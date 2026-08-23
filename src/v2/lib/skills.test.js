@@ -7,7 +7,7 @@ import {
   skillValue, multTotal, effectPrice, targetValue, passiveOf,
 } from './skills.js'
 import { CLASS_BONUS } from './classBonus.js'
-import { STAT_KEYS } from './stats.js'
+import { STAT_KEYS, STAT_DEFS } from './stats.js'
 import { AIL_KEYS } from './ailments.js'
 import { damageOf, healOf } from './combat.js'
 
@@ -339,9 +339,10 @@ test('威力テキストが威力の出どころを示す', () => {
   assert.equal(powerText(SKILL_BY_NAME['体当たり']), `STR×${SKILL_BY_NAME['体当たり'].mult}`)
   assert.equal(powerText(SKILL_BY_NAME['狙撃']), `STR×${SKILL_BY_NAME['狙撃'].mult} ＋ AGI×0.6`)
   assert.equal(powerText(SKILL_BY_NAME['連打']), `STR×${SKILL_BY_NAME['連打'].mult} ×3回`)
-  assert.equal(powerText(SKILL_BY_NAME['ヒール']), `INT×${SKILL_BY_NAME['ヒール'].heal.rate}`)
-  assert.equal(powerText(SKILL_BY_NAME['祈祷']), `毎ターン INT×${SKILL_BY_NAME['祈祷'].regen.rate}×4T`)
-  assert.equal(powerText(SKILL_BY_NAME['魔力供給']), `毎ターン MP INT×${SKILL_BY_NAME['魔力供給'].mpRegen.rate}×4T`)
+  // 回復は「何が」「どれだけ」戻るかを威力欄だけで分かるようにする（説明文には数字を書かない）
+  assert.equal(powerText(SKILL_BY_NAME['ヒール']), `HPを INT×${SKILL_BY_NAME['ヒール'].heal.rate} 回復`)
+  assert.equal(powerText(SKILL_BY_NAME['祈祷']), `毎ターン HPを INT×${SKILL_BY_NAME['祈祷'].regen.rate} 回復 ×4T`)
+  assert.equal(powerText(SKILL_BY_NAME['魔力供給']), `毎ターン MPを INT×${SKILL_BY_NAME['魔力供給'].mpRegen.rate} 回復 ×4T`)
 })
 
 test('回復はすべてINT参照で、最大HP/MPの％は使わない', () => {
@@ -526,4 +527,70 @@ test('スキルが持つ効果は、威力欄か説明文のどこかに必ず�
     }
   }
   assert.deepEqual(bad, [], bad.join(' / '))
+})
+
+// ============================================================
+// ★説明文に書いた数字が、実データとズレていないこと（2026-08-23 実機で発覚）
+//   値段を揃える rebalance で**実データだけ**が動き、説明文が置き去りになっていた。
+//   例：気孔術は INT×1.2 に上がったのに説明は「INT×1.0を回復」のままだった。
+//   回復量は威力欄（powerText）が実データから作るので、**説明文には書かない**。
+// ============================================================
+test('説明文の数字は実データと合っている（置き去り検出）', () => {
+  const label = {}
+  for (const [k, v] of Object.entries(STAT_DEFS)) label[v.label] = k
+  const near = (a, b) => Math.abs(a - b) < 0.005
+  const bad = []
+  const NG = (s, msg) => bad.push(`${s.cls}／${s.name}：${msg}`)
+
+  for (const s of SKILLS) {
+    const d = s.desc || ''
+    // ① 回復量は威力欄が出す。説明文に書くと二重になり、片方だけ古くなる
+    for (const m of d.matchAll(/([A-Z]{3})×([\d.]+)を回復/g)) {
+      NG(s, `回復量は威力欄が出すので説明文に書かない（「${m[0]}」）`)
+    }
+    // ② 防御無視（納刀中だけのものは whileStance に入る）
+    for (const m of d.matchAll(/防御を(\d+)%無視/g)) {
+      const n = Number(m[1]) / 100
+      const got = s.defPen ?? s.whileStance?.defPen
+      if (got === undefined) NG(s, `説明に「${m[0]}」とあるが防御無視の設定が無い`)
+      else if (!near(got, n)) NG(s, `防御無視が説明と違う（説明${m[1]}% / 実データ${Math.round(got * 100)}%）`)
+    }
+    // ③ 吸収（drain は0〜1の割合・drainIfAil は%）
+    for (const m of d.matchAll(/ダメージの(\d+)%[をだけ]*(?:吸収|HPが回復)/g)) {
+      const n = Number(m[1])
+      const got = s.drain !== undefined ? s.drain * 100 : s.drainIfAil?.pct
+      if (got === undefined) NG(s, '説明に吸収とあるが吸収の設定が無い')
+      else if (!near(got, n)) NG(s, `吸収が説明と違う（説明${n}% / 実データ${got}%）`)
+    }
+    // ④ 状態異常の確率
+    for (const m of d.matchAll(/(\d+)%で(毒|出血|麻痺|鈍足|回復低下|サイレンス)/g)) {
+      const n = Number(m[1])
+      const ch = s.ail?.chance ?? s.ailPerHit?.chance
+      if (ch === undefined) NG(s, `説明に「${m[0]}」とあるが状態異常の設定が無い`)
+      else if (!near(ch, n)) NG(s, `状態異常の確率が説明と違う（説明${n}% / 実データ${ch}%）`)
+    }
+    // ⑤ 空中・地上の威力／命中
+    for (const m of d.matchAll(/空中なら威力\+(\d+)%/g)) {
+      if (!near(s.whileAir?.mult ?? -1, Number(m[1]))) NG(s, `空中の威力が説明と違う（説明${m[1]}% / 実データ${s.whileAir?.mult ?? 'なし'}）`)
+    }
+    for (const m of d.matchAll(/地上なら威力\+(\d+)%/g)) {
+      if (!near(s.whileGround?.mult ?? -1, Number(m[1]))) NG(s, `地上の威力が説明と違う（説明${m[1]}% / 実データ${s.whileGround?.mult ?? 'なし'}）`)
+    }
+    for (const m of d.matchAll(/空中なら命中\+(\d+)%/g)) {
+      if (!near(s.whileAir?.hitBonus ?? -1, Number(m[1]))) NG(s, `空中の命中が説明と違う（説明${m[1]}% / 実データ${s.whileAir?.hitBonus ?? 'なし'}）`)
+    }
+    // ⑥ 相手へのバフ（説明文が唯一の情報源なので、ここが狂うと嘘になる）
+    for (const m of d.matchAll(/相手の([A-Z]{3}|HP|MP)([-+])(\d+)%/g)) {
+      const k = label[m[1]] || m[1].toLowerCase()
+      const want = (m[2] === '-' ? -1 : 1) * Number(m[3])
+      const got = s.buff?.enemy?.[k]
+      if (got === undefined) NG(s, `説明に「${m[0]}」とあるが相手へのバフが無い`)
+      else if (!near(got, want)) NG(s, `相手への${m[1]}が説明と違う（説明${want}% / 実データ${got}%）`)
+    }
+    // ⑦ 連撃数
+    for (const m of d.matchAll(/(\d+)連撃/g)) {
+      if ((s.hits || 1) !== Number(m[1])) NG(s, `連撃数が説明と違う（説明${m[1]}回 / 実データ${s.hits || 1}回）`)
+    }
+  }
+  assert.deepEqual(bad, [], '説明文と実データの食い違い:\n' + bad.join('\n'))
 })
