@@ -493,3 +493,37 @@ test('副参照が主参照と重ならない（同じステを二重に数え�
   }
   assert.deepEqual(bad, [], bad.join(' / '))
 })
+
+// ★2026-08-23 実機で見つかった不具合はどれも「画面の表示」だった（説明文のステ違い・
+//   枠に置けてしまうパッシブ・出ないログ・二重の副参照）。そこで
+//   **持っている効果が画面のどこかに出ているか**を全スキルで突き合わせる。
+//   出ていない効果は、プレイヤーには存在しないのと同じ。
+test('スキルが持つ効果は、威力欄か説明文のどこかに必ず出ている', () => {
+  const CLUE = {
+    drain:['吸収'], drainIfAil:['吸収'], defPen:['無視', '軽減'], sureHit:['必中'], sureCrit:['確定クリ'],
+    hitBonus:['命中'], ail:['%で'], ailPerHit:['1発ごと'], consumeAil:['消費', '弾け'],
+    mpPct:['MP'], hpCostPct:['HP'], lowHpBonus:['低いほど'], highHpBonus:['高いほど'], vsBuff:['バフ'],
+    vsAil:['状態異常'], dispel:['消す'], repeat:['続け'], switchKind:['直前'], variance:['振れる'],
+    combo:['直前'], airUp:['空中'], whileAir:['空中'], whileGround:['地上'], keepAir:['位置', '留まる'],
+    rampHit:['1発ごと', 'ほど'], ritual:['呪力'], useRitual:['呪力'], chargeUp:['竜気'], useCharge:['竜気'],
+    whileStack:['呪力', '竜気'], whileForm:['獣'], form:['鷹', '熊', '蛇'], formBuff:['獣'],
+    cure:['払う'], bigGuard:['軽減', 'ダメージ-'], stance:['納刀'], whileStance:['納刀'],
+    foresight:['回避率', '見切り'], frenzy:['狂乱'],
+  }
+  const bad = []
+  for (const s of SKILLS) {
+    // ★画面は「必中／クリ無／先制」をチップで出すので、そのぶんも見えている扱いにする
+    const chips = [s.sureHit ? '必中' : '', s.noCrit ? 'クリ無' : '', s.priority ? '先制' : ''].join(' ')
+    const shown = chips + ' ／ ' + powerText(s) + ' ／ ' + (s.desc || '')
+    for (const [k, list] of Object.entries(CLUE)) {
+      const v = s[k]
+      if (v === undefined || v === null || v === false) continue
+      if (!list.some(c => shown.includes(c))) bad.push(`${s.name}: ${k} が画面に出ていない`)
+    }
+    if (s.buff && !/[+-]\d+%/.test(shown)) bad.push(`${s.name}: バフの数値が出ていない`)
+    for (const k of ['heal', 'regen', 'mpRegen']) {
+      if (s[k] && !/回復/.test(shown)) bad.push(`${s.name}: ${k} が出ていない`)
+    }
+  }
+  assert.deepEqual(bad, [], bad.join(' / '))
+})
