@@ -114,20 +114,26 @@ export const consumeParalyze = (ail) => {
   return true
 }
 
-// ===== ターン終わりの持続ダメージ =====
+// ★2026-08-23：**出血は「出血している側が行動した直後」に刻む**（ユーザー指定）。
+//   ターン終わりにまとめて刻んでいたころは、相手が動いた実感と傷が繋がっていなかった。
+//   毒はこれまでどおりターン終わり（ATBでは TICK_SEC ごと）に刻む。
+//   戻り値は { key, damage, stacks } ／ 出血していなければ null
+export const tickBleed = (ail, hp) => {
+  if (!(ail?.bleed?.stacks > 0)) return null
+  const out = { key: 'bleed', damage: bleedTickOf(ail.bleed, hp), stacks: ail.bleed.stacks }
+  ail.bleed.age += 1
+  if (ail.bleed.age >= BLEED_TURNS) delete ail.bleed
+  return out
+}
+
+// ===== ターン終わりの持続ダメージ（毒）=====
 // 戻り値は [{ key, damage }]。HPの増減は呼び出し側で行う（ログを作る都合）
-export const tickAilments = (ail, { hp, maxHp }) => {
+export const tickAilments = (ail, { maxHp }) => {
   const out = []
   if (ail.poison?.turns > 0) {
     out.push({ key: 'poison', damage: poisonTickOf(ail.poison, maxHp) })
     ail.poison.turns -= 1
     if (ail.poison.turns <= 0) delete ail.poison
-  }
-  if (ail.bleed?.stacks > 0) {
-    // 旧版と同じく**現在HP**基準。刻むほど減衰する
-    out.push({ key: 'bleed', damage: bleedTickOf(ail.bleed, hp), stacks: ail.bleed.stacks })
-    ail.bleed.age += 1
-    if (ail.bleed.age >= BLEED_TURNS) delete ail.bleed
   }
   // ターン数だけ持つもの
   for (const k of ['slow', 'healCut']) {

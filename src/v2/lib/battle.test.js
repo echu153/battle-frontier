@@ -1,7 +1,7 @@
 // バトルフロンティアⅡ 戦闘ループの回帰テスト（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { tickAil, runBattle, createSide, takeAction, liveStats, lowHpMultOf, highHpMultOf, vsBuffMultOf, buffCountOf, repeatMultOf, switchKindMultOf, varianceMultOf, comboMultOf, airMultOf, stackMultOf, chargeGuardOf, AIR_EVA, STACK_MAX, beastMultOf, BEAST_FORMS, BEAST_BONUS, peekSkill, attackKindOf, mpCostOf, priorityOf, foresightEva, tickForesight, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
+import { tickAil, tickBleedAfterAct, runBattle, createSide, takeAction, liveStats, lowHpMultOf, highHpMultOf, vsBuffMultOf, buffCountOf, repeatMultOf, switchKindMultOf, varianceMultOf, comboMultOf, airMultOf, stackMultOf, chargeGuardOf, AIR_EVA, STACK_MAX, beastMultOf, BEAST_FORMS, BEAST_BONUS, peekSkill, attackKindOf, mpCostOf, priorityOf, foresightEva, tickForesight, NORMAL_ATTACK_MULT, MAX_TURNS, BUFF_MIN_PCT } from './battle.js'
 import { inflict, POISON_CAP_RATE, BLEED_CAP_RATE } from './ailments.js'
 import { INITIAL_STATS, applyExp } from './stats.js'
 import { skillsOf, SKILL_BY_NAME, OFF_CLASS_MULT, OFF_CLASS_MP_MULT, setMpCost, offClassMult, mpOf } from './skills.js'
@@ -722,7 +722,7 @@ test('竜騎士：竜気を溜めると硬くなり、切り札で全部使う',
 test('サイキッカー：相手の特防で受けるが、威力はSTR参照', () => {
   const shot = SKILL_BY_NAME['サイコショット']
   assert.equal(shot.kind, 'mag')
-  assert.equal(shot.srcKind, 'phys')
+  assert.equal(shot.src, 'str')
   const hit = (myStats, foeStats) => {
     const me = createSide({ name:'念', cls:'サイキッカー', kind:'mag', stats: myStats, slots:[{ skill: shot, uses:9 }] })
     const foe = createSide({ name:'的', cls:'戦士', kind:'phys', stats: { ...foeStats, hp: 10 ** 7 }, slots: [] })
@@ -851,7 +851,8 @@ test('出血・毒の1刻みは、付けた側の攻撃力を超えて伸びな�
     const foe = createSide(fighter('的', [], { ...stats, hp: foeHp }))
     for (let i = 0; i < times; i++) takeAction(me, foe, () => 0.01, [], { idx: 0, noProc: true })
     const log = []
-    tickAil(foe, log, me)
+    tickAil(foe, log, me)                 // 毒はターン終わり
+    tickBleedAfterAct(foe, log, me)       // 出血は行動した直後
     return log.filter(l => l.type === 'ailTick').reduce((t, l) => t + l.damage, 0)
   }
   const atk = liveStats(createSide(fighter('攻', []))).str
@@ -868,4 +869,28 @@ test('出血・毒の1刻みは、付けた側の攻撃力を超えて伸びな�
   assert.ok(b1 <= Math.floor(atk * BLEED_CAP_RATE) + 1, `出血1スタックの上限が効いていない: ${b1}`)
   assert.ok(b3 > b1 * 2, 'スタックを積んだぶんは伸びる')
   assert.ok(b3 <= Math.floor(atk * BLEED_CAP_RATE * 3) + 1, `出血3スタックの上限が効いていない: ${b3}`)
+})
+
+// ★2026-08-23：出血は「出血している側が行動した直後」に刻む（ユーザー指定）
+test('出血は行動した直後に刻む（ターン終わりではない）', () => {
+  const stats = evenStats(534)
+  const cut = sk('切り裂き', { ail:{ key:'bleed', chance:100 }, mult:0.01 })
+  const me = createSide(fighter('攻', [{ skill: cut, uses:99 }]))
+  const foe = createSide(fighter('的', [{ skill: sk('殴る'), uses:99 }], { ...stats, hp: 10 ** 6 }))
+  // 出血させただけでは刻まない（相手がまだ動いていない）
+  const log1 = []
+  takeAction(me, foe, () => 0.01, log1, { idx: 0, noProc: true })
+  assert.equal(log1.filter(l => l.type === 'ailTick').length, 0, '付けた瞬間には刻まない')
+  assert.ok(foe.ail.bleed?.stacks > 0)
+  // 出血している側が動いた直後に刻む
+  const log2 = []
+  takeAction(foe, me, () => 0.5, log2, { idx: 0, noProc: true })
+  tickBleedAfterAct(foe, log2, me)
+  const tick = log2.find(l => l.type === 'ailTick')
+  assert.ok(tick, '行動したのに刻んでいない')
+  assert.equal(tick.ail, '出血')
+  // ターン終わりの tickAil ではもう刻まない（二重取りしない）
+  const log3 = []
+  tickAil(foe, log3, me)
+  assert.equal(log3.filter(l => l.type === 'ailTick' && l.ail === '出血').length, 0, 'ターン終わりに二重で刻んでいる')
 })

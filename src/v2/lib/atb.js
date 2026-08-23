@@ -26,9 +26,10 @@
 // ============================================================
 import {
   createSide, liveStats, peekSkill, mpCostOf, priorityOf, takeAction, tickRegen, BUFF_MIN_PCT,
+  tickBleedAfterAct,
 } from './battle.js'
 import { STAT_KEYS } from './stats.js'
-import { AIL_KEYS, AIL_LABEL, poisonTickOf, bleedTickOf, hasAilment } from './ailments.js'
+import { AIL_KEYS, AIL_LABEL, poisonTickOf, hasAilment } from './ailments.js'
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
 // 秒の比較に使うごく小さい余裕。実時間を足し込むと 30 が 30.000000000000004 になるため、
@@ -217,11 +218,6 @@ const tickDot = (side, log, foe = null) => {
     side.hp -= d
     log.push({ side: side.name, type: 'ailTick', ail: AIL_LABEL.poison, damage: d })
   }
-  if (side.hp > 0 && a.bleed?.stacks > 0) {
-    const d = Math.max(1, Math.floor(bleedTickOf(a.bleed, side.hp) * boost))
-    side.hp -= d
-    log.push({ side: side.name, type: 'ailTick', ail: AIL_LABEL.bleed, damage: d, stacks: a.bleed.stacks })
-  }
   if (side.hp > 0) tickRegen(side, log, foe)
 }
 
@@ -270,6 +266,7 @@ const act = (st, me, foe) => {
     me.gauge = Math.max(0, me.gauge - GUARD_NEED)
     me.pending = undefined
     st.log.push({ side: me.name, type: 'guard', sec: GUARD_SEC, cut: GUARD_CUT })
+    tickBleedAfterAct(me, st.log, foe)   // ★防御も行動なので、そのあと出血が刻む
     return
   }
   // ★納刀は撃った瞬間に消えるので、消費するゲージは「撃つ前」の値で決める
@@ -281,6 +278,7 @@ const act = (st, me, foe) => {
   const opt = { noProc: true, noParalyze: true }
   if (!ch.auto) opt.idx = ch.idx
   takeAction(me, foe, st.rng, st.log, opt)
+  tickBleedAfterAct(me, st.log, foe)     // ★出血は行動した直後に刻む
   commitBuff(me, beforeMe, false, st.t)
   commitBuff(foe, beforeFoe, true, st.t)
   commitAil(me, ailMe, st.t)

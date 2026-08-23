@@ -6,7 +6,7 @@ import { ENCHANTS, collectEnchants, inflictChance, dropRateMultOf, enchantChance
 import { allEnemies } from './enemies.js'
 import {
   createAilments, inflict, tickAilments, healMultOf, consumeParalyze, hasAilment,
-  BLEED_MAX_STACKS, POISON_TURNS,
+  BLEED_MAX_STACKS, POISON_TURNS, tickBleed,
 } from './ailments.js'
 import { runBattle, createSide, liveStats } from './battle.js'
 
@@ -62,7 +62,7 @@ test('band を渡さなければ時間帯つきの能力は常に有効（画面
 })
 
 // ===== 状態異常 =====
-test('出血は旧版と同じ：スタック上限5・現在HPの1%×スタック・3回刻んで消える', () => {
+test('出血：スタック上限5・現在HPの1%×スタック・3回刻んで消える（刻むのは行動した直後）', () => {
   const ail = createAilments()
   for (let i = 0; i < 8; i++) inflict(ail, 'bleed')
   assert.equal(ail.bleed.stacks, BLEED_MAX_STACKS)
@@ -71,10 +71,10 @@ test('出血は旧版と同じ：スタック上限5・現在HPの1%×スタッ�
   let hp = 10000
   const hits = []
   for (let t = 0; t < 4; t++) {
-    const ticks = tickAilments(ail, { hp, maxHp: 10000 })
-    if (!ticks.length) break
-    hp -= ticks[0].damage
-    hits.push(ticks[0].damage)
+    const tick = tickBleed(ail, hp)
+    if (!tick) break
+    hp -= tick.damage
+    hits.push(tick.damage)
   }
   assert.deepEqual(hits, [500, 475, 451])   // 3回で終わり。現在HP基準なので減衰する
   assert.equal(hasAilment(ail, 'bleed'), false)
@@ -83,8 +83,8 @@ test('出血は旧版と同じ：スタック上限5・現在HPの1%×スタッ�
 test('出血を付け直すと消えるまでの数え直しになる', () => {
   const ail = createAilments()
   inflict(ail, 'bleed')
-  tickAilments(ail, { hp: 1000, maxHp: 1000 })
-  tickAilments(ail, { hp: 1000, maxHp: 1000 })
+  tickBleed(ail, 1000)
+  tickBleed(ail, 1000)
   assert.equal(ail.bleed.age, 2)
   inflict(ail, 'bleed')            // 付け直し
   assert.equal(ail.bleed.age, 0)

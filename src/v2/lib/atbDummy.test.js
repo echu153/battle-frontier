@@ -18,7 +18,10 @@ test('仮想敵は自分の戦闘力とAGIから組み立てられる', () => {
   const p = calcPower(me.stats)
   const even = list.find(d => d.key === 'even')
   assert.equal(even.power, p, '【等速】は自分と同じ戦闘力')
-  assert.equal(even.hp, bossHpOf(p))
+  // ★2026-08-23：HPはユニークボスの式ではなく「同じ戦闘力のキャラのHP×BOSS_HP_MULT」
+  assert.ok(even.hp > 0)
+  assert.equal(even.hp, even.make().stats.hp, '一覧のHPと実物のHPが合っている')
+  assert.ok(even.hp < bossHpOf(p) / 10, '昔のユニークボス式ほど厚くない（測定にならないため）')
   assert.equal(even.make().stats.agi, me.stats.agi, '【等速】はAGIも同じ')
   assert.equal(list.find(d => d.key === 'fast').make().stats.agi, me.stats.agi * 2)
   assert.equal(list.find(d => d.key === 'slow').make().stats.agi, me.stats.agi * 0.5)

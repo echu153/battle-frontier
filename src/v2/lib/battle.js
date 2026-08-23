@@ -22,7 +22,7 @@ import { skillsOf, isPassive, offClassMult, scaleTable, mpOf, mpPctOf } from './
 import { classBonusOf } from './classBonus.js'
 import {
   createAilments, inflict, tickAilments, ailStatPct, healMultOf, consumeParalyze, hasAilment, AIL_LABEL,
-  POISON_CAP_RATE, BLEED_CAP_RATE,
+  POISON_CAP_RATE, BLEED_CAP_RATE, tickBleed,
 } from './ailments.js'
 import { collectEnchants, inflictChance } from './enchant.js'
 import {
@@ -666,7 +666,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
           * comboMultOf(skill, prevSkill) * airMultOf(skill, wasAir)
           * stackMultOf(skill.useRitual, ritualUsed) * stackMultOf(skill.useCharge, chargeUsed)
           * beastMultOf(skill, prevForm),
-        kind: skill.kind, atkKind: skill.srcKind || null,
+        kind: skill.kind, atkStat: skill.src || null,
         defPen, add: skill.add || null,
         sureHit: !!skill.sureHit, sureCrit: !!skill.sureCrit, noCrit: !!skill.noCrit,
         acc: skill.acc ?? 100,
@@ -877,6 +877,17 @@ export const tickAil = (side, log, foe = null) => {
   }
 }
 
+// ★出血は「出血している側が行動した直後」に刻む（2026-08-23 ユーザー指定）
+//   倍率は**入れた側**の武器の進化を見るので、相手（foe）を渡す
+export const tickBleedAfterAct = (side, log, foe = null) => {
+  const t = tickBleed(side.ail, side.hp)
+  if (!t) return
+  const boost = 1 + (foe?.evo?.ail?.dmg || 0) / 100
+  const dmg = Math.max(1, Math.floor(t.damage * boost))
+  side.hp -= dmg
+  log.push({ side: side.name, type: 'ailTick', ail: AIL_LABEL.bleed, damage: dmg, stacks: t.stacks })
+}
+
 // 見切りの残りターン（ターン終わりに1つ減る）
 export const tickForesight = (side) => {
   if (side.foresight?.turns > 0) {
@@ -948,7 +959,8 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
     for (const [me, foe] of order) {
       if (a.hp <= 0 || b.hp <= 0) break
       takeAction(me, foe, rng, log)
-      if (foe.hp <= 0) break
+      tickBleedAfterAct(me, log, foe)          // ★出血は行動した直後に刻む
+      if (foe.hp <= 0 || me.hp <= 0) break
       // 追加行動（相手よりAGIが高いときだけ・上限50%）
       const em = liveStats(me)
       const ef = liveStats(foe)
@@ -956,6 +968,7 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
       if (rollExtraAction(em, ef, rng) || (me.evo.extra > 0 && roll(me.evo.extra, rng))) {
         log.push({ side: me.name, type: 'extra' })
         takeAction(me, foe, rng, log)
+        tickBleedAfterAct(me, log, foe)
       }
     }
 
