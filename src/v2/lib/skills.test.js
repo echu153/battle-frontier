@@ -476,3 +476,20 @@ test('説明文の「○○も威力になる」が実際の副参照と合っ�
   }
   assert.deepEqual(bad, [], bad.join(' / '))
 })
+
+// ★2026-08-23 実機で発覚：聖騎士のホーリーエッジが「STR×1.36 ＋ STR×0.5」になっていた。
+//   主参照と同じステを副参照に置くと、副参照の意味（別のステも育てる理由）が消える。
+test('副参照が主参照と重ならない（同じステを二重に数えない）', () => {
+  const bad = []
+  for (const s of SKILLS) {
+    if (s.kind !== 'phys' && s.kind !== 'mag') continue
+    const main = s.src || (s.kind === 'mag' ? 'int_stat' : 'str')
+    const seen = new Set()
+    for (const a of s.add || []) {
+      if (a.stat === main) bad.push(`${s.name}: 副参照が主参照(${main})と同じ`)
+      if (seen.has(a.stat)) bad.push(`${s.name}: 副参照に ${a.stat} が2回`)
+      seen.add(a.stat)
+    }
+  }
+  assert.deepEqual(bad, [], bad.join(' / '))
+})
