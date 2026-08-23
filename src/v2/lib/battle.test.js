@@ -988,3 +988,31 @@ test('空中から降りたら必ずログに出る（黙って降りない）',
   takeAction(me, foe, () => 0.01, log, { idx: 2, noProc: true })
   assert.ok(!log.slice(k).some(l => l.type === 'land'), '地上で撃ったときは出さない')
 })
+
+// ★「何で出血したのか」が分かるように、攻撃の行を先に出す（2026-08-23 実機で発覚）
+test('攻撃のログは、その攻撃で入った状態異常より先に出る', () => {
+  const st = { hp:100000, mp:100000, str:400, dex:400, agi:400, int_stat:400, vit:400, luk:400 }
+  const sk = { name:'試し斬り', kind:'phys', mult:1, proc:100, mp:0, sureHit:true,
+    ail:{ key:'bleed', chance:100 }, desc:'' }
+  const me = createSide({ name:'私', cls:'戦士', kind:'phys', stats: st, slots:[{ skill: sk, uses:9 }] })
+  const foe = createSide({ name:'的', cls:'戦士', kind:'phys', stats: st, slots: [] })
+  const log = []
+  takeAction(me, foe, () => 0.01, log, { idx: 0, noProc: true })
+  const iSkill = log.findIndex(l => l.type === 'skill')
+  const iAil = log.findIndex(l => l.type === 'ailment')
+  assert.ok(iSkill >= 0 && iAil >= 0, '攻撃と状態異常の両方が出る')
+  assert.ok(iSkill < iAil, '攻撃の行のほうが先に出る（' + iSkill + ' < ' + iAil + '）')
+})
+
+test('吸収した額はログに残る（行を先に置いても消えない）', () => {
+  const st = { hp:100000, mp:100000, str:400, dex:400, agi:400, int_stat:400, vit:400, luk:400 }
+  const sk = { name:'吸い取り', kind:'phys', mult:1, proc:100, mp:0, sureHit:true, drain:0.5, desc:'' }
+  const me = createSide({ name:'私', cls:'戦士', kind:'phys', stats: st, slots:[{ skill: sk, uses:9 }] })
+  const foe = createSide({ name:'的', cls:'戦士', kind:'phys', stats: st, slots: [] })
+  me.hp = 1000
+  const log = []
+  takeAction(me, foe, () => 0.01, log, { idx: 0, noProc: true })
+  const l = log.find(x => x.type === 'skill')
+  assert.ok(l.drain > 0, '吸収の額が入っている')
+  assert.equal(me.hp, 1000 + l.drain)
+})

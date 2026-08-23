@@ -754,6 +754,10 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     raw = Math.floor(raw * evoMult(me, foe, { kind: skill.kind, skill: true, multi: (skill.hits || 1) > 1 }))
     rememberSkill(foe, skill.name)
     const dmg = applyIncoming(me, foe, raw, skill.kind, rng, log)
+    // ★先に「撃った」行を置く（状態異常やスタックの行より前に出す）。吸収の額は後で埋める
+    const entry = { side: me.name, type: 'skill', skill: skill.name, kind: skill.kind,
+      damage: dmg, crit, hits, of: skill.hits || 1, drain: 0 }
+    log.push(entry)
     if (hits > 0) {
       bumpHitStack(me, hits)
       onHit(me, foe, skill.kind, rng, log)
@@ -788,7 +792,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       drained = Math.min(drained, drainCapOf(me, crit))
       me.hp = Math.min(me.base.hp, me.hp + drained)
     }
-    log.push({ side: me.name, type: 'skill', skill: skill.name, kind: skill.kind, damage: dmg, crit, hits, of: skill.hits || 1, drain: drained })
+    entry.drain = drained
   } else if (skill.kind === 'heal') {
     if (skill.heal) {
       const amt = healAmount(me, eMe, skill.heal.rate * off)
