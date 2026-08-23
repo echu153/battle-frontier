@@ -5,7 +5,7 @@ import { toFighter as playerFighter } from '../lib/loadout.js'
 import { dummyFoes } from '../lib/atbDummy.js'
 import { buildBattleLog } from '../lib/battleLog.js'
 import {
-  createAtb, step, needOf, needNow, procBonusOf, chosenOf, canUse, buffChips, ailChips, guardLeft,
+  createAtb, step, needOf, needNow, procBonusOf, chosenOf, canUse, buffChips, ailChips, guardLeft, stateChips,
   GAUGE_BASE, MAX_SEC, GUARD_NEED, GUARD_CUT, GUARD_SEC,
 } from '../lib/atb.js'
 import { STAT_DEFS } from '../lib/stats.js'
@@ -36,7 +36,8 @@ const Chips = ({ side, now }) => {
   const buffs = buffChips(side, now)
   const ails = ailChips(side, now)
   const guard = guardLeft(side, now)
-  if (!buffs.length && !ails.length && !guard) return null
+  const states = stateChips(side)
+  if (!buffs.length && !ails.length && !guard && !states.length) return null
   return (
     <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginTop:'4px' }}>
       {guard > 0 && (
@@ -53,6 +54,12 @@ const Chips = ({ side, now }) => {
           </span>
         )
       })}
+      {states.map(c => (
+        <span key={c.key} style={{ fontSize:'10px', padding:'1px 5px', border:'1px solid #ffcc44',
+          color:'#ffdd88', background:'#181000' }}>
+          {c.label}
+        </span>
+      ))}
       {ails.map(c => (
         <span key={c.key} style={{ fontSize:'10px', padding:'1px 5px', border:'1px solid #cc66ff', color:'#cc99ff', background:'#000818' }}>
           {c.label}{c.stacks ? `×${c.stacks}` : ''} {c.sec}s

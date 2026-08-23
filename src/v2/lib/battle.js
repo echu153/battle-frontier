@@ -816,7 +816,8 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   // ★聖騎士：大防御。1ターンのあいだ大きく軽減する代わりに、追加行動が出なくなる
   if (skill.bigGuard) {
     me.bigGuard = skill.bigGuard.cut
-    log.push({ side: me.name, type: 'bigGuard', skill: skill.name, cut: skill.bigGuard.cut })
+    // opt.bigGuardSec が来るのはATB（ターンが無いので秒で出す）
+    log.push({ side: me.name, type: 'bigGuard', skill: skill.name, cut: skill.bigGuard.cut, sec: opt.bigGuardSec || 0 })
   }
   // ★武僧：自分にかかっている状態異常を払う（効きづらいだけでなく、抜け出せる）
   if (skill.cure) {
@@ -835,6 +836,8 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     log.push({ side: me.name, type: 'air', skill: skill.name })
   } else if ((skill.kind === 'phys' || skill.kind === 'mag') && !skill.keepAir) {
     // keepAir を持つ技は蹴り続けて空中に留まる（体術師）
+    // ★降りたことも必ずログに出す。空中かどうかで威力が変わるので、黙って戻ると分からない
+    if (me.air) log.push({ side: me.name, type: 'land', skill: skill.name })
     me.air = false
   }
   // ★ビーストレンジャー：獣を呼ぶ技を使うと、その獣の型になる

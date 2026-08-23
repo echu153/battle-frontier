@@ -82,6 +82,8 @@ export const buildBattleLog = (r, you, foe) => {
       out.push({ text:`🛡 ${actor}は身を守っている！（${l.sec}秒・被ダメージ-${l.cut}%）`, color: LOG_COLOR.guard })
     } else if (l.type === 'air') {
       out.push({ text:`🕊 ${actor}は跳び上がった！`, color: LOG_COLOR.extra })
+    } else if (l.type === 'land') {
+      out.push({ text:`🥾 ${actor}は地上へ降りた！`, color: LOG_COLOR.extra })
     } else if (l.type === 'form') {
       out.push({ text:`🐾 ${actor}の${l.skill}！ ${l.form}を呼んだ！`, color: LOG_COLOR.buff })
     } else if (l.type === 'ritual') {
@@ -97,7 +99,8 @@ export const buildBattleLog = (r, you, foe) => {
     } else if (l.type === 'dispel') {
       out.push({ text:`✂ ${actor}の強化が1つ消えた！`, color: LOG_COLOR.ail })
     } else if (l.type === 'bigGuard') {
-      out.push({ text:`🛡 ${actor}の${l.skill}！ 1ターンのあいだ受けるダメージ-${l.cut}%！`, color: LOG_COLOR.guard })
+      const span = l.sec > 0 ? `${l.sec}秒のあいだ` : '1ターンのあいだ'
+      out.push({ text:`🛡 ${actor}の${l.skill}！ ${span}受けるダメージ-${l.cut}%！`, color: LOG_COLOR.guard })
     } else if (l.type === 'cure') {
       out.push({ text:`🌿 ${actor}の${l.skill}！ ${l.ail}が治った！`, color: LOG_COLOR.heal })
     } else if (l.type === 'hpCost') {

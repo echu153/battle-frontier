@@ -6,9 +6,11 @@ import {
   createAtb, step, needOf, fillRatio, buffSecOf, chosenOf, needNow, buffChips, ailChips,
   GAUGE_BASE, FILL_PER_SEC, TICK_SEC, AIL_SEC, MAX_DT, AGI_EFFECT,
   GUARD_NEED, GUARD_CUT, GUARD_SEC, guardLeft, needFor, PRIORITY_CUT, procBonusOf, GAUGE_MAX,
+  BIG_GUARD_SEC, stateChips,
 } from './atb.js'
 import { runBattle, createSide, takeAction } from './battle.js'
 import { inflict, POISON_RATE } from './ailments.js'
+import { SKILLS } from './skills.js'
 
 const makeRng = (seed) => {
   let s = seed >>> 0
@@ -392,4 +394,78 @@ test('別のステのバフは同時に乗る（重ならないのは同じス�
   assert.equal(st.a.buffs.str, s0 + 30)
   assert.equal(st.a.buffs.agi, a0 + 30)
   assert.equal(st.a.timed.length, 2)
+})
+
+// ============================================================
+// ★ターンで切れる状態は、ATBでも必ず時間で切れること（2026-08-23 実機で発覚）
+//   オート戦闘は runBattle が「ターン終わり」に消している。ATBにはターンが無いので、
+//   expire に入れ忘れると**戦闘の終わりまでかかりっぱなし**になる。
+//   実際、聖騎士の大防御（被ダメージ-60%）が90秒ずっと効いていた。
+// ============================================================
+// その状態が「乗っているか」を見る。数字で持つもの・オブジェクトで持つものがある
+const STATE_ON = {
+  bigGuard:  (s) => (s.bigGuard || 0) > 0,
+  foresight: (s) => !!s.foresight,
+  frenzy:    (s) => !!s.frenzy,
+}
+// その状態を作るスキルを1枚だけ持たせて、1回撃たせてから時間を進める
+const holdsAfter = (skill, sec) => {
+  const me = { name:'私', cls:'戦士', kind:'phys', stats: stats(), slots:[{ skill, uses:1 }] }
+  const foe = { name:'的', cls:'戦士', kind:'phys', stats: stats({ hp: 10 ** 7 }), slots: [] }
+  const st = createAtb(me, foe, { rng: () => 0.5 })
+  st.a.auto = true
+  st.b.auto = true
+  // 乗った「瞬間」を拾う（大防御のように短いものは、まとめて進めると見逃す）
+  const on = {}
+  for (let i = 0; i < 300; i++) {
+    step(st, 0.1)
+    for (const k of Object.keys(STATE_ON)) if (STATE_ON[k](st.a)) on[k] = true
+    if (st.a.slots[0].uses <= 0) break   // 枠は uses:1。撃ち切ったら以降は通常攻撃
+  }
+  run(st, sec)
+  const still = {}
+  for (const k of Object.keys(STATE_ON)) still[k] = STATE_ON[k](st.a)
+  return { on, still }
+}
+
+test('大防御はATBでも時間で切れる（1ターン＝BIG_GUARD_SEC 秒）', () => {
+  const bg = SKILLS.find(s => s.bigGuard)
+  assert.ok(bg, '大防御を持つスキルが要る')
+  const r = holdsAfter(bg, BIG_GUARD_SEC + 5)
+  assert.equal(r.on.bigGuard, true, '撃った直後は大防御が乗っている')
+  assert.equal(r.still.bigGuard, false, '時間が経てば大防御は切れる')
+})
+
+test('ターンで切れる状態は、ATBでも全部が時間で切れる（入れ忘れ検出）', () => {
+  // 「ターン終わりに消える」状態を持つスキルを**全部**当たる。
+  //   新しく同じ形の状態を足したとき、ATB側の始末を忘れたらここで落ちる
+  const keys = { bigGuard:'bigGuard', foresight:'foresight', frenzy:'frenzy' }
+  const found = {}
+  for (const s of SKILLS) {
+    for (const k of Object.keys(keys)) if (s[k]) (found[k] ||= []).push(s)
+  }
+  for (const k of Object.keys(keys)) assert.ok(found[k]?.length, k + ' を持つスキルが見つからない')
+  for (const [k, list] of Object.entries(found)) {
+    for (const s of list) {
+      const r = holdsAfter(s, 60)
+      assert.equal(r.still[k], false, `「${s.name}」の ${k} がATBで切れない（60秒後も乗ったまま）`)
+    }
+  }
+})
+
+test('ATB画面に職の軸の状態が出る（空中・呪力・竜気・獣の型…）', () => {
+  const me = { name:'私', cls:'戦士', kind:'phys', stats: stats(), slots: [] }
+  const foe = { name:'的', cls:'戦士', kind:'phys', stats: stats(), slots: [] }
+  const st = createAtb(me, foe, { rng: () => 0.5 })
+  assert.deepEqual(stateChips(st.a), [], '何も無いときは出さない')
+  st.a.air = true
+  st.a.ritual = 2
+  st.a.charge = 3
+  st.a.form = 'bear'
+  st.a.stance = { proc: 100, mult: 1.5 }
+  st.a.bigGuard = 60
+  const labels = stateChips(st.a).map(c => c.label).join(' ')
+  for (const w of ['空中', '呪力×2', '竜気×3', '熊の型', '納刀', '大防御']) {
+    assert.ok(labels.includes(w), w + ' が出ていない：' + labels)
+  }
 })

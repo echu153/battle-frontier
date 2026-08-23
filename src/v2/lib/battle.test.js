@@ -957,3 +957,34 @@ test('武僧：自分にかかっている状態異常を払う', () => {
   // 2つ払う技もある
   assert.equal(SKILL_BY_NAME['自癒功'].cure, 2)
 })
+
+// ★空中↔地上は威力に直結するので、降りたことも必ずログに出す（2026-08-23 実機で発覚）
+//   「跳び上がった！」だけ出ていて、次の技で黙って着地していた
+test('空中から降りたら必ずログに出る（黙って降りない）', () => {
+  const st = { hp:100000, mp:100000, str:300, dex:300, agi:300, int_stat:300, vit:300, luk:300 }
+  const jump = SKILL_BY_NAME['半月蹴り']       // airUp：跳び上がる
+  const drop = SKILL_BY_NAME['破衝掌']          // whileAir：叩きつけて着地する
+  const stay = SKILL_BY_NAME['五連殺']          // keepAir：蹴り続けて空中のまま
+  const me = createSide({ name:'私', cls:'体術師', kind:'phys', stats: st,
+    slots:[{ skill: jump, uses:99 }, { skill: stay, uses:99 }, { skill: drop, uses:99 }] })
+  const foe = createSide({ name:'的', cls:'戦士', kind:'phys', stats: st, slots: [] })
+  const log = []
+  takeAction(me, foe, () => 0.01, log, { idx: 0, noProc: true })   // 跳ぶ
+  assert.equal(me.air, true)
+  assert.ok(log.some(l => l.type === 'air'), '跳び上がったログが出る')
+
+  const n = log.length
+  takeAction(me, foe, () => 0.01, log, { idx: 1, noProc: true })   // keepAir：降りない
+  assert.equal(me.air, true, 'keepAir の技では降りない')
+  assert.ok(!log.slice(n).some(l => l.type === 'land'), '降りていないのに着地ログを出さない')
+
+  const m = log.length
+  takeAction(me, foe, () => 0.01, log, { idx: 2, noProc: true })   // 叩きつけて着地
+  assert.equal(me.air, false)
+  assert.ok(log.slice(m).some(l => l.type === 'land'), '着地したログが出る')
+
+  // 地上で撃っても着地ログは出ない（毎回出るとうるさい）
+  const k = log.length
+  takeAction(me, foe, () => 0.01, log, { idx: 2, noProc: true })
+  assert.ok(!log.slice(k).some(l => l.type === 'land'), '地上で撃ったときは出さない')
+})

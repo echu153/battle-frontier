@@ -26,7 +26,7 @@
 // ============================================================
 import {
   createSide, liveStats, peekSkill, mpCostOf, priorityOf, takeAction, tickRegen, BUFF_MIN_PCT,
-  tickBleedAfterAct,
+  tickBleedAfterAct, BEAST_FORMS,
 } from './battle.js'
 import { STAT_KEYS } from './stats.js'
 import { AIL_KEYS, AIL_LABEL, poisonTickOf, hasAilment, SILENCE_PROC } from './ailments.js'
@@ -93,6 +93,10 @@ export const needFor = (side, skill) => {
 // ★ATBだけの基本コマンド（2026-08-19 ユーザー決定）。スキル枠を1つも使わずに誰でも使える。
 //   ゲージが軽い（通常攻撃より安い）ので「大技が来る前に挟む」動きができる＝
 //   相手のゲージを見る意味がここで生まれる
+// ★大防御（聖騎士）はオート戦闘だと「1ターンで切れる」。ATBにはターンが無いので
+//   1ターンぶん＝TICK_SEC で切る。**ここを入れ忘れると戦闘の終わりまでかかりっぱなしになる**
+export const BIG_GUARD_SEC = 5
+
 export const GUARD_NEED = 60   // 必要ゲージ（通常攻撃100より軽い）
 export const GUARD_CUT  = 50   // 被ダメージを何%減らすか
 export const GUARD_SEC  = 6    // 効いている秒数
@@ -200,6 +204,7 @@ const commitAil = (side, before, now) => {
 const commitStates = (side, now) => {
   if (side.foresight && !side.stateUntil.foresight) side.stateUntil.foresight = now + turnsToSec(side.foresight.turns)
   if (side.frenzy && !side.stateUntil.frenzy) side.stateUntil.frenzy = now + turnsToSec(side.frenzy.turns)
+  if (side.bigGuard && !side.stateUntil.bigGuard) side.stateUntil.bigGuard = now + BIG_GUARD_SEC
   for (const t of side.timedBuffs || []) {
     if (!t.until) t.until = now + turnsToSec(t.turns)
   }
@@ -220,6 +225,8 @@ const expire = (side, now) => {
   for (const k of ['foresight', 'frenzy']) {
     if (side[k] && (side.stateUntil[k] ?? 0) + EPS < now) { side[k] = null; delete side.stateUntil[k] }
   }
+  // 大防御は数字なので null ではなく 0 へ戻す
+  if (side.bigGuard && (side.stateUntil.bigGuard ?? 0) + EPS < now) { side.bigGuard = 0; delete side.stateUntil.bigGuard }
   if (side.timedBuffs?.length) {
     side.timedBuffs = side.timedBuffs.filter(t => !t.until || t.until + EPS >= now)
   }
@@ -292,7 +299,7 @@ const act = (st, me, foe) => {
   const beforeFoe = { ...foe.buffs }
   const ailMe = { ...me.ail }
   const ailFoe = { ...foe.ail }
-  const opt = { noProc: true, noParalyze: true }
+  const opt = { noProc: true, noParalyze: true, bigGuardSec: BIG_GUARD_SEC }
   if (!ch.auto) opt.idx = ch.idx
   takeAction(me, foe, st.rng, st.log, opt)
   tickBleedAfterAct(me, st.log, foe)     // ★出血は行動した直後に刻む
@@ -351,6 +358,25 @@ export const buffChips = (side, now) => side.timed
   .filter(c => c.sec > 0)
 // 防御の残り秒（0＝防御していない）
 export const guardLeft = (side, now) => (side.guardCut ? Math.max(0, Math.ceil(side.guardUntil - now)) : 0)
+// ★職の軸の状態（空中・呪力・竜気・獣の型・納刀…）。
+//   ATBは自分でコマンドを選ぶので、**いま何が乗っているかが見えないと切り札を撃つ判断ができない**。
+//   バフと違って時間では切れず、技を撃つと変わる（＝残り秒は出さない）
+export const stateChips = (side) => {
+  const out = []
+  if (side.air) out.push({ key:'air', label:'🕊 空中' })
+  if (side.form) out.push({ key:'form', label:`🐾 ${BEAST_FORMS[side.form]?.label || side.form}の型` })
+  if (side.ritual > 0) out.push({ key:'ritual', label:`🔯 呪力×${side.ritual}` })
+  if (side.charge > 0) out.push({ key:'charge', label:`🐉 竜気×${side.charge}` })
+  if (side.stance) out.push({ key:'stance', label:'🗡 納刀' })
+  if (side.frenzy) out.push({ key:'frenzy', label:'💢 我を忘れている' })
+  if (side.foresight) out.push({ key:'foresight', label:'👁 見切り' })
+  if (side.bigGuard > 0) out.push({ key:'bigGuard', label:`🛡 大防御 被ダメージ-${side.bigGuard}%` })
+  if (side.rage > 0) out.push({ key:'rage', label:`🔥 高ぶり×${side.rage}` })
+  if (side.hitStacks > 0) out.push({ key:'hit', label:`🎯 照準×${side.hitStacks}` })
+  if (side.repeatCount > 1) out.push({ key:'repeat', label:`🔁 連打×${side.repeatCount}` })
+  return out
+}
+
 // 状態異常の表示（残り秒つき）
 export const ailChips = (side, now) => AIL_KEYS
   .filter(k => side.ail[k])
