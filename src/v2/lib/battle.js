@@ -699,6 +699,8 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       }
     }
     const varMult = varianceMultOf(skill, rng)   // ギャンブラー：1行動につき1回だけ振る
+    // ★「撃った」行より後ろに流したいログを貯める（1発ごとの状態異常）
+    const afterAil = []
     for (let h = 0; h < (skill.hits || 1); h++) {
       // ★多段で1発ごとに威力が上がる（体術師の飛天三角蹴り）。1発目は素のまま
       const ramp = skill.rampHit ? 1 + (skill.rampHit / 100) * h : 1
@@ -727,7 +729,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       // ★クリティカルの与ダメージ+%は**1発ずつ**掛ける（多段でクリした発だけ伸びる）
       // ★ヒットごとに状態異常を試す技（連撃で少しずつ積む）
       if (r.hit && skill.ailPerHit && skill.ail) {
-        tryInflict(me, foe, { ...skill.ail, chance: skill.ail.chance * off }, rng, log)
+        tryInflict(me, foe, { ...skill.ail, chance: skill.ail.chance * off }, rng, afterAil)
       }
       raw += r.hit && r.crit && me.evo.critDmg
         ? Math.floor(r.damage * (1 + me.evo.critDmg / 100))
@@ -753,11 +755,15 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     // 武器の進化（条件つきの与ダメージ+%をまとめて）
     raw = Math.floor(raw * evoMult(me, foe, { kind: skill.kind, skill: true, multi: (skill.hits || 1) > 1 }))
     rememberSkill(foe, skill.name)
-    const dmg = applyIncoming(me, foe, raw, skill.kind, rng, log)
+    // 受け手の反応（骸の壁・エンチャントの軽減・跳ね返し）も撃った行より後ろに出す
+    const afterHurt = []
+    const dmg = applyIncoming(me, foe, raw, skill.kind, rng, afterHurt)
     // ★先に「撃った」行を置く（状態異常やスタックの行より前に出す）。吸収の額は後で埋める
     const entry = { side: me.name, type: 'skill', skill: skill.name, kind: skill.kind,
       damage: dmg, crit, hits, of: skill.hits || 1, drain: 0 }
     log.push(entry)
+    for (const l of afterHurt) log.push(l)
+    for (const l of afterAil) log.push(l)
     if (hits > 0) {
       bumpHitStack(me, hits)
       onHit(me, foe, skill.kind, rng, log)
@@ -914,14 +920,17 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
   const critMult = r.hit && r.crit && me.evo.critDmg ? 1 + me.evo.critDmg / 100 : 1
   const raw = Math.floor(r.damage * (1 + (me.kind === 'mag' ? me.en.magDmgPct : me.en.physDmgPct) / 100)
     * critMult * evoMult(me, foe, { kind: me.kind, skill: false }))
-  const dmg = applyIncoming(me, foe, raw, me.kind, rng, log)
-  if (r.hit) { bumpHitStack(me, 1); onHit(me, foe, me.kind, rng, log); evoOnHit(me) }
+  // 撃った行を先に出すため、受け手の反応と当てたときの効果はいったん貯める
+  const after = []
+  const dmg = applyIncoming(me, foe, raw, me.kind, rng, after)
+  if (r.hit) { bumpHitStack(me, 1); onHit(me, foe, me.kind, rng, after); evoOnHit(me) }
   const drainRate = me.evo.drain / 100
   if (drainRate > 0 && dmg > 0) me.hp = Math.min(me.base.hp, me.hp + Math.max(1, Math.floor(dmg * drainRate)))
   if (me.kind === 'phys' && me.en.drainPhysPct > 0 && dmg > 0) {
     me.hp = Math.min(me.base.hp, me.hp + Math.max(1, Math.floor(dmg * me.en.drainPhysPct / 100)))
   }
   log.push({ side: me.name, type: 'normal', kind: me.kind, damage: dmg, crit: r.crit, hit: r.hit, mult: multScale })
+  for (const l of after) log.push(l)
 }
 
 // 回避率。HPが減っているときだけ乗る「際の見切り」をここで足す

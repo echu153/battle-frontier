@@ -1016,3 +1016,31 @@ test('吸収した額はログに残る（行を先に置いても消えない�
   assert.ok(l.drain > 0, '吸収の額が入っている')
   assert.equal(me.hp, 1000 + l.drain)
 })
+
+test('1発ごとに状態異常を撒く技でも、攻撃の行が先に出る', () => {
+  // ★影裂き（1発ごとに出血）は多段のループの中で撒くので、放っておくと
+  //   「☠ 出血になった！」→「⚔ 影裂き！」の順になる（2026-08-23 実機で発覚）
+  const st = { hp:100000, mp:100000, str:400, dex:400, agi:400, int_stat:400, vit:400, luk:400 }
+  const sk = { name:'連ね斬り', kind:'phys', mult:0.4, hits:3, proc:100, mp:0, sureHit:true,
+    noCrit:true, ailPerHit:true, ail:{ key:'bleed', chance:100 }, desc:'' }
+  const me = createSide({ name:'私', cls:'戦士', kind:'phys', stats: st, slots:[{ skill: sk, uses:9 }] })
+  const foe = createSide({ name:'的', cls:'戦士', kind:'phys', stats: st, slots: [] })
+  const log = []
+  takeAction(me, foe, () => 0.01, log, { idx: 0, noProc: true })
+  const iSkill = log.findIndex(l => l.type === 'skill')
+  const iAil = log.findIndex(l => l.type === 'ailment')
+  assert.ok(iSkill >= 0 && iAil >= 0, '攻撃と状態異常の両方が出る')
+  assert.ok(iSkill < iAil, '攻撃の行のほうが先（' + iSkill + ' < ' + iAil + '）')
+})
+
+test('通常攻撃でも、攻撃の行が受け手の反応より先に出る', () => {
+  const st = { hp:100000, mp:100000, str:400, dex:400, agi:400, int_stat:400, vit:400, luk:400 }
+  const me = createSide({ name:'私', cls:'戦士', kind:'phys', stats: st, slots: [] })
+  const foe = createSide({ name:'的', cls:'死霊使い', kind:'phys', stats: st, slots: [] })
+  foe.wallPct = 50   // 骸の壁（受けたときにログが出る）
+  const log = []
+  for (let i = 0; i < 12; i++) takeAction(me, foe, () => 0.01, log, { noProc: true })
+  const iNormal = log.findIndex(l => l.type === 'normal')
+  const iWall = log.findIndex(l => l.type === 'wall')
+  if (iWall >= 0) assert.ok(iNormal < iWall, '攻撃の行のほうが先（' + iNormal + ' < ' + iWall + '）')
+})
