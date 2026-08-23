@@ -304,6 +304,13 @@ const act = (st, me, foe) => {
   if (!ch.auto) opt.idx = ch.idx
   takeAction(me, foe, st.rng, st.log, opt)
   tickBleedAfterAct(me, st.log, foe)     // ★出血は行動した直後に刻む
+  // ★バフ消しで落ちたぶんは「デバフが入った」ではない。差分から外してから登録する
+  for (const [side, before] of [[me, beforeMe], [foe, beforeFoe]]) {
+    if (!side.dispelled) continue
+    for (const k of Object.keys(side.dispelled)) delete before[k]
+    side.dispelled = null
+    recomputeBuffs(side)
+  }
   commitBuff(me, beforeMe, false, st.t)
   commitBuff(foe, beforeFoe, true, st.t)
   commitAil(me, ailMe, st.t)

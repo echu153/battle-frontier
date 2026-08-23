@@ -827,6 +827,13 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       delete foe.buffs[k]
       // 期限つきバフ側にも同じステが乗っていたら一緒に落とす
       foe.timedBuffs = (foe.timedBuffs || []).filter(t => !(k in (t.table || {})))
+      // ★ATB：秒で切れる枠からも落とす。ここを消さないと buffs を作り直したときに戻ってくる
+      if (foe.timed) {
+        for (const e of foe.timed) delete e.table[k]
+        foe.timed = foe.timed.filter(e => Object.keys(e.table).length > 0)
+      }
+      // 消したことを覚えておく（ATBが「デバフが入った」と読み違えないように）
+      ;(foe.dispelled ||= {})[k] = true
       log.push({ side: foe.name, type: 'dispel', skill: skill.name, stat: k })
     }
   }

@@ -483,3 +483,31 @@ test('連打のチップは、連打を活かすスキルを持っている側�
   assert.ok(stateChips(st.a).some(c => c.key === 'repeat'), '持っている側には出る')
   assert.ok(!stateChips(st.b).some(c => c.key === 'repeat'), '持っていない側には出さない')
 })
+
+test('バフ消しは、ATBでも本当にバフを消す（デバフに化けない）', () => {
+  // ★ATBのバフは秒で切れる枠に持つので、buffs から消すだけでは戻ってきてしまう。
+  //   実機では +20% と -20% が並んで合計0になり、次の狙いも外れていた（2026-08-23）
+  const up = { name:'鼓舞', kind:'buff', proc:100, mp:0, buff:{ self:{ str:20 } }, priority:1, desc:'' }
+  const cut = { name:'剥奪', kind:'phys', mult:1, proc:100, mp:0, sureHit:true, dispel:{ chance:100 }, desc:'' }
+  const me = { name:'私', cls:'戦士', kind:'phys', stats: stats(), slots:[{ skill: cut, uses:99 }] }
+  const foe = { name:'的', cls:'戦士', kind:'phys', stats: stats({ hp: 10 ** 7 }), slots:[{ skill: up, uses:99 }] }
+  const st = createAtb(me, foe, { rng: () => 0.5 })
+
+  // まず相手にバフを乗せる
+  st.b.def = { idx: 0 }
+  st.b.gauge = GAUGE_MAX
+  step(st, 0.05)
+  assert.equal(st.b.buffs.str, 20, '相手にバフが乗った')
+
+  // こちらが剥奪する
+  st.a.def = { idx: 0 }
+  st.a.gauge = GAUGE_MAX
+  step(st, 0.05)
+  assert.ok(!(st.b.buffs.str > 0), 'バフが消えている')
+  assert.ok(!(st.b.buffs.str < 0), `デバフに化けていない（str=${st.b.buffs.str}）`)
+  assert.ok(!st.b.timed.some(e => 'str' in e.table), '秒で切れる枠からも消えている')
+
+  // 時間が経っても戻ってこない
+  run(st, 40)
+  assert.ok(!(st.b.buffs.str > 0), '時間が経っても戻らない')
+})
