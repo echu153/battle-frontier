@@ -1,6 +1,7 @@
 // バトルフロンティアⅡ 装備カタログのテスト（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readdirSync, readFileSync } from 'node:fs'
 import {
   CATALOG, ITEM_BY_ID, RANKS, RANK_BASE, PLUS_MULT, PARTS, SLOTS,
   WEAPONS, ARMOR_LINES, ACCESSORIES, powerOf, statsOf, slotsFor, itemsOf, typesOf,
@@ -86,4 +87,23 @@ test('ランクが上がるほど強い（同じ種類の中で逆転しない�
       prev = p
     }
   }
+})
+
+// ★装備枠の名前は SLOT_LABEL だけが正（2026-08-23 実機で画面ごとに違っていた）
+//   プロフィールが「頭具/防具/腕具/足具/アクセサリー」、ステータスが「武器（右手）/頭/鎧…」、
+//   倉庫が SLOT_LABEL、と3通りあった。ベタ書きが戻ってきたらここで落ちる。
+test('装備枠の名前を画面にベタ書きしていない（SLOT_LABELが唯一の正）', () => {
+  const dir = new URL('../components/', import.meta.url)
+  const OLD = ['頭具', '防具', '腕具', '足具', 'アクセサリー', '武器（右手）', '武器（左手）']
+  const bad = []
+  for (const name of readdirSync(dir)) {
+    if (!name.endsWith('.jsx')) continue
+    const src = readFileSync(new URL(name, dir), 'utf8')
+    for (const w of OLD) {
+      // コメント行は見逃す（説明で昔の名前に触れることがある）
+      const hit = src.split(/\r?\n/).some(l => l.includes(`"${w}"`) || l.includes(`'${w}'`))
+      if (hit) bad.push(`${name}: 「${w}」をベタ書きしている`)
+    }
+  }
+  assert.deepEqual(bad, [], bad.join(' / '))
 })

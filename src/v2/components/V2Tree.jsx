@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../supabase'
-import { FORTUNE_BY_NAME, canPray, remainUntilPray } from '../lib/tree.js'
+import { FORTUNE_BY_NAME, canPray, remainUntilPray, rewardText, PRAY_GOLD, PRAY_EXP } from '../lib/tree.js'
 import { box, btn, miniBtn } from './v2ui.js'
 
 // 施設「ユグレシアの宝樹」。1日1回だけ祈れて、大凶〜大吉が引かれる。
@@ -42,7 +42,7 @@ export default function V2Tree({ prof, isAdmin, onProfile, onBack }) {
         <button onClick={onBack} style={miniBtn('#88aaff')}>← ホームへ</button>
       </div>
       <div style={{ color:'#7fa6d0', fontSize:'10px', lineHeight:'1.8', marginBottom:'10px' }}>
-        1日1回だけ祈れます。宝樹の返す言葉（大凶〜大吉）で、もらえるものが変わります。
+        1日1回だけ祈れます。宝樹の返す言葉（大凶〜大吉）で、もらえる Gold と EXP が変わります（吉で {PRAY_GOLD}G・EXP+{PRAY_EXP}）。
         <br />日付が変わるのは日本時間の5時です。
       </div>
 
@@ -51,9 +51,9 @@ export default function V2Tree({ prof, isAdmin, onProfile, onBack }) {
         <div style={{ border:`1px solid ${shown.color}`, background:'#000c1c', padding:'14px', marginBottom:'10px', textAlign:'center' }}>
           <div style={{ color:shown.color, fontSize:'24px', letterSpacing:'6px', marginBottom:'6px' }}>{shown.name}</div>
           <div style={{ color:'#a8c4d6', fontSize:'11px', lineHeight:'1.8' }}>{shown.text}</div>
-          {/* ★報酬が決まったらここに出す */}
+          {/* 報酬はサーバーが決めて文字列で返す（画面では計算しない） */}
           <div style={{ color:'#7fa6d0', fontSize:'10px', marginTop:'8px' }}>
-            {result?.reward ? result.reward : '（報酬は準備中です）'}
+            {result?.reward || (shown ? rewardText(shown) : '')}
           </div>
         </div>
       )}

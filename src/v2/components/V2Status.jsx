@@ -6,6 +6,7 @@ import { classBonusText, jobCountOf } from '../lib/classBonus.js'
 import { TIER_COLOR } from '../lib/classes.js'
 import { KIND_COLOR, SKILL_BY_NAME, SKILL_SET_SLOTS, passiveOf } from '../lib/skills.js'
 import { equippedItems, totalStats } from '../lib/loadout.js'
+import { SLOT_LABEL } from '../lib/equipment.js'
 import { RANK_COLOR } from './v2ui.js'
 import V2ItemTip, { V2SkillTip, V2Tip } from './V2ItemTip.jsx'
 
@@ -223,10 +224,11 @@ export default function V2Status({ prof, inventory, runes, fishDex, classes, ope
 
         <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'2px' }}>装備</div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'2px', marginBottom:'6px' }}>
-          {eq('right', '武器（右手）', 0)}{eq('head', '頭', 1)}
-          {eq('left', '武器（左手）', 0)}{eq('body', '鎧', 1)}
-          {eq('arm', '腕', 0)}{eq('foot', '足', 1)}
-          {eq('acc1', 'アクセ①', 0)}{eq('acc2', 'アクセ②', 1)}
+          {/* ★名前は equipment.js の SLOT_LABEL が正。ここでベタ書きしない */}
+          {eq('right', SLOT_LABEL.right, 0)}{eq('head', SLOT_LABEL.head, 1)}
+          {eq('left', SLOT_LABEL.left, 0)}{eq('body', SLOT_LABEL.body, 1)}
+          {eq('arm', SLOT_LABEL.arm, 0)}{eq('foot', SLOT_LABEL.foot, 1)}
+          {eq('acc1', SLOT_LABEL.acc1, 0)}{eq('acc2', SLOT_LABEL.acc2, 1)}
         </div>
 
         <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'2px' }}>スキル編成</div>

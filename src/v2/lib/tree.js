@@ -7,22 +7,37 @@
 //   このファイルは「表示」と「テスト」のためのもので、ここで引いた結果は使わない。
 //   重みを変えるときは v2_pray の c_weight も必ず同時に直すこと（下のテストで並びを固定してある）。
 //
-// ★報酬は未定（2026-08-16）。決まったら
-//     ・このファイルの FORTUNES に reward を足す
-//     ・v2_pray の「報酬をここに入れる」と書いてある場所に処理を足す
-//   の2か所を直す。いまは結果だけ返して何も配らない。
+// ★報酬（2026-08-23 ユーザー決定）：**Gold と EXP**。ベースは「吉」の 300G・EXP30 で、
+//   結果ごとの倍率 mult を掛ける。重み付きの期待値は×1.045＝ならすとベースとほぼ同じ。
+//   ⚠**配るのはサーバー（v2_pray）**。ここの数字は表示とテスト用の写しなので、
+//     倍率を変えるときは v2_pray の c_mult も必ず同時に直すこと（v2sql.test.js が突き合わせる）。
 // ============================================================
+
+// 報酬のベース（＝「吉」でもらえる量）
+export const PRAY_GOLD = 300
+export const PRAY_EXP  = 30
 
 // 出にくい順に上から。weight の合計は100（＝そのまま%として読める）
 export const FORTUNES = [
-  { id:'daikichi', name:'大吉', weight:5,  color:'#ffcc00', text:'宝樹が大きく揺れ、金色の葉が降りそそいだ。' },
-  { id:'chukichi', name:'中吉', weight:10, color:'#ffaa44', text:'枝先がほのかに輝いている。' },
-  { id:'shokichi', name:'小吉', weight:15, color:'#88ddaa', text:'若葉が一枚、手のひらに落ちてきた。' },
-  { id:'kichi',    name:'吉',   weight:25, color:'#88ccff', text:'穏やかな風が幹をなでていった。' },
-  { id:'suekichi', name:'末吉', weight:20, color:'#7f95c4', text:'葉ずれの音がかすかに返ってきた。' },
-  { id:'kyo',      name:'凶',   weight:15, color:'#aa77cc', text:'宝樹は静かなままだった。' },
-  { id:'daikyo',   name:'大凶', weight:10, color:'#ff6666', text:'幹がきしみ、あたりが暗くなった。' },
+  { id:'daikichi', name:'大吉', weight:5,  mult:3,   color:'#ffcc00', text:'宝樹が大きく揺れ、金色の葉が降りそそいだ。' },
+  { id:'chukichi', name:'中吉', weight:10, mult:2,   color:'#ffaa44', text:'枝先がほのかに輝いている。' },
+  { id:'shokichi', name:'小吉', weight:15, mult:1.5, color:'#88ddaa', text:'若葉が一枚、手のひらに落ちてきた。' },
+  { id:'kichi',    name:'吉',   weight:25, mult:1,   color:'#88ccff', text:'穏やかな風が幹をなでていった。' },
+  { id:'suekichi', name:'末吉', weight:20, mult:0.7, color:'#7f95c4', text:'葉ずれの音がかすかに返ってきた。' },
+  { id:'kyo',      name:'凶',   weight:15, mult:0.4, color:'#aa77cc', text:'宝樹は静かなままだった。' },
+  { id:'daikyo',   name:'大凶', weight:10, mult:0.2, color:'#ff6666', text:'幹がきしみ、あたりが暗くなった。' },
 ]
+
+// その結果でもらえる Gold と EXP。★サーバーの v2_pray と同じ丸め方（四捨五入）
+export const rewardOf = (f) => ({
+  gold: Math.round(PRAY_GOLD * (f?.mult ?? 1)),
+  exp:  Math.round(PRAY_EXP  * (f?.mult ?? 1)),
+})
+// 画面に出す文（サーバーが返す reward と同じ形）
+export const rewardText = (f) => {
+  const r = rewardOf(f)
+  return `${r.gold.toLocaleString()}G・EXP+${r.exp}`
+}
 
 export const FORTUNE_BY_NAME = Object.fromEntries(FORTUNES.map(f => [f.name, f]))
 export const TOTAL_WEIGHT = FORTUNES.reduce((t, f) => t + f.weight, 0)

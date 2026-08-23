@@ -4,6 +4,7 @@ import { STAT_KEYS, STAT_DEFS, MAX_LV, calcPower, expToNext } from '../lib/stats
 import { classBonusText, jobCountOf } from '../lib/classBonus.js'
 import { attackKindOf } from '../lib/battle.js'
 import { equippedItems, totalStats } from '../lib/loadout.js'
+import { SLOT_LABEL } from '../lib/equipment.js'
 import { SKILL_BY_NAME, KIND_LABEL, KIND_COLOR } from '../lib/skills.js'
 import { AREAS } from '../lib/enemies.js'
 import { RANK_COLOR, miniBtn } from './v2ui.js'
@@ -137,10 +138,11 @@ export default function V2Profile({ prof, inventory, runes, fishDex, onProfile, 
             <Row key={a} k1={STAT_DEFS[a].label} c1={STAT_DEFS[a].color} v1={stat(a)}
               k2={STAT_DEFS[b].label} c2={STAT_DEFS[b].color} v2={stat(b)} />
           ))}
-          <Row k1="武器（右手）" v1={eq('right')} k2="頭具" v2={eq('head')} />
-          <Row k1="武器（左手）" v1={eq('left')} k2="防具" v2={eq('body')} />
-          <Row k1="腕具" v1={eq('arm')} k2="足具" v2={eq('foot')} />
-          <Row k1="アクセサリー" v1={eq('acc1')} k2="アクセサリー" v2={eq('acc2')} />
+          {/* ★名前は equipment.js の SLOT_LABEL が正。ここでベタ書きしない */}
+          <Row k1={SLOT_LABEL.right} v1={eq('right')} k2={SLOT_LABEL.head} v2={eq('head')} />
+          <Row k1={SLOT_LABEL.left}  v1={eq('left')}  k2={SLOT_LABEL.body} v2={eq('body')} />
+          <Row k1={SLOT_LABEL.arm}   v1={eq('arm')}   k2={SLOT_LABEL.foot} v2={eq('foot')} />
+          <Row k1={SLOT_LABEL.acc1}  v1={eq('acc1')}  k2={SLOT_LABEL.acc2} v2={eq('acc2')} />
           {[0, 2].map(i => (
             <Row key={i} k1={`スキル${i + 1}`} v1={skills[i]?.name || <span style={{ color:'#7b8fb8' }}>—</span>}
               k2={`スキル${i + 2}`} v2={skills[i + 1]?.name || <span style={{ color:'#7b8fb8' }}>—</span>} />

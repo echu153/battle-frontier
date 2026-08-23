@@ -2084,6 +2084,11 @@ declare
   --   片方だけ直すと、実際に引かれる確率が設計と変わる。
   c_names  constant text[] := array['大吉','中吉','小吉','吉','末吉','凶','大凶'];
   c_weight constant int[]  := array[5, 10, 15, 25, 20, 15, 10];
+  -- ★報酬（2026-08-23）。ベースは「吉」の 300G・EXP30 で、結果ごとに倍率を掛ける。
+  --   src/v2/lib/tree.js の PRAY_GOLD / PRAY_EXP / FORTUNES.mult と同じにすること。
+  c_gold   constant int    := 300;
+  c_exp    constant int    := 30;
+  c_mult   constant numeric[] := array[3, 2, 1.5, 1, 0.7, 0.4, 0.2];
   c_keep   constant int    := 10;   -- 履歴として残す件数
   v_uid   uuid := auth.uid();
   v_admin boolean := false;
@@ -2092,6 +2097,9 @@ declare
   v_name  text := c_names[array_length(c_names, 1)];
   v_count int;
   v_log   jsonb;
+  v_idx   int;
+  v_gold  int;
+  v_exp   int;
   i       int;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
@@ -2144,10 +2152,19 @@ begin
   -- デイリーミッション：実際に祈れた回だけ数える
   perform public.v2_daily_bump(v_uid, 'pray', 1);
 
-  -- ★報酬をここに入れる（未定）。v_name（大吉〜大凶）で分けて Gold や装備を配り、
-  --   配ったものを 'reward' に文字列で入れて返すと、そのまま画面に出る。
+  -- ★報酬（2026-08-23）：Gold と EXP。結果の倍率を掛ける。
+  --   ここまで来ているのは「実際に祈れた」ときだけなので、二重取りにはならない。
+  v_idx  := coalesce(array_position(c_names, v_name), 4);
+  v_gold := round(c_gold * c_mult[v_idx]);
+  v_exp  := round(c_exp  * c_mult[v_idx]);
+  update public.v2_profiles set gold = gold + v_gold, updated_at = now() where id = v_uid;
+  -- EXPはLVアップの抽選を通す（LV100のときは中で弾かれる）
+  perform public.v2_apply_exp(v_uid, v_exp);
+
   return jsonb_build_object('ok', true, 'fortune', v_name,
-                            'pray_count', v_count, 'pray_log', v_log, 'reward', null);
+                            'pray_count', v_count, 'pray_log', v_log,
+                            'gold', v_gold, 'exp', v_exp,
+                            'reward', format('%sG・EXP+%s', to_char(v_gold, 'FM999,999'), v_exp));
 end;
 $$;
 revoke all on function public.v2_pray() from public;

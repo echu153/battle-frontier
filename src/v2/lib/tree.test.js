@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   FORTUNES, TOTAL_WEIGHT, chanceOf, rollFortune,
+  PRAY_GOLD, PRAY_EXP, rewardOf, rewardText,
   prayDayOf, canPray, nextPrayAt, remainUntilPray, DAY_RESET_HOUR,
 } from './tree.js'
 
@@ -64,4 +65,27 @@ test('次に祈れる時刻は日本時間の5時ちょうど', () => {
   assert.deepEqual([r.h, r.m, r.s], [10, 0, 0])
   // 祈れる状態なら0
   assert.equal(remainUntilPray(null, new Date('2026-08-16T10:00:00Z')).total, 0)
+})
+
+test('報酬はベース300G・EXP30に結果の倍率を掛ける', () => {
+  assert.equal(PRAY_GOLD, 300)
+  assert.equal(PRAY_EXP, 30)
+  const kichi = FORTUNES.find(f => f.name === '吉')
+  assert.deepEqual(rewardOf(kichi), { gold: 300, exp: 30 }, '「吉」がちょうどベース')
+  assert.deepEqual(rewardOf(FORTUNES.find(f => f.name === '大吉')), { gold: 900, exp: 90 })
+  assert.deepEqual(rewardOf(FORTUNES.find(f => f.name === '大凶')), { gold: 60, exp: 6 })
+  assert.equal(rewardText(kichi), '300G・EXP+30')
+})
+
+test('良い結果ほど多くもらえる（並びと逆転しない）', () => {
+  for (let i = 1; i < FORTUNES.length; i++) {
+    assert.ok(FORTUNES[i - 1].mult > FORTUNES[i].mult,
+      `${FORTUNES[i - 1].name} > ${FORTUNES[i].name} でない`)
+  }
+})
+
+test('ならすとベースとほぼ同じになる（期待値が偏っていない）', () => {
+  // ★ここが大きくズレると「毎日祈るとGoldが湧く／枯れる」になる
+  const exp = FORTUNES.reduce((t, f) => t + (f.weight / TOTAL_WEIGHT) * f.mult, 0)
+  assert.ok(Math.abs(exp - 1) < 0.1, `期待値の倍率 ${exp.toFixed(3)}（1.0から離れすぎ）`)
 })

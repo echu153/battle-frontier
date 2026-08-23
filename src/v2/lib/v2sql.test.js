@@ -8,6 +8,7 @@ import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
 import { RATES } from './smith.js'
 import { RANKS } from './equipment.js'
+import { FORTUNES, PRAY_GOLD, PRAY_EXP } from './tree.js'
 import { SELL_BASE_TIER, SELL_RARITY_MULT } from './material.js'
 import { LOSE_DROP, floorAfterLose } from './arena.js'
 import { SKILLS, OFF_CLASS_MP_MULT } from './skills.js'
@@ -469,4 +470,19 @@ test('★マスタの種は何度流しても入れ直せる（2回目に落ち�
 
   assert.deepEqual(bad, [],
     `2回目に流すと落ちる種がある。on conflict を付けるか、直前で delete すること: ${bad.join(' / ')}`)
+})
+
+// ★宝樹の報酬は「配るのはサーバー・表示はJS」の2か所に同じ数字がある（2026-08-23）
+//   片方だけ直すと、画面に出る額と実際にもらえる額が食い違う
+test('宝樹の報酬（ベースと倍率）がSQLとJSで一致している', () => {
+  const gold = SQL.match(/c_gold\s+constant int\s+:=\s*(\d+)/)
+  const exp = SQL.match(/c_exp\s+constant int\s+:=\s*(\d+)/)
+  const mult = SQL.match(/c_mult\s+constant numeric\[\]\s*:=\s*array\[([^\]]+)\]/)
+  assert.ok(gold && exp && mult, 'v2_pray に報酬の定義が見つからない')
+  assert.equal(Number(gold[1]), PRAY_GOLD, 'ベースGoldが違う')
+  assert.equal(Number(exp[1]), PRAY_EXP, 'ベースEXPが違う')
+  assert.deepEqual(
+    mult[1].split(',').map(s => Number(s.trim())),
+    FORTUNES.map(f => f.mult),
+    '結果ごとの倍率が違う（並びはSQLの c_names と同じ順）')
 })
