@@ -96,6 +96,20 @@ export const buildBattleLog = (r, you, foe) => {
       out.push({ text:`👁 ${actor}の${l.skill}！ 相手の動きを見切っている！`, color: LOG_COLOR.guard })
     } else if (l.type === 'dispel') {
       out.push({ text:`✂ ${actor}の強化が1つ消えた！`, color: LOG_COLOR.ail })
+    } else if (l.type === 'bigGuard') {
+      out.push({ text:`🛡 ${actor}の${l.skill}！ 1ターンのあいだ受けるダメージ-${l.cut}%！`, color: LOG_COLOR.guard })
+    } else if (l.type === 'cure') {
+      out.push({ text:`🌿 ${actor}の${l.skill}！ ${l.ail}が治った！`, color: LOG_COLOR.heal })
+    } else if (l.type === 'hpCost') {
+      out.push({ text:`🩸 ${actor}は${l.skill}のために${l.damage.toLocaleString()}のHPを削った！`, color:'#ff8844' })
+    } else if (l.type === 'regen') {
+      out.push({ text:`💚 ${actor}の${l.skill}！ しばらくHPが戻り続ける！`, color: LOG_COLOR.heal })
+    } else if (l.type === 'mpRegen') {
+      out.push({ text:`💙 ${actor}の${l.skill}！ しばらくMPが戻り続ける！`, color:'#66aaff' })
+    } else if (l.type === 'mpRegenTick') {
+      out.push({ text:`💙 ${actor}のMPが${(l.mp || 0).toLocaleString()}回復した！`, color:'#66aaff' })
+    } else if (l.type === 'dodgeCut') {
+      out.push({ text:`🐉 ${actor}の鱗が攻撃を弾いた！`, color: LOG_COLOR.guard })
     } else if (l.type === 'guts') {
       // 武器の進化「不屈」。1戦に1回だけ致命傷をHP1で耐える
       out.push({ text:`💢 ${actor}は倒れずに踏み止まった！`, color:'#ffcc44' })

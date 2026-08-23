@@ -1,6 +1,7 @@
 // バトルフロンティアⅡ 戦闘ログの文面の回帰テスト（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { buildBattleLog } from './battleLog.js'
 
 const YOU = 'おれおれお'
@@ -79,4 +80,18 @@ test('知らない種類の行は落とす（落ちない）', () => {
   assert.deepEqual(build([{ side: YOU, type:'まだ無い種類' }]), [])
   assert.deepEqual(build(null), [])
   assert.deepEqual(buildBattleLog(null, YOU, FOE), [])
+})
+
+// ★2026-08-23 実機で発覚：大防御を撃ってもログに何も出ず「効いていない」ように見えた。
+//   戦闘が出すログの種類と、画面が出せる種類がズレたら落とす（片方だけ足すと気付く）。
+test('戦闘が出すログの種類は、すべて画面に出せる', () => {
+  const emit = new Set()
+  for (const p of ['battle.js', 'atb.js']) {
+    const src = readFileSync(new URL('./' + p, import.meta.url), 'utf8')
+    for (const m of src.matchAll(/type:\s*'([a-zA-Z]+)'/g)) emit.add(m[1])
+  }
+  const src = readFileSync(new URL('./battleLog.js', import.meta.url), 'utf8')
+  const rendered = new Set([...src.matchAll(/l\.type === '([a-zA-Z]+)'/g)].map(m => m[1]))
+  const missing = [...emit].filter(t => !rendered.has(t)).sort()
+  assert.deepEqual(missing, [], '画面に出せないログの種類: ' + missing.join(', '))
 })
