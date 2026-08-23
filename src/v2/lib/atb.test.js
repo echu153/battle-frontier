@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import {
   createAtb, step, needOf, fillRatio, buffSecOf, chosenOf, needNow, buffChips, ailChips,
   GAUGE_BASE, FILL_PER_SEC, TICK_SEC, AIL_SEC, MAX_DT, AGI_EFFECT,
-  GUARD_NEED, GUARD_CUT, GUARD_SEC, guardLeft, needFor, PRIORITY_CUT, procBonusOf,
+  GUARD_NEED, GUARD_CUT, GUARD_SEC, guardLeft, needFor, PRIORITY_CUT, procBonusOf, GAUGE_MAX,
 } from './atb.js'
 import { runBattle, createSide, takeAction } from './battle.js'
 import { inflict, POISON_RATE } from './ailments.js'
@@ -114,16 +114,15 @@ test('バフは時間で消える（残り秒つきで持つ）', () => {
   assert.equal(st.a.buffs.vit, 50, 'バフが乗る')
   assert.equal(st.a.timed[0].sec, 60, 'VIT+50% は60秒もつ')
   assert.ok(buffChips(st.a, st.t)[0].sec >= 58, '残り秒が減っていく')
+  // ★2026-08-23：同じステは重ならない。撃ち続けても値は変わらず、残り時間だけリセットされる
   run(st, 30)
-  assert.ok(st.a.buffs.vit > 50, '撃ち続けるぶんは積み上がる')
-  const stacked = st.a.timed.length
-  assert.ok(stacked > 1)
-  // 60秒経つと古いものから順に切れる
+  assert.equal(st.a.buffs.vit, 50, '重ねがけしても増えない')
+  assert.equal(st.a.timed.length, 1, '同じステの枠は1つだけ')
+  assert.ok(buffChips(st.a, st.t)[0].sec >= 55, '掛け直したぶん残り時間は戻っている')
+  // 撒き直さなければ時間で切れる
   st.a.def = { idx: null }
-  run(st, 40)
-  assert.ok(st.a.timed.length < stacked, '古いバフから消えていく')
   run(st, 70)
-  assert.equal(st.a.timed.length, 0, '撒き直さなければ全部消える')
+  assert.equal(st.a.timed.length, 0, '撒き直さなければ消える')
   assert.equal(st.a.buffs.vit ?? 0, 0, '元に戻る')
 })
 
@@ -349,4 +348,48 @@ test('ターンで数える状態（見切り・狂乱）はATBでは秒に読�
   st.a.def = { idx: null }
   run(st, 30)               // 5ターン＝25秒より長く進める
   assert.equal(st.a.foresight, null, 'ATBでも切れる')
+})
+
+// ★2026-08-23：ATBでは同じステのバフは重ならない（掛け直すと値は大きいほう・時間はリセット）
+test('同じステのバフは重ならない（掛け直しは時間のリセット）', () => {
+  const buff = { name:'気合い', kind:'buff', proc:100, mp:0, buff:{ self:{ str:30 } }, priority:1, desc:'' }
+  const me = { name:'私', cls:'戦士', kind:'phys', stats: stats(), slots:[{ skill: buff, uses:99 }] }
+  const foe = { name:'的', cls:'戦士', kind:'phys', stats:stats({ hp: 10 ** 7 }), slots: [] }
+  const st = createAtb(me, foe, { rng: () => 0.5 })
+  const base = st.a.buffs.str || 0
+  st.a.def = { idx: 0 }
+  // 1回目
+  st.a.gauge = GAUGE_MAX
+  step(st, 0.05)
+  const after1 = st.a.buffs.str
+  assert.equal(after1, base + 30, '1回目は素直に乗る')
+  const until1 = st.a.timed[0].until
+  assert.equal(st.a.timed.length, 1)
+  // 2回目（時間を進めてから掛け直す）
+  for (let i = 0; i < 200; i++) step(st, 0.05)   // 10秒進める
+  st.a.gauge = GAUGE_MAX
+  step(st, 0.05)
+  assert.equal(st.a.buffs.str, after1, '重ねがけしても増えない')
+  assert.equal(st.a.timed.length, 1, '同じステの枠は1つだけ')
+  assert.ok(st.a.timed[0].until > until1, '掛け直したぶん残り時間が伸びる')
+})
+
+test('別のステのバフは同時に乗る（重ならないのは同じステだけ）', () => {
+  const bStr = { name:'力', kind:'buff', proc:100, mp:0, buff:{ self:{ str:30 } }, priority:1, desc:'' }
+  const bAgi = { name:'速', kind:'buff', proc:100, mp:0, buff:{ self:{ agi:30 } }, priority:1, desc:'' }
+  const me = { name:'私', cls:'戦士', kind:'phys', stats: stats(),
+    slots:[{ skill: bStr, uses:99 }, { skill: bAgi, uses:99 }] }
+  const foe = { name:'的', cls:'戦士', kind:'phys', stats:stats({ hp: 10 ** 7 }), slots: [] }
+  const st = createAtb(me, foe, { rng: () => 0.5 })
+  const s0 = st.a.buffs.str || 0
+  const a0 = st.a.buffs.agi || 0
+  st.a.def = { idx: 0 }
+  st.a.gauge = GAUGE_MAX
+  step(st, 0.05)
+  st.a.def = { idx: 1 }
+  st.a.gauge = GAUGE_MAX
+  step(st, 0.05)
+  assert.equal(st.a.buffs.str, s0 + 30)
+  assert.equal(st.a.buffs.agi, a0 + 30)
+  assert.equal(st.a.timed.length, 2)
 })

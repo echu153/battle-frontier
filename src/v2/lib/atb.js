@@ -165,7 +165,22 @@ const commitBuff = (side, before, isDebuff, now) => {
     if (d) { table[k] = d; total += Math.abs(d) }
   }
   if (!total) return
-  const sec = buffSecOf(total, isDebuff)
+  // ★2026-08-23：ATBでは**同じステのバフは重ならない**（ユーザー指定）。
+  //   時間で切れる仕組みがある以上、重ねられると「最初の1分はひたすらバフ」が最適解になり、
+  //   実測で180秒のうちにステが×6〜×8まで伸びていた。
+  //   掛け直したときは「値は大きいほう・残り時間はリセット」＝切れたら入れ直す運用にする。
+  //   ★プラスとマイナスは別枠（自分のバフが相手のデバフを打ち消す形にはしない）
+  for (const [k, v] of Object.entries(table)) {
+    for (const e of side.timed) {
+      const cur = e.table[k]
+      if (cur === undefined || Math.sign(cur) !== Math.sign(v)) continue
+      if (Math.abs(cur) > Math.abs(v)) table[k] = cur   // 強いほうが残る
+      delete e.table[k]
+    }
+  }
+  side.timed = side.timed.filter(e => Object.keys(e.table).length > 0)
+  const merged = Object.values(table).reduce((t, v) => t + Math.abs(v), 0)
+  const sec = buffSecOf(merged, isDebuff)
   side.timed.push({ table, sec, until: now + sec })
   recomputeBuffs(side)
 }
