@@ -22,7 +22,7 @@
 //   例外は出血だけで、こちらはスタックが積み上がる（旧版と同じ）。
 // ============================================================
 
-export const AIL_KEYS = ['bleed', 'poison', 'slow', 'paralyze', 'healCut']
+export const AIL_KEYS = ['bleed', 'poison', 'slow', 'paralyze', 'healCut', 'silence']
 
 // 出血（旧版準拠）
 export const BLEED_MAX_STACKS = 5
@@ -46,6 +46,10 @@ export const bleedTickOf = (bleed, hp) => {
   return Math.max(1, Math.floor(Math.min(raw, (bleed?.cap || Infinity) * st)))
 }
 
+// ★2026-08-23 サイレンス：スキルの**発動率-20%**（ATBでは必要ゲージが伸びる）
+export const SILENCE_TURNS = 3
+export const SILENCE_PROC  = 20
+
 export const POISON_TURNS = 4
 export const POISON_RATE  = 0.03      // 最大HPに対する割合
 // 鈍足
@@ -57,7 +61,7 @@ export const PARALYZE_TURNS = 1
 export const HEAL_CUT_TURNS = 3
 
 export const AIL_LABEL = {
-  bleed: '出血', poison: '毒', slow: '鈍足', paralyze: '麻痺', healCut: '回復阻害',
+  bleed: '出血', poison: '毒', slow: '鈍足', paralyze: '麻痺', healCut: '回復阻害', silence: 'サイレンス',
 }
 
 // 状態異常の入れ物。side.ail に持たせる
@@ -80,6 +84,11 @@ export const inflict = (ail, key, opt = {}) => {
       // 旧版と同じ：すでに毒なら入らない
       if (ail.poison?.turns > 0) return false
       ail.poison = { turns: POISON_TURNS, rate: POISON_RATE, cap: opt.cap }
+      return true
+    }
+    case 'silence': {
+      // 鈍足と同じ扱い：すでにかかっていれば数え直し
+      ail.silence = { turns: opt.turns || SILENCE_TURNS }
       return true
     }
     case 'slow':
@@ -136,7 +145,7 @@ export const tickAilments = (ail, { maxHp }) => {
     if (ail.poison.turns <= 0) delete ail.poison
   }
   // ターン数だけ持つもの
-  for (const k of ['slow', 'healCut']) {
+  for (const k of ['slow', 'healCut', 'silence']) {
     if (ail[k]?.turns > 0) {
       ail[k].turns -= 1
       if (ail[k].turns <= 0) delete ail[k]

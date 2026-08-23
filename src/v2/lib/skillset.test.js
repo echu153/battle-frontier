@@ -177,13 +177,13 @@ test('編成どおりの順番と回数で戦闘が回る', () => {
 })
 
 // ===== パッシブ（未実装。足したときに壊れないための土台） =====
+// ★2026-08-23：パッシブは枠に置かない。**その職業のものが最初から効いている**
 test('パッシブは発動順のローテーションに入らず、常時の補正として掛かる', () => {
-  const passive = { name:'テスト鍛錬', cls:'戦士', kind:'passive', mp:0, proc:100,
-    passive:{ statPct:{ str:50 } }, desc:'STR+50%' }
   const atk = { name:'殴る', cls:'戦士', kind:'phys', mult:1, proc:100, mp:0, sureHit:true, noCrit:true, desc:'' }
   const stats = { ...evenStats(534), hp: 10 ** 7 }
+  // 武僧＝パッシブ「心身一如」を持つ職／戦士＝パッシブの無い職
   const withP = runBattle(
-    { name:'me', cls:'戦士', stats, slots:[{ skill:passive, uses:1 }, { skill:atk, uses:99 }] },
+    { name:'me', cls:'武僧', stats, slots:[{ skill:atk, uses:99 }] },
     { name:'foe', cls:'戦士', stats, slots: [] }, { rng: mkRng(3), maxTurns: 4 })
   const without = runBattle(
     { name:'me', cls:'戦士', stats, slots:[{ skill:atk, uses:99 }] },
@@ -192,8 +192,10 @@ test('パッシブは発動順のローテーションに入らず、常時の�
   const a = withP.log.find(l => l.side === 'me' && l.type === 'skill')
   const b = without.log.find(l => l.side === 'me' && l.type === 'skill')
   assert.equal(a.skill, '殴る', 'パッシブが発動順に割り込んでいる')
-  assert.ok(a.damage > b.damage, `パッシブが効いていない: ${a.damage} vs ${b.damage}`)
-  assert.equal(withP.a.buffs.str, 50)
+  assert.ok(b.damage > 0)
+  assert.equal(without.a.pa.ailResist, 0, '戦士にはパッシブが無い')
+  assert.equal(withP.a.pa.ailResist, 20, '武僧のパッシブが枠を使わずに効いている')
+  assert.equal(withP.a.slots.length, 1, '枠に入っているのは攻撃スキルだけ')
 })
 
 test('パッシブは想定利用MPに数えない', () => {

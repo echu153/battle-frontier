@@ -6,10 +6,10 @@ const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 const KIND_KEY = { 物理:'phys', 特殊:'mag', 回復:'heal', 補助:'buff', パッシブ:'passive' }
 
 const rows = (c) => c.skills.map((s, i) => {
-  const mark = s.added && i === 5 ? ' data-firstadded="1"' : ''
+  const mark = s.added && i === 6 ? ' data-firstadded="1"' : ''
   return `<tr class="row" data-kind="${KIND_KEY[s.kind]}" data-cls="${esc(c.name)}"${mark}
  data-q="${esc((s.name + ' ' + s.power + ' ' + s.note + ' ' + c.name).toLowerCase())}">
-<th scope="row" class="nm">${esc(s.name)}${s.req ? `<span class="req" title="転職${s.req}回以上で覚える">転${s.req}</span>` : ''}</th>
+<th scope="row" class="nm">${esc(s.name)}${s.req ? `<span class="req" title="転職${s.req}回以上で覚える">転${s.req}</span>` : ''}${s.kindKey === 'passive' ? '<span class="req pas" title="枠を使わない・その職業だけ・最初から効いている">枠外</span>' : ''}</th>
 <td><span class="kind k-${KIND_KEY[s.kind]}">${esc(s.kind)}</span></td>
 <td class="pw">${esc(s.power)}</td>
 <td class="num">${esc(s.proc)}</td>
@@ -133,6 +133,7 @@ tbody th,tbody td{padding:10px 14px; border-bottom:1px solid var(--line2); verti
 tbody tr:last-child th,tbody tr:last-child td{border-bottom:0}
 tbody tr:hover{background:color-mix(in srgb, var(--ai) 5%, transparent)}
 .nm{font-weight:700; white-space:nowrap; font-size:14.5px}
+.req.pas{color:var(--ai); border-color:color-mix(in srgb, var(--ai) 45%, transparent)}
 .req{
   display:inline-block; margin-left:7px; font-size:10.5px; font-weight:700; letter-spacing:.04em;
   color:var(--yamabuki); border:1px solid color-mix(in srgb, var(--yamabuki) 45%, transparent);
@@ -167,7 +168,7 @@ tr[data-firstadded] .nm::before{
   <header class="top">
     <h1>バトルフロンティアⅡ スキル台帳</h1>
     <p class="lede">初期職7職×5個 ＋ 上位職20職×10個 ＝ <b>${data.total}</b>スキル。
-      ＋印が付いているのは2026-08-19に足したぶん（上位職の6〜10個目）。<b>この100個は全部「転職5回以上」で覚える</b>（<b>転5</b>マーク）。</p>
+      各職の先頭は<b>パッシブ</b>（<b>枠外</b>マーク＝枠を使わず、その職業なら最初から効いている）。＋印から下は<b>転職5回以上</b>で覚えるぶん。</p>
     <p class="src">数値の正は <code>src/v2/lib/skills.js</code>。この表は <code>tools/v2-skills-doc.mjs</code> と同じ元データから作っている。</p>
   </header>
 

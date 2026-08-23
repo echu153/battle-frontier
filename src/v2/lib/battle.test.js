@@ -454,10 +454,10 @@ test('すてみ：現在HPの10%を払って撃つ（払っても死なない）
   assert.equal(me.hp, 1)
 })
 
-test('狂心：4ターンSTR+70%、そのあいだ出る技がランダムになる', () => {
+test('狂心：4ターンSTR+50%、そのあいだ出る技がランダムになる', () => {
   const kyo = SKILL_BY_NAME['狂心']
   assert.deepEqual(kyo.frenzy, { turns:4 })
-  assert.deepEqual(kyo.buff, { self:{ str:70 } })
+  assert.deepEqual(kyo.buff, { self:{ str:50 } })
   assert.equal(kyo.buffTurns, 4)
   const atkA = sk('技A', { mult:1, proc:100 })
   const atkB = sk('技B', { mult:1, proc:100 })
@@ -466,7 +466,7 @@ test('狂心：4ターンSTR+70%、そのあいだ出る技がランダムにな
   const before = liveStats(me).str
   takeAction(me, foe, () => 0.5, [], { idx: 0, noProc: true })
   assert.equal(me.frenzy.turns, 4)
-  assert.equal(liveStats(me).str - before, Math.round(me.base.str * 0.7), 'STR+70%（素のSTRに対して足す）')
+  assert.ok(Math.abs(liveStats(me).str - before - me.base.str * 0.5) <= 1, 'STR+50%（素のSTRに対して足す）')
   // 狙った枠（技A）を指定しても、狂乱中はランダムに選ばれる
   const names = new Set()
   for (let i = 0; i < 12; i++) {
@@ -668,7 +668,7 @@ test('体術師：跳び上がると空中・空中から叩きつけると伸�
   assert.equal(airMultOf(drop, true), 1.45, '空中なら乗る')
   assert.equal(airMultOf(sk('ふつう'), true), 1)
   const me = createSide({ name:'体', cls:'体術師', kind:'phys', stats: evenStats(534),
-    slots:[{ skill: jump, uses:9 }, { skill: drop, uses:9 }, { skill: SKILL_BY_NAME['半月蹴り'], uses:9 }] })
+    slots:[{ skill: jump, uses:9 }, { skill: drop, uses:9 }, { skill: SKILL_BY_NAME['地摺り足'], uses:9 }] })
   const foe = createSide(fighter('的', [], { ...evenStats(534), hp: 10 ** 7 }))
   assert.equal(me.air, false)
   takeAction(me, foe, () => 0.5, [], { idx: 0, noProc: true })
@@ -677,7 +677,7 @@ test('体術師：跳び上がると空中・空中から叩きつけると伸�
   assert.equal(me.air, false, '叩きつけて着地した')
   takeAction(me, foe, () => 0.5, [], { idx: 0, noProc: true })
   takeAction(me, foe, () => 0.5, [], { idx: 2, noProc: true })
-  assert.equal(me.air, false, 'ふつうに殴っても着地する')
+  assert.equal(me.air, false, '地上の技を出すと降りる')
   assert.equal(AIR_EVA, 10)
 })
 
@@ -803,9 +803,9 @@ test('ビーストレンジャー：同じ獣を続けて呼ぶと威力+25%', (
 test('ビーストレンジャー：野性の勘は型の補正を1.5倍にする', () => {
   const kan = SKILL_BY_NAME['野性の勘']
   assert.equal(kan.passive.formBoost, 50)
-  const make = (withPassive) => createSide({ name:'獣', cls:'ビーストレンジャー', kind:'phys', stats: evenStats(534),
-    slots: withPassive ? [{ skill: kan, uses:1 }, { skill: SKILL_BY_NAME['ホークダイブ'], uses:9 }]
-      : [{ skill: SKILL_BY_NAME['ホークダイブ'], uses:9 }] })
+  // パッシブは職業に紐づく＝「無い側」は同じ技を持てる別職（戦士）で測る
+  const make = (withPassive) => createSide({ name:'獣', cls: withPassive ? 'ビーストレンジャー' : '戦士',
+    kind:'phys', stats: evenStats(534), slots:[{ skill: SKILL_BY_NAME['ホークダイブ'], uses:9 }] })
   const foe = createSide(fighter('的', [], { ...evenStats(534), hp: 10 ** 7 }))
   const agiAfterCall = (withPassive) => {
     const me = make(withPassive)

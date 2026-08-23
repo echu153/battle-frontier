@@ -1,6 +1,6 @@
 // docs/v2-skills.md の「職業別」を skills.js から作り直す（正はJS・ドキュメントは写し）
 import fs from 'node:fs'
-const { SKILL_CLASSES, skillsOf, powerText, isPassive, SKILLS } = await import(new URL('../src/v2/lib/skills.js', import.meta.url).href)
+const { SKILL_CLASSES, skillsOf, passiveOf, powerText, isPassive, SKILLS } = await import(new URL('../src/v2/lib/skills.js', import.meta.url).href)
 const { classBonusText } = await import(new URL('../src/v2/lib/classBonus.js', import.meta.url).href)
 
 const AIL = { bleed:'出血', poison:'毒', slow:'鈍足', paralyze:'麻痺', healCut:'回復阻害' }
@@ -85,7 +85,6 @@ const noteOf = (s) => {
   }
   if (s.vsAil) n.push(`**相手の状態異常1つにつき威力+${s.vsAil.per}%**（${s.vsAil.max}つまで）`)
   if (s.cure) n.push(`**自分の状態異常を${s.cure}つ払う**`)
-  if (s.reqJobs) n.push(`**転職${s.reqJobs}回以上**`)
   return n.join('・')
 }
 
@@ -104,8 +103,10 @@ for (const cls of SKILL_CLASSES) {
   out.push(bonus ? `### ${cls}（職業補正 ${bonus}）` : `### ${cls}`, '')
   out.push('| スキル | 種別 | 威力・効果 | 発動 | MP | 備考 |')
   out.push('|---|---|---|---|---|---|')
+  const pas = passiveOf(cls)
+  if (pas) out.push(`| ${pas.name} | パッシブ | ${pas.desc} | 常時 | 0 | **枠を使わない・その職業だけ・最初から** |`)
   list.forEach((s, i) => {
-    if (i === 5) out.push('| — | | **↓ 2026-08-19 追加** | | | |')
+    if (i === 5) out.push('| — | | **↓ 2026-08-19 追加（転職5回以上）** | | | |')
     out.push(rowOf(s))
   })
   out.push('')

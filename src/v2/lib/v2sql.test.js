@@ -27,7 +27,10 @@ const bodyOf = (name) => {
 //   倍率を下げたときにMPだけ据え置くと編成の重さが合わなくなるので、片方だけ直したら落とす。
 test('v2_skills の名前・職業・消費MPが skills.js と一致している（片方だけ直すと気付く）', () => {
   const seed = SQL.slice(SQL.indexOf('insert into public.v2_skills'))
-  const rows = [...seed.slice(0, seed.indexOf('on conflict')).matchAll(/\('([^']+)','([^']+)',(\d+),(\d+),(\d+)\)/g)]
+  // ★2026-08-23：パッシブかどうかの列が増えた（枠を使わない＝抽選にも出ないし枠にも置けない）
+  const end = seed.indexOf('on conflict')
+  const body = end >= 0 ? seed.slice(0, end) : seed
+  const rows = [...body.matchAll(/\('([^']+)','([^']+)',(\d+),(\d+),(\d+),(true|false)\)/g)]
   assert.equal(rows.length, SKILLS.length, 'v2_skills の行数がJS側と違う')
   const bySql = new Map(rows.map(m => [m[1], { cls: m[2], mp: Number(m[3]), reqJobs: Number(m[5]) }]))
   for (const s of SKILLS) {

@@ -1,6 +1,6 @@
 // スキル一覧をJSONで吐く（Artifactの表に埋め込む用）。正は src/v2/lib/skills.js
 import fs from 'node:fs'
-const { SKILL_CLASSES, skillsOf, powerText, isPassive } = await import(new URL('../src/v2/lib/skills.js', import.meta.url).href)
+const { SKILL_CLASSES, skillsOf, passiveOf, powerText, isPassive } = await import(new URL('../src/v2/lib/skills.js', import.meta.url).href)
 const { CLASS_BONUS, classBonusText } = await import(new URL('../src/v2/lib/classBonus.js', import.meta.url).href)
 
 // docs 生成と同じ備考を使う（二重定義しないよう、生成器から noteOf を取り出す）
@@ -14,7 +14,8 @@ const STAT = { str:'STR', dex:'DEX', agi:'AGI', int_stat:'INT', vit:'VIT', luk:'
 
 const classes = SKILL_CLASSES.map(cls => {
   const b = CLASS_BONUS[cls] || {}
-  const list = skillsOf(cls)
+  const pas = passiveOf(cls)
+  const list = [...(pas ? [pas] : []), ...skillsOf(cls)]
   return {
     name: cls,
     basic: list.length === 5,
@@ -36,7 +37,7 @@ const classes = SKILL_CLASSES.map(cls => {
   }
 })
 // 「2026-08-19 追加」の6〜10個目に印を付ける（初期職は5個のまま）
-for (const c of classes) if (!c.basic) c.skills.forEach((s, i) => { s.added = i >= 5 })
+for (const c of classes) if (!c.basic) c.skills.forEach((s, i) => { s.added = i >= 6 })   // 先頭はパッシブ
 
 const out = { classes, total: classes.reduce((t, c) => t + c.skills.length, 0) }
 fs.writeFileSync(new URL('./v2-skills.json', import.meta.url), JSON.stringify(out))

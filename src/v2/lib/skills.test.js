@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import {
   SKILLS, SKILL_BY_NAME, skillsOf, SKILL_CLASSES, BASIC_CLASSES, isBasicClass, isPassive,
   powerText, expectedDamage, expectedHeal, PASSIVE_EFFECT_KEYS,
-  skillValue, multTotal, effectPrice, targetValue,
+  skillValue, multTotal, effectPrice, targetValue, passiveOf,
 } from './skills.js'
 import { CLASS_BONUS } from './classBonus.js'
 import { damageOf, healOf } from './combat.js'
@@ -23,15 +23,18 @@ test('初期職は5個・上位職は10個ずつスキルを持つ（全27職）
   assert.equal(SKILL_CLASSES.length, 27)
   // ★2026-08-19：足すのは上位職だけ（初期職は通過点なので5個のまま）
   for (const c of SKILL_CLASSES) assert.equal(skillsOf(c).length, isBasicClass(c) ? 5 : 10, `${c}のスキル数`)
-  assert.equal(SKILLS.length, 7 * 5 + 20 * 10)
+  assert.equal(SKILLS.length, 7 * 5 + 20 * 11)   // 上位職は枠10個＋枠外のパッシブ1個
   assert.deepEqual(BASIC_CLASSES, ['ノーブル', '戦士', '弓使い', '魔法使い', '僧侶', '格闘家', 'サモナー'])
 })
 
-test('上位職はそれぞれパッシブを1つだけ持つ', () => {
-  // ★パッシブは複数セットできるので、1つ1つは控えめにする。初期職にはパッシブを置かない
+test('上位職はそれぞれパッシブを1つだけ持つ（枠の外・その職限定）', () => {
+  // ★2026-08-23：パッシブは**枠を使わない**。その職業なら最初から効いていて、
+  //   LVアップの抽選にも出ず、他職へ持ち出せない（ユーザー指定）
   for (const c of SKILL_CLASSES) {
-    const pas = skillsOf(c).filter(isPassive)
+    assert.equal(skillsOf(c).filter(isPassive).length, 0, `${c}：パッシブが枠に混ざっている`)
+    const pas = SKILLS.filter(s => s.cls === c && isPassive(s))
     assert.equal(pas.length, isBasicClass(c) ? 0 : 1, `${c}のパッシブ数`)
+    if (pas.length) assert.equal(passiveOf(c), pas[0], `${c}：passiveOf が引けない`)
     for (const s of pas) {
       assert.ok(s.passive, `${s.name} に効果がない`)
       assert.equal(s.buff, undefined, `${s.name} は buff ではなく passive に書く`)
@@ -165,13 +168,13 @@ test('強い技ほど発動しにくい（威力と発動率が逆相関）', ()
 //   実質倍率＝(倍率＋副参照の合計)×多段数×発動率。これが職業間で開かないことを固定する。
 const effMult = (s) => (s.mult + (s.add || []).reduce((t, a) => t + a.rate, 0)) * (s.hits || 1) * (s.proc / 100)
 
-test('補助・回復は優先度1、攻撃スキルは優先度なし', () => {
+test('補助は優先度1・回復と攻撃は先制なし', () => {
   // v2の規則：補助と回復は既定で優先度1（攻撃より先に動くが、2以上には後攻になる）。
   // ★優先度は順番だけを変える。行動回数は増えない（増えるのはAGIの追加行動だけ）
   for (const s of SKILLS) {
-    const support = s.kind === 'buff' || s.kind === 'heal'
-    if (support) assert.equal(s.priority, 1, `${s.name}（${s.kind}）は優先度1にすること`)
-    else assert.ok(!s.priority, `${s.name}（${s.kind}）は攻撃スキルなので優先度なし`)
+    // ★2026-08-23：**回復は先制を付けない**（ユーザー指定）。補助（バフ・デバフ）だけ優先度1
+    if (s.kind === 'buff') assert.equal(s.priority, 1, `${s.name}（補助）は優先度1にすること`)
+    else assert.ok(!s.priority, `${s.name}（${s.kind}）は先制を付けない`)
   }
   // 2以上はまだ未使用（上位職の切り札用に空けてある）
   assert.equal(SKILLS.filter(s => s.priority >= 2).length, 0)
@@ -233,7 +236,8 @@ const dominates = (A, B) => {
   // ★特別な仕組みを持つ技（納刀・見切り・納刀中だけの効果）は、持っていない技とは比べない
   for (const k of ['stance', 'foresight', 'whileStance', 'frenzy', 'hpCostPct', 'ailPerHit', 'drainIfAil', 'lowHpBonus', 'highHpBonus', 'vsBuff', 'dispel', 'repeat', 'switchKind', 'variance',
     'combo', 'airUp', 'whileAir', 'src', 'ritual', 'useRitual', 'chargeUp', 'useCharge',
-    'form', 'formBuff', 'whileStack', 'whileForm', 'vsAil', 'cure']) if (!!A[k] !== !!B[k]) return false
+    'form', 'formBuff', 'whileStack', 'whileForm', 'vsAil', 'cure',
+    'bigGuard', 'keepAir', 'whileGround', 'rampHit']) if (!!A[k] !== !!B[k]) return false
   if ((A.hits || 1) !== (B.hits || 1)) return false        // 多段と単発は別の土俵
   if (!!A.noCrit !== !!B.noCrit) return false
   if (!!A.mpPct !== !!B.mpPct) return false                // 割合消費も別の土俵
@@ -255,9 +259,13 @@ const dominates = (A, B) => {
   const NUM = [['lowHpBonus', 'max'], ['highHpBonus', 'max'], ['vsBuff', 'per'], ['dispel', 'chance'],
     ['repeat', 'per'], ['variance', 'lo'], ['variance', 'hi'],
     ['combo', 'mult'], ['whileAir', 'mult'], ['useRitual', 'per'], ['useCharge', 'per'],
-    ['whileStack', 'mult'], ['whileForm', 'mult'], ['vsAil', 'per']]
+    ['whileStack', 'mult'], ['whileForm', 'mult'], ['vsAil', 'per'],
+    ['whileGround', 'mult'], ['bigGuard', 'cut']]
   for (const [k, f] of NUM) if (!cmp(A[k]?.[f] || 0, B[k]?.[f] || 0, k + '.' + f)) return false
   if (!cmp(A.switchKind || 0, B.switchKind || 0, 'switchKind')) return false
+  const stack = (x) => (x.chargeUp === true ? 1 : x.chargeUp || 0) + (x.ritual || 0)
+  if (!cmp(stack(A), stack(B), 'stack')) return false
+  if (!cmp(A.rampHit || 0, B.rampHit || 0, 'rampHit')) return false
   // 起爆（急所突きの「出血を全部消費して威力+」）も軸に入れる
   const burst = (x) => (x.consumeAil ? x.consumeAil.perStack : 0)
   if (!cmp(burst(A), burst(B), 'consumeAil')) return false
@@ -398,7 +406,7 @@ test('LUKは威力の参照に使わない（クリティカル率と回避だ�
     }
   }
   // 職業補正やバフでLUKを上げるのは可（クリティカル率が上がる＝ギャンブラーらしさ）
-  assert.equal(CLASS_BONUS['ギャンブラー'].stats.luk, 10)
+  assert.equal(CLASS_BONUS['ギャンブラー'].stats.luk, 5)
 })
 
 test('割合消費のスキルは想定利用MPに数えない', () => {

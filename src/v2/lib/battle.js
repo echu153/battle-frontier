@@ -18,11 +18,11 @@ import {
   resolveAttack, healOf, roll, goesFirst, rollExtraAction,
 } from './combat.js'
 import { STAT_KEYS, calcPower } from './stats.js'
-import { skillsOf, isPassive, offClassMult, scaleTable, mpOf, mpPctOf } from './skills.js'
+import { skillsOf, isPassive, passiveOf, offClassMult, scaleTable, mpOf, mpPctOf } from './skills.js'
 import { classBonusOf } from './classBonus.js'
 import {
   createAilments, inflict, tickAilments, ailStatPct, healMultOf, consumeParalyze, hasAilment, AIL_LABEL, AIL_KEYS,
-  POISON_CAP_RATE, BLEED_CAP_RATE, tickBleed,
+  POISON_CAP_RATE, BLEED_CAP_RATE, tickBleed, SILENCE_PROC,
 } from './ailments.js'
 import { collectEnchants, inflictChance } from './enchant.js'
 import {
@@ -190,7 +190,9 @@ export const createSide = (fighter, band = null) => {
   const all = (fighter.slots || skillsOf(fighter.cls).map(s => ({ skill: s, uses: 3 })))
     .filter(s => s?.skill)
     .map(s => ({ skill: s.skill, uses: s.uses ?? 3 }))
-  const passives = all.filter(s => isPassive(s.skill)).map(s => s.skill)
+  // ★パッシブは枠から取らない。**その職業のものが最初から効いている**（2026-08-23）
+  //   ＝他職のパッシブは持ち込めない。枠に紛れ込んでいても無視する
+  const passives = [passiveOf(fighter.cls)].filter(Boolean)
   const pa = collectPassives(passives)
   const bonus = classBonusOf(fighter.cls, fighter.jobCount)
   const en = collectEnchants(fighter.enchants, band)
@@ -240,6 +242,7 @@ export const createSide = (fighter, band = null) => {
     timedBuffs: [],  // 期限つきバフ：[{ table, turns }] ターンで切れる（狂心のSTR+70%など）
     wallPct: pa.wall ? pa.wall.pct : 0,  // 骸の壁は戦闘開始時から乗る（重複しない）
     guards: pa.debuffGuard,              // 心身一如：デバフを打ち消せる残り回数
+    bigGuard: 0,                         // 大防御：受けるダメージ-% （1ターンで切れる・聖騎士）
     lastSkill: null,                     // 元素共鳴が見る「直前に使ったスキル」
     switchOn: false,
     // ===== エンチャント・状態異常 =====
@@ -330,6 +333,8 @@ const applyIncoming = (me, foe, dmg, kind, rng, log) => {
   if (cut) d *= Math.max(0, 1 - cut / 100)
   // ATBの「防御」（atb.js が guardCut を立てる。オート戦闘では常に未設定＝素通り）
   if (foe.guardCut) d *= Math.max(0, 1 - foe.guardCut / 100)
+  // 大防御（聖騎士）。ATBの防御と同じ枠で掛ける
+  if (foe.bigGuard) d *= Math.max(0, 1 - foe.bigGuard / 100)
   // スケルトン：**1回ダメージを受けると消える**軽減バフ
   if (foe.enCut) { d *= (1 - foe.enCut / 100); foe.enCut = 0; log.push({ side: foe.name, type: 'enCut' }) }
   // 骸の壁：**1回ダメージを受けると消える**。取り直すまで効かない
@@ -496,6 +501,12 @@ export const comboMultOf = (skill, prevSkill) => {
   if (!c || !prevSkill) return 1
   return c.after.includes(prevSkill) ? 1 + c.mult / 100 : 1
 }
+// 体術師：地上にいるときだけ乗る（足を着いていないと出せない技）
+export const groundMultOf = (skill, wasAir) => {
+  const g = skill?.whileGround
+  if (!g || wasAir) return 1
+  return 1 + (g.mult || 0) / 100
+}
 // 体術師：空中にいるときだけ乗る（叩きつけて着地する技）
 export const airMultOf = (skill, wasAir) => {
   const a = skill?.whileAir
@@ -618,7 +629,9 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   //   ★不発はバーサク・執行本能のスタックをリセットする
   // ★納刀（侍）：次に撃つスキルの発動率+・威力×。不発では消えない（撃てるまで構えたまま）
   const stance = skill ? me.stance : null
-  if (skill && !opt.noProc && !roll(skill.proc + me.pa.procBonus + me.en.procBonus + me.evo.proc + (stance?.proc || 0), rng)) {
+  // ★サイレンス：スキルの発動率-20%（ATBでは atb.js が必要ゲージへ読み替える）
+  const silenced = hasAilment(me.ail, 'silence') ? SILENCE_PROC : 0
+  if (skill && !opt.noProc && !roll(skill.proc + me.pa.procBonus + me.en.procBonus + me.evo.proc + (stance?.proc || 0) - silenced, rng)) {
     log.push({ side: me.name, type: 'misfire', skill: skill.name })
     me.rage = 0
     // 居合の構えはここで威力2倍。武器の進化「居合の心得」も同じ枠で乗る
@@ -687,20 +700,23 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     }
     const varMult = varianceMultOf(skill, rng)   // ギャンブラー：1行動につき1回だけ振る
     for (let h = 0; h < (skill.hits || 1); h++) {
+      // ★多段で1発ごとに威力が上がる（体術師の飛天三角蹴り）。1発目は素のまま
+      const ramp = skill.rampHit ? 1 + (skill.rampHit / 100) * h : 1
       const r = resolveAttack({
-        attacker: eMe, defender: eFoe, mult: skill.mult * burst * (stance?.mult || 1) * lowHpMultOf(skill, foe)
+        attacker: eMe, defender: eFoe, mult: ramp * skill.mult * burst * (stance?.mult || 1) * lowHpMultOf(skill, foe)
           * highHpMultOf(skill, me) * vsBuffMultOf(skill, foe) * repeatMultOf(skill, me)
           * switchKindMultOf(skill, prevKind) * varMult
           * comboMultOf(skill, prevSkill) * airMultOf(skill, wasAir)
           * stackMultOf(skill.useRitual, ritualUsed) * stackMultOf(skill.useCharge, chargeUsed)
           * beastMultOf(skill, prevForm) * whileStackMultOf(skill, me)
-          * whileFormMultOf(skill, prevForm) * vsAilMultOf(skill, foe),
+          * whileFormMultOf(skill, prevForm) * vsAilMultOf(skill, foe) * groundMultOf(skill, wasAir),
         kind: skill.kind, atkStat: skill.src || null,
         defPen, add: skill.add || null,
         sureHit: !!skill.sureHit, sureCrit: !!skill.sureCrit, noCrit: !!skill.noCrit,
         acc: skill.acc ?? 100,
         // ★スキル自身の命中補正（skill.hitBonus）もここで足す＝「必中ではないが当てやすい技」を作れる
-        hitBonus: me.pa.hitBonus + me.en.hitBonus + evoHit(me, foe) + (skill.hitBonus || 0),
+        hitBonus: me.pa.hitBonus + me.en.hitBonus + evoHit(me, foe) + (skill.hitBonus || 0)
+          + (wasAir ? (skill.whileAir?.hitBonus || 0) : 0),   // 空中からは狙いが通る（体術師）
         evaBonus: foe.pa.evaBonus + foe.en.evaBonus + evoEva(foe) + foresightEva(foe, skill.name)
           + (foe.air ? AIR_EVA : 0),
         critBonus: me.pa.critBonus + evoCrit(me, foe) + critRateStackOf(me),
@@ -757,24 +773,20 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     // バーサク・執行本能：ダメージを与えたら+1スタック、全部外れたらリセット
     if (me.pa.rages.length) me.rage = hits > 0 ? me.rage + 1 : 0
     // 吸収：与えたダメージの一定割合を自分のHPへ（ソウルドレイン・ブラッティロアなど）
+    // ★吸収は全部いったん足してから、自分の最大HPの割合で頭を打つ
     let drained = 0
     // 条件つき吸収（血啜り）：相手が出血しているときだけ吸う
-    if (drainIf && dmg > 0) {
-      const back = Math.max(1, Math.floor(dmg * skill.drainIfAil.pct / 100))
-      me.hp = Math.min(me.base.hp, me.hp + back)
-      drained += back
-    }
+    if (drainIf && dmg > 0) drained += Math.max(1, Math.floor(dmg * skill.drainIfAil.pct / 100))
     // 武器の進化の吸収(%)はスキル自身の吸収と同じ枠で足す
     const drainRate = (skill.drain || 0) + me.evo.drain / 100
-    if (drainRate > 0 && dmg > 0) {
-      drained = Math.max(1, Math.floor(dmg * drainRate))
-      me.hp = Math.min(me.base.hp, me.hp + drained)
-    }
+    if (drainRate > 0 && dmg > 0) drained += Math.max(1, Math.floor(dmg * drainRate))
     // コウモリ・暁のフレイムバット：物理で与えたダメージの一部を回復
     if (skill.kind === 'phys' && me.en.drainPhysPct > 0 && dmg > 0) {
-      const back = Math.max(1, Math.floor(dmg * me.en.drainPhysPct / 100))
-      me.hp = Math.min(me.base.hp, me.hp + back)
-      drained += back
+      drained += Math.max(1, Math.floor(dmg * me.en.drainPhysPct / 100))
+    }
+    if (drained > 0) {
+      drained = Math.min(drained, drainCapOf(me, crit))
+      me.hp = Math.min(me.base.hp, me.hp + drained)
     }
     log.push({ side: me.name, type: 'skill', skill: skill.name, kind: skill.kind, damage: dmg, crit, hits, of: skill.hits || 1, drain: drained })
   } else if (skill.kind === 'heal') {
@@ -801,6 +813,11 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       log.push({ side: foe.name, type: 'dispel', skill: skill.name, stat: k })
     }
   }
+  // ★聖騎士：大防御。1ターンのあいだ大きく軽減する代わりに、追加行動が出なくなる
+  if (skill.bigGuard) {
+    me.bigGuard = skill.bigGuard.cut
+    log.push({ side: me.name, type: 'bigGuard', skill: skill.name, cut: skill.bigGuard.cut })
+  }
   // ★武僧：自分にかかっている状態異常を払う（効きづらいだけでなく、抜け出せる）
   if (skill.cure) {
     let left = skill.cure
@@ -816,7 +833,8 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   if (skill.airUp) {
     me.air = true
     log.push({ side: me.name, type: 'air', skill: skill.name })
-  } else if (skill.kind === 'phys' || skill.kind === 'mag') {
+  } else if ((skill.kind === 'phys' || skill.kind === 'mag') && !skill.keepAir) {
+    // keepAir を持つ技は蹴り続けて空中に留まる（体術師）
     me.air = false
   }
   // ★ビーストレンジャー：獣を呼ぶ技を使うと、その獣の型になる
@@ -830,7 +848,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     log.push({ side: me.name, type: 'ritual', skill: skill.name, stacks: me.ritual })
   }
   if (skill.chargeUp) {
-    me.charge = Math.min(STACK_MAX, (me.charge || 0) + 1)
+    me.charge = Math.min(STACK_MAX, (me.charge || 0) + (skill.chargeUp === true ? 1 : skill.chargeUp))
     log.push({ side: me.name, type: 'charge', skill: skill.name, stacks: me.charge })
   }
   // 切り札は溜めを全部使う（当たっても外れても消える＝撃ち直しが要る）
@@ -920,6 +938,14 @@ export const tickAil = (side, log, foe = null) => {
   }
 }
 
+// ★吸収の上限（2026-08-23 ユーザー指定）：1回の行動で戻せるのは自分の最大HPの DRAIN_CAP_PCT%。
+//   クリティカルが出た行動だけ DRAIN_CAP_CRIT_PCT% まで伸びる。
+//   ＝HPが桁違いの相手を殴っても「一撃で全快」にならない
+export const DRAIN_CAP_PCT = 10
+export const DRAIN_CAP_CRIT_PCT = 15
+export const drainCapOf = (me, crit) =>
+  Math.max(1, Math.floor(me.base.hp * (crit ? DRAIN_CAP_CRIT_PCT : DRAIN_CAP_PCT) / 100))
+
 // ★出血は「出血している側が行動した直後」に刻む（2026-08-23 ユーザー指定）
 //   倍率は**入れた側**の武器の進化を見るので、相手（foe）を渡す
 export const tickBleedAfterAct = (side, log, foe = null) => {
@@ -1008,7 +1034,7 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
       const em = liveStats(me)
       const ef = liveStats(foe)
       // 武器の進化「疾風の足」ぶんは追加行動率へ素直に足す
-      if (rollExtraAction(em, ef, rng) || (me.evo.extra > 0 && roll(me.evo.extra, rng))) {
+      if (!me.bigGuard && (rollExtraAction(em, ef, rng) || (me.evo.extra > 0 && roll(me.evo.extra, rng)))) {
         log.push({ side: me.name, type: 'extra' })
         takeAction(me, foe, rng, log)
         tickBleedAfterAct(me, log, foe)
@@ -1016,6 +1042,8 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
     }
 
     if (a.hp <= 0 || b.hp <= 0) break
+    a.bigGuard = 0   // 大防御は1ターンで切れる
+    b.bigGuard = 0
     tickAil(a, log, b)
     tickAil(b, log, a)
     if (a.hp <= 0 || b.hp <= 0) break

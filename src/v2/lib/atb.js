@@ -29,7 +29,7 @@ import {
   tickBleedAfterAct,
 } from './battle.js'
 import { STAT_KEYS } from './stats.js'
-import { AIL_KEYS, AIL_LABEL, poisonTickOf, hasAilment } from './ailments.js'
+import { AIL_KEYS, AIL_LABEL, poisonTickOf, hasAilment, SILENCE_PROC } from './ailments.js'
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
 // 秒の比較に使うごく小さい余裕。実時間を足し込むと 30 が 30.000000000000004 になるため、
@@ -82,9 +82,11 @@ export const procBonusOf = (side) =>
 //   代わりに**必要ゲージが軽くなる**＝早く撃てる、へ読み替える。
 //   priority 1 につき PRIORITY_CUT%（納刀ぶんの先制もここに乗る）
 export const PRIORITY_CUT = 20
+// ★サイレンス：オート戦闘では発動率-20%。ATBは不発が無いので**必要ゲージ**へ読み替える
+//   （needOf は「発動率が低いほど重い」形なので、発動率を下げるのと同じ式に通せばよい）
 export const needFor = (side, skill) => {
   const cut = Math.min(60, PRIORITY_CUT * Math.max(0, priorityOf(side, skill)))
-  return Math.max(20, Math.round(needOf(skill, procBonusOf(side)) * (1 - cut / 100)))
+  return Math.max(20, Math.round(needOf(skill, procBonusOf(side) - (hasAilment(side.ail, 'silence') ? SILENCE_PROC : 0)) * (1 - cut / 100)))
 }
 
 // ===== 防御（全職共通・スキルではない）=====
@@ -106,7 +108,7 @@ export const buffSecOf = (totalPct, isDebuff = false) =>
     BUFF_SEC_MIN, isDebuff ? DEBUFF_SEC_MAX : BUFF_SEC_MAX))
 
 // ===== 状態異常（ATB用の別表）=====
-export const AIL_SEC  = { paralyze:5, healCut:15, bleed:20, poison:30, slow:30 }
+export const AIL_SEC  = { paralyze:5, healCut:15, bleed:20, poison:30, slow:30, silence:20 }
 export const TICK_SEC = 5      // 出血・毒・継続回復が刻む間隔
 export const MAX_DT   = 0.25   // タブを裏に回したときに一気に進まないための上限（秒）
 export const MAX_SEC  = 180    // これを超えたら引き分け

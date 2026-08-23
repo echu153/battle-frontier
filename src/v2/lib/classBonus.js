@@ -34,10 +34,10 @@ export const CLASS_BONUS = {
   // ---- 上位職 ----
   侍:           { stats: { str: 5 },            main:'str',      sub:'dex' },
   狂戦士:       { stats: { str: 10, vit: -5 },  main:'str',      sub:'agi' },
-  狩人:         { stats: { dex: 5 },            main:'dex',      sub:'agi' },
-  暗殺者:       { stats: { agi: 5 },            main:'agi',      sub:'dex' },
+  狩人:           { stats: { str: 5 }, main:'str', sub:'dex' },
+  暗殺者:          { stats: { str: 5 }, main:'str', sub:'agi' },
   元素使い:     { stats: { int_stat: 5 },       main:'int_stat', sub:'dex' },
-  死霊使い:     { stats: { vit: 5 },            main:'vit',      sub:'int_stat' },
+  死霊使い:         { stats: { int_stat: 5 }, main:'int_stat', sub:'vit' },
   聖職者:       { stats: { int_stat: 5 },       main:'int_stat', sub:'vit' },
   異端審問官:   { stats: { int_stat: 10 }, healMult: 0.8, main:'int_stat', sub:'luk' },
   // ★STRで殴るのに相手の特防で受ける「特殊アタッカー」（2026-08-23 ユーザー指定のコンセプト）
@@ -51,14 +51,14 @@ export const CLASS_BONUS = {
   //   v2は覚えたスキルが転職後も残るので、「どの職の技でも使いこなす」を職業の個性にする
   //   ＝他職スキルの威力低下（0.8倍）と追加MP（2倍）が半分になる
   賢者:               { stats: { int_stat: 5 },      main:'int_stat', sub:'luk', offClassCut: 50 },
-  聖騎士:             { stats: { vit: 5 },           main:'vit',      sub:'str' },
+  聖騎士:          { stats: { str: 5 }, main:'str', sub:'vit' },
   魔法剣士:           { stats: { str: 3, int_stat: 3 }, main:'str',   sub:'int_stat' },
-  魔銃士:             { stats: { dex: 5 },           main:'dex',      sub:'int_stat' },
-  武僧:               { stats: { vit: 5 },           main:'vit',      sub:'str' },
-  ビーストレンジャー: { stats: { agi: 5 },           main:'agi',      sub:'dex' },
+  魔銃士:          { stats: { str: 5 }, main:'str', sub:'dex' },
+  武僧:           { stats: { str: 5 }, main:'str', sub:'vit' },
+  ビーストレンジャー:          { stats: { str: 5 }, main:'str', sub:'agi' },
   // ---- 特殊職 ----
-  ギャンブラー: { stats: { luk: 10 },      main:'luk', sub:'agi' },
-  竜騎士:       { stats: { vit: 5 },       main:'vit', sub:'str' },
+  ギャンブラー:       { stats: { str: 5, luk: 5 }, main:'str', sub:'luk' },
+  竜騎士:          { stats: { str: 5 }, main:'str', sub:'vit' },
 }
 
 // ===== 伸び方の定数（ここだけ触れば調整できる）=====
