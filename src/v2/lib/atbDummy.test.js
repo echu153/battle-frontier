@@ -7,7 +7,7 @@ import { calcPower } from './stats.js'
 
 const me = { name:'自分', cls:'戦士', stats:{ hp:4000, mp:400, str:300, dex:200, agi:200, int_stat:100, vit:250, luk:120 }, slots: [] }
 
-test('ボスのHPはユニークボスの式（戦闘力に対して超線形）', () => {
+test('bossHpOf はユニークボスの式のまま（設計の記録。仮想敵はもう使っていない）', () => {
   assert.equal(bossHpOf(2000), 192000)                    // 96 × P（P=2000が基準）
   assert.ok(bossHpOf(4000) / bossHpOf(2000) > 2, '戦闘力2倍でHPは2倍より厚くなる')
   assert.ok(bossHpOf(4000) / bossHpOf(2000) < 2.5)

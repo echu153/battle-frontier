@@ -147,7 +147,7 @@ export default function V2Atb({ prof, inventory, runes, fishDex }) {
         {mode === 'dummy' ? (
           <div style={{ marginBottom:'10px' }}>
             <div style={{ color:'#5a7a96', fontSize:'10px', marginBottom:'6px' }}>
-              自分の戦闘力とAGIから組み立てる（HPはユニークボスの式）。この相手はゲームには出てこない
+              自分の戦闘力とAGIから組み立てる（HPは同じ戦闘力のキャラの3倍）。この相手はゲームには出てこない
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
               {dummies.map(d => (
