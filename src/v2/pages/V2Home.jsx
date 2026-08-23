@@ -517,8 +517,15 @@ export default function V2Home() {
                         <span style={{ color:'#8fa8bb', fontSize:'10px', flex:1, minWidth:0, lineHeight:'1.6' }}>
                           {powerText(s) === s.desc ? '' : s.desc}
                         </span>
+                        {/* ★2026-08-23：パッシブは枠を使わない。その職業なら最初から効いているので、
+                            枠へ入れるボタンは出さない（サーバー側の v2_set_skills も弾く） */}
+                        {isPassive(s) && (
+                          <span style={{ color: s.cls === prof.class ? '#88ddaa' : '#62789a', fontSize:'9px', whiteSpace:'nowrap' }}>
+                            {s.cls === prof.class ? '常時・枠を使わない' : `${s.cls}専用`}
+                          </span>
+                        )}
                         {/* ★同じスキルを複数の枠に置ける（納刀→居合斬→納刀→月影 のような編成） */}
-                        {has && Array.from({ length: SKILL_SET_SLOTS }).map((_, i) => {
+                        {has && !isPassive(s) && Array.from({ length: SKILL_SET_SLOTS }).map((_, i) => {
                           const here = draft[i]?.name === s.name
                           return (
                           <button key={i} onClick={() => setSlot(i, { name: s.name, uses: here ? draft[i].uses : 1 })}
@@ -527,7 +534,7 @@ export default function V2Home() {
                           </button>
                           )
                         })}
-                        {!has && <span style={{ color:'#c69a5c', fontSize:'9px' }}>LVアップで習得</span>}
+                        {!has && !isPassive(s) && <span style={{ color:'#c69a5c', fontSize:'9px' }}>LVアップで習得</span>}
                       </div>
                     </div>
                   )

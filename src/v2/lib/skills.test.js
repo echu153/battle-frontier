@@ -456,3 +456,23 @@ test('スキルに知らないキー・知らないステ名・知らない状�
   }
   assert.deepEqual(bad, [], bad.join(' / '))
 })
+
+// ★2026-08-23 実機で発覚：副参照のステを寄せ替えたのに説明文が「DEXも威力になる」のまま残っていた。
+//   威力の欄（powerText）と説明文が食い違うと、どちらを信じてよいか分からなくなる。
+test('説明文の「○○も威力になる」が実際の副参照と合っている', () => {
+  const L = { str:'STR', dex:'DEX', agi:'AGI', int_stat:'INT', vit:'VIT', luk:'LUK' }
+  const RE = /(STR|DEX|AGI|INT|VIT|LUK)(・(STR|DEX|AGI|INT|VIT|LUK))*(も|が大きく)威力になる/
+  const bad = []
+  for (const s of SKILLS) {
+    const adds = [...new Set((s.add || []).map(a => L[a.stat]))]
+    const m = RE.exec(s.desc || '')
+    if (adds.length && !m) { bad.push(`${s.name}: 副参照 ${adds.join('・')} が説明文に無い`); continue }
+    if (!adds.length && m) { bad.push(`${s.name}: 副参照が無いのに「${m[0]}」と書いてある`); continue }
+    if (!m) continue
+    const said = m[0].replace(/(も|が大きく)威力になる/, '').split('・')
+    if (JSON.stringify(said) !== JSON.stringify(adds)) {
+      bad.push(`${s.name}: 説明「${said.join('・')}」／実体「${adds.join('・')}」`)
+    }
+  }
+  assert.deepEqual(bad, [], bad.join(' / '))
+})
