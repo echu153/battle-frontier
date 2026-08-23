@@ -469,3 +469,17 @@ test('ATB画面に職の軸の状態が出る（空中・呪力・竜気・獣�
     assert.ok(labels.includes(w), w + ' が出ていない：' + labels)
   }
 })
+
+test('連打のチップは、連打を活かすスキルを持っている側にだけ出す', () => {
+  // ★誰でも「同じ技を続けた回数」は増えるので、そのまま出すと
+  //   何もしてこない木人にまで「🔁 連打×4」が出てしまう（2026-08-23 実機で発覚）
+  const rep = SKILLS.find(s => s.repeat)
+  assert.ok(rep, '連打を活かすスキルが要る')
+  const plain = { name:'的', cls:'戦士', kind:'phys', stats: stats(), slots: [] }
+  const user = { name:'私', cls: rep.cls, kind:'phys', stats: stats(), slots:[{ skill: rep, uses:99 }] }
+  const st = createAtb(user, plain, { rng: () => 0.5 })
+  st.a.repeatCount = 4
+  st.b.repeatCount = 4
+  assert.ok(stateChips(st.a).some(c => c.key === 'repeat'), '持っている側には出る')
+  assert.ok(!stateChips(st.b).some(c => c.key === 'repeat'), '持っていない側には出さない')
+})

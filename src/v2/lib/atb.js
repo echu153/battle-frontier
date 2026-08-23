@@ -373,7 +373,10 @@ export const stateChips = (side) => {
   if (side.bigGuard > 0) out.push({ key:'bigGuard', label:`🛡 大防御 被ダメージ-${side.bigGuard}%` })
   if (side.rage > 0) out.push({ key:'rage', label:`🔥 高ぶり×${side.rage}` })
   if (side.hitStacks > 0) out.push({ key:'hit', label:`🎯 照準×${side.hitStacks}` })
-  if (side.repeatCount > 1) out.push({ key:'repeat', label:`🔁 連打×${side.repeatCount}` })
+  // ★連打の回数は誰でも増える。活かせるスキルを枠に持っている側だけに出す
+  if (side.repeatCount > 1 && side.slots?.some(s => s.skill?.repeat)) {
+    out.push({ key:'repeat', label:`🔁 連打×${side.repeatCount}` })
+  }
   return out
 }
 
