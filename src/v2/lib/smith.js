@@ -39,6 +39,19 @@ export const ratesOf = (rank) => RATES[rank] || RATES.F
 // 強化素材の数（強化元をのぞく）
 export const MAT_COUNT = 2
 
+// ===== 強化にかかるGold（2026-08-22 ユーザー決定）=====
+// ★それまで強化は無料だった（同じ装備を2個食わせるだけ）。
+//   v2のGoldは「素材を売って湧く／取引所の手数料で消える」の2点しか無く、
+//   拠点を作り切ると使い道が無くなるので、鍛冶にも吸わせる。
+// ランクの基礎額 × 1.5^強化値。**上に行くほど重くなる**ので、
+// 素材売却の収入が終盤まで意味を持つ（取引所の下限価格と同じ「段ごとに伸ばす」考え方）。
+//   F+0=20G ／ S+0=5,000G ／ S+5=約38,000G ／ S+11=約432,000G
+// ⚠**成否にかかわらず取る**（失敗しても払う）。護符を使っても額は変わらない
+export const FUSE_GOLD_BASE = { F:20, E:50, D:120, C:300, B:800, A:2000, S:5000 }
+export const FUSE_GOLD_STEP = 1.5
+export const fuseCostOf = (rank, plus = 0) =>
+  Math.round((FUSE_GOLD_BASE[rank] ?? FUSE_GOLD_BASE.F) * Math.pow(FUSE_GOLD_STEP, Math.max(0, plus || 0)))
+
 // ===== 守りの護符 =====
 // 失敗しても強化素材が消えない。そのかわり**成功しても+1どまり**（大成功・超大成功が出ない）。
 // ★入手方法は未定（2026-08-16）。いまは開発限定の付与（v2_debug_grant_protect）だけ。

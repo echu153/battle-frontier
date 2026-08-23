@@ -292,6 +292,15 @@ export const sellPriceOf = (m) =>
 export const sellTotalOf = (items) =>
   (items || []).reduce((t, it) => t + sellPriceOf(MATERIAL_BY_ID[it.id]) * Math.max(0, it.qty || 0), 0)
 
+// ===== 刻印除去装置 =====
+// ★刻んだルーンを外すための道具（2026-08-22 ユーザー決定で名前と入手手段が決まった）。
+//   これが無いと、ルーンを刻んだ装備は**取引所へ出せない**（刻印済みは出品不可のため）。
+//   激レア素材だけで作る＝周回している人には自然に溜まるが、
+//   **同じ激レア素材はルーンの抽出にも使う**ので「外す道具にするか、良いルーンにするか」の択になる。
+export const UNSOCKET_KIT_NAME = '刻印除去装置'
+export const UNSOCKET_KIT_COST = 5          // 消費する激レア素材の数
+export const UNSOCKET_KIT_RARITY = 'ultra'  // 激レアだけ
+
 // ===== 抽出 =====
 export const EXTRACT_COST = 5     // 消費する素材の数
 export const BOSS_LIMIT = 1       // ボス素材は5枠に1個まで（ユニーク素材）

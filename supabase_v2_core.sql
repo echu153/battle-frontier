@@ -1794,11 +1794,16 @@ create or replace function public.v2_fuse(p_base bigint, p_mat_a bigint, p_mat_b
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   c_plus_max constant int := 12;
+  -- ★強化にはGoldが要る（2026-08-22 ユーザー決定）。src/v2/lib/smith.js の FUSE_GOLD_BASE と同じ数字
+  --   ランクの基礎額 × 1.5^強化値。**成否にかかわらず取る**
+  c_gold_step constant numeric := 1.5;
   v_uid   uuid := auth.uid();
   v_mats  bigint[] := array[p_mat_a, p_mat_b];
   v_equip text;
   v_plus  int;
   v_rank  text;
+  v_cost  bigint;
+  v_gold  bigint;
   v_cnt   int;
   v_r     numeric;
   v_fail numeric; v_great numeric; v_super numeric;
@@ -1845,6 +1850,18 @@ begin
   end if;
 
   select rank into v_rank from public.v2_equipment where id = v_equip;
+
+  -- ★Goldを引く。**護符を減らしたあと・抽選の前**（成否にかかわらず取るため）
+  select round(g * power(c_gold_step, v_plus))::bigint into v_cost from (values
+    ('F', 20), ('E', 50), ('D', 120), ('C', 300), ('B', 800), ('A', 2000), ('S', 5000)
+  ) t(r, g) where t.r = v_rank;
+  update public.v2_profiles set gold = gold - v_cost, updated_at = now()
+   where id = v_uid and gold >= v_cost
+  returning gold into v_gold;
+  if not found then
+    return jsonb_build_object('ok', false, 'error', format('Goldが足りません（%sG必要）', v_cost));
+  end if;
+
   -- ★src/v2/lib/smith.js の RATES と同じ数字
   select f, g, s into v_fail, v_great, v_super from (values
     ('F', 0.00, 0.14, 0.04), ('E', 0.03, 0.12, 0.03), ('D', 0.07, 0.10, 0.03),
@@ -1875,12 +1892,76 @@ begin
   end if;
 
   return jsonb_build_object('ok', true, 'result', v_res, 'plus', v_new,
-                            'id', p_base, 'protected', v_protect and v_up = 0);
+                            'id', p_base, 'protected', v_protect and v_up = 0,
+                            'cost', v_cost, 'gold', v_gold);
 end;
 $$;
 revoke all on function public.v2_fuse(bigint, bigint, bigint, boolean) from public;
 revoke all on function public.v2_fuse(bigint, bigint, bigint, boolean) from anon;
 grant execute on function public.v2_fuse(bigint, bigint, bigint, boolean) to authenticated;
+
+-- ===== 刻印除去装置を作る（激レア素材5個 → 1個）=====
+-- ★ルーンを外すための道具。**これが無いと刻印済みの装備は取引所へ出せない**
+--   （刻印済みは出品不可のため）。2026-08-22 ユーザー決定で名前と入手手段が決まった。
+--   激レア素材だけで作る＝同じ素材をルーンの抽出にも使うので、どちらに回すかの択になる。
+create or replace function public.v2_make_unsocket_kit(p_items jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_cost   constant int := 5;         -- src/v2/lib/material.js の UNSOCKET_KIT_COST
+  c_rarity constant text := 'ultra';  -- 同 UNSOCKET_KIT_RARITY
+  v_uid  uuid := auth.uid();
+  v_req  int;
+  v_ok   int;
+  v_sum  int;
+  v_have int;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then
+    return jsonb_build_object('ok', false, 'error', '素材が選ばれていません');
+  end if;
+
+  -- 送られてきた種類と、そのうち「実在して・激レアで・足りている」種類
+  select count(*), coalesce(sum(q.qty), 0) into v_req, v_sum
+    from (select r.id, sum(r.qty)::int as qty
+            from jsonb_to_recordset(p_items) as r(id text, qty int)
+           where r.id is not null and coalesce(r.qty, 0) > 0
+           group by r.id) q;
+  if v_req = 0 then return jsonb_build_object('ok', false, 'error', '個数が不正です'); end if;
+  if v_sum <> c_cost then
+    return jsonb_build_object('ok', false, 'error', format('激レア素材をちょうど%s個選んでください', c_cost));
+  end if;
+
+  select count(*) into v_ok
+    from (select r.id, sum(r.qty)::int as qty
+            from jsonb_to_recordset(p_items) as r(id text, qty int)
+           where r.id is not null and coalesce(r.qty, 0) > 0
+           group by r.id) q
+    join public.v2_materials m on m.id = q.id and m.rarity = c_rarity
+    join public.v2_player_materials pm
+      on pm.player_id = v_uid and pm.material_id = q.id and pm.qty >= q.qty;
+  if v_ok <> v_req then
+    return jsonb_build_object('ok', false, 'error', '激レア素材が足りません');
+  end if;
+
+  -- ここから先は失敗しない（検証が通っている）
+  update public.v2_player_materials pm
+     set qty = pm.qty - q.qty
+    from (select r.id, sum(r.qty)::int as qty
+            from jsonb_to_recordset(p_items) as r(id text, qty int)
+           where r.id is not null and coalesce(r.qty, 0) > 0
+           group by r.id) q
+   where pm.player_id = v_uid and pm.material_id = q.id;
+
+  update public.v2_profiles set unsocket_tickets = unsocket_tickets + 1, updated_at = now()
+   where id = v_uid returning unsocket_tickets into v_have;
+
+  return jsonb_build_object('ok', true, 'unsocket_tickets', v_have);
+end;
+$$;
+revoke all on function public.v2_make_unsocket_kit(jsonb) from public;
+revoke all on function public.v2_make_unsocket_kit(jsonb) from anon;
+grant execute on function public.v2_make_unsocket_kit(jsonb) to authenticated;
 
 -- ===== 動作確認用（開発限定）：守りの護符を配る =====
 -- ★入手方法は未定（2026-08-16）。決まるまでは開発だけがここで増やせる
@@ -4165,3 +4246,260 @@ $$;
 revoke all on function public.v2_weapon_evolve(bigint, text, numeric) from public;
 revoke all on function public.v2_weapon_evolve(bigint, text, numeric) from anon;
 grant execute on function public.v2_weapon_evolve(bigint, text, numeric) to authenticated;
+
+-- ============================================================
+-- ===== 13. 取引所 =====
+-- ------------------------------------------------------------
+-- 設計は docs/v2-market-design.md、値段と規則の正は src/v2/lib/market.js。
+--
+-- ★**取引所はGoldを減らさない**（設計の芯）。売買はGoldが人から人へ移るだけで、
+--   世界の総量は1Gも減らない。減るのは**手数料25%**だけ。
+--       湧く   … 素材のNPC売却
+--       消える … 取引所の手数料 ＋ 鍛冶の強化費
+--
+-- ★出品できないもの（2026-08-17 ユーザー決定）
+--   ・装備中のもの ・**ルーンを刻んでいるもの** ・取引から7日経っていないもの
+--   ⚠旧版は帰属の判定を見落とした一括加工が購入装備を消す事故を起こしている。
+--     **判定は v2_can_list() 1か所に固定**して、出品も購入も必ずここを通す。
+--
+-- ⚠所有者・出品状態・traded_at を書けるのは**RPCだけ**。RLSは読みだけ許す。
+-- ============================================================
+alter table public.v2_inventory add column if not exists traded_at timestamptz;
+create index if not exists v2_inventory_traded_idx on public.v2_inventory(traded_at);
+
+create table if not exists public.v2_market_listings (
+  id         bigserial primary key,
+  inv_id     bigint not null references public.v2_inventory(id) on delete cascade,
+  seller_id  uuid   not null references auth.users(id) on delete cascade,
+  price      bigint not null check (price > 0),
+  listed_at  timestamptz not null default now(),
+  expires_at timestamptz not null,
+  sold_at    timestamptz,
+  buyer_id   uuid references auth.users(id) on delete set null
+);
+-- ★同じ個体を二重に出せない（売れていない出品は1件だけ）
+create unique index if not exists v2_market_open_uniq
+  on public.v2_market_listings(inv_id) where sold_at is null;
+create index if not exists v2_market_open_idx on public.v2_market_listings(sold_at, expires_at);
+create index if not exists v2_market_seller_idx on public.v2_market_listings(seller_id);
+
+alter table public.v2_market_listings enable row level security;
+drop policy if exists "v2_market_read" on public.v2_market_listings;
+-- 出品は誰でも見える（買うため）。書き込みはRPCだけ
+create policy "v2_market_read" on public.v2_market_listings for select to authenticated using (true);
+revoke all on table public.v2_market_listings from anon;
+grant select on table public.v2_market_listings to authenticated;
+
+-- ---- 出品の一覧を読むために、他人の装備も見えるようにする ----
+-- ⚠v2_inventory は「自分のものだけ」だったが、出品中のものは買い手にも見えないと選べない
+drop policy if exists "v2_inventory_own" on public.v2_inventory;
+create policy "v2_inventory_own" on public.v2_inventory for select to authenticated
+  using (player_id = auth.uid()
+         or exists (select 1 from public.v2_market_listings l
+                     where l.inv_id = v2_inventory.id and l.sold_at is null));
+
+-- ===== 内部ヘルパ：出品できるか =====
+-- ★判定はここ1か所。出品も購入も必ず通す（旧版の帰属見落とし事故を繰り返さない）
+create or replace function public.v2_can_list(p_inv bigint, p_uid uuid)
+returns text language plpgsql stable security definer set search_path = public as $$
+declare
+  c_retrade constant interval := interval '7 days';   -- market.js の RETRADE_DAYS
+  v_row     record;
+  v_equipped jsonb;
+begin
+  select i.id, i.player_id, i.traded_at into v_row
+    from public.v2_inventory i where i.id = p_inv;
+  if not found or v_row.player_id <> p_uid then return 'その装備を持っていません'; end if;
+
+  select equipped into v_equipped from public.v2_profiles where id = p_uid;
+  if exists (select 1 from jsonb_each_text(coalesce(v_equipped, '{}'::jsonb)) where value::bigint = p_inv) then
+    return '装備中のものは出せません（外してから）';
+  end if;
+  if exists (select 1 from public.v2_essences e where e.inv_id = p_inv) then
+    return 'ルーンを刻んだままでは出せません（刻印除去装置で外してから）';
+  end if;
+  if v_row.traded_at is not null and now() - v_row.traded_at < c_retrade then
+    return format('取引したばかりです（あと%s日で出せます）',
+                  ceil(extract(epoch from (v_row.traded_at + c_retrade - now())) / 86400)::int);
+  end if;
+  if exists (select 1 from public.v2_market_listings l where l.inv_id = p_inv and l.sold_at is null) then
+    return 'すでに出品しています';
+  end if;
+  return null;   -- null＝出せる
+end;
+$$;
+revoke all on function public.v2_can_list(bigint, uuid) from public;
+revoke all on function public.v2_can_list(bigint, uuid) from anon;
+
+-- ===== 出品する =====
+create or replace function public.v2_market_list(p_inv bigint, p_price bigint)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_days     constant int := 7;            -- market.js の LISTING_DAYS
+  c_max      constant int := 10;           -- 同 MAX_LISTINGS
+  c_price_max constant bigint := 10000000; -- 同 PRICE_MAX
+  v_uid   uuid := auth.uid();
+  v_err   text;
+  v_rank  text;
+  v_plus  int;
+  v_floor bigint;
+  v_open  int;
+  v_id    bigint;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+
+  select count(*) into v_open from public.v2_market_listings
+   where seller_id = v_uid and sold_at is null and expires_at > now();
+  if v_open >= c_max then
+    return jsonb_build_object('ok', false, 'error', format('同時に出せるのは%s件までです', c_max));
+  end if;
+
+  v_err := public.v2_can_list(p_inv, v_uid);
+  if v_err is not null then return jsonb_build_object('ok', false, 'error', v_err); end if;
+
+  -- 下限価格。装備は「ランクの基礎価格 × 2^強化値」（market.js の EQUIP_BASE）
+  select e.rank, i.plus into v_rank, v_plus
+    from public.v2_inventory i join public.v2_equipment e on e.id = i.equip_id
+   where i.id = p_inv;
+  select round(b * power(2, v_plus))::bigint into v_floor from (values
+    ('F', 200), ('E', 500), ('D', 1200), ('C', 3000), ('B', 8000), ('A', 20000), ('S', 50000)
+  ) t(r, b) where t.r = v_rank;
+
+  if coalesce(p_price, 0) < v_floor then
+    return jsonb_build_object('ok', false, 'error', format('この品は%sG以上でないと出せません', v_floor));
+  end if;
+  if p_price > c_price_max then
+    return jsonb_build_object('ok', false, 'error', format('%sGを超える値は付けられません', c_price_max));
+  end if;
+
+  insert into public.v2_market_listings (inv_id, seller_id, price, expires_at)
+  values (p_inv, v_uid, p_price, now() + (c_days || ' days')::interval)
+  returning id into v_id;
+
+  return jsonb_build_object('ok', true, 'id', v_id, 'price', p_price, 'floor', v_floor);
+end;
+$$;
+revoke all on function public.v2_market_list(bigint, bigint) from public;
+revoke all on function public.v2_market_list(bigint, bigint) from anon;
+grant execute on function public.v2_market_list(bigint, bigint) to authenticated;
+
+-- ===== 出品を取り消す =====
+create or replace function public.v2_market_cancel(p_id bigint)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_uid uuid := auth.uid();
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  delete from public.v2_market_listings
+   where id = p_id and seller_id = v_uid and sold_at is null;
+  if not found then return jsonb_build_object('ok', false, 'error', 'その出品はもうありません'); end if;
+  return jsonb_build_object('ok', true);
+end;
+$$;
+revoke all on function public.v2_market_cancel(bigint) from public;
+revoke all on function public.v2_market_cancel(bigint) from anon;
+grant execute on function public.v2_market_cancel(bigint) to authenticated;
+
+-- ===== 買う =====
+-- ★Goldの引き落とし・売り手への支払い・所有者の移管・出品の締めを**1トランザクションで**やる。
+--   分けると二重購入が出る（旧版と同じ作り）。
+create or replace function public.v2_market_buy(p_id bigint)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_fee constant int := 25;   -- market.js の FEE_PCT。★ここで消えるGoldがv2の唯一の穴
+  v_uid    uuid := auth.uid();
+  v_row    record;
+  v_fee    bigint;
+  v_payout bigint;
+  v_gold   bigint;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+
+  -- ★出品の行をロックしてから見る（同時に買われても片方だけ通す）
+  select l.id, l.inv_id, l.seller_id, l.price, l.expires_at, l.sold_at into v_row
+    from public.v2_market_listings l where l.id = p_id for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'その出品はもうありません'); end if;
+  if v_row.sold_at is not null then return jsonb_build_object('ok', false, 'error', '売り切れました'); end if;
+  if v_row.expires_at <= now() then return jsonb_build_object('ok', false, 'error', '出品期間が切れています'); end if;
+  if v_row.seller_id = v_uid then return jsonb_build_object('ok', false, 'error', '自分の出品は買えません'); end if;
+
+  -- 買い手からGoldを引く（足りなければここで止まる）
+  update public.v2_profiles set gold = gold - v_row.price, updated_at = now()
+   where id = v_uid and gold >= v_row.price
+  returning gold into v_gold;
+  if not found then
+    return jsonb_build_object('ok', false, 'error', format('Goldが足りません（%sG必要）', v_row.price));
+  end if;
+
+  -- 売り手へ手数料を引いた額を渡す。★差額は誰にも渡らず**消える**
+  v_fee    := floor(v_row.price * c_fee / 100.0);
+  v_payout := v_row.price - v_fee;
+  update public.v2_profiles set gold = gold + v_payout, updated_at = now()
+   where id = v_row.seller_id;
+
+  -- 所有者を移して、再出品できるようになる時刻の基準を打つ
+  update public.v2_inventory set player_id = v_uid, traded_at = now() where id = v_row.inv_id;
+  update public.v2_market_listings set sold_at = now(), buyer_id = v_uid where id = p_id;
+
+  return jsonb_build_object('ok', true, 'price', v_row.price, 'fee', v_fee,
+                            'inv_id', v_row.inv_id, 'gold', v_gold);
+end;
+$$;
+revoke all on function public.v2_market_buy(bigint) from public;
+revoke all on function public.v2_market_buy(bigint) from anon;
+grant execute on function public.v2_market_buy(bigint) to authenticated;
+
+-- ===== 並んでいる出品を読む =====
+-- ★期限切れは出さない（自動で手元に戻る＝行を消す）。読むついでに掃除する
+create or replace function public.v2_market_browse()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_uid uuid := auth.uid(); v_rows jsonb;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+
+  -- 期限切れの出品は消す（装備はもともと売り手のものなので、消すだけで手元に戻る）
+  delete from public.v2_market_listings where sold_at is null and expires_at <= now();
+
+  select coalesce(jsonb_agg(to_jsonb(t) order by t.price), '[]'::jsonb) into v_rows from (
+    select l.id, l.price, l.listed_at, l.expires_at, l.seller_id = v_uid as mine,
+           p.username as seller, i.id as inv_id, i.equip_id, i.plus,
+           coalesce(i.record, '{}'::jsonb) as record, coalesce(i.evolutions, '[]'::jsonb) as evolutions
+      from public.v2_market_listings l
+      join public.v2_inventory i on i.id = l.inv_id
+      left join public.v2_profiles p on p.id = l.seller_id
+     where l.sold_at is null and l.expires_at > now()
+  ) t;
+
+  -- 直近の成約価格（相場の参考。装備の種類ごとに最後の1件）
+  return jsonb_build_object('ok', true, 'rows', v_rows,
+    'sold', (select coalesce(jsonb_object_agg(k, v), '{}'::jsonb) from (
+        select (i.equip_id || '#' || i.plus) as k, max(l.price) as v
+          from public.v2_market_listings l join public.v2_inventory i on i.id = l.inv_id
+         where l.sold_at is not null and l.sold_at > now() - interval '30 days'
+         group by 1) s));
+end;
+$$;
+revoke all on function public.v2_market_browse() from public;
+revoke all on function public.v2_market_browse() from anon;
+grant execute on function public.v2_market_browse() to authenticated;
+
+-- ===== 自分の持ち物のうち、いま出せるもの =====
+create or replace function public.v2_market_sellable()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_uid uuid := auth.uid(); v_rows jsonb;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select coalesce(jsonb_agg(to_jsonb(t) order by t.id desc), '[]'::jsonb) into v_rows from (
+    select i.id, i.equip_id, i.plus, public.v2_can_list(i.id, v_uid) as reason
+      from public.v2_inventory i where i.player_id = v_uid
+  ) t;
+  return jsonb_build_object('ok', true, 'rows', v_rows);
+end;
+$$;
+revoke all on function public.v2_market_sellable() from public;
+revoke all on function public.v2_market_sellable() from anon;
+grant execute on function public.v2_market_sellable() to authenticated;

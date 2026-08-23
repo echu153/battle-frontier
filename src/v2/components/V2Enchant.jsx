@@ -5,7 +5,8 @@ import { equippedItems } from '../lib/loadout.js'
 import {
   MATERIAL_BY_ID, RARITY_LABEL, RARITY_COLOR, COLOR_LABEL, COLOR_HEX,
   EXTRACT_COST, BOSS_LIMIT, canExtract, runePower, runeName, runeFullName, materialsOfArea,
-  RARITIES, sellPriceOf, sellTotalOf,
+  RARITIES, sellPriceOf, sellTotalOf, MATERIALS,
+  UNSOCKET_KIT_NAME, UNSOCKET_KIT_COST,
 } from '../lib/material.js'
 import { enchantOf } from '../lib/enchant.js'
 import { STAT_DEFS } from '../lib/stats.js'
@@ -73,6 +74,9 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
   const [runeFilter, setEssFilter] = useStored('runeFilter', defaultRuneFilter, true)  // ルーン一覧の絞り込み
   const [rawRunePage, setRawEssPage] = useState(0)
   const [sell, setSell] = useState({})          // 売却タブで選んだ数 { 素材ID: 個数 }
+  // 刻印除去装置（ルーンを外す道具）。★激レア素材5個で1個作る
+  const [kit, setKit] = useState(false)
+  const [kitPick, setKitPick] = useState({})
   const [sellConfirm, setSellConfirm] = useState(false)
   const [sold, setSold] = useState(null)        // 売却の結果 { gained, gold }
   const [busy, setBusy] = useState(false)
@@ -104,6 +108,24 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
     if (!data) return
     setPicked([])
     setResult(data.essence)   // 結果はポップアップで出す
+  }
+
+  // ===== 刻印除去装置 =====
+  // ★これが無いと、ルーンを刻んだ装備は取引所へ出せない（刻印済みは出品不可）
+  const ultraHeld = MATERIALS.filter(m => m.rarity === 'ultra' && held[m.id] > 0)
+  const kitTotal = Object.values(kitPick).reduce((a, b) => a + b, 0)
+  const setKitQty = (id, n) => setKitPick(p => {
+    const v = Math.max(0, Math.min(held[id] || 0, n))
+    const next = { ...p }
+    if (v) next[id] = v; else delete next[id]
+    return next
+  })
+  const doMakeKit = async () => {
+    const items = Object.entries(kitPick).map(([id, qty]) => ({ id, qty }))
+    const d = await call('v2_make_unsocket_kit', { p_items: items })
+    if (!d) return
+    setKit(false); setKitPick({})
+    setMsg({ text: `🧰 ${UNSOCKET_KIT_NAME}を作りました（残り${d.unsocket_tickets}個）`, color:'#44ff88' })
   }
 
   // ソケットへ入れる。ふさがっている枠は**上書き＝元のルーンが消える**ので確認を1段挟む
@@ -324,10 +346,15 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
           <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'8px' }}>
             ルーンを刻めるのは武器だけ（片手2枠・両手3枠）。枠の色はドロップしたときに決まっていて、
             <span style={{ color:'#88ccff' }}>色の合うルーンしか刻めない</span>。
-            <span style={{ color:'#88ccff' }}>外す</span>には専用アイテムが要る（残り{prof?.unsocket_tickets || 0}個）。
-            アイテムが無くても<span style={{ color:'#cc88ff' }}>上書き</span>はできるが、
-            そのとき<span style={{ color:'#ff8844' }}>元のルーンは消える</span>
+            <span style={{ color:'#88ccff' }}>外す</span>には<b style={{ color:'#ffcc44' }}>{UNSOCKET_KIT_NAME}</b>が1個要る（残り{prof?.unsocket_tickets || 0}個）。
+            装置が無くても<span style={{ color:'#cc88ff' }}>上書き</span>はできるが、
+            そのとき<span style={{ color:'#ff8844' }}>元のルーンは消える</span><br />
+            ★<b style={{ color:'#ffcc44' }}>刻んだままの装備は取引所へ出せない</b>。売るときは全部外してから
           </div>
+          <button onClick={() => setKit(true)} disabled={busy}
+            style={{ ...miniBtn('#ffcc44'), marginBottom:'8px' }}>
+            🧰 {UNSOCKET_KIT_NAME}を作る（激レア素材×{UNSOCKET_KIT_COST}）
+          </button>
 
           {weapons.length === 0 && <div style={{ color:'#7fa6d0', fontSize:'11px' }}>武器を装着してください</div>}
           {weapons.map(w => (
@@ -547,9 +574,45 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
           <div style={{ marginTop:'6px' }}><RuneTag e={seal.rune} size="13px" /></div>
           <div style={{ color:'#ff8844', fontSize:'11px', marginTop:'10px', lineHeight:1.8 }}>
             ⚠ 一度刻むと<b>外すのが大変です</b>。<br />
-            外して手元に戻すには専用アイテムが1個要ります（残り{prof?.unsocket_tickets || 0}個）。<br />
-            アイテムが無いときは<b>上書きするしかなく、いま刻むルーンは消えます</b>。
+            外して手元に戻すには<b>{UNSOCKET_KIT_NAME}</b>が1個要ります（残り{prof?.unsocket_tickets || 0}個）。<br />
+            装置が無いときは<b>上書きするしかなく、いま刻むルーンは消えます</b>。<br />
+            <b>刻んだままの装備は取引所へ出せません。</b>
           </div>
+        </V2Modal>
+      )}
+
+      {/* ===== 刻印除去装置を作る ===== */}
+      {kit && (
+        <V2Modal title={`🧰 ${UNSOCKET_KIT_NAME}を作る`} color="#ffcc44" busy={busy}
+          confirmLabel={`作る（${kitTotal}/${UNSOCKET_KIT_COST}）`}
+          onConfirm={kitTotal === UNSOCKET_KIT_COST ? doMakeKit : undefined}
+          onClose={() => !busy && (setKit(false), setKitPick({}))}>
+          <div style={{ color:'#cfe2ff', fontSize:'12px' }}>
+            激レア素材を{UNSOCKET_KIT_COST}個そろえると1個できます。
+          </div>
+          <div style={{ color:'#ff8844', fontSize:'11px', margin:'6px 0 10px' }}>
+            ⚠ 同じ激レア素材は<b>ルーン作成にも使います</b>。どちらに回すか決めてから。
+          </div>
+          {ultraHeld.length === 0 && <div style={{ color:'#7fa6d0', fontSize:'11px' }}>激レア素材を持っていません。</div>}
+          {ultraHeld.map(m => (
+            <div key={m.id} style={{ display:'flex', alignItems:'center', gap:'4px', background:'#000818',
+              border:'1px solid #002244', borderLeft:`3px solid ${RARITY_COLOR.ultra}`,
+              padding:'4px 6px', marginBottom:'2px', fontFamily:'monospace', fontSize:'11px' }}>
+              <span style={{ color: RARITY_COLOR.ultra, flex:'1 1 auto', minWidth:0, overflow:'hidden',
+                textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                {m.name}<span style={{ color:'#ffffff' }}> ×{held[m.id]}</span>
+              </span>
+              <button onClick={() => setKitQty(m.id, (kitPick[m.id] || 0) - 1)} disabled={!kitPick[m.id]}
+                style={{ ...miniBtn(kitPick[m.id] ? '#88aaff' : '#3a4a60'), padding:'2px 7px' }}>−</button>
+              <span style={{ color: kitPick[m.id] ? '#ffcc00' : '#62789a', minWidth:'26px', textAlign:'center' }}>
+                {kitPick[m.id] || 0}
+              </span>
+              <button onClick={() => setKitQty(m.id, (kitPick[m.id] || 0) + 1)}
+                disabled={(kitPick[m.id] || 0) >= held[m.id] || kitTotal >= UNSOCKET_KIT_COST}
+                style={{ ...miniBtn((kitPick[m.id] || 0) < held[m.id] && kitTotal < UNSOCKET_KIT_COST ? '#88aaff' : '#3a4a60'),
+                  padding:'2px 7px' }}>＋</button>
+            </div>
+          ))}
         </V2Modal>
       )}
 

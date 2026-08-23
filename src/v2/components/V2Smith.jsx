@@ -5,7 +5,7 @@ import { STAT_KEYS, STAT_DEFS } from '../lib/stats.js'
 import { wornIdsOf } from '../lib/loadout.js'
 import { COLOR_HEX, COLOR_LABEL } from '../lib/material.js'
 import {
-  ratesFor, checkPick, MAT_COUNT, RESULT_LABEL, RESULT_COLOR, RESULT_UP,
+  ratesFor, checkPick, fuseCostOf, MAT_COUNT, RESULT_LABEL, RESULT_COLOR, RESULT_UP,
   PROTECT_NAME, PROTECT_DESC,
 } from '../lib/smith.js'
 import { filterRows, sortRows, pageOf, clampPage, defaultFilter } from '../lib/browse.js'
@@ -71,7 +71,13 @@ export default function V2Smith({ prof, inventory, materials, runes, isAdmin, on
   const baseItem = base ? ITEM_BY_ID[base.equip_id] : null
   const mats = matIds.map(id => (inventory || []).find(i => i.id === id)).filter(Boolean)
   const rate = baseItem ? ratesFor(baseItem.rank, protect) : null
-  const pickError = base ? checkPick({ base, mats, plusMax: PLUS_MAX, wornIds }) : ''
+  // ★強化にはGoldが要る（2026-08-22 ユーザー決定）。成否にかかわらず取られる
+  const cost = baseItem ? fuseCostOf(baseItem.rank, base.plus || 0) : 0
+  const poor = cost > Number(prof?.gold || 0)
+  const pickError = base
+    ? (checkPick({ base, mats, plusMax: PLUS_MAX, wornIds })
+       || (poor ? `Goldが足りません（${cost.toLocaleString()}G必要）` : ''))
+    : ''
   // 素材に選べる個体＝強化元と同じ強化値・装備中でない・強化元そのものでない
   const candidates = base
     ? (opened?.list || []).filter(i => i.id !== base.id && (i.plus || 0) === (base.plus || 0) && !wornIds.has(String(i.id)))
@@ -260,6 +266,7 @@ export default function V2Smith({ prof, inventory, materials, runes, isAdmin, on
                       style={{ ...btn(pickError ? '#62789a' : '#ffcc00'), width:'100%',
                         color: pickError ? '#445566' : '#ffcc00', cursor: pickError ? 'not-allowed' : 'pointer' }}>
                       🔨 {baseItem.name}{base.plus ? `+${base.plus}` : ''}（#{base.id}）を強化する
+                      <span style={{ color: poor ? '#ff6666' : '#7fa6d0' }}>　{cost.toLocaleString()}G</span>
                     </button>
                     {msg && <div style={{ marginTop:'8px', fontSize:'12px', color: msg.color }}>{msg.text}</div>}
                   </div>
@@ -283,6 +290,10 @@ export default function V2Smith({ prof, inventory, materials, runes, isAdmin, on
           <div style={{ color:'#ffcc00' }}>
             強化素材　{mats.map(m => `#${m.id}`).join('・')}
             <span style={{ color:'#7fa6d0' }}>　→ {protect ? '失敗しても残ります' : '失敗すると消えます'}</span>
+          </div>
+          <div style={{ color:'#ffcc00' }}>
+            費用　{cost.toLocaleString()}G
+            <span style={{ color:'#7fa6d0' }}>　→ 成否にかかわらず取られます（所持 {Number(prof?.gold || 0).toLocaleString()}G）</span>
           </div>
           <div style={{ color:'#93a9be', fontSize:'11px', marginTop:'6px' }}>
             戦闘力 {powerOf(baseItem, base.plus || 0)} → {powerOf(baseItem, (base.plus || 0) + 1)}（成功時）
