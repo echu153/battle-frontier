@@ -414,7 +414,7 @@ export default function V2Home() {
                   const s = SKILL_BY_NAME[row.name]
                   const cost = (s?.mp || 0) * (row.uses || 0)
                   return (
-                    <div key={i} style={{ background:'#000818', border:'1px solid #002244', padding:'5px 7px', display:'flex', alignItems:'center', gap:'5px', fontSize:'11px' }}>
+                    <div key={i} style={{ background:'#000818', border:'1px solid #002244', padding:'5px 7px', display:'flex', alignItems:'center', gap:'5px', fontSize:'11px', flexWrap:'wrap' }}>
                       <span style={{ color:'#8866cc', width:'42px' }}>スキル{i + 1}</span>
                       <span style={{ flex:1, color: s ? KIND_COLOR[s.kind] : '#62789a', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                         {s ? s.name : '（空き）'}

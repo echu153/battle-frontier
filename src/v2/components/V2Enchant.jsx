@@ -305,7 +305,8 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
             <div key={m.id}
               style={{ display:'flex', alignItems:'center', gap:'4px', background:'#000818',
                 border:'1px solid #002244', borderLeft:`3px solid ${RARITY_COLOR[m.rarity]}`,
-                padding:'4px 6px', marginBottom:'2px', fontFamily:'monospace', fontSize:'11px' }}>
+                padding:'4px 6px', marginBottom:'2px', fontFamily:'monospace', fontSize:'11px',
+                flexWrap:'wrap' }}>
               <span style={{ color: RARITY_COLOR[m.rarity], flex:'1 1 auto', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                 {m.name}
                 <span style={{ color:'#ffffff' }}>{' '}×{held[m.id]}</span>
