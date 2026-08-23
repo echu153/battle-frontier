@@ -4,7 +4,7 @@ import { STAT_DEFS, MAX_LV, ROLLS_PER_LV, calcPower, expToNext, expPerLv } from 
 import { staminaMax, rollStamina, msToNextStamina, mmss } from '../lib/stamina.js'
 import { classBonusText, jobCountOf } from '../lib/classBonus.js'
 import { TIER_COLOR } from '../lib/classes.js'
-import { KIND_COLOR, SKILL_BY_NAME, SKILL_SET_SLOTS } from '../lib/skills.js'
+import { KIND_COLOR, SKILL_BY_NAME, SKILL_SET_SLOTS, passiveOf } from '../lib/skills.js'
 import { equippedItems, totalStats } from '../lib/loadout.js'
 import { RANK_COLOR } from './v2ui.js'
 import V2ItemTip, { V2SkillTip, V2Tip } from './V2ItemTip.jsx'
@@ -116,6 +116,10 @@ export default function V2Status({ prof, inventory, runes, fishDex, classes, ope
     )
   }
 
+  // ★2026-08-23：職業パッシブは**枠を使わない**（その職業なら最初から効いている）。
+  //   スキル編成に出てこないので、ここに出さないと持っていることに気づけない
+  const passive = passiveOf(prof.class)
+
   // スキル編成。1行にまとめると読めないので、装備と同じ升目にして種別の色を付ける。
   // ★装備と同じで、カーソルを合わせる（スマホはタップ）と効果が出る
   const skillCell = (i) => {
@@ -200,6 +204,20 @@ export default function V2Status({ prof, inventory, runes, fishDex, classes, ope
           <div style={{ ...cell, marginBottom:'6px' }}>
             <span style={{ color:'#7fa6d0', fontSize:'9px' }}>職業補正</span>
             <span style={{ color:'#88ddaa', fontSize:'10px' }}>{classBonusText(prof.class, jobCountOf(prof))}</span>
+          </div>
+        )}
+
+        {/* ★2026-08-23：パッシブは枠を使わない＝スキル編成に出てこない。
+            「持っていることに気づけない」ので、職業補正のとなりに常時の効果として出す */}
+        {passive && (
+          <div style={{ ...cell, marginBottom:'6px' }}>
+            <span style={{ color:'#7fa6d0', fontSize:'9px', flexShrink:0 }}>職業パッシブ</span>
+            <V2SkillTip skill={passive} alignRight style={{ display:'block', flex:1, minWidth:0 }}>
+              <span style={{ ...valueCell, display:'block' }}>
+                <span style={{ color: KIND_COLOR.passive }}>{passive.name}</span>
+                <span style={{ color:'#7fa6d0' }}> 常時</span>
+              </span>
+            </V2SkillTip>
           </div>
         )}
 
