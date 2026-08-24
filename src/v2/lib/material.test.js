@@ -351,3 +351,12 @@ test('レアの素材は売値は同じで、ルーンにしたときの伸び�
   // 値段は同じでも、ルーンにしたときの上がり幅が1.5倍
   assert.ok(rare.hi > normal.hi, 'レアの素材のほうが伸びる')
 })
+
+// ★素材名は一覧に並ぶので、片方がもう片方の頭と同じだと読み違える
+//   （例：静寂の風切 と 静寂の風切羽）。レアを足したときに起きたので、ここで落とす
+test('素材名に、片方がもう片方の先頭と同じものが無い', () => {
+  const names = MATERIALS.map(m => m.name)
+  const bad = []
+  for (const a of names) for (const b of names) if (a !== b && b.startsWith(a)) bad.push(`${a} ⊂ ${b}`)
+  assert.deepEqual(bad, [], `紛らわしい素材名: ${bad.join(' / ')}`)
+})
