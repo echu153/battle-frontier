@@ -59,15 +59,9 @@ export function TutorialModal({ id, onClose }) {
       {t.lines.map((l, i) => (
         <div key={i} style={{ color:'#cfe2ff', marginBottom:'4px' }}>{l}</div>
       ))}
-      {!!t.tips?.length && (
-        <div style={{ marginTop:'10px', borderTop:'1px solid #002a55', paddingTop:'8px' }}>
-          <div style={{ color: TEXT.label, fontSize:'10px', marginBottom:'4px' }}>おぼえておくこと</div>
-          {t.tips.map((l, i) => (
-            <div key={i} style={{ color:'#93a9be', fontSize:'11px', display:'flex', gap:'6px' }}>
-              <span style={{ color:'#44aaff' }}>・</span><span>{l}</span>
-            </div>
-          ))}
-        </div>
+      {/* 補足は箇条書きにしない。最後に1文だけ置く（2026-08-25 ユーザー指示） */}
+      {t.note && (
+        <div style={{ color:'#93a9be', marginTop:'12px' }}>{t.note}</div>
       )}
       <div style={{ color: TEXT.empty, fontSize:'10px', marginTop:'10px' }}>
         この説明は、いつでも ❓ヘルプ から読み直せます。

@@ -17,7 +17,6 @@ import { RARITY_COLOR } from '../lib/material.js'
 import { RANK_COLOR, dropLine, LOG_PLAIN } from './v2ui.js'
 import V2Evolve from './V2Evolve.jsx'
 import { pushWeaponRecord } from './weaponRecord.js'
-import V2Help from './V2Help.jsx'
 
 // ★旧版（無印）の街とまったく同じ作り。
 //   街のブロックが**ホームにそのまま載っている**（別画面へ移動しない）。
@@ -180,9 +179,6 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
   // 次の行動までのバー（★街と戦闘ログの両方に出す。戦闘ログ側でも待ち時間が分かるように）
   const timerRow = (
     <>
-      <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:'6px' }}>
-        <V2Help id="sortie" />
-      </div>
       <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', marginBottom:'3px' }}>
         <span style={{ color:'#7fa6d0' }}>次の行動まで</span>
         <span style={{ color: canAct ? '#44ff88' : '#ffcc00' }}>{canAct ? '▶ 出撃可能！' : `${remaining.toFixed(1)}秒`}</span>

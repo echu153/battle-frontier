@@ -6,7 +6,6 @@ import {
 } from '../lib/daily.js'
 import { box, btn, miniBtn } from './v2ui.js'
 import V2Modal from './V2Modal.jsx'
-import V2Help from './V2Help.jsx'
 
 // デイリーミッション。1日1組で、難易度を2つから選ぶ。
 // ★数えるのも達成の判定も報酬もサーバー（v2_daily_pick / v2_daily_claim）。
@@ -84,7 +83,6 @@ export default function V2Daily({ prof, onProfile, embedded = false, showPanel =
   const head = (
     <span>
       📋 今日のミッション
-      <span style={{ marginLeft:'8px' }}><V2Help id="daily" auto={false} /></span>
       <span style={{ color:lv.color, fontSize:'10px', marginLeft:'6px' }}>{lv.label}</span>
       <span style={{ color: done ? '#44ff88' : '#ffcc00', fontSize:'11px', marginLeft:'6px' }}>
         {doneCount}/{TASKS.length}
