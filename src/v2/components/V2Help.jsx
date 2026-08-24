@@ -15,7 +15,12 @@ import { TEXT } from './v2ui.js'
 // ★文章は src/v2/lib/tutorial.js が正。ここには文章を書かない
 //   （説明が画面のあちこちに散らばると、直すときに探すことになる）。
 
-export default function V2Help({ id, auto = true }) {
+// ★自動で開くのは**1回の読み込みにつき1つだけ**。
+//   ホームには常に出ている画面がいくつもあるので、素直に書くとポップアップが重なる。
+//   譲ったほうは「見た」にしないので、次に開いたときに出る＝順番に出てくる。
+let autoTaken = false
+
+export default function V2Help({ id, auto = true, label = 'ヘルプ' }) {
   const t = tutorialOf(id)
   const [open, setOpen] = useState(false)
 
@@ -23,6 +28,8 @@ export default function V2Help({ id, auto = true }) {
   useEffect(() => {
     if (!t || !auto) return
     if (loadPref(seenKey(id), false)) return
+    if (autoTaken) return          // このページではもう別のが出ている
+    autoTaken = true
     savePref(seenKey(id), true)
     setOpen(true)
   }, [id, t, auto])
@@ -36,7 +43,7 @@ export default function V2Help({ id, auto = true }) {
           color: TEXT.label, cursor:'pointer', fontFamily:'monospace', fontSize:'10px',
           lineHeight:1, padding:'3px 8px',
         }}>
-        ❓ ヘルプ
+        ❓ {label}
       </button>
       {open && <TutorialModal id={id} onClose={() => setOpen(false)} />}
     </>

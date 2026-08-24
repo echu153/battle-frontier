@@ -55,7 +55,7 @@ export default function V2Storage({ prof, inventory, runes, onProfile, onBack })
       <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'8px' }}>
           <span style={{ color:'#7fa6d0', fontSize:'10px', display:'flex', gap:'8px', alignItems:'center' }}>
-            装着中（8枠）<V2Help id="storage" /><V2Help id="evolve" auto={false} />
+            装着中（8枠）<V2Help id="storage" /><V2Help id="evolve" auto={false} label="武器の覚醒" />
           </span>
           <span style={{ color:'#ffcc00', fontSize:'11px' }}>装備の戦闘力 +{gearPower(prof, inventory).toLocaleString()}</span>
         </div>
