@@ -8,19 +8,19 @@ import {
   rangeOf, ratioOf, valueTable, meanOf, rollValue, rollStats, colorOf,
   canExtract, extract, EXTRACT_COST, TIER_RATE_MAX, TOP_WEIGHT, runePower,
   gradeOf, runeName, runeFullName, RUNE_NAMES, GRADE_MIN, COLOR_LABEL,
-  SELL_BASE_TIER, SELL_RARITY_MULT, sellPriceOf, sellTotalOf,
+  SELL_BASE_TIER, SELL_RARITY_MULT, sellPriceOf, sellTotalOf, RARE_MULT,
 } from './material.js'
-import { allEnemies } from './enemies.js'
+import { allEnemies, allRares } from './enemies.js'
 import { ENCHANTS } from './enchant.js'
 import { rollMaterial, MATERIAL_RATE } from './sortie.js'
 import { CATALOG, socketCountOf, rollSockets } from './equipment.js'
 import { STAT_KEYS } from './stats.js'
 
 // ===== 網羅 =====
-test('素材は敵105体 × 3レア度 ＝ 315種', () => {
-  assert.equal(MATERIALS.length, 315)
-  assert.equal(new Set(MATERIALS.map(m => m.id)).size, 315, 'IDが重複している')
-  assert.equal(new Set(MATERIALS.map(m => m.name)).size, 315, '名前が重複している')
+test('素材は敵180体 × 3レア度 ＝ 540種', () => {
+  assert.equal(MATERIALS.length, 540)
+  assert.equal(new Set(MATERIALS.map(m => m.id)).size, 540, 'IDが重複している')
+  assert.equal(new Set(MATERIALS.map(m => m.name)).size, 540, '名前が重複している')
   // ★素材は自分の**難易度帯**を持つ（レンジも売値も帯で決まる）
   for (const m of MATERIALS) assert.ok(m.tier >= 1 && m.tier <= 8, `${m.name} の帯`)
 })
@@ -314,4 +314,40 @@ test('売却の合計は個数ぶん足される（持っていない素材は0�
   assert.equal(sellTotalOf([{ id:'m:9:9:n', qty:5 }]), 0, '存在しないIDは0')
   assert.equal(sellTotalOf([{ id:n.id, qty:-5 }]), 0, 'マイナスは0扱い')
   assert.equal(sellTotalOf([]), 0)
+})
+
+// ============================================================
+// ★レアモンスターの素材（2026-08-25 ユーザー指示）
+//   ・値は通常の素材の 1.5倍（レア度の段は増やさない）
+//   ・idは `mr:` から始める＝**すでに持っている素材のidを1つも変えない**
+// ============================================================
+test('レアモンスターの素材は値が1.5倍', () => {
+  assert.equal(RARE_MULT, 1.5)
+  const rares = MATERIALS.filter(m => m.isRare)
+  assert.equal(rares.length, 225, '75体 × 3レア度')
+  for (const m of rares) {
+    const base = rangeOf(m.tier, m.rarity)
+    assert.ok(Math.abs(m.lo - base.lo * RARE_MULT) < 0.051, `${m.name} の下限 ${m.lo}（通常${base.lo}）`)
+    assert.ok(Math.abs(m.hi - base.hi * RARE_MULT) < 0.051, `${m.name} の上限 ${m.hi}（通常${base.hi}）`)
+  }
+})
+
+test('★レアの素材idは mr: 始まり＝既存の素材のidを1つも変えていない', () => {
+  for (const m of MATERIALS) {
+    assert.equal(m.id.startsWith('mr:'), !!m.isRare, `${m.name} のid ${m.id}`)
+  }
+  // 通常敵の素材のidは今までどおり m:エリア:番号:レア度 のまま
+  assert.equal(materialOf('スライム', 'normal').id, 'm:1:0:n')
+  assert.equal(materialOf('ビッグスライム', 'ultra').id, 'm:1:6:u')
+  // レアの素材は敵ごとに3つそろっている
+  for (const r of allRares()) assert.equal(materialsOfEnemy(r.name).length, 3, r.name)
+})
+
+test('レアの素材は売値は同じで、ルーンにしたときの伸びだけが大きい', () => {
+  const rare = materialOf('翠玉のスライムロード', 'normal')
+  const normal = materialOf('スライム', 'normal')
+  assert.equal(rare.tier, normal.tier, '同じ帯であること')
+  assert.equal(sellPriceOf(rare), sellPriceOf(normal), '売値は帯とレア度で決まる（同じ）')
+  // 値段は同じでも、ルーンにしたときの上がり幅が1.5倍
+  assert.ok(rare.hi > normal.hi, 'レアの素材のほうが伸びる')
 })

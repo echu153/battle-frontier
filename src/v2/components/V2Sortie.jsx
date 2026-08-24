@@ -88,14 +88,17 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
       const win = r.winner === 'a'
       const exp = win ? expOf(enc.isBoss) : 0
       const drop = win && rollHasDrop(Math.random, guardMult) ? rollDrop(area.id, new Date()) : null
-      const mat = win ? rollMaterial(enc.enemy.name, matMult) : null
+      // ★レアモンスターは素材を**確定で**落とす（内訳は55/35/10・sortie.js）
+      const mat = win ? rollMaterial(enc.enemy.name, matMult, Math.random, { sure: !!enc.isRare }) : null
       setBossRate(nextBossRate(bossRate, enc.isBoss))
 
       // 旧版の文体に合わせる（BattleLogLine が スキル名・ダメージ・回復 を拾って色を付ける）
       const out = []
       out.push(enc.isBoss
         ? { text:`⚠ ボス出現！ ${enc.enemy.name}が現れた！`, color:'#ff4444' }
-        : { text:`${enc.enemy.name}が現れた！`, color:'#88ccff' })
+        : enc.isRare
+          ? { text:`✦ レアモンスター出現！ ${enc.enemy.name}が現れた！`, color:'#ffcc44' }
+          : { text:`${enc.enemy.name}が現れた！`, color:'#88ccff' })
       const foe = enc.enemy.name
       const you = me.name   // ★ログはプレイヤー名で出す（「あなた」とは書かない）
       // ★文面は battleLog.js が正（出撃とアリーナで同じものを使う）

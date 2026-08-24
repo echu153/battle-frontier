@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  AREAS, AREAS_SORTED, statsOf, toFighter, areaOf, allEnemies, rollDropRank,
+  AREAS, AREAS_SORTED, statsOf, toFighter, areaOf, allEnemies, allRares, rarePoolAt, rollDropRank,
   TIER_MAX, tierOf, areasOfTier, areaLabel, areaFullName,
   BIAS_MULT, biasLabelOf, takenMultOf, areaOfEnemy,
 } from './enemies.js'
@@ -29,8 +29,8 @@ test('エリアは15。①〜③の名前と敵は旧版から流用、④以降
     '深紅のサラマンダー', '毒龍ヴェノムヒュドラ', '巌喰いガイアモール',
     '天空覇龍ウラノス', '時星龍アイオーン', '深海覇王リヴァイアサン'])
   for (const a of AREAS) assert.equal(a.enemies.length, 3, `エリア${a.id}の通常敵`)
-  // 通常3体＋時間帯限定3体＋ボス1体 × 15エリア
-  assert.equal(allEnemies().length, 15 * 7)
+  // 通常3体＋時間帯限定3体＋ボス1体＋レアモンスター5体 × 15エリア
+  assert.equal(allEnemies().length, 15 * 12)
   assert.equal(areaOf(3).name, '古代の洞窟')
   assert.equal(areaOf(99), null)
 })
@@ -226,4 +226,50 @@ test('敵をrunBattle用にすると、そのエリアの相性が付いてく�
   assert.deepEqual(toFighter(areaOf(4).boss).taken, { phys: BIAS_MULT })
   assert.deepEqual(toFighter(areaOf(9).enemies[0]).taken, { mag: BIAS_MULT })
   assert.equal(toFighter(areaOf(1).boss).taken, null)
+})
+
+// ============================================================
+// ★レアモンスター（2026-08-25 ユーザー指示）
+//   ・エリアごとに5体（常時2体＋朝・昼・晩に1体ずつ）
+//   ・強さは**そのエリアのボスと同じくらい**
+//   ・出現率は 0.5% 固定（sortie.js 側で見る）
+// ============================================================
+test('レアモンスターはエリアごとに5体（常時2＋朝昼晩1体ずつ）', () => {
+  for (const a of AREAS) {
+    assert.equal(a.rares.length, 5, `エリア${a.id}のレアモンスター`)
+    assert.equal(a.rares.filter(r => !r.band).length, 2, `エリア${a.id}の常時レア`)
+    assert.deepEqual(a.rares.filter(r => r.band).map(r => r.band), ['朝', '昼', '晩'], `エリア${a.id}の時間帯レア`)
+    for (const r of a.rares) assert.equal(r.isRare, true, `${r.name} に isRare が無い`)
+  }
+  assert.equal(allRares().length, 75)
+  assert.equal(new Set(allRares().map(r => r.name)).size, 75, '名前が重複している')
+})
+
+test('レアモンスターの強さはそのエリアのボスと同じ', () => {
+  for (const a of AREAS) {
+    for (const r of a.rares) {
+      assert.equal(r.power, a.boss.power, `${r.name} の戦闘力`)
+      // 配分どおりのステータスになっていること（3%以内）
+      const p = calcPower(statsOf(r))
+      assert.ok(Math.abs(p - r.power) / r.power < 0.03, `${r.name}: 想定${r.power} 実際${p}`)
+    }
+  }
+})
+
+test('レアモンスターも runBattle にそのまま渡せる', () => {
+  const rare = AREAS[0].rares[0]
+  const me = { name:'me', cls:'戦士', stats:{ hp:1200, mp:400, str:150, dex:150, agi:150, int_stat:150, vit:150, luk:150 } }
+  const r = runBattle(me, toFighter(rare), { rng: mkRng(7) })
+  assert.ok(['a', 'b', 'draw'].includes(r.winner))
+  assert.ok(r.turns >= 1, '戦闘が成立していない')
+  assert.ok(r.log.some(l => l.side === rare.name), 'レアモンスターが動いていない')
+})
+
+test('その時間帯に出るレアだけが並ぶ', () => {
+  const a = AREAS[0]
+  const morning = rarePoolAt(a, '朝').map(r => r.name)
+  assert.equal(morning.length, 3, '常時2体＋朝の1体')
+  assert.deepEqual(rarePoolAt(a, '朝').filter(r => r.band).map(r => r.band), ['朝'])
+  assert.equal(rarePoolAt(a, '昼').length, 3)
+  assert.equal(rarePoolAt(a, '晩').length, 3)
 })

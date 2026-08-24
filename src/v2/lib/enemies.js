@@ -453,6 +453,136 @@ export const toFighter = (enemy, uses = 4) => ({
   taken: takenMultOf(areaOfEnemy(enemy.name)),
 })
 
+
+// ============================================================
+// ===== レアモンスター =====
+// ★エリアごとに5体（常時2体＋朝・昼・晩に1体ずつ）。2026-08-25 ユーザー決定。
+//   ・出現率は**合計0.5%で固定**（通常敵・ボスの抽選より先に引く。sortie.js の RARE_RATE）
+//   ・強さは**そのエリアのボス相当**。power はボスから自動で取るので、ここには書かない
+//   ・素材は**確定で落ちる**。内訳は 通常55% / レア35% / 激レア10%（sortie.js）
+//   ・素材の値は通常の素材の**1.5倍**（material.js の RARE_MULT）
+//
+// ⚠dist はボスと同じ「HPとVITへ寄せる」形にしてある。通常敵の配分のままボスの戦闘力を
+//   持たせると、ボスよりはるかに硬くて痛い相手になってしまう（enemies.js 冒頭の注記）。
+// ⚠**名前は全モンスターで重複させない**（素材の引き当てが名前なので。テストで縛ってある）
+// ============================================================
+const R = (o) => ({ ...o, isRare: true })
+
+const RARES = {
+  1: [
+    R({ name:'翠玉のスライムロード', kind:'phys', dist:{ hp:40, mp:5, str:16, dex:8, agi:6, int_stat:3, vit:19, luk:3 }, skills:[S.たいあたり, S.かたくなる, S.じこさいせい] }),
+    R({ name:'古木の番人フォレスト', kind:'phys', dist:{ hp:38, mp:5, str:18, dex:9, agi:6, int_stat:3, vit:18, luk:3 }, skills:[S.つるのむち, S.ちからため, S.かたくなる] }),
+    R({ band:'朝', name:'暁光の妖精女王', kind:'mag', dist:{ hp:36, mp:9, str:4, dex:12, agi:14, int_stat:20, vit:3, luk:2 }, skills:[S.どくのほうし, S.まりょくため, S.すばやくなる] }),
+    R({ band:'昼', name:'陽輪の大トカゲ', kind:'phys', dist:{ hp:38, mp:5, str:20, dex:10, agi:10, int_stat:3, vit:11, luk:3 }, skills:[S.かみつく, S.ちからため, S.かたくなる] }),
+    R({ band:'晩', name:'月冠のフクロウ王', kind:'phys', dist:{ hp:33, mp:6, str:18, dex:15, agi:16, int_stat:3, vit:6, luk:3 }, skills:[S.ひっかく, S.すばやくなる, S.かぜのやいば] }),
+  ],
+  2: [
+    R({ name:'鬼火のゴブリンキング', kind:'phys', dist:{ hp:39, mp:5, str:21, dex:10, agi:10, int_stat:3, vit:9, luk:3 }, skills:[S.こんぼう, S.ちからため, S.さけび] }),
+    R({ name:'銀牙のフェンリル', kind:'phys', dist:{ hp:37, mp:5, str:20, dex:11, agi:19, int_stat:3, vit:2, luk:3 }, skills:[S.かみつく, S.すばやくなる, S.ちからため] }),
+    R({ band:'朝', name:'朝靄の大地喰らい', kind:'phys', dist:{ hp:44, mp:5, str:18, dex:8, agi:5, int_stat:3, vit:14, luk:3 }, skills:[S.じわれ, S.かたくなる, S.じこさいせい] }),
+    R({ band:'昼', name:'灼陽のバジリスク', kind:'phys', dist:{ hp:38, mp:6, str:20, dex:12, agi:10, int_stat:3, vit:8, luk:3 }, skills:[S.どくばり, S.ちからため, S.かたくなる] }),
+    R({ band:'晩', name:'影渡りの首領', kind:'phys', dist:{ hp:33, mp:6, str:17, dex:18, agi:14, int_stat:3, vit:6, luk:3 }, skills:[S.だましうち, S.すばやくなる, S.略奪] }),
+  ],
+  3: [
+    R({ name:'黒曜のコボルト長', kind:'phys', dist:{ hp:38, mp:5, str:21, dex:11, agi:9, int_stat:3, vit:10, luk:3 }, skills:[S.ほねきり, S.ちからため, S.さけび] }),
+    R({ name:'骸將スケルトンナイト', kind:'phys', dist:{ hp:40, mp:5, str:19, dex:10, agi:6, int_stat:3, vit:14, luk:3 }, skills:[S.ほねきり, S.かたくなる, S.じこさいせい] }),
+    R({ band:'朝', name:'曙の石翼ガーゴイル', kind:'phys', dist:{ hp:40, mp:5, str:17, dex:9, agi:8, int_stat:3, vit:15, luk:3 }, skills:[S.いわなげ, S.かたくなる, S.ちからため] }),
+    R({ band:'昼', name:'岩喰いバジリスク', kind:'phys', dist:{ hp:42, mp:5, str:18, dex:9, agi:5, int_stat:3, vit:15, luk:3 }, skills:[S.いわなげ, S.かたくなる, S.じわれ] }),
+    R({ band:'晩', name:'冥闇のレイスロード', kind:'mag', dist:{ hp:36, mp:10, str:3, dex:11, agi:12, int_stat:21, vit:5, luk:2 }, skills:[S.でんげき, S.まりょくため, S.どくのきり] }),
+  ],
+  4: [
+    R({ name:'珊瑚甲のシーナイト', kind:'phys', dist:{ hp:40, mp:6, str:19, dex:11, agi:8, int_stat:3, vit:10, luk:3 }, skills:[S.しおのやり, S.かたくなる, S.ちからため] }),
+    R({ name:'渦潮のクラーケン仔', kind:'phys', dist:{ hp:41, mp:6, str:20, dex:9, agi:8, int_stat:3, vit:10, luk:3 }, skills:[S.しょくしゅ, S.ちからため, S.じこさいせい] }),
+    R({ band:'朝', name:'朝凪の海妖姫', kind:'mag', dist:{ hp:36, mp:10, str:3, dex:12, agi:12, int_stat:21, vit:4, luk:2 }, skills:[S.しんえんのめ, S.まりょくため, S.どくのきり] }),
+    R({ band:'昼', name:'潮鳴りの巨蟹', kind:'phys', dist:{ hp:43, mp:5, str:18, dex:9, agi:5, int_stat:3, vit:14, luk:3 }, skills:[S.いわなげ, S.かたくなる, S.じこさいせい] }),
+    R({ band:'晩', name:'深光のアンコウ王', kind:'phys', dist:{ hp:38, mp:7, str:20, dex:13, agi:10, int_stat:3, vit:6, luk:3 }, skills:[S.かみつく, S.しんえんのめ, S.ちからため] }),
+  ],
+  5: [
+    R({ name:'峰嵐のグリフォンロード', kind:'phys', dist:{ hp:35, mp:6, str:20, dex:13, agi:15, int_stat:3, vit:5, luk:3 }, skills:[S.れっぷうそう, S.すばやくなる, S.ちからため] }),
+    R({ name:'巌骨のマウンテンゴーレム', kind:'phys', dist:{ hp:44, mp:5, str:18, dex:8, agi:4, int_stat:3, vit:15, luk:3 }, skills:[S.いわなげ, S.かたくなる, S.じこさいせい] }),
+    R({ band:'朝', name:'払暁の飛竜将', kind:'phys', dist:{ hp:39, mp:6, str:21, dex:12, agi:12, int_stat:3, vit:4, luk:3 }, skills:[S.かえんだん, S.ちからため, S.すばやくなる] }),
+    R({ band:'昼', name:'陽炎の大猿王', kind:'phys', dist:{ hp:41, mp:5, str:22, dex:9, agi:8, int_stat:3, vit:9, luk:3 }, skills:[S.ちからため, S.いわなげ, S.さけび] }),
+    R({ band:'晩', name:'宵闇の山猫王', kind:'phys', dist:{ hp:33, mp:6, str:18, dex:16, agi:17, int_stat:3, vit:3, luk:4 }, skills:[S.ひっかく, S.すばやくなる, S.かぜのやいば] }),
+  ],
+  6: [
+    R({ name:'白牙のイエティロード', kind:'phys', dist:{ hp:41, mp:5, str:21, dex:9, agi:8, int_stat:3, vit:10, luk:3 }, skills:[S.つらら, S.ちからため, S.かたくなる] }),
+    R({ name:'氷鎧のグレイシアドラゴン', kind:'phys', dist:{ hp:40, mp:6, str:20, dex:10, agi:8, int_stat:3, vit:10, luk:3 }, skills:[S.つらら, S.かたくなる, S.じこさいせい] }),
+    R({ band:'朝', name:'朝焼けの氷狼王', kind:'phys', dist:{ hp:38, mp:6, str:20, dex:12, agi:15, int_stat:3, vit:3, luk:3 }, skills:[S.つらら, S.すばやくなる, S.ちからため] }),
+    R({ band:'昼', name:'白光の樹氷女王', kind:'mag', dist:{ hp:36, mp:10, str:3, dex:12, agi:11, int_stat:22, vit:4, luk:2 }, skills:[S.つらら, S.まりょくため, S.どくのきり] }),
+    R({ band:'晩', name:'極夜のワイト王', kind:'phys', dist:{ hp:39, mp:7, str:21, dex:11, agi:9, int_stat:3, vit:7, luk:3 }, skills:[S.ほねきり, S.どくのきり, S.ちからため] }),
+  ],
+  7: [
+    R({ name:'業火のイフリート将', kind:'mag', dist:{ hp:37, mp:10, str:3, dex:12, agi:11, int_stat:22, vit:3, luk:2 }, skills:[S.かえんだん, S.まりょくため, S.きょうきのぜっきょう] }),
+    R({ name:'溶鉄のマグマゴーレム', kind:'phys', dist:{ hp:43, mp:5, str:19, dex:8, agi:5, int_stat:3, vit:14, luk:3 }, skills:[S.ようがんけん, S.かたくなる, S.じこさいせい] }),
+    R({ band:'朝', name:'暁炎のフレイムロード', kind:'phys', dist:{ hp:38, mp:7, str:21, dex:12, agi:12, int_stat:3, vit:4, luk:3 }, skills:[S.かえんだん, S.ちからため, S.すばやくなる] }),
+    R({ band:'昼', name:'陽獄のサラマンダー将', kind:'mag', dist:{ hp:37, mp:10, str:3, dex:11, agi:10, int_stat:22, vit:5, luk:2 }, skills:[S.かえんだん, S.まりょくため, S.らくらい] }),
+    R({ band:'晩', name:'熾火の大悪魔', kind:'phys', dist:{ hp:39, mp:7, str:22, dex:11, agi:10, int_stat:3, vit:5, luk:3 }, skills:[S.ようがんけん, S.きょうきのぜっきょう, S.ちからため] }),
+  ],
+  8: [
+    R({ name:'蒼天のハーピークイーン', kind:'phys', dist:{ hp:37, mp:7, str:21, dex:14, agi:16, int_stat:3, vit:1, luk:1 }, skills:[S.かぜのやいば, S.すばやくなる, S.れっぷうそう] }),
+    R({ name:'雷雲の大精霊', kind:'mag', dist:{ hp:37, mp:11, str:3, dex:12, agi:11, int_stat:22, vit:2, luk:2 }, skills:[S.らくらい, S.まりょくため, S.でんげき] }),
+    R({ band:'朝', name:'曙光の熾天使', kind:'mag', dist:{ hp:38, mp:11, str:3, dex:12, agi:10, int_stat:21, vit:3, luk:2 }, skills:[S.ほしくず, S.まりょくため, S.じこさいせい] }),
+    R({ band:'昼', name:'白昼の天馬将', kind:'phys', dist:{ hp:38, mp:7, str:21, dex:13, agi:15, int_stat:3, vit:2, luk:1 }, skills:[S.そうてんとつげき, S.すばやくなる, S.ちからため] }),
+    R({ band:'晩', name:'星降りの戦乙女長', kind:'phys', dist:{ hp:39, mp:7, str:22, dex:13, agi:11, int_stat:3, vit:4, luk:1 }, skills:[S.そうてんとつげき, S.ちからため, S.かたくなる] }),
+  ],
+  9: [
+    R({ name:'砂王のグレートワーム', kind:'phys', dist:{ hp:43, mp:5, str:19, dex:9, agi:6, int_stat:3, vit:12, luk:3 }, skills:[S.すなあらし, S.じわれ, S.じこさいせい] }),
+    R({ name:'黄金のミイラ神官', kind:'mag', dist:{ hp:38, mp:10, str:3, dex:12, agi:9, int_stat:21, vit:5, luk:2 }, skills:[S.どくのきり, S.まりょくため, S.ほうたい] }),
+    R({ band:'朝', name:'陽炎の砂幻王', kind:'mag', dist:{ hp:37, mp:10, str:3, dex:13, agi:13, int_stat:21, vit:1, luk:2 }, skills:[S.すなあらし, S.まりょくため, S.すばやくなる] }),
+    R({ band:'昼', name:'灼熱の冥王アヌビス', kind:'phys', dist:{ hp:40, mp:6, str:21, dex:11, agi:9, int_stat:3, vit:7, luk:3 }, skills:[S.すなあらし, S.ちからため, S.かたくなる] }),
+    R({ band:'晩', name:'月砂の狼王', kind:'phys', dist:{ hp:37, mp:6, str:20, dex:14, agi:17, int_stat:3, vit:1, luk:2 }, skills:[S.かみつく, S.すばやくなる, S.すなあらし] }),
+  ],
+  10: [
+    R({ name:'樹海の食人王', kind:'phys', dist:{ hp:43, mp:5, str:20, dex:8, agi:5, int_stat:3, vit:13, luk:3 }, skills:[S.つるのむち, S.かたくなる, S.じこさいせい] }),
+    R({ name:'毒霧のマンドラ女王', kind:'mag', dist:{ hp:37, mp:10, str:3, dex:12, agi:10, int_stat:21, vit:5, luk:2 }, skills:[S.どくのきり, S.まりょくため, S.どくばり] }),
+    R({ band:'朝', name:'朝靄の古樹王', kind:'phys', dist:{ hp:44, mp:5, str:19, dex:8, agi:4, int_stat:3, vit:14, luk:3 }, skills:[S.つるのむち, S.かたくなる, S.じこさいせい] }),
+    R({ band:'昼', name:'木漏れ日の妖精姫', kind:'mag', dist:{ hp:36, mp:11, str:3, dex:13, agi:13, int_stat:21, vit:1, luk:2 }, skills:[S.ほしくず, S.まりょくため, S.すばやくなる] }),
+    R({ band:'晩', name:'常闇の哭女王', kind:'mag', dist:{ hp:37, mp:10, str:3, dex:12, agi:12, int_stat:22, vit:2, luk:2 }, skills:[S.きょうきのぜっきょう, S.まりょくため, S.どくのきり] }),
+  ],
+  11: [
+    R({ name:'雷翼のストームロード', kind:'phys', dist:{ hp:38, mp:7, str:21, dex:13, agi:15, int_stat:3, vit:2, luk:1 }, skills:[S.らくらい, S.すばやくなる, S.かぜのやいば] }),
+    R({ name:'雷刃のガーゴイル将', kind:'phys', dist:{ hp:41, mp:6, str:20, dex:11, agi:8, int_stat:3, vit:8, luk:3 }, skills:[S.でんげき, S.かたくなる, S.ちからため] }),
+    R({ band:'朝', name:'暁雲の雷鷹王', kind:'phys', dist:{ hp:38, mp:7, str:21, dex:14, agi:14, int_stat:3, vit:2, luk:1 }, skills:[S.らくらい, S.すばやくなる, S.ちからため] }),
+    R({ band:'昼', name:'雷光の大精霊', kind:'mag', dist:{ hp:37, mp:11, str:3, dex:12, agi:11, int_stat:22, vit:2, luk:2 }, skills:[S.らくらい, S.まりょくため, S.でんげき] }),
+    R({ band:'晩', name:'雷鳴の飛竜王', kind:'phys', dist:{ hp:40, mp:6, str:21, dex:12, agi:11, int_stat:3, vit:4, luk:3 }, skills:[S.でんげき, S.ちからため, S.かたくなる] }),
+  ],
+  12: [
+    R({ name:'沼獄のヒュドラ将', kind:'phys', dist:{ hp:42, mp:6, str:20, dex:9, agi:7, int_stat:3, vit:10, luk:3 }, skills:[S.どくばり, S.じこさいせい, S.かたくなる] }),
+    R({ name:'腐溶のスライムロード', kind:'mag', dist:{ hp:39, mp:10, str:3, dex:11, agi:8, int_stat:21, vit:6, luk:2 }, skills:[S.どくのきり, S.まりょくため, S.じこさいせい] }),
+    R({ band:'朝', name:'朝霞の魂火王', kind:'mag', dist:{ hp:37, mp:11, str:3, dex:12, agi:12, int_stat:22, vit:1, luk:2 }, skills:[S.きょうきのぜっきょう, S.まりょくため, S.どくのきり] }),
+    R({ band:'昼', name:'陽だまりの毒蛙王', kind:'phys', dist:{ hp:43, mp:5, str:19, dex:9, agi:6, int_stat:3, vit:12, luk:3 }, skills:[S.どくばり, S.かたくなる, S.じこさいせい] }),
+    R({ band:'晩', name:'夜霧の腐王', kind:'phys', dist:{ hp:41, mp:6, str:21, dex:10, agi:7, int_stat:3, vit:9, luk:3 }, skills:[S.どくのきり, S.ちからため, S.ほうたい] }),
+  ],
+  13: [
+    R({ name:'坑道の屍鬼王', kind:'phys', dist:{ hp:41, mp:6, str:21, dex:10, agi:9, int_stat:3, vit:7, luk:3 }, skills:[S.ほねきり, S.ちからため, S.じこさいせい] }),
+    R({ name:'鉱晶のゴーレム将', kind:'phys', dist:{ hp:44, mp:5, str:18, dex:8, agi:4, int_stat:3, vit:15, luk:3 }, skills:[S.いわなげ, S.かたくなる, S.じわれ] }),
+    R({ band:'朝', name:'曙光の晶蟲王', kind:'mag', dist:{ hp:38, mp:10, str:3, dex:12, agi:10, int_stat:21, vit:4, luk:2 }, skills:[S.ほしくず, S.まりょくため, S.どくのきり] }),
+    R({ band:'昼', name:'灯火のドワーフ王', kind:'phys', dist:{ hp:40, mp:6, str:21, dex:12, agi:8, int_stat:3, vit:7, luk:3 }, skills:[S.ようがんけん, S.ちからため, S.かたくなる] }),
+    R({ band:'晩', name:'深穴の影王', kind:'mag', dist:{ hp:37, mp:10, str:3, dex:13, agi:13, int_stat:22, vit:1, luk:1 }, skills:[S.しんえんのめ, S.まりょくため, S.すばやくなる] }),
+  ],
+  14: [
+    R({ name:'星読みの大石像', kind:'mag', dist:{ hp:40, mp:10, str:3, dex:11, agi:7, int_stat:21, vit:6, luk:2 }, skills:[S.ほしくず, S.まりょくため, S.かたくなる] }),
+    R({ name:'遺跡の守護機神', kind:'phys', dist:{ hp:42, mp:6, str:20, dex:11, agi:7, int_stat:3, vit:10, luk:1 }, skills:[S.いわなげ, S.かたくなる, S.じこさいせい] }),
+    R({ band:'朝', name:'暁星の星辰騎士', kind:'phys', dist:{ hp:39, mp:7, str:22, dex:13, agi:11, int_stat:3, vit:4, luk:1 }, skills:[S.そうてんとつげき, S.ちからため, S.かたくなる] }),
+    R({ band:'昼', name:'白日の獅子王', kind:'mag', dist:{ hp:38, mp:11, str:3, dex:12, agi:9, int_stat:22, vit:3, luk:2 }, skills:[S.ほしくず, S.まりょくため, S.きょうきのぜっきょう] }),
+    R({ band:'晩', name:'星宿の月女神', kind:'mag', dist:{ hp:37, mp:11, str:3, dex:13, agi:12, int_stat:22, vit:1, luk:1 }, skills:[S.ほしくず, S.まりょくため, S.すばやくなる] }),
+  ],
+  15: [
+    R({ name:'深淵のクラーケン王', kind:'phys', dist:{ hp:42, mp:6, str:21, dex:10, agi:8, int_stat:3, vit:9, luk:1 }, skills:[S.しょくしゅ, S.ちからため, S.じこさいせい] }),
+    R({ name:'海淵の古龍', kind:'phys', dist:{ hp:41, mp:6, str:21, dex:11, agi:9, int_stat:3, vit:8, luk:1 }, skills:[S.しんえんのめ, S.かたくなる, S.ちからため] }),
+    R({ band:'朝', name:'朝凪の海竜王', kind:'phys', dist:{ hp:40, mp:7, str:21, dex:12, agi:11, int_stat:3, vit:5, luk:1 }, skills:[S.しおのやり, S.ちからため, S.すばやくなる] }),
+    R({ band:'昼', name:'陽射しの海皇鯨', kind:'phys', dist:{ hp:45, mp:5, str:19, dex:8, agi:4, int_stat:3, vit:15, luk:1 }, skills:[S.しおのやり, S.かたくなる, S.じこさいせい] }),
+    R({ band:'晩', name:'深海の海妖女王', kind:'mag', dist:{ hp:37, mp:11, str:3, dex:12, agi:11, int_stat:22, vit:3, luk:1 }, skills:[S.しんえんのめ, S.まりょくため, S.どくのきり] }),
+  ],
+}
+// ★戦闘力はそのエリアのボスと同じにする（ここで配るので、上の表には書かない）
+for (const a of AREAS) a.rares = (RARES[a.id] || []).map(r => ({ ...r, power: a.boss.power }))
+
+// その時間帯に出うるレアモンスター（常時2体＋その時間帯の1体）
+export const rarePoolAt = (area, band) =>
+  (area?.rares || []).filter(r => !r.band || r.band === band)
+export const allRares = () => AREAS.flatMap(a => a.rares || [])
+
 export const areaOf = (id) => AREAS.find(a => a.id === id) || null
 // ===== 属性の通りやすさ（同じ帯の中の役割分担）=====
 // ★2026-08-22 ユーザー決定：帯にエリアが複数あるとき、**片方は物理・片方は特殊が少し通る**。
@@ -489,7 +619,7 @@ export const areaFullName = (areaOrId) => {
   return a ? `${areaLabel(a)} ${a.name}` : ''
 }
 
-export const allEnemies = () => AREAS.flatMap(a => [...a.enemies, ...(a.timed || []), a.boss])
+export const allEnemies = () => AREAS.flatMap(a => [...a.enemies, ...(a.timed || []), ...(a.rares || []), a.boss])
 // 敵の名前 → いるエリア（相性を引くのに使う）
 const AREA_OF_ENEMY = new Map(
   AREAS.flatMap(a => [...a.enemies, ...(a.timed || []), a.boss].map(e => [e.name, a])))

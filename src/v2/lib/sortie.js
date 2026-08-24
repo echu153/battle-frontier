@@ -15,7 +15,7 @@
 //   **その帯を全部踏破すると次の帯がまとめて開く**。①は最初から解放。
 //   （旧版は「倒したエリアの次が開く」の1本道だった）
 // ============================================================
-import { AREAS, areaOf, rollDropRank, timedEnemyOf, tierOf, TIER_MAX } from './enemies.js'
+import { AREAS, areaOf, rollDropRank, timedEnemyOf, tierOf, TIER_MAX, rarePoolAt } from './enemies.js'
 import { PARTS, itemsOf, typesOf, CATALOG } from './equipment.js'
 import { materialOf } from './material.js'
 
@@ -94,13 +94,26 @@ export const enemyPoolAt = (area, at = new Date()) => {
   const timed = timedEnemyOf(area, bandAt(at))
   return timed ? [...area.enemies, timed] : [...area.enemies]
 }
+// ===== レアモンスター =====
+// ★出現率は**合計0.5%で固定**（2026-08-25 ユーザー決定）。1体ごとではなく、
+//   「レアモンスターに会う確率」が0.5%。出たら、その時間帯に出うる3体から1体を引く。
+//   ボスのようなピティ（積み上げ）は無く、常に同じ確率。
+export const RARE_RATE = 0.5
+export const rollRare = (rng = Math.random) => rng() * 100 < RARE_RATE
+
 export const pickEncounter = (areaId, bossRate, at = new Date(), rng = Math.random) => {
   const area = areaOf(areaId)
   if (!area) return null
+  const band = bandAt(at)
+  // ★レアモンスターの抽選が先。ボスより優先する（0.5%しか出ないため）
+  const rares = rarePoolAt(area, band)
+  if (rares.length && rollRare(rng)) {
+    return { area, enemy: rares[Math.floor(rng() * rares.length)], isBoss: false, isRare: true, band }
+  }
   const wasBoss = rollBoss(bossRate, rng)
   const pool = enemyPoolAt(area, at)
   const enemy = wasBoss ? area.boss : pool[Math.floor(rng() * pool.length)]
-  return { area, enemy, isBoss: wasBoss, band: bandAt(at) }
+  return { area, enemy, isBoss: wasBoss, isRare: false, band }
 }
 
 // 勝ったあとの取り分。装備のドロップは別（rollDrop を呼ぶ）。
@@ -183,12 +196,18 @@ export const dropPoolOf = (part) => itemsOf(part)
 // 雑魚・時間帯限定敵・ボスとも同じ率。mult は「素材ドロップ率up」の特殊能力ぶん
 //   ⚠サーバー側は「1戦闘あたり1個まで」しか検証できない（mult はクライアント側の確率）
 export const MATERIAL_RATE = { ultra:1, rare:5, normal:20 }
-export const rollMaterial = (enemyName, mult = 1, rng = Math.random) => {
+// ★レアモンスターは**確定で落とす**。内訳は 通常55% / レア35% / 激レア10%（ユーザー決定）
+//   ドロップ率upの特殊能力は「落ちるかどうか」に効くもので、確定のここには掛けない
+export const RARE_MATERIAL_RATE = { normal:55, rare:35, ultra:10 }
+
+export const rollMaterial = (enemyName, mult = 1, rng = Math.random, { sure = false } = {}) => {
+  const table = sure ? RARE_MATERIAL_RATE : MATERIAL_RATE
   const r = rng() * 100
   let acc = 0
   for (const rarity of ['ultra', 'rare', 'normal']) {
-    acc += MATERIAL_RATE[rarity] * mult
+    acc += table[rarity] * (sure ? 1 : mult)
     if (r < acc) return materialOf(enemyName, rarity)
   }
-  return null
+  // 確定のときは取りこぼさない（丸めで漏れても通常を返す）
+  return sure ? materialOf(enemyName, 'normal') : null
 }

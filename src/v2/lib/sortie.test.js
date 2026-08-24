@@ -9,9 +9,10 @@ import {
   SORTIE_CD,
   featuredPartAt, nextSwitchAt, featuredSchedule, rollDropPart, rollDrop,
   BANDS, bandAt, enemyPoolAt, DROP_RATE, dropRateOf, rollHasDrop,
+  RARE_RATE, rollRare, RARE_MATERIAL_RATE, rollMaterial,
 } from './sortie.js'
 import { PARTS, ITEM_BY_ID } from './equipment.js'
-import { allEnemies, areaOf } from './enemies.js'
+import { allEnemies, areaOf, rarePoolAt } from './enemies.js'
 
 const mkRng = (s0) => { let s = s0 >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }
 
@@ -124,7 +125,7 @@ test('遭遇はそのエリアの敵から選ばれる', () => {
   for (let i = 0; i < 300; i++) {
     const enc = pickEncounter(3, 0, new Date(), rng)   // 遭遇率0なので必ず通常敵
     assert.equal(enc.isBoss, false)
-    names.add(enc.enemy.name)
+    if (!enc.isRare) names.add(enc.enemy.name)         // レアはごくまれに混ざる
   }
   // ★その時間帯の限定敵も4体目として並ぶ
   assert.deepEqual([...names].sort(), enemyPoolAt(area, new Date()).map(e => e.name).sort())
@@ -251,4 +252,60 @@ test('ボスを倒したエリアは踏破済みになる（⑧も残る）', ()
   assert.deepEqual(clearedAreasOf({ unlocked_areas: [1, 2], cleared_areas: [1, 8] }), [1, 8])
   assert.ok(isAreaCleared(clearedAreasOf({ unlocked_areas: [1, 2] }), 1))
   assert.ok(!isAreaCleared(clearedAreasOf({ unlocked_areas: [1, 2] }), 2))
+})
+
+// ============================================================
+// ★レアモンスター（2026-08-25 ユーザー指示）
+//   ・出現率は **0.5% 固定**（エリア・帯・運では変わらない）
+//   ・素材は**確定ドロップ**で、通常55% / レア35% / 激レア10%
+// ============================================================
+test('レアモンスターの出現率は0.5%固定で、ボスより先に抽選される', () => {
+  assert.equal(RARE_RATE, 0.5)
+  assert.equal(rollRare(() => 0.004), true)     // 0.4% は当たり
+  assert.equal(rollRare(() => 0.005), false)    // 0.5% ちょうどは外れ
+  assert.equal(rollRare(() => 0.5), false)
+  const rng = mkRng(2025)
+  let rare = 0
+  const N = 200000
+  for (let i = 0; i < N; i++) if (pickEncounter(1, 0, new Date(), rng).isRare) rare++
+  const pct = rare / N * 100
+  assert.ok(Math.abs(pct - RARE_RATE) < 0.08, `レア出現率 ${pct.toFixed(3)}%`)
+  // ★ボス遭遇率100%でもレアが割り込む（0.5%しか出ないので、そちらを優先する）
+  assert.equal(pickEncounter(1, 100, new Date(), () => 0).isRare, true)
+  assert.equal(pickEncounter(1, 100, new Date(), () => 0.99).isBoss, true)
+})
+
+test('レアモンスターはその時間帯に出る5体のうちから選ばれる', () => {
+  const rng = mkRng(11)
+  const at = new Date()
+  const area = areaOf(1)
+  const pool = new Set(rarePoolAt(area, bandAt(at)).map(r => r.name))
+  let n = 0
+  for (let i = 0; i < 50000; i++) {
+    const enc = pickEncounter(1, 0, at, rng)
+    if (!enc.isRare) continue
+    n++
+    assert.ok(pool.has(enc.enemy.name), `${enc.enemy.name} はこの時間帯に出ないはず`)
+  }
+  assert.ok(n > 100, `レアが${n}体しか出ていない`)
+})
+
+test('レアモンスターの素材は確定で、通常55／レア35／激レア10', () => {
+  assert.deepEqual(RARE_MATERIAL_RATE, { normal: 55, rare: 35, ultra: 10 })
+  const rng = mkRng(31)
+  const count = { normal: 0, rare: 0, ultra: 0 }
+  const N = 100000
+  for (let i = 0; i < N; i++) {
+    const m = rollMaterial('翠玉のスライムロード', 1, rng, { sure: true })
+    assert.ok(m, '確定なのに落ちなかった')
+    count[m.rarity]++
+  }
+  for (const k of ['normal', 'rare', 'ultra']) {
+    const pct = count[k] / N * 100
+    assert.ok(Math.abs(pct - RARE_MATERIAL_RATE[k]) < 1, `${k} が ${pct.toFixed(1)}%`)
+  }
+  // ★ドロップ率upの特殊能力は確定ドロップには効かない（乗せると100%を超える）
+  const rng2 = mkRng(31)
+  const withMult = Array.from({ length: 1000 }, () => rollMaterial('翠玉のスライムロード', 1.5, rng2, { sure: true }))
+  assert.equal(withMult.filter(Boolean).length, 1000)
 })
