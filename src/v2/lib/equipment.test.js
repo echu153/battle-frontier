@@ -107,3 +107,14 @@ test('装備枠の名前を画面にベタ書きしていない（SLOT_LABELが�
   }
   assert.deepEqual(bad, [], bad.join(' / '))
 })
+
+// ★装備欄の並びは equipment.js の SLOTS が正。ステータス画面は手で並べているので、
+//   片方だけ直すと「倉庫と順番が違う」になる（2026-08-25 に右手・左手／頭・鎧へ変更）。
+test('ステータス画面の装備欄は SLOTS と同じ順に並んでいる', () => {
+  const src = readFileSync(new URL('../components/V2Status.jsx', import.meta.url), 'utf8')
+  const order = [...src.matchAll(/eq\('(\w+)',/g)].map(m => m[1])
+  assert.deepEqual(order, SLOTS, '装備欄の並びが SLOTS とズレている')
+  // 倉庫は SLOTS をそのまま回しているので、こちらは並べ直していないことだけ見る
+  const st = readFileSync(new URL('../components/V2Storage.jsx', import.meta.url), 'utf8')
+  assert.match(st, /SLOTS\.map\(/, '倉庫が SLOTS を使わずに並べ直している')
+})

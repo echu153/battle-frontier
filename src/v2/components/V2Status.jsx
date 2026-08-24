@@ -225,8 +225,8 @@ export default function V2Status({ prof, inventory, runes, fishDex, classes, ope
         <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'2px' }}>装備</div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'2px', marginBottom:'6px' }}>
           {/* ★名前は equipment.js の SLOT_LABEL が正。ここでベタ書きしない */}
-          {eq('right', SLOT_LABEL.right, 0)}{eq('head', SLOT_LABEL.head, 1)}
-          {eq('left', SLOT_LABEL.left, 0)}{eq('body', SLOT_LABEL.body, 1)}
+          {eq('right', SLOT_LABEL.right, 0)}{eq('left', SLOT_LABEL.left, 1)}
+          {eq('head', SLOT_LABEL.head, 0)}{eq('body', SLOT_LABEL.body, 1)}
           {eq('arm', SLOT_LABEL.arm, 0)}{eq('foot', SLOT_LABEL.foot, 1)}
           {eq('acc1', SLOT_LABEL.acc1, 0)}{eq('acc2', SLOT_LABEL.acc2, 1)}
         </div>
