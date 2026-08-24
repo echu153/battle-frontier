@@ -17,10 +17,10 @@ import { CATALOG, socketCountOf, rollSockets } from './equipment.js'
 import { STAT_KEYS } from './stats.js'
 
 // ===== 網羅 =====
-test('素材は敵180体 × 3レア度 ＝ 540種', () => {
-  assert.equal(MATERIALS.length, 540)
-  assert.equal(new Set(MATERIALS.map(m => m.id)).size, 540, 'IDが重複している')
-  assert.equal(new Set(MATERIALS.map(m => m.name)).size, 540, '名前が重複している')
+test('素材は敵270体 × 3レア度 ＝ 810種', () => {
+  assert.equal(MATERIALS.length, 810)
+  assert.equal(new Set(MATERIALS.map(m => m.id)).size, 810, 'IDが重複している')
+  assert.equal(new Set(MATERIALS.map(m => m.name)).size, 810, '名前が重複している')
   // ★素材は自分の**難易度帯**を持つ（レンジも売値も帯で決まる）
   for (const m of MATERIALS) assert.ok(m.tier >= 1 && m.tier <= 8, `${m.name} の帯`)
 })
@@ -311,7 +311,7 @@ test('売却の合計は個数ぶん足される（持っていない素材は0�
   assert.equal(sellTotalOf([{ id:n.id, qty:3 }]), sellPriceOf(n) * 3)
   assert.equal(sellTotalOf([{ id:n.id, qty:3 }, { id:u.id, qty:1 }]),
     sellPriceOf(n) * 3 + sellPriceOf(u))
-  assert.equal(sellTotalOf([{ id:'m:9:9:n', qty:5 }]), 0, '存在しないIDは0')
+  assert.equal(sellTotalOf([{ id:'m:9:99:n', qty:5 }]), 0, '存在しないIDは0')
   assert.equal(sellTotalOf([{ id:n.id, qty:-5 }]), 0, 'マイナスは0扱い')
   assert.equal(sellTotalOf([]), 0)
 })

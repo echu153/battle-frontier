@@ -15,9 +15,9 @@ const always = () => 0
 
 // ===== 定義の網羅 =====
 // ★再発検出テスト：敵を足したら特殊能力も足す、を強制する
-test('特殊能力は敵180体すべてに1つずつ定義されている', () => {
+test('特殊能力は敵270体すべてに1つずつ定義されている', () => {
   const names = allEnemies().map(e => e.name)
-  assert.equal(names.length, 180, '15エリア × (通常3＋時間帯3＋ボス1＋レア5)')
+  assert.equal(names.length, 270, '15エリア × (通常6＋時間帯6＋ボス1＋レア5)')
   assert.deepEqual(names.filter(n => !ENCHANTS[n]), [], '敵にあって特殊能力が無い')
   assert.deepEqual(Object.keys(ENCHANTS).filter(k => !names.includes(k)), [], '特殊能力にあって敵が無い')
 })

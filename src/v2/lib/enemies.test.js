@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   AREAS, AREAS_SORTED, statsOf, toFighter, areaOf, allEnemies, allRares, rarePoolAt, rollDropRank,
+  CREATURE_WORDS, nameTellsWhatItIs,
   TIER_MAX, tierOf, areasOfTier, areaLabel, areaFullName,
   BIAS_MULT, biasLabelOf, takenMultOf, areaOfEnemy,
 } from './enemies.js'
@@ -28,9 +29,9 @@ test('エリアは15。①〜③の名前と敵は旧版から流用、④以降
     '氷霊フロストバーン', '雷帝ケラウノス',
     '深紅のサラマンダー', '毒龍ヴェノムヒュドラ', '巌喰いガイアモール',
     '天空覇龍ウラノス', '時星龍アイオーン', '深海覇王リヴァイアサン'])
-  for (const a of AREAS) assert.equal(a.enemies.length, 3, `エリア${a.id}の通常敵`)
-  // 通常3体＋時間帯限定3体＋ボス1体＋レアモンスター5体 × 15エリア
-  assert.equal(allEnemies().length, 15 * 12)
+  for (const a of AREAS) assert.equal(a.enemies.length, 6, `エリア${a.id}の通常敵`)
+  // 通常6体＋時間帯限定6体（朝昼晩に2体ずつ）＋ボス1体＋レアモンスター5体 × 15エリア
+  assert.equal(allEnemies().length, 15 * 18)
   assert.equal(areaOf(3).name, '古代の洞窟')
   assert.equal(areaOf(99), null)
 })
@@ -272,4 +273,21 @@ test('その時間帯に出るレアだけが並ぶ', () => {
   assert.deepEqual(rarePoolAt(a, '朝').filter(r => r.band).map(r => r.band), ['朝'])
   assert.equal(rarePoolAt(a, '昼').length, 3)
   assert.equal(rarePoolAt(a, '晩').length, 3)
+})
+
+// ★名前を見ただけでどんな生き物か分かること（2026-08-25 ユーザー指示）。
+//   「朝靄の大地喰らい」のような雰囲気だけの名前を作らないための歯止め。
+//   引っかかったら、まず**名前を直す**。新しい生き物なら CREATURE_WORDS に語を足す
+test('★敵の名前には必ず生き物の名前が入っている', () => {
+  const bad = allEnemies().filter(e => !nameTellsWhatItIs(e.name)).map(e => e.name)
+  assert.deepEqual(bad, [], `何の生き物か分からない名前: ${bad.join(' / ')}`)
+  // 語の一覧そのものが壊れていないこと（空文字が混ざると全部素通りする）
+  for (const w of CREATURE_WORDS) assert.ok(w.length >= 1, '空の語が混ざっている')
+  assert.equal(new Set(CREATURE_WORDS).size, CREATURE_WORDS.length, '語が重複している')
+})
+
+// ★足した敵の名前どうしがぶつかっていないこと
+test('敵の名前は270体すべてちがう', () => {
+  const names = allEnemies().map(e => e.name)
+  assert.equal(new Set(names).size, names.length, '同じ名前の敵がいる')
 })

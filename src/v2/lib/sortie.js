@@ -15,7 +15,7 @@
 //   **その帯を全部踏破すると次の帯がまとめて開く**。①は最初から解放。
 //   （旧版は「倒したエリアの次が開く」の1本道だった）
 // ============================================================
-import { AREAS, areaOf, rollDropRank, timedEnemyOf, tierOf, TIER_MAX, rarePoolAt } from './enemies.js'
+import { AREAS, areaOf, rollDropRank, timedEnemiesOf, tierOf, TIER_MAX, rarePoolAt } from './enemies.js'
 import { PARTS, itemsOf, typesOf, CATALOG } from './equipment.js'
 import { materialOf } from './material.js'
 
@@ -89,11 +89,9 @@ export const expOf = (wasBoss, rng = Math.random) =>
 
 // ===== 1回の出撃 =====
 // 戦闘そのものは runBattle が担当する。ここは「誰と当たるか・何がもらえるか」だけ
-// 通常敵の抽選には**その時間帯の限定敵も加わる**（朝なら朝の敵が4体目として並ぶ）
-export const enemyPoolAt = (area, at = new Date()) => {
-  const timed = timedEnemyOf(area, bandAt(at))
-  return timed ? [...area.enemies, timed] : [...area.enemies]
-}
+// 通常敵の抽選には**その時間帯の限定敵も加わる**（朝なら朝の敵2体が7・8体目として並ぶ）
+export const enemyPoolAt = (area, at = new Date()) =>
+  [...area.enemies, ...timedEnemiesOf(area, bandAt(at))]
 // ===== レアモンスター =====
 // ★出現率は**合計0.5%で固定**（2026-08-25 ユーザー決定）。1体ごとではなく、
 //   「レアモンスターに会う確率」が0.5%。出たら、その時間帯に出うる3体から1体を引く。

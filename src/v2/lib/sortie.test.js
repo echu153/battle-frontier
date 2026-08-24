@@ -201,29 +201,31 @@ test('時間帯は朝5〜12・昼13〜20・晩21〜4（JST・各8時間）', () 
   for (const h of [21, 23, 0, 4]) assert.equal(bandAt(at(h)), '晩', `${h}時`)
 })
 
-test('時間帯限定の敵が各エリアに1体ずつ、その時間だけ抽選に加わる', () => {
+test('時間帯限定の敵が各エリアに2体ずつ、その時間だけ抽選に加わる', () => {
   for (const id of [1, 4, 8]) {
     const area = areaOf(id)
-    assert.equal(area.timed.length, 3, `エリア${id}の限定敵`)
-    assert.deepEqual(area.timed.map(e => e.band), BANDS)
+    assert.equal(area.timed.length, 6, `エリア${id}の限定敵`)
+    // 朝・昼・晩がそれぞれ2体
     for (const band of BANDS) {
+      assert.equal(area.timed.filter(e => e.band === band).length, 2, `エリア${id}の${band}`)
       const at = new Date(band === '朝' ? '2026-08-15T06:00:00+09:00'
         : band === '昼' ? '2026-08-15T15:00:00+09:00' : '2026-08-15T23:00:00+09:00')
       const pool = enemyPoolAt(area, at)
-      assert.equal(pool.length, 4, '通常3体＋限定1体')
-      const timed = pool[3]
-      assert.equal(timed.band, band)
-      // 限定敵は通常敵の最上位より強い
-      const maxNormal = Math.max(...area.enemies.map(e => e.power))
-      assert.ok(timed.power > maxNormal, `${timed.name} の戦闘力`)
-      // ボスより弱い
-      assert.ok(timed.power < area.boss.power, `${timed.name} がボスより強い`)
+      assert.equal(pool.length, 8, '通常6体＋限定2体')
+      for (const timed of pool.slice(6)) {
+        assert.equal(timed.band, band)
+        // 限定敵は通常敵の最上位より強い
+        const maxNormal = Math.max(...area.enemies.map(e => e.power))
+        assert.ok(timed.power > maxNormal, `${timed.name} の戦闘力`)
+        // ボスより弱い
+        assert.ok(timed.power < area.boss.power, `${timed.name} がボスより強い`)
+      }
     }
   }
-  // 24体の名前が全部ちがう
+  // 48体の名前が全部ちがう
   const names = [1, 2, 3, 4, 5, 6, 7, 8].flatMap(id => areaOf(id).timed.map(e => e.name))
-  assert.equal(names.length, 24)
-  assert.equal(new Set(names).size, 24)
+  assert.equal(names.length, 48)
+  assert.equal(new Set(names).size, 48)
 })
 
 test('装備が落ちる確率は3%（10秒固定になったので1本）', () => {
