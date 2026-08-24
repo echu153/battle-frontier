@@ -16,6 +16,7 @@ import {
 import { box, btn, miniBtn, RANK_COLOR, dropLine } from './v2ui.js'
 import V2Evolve from './V2Evolve.jsx'
 import { pushWeaponRecord } from './weaponRecord.js'
+import V2Help from './V2Help.jsx'
 
 // アリーナ（あるけみすとの天空闘技場と同じ仕組み）。
 // ★戦闘はここで回して、結果を v2_arena_fight へ申告する（出撃と同じ形）。
@@ -154,7 +155,10 @@ export default function V2Arena({ prof, inventory, runes, fishDex, onProfile, on
       {!embedded && <button onClick={onBack} style={{ ...miniBtn('#88aaff'), marginBottom:'10px' }}>← ホームへ</button>}
 
       <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
-        <div style={{ color:'#ff88cc', fontSize:'13px', marginBottom:'6px' }}>⚔ アリーナ</div>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
+          <span style={{ color:'#ff88cc', fontSize:'13px' }}>⚔ アリーナ</span>
+          <V2Help id="arena" />
+        </div>
         <div style={{ color:'#7fa6d0', fontSize:'10px', lineHeight:1.8 }}>
           各階に<b style={{ color:'#ff88cc' }}>階層守護者</b>がいます。勝つとその階の階層守護者になり、
           守っているあいだは挑戦できません。<br />

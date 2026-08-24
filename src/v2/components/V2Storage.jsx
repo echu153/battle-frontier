@@ -9,6 +9,7 @@ import { box, miniBtn, RANK_COLOR } from './v2ui.js'
 import { useStored } from '../lib/prefs.js'
 import { V2Filter, V2Pager } from './V2Browse.jsx'
 import V2ItemTip, { SealTags, EvoTags } from './V2ItemTip.jsx'
+import V2Help from './V2Help.jsx'
 
 // 倉庫：持っている装備を見て、着け外しする。
 // 枠の種類チェックはサーバー（v2_equip）が行う。ここは押せる枠だけ出す。
@@ -53,7 +54,9 @@ export default function V2Storage({ prof, inventory, runes, onProfile, onBack })
       {/* 装着中 */}
       <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'8px' }}>
-          <span style={{ color:'#7fa6d0', fontSize:'10px' }}>装着中（8枠）</span>
+          <span style={{ color:'#7fa6d0', fontSize:'10px', display:'flex', gap:'8px', alignItems:'center' }}>
+            装着中（8枠）<V2Help id="storage" /><V2Help id="evolve" auto={false} />
+          </span>
           <span style={{ color:'#ffcc00', fontSize:'11px' }}>装備の戦闘力 +{gearPower(prof, inventory).toLocaleString()}</span>
         </div>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(170px,1fr))', gap:'4px' }}>

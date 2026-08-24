@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../supabase'
 import { FORTUNE_BY_NAME, canPray, remainUntilPray, rewardText, PRAY_GOLD, PRAY_EXP } from '../lib/tree.js'
 import { box, btn, miniBtn } from './v2ui.js'
+import V2Help from './V2Help.jsx'
 
 // 施設「ユグレシアの宝樹」。1日1回だけ祈れて、大凶〜大吉が引かれる。
 // ★引くのはサーバー（v2_pray）。ここは結果を見せるだけで、抽選も回数の管理もしない。
@@ -39,6 +40,7 @@ export default function V2Tree({ prof, isAdmin, onProfile, onBack }) {
     <div style={{ ...box, padding:'12px', marginBottom:'8px' }}>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'8px' }}>
         <span style={{ color:'#44dd99', fontSize:'13px' }}>🌳 ユグレシアの宝樹</span>
+        <V2Help id="tree" />
         <button onClick={onBack} style={miniBtn('#88aaff')}>← ホームへ</button>
       </div>
       <div style={{ color:'#7fa6d0', fontSize:'10px', lineHeight:'1.8', marginBottom:'10px' }}>

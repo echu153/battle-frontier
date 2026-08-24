@@ -13,6 +13,7 @@ import { STAT_DEFS } from '../lib/stats.js'
 import { useStored } from '../lib/prefs.js'
 import { box, miniBtn } from './v2ui.js'
 import V2Modal from './V2Modal.jsx'
+import V2Help from './V2Help.jsx'
 import { V2RuneFilter, V2Pager } from './V2Browse.jsx'
 import {
   defaultRuneFilter, filterRunes, sortRunes, pageOf, clampPage,
@@ -205,6 +206,7 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
       {!embedded && <button onClick={onBack} style={{ ...miniBtn('#88aaff'), marginBottom:'10px' }}>← ホームへ</button>}
 
       <div style={{ display:'flex', gap:'4px', marginBottom:'10px' }}>
+        <span style={{ marginLeft:'auto', alignSelf:'center' }}><V2Help id="enchant" /></span>
         {TABS.map(t => (
           <button key={t.key} onClick={() => { setTab(t.key); setMsg('') }}
             style={{ ...miniBtn(tab === t.key ? '#00aaff' : '#7fa6d0'), padding:'6px 12px', fontSize:'11px',

@@ -13,6 +13,7 @@ import { box, btn, miniBtn, RANK_COLOR } from './v2ui.js'
 import { useStored } from '../lib/prefs.js'
 import { V2Filter, V2Pager } from './V2Browse.jsx'
 import V2Modal from './V2Modal.jsx'
+import V2Help from './V2Help.jsx'
 import V2Enchant from './V2Enchant.jsx'
 
 // 鍛冶屋。「強化」と「エンチャント」の2枚看板で、タブで切り替える。
@@ -184,7 +185,10 @@ export default function V2Smith({ prof, inventory, materials, runes, isAdmin, on
 
       {menu === 'fuse' && (<>
       <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
-        <div style={{ color:'#ffcc00', fontSize:'13px', marginBottom:'6px' }}>🔨 強化</div>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
+          <span style={{ color:'#ffcc00', fontSize:'13px' }}>🔨 強化</span>
+          <V2Help id="smith" />
+        </div>
         <div style={{ color:'#93a9be', fontSize:'10px', lineHeight:1.8 }}>
           <b style={{ color:'#44ff88' }}>強化元1個</b>に、同じ装備・同じ強化値の
           <b style={{ color:'#ffcc00' }}>強化素材{MAT_COUNT}個</b>を使って強化値を上げます（上限+{PLUS_MAX}）。<br />

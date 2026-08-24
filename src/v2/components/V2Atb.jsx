@@ -9,6 +9,7 @@ import {
   GAUGE_BASE, MAX_SEC, GUARD_NEED, GUARD_CUT, GUARD_SEC,
 } from '../lib/atb.js'
 import { STAT_DEFS } from '../lib/stats.js'
+import V2Help from './V2Help.jsx'
 import { miniBtn } from './v2ui.js'
 
 // ============================================================
@@ -135,7 +136,10 @@ export default function V2Atb({ prof, inventory, runes, fishDex }) {
   if (phase !== 'fight' || !st.current) {
     return (
       <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px' }}>
-        <div style={{ color:'#44ddff', fontSize:'13px', marginBottom:'8px' }}>⏱ ATB戦闘［開発中のお試し］</div>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
+          <span style={{ color:'#44ddff', fontSize:'13px' }}>⏱ ATB戦闘［開発中のお試し］</span>
+          <V2Help id="atb" />
+        </div>
         <div style={{ color:'#7fa6d0', fontSize:'11px', lineHeight:'1.7', marginBottom:'10px' }}>
           時間で溜まるゲージでコマンドを選ぶ戦闘の試し撃ち場。<br />
           <b style={{ color:'#88ccff' }}>報酬もEXPも入らない・サーバーへ何も送らない。</b>手触りを見るためだけの画面。

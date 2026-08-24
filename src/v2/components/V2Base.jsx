@@ -17,6 +17,7 @@ import {
 import { STAT_DEFS } from '../lib/stats.js'
 import { box, btn, miniBtn, TEXT } from './v2ui.js'
 import V2Modal from './V2Modal.jsx'
+import V2Help from './V2Help.jsx'
 
 // ============================================================
 // 施設「拠点」— 開発限定
@@ -274,6 +275,7 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
     <div style={{ ...box, padding:'12px', marginBottom:'8px' }}>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'8px' }}>
         <span style={{ color:'#8fcf6f', fontSize:'13px' }}>🏕 拠点</span>
+        <V2Help id="base" />
         <button onClick={onBack} style={miniBtn('#88aaff')}>← ホームへ</button>
       </div>
       <div style={{ color:TEXT.sub, fontSize:'10px', lineHeight:'1.8', marginBottom:'10px' }}>

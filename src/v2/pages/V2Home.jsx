@@ -22,6 +22,7 @@ import V2Arena from '../components/V2Arena.jsx'
 import V2Daily from '../components/V2Daily.jsx'
 import V2Base from '../components/V2Base.jsx'
 import V2Market from '../components/V2Market.jsx'
+import V2Help from '../components/V2Help.jsx'
 import {
   powerText, isPassive, KIND_LABEL, KIND_COLOR, SKILL_BY_NAME,
   usableSkills, usableSkillNames, unlearnedSkills, validateSkillSet, setMpCost,
@@ -412,7 +413,10 @@ const TWO_COLUMN = {
             {screen === 'market'  && <V2Market  prof={prof} onProfile={refresh} onBack={() => setScreen('home')} />}
 
             {(screen === 'skills' || screen === 'temple') && (
-              <button onClick={() => setScreen('home')} style={{ ...miniBtn('#88aaff'), marginBottom:'10px' }}>← ホームへ</button>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>
+                <button onClick={() => setScreen('home')} style={miniBtn('#88aaff')}>← ホームへ</button>
+                <V2Help id={screen === 'skills' ? 'skills' : 'temple'} />
+              </div>
             )}
             <div style={{ display: screen === 'skills' ? 'block' : 'none' }}>
             {/* スキル編成（並び順＝発動順・使用回数を配る） */}

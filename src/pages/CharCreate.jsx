@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../supabase'
 import { validateName } from '../lib/nameFilter'
 
@@ -26,6 +26,18 @@ const PRESET_AVATARS = [
   { id:'wizard2',   label:'魔法使い②', url:`${SUPABASE_URL}/storage/v1/object/public/avatars/wizard2.png` },
   { id:'priest',    label:'僧侶',      url:`${SUPABASE_URL}/storage/v1/object/public/avatars/priest.png` },
 ]
+
+// ★バトルフロンティアⅡは開発限定（is_admin）。一般公開するときはここを true にすれば
+//   選択肢が全員に出る。⚠v2側のゲート（v2_is_dev）はそれとは別に残っているので、
+//   公開するときは両方そろえること。
+const V2_PUBLIC = false
+
+// 「どちらで始めるか」のカード
+const pickStyle = (color) => ({
+  display:'block', width:'100%', textAlign:'left', marginBottom:'12px',
+  background:'#000c1c', border:`1px solid ${color}`, color:'#88ccff',
+  padding:'14px 16px', cursor:'pointer', fontFamily:'monospace',
+})
 
 export default function CharCreate() {
   const [username, setUsername] = useState('')
@@ -107,11 +119,77 @@ export default function CharCreate() {
 
   const selectedJob = CLASSES.find(c => c.id === selectedClass)
 
+  // ===== どちらで始めるか =====
+  // ★新規作成のとき「バトルフロンティア」か「バトルフロンティアⅡ」を選ぶ（2026-08-23 ユーザー指示）。
+  //   Ⅱは開発限定（is_admin）なので、**選択肢を出すのも is_admin のときだけ**。
+  //   一般公開するときは V2_PUBLIC を true にすれば全員に出る（ゲートは v2 側にも残っている）。
+  const [canPickV2, setCanPickV2] = useState(false)
+  const [game, setGame] = useState(null)   // null＝まだ選んでいない
+
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      if (V2_PUBLIC) { if (alive) { setCanPickV2(true) } return }
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+        const { data } = await supabase.from('profiles').select('is_admin').eq('id', user.id).maybeSingle()
+        if (alive && data?.is_admin) setCanPickV2(true)
+      } catch { /* 選べないだけ。作成そのものは進める */ }
+    })()
+    return () => { alive = false }
+  }, [])
+
+  // 選ぶ画面。Ⅱを選んだら v2 のキャラ作成（名前だけ・職業はノーブル固定）へ渡す
+  if (canPickV2 && game === null) {
+    return (
+      <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#000820', padding:'20px' }}>
+        <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'30px', width:'500px', maxWidth:'100%', fontFamily:'monospace' }}>
+          <div style={{ color:'#ffcc00', textAlign:'center', fontSize:'18px', marginBottom:'6px', letterSpacing:'3px' }}>
+            どちらで はじめる？
+          </div>
+          <div style={{ color:'#446688', fontSize:'11px', textAlign:'center', marginBottom:'20px' }}>
+            データは完全に別です。あとからもう一方も作れます。
+          </div>
+
+          <button onClick={() => setGame('v1')} style={pickStyle('#ffcc00')}>
+            <div style={{ color:'#ffcc00', fontSize:'15px', letterSpacing:'2px' }}>BATTLE FRONTIER</div>
+            <div style={{ color:'#88ccff', fontSize:'11px', marginTop:'4px' }}>バトルフロンティア</div>
+            <div style={{ color:'#7fa6d0', fontSize:'10px', marginTop:'6px', lineHeight:1.7 }}>
+              いま動いている本編。6つのクラスから選んで始めます。
+            </div>
+          </button>
+
+          <button onClick={() => { window.location.href = '/v2' }} style={pickStyle('#44ddff')}>
+            <div style={{ color:'#44ddff', fontSize:'15px', letterSpacing:'2px' }}>
+              BATTLE FRONTIER <span style={{ fontSize:'13px' }}>Ⅱ</span>
+              <span style={{ color:'#c69a5c', fontSize:'10px', letterSpacing:0 }}> ［開発中］</span>
+            </div>
+            <div style={{ color:'#88ccff', fontSize:'11px', marginTop:'4px' }}>バトルフロンティアⅡ</div>
+            <div style={{ color:'#7fa6d0', fontSize:'10px', marginTop:'6px', lineHeight:1.7 }}>
+              作り直し中の新しいほう。職業はノーブルから始まり、名前を決めるだけで始まります。
+            </div>
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#000820', padding:'20px' }}>
       <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'30px', width:'500px', fontFamily:'monospace' }}>
         <div style={{ color:'#ffcc00', textAlign:'center', fontSize:'18px', marginBottom:'20px', letterSpacing:'3px' }}>
           キャラクター作成
+          {canPickV2 && (
+            <div style={{ fontSize:'10px', color:'#446688', letterSpacing:0, marginTop:'4px' }}>
+              バトルフロンティア
+              <button type="button" onClick={() => setGame(null)}
+                style={{ background:'transparent', border:'1px solid #35506b', color:'#7fa6d0',
+                  fontFamily:'monospace', fontSize:'10px', padding:'2px 8px', cursor:'pointer' }}>
+                選び直す
+              </button>
+            </div>
+          )}
         </div>
 
         <form onSubmit={handle} style={{ display:'flex', flexDirection:'column', gap:'14px' }}>

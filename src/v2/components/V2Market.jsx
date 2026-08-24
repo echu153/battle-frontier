@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../supabase'
 import V2ItemTip from './V2ItemTip.jsx'
 import V2Modal from './V2Modal.jsx'
+import V2Help from './V2Help.jsx'
 import { ITEM_BY_ID, powerOf, statsOf } from '../lib/equipment.js'
 import { STAT_DEFS, STAT_KEYS } from '../lib/stats.js'
 import {
@@ -98,7 +99,10 @@ export default function V2Market({ prof, onProfile, onBack }) {
       <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:'6px' }}>
           <span style={{ color:'#ffcc00', fontSize:'13px' }}>🏪 取引所</span>
-          <span style={{ color:'#ffcc00', fontSize:'12px' }}>所持 {gold(held)}</span>
+          <span style={{ display:'flex', gap:'8px', alignItems:'center' }}>
+            <span style={{ color:'#ffcc00', fontSize:'12px' }}>所持 {gold(held)}</span>
+            <V2Help id="market" />
+          </span>
         </div>
         <div style={{ color: TEXT.label, fontSize:'10px', lineHeight:1.8 }}>
           プレイヤー同士で装備を売買します。売り手が受け取るのは
