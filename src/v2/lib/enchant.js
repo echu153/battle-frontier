@@ -401,6 +401,13 @@ export const ENCHANT_NAMES = Object.keys(ENCHANTS)
 export const ENCHANT_CHANCE = { normal: 0, rare: 1, ultra: 3 }
 export const enchantChanceOf = (rarity) => ENCHANT_CHANCE[rarity] || 0
 
+// ===== 画面での見せ方 =====
+// ★特殊能力は**敵の名前をキーにして**持っているが、画面には敵の名前を出さない
+//   （2026-08-26 ユーザー指示。ルーンに付いた能力が「コウモリ」では何のことか分からない）。
+//   見出しはいつも「特殊能力」で、中身はその効果の文を出す。
+export const ABILITY_LABEL = '特殊能力'
+export const abilityText = (name) => ENCHANTS[name]?.text || name
+
 // ===== 戦闘用のまとめ =====
 // 装備している全ソケットぶんのエンチャントを1つに畳む。**同じ能力でも重複して足す**
 // band は '朝' | '昼' | '晩'（時間帯条件つきの能力がここで有効／無効になる）

@@ -8,7 +8,7 @@ import {
   RARITIES, sellPriceOf, sellTotalOf, MATERIALS,
   UNSOCKET_KIT_NAME, UNSOCKET_KIT_COST,
 } from '../lib/material.js'
-import { enchantOf } from '../lib/enchant.js'
+import { ABILITY_LABEL, abilityText } from '../lib/enchant.js'
 import { STAT_DEFS } from '../lib/stats.js'
 import { useStored } from '../lib/prefs.js'
 import { box, miniBtn } from './v2ui.js'
@@ -36,13 +36,12 @@ const statLine = (stats) =>
     .join(' / ')
 
 // 付与された特殊能力の1行。★敵の名前ではなく**実際の効果**を出す
-//   （名前だけだと何が起きるのか分からない。出どころは後ろに小さく添える）
+//   （2026-08-26 ユーザー指示。出どころの敵の名前は添えない＝「コウモリ」では何のことか分からない）
 function AbilityLine({ ability }) {
   if (!ability) return null
   return (
     <div style={{ color:'#ffcc44', fontSize:'12px', marginTop:'4px' }}>
-      【特殊能力】{enchantOf(ability)?.text || ability}
-      <span style={{ color:'#7fa6d0', fontSize:'10px', marginLeft:'6px' }}>（{ability}）</span>
+      【{ABILITY_LABEL}】{abilityText(ability)}
     </div>
   )
 }
@@ -55,7 +54,7 @@ function RuneTag({ e, size = '11px', showAbility = true }) {
       ●{COLOR_LABEL[e.color]}
       {' '}<b>{runeName(e.color, e.stats)}</b>
       {' '}<span style={{ color:'#88ccff' }}>{statLine(e.stats)}</span>
-      {showAbility && e.ability && <span style={{ color:'#ffcc44' }}>　★{e.ability}</span>}
+      {showAbility && e.ability && <span style={{ color:'#ffcc44' }}>　★{ABILITY_LABEL}</span>}
     </span>
   )
 }
@@ -537,7 +536,7 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
                     if (d) setResult(d.essence)
                   }}
                   style={{ ...miniBtn('#ffcc44'), display:'block', width:'100%', textAlign:'left', marginBottom:'3px', padding:'6px' }}>
-                  {name}：{enchantOf(name)?.text}
+                  {abilityText(name)}
                 </button>
               ))}
             </div>

@@ -1,8 +1,9 @@
 // エンチャント（特殊能力）と状態異常のテスト。
 // 数値の正は docs/v2-enchant-design.md。ここは「その通りに動くか」を1つずつ固定する。
 import test from 'node:test'
+import { readFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
-import { ENCHANTS, collectEnchants, inflictChance, dropRateMultOf, enchantChanceOf } from './enchant.js'
+import { ENCHANTS, collectEnchants, inflictChance, dropRateMultOf, enchantChanceOf, ABILITY_LABEL, abilityText } from './enchant.js'
 import { allEnemies } from './enemies.js'
 import {
   createAilments, inflict, tickAilments, healMultOf, consumeParalyze, hasAilment,
@@ -262,4 +263,25 @@ test('★特殊能力の文と中身が食い違っていない', () => {
     if (ef.healPct) num(ef.healPct, 'healPct')
   }
   assert.deepEqual(bad, [], `説明と中身がズレている: ${bad.join(' / ')}`)
+})
+
+// ★ルーンに付いた特殊能力は、**敵の名前ではなく「特殊能力」と効果の文**を出す
+//   （2026-08-26 ユーザー指示。「★コウモリ」では何のことか分からない）
+test('★画面に特殊能力の出どころ（敵の名前）を出していない', () => {
+  assert.equal(ABILITY_LABEL, '特殊能力')
+  assert.equal(abilityText('コウモリ'), ENCHANTS['コウモリ'].text)
+  // 名簿に無い名前は、そのまま返してとりあえず読めるようにする
+  assert.equal(abilityText('しらない敵'), 'しらない敵')
+
+  const files = ['V2ItemTip.jsx', 'V2Enchant.jsx', 'V2Storage.jsx', 'V2Smith.jsx']
+  const bad = []
+  for (const name of files) {
+    const src = readFileSync(new URL(`../components/${name}`, import.meta.url), 'utf8')
+    // 「★ に続けて能力（＝敵の名前）をそのまま出す」書き方が残っていないこと
+    if (/★\{[^}]*\.?ability\}/.test(src)) bad.push(`${name}（★{ability} が残っている）`)
+    if (/★\$\{[^}]*\.?ability\}/.test(src)) bad.push(`${name}（★\${ability} が残っている）`)
+    // 「（コウモリ）」のように出どころを添える書き方も残っていないこと
+    if (/（\{ability\}）/.test(src)) bad.push(`${name}（出どころを添えている）`)
+  }
+  assert.deepEqual(bad, [], `敵の名前を出している画面: ${bad.join(' / ')}`)
 })

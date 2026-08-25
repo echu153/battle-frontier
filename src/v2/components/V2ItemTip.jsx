@@ -3,7 +3,7 @@ import { powerOf, statsOf, socketCountOf, handsLabel, handsColor, handsNote } fr
 import { STAT_DEFS, STAT_KEYS } from '../lib/stats.js'
 import { COLOR_HEX, COLOR_LABEL, runeName } from '../lib/material.js'
 import { runePctText } from '../lib/loadout.js'
-import { enchantOf } from '../lib/enchant.js'
+import { ABILITY_LABEL, abilityText } from '../lib/enchant.js'
 import { evolutionLines, levelOf, expToNext, TRAIT_BY_KEY } from '../lib/evolve.js'
 import { KIND_LABEL, KIND_COLOR, isPassive, powerText } from '../lib/skills.js'
 import { RANK_COLOR } from './v2ui.js'
@@ -172,10 +172,11 @@ export function ItemDetail({ item, inv, runes }) {
       {(runes || []).length > 0 ? (<>
         <div><SealTags list={runes} /></div>
         {pctText && <div style={{ color:'#88ddaa' }}>刻印効果：{pctText}</div>}
+        {/* ★出どころの敵の名前は出さない。見出しは「特殊能力」で、中身は効果の文 */}
         {abilities.map((a, i) => (
           <div key={i} style={{ color:'#ffcc44' }}>
-            ★{a}
-            {enchantOf(a)?.text && <span style={{ color:'#93a9be' }}>　{enchantOf(a).text}</span>}
+            ★{ABILITY_LABEL}
+            <span style={{ color:'#93a9be' }}>　{abilityText(a)}</span>
           </div>
         ))}
       </>) : socketMax > 0 && (

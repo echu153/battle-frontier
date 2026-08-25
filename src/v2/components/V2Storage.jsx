@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { supabase } from '../../supabase'
 import { SLOTS, SLOT_LABEL, PARTS, powerOf, statsOf, slotsFor, socketCountOf, handsLabel, handsColor } from '../lib/equipment.js'
 import { equippedItems, gearPower, wornIdsOf, stackInventory, runePctText } from '../lib/loadout.js'
+import { ABILITY_LABEL } from '../lib/enchant.js'
 import { STAT_DEFS, STAT_KEYS } from '../lib/stats.js'
 import { COLOR_HEX } from '../lib/material.js'
 import { filterRows, sortRows, pageOf, clampPage, defaultFilter } from '../lib/browse.js'
@@ -155,7 +156,7 @@ export default function V2Storage({ prof, inventory, runes, onProfile, onBack })
                     </V2ItemTip>
                     {pct && <span style={{ color:'#88ddaa' }}>刻印効果：{pct}</span>}
                     {es.filter(e => e.ability).map(e => (
-                      <span key={e.id} style={{ color:'#ffcc44' }}>★{e.ability}</span>
+                      <span key={e.id} style={{ color:'#ffcc44' }}>★{ABILITY_LABEL}</span>
                     ))}
                   </div>
                 )

@@ -4,6 +4,7 @@ import { ITEM_BY_ID, powerOf, statsOf, PLUS_MAX, socketCountOf, handsLabel, hand
 import { STAT_KEYS, STAT_DEFS } from '../lib/stats.js'
 import { wornIdsOf } from '../lib/loadout.js'
 import { COLOR_HEX, COLOR_LABEL } from '../lib/material.js'
+import { ABILITY_LABEL } from '../lib/enchant.js'
 import {
   ratesFor, checkPick, fuseCostOf, MAT_COUNT, RESULT_LABEL, RESULT_COLOR, RESULT_UP,
   PROTECT_NAME, PROTECT_DESC,
@@ -149,7 +150,7 @@ export default function V2Smith({ prof, inventory, materials, runes, isAdmin, on
             {'　'}
             {es.map(e => (
               <span key={e.id} style={{ color: COLOR_HEX[e.color], marginRight:'3px' }}>
-                ●{COLOR_LABEL[e.color]}{e.ability ? `★${e.ability}` : ''}
+                ●{COLOR_LABEL[e.color]}{e.ability ? `★${ABILITY_LABEL}` : ''}
               </span>
             ))}
           </span>
