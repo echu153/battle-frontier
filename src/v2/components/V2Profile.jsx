@@ -6,7 +6,8 @@ import { attackKindOf } from '../lib/battle.js'
 import { equippedItems, totalStats } from '../lib/loadout.js'
 import { SLOT_LABEL } from '../lib/equipment.js'
 import { SKILL_BY_NAME, KIND_LABEL, KIND_COLOR } from '../lib/skills.js'
-import { AREAS } from '../lib/enemies.js'
+import { AREAS, allEnemies } from '../lib/enemies.js'
+import { dexStats, dexProgress } from '../lib/dex.js'
 import { RANK_COLOR, miniBtn } from './v2ui.js'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
@@ -30,6 +31,9 @@ const VAL = { background:'#0a1330', color:'#cfe2ff', fontSize:'11px', padding:'6
 // ステータスの並び。あるけみすとのプロフィールと同じ「項目｜値」を2組ずつ
 export default function V2Profile({ prof, inventory, runes, fishDex, dex, onProfile, onBack }) {
   const [detail, setDetail] = useState(false)
+  // ★アイコン選びは**ふだん閉じておく**（2026-08-26 ユーザー指示）。
+  //   縦に長くてステータスが押し下げられるため
+  const [openAvatar, setOpenAvatar] = useState(false)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
   const [msgColor, setMsgColor] = useState('#ff8844')
@@ -116,6 +120,10 @@ export default function V2Profile({ prof, inventory, runes, fishDex, dex, onProf
     </>)
   }
   const stat = (k) => (total[k] || 0).toLocaleString()
+  // モンスター図鑑でもらっているぶん（討伐数の段＋素材の初回登録）
+  const dexBonus = dexStats(dex?.kills, dex?.found)
+  const dexUp = STAT_KEYS.filter(k => dexBonus[k] > 0)
+  const prog = dexProgress(allEnemies().map(e => e.name), dex?.kills || {})
 
   return (
     <div>
@@ -151,6 +159,12 @@ export default function V2Profile({ prof, inventory, runes, fishDex, dex, onProf
           <Row k1="所持金" v1={`${(prof.gold || 0).toLocaleString()} Gold`} k2="転職回数" v2={`${prof.job_changes}回`} />
           <Row k1="職業補正" v1={classBonusText(prof.class, jobCountOf(prof)) || <span style={{ color:'#7b8fb8' }}>なし</span>}
             k2="解放エリア" v2={`${(prof.unlocked_areas || [1]).length} / ${AREAS.length}`} />
+          {/* ★モンスター図鑑ぶん（討伐数＋素材の初回登録）。上のステータスに**もう入っている** */}
+          <Row k1="図鑑" k2="図鑑の内訳"
+            v1={`${prog.done} / ${prog.total}体`}
+            v2={dexUp.length
+              ? dexUp.map(k => `${STAT_DEFS[k].label}+${dexBonus[k]}`).join('　')
+              : <span style={{ color:'#7b8fb8' }}>まだ無し</span>} />
         </div>
 
         <div style={{ background:'#0a1330', padding:'8px' }}>
@@ -162,10 +176,15 @@ export default function V2Profile({ prof, inventory, runes, fishDex, dex, onProf
         </div>
       </div>
 
-      {/* アイコンを選ぶ */}
+      {/* アイコンを選ぶ。★ふだんは閉じておく（縦に長いため） */}
       <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', fontFamily:'monospace' }}>
-        <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'8px' }}>アイコンを選ぶ</div>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'6px' }}>
+        <button onClick={() => setOpenAvatar(v => !v)}
+          style={{ width:'100%', padding:'8px', background:'#001840', border:'1px solid #ffcc00', color:'#ffcc00',
+            cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>
+          {openAvatar ? '▲ アイコンを選ぶ（閉じる）' : '▼ アイコンを選ぶ'}
+        </button>
+        {openAvatar && (<>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'6px', marginTop:'8px' }}>
           {PRESET_AVATARS.map(a => (
             <div key={a.id} onClick={() => !busy && pickAvatar(a.url)}
               style={{ cursor:'pointer', border:`2px solid ${prof.avatar_url === a.url ? '#ffcc00' : '#003366'}`,
@@ -221,10 +240,12 @@ export default function V2Profile({ prof, inventory, runes, fishDex, dex, onProf
           </div>
         </div>
 
-        {msg && <div style={{ color: msgColor, fontSize:'11px', marginTop:'8px' }}>{msg}</div>}
         <div style={{ color:'#7fa6d0', fontSize:'9px', marginTop:'8px' }}>
           プリセットは旧版（無印）の美容整形と同じ画像です。アップロードした画像も共通で使えます。
         </div>
+        </>)}
+        {/* ★知らせは閉じていても見えるようにする（変更した直後に閉じても伝わる） */}
+        {msg && <div style={{ color: msgColor, fontSize:'11px', marginTop:'8px' }}>{msg}</div>}
       </div>
 
       {detail && <StatusDetail prof={prof} total={total} power={power} onClose={() => setDetail(false)} />}

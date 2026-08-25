@@ -129,3 +129,19 @@ test('★図鑑の画面は、倒していない敵の名前も素材の名前�
   const jsx = src.split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n')
   assert.ok(!/\*\*/.test(jsx), 'JSXにアスタリスクの強調が残っている')
 })
+
+// ★プロフィールの画面まわり（2026-08-26 ユーザー指示）
+test('★アイコン選びはふだん閉じておく', () => {
+  const src = readFileSync(new URL('../components/V2Profile.jsx', import.meta.url), 'utf8')
+  assert.match(src, /useState\(false\)[^\n]*\n?/, 'state が無い')
+  assert.ok(/const \[openAvatar, setOpenAvatar\] = useState\(false\)/.test(src), '閉じた状態で始まっていない')
+  assert.match(src, /openAvatar \? '▲ アイコンを選ぶ（閉じる）' : '▼ アイコンを選ぶ'/, '開け閉めのボタンが無い')
+  assert.match(src, /\{openAvatar && \(<>/, '中身を折りたたんでいない')
+})
+
+test('★プロフィールで図鑑ぶんの上がり幅が見られる', () => {
+  const src = readFileSync(new URL('../components/V2Profile.jsx', import.meta.url), 'utf8')
+  assert.match(src, /dexStats\(dex\?\.kills, dex\?\.found\)/, '図鑑ぶんを出していない')
+  assert.match(src, /k1="図鑑"/, '図鑑の行が無い')
+  assert.match(src, /STAT_DEFS\[k\]\.label\}\+\$\{dexBonus\[k\]\}/, '内訳を出していない')
+})
