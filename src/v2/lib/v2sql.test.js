@@ -486,3 +486,54 @@ test('宝樹の報酬（ベースと倍率）がSQLとJSで一致している', 
     FORTUNES.map(f => f.mult),
     '結果ごとの倍率が違う（並びはSQLの c_names と同じ順）')
 })
+
+// ★v2_enemies は「討伐の申告を弾く」ための名簿。ズレると正しい討伐が数えられない。
+//   （enemies.js が正・SQLはその写し。2026-08-26 モンスター図鑑）
+test('v2_enemies が enemies.js の敵と完全に一致している', async () => {
+  const { AREAS_SORTED } = await import('./enemies.js')
+  const want = new Map()
+  for (const a of AREAS_SORTED) {
+    const put = (e, slot) => want.set(e.name, { area:a.id, tier:a.tier, slot, band:e.band || null, kind:e.kind, power:e.power })
+    for (const e of a.enemies) put(e, 'normal')
+    for (const e of a.timed) put(e, 'timed')
+    for (const e of a.rares) put(e, 'rare')
+    put(a.boss, 'boss')
+  }
+  const seed = SQL.slice(SQL.indexOf('insert into public.v2_enemies (name, area, tier, slot, band, kind, power) values'))
+  const rows = [...seed.slice(0, seed.indexOf('on conflict')).matchAll(
+    /\('([^']+)', (\d+), (\d+), '(\w+)', (?:'([^']+)'|null), '(\w+)', (\d+)\)/g)]
+  assert.equal(rows.length, want.size, 'v2_enemies の行数がJS側と違う')
+  for (const m of rows) {
+    const w = want.get(m[1])
+    assert.ok(w, `SQLにあってJSに無い敵: ${m[1]}`)
+    assert.equal(Number(m[2]), w.area, `${m[1]} のエリア`)
+    assert.equal(Number(m[3]), w.tier, `${m[1]} の帯`)
+    assert.equal(m[4], w.slot, `${m[1]} の枠`)
+    assert.equal(m[5] ?? null, w.band, `${m[1]} の時間帯`)
+    assert.equal(m[6], w.kind, `${m[1]} の型`)
+    assert.equal(Number(m[7]), w.power, `${m[1]} の戦闘力`)
+  }
+})
+
+// ★討伐数はサーバーが数える。**自分で書ける穴が開いていないこと**
+test('★討伐数と図鑑の素材は自分で書き換えられない（読むだけ）', () => {
+  for (const t of ['v2_kills', 'v2_dex_materials']) {
+    assert.ok(SQL.includes(`grant select on table public.${t} to authenticated;`), `${t} に select の許可が無い`)
+    for (const bad of ['insert', 'update', 'delete']) {
+      assert.ok(!SQL.includes(`grant ${bad} on table public.${t} to authenticated`), `${t} に ${bad} を許してしまっている`)
+    }
+    assert.ok(SQL.includes(`alter table public.${t} enable row level security;`), `${t} のRLSが無い`)
+  }
+  // 討伐数を積むのは出撃の清算だけ
+  const bumps = [...SQL.matchAll(/insert into public\.v2_kills/g)]
+  assert.equal(bumps.length, 1, '討伐数を書く場所が2か所以上ある')
+})
+
+// ★勝った敵の名前をサーバーへ送っていること（送り忘れると図鑑が一生埋まらない）
+test('★出撃は戦った敵の名前と勝敗をサーバーへ送っている', () => {
+  const src = readFileSync(new URL('../components/V2Sortie.jsx', import.meta.url), 'utf8')
+  assert.match(src, /p_enemy: enc\.enemy\.name/, '敵の名前を送っていない')
+  assert.match(src, /p_win: win/, '勝敗を送っていない')
+  assert.ok(SQL.includes('p_enemy text default null'), 'サーバーが p_enemy を受け取っていない')
+  assert.ok(SQL.includes('p_win boolean default false'), 'サーバーが p_win を受け取っていない')
+})

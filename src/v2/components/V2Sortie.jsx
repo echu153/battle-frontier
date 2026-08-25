@@ -143,6 +143,9 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
         p_materials: mat ? [mat.id] : [],
         // ★オートで戦ったときだけスタミナを1使う（手動は消費しない）
         p_auto: !!isAuto,
+        // ★モンスター図鑑。勝ったときだけ討伐数が1増える。
+        //   名前はサーバーが v2_enemies と突き合わせて弾くので、盛れない
+        p_enemy: enc.enemy.name, p_win: win,
       })
       // サーバーが返したスタミナへ合わせる（足りずに弾かれたときも returns に入っている）
       if (data && data.stamina != null) setStam({ n: data.stamina, at: data.stamina_at || new Date().toISOString() })

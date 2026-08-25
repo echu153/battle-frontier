@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { supabase } from '../../supabase'
 import V2Help from './V2Help.jsx'
 import { AREAS_SORTED, areaLabel, statsOf } from '../lib/enemies.js'
 import { materialsOfEnemy, RARITY_COLOR, RARITY_LABEL } from '../lib/material.js'
 import { ENCHANTS } from '../lib/enchant.js'
 import { MATERIAL_RATE, RARE_MATERIAL_RATE, RARE_RATE } from '../lib/sortie.js'
 import { STAT_DEFS } from '../lib/stats.js'
+import { UNKNOWN, killMapOf, foundSetOf, dexProgress, killBonusPct, nextKillTier } from '../lib/dex.js'
 import { box, miniBtn, TEXT } from './v2ui.js'
 
 // バトルフロンティアⅡ（リメイク版）— モンスター図鑑
@@ -12,7 +14,8 @@ import { box, miniBtn, TEXT } from './v2ui.js'
 // 出撃で会う敵と、その敵が落とすルーン素材をエリアごとに並べる。
 // ★数字はぜんぶ enemies.js / material.js / enchant.js / sortie.js から引くだけ。
 //   ここに数字を書き写さないこと（直したときにズレる）。
-// ★**まだ解放していないエリアは出さない**（先の敵の名前が見えると出撃の楽しみが減る）。
+// ★**倒すまでは ??? のまま**（2026-08-26 ユーザー指示）。素材も拾うまで ???。
+//   討伐数の権威はサーバー（v2_kills）。ここは見せるだけ。
 
 const SLOT_COLOR = { 通常:'#7fa6d0', 時間帯:'#c0b0ff', レア:'#ffcc44', ボス:'#ff4444' }
 const KIND_LABEL = { phys:'物理', mag:'魔法' }
@@ -34,9 +37,31 @@ export default function V2Dex({ prof, onBack }) {
   const [area, setArea] = useState(() => open[open.length - 1]?.id || 1)
   const [slots, setSlots] = useState(() => new Set(SLOTS))
   const [q, setQ] = useState('')
+  const [kills, setKills] = useState({})
+  const [found, setFound] = useState(() => new Set())
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState('')
+
+  // 討伐数と「拾ったことのある素材」を取りに行く。図鑑を開いたときだけでよい
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      const [{ data: k, error: ek }, { data: m, error: em }] = await Promise.all([
+        supabase.from('v2_kills').select('enemy,n'),
+        supabase.from('v2_dex_materials').select('material_id'),
+      ])
+      if (!alive) return
+      if (ek || em) setErr((ek || em).message || String(ek || em))
+      setKills(killMapOf(k))
+      setFound(foundSetOf(m))
+      setLoading(false)
+    })()
+    return () => { alive = false }
+  }, [])
 
   const cur = open.find(a => a.id === area) || open[0]
   const locked = AREAS_SORTED.length - open.length
+  const prog = useMemo(() => dexProgress(cur ? rowsOf(cur).map(r => r.e.name) : [], kills), [cur, kills])
 
   const rows = useMemo(() => {
     if (!cur) return []
@@ -44,10 +69,11 @@ export default function V2Dex({ prof, onBack }) {
     return rowsOf(cur).filter(({ slot, e }) => {
       if (!slots.has(slot)) return false
       if (!t) return true
+      if (!(kills[e.name] > 0)) return false        // まだ倒していない敵は名前で引っかけない
       const key = [e.name, ENCHANTS[e.name]?.text || '', ...materialsOfEnemy(e.name).map(m => m.name)].join(' ')
       return key.includes(t)
     })
-  }, [cur, slots, q])
+  }, [cur, slots, q, kills])
 
   const toggle = (s) => setSlots(prev => {
     const next = new Set(prev)
@@ -64,10 +90,12 @@ export default function V2Dex({ prof, onBack }) {
       </div>
 
       <div style={{ color: TEXT.label, fontSize:'10px', lineHeight:'1.8', marginBottom:'10px' }}>
-        ふつうの敵は倒しても素材を落とさないことがあります（通常{MATERIAL_RATE.normal}%／レア{MATERIAL_RATE.rare}%／激レア{MATERIAL_RATE.ultra}%）。
+        一度倒した敵と、一度拾った素材だけが載ります。まだのものは {UNKNOWN} のままです。
+        <br />ふつうの敵は倒しても素材を落とさないことがあります（通常{MATERIAL_RATE.normal}%／レア{MATERIAL_RATE.rare}%／激レア{MATERIAL_RATE.ultra}%）。
         <br />レアモンスターは出現率{RARE_RATE}%で、素材はかならず落とします
         （通常{RARE_MATERIAL_RATE.normal}%／レア{RARE_MATERIAL_RATE.rare}%／激レア{RARE_MATERIAL_RATE.ultra}%・上がり幅は1.5倍）。
       </div>
+      {err && <div style={{ color:'#ff8844', fontSize:'10px', marginBottom:'6px' }}>⚠ {err}</div>}
 
       {/* エリア */}
       <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginBottom:'6px' }}>
@@ -101,37 +129,60 @@ export default function V2Dex({ prof, onBack }) {
       {cur && (
         <div style={{ color: TEXT.body, fontSize:'12px', marginBottom:'6px' }}>
           {areaLabel(cur)} {cur.name}
-          <span style={{ color: TEXT.empty, fontSize:'10px', marginLeft:'8px' }}>{rows.length}体</span>
+          <span style={{ color: TEXT.empty, fontSize:'10px', marginLeft:'8px' }}>
+            {loading ? '読み込み中…' : `見つけた敵 ${prog.done}／${prog.total}体（${prog.pct}%）`}
+          </span>
         </div>
       )}
 
       {rows.map(({ slot, e }) => {
+        const n = kills[e.name] || 0
+        const seen = n > 0
         const ench = ENCHANTS[e.name]
         const st = statsOf(e)
+        const bonus = killBonusPct(n)
+        const next = nextKillTier(n)
         return (
-          <div key={e.name} style={{ border:'1px solid #002356', background:'#000c30', padding:'7px 8px', marginBottom:'6px' }}>
+          <div key={e.name} style={{ border:'1px solid #002356', background: seen ? '#000c30' : '#00040f',
+            padding:'7px 8px', marginBottom:'6px', opacity: seen ? 1 : 0.75 }}>
             <div style={{ display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap' }}>
-              <span style={{ border:`1px solid ${SLOT_COLOR[slot]}`, color: SLOT_COLOR[slot],
+              <span style={{ border:`1px solid ${seen ? SLOT_COLOR[slot] : '#334b6b'}`, color: seen ? SLOT_COLOR[slot] : '#334b6b',
                 fontSize:'9px', padding:'1px 4px', fontFamily:'monospace' }}>{slot}</span>
-              {e.band && <span style={{ color: TEXT.empty, fontSize:'10px' }}>{BAND_MARK[e.band]}{e.band}だけ</span>}
-              <span style={{ color: TEXT.bright, fontSize:'12px', fontWeight:'bold' }}>{e.name}</span>
+              {seen && e.band && <span style={{ color: TEXT.empty, fontSize:'10px' }}>{BAND_MARK[e.band]}{e.band}だけ</span>}
+              <span style={{ color: seen ? TEXT.bright : '#3c5578', fontSize:'12px', fontWeight:'bold' }}>
+                {seen ? e.name : UNKNOWN}
+              </span>
               <span style={{ color: TEXT.empty, fontSize:'10px', marginLeft:'auto', fontFamily:'monospace' }}>
-                {KIND_LABEL[e.kind] || e.kind}　戦闘力 {e.power.toLocaleString()}　HP {st.hp.toLocaleString()}
+                {seen
+                  ? `${KIND_LABEL[e.kind] || e.kind}　戦闘力 ${e.power.toLocaleString()}　HP ${st.hp.toLocaleString()}`
+                  : 'まだ倒していない'}
               </span>
             </div>
-            {ench && (
+            {seen && (
+              <div style={{ color:'#ffcc44', fontSize:'10px', fontFamily:'monospace', marginTop:'3px' }}>
+                ⚔ 討伐数 {n.toLocaleString()}
+                {bonus > 0 && <span style={{ color:'#44ff88', marginLeft:'8px' }}>ステータス+{bonus}%</span>}
+                {next && <span style={{ color: TEXT.empty, marginLeft:'8px' }}>次の段まであと{(next.n - n).toLocaleString()}体</span>}
+              </div>
+            )}
+            {seen && ench && (
               <div style={{ color: TEXT.sub, fontSize:'10px', marginTop:'3px' }}>⚗ {ench.text}</div>
             )}
             <div style={{ marginTop:'4px' }}>
-              {materialsOfEnemy(e.name).map(m => (
-                <div key={m.id} style={{ display:'flex', gap:'6px', fontSize:'10px', fontFamily:'monospace', lineHeight:'1.7' }}>
-                  <span style={{ color: RARITY_COLOR[m.rarity], minWidth:'42px' }}>{RARITY_LABEL[m.rarity]}</span>
-                  <span style={{ color: RARITY_COLOR[m.rarity] }}>{m.name}</span>
-                  <span style={{ color: TEXT.empty, marginLeft:'auto', whiteSpace:'nowrap' }}>
-                    {m.stats.map(k => STAT_DEFS[k]?.label || k).join('・')} {m.lo.toFixed(1)}〜{m.hi.toFixed(1)}%
-                  </span>
-                </div>
-              ))}
+              {materialsOfEnemy(e.name).map(m => {
+                const got = found.has(m.id)
+                return (
+                  <div key={m.id} style={{ display:'flex', gap:'6px', fontSize:'10px', fontFamily:'monospace', lineHeight:'1.7' }}>
+                    <span style={{ color: got ? RARITY_COLOR[m.rarity] : '#334b6b', minWidth:'42px' }}>{RARITY_LABEL[m.rarity]}</span>
+                    <span style={{ color: got ? RARITY_COLOR[m.rarity] : '#3c5578' }}>{got ? m.name : UNKNOWN}</span>
+                    {got && (
+                      <span style={{ color: TEXT.empty, marginLeft:'auto', whiteSpace:'nowrap' }}>
+                        {m.stats.map(k => STAT_DEFS[k]?.label || k).join('・')} {m.lo.toFixed(1)}〜{m.hi.toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
         )

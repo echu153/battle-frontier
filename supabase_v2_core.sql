@@ -2056,15 +2056,349 @@ update public.v2_profiles p
  where p.unlocked_areas is distinct from
        public.v2_unlocked_from_cleared(p.cleared_areas, p.unlocked_areas);
 
+
+-- ============================================================
+-- §14 モンスター図鑑（2026-08-26）
+-- ------------------------------------------------------------
+-- ★図鑑は**倒した敵・拾った素材だけ**が見える。まだのものは ??? のまま。
+--   討伐数はあとでステータス上昇に使うので、**サーバーが数える**（申告は検証する）。
+-- ============================================================
+
+-- 敵の名簿。JS（src/v2/lib/enemies.js）が正で、ここはその写し。
+-- ⚠ズレるとサーバーが正しい討伐を弾くので、v2sql.test.js が突き合わせている
+create table if not exists public.v2_enemies (
+  name  text primary key,
+  area  int  not null,
+  tier  int  not null,
+  slot  text not null,          -- normal / timed / rare / boss
+  band  text,                   -- 朝 / 昼 / 晩（時間帯限定のみ）
+  kind  text not null,
+  power int  not null
+);
+alter table public.v2_enemies enable row level security;
+drop policy if exists "v2_enemies_read" on public.v2_enemies;
+create policy "v2_enemies_read" on public.v2_enemies for select to authenticated using (true);
+revoke all on table public.v2_enemies from anon;
+grant select on table public.v2_enemies to authenticated;
+
+delete from public.v2_enemies;
+insert into public.v2_enemies (name, area, tier, slot, band, kind, power) values
+  ('スライム', 1, 1, 'normal', null, 'phys', 342),
+  ('コウモリ', 1, 1, 'normal', null, 'phys', 377),
+  ('毒キノコ', 1, 1, 'normal', null, 'mag', 411),
+  ('森ネズミ', 1, 1, 'normal', null, 'phys', 332),
+  ('オオアリ', 1, 1, 'normal', null, 'phys', 388),
+  ('つるヘビ', 1, 1, 'normal', null, 'phys', 436),
+  ('朝露のフェアリー', 1, 1, 'timed', '朝', 'mag', 491),
+  ('ひなたトカゲ', 1, 1, 'timed', '昼', 'phys', 491),
+  ('月夜のフクロウ', 1, 1, 'timed', '晩', 'phys', 491),
+  ('朝もやのカエル', 1, 1, 'timed', '朝', 'mag', 491),
+  ('ひなたのチョウ', 1, 1, 'timed', '昼', 'mag', 491),
+  ('夜鳴きのコオロギ', 1, 1, 'timed', '晩', 'phys', 491),
+  ('ジェイドスライム', 1, 1, 'rare', null, 'phys', 978),
+  ('エンシェントトレント', 1, 1, 'rare', null, 'phys', 978),
+  ('オーロラフェアリー', 1, 1, 'rare', '朝', 'mag', 978),
+  ('サンリザード', 1, 1, 'rare', '昼', 'phys', 978),
+  ('ナイトオウル', 1, 1, 'rare', '晩', 'phys', 978),
+  ('ビッグスライム', 1, 1, 'boss', null, 'phys', 978),
+  ('ゴブリン', 2, 2, 'normal', null, 'phys', 532),
+  ('野良犬', 2, 2, 'normal', null, 'phys', 574),
+  ('盗賊', 2, 2, 'normal', null, 'phys', 639),
+  ('草原オオカミ', 2, 2, 'normal', null, 'phys', 516),
+  ('ゴブリン射手', 2, 2, 'normal', null, 'phys', 591),
+  ('野伏せのイノシシ', 2, 2, 'normal', null, 'phys', 677),
+  ('朝霧のワーム', 2, 2, 'timed', '朝', 'phys', 767),
+  ('陽炎リザード', 2, 2, 'timed', '昼', 'phys', 767),
+  ('夜盗の斥候', 2, 2, 'timed', '晩', 'phys', 767),
+  ('朝露のオオバッタ', 2, 2, 'timed', '朝', 'phys', 767),
+  ('炎天のハゲタカ', 2, 2, 'timed', '昼', 'phys', 767),
+  ('夜盗の番犬', 2, 2, 'timed', '晩', 'phys', 767),
+  ('ホブゴブリン', 2, 2, 'rare', null, 'phys', 1251),
+  ('シルバーフェンリル', 2, 2, 'rare', null, 'phys', 1251),
+  ('ミストワーム', 2, 2, 'rare', '朝', 'phys', 1251),
+  ('フレアバジリスク', 2, 2, 'rare', '昼', 'phys', 1251),
+  ('シャドウシーフ', 2, 2, 'rare', '晩', 'phys', 1251),
+  ('盗賊団のリーダー', 2, 2, 'boss', null, 'phys', 1251),
+  ('コボルト', 3, 3, 'normal', null, 'phys', 820),
+  ('スケルトン', 3, 3, 'normal', null, 'phys', 881),
+  ('ゴーレム', 3, 3, 'normal', null, 'phys', 960),
+  ('洞窟グモ', 3, 3, 'normal', null, 'phys', 794),
+  ('コボルト投石手', 3, 3, 'normal', null, 'phys', 906),
+  ('スケルトンドッグ', 3, 3, 'normal', null, 'phys', 1018),
+  ('曙のガーゴイル', 3, 3, 'timed', '朝', 'phys', 1149),
+  ('石化トカゲ', 3, 3, 'timed', '昼', 'phys', 1149),
+  ('夜這うレイス', 3, 3, 'timed', '晩', 'mag', 1149),
+  ('朝陰のオオムカデ', 3, 3, 'timed', '朝', 'phys', 1149),
+  ('石窟のサソリ', 3, 3, 'timed', '昼', 'phys', 1149),
+  ('亡霊コボルト', 3, 3, 'timed', '晩', 'mag', 1149),
+  ('オブシディアンコボルト', 3, 3, 'rare', null, 'phys', 2046),
+  ('スケルトンナイト', 3, 3, 'rare', null, 'phys', 2046),
+  ('ドーンガーゴイル', 3, 3, 'rare', '朝', 'phys', 2046),
+  ('ロックバジリスク', 3, 3, 'rare', '昼', 'phys', 2046),
+  ('ダークレイス', 3, 3, 'rare', '晩', 'mag', 2046),
+  ('古代の番人', 3, 3, 'boss', null, 'mag', 2046),
+  ('深海魚人', 4, 4, 'normal', null, 'phys', 1350),
+  ('海賊', 4, 4, 'normal', null, 'phys', 1450),
+  ('毒クラゲ', 4, 4, 'normal', null, 'mag', 1300),
+  ('入り江のサメ', 4, 4, 'normal', null, 'phys', 1310),
+  ('大ウミヘビ', 4, 4, 'normal', null, 'phys', 1494),
+  ('海賊の砲手', 4, 4, 'normal', null, 'phys', 1378),
+  ('朝凪のセイレーン', 4, 4, 'timed', '朝', 'mag', 1740),
+  ('潮騒のカニ', 4, 4, 'timed', '昼', 'phys', 1740),
+  ('夜光アンコウ', 4, 4, 'timed', '晩', 'phys', 1740),
+  ('朝凪のトビウオ', 4, 4, 'timed', '朝', 'phys', 1740),
+  ('日照りのウミガメ', 4, 4, 'timed', '昼', 'phys', 1740),
+  ('夜光のタコ', 4, 4, 'timed', '晩', 'mag', 1740),
+  ('コーラルナイト', 4, 4, 'rare', null, 'phys', 4137),
+  ('ベビークラーケン', 4, 4, 'rare', null, 'phys', 4137),
+  ('サンライズセイレーン', 4, 4, 'rare', '朝', 'mag', 4137),
+  ('ジャイアントクラブ', 4, 4, 'rare', '昼', 'phys', 4137),
+  ('ランタンアンコウ', 4, 4, 'rare', '晩', 'phys', 4137),
+  ('シーサーペント', 4, 4, 'boss', null, 'phys', 4137),
+  ('砂喰いワーム', 9, 4, 'normal', null, 'phys', 1400),
+  ('墓守のミイラ', 9, 4, 'normal', null, 'phys', 1319),
+  ('砂蠍サンドスコーピオン', 9, 4, 'normal', null, 'phys', 1380),
+  ('遺丘のハゲワシ', 9, 4, 'normal', null, 'phys', 1358),
+  ('砂のゴーレム', 9, 4, 'normal', null, 'phys', 1360),
+  ('墓荒らしの盗掘者', 9, 4, 'normal', null, 'phys', 1463),
+  ('陽炎の砂トカゲ', 9, 4, 'timed', '朝', 'mag', 1740),
+  ('灼熱のアヌビス', 9, 4, 'timed', '昼', 'phys', 1740),
+  ('月砂のジャッカル', 9, 4, 'timed', '晩', 'phys', 1740),
+  ('朝日のスカラベ', 9, 4, 'timed', '朝', 'phys', 1740),
+  ('灼熱のコブラ', 9, 4, 'timed', '昼', 'phys', 1740),
+  ('月下のハイエナ', 9, 4, 'timed', '晩', 'phys', 1740),
+  ('サンドワーム', 9, 4, 'rare', null, 'phys', 4137),
+  ('ゴールデンマミー', 9, 4, 'rare', null, 'mag', 4137),
+  ('ミラージュリザード', 9, 4, 'rare', '朝', 'mag', 4137),
+  ('フレイムアヌビス', 9, 4, 'rare', '昼', 'phys', 4137),
+  ('デザートウルフ', 9, 4, 'rare', '晩', 'phys', 4137),
+  ('砂皇スカラベウス', 9, 4, 'boss', null, 'phys', 4137),
+  ('山岳ゴブリン', 5, 5, 'normal', null, 'phys', 4565),
+  ('岩石ゴーレム', 5, 5, 'normal', null, 'phys', 5188),
+  ('グリフォン', 5, 5, 'normal', null, 'phys', 4876),
+  ('峰のオオワシ', 5, 5, 'normal', null, 'phys', 4429),
+  ('山岳トロール', 5, 5, 'normal', null, 'phys', 5344),
+  ('岩場のヒグマ', 5, 5, 'normal', null, 'phys', 5169),
+  ('払暁のワイバーン', 5, 5, 'timed', '朝', 'phys', 6225),
+  ('陽射しの大猿', 5, 5, 'timed', '昼', 'phys', 6225),
+  ('宵闇の山猫', 5, 5, 'timed', '晩', 'phys', 6225),
+  ('払暁のハヤブサ', 5, 5, 'timed', '朝', 'phys', 6225),
+  ('陽射しのヤマアラシ', 5, 5, 'timed', '昼', 'phys', 6225),
+  ('宵闇のオオカミ', 5, 5, 'timed', '晩', 'phys', 6225),
+  ('ストームグリフォン', 5, 5, 'rare', null, 'phys', 13994),
+  ('マウンテンゴーレム', 5, 5, 'rare', null, 'phys', 13994),
+  ('ドーンワイバーン', 5, 5, 'rare', '朝', 'phys', 13994),
+  ('ブレイズゴリラ', 5, 5, 'rare', '昼', 'phys', 13994),
+  ('シャドウキャット', 5, 5, 'rare', '晩', 'phys', 13994),
+  ('雷鷲サンダーロック', 5, 5, 'boss', null, 'phys', 13994),
+  ('食人樹', 10, 5, 'normal', null, 'phys', 4980),
+  ('毒霧のマンドラゴラ', 10, 5, 'normal', null, 'mag', 4668),
+  ('影狼シャドウウルフ', 10, 5, 'normal', null, 'phys', 4876),
+  ('樹海のオオグモ', 10, 5, 'normal', null, 'phys', 4831),
+  ('苔むしたゴーレム', 10, 5, 'normal', null, 'phys', 4810),
+  ('人喰いのツタ', 10, 5, 'normal', null, 'phys', 5169),
+  ('朝靄のトレント', 10, 5, 'timed', '朝', 'phys', 6225),
+  ('木漏れ日のピクシー', 10, 5, 'timed', '昼', 'mag', 6225),
+  ('常闇のバンシー', 10, 5, 'timed', '晩', 'mag', 6225),
+  ('朝靄のマイコニド', 10, 5, 'timed', '朝', 'mag', 6225),
+  ('木漏れ日のオオカブト', 10, 5, 'timed', '昼', 'phys', 6225),
+  ('常闇のオオコウモリ', 10, 5, 'timed', '晩', 'phys', 6225),
+  ('キラープラント', 10, 5, 'rare', null, 'phys', 13994),
+  ('クイーンマンドラゴラ', 10, 5, 'rare', null, 'mag', 13994),
+  ('ミストトレント', 10, 5, 'rare', '朝', 'phys', 13994),
+  ('サンライトピクシー', 10, 5, 'rare', '昼', 'mag', 13994),
+  ('クイーンバンシー', 10, 5, 'rare', '晩', 'mag', 13994),
+  ('森王エルダートレント', 10, 5, 'boss', null, 'phys', 13994),
+  ('雪男', 6, 6, 'normal', null, 'phys', 9237),
+  ('氷河ドラゴン', 6, 6, 'normal', null, 'phys', 10161),
+  ('霜の精霊', 6, 6, 'normal', null, 'mag', 9006),
+  ('氷壁のゴーレム', 6, 6, 'normal', null, 'phys', 8959),
+  ('白銀のシロクマ', 6, 6, 'normal', null, 'phys', 10464),
+  ('霜のスケルトン', 6, 6, 'normal', null, 'phys', 9546),
+  ('朝焼けの氷狼', 6, 6, 'timed', '朝', 'phys', 12192),
+  ('白光の樹氷精', 6, 6, 'timed', '昼', 'mag', 12192),
+  ('極夜のワイト', 6, 6, 'timed', '晩', 'phys', 12192),
+  ('朝焼けのアイスドレイク', 6, 6, 'timed', '朝', 'mag', 12192),
+  ('白光のスノーハーピー', 6, 6, 'timed', '昼', 'phys', 12192),
+  ('極夜のリッチ', 6, 6, 'timed', '晩', 'mag', 12192),
+  ('イエティロード', 6, 6, 'rare', null, 'phys', 22844),
+  ('グレイシアドラゴン', 6, 6, 'rare', null, 'phys', 22844),
+  ('ブリザードウルフ', 6, 6, 'rare', '朝', 'phys', 22844),
+  ('アイスドライアド', 6, 6, 'rare', '昼', 'mag', 22844),
+  ('ワイトキング', 6, 6, 'rare', '晩', 'phys', 22844),
+  ('氷霊フロストバーン', 6, 6, 'boss', null, 'mag', 22844),
+  ('嵐鳥ストームバード', 11, 6, 'normal', null, 'phys', 9467),
+  ('雷刃のガーゴイル', 11, 6, 'normal', null, 'phys', 9929),
+  ('断崖のトロール', 11, 6, 'normal', null, 'phys', 9237),
+  ('断崖のコンドル', 11, 6, 'normal', null, 'phys', 9183),
+  ('帯電のゴーレム', 11, 6, 'normal', null, 'mag', 10227),
+  ('雷牙のオオカミ', 11, 6, 'normal', null, 'phys', 9790),
+  ('暁雲のサンダーホーク', 11, 6, 'timed', '朝', 'phys', 12192),
+  ('雷光のエレメンタル', 11, 6, 'timed', '昼', 'mag', 12192),
+  ('雷鳴のワイバーン', 11, 6, 'timed', '晩', 'phys', 12192),
+  ('暁雲のグリフォン', 11, 6, 'timed', '朝', 'phys', 12192),
+  ('雷光のドレイク', 11, 6, 'timed', '昼', 'mag', 12192),
+  ('雷鳴のハーピー', 11, 6, 'timed', '晩', 'phys', 12192),
+  ('ストームイーグル', 11, 6, 'rare', null, 'phys', 22844),
+  ('サンダーガーゴイル', 11, 6, 'rare', null, 'phys', 22844),
+  ('サンダーバード', 11, 6, 'rare', '朝', 'phys', 22844),
+  ('サンダーエレメンタル', 11, 6, 'rare', '昼', 'mag', 22844),
+  ('ボルトワイバーン', 11, 6, 'rare', '晩', 'phys', 22844),
+  ('雷帝ケラウノス', 11, 6, 'boss', null, 'mag', 22844),
+  ('炎の精霊', 7, 7, 'normal', null, 'mag', 12329),
+  ('溶岩ゴーレム', 7, 7, 'normal', null, 'phys', 13737),
+  ('ファイアドレイク', 7, 7, 'normal', null, 'phys', 13033),
+  ('溶岩スライム', 7, 7, 'normal', null, 'mag', 11959),
+  ('火口のヘルハウンド', 7, 7, 'normal', null, 'phys', 14149),
+  ('燃えさかるインプ', 7, 7, 'normal', null, 'mag', 13815),
+  ('暁のフレイムバット', 7, 7, 'timed', '朝', 'phys', 16484),
+  ('陽炎のイフリート', 7, 7, 'timed', '昼', 'mag', 16484),
+  ('熾火のデーモン', 7, 7, 'timed', '晩', 'phys', 16484),
+  ('暁炎のフェニックス', 7, 7, 'timed', '朝', 'mag', 16484),
+  ('陽炎のケルベロス', 7, 7, 'timed', '昼', 'phys', 16484),
+  ('熾火のワイバーン', 7, 7, 'timed', '晩', 'phys', 16484),
+  ('イフリートロード', 7, 7, 'rare', null, 'mag', 34255),
+  ('マグマゴーレム', 7, 7, 'rare', null, 'phys', 34255),
+  ('ブレイズバット', 7, 7, 'rare', '朝', 'phys', 34255),
+  ('サラマンダーロード', 7, 7, 'rare', '昼', 'mag', 34255),
+  ('アークデーモン', 7, 7, 'rare', '晩', 'phys', 34255),
+  ('深紅のサラマンダー', 7, 7, 'boss', null, 'phys', 34255),
+  ('沼のヒュドラ', 12, 7, 'normal', null, 'phys', 13385),
+  ('腐食スライム', 12, 7, 'normal', null, 'mag', 12329),
+  ('沼底のリザードマン', 12, 7, 'normal', null, 'phys', 13033),
+  ('沼のオオワニ', 12, 7, 'normal', null, 'phys', 12983),
+  ('腐肉のオオバエ', 12, 7, 'normal', null, 'phys', 12698),
+  ('泥のゴーレム', 12, 7, 'normal', null, 'phys', 13815),
+  ('朝霞のウィルオウィスプ', 12, 7, 'timed', '朝', 'mag', 16484),
+  ('陽だまりの大蛙', 12, 7, 'timed', '昼', 'phys', 16484),
+  ('夜霧のゾンビ', 12, 7, 'timed', '晩', 'phys', 16484),
+  ('朝霞のオオヒル', 12, 7, 'timed', '朝', 'phys', 16484),
+  ('陽だまりのオオヘビ', 12, 7, 'timed', '昼', 'phys', 16484),
+  ('夜霧のバジリスク', 12, 7, 'timed', '晩', 'mag', 16484),
+  ('ヒュドラロード', 12, 7, 'rare', null, 'phys', 34255),
+  ('アシッドスライム', 12, 7, 'rare', null, 'mag', 34255),
+  ('グレーターウィスプ', 12, 7, 'rare', '朝', 'mag', 34255),
+  ('ポイズンフロッグ', 12, 7, 'rare', '昼', 'phys', 34255),
+  ('グレーターゾンビ', 12, 7, 'rare', '晩', 'phys', 34255),
+  ('毒龍ヴェノムヒュドラ', 12, 7, 'boss', null, 'phys', 34255),
+  ('坑道のグール', 13, 7, 'normal', null, 'phys', 12680),
+  ('鉱石ゴーレム', 13, 7, 'normal', null, 'phys', 13737),
+  ('闇喰いコウモリ', 13, 7, 'normal', null, 'phys', 12329),
+  ('坑道のオオネズミ', 13, 7, 'normal', null, 'phys', 12300),
+  ('錆びた自動人形', 13, 7, 'normal', null, 'phys', 14149),
+  ('奈落のスケルトン兵', 13, 7, 'normal', null, 'phys', 13068),
+  ('曙光のクリスタルワーム', 13, 7, 'timed', '朝', 'mag', 16484),
+  ('灯火のドワーフ亡霊', 13, 7, 'timed', '昼', 'phys', 16484),
+  ('深穴のシャドウ', 13, 7, 'timed', '晩', 'mag', 16484),
+  ('曙光のクリスタルゴーレム', 13, 7, 'timed', '朝', 'mag', 16484),
+  ('灯火のドワーフ坑夫', 13, 7, 'timed', '昼', 'phys', 16484),
+  ('深穴のオオグモ', 13, 7, 'timed', '晩', 'phys', 16484),
+  ('グールキング', 13, 7, 'rare', null, 'phys', 34255),
+  ('ミスリルゴーレム', 13, 7, 'rare', null, 'phys', 34255),
+  ('クリスタルワームロード', 13, 7, 'rare', '朝', 'mag', 34255),
+  ('ドワーフキング', 13, 7, 'rare', '昼', 'phys', 34255),
+  ('グレーターシャドウ', 13, 7, 'rare', '晩', 'mag', 34255),
+  ('巌喰いガイアモール', 13, 7, 'boss', null, 'phys', 34255),
+  ('天翼のハーピー', 8, 8, 'normal', null, 'phys', 17279),
+  ('雷雲の精霊', 8, 8, 'normal', null, 'mag', 18064),
+  ('天空騎士グリフィオン', 8, 8, 'normal', null, 'phys', 19634),
+  ('蒼天のロック鳥', 8, 8, 'normal', null, 'phys', 16760),
+  ('浮遊するゴーレム', 8, 8, 'normal', null, 'phys', 18605),
+  ('天空の弓兵', 8, 8, 'normal', null, 'phys', 20813),
+  ('曙光のセラフ', 8, 8, 'timed', '朝', 'mag', 23562),
+  ('白昼のペガサス', 8, 8, 'timed', '昼', 'phys', 23562),
+  ('星降りのヴァルキリー', 8, 8, 'timed', '晩', 'phys', 23562),
+  ('曙光のケルビム', 8, 8, 'timed', '朝', 'mag', 23562),
+  ('白昼のユニコーン', 8, 8, 'timed', '昼', 'phys', 23562),
+  ('星降りのワイバーン', 8, 8, 'timed', '晩', 'phys', 23562),
+  ('ハーピークイーン', 8, 8, 'rare', null, 'phys', 44299),
+  ('ストームエレメンタル', 8, 8, 'rare', null, 'mag', 44299),
+  ('アークセラフ', 8, 8, 'rare', '朝', 'mag', 44299),
+  ('ペガサスロード', 8, 8, 'rare', '昼', 'phys', 44299),
+  ('ヴァルキリーロード', 8, 8, 'rare', '晩', 'phys', 44299),
+  ('天空覇龍ウラノス', 8, 8, 'boss', null, 'phys', 44299),
+  ('星読みの石像', 14, 8, 'normal', null, 'mag', 18849),
+  ('遺跡の守護機兵', 14, 8, 'normal', null, 'phys', 19634),
+  ('時喰いのクロノワーム', 14, 8, 'normal', null, 'phys', 17279),
+  ('星霜のゴーレム', 14, 8, 'normal', null, 'phys', 18284),
+  ('遺跡の魔導兵', 14, 8, 'normal', null, 'mag', 20224),
+  ('時喰いのカゲロウ', 14, 8, 'normal', null, 'phys', 18315),
+  ('暁星のアストラルナイト', 14, 8, 'timed', '朝', 'phys', 23562),
+  ('白日のスフィンクス', 14, 8, 'timed', '昼', 'mag', 23562),
+  ('星宿の月狼ルナウルフ', 14, 8, 'timed', '晩', 'mag', 23562),
+  ('暁星のケンタウロス', 14, 8, 'timed', '朝', 'phys', 23562),
+  ('白日のマンティコア', 14, 8, 'timed', '昼', 'phys', 23562),
+  ('星宿の月蛾', 14, 8, 'timed', '晩', 'mag', 23562),
+  ('スターゴーレム', 14, 8, 'rare', null, 'mag', 44299),
+  ('ガーディアンゴーレム', 14, 8, 'rare', null, 'phys', 44299),
+  ('セレスティアルナイト', 14, 8, 'rare', '朝', 'phys', 44299),
+  ('スフィンクスロード', 14, 8, 'rare', '昼', 'mag', 44299),
+  ('ルナウルフキング', 14, 8, 'rare', '晩', 'mag', 44299),
+  ('時星龍アイオーン', 14, 8, 'boss', null, 'mag', 44299),
+  ('深淵のクラーケン', 15, 8, 'normal', null, 'phys', 19634),
+  ('海淵のリヴァイアサン幼体', 15, 8, 'normal', null, 'phys', 18536),
+  ('冥暗のシーウィッチ', 15, 8, 'normal', null, 'mag', 17279),
+  ('深海のメガロドン', 15, 8, 'normal', null, 'phys', 19045),
+  ('海溝のダイオウイカ', 15, 8, 'normal', null, 'phys', 19092),
+  ('冥暗のマーマン', 15, 8, 'normal', null, 'phys', 18315),
+  ('朝凪の海竜', 15, 8, 'timed', '朝', 'phys', 23562),
+  ('陽射しの巨鯨', 15, 8, 'timed', '昼', 'phys', 23562),
+  ('深海のセイレーン', 15, 8, 'timed', '晩', 'mag', 23562),
+  ('朝凪のシャチ', 15, 8, 'timed', '朝', 'phys', 23562),
+  ('陽射しのマンタ', 15, 8, 'timed', '昼', 'phys', 23562),
+  ('深海のオオダコ', 15, 8, 'timed', '晩', 'mag', 23562),
+  ('クラーケンキング', 15, 8, 'rare', null, 'phys', 44299),
+  ('エンシェントドラゴン', 15, 8, 'rare', null, 'phys', 44299),
+  ('アビスサーペント', 15, 8, 'rare', '朝', 'phys', 44299),
+  ('グレートホエール', 15, 8, 'rare', '昼', 'phys', 44299),
+  ('セイレーンクイーン', 15, 8, 'rare', '晩', 'mag', 44299),
+  ('深海覇王リヴァイアサン', 15, 8, 'boss', null, 'phys', 44299)
+on conflict (name) do update set
+  area = excluded.area, tier = excluded.tier, slot = excluded.slot,
+  band = excluded.band, kind = excluded.kind, power = excluded.power;
+
+-- 討伐数。**書けるのは v2_sortie_settle だけ**（自分で書き換えられるとステが盛れる）
+create table if not exists public.v2_kills (
+  player_id uuid not null references auth.users(id) on delete cascade,
+  enemy     text not null references public.v2_enemies(name) on delete cascade,
+  n         int  not null default 0,
+  primary key (player_id, enemy)
+);
+alter table public.v2_kills enable row level security;
+drop policy if exists "v2_kills_own" on public.v2_kills;
+create policy "v2_kills_own" on public.v2_kills for select to authenticated using (player_id = auth.uid());
+revoke all on table public.v2_kills from anon;
+grant select on table public.v2_kills to authenticated;
+
+-- 一度でも手に入れた素材。**持ち物が0個になっても図鑑からは消えない**
+create table if not exists public.v2_dex_materials (
+  player_id   uuid not null references auth.users(id) on delete cascade,
+  material_id text not null references public.v2_materials(id) on delete cascade,
+  primary key (player_id, material_id)
+);
+alter table public.v2_dex_materials enable row level security;
+drop policy if exists "v2_dex_materials_own" on public.v2_dex_materials;
+create policy "v2_dex_materials_own" on public.v2_dex_materials for select to authenticated using (player_id = auth.uid());
+revoke all on table public.v2_dex_materials from anon;
+grant select on table public.v2_dex_materials to authenticated;
+
+-- いま持っている素材は「発見済み」として拾い直す（この節を流した時点の救済）
+insert into public.v2_dex_materials (player_id, material_id)
+select player_id, material_id from public.v2_player_materials
+on conflict do nothing;
+
 -- ⚠引数が増えたので、古い版は落としてから作り直す（同じ名前で残ると呼び分けが曖昧になる）
 drop function if exists public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb);
+drop function if exists public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb, boolean);
 drop function if exists public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb);
 -- p_auto ＝ **オート出撃で戦ったか**（2026-08-22 追加）。true なら戦った回数ぶんスタミナを消費する。
 --   手動（自分でクリック）は消費しない＝スタミナが切れてもこれまで通り遊べる
+-- p_enemy ＝ **戦った敵の名前**／p_win ＝ 勝ったか（2026-08-26 追加・モンスター図鑑）。
+--   勝ったときだけ討伐数を1増やす。名前はサーバーが v2_enemies と突き合わせて弾く
 create or replace function public.v2_sortie_settle(
   p_area int, p_normals int, p_boss_wins int, p_boss_seen int,
   p_exp int, p_gold bigint, p_drops jsonb, p_materials jsonb default '[]'::jsonb,
-  p_auto boolean default false
+  p_auto boolean default false, p_enemy text default null, p_win boolean default false
 ) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
@@ -2155,7 +2489,18 @@ begin
       insert into public.v2_player_materials (player_id, material_id, qty)
       select v_uid, m.id, 1 from public.v2_materials m where m.id = v_mid and m.area = p_area
       on conflict (player_id, material_id) do update set qty = public.v2_player_materials.qty + 1;
+      -- 図鑑：一度でも手に入れたら残す（売っても抽出しても消えない）
+      insert into public.v2_dex_materials (player_id, material_id)
+      select v_uid, m.id from public.v2_materials m where m.id = v_mid and m.area = p_area
+      on conflict do nothing;
     end loop;
+  end if;
+
+  -- 図鑑：討伐数。**勝ったときだけ**・**そのエリアにいる敵だけ**数える
+  if p_win and p_enemy is not null then
+    insert into public.v2_kills (player_id, enemy, n)
+    select v_uid, e.name, 1 from public.v2_enemies e where e.name = p_enemy and e.area = p_area
+    on conflict (player_id, enemy) do update set n = public.v2_kills.n + 1;
   end if;
 
   -- 踏破済み（そのエリアのボスを倒した）。**帯が開いたかどうかはここから数える**
@@ -2919,6 +3264,9 @@ begin
   insert into public.v2_player_materials (player_id, material_id, qty)
   select v_uid, m.id, v_q from public.v2_materials m where m.area = coalesce(p_area, 1)
   on conflict (player_id, material_id) do update set qty = public.v2_player_materials.qty + v_q;
+  insert into public.v2_dex_materials (player_id, material_id)
+  select v_uid, m.id from public.v2_materials m where m.area = coalesce(p_area, 1)
+  on conflict do nothing;
   update public.v2_profiles set unsocket_tickets = unsocket_tickets + 5 where id = v_uid;
   return jsonb_build_object('ok', true, 'area', coalesce(p_area, 1), 'qty', v_q);
 end;
@@ -3519,6 +3867,8 @@ begin
         values (p_uid, v_mid, 1)
         on conflict (player_id, material_id)
           do update set qty = public.v2_player_materials.qty + 1;
+        insert into public.v2_dex_materials (player_id, material_id)
+        values (p_uid, v_mid) on conflict do nothing;
         v_mats := v_mats + 1;
       end if;
     end if;
