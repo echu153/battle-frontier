@@ -139,11 +139,16 @@ test('★アイコン選びはふだん閉じておく', () => {
   assert.match(src, /\{openAvatar && \(<>/, '中身を折りたたんでいない')
 })
 
-test('★プロフィールで図鑑ぶんの上がり幅が見られる', () => {
+test('★プロフィールで2つの図鑑の上がり幅が見られる', () => {
   const src = readFileSync(new URL('../components/V2Profile.jsx', import.meta.url), 'utf8')
-  assert.match(src, /dexStats\(dex\?\.kills, dex\?\.found\)/, '図鑑ぶんを出していない')
-  assert.match(src, /k1="図鑑"/, '図鑑の行が無い')
+  // モンスター図鑑（固定値）
+  assert.match(src, /dexStats\(dex\?\.kills, dex\?\.found\)/, 'モンスター図鑑ぶんを出していない')
+  assert.match(src, /k1="モンスター図鑑"/, 'モンスター図鑑の行が無い')
   assert.match(src, /STAT_DEFS\[k\]\.label\}\+\$\{dexBonus\[k\]\}/, '内訳を出していない')
+  // 釣り図鑑（割合）。固定値のモンスター図鑑と混ぜないこと
+  assert.match(src, /fishDexText\(fishDex\)/, '釣り図鑑ぶんを出していない')
+  assert.match(src, /k1="釣り図鑑"/, '釣り図鑑の行が無い')
+  assert.match(src, /DEX_SLOTS/, '釣り図鑑の枠数を出していない')
 })
 
 // ★「素材を登録したらちゃんとステータスが上がっているか」を端まで確かめる。

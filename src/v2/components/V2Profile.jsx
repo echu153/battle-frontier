@@ -8,6 +8,7 @@ import { SLOT_LABEL } from '../lib/equipment.js'
 import { SKILL_BY_NAME, KIND_LABEL, KIND_COLOR } from '../lib/skills.js'
 import { AREAS, allEnemies } from '../lib/enemies.js'
 import { dexStats, dexProgress } from '../lib/dex.js'
+import { fishDexText, dexIdsOf, DEX_SLOTS } from '../lib/fishing.js'
 import { RANK_COLOR, miniBtn } from './v2ui.js'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
@@ -124,6 +125,9 @@ export default function V2Profile({ prof, inventory, runes, fishDex, dex, onProf
   const dexBonus = dexStats(dex?.kills, dex?.found)
   const dexUp = STAT_KEYS.filter(k => dexBonus[k] > 0)
   const prog = dexProgress(allEnemies().map(e => e.name), dex?.kills || {})
+  // 釣り図鑑でもらっているぶん（こちらは**割合**。合計へ掛かる）
+  const fishUp = fishDexText(fishDex)
+  const fishDone = dexIdsOf(fishDex).length
 
   return (
     <div>
@@ -160,11 +164,15 @@ export default function V2Profile({ prof, inventory, runes, fishDex, dex, onProf
           <Row k1="職業補正" v1={classBonusText(prof.class, jobCountOf(prof)) || <span style={{ color:'#7b8fb8' }}>なし</span>}
             k2="解放エリア" v2={`${(prof.unlocked_areas || [1]).length} / ${AREAS.length}`} />
           {/* ★モンスター図鑑ぶん（討伐数＋素材の初回登録）。上のステータスに**もう入っている** */}
-          <Row k1="図鑑" k2="図鑑の内訳"
+          <Row k1="モンスター図鑑" k2="上がっているぶん"
             v1={`${prog.done} / ${prog.total}体`}
             v2={dexUp.length
               ? dexUp.map(k => `${STAT_DEFS[k].label}+${dexBonus[k]}`).join('　')
               : <span style={{ color:'#7b8fb8' }}>まだ無し</span>} />
+          {/* ★釣り図鑑は**割合**（モンスター図鑑の固定値とは別枠）。合計に掛かる */}
+          <Row k1="釣り図鑑" k2="上がっているぶん"
+            v1={`${fishDone} / ${DEX_SLOTS}枠`}
+            v2={fishUp || <span style={{ color:'#7b8fb8' }}>まだ無し</span>} />
         </div>
 
         <div style={{ background:'#0a1330', padding:'8px' }}>
