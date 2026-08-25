@@ -551,3 +551,32 @@ test('★一度だけの処理は v2_migrations で守られている', () => {
   assert.match(before, /v2_migrations where key = 'dex_material_backfill'/, '拾い直しが毎回走ってしまう')
   assert.ok(SQL.includes("insert into public.v2_migrations (key) values ('dex_material_backfill')"), '目印を残していない')
 })
+// ★関数の引数を増やしたら、**grant / revoke の引数も直す**必要がある。
+//   REVOKE は関数が無いと「does not exist」で**その場で全文が止まる**（2026-08-26 実際に踏んだ）。
+//   DROP は if exists で黙るので気付けない。ここで機械的に突き合わせる。
+test('★grant / revoke の関数の引数が、作った関数と一致している', () => {
+  // 「create or replace function public.名前(引数)」から引数の型だけ取り出す
+  const defined = new Map()   // 名前 -> Set(引数の型を並べた文字列)
+  const CREATE = /create or replace function public\.(\w+)\s*\(([\s\S]*?)\)\s*returns/g
+  for (const m of SQL.matchAll(CREATE)) {
+    const types = m[2].split(',').map(a => {
+      // 「p_name type default ...」から type だけ。default の中のカンマは無い前提（実際に無い）
+      const t = a.trim().replace(/\s+default[\s\S]*$/i, '').split(/\s+/)
+      return (t[1] || '').toLowerCase()
+    }).filter(Boolean).join(', ')
+    if (!defined.has(m[1])) defined.set(m[1], new Set())
+    defined.get(m[1]).add(types)
+  }
+  assert.ok(defined.size > 20, `関数が ${defined.size} 個しか読めていない（読み取りが壊れている）`)
+
+  const bad = []
+  const USE = /(?:revoke [\w ]+|grant execute) on function public\.(\w+)\(([^)]*)\)/g
+  for (const m of SQL.matchAll(USE)) {
+    const name = m[1]
+    const sig = m[2].split(',').map(x => x.trim().toLowerCase()).filter(Boolean).join(', ')
+    const have = defined.get(name)
+    if (!have) { bad.push(`${name} … この名前の関数を作っていない`); continue }
+    if (!have.has(sig)) bad.push(`${name}(${sig}) … 作ったのは (${[...have].join(') / (')})`)
+  }
+  assert.deepEqual(bad, [], `grant/revoke の引数がズレている: ${bad.join(' ／ ')}`)
+})

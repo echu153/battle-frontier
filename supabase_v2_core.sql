@@ -2549,9 +2549,9 @@ begin
     'stamina', v_stam, 'stamina_at', v_stam_at, 'stamina_max', public.v2_stamina_max(v_row.job_changes));
 end;
 $$;
-revoke all on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb, boolean) from public;
-revoke all on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb, boolean) from anon;
-grant execute on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb, boolean) to authenticated;
+revoke all on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb, boolean, text, boolean) from public;
+revoke all on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb, boolean, text, boolean) from anon;
+grant execute on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb, boolean, text, boolean) to authenticated;
 
 -- ===== 出撃のクールタイムの設定は廃止（10秒固定・2026-08-22 ユーザー決定）=====
 drop function if exists public.v2_set_cooldown(int);
