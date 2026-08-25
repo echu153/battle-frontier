@@ -228,3 +228,38 @@ test('回避率・命中率・発動率への加算は combat.js のボーナス
   assert.equal(createSide(dummy({ enchants: ['グリフォン'] })).en.hitBonus, 3)
   assert.equal(createSide(dummy({ enchants: ['白昼のペガサス'] })).en.procBonus, 5)
 })
+
+// ★特殊能力は「文」と「中身」が別々に書いてあるので、片方だけ直すと嘘の説明が残る。
+//   実際に図鑑で見つかった（ミラージュリザードの文が「回避率+4%」・中身はAGI+10%）ので、
+//   ここで機械的に突き合わせる。
+test('★特殊能力の文と中身が食い違っていない', () => {
+  const LABEL = { hp:'HP', mp:'MP', str:'STR', dex:'DEX', agi:'AGI', int_stat:'INT', vit:'VIT', luk:'LUK' }
+  const bad = []
+  for (const [name, e] of Object.entries(ENCHANTS)) {
+    const t = e.text, ef = e.effect || {}
+    const nums = [...t.matchAll(/(\d+(?:\.\d+)?)/g)].map(m => Number(m[1]))
+    const num = (v, why) => { if (!nums.includes(v)) bad.push(`${name}「${t}」に ${v} が無い（${why}）`) }
+    const word = (w, why) => { if (!t.includes(w)) bad.push(`${name}「${t}」が ${w} に触れていない（${why}）`) }
+    for (const [k, v] of Object.entries(ef.statPct || {})) { word(LABEL[k], 'statPct'); num(v, 'statPct') }
+    if (ef.bandStatPct) {
+      word(LABEL[ef.bandStatPct.stat], 'bandStatPct')
+      num(ef.bandStatPct.pct, 'bandStatPct')
+      for (const b of ef.bandStatPct.bands) word(b, 'bandStatPct')
+    }
+    if (ef.bandDmgPct) { num(ef.bandDmgPct.pct, 'bandDmgPct'); for (const b of ef.bandDmgPct.bands) word(b, 'bandDmgPct') }
+    if (ef.physCutPct) num(ef.physCutPct, 'physCutPct')
+    if (ef.magCutPct) num(ef.magCutPct, 'magCutPct')
+    if (ef.physDmgPct) num(ef.physDmgPct, 'physDmgPct')
+    if (ef.magDmgPct) num(ef.magDmgPct, 'magDmgPct')
+    if (ef.evaBonus) num(ef.evaBonus, 'evaBonus')
+    if (ef.hitBonus) num(ef.hitBonus, 'hitBonus')
+    if (ef.procBonus) num(ef.procBonus, 'procBonus')
+    // 100%（かならず付く）は文に数字を書かない書き方なので見ない
+    if (ef.onHitAil && ef.onHitAil.chance !== 100) num(ef.onHitAil.chance, 'onHitAil')
+    if (ef.onHitFoeStat) num(Math.abs(ef.onHitFoeStat.pct), 'onHitFoeStat')
+    if (ef.onHitSelfStat) num(ef.onHitSelfStat.pct, 'onHitSelfStat')
+    if (ef.drainPhysPct) num(ef.drainPhysPct, 'drainPhysPct')
+    if (ef.healPct) num(ef.healPct, 'healPct')
+  }
+  assert.deepEqual(bad, [], `説明と中身がズレている: ${bad.join(' / ')}`)
+})

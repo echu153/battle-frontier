@@ -236,7 +236,7 @@ export const ENCHANTS = {
   // ⑨灼砂の遺丘
   'サンドワーム':   { text:'HP+8%', effect:{ statPct:{ hp:8 } } },
   'ゴールデンマミー':       { text:'ルーン素材のドロップ率×1.4', effect:{ dropRateMult:1.4 } },
-  'ミラージュリザード':           { text:'朝の間、回避率+4%', effect:{ bandStatPct:{ bands:['朝'], stat:'agi', pct:10 } } },
+  'ミラージュリザード':           { text:'朝の間、AGI+10%', effect:{ bandStatPct:{ bands:['朝'], stat:'agi', pct:10 } } },
   'フレイムアヌビス':     { text:'昼の間、物理ダメージ+10%', effect:{ bandDmgPct:{ bands:['昼'], kind:'phys', pct:10 } } },
   'デザートウルフ':             { text:'晩の間、AGI+12%', effect:{ bandStatPct:{ bands:['晩'], stat:'agi', pct:12 } } },
 
