@@ -298,7 +298,7 @@ test('レアモンスターの素材は確定で、通常55／レア35／激レ�
   const count = { normal: 0, rare: 0, ultra: 0 }
   const N = 100000
   for (let i = 0; i < N; i++) {
-    const m = rollMaterial('翠玉のスライムロード', 1, rng, { sure: true })
+    const m = rollMaterial('ジェイドスライム', 1, rng, { sure: true })
     assert.ok(m, '確定なのに落ちなかった')
     count[m.rarity]++
   }
@@ -308,6 +308,6 @@ test('レアモンスターの素材は確定で、通常55／レア35／激レ�
   }
   // ★ドロップ率upの特殊能力は確定ドロップには効かない（乗せると100%を超える）
   const rng2 = mkRng(31)
-  const withMult = Array.from({ length: 1000 }, () => rollMaterial('翠玉のスライムロード', 1.5, rng2, { sure: true }))
+  const withMult = Array.from({ length: 1000 }, () => rollMaterial('ジェイドスライム', 1.5, rng2, { sure: true }))
   assert.equal(withMult.filter(Boolean).length, 1000)
 })

@@ -291,3 +291,25 @@ test('敵の名前は270体すべてちがう', () => {
   const names = allEnemies().map(e => e.name)
   assert.equal(new Set(names).size, names.length, '同じ名前の敵がいる')
 })
+
+// ★序盤（難易度①〜④）の敵に「王」「女王」などの称号を付けない（2026-08-25 ユーザー指示）。
+//   始まったばかりのエリアに王や女王が並ぶと大げさに見える。
+//   ⚠ボスはそのエリアの締めなので対象外（砂皇スカラベウスなど）
+const RANK_WORDS = /王|帝|皇|将|長|姫|神官|首領|キング|クイーン|ロード|エンペラー/
+test('★序盤（①〜④）の敵に称号を付けない（ボスは別）', () => {
+  const bad = []
+  for (const a of AREAS.filter(x => x.tier <= 4)) {
+    for (const e of [...a.enemies, ...a.timed, ...a.rares]) {
+      if (RANK_WORDS.test(e.name)) bad.push(`${areaLabel(a.id)} ${e.name}`)
+    }
+  }
+  assert.deepEqual(bad, [], `序盤に称号つきの敵がいる: ${bad.join(' / ')}`)
+})
+
+// ★レアモンスターはカタカナの英語名でそろえる（2026-08-25 ユーザー指示）。
+//   通常の敵は「雰囲気＋生き物」の日本語名なので、名前を見ただけでレアだと分かる
+test('★レアモンスターの名前はカタカナだけ', () => {
+  const bad = allRares().filter(r => !/^[ァ-ヶー・]+$/.test(r.name)).map(r => r.name)
+  assert.deepEqual(bad, [], `カタカナ以外が混ざっている: ${bad.join(' / ')}`)
+  assert.equal(allRares().length, 75)
+})

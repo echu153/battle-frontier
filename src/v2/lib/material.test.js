@@ -344,7 +344,7 @@ test('★レアの素材idは mr: 始まり＝既存の素材のidを1つも変�
 })
 
 test('レアの素材は売値は同じで、ルーンにしたときの伸びだけが大きい', () => {
-  const rare = materialOf('翠玉のスライムロード', 'normal')
+  const rare = materialOf('ジェイドスライム', 'normal')
   const normal = materialOf('スライム', 'normal')
   assert.equal(rare.tier, normal.tier, '同じ帯であること')
   assert.equal(sellPriceOf(rare), sellPriceOf(normal), '売値は帯とレア度で決まる（同じ）')
