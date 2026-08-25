@@ -5,6 +5,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import {
   CATALOG, ITEM_BY_ID, RANKS, RANK_BASE, PLUS_MULT, PARTS, SLOTS,
   WEAPONS, ARMOR_LINES, ACCESSORIES, powerOf, statsOf, slotsFor, itemsOf, typesOf,
+  handsLabel, handsColor, handsNote,
 } from './equipment.js'
 import { calcPower, STAT_KEYS } from './stats.js'
 
@@ -117,4 +118,50 @@ test('ステータス画面の装備欄は SLOTS と同じ順に並んでいる'
   // 倉庫は SLOTS をそのまま回しているので、こちらは並べ直していないことだけ見る
   const st = readFileSync(new URL('../components/V2Storage.jsx', import.meta.url), 'utf8')
   assert.match(st, /SLOTS\.map\(/, '倉庫が SLOTS を使わずに並べ直している')
+})
+
+// ★装備するときに「片手か両手か」が分かること（2026-08-26 ユーザー指示）。
+//   両手武器は左手の枠もふさぐので、着けてから気付くと持ち替えの手間になる
+test('★武器の持ち方（片手／両手／盾）が出る', () => {
+  const oneHand = CATALOG.find(i => i.part === '武器' && i.hands === 1)
+  const twoHand = CATALOG.find(i => i.part === '武器' && i.hands === 2)
+  const shield  = CATALOG.find(i => i.part === '武器' && i.hands === 'L')
+  assert.ok(oneHand && twoHand && shield, '3種類そろっている')
+  assert.equal(handsLabel(oneHand), '片手')
+  assert.equal(handsLabel(twoHand), '両手')
+  assert.equal(handsLabel(shield), '盾（左手）')
+  // 武器でないものには出さない（頭・鎧などは手を使わない）
+  assert.equal(handsLabel(CATALOG.find(i => i.part === '鎧')), null)
+  assert.equal(handsLabel(undefined), null)
+  // 両手だけ但し書きが付く
+  assert.equal(handsNote(twoHand), '左手の枠もふさぎます')
+  assert.equal(handsNote(oneHand), null)
+  assert.equal(handsNote(shield), null)
+  // 色も持ち方ごとに分ける（並んだときに見分けが付くように）
+  assert.notEqual(handsColor(oneHand), handsColor(twoHand))
+})
+
+// ★どの画面で装備を選ぶときにも出ていること
+test('★装備を選ぶ画面すべてに持ち方が出ている', () => {
+  const need = {
+    'V2Storage.jsx': '倉庫（着け外し）',
+    'V2ItemTip.jsx': 'カーソルを合わせたときの中身',
+    'V2Smith.jsx':   '鍛冶屋（強化元を選ぶ）',
+  }
+  const bad = []
+  for (const [file, why] of Object.entries(need)) {
+    const src = readFileSync(new URL(`../components/${file}`, import.meta.url), 'utf8')
+    if (!/handsLabel\(/.test(src)) bad.push(`${file}（${why}）`)
+  }
+  assert.deepEqual(bad, [], `持ち方が出ていない画面: ${bad.join(' / ')}`)
+})
+
+// ★表示と、サーバーが弾く規則が食い違わないこと
+test('持ち方の表示は、サーバーが弾く規則と合っている', () => {
+  const twoHand = CATALOG.find(i => i.part === '武器' && i.hands === 2)
+  const shield  = CATALOG.find(i => i.part === '武器' && i.hands === 'L')
+  // 両手武器は右手だけ・盾は左手だけ（slotsFor が正）
+  assert.deepEqual(slotsFor(twoHand), ['right'])
+  assert.deepEqual(slotsFor(shield), ['left'])
+  assert.deepEqual(slotsFor(CATALOG.find(i => i.part === '武器' && i.hands === 1)), ['right', 'left'])
 })

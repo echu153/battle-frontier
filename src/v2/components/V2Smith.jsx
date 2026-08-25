@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../../supabase'
-import { ITEM_BY_ID, powerOf, statsOf, PLUS_MAX, socketCountOf } from '../lib/equipment.js'
+import { ITEM_BY_ID, powerOf, statsOf, PLUS_MAX, socketCountOf, handsLabel, handsColor } from '../lib/equipment.js'
 import { STAT_KEYS, STAT_DEFS } from '../lib/stats.js'
 import { wornIdsOf } from '../lib/loadout.js'
 import { COLOR_HEX, COLOR_LABEL } from '../lib/material.js'
@@ -222,6 +222,10 @@ export default function V2Smith({ prof, inventory, materials, runes, isAdmin, on
               <span style={{ color: RANK_COLOR[k.item.rank] }}>{k.item.rank}</span>
               {' '}{k.item.name}
               <span style={{ color:'#7fa6d0' }}>　×{k.count}個　{k.item.type}</span>
+              {/* ★武器は持ち方も出す（強化元を選ぶときに片手か両手か分かるように） */}
+              {handsLabel(k.item) && (
+                <span style={{ color: handsColor(k.item) }}>　{handsLabel(k.item)}</span>
+              )}
               <span style={{ color:'#7fa6d0', float:'right' }}>{openEquip === k.equipId ? '▲' : '▼'}</span>
             </button>
 

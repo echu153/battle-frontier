@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { powerOf, statsOf, socketCountOf } from '../lib/equipment.js'
+import { powerOf, statsOf, socketCountOf, handsLabel, handsColor, handsNote } from '../lib/equipment.js'
 import { STAT_DEFS, STAT_KEYS } from '../lib/stats.js'
 import { COLOR_HEX, COLOR_LABEL, runeName } from '../lib/material.js'
 import { runePctText } from '../lib/loadout.js'
@@ -147,6 +147,13 @@ export function ItemDetail({ item, inv, runes }) {
         {plus ? <span style={{ color:'#ffcc00' }}>+{plus}</span> : ''}
         <span style={{ color:'#7fa6d0' }}>　{item.type}　戦闘力{powerOf(item, plus)}</span>
       </div>
+      {/* ★武器の持ち方。両手武器は左手もふさぐので但し書きまで出す */}
+      {handsLabel(item) && (
+        <div style={{ color: handsColor(item) }}>
+          {handsLabel(item)}
+          {handsNote(item) && <span style={{ color:'#7fa6d0' }}>　{handsNote(item)}</span>}
+        </div>
+      )}
       <div style={{ color:'#93a9be' }}>
         {STAT_KEYS.filter(k => st[k]).map(k => `${STAT_DEFS[k].label}+${st[k]}`).join(' / ') || 'ステータス上昇なし'}
       </div>

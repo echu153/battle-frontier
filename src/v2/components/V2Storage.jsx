@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../../supabase'
-import { SLOTS, SLOT_LABEL, PARTS, powerOf, statsOf, slotsFor, socketCountOf } from '../lib/equipment.js'
+import { SLOTS, SLOT_LABEL, PARTS, powerOf, statsOf, slotsFor, socketCountOf, handsLabel, handsColor } from '../lib/equipment.js'
 import { equippedItems, gearPower, wornIdsOf, stackInventory, runePctText } from '../lib/loadout.js'
 import { STAT_DEFS, STAT_KEYS } from '../lib/stats.js'
 import { COLOR_HEX } from '../lib/material.js'
@@ -117,6 +117,11 @@ export default function V2Storage({ prof, inventory, runes, onProfile, onBack })
                 {/* ★同じ装備・同じ強化値はここでまとめて個数にする */}
                 {g.list.length > 1 && <span style={{ color:'#ffffff', fontSize:'11px' }}>×{g.list.length}</span>}
                 <span style={{ color:'#7fa6d0', fontSize:'10px' }}>{item.type} / 戦闘力{powerOf(item, plus)}</span>
+                {/* ★武器は持ち方（片手／両手／盾）をここで見せる。着ける前に分かるように */}
+                {handsLabel(item) && (
+                  <span style={{ border:`1px solid ${handsColor(item)}`, color: handsColor(item),
+                    fontSize:'9px', padding:'0 4px', lineHeight:'1.6' }}>{handsLabel(item)}</span>
+                )}
                 {g.worn.length > 0 && (
                   <span style={{ color:'#44ff88', fontSize:'9px' }}>
                     装着中{g.worn.length > 1 ? `×${g.worn.length}` : ''}

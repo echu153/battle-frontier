@@ -129,6 +129,18 @@ export const socketCountOf = (item) => (item?.part === '武器' ? (item.hands ==
 export const rollSockets = (item, rng = Math.random) =>
   Array.from({ length: socketCountOf(item) }, () => SOCKET_COLORS[Math.min(2, Math.floor(rng() * 3))])
 
+// ===== 持ち方（片手／両手／盾）=====
+// ★装備するときに**どちらの手を使うのか**がひと目で分かるようにする（2026-08-26 ユーザー指示）。
+//   両手武器は左手の枠もふさぐので、盾やもう1本と一緒には着けられない。
+export const HANDS_LABEL = { 1:'片手', 2:'両手', L:'盾（左手）' }
+export const HANDS_COLOR = { 1:'#88ddaa', 2:'#ffaa44', L:'#88aaff' }
+// 武器でなければ null（頭・鎧などは手を使わない）
+export const handsOf = (item) => (item?.part === '武器' ? String(item.hands) : null)
+export const handsLabel = (item) => HANDS_LABEL[handsOf(item)] || null
+export const handsColor = (item) => HANDS_COLOR[handsOf(item)] || null
+// 両手武器だけの但し書き
+export const handsNote = (item) => (handsOf(item) === '2' ? '左手の枠もふさぎます' : null)
+
 // この装備をどの枠に着けられるか
 export const slotsFor = (item) => {
   if (item.part === '武器') return item.hands === 'L' ? ['left'] : item.hands === 2 ? ['right'] : ['right', 'left']
