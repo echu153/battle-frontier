@@ -48,7 +48,13 @@ const bestLoadout = (bag) => {
   total += Math.max(two, one)
   for (const part of ['頭', '鎧', '腕', '足']) total += best[part]?.p || 0
   total += (best['アクセ']?.p || 0) * 2
-  return total
+  // 着けているものの中身（ランクと強化値）も返す。バランスを見るときに要る
+  const worn = []
+  const wk = two >= one ? 'weapon2' : 'weapon1'
+  for (const k of [wk, '頭', '鎧', '腕', '足', 'アクセ']) {
+    if (best[k]) worn.push(`${best[k].item.rank}+${best[k].plus}`)
+  }
+  return { total, worn }
 }
 
 // 1人ぶんを days 日ぶん回す
@@ -116,12 +122,12 @@ export const simulate = (days, { seed = 1, areaOf = () => 1, tierOfDay = () => 1
       }
     }
 
-    const equip = bestLoadout(bag)
+    const { total: equip, worn } = bestLoadout(bag)
     const body = jc * JOB_CHANGE_POWER + calcPower(INITIAL_STATS) + (lv - 1) * ROLLS_PER_LV
     // ★ボスに挑むときの戦闘力＝**その時点で行けるLV100**。
     //   壁に当たった人は転職を止めてLV100で挑むので、そこが「挑戦できる力」になる
     const peak = jc * JOB_CHANGE_POWER + BODY_AT_LV100 + equip
-    out.push({ day: d, jc, lv, body, equip, power: body + equip, peak })
+    out.push({ day: d, jc, lv, body, equip, worn, power: body + equip, peak })
   }
   return out
 }
@@ -166,4 +172,12 @@ if (import.meta.url === `file:///${process.argv[1].replace(/\\/g, '/')}`) {
       '（うち装備 ' + Math.round(a.equip).toLocaleString('ja-JP') + '）')
   }
   console.log('\n※ ルーン・武器の進化・拠点・取引所は入れていないので、実際はこれより少し速い')
+  console.log('')
+  console.log('■ その日に着けている装備（1本目のシミュレーション）')
+  console.log('日数    武器      頭      鎧      腕      足    アクセ   ｜ 装備の戦闘力')
+  for (const [, day] of Object.entries(GOAL_DAYS)) {
+    const r = runs[0][day - 1]
+    console.log(String(day).padStart(4) + '日  ' +
+      r.worn.map(w => w.padStart(6)).join('  ') + '   ｜ ' + Math.round(r.equip).toLocaleString('ja-JP'))
+  }
 }
