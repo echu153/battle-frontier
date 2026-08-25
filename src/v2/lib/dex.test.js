@@ -145,3 +145,26 @@ test('★プロフィールで図鑑ぶんの上がり幅が見られる', () =>
   assert.match(src, /k1="図鑑"/, '図鑑の行が無い')
   assert.match(src, /STAT_DEFS\[k\]\.label\}\+\$\{dexBonus\[k\]\}/, '内訳を出していない')
 })
+
+// ★「素材を登録したらちゃんとステータスが上がっているか」を端まで確かめる。
+//   dexStats が正しくても、totalStats / toFighter へつながっていなければ意味がない
+test('★素材の初回登録と討伐数が、戦闘に渡るステータスまで届いている', async () => {
+  const { totalStats, toFighter } = await import('./loadout.js')
+  const prof = {
+    username:'ためし', class:'戦士', equipped:{}, skill_set:[],
+    hp:1000, mp:200, str:100, dex:100, agi:100, int_stat:100, vit:100, luk:100,
+  }
+  const m = materialsOfEnemy('スライム')          // VIT の素材3種
+  const none = totalStats(prof, [], [], [], undefined)
+  assert.equal(none.vit, 100, '図鑑を渡さなければ素のまま')
+
+  assert.equal(totalStats(prof, [], [], [], { kills:{}, found:new Set([m[0].id]) }).vit, 101, '素材1種で+1')
+  assert.equal(totalStats(prof, [], [], [], { kills:{}, found:new Set(m.map(x => x.id)) }).vit, 103, '素材3種で+3')
+
+  const both = { kills:{ スライム: 10 }, found:new Set(m.map(x => x.id)) }
+  assert.equal(totalStats(prof, [], [], [], both).vit, 104, '素材3種＋討伐10体で+4')
+  // ★戦闘に渡る形（runBattle が使う stats）にも同じ値が入っていること
+  assert.equal(toFighter(prof, [], [], [], both).stats.vit, 104, '戦闘に届いていない')
+  // 関係ないステータスは動かない
+  assert.equal(toFighter(prof, [], [], [], both).stats.str, 100)
+})
