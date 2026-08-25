@@ -16,6 +16,7 @@ import V2Atb from '../components/V2Atb.jsx'
 import V2Storage from '../components/V2Storage.jsx'
 import V2Smith from '../components/V2Smith.jsx'
 import V2Status, { V2Menu } from '../components/V2Status.jsx'
+import V2Dex from '../components/V2Dex.jsx'
 import V2Profile from '../components/V2Profile.jsx'
 import V2Tree from '../components/V2Tree.jsx'
 import V2Arena from '../components/V2Arena.jsx'
@@ -60,16 +61,26 @@ const mpLabel = (s, cls) => (s.mpPct
   : `MP${mpOf(cls, s)}`)
 const ROW_INDENT = '28px'
 
-// ホームから行ける先。旧版の街と同じ並びの考え方（出撃が主役、あとは施設）
+// ホームから行ける先。**2列 × 3つのまとまり**で並べる（2026-08-26 ユーザー指示）
+//   ① 自分のこと … プロフィール／スキルセット／倉庫／モンスター図鑑
+//   ② 施設     … 鍛冶屋／神殿／取引所／拠点
+//   ③ 1日1回   … ユグレシアの宝樹
 const MENU = [
-  { key:'profile', label:'プロフィール', icon:'👤', color:'#88aaff', action:'確認する' },
-  { key:'temple',  label:'神殿',        icon:'🏛', color:'#ff88cc', action:'転職する' },
-  { key:'smith',   label:'鍛冶屋',      icon:'🔨', color:'#ffcc00', action:'強化・エンチャント' },
-  { key:'skills',  label:'スキルセット', icon:'📖', color:'#44ff88', action:'編成する' },
-  { key:'storage', label:'倉庫',        icon:'🎒', color:'#88ccff', action:'倉庫に行く' },
-  { key:'market',  label:'取引所',      icon:'🏪', color:'#ffaa44', action:'装備を売り買いする' },
-  { key:'tree',    label:'ユグレシアの宝樹', icon:'🌳', color:'#44dd99', action:'祈る' },
-  { key:'base',    label:'拠点',        icon:'🏕', color:'#8fcf6f', action:'資材を集める' },
+  [
+    { key:'profile', label:'プロフィール', icon:'👤', color:'#88aaff', action:'確認する' },
+    { key:'skills',  label:'スキルセット', icon:'📖', color:'#44ff88', action:'編成する' },
+    { key:'storage', label:'倉庫',        icon:'🎒', color:'#88ccff', action:'倉庫に行く' },
+    { key:'dex',     label:'モンスター図鑑', icon:'📕', color:'#c0b0ff', action:'敵とドロップを見る' },
+  ],
+  [
+    { key:'smith',   label:'鍛冶屋',      icon:'🔨', color:'#ffcc00', action:'強化・エンチャント' },
+    { key:'temple',  label:'神殿',        icon:'🏛', color:'#ff88cc', action:'転職する' },
+    { key:'market',  label:'取引所',      icon:'🏪', color:'#ffaa44', action:'装備を売り買いする' },
+    { key:'base',    label:'拠点',        icon:'🏕', color:'#8fcf6f', action:'資材を集める' },
+  ],
+  [
+    { key:'tree',    label:'ユグレシアの宝樹', icon:'🌳', color:'#44dd99', action:'祈る' },
+  ],
 ]
 
 export default function V2Home() {
@@ -402,7 +413,7 @@ const TWO_COLUMN = {
 
             {/* ===== 行動メニュー（あるけみすと式の「施設名｜ボタン」）===== */}
             {screen === 'home' && !inBattle && (
-              <V2Menu items={MENU} open={openMenu} onToggle={() => setOpenMenu(v => !v)} onPick={setScreen} />
+              <V2Menu groups={MENU} open={openMenu} onToggle={() => setOpenMenu(v => !v)} onPick={setScreen} />
             )}
 
             {screen === 'profile' && <V2Profile prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} onProfile={refresh} onBack={() => setScreen('home')} />}
@@ -411,6 +422,7 @@ const TWO_COLUMN = {
             {screen === 'tree'    && <V2Tree    prof={prof} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'base'    && <V2Base    prof={prof} materials={materials} fishDex={fishDex} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'market'  && <V2Market  prof={prof} onProfile={refresh} onBack={() => setScreen('home')} />}
+            {screen === 'dex'     && <V2Dex     prof={prof} onBack={() => setScreen('home')} />}
 
             {(screen === 'skills' || screen === 'temple') && (
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>

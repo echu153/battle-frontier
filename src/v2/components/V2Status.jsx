@@ -240,21 +240,30 @@ export default function V2Status({ prof, inventory, runes, fishDex, classes, ope
   )
 }
 
-// 行動メニュー。旧版の街のボタン（padding:8px／fontSize:12px）と同じ大きさにそろえてある
-export function V2Menu({ items, open, onToggle, onPick }) {
+// 行動メニュー。旧版の街のボタン（padding:8px／fontSize:12px）と同じ大きさにそろえてある。
+// ★**2列 × まとまりごと**に並べる（2026-08-26 ユーザー指示）。
+//   groups は「まとまりの配列」で、まとまりの中身が2列に流れる。
+//   まとまりに1つしか無いときは横いっぱいに伸ばす（宝樹）。
+export function V2Menu({ groups, open, onToggle, onPick }) {
   return (
     <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'10px', marginBottom:'8px' }}>
       {/* ★こちらも折りたたみは上（ステータスとそろえる） */}
       <button onClick={onToggle} style={{ ...foldBtn, marginBottom: open ? '8px' : 0 }}>
         {open ? '▲ メニューを閉じる' : '▼ メニューを表示'}
       </button>
-      {open && items.map(m => (
-        <button key={m.key} onClick={() => onPick(m.key)}
-          style={{ width:'100%', padding:'8px', marginBottom:'8px', background:'#001840', border:`1px solid ${m.color}`, color:m.color,
-            cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left' }}>
-          {m.icon} {m.label}
-          <span style={{ color:'#7fa6d0', fontSize:'10px', marginLeft:'8px' }}>{m.action}</span>
-        </button>
+      {open && groups.map((group, gi) => (
+        <div key={gi} style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px',
+          marginBottom: gi === groups.length - 1 ? 0 : '10px' }}>
+          {group.map(m => (
+            <button key={m.key} onClick={() => onPick(m.key)}
+              style={{ padding:'8px', background:'#001840', border:`1px solid ${m.color}`, color:m.color,
+                cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left',
+                gridColumn: group.length === 1 ? '1 / -1' : undefined }}>
+              {m.icon} {m.label}
+              <span style={{ display:'block', color:'#7fa6d0', fontSize:'9px', marginTop:'2px' }}>{m.action}</span>
+            </button>
+          ))}
+        </div>
       ))}
     </div>
   )

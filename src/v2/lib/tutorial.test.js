@@ -84,6 +84,7 @@ test('★主なコンテンツの画面には必ずヘルプが置いてある',
     'V2Base.jsx':   'base',
     'V2Market.jsx': 'market',
     'V2Storage.jsx':'storage',
+    'V2Dex.jsx':    'dex',
   }
   const bad = []
   for (const [file, id] of Object.entries(NEED)) {
