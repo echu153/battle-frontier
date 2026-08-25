@@ -537,3 +537,17 @@ test('★出撃は戦った敵の名前と勝敗をサーバーへ送ってい�
   assert.ok(SQL.includes('p_enemy text default null'), 'サーバーが p_enemy を受け取っていない')
   assert.ok(SQL.includes('p_win boolean default false'), 'サーバーが p_win を受け取っていない')
 })
+
+// ★このファイルは何度でも流し直す運用。**「一度だけ」の処理が繰り返されないこと**を縛る。
+//   図鑑の素材の拾い直しが毎回走ると、リセットしても流し直した瞬間に戻ってしまう（実際に困った）
+test('★一度だけの処理は v2_migrations で守られている', () => {
+  assert.ok(SQL.includes('create table if not exists public.v2_migrations'), 'v2_migrations が無い')
+  // ⚠SQLファイルの改行はCRLF。行をまたぐところは正規表現で拾う
+  const backfill = /insert into public\.v2_dex_materials \(player_id, material_id\)\s+select player_id, material_id from public\.v2_player_materials/
+  const hit = SQL.match(backfill)
+  assert.ok(hit, '素材の拾い直しが見つからない')
+  // 拾い直しの前に「まだやっていないか」の判定があること
+  const before = SQL.slice(Math.max(0, hit.index - 400), hit.index)
+  assert.match(before, /v2_migrations where key = 'dex_material_backfill'/, '拾い直しが毎回走ってしまう')
+  assert.ok(SQL.includes("insert into public.v2_migrations (key) values ('dex_material_backfill')"), '目印を残していない')
+})

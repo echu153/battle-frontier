@@ -2382,10 +2382,26 @@ create policy "v2_dex_materials_own" on public.v2_dex_materials for select to au
 revoke all on table public.v2_dex_materials from anon;
 grant select on table public.v2_dex_materials to authenticated;
 
--- いま持っている素材は「発見済み」として拾い直す（この節を流した時点の救済）
-insert into public.v2_dex_materials (player_id, material_id)
-select player_id, material_id from public.v2_player_materials
-on conflict do nothing;
+-- ★このファイルは何度でも流し直す運用なので、「一度だけやりたい処理」の目印を置く場所。
+--   ここが無いと、図鑑をリセットしても次に全文を流した瞬間に元へ戻ってしまう
+create table if not exists public.v2_migrations (
+  key text primary key,
+  at  timestamptz not null default now()
+);
+alter table public.v2_migrations enable row level security;
+revoke all on table public.v2_migrations from anon;
+revoke all on table public.v2_migrations from authenticated;
+
+-- いま持っている素材を「発見済み」として拾い直す。**最初の1回だけ**。
+do $$
+begin
+  if not exists (select 1 from public.v2_migrations where key = 'dex_material_backfill') then
+    insert into public.v2_dex_materials (player_id, material_id)
+    select player_id, material_id from public.v2_player_materials
+    on conflict do nothing;
+    insert into public.v2_migrations (key) values ('dex_material_backfill');
+  end if;
+end $$;
 
 -- ⚠引数が増えたので、古い版は落としてから作り直す（同じ名前で残ると呼び分けが曖昧になる）
 drop function if exists public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb);
