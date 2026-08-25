@@ -313,3 +313,30 @@ test('★レアモンスターの名前はカタカナだけ', () => {
   assert.deepEqual(bad, [], `カタカナ以外が混ざっている: ${bad.join(' / ')}`)
   assert.equal(allRares().length, 75)
 })
+
+// ★ボスの戦闘力は「1日1時間で目標どおりに越えられる」ところへ合わせてある
+//   （2026-08-25 ユーザー決定 ①3日／②1週／③2週／④1月／⑤3月／⑥6月／⑦9月／⑧1年）。
+//   出どころは tools/v2-boss-tune.mjs（実際に runBattle を回して勝率65%を探す）。
+//   ⚠ここを触るなら必ずあのツールを回し直すこと。数字だけ動かすと目標がずれる
+const BOSS_POWER = { 1: 875, 2: 1028, 3: 1522, 4: 2988, 5: 10156, 6: 16543, 7: 25720, 8: 32503 }
+test('★ボスの戦闘力は進行速度の目標どおり', () => {
+  for (const a of AREAS) {
+    assert.equal(a.boss.power, BOSS_POWER[a.tier], `${areaFullName(a.id)} のボス`)
+  }
+  // 帯が上がるほど強くなる
+  for (let t = 2; t <= TIER_MAX; t++) assert.ok(BOSS_POWER[t] > BOSS_POWER[t - 1], `難易度${t}`)
+})
+
+// ★通常敵はボスの3〜4割。**周回は楽・ボスが壁**という作りを崩さない
+test('通常敵と時間帯の敵はボスの3〜6割に収まっている', () => {
+  for (const a of AREAS) {
+    for (const e of a.enemies) {
+      const r = e.power / a.boss.power
+      assert.ok(r >= 0.28 && r <= 0.56, `${e.name} がボスの${(r * 100).toFixed(0)}%`)
+    }
+    for (const e of a.timed) {
+      const r = e.power / a.boss.power
+      assert.ok(r >= 0.35 && r <= 0.65, `${e.name} がボスの${(r * 100).toFixed(0)}%`)
+    }
+  }
+})
