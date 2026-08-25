@@ -9,6 +9,7 @@ import { ITEM_BY_ID, statsOf as equipStats, powerOf as equipPower, SLOTS } from 
 import { SKILL_BY_NAME } from './skills.js'
 import { jobCountOf } from './classBonus.js'
 import { fishDexPct } from './fishing.js'
+import { dexStats } from './dex.js'
 import { pendingStage } from './evolve.js'
 
 // 装着中の装備を { slot: { inv, item } } の形で引く
@@ -119,25 +120,27 @@ export const statPct = (profile, inventory, runes, fishDex) => {
   return out
 }
 
-// 本体＋装備の合計ステータス。ルーンと図鑑の%はこの合計に対して掛かる
-// ⚠ fishDex（v2_player_fish の行）を渡し忘れると図鑑ボーナスが黙って消える。
-//   渡し忘れを検出するテストが fishing.test.js にある
-export const totalStats = (profile, inventory, runes, fishDex) => {
+// 本体＋装備＋モンスター図鑑の合計ステータス。ルーンと釣り図鑑の%はこの合計に対して掛かる
+// ⚠ fishDex（v2_player_fish）と dex（討伐数・見つけた素材）を渡し忘れると
+//   図鑑のぶんが黙って消える。渡し忘れを検出するテストが fishing.test.js にある
+// ★モンスター図鑑のぶんは**固定値**（討伐数と素材の初回登録）。装備と同じく素の合計に足す
+export const totalStats = (profile, inventory, runes, fishDex, dex) => {
   const gear = gearStats(profile, inventory)
   const pct = statPct(profile, inventory, runes, fishDex)
+  const bonus = dexStats(dex?.kills, dex?.found)
   return Object.fromEntries(STAT_KEYS.map(k => {
-    const base = (profile?.[k] || 0) + gear[k]
+    const base = (profile?.[k] || 0) + gear[k] + bonus[k]
     return [k, pct[k] ? Math.round(base * (1 + pct[k] / 100)) : base]
   }))
 }
 
 // runBattle に渡す形。スキル編成が空なら通常攻撃だけで戦う
-export const toFighter = (profile, inventory, runes, fishDex) => ({
+export const toFighter = (profile, inventory, runes, fishDex, dex) => ({
   name: profile?.username || 'あなた',
   cls: profile?.class,
   // ★職業補正は「その職業に何回転職したか」で伸びる（classBonus.js）
   jobCount: jobCountOf(profile),
-  stats: totalStats(profile, inventory, runes, fishDex),
+  stats: totalStats(profile, inventory, runes, fishDex, dex),
   enchants: runeAbilities(equippedRunes(profile, inventory, runes)),
   // ★武器の進化（戦闘記憶）。刻印とは別枠で、装備している武器のぶんが乗る
   evolutions: equippedEvolutions(profile, inventory),

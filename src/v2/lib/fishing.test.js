@@ -247,8 +247,8 @@ const srcFiles = () => {
   return out
 }
 
-test('totalStats / toFighter の呼び出しは必ず fishDex まで渡している', () => {
-  // 呼び出しの形は「識別子だけを並べた4引数」なので、カンマの数で足りる
+test('totalStats / toFighter の呼び出しは必ず fishDex と dex まで渡している', () => {
+  // 呼び出しの形は「識別子だけを並べた5引数」なので、カンマの数で足りる
   const calls = []
   for (const f of srcFiles()) {
     for (const m of f.text.matchAll(/(?:totalStats|playerFighter)\(([^()]*)\)/g)) {
@@ -261,9 +261,9 @@ test('totalStats / toFighter の呼び出しは必ず fishDex まで渡してい
     }
   }
   assert.ok(calls.length >= 5, `呼び出しを拾えている（${calls.length}件）`)
-  const bad = calls.filter(c => c.args !== 4)
+  const bad = calls.filter(c => c.args !== 5)
   assert.deepEqual(bad.map(c => c.where), [],
-    `fishDex を渡していない呼び出しがある:\n${bad.map(c => '  ' + c.where).join('\n')}`)
+    `fishDex / dex を渡していない呼び出しがある:\n${bad.map(c => '  ' + c.where).join('\n')}`)
 })
 
 test('図鑑は解放していない釣り場を見せない', () => {
@@ -275,20 +275,33 @@ test('図鑑は解放していない釣り場を見せない', () => {
   assert.match(src, /SPOTS\.slice\(0, f\.grade\)/, '釣り場の選択ボタンを解放ぶんで切っていない')
 })
 
-test('loadout.js の totalStats / toFighter は fishDex を受け取る', () => {
+// ★2026-08-26：モンスター図鑑（討伐数・素材の初回登録）も戦闘のステに効くので、
+//   dex も最後まで渡す必要がある。渡し忘れると黙って弱くなる
+test('loadout.js の totalStats / toFighter は fishDex と dex を受け取る', () => {
   const src = readFileSync(new URL('./loadout.js', import.meta.url), 'utf8')
-  assert.match(src, /export const totalStats = \(profile, inventory, runes, fishDex\)/)
-  assert.match(src, /export const toFighter = \(profile, inventory, runes, fishDex\)/)
-  assert.match(src, /fishDexPct/, '図鑑ぶんを合流させていない')
+  assert.match(src, /export const totalStats = \(profile, inventory, runes, fishDex, dex\)/)
+  assert.match(src, /export const toFighter = \(profile, inventory, runes, fishDex, dex\)/)
+  assert.match(src, /fishDexPct/, '釣り図鑑ぶんを合流させていない')
+  assert.match(src, /dexStats\(dex\?\.kills, dex\?\.found\)/, 'モンスター図鑑ぶんを合流させていない')
 })
 
-test('V2Home は戦闘に関わる画面すべてに fishDex を渡している', () => {
+test('V2Home は戦闘に関わる画面すべてに fishDex と dex を渡している', () => {
   const src = readFileSync(new URL('../pages/V2Home.jsx', import.meta.url), 'utf8')
-  for (const c of ['V2Sortie', 'V2Arena', 'V2Status', 'V2Profile', 'V2Base']) {
-    // ★JSXの中に `=>` が入るので「> まで」では切れない。タグの頭から一定の長さで見る
+  // ★JSXの中に `=>` が入るので「> まで」では切れない。タグの頭から一定の長さで見る
+  const near = (c) => {
     const i = src.indexOf(`<${c} `)
     assert.notEqual(i, -1, `${c} を置いている`)
-    assert.match(src.slice(i, i + 400), /fishDex=\{fishDex\}/, `${c} に fishDex を渡していない`)
+    return src.slice(i, i + 400)
   }
-  assert.match(src, /from\('v2_player_fish'\)/, '図鑑を読み込んでいない')
+  // 釣り図鑑（%）が要るのはステータスを組み立てる画面
+  for (const c of ['V2Sortie', 'V2Arena', 'V2Status', 'V2Profile', 'V2Base', 'V2Atb']) {
+    assert.match(near(c), /fishDex=\{fishDex\}/, `${c} に fishDex を渡していない`)
+  }
+  // モンスター図鑑（固定値）が要るのは、それに加えて図鑑の画面そのもの
+  for (const c of ['V2Sortie', 'V2Arena', 'V2Status', 'V2Profile', 'V2Atb', 'V2Dex']) {
+    assert.match(near(c), /dex=\{dex\}/, `${c} に dex を渡していない`)
+  }
+  assert.match(src, /from\('v2_player_fish'\)/, '釣り図鑑を読み込んでいない')
+  assert.match(src, /from\('v2_kills'\)/, '討伐数を読み込んでいない')
+  assert.match(src, /from\('v2_dex_materials'\)/, '見つけた素材を読み込んでいない')
 })

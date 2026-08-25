@@ -28,7 +28,7 @@ import { pushWeaponRecord } from './weaponRecord.js'
 //   スタミナが1以上あるあいだは、10秒ごとに勝手に出撃する（1回につき1消費）。
 //   切れたら止まり、**これまで通り自分でクリックして出撃**する（手動は消費しない）。
 //   ⚠消費と回復の権威はサーバー（v2_sortie_settle / v2_stamina_roll）。ここは表示と読み替え。
-export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onProfile, onScene }) {
+export default function V2Sortie({ prof, inventory, runes, fishDex, dex, guard, onProfile, onScene }) {
   const [scene, setScene] = useState('town')
   const [selectedArea, setSelectedArea] = useState(() => Number(localStorage.getItem('v2SelectedArea')) || 1)
   const [logs, setLogs] = useState([])
@@ -78,7 +78,7 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, guard, onPro
     lastAt.current = Date.now()
     setLoading(true); setScene('battle'); setLogs([])
     try {
-      const me = playerFighter(prof, inventory, runes, fishDex)
+      const me = playerFighter(prof, inventory, runes, fishDex, dex)
       // 「素材ドロップ率up」の特殊能力ぶん。★重複せず、一番高いものだけが効く
       // ★アリーナで階層守護者でいるあいだは、素材も装備も落ちやすくなる（×1.1・掛け算で乗る）
       const matMult = dropRateMultOf(runeAbilities(equippedRunes(prof, inventory, runes))) * guardMult

@@ -1,12 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
-import { supabase } from '../../supabase'
+import { useMemo, useState } from 'react'
 import V2Help from './V2Help.jsx'
 import { AREAS_SORTED, areaLabel, statsOf } from '../lib/enemies.js'
 import { materialsOfEnemy, RARITY_COLOR, RARITY_LABEL } from '../lib/material.js'
 import { ENCHANTS } from '../lib/enchant.js'
 import { MATERIAL_RATE, RARE_MATERIAL_RATE, RARE_RATE } from '../lib/sortie.js'
-import { STAT_DEFS } from '../lib/stats.js'
-import { UNKNOWN, killMapOf, foundSetOf, dexProgress, killBonusPct, nextKillTier } from '../lib/dex.js'
+import { STAT_DEFS, STAT_KEYS } from '../lib/stats.js'
+import { UNKNOWN, dexProgress, killAddOf, nextKillTier, dexStats, MATERIAL_FIRST_ADD } from '../lib/dex.js'
 import { box, miniBtn, TEXT } from './v2ui.js'
 
 // バトルフロンティアⅡ（リメイク版）— モンスター図鑑
@@ -21,6 +20,8 @@ const SLOT_COLOR = { 通常:'#7fa6d0', 時間帯:'#c0b0ff', レア:'#ffcc44', �
 const KIND_LABEL = { phys:'物理', mag:'魔法' }
 const BAND_MARK = { 朝:'🌅', 昼:'☀', 晩:'🌙' }
 const SLOTS = ['通常', '時間帯', 'レア', 'ボス']
+// 画面の見出し（日本語）→ dex.js の枠の名前
+const SLOT_KEY = { 通常:'normal', 時間帯:'timed', レア:'rare', ボス:'boss' }
 
 const rowsOf = (area) => [
   ...area.enemies.map(e => ({ slot:'通常', e })),
@@ -29,7 +30,7 @@ const rowsOf = (area) => [
   { slot:'ボス', e: area.boss },
 ]
 
-export default function V2Dex({ prof, onBack }) {
+export default function V2Dex({ prof, dex, onBack }) {
   const open = useMemo(() => {
     const unlocked = prof?.unlocked_areas || [1]
     return AREAS_SORTED.filter(a => unlocked.includes(a.id))
@@ -37,27 +38,10 @@ export default function V2Dex({ prof, onBack }) {
   const [area, setArea] = useState(() => open[open.length - 1]?.id || 1)
   const [slots, setSlots] = useState(() => new Set(SLOTS))
   const [q, setQ] = useState('')
-  const [kills, setKills] = useState({})
-  const [found, setFound] = useState(() => new Set())
-  const [loading, setLoading] = useState(true)
-  const [err, setErr] = useState('')
-
-  // 討伐数と「拾ったことのある素材」を取りに行く。図鑑を開いたときだけでよい
-  useEffect(() => {
-    let alive = true
-    ;(async () => {
-      const [{ data: k, error: ek }, { data: m, error: em }] = await Promise.all([
-        supabase.from('v2_kills').select('enemy,n'),
-        supabase.from('v2_dex_materials').select('material_id'),
-      ])
-      if (!alive) return
-      if (ek || em) setErr((ek || em).message || String(ek || em))
-      setKills(killMapOf(k))
-      setFound(foundSetOf(m))
-      setLoading(false)
-    })()
-    return () => { alive = false }
-  }, [])
+  // ★討伐数と「拾ったことのある素材」はホームが持っている（戦闘のステにも効くため）
+  const kills = useMemo(() => dex?.kills || {}, [dex])
+  const found = useMemo(() => dex?.found || new Set(), [dex])
+  const bonus = useMemo(() => dexStats(kills, found), [kills, found])
 
   const cur = open.find(a => a.id === area) || open[0]
   const locked = AREAS_SORTED.length - open.length
@@ -95,7 +79,26 @@ export default function V2Dex({ prof, onBack }) {
         <br />レアモンスターは出現率{RARE_RATE}%で、素材はかならず落とします
         （通常{RARE_MATERIAL_RATE.normal}%／レア{RARE_MATERIAL_RATE.rare}%／激レア{RARE_MATERIAL_RATE.ultra}%・上がり幅は1.5倍）。
       </div>
-      {err && <div style={{ color:'#ff8844', fontSize:'10px', marginBottom:'6px' }}>⚠ {err}</div>}
+
+      {/* いまもらえているぶん */}
+      <div style={{ border:'1px solid #002356', background:'#000818', padding:'6px 8px', marginBottom:'8px' }}>
+        <div style={{ color:'#44ff88', fontSize:'10px', fontFamily:'monospace' }}>
+          🏅 図鑑でもらっているステータス
+          {STAT_KEYS.every(k => !bonus[k]) && <span style={{ color: TEXT.empty }}>　まだ無し</span>}
+        </div>
+        <div style={{ display:'flex', gap:'10px', flexWrap:'wrap', marginTop:'3px' }}>
+          {STAT_KEYS.filter(k => bonus[k] > 0).map(k => (
+            <span key={k} style={{ color: STAT_DEFS[k]?.color || TEXT.body, fontSize:'11px', fontFamily:'monospace' }}>
+              {STAT_DEFS[k]?.label || k} +{bonus[k]}
+            </span>
+          ))}
+        </div>
+        <div style={{ color: TEXT.empty, fontSize:'9px', marginTop:'3px', lineHeight:'1.7' }}>
+          素材は初めて図鑑に載ったときに、そのステータスが+{MATERIAL_FIRST_ADD}。
+          討伐数は 通常・時間帯＝10体で+1／100体で+3／1000体で+10、
+          レア・ボス＝3体で+1／10体で+3／50体で+10（段は置き換え）。
+        </div>
+      </div>
 
       {/* エリア */}
       <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginBottom:'6px' }}>
@@ -130,7 +133,7 @@ export default function V2Dex({ prof, onBack }) {
         <div style={{ color: TEXT.body, fontSize:'12px', marginBottom:'6px' }}>
           {areaLabel(cur)} {cur.name}
           <span style={{ color: TEXT.empty, fontSize:'10px', marginLeft:'8px' }}>
-            {loading ? '読み込み中…' : `見つけた敵 ${prog.done}／${prog.total}体（${prog.pct}%）`}
+            見つけた敵 {prog.done}／{prog.total}体（{prog.pct}%）
           </span>
         </div>
       )}
@@ -140,8 +143,10 @@ export default function V2Dex({ prof, onBack }) {
         const seen = n > 0
         const ench = ENCHANTS[e.name]
         const st = statsOf(e)
-        const bonus = killBonusPct(n)
-        const next = nextKillTier(n)
+        const key = SLOT_KEY[slot]
+        const add = killAddOf(key, n)
+        const next = nextKillTier(key, n)
+        const upStats = materialsOfEnemy(e.name)[0]?.stats || []
         return (
           <div key={e.name} style={{ border:'1px solid #002356', background: seen ? '#000c30' : '#00040f',
             padding:'7px 8px', marginBottom:'6px', opacity: seen ? 1 : 0.75 }}>
@@ -161,8 +166,15 @@ export default function V2Dex({ prof, onBack }) {
             {seen && (
               <div style={{ color:'#ffcc44', fontSize:'10px', fontFamily:'monospace', marginTop:'3px' }}>
                 ⚔ 討伐数 {n.toLocaleString()}
-                {bonus > 0 && <span style={{ color:'#44ff88', marginLeft:'8px' }}>ステータス+{bonus}%</span>}
-                {next && <span style={{ color: TEXT.empty, marginLeft:'8px' }}>次の段まであと{(next.n - n).toLocaleString()}体</span>}
+                {add > 0 && (
+                  <span style={{ color:'#44ff88', marginLeft:'8px' }}>
+                    {upStats.map(k => `${STAT_DEFS[k]?.label || k}+${add}`).join('・')}
+                  </span>
+                )}
+                {next && <span style={{ color: TEXT.empty, marginLeft:'8px' }}>
+                  あと{(next.n - n).toLocaleString()}体で
+                  {upStats.map(k => `${STAT_DEFS[k]?.label || k}+${next.add}`).join('・')}
+                </span>}
               </div>
             )}
             {seen && ench && (

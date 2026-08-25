@@ -28,7 +28,7 @@ const KEY = { background:'#101c3c', fontSize:'11px', padding:'6px 8px', borderTo
 const VAL = { background:'#0a1330', color:'#cfe2ff', fontSize:'11px', padding:'6px 8px', borderTop:'1px solid #07102a', wordBreak:'break-all' }
 
 // ステータスの並び。あるけみすとのプロフィールと同じ「項目｜値」を2組ずつ
-export default function V2Profile({ prof, inventory, runes, fishDex, onProfile, onBack }) {
+export default function V2Profile({ prof, inventory, runes, fishDex, dex, onProfile, onBack }) {
   const [detail, setDetail] = useState(false)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
@@ -40,7 +40,7 @@ export default function V2Profile({ prof, inventory, runes, fishDex, onProfile, 
   const fileRef = useRef(null)
   const worn = equippedItems(prof, inventory)
   // ★エンチャントは割合なので totalStats に渡して合計へ乗せる
-  const total = totalStats(prof, inventory, runes, fishDex)
+  const total = totalStats(prof, inventory, runes, fishDex, dex)
   const power = calcPower(total)
   const skills = prof.skill_set || []
   const kind = attackKindOf(prof.class) === 'mag' ? '魔法型' : '物理型'

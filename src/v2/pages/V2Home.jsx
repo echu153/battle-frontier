@@ -17,6 +17,7 @@ import V2Storage from '../components/V2Storage.jsx'
 import V2Smith from '../components/V2Smith.jsx'
 import V2Status, { V2Menu } from '../components/V2Status.jsx'
 import V2Dex from '../components/V2Dex.jsx'
+import { killMapOf, foundSetOf } from '../lib/dex.js'
 import V2Profile from '../components/V2Profile.jsx'
 import V2Tree from '../components/V2Tree.jsx'
 import V2Arena from '../components/V2Arena.jsx'
@@ -103,6 +104,8 @@ export default function V2Home() {
   const [screen, setScreen] = useState('home')     // home / sortie / temple / smith / skills / storage
   const [inventory, setInventory] = useState([])   // 所持している装備（v2_inventory）
   const [materials, setMaterials] = useState([])   // 持っている素材（v2_player_materials）
+  // ★モンスター図鑑。**戦闘のステータスにも効く**ので、図鑑を開いていなくても持っておく
+  const [dex, setDex] = useState({ kills:{}, found:new Set() })
   const [runes, setRunes] = useState([])     // 持っているルーン（v2_essences）
   // ★釣り図鑑（v2_player_fish）。first_at が入っている行が恒久ステータスの対象。
   //   **戦闘のステータス計算に効く**ので、装備やルーンと同じようにここで持って配る
@@ -137,18 +140,22 @@ export default function V2Home() {
         if (e2 || e3) { setSqlError((e2 || e3).message || String(e2 || e3)); setLoading(false); return }
         setProf(v2 || null)
         setClasses(cls || [])
-        const [{ data: inv }, { data: mats }, { data: ess }, { data: grd }, { data: fish }] = await Promise.all([
+        const [{ data: inv }, { data: mats }, { data: ess }, { data: grd }, { data: fish },
+          { data: kills }, { data: found }] = await Promise.all([
           supabase.from('v2_inventory').select('*').order('id', { ascending:false }),
           supabase.from('v2_player_materials').select('*'),
           supabase.from('v2_essences').select('*').order('id', { ascending:false }),
           supabase.from('v2_arena_floors').select('*').eq('player_id', user.id).maybeSingle(),
           supabase.from('v2_player_fish').select('*'),
+          supabase.from('v2_kills').select('enemy,n'),
+          supabase.from('v2_dex_materials').select('material_id'),
         ])
         setInventory(inv || [])
         setMaterials(mats || [])
         setRunes(ess || [])
         setGuard(grd || null)
         setFishDex(fish || [])
+        setDex({ kills: killMapOf(kills), found: foundSetOf(found) })
       } catch (err) {
         setSqlError(err.message || String(err))
       }
@@ -162,7 +169,8 @@ export default function V2Home() {
     if (typeof updater === 'function') { setProf(updater); return }
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    const [{ data: v2 }, { data: inv }, { data: mats }, { data: ess }, { data: grd }, { data: fish }] = await Promise.all([
+    const [{ data: v2 }, { data: inv }, { data: mats }, { data: ess }, { data: grd }, { data: fish },
+      { data: kills }, { data: found }] = await Promise.all([
       supabase.from('v2_profiles').select('*').eq('id', user.id).maybeSingle(),
       supabase.from('v2_inventory').select('*').order('id', { ascending:false }),
       supabase.from('v2_player_materials').select('*'),
@@ -170,6 +178,9 @@ export default function V2Home() {
       // ★守っている階は他人に破られて消えることがある＝毎回取り直す（ドロップ率に効くため）
       supabase.from('v2_arena_floors').select('*').eq('player_id', user.id).maybeSingle(),
       supabase.from('v2_player_fish').select('*'),
+      // ★1戦ごとに討伐数が増える＝ここも取り直さないとステータスが古いままになる
+      supabase.from('v2_kills').select('enemy,n'),
+      supabase.from('v2_dex_materials').select('material_id'),
     ])
     if (v2) setProf(v2)
     setInventory(inv || [])
@@ -177,6 +188,7 @@ export default function V2Home() {
     setRunes(ess || [])
     setGuard(grd || null)
     setFishDex(fish || [])
+    setDex({ kills: killMapOf(kills), found: foundSetOf(found) })
   }
 
   const create = async (e) => {
@@ -255,7 +267,7 @@ export default function V2Home() {
   // ★最大MPは**ルーンのMP+%を乗せたぶん**で見る（サーバー v2_set_skills と同じ計算）。
   //   素の prof.mp のままだと蒼ルーンのMPがどこにも効かない
   //   （戦闘はHP/MP満タン開始で5〜13ターン＝MPが枯れないため）。
-  const maxMp = prof ? totalStats(prof, inventory, runes, fishDex).mp : 0
+  const maxMp = prof ? totalStats(prof, inventory, runes, fishDex, dex).mp : 0
   const setErr = prof ? validateSkillSet(compact, usableNames, maxMp, prof.class) : null
   // 一覧には、まだ覚えていない「いまの職業のスキル」もグレーで出す（何を狙えるか分かるように）
   const shownSkills = sortSkills(filterSkills([...usable, ...stillLocked], { tab, query, favorites }), sortKey, sortAsc)
@@ -373,7 +385,7 @@ const TWO_COLUMN = {
                   （施設の一覧を見るのに、毎回ステータスぶんスクロールさせられていた） */}
             <div>
               {screen === 'home' && (
-                <V2Status prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} classes={classes} open={openStatus} onToggle={() => setOpenStatus(v => !v)} />
+                <V2Status prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} dex={dex} classes={classes} open={openStatus} onToggle={() => setOpenStatus(v => !v)} />
               )}
             </div>
 
@@ -405,9 +417,9 @@ const TWO_COLUMN = {
                     ))}
                   </div>
                 )}
-                {act === 'sortie' && <V2Sortie prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} guard={guard} onProfile={refresh} onScene={sc => setInBattle(sc === 'battle')} />}
-                {act === 'arena'  && <V2Arena  prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} onProfile={refresh} onBack={() => setAct('sortie')} embedded />}
-                {act === 'atb'    && <V2Atb    prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} />}
+                {act === 'sortie' && <V2Sortie prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} dex={dex} guard={guard} onProfile={refresh} onScene={sc => setInBattle(sc === 'battle')} />}
+                {act === 'arena'  && <V2Arena  prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} dex={dex} onProfile={refresh} onBack={() => setAct('sortie')} embedded />}
+                {act === 'atb'    && <V2Atb    prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} dex={dex} />}
               </div>
             )}
 
@@ -416,13 +428,13 @@ const TWO_COLUMN = {
               <V2Menu groups={MENU} open={openMenu} onToggle={() => setOpenMenu(v => !v)} onPick={setScreen} />
             )}
 
-            {screen === 'profile' && <V2Profile prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} onProfile={refresh} onBack={() => setScreen('home')} />}
+            {screen === 'profile' && <V2Profile prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} dex={dex} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'storage' && <V2Storage prof={prof} inventory={inventory} runes={runes} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'smith'   && <V2Smith   prof={prof} inventory={inventory} materials={materials} runes={runes} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'tree'    && <V2Tree    prof={prof} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'base'    && <V2Base    prof={prof} materials={materials} fishDex={fishDex} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'market'  && <V2Market  prof={prof} onProfile={refresh} onBack={() => setScreen('home')} />}
-            {screen === 'dex'     && <V2Dex     prof={prof} onBack={() => setScreen('home')} />}
+            {screen === 'dex'     && <V2Dex     prof={prof} dex={dex} onBack={() => setScreen('home')} />}
 
             {(screen === 'skills' || screen === 'temple') && (
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>

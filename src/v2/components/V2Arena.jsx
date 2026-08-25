@@ -24,7 +24,7 @@ import V2Help from './V2Help.jsx'
 //
 // 表示は「いまいる階の階層守護者」と「一覧」の2つだけ。挑戦できるのは自分の階の階層守護者。
 // embedded … ホームの出撃タブの中に置くとき。自前の「← ホームへ」は出さず、階の一覧は畳んでおく
-export default function V2Arena({ prof, inventory, runes, fishDex, onProfile, onBack, embedded = false }) {
+export default function V2Arena({ prof, inventory, runes, fishDex, dex, onProfile, onBack, embedded = false }) {
   const [rows, setRows] = useState([])       // v2_arena_floors（埋まっている階だけ）
   const [logs, setLogs] = useState([])
   const [scene, setScene] = useState('lobby')
@@ -49,7 +49,7 @@ export default function V2Arena({ prof, inventory, runes, fishDex, onProfile, on
   const defending = (rows || []).find(r => String(r.player_id) === String(prof.id)) || null
   const champ = champOf(floor, byFloor[floor], SKILL_BY_NAME)
 
-  const me = useMemo(() => toFighter(prof, inventory, runes, fishDex), [prof, inventory, runes, fishDex])
+  const me = useMemo(() => toFighter(prof, inventory, runes, fishDex, dex), [prof, inventory, runes, fishDex, dex])
   const myPower = calcPower(me.stats)
   const foePower = champ ? calcPower(champ.stats) : 0
   const bonus = champ ? streakBonusPct(champ.streak, floor, myPower, foePower) : 0
