@@ -85,7 +85,9 @@ test('v2_sortie_settle はボス勝利数をボス遭遇数で頭打ちにする
 test('authenticated に開放しているv2のRPCは全部 is_admin を見ている（開発限定のまま）', () => {
   // ★画面（V2Home.jsx）のゲートだけだと、RPCを直接叩けば誰でもv2を遊べてしまう。
   //   旧版の arena/pvp と同じ穴なので、grant したものは必ずサーバー側でも弾く。
-  const granted = [...SQL.matchAll(/grant execute on function public\.(v2_\w+)\(/g)].map(m => m[1])
+  // ★拾うのは「authenticated へ渡したもの」だけ。service_role にだけ渡したRPC
+  //   （NPCを動かす v2_npc_* など。Edge Functionからしか呼べない）はプレイヤーの手が届かないので対象外
+  const granted = [...SQL.matchAll(/grant execute on function public\.(v2_\w+)\([^)]*\) to authenticated;/g)].map(m => m[1])
   assert.ok(granted.length >= 15, `grant されたRPCを拾えている（${granted.length}件）`)
   const holes = [...new Set(granted)].filter(name => {
     const body = bodyOf(name)

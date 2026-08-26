@@ -3393,6 +3393,12 @@ create table if not exists public.v2_arena_floors (
 create index if not exists v2_arena_floors_player_idx on public.v2_arena_floors(player_id);
 alter table public.v2_arena_floors enable row level security;
 
+-- ★自動成長NPC（§15）が座っている席。player_id と npc_id は**どちらか片方だけ**入る
+--   （どちらも null の席は無い＝行が無いことが「空席」）。
+--   行が無い階には、クライアントが arena.js の見せかけNPCを置く（従来どおり）
+alter table public.v2_arena_floors add column if not exists npc_id int;
+create index if not exists v2_arena_floors_npc_idx on public.v2_arena_floors(npc_id);
+
 -- 一覧は誰でも読める（誰が何階を守っているかは公開情報）
 drop policy if exists v2_arena_read on public.v2_arena_floors;
 create policy v2_arena_read on public.v2_arena_floors for select to authenticated using (public.v2_is_dev());
@@ -3441,12 +3447,21 @@ begin
              arena_losses = arena_losses + 1, updated_at = now()
        where id = v_champ.player_id;
     end if;
+    -- ★破られたのが自動成長NPC（§15）だったときも同じ扱いにする。
+    --   ここを書き忘れると、NPCは席を失ったのに「まだ守っている」と思い込んで固まる
+    if v_champ.npc_id is not null then
+      update public.v2_npcs
+         set arena_floor = least(c_floors, v_floor + 1),
+             arena_losses = arena_losses + 1, updated_at = now()
+       where id = v_champ.npc_id;
+    end if;
     -- 自分がその階の階層守護者になる。**HP/MPは戦い終わった値のまま座る**
-    insert into public.v2_arena_floors (floor, player_id, snapshot, hp, mp, streak, since)
-    values (v_floor, v_uid, coalesce(p_snapshot, '{}'::jsonb),
+    -- ★npc_id は必ず null に戻す（前の主がNPCだった席を引き継ぐため）
+    insert into public.v2_arena_floors (floor, player_id, npc_id, snapshot, hp, mp, streak, since)
+    values (v_floor, v_uid, null, coalesce(p_snapshot, '{}'::jsonb),
             greatest(1, coalesce(p_my_hp, 1)), greatest(0, coalesce(p_my_mp, 0)), 0, now())
     on conflict (floor) do update
-      set player_id = excluded.player_id, snapshot = excluded.snapshot,
+      set player_id = excluded.player_id, npc_id = null, snapshot = excluded.snapshot,
           hp = excluded.hp, mp = excluded.mp, streak = 0, since = now();
     v_next := v_floor;   -- 守っているので、次に挑戦する階は据え置き
     update public.v2_profiles
@@ -3462,6 +3477,11 @@ begin
       if v_champ.player_id is not null then
         update public.v2_profiles set arena_wins = arena_wins + 1, updated_at = now()
          where id = v_champ.player_id;
+      end if;
+      -- 守り切ったのが自動成長NPCだったときも勝ち数を数える（§15）
+      if v_champ.npc_id is not null then
+        update public.v2_npcs set arena_wins = arena_wins + 1, updated_at = now()
+         where id = v_champ.npc_id;
       end if;
     end if;
     -- 1つ下へ。**戦闘力に関係なく必ず落ちる**（2026-08-17 ユーザー決定）
@@ -5388,3 +5408,162 @@ $$;
 revoke all on function public.v2_market_sellable() from public;
 revoke all on function public.v2_market_sellable() from anon;
 grant execute on function public.v2_market_sellable() to authenticated;
+
+-- ============================================================
+-- §15 自動成長NPC（アリーナの住人・2026-08-27）
+-- ------------------------------------------------------------
+-- 人が少なくてもアリーナが成り立つように、**勝手に強くなって勝手に挑戦してくる**
+-- 疑似プレイヤーを100体置く。
+--
+--   ・中身の正は src/v2/lib/npc.js（名前・職業・成長速度・ステの作り方・アリーナでの動き）
+--   ・動かすのは Edge Function「v2-npc-tick」＋ pg_cron（supabase_v2_npc_cron.sql）
+--     → 誰も遊んでいない時間帯でも育ち、アリーナにも挑戦してくる
+--   ・アリーナの勝敗は Edge Function の中で**本物の runBattle** が決め、
+--     結果をここの v2_npc_arena_apply へ申告する（プレイヤーの v2_arena_fight と同じ形）
+--   ・成長は「1時間あたり何EXP（speed）」だけ。**出撃の戦闘は回さない**
+--     （LV・転職回数・装備の強さは通算EXPから計算で出る＝npc.js を読むこと）
+--
+-- ★NPCは v2_profiles を持たない（auth.users も作らない）。
+--   ＝ ランキング・取引所・図鑑・デイリーには一切出てこない。アリーナ専用の住人。
+-- ★§10の v2_arena_fight は public.v2_npcs を参照する。plpgsql の本体は実行時に
+--   名前を解決するので、この節がファイルの後ろにあっても順番の問題は起きない。
+-- ============================================================
+create table if not exists public.v2_npcs (
+  id           int primary key,               -- npc.js の添字+1（作り直しても同じ番号＝同じ人）
+  name         text not null,
+  cls          text not null,                 -- 職業。**転職してもずっと同じ職業**を選び続ける
+  seed         int  not null,                 -- ステの散らばり方を決める種（npc.js の mulberry32）
+  speed        int  not null,                 -- 1時間あたりに稼ぐEXP（成長速度）
+  total_exp    bigint not null default 0,     -- 通算EXP。**これ1つが成長の正**
+  arena_floor  int  not null default 1,       -- 次に挑戦する階
+  arena_wins   int  not null default 0,
+  arena_losses int  not null default 0,
+  active       boolean not null default true, -- false にするとその1体だけ止まる
+  born_at      timestamptz not null default now(),
+  last_tick_at timestamptz not null default now(),
+  next_arena_at timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
+);
+create unique index if not exists v2_npcs_name_idx on public.v2_npcs (lower(name));
+alter table public.v2_npcs enable row level security;
+
+-- 読むのは誰でも（＝開発参加者）。誰が何階にいるかは公開情報
+drop policy if exists v2_npcs_read on public.v2_npcs;
+create policy v2_npcs_read on public.v2_npcs for select to authenticated using (public.v2_is_dev());
+-- 書き込みポリシーは足さない。更新するのは下のRPC（service_role だけ）
+
+-- ===== NPCの成長を書き戻す =====
+-- p_rows … [{"id":1,"total_exp":1234,"last_tick_at":"...","next_arena_at":"..."}, ...]
+-- ★Edge Function から service_role で呼ぶ。プレイヤーからは呼べない
+create or replace function public.v2_npc_grow(p_rows jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_n int := 0;
+begin
+  if jsonb_typeof(coalesce(p_rows, 'null'::jsonb)) <> 'array' then
+    return jsonb_build_object('ok', false, 'error', 'rows must be an array');
+  end if;
+  update public.v2_npcs n
+     set total_exp     = greatest(0, (r ->> 'total_exp')::bigint),
+         last_tick_at  = coalesce((r ->> 'last_tick_at')::timestamptz, n.last_tick_at),
+         next_arena_at = coalesce((r ->> 'next_arena_at')::timestamptz, n.next_arena_at),
+         updated_at    = now()
+    from jsonb_array_elements(p_rows) r
+   where n.id = (r ->> 'id')::int;
+  get diagnostics v_n = row_count;
+  return jsonb_build_object('ok', true, 'updated', v_n);
+end;
+$$;
+revoke all on function public.v2_npc_grow(jsonb) from public;
+revoke all on function public.v2_npc_grow(jsonb) from anon;
+revoke all on function public.v2_npc_grow(jsonb) from authenticated;
+grant execute on function public.v2_npc_grow(jsonb) to service_role;
+
+-- ===== NPCがアリーナに挑戦した結果を反映する =====
+-- プレイヤーの v2_arena_fight と**同じ規則**（勝てばその階の階層守護者になり、
+-- 負ければ1つ下の階へ。守っている側のHP/MPは回復しない）。
+-- ★NPCはアリーナではEXPをもらわない（成長は speed だけで決まる）。
+--   ここでEXPを足すと成長速度が二重になり、狙った進行速度が崩れる。
+create or replace function public.v2_npc_arena_apply(
+  p_npc_id int, p_win boolean, p_my_hp int, p_my_mp int, p_foe_hp int, p_foe_mp int, p_snapshot jsonb
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_floors constant int := 50;   -- arena.js の FLOORS
+  c_drop   constant int := 1;    -- 負けたときに落ちる階数（arena.js の LOSE_DROP）
+  v_npc   public.v2_npcs%rowtype;
+  v_champ public.v2_arena_floors%rowtype;
+  v_floor int;
+  v_next  int;
+begin
+  select * into v_npc from public.v2_npcs where id = p_npc_id for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'no such npc'); end if;
+  -- 守っているあいだは挑戦できない（プレイヤーと同じ）
+  if exists (select 1 from public.v2_arena_floors where npc_id = p_npc_id) then
+    return jsonb_build_object('ok', false, 'error', 'defending');
+  end if;
+
+  v_floor := least(greatest(coalesce(v_npc.arena_floor, 1), 1), c_floors);
+  select * into v_champ from public.v2_arena_floors where floor = v_floor;
+
+  if p_win then
+    -- 破られた側を「1つ上へ挑戦できる」状態に戻す（プレイヤーでもNPCでも同じ）
+    if v_champ.player_id is not null then
+      update public.v2_profiles
+         set arena_floor = least(c_floors, v_floor + 1), arena_losses = arena_losses + 1, updated_at = now()
+       where id = v_champ.player_id;
+    end if;
+    if v_champ.npc_id is not null then
+      update public.v2_npcs
+         set arena_floor = least(c_floors, v_floor + 1), arena_losses = arena_losses + 1, updated_at = now()
+       where id = v_champ.npc_id;
+    end if;
+    insert into public.v2_arena_floors (floor, player_id, npc_id, snapshot, hp, mp, streak, since)
+    values (v_floor, null, p_npc_id, coalesce(p_snapshot, '{}'::jsonb),
+            greatest(1, coalesce(p_my_hp, 1)), greatest(0, coalesce(p_my_mp, 0)), 0, now())
+    on conflict (floor) do update
+      set player_id = null, npc_id = excluded.npc_id, snapshot = excluded.snapshot,
+          hp = excluded.hp, mp = excluded.mp, streak = 0, since = now();
+    v_next := v_floor;   -- 守っているので次の挑戦先は据え置き
+    update public.v2_npcs set arena_wins = arena_wins + 1 where id = p_npc_id;
+  else
+    if v_champ.floor is not null then
+      update public.v2_arena_floors
+         set hp = greatest(1, coalesce(p_foe_hp, hp)), mp = greatest(0, coalesce(p_foe_mp, mp)),
+             streak = streak + 1
+       where floor = v_floor;
+      if v_champ.player_id is not null then
+        update public.v2_profiles set arena_wins = arena_wins + 1, updated_at = now() where id = v_champ.player_id;
+      end if;
+      if v_champ.npc_id is not null then
+        update public.v2_npcs set arena_wins = arena_wins + 1 where id = v_champ.npc_id;
+      end if;
+    end if;
+    v_next := greatest(1, v_floor - c_drop);
+    update public.v2_npcs set arena_losses = arena_losses + 1 where id = p_npc_id;
+  end if;
+
+  update public.v2_npcs set arena_floor = v_next, updated_at = now() where id = p_npc_id;
+  return jsonb_build_object('ok', true, 'win', p_win, 'floor', v_floor, 'next_floor', v_next);
+end;
+$$;
+revoke all on function public.v2_npc_arena_apply(int, boolean, int, int, int, int, jsonb) from public;
+revoke all on function public.v2_npc_arena_apply(int, boolean, int, int, int, int, jsonb) from anon;
+revoke all on function public.v2_npc_arena_apply(int, boolean, int, int, int, int, jsonb) from authenticated;
+grant execute on function public.v2_npc_arena_apply(int, boolean, int, int, int, int, jsonb) to service_role;
+
+-- ===== NPCが席を降りる =====
+-- その階には強すぎるとき／守りすぎて席が回らなくなったときに自分から空ける
+-- （プレイヤーの v2_arena_retire と同じ扱い＝次は1つ上の階へ）
+create or replace function public.v2_npc_retire(p_npc_id int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_floor int;
+begin
+  delete from public.v2_arena_floors where npc_id = p_npc_id returning floor into v_floor;
+  if not found then return jsonb_build_object('ok', false, 'error', 'not defending'); end if;
+  update public.v2_npcs set arena_floor = least(50, v_floor + 1), updated_at = now() where id = p_npc_id;
+  return jsonb_build_object('ok', true, 'floor', v_floor, 'next_floor', least(50, v_floor + 1));
+end;
+$$;
+revoke all on function public.v2_npc_retire(int) from public;
+revoke all on function public.v2_npc_retire(int) from anon;
+revoke all on function public.v2_npc_retire(int) from authenticated;
+grant execute on function public.v2_npc_retire(int) to service_role;

@@ -8,7 +8,10 @@
     "build": "vite build",
     "test": "node --test",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "npc:seed": "node tools/v2-npc-seed.mjs",
+    "npc:sync": "node tools/v2-npc-fn-sync.mjs",
+    "npc:curve": "node tools/v2-npc-curve.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.1",

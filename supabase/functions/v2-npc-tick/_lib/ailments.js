@@ -1,0 +1,191 @@
+// ============================================================
+// バトルフロンティアⅡ（リメイク版）— 状態異常
+// ------------------------------------------------------------
+// エンチャントの特殊能力（enchant.js）が付与する。スキルからも同じ形で入れられる。
+//
+// ★出血と毒は**旧版（無印バトルフロンティア）と同じ仕様**（2026-08-16 ユーザー決定）
+//   ・出血：攻撃が当たるたび1スタック（上限5）。毎ターン **現在HPの1%×スタック数**。
+//           **最後に付与されてから3回ぶん**刻んで消える（付け直すと数え直し）
+//           出どころ＝旧版 src/lib/pvp.js の applyTurnStart と evoCombat.js
+//   ・毒  ：毎ターン **最大HPの3%**・4ターン。**すでに毒なら重ねて入らない**
+//   ★どちらも**割合ダメージなのでVITで軽減されない**（硬い相手にも通る）
+//
+// 鈍足・麻痺・回復阻害はv2の新規（旧版に同じものが無い、または形が違う）。
+//   ・鈍足    ：AGI-20%・4ターン
+//   ・麻痺    ：1ターン行動できない
+//   ・回復阻害：回復量を指定%だけ下げる・3ターン（下げ幅は付与する側が持つ）
+//   ⚠旧版の麻痺は「25%で行動スキップ＋素早さ0.8・3〜5ターン」でこれとは別物。
+//     旧版へ寄せる場合は PARALYZE をそちらの形に書き換える。
+//
+// ★同じ状態異常は**重ならず上書き**（ターン数がリセットされる）。
+//   v2のステータスバフは重ねがけ加算だが、状態異常はそれとは別扱い。
+//   例外は出血だけで、こちらはスタックが積み上がる（旧版と同じ）。
+// ============================================================
+
+export const AIL_KEYS = ['bleed', 'poison', 'slow', 'paralyze', 'healCut', 'silence',
+  'blind', 'curse', 'frenzy', 'weaken']
+
+// 出血（旧版準拠）
+export const BLEED_MAX_STACKS = 5
+export const BLEED_HP_RATE    = 0.01  // 現在HPに対する割合 × スタック数
+export const BLEED_TURNS      = 3     // 最後に付与されてからの持続
+// 毒（旧版準拠）
+// ★2026-08-23：**1刻みのダメージに上限**を付ける（付けた側の攻撃力から決まる）。
+//   出血・毒は「最大HP／現在HPの割合」なので、HPが桁違いに大きいユニークボスやレイドでは
+//   直接攻撃の10〜15倍になっていた（実測：戦闘力2万のボスで毒1刻み95,592・直接攻撃は7,000〜13,000）。
+//   上限は**同格の敵には届かない**大きさにしてあるので、ふつうの出撃の出目は変わらない。
+export const POISON_CAP_RATE = 0.6   // 毒の1刻み上限＝付けた側の攻撃力 × これ（4刻みで攻撃力×2.4）
+export const BLEED_CAP_RATE  = 0.25  // 出血の1スタックあたりの上限（5スタック3刻みで攻撃力×3.75）
+// 1刻みのダメージ。cap は付与時に控えた「付けた側の攻撃力ぶんの上限」（無ければ従来どおり）
+export const poisonTickOf = (poison, maxHp) => {
+  const raw = maxHp * (poison?.rate ?? POISON_RATE)
+  return Math.max(1, Math.floor(Math.min(raw, poison?.cap || Infinity)))
+}
+export const bleedTickOf = (bleed, hp) => {
+  const st = bleed?.stacks || 0
+  const raw = hp * BLEED_HP_RATE * st
+  return Math.max(1, Math.floor(Math.min(raw, (bleed?.cap || Infinity) * st)))
+}
+
+// ★2026-08-23 サイレンス：スキルの**発動率-20%**（ATBでは必要ゲージが伸びる）
+export const SILENCE_TURNS = 3
+export const SILENCE_PROC  = 20
+
+export const POISON_TURNS = 4
+export const POISON_RATE  = 0.03      // 最大HPに対する割合
+// 鈍足
+export const SLOW_TURNS   = 4
+export const SLOW_AGI_PCT = -20
+// 麻痺
+export const PARALYZE_TURNS = 1
+// 回復阻害
+export const HEAL_CUT_TURNS = 3
+
+// ★2026-08-23 追加の4種。どれも「重ならず上書き（ターン数の数え直し）」
+//   ・暗闇：当てにくくなる。**当たらなくする**役はこれまで無かった
+//   ・呪い：受けるダメージが増える。相手を柔らかくする
+//   ・狂乱：出る技がランダムになる。狂戦士の「狂心」と同じ状態を相手にかける形
+//   ・衰弱：与えるダメージが減る。STR-%のデバフと違い、物理も魔法もまとめて下がる
+export const BLIND_TURNS   = 4
+export const BLIND_ACC_PCT = -25    // 命中率に足す（%ポイント）
+export const CURSE_TURNS   = 4
+export const CURSE_TAKEN_PCT = 15   // 受けるダメージ+%
+export const FRENZY_AIL_TURNS = 3
+export const WEAKEN_TURNS  = 4
+export const WEAKEN_DMG_PCT = 15    // 与えるダメージ-%
+
+export const AIL_LABEL = {
+  bleed: '出血', poison: '毒', slow: '鈍足', paralyze: '麻痺', healCut: '回復阻害', silence: 'サイレンス',
+  blind: '暗闇', curse: '呪い', frenzy: '狂乱', weaken: '衰弱',
+}
+
+// 状態異常の入れ物。side.ail に持たせる
+export const createAilments = () => ({})
+
+// ===== 付与 =====
+// resistPct は受ける側の抵抗（付与確率から引く）。確率判定は呼び出し側で済ませてから来る想定で、
+// ここは「入れる」だけを行う。戻り値は入ったかどうか
+export const inflict = (ail, key, opt = {}) => {
+  switch (key) {
+    case 'bleed': {
+      // 旧版と同じ：スタックを1つ足して、消えるまでの数え直し
+      // ★opt.max … 付与する側が上限を伸ばせる（暗殺者の隠身＝10スタックまで）
+      const cur = ail.bleed
+      const max = opt.max || BLEED_MAX_STACKS
+      ail.bleed = { stacks: Math.min(max, (cur?.stacks || 0) + (opt.stacks || 1)), age: 0, cap: opt.cap || cur?.cap }
+      return true
+    }
+    case 'poison': {
+      // 旧版と同じ：すでに毒なら入らない
+      if (ail.poison?.turns > 0) return false
+      ail.poison = { turns: POISON_TURNS, rate: POISON_RATE, cap: opt.cap }
+      return true
+    }
+    case 'silence': {
+      // 鈍足と同じ扱い：すでにかかっていれば数え直し
+      ail.silence = { turns: opt.turns || SILENCE_TURNS }
+      return true
+    }
+    case 'slow':
+      ail.slow = { turns: SLOW_TURNS }
+      return true
+    // 追加の4種。どれも数え直しの上書き（重ならない）
+    case 'blind':
+      ail.blind = { turns: opt.turns || BLIND_TURNS }
+      return true
+    case 'curse':
+      ail.curse = { turns: opt.turns || CURSE_TURNS }
+      return true
+    case 'frenzy':
+      ail.frenzy = { turns: opt.turns || FRENZY_AIL_TURNS }
+      return true
+    case 'weaken':
+      ail.weaken = { turns: opt.turns || WEAKEN_TURNS }
+      return true
+    case 'paralyze':
+      ail.paralyze = { turns: PARALYZE_TURNS }
+      return true
+    case 'healCut':
+      // 下げ幅は付与する側が持つ。重ねがけは強いほうを採る
+      ail.healCut = { turns: HEAL_CUT_TURNS, pct: Math.max(ail.healCut?.pct || 0, opt.pct || 0) }
+      return true
+    default:
+      return false
+  }
+}
+
+export const hasAilment = (ail, key) =>
+  key === 'bleed' ? (ail?.bleed?.stacks > 0) : (ail?.[key]?.turns > 0)
+
+// ===== 効果を読む =====
+// 鈍足ぶんのステータス補正（liveStats が足す）
+export const ailStatPct = (ail) => (hasAilment(ail, 'slow') ? { agi: SLOW_AGI_PCT } : null)
+// 暗闇：命中率に足す%ポイント（0＝暗闇でない）
+export const ailAccPct = (ail) => (hasAilment(ail, 'blind') ? BLIND_ACC_PCT : 0)
+// 呪い：**受ける**ダメージに掛ける倍率（1.0＝呪われていない）
+export const ailTakenMult = (ail) => (hasAilment(ail, 'curse') ? 1 + CURSE_TAKEN_PCT / 100 : 1)
+// 衰弱：**与える**ダメージに掛ける倍率（1.0＝衰弱していない）
+export const ailDealMult = (ail) => (hasAilment(ail, 'weaken') ? 1 - WEAKEN_DMG_PCT / 100 : 1)
+// 狂乱：出る技がランダムになるか
+export const isFrenzied = (ail) => hasAilment(ail, 'frenzy')
+// 回復阻害の倍率（1.0＝阻害なし）
+export const healMultOf = (ail) =>
+  hasAilment(ail, 'healCut') ? Math.max(0, 1 - (ail.healCut.pct || 0) / 100) : 1
+// このターン行動できないか。麻痺は「見たら1ターン消費する」ので判定と同時に減らす
+export const consumeParalyze = (ail) => {
+  if (!hasAilment(ail, 'paralyze')) return false
+  ail.paralyze.turns -= 1
+  if (ail.paralyze.turns <= 0) delete ail.paralyze
+  return true
+}
+
+// ★2026-08-23：**出血は「出血している側が行動した直後」に刻む**（ユーザー指定）。
+//   ターン終わりにまとめて刻んでいたころは、相手が動いた実感と傷が繋がっていなかった。
+//   毒はこれまでどおりターン終わり（ATBでは TICK_SEC ごと）に刻む。
+//   戻り値は { key, damage, stacks } ／ 出血していなければ null
+export const tickBleed = (ail, hp) => {
+  if (!(ail?.bleed?.stacks > 0)) return null
+  const out = { key: 'bleed', damage: bleedTickOf(ail.bleed, hp), stacks: ail.bleed.stacks }
+  ail.bleed.age += 1
+  if (ail.bleed.age >= BLEED_TURNS) delete ail.bleed
+  return out
+}
+
+// ===== ターン終わりの持続ダメージ（毒）=====
+// 戻り値は [{ key, damage }]。HPの増減は呼び出し側で行う（ログを作る都合）
+export const tickAilments = (ail, { maxHp }) => {
+  const out = []
+  if (ail.poison?.turns > 0) {
+    out.push({ key: 'poison', damage: poisonTickOf(ail.poison, maxHp) })
+    ail.poison.turns -= 1
+    if (ail.poison.turns <= 0) delete ail.poison
+  }
+  // ターン数だけ持つもの
+  for (const k of ['slow', 'healCut', 'silence', 'blind', 'curse', 'frenzy', 'weaken']) {
+    if (ail[k]?.turns > 0) {
+      ail[k].turns -= 1
+      if (ail[k].turns <= 0) delete ail[k]
+    }
+  }
+  return out
+}

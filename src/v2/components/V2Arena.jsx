@@ -35,6 +35,11 @@ export default function V2Arena({ prof, inventory, runes, fishDex, dex, onProfil
   // 武器の進化：節目に達した武器（ポップアップで受け取る）
   const [evolving, setEvolving] = useState(null)
 
+  // ★NPCだと分かるようにする（2026-08-27 ユーザー決定）。
+  //   アリーナには「勝手に育って勝手に挑戦してくる」NPCが100体住んでいる（src/v2/lib/npc.js）。
+  //   人が少ないうちの賑やかしだと分かるように、名前の横に必ずこの印を出す
+  const npcTag = <span style={{ color:'#5d7fa8', border:'1px solid #24405e', padding:'0 3px', fontSize:'9px', marginLeft:'4px' }}>NPC</span>
+
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 200); return () => clearInterval(t) }, [])
 
   const load = async () => {
@@ -167,7 +172,9 @@ export default function V2Arena({ prof, inventory, runes, fishDex, dex, onProfil
           <b style={{ color:'#ffcc00' }}>階層守護者のHP/MPは回復しません</b>。挑戦する側は毎回満タンです。<br />
           連勝中の階層守護者に挑むと、こちらのステータスが連勝数×{STREAK_PCT}%上がります（HP/MPを除く）。<br />
           EXPも装備も<b style={{ color:'#ffcc00' }}>勝敗によらず</b>もらえます（装備は{dropRateOf()}%＝出撃と同じ確率）。落ちるランクはどの階でも同じで、F〜Sまで出ます。出撃とクールタイムを共有します。<br />
-          <b style={{ color:'#44ff88' }}>守っているあいだは、出撃のルーン素材と装備のドロップ率が×{GUARD_DROP_MULT}</b>になります。
+          <b style={{ color:'#44ff88' }}>守っているあいだは、出撃のルーン素材と装備のドロップ率が×{GUARD_DROP_MULT}</b>になります。<br />
+          <span style={{ color:'#5d7fa8' }}>NPC</span>の印が付いている相手は、<b style={{ color:'#7fa6d0' }}>自動で強くなり、自動で挑戦してくる住人</b>です。
+          あなたが席を離れているあいだにも階を奪いに来ます。
         </div>
       </div>
 
@@ -203,7 +210,7 @@ export default function V2Arena({ prof, inventory, runes, fishDex, dex, onProfil
                 </div>
                 <div style={{ color: mine ? '#ffcc00' : c?.npc ? '#7fa6d0' : '#88ccff', fontSize:'10px',
                   overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textAlign:'center' }}>
-                  {c ? c.name : '空席'}
+                  {c ? c.name : '空席'}{c?.npc ? npcTag : null}
                 </div>
                 {/* 階層守護者は回復しないので、残りHPがいちばん大事な情報 */}
                 <div style={{ background:'#001028', height:'4px', border:'1px solid #002244', margin:'2px 0' }}>
@@ -268,7 +275,7 @@ export default function V2Arena({ prof, inventory, runes, fishDex, dex, onProfil
                 <span style={{ color:'#62789a', width:'34px', flexShrink:0 }}>{f}階</span>
                 <span style={{ color: c?.npc ? '#7fa6d0' : mine ? '#ffcc00' : '#88ccff', flex:1, minWidth:0,
                   overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                  {c ? c.name : '空席'}{mine ? '（あなた）' : ''}
+                  {c ? c.name : '空席'}{mine ? '（あなた）' : ''}{c?.npc ? npcTag : null}
                 </span>
                 {c?.streak > 0 && <span style={{ color:'#ff8844', flexShrink:0 }}>{c.streak}連勝</span>}
                 {c && <span style={{ color:'#62789a', flexShrink:0 }}>HP {c.hp}／{c.stats.hp}</span>}
