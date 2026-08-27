@@ -46,17 +46,26 @@ export const emptyPetGains = () => Object.fromEntries(PET_STAT_KEYS.map(k => [k,
 // pts … { str: 20 } のように「主ステごとのpt」。主ステに全部、他の5ステに SPILL ぶん。
 // ★神経衰弱のように主ステが2つあるときは { dex, agi } を一度に渡す
 //   （DEXぶんの10%がAGIにも入る＝速いだけ・正確なだけでも少しは伸びる）
-export const spread = (pts) => {
+//
+// ★こぼれる10%は**端数を繰り越す**。1プレイごとに切り捨てると、
+//   コイントス（1回8pt）は 8×10%＝0.8 が毎回0になり、**他ステが永久に0のまま**になる
+//   （実際そうなっていた。10回投げてLUK+40・他は全部0）。
+//   carry … 前回までの端数。返り値の carry をそのまま次に渡すこと
+export const spread = (pts, carry = null) => {
   const out = emptyPetGains()
+  const rest = { ...emptyPetGains(), ...(carry || {}) }
   for (const [main, raw] of Object.entries(pts)) {
     const pt = Math.max(0, Math.floor(raw || 0))
     if (!pt || !(main in out)) continue
     out[main] += pt
-    const spill = Math.floor(pt * SPILL)
-    if (spill <= 0) continue
-    for (const k of PET_STAT_KEYS) if (k !== main) out[k] += spill
+    for (const k of PET_STAT_KEYS) if (k !== main) rest[k] += pt * SPILL
   }
-  return out
+  for (const k of PET_STAT_KEYS) {
+    const whole = Math.floor(rest[k])
+    if (whole > 0) { out[k] += whole; rest[k] -= whole }
+    rest[k] = Math.round(rest[k] * 1000) / 1000   // 端数の桁を丸めて保存を汚さない
+  }
+  return { gains: out, carry: rest }
 }
 
 // ===== 累計pt → ステ値 =====
@@ -83,8 +92,9 @@ export const petLvNeed = (lv) => Math.floor(PET_LV_STEP * lv * (lv - 1) / 2)  //
 //     day   … 数え始めた日（JST 5:00 区切り。daily.js の dayOf と同じ）
 //     plays … 今日そのコンテンツを何回やったか
 //     cum   … ステごとの累計pt
+//     carry … こぼれる10%の端数（1pt未満の持ち越し）
 // ============================================================
-export const emptyPetState = () => ({ day: '', plays: {}, cum: emptyPetGains() })
+export const emptyPetState = () => ({ day: '', plays: {}, cum: emptyPetGains(), carry: emptyPetGains() })
 
 // 日付が変わっていれば回数を0として読む（累計ptは持ち越す）
 export const playsOf = (state, day) =>
@@ -97,18 +107,34 @@ export const playsLeft = (state, key, day) => {
   return Math.max(0, c.plays - (playsOf(state, day)[key] || 0))
 }
 
-// 1プレイぶんを足す。pts は { dex:16, agi:12 } のような主ステごとのpt。
-// 回数を使い切っていたら { ok:false } を返して何も足さない
-export const applyPlay = (state, key, pts, day) => {
+// 回数を1つ使う。**遊び始めた時点で呼ぶ**。
+// ★終わったときに数えると、出だしが悪ければ抜けて引き直せてしまい、
+//   回数で区切った意味が消える（神経衰弱で顕著。実際に引き直せた）。
+//   途中でやめたら、その1回は戻らない。
+export const beginPlay = (state, key, day) => {
   const cur = state || emptyPetState()
-  const left = playsLeft(cur, key, day)
-  if (left === 0) return { ok: false, state: cur, gains: emptyPetGains() }
+  if (playsLeft(cur, key, day) === 0) return { ok: false, state: cur }
   const plays = { ...playsOf(cur, day) }
   plays[key] = (plays[key] || 0) + 1
-  const gains = spread(pts)
+  return { ok: true, state: { ...cur, day, plays } }
+}
+
+// 成績ぶんのptを足す。**回数はここでは減らさない**（もう beginPlay で使っている）。
+// pts は { dex:16, agi:12 } のような主ステごとのpt
+export const scorePlay = (state, pts) => {
+  const cur = state || emptyPetState()
+  const { gains, carry } = spread(pts, cur.carry)
   const cum = { ...emptyPetGains(), ...cur.cum }
   for (const k of PET_STAT_KEYS) cum[k] = (cum[k] || 0) + gains[k]
-  return { ok: true, gains, state: { day, plays, cum } }
+  return { gains, state: { ...cur, cum, carry } }
+}
+
+// 始めて終わるまでが一瞬のもの（コイントス）用。beginPlay と scorePlay をまとめて行う
+export const applyPlay = (state, key, pts, day) => {
+  const begun = beginPlay(state, key, day)
+  if (!begun.ok) return { ok: false, state: begun.state, gains: emptyPetGains() }
+  const scored = scorePlay(begun.state, pts)
+  return { ok: true, gains: scored.gains, state: scored.state }
 }
 
 // 累計ptの合計（＝ペットのLVのもと）

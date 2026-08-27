@@ -10,7 +10,7 @@ import {
   COIN_HIT_PT, COIN_CHAIN_PT, COIN_SIDES, coinFlip, coinPt,
   WALK_MAX_STEPS, walkPt,
   KANJI_GRADES, KANJI_BASE_PT, kanjiPt,
-  emptyPetState, playsLeft, applyPlay, totalPtOf,
+  emptyPetState, playsLeft, beginPlay, scorePlay, applyPlay, totalPtOf,
 } from './pet.js'
 
 // ===== ステの並び =====
@@ -22,28 +22,45 @@ test('ペットの6ステは本編のSTAT_KEYSからHP・MPを除いたものと
 // ===== ptの配り方 =====
 
 test('ptは主ステに100%、他の5ステに10%ずつ入る', () => {
-  const g = spread({ str: 100 })
-  assert.equal(g.str, 100)
-  for (const k of PET_STAT_KEYS) if (k !== 'str') assert.equal(g[k], 10, `${k}にも10%こぼれる`)
+  assert.equal(SPILL, 0.1)
+  const { gains } = spread({ str: 100 })
+  assert.equal(gains.str, 100)
+  for (const k of PET_STAT_KEYS) if (k !== 'str') assert.equal(gains[k], 10, `${k}にも10%こぼれる`)
 })
 
-test('こぼれる量は切り捨て。10pt未満だと他ステには入らない', () => {
-  assert.equal(SPILL, 0.1)
-  const g = spread({ luk: 9 })
-  assert.equal(g.luk, 9)
-  assert.equal(g.str, 0, '9の10%は0.9＝切り捨てで0')
+// ★実際に踏んだ穴。1プレイごとに切り捨てていたので、
+//   コイントス（1回8pt）は 8×10%＝0.8 が毎回0になり、他ステが永久に0のままだった
+//   （10回投げてLUK+40・他は全部0）。端数は次のプレイへ持ち越す
+test('1pt未満の端数は捨てずに次へ持ち越す', () => {
+  let carry = null
+  let luk = 0
+  let str = 0
+  for (let i = 0; i < 10; i++) {                 // コイントスを10回当てた想定
+    const r = spread({ luk: 8 }, carry)
+    carry = r.carry
+    luk += r.gains.luk
+    str += r.gains.str
+  }
+  assert.equal(luk, 80)
+  assert.equal(str, 8, `10回ぶんの端数(0.8×10)が入っていない（${str}）`)
+})
+
+test('持ち越しを渡さないと端数はその場で消える', () => {
+  const { gains, carry } = spread({ luk: 8 })
+  assert.equal(gains.str, 0, '8ptの10%は0.8＝まだ1ptに満たない')
+  assert.equal(carry.str, 0.8, '端数が carry に残っていない')
 })
 
 test('神経衰弱のように主ステが2つあると、互いにもこぼれる', () => {
-  const g = spread({ dex: 16, agi: 10 })
-  assert.equal(g.dex, 16 + 1, 'AGIぶん10ptの10%＝1が乗る')
-  assert.equal(g.agi, 10 + 1, 'DEXぶん16ptの10%＝1が乗る')
-  assert.equal(g.vit, 1 + 1, '他ステは両方からこぼれを受ける')
+  const { gains } = spread({ dex: 16, agi: 10 })
+  assert.equal(gains.dex, 16 + 1, 'AGIぶん10ptの10%＝1が乗る')
+  assert.equal(gains.agi, 10 + 1, 'DEXぶん16ptの10%＝1が乗る')
+  assert.equal(gains.vit, 2, '他ステは両方（1.6+1.0=2.6）からこぼれを受ける')
 })
 
 test('存在しないステや負のptは無視する', () => {
-  assert.deepEqual(spread({ hp: 100 }), emptyPetGains(), 'HPはペットのステではない')
-  assert.deepEqual(spread({ str: -50 }), emptyPetGains())
+  assert.deepEqual(spread({ hp: 100 }).gains, emptyPetGains(), 'HPはペットのステではない')
+  assert.deepEqual(spread({ str: -50 }).gains, emptyPetGains())
 })
 
 // ===== 累計pt → ステ値 =====
@@ -121,6 +138,33 @@ test('日付が変われば回数は戻るが、累計ptは持ち越す', () => 
 test('回数の上限がないコンテンツは何回でも足せる', () => {
   assert.equal(playsLeft(emptyPetState(), 'walk', '2026-08-27'), null)
   assert.equal(applyPlay(emptyPetState(), 'walk', { str: 10 }, '2026-08-27').ok, true)
+})
+
+// ★実際に踏んだ穴。終わったときに数えていたので、出だしが悪ければ抜けて引き直せた
+//   （神経衰弱を1手めくって戻っても「あと5回」のままだった）＝回数で区切った意味が消える
+test('回数は遊び始めた時点で減る。途中でやめても戻らない', () => {
+  const begun = beginPlay(emptyPetState(), 'memory', '2026-08-27')
+  assert.equal(begun.ok, true)
+  assert.equal(playsLeft(begun.state, 'memory', '2026-08-27'),
+    CONTENT_BY_KEY.memory.plays - 1, '始めた時点で減っていない')
+  // ここで投げ出す＝ptは入らないが、回数は戻らない
+  assert.equal(playsLeft(begun.state, 'memory', '2026-08-27'), CONTENT_BY_KEY.memory.plays - 1)
+})
+
+test('点を入れるほうは回数を減らさない', () => {
+  const begun = beginPlay(emptyPetState(), 'memory', '2026-08-27')
+  const scored = scorePlay(begun.state, { dex: 16, agi: 16 })
+  assert.equal(playsLeft(scored.state, 'memory', '2026-08-27'),
+    CONTENT_BY_KEY.memory.plays - 1, '始めたぶんと二重に減っている')
+  assert.equal(scored.state.cum.dex, 16 + 1)
+})
+
+test('使い切っていたら始められない', () => {
+  let s = emptyPetState()
+  for (let i = 0; i < CONTENT_BY_KEY.memory.plays; i++) {
+    s = beginPlay(s, 'memory', '2026-08-27').state
+  }
+  assert.equal(beginPlay(s, 'memory', '2026-08-27').ok, false)
 })
 
 test('累計ptの合計からペットのLVが決まる', () => {

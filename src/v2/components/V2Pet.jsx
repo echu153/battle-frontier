@@ -5,7 +5,7 @@ import { dayOf } from '../lib/daily.js'
 import { loadPref, savePref } from '../lib/prefs.js'
 import {
   PET_STAT_KEYS, CONTENTS, CONTENT_BY_KEY,
-  emptyPetState, playsLeft, applyPlay, totalPtOf, statsOf, petLvOf, petLvNeed,
+  emptyPetState, playsLeft, beginPlay, scorePlay, applyPlay, totalPtOf, statsOf, petLvOf, petLvNeed,
   MEMORY_PAIRS, memoryDeck, memoryPt,
   STACK_LIMIT, stackStart, stackStep, stackPt, stackCleared,
   COIN_SIDES, coinFlip, coinPt,
@@ -43,11 +43,30 @@ export default function V2Pet({ onBack }) {
   const [result, setResult] = useState(null)    // 直前のプレイの結果 { label, pts, gains }
   const day = dayOf()
 
-  const save = (next) => { savePref(PREF_KEY, next); setState(next) }
+  // ★いまの育ち具合は ref でも持つ。
+  //   遊んでいる最中（積み上げのrAFループなど）から呼ばれるので、
+  //   render時の値を閉じ込めると古い state に足してしまう
+  const stateRef = useRef(state)
+  const save = (next) => { stateRef.current = next; savePref(PREF_KEY, next); setState(next) }
 
-  // 1プレイぶんを記録する。回数を使い切っていたら何もしない
+  // 遊び始めるときに回数を1つ使う。使い切っていたら false（＝始めさせない）
+  const begin = (key) => {
+    const r = beginPlay(stateRef.current, key, day)
+    if (!r.ok) return false
+    save(r.state)
+    return true
+  }
+
+  // 成績ぶんのptを足す。回数はもう begin で使っている
   const finish = (key, pts, label) => {
-    const r = applyPlay(state, key, pts, day)
+    const r = scorePlay(stateRef.current, pts)
+    save(r.state)
+    setResult({ key, label, pts, gains: r.gains })
+  }
+
+  // コイントスは投げた瞬間に始まって終わる＝回数と成績をまとめて記録する
+  const tossed = (key, pts, label) => {
+    const r = applyPlay(stateRef.current, key, pts, day)
     if (!r.ok) return
     save(r.state)
     setResult({ key, label, pts, gains: r.gains })
@@ -108,7 +127,9 @@ export default function V2Pet({ onBack }) {
                     {c.main.map(k => STAT_DEFS[k].label).join('・')}
                   </span>
                   {!ready && <span style={{ color:'#ff8844', fontSize:'10px', marginLeft:'8px' }}>準備中</span>}
-                  {ready && (
+                  {/* ★回数の上限がないコンテンツ（運動・漢字）は left が null。
+                      そのまま出すと「あとnull回」になるので、量の上限は下の note 側に任せる */}
+                  {ready && left !== null && (
                     <span style={{ color: out ? '#ff8844' : '#44ff88', fontSize:'10px', marginLeft:'8px' }}>
                       {out ? '今日はおしまい' : `あと${left}回`}
                     </span>
@@ -135,9 +156,9 @@ export default function V2Pet({ onBack }) {
         </div>
       )}
 
-      {game === 'memory' && <MemoryGame onDone={finish} onBack={() => setGame('')} />}
-      {game === 'stack'  && <StackGame  onDone={finish} onBack={() => setGame('')} />}
-      {game === 'coin'   && <CoinGame   state={state} day={day} onDone={finish} onBack={() => setGame('')} />}
+      {game === 'memory' && <MemoryGame onBegin={begin} onDone={finish} onBack={() => setGame('')} />}
+      {game === 'stack'  && <StackGame  onBegin={begin} onDone={finish} onBack={() => setGame('')} />}
+      {game === 'coin'   && <CoinGame   state={state} day={day} onDone={tossed} onBack={() => setGame('')} />}
     </div>
   )
 }
@@ -145,26 +166,35 @@ export default function V2Pet({ onBack }) {
 // ============================================================
 // 神経衰弱 — 手数でDEX・時間でAGI
 // ============================================================
-function MemoryGame({ onDone, onBack }) {
+function MemoryGame({ onBegin, onDone, onBack }) {
   const [deck] = useState(() => memoryDeck())
   const [open, setOpen] = useState([])        // いまめくっている札の位置（最大2）
   const [done, setDone] = useState([])        // そろった札の位置
   const [moves, setMoves] = useState(0)
-  const [startAt] = useState(() => Date.now())
+  const startAt = useRef(0)   // ★時間を計り始めるのは最初の1枚をめくったとき。
+                              //   盤を眺めているあいだをAGIの成績に混ぜない
   const [sec, setSec] = useState(0)
   const [clear, setClear] = useState(null)
+  const [started, setStarted] = useState(false)
   const lock = useRef(false)                  // 2枚めくったあとの見せている間は押せない
+  const begun = useRef(false)                 // 回数を使ったか（最初の1枚をめくった時点で使う）
 
-  // 経過時間の表示。クリアしたら止める
+  // 経過時間の表示。始まる前と、クリアしたあとは動かさない
   useEffect(() => {
-    if (clear) return
-    const id = setInterval(() => setSec(Math.floor((Date.now() - startAt) / 1000)), 500)
+    if (clear || !started) return
+    const id = setInterval(() => setSec(Math.floor((Date.now() - startAt.current) / 1000)), 500)
     return () => clearInterval(id)
-  }, [startAt, clear])
+  }, [started, clear])
 
   const flip = (i) => {
     if (lock.current || clear) return
     if (open.includes(i) || done.includes(i)) return
+    if (!begun.current) {                    // 最初の1枚。ここで今日の1回を使う
+      if (!onBegin('memory')) return
+      begun.current = true
+      startAt.current = Date.now()
+      setStarted(true)
+    }
     const next = [...open, i]
     setOpen(next)
     if (next.length < 2) return
@@ -175,7 +205,7 @@ function MemoryGame({ onDone, onBack }) {
       setDone(nextDone)
       setOpen([])
       if (nextDone.length === deck.length) {
-        const seconds = Math.max(1, Math.round((Date.now() - startAt) / 1000))
+        const seconds = Math.max(1, Math.round((Date.now() - startAt.current) / 1000))
         const pts = memoryPt({ moves: moves + 1, seconds })
         setClear({ moves: moves + 1, seconds, pts })
         onDone('memory', pts, `${moves + 1}手・${seconds}秒`)
@@ -195,6 +225,11 @@ function MemoryGame({ onDone, onBack }) {
         <span style={{ color:TEXT.empty, fontSize:'10px' }}>
           最小{MEMORY_PAIRS}手・25秒で満点
         </span>
+      </div>
+      <div style={{ color: started ? '#ff8844' : TEXT.empty, fontSize:'10px', marginBottom:'6px' }}>
+        {started
+          ? '※ 今日の1回を使っています。途中でやめても戻りません'
+          : '※ 最初の1枚をめくると今日の1回を使います'}
       </div>
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'5px', maxWidth:'320px' }}>
@@ -232,7 +267,7 @@ function MemoryGame({ onDone, onBack }) {
 // ============================================================
 // 積み上げ耐久 — どこまで持ちこたえたかでVIT
 // ============================================================
-function StackGame({ onDone, onBack }) {
+function StackGame({ onBegin, onDone, onBack }) {
   const [view, setView] = useState(() => stackStart())
   const [playing, setPlaying] = useState(false)
   const [over, setOver] = useState(null)
@@ -243,8 +278,9 @@ function StackGame({ onDone, onBack }) {
   // キーボード（PC）。押しているあいだだけ効く
   useEffect(() => {
     const down = (e) => {
-      if (e.key === 'ArrowLeft')  input.current = -1
-      if (e.key === 'ArrowRight') input.current = 1
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+      e.preventDefault()          // ★これが無いと舵を切るたびにページが左右へスクロールする
+      input.current = e.key === 'ArrowLeft' ? -1 : 1
     }
     const up = (e) => {
       if ((e.key === 'ArrowLeft' && input.current === -1) ||
@@ -282,7 +318,9 @@ function StackGame({ onDone, onBack }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing])
 
+  // ★始めた時点で今日の1回を使う。崩れそうになったら抜ける、を封じるため
   const start = () => {
+    if (!onBegin('stack')) return
     sim.current = stackStart()
     input.current = 0
     setView(sim.current)
@@ -331,7 +369,12 @@ function StackGame({ onDone, onBack }) {
       </div>
 
       {!playing && !over && (
-        <button onClick={start} style={{ ...btn('#88aaff'), marginTop:'10px' }}>はじめる</button>
+        <div style={{ marginTop:'10px' }}>
+          <button onClick={start} style={btn('#88aaff')}>はじめる</button>
+          <div style={{ color:TEXT.empty, fontSize:'10px', marginTop:'6px' }}>
+            ※ はじめると今日の1回を使います。途中でやめても戻りません
+          </div>
+        </div>
       )}
 
       {playing && (
