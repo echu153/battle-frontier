@@ -25,6 +25,7 @@ import V2Daily from '../components/V2Daily.jsx'
 import V2Base from '../components/V2Base.jsx'
 import V2Market from '../components/V2Market.jsx'
 import V2Help from '../components/V2Help.jsx'
+import V2Pet from '../components/V2Pet.jsx'
 import {
   powerText, isPassive, KIND_LABEL, KIND_COLOR, SKILL_BY_NAME,
   usableSkills, usableSkillNames, unlearnedSkills, validateSkillSet, setMpCost,
@@ -81,6 +82,7 @@ const MENU = [
   ],
   [
     { key:'tree',    label:'ユグレシアの宝樹', icon:'🌳', color:'#44dd99', action:'祈る' },
+    { key:'pet',     label:'ペット',          icon:'🐾', color:'#c0b0ff', action:'遊んで育てる' },
   ],
 ]
 
@@ -435,6 +437,7 @@ const TWO_COLUMN = {
             {screen === 'base'    && <V2Base    prof={prof} materials={materials} fishDex={fishDex} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'market'  && <V2Market  prof={prof} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'dex'     && <V2Dex     prof={prof} dex={dex} onBack={() => setScreen('home')} />}
+            {screen === 'pet'     && <V2Pet     onBack={() => setScreen('home')} />}
 
             {(screen === 'skills' || screen === 'temple') && (
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>
