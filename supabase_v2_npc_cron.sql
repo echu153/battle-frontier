@@ -10,6 +10,9 @@
 --     ここを5分より短くしても挑戦は増えない
 --
 -- 流す順番： ① supabase_v2_core.sql（全文）→ ② supabase_v2_npc_seed.sql → ③ このファイル
+--            そして**v2の一般公開と同時に** ④ supabase_v2_npc_deploy_all.sql
+--
+-- ★開発中に動くのは②で active=true にした6体だけ。cronは同じまま（起こす体数が増えるだけ）。
 --
 -- ⚠事前に必要なもの：
 --   ・Edge Function をデプロイしておく（レイド通知と同じ手順）
@@ -48,4 +51,5 @@ $job$);
 -- 止めたいとき:
 --   select cron.unschedule('v2-npc-tick');            -- 全部止める
 --   update public.v2_npcs set active = false;          -- NPCだけ止める（cronは回ったまま）
+--   ※逆に全員を動かしたいときは ④ supabase_v2_npc_deploy_all.sql を流す（時計も直してくれる）
 --   update public.v2_npcs set active = false where id = 7;  -- 1体だけ止める

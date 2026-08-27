@@ -13,7 +13,7 @@ import {
   progressOf, expForProgress, basePowerOf, powerOfExp,
   statsOfNpc, slotsOfNpc, fighterOf, snapshotOfNpc, grownExp,
   arenaIntervalOf, arenaDelayOf, shouldRetire, seedListOf, mulberry32,
-  ARENA_MIN_MINUTES, ARENA_MAX_MINUTES, RETIRE_STREAK, gearRatioOf,
+  ARENA_MIN_MINUTES, ARENA_MAX_MINUTES, RETIRE_STREAK, gearRatioOf, DEV_ACTIVE_IDS, isDevActive,
 } from './npc.js'
 import { calcPower, MAX_LV, expPerLv, INITIAL_STATS, JOB_CHANGE_POWER, ROLLS_PER_LV } from './stats.js'
 import { FLOORS, powerOfFloor, champOf, fromSnapshot, LOSE_DROP } from './arena.js'
@@ -121,6 +121,43 @@ test('1階から最上階まで住人がいて、その階の目安どおりの�
   }
   // 半分が最初から席に座っている＝作った直後でも一覧が埋まって見える
   assert.equal(list.filter(n => n.defending).length, FLOORS)
+})
+
+test('席に着くNPCが階ごとに1体ずつになっている（重なると黙って席に着けない）', () => {
+  // ⚠席は1階に1つ。同じ階に「守る側」を2体作ると、SQLの on conflict (floor) do nothing で
+  //   片方が黙って落ちる＝一覧が半分しか埋まらない。実際にそうなっていたので固定する
+  const seats = seedListOf().filter(n => n.defending).map(n => n.arena_floor)
+  assert.equal(new Set(seats).size, seats.length, '同じ階に守る側が2体いる')
+  assert.equal(new Set(seats).size, FLOORS, '1階〜50階が全部埋まっていない')
+})
+
+// ===== 開発中に動かすぶん =====
+
+test('開発中に動かすのは数体だけで、全部が100体のうちの誰か', () => {
+  const list = seedListOf().map(n => ({ ...n, id: n.idx + 1 }))
+  assert.ok(DEV_ACTIVE_IDS.length >= 2 && DEV_ACTIVE_IDS.length <= 12, `開発中に動かす数（${DEV_ACTIVE_IDS.length}体）が多すぎ／少なすぎ`)
+  assert.equal(new Set(DEV_ACTIVE_IDS).size, DEV_ACTIVE_IDS.length, '同じIDが2回入っている')
+  for (const id of DEV_ACTIVE_IDS) {
+    assert.ok(list.some(n => n.id === id), `id ${id} のNPCがいない`)
+    assert.equal(isDevActive(id), true)
+  }
+  assert.equal(isDevActive(list.find(n => !DEV_ACTIVE_IDS.includes(n.id)).id), false)
+})
+
+test('開発中の顔ぶれは低い階に固まっていて、守る側と挑む側が両方いる', () => {
+  const dev = seedListOf().map(n => ({ ...n, id: n.idx + 1 })).filter(n => isDevActive(n.id))
+  // 開発キャラは1階から登るので、当たれない階に置いても意味がない
+  for (const n of dev) assert.ok(n.arena_floor <= 10, `${n.name} が${n.arena_floor}階＝開発キャラが当たれない`)
+  assert.ok(dev.some(n => n.defending), '守る側がいない＝挑戦する相手がいない')
+  assert.ok(dev.some(n => !n.defending), '挑む側がいない＝席を奪いに来る動きが見られない')
+  // 同じ階に「ゆっくり守る側」と「速い挑む側」が並んでいること
+  const byFloor = {}
+  for (const n of dev) (byFloor[n.arena_floor] ||= []).push(n)
+  const pairs = Object.values(byFloor).filter(a => a.length === 2 && a.some(n => n.defending) && a.some(n => !n.defending))
+  assert.ok(pairs.length >= 1, '守る側と挑む側が同じ階に並んでいない＝席の奪い合いが見られない')
+  for (const [a, b] of pairs.map(p => [p.find(n => n.defending), p.find(n => !n.defending)])) {
+    assert.ok(b.speed > a.speed * 3, `${b.name} が ${a.name} より十分速くない＝いつまでも席が動かない`)
+  }
 })
 
 // ===== 戦える形になっているか =====
@@ -248,6 +285,42 @@ test('プレイヤーがNPCの階層守護者を破ったとき、NPCを1つ上�
   const body = bodyOf('v2_arena_fight')
   assert.ok(body.includes('v_champ.npc_id is not null'), 'v2_arena_fight がNPCの席を見ていない')
   assert.ok(body.includes('npc_id = null'), '席を奪ったときに npc_id を消していない')
+})
+
+// ===== 投入SQL（生成物）が npc.js とズレていないか =====
+// ★②と④は tools/v2-npc-seed.mjs が作る。npc.js を直したのに流し直し忘れると、
+//   **DBに入る顔ぶれだけ古いまま**になる。ここで突き合わせて気付けるようにする。
+
+const SEED_SQL = readFileSync(new URL('../../../supabase_v2_npc_seed.sql', import.meta.url), 'utf8')
+const DEPLOY_SQL = readFileSync(new URL('../../../supabase_v2_npc_deploy_all.sql', import.meta.url), 'utf8')
+
+test('②の投入SQLで active=true になっているのは開発中の顔ぶれだけ', () => {
+  // (id, '名前', '職業', seed, speed, total_exp, floor, active, ...
+  const rows = [...SEED_SQL.matchAll(/^ {2}\((\d+), '[^']*', '[^']*', \d+, \d+, \d+, \d+, (true|false),/gm)]
+  assert.equal(rows.length, NPC_COUNT, `②に入っているNPCが${NPC_COUNT}体でない`)
+  const active = rows.filter(m => m[2] === 'true').map(m => Number(m[1]))
+  assert.deepEqual(
+    [...active].sort((a, b) => a - b),
+    [...DEV_ACTIVE_IDS].sort((a, b) => a - b),
+    '②で動くNPCが DEV_ACTIVE_IDS と違う（node tools/v2-npc-seed.mjs を流し直す）',
+  )
+  // 席に着くのは開発中の顔ぶれのうち「守る側」だけ
+  const seats = [...SEED_SQL.matchAll(/^ {2}\((\d+), (\d+), '\{"npc":true/gm)].map(m => Number(m[2]))
+  const expected = seedListOf().map(n => ({ ...n, id: n.idx + 1 })).filter(n => isDevActive(n.id) && n.defending).map(n => n.id)
+  assert.deepEqual([...seats].sort((a, b) => a - b), [...expected].sort((a, b) => a - b))
+})
+
+test('④の展開SQLは眠っているNPCだけを起こし、眠っていたぶんの成長をまとめて入れない', () => {
+  assert.ok(DEPLOY_SQL.includes('where not active;'), '起きているNPCまで触っている')
+  assert.ok(/set active\s*=\s*true/.test(DEPLOY_SQL), 'active を true にしていない')
+  // ★ここが肝。last_tick_at を now() に直さないと「眠っていた期間×速度」が一度に入る
+  assert.ok(/last_tick_at\s*=\s*now\(\)/.test(DEPLOY_SQL), 'last_tick_at を now() に直していない')
+  assert.ok(DEPLOY_SQL.includes('on conflict (floor) do nothing'), 'プレイヤーの席を奪う恐れがある')
+  // ②で起こしたぶんを④が二重に席へ入れない
+  const seats = [...DEPLOY_SQL.matchAll(/^ {2}\((\d+), (\d+), '\{"npc":true/gm)].map(m => Number(m[2]))
+  for (const id of seats) assert.equal(isDevActive(id), false, `id ${id} は②で既に起きている`)
+  const expected = seedListOf().map(n => ({ ...n, id: n.idx + 1 })).filter(n => !isDevActive(n.id) && n.defending).length
+  assert.equal(seats.length, expected)
 })
 
 test('席は player_id と npc_id のどちらか片方（列がSQLにある）', () => {

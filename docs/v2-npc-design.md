@@ -11,6 +11,7 @@
 | 成長のやり方 | **数字で育てる**。出撃の戦闘は回さない。「1時間あたり何EXP」だけを持つ |
 | 強さの上限 | アリーナ最上階の目安（`powerOfFloor(50)` ≒ 29,749）で頭打ち。**一旦これで、後で調整する** |
 | 見え方 | **NPCだと分かるようにする**（名前の横に `NPC` の印） |
+| 展開の仕方 | **開発中は6体だけ動かし、v2の一般公開と同時に残り94体を一斉に起こす**（2026-08-27 追加指示） |
 
 ## どこに何があるか
 
@@ -19,7 +20,8 @@
 | NPCの正（名前・職業・速度・ステの作り方・アリーナでの動き） | `src/v2/lib/npc.js` |
 | テスト（成長の式・顔ぶれ・実際に戦えるか・1週間の再現） | `src/v2/lib/npc.test.js` |
 | サーバー側（テーブル・RPC 3本） | `supabase_v2_core.sql` §15 |
-| 100体の投入SQL（生成物） | `supabase_v2_npc_seed.sql` ← `tools/v2-npc-seed.mjs` が作る |
+| 100体の投入SQL（生成物・②） | `supabase_v2_npc_seed.sql` ← `tools/v2-npc-seed.mjs` が作る |
+| 残りを一斉に起こすSQL（生成物・④） | `supabase_v2_npc_deploy_all.sql` ← 同じツールが作る |
 | cron | `supabase_v2_npc_cron.sql` |
 | 動かす本体 | `supabase/functions/v2-npc-tick/index.ts` |
 | ライブラリのコピー同期 | `tools/v2-npc-fn-sync.mjs`（`src/v2/lib/npc.fn.test.js` が見張る） |
@@ -62,12 +64,29 @@ v2の成長は LVアップ1回＝5回抽選・転職1回＝転職回数×100戦�
 - **席を降りる**のは「その階には強すぎる（2階ぶん上の目安に届いた）」か「5連勝した」とき。
   席が回らなくなるのを防ぐための仕組み
 
+## 開発中と一般公開
+
+100体すべてを最初からDBに入れておくが、**動くのは `active = true` のものだけ**。
+
+- **開発中** … 6体（`npc.js` の `DEV_ACTIVE_IDS` ＝ 1・51／2・52／6・56）。
+  **1階・2階・6階**に「ゆっくり守る側」と「速い挑む側」を1体ずつ置いてある。
+  開発キャラが実際に当たれる場所で、席の奪い合いと「強くなりすぎて席を降りて上へ行く」
+  動きが必ず見られるようにするため。残り94体は `active = false` で眠っていて、
+  成長もしないし挑戦もしてこない
+- **一般公開と同時** … `supabase_v2_npc_deploy_all.sql` を1本流すと残り94体が起きる。
+  眠っていた47体ぶんの席も、そのとき空いている階にだけ入る（プレイヤーの席は奪わない）
+
+⚠ 起こすときに `last_tick_at` を `now()` へ直すのが肝。直さないと
+「眠っていた期間 × 速度」ぶんの成長が**まとめて1回で入って**、全員が一気に最上階の強さになる。
+Edge Function 側にも1週間ぶんで頭を打つ保険（`MAX_CATCHUP_HOURS`）を入れてある。
+
 ## 運用
 
 ```
 ① supabase_v2_core.sql（全文）
-② supabase_v2_npc_seed.sql
+② supabase_v2_npc_seed.sql       ← 100体を入れる（動くのは6体）
 ③ supabase_v2_npc_cron.sql
+④ supabase_v2_npc_deploy_all.sql ← v2の一般公開と同時に
 ```
 
 Edge Function のデプロイ：
@@ -90,6 +109,7 @@ supabase secrets set CRON_SECRET=＜秘密の文字列＞
 - 成長速度の幅 … `npc.js` の `SPEED_MIN` / `SPEED_MAX`
 - 装備の強さ … `npc.js` の `GEAR_RATIO_*`
 - 挑戦の頻度 … `npc.js` の `ARENA_MIN_MINUTES` / `ARENA_MAX_MINUTES`
+- 開発中に動かす顔ぶれ … `npc.js` の `DEV_ACTIVE_IDS`
 
 直したら `node tools/v2-npc-curve.mjs` で伸び方を見て、
 `node tools/v2-npc-seed.mjs` と `node tools/v2-npc-fn-sync.mjs` を流し直す。

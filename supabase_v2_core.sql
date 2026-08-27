@@ -5425,6 +5425,14 @@ grant execute on function public.v2_market_sellable() to authenticated;
 --
 -- ★NPCは v2_profiles を持たない（auth.users も作らない）。
 --   ＝ ランキング・取引所・図鑑・デイリーには一切出てこない。アリーナ専用の住人。
+--
+-- ===== 開発中は数体だけ動かす（2026-08-27 ユーザー指示）=====
+-- 100体すべてを v2_npcs に入れておくが、**動くのは active = true のものだけ**。
+-- 開発中は6体（supabase_v2_npc_seed.sql が active を立てる）。
+-- **v2の一般公開と同時に supabase_v2_npc_deploy_all.sql を流すと残り94体が起きる**。
+--   ⚠起こすときは last_tick_at を now() に直すこと。直さないと
+--     「眠っていた期間 × 速度」ぶんの成長が一度に入って全員が最上階の強さになる
+--     （deploy のSQLがやっている。Edge Function 側にも保険の頭打ちがある）。
 -- ★§10の v2_arena_fight は public.v2_npcs を参照する。plpgsql の本体は実行時に
 --   名前を解決するので、この節がファイルの後ろにあっても順番の問題は起きない。
 -- ============================================================

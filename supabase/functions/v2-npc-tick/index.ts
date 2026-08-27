@@ -35,6 +35,14 @@ const CRON_SECRET = Deno.env.get('CRON_SECRET') || ''
 // つまり普段この上限には当たらない（詰まったときだけ効く）
 const MAX_FIGHTS = 40
 
+// 1回のティックでまとめて入れる成長の上限（時間）。
+// cronが数時間止まっていたぶんは、次のティックでまとめて追いつくのが正しい。
+// ただし**何か月ぶん**が一度に入るのは、止まっていたのではなく
+// 「眠らせていたNPCを起こした」など別の理由なので、そこで頭を打つ。
+// ★眠っていたNPCを起こす supabase_v2_npc_deploy_all.sql は last_tick_at を now() に直すので、
+//   本来ここには当たらない。当たったときのための保険
+const MAX_CATCHUP_HOURS = 24 * 7
+
 const db = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } })
 
 Deno.serve(async (req) => {
@@ -58,7 +66,7 @@ Deno.serve(async (req) => {
   // ---- ① 成長（全員ぶん）----
   const grown: any[] = []
   for (const n of npcs || []) {
-    const hours = Math.max(0, (now - new Date(n.last_tick_at).getTime()) / 3600000)
+    const hours = Math.min(MAX_CATCHUP_HOURS, Math.max(0, (now - new Date(n.last_tick_at).getTime()) / 3600000))
     n.total_exp = grownExp(n, hours)
     grown.push({ id: n.id, total_exp: n.total_exp, last_tick_at: new Date(now).toISOString(), next_arena_at: n.next_arena_at })
   }
