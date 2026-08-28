@@ -32,11 +32,11 @@ export const CONTENTS = [
   { key:'kanji',  label:'漢字',         icon:'✍',  main:['int_stat'],
     limitText:'20問/日',     note:'漢字検定3級〜1級。正解した数でpt' },
   { key:'stack',  label:'積み上げ耐久',  icon:'🧱', main:['vit'], plays:5,
-    limitText:'5回/日',      note:'崩れるまでに乗せた個数がそのままpt' },
-  { key:'memory', label:'神経衰弱',      icon:'🃏', main:['dex','agi'], plays:5,
-    limitText:'5回/日',      note:'めくった手数でDEX・かかった時間でAGI' },
-  { key:'coin',   label:'コイントス',    icon:'🪙', main:['luk'], plays:10,
-    limitText:'10回/日',     note:'当てるとpt。3連続からは上乗せ' },
+    limitText:'5回/日',      note:'崩れるまでに乗せた個数がそのままpt。上限なし' },
+  { key:'memory', label:'神経衰弱',      icon:'🃏', main:['dex','agi'], plays:1,
+    limitText:'1日1回',      note:'めくった手数でDEX・かかった時間でAGI' },
+  { key:'coin',   label:'コイントス',    icon:'🪙', main:['luk'], plays:2,
+    limitText:'2回/日',      note:'1回につき5投げ。当てるとpt・3連続からは上乗せ' },
 ]
 export const CONTENT_BY_KEY = Object.fromEntries(CONTENTS.map(c => [c.key, c]))
 
@@ -152,7 +152,9 @@ const scale = (v, best, worst, max) => {
 // 神経衰弱 — DEX（手数）とAGI（時間）
 // ============================================================
 export const MEMORY_PAIRS = 8              // 8ペア＝16枚（4×4）
-export const MEMORY_MAX_PT = 16            // DEX・AGIそれぞれ1プレイの上限（5回で80pt）
+// ★1日1回なので、1プレイで1日ぶん（80pt）を取り切る形。
+//   DEX・AGIそれぞれ最大80pt＝この1回の出来がそのままその日の成績になる
+export const MEMORY_MAX_PT = 80
 export const MEMORY_MOVE_BEST  = MEMORY_PAIRS      // 最小手数＝ペア数。一度も外さなければ満点
 export const MEMORY_MOVE_WORST = MEMORY_PAIRS * 3  // これ以上かかると0pt
 export const MEMORY_SEC_BEST  = 25
@@ -182,18 +184,25 @@ export const memoryDeck = (rng = Math.random) => {
 // 1個ごとの操作はやさしく、**乗せた数が増えるほど揺れを大きく**する。
 // 操作の精度を競わせるとDEXと被るので、測るのは「どこまで持ちこたえたか」だけ。
 // ============================================================
-export const STACK_MAX_PT   = 16     // 1プレイの上限（5回で80pt）
+// ★上限なし（青天井）。積めるだけ積む＝そのままpt。
+//   そのぶん、乗せるほど「重く・速く・揺れる」の3つが同時にきつくなる
 export const STACK_LIMIT    = 1      // |傾き| がこれを超えたら崩れる
-export const STACK_PLACE_SEC = 1.6   // 次の1個が乗るまでの間隔（秒）
 export const STACK_CORRECT  = 1.6    // 左右キーで戻す速さ（毎秒）
 export const STACK_DAMP     = 0.25   // 1秒あたりに残る勢い（＝減衰）
 export const STACK_KICK     = 0.25   // 1個乗るたびに入る衝撃
 
+// 次の1個が乗るまでの間隔。積むほど短くなる＝どんどん忙しくなる
+export const STACK_PLACE_SEC = 1.6   // 1個目までの間隔
+export const STACK_PLACE_MIN = 0.5   // これ以上は速くしない
+export const stackPlaceSec = (blocks) =>
+  Math.max(STACK_PLACE_MIN, STACK_PLACE_SEC - Math.max(0, blocks) * 0.03)
+
 // ★倒立振子。**傾くほど倒れが速くなる**＝手を離した時点で終わる。
 //   これが無いとただのランダムウォークになり、放置していたほうが成績が良くなる
-//   （実際そうなっていた。放置で平均25個＝上限16個を素通り）。
-//   乗るほど重くなる＝立て直せる限界が来て、そこが天井になる。
-export const stackGravity = (blocks) => 2.2 + Math.max(0, blocks) * 0.22
+//   （実際そうなっていた。放置で平均25個）。
+//   上限を置かない代わりに、ここの伸びが実質の天井を作る。
+//   0.3のとき：放置2.5個／人(反応0.3秒)15.6個／上手い人42.7個
+export const stackGravity = (blocks) => 2.2 + Math.max(0, blocks) * 0.3
 
 // 乗っている数に応じた揺れの強さ。序盤はほとんど揺れない
 export const stackDrift = (blocks) => 0.5 + Math.max(0, blocks) * 0.16
@@ -212,20 +221,17 @@ export const stackStep = (s, rawDt, input = 0, rng = Math.random) => {
   const tilt = s.tilt + vel * dt
   let blocks = s.blocks
   let t = s.t + dt
-  if (t >= STACK_PLACE_SEC) {          // 1個乗る＝衝撃が入る
-    t -= STACK_PLACE_SEC
+  const wait = stackPlaceSec(s.blocks)
+  if (t >= wait) {                     // 1個乗る＝衝撃が入る
+    t -= wait
     blocks += 1
     vel += (rng() * 2 - 1) * STACK_KICK
   }
   return { blocks, tilt, vel, t, over: Math.abs(tilt) >= STACK_LIMIT }
 }
 
-export const stackPt = (blocks) => Math.max(0, Math.min(STACK_MAX_PT, Math.floor(blocks || 0)))
-
-// 上限まで積んだら「耐えきった」で終わり。
-// ★ここで切らないと、上限に届いたあとも1ptにもならないまま延々と続くことになる
-//   （測ってみると、ちゃんと操作する人の中央値は上限を超える）
-export const stackCleared = (s) => (s?.blocks || 0) >= STACK_MAX_PT
+// 乗せた個数がそのままpt。★上限なし＝積んだだけ入る
+export const stackPt = (blocks) => Math.max(0, Math.floor(blocks || 0))
 
 // ============================================================
 // コイントス — LUK
@@ -233,6 +239,7 @@ export const stackCleared = (s) => (s?.blocks || 0) >= STACK_MAX_PT
 export const COIN_HIT_PT    = 8      // 当てたときのpt
 export const COIN_CHAIN_PT  = 4      // 連続的中の上乗せ
 export const COIN_CHAIN_FROM = 3     // 何連続目から上乗せするか
+export const COIN_TOSSES    = 5      // 1回のプレイで投げる回数。投げ切ったら終わり
 export const COIN_SIDES = ['表', '裏']
 
 export const coinFlip = (rng = Math.random) => COIN_SIDES[rng() < 0.5 ? 0 : 1]

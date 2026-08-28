@@ -5,10 +5,10 @@ import { dayOf } from '../lib/daily.js'
 import { loadPref, savePref } from '../lib/prefs.js'
 import {
   PET_STAT_KEYS, CONTENTS, CONTENT_BY_KEY,
-  emptyPetState, playsLeft, beginPlay, scorePlay, applyPlay, totalPtOf, statsOf, petLvOf, petLvNeed,
+  emptyPetState, playsLeft, beginPlay, scorePlay, totalPtOf, statsOf, petLvOf, petLvNeed,
   MEMORY_PAIRS, memoryDeck, memoryPt,
-  STACK_LIMIT, stackStart, stackStep, stackPt, stackCleared,
-  COIN_SIDES, coinFlip, coinPt,
+  STACK_LIMIT, stackStart, stackStep, stackPt,
+  COIN_SIDES, COIN_TOSSES, COIN_CHAIN_FROM, coinFlip, coinPt,
 } from '../lib/pet.js'
 
 // ============================================================
@@ -60,14 +60,6 @@ export default function V2Pet({ onBack }) {
   // 成績ぶんのptを足す。回数はもう begin で使っている
   const finish = (key, pts, label) => {
     const r = scorePlay(stateRef.current, pts)
-    save(r.state)
-    setResult({ key, label, pts, gains: r.gains })
-  }
-
-  // コイントスは投げた瞬間に始まって終わる＝回数と成績をまとめて記録する
-  const tossed = (key, pts, label) => {
-    const r = applyPlay(stateRef.current, key, pts, day)
-    if (!r.ok) return
     save(r.state)
     setResult({ key, label, pts, gains: r.gains })
   }
@@ -158,7 +150,7 @@ export default function V2Pet({ onBack }) {
 
       {game === 'memory' && <MemoryGame onBegin={begin} onDone={finish} onBack={() => setGame('')} />}
       {game === 'stack'  && <StackGame  onBegin={begin} onDone={finish} onBack={() => setGame('')} />}
-      {game === 'coin'   && <CoinGame   state={state} day={day} onDone={tossed} onBack={() => setGame('')} />}
+      {game === 'coin'   && <CoinGame   onBegin={begin} onDone={finish} onBack={() => setGame('')} />}
     </div>
   )
 }
@@ -302,13 +294,13 @@ function StackGame({ onBegin, onDone, onBack }) {
       last = now
       sim.current = stackStep(sim.current, dt, input.current)
       setView(sim.current)
-      const cleared = stackCleared(sim.current)
-      if (sim.current.over || cleared) {
+      // ★上限なし。崩れるまでが1プレイ＝終わりは崩れたときだけ
+      if (sim.current.over) {
         setPlaying(false)
         const blocks = sim.current.blocks
         const pt = stackPt(blocks)
-        setOver({ blocks, pt, cleared })
-        onDone('stack', { vit: pt }, cleared ? `耐えきった（${blocks}個）` : `${blocks}個`)
+        setOver({ blocks, pt })
+        onDone('stack', { vit: pt }, `${blocks}個`)
         return
       }
       raf.current = requestAnimationFrame(tick)
@@ -337,6 +329,7 @@ function StackGame({ onBegin, onDone, onBack }) {
   })
 
   const deg = view.tilt * 22
+  const fit = Math.min(1, 225 / (view.blocks * 12 + 12))   // 枠(240px)に収まる倍率
   const ratio = Math.min(1, Math.abs(view.tilt) / STACK_LIMIT)
 
   return (
@@ -358,7 +351,9 @@ function StackGame({ onBegin, onDone, onBack }) {
       {/* 塔 */}
       <div style={{ ...cell, height:'240px', display:'flex', alignItems:'flex-end',
         justifyContent:'center', overflow:'hidden' }}>
-        <div style={{ transform:`rotate(${deg}deg)`, transformOrigin:'bottom center',
+        {/* ★上限が無いので塔は青天井に伸びる。枠に収まるよう縮めて出す
+            （縮めないと上が切れて、いま何個目かが見えなくなる） */}
+        <div style={{ transform:`rotate(${deg}deg) scale(${fit})`, transformOrigin:'bottom center',
           display:'flex', flexDirection:'column-reverse', alignItems:'center' }}>
           {Array.from({ length: view.blocks }, (_, i) => (
             <div key={i} style={{ width:`${46 - Math.min(20, i)}px`, height:'11px',
@@ -386,9 +381,7 @@ function StackGame({ onBegin, onDone, onBack }) {
 
       {over && (
         <div style={{ ...cell, padding:'8px', marginTop:'10px' }}>
-          <div style={{ color: over.cleared ? '#44ff88' : '#ff8844', fontSize:'12px' }}>
-            {over.cleared ? `耐えきった！ ${over.blocks}個` : `崩れた！ ${over.blocks}個`}
-          </div>
+          <div style={{ color:'#ff8844', fontSize:'12px' }}>崩れた！ {over.blocks}個</div>
           <div style={{ color:TEXT.sub, fontSize:'10px', marginTop:'4px' }}>VIT +{over.pt}pt</div>
           <button onClick={onBack} style={{ ...btn('#88aaff'), marginTop:'8px' }}>もどる</button>
         </div>
@@ -400,22 +393,41 @@ function StackGame({ onBegin, onDone, onBack }) {
 // ============================================================
 // コイントス — 当てるとLUK。3連続からは上乗せ
 // ============================================================
-function CoinGame({ state, day, onDone, onBack }) {
+// 1回のプレイで COIN_TOSSES 回投げて終わり。回数は最初の1投げで使う
+function CoinGame({ onBegin, onDone, onBack }) {
   const [streak, setStreak] = useState(0)
+  const [tosses, setTosses] = useState(0)    // 投げた回数
+  const [total, setTotal] = useState(0)      // このセットで稼いだpt
+  const [hits, setHits] = useState(0)
+  const [best, setBest] = useState(0)        // このセットの最高連続
   const [last, setLast] = useState(null)     // { pick, side, hit, pt }
   const [busy, setBusy] = useState(false)
-  const left = playsLeft(state, 'coin', day)
+  const begun = useRef(false)
+  const done = tosses >= COIN_TOSSES
 
   const toss = (pick) => {
-    if (busy || left === 0) return
+    if (busy || done) return
+    if (!begun.current) {                    // 最初の1投げ。ここで今日の1回を使う
+      if (!onBegin('coin')) return
+      begun.current = true
+    }
     setBusy(true)
     const side = coinFlip()
     const hit = side === pick
-    const next = hit ? streak + 1 : 0
-    const pt = coinPt(next)
-    setStreak(next)
+    const chain = hit ? streak + 1 : 0
+    const pt = coinPt(chain)
+    const n = tosses + 1
+    const sum = total + pt
+    setStreak(chain)
+    setBest(b => Math.max(b, chain))
+    setHits(h => h + (hit ? 1 : 0))
+    setTosses(n)
+    setTotal(sum)
     setLast({ pick, side, hit, pt })
-    onDone('coin', { luk: pt }, hit ? `${side}・${next}連続` : `はずれ（${side}）`)
+    // ★ptを入れるのは投げ切ったとき1回だけ（途中でやめたら入らない）
+    if (n >= COIN_TOSSES) {
+      onDone('coin', { luk: sum }, `${COIN_TOSSES}投げ中${hits + (hit ? 1 : 0)}回的中`)
+    }
     setTimeout(() => setBusy(false), 250)
   }
 
@@ -423,8 +435,15 @@ function CoinGame({ state, day, onDone, onBack }) {
     <div style={{ marginTop:'10px' }}>
       <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
         <button onClick={onBack} style={miniBtn('#88aaff')}>← もどる</button>
+        <span style={{ color:'#ffdd66', fontSize:'11px' }}>{tosses}/{COIN_TOSSES}投げ</span>
         <span style={{ color:'#ffdd66', fontSize:'11px' }}>{streak}連続</span>
-        <span style={{ color:TEXT.empty, fontSize:'10px' }}>あと{left}回・3連続から上乗せ</span>
+        <span style={{ color:TEXT.empty, fontSize:'10px' }}>{COIN_CHAIN_FROM}連続から上乗せ</span>
+      </div>
+
+      <div style={{ color: begun.current ? '#ff8844' : TEXT.empty, fontSize:'10px', marginBottom:'6px' }}>
+        {begun.current
+          ? `※ 今日の1回を使っています。${COIN_TOSSES}投げ切るまでptは入りません`
+          : `※ 最初の1投げで今日の1回を使います。${COIN_TOSSES}投げで終わりです`}
       </div>
 
       <div style={{ ...cell, padding:'20px', textAlign:'center', marginBottom:'10px' }}>
@@ -432,23 +451,29 @@ function CoinGame({ state, day, onDone, onBack }) {
           {last ? last.side : '？'}
         </div>
         <div style={{ color:TEXT.sub, fontSize:'11px', marginTop:'6px' }}>
-          {last ? (last.hit ? `当たり！ LUK +${last.pt}pt` : 'はずれ') : '表か裏かを選ぶ'}
+          {last ? (last.hit ? `当たり！ +${last.pt}pt` : 'はずれ') : '表か裏かを選ぶ'}
         </div>
       </div>
 
-      <div style={{ display:'flex', gap:'8px' }}>
-        {COIN_SIDES.map(s => (
-          <button key={s} onClick={() => toss(s)} disabled={busy || left === 0}
-            style={{ ...btn('#ffdd66'), flex:1, fontSize:'16px',
-              cursor: (busy || left === 0) ? 'not-allowed' : 'pointer' }}>
-            {s}
-          </button>
-        ))}
-      </div>
+      {!done && (
+        <div style={{ display:'flex', gap:'8px' }}>
+          {COIN_SIDES.map(s => (
+            <button key={s} onClick={() => toss(s)} disabled={busy}
+              style={{ ...btn('#ffdd66'), flex:1, fontSize:'16px',
+                cursor: busy ? 'not-allowed' : 'pointer' }}>
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
 
-      {left === 0 && (
-        <div style={{ color:'#ff8844', fontSize:'11px', marginTop:'10px' }}>
-          今日のぶんは使い切りました。
+      {done && (
+        <div style={{ ...cell, padding:'8px' }}>
+          <div style={{ color:'#44ff88', fontSize:'12px' }}>
+            投げ切った！ {COIN_TOSSES}投げ中{hits}回的中（最高{best}連続）
+          </div>
+          <div style={{ color:TEXT.sub, fontSize:'10px', marginTop:'4px' }}>LUK +{total}pt</div>
+          <button onClick={onBack} style={{ ...btn('#88aaff'), marginTop:'8px' }}>もどる</button>
         </div>
       )}
     </div>

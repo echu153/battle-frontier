@@ -7,13 +7,20 @@
 //   ・人      … 反応が遅れる操作でどこまで行くか（＝ここが実戦値）
 //   ・上手い人 … 遅れなしの理想操作でどこまで行くか（＝天井）
 // 「放置で満点」だと待つだけのゲームになる。逆に「上手い人でも上限に届かない」と
-// 伸ばしようがない。上限は STACK_MAX_PT（16個）。
+// 上限は無い（青天井）。放置がすぐ崩れ、上手いほど伸び続けるのが正しい形。
 // ============================================================
 import {
-  stackStart, stackStep, STACK_MAX_PT, STACK_PLACE_SEC,
+  stackStart, stackStep, stackPlaceSec,
 } from '../src/v2/lib/pet.js'
 
 const DT = 1 / 60
+
+// n個積むまでにかかる秒数。1個ごとの間隔は積むほど短くなる
+const secOf = (blocks) => {
+  let t = 0
+  for (let i = 0; i < blocks; i++) t += stackPlaceSec(i)
+  return t
+}
 
 // 傾きと勢いを見て、倒れる側と逆を押す。delay 秒ぶん遅れて反応する
 const play = (rng, delaySec) => {
@@ -45,12 +52,13 @@ const stat = (label, delay) => {
   const top = runs[Math.floor(runs.length * 0.9)]
   console.log(
     `${label.padEnd(10)} 平均${avg.toFixed(1).padStart(6)}個  中央${String(med).padStart(3)}個  ` +
-    `上位1割${String(top).padStart(3)}個  （${(avg * STACK_PLACE_SEC).toFixed(0)}秒）`
+    `上位1割${String(top).padStart(3)}個  （${secOf(avg).toFixed(0)}秒）`
   )
   return avg
 }
 
-console.log(`上限 ${STACK_MAX_PT}個（${(STACK_MAX_PT * STACK_PLACE_SEC).toFixed(0)}秒ぶん）\n`)
+console.log(`上限なし（青天井）。積んだ個数がそのままpt
+`)
 stat('放置', null)
 stat('人(0.30秒)', 0.30)
 stat('人(0.20秒)', 0.20)

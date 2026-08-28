@@ -6,8 +6,8 @@ import {
   PET_STAT_KEYS, SPILL, CONTENTS, CONTENT_BY_KEY, spread, emptyPetGains,
   statValueOf, statsOf, petLvOf, petLvNeed, PET_LV_STEP,
   MEMORY_PAIRS, MEMORY_MAX_PT, memoryPt, memoryDeck,
-  STACK_MAX_PT, STACK_LIMIT, stackDrift, stackGravity, stackStart, stackStep, stackPt, stackCleared,
-  COIN_HIT_PT, COIN_CHAIN_PT, COIN_SIDES, coinFlip, coinPt,
+  STACK_LIMIT, STACK_PLACE_MIN, stackDrift, stackGravity, stackPlaceSec, stackStart, stackStep, stackPt,
+  COIN_HIT_PT, COIN_CHAIN_PT, COIN_TOSSES, COIN_SIDES, coinFlip, coinPt,
   WALK_MAX_STEPS, walkPt,
   KANJI_GRADES, KANJI_BASE_PT, kanjiPt,
   emptyPetState, playsLeft, beginPlay, scorePlay, applyPlay, totalPtOf,
@@ -188,10 +188,18 @@ test('神経衰弱だけが1プレイで2ステに入る', () => {
 })
 
 test('1日ぶんを使い切るとどのステもおよそ80ptになる', () => {
-  assert.equal(CONTENT_BY_KEY.stack.plays * STACK_MAX_PT, 80)
-  assert.equal(CONTENT_BY_KEY.memory.plays * MEMORY_MAX_PT, 80)
-  assert.equal(CONTENT_BY_KEY.coin.plays * COIN_HIT_PT, 80, 'コイントスは全部当てて80')
+  assert.equal(CONTENT_BY_KEY.memory.plays * MEMORY_MAX_PT, 80, '神経衰弱は1日1回で80pt')
+  assert.equal(CONTENT_BY_KEY.coin.plays * COIN_TOSSES * COIN_HIT_PT, 80,
+    'コイントスは2回×5投げの基礎ぶんで80（3連続からの上乗せはこれに足される）')
   assert.equal(walkPt(WALK_MAX_STEPS), 80)
+  // ★積み上げだけは上限なし（青天井）。実測の平均15.6個×5回＝おおよそ80ptに乗る
+  assert.equal(CONTENT_BY_KEY.stack.plays, 5)
+})
+
+test('神経衰弱は1日1回・コイントスは1回5投げ', () => {
+  assert.equal(CONTENT_BY_KEY.memory.plays, 1)
+  assert.equal(CONTENT_BY_KEY.coin.plays, 2)
+  assert.equal(COIN_TOSSES, 5)
 })
 
 // ===== 神経衰弱 =====
@@ -272,23 +280,35 @@ test('崩れたあとは進まない', () => {
   assert.deepEqual(stackStep(over, 1, 1, () => 0.5), over)
 })
 
-// ★測ってみたら、ちゃんと操作する人の中央値は上限（16個）を超えていた。
-//   切らないと、1ptにもならないまま延々と続けることになる
-test('上限まで積んだら耐えきったで終わる', () => {
-  assert.equal(stackCleared({ blocks: STACK_MAX_PT - 1 }), false)
-  assert.equal(stackCleared({ blocks: STACK_MAX_PT }), true)
-  assert.equal(stackCleared(stackStart()), false)
+// 積み上げは上限なし（青天井）。積んだぶんがそのままptになる
+test('積み上げのptに上限はない', () => {
+  assert.equal(stackPt(16), 16)
+  assert.equal(stackPt(50), 50)
+  assert.equal(stackPt(200), 200, '青天井のはずが頭打ちになっている')
+})
+
+// 「どんどん難易度を上げる」＝重さ・速さ・揺れの3つが同時にきつくなる
+test('積むほど1個あたりの間隔が短くなる', () => {
+  assert.ok(stackPlaceSec(20) < stackPlaceSec(0), '積んでも忙しくならない')
+  assert.ok(stackPlaceSec(40) < stackPlaceSec(20))
+  assert.equal(stackPlaceSec(9999), STACK_PLACE_MIN, '短くなりすぎないよう下限で止まる')
 })
 
 // ★倒立振子にする前は、傾きに戻す力も倒れる力も無いただのランダムウォークだった。
-//   放置の平均が25個＝上限16個を素通りし、**何もしないほうが満点**になっていた
-test('放置していると上限に届く前に崩れる', () => {
-  let seed = 3
-  const rng = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648 }
-  let s = stackStart()
-  for (let i = 0; i < 60 * 300 && !s.over; i++) s = stackStep(s, 1 / 60, 0, rng)
-  assert.ok(s.over, '放置していても崩れない')
-  assert.ok(s.blocks < STACK_MAX_PT, `放置で上限に届いている（${s.blocks}個）＝待つだけのゲーム`)
+//   放置で平均25個も積め、**何もしないほうが成績が良い**状態になっていた。
+//   上限を外した（青天井）いまは、放置が伸びないことがそのまま歯止めになる
+test('放置しているとすぐ崩れる', () => {
+  const runs = []
+  for (let seedStart = 1; seedStart <= 20; seedStart++) {
+    let seed = seedStart
+    const rng = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648 }
+    let s = stackStart()
+    for (let i = 0; i < 60 * 300 && !s.over; i++) s = stackStep(s, 1 / 60, 0, rng)
+    assert.ok(s.over, '放置していても崩れない')
+    runs.push(s.blocks)
+  }
+  const avg = runs.reduce((t, v) => t + v, 0) / runs.length
+  assert.ok(avg < 6, `放置で平均${avg.toFixed(1)}個も積めている＝待つだけのゲーム`)
 })
 
 test('傾くほど倒れる力が強くなる', () => {
@@ -303,7 +323,7 @@ test('傾くほど倒れる力が強くなる', () => {
 test('積み上げのptは乗せた個数そのまま。上限16', () => {
   assert.equal(stackPt(0), 0)
   assert.equal(stackPt(9), 9)
-  assert.equal(stackPt(99), STACK_MAX_PT)
+  assert.equal(stackPt(99), 99)
   assert.equal(STACK_LIMIT, 1)
 })
 
