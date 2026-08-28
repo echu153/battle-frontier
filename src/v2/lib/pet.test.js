@@ -7,9 +7,10 @@ import {
   statValueOf, statsOf, petLvOf, petLvNeed, PET_LV_STEP,
   MEMORY_PAIRS, MEMORY_MAX_PT, memoryPt, memoryDeck,
   STACK_LIMIT, STACK_PLACE_MIN, stackDrift, stackGravity, stackPlaceSec, stackStart, stackStep, stackPt,
-  COIN_HIT_PT, COIN_CHAIN_PT, COIN_TOSSES, COIN_SIDES, coinFlip, coinPt,
+  COIN_TRIES, COIN_HEAD_PT, COIN_RUN_CAP, COIN_SIDES, coinFlip, coinRun, coinPt,
   WALK_MAX_STEPS, walkPt,
-  KANJI_GRADES, KANJI_BASE_PT, KANJI_QUIZ_MAX, KANJI_CHOICES, kanjiPt, makeKanjiQuiz,
+  KANJI_GRADES, KANJI_BASE_PT, KANJI_QUIZ_MAX, KANJI_CHOICES, KANJI_MASTER_OK,
+  kanjiPt, makeKanjiQuiz, kanjiWeightOf, kanjiScoreOf, kanjiMasteredCount, pickKanjiWord, recordKanji,
   addWalk,
   emptyPetState, playsLeft, beginPlay, scorePlay, applyPlay, totalPtOf,
 } from './pet.js'
@@ -191,17 +192,18 @@ test('神経衰弱だけが1プレイで2ステに入る', () => {
 
 test('1日ぶんを使い切るとどのステもおよそ80ptになる', () => {
   assert.equal(CONTENT_BY_KEY.memory.plays * MEMORY_MAX_PT, 80, '神経衰弱は1日1回で80pt')
-  assert.equal(CONTENT_BY_KEY.coin.plays * COIN_TOSSES * COIN_HIT_PT, 80,
-    'コイントスは2回×5投げの基礎ぶんで80（3連続からの上乗せはこれに足される）')
-  assert.equal(walkPt(WALK_MAX_STEPS), 80)
-  // ★積み上げだけは上限なし（青天井）。実測の平均15.6個×5回＝おおよそ80ptに乗る
+  assert.equal(walkPt(WALK_MAX_STEPS), 80, '運動は8,000歩で80pt')
+  assert.equal(kanjiPt('g3', KANJI_QUIZ_MAX), 80, '漢字は3級20問全問正解で80pt')
+  // ★この2つだけは固定値にならない。
+  //   積み上げ＝上限なし（実測の平均15.6個×5回でおよそ80pt）
+  //   コイントス＝運まかせ（下の期待値のテストで見る）
   assert.equal(CONTENT_BY_KEY.stack.plays, 5)
+  assert.equal(CONTENT_BY_KEY.coin.plays, 1)
 })
 
-test('神経衰弱は1日1回・コイントスは1回5投げ', () => {
+test('神経衰弱もコイントスも1日1回', () => {
   assert.equal(CONTENT_BY_KEY.memory.plays, 1)
-  assert.equal(CONTENT_BY_KEY.coin.plays, 2)
-  assert.equal(COIN_TOSSES, 5)
+  assert.equal(CONTENT_BY_KEY.coin.plays, 1)
 })
 
 // ===== 神経衰弱 =====
@@ -337,12 +339,40 @@ test('コイントスは表か裏しか出ない', () => {
   assert.equal(coinFlip(() => 0.9), '裏')
 })
 
-test('当てるとpt。3連続からは上乗せがつく', () => {
-  assert.equal(coinPt(0), 0, '外したら0')
-  assert.equal(coinPt(1), COIN_HIT_PT)
-  assert.equal(coinPt(2), COIN_HIT_PT)
-  assert.equal(coinPt(3), COIN_HIT_PT + COIN_CHAIN_PT)
-  assert.equal(coinPt(10), COIN_HIT_PT + COIN_CHAIN_PT)
+test('裏が出るまで投げ続け、出た表の回数を返す', () => {
+  assert.equal(coinRun(() => 0.9), 0, '1投げ目が裏なら0回')
+  let n = 0
+  const three = () => (n++ < 3 ? 0.1 : 0.9)      // 表・表・表・裏
+  assert.equal(coinRun(three), 3)
+})
+
+test('表が出続けても必ず止まる', () => {
+  assert.equal(coinRun(() => 0.0), COIN_RUN_CAP, '保険の上限で止まっていない')
+})
+
+test('ptは表の回数ぶん。0回なら0pt', () => {
+  assert.equal(coinPt(0), 0)
+  assert.equal(coinPt(1), COIN_HEAD_PT)
+  assert.equal(coinPt(3), COIN_HEAD_PT * 3)
+  assert.equal(coinPt(-5), 0)
+})
+
+// 3回投げて一番良い回を採るので、1日ぶんの期待値が他ステの80ptとほぼ同じになる。
+// ★数値を変えたらこのテストが落ちる＝そのとき期待値を測り直すこと
+test('3回のうち最良を採ると1日およそ80ptになる', () => {
+  assert.equal(COIN_TRIES, 3)
+  assert.equal(CONTENT_BY_KEY.coin.plays, 1, 'コイントスは1日1回')
+  let seed = 20260828
+  const rng = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648 }
+  const N = 20000
+  let sum = 0
+  for (let i = 0; i < N; i++) {
+    let best = 0
+    for (let t = 0; t < COIN_TRIES; t++) best = Math.max(best, coinRun(rng))
+    sum += coinPt(best)
+  }
+  const avg = sum / N
+  assert.ok(avg > 70 && avg < 100, `1日の期待値が帯から外れた（${avg.toFixed(1)}pt）`)
 })
 
 // ===== 運動量 =====
@@ -427,6 +457,78 @@ test('出題もとの読みはすべてひらがな', () => {
       assert.match(e.w, /[一-龥]/, `${e.w} に漢字がない`)
     }
   }
+})
+
+// ===== 覚え具合と復習 =====
+// ★ここが「毎日やれば実力がつく」の中身。ただの抽選だと苦手がいつまでも残る
+
+test('間違えた語ほど出やすく、正解を重ねた語ほど出にくい', () => {
+  const log = {
+    苦手: { ok: 0, ng: 3 },
+    半分: { ok: 1, ng: 1 },
+    まあまあ: { ok: 2, ng: 0 },
+    覚えた: { ok: 5, ng: 0 },
+  }
+  const w = (k) => kanjiWeightOf(log, k)
+  assert.ok(w('苦手') > w('半分'), '苦手な語がいちばん濃く出ていない')
+  assert.ok(w('半分') > w('まあまあ'))
+  assert.ok(w('まあまあ') > w('覚えた'))
+  assert.ok(w('覚えた') > 0, '覚えた語も忘れないよう、たまには出す')
+  assert.ok(kanjiWeightOf(log, '初めて') > w('覚えた'), '未出題の語が出てこない')
+})
+
+test('苦手な語は実際に何度も出てくる', () => {
+  const words = [
+    { w:'苦手', y:'にがて' }, { w:'甲', y:'こう' }, { w:'乙', y:'おつ' }, { w:'丙', y:'へい' },
+  ]
+  const log = { 苦手:{ ok:0, ng:5 }, 甲:{ ok:5, ng:0 }, 乙:{ ok:5, ng:0 }, 丙:{ ok:5, ng:0 } }
+  let seed = 99
+  const rng = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648 }
+  let hit = 0
+  for (let i = 0; i < 600; i++) if (pickKanjiWord(words, log, rng).w === '苦手') hit++
+  assert.ok(hit / 600 > 0.6, `苦手な語が優先されていない（${(hit / 600 * 100).toFixed(0)}%）`)
+})
+
+test('直前に出した語は続けて出さない', () => {
+  const words = [{ w:'甲', y:'こう' }, { w:'乙', y:'おつ' }]
+  for (let i = 0; i < 20; i++) {
+    assert.equal(pickKanjiWord(words, {}, Math.random, ['甲']).w, '乙')
+  }
+  // 全部が recent に入っていたら、避けきれないので普通に出す
+  assert.ok(pickKanjiWord(words, {}, Math.random, ['甲', '乙']))
+})
+
+test('正解と不正解を数える。3回正解で覚えたに入る', () => {
+  let log = recordKanji({}, '把握', true)
+  assert.deepEqual(log['把握'], { ok: 1, ng: 0 })
+  log = recordKanji(log, '把握', false)
+  assert.deepEqual(log['把握'], { ok: 1, ng: 1 })
+  assert.equal(kanjiScoreOf(log, '把握'), 0)
+  assert.equal(kanjiScoreOf(log, '知らない語'), null)
+
+  const words = [{ w:'把握', y:'はあく' }]
+  assert.equal(kanjiMasteredCount(log, words), 0)
+  for (let i = 0; i < 3; i++) log = recordKanji(log, '把握', true)
+  assert.equal(kanjiScoreOf(log, '把握'), 3)
+  assert.equal(kanjiMasteredCount(log, words), 1, `正解${KANJI_MASTER_OK}回で覚えたに入っていない`)
+})
+
+test('覚え具合を渡しても出題の形はくずれない', () => {
+  const log = { 把握:{ ok:0, ng:9 } }
+  let seed = 3
+  const rng = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648 }
+  for (let i = 0; i < 40; i++) {
+    const q = makeKanjiQuiz('g3', rng, null, log, [])
+    assert.ok(q.choices.includes(q.answer))
+    assert.equal(new Set(q.choices).size, KANJI_CHOICES)
+  }
+})
+
+test('毎日20問やれば1年で全部の語に手が届く量がある', () => {
+  // 1日20問×365日＝7,300問。語数がこれを大きく超えていると一周もできない
+  const total = KANJI_GRADES.reduce((t, g) => t + kanjiWordsOf(g.key).length, 0)
+  assert.ok(total >= 500, `語数が少なすぎる（${total}語）`)
+  assert.ok(total <= KANJI_QUIZ_MAX * 365, `1年でも一周できない量（${total}語）`)
 })
 
 test('同じ級に同じ熟語を二重に入れない', () => {

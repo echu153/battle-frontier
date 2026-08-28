@@ -8,7 +8,7 @@ import {
   emptyPetState, playsLeft, beginPlay, scorePlay, totalPtOf, statsOf, petLvOf, petLvNeed,
   MEMORY_PAIRS, memoryDeck, memoryPt,
   STACK_LIMIT, stackStart, stackStep, stackPt,
-  COIN_SIDES, COIN_TOSSES, COIN_CHAIN_FROM, coinFlip, coinPt,
+  COIN_SIDES, COIN_TRIES, COIN_HEAD_PT, coinRun, coinPt,
   countsOf, addWalk, WALK_MAX_STEPS,
 } from '../lib/pet.js'
 import { WalkGame, KanjiGame } from './V2PetReal.jsx'
@@ -404,88 +404,101 @@ function StackGame({ onBegin, onDone, onBack }) {
 }
 
 // ============================================================
-// コイントス — 当てるとLUK。3連続からは上乗せ
+// コイントス — LUK
+// ------------------------------------------------------------
+// 裏が出るまで投げ続け、出た表の回数がその回の成績。
+// 3回まで投げられて、**いちばん良かった回だけ**が採用される
 // ============================================================
-// 1回のプレイで COIN_TOSSES 回投げて終わり。回数は最初の1投げで使う
 function CoinGame({ onBegin, onDone, onBack }) {
-  const [streak, setStreak] = useState(0)
-  const [tosses, setTosses] = useState(0)    // 投げた回数
-  const [total, setTotal] = useState(0)      // このセットで稼いだpt
-  const [hits, setHits] = useState(0)
-  const [best, setBest] = useState(0)        // このセットの最高連続
-  const [last, setLast] = useState(null)     // { pick, side, hit, pt }
+  const [tries, setTries] = useState([])       // 各回の表の回数
+  const [flips, setFlips] = useState([])       // いま投げている最中の表示
   const [busy, setBusy] = useState(false)
   const begun = useRef(false)
-  const done = tosses >= COIN_TOSSES
+  const done = tries.length >= COIN_TRIES
+  const best = tries.length ? Math.max(...tries) : 0
 
-  const toss = (pick) => {
+  // 1回ぶん。表が出るたびに1枚ずつ見せてから、裏で止める
+  const play = async () => {
     if (busy || done) return
-    if (!begun.current) {                    // 最初の1投げ。ここで今日の1回を使う
+    if (!begun.current) {                      // 最初の1回。ここで今日の1回を使う
       if (!onBegin('coin')) return
       begun.current = true
     }
     setBusy(true)
-    const side = coinFlip()
-    const hit = side === pick
-    const chain = hit ? streak + 1 : 0
-    const pt = coinPt(chain)
-    const n = tosses + 1
-    const sum = total + pt
-    setStreak(chain)
-    setBest(b => Math.max(b, chain))
-    setHits(h => h + (hit ? 1 : 0))
-    setTosses(n)
-    setTotal(sum)
-    setLast({ pick, side, hit, pt })
-    // ★ptを入れるのは投げ切ったとき1回だけ（途中でやめたら入らない）
-    if (n >= COIN_TOSSES) {
-      onDone('coin', { luk: sum }, `${COIN_TOSSES}投げ中${hits + (hit ? 1 : 0)}回的中`)
+    const heads = coinRun()
+    setFlips([])
+    for (let i = 0; i < heads; i++) {
+      await new Promise(r => setTimeout(r, 260))
+      setFlips(f => [...f, COIN_SIDES[0]])
     }
-    setTimeout(() => setBusy(false), 250)
+    await new Promise(r => setTimeout(r, 260))
+    setFlips(f => [...f, COIN_SIDES[1]])       // 裏が出て終わり
+    const next = [...tries, heads]
+    setTries(next)
+    if (next.length >= COIN_TRIES) {
+      const top = Math.max(...next)
+      onDone('coin', { luk: coinPt(top) }, `一番良くて表${top}回`)
+    }
+    setBusy(false)
   }
 
   return (
     <div style={{ marginTop:'10px' }}>
       <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
         <button onClick={onBack} style={miniBtn('#88aaff')}>← もどる</button>
-        <span style={{ color:'#ffdd66', fontSize:'11px' }}>{tosses}/{COIN_TOSSES}投げ</span>
-        <span style={{ color:'#ffdd66', fontSize:'11px' }}>{streak}連続</span>
-        <span style={{ color:TEXT.empty, fontSize:'10px' }}>{COIN_CHAIN_FROM}連続から上乗せ</span>
+        <span style={{ color:'#ffdd66', fontSize:'11px' }}>{tries.length}/{COIN_TRIES}回</span>
+        <span style={{ color:'#44ff88', fontSize:'11px' }}>最高 表{best}回</span>
+        <span style={{ color:TEXT.empty, fontSize:'10px' }}>表1回＝{COIN_HEAD_PT}pt</span>
       </div>
 
-      <div style={{ color: begun.current ? '#ff8844' : TEXT.empty, fontSize:'10px', marginBottom:'6px' }}>
+      <div style={{ color: begun.current ? '#ff8844' : TEXT.empty, fontSize:'10px',
+        marginBottom:'6px', lineHeight:1.7 }}>
         {begun.current
-          ? `※ 今日の1回を使っています。${COIN_TOSSES}投げ切るまでptは入りません`
-          : `※ 最初の1投げで今日の1回を使います。${COIN_TOSSES}投げで終わりです`}
+          ? `※ 今日の1回を使っています。${COIN_TRIES}回投げ切るまでptは入りません`
+          : `※ 裏が出るまで投げ続けます。${COIN_TRIES}回のうち一番良かった回だけが残ります`}
       </div>
 
-      <div style={{ ...cell, padding:'20px', textAlign:'center', marginBottom:'10px' }}>
-        <div style={{ fontSize:'34px', color: last ? (last.hit ? '#44ff88' : '#ff8844') : TEXT.empty }}>
-          {last ? last.side : '？'}
+      {/* 投げている最中の表示。表が続くほど伸びる */}
+      <div style={{ ...cell, padding:'18px', textAlign:'center', marginBottom:'10px', minHeight:'74px' }}>
+        <div style={{ fontSize:'26px', letterSpacing:'6px' }}>
+          {flips.length
+            ? flips.map((s, i) => (
+                <span key={i} style={{ color: s === COIN_SIDES[0] ? '#44ff88' : '#ff8844' }}>{s}</span>
+              ))
+            : <span style={{ color:TEXT.empty }}>？</span>}
         </div>
-        <div style={{ color:TEXT.sub, fontSize:'11px', marginTop:'6px' }}>
-          {last ? (last.hit ? `当たり！ +${last.pt}pt` : 'はずれ') : '表か裏かを選ぶ'}
+        <div style={{ color:TEXT.sub, fontSize:'11px', marginTop:'8px' }}>
+          {busy ? '投げています…'
+            : tries.length ? `${tries.length}回目：表${tries[tries.length - 1]}回`
+            : '投げると裏が出るまで続きます'}
         </div>
       </div>
 
-      {!done && (
-        <div style={{ display:'flex', gap:'8px' }}>
-          {COIN_SIDES.map(s => (
-            <button key={s} onClick={() => toss(s)} disabled={busy}
-              style={{ ...btn('#ffdd66'), flex:1, fontSize:'16px',
-                cursor: busy ? 'not-allowed' : 'pointer' }}>
-              {s}
-            </button>
+      {/* これまでの結果 */}
+      {tries.length > 0 && (
+        <div style={{ display:'flex', gap:'6px', marginBottom:'10px' }}>
+          {tries.map((n, i) => (
+            <div key={i} style={{ ...cell, flex:1, padding:'6px', textAlign:'center',
+              borderColor: n === best ? '#44ff88' : '#0044aa',
+              color: n === best ? '#44ff88' : TEXT.sub, fontSize:'11px' }}>
+              {i + 1}回目 表{n}
+            </div>
           ))}
         </div>
       )}
 
+      {!done && (
+        <button onClick={play} disabled={busy}
+          style={{ ...btn('#ffdd66'), width:'100%', fontSize:'15px',
+            cursor: busy ? 'not-allowed' : 'pointer' }}>
+          投げる（あと{COIN_TRIES - tries.length}回）
+        </button>
+      )}
+
       {done && (
         <div style={{ ...cell, padding:'8px' }}>
-          <div style={{ color:'#44ff88', fontSize:'12px' }}>
-            投げ切った！ {COIN_TOSSES}投げ中{hits}回的中（最高{best}連続）
-          </div>
-          <div style={{ color:TEXT.sub, fontSize:'10px', marginTop:'4px' }}>LUK +{total}pt</div>
+          <div style={{ color:'#44ff88', fontSize:'12px' }}>一番良かったのは 表{best}回！</div>
+          <div style={{ color:TEXT.sub, fontSize:'10px', marginTop:'4px' }}>LUK +{coinPt(best)}pt</div>
           <button onClick={onBack} style={{ ...btn('#88aaff'), marginTop:'8px' }}>もどる</button>
         </div>
       )}

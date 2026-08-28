@@ -38,8 +38,8 @@ export const CONTENTS = [
     limitText:'5回/日',      note:'崩れるまでに乗せた個数がそのままpt。上限なし' },
   { key:'memory', label:'神経衰弱',      icon:'🃏', main:['dex','agi'], plays:1,
     limitText:'1日1回',      note:'めくった手数でDEX・かかった時間でAGI' },
-  { key:'coin',   label:'コイントス',    icon:'🪙', main:['luk'], plays:2,
-    limitText:'2回/日',      note:'1回につき5投げ。当てるとpt・3連続からは上乗せ' },
+  { key:'coin',   label:'コイントス',    icon:'🪙', main:['luk'], plays:1,
+    limitText:'1日1回',      note:'裏が出るまで投げ続ける。3回のうち一番良かった表の回数ぶん' },
 ]
 export const CONTENT_BY_KEY = Object.fromEntries(CONTENTS.map(c => [c.key, c]))
 
@@ -243,17 +243,28 @@ export const stackPt = (blocks) => Math.max(0, Math.floor(blocks || 0))
 // ============================================================
 // コイントス — LUK
 // ============================================================
-export const COIN_HIT_PT    = 8      // 当てたときのpt
-export const COIN_CHAIN_PT  = 4      // 連続的中の上乗せ
-export const COIN_CHAIN_FROM = 3     // 何連続目から上乗せするか
-export const COIN_TOSSES    = 5      // 1回のプレイで投げる回数。投げ切ったら終わり
+// ★遊び方：**裏が出るまで投げ続け、出た表の回数がその回の成績**。
+//   これを COIN_TRIES 回やって、**いちばん良かった回だけ**が採用される。
+//   （表が出るたびに「まだ伸びる」と分かるので、引きの良い回を引き当てる遊び）
+export const COIN_TRIES   = 3        // 1プレイで投げられる回数
+export const COIN_HEAD_PT = 40       // 表1回ぶんのpt
+export const COIN_RUN_CAP = 60       // 万一 rng が偏っても止まるための保険
 export const COIN_SIDES = ['表', '裏']
 
 export const coinFlip = (rng = Math.random) => COIN_SIDES[rng() < 0.5 ? 0 : 1]
 
-// streak … この的中を含めた連続的中数。外したときは 0 を渡す＝0pt
-export const coinPt = (streak) =>
-  (streak > 0 ? COIN_HIT_PT + (streak >= COIN_CHAIN_FROM ? COIN_CHAIN_PT : 0) : 0)
+// 1回ぶん。裏が出るまで投げ続けて、出た表の並びを返す
+export const coinRun = (rng = Math.random) => {
+  const heads = []
+  while (heads.length < COIN_RUN_CAP && rng() < 0.5) heads.push('表')
+  return heads.length
+}
+
+// 表の回数ぶん。0回なら0pt
+// ★実測（40万回）：3回のうち最良の表の回数は平均2.15回。
+//   40pt/回で1日およそ86pt＝他ステの80ptとほぼ同じ。ただし12.5%で0pt、
+//   まれに表5回以上（200pt超）も出る＝LUKらしいブレの大きさ
+export const coinPt = (heads) => Math.max(0, Math.floor(heads || 0)) * COIN_HEAD_PT
 
 // ============================================================
 // 運動量 — STR（実装は端末の歩数センサー。https必須・画面を開いている間だけ）
@@ -303,15 +314,75 @@ export const kanjiPt = (gradeKey, correct) => {
   return Math.floor(Math.max(0, correct || 0) * KANJI_BASE_PT * g.mult)
 }
 
+// ============================================================
+// 覚え具合と、出題の重みづけ
+// ------------------------------------------------------------
+// ★ここが「毎日やれば実力がつく」の中身。ただの抽選だと、覚えた語も
+//   知らない語も同じ確率で出てしまい、いつまでも苦手が苦手のまま残る。
+//   **間違えた語ほど濃く、正解を重ねた語ほど薄く**出す。
+//
+//   log … { [熟語]: { ok, ng } }。正解数と不正解数だけ持つ
+// ============================================================
+export const KANJI_MASTER_OK = 3      // 正解がこの数に届いたら「覚えた」
+
+// その語の覚え具合。ok - ng。マイナスなら苦手
+export const kanjiScoreOf = (log, word) => {
+  const e = log?.[word]
+  if (!e) return null                 // まだ一度も出していない
+  return (e.ok || 0) - (e.ng || 0)
+}
+
+// 出やすさ。数字が大きいほど出る
+export const kanjiWeightOf = (log, word) => {
+  const s = kanjiScoreOf(log, word)
+  if (s === null) return 6            // 初めての語。ひととおり出したい
+  if (s < 0) return 12                // 間違えたほうが多い＝苦手。いちばん濃く
+  if (s === 0) return 6
+  if (s === 1) return 3
+  if (s === 2) return 2
+  return 1                            // 覚えた語も忘れないよう、たまには出す
+}
+
+// 覚えた語の数（正解が KANJI_MASTER_OK 以上・不正解を差し引いて）
+export const kanjiMasteredCount = (log, words) =>
+  words.filter(e => (kanjiScoreOf(log, e.w) ?? -99) >= KANJI_MASTER_OK).length
+
+// 重みつきで1語選ぶ。recent に入っている語は避ける（続けて同じ語を出さない）
+export const pickKanjiWord = (words, log, rng = Math.random, recent = []) => {
+  if (!words.length) return null
+  const avail = words.filter(e => !recent.includes(e.w))
+  const pool = avail.length ? avail : words
+  const weights = pool.map(e => kanjiWeightOf(log, e.w))
+  const total = weights.reduce((t, v) => t + v, 0)
+  let r = rng() * total
+  for (let i = 0; i < pool.length; i++) {
+    r -= weights[i]
+    if (r < 0) return pool[i]
+  }
+  return pool[pool.length - 1]
+}
+
+// 1問ぶんの結果を記録する
+export const recordKanji = (log, word, right) => {
+  const cur = { ...(log || {}) }
+  const e = { ok: 0, ng: 0, ...(cur[word] || {}) }
+  if (right) e.ok += 1
+  else e.ng += 1
+  cur[word] = e
+  return cur
+}
+
 // 出題を1問組み立てる。
 //   kind 'read'  … 熟語を出して読みを当てる
 //   kind 'write' … 読みを出して熟語を当てる
 // ★まちがいの選択肢は**同じ級の別の語**から取る。
 //   読み問題では「読みの長さが近いもの」を優先＝字数で答えが割れないようにする
-export const makeKanjiQuiz = (gradeKey, rng = Math.random, kind = null) => {
+// log と recent を渡すと、苦手な語が優先して出る（渡さなければただの抽選）
+export const makeKanjiQuiz = (gradeKey, rng = Math.random, kind = null, log = null, recent = []) => {
   const words = kanjiWordsOf(gradeKey)
   if (words.length < KANJI_CHOICES) return null
-  const pick = words[Math.floor(rng() * words.length)]
+  const pick = pickKanjiWord(words, log, rng, recent)
+  if (!pick) return null
   const type = kind || (rng() < 0.5 ? 'read' : 'write')
   const answer = type === 'read' ? pick.y : pick.w
 
