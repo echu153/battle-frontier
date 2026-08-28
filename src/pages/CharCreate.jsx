@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabase'
 import { validateName } from '../lib/nameFilter'
+import { creatableVersions, V2_PUBLIC } from '../lib/gameMode'
 
 const CLASSES = [
   { id:'戦士',    icon:'⚔️', hp_max:80,  mp_max:10, atk:10, def:8,  matk:1,  mdef:3,  spd:5,  desc:'高HP・高防御の前衛',     weaponName:'木の剣' },
@@ -27,10 +28,6 @@ const PRESET_AVATARS = [
   { id:'priest',    label:'僧侶',      url:`${SUPABASE_URL}/storage/v1/object/public/avatars/priest.png` },
 ]
 
-// ★バトルフロンティアⅡは開発限定（is_admin）。一般公開するときはここを true にすれば
-//   選択肢が全員に出る。⚠v2側のゲート（v2_is_dev）はそれとは別に残っているので、
-//   公開するときは両方そろえること。
-const V2_PUBLIC = false
 
 // 「どちらで始めるか」のカード
 const pickStyle = (color) => ({
@@ -120,28 +117,40 @@ export default function CharCreate() {
   const selectedJob = CLASSES.find(c => c.id === selectedClass)
 
   // ===== どちらで始めるか =====
-  // ★新規作成のとき「バトルフロンティア」か「バトルフロンティアⅡ」を選ぶ（2026-08-23 ユーザー指示）。
-  //   Ⅱは開発限定（is_admin）なので、**選択肢を出すのも is_admin のときだけ**。
-  //   一般公開するときは V2_PUBLIC を true にすれば全員に出る（ゲートは v2 側にも残っている）。
-  const [canPickV2, setCanPickV2] = useState(false)
-  const [game, setGame] = useState(null)   // null＝まだ選んでいない
+  // ★作れる版は src/lib/gameMode.js の CREATE_MODE が決める（2026-08-26 ユーザー指示）。
+  //   2つ作れるときだけ「どちらではじめる？」を出し、1つしか作れないならそこへ直行する。
+  //   is_admin はいつでも両方作れる（作れないと開発中の確認ができない）。
+  const [versions, setVersions] = useState(null)   // null＝まだ分からない（is_admin を確かめている途中）
+  const [game, setGame] = useState(null)           // null＝まだ選んでいない
 
   useEffect(() => {
     let alive = true
     ;(async () => {
-      if (V2_PUBLIC) { if (alive) { setCanPickV2(true) } return }
+      let admin = false
       try {
         const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
-        const { data } = await supabase.from('profiles').select('is_admin').eq('id', user.id).maybeSingle()
-        if (alive && data?.is_admin) setCanPickV2(true)
-      } catch { /* 選べないだけ。作成そのものは進める */ }
+        if (user) {
+          const { data } = await supabase.from('profiles').select('is_admin').eq('id', user.id).maybeSingle()
+          admin = !!data?.is_admin
+        }
+      } catch { /* 確かめられなければ一般として扱う */ }
+      if (alive) setVersions(creatableVersions(admin))
     })()
     return () => { alive = false }
   }, [])
 
+  // ★Ⅱしか作れないなら、この画面には用が無いので送り出す
+  useEffect(() => {
+    if (versions && versions.length === 1 && versions[0] === 'v2') window.location.href = '/v2'
+  }, [versions])
+
+  // 作れる版が分かるまでは何も出さない（一瞬だけ無印の画面が見えるのを防ぐ）
+  if (versions === null) return null
+  // Ⅱへ送り出している最中
+  if (versions.length === 1 && versions[0] === 'v2') return null
+
   // 選ぶ画面。Ⅱを選んだら v2 のキャラ作成（名前だけ・職業はノーブル固定）へ渡す
-  if (canPickV2 && game === null) {
+  if (versions.length > 1 && game === null) {
     return (
       <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#000820', padding:'20px' }}>
         <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'30px', width:'500px', maxWidth:'100%', fontFamily:'monospace' }}>
@@ -163,7 +172,7 @@ export default function CharCreate() {
           <button onClick={() => { window.location.href = '/v2' }} style={pickStyle('#44ddff')}>
             <div style={{ color:'#44ddff', fontSize:'15px', letterSpacing:'2px' }}>
               BATTLE FRONTIER <span style={{ fontSize:'13px' }}>Ⅱ</span>
-              <span style={{ color:'#c69a5c', fontSize:'10px', letterSpacing:0 }}> ［開発中］</span>
+              {!V2_PUBLIC && <span style={{ color:'#c69a5c', fontSize:'10px', letterSpacing:0 }}> ［開発中］</span>}
             </div>
             <div style={{ color:'#88ccff', fontSize:'11px', marginTop:'4px' }}>バトルフロンティアⅡ</div>
             <div style={{ color:'#7fa6d0', fontSize:'10px', marginTop:'6px', lineHeight:1.7 }}>
@@ -180,7 +189,7 @@ export default function CharCreate() {
       <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'30px', width:'500px', fontFamily:'monospace' }}>
         <div style={{ color:'#ffcc00', textAlign:'center', fontSize:'18px', marginBottom:'20px', letterSpacing:'3px' }}>
           キャラクター作成
-          {canPickV2 && (
+          {versions.length > 1 && (
             <div style={{ fontSize:'10px', color:'#446688', letterSpacing:0, marginTop:'4px' }}>
               バトルフロンティア
               <button type="button" onClick={() => setGame(null)}

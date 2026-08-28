@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../supabase'
 import { validateName } from '../../lib/nameFilter'
 import { reportDevAccess } from '../../lib/devAccess'
+import { canPlayV2 } from '../../lib/gameMode'
 import {
   STAT_KEYS, STAT_DEFS, MAX_LV, ROLLS_PER_LV, JOB_CHANGE_POWER,
   canJobChange,
@@ -129,11 +130,15 @@ export default function V2Home() {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) { nav('/login'); return }
         const { data: p } = await supabase.from('profiles').select('username, is_admin').eq('id', user.id).maybeSingle()
-        // 開発限定。非管理者は旧BFへ戻す（アクセスは管理者へ通知）
-        if (!p?.is_admin) { reportDevAccess('v2_remake', 'リメイク版[開発]'); nav('/game'); return }
+        // ★入れるかどうかは gameMode.js の V2_PUBLIC が決める（切り替えは1か所）。
+        //   公開前は開発限定＝非管理者は旧BFへ戻す（アクセスは管理者へ通知）
+        if (!canPlayV2(p?.is_admin)) { reportDevAccess('v2_remake', 'リメイク版[開発]'); nav('/game'); return }
         if (!alive) return
-        setName(p.username || '')
-        setIsAdmin(!!p.is_admin)
+        // ⚠Ⅱだけで始めた人は**旧版の profiles に行が無い**（v2_create_character は
+        //   v2_profiles にしか書かない）。p が null でも落ちないようにしておくこと。
+        //   ここを p.username と書くと、Ⅱ単独リリース後の新規が真っ白になる
+        setName(p?.username || '')
+        setIsAdmin(!!p?.is_admin)
         const [{ data: v2, error: e2 }, { data: cls, error: e3 }] = await Promise.all([
           supabase.from('v2_profiles').select('*').eq('id', user.id).maybeSingle(),
           supabase.from('v2_classes').select('*').order('sort'),
