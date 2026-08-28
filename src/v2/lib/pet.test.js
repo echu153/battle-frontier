@@ -9,9 +9,11 @@ import {
   STACK_LIMIT, STACK_PLACE_MIN, stackDrift, stackGravity, stackPlaceSec, stackStart, stackStep, stackPt,
   COIN_HIT_PT, COIN_CHAIN_PT, COIN_TOSSES, COIN_SIDES, coinFlip, coinPt,
   WALK_MAX_STEPS, walkPt,
-  KANJI_GRADES, KANJI_BASE_PT, kanjiPt,
+  KANJI_GRADES, KANJI_BASE_PT, KANJI_QUIZ_MAX, KANJI_CHOICES, kanjiPt, makeKanjiQuiz,
+  addWalk,
   emptyPetState, playsLeft, beginPlay, scorePlay, applyPlay, totalPtOf,
 } from './pet.js'
+import { kanjiWordsOf } from './kanjiData.js'
 
 // ===== ステの並び =====
 
@@ -354,11 +356,95 @@ test('歩数は1,000歩ごとに10pt、8,000歩で頭打ち', () => {
   assert.equal(walkPt(-100), 0)
 })
 
+test('歩数は減らない。区切りを跨いだぶんだけptが入る', () => {
+  let s = emptyPetState()
+  let r = addWalk(s, 500, '2026-08-27')
+  assert.equal(r.pt, 0, '1,000歩に届く前に入っている')
+  r = addWalk(r.state, 1200, '2026-08-27')
+  assert.equal(r.pt, 10)
+  assert.equal(r.state.cum.str, 10)
+  // ★同じ歩数で何度呼ばれても二重に入らない（歩くたびに呼ぶので必ず起きる）
+  r = addWalk(r.state, 1200, '2026-08-27')
+  assert.equal(r.pt, 0, '同じ歩数で二重に入っている')
+  assert.equal(r.state.cum.str, 10)
+  // 画面を開き直して0から数え始めても、その日の最大値より下がらない
+  r = addWalk(r.state, 300, '2026-08-27')
+  assert.equal(r.state.counts.walkSteps, 1200, '歩数が巻き戻っている')
+})
+
+test('歩数は8,000歩で頭打ち。日付が変われば0から', () => {
+  let r = addWalk(emptyPetState(), 50000, '2026-08-27')
+  assert.equal(r.pt, 80)
+  r = addWalk(r.state, 60000, '2026-08-27')
+  assert.equal(r.pt, 0, '上限を超えても入っている')
+  r = addWalk(r.state, 1000, '2026-08-28')
+  assert.equal(r.state.counts.walkSteps, 1000, '日付が変わっても持ち越している')
+  assert.equal(r.pt, 10)
+  assert.equal(r.state.cum.str, 80 + 10, '累計ptは持ち越す')
+})
+
 // ===== 漢字 =====
 
+test('漢字は1問＝1回として数える', () => {
+  assert.equal(CONTENT_BY_KEY.kanji.plays, KANJI_QUIZ_MAX)
+  assert.equal(KANJI_QUIZ_MAX, 20)
+})
+
+test('出題は熟語と読みのどちらかを問い、選択肢に必ず正解が入る', () => {
+  let seed = 11
+  const rng = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648 }
+  for (const g of KANJI_GRADES) {
+    for (let i = 0; i < 30; i++) {
+      const q = makeKanjiQuiz(g.key, rng)
+      assert.ok(q, `${g.label}で出題できない`)
+      assert.equal(q.choices.length, KANJI_CHOICES)
+      assert.ok(q.choices.includes(q.answer), '選択肢に正解がない')
+      assert.equal(new Set(q.choices).size, KANJI_CHOICES, '選択肢が重複している')
+      assert.equal(q.answer, q.type === 'read' ? q.yomi : q.word)
+      assert.equal(q.ask, q.type === 'read' ? q.word : q.yomi)
+      assert.ok(!q.choices.includes(q.ask) || q.type === 'write' || q.ask !== q.answer)
+    }
+  }
+})
+
+test('読み問題の選択肢はぜんぶ読み、書き問題はぜんぶ熟語', () => {
+  let seed = 5
+  const rng = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648 }
+  for (let i = 0; i < 40; i++) {
+    const read = makeKanjiQuiz('g3', rng, 'read')
+    for (const c of read.choices) assert.match(c, /^[ぁ-ん]+$/, `読みでない選択肢（${c}）`)
+    const write = makeKanjiQuiz('g3', rng, 'write')
+    for (const c of write.choices) assert.match(c, /[一-龥]/, `熟語でない選択肢（${c}）`)
+  }
+})
+
+test('出題もとの読みはすべてひらがな', () => {
+  for (const g of KANJI_GRADES) {
+    const words = kanjiWordsOf(g.key)
+    assert.ok(words.length >= KANJI_CHOICES, `${g.label}の語が少なすぎて出題できない`)
+    for (const e of words) {
+      assert.match(e.y, /^[ぁ-ん]+$/, `${e.w} の読みがひらがなでない`)
+      assert.match(e.w, /[一-龥]/, `${e.w} に漢字がない`)
+    }
+  }
+})
+
+test('同じ級に同じ熟語を二重に入れない', () => {
+  for (const g of KANJI_GRADES) {
+    const words = kanjiWordsOf(g.key).map(e => e.w)
+    assert.equal(new Set(words).size, words.length, `${g.label}に同じ熟語がある`)
+  }
+})
+
+
+// ★実際に踏んだ穴。倍率1.1のとき 4×1.1＝4.4→切り捨て4で3級と同額になり、
+//   準2級を選ぶ意味が消えていた。**ゲームが実際に配るのは1問ぶん**なので1問で見る
 test('上の級ほど1問のptが高い', () => {
-  const pts = KANJI_GRADES.map(g => kanjiPt(g.key, 10))
-  for (let i = 1; i < pts.length; i++) assert.ok(pts[i] > pts[i - 1], `${KANJI_GRADES[i].label}が上がっていない`)
+  const pts = KANJI_GRADES.map(g => kanjiPt(g.key, 1))
+  for (let i = 1; i < pts.length; i++) {
+    assert.ok(pts[i] > pts[i - 1],
+      `${KANJI_GRADES[i].label}が${KANJI_GRADES[i - 1].label}と同じかそれ以下（${pts[i]}pt）`)
+  }
   assert.equal(kanjiPt('g3', 20), KANJI_BASE_PT * 20, '3級は20問全問正解で80pt')
 })
 

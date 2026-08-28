@@ -9,13 +9,16 @@ import {
   MEMORY_PAIRS, memoryDeck, memoryPt,
   STACK_LIMIT, stackStart, stackStep, stackPt,
   COIN_SIDES, COIN_TOSSES, COIN_CHAIN_FROM, coinFlip, coinPt,
+  countsOf, addWalk, WALK_MAX_STEPS,
 } from '../lib/pet.js'
+import { WalkGame, KanjiGame } from './V2PetReal.jsx'
 
 // ============================================================
 // ペット — 遊びと現実の行動で育て、ステータスを主人公に足す
 // ------------------------------------------------------------
-// いま動くのは**ゲーム内で完結する3つ**（神経衰弱・積み上げ耐久・コイントス）。
-// 運動（歩数センサー）と漢字（配当漢字データ）は準備中として枠だけ出す。
+// このファイルは全体の枠と、ゲーム内で完結する3つ
+// （神経衰弱・積み上げ耐久・コイントス）。
+// 現実の行動でのばす2つ（運動＝歩数センサー／漢字）は V2PetReal.jsx。
 //
 // ★育ち具合の保存先は端末（localStorage）＝**仮**。
 //   ステが主人公に効く以上、最後は必ずサーバーが数える。
@@ -64,6 +67,15 @@ export default function V2Pet({ onBack }) {
     setResult({ key, label, pts, gains: r.gains })
   }
 
+  // 歩数は「回数」ではなく量。今日の歩数を記録して、区切りを跨いだぶんだけptが入る
+  const walked = (steps) => {
+    const r = addWalk(stateRef.current, steps, day)
+    save(r.state)
+    if (r.pt > 0) {
+      setResult({ key:'walk', label:`${r.state.counts.walkSteps}歩`, pts:{ str:r.pt }, gains:r.gains })
+    }
+  }
+
   const stats = statsOf(state.cum)
   const total = totalPtOf(state)
   const lv = petLvOf(total)
@@ -105,27 +117,26 @@ export default function V2Pet({ onBack }) {
         <div style={{ display:'grid', gap:'6px' }}>
           {CONTENTS.map(c => {
             const left = playsLeft(state, c.key, day)
-            const ready = c.key === 'stack' || c.key === 'memory' || c.key === 'coin'
-            const out = left === 0
-            const color = !ready ? TEXT.empty : out ? TEXT.empty : '#88ccff'
+            const steps = countsOf(state, day).walkSteps || 0
+            const out = left === 0 || (c.key === 'walk' && steps >= WALK_MAX_STEPS)
             return (
-              <button key={c.key} disabled={!ready || out}
+              <button key={c.key} disabled={out}
                 onClick={() => { setResult(null); setGame(c.key) }}
-                style={{ ...cell, textAlign:'left', padding:'9px 10px', color,
-                  cursor: (!ready || out) ? 'not-allowed' : 'pointer', fontFamily:'monospace' }}>
+                style={{ ...cell, textAlign:'left', padding:'9px 10px',
+                  color: out ? TEXT.empty : '#88ccff',
+                  cursor: out ? 'not-allowed' : 'pointer', fontFamily:'monospace' }}>
                 <div style={{ fontSize:'12px' }}>
                   {c.icon} {c.label}
                   <span style={{ color:TEXT.label, fontSize:'10px', marginLeft:'8px' }}>
                     {c.main.map(k => STAT_DEFS[k].label).join('・')}
                   </span>
-                  {!ready && <span style={{ color:'#ff8844', fontSize:'10px', marginLeft:'8px' }}>準備中</span>}
-                  {/* ★回数の上限がないコンテンツ（運動・漢字）は left が null。
-                      そのまま出すと「あとnull回」になるので、量の上限は下の note 側に任せる */}
-                  {ready && left !== null && (
-                    <span style={{ color: out ? '#ff8844' : '#44ff88', fontSize:'10px', marginLeft:'8px' }}>
-                      {out ? '今日はおしまい' : `あと${left}回`}
-                    </span>
-                  )}
+                  {/* ★運動だけは回数で区切らない＝left が null。歩数のほうを出す */}
+                  <span style={{ color: out ? '#ff8844' : '#44ff88', fontSize:'10px', marginLeft:'8px' }}>
+                    {out ? '今日はおしまい'
+                      : c.key === 'walk' ? `${steps}歩`
+                      : c.key === 'kanji' ? `あと${left}問`
+                      : `あと${left}回`}
+                  </span>
                 </div>
                 <div style={{ color:TEXT.sub, fontSize:'10px', marginTop:'3px' }}>
                   {c.note}（{c.limitText}）
@@ -148,6 +159,8 @@ export default function V2Pet({ onBack }) {
         </div>
       )}
 
+      {game === 'walk'   && <WalkGame   state={state} day={day} onWalk={walked} onBack={() => setGame('')} />}
+      {game === 'kanji'  && <KanjiGame  state={state} day={day} onBegin={begin} onDone={finish} onBack={() => setGame('')} />}
       {game === 'memory' && <MemoryGame onBegin={begin} onDone={finish} onBack={() => setGame('')} />}
       {game === 'stack'  && <StackGame  onBegin={begin} onDone={finish} onBack={() => setGame('')} />}
       {game === 'coin'   && <CoinGame   onBegin={begin} onDone={finish} onBack={() => setGame('')} />}

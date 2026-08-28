@@ -16,6 +16,8 @@
 // tools で逆算してから確定させる（勘で置かない）。
 // ============================================================
 
+import { kanjiWordsOf } from './kanjiData.js'
+
 // 本編の STAT_KEYS から HP・MP を除いた6種。並びは本編と揃える
 export const PET_STAT_KEYS = ['str', 'dex', 'agi', 'int_stat', 'vit', 'luk']
 
@@ -29,8 +31,9 @@ export const SPILL = 0.1
 export const CONTENTS = [
   { key:'walk',   label:'運動',         icon:'👟', main:['str'],
     limitText:'8,000歩/日',  note:'歩数を数える。1,000歩ごとに10pt' },
-  { key:'kanji',  label:'漢字',         icon:'✍',  main:['int_stat'],
-    limitText:'20問/日',     note:'漢字検定3級〜1級。正解した数でpt' },
+  // ★漢字は**1問＝1回**として数える（plays をそのまま出題数の上限に使う）
+  { key:'kanji',  label:'漢字',         icon:'✍',  main:['int_stat'], plays:20,
+    limitText:'20問/日',     note:'漢字検定3級〜1級。正解でpt・上の級ほど1問が高い' },
   { key:'stack',  label:'積み上げ耐久',  icon:'🧱', main:['vit'], plays:5,
     limitText:'5回/日',      note:'崩れるまでに乗せた個数がそのままpt。上限なし' },
   { key:'memory', label:'神経衰弱',      icon:'🃏', main:['dex','agi'], plays:1,
@@ -140,6 +143,10 @@ export const applyPlay = (state, key, pts, day) => {
 // 累計ptの合計（＝ペットのLVのもと）
 export const totalPtOf = (state) =>
   PET_STAT_KEYS.reduce((t, k) => t + (state?.cum?.[k] || 0), 0)
+
+// 「回数」では区切れない、その日の積み上げ量（いまは歩数だけ）。日付が変われば0から
+export const countsOf = (state, day) =>
+  (state?.day === day ? (state.counts || {}) : {})
 
 // スコアを 0〜max の pt に直す。best で満点、worst で0
 const scale = (v, best, worst, max) => {
@@ -257,20 +264,84 @@ export const WALK_MAX_STEPS = 8000
 export const walkPt = (steps) =>
   Math.floor(Math.min(WALK_MAX_STEPS, Math.max(0, steps || 0)) / WALK_STEP_UNIT) * WALK_PT_PER_UNIT
 
+// 今日の歩数を記録して、まだ渡していないぶんのptを入れる。
+// ★歩数は減らない（画面を開き直しても、その日の最大値を持つ）。
+//   1,000歩ごとの区切りを跨いだときだけptが入るので、何度呼んでも二重には入らない
+export const addWalk = (state, steps, day) => {
+  const cur = state || emptyPetState()
+  const counts = { ...countsOf(cur, day) }
+  const total = Math.max(counts.walkSteps || 0, Math.max(0, Math.floor(steps || 0)))
+  const already = counts.walkPt || 0
+  const pt = Math.max(0, walkPt(total) - already)
+  counts.walkSteps = total
+  counts.walkPt = already + pt
+  const base = { ...cur, day, plays: playsOf(cur, day), counts }
+  if (!pt) return { pt: 0, gains: emptyPetGains(), state: base }
+  const scored = scorePlay(base, { str: pt })
+  return { pt, gains: scored.gains, state: scored.state }
+}
+
 // ============================================================
 // 漢字 — INT（配当漢字から問題を組み立てる。データは後で足す）
 // ============================================================
+// ★倍率は**1問ぶんを切り捨てても差が残る**ように刻むこと。
+//   1.1 にしていたとき、4×1.1＝4.4→切り捨て4で3級とまったく同じptになっていた
+//   （上の級を選ぶ意味が消える）。1問あたり 4/5/6/8/10pt。
 export const KANJI_GRADES = [
   { key:'g3',  label:'3級',   mult:1 },
-  { key:'g25', label:'準2級', mult:1.1 },
-  { key:'g2',  label:'2級',   mult:1.25 },
-  { key:'g15', label:'準1級', mult:1.5 },
-  { key:'g1',  label:'1級',   mult:2 },
+  { key:'g25', label:'準2級', mult:1.25 },
+  { key:'g2',  label:'2級',   mult:1.5 },
+  { key:'g15', label:'準1級', mult:2 },
+  { key:'g1',  label:'1級',   mult:2.5 },
 ]
 export const KANJI_BASE_PT = 4
-export const KANJI_QUIZ_MAX = 20       // 1日の出題数
+export const KANJI_QUIZ_MAX = 20       // 1日の出題数（1問＝1回として数える）
+export const KANJI_CHOICES = 4         // 選択肢の数
 export const kanjiPt = (gradeKey, correct) => {
   const g = KANJI_GRADES.find(x => x.key === gradeKey)
   if (!g) return 0
   return Math.floor(Math.max(0, correct || 0) * KANJI_BASE_PT * g.mult)
+}
+
+// 出題を1問組み立てる。
+//   kind 'read'  … 熟語を出して読みを当てる
+//   kind 'write' … 読みを出して熟語を当てる
+// ★まちがいの選択肢は**同じ級の別の語**から取る。
+//   読み問題では「読みの長さが近いもの」を優先＝字数で答えが割れないようにする
+export const makeKanjiQuiz = (gradeKey, rng = Math.random, kind = null) => {
+  const words = kanjiWordsOf(gradeKey)
+  if (words.length < KANJI_CHOICES) return null
+  const pick = words[Math.floor(rng() * words.length)]
+  const type = kind || (rng() < 0.5 ? 'read' : 'write')
+  const answer = type === 'read' ? pick.y : pick.w
+
+  // 答え以外の候補。読みが近い長さのものを前に寄せてから選ぶ
+  const others = words.filter(e => e.w !== pick.w && e.y !== pick.y)
+  others.sort((a, b) =>
+    Math.abs(a.y.length - pick.y.length) - Math.abs(b.y.length - pick.y.length))
+  const pool = others.slice(0, Math.max(KANJI_CHOICES * 3, 12))
+  const wrong = []
+  while (wrong.length < KANJI_CHOICES - 1 && pool.length) {
+    const e = pool.splice(Math.floor(rng() * pool.length), 1)[0]
+    const v = type === 'read' ? e.y : e.w
+    if (v !== answer && !wrong.includes(v)) wrong.push(v)
+  }
+  if (wrong.length < KANJI_CHOICES - 1) return null
+
+  const choices = [answer, ...wrong]
+  for (let i = choices.length - 1; i > 0; i--) {   // 並べ替え
+    const j = Math.floor(rng() * (i + 1))
+    const tmp = choices[i]
+    choices[i] = choices[j]
+    choices[j] = tmp
+  }
+  return {
+    type,
+    grade: gradeKey,
+    ask: type === 'read' ? pick.w : pick.y,   // 画面に出す側
+    answer,
+    choices,
+    word: pick.w,
+    yomi: pick.y,
+  }
 }
