@@ -15,7 +15,8 @@ import {
   addWalk,
   emptyPetState, playsLeft, beginPlay, scorePlay, applyPlay, totalPtOf,
 } from './pet.js'
-import { kanjiWordsOf } from './kanjiData.js'
+import { kanjiWordsOf, kanjiMeaningOf } from './kanjiData.js'
+import { KANJI_MEANING } from './kanjiMeaning.js'
 
 // ===== ステの並び =====
 
@@ -575,4 +576,45 @@ test('上の級ほど1問のptが高い', () => {
 test('知らない級は0pt', () => {
   assert.equal(kanjiPt('g0', 20), 0)
   assert.equal(kanjiPt('g3', 0), 0)
+})
+
+// ★正解を出すときに意味も見せる（2026-08-29 ユーザー指示「がちで勉強に使えるようにしたい」）。
+//   語を足して意味を書き忘れると、その語だけ解説が出ない＝黙って抜ける。ここで落とす
+test('★どの熟語にも意味が書いてある', () => {
+  const miss = []
+  for (const g of KANJI_GRADES) {
+    for (const w of kanjiWordsOf(g.key)) {
+      if (!kanjiMeaningOf(w.w)) miss.push(`${g.label} ${w.w}`)
+    }
+  }
+  assert.deepEqual(miss, [], `意味が書かれていない熟語: ${miss.join(' / ')}`)
+})
+
+test('意味の書き方がそろっている', () => {
+  const bad = []
+  for (const [w, m] of Object.entries(KANJI_MEANING)) {
+    if (m.length > 30) bad.push(`${w}（${m.length}字・長すぎる）`)
+    if (!m.trim()) bad.push(`${w}（空）`)
+    // 答え合わせの一瞬に読むものなので、改行や英字は入れない
+    if (/[\n\r]/.test(m)) bad.push(`${w}（改行が入っている）`)
+    if (/[A-Za-z]/.test(m)) bad.push(`${w}（英字が混ざっている）`)
+  }
+  assert.deepEqual(bad, [], `書き方がそろっていない: ${bad.join(' / ')}`)
+})
+
+// ★語が無いのに意味だけ残っていると、消した語の掃除もれに気づけない
+test('意味の表に、いない熟語が残っていない', () => {
+  const all = new Set(KANJI_GRADES.flatMap(g => kanjiWordsOf(g.key).map(w => w.w)))
+  const orphan = Object.keys(KANJI_MEANING).filter(w => !all.has(w))
+  assert.deepEqual(orphan, [], `熟語の一覧に無いのに意味だけある: ${orphan.join(' / ')}`)
+})
+
+test('画面は正解のときも不正解のときも意味を出す', async () => {
+  const { readFileSync } = await import('node:fs')
+  const src = readFileSync(new URL('../components/V2PetReal.jsx', import.meta.url), 'utf8')
+  assert.match(src, /kanjiMeaningOf\(quiz\.word\)/, '意味を出していない')
+  // judged の中（＝答え合わせの枠）に置いていること。正解・不正解で出し分けていないこと
+  const judged = src.slice(src.indexOf('{judged && ('), src.indexOf('{judged && (') + 1600)
+  assert.ok(judged.includes('kanjiMeaningOf'), '答え合わせの枠の外に置いている')
+  assert.ok(!/judged\.right &&[^\n]*kanjiMeaningOf/.test(src), '正解のときしか出していない')
 })

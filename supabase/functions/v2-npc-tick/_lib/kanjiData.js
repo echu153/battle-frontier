@@ -16,6 +16,12 @@
 //   pet.test.js が重複と表記をぜんぶ見張っているので、足したらテストを回す
 // ============================================================
 
+import { KANJI_MEANING } from './kanjiMeaning.js'
+
+// 熟語の意味。★正解を出すときに一緒に見せる（2026-08-29 ユーザー指示）。
+//   意味の表は kanjiMeaning.js。ここは引くだけ
+export const kanjiMeaningOf = (word) => KANJI_MEANING[word] || ''
+
 export const KANJI_WORDS = {
   // ===== 3級（中学校卒業程度） =====
   g3: [

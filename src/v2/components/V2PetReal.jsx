@@ -5,7 +5,7 @@ import {
   KANJI_GRADES, kanjiPt, makeKanjiQuiz, recordKanji, kanjiMasteredCount,
   KANJI_SET_SIZE,
 } from '../lib/pet.js'
-import { kanjiWordsOf } from '../lib/kanjiData.js'
+import { kanjiWordsOf, kanjiMeaningOf } from '../lib/kanjiData.js'
 import { createStepDetector, needsMotionPermission } from '../lib/steps.js'
 import { loadPref, savePref } from '../lib/prefs.js'
 
@@ -339,8 +339,8 @@ export function KanjiGame({ state, day, onBegin, onDone, onBack }) {
                   ? (drill ? '正解！（練習なのでptは入りません）' : `正解！ INT +${judged.pt}pt`)
                   : '不正解'}
               </div>
-              <div style={{ color:TEXT.sub, fontSize:'11px', marginTop:'4px' }}>
-                {quiz.word}（{quiz.yomi}）
+              <div style={{ color:'#cfe2ff', fontSize:'14px', marginTop:'6px' }}>
+                {quiz.word}<span style={{ color:TEXT.sub, fontSize:'11px' }}>（{quiz.yomi}）</span>
                 {/* 間違えた語は濃く出直してくる、と分かるように出しておく */}
                 {!judged.right && (
                   <span style={{ color:'#ff8844', fontSize:'10px', marginLeft:'8px' }}>
@@ -348,6 +348,13 @@ export function KanjiGame({ state, day, onBegin, onDone, onBack }) {
                   </span>
                 )}
               </div>
+              {/* ★意味も出す。ここが「勉強に使える」の中身（2026-08-29 ユーザー指示） */}
+              {kanjiMeaningOf(quiz.word) && (
+                <div style={{ color:'#88ddaa', fontSize:'12px', marginTop:'4px', lineHeight:1.7,
+                  borderLeft:'2px solid #226644', paddingLeft:'8px' }}>
+                  {kanjiMeaningOf(quiz.word)}
+                </div>
+              )}
               {/* ★セットの中は必ず最後まで進める。区切りは5問目のあとだけ */}
               <div style={{ display:'flex', gap:'8px', marginTop:'8px' }}>
                 <button onClick={after} style={btn('#cc44ff')}>
