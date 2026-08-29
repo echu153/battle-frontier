@@ -3,6 +3,7 @@ import { btn, miniBtn, TEXT } from './v2ui.js'
 import {
   playsLeft, countsOf, walkPt, WALK_MAX_STEPS,
   KANJI_GRADES, kanjiPt, makeKanjiQuiz, recordKanji, kanjiMasteredCount,
+  KANJI_SET_SIZE,
 } from '../lib/pet.js'
 import { kanjiWordsOf } from '../lib/kanjiData.js'
 import { createStepDetector, needsMotionPermission } from '../lib/steps.js'
@@ -137,8 +138,12 @@ export function KanjiGame({ state, day, onBegin, onDone, onBack }) {
   const [grade, setGrade] = useState(null)
   const [quiz, setQuiz] = useState(null)
   const [judged, setJudged] = useState(null)   // { picked, right, pt }
-  const [right, setRight] = useState(0)
-  const [asked, setAsked] = useState(0)
+  // ★1セット5問で区切る（2026-08-29 ユーザー指示）。
+  //   前は20問ノンストップだったので、終わりが見えず「一生続く」状態だった。
+  const [inSet, setInSet] = useState(0)        // このセットで何問目か（1〜5）
+  const [setRight, setSetRight] = useState(0)  // このセットの正解数
+  const [setPt, setSetPt] = useState(0)        // このセットで入ったpt
+  const [done, setDone] = useState(false)      // セットを終えて結果を出している
   const [drill, setDrill] = useState(false)    // 練習モード（ptは入らない）
   // ★覚え具合。**これが「毎日やれば実力がつく」の中身**。
   //   間違えた語ほど濃く出す（重みづけは pet.js の kanjiWeightOf）
@@ -148,13 +153,22 @@ export function KanjiGame({ state, day, onBegin, onDone, onBack }) {
 
   const saveLog = (next) => { savePref(LOG_KEY, next); setLog(next) }
 
-  // 1問出す。★出題の前に今日の1問ぶんを使う（見てからやめる、を封じる）。
-  //   練習モードでは回数を使わない代わりに、ptも入らない
-  const next = (g, practice = drill) => {
-    if (!practice && !onBegin('kanji')) { setQuiz(null); return }
+  // 1問出すだけ（セットの中の次の問題）
+  const ask = (g) => {
     setQuiz(makeKanjiQuiz(g, Math.random, null, log, recent.current))
     setJudged(null)
-    setAsked(n => n + 1)
+    setInSet(n => n + 1)
+  }
+
+  // 1セット始める。★始めた時点で今日の1セットぶんを使う（見てからやめる、を封じる）。
+  //   練習モードでは回数を使わない代わりに、ptも入らない
+  const startSet = (g, practice = drill) => {
+    if (!practice && !onBegin('kanji')) { setQuiz(null); return }
+    setInSet(0)
+    setSetRight(0)
+    setSetPt(0)
+    setDone(false)
+    ask(g)
   }
 
   const answer = (choice) => {
@@ -165,16 +179,24 @@ export function KanjiGame({ state, day, onBegin, onDone, onBack }) {
     saveLog(recordKanji(log, quiz.word, ok))
     recent.current = [quiz.word, ...recent.current].slice(0, 6)
     if (!ok) return
-    setRight(n => n + 1)
+    setSetRight(n => n + 1)
+    setSetPt(n => n + pt)
     if (pt > 0) onDone('kanji', { int_stat: pt }, `${quiz.word}（${quiz.yomi}）`)
   }
 
-  // 今日のぶんを使い切ったら、練習モードへ切り替えて続けられる
+  // 答え合わせのあと。5問目なら結果へ、まだならその場で次の問題
+  const after = () => {
+    if (inSet >= KANJI_SET_SIZE) { setDone(true); setQuiz(null); return }
+    ask(grade)
+  }
+
+  // 今日のぶんを使い切ったら、練習モードへ切り替えて続けられる（こちらも5問で区切る）
   const toDrill = () => {
     setDrill(true)
+    setInSet(0); setSetRight(0); setSetPt(0); setDone(false)
     setQuiz(makeKanjiQuiz(grade, Math.random, null, log, recent.current))
     setJudged(null)
-    setAsked(n => n + 1)
+    setInSet(1)
   }
 
   // ===== 級を選ぶ =====
@@ -183,7 +205,7 @@ export function KanjiGame({ state, day, onBegin, onDone, onBack }) {
       <div style={{ marginTop:'10px' }}>
         <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
           <button onClick={onBack} style={miniBtn('#88aaff')}>← もどる</button>
-          <span style={{ color:TEXT.empty, fontSize:'10px' }}>あと{left}問</span>
+          <span style={{ color:TEXT.empty, fontSize:'10px' }}>あと{left}セット</span>
         </div>
         <div style={{ color:TEXT.label, fontSize:'11px', marginBottom:'8px' }}>級を選んでください</div>
         <div style={{ display:'grid', gap:'6px' }}>
@@ -193,7 +215,7 @@ export function KanjiGame({ state, day, onBegin, onDone, onBack }) {
             const out = left === 0
             return (
               <button key={g.key}
-                onClick={() => { setGrade(g.key); setDrill(out); next(g.key, out) }}
+                onClick={() => { setGrade(g.key); setDrill(out); startSet(g.key, out) }}
                 style={{ ...cell, textAlign:'left', padding:'9px 10px', fontFamily:'monospace',
                   color:'#cc44ff', cursor:'pointer' }}>
                 <div style={{ fontSize:'13px' }}>
@@ -216,7 +238,8 @@ export function KanjiGame({ state, day, onBegin, onDone, onBack }) {
         </div>
         <div style={{ color:TEXT.empty, fontSize:'10px', marginTop:'8px', lineHeight:1.7 }}>
           ※ 上の級ほど1問のptが高くなります。<br />
-          ※ 1問出すたびに今日の1問ぶんを使います。使い切っても<b>練習だけは続けられます</b>（ptは入りません）。<br />
+          ※ <b>1セット{KANJI_SET_SIZE}問</b>です。始めた時点で今日の1セットぶんを使います。
+          使い切っても<b>練習だけは続けられます</b>（ptは入りません）。<br />
           ※ <b>間違えた語ほど何度も出ます</b>。3回正解すると「覚えた」に入ります。
         </div>
       </div>
@@ -231,17 +254,51 @@ export function KanjiGame({ state, day, onBegin, onDone, onBack }) {
         <span style={{ color:'#cc44ff', fontSize:'11px' }}>
           {KANJI_GRADES.find(g => g.key === grade)?.label}
         </span>
-        <span style={{ color:'#44ff88', fontSize:'11px' }}>{right}/{asked}問 正解</span>
+        {/* ★何問目かをはっきり出す（前は残り数が薄くて見落としていた） */}
+        <span style={{ color:'#cfe2ff', fontSize:'13px', fontWeight:'bold' }}>
+          {Math.min(inSet, KANJI_SET_SIZE)} / {KANJI_SET_SIZE}問目
+        </span>
+        <span style={{ color:'#44ff88', fontSize:'11px' }}>{setRight}問 正解</span>
         <span style={{ color: drill ? '#ff8844' : TEXT.empty, fontSize:'10px' }}>
-          {drill ? '練習中（ptは入りません）' : `あと${left}問`}
+          {drill ? '練習中（ptは入りません）' : `あと${left}セット`}
         </span>
       </div>
 
-      {!quiz && (
+      {/* ★1セット終わったときの結果。ここが「終わり」だと分かるようにする */}
+      {!quiz && done && (
+        <div style={{ ...cell, padding:'14px' }}>
+          <div style={{ color:'#44ff88', fontSize:'15px', fontWeight:'bold' }}>
+            {drill ? '練習おわり' : 'セット終了'}
+          </div>
+          <div style={{ color:'#cfe2ff', fontSize:'13px', marginTop:'6px' }}>
+            {setRight} / {KANJI_SET_SIZE}問 正解
+            {!drill && <span style={{ color:'#44ff88', marginLeft:'10px' }}>INT +{setPt}pt</span>}
+          </div>
+          <div style={{ color:TEXT.sub, fontSize:'10px', marginTop:'6px' }}>
+            {drill ? '練習はptが入りません。'
+              : left > 0 ? `今日はあと${left}セットできます。`
+                : '今日のぶんは使い切りました。練習なら続けられます（ptは入りません）。'}
+          </div>
+          <div style={{ display:'flex', gap:'8px', marginTop:'10px', flexWrap:'wrap' }}>
+            {(drill || left > 0) && (
+              <button onClick={() => startSet(grade)} style={btn('#cc44ff')}>
+                {drill ? 'もう1セット（練習）' : `もう1セット（あと${left}）`}
+              </button>
+            )}
+            {!drill && left === 0 && (
+              <button onClick={toDrill} style={btn('#cc44ff')}>練習を続ける</button>
+            )}
+            <button onClick={onBack} style={btn('#88aaff')}>もどる</button>
+          </div>
+        </div>
+      )}
+
+      {/* 級を選んだ時点で今日のぶんが尽きていたとき */}
+      {!quiz && !done && (
         <div style={{ ...cell, padding:'12px' }}>
           <div style={{ color:'#ff8844', fontSize:'11px' }}>今日のぶんは使い切りました。</div>
           <div style={{ color:TEXT.sub, fontSize:'10px', marginTop:'6px' }}>
-            ptは入りませんが、練習は何問でも続けられます。
+            ptは入りませんが、練習は何セットでも続けられます。
           </div>
           <div style={{ display:'flex', gap:'8px', marginTop:'8px' }}>
             <button onClick={toDrill} style={btn('#cc44ff')}>練習を続ける</button>
@@ -291,14 +348,11 @@ export function KanjiGame({ state, day, onBegin, onDone, onBack }) {
                   </span>
                 )}
               </div>
+              {/* ★セットの中は必ず最後まで進める。区切りは5問目のあとだけ */}
               <div style={{ display:'flex', gap:'8px', marginTop:'8px' }}>
-                <button onClick={() => next(grade)} disabled={!drill && left === 0}
-                  style={btn(!drill && left === 0 ? '#62789a' : '#cc44ff')}>
-                  {drill ? '次の問題（練習）' : left === 0 ? '今日はおしまい' : '次の問題'}
+                <button onClick={after} style={btn('#cc44ff')}>
+                  {inSet >= KANJI_SET_SIZE ? 'けっかを見る' : `次の問題（${inSet + 1}/${KANJI_SET_SIZE}）`}
                 </button>
-                {!drill && left === 0 && (
-                  <button onClick={toDrill} style={btn('#cc44ff')}>練習を続ける</button>
-                )}
               </div>
             </div>
           )}

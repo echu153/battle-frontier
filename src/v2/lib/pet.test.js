@@ -10,6 +10,7 @@ import {
   COIN_TRIES, COIN_HEAD_PT, COIN_RUN_CAP, COIN_SIDES, coinFlip, coinRun, coinPt,
   WALK_MAX_STEPS, walkPt,
   KANJI_GRADES, KANJI_BASE_PT, KANJI_QUIZ_MAX, KANJI_CHOICES, KANJI_MASTER_OK,
+  KANJI_SET_SIZE, KANJI_SETS_PER_DAY,
   kanjiPt, makeKanjiQuiz, kanjiWeightOf, kanjiScoreOf, kanjiMasteredCount, pickKanjiWord, recordKanji,
   addWalk,
   emptyPetState, playsLeft, beginPlay, scorePlay, applyPlay, totalPtOf,
@@ -415,9 +416,30 @@ test('歩数は8,000歩で頭打ち。日付が変われば0から', () => {
 
 // ===== 漢字 =====
 
-test('漢字は1問＝1回として数える', () => {
-  assert.equal(CONTENT_BY_KEY.kanji.plays, KANJI_QUIZ_MAX)
-  assert.equal(KANJI_QUIZ_MAX, 20)
+// ★漢字は「1セット5問 × 4セット」で区切る（2026-08-29 ユーザー指示）。
+//   前は1問＝1回で、実質20問ノンストップ＝終わりが見えなかった。
+//   合計の出題数（20問）とptは変えていないので、ほかのステとの釣り合いは崩れない。
+test('漢字は1セット5問・1日4セット（合計は前と同じ20問）', () => {
+  assert.equal(KANJI_SET_SIZE, 5)
+  assert.equal(KANJI_SETS_PER_DAY, 4)
+  assert.equal(KANJI_QUIZ_MAX, 20, '1日の合計は前と同じ20問')
+  assert.equal(KANJI_QUIZ_MAX, KANJI_SET_SIZE * KANJI_SETS_PER_DAY)
+  // 回数として数えるのは**セット**（1回＝5問）
+  assert.equal(CONTENT_BY_KEY.kanji.plays, KANJI_SETS_PER_DAY)
+  // 1日ぶんを使い切ったときのptは前と同じ80pt（3級・全問正解）
+  assert.equal(kanjiPt('g3', KANJI_QUIZ_MAX), 80)
+})
+
+// ★画面が5問で区切っていること。ここが崩れると「一生問題が続く」に戻る
+test('★漢字の画面は1セット5問で区切って結果を出す', async () => {
+  const { readFileSync } = await import('node:fs')
+  const src = readFileSync(new URL('../components/V2PetReal.jsx', import.meta.url), 'utf8')
+  assert.match(src, /KANJI_SET_SIZE/, '1セットの問題数を画面が見ていない')
+  assert.match(src, /inSet >= KANJI_SET_SIZE/, '5問目で区切っていない')
+  assert.match(src, /セット終了/, 'セットの結果を出していない')
+  // 始めるときに1セットぶんを使う（1問ごとではない）
+  assert.match(src, /const startSet = \(g, practice = drill\) => \{\s*\n\s*if \(!practice && !onBegin\('kanji'\)\)/,
+    'セットの始めに回数を使っていない')
 })
 
 test('出題は熟語と読みのどちらかを問い、選択肢に必ず正解が入る', () => {

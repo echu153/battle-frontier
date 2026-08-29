@@ -31,9 +31,11 @@ export const SPILL = 0.1
 export const CONTENTS = [
   { key:'walk',   label:'運動',         icon:'👟', main:['str'],
     limitText:'8,000歩/日',  note:'歩数を数える。1,000歩ごとに10pt' },
-  // ★漢字は**1問＝1回**として数える（plays をそのまま出題数の上限に使う）
-  { key:'kanji',  label:'漢字',         icon:'✍',  main:['int_stat'], plays:20,
-    limitText:'20問/日',     note:'漢字検定3級〜1級。正解でpt・上の級ほど1問が高い' },
+  // ★漢字は**1セット＝1回**（2026-08-29 ユーザー指示）。
+  //   前は1問＝1回にしていたので、実質「20問ノンストップ」になって終わりが見えなかった。
+  //   ほかの遊びと同じ「1回やったら終わる」形にそろえる。合計の出題数とptは変えていない。
+  { key:'kanji',  label:'漢字',         icon:'✍',  main:['int_stat'], plays:4,
+    limitText:'4セット/日（1セット5問）', note:'漢字検定3級〜1級。正解でpt・上の級ほど1問が高い' },
   { key:'stack',  label:'積み上げ耐久',  icon:'🧱', main:['vit'], plays:5,
     limitText:'5回/日',      note:'崩れるまでに乗せた個数がそのままpt。上限なし' },
   { key:'memory', label:'神経衰弱',      icon:'🃏', main:['dex','agi'], plays:1,
@@ -306,7 +308,11 @@ export const KANJI_GRADES = [
   { key:'g1',  label:'1級',   mult:2.5 },
 ]
 export const KANJI_BASE_PT = 4
-export const KANJI_QUIZ_MAX = 20       // 1日の出題数（1問＝1回として数える）
+// ★1セット5問 × 4セット＝1日20問（2026-08-29 ユーザー決定）。
+//   合計は前と同じ。区切りを入れて「1セットやったら終わる」形にしただけ
+export const KANJI_SET_SIZE = 5        // 1セットの問題数
+export const KANJI_SETS_PER_DAY = 4    // 1日にできるセット数（CONTENTS の plays と同じ）
+export const KANJI_QUIZ_MAX = KANJI_SET_SIZE * KANJI_SETS_PER_DAY   // 1日の出題数（20問）
 export const KANJI_CHOICES = 4         // 選択肢の数
 export const kanjiPt = (gradeKey, correct) => {
   const g = KANJI_GRADES.find(x => x.key === gradeKey)
