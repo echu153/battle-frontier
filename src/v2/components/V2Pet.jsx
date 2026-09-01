@@ -9,9 +9,14 @@ import {
   MEMORY_PAIRS, memoryDeck, memoryPt,
   STACK_LIMIT, stackStart, stackStep, stackPt,
   COIN_SIDES, COIN_TRIES, COIN_HEAD_PT, coinRun, coinPt,
-  countsOf, addWalk, WALK_MAX_STEPS,
+  countsOf, addWalk, WALK_MAX_STEPS, evolveAll,
 } from '../lib/pet.js'
 import { WalkGame, KanjiGame } from './V2PetReal.jsx'
+import { PartyPanel, WildBattle } from './V2PetBattle.jsx'
+
+
+import { petsOf } from '../lib/pet.js'
+import { speciesOf, SPECIES } from '../lib/petSpecies.js'
 
 // ============================================================
 // ペット — 遊びと現実の行動で育て、ステータスを主人公に足す
@@ -79,6 +84,19 @@ export default function V2Pet({ onCum, onBack }) {
       setResult({ key:'walk', label:`${r.state.counts.walkSteps}歩`, pts:{ str:r.pt }, gains:r.gains })
     }
   }
+
+  const active = petsOf(state)[state.active || 0] || null
+
+  // ★進化LVに届いた子は自動で進化させる（「特定のLVで進化」なので、
+  //   ボタンを押しに行かないと進化しないのはおかしい）。
+  //   evolveAll は進化する子がいなければ同じ state を返すので、ここは回り続けない
+  useEffect(() => {
+    const r = evolveAll(stateRef.current, petLvOf(totalPtOf(stateRef.current)))
+    if (!r.evolved.length) return
+    save(r.state)
+    setResult({ key:'party', label: r.evolved.map(e => `${e.from}は${e.to}に進化した！`).join(' '), pts:{}, gains:{} })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.cum, state.pets])
 
   const stats = statsOf(state.cum)
   const total = totalPtOf(state)
@@ -163,6 +181,42 @@ export default function V2Pet({ onCum, onBack }) {
         </div>
       )}
 
+      {/* ===== 手持ちとバトル ===== */}
+      {!game && (
+        <div style={{ display:'grid', gap:'6px', marginTop:'10px' }}>
+          <button onClick={() => { setResult(null); setGame('party') }}
+            style={{ ...cell, textAlign:'left', padding:'9px 10px', color:'#c0b0ff',
+              cursor:'pointer', fontFamily:'monospace' }}>
+            <div style={{ fontSize:'12px' }}>
+              🐾 手持ち
+              <span style={{ color:TEXT.label, fontSize:'10px', marginLeft:'8px' }}>
+                {petsOf(state).length ? `${petsOf(state).length}体` : 'まだいない'}
+              </span>
+              {active && (
+                <span style={{ color:'#44ff88', fontSize:'10px', marginLeft:'8px' }}>
+                  連れている：{speciesOf(active.sp)?.name}
+                </span>
+              )}
+            </div>
+            <div style={{ color:TEXT.sub, fontSize:'10px', marginTop:'3px' }}>
+              全{SPECIES.length}種。技は4つまで選べる・特定のLVで進化する
+            </div>
+          </button>
+          <button onClick={() => { setResult(null); setGame('wild') }}
+            disabled={!petsOf(state).length}
+            style={{ ...cell, textAlign:'left', padding:'9px 10px',
+              color: petsOf(state).length ? '#ff8844' : TEXT.empty,
+              cursor: petsOf(state).length ? 'pointer' : 'not-allowed', fontFamily:'monospace' }}>
+            <div style={{ fontSize:'12px' }}>⚔ 野生とバトル</div>
+            <div style={{ color:TEXT.sub, fontSize:'10px', marginTop:'3px' }}>
+              勝つと仲間になることがある。タイプの相性で決まる
+            </div>
+          </button>
+        </div>
+      )}
+
+      {game === 'party' && <PartyPanel  state={state} lv={lv} onState={save} onBack={() => setGame('')} />}
+      {game === 'wild'  && <WildBattle  state={state} lv={lv} onState={save} onBack={() => setGame('')} />}
       {game === 'walk'   && <WalkGame   state={state} day={day} onWalk={walked} onBack={() => setGame('')} />}
       {game === 'kanji'  && <KanjiGame  state={state} day={day} onBegin={begin} onDone={finish} onBack={() => setGame('')} />}
       {game === 'memory' && <MemoryGame onBegin={begin} onDone={finish} onBack={() => setGame('')} />}

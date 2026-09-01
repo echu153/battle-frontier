@@ -17,6 +17,9 @@
 // ============================================================
 
 import { kanjiWordsOf } from './kanjiData.js'
+import { speciesOf, knownMoves, evolveTo } from './petSpecies.js'
+
+export const MOVE_SLOTS = 4          // 技は4つまで（petBattle.js と同じ値）
 
 // 本編の STAT_KEYS から HP・MP を除いた6種。並びは本編と揃える
 export const PET_STAT_KEYS = ['str', 'dex', 'agi', 'int_stat', 'vit', 'luk']
@@ -99,7 +102,10 @@ export const petLvNeed = (lv) => Math.floor(PET_LV_STEP * lv * (lv - 1) / 2)  //
 //     cum   … ステごとの累計pt
 //     carry … こぼれる10%の端数（1pt未満の持ち越し）
 // ============================================================
-export const emptyPetState = () => ({ day: '', plays: {}, cum: emptyPetGains(), carry: emptyPetGains() })
+export const emptyPetState = () => ({
+  day: '', plays: {}, cum: emptyPetGains(), carry: emptyPetGains(),
+  pets: [], active: 0,
+})
 
 // 日付が変わっていれば回数を0として読む（累計ptは持ち越す）
 export const playsOf = (state, day) =>
@@ -145,6 +151,86 @@ export const applyPlay = (state, key, pts, day) => {
 // 累計ptの合計（＝ペットのLVのもと）
 export const totalPtOf = (state) =>
   PET_STAT_KEYS.reduce((t, k) => t + (state?.cum?.[k] || 0), 0)
+
+// ============================================================
+// 手持ちのペット
+// ------------------------------------------------------------
+// ★LVも育てたptも**プレイヤーひとりぶんで共通**（ユーザー指示：
+//   LVの上げ方はミニゲームのまま）。だから新しく仲間にした子も
+//   すぐ同じLVで戦える＝集めるのに育て直しの苦行がない。
+//   種ごとの差は**種族値と覚える技**で出る。
+//
+//   pets   … [{ sp: 種族id, moves: [技名…4つまで] }]
+//   active … いま連れている子の位置。主人公へのステ加算はこの1体ぶん
+// ============================================================
+export const PARTY_MAX = 30          // 手持ちの上限
+
+// そのLVで覚えている技のうち、後ろ（＝強い）から4つを既定の編成にする
+export const defaultMovesOf = (speciesId, lv) => {
+  const sp = speciesOf(speciesId)
+  if (!sp) return []
+  const pool = knownMoves(sp, lv)
+  return pool.slice(-MOVE_SLOTS)
+}
+
+export const petsOf = (state) => state?.pets || []
+export const activePet = (state) => petsOf(state)[state?.active || 0] || null
+
+// 仲間にする。すでに上限なら足さない
+export const addPet = (state, speciesId, lv) => {
+  const cur = state || emptyPetState()
+  const pets = [...petsOf(cur)]
+  if (pets.length >= PARTY_MAX) return { ok: false, state: cur, index: -1 }
+  pets.push({ sp: speciesId, moves: defaultMovesOf(speciesId, lv) })
+  return { ok: true, index: pets.length - 1, state: { ...cur, pets, active: cur.active ?? 0 } }
+}
+
+export const setActivePet = (state, index) => {
+  const cur = state || emptyPetState()
+  if (!petsOf(cur)[index]) return cur
+  return { ...cur, active: index }
+}
+
+// 技の編成を差し替える。覚えていない技は入れない
+export const setPetMoves = (state, index, moves, lv) => {
+  const cur = state || emptyPetState()
+  const pets = [...petsOf(cur)]
+  const pet = pets[index]
+  if (!pet) return cur
+  const sp = speciesOf(pet.sp)
+  const learned = knownMoves(sp, lv)
+  const next = (moves || []).filter(n => learned.includes(n)).slice(0, MOVE_SLOTS)
+  pets[index] = { ...pet, moves: next }
+  return { ...cur, pets }
+}
+
+// 進化できる子を全部進化させる。★進化LVは種ごとに違う（petSpecies.js）
+export const evolveAll = (state, lv) => {
+  const cur = state || emptyPetState()
+  const pets = [...petsOf(cur)]
+  const done = []
+  pets.forEach((pet, i) => {
+    let sp = speciesOf(pet.sp)
+    let to = evolveTo(sp, lv)
+    let changed = false
+    while (to) {                       // 2段まとめて進化することもある
+      done.push({ from: sp.name, to: speciesOf(to).name })
+      pet = { ...pet, sp: to }
+      sp = speciesOf(to)
+      to = evolveTo(sp, lv)
+      changed = true
+    }
+    if (changed) {
+      // 進化して覚えた技があれば、空き枠に入れておく
+      const learned = knownMoves(sp, lv)
+      const add = learned.filter(n => !pet.moves.includes(n)).slice(-MOVE_SLOTS)
+      const moves = [...pet.moves]
+      for (const n of add) if (moves.length < MOVE_SLOTS) moves.push(n)
+      pets[i] = { ...pet, moves }
+    }
+  })
+  return { state: done.length ? { ...cur, pets } : cur, evolved: done }
+}
 
 // 「回数」では区切れない、その日の積み上げ量（いまは歩数だけ）。日付が変われば0から
 export const countsOf = (state, day) =>
