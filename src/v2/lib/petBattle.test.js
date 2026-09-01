@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  SPECIES, SPECIES_BY_NAME, FAMILIES, CREATURE_WORDS, hasCreatureWord,
+  SPECIES, SPECIES_BY_NAME, FAMILIES, CREATURE_WORDS, MOTIF, hasCreatureWord,
   learnsetOf, knownMoves, evolveTo, familyOf, STAT_ORDER, speciesOf,
 } from './petSpecies.js'
 import { MOVES, MOVE_BY_NAME, moveOf } from './petMoves.js'
@@ -53,6 +53,25 @@ test('同じ家系で生き物の語を使い回さない', () => {
     }
   }
   assert.deepEqual(bad, [], `家系の中で生き物が同じ：${bad.join('  ')}`)
+})
+
+// ★開発用の控え。名前を足すとき「この家系はもう狼を使った」が分かるように
+test('どの種にもモチーフの生き物が書いてある', () => {
+  const bad = SPECIES.filter(s => !s.motif).map(s => s.name)
+  assert.deepEqual(bad, [], `モチーフが無い：${bad.join('・')}`)
+  assert.equal(Object.keys(MOTIF).length, SPECIES.length, 'MOTIFに余分な行がある')
+})
+
+test('モチーフは家系の中で重ならない（名前と食い違っていないか）', () => {
+  // 生き物の名前だけ取り出して比べる（「クマ（羅 ursus）」→「クマ」）
+  const head = (m) => m.split('（')[0]
+  const bad = []
+  for (const f of FAMILIES) {
+    if (f.names.length < 2) continue
+    const kinds = f.names.map(n => head(MOTIF[n] || ''))
+    if (new Set(kinds).size !== kinds.length) bad.push(`${f.names.join('→')}＝${kinds.join('・')}`)
+  }
+  assert.deepEqual(bad, [], `家系の中でモチーフが同じ：${bad.join('  ')}`)
 })
 
 test('進化しない種もいて、その子は1段目よりずっと強い', () => {
