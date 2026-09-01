@@ -273,7 +273,7 @@ test('技を出すとPPが減る', () => {
   const sp = SPECIES_BY_NAME['インフェルレオン']
   const cum = Object.fromEntries(PET_STAT_KEYS.map(k => [k, 500]))
   const me = makeFighter(sp.id, cum, knownMoves(sp, 40).slice(-MOVE_SLOTS))
-  const foe = makeFighter(SPECIES_BY_NAME['シェンロン'].id, cum, ['たいあたり'])
+  const foe = makeFighter(SPECIES_BY_NAME['シェンロン'].id, cum, ['小突き'])
   const before = me.moves[0].pp
   const s = battleTurn(startBattle(me, foe), me.moves[0].name, seeded(3))
   assert.equal(s.me.moves[0].pp, before - 1)
@@ -281,29 +281,29 @@ test('技を出すとPPが減る', () => {
 
 test('技は4つまで', () => {
   const sp = SPECIES_BY_NAME['インフェルレオン']
-  const f = makeFighter(sp.id, {}, ['たいあたり', 'ひのこ', 'かえんほうしゃ', 'だいもんじ', 'のしかかり'])
+  const f = makeFighter(sp.id, {}, ['小突き', '火種', '業火吹き', '獄炎', '重圧撃'])
   assert.equal(f.moves.length, MOVE_SLOTS)
 })
 
 test('弱点を突くとダメージが伸びる', () => {
   const fire = SPECIES_BY_NAME['インフェルレオン']       // 炎
   const cum = Object.fromEntries(PET_STAT_KEYS.map(k => [k, 500]))
-  const atk = makeFighter(fire.id, cum, ['かえんほうしゃ'])
-  const grass = makeFighter(SPECIES_BY_NAME['シルヴァウルスス'].id, cum, ['たいあたり'])  // 草＝弱点
-  const water = makeFighter(SPECIES_BY_NAME['シェンロン'].id, cum, ['たいあたり'])  // 水＝半減
+  const atk = makeFighter(fire.id, cum, ['業火吹き'])
+  const grass = makeFighter(SPECIES_BY_NAME['シルヴァウルスス'].id, cum, ['小突き'])  // 草＝弱点
+  const water = makeFighter(SPECIES_BY_NAME['シェンロン'].id, cum, ['小突き'])  // 水＝半減
   const fixed = () => 0.5
-  const a = damageOf(atk, grass, 'かえんほうしゃ', fixed)
-  const b = damageOf(atk, water, 'かえんほうしゃ', fixed)
+  const a = damageOf(atk, grass, '業火吹き', fixed)
+  const b = damageOf(atk, water, '業火吹き', fixed)
   assert.ok(a.dmg > b.dmg * 3, `弱点のほうが伸びていない（${a.dmg} vs ${b.dmg}）`)
   assert.equal(a.mult, 2)
 })
 
 test('相手は弱点を突く技を選んでくる', () => {
   const cum = Object.fromEntries(PET_STAT_KEYS.map(k => [k, 500]))
-  const me = makeFighter(SPECIES_BY_NAME['インフェルレオン'].id, cum, ['たいあたり', 'かえんほうしゃ'])
-  const grass = makeFighter(SPECIES_BY_NAME['シルヴァウルスス'].id, cum, ['たいあたり'])
+  const me = makeFighter(SPECIES_BY_NAME['インフェルレオン'].id, cum, ['小突き', '業火吹き'])
+  const grass = makeFighter(SPECIES_BY_NAME['シルヴァウルスス'].id, cum, ['小突き'])
   let fire = 0
-  for (let i = 0; i < 20; i++) if (chooseMove(me, grass, seeded(i + 1)) === 'かえんほうしゃ') fire++
+  for (let i = 0; i < 20; i++) if (chooseMove(me, grass, seeded(i + 1)) === '業火吹き') fire++
   assert.ok(fire >= 18, `弱点を突いてこない（${fire}/20）`)
 })
 
@@ -326,11 +326,11 @@ test('倒れたら終わり。そのあとターンは進まない', () => {
 
 test('元の状態は書き換えない', () => {
   const cum = Object.fromEntries(PET_STAT_KEYS.map(k => [k, 500]))
-  const me = makeFighter(SPECIES_BY_NAME['インフェルレオン'].id, cum, ['かえんほうしゃ'])
-  const foe = makeFighter(SPECIES_BY_NAME['シルヴァウルスス'].id, cum, ['たいあたり'])
+  const me = makeFighter(SPECIES_BY_NAME['インフェルレオン'].id, cum, ['業火吹き'])
+  const foe = makeFighter(SPECIES_BY_NAME['シルヴァウルスス'].id, cum, ['小突き'])
   const s = startBattle(me, foe)
   const hpBefore = s.foe.hp
-  battleTurn(s, 'かえんほうしゃ', seeded(9))
+  battleTurn(s, '業火吹き', seeded(9))
   assert.equal(s.foe.hp, hpBefore, '元の状態が書き換わっている')
 })
 
@@ -352,8 +352,8 @@ test('手持ちには上限がある', () => {
 test('覚えていない技は編成に入れられない', () => {
   const sp = SPECIES_BY_NAME['フンケベルカ']
   let s = addPet(emptyPetState(), sp.id, 5).state
-  s = setPetMoves(s, 0, ['たいあたり', 'だいもんじ'], 5)   // だいもんじはまだ覚えていない
-  assert.deepEqual(s.pets[0].moves, ['たいあたり'])
+  s = setPetMoves(s, 0, ['小突き', '獄炎'], 5)   // だいもんじはまだ覚えていない
+  assert.deepEqual(s.pets[0].moves, ['小突き'])
 })
 
 test('連れている子を変えられる', () => {
