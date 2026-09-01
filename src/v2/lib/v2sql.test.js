@@ -465,6 +465,8 @@ test('★マスタの種は何度流しても入れ直せる（2回目に落ち�
   const bad = stmts.filter(s => {
     if (s.inFunc) return false                       // 関数の中は毎回走る前提なので対象外
     if (/on conflict/.test(s.text)) return false     // 入れ直せる
+    // 「まだ1件も無いときだけ入れる」形も入れ直せる（お知らせの最初の1件など）
+    if (/where not exists/.test(s.text)) return false
     // 直前に同じ表を空にしていれば入れ直せる
     const before = SQL.slice(0, SQL.indexOf(s.text))
     return !new RegExp(`delete from public\\.${s.table}\\s*;`).test(before.slice(-500))

@@ -17,9 +17,11 @@ import V2Atb from '../components/V2Atb.jsx'
 import V2Storage from '../components/V2Storage.jsx'
 import V2Smith from '../components/V2Smith.jsx'
 import V2Status, { V2Menu } from '../components/V2Status.jsx'
+import V2Announce, { V2AnnouncePopup } from '../components/V2Announce.jsx'
+import { SEEN_KEY as ANN_SEEN, initialSeen, unreadOf } from '../lib/announce.js'
 import V2Dex from '../components/V2Dex.jsx'
 import { killMapOf, foundSetOf } from '../lib/dex.js'
-import { loadPref } from '../lib/prefs.js'
+import { loadPref, savePref } from '../lib/prefs.js'
 import V2Profile from '../components/V2Profile.jsx'
 import V2Tree from '../components/V2Tree.jsx'
 import V2Arena from '../components/V2Arena.jsx'
@@ -86,6 +88,10 @@ const MENU = [
     { key:'tree',    label:'ユグレシアの宝樹', icon:'🌳', color:'#44dd99', action:'祈る' },
     { key:'pet',     label:'ペット',          icon:'🐾', color:'#c0b0ff', action:'遊んで育てる' },
   ],
+  // ④ 運営から … 新着があるときは NEW が付く（badge は V2Menu が見る目印の名前）
+  [
+    { key:'announce', label:'お知らせ', icon:'📢', color:'#ff8844', action:'更新・不具合・イベント', badge:'ann' },
+  ],
 ]
 
 export default function V2Home() {
@@ -114,6 +120,11 @@ export default function V2Home() {
   //   ペットの画面を開いていなくても持っておく。
   //   ⚠保存先はまだ端末（localStorage）＝仮。サーバーへ移すまでは書き換えられる
   const [pet, setPet] = useState(() => loadPref('pet', null)?.cum || null)
+  // お知らせ（v2_announcements）。既読は端末ごと＝localStorage
+  const [announce, setAnnounce] = useState([])
+  const [unreadAnn, setUnreadAnn] = useState(() => new Set())  // 一覧の NEW（この読み込みのあいだ残す）
+  const [hasNewAnn, setHasNewAnn] = useState(false)            // メニューの NEW（見たら消す）
+  const [annPopup, setAnnPopup] = useState(false)
   const [runes, setRunes] = useState([])     // 持っているルーン（v2_essences）
   // ★釣り図鑑（v2_player_fish）。first_at が入っている行が恒久ステータスの対象。
   //   **戦闘のステータス計算に効く**ので、装備やルーンと同じようにここで持って配る
@@ -162,6 +173,11 @@ export default function V2Home() {
           supabase.from('v2_kills').select('enemy,n'),
           supabase.from('v2_dex_materials').select('material_id'),
         ])
+        // ★お知らせは**取れなくても先へ進む**（テーブルを作る前でも遊べるように）
+        const { data: anns } = await supabase.from('v2_announcements')
+          .select('id,title,content,category,created_at')
+          .eq('is_active', true).order('created_at', { ascending:false })
+        if (alive) applyAnnounce(anns || [])
         setInventory(inv || [])
         setMaterials(mats || [])
         setRunes(ess || [])
@@ -175,6 +191,29 @@ export default function V2Home() {
     })()
     return () => { alive = false }
   }, [nav])
+
+  // ===== お知らせ =====
+  // ★既読の記録が無い端末は、いま在るぶんを**全部既読**にしてから始める（announce.js）。
+  //   これをしないと、新しい端末で開くたびに過去のお知らせを全部浴びる。
+  const applyAnnounce = (list) => {
+    setAnnounce(list)
+    const seen = initialSeen(list, loadPref(ANN_SEEN, null))
+    savePref(ANN_SEEN, seen)
+    const unread = unreadOf(list, seen)
+    setUnreadAnn(new Set(unread.map(a => a.id)))
+    setHasNewAnn(unread.length > 0)
+    if (unread.length > 0) setAnnPopup(true)
+  }
+  // 「見た」＝いま在る全部を既読にする。★一覧の NEW（unreadAnn）はこの読み込みのあいだ残す
+  //   ＝メニューの NEW はすぐ消えるが、どれが新しかったかは読んでいるあいだ分かる
+  const markAnnSeen = () => {
+    savePref(ANN_SEEN, announce.map(a => a.id))
+    setHasNewAnn(false)
+  }
+  const openAnnounce = () => { setAnnPopup(false); setScreen('announce'); markAnnSeen() }
+
+  // メニューから画面を選ぶ。お知らせだけは開いた時点で既読にする
+  const pickScreen = (key) => { if (key === 'announce') openAnnounce(); else setScreen(key) }
 
   // 子の画面から呼ぶ。null を渡すとサーバーから取り直す（装備の着脱・合成・清算のあと）
   const refresh = async (updater) => {
@@ -437,7 +476,8 @@ const TWO_COLUMN = {
 
             {/* ===== 行動メニュー（あるけみすと式の「施設名｜ボタン」）===== */}
             {screen === 'home' && !inBattle && (
-              <V2Menu groups={MENU} open={openMenu} onToggle={() => setOpenMenu(v => !v)} onPick={setScreen} />
+              <V2Menu groups={MENU} open={openMenu} onToggle={() => setOpenMenu(v => !v)}
+                onPick={pickScreen} badges={{ ann: hasNewAnn }} />
             )}
 
             {screen === 'profile' && <V2Profile prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} dex={dex} pet={pet} onProfile={refresh} onBack={() => setScreen('home')} />}
@@ -448,6 +488,7 @@ const TWO_COLUMN = {
             {screen === 'market'  && <V2Market  prof={prof} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'dex'     && <V2Dex     prof={prof} dex={dex} onBack={() => setScreen('home')} />}
             {screen === 'pet'     && <V2Pet     onCum={setPet} onBack={() => setScreen('home')} />}
+            {screen === 'announce' && <V2Announce list={announce} unread={unreadAnn} onBack={() => setScreen('home')} />}
 
             {(screen === 'skills' || screen === 'temple') && (
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>
@@ -731,6 +772,14 @@ const TWO_COLUMN = {
           </div>
         )}
       </div>
+
+      {/* ★新着お知らせ。読み込んだときに1回だけ出す（旧版と同じ） */}
+      {annPopup && (
+        <V2AnnouncePopup
+          items={announce.filter(a => unreadAnn.has(a.id))}
+          onOpen={openAnnounce}
+          onClose={() => { setAnnPopup(false); markAnnSeen() }} />
+      )}
     </div>
   )
 }

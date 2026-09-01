@@ -5585,3 +5585,46 @@ revoke all on function public.v2_npc_retire(int) from public;
 revoke all on function public.v2_npc_retire(int) from anon;
 revoke all on function public.v2_npc_retire(int) from authenticated;
 grant execute on function public.v2_npc_retire(int) to service_role;
+
+
+-- ============================================================
+-- §16 お知らせ（2026-09-01）
+-- ------------------------------------------------------------
+-- ★旧版の announcements には**触らない**。Ⅱは v2_announcements を使う。
+--   種類は3つ … update（アップデート）/ bug（不具合）/ event（イベント）。
+--   ここに無い値を入れても消えはしない（画面はアップデートのタブに寄せて出す）。
+--
+-- ★書けるのは運営だけ。プレイヤーには **select しか許可しない**。
+--   お知らせを出すときは、このファイルとは別に INSERT のSQLを1本作って流すこと。
+--
+-- ★既読はサーバーに持たない（端末ごとの localStorage）。
+--   「どの端末でも既読を合わせたい」となったら、そのとき列を足す。
+-- ============================================================
+
+create table if not exists public.v2_announcements (
+  id         bigserial primary key,
+  title      text not null,
+  content    text not null default '',
+  category   text not null default 'update',   -- update / bug / event
+  is_active  boolean not null default true,
+  created_at timestamptz not null default now()
+);
+create index if not exists v2_announcements_active_idx
+  on public.v2_announcements (is_active, created_at desc);
+
+alter table public.v2_announcements enable row level security;
+drop policy if exists "v2_announcements_read" on public.v2_announcements;
+create policy "v2_announcements_read" on public.v2_announcements
+  for select to authenticated using (is_active);
+revoke all on table public.v2_announcements from anon;
+revoke all on table public.v2_announcements from authenticated;
+grant select on table public.v2_announcements to authenticated;
+
+-- 最初の1件（画面の動作確認用）。★2回流しても増えない
+insert into public.v2_announcements (title, content, category)
+select 'バトルフロンティアⅡ 開発中',
+       'このお知らせはⅡ専用です。旧版のお知らせとは別々に出ます。' || chr(10) ||
+       'アップデート・不具合・イベントの3種類に分かれています。' || chr(10) ||
+       '新しいお知らせが来たときは、開いたときにポップアップでお伝えします。',
+       'update'
+where not exists (select 1 from public.v2_announcements);

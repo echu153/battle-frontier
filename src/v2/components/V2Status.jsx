@@ -244,7 +244,7 @@ export default function V2Status({ prof, inventory, runes, fishDex, dex, pet, cl
 // ★**2列 × まとまりごと**に並べる（2026-08-26 ユーザー指示）。
 //   groups は「まとまりの配列」で、まとまりの中身が2列に流れる。
 //   まとまりに1つしか無いときは横いっぱいに伸ばす（宝樹）。
-export function V2Menu({ groups, open, onToggle, onPick }) {
+export function V2Menu({ groups, open, onToggle, onPick, badges = {} }) {
   return (
     <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'10px', marginBottom:'8px' }}>
       {/* ★こちらも折りたたみは上（ステータスとそろえる） */}
@@ -260,6 +260,9 @@ export function V2Menu({ groups, open, onToggle, onPick }) {
                 cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left',
                 gridColumn: group.length === 1 ? '1 / -1' : undefined }}>
               {m.icon} {m.label}
+              {/* ★新着の目印。お知らせのように「来ているのに気づかない」が起きる先だけ付ける */}
+              {badges[m.badge] && <span style={{ marginLeft:'4px', background:'#ff4400', color:'#fff',
+                fontSize:'7px', padding:'1px 4px', borderRadius:'6px' }}>NEW</span>}
               <span style={{ display:'block', color:'#7fa6d0', fontSize:'9px', marginTop:'2px' }}>{m.action}</span>
             </button>
           ))}
