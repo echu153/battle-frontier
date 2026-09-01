@@ -2407,6 +2407,7 @@ end $$;
 drop function if exists public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb);
 drop function if exists public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb, boolean);
 drop function if exists public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb);
+drop function if exists public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb, boolean, text, boolean);
 -- p_auto ＝ **オート出撃で戦ったか**（2026-08-22 追加）。true なら戦った回数ぶんスタミナを消費する。
 --   手動（自分でクリック）は消費しない＝スタミナが切れてもこれまで通り遊べる
 -- p_enemy ＝ **戦った敵の名前**／p_win ＝ 勝ったか（2026-08-26 追加・モンスター図鑑）。
@@ -2414,7 +2415,8 @@ drop function if exists public.v2_sortie_settle(int, int, int, int, int, bigint,
 create or replace function public.v2_sortie_settle(
   p_area int, p_normals int, p_boss_wins int, p_boss_seen int,
   p_exp int, p_gold bigint, p_drops jsonb, p_materials jsonb default '[]'::jsonb,
-  p_auto boolean default false, p_enemy text default null, p_win boolean default false
+  p_auto boolean default false, p_enemy text default null, p_win boolean default false,
+  p_protect int default 0
 ) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
@@ -2512,6 +2514,14 @@ begin
     end loop;
   end if;
 
+  -- 守りの護符。★装備と同じ抽選から出る（2026-08-29 ユーザー指示）。
+  --   1戦につき1個まで＝装備のドロップと同じ縛りにする（申告をそのまま信じない）
+  if coalesce(p_protect, 0) > 0 then
+    update public.v2_profiles
+       set protect_count = protect_count + least(p_protect, v_n + v_bs), updated_at = now()
+     where id = v_uid;
+  end if;
+
   -- 図鑑：討伐数。**勝ったときだけ**・**そのエリアにいる敵だけ**数える
   if p_win and p_enemy is not null then
     insert into public.v2_kills (player_id, enemy, n)
@@ -2549,9 +2559,9 @@ begin
     'stamina', v_stam, 'stamina_at', v_stam_at, 'stamina_max', public.v2_stamina_max(v_row.job_changes));
 end;
 $$;
-revoke all on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb, boolean, text, boolean) from public;
-revoke all on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb, boolean, text, boolean) from anon;
-grant execute on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb, boolean, text, boolean) to authenticated;
+revoke all on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb, boolean, text, boolean, int) from public;
+revoke all on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb, boolean, text, boolean, int) from anon;
+grant execute on function public.v2_sortie_settle(int, int, int, int, int, bigint, jsonb, jsonb, boolean, text, boolean, int) to authenticated;
 
 -- ===== 出撃のクールタイムの設定は廃止（10秒固定・2026-08-22 ユーザー決定）=====
 drop function if exists public.v2_set_cooldown(int);

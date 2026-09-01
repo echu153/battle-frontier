@@ -5,7 +5,7 @@ import { AREAS_SORTED, areaOf, markOf, biasLabelOf, BIAS_MULT, toFighter as enem
 import {
   pickEncounter, expOf, isAreaUnlocked, nextBossRate, clearedAreasOf, isAreaCleared,
   clearNext, unlockNext, restToOpenNext, LAST_TIER,
-  SORTIE_CD, rollHasDrop, rollDrop, rollMaterial,
+  SORTIE_CD, rollHasDrop, rollIsProtect, rollDrop, rollMaterial,
 } from '../lib/sortie.js'
 import { staminaMax, rollStamina } from '../lib/stamina.js'
 import { runBattle } from '../lib/battle.js'
@@ -14,6 +14,7 @@ import { toFighter as playerFighter, equippedRunes, runeAbilities } from '../lib
 import { dropRateMultOf } from '../lib/enchant.js'
 import { guardDropMultOf, GUARD_DROP_MULT } from '../lib/arena.js'
 import { RARITY_COLOR } from '../lib/material.js'
+import { PROTECT_NAME } from '../lib/smith.js'
 import { RANK_COLOR, dropLine, LOG_PLAIN } from './v2ui.js'
 import V2Evolve from './V2Evolve.jsx'
 import { pushWeaponRecord } from './weaponRecord.js'
@@ -28,7 +29,7 @@ import { pushWeaponRecord } from './weaponRecord.js'
 //   スタミナが1以上あるあいだは、10秒ごとに勝手に出撃する（1回につき1消費）。
 //   切れたら止まり、**これまで通り自分でクリックして出撃**する（手動は消費しない）。
 //   ⚠消費と回復の権威はサーバー（v2_sortie_settle / v2_stamina_roll）。ここは表示と読み替え。
-export default function V2Sortie({ prof, inventory, runes, fishDex, dex, guard, onProfile, onScene }) {
+export default function V2Sortie({ prof, inventory, runes, fishDex, dex, pet, guard, onProfile, onScene }) {
   const [scene, setScene] = useState('town')
   const [selectedArea, setSelectedArea] = useState(() => Number(localStorage.getItem('v2SelectedArea')) || 1)
   const [logs, setLogs] = useState([])
@@ -78,7 +79,7 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, dex, guard, 
     lastAt.current = Date.now()
     setLoading(true); setScene('battle'); setLogs([])
     try {
-      const me = playerFighter(prof, inventory, runes, fishDex, dex)
+      const me = playerFighter(prof, inventory, runes, fishDex, dex, pet)
       // 「素材ドロップ率up」の特殊能力ぶん。★重複せず、一番高いものだけが効く
       // ★アリーナで階層守護者でいるあいだは、素材も装備も落ちやすくなる（×1.1・掛け算で乗る）
       const matMult = dropRateMultOf(runeAbilities(equippedRunes(prof, inventory, runes))) * guardMult
@@ -87,7 +88,10 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, dex, guard, 
       const r = runBattle(me, { ...enemyFighter(enc.enemy, 8), boss: enc.isBoss })
       const win = r.winner === 'a'
       const exp = win ? expOf(enc.isBoss) : 0
-      const drop = win && rollHasDrop(Math.random, guardMult) ? rollDrop(area.id, new Date()) : null
+      // ★落ちたものが装備か守りの護符か。**同じ抽選から出る**（sortie.js の PROTECT_SHARE）
+      const gotDrop = win && rollHasDrop(Math.random, guardMult)
+      const gotProtect = gotDrop && rollIsProtect()
+      const drop = gotDrop && !gotProtect ? rollDrop(area.id, new Date()) : null
       // ★レアモンスターは素材を**確定で**落とす（内訳は55/35/10・sortie.js）
       const mat = win ? rollMaterial(enc.enemy.name, matMult, Math.random, { sure: !!enc.isRare }) : null
       setBossRate(nextBossRate(bossRate, enc.isBoss))
@@ -112,6 +116,9 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, dex, guard, 
         out.push({ text:`EXP +${exp}`, color:'#ffcc00' })
         // ★色を付けるのは**ランクと装備名だけ**。行全体は塗らない（V2LogLine）
         if (drop) out.push(dropLine(drop, RANK_COLOR[drop.rank]))
+        if (gotProtect) out.push({ color: LOG_PLAIN, parts:[
+          { text:'🛡 ' }, { text: PROTECT_NAME, color:'#88ddaa' }, { text:'を入手！' },
+        ] })
         if (mat) out.push({ color: LOG_PLAIN, parts:[
           { text:'⚗ ルーン素材「' },
           { text: mat.name, color: RARITY_COLOR[mat.rarity] },
@@ -141,6 +148,7 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, dex, guard, 
         // p_gold は**サーバー側が無視する**（敵はGoldを落とさない）。引数だけ互換で残している
         p_exp: exp, p_gold: 0, p_drops: drop ? [drop.id] : [],
         p_materials: mat ? [mat.id] : [],
+        p_protect: gotProtect ? 1 : 0,
         // ★オートで戦ったときだけスタミナを1使う（手動は消費しない）
         p_auto: !!isAuto,
         // ★モンスター図鑑。勝ったときだけ討伐数が1増える。

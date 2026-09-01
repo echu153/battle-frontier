@@ -8,7 +8,8 @@ import {
   expOf, rewardsOf, pickEncounter, EXP_BOSS, EXP_ZAKO_MIN, EXP_ZAKO_MAX,
   SORTIE_CD,
   featuredPartAt, nextSwitchAt, featuredSchedule, rollDropPart, rollDrop,
-  BANDS, bandAt, enemyPoolAt, DROP_RATE, dropRateOf, rollHasDrop,
+  BANDS, bandAt, enemyPoolAt, DROP_RATE, rollHasDrop,
+  PROTECT_SHARE, EQUIP_DROP_RATE, PROTECT_DROP_RATE, rollIsProtect, rollHasEquipDrop,
   RARE_RATE, rollRare, RARE_MATERIAL_RATE, rollMaterial,
 } from './sortie.js'
 import { PARTS, ITEM_BY_ID } from './equipment.js'
@@ -228,14 +229,36 @@ test('時間帯限定の敵が各エリアに2体ずつ、その時間だけ抽�
   assert.equal(new Set(names).size, 48)
 })
 
-test('装備が落ちる確率は3%（10秒固定になったので1本）', () => {
-  assert.equal(DROP_RATE, 3)
-  assert.equal(dropRateOf(), 3)
+// ★2026-08-29：守りの護符も**装備と同じ抽選**から出るようにした（ユーザー指示）。
+//   何かが落ちる＝4%。そのうち25%が護符なので、**装備は3%のまま**。
+//   ここを崩すと装備の伸びが変わって、進行速度の見積もり（tools/v2-progress.mjs）がずれる
+test('落ちるのは4%。うち装備3%・守りの護符1%', () => {
+  assert.equal(DROP_RATE, 4)
+  assert.equal(PROTECT_SHARE, 25)
+  assert.equal(EQUIP_DROP_RATE, 3, '装備の率は前と同じ3%')
+  assert.equal(PROTECT_DROP_RATE, 1)
   const rng = mkRng(55)
-  let hit = 0
-  const N = 40000
-  for (let i = 0; i < N; i++) if (rollHasDrop(rng)) hit++
-  assert.ok(Math.abs(hit / N - 0.03) < 0.004, `${(hit / N * 100).toFixed(2)}%`)
+  let equip = 0, protect = 0
+  const N = 200000
+  for (let i = 0; i < N; i++) {
+    if (!rollHasDrop(rng)) continue
+    if (rollIsProtect(rng)) protect++; else equip++
+  }
+  assert.ok(Math.abs(equip / N - 0.03) < 0.003, `装備 ${(equip / N * 100).toFixed(2)}%`)
+  assert.ok(Math.abs(protect / N - 0.01) < 0.002, `護符 ${(protect / N * 100).toFixed(2)}%`)
+  // アリーナは装備だけを引く（護符は出撃でしか出ない）
+  let arena = 0
+  const rng2 = mkRng(56)
+  for (let i = 0; i < N; i++) if (rollHasEquipDrop(rng2)) arena++
+  assert.ok(Math.abs(arena / N - 0.03) < 0.003, `アリーナ ${(arena / N * 100).toFixed(2)}%`)
+})
+
+// ★出撃の画面が護符を申告していること（送り忘れると永久に手に入らない）
+test('★出撃は守りの護符をサーバーへ申告している', async () => {
+  const { readFileSync } = await import('node:fs')
+  const src = readFileSync(new URL('../components/V2Sortie.jsx', import.meta.url), 'utf8')
+  assert.match(src, /const gotProtect = gotDrop && rollIsProtect\(\)/, '護符を引いていない')
+  assert.match(src, /p_protect: gotProtect \? 1 : 0/, 'サーバーへ送っていない')
 })
 
 test('ボスを倒したエリアは踏破済みになる（⑧も残る）', () => {

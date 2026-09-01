@@ -9,7 +9,7 @@ import {
   snapshotOf, fromSnapshot, expOf, canChallenge,
   GUARD_DROP_MULT, guardDropMultOf, DROP_RANKS,
 } from './arena.js'
-import { dropRateOf, rollHasDrop, DROP_RATE as SORTIE_DROP_RATE } from './sortie.js'
+import { equipDropRateOf, rollHasEquipDrop, EQUIP_DROP_RATE } from './sortie.js'
 import { RANKS } from './equipment.js'
 import { rollDropRank } from './enemies.js'
 import { STAT_KEYS, calcPower } from './stats.js'
@@ -163,11 +163,13 @@ test('★装備のドロップ率は出撃とまったく同じ（アリーナ�
   assert.equal(arena.DROP_RATE, undefined, 'arena.js に独自のドロップ率が戻っている')
   assert.equal(arena.rollDrop, undefined, 'arena.js に独自の抽選が戻っている')
   // 出撃側が唯一の正
-  assert.equal(SORTIE_DROP_RATE, 3)
-  assert.equal(dropRateOf(), 3)
+  // ★2026-08-29：出撃の抽選には守りの護符も入ったので、全体は4%・**装備は3%のまま**。
+  //   アリーナは装備だけを引く（護符は出撃でしか出ない）
+  assert.equal(EQUIP_DROP_RATE, 3)
+  assert.equal(equipDropRateOf(), 3)
   // 同じ乱数なら出撃とアリーナで結果が一致する
   for (const n of [0.001, 0.029, 0.031, 0.039, 0.041, 0.5]) {
-    assert.equal(rollHasDrop(() => n), n * 100 < dropRateOf(), `rng=${n}`)
+    assert.equal(rollHasEquipDrop(() => n), n * 100 < equipDropRateOf(), `rng=${n}`)
   }
 })
 
@@ -184,11 +186,11 @@ test('階層守護者の間だけ、出撃のドロップ率が×1.1になる', 
 
 test('守護者ぶんの倍率は出撃の装備ドロップ率に乗る', () => {
   // 3% → 守護中は3.3%
-  assert.equal(dropRateOf(), 3)
-  assert.equal(Math.round(dropRateOf(GUARD_DROP_MULT) * 100) / 100, 3.3)
+  assert.equal(equipDropRateOf(), 3)
+  assert.equal(Math.round(equipDropRateOf(GUARD_DROP_MULT) * 100) / 100, 3.3)
   // 3%と3.3%のあいだ（rng=0.032）では、守護中だけ落ちる
-  assert.equal(rollHasDrop(() => 0.032), false)
-  assert.equal(rollHasDrop(() => 0.032, GUARD_DROP_MULT), true)
+  assert.equal(rollHasEquipDrop(() => 0.032), false)
+  assert.equal(rollHasEquipDrop(() => 0.032, GUARD_DROP_MULT), true)
 })
 
 // ===== 落ちるランク（2026-08-17 ユーザー決定）=====

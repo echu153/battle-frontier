@@ -67,10 +67,10 @@ function StatMini({ label, jp, val, add, color, short, detail, alignRight }) {
   )
 }
 
-export default function V2Status({ prof, inventory, runes, fishDex, dex, classes, open, onToggle }) {
+export default function V2Status({ prof, inventory, runes, fishDex, dex, pet, classes, open, onToggle }) {
   const worn = equippedItems(prof, inventory)
   // ★エンチャントは**割合**なので装備の固定値とは別枠。totalStats に渡すと合計へ乗る
-  const total = totalStats(prof, inventory, runes, fishDex, dex)
+  const total = totalStats(prof, inventory, runes, fishDex, dex, pet)
   const power = calcPower(total)
   const tierColor = TIER_COLOR[classes?.find(c => c.id === prof.class)?.tier] || '#88ccff'
   const next = expToNext(prof.lv, prof.job_changes)

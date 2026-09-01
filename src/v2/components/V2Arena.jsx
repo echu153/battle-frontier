@@ -8,7 +8,7 @@ import { calcPower } from '../lib/stats.js'
 import { SKILL_BY_NAME } from '../lib/skills.js'
 import { ITEM_BY_ID } from '../lib/equipment.js'
 import { rollDropRank } from '../lib/enemies.js'
-import { SORTIE_CD, dropRateOf, rollHasDrop } from '../lib/sortie.js'
+import { SORTIE_CD, EQUIP_DROP_RATE, rollHasEquipDrop } from '../lib/sortie.js'
 import {
   FLOORS, champOf, snapshotOf, streakBonusPct, applyStreakBonus,
   floorAfterLose, expOf, canChallenge, STREAK_PCT, GUARD_DROP_MULT, DROP_RANKS,
@@ -24,7 +24,7 @@ import V2Help from './V2Help.jsx'
 //
 // 表示は「いまいる階の階層守護者」と「一覧」の2つだけ。挑戦できるのは自分の階の階層守護者。
 // embedded … ホームの出撃タブの中に置くとき。自前の「← ホームへ」は出さず、階の一覧は畳んでおく
-export default function V2Arena({ prof, inventory, runes, fishDex, dex, onProfile, onBack, embedded = false }) {
+export default function V2Arena({ prof, inventory, runes, fishDex, dex, pet, onProfile, onBack, embedded = false }) {
   const [rows, setRows] = useState([])       // v2_arena_floors（埋まっている階だけ）
   const [logs, setLogs] = useState([])
   const [scene, setScene] = useState('lobby')
@@ -54,7 +54,7 @@ export default function V2Arena({ prof, inventory, runes, fishDex, dex, onProfil
   const defending = (rows || []).find(r => String(r.player_id) === String(prof.id)) || null
   const champ = champOf(floor, byFloor[floor], SKILL_BY_NAME)
 
-  const me = useMemo(() => toFighter(prof, inventory, runes, fishDex, dex), [prof, inventory, runes, fishDex, dex])
+  const me = useMemo(() => toFighter(prof, inventory, runes, fishDex, dex, pet), [prof, inventory, runes, fishDex, dex, pet])
   const myPower = calcPower(me.stats)
   const foePower = champ ? calcPower(champ.stats) : 0
   const bonus = champ ? streakBonusPct(champ.streak, floor, myPower, foePower) : 0
@@ -85,7 +85,7 @@ export default function V2Arena({ prof, inventory, runes, fishDex, dex, onProfil
     const exp = expOf()
     // ★装備のドロップ率は出撃とまったく同じ（クールタイムを共有するので揃える）。
     //   アリーナは**勝敗によらず**同じ確率で落ちる（出撃は勝ったときだけ）
-    const drop = rollHasDrop()
+    const drop = rollHasEquipDrop()
       ? (() => {
           // ★ランクの表はどの階でも同じ。F〜Sまで出るが高いほど出にくい
           const rank = rollDropRank({ dropRanks: DROP_RANKS })
@@ -171,7 +171,7 @@ export default function V2Arena({ prof, inventory, runes, fishDex, dex, onProfil
           挑戦して負けると<b style={{ color:'#ff8844' }}>1つ下の階</b>へ（戦闘力に関係なく必ず落ちます）。<br />
           <b style={{ color:'#ffcc00' }}>階層守護者のHP/MPは回復しません</b>。挑戦する側は毎回満タンです。<br />
           連勝中の階層守護者に挑むと、こちらのステータスが連勝数×{STREAK_PCT}%上がります（HP/MPを除く）。<br />
-          EXPも装備も<b style={{ color:'#ffcc00' }}>勝敗によらず</b>もらえます（装備は{dropRateOf()}%＝出撃と同じ確率）。落ちるランクはどの階でも同じで、F〜Sまで出ます。出撃とクールタイムを共有します。<br />
+          EXPも装備も<b style={{ color:'#ffcc00' }}>勝敗によらず</b>もらえます（装備は{EQUIP_DROP_RATE}%＝出撃と同じ確率）。落ちるランクはどの階でも同じで、F〜Sまで出ます。出撃とクールタイムを共有します。<br />
           <b style={{ color:'#44ff88' }}>守っているあいだは、出撃のルーン素材と装備のドロップ率が×{GUARD_DROP_MULT}</b>になります。<br />
           <span style={{ color:'#5d7fa8' }}>NPC</span>の印が付いている相手は、<b style={{ color:'#7fa6d0' }}>自動で強くなり、自動で挑戦してくる住人</b>です。
           あなたが席を離れているあいだにも階を奪いに来ます。

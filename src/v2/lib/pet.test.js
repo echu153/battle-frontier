@@ -618,3 +618,47 @@ test('画面は正解のときも不正解のときも意味を出す', async ()
   assert.ok(judged.includes('kanjiMeaningOf'), '答え合わせの枠の外に置いている')
   assert.ok(!/judged\.right &&[^\n]*kanjiMeaningOf/.test(src), '正解のときしか出していない')
 })
+
+// ★ペットで育てたステが**戦闘まで届いているか**（2026-08-29 ユーザー指示「反映させるように」）。
+//   pet.js が正しくても loadout へつながっていなければ、育てても何も起きない
+test('★ペットで育てたステが戦闘に渡るステータスまで届いている', async () => {
+  const { totalStats, toFighter } = await import('./loadout.js')
+  const prof = {
+    username:'ためし', class:'戦士', equipped:{}, skill_set:[],
+    hp:1000, mp:200, str:100, dex:100, agi:100, int_stat:100, vit:100, luk:100,
+  }
+  const none = totalStats(prof, [], [], [], undefined, undefined)
+  assert.equal(none.str, 100, 'ペットを渡さなければ素のまま')
+
+  // 累計pt → ステ値は statValueOf（√2n の切り捨て）
+  const cum = { str: 50, int_stat: 200 }
+  assert.equal(statValueOf(50), 10)
+  assert.equal(statValueOf(200), 20)
+  const got = totalStats(prof, [], [], [], undefined, cum)
+  assert.equal(got.str, 110, 'STR +10')
+  assert.equal(got.int_stat, 120, 'INT +20')
+  assert.equal(got.vit, 100, '育てていないステは動かない')
+  // ★runBattle が使う stats にも同じ値が入っていること
+  assert.equal(toFighter(prof, [], [], [], undefined, cum).stats.str, 110, '戦闘に届いていない')
+
+  // HP・MP はペットで育たない（PET_STAT_KEYS に無い）
+  assert.ok(!PET_STAT_KEYS.includes('hp'))
+  assert.equal(totalStats(prof, [], [], [], undefined, { hp: 10000 }).hp, 1000)
+})
+
+test('★プロフィールでペットの上がり幅が見られる', async () => {
+  const { readFileSync } = await import('node:fs')
+  const src = readFileSync(new URL('../components/V2Profile.jsx', import.meta.url), 'utf8')
+  assert.match(src, /petStatsOf\(pet \|\| \{\}\)/, 'ペットぶんを出していない')
+  assert.match(src, /k1="ペット"/, 'ペットの行が無い')
+})
+
+// ★遊んだ結果がすぐ効くこと。ホームへ返さないと、次に開き直すまで古いままになる
+test('ペットの画面は育ち具合をホームへ返す', async () => {
+  const { readFileSync } = await import('node:fs')
+  const pet = readFileSync(new URL('../components/V2Pet.jsx', import.meta.url), 'utf8')
+  assert.match(pet, /onCum\?\.\(next\.cum \|\| null\)/, '育ち具合を親へ返していない')
+  const home = readFileSync(new URL('../pages/V2Home.jsx', import.meta.url), 'utf8')
+  assert.match(home, /onCum=\{setPet\}/, 'ホームが受け取っていない')
+  assert.match(home, /loadPref\('pet', null\)\?\.cum/, 'ホームが保存から読み直していない')
+})

@@ -70,7 +70,7 @@ const Chips = ({ side, now }) => {
   )
 }
 
-export default function V2Atb({ prof, inventory, runes, fishDex, dex }) {
+export default function V2Atb({ prof, inventory, runes, fishDex, dex, pet }) {
   const [mode, setMode] = useState('dummy')     // dummy=仮想敵（強い）／area=エリアの敵
   const [areaId, setAreaId] = useState(1)
   const [foeName, setFoeName] = useState('')
@@ -87,7 +87,7 @@ export default function V2Atb({ prof, inventory, runes, fishDex, dex }) {
   const foes = [...area.enemies, ...(area.timed || []), area.boss]
   const foe = foes.find(e => e.name === foeName) || foes[0]
   // 仮想敵は**自分のステータスから**組み立てる（戦闘力とAGIに比例）
-  const myFighter = useMemo(() => playerFighter(prof, inventory, runes, fishDex, dex), [prof, inventory, runes, fishDex, dex])
+  const myFighter = useMemo(() => playerFighter(prof, inventory, runes, fishDex, dex, pet), [prof, inventory, runes, fishDex, dex, pet])
   const dummies = useMemo(() => dummyFoes(myFighter), [myFighter])
   const dummy = dummies.find(d => d.key === dummyKey) || dummies[0]
 

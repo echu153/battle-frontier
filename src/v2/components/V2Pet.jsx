@@ -40,7 +40,7 @@ const StatRow = ({ k, value, gain }) => {
   )
 }
 
-export default function V2Pet({ onBack }) {
+export default function V2Pet({ onCum, onBack }) {
   const [state, setState] = useState(() => ({ ...emptyPetState(), ...loadPref(PREF_KEY, null) }))
   const [game, setGame] = useState('')          // いま開いているミニゲーム
   const [result, setResult] = useState(null)    // 直前のプレイの結果 { label, pts, gains }
@@ -50,7 +50,11 @@ export default function V2Pet({ onBack }) {
   //   遊んでいる最中（積み上げのrAFループなど）から呼ばれるので、
   //   render時の値を閉じ込めると古い state に足してしまう
   const stateRef = useRef(state)
-  const save = (next) => { stateRef.current = next; savePref(PREF_KEY, next); setState(next) }
+  // ★育ち具合はホームにも返す。**戦闘のステに効く**ので、遊んだ結果をすぐ反映させる
+  const save = (next) => {
+    stateRef.current = next; savePref(PREF_KEY, next); setState(next)
+    onCum?.(next.cum || null)
+  }
 
   // 遊び始めるときに回数を1つ使う。使い切っていたら false（＝始めさせない）
   const begin = (key) => {

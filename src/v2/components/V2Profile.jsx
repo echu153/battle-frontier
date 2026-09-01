@@ -9,6 +9,7 @@ import { SKILL_BY_NAME, KIND_LABEL, KIND_COLOR } from '../lib/skills.js'
 import { AREAS, allEnemies } from '../lib/enemies.js'
 import { dexStats, dexProgress } from '../lib/dex.js'
 import { fishDexText, dexIdsOf, DEX_SLOTS } from '../lib/fishing.js'
+import { statsOf as petStatsOf, petLvOf } from '../lib/pet.js'
 import { RANK_COLOR, miniBtn } from './v2ui.js'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
@@ -30,7 +31,7 @@ const KEY = { background:'#101c3c', fontSize:'11px', padding:'6px 8px', borderTo
 const VAL = { background:'#0a1330', color:'#cfe2ff', fontSize:'11px', padding:'6px 8px', borderTop:'1px solid #07102a', wordBreak:'break-all' }
 
 // ステータスの並び。あるけみすとのプロフィールと同じ「項目｜値」を2組ずつ
-export default function V2Profile({ prof, inventory, runes, fishDex, dex, onProfile, onBack }) {
+export default function V2Profile({ prof, inventory, runes, fishDex, dex, pet, onProfile, onBack }) {
   const [detail, setDetail] = useState(false)
   // ★アイコン選びは**ふだん閉じておく**（2026-08-26 ユーザー指示）。
   //   縦に長くてステータスが押し下げられるため
@@ -45,7 +46,7 @@ export default function V2Profile({ prof, inventory, runes, fishDex, dex, onProf
   const fileRef = useRef(null)
   const worn = equippedItems(prof, inventory)
   // ★エンチャントは割合なので totalStats に渡して合計へ乗せる
-  const total = totalStats(prof, inventory, runes, fishDex, dex)
+  const total = totalStats(prof, inventory, runes, fishDex, dex, pet)
   const power = calcPower(total)
   const skills = prof.skill_set || []
   const kind = attackKindOf(prof.class) === 'mag' ? '魔法型' : '物理型'
@@ -128,6 +129,10 @@ export default function V2Profile({ prof, inventory, runes, fishDex, dex, onProf
   // 釣り図鑑でもらっているぶん（こちらは**割合**。合計へ掛かる）
   const fishUp = fishDexText(fishDex)
   const fishDone = dexIdsOf(fishDex).length
+  // ペットで育てたぶん（こちらも固定値）
+  const petAdd = petStatsOf(pet || {})
+  const petUp = STAT_KEYS.filter(k => petAdd[k] > 0)
+  const petLv = petLvOf(Object.values(pet || {}).reduce((t, v) => t + (v || 0), 0))
 
   return (
     <div>
@@ -173,6 +178,12 @@ export default function V2Profile({ prof, inventory, runes, fishDex, dex, onProf
           <Row k1="釣り図鑑" k2="上がっているぶん"
             v1={`${fishDone} / ${DEX_SLOTS}枠`}
             v2={fishUp || <span style={{ color:'#7b8fb8' }}>まだ無し</span>} />
+          {/* ★ペットで育てたぶん（固定値）。上のステータスにはもう入っている */}
+          <Row k1="ペット" k2="上がっているぶん"
+            v1={`LV${petLv}`}
+            v2={petUp.length
+              ? petUp.map(k => `${STAT_DEFS[k].label}+${petAdd[k]}`).join('　')
+              : <span style={{ color:'#7b8fb8' }}>まだ無し</span>} />
         </div>
 
         <div style={{ background:'#0a1330', padding:'8px' }}>

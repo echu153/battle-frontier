@@ -128,12 +128,27 @@ export const AREA_LIST = AREAS.map(a => ({ id: a.id, tier: a.tier, name: a.name 
 //   スタミナ（オート出撃）を入れるにあたって**間隔は全員そろえる**ことにした。
 //   ＝オートも手動も10秒。アリーナもこのクールタイムを共有する。
 export const SORTIE_CD = 10
-// 装備が落ちる確率(%)。旧・10秒モードの値をそのまま使う
-export const DROP_RATE = 3
+// 出撃で何かが落ちる確率(%)。★守りの護符も**装備と同じ抽選**から出る（2026-08-29 ユーザー指示）。
+//   落ちたときの中身を PROTECT_SHARE の割合で振り分ける：
+//     装備 … 4% × 75% ＝ 3%（これまでと同じ。進行速度の見積もりを崩さないため）
+//     護符 … 4% × 25% ＝ 1%（1日360回まわして約3.6個）
+//   ⚠**装備の3%を減らさないために全体を4%へ上げてある**。ここを3%に戻すと装備が25%減る
+export const DROP_RATE = 4
+export const PROTECT_SHARE = 25
+// 落ちたぶんのうち装備になる確率(%)。表示用
+export const EQUIP_DROP_RATE = DROP_RATE * (100 - PROTECT_SHARE) / 100   // 3
+export const PROTECT_DROP_RATE = DROP_RATE * PROTECT_SHARE / 100        // 1
 // mult は**アリーナの階層守護者ぶんの倍率**（arena.js の guardDropMultOf）。
 //   素材側（rollMaterial）と同じ形にそろえてある
 export const dropRateOf = (mult = 1) => DROP_RATE * mult
 export const rollHasDrop = (rng = Math.random, mult = 1) => rng() * 100 < dropRateOf(mult)
+// 落ちたものが護符かどうか。★rollHasDrop が当たったあとに1回だけ引く
+export const rollIsProtect = (rng = Math.random) => rng() * 100 < PROTECT_SHARE
+// 装備だけを引く（護符は出撃のみ・2026-08-29 ユーザー指示「出撃で獲得できるように」）。
+//   アリーナはこちらを使う＝装備の落ちる率は出撃とまったく同じ3%のまま
+export const equipDropRateOf = (mult = 1) => EQUIP_DROP_RATE * mult
+export const rollHasEquipDrop = (rng = Math.random, mult = 1) =>
+  rng() * 100 < equipDropRateOf(mult)
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000
 

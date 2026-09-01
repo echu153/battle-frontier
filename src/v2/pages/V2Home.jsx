@@ -19,6 +19,7 @@ import V2Smith from '../components/V2Smith.jsx'
 import V2Status, { V2Menu } from '../components/V2Status.jsx'
 import V2Dex from '../components/V2Dex.jsx'
 import { killMapOf, foundSetOf } from '../lib/dex.js'
+import { loadPref } from '../lib/prefs.js'
 import V2Profile from '../components/V2Profile.jsx'
 import V2Tree from '../components/V2Tree.jsx'
 import V2Arena from '../components/V2Arena.jsx'
@@ -109,6 +110,10 @@ export default function V2Home() {
   const [materials, setMaterials] = useState([])   // 持っている素材（v2_player_materials）
   // ★モンスター図鑑。**戦闘のステータスにも効く**ので、図鑑を開いていなくても持っておく
   const [dex, setDex] = useState({ kills:{}, found:new Set() })
+  // ★ペットで育てたぶん（ステごとの累計pt）。**戦闘のステにも効く**ので、
+  //   ペットの画面を開いていなくても持っておく。
+  //   ⚠保存先はまだ端末（localStorage）＝仮。サーバーへ移すまでは書き換えられる
+  const [pet, setPet] = useState(() => loadPref('pet', null)?.cum || null)
   const [runes, setRunes] = useState([])     // 持っているルーン（v2_essences）
   // ★釣り図鑑（v2_player_fish）。first_at が入っている行が恒久ステータスの対象。
   //   **戦闘のステータス計算に効く**ので、装備やルーンと同じようにここで持って配る
@@ -274,7 +279,7 @@ export default function V2Home() {
   // ★最大MPは**ルーンのMP+%を乗せたぶん**で見る（サーバー v2_set_skills と同じ計算）。
   //   素の prof.mp のままだと蒼ルーンのMPがどこにも効かない
   //   （戦闘はHP/MP満タン開始で5〜13ターン＝MPが枯れないため）。
-  const maxMp = prof ? totalStats(prof, inventory, runes, fishDex, dex).mp : 0
+  const maxMp = prof ? totalStats(prof, inventory, runes, fishDex, dex, pet).mp : 0
   const setErr = prof ? validateSkillSet(compact, usableNames, maxMp, prof.class) : null
   // 一覧には、まだ覚えていない「いまの職業のスキル」もグレーで出す（何を狙えるか分かるように）
   const shownSkills = sortSkills(filterSkills([...usable, ...stillLocked], { tab, query, favorites }), sortKey, sortAsc)
@@ -392,7 +397,7 @@ const TWO_COLUMN = {
                   （施設の一覧を見るのに、毎回ステータスぶんスクロールさせられていた） */}
             <div>
               {screen === 'home' && (
-                <V2Status prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} dex={dex} classes={classes} open={openStatus} onToggle={() => setOpenStatus(v => !v)} />
+                <V2Status prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} dex={dex} pet={pet} classes={classes} open={openStatus} onToggle={() => setOpenStatus(v => !v)} />
               )}
             </div>
 
@@ -424,9 +429,9 @@ const TWO_COLUMN = {
                     ))}
                   </div>
                 )}
-                {act === 'sortie' && <V2Sortie prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} dex={dex} guard={guard} onProfile={refresh} onScene={sc => setInBattle(sc === 'battle')} />}
-                {act === 'arena'  && <V2Arena  prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} dex={dex} onProfile={refresh} onBack={() => setAct('sortie')} embedded />}
-                {act === 'atb'    && <V2Atb    prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} dex={dex} />}
+                {act === 'sortie' && <V2Sortie prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} dex={dex} pet={pet} guard={guard} onProfile={refresh} onScene={sc => setInBattle(sc === 'battle')} />}
+                {act === 'arena'  && <V2Arena  prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} dex={dex} pet={pet} onProfile={refresh} onBack={() => setAct('sortie')} embedded />}
+                {act === 'atb'    && <V2Atb    prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} dex={dex} pet={pet} />}
               </div>
             )}
 
@@ -435,14 +440,14 @@ const TWO_COLUMN = {
               <V2Menu groups={MENU} open={openMenu} onToggle={() => setOpenMenu(v => !v)} onPick={setScreen} />
             )}
 
-            {screen === 'profile' && <V2Profile prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} dex={dex} onProfile={refresh} onBack={() => setScreen('home')} />}
+            {screen === 'profile' && <V2Profile prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} dex={dex} pet={pet} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'storage' && <V2Storage prof={prof} inventory={inventory} runes={runes} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'smith'   && <V2Smith   prof={prof} inventory={inventory} materials={materials} runes={runes} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'tree'    && <V2Tree    prof={prof} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'base'    && <V2Base    prof={prof} materials={materials} fishDex={fishDex} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'market'  && <V2Market  prof={prof} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'dex'     && <V2Dex     prof={prof} dex={dex} onBack={() => setScreen('home')} />}
-            {screen === 'pet'     && <V2Pet     onBack={() => setScreen('home')} />}
+            {screen === 'pet'     && <V2Pet     onCum={setPet} onBack={() => setScreen('home')} />}
 
             {(screen === 'skills' || screen === 'temple') && (
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>

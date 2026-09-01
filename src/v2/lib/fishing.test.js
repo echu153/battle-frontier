@@ -247,8 +247,8 @@ const srcFiles = () => {
   return out
 }
 
-test('totalStats / toFighter の呼び出しは必ず fishDex と dex まで渡している', () => {
-  // 呼び出しの形は「識別子だけを並べた5引数」なので、カンマの数で足りる
+test('totalStats / toFighter の呼び出しは必ず fishDex・dex・pet まで渡している', () => {
+  // 呼び出しの形は「識別子だけを並べた6引数」なので、カンマの数で足りる
   const calls = []
   for (const f of srcFiles()) {
     for (const m of f.text.matchAll(/(?:totalStats|playerFighter)\(([^()]*)\)/g)) {
@@ -261,9 +261,9 @@ test('totalStats / toFighter の呼び出しは必ず fishDex と dex まで渡�
     }
   }
   assert.ok(calls.length >= 5, `呼び出しを拾えている（${calls.length}件）`)
-  const bad = calls.filter(c => c.args !== 5)
+  const bad = calls.filter(c => c.args !== 6)
   assert.deepEqual(bad.map(c => c.where), [],
-    `fishDex / dex を渡していない呼び出しがある:\n${bad.map(c => '  ' + c.where).join('\n')}`)
+    `fishDex / dex / pet を渡していない呼び出しがある:\n${bad.map(c => '  ' + c.where).join('\n')}`)
 })
 
 test('図鑑は解放していない釣り場を見せない', () => {
@@ -279,10 +279,11 @@ test('図鑑は解放していない釣り場を見せない', () => {
 //   dex も最後まで渡す必要がある。渡し忘れると黙って弱くなる
 test('loadout.js の totalStats / toFighter は fishDex と dex を受け取る', () => {
   const src = readFileSync(new URL('./loadout.js', import.meta.url), 'utf8')
-  assert.match(src, /export const totalStats = \(profile, inventory, runes, fishDex, dex\)/)
-  assert.match(src, /export const toFighter = \(profile, inventory, runes, fishDex, dex\)/)
+  assert.match(src, /export const totalStats = \(profile, inventory, runes, fishDex, dex, pet\)/)
+  assert.match(src, /export const toFighter = \(profile, inventory, runes, fishDex, dex, pet\)/)
   assert.match(src, /fishDexPct/, '釣り図鑑ぶんを合流させていない')
   assert.match(src, /dexStats\(dex\?\.kills, dex\?\.found\)/, 'モンスター図鑑ぶんを合流させていない')
+  assert.match(src, /petStatsOf\(pet \|\| \{\}\)/, 'ペットぶんを合流させていない')
 })
 
 test('V2Home は戦闘に関わる画面すべてに fishDex と dex を渡している', () => {
@@ -300,6 +301,10 @@ test('V2Home は戦闘に関わる画面すべてに fishDex と dex を渡し�
   // モンスター図鑑（固定値）が要るのは、それに加えて図鑑の画面そのもの
   for (const c of ['V2Sortie', 'V2Arena', 'V2Status', 'V2Profile', 'V2Atb', 'V2Dex']) {
     assert.match(near(c), /dex=\{dex\}/, `${c} に dex を渡していない`)
+  }
+  // ペット（固定値）が要るのは、ステータスを組み立てる画面
+  for (const c of ['V2Sortie', 'V2Arena', 'V2Status', 'V2Profile', 'V2Atb']) {
+    assert.match(near(c), /pet=\{pet\}/, `${c} に pet を渡していない`)
   }
   assert.match(src, /from\('v2_player_fish'\)/, '釣り図鑑を読み込んでいない')
   assert.match(src, /from\('v2_kills'\)/, '討伐数を読み込んでいない')

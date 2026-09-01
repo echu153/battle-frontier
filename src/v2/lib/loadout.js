@@ -10,6 +10,7 @@ import { SKILL_BY_NAME } from './skills.js'
 import { jobCountOf } from './classBonus.js'
 import { fishDexPct } from './fishing.js'
 import { dexStats } from './dex.js'
+import { statsOf as petStatsOf } from './pet.js'
 import { pendingStage } from './evolve.js'
 
 // 装着中の装備を { slot: { inv, item } } の形で引く
@@ -124,23 +125,26 @@ export const statPct = (profile, inventory, runes, fishDex) => {
 // ⚠ fishDex（v2_player_fish）と dex（討伐数・見つけた素材）を渡し忘れると
 //   図鑑のぶんが黙って消える。渡し忘れを検出するテストが fishing.test.js にある
 // ★モンスター図鑑のぶんは**固定値**（討伐数と素材の初回登録）。装備と同じく素の合計に足す
-export const totalStats = (profile, inventory, runes, fishDex, dex) => {
+export const totalStats = (profile, inventory, runes, fishDex, dex, pet) => {
   const gear = gearStats(profile, inventory)
   const pct = statPct(profile, inventory, runes, fishDex)
   const bonus = dexStats(dex?.kills, dex?.found)
+  // ★ペットで育てたぶんも**固定値**で足す（2026-08-29 ユーザー指示）。
+  //   pet は育ち具合の cum（ステごとの累計pt）。ステ値への直しは pet.js の statsOf が正
+  const petAdd = petStatsOf(pet || {})
   return Object.fromEntries(STAT_KEYS.map(k => {
-    const base = (profile?.[k] || 0) + gear[k] + bonus[k]
+    const base = (profile?.[k] || 0) + gear[k] + bonus[k] + (petAdd[k] || 0)
     return [k, pct[k] ? Math.round(base * (1 + pct[k] / 100)) : base]
   }))
 }
 
 // runBattle に渡す形。スキル編成が空なら通常攻撃だけで戦う
-export const toFighter = (profile, inventory, runes, fishDex, dex) => ({
+export const toFighter = (profile, inventory, runes, fishDex, dex, pet) => ({
   name: profile?.username || 'あなた',
   cls: profile?.class,
   // ★職業補正は「その職業に何回転職したか」で伸びる（classBonus.js）
   jobCount: jobCountOf(profile),
-  stats: totalStats(profile, inventory, runes, fishDex, dex),
+  stats: totalStats(profile, inventory, runes, fishDex, dex, pet),
   enchants: runeAbilities(equippedRunes(profile, inventory, runes)),
   // ★武器の進化（戦闘記憶）。刻印とは別枠で、装備している武器のぶんが乗る
   evolutions: equippedEvolutions(profile, inventory),
