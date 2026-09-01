@@ -4,7 +4,7 @@ import { STAT_DEFS } from '../lib/stats.js'
 import {
   PET_STAT_KEYS, petsOf, addPet, setActivePet, setPetMoves, evolveAll, PARTY_MAX, MOVE_SLOTS,
 } from '../lib/pet.js'
-import { speciesOf, knownMoves, familyOf, SPECIES_BY_NAME } from '../lib/petSpecies.js'
+import { speciesOf, knownMoves, familyOf, SPECIES } from '../lib/petSpecies.js'
 import { moveOf } from '../lib/petMoves.js'
 import { TYPE_COLOR, typeMult } from '../lib/petTypes.js'
 import {
@@ -47,11 +47,13 @@ export function PartyPanel({ state, lv, onState, onBack }) {
   const [pick, setPick] = useState(null)      // 技を編成している位置
   const [msg, setMsg] = useState('')
 
-  // まだ1体もいないとき。3種から選ぶ
-  // ★**idを直に書かない**。家系を足し引きすると番号がずれて、
-  //   炎・水・草のつもりが全部炎になる（実際そうなっていた）
-  const starters = ['ヒノコリス', 'ミズガメ', 'フタバガエル']
-    .map(n => SPECIES_BY_NAME[n]).filter(Boolean)
+  // まだ1体もいないとき。炎・水・草の3種から選ぶ
+  // ★**idも名前も直に書かない**。id で書いていたら家系を足した瞬間に番号がずれて
+  //   「炎・水・草のつもりが全部炎」になり、名前で書き直したら今度は
+  //   名前を付け替えたときに壊れた。**条件で選ぶ**のがいちばん保つ。
+  const starters = ['炎', '水', '草']
+    .map(t => SPECIES.find(s => s.types[0] === t && s.stages === 3 && s.stage === 0))
+    .filter(Boolean)
 
   const take = (id) => {
     const r = addPet(state, id, lv)

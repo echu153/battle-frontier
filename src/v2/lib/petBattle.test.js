@@ -134,7 +134,7 @@ test('1段目のうちは大技を覚えない', () => {
 })
 
 test('LVを上げると覚えている技が増える', () => {
-  const sp = SPECIES_BY_NAME['ゴウカリス']
+  const sp = SPECIES_BY_NAME['インフェルベルカ']
   assert.ok(knownMoves(sp, 60).length > knownMoves(sp, 5).length)
   assert.ok(knownMoves(sp, 1).length >= 1)
 })
@@ -201,7 +201,7 @@ test('効果の言い方が倍率に合っている', () => {
 // ===== ステの決まり方 =====
 
 test('実ステは種族値×育てたptで決まる', () => {
-  const sp = SPECIES_BY_NAME['ゴウカリス']
+  const sp = SPECIES_BY_NAME['インフェルベルカ']
   const none = battleStatsOf(sp, {})
   const grown = battleStatsOf(sp, Object.fromEntries(PET_STAT_KEYS.map(k => [k, 2400])))
   assert.equal(none.str, sp.base.str, '育てる前は種族値そのまま')
@@ -210,8 +210,8 @@ test('実ステは種族値×育てたptで決まる', () => {
 })
 
 test('種族値の差はどれだけ育てても残る', () => {
-  const strong = SPECIES_BY_NAME['ゴウカリス']
-  const weak = SPECIES_BY_NAME['ヒノコリス']
+  const strong = SPECIES_BY_NAME['インフェルベルカ']
+  const weak = SPECIES_BY_NAME['フンケベルカ']
   const cum = Object.fromEntries(PET_STAT_KEYS.map(k => [k, 5000]))
   assert.ok(battleStatsOf(strong, cum).str > battleStatsOf(weak, cum).str)
 })
@@ -244,34 +244,34 @@ const fight = (aName, bName, seed = 7, cum = null) => {
 
 test('バトルは必ず決着する', () => {
   for (let seed = 1; seed <= 20; seed++) {
-    const s = fight('ゴウカリス', 'リュウグウガメ', seed)
+    const s = fight('インフェルベルカ', 'ロングイ', seed)
     assert.equal(s.over, true, `決着しない（seed ${seed}）`)
     assert.ok(s.me.hp <= 0 || s.foe.hp <= 0)
   }
 })
 
 test('技を出すとPPが減る', () => {
-  const sp = SPECIES_BY_NAME['ゴウカリス']
+  const sp = SPECIES_BY_NAME['インフェルベルカ']
   const cum = Object.fromEntries(PET_STAT_KEYS.map(k => [k, 500]))
   const me = makeFighter(sp.id, cum, knownMoves(sp, 40).slice(-MOVE_SLOTS))
-  const foe = makeFighter(SPECIES_BY_NAME['リュウグウガメ'].id, cum, ['たいあたり'])
+  const foe = makeFighter(SPECIES_BY_NAME['ロングイ'].id, cum, ['たいあたり'])
   const before = me.moves[0].pp
   const s = battleTurn(startBattle(me, foe), me.moves[0].name, seeded(3))
   assert.equal(s.me.moves[0].pp, before - 1)
 })
 
 test('技は4つまで', () => {
-  const sp = SPECIES_BY_NAME['ゴウカリス']
+  const sp = SPECIES_BY_NAME['インフェルベルカ']
   const f = makeFighter(sp.id, {}, ['たいあたり', 'ひのこ', 'かえんほうしゃ', 'だいもんじ', 'のしかかり'])
   assert.equal(f.moves.length, MOVE_SLOTS)
 })
 
 test('弱点を突くとダメージが伸びる', () => {
-  const fire = SPECIES_BY_NAME['ゴウカリス']       // 炎
+  const fire = SPECIES_BY_NAME['インフェルベルカ']       // 炎
   const cum = Object.fromEntries(PET_STAT_KEYS.map(k => [k, 500]))
   const atk = makeFighter(fire.id, cum, ['かえんほうしゃ'])
-  const grass = makeFighter(SPECIES_BY_NAME['ジュカイガエル'].id, cum, ['たいあたり'])  // 草＝弱点
-  const water = makeFighter(SPECIES_BY_NAME['リュウグウガメ'].id, cum, ['たいあたり'])  // 水＝半減
+  const grass = makeFighter(SPECIES_BY_NAME['シルヴァラーナ'].id, cum, ['たいあたり'])  // 草＝弱点
+  const water = makeFighter(SPECIES_BY_NAME['ロングイ'].id, cum, ['たいあたり'])  // 水＝半減
   const fixed = () => 0.5
   const a = damageOf(atk, grass, 'かえんほうしゃ', fixed)
   const b = damageOf(atk, water, 'かえんほうしゃ', fixed)
@@ -281,8 +281,8 @@ test('弱点を突くとダメージが伸びる', () => {
 
 test('相手は弱点を突く技を選んでくる', () => {
   const cum = Object.fromEntries(PET_STAT_KEYS.map(k => [k, 500]))
-  const me = makeFighter(SPECIES_BY_NAME['ゴウカリス'].id, cum, ['たいあたり', 'かえんほうしゃ'])
-  const grass = makeFighter(SPECIES_BY_NAME['ジュカイガエル'].id, cum, ['たいあたり'])
+  const me = makeFighter(SPECIES_BY_NAME['インフェルベルカ'].id, cum, ['たいあたり', 'かえんほうしゃ'])
+  const grass = makeFighter(SPECIES_BY_NAME['シルヴァラーナ'].id, cum, ['たいあたり'])
   let fire = 0
   for (let i = 0; i < 20; i++) if (chooseMove(me, grass, seeded(i + 1)) === 'かえんほうしゃ') fire++
   assert.ok(fire >= 18, `弱点を突いてこない（${fire}/20）`)
@@ -290,7 +290,7 @@ test('相手は弱点を突く技を選んでくる', () => {
 
 test('野生の相手はこちらと同じくらいの強さになる', () => {
   const cum = Object.fromEntries(PET_STAT_KEYS.map(k => [k, 1000]))
-  const sp = SPECIES_BY_NAME['ヤミネコ']
+  const sp = SPECIES_BY_NAME['オンブラガット']
   const wild = makeWild(sp.id, cum, 30, seeded(5))
   assert.ok(wild.moves.length > 0 && wild.moves.length <= MOVE_SLOTS)
   assert.ok(wild.hp > 0)
@@ -300,15 +300,15 @@ test('野生の相手はこちらと同じくらいの強さになる', () => {
 })
 
 test('倒れたら終わり。そのあとターンは進まない', () => {
-  const s = fight('ゴウカリス', 'ヒノコリス', 11)
+  const s = fight('インフェルベルカ', 'フンケベルカ', 11)
   const after = battleTurn(s, s.me.moves[0].name, seeded(1))
   assert.equal(after.turn, s.turn, '決着後にターンが進んでいる')
 })
 
 test('元の状態は書き換えない', () => {
   const cum = Object.fromEntries(PET_STAT_KEYS.map(k => [k, 500]))
-  const me = makeFighter(SPECIES_BY_NAME['ゴウカリス'].id, cum, ['かえんほうしゃ'])
-  const foe = makeFighter(SPECIES_BY_NAME['ジュカイガエル'].id, cum, ['たいあたり'])
+  const me = makeFighter(SPECIES_BY_NAME['インフェルベルカ'].id, cum, ['かえんほうしゃ'])
+  const foe = makeFighter(SPECIES_BY_NAME['シルヴァラーナ'].id, cum, ['たいあたり'])
   const s = startBattle(me, foe)
   const hpBefore = s.foe.hp
   battleTurn(s, 'かえんほうしゃ', seeded(9))
@@ -318,7 +318,7 @@ test('元の状態は書き換えない', () => {
 // ===== 手持ち =====
 
 test('仲間にすると手持ちに増え、技は既定で4つ入る', () => {
-  const r = addPet(emptyPetState(), SPECIES_BY_NAME['ゴウカリス'].id, 40)
+  const r = addPet(emptyPetState(), SPECIES_BY_NAME['インフェルベルカ'].id, 40)
   assert.equal(r.ok, true)
   assert.equal(r.state.pets.length, 1)
   assert.equal(r.state.pets[0].moves.length, MOVE_SLOTS)
@@ -331,7 +331,7 @@ test('手持ちには上限がある', () => {
 })
 
 test('覚えていない技は編成に入れられない', () => {
-  const sp = SPECIES_BY_NAME['ヒノコリス']
+  const sp = SPECIES_BY_NAME['フンケベルカ']
   let s = addPet(emptyPetState(), sp.id, 5).state
   s = setPetMoves(s, 0, ['たいあたり', 'だいもんじ'], 5)   // だいもんじはまだ覚えていない
   assert.deepEqual(s.pets[0].moves, ['たいあたり'])
@@ -369,7 +369,7 @@ test('進化しない種は何度呼んでも進化しない', () => {
 })
 
 test('既定の技はそのLVで覚えているものだけ', () => {
-  const sp = SPECIES_BY_NAME['ヒノコリス']
+  const sp = SPECIES_BY_NAME['フンケベルカ']
   const moves = defaultMovesOf(sp.id, 3)
   const learned = knownMoves(sp, 3)
   for (const m of moves) assert.ok(learned.includes(m), `${m}はLV3で覚えていない`)
