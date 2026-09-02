@@ -477,6 +477,28 @@ const lvForPower = (pow) =>
 // 段階ごとに覚えられる威力の上限。1段目のうちから大技は覚えない
 const POW_CAP = { 0: 90, 1: 110, 2: 999 }
 
+// ★技を増やした（78→188）ので、**タイプの技を全部覚えさせない**。
+//   全部だと1種が25技も覚えて、どの種も同じ顔になってしまう。
+//   種ごとに違う組み合わせを、乱数を使わず**idから決める**。
+export const ATTACK_PICKS = 7      // 攻撃技をいくつ覚えるか
+export const CHANGE_PICKS = 3      // 変化技をいくつ覚えるか
+
+// 並んだ候補から n 個を「散らして」選ぶ。offset を変えると別の顔になる
+const pickSpread = (list, n, offset) => {
+  if (list.length <= n) return list.slice()
+  const out = []
+  const used = new Set()
+  for (let i = 0; i < n; i++) {
+    // 端から端まで等間隔に取り、offset で少しずらす
+    let at = Math.round(i * (list.length - 1) / (n - 1)) + (i === 0 || i === n - 1 ? 0 : offset % 2)
+    at = Math.max(0, Math.min(list.length - 1, at))
+    while (used.has(at)) at = (at + 1) % list.length
+    used.add(at)
+    out.push(list[at])
+  }
+  return out.sort((a, b) => list.indexOf(a) - list.indexOf(b))
+}
+
 export const learnsetOf = (sp) => {
   const prefer = PREFER[sp.role]
   const cap = POW_CAP[Math.min(sp.stage, 2)] ?? 999
@@ -484,7 +506,7 @@ export const learnsetOf = (sp) => {
   const powCap = sp.stages === 1 ? 999 : cap
 
   const seen = new Set()
-  const typed = []
+  const pool = []
   for (const t of sp.types) {
     for (const m of MOVES.filter(x => x.type === t)) {
       if (seen.has(m.name)) continue
@@ -492,11 +514,25 @@ export const learnsetOf = (sp) => {
       if (SIG_MOVES.has(m.name)) continue
       if (m.kind !== '変化' && m.pow > powCap) continue
       seen.add(m.name)
-      typed.push(m)
+      pool.push(m)
     }
   }
   // 威力の低い順。同じくらいなら役割に合うほうを先に（変化技は中盤に置く）
   const keyOf = (m) => (m.kind === '変化' ? 62 : m.pow - (m.kind === prefer ? 8 : 0))
+  pool.sort((a, b) => keyOf(a) - keyOf(b))
+
+  // 攻撃技と変化技を分けて選ぶ。分けないと、変化技ばかりの種が出てしまう
+  const atk = pool.filter(m => m.kind !== '変化')
+  const chg = pool.filter(m => m.kind === '変化')
+  // ★家系の中で覚える技が同じにならないよう、id で選び方をずらす
+  const off = sp.id % 3
+  const typed = [
+    ...pickSpread(atk, ATTACK_PICKS, off),
+    ...pickSpread(chg, CHANGE_PICKS, off + 1),
+  ]
+  // いちばん強い技（そのタイプ・その段階で覚えられるもの）は必ず入れる
+  const top = atk[atk.length - 1]
+  if (top && !typed.includes(top)) typed.push(top)
   typed.sort((a, b) => keyOf(a) - keyOf(b))
 
   const out = [{ lv: 1, move: NEUTRAL_START[sp.role] }]

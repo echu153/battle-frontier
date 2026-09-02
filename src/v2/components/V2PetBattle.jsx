@@ -5,7 +5,7 @@ import {
   PET_STAT_KEYS, petsOf, addPet, setActivePet, setPetMoves, evolveAll, PARTY_MAX, MOVE_SLOTS,
 } from '../lib/pet.js'
 import { speciesOf, knownMoves, familyOf, SPECIES } from '../lib/petSpecies.js'
-import { moveOf } from '../lib/petMoves.js'
+import { moveOf, moveEffText, AIL_TEXT } from '../lib/petMoves.js'
 import { TYPE_COLOR, typeMult } from '../lib/petTypes.js'
 import {
   makeFighter, makeWild, startBattle, battleTurn, battleStatsOf, maxHpOf,
@@ -129,6 +129,11 @@ export function PartyPanel({ state, lv, onState, onBack }) {
                 <span style={{ color:TEXT.sub, fontSize:'10px', marginLeft:'6px' }}>
                   {m.kind}{m.pow ? ` 威力${m.pow}` : ''} 命中{m.acc} PP{m.pp}
                 </span>
+                {moveEffText(m) && (
+                  <div style={{ color:'#ffcc66', fontSize:'10px', marginTop:'2px' }}>
+                    {moveEffText(m)}
+                  </div>
+                )}
               </button>
             )
           })}
@@ -248,6 +253,12 @@ export function WildBattle({ state, lv, onState, onBack }) {
         </span>
         {f.sp.types.map(t => <TypeTag key={t} t={t} />)}
         {f.status && <span style={{ color:'#ff4444', fontSize:'10px' }}>{f.status}</span>}
+        {/* ターンで消える状態異常。残りターンも出す（あと何ターン我慢するかで動きが変わる） */}
+        {Object.entries(f.ail || {}).map(([k, v]) => (
+          <span key={k} style={{ color:'#ffcc66', fontSize:'10px' }}>
+            {AIL_TEXT[k] || k}{k === 'bleed' ? `×${v.stacks}` : ''}({v.turns})
+          </span>
+        ))}
         <span style={{ color:TEXT.sub, fontSize:'10px', marginLeft:'auto' }}>{f.hp}/{f.maxHp}</span>
       </div>
       <HpBar hp={f.hp} max={f.maxHp} color={mine ? '#44ff88' : '#88ccff'} />

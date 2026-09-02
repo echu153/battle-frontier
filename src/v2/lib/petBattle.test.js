@@ -9,7 +9,7 @@ import { MOVES, MOVE_BY_NAME, moveOf } from './petMoves.js'
 import { TYPE_KEYS, typeMult, typeText, strongAgainst, weakAgainst } from './petTypes.js'
 import {
   MOVE_SLOTS, makeFighter, makeWild, startBattle, battleTurn, chooseMove,
-  battleStatsOf, growthMult, maxHpOf, stageMult, damageOf, wildPoolFor,
+  battleStatsOf, growthMult, maxHpOf, stageMult, damageOf, wildPoolFor, hits, PET_AIL_KEYS,
 } from './petBattle.js'
 import { PET_STAT_KEYS, addPet, setPetMoves, setActivePet, evolveAll, emptyPetState, defaultMovesOf, PARTY_MAX } from './pet.js'
 
@@ -478,4 +478,165 @@ test('既定の技はそのLVで覚えているものだけ', () => {
   const moves = defaultMovesOf(sp.id, 3)
   const learned = knownMoves(sp, 3)
   for (const m of moves) assert.ok(learned.includes(m), `${m}はLV3で覚えていない`)
+})
+
+// ===== 技の数と名前（2026-09-03 拡張）=====
+
+test('技は190種以上あって、どのタイプにも12種以上ある', () => {
+  assert.ok(MOVES.length >= 190, `技が${MOVES.length}種しかない`)
+  for (const t of TYPE_KEYS) {
+    const n = MOVES.filter(m => m.type === t).length
+    assert.ok(n >= 12, `${t}タイプの技が${n}種しかない`)
+  }
+})
+
+// ★実際に言われた指摘。「全部漢字」で単調だった
+test('技の名前が漢字だけになっていない', () => {
+  const kana = MOVES.filter(m => /[ァ-ヴー]/.test(m.name))
+  assert.ok(kana.length >= 60, `カタカナの技が${kana.length}個しかない`)
+  for (const t of TYPE_KEYS) {
+    const n = MOVES.filter(m => m.type === t && /[ァ-ヴー]/.test(m.name)).length
+    assert.ok(n >= 2, `${t}タイプにカタカナの技が${n}個しかない`)
+  }
+})
+
+test('状態異常をつける技がひととおりある', () => {
+  for (const key of PET_AIL_KEYS) {
+    const n = MOVES.filter(m => m.eff?.ail?.key === key).length
+    assert.ok(n >= 2, `${key}をつける技が${n}個しかない`)
+  }
+  // 上げ下げの技も残っていること
+  assert.ok(MOVES.filter(m => m.eff?.up).length >= 15)
+  assert.ok(MOVES.filter(m => m.eff?.down).length >= 10)
+})
+
+test('知らない状態異常を書いた技がない', () => {
+  for (const m of MOVES) {
+    if (!m.eff?.ail) continue
+    assert.ok(PET_AIL_KEYS.includes(m.eff.ail.key), `${m.name}に知らない状態異常 ${m.eff.ail.key}`)
+    assert.ok(m.eff.ail.pct > 0 && m.eff.ail.pct <= 100, `${m.name}の確率がおかしい`)
+  }
+})
+
+// ★技を78→188に増やしたので、タイプの技を全部覚えさせると1種25技になる。
+//   それだと選ぶ楽しみが無いうえ、どの種も同じ顔になる
+test('覚える技は多すぎず、種ごとに散らばっている', () => {
+  for (const s of SPECIES) {
+    const n = learnsetOf(s).length
+    assert.ok(n <= 16, `${s.name}が${n}技も覚える`)
+  }
+  const sets = new Set(SPECIES.map(s => learnsetOf(s).map(e => e.move).join(',')))
+  assert.ok(sets.size > SPECIES.length * 0.7, `覚える技の組み合わせが${sets.size}通りしかない`)
+})
+
+test('同じ家系でも覚える技が少しずつ違う', () => {
+  let same = 0
+  for (const f of FAMILIES) {
+    if (f.names.length < 2) continue
+    const a = SPECIES_BY_NAME[f.names[0]]
+    const b = SPECIES_BY_NAME[f.names[1]]
+    const sa = learnsetOf(a).map(e => e.move).join(',')
+    const sb = learnsetOf(b).map(e => e.move).join(',')
+    if (sa === sb) same += 1
+  }
+  assert.ok(same <= 10, `1段目と2段目で覚える技が丸ごと同じ家系が${same}ある`)
+})
+
+// ===== 状態異常が効いているか =====
+
+const fixed = (v) => () => v
+const rigged = (vals) => { let i = 0; return () => vals[Math.min(i++, vals.length - 1)] }
+
+// 無タイプの種でそろえる（タイプ相性でぶれないように）
+const plainSp = () => SPECIES.find(s => s.types.length === 1 && s.types[0] === '無' && !s.legendary)
+const rig = (myMoves, foeMoves) => {
+  const sp = plainSp()
+  const cum = Object.fromEntries(PET_STAT_KEYS.map(k => [k, 2000]))
+  const me = makeFighter(sp.id, cum, myMoves, 'こちら')
+  const foe = makeFighter(sp.id, cum, foeMoves, 'あいて')
+  return { me, foe }
+}
+
+test('呪いにかかると受けるダメージが増える', () => {
+  const { me, foe } = rig(['小突き'], ['小突き'])
+  const before = damageOf(me, foe, '小突き', fixed(0.5)).dmg
+  foe.ail.curse = { turns: 4 }
+  const after = damageOf(me, foe, '小突き', fixed(0.5)).dmg
+  assert.ok(after > before, `呪いで増えていない（${before}→${after}）`)
+})
+
+test('衰弱すると与えるダメージが減る', () => {
+  const { me, foe } = rig(['小突き'], ['小突き'])
+  const before = damageOf(me, foe, '小突き', fixed(0.5)).dmg
+  me.ail.weaken = { turns: 4 }
+  const after = damageOf(me, foe, '小突き', fixed(0.5)).dmg
+  assert.ok(after < before, `衰弱で減っていない（${before}→${after}）`)
+})
+
+test('暗闇になると当たらなくなる', () => {
+  const { me, foe } = rig(['小突き'], ['小突き'])
+  assert.equal(hits(me, foe, '小突き', fixed(0.8)), true)
+  me.ail.blind = { turns: 4 }
+  assert.equal(hits(me, foe, '小突き', fixed(0.8)), false, '暗闇でも当たっている')
+})
+
+test('鈍足だと避けにくくなる（AGIが落ちる）', () => {
+  const { me, foe } = rig(['大嵐'], ['小突き'])
+  const accOf = (f) => {
+    let n = 0
+    for (let i = 0; i < 100; i++) if (hits(me, f, '大嵐', fixed(i / 100))) n += 1
+    return n
+  }
+  const before = accOf(foe)
+  foe.ail.slow = { turns: 4 }
+  assert.ok(accOf(foe) > before, '鈍足でも当たりやすくなっていない')
+})
+
+test('サイレンス中は変化技が出せない', () => {
+  const { me, foe } = rig(['養生', '小突き'], ['小突き'])
+  me.hp = Math.floor(me.maxHp / 2)
+  me.ail.silence = { turns: 3 }
+  const st = battleTurn(startBattle(me, foe), '養生', fixed(0.5))
+  assert.ok(st.log.some(l => l.includes('サイレンス')), st.log.join('／'))
+  assert.ok(!st.log.some(l => l.includes('回復した')), '沈黙しているのに回復している')
+})
+
+test('狂乱すると選んだ技と違う技が出る', () => {
+  const { me, foe } = rig(['小突き', '爪牙', '思念弾', '衝波'], ['小突き'])
+  me.ail.frenzy = { turns: 3 }
+  const st = battleTurn(startBattle(me, foe), '小突き', rigged([0.99, 0.5]))
+  assert.ok(st.log.some(l => l.includes('狂乱')), st.log.join('／'))
+})
+
+test('出血はターンの終わりに削って、やがて治る', () => {
+  const { me, foe } = rig(['小突き'], ['小突き'])
+  foe.ail.bleed = { turns: 2, stacks: 2 }
+  let st = startBattle(me, foe)
+  const hp0 = st.foe.hp
+  st = battleTurn(st, '小突き', fixed(0.5))
+  assert.ok(st.log.some(l => l.includes('出血で')), st.log.join('／'))
+  assert.ok(st.foe.hp < hp0)
+  st = battleTurn(st, '小突き', fixed(0.5))
+  assert.ok(st.log.some(l => l.includes('出血が止まった')), st.log.join('／'))
+  assert.equal(st.foe.ail.bleed, undefined)
+})
+
+test('状態異常をつける変化技が実際に効く', () => {
+  const { me, foe } = rig(['マレディクト'], ['小突き'])
+  const st = battleTurn(startBattle(me, foe), 'マレディクト', fixed(0.1))
+  assert.equal(st.foe.ail.curse?.turns > 0, true, st.log.join('／'))
+})
+
+// ★これは直した穴。攻撃技に書いた down（鉄尾撃のVIT-1など）が
+//   ずっと素通りしていて、変化技のときしか効いていなかった
+test('攻撃技についた「相手のステを下げる」も効く', () => {
+  const { me, foe } = rig(['鉄尾撃'], ['小突き'])
+  const st = battleTurn(startBattle(me, foe), '鉄尾撃', fixed(0.3))
+  assert.equal(st.foe.stage.vit, -1, st.log.join('／'))
+})
+
+test('代償つきの技は自分のステが下がる', () => {
+  const { me, foe } = rig(['過負荷放電'], ['小突き'])
+  const st = battleTurn(startBattle(me, foe), '過負荷放電', fixed(0.3))
+  assert.equal(st.me.stage.int_stat, -1, st.log.join('／'))
 })

@@ -13,6 +13,50 @@ import { statValueOf, PET_STAT_KEYS } from './pet.js'
 import { moveOf } from './petMoves.js'
 import { typeMult, typeText } from './petTypes.js'
 import { speciesOf, knownMoves, SPECIES } from './petSpecies.js'
+import { AIL_LABEL } from './ailments.js'
+
+// ============================================================
+// 状態異常
+// ------------------------------------------------------------
+// ★2種類ある。混ぜないこと。
+//   ① status … やけど／まひ／どく。**1体に1つだけ・戦闘が終わるまで残る**
+//   ② ail    … 本編（ailments.js）と同じ顔ぶれ。**ターンで消える・重ねて持てる**
+//              名前は AIL_LABEL から借りて、本編と呼び方をそろえてある。
+//              数字はペットの1対1（HPが小さい・4つしか技がない）に合わせて別に持つ
+// ============================================================
+export const PET_AIL_TURNS = {
+  bleed: 4,      // 出血：ターンの終わりに削られる（重なる）
+  blind: 4,      // 暗闇：当たらなくなる
+  curse: 4,      // 呪い：受けるダメージが増える
+  frenzy: 3,     // 狂乱：出す技を選べない
+  weaken: 4,     // 衰弱：与えるダメージが減る
+  slow: 4,       // 鈍足：AGIが落ちる＝後攻になりやすい
+  silence: 3,    // サイレンス：変化技が出せない
+}
+export const PET_AIL_KEYS = Object.keys(PET_AIL_TURNS)
+export const petAilLabel = (key) => AIL_LABEL[key] || key
+
+// かかったとき／治ったときの文。ラベルをそのまま埋めると「呪いになった」になる
+const AIL_ON = {
+  bleed: 'は出血した', blind: 'は目がくらんだ', curse: 'は呪われた', frenzy: 'は狂乱した',
+  weaken: 'は弱ってきた', slow: 'は動きが鈍った', silence: 'は声を封じられた',
+}
+const AIL_OFF = {
+  bleed: 'の出血が止まった', blind: 'の目が慣れた', curse: 'の呪いが解けた',
+  frenzy: 'は落ち着いた', weaken: 'は力を取り戻した', slow: 'の動きが戻った',
+  silence: 'の声が戻った',
+}
+
+export const BLIND_ACC_PT = -25        // 命中率に足す%ポイント
+export const CURSE_TAKEN = 1.15        // 受けるダメージ倍率
+export const WEAKEN_DEAL = 0.85        // 与えるダメージ倍率
+export const SLOW_AGI = 0.8            // AGIにかかる倍率
+export const BLEED_PER_STACK = 0.02    // 1スタックあたり最大HPの%（4%だと通常攻撃より強かった）
+export const BLEED_MAX_STACKS = 5
+
+export const hasAil = (f, key) =>
+  key === 'bleed' ? ((f?.ail?.bleed?.stacks || 0) > 0 && f.ail.bleed.turns > 0)
+    : ((f?.ail?.[key]?.turns || 0) > 0)
 
 export const MOVE_SLOTS = 4          // 技は4つまで（pet.js と同じ値）
 export const HP_PER_VIT = 2.5        // HPはVITから作る
@@ -53,12 +97,16 @@ export const makeFighter = (speciesId, cum, moves, name = null) => {
     maxHp: hp,
     moves: (moves || []).slice(0, MOVE_SLOTS).map(n => ({ name: n, pp: moveOf(n)?.pp || 0 })),
     stage: Object.fromEntries(PET_STAT_KEYS.map(k => [k, 0])),
-    status: '',      // '' / 'やけど' / 'まひ' / 'どく'
+    status: '',      // '' / 'やけど' / 'まひ' / 'どく'（戦闘が終わるまで残る）
+    ail: {},         // 出血・暗闇・呪い・狂乱・衰弱・鈍足・サイレンス（ターンで消える）
   }
 }
 
-// 上げ下げこみのステ
-const statOf = (f, k) => Math.max(1, Math.floor(f.stats[k] * stageMult(f.stage[k] || 0)))
+// 上げ下げこみのステ。鈍足はここで効かせる（先攻・後攻にも回避にも効く）
+const statOf = (f, k) => {
+  const slow = (k === 'agi' && hasAil(f, 'slow')) ? SLOW_AGI : 1
+  return Math.max(1, Math.floor(f.stats[k] * stageMult(f.stage[k] || 0) * slow))
+}
 
 // ===== 野生の相手 =====
 // ★強さはこちらと同じ育ちぶんから作る。少しだけ振れる（0.85〜1.05倍）ので、
@@ -89,10 +137,12 @@ export const damageOf = (atk, def, move, rng = Math.random) => {
   const crit = rng() * 100 < critRate
   const stab = atk.sp.types.includes(m.type) ? STAB : 1
   const burn = (atk.status === 'やけど' && useStr) ? 0.5 : 1
+  const weaken = hasAil(atk, 'weaken') ? WEAKEN_DEAL : 1    // 衰弱：与えるダメージが減る
+  const curse = hasAil(def, 'curse') ? CURSE_TAKEN : 1      // 呪い：受けるダメージが増える
   const spread = 0.85 + rng() * 0.15
 
   let dmg = (m.pow * a / d) * 0.5 + 2
-  dmg *= mult * stab * burn * spread
+  dmg *= mult * stab * burn * weaken * curse * spread
   if (crit) dmg *= CRIT_MULT
   return { dmg: Math.max(1, Math.floor(dmg)), mult, crit }
 }
@@ -102,23 +152,59 @@ export const hits = (atk, def, move, rng = Math.random) => {
   const m = moveOf(move)
   if (!m) return false
   const ratio = statOf(atk, 'dex') / statOf(def, 'agi')
-  const acc = Math.min(100, m.acc * (0.85 + Math.min(0.45, ratio * 0.15)))
+  const blind = hasAil(atk, 'blind') ? BLIND_ACC_PT : 0    // 暗闇：当てにくくなる
+  const acc = Math.max(5, Math.min(100, m.acc * (0.85 + Math.min(0.45, ratio * 0.15)) + blind))
   return rng() * 100 < acc
 }
 
 // ===== 1体ぶんの行動 =====
+const STAT_LABEL = { str:'STR', int_stat:'INT', vit:'VIT', dex:'DEX', agi:'AGI', luk:'LUK' }
+
 const applyStage = (f, stat, n, log, who) => {
   const before = f.stage[stat] || 0
   const after = Math.max(STAGE_MIN, Math.min(STAGE_MAX, before + n))
   f.stage[stat] = after
-  if (after === before) log.push(`${who}の${stat}はもう変わらない`)
-  else log.push(`${who}の${stat}が${n > 0 ? '上がった' : '下がった'}`)
+  const label = STAT_LABEL[stat] || stat
+  if (after === before) log.push(`${who}の${label}はもう変わらない`)
+  else log.push(`${who}の${label}が${n > 0 ? '上がった' : '下がった'}`)
+}
+
+// 状態異常を入れる。ail は { key, pct, turns?, stacks? }
+const applyAil = (target, ail, log, rng) => {
+  if (!ail?.key || !PET_AIL_TURNS[ail.key]) return
+  if (rng() * 100 >= (ail.pct ?? 100)) return
+  const turns = ail.turns || PET_AIL_TURNS[ail.key]
+  if (ail.key === 'bleed') {
+    const cur = target.ail.bleed?.stacks || 0
+    target.ail.bleed = { turns, stacks: Math.min(BLEED_MAX_STACKS, cur + (ail.stacks || 1)) }
+    log.push(`${target.name}${AIL_ON.bleed}（${target.ail.bleed.stacks}）`)
+    return
+  }
+  // 出血いがいは重ならない＝ターンの数え直し（本編と同じ扱い）
+  target.ail[ail.key] = { turns }
+  log.push(`${target.name}${AIL_ON[ail.key] || `は${petAilLabel(ail.key)}になった`}`)
 }
 
 const act = (atk, def, moveName, log, rng) => {
+  // 狂乱：出す技を選べない。撃てる技からランダムに出る
+  if (hasAil(atk, 'frenzy')) {
+    const usable = atk.moves.filter(s => s.pp > 0)
+    if (usable.length) {
+      const pick = usable[Math.floor(rng() * usable.length)].name
+      if (pick !== moveName) log.push(`${atk.name}は狂乱していて技を選べない！`)
+      moveName = pick
+    }
+  }
   const m = moveOf(moveName)
   const slot = atk.moves.find(s => s.name === moveName)
   if (!m || !slot || slot.pp <= 0) { log.push(`${atk.name}は動けなかった`); return }
+
+  // サイレンス：変化技だけ出せない（攻撃技は出る）
+  if (m.kind === '変化' && hasAil(atk, 'silence')) {
+    slot.pp -= 1
+    log.push(`${atk.name}はサイレンスで${m.name}を出せない！`)
+    return
+  }
   slot.pp -= 1
 
   if (atk.status === 'まひ' && rng() < 0.25) {
@@ -141,6 +227,11 @@ const act = (atk, def, moveName, log, rng) => {
     }
     if (m.eff?.poison && !def.status) { def.status = 'どく'; log.push(`${def.name}は毒を受けた`) }
     if (m.eff?.para && !def.status) { def.status = 'まひ'; log.push(`${def.name}はしびれた`) }
+    // ターンで消える状態異常（暗闇・呪い・狂乱・衰弱・鈍足・サイレンス・出血）
+    if (m.eff?.ail) {
+      if (hits(atk, def, moveName, rng)) applyAil(def, m.eff.ail, log, rng)
+      else log.push('しかし外れた')
+    }
     return
   }
 
@@ -179,18 +270,36 @@ const act = (atk, def, moveName, log, rng) => {
     else if (m.eff?.para && rng() * 100 < m.eff.para) { def.status = 'まひ'; log.push(`${def.name}はしびれた`) }
     else if (m.eff?.poison && rng() * 100 < m.eff.poison) { def.status = 'どく'; log.push(`${def.name}は毒を受けた`) }
   }
+  if (def.hp > 0 && m.eff?.ail) applyAil(def, m.eff.ail, log, rng)
+  if (def.hp > 0 && m.eff?.down) applyStage(def, m.eff.down.stat, -m.eff.down.n, log, def.name)
   if (def.hp > 0 && m.eff?.up && m.eff?.chance && rng() * 100 < m.eff.chance) {
     applyStage(atk, m.eff.up.stat, m.eff.up.n, log, atk.name)
   }
+  // 強い技の代償。撃った自分のステが下がる
+  if (m.eff?.downSelf) applyStage(atk, m.eff.downSelf.stat, -m.eff.downSelf.n, log, atk.name)
 }
 
-// ターンの終わりに状態異常で削る
+// ターンの終わりに状態異常で削る／ターン数を減らす
 const tickStatus = (f, log) => {
   if (f.hp <= 0) return
   if (f.status === 'やけど' || f.status === 'どく') {
     const d = Math.max(1, Math.floor(f.maxHp / (f.status === 'どく' ? 8 : 16)))
     f.hp = Math.max(0, f.hp - d)
     log.push(`${f.name}は${f.status}で${d}受けた`)
+  }
+  if (hasAil(f, 'bleed')) {
+    const d = Math.max(1, Math.floor(f.maxHp * BLEED_PER_STACK * f.ail.bleed.stacks))
+    f.hp = Math.max(0, f.hp - d)
+    log.push(`${f.name}は出血で${d}受けた`)
+  }
+  for (const key of PET_AIL_KEYS) {
+    const a = f.ail?.[key]
+    if (!a) continue
+    a.turns -= 1
+    if (a.turns <= 0) {
+      delete f.ail[key]
+      log.push(`${f.name}${AIL_OFF[key] || `の${petAilLabel(key)}が治った`}`)
+    }
   }
 }
 
@@ -201,7 +310,8 @@ export const chooseMove = (me, foe, rng = Math.random) => {
   const scored = usable.map(s => {
     const m = moveOf(s.name)
     if (!m) return { name: s.name, score: 0 }
-    if (m.kind === '変化') return { name: s.name, score: 25 + rng() * 10 }
+    // サイレンス中は変化技が出せない＝選ばない
+    if (m.kind === '変化') return { name: s.name, score: hasAil(me, 'silence') ? 0 : 25 + rng() * 10 }
     const mult = typeMult(m.type, foe.sp.types)
     const stab = me.sp.types.includes(m.type) ? STAB : 1
     return { name: s.name, score: m.pow * mult * stab * (m.acc / 100) + rng() * 10 }
