@@ -258,6 +258,7 @@ export const startBattle = (me, foe) => ({ me, foe, turn: 1, log: [], over: fals
 //   育ってから出てくる＝いきなり強い子が手に入らないようにするため
 // ============================================================
 export const wildPoolFor = (lv) => SPECIES.filter((s) => {
+  if (s.legendary) return false        // ★伝説は野生には出ない（入手方法は未定）
   if (s.stages === 1) return lv >= 20          // 進化しない強い種
   if (s.stage === 0) return true
   if (s.stage === 1) return lv >= 16

@@ -199,7 +199,7 @@ export default function V2Pet({ onCum, onBack }) {
               )}
             </div>
             <div style={{ color:TEXT.sub, fontSize:'10px', marginTop:'3px' }}>
-              全{SPECIES.length}種。技は4つまで選べる・特定のLVで進化する
+              全{SPECIES.filter(s => !s.legendary).length}種＋伝説{SPECIES.filter(s => s.legendary).length}種。技は4つまで選べる・特定のLVで進化する
             </div>
           </button>
           <button onClick={() => { setResult(null); setGame('wild') }}

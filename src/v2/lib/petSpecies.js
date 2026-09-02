@@ -253,6 +253,34 @@ export const FAMILIES = [
 ]
 
 // ============================================================
+// 伝説のペット — 熾天使シリーズ
+// ------------------------------------------------------------
+// ★全13タイプに1体ずつ。**種族値の合計は全員600**（最終進化の平均560より上）。
+//   進化しない。1体につき専用技を1つ覚える（petMoves.js の熾天使の専用技）。
+//   名前は熾天使・大天使の名前をそのまま使う（2026-08-29 ユーザー指示）ので、
+//   生き物の語は入っていない＝名前の決まりの対象外にしてある。
+//
+// ⚠ **入手方法はまだ決めていない**。いまは野生には出てこない（wildPoolFor から除外）。
+// ============================================================
+const L = (type, role, name, sig) => ({ type, role, name, sig })
+
+export const LEGENDS = [
+  L('炎', 'atk', 'ミカエル', '熾天の劫火'),
+  L('水', 'mag', 'ガブリエル', '聖河の奔流'),
+  L('草', 'mag', 'ヨフィエル', '生命の讃歌'),
+  L('雷', 'spd', 'サンダルフォン', '神鳴の裁き'),
+  L('氷', 'def', 'ザフキエル', '静寂の氷獄'),
+  L('地', 'def', 'ウリエル', '大地の顕現'),
+  L('風', 'spd', 'ラファエル', '癒しの旋風'),
+  L('岩', 'atk', 'カマエル', '不動の巌撃'),
+  L('毒', 'mag', 'サリエル', '黄泉の瘴気'),
+  L('闇', 'atk', 'ルシファー', '堕天の一撃'),
+  L('光', 'mag', 'セラフィエル', '六翼の閃光'),
+  L('鋼', 'def', 'メタトロン', '天鋼の玉座'),
+  L('無', 'bal', 'ラジエル', '秘蹟の書'),
+]
+
+// ============================================================
 // モチーフの生き物（開発用）
 // ------------------------------------------------------------
 // ★**プレイヤーには出さない**。名前がどの生き物のどの言語から来ているかの控え。
@@ -369,6 +397,11 @@ export const MOTIF = {
   'レドンドブエイ':'ウシ', 'マヨルタウルス':'ウシ',
   'フェルトシャーフ':'ヒツジ', 'ハイデオベハ':'ヒツジ',
   'ロブスアルケス':'ヘラジカ',
+  // ===== 伝説（熾天使）=====
+  'ミカエル':'熾天使', 'ガブリエル':'熾天使', 'ヨフィエル':'熾天使', 'サンダルフォン':'熾天使',
+  'ザフキエル':'熾天使', 'ウリエル':'熾天使', 'ラファエル':'熾天使', 'カマエル':'熾天使',
+  'サリエル':'熾天使', 'ルシファー':'熾天使', 'セラフィエル':'熾天使', 'メタトロン':'熾天使',
+  'ラジエル':'熾天使',
 }
 
 // ============================================================
@@ -389,7 +422,7 @@ const SHARE = {
 
 // 段階ごとの総量。★進化しない種（solo）は1段目よりずっと高く、
 //   最終進化よりは少し低い＝「進化しないけどそこそこ強い」
-const TOTAL = { first: 300, mid: 400, last: 560, second: 440, solo: 470 }
+const TOTAL = { first: 300, mid: 400, last: 560, second: 440, solo: 470, legend: 600 }
 
 // id から作る小さなブレ（-6〜+6）
 const jitter = (id, i) => ((id * 37 + i * 101) % 13) - 6
@@ -401,6 +434,17 @@ const baseStatsOf = (id, role, stageKey) => {
   STAT_ORDER.forEach((k, i) => {
     out[k] = Math.max(10, Math.round(total * share[k] / 100) + jitter(id, i))
   })
+  return out
+}
+
+// 合計をぴったり want に合わせる。ズレは役割の主ステで吸わせる
+// （伝説の「種族値600」をきっちり見せるため）
+const MAIN_OF = { atk:'str', mag:'int_stat', def:'vit', spd:'agi', bal:'str' }
+const exactTotal = (base, want, role) => {
+  const out = { ...base }
+  const now = STAT_ORDER.reduce((t, k) => t + out[k], 0)
+  const k = MAIN_OF[role] || 'str'
+  out[k] = Math.max(10, out[k] + (want - now))
   return out
 }
 
@@ -424,6 +468,9 @@ const PREFER = { atk:'物理', mag:'特殊', def:'物理', spd:'物理', bal:nul
 // ★覚えるLVは**技の威力から決める**。順番に並べるだけだと、
 //   自タイプの弱い技が少ない種（炎の物理技は2つしかない等）で
 //   威力120の技をLV5で覚えてしまう（実際そうなっていた）
+// 熾天使の専用技の名前。ふつうの種が拾わないようにここで弾く
+const SIG_MOVES = new Set(LEGENDS.map(l => l.sig))
+
 const lvForPower = (pow) =>
   (pow <= 45 ? 1 : pow <= 60 ? 7 : pow <= 75 ? 14 : pow <= 90 ? 22 : pow <= 110 ? 32 : 42)
 
@@ -441,6 +488,8 @@ export const learnsetOf = (sp) => {
   for (const t of sp.types) {
     for (const m of MOVES.filter(x => x.type === t)) {
       if (seen.has(m.name)) continue
+      // ★専用技はここでは配らない（持ち主にだけ、下でLV50に置く）
+      if (SIG_MOVES.has(m.name)) continue
       if (m.kind !== '変化' && m.pow > powCap) continue
       seen.add(m.name)
       typed.push(m)
@@ -462,6 +511,8 @@ export const learnsetOf = (sp) => {
   for (const m of typed) put(m.name, m.kind === '変化' ? 10 : lvForPower(m.pow))
   // 無タイプの補助技。役割ごとに違うものが入る
   NEUTRAL_UTIL[sp.role].forEach((name, i) => put(name, 12 + i * 11))
+  // 熾天使の専用技。★終盤で覚える（威力125以上なので LV50）
+  if (sp.sig) put(sp.sig, 50)
 
   return out.sort((a, b) => a.lv - b.lv)
 }
@@ -496,6 +547,25 @@ const build = () => {
         evoTo: i < n - 1 ? id + 1 : 0,
         evoLv: i < n - 1 ? (n === 2 ? 18 + (id % 9) : i === 0 ? 14 + (id % 6) : 30 + (id % 9)) : 0,
       })
+    })
+  }
+  // ★伝説（熾天使）は最後に足す。進化しない・種族値600・専用技つき
+  for (const lg of LEGENDS) {
+    id += 1
+    list.push({
+      id,
+      name: lg.name,
+      motif: MOTIF[lg.name] || '熾天使',
+      types: [lg.type],
+      role: lg.role,
+      stage: 0,
+      stages: 1,
+      legendary: true,
+      sig: lg.sig,
+      // ★伝説は合計をぴったり600に揃える（ブレのぶんを主ステで吸う）
+      base: exactTotal(baseStatsOf(id, lg.role, 'legend'), TOTAL.legend, lg.role),
+      evoTo: 0,
+      evoLv: 0,
     })
   }
   return list

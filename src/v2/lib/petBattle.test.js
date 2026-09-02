@@ -9,7 +9,7 @@ import { MOVES, MOVE_BY_NAME, moveOf } from './petMoves.js'
 import { TYPE_KEYS, typeMult, typeText, strongAgainst, weakAgainst } from './petTypes.js'
 import {
   MOVE_SLOTS, makeFighter, makeWild, startBattle, battleTurn, chooseMove,
-  battleStatsOf, growthMult, maxHpOf, stageMult, damageOf,
+  battleStatsOf, growthMult, maxHpOf, stageMult, damageOf, wildPoolFor,
 } from './petBattle.js'
 import { PET_STAT_KEYS, addPet, setPetMoves, setActivePet, evolveAll, emptyPetState, defaultMovesOf, PARTY_MAX } from './pet.js'
 
@@ -20,8 +20,10 @@ const seeded = (seed) => () => {
 
 // ===== 種族 =====
 
-test('ペットはちょうど200種いる', () => {
-  assert.equal(SPECIES.length, 200)
+test('通常200種＋伝説13種で213種いる', () => {
+  assert.equal(SPECIES.filter(s => !s.legendary).length, 200)
+  assert.equal(SPECIES.filter(s => s.legendary).length, 13)
+  assert.equal(SPECIES.length, 213)
 })
 
 test('名前が重複していない', () => {
@@ -31,7 +33,8 @@ test('名前が重複していない', () => {
 
 // ★[[v2-enemy-naming]] と同じ決まり。文字だけでは何か分からない名前を作らない
 test('どの種の名前にも生き物の語が入っている', () => {
-  const bad = SPECIES.filter(s => !hasCreatureWord(s.name)).map(s => s.name)
+  // ★伝説（熾天使）は名前をそのまま使う指示なので対象外
+  const bad = SPECIES.filter(s => !s.legendary && !hasCreatureWord(s.name)).map(s => s.name)
   assert.deepEqual(bad, [], `生き物の語がない：${bad.join('・')}`)
   assert.ok(CREATURE_WORDS.length > 50)
 })
@@ -83,8 +86,63 @@ test('ユーザー指定のモチーフを守っている', () => {
   assert.equal(SPECIES_BY_NAME['グルートドラッヘ'].motif, 'ドラゴン')
 })
 
+// ===== 伝説（熾天使） =====
+
+test('伝説は全13タイプに1体ずついる', () => {
+  const legends = SPECIES.filter(s => s.legendary)
+  assert.equal(legends.length, TYPE_KEYS.length)
+  for (const t of TYPE_KEYS) {
+    const n = legends.filter(s => s.types[0] === t).length
+    assert.equal(n, 1, `${t}タイプの伝説が${n}体`)
+  }
+})
+
+test('伝説の種族値はぴったり600', () => {
+  for (const s of SPECIES.filter(x => x.legendary)) {
+    const total = STAT_ORDER.reduce((t, k) => t + s.base[k], 0)
+    assert.equal(total, 600, `${s.name}の合計が${total}`)
+  }
+})
+
+test('伝説は最終進化より強い', () => {
+  const total = (s) => STAT_ORDER.reduce((t, k) => t + s.base[k], 0)
+  const lasts = SPECIES.filter(s => !s.legendary && s.stages > 1 && s.stage === s.stages - 1)
+  const lastMax = Math.max(...lasts.map(total))
+  assert.ok(600 > lastMax, `最終進化に600超えがいる（${lastMax}）`)
+})
+
+test('伝説は専用技を1つ持ち、他の種は覚えない', () => {
+  const legends = SPECIES.filter(s => s.legendary)
+  const sigs = legends.map(s => s.sig)
+  assert.equal(new Set(sigs).size, legends.length, '専用技が使い回されている')
+  for (const s of legends) {
+    assert.ok(MOVE_BY_NAME[s.sig], `${s.name}の専用技 ${s.sig} が技表にない`)
+    assert.ok(learnsetOf(s).some(e => e.move === s.sig), `${s.name}が専用技を覚えない`)
+    assert.equal(MOVE_BY_NAME[s.sig].type, s.types[0], `${s.sig}のタイプが本体と違う`)
+  }
+  // ほかの種が拾っていないこと
+  for (const s of SPECIES.filter(x => !x.legendary)) {
+    for (const e of learnsetOf(s)) {
+      assert.ok(!sigs.includes(e.move), `${s.name}が専用技 ${e.move} を覚えている`)
+    }
+  }
+})
+
+test('専用技はふつうの大技より強い', () => {
+  const sigs = SPECIES.filter(s => s.legendary).map(s => MOVE_BY_NAME[s.sig])
+  const normalMax = Math.max(...MOVES.filter(m => !sigs.includes(m)).map(m => m.pow))
+  for (const m of sigs) assert.ok(m.pow > normalMax, `${m.name}(${m.pow})が通常技以下`)
+})
+
+// ★入手方法をまだ決めていないので、いまは野生に混ぜない
+test('伝説は野生には出てこない', () => {
+  for (const lv of [1, 20, 40, 99]) {
+    assert.ok(!wildPoolFor(lv).some(s => s.legendary), `LV${lv}の野生に伝説が混ざっている`)
+  }
+})
+
 test('進化しない種もいて、その子は1段目よりずっと強い', () => {
-  const solo = SPECIES.filter(s => s.stages === 1)
+  const solo = SPECIES.filter(s => s.stages === 1 && !s.legendary)
   assert.ok(solo.length >= 20, `進化しない種が少なすぎる（${solo.length}体）`)
   const total = (s) => STAT_ORDER.reduce((t, k) => t + s.base[k], 0)
   const soloAvg = solo.reduce((t, s) => t + total(s), 0) / solo.length
@@ -173,7 +231,7 @@ test('強い技ほど後のLVで覚える', () => {
 
 test('1段目のうちは大技を覚えない', () => {
   for (const s of SPECIES) {
-    if (s.stages === 1 || s.stage > 0) continue
+    if (s.stages === 1 || s.legendary || s.stage > 0) continue
     for (const e of learnsetOf(s)) {
       assert.ok(moveOf(e.move).pow <= 90, `1段目の${s.name}が${e.move}を覚える`)
     }
