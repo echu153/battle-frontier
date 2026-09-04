@@ -6,12 +6,16 @@
 //   ③ 帯ごとに決めた勝率になるボスの戦闘力を二分探索する
 //   ④ 「その帯を実際に何日で抜けるか」を最後に検算する
 //
-// ★勝率は高くなくていい（2026-08-26 ユーザー指示「もうちょっと敵強くていい」）。
+// ★勝率は高くなくていい。
 //   v2は**どの戦闘もHP満タンから始まる**ので、ボスに負けても失うのは時間だけ。
 //   1時間あそべばボスに約15回会えるから、勝率10%でも「その日のうちに1回は勝てる」。
-//   なので勝率6割は緩すぎた。帯ごとにこう置く：
-//     ①40% ②20% ③（旧値2,046のまま＝ユーザー指示） ④⑤⑥12% ⑦⑧15%
-//   ④以降が低いのは、その帯にエリアが2〜3個あって**その数だけ勝たないと次が開かない**ため。
+//
+// ★★2026-09-05 ユーザー指示で **決め方そのものを変えた**。
+//   前：「目標の日にちょうど抜ける」ボスの強さを逆算する（＝日数が正）
+//   今：「目標の日の挑戦力に対する**比**」を決め打ちする（＝比が正）
+//        ①〜④ … 150%   ⑤〜⑧ … 170%
+//   ⑤から重くなるのは狙いどおり（帯が進むほど1つの帯に2〜3エリアあるため）。
+//   日数はこの決め方の**結果**なので、ズレたら報告するだけで直さないこと。
 //
 //   node tools/v2-boss-tune.mjs
 // ============================================================
@@ -22,9 +26,8 @@ const { runBattle } = await import(B + 'battle.js')
 const { skillsOf } = await import(B + 'skills.js')
 const { CLASS_BONUS } = await import(B + 'classBonus.js')
 
-// 帯ごとの目標の勝率
-const TARGET_WIN = { 1: 0.40, 2: 0.20, 3: null, 4: 0.12, 5: 0.12, 6: 0.12, 7: 0.15, 8: 0.15 }
-const FIXED = { 3: 2046, 4: 4137 }   // ③④は前のまま（2026-08-26 ユーザー指示）
+// ★これが正。目標の日の挑戦力に対する、ボスの戦闘力の比
+const RATIO = { 1: 1.50, 2: 1.50, 3: 1.50, 4: 1.50, 5: 1.70, 6: 1.70, 7: 1.70, 8: 1.70 }
 const BOSS_TRIES_PER_DAY = 15             // 1時間でボスに会える回数（遭遇率が0.3%ずつ上がる）
 const FIGHTS = 160
 const rngOf = (s0) => { let s = s0 >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }
@@ -114,7 +117,7 @@ const clearDay = (curve, bossPower, areas, start) => {
 }
 
 console.log('■ ボスの強さを「目標の日にちょうど抜ける」ところへ合わせる')
-console.log('帯 エリア  目標    挑戦力      いま   →    新しく    その日の勝率   抜ける日')
+console.log('帯 エリア  目標    挑戦力      いま   →    新しく     比    その日の勝率  抜ける日')
 const plan = {}
 let start = 1
 for (const [tStr, goalDay] of Object.entries(GOAL_DAYS)) {
@@ -122,25 +125,16 @@ for (const [tStr, goalDay] of Object.entries(GOAL_DAYS)) {
   const areas = AREAS_SORTED.filter(a => a.tier === tier)
   const boss = areas[0].boss
   const curve = curveOf(tier)
-  let want
-  if (FIXED[tier]) {
-    want = FIXED[tier]
-  } else {
-    // ボスが強いほど遅く抜ける＝単調。二分探索で目標の日に合わせる
-    let lo = Math.round(peakAt(goalDay) * 0.2), hi = Math.round(peakAt(goalDay) * 6)
-    for (let i = 0; i < 24; i++) {
-      const mid = Math.round((lo + hi) / 2)
-      if (clearDay(curve, mid, areas.length, start) < goalDay) lo = mid; else hi = mid
-    }
-    want = Math.round((lo + hi) / 2)
-  }
+  // ★比を掛けるだけ。二分探索はもう要らない（日数ではなく比が正になったため）
+  const want = Math.round(peakAt(goalDay) * RATIO[tier])
   plan[tier] = Math.max(want, (plan[tier - 1] || 0) + 1)
   const done = clearDay(curve, plan[tier], areas.length, start)
   const rate = rateFromCurve(curve, peakAt(goalDay) / plan[tier])
   console.log('難' + tier + '   ' + areas.length + '個 ' + String(goalDay).padStart(4) + '日 ' +
     Math.round(peakAt(goalDay)).toLocaleString('ja-JP').padStart(8) + ' ' +
     boss.power.toLocaleString('ja-JP').padStart(9) + '  →  ' + plan[tier].toLocaleString('ja-JP').padStart(8) +
-    '    ' + (rate * 100).toFixed(0).padStart(4) + '%' + (FIXED[tier] ? '（据置）' : '        ') +
+    '   比' + (plan[tier] / peakAt(goalDay) * 100).toFixed(0).padStart(4) + '%' +
+    '    ' + (rate * 100).toFixed(0).padStart(4) + '%' +
     '  ' + String(done).padStart(4) + '日（' + (done - goalDay >= 0 ? '+' : '') + (done - goalDay) + '）')
   start = done + 1
 }
