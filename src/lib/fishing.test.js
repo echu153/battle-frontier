@@ -3,9 +3,10 @@
 // 経緯: 図鑑は (player_id, location, fish_name) で1件。魚名が場所をまたいで重複すると
 //       DBの一意制約に弾かれて図鑑が???のまま残る（2026-07-04 カリブカンパチ／
 //       2026-07-16 日本海カンパチ）。人力レビューでは見落とすのでテストで機械的に止める。
-import { describe, it, expect } from 'vitest'
+import { describe, it } from 'node:test'
+import { expect } from './testExpect.js'
 import { readFileSync } from 'node:fs'
-import { FISH_DATA, FISHING_LOCATIONS, COMPLETE_BONUS, calcFishBonus, FISH_RANK_BONUS_STATS } from './fishing'
+import { FISH_DATA, FISHING_LOCATIONS, COMPLETE_BONUS, calcFishBonus, FISH_RANK_BONUS_STATS } from './fishing.js'
 
 describe('魚図鑑データの健全性', () => {
   it('魚名が場所をまたいで重複しない（同名だとDBの一意制約に弾かれて図鑑に載らない）', () => {

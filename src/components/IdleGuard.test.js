@@ -2,7 +2,8 @@
 //
 // 経緯: 排他が片方向（釣りページ側）にしか無く、かかし側から入ると両方同時に
 //       走ってしまった（2026-07-16報告）。片方向だけの実装に戻ったら落ちるようにする。
-import { describe, it, expect } from 'vitest'
+import { describe, it } from 'node:test'
+import { expect } from '../lib/testExpect.js'
 import { readFileSync } from 'node:fs'
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8')
