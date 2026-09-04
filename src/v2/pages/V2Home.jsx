@@ -18,6 +18,7 @@ import V2Storage from '../components/V2Storage.jsx'
 import V2Smith from '../components/V2Smith.jsx'
 import V2Status, { V2Menu } from '../components/V2Status.jsx'
 import V2Announce, { V2AnnouncePopup } from '../components/V2Announce.jsx'
+import V2TestAccount from '../components/V2TestAccount.jsx'
 import { SEEN_KEY as ANN_SEEN, initialSeen, unreadOf } from '../lib/announce.js'
 import V2Dex from '../components/V2Dex.jsx'
 import { killMapOf, foundSetOf } from '../lib/dex.js'
@@ -145,10 +146,14 @@ export default function V2Home() {
       try {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) { nav('/login'); return }
-        const { data: p } = await supabase.from('profiles').select('username, is_admin').eq('id', user.id).maybeSingle()
+        const [{ data: p }, { data: tester }] = await Promise.all([
+          supabase.from('profiles').select('username, is_admin').eq('id', user.id).maybeSingle(),
+          // ★テスター名簿。自分の行しか見えない（v2_testers の RLS）
+          supabase.from('v2_testers').select('id').eq('id', user.id).maybeSingle(),
+        ])
         // ★入れるかどうかは gameMode.js の V2_PUBLIC が決める（切り替えは1か所）。
-        //   公開前は開発限定＝非管理者は旧BFへ戻す（アクセスは管理者へ通知）
-        if (!canPlayV2(p?.is_admin)) { reportDevAccess('v2_remake', 'リメイク版[開発]'); nav('/game'); return }
+        //   公開前は開発限定＝管理者とテスター以外は旧BFへ戻す（アクセスは管理者へ通知）
+        if (!canPlayV2(p?.is_admin, !!tester)) { reportDevAccess('v2_remake', 'リメイク版[開発]'); nav('/game'); return }
         if (!alive) return
         // ⚠Ⅱだけで始めた人は**旧版の profiles に行が無い**（v2_create_character は
         //   v2_profiles にしか書かない）。p が null でも落ちないようにしておくこと。
@@ -738,6 +743,9 @@ const TWO_COLUMN = {
               {error && <div style={{ color:'#ff4444', fontSize:'11px', marginTop:'8px' }}>⚠ {error}</div>}
               {prof.lv >= MAX_LV && <div style={{ color:'#ff8844', fontSize:'10px', marginTop:'8px' }}>LV{MAX_LV}に到達しています。EXPは入りません（転職してください）。</div>}
             </div>
+
+            {/* ★テスト用アカウントは**管理者だけ**が作れる（テスターには出さない） */}
+            {isAdmin && <V2TestAccount />}
 
             {/* 上昇ログ */}
             {log.length > 0 && (

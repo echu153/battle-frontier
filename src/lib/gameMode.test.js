@@ -66,7 +66,7 @@ test('★版の判定は gameMode.js だけに書く', () => {
   assert.match(create, /creatableVersions\(/, 'キャラ作成が判定を使っていない')
   assert.ok(!/const V2_PUBLIC = /.test(create), 'キャラ作成に古いフラグが残っている')
   const home = src('../v2/pages/V2Home.jsx')
-  assert.match(home, /canPlayV2\(p\?\.is_admin\)/, '/v2 のゲートが判定を使っていない')
+  assert.match(home, /canPlayV2\(p\?\.is_admin, !!tester\)/, '/v2 のゲートが判定を使っていない')
   assert.ok(!/if \(!p\?\.is_admin\) \{ reportDevAccess/.test(home), '/v2 に古いゲートが残っている')
 })
 

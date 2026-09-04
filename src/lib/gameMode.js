@@ -37,4 +37,8 @@ export const creatableVersions = (isAdmin = false) =>
   ['v1', 'v2'].filter(v => canCreate(v, isAdmin))
 
 // バトルフロンティアⅡに入れるか（/v2 のゲート）
-export const canPlayV2 = (isAdmin = false) => V2_PUBLIC || !!isAdmin
+// ★テスター … 公開前に「is_admin ではないがⅡには入れる」捨てアカウント。
+//   取引所のように**2人いないと確かめられない**ものを試すために作る。
+//   名簿はサーバー（v2_testers）が持っていて、足せるのは is_admin だけ。
+//   ⚠これはゲートを**緩めていない**。名簿に載っている人だけが通る。
+export const canPlayV2 = (isAdmin = false, isTester = false) => V2_PUBLIC || !!isAdmin || !!isTester

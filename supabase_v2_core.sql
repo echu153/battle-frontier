@@ -5628,3 +5628,94 @@ select 'バトルフロンティアⅡ 開発中',
        '新しいお知らせが来たときは、開いたときにポップアップでお伝えします。',
        'update'
 where not exists (select 1 from public.v2_announcements);
+
+
+-- ============================================================
+-- §17 テスト用アカウント（クローズドテスト・2026-09-05）
+-- ------------------------------------------------------------
+-- ★Ⅱは未公開（V2_PUBLIC=false）で、入れるのは is_admin だけ。
+--   でも取引所のように**2人いないと確かめられない**ものがある。
+--   そこで「is_admin ではないが、Ⅱには入れる」アカウントを作れるようにする。
+--
+-- ★これは**ゲートを緩めていない**。
+--   ・v2_testers に**名簿として入っている人だけ**が通る（誰でもではない）
+--   ・名簿に足せるのは **is_admin だけ**（テスターがテスターを増やせない）
+--   ・旧版の is_admin は渡さない＝Ⅱで遊べるだけの権限
+--
+-- ⚠ v2_is_dev() を広げるので、Ⅱの開発用RPC（EXP付与など）もテスターから
+--   使えるようになる。**捨てアカウント専用**であって、一般公開の前段ではない。
+-- ============================================================
+
+create table if not exists public.v2_testers (
+  id         uuid primary key references auth.users(id) on delete cascade,
+  note       text not null default '',
+  created_at timestamptz not null default now()
+);
+alter table public.v2_testers enable row level security;
+-- ★見えるのは**自分の行だけ**（誰がテスターかの一覧は配らない）
+drop policy if exists "v2_testers_read_self" on public.v2_testers;
+create policy "v2_testers_read_self" on public.v2_testers
+  for select to authenticated using (id = auth.uid());
+revoke all on table public.v2_testers from anon;
+revoke all on table public.v2_testers from authenticated;
+grant select on table public.v2_testers to authenticated;
+
+-- ===== Ⅱに入れる人の判定を広げる =====
+-- ★これが唯一の入口。画面（gameMode.js の canPlayV2）はこれに合わせてある
+create or replace function public.v2_is_dev()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce((select p.is_admin from public.profiles p where p.id = auth.uid()), false)
+      or exists (select 1 from public.v2_testers t where t.id = auth.uid())
+$$;
+
+-- ===== 名簿に足す（is_admin だけ） =====
+-- ★v2_is_dev() ではなく **is_admin** を見る。ここを v2_is_dev にすると
+--   テスターがテスターを増やせてしまい、名簿の意味が無くなる。
+-- 認証ユーザ（auth.users）は先にクライアントの signUp で作っておく。
+-- ここではその id に対して「テスター名簿 → Ⅱのキャラクター → 動作確認用のGold」を用意する。
+create or replace function public.v2_dev_create_tester(
+  p_user_id uuid, p_username text, p_gold bigint default 1000000
+) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_name text := btrim(coalesce(p_username, ''));
+  v_row  public.v2_profiles;
+begin
+  if not coalesce((select p.is_admin from public.profiles p where p.id = auth.uid()), false) then
+    return jsonb_build_object('ok', false, 'error', '管理者だけが作れます');
+  end if;
+  if p_user_id is null then return jsonb_build_object('ok', false, 'error', 'user_id がありません'); end if;
+  if not exists (select 1 from auth.users u where u.id = p_user_id) then
+    return jsonb_build_object('ok', false, 'error', 'そのアカウントが見つかりません（先にサインアップしてください）');
+  end if;
+  if char_length(v_name) < 1 or char_length(v_name) > 16 then
+    return jsonb_build_object('ok', false, 'error', '名前は1〜16文字で入力してください');
+  end if;
+  if exists (select 1 from public.v2_profiles where lower(username) = lower(v_name) and id <> p_user_id) then
+    return jsonb_build_object('ok', false, 'error', 'その名前はすでに使われています');
+  end if;
+
+  insert into public.v2_testers (id, note) values (p_user_id, 'test account')
+    on conflict (id) do nothing;
+
+  select * into v_row from public.v2_profiles where id = p_user_id;
+  if not found then
+    insert into public.v2_profiles (id, username) values (p_user_id, v_name) returning * into v_row;
+  end if;
+
+  -- ★取引所を試すためのGold。**買う側**をこのアカウントにできるようにする
+  --   （売る側は素材を売ればGoldが湧くが、新規は何も持っていないため）
+  update public.v2_profiles set gold = greatest(gold, coalesce(p_gold, 0)), updated_at = now()
+   where id = p_user_id returning * into v_row;
+
+  return jsonb_build_object('ok', true, 'profile', to_jsonb(v_row));
+end;
+$$;
+revoke all on function public.v2_dev_create_tester(uuid, text, bigint) from public;
+revoke all on function public.v2_dev_create_tester(uuid, text, bigint) from anon;
+grant execute on function public.v2_dev_create_tester(uuid, text, bigint) to authenticated;
