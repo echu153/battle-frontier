@@ -42,7 +42,7 @@ test('★テスター名簿は自分の行しか見えない・自分では書�
     '自分の行だけ、になっていない')
   assert.match(SQL, /grant select on table public\.v2_testers to authenticated/, 'select の許可が無い')
   for (const bad of ['insert', 'update', 'delete', 'all']) {
-    assert.ok(!new RegExp(`grant ${bad}[^;]*on table public\.v2_testers to authenticated`).test(SQL),
+    assert.ok(!new RegExp(`grant ${bad}[^;]*on table public\\.v2_testers to authenticated`).test(SQL),
       `v2_testers に ${bad} を許してしまっている`)
   }
   assert.match(SQL, /revoke all on table public\.v2_testers from anon/, 'anon を止めていない')
