@@ -3,6 +3,7 @@ import { supabase } from '../../supabase'
 import { SLOTS, SLOT_LABEL, PARTS, powerOf, statsOf, slotsFor, socketCountOf, handsLabel, handsColor } from '../lib/equipment.js'
 import { equippedItems, gearPower, wornIdsOf, stackInventory, runePctText } from '../lib/loadout.js'
 import { ABILITY_LABEL } from '../lib/enchant.js'
+import { fusedName } from '../lib/fusion.js'
 import { STAT_DEFS, STAT_KEYS } from '../lib/stats.js'
 import { COLOR_HEX } from '../lib/material.js'
 import { filterRows, sortRows, pageOf, clampPage, defaultFilter } from '../lib/browse.js'
@@ -71,7 +72,7 @@ export default function V2Storage({ prof, inventory, runes, onProfile, onBack })
                     {/* ★合わせると能力値と刻印がまとめて見える */}
                     <V2ItemTip item={w.item} inv={w.inv} runes={essOf(w.inv.id)}>
                       <span style={{ color: RANK_COLOR[w.item.rank] }}>
-                        {w.item.name}{w.inv.plus ? `+${w.inv.plus}` : ''}
+                        {fusedName(w.item, w.inv.fused)}{w.inv.plus ? `+${w.inv.plus}` : ''}
                       </span>
                       <SealTags list={essOf(w.inv.id)} size="9px" />
                       <EvoTags inv={w.inv} size="9px" />
@@ -113,7 +114,7 @@ export default function V2Storage({ prof, inventory, runes, onProfile, onBack })
               <div style={{ display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap' }}>
                 <span style={{ color: RANK_COLOR[item.rank], fontSize:'10px', minWidth:'22px' }}>{item.rank}</span>
                 <span style={{ color:'#88ccff', fontSize:'12px' }}>
-                  {item.name}{plus ? <span style={{ color:'#ffcc00' }}>+{plus}</span> : ''}
+                  {fusedName(item, g.fused)}{plus ? <span style={{ color:'#ffcc00' }}>+{plus}</span> : ''}
                 </span>
                 {/* ★同じ装備・同じ強化値はここでまとめて個数にする */}
                 {g.list.length > 1 && <span style={{ color:'#ffffff', fontSize:'11px' }}>×{g.list.length}</span>}

@@ -9,6 +9,7 @@ import {
   UNSOCKET_KIT_NAME, UNSOCKET_KIT_COST,
 } from '../lib/material.js'
 import { ABILITY_LABEL, abilityText } from '../lib/enchant.js'
+import { fusedName } from '../lib/fusion.js'
 import { STAT_DEFS } from '../lib/stats.js'
 import { useStored } from '../lib/prefs.js'
 import { box, miniBtn } from './v2ui.js'
@@ -362,7 +363,7 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
           {weapons.map(w => (
             <div key={w.slot} style={{ borderTop:'1px solid #002244', padding:'8px 0' }}>
               <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'4px' }}>
-                {w.item.name}{w.inv.plus ? <span style={{ color:'#ffcc00' }}>+{w.inv.plus}</span> : ''}
+                {fusedName(w.item, w.inv.fused)}{w.inv.plus ? <span style={{ color:'#ffcc00' }}>+{w.inv.plus}</span> : ''}
               </div>
               {w.sockets.length === 0 && (
                 <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>

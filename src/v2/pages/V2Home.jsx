@@ -31,6 +31,8 @@ import V2Base from '../components/V2Base.jsx'
 import V2Market from '../components/V2Market.jsx'
 import V2Help from '../components/V2Help.jsx'
 import V2Pet from '../components/V2Pet.jsx'
+import V2Raid from '../components/V2Raid.jsx'
+import V2Friends from '../components/V2Friends.jsx'
 import {
   powerText, isPassive, KIND_LABEL, KIND_COLOR, SKILL_BY_NAME,
   usableSkills, usableSkillNames, unlearnedSkills, validateSkillSet, setMpCost,
@@ -85,6 +87,11 @@ const MENU = [
     { key:'market',  label:'取引所',      icon:'🏪', color:'#ffaa44', action:'装備を売り買いする' },
     { key:'base',    label:'拠点',        icon:'🏕', color:'#8fcf6f', action:'資材を集める' },
   ],
+  // ⑤ みんなで … レイドと、その救援を送る相手（docs/v2-raid-design.md）
+  [
+    { key:'raid',    label:'レイド',      icon:'☠', color:'#ff6644', action:'挑む・救援を出す', badge:'raid' },
+    { key:'friends', label:'フレンド',    icon:'🤝', color:'#88ccff', action:'申請・承認する' },
+  ],
   [
     { key:'tree',    label:'ユグレシアの宝樹', icon:'🌳', color:'#44dd99', action:'祈る' },
     { key:'pet',     label:'ペット',          icon:'🐾', color:'#c0b0ff', action:'遊んで育てる' },
@@ -127,6 +134,10 @@ export default function V2Home() {
   const [hasNewAnn, setHasNewAnn] = useState(false)            // メニューの NEW（見たら消す）
   const [annPopup, setAnnPopup] = useState(false)
   const [runes, setRunes] = useState([])     // 持っているルーン（v2_essences）
+  // 合成素材（v2_player_fusions）。鍛冶屋の「合成」で武器に付ける（docs/v2-raid-design.md §6）
+  const [fusions, setFusions] = useState([])
+  // レイドに動きがあるか（挑戦中・救援に呼ばれている・報酬が未受取）。メニューの NEW に使う
+  const [hasRaid, setHasRaid] = useState(false)
   // ★釣り図鑑（v2_player_fish）。first_at が入っている行が恒久ステータスの対象。
   //   **戦闘のステータス計算に効く**ので、装備やルーンと同じようにここで持って配る
   const [fishDex, setFishDex] = useState([])
@@ -178,6 +189,9 @@ export default function V2Home() {
           supabase.from('v2_kills').select('enemy,n'),
           supabase.from('v2_dex_materials').select('material_id'),
         ])
+        // ★合成素材とレイドは**取れなくても先へ進む**（supabase_v2_raid_*.sql を流す前でも遊べるように）
+        const { data: fus } = await supabase.from('v2_player_fusions').select('*')
+        setFusions(fus || [])
         // ★お知らせは**取れなくても先へ進む**（テーブルを作る前でも遊べるように）
         const { data: anns } = await supabase.from('v2_announcements')
           .select('id,title,content,category,created_at')
@@ -189,6 +203,7 @@ export default function V2Home() {
         setGuard(grd || null)
         setFishDex(fish || [])
         setDex({ kills: killMapOf(kills), found: foundSetOf(found) })
+        checkRaid()
       } catch (err) {
         setSqlError(err.message || String(err))
       }
@@ -238,6 +253,8 @@ export default function V2Home() {
       supabase.from('v2_kills').select('enemy,n'),
       supabase.from('v2_dex_materials').select('material_id'),
     ])
+    const { data: fus } = await supabase.from('v2_player_fusions').select('*')
+    setFusions(fus || [])
     if (v2) setProf(v2)
     setInventory(inv || [])
     setMaterials(mats || [])
@@ -245,6 +262,13 @@ export default function V2Home() {
     setGuard(grd || null)
     setFishDex(fish || [])
     setDex({ kills: killMapOf(kills), found: foundSetOf(found) })
+  }
+
+  // レイドに動きがあるか。★テーブルを作る前は黙って false（画面は落とさない）
+  const checkRaid = async () => {
+    const { data } = await supabase.rpc('v2_raid_list')
+    if (!data?.ok) { setHasRaid(false); return }
+    setHasRaid(!!data.active || (data.invites || []).length > 0 || (data.unclaimed || []).length > 0)
   }
 
   const create = async (e) => {
@@ -489,7 +513,7 @@ const COL_RIGHT = { flex: '999 1 ' + SIDE_BASIS, minWidth: 0 }
                     ))}
                   </div>
                 )}
-                {act === 'sortie' && <V2Sortie prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} dex={dex} pet={pet} guard={guard} onProfile={refresh} onScene={sc => setInBattle(sc === 'battle')} />}
+                {act === 'sortie' && <V2Sortie prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} dex={dex} pet={pet} guard={guard} onProfile={refresh} onScene={sc => setInBattle(sc === 'battle')} onRaid={checkRaid} />}
                 {act === 'arena'  && <V2Arena  prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} dex={dex} pet={pet} onProfile={refresh} onBack={() => setAct('sortie')} embedded />}
                 {act === 'atb'    && <V2Atb    prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} dex={dex} pet={pet} />}
               </div>
@@ -498,17 +522,19 @@ const COL_RIGHT = { flex: '999 1 ' + SIDE_BASIS, minWidth: 0 }
             {/* ===== 行動メニュー（あるけみすと式の「施設名｜ボタン」）===== */}
             {screen === 'home' && !inBattle && (
               <V2Menu groups={MENU} open={openMenu} onToggle={() => setOpenMenu(v => !v)}
-                onPick={pickScreen} badges={{ ann: hasNewAnn }} />
+                onPick={pickScreen} badges={{ ann: hasNewAnn, raid: hasRaid }} />
             )}
 
             {screen === 'profile' && <V2Profile prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} dex={dex} pet={pet} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'storage' && <V2Storage prof={prof} inventory={inventory} runes={runes} onProfile={refresh} onBack={() => setScreen('home')} />}
-            {screen === 'smith'   && <V2Smith   prof={prof} inventory={inventory} materials={materials} runes={runes} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
+            {screen === 'smith'   && <V2Smith   prof={prof} inventory={inventory} materials={materials} runes={runes} fusions={fusions} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'tree'    && <V2Tree    prof={prof} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'base'    && <V2Base    prof={prof} materials={materials} fishDex={fishDex} isAdmin={isAdmin} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'market'  && <V2Market  prof={prof} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'dex'     && <V2Dex     prof={prof} dex={dex} onBack={() => setScreen('home')} />}
             {screen === 'pet'     && <V2Pet     onCum={setPet} onBack={() => setScreen('home')} />}
+            {screen === 'raid'    && <V2Raid    prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} dex={dex} pet={pet} onProfile={refresh} onBack={() => { setScreen('home'); checkRaid() }} />}
+            {screen === 'friends' && <V2Friends prof={prof} onBack={() => setScreen('home')} />}
             {screen === 'announce' && <V2Announce list={announce} unread={unreadAnn} onBack={() => setScreen('home')} />}
 
             {(screen === 'skills' || screen === 'temple') && (

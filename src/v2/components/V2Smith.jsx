@@ -5,6 +5,7 @@ import { STAT_KEYS, STAT_DEFS } from '../lib/stats.js'
 import { wornIdsOf } from '../lib/loadout.js'
 import { COLOR_HEX, COLOR_LABEL } from '../lib/material.js'
 import { ABILITY_LABEL } from '../lib/enchant.js'
+import { fusedName } from '../lib/fusion.js'
 import {
   ratesFor, checkPick, fuseCostOf, MAT_COUNT, RESULT_LABEL, RESULT_COLOR, RESULT_UP,
   PROTECT_NAME, PROTECT_DESC,
@@ -16,8 +17,11 @@ import { V2Filter, V2Pager } from './V2Browse.jsx'
 import V2Modal from './V2Modal.jsx'
 import V2Help from './V2Help.jsx'
 import V2Enchant from './V2Enchant.jsx'
+import V2Fusion from './V2Fusion.jsx'
 
-// 鍛冶屋。「強化」と「エンチャント」の2枚看板で、タブで切り替える。
+// 鍛冶屋。「強化」「エンチャント」「合成」の3枚看板で、タブで切り替える。
+// ★合成（2026-09-06）はレイドボスの素材を武器に付ける枠（docs/v2-raid-design.md §6）。
+//   強化とは別物で、**合成しても強化はこれまで通りできる**（equip_id で見ているため）。
 //
 // 強化の流れ（2026-08-16 に作り直し）：
 //   ① 持っている装備の一覧（種類ごと）から1つ選ぶ
@@ -27,9 +31,9 @@ import V2Enchant from './V2Enchant.jsx'
 //   前は3個まとめて溶けて新しい1個ができる方式だったが、それだと
 //   ルーン入り・ソケット厳選の装備がどれか分からないまま消えていた。
 // ★ルーンが入っている個体には印を付けて、素材に選ぶと警告を出す。
-export default function V2Smith({ prof, inventory, materials, runes, isAdmin, onProfile, onBack }) {
+export default function V2Smith({ prof, inventory, materials, runes, fusions, isAdmin, onProfile, onBack }) {
   // ★どちらのタブを見ていたか・絞り込みは覚えておく
-  const [menu, setMenu] = useStored('smithTab', 'fuse')   // fuse=強化 / enchant=エンチャント
+  const [menu, setMenu] = useStored('smithTab', 'fuse')   // fuse=強化 / enchant=エンチャント / fusion=合成
   const [openEquip, setOpenEquip] = useState('')  // 個体一覧を開いている装備ID
   const [filter, setFilter] = useStored('smithFilter', defaultFilter, true)
   const [rawPage, setRawPage] = useState(0)            // ページ（0始まり）
@@ -142,7 +146,7 @@ export default function V2Smith({ prof, inventory, materials, runes, isAdmin, on
           opacity: (base && !isBase && !selectable) ? 0.35 : 1,
           cursor: (base && !isBase && !selectable) ? 'not-allowed' : 'pointer' }}>
         <span style={{ color:'#7fa6d0', fontSize:'9px' }}>#{inv.id}</span>{' '}
-        {item.name}{inv.plus ? <span style={{ color:'#ffcc00' }}>+{inv.plus}</span> : ''}
+        {fusedName(item, inv.fused)}{inv.plus ? <span style={{ color:'#ffcc00' }}>+{inv.plus}</span> : ''}
         <span style={{ color:'#7fa6d0' }}>　戦闘力{powerOf(item, inv.plus || 0)}</span>
         {isWorn && <span style={{ color:'#44ff88', fontSize:'9px' }}>　装備中</span>}
         {es.length > 0 && (
@@ -170,7 +174,9 @@ export default function V2Smith({ prof, inventory, materials, runes, isAdmin, on
 
       {/* 鍛冶屋でできること。強化とエンチャントをここで切り替える */}
       <div style={{ display:'flex', gap:'4px', marginBottom:'10px' }}>
-        {[{ key:'fuse', label:'🔨 強化', color:'#ffcc00' }, { key:'enchant', label:'⚗ エンチャント', color:'#cc88ff' }].map(t => (
+        {[{ key:'fuse', label:'🔨 強化', color:'#ffcc00' },
+          { key:'enchant', label:'⚗ エンチャント', color:'#cc88ff' },
+          { key:'fusion', label:'✦ 合成', color:'#ff8844' }].map(t => (
           <button key={t.key} onClick={() => { setMenu(t.key); setMsg(null) }}
             style={{ ...miniBtn(menu === t.key ? t.color : '#7fa6d0'), padding:'7px 14px', fontSize:'12px',
               background: menu === t.key ? '#002850' : '#000818' }}>
@@ -182,6 +188,10 @@ export default function V2Smith({ prof, inventory, materials, runes, isAdmin, on
       {menu === 'enchant' && (
         <V2Enchant prof={prof} inventory={inventory} materials={materials} runes={runes}
           isAdmin={isAdmin} onRefresh={onProfile} onBack={onBack} embedded />
+      )}
+
+      {menu === 'fusion' && (
+        <V2Fusion prof={prof} inventory={inventory} fusions={fusions} isAdmin={isAdmin} onRefresh={onProfile} />
       )}
 
       {menu === 'fuse' && (<>

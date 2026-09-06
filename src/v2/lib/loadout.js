@@ -12,6 +12,7 @@ import { fishDexPct } from './fishing.js'
 import { dexStats } from './dex.js'
 import { statsOf as petStatsOf } from './pet.js'
 import { pendingStage } from './evolve.js'
+import { fusedAbilitiesOf } from './fusion.js'
 
 // 装着中の装備を { slot: { inv, item } } の形で引く
 export const equippedItems = (profile, inventory) => {
@@ -32,6 +33,8 @@ export const wornIdsOf = (profile, inventory) =>
   new Set(Object.values(equippedItems(profile, inventory)).map(w => String(w.inv.id)))
 
 // ★同じ装備・同じ強化値をひとまとめにする。**＋が違えば別のまとまり**。
+//   **合成（fused）が違うものも別のまとまり**（2026-09-06）＝名前も特殊能力も違うため、
+//   ひとまとめにすると倉庫で「黒龍の鋼剣」と素の「鋼剣」が同じ行に混ざる。
 //   倉庫の一覧と鍛冶屋の合成で「同じもの」の定義がズレないよう、ここ1か所で決める。
 //   worn … そのまとまりのうち装着中のぶん ／ free … 外れているぶん（合成や装着に使えるぶん）
 //   並びは戦闘力の高い順。
@@ -41,9 +44,9 @@ export const stackInventory = (inventory, wornIds = new Set()) => {
     const item = ITEM_BY_ID[inv.equip_id]
     if (!item) continue
     const plus = inv.plus || 0
-    const key = `${inv.equip_id}#${plus}`
+    const key = `${inv.equip_id}#${plus}#${inv.fused || ''}`
     let g = map.get(key)
-    if (!g) { g = { key, item, plus, list:[], worn:[], free:[] }; map.set(key, g) }
+    if (!g) { g = { key, item, plus, fused: inv.fused || null, list:[], worn:[], free:[] }; map.set(key, g) }
     g.list.push(inv)
     ;(wornIds.has(String(inv.id)) ? g.worn : g.free).push(inv)
   }
@@ -112,6 +115,23 @@ export const runePctText = (list) => {
 // 付いている特殊能力の名前（＝敵の名前。enchant.js のキー）。**同じものが複数あればそのぶん並ぶ**
 export const runeAbilities = (list) => (list || []).map(e => e.ability).filter(Boolean)
 
+// ===== 合成（レイドボスの特殊能力）=====
+// 装備している武器に合成で付いた能力。**刻印とまったく同じ枠**で戦闘に乗る
+//   （enchant.js の ABILITY_OF が両方を引ける）＝刻印と重ねて足せる。
+// ⚠両手武器は右手と左手の2枠を埋めるので、**所持品IDで重複を落としてから**渡す
+//   （落とさないと同じ能力が2回乗る）
+export const equippedFusions = (profile, inventory) => {
+  const seen = new Set()
+  const invs = []
+  for (const w of Object.values(equippedItems(profile, inventory))) {
+    const key = String(w.inv.id)
+    if (seen.has(key)) continue
+    seen.add(key)
+    invs.push(w.inv)
+  }
+  return fusedAbilitiesOf(invs)
+}
+
 // ルーン＋釣り図鑑の補正(%)をひとまとめにする。
 // ★どちらも「%」なので同じ枠で合算する。**図鑑ぶんだけ別の計算経路を作らない**
 //   （別経路にすると、戦闘のどこか1つに入れ忘れたときに気付けない）
@@ -145,7 +165,10 @@ export const toFighter = (profile, inventory, runes, fishDex, dex, pet) => ({
   // ★職業補正は「その職業に何回転職したか」で伸びる（classBonus.js）
   jobCount: jobCountOf(profile),
   stats: totalStats(profile, inventory, runes, fishDex, dex, pet),
-  enchants: runeAbilities(equippedRunes(profile, inventory, runes)),
+  enchants: [
+    ...runeAbilities(equippedRunes(profile, inventory, runes)),
+    ...equippedFusions(profile, inventory),
+  ],
   // ★武器の進化（戦闘記憶）。刻印とは別枠で、装備している武器のぶんが乗る
   evolutions: equippedEvolutions(profile, inventory),
   slots: (profile?.skill_set || [])

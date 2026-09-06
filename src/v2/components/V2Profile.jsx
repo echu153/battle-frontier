@@ -5,6 +5,7 @@ import { classBonusText, jobCountOf } from '../lib/classBonus.js'
 import { attackKindOf } from '../lib/battle.js'
 import { equippedItems, totalStats } from '../lib/loadout.js'
 import { SLOT_LABEL } from '../lib/equipment.js'
+import { fusedName } from '../lib/fusion.js'
 import { SKILL_BY_NAME, KIND_LABEL, KIND_COLOR } from '../lib/skills.js'
 import { AREAS, allEnemies } from '../lib/enemies.js'
 import { dexStats, dexProgress } from '../lib/dex.js'
@@ -118,7 +119,7 @@ export default function V2Profile({ prof, inventory, runes, fishDex, dex, pet, o
     if (!w) return <span style={{ color:'#7b8fb8' }}>—</span>
     return (<>
       <span style={{ color: RANK_COLOR[w.item.rank] }}>[{w.item.rank}]</span>{' '}
-      {w.item.name}{w.inv.plus ? <span style={{ color:'#ffcc00' }}>+{w.inv.plus}</span> : ''}
+      {fusedName(w.item, w.inv.fused)}{w.inv.plus ? <span style={{ color:'#ffcc00' }}>+{w.inv.plus}</span> : ''}
     </>)
   }
   const stat = (k) => (total[k] || 0).toLocaleString()

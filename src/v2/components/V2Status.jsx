@@ -7,6 +7,7 @@ import { TIER_COLOR } from '../lib/classes.js'
 import { KIND_COLOR, SKILL_BY_NAME, SKILL_SET_SLOTS, passiveOf } from '../lib/skills.js'
 import { equippedItems, totalStats } from '../lib/loadout.js'
 import { SLOT_LABEL } from '../lib/equipment.js'
+import { fusedName } from '../lib/fusion.js'
 import { RANK_COLOR } from './v2ui.js'
 import V2ItemTip, { V2SkillTip, V2Tip } from './V2ItemTip.jsx'
 
@@ -108,7 +109,7 @@ export default function V2Status({ prof, inventory, runes, fishDex, dex, pet, cl
                 カーソルを合わせたとき（V2ItemTip の中）に出す */}
             <span style={{ ...valueCell, display:'block' }}>
               <span style={{ color: RANK_COLOR[w.item.rank] }}>[{w.item.rank}]</span>{' '}
-              <span style={{ color:'#88ccff' }}>{w.item.name}</span>
+              <span style={{ color:'#88ccff' }}>{fusedName(w.item, w.inv.fused)}</span>
               {w.inv.plus ? <span style={{ color:'#ffcc00' }}>+{w.inv.plus}</span> : ''}
             </span>
           </V2ItemTip>

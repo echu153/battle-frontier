@@ -393,7 +393,31 @@ export const ENCHANTS = {
   '深海のオオダコ': { text:'晩の間、魔法ダメージ+12%', effect:{ bandDmgPct:{ bands:['晩'], kind:'mag', pct:12 } } },
 }
 
-export const enchantOf = (enemyName) => ENCHANTS[enemyName] || null
+// ============================================================
+// ===== 合成の特殊能力（レイドボス・2026-09-06）=====
+// ------------------------------------------------------------
+// ★**ENCHANTS には入れない。**あちらは「敵270体にちょうど1つずつ」で、
+//   テスト（enchant.test.js）がその数を見張っている。レイドボスは出撃の敵ではない。
+// ★引く先はどちらも下の ABILITY_OF なので、戦闘（collectEnchants）からは
+//   刻印と同じものとして扱われる＝**刻印と重ねて足せる**。
+//
+// 素材と冠名は fusion.js（キーはレイドボスの名前・raid.js の RAID_BOSSES と一致させること）。
+// 強さは**刻印より1段強い**（刻印は最大でも物理+4%）。レイドを回さないと手に入らず、
+// しかも**武器そのものを1枠使う**ため。docs/v2-raid-design.md §1
+// ============================================================
+export const FUSION_ABILITIES = {
+  '黒龍ヴァルゼノク': { text:'物理ダメージ+15%', effect:{ physDmgPct:15 } },
+  '雨摩座': { text:'魔法ダメージ+8%／攻撃ヒット時、30%で鈍足付与',
+    effect:{ magDmgPct:8, onHitAil:{ key:'slow', chance:30, kind:'any' } } },
+  '雷鋼機神ゼルギアス': { text:'命中率+8%／スキル発動率+8%', effect:{ hitBonus:8, procBonus:8 } },
+  '閻魔': { text:'攻撃ヒット時、25%で呪い付与／物理ダメージを与えたとき、与えたダメージの5%を回復',
+    effect:{ onHitAil:{ key:'curse', chance:25, kind:'any' }, drainPhysPct:5 } },
+  '炎獄王グラウディオス': { text:'魔法ダメージ+15%', effect:{ magDmgPct:15 } },
+}
+
+// 敵の刻印と合成の能力を1つの表として引く。**collectEnchants はこちらを見る**
+export const ABILITY_OF = { ...ENCHANTS, ...FUSION_ABILITIES }
+export const enchantOf = (name) => ABILITY_OF[name] || null
 export const ENCHANT_NAMES = Object.keys(ENCHANTS)
 
 // ===== 付く確率 =====
@@ -406,7 +430,7 @@ export const enchantChanceOf = (rarity) => ENCHANT_CHANCE[rarity] || 0
 //   （2026-08-26 ユーザー指示。ルーンに付いた能力が「コウモリ」では何のことか分からない）。
 //   見出しはいつも「特殊能力」で、中身はその効果の文を出す。
 export const ABILITY_LABEL = '特殊能力'
-export const abilityText = (name) => ENCHANTS[name]?.text || name
+export const abilityText = (name) => ABILITY_OF[name]?.text || name
 
 // ===== 戦闘用のまとめ =====
 // 装備している全ソケットぶんのエンチャントを1つに畳む。**同じ能力でも重複して足す**

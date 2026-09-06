@@ -14,6 +14,8 @@ import { toFighter as playerFighter, equippedRunes, runeAbilities } from '../lib
 import { dropRateMultOf } from '../lib/enchant.js'
 import { guardDropMultOf, GUARD_DROP_MULT } from '../lib/arena.js'
 import { RARITY_COLOR } from '../lib/material.js'
+import { rollRaid, pickRaidBoss } from '../lib/raid.js'
+import { calcPower } from '../lib/stats.js'
 import { PROTECT_NAME } from '../lib/smith.js'
 import { RANK_COLOR, dropLine, LOG_PLAIN } from './v2ui.js'
 import V2Evolve from './V2Evolve.jsx'
@@ -29,7 +31,7 @@ import { pushWeaponRecord } from './weaponRecord.js'
 //   スタミナが1以上あるあいだは、10秒ごとに勝手に出撃する（1回につき1消費）。
 //   切れたら止まり、**これまで通り自分でクリックして出撃**する（手動は消費しない）。
 //   ⚠消費と回復の権威はサーバー（v2_sortie_settle / v2_stamina_roll）。ここは表示と読み替え。
-export default function V2Sortie({ prof, inventory, runes, fishDex, dex, pet, guard, onProfile, onScene }) {
+export default function V2Sortie({ prof, inventory, runes, fishDex, dex, pet, guard, onProfile, onScene, onRaid }) {
   const [scene, setScene] = useState('town')
   const [selectedArea, setSelectedArea] = useState(() => Number(localStorage.getItem('v2SelectedArea')) || 1)
   const [logs, setLogs] = useState([])
@@ -163,6 +165,24 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, dex, pet, gu
         return
       }
       if (data.level?.ups > 0) setLogs(l => [...l, { text:`🆙 レベルアップ！ LV${data.level.lv}`, color:'#44ff88' }])
+      // ★レイドボス（docs/v2-raid-design.md §2）。出撃1戦闘につき0.4%・ピティは無い。
+      //   ボスもレアモンスターもこの抽選には関係しない（別枠で引く）。
+      //   ⚠**清算が通ったあとに引く**＝弾かれた出撃でレイドが立たないように。
+      //   立てられるかどうか（3時間の間隔・参加中かどうか）はサーバーが決めるので、
+      //   ここで断られても何も出さずに黙って流す。
+      if (rollRaid()) {
+        const rb = pickRaidBoss()
+        const { data: rd } = await supabase.rpc('v2_raid_spawn', {
+          p_boss_key: rb.key, p_area: area.id, p_power: Math.round(calcPower(me.stats)),
+        })
+        if (rd?.ok) {
+          setLogs(l => [...l, { text:`☠ レイドボス出現！ ${rb.name}が現れた！`, color: rb.color },
+            { text:'「レイド」から挑戦できる（1時間・救援信号を出せる）', color:'#ffcc00' }])
+          setAuto(false)   // ★オート出撃は止める（気づかずに時間を溶かさないように）
+          onRaid?.()
+        }
+      }
+
       // ★武器の進化（戦闘記憶）。装備している武器へ1戦ぶんの戦績を積む
       const ready = await pushWeaponRecord(prof, inventory, r, you, foe, { isBoss: enc.isBoss })
       if (ready.length) setEvolving(ready[0])
