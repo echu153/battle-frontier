@@ -136,6 +136,9 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, isAd
           { text:'💥 与えたダメージ ' },
           { text: Number(data.damage).toLocaleString(), color:'#ffcc00' },
         ] },
+        // ★EXPはサーバーが抽選して配る。**入っていることが見えないと入っていないのと同じ**なので必ず出す
+        ...(data.exp ? [{ text:`EXP +${data.exp}`, color:'#ffcc00' }] : []),
+        ...(data.level?.ups > 0 ? [{ text:`🆙 レベルアップ！ LV${data.level.lv}`, color:'#44ff88' }] : []),
         ...(data.killed ? [{ text:`🎉 ${boss.name}を討伐した！`, color:'#44ff88' }] : []),
       ])
       // ★武器の進化（戦闘記憶）。**戦闘のある画面はすべて積む**（出撃・アリーナと同じ）。
@@ -143,6 +146,8 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, isAd
       const ready = await pushWeaponRecord(prof, inventory, r, me.name, boss.name, { isBoss: true })
       if (ready.length) setEvolving(ready[0])
       await refresh()
+      // ★EXPが入るので、プロフィール（LV・ステータス）も取り直す
+      onProfile?.(null)
     } finally {
       running.current = false
       setBusy(false)
@@ -311,7 +316,7 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, isAd
             )}
           </div>
           <div style={{ color: TEXT.sub, fontSize:'10px', marginBottom:'8px', lineHeight:1.7 }}>
-            挑戦してもスタミナは減りません（EXPも入りません）。報酬は終わったあとにまとめて受け取ります。<br />
+            挑戦してもスタミナは減りません。EXPは出撃の敵と同じだけ入ります。報酬は終わったあとにまとめて受け取ります。<br />
             1回の挑戦は{RAID_TURNS}ターンまで。ボスはターンが進むほど強くなるので、後半はほとんど通りません。
           </div>
 
