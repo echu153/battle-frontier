@@ -9,17 +9,22 @@
 //     出撃と同じ10秒クールタイムで何度でも殴る（HP/MPは毎回全快・ボスのHPは減ったまま）
 //     救援信号を出すと、選んだ相手も同じレイドへ入れる（最大20人）
 //         ↓
-//     討伐 or 時間切れ → 与ダメの割合ぶんの報酬（ルーン素材＋確率で合成素材）
+//     討伐 or 時間切れ → 貢献度のティアぶんの報酬（ルーン素材＋討伐なら合成素材）
+//
+// ★強さは**出撃していたエリアの難易度帯で決まる**（2026-09-06 ユーザー指示）。
+//   奥のエリアで引くほど強く、そのぶん報酬も豪華になる。挑む人の戦闘力では変わらない。
+// ★1回の挑戦は**30ターン**。ボスは**ターンが進むほど火力と耐久が上がる**（たかぶり）ので、
+//   後半のターンはほとんど通らない＝短期決戦を組めた人ほど削れる。
 //
 // ★5体は無印から来た4体＋炎の枠が空いていたので足した1体。
 //   名前・冠名・素材・特殊能力は**この表の1行にまとまっている**（変えるならここだけ）。
-// ★特殊能力の中身は enchant.js の FUSIONS（刻印と同じ枠で戦闘に乗るため）。
+// ★特殊能力の中身は enchant.js の FUSION_ABILITIES（刻印と同じ枠で戦闘に乗せるため）。
 //   合成素材そのものは fusion.js（ユニークボスぶんも後で同じ表へ足す）。
 //
 // ⚠数値の正はこのファイル。supabase_v2_raid_20260906.sql に同じ値が入っていて、
 //   raid.test.js が両方を突き合わせている（片方だけ直すと落ちる）。
 // ============================================================
-import { ENEMY_SKILLS, statsOf, toFighter } from './enemies.js'
+import { ENEMY_SKILLS, statsOf, toFighter, areasOfTier, tierOf, TIER_MAX, markOf } from './enemies.js'
 
 const S = ENEMY_SKILLS
 
@@ -79,57 +84,139 @@ export const RAID_MINUTES = 60
 export const RAID_COOLDOWN_HOURS = 3
 // 1つのレイドに入れる人数（主催者を含む）
 export const RAID_MAX_MEMBERS = 20
-// どのボスが出るかは5体から均等
+// どのボスが出るかは5体から均等（強さはエリアで決まるので、どれが出ても手応えは同じ）
 export const pickRaidBoss = (rng = Math.random) => RAID_BOSSES[Math.floor(rng() * RAID_BOSSES.length)]
 
-// ===== 強さ（tools/v2-raid-tune.mjs で測って決めた）=====
-// ボスの戦闘力もHPも**主催者の戦闘力 P 基準**。ボスの防御も一緒に伸びるので、
-// 与ダメはPに対してほぼ線形になる（ユニークボスの P^1.2 はここでは要らない）。
-export const RAID_MIN_POWER = 6000    // 下限。これ未満の人が引いても強さはここで止まる
-export const RAID_HP_K = 2000         // HP = K × 戦闘力。攻撃寄りの編成で約320回ぶん＝1時間
-export const RAID_TURNS = 10          // 1回の挑戦で回すターン数（通常戦闘は100ターン上限）
-export const raidPowerOf = (power) => Math.max(RAID_MIN_POWER, Math.round(power || 0))
-export const raidHpOf = (power) => RAID_HP_K * raidPowerOf(power)
+// ===== 強さ（エリアの難易度帯で決まる・2026-09-06 ユーザー指示）=====
+// ★**そのエリアのボスの戦闘力 × 2**。エリアボスの数字は tools/v2-boss-tune.mjs が
+//   「1日1時間で目標どおりに進む」ところへ置いたものなので、それに乗せておけば
+//   帯を進めるたびにレイドも同じ歩幅で重くなる（レイド用に別の目標を置かない）。
+// ⚠**挑む人の戦闘力では変わらない**。強い人が浅いエリアのレイドを手伝うと楽に倒せるが、
+//   報酬はその帯ぶんしか出ないので旨みは無い（自然に釣り合う）。
+// ★**守りと攻めを別の戦闘力で作る**（2026-09-06）。
+//   ・守り（HP以外のステ全部）… エリアボスの **2倍**。硬くて素早い
+//   ・攻め（STR / INT）      … エリアボスの **6%**。素の攻撃力はとても低い
+//   ⚠攻めを守りと同じ戦闘力で作ると、**5ターンでこちらが力尽きて30ターンに届かない**
+//     （実測。tools/v2-raid-tune.mjs）。レイドボスは「倒しに来る敵」ではなく
+//     **削り切るまでの時間を測る壁**なので、素の攻撃力は低くしてある。
+//     そのかわり下の「たかぶり」でターンごとに攻撃力が伸び、最後には必ず倒される。
+export const RAID_POWER_MULT = 2
+export const RAID_ATK_MULT = 0.06
+export const bossPowerOfTier = (tier) => areasOfTier(tier)[0]?.boss?.power || 0
+export const raidPowerOfTier = (tier) => Math.round(bossPowerOfTier(tier) * RAID_POWER_MULT)
+export const raidAtkPowerOfTier = (tier) => Math.max(1, Math.round(bossPowerOfTier(tier) * RAID_ATK_MULT))
+export const raidPowerOfArea = (areaId) => raidPowerOfTier(tierOf(areaId))
 
-// runBattle に渡せる形。uses は1回の挑戦で技を何回使えるか（10ターンなので4回で足りる）
-export const bossStatsOf = (boss, power) => ({
-  name: boss.name, kind: boss.kind, dist: boss.dist, skills: boss.skills, power: raidPowerOf(power),
+// HPは**帯ごとの表**。「その帯の標準的な編成が1時間フル（360回）殴って
+// ちょうど削り切れる」量を tools/v2-raid-tune.mjs で測って焼いてある。
+// ⚠**勘で書き換えない。** 帯ごとに編成の枠数もエリアボスの強さも違うので、
+//   「戦闘力 × 一定」では出せない（①〜④と⑤〜⑧で必要な倍率が3倍ちがう）。
+//   触るときは `node tools/v2-raid-tune.mjs` を回して、出た表をそのまま貼ること。
+export const RAID_HP = {
+  1:370000, 2:950000, 3:1900000, 4:2500000,
+  5:33000000, 6:61000000, 7:86000000, 8:110000000,
+}
+export const raidHpOfTier = (tier) => RAID_HP[tier] || RAID_HP[1]
+export const raidHpOfArea = (areaId) => raidHpOfTier(tierOf(areaId))
+
+// ===== 1回の挑戦 =====
+// ★30ターンで強制終了。ボスは**1ターンごとに火力+RAMP_ATK%・耐久+RAMP_DEF%**（たかぶり）。
+//   後半はほとんど通らなくなり、こちらが先に倒れる＝**短期決戦を組めた人ほど削れる**。
+//   解釈は battle.js の liveStats（fighter.ramp を渡したときだけ効く）。
+export const RAID_TURNS = 30
+export const RAMP_ATK = 8   // 1ターンごとの火力(+STR/INT%)
+export const RAMP_DEF = 6   // 1ターンごとの耐久(+VIT%)
+export const rampText = () => `1ターンごとに 火力+${RAMP_ATK}% ／ 耐久+${RAMP_DEF}%`
+// n ターン目（1始まり）の上がり幅
+export const rampAt = (turn) => ({ atk: RAMP_ATK * Math.max(0, turn - 1), def: RAMP_DEF * Math.max(0, turn - 1) })
+
+// runBattle に渡せる形。uses は1回の挑戦で技を何回使えるか（30ターンなので多めに要る）
+export const bossStatsOf = (boss, tier) => ({
+  name: boss.name, kind: boss.kind, dist: boss.dist, skills: boss.skills, power: raidPowerOfTier(tier),
 })
-export const toRaidFighter = (boss, power, hpLeft = null) => {
-  const f = toFighter(bossStatsOf(boss, power), 4)
-  // ★HPだけレイドのもの（削れた状態）に差し替える。他のステはそのまま
-  const max = raidHpOf(power)
-  f.stats = { ...f.stats, hp: Math.max(1, hpLeft == null ? max : hpLeft) }
+export const toRaidFighter = (boss, tier, hpLeft = null) => {
+  const f = toFighter(bossStatsOf(boss, tier), 10)
+  const max = raidHpOfTier(tier)
+  f.stats = {
+    ...f.stats,
+    // ★HPはレイドのもの（削れた状態）に差し替える
+    hp: Math.max(1, hpLeft == null ? max : hpLeft),
+    // ★攻撃ステだけ**低い戦闘力**で作り直す（上の RAID_ATK_MULT）
+    ...atkStatsOf(boss, tier),
+  }
+  f.ramp = { atk: RAMP_ATK, def: RAMP_DEF }
   return f
 }
-// 表示用（ステータスの中身を見せるとき）
-export const bossBaseStats = (boss, power) => statsOf(bossStatsOf(boss, power))
-
-// ===== 報酬 =====
-// share ＝ 自分の与ダメ ÷ ボスの最大HP（0〜1）
-export const shareOf = (dmg, maxHp) => (maxHp > 0 ? Math.min(1, Math.max(0, (dmg || 0) / maxHp)) : 0)
-// ルーン素材は**確定**。個数は share で増える（最大6個）
-export const MAT_COUNT_MAX = 6
-export const matCountOf = (share) => Math.min(MAT_COUNT_MAX, 1 + Math.floor(shareClamp(share) * 10))
-const shareClamp = (s) => Math.min(1, Math.max(0, Number(s) || 0))
-// レア度の重み(%)。share が大きいほど良いものが出る（合計100）
-export const rarityTableOf = (share) => {
-  const s = shareClamp(share)
-  return { normal: 70 - 50 * s, rare: 25 + 30 * s, ultra: 5 + 20 * s }
+// 攻撃ステ（STR / INT）だけを低い戦闘力から作る。ボスごとの配分の比はそのまま残す
+export const atkStatsOf = (boss, tier) => {
+  const a = statsOf({ dist: boss.dist, power: raidAtkPowerOfTier(tier) })
+  return { str: a.str, int_stat: a.int_stat }
 }
-export const rollRarity = (share, rng = Math.random) => {
-  const t = rarityTableOf(share)
+// 表示用（ステータスの中身を見せるとき）
+export const bossBaseStats = (boss, tier) => {
+  const full = statsOf(bossStatsOf(boss, tier))
+  return { ...full, hp: raidHpOfTier(tier), ...atkStatsOf(boss, tier) }
+}
+export const tierMark = markOf
+export const TIERS = Array.from({ length: TIER_MAX }, (_, i) => i + 1)
+
+// ===== 報酬のティア（2026-09-06 ユーザー指示）=====
+// ★**主催者とMVP（いちばん削った人）はティアA確定**。
+//   それ以外は貢献度（share ＝ 自分の与ダメ ÷ 最大HP）でティアが上がる。
+export const REWARD_TIERS = ['A', 'B', 'C', 'D']
+export const TIER_LABEL = { A:'ティアA', B:'ティアB', C:'ティアC', D:'ティアD' }
+export const TIER_COLOR = { A:'#ffcc00', B:'#44ff88', C:'#88ccff', D:'#7fa6d0' }
+// このshare以上でそのティア（上から見る）
+export const TIER_SHARE = { A: 0.25, B: 0.10, C: 0.03, D: 0 }
+export const shareOf = (dmg, maxHp) => (maxHp > 0 ? Math.min(1, Math.max(0, (dmg || 0) / maxHp)) : 0)
+export const tierOfShare = (share) =>
+  REWARD_TIERS.find(t => shareOf(share, 1) >= TIER_SHARE[t]) || 'D'
+// 主催者とMVPはティアA確定。それ以外は貢献度どおり
+export const rewardTierOf = ({ share, isHost = false, isMvp = false }) =>
+  (isHost || isMvp) ? 'A' : tierOfShare(share)
+// 参加者の中でいちばん削った人（同点なら先に見つかったほう。与ダメ0はMVPにしない）
+export const mvpIdOf = (members) => {
+  let best = null
+  for (const m of members || []) {
+    if (Number(m.damage || 0) <= 0) continue
+    if (!best || Number(m.damage) > Number(best.damage)) best = m
+  }
+  return best ? String(best.player_id) : null
+}
+
+// ===== ティアごとの中身 =====
+// ★エリアの帯が奥ほど豪華になる（2026-09-06 ユーザー指示「強さに比例して報酬も豪華に」）。
+//   個数は帯3つごとに+1、激レアの出やすさは帯ぶん、合成素材の確率は帯×2%。
+export const TIER_MAT_COUNT = { A: 6, B: 4, C: 2, D: 1 }
+export const tierCountBonus = (tier) => Math.floor((tier || 1) / 3)   // ①②=0 ③④⑤=1 ⑥⑦⑧=2
+export const matCountOf = (rewardTier, tier) =>
+  (TIER_MAT_COUNT[rewardTier] ?? TIER_MAT_COUNT.D) + tierCountBonus(tier)
+
+// レア度の表（合計100）。帯ぶんは通常から激レアへ移す
+export const TIER_RARITY = {
+  A: { normal: 30, rare: 45, ultra: 25 },
+  B: { normal: 50, rare: 38, ultra: 12 },
+  C: { normal: 65, rare: 30, ultra: 5 },
+  D: { normal: 85, rare: 14, ultra: 1 },
+}
+export const rarityTableOf = (rewardTier, tier) => {
+  const t = TIER_RARITY[rewardTier] || TIER_RARITY.D
+  const move = Math.min(t.normal, tier || 1)
+  return { normal: t.normal - move, rare: t.rare, ultra: t.ultra + move }
+}
+export const rollRarity = (rewardTier, tier, rng = Math.random) => {
+  const t = rarityTableOf(rewardTier, tier)
   const r = rng() * 100
   if (r < t.ultra) return 'ultra'
   if (r < t.ultra + t.rare) return 'rare'
   return 'normal'
 }
-// 合成素材は**討伐できたときだけ**。主催者は+10%
-export const FUSION_BASE_PCT = 20
-export const FUSION_SHARE_PCT = 60
-export const FUSION_HOST_BONUS = 10
-export const fusionChanceOf = (share, isHost = false) =>
-  Math.min(100, FUSION_BASE_PCT + FUSION_SHARE_PCT * shareClamp(share) + (isHost ? FUSION_HOST_BONUS : 0))
+
+// 合成素材は**討伐できたときだけ**。ティアと帯で上がる
+export const TIER_FUSION_PCT = { A: 60, B: 35, C: 15, D: 5 }
+export const FUSION_TIER_BONUS = 2   // 帯1つにつき+2%
+export const fusionChanceOf = (rewardTier, tier) =>
+  Math.min(100, (TIER_FUSION_PCT[rewardTier] ?? TIER_FUSION_PCT.D) + FUSION_TIER_BONUS * (tier || 1))
 
 // ===== 救援信号 =====
 // 宛先は**種別＋ID**で持つ。国を作ったら 'country' を足すだけで載る

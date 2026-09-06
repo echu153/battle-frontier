@@ -135,13 +135,46 @@ grant execute on function public.v2_friend_remove(bigint) to authenticated;
 -- ------------------------------------------------------------
 -- 出撃で 0.4% を引いた人が主催者になり、レイドが1件立つ。
 -- 挑戦できるのは1時間。終わってから3時間は次が出ない。参加は最大20人。
+--
+-- ★強さは**出撃していたエリアの難易度帯だけで決まる**（2026-09-06 ユーザー指示）。
+--   挑む人の戦闘力では変わらない。奥のエリアで引くほど強く、報酬も豪華になる。
+-- ★1回の挑戦は30ターン。ボスは**ターンが進むほど火力と耐久が上がる**（たかぶり）。
+--   この計算はクライアント（battle.js）が回すので、サーバーは結果だけを受け取る。
 -- ============================================================
+
+-- ---- 帯ごとの強さ（src/v2/lib/raid.js の RAID_HP / raidPowerOfTier の写し）----
+-- ⚠**勘で書き換えない。** node tools/v2-raid-tune.mjs を回して出た表を貼ること。
+--   power … そのエリアのボスの戦闘力 × 2（守りのステを作るもとになる数字）
+--   hp    … その帯の標準的な編成が1時間フル（360回）殴ってちょうど削り切れる量
+create table if not exists public.v2_raid_tiers (
+  tier  int    primary key,
+  power int    not null,
+  hp    bigint not null
+);
+alter table public.v2_raid_tiers enable row level security;
+drop policy if exists "v2_raid_tiers_read" on public.v2_raid_tiers;
+create policy "v2_raid_tiers_read" on public.v2_raid_tiers for select to authenticated using (true);
+revoke all on table public.v2_raid_tiers from anon;
+grant select on table public.v2_raid_tiers to authenticated;
+
+insert into public.v2_raid_tiers (tier, power, hp) values
+  (1,   2572,    370000),
+  (2,   3720,    950000),
+  (3,   5588,   1900000),
+  (4,   9212,   2500000),
+  (5,  26288,  33000000),
+  (6,  48824,  61000000),
+  (7,  69538,  86000000),
+  (8,  90494, 110000000)
+on conflict (tier) do update set power = excluded.power, hp = excluded.hp;
+
 create table if not exists public.v2_raids (
   id         bigserial primary key,
   host_id    uuid   not null references auth.users(id) on delete cascade,
   boss_key   text   not null,            -- src/v2/lib/raid.js の RAID_BOSSES.key
   area_id    int    not null references public.v2_areas(id),  -- 報酬のルーン素材はここのボス素材
-  power      int    not null,            -- ボスの強さの基準（主催者の戦闘力・下限つき）
+  tier       int    not null,            -- そのエリアの難易度帯。強さも報酬もこれで決まる
+  power      int    not null,            -- ボスの戦闘力（v2_raid_tiers の写し）
   hp_max     bigint not null,
   hp_left    bigint not null,
   started_at timestamptz not null default now(),
@@ -190,10 +223,25 @@ revoke all on table public.v2_raid_calls from authenticated;
 create or replace function public.v2_raid_const() returns jsonb
   language sql immutable as $$ select jsonb_build_object(
     'rate', 0.4, 'minutes', 60, 'cooldown_hours', 3, 'max_members', 20,
-    'min_power', 6000, 'hp_k', 2000, 'turns', 10,
+    'turns', 30, 'ramp_atk', 8, 'ramp_def', 6,
+    'power_mult', 2, 'atk_mult', 0.06,
     'call_max', 50, 'online_minutes', 5,
-    'mat_count_max', 6, 'fusion_base_pct', 20, 'fusion_share_pct', 60, 'fusion_host_bonus', 10
+    'tier_share_a', 0.25, 'tier_share_b', 0.10, 'tier_share_c', 0.03,
+    'fusion_tier_bonus', 2
   ) $$;
+
+-- ---- 報酬のティア（主催者とMVPはA確定・それ以外は貢献度）----
+-- ★src/v2/lib/raid.js の rewardTierOf と同じ規則
+create or replace function public.v2_raid_reward_tier(
+  p_share numeric, p_is_host boolean, p_is_mvp boolean
+) returns text language sql immutable as $$
+  select case
+    when coalesce(p_is_host, false) or coalesce(p_is_mvp, false) then 'A'
+    when p_share >= 0.25 then 'A'
+    when p_share >= 0.10 then 'B'
+    when p_share >= 0.03 then 'C'
+    else 'D' end
+$$;
 
 -- ---- 1件ぶんの見え方（参加者つき）----
 -- ⚠これは内部ヘルパ。**外から叩かせない**（SECURITY DEFINER の一覧から呼ぶだけ）
@@ -219,21 +267,32 @@ revoke all on function public.v2_raid_json(public.v2_raids) from authenticated;
 
 -- ---- レイドを立てる（出撃で引いた人が呼ぶ）----
 -- ⚠**出たかどうかの抽選はクライアント**（出撃・ドロップと同じ作り）。
---   サーバーが見るのは「前のレイドから3時間あいたか」「いま参加中でないか」だけ。
-create or replace function public.v2_raid_spawn(p_boss_key text, p_area int, p_power int)
+--   ★**強さはサーバーが決める**（エリアの帯 → v2_raid_tiers）。クライアントは
+--     どのエリアで引いたかしか送れないので、強さも報酬も盛れない。
+create or replace function public.v2_raid_spawn(p_boss_key text, p_area int)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_me uuid := auth.uid();
   v_c jsonb := public.v2_raid_const();
-  v_power int;
-  v_hp bigint;
+  v_tier int;
+  v_t public.v2_raid_tiers;
   v_row public.v2_raids;
 begin
   if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発中の機能です'); end if;
   if v_me is null then return jsonb_build_object('ok', false, 'error', 'ログインしてください'); end if;
   if p_boss_key is null or p_boss_key = '' then return jsonb_build_object('ok', false, 'error', 'ボスがありません'); end if;
-  if not exists (select 1 from public.v2_areas where id = p_area) then
-    return jsonb_build_object('ok', false, 'error', 'そのエリアはありません');
+
+  select tier into v_tier from public.v2_areas where id = p_area;
+  if v_tier is null then return jsonb_build_object('ok', false, 'error', 'そのエリアはありません'); end if;
+  select * into v_t from public.v2_raid_tiers where tier = v_tier;
+  if not found then return jsonb_build_object('ok', false, 'error', 'その難易度帯の設定がありません'); end if;
+
+  -- ★そのエリアが解放されていない人はレイドを立てられない（帯を飛ばして報酬だけ取れない）
+  if not exists (
+    select 1 from public.v2_profiles p
+     where p.id = v_me and (v_tier = 1 or p_area = any(coalesce(p.unlocked_areas, '{}')))
+  ) then
+    return jsonb_build_object('ok', false, 'error', 'そのエリアはまだ解放されていません');
   end if;
 
   -- すでにどこかのレイドに参加している（＝主催中も含む）なら立てない
@@ -253,11 +312,8 @@ begin
     return jsonb_build_object('ok', false, 'error', 'まだ次のレイドは現れません');
   end if;
 
-  v_power := greatest((v_c->>'min_power')::int, coalesce(p_power, 0));
-  v_hp := (v_c->>'hp_k')::bigint * v_power;
-
-  insert into public.v2_raids (host_id, boss_key, area_id, power, hp_max, hp_left, ends_at)
-  values (v_me, p_boss_key, p_area, v_power, v_hp, v_hp,
+  insert into public.v2_raids (host_id, boss_key, area_id, tier, power, hp_max, hp_left, ends_at)
+  values (v_me, p_boss_key, p_area, v_tier, v_t.power, v_t.hp, v_t.hp,
           now() + ((v_c->>'minutes')::int * interval '1 minute'))
   returning * into v_row;
 
@@ -329,7 +385,7 @@ $$;
 
 -- ---- 殴る ----
 -- ⚠与ダメはクライアントの申告。サーバーが見張るのは3つ：
---     ・1発の上限は **最大HPの1/100**（実測の1発は約1/320なので3倍の余裕）
+--     ・1発の上限は **最大HPの1/100**（実測の1発は約1/360なので3倍の余裕）
 --     ・**10秒に1回まで**（出撃と同じクールタイム。時計のずれを見て9秒で判定する）
 --     ・期限を過ぎたら受け付けない
 create or replace function public.v2_raid_attack(p_raid_id bigint, p_damage bigint)
@@ -416,8 +472,8 @@ begin
 end;
 $$;
 
-revoke all on function public.v2_raid_spawn(text, int, int) from public;
-revoke all on function public.v2_raid_spawn(text, int, int) from anon;
+revoke all on function public.v2_raid_spawn(text, int) from public;
+revoke all on function public.v2_raid_spawn(text, int) from anon;
 revoke all on function public.v2_raid_list() from public;
 revoke all on function public.v2_raid_list() from anon;
 revoke all on function public.v2_raid_join(bigint) from public;
@@ -428,7 +484,7 @@ revoke all on function public.v2_raid_call(bigint, uuid[], text) from public;
 revoke all on function public.v2_raid_call(bigint, uuid[], text) from anon;
 revoke all on function public.v2_raid_online() from public;
 revoke all on function public.v2_raid_online() from anon;
-grant execute on function public.v2_raid_spawn(text, int, int) to authenticated;
+grant execute on function public.v2_raid_spawn(text, int) to authenticated;
 grant execute on function public.v2_raid_list() to authenticated;
 grant execute on function public.v2_raid_join(bigint) to authenticated;
 grant execute on function public.v2_raid_attack(bigint, bigint) to authenticated;
@@ -478,10 +534,13 @@ revoke all on table public.v2_player_fusions from anon;
 grant select on table public.v2_player_fusions to authenticated;
 
 -- ---- 報酬を受け取る（1レイドにつき1回）----
--- share ＝ 自分の与ダメ ÷ 最大HP
---   ルーン素材 … 確定。個数 1 + floor(share×10)（最大6）。中身は**そのエリアのボス素材**
---   レア度     … 通常 70-50s ／ レア 25+30s ／ 激レア 5+20s（%）
---   合成素材   … **討伐できたときだけ** 20 + 60s（%）。主催者は +10%
+-- ★**主催者とMVP（いちばん削った人）はティアA確定**。それ以外は貢献度でティアが上がる
+--     share ＝ 自分の与ダメ ÷ 最大HP　… A:25%以上 / B:10%以上 / C:3%以上 / D:それ未満
+-- ★**エリアの帯が奥ほど豪華**（2026-09-06 ユーザー指示）
+--     ルーン素材の個数 … A6 B4 C2 D1 ＋ floor(帯 / 3)
+--     レア度           … ティアごとの表から、帯ぶん(%)を通常 → 激レアへ移す
+--     合成素材の確率   … A60 B35 C15 D5 ＋ 帯×2（**討伐できたときだけ**）
+-- ⚠数値の正は src/v2/lib/raid.js。raid.test.js が両方を突き合わせている
 create or replace function public.v2_raid_claim(p_raid_id bigint)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
@@ -489,10 +548,14 @@ declare
   v_c jsonb := public.v2_raid_const();
   v_r public.v2_raids;
   v_m public.v2_raid_members;
+  v_mvp uuid;
+  v_rt text;
   v_share numeric;
   v_n int;
   v_i int;
   v_roll numeric;
+  v_ultra numeric;
+  v_rare numeric;
   v_rarity text;
   v_mid text;
   v_got jsonb := '[]'::jsonb;
@@ -508,14 +571,26 @@ begin
     return jsonb_build_object('ok', false, 'error', 'まだ終わっていません');
   end if;
 
+  -- MVP＝いちばん削った人（与ダメ0はMVPにしない）
+  select player_id into v_mvp from public.v2_raid_members
+   where raid_id = p_raid_id and damage > 0 order by damage desc, joined_at limit 1;
+
   v_share := least(1, greatest(0, v_m.damage::numeric / greatest(1, v_r.hp_max)));
-  v_n := least((v_c->>'mat_count_max')::int, 1 + floor(v_share * 10)::int);
+  v_rt := public.v2_raid_reward_tier(v_share, v_m.is_host, v_mvp is not null and v_mvp = v_me);
+
+  -- ルーン素材の個数（ティア ＋ 帯3つごとに+1）
+  v_n := (case v_rt when 'A' then 6 when 'B' then 4 when 'C' then 2 else 1 end)
+       + floor(v_r.tier / 3.0)::int;
+
+  -- レア度の表。帯ぶん(%)を通常から激レアへ移す
+  v_ultra := (case v_rt when 'A' then 25 when 'B' then 12 when 'C' then 5 else 1 end) + v_r.tier;
+  v_rare  := (case v_rt when 'A' then 45 when 'B' then 38 when 'C' then 30 else 14 end);
 
   -- ルーン素材（そのエリアのボス素材。レア度を1個ずつ引く）
   for v_i in 1..v_n loop
     v_roll := random() * 100;
-    if v_roll < 5 + 20 * v_share then v_rarity := 'ultra';
-    elsif v_roll < (5 + 20 * v_share) + (25 + 30 * v_share) then v_rarity := 'rare';
+    if v_roll < v_ultra then v_rarity := 'ultra';
+    elsif v_roll < v_ultra + v_rare then v_rarity := 'rare';
     else v_rarity := 'normal';
     end if;
     select id into v_mid from public.v2_materials
@@ -531,8 +606,8 @@ begin
   -- 合成素材（討伐できたときだけ）
   if v_r.killed_at is not null then
     if random() * 100 < least(100,
-         (v_c->>'fusion_base_pct')::numeric + (v_c->>'fusion_share_pct')::numeric * v_share
-         + case when v_m.is_host then (v_c->>'fusion_host_bonus')::numeric else 0 end) then
+         (case v_rt when 'A' then 60 when 'B' then 35 when 'C' then 15 else 5 end)
+         + (v_c->>'fusion_tier_bonus')::numeric * v_r.tier) then
       v_fid := 'fu:' || v_r.boss_key;
       if exists (select 1 from public.v2_fusion_materials where id = v_fid) then
         insert into public.v2_player_fusions (player_id, fusion_id, qty) values (v_me, v_fid, 1)
@@ -545,7 +620,8 @@ begin
 
   update public.v2_raid_members set claimed_at = now() where raid_id = p_raid_id and player_id = v_me;
   return jsonb_build_object('ok', true, 'share', round(v_share, 4), 'killed', v_r.killed_at is not null,
-                            'materials', v_got, 'fusion', v_fusion);
+                            'reward_tier', v_rt, 'is_mvp', v_mvp is not null and v_mvp = v_me,
+                            'tier', v_r.tier, 'materials', v_got, 'fusion', v_fusion);
 end;
 $$;
 revoke all on function public.v2_raid_claim(bigint) from public;
@@ -621,7 +697,7 @@ grant execute on function public.v2_debug_grant_fusion(text, int) to authenticat
 -- ---- 動作確認用（開発限定）：レイドをその場で呼ぶ ----
 -- ★3時間のクールタイムと「参加中のレイド」を先に片付けてから立て直す。
 --   未受取の報酬がある行は消さない（受け取りの動作確認ができなくなるため）
-create or replace function public.v2_debug_spawn_raid(p_boss_key text, p_area int default 1, p_power int default 6000)
+create or replace function public.v2_debug_spawn_raid(p_boss_key text, p_area int default 1)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare v_me uuid := auth.uid();
 begin
@@ -637,9 +713,9 @@ begin
          killed_at  = killed_at  - interval '4 hours'
    where host_id = v_me
      and coalesce(killed_at, ends_at) > now() - interval '4 hours';
-  return public.v2_raid_spawn(p_boss_key, p_area, p_power);
+  return public.v2_raid_spawn(p_boss_key, p_area);
 end;
 $$;
-revoke all on function public.v2_debug_spawn_raid(text, int, int) from public;
-revoke all on function public.v2_debug_spawn_raid(text, int, int) from anon;
-grant execute on function public.v2_debug_spawn_raid(text, int, int) to authenticated;
+revoke all on function public.v2_debug_spawn_raid(text, int) from public;
+revoke all on function public.v2_debug_spawn_raid(text, int) from anon;
+grant execute on function public.v2_debug_spawn_raid(text, int) to authenticated;

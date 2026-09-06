@@ -10,8 +10,10 @@ import { toFighter as playerFighter } from '../lib/loadout.js'
 import { RARITY_COLOR } from '../lib/material.js'
 import { SORTIE_CD } from '../lib/sortie.js'
 import {
-  RAID_BOSSES, raidBossOf, RAID_TURNS, RAID_MAX_MEMBERS, CALL_MAX,
-  ONLINE_MINUTES, secondsLeft, timeText, shareOf, fusionChanceOf, toRaidFighter,
+  RAID_BOSSES, raidBossOf, RAID_TURNS, RAID_MAX_MEMBERS, CALL_MAX, ONLINE_MINUTES,
+  secondsLeft, timeText, shareOf, toRaidFighter, rampText,
+  rewardTierOf, mvpIdOf, matCountOf, rarityTableOf, fusionChanceOf,
+  TIER_LABEL, TIER_COLOR, tierMark,
 } from '../lib/raid.js'
 import { fusionOfBoss } from '../lib/fusion.js'
 import { splitRows } from '../lib/friends.js'
@@ -33,15 +35,21 @@ import { pushWeaponRecord } from './weaponRecord.js'
 
 const barColor = (pct) => (pct > 50 ? '#44ff88' : pct > 20 ? '#ffcc00' : '#ff4444')
 
-// 参加者の1行
-const MemberRow = ({ m, hpMax, meId }) => {
-  const pct = hpMax > 0 ? (m.damage / hpMax) * 100 : 0
+// 参加者の1行。★いまの貢献度だと**どのティアの報酬になるか**をその場で出す
+//   （主催者とMVPはA確定。他の人は削るほど上がる＝殴る動機が見える）
+const MemberRow = ({ m, hpMax, meId, mvpId }) => {
+  const share = shareOf(Number(m.damage || 0), hpMax)
+  const isMvp = String(m.player_id) === String(mvpId)
+  const rt = rewardTierOf({ share, isHost: m.is_host, isMvp })
   return (
     <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', padding:'2px 0',
       color: String(m.player_id) === String(meId) ? '#ffcc00' : TEXT.body }}>
-      <span>{m.is_host ? '👑 ' : ''}{m.name || '???'}</span>
+      <span>
+        {m.is_host ? '👑 ' : ''}{isMvp ? '★ ' : ''}{m.name || '???'}
+      </span>
       <span style={{ color: TEXT.label }}>
-        {Number(m.damage).toLocaleString()}（{pct.toFixed(1)}%・{m.hits}回）
+        {Number(m.damage).toLocaleString()}（{(share * 100).toFixed(1)}%・{m.hits}回）
+        <span style={{ color: TIER_COLOR[rt] }}>　{TIER_LABEL[rt]}</span>
       </span>
     </div>
   )
@@ -101,7 +109,7 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, onPr
     try {
       const me = playerFighter(prof, inventory, runes, fishDex, dex, pet)
       // ★残りHPはサーバーの値で組む（自分の画面で減らして持ち回さない）
-      const foe = toRaidFighter(boss, raid.power, Number(raid.hp_left))
+      const foe = toRaidFighter(boss, raid.tier, Number(raid.hp_left))
       const r = runBattle(me, foe, { maxTurns: RAID_TURNS })
       const dealt = Math.max(0, r.b.base.hp - r.b.hp)
 
@@ -237,7 +245,11 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, onPr
               <div style={{ color: boss.color, fontSize:'14px' }}>{boss.name}</div>
               <div style={{ color: TEXT.sub, fontSize:'10px', marginBottom:'4px' }}>{boss.text}</div>
               <div style={{ color: TEXT.label, fontSize:'10px' }}>
-                主催 {raid.host_name}／{raid.area_name}／戦闘力 {Number(raid.power).toLocaleString()}
+                主催 {raid.host_name}／難易度{tierMark(raid.tier)} {raid.area_name}／戦闘力 {Number(raid.power).toLocaleString()}
+              </div>
+              {/* ★奥のエリアで引いたレイドほど強く、そのぶん報酬も豪華になる */}
+              <div style={{ color:'#ff8844', fontSize:'10px' }}>
+                {RAID_TURNS}ターンで撤退／たかぶり：{rampText()}
               </div>
               <div style={{ color: left > 300 ? TEXT.label : '#ff8844', fontSize:'11px' }}>
                 残り {timeText(left)}
@@ -283,7 +295,8 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, onPr
             )}
           </div>
           <div style={{ color: TEXT.sub, fontSize:'10px', marginBottom:'8px', lineHeight:1.7 }}>
-            挑戦してもスタミナは減りません（EXPも入りません）。報酬は終わったあとにまとめて受け取ります。
+            挑戦してもスタミナは減りません（EXPも入りません）。報酬は終わったあとにまとめて受け取ります。<br />
+            1回の挑戦は{RAID_TURNS}ターンまで。ボスはターンが進むほど強くなるので、後半はほとんど通りません。
           </div>
 
           {/* 参加者 */}
@@ -292,8 +305,12 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, onPr
               参加者 {raid.members?.length || 0}／{RAID_MAX_MEMBERS}人
             </div>
             {(raid.members || []).map(m => (
-              <MemberRow key={m.player_id} m={m} hpMax={Number(raid.hp_max)} meId={meId} />
+              <MemberRow key={m.player_id} m={m} hpMax={Number(raid.hp_max)} meId={meId}
+                mvpId={mvpIdOf(raid.members)} />
             ))}
+            <div style={{ color: TEXT.sub, fontSize:'10px', marginTop:'4px', lineHeight:1.7 }}>
+              👑 主催者と ★ MVP（いちばん削った人）はティアA確定。ほかの人は削るほどティアが上がります。
+            </div>
           </div>
         </div>
       )}
@@ -335,14 +352,21 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, onPr
             const b = raidBossOf(r.boss_key)
             const mine = (r.members || []).find(m => String(m.player_id) === String(meId))
             const sh = shareOf(Number(mine?.damage || 0), Number(r.hp_max))
+            const rt = rewardTierOf({
+              share: sh, isHost: String(r.host_id) === String(meId),
+              isMvp: String(mvpIdOf(r.members)) === String(meId),
+            })
             return (
               <div key={r.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
                 borderTop:'1px solid #002244', padding:'6px 0', gap:'8px', flexWrap:'wrap' }}>
                 <span style={{ fontSize:'11px', color: TEXT.body }}>
                   <span style={{ color: b?.color }}>{b?.name || r.boss_key}</span>
                   <span style={{ color: TEXT.label }}>
-                    　{r.killed_at ? '討伐' : '時間切れ'}／貢献 {(sh * 100).toFixed(1)}%
-                    {r.killed_at ? `／合成素材 ${fusionChanceOf(sh, String(r.host_id) === String(meId)).toFixed(0)}%` : ''}
+                    　難易度{tierMark(r.tier)}／{r.killed_at ? '討伐' : '時間切れ'}／貢献 {(sh * 100).toFixed(1)}%
+                  </span>
+                  <span style={{ color: TIER_COLOR[rt] }}>
+                    　{TIER_LABEL[rt]}（素材{matCountOf(rt, r.tier)}個・激レア{rarityTableOf(rt, r.tier).ultra}%
+                    {r.killed_at ? `・合成素材${fusionChanceOf(rt, r.tier)}%` : ''}）
                   </span>
                 </span>
                 <button onClick={() => claim(r.id)} disabled={busy} style={miniBtn('#ffcc00')}>受け取る</button>
@@ -359,7 +383,8 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, onPr
           <div style={{ color: TEXT.sub, fontSize:'11px', lineHeight:1.8 }}>
             出撃していると、まれにレイドボスが現れます。<br />
             現れたら1時間だけ挑戦でき、救援信号を出して仲間を呼べます。<br />
-            倒すとルーン素材と、確率で武器に合成できる素材が手に入ります。
+            倒すとルーン素材と、確率で武器に合成できる素材が手に入ります。<br />
+            <b style={{ color:'#ff8844' }}>奥のエリアで引いたレイドほど強く、報酬も豪華</b>になります。
           </div>
           <div style={{ borderTop:'1px solid #002244', marginTop:'8px', paddingTop:'8px' }}>
             <div style={{ color: TEXT.label, fontSize:'10px', marginBottom:'4px' }}>現れるボス</div>
@@ -420,7 +445,10 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, onPr
       {reward && (
         <V2Modal title="🎁 報酬" color="#44ff88" onClose={() => setReward(null)}>
           <div style={{ color: TEXT.label, fontSize:'11px', marginBottom:'8px' }}>
-            {reward.killed ? '討伐' : '時間切れ'}／貢献 {(Number(reward.share) * 100).toFixed(1)}%
+            難易度{tierMark(reward.tier)}／{reward.killed ? '討伐' : '時間切れ'}
+            ／貢献 {(Number(reward.share) * 100).toFixed(1)}%
+            {reward.is_mvp && <span style={{ color:'#ffcc00' }}>　★MVP</span>}
+            <span style={{ color: TIER_COLOR[reward.reward_tier] }}>　{TIER_LABEL[reward.reward_tier]}</span>
           </div>
           {(reward.materials || []).map((m, i) => (
             <div key={i} style={{ fontSize:'11px', color: LOG_PLAIN }}>

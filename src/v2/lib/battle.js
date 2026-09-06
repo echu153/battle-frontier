@@ -168,6 +168,15 @@ export const liveStats = (side, acting = false) => {
     add('agi', side.evo.onDodge.agi * Math.min(EVO_STACK_MAX, side.evoStacks.dodge))
   if (side.evo?.onHurt.str && side.evoStacks?.hurt)
     add('str', side.evo.onHurt.str * Math.min(EVO_STACK_MAX, side.evoStacks.hurt))
+  // ★たかぶり（ramp）＝**ターンが進むほど火力と耐久が上がる**。
+  //   いまのところレイドボスだけが持つ（fighter.ramp を渡したときにしか効かない＝
+  //   ふつうの戦闘には一切影響しない）。turn は runBattle がターンの頭で入れる。
+  //   docs/v2-raid-design.md §3
+  if (side.ramp && side.ramp.turn > 0) {
+    const n = side.ramp.turn
+    if (side.ramp.atk) { add('str', side.ramp.atk * n); add('int_stat', side.ramp.atk * n) }
+    if (side.ramp.def) add('vit', side.ramp.def * n)
+  }
   const eff = effectiveStats(side.base, b)
   // 魔導剣術：INTの20%をSTRへ「変換」する。移した元は減る
   for (const c of side.pa.converts) {
@@ -224,6 +233,9 @@ export const createSide = (fighter, band = null) => {
     healMult: bonus?.healMult ?? 1,   // 異端審問官は自身の回復量0.8倍
     offClassCut: bonus?.offClassCut ?? 0, // 賢者は他職スキルのペナルティが半分
     ptr: 0,
+    // たかぶり。{ atk, def } を渡すと**1ターンごとにその%ずつ**STR/INTとVITが上がる。
+    // ★渡さなければ null ＝ふつうの戦闘は今までどおり
+    ramp: fighter.ramp ? { atk: fighter.ramp.atk || 0, def: fighter.ramp.def || 0, turn: 0 } : null,
     buffs,          // 自分にかかっているバフ（職業補正とパッシブぶんを最初から乗せておく）
     regen: null,    // { rate, turns }
     mpRegen: null,  // { rate, turns }
@@ -1049,6 +1061,9 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
   let turn = 1
 
   for (; turn <= maxTurns; turn++) {
+    // たかぶりは「経過したターン数」で効く（1ターン目は素の値）
+    if (a.ramp) a.ramp.turn = turn - 1
+    if (b.ramp) b.ramp.turn = turn - 1
     // 行動順：このターン撃つ予定のスキルの優先度 → AGI → ランダム
     const eA = liveStats(a)
     const eB = liveStats(b)

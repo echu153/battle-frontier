@@ -15,7 +15,6 @@ import { dropRateMultOf } from '../lib/enchant.js'
 import { guardDropMultOf, GUARD_DROP_MULT } from '../lib/arena.js'
 import { RARITY_COLOR } from '../lib/material.js'
 import { rollRaid, pickRaidBoss } from '../lib/raid.js'
-import { calcPower } from '../lib/stats.js'
 import { PROTECT_NAME } from '../lib/smith.js'
 import { RANK_COLOR, dropLine, LOG_PLAIN } from './v2ui.js'
 import V2Evolve from './V2Evolve.jsx'
@@ -172,8 +171,10 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, dex, pet, gu
       //   ここで断られても何も出さずに黙って流す。
       if (rollRaid()) {
         const rb = pickRaidBoss()
+        // ★強さと報酬は**サーバーがエリアの難易度帯から決める**。
+        //   こちらが送れるのは「どのボスを引いたか」と「どのエリアで引いたか」だけ
         const { data: rd } = await supabase.rpc('v2_raid_spawn', {
-          p_boss_key: rb.key, p_area: area.id, p_power: Math.round(calcPower(me.stats)),
+          p_boss_key: rb.key, p_area: area.id,
         })
         if (rd?.ok) {
           setLogs(l => [...l, { text:`☠ レイドボス出現！ ${rb.name}が現れた！`, color: rb.color },
