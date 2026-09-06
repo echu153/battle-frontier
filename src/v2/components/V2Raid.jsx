@@ -12,7 +12,7 @@ import { SORTIE_CD } from '../lib/sortie.js'
 import {
   RAID_BOSSES, raidBossOf, RAID_TURNS, RAID_MAX_MEMBERS, CALL_MAX, ONLINE_MINUTES,
   secondsLeft, timeText, shareOf, toRaidFighter, rampText, raidHpOfTier,
-  RAID_BOSS_RATE, RAID_DAILY_MAX, ROTATE_HOURS, raidBossAt, nextRotateAt, rotateSchedule,
+  RAID_RATE, RAID_DAILY_MAX, ROTATE_HOURS, raidBossAt, nextRotateAt, rotateSchedule,
   rewardTierOf, mvpIdOf, matRangeText, rarityTableOf, fusionChanceOf,
   BOX_LABEL, BOX_COLOR, BOX_MAT_COUNT, BOX_RARITY, BOX_FUSION_PCT,
   TIER_LABEL, TIER_COLOR, tierMark,
@@ -445,8 +445,9 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, isAd
         <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
           <div style={{ color: TEXT.body, fontSize:'12px', marginBottom:'6px' }}>いまレイドは出ていません</div>
           <div style={{ color: TEXT.sub, fontSize:'11px', lineHeight:1.8 }}>
-            <b style={{ color:'#ffcc00' }}>エリアボスを討伐したとき</b>に、{RAID_BOSS_RATE}%でレイドボスが現れます
+            <b style={{ color:'#ffcc00' }}>踏破したエリア</b>に出撃していると、{RAID_RATE}%でレイドボスが現れます
             （<b>1日{RAID_DAILY_MAX}回</b>まで・日本時間の5時に戻ります）。<br />
+            そのエリアのボスを倒していれば、相手がボスでなくても出会えます。<br />
             現れたら1時間だけ挑戦でき、救援信号を出して仲間を呼べます。<br />
             主催者といちばん削った人は、貢献度とは別に{BOX_LABEL.host}・{BOX_LABEL.mvp}
             （素材{BOX_MAT_COUNT}個・激レア{BOX_RARITY.ultra}%・合成素材{BOX_FUSION_PCT}%）をもらえます。<br />

@@ -75,12 +75,15 @@ export const RAID_BOSS_BY_NAME = Object.fromEntries(RAID_BOSSES.map(b => [b.name
 export const raidBossOf = (key) => RAID_BOSS_BY_KEY[key] || null
 
 // ===== 出現（2026-09-06 ユーザー指示で決め直した）=====
-// ★**エリアボスを討伐したときだけ**引く。ふつうの敵やレアモンスターでは出ない。
-//   ＝レイドは「そのエリアを踏破できる人」への追加コンテンツという位置づけになる。
+// ★**そのエリアのボスを討伐ずみ（＝踏破済み）のエリア**でだけ出る。
+//   条件はエリアにかかっていて、**戦った相手がボスかどうかは関係ない**＝
+//   踏破したエリアを周回していれば、どの戦闘からでも 3% で出会う。
+//   ＝レイドは「そのエリアを踏破できた人」への追加コンテンツという位置づけになる。
 // ★**1人1日2回まで**（日本時間の5時で切り替わる。宝樹・デイリーと同じ区切り）。
-//   ⚠回数を数えるのは**サーバー**（v2_raid_spawn）。画面の表示は読み替えでしかない。
-export const RAID_BOSS_RATE = 20
-export const rollRaid = (rng = Math.random) => rng() * 100 < RAID_BOSS_RATE
+//   ⚠回数を数えるのも、踏破しているかを見るのも**サーバー**（v2_raid_spawn）。
+//     画面の表示と抽選は読み替えでしかない。
+export const RAID_RATE = 3
+export const rollRaid = (rng = Math.random) => rng() * 100 < RAID_RATE
 export const RAID_DAILY_MAX = 2
 // 出たあと挑戦できる時間（分）
 export const RAID_MINUTES = 60

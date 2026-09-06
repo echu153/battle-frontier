@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs'
 import {
   RAID_BOSSES, RAID_BOSS_BY_KEY, raidBossOf, rollRaid,
   RAID_MINUTES, RAID_MAX_MEMBERS, RAID_TURNS, RAMP_ATK, RAMP_DEF, rampAt,
-  RAID_BOSS_RATE, RAID_DAILY_MAX, ROTATE_HOURS, raidSlotAt, raidBossAt, nextRotateAt, rotateSchedule,
+  RAID_RATE, RAID_DAILY_MAX, ROTATE_HOURS, raidSlotAt, raidBossAt, nextRotateAt, rotateSchedule,
   RAID_POWER_MULT, RAID_ATK_MULT, RAID_HP, raidPowerOfTier, raidAtkPowerOfTier, raidHpOfTier,
   bossPowerOfTier, raidPowerOfArea, raidHpOfArea, toRaidFighter, bossBaseStats, atkStatsOf,
   shareOf, tierOfShare, rewardTierOf, mvpIdOf, REWARD_TIERS, TIER_SHARE,
@@ -85,13 +85,18 @@ test('raidBossOf は key で引ける', () => {
 })
 
 // ===== 出現（2026-09-06 ユーザー指示）=====
-test('★エリアボスを討伐したときだけ20%で引く', () => {
-  assert.equal(RAID_BOSS_RATE, 20)
-  assert.equal(rollRaid(() => 0.19), true)
-  assert.equal(rollRaid(() => 0.21), false)
-  // ★引く場所も固定する（ふつうの敵やレアモンスターでは引かない）
+test('★踏破済みのエリアでだけ3%で引く（相手がボスかどうかは関係ない）', () => {
+  assert.equal(RAID_RATE, 3)
+  assert.equal(rollRaid(() => 0.029), true)
+  assert.equal(rollRaid(() => 0.031), false)
+  // ★引く条件は「エリアを踏破しているか」だけ。相手の種類では絞らない
   const src = readFileSync(new URL('../components/V2Sortie.jsx', import.meta.url), 'utf8')
-  assert.ok(src.includes('if (enc.isBoss && win && rollRaid())'), 'ボス討伐以外でも引いている')
+  assert.ok(src.includes('if (isAreaCleared(cleared, area.id) && rollRaid())'),
+    '踏破の判定を通っていない')
+  assert.ok(!src.includes('enc.isBoss && win && rollRaid()'), '相手の種類で絞っている')
+  // ★サーバーも踏破済みかを見る（解放だけでは立たない）
+  assert.ok(SQL.includes("p_area = any(coalesce(p.cleared_areas, '{}'))"), 'SQLが踏破を見ていない')
+  assert.ok(!SQL.includes('unlocked_areas'), 'SQLが解放だけで通している')
 })
 
 test('★1人1日2回まで（数えるのはサーバー）', () => {
@@ -573,7 +578,7 @@ test('SQL の v2_raid_const が raid.js と同じ数字になっている', () =
   }
   assert.equal(num('minutes'), RAID_MINUTES)
   assert.equal(num('max_members'), RAID_MAX_MEMBERS)
-  assert.equal(num('boss_rate'), RAID_BOSS_RATE)
+  assert.equal(num('rate'), RAID_RATE)
   assert.equal(num('daily_max'), RAID_DAILY_MAX)
   assert.equal(num('rotate_hours'), ROTATE_HOURS)
   assert.equal(num('turns'), RAID_TURNS)

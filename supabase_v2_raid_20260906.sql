@@ -21,8 +21,8 @@
 -- 出撃で 0.4% を引いた人が主催者になり、レイドが1件立つ。
 -- 挑戦できるのは1時間。終わってから3時間は次が出ない。参加は最大20人。
 --
--- ★出るのは**エリアボスを討伐したときだけ**（2026-09-06 ユーザー指示）。
---   確率は20%で、**1人1日2回まで**（日本時間の5時で切り替わる）。
+-- ★出るのは**そのエリアのボスを討伐ずみ（＝踏破済み）のエリア**だけ（2026-09-06 ユーザー指示）。
+--   戦った相手がボスかどうかは関係ない。確率は3%で、**1人1日2回まで**（日本時間の5時で切り替わる）。
 -- ★**どのボスが出るかは時間帯で決まる**（2時間ごとのローテ）。抽選ではないので、
 --   同じ時間なら誰が引いても同じ顔が出る。**選ぶのはこのサーバー側**。
 -- ★強さは**出撃していたエリアの難易度帯だけで決まる**。
@@ -125,7 +125,7 @@ revoke all on table public.v2_raid_calls from authenticated;
 -- ---- 定数（src/v2/lib/raid.js の写し。片方だけ直すと raid.test.js が落ちる）----
 create or replace function public.v2_raid_const() returns jsonb
   language sql immutable as $$ select jsonb_build_object(
-    'boss_rate', 20, 'daily_max', 2, 'rotate_hours', 2,
+    'rate', 3, 'daily_max', 2, 'rotate_hours', 2,
     'minutes', 60, 'max_members', 20,
     'turns', 30, 'ramp_atk', 8, 'ramp_def', 6,
     'power_mult', 2, 'atk_mult', 0.06,
@@ -230,12 +230,13 @@ begin
   select * into v_t from public.v2_raid_tiers where tier = v_tier;
   if not found then return jsonb_build_object('ok', false, 'error', 'その難易度帯の設定がありません'); end if;
 
-  -- ★そのエリアが解放されていない人はレイドを立てられない（帯を飛ばして報酬だけ取れない）
+  -- ★**そのエリアのボスを討伐ずみ（踏破済み）でないと立てられない**（2026-09-06 ユーザー指示）。
+  --   解放しているだけでは出ない＝帯を飛ばして奥の報酬だけ取ることもできない
   if not exists (
     select 1 from public.v2_profiles p
-     where p.id = v_me and (v_tier = 1 or p_area = any(coalesce(p.unlocked_areas, '{}')))
+     where p.id = v_me and p_area = any(coalesce(p.cleared_areas, '{}'))
   ) then
-    return jsonb_build_object('ok', false, 'error', 'そのエリアはまだ解放されていません');
+    return jsonb_build_object('ok', false, 'error', 'そのエリアはまだ踏破していません');
   end if;
 
   -- すでにどこかのレイドに参加している（＝主催中も含む）なら立てない

@@ -186,12 +186,12 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, dex, pet, gu
       }
 
       // ★レイドボス（docs/v2-raid-design.md §2）。2026-09-06 ユーザー指示で
-      //   **エリアボスを討伐したときだけ**引く（確率20%・1人1日2回まで）。
+      //   **踏破済みのエリア**でだけ 3% で出る（**相手がボスかどうかは関係ない**）。
       //   ⚠**清算が通ったあとに引く**＝弾かれた出撃でレイドが立たないように。
-      //   ⚠**どのボスが出るか・今日あと何回出会えるかはサーバーが決める**。
+      //   ⚠**踏破しているか・今日あと何回出会えるか・どのボスが出るかはサーバーが決める**。
       //     こちらが送るのは「どのエリアで引いたか」だけ。断られたら黙って流す
       //     （1日の上限に当たっただけなので、出撃の邪魔をしない）。
-      if (enc.isBoss && win && rollRaid()) {
+      if (isAreaCleared(cleared, area.id) && rollRaid()) {
         const { data: rd } = await supabase.rpc('v2_raid_spawn', { p_area: area.id })
         if (rd?.ok) {
           const rb = raidBossOf(rd.raid?.boss_key)
