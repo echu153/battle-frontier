@@ -7,6 +7,7 @@ import {
 import { speciesOf, knownMoves, familyOf, SPECIES } from '../lib/petSpecies.js'
 import { moveOf, moveEffText, AIL_TEXT } from '../lib/petMoves.js'
 import { TYPE_COLOR, typeMult } from '../lib/petTypes.js'
+import PixelBreathingSprite from '../../components/PixelBreathingSprite.jsx'
 import {
   makeFighter, makeWild, startBattle, battleTurn, battleStatsOf, maxHpOf,
   randomWild, rollCatch,
@@ -160,6 +161,11 @@ export function PartyPanel({ state, lv, onState, onBack }) {
           return (
             <div key={i} style={{ ...cell, padding:'9px 10px',
               borderColor: active ? '#c0b0ff' : '#0044aa' }}>
+              {sp.image && (
+                <div style={{ textAlign:'center', marginBottom:'6px' }}>
+                  <PixelBreathingSprite src={sp.image} alt={sp.name} size={112} breathe={false} />
+                </div>
+              )}
               <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
                 <span style={{ color: active ? '#c0b0ff' : '#cfe2ff', fontSize:'13px' }}>
                   {active ? '🐾 ' : ''}{sp.name}
@@ -247,6 +253,17 @@ export function WildBattle({ state, lv, onState, onBack }) {
 
   const Side = ({ f, mine }) => (
     <div style={{ ...cell, padding:'8px', marginBottom:'6px' }}>
+      {f.sp.image && (
+        <div style={{ textAlign:'center', minHeight:'126px' }}>
+          <PixelBreathingSprite
+            src={f.sp.image}
+            alt={f.name}
+            size={124}
+            breathe={false}
+            flip={!mine}
+          />
+        </div>
+      )}
       <div style={{ display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap' }}>
         <span style={{ color: mine ? '#c0b0ff' : '#ff8844', fontSize:'12px' }}>
           {mine ? '' : '野生の '}{f.name}
@@ -345,4 +362,3 @@ export function WildBattle({ state, lv, onState, onBack }) {
     </div>
   )
 }
-

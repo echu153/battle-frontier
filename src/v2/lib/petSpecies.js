@@ -94,6 +94,11 @@ export const hasCreatureWord = (name) => CREATURE_WORDS.some(w => name.includes(
 // ============================================================
 const F = (types, role, names) => ({ types: [].concat(types), role, names })
 
+// 完成済みの種族絵だけをここで割り当てる。未制作の種族は従来どおり文字表示。
+const SPECIES_IMAGES = {
+  'シェンロン': '/V2ペット/shenron-cosmic-flame-roar.webp',
+}
+
 export const FAMILIES = [
   // ===== 炎 =====
   // 【オオカミ】独 Wolf → 羅 lupus → 北欧神話 Fenrir。火花→火災→地獄
@@ -573,6 +578,7 @@ const build = () => {
       list.push({
         id,
         name,
+        image: SPECIES_IMAGES[name] || null,
         motif: MOTIF[name] || '',   // ★開発用。画面には出さない
         types: fam.types,
         role: fam.role,

@@ -378,16 +378,32 @@ export default function V2Home() {
     return <div style={{ minHeight:'100vh', background:'#000820', color:'#0088ff', fontFamily:'monospace', padding:'40px', textAlign:'center' }}>読み込み中...</div>
   }
 
-  // ★PCは左右2列・狭い画面は1列（2026-08-23）。**メディアクエリを使わない**のがv2の方針で、
-//   auto-fit は列が入りきらなくなると勝手に1列へ落ちる。380pxはステータス枠が窮屈にならない下限。
-//   alignItems:'start' が無いと、短いほうの列が長いほうに引き伸ばされて枠がだぶつく。
+  // ★PCは左右2列・狭い画面は1列（2026-08-23）。**メディアクエリを使わない**のがv2の方針。
+//   alignItems:'flex-start' が無いと、短いほうの列が長いほうに引き伸ばされて枠がだぶつく。
+//
+// ★★2026-09-06 ユーザー指示「左は無印と同じくらいの幅に・文字がつぶれない程度に」。
+//   前は左右を**同じ幅**にしていて（auto-fit ＝ 1fr 1fr）、左のステータスが間延びしていた。
+//   旧版のPCの街は maxWidth:900px の中で 220px と残り。v2の左はラベルと値が
+//   **2組ならぶ表**なので220pxでは潰れる。実機で幅を変えながら測ったところ
+//   **320pxが折り返さない下限**だったので、少し余裕を見て **340px** にする。
+//
+// ★flex で組むのは「幅が違う2列」と「狭くなったら勝手に1列」を**両立させるため**。
+//   grid の auto-fit は列を同じ幅にしかできない。
+//   ・左 … flex:'1 1 340px'
+//   ・右 … flex:'999 1 340px' ＝ 余った幅はほぼ全部こちらへ行く＝左は340pxのまま
+//   ・器が 340+340+8=688px より狭くなると折り返して、それぞれ横いっぱいになる
+const HOME_MAX = '980px'        // 旧版（900px）に寄せた。**ホームだけ**に掛ける
+const SIDE_BASIS = '340px'
 const TWO_COLUMN = {
-  display: 'grid',
-  // ★min(380px,100%) にしないと、380pxより狭い画面で列がはみ出す（375pxのスマホで5px溢れた）
-  gridTemplateColumns: 'repeat(auto-fit, minmax(min(380px, 100%), 1fr))',
+  display: 'flex',
+  flexWrap: 'wrap',
   gap: '8px',
-  alignItems: 'start',
+  alignItems: 'flex-start',
+  maxWidth: HOME_MAX,
+  margin: '0 auto',
 }
+const COL_LEFT  = { flex: '1 1 ' + SIDE_BASIS, minWidth: 0 }
+const COL_RIGHT = { flex: '999 1 ' + SIDE_BASIS, minWidth: 0 }
 
 // index.css の #root が text-align:center なので、v2の中は左揃えに戻す（旧版には触らない）
   return (
@@ -439,14 +455,14 @@ const TWO_COLUMN = {
             {/* ===== 左：キャラクターの状態 =====
                 ★ステータスはホームだけに出す。施設は別の画面として開く
                   （施設の一覧を見るのに、毎回ステータスぶんスクロールさせられていた） */}
-            <div>
+            <div style={screen === 'home' ? COL_LEFT : undefined}>
               {screen === 'home' && (
                 <V2Status prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} dex={dex} pet={pet} classes={classes} open={openStatus} onToggle={() => setOpenStatus(v => !v)} />
               )}
             </div>
 
             {/* ===== 右：やること（出撃・施設・開発用） ===== */}
-            <div>
+            <div style={screen === 'home' ? COL_RIGHT : undefined}>
 
             {/* ===== デイリーミッション（ステータスのすぐ下）=====
                 ★難易度を選んでいない日は**閉じられないポップアップ**で選ばせる。
