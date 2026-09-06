@@ -11,13 +11,13 @@ import { RARITY_COLOR } from '../lib/material.js'
 import { SORTIE_CD } from '../lib/sortie.js'
 import {
   RAID_BOSSES, raidBossOf, RAID_TURNS, RAID_MAX_MEMBERS, CALL_MAX, ONLINE_MINUTES,
-  secondsLeft, timeText, shareOf, toRaidFighter, rampText,
+  secondsLeft, timeText, shareOf, toRaidFighter, rampText, raidHpOfTier,
   rewardTierOf, mvpIdOf, matRangeText, rarityTableOf, fusionChanceOf,
   BOX_LABEL, BOX_COLOR, BOX_MAT_COUNT, BOX_RARITY, BOX_FUSION_PCT,
   TIER_LABEL, TIER_COLOR, tierMark,
 } from '../lib/raid.js'
 import { fusionOfBoss } from '../lib/fusion.js'
-import { tierOf } from '../lib/enemies.js'
+import { tierOf, markOf, areaOf } from '../lib/enemies.js'
 import { splitRows } from '../lib/friends.js'
 import V2Evolve from './V2Evolve.jsx'
 import { pushWeaponRecord } from './weaponRecord.js'
@@ -76,8 +76,11 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, isAd
   const running = useRef(false)
 
   const meId = prof?.id
-  // 開発用に立てるときのエリア。解放済みのうち**いちばん奥の帯**を使う
-  const devArea = [...(prof?.unlocked_areas || [1])].sort((a, b) => tierOf(b) - tierOf(a))[0] || 1
+  // 開発用に立てるときのエリア。**帯を選べる**ようにしてある
+  //   （帯ごとにHPが桁違いなので、討伐まで確かめたいときは浅い帯で立てる）
+  const devAreas = [...(prof?.unlocked_areas || [1])].sort((a, b) => tierOf(a) - tierOf(b) || a - b)
+  const [devArea, setDevArea] = useState(null)
+  const devPick = devArea ?? devAreas[devAreas.length - 1] ?? 1
   const raid = state?.active || null
   const boss = raid ? raidBossOf(raid.boss_key) : null
   const left = raid ? secondsLeft(raid.started_at, now) : 0
@@ -406,12 +409,25 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, isAd
       {isAdmin && (
         <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
           <div style={{ color:'#88ddaa', fontSize:'11px', marginBottom:'6px' }}>
-            [開発] レイドをその場に呼ぶ（解放しているエリアの中でいちばん奥の帯で立てます）
+            [開発] レイドをその場に呼ぶ
             {raid && <span style={{ color:'#ff8844' }}>　※いまのレイドは時間切れ扱いで終わります（報酬は残ります）</span>}
+          </div>
+          {/* ★帯ごとにHPが桁違い（①190万 〜 ⑧15億）。討伐まで確かめたいときは浅い帯で立てる */}
+          <div style={{ marginBottom:'6px' }}>
+            <span style={{ color: TEXT.label, fontSize:'10px' }}>立てるエリア　</span>
+            <select value={devPick} onChange={e => setDevArea(Number(e.target.value))}
+              style={{ background:'#000818', border:'1px solid #0044aa', color:'#88ccff',
+                fontFamily:'monospace', fontSize:'11px', padding:'3px' }}>
+              {devAreas.map(id => (
+                <option key={id} value={id}>
+                  {markOf(tierOf(id))} {areaOf(id)?.name}（HP {raidHpOfTier(tierOf(id)).toLocaleString()}）
+                </option>
+              ))}
+            </select>
           </div>
           <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
             {RAID_BOSSES.map(b => (
-              <button key={b.key} onClick={() => devSpawn(b.key, devArea)} disabled={busy}
+              <button key={b.key} onClick={() => devSpawn(b.key, devPick)} disabled={busy}
                 style={miniBtn(b.color)}>{b.name}</button>
             ))}
           </div>
