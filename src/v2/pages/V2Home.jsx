@@ -533,7 +533,7 @@ const COL_RIGHT = { flex: '999 1 ' + SIDE_BASIS, minWidth: 0 }
             {screen === 'market'  && <V2Market  prof={prof} onProfile={refresh} onBack={() => setScreen('home')} />}
             {screen === 'dex'     && <V2Dex     prof={prof} dex={dex} onBack={() => setScreen('home')} />}
             {screen === 'pet'     && <V2Pet     onCum={setPet} onBack={() => setScreen('home')} />}
-            {screen === 'raid'    && <V2Raid    prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} dex={dex} pet={pet} onProfile={refresh} onBack={() => { setScreen('home'); checkRaid() }} />}
+            {screen === 'raid'    && <V2Raid    prof={prof} inventory={inventory} runes={runes} fishDex={fishDex} dex={dex} pet={pet} isAdmin={isAdmin} onProfile={refresh} onBack={() => { setScreen('home'); checkRaid() }} />}
             {screen === 'friends' && <V2Friends prof={prof} onBack={() => setScreen('home')} />}
             {screen === 'announce' && <V2Announce list={announce} unread={unreadAnn} onBack={() => setScreen('home')} />}
 

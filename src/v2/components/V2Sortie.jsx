@@ -174,8 +174,16 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, dex, pet, gu
       }
       if (data.level?.ups > 0) setLogs(l => [...l, { text:`🆙 レベルアップ！ LV${data.level.lv}`, color:'#44ff88' }])
       // ★合成素材は別のRPCで受け取る（core の v2_sortie_settle を触らずに足すため）。
-      //   ⚠受け取れなくても出撃そのものは成立している＝ログはもう出してある
-      if (fuse) await supabase.rpc('v2_grant_fusion_drop', { p_fusion_id: fuse.id })
+      //   ⚠**失敗したら黙らない**。ログには「入手！」ともう出しているので、
+      //     受け取れていないのに手に入ったように見えるのが一番まずい
+      if (fuse) {
+        const { data: fd, error: fe } = await supabase.rpc('v2_grant_fusion_drop', { p_fusion_id: fuse.id })
+        if (fe || !fd?.ok) {
+          setLogs(l => [...l, {
+            text: `⚠ 合成素材を受け取れませんでした（${fe?.message || fd?.error}）`, color:'#ff8844',
+          }])
+        }
+      }
 
       // ★レイドボス（docs/v2-raid-design.md §2）。出撃1戦闘につき0.4%・ピティは無い。
       //   ボスもレアモンスターもこの抽選には関係しない（別枠で引く）。

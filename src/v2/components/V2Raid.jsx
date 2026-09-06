@@ -17,6 +17,7 @@ import {
   TIER_LABEL, TIER_COLOR, tierMark,
 } from '../lib/raid.js'
 import { fusionOfBoss } from '../lib/fusion.js'
+import { tierOf } from '../lib/enemies.js'
 import { splitRows } from '../lib/friends.js'
 import V2Evolve from './V2Evolve.jsx'
 import { pushWeaponRecord } from './weaponRecord.js'
@@ -57,7 +58,7 @@ const MemberRow = ({ m, hpMax, meId, mvpId }) => {
   )
 }
 
-export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, onProfile, onBack }) {
+export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, isAdmin, onProfile, onBack }) {
   const [state, setState] = useState(null)     // v2_raid_list の返り
   const [logs, setLogs] = useState([])
   const [busy, setBusy] = useState(false)
@@ -75,6 +76,8 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, onPr
   const running = useRef(false)
 
   const meId = prof?.id
+  // 開発用に立てるときのエリア。解放済みのうち**いちばん奥の帯**を使う
+  const devArea = [...(prof?.unlocked_areas || [1])].sort((a, b) => tierOf(b) - tierOf(a))[0] || 1
   const raid = state?.active || null
   const boss = raid ? raidBossOf(raid.boss_key) : null
   const left = raid ? secondsLeft(raid.started_at, now) : 0
@@ -195,6 +198,17 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, onPr
     if (error || !data?.ok) { setMsg(`⚠ ${error?.message || data?.error}`); return }
     setMsg(`📣 救援信号を${targets.length}人へ送りました`)
     setCallOpen(false)
+  }
+
+  // ★開発限定：レイドをその場に呼ぶ（3時間の間隔と参加中のレイドを飛ばす）。
+  //   出現率は0.4%なので、これが無いと動作確認のたびに何百回も出撃することになる
+  const devSpawn = async (key, area) => {
+    setBusy(true)
+    const { data, error } = await supabase.rpc('v2_debug_spawn_raid', { p_boss_key: key, p_area: area })
+    setBusy(false)
+    if (error || !data?.ok) { setMsg(`⚠ ${error?.message || data?.error}`); return }
+    setLogs([])
+    await refresh()
   }
 
   // ===== 参加する／報酬を受け取る =====
@@ -378,6 +392,21 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, onPr
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* ===== 開発限定：レイドをその場に呼ぶ ===== */}
+      {isAdmin && !raid && (
+        <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
+          <div style={{ color:'#88ddaa', fontSize:'11px', marginBottom:'6px' }}>
+            [開発] レイドをその場に呼ぶ（解放しているエリアの中でいちばん奥の帯で立てます）
+          </div>
+          <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
+            {RAID_BOSSES.map(b => (
+              <button key={b.key} onClick={() => devSpawn(b.key, devArea)} disabled={busy}
+                style={miniBtn(b.color)}>{b.name}</button>
+            ))}
+          </div>
         </div>
       )}
 
