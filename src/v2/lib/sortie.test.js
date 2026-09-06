@@ -334,3 +334,17 @@ test('レアモンスターの素材は確定で、通常55／レア35／激レ�
   const withMult = Array.from({ length: 1000 }, () => rollMaterial('ジェイドスライム', 1.5, rng2, { sure: true }))
   assert.equal(withMult.filter(Boolean).length, 1000)
 })
+
+// ★2026-09-06 ユーザー指示「出撃したとき一瞬『戦闘中...』が出るけど出ないでほしい」。
+//   ログはもう出そろっているのに上に1行はさまって、消えるとまた戻る＝ちらつく。
+//   気持ちよさの話なので、消したことを機械で見張っておかないと簡単に戻る。
+test('★戦闘ログの画面に「戦闘中...」の1行を出さない（ログがずれてちらつく）', async () => {
+  const { readFileSync } = await import('node:fs')
+  for (const c of ['V2Sortie', 'V2Arena']) {
+    const src = readFileSync(new URL(`../components/${c}.jsx`, import.meta.url), 'utf8')
+    // 戦闘ログの画面（scene === 'battle'）に、ログの上へ差し込む1行が無いこと。
+    // ★アリーナのロビーにあるボタンの**中の文字**は別（枠が動かないので残してある）
+    assert.ok(!/\{(?:loading|busy) && <div[^>]*>戦闘中\.\.\.<\/div>\}/.test(src),
+      `${c} に「戦闘中...」の1行が戻っている`)
+  }
+})

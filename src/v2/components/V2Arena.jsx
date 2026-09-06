@@ -143,7 +143,11 @@ export default function V2Arena({ prof, inventory, runes, fishDex, dex, pet, onP
       <div style={{ ...box, padding:'12px' }}>
         {evolveModal}
         <div style={{ color:'#ff88cc', fontSize:'13px', marginBottom:'10px' }}>⚔ アリーナ {floor}階</div>
-        {busy && <div style={{ color:'#7fa6d0', fontSize:'12px', marginBottom:'10px' }}>戦闘中...</div>}
+        {/* ★「戦闘中...」の1行はここに置かない（2026-09-06 ユーザー指示）。
+            戦闘そのものは runBattle で一瞬で終わっていて、その表示が出ているのは
+            **サーバーへ結果を送っているあいだ**。ログはもう出そろっているので、
+            上に1行はさまってログが下へずれ、消えるとまた戻る＝ちらつくだけだった。
+            反映に失敗したときはログの最後に⚠が出るので、待っている印は要らない。 */}
         <div style={{ marginBottom:'12px', maxHeight:'300px', overflowY:'auto' }}>
           {logs.map((l, i) => <V2LogLine key={i} l={l} />)}
         </div>

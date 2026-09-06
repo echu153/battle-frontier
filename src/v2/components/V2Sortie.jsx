@@ -212,7 +212,11 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, dex, pet, gu
           <span style={{ color:'#ff6644', fontSize:'13px' }}>⚔ バトル！</span>
           {auto && <span style={{ color:'#44ff88', fontSize:'11px' }}>▶ オート出撃中（⚡{stamNow}）</span>}
         </div>
-        {loading && <div style={{ color:'#7fa6d0', fontSize:'12px', marginBottom:'10px' }}>戦闘中...</div>}
+        {/* ★「戦闘中...」の1行はここに置かない（2026-09-06 ユーザー指示）。
+            戦闘そのものは runBattle で一瞬で終わっていて、その表示が出ているのは
+            **サーバーへ結果を送っているあいだ**。ログはもう出そろっているので、
+            上に1行はさまってログが下へずれ、消えるとまた戻る＝ちらつくだけだった。
+            反映に失敗したときはログの最後に⚠が出るので、待っている印は要らない。 */}
         <div style={{ marginBottom:'12px', maxHeight:'300px', overflowY:'auto' }}>
           {logs.map((l, i) => <V2LogLine key={i} l={l} />)}
         </div>
