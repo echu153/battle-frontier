@@ -176,20 +176,29 @@ export const bossBaseStats = (boss, tier) => {
 export const tierMark = markOf
 export const TIERS = Array.from({ length: TIER_MAX }, (_, i) => i + 1)
 
-// ===== 報酬のティア（2026-09-06 ユーザー指示）=====
-// ★**主催者とMVP（いちばん削った人）はティアA確定**。
-//   それ以外は貢献度（share ＝ 自分の与ダメ ÷ 最大HP）でティアが上がる。
+// ===== 報酬（2026-09-06 ユーザー指示で決め直した）=====
+// ★報酬は**3枠**あり、条件を満たせば**重ねて受け取れる**。
+//     ① 貢献度  … share（自分の与ダメ ÷ 最大HP）で ティアA〜D
+//     ② 主催の箱 … そのレイドを呼んだ人
+//     ③ MVPの箱  … いちばん削った人
+//   ＝**主催者がMVPを取って貢献度もAなら、3つとも**受け取る。
+//   ⚠②③が別枠になったので、**貢献度のティアは純粋に share だけ**で決める
+//     （前にあった「主催者とMVPはA確定」は無くした）。
+
+export const shareOf = (dmg, maxHp) => (maxHp > 0 ? Math.min(1, Math.max(0, (dmg || 0) / maxHp)) : 0)
+
+// ---- ① 貢献度のティア ----
 export const REWARD_TIERS = ['A', 'B', 'C', 'D']
 export const TIER_LABEL = { A:'ティアA', B:'ティアB', C:'ティアC', D:'ティアD' }
 export const TIER_COLOR = { A:'#ffcc00', B:'#44ff88', C:'#88ccff', D:'#7fa6d0' }
 // このshare以上でそのティア（上から見る）
 export const TIER_SHARE = { A: 0.25, B: 0.10, C: 0.03, D: 0 }
-export const shareOf = (dmg, maxHp) => (maxHp > 0 ? Math.min(1, Math.max(0, (dmg || 0) / maxHp)) : 0)
-export const tierOfShare = (share) =>
-  REWARD_TIERS.find(t => shareOf(share, 1) >= TIER_SHARE[t]) || 'D'
-// 主催者とMVPはティアA確定。それ以外は貢献度どおり
-export const rewardTierOf = ({ share, isHost = false, isMvp = false }) =>
-  (isHost || isMvp) ? 'A' : tierOfShare(share)
+export const tierOfShare = (share) => {
+  const s = Math.min(1, Math.max(0, Number(share) || 0))
+  return REWARD_TIERS.find(t => s >= TIER_SHARE[t]) || 'D'
+}
+export const rewardTierOf = tierOfShare
+
 // 参加者の中でいちばん削った人（同点なら先に見つかったほう。与ダメ0はMVPにしない）
 export const mvpIdOf = (members) => {
   let best = null
@@ -200,19 +209,20 @@ export const mvpIdOf = (members) => {
   return best ? String(best.player_id) : null
 }
 
-// ===== ティアごとの中身 =====
-// ★2026-09-06 ユーザー指示で決め直した。**軸を1本ずつに分けてある**：
-//     個数   … ティア（＋帯3つごとに+1）
-//     激レア … **帯だけ**（①3% 〜 ⑧7%）。どのティアでも同じ
-//     レア   … **ティアだけ**（A30% 〜 D12%）
-//     通常   … 残り（★必ず一番多い）
-//   ⚠前は「通常よりレアのほうが出やすい」表になっていた。**通常＞レア＞激レア**を崩さないこと
-//     （下のテストで並びを固定してある）。
-export const TIER_MAT_COUNT = { A: 6, B: 4, C: 2, D: 1 }
-export const tierCountBonus = (tier) => Math.floor((tier || 1) / 3)   // ①②=0 ③④⑤=1 ⑥⑦⑧=2
-export const matCountOf = (rewardTier, tier) =>
-  (TIER_MAT_COUNT[rewardTier] ?? TIER_MAT_COUNT.D) + tierCountBonus(tier)
+// ---- 素材の数（ティアごとの範囲から1つ引く）----
+// ★帯ボーナスは無し。もらった数字そのまま（2026-09-06 ユーザー決定）
+export const TIER_MAT_RANGE = { A: [5, 7], B: [3, 5], C: [2, 3], D: [1, 2] }
+export const matRangeOf = (rewardTier) => TIER_MAT_RANGE[rewardTier] || TIER_MAT_RANGE.D
+export const matCountOf = (rewardTier, rng = Math.random) => {
+  const [lo, hi] = matRangeOf(rewardTier)
+  return lo + Math.floor(rng() * (hi - lo + 1))
+}
+export const matRangeText = (rewardTier) => {
+  const [lo, hi] = matRangeOf(rewardTier)
+  return `${lo}〜${hi}個`
+}
 
+// ---- レア度 ----
 // 激レアの確率(%)。**帯だけで決まる**（2026-09-06 ユーザー指示「①で3%・最高でも7%」）
 export const TIER_ULTRA = { 1:3, 2:3, 3:4, 4:4, 5:5, 6:5, 7:6, 8:7 }
 export const ultraPctOf = (tier) => TIER_ULTRA[tier] ?? TIER_ULTRA[1]
@@ -220,23 +230,44 @@ export const ultraPctOf = (tier) => TIER_ULTRA[tier] ?? TIER_ULTRA[1]
 export const TIER_RARE = { A: 30, B: 24, C: 18, D: 12 }
 export const rarePctOf = (rewardTier) => TIER_RARE[rewardTier] ?? TIER_RARE.D
 
+// ⚠**通常＞レア＞激レア**を崩さないこと（テストで固定してある）
 export const rarityTableOf = (rewardTier, tier) => {
   const ultra = ultraPctOf(tier)
   const rare = rarePctOf(rewardTier)
   return { normal: 100 - rare - ultra, rare, ultra }
 }
-export const rollRarity = (rewardTier, tier, rng = Math.random) => {
-  const t = rarityTableOf(rewardTier, tier)
+export const rollRarityFrom = (table, rng = Math.random) => {
   const r = rng() * 100
-  if (r < t.ultra) return 'ultra'
-  if (r < t.ultra + t.rare) return 'rare'
+  if (r < table.ultra) return 'ultra'
+  if (r < table.ultra + table.rare) return 'rare'
   return 'normal'
 }
+export const rollRarity = (rewardTier, tier, rng = Math.random) =>
+  rollRarityFrom(rarityTableOf(rewardTier, tier), rng)
 
-// 合成素材は**討伐できたときだけ**。★**固定1%**（2026-09-06 ユーザー指示）。
-//   ティアでも帯でも変わらない＝武器に付ける特殊能力は「たまたま出たら儲けもの」の枠
+// 合成素材（貢献度ぶん）は**討伐できたときだけ・固定1%**
 export const FUSION_PCT = 1
 export const fusionChanceOf = () => FUSION_PCT
+
+// ---- ②③ 主催の箱／MVPの箱 ----
+// ★**中身は同じ**（2026-09-06 ユーザー決定）。素材3個固定で、激レアと合成素材が出やすい。
+//   帯でもティアでも変わらない＝「取った人へのご褒美」の枠。
+export const BOX_KINDS = ['host', 'mvp']
+export const BOX_LABEL = { host: '主催の箱', mvp: 'MVPの箱' }
+export const BOX_COLOR = { host: '#ffcc00', mvp: '#ff88cc' }
+export const BOX_MAT_COUNT = 3
+export const BOX_RARITY = { normal: 60, rare: 30, ultra: 10 }
+export const BOX_FUSION_PCT = 3
+export const boxRarityTable = () => ({ ...BOX_RARITY })
+
+// ===== EXP（2026-09-06 ユーザー指示「レイドでも経験値を稼げるように」）=====
+// ★出撃の通常敵と同じ 8〜11。レイドはスタミナを使わないが、
+//   ドロップも素材もその場では出ないので、出撃より旨くはならない。
+//   ⚠**抽選も付与もサーバー**（v2_raid_attack が v2_apply_exp を呼ぶ）。言い値では入らない
+export const RAID_EXP_MIN = 8
+export const RAID_EXP_MAX = 11
+export const raidExpOf = (rng = Math.random) =>
+  RAID_EXP_MIN + Math.floor(rng() * (RAID_EXP_MAX - RAID_EXP_MIN + 1))
 
 // ===== 救援信号 =====
 // 宛先は**種別＋ID**で持つ。国を作ったら 'country' を足すだけで載る

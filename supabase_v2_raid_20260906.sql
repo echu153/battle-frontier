@@ -232,16 +232,17 @@ create or replace function public.v2_raid_const() returns jsonb
     'power_mult', 2, 'atk_mult', 0.06,
     'call_max', 50, 'online_minutes', 5,
     'tier_share_a', 0.25, 'tier_share_b', 0.10, 'tier_share_c', 0.03,
-    'fusion_pct', 1
-  ) $;
+    'fusion_pct', 1,
+    'exp_min', 8, 'exp_max', 11,
+    'box_mat', 3, 'box_ultra', 10, 'box_rare', 30, 'box_fusion_pct', 3
+  ) $$;
 
--- ---- 報酬のティア（主催者とMVPはA確定・それ以外は貢献度）----
--- ★src/v2/lib/raid.js の rewardTierOf と同じ規則
-create or replace function public.v2_raid_reward_tier(
-  p_share numeric, p_is_host boolean, p_is_mvp boolean
-) returns text language sql immutable as $$
+-- ---- 貢献度のティア（★share だけで決まる）----
+-- ★主催者とMVPは**別枠の箱**でもらうので、ここでは優遇しない
+--   （src/v2/lib/raid.js の tierOfShare と同じ規則）
+create or replace function public.v2_raid_reward_tier(p_share numeric)
+returns text language sql immutable as $$
   select case
-    when coalesce(p_is_host, false) or coalesce(p_is_mvp, false) then 'A'
     when p_share >= 0.25 then 'A'
     when p_share >= 0.10 then 'B'
     when p_share >= 0.03 then 'C'
@@ -391,15 +392,19 @@ $$;
 -- ---- 殴る ----
 -- ⚠与ダメはクライアントの申告。サーバーが見張るのは3つ：
 --     ・1発の上限は **最大HPの1/10**（実測の1発は約1/1800）
+--   ★EXPは**サーバーが抽選して配る**（出撃の通常敵と同じ 8〜11）。
 --     ・**10秒に1回まで**（出撃と同じクールタイム。時計のずれを見て9秒で判定する）
 --     ・期限を過ぎたら受け付けない
 create or replace function public.v2_raid_attack(p_raid_id bigint, p_damage bigint)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_me uuid := auth.uid();
+  v_c jsonb := public.v2_raid_const();
   v_r public.v2_raids;
   v_m public.v2_raid_members;
   v_dmg bigint;
+  v_exp int;
+  v_lvl jsonb;
 begin
   if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発中の機能です'); end if;
   select * into v_m from public.v2_raid_members where raid_id = p_raid_id and player_id = v_me;
@@ -424,8 +429,15 @@ begin
      set damage = damage + v_dmg, hits = hits + 1, last_hit_at = now()
    where raid_id = p_raid_id and player_id = v_me;
 
+  -- ★EXP（2026-09-06 ユーザー指示「レイドでも経験値を稼げるように」）。
+  --   出撃の通常敵と同じ 8〜11。**抽選も付与もサーバー**（言い値は受け取らない）
+  v_exp := (v_c->>'exp_min')::int
+         + floor(random() * (((v_c->>'exp_max')::int - (v_c->>'exp_min')::int) + 1))::int;
+  v_lvl := public.v2_apply_exp(v_me, v_exp);
+
   return jsonb_build_object('ok', true, 'damage', v_dmg, 'hp_left', v_r.hp_left,
-                            'hp_max', v_r.hp_max, 'killed', v_r.killed_at is not null);
+                            'hp_max', v_r.hp_max, 'killed', v_r.killed_at is not null,
+                            'exp', v_exp, 'level', v_lvl);
 end;
 $$;
 
@@ -539,15 +551,68 @@ revoke all on table public.v2_player_fusions from anon;
 grant select on table public.v2_player_fusions to authenticated;
 
 -- ---- 報酬を受け取る（1レイドにつき1回）----
--- ★**主催者とMVP（いちばん削った人）はティアA確定**。それ以外は貢献度でティアが上がる
---     share ＝ 自分の与ダメ ÷ 最大HP　… A:25%以上 / B:10%以上 / C:3%以上 / D:それ未満
--- ★中身は**軸を1本ずつに分けてある**（2026-09-06 ユーザー指示）
---     ルーン素材の個数 … ティア（A6 B4 C2 D1）＋ floor(帯 / 3)
---     激レアの確率     … **帯だけ**（①3% 〜 ⑧7%・v2_raid_tiers.ultra_pct）
---     レアの確率       … **ティアだけ**（A30 B24 C18 D12）
---     通常             … 残り（★必ず一番多い＝通常＞レア＞激レア）
---     合成素材の確率   … **固定1%**（**討伐できたときだけ**）
+-- ★報酬は**3枠**あり、条件を満たせば**重ねてもらえる**（2026-09-06 ユーザー指示）
+--     ① 貢献度  … share（自分の与ダメ ÷ 最大HP）で ティアA〜D
+--                  素材の数 A5〜7 / B3〜5 / C2〜3 / D1〜2（帯ボーナスは無し）
+--                  激レアは**帯だけ**（v2_raid_tiers.ultra_pct・①3%〜⑧7%）
+--                  レアは**ティアだけ**（A30 B24 C18 D12）／残りが通常（★必ず一番多い）
+--                  合成素材は**固定1%**
+--     ② 主催の箱 … そのレイドを呼んだ人
+--     ③ MVPの箱  … いちばん削った人（与ダメ0はMVPにしない）
+--                  ②③は**中身が同じ**：素材3個固定・激レア10%・レア30%・合成素材3%
+--   ＝主催者がMVPを取って貢献度もAなら、3つとも受け取る。
+-- ★合成素材はどの枠も**討伐できたときだけ**。ルーン素材は時間切れでももらえる
 -- ⚠数値の正は src/v2/lib/raid.js。raid.test.js が両方を突き合わせている
+
+-- 素材を n 個配って、中身を jsonb で返す内部ヘルパ（3枠とも同じ道を通す）
+create or replace function public.v2_raid_grant(
+  p_player uuid, p_area int, p_boss_key text, p_killed boolean,
+  p_count int, p_ultra numeric, p_rare numeric, p_fusion_pct numeric
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_i int;
+  v_roll numeric;
+  v_rarity text;
+  v_mid text;
+  v_got jsonb := '[]'::jsonb;
+  v_fusion jsonb := null;
+  v_fid text;
+begin
+  for v_i in 1..greatest(0, coalesce(p_count, 0)) loop
+    v_roll := random() * 100;
+    if v_roll < p_ultra then v_rarity := 'ultra';
+    elsif v_roll < p_ultra + p_rare then v_rarity := 'rare';
+    else v_rarity := 'normal';
+    end if;
+    select id into v_mid from public.v2_materials
+     where area = p_area and is_boss and rarity = v_rarity limit 1;
+    if v_mid is not null then
+      insert into public.v2_player_materials (player_id, material_id, qty) values (p_player, v_mid, 1)
+        on conflict (player_id, material_id) do update set qty = public.v2_player_materials.qty + 1;
+      v_got := v_got || jsonb_build_array(jsonb_build_object(
+        'id', v_mid, 'name', (select name from public.v2_materials where id = v_mid), 'rarity', v_rarity));
+    end if;
+  end loop;
+
+  -- 合成素材は**討伐できたときだけ**
+  if coalesce(p_killed, false) and random() * 100 < coalesce(p_fusion_pct, 0) then
+    v_fid := 'fu:' || p_boss_key;
+    if exists (select 1 from public.v2_fusion_materials where id = v_fid) then
+      insert into public.v2_player_fusions (player_id, fusion_id, qty) values (p_player, v_fid, 1)
+        on conflict (player_id, fusion_id) do update set qty = public.v2_player_fusions.qty + 1;
+      select jsonb_build_object('id', id, 'name', name, 'crown', crown) into v_fusion
+        from public.v2_fusion_materials where id = v_fid;
+    end if;
+  end if;
+
+  return jsonb_build_object('materials', v_got, 'fusion', v_fusion);
+end;
+$$;
+-- ⚠内部ヘルパ。**外から叩かせない**（叩けると素材を配り放題になる）
+revoke all on function public.v2_raid_grant(uuid, int, text, boolean, int, numeric, numeric, numeric) from public;
+revoke all on function public.v2_raid_grant(uuid, int, text, boolean, int, numeric, numeric, numeric) from anon;
+revoke all on function public.v2_raid_grant(uuid, int, text, boolean, int, numeric, numeric, numeric) from authenticated;
+
 create or replace function public.v2_raid_claim(p_raid_id bigint)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
@@ -556,18 +621,17 @@ declare
   v_r public.v2_raids;
   v_m public.v2_raid_members;
   v_mvp uuid;
+  v_is_mvp boolean;
+  v_killed boolean;
   v_rt text;
   v_share numeric;
   v_n int;
-  v_i int;
-  v_roll numeric;
+  v_lo int;
+  v_hi int;
   v_ultra numeric;
   v_rare numeric;
-  v_rarity text;
-  v_mid text;
-  v_got jsonb := '[]'::jsonb;
-  v_fusion jsonb := null;
-  v_fid text;
+  v_parts jsonb := '[]'::jsonb;
+  v_one jsonb;
 begin
   if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発中の機能です'); end if;
   select * into v_m from public.v2_raid_members where raid_id = p_raid_id and player_id = v_me for update;
@@ -577,57 +641,45 @@ begin
   if v_r.killed_at is null and v_r.ends_at > now() then
     return jsonb_build_object('ok', false, 'error', 'まだ終わっていません');
   end if;
+  v_killed := v_r.killed_at is not null;
 
   -- MVP＝いちばん削った人（与ダメ0はMVPにしない）
   select player_id into v_mvp from public.v2_raid_members
    where raid_id = p_raid_id and damage > 0 order by damage desc, joined_at limit 1;
+  v_is_mvp := v_mvp is not null and v_mvp = v_me;
 
   v_share := least(1, greatest(0, v_m.damage::numeric / greatest(1, v_r.hp_max)));
-  v_rt := public.v2_raid_reward_tier(v_share, v_m.is_host, v_mvp is not null and v_mvp = v_me);
+  v_rt := public.v2_raid_reward_tier(v_share);
 
-  -- ルーン素材の個数（ティア ＋ 帯3つごとに+1）
-  v_n := (case v_rt when 'A' then 6 when 'B' then 4 when 'C' then 2 else 1 end)
-       + floor(v_r.tier / 3.0)::int;
-
-  -- レア度。激レアは帯だけ・レアはティアだけで決まる（残りが通常＝必ず一番多い）
+  -- ===== ① 貢献度 =====
   select ultra_pct into v_ultra from public.v2_raid_tiers where tier = v_r.tier;
   v_rare := (case v_rt when 'A' then 30 when 'B' then 24 when 'C' then 18 else 12 end);
+  v_lo := (case v_rt when 'A' then 5 when 'B' then 3 when 'C' then 2 else 1 end);
+  v_hi := (case v_rt when 'A' then 7 when 'B' then 5 when 'C' then 3 else 2 end);
+  v_n := v_lo + floor(random() * ((v_hi - v_lo) + 1))::int;
+  v_one := public.v2_raid_grant(v_me, v_r.area_id, v_r.boss_key, v_killed,
+                                v_n, v_ultra, v_rare, (v_c->>'fusion_pct')::numeric);
+  v_parts := v_parts || jsonb_build_array(
+    jsonb_build_object('kind', 'share', 'tier', v_rt) || v_one);
 
-  -- ルーン素材（そのエリアのボス素材。レア度を1個ずつ引く）
-  for v_i in 1..v_n loop
-    v_roll := random() * 100;
-    if v_roll < v_ultra then v_rarity := 'ultra';
-    elsif v_roll < v_ultra + v_rare then v_rarity := 'rare';
-    else v_rarity := 'normal';
-    end if;
-    select id into v_mid from public.v2_materials
-     where area = v_r.area_id and is_boss and rarity = v_rarity limit 1;
-    if v_mid is not null then
-      insert into public.v2_player_materials (player_id, material_id, qty) values (v_me, v_mid, 1)
-        on conflict (player_id, material_id) do update set qty = public.v2_player_materials.qty + 1;
-      v_got := v_got || jsonb_build_array(jsonb_build_object(
-        'id', v_mid, 'name', (select name from public.v2_materials where id = v_mid), 'rarity', v_rarity));
-    end if;
-  end loop;
-
-  -- 合成素材（討伐できたときだけ）
-  if v_r.killed_at is not null then
-    -- ★合成素材は**固定1%**（ティアでも帯でも変わらない）
-    if random() * 100 < (v_c->>'fusion_pct')::numeric then
-      v_fid := 'fu:' || v_r.boss_key;
-      if exists (select 1 from public.v2_fusion_materials where id = v_fid) then
-        insert into public.v2_player_fusions (player_id, fusion_id, qty) values (v_me, v_fid, 1)
-          on conflict (player_id, fusion_id) do update set qty = public.v2_player_fusions.qty + 1;
-        select jsonb_build_object('id', id, 'name', name, 'crown', crown) into v_fusion
-          from public.v2_fusion_materials where id = v_fid;
-      end if;
-    end if;
+  -- ===== ② 主催の箱 ／ ③ MVPの箱（中身は同じ）=====
+  if v_m.is_host then
+    v_one := public.v2_raid_grant(v_me, v_r.area_id, v_r.boss_key, v_killed,
+                                  (v_c->>'box_mat')::int, (v_c->>'box_ultra')::numeric,
+                                  (v_c->>'box_rare')::numeric, (v_c->>'box_fusion_pct')::numeric);
+    v_parts := v_parts || jsonb_build_array(jsonb_build_object('kind', 'host') || v_one);
+  end if;
+  if v_is_mvp then
+    v_one := public.v2_raid_grant(v_me, v_r.area_id, v_r.boss_key, v_killed,
+                                  (v_c->>'box_mat')::int, (v_c->>'box_ultra')::numeric,
+                                  (v_c->>'box_rare')::numeric, (v_c->>'box_fusion_pct')::numeric);
+    v_parts := v_parts || jsonb_build_array(jsonb_build_object('kind', 'mvp') || v_one);
   end if;
 
   update public.v2_raid_members set claimed_at = now() where raid_id = p_raid_id and player_id = v_me;
-  return jsonb_build_object('ok', true, 'share', round(v_share, 4), 'killed', v_r.killed_at is not null,
-                            'reward_tier', v_rt, 'is_mvp', v_mvp is not null and v_mvp = v_me,
-                            'tier', v_r.tier, 'materials', v_got, 'fusion', v_fusion);
+  return jsonb_build_object('ok', true, 'share', round(v_share, 4), 'killed', v_killed,
+                            'reward_tier', v_rt, 'is_host', v_m.is_host, 'is_mvp', v_is_mvp,
+                            'tier', v_r.tier, 'parts', v_parts);
 end;
 $$;
 revoke all on function public.v2_raid_claim(bigint) from public;

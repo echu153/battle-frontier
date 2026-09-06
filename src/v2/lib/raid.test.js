@@ -10,10 +10,12 @@ import {
   RAID_POWER_MULT, RAID_ATK_MULT, RAID_HP, raidPowerOfTier, raidAtkPowerOfTier, raidHpOfTier,
   bossPowerOfTier, raidPowerOfArea, raidHpOfArea, toRaidFighter, bossBaseStats, atkStatsOf,
   shareOf, tierOfShare, rewardTierOf, mvpIdOf, REWARD_TIERS, TIER_SHARE,
-  matCountOf, TIER_MAT_COUNT, tierCountBonus, rarityTableOf, rollRarity,
+  matCountOf, matRangeOf, matRangeText, TIER_MAT_RANGE, rarityTableOf, rollRarity,
   TIER_ULTRA, TIER_RARE, ultraPctOf, rarePctOf,
   RAID_PARTY, HIT_CAP_DIV, hitCapOf,
   fusionChanceOf, FUSION_PCT,
+  BOX_KINDS, BOX_MAT_COUNT, BOX_RARITY, BOX_FUSION_PCT, boxRarityTable,
+  RAID_EXP_MIN, RAID_EXP_MAX, raidExpOf,
   CALL_KINDS, CALL_MAX, ONLINE_MINUTES, pickRaidBoss, TIERS,
   secondsLeft, isOver, timeText,
 } from './raid.js'
@@ -23,7 +25,7 @@ import { allEnemies, TIER_MAX } from './enemies.js'
 import { ITEM_BY_ID, CATALOG } from './equipment.js'
 import { runBattle, createSide, liveStats } from './battle.js'
 import { AIL_LABEL } from './ailments.js'
-import { SORTIE_CD } from './sortie.js'
+import { SORTIE_CD, EXP_ZAKO_MIN, EXP_ZAKO_MAX } from './sortie.js'
 
 const SQL = readFileSync(new URL('../../../supabase_v2_raid_20260906.sql', import.meta.url), 'utf8')
 // v2_raid_tiers の1行 (tier, power, hp, ultra_pct) を拾う
@@ -203,11 +205,14 @@ test('貢献度でティアが上がる（A:25% / B:10% / C:3% / それ未満は
   assert.equal(tierOfShare(0), 'D')
 })
 
-test('★主催者とMVPはティアA確定（1発も殴っていなくても）', () => {
-  assert.equal(rewardTierOf({ share: 0, isHost: true }), 'A')
-  assert.equal(rewardTierOf({ share: 0, isMvp: true }), 'A')
-  assert.equal(rewardTierOf({ share: 0 }), 'D')
-  assert.equal(rewardTierOf({ share: 0.12 }), 'B')
+// ★2026-09-06 ユーザー指示：報酬は**3枠**（貢献度／主催の箱／MVPの箱）で重ねてもらえる。
+//   別枠になったので、**貢献度のティアは share だけ**で決まる（A確定は無くした）
+test('★貢献度のティアは share だけで決まる（主催・MVPでも優遇しない）', () => {
+  assert.equal(rewardTierOf(0), 'D')
+  assert.equal(rewardTierOf(0.12), 'B')
+  assert.equal(rewardTierOf(0.30), 'A')
+  // 主催かどうか・MVPかどうかは受け取らない（渡しても効かない）
+  assert.equal(rewardTierOf.length, 1, 'ティアの判定が share 以外を見ている')
 })
 
 test('MVPはいちばん削った人。誰も削っていなければ MVP なし', () => {
@@ -217,24 +222,51 @@ test('MVPはいちばん削った人。誰も削っていなければ MVP なし
 })
 
 // ===== ティアと帯で豪華になる =====
-test('ルーン素材の個数はティア＋帯で増える', () => {
-  assert.deepEqual(TIER_MAT_COUNT, { A: 6, B: 4, C: 2, D: 1 })
-  assert.equal(tierCountBonus(1), 0)
-  assert.equal(tierCountBonus(3), 1)
-  assert.equal(tierCountBonus(8), 2)
-  assert.equal(matCountOf('A', 1), 6)
-  assert.equal(matCountOf('A', 8), 8)
-  assert.equal(matCountOf('D', 1), 1)
-  // 帯が上がって減ることはない
-  for (const rt of REWARD_TIERS) {
-    for (let t = 2; t <= TIER_MAX; t++) {
-      assert.ok(matCountOf(rt, t) >= matCountOf(rt, t - 1), `${rt} 帯${t}で個数が減った`)
-    }
+test('素材の数はティアごとの範囲から引く（帯ボーナスは無し）', () => {
+  assert.deepEqual(TIER_MAT_RANGE, { A: [5, 7], B: [3, 5], C: [2, 3], D: [1, 2] })
+  assert.deepEqual(matRangeOf('A'), [5, 7])
+  assert.deepEqual(matRangeOf('ない'), TIER_MAT_RANGE.D)
+  assert.equal(matRangeText('B'), '3〜5個')
+  // 範囲の下と上がちゃんと出る
+  assert.equal(matCountOf('A', () => 0), 5)
+  assert.equal(matCountOf('A', () => 0.99), 7)
+  assert.equal(matCountOf('D', () => 0), 1)
+  assert.equal(matCountOf('D', () => 0.99), 2)
+  // ティアが上がると必ず増える（範囲が重ならない）
+  for (let i = 1; i < REWARD_TIERS.length; i++) {
+    const hi = matRangeOf(REWARD_TIERS[i])[1]
+    const lo = matRangeOf(REWARD_TIERS[i - 1])[0]
+    assert.ok(lo >= hi, `${REWARD_TIERS[i - 1]} と ${REWARD_TIERS[i]} の範囲が逆転している`)
   }
 })
 
-// ★2026-09-06 ユーザー指摘：**通常よりレアのほうが出やすい表になっていた**。
-//   どのティア・どの帯でも「通常＞レア＞激レア」を崩さないよう、ここで固定する
+// ===== 主催の箱／MVPの箱 =====
+test('★主催の箱とMVPの箱は中身が同じ（素材3個・激レア10%・合成素材3%）', () => {
+  assert.deepEqual(BOX_KINDS, ['host', 'mvp'])
+  assert.equal(BOX_MAT_COUNT, 3)
+  assert.equal(BOX_FUSION_PCT, 3)
+  const t = boxRarityTable()
+  assert.deepEqual(t, BOX_RARITY)
+  assert.equal(t.normal + t.rare + t.ultra, 100)
+  assert.equal(t.ultra, 10)
+  // 箱も 通常＞レア＞激レア を守る
+  assert.ok(t.normal > t.rare && t.rare > t.ultra, '箱の並びが崩れている')
+  // 箱のほうが貢献度ぶんより激レアも合成素材も出やすい（ご褒美として成立している）
+  assert.ok(t.ultra > ultraPctOf(8), '箱の激レアが帯⑧より出にくい')
+  assert.ok(BOX_FUSION_PCT > FUSION_PCT, '箱の合成素材が貢献度ぶんより出にくい')
+})
+
+// ===== EXP =====
+test('★レイドへの挑戦でもEXPが入る（出撃の通常敵と同じ 8〜11）', () => {
+  assert.equal(RAID_EXP_MIN, 8)
+  assert.equal(RAID_EXP_MAX, 11)
+  assert.equal(raidExpOf(() => 0), 8)
+  assert.equal(raidExpOf(() => 0.99), 11)
+  // 出撃の通常敵とそろえてある（片方だけ動かしたら気づく）
+  assert.equal(RAID_EXP_MIN, EXP_ZAKO_MIN)
+  assert.equal(RAID_EXP_MAX, EXP_ZAKO_MAX)
+})
+
 test('★どのティア・どの帯でも 通常＞レア＞激レア', () => {
   for (const rt of REWARD_TIERS) {
     for (const t of TIERS) {
@@ -380,31 +412,61 @@ test('★SQL の v2_raid_tiers が raid.js の強さ・激レアの表と一致�
   }
 })
 
-test('★SQL の報酬ティアの判定が raid.js と一致している', () => {
+test('★SQL の貢献度ティアの判定が raid.js と一致している（主催・MVPの優遇は無い）', () => {
   const body = SQL.slice(SQL.indexOf('create or replace function public.v2_raid_reward_tier'))
-  assert.ok(body.includes('p_is_host, false) or coalesce(p_is_mvp, false) then \'A\''), '主催者とMVPのA確定が無い')
-  assert.ok(body.includes(`p_share >= ${TIER_SHARE.A} then 'A'`), 'Aのしきい値が違う')
-  assert.ok(body.includes(`p_share >= ${TIER_SHARE.B.toFixed(2)} then 'B'`), 'Bのしきい値が違う')
-  assert.ok(body.includes(`p_share >= ${TIER_SHARE.C.toFixed(2)} then 'C'`), 'Cのしきい値が違う')
+  assert.ok(body.includes('v2_raid_reward_tier(p_share numeric)'), '引数が share だけになっていない')
+  assert.ok(!body.includes('p_is_host'), '主催者の優遇がSQLに残っている')
+  assert.ok(body.includes("p_share >= " + TIER_SHARE.A + " then 'A'"), 'Aのしきい値が違う')
+  assert.ok(body.includes("p_share >= " + TIER_SHARE.B.toFixed(2) + " then 'B'"), 'Bのしきい値が違う')
+  assert.ok(body.includes("p_share >= " + TIER_SHARE.C.toFixed(2) + " then 'C'"), 'Cのしきい値が違う')
 })
 
 test('★SQL の報酬の中身が raid.js と一致している', () => {
   const body = SQL.slice(SQL.indexOf('create or replace function public.v2_raid_claim'))
-  // 個数
-  const cnt = `when 'A' then ${TIER_MAT_COUNT.A} when 'B' then ${TIER_MAT_COUNT.B} when 'C' then ${TIER_MAT_COUNT.C} else ${TIER_MAT_COUNT.D} end`
-  assert.ok(body.includes(cnt), `素材の個数がSQLと違う（${cnt}）`)
-  assert.ok(body.includes('floor(v_r.tier / 3.0)::int'), '帯ぶんの個数ボーナスが無い')
+  // 素材の数の範囲（ティアごと）
+  const lo = "when 'A' then " + TIER_MAT_RANGE.A[0] + " when 'B' then " + TIER_MAT_RANGE.B[0]
+    + " when 'C' then " + TIER_MAT_RANGE.C[0] + " else " + TIER_MAT_RANGE.D[0] + " end"
+  const hi = "when 'A' then " + TIER_MAT_RANGE.A[1] + " when 'B' then " + TIER_MAT_RANGE.B[1]
+    + " when 'C' then " + TIER_MAT_RANGE.C[1] + " else " + TIER_MAT_RANGE.D[1] + " end"
+  assert.ok(body.includes(lo), '素材の数の下限がSQLと違う')
+  assert.ok(body.includes(hi), '素材の数の上限がSQLと違う')
+  assert.ok(!body.includes('floor(v_r.tier / 3.0)'), '帯ボーナスがSQLに残っている')
   // 激レアは v2_raid_tiers.ultra_pct（帯だけ）から引いている
   assert.ok(body.includes('select ultra_pct into v_ultra from public.v2_raid_tiers'),
     '激レアを帯の表から引いていない')
   // レアはティアだけ
-  const rare = `when 'A' then ${TIER_RARE.A} when 'B' then ${TIER_RARE.B}`
-    + ` when 'C' then ${TIER_RARE.C} else ${TIER_RARE.D} end)`
-  assert.ok(body.includes(rare), `レアの表がSQLと違う（${rare}）`)
-  // 合成素材は固定1%
-  assert.ok(body.includes("(v_c->>'fusion_pct')::numeric"), '合成素材が固定の確率になっていない')
+  const rare = "when 'A' then " + TIER_RARE.A + " when 'B' then " + TIER_RARE.B
+    + " when 'C' then " + TIER_RARE.C + " else " + TIER_RARE.D + " end)"
+  assert.ok(body.includes(rare), 'レアの表がSQLと違う')
+  // 3枠（貢献度・主催の箱・MVPの箱）
+  assert.ok(body.includes("'kind', 'share'"), '貢献度の枠がSQLに無い')
+  for (const k of BOX_KINDS) assert.ok(body.includes("'kind', '" + k + "'"), k + ' の箱がSQLに無い')
+  assert.ok(body.includes("(v_c->>'box_mat')::int"), '箱の素材の数が定数から来ていない')
   // 1発の上限
-  assert.ok(SQL.includes(`v_r.hp_max / ${HIT_CAP_DIV}`), '1発の上限がSQLと違う')
+  assert.ok(SQL.includes('v_r.hp_max / ' + HIT_CAP_DIV), '1発の上限がSQLと違う')
+})
+
+test('★SQL の定数が箱とEXPの値と一致している', () => {
+  const body = SQL.slice(SQL.indexOf('create or replace function public.v2_raid_const'))
+  const num = (k) => {
+    const m = body.match(new RegExp("'" + k + "'," + String.raw`\s*([0-9.]+)`))
+    assert.ok(m, k + ' がSQLに無い')
+    return Number(m[1])
+  }
+  assert.equal(num('box_mat'), BOX_MAT_COUNT)
+  assert.equal(num('box_ultra'), BOX_RARITY.ultra)
+  assert.equal(num('box_rare'), BOX_RARITY.rare)
+  assert.equal(num('box_fusion_pct'), BOX_FUSION_PCT)
+  assert.equal(num('exp_min'), RAID_EXP_MIN)
+  assert.equal(num('exp_max'), RAID_EXP_MAX)
+})
+
+test('★SQL の v2_raid_attack がEXPをサーバーで抽選して配っている', () => {
+  const body = SQL.slice(SQL.indexOf('create or replace function public.v2_raid_attack'))
+  assert.ok(body.includes("(v_c->>'exp_min')::int"), 'EXPの抽選がSQLに無い')
+  assert.ok(body.includes('public.v2_apply_exp(v_me, v_exp)'), 'EXPを配っていない')
+  // ★言い値では入らない（引数でEXPを受け取っていない）
+  assert.ok(body.includes('v2_raid_attack(p_raid_id bigint, p_damage bigint)'), '引数が増えている')
 })
 
 test('SQL の合成素材の名簿が fusion.js と一致している', () => {

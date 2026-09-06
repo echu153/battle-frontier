@@ -12,7 +12,8 @@ import { SORTIE_CD } from '../lib/sortie.js'
 import {
   RAID_BOSSES, raidBossOf, RAID_TURNS, RAID_MAX_MEMBERS, CALL_MAX, ONLINE_MINUTES,
   secondsLeft, timeText, shareOf, toRaidFighter, rampText,
-  rewardTierOf, mvpIdOf, matCountOf, rarityTableOf, fusionChanceOf,
+  rewardTierOf, mvpIdOf, matRangeText, rarityTableOf, fusionChanceOf,
+  BOX_LABEL, BOX_COLOR, BOX_MAT_COUNT, BOX_RARITY, BOX_FUSION_PCT,
   TIER_LABEL, TIER_COLOR, tierMark,
 } from '../lib/raid.js'
 import { fusionOfBoss } from '../lib/fusion.js'
@@ -40,7 +41,8 @@ const barColor = (pct) => (pct > 50 ? '#44ff88' : pct > 20 ? '#ffcc00' : '#ff444
 const MemberRow = ({ m, hpMax, meId, mvpId }) => {
   const share = shareOf(Number(m.damage || 0), hpMax)
   const isMvp = String(m.player_id) === String(mvpId)
-  const rt = rewardTierOf({ share, isHost: m.is_host, isMvp })
+  // ★ティアは**貢献度だけ**で決まる。主催・MVPはこれとは別に箱をもらう
+  const rt = rewardTierOf(share)
   return (
     <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', padding:'2px 0',
       color: String(m.player_id) === String(meId) ? '#ffcc00' : TEXT.body }}>
@@ -309,7 +311,8 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, onPr
                 mvpId={mvpIdOf(raid.members)} />
             ))}
             <div style={{ color: TEXT.sub, fontSize:'10px', marginTop:'4px', lineHeight:1.7 }}>
-              👑 主催者と ★ MVP（いちばん削った人）はティアA確定。ほかの人は削るほどティアが上がります。<br />
+              ティアは貢献度で上がります。👑 主催者と ★ MVP（いちばん削った人）は、
+              それとは<b style={{ color:'#ffcc00' }}>別に箱</b>をもらえます（両方なら3つとも）。<br />
               報酬は人数で割られません。呼べば呼ぶほど早く倒せて、全員が受け取れます。
             </div>
           </div>
@@ -353,10 +356,9 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, onPr
             const b = raidBossOf(r.boss_key)
             const mine = (r.members || []).find(m => String(m.player_id) === String(meId))
             const sh = shareOf(Number(mine?.damage || 0), Number(r.hp_max))
-            const rt = rewardTierOf({
-              share: sh, isHost: String(r.host_id) === String(meId),
-              isMvp: String(mvpIdOf(r.members)) === String(meId),
-            })
+            const rt = rewardTierOf(sh)
+            const isHost = String(r.host_id) === String(meId)
+            const isMvp = String(mvpIdOf(r.members)) === String(meId)
             return (
               <div key={r.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
                 borderTop:'1px solid #002244', padding:'6px 0', gap:'8px', flexWrap:'wrap' }}>
@@ -366,9 +368,11 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, onPr
                     　難易度{tierMark(r.tier)}／{r.killed_at ? '討伐' : '時間切れ'}／貢献 {(sh * 100).toFixed(1)}%
                   </span>
                   <span style={{ color: TIER_COLOR[rt] }}>
-                    　{TIER_LABEL[rt]}（素材{matCountOf(rt, r.tier)}個・激レア{rarityTableOf(rt, r.tier).ultra}%
+                    　{TIER_LABEL[rt]}（素材{matRangeText(rt)}・激レア{rarityTableOf(rt, r.tier).ultra}%
                     {r.killed_at ? `・合成素材${fusionChanceOf()}%` : ''}）
                   </span>
+                  {isHost && <span style={{ color: BOX_COLOR.host }}>　＋{BOX_LABEL.host}</span>}
+                  {isMvp && <span style={{ color: BOX_COLOR.mvp }}>　＋{BOX_LABEL.mvp}</span>}
                 </span>
                 <button onClick={() => claim(r.id)} disabled={busy} style={miniBtn('#ffcc00')}>受け取る</button>
               </div>
@@ -384,6 +388,8 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, onPr
           <div style={{ color: TEXT.sub, fontSize:'11px', lineHeight:1.8 }}>
             出撃していると、まれにレイドボスが現れます。<br />
             現れたら1時間だけ挑戦でき、救援信号を出して仲間を呼べます。<br />
+            主催者といちばん削った人は、貢献度とは別に{BOX_LABEL.host}・{BOX_LABEL.mvp}
+            （素材{BOX_MAT_COUNT}個・激レア{BOX_RARITY.ultra}%・合成素材{BOX_FUSION_PCT}%）をもらえます。<br />
             HPは<b style={{ color:'#ff8844' }}>複数人がかりで1時間</b>ぶんあるので、ひとりでは削り切れません。<br />
             倒すとルーン素材と、確率で武器に合成できる素材が手に入ります。<br />
             <b style={{ color:'#ff8844' }}>奥のエリアで引いたレイドほど強く、報酬も豪華</b>になります。
@@ -449,23 +455,27 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, onPr
           <div style={{ color: TEXT.label, fontSize:'11px', marginBottom:'8px' }}>
             難易度{tierMark(reward.tier)}／{reward.killed ? '討伐' : '時間切れ'}
             ／貢献 {(Number(reward.share) * 100).toFixed(1)}%
-            {reward.is_mvp && <span style={{ color:'#ffcc00' }}>　★MVP</span>}
-            <span style={{ color: TIER_COLOR[reward.reward_tier] }}>　{TIER_LABEL[reward.reward_tier]}</span>
           </div>
-          {(reward.materials || []).map((m, i) => (
-            <div key={i} style={{ fontSize:'11px', color: LOG_PLAIN }}>
-              ⚗ ルーン素材「<span style={{ color: RARITY_COLOR[m.rarity] }}>{m.name}</span>」
+          {/* ★枠ごとに分けて出す（貢献度／主催の箱／MVPの箱） */}
+          {(reward.parts || []).map((part, pi) => (
+            <div key={pi} style={{ borderTop: pi ? '1px solid #002244' : 'none', paddingTop: pi ? '8px' : 0, marginTop: pi ? '8px' : 0 }}>
+              <div style={{ fontSize:'12px', marginBottom:'4px',
+                color: part.kind === 'share' ? TIER_COLOR[part.tier] : BOX_COLOR[part.kind] }}>
+                {part.kind === 'share' ? `${TIER_LABEL[part.tier]}（貢献度）` : BOX_LABEL[part.kind]}
+              </div>
+              {(part.materials || []).map((m, i) => (
+                <div key={i} style={{ fontSize:'11px', color: LOG_PLAIN }}>
+                  ⚗ ルーン素材「<span style={{ color: RARITY_COLOR[m.rarity] }}>{m.name}</span>」
+                </div>
+              ))}
+              {part.fusion && (
+                <div style={{ fontSize:'12px', color:'#ffcc00', marginTop:'4px' }}>
+                  ✦ 合成素材「{part.fusion.name}」を入手！
+                  <div style={{ color: TEXT.sub, fontSize:'10px' }}>鍛冶屋の「合成」で武器に付けられます</div>
+                </div>
+              )}
             </div>
           ))}
-          {reward.fusion && (
-            <div style={{ fontSize:'12px', color:'#ffcc00', marginTop:'6px' }}>
-              ✦ 合成素材「{reward.fusion.name}」を入手！
-              <div style={{ color: TEXT.sub, fontSize:'10px' }}>鍛冶屋の「合成」で武器に付けられます</div>
-            </div>
-          )}
-          {!reward.fusion && reward.killed && (
-            <div style={{ color: TEXT.sub, fontSize:'10px', marginTop:'6px' }}>合成素材は出ませんでした</div>
-          )}
         </V2Modal>
       )}
     </div>
