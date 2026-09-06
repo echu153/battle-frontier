@@ -107,14 +107,22 @@ export const raidPowerOfTier = (tier) => Math.round(bossPowerOfTier(tier) * RAID
 export const raidAtkPowerOfTier = (tier) => Math.max(1, Math.round(bossPowerOfTier(tier) * RAID_ATK_MULT))
 export const raidPowerOfArea = (areaId) => raidPowerOfTier(tierOf(areaId))
 
-// HPは**帯ごとの表**。「その帯の標準的な編成が1時間フル（360回）殴って
-// ちょうど削り切れる」量を tools/v2-raid-tune.mjs で測って焼いてある。
+// ===== 想定人数（2026-09-06 ユーザー指示「複数人で戦闘することも考慮」）=====
+// ★HPは**この人数で1時間ちょうど**になるように置いてある。
+//   ソロだと1時間かけても 1/RAID_PARTY しか削れない＝**救援を出す前提**のコンテンツ。
+//   ただし**自分の帯より下のレイド**なら上振れぶんそのまま速く、少人数でも討伐できる。
+export const RAID_PARTY = 5
+
+// HPは**帯ごとの表**。「その帯の作り込んだ編成が RAID_PARTY 人で1時間フル
+// （360回×人数）殴ってちょうど削り切れる」量を tools/v2-raid-tune.mjs で測って焼いてある。
+// ★戦闘力に出てこない伸び（ルーンの刻印・釣り図鑑・モンスター図鑑・ペット・職業補正）も
+//   乗せた状態で測っている（2026-09-06 ユーザー指摘）。素のステだけで測るとHPが足りない。
 // ⚠**勘で書き換えない。** 帯ごとに編成の枠数もエリアボスの強さも違うので、
 //   「戦闘力 × 一定」では出せない（①〜④と⑤〜⑧で必要な倍率が3倍ちがう）。
 //   触るときは `node tools/v2-raid-tune.mjs` を回して、出た表をそのまま貼ること。
 export const RAID_HP = {
-  1:370000, 2:950000, 3:1900000, 4:2500000,
-  5:33000000, 6:61000000, 7:86000000, 8:110000000,
+  1:1900000, 2:4800000, 3:15000000, 4:19000000,
+  5:260000000, 6:580000000, 7:930000000, 8:1500000000,
 }
 export const raidHpOfTier = (tier) => RAID_HP[tier] || RAID_HP[1]
 export const raidHpOfArea = (areaId) => raidHpOfTier(tierOf(areaId))
@@ -123,6 +131,14 @@ export const raidHpOfArea = (areaId) => raidHpOfTier(tierOf(areaId))
 // ★30ターンで強制終了。ボスは**1ターンごとに火力+RAMP_ATK%・耐久+RAMP_DEF%**（たかぶり）。
 //   後半はほとんど通らなくなり、こちらが先に倒れる＝**短期決戦を組めた人ほど削れる**。
 //   解釈は battle.js の liveStats（fighter.ramp を渡したときだけ効く）。
+// ★1発でHPの何分の1まで削れるか（サーバーの申告チェック）。
+//   実測の1発は HP の 1/1800 なので、**まっとうな挑戦がこの上限に当たることはない**。
+//   自分の帯より下のレイドを手伝う人（＝格上）だけが当たるが、それでも10回で削り切れる。
+//   ⚠これは**でたらめな数字を弾くだけ**の網。ちゃんと防ぐには戦闘をサーバーで回すしかない
+//     （出撃・アリーナと同じ穴。一般公開の前にまとめて直す）。
+export const HIT_CAP_DIV = 10
+export const hitCapOf = (hpMax) => Math.floor((hpMax || 0) / HIT_CAP_DIV)
+
 export const RAID_TURNS = 30
 export const RAMP_ATK = 8   // 1ターンごとの火力(+STR/INT%)
 export const RAMP_DEF = 6   // 1ターンごとの耐久(+VIT%)
@@ -231,6 +247,33 @@ export const secondsLeft = (startedAt, now = Date.now()) =>
   Math.max(0, Math.floor((endsAtOf(startedAt).getTime() - now) / 1000))
 export const isOver = (raid, now = Date.now()) =>
   !raid || raid.hp_left <= 0 || secondsLeft(raid.started_at, now) <= 0
+// ===== いまのペースで討伐できるか（複数人で殴る前提の目安）=====
+// ★「あと何人呼べばいいか」がその場で分かるようにする（2026-09-06 ユーザー指示）。
+//   参加者ぜんぶの与ダメ合計 ÷ 経過時間 を「いまの速さ」として、残りHPと残り時間から出す。
+//   ⚠始まった直後は速さが定まらないので、PACE_WARMUP 秒たつまでは出さない
+export const PACE_WARMUP = 60
+export const paceOf = (raid, now = Date.now()) => {
+  if (!raid) return null
+  const elapsed = (now - new Date(raid.started_at).getTime()) / 1000
+  const left = secondsLeft(raid.started_at, now)
+  const done = Number(raid.hp_max) - Number(raid.hp_left)
+  if (elapsed < PACE_WARMUP || done <= 0) return null
+  const speed = done / elapsed                 // 1秒あたりに削れている量
+  const need = Number(raid.hp_left)
+  const etaSec = speed > 0 ? Math.ceil(need / speed) : Infinity
+  const members = (raid.members || []).length || 1
+  // 時間内に削り切るのに要る速さ。いまの速さとの比が「何人ぶん要るか」
+  const needSpeed = left > 0 ? need / left : Infinity
+  const needMembers = Number.isFinite(needSpeed) && speed > 0
+    ? Math.ceil(members * (needSpeed / speed)) : Infinity
+  return {
+    etaSec, left, members,
+    willKill: etaSec <= left,
+    // あと何人呼べば間に合うか（間に合っているなら0）
+    short: etaSec <= left ? 0 : Math.max(1, Math.min(RAID_MAX_MEMBERS, needMembers) - members),
+  }
+}
+
 export const timeText = (sec) => {
   const m = Math.floor(sec / 60)
   const s = sec % 60

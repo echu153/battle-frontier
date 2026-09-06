@@ -11,9 +11,10 @@ import {
   bossPowerOfTier, raidPowerOfArea, raidHpOfArea, toRaidFighter, bossBaseStats, atkStatsOf,
   shareOf, tierOfShare, rewardTierOf, mvpIdOf, REWARD_TIERS, TIER_SHARE,
   matCountOf, TIER_MAT_COUNT, tierCountBonus, rarityTableOf, rollRarity, TIER_RARITY,
+  RAID_PARTY, HIT_CAP_DIV, hitCapOf,
   fusionChanceOf, TIER_FUSION_PCT, FUSION_TIER_BONUS,
   CALL_KINDS, CALL_MAX, ONLINE_MINUTES, pickRaidBoss, TIERS,
-  secondsLeft, isOver, timeText,
+  secondsLeft, isOver, timeText, paceOf, PACE_WARMUP,
 } from './raid.js'
 import { FUSIONS, FUSION_BY_ID, fusedName, canFuseItem, checkFuse, fusedAbilitiesOf } from './fusion.js'
 import { FUSION_ABILITIES, ABILITY_OF, ENCHANTS, collectEnchants, abilityText } from './enchant.js'
@@ -154,7 +155,7 @@ test('★たかぶりがあると、同じ30ターンでも与ダメが落ちる
   assert.ok(dmgOf(true) < dmgOf(false), 'たかぶりが与ダメを抑えていない')
 })
 
-test('1発でHPの1/100より多く削れない（サーバーの上限に収まっている）', () => {
+test('★まっとうな1発はサーバーの上限（HPの1/10）にまったく届かない', () => {
   const me = {
     name: 'テスト', cls: '侍', stats: { hp: 4000, mp: 600, str: 1400, dex: 800, agi: 800, int_stat: 200, vit: 700, luk: 300 },
     slots: [],
@@ -163,7 +164,20 @@ test('1発でHPの1/100より多く削れない（サーバーの上限に収ま
   const r = runBattle(me, toRaidFighter(RAID_BOSSES[0], 5), { rng: rngOf(1), maxTurns: RAID_TURNS })
   const dmg = r.b.base.hp - r.b.hp
   assert.ok(dmg > 0, '1ターンも通っていない')
-  assert.ok(dmg < max / 100, `1発が上限（最大HPの1/100）を超えている：${dmg}`)
+  assert.ok(dmg < hitCapOf(max), `1発が上限（最大HPの1/${HIT_CAP_DIV}）を超えている：${dmg}`)
+  assert.equal(hitCapOf(1000), 100)
+})
+
+test('★HPは想定人数ぶんある（ソロでは1時間で削り切れない）', () => {
+  assert.equal(RAID_PARTY, 5)
+  // 1時間ぶん（360回）× 想定人数 でちょうど。tools/v2-raid-tune.mjs の実測を焼いてある
+  const perHour = Math.floor((RAID_MINUTES * 60) / SORTIE_CD)
+  for (const t of TIERS) {
+    // 帯ごとの「1回の与ダメ」の見積り＝HP ÷（360回 × 人数）。桁が合っていることだけ見る
+    const per = raidHpOfTier(t) / (perHour * RAID_PARTY)
+    assert.ok(per > 0, `帯${t}`)
+    assert.ok(hitCapOf(raidHpOfTier(t)) > per * 5, `帯${t} の1発上限が実測に近すぎる`)
+  }
 })
 
 // ===== 報酬のティア =====
@@ -252,6 +266,30 @@ test('討伐済み・時間切れはどちらも「終わっている」', () =>
   assert.equal(isOver({ hp_left: 100, started_at: t0 }, t0.getTime()), false)
   assert.equal(isOver({ hp_left: 0, started_at: t0 }, t0.getTime()), true)
   assert.equal(isOver({ hp_left: 100, started_at: t0 }, t0.getTime() + 61 * 60000), true)
+})
+
+// ===== いまのペース（複数人で殴る前提の目安）=====
+test('★始まった直後はペースを出さない（速さが定まらないため）', () => {
+  const t0 = new Date('2026-09-06T10:00:00Z').getTime()
+  const raid = { started_at: new Date(t0), hp_max: 1000, hp_left: 900, members: [{}] }
+  assert.equal(paceOf(raid, t0 + (PACE_WARMUP - 1) * 1000), null)
+  assert.equal(paceOf(null, t0), null)
+  // まだ1も削れていないときも出さない
+  assert.equal(paceOf({ ...raid, hp_left: 1000 }, t0 + 600000), null)
+})
+
+test('★このペースで間に合うかと、あと何人要るかを出す', () => {
+  const t0 = new Date('2026-09-06T10:00:00Z').getTime()
+  // 10分で半分削れた ＝ このままなら10分後に討伐（残り50分あるので間に合う）
+  const ok = paceOf({ started_at: new Date(t0), hp_max: 1000, hp_left: 500, members: [{}, {}] }, t0 + 600000)
+  assert.equal(ok.willKill, true)
+  assert.equal(ok.short, 0)
+  assert.equal(ok.members, 2)
+  assert.equal(ok.etaSec, 600)
+  // 10分で1%しか削れていない ＝ 間に合わないので人が要る
+  const ng = paceOf({ started_at: new Date(t0), hp_max: 1000, hp_left: 990, members: [{}, {}] }, t0 + 600000)
+  assert.equal(ng.willKill, false)
+  assert.ok(ng.short >= 1, '足りない人数が出ていない')
 })
 
 // ===== 合成 =====
@@ -374,7 +412,7 @@ test('★SQL の報酬の中身が raid.js と一致している', () => {
   const fus = `when 'A' then ${TIER_FUSION_PCT.A} when 'B' then ${TIER_FUSION_PCT.B} when 'C' then ${TIER_FUSION_PCT.C} else ${TIER_FUSION_PCT.D} end`
   assert.ok(body.includes(fus), '合成素材の確率がSQLと違う')
   // 1発の上限
-  assert.ok(SQL.includes('v_r.hp_max / 100'), '1発の上限がSQLに無い')
+  assert.ok(SQL.includes(`v_r.hp_max / ${HIT_CAP_DIV}`), '1発の上限がSQLと違う')
 })
 
 test('SQL の合成素材の名簿が fusion.js と一致している', () => {

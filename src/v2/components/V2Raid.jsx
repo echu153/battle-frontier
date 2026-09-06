@@ -11,7 +11,7 @@ import { RARITY_COLOR } from '../lib/material.js'
 import { SORTIE_CD } from '../lib/sortie.js'
 import {
   RAID_BOSSES, raidBossOf, RAID_TURNS, RAID_MAX_MEMBERS, CALL_MAX, ONLINE_MINUTES,
-  secondsLeft, timeText, shareOf, toRaidFighter, rampText,
+  secondsLeft, timeText, shareOf, toRaidFighter, rampText, paceOf, RAID_PARTY,
   rewardTierOf, mvpIdOf, matCountOf, rarityTableOf, fusionChanceOf,
   TIER_LABEL, TIER_COLOR, tierMark,
 } from '../lib/raid.js'
@@ -268,6 +268,28 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, onPr
             <div style={{ height:'100%', width:`${Math.max(0, hpPct)}%`, background: barColor(hpPct), transition:'width 0.3s' }} />
           </div>
 
+          {/* ★いまのペース。人が足りているかがその場で分かる（複数人で殴る前提） */}
+          {(() => {
+            const pace = paceOf(raid, now)
+            if (!pace) {
+              return (
+                <div style={{ color: TEXT.sub, fontSize:'10px', marginBottom:'8px' }}>
+                  目安は{RAID_PARTY}人。ひとりだと1時間かけても削り切れません
+                </div>
+              )
+            }
+            return pace.willKill ? (
+              <div style={{ color:'#44ff88', fontSize:'11px', marginBottom:'8px' }}>
+                このペースなら あと{timeText(pace.etaSec)}で討伐（{pace.members}人）
+              </div>
+            ) : (
+              <div style={{ color:'#ff8844', fontSize:'11px', marginBottom:'8px' }}>
+                このペースだと時間内に討伐できません（{pace.members}人）
+                {pace.short < RAID_MAX_MEMBERS && <>　あと{pace.short}人ぶんの火力が要ります</>}
+              </div>
+            )
+          })()}
+
           {/* 次の行動まで */}
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', marginBottom:'3px' }}>
             <span style={{ color: TEXT.label }}>次の行動まで</span>
@@ -309,7 +331,8 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, onPr
                 mvpId={mvpIdOf(raid.members)} />
             ))}
             <div style={{ color: TEXT.sub, fontSize:'10px', marginTop:'4px', lineHeight:1.7 }}>
-              👑 主催者と ★ MVP（いちばん削った人）はティアA確定。ほかの人は削るほどティアが上がります。
+              👑 主催者と ★ MVP（いちばん削った人）はティアA確定。ほかの人は削るほどティアが上がります。<br />
+              報酬は人数で割られません。呼べば呼ぶほど早く倒せて、全員が受け取れます。
             </div>
           </div>
         </div>
@@ -383,6 +406,7 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, onPr
           <div style={{ color: TEXT.sub, fontSize:'11px', lineHeight:1.8 }}>
             出撃していると、まれにレイドボスが現れます。<br />
             現れたら1時間だけ挑戦でき、救援信号を出して仲間を呼べます。<br />
+            HPは<b style={{ color:'#ff8844' }}>{RAID_PARTY}人がかりで1時間</b>ぶんあるので、ひとりでは削り切れません。<br />
             倒すとルーン素材と、確率で武器に合成できる素材が手に入ります。<br />
             <b style={{ color:'#ff8844' }}>奥のエリアで引いたレイドほど強く、報酬も豪華</b>になります。
           </div>

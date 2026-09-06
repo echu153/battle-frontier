@@ -145,7 +145,8 @@ grant execute on function public.v2_friend_remove(bigint) to authenticated;
 -- ---- 帯ごとの強さ（src/v2/lib/raid.js の RAID_HP / raidPowerOfTier の写し）----
 -- ⚠**勘で書き換えない。** node tools/v2-raid-tune.mjs を回して出た表を貼ること。
 --   power … そのエリアのボスの戦闘力 × 2（守りのステを作るもとになる数字）
---   hp    … その帯の標準的な編成が1時間フル（360回）殴ってちょうど削り切れる量
+--   hp    … その帯の**作り込んだ**編成が、想定人数（5人）で1時間フル（360回×5）
+--            殴ってちょうど削り切れる量。★ソロだと1時間で2割ほどしか削れない
 create table if not exists public.v2_raid_tiers (
   tier  int    primary key,
   power int    not null,
@@ -158,14 +159,14 @@ revoke all on table public.v2_raid_tiers from anon;
 grant select on table public.v2_raid_tiers to authenticated;
 
 insert into public.v2_raid_tiers (tier, power, hp) values
-  (1,   2572,    370000),
-  (2,   3720,    950000),
-  (3,   5588,   1900000),
-  (4,   9212,   2500000),
-  (5,  26288,  33000000),
-  (6,  48824,  61000000),
-  (7,  69538,  86000000),
-  (8,  90494, 110000000)
+  (1,   2572,    1900000),
+  (2,   3720,    4800000),
+  (3,   5588,   15000000),
+  (4,   9212,   19000000),
+  (5,  26288,  260000000),
+  (6,  48824,  580000000),
+  (7,  69538,  930000000),
+  (8,  90494, 1500000000)
 on conflict (tier) do update set power = excluded.power, hp = excluded.hp;
 
 create table if not exists public.v2_raids (
@@ -385,7 +386,7 @@ $$;
 
 -- ---- 殴る ----
 -- ⚠与ダメはクライアントの申告。サーバーが見張るのは3つ：
---     ・1発の上限は **最大HPの1/100**（実測の1発は約1/360なので3倍の余裕）
+--     ・1発の上限は **最大HPの1/10**（実測の1発は約1/1800）
 --     ・**10秒に1回まで**（出撃と同じクールタイム。時計のずれを見て9秒で判定する）
 --     ・期限を過ぎたら受け付けない
 create or replace function public.v2_raid_attack(p_raid_id bigint, p_damage bigint)
@@ -407,7 +408,7 @@ begin
   if v_r.killed_at is not null then return jsonb_build_object('ok', false, 'error', 'もう討伐されています'); end if;
   if v_r.ends_at <= now() then return jsonb_build_object('ok', false, 'error', '時間切れです'); end if;
 
-  v_dmg := greatest(0, least(coalesce(p_damage, 0), v_r.hp_max / 100));
+  v_dmg := greatest(0, least(coalesce(p_damage, 0), v_r.hp_max / 10));
   v_dmg := least(v_dmg, v_r.hp_left);
 
   update public.v2_raids
