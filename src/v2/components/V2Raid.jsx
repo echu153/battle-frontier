@@ -12,6 +12,7 @@ import { SORTIE_CD } from '../lib/sortie.js'
 import {
   RAID_BOSSES, raidBossOf, RAID_TURNS, RAID_MAX_MEMBERS, CALL_MAX, ONLINE_MINUTES,
   secondsLeft, timeText, shareOf, toRaidFighter, rampText, raidHpOfTier,
+  RAID_BOSS_RATE, RAID_DAILY_MAX, ROTATE_HOURS, raidBossAt, nextRotateAt, rotateSchedule,
   rewardTierOf, mvpIdOf, matRangeText, rarityTableOf, fusionChanceOf,
   BOX_LABEL, BOX_COLOR, BOX_MAT_COUNT, BOX_RARITY, BOX_FUSION_PCT,
   TIER_LABEL, TIER_COLOR, tierMark,
@@ -36,6 +37,11 @@ import { pushWeaponRecord } from './weaponRecord.js'
 // ============================================================
 
 const barColor = (pct) => (pct > 50 ? '#44ff88' : pct > 20 ? '#ffcc00' : '#ff4444')
+// 日本時間の「M/D H時」。ローテの予定を出すのに使う
+const jstText = (d) => {
+  const j = new Date(new Date(d).getTime() + 9 * 3600000)
+  return `${j.getUTCMonth() + 1}/${j.getUTCDate()} ${j.getUTCHours()}時`
+}
 
 // 参加者の1行。★いまの貢献度だと**どのティアの報酬になるか**をその場で出す
 //   （主催者とMVPはA確定。他の人は削るほど上がる＝殴る動機が見える）
@@ -212,7 +218,7 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, isAd
   //   出現率は0.4%なので、これが無いと動作確認のたびに何百回も出撃することになる
   const devSpawn = async (key, area) => {
     setBusy(true)
-    const { data, error } = await supabase.rpc('v2_debug_spawn_raid', { p_boss_key: key, p_area: area })
+    const { data, error } = await supabase.rpc('v2_debug_spawn_raid', { p_area: area, p_boss_key: key })
     setBusy(false)
     if (error || !data?.ok) { setMsg(`⚠ ${error?.message || data?.error}`); return }
     setLogs([])
@@ -439,23 +445,48 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, isAd
         <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
           <div style={{ color: TEXT.body, fontSize:'12px', marginBottom:'6px' }}>いまレイドは出ていません</div>
           <div style={{ color: TEXT.sub, fontSize:'11px', lineHeight:1.8 }}>
-            出撃していると、まれにレイドボスが現れます。<br />
+            <b style={{ color:'#ffcc00' }}>エリアボスを討伐したとき</b>に、{RAID_BOSS_RATE}%でレイドボスが現れます
+            （<b>1日{RAID_DAILY_MAX}回</b>まで・日本時間の5時に戻ります）。<br />
             現れたら1時間だけ挑戦でき、救援信号を出して仲間を呼べます。<br />
             主催者といちばん削った人は、貢献度とは別に{BOX_LABEL.host}・{BOX_LABEL.mvp}
             （素材{BOX_MAT_COUNT}個・激レア{BOX_RARITY.ultra}%・合成素材{BOX_FUSION_PCT}%）をもらえます。<br />
             HPは<b style={{ color:'#ff8844' }}>複数人がかりで1時間</b>ぶんあるので、ひとりでは削り切れません。<br />
-            倒すとルーン素材と、確率で武器に合成できる素材が手に入ります。<br />
             <b style={{ color:'#ff8844' }}>奥のエリアで引いたレイドほど強く、報酬も豪華</b>になります。
           </div>
+
+          {/* ★今日の残り回数。数えているのはサーバー（v2_raid_spawn） */}
+          {state?.daily_max != null && (
+            <div style={{ fontSize:'11px', marginTop:'8px',
+              color: (state.used || 0) >= state.daily_max ? '#ff8844' : '#44ff88' }}>
+              今日の残り {Math.max(0, state.daily_max - (state.used || 0))} / {state.daily_max} 回
+            </div>
+          )}
+
+          {/* ★出るボスは時間帯で決まる（2時間ごとのローテ・誰が引いても同じ顔） */}
           <div style={{ borderTop:'1px solid #002244', marginTop:'8px', paddingTop:'8px' }}>
-            <div style={{ color: TEXT.label, fontSize:'10px', marginBottom:'4px' }}>現れるボス</div>
-            <div style={{ display:'flex', gap:'10px', flexWrap:'wrap' }}>
-              {RAID_BOSSES.map(b => (
-                <div key={b.key} style={{ textAlign:'center', width:'80px' }}>
-                  {bossFace(b, 56)}
-                  <div style={{ color: b.color, fontSize:'9px', marginTop:'2px' }}>{b.name}</div>
-                  <div style={{ color: TEXT.label, fontSize:'9px' }}>{fusionOfBoss(b.name)?.name}</div>
+            <div style={{ color: TEXT.label, fontSize:'10px', marginBottom:'4px' }}>
+              いまの時間帯に出るボス（{ROTATE_HOURS}時間ごとに入れ替わります）
+            </div>
+            <div style={{ display:'flex', gap:'10px', alignItems:'center', marginBottom:'8px' }}>
+              {bossFace(raidBossAt(new Date(now)), 56)}
+              <div>
+                <div style={{ color: raidBossAt(new Date(now)).color, fontSize:'12px' }}>
+                  {raidBossAt(new Date(now)).name}
                 </div>
+                <div style={{ color: TEXT.label, fontSize:'10px' }}>
+                  {fusionOfBoss(raidBossAt(new Date(now)).name)?.name}
+                </div>
+                <div style={{ color: TEXT.sub, fontSize:'10px' }}>
+                  次の入れ替えは {jstText(nextRotateAt(new Date(now)))}
+                </div>
+              </div>
+            </div>
+            <div style={{ color: TEXT.label, fontSize:'10px', marginBottom:'2px' }}>このあとの順番</div>
+            <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+              {rotateSchedule(new Date(now), 5).slice(1).map(s => (
+                <span key={s.at.toISOString()} style={{ fontSize:'10px', color: TEXT.sub }}>
+                  {jstText(s.at)} <span style={{ color: s.boss.color }}>{s.boss.name}</span>
+                </span>
               ))}
             </div>
           </div>

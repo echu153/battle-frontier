@@ -14,7 +14,7 @@ import { toFighter as playerFighter, equippedRunes, runeAbilities } from '../lib
 import { dropRateMultOf } from '../lib/enchant.js'
 import { guardDropMultOf, GUARD_DROP_MULT } from '../lib/arena.js'
 import { RARITY_COLOR } from '../lib/material.js'
-import { rollRaid, pickRaidBoss } from '../lib/raid.js'
+import { rollRaid, raidBossOf } from '../lib/raid.js'
 import { fusionOfEnemy } from '../lib/fusion.js'
 import { PROTECT_NAME } from '../lib/smith.js'
 import { RANK_COLOR, dropLine, LOG_PLAIN } from './v2ui.js'
@@ -185,20 +185,18 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, dex, pet, gu
         }
       }
 
-      // ★レイドボス（docs/v2-raid-design.md §2）。出撃1戦闘につき0.4%・ピティは無い。
-      //   ボスもレアモンスターもこの抽選には関係しない（別枠で引く）。
+      // ★レイドボス（docs/v2-raid-design.md §2）。2026-09-06 ユーザー指示で
+      //   **エリアボスを討伐したときだけ**引く（確率20%・1人1日2回まで）。
       //   ⚠**清算が通ったあとに引く**＝弾かれた出撃でレイドが立たないように。
-      //   立てられるかどうか（3時間の間隔・参加中かどうか）はサーバーが決めるので、
-      //   ここで断られても何も出さずに黙って流す。
-      if (rollRaid()) {
-        const rb = pickRaidBoss()
-        // ★強さと報酬は**サーバーがエリアの難易度帯から決める**。
-        //   こちらが送れるのは「どのボスを引いたか」と「どのエリアで引いたか」だけ
-        const { data: rd } = await supabase.rpc('v2_raid_spawn', {
-          p_boss_key: rb.key, p_area: area.id,
-        })
+      //   ⚠**どのボスが出るか・今日あと何回出会えるかはサーバーが決める**。
+      //     こちらが送るのは「どのエリアで引いたか」だけ。断られたら黙って流す
+      //     （1日の上限に当たっただけなので、出撃の邪魔をしない）。
+      if (enc.isBoss && win && rollRaid()) {
+        const { data: rd } = await supabase.rpc('v2_raid_spawn', { p_area: area.id })
         if (rd?.ok) {
-          setLogs(l => [...l, { text:`☠ レイドボス出現！ ${rb.name}が現れた！`, color: rb.color },
+          const rb = raidBossOf(rd.raid?.boss_key)
+          setLogs(l => [...l,
+            { text:`☠ レイドボス出現！ ${rb?.name || 'レイドボス'}が現れた！`, color: rb?.color || '#ff6644' },
             { text:'「レイド」から挑戦できる（1時間・救援信号を出せる）', color:'#ffcc00' }])
           setAuto(false)   // ★オート出撃は止める（気づかずに時間を溶かさないように）
           onRaid?.()

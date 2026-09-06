@@ -5,8 +5,9 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
-  RAID_BOSSES, RAID_BOSS_BY_KEY, raidBossOf, RAID_RATE, rollRaid,
-  RAID_MINUTES, RAID_COOLDOWN_HOURS, RAID_MAX_MEMBERS, RAID_TURNS, RAMP_ATK, RAMP_DEF, rampAt,
+  RAID_BOSSES, RAID_BOSS_BY_KEY, raidBossOf, rollRaid,
+  RAID_MINUTES, RAID_MAX_MEMBERS, RAID_TURNS, RAMP_ATK, RAMP_DEF, rampAt,
+  RAID_BOSS_RATE, RAID_DAILY_MAX, ROTATE_HOURS, raidSlotAt, raidBossAt, nextRotateAt, rotateSchedule,
   RAID_POWER_MULT, RAID_ATK_MULT, RAID_HP, raidPowerOfTier, raidAtkPowerOfTier, raidHpOfTier,
   bossPowerOfTier, raidPowerOfArea, raidHpOfArea, toRaidFighter, bossBaseStats, atkStatsOf,
   shareOf, tierOfShare, rewardTierOf, mvpIdOf, REWARD_TIERS, TIER_SHARE,
@@ -16,7 +17,7 @@ import {
   fusionChanceOf, FUSION_PCT,
   BOX_KINDS, BOX_MAT_COUNT, BOX_RARITY, BOX_FUSION_PCT, boxRarityTable,
   RAID_EXP_MIN, RAID_EXP_MAX, raidExpOf,
-  CALL_KINDS, CALL_MAX, ONLINE_MINUTES, pickRaidBoss, TIERS,
+  CALL_KINDS, CALL_MAX, ONLINE_MINUTES, TIERS,
   secondsLeft, isOver, timeText,
 } from './raid.js'
 import {
@@ -42,6 +43,8 @@ const SQL_MOVE = sqlOf('ability_move')
 const SQL_FRIENDS = sqlOf('friends')
 // v2_raid_tiers の1行 (tier, power, hp, ultra_pct) を拾う
 const ROW_RE = /\(\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+)\)/g
+// v2_raid_bosses の1行 (idx, 'key') を拾う
+const BOSS_ROW_RE = /\(\s*(\d+),\s*'([^']+)'\)/g
 const rngOf = (s0) => { let s = s0 >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }
 
 // ===== 5体 =====
@@ -75,20 +78,75 @@ test('レイドボスの名前は出撃の敵と重複しない（素材の引�
   for (const b of RAID_BOSSES) assert.ok(!enemies.has(b.name), `${b.name} が出撃の敵と同じ名前`)
 })
 
-test('raidBossOf は key で引ける／出るボスは5体から均等', () => {
+test('raidBossOf は key で引ける', () => {
   assert.equal(raidBossOf('enma')?.name, '閻魔')
   assert.equal(raidBossOf('ない'), null)
   assert.equal(Object.keys(RAID_BOSS_BY_KEY).length, 5)
-  const seen = new Set()
-  for (let i = 0; i < 5; i++) seen.add(pickRaidBoss(() => i / 5).key)
-  assert.equal(seen.size, 5)
 })
 
-// ===== 出現 =====
-test('遭遇率は0.4%（ピティは無い＝いつでも同じ確率）', () => {
-  assert.equal(RAID_RATE, 0.4)
-  assert.equal(rollRaid(() => 0.003), true)
-  assert.equal(rollRaid(() => 0.005), false)
+// ===== 出現（2026-09-06 ユーザー指示）=====
+test('★エリアボスを討伐したときだけ20%で引く', () => {
+  assert.equal(RAID_BOSS_RATE, 20)
+  assert.equal(rollRaid(() => 0.19), true)
+  assert.equal(rollRaid(() => 0.21), false)
+  // ★引く場所も固定する（ふつうの敵やレアモンスターでは引かない）
+  const src = readFileSync(new URL('../components/V2Sortie.jsx', import.meta.url), 'utf8')
+  assert.ok(src.includes('if (enc.isBoss && win && rollRaid())'), 'ボス討伐以外でも引いている')
+})
+
+test('★1人1日2回まで（数えるのはサーバー）', () => {
+  assert.equal(RAID_DAILY_MAX, 2)
+  assert.ok(SQL.includes("(v_c->>'daily_max')::int"), '1日の上限がSQLに無い')
+  // 日本時間の5時で切り替わる（宝樹・デイリーと同じ区切り）
+  assert.ok(SQL.includes("at time zone 'Asia/Tokyo') - interval '5 hours'"), '日付の区切りが5時になっていない')
+  // クライアントは回数を送らない（サーバーが数える）
+  const src = readFileSync(new URL('../components/V2Sortie.jsx', import.meta.url), 'utf8')
+  assert.ok(!src.includes('p_used'), 'クライアントが回数を送っている')
+})
+
+// ===== 出るボスは時間帯で決まる（2時間ごとのローテ） =====
+test('★2時間ごとに5体がローテする（抽選ではない）', () => {
+  assert.equal(ROTATE_HOURS, 2)
+  const t0 = new Date('2026-09-06T13:00:00Z')   // JST 22:00
+  const first = raidBossAt(t0)
+  // 2時間ごとに次の顔へ進み、5体でひと回り（10時間）して戻る
+  for (let i = 1; i < RAID_BOSSES.length; i++) {
+    const t = new Date(t0.getTime() + i * ROTATE_HOURS * 3600000)
+    assert.notEqual(raidBossAt(t).key, first.key, `${i}枠目が同じ顔`)
+  }
+  const round = new Date(t0.getTime() + RAID_BOSSES.length * ROTATE_HOURS * 3600000)
+  assert.equal(raidBossAt(round).key, first.key, 'ひと回りして戻っていない')
+  // 同じ2時間の中ではずっと同じ顔（＝誰が引いても同じ）
+  assert.equal(raidBossAt(new Date(t0.getTime() + 1)).key, first.key)
+  assert.equal(raidBossAt(new Date(t0.getTime() + 7199000)).key, first.key)
+  assert.notEqual(raidBossAt(new Date(t0.getTime() + 7200000)).key, first.key)
+})
+
+test('次の入れ替え時刻と、このあとの順番が出せる', () => {
+  const t0 = new Date('2026-09-06T13:30:00Z')
+  const next = nextRotateAt(t0)
+  assert.equal(next.getTime(), new Date('2026-09-06T15:00:00Z').getTime())
+  assert.equal(raidSlotAt(next) - raidSlotAt(t0), 1)
+  const sched = rotateSchedule(t0, 5)
+  assert.equal(sched.length, 5)
+  assert.equal(new Set(sched.map(s => s.boss.key)).size, 5, '5枠に同じ顔が混ざっている')
+  assert.equal(sched[0].boss.key, raidBossAt(t0).key)
+})
+
+test('★SQL も同じ規則でボスを選ぶ（クライアントの言い値は使わない）', () => {
+  assert.ok(SQL.includes('create or replace function public.v2_raid_boss_now()'), 'ボスを選ぶ関数がSQLに無い')
+  assert.ok(SQL.includes("interval '9 hours'"), 'JSTに直していない')
+  assert.ok(SQL.includes("->>'rotate_hours')::int"), 'ローテの間隔が定数から来ていない')
+  // 名簿の並びが raid.js と同じ
+  const seed = SQL.slice(SQL.indexOf('insert into public.v2_raid_bosses'))
+  const rows = [...seed.slice(0, seed.indexOf('on conflict')).matchAll(BOSS_ROW_RE)]
+  assert.equal(rows.length, RAID_BOSSES.length, '行数が違う')
+  for (const [, idx, key] of rows) {
+    assert.equal(key, RAID_BOSSES[Number(idx)].key, `${idx}番目の並びが違う`)
+  }
+  // 出撃からは**ボスを送らない**（エリアだけ）
+  const src = readFileSync(new URL('../components/V2Sortie.jsx', import.meta.url), 'utf8')
+  assert.ok(src.includes("supabase.rpc('v2_raid_spawn', { p_area: area.id })"), '出撃がボスを送っている')
 })
 
 // ===== 強さ（エリアの難易度帯で決まる） =====
@@ -513,10 +571,11 @@ test('SQL の v2_raid_const が raid.js と同じ数字になっている', () =
     assert.ok(m, `${k} がSQLに無い`)
     return Number(m[1])
   }
-  assert.equal(num('rate'), RAID_RATE)
   assert.equal(num('minutes'), RAID_MINUTES)
-  assert.equal(num('cooldown_hours'), RAID_COOLDOWN_HOURS)
   assert.equal(num('max_members'), RAID_MAX_MEMBERS)
+  assert.equal(num('boss_rate'), RAID_BOSS_RATE)
+  assert.equal(num('daily_max'), RAID_DAILY_MAX)
+  assert.equal(num('rotate_hours'), ROTATE_HOURS)
   assert.equal(num('turns'), RAID_TURNS)
   assert.equal(num('ramp_atk'), RAMP_ATK)
   assert.equal(num('ramp_def'), RAMP_DEF)
@@ -614,8 +673,8 @@ test('SQL の合成素材の名簿が fusion.js と一致している', () => {
 })
 
 test('★強さも報酬もサーバーが決める（クライアントは戦闘力を送らない）', () => {
-  assert.ok(SQL.includes('create or replace function public.v2_raid_spawn(p_boss_key text, p_area int)'),
-    'v2_raid_spawn が戦闘力を受け取る形のまま')
+  assert.ok(SQL.includes('create or replace function public.v2_raid_spawn(p_area int, p_boss_key text default null)'),
+    'v2_raid_spawn の引数が変わっている')
   assert.ok(!SQL.includes('p_power'), 'クライアントから戦闘力を受け取る引数が残っている')
   const src = readFileSync(new URL('../components/V2Sortie.jsx', import.meta.url), 'utf8')
   assert.ok(!src.includes('p_power'), '出撃の画面が戦闘力を送っている')

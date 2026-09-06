@@ -74,18 +74,41 @@ export const RAID_BOSS_BY_KEY = Object.fromEntries(RAID_BOSSES.map(b => [b.key, 
 export const RAID_BOSS_BY_NAME = Object.fromEntries(RAID_BOSSES.map(b => [b.name, b]))
 export const raidBossOf = (key) => RAID_BOSS_BY_KEY[key] || null
 
-// ===== 出現 =====
-// ★出撃1戦闘につき 0.4%。ピティ（積み上げ）は無い＝いつでも同じ確率。
-//   レアモンスター（0.5%・sortie.js）やエリアボス（ピティ）とは**別の抽選**。
-export const RAID_RATE = 0.4
-export const rollRaid = (rng = Math.random) => rng() * 100 < RAID_RATE
-// 出たあと挑戦できる時間（分）と、終わってから次が出るまでの間隔（時間）
+// ===== 出現（2026-09-06 ユーザー指示で決め直した）=====
+// ★**エリアボスを討伐したときだけ**引く。ふつうの敵やレアモンスターでは出ない。
+//   ＝レイドは「そのエリアを踏破できる人」への追加コンテンツという位置づけになる。
+// ★**1人1日2回まで**（日本時間の5時で切り替わる。宝樹・デイリーと同じ区切り）。
+//   ⚠回数を数えるのは**サーバー**（v2_raid_spawn）。画面の表示は読み替えでしかない。
+export const RAID_BOSS_RATE = 20
+export const rollRaid = (rng = Math.random) => rng() * 100 < RAID_BOSS_RATE
+export const RAID_DAILY_MAX = 2
+// 出たあと挑戦できる時間（分）
 export const RAID_MINUTES = 60
-export const RAID_COOLDOWN_HOURS = 3
 // 1つのレイドに入れる人数（主催者を含む）
 export const RAID_MAX_MEMBERS = 20
-// どのボスが出るかは5体から均等（強さはエリアで決まるので、どれが出ても手応えは同じ）
-export const pickRaidBoss = (rng = Math.random) => RAID_BOSSES[Math.floor(rng() * RAID_BOSSES.length)]
+
+// ===== どのボスが出るか（2時間ごとのローテ）=====
+// ★**時間帯で決まる**（2026-09-06 ユーザー指示）。抽選ではないので、
+//   同じ時間なら**世界中の誰が引いても同じボス**が出る。
+//   5体を2時間ずつ回すので、ひと回りに10時間かかる（毎日同じ時刻に同じ顔にならない）。
+// ⚠**選ぶのはサーバー**（v2_raid_spawn が now() から決める）。
+//   ここは画面に「いま出るボス」を出すためのもので、送っても採用されない。
+export const ROTATE_HOURS = 2
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000
+// 1970年からのJSTでの通算「2時間」数。出撃の部位ローテ（sortie.js）と同じ作り
+export const raidSlotAt = (at = new Date()) =>
+  Math.floor((new Date(at).getTime() + JST_OFFSET_MS) / (ROTATE_HOURS * 3600000))
+export const raidBossAt = (at = new Date()) =>
+  RAID_BOSSES[((raidSlotAt(at) % RAID_BOSSES.length) + RAID_BOSSES.length) % RAID_BOSSES.length]
+// 次に入れ替わる時刻
+export const nextRotateAt = (at = new Date()) =>
+  new Date((raidSlotAt(at) + 1) * ROTATE_HOURS * 3600000 - JST_OFFSET_MS)
+// これから n 回ぶんの予定（画面に出す）
+export const rotateSchedule = (at = new Date(), n = 5) =>
+  Array.from({ length: n }, (_, i) => {
+    const t = new Date(new Date(at).getTime() + i * ROTATE_HOURS * 3600000)
+    return { at: new Date(raidSlotAt(t) * ROTATE_HOURS * 3600000 - JST_OFFSET_MS), boss: raidBossAt(t) }
+  })
 
 // ===== 強さ（エリアの難易度帯で決まる・2026-09-06 ユーザー指示）=====
 // ★**そのエリアのボスの戦闘力 × 2**。エリアボスの数字は tools/v2-boss-tune.mjs が

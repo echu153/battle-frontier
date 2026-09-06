@@ -21,7 +21,11 @@
 -- 出撃で 0.4% を引いた人が主催者になり、レイドが1件立つ。
 -- 挑戦できるのは1時間。終わってから3時間は次が出ない。参加は最大20人。
 --
--- ★強さは**出撃していたエリアの難易度帯だけで決まる**（2026-09-06 ユーザー指示）。
+-- ★出るのは**エリアボスを討伐したときだけ**（2026-09-06 ユーザー指示）。
+--   確率は20%で、**1人1日2回まで**（日本時間の5時で切り替わる）。
+-- ★**どのボスが出るかは時間帯で決まる**（2時間ごとのローテ）。抽選ではないので、
+--   同じ時間なら誰が引いても同じ顔が出る。**選ぶのはこのサーバー側**。
+-- ★強さは**出撃していたエリアの難易度帯だけで決まる**。
 --   挑む人の戦闘力では変わらない。奥のエリアで引くほど強く、報酬も豪華になる。
 -- ★1回の挑戦は30ターン。ボスは**ターンが進むほど火力と耐久が上がる**（たかぶり）。
 --   この計算はクライアント（battle.js）が回すので、サーバーは結果だけを受け取る。
@@ -33,6 +37,7 @@
 --   （このファイルを1度も流していなければ、下の3行は何もしない）
 drop function if exists public.v2_raid_reward_tier(numeric, boolean, boolean);
 drop function if exists public.v2_raid_spawn(text, int, int);
+drop function if exists public.v2_raid_spawn(text, int);
 drop function if exists public.v2_debug_spawn_raid(text, int, int);
 
 -- ---- 帯ごとの強さ（src/v2/lib/raid.js の RAID_HP / raidPowerOfTier の写し）----
@@ -120,7 +125,8 @@ revoke all on table public.v2_raid_calls from authenticated;
 -- ---- 定数（src/v2/lib/raid.js の写し。片方だけ直すと raid.test.js が落ちる）----
 create or replace function public.v2_raid_const() returns jsonb
   language sql immutable as $$ select jsonb_build_object(
-    'rate', 0.4, 'minutes', 60, 'cooldown_hours', 3, 'max_members', 20,
+    'boss_rate', 20, 'daily_max', 2, 'rotate_hours', 2,
+    'minutes', 60, 'max_members', 20,
     'turns', 30, 'ramp_atk', 8, 'ramp_def', 6,
     'power_mult', 2, 'atk_mult', 0.06,
     'call_max', 50, 'online_minutes', 5,
@@ -129,6 +135,35 @@ create or replace function public.v2_raid_const() returns jsonb
     'exp_min', 8, 'exp_max', 11,
     'box_mat', 3, 'box_ultra', 10, 'box_rare', 30, 'box_fusion_pct', 3
   ) $$;
+
+-- ---- 出るボスの順番（2時間ごとのローテ・src/v2/lib/raid.js の RAID_BOSSES の並び）----
+-- ★**時間帯で決まる**ので抽選しない。同じ時間なら誰が引いても同じ顔が出る。
+create table if not exists public.v2_raid_bosses (
+  idx int  primary key,   -- 0始まり。raid.js の RAID_BOSSES の並びと同じ
+  key text not null unique
+);
+alter table public.v2_raid_bosses enable row level security;
+drop policy if exists "v2_raid_bosses_read" on public.v2_raid_bosses;
+create policy "v2_raid_bosses_read" on public.v2_raid_bosses for select to authenticated using (true);
+revoke all on table public.v2_raid_bosses from anon;
+grant select on table public.v2_raid_bosses to authenticated;
+
+insert into public.v2_raid_bosses (idx, key) values
+  (0, 'varuzenoku'),
+  (1, 'amaza'),
+  (2, 'zerugiasu'),
+  (3, 'enma'),
+  (4, 'guraudiosu')
+on conflict (idx) do update set key = excluded.key;
+
+-- いまの時間帯に出るボス。JSTの通算「2時間」数をボスの数で割った余り
+create or replace function public.v2_raid_boss_now()
+returns text language sql stable set search_path = public as $$
+  select key from public.v2_raid_bosses
+   where idx = (floor(extract(epoch from now() + interval '9 hours')
+                      / (((public.v2_raid_const()->>'rotate_hours')::int) * 3600))::bigint
+                % (select count(*) from public.v2_raid_bosses))::int
+$$;
 
 -- ---- 貢献度のティア（★share だけで決まる）----
 -- ★主催者とMVPは**別枠の箱**でもらうので、ここでは優遇しない
@@ -168,7 +203,9 @@ revoke all on function public.v2_raid_json(public.v2_raids) from authenticated;
 -- ⚠**出たかどうかの抽選はクライアント**（出撃・ドロップと同じ作り）。
 --   ★**強さはサーバーが決める**（エリアの帯 → v2_raid_tiers）。クライアントは
 --     どのエリアで引いたかしか送れないので、強さも報酬も盛れない。
-create or replace function public.v2_raid_spawn(p_boss_key text, p_area int)
+-- ★p_boss_key は**開発用の指定だけ**に使う（null なら時間帯どおりのボスが出る）。
+--   ふつうの出撃から呼ぶときは渡さない＝**誰が引いても同じ顔**になる。
+create or replace function public.v2_raid_spawn(p_area int, p_boss_key text default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_me uuid := auth.uid();
@@ -176,10 +213,17 @@ declare
   v_tier int;
   v_t public.v2_raid_tiers;
   v_row public.v2_raids;
+  v_boss text;
+  v_used int;
 begin
   if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発中の機能です'); end if;
   if v_me is null then return jsonb_build_object('ok', false, 'error', 'ログインしてください'); end if;
-  if p_boss_key is null or p_boss_key = '' then return jsonb_build_object('ok', false, 'error', 'ボスがありません'); end if;
+
+  -- ★出るボスは**時間帯で決まる**（2時間ごとのローテ）。開発用に指定されたときだけそれを使う
+  v_boss := case when p_boss_key is null or p_boss_key = '' then public.v2_raid_boss_now() else p_boss_key end;
+  if not exists (select 1 from public.v2_raid_bosses where key = v_boss) then
+    return jsonb_build_object('ok', false, 'error', 'そのボスはいません');
+  end if;
 
   select tier into v_tier from public.v2_areas where id = p_area;
   if v_tier is null then return jsonb_build_object('ok', false, 'error', 'そのエリアはありません'); end if;
@@ -202,31 +246,40 @@ begin
     return jsonb_build_object('ok', false, 'error', 'すでにレイドに参加しています');
   end if;
 
-  -- 終わってから3時間はあける
-  if exists (
-    select 1 from public.v2_raids r
-     where r.host_id = v_me
-       and coalesce(r.killed_at, r.ends_at) > now() - ((v_c->>'cooldown_hours')::int * interval '1 hour')
-  ) then
-    return jsonb_build_object('ok', false, 'error', 'まだ次のレイドは現れません');
+  -- ★1日2回まで（日本時間の5時で切り替わる。宝樹・デイリーと同じ区切り）
+  select count(*) into v_used from public.v2_raids r
+   where r.host_id = v_me
+     and ((r.started_at at time zone 'Asia/Tokyo') - interval '5 hours')::date
+       = ((now()         at time zone 'Asia/Tokyo') - interval '5 hours')::date;
+  if v_used >= (v_c->>'daily_max')::int then
+    return jsonb_build_object('ok', false, 'error', '今日はもうレイドに出会えません', 'used', v_used);
   end if;
 
   insert into public.v2_raids (host_id, boss_key, area_id, tier, power, hp_max, hp_left, ends_at)
-  values (v_me, p_boss_key, p_area, v_tier, v_t.power, v_t.hp, v_t.hp,
+  values (v_me, v_boss, p_area, v_tier, v_t.power, v_t.hp, v_t.hp,
           now() + ((v_c->>'minutes')::int * interval '1 minute'))
   returning * into v_row;
 
   insert into public.v2_raid_members (raid_id, player_id, is_host) values (v_row.id, v_me, true);
-  return jsonb_build_object('ok', true, 'raid', public.v2_raid_json(v_row));
+  return jsonb_build_object('ok', true, 'raid', public.v2_raid_json(v_row), 'used', v_used + 1);
 end;
 $$;
 
 -- ---- いまの状況（挑戦中／招かれている／未受取）----
 create or replace function public.v2_raid_list()
 returns jsonb language plpgsql security definer set search_path = public as $$
-declare v_me uuid := auth.uid(); v_active jsonb; v_invites jsonb; v_unclaimed jsonb;
+declare
+  v_me uuid := auth.uid();
+  v_c jsonb := public.v2_raid_const();
+  v_active jsonb; v_invites jsonb; v_unclaimed jsonb; v_used int;
 begin
   if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発中の機能です'); end if;
+
+  -- ★今日もう何回出会ったか（日本時間の5時で切り替わる）
+  select count(*) into v_used from public.v2_raids r
+   where r.host_id = v_me
+     and ((r.started_at at time zone 'Asia/Tokyo') - interval '5 hours')::date
+       = ((now()         at time zone 'Asia/Tokyo') - interval '5 hours')::date;
 
   select public.v2_raid_json(r) into v_active
     from public.v2_raids r join public.v2_raid_members m on m.raid_id = r.id
@@ -247,7 +300,10 @@ begin
 
   return jsonb_build_object('ok', true, 'active', v_active,
                             'invites', coalesce(v_invites, '[]'::jsonb),
-                            'unclaimed', coalesce(v_unclaimed, '[]'::jsonb));
+                            'unclaimed', coalesce(v_unclaimed, '[]'::jsonb),
+                            -- 今日の残り回数と、いまの時間帯に出るボス（画面に出す）
+                            'used', v_used, 'daily_max', (v_c->>'daily_max')::int,
+                            'boss_now', public.v2_raid_boss_now());
 end;
 $$;
 
@@ -382,8 +438,8 @@ begin
 end;
 $$;
 
-revoke all on function public.v2_raid_spawn(text, int) from public;
-revoke all on function public.v2_raid_spawn(text, int) from anon;
+revoke all on function public.v2_raid_spawn(int, text) from public;
+revoke all on function public.v2_raid_spawn(int, text) from anon;
 revoke all on function public.v2_raid_list() from public;
 revoke all on function public.v2_raid_list() from anon;
 revoke all on function public.v2_raid_join(bigint) from public;
@@ -394,7 +450,7 @@ revoke all on function public.v2_raid_call(bigint, uuid[], text) from public;
 revoke all on function public.v2_raid_call(bigint, uuid[], text) from anon;
 revoke all on function public.v2_raid_online() from public;
 revoke all on function public.v2_raid_online() from anon;
-grant execute on function public.v2_raid_spawn(text, int) to authenticated;
+grant execute on function public.v2_raid_spawn(int, text) to authenticated;
 grant execute on function public.v2_raid_list() to authenticated;
 grant execute on function public.v2_raid_join(bigint) to authenticated;
 grant execute on function public.v2_raid_attack(bigint, bigint) to authenticated;
@@ -556,7 +612,7 @@ begin
          killed_at  = killed_at  - interval '4 hours'
    where host_id = v_me
      and coalesce(killed_at, ends_at) > now() - interval '4 hours';
-  return public.v2_raid_spawn(p_boss_key, p_area);
+  return public.v2_raid_spawn(p_area, p_boss_key);
 end;
 $$;
 revoke all on function public.v2_debug_spawn_raid(text, int) from public;
