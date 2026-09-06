@@ -168,6 +168,12 @@ export const liveStats = (side, acting = false) => {
     add('agi', side.evo.onDodge.agi * Math.min(EVO_STACK_MAX, side.evoStacks.dodge))
   if (side.evo?.onHurt.str && side.evoStacks?.hurt)
     add('str', side.evo.onHurt.str * Math.min(EVO_STACK_MAX, side.evoStacks.hurt))
+  // 合成の「ターンが経つごとにステータス+%」（重複の上限つき）。
+  // ★side.turn は runBattle がターンの頭で入れる（1ターン目は0）
+  for (const t of side.en.perTurnStats || []) {
+    const n = Math.min(t.max || 0, side.turn || 0)
+    if (n > 0) add(t.stat, t.pct * n)
+  }
   // ★たかぶり（ramp）＝**ターンが進むほど火力と耐久が上がる**。
   //   いまのところレイドボスだけが持つ（fighter.ramp を渡したときにしか効かない＝
   //   ふつうの戦闘には一切影響しない）。turn は runBattle がターンの頭で入れる。
@@ -233,6 +239,9 @@ export const createSide = (fighter, band = null) => {
     healMult: bonus?.healMult ?? 1,   // 異端審問官は自身の回復量0.8倍
     offClassCut: bonus?.offClassCut ?? 0, // 賢者は他職スキルのペナルティが半分
     ptr: 0,
+    // 経過したターン数（runBattle がターンの頭で入れる）。1ターン目は0。
+    // ★たかぶりと「ターンが経つごとにステータス+%」がこれを見る
+    turn: 0,
     // たかぶり。{ atk, def } を渡すと**1ターンごとにその%ずつ**STR/INTとVITが上がる。
     // ★渡さなければ null ＝ふつうの戦闘は今までどおり
     ramp: fighter.ramp ? { atk: fighter.ramp.atk || 0, def: fighter.ramp.def || 0, turn: 0 } : null,
@@ -813,6 +822,8 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     if (skill.kind === 'phys' && me.en.drainPhysPct > 0 && dmg > 0) {
       drained += Math.max(1, Math.floor(dmg * me.en.drainPhysPct / 100))
     }
+    // 合成「閻魔」：**種別を問わず**与えたダメージの一部を回復
+    if (me.en.drainPct > 0 && dmg > 0) drained += Math.max(1, Math.floor(dmg * me.en.drainPct / 100))
     if (drained > 0) {
       drained = Math.min(drained, drainCapOf(me, crit))
       me.hp = Math.min(me.base.hp, me.hp + drained)
@@ -960,6 +971,9 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
   if (me.kind === 'phys' && me.en.drainPhysPct > 0 && dmg > 0) {
     me.hp = Math.min(me.base.hp, me.hp + Math.max(1, Math.floor(dmg * me.en.drainPhysPct / 100)))
   }
+  if (me.en.drainPct > 0 && dmg > 0) {
+    me.hp = Math.min(me.base.hp, me.hp + Math.max(1, Math.floor(dmg * me.en.drainPct / 100)))
+  }
   log.push({ side: me.name, type: 'normal', kind: me.kind, damage: dmg, crit: r.crit, hit: r.hit, mult: multScale })
   for (const l of after) log.push(l)
 }
@@ -1061,9 +1075,11 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
   let turn = 1
 
   for (; turn <= maxTurns; turn++) {
-    // たかぶりは「経過したターン数」で効く（1ターン目は素の値）
-    if (a.ramp) a.ramp.turn = turn - 1
-    if (b.ramp) b.ramp.turn = turn - 1
+    // 「経過したターン数」で効くもの（1ターン目は素の値）
+    a.turn = turn - 1
+    b.turn = turn - 1
+    if (a.ramp) a.ramp.turn = a.turn
+    if (b.ramp) b.ramp.turn = b.turn
     // 行動順：このターン撃つ予定のスキルの優先度 → AGI → ランダム
     const eA = liveStats(a)
     const eB = liveStats(b)

@@ -24,7 +24,7 @@ import { FUSION_ABILITIES, ABILITY_OF, ENCHANTS, collectEnchants, abilityText } 
 import { allEnemies, TIER_MAX } from './enemies.js'
 import { ITEM_BY_ID, CATALOG } from './equipment.js'
 import { runBattle, createSide, liveStats } from './battle.js'
-import { AIL_LABEL } from './ailments.js'
+import { AIL_LABEL, createAilments, inflict, healMultOf, HEAL_CUT_TURNS } from './ailments.js'
 import { SORTIE_CD, EXP_ZAKO_MIN, EXP_ZAKO_MAX } from './sortie.js'
 
 const SQL = readFileSync(new URL('../../../supabase_v2_raid_20260906.sql', import.meta.url), 'utf8')
@@ -363,6 +363,86 @@ test('合成の特殊能力は刻印と同じ枠で戦闘に乗る（重ねて�
   }
   const en = collectEnchants(['黒龍ヴァルゼノク', 'ひなたトカゲ'])
   assert.equal(en.physDmgPct, 15 + 2, '合成ぶんと刻印ぶんが足されていない')
+})
+
+// ★2026-09-06 ユーザー指定の5体ぶん。**効果が実際に戦闘で動くところまで**を1つずつ固定する
+//   （文だけ直して効果を入れ忘れる／キーを打ち間違える事故を止める）
+test('★合成の特殊能力5つが、指定どおりの効果になっている', () => {
+  const en = (name) => collectEnchants([name])
+  const v = en('黒龍ヴァルゼノク')
+  assert.equal(v.physDmgPct, 15)
+  assert.deepEqual(v.onHitAils[0], { key:'healCut', chance:100, kind:'any', pct:20, turns:2 })
+
+  const a = en('雨摩座')
+  assert.equal(a.magDmgPct, 15)
+  assert.equal(a.onHitAils[0].key, 'slow')
+  assert.equal(a.onHitAils[0].chance, 30)
+
+  const z = en('雷鋼機神ゼルギアス')
+  assert.equal(z.statPct.agi, 10)
+  assert.equal(z.statPct.dex, 10)
+  assert.equal(z.procBonus, 5)
+
+  const e = en('閻魔')
+  assert.equal(e.onHitAils[0].key, 'curse')
+  assert.equal(e.onHitAils[0].chance, 25)
+  assert.equal(e.drainPct, 5)
+  assert.equal(e.drainPhysPct, 0, '閻魔は物理限定の吸収を持たない（種別を問わない）')
+
+  const g = en('炎獄王グラウディオス')
+  assert.equal(g.statPct.vit, 10)
+  assert.deepEqual(g.perTurnStats[0], { stat:'vit', pct:0.5, max:20 })
+})
+
+test('★黒龍：回復阻害は2ターンで切れる（既定の3ターンではない）', () => {
+  const ail = createAilments()
+  inflict(ail, 'healCut', { pct: 20, turns: 2 })
+  assert.equal(ail.healCut.turns, 2)
+  assert.equal(healMultOf(ail), 0.8, '回復量が-20%になっていない')
+  // 既定（turns を渡さない）は今までどおり
+  const d = createAilments()
+  inflict(d, 'healCut', { pct: 20 })
+  assert.equal(d.healCut.turns, HEAL_CUT_TURNS)
+})
+
+test('★閻魔：物理でも魔法でも与ダメージの5%を回復する', () => {
+  const foe = { name:'まと', stats:{ hp:900000, mp:10, str:1, dex:1, agi:1, int_stat:1, vit:1, luk:1 }, slots:[] }
+  const hpAfter = (kind, enchants) => {
+    const me = { name:'私', cls:'侍', kind, enchants,
+      stats:{ hp:5000, mp:400, str:900, dex:400, agi:400, int_stat:900, vit:400, luk:200 }, slots:[] }
+    const r = runBattle({ ...me, startHp: 2500 }, foe, { rng: rngOf(3), maxTurns: 5 })
+    return r.a.hp
+  }
+  for (const kind of ['phys', 'mag']) {
+    assert.ok(hpAfter(kind, ['閻魔']) > hpAfter(kind, []), `${kind} で吸収していない`)
+  }
+})
+
+test('★グラウディオス：ターンが経つごとにVITが上がる（重複20で頭打ち）', () => {
+  const side = createSide({ name:'私', cls:'侍', enchants:['炎獄王グラウディオス'],
+    stats:{ hp:1000, mp:100, str:100, dex:100, agi:100, int_stat:100, vit:1000, luk:100 }, slots:[] })
+  side.turn = 0
+  const t0 = liveStats(side).vit
+  side.turn = 10
+  const t10 = liveStats(side).vit
+  side.turn = 20
+  const t20 = liveStats(side).vit
+  side.turn = 40
+  const t40 = liveStats(side).vit
+  assert.ok(t10 > t0, '10ターン後に上がっていない')
+  assert.ok(t20 > t10, '20ターン後に上がっていない')
+  assert.equal(t40, t20, '重複20で頭打ちになっていない')
+  // 素の1000に対して +10%（常時）＋ 0.5%×20（ターン）＝ +20%
+  assert.equal(t0, 1100)
+  assert.equal(t20, 1200)
+})
+
+test('ターン数はふつうの戦闘でも数えている（perTurnStat が無ければ何も起きない）', () => {
+  const plain = createSide({ name:'敵', stats:{ hp:100, mp:10, str:10, dex:10, agi:10, int_stat:10, vit:10, luk:10 }, slots:[] })
+  assert.equal(plain.turn, 0)
+  const before = liveStats(plain).vit
+  plain.turn = 30
+  assert.equal(liveStats(plain).vit, before, '能力が無いのにターンで変わっている')
 })
 
 test('付与する状態異常は実在するものだけ', () => {

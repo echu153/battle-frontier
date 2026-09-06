@@ -17,6 +17,8 @@
 //   bandDmgPct     {bands:[], kind, pct}    その時間帯だけ与ダメージ+%
 //   physCutPct / magCutPct  %               受ける物理／魔法ダメージ軽減+%
 //   drainPhysPct   %                        物理で与えたダメージの%を回復
+//   drainPct       %                        **種別を問わず**与えたダメージの%を回復
+//   perTurnStat    {stat, pct, max}         ターンが経つごとにステータス+%（max は重複の上限）
 //   healPct        %                        回復量+%
 //   bandHealPct    {bands:[], pct}          その時間帯だけ回復量+%
 //   hitBonus / evaBonus / procBonus  ポイント 命中率／回避率／スキル発動率へ加算
@@ -406,13 +408,16 @@ export const ENCHANTS = {
 // しかも**武器そのものを1枠使う**ため。docs/v2-raid-design.md §1
 // ============================================================
 export const FUSION_ABILITIES = {
-  '黒龍ヴァルゼノク': { text:'物理ダメージ+15%', effect:{ physDmgPct:15 } },
-  '雨摩座': { text:'魔法ダメージ+8%／攻撃ヒット時、30%で鈍足付与',
-    effect:{ magDmgPct:8, onHitAil:{ key:'slow', chance:30, kind:'any' } } },
-  '雷鋼機神ゼルギアス': { text:'命中率+8%／スキル発動率+8%', effect:{ hitBonus:8, procBonus:8 } },
-  '閻魔': { text:'攻撃ヒット時、25%で呪い付与／物理ダメージを与えたとき、与えたダメージの5%を回復',
-    effect:{ onHitAil:{ key:'curse', chance:25, kind:'any' }, drainPhysPct:5 } },
-  '炎獄王グラウディオス': { text:'魔法ダメージ+15%', effect:{ magDmgPct:15 } },
+  '黒龍ヴァルゼノク': { text:'物理ダメージ+15%／攻撃ヒット時、2ターンのあいだ回復量-20%',
+    effect:{ physDmgPct:15, onHitAil:{ key:'healCut', chance:100, kind:'any', pct:20, turns:2 } } },
+  '雨摩座': { text:'魔法ダメージ+15%／攻撃ヒット時、30%で鈍足付与',
+    effect:{ magDmgPct:15, onHitAil:{ key:'slow', chance:30, kind:'any' } } },
+  '雷鋼機神ゼルギアス': { text:'AGI・DEX+10%／スキル発動率+5%',
+    effect:{ statPct:{ agi:10, dex:10 }, procBonus:5 } },
+  '閻魔': { text:'攻撃ヒット時、25%で呪い付与／与えたダメージの5%を回復',
+    effect:{ onHitAil:{ key:'curse', chance:25, kind:'any' }, drainPct:5 } },
+  '炎獄王グラウディオス': { text:'VIT+10%／ターンが経つごとにVIT+0.5%（重複20）',
+    effect:{ statPct:{ vit:10 }, perTurnStat:{ stat:'vit', pct:0.5, max:20 } } },
 }
 
 // 敵の刻印と合成の能力を1つの表として引く。**collectEnchants はこちらを見る**
@@ -440,7 +445,8 @@ export const collectEnchants = (list, band = null) => {
     statPct: {},
     physDmgPct: 0, magDmgPct: 0,
     physCutPct: 0, magCutPct: 0,
-    drainPhysPct: 0, healPct: 0,
+    drainPhysPct: 0, drainPct: 0, healPct: 0,
+    perTurnStats: [],
     hitBonus: 0, evaBonus: 0, procBonus: 0,
     onHitAils: [], ailResistAll: 0, ailResist: {},
     startCut: 0,
@@ -456,7 +462,7 @@ export const collectEnchants = (list, band = null) => {
     if (e.bandStatPct && (!band || e.bandStatPct.bands.includes(band))) {
       addStat(e.bandStatPct.stat, e.bandStatPct.pct)
     }
-    for (const k of ['physDmgPct', 'magDmgPct', 'physCutPct', 'magCutPct', 'drainPhysPct', 'healPct', 'hitBonus', 'evaBonus', 'procBonus']) {
+    for (const k of ['physDmgPct', 'magDmgPct', 'physCutPct', 'magCutPct', 'drainPhysPct', 'drainPct', 'healPct', 'hitBonus', 'evaBonus', 'procBonus']) {
       if (e[k]) en[k] += e[k]
     }
     if (e.bandDmgPct && (!band || e.bandDmgPct.bands.includes(band))) {
@@ -469,6 +475,7 @@ export const collectEnchants = (list, band = null) => {
       else en.ailResist[e.ailResist.key] = (en.ailResist[e.ailResist.key] || 0) + e.ailResist.pct
     }
     if (e.startBuff)     en.startCut += e.startBuff.cut
+    if (e.perTurnStat)   en.perTurnStats.push(e.perTurnStat)
     if (e.onHitFoeStat)  en.onHitFoeStats.push(e.onHitFoeStat)
     if (e.onHitSelfStat) en.onHitSelfStats.push(e.onHitSelfStat)
     if (e.convertAdd)    en.convertAdds.push(e.convertAdd)

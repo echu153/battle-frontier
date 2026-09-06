@@ -127,7 +127,8 @@ export const inflict = (ail, key, opt = {}) => {
       return true
     case 'healCut':
       // 下げ幅は付与する側が持つ。重ねがけは強いほうを採る
-      ail.healCut = { turns: HEAL_CUT_TURNS, pct: Math.max(ail.healCut?.pct || 0, opt.pct || 0) }
+      // ★opt.turns … 付与する側が持続ターンを指定できる（合成「黒龍」の2ターンなど）
+      ail.healCut = { turns: opt.turns || HEAL_CUT_TURNS, pct: Math.max(ail.healCut?.pct || 0, opt.pct || 0) }
       return true
     default:
       return false
