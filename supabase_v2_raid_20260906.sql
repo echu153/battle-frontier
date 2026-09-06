@@ -142,6 +142,14 @@ grant execute on function public.v2_friend_remove(bigint) to authenticated;
 --   この計算はクライアント（battle.js）が回すので、サーバーは結果だけを受け取る。
 -- ============================================================
 
+-- ---- 念のため：作りかけの版で入れた古い関数を落とす ----
+-- ★v2は**同名のオーバーロードを作らない運用**。引数を変えた関数は
+--   create or replace では上書きされず、古いほうが残って両方呼べてしまう。
+--   （このファイルを1度も流していなければ、下の3行は何もしない）
+drop function if exists public.v2_raid_reward_tier(numeric, boolean, boolean);
+drop function if exists public.v2_raid_spawn(text, int, int);
+drop function if exists public.v2_debug_spawn_raid(text, int, int);
+
 -- ---- 帯ごとの強さ（src/v2/lib/raid.js の RAID_HP / raidPowerOfTier の写し）----
 -- ⚠**勘で書き換えない。** node tools/v2-raid-tune.mjs を回して出た表を貼ること。
 --   power … そのエリアのボスの戦闘力 × 2（守りのステを作るもとになる数字）
