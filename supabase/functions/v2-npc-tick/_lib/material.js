@@ -94,9 +94,12 @@ export const colorOf = (stats) => {
   return COLORS.reduce((best, c) => (sum[c] > sum[best] ? c : best), 'red')
 }
 
-// ===== 特殊能力が付く確率 =====
-// 素材5個それぞれで個別に抽選し、**当たった中から1つを選ぶ**
-export const ABILITY_CHANCE = { normal:0, rare:1, ultra:3 }
+// ===== 特殊能力は**もう付かない**（2026-09-06 ユーザー指示）=====
+// ★それまでは抽出のとき稀に付いていた（通常0% / レア1% / 激レア3%）が、
+//   **特殊能力の入手経路は合成素材へ一本化した**（fusion.js）。
+//   ルーンは**ステータス%だけ**になる。レア度の意味は「値の下限が高い」だけ。
+// ⚠ ABILITY_CHANCE は消してある。戻すときは enchant.js の ENCHANT_CHANCE と
+//   SQL（v2_extract_essence）もセットで戻すこと。
 
 // ===== 素材168種 =====
 // [敵の名前, ステータス, [通常, レア, 激レア], 時間帯（無ければ null）]
@@ -542,23 +545,20 @@ export const canExtract = (ids) => {
 }
 
 // 抽出の本体。★同じ計算がSQL側（v2_extract_essence）にもある
-// 戻り値 { stats, color, abilityChoices }。abilityChoices は当たった敵の名前（重複は除く）
+// 戻り値 { stats, color, abilityChoices }。★abilityChoices は**必ず空**（2026-09-06）
 export const extract = (ids, rng = Math.random) => {
   const err = canExtract(ids)
   if (err) return { error: err }
   const stats = {}
-  const abilityChoices = []
   for (const id of ids) {
     const m = MATERIAL_BY_ID[id]
     for (const k of rollStats(m, rng)) {
       stats[k] = round1((stats[k] || 0) + rollValue(m.lo, m.hi, rng))
     }
-    // 特殊能力は素材ごとに個別抽選（通常0% / レア1% / 激レア3%）
-    if (rng() * 100 < ABILITY_CHANCE[m.rarity] && !abilityChoices.includes(m.enemy)) {
-      abilityChoices.push(m.enemy)
-    }
   }
-  return { stats, color: colorOf(stats), abilityChoices }
+  // ★特殊能力はもう付かない（2026-09-06）。abilityChoices は空のまま返す＝
+  //   画面もSQLも「無い」と分かる形にしておく（キーごと消すと読み手が落ちる）
+  return { stats, color: colorOf(stats), abilityChoices: [] }
 }
 
 // ルーンの「強さ」を1つの数字で言うときの目安（合計%）

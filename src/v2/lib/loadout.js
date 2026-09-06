@@ -113,6 +113,8 @@ export const runePctText = (list) => {
 }
 
 // 付いている特殊能力の名前（＝敵の名前。enchant.js のキー）。**同じものが複数あればそのぶん並ぶ**
+// ⚠2026-09-06：**ルーンの特殊能力は廃止**（合成素材へ一本化）。
+//   戦闘には渡していない。倉庫が古い個体の表示に使うだけ
 export const runeAbilities = (list) => (list || []).map(e => e.ability).filter(Boolean)
 
 // ===== 合成（レイドボスの特殊能力）=====
@@ -165,10 +167,10 @@ export const toFighter = (profile, inventory, runes, fishDex, dex, pet) => ({
   // ★職業補正は「その職業に何回転職したか」で伸びる（classBonus.js）
   jobCount: jobCountOf(profile),
   stats: totalStats(profile, inventory, runes, fishDex, dex, pet),
-  enchants: [
-    ...runeAbilities(equippedRunes(profile, inventory, runes)),
-    ...equippedFusions(profile, inventory),
-  ],
+  // ★特殊能力は**合成ぶんだけ**（2026-09-06 ユーザー指示）。
+  //   ルーンからは付かなくなったので、runeAbilities はもう混ぜない
+  //   （古いルーンに ability が残っていても効かない）
+  enchants: equippedFusions(profile, inventory),
   // ★武器の進化（戦闘記憶）。刻印とは別枠で、装備している武器のぶんが乗る
   evolutions: equippedEvolutions(profile, inventory),
   slots: (profile?.skill_set || [])

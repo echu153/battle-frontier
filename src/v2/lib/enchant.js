@@ -425,7 +425,9 @@ export const ABILITY_OF = { ...ENCHANTS, ...FUSION_ABILITIES }
 export const enchantOf = (name) => ABILITY_OF[name] || null
 export const ENCHANT_NAMES = Object.keys(ENCHANTS)
 
-// ===== 付く確率 =====
+// ===== 付く確率（★もう使っていない）=====
+// ⚠2026-09-06 ユーザー指示で**特殊能力は合成素材へ一本化**した。
+//   ルーンの抽出では付かなくなったので、この表は参照されていない（戻すとき用に残す）。
 // 素材のレア度ごとに個別抽選する。5個それぞれで引いて、当たった中から1つ選ぶ
 export const ENCHANT_CHANCE = { normal: 0, rare: 1, ultra: 3 }
 export const enchantChanceOf = (rarity) => ENCHANT_CHANCE[rarity] || 0

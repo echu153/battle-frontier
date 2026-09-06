@@ -156,9 +156,9 @@ export default function V2Storage({ prof, inventory, runes, onProfile, onBack })
                       <EvoTags inv={inv} />
                     </V2ItemTip>
                     {pct && <span style={{ color:'#88ddaa' }}>刻印効果：{pct}</span>}
-                    {es.filter(e => e.ability).map(e => (
-                      <span key={e.id} style={{ color:'#ffcc44' }}>★{ABILITY_LABEL}</span>
-                    ))}
+                    {/* ★ルーンの特殊能力は廃止（2026-09-06・合成素材へ一本化）。
+                        合成ぶんは装備名の頭（「黒龍の〜」）とツールチップで分かる */}
+                    {g.fused && <span style={{ color:'#ff8844' }}>✦{ABILITY_LABEL}</span>}
                   </div>
                 )
               })}

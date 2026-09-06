@@ -19,13 +19,16 @@ import {
   CALL_KINDS, CALL_MAX, ONLINE_MINUTES, pickRaidBoss, TIERS,
   secondsLeft, isOver, timeText,
 } from './raid.js'
-import { FUSIONS, FUSION_BY_ID, fusedName, canFuseItem, checkFuse, fusedAbilitiesOf } from './fusion.js'
+import {
+  FUSIONS, FUSION_BY_ID, fusedName, canFuseItem, checkFuse, fusedAbilitiesOf,
+  fusionsOfSource, fusionOfBoss, fusionOfEnemy, FUSE_COST, ENEMY_FUSION_RATE,
+} from './fusion.js'
 import { FUSION_ABILITIES, ABILITY_OF, ENCHANTS, collectEnchants, abilityText } from './enchant.js'
 import { allEnemies, TIER_MAX } from './enemies.js'
 import { ITEM_BY_ID, CATALOG } from './equipment.js'
 import { runBattle, createSide, liveStats } from './battle.js'
 import { AIL_LABEL, createAilments, inflict, healMultOf, HEAL_CUT_TURNS } from './ailments.js'
-import { SORTIE_CD, EXP_ZAKO_MIN, EXP_ZAKO_MAX } from './sortie.js'
+import { SORTIE_CD, EXP_ZAKO_MIN, EXP_ZAKO_MAX, FUSION_DROP_RATE, rollFusionDrop } from './sortie.js'
 
 const SQL = readFileSync(new URL('../../../supabase_v2_raid_20260906.sql', import.meta.url), 'utf8')
 // v2_raid_tiers の1行 (tier, power, hp, ultra_pct) を拾う
@@ -322,14 +325,51 @@ test('討伐済み・時間切れはどちらも「終わっている」', () =>
 })
 
 // ===== 合成 =====
-test('合成素材は5体ぶんあり、それぞれ特殊能力を1つ持っている', () => {
-  assert.equal(FUSIONS.length, RAID_BOSSES.length)
+// ★2026-09-06 ユーザー指示：**特殊能力の入手経路を合成素材へ一本化**した。
+//   敵270体ぶん（出撃で一律1%）＋レイドボス5体ぶん＝275種
+test('★合成素材は 敵270 ＋ レイド5 ＝ 275種で、全部に特殊能力がある', () => {
+  const enemyFus = fusionsOfSource('enemy')
+  const raidFus = fusionsOfSource('raid')
+  assert.equal(enemyFus.length, allEnemies().length, '敵の数と合っていない')
+  assert.equal(enemyFus.length, 270)
+  assert.equal(raidFus.length, RAID_BOSSES.length)
+  assert.equal(FUSIONS.length, 275)
   for (const f of FUSIONS) {
-    assert.equal(f.id, `fu:${RAID_BOSSES.find(b => b.name === f.boss).key}`)
-    assert.ok(FUSION_ABILITIES[f.ability], `${f.name} の特殊能力が無い`)
+    assert.ok(ABILITY_OF[f.ability], `${f.name} の特殊能力が無い`)
     assert.ok(f.name && f.crown, `${f.id} に名前か冠名が無い`)
+    assert.ok(f.id.startsWith('fu:'), `${f.id} のidの形が違う`)
   }
+  assert.equal(new Set(FUSIONS.map(f => f.id)).size, FUSIONS.length, 'idが重複')
   assert.equal(new Set(FUSIONS.map(f => f.name)).size, FUSIONS.length, '素材名が重複')
+  // レイドぶんは冠名（黒龍…）、敵ぶんは敵の名前がそのまま頭に付く
+  for (const b of RAID_BOSSES) assert.equal(fusionOfBoss(b.name).crown, b.crown)
+  assert.equal(fusionOfEnemy('スライム').crown, 'スライム')
+  assert.equal(fusionOfEnemy('スライム').name, 'スライムの因子')
+})
+
+test('★敵270体ぜんぶに合成素材がある（敵を足したら自動でつく）', () => {
+  const byBoss = new Set(fusionsOfSource('enemy').map(f => f.boss))
+  const missing = allEnemies().map(e => e.name).filter(n => !byBoss.has(n))
+  assert.deepEqual(missing, [], '合成素材が無い敵がいる')
+})
+
+test('★合成に使う素材は1個', () => {
+  assert.equal(FUSE_COST, 1)
+  assert.equal(checkFuse({ inv: { id: 1 }, item: CATALOG.find(i => i.part === '武器'), matId: 'fu:enma', have: 1 }), '')
+})
+
+test('★敵の合成素材は一律1%で落ちる（レア度による差は無い）', () => {
+  assert.equal(FUSION_DROP_RATE, ENEMY_FUSION_RATE)
+  assert.equal(FUSION_DROP_RATE, 1)
+  assert.equal(rollFusionDrop(() => 0.009), true)
+  assert.equal(rollFusionDrop(() => 0.011), false)
+})
+
+// ★ルーンからは特殊能力が付かなくなった（移し忘れ・戻し忘れをここで止める）
+test('★ルーンの特殊能力は廃止され、戦闘には合成ぶんだけが乗る', () => {
+  const src = readFileSync(new URL('./loadout.js', import.meta.url), 'utf8')
+  assert.ok(!/enchants:[^,]*runeAbilities/.test(src), 'ルーンの特殊能力が戦闘に戻っている')
+  assert.ok(src.includes('enchants: equippedFusions('), '合成ぶんが戦闘に渡っていない')
 })
 
 test('合成すると名前が「◯◯の××」になる（素の名前は保存しない）', () => {

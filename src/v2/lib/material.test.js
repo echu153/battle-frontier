@@ -150,13 +150,14 @@ test('抽出はステータス合計・色・特殊能力の候補を返す', ()
   assert.ok(Array.isArray(r.abilityChoices))
 })
 
-test('特殊能力は 通常0% / レア1% / 激レア3%', () => {
-  // 通常だけで組むと絶対に付かない
-  for (let i = 0; i < 200; i++) assert.equal(extract(five('m:1:0:n'), Math.random).abilityChoices.length, 0)
-  // 激レア5個なら 1-0.97^5 = 14.1% くらい
-  let hit = 0
-  for (let i = 0; i < 4000; i++) if (extract(five('m:1:0:u'), Math.random).abilityChoices.length > 0) hit++
-  assert.ok(Math.abs(hit / 4000 - 0.141) < 0.025, `付いた率 ${hit / 4000}`)
+// ★2026-09-06 ユーザー指示：**特殊能力は合成素材へ一本化**した。
+//   ルーンはステータス%だけになり、抽出では何も付かない（レア度によらず0%）
+test('★ルーンの抽出では特殊能力が付かない（合成素材へ移した）', () => {
+  for (const id of ['m:1:0:n', 'm:1:0:r', 'm:1:0:u', 'm:8:0:u']) {
+    for (let i = 0; i < 300; i++) {
+      assert.equal(extract(five(id), Math.random).abilityChoices.length, 0, `${id} で特殊能力が付いた`)
+    }
+  }
 })
 
 test('ルーンの合計は帯4の激レアで6%前後になる', () => {

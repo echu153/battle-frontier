@@ -213,6 +213,14 @@ export const MATERIAL_RATE = { ultra:1, rare:5, normal:20 }
 //   ドロップ率upの特殊能力は「落ちるかどうか」に効くもので、確定のここには掛けない
 export const RARE_MATERIAL_RATE = { normal:55, rare:35, ultra:10 }
 
+// ===== 合成素材のドロップ（2026-09-06 ユーザー指示）=====
+// ★**倒した敵の合成素材が一律1%**で落ちる。レア度による差は無く、
+//   ルーン素材・装備・護符とは**まったく別の抽選**（どれと重なってもよい）。
+//   中身は fusion.js（敵270体ぶん）。特殊能力はここからしか手に入らない。
+// ⚠「素材ドロップ率up」の特殊能力（dropRateMult）は**掛けない**＝一律1%のまま
+export const FUSION_DROP_RATE = 1
+export const rollFusionDrop = (rng = Math.random) => rng() * 100 < FUSION_DROP_RATE
+
 export const rollMaterial = (enemyName, mult = 1, rng = Math.random, { sure = false } = {}) => {
   const table = sure ? RARE_MATERIAL_RATE : MATERIAL_RATE
   const r = rng() * 100

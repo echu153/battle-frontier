@@ -2,7 +2,10 @@ import { useState } from 'react'
 import { supabase } from '../../supabase'
 import { ITEM_BY_ID, handsLabel, handsColor } from '../lib/equipment.js'
 import { wornIdsOf } from '../lib/loadout.js'
-import { FUSIONS, FUSION_BY_ID, fusedName, canFuseItem, checkFuse, fusionText } from '../lib/fusion.js'
+import {
+  FUSIONS, FUSION_BY_ID, fusedName, canFuseItem, checkFuse, fusionText,
+  fusionsOfSource, FUSE_COST, ENEMY_FUSION_RATE,
+} from '../lib/fusion.js'
 import { ABILITY_LABEL, abilityText } from '../lib/enchant.js'
 import { box, btn, miniBtn, TEXT, RANK_COLOR } from './v2ui.js'
 import V2Modal from './V2Modal.jsx'
@@ -11,8 +14,12 @@ import V2Help from './V2Help.jsx'
 // ============================================================
 // 鍛冶屋「合成」（docs/v2-raid-design.md §6）
 // ------------------------------------------------------------
-//   武器1個 ＋ レイドボスの合成素材1個
-//     → その武器に**ボスの特殊能力**が付き、名前が「◯◯の××」に変わる
+//   武器1個 ＋ 合成素材1個
+//     → その武器に**特殊能力**が付き、名前が「◯◯の××」に変わる
+//
+// ★合成素材は2つの出どころがある（2026-09-06 ユーザー指示で特殊能力をここへ一本化）
+//     ・倒した敵から**一律1%**（敵270体ぶん）
+//     ・レイドボスの討伐報酬（5体ぶん）
 //
 // ★強化はこれまで通り。強化は equip_id で見ているので、合成していても
 //   「同じ武器名」であれば強化元にも強化素材にもできる。
@@ -27,9 +34,11 @@ export default function V2Fusion({ prof, inventory, fusions, isAdmin, onRefresh 
   const [msg, setMsg] = useState('')
 
   const wornIds = wornIdsOf(prof, inventory)
-  // 持っている合成素材（qty > 0 のものだけ）
+  // 持っている合成素材（qty > 0 のものだけ）。★名簿は275種あるので、持っているぶんだけ出す
   const have = Object.fromEntries((fusions || []).map(r => [r.fusion_id, r.qty]))
   const owned = FUSIONS.filter(f => (have[f.id] || 0) > 0)
+  // レイドぶんを先に、そのあと敵ぶん（帯の順）
+  owned.sort((a, b) => (a.source === b.source ? (a.tier || 0) - (b.tier || 0) : a.source === 'raid' ? -1 : 1))
 
   // 合成できるのは武器だけ
   const weapons = (inventory || [])
@@ -69,14 +78,16 @@ export default function V2Fusion({ prof, inventory, fusions, isAdmin, onRefresh 
           <V2Help id="fusion" />
         </div>
         <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.8 }}>
-          レイドボスから手に入る<b style={{ color:'#ff8844' }}>合成素材</b>を武器に合わせると、
-          そのボスの<b style={{ color:'#ffcc00' }}>{ABILITY_LABEL}</b>が付いて名前が変わります。<br />
+          <b style={{ color:'#ff8844' }}>合成素材</b>を武器に{FUSE_COST}個合わせると、
+          その<b style={{ color:'#ffcc00' }}>{ABILITY_LABEL}</b>が付いて名前が変わります。<br />
+          合成素材は<b>倒した敵から{ENEMY_FUSION_RATE}%</b>で落ちるほか、レイドボスの報酬でも手に入ります。<br />
           <b style={{ color:'#44ff88' }}>強化はこれまで通り</b>。合成しても、同じ武器名なら強化元にも強化素材にも使えます。<br />
-          ソケットに刻んだルーンと武器の進化はそのまま残り、効果は刻印と重ねて足されます。
+          ソケットに刻んだルーンと武器の進化はそのまま残ります。
         </div>
+        {/* ★開発限定の配り口。敵ぶんは270種あるので、レイドぶんだけボタンにする */}
         {isAdmin && (
           <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginTop:'8px' }}>
-            {FUSIONS.map(f => (
+            {fusionsOfSource('raid').map(f => (
               <button key={f.id} onClick={() => grant(f.id)} disabled={busy} style={miniBtn('#88ddaa')}>
                 [開発] {f.name}×3
               </button>
@@ -92,9 +103,15 @@ export default function V2Fusion({ prof, inventory, fusions, isAdmin, onRefresh 
         <div style={{ color: TEXT.label, fontSize:'11px', marginBottom:'6px' }}>① 合成素材を選ぶ</div>
         {owned.length === 0 && (
           <div style={{ color: TEXT.sub, fontSize:'11px' }}>
-            まだ持っていません（レイドボスを倒すと確率で手に入ります）
+            まだ持っていません（出撃で敵を倒すと{ENEMY_FUSION_RATE}%で落ちます）
           </div>
         )}
+        {owned.length > 0 && (
+          <div style={{ color: TEXT.sub, fontSize:'10px', marginBottom:'4px' }}>
+            持っているもの {owned.length}種
+          </div>
+        )}
+        <div style={{ maxHeight:'320px', overflowY:'auto' }}>
         {owned.map(f => (
           <button key={f.id} onClick={() => setMatId(matId === f.id ? null : f.id)}
             style={{ display:'block', width:'100%', textAlign:'left', marginBottom:'4px', padding:'6px 8px',
@@ -102,10 +119,11 @@ export default function V2Fusion({ prof, inventory, fusions, isAdmin, onRefresh 
               border:`1px solid ${matId === f.id ? f.color : '#002244'}`,
               color: TEXT.body, fontFamily:'monospace', fontSize:'11px', cursor:'pointer' }}>
             <span style={{ color: f.color }}>{f.name}</span>
-            <span style={{ color: TEXT.label }}>　×{have[f.id]}個　（{f.boss}）</span>
+            <span style={{ color: TEXT.label }}>　×{have[f.id]}個</span>
             <div style={{ color:'#ffcc00', fontSize:'10px', marginTop:'2px' }}>{ABILITY_LABEL}：{fusionText(f.id)}</div>
           </button>
         ))}
+        </div>
       </div>
 
       {/* ② 武器 */}

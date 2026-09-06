@@ -4,6 +4,7 @@ import { STAT_DEFS, STAT_KEYS } from '../lib/stats.js'
 import { COLOR_HEX, COLOR_LABEL, runeName } from '../lib/material.js'
 import { runePctText } from '../lib/loadout.js'
 import { ABILITY_LABEL, abilityText } from '../lib/enchant.js'
+import { fusedName } from '../lib/fusion.js'
 import { evolutionLines, levelOf, expToNext, TRAIT_BY_KEY } from '../lib/evolve.js'
 import { KIND_LABEL, KIND_COLOR, isPassive, powerText } from '../lib/skills.js'
 import { RANK_COLOR } from './v2ui.js'
@@ -138,12 +139,12 @@ export function ItemDetail({ item, inv, runes }) {
   const sockets = inv?.sockets || []
   const socketMax = socketCountOf(item)
   const pctText = runePctText(runes)
-  const abilities = (runes || []).map(e => e.ability).filter(Boolean)
+  // ★特殊能力は**合成ぶんだけ**（2026-09-06 ユーザー指示でルーンからは廃止）
   return (
     <>
       <div>
         <span style={{ color: RANK_COLOR[item.rank] }}>{item.rank}</span>{' '}
-        <span style={{ color:'#88ccff' }}>{item.name}</span>
+        <span style={{ color:'#88ccff' }}>{fusedName(item, inv?.fused)}</span>
         {plus ? <span style={{ color:'#ffcc00' }}>+{plus}</span> : ''}
         <span style={{ color:'#7fa6d0' }}>　{item.type}　戦闘力{powerOf(item, plus)}</span>
       </div>
@@ -172,15 +173,16 @@ export function ItemDetail({ item, inv, runes }) {
       {(runes || []).length > 0 ? (<>
         <div><SealTags list={runes} /></div>
         {pctText && <div style={{ color:'#88ddaa' }}>刻印効果：{pctText}</div>}
-        {/* ★出どころの敵の名前は出さない。見出しは「特殊能力」で、中身は効果の文 */}
-        {abilities.map((a, i) => (
-          <div key={i} style={{ color:'#ffcc44' }}>
-            ★{ABILITY_LABEL}
-            <span style={{ color:'#93a9be' }}>　{abilityText(a)}</span>
-          </div>
-        ))}
       </>) : socketMax > 0 && (
         <div style={{ color:'#62789a' }}>刻印なし</div>
+      )}
+
+      {/* ★合成で付いた特殊能力。出どころの名前は出さず、効果の文だけ出す */}
+      {inv?.fused && (
+        <div style={{ color:'#ff8844' }}>
+          ✦{ABILITY_LABEL}
+          <span style={{ color:'#93a9be' }}>　{abilityText(inv.fused)}</span>
+        </div>
       )}
 
       {/* ★武器の進化（戦闘記憶）は刻印とは別枠。ソケットを食わないので分けて出す */}
