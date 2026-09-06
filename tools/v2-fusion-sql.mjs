@@ -2,7 +2,7 @@
 // 合成素材の名簿（src/v2/lib/fusion.js）から、SQLの INSERT を作り直す
 // ------------------------------------------------------------
 // 敵270体＋レイドボス5体＝275行。敵を足したら fusion.js が自動で増えるので、
-// このコマンドで supabase_v2_raid_20260906.sql の INSERT を貼り直す。
+// このコマンドで supabase_v2_fusion_20260906.sql の INSERT を貼り直す。
 //
 //   node tools/v2-fusion-sql.mjs          … 差分があるか見るだけ
 //   node tools/v2-fusion-sql.mjs --write  … SQLへ書き戻す
@@ -12,7 +12,7 @@
 // ============================================================
 import { readFileSync, writeFileSync } from 'node:fs'
 
-const SQL_PATH = new URL('../supabase_v2_raid_20260906.sql', import.meta.url)
+const SQL_PATH = new URL('../supabase_v2_fusion_20260906.sql', import.meta.url)
 const { FUSIONS } = await import(new URL('../src/v2/lib/fusion.js', import.meta.url).href)
 
 const q = (s) => "'" + String(s).replace(/'/g, "''") + "'"

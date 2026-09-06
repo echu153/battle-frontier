@@ -30,7 +30,16 @@ import { runBattle, createSide, liveStats } from './battle.js'
 import { AIL_LABEL, createAilments, inflict, healMultOf, HEAL_CUT_TURNS } from './ailments.js'
 import { SORTIE_CD, EXP_ZAKO_MIN, EXP_ZAKO_MAX, FUSION_DROP_RATE, rollFusionDrop } from './sortie.js'
 
-const SQL = readFileSync(new URL('../../../supabase_v2_raid_20260906.sql', import.meta.url), 'utf8')
+// ★SQLは**依存の順に4本**に分かれている（2026-09-06 ユーザー指示「複数出して」）
+//     ① supabase_v2_friends_20260906.sql       フレンド
+//     ② supabase_v2_fusion_20260906.sql        合成素材と「合成」
+//     ③ supabase_v2_raid_20260906.sql          レイドボスと救援
+//     ④ supabase_v2_ability_move_20260906.sql  特殊能力をルーンから合成へ移す
+const sqlOf = (n) => readFileSync(new URL(`../../../supabase_v2_${n}_20260906.sql`, import.meta.url), 'utf8')
+const SQL = sqlOf('raid')
+const SQL_FUSION = sqlOf('fusion')
+const SQL_MOVE = sqlOf('ability_move')
+const SQL_FRIENDS = sqlOf('friends')
 // v2_raid_tiers の1行 (tier, power, hp, ultra_pct) を拾う
 const ROW_RE = /\(\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+)\)/g
 const rngOf = (s0) => { let s = s0 >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }
@@ -590,7 +599,7 @@ test('★SQL の v2_raid_attack がEXPをサーバーで抽選して配ってい
 })
 
 test('SQL の合成素材の名簿が fusion.js と一致している', () => {
-  const seed = SQL.slice(SQL.indexOf('insert into public.v2_fusion_materials'))
+  const seed = SQL_FUSION.slice(SQL_FUSION.indexOf('insert into public.v2_fusion_materials'))
   const rows = [...seed.slice(0, seed.indexOf('on conflict')).matchAll(
     /\('([^']+)',\s*'([^']+)',\s*'([^']+)',\s*'([^']+)',\s*'([^']+)'\)/g)]
   assert.equal(rows.length, FUSIONS.length, '行数が違う')
@@ -615,6 +624,7 @@ test('★強さも報酬もサーバーが決める（クライアントは戦�
 test('救援の宛先の種別は online と friend の2つ（国はまだ無い）', () => {
   assert.deepEqual(CALL_KINDS, ['online', 'friend'])
   assert.ok(!SQL.includes("'country'"), '国はまだ作っていないはず')
+  assert.ok(SQL_FRIENDS.includes('create table if not exists public.v2_friends'), 'フレンドのSQLが無い')
 })
 
 test('1時間の枠で殴れる回数と、HPの決め方の前提が合っている', () => {

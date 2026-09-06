@@ -1,8 +1,23 @@
 # バトルフロンティアⅡ レイドボス 設計メモ
 
 **2026-09-06 ユーザー決定ぶんを反映して実装した。**
-ここに書いてある数字が正で、`src/v2/lib/raid.js` ／ `src/v2/lib/fusion.js` ／
-`supabase_v2_raid_20260906.sql` の3か所に同じ値が入っている（テストで突き合わせている）。
+ここに書いてある数字が正で、`src/v2/lib/raid.js` ／ `src/v2/lib/fusion.js` と
+SQLに同じ値が入っている（`src/v2/lib/raid.test.js` が突き合わせている）。
+
+## ⚠ 要SQL（**この順番で4本**流す）
+
+`supabase_v2_core.sql` を全文流したあとに：
+
+| | ファイル | 中身 |
+|---|---|---|
+| ① | `supabase_v2_friends_20260906.sql` | フレンド（救援の宛先）。**独立** |
+| ② | `supabase_v2_fusion_20260906.sql` | 合成素材275種の名簿・所持・`v2_inventory.fused`・合成のRPC |
+| ③ | `supabase_v2_raid_20260906.sql` | レイド本体・救援・報酬。**②に依存** |
+| ④ | `supabase_v2_ability_move_20260906.sql` | 特殊能力をルーンから合成へ移す。**②に依存** |
+
+- ⚠**④は core の `v2_extract_essence` を上書きする。**
+  `supabase_v2_core.sql` を流し直したら、**④も必ず流し直すこと**
+- ②のINSERT（275行）は `node tools/v2-fusion-sql.mjs --write` で貼り直せる
 
 関連: [ユニークボス](v2-unique-boss-design.md) ／ [出撃](v2-sortie-design.md) ／
 [エンチャント](v2-enchant-design.md) ／ [装備](v2-equipment-design.md)
