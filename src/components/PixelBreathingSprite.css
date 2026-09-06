@@ -1,0 +1,41 @@
+.bf-pixel-breath {
+  display: inline-grid;
+  width: var(--bf-sprite-size, 128px);
+  height: var(--bf-sprite-size, 128px);
+  place-items: end center;
+  overflow: visible;
+  isolation: isolate;
+}
+
+.bf-pixel-breath__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  transform-origin: 50% 82%;
+  filter: drop-shadow(0 5px 5px rgba(0, 0, 0, 0.5));
+}
+
+.bf-pixel-breath__image--motion {
+  animation: bf-pixel-breathe var(--bf-breath-duration, 2.8s) ease-in-out infinite;
+  will-change: transform, filter;
+}
+
+@keyframes bf-pixel-breathe {
+  0%, 100% {
+    transform: translateY(1px) scaleX(var(--bf-sprite-facing, 1)) scaleY(0.995);
+  }
+  45% {
+    transform: translateY(-3px) scaleX(var(--bf-sprite-facing, 1)) scaleY(1.012);
+  }
+  60% {
+    transform: translateY(-2px) scaleX(var(--bf-sprite-facing, 1)) scaleY(1.007);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bf-pixel-breath__image--motion {
+    animation: none;
+  }
+}
