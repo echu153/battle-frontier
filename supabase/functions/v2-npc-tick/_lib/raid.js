@@ -201,24 +201,29 @@ export const mvpIdOf = (members) => {
 }
 
 // ===== ティアごとの中身 =====
-// ★エリアの帯が奥ほど豪華になる（2026-09-06 ユーザー指示「強さに比例して報酬も豪華に」）。
-//   個数は帯3つごとに+1、激レアの出やすさは帯ぶん、合成素材の確率は帯×2%。
+// ★2026-09-06 ユーザー指示で決め直した。**軸を1本ずつに分けてある**：
+//     個数   … ティア（＋帯3つごとに+1）
+//     激レア … **帯だけ**（①3% 〜 ⑧7%）。どのティアでも同じ
+//     レア   … **ティアだけ**（A30% 〜 D12%）
+//     通常   … 残り（★必ず一番多い）
+//   ⚠前は「通常よりレアのほうが出やすい」表になっていた。**通常＞レア＞激レア**を崩さないこと
+//     （下のテストで並びを固定してある）。
 export const TIER_MAT_COUNT = { A: 6, B: 4, C: 2, D: 1 }
 export const tierCountBonus = (tier) => Math.floor((tier || 1) / 3)   // ①②=0 ③④⑤=1 ⑥⑦⑧=2
 export const matCountOf = (rewardTier, tier) =>
   (TIER_MAT_COUNT[rewardTier] ?? TIER_MAT_COUNT.D) + tierCountBonus(tier)
 
-// レア度の表（合計100）。帯ぶんは通常から激レアへ移す
-export const TIER_RARITY = {
-  A: { normal: 30, rare: 45, ultra: 25 },
-  B: { normal: 50, rare: 38, ultra: 12 },
-  C: { normal: 65, rare: 30, ultra: 5 },
-  D: { normal: 85, rare: 14, ultra: 1 },
-}
+// 激レアの確率(%)。**帯だけで決まる**（2026-09-06 ユーザー指示「①で3%・最高でも7%」）
+export const TIER_ULTRA = { 1:3, 2:3, 3:4, 4:4, 5:5, 6:5, 7:6, 8:7 }
+export const ultraPctOf = (tier) => TIER_ULTRA[tier] ?? TIER_ULTRA[1]
+// レアの確率(%)。**ティアだけで決まる**。★いちばん低いDでも激レアの上限(7%)より多い
+export const TIER_RARE = { A: 30, B: 24, C: 18, D: 12 }
+export const rarePctOf = (rewardTier) => TIER_RARE[rewardTier] ?? TIER_RARE.D
+
 export const rarityTableOf = (rewardTier, tier) => {
-  const t = TIER_RARITY[rewardTier] || TIER_RARITY.D
-  const move = Math.min(t.normal, tier || 1)
-  return { normal: t.normal - move, rare: t.rare, ultra: t.ultra + move }
+  const ultra = ultraPctOf(tier)
+  const rare = rarePctOf(rewardTier)
+  return { normal: 100 - rare - ultra, rare, ultra }
 }
 export const rollRarity = (rewardTier, tier, rng = Math.random) => {
   const t = rarityTableOf(rewardTier, tier)
@@ -228,11 +233,10 @@ export const rollRarity = (rewardTier, tier, rng = Math.random) => {
   return 'normal'
 }
 
-// 合成素材は**討伐できたときだけ**。ティアと帯で上がる
-export const TIER_FUSION_PCT = { A: 60, B: 35, C: 15, D: 5 }
-export const FUSION_TIER_BONUS = 2   // 帯1つにつき+2%
-export const fusionChanceOf = (rewardTier, tier) =>
-  Math.min(100, (TIER_FUSION_PCT[rewardTier] ?? TIER_FUSION_PCT.D) + FUSION_TIER_BONUS * (tier || 1))
+// 合成素材は**討伐できたときだけ**。★**固定1%**（2026-09-06 ユーザー指示）。
+//   ティアでも帯でも変わらない＝武器に付ける特殊能力は「たまたま出たら儲けもの」の枠
+export const FUSION_PCT = 1
+export const fusionChanceOf = () => FUSION_PCT
 
 // ===== 救援信号 =====
 // 宛先は**種別＋ID**で持つ。国を作ったら 'country' を足すだけで載る

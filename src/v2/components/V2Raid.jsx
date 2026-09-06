@@ -367,7 +367,7 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, onPr
                   </span>
                   <span style={{ color: TIER_COLOR[rt] }}>
                     　{TIER_LABEL[rt]}（素材{matCountOf(rt, r.tier)}個・激レア{rarityTableOf(rt, r.tier).ultra}%
-                    {r.killed_at ? `・合成素材${fusionChanceOf(rt, r.tier)}%` : ''}）
+                    {r.killed_at ? `・合成素材${fusionChanceOf()}%` : ''}）
                   </span>
                 </span>
                 <button onClick={() => claim(r.id)} disabled={busy} style={miniBtn('#ffcc00')}>受け取る</button>

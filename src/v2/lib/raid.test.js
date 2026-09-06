@@ -10,9 +10,10 @@ import {
   RAID_POWER_MULT, RAID_ATK_MULT, RAID_HP, raidPowerOfTier, raidAtkPowerOfTier, raidHpOfTier,
   bossPowerOfTier, raidPowerOfArea, raidHpOfArea, toRaidFighter, bossBaseStats, atkStatsOf,
   shareOf, tierOfShare, rewardTierOf, mvpIdOf, REWARD_TIERS, TIER_SHARE,
-  matCountOf, TIER_MAT_COUNT, tierCountBonus, rarityTableOf, rollRarity, TIER_RARITY,
+  matCountOf, TIER_MAT_COUNT, tierCountBonus, rarityTableOf, rollRarity,
+  TIER_ULTRA, TIER_RARE, ultraPctOf, rarePctOf,
   RAID_PARTY, HIT_CAP_DIV, hitCapOf,
-  fusionChanceOf, TIER_FUSION_PCT, FUSION_TIER_BONUS,
+  fusionChanceOf, FUSION_PCT,
   CALL_KINDS, CALL_MAX, ONLINE_MINUTES, pickRaidBoss, TIERS,
   secondsLeft, isOver, timeText,
 } from './raid.js'
@@ -25,6 +26,8 @@ import { AIL_LABEL } from './ailments.js'
 import { SORTIE_CD } from './sortie.js'
 
 const SQL = readFileSync(new URL('../../../supabase_v2_raid_20260906.sql', import.meta.url), 'utf8')
+// v2_raid_tiers の1行 (tier, power, hp, ultra_pct) を拾う
+const ROW_RE = /\(\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+)\)/g
 const rngOf = (s0) => { let s = s0 >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }
 
 // ===== 5体 =====
@@ -230,27 +233,45 @@ test('ルーン素材の個数はティア＋帯で増える', () => {
   }
 })
 
-test('レア度の表は合計100で、ティアも帯も上がるほど良くなる', () => {
+// ★2026-09-06 ユーザー指摘：**通常よりレアのほうが出やすい表になっていた**。
+//   どのティア・どの帯でも「通常＞レア＞激レア」を崩さないよう、ここで固定する
+test('★どのティア・どの帯でも 通常＞レア＞激レア', () => {
   for (const rt of REWARD_TIERS) {
     for (const t of TIERS) {
       const x = rarityTableOf(rt, t)
       assert.ok(Math.abs(x.normal + x.rare + x.ultra - 100) < 1e-9, `${rt}／帯${t} の合計が100でない`)
-      assert.ok(x.normal >= 0, `${rt}／帯${t} の通常が負`)
+      assert.ok(x.normal > x.rare, `${rt}／帯${t} で通常がレアより少ない`)
+      assert.ok(x.rare > x.ultra, `${rt}／帯${t} でレアが激レアより少ない`)
     }
   }
-  assert.ok(rarityTableOf('A', 1).ultra > rarityTableOf('B', 1).ultra, 'ティアで良くならない')
-  assert.ok(rarityTableOf('A', 8).ultra > rarityTableOf('A', 1).ultra, '帯で良くならない')
   assert.equal(rollRarity('A', 1, () => 0), 'ultra')
   assert.equal(rollRarity('D', 1, () => 0.99), 'normal')
 })
 
-test('合成素材の確率はティア＋帯×2%', () => {
-  assert.deepEqual(TIER_FUSION_PCT, { A: 60, B: 35, C: 15, D: 5 })
-  assert.equal(FUSION_TIER_BONUS, 2)
-  assert.equal(fusionChanceOf('A', 1), 62)
-  assert.equal(fusionChanceOf('A', 8), 76)
-  assert.equal(fusionChanceOf('D', 1), 7)
-  assert.ok(fusionChanceOf('A', 8) <= 100)
+test('激レアは帯だけで決まる（①3% 〜 最高7%）', () => {
+  assert.equal(ultraPctOf(1), 3)
+  assert.equal(Math.max(...Object.values(TIER_ULTRA)), 7, '激レアの上限が7%を超えている')
+  assert.equal(Math.min(...Object.values(TIER_ULTRA)), 3, '激レアの下限が3%でない')
+  for (const rt of REWARD_TIERS) {
+    assert.equal(rarityTableOf(rt, 1).ultra, 3, `${rt} の帯①が3%でない`)
+    assert.equal(rarityTableOf(rt, 8).ultra, 7, `${rt} の帯⑧が7%でない`)
+  }
+  // 帯が上がって下がることはない
+  for (let t = 2; t <= TIER_MAX; t++) assert.ok(ultraPctOf(t) >= ultraPctOf(t - 1), `帯${t}`)
+})
+
+test('レアはティアだけで決まる（A30 〜 D12・激レアの上限より必ず多い）', () => {
+  assert.deepEqual(TIER_RARE, { A: 30, B: 24, C: 18, D: 12 })
+  assert.equal(rarePctOf('A'), 30)
+  assert.equal(rarePctOf('ない'), TIER_RARE.D)
+  assert.ok(Math.min(...Object.values(TIER_RARE)) > Math.max(...Object.values(TIER_ULTRA)),
+    'いちばん低いレアが激レアの上限より少ない')
+  for (const t of TIERS) assert.equal(rarityTableOf('A', t).rare, 30, `帯${t}`)
+})
+
+test('★合成素材は固定1%（ティアでも帯でも変わらない）', () => {
+  assert.equal(FUSION_PCT, 1)
+  assert.equal(fusionChanceOf(), 1)
 })
 
 // ===== 残り時間 =====
@@ -345,16 +366,17 @@ test('SQL の v2_raid_const が raid.js と同じ数字になっている', () =
   assert.equal(num('tier_share_a'), TIER_SHARE.A)
   assert.equal(num('tier_share_b'), TIER_SHARE.B)
   assert.equal(num('tier_share_c'), TIER_SHARE.C)
-  assert.equal(num('fusion_tier_bonus'), FUSION_TIER_BONUS)
+  assert.equal(num('fusion_pct'), FUSION_PCT)
 })
 
-test('★SQL の v2_raid_tiers が raid.js の強さの表と一致している', () => {
+test('★SQL の v2_raid_tiers が raid.js の強さ・激レアの表と一致している', () => {
   const seed = SQL.slice(SQL.indexOf('insert into public.v2_raid_tiers'))
-  const rows = [...seed.slice(0, seed.indexOf('on conflict')).matchAll(/\(\s*(\d+),\s*(\d+),\s*(\d+)\)/g)]
+  const rows = [...seed.slice(0, seed.indexOf('on conflict')).matchAll(ROW_RE)]
   assert.equal(rows.length, TIER_MAX, '行数が帯の数と違う')
-  for (const [, tier, power, hp] of rows) {
+  for (const [, tier, power, hp, ultra] of rows) {
     assert.equal(Number(power), raidPowerOfTier(Number(tier)), `帯${tier}の戦闘力がSQLと違う`)
     assert.equal(Number(hp), raidHpOfTier(Number(tier)), `帯${tier}のHPがSQLと違う`)
+    assert.equal(Number(ultra), ultraPctOf(Number(tier)), `帯${tier}の激レアの確率がSQLと違う`)
   }
 })
 
@@ -372,21 +394,15 @@ test('★SQL の報酬の中身が raid.js と一致している', () => {
   const cnt = `when 'A' then ${TIER_MAT_COUNT.A} when 'B' then ${TIER_MAT_COUNT.B} when 'C' then ${TIER_MAT_COUNT.C} else ${TIER_MAT_COUNT.D} end`
   assert.ok(body.includes(cnt), `素材の個数がSQLと違う（${cnt}）`)
   assert.ok(body.includes('floor(v_r.tier / 3.0)::int'), '帯ぶんの個数ボーナスが無い')
-  // レア度（ティアごとの基礎＋帯ぶん）
-  const ult = `when 'A' then ${TIER_RARITY.A.ultra} when 'B' then ${TIER_RARITY.B.ultra}`
-    + ` when 'C' then ${TIER_RARITY.C.ultra} else ${TIER_RARITY.D.ultra} end) + v_r.tier`
-  assert.ok(body.includes(ult), `激レアの表がSQLと違う（${ult}）`)
-  const rare = `when 'A' then ${TIER_RARITY.A.rare} when 'B' then ${TIER_RARITY.B.rare}`
-    + ` when 'C' then ${TIER_RARITY.C.rare} else ${TIER_RARITY.D.rare} end)`
+  // 激レアは v2_raid_tiers.ultra_pct（帯だけ）から引いている
+  assert.ok(body.includes('select ultra_pct into v_ultra from public.v2_raid_tiers'),
+    '激レアを帯の表から引いていない')
+  // レアはティアだけ
+  const rare = `when 'A' then ${TIER_RARE.A} when 'B' then ${TIER_RARE.B}`
+    + ` when 'C' then ${TIER_RARE.C} else ${TIER_RARE.D} end)`
   assert.ok(body.includes(rare), `レアの表がSQLと違う（${rare}）`)
-  // 帯が1つ上がるごとに激レアが1%ずつ増える（SQLの「+ v_r.tier」と同じ動き）
-  for (const rt of REWARD_TIERS) {
-    assert.equal(rarityTableOf(rt, 2).ultra, rarityTableOf(rt, 1).ultra + 1, `${rt} の帯ボーナスが1%になっていない`)
-    assert.equal(rarityTableOf(rt, 1).ultra, TIER_RARITY[rt].ultra + 1, `${rt} の基礎が違う`)
-  }
-  // 合成素材
-  const fus = `when 'A' then ${TIER_FUSION_PCT.A} when 'B' then ${TIER_FUSION_PCT.B} when 'C' then ${TIER_FUSION_PCT.C} else ${TIER_FUSION_PCT.D} end`
-  assert.ok(body.includes(fus), '合成素材の確率がSQLと違う')
+  // 合成素材は固定1%
+  assert.ok(body.includes("(v_c->>'fusion_pct')::numeric"), '合成素材が固定の確率になっていない')
   // 1発の上限
   assert.ok(SQL.includes(`v_r.hp_max / ${HIT_CAP_DIV}`), '1発の上限がSQLと違う')
 })

@@ -145,29 +145,33 @@ grant execute on function public.v2_friend_remove(bigint) to authenticated;
 -- ---- 帯ごとの強さ（src/v2/lib/raid.js の RAID_HP / raidPowerOfTier の写し）----
 -- ⚠**勘で書き換えない。** node tools/v2-raid-tune.mjs を回して出た表を貼ること。
 --   power … そのエリアのボスの戦闘力 × 2（守りのステを作るもとになる数字）
---   hp    … その帯の**作り込んだ**編成が、想定人数（5人）で1時間フル（360回×5）
---            殴ってちょうど削り切れる量。★ソロだと1時間で2割ほどしか削れない
+--   hp        … その帯の**作り込んだ**編成が、想定人数（5人）で1時間フル（360回×5）
+--                殴ってちょうど削り切れる量。★ソロだと1時間で2割ほどしか削れない
+--   ultra_pct … 報酬の激レア素材の確率(%)。**帯だけで決まる**（①3% 〜 ⑧7%）
 create table if not exists public.v2_raid_tiers (
-  tier  int    primary key,
-  power int    not null,
-  hp    bigint not null
+  tier      int    primary key,
+  power     int    not null,
+  hp        bigint not null,
+  ultra_pct numeric not null default 3   -- 激レア素材の確率(%)。帯だけで決まる
 );
+alter table public.v2_raid_tiers add column if not exists ultra_pct numeric not null default 3;
 alter table public.v2_raid_tiers enable row level security;
 drop policy if exists "v2_raid_tiers_read" on public.v2_raid_tiers;
 create policy "v2_raid_tiers_read" on public.v2_raid_tiers for select to authenticated using (true);
 revoke all on table public.v2_raid_tiers from anon;
 grant select on table public.v2_raid_tiers to authenticated;
 
-insert into public.v2_raid_tiers (tier, power, hp) values
-  (1,   2572,    1900000),
-  (2,   3720,    4800000),
-  (3,   5588,   15000000),
-  (4,   9212,   19000000),
-  (5,  26288,  260000000),
-  (6,  48824,  580000000),
-  (7,  69538,  930000000),
-  (8,  90494, 1500000000)
-on conflict (tier) do update set power = excluded.power, hp = excluded.hp;
+insert into public.v2_raid_tiers (tier, power, hp, ultra_pct) values
+  (1,   2572,    1900000, 3),
+  (2,   3720,    4800000, 3),
+  (3,   5588,   15000000, 4),
+  (4,   9212,   19000000, 4),
+  (5,  26288,  260000000, 5),
+  (6,  48824,  580000000, 5),
+  (7,  69538,  930000000, 6),
+  (8,  90494, 1500000000, 7)
+on conflict (tier) do update set
+  power = excluded.power, hp = excluded.hp, ultra_pct = excluded.ultra_pct;
 
 create table if not exists public.v2_raids (
   id         bigserial primary key,
@@ -228,8 +232,8 @@ create or replace function public.v2_raid_const() returns jsonb
     'power_mult', 2, 'atk_mult', 0.06,
     'call_max', 50, 'online_minutes', 5,
     'tier_share_a', 0.25, 'tier_share_b', 0.10, 'tier_share_c', 0.03,
-    'fusion_tier_bonus', 2
-  ) $$;
+    'fusion_pct', 1
+  ) $;
 
 -- ---- 報酬のティア（主催者とMVPはA確定・それ以外は貢献度）----
 -- ★src/v2/lib/raid.js の rewardTierOf と同じ規則
@@ -537,10 +541,12 @@ grant select on table public.v2_player_fusions to authenticated;
 -- ---- 報酬を受け取る（1レイドにつき1回）----
 -- ★**主催者とMVP（いちばん削った人）はティアA確定**。それ以外は貢献度でティアが上がる
 --     share ＝ 自分の与ダメ ÷ 最大HP　… A:25%以上 / B:10%以上 / C:3%以上 / D:それ未満
--- ★**エリアの帯が奥ほど豪華**（2026-09-06 ユーザー指示）
---     ルーン素材の個数 … A6 B4 C2 D1 ＋ floor(帯 / 3)
---     レア度           … ティアごとの表から、帯ぶん(%)を通常 → 激レアへ移す
---     合成素材の確率   … A60 B35 C15 D5 ＋ 帯×2（**討伐できたときだけ**）
+-- ★中身は**軸を1本ずつに分けてある**（2026-09-06 ユーザー指示）
+--     ルーン素材の個数 … ティア（A6 B4 C2 D1）＋ floor(帯 / 3)
+--     激レアの確率     … **帯だけ**（①3% 〜 ⑧7%・v2_raid_tiers.ultra_pct）
+--     レアの確率       … **ティアだけ**（A30 B24 C18 D12）
+--     通常             … 残り（★必ず一番多い＝通常＞レア＞激レア）
+--     合成素材の確率   … **固定1%**（**討伐できたときだけ**）
 -- ⚠数値の正は src/v2/lib/raid.js。raid.test.js が両方を突き合わせている
 create or replace function public.v2_raid_claim(p_raid_id bigint)
 returns jsonb language plpgsql security definer set search_path = public as $$
@@ -583,9 +589,9 @@ begin
   v_n := (case v_rt when 'A' then 6 when 'B' then 4 when 'C' then 2 else 1 end)
        + floor(v_r.tier / 3.0)::int;
 
-  -- レア度の表。帯ぶん(%)を通常から激レアへ移す
-  v_ultra := (case v_rt when 'A' then 25 when 'B' then 12 when 'C' then 5 else 1 end) + v_r.tier;
-  v_rare  := (case v_rt when 'A' then 45 when 'B' then 38 when 'C' then 30 else 14 end);
+  -- レア度。激レアは帯だけ・レアはティアだけで決まる（残りが通常＝必ず一番多い）
+  select ultra_pct into v_ultra from public.v2_raid_tiers where tier = v_r.tier;
+  v_rare := (case v_rt when 'A' then 30 when 'B' then 24 when 'C' then 18 else 12 end);
 
   -- ルーン素材（そのエリアのボス素材。レア度を1個ずつ引く）
   for v_i in 1..v_n loop
@@ -606,9 +612,8 @@ begin
 
   -- 合成素材（討伐できたときだけ）
   if v_r.killed_at is not null then
-    if random() * 100 < least(100,
-         (case v_rt when 'A' then 60 when 'B' then 35 when 'C' then 15 else 5 end)
-         + (v_c->>'fusion_tier_bonus')::numeric * v_r.tier) then
+    -- ★合成素材は**固定1%**（ティアでも帯でも変わらない）
+    if random() * 100 < (v_c->>'fusion_pct')::numeric then
       v_fid := 'fu:' || v_r.boss_key;
       if exists (select 1 from public.v2_fusion_materials where id = v_fid) then
         insert into public.v2_player_fusions (player_id, fusion_id, qty) values (v_me, v_fid, 1)
