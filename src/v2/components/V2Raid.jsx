@@ -401,10 +401,13 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, isAd
       )}
 
       {/* ===== 開発限定：レイドをその場に呼ぶ ===== */}
-      {isAdmin && !raid && (
+      {/* ★挑戦中でも出す。**進行中のレイドを終わらせてから立て直す**ので、
+          これが無いと1時間待たないと次の確認ができない（報酬の受け取りも試せない） */}
+      {isAdmin && (
         <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
           <div style={{ color:'#88ddaa', fontSize:'11px', marginBottom:'6px' }}>
             [開発] レイドをその場に呼ぶ（解放しているエリアの中でいちばん奥の帯で立てます）
+            {raid && <span style={{ color:'#ff8844' }}>　※いまのレイドは時間切れ扱いで終わります（報酬は残ります）</span>}
           </div>
           <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
             {RAID_BOSSES.map(b => (
