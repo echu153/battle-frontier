@@ -70,6 +70,20 @@ export default function V2Fusion({ prof, inventory, fusions, isAdmin, onRefresh 
     onRefresh?.(null)
   }
 
+  // ★開発限定：**出撃で落ちたときと同じ道**（v2_grant_fusion_drop）を1回だけ通す。
+  //   一律1%なので、ふつうに出撃していると出るまで100回かかる＝これが無いと確かめられない。
+  //   ⚠敵の因子しか受け取れないRPCなので、レイド由来の素材では弾かれる（それも確認になる）
+  const tryDrop = async () => {
+    const f = fusionsOfSource('enemy')[0]
+    setBusy(true)
+    const { data, error } = await supabase.rpc('v2_grant_fusion_drop', { p_fusion_id: f.id })
+    setBusy(false)
+    setMsg(error || !data?.ok
+      ? `⚠ 出撃ドロップの受け取りに失敗（${error?.message || data?.error}）`
+      : `✦ 出撃ドロップと同じ道で「${data.fusion?.name}」を受け取りました`)
+    onRefresh?.(null)
+  }
+
   return (
     <div>
       <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
@@ -92,6 +106,9 @@ export default function V2Fusion({ prof, inventory, fusions, isAdmin, onRefresh 
                 [開発] {f.name}×3
               </button>
             ))}
+            <button onClick={tryDrop} disabled={busy} style={miniBtn('#ffcc00')}>
+              [開発] 出撃ドロップを1回ためす（{fusionsOfSource('enemy')[0]?.name}）
+            </button>
           </div>
         )}
       </div>
