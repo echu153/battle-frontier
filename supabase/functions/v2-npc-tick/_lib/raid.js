@@ -247,33 +247,6 @@ export const secondsLeft = (startedAt, now = Date.now()) =>
   Math.max(0, Math.floor((endsAtOf(startedAt).getTime() - now) / 1000))
 export const isOver = (raid, now = Date.now()) =>
   !raid || raid.hp_left <= 0 || secondsLeft(raid.started_at, now) <= 0
-// ===== いまのペースで討伐できるか（複数人で殴る前提の目安）=====
-// ★「あと何人呼べばいいか」がその場で分かるようにする（2026-09-06 ユーザー指示）。
-//   参加者ぜんぶの与ダメ合計 ÷ 経過時間 を「いまの速さ」として、残りHPと残り時間から出す。
-//   ⚠始まった直後は速さが定まらないので、PACE_WARMUP 秒たつまでは出さない
-export const PACE_WARMUP = 60
-export const paceOf = (raid, now = Date.now()) => {
-  if (!raid) return null
-  const elapsed = (now - new Date(raid.started_at).getTime()) / 1000
-  const left = secondsLeft(raid.started_at, now)
-  const done = Number(raid.hp_max) - Number(raid.hp_left)
-  if (elapsed < PACE_WARMUP || done <= 0) return null
-  const speed = done / elapsed                 // 1秒あたりに削れている量
-  const need = Number(raid.hp_left)
-  const etaSec = speed > 0 ? Math.ceil(need / speed) : Infinity
-  const members = (raid.members || []).length || 1
-  // 時間内に削り切るのに要る速さ。いまの速さとの比が「何人ぶん要るか」
-  const needSpeed = left > 0 ? need / left : Infinity
-  const needMembers = Number.isFinite(needSpeed) && speed > 0
-    ? Math.ceil(members * (needSpeed / speed)) : Infinity
-  return {
-    etaSec, left, members,
-    willKill: etaSec <= left,
-    // あと何人呼べば間に合うか（間に合っているなら0）
-    short: etaSec <= left ? 0 : Math.max(1, Math.min(RAID_MAX_MEMBERS, needMembers) - members),
-  }
-}
-
 export const timeText = (sec) => {
   const m = Math.floor(sec / 60)
   const s = sec % 60

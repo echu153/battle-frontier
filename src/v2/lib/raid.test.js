@@ -14,7 +14,7 @@ import {
   RAID_PARTY, HIT_CAP_DIV, hitCapOf,
   fusionChanceOf, TIER_FUSION_PCT, FUSION_TIER_BONUS,
   CALL_KINDS, CALL_MAX, ONLINE_MINUTES, pickRaidBoss, TIERS,
-  secondsLeft, isOver, timeText, paceOf, PACE_WARMUP,
+  secondsLeft, isOver, timeText,
 } from './raid.js'
 import { FUSIONS, FUSION_BY_ID, fusedName, canFuseItem, checkFuse, fusedAbilitiesOf } from './fusion.js'
 import { FUSION_ABILITIES, ABILITY_OF, ENCHANTS, collectEnchants, abilityText } from './enchant.js'
@@ -266,30 +266,6 @@ test('討伐済み・時間切れはどちらも「終わっている」', () =>
   assert.equal(isOver({ hp_left: 100, started_at: t0 }, t0.getTime()), false)
   assert.equal(isOver({ hp_left: 0, started_at: t0 }, t0.getTime()), true)
   assert.equal(isOver({ hp_left: 100, started_at: t0 }, t0.getTime() + 61 * 60000), true)
-})
-
-// ===== いまのペース（複数人で殴る前提の目安）=====
-test('★始まった直後はペースを出さない（速さが定まらないため）', () => {
-  const t0 = new Date('2026-09-06T10:00:00Z').getTime()
-  const raid = { started_at: new Date(t0), hp_max: 1000, hp_left: 900, members: [{}] }
-  assert.equal(paceOf(raid, t0 + (PACE_WARMUP - 1) * 1000), null)
-  assert.equal(paceOf(null, t0), null)
-  // まだ1も削れていないときも出さない
-  assert.equal(paceOf({ ...raid, hp_left: 1000 }, t0 + 600000), null)
-})
-
-test('★このペースで間に合うかと、あと何人要るかを出す', () => {
-  const t0 = new Date('2026-09-06T10:00:00Z').getTime()
-  // 10分で半分削れた ＝ このままなら10分後に討伐（残り50分あるので間に合う）
-  const ok = paceOf({ started_at: new Date(t0), hp_max: 1000, hp_left: 500, members: [{}, {}] }, t0 + 600000)
-  assert.equal(ok.willKill, true)
-  assert.equal(ok.short, 0)
-  assert.equal(ok.members, 2)
-  assert.equal(ok.etaSec, 600)
-  // 10分で1%しか削れていない ＝ 間に合わないので人が要る
-  const ng = paceOf({ started_at: new Date(t0), hp_max: 1000, hp_left: 990, members: [{}, {}] }, t0 + 600000)
-  assert.equal(ng.willKill, false)
-  assert.ok(ng.short >= 1, '足りない人数が出ていない')
 })
 
 // ===== 合成 =====
