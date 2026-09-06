@@ -52,10 +52,10 @@ export default function V2Arena({ prof, inventory, runes, fishDex, dex, pet, onP
   const byFloor = useMemo(() => Object.fromEntries((rows || []).map(r => [r.floor, r])), [rows])
   const floor = Math.min(FLOORS, Math.max(1, prof.arena_floor || 1))
   const defending = (rows || []).find(r => String(r.player_id) === String(prof.id)) || null
-  const champ = champOf(floor, byFloor[floor], SKILL_BY_NAME)
-
+  // ★自分の戦闘力を**先に**出す。空き階のNPCはこれに合わせて底上げされる（arena.js の npcPowerFor）
   const me = useMemo(() => toFighter(prof, inventory, runes, fishDex, dex, pet), [prof, inventory, runes, fishDex, dex, pet])
   const myPower = calcPower(me.stats)
+  const champ = champOf(floor, byFloor[floor], SKILL_BY_NAME, myPower)
   const foePower = champ ? calcPower(champ.stats) : 0
   const bonus = champ ? streakBonusPct(champ.streak, floor, myPower, foePower) : 0
 
@@ -202,7 +202,7 @@ export default function V2Arena({ prof, inventory, runes, fishDex, dex, pet, onP
       <div style={{ ...box, padding:'10px', marginBottom:'10px' }}>
         <div style={{ display:'flex', gap:'4px', overflowX:'auto', paddingBottom:'2px' }}>
           {nearFloors.map(f => {
-            const c = champOf(f, byFloor[f], SKILL_BY_NAME)
+            const c = champOf(f, byFloor[f], SKILL_BY_NAME, myPower)
             const here = f === floor
             const mine = String(byFloor[f]?.player_id || '') === String(prof.id)
             const pct = c ? Math.max(0, Math.min(100, (c.hp / Math.max(1, c.stats.hp)) * 100)) : 0
@@ -269,7 +269,7 @@ export default function V2Arena({ prof, inventory, runes, fishDex, dex, pet, onP
         {showList && (
         <div style={{ display:'grid', gap:'2px' }}>
           {Array.from({ length: FLOORS }, (_, i) => FLOORS - i).map(f => {
-            const c = champOf(f, byFloor[f], SKILL_BY_NAME)
+            const c = champOf(f, byFloor[f], SKILL_BY_NAME, myPower)
             const mine = String(byFloor[f]?.player_id || '') === String(prof.id)
             const here = f === floor && !defending
             return (

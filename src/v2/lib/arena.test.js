@@ -19,11 +19,18 @@ test('50階建て（ユーザー決定）', () => {
   assert.equal(FLOORS, 50)
 })
 
-test('階が上がるほど戦闘力の目安が上がる', () => {
+test('階が上がるほど戦闘力の目安が上がる', async () => {
   for (let f = 2; f <= FLOORS; f++) assert.ok(powerOfFloor(f) > powerOfFloor(f - 1), `${f}階`)
+  // ★1階は動かさない。はじめたての戦闘力がこのくらいで、ここを上げると新規が入れない
   assert.equal(powerOfFloor(1), 150)
-  // 最上階はエリア⑧のボス級（28,000前後）
-  assert.ok(powerOfFloor(FLOORS) > 25000 && powerOfFloor(FLOORS) < 35000, `50階=${powerOfFloor(FLOORS)}`)
+  // ★最上階は**この作品でいちばん強い相手**であること。
+  //   数字を書かずにエリア⑧のボスと比べる＝ボスを調整したときに逆転へ気づける
+  //   （実際 2026-09-06 にボスを上げて 50階(29,749) < ⑧ボス(45,247) の逆転が起きていた）
+  const { AREAS_SORTED } = await import('./enemies.js')
+  const last = AREAS_SORTED.filter(a => a.tier === Math.max(...AREAS_SORTED.map(x => x.tier)))
+  const bossMax = Math.max(...last.map(a => a.boss.power))
+  assert.ok(powerOfFloor(FLOORS) > bossMax,
+    `50階=${powerOfFloor(FLOORS)} が⑧のボス${bossMax}より弱い`)
   // 範囲の外を渡しても端に丸める
   assert.equal(powerOfFloor(0), powerOfFloor(1))
   assert.equal(powerOfFloor(999), powerOfFloor(FLOORS))
@@ -234,4 +241,50 @@ test('抽選はその表どおりに出る', () => {
     const pct = ((count[r] || 0) / n) * 100
     assert.ok(Math.abs(pct - DROP_RANKS[r]) < 0.5, `${r} は約${DROP_RANKS[r]}% だが ${pct.toFixed(2)}%`)
   }
+})
+
+// ===== 空き階のNPCは挑戦者より格上（2026-09-06 ユーザー指示）=====
+// 前は階だけで強さが決まっていて、戦闘力6,438の人が8階（319＝自分の5%）で
+// 足踏みし、釣り合う35階まで**無意味な戦いが27回続く**状態だった。
+test('★空き階のNPCは「その階の値」と「自分×0.8」の高いほう', async () => {
+  const { NPC_MIN_RATIO, npcPowerFor } = await import('./arena.js')
+  assert.equal(NPC_MIN_RATIO, 0.8)
+  const me = 6438
+  // 下の階 … 自分の1.3倍まで底上げされる
+  assert.equal(npcPowerFor(1, me), Math.round(me * 0.8))
+  assert.equal(npcPowerFor(8, me), Math.round(me * 0.8))
+  assert.ok(npcPowerFor(8, me) > powerOfFloor(8), '底上げされていない')
+  // 上の階 … 階の値のほうが高いのでそのまま＝**階の意味が残っている**
+  assert.equal(npcPowerFor(50, me), powerOfFloor(50))
+  assert.ok(npcPowerFor(50, me) > npcPowerFor(8, me), '上の階のほうが強くない')
+  // 戦闘力を渡さなければ前と同じ（階の値だけ）
+  assert.equal(npcPowerFor(8), powerOfFloor(8))
+  assert.equal(npcPowerFor(8, 0), powerOfFloor(8))
+})
+
+test('★底上げは空き階のNPCだけ。人が座っている階は本人の実力のまま', async () => {
+  const { champOf, npcStatsOf, snapshotOf } = await import('./arena.js')
+  const { calcPower } = await import('./stats.js')
+  const me = 6438
+  // 空き階（row が無い）… 底上げされる
+  const npc = champOf(8, null, {}, me)
+  assert.ok(calcPower(npc.stats) > powerOfFloor(8) * 2, `空き階が底上げされていない（${calcPower(npc.stats)}）`)
+  // 人が座っている階 … スナップショットの実力そのまま
+  const weak = { name:'よわい人', cls:'ノーブル', jobCount:0, stats: npcStatsOf(3), enchants:[], slots:[] }
+  const row = { snapshot: snapshotOf(weak), hp: weak.stats.hp, mp: weak.stats.mp, streak: 0 }
+  const sat = champOf(8, row, {}, me)
+  assert.equal(calcPower(sat.stats), calcPower(weak.stats), '座っている人まで底上げしてしまっている')
+})
+
+// ★画面と自動成長NPCの両方が自分の戦闘力を渡していること。
+//   片方だけ渡すと、渡していない側だけが空き階を素通りできてしまう。
+test('★画面もNPCの自動処理も、champOf へ自分の戦闘力を渡している', async () => {
+  const { readFileSync } = await import('node:fs')
+  const ui = readFileSync(new URL('../components/V2Arena.jsx', import.meta.url), 'utf8')
+  const calls = [...ui.matchAll(/champOf\(([^)]*)\)/g)].map(m => m[1])
+  assert.ok(calls.length >= 3, `champOf の呼び出しを拾えている（${calls.length}件）`)
+  for (const c of calls) assert.match(c, /myPower/, `戦闘力を渡していない呼び出しがある: champOf(${c})`)
+  const fn = readFileSync(new URL('../../../supabase/functions/v2-npc-tick/index.ts', import.meta.url), 'utf8')
+  assert.match(fn, /champOf\(floor, byFloor\.get\(floor\), SKILL_BY_NAME, myPower\)/,
+    '自動成長NPC側が戦闘力を渡していない')
 })

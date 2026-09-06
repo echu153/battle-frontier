@@ -62,11 +62,39 @@ export const GUARD_DROP_MULT = 1.1
 export const guardDropMultOf = (defending) => (defending ? GUARD_DROP_MULT : 1)
 
 // ===== 階ごとの戦闘力の目安 =====
-// 1階＝はじめたて、50階＝エリア⑧のボス級（28,000前後）になるよう指数で並べる
+// 1階＝はじめたて、50階＝この作品でいちばん強い相手になるよう指数で並べる。
+// ★2026-09-06 ユーザー指示「アリーナの敵が弱すぎる、もっと強くして」で引き上げた。
+//   前は 成長率1.114 で 50階＝29,749。ボスを上げたあと（⑧＝45,247）は
+//   **最上階がエリア⑧より弱い**という逆転が起きていた。
+//   成長率1.126 にして 50階＝50,289 ＝ ⑧のボスより少し上に置く。
+//   ⚠1階（150）は動かさない。はじめたての戦闘力がそのくらいなので、
+//     ここを上げると新規がアリーナに入れなくなる。
 export const FLOOR_BASE = 150
-export const FLOOR_GROWTH = 1.114
+export const FLOOR_GROWTH = 1.126
 export const powerOfFloor = (floor) =>
   Math.round(FLOOR_BASE * Math.pow(FLOOR_GROWTH, Math.max(1, Math.min(FLOORS, floor)) - 1))
+
+// ===== 空き階のNPCは「挑戦者より格上」を下限にする =====
+// ★2026-09-06 ユーザー指示。階だけで強さを決めていたので、
+//   戦闘力6,438の人が8階（319＝自分の5%）で足踏みし、釣り合う35階まで
+//   **無意味な戦いが27回続く**状態になっていた。
+//   そこで空き階のNPCを「その階の値」と「自分の戦闘力×NPC_MIN_RATIO」の**高いほう**にする。
+//   ・どの階にいてもすぐ歯ごたえが出る
+//   ・階の意味（上ほど強い）は残る＝上の階では階の値のほうが勝つ
+//   ⚠**人が座っている階には効かない**。そこは本人の実力そのものと戦う（KOTHなので当然）。
+//
+// ★★倍率は 0.8。**1.0より上にしてはいけない**（2026-09-06 実測）。
+//   ・アリーナのNPCはHPに厚く配られていて技も4つ持つので、
+//     **同じ戦闘力なら相手のほうが強い**（相手＝自分×1.00 で勝率22%）。
+//   ・アリーナは勝てば+1階・負ければ−1階。**勝率が50%を割ると下へ流れて戻れない**。
+//     ×1.3 は勝率0%＝永久に1階から動けなくなる。
+//   相手が自分の… 70% 80% 90% 100% 110% 120% 130%
+//   勝率           76% 62% 44%  22%  10%   5%   0%
+//   → 0.8（勝率62%・4戦に1階のペースで上がる）を採った。
+//   ⚠**数字を変えたら node tools/v2-arena-tune.mjs を回し直すこと**
+export const NPC_MIN_RATIO = 0.8
+export const npcPowerFor = (floor, myPower = 0) =>
+  Math.max(powerOfFloor(floor), Math.round((myPower || 0) * NPC_MIN_RATIO))
 
 // 負けたときに次に挑戦する階。**戦闘力に関係なく、負けたら必ず1つ落ちる**
 // ⚠**「戦闘力が足りていれば落ちない」という下限は廃止した**（2026-08-17 ユーザー決定）。
@@ -116,10 +144,10 @@ export const npcNameOf = (floor) =>
 // 戦闘力の配り方。職業のメイン／サブへ厚くする（プレイヤーらしい形にする）
 // HPは8・MPは3で戦闘力1ぶんなので、そのぶん量を増やす
 const UNIT = { hp: 8, mp: 3 }
-export const npcStatsOf = (floor) => {
+export const npcStatsOf = (floor, myPower = 0) => {
   const cls = npcClassOf(floor)
   const b = CLASS_BONUS[cls] || {}
-  const power = powerOfFloor(floor)
+  const power = npcPowerFor(floor, myPower)
   // 8種へ配る割合(%)。HPを厚めにして、殴り合いが1発で終わらないようにする
   const dist = { hp: 26, mp: 8, str: 8, dex: 8, agi: 8, int_stat: 8, vit: 8, luk: 8 }
   if (b.main) dist[b.main] += 12
@@ -139,12 +167,13 @@ export const npcSlotsOf = (floor) => {
 }
 
 // runBattle に渡せる形。プレイヤーのスナップショットと同じ形にそろえてある
-export const npcChampOf = (floor) => ({
+// ★myPower … 挑戦する側の戦闘力。空き階のNPCはこれに合わせて底上げされる（npcPowerFor）
+export const npcChampOf = (floor, myPower = 0) => ({
   npc: true,
   name: npcNameOf(floor),
   cls: npcClassOf(floor),
   jobCount: 0,
-  stats: npcStatsOf(floor),
+  stats: npcStatsOf(floor, myPower),
   enchants: [],
   slots: npcSlotsOf(floor),
 })
@@ -172,10 +201,12 @@ export const fromSnapshot = (snap, skillByName) => ({
 })
 
 // その階の階層守護者（空いていればNPC）
-export const champOf = (floor, row, skillByName) => {
+// ★myPower を渡すと、**空き階のNPCだけ**が「自分×NPC_MIN_RATIO」まで底上げされる。
+//   人が座っている階（row.snapshot がある）は本人の実力そのままで、影響を受けない。
+export const champOf = (floor, row, skillByName, myPower = 0) => {
   if (row?.snapshot) return { ...fromSnapshot(row.snapshot, skillByName), hp: row.hp, mp: row.mp, streak: row.streak || 0 }
   if (!NPC_ENABLED) return null
-  const npc = npcChampOf(floor)
+  const npc = npcChampOf(floor, myPower)
   return { ...npc, hp: npc.stats.hp, mp: npc.stats.mp, streak: 0 }
 }
 

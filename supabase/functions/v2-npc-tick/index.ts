@@ -106,11 +106,12 @@ Deno.serve(async (req) => {
 
     // 挑戦する
     const floor = Math.min(FLOORS, Math.max(1, n.arena_floor || 1))
-    const champ = champOf(floor, byFloor.get(floor), SKILL_BY_NAME)
-    if (!champ) { bump(arenaDelayOf(n.speed, rng)); continue }
-
+    // ★自分の戦闘力を先に出す。空き階のNPCはこれに合わせて底上げされる
+    //   （プレイヤーとまったく同じ扱い。片方だけ底上げすると釣り合わなくなる）
     const me = fighterOf(n)
     const myPower = calcPower(me.stats)
+    const champ = champOf(floor, byFloor.get(floor), SKILL_BY_NAME, myPower)
+    if (!champ) { bump(arenaDelayOf(n.speed, rng)); continue }
     const foePower = calcPower(champ.stats)
     // 連勝中の相手に挑むとこちらが強くなる（プレイヤーとまったく同じ補正）
     const bonus = streakBonusPct(champ.streak, floor, myPower, foePower)
