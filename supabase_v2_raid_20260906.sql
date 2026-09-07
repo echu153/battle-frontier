@@ -75,7 +75,7 @@ create table if not exists public.v2_raids (
   id         bigserial primary key,
   host_id    uuid   not null references auth.users(id) on delete cascade,
   boss_key   text   not null,            -- src/v2/lib/raid.js の RAID_BOSSES.key
-  area_id    int    not null references public.v2_areas(id),  -- 報酬のルーン素材はここのボス素材
+  area_id    int    not null references public.v2_areas(id),  -- 報酬のルーン素材はここのエリアから引く
   tier       int    not null,            -- そのエリアの難易度帯。強さも報酬もこれで決まる
   power      int    not null,            -- ボスの戦闘力（v2_raid_tiers の写し）
   hp_max     bigint not null,
@@ -492,8 +492,12 @@ begin
     elsif v_roll < p_ultra + p_rare then v_rarity := 'rare';
     else v_rarity := 'normal';
     end if;
+    -- ★そのエリアの**ランダムな敵**の素材（2026-09-07 ユーザー指示）。
+    --   前はボス素材だけだった。いまは雑魚もレアモンスターもボスも同じ確率で引く。
+    --   ⚠1個ずつ引き直すので、5個もらうと中身はバラバラになる
     select id into v_mid from public.v2_materials
-     where area = p_area and is_boss and rarity = v_rarity limit 1;
+     where area = p_area and rarity = v_rarity
+     order by random() limit 1;
     if v_mid is not null then
       insert into public.v2_player_materials (player_id, material_id, qty) values (p_player, v_mid, 1)
         on conflict (player_id, material_id) do update set qty = public.v2_player_materials.qty + 1;

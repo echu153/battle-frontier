@@ -452,7 +452,9 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, isAd
             主催者といちばん削った人は、貢献度とは別に{BOX_LABEL.host}・{BOX_LABEL.mvp}
             （素材{BOX_MAT_COUNT}個・{RARITY_LABEL.ultra}{BOX_RARITY.ultra}%・合成素材{BOX_FUSION_PCT}%）をもらえます。<br />
             HPは<b style={{ color:'#ff8844' }}>複数人がかりで1時間</b>ぶんあるので、ひとりでは削り切れません。<br />
-            <b style={{ color:'#ff8844' }}>奥のエリアで引いたレイドほど強く、報酬も豪華</b>になります。
+            <b style={{ color:'#ff8844' }}>奥のエリアで引いたレイドほど強く、報酬も豪華</b>になります。<br />
+            もらえるルーン素材は<b style={{ color:'#ffcc00' }}>そのエリアの敵からランダム</b>で、
+            合成素材は<b>討伐したレイドボスのもの</b>が別枠で出ます。
           </div>
 
           {/* ★今日の残り回数。数えているのはサーバー（v2_raid_spawn） */}

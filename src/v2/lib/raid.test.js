@@ -632,6 +632,18 @@ test('★SQL の報酬の中身が raid.js と一致している', () => {
   assert.ok(SQL.includes('v_r.hp_max / ' + HIT_CAP_DIV), '1発の上限がSQLと違う')
 })
 
+// ★2026-09-07 ユーザー指示「レイドボスの報酬は出現したエリアのランダムなルーン素材にして」
+test('★ルーン素材はそのエリアからランダムに引く（ボス素材固定ではない）', () => {
+  const body = SQL.slice(SQL.indexOf('create or replace function public.v2_raid_grant'))
+  const one = body.slice(0, body.indexOf('合成素材は'))
+  assert.ok(one.includes('where area = p_area and rarity = v_rarity'), 'エリアで絞っていない')
+  assert.ok(one.includes('order by random() limit 1'), 'ランダムに引いていない')
+  assert.ok(!one.includes('is_boss'), 'ボス素材に固定されたままになっている')
+  // 合成素材のほうは別枠のまま（レイドボスの5種・討伐したときだけ）
+  assert.ok(body.includes("'fu:' || p_boss_key"), '合成素材がレイドボスから引かれていない')
+  assert.ok(body.includes('coalesce(p_killed, false)'), '合成素材が討伐条件から外れている')
+})
+
 test('★SQL の定数が箱とEXPの値と一致している', () => {
   const body = SQL.slice(SQL.indexOf('create or replace function public.v2_raid_const'))
   const num = (k) => {

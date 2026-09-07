@@ -13,6 +13,25 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "C:/Users/echu1/Desktop/proseka-tool", "run", "dev"],
       "port": 5199
+    },
+    {
+      "name": "walk-rpg",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "C:/Users/echu1/Desktop/walk-rpg", "run", "dev"],
+      "port": 5177
+    },
+    {
+      "name": "walk-rpg-phone",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "C:/Users/echu1/Desktop/walk-rpg", "run", "dev:phone"],
+      "port": 5177,
+      "url": "https://localhost:5177"
+    },
+    {
+      "name": "sa-zero-stats",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "C:/Users/echu1/Desktop/sa-zero-stats", "run", "dev"],
+      "port": 5180
     }
   ]
 }

@@ -1,0 +1,1552 @@
+[
+ {
+  "floor": 1,
+  "role": "mob0",
+  "name": "鉄角の仔牛",
+  "hp": 28000,
+  "atk": 2400,
+  "def": 2200,
+  "matk": 0,
+  "mdef": 1300,
+  "spd": 1500,
+  "dmgTaken": 0.5,
+  "total": 10200,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "突進",
+    "eff": 2.1,
+    "hits": 1
+   },
+   {
+    "name": "角ぶつけ",
+    "eff": 1.8,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 1,
+  "role": "mob1",
+  "name": "牛頭の斧兵",
+  "hp": 30000,
+  "atk": 3400,
+  "def": 2500,
+  "matk": 0,
+  "mdef": 1300,
+  "spd": 500,
+  "dmgTaken": 0.5,
+  "total": 10700,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "兜割り",
+    "eff": 2.4,
+    "hits": 1
+   },
+   {
+    "name": "斧の乱れ打ち",
+    "eff": 1.05,
+    "hits": 2
+   }
+  ]
+ },
+ {
+  "floor": 1,
+  "role": "mob2",
+  "name": "迷宮の鉄像",
+  "hp": 28000,
+  "atk": 0,
+  "def": 3000,
+  "matk": 2200,
+  "mdef": 1900,
+  "spd": 400,
+  "dmgTaken": 0.5,
+  "total": 10300,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "石光の呪波",
+    "eff": 2.1,
+    "hits": 1
+   },
+   {
+    "name": "硬化",
+    "eff": null,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 1,
+  "role": "mid",
+  "name": "エリートミノタウロス",
+  "hp": 50000,
+  "atk": 2990,
+  "def": 3000,
+  "matk": 0,
+  "mdef": 2400,
+  "spd": 1300,
+  "dmgTaken": 0.7,
+  "total": 14690,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "大斧の一撃",
+    "eff": 2.55,
+    "hits": 1
+   },
+   {
+    "name": "威嚇の咆哮",
+    "eff": null,
+    "hits": 1
+   },
+   {
+    "name": "突進踏み",
+    "eff": 1.2,
+    "hits": 2
+   }
+  ]
+ },
+ {
+  "floor": 1,
+  "role": "boss",
+  "name": "アーマードミノタウロス",
+  "hp": 70000,
+  "atk": 4290,
+  "def": 4200,
+  "matk": 0,
+  "mdef": 3400,
+  "spd": 2200,
+  "dmgTaken": 0.7,
+  "total": 21090,
+  "basic": 1.5,
+  "special": 3.75,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "装甲突進",
+    "eff": 2.7,
+    "hits": 1
+   },
+   {
+    "name": "鉄角の乱打",
+    "eff": 1.2,
+    "hits": 3
+   },
+   {
+    "name": "戦鬼の構え",
+    "eff": null,
+    "hits": 1
+   },
+   {
+    "name": "大地割り",
+    "eff": 2.4,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 2,
+  "role": "mob0",
+  "name": "血狼",
+  "hp": 45000,
+  "atk": 2000,
+  "def": 1300,
+  "matk": 0,
+  "mdef": 1800,
+  "spd": 2200,
+  "dmgTaken": 0.5,
+  "total": 11800,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "噛みつき",
+    "eff": 2.1,
+    "hits": 1
+   },
+   {
+    "name": "喉笛狙い",
+    "eff": 1.8,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 2,
+  "role": "mob1",
+  "name": "荒野のガルム",
+  "hp": 46000,
+  "atk": 3800,
+  "def": 1600,
+  "matk": 0,
+  "mdef": 1900,
+  "spd": 800,
+  "dmgTaken": 0.5,
+  "total": 12700,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "裂爪",
+    "eff": 2.4,
+    "hits": 1
+   },
+   {
+    "name": "双牙",
+    "eff": 1.05,
+    "hits": 2
+   }
+  ]
+ },
+ {
+  "floor": 2,
+  "role": "mob2",
+  "name": "吸血コウモリ",
+  "hp": 40000,
+  "atk": 0,
+  "def": 1400,
+  "matk": 2500,
+  "mdef": 3000,
+  "spd": 1400,
+  "dmgTaken": 0.5,
+  "total": 12300,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "吸血の羽音",
+    "eff": 2.1,
+    "hits": 1
+   },
+   {
+    "name": "超音波",
+    "eff": null,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 2,
+  "role": "mid",
+  "name": "ハウリングダイアウルフ",
+  "hp": 75000,
+  "atk": 3250,
+  "def": 3100,
+  "matk": 0,
+  "mdef": 2500,
+  "spd": 1500,
+  "dmgTaken": 0.7,
+  "total": 17850,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "牙の連撃",
+    "eff": 1.2,
+    "hits": 2
+   },
+   {
+    "name": "血の匂い",
+    "eff": 2.25,
+    "hits": 1
+   },
+   {
+    "name": "遠吠え",
+    "eff": null,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 2,
+  "role": "boss",
+  "name": "ブラッドダイアウルフ",
+  "hp": 110000,
+  "atk": 5850,
+  "def": 4400,
+  "matk": 0,
+  "mdef": 3600,
+  "spd": 2900,
+  "dmgTaken": 0.7,
+  "total": 27750,
+  "basic": 1.5,
+  "special": 3.75,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "血牙の連撃",
+    "eff": 1.275,
+    "hits": 3
+   },
+   {
+    "name": "咬み裂き",
+    "eff": 2.7,
+    "hits": 1
+   },
+   {
+    "name": "威圧の唸り",
+    "eff": null,
+    "hits": 1
+   },
+   {
+    "name": "血の遠吠え",
+    "eff": null,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 3,
+  "role": "mob0",
+  "name": "毒沼のトード",
+  "hp": 40000,
+  "atk": 0,
+  "def": 1800,
+  "matk": 3400,
+  "mdef": 2500,
+  "spd": 3000,
+  "dmgTaken": 0.5,
+  "total": 14700,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "毒液",
+    "eff": 2.1,
+    "hits": 1
+   },
+   {
+    "name": "瘴気の吐息",
+    "eff": 1.8,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 3,
+  "role": "mob1",
+  "name": "沼地のヒル",
+  "hp": 52000,
+  "atk": 3000,
+  "def": 3000,
+  "matk": 0,
+  "mdef": 2300,
+  "spd": 1000,
+  "dmgTaken": 0.5,
+  "total": 14500,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "吸着",
+    "eff": 2.25,
+    "hits": 1
+   },
+   {
+    "name": "腐食の牙",
+    "eff": 1.8,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 3,
+  "role": "mob2",
+  "name": "猛毒スライム",
+  "hp": 46000,
+  "atk": 4800,
+  "def": 2000,
+  "matk": 0,
+  "mdef": 2200,
+  "spd": 1800,
+  "dmgTaken": 0.5,
+  "total": 15400,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "毒撃",
+    "eff": 2.4,
+    "hits": 1
+   },
+   {
+    "name": "溶解",
+    "eff": 1.05,
+    "hits": 2
+   }
+  ]
+ },
+ {
+  "floor": 3,
+  "role": "mid",
+  "name": "ポイズントードガード",
+  "hp": 82000,
+  "atk": 3640,
+  "def": 3500,
+  "matk": 2080,
+  "mdef": 2900,
+  "spd": 1600,
+  "dmgTaken": 0.7,
+  "total": 21920,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "毒棘",
+    "eff": 2.55,
+    "hits": 1
+   },
+   {
+    "name": "毒霧",
+    "eff": 2.25,
+    "hits": 1
+   },
+   {
+    "name": "沼の構え",
+    "eff": null,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 3,
+  "role": "boss",
+  "name": "ポイズントードキング",
+  "hp": 143000,
+  "atk": 3900,
+  "def": 5000,
+  "matk": 2340,
+  "mdef": 4600,
+  "spd": 2950,
+  "dmgTaken": 0.7,
+  "total": 33090,
+  "basic": 1.5,
+  "special": 3.75,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "毒液噴射",
+    "eff": 2.55,
+    "hits": 1
+   },
+   {
+    "name": "粘着の舌",
+    "eff": 2.25,
+    "hits": 1
+   },
+   {
+    "name": "沼の顎",
+    "eff": 1.05,
+    "hits": 2
+   },
+   {
+    "name": "沼の鼓動",
+    "eff": null,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 4,
+  "role": "mob0",
+  "name": "甲殻スカラベ",
+  "hp": 58000,
+  "atk": 3600,
+  "def": 4000,
+  "matk": 0,
+  "mdef": 2800,
+  "spd": 1200,
+  "dmgTaken": 0.5,
+  "total": 17400,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "角突き",
+    "eff": 2.25,
+    "hits": 1
+   },
+   {
+    "name": "甲殻打ち",
+    "eff": 1.8,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 4,
+  "role": "mob1",
+  "name": "砂喰い蟲",
+  "hp": 52000,
+  "atk": 6400,
+  "def": 2600,
+  "matk": 0,
+  "mdef": 2600,
+  "spd": 2000,
+  "dmgTaken": 0.5,
+  "total": 18800,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "砂噛み",
+    "eff": 2.4,
+    "hits": 1
+   },
+   {
+    "name": "連牙",
+    "eff": 1.05,
+    "hits": 2
+   }
+  ]
+ },
+ {
+  "floor": 4,
+  "role": "mob2",
+  "name": "腐食蟲",
+  "hp": 48000,
+  "atk": 0,
+  "def": 2400,
+  "matk": 4400,
+  "mdef": 3800,
+  "spd": 2400,
+  "dmgTaken": 0.5,
+  "total": 17800,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "腐食液",
+    "eff": 2.25,
+    "hits": 1
+   },
+   {
+    "name": "酸の霧",
+    "eff": 1.8,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 4,
+  "role": "mid",
+  "name": "ロイヤルスカラベ",
+  "hp": 115000,
+  "atk": 4550,
+  "def": 4400,
+  "matk": 2600,
+  "mdef": 3700,
+  "spd": 1900,
+  "dmgTaken": 0.7,
+  "total": 28650,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "王甲の一撃",
+    "eff": 2.55,
+    "hits": 1
+   },
+   {
+    "name": "砂塵",
+    "eff": 2.25,
+    "hits": 1
+   },
+   {
+    "name": "甲殻硬化",
+    "eff": null,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 4,
+  "role": "boss",
+  "name": "エンペラースカラベ",
+  "hp": 175000,
+  "atk": 5720,
+  "def": 6200,
+  "matk": 2990,
+  "mdef": 5600,
+  "spd": 3100,
+  "dmgTaken": 0.7,
+  "total": 41110,
+  "basic": 1.5,
+  "special": 3.75,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "皇甲の顎",
+    "eff": 2.55,
+    "hits": 1
+   },
+   {
+    "name": "砂嵐",
+    "eff": 2.25,
+    "hits": 1
+   },
+   {
+    "name": "黄金の顎",
+    "eff": 1.05,
+    "hits": 2
+   },
+   {
+    "name": "皇の構え",
+    "eff": null,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 5,
+  "role": "mob0",
+  "name": "疾風のハーピー",
+  "hp": 61500,
+  "atk": 6570,
+  "def": 3077,
+  "matk": 0,
+  "mdef": 3516,
+  "spd": 4945,
+  "dmgTaken": 0.5,
+  "total": 24258,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "烈風爪",
+    "eff": 2.25,
+    "hits": 1
+   },
+   {
+    "name": "旋風撃",
+    "eff": 1.05,
+    "hits": 2
+   }
+  ]
+ },
+ {
+  "floor": 5,
+  "role": "mob1",
+  "name": "雷雲イーグル",
+  "hp": 58900,
+  "atk": 6806,
+  "def": 4515,
+  "matk": 0,
+  "mdef": 4311,
+  "spd": 2741,
+  "dmgTaken": 0.5,
+  "total": 24263,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "急降下",
+    "eff": 2.55,
+    "hits": 1
+   },
+   {
+    "name": "雷嘴",
+    "eff": 1.95,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 5,
+  "role": "mob2",
+  "name": "暴風の精霊",
+  "hp": 57600,
+  "atk": 0,
+  "def": 3604,
+  "matk": 6806,
+  "mdef": 5099,
+  "spd": 2989,
+  "dmgTaken": 0.5,
+  "total": 24258,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "暴風弾",
+    "eff": 2.25,
+    "hits": 1
+   },
+   {
+    "name": "乱気流",
+    "eff": 1.8,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 5,
+  "role": "mid",
+  "name": "ゲイルグリフォン",
+  "hp": 130500,
+  "atk": 6804,
+  "def": 5057,
+  "matk": 3628,
+  "mdef": 4349,
+  "spd": 4855,
+  "dmgTaken": 0.7,
+  "total": 37743,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "疾風の爪",
+    "eff": 2.55,
+    "hits": 1
+   },
+   {
+    "name": "風刃",
+    "eff": 2.25,
+    "hits": 1
+   },
+   {
+    "name": "風の加護",
+    "eff": null,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 5,
+  "role": "boss",
+  "name": "ストームグリフォン",
+  "hp": 200600,
+  "atk": 9074,
+  "def": 6482,
+  "matk": 5230,
+  "mdef": 5864,
+  "spd": 7202,
+  "dmgTaken": 0.7,
+  "total": 53912,
+  "basic": 1.5,
+  "special": 3.75,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "暴風の爪",
+    "eff": 2.4,
+    "hits": 1
+   },
+   {
+    "name": "雷嵐",
+    "eff": 2.1,
+    "hits": 1
+   },
+   {
+    "name": "烈風連撃",
+    "eff": 0.9,
+    "hits": 2
+   },
+   {
+    "name": "嵐の加護",
+    "eff": null,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 6,
+  "role": "mob0",
+  "name": "亡霊騎士",
+  "hp": 75900,
+  "atk": 16786,
+  "def": 5201,
+  "matk": 0,
+  "mdef": 4956,
+  "spd": 4654,
+  "dmgTaken": 0.5,
+  "total": 39187,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "亡霊剣",
+    "eff": 2.4,
+    "hits": 1
+   },
+   {
+    "name": "怨嗟の斬",
+    "eff": 1.05,
+    "hits": 2
+   }
+  ]
+ },
+ {
+  "floor": 6,
+  "role": "mob1",
+  "name": "首なし従者",
+  "hp": 96600,
+  "atk": 13690,
+  "def": 6979,
+  "matk": 0,
+  "mdef": 5100,
+  "spd": 3758,
+  "dmgTaken": 0.5,
+  "total": 39187,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "鎧砕き",
+    "eff": 2.25,
+    "hits": 1
+   },
+   {
+    "name": "虚ろな一撃",
+    "eff": 1.8,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 6,
+  "role": "mob2",
+  "name": "呪詛の霊灯",
+  "hp": 75800,
+  "atk": 0,
+  "def": 4442,
+  "matk": 14893,
+  "mdef": 7316,
+  "spd": 4964,
+  "dmgTaken": 0.5,
+  "total": 39195,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "呪詛の火",
+    "eff": 2.25,
+    "hits": 1
+   },
+   {
+    "name": "鬼火",
+    "eff": 1.8,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 6,
+  "role": "mid",
+  "name": "シェイドデュラハン",
+  "hp": 197500,
+  "atk": 13351,
+  "def": 7637,
+  "matk": 7189,
+  "mdef": 6584,
+  "spd": 6452,
+  "dmgTaken": 0.7,
+  "total": 60963,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "首狩りの一閃",
+    "eff": 2.55,
+    "hits": 1
+   },
+   {
+    "name": "冥火",
+    "eff": 2.25,
+    "hits": 1
+   },
+   {
+    "name": "亡者の構え",
+    "eff": null,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 6,
+  "role": "boss",
+  "name": "ファントムデュラハン",
+  "hp": 296200,
+  "atk": 22381,
+  "def": 9379,
+  "matk": 12755,
+  "mdef": 8515,
+  "spd": 4443,
+  "dmgTaken": 0.7,
+  "total": 87093,
+  "basic": 1.5,
+  "special": 3.75,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "断頭の一閃",
+    "eff": 2.55,
+    "hits": 1
+   },
+   {
+    "name": "冥界の炎",
+    "eff": 2.25,
+    "hits": 1
+   },
+   {
+    "name": "怨霊乱舞",
+    "eff": 1.05,
+    "hits": 2
+   },
+   {
+    "name": "亡者の加護",
+    "eff": null,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 7,
+  "role": "mob0",
+  "name": "光晶ドレイク",
+  "hp": 81400,
+  "atk": 0,
+  "def": 5249,
+  "matk": 20523,
+  "mdef": 8136,
+  "spd": 4986,
+  "dmgTaken": 0.5,
+  "total": 47034,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "光晶ブレス",
+    "eff": 2.4,
+    "hits": 1
+   },
+   {
+    "name": "乱反射",
+    "eff": 1.95,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 7,
+  "role": "mob1",
+  "name": "稜光のワイバーン",
+  "hp": 83500,
+  "atk": 21031,
+  "def": 6106,
+  "matk": 0,
+  "mdef": 5726,
+  "spd": 5819,
+  "dmgTaken": 0.5,
+  "total": 47032,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "稜光爪",
+    "eff": 2.4,
+    "hits": 1
+   },
+   {
+    "name": "閃光旋回",
+    "eff": 1.05,
+    "hits": 2
+   }
+  ]
+ },
+ {
+  "floor": 7,
+  "role": "mob2",
+  "name": "虹鱗のリザードマン",
+  "hp": 104200,
+  "atk": 18647,
+  "def": 7953,
+  "matk": 0,
+  "mdef": 6033,
+  "spd": 3976,
+  "dmgTaken": 0.5,
+  "total": 47029,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "虹鱗の一撃",
+    "eff": 2.25,
+    "hits": 1
+   },
+   {
+    "name": "鱗返し",
+    "eff": 1.8,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 7,
+  "role": "mid",
+  "name": "クリスタルドラゴン",
+  "hp": 230500,
+  "atk": 17178,
+  "def": 8711,
+  "matk": 9477,
+  "mdef": 7639,
+  "spd": 7103,
+  "dmgTaken": 0.7,
+  "total": 73158,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "晶牙",
+    "eff": 2.55,
+    "hits": 1
+   },
+   {
+    "name": "屈折光線",
+    "eff": 2.25,
+    "hits": 1
+   },
+   {
+    "name": "結晶硬化",
+    "eff": null,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 7,
+  "role": "boss",
+  "name": "プリズムドラゴン",
+  "hp": 343900,
+  "atk": 28041,
+  "def": 10317,
+  "matk": 17296,
+  "mdef": 9368,
+  "spd": 5099,
+  "dmgTaken": 0.7,
+  "total": 104511,
+  "basic": 1.5,
+  "special": 3.75,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "虹閃牙",
+    "eff": 2.55,
+    "hits": 1
+   },
+   {
+    "name": "七彩の吐息",
+    "eff": 2.4,
+    "hits": 1
+   },
+   {
+    "name": "稜光乱舞",
+    "eff": 1.05,
+    "hits": 2
+   },
+   {
+    "name": "光輪の加護",
+    "eff": null,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 8,
+  "role": "mob0",
+  "name": "溶岩の単眼鬼",
+  "hp": 86300,
+  "atk": 22403,
+  "def": 10540,
+  "matk": 0,
+  "mdef": 10097,
+  "spd": 4760,
+  "dmgTaken": 0.5,
+  "total": 56430,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "溶岩拳",
+    "eff": 2.55,
+    "hits": 1
+   },
+   {
+    "name": "熔解乱打",
+    "eff": 1.05,
+    "hits": 2
+   }
+  ]
+ },
+ {
+  "floor": 8,
+  "role": "mob1",
+  "name": "噴火の岩塊",
+  "hp": 115800,
+  "atk": 22403,
+  "def": 11036,
+  "matk": 0,
+  "mdef": 8265,
+  "spd": 3148,
+  "dmgTaken": 0.5,
+  "total": 56432,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "岩塊落とし",
+    "eff": 2.25,
+    "hits": 1
+   },
+   {
+    "name": "灼熱の飛礫",
+    "eff": 1.8,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 8,
+  "role": "mob2",
+  "name": "火山の火霊",
+  "hp": 89500,
+  "atk": 0,
+  "def": 7752,
+  "matk": 22403,
+  "mdef": 11233,
+  "spd": 6094,
+  "dmgTaken": 0.5,
+  "total": 56432,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "火柱",
+    "eff": 2.4,
+    "hits": 1
+   },
+   {
+    "name": "熱波",
+    "eff": 1.95,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 8,
+  "role": "mid",
+  "name": "マグマサイクロプス",
+  "hp": 266500,
+  "atk": 22403,
+  "def": 10050,
+  "matk": 12523,
+  "mdef": 8879,
+  "spd": 7281,
+  "dmgTaken": 0.7,
+  "total": 87786,
+  "basic": 1.5,
+  "special": null,
+  "erupt": 2.7,
+  "skills": [
+   {
+    "name": "剛腕振り下ろし",
+    "eff": 2.55,
+    "hits": 1
+   },
+   {
+    "name": "溶岩弾",
+    "eff": 2.25,
+    "hits": 1
+   },
+   {
+    "name": "岩の守り",
+    "eff": null,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 8,
+  "role": "boss",
+  "name": "ヴォルケーノサイクロプス",
+  "hp": 460100,
+  "atk": 29871,
+  "def": 13014,
+  "matk": 18507,
+  "mdef": 11831,
+  "spd": 6179,
+  "dmgTaken": 0.7,
+  "total": 125412,
+  "basic": 1.5,
+  "special": 3.75,
+  "erupt": 3,
+  "skills": [
+   {
+    "name": "灼熱の豪腕",
+    "eff": 2.7,
+    "hits": 1
+   },
+   {
+    "name": "火砕流",
+    "eff": 2.4,
+    "hits": 1
+   },
+   {
+    "name": "巨腕乱打",
+    "eff": 1.05,
+    "hits": 2
+   },
+   {
+    "name": "火山の加護",
+    "eff": null,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 9,
+  "role": "mob0",
+  "name": "深淵の獅子頭",
+  "hp": 95800,
+  "atk": 26515,
+  "def": 13419,
+  "matk": 0,
+  "mdef": 12898,
+  "spd": 5310,
+  "dmgTaken": 0.5,
+  "total": 67722,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "獅咬",
+    "eff": 2.7,
+    "hits": 1
+   },
+   {
+    "name": "裂爪乱舞",
+    "eff": 1.05,
+    "hits": 2
+   }
+  ]
+ },
+ {
+  "floor": 9,
+  "role": "mob1",
+  "name": "淵底の蛇尾",
+  "hp": 101500,
+  "atk": 0,
+  "def": 10214,
+  "matk": 26515,
+  "mdef": 13992,
+  "spd": 6848,
+  "dmgTaken": 0.5,
+  "total": 67719,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "蛇毒牙",
+    "eff": 2.4,
+    "hits": 1
+   },
+   {
+    "name": "毒霧",
+    "eff": 1.95,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 9,
+  "role": "mob2",
+  "name": "虚無の山羊",
+  "hp": 134800,
+  "atk": 0,
+  "def": 12048,
+  "matk": 26515,
+  "mdef": 11788,
+  "spd": 3889,
+  "dmgTaken": 0.5,
+  "total": 67720,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "魔眼の光",
+    "eff": 2.25,
+    "hits": 1
+   },
+   {
+    "name": "呪縛の瞳",
+    "eff": 1.8,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 9,
+  "role": "mid",
+  "name": "ダスクキマイラ",
+  "hp": 308100,
+  "atk": 26515,
+  "def": 12733,
+  "matk": 16137,
+  "mdef": 11350,
+  "spd": 7797,
+  "dmgTaken": 0.7,
+  "total": 105342,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "三獣爪",
+    "eff": 2.55,
+    "hits": 1
+   },
+   {
+    "name": "混沌吐息",
+    "eff": 2.25,
+    "hits": 1
+   },
+   {
+    "name": "獣毛の守り",
+    "eff": null,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 9,
+  "role": "boss",
+  "name": "アビスキマイラ",
+  "hp": 560700,
+  "atk": 35353,
+  "def": 14685,
+  "matk": 23690,
+  "mdef": 13617,
+  "spd": 7076,
+  "dmgTaken": 0.7,
+  "total": 150491,
+  "basic": 1.5,
+  "special": 3.75,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "獅咬爪",
+    "eff": 2.7,
+    "hits": 1
+   },
+   {
+    "name": "蛇尾猛毒",
+    "eff": 2.4,
+    "hits": 1
+   },
+   {
+    "name": "三獣乱撃",
+    "eff": 1.05,
+    "hits": 2
+   },
+   {
+    "name": "獣魂の鎧",
+    "eff": null,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 10,
+  "role": "mob0",
+  "name": "混沌の巨腕",
+  "hp": 108600,
+  "atk": 27824,
+  "def": 18575,
+  "matk": 0,
+  "mdef": 17883,
+  "spd": 6122,
+  "dmgTaken": 0.5,
+  "total": 81264,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "巨腕叩きつけ",
+    "eff": 2.7,
+    "hits": 1
+   },
+   {
+    "name": "大地砕き",
+    "eff": 1.05,
+    "hits": 2
+   }
+  ]
+ },
+ {
+  "floor": 10,
+  "role": "mob1",
+  "name": "混沌の牙獣",
+  "hp": 104100,
+  "atk": 27824,
+  "def": 16475,
+  "matk": 0,
+  "mdef": 16051,
+  "spd": 10511,
+  "dmgTaken": 0.5,
+  "total": 81271,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "疾牙",
+    "eff": 2.55,
+    "hits": 1
+   },
+   {
+    "name": "追い立て",
+    "eff": 1.95,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 10,
+  "role": "mob2",
+  "name": "混沌の瞳",
+  "hp": 112500,
+  "atk": 0,
+  "def": 14963,
+  "matk": 27824,
+  "mdef": 19350,
+  "spd": 7877,
+  "dmgTaken": 0.5,
+  "total": 81264,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "混沌視線",
+    "eff": 2.4,
+    "hits": 1
+   },
+   {
+    "name": "虚空の脈動",
+    "eff": 1.95,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 10,
+  "role": "mid",
+  "name": "レイジベヒモス",
+  "hp": 356700,
+  "atk": 27824,
+  "def": 17648,
+  "matk": 20247,
+  "mdef": 16076,
+  "spd": 8948,
+  "dmgTaken": 0.7,
+  "total": 126413,
+  "basic": 1.5,
+  "special": null,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "憤怒の一撃",
+    "eff": 2.55,
+    "hits": 1
+   },
+   {
+    "name": "咆哮衝波",
+    "eff": 2.25,
+    "hits": 1
+   },
+   {
+    "name": "猛り立ち",
+    "eff": null,
+    "hits": 1
+   }
+  ]
+ },
+ {
+  "floor": 10,
+  "role": "boss",
+  "name": "カオスベヒモス",
+  "hp": 709000,
+  "atk": 37098,
+  "def": 17998,
+  "matk": 24869,
+  "mdef": 16635,
+  "spd": 13090,
+  "dmgTaken": 0.7,
+  "total": 180590,
+  "basic": 1.5,
+  "special": 3.75,
+  "erupt": null,
+  "skills": [
+   {
+    "name": "崩落の一撃",
+    "eff": 2.7,
+    "hits": 1
+   },
+   {
+    "name": "混沌の波動",
+    "eff": 2.4,
+    "hits": 1
+   },
+   {
+    "name": "地裂踏破",
+    "eff": 1.05,
+    "hits": 2
+   },
+   {
+    "name": "憤怒の唸り",
+    "eff": null,
+    "hits": 1
+   }
+  ]
+ }
+]
