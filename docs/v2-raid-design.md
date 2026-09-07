@@ -11,13 +11,15 @@ SQLに同じ値が入っている（`src/v2/lib/raid.test.js` が突き合わせ
 | | ファイル | 中身 |
 |---|---|---|
 | ① | `supabase_v2_friends_20260906.sql` | フレンド（救援の宛先）。**独立** |
-| ② | `supabase_v2_fusion_20260906.sql` | 合成素材275種の名簿・所持・`v2_inventory.fused`・合成のRPC |
+| ② | `supabase_v2_fusion_20260906.sql` | 合成素材5種（レイドボスぶん）の名簿・所持・`v2_inventory.fused`・合成のRPC |
 | ③ | `supabase_v2_raid_20260906.sql` | レイド本体・救援・報酬。**②に依存** |
-| ④ | `supabase_v2_ability_move_20260906.sql` | 特殊能力をルーンから合成へ移す。**②に依存** |
 
-- ⚠**④は core の `v2_extract_essence` を上書きする。**
-  `supabase_v2_core.sql` を流し直したら、**④も必ず流し直すこと**
-- ②のINSERT（275行）は `node tools/v2-fusion-sql.mjs --write` で貼り直せる
+- ★**2026-09-07 ユーザー指示で「因子」を廃止した。**
+  一度は敵270体ぶんの合成素材（「◯◯の因子」）を出撃で一律1%落とし、
+  特殊能力の入手経路をそちらへ一本化していた（④ `supabase_v2_ability_move_20260906.sql`）。
+  いまは**合成素材はレイドボスからだけ**・**特殊能力は刻印（ルーンの抽出）から低確率**に戻っている。
+  ④を流したあとに戻す場合は `supabase_v2_fusion_undo_20260907.sql` を流す。**④は復活させないこと**
+- ②のINSERT（5行）は `node tools/v2-fusion-sql.mjs --write` で貼り直せる
 
 関連: [ユニークボス](v2-unique-boss-design.md) ／ [出撃](v2-sortie-design.md) ／
 [エンチャント](v2-enchant-design.md) ／ [装備](v2-equipment-design.md)

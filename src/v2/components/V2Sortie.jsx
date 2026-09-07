@@ -5,7 +5,7 @@ import { AREAS_SORTED, areaOf, markOf, biasLabelOf, BIAS_MULT, toFighter as enem
 import {
   pickEncounter, expOf, isAreaUnlocked, nextBossRate, clearedAreasOf, isAreaCleared,
   clearNext, unlockNext, restToOpenNext, LAST_TIER,
-  SORTIE_CD, rollHasDrop, rollIsProtect, rollDrop, rollMaterial, rollFusionDrop,
+  SORTIE_CD, rollHasDrop, rollIsProtect, rollDrop, rollMaterial,
 } from '../lib/sortie.js'
 import { staminaMax, rollStamina } from '../lib/stamina.js'
 import { runBattle } from '../lib/battle.js'
@@ -15,7 +15,6 @@ import { dropRateMultOf } from '../lib/enchant.js'
 import { guardDropMultOf, GUARD_DROP_MULT } from '../lib/arena.js'
 import { RARITY_COLOR } from '../lib/material.js'
 import { rollRaid, raidBossOf } from '../lib/raid.js'
-import { fusionOfEnemy } from '../lib/fusion.js'
 import { PROTECT_NAME } from '../lib/smith.js'
 import { RANK_COLOR, dropLine, LOG_PLAIN } from './v2ui.js'
 import V2Evolve from './V2Evolve.jsx'
@@ -98,7 +97,6 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, dex, pet, gu
       const mat = win ? rollMaterial(enc.enemy.name, matMult, Math.random, { sure: !!enc.isRare }) : null
       // ★合成素材（2026-09-06）。倒した敵のぶんが**一律1%**で落ちる。
       //   装備・護符・ルーン素材とは**まったく別の抽選**（重なってもよい）
-      const fuse = win && rollFusionDrop() ? fusionOfEnemy(enc.enemy.name) : null
       setBossRate(nextBossRate(bossRate, enc.isBoss))
 
       // 旧版の文体に合わせる（BattleLogLine が スキル名・ダメージ・回復 を拾って色を付ける）
@@ -127,11 +125,6 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, dex, pet, gu
         if (mat) out.push({ color: LOG_PLAIN, parts:[
           { text:'⚗ ルーン素材「' },
           { text: mat.name, color: RARITY_COLOR[mat.rarity] },
-          { text:'」を入手！' },
-        ] })
-        if (fuse) out.push({ color: LOG_PLAIN, parts:[
-          { text:'✦ 合成素材「' },
-          { text: fuse.name, color:'#ff8844' },
           { text:'」を入手！' },
         ] })
         // ★解放は「その帯を全部踏破したか」で決まる（1本道ではない）。
@@ -173,18 +166,6 @@ export default function V2Sortie({ prof, inventory, runes, fishDex, dex, pet, gu
         return
       }
       if (data.level?.ups > 0) setLogs(l => [...l, { text:`🆙 レベルアップ！ LV${data.level.lv}`, color:'#44ff88' }])
-      // ★合成素材は別のRPCで受け取る（core の v2_sortie_settle を触らずに足すため）。
-      //   ⚠**失敗したら黙らない**。ログには「入手！」ともう出しているので、
-      //     受け取れていないのに手に入ったように見えるのが一番まずい
-      if (fuse) {
-        const { data: fd, error: fe } = await supabase.rpc('v2_grant_fusion_drop', { p_fusion_id: fuse.id })
-        if (fe || !fd?.ok) {
-          setLogs(l => [...l, {
-            text: `⚠ 合成素材を受け取れませんでした（${fe?.message || fd?.error}）`, color:'#ff8844',
-          }])
-        }
-      }
-
       // ★レイドボス（docs/v2-raid-design.md §2）。2026-09-06 ユーザー指示で
       //   **踏破済みのエリア**でだけ 3% で出る（**相手がボスかどうかは関係ない**）。
       //   ⚠**清算が通ったあとに引く**＝弾かれた出撃でレイドが立たないように。

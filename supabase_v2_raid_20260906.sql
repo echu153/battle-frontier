@@ -6,7 +6,7 @@
 --     ① supabase_v2_friends_20260906.sql   フレンド
 --     ② supabase_v2_fusion_20260906.sql    合成素材と「合成」
 --     ③ supabase_v2_raid_20260906.sql      レイドボスと救援
---     ④ supabase_v2_ability_move_20260906.sql 特殊能力をルーンから合成へ移す
+
 --   どれも supabase_v2_core.sql を全文流したあとに、**この順番で**流してください。
 --
 -- ★**②を先に流してください**（報酬で合成素材を配るため）。

@@ -22,24 +22,25 @@ import {
 } from './raid.js'
 import {
   FUSIONS, FUSION_BY_ID, fusedName, canFuseItem, checkFuse, fusedAbilitiesOf,
-  fusionsOfSource, fusionOfBoss, fusionOfEnemy, FUSE_COST, ENEMY_FUSION_RATE,
+  fusionOfBoss,
 } from './fusion.js'
 import { FUSION_ABILITIES, ABILITY_OF, ENCHANTS, collectEnchants, abilityText } from './enchant.js'
 import { allEnemies, TIER_MAX } from './enemies.js'
 import { ITEM_BY_ID, CATALOG } from './equipment.js'
 import { runBattle, createSide, liveStats } from './battle.js'
 import { AIL_LABEL, createAilments, inflict, healMultOf, HEAL_CUT_TURNS } from './ailments.js'
-import { SORTIE_CD, EXP_ZAKO_MIN, EXP_ZAKO_MAX, FUSION_DROP_RATE, rollFusionDrop } from './sortie.js'
+import { SORTIE_CD, EXP_ZAKO_MIN, EXP_ZAKO_MAX } from './sortie.js'
 
-// ★SQLは**依存の順に4本**に分かれている（2026-09-06 ユーザー指示「複数出して」）
-//     ① supabase_v2_friends_20260906.sql       フレンド
-//     ② supabase_v2_fusion_20260906.sql        合成素材と「合成」
-//     ③ supabase_v2_raid_20260906.sql          レイドボスと救援
-//     ④ supabase_v2_ability_move_20260906.sql  特殊能力をルーンから合成へ移す
+// ★SQLは**依存の順に3本**に分かれている（2026-09-06 ユーザー指示「複数出して」）
+//     ① supabase_v2_friends_20260906.sql   フレンド
+//     ② supabase_v2_fusion_20260906.sql    合成素材と「合成」
+//     ③ supabase_v2_raid_20260906.sql      レイドボスと救援
+//   ⚠かつて④ supabase_v2_ability_move_20260906.sql（特殊能力をルーンから合成へ移す）が
+//     あったが、2026-09-07 のユーザー指示で**廃止**した。打ち消すのが
+//     supabase_v2_fusion_undo_20260907.sql。**④を復活させないこと**
 const sqlOf = (n) => readFileSync(new URL(`../../../supabase_v2_${n}_20260906.sql`, import.meta.url), 'utf8')
 const SQL = sqlOf('raid')
 const SQL_FUSION = sqlOf('fusion')
-const SQL_MOVE = sqlOf('ability_move')
 const SQL_FRIENDS = sqlOf('friends')
 // v2_raid_tiers の1行 (tier, power, hp, ultra_pct) を拾う
 const ROW_RE = /\(\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+)\)/g
@@ -397,51 +398,43 @@ test('討伐済み・時間切れはどちらも「終わっている」', () =>
 })
 
 // ===== 合成 =====
-// ★2026-09-06 ユーザー指示：**特殊能力の入手経路を合成素材へ一本化**した。
-//   敵270体ぶん（出撃で一律1%）＋レイドボス5体ぶん＝275種
-test('★合成素材は 敵270 ＋ レイド5 ＝ 275種で、全部に特殊能力がある', () => {
-  const enemyFus = fusionsOfSource('enemy')
-  const raidFus = fusionsOfSource('raid')
-  assert.equal(enemyFus.length, allEnemies().length, '敵の数と合っていない')
-  assert.equal(enemyFus.length, 270)
-  assert.equal(raidFus.length, RAID_BOSSES.length)
-  assert.equal(FUSIONS.length, 275)
+// ★2026-09-07 ユーザー指示：**「因子」は廃止**した。
+//   合成素材はレイドボスからだけ落ちる。特殊能力は**刻印（ルーンの抽出）**へ戻す。
+//   ⚠一度は敵270体ぶんの因子を作って出撃で落としていた（c50bc34c）。戻さないこと。
+test('★合成素材はレイドボスの5種だけ（敵からは落ちない）', () => {
+  assert.equal(FUSIONS.length, RAID_BOSSES.length)
+  assert.equal(FUSIONS.length, 5)
   for (const f of FUSIONS) {
+    assert.equal(f.source, 'raid', `${f.name} がレイド由来でない`)
     assert.ok(ABILITY_OF[f.ability], `${f.name} の特殊能力が無い`)
     assert.ok(f.name && f.crown, `${f.id} に名前か冠名が無い`)
     assert.ok(f.id.startsWith('fu:'), `${f.id} のidの形が違う`)
   }
   assert.equal(new Set(FUSIONS.map(f => f.id)).size, FUSIONS.length, 'idが重複')
   assert.equal(new Set(FUSIONS.map(f => f.name)).size, FUSIONS.length, '素材名が重複')
-  // レイドぶんは冠名（黒龍…）、敵ぶんは敵の名前がそのまま頭に付く
   for (const b of RAID_BOSSES) assert.equal(fusionOfBoss(b.name).crown, b.crown)
-  assert.equal(fusionOfEnemy('スライム').crown, 'スライム')
-  assert.equal(fusionOfEnemy('スライム').name, 'スライムの因子')
+  // 敵の名前では引けない＝「◯◯の因子」がどこにも残っていない
+  assert.equal(fusionOfBoss('スライム'), null, '敵の因子が残っている')
+  assert.ok(!FUSIONS.some(f => f.name.endsWith('の因子')), '「◯◯の因子」が残っている')
 })
 
-test('★敵270体ぜんぶに合成素材がある（敵を足したら自動でつく）', () => {
-  const byBoss = new Set(fusionsOfSource('enemy').map(f => f.boss))
-  const missing = allEnemies().map(e => e.name).filter(n => !byBoss.has(n))
-  assert.deepEqual(missing, [], '合成素材が無い敵がいる')
+test('★出撃で合成素材は落ちない（因子の廃止）', async () => {
+  const sortie = await import('./sortie.js')
+  assert.equal('FUSION_DROP_RATE' in sortie, false, '出撃の合成素材ドロップが残っている')
+  assert.equal('rollFusionDrop' in sortie, false, '出撃の合成素材ドロップが残っている')
+  const ui = readFileSync(new URL('../components/V2Sortie.jsx', import.meta.url), 'utf8')
+  assert.ok(!/fusion/i.test(ui), '出撃の画面に合成素材が残っている')
 })
 
-test('★合成に使う素材は1個', () => {
-  assert.equal(FUSE_COST, 1)
-  assert.equal(checkFuse({ inv: { id: 1 }, item: CATALOG.find(i => i.part === '武器'), matId: 'fu:enma', have: 1 }), '')
-})
-
-test('★敵の合成素材は一律1%で落ちる（レア度による差は無い）', () => {
-  assert.equal(FUSION_DROP_RATE, ENEMY_FUSION_RATE)
-  assert.equal(FUSION_DROP_RATE, 1)
-  assert.equal(rollFusionDrop(() => 0.009), true)
-  assert.equal(rollFusionDrop(() => 0.011), false)
-})
-
-// ★ルーンからは特殊能力が付かなくなった（移し忘れ・戻し忘れをここで止める）
-test('★ルーンの特殊能力は廃止され、戦闘には合成ぶんだけが乗る', () => {
+// ★特殊能力は刻印（ルーンの抽出）から低確率で付く。ここが正。
+test('★ルーンの特殊能力は生きている（抽出で低確率に付く）', async () => {
+  const { ENCHANT_CHANCE } = await import('./enchant.js')
+  const { ABILITY_CHANCE } = await import('./material.js')
+  assert.deepEqual(ENCHANT_CHANCE, { normal: 0, rare: 1, ultra: 3 })
+  assert.deepEqual(ABILITY_CHANCE, ENCHANT_CHANCE, '素材側と刻印側で率が食い違っている')
   const src = readFileSync(new URL('./loadout.js', import.meta.url), 'utf8')
-  assert.ok(!/enchants:[^,]*runeAbilities/.test(src), 'ルーンの特殊能力が戦闘に戻っている')
-  assert.ok(src.includes('enchants: equippedFusions('), '合成ぶんが戦闘に渡っていない')
+  assert.match(src, /runeAbilities\(equippedRunes\(/, 'ルーンの特殊能力が戦闘に乗っていない')
+  assert.match(src, /equippedFusions\(/, '合成ぶんが戦闘に乗っていない')
 })
 
 test('合成すると名前が「◯◯の××」になる（素の名前は保存しない）', () => {
@@ -694,4 +687,24 @@ test('救援の宛先の種別は online と friend の2つ（国はまだ無い
 test('1時間の枠で殴れる回数と、HPの決め方の前提が合っている', () => {
   // ★HPは「360回で削り切れる量」。クールタイムか挑戦時間を変えたらHPも測り直す
   assert.equal(Math.floor((RAID_MINUTES * 60) / SORTIE_CD), 360)
+})
+
+// ===== 「因子」の廃止を巻き戻さないための見張り（2026-09-07）=====
+// 一度この形にして戻した経緯があるので、機械的に止めておく。
+test('★打ち消しSQLが揃っている（因子を消し、抽出で能力が付く版へ戻す）', () => {
+  const undo = readFileSync(new URL('../../../supabase_v2_fusion_undo_20260907.sql', import.meta.url), 'utf8')
+  assert.match(undo, /delete from public\.v2_player_fusions/, '所持ぶんを消していない（外部キーで落ちる）')
+  assert.match(undo, /delete from public\.v2_fusion_materials where source = 'enemy'/, '敵ぶんの名簿を消していない')
+  assert.match(undo, /drop function if exists public\.v2_grant_fusion_drop\(text\)/, '配っていたRPCを落としていない')
+  assert.match(undo, /create or replace function public\.v2_extract_essence/, '抽出を戻していない')
+  // ★戻した抽出が**能力を抽選している**こと（ここが本題）
+  assert.match(undo, /when 'ultra' then 3 when 'rare' then 1 else 0 end/, '能力の抽選が入っていない')
+  // 所持ぶん→名簿 の順であること（逆にすると外部キーで落ちる）
+  assert.ok(undo.indexOf('delete from public.v2_player_fusions') < undo.indexOf('delete from public.v2_fusion_materials'),
+    '消す順番が逆（先に名簿を消すと外部キーで落ちる）')
+})
+
+test('★合成素材のSQLに敵ぶんが残っていない', () => {
+  assert.ok(!/source = 'enemy'|'enemy',/.test(SQL_FUSION), 'SQLに敵ぶんの合成素材が残っている')
+  assert.ok(!SQL_FUSION.includes('の因子'), 'SQLに「◯◯の因子」が残っている')
 })
