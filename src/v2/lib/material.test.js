@@ -9,6 +9,7 @@ import {
   canExtract, extract, EXTRACT_COST, TIER_RATE_MAX, TOP_WEIGHT, runePower,
   gradeOf, runeName, runeFullName, RUNE_NAMES, GRADE_MIN, COLOR_LABEL,
   SELL_BASE_TIER, SELL_RARITY_MULT, sellPriceOf, sellTotalOf, RARE_MULT,
+  RARITY_LABEL, RARITY_SHORT, RARITY_COLOR,
 } from './material.js'
 import { allEnemies, allRares } from './enemies.js'
 import { ENCHANTS } from './enchant.js'
@@ -359,4 +360,48 @@ test('素材名に、片方がもう片方の先頭と同じものが無い', ()
   const bad = []
   for (const a of names) for (const b of names) if (a !== b && b.startsWith(a)) bad.push(`${a} ⊂ ${b}`)
   assert.deepEqual(bad, [], `紛らわしい素材名: ${bad.join(' / ')}`)
+})
+
+// ===== レア度の呼び方（2026-09-07 ユーザー指示）=====
+// **ノーマル／コモン／エピック**・色は**灰／青／紫**。
+// ⚠キーと短縮キーは素材のidに焼き込まれているので**絶対に変えない**。
+test('★レア度の呼び方と色。キーとidは動かさない', () => {
+  assert.deepEqual(RARITY_LABEL, { normal:'ノーマル', rare:'コモン', ultra:'エピック' })
+  assert.deepEqual(RARITY_SHORT, { normal:'n', rare:'r', ultra:'u' }, 'idが変わると持ち物が行方不明になる')
+  assert.deepEqual(RARITIES, ['normal', 'rare', 'ultra'])
+  // 灰・青・紫であること（明るさだけ確かめる＝濃紺の背景で読めるか）
+  const rgb = (h) => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16))
+  const [gr, gg, gb] = rgb(RARITY_COLOR.normal)
+  assert.ok(Math.abs(gr - gg) < 40 && Math.abs(gg - gb) < 40, `ノーマルが灰色でない（${RARITY_COLOR.normal}）`)
+  const [, gb2, bb] = rgb(RARITY_COLOR.rare)
+  assert.ok(bb > gb2, `コモンが青でない（${RARITY_COLOR.rare}）`)
+  const [pr, pg, pb] = rgb(RARITY_COLOR.ultra)
+  assert.ok(pr > pg && pb > pg, `エピックが紫でない（${RARITY_COLOR.ultra}）`)
+  for (const c of Object.values(RARITY_COLOR)) {
+    const [r, g, b] = rgb(c)
+    assert.ok(r + g + b > 250, `${c} は濃紺の背景で暗すぎる`)
+  }
+  // 素材のidが短縮キーでできていること（呼び方を変えてもidは無傷）
+  assert.ok(MATERIALS.every(m => m.id.endsWith(`:${RARITY_SHORT[m.rarity]}`)), 'idの形が変わっている')
+})
+
+// ★画面の文言に呼び方を**直書きしない**。次に変えたときに取りこぼす。
+test('★レア度の呼び方を画面へ直書きしていない', async () => {
+  const { readdirSync, readFileSync } = await import('node:fs')
+  const dir = new URL('../components/', import.meta.url)
+  const bad = []
+  for (const name of readdirSync(dir)) {
+    if (!name.endsWith('.jsx')) continue
+    const src = readFileSync(new URL(name, dir), 'utf8')
+    // 行から「// で始まるコメント」を落としてから見る（説明文までは縛らない）
+    for (const [i, line] of src.split(/\r?\n/).entries()) {
+      const code = line.replace(/\/\/.*$/, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      for (const w of Object.values(RARITY_LABEL)) {
+        if (code.includes(w)) bad.push(`${name}:${i + 1} に「${w}」`)
+      }
+      // 古い呼び方も残っていないこと
+      for (const w of ['激レア']) if (code.includes(w)) bad.push(`${name}:${i + 1} に古い「${w}」`)
+    }
+  }
+  assert.deepEqual(bad, [], `RARITY_LABEL から引くこと:\n  ${bad.join('\n  ')}`)
 })

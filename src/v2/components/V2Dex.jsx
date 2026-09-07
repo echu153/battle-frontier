@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import V2Help from './V2Help.jsx'
 import { AREAS_SORTED, areaLabel, statsOf } from '../lib/enemies.js'
-import { materialsOfEnemy, RARITY_COLOR, RARITY_LABEL } from '../lib/material.js'
+import { materialsOfEnemy, RARITIES, RARITY_COLOR, RARITY_LABEL } from '../lib/material.js'
 import { ENCHANTS } from '../lib/enchant.js'
 import { MATERIAL_RATE, RARE_MATERIAL_RATE, RARE_RATE } from '../lib/sortie.js'
 import { STAT_DEFS, STAT_KEYS } from '../lib/stats.js'
@@ -75,9 +75,9 @@ export default function V2Dex({ prof, dex, onBack }) {
 
       <div style={{ color: TEXT.label, fontSize:'10px', lineHeight:'1.8', marginBottom:'10px' }}>
         一度倒した敵と、一度拾った素材だけが載ります。まだのものは {UNKNOWN} のままです。
-        <br />ふつうの敵は倒しても素材を落とさないことがあります（通常{MATERIAL_RATE.normal}%／レア{MATERIAL_RATE.rare}%／激レア{MATERIAL_RATE.ultra}%）。
+        <br />ふつうの敵は倒しても素材を落とさないことがあります（{RARITIES.map(r => `${RARITY_LABEL[r]}${MATERIAL_RATE[r]}%`).join('／')}）。
         <br />レアモンスターは出現率{RARE_RATE}%で、素材はかならず落とします
-        （通常{RARE_MATERIAL_RATE.normal}%／レア{RARE_MATERIAL_RATE.rare}%／激レア{RARE_MATERIAL_RATE.ultra}%・上がり幅は1.5倍）。
+        （{RARITIES.map(r => `${RARITY_LABEL[r]}${RARE_MATERIAL_RATE[r]}%`).join('／')}・上がり幅は1.5倍）。
       </div>
 
       {/* いまもらえているぶん */}

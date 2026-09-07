@@ -7,7 +7,7 @@ import { box, btn, miniBtn, TEXT, LOG_PLAIN } from './v2ui.js'
 import { runBattle } from '../lib/battle.js'
 import { buildBattleLog } from '../lib/battleLog.js'
 import { toFighter as playerFighter } from '../lib/loadout.js'
-import { RARITY_COLOR } from '../lib/material.js'
+import { RARITY_COLOR, RARITY_LABEL } from '../lib/material.js'
 import { SORTIE_CD } from '../lib/sortie.js'
 import {
   RAID_BOSSES, raidBossOf, RAID_TURNS, RAID_MAX_MEMBERS, CALL_MAX, ONLINE_MINUTES,
@@ -396,7 +396,7 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, isAd
                     　難易度{tierMark(r.tier)}／{r.killed_at ? '討伐' : '時間切れ'}／貢献 {(sh * 100).toFixed(1)}%
                   </span>
                   <span style={{ color: TIER_COLOR[rt] }}>
-                    　{TIER_LABEL[rt]}（素材{matRangeText(rt)}・激レア{rarityTableOf(rt, r.tier).ultra}%
+                    　{TIER_LABEL[rt]}（素材{matRangeText(rt)}・{RARITY_LABEL.ultra}{rarityTableOf(rt, r.tier).ultra}%
                     {r.killed_at ? `・合成素材${fusionChanceOf()}%` : ''}）
                   </span>
                   {isHost && <span style={{ color: BOX_COLOR.host }}>　＋{BOX_LABEL.host}</span>}
@@ -450,7 +450,7 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, isAd
             そのエリアのボスを倒していれば、相手がボスでなくても出会えます。<br />
             現れたら1時間だけ挑戦でき、救援信号を出して仲間を呼べます。<br />
             主催者といちばん削った人は、貢献度とは別に{BOX_LABEL.host}・{BOX_LABEL.mvp}
-            （素材{BOX_MAT_COUNT}個・激レア{BOX_RARITY.ultra}%・合成素材{BOX_FUSION_PCT}%）をもらえます。<br />
+            （素材{BOX_MAT_COUNT}個・{RARITY_LABEL.ultra}{BOX_RARITY.ultra}%・合成素材{BOX_FUSION_PCT}%）をもらえます。<br />
             HPは<b style={{ color:'#ff8844' }}>複数人がかりで1時間</b>ぶんあるので、ひとりでは削り切れません。<br />
             <b style={{ color:'#ff8844' }}>奥のエリアで引いたレイドほど強く、報酬も豪華</b>になります。
           </div>

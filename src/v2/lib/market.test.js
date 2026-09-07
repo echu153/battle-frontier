@@ -9,7 +9,10 @@ import {
 } from './market.js'
 import { RANKS } from './equipment.js'
 import { fuseCostOf, FUSE_GOLD_BASE, FUSE_GOLD_STEP } from './smith.js'
-import { UNSOCKET_KIT_COST, UNSOCKET_KIT_RARITY } from './material.js'
+import {
+  UNSOCKET_GOLD_MIN, UNSOCKET_GOLD_PER_PCT, UNSOCKET_ABILITY_MULT, UNSOCKET_GOLD_STEP,
+  runeTotalPct, unsocketGoldOf,
+} from './material.js'
 
 const SQL = readFileSync(new URL('../../../supabase_v2_core.sql', import.meta.url), 'utf8')
 const bodyOf = (name) => {
@@ -183,18 +186,44 @@ test('強化のGoldがSQLと smith.js で一致している', () => {
 // ============================================================
 // 刻印除去装置（ルーンを外す道具）
 // ============================================================
-test('★刻印除去装置は激レア素材だけで作る（これが無いと刻印済みは売れない）', () => {
-  assert.equal(UNSOCKET_KIT_COST, 5)
-  assert.equal(UNSOCKET_KIT_RARITY, 'ultra')
-  const body = bodyOf('v2_make_unsocket_kit')
-  assert.ok(body.includes(`c_cost   constant int := ${UNSOCKET_KIT_COST};`), '必要な数がSQLと違う')
-  assert.ok(body.includes(`c_rarity constant text := '${UNSOCKET_KIT_RARITY}';`), 'レア度がSQLと違う')
-  assert.ok(body.includes('m.rarity = c_rarity'), '激レア以外も使えてしまう')
-  assert.ok(body.includes('if v_sum <> c_cost'), 'ちょうどの個数を見ていない')
-  assert.ok(body.includes('pm.qty >= q.qty'), '持っている数を見ていない')
-  assert.ok(body.includes('unsocket_tickets = unsocket_tickets + 1'), '装置が増えていない')
-  // 検証を全部済ませてから素材を引く（部分的に消えない）
-  const checkAt = body.indexOf('if v_ok <> v_req')
-  const spendAt = body.indexOf('set qty = pm.qty - q.qty')
-  assert.ok(checkAt !== -1 && spendAt !== -1 && checkAt < spendAt, '検証の前に素材を引いている')
+// ★2026-09-07 ユーザー指示で**Goldで買う**形に変えた（前はエピック素材5個で作っていた）。
+//   値段は外すルーンの良さで変わり、**下限は1,000G**。
+test('★刻印除去装置はGoldで買う。値段はルーンが良いほど高い（下限1,000G）', () => {
+  assert.equal(UNSOCKET_GOLD_MIN, 1000, '下限はユーザー指示の1,000G')
+  // 合計%に比例し、特殊能力つきは倍率がかかる
+  assert.equal(unsocketGoldOf({ stats: { vit: 3 } }), 3 * UNSOCKET_GOLD_PER_PCT)
+  assert.equal(unsocketGoldOf({ stats: { vit: 3 }, ability: 'コウモリ' }),
+    3 * UNSOCKET_GOLD_PER_PCT * UNSOCKET_ABILITY_MULT)
+  // ★良いルーンほど高い（外すのが惜しくなる、という置き方）
+  assert.ok(unsocketGoldOf({ stats: { vit: 6 } }) > unsocketGoldOf({ stats: { vit: 3 } }))
+  // ★どんなに安くても下限を割らない
+  assert.equal(unsocketGoldOf({ stats: { vit: 0.1 } }), UNSOCKET_GOLD_MIN)
+  assert.equal(unsocketGoldOf({}), UNSOCKET_GOLD_MIN)
+  assert.equal(unsocketGoldOf(null), UNSOCKET_GOLD_MIN)
+  // 刻みで丸める（読みやすい額にする）
+  for (const s of [{ vit: 0.7 }, { vit: 1.3, agi: 0.9 }, { str: 2.4 }]) {
+    assert.equal(unsocketGoldOf({ stats: s }) % UNSOCKET_GOLD_STEP, 0, `${JSON.stringify(s)} が刻みで割れない`)
+  }
+  assert.equal(runeTotalPct({ vit: 1.2, agi: 0.8 }), 2)
+
+  // ★同じ式がSQLにもある。**片方だけ直すと画面の額と実際に引かれる額が食い違う**
+  const body = bodyOf('v2_unsocket_essence')
+  assert.ok(body.includes(`c_min  constant bigint := ${UNSOCKET_GOLD_MIN};`), '下限がSQLと違う')
+  assert.ok(body.includes(`c_per  constant bigint := ${UNSOCKET_GOLD_PER_PCT};`), '1%あたりがSQLと違う')
+  assert.ok(body.includes(`c_mult constant bigint := ${UNSOCKET_ABILITY_MULT};`), '能力の倍率がSQLと違う')
+  assert.ok(body.includes(`c_step constant bigint := ${UNSOCKET_GOLD_STEP};`), '刻みがSQLと違う')
+  assert.ok(body.includes('and gold >= v_cost'), '所持金を見ずに引いている')
+  assert.ok(body.includes('greatest(c_min'), '下限を効かせていない')
+  // 払えたときだけ外す（先に外してから課金しない）
+  const payAt = body.indexOf('set gold = gold - v_cost')
+  const pullAt = body.indexOf('set inv_id = null, socket_idx = null')
+  assert.ok(payAt !== -1 && pullAt !== -1 && payAt < pullAt, '払う前に外してしまっている')
+})
+
+// ★作る道は廃止した。残っていると2つの入手経路ができてしまう
+test('★エピック素材で作る道は廃止されている', () => {
+  assert.ok(SQL.includes('drop function if exists public.v2_make_unsocket_kit(jsonb);'),
+    '古い関数を落としていない')
+  assert.ok(!SQL.includes('create or replace function public.v2_make_unsocket_kit'),
+    '作る関数が残っている')
 })

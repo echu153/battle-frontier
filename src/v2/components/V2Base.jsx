@@ -489,7 +489,7 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
       {tab === 'exchange' && (<>
         <div style={{ color:TEXT.sub, fontSize:'10px', lineHeight:'1.8', marginBottom:'8px' }}>
           エリア{AREA_MARK[0]}〜{AREA_MARK[7]}のルーン素材が、<span style={{ color:'#8fcf6f' }}>同じ番号のグレードの資材</span>になります。
-          <br />通常1個→{EXCHANGE_RATE.normal}個 ／ レア1個→{EXCHANGE_RATE.rare}個 ／ 激レア1個→{EXCHANGE_RATE.ultra}個
+          <br />{RARITIES.map(r => `${RARITY_LABEL[r]}1個→${EXCHANGE_RATE[r]}個`).join(' ／ ')}
         </div>
 
         <div style={{ display:'flex', gap:'4px', marginBottom:'6px', alignItems:'center', flexWrap:'wrap' }}>
@@ -725,7 +725,7 @@ export default function V2Base({ prof, materials, fishDex, isAdmin, onProfile, o
           ))}
         </div>
         <div style={{ color:TEXT.sub, fontSize:'9px', marginTop:'6px' }}>
-          値段の目安：エリア番号 × 通常{SHOP_MATERIAL_COST.normal} / レア{SHOP_MATERIAL_COST.rare} / 激レア{SHOP_MATERIAL_COST.ultra}枚
+          値段の目安：エリア番号 × {RARITIES.map(r => `${RARITY_LABEL[r]}${SHOP_MATERIAL_COST[r]}`).join(' / ')}枚
         </div>
       </>)}
 

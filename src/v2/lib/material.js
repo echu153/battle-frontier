@@ -19,9 +19,15 @@ import { STAT_KEYS } from './stats.js'
 import { tierOf } from './enemies.js'
 
 export const RARITIES = ['normal', 'rare', 'ultra']
-export const RARITY_LABEL = { normal:'通常', rare:'レア', ultra:'激レア' }
+// ★呼び方は**ノーマル／コモン／エピック**、色は**灰・青・紫**（2026-09-07 ユーザー指示）。
+//   ⚠**キー（normal/rare/ultra）と RARITY_SHORT は絶対に変えない**。
+//     素材のidが 'm:1:0:n' のように短縮キーでできていて、
+//     変えると**プレイヤーの持ち物が全部行方不明になる**。
+//   ⚠画面に出す言葉は必ずこの RARITY_LABEL から引くこと。直書きすると次に呼び方を
+//     変えたときに取りこぼす（material.test.js が直書きを見張っている）。
+export const RARITY_LABEL = { normal:'ノーマル', rare:'コモン', ultra:'エピック' }
 export const RARITY_SHORT = { normal:'n', rare:'r', ultra:'u' }
-export const RARITY_COLOR = { normal:'#a8c4d6', rare:'#66ccff', ultra:'#ffcc44' }
+export const RARITY_COLOR = { normal:'#9aa8b8', rare:'#4da3ff', ultra:'#b06cff' }
 
 // ===== レンジ =====
 // 上限は**難易度帯**で決まり、下限だけレア度で上がる。刻みは0.1%。**全体の最大は2.0%**
@@ -523,11 +529,30 @@ export const sellTotalOf = (items) =>
 // ===== 刻印除去装置 =====
 // ★刻んだルーンを外すための道具（2026-08-22 ユーザー決定で名前と入手手段が決まった）。
 //   これが無いと、ルーンを刻んだ装備は**取引所へ出せない**（刻印済みは出品不可のため）。
-//   激レア素材だけで作る＝周回している人には自然に溜まるが、
-//   **同じ激レア素材はルーンの抽出にも使う**ので「外す道具にするか、良いルーンにするか」の択になる。
+//
+// ★2026-09-07 ユーザー指示で**Goldで買う**形に変えた（前はエピック素材5個で作っていた）。
+//   値段は**外すルーンの良さ**で変わる。良いルーンほど外すのが惜しくなる、という置き方。
+//     値段 ＝ 合計% × 2,000G ×（特殊能力つきなら3倍）… 100G刻みに丸める
+//     ★下限は 1,000G（ユーザー指示）
+//   目安： 合計0.5%で1,000G ／ 3%で6,000G ／ 6%＋能力つきで36,000G ／ 10%＋能力つきで60,000G
+//   ⚠**値段を決めるのはサーバー**（v2_unsocket_essence）。ここは画面の表示用の写しで、
+//     同じ式が両方にある。**変えるときは必ず両方**（material.test.js が突き合わせる）。
 export const UNSOCKET_KIT_NAME = '刻印除去装置'
-export const UNSOCKET_KIT_COST = 5          // 消費する激レア素材の数
-export const UNSOCKET_KIT_RARITY = 'ultra'  // 激レアだけ
+export const UNSOCKET_GOLD_MIN = 1000        // 最低ライン
+export const UNSOCKET_GOLD_PER_PCT = 2000    // 合計1%あたり
+export const UNSOCKET_ABILITY_MULT = 3       // 特殊能力が付いているルーンは何倍か
+export const UNSOCKET_GOLD_STEP = 100        // 値段の刻み（読みやすくするため）
+
+// ルーンの「良さ」＝乗っているステータス%の合計
+export const runeTotalPct = (stats) =>
+  Object.values(stats || {}).reduce((t, v) => t + (Number(v) || 0), 0)
+
+// そのルーンを外すのにかかるGold
+export const unsocketGoldOf = (essence) => {
+  const pct = runeTotalPct(essence?.stats)
+  const raw = pct * UNSOCKET_GOLD_PER_PCT * (essence?.ability ? UNSOCKET_ABILITY_MULT : 1)
+  return Math.max(UNSOCKET_GOLD_MIN, Math.round(raw / UNSOCKET_GOLD_STEP) * UNSOCKET_GOLD_STEP)
+}
 
 // ===== 抽出 =====
 export const EXTRACT_COST = 5     // 消費する素材の数

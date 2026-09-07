@@ -2773,68 +2773,13 @@ revoke all on function public.v2_fuse(bigint, bigint, bigint, boolean) from publ
 revoke all on function public.v2_fuse(bigint, bigint, bigint, boolean) from anon;
 grant execute on function public.v2_fuse(bigint, bigint, bigint, boolean) to authenticated;
 
--- ===== 刻印除去装置を作る（激レア素材5個 → 1個）=====
--- ★ルーンを外すための道具。**これが無いと刻印済みの装備は取引所へ出せない**
---   （刻印済みは出品不可のため）。2026-08-22 ユーザー決定で名前と入手手段が決まった。
---   激レア素材だけで作る＝同じ素材をルーンの抽出にも使うので、どちらに回すかの択になる。
-create or replace function public.v2_make_unsocket_kit(p_items jsonb)
-returns jsonb language plpgsql security definer set search_path = public as $$
-declare
-  c_cost   constant int := 5;         -- src/v2/lib/material.js の UNSOCKET_KIT_COST
-  c_rarity constant text := 'ultra';  -- 同 UNSOCKET_KIT_RARITY
-  v_uid  uuid := auth.uid();
-  v_req  int;
-  v_ok   int;
-  v_sum  int;
-  v_have int;
-begin
-  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
-  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
-  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then
-    return jsonb_build_object('ok', false, 'error', '素材が選ばれていません');
-  end if;
-
-  -- 送られてきた種類と、そのうち「実在して・激レアで・足りている」種類
-  select count(*), coalesce(sum(q.qty), 0) into v_req, v_sum
-    from (select r.id, sum(r.qty)::int as qty
-            from jsonb_to_recordset(p_items) as r(id text, qty int)
-           where r.id is not null and coalesce(r.qty, 0) > 0
-           group by r.id) q;
-  if v_req = 0 then return jsonb_build_object('ok', false, 'error', '個数が不正です'); end if;
-  if v_sum <> c_cost then
-    return jsonb_build_object('ok', false, 'error', format('激レア素材をちょうど%s個選んでください', c_cost));
-  end if;
-
-  select count(*) into v_ok
-    from (select r.id, sum(r.qty)::int as qty
-            from jsonb_to_recordset(p_items) as r(id text, qty int)
-           where r.id is not null and coalesce(r.qty, 0) > 0
-           group by r.id) q
-    join public.v2_materials m on m.id = q.id and m.rarity = c_rarity
-    join public.v2_player_materials pm
-      on pm.player_id = v_uid and pm.material_id = q.id and pm.qty >= q.qty;
-  if v_ok <> v_req then
-    return jsonb_build_object('ok', false, 'error', '激レア素材が足りません');
-  end if;
-
-  -- ここから先は失敗しない（検証が通っている）
-  update public.v2_player_materials pm
-     set qty = pm.qty - q.qty
-    from (select r.id, sum(r.qty)::int as qty
-            from jsonb_to_recordset(p_items) as r(id text, qty int)
-           where r.id is not null and coalesce(r.qty, 0) > 0
-           group by r.id) q
-   where pm.player_id = v_uid and pm.material_id = q.id;
-
-  update public.v2_profiles set unsocket_tickets = unsocket_tickets + 1, updated_at = now()
-   where id = v_uid returning unsocket_tickets into v_have;
-
-  return jsonb_build_object('ok', true, 'unsocket_tickets', v_have);
-end;
-$$;
-revoke all on function public.v2_make_unsocket_kit(jsonb) from public;
-revoke all on function public.v2_make_unsocket_kit(jsonb) from anon;
-grant execute on function public.v2_make_unsocket_kit(jsonb) to authenticated;
+-- ===== 刻印除去装置は**Goldで買う**（2026-09-07 ユーザー指示）=====
+-- ★以前はエピック素材5個で作る v2_make_unsocket_kit があったが、廃止した。
+--   いまは v2_unsocket_essence が外すときに直接Goldを引く（値段は外すルーンの良さで変わる）。
+--   古い関数と列が残っていても害は無いが、掃除するなら：
+--     drop function if exists public.v2_make_unsocket_kit(jsonb);
+--     alter table public.v2_profiles drop column if exists unsocket_tickets;
+drop function if exists public.v2_make_unsocket_kit(jsonb);
 
 -- ===== 動作確認用（開発限定）：守りの護符を配る =====
 -- ★入手方法は未定（2026-08-16）。決まるまでは開発だけがここで増やせる
@@ -3224,11 +3169,24 @@ revoke all on function public.v2_socket_essence(bigint, bigint, int) from public
 revoke all on function public.v2_socket_essence(bigint, bigint, int) from anon;
 grant execute on function public.v2_socket_essence(bigint, bigint, int) to authenticated;
 
--- エッセンスを外す。**専用アイテムを1個消費する**（エッセンスは無傷で戻る）
--- ⚠アイテムの名前と入手手段はまだ決まっていない（docs/v2-enchant-design.md の「残り」）
+-- エッセンスを外す。**Goldを払う**（エッセンスは無傷で戻る）
+-- ★2026-09-07 ユーザー指示で「刻印除去装置をGoldで買う」形に変えた。
+--   値段は**外すルーンの良さ**で変わる：合計% × 2,000G ×（特殊能力つきなら3倍）。
+--   100G刻みに丸め、**下限は1,000G**。
+-- ⚠同じ式が src/v2/lib/material.js の unsocketGoldOf にもある。**変えるときは両方**。
+--   権威はこちら＝画面が出した額は信じない（自分で計算し直して引く）。
 create or replace function public.v2_unsocket_essence(p_essence_id bigint)
 returns jsonb language plpgsql security definer set search_path = public as $$
-declare v_uid uuid := auth.uid(); v_ess public.v2_essences; v_left int;
+declare
+  v_uid  uuid := auth.uid();
+  v_ess  public.v2_essences;
+  v_pct  numeric := 0;
+  v_cost bigint;
+  v_gold bigint;
+  c_min  constant bigint := 1000;   -- 下限（ユーザー指示）
+  c_per  constant bigint := 2000;   -- 合計1%あたり
+  c_mult constant bigint := 3;      -- 特殊能力つきの倍率
+  c_step constant bigint := 100;    -- 値段の刻み
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   -- ★開発限定（v2は未公開）。画面のゲートだけだと直接RPCを叩けば通ってしまう
@@ -3236,12 +3194,21 @@ begin
   select * into v_ess from public.v2_essences where id = p_essence_id and player_id = v_uid;
   if not found then return jsonb_build_object('ok', false, 'error', 'そのエッセンスはありません'); end if;
   if v_ess.inv_id is null then return jsonb_build_object('ok', false, 'error', 'はめていません'); end if;
-  update public.v2_profiles set unsocket_tickets = unsocket_tickets - 1
-   where id = v_uid and unsocket_tickets > 0
-  returning unsocket_tickets into v_left;
-  if not found then return jsonb_build_object('ok', false, 'error', '外すためのアイテムが足りません'); end if;
+
+  -- 乗っているステータス%の合計＝ルーンの良さ
+  select coalesce(sum(v::numeric), 0) into v_pct from jsonb_each_text(v_ess.stats) as t(k, v);
+  v_cost := greatest(c_min,
+    round(v_pct * c_per * (case when v_ess.ability is null then 1 else c_mult end) / c_step) * c_step);
+
+  update public.v2_profiles set gold = gold - v_cost, updated_at = now()
+   where id = v_uid and gold >= v_cost
+  returning gold into v_gold;
+  if not found then
+    return jsonb_build_object('ok', false, 'error', format('Goldが足りません（%sG必要）', v_cost));
+  end if;
+
   update public.v2_essences set inv_id = null, socket_idx = null where id = p_essence_id;
-  return jsonb_build_object('ok', true, 'tickets', v_left);
+  return jsonb_build_object('ok', true, 'cost', v_cost, 'gold', v_gold);
 end;
 $$;
 revoke all on function public.v2_unsocket_essence(bigint) from public;

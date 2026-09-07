@@ -5,8 +5,8 @@ import { equippedItems } from '../lib/loadout.js'
 import {
   MATERIAL_BY_ID, RARITY_LABEL, RARITY_COLOR, COLOR_LABEL, COLOR_HEX,
   EXTRACT_COST, BOSS_LIMIT, canExtract, runePower, runeName, runeFullName, materialsOfArea,
-  RARITIES, sellPriceOf, sellTotalOf, MATERIALS,
-  UNSOCKET_KIT_NAME, UNSOCKET_KIT_COST,
+  RARITIES, sellPriceOf, sellTotalOf,
+  UNSOCKET_KIT_NAME, UNSOCKET_GOLD_MIN, UNSOCKET_ABILITY_MULT, unsocketGoldOf, runeTotalPct,
 } from '../lib/material.js'
 import { ABILITY_LABEL, abilityText } from '../lib/enchant.js'
 import { fusedName } from '../lib/fusion.js'
@@ -75,9 +75,8 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
   const [runeFilter, setEssFilter] = useStored('runeFilter', defaultRuneFilter, true)  // ルーン一覧の絞り込み
   const [rawRunePage, setRawEssPage] = useState(0)
   const [sell, setSell] = useState({})          // 売却タブで選んだ数 { 素材ID: 個数 }
-  // 刻印除去装置（ルーンを外す道具）。★激レア素材5個で1個作る
-  const [kit, setKit] = useState(false)
-  const [kitPick, setKitPick] = useState({})
+  // 刻印除去装置（ルーンを外す道具）。★2026-09-07 から**Goldで買う**（値段は外すルーンの良さで変わる）
+  const [unseal, setUnseal] = useState(null)    // 外す確認 { rune, cost }
   const [sellConfirm, setSellConfirm] = useState(false)
   const [sold, setSold] = useState(null)        // 売却の結果 { gained, gold }
   const [busy, setBusy] = useState(false)
@@ -111,22 +110,14 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
     setResult(data.essence)   // 結果はポップアップで出す
   }
 
-  // ===== 刻印除去装置 =====
-  // ★これが無いと、ルーンを刻んだ装備は取引所へ出せない（刻印済みは出品不可）
-  const ultraHeld = MATERIALS.filter(m => m.rarity === 'ultra' && held[m.id] > 0)
-  const kitTotal = Object.values(kitPick).reduce((a, b) => a + b, 0)
-  const setKitQty = (id, n) => setKitPick(p => {
-    const v = Math.max(0, Math.min(held[id] || 0, n))
-    const next = { ...p }
-    if (v) next[id] = v; else delete next[id]
-    return next
-  })
-  const doMakeKit = async () => {
-    const items = Object.entries(kitPick).map(([id, qty]) => ({ id, qty }))
-    const d = await call('v2_make_unsocket_kit', { p_items: items })
+
+  // ★値段を決めるのは**サーバー**。ここで出しているのは同じ式の写しなので、
+  //   受け取った実額（d.cost）でメッセージを出す＝ズレていたら気づける
+  const doUnsocket = async () => {
+    const d = await call('v2_unsocket_essence', { p_essence_id: unseal.rune.id })
+    setUnseal(null)
     if (!d) return
-    setKit(false); setKitPick({})
-    setMsg({ text: `🧰 ${UNSOCKET_KIT_NAME}を作りました（残り${d.unsocket_tickets}個）`, color:'#44ff88' })
+    setMsg({ text: `🧰 ルーンを外しました（${(d.cost || 0).toLocaleString()}G）`, color:'#44ff88' })
   }
 
   // ソケットへ入れる。ふさがっている枠は**上書き＝元のルーンが消える**ので確認を1段挟む
@@ -349,16 +340,12 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
           <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'8px' }}>
             ルーンを刻めるのは武器だけ（片手2枠・両手3枠）。枠の色はドロップしたときに決まっていて、
             <span style={{ color:'#88ccff' }}>色の合うルーンしか刻めない</span>。
-            <span style={{ color:'#88ccff' }}>外す</span>には<b style={{ color:'#ffcc44' }}>{UNSOCKET_KIT_NAME}</b>が1個要る（残り{prof?.unsocket_tickets || 0}個）。
-            装置が無くても<span style={{ color:'#cc88ff' }}>上書き</span>はできるが、
+            <span style={{ color:'#88ccff' }}>外す</span>には<b style={{ color:'#ffcc44' }}>{UNSOCKET_KIT_NAME}</b>をGoldで買う。
+            値段は<b style={{ color:'#ffcc44' }}>そのルーンが良いほど高い</b>（下限{UNSOCKET_GOLD_MIN.toLocaleString()}G）。
+            <span style={{ color:'#cc88ff' }}>上書き</span>ならGoldは要らないが、
             そのとき<span style={{ color:'#ff8844' }}>元のルーンは消える</span><br />
             ★<b style={{ color:'#ffcc44' }}>刻んだままの装備は取引所へ出せない</b>。売るときは全部外してから
           </div>
-          <button onClick={() => setKit(true)} disabled={busy}
-            style={{ ...miniBtn('#ffcc44'), marginBottom:'8px' }}>
-            🧰 {UNSOCKET_KIT_NAME}を作る（激レア素材×{UNSOCKET_KIT_COST}）
-          </button>
-
           {weapons.length === 0 && <div style={{ color:'#7fa6d0', fontSize:'11px' }}>武器を装着してください</div>}
           {weapons.map(w => (
             <div key={w.slot} style={{ borderTop:'1px solid #002244', padding:'8px 0' }}>
@@ -388,10 +375,10 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
                         <>
                           <RuneTag e={e} />
                           <div style={{ display:'flex', gap:'4px', marginTop:'3px' }}>
-                            {/* 外す＝ルーンが無傷で戻る。専用アイテムが要る */}
-                            <button disabled={busy || !(prof?.unsocket_tickets > 0)}
-                              onClick={() => call('v2_unsocket_essence', { p_essence_id: e.id })}
-                              style={miniBtn(prof?.unsocket_tickets > 0 ? '#ff8888' : '#62789a')}>外す</button>
+                            {/* 外す＝ルーンが無傷で戻る。Goldを払う（額はそのルーンの良さで変わる） */}
+                            <button disabled={busy}
+                              onClick={() => setUnseal({ rune: e, cost: unsocketGoldOf(e) })}
+                              style={miniBtn('#ff8888')}>外す（{unsocketGoldOf(e).toLocaleString()}G）</button>
                             {/* 上書き＝アイテムは要らないが、**いま入っているルーンは消える** */}
                             <button onClick={() => setTarget(isTarget ? null : { invId: w.inv.id, slot: i, color: c, over: e, name: w.item.name + (w.inv.plus ? '+' + w.inv.plus : '') })}
                               style={miniBtn(isTarget ? '#ffcc00' : '#cc88ff')}>
@@ -577,45 +564,35 @@ export default function V2Enchant({ prof, inventory, materials, runes, onRefresh
           <div style={{ marginTop:'6px' }}><RuneTag e={seal.rune} size="13px" /></div>
           <div style={{ color:'#ff8844', fontSize:'11px', marginTop:'10px', lineHeight:1.8 }}>
             ⚠ 一度刻むと<b>外すのが大変です</b>。<br />
-            外して手元に戻すには<b>{UNSOCKET_KIT_NAME}</b>が1個要ります（残り{prof?.unsocket_tickets || 0}個）。<br />
-            装置が無いときは<b>上書きするしかなく、いま刻むルーンは消えます</b>。<br />
+            外して手元に戻すには<b>{UNSOCKET_KIT_NAME}</b>を{unsocketGoldOf(seal.rune).toLocaleString()}Gで買う必要があります。<br />
+            払わない場合は<b>上書きするしかなく、いま刻むルーンは消えます</b>。<br />
             <b>刻んだままの装備は取引所へ出せません。</b>
           </div>
         </V2Modal>
       )}
 
-      {/* ===== 刻印除去装置を作る ===== */}
-      {kit && (
-        <V2Modal title={`🧰 ${UNSOCKET_KIT_NAME}を作る`} color="#ffcc44" busy={busy}
-          confirmLabel={`作る（${kitTotal}/${UNSOCKET_KIT_COST}）`}
-          onConfirm={kitTotal === UNSOCKET_KIT_COST ? doMakeKit : undefined}
-          onClose={() => !busy && (setKit(false), setKitPick({}))}>
-          <div style={{ color:'#cfe2ff', fontSize:'12px' }}>
-            激レア素材を{UNSOCKET_KIT_COST}個そろえると1個できます。
+      {/* ===== 外す確認（Goldを払う）===== */}
+      {unseal && (
+        <V2Modal title={`🧰 ${UNSOCKET_KIT_NAME}で外す`} color="#ffcc44" busy={busy}
+          confirmLabel={`${unseal.cost.toLocaleString()}Gで外す`}
+          onConfirm={(prof?.gold || 0) >= unseal.cost ? doUnsocket : undefined}
+          onClose={() => !busy && setUnseal(null)}>
+          <div style={{ marginBottom:'8px' }}><RuneTag e={unseal.rune} size="13px" /></div>
+          <div style={{ color:'#cfe2ff', fontSize:'12px', lineHeight:1.9 }}>
+            このルーンを外して手元に戻します。ルーンは無傷です。<br />
+            値段は<b style={{ color:'#ffcc44' }}>ルーンが良いほど高く</b>なります
+            （合計{runeTotalPct(unseal.rune.stats).toFixed(1)}%
+            {unseal.rune.ability ? `・特殊能力つきで${UNSOCKET_ABILITY_MULT}倍` : ''}）。
           </div>
-          <div style={{ color:'#ff8844', fontSize:'11px', margin:'6px 0 10px' }}>
-            ⚠ 同じ激レア素材は<b>ルーン作成にも使います</b>。どちらに回すか決めてから。
+          <div style={{ marginTop:'10px', fontFamily:'monospace', fontSize:'12px' }}>
+            <span style={{ color:'#7fa6d0' }}>いま持っているGold </span>
+            <span style={{ color:'#ffcc00' }}>{(prof?.gold || 0).toLocaleString()}G</span>
           </div>
-          {ultraHeld.length === 0 && <div style={{ color:'#7fa6d0', fontSize:'11px' }}>激レア素材を持っていません。</div>}
-          {ultraHeld.map(m => (
-            <div key={m.id} style={{ display:'flex', alignItems:'center', gap:'4px', background:'#000818',
-              border:'1px solid #002244', borderLeft:`3px solid ${RARITY_COLOR.ultra}`,
-              padding:'4px 6px', marginBottom:'2px', fontFamily:'monospace', fontSize:'11px' }}>
-              <span style={{ color: RARITY_COLOR.ultra, flex:'1 1 auto', minWidth:0, overflow:'hidden',
-                textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                {m.name}<span style={{ color:'#ffffff' }}> ×{held[m.id]}</span>
-              </span>
-              <button onClick={() => setKitQty(m.id, (kitPick[m.id] || 0) - 1)} disabled={!kitPick[m.id]}
-                style={{ ...miniBtn(kitPick[m.id] ? '#88aaff' : '#3a4a60'), padding:'2px 7px' }}>−</button>
-              <span style={{ color: kitPick[m.id] ? '#ffcc00' : '#62789a', minWidth:'26px', textAlign:'center' }}>
-                {kitPick[m.id] || 0}
-              </span>
-              <button onClick={() => setKitQty(m.id, (kitPick[m.id] || 0) + 1)}
-                disabled={(kitPick[m.id] || 0) >= held[m.id] || kitTotal >= UNSOCKET_KIT_COST}
-                style={{ ...miniBtn((kitPick[m.id] || 0) < held[m.id] && kitTotal < UNSOCKET_KIT_COST ? '#88aaff' : '#3a4a60'),
-                  padding:'2px 7px' }}>＋</button>
+          {(prof?.gold || 0) < unseal.cost && (
+            <div style={{ color:'#ff4444', fontSize:'11px', marginTop:'6px' }}>
+              ⚠ Goldが足りません（あと{(unseal.cost - (prof?.gold || 0)).toLocaleString()}G）
             </div>
-          ))}
+          )}
         </V2Modal>
       )}
 
