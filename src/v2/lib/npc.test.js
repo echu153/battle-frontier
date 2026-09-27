@@ -391,3 +391,37 @@ test('1週間ぶん回すと、順位表が戦闘力の順に落ち着いてい�
   // 全員がどこかの階に居る（詰まって消えない）
   for (const n of npcs) assert.ok(n.arena_floor >= 1 && n.arena_floor <= FLOORS, `${n.name} の階がおかしい`)
 })
+
+// ===== シードSQLが名簿とズレていないこと（2026-09-27）=====
+// ★100体の初期値は powerOfFloor（アリーナの曲線）から逆算している。
+//   つまり**アリーナの強さをいじるとシードSQLが黙って古くなる**。
+//   実際 2026-09-06 にアリーナの曲線を上げたとき、
+//   supabase_v2_npc_seed.sql が古いまま1本も落ちずに残っていた。
+//   ズレたら `node tools/v2-npc-seed.mjs` で作り直す。
+test('★シードSQL（100体）が npc.js の名簿と一致している', () => {
+  const sql = readFileSync(new URL('../../../supabase_v2_npc_seed.sql', import.meta.url), 'utf8')
+  const head = 'insert into public.v2_npcs (id, name, cls, seed, speed, total_exp, arena_floor, active, born_at, last_tick_at, next_arena_at)'
+  assert.ok(sql.includes(head), 'シードSQLの insert が見つからない（列の並びが変わった？）')
+  const rows = [...sql.matchAll(/^ {2}\((\d+), '([^']+)', '([^']+)', (\d+), (\d+), (\d+), (\d+),/gm)]
+    .map(m => ({
+      id: Number(m[1]), name: m[2], cls: m[3],
+      seed: Number(m[4]), speed: Number(m[5]), total_exp: Number(m[6]), arena_floor: Number(m[7]),
+    }))
+  const want = seedListOf()
+  assert.equal(rows.length, want.length, `SQLの行数（${rows.length}）がJS（${want.length}）と違う`)
+  const stale = []
+  rows.forEach((r, i) => {
+    const w = want[i]
+    for (const k of ['name', 'cls', 'seed', 'speed', 'total_exp', 'arena_floor']) {
+      if (r[k] !== w[k]) stale.push(`${r.id} ${r.name} の ${k}: SQL ${r[k]} / JS ${w[k]}`)
+    }
+  })
+  assert.deepEqual(stale, [],
+    `シードSQLが古い。node tools/v2-npc-seed.mjs で作り直すこと:\n  ${stale.slice(0, 8).join('\n  ')}`)
+})
+
+// ★上限はアリーナの最上階に追従する（数字を書き写さない）
+test('★NPCの強さの上限はアリーナ最上階と同じ', async () => {
+  const { powerOfFloor, FLOORS: F } = await import('./arena.js')
+  assert.equal(POWER_CAP, powerOfFloor(F), 'アリーナの天井とNPCの上限が食い違っている')
+})
