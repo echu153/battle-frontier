@@ -12,10 +12,10 @@ import {
   VISIBILITIES, VISIBILITY_LABEL, VISIBILITY_HINT, DEFAULT_VISIBILITY, isVisibility,
   bossPowerOfTier, raidPowerOfArea, raidHpOfArea, toRaidFighter, bossBaseStats, atkStatsOf,
   shareOf, tierOfShare, rewardTierOf, mvpIdOf, REWARD_TIERS, TIER_SHARE,
-  matCountOf, matRangeOf, matRangeText, TIER_MAT_RANGE, rarityTableOf, rollRarity,
+  matCountOf, matRangeOf, matRangeText, TIER_MAT_RANGE, TIER_MAT_MULT, matMultOf, rarityTableOf, rollRarity,
   TIER_ULTRA, TIER_RARE, ultraPctOf, rarePctOf,
   RAID_PARTY, HIT_CAP_DIV, hitCapOf,
-  fusionChanceOf, FUSION_PCT,
+  fusionChanceOf, FUSION_PCT, FUSION_MAX_PER_PART,
   BOX_KINDS, BOX_MAT_COUNT, BOX_RARITY, BOX_FUSION_PCT, boxRarityTable,
   RAID_EXP_MIN, RAID_EXP_MAX, raidExpOf,
   CALL_KINDS, CALL_MAX, ONLINE_MINUTES, TIERS,
@@ -52,7 +52,8 @@ const bodyOf = (name) => {
 }
 const SQL_FRIENDS = sqlOf('friends')
 // v2_raid_tiers の1行 (tier, power, hp, ultra_pct) を拾う
-const ROW_RE = /\(\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+)\)/g
+// (tier, power, hp, ultra_pct, mat_mult) の5列
+const ROW_RE = /\(\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/g
 // v2_raid_bosses の1行 (idx, 'key') を拾う
 const BOSS_ROW_RE = /\(\s*(\d+),\s*'([^']+)'\)/g
 const rngOf = (s0) => { let s = s0 >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }
@@ -318,10 +319,10 @@ test('素材の数はティアごとの範囲から引く（帯ボーナスは�
   assert.deepEqual(matRangeOf('ない'), TIER_MAT_RANGE.D)
   assert.equal(matRangeText('B'), '3〜5個')
   // 範囲の下と上がちゃんと出る
-  assert.equal(matCountOf('A', () => 0), 5)
-  assert.equal(matCountOf('A', () => 0.99), 7)
-  assert.equal(matCountOf('D', () => 0), 1)
-  assert.equal(matCountOf('D', () => 0.99), 2)
+  assert.equal(matCountOf('A', 1, () => 0), 5)
+  assert.equal(matCountOf('A', 1, () => 0.99), 7)
+  assert.equal(matCountOf('D', 1, () => 0), 1)
+  assert.equal(matCountOf('D', 1, () => 0.99), 2)
   // ティアが上がると必ず増える（範囲が重ならない）
   for (let i = 1; i < REWARD_TIERS.length; i++) {
     const hi = matRangeOf(REWARD_TIERS[i])[1]
@@ -632,7 +633,7 @@ test('★SQL の報酬の中身が raid.js と一致している', () => {
   assert.ok(body.includes(hi), '素材の数の上限がSQLと違う')
   assert.ok(!body.includes('floor(v_r.tier / 3.0)'), '帯ボーナスがSQLに残っている')
   // 激レアは v2_raid_tiers.ultra_pct（帯だけ）から引いている
-  assert.ok(body.includes('select ultra_pct into v_ultra from public.v2_raid_tiers'),
+  assert.ok(body.includes('select ultra_pct, mat_mult into v_ultra, v_mult from public.v2_raid_tiers'),
     '激レアを帯の表から引いていない')
   // レアはティアだけ
   const rare = "when 'A' then " + TIER_RARE.A + " when 'B' then " + TIER_RARE.B
@@ -771,4 +772,49 @@ test('★救援一覧は「公開されていて満員でない」ものだけ',
   assert.match(list, /r\.host_id <> v_me/, '自分のレイドが一覧に出てしまう')
   assert.match(list, /< \(v_c->>'max_members'\)::int/, '満員のレイドを並べている')
   assert.match(list, /killed_at is null and r\.ends_at > now\(\)/, '終わったレイドを並べている')
+})
+
+
+// ===== 帯で素材の個数が増える（2026-09-28 ユーザー指示）=====
+// ★前は「帯ボーナス無し」で、難易度を上げてもエピック率が少し動くだけだった。
+test('★帯が上がるほど素材が多く出る（①等倍〜⑧2倍）', () => {
+  assert.equal(matMultOf(1), 1, '①は等倍')
+  assert.equal(matMultOf(8), 2, '⑧は2倍')
+  for (let t = 2; t <= 8; t++) {
+    assert.ok(TIER_MAT_MULT[t] >= TIER_MAT_MULT[t - 1], `帯${t} の倍率が前の帯より小さい`)
+  }
+  // 貢献度Aの個数が帯で増えている
+  assert.deepEqual(matRangeOf('A', 1), [5, 7])
+  assert.deepEqual(matRangeOf('A', 8), [10, 14])
+  // どの帯でも最低1個は出る
+  for (let t = 1; t <= 8; t++) assert.ok(matRangeOf('D', t)[0] >= 1, `帯${t} で0個になる`)
+  // 帯を渡さなければ等倍（呼び忘れても壊れない）
+  assert.deepEqual(matRangeOf('A'), matRangeOf('A', 1))
+})
+
+// ===== 合成素材は素材1個ごとに判定する =====
+test('★合成素材は素材1個ごとに引く（1枠につき1個まで）', () => {
+  assert.equal(FUSION_PCT, 1, '率そのものは触っていない')
+  assert.equal(FUSION_MAX_PER_PART, 1, '1枠で2個以上は出さない')
+  // 素材が多いほど当たりやすい
+  assert.ok(fusionChanceOf(12) > fusionChanceOf(6), '個数が増えても当たりやすくなっていない')
+  assert.equal(fusionChanceOf(1), 1)
+  assert.equal(fusionChanceOf(0), 0)
+
+  // サーバーも同じ形になっていること
+  const grant = bodyOf('v2_raid_grant')
+  const loopAt = grant.indexOf('for v_i in 1..')
+  const endAt = grant.indexOf('end loop;')
+  const inLoop = grant.slice(loopAt, endAt)
+  assert.match(inLoop, /v_fusion is null and coalesce\(p_killed, false\)/, '合成素材の判定がループの中にない')
+  assert.match(inLoop, /'fu:' \|\| p_boss_key/, '倒したボスの素材になっていない（乱択はだめ）')
+  // ループの外に古い判定が残っていないこと（残すと2回引いてしまう）
+  const after = grant.slice(endAt)
+  assert.ok(!/random\(\) \* 100 < coalesce\(p_fusion_pct/.test(after), 'ループの外にも判定が残っている')
+
+  // 個数に帯の倍率が掛かっていること
+  const claim = bodyOf('v2_raid_claim')
+  assert.match(claim, /mat_mult into v_ultra, v_mult/, '倍率を読んでいない')
+  assert.match(claim, /round\(v_lo \* coalesce\(v_mult, 1\)\)/, '下限に倍率が掛かっていない')
+  assert.match(claim, /round\(v_hi \* coalesce\(v_mult, 1\)\)/, '上限に倍率が掛かっていない')
 })

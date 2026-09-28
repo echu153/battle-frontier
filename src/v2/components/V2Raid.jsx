@@ -454,7 +454,7 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, isAd
                     　難易度{tierMark(r.tier)}／{r.killed_at ? '討伐' : '時間切れ'}／貢献 {(sh * 100).toFixed(1)}%
                   </span>
                   <span style={{ color: TIER_COLOR[rt] }}>
-                    　{TIER_LABEL[rt]}（素材{matRangeText(rt)}・{RARITY_LABEL.ultra}{rarityTableOf(rt, r.tier).ultra}%
+                    　{TIER_LABEL[rt]}（素材{matRangeText(rt, r.tier)}・{RARITY_LABEL.ultra}{rarityTableOf(rt, r.tier).ultra}%
                     {r.killed_at ? `・合成素材${fusionChanceOf()}%` : ''}）
                   </span>
                   {isHost && <span style={{ color: BOX_COLOR.host }}>　＋{BOX_LABEL.host}</span>}

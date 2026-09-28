@@ -59,17 +59,18 @@ create policy "v2_raid_tiers_read" on public.v2_raid_tiers for select to authent
 revoke all on table public.v2_raid_tiers from anon;
 grant select on table public.v2_raid_tiers to authenticated;
 
-insert into public.v2_raid_tiers (tier, power, hp, ultra_pct) values
-  (1,   2572,      390000, 3),
-  (2,   3720,      960000, 3),
-  (3,   5588,     2900000, 4),
-  (4,   9212,     3800000, 4),
-  (5,  26288,    53000000, 5),
-  (6,  48824,   120000000, 5),
-  (7,  69538,   190000000, 6),
-  (8,  90494,   300000000, 7)
+insert into public.v2_raid_tiers (tier, power, hp, ultra_pct, mat_mult) values
+  (1,   2572,      390000, 3,  1.0),
+  (2,   3720,      960000, 3,  1.1),
+  (3,   5588,     2900000, 4,  1.2),
+  (4,   9212,     3800000, 4,  1.3),
+  (5,  26288,    53000000, 5,  1.5),
+  (6,  48824,   120000000, 5,  1.6),
+  (7,  69538,   190000000, 6,  1.8),
+  (8,  90494,   300000000, 7,  2.0)
 on conflict (tier) do update set
-  power = excluded.power, hp = excluded.hp, ultra_pct = excluded.ultra_pct;
+  power = excluded.power, hp = excluded.hp, ultra_pct = excluded.ultra_pct,
+  mat_mult = excluded.mat_mult;
 
 create table if not exists public.v2_raids (
   id         bigserial primary key,
@@ -271,6 +272,10 @@ $$;
 -- invite … 呼んだ人だけ（既定・これまでの形）／ friend … フレンドまで ／ all … 誰でも
 -- ⚠呼ばれた人（v2_raid_calls）は**どの範囲でも入れる**。公開範囲はそれに足すもの。
 alter table public.v2_raids add column if not exists visibility text not null default 'invite';
+
+-- ★帯（難易度）ごとの素材の個数の倍率（2026-09-28 ユーザー指示）。
+--   正は src/v2/lib/raid.js の TIER_MAT_MULT。node tools/v2-raid-sql.mjs --write で流し込む
+alter table public.v2_raid_tiers add column if not exists mat_mult numeric not null default 1;
 
 -- 自分がそのレイドを見られる（＝救援一覧に出す）か
 create or replace function public.v2_raid_visible(p_raid public.v2_raids, p_me uuid)
@@ -566,18 +571,20 @@ begin
       v_got := v_got || jsonb_build_array(jsonb_build_object(
         'id', v_mid, 'name', (select name from public.v2_materials where id = v_mid), 'rarity', v_rarity));
     end if;
-  end loop;
-
-  -- 合成素材は**討伐できたときだけ**
-  if coalesce(p_killed, false) and random() * 100 < coalesce(p_fusion_pct, 0) then
-    v_fid := 'fu:' || p_boss_key;
-    if exists (select 1 from public.v2_fusion_materials where id = v_fid) then
-      insert into public.v2_player_fusions (player_id, fusion_id, qty) values (p_player, v_fid, 1)
-        on conflict (player_id, fusion_id) do update set qty = public.v2_player_fusions.qty + 1;
-      select jsonb_build_object('id', id, 'name', name, 'crown', crown) into v_fusion
-        from public.v2_fusion_materials where id = v_fid;
+    -- ★合成素材は**素材1個につき1回**判定する（2026-09-28 ユーザー指示）。
+    --   素材が多く出る枠ほど当たりやすい。**1枠につき1個まで**なので当たったら以降は引かない。
+    --   ⚠出るのは**倒したボスの素材**（fu:<ボスのkey>）。乱択ではない。
+    if v_fusion is null and coalesce(p_killed, false)
+       and random() * 100 < coalesce(p_fusion_pct, 0) then
+      v_fid := 'fu:' || p_boss_key;
+      if exists (select 1 from public.v2_fusion_materials where id = v_fid) then
+        insert into public.v2_player_fusions (player_id, fusion_id, qty) values (p_player, v_fid, 1)
+          on conflict (player_id, fusion_id) do update set qty = public.v2_player_fusions.qty + 1;
+        select jsonb_build_object('id', id, 'name', name, 'crown', crown) into v_fusion
+          from public.v2_fusion_materials where id = v_fid;
+      end if;
     end if;
-  end if;
+  end loop;
 
   return jsonb_build_object('materials', v_got, 'fusion', v_fusion);
 end;
@@ -600,6 +607,7 @@ declare
   v_rt text;
   v_share numeric;
   v_n int;
+  v_mult numeric;
   v_lo int;
   v_hi int;
   v_ultra numeric;
@@ -626,10 +634,13 @@ begin
   v_rt := public.v2_raid_reward_tier(v_share);
 
   -- ===== ① 貢献度 =====
-  select ultra_pct into v_ultra from public.v2_raid_tiers where tier = v_r.tier;
+  select ultra_pct, mat_mult into v_ultra, v_mult from public.v2_raid_tiers where tier = v_r.tier;
   v_rare := (case v_rt when 'A' then 30 when 'B' then 24 when 'C' then 18 else 12 end);
   v_lo := (case v_rt when 'A' then 5 when 'B' then 3 when 'C' then 2 else 1 end);
   v_hi := (case v_rt when 'A' then 7 when 'B' then 5 when 'C' then 3 else 2 end);
+  -- ★帯（難易度）の倍率。raid.js の matRangeOf と同じ式（round で丸め、最低1個）
+  v_lo := greatest(1, round(v_lo * coalesce(v_mult, 1))::int);
+  v_hi := greatest(1, round(v_hi * coalesce(v_mult, 1))::int);
   v_n := v_lo + floor(random() * ((v_hi - v_lo) + 1))::int;
   v_one := public.v2_raid_grant(v_me, v_r.area_id, v_r.boss_key, v_killed,
                                 v_n, v_ultra, v_rare, (v_c->>'fusion_pct')::numeric);

@@ -11,14 +11,14 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 
 const B = new URL('../src/v2/lib/', import.meta.url).href
-const { TIERS, raidPowerOfTier, raidHpOfTier, ultraPctOf } = await import(B + 'raid.js')
+const { TIERS, raidPowerOfTier, raidHpOfTier, ultraPctOf, matMultOf } = await import(B + 'raid.js')
 
 const file = new URL('../supabase_v2_raid_20260906.sql', import.meta.url)
 const raw = readFileSync(file, 'utf8')
 const crlf = raw.includes('\r\n')
 const text = crlf ? raw.split('\r\n').join('\n') : raw
 
-const head = 'insert into public.v2_raid_tiers (tier, power, hp, ultra_pct) values\n'
+const head = 'insert into public.v2_raid_tiers (tier, power, hp, ultra_pct, mat_mult) values\n'
 const at = text.indexOf(head)
 if (at < 0) { console.error('NG: v2_raid_tiers の insert が見つからない'); process.exit(1) }
 const tail = text.indexOf('\non conflict', at)
@@ -26,7 +26,7 @@ if (tail < 0) { console.error('NG: insert の終わりが見つからない'); p
 
 const w = (s, n) => String(s).padStart(n)
 const rows = TIERS.map(t =>
-  `  (${w(t, 1)}, ${w(raidPowerOfTier(t), 6)}, ${w(raidHpOfTier(t), 11)}, ${w(ultraPctOf(t), 1)})`
+  `  (${w(t, 1)}, ${w(raidPowerOfTier(t), 6)}, ${w(raidHpOfTier(t), 11)}, ${w(ultraPctOf(t), 1)}, ${w(matMultOf(t).toFixed(1), 4)})`
 ).join(',\n')
 
 const next = text.slice(0, at + head.length) + rows + text.slice(tail)

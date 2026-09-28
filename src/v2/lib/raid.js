@@ -240,16 +240,27 @@ export const mvpIdOf = (members) => {
   return best ? String(best.player_id) : null
 }
 
-// ---- 素材の数（ティアごとの範囲から1つ引く）----
-// ★帯ボーナスは無し。もらった数字そのまま（2026-09-06 ユーザー決定）
+// ---- 素材の数（ティアごとの範囲 × 帯の倍率）----
+// ★基礎は貢献度のティアで決まる。
+// ★★2026-09-28 ユーザー指示で**帯（難易度）の倍率を掛ける**ようにした。
+//   奥のエリアで引いたレイドほど素材が多く出る＝奥へ進む理由になる。
+//   （2026-09-06 は「帯ボーナス無し」だったが、そのままだと難易度を上げても
+//     エピック率が少し上がるだけで、個数も合成素材の当たりやすさも変わらなかった）
 export const TIER_MAT_RANGE = { A: [5, 7], B: [3, 5], C: [2, 3], D: [1, 2] }
-export const matRangeOf = (rewardTier) => TIER_MAT_RANGE[rewardTier] || TIER_MAT_RANGE.D
-export const matCountOf = (rewardTier, rng = Math.random) => {
-  const [lo, hi] = matRangeOf(rewardTier)
+export const TIER_MAT_MULT = { 1:1.0, 2:1.1, 3:1.2, 4:1.3, 5:1.5, 6:1.6, 7:1.8, 8:2.0 }
+export const matMultOf = (tier) => TIER_MAT_MULT[tier] ?? 1
+// ★tier を渡さなければ倍率1（＝これまでと同じ）。呼ぶ側が渡し忘れても壊れない
+export const matRangeOf = (rewardTier, tier = 1) => {
+  const [lo, hi] = TIER_MAT_RANGE[rewardTier] || TIER_MAT_RANGE.D
+  const m = matMultOf(tier)
+  return [Math.max(1, Math.round(lo * m)), Math.max(1, Math.round(hi * m))]
+}
+export const matCountOf = (rewardTier, tier = 1, rng = Math.random) => {
+  const [lo, hi] = matRangeOf(rewardTier, tier)
   return lo + Math.floor(rng() * (hi - lo + 1))
 }
-export const matRangeText = (rewardTier) => {
-  const [lo, hi] = matRangeOf(rewardTier)
+export const matRangeText = (rewardTier, tier = 1) => {
+  const [lo, hi] = matRangeOf(rewardTier, tier)
   return `${lo}〜${hi}個`
 }
 
@@ -276,9 +287,15 @@ export const rollRarityFrom = (table, rng = Math.random) => {
 export const rollRarity = (rewardTier, tier, rng = Math.random) =>
   rollRarityFrom(rarityTableOf(rewardTier, tier), rng)
 
-// 合成素材（貢献度ぶん）は**討伐できたときだけ・固定1%**
+// ---- 合成素材 ----
+// ★討伐できたときだけ。**素材1個につき1回ずつ**判定する（2026-09-28 ユーザー指示）。
+//   ＝素材が多く出る枠ほど当たりやすい。率そのもの（1%／箱3%）は触っていない。
+//   ⚠**1回の枠で手に入るのは1個まで**（当たったらそこで打ち切る）。
 export const FUSION_PCT = 1
-export const fusionChanceOf = () => FUSION_PCT
+export const FUSION_MAX_PER_PART = 1
+// 素材を n 個引いたときに、合成素材が1個でも出る確率(%)
+export const fusionChanceOf = (count = 1, pct = FUSION_PCT) =>
+  Math.round((1 - Math.pow(1 - pct / 100, Math.max(0, count))) * 1000) / 10
 
 // ---- ②③ 主催の箱／MVPの箱 ----
 // ★**中身は同じ**（2026-09-06 ユーザー決定）。素材3個固定で、激レアと合成素材が出やすい。
