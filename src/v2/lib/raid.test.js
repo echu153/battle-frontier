@@ -249,15 +249,20 @@ test('★まっとうな1発はサーバーの上限（HPの1/10）にまった�
   assert.equal(hitCapOf(1000), 100)
 })
 
-test('★HPは想定人数ぶんある（ソロでは1時間で削り切れない）', () => {
-  assert.equal(RAID_PARTY, 5)
-  // 1時間ぶん（360回）× 想定人数 でちょうど。tools/v2-raid-tune.mjs の実測を焼いてある
+// ★2026-09-28 ユーザー指示：**頑張れば1人で削り切れる**重さにする。
+//   （レイドボス5体の話。ユニークボスは別コンテンツ）
+test('★HPは「1人で1時間フルに殴ってちょうど」', () => {
+  assert.equal(RAID_PARTY, 1, 'ソロで討伐できる重さにする決まり')
   const perHour = Math.floor((RAID_MINUTES * 60) / SORTIE_CD)
   for (const t of TIERS) {
-    // 帯ごとの「1回の与ダメ」の見積り＝HP ÷（360回 × 人数）。桁が合っていることだけ見る
+    // 帯ごとの「1回の与ダメ」の見積り＝HP ÷ 360回。桁が合っていることだけ見る
     const per = raidHpOfTier(t) / (perHour * RAID_PARTY)
     assert.ok(per > 0, `帯${t}`)
     assert.ok(hitCapOf(raidHpOfTier(t)) > per * 5, `帯${t} の1発上限が実測に近すぎる`)
+  }
+  // 帯が進むほど重くなる（順番が崩れていないこと）
+  for (let i = 1; i < TIERS.length; i++) {
+    assert.ok(raidHpOfTier(TIERS[i]) > raidHpOfTier(TIERS[i - 1]), `帯${TIERS[i]} が前の帯より軽い`)
   }
 })
 

@@ -60,14 +60,14 @@ revoke all on table public.v2_raid_tiers from anon;
 grant select on table public.v2_raid_tiers to authenticated;
 
 insert into public.v2_raid_tiers (tier, power, hp, ultra_pct) values
-  (1,   2572,    1900000, 3),
-  (2,   3720,    4800000, 3),
-  (3,   5588,   15000000, 4),
-  (4,   9212,   19000000, 4),
-  (5,  26288,  260000000, 5),
-  (6,  48824,  580000000, 5),
-  (7,  69538,  930000000, 6),
-  (8,  90494, 1500000000, 7)
+  (1,   2572,      390000, 3),
+  (2,   3720,      960000, 3),
+  (3,   5588,     2900000, 4),
+  (4,   9212,     3800000, 4),
+  (5,  26288,    53000000, 5),
+  (6,  48824,   120000000, 5),
+  (7,  69538,   190000000, 6),
+  (8,  90494,   300000000, 7)
 on conflict (tier) do update set
   power = excluded.power, hp = excluded.hp, ultra_pct = excluded.ultra_pct;
 
