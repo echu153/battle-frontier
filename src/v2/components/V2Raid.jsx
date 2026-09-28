@@ -16,6 +16,7 @@ import {
   rewardTierOf, mvpIdOf, matRangeText, rarityTableOf, fusionChanceOf,
   BOX_LABEL, BOX_COLOR, BOX_MAT_COUNT, BOX_RARITY, BOX_FUSION_PCT,
   TIER_LABEL, TIER_COLOR, tierMark,
+  VISIBILITIES, VISIBILITY_LABEL, VISIBILITY_HINT, VISIBILITY_COLOR, visibilityLabel,
 } from '../lib/raid.js'
 import { fusionOfBoss } from '../lib/fusion.js'
 import { tierOf, markOf, areaOf } from '../lib/enemies.js'
@@ -171,6 +172,15 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, isAd
   // 終わったら自動で止める
   useEffect(() => { if (auto && (!raid || left <= 0)) setAuto(false) }, [auto, raid, left])
 
+  // ===== 公開範囲（主催者だけ・2026-09-28）=====
+  // ★どこまで見せるかを主催者が決める。呼んだ相手はどの範囲でも入れる
+  const setVisibility = async (v) => {
+    const { data, error } = await supabase.rpc('v2_raid_publish', { p_raid_id: raid.id, p_visibility: v })
+    if (error || !data?.ok) { setMsg('⚠ ' + (error?.message || data?.error)); return }
+    setMsg('救援の公開範囲を「' + visibilityLabel(v) + '」にしました')
+    refresh()
+  }
+
   // ===== 救援信号 =====
   const openCall = async () => {
     setPicked(new Set())
@@ -324,6 +334,24 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, isAd
               <button onClick={openCall} style={btn('#ffcc00')}>📣 救援信号</button>
             )}
           </div>
+          {/* ★救援の公開範囲。主催者だけが変えられる */}
+          {String(raid.host_id) === String(meId) && (
+            <div style={{ display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap', marginBottom:'8px' }}>
+              <span style={{ color: TEXT.label, fontSize:'10px' }}>救援の公開範囲</span>
+              {VISIBILITIES.map(v => {
+                const on = (raid.visibility || 'invite') === v
+                return (
+                  <button key={v} onClick={() => setVisibility(v)} disabled={busy || on}
+                    style={miniBtn(on ? VISIBILITY_COLOR[v] : TEXT.label)}>
+                    {on ? '● ' : ''}{VISIBILITY_LABEL[v]}
+                  </button>
+                )
+              })}
+              <span style={{ color: TEXT.sub, fontSize:'10px', flexBasis:'100%' }}>
+                {VISIBILITY_HINT[raid.visibility || 'invite']}
+              </span>
+            </div>
+          )}
           <div style={{ color: TEXT.sub, fontSize:'10px', marginBottom:'8px', lineHeight:1.7 }}>
             挑戦してもスタミナは減りません。EXPは出撃の敵と同じだけ入ります。報酬は終わったあとにまとめて受け取ります。<br />
             1回の挑戦は{RAID_TURNS}ターンまで。ボスはターンが進むほど強くなるので、後半はほとんど通りません。
@@ -366,6 +394,36 @@ export default function V2Raid({ prof, inventory, runes, fishDex, dex, pet, isAd
                 <span style={{ color: b?.color, fontSize:'11px' }}>
                   {b?.name || r.boss_key}
                   <span style={{ color: TEXT.label }}>　{r.host_name}／残り {timeText(secondsLeft(r.started_at, now))}</span>
+                </span>
+                <button onClick={() => join(r.id)} disabled={busy || !!raid} style={miniBtn(raid ? TEXT.empty : '#44ff88')}>
+                  {raid ? '別のレイドに参加中' : '駆けつける'}
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ===== 救援一覧（公開されているレイド）===== */}
+      {(state?.open || []).length > 0 && (
+        <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
+          <div style={{ color:'#44ff88', fontSize:'12px', marginBottom:'6px' }}>
+            🛟 救援を募集中（{(state.open || []).length}件）
+          </div>
+          {state.open.map(r => {
+            const b = raidBossOf(r.boss_key)
+            const n = (r.members || []).length
+            return (
+              <div key={r.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
+                borderTop:'1px solid #002244', padding:'6px 0', gap:'8px', flexWrap:'wrap' }}>
+                <span style={{ color: b?.color, fontSize:'11px' }}>
+                  {b?.name || r.boss_key}
+                  <span style={{ color: TEXT.label }}>
+                    　{tierMark(r.tier)}／{r.host_name}／{n}人／残り {timeText(secondsLeft(r.started_at, now))}
+                  </span>
+                  <span style={{ color: VISIBILITY_COLOR[r.visibility || 'invite'], marginLeft:'4px' }}>
+                    {VISIBILITY_LABEL[r.visibility || 'invite']}
+                  </span>
                 </span>
                 <button onClick={() => join(r.id)} disabled={busy || !!raid} style={miniBtn(raid ? TEXT.empty : '#44ff88')}>
                   {raid ? '別のレイドに参加中' : '駆けつける'}

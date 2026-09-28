@@ -300,6 +300,25 @@ export const RAID_EXP_MAX = 11
 export const raidExpOf = (rng = Math.random) =>
   RAID_EXP_MIN + Math.floor(rng() * (RAID_EXP_MAX - RAID_EXP_MIN + 1))
 
+// ===== 公開範囲（★2026-09-28 ユーザー指示「誰でもか、フレンドか、選択できる」）=====
+// ★主催者が「誰に見せるか」を選ぶ。グラブルの救援一覧に当たるもの。
+//   ・invite … 呼んだ人だけ（これまでの形。既定値）
+//   ・friend … フレンドなら一覧から入れる
+//   ・all    … 誰でも一覧から入れる
+//   ⚠呼ばれた人（v2_raid_calls）は**どの範囲でも入れる**。公開範囲は「それに足す」もの。
+//   ⚠判定はサーバー（v2_raid_join / v2_raid_list）。ここは画面の表示用。
+export const VISIBILITIES = ['invite', 'friend', 'all']
+export const VISIBILITY_LABEL = { invite:'呼んだ人だけ', friend:'フレンドまで', all:'誰でも' }
+export const VISIBILITY_HINT = {
+  invite: '一覧には出ません。救援信号を送った相手だけが入れます',
+  friend: '救援一覧に出て、フレンドなら誰でも入れます',
+  all:    '救援一覧に出て、誰でも入れます',
+}
+export const VISIBILITY_COLOR = { invite:'#7fa6d0', friend:'#44ff88', all:'#ffcc00' }
+export const DEFAULT_VISIBILITY = 'invite'
+export const isVisibility = (v) => VISIBILITIES.includes(v)
+export const visibilityLabel = (v) => VISIBILITY_LABEL[v] || VISIBILITY_LABEL[DEFAULT_VISIBILITY]
+
 // ===== 救援信号 =====
 // 宛先は**種別＋ID**で持つ。国を作ったら 'country' を足すだけで載る
 export const CALL_KINDS = ['online', 'friend']

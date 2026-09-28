@@ -9,6 +9,7 @@ import {
   RAID_MINUTES, RAID_MAX_MEMBERS, RAID_TURNS, RAMP_ATK, RAMP_DEF, rampAt,
   RAID_RATE, RAID_DAILY_MAX, ROTATE_HOURS, raidSlotAt, raidBossAt, nextRotateAt, rotateSchedule,
   RAID_POWER_MULT, RAID_ATK_MULT, RAID_HP, raidPowerOfTier, raidAtkPowerOfTier, raidHpOfTier,
+  VISIBILITIES, VISIBILITY_LABEL, VISIBILITY_HINT, DEFAULT_VISIBILITY, isVisibility,
   bossPowerOfTier, raidPowerOfArea, raidHpOfArea, toRaidFighter, bossBaseStats, atkStatsOf,
   shareOf, tierOfShare, rewardTierOf, mvpIdOf, REWARD_TIERS, TIER_SHARE,
   matCountOf, matRangeOf, matRangeText, TIER_MAT_RANGE, rarityTableOf, rollRarity,
@@ -41,6 +42,14 @@ import { SORTIE_CD, EXP_ZAKO_MIN, EXP_ZAKO_MAX } from './sortie.js'
 const sqlOf = (n) => readFileSync(new URL(`../../../supabase_v2_${n}_20260906.sql`, import.meta.url), 'utf8')
 const SQL = sqlOf('raid')
 const SQL_FUSION = sqlOf('fusion')
+// SQLの関数の本体だけを切り出す（v2は同名オーバーロードを作らない運用）
+const bodyOf = (name) => {
+  const i = SQL.indexOf('create or replace function public.' + name + '(')
+  if (i < 0) throw new Error(name + ' がSQLに無い')
+  const end = SQL.indexOf('\n' + '$$;', i)
+  if (end < 0) throw new Error(name + ' の終わりが見つからない')
+  return SQL.slice(i, end)
+}
 const SQL_FRIENDS = sqlOf('friends')
 // v2_raid_tiers の1行 (tier, power, hp, ultra_pct) を拾う
 const ROW_RE = /\(\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+)\)/g
@@ -724,4 +733,42 @@ test('★打ち消しSQLが揃っている（因子を消し、抽出で能力�
 test('★合成素材のSQLに敵ぶんが残っていない', () => {
   assert.ok(!/source = 'enemy'|'enemy',/.test(SQL_FUSION), 'SQLに敵ぶんの合成素材が残っている')
   assert.ok(!SQL_FUSION.includes('の因子'), 'SQLに「◯◯の因子」が残っている')
+})
+
+// ===== 救援の公開範囲（2026-09-28 ユーザー指示「誰でもか、フレンドか、選択できる」）=====
+test('★公開範囲は3つ。既定は「呼んだ人だけ」', () => {
+  assert.deepEqual(VISIBILITIES, ['invite', 'friend', 'all'])
+  assert.equal(DEFAULT_VISIBILITY, 'invite', '黙って公開されるのはまずい')
+  assert.equal(isVisibility('all'), true)
+  assert.equal(isVisibility('everyone'), false)
+  for (const v of VISIBILITIES) assert.ok(VISIBILITY_LABEL[v] && VISIBILITY_HINT[v], `${v} の文が無い`)
+})
+
+// ★判定はサーバー。画面が送った範囲をそのまま信じない／主催者以外は変えられない
+test('★公開範囲はサーバーが見ている（主催者だけが変えられる）', () => {
+  assert.ok(SQL.includes("alter table public.v2_raids add column if not exists visibility text not null default 'invite'"),
+    '列が無い（既定は invite）')
+  const pub = bodyOf('v2_raid_publish')
+  assert.match(pub, /not in \('invite', 'friend', 'all'\)/, '知らない値を弾いていない')
+  assert.match(pub, /v_r\.host_id <> v_me/, '主催者以外も変えられてしまう')
+  assert.match(pub, /killed_at is not null or v_r\.ends_at <= now\(\)/, '終わったレイドでも変えられる')
+
+  // 入れるかどうかは v2_raid_visible が決める（呼ばれた人はどの範囲でも入れる）
+  const vis = bodyOf('v2_raid_visible')
+  assert.match(vis, /p_raid\.host_id = p_me/, '主催者が入れない')
+  assert.match(vis, /v2_raid_calls/, '呼ばれた人が入れない')
+  assert.match(vis, /p_raid\.visibility = 'all'/, '「誰でも」が効いていない')
+  assert.match(vis, /v2_friends/, '「フレンドまで」が効いていない')
+
+  // 参加の入口がその判定を通っていること
+  const join = bodyOf('v2_raid_join')
+  assert.match(join, /v2_raid_visible\(v_r, v_me\)/, '参加が公開範囲を見ていない')
+})
+
+test('★救援一覧は「公開されていて満員でない」ものだけ', () => {
+  const list = bodyOf('v2_raid_list')
+  assert.match(list, /r\.visibility in \('friend', 'all'\)/, '非公開のレイドまで並べている')
+  assert.match(list, /r\.host_id <> v_me/, '自分のレイドが一覧に出てしまう')
+  assert.match(list, /< \(v_c->>'max_members'\)::int/, '満員のレイドを並べている')
+  assert.match(list, /killed_at is null and r\.ends_at > now\(\)/, '終わったレイドを並べている')
 })

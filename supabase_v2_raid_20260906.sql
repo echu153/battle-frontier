@@ -267,12 +267,62 @@ end;
 $$;
 
 -- ---- いまの状況（挑戦中／招かれている／未受取）----
+-- ===== 公開範囲（★2026-09-28 ユーザー指示「誰でもか、フレンドか、選択できる」）=====
+-- invite … 呼んだ人だけ（既定・これまでの形）／ friend … フレンドまで ／ all … 誰でも
+-- ⚠呼ばれた人（v2_raid_calls）は**どの範囲でも入れる**。公開範囲はそれに足すもの。
+alter table public.v2_raids add column if not exists visibility text not null default 'invite';
+
+-- 自分がそのレイドを見られる（＝救援一覧に出す）か
+create or replace function public.v2_raid_visible(p_raid public.v2_raids, p_me uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select case
+    when p_raid.host_id = p_me then true
+    when exists (select 1 from public.v2_raid_calls c
+                  where c.raid_id = p_raid.id and c.player_id = p_me) then true
+    when p_raid.visibility = 'all' then true
+    when p_raid.visibility = 'friend' then exists (
+      select 1 from public.v2_friends fr
+       where fr.status = 'accepted'
+         and ((fr.requester = p_raid.host_id and fr.addressee = p_me)
+           or (fr.addressee = p_raid.host_id and fr.requester = p_me)))
+    else false
+  end
+$$;
+revoke all on function public.v2_raid_visible(public.v2_raids, uuid) from public;
+revoke all on function public.v2_raid_visible(public.v2_raids, uuid) from anon;
+
+-- 主催者が公開範囲を決める（いつでも変えられる）
+create or replace function public.v2_raid_publish(p_raid_id bigint, p_visibility text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_me uuid := auth.uid(); v_r public.v2_raids;
+begin
+  if v_me is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発中の機能です'); end if;
+  if p_visibility is null or p_visibility not in ('invite', 'friend', 'all') then
+    return jsonb_build_object('ok', false, 'error', '公開範囲が正しくありません');
+  end if;
+  select * into v_r from public.v2_raids where id = p_raid_id for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'そのレイドはありません'); end if;
+  -- ★変えられるのは**主催者だけ**
+  if v_r.host_id <> v_me then return jsonb_build_object('ok', false, 'error', '主催者だけが変えられます'); end if;
+  
+  if v_r.killed_at is not null or v_r.ends_at <= now() then
+    return jsonb_build_object('ok', false, 'error', 'そのレイドは終わっています');
+  end if;
+  update public.v2_raids set visibility = p_visibility where id = p_raid_id;
+  return jsonb_build_object('ok', true, 'visibility', p_visibility);
+end;
+$$;
+revoke all on function public.v2_raid_publish(bigint, text) from public;
+revoke all on function public.v2_raid_publish(bigint, text) from anon;
+grant execute on function public.v2_raid_publish(bigint, text) to authenticated;
+
 create or replace function public.v2_raid_list()
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_me uuid := auth.uid();
   v_c jsonb := public.v2_raid_const();
-  v_active jsonb; v_invites jsonb; v_unclaimed jsonb; v_used int;
+  v_active jsonb; v_invites jsonb; v_open jsonb; v_unclaimed jsonb; v_used int;
 begin
   if not public.v2_is_dev() then return jsonb_build_object('ok', false, 'error', '開発中の機能です'); end if;
 
@@ -299,8 +349,19 @@ begin
    where m.player_id = v_me and m.claimed_at is null
      and (r.killed_at is not null or r.ends_at <= now());
 
+  -- ★救援一覧。公開されていて、まだ入っていない生きたレイド（満員は出さない）
+  select coalesce(jsonb_agg(public.v2_raid_json(r) order by r.started_at desc), '[]'::jsonb) into v_open
+    from public.v2_raids r
+   where r.killed_at is null and r.ends_at > now()
+     and r.visibility in ('friend', 'all')
+     and r.host_id <> v_me
+     and public.v2_raid_visible(r, v_me)
+     and not exists (select 1 from public.v2_raid_members m where m.raid_id = r.id and m.player_id = v_me)
+     and (select count(*) from public.v2_raid_members m2 where m2.raid_id = r.id) < (v_c->>'max_members')::int;
+
   return jsonb_build_object('ok', true, 'active', v_active,
                             'invites', coalesce(v_invites, '[]'::jsonb),
+                            'open', coalesce(v_open, '[]'::jsonb),
                             'unclaimed', coalesce(v_unclaimed, '[]'::jsonb),
                             -- 今日の残り回数と、いまの時間帯に出るボス（画面に出す）
                             'used', v_used, 'daily_max', (v_c->>'daily_max')::int,
@@ -319,8 +380,9 @@ begin
   if v_r.killed_at is not null or v_r.ends_at <= now() then
     return jsonb_build_object('ok', false, 'error', 'そのレイドは終わっています');
   end if;
-  if not exists (select 1 from public.v2_raid_calls where raid_id = p_raid_id and player_id = v_me) then
-    return jsonb_build_object('ok', false, 'error', '救援に呼ばれていません');
+  -- ★呼ばれているか、公開範囲の中に入っているか（2026-09-28）
+  if not public.v2_raid_visible(v_r, v_me) then
+    return jsonb_build_object('ok', false, 'error', 'このレイドには入れません');
   end if;
   if exists (
     select 1 from public.v2_raid_members m join public.v2_raids r on r.id = m.raid_id
