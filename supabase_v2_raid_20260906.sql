@@ -53,6 +53,14 @@ create table if not exists public.v2_raid_tiers (
   ultra_pct numeric not null default 3   -- 激レア素材の確率(%)。帯だけで決まる
 );
 alter table public.v2_raid_tiers add column if not exists ultra_pct numeric not null default 3;
+-- ★帯（難易度）ごとの素材の個数の倍率（2026-09-28 ユーザー指示）。
+--   正は src/v2/lib/raid.js の TIER_MAT_MULT。node tools/v2-raid-sql.mjs --write で流し込む
+--   ⚠**下の insert より前に置くこと**（後ろに置いて「column does not exist」で止まった）
+alter table public.v2_raid_tiers add column if not exists mat_mult numeric not null default 1;
+-- ★帯（難易度）ごとの素材の個数の倍率（2026-09-28 ユーザー指示）。
+--   正は src/v2/lib/raid.js の TIER_MAT_MULT。node tools/v2-raid-sql.mjs --write で流し込む
+--   ⚠**下の insert より前に置くこと**（後ろに置いて「列が無い」で止まった）
+
 alter table public.v2_raid_tiers enable row level security;
 drop policy if exists "v2_raid_tiers_read" on public.v2_raid_tiers;
 create policy "v2_raid_tiers_read" on public.v2_raid_tiers for select to authenticated using (true);
@@ -273,9 +281,6 @@ $$;
 -- ⚠呼ばれた人（v2_raid_calls）は**どの範囲でも入れる**。公開範囲はそれに足すもの。
 alter table public.v2_raids add column if not exists visibility text not null default 'invite';
 
--- ★帯（難易度）ごとの素材の個数の倍率（2026-09-28 ユーザー指示）。
---   正は src/v2/lib/raid.js の TIER_MAT_MULT。node tools/v2-raid-sql.mjs --write で流し込む
-alter table public.v2_raid_tiers add column if not exists mat_mult numeric not null default 1;
 
 -- 自分がそのレイドを見られる（＝救援一覧に出す）か
 create or replace function public.v2_raid_visible(p_raid public.v2_raids, p_me uuid)
@@ -696,3 +701,5 @@ $$;
 revoke all on function public.v2_debug_spawn_raid(text, int) from public;
 revoke all on function public.v2_debug_spawn_raid(text, int) from anon;
 grant execute on function public.v2_debug_spawn_raid(text, int) to authenticated;
+
+

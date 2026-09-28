@@ -584,3 +584,37 @@ test('★grant / revoke の関数の引数が、作った関数と一致して�
   }
   assert.deepEqual(bad, [], `grant/revoke の引数がズレている: ${bad.join(' ／ ')}`)
 })
+
+
+// ===== 列を足す alter は、その列を使う insert より前にあること（2026-09-28）=====
+// ★実際にこれで止まった：
+//     ERROR: 42703: column "mat_mult" of relation "v2_raid_tiers" does not exist
+//   v2のSQLは「上から順に全文を流し直す」運用なので、
+//   `alter table ... add column` を insert より後ろに書くと、**初回だけ**落ちる。
+//   （2回目以降は列があるので通ってしまい、気づきにくい）
+test('★列を足す alter が、その列を使う insert より前にある', async () => {
+  const { readdirSync, readFileSync } = await import('node:fs')
+  const dir = new URL('../../../', import.meta.url)
+  const files = readdirSync(dir).filter(n => /^supabase_v2_.*\.sql$/.test(n))
+  const bad = []
+  for (const name of files) {
+    const sql = readFileSync(new URL(name, dir), 'utf8')
+    // 「この表にこの列を足す」の位置
+    const adds = new Map()
+    for (const m of sql.matchAll(/alter table (?:public\.)?(\w+)\s+add column (?:if not exists )?(\w+)/gi)) {
+      adds.set(m[1] + '.' + m[2], m.index)
+    }
+    // 「この表へ、これらの列で入れる」の位置
+    for (const m of sql.matchAll(/insert into (?:public\.)?(\w+)\s*\(([^)]*)\)/gi)) {
+      const table = m[1]
+      for (const col of m[2].split(',').map(s => s.trim())) {
+        const at = adds.get(table + '.' + col)
+        if (at !== undefined && at > m.index) {
+          bad.push(`${name}: ${table}.${col} … alter が insert より後ろ`)
+        }
+      }
+    }
+  }
+  assert.deepEqual(bad, [],
+    '初回に「column does not exist」で止まる。alter を insert より前へ移すこと:\n  ' + bad.join('\n  '))
+})
