@@ -14,7 +14,7 @@
 const B = new URL('../src/v2/lib/', import.meta.url).href
 const { runBattle } = await import(B + 'battle.js')
 const { statsOf, toFighter } = await import(B + 'enemies.js')
-const { skillsOf } = await import(B + 'skills.js')
+const { skillsOf, mpOf } = await import(B + 'skills.js')
 const { CLASS_BONUS } = await import(B + 'classBonus.js')
 const { calcPower } = await import(B + 'stats.js')
 const {
@@ -34,16 +34,34 @@ const distFor = (cls) => {
   d[b.sub || 'agi'] += 8
   return d
 }
+// ★編成は**実戦に寄せる**（2026-09-28）。
+//   前は「倍率の高い攻撃技4つ＋バフ1つ・使用回数99」で組んでいたが、それだと
+//   多段技も回復技も入らず、MPも尽きない。その状態で測ると
+//   「多段の与ダメ+N%」「回復量+N%」「消費MP-N%」系の能力が**全部0ptに見える**。
+//   実際に効いていないのではなく、**測るキャラが使っていなかった**だけだった。
 const playerOf = (cls, power, evolutions = []) => {
   const all = skillsOf(cls).filter(s => s.kind !== 'passive')
   const atk = all.filter(s => s.kind === 'phys' || s.kind === 'mag')
-    .sort((a, b) => (b.mult || 0) - (a.mult || 0)).slice(0, 4)
-  const buff = all.find(s => s.kind === 'buff')
+    .sort((a, b) => (b.mult || 0) - (a.mult || 0))
+  const multi = all.find(s => (s.hits || 1) > 1)        // 多段技（持っている職だけ）
+  const heal  = all.find(s => s.kind === 'heal')        // 回復技（持っている職だけ）
+  const buff  = all.find(s => s.kind === 'buff')
+  const picks = []
+  for (const s of [buff, heal, multi, ...atk]) {
+    if (s && !picks.includes(s)) picks.push(s)
+    if (picks.length >= 5) break
+  }
+  const stats = statsOf({ power, dist: distFor(cls) })
+  // 使用回数はMPで縛る（編成はMPの中に収まる決まり）。1枠あたりMPを等分する
+  const budget = Math.max(1, stats.mp) / Math.max(1, picks.length)
   return {
     name: cls, cls,
     kind: CLASS_BONUS[cls]?.main === 'int_stat' ? 'mag' : 'phys',
-    stats: statsOf({ power, dist: distFor(cls) }),
-    slots: [...(buff ? [buff] : []), ...atk].slice(0, 5).map(s => ({ skill: s, uses: 99 })),
+    stats,
+    slots: picks.map(s => {
+      const cost = Math.max(1, mpOf(cls, s))
+      return { skill: s, uses: Math.max(1, Math.min(99, Math.floor(budget / cost))) }
+    }),
     evolutions,
   }
 }
@@ -66,7 +84,7 @@ const winRate = (power, foe, n, evolutions = [], seed = 7000) => {
 
 // ===== ① 節目までの道のり =====
 console.log('■ ① 節目までにどれだけ戦うか（熟練度は「行動した回数」で貯まる）')
-console.log('帯   相手            1戦の行動数   LV300まで      LV1000まで      LV2000まで')
+console.log('帯   相手            1戦の行動数   ' + LEVELS.map(lv => ('LV' + lv + 'まで').padStart(14)).join(' '))
 const MOVE_N = 120
 for (const tier of [1, 4, 8]) {
   const area = AREAS_SORTED.find(a => a.tier === tier)
@@ -167,28 +185,52 @@ const avg = gains.reduce((a, b) => a + b, 0) / gains.length
 console.log("")
 console.log("  平均 " + (avg >= 0 ? "+" : "") + avg.toFixed(0) + "% ／ 最良 +" + Math.max(...gains).toFixed(0) +
   "% ／ 最悪 " + Math.min(...gains).toFixed(0) + "%")
-// ===== ③ 159種の効き目のばらつき =====
+// ===== ③ 能力ごとの効き目 =====
+// ★**2つの当たり方**で測る（片方でしか出ない条件つきの能力があるため）。
+//   ・格上のボス戦 … 生き残り系・ボス系が出る
+//   ・格下の雑魚戦 … 速攻系・無傷系が出る
+//   どちらでも勝率が上がらないものだけを「効いていない」とみなす。
 if (process.argv.includes('--traits')) {
-  console.log('')
-  console.log('■ ③ 能力ごとの効き目（段階3・偏り1.0＝いちばん強い状態で、単体で付けたとき）')
-  const TN = 40
-  const b3 = winRate(BASE_POWER, foe5, TN)
+  const area5b = AREAS_SORTED.find(a => a.tier === TIER)
+  const SCENES = [
+    { key: 'ボス', foe: { ...toFighter({ ...area5b.boss }), boss: true }, power: Math.round(area5b.boss.power * 0.8) },
+    { key: '雑魚', foe: toFighter({ ...area5b.enemies[0] }), power: Math.round(area5b.boss.power * 0.45) },
+  ]
+  const TN = 50
+  const rateIn = (sc, evolutions) => {
+    let win = 0, n = 0
+    for (const cls of CLASSES) {
+      const me = playerOf(cls, sc.power, evolutions)
+      for (let i = 0; i < TN; i++) {
+        const r = runBattle(me, sc.foe, { rng: rngOf(7000 + i * 31), maxTurns: 200 })
+        if (r.winner === 'a') win++
+        n++
+      }
+    }
+    return win / n
+  }
+  const baseIn = Object.fromEntries(SCENES.map(sc => [sc.key, rateIn(sc, [])]))
   const rows = []
-  for (const t of TRAITS) {
-    const ev = [{ stage: 3, key: t.key, s: 1, eff: buildEffect(t, STAGE_CAP[2], 1) }]
-    const w = winRate(BASE_POWER, foe5, TN, ev)
-    rows.push({ name: t.name, key: t.key, gain: (w - b3) * 100 })
+  for (const tr of TRAITS) {
+    const ev = [{ stage: 3, key: tr.key, s: 1, eff: buildEffect(tr, STAGE_CAP[2], 1) }]
+    const g = SCENES.map(sc => (rateIn(sc, ev) - baseIn[sc.key]) * 100)
+    rows.push({ tr, boss: g[0], zako: g[1], best: Math.max(...g) })
   }
-  rows.sort((a, b) => b.gain - a.gain)
-  const show = (list, title) => {
-    console.log('  ' + title)
-    for (const r of list) console.log(`    ${r.gain >= 0 ? '+' : ''}${r.gain.toFixed(1)}pt  ${r.name}（${r.key}）`)
+  rows.sort((a, b) => b.best - a.best)
+  console.log('')
+  console.log('■ ③ 能力ごとの効き目（段階3・偏り1.0で単体で付けたとき／ボス戦・雑魚戦の良いほう）')
+  const line = (r) => '    ' + (r.best >= 0 ? '+' : '') + r.best.toFixed(1).padStart(5) + 'pt  ' +
+    r.tr.name + '（' + r.tr.key + '）' +
+    (r.tr.cost && r.tr.cost.length ? '　代償 ' + r.tr.cost.map(([a, w]) => a + '×' + w).join(' ') : '')
+  console.log('  効きすぎ（上位10）')
+  for (const r of rows.slice(0, 10)) console.log(line(r))
+  const bad = rows.filter(r => r.best <= 0)
+  console.log('  どちらの当たり方でも上がらない: ' + bad.length + '種')
+  for (const r of bad) {
+    console.log(line(r))
+    console.log('             得 ' + (r.tr.gain || []).map(([a, w]) => a + '×' + w).join(' ') +
+      '　（ボス ' + r.boss.toFixed(1) + 'pt ／ 雑魚 ' + r.zako.toFixed(1) + 'pt）')
   }
-  show(rows.slice(0, 10), '効きすぎ（上位10）')
-  show(rows.slice(-10).reverse(), '効いていない（下位10）')
-  const mid = rows.map(r => r.gain)
-  const avg = mid.reduce((a, b) => a + b, 0) / mid.length
-  console.log(`  平均 ${avg.toFixed(1)}pt ／ 上位10の平均 ${(rows.slice(0, 10).reduce((a, r) => a + r.gain, 0) / 10).toFixed(1)}pt ` +
-    `／ 下位10の平均 ${(rows.slice(-10).reduce((a, r) => a + r.gain, 0) / 10).toFixed(1)}pt`)
-  console.log(`  全${rows.length}種。0pt以下＝勝率が上がらなかったもの: ${rows.filter(r => r.gain <= 0).length}種`)
+  const avg = rows.reduce((a, r) => a + r.best, 0) / rows.length
+  console.log('  全' + rows.length + '種の平均 ' + avg.toFixed(1) + 'pt')
 }

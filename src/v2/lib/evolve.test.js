@@ -120,26 +120,32 @@ test('★経験値は行動した回数（外した行動・回復・バフも1�
   assert.equal(recordOfBattle(logBattle([]), YOU, FOE).exp, 0, 'moves が無くても落ちない')
 })
 
-test('覚醒は3回。LV300 / 1000 / 2000 が節目', () => {
-  assert.deepEqual(LEVELS, [300, 1000, 2000])
+// ★節目の数字そのものは**書かない**（バランス調整で動かすため。2026-09-28に
+//   [300,1000,2000] → [170,550,1100] へ変えた）。見るのは「節目として正しく効くか」。
+test('覚醒は3回。LEVELS が節目として効く', () => {
+  assert.equal(LEVELS.length, 3)
   assert.equal(MAX_STAGE, 3)
   assert.deepEqual(STAGE_CAP, [6, 10, 15])
+  for (let i = 1; i < LEVELS.length; i++) {
+    assert.ok(LEVELS[i] > LEVELS[i - 1], `節目は増えていく（${LEVELS}）`)
+  }
   const at = (lv) => stageOf(lv * EXP_PER_LEVEL)
-  assert.equal(at(299), 0)
-  assert.equal(at(300), 1)
-  assert.equal(at(999), 1)
-  assert.equal(at(1000), 2)
-  assert.equal(at(2000), 3)
-  assert.equal(at(99999), 3, '最後まで行ったら増えない')
+  assert.equal(at(0), 0)
+  LEVELS.forEach((lv, i) => {
+    assert.equal(at(lv - 1), i, `LV${lv - 1} ではまだ${i}個`)
+    assert.equal(at(lv), i + 1, `LV${lv} で${i + 1}個目`)
+  })
+  assert.equal(at(LEVELS[LEVELS.length - 1] * 100), 3, '最後まで行ったら増えない')
 })
 
 test('受け取れる覚醒が分かる', () => {
   const exp = (lv) => ({ exp: lv * EXP_PER_LEVEL })
-  assert.equal(pendingStage(rec(exp(299)), []), 0)
-  assert.equal(pendingStage(rec(exp(300)), []), 1)
-  assert.equal(pendingStage(rec(exp(300)), [{ stage:1 }]), 0)
-  assert.equal(pendingStage(rec(exp(1000)), [{ stage:1 }]), 2)
-  assert.equal(pendingStage(rec(exp(99999)), [{}, {}, {}]), 0, '3つで打ち止め')
+  const [L1, L2] = LEVELS
+  assert.equal(pendingStage(rec(exp(L1 - 1)), []), 0)
+  assert.equal(pendingStage(rec(exp(L1)), []), 1)
+  assert.equal(pendingStage(rec(exp(L1)), [{ stage:1 }]), 0)
+  assert.equal(pendingStage(rec(exp(L2)), [{ stage:1 }]), 2)
+  assert.equal(pendingStage(rec(exp(L2 * 100)), [{}, {}, {}]), 0, '3つで打ち止め')
 })
 
 // ============================================================
@@ -551,4 +557,34 @@ test('かわすたび・被弾するたびの積み上げには上限がある',
     foeOf({ slots:[{ skill: sk('大振り', { mult:0.4, acc:1 }), uses:99 }] }),
     { rng: makeRng(5), maxTurns: 40 })
   assert.ok(r.a.evoStacks.dodge > EVO_STACK_MAX, 'かわした回数そのものは増え続ける')
+})
+
+// ===== 「もう1回生きる」は1種だけ（2026-09-28）=====
+// ★guts（致命傷をHP1で耐える）は%の効果と違って**重ねると跳ねる**。
+//   以前は tank / lowHp / comeback の3軸に散っていて、2つ引いた人だけ
+//   進化3つの効き目が+33%まで伸びていた（実測 tools/v2-evolve-tune.mjs）。
+//   軸が違うと pickTrait は両方選べてしまうので、**部品の側で1種に絞る**。
+test('★guts（致命傷を耐える）を持つ能力は1種だけ', async () => {
+  const { TRAITS } = await import('./evolveTraits.js')
+  const has = TRAITS.filter(t => [...(t.gain || []), ...(t.cost || [])].some(([a]) => a === 'guts'))
+  assert.equal(has.length, 1,
+    `重ねると跳ねるので1種だけにする（いま ${has.length}種: ${has.map(t => t.name).join(' / ')}）`)
+})
+
+// ★「たまにしか出ない得 × いつでも効く代償」を作らないこと。
+//   taken（被ダメージ+）と hit（命中率-）は**毎回**効くので、
+//   得の側が「最初の3行動だけ」「HPが満タンのときだけ」のように狭いと必ず損になる。
+//   ⚠代償の重さだけを見てはいけない。蛮勇（格上への与ダメ+）や王殺し（ボスへの与ダメ+）は
+//     得が戦闘のあいだずっと効くので、同じ重さの代償でも釣り合っている（実測で確認済み）。
+const NARROW = ['dmgFirst', 'dmgFull', 'dmgFinish', 'dmgLow', 'critRate', 'heal', 'ailRate', 'regen']
+const ALWAYS = ['taken', 'hit']
+test('★たまにしか出ない得に、いつでも効く代償を重く付けていない', async () => {
+  const { TRAITS } = await import('./evolveTraits.js')
+  const LIMIT = 0.4   // 段階3（予算15）で 被ダメージ+6% / 命中率-6% まで
+  const bad = TRAITS.filter(t => {
+    const narrow = (t.gain || []).some(([a]) => NARROW.includes(a))
+    return narrow && (t.cost || []).some(([a, w]) => ALWAYS.includes(a) && w > LIMIT)
+  }).map(t => t.name)
+  assert.deepEqual(bad, [],
+    '付けると弱くなる形。代償を下げるか、得の条件を広げること: ' + bad.join(' / '))
 })

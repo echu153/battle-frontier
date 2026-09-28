@@ -87,7 +87,7 @@ export const TRAITS = [
   T('crit_fang',     'crit', '吸血の牙',       [['critHpHeal', 0.22], ['critDmg', 1.2]]),
   T('crit_mana',     'crit', '魔喰らいの刃',   [['critMpHeal', 0.45], ['critRate', 0.4]], [['mpCost', 0.7]]),
   T('crit_gash',     'crit', '裂傷の太刀',     [['critAil', 2.6], ['ailDmg', 1.2]]),
-  T('crit_focus',    'crit', '一点集中',       [['critRate', 1.6]],                   [['hit', 0.9]]),
+  T('crit_focus',    'crit', '一点集中',       [['critRate', 1.6]],                   [['hit', 0.35]]),
   T('crit_reckless', 'crit', '捨て身の閃き',   [['critDmg', 2.6]],                    [['taken', 0.9]]),
   T('crit_luck',     'crit', '幸運の刃',       [['st_luk', 0.8]]),
   T('crit_burn',     'crit', '魔焼きの刃',     [['critDmg', 2.2]],                    [['critMpCost', 0.5]]),
@@ -106,7 +106,10 @@ export const TRAITS = [
   T('tank_scale',  'tank', '逆鱗',         [['dmgHurt', 2.4]]),
   T('tank_rage',   'tank', '痛みの糧',     [['onHurtStr', 0.5]]),
   T('tank_mana',   'tank', '痛撃転化',     [['onHurtMp', 0.5]]),
-  T('tank_guts',   'tank', '不屈',         [['guts', 2.2]]),
+  // ★2026-09-28：guts（致命傷を耐える）は**1種だけ**にする（lw_guts「死中に活」）。
+  //   %の効果と違って「もう1回生きる」は重ねると跳ねるため、3軸に散らばっていると
+  //   2つ引いた人だけ突出する（実測で進化3つの効き目が+33%まで伸びていた）。
+  T('tank_guts',   'tank', '不屈',         [['st_vit', 0.7], ['ailResist', 1.2]]),
   T('tank_wall',   'tank', '重甲',         [['cut', 1.1]],  [['st_agi', 0.9]]),
   T('tank_endure', 'tank', '耐えの構え',   [['cutLow', 2.4]]),
   T('tank_flesh',  'tank', '肉厚',         [['st_hp', 0.9]],  [['st_agi', 0.5]]),
@@ -116,7 +119,7 @@ export const TRAITS = [
   T('ail_rot',   'ail', '腐蝕',       [['ailDmg', 1.8]]),
   T('ail_hunt',  'ail', '病み狩り',   [['dmgAil', 2.2]]),
   T('ail_leech', 'ail', '疫の恵み',   [['ailDrain', 0.22]]),
-  T('ail_plague','ail', '疫禍',       [['ailRate', 1.6]], [['heal', 0.9]]),
+  T('ail_plague','ail', '疫禍',       [['ailRate', 1.6]], [['heal', 0.35]]),
   T('ail_curse', 'ail', '呪詛返し',   [['ailRate', 0.7], ['ailDmg', 0.9]]),
 
   // ---- 状態異常を浴び続けてきた ----
@@ -125,12 +128,12 @@ export const TRAITS = [
   T('ailed_pain',  'ailed', '痛みを喰う',     [['dmgLow', 1.8]],  [['ailWeak', 0.8]]),
   T('ailed_sacr',  'ailed', '供物の刃',       [['dmg', 1.1]],     [['ailWeak', 1.0]]),
   T('ailed_purge', 'ailed', '浄化の呼吸',     [['heal', 1.4], ['ailResist', 0.5]]),
-  T('ailed_blood', 'ailed', '毒血の巡り',     [['regen', 0.30]],  [['taken', 1.4]]),
+  T('ailed_blood', 'ailed', '毒血の巡り',     [['regen', 0.30]],  [['taken', 0.4]]),
 
   // ---- 傷を癒しながら戦ってきた ----
   T('heal_grace', 'heal', '癒しの手',     [['heal', 1.2]]),
   T('heal_light', 'heal', '治癒の光',     [['heal', 0.8], ['regen', 0.15]]),
-  T('heal_pray',  'heal', '祈りの刃',     [['heal', 1.6]],  [['dmg', 0.5]]),
+  T('heal_pray',  'heal', '祈りの刃',     [['heal', 1.6]],  [['dmg', 0.2]]),
   T('heal_flow',  'heal', '生命の巡り',   [['regen', 0.30]]),
   T('heal_mend',  'heal', '手当ての心得', [['heal', 0.7], ['mpCost', 0.6]]),
   T('heal_zeal',  'heal', '献身',         [['heal', 1.0], ['st_int_stat', 0.5]], [['st_str', 0.8]]),
@@ -187,7 +190,7 @@ export const TRAITS = [
   // ---- 短期決着で勝ってきた ----
   T('sw_blitz',  'swift', '疾き刃',     [['dmgFirst', 1.5]]),
   T('sw_first',  'swift', '先の先',     [['first', 1.6]]),
-  T('sw_rush',   'swift', '突撃',       [['dmgFirst', 2]], [['taken', 1.0]]),
+  T('sw_rush',   'swift', '突撃',       [['dmgFirst', 2]], [['taken', 0.4]]),
   T('sw_edge',   'swift', '出足',       [['st_agi', 0.7]]),
   T('sw_open',   'swift', '初手の型',   [['dmgFull', 1.3]]),
   T('sw_finish', 'swift', '一気呵成',   [['dmgSmall', 1.3], ['extra', 0.5]]),
@@ -203,7 +206,7 @@ export const TRAITS = [
   // ---- ぎりぎりで勝ってきた ----
   T('lw_ice',   'lowHp', '薄氷の勝者',     [['dmgLow', 2.4]]),
   T('lw_guts',  'lowHp', '死中に活',       [['guts', 2.4]]),
-  T('lw_last',  'lowHp', '背水',           [['dmgLow', 3.4]], [['taken', 1.0]]),
+  T('lw_last',  'lowHp', '背水',           [['dmgLow', 3.4]], [['taken', 0.4]]),
   T('lw_veil',  'lowHp', '窮鼠の見切り',   [['evaLow', 2.0]]),
   T('lw_hard',  'lowHp', '火事場の硬さ',   [['cutLow', 2.2]]),
   T('lw_leech', 'lowHp', '命の削り合い',   [['drain', 0.40], ['dmgLow', 1.2]]),
@@ -221,7 +224,7 @@ export const TRAITS = [
   T('fn_reap',  'finish', '刈り取り',     [['dmgFinish', 2.4]]),
   T('fn_chase', 'finish', '逃さぬ手',     [['hitFinish', 1.2], ['dmgFinish', 1.4]]),
   T('fn_eye',   'finish', '首筋を見る',   [['critFinish', 1.6], ['dmgFinish', 1.0]]),
-  T('fn_deep',  'finish', '深追い',       [['dmgFinish', 3.4]], [['taken', 1.0]]),
+  T('fn_deep',  'finish', '深追い',       [['dmgFinish', 3.4]], [['taken', 0.4]]),
   T('fn_feast', 'finish', '止めの一口',   [['dmgFinish', 1.2], ['drain', 0.30]]),
   T('fn_press', 'finish', '詰め',         [['dmgFinish', 1.0], ['extra', 0.5]]),
 
@@ -247,7 +250,7 @@ export const TRAITS = [
   T('mi_wait',  'misfire', '溜めの型',       [['dmgSkill', 1.1]], [['proc', 0.6]]),
   T('mi_ready', 'misfire', '二の太刀',       [['misfireDmg', 2.0], ['dmgNormal', 1.0]]),
   T('mi_calm',  'misfire', '平常心',         [['proc', 0.5], ['mpCost', 0.5]]),
-  T('mi_burst', 'misfire', '大振り',         [['dmgSkill', 1.6]], [['hit', 0.9]]),
+  T('mi_burst', 'misfire', '大振り',         [['dmgSkill', 1.6]], [['hit', 0.35]]),
 
   // ---- 相手より多く動いてきた ----
   T('ex_swift', 'extra', '疾風の足',     [['extra', 0.8]]),
@@ -263,7 +266,7 @@ export const TRAITS = [
   T('fs_full',  'first', '満を持して',   [['dmgFull', 1.4]]),
   T('fs_agi',   'first', '疾さの証',     [['st_agi', 0.7], ['first', 0.8]]),
   T('fs_press', 'first', '先制の圧',     [['first', 1.0], ['dmgFirst', 0.9]]),
-  T('fs_bold',  'first', '抜き打ち',     [['dmgFirst', 1.9]], [['taken', 0.9]]),
+  T('fs_bold',  'first', '抜き打ち',     [['dmgFirst', 1.9]], [['taken', 0.35]]),
 
   // ---- 過剰な力で叩き潰してきた ----
   T('ov_might',  'overkill', '有り余る力',       [['dmg', 0.8]]),
@@ -278,12 +281,12 @@ export const TRAITS = [
   T('pf_calm',  'perfect', '静謐',             [['cut', 0.8]]),
   T('pf_eye',   'perfect', '完璧な見切り',     [['eva', 0.7], ['hit', 0.5]]),
   T('pf_high',  'perfect', '余裕',             [['dmgHigh', 1.1]]),
-  T('pf_pure',  'perfect', '一分の隙もなく',   [['dmgFull', 2.1]], [['taken', 0.8]]),
+  T('pf_pure',  'perfect', '一分の隙もなく',   [['dmgFull', 2.1]], [['taken', 0.3]]),
   T('pf_keep',  'perfect', '崩さぬ構え',       [['cut', 0.5], ['regen', 0.18]]),
 
   // ---- 崖っぷちから巻き返してきた ----
   T('cb_rise',  'comeback', '巻き返し',   [['dmgLow', 2.2], ['regen', 0.15]]),
-  T('cb_guts',  'comeback', '諦めの悪さ', [['guts', 2.6]]),
+  T('cb_guts',  'comeback', '諦めの悪さ', [['evaLow', 1.8], ['regen', 0.15]]),
   T('cb_turn',  'comeback', '形勢逆転',   [['dmgHurt', 2.6]]),
   T('cb_bear',  'comeback', '耐え忍び',   [['cutLow', 2.0], ['heal', 0.6]]),
   T('cb_heart', 'comeback', '折れぬ心',   [['st_vit', 0.7], ['dmgLow', 1.2]]),

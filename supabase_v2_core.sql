@@ -4778,7 +4778,7 @@ insert into public.v2_evolve_traits (key, axis, name, atoms) values
   ('crit_fang','crit','吸血の牙','[{"a":"critHpHeal","w":0.22,"c":false},{"a":"critDmg","w":1.2,"c":false}]'),
   ('crit_mana','crit','魔喰らいの刃','[{"a":"critMpHeal","w":0.45,"c":false},{"a":"critRate","w":0.4,"c":false},{"a":"mpCost","w":0.7,"c":true}]'),
   ('crit_gash','crit','裂傷の太刀','[{"a":"critAil","w":2.6,"c":false},{"a":"ailDmg","w":1.2,"c":false}]'),
-  ('crit_focus','crit','一点集中','[{"a":"critRate","w":1.6,"c":false},{"a":"hit","w":0.9,"c":true}]'),
+  ('crit_focus','crit','一点集中','[{"a":"critRate","w":1.6,"c":false},{"a":"hit","w":0.35,"c":true}]'),
   ('crit_reckless','crit','捨て身の閃き','[{"a":"critDmg","w":2.6,"c":false},{"a":"taken","w":0.9,"c":true}]'),
   ('crit_luck','crit','幸運の刃','[{"a":"st_luk","w":0.8,"c":false}]'),
   ('crit_burn','crit','魔焼きの刃','[{"a":"critDmg","w":2.2,"c":false},{"a":"critMpCost","w":0.5,"c":true}]'),
@@ -4793,7 +4793,7 @@ insert into public.v2_evolve_traits (key, axis, name, atoms) values
   ('tank_scale','tank','逆鱗','[{"a":"dmgHurt","w":2.4,"c":false}]'),
   ('tank_rage','tank','痛みの糧','[{"a":"onHurtStr","w":0.5,"c":false}]'),
   ('tank_mana','tank','痛撃転化','[{"a":"onHurtMp","w":0.5,"c":false}]'),
-  ('tank_guts','tank','不屈','[{"a":"guts","w":2.2,"c":false}]'),
+  ('tank_guts','tank','不屈','[{"a":"st_vit","w":0.7,"c":false},{"a":"ailResist","w":1.2,"c":false}]'),
   ('tank_wall','tank','重甲','[{"a":"cut","w":1.1,"c":false},{"a":"st_agi","w":0.9,"c":true}]'),
   ('tank_endure','tank','耐えの構え','[{"a":"cutLow","w":2.4,"c":false}]'),
   ('tank_flesh','tank','肉厚','[{"a":"st_hp","w":0.9,"c":false},{"a":"st_agi","w":0.5,"c":true}]'),
@@ -4801,17 +4801,17 @@ insert into public.v2_evolve_traits (key, axis, name, atoms) values
   ('ail_rot','ail','腐蝕','[{"a":"ailDmg","w":1.8,"c":false}]'),
   ('ail_hunt','ail','病み狩り','[{"a":"dmgAil","w":2.2,"c":false}]'),
   ('ail_leech','ail','疫の恵み','[{"a":"ailDrain","w":0.22,"c":false}]'),
-  ('ail_plague','ail','疫禍','[{"a":"ailRate","w":1.6,"c":false},{"a":"heal","w":0.9,"c":true}]'),
+  ('ail_plague','ail','疫禍','[{"a":"ailRate","w":1.6,"c":false},{"a":"heal","w":0.35,"c":true}]'),
   ('ail_curse','ail','呪詛返し','[{"a":"ailRate","w":0.7,"c":false},{"a":"ailDmg","w":0.9,"c":false}]'),
   ('ailed_ward','ailed','慣れた痛み','[{"a":"ailResist","w":1.2,"c":false}]'),
   ('ailed_will','ailed','毒に慣れた体','[{"a":"ailResist","w":0.7,"c":false},{"a":"regen","w":0.18,"c":false}]'),
   ('ailed_pain','ailed','痛みを喰う','[{"a":"dmgLow","w":1.8,"c":false},{"a":"ailWeak","w":0.8,"c":true}]'),
   ('ailed_sacr','ailed','供物の刃','[{"a":"dmg","w":1.1,"c":false},{"a":"ailWeak","w":1,"c":true}]'),
   ('ailed_purge','ailed','浄化の呼吸','[{"a":"heal","w":1.4,"c":false},{"a":"ailResist","w":0.5,"c":false}]'),
-  ('ailed_blood','ailed','毒血の巡り','[{"a":"regen","w":0.3,"c":false},{"a":"taken","w":1.4,"c":true}]'),
+  ('ailed_blood','ailed','毒血の巡り','[{"a":"regen","w":0.3,"c":false},{"a":"taken","w":0.4,"c":true}]'),
   ('heal_grace','heal','癒しの手','[{"a":"heal","w":1.2,"c":false}]'),
   ('heal_light','heal','治癒の光','[{"a":"heal","w":0.8,"c":false},{"a":"regen","w":0.15,"c":false}]'),
-  ('heal_pray','heal','祈りの刃','[{"a":"heal","w":1.6,"c":false},{"a":"dmg","w":0.5,"c":true}]'),
+  ('heal_pray','heal','祈りの刃','[{"a":"heal","w":1.6,"c":false},{"a":"dmg","w":0.2,"c":true}]'),
   ('heal_flow','heal','生命の巡り','[{"a":"regen","w":0.3,"c":false}]'),
   ('heal_mend','heal','手当ての心得','[{"a":"heal","w":0.7,"c":false},{"a":"mpCost","w":0.6,"c":false}]'),
   ('heal_zeal','heal','献身','[{"a":"heal","w":1,"c":false},{"a":"st_int_stat","w":0.5,"c":false},{"a":"st_str","w":0.8,"c":true}]'),
@@ -4854,7 +4854,7 @@ insert into public.v2_evolve_traits (key, axis, name, atoms) values
   ('mu_press','multi','手数の圧','[{"a":"dmgMulti","w":2.4,"c":false},{"a":"hit","w":0.8,"c":true}]'),
   ('sw_blitz','swift','疾き刃','[{"a":"dmgFirst","w":1.5,"c":false}]'),
   ('sw_first','swift','先の先','[{"a":"first","w":1.6,"c":false}]'),
-  ('sw_rush','swift','突撃','[{"a":"dmgFirst","w":2,"c":false},{"a":"taken","w":1,"c":true}]'),
+  ('sw_rush','swift','突撃','[{"a":"dmgFirst","w":2,"c":false},{"a":"taken","w":0.4,"c":true}]'),
   ('sw_edge','swift','出足','[{"a":"st_agi","w":0.7,"c":false}]'),
   ('sw_open','swift','初手の型','[{"a":"dmgFull","w":1.3,"c":false}]'),
   ('sw_finish','swift','一気呵成','[{"a":"dmgSmall","w":1.3,"c":false},{"a":"extra","w":0.5,"c":false}]'),
@@ -4866,7 +4866,7 @@ insert into public.v2_evolve_traits (key, axis, name, atoms) values
   ('lg_wear','long','摩耗誘い','[{"a":"ailDmg","w":1.4,"c":false},{"a":"ailRate","w":0.6,"c":false}]'),
   ('lw_ice','lowHp','薄氷の勝者','[{"a":"dmgLow","w":2.4,"c":false}]'),
   ('lw_guts','lowHp','死中に活','[{"a":"guts","w":2.4,"c":false}]'),
-  ('lw_last','lowHp','背水','[{"a":"dmgLow","w":3.4,"c":false},{"a":"taken","w":1,"c":true}]'),
+  ('lw_last','lowHp','背水','[{"a":"dmgLow","w":3.4,"c":false},{"a":"taken","w":0.4,"c":true}]'),
   ('lw_veil','lowHp','窮鼠の見切り','[{"a":"evaLow","w":2,"c":false}]'),
   ('lw_hard','lowHp','火事場の硬さ','[{"a":"cutLow","w":2.2,"c":false}]'),
   ('lw_leech','lowHp','命の削り合い','[{"a":"drain","w":0.4,"c":false},{"a":"dmgLow","w":1.2,"c":false}]'),
@@ -4879,7 +4879,7 @@ insert into public.v2_evolve_traits (key, axis, name, atoms) values
   ('fn_reap','finish','刈り取り','[{"a":"dmgFinish","w":2.4,"c":false}]'),
   ('fn_chase','finish','逃さぬ手','[{"a":"hitFinish","w":1.2,"c":false},{"a":"dmgFinish","w":1.4,"c":false}]'),
   ('fn_eye','finish','首筋を見る','[{"a":"critFinish","w":1.6,"c":false},{"a":"dmgFinish","w":1,"c":false}]'),
-  ('fn_deep','finish','深追い','[{"a":"dmgFinish","w":3.4,"c":false},{"a":"taken","w":1,"c":true}]'),
+  ('fn_deep','finish','深追い','[{"a":"dmgFinish","w":3.4,"c":false},{"a":"taken","w":0.4,"c":true}]'),
   ('fn_feast','finish','止めの一口','[{"a":"dmgFinish","w":1.2,"c":false},{"a":"drain","w":0.3,"c":false}]'),
   ('fn_press','finish','詰め','[{"a":"dmgFinish","w":1,"c":false},{"a":"extra","w":0.5,"c":false}]'),
   ('bo_slay','boss','大敵斬り','[{"a":"dmgBoss","w":2.6,"c":false}]'),
@@ -4899,7 +4899,7 @@ insert into public.v2_evolve_traits (key, axis, name, atoms) values
   ('mi_wait','misfire','溜めの型','[{"a":"dmgSkill","w":1.1,"c":false},{"a":"proc","w":0.6,"c":true}]'),
   ('mi_ready','misfire','二の太刀','[{"a":"misfireDmg","w":2,"c":false},{"a":"dmgNormal","w":1,"c":false}]'),
   ('mi_calm','misfire','平常心','[{"a":"proc","w":0.5,"c":false},{"a":"mpCost","w":0.5,"c":false}]'),
-  ('mi_burst','misfire','大振り','[{"a":"dmgSkill","w":1.6,"c":false},{"a":"hit","w":0.9,"c":true}]'),
+  ('mi_burst','misfire','大振り','[{"a":"dmgSkill","w":1.6,"c":false},{"a":"hit","w":0.35,"c":true}]'),
   ('ex_swift','extra','疾風の足','[{"a":"extra","w":0.8,"c":false}]'),
   ('ex_agi','extra','軽身','[{"a":"st_agi","w":0.8,"c":false}]'),
   ('ex_combo','extra','連なる手','[{"a":"dmgCombo","w":0.4,"c":false}]'),
@@ -4911,7 +4911,7 @@ insert into public.v2_evolve_traits (key, axis, name, atoms) values
   ('fs_full','first','満を持して','[{"a":"dmgFull","w":1.4,"c":false}]'),
   ('fs_agi','first','疾さの証','[{"a":"st_agi","w":0.7,"c":false},{"a":"first","w":0.8,"c":false}]'),
   ('fs_press','first','先制の圧','[{"a":"first","w":1,"c":false},{"a":"dmgFirst","w":0.9,"c":false}]'),
-  ('fs_bold','first','抜き打ち','[{"a":"dmgFirst","w":1.9,"c":false},{"a":"taken","w":0.9,"c":true}]'),
+  ('fs_bold','first','抜き打ち','[{"a":"dmgFirst","w":1.9,"c":false},{"a":"taken","w":0.35,"c":true}]'),
   ('ov_might','overkill','有り余る力','[{"a":"dmg","w":0.8,"c":false}]'),
   ('ov_crush','overkill','打ち砕き','[{"a":"dmgSmall","w":1.5,"c":false}]'),
   ('ov_pierce','overkill','力任せ','[{"a":"defPen","w":1.3,"c":false}]'),
@@ -4922,10 +4922,10 @@ insert into public.v2_evolve_traits (key, axis, name, atoms) values
   ('pf_calm','perfect','静謐','[{"a":"cut","w":0.8,"c":false}]'),
   ('pf_eye','perfect','完璧な見切り','[{"a":"eva","w":0.7,"c":false},{"a":"hit","w":0.5,"c":false}]'),
   ('pf_high','perfect','余裕','[{"a":"dmgHigh","w":1.1,"c":false}]'),
-  ('pf_pure','perfect','一分の隙もなく','[{"a":"dmgFull","w":2.1,"c":false},{"a":"taken","w":0.8,"c":true}]'),
+  ('pf_pure','perfect','一分の隙もなく','[{"a":"dmgFull","w":2.1,"c":false},{"a":"taken","w":0.3,"c":true}]'),
   ('pf_keep','perfect','崩さぬ構え','[{"a":"cut","w":0.5,"c":false},{"a":"regen","w":0.18,"c":false}]'),
   ('cb_rise','comeback','巻き返し','[{"a":"dmgLow","w":2.2,"c":false},{"a":"regen","w":0.15,"c":false}]'),
-  ('cb_guts','comeback','諦めの悪さ','[{"a":"guts","w":2.6,"c":false}]'),
+  ('cb_guts','comeback','諦めの悪さ','[{"a":"evaLow","w":1.8,"c":false},{"a":"regen","w":0.15,"c":false}]'),
   ('cb_turn','comeback','形勢逆転','[{"a":"dmgHurt","w":2.6,"c":false}]'),
   ('cb_bear','comeback','耐え忍び','[{"a":"cutLow","w":2,"c":false},{"a":"heal","w":0.6,"c":false}]'),
   ('cb_heart','comeback','折れぬ心','[{"a":"st_vit","w":0.7,"c":false},{"a":"dmgLow","w":1.2,"c":false}]'),
@@ -4950,7 +4950,7 @@ declare
   c_max_exp   constant int := 200;   -- 1戦で入る経験値の上限（＝行動できる回数の上限。追加行動を見込む）
   c_per_lv    constant int := 100;
   c_foes_keep constant int := 12;    -- evolve.js の FOES_KEEP
-  c_levels    constant int[] := array[300, 1000, 2000];   -- 覚醒できるレベル
+  c_levels    constant int[] := array[170, 550, 1100];   -- 覚醒できるレベル
   v_hits  int;  v_taken int;  v_wins int;
   v_add   jsonb;
   v_foe   text;
@@ -5070,7 +5070,7 @@ create or replace function public.v2_weapon_evolve(p_id bigint, p_key text, p_s 
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_uid    uuid := auth.uid();
-  c_levels constant int[]     := array[300, 1000, 2000];      -- evolve.js の LEVELS
+  c_levels constant int[]     := array[170, 550, 1100];      -- evolve.js の LEVELS
   c_caps   constant numeric[] := array[6, 10, 15];   -- evolve.js の STAGE_CAP
   c_per_lv constant int       := 100;
   v_row    record;
