@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Twitch 複窓</title>
+<style>
+  :root {
+    --bg: #0e0e10;
+    --panel: #18181b;
+    --button: #26262c;
+    --button-hover: #35353b;
+    --line: #2f2f35;
+    --text: #efeff1;
+    --muted: #adadb8;
+    --accent: #9147ff;
+    --accent-hover: #772ce8;
+    --error: #ff7a7a;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", Meiryo, sans-serif;
+    overflow: hidden;
+  }
+  #app { display: flex; flex-direction: column; height: 100%; }
+
+  /* 上のバー */
+  #bar {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 8px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+  }
+  body.nobar #bar { display: none; }
+  #input {
+    flex: 0 1 520px; min-width: 120px; height: 30px;
+    padding: 0 10px;
+    border: 1px solid var(--line); border-radius: 6px;
+    background: var(--bg); color: var(--text); font: inherit;
+  }
+  #input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  #msg {
+    flex: 1 1 0; min-width: 0;
+    color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #msg.error { color: var(--error); }
+  button {
+    height: 30px; padding: 0 10px;
+    border: 0; border-radius: 6px;
+    background: var(--button); color: var(--text);
+    font: inherit; white-space: nowrap; cursor: pointer;
+  }
+  button:hover { background: var(--button-hover); }
+  button:disabled { opacity: .35; cursor: default; }
+  button:disabled:hover { background: var(--button); }
+  button.primary, button.on { background: var(--accent); }
+  button.primary:hover, button.on:hover { background: var(--accent-hover); }
+  #showBar {
+    position: fixed; top: 4px; left: 4px; z-index: 10;
+    display: none; height: 24px; padding: 0 8px; opacity: .3;
+  }
+  #showBar:hover { opacity: 1; }
+  body.nobar #showBar { display: block; }
+
+  /* 配信を並べる場所 */
+  #main { flex: 1 1 auto; display: flex; min-height: 0; }
+  #stage { position: relative; flex: 1 1 auto; min-width: 0; overflow: hidden; }
+  #empty {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    padding: 24px; text-align: center; color: var(--muted);
+  }
+  #empty strong { color: var(--text); font-size: 20px; }
+  #empty code { color: var(--text); }
+
+  .tile { position: absolute; background: #000; }
+  .tile .host, .tile iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .tbar {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 2;
+    display: flex; align-items: center; gap: 4px;
+    padding: 6px;
+    background: linear-gradient(rgba(0, 0, 0, .85), rgba(0, 0, 0, 0));
+    opacity: 0; pointer-events: none;
+    transition: opacity .15s;
+  }
+  .tile:hover .tbar { opacity: 1; pointer-events: auto; }
+  .tbar .name {
+    flex: 1 1 auto; min-width: 0;
+    font-weight: 600; text-shadow: 0 1px 2px #000;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .tbar button { height: 26px; min-width: 30px; padding: 0 6px; background: rgba(38, 38, 44, .9); }
+  .tbar button.on { background: var(--accent); }
+  .badge {
+    position: absolute; top: 6px; right: 6px; z-index: 1;
+    padding: 0 6px; border-radius: 4px;
+    background: var(--accent); font-size: 12px;
+    pointer-events: none;
+  }
+
+  /* チャット */
+  #chat {
+    flex: 0 0 340px;
+    display: flex; flex-direction: column;
+    background: var(--panel);
+    border-left: 1px solid var(--line);
+  }
+  #chatTabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px; border-bottom: 1px solid var(--line); }
+  #chatTabs button { height: 26px; max-width: 160px; padding: 0 8px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+  #chatFrame { flex: 1 1 auto; width: 100%; border: 0; }
+  #chatEmpty { padding: 16px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="bar">
+    <input id="input" type="text" autocomplete="off" spellcheck="false"
+           placeholder="Twitch の URL かチャンネル名を貼り付け（複数OK）">
+    <button id="addBtn" class="primary" type="button">追加</button>
+    <span id="msg" role="status"></span>
+    <button id="gridBtn" type="button" title="大きく表示している枠を戻して均等に並べる" hidden>均等に並べる</button>
+    <button id="muteBtn" type="button" title="すべての枠の音を消す">全ミュート</button>
+    <button id="chatBtn" type="button" title="チャット欄の表示を切り替える">チャット</button>
+    <button id="fsBtn" type="button" title="ページを全画面にする">全画面</button>
+    <button id="hideBarBtn" type="button" title="このバーを隠す">▲</button>
+  </div>
+  <div id="main">
+    <div id="stage">
+      <div id="empty">
+        <strong>Twitch の URL を貼り付けてください</strong>
+        <div>このページで <code>Ctrl+V</code>（Mac は <code>⌘V</code>）するか、上の欄に貼り付けると枠が増えます。</div>
+        <div>ライブ配信・アーカイブ（/videos/…）・クリップに対応。複数の URL をまとめて貼っても大丈夫です。</div>
+      </div>
+    </div>
+    <aside id="chat">
+      <div id="chatTabs"></div>
+      <div id="chatEmpty">ライブ配信を追加すると、ここにチャットが出ます。</div>
+      <iframe id="chatFrame" title="Twitch チャット" hidden></iframe>
+    </aside>
+  </div>
+</div>
+<button id="showBar" type="button" title="バーを表示する">▼</button>
+
+<script>
+(() => {
+  'use strict';
+
+  const $ = (id) => document.getElementById(id);
+  const stage = $('stage');
+  const input = $('input');
+  const msg = $('msg');
+  const empty = $('empty');
+  const chat = $('chat');
+  const chatTabs = $('chatTabs');
+  const chatFrame = $('chatFrame');
+  const chatEmpty = $('chatEmpty');
+
+  const GAP = 4;
+  const RATIO = 16 / 9;
+  const POLL_MS = 1000;
+  const PREFS_KEY = 'twitch-multiview';
+  // Twitch の埋め込みは「どのサイトに埋め込むか」を parent で伝える決まり
+  const PARENTS = Array.from(new Set([location.hostname || 'localhost', 'localhost']));
+
+  const tiles = new Map();   // key -> 枠
+  let streams = [];          // サーバーから来た並び順
+  let instance = null;
+  let version = -1;
+  let focusKey = null;       // 大きく表示している枠
+  let audioKey = null;       // 音を出している枠
+  let audioAssigned = false; // 最初の 1 枠だけ音ありで始める
+  let online = true;
+  let msgTimer = 0;
+  let seq = 0;
+
+  const prefs = loadPrefs();
+  let chatKey = prefs.chatKey || null;
+
+  function loadPrefs() {
+    try { return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}') || {}; } catch { return {}; }
+  }
+  function savePrefs() {
+    try {
+      localStorage.setItem(PREFS_KEY, JSON.stringify({
+        chatVisible: !chat.hidden,
+        barHidden: document.body.classList.contains('nobar'),
+        chatKey,
+      }));
+    } catch { /* 保存できなくても動く */ }
+  }
+
+  function showMsg(text, isError) {
+    msg.textContent = text || '';
+    msg.title = text || '';
+    msg.classList.toggle('error', !!isError);
+    clearTimeout(msgTimer);
+    if (text && !isError) msgTimer = setTimeout(() => { msg.textContent = ''; }, 6000);
+  }
+
+  // ---- サーバーとのやりとり ----
+
+  async function post(path, body) {
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      body: body || '',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || 'HTTP ' + res.status);
+    return data;
+  }
+
+  async function refresh() {
+    const res = await fetch('/api/state', { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const s = await res.json();
+    // 古い応答があとから届いても巻き戻らないように version で比べる
+    if (s.instance !== instance || s.version > version) {
+      instance = s.instance;
+      version = s.version;
+      apply(s.streams);
+    }
+  }
+
+  async function pollLoop() {
+    try {
+      await refresh();
+      if (!online) { online = true; showMsg('ツールにつながりました'); }
+    } catch {
+      if (online) {
+        online = false;
+        showMsg('Java のツールにつながりません（ツールを閉じると追加・同期ができません）', true);
+      }
+    }
+    setTimeout(pollLoop, POLL_MS);
+  }
+
+  async function addText(text) {
+    text = (text || '').trim();
+    if (!text) return;
+    try {
+      const r = await post('/api/add', text);
+      showMsg(r.message, r.failed);
+      if (!r.failed) input.value = '';
+      await refresh();
+    } catch (e) {
+      showMsg('追加できませんでした: ' + e.message, true);
+    }
+  }
+
+  async function moveBy(key, delta) {
+    const i = streams.findIndex((s) => s.key === key);
+    const to = i + delta;
+    if (i < 0 || to < 0 || to >= streams.length) return;
+    try {
+      await post('/api/move?key=' + encodeURIComponent(key) + '&to=' + to);
+      await refresh();
+    } catch (e) {
+      showMsg('並べ替えできませんでした: ' + e.message, true);
+    }
+  }
+
+  async function removeStream(key) {
+    try {
+      await post('/api/remove?key=' + encodeURIComponent(key));
+      await refresh();
+    } catch (e) {
+      showMsg('閉じられませんでした: ' + e.message, true);
+    }
+  }
+
+  // ---- 枠の作成 ----
+
+  function apply(list) {
+    streams = list;
+    const keys = new Set(list.map((s) => s.key));
+    for (const [key, t] of tiles) {
+      if (!keys.has(key)) { t.el.remove(); tiles.delete(key); }
+    }
+    // iframe は DOM 上で動かすと読み込み直しになるので、並べ替えは位置の指定だけで行う
+    for (const s of list) {
+      if (!tiles.has(s.key)) tiles.set(s.key, createTile(s));
+    }
+    if (focusKey && !keys.has(focusKey)) focusKey = null;
+    if (audioKey && !keys.has(audioKey)) audioKey = null;
+    empty.hidden = list.length > 0;
+    layout();
+    renderTileBars();
+    renderChat();
+  }
+
+  function createTile(s) {
+    const el = document.createElement('div');
+    el.className = 'tile';
+    const host = document.createElement('div');
+    host.className = 'host';
+    host.id = 'player-' + (++seq);
+    const badge = document.createElement('div');
+    badge.className = 'badge';
+    badge.textContent = '🔊';
+    badge.hidden = true;
+    const bar = document.createElement('div');
+    bar.className = 'tbar';
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = s.label;
+    name.title = s.url;
+    bar.appendChild(name);
+
+    const t = { key: s.key, entry: s, el, host, badge, player: null, muted: true, buttons: {} };
+    const button = (text, title, onClick) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = text;
+      b.title = title;
+      b.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+      bar.appendChild(b);
+      return b;
+    };
+    t.buttons.audio = button('🔊', 'この枠の音だけ出す', () => toggleAudio(s.key));
+    t.buttons.left = button('◀', '前へ', () => moveBy(s.key, -1));
+    t.buttons.right = button('▶', '後ろへ', () => moveBy(s.key, 1));
+    t.buttons.focus = button('⤢', '大きく表示', () => toggleFocus(s.key));
+    button('✕', 'この枠を閉じる', () => removeStream(s.key));
+
+    el.append(host, badge, bar);
+    stage.appendChild(el);
+
+    if (!audioAssigned && s.type !== 'clip') {
+      audioAssigned = true;
+      audioKey = s.key;
+      t.muted = false;
+    }
+    embed(t);
+    return t;
+  }
+
+  function embed(t) {
+    const s = t.entry;
+    // Twitch.Player を使えるとページ側から音のオン・オフができる（クリップは非対応）
+    if (s.type !== 'clip' && window.Twitch && typeof window.Twitch.Player === 'function') {
+      try {
+        const options = { width: '100%', height: '100%', parent: PARENTS, autoplay: true, muted: t.muted };
+        if (s.type === 'live') options.channel = s.id;
+        else { options.video = s.id; if (s.time) options.time = s.time; }
+        t.player = new window.Twitch.Player(t.host.id, options);
+        delegateAutoplay(t.host);
+        return;
+      } catch (e) {
+        console.warn('Twitch.Player を作れませんでした。iframe で表示します', e);
+        t.player = null;
+        t.host.textContent = '';
+      }
+    }
+    const f = document.createElement('iframe');
+    f.src = embedUrl(s, t.muted);
+    f.title = s.label;
+    f.setAttribute('allow', 'autoplay; fullscreen');
+    f.setAttribute('scrolling', 'no');
+    t.host.appendChild(f);
+  }
+
+  // ページ上のボタンで音を出せるよう、プレイヤーの iframe に自動再生の許可を渡しておく
+  function delegateAutoplay(host) {
+    const f = host.querySelector('iframe');
+    if (!f) return;
+    const allow = f.getAttribute('allow') || '';
+    if (/\bautoplay\b/.test(allow)) return;
+    f.setAttribute('allow', allow ? allow + '; autoplay' : 'autoplay; fullscreen');
+    f.src = f.src; // 許可は読み込み時に決まるので読み込み直す（作った直後なので一瞬）
+  }
+
+  function parentParams() {
+    return PARENTS.map((p) => 'parent=' + encodeURIComponent(p)).join('&');
+  }
+
+  function embedUrl(s, muted) {
+    const common = parentParams() + '&autoplay=true&muted=' + muted;
+    if (s.type === 'clip') {
+      return 'https://clips.twitch.tv/embed?clip=' + encodeURIComponent(s.id) + '&' + common;
+    }
+    if (s.type === 'vod') {
+      return 'https://player.twitch.tv/?video=' + encodeURIComponent(s.id)
+        + (s.time ? '&time=' + encodeURIComponent(s.time) : '') + '&' + common;
+    }
+    return 'https://player.twitch.tv/?channel=' + encodeURIComponent(s.id) + '&' + common;
+  }
+
+  // ---- 並べ方 ----
+
+  // n 枚の 16:9 の枠を w×h に並べるとき、いちばん大きくなる列数を探す
+  function fit(n, w, h) {
+    let best = null;
+    for (let cols = 1; cols <= n; cols++) {
+      const rows = Math.ceil(n / cols);
+      let tw = (w - GAP * (cols - 1)) / cols;
+      let th = (h - GAP * (rows - 1)) / rows;
+      if (tw <= 0 || th <= 0) continue;
+      if (tw / th > RATIO) tw = th * RATIO; else th = tw / RATIO;
+      if (!best || tw > best.w) best = { cols, rows, w: tw, h: th };
+    }
+    return best;
+  }
+
+  function placeGrid(keys, r) {
+    const n = keys.length;
+    const g = n ? fit(n, r.w, r.h) : null;
+    if (!g) return;
+    const totalH = g.rows * g.h + GAP * (g.rows - 1);
+    const top = r.y + (r.h - totalH) / 2;
+    keys.forEach((key, i) => {
+      const row = Math.floor(i / g.cols);
+      const col = i % g.cols;
+      const inRow = Math.min(g.cols, n - row * g.cols);   // 最後の行は中央寄せ
+      const rowW = inRow * g.w + GAP * (inRow - 1);
+      const left = r.x + (r.w - rowW) / 2;
+      place(tiles.get(key), left + col * (g.w + GAP), top + row * (g.h + GAP), g.w, g.h);
+    });
+  }
+
+  function place(t, x, y, w, h) {
+    const st = t.el.style;
+    st.left = Math.round(x) + 'px';
+    st.top = Math.round(y) + 'px';
+    st.width = Math.round(w) + 'px';
+    st.height = Math.round(h) + 'px';
+  }
+
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+  function layout() {
+    const W = stage.clientWidth;
+    const H = stage.clientHeight;
+    if (!W || !H) return;
+    const keys = streams.map((s) => s.key).filter((k) => tiles.has(k));
+    if (focusKey && keys.length > 1) {
+      // 1 枠を大きく、残りを横長の画面なら右に、縦長なら下にまとめる
+      const others = keys.filter((k) => k !== focusKey);
+      if (W / H >= RATIO) {
+        const side = clamp(W - H * RATIO - GAP, W * 0.2, W * 0.4);
+        placeGrid([focusKey], { x: 0, y: 0, w: W - side - GAP, h: H });
+        placeGrid(others, { x: W - side, y: 0, w: side, h: H });
+      } else {
+        const side = clamp(H - W / RATIO - GAP, H * 0.2, H * 0.4);
+        placeGrid([focusKey], { x: 0, y: 0, w: W, h: H - side - GAP });
+        placeGrid(others, { x: 0, y: H - side, w: W, h: side });
+      }
+    } else {
+      placeGrid(keys, { x: 0, y: 0, w: W, h: H });
+    }
+  }
+
+  function renderTileBars() {
+    const multi = streams.length > 1;
+    streams.forEach((s, i) => {
+      const t = tiles.get(s.key);
+      if (!t) return;
+      const focused = s.key === focusKey;
+      t.buttons.left.disabled = i === 0;
+      t.buttons.right.disabled = i === streams.length - 1;
+      t.buttons.left.hidden = t.buttons.right.hidden = !multi;
+      t.buttons.focus.hidden = !multi;
+      t.buttons.focus.textContent = focused ? '⤡' : '⤢';
+      t.buttons.focus.title = focused ? '均等表示に戻す' : '大きく表示';
+      t.buttons.focus.classList.toggle('on', focused);
+      t.buttons.audio.hidden = !t.player;
+      t.buttons.audio.classList.toggle('on', s.key === audioKey);
+      t.buttons.audio.title = s.key === audioKey ? '音を消す' : 'この枠の音だけ出す';
+      t.badge.hidden = !(multi && t.player && s.key === audioKey);
+    });
+    $('gridBtn').hidden = !focusKey;
+  }
+
+  // ---- 音・大きく表示 ----
+
+  function toggleAudio(key) {
+    audioKey = audioKey === key ? null : key;
+    applyAudio();
+  }
+
+  function applyAudio() {
+    for (const [key, t] of tiles) {
+      t.muted = key !== audioKey;
+      if (t.player) {
+        try { t.player.setMuted(t.muted); } catch { /* 読み込み中など */ }
+      }
+    }
+    renderTileBars();
+  }
+
+  function toggleFocus(key) {
+    focusKey = focusKey === key ? null : key;
+    const s = streams.find((x) => x.key === focusKey);
+    if (s && s.type === 'live') { chatKey = s.key; savePrefs(); }
+    layout();
+    renderTileBars();
+    renderChat();
+  }
+
+  // ---- チャット ----
+
+  function renderChat() {
+    const lives = streams.filter((s) => s.type === 'live');
+    if (!lives.some((s) => s.key === chatKey)) chatKey = lives.length ? lives[0].key : null;
+    chatTabs.textContent = '';
+    for (const s of lives) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = s.label;
+      b.title = s.label + ' のチャット';
+      b.classList.toggle('on', s.key === chatKey);
+      b.addEventListener('click', () => { chatKey = s.key; savePrefs(); renderChat(); });
+      chatTabs.appendChild(b);
+    }
+    chatTabs.hidden = lives.length === 0;
+    const current = lives.find((s) => s.key === chatKey);
+    chatEmpty.hidden = !!current;
+    chatFrame.hidden = !current;
+    // 隠している間は読み込まない
+    if (current && !chat.hidden) {
+      const src = 'https://www.twitch.tv/embed/' + encodeURIComponent(current.id) + '/chat?darkpopout&' + parentParams();
+      if (chatFrame.dataset.src !== src) {
+        chatFrame.dataset.src = src;
+        chatFrame.src = src;
+      }
+    }
+  }
+
+  // ---- 画面の操作 ----
+
+  function setChatVisible(visible) {
+    chat.hidden = !visible;
+    $('chatBtn').classList.toggle('on', visible);
+    renderChat();
+    layout();
+    savePrefs();
+  }
+
+  function setBarHidden(hidden) {
+    document.body.classList.toggle('nobar', hidden);
+    layout();
+    savePrefs();
+  }
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.isComposing) addText(input.value);
+  });
+  // 入力欄に URL を貼ったらそのまま追加する（チャンネル名は打って Enter）
+  input.addEventListener('paste', (e) => {
+    const text = e.clipboardData && e.clipboardData.getData('text');
+    if (text && /twitch\.tv/i.test(text) && !input.value.trim()) {
+      e.preventDefault();
+      addText(text);
+    }
+  });
+  // ページのどこで貼っても追加する
+  document.addEventListener('paste', (e) => {
+    if (e.target === input) return;
+    const text = e.clipboardData && e.clipboardData.getData('text');
+    if (text) { e.preventDefault(); addText(text); }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && focusKey && e.target !== input) toggleFocus(focusKey);
+  });
+
+  $('addBtn').addEventListener('click', () => addText(input.value));
+  $('gridBtn').addEventListener('click', () => { if (focusKey) toggleFocus(focusKey); });
+  $('muteBtn').addEventListener('click', () => { audioKey = null; applyAudio(); showMsg('すべての音を消しました'); });
+  $('chatBtn').addEventListener('click', () => setChatVisible(chat.hidden));
+  $('fsBtn').addEventListener('click', () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+  });
+  $('hideBarBtn').addEventListener('click', () => setBarHidden(true));
+  $('showBar').addEventListener('click', () => setBarHidden(false));
+
+  new ResizeObserver(() => layout()).observe(stage);
+
+  // Twitch の埋め込み用スクリプト。読めなくても iframe で表示できるので、待ちすぎないようにする
+  function loadTwitchApi() {
+    return new Promise((resolve) => {
+      const script = document.createElement('script');
+      script.src = 'https://player.twitch.tv/js/embed/v1.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.head.appendChild(script);
+      setTimeout(() => resolve(false), 5000);
+    });
+  }
+
+  chat.hidden = prefs.chatVisible === false;
+  $('chatBtn').classList.toggle('on', !chat.hidden);
+  document.body.classList.toggle('nobar', !!prefs.barHidden);
+  loadTwitchApi().then(pollLoop);
+})();
+</script>
+</body>
+</html>
