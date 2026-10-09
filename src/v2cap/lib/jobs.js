@@ -29,17 +29,18 @@ export const STAGE_ORDER = ['shoki']
 
 // ===== 職業 =====
 // weapons … 装備できる武器の種類（3つ）／kind … 通常攻撃が物理（STR）か魔法（INT）か
+// desc … キャラ作成で出す特徴の説明（2026-10-09 ユーザー承認の文面）。技やジョブのステを変えたら合わせて直す
 export const CLASS_INFO = {
-  戦士:     { weapons:['両手剣', '斧', '鈍器'],   kind:'phys' },
-  槍使い:   { weapons:['槍', '片手剣', '投擲'],   kind:'phys' },
-  格闘家:   { weapons:['拳', '鈍器', '杖'],       kind:'phys' },
-  盗賊:     { weapons:['短剣', '片手剣', '投擲'], kind:'phys' },
-  弓使い:   { weapons:['弓', '短剣', '片手剣'],   kind:'phys' },
-  銃士:     { weapons:['銃', '片手剣', '投擲'],   kind:'phys' },
-  魔法使い: { weapons:['杖', '書', '短剣'],       kind:'mag' },
-  呪術師:   { weapons:['杖', '短剣', '投擲'],     kind:'mag' },
-  僧侶:     { weapons:['鈍器', '杖', '書'],       kind:'mag' },
-  薬師:     { weapons:['短剣', '投擲', '書'],     kind:'mag' },
+  戦士:     { weapons:['両手剣', '斧', '鈍器'],   kind:'phys', desc:'STRとVITが伸びる頑丈な前衛。重い一撃と守りの構えで正面から戦う' },
+  槍使い:   { weapons:['槍', '片手剣', '投擲'],   kind:'phys', desc:'STRとDEXが伸びるバランス型。必中の投げ槍や三段突きで着実に削る' },
+  格闘家:   { weapons:['拳', '鈍器', '杖'],       kind:'phys', desc:'STRとAGIが伸びる拳の使い手。連打・爆裂拳の連撃で畳みかける' },
+  盗賊:     { weapons:['短剣', '片手剣', '投擲'], kind:'phys', desc:'AGIも威力になる素早いアタッカー。毒や目つぶしで相手を崩す' },
+  弓使い:   { weapons:['弓', '短剣', '片手剣'],   kind:'phys', desc:'AGIが大きく威力になる射手。必中の狙撃や、防御を貫く矢が得意' },
+  銃士:     { weapons:['銃', '片手剣', '投擲'],   kind:'phys', desc:'DEXが大きく威力になる銃の名手。必中弾や、防御を無視する徹甲弾で撃ち抜く' },
+  魔法使い: { weapons:['杖', '書', '短剣'],       kind:'mag',  desc:'INTで戦う攻撃魔法の使い手。火・雷・氷の魔法を撃ち分ける' },
+  呪術師:   { weapons:['杖', '短剣', '投擲'],     kind:'mag',  desc:'呪いで相手を弱らせる魔法職。毒・鈍足・呪いを重ねて追い詰める' },
+  僧侶:     { weapons:['鈍器', '杖', '書'],       kind:'mag',  desc:'回復と守りの魔法で粘り強く戦う。光の魔法で攻撃もこなす' },
+  薬師:     { weapons:['短剣', '投擲', '書'],     kind:'mag',  desc:'薬で回復も強化もこなす。毒薬で削り、気付け薬でMPも戻す' },
 }
 export const START_CLASSES = Object.keys(CLASS_INFO)
 export const CLASSES = START_CLASSES.map((id, i) => ({ id, stage:'shoki', sort: i, req: null, ...CLASS_INFO[id] }))
@@ -49,6 +50,7 @@ export const stageLabelOf = (cls) => STAGES[stageOf(cls)]?.label || ''
 export const stageColorOf = (cls) => STAGES[stageOf(cls)]?.color || '#88ccff'
 export const weaponsOf = (cls) => CLASS_BY_ID[cls]?.weapons || []
 export const attackKindOf = (cls) => CLASS_BY_ID[cls]?.kind || 'phys'
+export const classDescOf = (cls) => CLASS_BY_ID[cls]?.desc || ''
 // その職業がその武器の種類を装備できるか
 export const canEquipType = (cls, type) => weaponsOf(cls).includes(type)
 

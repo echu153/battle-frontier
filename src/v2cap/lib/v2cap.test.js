@@ -13,7 +13,7 @@ import {
 import {
   CLASSES, START_CLASSES, STAGES, JOB_MAX, JOB_BONUS, jobNeed, jobTotalTo, bonusSeqOf,
   bonusPointsAt, jobBonusStats, learnOrderOf, learnAtOf, skillsLearnedBy, applyJobExp,
-  canBecome, weaponsOf, canEquipType, attackKindOf, lineageOf, usableSkillNames,
+  canBecome, weaponsOf, canEquipType, attackKindOf, lineageOf, usableSkillNames, classDescOf,
 } from './jobs.js'
 import { SKILLS, NEW_SKILLS, SKILL_BY_NAME, setMpCost, validateSkillSet, defaultSetOf, DEFAULT_USES_MAX } from './skills.js'
 import {
@@ -124,6 +124,14 @@ test('【確定】ジョブのステは職業ごとに決まった配分で、�
         assert.ok(Math.abs(got - v * n / sum) <= 1.0001, `${c.id} ${n}点目の${k}`)
       }
     }
+  }
+})
+
+test('【確定】キャラ作成のクラス選択に出す特徴の説明が、10職ぶんある（カードに収まる長さ）', () => {
+  for (const c of CLASSES) {
+    const d = classDescOf(c.id)
+    assert.ok(d, `${c.id}の説明がある`)
+    assert.ok(d.length <= 40, `${c.id}の説明は40字まで（${d.length}字）`)
   }
 })
 

@@ -5,13 +5,12 @@ import { validateName } from '../../lib/nameFilter'
 import { reportDevAccess } from '../../lib/devAccess'
 import V2Modal from '../../v2/components/V2Modal.jsx'
 import { box, btn, miniBtn, TEXT } from '../../v2/components/v2ui.js'
-import { KIND_COLOR } from '../../v2/lib/skills.js'
 import V2capStatus from '../components/V2capStatus.jsx'
 import V2capSortie from '../components/V2capSortie.jsx'
 import V2capEquip from '../components/V2capEquip.jsx'
 import V2capSkills from '../components/V2capSkills.jsx'
 import V2capTemple from '../components/V2capTemple.jsx'
-import { START_CLASSES, JOB_MAX, jobBonusText, learnOrderOf, learnAtOf, weaponsOf, attackKindOf } from '../lib/jobs.js'
+import { START_CLASSES, weaponsOf, attackKindOf, classDescOf } from '../lib/jobs.js'
 
 // ============================================================
 // バトルフロンティアⅡ「レベルキャップあり」版 — ホーム（開発限定）
@@ -149,20 +148,18 @@ export default function V2capHome() {
       <div style={page}>
         <div style={{ maxWidth:'760px', margin:'0 auto' }}>
           {header}
+          {/* ★見せるのは「キャラクター名」と「クラス選択」だけ（2026-10-09 ユーザー指示）。
+               カードは職業名・物理／魔法・武器・特徴の説明1行（ジョブのステや技の一覧は神殿で見る） */}
           <form onSubmit={create} style={{ ...box, padding:'14px' }}>
-            <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'8px' }}>キャラクターを作る</div>
-            <div style={{ color: TEXT.sub, fontSize:'10px', marginBottom:'10px', lineHeight:1.8 }}>
-              LVは最大100で、職業を変えても下がりません。職業ごとにJBLV（最大{JOB_MAX}）があり、
-              上がるとその職業のスキルを覚え、その職業のステが上がります。スキルはその職業でだけ使えます。
-              職業ごとに装備できる武器が3種決まっています。
-            </div>
+            <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'6px' }}>キャラクター名</div>
             <input value={name} onChange={e => setName(e.target.value)} maxLength={16} placeholder="名前（1〜16文字）"
-              style={{ width:'100%', boxSizing:'border-box', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px', marginBottom:'10px' }} />
-            <div style={{ color: TEXT.label, fontSize:'11px', marginBottom:'6px' }}>最初の職業（あとで神殿でいつでも変えられます）</div>
+              style={{ width:'100%', boxSizing:'border-box', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px', marginBottom:'14px' }} />
+            <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'6px' }}>
+              クラス選択<span style={{ color: TEXT.label, fontSize:'10px' }}>※いつでも変更可能</span>
+            </div>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))', gap:'6px', marginBottom:'10px' }}>
               {START_CLASSES.map(c => {
                 const on = pick === c
-                const at = learnAtOf(c)
                 return (
                   <button type="button" key={c} onClick={() => setPick(c)}
                     style={{ textAlign:'left', background: on ? '#001840' : '#000818', border:`1px solid ${on ? '#ffcc00' : '#002244'}`,
@@ -173,12 +170,7 @@ export default function V2capHome() {
                     </div>
                     <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.7 }}>
                       <div>武器：<span style={{ color:'#cfe2ff' }}>{weaponsOf(c).join('・')}</span></div>
-                      <div>JBLV{JOB_MAX}で {jobBonusText(c, JOB_MAX)}</div>
-                      <div>{learnOrderOf(c).map((s, i) => (
-                        <span key={s.name} style={{ marginRight:'6px' }}>
-                          <span style={{ color: TEXT.label }}>JB{at[i]}</span> <span style={{ color: KIND_COLOR[s.kind] }}>{s.name}</span>
-                        </span>
-                      ))}</div>
+                      <div style={{ color:'#9fb8d0', marginTop:'2px' }}>{classDescOf(c)}</div>
                     </div>
                   </button>
                 )
