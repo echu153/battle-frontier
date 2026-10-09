@@ -1,20 +1,21 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../supabase'
 import {
-  SKILL_BY_NAME, KIND_COLOR, KIND_LABEL, KIND_TABS, isPassive, powerText, mpOf,
-  filterSkills, sortSkills, setMpCost, validateSkillSet,
-  SKILL_SET_SLOTS, SKILL_USE_MAX, OFF_CLASS_MULT, OFF_CLASS_MP_MULT,
+  KIND_COLOR, KIND_LABEL, KIND_TABS, isPassive, powerText, mpOf,
+  filterSkills, sortSkills, SKILL_SET_SLOTS, SKILL_USE_MAX, OFF_CLASS_MULT, OFF_CLASS_MP_MULT,
 } from '../../v2/lib/skills.js'
+// ★名前で引くもの（名簿・想定利用MP・検証）はこの版の名簿で引く。今のⅡの名簿には新しい5職の技が無い
+import { SKILL_BY_NAME, setMpCost, validateSkillSet } from '../lib/skills.js'
 import { box, btn, miniBtn, TEXT } from '../../v2/components/v2ui.js'
 import { totalStats } from '../lib/loadout.js'
-import { learnOrderOf, learnAtOf, jobOf, passiveOf } from '../lib/jobs.js'
+import { learnOrderOf, learnAtOf, jobOf } from '../lib/jobs.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — スキルセット
 //   ・置けるのは**覚えたスキル**（どの職業で覚えたものでもよい）
 //   ・いまの職業以外の技は効果0.8倍・消費MP2倍（今のⅡと同じ）
 //   ・想定利用MP（Σ 消費MP×回数）が最大MPを超える編成は保存できない（サーバーも同じ判定）
-//   ・一覧には、いまの職業の**まだ覚えていない技**も「ジョブLV◯で習得」と出す
+//   ・一覧には、いまの職業の**まだ覚えていない技**も「JBLV◯で習得」と出す
 // ============================================================
 const normalize = (set) => {
   const out = Array.from({ length: SKILL_SET_SLOTS }, () => ({ name:'', uses:1 }))
@@ -50,8 +51,7 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
   const lockedAt = Object.fromEntries(order.map((s, i) => [s.name, at[i]]).filter(([n]) => !learned.includes(n)))
   const known = learned.map(n => SKILL_BY_NAME[n]).filter(Boolean)
   const locked = order.filter(s => lockedAt[s.name] !== undefined)
-  const passive = passiveOf(cls)
-  const shown = sortSkills(filterSkills([...known, ...locked, ...(passive ? [passive] : [])], { tab, query, favorites }), sortKey, sortAsc)
+  const shown = sortSkills(filterSkills([...known, ...locked], { tab, query, favorites }), sortKey, sortAsc)
 
   const setSlot = (i, patch) => setDraft(d => {
     const next = normalize(d)
@@ -135,7 +135,7 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
       <div style={{ ...box, padding:'14px' }}>
         <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'4px' }}>📖 スキル</div>
         <div style={{ color: TEXT.sub, fontSize:'10px', marginBottom:'8px', lineHeight:1.7 }}>
-          スキルはジョブLVで覚え、職業を変えても残ります。いまの職業（{cls}・ジョブLV{jlv}）でまだ覚えていない技は、覚えるジョブLVを出しています。
+          スキルはJBLVで覚え、職業を変えても残ります。いまの職業（{cls}・JBLV{jlv}）でまだ覚えていない技は、覚えるJBLVを出しています。
         </div>
         <div style={{ display:'flex', gap:'5px', marginBottom:'6px' }}>
           <input value={query} onChange={e => setQuery(e.target.value)} placeholder="スキル名・職業・説明で検索"
@@ -176,7 +176,7 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
                     <span style={{ color: s.cls === cls ? '#88ddaa' : '#ff88cc', fontSize:'9px', marginLeft:'5px' }}>
                       {s.cls}{s.cls !== cls && !pas ? `・効果${OFF_CLASS_MULT}倍/MP${OFF_CLASS_MP_MULT}倍` : ''}
                     </span>
-                    {!has && !pas && <span style={{ color:'#c69a5c', fontSize:'9px', marginLeft:'5px' }}>ジョブLV{lockedAt[s.name]}で習得</span>}
+                    {!has && !pas && <span style={{ color:'#c69a5c', fontSize:'9px', marginLeft:'5px' }}>JBLV{lockedAt[s.name]}で習得</span>}
                   </span>
                   <span style={{ color: TEXT.label, fontSize:'10px' }}>{pas ? '常時' : `${mpLabel(s)} ／ ${s.proc}%`}</span>
                 </div>

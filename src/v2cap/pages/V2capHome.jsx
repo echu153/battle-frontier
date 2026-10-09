@@ -11,7 +11,7 @@ import V2capSortie from '../components/V2capSortie.jsx'
 import V2capEquip from '../components/V2capEquip.jsx'
 import V2capSkills from '../components/V2capSkills.jsx'
 import V2capTemple from '../components/V2capTemple.jsx'
-import { START_CLASSES, CLASSES, JOB_MAX, jobBonusText, learnOrderOf, learnAtOf } from '../lib/jobs.js'
+import { START_CLASSES, JOB_MAX, jobBonusText, learnOrderOf, learnAtOf, weaponsOf, attackKindOf } from '../lib/jobs.js'
 
 // ============================================================
 // バトルフロンティアⅡ「レベルキャップあり」版 — ホーム（開発限定）
@@ -101,7 +101,7 @@ export default function V2capHome() {
     setProf(data.profile)
     const parts = [`EXP+${amount.toLocaleString()}`]
     if (data.level_ups > 0) parts.push(`LV${data.lv}（+${data.level_ups}）`)
-    if (data.job_ups > 0) parts.push(`ジョブLV${data.jlv}（+${data.job_ups}）`)
+    if (data.job_ups > 0) parts.push(`JBLV${data.jlv}（+${data.job_ups}）`)
     if ((data.learned || []).length) parts.push(`スキル「${data.learned.join('」「')}」`)
     setDevMsg(parts.join('　'))
   }
@@ -152,8 +152,8 @@ export default function V2capHome() {
           <form onSubmit={create} style={{ ...box, padding:'14px' }}>
             <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'8px' }}>キャラクターを作る</div>
             <div style={{ color: TEXT.sub, fontSize:'10px', marginBottom:'10px', lineHeight:1.8 }}>
-              LVは最大100で、職業を変えても下がりません。職業ごとにジョブLV（最大{JOB_MAX}）があり、
-              上がるとその職業のスキルを覚え、その職業のステが上がります。初期職のジョブLV{JOB_MAX}で一次職に就けます。
+              LVは最大100で、職業を変えても下がりません。職業ごとにJBLV（最大{JOB_MAX}）があり、
+              上がるとその職業のスキルを覚え、その職業のステが上がります。職業ごとに装備できる武器が3種決まっています。
             </div>
             <input value={name} onChange={e => setName(e.target.value)} maxLength={16} placeholder="名前（1〜16文字）"
               style={{ width:'100%', boxSizing:'border-box', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px', marginBottom:'10px' }} />
@@ -162,20 +162,22 @@ export default function V2capHome() {
               {START_CLASSES.map(c => {
                 const on = pick === c
                 const at = learnAtOf(c)
-                const next = CLASSES.filter(x => x.req?.cls === c).map(x => x.id)
                 return (
                   <button type="button" key={c} onClick={() => setPick(c)}
                     style={{ textAlign:'left', background: on ? '#001840' : '#000818', border:`1px solid ${on ? '#ffcc00' : '#002244'}`,
                       color:'#88ccff', padding:'8px', cursor:'pointer', fontFamily:'monospace' }}>
-                    <div style={{ color: on ? '#ffcc00' : '#cfe2ff', fontSize:'12px', marginBottom:'4px' }}>{c}</div>
+                    <div style={{ color: on ? '#ffcc00' : '#cfe2ff', fontSize:'12px', marginBottom:'4px' }}>
+                      {c}
+                      <span style={{ color: TEXT.sub, fontSize:'10px', marginLeft:'6px' }}>{attackKindOf(c) === 'mag' ? '魔法' : '物理'}</span>
+                    </div>
                     <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.7 }}>
-                      <div>ジョブLV{JOB_MAX}で {jobBonusText(c, JOB_MAX)}</div>
+                      <div>武器：<span style={{ color:'#cfe2ff' }}>{weaponsOf(c).join('・')}</span></div>
+                      <div>JBLV{JOB_MAX}で {jobBonusText(c, JOB_MAX)}</div>
                       <div>{learnOrderOf(c).map((s, i) => (
                         <span key={s.name} style={{ marginRight:'6px' }}>
-                          <span style={{ color: TEXT.label }}>J{at[i]}</span> <span style={{ color: KIND_COLOR[s.kind] }}>{s.name}</span>
+                          <span style={{ color: TEXT.label }}>JB{at[i]}</span> <span style={{ color: KIND_COLOR[s.kind] }}>{s.name}</span>
                         </span>
                       ))}</div>
-                      {next.length > 0 && <div style={{ color:'#ffcc00' }}>→ {next.join('・')}</div>}
                     </div>
                   </button>
                 )
@@ -231,7 +233,7 @@ export default function V2capHome() {
                         ))}
                         <button onClick={() => setConfirmReset(true)} disabled={busy} style={miniBtn('#ff8844')}>キャラを作り直す</button>
                       </div>
-                      <div style={{ color: TEXT.sub, fontSize:'9px', marginTop:'4px' }}>EXPは戦闘と同じ扱い（いまの職業のジョブEXPにも同じ量が入る）</div>
+                      <div style={{ color: TEXT.sub, fontSize:'9px', marginTop:'4px' }}>EXPは戦闘と同じ扱い（いまの職業のJBEXPにも同じ量が入る）</div>
                       {devMsg && <div style={{ color:'#cfe2ff', fontSize:'10px', marginTop:'4px' }}>{devMsg}</div>}
                     </div>
                   </>
@@ -245,7 +247,7 @@ export default function V2capHome() {
                 </div>
                 {screen === 'equip' && <V2capEquip prof={prof} inventory={inventory} onProfile={refresh} />}
                 {screen === 'skills' && <V2capSkills prof={prof} inventory={inventory} onProfile={refresh} />}
-                {screen === 'temple' && <V2capTemple prof={prof} onProfile={refresh} />}
+                {screen === 'temple' && <V2capTemple prof={prof} inventory={inventory} onProfile={refresh} />}
               </>
             )}
           </div>

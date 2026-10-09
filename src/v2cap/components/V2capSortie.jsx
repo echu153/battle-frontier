@@ -5,7 +5,7 @@ import { runBattle } from '../../v2/lib/battle.js'
 import { buildBattleLog } from '../../v2/lib/battleLog.js'
 import { rollStamina } from '../../v2/lib/stamina.js'
 import { biasLabelOf, BIAS_MULT } from '../../v2/lib/enemies.js'
-import { RANK_COLOR, dropLine, LOG_PLAIN } from '../../v2/components/v2ui.js'
+import { RANK_COLOR, LOG_PLAIN } from '../../v2/components/v2ui.js'
 import { AREAS_SORTED, areaOf, markOf, tierLvText, toFighter as enemyFighter } from '../lib/areas.js'
 import {
   pickEncounter, rollEquipDrop, nextBossRate, isAreaUnlocked, clearedAreasOf, isAreaCleared,
@@ -22,7 +22,8 @@ import { effectPct } from '../lib/gear.js'
 //   違うのは：
 //   ・敵が**LV**を持つ（エリアのLV帯の中で、敵ごとに決まっている）
 //   ・**EXPはサーバーが敵のLVから決める**＝ログのEXPは清算の返事を出す
-//   ・ジョブLVアップ／スキル習得もサーバーの返事から出す
+//   ・JBLVアップ／スキル習得もサーバーの返事から出す
+//   ・落ちる装備は「基本装備＋ランク」。武器はいまの職業が装備できる3種から（sortie.js）
 //   ・落ちた装備には**アイテムLV**（＝倒した敵のLV）が付く
 // ============================================================
 export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
@@ -64,7 +65,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       const enc = pickEncounter(area.id, bossRate, new Date())
       const r = runBattle(me, { ...enemyFighter(enc.enemy, 8), boss: enc.isBoss })
       const win = r.winner === 'a'
-      const drop = win ? rollEquipDrop(enc, new Date()) : null
+      const drop = win ? rollEquipDrop(enc, prof.class, new Date()) : null
       setBossRate(nextBossRate(bossRate, enc.isBoss))
 
       const foe = enc.enemy.name
@@ -81,7 +82,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
 
       // ★1戦ごとにその場で反映する。EXP・アイテムLVはサーバーが敵のLVから決める
       const { data, error } = await supabase.rpc('v2cap_sortie_settle', {
-        p_area: area.id, p_enemy: foe, p_win: win, p_drop: drop ? drop.item.id : null, p_auto: !!isAuto,
+        p_area: area.id, p_enemy: foe, p_win: win, p_drop: drop ? drop.item.id : null, p_rank: drop ? drop.rank : null, p_auto: !!isAuto,
       })
       if (data && data.stamina != null) setStam({ n: data.stamina, at: data.stamina_at || new Date().toISOString() })
       if (error || !data?.ok) {
@@ -92,18 +93,22 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       const lv = data.level || {}
       const after = []
       if (win) {
-        // ★LV100・ジョブLV30（上限）のぶんは入らないので、そう出す
+        // ★LV100・JBLV30（上限）のぶんは入らないので、そう出す
         const lvMax = prof.lv >= MAX_LV
         const jobMax = jobOf(prof.jobs, prof.class).lv >= JOB_MAX
-        after.push({ text:`EXP +${data.exp}${lvMax ? '（LV上限のため入らない）' : ''}${jobMax ? '' : `（ジョブEXP +${data.exp}）`}`, color:'#ffcc00' })
+        after.push({ text:`EXP +${data.exp}${lvMax ? '（LV上限のため入らない）' : ''}${jobMax ? '' : `（JBEXP +${data.exp}）`}`, color:'#ffcc00' })
         if (lv.level_ups > 0) after.push({ text:`🆙 レベルアップ！ LV${lv.lv}`, color:'#44ff88' })
-        if (lv.job_ups > 0) after.push({ text:`⭐ ジョブLVアップ！ ${prof.class} ジョブLV${lv.jlv}`, color:'#ffcc00' })
+        if (lv.job_ups > 0) after.push({ text:`⭐ JBLVアップ！ ${prof.class} JBLV${lv.jlv}`, color:'#ffcc00' })
         for (const name of lv.learned || []) after.push({ text:`📖 スキル「${name}」を覚えた！（スキルセットで編成できる）`, color:'#44ddff' })
         if (data.drop && drop) {
           const ilv = data.drop.ilv
           const pct = effectPct(ilv, lv.lv || prof.lv)
-          const line = dropLine(drop.item, RANK_COLOR[drop.item.rank])
-          line.parts.push({ text:`（LV${ilv}）` })
+          // ★色を付けるのはランクと装備名だけ（今のⅡと同じ）
+          const color = RANK_COLOR[drop.rank]
+          const line = { color: LOG_PLAIN, parts: [
+            { text:'🎁 ' }, { text:`${drop.rank}級`, color }, { text:'「' }, { text: drop.item.name, color },
+            { text:`」を入手！（LV${ilv}）` },
+          ] }
           if (pct < 100) line.parts.push({ text:` 必要LVに足りない＝効果${pct}%`, color:'#ff8844' })
           after.push(line)
         }

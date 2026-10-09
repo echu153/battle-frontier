@@ -12,7 +12,9 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 // レイド装備を SQL に足したのに RAID_EQUIP_NAMES への追加を忘れる＝ランダム加工で溶かせてしまう、を検出する。
 const sqlWeaponNames = () => {
   const names = new Set()
-  for (const f of readdirSync(repoRoot).filter(n => n.endsWith('.sql'))) {
+  // ★Ⅱ系（supabase_v2*.sql＝今のⅡとレベルキャップあり版）は無印の交換所に触らないので見ない。
+  //   見ると、装備の枠名の列（'weapon','head',…）を装備名と取り違える（2026-10-09 実際に踏んだ）
+  for (const f of readdirSync(repoRoot).filter(n => n.endsWith('.sql') && !n.startsWith('supabase_v2'))) {
     const sql = readFileSync(join(repoRoot, f), 'utf8')
     for (const m of sql.matchAll(/'weapon',\s*'([^']+)'/g)) {
       // weapons テーブルの slot 列など、装備名でないものを弾く（'weapon','s' 等）

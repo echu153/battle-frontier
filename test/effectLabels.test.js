@@ -12,7 +12,9 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 // （閻魔装備の hit_poison_20 等で実際に踏んだ。5画面に表がコピーされていたのが原因）。
 const sqlEffects = () => {
   const found = new Map()
-  for (const f of readdirSync(repoRoot).filter(n => n.endsWith('.sql'))) {
+  // ★Ⅱ系（supabase_v2*.sql＝今のⅡとレベルキャップあり版）は無印の交換所に触らないので見ない。
+  //   見ると、装備の枠名の列（'weapon','head','body',…）を効果キーと取り違える（2026-10-09 実際に踏んだ）
+  for (const f of readdirSync(repoRoot).filter(n => n.endsWith('.sql') && !n.startsWith('supabase_v2'))) {
     const sql = readFileSync(join(repoRoot, f), 'utf8')
     // 'weapon', '装備名', '効果キー' の並び（exchange_shop の INSERT）
     for (const m of sql.matchAll(/'weapon',\s*'[^']+',\s*'([a-z0-9_]+)'/g)) found.set(m[1], f)

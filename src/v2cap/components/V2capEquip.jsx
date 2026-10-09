@@ -1,17 +1,19 @@
 import { useMemo, useState } from 'react'
 import { supabase } from '../../supabase'
 import { STAT_DEFS, STAT_KEYS } from '../../v2/lib/stats.js'
-import { ITEM_BY_ID, SLOT_LABEL, SLOTS, PARTS, slotsFor, handsLabel, handsColor, handsNote } from '../../v2/lib/equipment.js'
 import V2Modal from '../../v2/components/V2Modal.jsx'
 import { box, miniBtn, RANK_COLOR, TEXT } from '../../v2/components/v2ui.js'
+import { ITEM_BY_ID, SLOTS, SLOT_LABEL, PARTS, ARMOR_EFFECT, slotsFor, kindLabel } from '../lib/equipment.js'
+import { canEquipType, weaponsOf } from '../lib/jobs.js'
 import { equippedItems, wornIdsOf } from '../lib/loadout.js'
 import { powerAt, statsAt, effectPct } from '../lib/gear.js'
 
 // ============================================================
-// 「レベルキャップあり」版 — 装備（着脱と倉庫）
-//   ・装備は**アイテムLV**を持つ（＝必要LV。倒した敵のLV）
-//   ・必要LVに足りなくても着けられる。**不足1LVごとに効果-5%・最低10%**（gear.js）
-//   ・強化・ルーン・合成・進化は土台では無い
+// 「レベルキャップあり」版 — 装備（着脱と持ち物）
+//   ・枠は7つ（武器1・頭・鎧・腕・足・アクセ2）。盾なし・武器は1本（2026-10-09 ユーザー決定）
+//   ・武器は**いまの職業が装備できる種類だけ**着けられる（職業ごとに3種）
+//   ・防具は重鎧（受けるダメージ−3%）／軽装（AGI+5%）。どの職業でも着けられる
+//   ・装備は**アイテムLV**を持つ（＝必要LV）。足りなくても着けられるが、不足1LVごとに効果-5%（最低10%）
 // ============================================================
 const statLine = (s) => STAT_KEYS.filter(k => s[k] > 0).map(k => `${STAT_DEFS[k].label}+${s[k]}`).join(' ')
 
@@ -26,9 +28,9 @@ export default function V2capEquip({ prof, inventory, onProfile }) {
   const wornIds = wornIdsOf(prof, inventory)
   const rows = useMemo(() => {
     const list = (inventory || [])
-      .map(inv => ({ inv, item: ITEM_BY_ID[inv.equip_id] }))
+      .map(inv => ({ inv, item: ITEM_BY_ID[inv.base_id] }))
       .filter(r => r.item && (part === 'all' || r.item.part === part))
-    const pw = (r) => Math.round(powerAt(r.item, r.inv.ilv) * effectPct(r.inv.ilv, prof.lv) / 100)
+    const pw = (r) => Math.round(powerAt(r.item, r.inv.rank, r.inv.ilv) * effectPct(r.inv.ilv, prof.lv) / 100)
     if (sort === 'power') list.sort((a, b) => pw(b) - pw(a) || b.inv.ilv - a.inv.ilv)
     else if (sort === 'ilv') list.sort((a, b) => b.inv.ilv - a.inv.ilv || pw(b) - pw(a))
     else list.sort((a, b) => b.inv.id - a.inv.id)
@@ -55,7 +57,7 @@ export default function V2capEquip({ prof, inventory, onProfile }) {
       {confirm && (
         <V2Modal title="装備を捨てる" color="#ff8844" danger busy={busy}
           confirmLabel="捨てる" onConfirm={discard} onClose={() => setConfirm(null)}>
-          <span style={{ color: RANK_COLOR[confirm.item.rank] }}>[{confirm.item.rank}] {confirm.item.name}</span>（LV{confirm.inv.ilv}）を捨てます。元には戻せません。
+          <span style={{ color: RANK_COLOR[confirm.inv.rank] }}>[{confirm.inv.rank}] {confirm.item.name}</span>（LV{confirm.inv.ilv}）を捨てます。元には戻せません。
         </V2Modal>
       )}
 
@@ -63,24 +65,26 @@ export default function V2capEquip({ prof, inventory, onProfile }) {
       <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
         <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'6px' }}>🛡 装備中</div>
         <div style={{ color: TEXT.sub, fontSize:'10px', marginBottom:'8px', lineHeight:1.7 }}>
-          装備のLV（アイテムLV）が必要LVです。足りなくても着けられますが、1LV足りないごとに効果が5%下がります（最低10%）。
+          {prof.class}が装備できる武器は <span style={{ color:'#cfe2ff' }}>{weaponsOf(prof.class).join('・')}</span> です。
+          防具は重鎧（{ARMOR_EFFECT.重鎧.label}）か軽装（{ARMOR_EFFECT.軽装.label}）を部位ごとに選べます（1部位ごと）。
+          装備のLV（アイテムLV）が必要LVで、足りないと1LVごとに効果が5%下がります（最低10%）。
         </div>
         <div style={{ display:'grid', gap:'3px' }}>
           {SLOTS.map(slot => {
             const w = worn[slot]
             const pct = w ? effectPct(w.inv.ilv, prof.lv) : 100
             return (
-              <div key={slot} style={{ background:'#000818', border:'1px solid #002244', padding:'5px 7px', display:'flex', alignItems:'center', gap:'6px', fontSize:'11px' }}>
+              <div key={slot} style={{ background:'#000818', border:'1px solid #002244', padding:'5px 7px', display:'flex', alignItems:'center', gap:'6px', fontSize:'11px', flexWrap:'wrap' }}>
                 <span style={{ color: TEXT.label, width:'52px', flexShrink:0 }}>{SLOT_LABEL[slot]}</span>
                 {w ? (
                   <>
                     <span style={{ flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                      <span style={{ color: RANK_COLOR[w.item.rank] }}>[{w.item.rank}]</span>{' '}
+                      <span style={{ color: RANK_COLOR[w.inv.rank] }}>[{w.inv.rank}]</span>{' '}
                       <span style={{ color:'#88ccff' }}>{w.item.name}</span>
                       <span style={{ color: w.inv.ilv > prof.lv ? '#ff8844' : TEXT.sub }}> LV{w.inv.ilv}</span>
                       {pct < 100 && <span style={{ color:'#ff8844' }}> 効果{pct}%</span>}
                     </span>
-                    <span style={{ color: TEXT.sub, fontSize:'10px' }}>{statLine(statsAt(w.item, w.inv.ilv, pct))}</span>
+                    <span style={{ color: TEXT.sub, fontSize:'10px' }}>{statLine(statsAt(w.item, w.inv.rank, w.inv.ilv, pct))}</span>
                     <button onClick={() => unequip(slot)} disabled={busy} style={miniBtn('#aa5566')}>外す</button>
                   </>
                 ) : <span style={{ color: TEXT.empty }}>—</span>}
@@ -90,7 +94,7 @@ export default function V2capEquip({ prof, inventory, onProfile }) {
         </div>
       </div>
 
-      {/* 倉庫 */}
+      {/* 持ち物 */}
       <div style={{ ...box, padding:'12px' }}>
         <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'6px' }}>🎒 持っている装備（{(inventory || []).length}）</div>
         <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginBottom:'6px' }}>
@@ -114,29 +118,31 @@ export default function V2capEquip({ prof, inventory, onProfile }) {
           {rows.map(({ inv, item }) => {
             const pct = effectPct(inv.ilv, prof.lv)
             const isWorn = wornIds.has(String(inv.id))
-            const hands = handsLabel(item)
+            const usable = item.part !== '武器' || canEquipType(prof.class, item.type)
+            const effect = item.line ? ARMOR_EFFECT[item.line]?.label : null
             return (
-              <div key={inv.id} style={{ background:'#000818', border:`1px solid ${isWorn ? '#0055aa' : '#002244'}`, padding:'6px 8px' }}>
+              <div key={inv.id} style={{ background:'#000818', border:`1px solid ${isWorn ? '#0055aa' : '#002244'}`, padding:'6px 8px', opacity: usable ? 1 : 0.6 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12px' }}>
-                  <span style={{ color: RANK_COLOR[item.rank] }}>[{item.rank}]</span>
+                  <span style={{ color: RANK_COLOR[inv.rank] }}>[{inv.rank}]</span>
                   <span style={{ color:'#88ccff', flex:1, minWidth:0 }}>
                     {item.name}
-                    <span style={{ color: TEXT.sub, fontSize:'10px', marginLeft:'5px' }}>{item.part}・{item.type}</span>
-                    {hands && <span style={{ color: handsColor(item), fontSize:'10px', marginLeft:'5px' }}>{hands}</span>}
+                    <span style={{ color: TEXT.sub, fontSize:'10px', marginLeft:'5px' }}>{kindLabel(item)}</span>
+                    {effect && <span style={{ color:'#88ddaa', fontSize:'10px', marginLeft:'5px' }}>{effect}</span>}
                     {isWorn && <span style={{ color:'#44aaff', fontSize:'10px', marginLeft:'5px' }}>装備中</span>}
                   </span>
                   <span style={{ color: inv.ilv > prof.lv ? '#ff8844' : '#cfe2ff', fontSize:'11px' }}>LV{inv.ilv}</span>
                 </div>
                 <div style={{ fontSize:'10px', color: TEXT.sub, margin:'3px 0', display:'flex', gap:'8px', flexWrap:'wrap' }}>
-                  <span>戦闘力 {powerAt(item, inv.ilv)}{pct < 100 && <span style={{ color:'#ff8844' }}> → {Math.round(powerAt(item, inv.ilv) * pct / 100)}（効果{pct}%・必要LVまであと{inv.ilv - prof.lv}）</span>}</span>
-                  <span>{statLine(statsAt(item, inv.ilv, pct))}</span>
-                  {handsNote(item) && <span style={{ color:'#ffaa44' }}>{handsNote(item)}</span>}
+                  <span>戦闘力 {powerAt(item, inv.rank, inv.ilv)}{pct < 100 && <span style={{ color:'#ff8844' }}> → {Math.round(powerAt(item, inv.rank, inv.ilv) * pct / 100)}（効果{pct}%・必要LVまであと{inv.ilv - prof.lv}）</span>}</span>
+                  <span>{statLine(statsAt(item, inv.rank, inv.ilv, pct))}</span>
                 </div>
-                <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
-                  {slotsFor(item).map(slot => (
-                    <button key={slot} onClick={() => equip(slot, inv)} disabled={busy || prof.equipped?.[slot] === inv.id}
-                      style={miniBtn('#44aaff')}>{SLOT_LABEL[slot]}に着ける</button>
-                  ))}
+                <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', alignItems:'center' }}>
+                  {usable
+                    ? slotsFor(item).map(slot => (
+                      <button key={slot} onClick={() => equip(slot, inv)} disabled={busy || String(prof.equipped?.[slot]) === String(inv.id)}
+                        style={miniBtn('#44aaff')}>{SLOT_LABEL[slot]}に着ける</button>
+                    ))
+                    : <span style={{ color:'#c69a5c', fontSize:'10px' }}>{prof.class}は{item.type}を装備できない</span>}
                   {!isWorn && <button onClick={() => setConfirm({ inv, item })} disabled={busy} style={miniBtn('#aa5566')}>捨てる</button>}
                 </div>
               </div>

@@ -51,8 +51,8 @@ export const ENEMY_LEVELS = [...LEVELS.entries()].map(([name, v]) => ({ name, ..
 // ★値は `node tools/v2cap-progress.mjs --tune` の出力をそのまま貼る（勘で書き換えないこと）。
 //   そのLVに着いたときの実際の戦闘力の平均（戦士・魔法使い×seed違いで回した平均）
 export const STD_RATIO = [
-  [1, 1.01], [5, 1.05], [10, 1.17], [15, 1.39], [20, 1.65], [27, 1.92], [34, 2.06],
-  [44, 2.22], [54, 2.34], [63, 2.39], [71, 2.45], [79, 2.47], [90, 2.51], [100, 2.54],
+  [1, 1.01], [5, 1.06], [10, 1.21], [15, 1.41], [20, 1.67], [27, 1.97], [34, 2.15],
+  [44, 2.22], [54, 2.35], [63, 2.39], [71, 2.46], [79, 2.47], [90, 2.51], [100, 2.54],
 ]
 export const stdRatioAt = (lv) => {
   const l = Math.max(1, Math.min(100, lv || 1))
@@ -73,7 +73,7 @@ export const stdPowerAt = (lv) => Math.round(bodyPowerAt(lv) * stdRatioAt(lv))
 //   （3日／1週／2週／1か月／3か月／半年／9か月／1年）になるよう
 //   `node tools/v2cap-progress.mjs --tune --boss` で逆算した値（勘で書き換えないこと）
 export const NORMAL_RATIO = 0.6
-export const BOSS_RATIO = { 1: 0.78, 2: 0.7, 3: 0.86, 4: 1.11, 5: 1.14, 6: 1.12, 7: 1.15, 8: 1.1 }
+export const BOSS_RATIO = { 1: 0.85, 2: 0.85, 3: 1.01, 4: 1.2, 5: 1.16, 6: 1.07, 7: 1.12, 8: 1.07 }
 export const roleRatioOf = (role, tier) => (role === 'boss' ? (BOSS_RATIO[tier] || 1.5) : NORMAL_RATIO)
 export const enemyPowerOf = (enemy) => {
   const info = LEVELS.get(enemy.name)

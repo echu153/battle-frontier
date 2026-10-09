@@ -1,21 +1,23 @@
 import { useEffect, useState } from 'react'
 import { STAT_DEFS, STAT_KEYS, calcPower } from '../../v2/lib/stats.js'
 import { rollStamina, msToNextStamina, mmss } from '../../v2/lib/stamina.js'
-import { SLOT_LABEL, SLOTS } from '../../v2/lib/equipment.js'
-import { KIND_COLOR, SKILL_BY_NAME, SKILL_SET_SLOTS, passiveOf } from '../../v2/lib/skills.js'
+import { KIND_COLOR, SKILL_SET_SLOTS } from '../../v2/lib/skills.js'
 import { V2Tip } from '../../v2/components/V2ItemTip.jsx'
 import { RANK_COLOR } from '../../v2/components/v2ui.js'
 import { MAX_LV, needExp, staminaMaxOf } from '../lib/level.js'
-import { JOB_MAX, jobNeed, jobOf, stageOf, stageLabelOf, stageColorOf } from '../lib/jobs.js'
+import { JOB_MAX, jobNeed, jobOf, stageOf, stageLabelOf, stageColorOf, weaponsOf } from '../lib/jobs.js'
+import { SKILL_BY_NAME } from '../lib/skills.js'
+import { SLOTS, SLOT_LABEL, kindLabel } from '../lib/equipment.js'
 import { equippedItems, statBreakdown } from '../lib/loadout.js'
 import { effectPct, powerAt } from '../lib/gear.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — ステータス欄（ホームの左）
 //   見た目は今のⅡ（V2Status.jsx）にそろえる。違うのは
-//   ・LVとジョブLVの2本のバー（LV100・ジョブLV30で止まる）
-//   ・ステの内訳（本体＋ジョブ＋装備）をカーソルで出す
-//   ・装備の升目にアイテムLVと、必要LVに足りないときの効果%
+//   ・LVとJBLVの2本のバー（LV100・JBLV30で止まる）
+//   ・ステの内訳（本体＋ジョブ＋装備＋軽装のAGI）をカーソルで出す
+//   ・装備は7枠（武器1・頭・鎧・腕・足・アクセ2）。アイテムLVと、必要LVに足りないときの効果%
+//   ・防具のメリット（重鎧＝受けるダメージ−%／軽装＝AGI+%）の合計
 // ============================================================
 const cell = {
   background:'#000818', border:'1px solid #002244', padding:'3px 6px',
@@ -49,11 +51,11 @@ export default function V2capStatus({ prof, inventory }) {
   const stamMax = staminaMaxOf(prof.lv)
   const stamNow = rollStamina(prof.stamina, prof.stamina_at, stamMax, now).n
   const stamNext = msToNextStamina(prof.stamina, prof.stamina_at, stamMax, now)
-  const passive = passiveOf(prof.class)
 
   const statCell = (k, i) => {
     const d = STAT_DEFS[k]
-    const add = bd.job[k] + bd.gear[k]
+    const extra = k === 'agi' ? bd.armorAgi : 0
+    const add = bd.job[k] + bd.gear[k] + extra
     return (
       <V2Tip key={k} alignRight={i % 2 === 1} color={d.color} width="max(100%, 220px)"
         style={{ ...cell, justifyContent:'flex-start' }}
@@ -65,6 +67,7 @@ export default function V2capStatus({ prof, inventory }) {
             本体 {bd.body[k]}
             {bd.job[k] > 0 && <> ＋ ジョブ <span style={{ color:'#ffcc00' }}>{bd.job[k]}</span></>}
             {bd.gear[k] > 0 && <> ＋ 装備 <span style={{ color:'#44ff88' }}>{bd.gear[k]}</span></>}
+            {extra > 0 && <> ＋ 軽装 <span style={{ color:'#88ddaa' }}>{extra}</span></>}
           </div>
         </>}>
         <span style={{ color: d.color, fontSize:'9px', flexShrink:0 }}>{d.label}</span>
@@ -84,14 +87,14 @@ export default function V2capStatus({ prof, inventory }) {
       <div key={slot} style={cell}>
         <span style={{ color:'#7fa6d0', fontSize:'9px', flexShrink:0 }}>{SLOT_LABEL[slot]}</span>
         {w ? (
-          <V2Tip alignRight={i % 2 === 1} width="220px" style={{ display:'block', flex:1, minWidth:0 }}
+          <V2Tip alignRight={i % 2 === 1} width="230px" style={{ display:'block', flex:1, minWidth:0 }}
             body={<>
-              <div><span style={{ color: RANK_COLOR[w.item.rank] }}>[{w.item.rank}]</span> {w.item.name}</div>
+              <div><span style={{ color: RANK_COLOR[w.inv.rank] }}>[{w.inv.rank}]</span> {w.item.name}（{kindLabel(w.item)}）</div>
               <div>アイテムLV {w.inv.ilv}（必要LV {w.inv.ilv}）</div>
-              <div>戦闘力 {powerAt(w.item, w.inv.ilv)}{pct < 100 && <span style={{ color:'#ff8844' }}> → {Math.round(powerAt(w.item, w.inv.ilv) * pct / 100)}（効果{pct}%）</span>}</div>
+              <div>戦闘力 {powerAt(w.item, w.inv.rank, w.inv.ilv)}{pct < 100 && <span style={{ color:'#ff8844' }}> → {Math.round(powerAt(w.item, w.inv.rank, w.inv.ilv) * pct / 100)}（効果{pct}%）</span>}</div>
             </>}>
             <span style={{ ...valueCell, display:'block' }}>
-              <span style={{ color: RANK_COLOR[w.item.rank] }}>[{w.item.rank}]</span>{' '}
+              <span style={{ color: RANK_COLOR[w.inv.rank] }}>[{w.inv.rank}]</span>{' '}
               <span style={{ color:'#88ccff' }}>{w.item.name}</span>
               <span style={{ color:'#93a9be' }}> LV{w.inv.ilv}</span>
               {pct < 100 && <span style={{ color:'#ff8844' }}> {pct}%</span>}
@@ -118,6 +121,10 @@ export default function V2capStatus({ prof, inventory }) {
     )
   }
 
+  const armorParts = []
+  if (bd.armor.takenPct) armorParts.push(`受けるダメージ${bd.armor.takenPct}%`)
+  if (bd.armor.agiPct) armorParts.push(`AGI+${bd.armor.agiPct}%`)
+
   return (
     <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'10px', marginBottom:'8px', fontFamily:'monospace' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:'4px' }}>
@@ -137,7 +144,7 @@ export default function V2capStatus({ prof, inventory }) {
       <Bar label={`LV ${prof.lv}${prof.lv >= MAX_LV ? '（上限）' : ''}`}
         val={prof.lv >= MAX_LV ? 'MAX' : `${prof.exp.toLocaleString()} / ${lvNeed.toLocaleString()}`}
         pct={prof.lv >= MAX_LV ? 100 : (prof.exp / lvNeed) * 100} color="#44ff88" />
-      <Bar label={`ジョブLV ${job.lv}${job.lv >= JOB_MAX ? '（上限）' : ''}`}
+      <Bar label={`JBLV ${job.lv}${job.lv >= JOB_MAX ? '（上限）' : ''}`}
         val={job.lv >= JOB_MAX ? 'MAX' : `${job.exp.toLocaleString()} / ${jNeed.toLocaleString()}`}
         pct={job.lv >= JOB_MAX ? 100 : (job.exp / jNeed) * 100} color="#ffcc00" />
       <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#7fa6d0', marginBottom:'6px' }}>
@@ -152,7 +159,10 @@ export default function V2capStatus({ prof, inventory }) {
         {STAT_KEYS.map(statCell)}
       </div>
 
-      <div style={{ color:'#7fa6d0', fontSize:'9px', margin:'6px 0 2px' }}>装備</div>
+      <div style={{ color:'#7fa6d0', fontSize:'9px', margin:'6px 0 2px', display:'flex', justifyContent:'space-between', gap:'6px' }}>
+        <span>装備（{prof.class}の武器：{weaponsOf(prof.class).join('・')}）</span>
+        {armorParts.length > 0 && <span style={{ color:'#88ddaa' }}>{armorParts.join('・')}</span>}
+      </div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'2px', marginBottom:'6px' }}>
         {SLOTS.map(eqCell)}
       </div>
@@ -161,12 +171,6 @@ export default function V2capStatus({ prof, inventory }) {
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'2px' }}>
         {Array.from({ length: SKILL_SET_SLOTS }, (_, i) => skillCell(i))}
       </div>
-      {passive && (
-        <div style={{ ...cell, marginTop:'2px' }}>
-          <span style={{ color:'#7fa6d0', fontSize:'9px', flexShrink:0 }}>パッシブ</span>
-          <span style={{ ...valueCell, color: KIND_COLOR.passive }}>{passive.name}</span>
-        </div>
-      )}
     </div>
   )
 }

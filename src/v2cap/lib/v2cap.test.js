@@ -3,8 +3,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { STAT_KEYS, STAT_DEFS, calcPower, INITIAL_STATS } from '../../v2/lib/stats.js'
-import { CATALOG, ITEM_BY_ID } from '../../v2/lib/equipment.js'
-import { SKILLS, isPassive } from '../../v2/lib/skills.js'
+import { skillValue, VALUE_TABLE, MP_TABLE, BUFF_PER_MP, HEAL_PER_MP, MPREGEN_PER_MP, SKILLS as V2_SKILLS } from '../../v2/lib/skills.js'
 import { createSide } from '../../v2/lib/battle.js'
 import { AREAS } from '../../v2/lib/enemies.js'
 import {
@@ -14,11 +13,17 @@ import {
 import {
   CLASSES, START_CLASSES, STAGES, JOB_MAX, JOB_BONUS, jobNeed, jobTotalTo, bonusSeqOf,
   bonusPointsAt, jobBonusStats, learnOrderOf, learnAtOf, skillsLearnedBy, applyJobExp,
-  canBecome, missingReqOf,
+  canBecome, weaponsOf, canEquipType, attackKindOf,
 } from './jobs.js'
-import { powerAt, effectPct, statsAt, GEAR_RATIO } from './gear.js'
+import { SKILLS, NEW_SKILLS, SKILL_BY_NAME, setMpCost, validateSkillSet } from './skills.js'
+import {
+  BASE_ITEMS, ITEM_BY_ID, WEAPON_TYPES, ARMOR_LINES, ARMOR_PARTS, PART_MULT, SLOTS, ARMOR_EFFECT,
+  weaponsOfType, armorsOf, slotsFor,
+} from './equipment.js'
+import { powerAt, effectPct, statsAt, armorEffects, GEAR_RATIO, SET_PART_SUM } from './gear.js'
 import { TIER_LV, ENEMY_LEVELS, enemyLvOf, stdPowerAt, BOSS_RATIO, STD_RATIO, enemyPowerOf } from './areas.js'
-import { toFighter, statBreakdown } from './loadout.js'
+import { toFighter, statBreakdown, equippedItems } from './loadout.js'
+import { rollBaseItem, rollEquipDrop, pickEncounter } from './sortie.js'
 
 const rngOf = (seed) => { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }
 
@@ -27,7 +32,6 @@ test('【確定】LV上限は100。必要EXPは上がるほど重くなる（MMO
   assert.equal(MAX_LV, 100)
   assert.equal(needExp(100), 0)
   for (let l = 1; l < 99; l++) assert.ok(needExp(l + 1) > needExp(l), `LV${l}→${l + 1} より LV${l + 1}→${l + 2} が重い`)
-  // そのLVで要る勝ち数（必要EXP ÷ 1勝のEXP）も上がり続ける
   for (let l = 1; l < 99; l++) assert.ok(needExp(l + 1) / baseExpOf(l + 1) > needExp(l) / baseExpOf(l))
   // 設計書§2の表（係数0.335＝tools/v2cap-progress.mjs で1年でLV100前後になるよう決めた）
   assert.deepEqual([1, 5, 10, 20, 30, 50, 70, 90, 99].map(needExp), [3, 117, 637, 3886, 11759, 49413, 129679, 268637, 354600])
@@ -67,93 +71,148 @@ test('【確定】スタミナの最大値はLVで伸びる（10＋LV÷5）', ()
   assert.equal(staminaMaxOf(100), 30)
 })
 
-// ===== ジョブLV =====
-test('【確定】職業の段階：初期＝ノーブル＋6職／一次＝12職（元の初期職のJLV30で就ける）', () => {
-  assert.deepEqual(START_CLASSES, ['ノーブル', '戦士', '弓使い', '魔法使い', '僧侶', '格闘家', 'サモナー'])
-  const shoki = CLASSES.filter(c => c.stage === 'shoki')
-  const ichiji = CLASSES.filter(c => c.stage === 'ichiji')
-  assert.equal(shoki.length, 7)
-  assert.equal(ichiji.length, 12)
-  for (const c of ichiji) {
-    assert.ok(START_CLASSES.includes(c.req.cls), `${c.id}の元は初期職`)
-    assert.equal(c.req.jlv, JOB_MAX)
+// ===== 職業 =====
+test('【確定】初期職は10職。装備できる武器は職業ごとに3種（ユーザーの表のとおり）', () => {
+  assert.deepEqual(START_CLASSES, ['戦士', '槍使い', '格闘家', '盗賊', '弓使い', '銃士', '魔法使い', '呪術師', '僧侶', '薬師'])
+  const table = {
+    戦士: ['両手剣', '斧', '鈍器'], 槍使い: ['槍', '片手剣', '投擲'], 格闘家: ['拳', '鈍器', '杖'],
+    盗賊: ['短剣', '片手剣', '投擲'], 弓使い: ['弓', '短剣', '片手剣'], 銃士: ['銃', '片手剣', '投擲'],
+    魔法使い: ['杖', '書', '短剣'], 呪術師: ['杖', '短剣', '投擲'], 僧侶: ['鈍器', '杖', '書'], 薬師: ['短剣', '投擲', '書'],
   }
-  // ★複合上位職・特殊職はまだ置き場が決まっていない（二次・三次を作るときに決める）
-  for (const id of ['賢者', '聖騎士', '魔法剣士', 'ギャンブラー', '竜騎士']) assert.ok(!CLASSES.some(c => c.id === id), `${id}はまだ無い`)
+  for (const [cls, list] of Object.entries(table)) assert.deepEqual(weaponsOf(cls), list, `${cls}の武器`)
+  for (const list of Object.values(table)) for (const w of list) assert.ok(WEAPON_TYPES.includes(w), `${w}は12種にある`)
 })
 
-test('【確定】ジョブLVは最大30・上の段階ほど上がりにくい', () => {
+test('【確定】ノーブル・サモナーはなくし、一次職も一旦なし（初期職だけ）', () => {
+  assert.equal(CLASSES.length, 10)
+  assert.ok(CLASSES.every(c => c.stage === 'shoki' && !c.req))
+  for (const id of ['ノーブル', 'サモナー', '侍', '狂戦士', '聖職者', '賢者']) assert.ok(!CLASSES.some(c => c.id === id), `${id}は無い`)
+  assert.deepEqual(Object.keys(STAGES), ['shoki'])
+  for (const c of CLASSES) assert.equal(canBecome(c.id, {}), true, `${c.id}は条件なし`)
+})
+
+test('通常攻撃は 槍使い・盗賊・銃士・戦士・格闘家・弓使い＝物理／魔法使い・呪術師・僧侶・薬師＝魔法', () => {
+  for (const c of ['戦士', '槍使い', '格闘家', '盗賊', '弓使い', '銃士']) assert.equal(attackKindOf(c), 'phys', c)
+  for (const c of ['魔法使い', '呪術師', '僧侶', '薬師']) assert.equal(attackKindOf(c), 'mag', c)
+})
+
+test('【確定】JBLVは最大30。初期職のJBLV30まで＝LV31のころに入っているEXP（実測で約2週間）', () => {
   assert.equal(JOB_MAX, 30)
   assert.equal(jobNeed('shoki', 30), 0)
-  for (let j = 1; j < 30; j++) assert.ok(jobNeed('ichiji', j) > jobNeed('shoki', j))
-  // 初期職のJLV30まで＝LV31のころに入っているEXP（1日1時間で約2週間＝実測の中央値13日目）
   const total = jobTotalTo('shoki', 30)
   assert.equal(total, 105228)
   assert.ok(total >= totalExpTo(31) && total < totalExpTo(32), `初期職の合計 ${total} はLV31〜32のあいだ`)
-  assert.equal(STAGES.ichiji.mult, 3)
 })
 
-test('【確定】ジョブのステは職業ごとに決まった配分で、その職業の間だけ（JLV30で初期29点・一次58点）', () => {
+test('【確定】ジョブのステは職業ごとに決まった配分で、その職業の間だけ（JBLV30で29点）', () => {
   for (const c of CLASSES) {
     const w = JOB_BONUS[c.id]
     assert.ok(w, `${c.id}の配分がある`)
     const sum = Object.values(w).reduce((a, b) => a + b, 0)
-    assert.equal(sum, (JOB_MAX - 1) * STAGES[c.stage].perLv, `${c.id}の合計`)
+    assert.equal(sum, 29, `${c.id}の合計`)
     const seq = bonusSeqOf(c.id)
     assert.equal(seq.length, sum)
     for (const [k, v] of Object.entries(w)) assert.equal(seq.filter(x => x === k).length, v, `${c.id}の${k}`)
     const full = jobBonusStats(c.id, JOB_MAX)
     for (const k of STAT_KEYS) assert.equal(full[k], (w[k] || 0) * STAT_DEFS[k].unit)
-    assert.equal(calcPower(jobBonusStats(c.id, 1)), 0, 'JLV1ではまだ何も上がっていない')
+    assert.equal(calcPower(jobBonusStats(c.id, 1)), 0, 'JBLV1ではまだ何も上がっていない')
     assert.equal(bonusPointsAt(c.id, JOB_MAX), sum)
-  }
-})
-
-test('ジョブのステの並びは「どこで止めても配分どおりに近い」（1つのステへ偏らない）', () => {
-  for (const c of CLASSES) {
-    const w = JOB_BONUS[c.id]
-    const total = Object.values(w).reduce((a, b) => a + b, 0)
-    const seq = bonusSeqOf(c.id)
-    for (let n = 1; n <= total; n++) {
+    // どこで止めても配分どおりに近い（1つのステへ偏らない）
+    for (let n = 1; n <= sum; n++) {
       for (const [k, v] of Object.entries(w)) {
         const got = seq.slice(0, n).filter(x => x === k).length
-        assert.ok(Math.abs(got - v * n / total) <= 1.0001, `${c.id} ${n}点目の${k}: ${got}（目安${(v * n / total).toFixed(2)}）`)
+        assert.ok(Math.abs(got - v * n / sum) <= 1.0001, `${c.id} ${n}点目の${k}`)
       }
     }
   }
 })
 
-test('スキルはジョブLVで覚える（初期 1/5/10/15/20・一次 1/4/…/28）。転職5回が要った技は後ろ', () => {
+// ===== スキル =====
+test('スキルはJBLV 1／5／10／15／20 で1つずつ覚える（どの職業も5個）', () => {
   assert.deepEqual(STAGES.shoki.learnAt, [1, 5, 10, 15, 20])
-  assert.deepEqual(STAGES.ichiji.learnAt, [1, 4, 7, 10, 13, 16, 19, 22, 25, 28])
   for (const c of CLASSES) {
-    const order = learnOrderOf(c.id)
-    // ⚠今のⅡのスキル数が変わったら、覚えるジョブLVの表も直すこと（覚えられない技が出る）
-    assert.equal(order.length, learnAtOf(c.id).length, `${c.id}のスキル数と覚えるジョブLVの数`)
-    assert.ok(order.every(s => !isPassive(s)), 'パッシブは覚える技に入れない')
-    const firstReq = order.findIndex(s => s.reqJobs)
-    if (firstReq >= 0) assert.ok(order.slice(firstReq).every(s => s.reqJobs), `${c.id}：転職5回が要った技は後ろにまとまる`)
-    assert.equal(skillsLearnedBy(c.id, JOB_MAX).length, order.length, `${c.id}はJLV30で全部覚えている`)
-    assert.equal(skillsLearnedBy(c.id, 1).length, 1, `${c.id}はJLV1で1つ覚えている`)
+    assert.equal(learnOrderOf(c.id).length, learnAtOf(c.id).length, `${c.id}のスキル数`)
+    assert.equal(skillsLearnedBy(c.id, 1).length, 1, `${c.id}はJBLV1で1つ`)
+    assert.equal(skillsLearnedBy(c.id, JOB_MAX).length, 5, `${c.id}はJBLV30で全部`)
   }
-})
-
-test('ジョブEXPを入れると、JLV30で止まり、覚えた技が返る', () => {
   const r = applyJobExp({}, '戦士', jobTotalTo('shoki', 30) + 999999, ['体当たり'])
   assert.equal(r.lv, 30)
   assert.equal(r.exp, 0)
   assert.deepEqual(r.learned, ['強撃', '防御崩し', '防御態勢', 'シールドアタック'])
-  assert.equal(r.ups.length, 29)
 })
 
-test('一次職は元の初期職のJLV30が要る', () => {
-  assert.equal(canBecome('侍', {}), false)
-  assert.ok(missingReqOf('侍', { 戦士: { lv: 29, exp: 0 } }))
-  assert.equal(canBecome('侍', { 戦士: { lv: 30, exp: 0 } }), true)
-  assert.equal(canBecome('戦士', {}), true)
+test('【確定】戦士・弓使い・魔法使い・僧侶・格闘家のスキルは今のⅡのまま（中身も並びも同じ）', () => {
+  for (const cls of ['戦士', '弓使い', '魔法使い', '僧侶', '格闘家']) {
+    const v2 = V2_SKILLS.filter(s => s.cls === cls)
+    assert.deepEqual(learnOrderOf(cls), v2, `${cls}`)
+  }
+})
+
+test('【確定】新しい5職（槍使い・盗賊・銃士・呪術師・薬師）の25技は、今のⅡの初期職と同じ帯（価値・消費MP）', () => {
+  assert.equal(NEW_SKILLS.length, 25)
+  const band = (t, proc) => { const ks = Object.keys(t).map(Number).sort((a, b) => b - a); return t[ks.find(k => proc >= k) ?? ks[ks.length - 1]] }
+  for (const s of NEW_SKILLS) {
+    assert.ok(['槍使い', '盗賊', '銃士', '呪術師', '薬師'].includes(s.cls), s.name)
+    if (s.kind === 'phys' || s.kind === 'mag') {
+      assert.ok(Math.abs(skillValue(s) - band(VALUE_TABLE.basic[s.kind], s.proc)) <= 0.03, `${s.name}の価値 ${skillValue(s)}`)
+      assert.equal(s.mp, band(MP_TABLE.basic[s.kind], s.proc), `${s.name}の消費MP`)
+      assert.ok(s.proc >= 85, `${s.name}：初期職は発動率85%以上`)
+    } else if (s.kind === 'buff') {
+      const tot = [...Object.values(s.buff.self || {}), ...Object.values(s.buff.enemy || {})].reduce((a, b) => a + Math.abs(b), 0)
+      assert.ok(tot <= s.mp * BUFF_PER_MP.basic + 0.01, `${s.name}：バフの合計 ${tot}% は MP×3.4 まで`)
+    } else if (s.heal) {
+      assert.ok(s.heal.rate <= s.mp * HEAL_PER_MP.basic + 1e-9, `${s.name}の回復量`)
+    } else if (s.mpRegen) {
+      assert.ok(s.mpRegen.rate * s.mpRegen.turns <= s.mp * MPREGEN_PER_MP.basic + 1e-9, `${s.name}のMP回復`)
+    }
+  }
+  assert.equal(new Set(SKILLS.map(s => s.name)).size, SKILLS.length, 'スキル名は重複しない')
+  assert.ok(!NEW_SKILLS.some(s => V2_SKILLS.some(v => v.name === s.name)), '今のⅡの技と名前がぶつからない')
+})
+
+test('編成の想定利用MPは、この版の名簿で数える（新しい技の消費MPが0に見えない）', () => {
+  assert.equal(setMpCost([{ name:'災いの呪い', uses: 2 }], '呪術師'), 26)
+  assert.equal(setMpCost([{ name:'災いの呪い', uses: 1 }], '戦士'), 26, '他職は消費MP2倍')
+  assert.equal(validateSkillSet([{ name:'災いの呪い', uses: 1 }], ['災いの呪い'], 12, '呪術師'), '想定利用MPが最大MPを超えています（13 / 12）')
+  assert.equal(validateSkillSet([{ name:'呪弾', uses: 2 }], ['呪弾'], 12, '呪術師'), null)
+  assert.ok(SKILL_BY_NAME['気付け薬'])
 })
 
 // ===== 装備 =====
+test('【確定】武器は12種・盾なし。基本装備ごとに配分が違う（武器36・防具16・アクセ4）', () => {
+  assert.deepEqual(WEAPON_TYPES, ['片手剣', '両手剣', '斧', '槍', '鈍器', '短剣', '拳', '弓', '銃', '杖', '書', '投擲'])
+  const weapons = BASE_ITEMS.filter(i => i.part === '武器')
+  assert.equal(weapons.length, 36)
+  for (const t of WEAPON_TYPES) assert.ok(weaponsOfType(t).length >= 2, `${t}は基本装備が2つ以上`)
+  assert.ok(!BASE_ITEMS.some(i => i.name.includes('盾') || i.type === '盾'), '盾は無い')
+  assert.deepEqual(ARMOR_LINES, ['重鎧', '軽装'])
+  for (const part of ARMOR_PARTS) for (const line of ARMOR_LINES) assert.equal(armorsOf(part, line).length, 2, `${line}・${part}`)
+  assert.equal(BASE_ITEMS.filter(i => i.part === 'アクセ').length, 4)
+  for (const i of BASE_ITEMS) {
+    assert.equal(Object.values(i.dist).reduce((a, b) => a + b, 0), 100, `${i.name}の配分の合計`)
+    assert.ok(!('hp' in i.dist) && !('mp' in i.dist) && !('luk' in i.dist), `${i.name}：HP・MP・LUKは載せない`)
+  }
+  assert.equal(new Set(BASE_ITEMS.map(i => i.id)).size, BASE_ITEMS.length, 'IDは重複しない')
+})
+
+test('【確定】武器は1本だけ。枠は7つ（武器・頭・鎧・腕・足・アクセ2）', () => {
+  assert.deepEqual(SLOTS, ['weapon', 'head', 'body', 'arm', 'foot', 'acc1', 'acc2'])
+  for (const i of BASE_ITEMS) assert.ok(slotsFor(i).length >= 1, i.name)
+  assert.deepEqual(slotsFor(ITEM_BY_ID['w:大剣']), ['weapon'], '両手剣も武器の枠1つ')
+  assert.equal(PART_MULT.武器, 2.0)
+  const sum = PART_MULT.武器 + PART_MULT.頭 + PART_MULT.鎧 + PART_MULT.腕 + PART_MULT.足 + PART_MULT.アクセ * 2
+  assert.ok(Math.abs(sum - SET_PART_SUM) < 1e-9, `7枠の倍率の合計 ${sum}`)
+})
+
+test('【確定】同じLVのCランクを全部の枠にそろえると、本体（LVぶん）と同じくらい', () => {
+  assert.equal(GEAR_RATIO, 1)
+  const set = ['w:ロングソード', 'a:鉄兜', 'a:プレートメイル', 'a:鉄の籠手', 'a:鉄靴', 'c:リング', 'c:リング'].map(id => ITEM_BY_ID[id])
+  for (const lv of [20, 50, 100]) {
+    const sum = set.reduce((t, it) => t + powerAt(it, 'C', lv), 0)
+    assert.ok(Math.abs(sum - bodyPowerAt(lv)) / bodyPowerAt(lv) < 0.03, `LV${lv}：装備${sum} ≒ 本体${bodyPowerAt(lv)}`)
+  }
+})
+
 test('【確定】必要LVに足りないと、不足1LVごとに効果-5%・下げ幅は最大90%', () => {
   assert.equal(effectPct(10, 10), 100)
   assert.equal(effectPct(5, 10), 100, '足りていれば100%')
@@ -161,26 +220,85 @@ test('【確定】必要LVに足りないと、不足1LVごとに効果-5%・下
   assert.equal(effectPct(20, 10), 50)
   assert.equal(effectPct(28, 10), 10)
   assert.equal(effectPct(100, 1), 10, 'どれだけ足りなくても10%は残る')
-})
-
-test('【確定】同じLVのCランクを8枠そろえると、本体（LVぶん）と同じくらい', () => {
-  assert.equal(GEAR_RATIO, 1)
-  const C = (id) => ITEM_BY_ID[id]
-  const set = [C('w:剣:C'), C('w:剣:C'), C('a:重装:頭:C'), C('a:重装:鎧:C'), C('a:重装:腕:C'), C('a:重装:足:C'), C('c:リング:C'), C('c:リング:C')]
-  for (const lv of [20, 50, 100]) {
-    const sum = set.reduce((t, it) => t + powerAt(it, lv), 0)
-    assert.ok(Math.abs(sum - bodyPowerAt(lv)) / bodyPowerAt(lv) < 0.03, `LV${lv}：装備${sum} ≒ 本体${bodyPowerAt(lv)}`)
-  }
-})
-
-test('装備のステは配分どおりで、合計は効果%を掛けた戦闘力', () => {
-  for (const item of CATALOG) {
+  for (const item of BASE_ITEMS) {
     for (const [ilv, pct] of [[1, 100], [37, 100], [80, 55], [100, 10]]) {
-      const s = statsAt(item, ilv, pct)
-      assert.equal(Object.values(s).reduce((a, b) => a + b, 0), Math.round(powerAt(item, ilv) * pct / 100), `${item.name} LV${ilv}`)
-      assert.equal(s.hp + s.mp + s.luk, 0, 'HP・MP・LUKは装備に載らない（今のⅡと同じ）')
+      const s = statsAt(item, 'B', ilv, pct)
+      assert.equal(Object.values(s).reduce((a, b) => a + b, 0), Math.round(powerAt(item, 'B', ilv) * pct / 100), `${item.name} LV${ilv}`)
     }
   }
+})
+
+test('【確定】防具のメリットは 重鎧＝受けるダメージ−3%／軽装＝AGI+5%（1部位ごと・デメリットなし）', () => {
+  assert.equal(ARMOR_EFFECT.重鎧.takenPct, -3)
+  assert.equal(ARMOR_EFFECT.軽装.agiPct, 5)
+  assert.ok(!ARMOR_EFFECT.重鎧.agiPct && !ARMOR_EFFECT.軽装.takenPct, 'デメリットは付けない')
+  const heavy = armorsOf('頭', '重鎧')[0], light = armorsOf('頭', '軽装')[0]
+  assert.deepEqual(armorEffects([{ item: heavy, pct: 100 }, { item: heavy, pct: 100 }]), { takenPct: -6, agiPct: 0, takenMult: 0.94 })
+  assert.deepEqual(armorEffects([{ item: light, pct: 100 }]), { takenPct: 0, agiPct: 5, takenMult: 1 })
+  // 必要LVに足りないときは、メリットも同じ割合で弱まる
+  assert.deepEqual(armorEffects([{ item: heavy, pct: 50 }]), { takenPct: -1.5, agiPct: 0, takenMult: 0.99 })
+})
+
+// ===== 戦闘用のキャラ =====
+const baseProf = (over = {}) => ({ username:'t', class:'戦士', lv: 30, ...INITIAL_STATS, jobs: { 戦士: { lv: 30, exp: 0 } }, skill_set: [], equipped: {}, ...over })
+
+test('戦闘のステ＝本体＋いまの職業のジョブのステ＋装備（必要LV不足ぶんを引く）＋軽装のAGI', () => {
+  const inv = [
+    { id: 1, base_id: 'w:大剣', rank: 'C', ilv: 40 },
+    { id: 2, base_id: 'a:ブーツ', rank: 'C', ilv: 30 },
+  ]
+  const prof = baseProf({ equipped: { weapon: 1, foot: 2 } })
+  const bd = statBreakdown(prof, inv)
+  assert.deepEqual(bd.job, jobBonusStats('戦士', 30))
+  const gearW = Math.round(powerAt(ITEM_BY_ID['w:大剣'], 'C', 40) * 50 / 100)
+  const gearF = powerAt(ITEM_BY_ID['a:ブーツ'], 'C', 30)
+  assert.equal(calcPower(bd.gear), gearW + gearF, 'LV30でLV40の装備＝効果50%')
+  assert.equal(bd.armor.agiPct, 5)
+  assert.equal(bd.armorAgi, Math.round((bd.body.agi + bd.job.agi + bd.gear.agi) * 0.05))
+  assert.equal(bd.total.agi, bd.body.agi + bd.job.agi + bd.gear.agi + bd.armorAgi)
+})
+
+test('【確定】いまの職業で装備できない武器は効かない（数えない）', () => {
+  const inv = [{ id: 1, base_id: 'w:長杖', rank: 'C', ilv: 30 }]
+  assert.equal(Object.keys(equippedItems(baseProf({ equipped: { weapon: 1 } }), inv)).length, 0, '戦士は杖を装備できない')
+  assert.equal(Object.keys(equippedItems(baseProf({ class:'魔法使い', equipped: { weapon: 1 } }), inv)).length, 1, '魔法使いはできる')
+  assert.equal(canEquipType('戦士', '杖'), false)
+})
+
+test('【確定】職業補正は一旦なし（noClassBonus）。重鎧の軽減は taken、通常攻撃の種類は kind で渡す', () => {
+  const inv = [1, 2, 3, 4].map(id => ({ id, base_id: ['a:鉄兜', 'a:プレートメイル', 'a:鉄の籠手', 'a:鉄靴'][id - 1], rank: 'C', ilv: 30 }))
+  const f = toFighter(baseProf({ class:'薬師', jobs: { 薬師: { lv: 5, exp: 0 } }, equipped: { head: 1, body: 2, arm: 3, foot: 4 } }), inv)
+  assert.equal(f.noClassBonus, true)
+  assert.equal(f.kind, 'mag', '薬師の通常攻撃は魔法')
+  assert.deepEqual(f.taken, { phys: 0.88, mag: 0.88 }, '重鎧4部位＝受けるダメージ−12%')
+  // 今のⅡの戦闘エンジンは noClassBonus を見て職業補正を掛けない（渡さなければ従来どおり）
+  const berserk = createSide({ name:'b', cls:'狂戦士', stats:{ ...INITIAL_STATS }, slots:[], noClassBonus: true })
+  assert.equal(berserk.buffs.str || 0, 0)
+  assert.ok((createSide({ name:'b', cls:'狂戦士', stats:{ ...INITIAL_STATS }, slots:[] }).buffs.str || 0) > 0)
+})
+
+// ===== ドロップ =====
+test('【確定】武器はいまの職業が装備できる3種から落ちる。防具は重鎧と軽装の両方が落ちる', () => {
+  const rng = rngOf(7)
+  for (const cls of START_CLASSES) {
+    for (let i = 0; i < 300; i++) {
+      const w = rollBaseItem('武器', cls, rng)
+      assert.ok(canEquipType(cls, w.type), `${cls}に${w.type}が落ちた`)
+    }
+  }
+  const lines = new Set(Array.from({ length: 200 }, () => rollBaseItem('鎧', '戦士', rng).line))
+  assert.deepEqual([...lines].sort(), ['軽装', '重鎧'])
+  // 落ちたものはアイテムLV＝敵のLV・ランクはエリアの分布の中
+  let got = 0
+  for (let i = 0; i < 20000 && got < 50; i++) {
+    const enc = pickEncounter(1, 0, new Date(Date.UTC(2026, 0, 1, i % 24)), rng)
+    const d = rollEquipDrop(enc, '盗賊', new Date(), rng)
+    if (!d) continue
+    got++
+    assert.equal(d.ilv, enc.lv)
+    assert.ok(Object.keys(AREAS[0].dropRanks).includes(d.rank), d.rank)
+  }
+  assert.ok(got >= 50, 'ドロップを拾えている')
 })
 
 // ===== 敵のLV =====
@@ -189,8 +307,7 @@ test('【確定】敵は敵ごとに決まったLVを持つ（帯の中）。ボ
     const [lo, hi] = TIER_LV[a.tier]
     for (const e of [...a.enemies, ...(a.timed || [])]) {
       const lv = enemyLvOf(e.name)
-      assert.ok(lv >= lo && lv <= hi, `${e.name} LV${lv} は ${lo}〜${hi}`)
-      assert.ok(lv < hi, `${e.name}はボスより下`)
+      assert.ok(lv >= lo && lv < hi, `${e.name} LV${lv} は ${lo}〜${hi}（ボスより下）`)
     }
     assert.equal(enemyLvOf(a.boss.name), hi, `${a.boss.name}は帯の上限`)
   }
@@ -202,35 +319,6 @@ test('敵の強さの基準（標準の戦闘力）は右肩上がり・ボス�
   for (let t = 1; t <= 8; t++) assert.ok(BOSS_RATIO[t] > 0, `帯${t}のボスの倍率`)
   assert.equal(STD_RATIO[0][0], 1)
   assert.equal(STD_RATIO[STD_RATIO.length - 1][0], 100)
-  // 同じLVなら雑魚はプレイヤーの0.6倍
   const slime = AREAS[0].enemies.find(e => e.name === 'スライム')
   assert.equal(enemyPowerOf(slime), Math.round(stdPowerAt(enemyLvOf('スライム')) * 0.6))
-})
-
-// ===== 戦闘 =====
-test('【確定】職業補正は一旦なし（runBattle に noClassBonus を渡す）。パッシブは効く', () => {
-  const prof = { username:'t', class:'狂戦士', lv: 30, ...INITIAL_STATS, jobs: { 狂戦士: { lv: 10, exp: 0 } }, skill_set: [], equipped: {} }
-  const f = toFighter(prof, [])
-  assert.equal(f.noClassBonus, true)
-  const side = createSide(f)
-  assert.equal(side.buffs.str || 0, 0, '狂戦士のSTR+10%が乗っていない')
-  assert.ok(side.passives.length > 0, '狂戦士のパッシブ（バーサク）は効く')
-  // 今のⅡ（noClassBonus なし）は従来どおり職業補正が乗る
-  const v2 = createSide({ ...f, noClassBonus: undefined })
-  assert.ok((v2.buffs.str || 0) > 0)
-})
-
-test('戦闘のステ＝本体＋いまの職業のジョブのステ＋装備（必要LV不足ぶんを引く）', () => {
-  const inv = [{ id: 1, equip_id: 'w:剣:C', ilv: 40 }]
-  const prof = { username:'t', class:'戦士', lv: 30, ...INITIAL_STATS, jobs: { 戦士: { lv: 30, exp: 0 }, 侍: { lv: 5, exp: 0 } }, equipped: { right: 1 } }
-  const bd = statBreakdown(prof, inv)
-  assert.deepEqual(bd.job, jobBonusStats('戦士', 30))
-  assert.equal(calcPower(bd.gear), Math.round(powerAt(ITEM_BY_ID['w:剣:C'], 40) * 50 / 100), 'LV30でLV40の装備＝効果50%')
-  // 転職するとジョブのステは入れ替わる（侍のJLV5ぶん）
-  const asSamurai = statBreakdown({ ...prof, class:'侍' }, inv)
-  assert.deepEqual(asSamurai.job, jobBonusStats('侍', 5))
-})
-
-test('今のⅡのスキル一覧に、この版の職業のスキルがそろっている', () => {
-  for (const c of CLASSES) assert.ok(SKILLS.some(s => s.cls === c.id), `${c.id}のスキルがある`)
 })

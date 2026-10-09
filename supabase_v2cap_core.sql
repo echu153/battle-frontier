@@ -3,18 +3,20 @@
 --   設計は docs/v2cap-design.md。画面は src/v2cap、計算の写しは src/v2cap/lib。
 -- ------------------------------------------------------------
 -- ★このファイルは v2cap_ 接頭辞の新規オブジェクトだけを作る。
---   今のⅡ（v2_）と旧版のテーブル・RPCには**一切書き込まない**。
---   読むのは v2_skills（スキル名→職業・消費MP・並び）と v2_equipment（装備の一覧）だけ
---   ＝ supabase_v2_core.sql を先に流してあること（今のⅡの開発で流し済み）。
--- ★全体が冪等。仕様を足すたびに**全文を流し直す**運用（今のⅡと同じ）。何度流しても既存データは消えない。
+--   今のⅡ（v2_）と旧版のテーブル・RPCには**一切触らない**（読みもしない）。
+--   2026-10-09 の初期職の見直しで、スキルの名簿（v2cap_skills）と装備の一覧（v2cap_equipment）も
+--   この版で持つようになった。
+-- ★全体が冪等。仕様を足すたびに**全文を流し直す**運用（今のⅡと同じ）。何度流しても既存データは消えない
+--   （例外は §2 の「一度だけの作り直し」＝初期職の見直しのときに1回だけ消す。2回目以降は何もしない）。
 -- ★「-- @@seed:名前」〜「-- @@end:名前」のあいだは手で直さない。
 --   `node tools/v2cap-sql.mjs --write` が src/v2cap/lib から作り直す（v2capsql.test.js が見張る）。
 --
--- 今のⅡとの違い（2026-10-09 ユーザー決定）：
+-- 今のⅡとの違い（ユーザー決定・2026-10-09）：
 --   ・LVは上限100。**転職しても下がらない**（周回なし）。必要EXPは上がるほど重い
 --   ・1勝で入るEXPは**敵のLV**で決まる（サーバーが決める。画面からは受け取らない）
---   ・ジョブLV（最大30）を職業ごとに持つ。入るのは今の職業。上がるとスキルを覚える
---   ・装備は**アイテムLV**（＝倒した敵のLV）を持つ
+--   ・ジョブLV（表記は JBLV・最大30）を職業ごとに持つ。入るのは今の職業。上がるとスキルを覚える
+--   ・初期職は10職。職業ごとに装備できる武器が3種決まっている。一次職は一旦なし
+--   ・装備は「基本装備＋ランク＋アイテムLV（＝倒した敵のLV）」。武器は1本・盾なし・防具は重鎧／軽装
 -- ============================================================
 
 -- ===== 0. 開発限定ゲート =====
@@ -34,9 +36,10 @@ $$;
 -- ============================================================
 -- ===== 1. マスタ =====
 -- ============================================================
--- ---- 1-1. 段階（初期・一次）----
--- mult … 必要ジョブEXPの倍率／per_lv … ジョブLVが1上がるごとのステの点数／
--- learn_at … スキルを覚えるジョブLV（その職業の技を v2_skills の req_jobs, sort 順に当てる）
+-- ---- 1-1. 段階 ----
+-- mult … 必要JBEXPの倍率／per_lv … JBLVが1上がるごとのステの点数／
+-- learn_at … スキルを覚えるJBLV（その職業の技を v2cap_skills の sort 順に当てる）
+-- ★いまは初期だけ（一次職は見直すまで一旦なし・2026-10-09）
 create table if not exists public.v2cap_stages (
   stage    text primary key,
   mult     int  not null,
@@ -51,15 +54,14 @@ grant select on table public.v2cap_stages to authenticated;
 
 -- @@seed:stages
 insert into public.v2cap_stages (stage, mult, per_lv, learn_at) values
-  ('shoki', 1, 1, '{1,5,10,15,20}'::int[]),
-  ('ichiji', 3, 2, '{1,4,7,10,13,16,19,22,25,28}'::int[])
+  ('shoki', 1, 1, '{1,5,10,15,20}'::int[])
 on conflict (stage) do update set mult = excluded.mult, per_lv = excluded.per_lv, learn_at = excluded.learn_at;
 -- @@end:stages
 
 -- ---- 1-2. 職業 ----
--- req_cls / req_jlv … 就くのに要る職業とジョブLV（初期職は null）
--- bonus_seq … ジョブLVで上がるステの並び（1点ずつ。jobs.js の bonusSeqOf と同じ）
--- ★複合上位職・特殊職は二次・三次を作るときに置き場を決める（2026-10-09）＝まだ入れない
+-- req_cls / req_jlv … 就くのに要る職業とJBLV（初期職は null）
+-- bonus_seq … JBLVで上がるステの並び（1点ずつ。jobs.js の bonusSeqOf と同じ）
+-- weapons … 装備できる武器の種類（3つ）／kind … 通常攻撃が物理（phys）か魔法（mag）か
 create table if not exists public.v2cap_classes (
   id        text primary key,
   stage     text not null references public.v2cap_stages(stage),
@@ -68,6 +70,8 @@ create table if not exists public.v2cap_classes (
   req_jlv   int,
   bonus_seq text[] not null default '{}'
 );
+alter table public.v2cap_classes add column if not exists weapons text[] not null default '{}';
+alter table public.v2cap_classes add column if not exists kind text not null default 'phys';
 alter table public.v2cap_classes enable row level security;
 drop policy if exists v2cap_classes_read on public.v2cap_classes;
 create policy v2cap_classes_read on public.v2cap_classes for select to authenticated using (true);
@@ -75,31 +79,173 @@ revoke all on table public.v2cap_classes from anon;
 grant select on table public.v2cap_classes to authenticated;
 
 -- @@seed:classes
-insert into public.v2cap_classes (id, stage, sort, req_cls, req_jlv, bonus_seq) values
-  ('ノーブル', 'shoki', 0, null, null, '{hp,str,dex,agi,int_stat,mp,vit,luk,hp,str,dex,agi,int_stat,mp,vit,luk,hp,str,dex,agi,int_stat,mp,vit,luk,hp,str,dex,agi,int_stat}'::text[]),
-  ('戦士', 'shoki', 1, null, null, '{str,vit,hp,dex,str,str,vit,hp,str,dex,vit,str,str,hp,vit,dex,str,str,vit,hp,str,dex,vit,str,str,hp,dex,vit,str}'::text[]),
-  ('弓使い', 'shoki', 2, null, null, '{dex,agi,str,dex,luk,agi,dex,str,dex,agi,dex,luk,agi,dex,str,dex,agi,luk,dex,agi,dex,str,dex,agi,luk,dex,str,agi,dex}'::text[]),
-  ('魔法使い', 'shoki', 3, null, null, '{int_stat,mp,dex,int_stat,agi,int_stat,mp,int_stat,dex,int_stat,agi,int_stat,mp,int_stat,dex,int_stat,mp,int_stat,agi,int_stat,dex,int_stat,mp,int_stat,agi,int_stat,dex,mp,int_stat}'::text[]),
-  ('僧侶', 'shoki', 4, null, null, '{int_stat,vit,hp,mp,int_stat,vit,hp,int_stat,mp,int_stat,vit,hp,mp,int_stat,vit,int_stat,hp,mp,vit,int_stat,hp,int_stat,mp,vit,int_stat,hp,mp,vit,int_stat}'::text[]),
-  ('格闘家', 'shoki', 5, null, null, '{str,agi,hp,vit,str,agi,str,agi,hp,vit,str,agi,str,hp,agi,vit,str,agi,str,hp,vit,agi,str,agi,str,hp,vit,agi,str}'::text[]),
-  ('サモナー', 'shoki', 6, null, null, '{int_stat,mp,agi,luk,int_stat,int_stat,mp,agi,int_stat,luk,int_stat,mp,agi,int_stat,luk,int_stat,mp,agi,int_stat,luk,int_stat,mp,agi,int_stat,int_stat,luk,mp,agi,int_stat}'::text[]),
-  ('侍', 'ichiji', 10, '戦士', 30, '{str,dex,hp,str,vit,dex,str,hp,str,dex,str,vit,dex,str,hp,str,dex,vit,str,dex,str,hp,str,dex,vit,str,hp,dex,str,str,dex,hp,str,vit,dex,str,hp,str,dex,str,vit,dex,str,hp,str,dex,vit,str,dex,str,hp,str,dex,vit,str,hp,dex,str}'::text[]),
-  ('狂戦士', 'ichiji', 11, '戦士', 30, '{str,agi,hp,str,vit,agi,str,hp,str,agi,str,vit,agi,str,hp,str,agi,vit,str,agi,str,hp,str,agi,vit,str,hp,agi,str,str,agi,hp,str,vit,agi,str,hp,str,agi,str,vit,agi,str,hp,str,agi,vit,str,agi,str,hp,str,agi,vit,str,hp,agi,str}'::text[]),
-  ('狩人', 'ichiji', 12, '弓使い', 30, '{str,dex,hp,str,vit,dex,str,hp,str,dex,str,vit,dex,str,hp,str,dex,vit,str,dex,str,hp,str,dex,vit,str,hp,dex,str,str,dex,hp,str,vit,dex,str,hp,str,dex,str,vit,dex,str,hp,str,dex,vit,str,dex,str,hp,str,dex,vit,str,hp,dex,str}'::text[]),
-  ('暗殺者', 'ichiji', 13, '弓使い', 30, '{str,agi,hp,str,vit,agi,str,hp,str,agi,str,vit,agi,str,hp,str,agi,vit,str,agi,str,hp,str,agi,vit,str,hp,agi,str,str,agi,hp,str,vit,agi,str,hp,str,agi,str,vit,agi,str,hp,str,agi,vit,str,agi,str,hp,str,agi,vit,str,hp,agi,str}'::text[]),
-  ('元素使い', 'ichiji', 14, '魔法使い', 30, '{int_stat,dex,hp,int_stat,mp,dex,int_stat,hp,int_stat,dex,int_stat,mp,dex,int_stat,hp,int_stat,dex,mp,int_stat,dex,int_stat,hp,int_stat,dex,mp,int_stat,hp,dex,int_stat,int_stat,dex,hp,int_stat,mp,dex,int_stat,hp,int_stat,dex,int_stat,mp,dex,int_stat,hp,int_stat,dex,mp,int_stat,dex,int_stat,hp,int_stat,dex,mp,int_stat,hp,dex,int_stat}'::text[]),
-  ('死霊使い', 'ichiji', 15, '魔法使い', 30, '{int_stat,vit,hp,int_stat,mp,vit,int_stat,hp,int_stat,vit,int_stat,mp,vit,int_stat,hp,int_stat,vit,mp,int_stat,vit,int_stat,hp,int_stat,vit,mp,int_stat,hp,vit,int_stat,int_stat,vit,hp,int_stat,mp,vit,int_stat,hp,int_stat,vit,int_stat,mp,vit,int_stat,hp,int_stat,vit,mp,int_stat,vit,int_stat,hp,int_stat,vit,mp,int_stat,hp,vit,int_stat}'::text[]),
-  ('聖職者', 'ichiji', 16, '僧侶', 30, '{int_stat,vit,hp,int_stat,mp,vit,int_stat,hp,int_stat,vit,int_stat,mp,vit,int_stat,hp,int_stat,vit,mp,int_stat,vit,int_stat,hp,int_stat,vit,mp,int_stat,hp,vit,int_stat,int_stat,vit,hp,int_stat,mp,vit,int_stat,hp,int_stat,vit,int_stat,mp,vit,int_stat,hp,int_stat,vit,mp,int_stat,vit,int_stat,hp,int_stat,vit,mp,int_stat,hp,vit,int_stat}'::text[]),
-  ('異端審問官', 'ichiji', 17, '僧侶', 30, '{int_stat,luk,hp,int_stat,mp,luk,int_stat,hp,int_stat,luk,int_stat,mp,luk,int_stat,hp,int_stat,luk,mp,int_stat,luk,int_stat,hp,int_stat,luk,mp,int_stat,hp,luk,int_stat,int_stat,luk,hp,int_stat,mp,luk,int_stat,hp,int_stat,luk,int_stat,mp,luk,int_stat,hp,int_stat,luk,mp,int_stat,luk,int_stat,hp,int_stat,luk,mp,int_stat,hp,luk,int_stat}'::text[]),
-  ('サイキッカー', 'ichiji', 18, '格闘家', 30, '{str,int_stat,hp,str,vit,int_stat,str,hp,str,int_stat,str,vit,int_stat,str,hp,str,int_stat,vit,str,int_stat,str,hp,str,int_stat,vit,str,hp,int_stat,str,str,int_stat,hp,str,vit,int_stat,str,hp,str,int_stat,str,vit,int_stat,str,hp,str,int_stat,vit,str,int_stat,str,hp,str,int_stat,vit,str,hp,int_stat,str}'::text[]),
-  ('体術師', 'ichiji', 19, '格闘家', 30, '{str,agi,hp,str,vit,agi,str,hp,str,agi,str,vit,agi,str,hp,str,agi,vit,str,agi,str,hp,str,agi,vit,str,hp,agi,str,str,agi,hp,str,vit,agi,str,hp,str,agi,str,vit,agi,str,hp,str,agi,vit,str,agi,str,hp,str,agi,vit,str,hp,agi,str}'::text[]),
-  ('精霊召喚士', 'ichiji', 20, 'サモナー', 30, '{int_stat,agi,hp,int_stat,mp,agi,int_stat,hp,int_stat,agi,int_stat,mp,agi,int_stat,hp,int_stat,agi,mp,int_stat,agi,int_stat,hp,int_stat,agi,mp,int_stat,hp,agi,int_stat,int_stat,agi,hp,int_stat,mp,agi,int_stat,hp,int_stat,agi,int_stat,mp,agi,int_stat,hp,int_stat,agi,mp,int_stat,agi,int_stat,hp,int_stat,agi,mp,int_stat,hp,agi,int_stat}'::text[]),
-  ('式神使い', 'ichiji', 21, 'サモナー', 30, '{int_stat,dex,hp,int_stat,mp,dex,int_stat,hp,int_stat,dex,int_stat,mp,dex,int_stat,hp,int_stat,dex,mp,int_stat,dex,int_stat,hp,int_stat,dex,mp,int_stat,hp,dex,int_stat,int_stat,dex,hp,int_stat,mp,dex,int_stat,hp,int_stat,dex,int_stat,mp,dex,int_stat,hp,int_stat,dex,mp,int_stat,dex,int_stat,hp,int_stat,dex,mp,int_stat,hp,dex,int_stat}'::text[])
+delete from public.v2cap_classes where id <> all('{戦士,槍使い,格闘家,盗賊,弓使い,銃士,魔法使い,呪術師,僧侶,薬師}'::text[]);
+insert into public.v2cap_classes (id, stage, sort, req_cls, req_jlv, bonus_seq, weapons, kind) values
+  ('戦士', 'shoki', 0, null, null, '{str,vit,hp,dex,str,str,vit,hp,str,dex,vit,str,str,hp,vit,dex,str,str,vit,hp,str,dex,vit,str,str,hp,dex,vit,str}'::text[], '{両手剣,斧,鈍器}'::text[], 'phys'),
+  ('槍使い', 'shoki', 1, null, null, '{str,dex,vit,hp,str,dex,str,dex,vit,str,hp,dex,str,vit,str,dex,str,dex,hp,str,vit,dex,str,dex,str,hp,vit,dex,str}'::text[], '{槍,片手剣,投擲}'::text[], 'phys'),
+  ('格闘家', 'shoki', 2, null, null, '{str,agi,hp,vit,str,agi,str,agi,hp,vit,str,agi,str,hp,agi,vit,str,agi,str,hp,vit,agi,str,agi,str,hp,vit,agi,str}'::text[], '{拳,鈍器,杖}'::text[], 'phys'),
+  ('盗賊', 'shoki', 3, null, null, '{agi,dex,str,agi,luk,dex,agi,str,agi,dex,agi,luk,dex,agi,str,agi,dex,luk,agi,dex,agi,str,agi,dex,luk,agi,str,dex,agi}'::text[], '{短剣,片手剣,投擲}'::text[], 'phys'),
+  ('弓使い', 'shoki', 4, null, null, '{dex,agi,str,dex,luk,agi,dex,str,dex,agi,dex,luk,agi,dex,str,dex,agi,luk,dex,agi,dex,str,dex,agi,luk,dex,str,agi,dex}'::text[], '{弓,短剣,片手剣}'::text[], 'phys'),
+  ('銃士', 'shoki', 5, null, null, '{dex,str,agi,dex,luk,dex,str,dex,str,dex,agi,luk,dex,str,dex,str,dex,agi,luk,dex,str,dex,str,dex,agi,dex,luk,str,dex}'::text[], '{銃,片手剣,投擲}'::text[], 'phys'),
+  ('魔法使い', 'shoki', 6, null, null, '{int_stat,mp,dex,int_stat,agi,int_stat,mp,int_stat,dex,int_stat,agi,int_stat,mp,int_stat,dex,int_stat,mp,int_stat,agi,int_stat,dex,int_stat,mp,int_stat,agi,int_stat,dex,mp,int_stat}'::text[], '{杖,書,短剣}'::text[], 'mag'),
+  ('呪術師', 'shoki', 7, null, null, '{int_stat,mp,dex,int_stat,luk,int_stat,mp,int_stat,dex,luk,int_stat,mp,int_stat,dex,int_stat,luk,int_stat,mp,int_stat,dex,luk,int_stat,mp,int_stat,dex,int_stat,luk,mp,int_stat}'::text[], '{杖,短剣,投擲}'::text[], 'mag'),
+  ('僧侶', 'shoki', 8, null, null, '{int_stat,vit,hp,mp,int_stat,vit,hp,int_stat,mp,int_stat,vit,hp,mp,int_stat,vit,int_stat,hp,mp,vit,int_stat,hp,int_stat,mp,vit,int_stat,hp,mp,vit,int_stat}'::text[], '{鈍器,杖,書}'::text[], 'mag'),
+  ('薬師', 'shoki', 9, null, null, '{int_stat,dex,hp,mp,int_stat,dex,hp,int_stat,mp,int_stat,dex,hp,mp,int_stat,dex,int_stat,hp,mp,dex,int_stat,hp,int_stat,mp,dex,int_stat,hp,mp,dex,int_stat}'::text[], '{短剣,投擲,書}'::text[], 'mag')
 on conflict (id) do update set stage = excluded.stage, sort = excluded.sort,
-  req_cls = excluded.req_cls, req_jlv = excluded.req_jlv, bonus_seq = excluded.bonus_seq;
+  req_cls = excluded.req_cls, req_jlv = excluded.req_jlv, bonus_seq = excluded.bonus_seq,
+  weapons = excluded.weapons, kind = excluded.kind;
+delete from public.v2cap_stages s where s.stage <> all('{shoki}'::text[])
+  and not exists (select 1 from public.v2cap_classes c where c.stage = s.stage);
 -- @@end:classes
 
--- ---- 1-3. 難易度帯 ----
+-- ---- 1-3. スキルの名簿 ----
+-- ★持つのは「スキル名 → どの職業のものか・消費MP・覚える順」だけ。倍率などの中身は src/v2cap/lib/skills.js
+create table if not exists public.v2cap_skills (
+  name    text primary key,
+  cls     text not null,
+  mp      int  not null default 0,
+  sort    int  not null default 0,
+  passive boolean not null default false
+);
+alter table public.v2cap_skills enable row level security;
+drop policy if exists v2cap_skills_read on public.v2cap_skills;
+create policy v2cap_skills_read on public.v2cap_skills for select to authenticated using (true);
+revoke all on table public.v2cap_skills from anon;
+grant select on table public.v2cap_skills to authenticated;
+
+-- @@seed:skills
+delete from public.v2cap_skills;
+insert into public.v2cap_skills (name, cls, mp, sort, passive) values
+  ('体当たり', '戦士', 4, 1, false),
+  ('強撃', '戦士', 11, 2, false),
+  ('防御崩し', '戦士', 8, 3, false),
+  ('防御態勢', '戦士', 8, 4, false),
+  ('シールドアタック', '戦士', 8, 5, false),
+  ('狙撃', '弓使い', 8, 1, false),
+  ('剛射', '弓使い', 11, 2, false),
+  ('貫通射撃', '弓使い', 11, 3, false),
+  ('疾風矢', '弓使い', 8, 4, false),
+  ('駆け足', '弓使い', 6, 5, false),
+  ('マジックアロー', '魔法使い', 5, 1, false),
+  ('ファイア', '魔法使い', 13, 2, false),
+  ('サンダー', '魔法使い', 13, 3, false),
+  ('アイスランス', '魔法使い', 13, 4, false),
+  ('精神統一', '魔法使い', 8, 5, false),
+  ('ライト', '僧侶', 5, 1, false),
+  ('ライトニング', '僧侶', 13, 2, false),
+  ('ヒール', '僧侶', 12, 3, false),
+  ('祈祷', '僧侶', 15, 4, false),
+  ('プロテク', '僧侶', 10, 5, false),
+  ('打撃', '格闘家', 4, 1, false),
+  ('鉄拳', '格闘家', 11, 2, false),
+  ('連打', '格闘家', 11, 3, false),
+  ('爆裂拳', '格闘家', 11, 4, false),
+  ('残心', '格闘家', 8, 5, false),
+  ('突き', '槍使い', 4, 1, false),
+  ('薙ぎ払い', '槍使い', 8, 2, false),
+  ('投げ槍', '槍使い', 9, 3, false),
+  ('三段突き', '槍使い', 11, 4, false),
+  ('槍衾', '槍使い', 8, 5, false),
+  ('切りつけ', '盗賊', 4, 1, false),
+  ('早業', '盗賊', 8, 2, false),
+  ('毒塗りの刃', '盗賊', 9, 3, false),
+  ('目つぶし', '盗賊', 11, 4, false),
+  ('影走り', '盗賊', 8, 5, false),
+  ('早撃ち', '銃士', 4, 1, false),
+  ('連射', '銃士', 8, 2, false),
+  ('精密射撃', '銃士', 9, 3, false),
+  ('徹甲弾', '銃士', 11, 4, false),
+  ('狙いを定める', '銃士', 8, 5, false),
+  ('呪弾', '呪術師', 5, 1, false),
+  ('呪縛', '呪術師', 9, 2, false),
+  ('毒の呪い', '呪術師', 10, 3, false),
+  ('災いの呪い', '呪術師', 13, 4, false),
+  ('衰弱の呪詛', '呪術師', 9, 5, false),
+  ('薬瓶投げ', '薬師', 5, 1, false),
+  ('傷薬', '薬師', 12, 2, false),
+  ('毒薬', '薬師', 10, 3, false),
+  ('強壮剤', '薬師', 9, 4, false),
+  ('気付け薬', '薬師', 8, 5, false);
+-- @@end:skills
+
+-- ---- 1-4. 装備の一覧（基本装備）----
+-- part … 武器／頭／鎧／腕／足／アクセ ／ type … 武器の種類（防具は系統・アクセは名前）／ line … 重鎧／軽装
+-- ★配分（どのステに散らすか）は src/v2cap/lib/equipment.js にある。サーバーが要るのは枠と種類の判定だけ
+create table if not exists public.v2cap_equipment (
+  id   text primary key,
+  name text not null,
+  part text not null,
+  type text not null,
+  line text
+);
+alter table public.v2cap_equipment enable row level security;
+drop policy if exists v2cap_equipment_read on public.v2cap_equipment;
+create policy v2cap_equipment_read on public.v2cap_equipment for select to authenticated using (true);
+revoke all on table public.v2cap_equipment from anon;
+grant select on table public.v2cap_equipment to authenticated;
+
+-- @@seed:equipment
+insert into public.v2cap_equipment (id, name, part, type, line) values
+  ('w:ロングソード', 'ロングソード', '武器', '片手剣', null),
+  ('w:レイピア', 'レイピア', '武器', '片手剣', null),
+  ('w:曲刀', '曲刀', '武器', '片手剣', null),
+  ('w:大剣', '大剣', '武器', '両手剣', null),
+  ('w:太刀', '太刀', '武器', '両手剣', null),
+  ('w:片手斧', '片手斧', '武器', '斧', null),
+  ('w:大斧', '大斧', '武器', '斧', null),
+  ('w:長槍', '長槍', '武器', '槍', null),
+  ('w:斧槍', '斧槍', '武器', '槍', null),
+  ('w:三叉槍', '三叉槍', '武器', '槍', null),
+  ('w:メイス', 'メイス', '武器', '鈍器', null),
+  ('w:ハンマー', 'ハンマー', '武器', '鈍器', null),
+  ('w:トンファー', 'トンファー', '武器', '鈍器', null),
+  ('w:ダガー', 'ダガー', '武器', '短剣', null),
+  ('w:ナイフ', 'ナイフ', '武器', '短剣', null),
+  ('w:メス', 'メス', '武器', '短剣', null),
+  ('w:ナックル', 'ナックル', '武器', '拳', null),
+  ('w:鉤爪', '鉤爪', '武器', '拳', null),
+  ('w:ガントレット', 'ガントレット', '武器', '拳', null),
+  ('w:長弓', '長弓', '武器', '弓', null),
+  ('w:短弓', '短弓', '武器', '弓', null),
+  ('w:弩', '弩', '武器', '弓', null),
+  ('w:拳銃', '拳銃', '武器', '銃', null),
+  ('w:長銃', '長銃', '武器', '銃', null),
+  ('w:携行砲', '携行砲', '武器', '銃', null),
+  ('w:長杖', '長杖', '武器', '杖', null),
+  ('w:短杖', '短杖', '武器', '杖', null),
+  ('w:棍', '棍', '武器', '杖', null),
+  ('w:魔導書', '魔導書', '武器', '書', null),
+  ('w:聖典', '聖典', '武器', '書', null),
+  ('w:薬学書', '薬学書', '武器', '書', null),
+  ('w:投げナイフ', '投げナイフ', '武器', '投擲', null),
+  ('w:手裏剣', '手裏剣', '武器', '投擲', null),
+  ('w:薬瓶', '薬瓶', '武器', '投擲', null),
+  ('w:呪符', '呪符', '武器', '投擲', null),
+  ('w:投槍', '投槍', '武器', '投擲', null),
+  ('a:鉄兜', '鉄兜', '頭', '重鎧', '重鎧'),
+  ('a:鉄冠', '鉄冠', '頭', '重鎧', '重鎧'),
+  ('a:プレートメイル', 'プレートメイル', '鎧', '重鎧', '重鎧'),
+  ('a:聖鉄の鎧', '聖鉄の鎧', '鎧', '重鎧', '重鎧'),
+  ('a:鉄の籠手', '鉄の籠手', '腕', '重鎧', '重鎧'),
+  ('a:聖鉄の腕甲', '聖鉄の腕甲', '腕', '重鎧', '重鎧'),
+  ('a:鉄靴', '鉄靴', '足', '重鎧', '重鎧'),
+  ('a:聖鉄の具足', '聖鉄の具足', '足', '重鎧', '重鎧'),
+  ('a:バンダナ', 'バンダナ', '頭', '軽装', '軽装'),
+  ('a:フード', 'フード', '頭', '軽装', '軽装'),
+  ('a:レザーアーマー', 'レザーアーマー', '鎧', '軽装', '軽装'),
+  ('a:ローブ', 'ローブ', '鎧', '軽装', '軽装'),
+  ('a:リストバンド', 'リストバンド', '腕', '軽装', '軽装'),
+  ('a:魔導腕輪', '魔導腕輪', '腕', '軽装', '軽装'),
+  ('a:ブーツ', 'ブーツ', '足', '軽装', '軽装'),
+  ('a:サンダル', 'サンダル', '足', '軽装', '軽装'),
+  ('c:イヤリング', 'イヤリング', 'アクセ', 'イヤリング', null),
+  ('c:ネックレス', 'ネックレス', 'アクセ', 'ネックレス', null),
+  ('c:リング', 'リング', 'アクセ', 'リング', null),
+  ('c:ベルト', 'ベルト', 'アクセ', 'ベルト', null)
+on conflict (id) do update set name = excluded.name, part = excluded.part, type = excluded.type, line = excluded.line;
+-- @@end:equipment
+
+-- ---- 1-5. 難易度帯 ----
 -- lv_min / lv_max … その帯の敵のLVの範囲／req … いくつ踏破したら次の帯が開くか
 create table if not exists public.v2cap_tiers (
   tier   int primary key,
@@ -126,7 +272,7 @@ insert into public.v2cap_tiers (tier, lv_min, lv_max, req) values
 on conflict (tier) do update set lv_min = excluded.lv_min, lv_max = excluded.lv_max, req = excluded.req;
 -- @@end:tiers
 
--- ---- 1-4. エリア ----
+-- ---- 1-6. エリア ----
 create table if not exists public.v2cap_areas (
   id         int primary key,
   tier       int not null,
@@ -159,7 +305,7 @@ insert into public.v2cap_areas (id, tier, name, drop_ranks) values
 on conflict (id) do update set tier = excluded.tier, name = excluded.name, drop_ranks = excluded.drop_ranks;
 -- @@end:areas
 
--- ---- 1-5. 敵のLV ----
+-- ---- 1-7. 敵のLV ----
 -- ★EXPとアイテムLVはサーバーがここから決める（画面からは「どの敵と戦ったか」だけ受け取る）
 create table if not exists public.v2cap_enemies (
   name text primary key,
@@ -391,12 +537,12 @@ create table if not exists public.v2cap_profiles (
   int_stat   int not null default 5,
   vit        int not null default 5,
   luk        int not null default 5,
-  class      text  not null default 'ノーブル',
+  class      text  not null default '戦士',
   jobs       jsonb not null default '{}'::jsonb,   -- {"戦士":{"lv":12,"exp":345}}
   learned    jsonb not null default '[]'::jsonb,   -- 覚えたスキル名（ずっと残る）
   skill_set  jsonb not null default '[]'::jsonb,   -- [{"name":"体当たり","uses":3}]
   favorites  jsonb not null default '[]'::jsonb,
-  equipped   jsonb not null default '{}'::jsonb,   -- {"right": 12, ...} v2cap_inventory.id
+  equipped   jsonb not null default '{}'::jsonb,   -- {"weapon": 12, "head": 13, ...} v2cap_inventory.id
   unlocked_areas int[] not null default array[1],
   cleared_areas  int[] not null default '{}',
   boss_rate  numeric not null default 0,           -- ボス遭遇率(%)。戦うたび+0.3、当たると0へ
@@ -406,6 +552,7 @@ create table if not exists public.v2cap_profiles (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table public.v2cap_profiles alter column class set default '戦士';
 create unique index if not exists v2cap_profiles_username_lower_idx
   on public.v2cap_profiles (lower(username));
 -- 参照は認証済み全員（今のⅡと同じ）。書き込みはRPC経由だけ
@@ -415,14 +562,44 @@ create policy v2cap_profiles_select on public.v2cap_profiles for select to authe
 revoke all on table public.v2cap_profiles from anon;
 grant select on table public.v2cap_profiles to authenticated;
 
--- 所持している装備。ilv＝アイテムLV（＝必要LV。倒した敵のLV）
+-- ---- 一度だけの作り直し ----
+-- ★2026-10-09 初期職の見直し（ユーザー承認）：装備の一覧が変わった（武器12種・盾なし・防具は重鎧／軽装・
+--   名前は基本装備＋ランク）ので、**この版のキャラと装備を1回だけ消す**。
+--   v2cap_migrations に印を付けるので、2回目以降に全文を流し直しても何も消えない。
+--   今のⅡ（v2_）・旧版のテーブルには触らない。
+create table if not exists public.v2cap_migrations (
+  key text primary key,
+  at  timestamptz not null default now()
+);
+alter table public.v2cap_migrations enable row level security;
+revoke all on table public.v2cap_migrations from anon;
+revoke all on table public.v2cap_migrations from authenticated;
+do $$
+begin
+  if not exists (select 1 from public.v2cap_migrations where key = 'reset_classes_20261009') then
+    if to_regclass('public.v2cap_inventory') is not null then
+      delete from public.v2cap_inventory;
+      -- 旧版の列（今のⅡの装備の一覧 v2_equipment を指していた）
+      alter table public.v2cap_inventory drop column if exists equip_id;
+    end if;
+    delete from public.v2cap_profiles;
+    insert into public.v2cap_migrations (key) values ('reset_classes_20261009');
+  end if;
+end $$;
+
+-- 所持している装備。base_id＝基本装備・rank＝F〜S・ilv＝アイテムLV（＝必要LV。倒した敵のLV）
 create table if not exists public.v2cap_inventory (
   id         bigserial primary key,
   player_id  uuid not null references auth.users(id) on delete cascade,
-  equip_id   text not null references public.v2_equipment(id),
+  base_id    text not null references public.v2cap_equipment(id),
+  rank       text not null default 'F',
   ilv        int  not null default 1,
   created_at timestamptz not null default now()
 );
+-- 作り直しの前から表があった場合（上の do で空にしてある）
+alter table public.v2cap_inventory add column if not exists base_id text references public.v2cap_equipment(id);
+alter table public.v2cap_inventory add column if not exists rank text not null default 'F';
+alter table public.v2cap_inventory alter column base_id set not null;
 create index if not exists v2cap_inventory_player_idx on public.v2cap_inventory(player_id);
 alter table public.v2cap_inventory enable row level security;
 drop policy if exists v2cap_inventory_own on public.v2cap_inventory;
@@ -441,7 +618,7 @@ returns int language sql immutable set search_path = public as $$
               else greatest(1, round(335::numeric * p_lv * p_lv * (p_lv + 9) / 1000))::int end
 $$;
 
--- 必要ジョブEXP ＝ 12.3 × 段階の倍率 × ジョブLV²。ジョブLV30で0（jobs.js の jobNeed）
+-- 必要JBEXP ＝ 12.3 × 段階の倍率 × JBLV²。JBLV30で0（jobs.js の jobNeed）
 create or replace function public.v2cap_job_need(p_stage text, p_jlv int)
 returns int language sql stable set search_path = public as $$
   select case when p_jlv >= 30 then 0
@@ -455,8 +632,8 @@ returns int language sql immutable set search_path = public as $$
   select 10 + greatest(1, coalesce(p_lv, 1)) / 5
 $$;
 
--- そのジョブLVまでに覚えるスキルを足した learned を返す（jobs.js の skillsLearnedBy）。
--- 並び＝その職業の技を「転職5回が要った技（req_jobs）は後ろ・同じ組は sort 順」。パッシブは除く
+-- そのJBLVまでに覚えるスキルを足した learned を返す（jobs.js の skillsLearnedBy）。
+-- 並び＝その職業の技の sort 順（skills.js の名簿の順）。パッシブは除く
 create or replace function public.v2cap_learn(p_learned jsonb, p_cls text, p_jlv int)
 returns jsonb language sql stable set search_path = public as $$
   with st as (
@@ -465,8 +642,8 @@ returns jsonb language sql stable set search_path = public as $$
      where c.id = p_cls
   ), ord as (
     -- ⚠row_number() は bigint。配列の添字は integer しか受けないので int にしておく
-    select k.name, (row_number() over (order by k.req_jobs, k.sort))::int as i
-      from public.v2_skills k
+    select k.name, (row_number() over (order by k.sort))::int as i
+      from public.v2cap_skills k
      where k.cls = p_cls and not k.passive
   ), newly as (
     select o.name, o.i from ord o, st
@@ -496,7 +673,7 @@ returns int language sql stable set search_path = public as $$
   select coalesce(sum(s.mp * (case when s.cls = p_cls then 1 else 2 end)
                       * greatest(1, coalesce((t.e ->> 'uses')::int, 1))), 0)::int
     from jsonb_array_elements(coalesce(p_set, '[]'::jsonb)) as t(e)
-    join public.v2_skills s on s.name = t.e ->> 'name'
+    join public.v2cap_skills s on s.name = t.e ->> 'name'
 $$;
 
 -- 転職でMPの事情が変わったとき、編成を最大MPに収まる形へ縮める。
@@ -576,7 +753,7 @@ end;
 $$;
 revoke all on function public.v2cap_stamina_roll(uuid) from public, anon, authenticated;
 
--- ===== EXPを入れる（LVアップの抽選・ジョブEXP・スキル習得）=====
+-- ===== EXPを入れる（LVアップの抽選・JBEXP・スキル習得）=====
 -- ⚠内部ヘルパ。公開RPC（出撃の精算・開発用のEXP付与）からだけ呼ぶ。必ず REVOKE する
 create or replace function public.v2cap_apply_exp(p_player uuid, p_amount int)
 returns jsonb language plpgsql security definer set search_path = public as $$
@@ -622,7 +799,7 @@ begin
     if v_lv >= c_max_lv then v_exp := 0; end if;
   end if;
 
-  -- ジョブLV（いまの職業だけ。入るのはEXPと同じ量）
+  -- JBLV（いまの職業だけ。入るのはEXPと同じ量）
   v_cls := v_row.class;
   select c.stage into v_stage from public.v2cap_classes c where c.id = v_cls;
   v_jlv  := coalesce((v_row.jobs -> v_cls ->> 'lv')::int, 1);
@@ -637,7 +814,7 @@ begin
     if v_jlv >= c_job_max then v_jexp := 0; end if;
   end if;
 
-  -- スキル（そのジョブLVまでのぶんを覚える。覚えたものはずっと残る）
+  -- スキル（そのJBLVまでのぶんを覚える。覚えたものはずっと残る）
   v_old := coalesce(v_row.learned, '[]'::jsonb);
   v_new := public.v2cap_learn(v_old, v_cls, v_jlv);
   select coalesce(jsonb_agg(t.name), '[]'::jsonb) into v_added
@@ -670,7 +847,7 @@ revoke all on function public.v2cap_apply_exp(uuid, int) from public, anon, auth
 -- ============================================================
 -- ===== 4. キャラクター作成 =====
 -- ============================================================
--- 名前と、最初の職業（初期職7つから）。JLV1で覚えるスキルを1つ持って始め、編成の1枠目にも入れておく
+-- 名前と、最初の職業（初期職10から）。JBLV1で覚えるスキルを1つ持って始め、編成の1枠目にも入れておく
 create or replace function public.v2cap_create_character(p_username text, p_class text)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
@@ -701,7 +878,7 @@ begin
   v_first := v_learn ->> 0;
   if v_first is not null then
     -- 初期のMPは12。回数はMPに収まるだけ（最大5回）
-    select k.mp into v_mp from public.v2_skills k where k.name = v_first;
+    select k.mp into v_mp from public.v2cap_skills k where k.name = v_first;
     v_set := jsonb_build_array(jsonb_build_object('name', v_first,
       'uses', case when coalesce(v_mp, 0) = 0 then 5 else greatest(1, least(5, 12 / v_mp)) end));
   end if;
@@ -720,22 +897,27 @@ grant execute on function public.v2cap_create_character(text, text) to authentic
 -- ============================================================
 -- ===== 5. 出撃の精算（1戦ごと）=====
 -- ============================================================
--- 戦闘は画面で回し、ここへ「どのエリアの、どの敵と戦って、勝ったか」と、落ちた装備のIDを送る。
+-- 戦闘は画面で回し、ここへ「どのエリアの、どの敵と戦って、勝ったか」と、落ちた装備（基本装備とランク）を送る。
 -- ★EXPは**サーバーが敵のLVから決める**（雑魚±15%・ボス1.4倍）。画面からは受け取らない。
--- ★アイテムLVも**倒した敵のLV**をサーバーが付ける。装備は「そのエリアで落ちるランクか」だけ見る。
+-- ★アイテムLVも**倒した敵のLV**をサーバーが付ける。装備は「そのエリアで落ちるランクか」
+--   「武器ならいまの職業が装備できる種類か」を見る。
 -- ★出撃の間隔（10秒）はサーバーでも見る。通信の揺れぶん2秒の余裕を持たせて8秒
 -- ⚠勝ち負けは画面の申告のまま（戦闘をサーバーで回すまでは、今のⅡと同じ限界）
+-- ⚠引数を変えたので、前の形を落としてから作る（同じ名前で残ると呼び分けが曖昧になる）
+drop function if exists public.v2cap_sortie_settle(int, text, boolean, text, boolean);
 create or replace function public.v2cap_sortie_settle(
-  p_area int, p_enemy text, p_win boolean, p_drop text default null, p_auto boolean default false
+  p_area int, p_enemy text, p_win boolean, p_drop text default null, p_rank text default null,
+  p_auto boolean default false
 ) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
   c_cd constant interval := interval '8 seconds';
   v_uid   uuid := auth.uid();
   v_row   public.v2cap_profiles;
+  v_cls   public.v2cap_classes;
   v_area  public.v2cap_areas;
   v_en    public.v2cap_enemies;
-  v_eq    public.v2_equipment;
+  v_eq    public.v2cap_equipment;
   v_boss  boolean;
   v_win   boolean := coalesce(p_win, false);
   v_base  int;
@@ -754,6 +936,7 @@ begin
   if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   select * into v_row from public.v2cap_profiles where id = v_uid;
   if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  select * into v_cls from public.v2cap_classes where id = v_row.class;
   select * into v_area from public.v2cap_areas where id = p_area;
   if not found then return jsonb_build_object('ok', false, 'error', 'そのエリアはありません'); end if;
   if not (v_row.unlocked_areas @> array[p_area]) then
@@ -780,11 +963,12 @@ begin
     v_exp := case when v_boss then round(v_base * 14 / 10.0)::int
                   else round(v_base * (85 + random() * 30) / 100.0)::int end;
     if p_drop is not null then
-      select * into v_eq from public.v2_equipment e where e.id = p_drop and v_area.drop_ranks ? e.rank;
-      if found then
-        insert into public.v2cap_inventory (player_id, equip_id, ilv)
-        values (v_uid, v_eq.id, v_en.lv) returning id into v_inv;
-        v_drop := jsonb_build_object('id', v_inv, 'equip_id', v_eq.id, 'ilv', v_en.lv);
+      select * into v_eq from public.v2cap_equipment e where e.id = p_drop;
+      if found and v_area.drop_ranks ? coalesce(p_rank, '')
+         and (v_eq.part <> '武器' or v_eq.type = any(coalesce(v_cls.weapons, '{}'))) then
+        insert into public.v2cap_inventory (player_id, base_id, rank, ilv)
+        values (v_uid, v_eq.id, p_rank, v_en.lv) returning id into v_inv;
+        v_drop := jsonb_build_object('id', v_inv, 'base_id', v_eq.id, 'rank', p_rank, 'ilv', v_en.lv);
       end if;
     end if;
   end if;
@@ -812,14 +996,14 @@ begin
     'stamina_max', public.v2cap_stamina_max(coalesce((v_res -> 'profile' ->> 'lv')::int, v_row.lv)));
 end;
 $$;
-revoke all on function public.v2cap_sortie_settle(int, text, boolean, text, boolean) from public, anon;
-grant execute on function public.v2cap_sortie_settle(int, text, boolean, text, boolean) to authenticated;
+revoke all on function public.v2cap_sortie_settle(int, text, boolean, text, text, boolean) from public, anon;
+grant execute on function public.v2cap_sortie_settle(int, text, boolean, text, text, boolean) to authenticated;
 
 -- ============================================================
 -- ===== 6. 転職（神殿）=====
 -- ============================================================
--- いつでも無料。LVはそのまま、ジョブLVは職業ごとに続きから。初めて就く職業はJLV1から
--- ★一次職は元の初期職のJLV30が要る（v2cap_classes.req_cls / req_jlv）
+-- いつでも無料。LVはそのまま、JBLVは職業ごとに続きから。初めて就く職業はJBLV1から
+-- ★新しい職業で装備できない武器は外す（なくならない）
 -- ★消費MPが変わる（他職の技は2倍）ので、編成が最大MPを超えたら縮める（v2cap_fit_set）
 create or replace function public.v2cap_change_class(p_class text)
 returns jsonb language plpgsql security definer set search_path = public as $$
@@ -834,6 +1018,8 @@ declare
   v_new   jsonb;
   v_added jsonb;
   v_set   jsonb;
+  v_equip jsonb;
+  v_off   boolean := false;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
@@ -846,7 +1032,7 @@ begin
     v_have := coalesce((v_row.jobs -> v_cls.req_cls ->> 'lv')::int, 1);
     if v_have < v_cls.req_jlv then
       return jsonb_build_object('ok', false, 'error',
-        format('%sのジョブLV%sが必要です（いま%s）', v_cls.req_cls, v_cls.req_jlv, v_have));
+        format('%sのJBLV%sが必要です（いま%s）', v_cls.req_cls, v_cls.req_jlv, v_have));
     end if;
   end if;
 
@@ -861,11 +1047,20 @@ begin
     from jsonb_array_elements_text(v_new) as t(name) where not (v_old ? t.name);
   v_set := public.v2cap_fit_set(v_row.skill_set, v_cls.id, v_row.mp + public.v2cap_job_bonus_mp(v_cls.id, v_jlv));
 
+  -- 新しい職業で装備できない武器は外す
+  v_equip := coalesce(v_row.equipped, '{}'::jsonb);
+  if v_equip ? 'weapon' then
+    select not (e.type = any(coalesce(v_cls.weapons, '{}'))) into v_off
+      from public.v2cap_inventory i join public.v2cap_equipment e on e.id = i.base_id
+     where i.id = (v_equip ->> 'weapon')::bigint and i.player_id = v_uid;
+    if coalesce(v_off, true) then v_equip := v_equip - 'weapon'; end if;
+  end if;
+
   update public.v2cap_profiles
-     set class = v_cls.id, jobs = v_jobs, learned = v_new, skill_set = v_set, updated_at = now()
+     set class = v_cls.id, jobs = v_jobs, learned = v_new, skill_set = v_set, equipped = v_equip, updated_at = now()
    where id = v_uid
    returning * into v_row;
-  return jsonb_build_object('ok', true, 'learned', v_added, 'profile', to_jsonb(v_row));
+  return jsonb_build_object('ok', true, 'learned', v_added, 'unequipped', coalesce(v_off, false), 'profile', to_jsonb(v_row));
 end;
 $$;
 revoke all on function public.v2cap_change_class(text) from public, anon;
@@ -901,10 +1096,10 @@ begin
   for e in select value from jsonb_array_elements(v_set) loop
     v_name := e ->> 'name';
     if v_name is null then return jsonb_build_object('ok', false, 'error', '枠にスキルが入っていません'); end if;
-    if not exists (select 1 from public.v2_skills s where s.name = v_name) then
+    if not exists (select 1 from public.v2cap_skills s where s.name = v_name) then
       return jsonb_build_object('ok', false, 'error', format('%sというスキルはありません', v_name));
     end if;
-    if exists (select 1 from public.v2_skills s where s.name = v_name and s.passive) then
+    if exists (select 1 from public.v2cap_skills s where s.name = v_name and s.passive) then
       return jsonb_build_object('ok', false, 'error', format('%sはパッシブなので枠に置けません', v_name));
     end if;
     if not (coalesce(v_row.learned, '[]'::jsonb) ? v_name) then
@@ -945,7 +1140,7 @@ begin
   end if;
   select coalesce(jsonb_agg(distinct e.value), '[]'::jsonb) into v_new
     from jsonb_array_elements_text(coalesce(p_names, '[]'::jsonb)) e(value)
-   where exists (select 1 from public.v2_skills s where s.name = e.value);
+   where exists (select 1 from public.v2cap_skills s where s.name = e.value);
   update public.v2cap_profiles set favorites = v_new, updated_at = now() where id = v_uid returning * into v_row;
   if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
   return jsonb_build_object('ok', true, 'profile', to_jsonb(v_row));
@@ -957,57 +1152,50 @@ grant execute on function public.v2cap_set_favorites(jsonb) to authenticated;
 -- ============================================================
 -- ===== 8. 装備の着脱・捨てる =====
 -- ============================================================
--- ★必要LVに足りなくても着けられる（効果が下がるだけ。計算は画面側 gear.js）
--- ★枠の種類チェックはサーバー（両手武器は左手を塞ぐ・盾は左手専用・アクセは2枠）＝今のⅡと同じ
+-- ★枠は 武器・頭・鎧・腕・足・アクセ①・アクセ② の7つ（盾なし・武器は1本）
+-- ★武器は**いまの職業が装備できる種類だけ**。必要LVに足りなくても着けられる（効果が下がるだけ）
 create or replace function public.v2cap_equip(p_slot text, p_inventory_id bigint)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_uid  uuid := auth.uid();
   v_row  public.v2cap_profiles;
+  v_cls  public.v2cap_classes;
   v_inv  public.v2cap_inventory;
-  v_eq   public.v2_equipment;
+  v_eq   public.v2cap_equipment;
   v_new  jsonb;
-  v_slot text := p_slot;
+  v_key  text;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   select * into v_row from public.v2cap_profiles where id = v_uid for update;
   if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
-  if v_slot not in ('right','left','head','body','arm','foot','acc1','acc2') then
+  if p_slot not in ('weapon','head','body','arm','foot','acc1','acc2') then
     return jsonb_build_object('ok', false, 'error', 'そんな枠はありません');
   end if;
   select * into v_inv from public.v2cap_inventory where id = p_inventory_id and player_id = v_uid;
   if not found then return jsonb_build_object('ok', false, 'error', 'その装備を持っていません'); end if;
-  select * into v_eq from public.v2_equipment where id = v_inv.equip_id;
+  select * into v_eq from public.v2cap_equipment where id = v_inv.base_id;
+  select * into v_cls from public.v2cap_classes where id = v_row.class;
 
   if v_eq.part = '武器' then
-    if v_eq.hands = 'L' and v_slot <> 'left' then return jsonb_build_object('ok', false, 'error', '盾は左手にしか着けられません'); end if;
-    if v_eq.hands = '2' and v_slot <> 'right' then return jsonb_build_object('ok', false, 'error', '両手武器は右手に着けます'); end if;
-    if v_slot not in ('right','left') then return jsonb_build_object('ok', false, 'error', '武器は手の枠に着けます'); end if;
+    if p_slot <> 'weapon' then return jsonb_build_object('ok', false, 'error', '武器は武器の枠に着けます'); end if;
+    if not (v_eq.type = any(coalesce(v_cls.weapons, '{}'))) then
+      return jsonb_build_object('ok', false, 'error', format('%sは%sを装備できません', v_row.class, v_eq.type));
+    end if;
   elsif v_eq.part = 'アクセ' then
-    if v_slot not in ('acc1','acc2') then return jsonb_build_object('ok', false, 'error', 'アクセはアクセ枠に着けます'); end if;
+    if p_slot not in ('acc1','acc2') then return jsonb_build_object('ok', false, 'error', 'アクセはアクセ枠に着けます'); end if;
   else
-    if v_slot <> (case v_eq.part when '頭' then 'head' when '鎧' then 'body' when '腕' then 'arm' when '足' then 'foot' end) then
+    if p_slot <> (case v_eq.part when '頭' then 'head' when '鎧' then 'body' when '腕' then 'arm' when '足' then 'foot' end) then
       return jsonb_build_object('ok', false, 'error', format('%sは%sの枠に着けます', v_eq.name, v_eq.part));
     end if;
   end if;
 
   v_new := coalesce(v_row.equipped, '{}'::jsonb);
   -- 同じ装備が別の枠に着いていたら外す
-  for v_slot in select key from jsonb_each_text(v_new) where value::bigint = p_inventory_id loop
-    v_new := v_new - v_slot;
+  for v_key in select key from jsonb_each_text(v_new) where value ~ '^[0-9]+$' and value::bigint = p_inventory_id loop
+    v_new := v_new - v_key;
   end loop;
-  v_slot := p_slot;
-  v_new := jsonb_set(v_new, array[v_slot], to_jsonb(p_inventory_id));
-  -- 両手武器を右手に着けたら左手を空ける／左手に着けるとき右手が両手武器なら外す
-  if v_eq.part = '武器' and v_eq.hands = '2' then
-    v_new := v_new - 'left';
-  elsif v_slot = 'left' and (v_new ? 'right') then
-    if exists (select 1 from public.v2cap_inventory i join public.v2_equipment e on e.id = i.equip_id
-                where i.id = (v_new ->> 'right')::bigint and e.hands = '2') then
-      v_new := v_new - 'right';
-    end if;
-  end if;
+  v_new := jsonb_set(v_new, array[p_slot], to_jsonb(p_inventory_id));
   update public.v2cap_profiles set equipped = v_new, updated_at = now() where id = v_uid;
   return jsonb_build_object('ok', true, 'equipped', v_new);
 end;
@@ -1056,7 +1244,7 @@ grant execute on function public.v2cap_discard(bigint[]) to authenticated;
 -- ============================================================
 -- ===== 9. 開発用 =====
 -- ============================================================
--- EXPを入れる（戦闘で入ったのと同じ扱い＝ジョブEXPも同じ量入る）
+-- EXPを入れる（戦闘で入ったのと同じ扱い＝JBEXPも同じ量入る）
 create or replace function public.v2cap_debug_gain_exp(p_amount int)
 returns jsonb language plpgsql security definer set search_path = public as $$
 begin
