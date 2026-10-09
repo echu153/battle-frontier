@@ -1,6 +1,8 @@
 // ============================================================
-// バトルフロンティアⅡ「レベルキャップあり」版（v2cap）— 装備の強化と分解
+// バトルフロンティアⅡ「レベルキャップあり」版（v2cap）— 鍛冶屋（装備の強化・分解・作成）
 // ------------------------------------------------------------
+// 【確定】2026-10-10 ユーザー指示「鍛冶屋を追加、ここで装備の強化・分解・作成が可能」：
+//   強化と分解は鍛冶屋だけで行う（装備画面は着ける・外すだけ）。作成は下の「作成」
 // 【確定】2026-10-10 ユーザー決定：
 //   ・強化に使うのは **Gold と、その装備が落ちるエリアの「残骸」だけ**（強化石は使わない）
 //   ・残骸は**装備を分解すると手に入る**（その装備のエリアの残骸）。数はレア度で決まる
@@ -80,6 +82,31 @@ export const enhanceErrorOf = (item, inv, prof) => {
 }
 // 1回の抽選（サーバーの random() * 100 < 成功率 と同じ。シミュレーションとテスト用）
 export const rollEnhance = (rate, rng = Math.random) => rng() * 100 < rate
+// ===== 作成 =====
+// 【確定】2026-10-10 ユーザーの表：レア・エピック・レジェンダリーを、Goldと**その装備のエリアの残骸**で作れる（ノーマルは作れない）
+//   残骸 … レア30・エピック100・レジェンダリー300
+//   Gold … 必要LV × レア50・エピック100・レジェンダリー200
+//   武器は14種どれでも作れる（いまの職業で装備できなくてよい＝転職の前に作っておける・ユーザー決定）
+//   必ずできる（失敗なし）・+0で手に入る・アイテムLV＝その装備の必要LV（落ちたものと同じ）
+// ★サーバーは v2cap_craft（表の写しは v2capsql.test.js が突き合わせる）
+export const CRAFT_RARITIES = ['R', 'E', 'L']
+export const CRAFT_SCRAP = { R:30, E:100, L:300 }
+export const CRAFT_GOLD_PER_LV = { R:50, E:100, L:200 }
+export const canCraft = (item) => !!item && (CRAFT_SCRAP[item.rarity] || 0) > 0
+// 作るのにかかるもの（エリアとレア度が同じなら、どの種類でも同じ）。ノーマルは null
+export const craftCostOf = (item) => (canCraft(item)
+  ? { area: item.area, scrap: CRAFT_SCRAP[item.rarity], gold: Math.max(1, item.lv || 1) * CRAFT_GOLD_PER_LV[item.rarity] }
+  : null)
+// 作れないわけ（作れるなら null）。見る順はサーバーと同じ
+export const craftErrorOf = (item, prof) => {
+  if (!item) return 'その装備はありません'
+  const c = craftCostOf(item)
+  if (!c) return 'ノーマルの装備は作れません'
+  if (scrapOf(prof?.materials, c.area) < c.scrap) return `${scrapNameOf(c.area)}が足りません`
+  if ((Number(prof?.gold) || 0) < c.gold) return 'Goldが足りません'
+  return null
+}
+
 // +from から +to まで上げるのに、平均でかかる量（説明とテスト用）
 export const expectedEnhanceCost = (ilv, from = 0, to = PLUS_MAX) => {
   let scrap = 0, gold = 0, tries = 0

@@ -30,6 +30,8 @@
 --   ・装備の強化（2026-10-10）：+10まで・+1ごとに元の強さの0.1倍ずつ足す。使うのは Gold と、その装備のエリアの「残骸」だけ。
 --     残骸は装備を分解すると入る（ノーマル1・レア5・エピック10・レジェンダリー25）。失敗すると残骸とGoldは消え、強化値はそのまま。
 --     「捨てる」は分解に置き換えた
+--   ・鍛冶屋（2026-10-10）：強化・分解・作成をする所。作成はレア・エピック・レジェンダリーを Gold とその装備のエリアの残骸で作る
+--     （残骸 30／100／300・Gold 必要LV×50／100／200・必ずできる・武器は14種どれでも）
 -- ============================================================
 
 -- ===== 0. 開発限定ゲート =====
@@ -3649,7 +3651,7 @@ revoke all on function public.v2cap_set_favorites(jsonb) from public, anon;
 grant execute on function public.v2cap_set_favorites(jsonb) to authenticated;
 
 -- ============================================================
--- ===== 8. 装備の着脱・分解・強化 =====
+-- ===== 8. 装備の着脱・鍛冶屋（分解・強化・作成）=====
 -- ============================================================
 -- ★枠は 武器・頭・鎧・腕・足・装飾品①・装飾品② の7つ（盾なし・武器は1本）。装飾品の部位の内部名は「アクセ」
 -- ★武器は**いまの職業が装備できる種類だけ**。必要LVに足りなくても着けられる（効果が下がるだけ）
@@ -3831,6 +3833,56 @@ end;
 $$;
 revoke all on function public.v2cap_enhance(bigint) from public, anon;
 grant execute on function public.v2cap_enhance(bigint) to authenticated;
+
+-- 作成：選んだ装備を1つ作って持ち物に入れる（+0・アイテムLV＝その装備の必要LV）
+-- 【確定】2026-10-10 ユーザーの表：作れるのはレア・エピック・レジェンダリー（ノーマルは作れない）。使うのは Gold と、その装備のエリアの残骸
+--   ・残骸 … レア30・エピック100・レジェンダリー300
+--   ・Gold … 必要LV × レア50・エピック100・レジェンダリー200
+--   ・必ずできる。武器は14種どれでも作れる（いまの職業で装備できなくてよい・ユーザー決定）
+-- ★表の写しは src/v2cap/lib/smith.js（CRAFT_SCRAP・CRAFT_GOLD_PER_LV）。v2capsql.test.js が突き合わせる
+create or replace function public.v2cap_craft(p_equip_id text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid  uuid := auth.uid();
+  v_row  public.v2cap_profiles;
+  v_eq   public.v2cap_equipment;
+  v_need int;
+  v_gold bigint;
+  v_key  text;
+  v_have int;
+  v_mats jsonb;
+  v_inv  bigint;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  -- ★行をつかんでから見る（連打しても・強化や分解と同時に届いても、残骸とGoldを二重に使えないように）
+  select * into v_row from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  select * into v_eq from public.v2cap_equipment where id = p_equip_id;
+  if not found then return jsonb_build_object('ok', false, 'error', 'その装備はありません'); end if;
+  if coalesce(v_eq.rarity, 'N') not in ('R', 'E', 'L') then
+    return jsonb_build_object('ok', false, 'error', 'ノーマルの装備は作れません');
+  end if;
+  v_need := case v_eq.rarity when 'R' then 30 when 'E' then 100 when 'L' then 300 end;
+  v_gold := greatest(1, v_eq.lv)::bigint * (case v_eq.rarity when 'R' then 50 when 'E' then 100 when 'L' then 200 end);
+  v_key  := v_eq.area::text;
+  v_mats := coalesce(v_row.materials, '{}'::jsonb);
+  v_have := coalesce((v_mats ->> v_key)::int, 0);
+  if v_have < v_need then return jsonb_build_object('ok', false, 'error', '残骸が足りません'); end if;
+  if v_row.gold < v_gold then return jsonb_build_object('ok', false, 'error', 'Goldが足りません'); end if;
+
+  v_mats := jsonb_set(v_mats, array[v_key], to_jsonb(v_have - v_need));
+  update public.v2cap_profiles
+     set materials = v_mats, gold = gold - v_gold, updated_at = now()
+   where id = v_uid;
+  insert into public.v2cap_inventory (player_id, base_id, ilv)
+  values (v_uid, v_eq.id, v_eq.lv) returning id into v_inv;
+  return jsonb_build_object('ok', true, 'id', v_inv, 'base_id', v_eq.id, 'rarity', v_eq.rarity, 'ilv', v_eq.lv,
+    'area', v_eq.area, 'scrap', v_need, 'gold', v_gold, 'materials', v_mats, 'gold_left', v_row.gold - v_gold);
+end;
+$$;
+revoke all on function public.v2cap_craft(text) from public, anon;
+grant execute on function public.v2cap_craft(text) to authenticated;
 
 -- ============================================================
 -- ===== 9. 開発用 =====

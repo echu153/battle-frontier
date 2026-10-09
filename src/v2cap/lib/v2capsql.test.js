@@ -12,7 +12,7 @@ import { JOB_NEED_TENTHS, JOB_MAX } from './jobs.js'
 import { ROLE_TENTHS } from './areas.js'
 import { SLOTS, RARITIES } from './equipment.js'
 import { SORTIE_CD, DROP_RARITY } from './sortie.js'
-import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD } from './smith.js'
+import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV } from './smith.js'
 import { rewrite } from '../../../tools/v2cap-sql.mjs'
 
 const SQL = readFileSync(new URL('../../../supabase_v2cap_core.sql', import.meta.url), 'utf8')
@@ -235,6 +235,24 @@ test('【確定】強化：+10まで・残骸は 1,2,3,4,5,7,8,9,10,11・Goldは
   const branch = e.search(/if v_ok then\s+update public\.v2cap_inventory set plus = v_next where id = v_inv\.id;\s+end if;/)
   assert.ok(spend > 0 && branch > spend, '使うのは分岐の前・強化値は成功のときだけ上がる')
   assert.ok(!/plus = v_plus - 1|plus = plus - 1|delete from public\.v2cap_inventory/.test(e), '失敗しても下がらない・壊れない')
+})
+
+test('【確定】作成（鍛冶屋）：レア・エピック・レジェンダリーを Gold とその装備のエリアの残骸で作る（JSと同じ表）。ノーマルは作れない・武器は職業を見ない', () => {
+  const c = fnBody('v2cap_craft')
+  const scrapCase = `case v_eq.rarity ${CRAFT_RARITIES.map(r => `when '${r}' then ${CRAFT_SCRAP[r]}`).join(' ')} end`
+  const goldCase = `case v_eq.rarity ${CRAFT_RARITIES.map(r => `when '${r}' then ${CRAFT_GOLD_PER_LV[r]}`).join(' ')} end`
+  assert.ok(c.includes(`v_need := ${scrapCase};`), `残骸の数が smith.js の CRAFT_SCRAP と同じ（${scrapCase}）`)
+  assert.ok(c.includes(`v_gold := greatest(1, v_eq.lv)::bigint * (${goldCase});`), `Gold＝必要LV×係数（smith.js の CRAFT_GOLD_PER_LV）`)
+  assert.deepEqual(CRAFT_SCRAP, { R:30, E:100, L:300 }, 'ユーザーの表')
+  assert.deepEqual(CRAFT_GOLD_PER_LV, { R:50, E:100, L:200 }, 'ユーザーの表')
+  assert.ok(c.includes(`if coalesce(v_eq.rarity, 'N') not in ('${CRAFT_RARITIES.join("', '")}') then`), 'ノーマル（とレア度の無い前の行）は作れない')
+  assert.match(c, /select \* into v_row from public\.v2cap_profiles where id = v_uid for update;/, '行をつかんでから見る')
+  assert.ok(c.includes('v_key  := v_eq.area::text;'), 'その装備のエリアの残骸を使う')
+  assert.ok(c.includes("if v_have < v_need then return jsonb_build_object('ok', false, 'error', '残骸が足りません'); end if;"))
+  assert.ok(c.includes("if v_row.gold < v_gold then return jsonb_build_object('ok', false, 'error', 'Goldが足りません'); end if;"))
+  assert.match(c, /values \(v_uid, v_eq\.id, v_eq\.lv\) returning id into v_inv;/, '+0・アイテムLV＝必要LVで持ち物に入る（落ちたものと同じ）')
+  assert.ok(!/weapons|v_cls/.test(c), '武器は14種どれでも作れる（いまの職業を見ない・ユーザー決定）')
+  assert.ok(!/random\(\)/.test(c), '必ずできる（抽選しない）')
 })
 
 test('強化値（持ち物の plus）と残骸（プロフィールの materials）の列がある。キャラは消さない', () => {

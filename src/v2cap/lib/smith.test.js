@@ -11,6 +11,7 @@ import {
   PLUS_MAX, plusOf, plusMultOf, plusLabel, SCRAP_NAMES, scrapNameOf, scrapOf, SCRAP_YIELD, scrapYieldOf,
   dismantleGainOf, bulkPickable, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, enhanceGoldOf,
   enhanceCostOf, enhanceErrorOf, rollEnhance, expectedEnhanceCost,
+  CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV, canCraft, craftCostOf, craftErrorOf,
 } from './smith.js'
 
 const rngOf = (seed) => { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }
@@ -143,4 +144,33 @@ test('平均でかかる量（ユーザーに見せた数）：+10まで残骸�
   const last = expectedEnhanceCost(90, 9, 10)
   assert.equal(Math.round(last.scrap), 110)
   assert.equal(Math.round(last.tries), 10)
+})
+
+test('【確定】作成（鍛冶屋）：レア30・エピック100・レジェンダリー300個のその装備のエリアの残骸と、Gold＝必要LV×50／100／200。ノーマルは作れない', () => {
+  assert.deepEqual(CRAFT_RARITIES, ['R', 'E', 'L'])
+  assert.deepEqual(CRAFT_SCRAP, { R:30, E:100, L:300 })
+  assert.deepEqual(CRAFT_GOLD_PER_LV, { R:50, E:100, L:200 })
+  assert.equal(canCraft(itemOf(1, 'N', '片手剣')), false)
+  assert.equal(craftCostOf(itemOf(1, 'N', '片手剣')), null)
+  assert.deepEqual(craftCostOf(itemOf(1, 'R', '片手剣')), { area: 1, scrap: 30, gold: 10 * 50 }, 'エリア1のレア＝必要LV10')
+  assert.deepEqual(craftCostOf(itemOf(1, 'E', 'リング')), { area: 1, scrap: 100, gold: 15 * 100 })
+  assert.deepEqual(craftCostOf(itemOf(15, 'L', '刀')), { area: 15, scrap: 300, gold: 90 * 200 }, 'エリア15のレジェンダリー＝必要LV90で18000')
+  // エリアとレア度が同じなら、どの種類でも同じ（画面では1回だけ出す）
+  for (const area of [1, 8, 15]) {
+    for (const r of CRAFT_RARITIES) {
+      const costs = ITEMS.filter(i => i.area === area && i.rarity === r).map(i => JSON.stringify(craftCostOf(i)))
+      assert.equal(new Set(costs).size, 1, `エリア${area}の${r}`)
+    }
+  }
+  // 作れないわけ（見る順はサーバーと同じ：ノーマル → 残骸 → Gold）
+  const item = itemOf(3, 'E', '軽装鎧')   // 洞窟の残骸100・必要LV25でGold2500
+  assert.equal(craftErrorOf(itemOf(3, 'N', '軽装鎧'), { materials: { 3: 999 }, gold: 1e9 }), 'ノーマルの装備は作れません')
+  assert.equal(craftErrorOf(item, { materials: { 2: 999, 3: 99 }, gold: 1e9 }), '洞窟の残骸が足りません', 'ほかのエリアの残骸では作れない')
+  assert.equal(craftErrorOf(item, { materials: { 3: 100 }, gold: 2499 }), 'Goldが足りません')
+  assert.equal(craftErrorOf(item, { materials: { 3: 100 }, gold: 2500 }), null)
+  assert.equal(craftErrorOf(null, {}), 'その装備はありません')
+})
+
+test('作成は分解より重い（作って分解して増える抜け道が無い）', () => {
+  for (const r of CRAFT_RARITIES) assert.ok(CRAFT_SCRAP[r] > SCRAP_YIELD[r], `${r}：作る${CRAFT_SCRAP[r]} ＞ 分解${SCRAP_YIELD[r]}`)
 })

@@ -8,6 +8,7 @@ import { box, btn, miniBtn, TEXT } from '../../v2/components/v2ui.js'
 import V2capStatus from '../components/V2capStatus.jsx'
 import V2capSortie from '../components/V2capSortie.jsx'
 import V2capEquip from '../components/V2capEquip.jsx'
+import V2capSmith from '../components/V2capSmith.jsx'
 import V2capSkills from '../components/V2capSkills.jsx'
 import V2capTemple from '../components/V2capTemple.jsx'
 import { START_CLASSES, weaponsOf, attackKindOf, classDescOf } from '../lib/jobs.js'
@@ -18,13 +19,15 @@ import { START_CLASSES, weaponsOf, attackKindOf, classDescOf } from '../lib/jobs
 // 2026-10-09 着手。今のⅡ（/v2）は仮として残し、別のキャラ・別のデータで作る。
 // 設計は docs/v2cap-design.md。入れるのは is_admin だけ（サーバーの v2cap_is_dev も同じ）。
 // 土台で作ったのは：キャラ作成・ステータス・出撃・装備・神殿（転職）・スキルセット
+// 2026-10-10 鍛冶屋（強化・分解・作成）を足した（ユーザー指示）。強化と分解は鍛冶屋だけ
 // ============================================================
 const MENU = [
-  { key:'equip',  label:'装備',         icon:'🛡', color:'#88ccff', action:'着ける・強化・分解' },
+  { key:'equip',  label:'装備',         icon:'🛡', color:'#88ccff', action:'着ける・外す' },
+  { key:'smith',  label:'鍛冶屋',       icon:'🔨', color:'#ffaa44', action:'強化・分解・作成' },
   { key:'skills', label:'スキルセット', icon:'📖', color:'#44ff88', action:'編成する' },
   { key:'temple', label:'神殿',         icon:'🏛', color:'#ff88cc', action:'転職する' },
 ]
-const SCREEN_TITLE = { equip:'🛡 装備', skills:'📖 スキルセット', temple:'🏛 神殿' }
+const SCREEN_TITLE = { equip:'🛡 装備', smith:'🔨 鍛冶屋', skills:'📖 スキルセット', temple:'🏛 神殿' }
 
 export default function V2capHome() {
   const nav = useNavigate()
@@ -239,7 +242,8 @@ export default function V2capHome() {
                   <button onClick={() => setScreen('home')} style={miniBtn('#88aaff')}>← ホームへ</button>
                   <span style={{ color:'#88ccff', fontSize:'12px' }}>{SCREEN_TITLE[screen]}</span>
                 </div>
-                {screen === 'equip' && <V2capEquip prof={prof} inventory={inventory} onProfile={refresh} />}
+                {screen === 'equip' && <V2capEquip prof={prof} inventory={inventory} onProfile={refresh} onGo={setScreen} />}
+                {screen === 'smith' && <V2capSmith prof={prof} inventory={inventory} onProfile={refresh} onGo={setScreen} />}
                 {screen === 'skills' && <V2capSkills prof={prof} inventory={inventory} onProfile={refresh} />}
                 {screen === 'temple' && <V2capTemple prof={prof} inventory={inventory} onProfile={refresh} />}
               </>
