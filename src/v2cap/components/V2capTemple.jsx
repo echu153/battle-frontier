@@ -13,7 +13,9 @@ import { ITEM_BY_ID } from '../lib/equipment.js'
 // 「レベルキャップあり」版 — 神殿（転職）
 //   ・いつでも無料。**LVはそのまま**、JBLVは職業ごとに続きから（2026-10-09 ユーザー決定）
 //   ・初期職は10職。職業ごとに装備できる武器が3種決まっている（転職で装備できなくなった武器は外れる）
-//   ・ジョブのステはその職業に就いている間だけ効く。覚えたスキルはずっと残る
+//   ・ジョブのステはその職業に就いている間だけ効く
+//   ・スキルは**その職業でだけ使える**（覚えたものは消えず、戻れば使える）。スキルセットも**職業ごと**で、
+//     転職すると新しい職業の編成に切り替わる（初めてなら覚えている技を入れた編成で始まる）
 //   ・一次職は見直すまで一旦なし
 // ============================================================
 export default function V2capTemple({ prof, inventory, onProfile }) {
@@ -48,7 +50,10 @@ export default function V2capTemple({ prof, inventory, onProfile }) {
           <div><span style={{ color:'#cfe2ff' }}>{prof.class}</span> → <span style={{ color:'#ffcc00' }}>{confirm}</span></div>
           <div style={{ color: TEXT.sub, fontSize:'11px', marginTop:'6px' }}>
             LVはそのままです。{confirm}のJBLVは{jobOf(prof.jobs, confirm).lv}から続きます。
-            ジョブのステは{confirm}のものに入れ替わります。覚えたスキルはなくなりません。
+            ジョブのステは{confirm}のものに入れ替わります。
+            スキルセットは{confirm}の編成に切り替わり、使えるのは{confirm}のスキルだけになります
+            （{prof.class}の編成とスキルは残り、戻れば元どおり使えます）。
+            {!Array.isArray(prof.skill_sets?.[confirm]) && <span>{confirm}は初めてなので、覚えている技を入れた編成で始まります。</span>}
             {wornWeapon && !canEquipType(confirm, wornWeapon.type) && (
               <span style={{ color:'#ff8844' }}> いま着けている{wornWeapon.name}（{wornWeapon.type}）は{confirm}が装備できないので外れます。</span>
             )}
@@ -60,6 +65,7 @@ export default function V2capTemple({ prof, inventory, onProfile }) {
         <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.8 }}>
           いつでも無料で転職できます。LVは下がらず、JBLVは職業ごとに残ります（最大{JOB_MAX}）。
           JBLVが上がると、その職業のスキルを覚え、その職業のステが上がります（ステは就いている間だけ）。
+          スキルはその職業でだけ使え、スキルセットも職業ごとに保存されます。
           職業ごとに装備できる武器が決まっています。
         </div>
         {msg && <div style={{ color:'#44ff88', fontSize:'11px', marginTop:'8px' }}>{msg}</div>}

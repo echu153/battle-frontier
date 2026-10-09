@@ -153,7 +153,8 @@ export default function V2capHome() {
             <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'8px' }}>キャラクターを作る</div>
             <div style={{ color: TEXT.sub, fontSize:'10px', marginBottom:'10px', lineHeight:1.8 }}>
               LVは最大100で、職業を変えても下がりません。職業ごとにJBLV（最大{JOB_MAX}）があり、
-              上がるとその職業のスキルを覚え、その職業のステが上がります。職業ごとに装備できる武器が3種決まっています。
+              上がるとその職業のスキルを覚え、その職業のステが上がります。スキルはその職業でだけ使えます。
+              職業ごとに装備できる武器が3種決まっています。
             </div>
             <input value={name} onChange={e => setName(e.target.value)} maxLength={16} placeholder="名前（1〜16文字）"
               style={{ width:'100%', boxSizing:'border-box', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px', marginBottom:'10px' }} />

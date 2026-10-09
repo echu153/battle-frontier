@@ -4,7 +4,8 @@
 // supabase_v2cap_core.sql の「-- @@seed:名前」〜「-- @@end:名前」のあいだを、
 // src/v2cap/lib の値から作った INSERT に差し替える（手で書き写さない）。
 //   ・stages    … 段階（必要JBEXPの倍率・ステの量・スキルを覚えるJBLV）
-//   ・classes   … 職業（段階・就く条件・JBLVで上がるステの並び・装備できる武器・通常攻撃の種類）
+//   ・classes   … 職業（段階・就く条件・JBLVで上がるステの並び・装備できる武器・通常攻撃の種類・
+//                  スキルを使える職業＝自分と下位職）
 //   ・skills    … スキルの名簿（名前・職業・消費MP・覚える順）
 //   ・equipment … 装備の一覧（基本装備の部位・種類・系統）
 //   ・tiers     … 難易度帯（LV帯・次の帯が開くのに要る踏破数）
@@ -17,7 +18,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 
 const B = new URL('../src/', import.meta.url).href
-const { STAGES, STAGE_ORDER, CLASSES, bonusSeqOf } = await import(B + 'v2cap/lib/jobs.js')
+const { STAGES, STAGE_ORDER, CLASSES, bonusSeqOf, lineageOf } = await import(B + 'v2cap/lib/jobs.js')
 const { SKILLS, isPassive } = await import(B + 'v2cap/lib/skills.js')
 const { BASE_ITEMS } = await import(B + 'v2cap/lib/equipment.js')
 const { TIER_LV, ENEMY_LEVELS } = await import(B + 'v2cap/lib/areas.js')
@@ -45,11 +46,11 @@ export const seeds = () => ({
     // ★なくした職業（ノーブル・サモナー・一次職）を消してから入れ直す。参照している外部キーは無い
     //   （キャラの職業は §2 の一度だけの作り直しで消えている）
     `delete from public.v2cap_classes where id <> all(${arr(CLASSES.map(c => c.id), '::text[]')});`,
-    'insert into public.v2cap_classes (id, stage, sort, req_cls, req_jlv, bonus_seq, weapons, kind) values',
-    CLASSES.map(c => `  (${q(c.id)}, ${q(c.stage)}, ${c.sort}, ${c.req ? q(c.req.cls) : 'null'}, ${c.req ? c.req.jlv : 'null'}, ${arr(bonusSeqOf(c.id), '::text[]')}, ${arr(c.weapons, '::text[]')}, ${q(c.kind)})`).join(',\n'),
+    'insert into public.v2cap_classes (id, stage, sort, req_cls, req_jlv, bonus_seq, weapons, kind, lineage) values',
+    CLASSES.map(c => `  (${q(c.id)}, ${q(c.stage)}, ${c.sort}, ${c.req ? q(c.req.cls) : 'null'}, ${c.req ? c.req.jlv : 'null'}, ${arr(bonusSeqOf(c.id), '::text[]')}, ${arr(c.weapons, '::text[]')}, ${q(c.kind)}, ${arr(lineageOf(c.id), '::text[]')})`).join(',\n'),
     'on conflict (id) do update set stage = excluded.stage, sort = excluded.sort,',
     '  req_cls = excluded.req_cls, req_jlv = excluded.req_jlv, bonus_seq = excluded.bonus_seq,',
-    '  weapons = excluded.weapons, kind = excluded.kind;',
+    '  weapons = excluded.weapons, kind = excluded.kind, lineage = excluded.lineage;',
     // 使われなくなった段階（一次）を消す
     `delete from public.v2cap_stages s where s.stage <> all(${arr(STAGE_ORDER, '::text[]')})`,
     '  and not exists (select 1 from public.v2cap_classes c where c.stage = s.stage);',

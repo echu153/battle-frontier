@@ -8,12 +8,13 @@
 // ★職業補正は**一旦なし**（2026-10-09 ユーザー決定）＝ runBattle に noClassBonus を渡す。
 // ★武器は職業ごとに装備できる種類が決まっている。いまの職業で装備できない武器は
 //   （サーバーが外すはずだが）念のためここでも数えない
+// ★スキルセットは**職業ごと**（skill_sets[職業]）。使えるのはその職業と下位職の技だけ
 // ============================================================
 import { STAT_KEYS, calcPower } from '../../v2/lib/stats.js'
 import { ITEM_BY_ID, SLOTS } from './equipment.js'
-import { SKILL_BY_NAME } from './skills.js'
+import { SKILL_BY_NAME, isPassive } from './skills.js'
 import { statsAt, effectPct, powerAt, armorEffects } from './gear.js'
-import { jobBonusStats, jobOf, canEquipType, attackKindOf } from './jobs.js'
+import { jobBonusStats, jobOf, canEquipType, attackKindOf, lineageOf } from './jobs.js'
 
 const zero = () => Object.fromEntries(STAT_KEYS.map(k => [k, 0]))
 
@@ -74,6 +75,20 @@ export const statBreakdown = (profile, inventory) => {
 }
 export const totalStats = (profile, inventory) => statBreakdown(profile, inventory).total
 
+// ===== スキルセット =====
+// いまの職業の編成。【確定】スキルセットは職業ごとに持つ（転職して戻ると前の編成に戻る）
+export const currentSetOf = (profile) => {
+  const set = profile?.skill_sets?.[profile?.class]
+  return Array.isArray(set) ? set : []
+}
+// 戦闘の枠にする。その職業（と下位職）の技でないものは置かない（サーバーが保存のときに弾いているが念のため）。
+// ★下位職の技は「自分の職業の技」として渡す＝今のⅡの戦闘エンジンが他職扱い（効果0.8倍・消費MP2倍）にしない。
+//   【確定】上位職は下位職のスキルを**そのまま**使える（2026-10-09）
+export const slotsOf = (set, cls, lineage = lineageOf(cls)) => (set || [])
+  .map(e => ({ skill: SKILL_BY_NAME[e?.name], uses: e?.uses || 1 }))
+  .filter(e => e.skill && !isPassive(e.skill) && lineage.includes(e.skill.cls))
+  .map(e => (e.skill.cls === cls ? e : { ...e, skill: { ...e.skill, cls } }))
+
 // runBattle に渡す形。重鎧の「受けるダメージ−%」は taken（物理・魔法とも）で渡す
 export const toFighter = (profile, inventory) => {
   const bd = statBreakdown(profile, inventory)
@@ -86,8 +101,6 @@ export const toFighter = (profile, inventory) => {
     taken: bd.armor.takenMult !== 1 ? { phys: bd.armor.takenMult, mag: bd.armor.takenMult } : null,
     enchants: [],
     evolutions: [],
-    slots: (profile?.skill_set || [])
-      .map(e => ({ skill: SKILL_BY_NAME[e?.name], uses: e?.uses || 1 }))
-      .filter(e => e.skill),
+    slots: slotsOf(currentSetOf(profile), profile?.class),
   }
 }

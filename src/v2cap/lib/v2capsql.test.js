@@ -5,7 +5,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { STAT_KEYS, STAT_DEFS, ROLLS_PER_LV } from '../../v2/lib/stats.js'
-import { OFF_CLASS_MP_MULT } from '../../v2/lib/skills.js'
+import { SKILL_SET_SLOTS, SKILL_USE_MAX } from '../../v2/lib/skills.js'
+import { DEFAULT_USES_MAX } from './skills.js'
 import { NEED_PERMIL, EXP_OFFSET, EXP_SPREAD_PCT, EXP_BOSS_TENTHS, MAX_LV, STAMINA_BASE, STAMINA_PER_LV } from './level.js'
 import { JOB_NEED_TENTHS, JOB_MAX } from './jobs.js'
 import { SLOTS } from './equipment.js'
@@ -48,13 +49,53 @@ test('LVアップの抽選（回数・並び・上がる量）がJSと同じ', (
   STAT_KEYS.forEach((k, i) => assert.ok(apply.includes(`${k} = ${k} + v_gain[${i + 1}]`), `${k} は ${i + 1}番目`))
 })
 
-test('スキルを覚える順はこの版の名簿（v2cap_skills の sort）。他職の技は消費MP2倍', () => {
+test('スキルを覚える順はこの版の名簿（v2cap_skills の sort）', () => {
   const learn = fnBody('v2cap_learn')
   assert.match(learn, /from public\.v2cap_skills k/)
   assert.match(learn, /row_number\(\) over \(order by k\.sort\)/)
-  assert.equal(OFF_CLASS_MP_MULT, 2)
-  assert.match(fnBody('v2cap_set_cost'), /case when s\.cls = p_cls then 1 else 2 end/)
-  assert.match(fnBody('v2cap_set_cost'), /join public\.v2cap_skills s/)
+})
+
+test('【確定】スキルはその職業（と下位職）でだけ使える。消費MPは名簿のまま（他職を2倍にする形はやめた）', () => {
+  const cost = fnBody('v2cap_set_cost')
+  assert.match(cost, /create or replace function public\.v2cap_set_cost\(p_set jsonb\)/)
+  assert.match(cost, /join public\.v2cap_skills s/)
+  assert.ok(!/else 2 end|p_cls/.test(cost), '職業で消費MPを変えていない')
+  // 前の形（他職を2倍にしていた set_cost・職業だけ見ていた fit_set）は落としてから作る
+  assert.ok(SQL.includes('drop function if exists public.v2cap_set_cost(jsonb, text);'))
+  assert.ok(SQL.includes('drop function if exists public.v2cap_fit_set(jsonb, text, int);'))
+  // 保存のときに職業を見る（文言は skills.js の validateSkillSet と同じ）
+  const set = fnBody('v2cap_set_skills')
+  assert.match(set, /v_lin := public\.v2cap_lineage\(v_row\.class\);/)
+  assert.match(set, /if not \(v_sk\.cls = any\(v_lin\)\) then/)
+  assert.ok(set.includes(`format('%sは%sでは使えません（%sのスキル）', v_name, v_row.class, v_sk.cls)`))
+  assert.match(set, new RegExp(`c_slots\\s+constant int := ${SKILL_SET_SLOTS};`))
+  assert.match(set, new RegExp(`c_use_max constant int := ${SKILL_USE_MAX};`))
+  // 転職・移し替えで縮めるときも、その職業で使えない技を外す
+  assert.match(fnBody('v2cap_fit_set'), /s\.cls = any\(public\.v2cap_lineage\(p_cls\)\)/)
+  assert.match(fnBody('v2cap_fit_set'), /coalesce\(p_learned, '\[\]'::jsonb\) \? s\.name/)
+  // 使える職業は v2cap_classes.lineage（種は jobs.js の lineageOf から作る＝種の突き合わせで見ている）
+  assert.match(fnBody('v2cap_lineage'), /from public\.v2cap_classes c where c\.id = p_cls/)
+})
+
+test('【確定】スキルセットは職業ごと（skill_sets[職業]）。転職で前の編成は残り、初めての職業は覚えた技で始まる', () => {
+  assert.match(fnBody('v2cap_set_skills'), /set skill_sets = jsonb_set\([\s\S]*?array\[class\], v_set\)/)
+  const change = fnBody('v2cap_change_class')
+  assert.match(change, /if v_sets \? v_cls\.id then\s+v_set := public\.v2cap_fit_set\(v_sets -> v_cls\.id, v_cls\.id, v_new, v_max\);\s+else\s+v_set := public\.v2cap_default_set\(v_cls\.id, v_new, v_max\);/)
+  assert.match(change, /v_sets := jsonb_set\(v_sets, array\[v_cls\.id\], v_set\);/)
+  assert.match(fnBody('v2cap_create_character'), /public\.v2cap_default_set\(v_cls, v_learn,/)
+  // 初めての職業の編成の決まり（枠の数・1枠の回数の上限）が skills.js の defaultSetOf と同じ
+  const def = fnBody('v2cap_default_set')
+  assert.match(def, new RegExp(`c_slots\\s+constant int := ${SKILL_SET_SLOTS};`))
+  assert.match(def, new RegExp(`c_uses_max constant int := ${DEFAULT_USES_MAX};`))
+  // 前の「1つだけの編成」（skill_set）は、古い列があるときだけ動く移し替えの中でしか触らない
+  const m = SQL.match(/do \$\$\s*begin\s*if exists \(select 1 from information_schema\.columns[\s\S]*?column_name = 'skill_set'\) then([\s\S]*?)end if;\s*end \$\$;/)
+  assert.ok(m, '移し替えは古い列があるときだけ動く（全文を流し直しても2回目以降は何もしない）')
+  assert.match(m[1], /public\.v2cap_fit_set\(p\.skill_set, p\.class, p\.learned,/, '移すときに他の職業の技を外す')
+  assert.match(m[1], /alter table public\.v2cap_profiles drop column skill_set;/)
+  const outside = SQL.replace(m[0], '').replace(/--[^\n]*/g, '')
+  assert.ok(!/\bskill_set\b/.test(outside), '移し替えの外に skill_set が残っていない')
+  // 移し替えは、使う関数（v2cap_fit_set）を作ったあとに置く
+  assert.ok(SQL.indexOf(m[0]) > SQL.indexOf('create or replace function public.v2cap_fit_set('))
 })
 
 test('★今のⅡ（v2_）のテーブルは読みも書きもしない（この版の名簿と装備の一覧を使う）', () => {
@@ -94,6 +135,17 @@ test('★書き込みをする内部ヘルパは authenticated から閉じて�
   for (const name of ['v2cap_apply_exp(uuid, int)', 'v2cap_stamina_roll(uuid)']) {
     assert.ok(SQL.includes(`revoke all on function public.${name} from public, anon, authenticated;`), `${name} を閉じている`)
     assert.ok(!SQL.includes(`grant execute on function public.${name}`), `${name} を開けていない`)
+  }
+})
+
+test('★公開していない関数は、足したものも含めて全部 REVOKE してある（閉じ忘れを防ぐ）', () => {
+  const granted = new Set([...SQL.matchAll(/grant execute on function public\.(v2cap_\w+)\(/g)].map(m => m[1]))
+  const defined = [...new Set([...SQL.matchAll(/create or replace function public\.(v2cap_\w+)\(/g)].map(m => m[1]))]
+  // v2cap_is_dev は「開発者か」を返すだけ（画面からも呼べてよい）
+  const helpers = defined.filter(n => !granted.has(n) && n !== 'v2cap_is_dev')
+  assert.ok(helpers.length >= 10, `内部ヘルパを拾えている（${helpers.length}本）`)
+  for (const name of helpers) {
+    assert.match(SQL, new RegExp(`revoke all on function public\\.${name}\\([^)]*\\) from public, anon`), `${name} を閉じている`)
   }
 })
 

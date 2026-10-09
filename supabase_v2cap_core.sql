@@ -17,6 +17,8 @@
 --   ・ジョブLV（表記は JBLV・最大30）を職業ごとに持つ。入るのは今の職業。上がるとスキルを覚える
 --   ・初期職は10職。職業ごとに装備できる武器が3種決まっている。一次職は一旦なし
 --   ・装備は「基本装備＋ランク＋アイテムLV（＝倒した敵のLV）」。武器は1本・盾なし・防具は重鎧／軽装
+--   ・スキルは**その職業でだけ使える**（他職の技は置けない）。上位職は下位職のスキルをそのまま使える。
+--     スキルセットは**職業ごと**に持つ（v2cap_profiles.skill_sets。転職して戻ると前の編成に戻る）
 -- ============================================================
 
 -- ===== 0. 開発限定ゲート =====
@@ -62,6 +64,8 @@ on conflict (stage) do update set mult = excluded.mult, per_lv = excluded.per_lv
 -- req_cls / req_jlv … 就くのに要る職業とJBLV（初期職は null）
 -- bonus_seq … JBLVで上がるステの並び（1点ずつ。jobs.js の bonusSeqOf と同じ）
 -- weapons … 装備できる武器の種類（3つ）／kind … 通常攻撃が物理（phys）か魔法（mag）か
+-- lineage … スキルを使える職業＝[自分, 下位職, その下位職, …]（jobs.js の lineageOf。req_cls をさかのぼったもの）
+--   ★スキルは「その職業でだけ使える。上位職は下位職のスキルも使える」（2026-10-09 ユーザー決定）
 create table if not exists public.v2cap_classes (
   id        text primary key,
   stage     text not null references public.v2cap_stages(stage),
@@ -72,6 +76,7 @@ create table if not exists public.v2cap_classes (
 );
 alter table public.v2cap_classes add column if not exists weapons text[] not null default '{}';
 alter table public.v2cap_classes add column if not exists kind text not null default 'phys';
+alter table public.v2cap_classes add column if not exists lineage text[] not null default '{}';
 alter table public.v2cap_classes enable row level security;
 drop policy if exists v2cap_classes_read on public.v2cap_classes;
 create policy v2cap_classes_read on public.v2cap_classes for select to authenticated using (true);
@@ -80,20 +85,20 @@ grant select on table public.v2cap_classes to authenticated;
 
 -- @@seed:classes
 delete from public.v2cap_classes where id <> all('{戦士,槍使い,格闘家,盗賊,弓使い,銃士,魔法使い,呪術師,僧侶,薬師}'::text[]);
-insert into public.v2cap_classes (id, stage, sort, req_cls, req_jlv, bonus_seq, weapons, kind) values
-  ('戦士', 'shoki', 0, null, null, '{str,vit,hp,dex,str,str,vit,hp,str,dex,vit,str,str,hp,vit,dex,str,str,vit,hp,str,dex,vit,str,str,hp,dex,vit,str}'::text[], '{両手剣,斧,鈍器}'::text[], 'phys'),
-  ('槍使い', 'shoki', 1, null, null, '{str,dex,vit,hp,str,dex,str,dex,vit,str,hp,dex,str,vit,str,dex,str,dex,hp,str,vit,dex,str,dex,str,hp,vit,dex,str}'::text[], '{槍,片手剣,投擲}'::text[], 'phys'),
-  ('格闘家', 'shoki', 2, null, null, '{str,agi,hp,vit,str,agi,str,agi,hp,vit,str,agi,str,hp,agi,vit,str,agi,str,hp,vit,agi,str,agi,str,hp,vit,agi,str}'::text[], '{拳,鈍器,杖}'::text[], 'phys'),
-  ('盗賊', 'shoki', 3, null, null, '{agi,dex,str,agi,luk,dex,agi,str,agi,dex,agi,luk,dex,agi,str,agi,dex,luk,agi,dex,agi,str,agi,dex,luk,agi,str,dex,agi}'::text[], '{短剣,片手剣,投擲}'::text[], 'phys'),
-  ('弓使い', 'shoki', 4, null, null, '{dex,agi,str,dex,luk,agi,dex,str,dex,agi,dex,luk,agi,dex,str,dex,agi,luk,dex,agi,dex,str,dex,agi,luk,dex,str,agi,dex}'::text[], '{弓,短剣,片手剣}'::text[], 'phys'),
-  ('銃士', 'shoki', 5, null, null, '{dex,str,agi,dex,luk,dex,str,dex,str,dex,agi,luk,dex,str,dex,str,dex,agi,luk,dex,str,dex,str,dex,agi,dex,luk,str,dex}'::text[], '{銃,片手剣,投擲}'::text[], 'phys'),
-  ('魔法使い', 'shoki', 6, null, null, '{int_stat,mp,dex,int_stat,agi,int_stat,mp,int_stat,dex,int_stat,agi,int_stat,mp,int_stat,dex,int_stat,mp,int_stat,agi,int_stat,dex,int_stat,mp,int_stat,agi,int_stat,dex,mp,int_stat}'::text[], '{杖,書,短剣}'::text[], 'mag'),
-  ('呪術師', 'shoki', 7, null, null, '{int_stat,mp,dex,int_stat,luk,int_stat,mp,int_stat,dex,luk,int_stat,mp,int_stat,dex,int_stat,luk,int_stat,mp,int_stat,dex,luk,int_stat,mp,int_stat,dex,int_stat,luk,mp,int_stat}'::text[], '{杖,短剣,投擲}'::text[], 'mag'),
-  ('僧侶', 'shoki', 8, null, null, '{int_stat,vit,hp,mp,int_stat,vit,hp,int_stat,mp,int_stat,vit,hp,mp,int_stat,vit,int_stat,hp,mp,vit,int_stat,hp,int_stat,mp,vit,int_stat,hp,mp,vit,int_stat}'::text[], '{鈍器,杖,書}'::text[], 'mag'),
-  ('薬師', 'shoki', 9, null, null, '{int_stat,dex,hp,mp,int_stat,dex,hp,int_stat,mp,int_stat,dex,hp,mp,int_stat,dex,int_stat,hp,mp,dex,int_stat,hp,int_stat,mp,dex,int_stat,hp,mp,dex,int_stat}'::text[], '{短剣,投擲,書}'::text[], 'mag')
+insert into public.v2cap_classes (id, stage, sort, req_cls, req_jlv, bonus_seq, weapons, kind, lineage) values
+  ('戦士', 'shoki', 0, null, null, '{str,vit,hp,dex,str,str,vit,hp,str,dex,vit,str,str,hp,vit,dex,str,str,vit,hp,str,dex,vit,str,str,hp,dex,vit,str}'::text[], '{両手剣,斧,鈍器}'::text[], 'phys', '{戦士}'::text[]),
+  ('槍使い', 'shoki', 1, null, null, '{str,dex,vit,hp,str,dex,str,dex,vit,str,hp,dex,str,vit,str,dex,str,dex,hp,str,vit,dex,str,dex,str,hp,vit,dex,str}'::text[], '{槍,片手剣,投擲}'::text[], 'phys', '{槍使い}'::text[]),
+  ('格闘家', 'shoki', 2, null, null, '{str,agi,hp,vit,str,agi,str,agi,hp,vit,str,agi,str,hp,agi,vit,str,agi,str,hp,vit,agi,str,agi,str,hp,vit,agi,str}'::text[], '{拳,鈍器,杖}'::text[], 'phys', '{格闘家}'::text[]),
+  ('盗賊', 'shoki', 3, null, null, '{agi,dex,str,agi,luk,dex,agi,str,agi,dex,agi,luk,dex,agi,str,agi,dex,luk,agi,dex,agi,str,agi,dex,luk,agi,str,dex,agi}'::text[], '{短剣,片手剣,投擲}'::text[], 'phys', '{盗賊}'::text[]),
+  ('弓使い', 'shoki', 4, null, null, '{dex,agi,str,dex,luk,agi,dex,str,dex,agi,dex,luk,agi,dex,str,dex,agi,luk,dex,agi,dex,str,dex,agi,luk,dex,str,agi,dex}'::text[], '{弓,短剣,片手剣}'::text[], 'phys', '{弓使い}'::text[]),
+  ('銃士', 'shoki', 5, null, null, '{dex,str,agi,dex,luk,dex,str,dex,str,dex,agi,luk,dex,str,dex,str,dex,agi,luk,dex,str,dex,str,dex,agi,dex,luk,str,dex}'::text[], '{銃,片手剣,投擲}'::text[], 'phys', '{銃士}'::text[]),
+  ('魔法使い', 'shoki', 6, null, null, '{int_stat,mp,dex,int_stat,agi,int_stat,mp,int_stat,dex,int_stat,agi,int_stat,mp,int_stat,dex,int_stat,mp,int_stat,agi,int_stat,dex,int_stat,mp,int_stat,agi,int_stat,dex,mp,int_stat}'::text[], '{杖,書,短剣}'::text[], 'mag', '{魔法使い}'::text[]),
+  ('呪術師', 'shoki', 7, null, null, '{int_stat,mp,dex,int_stat,luk,int_stat,mp,int_stat,dex,luk,int_stat,mp,int_stat,dex,int_stat,luk,int_stat,mp,int_stat,dex,luk,int_stat,mp,int_stat,dex,int_stat,luk,mp,int_stat}'::text[], '{杖,短剣,投擲}'::text[], 'mag', '{呪術師}'::text[]),
+  ('僧侶', 'shoki', 8, null, null, '{int_stat,vit,hp,mp,int_stat,vit,hp,int_stat,mp,int_stat,vit,hp,mp,int_stat,vit,int_stat,hp,mp,vit,int_stat,hp,int_stat,mp,vit,int_stat,hp,mp,vit,int_stat}'::text[], '{鈍器,杖,書}'::text[], 'mag', '{僧侶}'::text[]),
+  ('薬師', 'shoki', 9, null, null, '{int_stat,dex,hp,mp,int_stat,dex,hp,int_stat,mp,int_stat,dex,hp,mp,int_stat,dex,int_stat,hp,mp,dex,int_stat,hp,int_stat,mp,dex,int_stat,hp,mp,dex,int_stat}'::text[], '{短剣,投擲,書}'::text[], 'mag', '{薬師}'::text[])
 on conflict (id) do update set stage = excluded.stage, sort = excluded.sort,
   req_cls = excluded.req_cls, req_jlv = excluded.req_jlv, bonus_seq = excluded.bonus_seq,
-  weapons = excluded.weapons, kind = excluded.kind;
+  weapons = excluded.weapons, kind = excluded.kind, lineage = excluded.lineage;
 delete from public.v2cap_stages s where s.stage <> all('{shoki}'::text[])
   and not exists (select 1 from public.v2cap_classes c where c.stage = s.stage);
 -- @@end:classes
@@ -539,8 +544,8 @@ create table if not exists public.v2cap_profiles (
   luk        int not null default 5,
   class      text  not null default '戦士',
   jobs       jsonb not null default '{}'::jsonb,   -- {"戦士":{"lv":12,"exp":345}}
-  learned    jsonb not null default '[]'::jsonb,   -- 覚えたスキル名（ずっと残る）
-  skill_set  jsonb not null default '[]'::jsonb,   -- [{"name":"体当たり","uses":3}]
+  learned    jsonb not null default '[]'::jsonb,   -- 覚えたスキル名（ずっと残る。使えるのは覚えた職業と、その上位職だけ）
+  skill_sets jsonb not null default '{}'::jsonb,   -- 職業ごとの編成 {"戦士":[{"name":"体当たり","uses":3}]}
   favorites  jsonb not null default '[]'::jsonb,
   equipped   jsonb not null default '{}'::jsonb,   -- {"weapon": 12, "head": 13, ...} v2cap_inventory.id
   unlocked_areas int[] not null default array[1],
@@ -553,6 +558,8 @@ create table if not exists public.v2cap_profiles (
   updated_at timestamptz not null default now()
 );
 alter table public.v2cap_profiles alter column class set default '戦士';
+-- スキルセットを職業ごとにした（2026-10-09）。前の1つだけの編成（skill_set）は §3 の終わりで移して消す
+alter table public.v2cap_profiles add column if not exists skill_sets jsonb not null default '{}'::jsonb;
 create unique index if not exists v2cap_profiles_username_lower_idx
   on public.v2cap_profiles (lower(username));
 -- 参照は認証済み全員（今のⅡと同じ）。書き込みはRPC経由だけ
@@ -667,30 +674,94 @@ returns int language sql stable set search_path = public as $$
      where c.id = p_cls and x.k = 'mp'), 0) * 3
 $$;
 
--- 編成の想定利用MP。★いまの職業以外のスキルは消費MPが2倍（skills.js の OFF_CLASS_MP_MULT）
-create or replace function public.v2cap_set_cost(p_set jsonb, p_cls text)
+-- その職業でスキルを使える職業＝[自分, 下位職, …]（v2cap_classes.lineage。jobs.js の lineageOf）。
+-- 種が入っていなければ自分だけ（「その職業でだけ使える」の最低限）
+create or replace function public.v2cap_lineage(p_cls text)
+returns text[] language sql stable set search_path = public as $$
+  select coalesce((select nullif(c.lineage, '{}') from public.v2cap_classes c where c.id = p_cls), array[p_cls])
+$$;
+
+-- 編成の想定利用MP（Σ 消費MP×回数）。skills.js の setMpCost
+-- ★置けるのはその職業（と下位職）の技だけなので、消費MPは名簿の値のまま（今のⅡの「他職は2倍」は無い）
+-- ⚠前は (jsonb, text) で他職を2倍にしていた。同じ名前で残ると呼び分けが曖昧になるので落とす
+drop function if exists public.v2cap_set_cost(jsonb, text);
+create or replace function public.v2cap_set_cost(p_set jsonb)
 returns int language sql stable set search_path = public as $$
-  select coalesce(sum(s.mp * (case when s.cls = p_cls then 1 else 2 end)
-                      * greatest(1, coalesce((t.e ->> 'uses')::int, 1))), 0)::int
+  select coalesce(sum(s.mp * greatest(1, coalesce((t.e ->> 'uses')::numeric::int, 1))), 0)::int
     from jsonb_array_elements(coalesce(p_set, '[]'::jsonb)) as t(e)
     join public.v2cap_skills s on s.name = t.e ->> 'name'
 $$;
 
--- 転職でMPの事情が変わったとき、編成を最大MPに収まる形へ縮める。
+-- 編成を「その職業で使える技だけ」にし、最大MPに収まる形へ縮める（転職で戻ってきたとき・前の形からの移し替え）。
+-- 使えない技（他の職業の技・覚えていない技・パッシブ・名簿に無い技）を外す →
 -- 収まっていればそのまま／超えていれば回数を全部1へ／それでも超えるなら後ろの枠から外す
-create or replace function public.v2cap_fit_set(p_set jsonb, p_cls text, p_max int)
+drop function if exists public.v2cap_fit_set(jsonb, text, int);
+create or replace function public.v2cap_fit_set(p_set jsonb, p_cls text, p_learned jsonb, p_max int)
 returns jsonb language plpgsql stable set search_path = public as $$
 declare
-  v_set jsonb := coalesce(p_set, '[]'::jsonb);
+  v_set jsonb;
 begin
-  if public.v2cap_set_cost(v_set, p_cls) <= p_max then return v_set; end if;
+  select coalesce(jsonb_agg(jsonb_build_object('name', s.name,
+                    'uses', least(99, greatest(1, coalesce((t.e ->> 'uses')::numeric::int, 1)))) order by t.i), '[]'::jsonb)
+    into v_set
+    from jsonb_array_elements(case when jsonb_typeof(p_set) = 'array' then p_set else '[]'::jsonb end)
+         with ordinality as t(e, i)
+    join public.v2cap_skills s on s.name = t.e ->> 'name'
+   where not s.passive
+     and s.cls = any(public.v2cap_lineage(p_cls))
+     and coalesce(p_learned, '[]'::jsonb) ? s.name;
+  if public.v2cap_set_cost(v_set) <= p_max then return v_set; end if;
   select coalesce(jsonb_agg(jsonb_build_object('name', t.e ->> 'name', 'uses', 1) order by t.i), '[]'::jsonb)
     into v_set
     from jsonb_array_elements(v_set) with ordinality as t(e, i);
-  while jsonb_array_length(v_set) > 0 and public.v2cap_set_cost(v_set, p_cls) > p_max loop
+  while jsonb_array_length(v_set) > 0 and public.v2cap_set_cost(v_set) > p_max loop
     v_set := v_set - (jsonb_array_length(v_set) - 1);
   end loop;
   return v_set;
+end;
+$$;
+
+-- 初めて就いた職業の編成（skills.js の defaultSetOf と同じ規則）。キャラ作成と、初めての転職で使う。
+-- その職業の覚えている技を覚えた順に最大5枠・回数は1回ずつから、最大MPに収まるだけ前の枠から1回ずつ足す
+-- （1枠最大5回）。1回ずつでも収まらなければ後ろの枠から外す
+create or replace function public.v2cap_default_set(p_cls text, p_learned jsonb, p_max int)
+returns jsonb language plpgsql stable set search_path = public as $$
+declare
+  c_slots    constant int := 5;
+  c_uses_max constant int := 5;
+  v_names text[];
+  v_mp    int[];
+  v_uses  int[];
+  v_n     int;
+  v_cost  int;
+  v_grew  boolean := true;
+  i       int;
+begin
+  select coalesce(array_agg(k.name order by k.sort), '{}'), coalesce(array_agg(k.mp order by k.sort), '{}')
+    into v_names, v_mp
+    from (select s.name, s.mp, s.sort from public.v2cap_skills s
+           where s.cls = p_cls and not s.passive and coalesce(p_learned, '[]'::jsonb) ? s.name
+           order by s.sort limit c_slots) k;
+  v_n := coalesce(array_length(v_names, 1), 0);
+  v_uses := array_fill(1, array[greatest(v_n, 1)]);
+  v_cost := 0;
+  for i in 1..v_n loop v_cost := v_cost + v_mp[i]; end loop;
+  while v_n > 0 and v_cost > p_max loop
+    v_cost := v_cost - v_mp[v_n];
+    v_n := v_n - 1;
+  end loop;
+  while v_grew loop
+    v_grew := false;
+    for i in 1..v_n loop
+      if v_uses[i] < c_uses_max and v_cost + v_mp[i] <= p_max then
+        v_uses[i] := v_uses[i] + 1;
+        v_cost := v_cost + v_mp[i];
+        v_grew := true;
+      end if;
+    end loop;
+  end loop;
+  return coalesce((select jsonb_agg(jsonb_build_object('name', v_names[g], 'uses', v_uses[g]) order by g)
+                     from generate_series(1, v_n) as g), '[]'::jsonb);
 end;
 $$;
 
@@ -717,9 +788,30 @@ revoke all on function public.v2cap_job_need(text, int) from public, anon;
 revoke all on function public.v2cap_stamina_max(int) from public, anon;
 revoke all on function public.v2cap_learn(jsonb, text, int) from public, anon, authenticated;
 revoke all on function public.v2cap_job_bonus_mp(text, int) from public, anon, authenticated;
-revoke all on function public.v2cap_set_cost(jsonb, text) from public, anon, authenticated;
-revoke all on function public.v2cap_fit_set(jsonb, text, int) from public, anon, authenticated;
+revoke all on function public.v2cap_lineage(text) from public, anon, authenticated;
+revoke all on function public.v2cap_set_cost(jsonb) from public, anon, authenticated;
+revoke all on function public.v2cap_fit_set(jsonb, text, jsonb, int) from public, anon, authenticated;
+revoke all on function public.v2cap_default_set(text, jsonb, int) from public, anon, authenticated;
 revoke all on function public.v2cap_unlocked_from_cleared(int[], int[]) from public, anon, authenticated;
+
+-- ---- 一度だけの移し替え：スキルセットを職業ごとに（2026-10-09 ユーザー決定）----
+-- 前は編成が1つだけ（skill_set）で、他の職業の技も置けた。いまの職業の編成として skill_sets へ移し、
+-- その職業で使えない技（他の職業の技）は外してから、古い列を消す。
+-- ★古い列があるときだけ動く＝全文を流し直しても2回目以降は何もしない。
+--   古い列の名前は、列が無いときに文として読まれないよう execute で渡す
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+              where table_schema = 'public' and table_name = 'v2cap_profiles' and column_name = 'skill_set') then
+    execute $m$
+      update public.v2cap_profiles p
+         set skill_sets = jsonb_build_object(p.class, public.v2cap_fit_set(p.skill_set, p.class, p.learned,
+               p.mp + public.v2cap_job_bonus_mp(p.class, coalesce((p.jobs -> p.class ->> 'lv')::int, 1))))
+       where p.skill_sets = '{}'::jsonb
+    $m$;
+    alter table public.v2cap_profiles drop column skill_set;
+  end if;
+end $$;
 
 -- ===== スタミナを数え直す（今のⅡの v2_stamina_roll と同じ。最大値だけLVで決まる）=====
 -- ⚠SECURITY DEFINER の内部ヘルパは既定で PUBLIC 実行可＝必ず REVOKE する
@@ -847,7 +939,8 @@ revoke all on function public.v2cap_apply_exp(uuid, int) from public, anon, auth
 -- ============================================================
 -- ===== 4. キャラクター作成 =====
 -- ============================================================
--- 名前と、最初の職業（初期職10から）。JBLV1で覚えるスキルを1つ持って始め、編成の1枠目にも入れておく
+-- 名前と、最初の職業（初期職10から）。JBLV1で覚えるスキルを1つ持って始め、その職業の編成にも入れておく
+-- （回数は最大MPに収まるだけ・最大5回＝ v2cap_default_set）
 create or replace function public.v2cap_create_character(p_username text, p_class text)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
@@ -856,9 +949,6 @@ declare
   v_cls   text := btrim(coalesce(p_class, ''));
   v_row   public.v2cap_profiles;
   v_learn jsonb;
-  v_first text;
-  v_mp    int;
-  v_set   jsonb := '[]'::jsonb;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
@@ -875,17 +965,15 @@ begin
   end if;
 
   v_learn := public.v2cap_learn('[]'::jsonb, v_cls, 1);
-  v_first := v_learn ->> 0;
-  if v_first is not null then
-    -- 初期のMPは12。回数はMPに収まるだけ（最大5回）
-    select k.mp into v_mp from public.v2cap_skills k where k.name = v_first;
-    v_set := jsonb_build_array(jsonb_build_object('name', v_first,
-      'uses', case when coalesce(v_mp, 0) = 0 then 5 else greatest(1, least(5, 12 / v_mp)) end));
-  end if;
-
-  insert into public.v2cap_profiles (id, username, class, jobs, learned, skill_set)
-  values (v_uid, v_name, v_cls, jsonb_build_object(v_cls, jsonb_build_object('lv', 1, 'exp', 0)), v_learn, v_set)
+  insert into public.v2cap_profiles (id, username, class, jobs, learned)
+  values (v_uid, v_name, v_cls, jsonb_build_object(v_cls, jsonb_build_object('lv', 1, 'exp', 0)), v_learn)
   returning * into v_row;
+  -- 最大MP＝本体の初期MP（列の既定値）＋ジョブのMP（JBLV1では0）
+  update public.v2cap_profiles
+     set skill_sets = jsonb_build_object(v_cls,
+           public.v2cap_default_set(v_cls, v_learn, v_row.mp + public.v2cap_job_bonus_mp(v_cls, 1)))
+   where id = v_uid
+   returning * into v_row;
   return jsonb_build_object('ok', true, 'profile', to_jsonb(v_row));
 exception when unique_violation then
   return jsonb_build_object('ok', false, 'error', 'その名前はすでに使われています');
@@ -1004,7 +1092,9 @@ grant execute on function public.v2cap_sortie_settle(int, text, boolean, text, t
 -- ============================================================
 -- いつでも無料。LVはそのまま、JBLVは職業ごとに続きから。初めて就く職業はJBLV1から
 -- ★新しい職業で装備できない武器は外す（なくならない）
--- ★消費MPが変わる（他職の技は2倍）ので、編成が最大MPを超えたら縮める（v2cap_fit_set）
+-- ★スキルセットは**職業ごと**（2026-10-09 ユーザー決定）。いまの職業の編成はそのまま残し、
+--   新しい職業の編成に切り替える。前に就いたことがあればその編成（使えない技を外し、最大MPに収まる形へ＝
+--   v2cap_fit_set）、初めてなら覚えている技を入れた編成（v2cap_default_set）で始まる
 create or replace function public.v2cap_change_class(p_class text)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
@@ -1017,7 +1107,9 @@ declare
   v_old   jsonb;
   v_new   jsonb;
   v_added jsonb;
+  v_sets  jsonb;
   v_set   jsonb;
+  v_max   int;
   v_equip jsonb;
   v_off   boolean := false;
 begin
@@ -1045,7 +1137,16 @@ begin
   v_new := public.v2cap_learn(v_old, v_cls.id, v_jlv);
   select coalesce(jsonb_agg(t.name), '[]'::jsonb) into v_added
     from jsonb_array_elements_text(v_new) as t(name) where not (v_old ? t.name);
-  v_set := public.v2cap_fit_set(v_row.skill_set, v_cls.id, v_row.mp + public.v2cap_job_bonus_mp(v_cls.id, v_jlv));
+
+  -- スキルセット（職業ごと）。最大MP＝本体のMP＋新しい職業のジョブのMP
+  v_max  := v_row.mp + public.v2cap_job_bonus_mp(v_cls.id, v_jlv);
+  v_sets := case when jsonb_typeof(v_row.skill_sets) = 'object' then v_row.skill_sets else '{}'::jsonb end;
+  if v_sets ? v_cls.id then
+    v_set := public.v2cap_fit_set(v_sets -> v_cls.id, v_cls.id, v_new, v_max);
+  else
+    v_set := public.v2cap_default_set(v_cls.id, v_new, v_max);
+  end if;
+  v_sets := jsonb_set(v_sets, array[v_cls.id], v_set);
 
   -- 新しい職業で装備できない武器は外す
   v_equip := coalesce(v_row.equipped, '{}'::jsonb);
@@ -1057,7 +1158,7 @@ begin
   end if;
 
   update public.v2cap_profiles
-     set class = v_cls.id, jobs = v_jobs, learned = v_new, skill_set = v_set, equipped = v_equip, updated_at = now()
+     set class = v_cls.id, jobs = v_jobs, learned = v_new, skill_sets = v_sets, equipped = v_equip, updated_at = now()
    where id = v_uid
    returning * into v_row;
   return jsonb_build_object('ok', true, 'learned', v_added, 'unequipped', coalesce(v_off, false), 'profile', to_jsonb(v_row));
@@ -1069,8 +1170,10 @@ grant execute on function public.v2cap_change_class(text) to authenticated;
 -- ============================================================
 -- ===== 7. スキル編成 =====
 -- ============================================================
--- 5枠・並び順＝発動順。置けるのは**覚えたスキルだけ**（どの職業で覚えたものでもよい）。
--- 想定利用MP（Σ 消費MP×回数。他職の技は消費MP2倍）が最大MP（本体＋ジョブのMP）を超えたら保存させない
+-- いまの職業の編成を保存する（スキルセットは職業ごと＝ skill_sets[いまの職業] だけを書き換える）。
+-- 5枠・並び順＝発動順。置けるのは**いまの職業（と下位職）の技で、覚えたものだけ**（2026-10-09 ユーザー決定）。
+-- 想定利用MP（Σ 消費MP×回数）が最大MP（本体＋ジョブのMP）を超えたら保存させない。
+-- ★確かめる順と文言は skills.js の validateSkillSet と同じ
 create or replace function public.v2cap_set_skills(p_set jsonb)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
@@ -1079,9 +1182,10 @@ declare
   v_uid  uuid := auth.uid();
   v_row  public.v2cap_profiles;
   v_set  jsonb := coalesce(p_set, '[]'::jsonb);
+  v_lin  text[];
+  v_sk   public.v2cap_skills;
   e      jsonb;
   v_name text;
-  v_uses int;
   v_cost int;
   v_max  int;
 begin
@@ -1093,32 +1197,48 @@ begin
   if jsonb_array_length(v_set) > c_slots then
     return jsonb_build_object('ok', false, 'error', format('枠は%s個までです', c_slots));
   end if;
+  v_lin := public.v2cap_lineage(v_row.class);
   for e in select value from jsonb_array_elements(v_set) loop
     v_name := e ->> 'name';
     if v_name is null then return jsonb_build_object('ok', false, 'error', '枠にスキルが入っていません'); end if;
-    if not exists (select 1 from public.v2cap_skills s where s.name = v_name) then
+    select * into v_sk from public.v2cap_skills s where s.name = v_name;
+    if not found then
       return jsonb_build_object('ok', false, 'error', format('%sというスキルはありません', v_name));
     end if;
-    if exists (select 1 from public.v2cap_skills s where s.name = v_name and s.passive) then
+    if v_sk.passive then
       return jsonb_build_object('ok', false, 'error', format('%sはパッシブなので枠に置けません', v_name));
+    end if;
+    -- ★その職業でだけ使える（上位職は下位職の技も使える＝ v2cap_classes.lineage）
+    if not (v_sk.cls = any(v_lin)) then
+      return jsonb_build_object('ok', false, 'error', format('%sは%sでは使えません（%sのスキル）', v_name, v_row.class, v_sk.cls));
     end if;
     if not (coalesce(v_row.learned, '[]'::jsonb) ? v_name) then
       return jsonb_build_object('ok', false, 'error', format('%sはまだ覚えていません', v_name));
     end if;
-    if jsonb_typeof(e -> 'uses') <> 'number' then
+    -- ⚠回数が無い（null）・小数・桁あふれも弾く（前は回数が無いと null のまま通っていた）
+    if jsonb_typeof(e -> 'uses') is distinct from 'number'
+       or (e ->> 'uses')::numeric <> trunc((e ->> 'uses')::numeric) then
       return jsonb_build_object('ok', false, 'error', format('%sの使用回数が不正です', v_name));
     end if;
-    v_uses := (e ->> 'uses')::int;
-    if v_uses < 1 or v_uses > c_use_max then
+    if (e ->> 'uses')::numeric < 1 or (e ->> 'uses')::numeric > c_use_max then
       return jsonb_build_object('ok', false, 'error', format('%sの使用回数は1〜%sです', v_name, c_use_max));
     end if;
   end loop;
-  v_cost := public.v2cap_set_cost(v_set, v_row.class);
+  v_cost := public.v2cap_set_cost(v_set);
   v_max  := v_row.mp + public.v2cap_job_bonus_mp(v_row.class, coalesce((v_row.jobs -> v_row.class ->> 'lv')::int, 1));
   if v_cost > v_max then
     return jsonb_build_object('ok', false, 'error', format('想定利用MPが最大MPを超えています（%s / %s）', v_cost, v_max));
   end if;
-  update public.v2cap_profiles set skill_set = v_set, updated_at = now() where id = v_uid returning * into v_row;
+  -- 保存するのは名前と回数だけ（ほかのキーは落とす）
+  select coalesce(jsonb_agg(jsonb_build_object('name', t.e ->> 'name', 'uses', (t.e ->> 'uses')::numeric::int) order by t.i), '[]'::jsonb)
+    into v_set
+    from jsonb_array_elements(v_set) with ordinality as t(e, i);
+  update public.v2cap_profiles
+     set skill_sets = jsonb_set(case when jsonb_typeof(skill_sets) = 'object' then skill_sets else '{}'::jsonb end,
+                                array[class], v_set),
+         updated_at = now()
+   where id = v_uid
+   returning * into v_row;
   return jsonb_build_object('ok', true, 'profile', to_jsonb(v_row));
 end;
 $$;

@@ -3,8 +3,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { STAT_KEYS, STAT_DEFS, calcPower, INITIAL_STATS } from '../../v2/lib/stats.js'
-import { skillValue, VALUE_TABLE, MP_TABLE, BUFF_PER_MP, HEAL_PER_MP, MPREGEN_PER_MP, SKILLS as V2_SKILLS } from '../../v2/lib/skills.js'
-import { createSide } from '../../v2/lib/battle.js'
+import { skillValue, VALUE_TABLE, MP_TABLE, BUFF_PER_MP, HEAL_PER_MP, MPREGEN_PER_MP, SKILLS as V2_SKILLS, offClassMult } from '../../v2/lib/skills.js'
+import { createSide, mpCostOf } from '../../v2/lib/battle.js'
 import { AREAS } from '../../v2/lib/enemies.js'
 import {
   MAX_LV, needExp, totalExpTo, applyExp, rollExp, expMinOf, expMaxOf, baseExpOf,
@@ -13,16 +13,16 @@ import {
 import {
   CLASSES, START_CLASSES, STAGES, JOB_MAX, JOB_BONUS, jobNeed, jobTotalTo, bonusSeqOf,
   bonusPointsAt, jobBonusStats, learnOrderOf, learnAtOf, skillsLearnedBy, applyJobExp,
-  canBecome, weaponsOf, canEquipType, attackKindOf,
+  canBecome, weaponsOf, canEquipType, attackKindOf, lineageOf, usableSkillNames,
 } from './jobs.js'
-import { SKILLS, NEW_SKILLS, SKILL_BY_NAME, setMpCost, validateSkillSet } from './skills.js'
+import { SKILLS, NEW_SKILLS, SKILL_BY_NAME, setMpCost, validateSkillSet, defaultSetOf, DEFAULT_USES_MAX } from './skills.js'
 import {
   BASE_ITEMS, ITEM_BY_ID, WEAPON_TYPES, ARMOR_LINES, ARMOR_PARTS, PART_MULT, SLOTS, ARMOR_EFFECT,
   weaponsOfType, armorsOf, slotsFor,
 } from './equipment.js'
 import { powerAt, effectPct, statsAt, armorEffects, GEAR_RATIO, SET_PART_SUM } from './gear.js'
 import { TIER_LV, ENEMY_LEVELS, enemyLvOf, stdPowerAt, BOSS_RATIO, STD_RATIO, enemyPowerOf } from './areas.js'
-import { toFighter, statBreakdown, equippedItems } from './loadout.js'
+import { toFighter, statBreakdown, equippedItems, slotsOf, currentSetOf } from './loadout.js'
 import { rollBaseItem, rollEquipDrop, pickEncounter } from './sortie.js'
 
 const rngOf = (seed) => { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }
@@ -171,11 +171,62 @@ test('【確定】新しい5職（槍使い・盗賊・銃士・呪術師・薬�
 })
 
 test('編成の想定利用MPは、この版の名簿で数える（新しい技の消費MPが0に見えない）', () => {
-  assert.equal(setMpCost([{ name:'災いの呪い', uses: 2 }], '呪術師'), 26)
-  assert.equal(setMpCost([{ name:'災いの呪い', uses: 1 }], '戦士'), 26, '他職は消費MP2倍')
-  assert.equal(validateSkillSet([{ name:'災いの呪い', uses: 1 }], ['災いの呪い'], 12, '呪術師'), '想定利用MPが最大MPを超えています（13 / 12）')
-  assert.equal(validateSkillSet([{ name:'呪弾', uses: 2 }], ['呪弾'], 12, '呪術師'), null)
+  assert.equal(setMpCost([{ name:'災いの呪い', uses: 2 }]), 26)
+  assert.equal(validateSkillSet([{ name:'災いの呪い', uses: 1 }], { lineage: ['呪術師'], learned: ['災いの呪い'], maxMp: 12 }), '想定利用MPが最大MPを超えています（13 / 12）')
+  assert.equal(validateSkillSet([{ name:'呪弾', uses: 2 }], { lineage: ['呪術師'], learned: ['呪弾'], maxMp: 12 }), null)
   assert.ok(SKILL_BY_NAME['気付け薬'])
+})
+
+test('【確定】スキルはその職業でだけ使える。他の職業の技は、覚えていても置けない（0.8倍・MP2倍で使う形はやめた）', () => {
+  for (const c of CLASSES) assert.deepEqual(lineageOf(c.id), [c.id], `${c.id}：いまは上位職が無い＝自分だけ`)
+  const lin = lineageOf('戦士')
+  const learned = ['体当たり', '強撃', '呪弾']
+  assert.equal(validateSkillSet([{ name:'呪弾', uses: 1 }], { lineage: lin, learned, maxMp: 99 }), '呪弾は戦士では使えません（呪術師のスキル）')
+  assert.equal(validateSkillSet([{ name:'防御崩し', uses: 1 }], { lineage: lin, learned, maxMp: 99 }), '防御崩しはまだ覚えていません')
+  assert.equal(validateSkillSet([{ name:'強撃', uses: 1 }], { lineage: lin, learned, maxMp: 99 }), null)
+  assert.equal(validateSkillSet([{ name:'強撃', uses: 1 }], { learned, maxMp: 99 }), '強撃はいまの職業では使えません（戦士のスキル）', '職業を渡し忘れたら何も置けない（緩い側に倒れない）')
+  assert.deepEqual(usableSkillNames('戦士', learned), ['体当たり', '強撃'], '置けるのはその職業の覚えた技だけ')
+})
+
+test('【確定】上位職は下位職のスキルをそのまま使える（効果も消費MPも同じ）', () => {
+  // いまは上位職が無いので、就く条件（req）だけを持たせた試しの名簿で確かめる
+  const byId = { 戦士: { req: null }, 騎士: { req: { cls:'戦士', jlv: 20 } }, 聖騎士: { req: { cls:'騎士', jlv: 30 } } }
+  assert.deepEqual(lineageOf('聖騎士', byId), ['聖騎士', '騎士', '戦士'], '何段でもさかのぼる')
+  assert.deepEqual(lineageOf('戦士', byId), ['戦士'], '下位職は上位職の技を使えない')
+  assert.deepEqual(lineageOf('A', { A: { req: { cls:'B' } }, B: { req: { cls:'A' } } }), ['A', 'B'], '輪になっていても止まる')
+  const lin = lineageOf('騎士', byId)
+  assert.equal(validateSkillSet([{ name:'強撃', uses: 1 }], { lineage: lin, learned: ['強撃'], maxMp: 99 }), null)
+  assert.equal(validateSkillSet([{ name:'呪弾', uses: 1 }], { lineage: lin, learned: ['呪弾'], maxMp: 99 }), '呪弾は騎士では使えません（呪術師のスキル）')
+  assert.deepEqual(usableSkillNames('騎士', ['体当たり', '呪弾'], lin), ['体当たり'])
+  // 戦闘：下位職の技は「自分の職業の技」として渡す＝今のⅡのエンジンが他職扱い（0.8倍・MP2倍）にしない
+  const slots = slotsOf([{ name:'強撃', uses: 2 }, { name:'呪弾', uses: 1 }], '騎士', lin)
+  assert.deepEqual(slots.map(s => [s.skill.name, s.uses]), [['強撃', 2]], '下位職でない職業の技は戦闘の枠にも入れない')
+  const side = createSide({ name:'k', cls:'騎士', stats:{ ...INITIAL_STATS }, slots, noClassBonus: true })
+  const sk = side.slots[0].skill
+  assert.equal(offClassMult(side.cls, sk), 1, '効果はそのまま')
+  assert.equal(mpCostOf(side, sk), SKILL_BY_NAME['強撃'].mp, '消費MPもそのまま')
+  // 渡さなければ（今のⅡのまま）他職扱いになる＝ここで差し替えていることの確かめ
+  assert.ok(offClassMult('騎士', SKILL_BY_NAME['強撃']) < 1)
+})
+
+test('【確定】スキルセットは職業ごと。初めて就いた職業は、覚えている技を入れた編成で始まる', () => {
+  // JBLV1の技1つ。回数は最大MPに収まるだけ（1枠最大5回）
+  assert.deepEqual(defaultSetOf('戦士', ['体当たり'], 12), [{ name:'体当たり', uses: 3 }])
+  assert.deepEqual(defaultSetOf('魔法使い', ['マジックアロー'], 999), [{ name:'マジックアロー', uses: DEFAULT_USES_MAX }])
+  assert.deepEqual(defaultSetOf('戦士', ['体当たり'], 3), [], '1回も撃てなければ空')
+  assert.deepEqual(defaultSetOf('戦士', ['体当たり', '呪弾'], 12), [{ name:'体当たり', uses: 3 }], '他の職業の技は入れない')
+  // 覚えた技が多いときは覚えた順に最大5枠。前の枠から1回ずつ足し、最大MPを超えない
+  for (const max of [15, 30, 60, 200]) {
+    const s = defaultSetOf('戦士', skillsLearnedBy('戦士', JOB_MAX), max)
+    assert.deepEqual(s.map(e => e.name), learnOrderOf('戦士').slice(0, s.length).map(x => x.name), `MP${max}：覚えた順`)
+    assert.ok(setMpCost(s) <= max, `MP${max}：収まる`)
+    assert.ok(s.every(e => e.uses >= 1 && e.uses <= DEFAULT_USES_MAX))
+  }
+  // 画面・戦闘が見るのは、いまの職業の編成
+  const p = { class:'魔法使い', skill_sets: { 戦士: [{ name:'体当たり', uses: 3 }], 魔法使い: [{ name:'マジックアロー', uses: 2 }] } }
+  assert.deepEqual(currentSetOf(p), [{ name:'マジックアロー', uses: 2 }])
+  assert.deepEqual(currentSetOf({ class:'銃士', skill_sets: {} }), [], 'まだ編成が無い職業は空')
+  assert.deepEqual(currentSetOf({ class:'銃士' }), [])
 })
 
 // ===== 装備 =====
@@ -240,7 +291,21 @@ test('【確定】防具のメリットは 重鎧＝受けるダメージ−3%�
 })
 
 // ===== 戦闘用のキャラ =====
-const baseProf = (over = {}) => ({ username:'t', class:'戦士', lv: 30, ...INITIAL_STATS, jobs: { 戦士: { lv: 30, exp: 0 } }, skill_set: [], equipped: {}, ...over })
+const baseProf = (over = {}) => ({ username:'t', class:'戦士', lv: 30, ...INITIAL_STATS, jobs: { 戦士: { lv: 30, exp: 0 } }, learned: [], skill_sets: {}, equipped: {}, ...over })
+
+test('【確定】戦闘で使うのは、いまの職業の編成だけ。その職業で使えない技は入れない', () => {
+  const p = baseProf({
+    learned: ['体当たり', '強撃', '呪弾'],
+    skill_sets: {
+      戦士: [{ name:'体当たり', uses: 3 }, { name:'呪弾', uses: 2 }, { name:'強撃', uses: 1 }],   // 呪弾は前の形から紛れ込んだもの
+      呪術師: [{ name:'呪弾', uses: 5 }],
+    },
+  })
+  assert.deepEqual(toFighter(p, []).slots.map(s => [s.skill.name, s.uses]), [['体当たり', 3], ['強撃', 1]])
+  const q = { ...p, class:'呪術師', jobs: { 呪術師: { lv: 1, exp: 0 } } }
+  assert.deepEqual(toFighter(q, []).slots.map(s => [s.skill.name, s.uses]), [['呪弾', 5]], '転職すると、その職業の編成で戦う')
+  assert.deepEqual(toFighter({ ...p, class:'銃士' }, []).slots, [], '編成の無い職業は空（他の職業の編成を使わない）')
+})
 
 test('戦闘のステ＝本体＋いまの職業のジョブのステ＋装備（必要LV不足ぶんを引く）＋軽装のAGI', () => {
   const inv = [

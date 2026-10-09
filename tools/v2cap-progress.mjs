@@ -16,7 +16,7 @@
 const B = new URL('../src/', import.meta.url).href
 const { runBattle } = await import(B + 'v2/lib/battle.js')
 const { STAT_KEYS, INITIAL_STATS, calcPower } = await import(B + 'v2/lib/stats.js')
-const { SKILL_BY_NAME, mpOf } = await import(B + 'v2cap/lib/skills.js')
+const { setMpCost } = await import(B + 'v2cap/lib/skills.js')
 const { ITEM_BY_ID } = await import(B + 'v2cap/lib/equipment.js')
 const { AREAS_SORTED, toFighter: enemyFighter, stdPowerAt } = await import(B + 'v2cap/lib/areas.js')
 const { applyExp, rollExp, bodyPowerAt } = await import(B + 'v2cap/lib/level.js')
@@ -54,7 +54,7 @@ export const simulate = ({ days = DAYS, seed = SEED, start = START } = {}) => {
   const prof = () => ({
     username:'me', class: cls, lv: st.lv,
     ...Object.fromEntries(STAT_KEYS.map(k => [k, st[k]])),
-    jobs, skill_set: skillSet, equipped,
+    jobs, learned, skill_sets: { [cls]: skillSet }, equipped,   // スキルセットは職業ごと（画面の v2cap_profiles と同じ形）
   })
   const valueOf = (row) => {
     const s = statsAt(ITEM_BY_ID[row.base_id], row.rank, row.ilv, effectPct(row.ilv, st.lv))
@@ -83,7 +83,7 @@ export const simulate = ({ days = DAYS, seed = SEED, start = START } = {}) => {
     const names = learnOrderOf(cls).map(s => s.name).filter(n => learned.includes(n)).slice(-5).reverse()
     const mp = totalStats(prof(), inventory).mp
     const uses = names.map(() => 1)
-    const cost = () => names.reduce((t, n, i) => t + mpOf(cls, SKILL_BY_NAME[n]) * uses[i], 0)
+    const cost = () => setMpCost(names.map((name, i) => ({ name, uses: uses[i] })))
     let grew = true
     while (grew) {
       grew = false

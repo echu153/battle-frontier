@@ -8,7 +8,7 @@ import { MAX_LV, needExp, staminaMaxOf } from '../lib/level.js'
 import { JOB_MAX, jobNeed, jobOf, stageOf, stageLabelOf, stageColorOf, weaponsOf } from '../lib/jobs.js'
 import { SKILL_BY_NAME } from '../lib/skills.js'
 import { SLOTS, SLOT_LABEL, kindLabel } from '../lib/equipment.js'
-import { equippedItems, statBreakdown } from '../lib/loadout.js'
+import { equippedItems, statBreakdown, currentSetOf } from '../lib/loadout.js'
 import { effectPct, powerAt } from '../lib/gear.js'
 
 // ============================================================
@@ -18,6 +18,7 @@ import { effectPct, powerAt } from '../lib/gear.js'
 //   ・ステの内訳（本体＋ジョブ＋装備＋軽装のAGI）をカーソルで出す
 //   ・装備は7枠（武器1・頭・鎧・腕・足・アクセ2）。アイテムLVと、必要LVに足りないときの効果%
 //   ・防具のメリット（重鎧＝受けるダメージ−%／軽装＝AGI+%）の合計
+//   ・スキルは**いまの職業の編成**（スキルセットは職業ごと）
 // ============================================================
 const cell = {
   background:'#000818', border:'1px solid #002244', padding:'3px 6px',
@@ -106,7 +107,7 @@ export default function V2capStatus({ prof, inventory }) {
   }
 
   const skillCell = (i) => {
-    const e = (prof.skill_set || [])[i]
+    const e = currentSetOf(prof)[i]
     const s = e && SKILL_BY_NAME[e.name]
     return (
       <div key={i} style={cell}>

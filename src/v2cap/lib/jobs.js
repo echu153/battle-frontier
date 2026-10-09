@@ -8,12 +8,13 @@
 //   ・職業補正（今のⅡの STR+5% など）は**一旦なし**
 //   ・**初期職は10職**。職業ごとに**装備できる武器が3種**決まっている
 //   ・ノーブル・サモナーはなくす。**一次職も見直すまで一旦なし**（二次・三次もこれから）
+//   ・スキルは**その職業でだけ使える**。**上位職は下位職のスキルをそのまま使える**（lineageOf）
 //
 // ★権威はサーバー（supabase_v2cap_core.sql の v2cap_classes / v2cap_job_need / v2cap_apply_exp）。
 //   ここは表示とシミュレーション用の写し。v2capsql.test.js が突き合わせる。
 // ============================================================
 import { STAT_KEYS, STAT_DEFS } from '../../v2/lib/stats.js'
-import { skillsOf } from './skills.js'
+import { SKILLS, skillsOf, isPassive } from './skills.js'
 
 export const JOB_MAX = 30
 
@@ -140,8 +141,26 @@ export const nextSkillOf = (cls, jlv) => {
   return null
 }
 
+// ===== その職業で使えるスキル =====
+// 【確定】スキルは**その職業でだけ使える**。**上位職は下位職のスキルをそのまま使える**（効果も消費MPも同じ）
+//   （2026-10-09 ユーザー決定。今のⅡの「他職は0.8倍・MP2倍で使える」はやめた）
+// 下位職＝就く条件（req）の職業をさかのぼったもの。先頭が自分＝[自分, 下位職, その下位職, …]
+// ★いまは初期職だけ＝どの職業も自分だけ。一次職を入れると req からここが伸びる。
+//   サーバーの v2cap_classes.lineage はこの出力を写したもの（tools/v2cap-sql.mjs が作る）
+export const lineageOf = (cls, byId = CLASS_BY_ID) => {
+  const out = []
+  for (let c = cls; c && byId[c] && !out.includes(c); c = byId[c].req?.cls) out.push(c)
+  return out
+}
+// その職業で枠に置ける技（覚えたもの・パッシブ以外）の名前。並び＝名簿の順
+export const usableSkillNames = (cls, learned = [], lineage = lineageOf(cls)) => {
+  const have = new Set(learned)
+  return SKILLS.filter(s => lineage.includes(s.cls) && !isPassive(s) && have.has(s.name)).map(s => s.name)
+}
+
 // ===== 就けるか =====
 // ★いまは初期職だけ＝条件なし。一次職を入れるときに req（{ cls, jlv }）を使う
+//   （req の職業が「下位職」になり、そのスキルも使えるようになる＝ lineageOf）
 export const reqOf = (cls) => CLASS_BY_ID[cls]?.req || null
 export const missingReqOf = (cls, jobs) => {
   const r = reqOf(cls)

@@ -1,21 +1,20 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../supabase'
 import {
-  KIND_COLOR, KIND_LABEL, KIND_TABS, isPassive, powerText, mpOf,
-  filterSkills, sortSkills, SKILL_SET_SLOTS, SKILL_USE_MAX, OFF_CLASS_MULT, OFF_CLASS_MP_MULT,
+  KIND_COLOR, KIND_LABEL, KIND_TABS, powerText, filterSkills, sortSkills, SKILL_SET_SLOTS, SKILL_USE_MAX,
 } from '../../v2/lib/skills.js'
 // ★名前で引くもの（名簿・想定利用MP・検証）はこの版の名簿で引く。今のⅡの名簿には新しい5職の技が無い
 import { SKILL_BY_NAME, setMpCost, validateSkillSet } from '../lib/skills.js'
 import { box, btn, miniBtn, TEXT } from '../../v2/components/v2ui.js'
-import { totalStats } from '../lib/loadout.js'
-import { learnOrderOf, learnAtOf, jobOf } from '../lib/jobs.js'
+import { totalStats, currentSetOf } from '../lib/loadout.js'
+import { learnOrderOf, learnAtOf, jobOf, lineageOf } from '../lib/jobs.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — スキルセット
-//   ・置けるのは**覚えたスキル**（どの職業で覚えたものでもよい）
-//   ・いまの職業以外の技は効果0.8倍・消費MP2倍（今のⅡと同じ）
+//   ・【確定】スキルは**その職業でだけ使える**。上位職は下位職のスキルもそのまま使える（2026-10-09）
+//   ・スキルセットは**職業ごと**。ここで編成するのは、いまの職業の編成（転職して戻ると前の編成に戻る）
 //   ・想定利用MP（Σ 消費MP×回数）が最大MPを超える編成は保存できない（サーバーも同じ判定）
-//   ・一覧には、いまの職業の**まだ覚えていない技**も「JBLV◯で習得」と出す
+//   ・一覧は、いまの職業（と下位職）の技だけ。まだ覚えていない技は「JBLV◯で習得」と出す
 // ============================================================
 const normalize = (set) => {
   const out = Array.from({ length: SKILL_SET_SLOTS }, () => ({ name:'', uses:1 }))
@@ -23,35 +22,40 @@ const normalize = (set) => {
   return out
 }
 const ROW_INDENT = '28px'
+const mpLabel = (s) => (s.mpPct ? `MP 残りの${Math.round(Math.min(1, s.mpPct) * 100)}%` : `MP${s.mp}`)
 
 export default function V2capSkills({ prof, inventory, onProfile }) {
-  const [draft, setDraft] = useState(() => normalize(prof.skill_set))
+  const [draft, setDraft] = useState(() => normalize(currentSetOf(prof)))
   const [tab, setTab] = useState('all')
   const [query, setQuery] = useState('')
-  const [sortKey, setSortKey] = useState('cls')
+  // 一覧はいまの職業（と下位職）だけなので、職業で並べる意味は無い＝既定は「覚える順」
+  const [sortKey, setSortKey] = useState('order')
   const [sortAsc, setSortAsc] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
   const learned = prof.learned || []
   const favorites = prof.favorites || []
-  const savedKey = JSON.stringify(prof.skill_set || [])
+  const savedKey = JSON.stringify(currentSetOf(prof))
   useEffect(() => { setDraft(normalize(JSON.parse(savedKey))) }, [savedKey])
 
   const cls = prof.class
   const jlv = jobOf(prof.jobs, cls).lv
+  const lineage = lineageOf(cls)
   const maxMp = totalStats(prof, inventory).mp
   const compact = draft.filter(d => d.name).map(d => ({ name: d.name, uses: d.uses }))
-  const mpCost = setMpCost(compact, cls)
-  const setErr = validateSkillSet(compact, learned, maxMp, cls)
+  const mpCost = setMpCost(compact)
+  const setErr = validateSkillSet(compact, { lineage, learned, maxMp })
 
-  // 一覧：覚えたスキル＋いまの職業でまだ覚えていない技（いつ覚えるかを出す）
-  const order = learnOrderOf(cls)
-  const at = learnAtOf(cls)
-  const lockedAt = Object.fromEntries(order.map((s, i) => [s.name, at[i]]).filter(([n]) => !learned.includes(n)))
-  const known = learned.map(n => SKILL_BY_NAME[n]).filter(Boolean)
-  const locked = order.filter(s => lockedAt[s.name] !== undefined)
-  const shown = sortSkills(filterSkills([...known, ...locked], { tab, query, favorites }), sortKey, sortAsc)
+  // 一覧：いまの職業（と下位職）の技だけ。覚えていない技には、覚えるJBLVを出す
+  const have = new Set(learned)
+  const entries = lineage.flatMap(c => {
+    const at = learnAtOf(c)
+    return learnOrderOf(c).map((s, i) => ({ s, lock: have.has(s.name) ? null : (c === cls ? `JBLV${at[i]}で習得` : `${c}のJBLV${at[i]}で習得`) }))
+  })
+  const lockOf = Object.fromEntries(entries.map(e => [e.s.name, e.lock]))
+  const filtered = filterSkills(entries.map(e => e.s), { tab, query, favorites })
+  const shown = sortKey === 'order' ? (sortAsc ? filtered : [...filtered].reverse()) : sortSkills(filtered, sortKey, sortAsc)
 
   const setSlot = (i, patch) => setDraft(d => {
     const next = normalize(d)
@@ -80,20 +84,18 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
     if (e || !data?.ok) { setError(e?.message || data?.error || 'お気に入りの保存に失敗しました'); return }
     onProfile(null)
   }
-  const mpLabel = (s) => (s.mpPct
-    ? `MP 残りの${Math.round(Math.min(1, s.mpPct * (s.cls === cls ? 1 : OFF_CLASS_MP_MULT)) * 100)}%`
-    : `MP${mpOf(cls, s)}`)
 
   return (
     <div style={{ fontFamily:'monospace' }}>
       <div style={{ ...box, padding:'14px', marginBottom:'12px' }}>
-        <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'6px' }}>🎯 スキルセット</div>
+        <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'6px' }}>🎯 スキルセット（{cls}）</div>
         <div style={{ color: TEXT.label, fontSize:'10px', marginBottom:'8px', lineHeight:'1.8' }}>
           あなたの最大MPは<span style={{ color:'#4488ff' }}>{maxMp}MP</span>です。
           いまの編成の想定利用MPは<span style={{ color: mpCost > maxMp ? '#ff4444' : '#44ffaa' }}>{mpCost}MP</span>です。
         </div>
-        <div style={{ color:'#ff88cc', fontSize:'10px', marginBottom:'5px', lineHeight:'1.6' }}>
-          いまの職業（{cls}）以外のスキルは、ダメージ・回復・バフ・状態異常の効果が{OFF_CLASS_MULT}倍・消費MPが{OFF_CLASS_MP_MULT}倍になります。
+        <div style={{ color:'#88ddaa', fontSize:'10px', marginBottom:'5px', lineHeight:'1.6' }}>
+          スキルはその職業でだけ使えます（上位職は下位職のスキルもそのまま使えます）。
+          編成は職業ごとに保存され、転職して戻ると元の編成に戻ります。
         </div>
         <div style={{ display:'grid', gap:'3px' }}>
           {Array.from({ length: SKILL_SET_SLOTS }).map((_, i) => {
@@ -104,9 +106,9 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
                 <span style={{ color:'#8866cc', width:'42px' }}>スキル{i + 1}</span>
                 <span style={{ flex:1, color: s ? KIND_COLOR[s.kind] : '#62789a', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                   {s ? s.name : '（空き）'}
-                  {s && s.cls !== cls && <span style={{ color:'#ff88cc', fontSize:'9px', marginLeft:'4px' }}>×{OFF_CLASS_MULT}</span>}
+                  {s && !lineage.includes(s.cls) && <span style={{ color:'#ff4444', fontSize:'9px', marginLeft:'4px' }}>{s.cls}の技・使えない</span>}
                 </span>
-                <span style={{ color: TEXT.label, width:'62px', textAlign:'right' }}>{s ? (s.mpPct ? mpLabel(s) : `MP${mpOf(cls, s)}×${row.uses}`) : ''}</span>
+                <span style={{ color: TEXT.label, width:'62px', textAlign:'right' }}>{s ? (s.mpPct ? mpLabel(s) : `MP${s.mp}×${row.uses}`) : ''}</span>
                 <span style={{ color: TEXT.label, width:'34px', textAlign:'right' }}>{s ? `${s.proc}%` : ''}</span>
                 <input type="number" min={1} max={SKILL_USE_MAX} value={row.uses} disabled={!row.name}
                   onChange={e => setSlot(i, { uses: Math.max(1, Math.min(SKILL_USE_MAX, Number(e.target.value) || 1)) })}
@@ -123,7 +125,7 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
           <button onClick={save} disabled={busy || !!setErr} style={{ ...btn('#44aaff'), opacity: (busy || setErr) ? 0.4 : 1 }}>
             {busy ? '保存中...' : '保存'}
           </button>
-          <button onClick={() => setDraft(normalize(prof.skill_set || []))} disabled={busy} style={btn('#7fa6d0')}>戻す</button>
+          <button onClick={() => setDraft(normalize(currentSetOf(prof)))} disabled={busy} style={btn('#7fa6d0')}>戻す</button>
         </div>
         <div style={{ color: TEXT.label, fontSize:'9px', marginTop:'8px', lineHeight:'1.8' }}>
           上から順に発動し、1周ごとに次の枠へ回ります（1→2→3→4→5→1…）。回数はその枠を使える総回数です。
@@ -133,9 +135,10 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
       </div>
 
       <div style={{ ...box, padding:'14px' }}>
-        <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'4px' }}>📖 スキル</div>
+        <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'4px' }}>📖 {cls}のスキル</div>
         <div style={{ color: TEXT.sub, fontSize:'10px', marginBottom:'8px', lineHeight:1.7 }}>
-          スキルはJBLVで覚え、職業を変えても残ります。いまの職業（{cls}・JBLV{jlv}）でまだ覚えていない技は、覚えるJBLVを出しています。
+          スキルはJBLVで覚えます（いまの職業：{cls}・JBLV{jlv}）。まだ覚えていない技は、覚えるJBLVを出しています。
+          ほかの職業で覚えたスキルは、その職業に戻れば使えます。
         </div>
         <div style={{ display:'flex', gap:'5px', marginBottom:'6px' }}>
           <input value={query} onChange={e => setQuery(e.target.value)} placeholder="スキル名・職業・説明で検索"
@@ -152,7 +155,7 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:'4px', marginBottom:'6px', fontSize:'10px', color: TEXT.label }}>
           <span>並べ替え</span>
-          {[['name', 'スキル名'], ['mp', 'MP'], ['proc', '発動'], ['cls', '職業']].map(([k, label]) => (
+          {[['order', '覚える順'], ['name', 'スキル名'], ['mp', 'MP'], ['proc', '発動']].map(([k, label]) => (
             <button key={k} onClick={() => { if (sortKey === k) setSortAsc(a => !a); else { setSortKey(k); setSortAsc(true) } }}
               style={{ ...miniBtn(sortKey === k ? '#44aaff' : '#62789a'), color: sortKey === k ? '#88ccff' : '#93a9be' }}>
               {label}{sortKey === k ? (sortAsc ? ' ▲' : ' ▼') : ''}
@@ -163,22 +166,21 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
           {shown.length === 0 && <div style={{ color: TEXT.label, fontSize:'11px', padding:'8px' }}>該当するスキルがありません</div>}
           {shown.map(s => {
             const fav = favorites.includes(s.name)
-            const has = learned.includes(s.name)
-            const pas = isPassive(s)
+            const lock = lockOf[s.name]
             return (
-              <div key={s.name} style={{ background:'#000818', border:`1px solid ${draft.some(d => d.name === s.name) ? '#0055aa' : '#002244'}`, padding:'6px 8px', opacity: has || pas ? 1 : 0.5 }}>
+              <div key={s.name} style={{ background:'#000818', border:`1px solid ${draft.some(d => d.name === s.name) ? '#0055aa' : '#002244'}`, padding:'6px 8px', opacity: lock ? 0.5 : 1 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
                   <button onClick={() => toggleFavorite(s.name)} title="お気に入り"
                     style={{ ...miniBtn(fav ? '#ffcc00' : '#62789a'), color: fav ? '#ffcc00' : '#445566', padding:'2px 5px' }}>★</button>
-                  <span style={{ flex:1, color: has || pas ? KIND_COLOR[s.kind] : '#93a9be', fontSize:'12px', minWidth:0 }}>
+                  <span style={{ flex:1, color: lock ? '#93a9be' : KIND_COLOR[s.kind], fontSize:'12px', minWidth:0 }}>
                     {s.name}
                     <span style={{ color: TEXT.sub, fontSize:'9px', marginLeft:'5px' }}>{KIND_LABEL[s.kind]}</span>
-                    <span style={{ color: s.cls === cls ? '#88ddaa' : '#ff88cc', fontSize:'9px', marginLeft:'5px' }}>
-                      {s.cls}{s.cls !== cls && !pas ? `・効果${OFF_CLASS_MULT}倍/MP${OFF_CLASS_MP_MULT}倍` : ''}
+                    <span style={{ color: s.cls === cls ? '#88ddaa' : '#aaccff', fontSize:'9px', marginLeft:'5px' }}>
+                      {s.cls}{s.cls !== cls ? '（下位職）' : ''}
                     </span>
-                    {!has && !pas && <span style={{ color:'#c69a5c', fontSize:'9px', marginLeft:'5px' }}>JBLV{lockedAt[s.name]}で習得</span>}
+                    {lock && <span style={{ color:'#c69a5c', fontSize:'9px', marginLeft:'5px' }}>{lock}</span>}
                   </span>
-                  <span style={{ color: TEXT.label, fontSize:'10px' }}>{pas ? '常時' : `${mpLabel(s)} ／ ${s.proc}%`}</span>
+                  <span style={{ color: TEXT.label, fontSize:'10px' }}>{`${mpLabel(s)} ／ ${s.proc}%`}</span>
                 </div>
                 <div style={{ color:'#7fa6c0', fontSize:'10px', margin:'3px 0', lineHeight:'1.6', paddingLeft:ROW_INDENT }}>
                   {s.priority > 0 && <span style={{ color:'#a888e0', marginRight:'5px' }}>先制{s.priority >= 2 ? `+${s.priority}` : ''}</span>}
@@ -190,8 +192,7 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
                   <span style={{ color:'#8fa8bb', fontSize:'10px', flex:1, minWidth:0, lineHeight:'1.6' }}>
                     {powerText(s) === s.desc ? '' : s.desc}
                   </span>
-                  {pas && <span style={{ color:'#88ddaa', fontSize:'9px', whiteSpace:'nowrap' }}>常時・枠を使わない（{s.cls}のあいだ）</span>}
-                  {has && !pas && Array.from({ length: SKILL_SET_SLOTS }).map((_, i) => {
+                  {!lock && Array.from({ length: SKILL_SET_SLOTS }).map((_, i) => {
                     const here = draft[i]?.name === s.name
                     return (
                       <button key={i} onClick={() => setSlot(i, { name: s.name, uses: here ? draft[i].uses : 1 })}

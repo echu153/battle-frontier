@@ -7,12 +7,16 @@
 //   ・ノーブル・サモナーと一次職は**一旦なし**
 // 新しい技は今のⅡの値段の付け方（発動率ごとの価値 skillValue・消費MPの帯）で初期職の帯に合わせてある。
 //
+// 【確定】スキルは**その職業でだけ使える**（2026-10-09 ユーザー決定・今のⅡの「他職は0.8倍・MP2倍」はやめた）。
+//   代わりに**上位職は下位職のスキルをそのまま使える**（効果も消費MPも同じ）。下位職のたどり方は jobs.js の lineageOf。
+//   スキルセットも**職業ごと**に持つ（転職して戻ると前の編成に戻る）。
+//
 // ★戦闘（battle.js）はスキルの中身を受け取って動くので、名簿をこの版で持てば足りる。
 // ★サーバーの v2cap_skills はこの名簿から tools/v2cap-sql.mjs が作る（手で書き写さない）
 // ============================================================
-import { SKILLS as V2_SKILLS, isPassive, mpOf, SKILL_SET_SLOTS, SKILL_USE_MAX } from '../../v2/lib/skills.js'
+import { SKILLS as V2_SKILLS, isPassive, SKILL_SET_SLOTS, SKILL_USE_MAX } from '../../v2/lib/skills.js'
 
-export { isPassive, mpOf, SKILL_SET_SLOTS, SKILL_USE_MAX }
+export { isPassive, SKILL_SET_SLOTS, SKILL_USE_MAX }
 
 // 今のⅡから持ってくる職業
 export const KEEP_FROM_V2 = ['戦士', '弓使い', '魔法使い', '僧侶', '格闘家']
@@ -61,24 +65,54 @@ export const SKILL_BY_NAME = Object.fromEntries(SKILLS.map(s => [s.name, s]))
 export const skillsOf = (cls) => SKILLS.filter(s => s.cls === cls && !isPassive(s))
 
 // ===== 編成の想定利用MP・検証 =====
-// ★今のⅡの setMpCost／validateSkillSet は今のⅡの名簿で名前を引くので、新しい技の消費MPが0に見える。
-//   なのでこの版の名簿で引き直す（規則は同じ。サーバーの v2cap_set_cost／v2cap_set_skills とも同じ）
-export const setMpCost = (set, cls) => (set || []).reduce((t, e) => {
+// ★今のⅡの setMpCost／validateSkillSet は今のⅡの名簿で名前を引くうえ、他職の技を0.8倍・MP2倍で数える。
+//   この版は「その職業（と下位職）の技しか置けない」ので、消費MPは名簿の値のまま数える
+//   （サーバーの v2cap_set_cost／v2cap_set_skills と同じ規則・同じ文言）
+export const setMpCost = (set) => (set || []).reduce((t, e) => {
   const s = SKILL_BY_NAME[e?.name]
-  return t + (!s || isPassive(s) || s.mpPct ? 0 : mpOf(cls, s) * (e?.uses || 0))
+  return t + (!s || isPassive(s) || s.mpPct ? 0 : s.mp * (e?.uses || 0))
 }, 0)
-export const validateSkillSet = (set, usableNames, maxMp = Infinity, cls = undefined) => {
+// lineage … その職業で使える技の職業（自分＋下位職。jobs.js の lineageOf）。先頭が自分の職業
+// learned … 覚えたスキル名／maxMp … 最大MP
+// ★確かめる順（文言も）はサーバーの v2cap_set_skills と同じ
+export const validateSkillSet = (set, { lineage = [], learned = [], maxMp = Infinity } = {}) => {
   if (!Array.isArray(set)) return '編成の形式が不正です'
   if (set.length > SKILL_SET_SLOTS) return `枠は${SKILL_SET_SLOTS}個までです`
-  const usable = new Set(usableNames)
+  const have = new Set(learned)
   for (const e of set) {
     if (!e?.name) return '枠にスキルが入っていません'
-    if (!SKILL_BY_NAME[e.name]) return `${e.name}というスキルはありません`
-    if (!usable.has(e.name)) return `${e.name}はまだ覚えていません`
+    const s = SKILL_BY_NAME[e.name]
+    if (!s) return `${e.name}というスキルはありません`
+    if (isPassive(s)) return `${e.name}はパッシブなので枠に置けません`
+    if (!lineage.includes(s.cls)) return `${e.name}は${lineage[0] || 'いまの職業'}では使えません（${s.cls}のスキル）`
+    if (!have.has(e.name)) return `${e.name}はまだ覚えていません`
     const uses = Number(e.uses)
     if (!Number.isInteger(uses) || uses < 1 || uses > SKILL_USE_MAX) return `${e.name}の使用回数は1〜${SKILL_USE_MAX}です`
   }
-  const cost = setMpCost(set, cls)
+  const cost = setMpCost(set)
   if (cost > maxMp) return `想定利用MPが最大MPを超えています（${cost} / ${maxMp}）`
   return null
+}
+
+// ===== 初めて就いた職業の編成 =====
+// 【確定】スキルセットは職業ごと。初めて就く職業は「覚えている技（その職業のもの）」を入れて始まる。
+// 覚えた順に最大5枠・回数は1回ずつから、最大MPに収まるだけ前の枠から1回ずつ足す（1枠最大5回）。
+// 1回ずつでも収まらなければ後ろの枠から外す。
+// ★サーバーの v2cap_default_set と同じ規則（キャラ作成と、初めての転職で使う）
+export const DEFAULT_USES_MAX = 5
+export const defaultSetOf = (cls, learned = [], maxMp = 0) => {
+  const have = new Set(learned)
+  const names = skillsOf(cls).filter(s => have.has(s.name)).slice(0, SKILL_SET_SLOTS).map(s => s.name)
+  const set = names.map(name => ({ name, uses: 1 }))
+  while (set.length > 0 && setMpCost(set) > maxMp) set.pop()
+  for (let grew = true; grew;) {
+    grew = false
+    for (const e of set) {
+      if (e.uses >= DEFAULT_USES_MAX) continue
+      e.uses += 1
+      if (setMpCost(set) > maxMp) e.uses -= 1
+      else grew = true
+    }
+  }
+  return set
 }
