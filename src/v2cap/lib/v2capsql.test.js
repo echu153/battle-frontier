@@ -33,7 +33,8 @@ test('必要EXP・必要ClassEXP・スタミナの式と係数がJSと同じ', (
   assert.match(need, new RegExp(`when p_lv >= ${MAX_LV} then 0`))
   assert.match(need, new RegExp(`round\\(${NEED_PERMIL}::numeric \\* p_lv \\* p_lv \\* p_lv / 1000\\)`))
   const job = fnBody('v2cap_job_need')
-  assert.match(job, new RegExp(`when p_jlv >= ${JOB_MAX} then 0`))
+  // 上限は段階ごと（初期30・一次50＝v2cap_stages.max_jlv）。種が無いときは初期職の上限
+  assert.ok(job.includes(`when p_jlv >= coalesce((select s.max_jlv from public.v2cap_stages s where s.stage = p_stage), ${JOB_MAX}) then 0`))
   assert.match(job, new RegExp(`round\\(${JOB_NEED_TENTHS}::numeric \\*`))
   assert.match(job, /\* p_jlv \* p_jlv \/ 10\)/)
   // スタミナ：最大値は 10＋(LV−1)・回復は3分に1（2026-10-09 ユーザー指示）
@@ -107,7 +108,9 @@ test('【確定】場所は1本道。ボスを倒した一番先の場所の次�
 test('【確定】LVアップで入るステータスポイントがJSと同じ（ステは上がらない）', () => {
   const apply = fnBody('v2cap_apply_exp')
   assert.match(apply, new RegExp(`c_max_lv\\s+constant int := ${MAX_LV};`))
-  assert.match(apply, new RegExp(`c_job_max constant int := ${JOB_MAX};`))
+  assert.ok(apply.includes(`v_job_max int := ${JOB_MAX};`), 'ClassLVの上限は段階から引く（引けなければ初期職の上限）')
+  assert.ok(apply.includes('select c.stage, coalesce(s.max_jlv, 30) into v_stage, v_job_max'))
+  assert.ok(!/c_job_max/.test(apply), '上限30の決め打ちはもう無い')
   assert.ok(apply.includes(`v_pts := v_pts + case when v_lv % ${POINTS_STEP} = 0 then ${POINTS_ON_STEP} else ${POINTS_PER_LV} end;`), '入るポイントが level.js と同じ')
   assert.ok(apply.includes('stat_points = stat_points + v_pts,'))
   assert.ok(!/random\(\)/.test(apply), 'LVアップの抽選はもう無い')

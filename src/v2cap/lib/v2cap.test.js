@@ -11,10 +11,12 @@ import {
 } from './level.js'
 import {
   CLASSES, START_CLASSES, STAGES, JOB_MAX, JOB_BONUS, jobNeed, jobTotalTo, bonusSeqOf,
+  ICHIJI_CLASSES, ICHIJI_INFO, ICHIJI_REQ_JLV, jobMaxOf, nextClassesOf, CLASS_INFO,
   bonusPointsAt, jobBonusStats, learnOrderOf, learnAtOf, skillsLearnedBy, applyJobExp,
   canBecome, weaponsOf, canEquipType, attackKindOf, lineageOf, usableSkillNames, classDescOf,
 } from './jobs.js'
-import { SKILLS, NEW_SKILLS, SKILL_BY_NAME, setMpCost, validateSkillSet, defaultSetOf, DEFAULT_USES_MAX } from './skills.js'
+import { SKILLS, NEW_SKILLS, SKILL_BY_NAME, setMpCost, validateSkillSet, defaultSetOf, DEFAULT_USES_MAX, passiveOf } from './skills.js'
+import { ICHIJI_SKILLS, ICHIJI_BUILDS } from './skillsIchiji.js'
 import {
   ITEMS, ITEM_BY_ID, KINDS, WEAPON_TYPES, ARMOR_LINES, ARMOR_PARTS, ACCESSORY_TYPES, PART_MULT, SLOTS, ARMOR_EFFECT,
   RARITIES, RARITY_LABEL, RARITY_BASE, AREA_COUNT, itemOf, itemLabel, slotsFor, SLOT_LABEL, PARTS, partLabel, kindLabel, reqLvOf,
@@ -230,12 +232,49 @@ test('【確定】初期職は11職（剣士を足した）。装備できる武
   for (const w of WEAPON_TYPES) assert.ok(Object.values(table).some(list => list.includes(w)), `${w}を装備できる職業がいる`)
 })
 
-test('【確定】ノーブル・サモナーはなくし、一次職も一旦なし（初期職だけ）', () => {
-  assert.equal(CLASSES.length, 11)
-  assert.ok(CLASSES.every(c => c.stage === 'shoki' && !c.req))
-  for (const id of ['ノーブル', 'サモナー', '侍', '狂戦士', '聖職者', '賢者']) assert.ok(!CLASSES.some(c => c.id === id), `${id}は無い`)
-  assert.deepEqual(Object.keys(STAGES), ['shoki'])
-  for (const c of CLASSES) assert.equal(canBecome(c.id, {}), true, `${c.id}は条件なし`)
+test('【確定】ノーブル・サモナーはなくした。初期職11職は条件なし', () => {
+  for (const id of ['ノーブル', 'サモナー', '侍', '聖職者', '賢者']) assert.ok(!CLASSES.some(c => c.id === id), `${id}は無い`)
+  const shoki = CLASSES.filter(c => c.stage === 'shoki')
+  assert.deepEqual(shoki.map(c => c.id), START_CLASSES)
+  for (const c of shoki) { assert.equal(c.req, null); assert.equal(canBecome(c.id, {}), true, `${c.id}は条件なし`) }
+})
+
+test('【確定】一次職は20職（ユーザーの表「一次職スキル一覧」）：系統の初期職のClassLV30で就ける・上限50・必要ClassEXP3倍・ステ6点・武器は系統の初期職と同じ', () => {
+  // 2026-10-10 ユーザー決定（転職の条件・ClassLV上限50・必要ClassEXP3倍・クラスのステはClassLV30で初期職の1.2倍・武器）
+  assert.deepEqual(Object.keys(STAGES), ['shoki', 'ichiji'])
+  assert.deepEqual([STAGES.shoki.max, STAGES.ichiji.max], [30, 50])
+  assert.deepEqual([STAGES.ichiji.mult, STAGES.ichiji.perLv], [3, 6])
+  assert.equal(STAGES.ichiji.perLv * 29, Math.round(STAGES.shoki.perLv * 29 * 1.2), 'ClassLV30で初期職の1.2倍')
+  assert.deepEqual(STAGES.ichiji.learnAt, [1, 5, 10, 15, 20, 25, 30, 40])
+  assert.equal(CLASSES.length, 31)
+  assert.deepEqual(ICHIJI_CLASSES, ['狂戦士', '重戦士', '竜騎士', '槍術士', '体術師', '気功師', '暗殺者', '忍者', '狩人', '狙撃手',
+    '魔銃士', '砲撃士', '魔導士', '時魔導士', '死霊術師', '陰陽師', '司祭', '祓魔師', '錬金術師', '霊薬師'])
+  // 系統（初期職10系統に2職ずつ・剣士系はあとでユーザーが足す）
+  const bases = ['戦士', '槍使い', '格闘家', '盗賊', '弓使い', '銃士', '魔法使い', '呪術師', '僧侶', '薬師']
+  for (const b of bases) assert.equal(nextClassesOf(b).length, 2, `${b}から就ける一次職は2つ`)
+  assert.deepEqual(nextClassesOf('剣士'), [], '剣士系はまだ無い')
+  for (const id of ICHIJI_CLASSES) {
+    const c = CLASSES.find(x => x.id === id)
+    const base = ICHIJI_INFO[id].base
+    assert.equal(c.stage, 'ichiji')
+    assert.deepEqual(c.req, { cls: base, jlv: ICHIJI_REQ_JLV })
+    assert.deepEqual(c.weapons, CLASS_INFO[base].weapons, `${id}の武器は${base}と同じ`)
+    assert.equal(c.kind, CLASS_INFO[base].kind)
+    assert.equal(jobMaxOf(id), 50)
+    assert.deepEqual(lineageOf(id), [id, base], `${id}は${base}の技も使える`)
+    assert.equal(canBecome(id, {}), false)
+    assert.equal(canBecome(id, { [base]: { lv: 29 } }), false)
+    assert.equal(canBecome(id, { [base]: { lv: 30 } }), true)
+  }
+  // 必要ClassEXP：初期職の3倍・ClassLV50で0
+  assert.equal(jobNeed('ichiji', 10), 3 * jobNeed('shoki', 10))
+  assert.equal(jobNeed('ichiji', 49) > 0 && jobNeed('ichiji', 50), 0)
+  assert.equal(jobNeed('shoki', 30), 0)
+  assert.equal(jobTotalTo('ichiji', 50), 533610)
+  // ClassEXPを入れると50で止まる
+  const r = applyJobExp({}, '狂戦士', jobTotalTo('ichiji', 50) + 99999, [])
+  assert.deepEqual([r.lv, r.exp], [50, 0])
+  assert.equal(r.learned.length, 8, 'ClassLV50で8つ全部')
 })
 
 test('通常攻撃は 槍使い・盗賊・銃士・戦士・格闘家・弓使い・剣士＝物理／魔法使い・呪術師・僧侶・薬師＝魔法', () => {
@@ -252,24 +291,26 @@ test('【確定】ClassLVは最大30。初期職のClassLV30まで＝LV33のこ�
   assert.ok(total >= totalExpTo(33) && total < totalExpTo(34), `初期職の合計 ${total} はLV33〜34のあいだ`)
 })
 
-test('【確定】クラスのステはClassLVが1上がるごとに5点（ClassLV30で145点）。職業ごとに2〜3種が高く、ほかは低め', () => {
+test('【確定】クラスのステはClassLVが1上がるごとに初期職5点（ClassLV30で145点）・一次職6点（ClassLV50で294点）。職業ごとに2〜3種が高く、ほかは低め', () => {
   for (const c of CLASSES) {
     const w = JOB_BONUS[c.id]
     assert.ok(w, `${c.id}の配分がある`)
     const sum = Object.values(w).reduce((a, b) => a + b, 0)
-    assert.equal(sum, 145, `${c.id}の合計（ClassLV30で145点）`)
-    // 2〜3種が高い（30点以上）・ほかはそれより低い・尖りすぎない（1種で半分を超えない）
+    const total = c.stage === 'ichiji' ? 294 : 145
+    assert.equal(sum, total, `${c.id}の合計（上限のClassLVで${total}点）`)
+    // 2〜3種が高い（初期職30点以上・一次職61点以上＝同じ割合）・ほかはそれより低い・尖りすぎない（1種で半分を超えない）
     const vals = Object.values(w).sort((a, b) => b - a)
-    const high = vals.filter(v => v >= 30).length
+    const high = vals.filter(v => v >= (c.stage === 'ichiji' ? 61 : 30)).length
     assert.ok(high >= 2 && high <= 3, `${c.id}：高いのは${high}種`)
-    assert.ok(vals[0] <= 145 / 2, `${c.id}：1種に寄りすぎない`)
+    assert.ok(vals[0] <= total / 2, `${c.id}：1種に寄りすぎない`)
     const seq = bonusSeqOf(c.id)
     assert.equal(seq.length, sum)
     for (const [k, v] of Object.entries(w)) assert.equal(seq.filter(x => x === k).length, v, `${c.id}の${k}`)
-    const full = jobBonusStats(c.id, JOB_MAX)
+    const full = jobBonusStats(c.id, jobMaxOf(c.id))
     for (const k of STAT_KEYS) assert.equal(full[k], (w[k] || 0) * STAT_DEFS[k].unit)
     assert.equal(calcPower(jobBonusStats(c.id, 1)), 0, 'ClassLV1ではまだ何も上がっていない')
-    assert.equal(bonusPointsAt(c.id, JOB_MAX), sum)
+    assert.equal(bonusPointsAt(c.id, jobMaxOf(c.id)), sum)
+    assert.equal(bonusPointsAt(c.id, 99), sum, '上限より上は増えない')
     // どこで止めても配分どおりに近い（1つのステへ偏らない）
     for (let n = 1; n <= sum; n++) {
       for (const [k, v] of Object.entries(w)) {
@@ -289,13 +330,16 @@ test('【確定】キャラ作成のクラス選択に出す特徴の説明が�
 })
 
 // ===== スキル =====
-test('スキルはClassLV 1／5／10／15／20 で1つずつ覚える（どの職業も5個）', () => {
+test('スキルは初期職ClassLV 1／5／10／15／20 で5個・一次職ClassLV 1／5／10／15／20／25／30／40 で8個', () => {
   assert.deepEqual(STAGES.shoki.learnAt, [1, 5, 10, 15, 20])
   for (const c of CLASSES) {
+    const n = c.stage === 'ichiji' ? 8 : 5
     assert.equal(learnOrderOf(c.id).length, learnAtOf(c.id).length, `${c.id}のスキル数`)
+    assert.equal(learnOrderOf(c.id).length, n)
     assert.equal(skillsLearnedBy(c.id, 1).length, 1, `${c.id}はClassLV1で1つ`)
-    assert.equal(skillsLearnedBy(c.id, JOB_MAX).length, 5, `${c.id}はClassLV30で全部`)
+    assert.equal(skillsLearnedBy(c.id, jobMaxOf(c.id)).length, n, `${c.id}は上限のClassLVで全部`)
   }
+  assert.equal(skillsLearnedBy('狂戦士', 39).length, 7, 'ClassLV40の技は40で覚える')
   const r = applyJobExp({}, '戦士', jobTotalTo('shoki', 30) + 999999, ['体当たり'])
   assert.equal(r.lv, 30)
   assert.equal(r.exp, 0)
@@ -305,8 +349,44 @@ test('スキルはClassLV 1／5／10／15／20 で1つずつ覚える（どの�
 test('【確定】戦士・弓使い・魔法使い・僧侶・格闘家のスキルは今のⅡのまま（中身も並びも同じ）', () => {
   for (const cls of ['戦士', '弓使い', '魔法使い', '僧侶', '格闘家']) {
     const v2 = V2_SKILLS.filter(s => s.cls === cls)
-    assert.deepEqual(learnOrderOf(cls), v2, `${cls}`)
+    // ★魔法の属性（elem）だけはこの版の写しに付けている（魔導士の元素共鳴が見る・2026-10-10）。それ以外は同じ
+    const noElem = (s) => { const { elem: _e, ...rest } = s; return rest }
+    assert.deepEqual(learnOrderOf(cls).map(noElem), v2, `${cls}`)
   }
+  assert.deepEqual(['ファイア', 'サンダー', 'アイスランス'].map(n => SKILL_BY_NAME[n].elem), ['fire', 'thunder', 'ice'])
+  assert.ok(V2_SKILLS.every(s => !('elem' in s)), '今のⅡの名簿は書き換えていない')
+})
+
+test('【確定】一次職の技はユーザーの表「一次職スキル一覧」のとおり（各職8技＋パッシブ1つ・組み方の例2つ）', () => {
+  assert.equal(ICHIJI_SKILLS.length, 180)
+  for (const id of ICHIJI_CLASSES) {
+    const mine = ICHIJI_SKILLS.filter(x => x.cls === id)
+    assert.equal(mine.filter(x => x.kind === 'passive').length, 1, `${id}のパッシブは1つ`)
+    assert.equal(mine.filter(x => x.kind !== 'passive').length, 8, `${id}の技は8つ`)
+    assert.equal(passiveOf(id)?.cls, id)
+    for (const x of mine) {
+      assert.ok(x.desc, `${x.name}の説明`)
+      if (x.kind !== 'passive') assert.ok(x.mp > 0 && x.proc >= 70 && x.proc <= 100, `${x.name}の消費MP・発動率`)
+    }
+    assert.equal(ICHIJI_BUILDS[id].length, 2, `${id}の組み方の例は2つ`)
+    for (const b of ICHIJI_BUILDS[id]) {
+      assert.equal(b.length, 5)
+      for (const n of b) assert.equal(SKILL_BY_NAME[n]?.cls, id, `${id}の組み方の${n}は${id}の技`)
+    }
+  }
+  // 表の値（抜き出して固定）。並び＝覚える順（ClassLV1／5／10／15／20／25／30／40）
+  assert.deepEqual(learnOrderOf('狂戦士').map(x => [x.name, x.mp, x.proc]), [
+    ['マッドラッシュ', 6, 95], ['血風斬', 12, 85], ['狂乱の咆哮', 10, 100], ['ブラッドスプラッシュ', 11, 88],
+    ['狂撃', 14, 85], ['ブラッディロア', 14, 100], ['血の誓い', 10, 100], ['フルブレイカー', 22, 80]])
+  assert.deepEqual(learnOrderOf('霊薬師').map(x => x.name), ['霊薬瓶', '剛力薬', '叡智の薬', '鉄身薬', '再生薬', '霊薬', '薬効解放', '仙丹'])
+  assert.deepEqual([SKILL_BY_NAME['カタストロフ'].mult, SKILL_BY_NAME['カタストロフ'].mp, SKILL_BY_NAME['カタストロフ'].proc], [2.6, 28, 70])
+  assert.deepEqual(SKILL_BY_NAME['マナショット'].hybrid, { phys:1.2, mag:1.2 })
+  assert.equal(passiveOf('狂戦士').name, 'バーサク')
+  assert.equal(passiveOf('戦士'), null, '初期職にパッシブは無い')
+  // 今のⅡと同じ名前の技がある（表の「過去作の名前も引き継ぐ」）。この版の名簿の中では重ならない
+  assert.equal(new Set(SKILLS.map(x => x.name)).size, SKILLS.length)
+  assert.equal(SKILL_BY_NAME['マッドラッシュ'].cls, '狂戦士')
+  assert.equal(SKILL_BY_NAME['マッドラッシュ'].mult, 1.45, 'この版の中身（表の値）')
 })
 
 test('【確定】新しい6職（槍使い・盗賊・銃士・剣士・呪術師・薬師）の30技は、今のⅡの初期職と同じ帯（価値・消費MP）', () => {
@@ -339,7 +419,7 @@ test('編成の想定利用MPは、この版の名簿で数える（新しい技
 })
 
 test('【確定】スキルはその職業でだけ使える。他の職業の技は、覚えていても置けない（0.8倍・MP2倍で使う形はやめた）', () => {
-  for (const c of CLASSES) assert.deepEqual(lineageOf(c.id), [c.id], `${c.id}：いまは上位職が無い＝自分だけ`)
+  for (const c of CLASSES) assert.deepEqual(lineageOf(c.id), c.req ? [c.id, c.req.cls] : [c.id], `${c.id}：自分（一次職は系統の初期職も）`)
   const lin = lineageOf('戦士')
   const learned = ['体当たり', '強撃', '呪弾']
   assert.equal(validateSkillSet([{ name:'呪弾', uses: 1 }], { lineage: lin, learned, maxMp: 99 }), '呪弾は戦士では使えません（呪術師のスキル）')

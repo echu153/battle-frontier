@@ -19,7 +19,8 @@
 --   ・場所（15エリア×①②③＝45か所）を1本道で進む。その場所のボスを倒すと次の場所が開く
 --   ・1勝で入るEXPとGoldは**場所の表の値**×役割の倍率（朝昼晩1.5倍・レア3倍・ボス5倍）。
 --     サーバーが決める（画面からは受け取らない）
---   ・クラスLV（表記は ClassLV・最大30）を職業ごとに持つ。入るのは今の職業。上がるとスキルを覚える
+--   ・クラスLV（表記は ClassLV）を職業ごとに持つ。上限は初期職30・一次職50（v2cap_stages.max_jlv）。入るのは今の職業。上がるとスキルを覚える
+--   ・一次職は20職（2026-10-10）：系統の初期職のClassLV30で就ける・必要ClassEXPは初期職の3倍・ClassLV1ごとに6点・武器は系統の初期職と同じ
 --   ・初期職は11職（2026-10-09 に剣士を足した）。職業ごとに装備できる武器が3〜4種決まっている。一次職は一旦なし
 --   ・装備は**エリアごと**に、武器14種（刀・宝珠を足した）・重鎧4部位・軽装4部位・装飾品4種の26点が、レア度
 --     （ノーマル・レア・エピック・レジェンダリー）ごとに1つずつ。アイテムLV＝装備の必要LV（エリア×レア度）。
@@ -47,14 +48,16 @@ $$;
 -- ============================================================
 -- ---- 1-1. 段階 ----
 -- mult … 必要ClassEXPの倍率／per_lv … ClassLVが1上がるごとのステの点数／
--- learn_at … スキルを覚えるClassLV（その職業の技を v2cap_skills の sort 順に当てる）
--- ★いまは初期だけ（一次職は見直すまで一旦なし・2026-10-09）
+-- learn_at … スキルを覚えるClassLV（その職業の技を v2cap_skills の sort 順に当てる）／max_jlv … ClassLVの上限
+-- ★初期（ClassLV30まで）と一次（2026-10-10・ClassLV50まで）
 create table if not exists public.v2cap_stages (
   stage    text primary key,
   mult     int  not null,
   per_lv   int  not null,
-  learn_at int[] not null
+  learn_at int[] not null,
+  max_jlv  int  not null default 30
 );
+alter table public.v2cap_stages add column if not exists max_jlv int not null default 30;
 alter table public.v2cap_stages enable row level security;
 drop policy if exists v2cap_stages_read on public.v2cap_stages;
 create policy v2cap_stages_read on public.v2cap_stages for select to authenticated using (true);
@@ -62,15 +65,16 @@ revoke all on table public.v2cap_stages from anon;
 grant select on table public.v2cap_stages to authenticated;
 
 -- @@seed:stages
-insert into public.v2cap_stages (stage, mult, per_lv, learn_at) values
-  ('shoki', 1, 5, '{1,5,10,15,20}'::int[])
-on conflict (stage) do update set mult = excluded.mult, per_lv = excluded.per_lv, learn_at = excluded.learn_at;
+insert into public.v2cap_stages (stage, mult, per_lv, learn_at, max_jlv) values
+  ('shoki', 1, 5, '{1,5,10,15,20}'::int[], 30),
+  ('ichiji', 3, 6, '{1,5,10,15,20,25,30,40}'::int[], 50)
+on conflict (stage) do update set mult = excluded.mult, per_lv = excluded.per_lv, learn_at = excluded.learn_at, max_jlv = excluded.max_jlv;
 -- @@end:stages
 
 -- ---- 1-2. 職業 ----
 -- req_cls / req_jlv … 就くのに要る職業とClassLV（初期職は null）
 -- bonus_seq … ClassLVで上がるステの並び（1点ずつ。jobs.js の bonusSeqOf と同じ）
--- weapons … 装備できる武器の種類（3つ）／kind … 通常攻撃が物理（phys）か魔法（mag）か
+-- weapons … 装備できる武器の種類（3〜4つ・一次職は系統の初期職と同じ）／kind … 通常攻撃が物理（phys）か魔法（mag）か
 -- lineage … スキルを使える職業＝[自分, 下位職, その下位職, …]（jobs.js の lineageOf。req_cls をさかのぼったもの）
 --   ★スキルは「その職業でだけ使える。上位職は下位職のスキルも使える」（2026-10-09 ユーザー決定）
 create table if not exists public.v2cap_classes (
@@ -91,7 +95,7 @@ revoke all on table public.v2cap_classes from anon;
 grant select on table public.v2cap_classes to authenticated;
 
 -- @@seed:classes
-delete from public.v2cap_classes where id <> all('{戦士,槍使い,格闘家,盗賊,弓使い,銃士,剣士,魔法使い,呪術師,僧侶,薬師}'::text[]);
+delete from public.v2cap_classes where id <> all('{戦士,槍使い,格闘家,盗賊,弓使い,銃士,剣士,魔法使い,呪術師,僧侶,薬師,狂戦士,重戦士,竜騎士,槍術士,体術師,気功師,暗殺者,忍者,狩人,狙撃手,魔銃士,砲撃士,魔導士,時魔導士,死霊術師,陰陽師,司祭,祓魔師,錬金術師,霊薬師}'::text[]);
 insert into public.v2cap_classes (id, stage, sort, req_cls, req_jlv, bonus_seq, weapons, kind, lineage) values
   ('戦士', 'shoki', 0, null, null, '{str,vit,hp,dex,agi,str,vit,mp,hp,str,vit,luk,str,hp,dex,agi,vit,str,hp,str,vit,mp,hp,str,dex,vit,agi,str,hp,vit,str,dex,agi,hp,vit,str,mp,str,vit,hp,luk,str,vit,dex,hp,agi,str,vit,str,hp,mp,vit,str,dex,agi,hp,str,vit,hp,str,vit,dex,agi,str,hp,vit,mp,str,luk,hp,vit,str,dex,agi,str,vit,hp,str,mp,vit,hp,str,dex,agi,vit,str,hp,vit,str,hp,dex,agi,str,vit,mp,hp,str,vit,luk,str,hp,dex,vit,agi,str,hp,vit,str,mp,dex,str,vit,hp,agi,str,vit,hp,str,dex,vit,agi,str,hp,mp,vit,str,hp,luk,str,vit,dex,agi,str,hp,vit,str,hp,mp,vit,str,dex,agi,hp,vit,str}'::text[], '{両手剣,斧,鈍器,刀}'::text[], 'phys', '{戦士}'::text[]),
   ('槍使い', 'shoki', 1, null, null, '{str,dex,agi,vit,hp,str,dex,mp,str,agi,dex,vit,str,luk,dex,hp,str,agi,dex,str,vit,mp,dex,agi,str,hp,dex,str,vit,agi,str,dex,hp,str,dex,mp,agi,vit,str,dex,luk,str,agi,dex,hp,vit,str,dex,str,agi,mp,dex,str,vit,hp,dex,str,agi,vit,str,dex,hp,agi,str,dex,mp,str,vit,dex,agi,str,luk,dex,hp,str,agi,dex,vit,str,mp,dex,str,agi,hp,vit,dex,str,agi,str,dex,hp,vit,str,dex,mp,agi,str,dex,luk,str,vit,dex,hp,agi,str,dex,str,mp,agi,vit,dex,str,hp,dex,str,agi,vit,str,dex,hp,str,agi,dex,mp,vit,str,dex,agi,str,luk,dex,hp,str,vit,dex,agi,str,mp,dex,str,hp,vit,agi,dex,str}'::text[], '{槍,片手剣,投擲}'::text[], 'phys', '{槍使い}'::text[]),
@@ -103,11 +107,31 @@ insert into public.v2cap_classes (id, stage, sort, req_cls, req_jlv, bonus_seq, 
   ('魔法使い', 'shoki', 7, null, null, '{int_stat,mp,agi,hp,int_stat,dex,vit,mp,int_stat,agi,int_stat,mp,luk,hp,int_stat,agi,dex,mp,int_stat,agi,int_stat,mp,vit,hp,int_stat,dex,agi,mp,int_stat,int_stat,mp,agi,hp,int_stat,dex,vit,mp,int_stat,agi,int_stat,mp,luk,hp,int_stat,agi,dex,mp,int_stat,agi,int_stat,mp,vit,hp,int_stat,dex,agi,mp,int_stat,int_stat,mp,agi,hp,int_stat,dex,vit,mp,int_stat,agi,int_stat,mp,luk,hp,int_stat,agi,dex,mp,int_stat,agi,int_stat,mp,vit,hp,int_stat,dex,agi,mp,int_stat,int_stat,mp,agi,hp,int_stat,dex,vit,mp,int_stat,agi,int_stat,mp,luk,hp,int_stat,agi,dex,mp,int_stat,agi,int_stat,mp,vit,hp,int_stat,dex,agi,mp,int_stat,int_stat,mp,agi,hp,int_stat,dex,vit,mp,int_stat,agi,int_stat,mp,luk,hp,int_stat,agi,dex,mp,int_stat,agi,int_stat,mp,vit,hp,int_stat,dex,agi,mp,int_stat}'::text[], '{杖,書,短剣,宝珠}'::text[], 'mag', '{魔法使い}'::text[]),
   ('呪術師', 'shoki', 8, null, null, '{int_stat,mp,dex,luk,agi,int_stat,hp,mp,int_stat,vit,dex,luk,int_stat,mp,agi,int_stat,mp,hp,dex,int_stat,luk,mp,int_stat,agi,dex,int_stat,mp,vit,luk,int_stat,hp,mp,int_stat,dex,agi,luk,int_stat,mp,dex,int_stat,mp,hp,int_stat,agi,luk,vit,mp,int_stat,dex,int_stat,mp,luk,agi,int_stat,dex,hp,mp,int_stat,luk,mp,int_stat,dex,agi,int_stat,vit,mp,hp,int_stat,luk,dex,mp,int_stat,agi,int_stat,mp,dex,luk,int_stat,hp,mp,vit,int_stat,agi,dex,int_stat,mp,luk,int_stat,mp,hp,dex,int_stat,agi,luk,mp,int_stat,dex,vit,int_stat,mp,luk,agi,int_stat,hp,mp,int_stat,dex,luk,int_stat,mp,agi,dex,int_stat,mp,hp,int_stat,luk,vit,mp,int_stat,dex,agi,int_stat,mp,luk,int_stat,dex,hp,mp,int_stat,agi,luk,int_stat,mp,dex,vit,int_stat,mp,hp,int_stat,agi,luk,dex,mp,int_stat}'::text[], '{杖,短剣,投擲,宝珠}'::text[], 'mag', '{呪術師}'::text[]),
   ('僧侶', 'shoki', 9, null, null, '{int_stat,vit,hp,mp,agi,int_stat,vit,hp,mp,int_stat,dex,vit,hp,int_stat,mp,luk,vit,int_stat,hp,agi,mp,int_stat,vit,hp,int_stat,mp,vit,hp,int_stat,agi,dex,vit,mp,int_stat,hp,vit,int_stat,mp,hp,int_stat,vit,agi,luk,mp,int_stat,hp,vit,int_stat,hp,mp,vit,int_stat,dex,agi,hp,int_stat,mp,vit,int_stat,hp,vit,mp,int_stat,hp,vit,agi,int_stat,mp,luk,hp,vit,int_stat,mp,dex,int_stat,vit,hp,agi,int_stat,mp,vit,hp,int_stat,mp,vit,hp,int_stat,agi,vit,int_stat,mp,hp,dex,int_stat,vit,mp,hp,int_stat,vit,luk,hp,int_stat,mp,agi,vit,int_stat,hp,mp,int_stat,vit,hp,dex,int_stat,mp,vit,agi,int_stat,hp,vit,mp,int_stat,hp,vit,int_stat,mp,agi,hp,int_stat,vit,luk,mp,int_stat,hp,vit,dex,int_stat,mp,hp,vit,int_stat,agi,mp,hp,vit,int_stat}'::text[], '{鈍器,杖,書,宝珠}'::text[], 'mag', '{僧侶}'::text[]),
-  ('薬師', 'shoki', 10, null, null, '{int_stat,dex,mp,hp,agi,int_stat,vit,dex,mp,int_stat,hp,dex,luk,int_stat,mp,agi,hp,dex,int_stat,mp,int_stat,dex,vit,hp,agi,int_stat,mp,dex,int_stat,hp,dex,mp,int_stat,agi,vit,hp,int_stat,dex,mp,int_stat,dex,luk,hp,mp,int_stat,agi,dex,int_stat,mp,hp,dex,int_stat,vit,agi,mp,int_stat,dex,hp,int_stat,dex,mp,agi,hp,int_stat,vit,dex,int_stat,mp,hp,dex,int_stat,luk,mp,agi,int_stat,dex,hp,mp,int_stat,dex,vit,int_stat,hp,agi,mp,dex,int_stat,hp,dex,int_stat,mp,agi,vit,int_stat,dex,hp,mp,int_stat,dex,luk,int_stat,mp,agi,hp,dex,int_stat,mp,vit,int_stat,dex,hp,agi,int_stat,mp,dex,hp,int_stat,dex,mp,int_stat,agi,hp,vit,dex,int_stat,mp,luk,int_stat,dex,hp,mp,agi,int_stat,dex,hp,int_stat,mp,dex,vit,int_stat,agi,hp,mp,dex,int_stat}'::text[], '{短剣,投擲,書}'::text[], 'mag', '{薬師}'::text[])
+  ('薬師', 'shoki', 10, null, null, '{int_stat,dex,mp,hp,agi,int_stat,vit,dex,mp,int_stat,hp,dex,luk,int_stat,mp,agi,hp,dex,int_stat,mp,int_stat,dex,vit,hp,agi,int_stat,mp,dex,int_stat,hp,dex,mp,int_stat,agi,vit,hp,int_stat,dex,mp,int_stat,dex,luk,hp,mp,int_stat,agi,dex,int_stat,mp,hp,dex,int_stat,vit,agi,mp,int_stat,dex,hp,int_stat,dex,mp,agi,hp,int_stat,vit,dex,int_stat,mp,hp,dex,int_stat,luk,mp,agi,int_stat,dex,hp,mp,int_stat,dex,vit,int_stat,hp,agi,mp,dex,int_stat,hp,dex,int_stat,mp,agi,vit,int_stat,dex,hp,mp,int_stat,dex,luk,int_stat,mp,agi,hp,dex,int_stat,mp,vit,int_stat,dex,hp,agi,int_stat,mp,dex,hp,int_stat,dex,mp,int_stat,agi,hp,vit,dex,int_stat,mp,luk,int_stat,dex,hp,mp,agi,int_stat,dex,hp,int_stat,mp,dex,vit,int_stat,agi,hp,mp,dex,int_stat}'::text[], '{短剣,投擲,書}'::text[], 'mag', '{薬師}'::text[]),
+  ('狂戦士', 'ichiji', 11, '戦士', 30, '{str,hp,agi,vit,dex,str,hp,mp,str,agi,hp,str,vit,luk,hp,agi,str,dex,hp,str,agi,vit,str,hp,dex,str,agi,hp,mp,str,vit,hp,agi,str,dex,hp,str,agi,vit,str,hp,luk,str,dex,hp,agi,str,vit,hp,mp,str,agi,hp,str,dex,agi,vit,hp,str,str,hp,agi,dex,str,vit,hp,mp,str,agi,hp,str,luk,dex,hp,agi,str,vit,hp,str,agi,str,hp,vit,dex,str,agi,hp,mp,str,hp,vit,agi,str,dex,hp,str,agi,hp,str,vit,luk,str,hp,agi,dex,str,hp,mp,vit,str,agi,hp,str,dex,agi,hp,str,vit,str,hp,agi,dex,str,hp,vit,mp,str,agi,hp,str,luk,dex,hp,agi,str,vit,hp,str,agi,str,hp,dex,vit,str,agi,hp,mp,str,hp,agi,str,vit,dex,hp,str,agi,str,hp,luk,vit,str,hp,agi,dex,str,hp,mp,str,agi,vit,hp,str,dex,agi,hp,str,vit,str,hp,agi,dex,str,hp,mp,str,agi,vit,hp,str,luk,dex,hp,agi,str,vit,hp,str,agi,str,hp,dex,str,agi,vit,hp,str,mp,hp,agi,str,dex,vit,hp,str,agi,str,hp,luk,dex,str,hp,agi,vit,str,hp,mp,str,agi,hp,vit,str,dex,agi,hp,str,vit,str,hp,agi,dex,str,hp,mp,str,agi,hp,vit,str,luk,hp,agi,str,dex,hp,str,vit,agi,str,hp,dex,str,agi,hp,vit,str,mp,hp,agi,str,dex,hp,str,vit,agi,str,hp,luk,str,dex,hp,agi,vit,str,hp,mp,str,agi,hp,str,dex,vit,agi,hp,str}'::text[], '{両手剣,斧,鈍器,刀}'::text[], 'phys', '{狂戦士,戦士}'::text[]),
+  ('重戦士', 'ichiji', 12, '戦士', 30, '{vit,hp,str,dex,vit,agi,hp,str,vit,mp,hp,str,vit,luk,dex,vit,hp,str,agi,vit,hp,str,vit,dex,hp,str,vit,mp,hp,vit,str,agi,vit,hp,str,dex,vit,hp,str,vit,luk,agi,hp,str,vit,dex,vit,hp,str,mp,vit,hp,str,vit,dex,agi,hp,str,vit,vit,hp,str,dex,vit,hp,str,agi,vit,mp,hp,str,vit,luk,dex,vit,hp,str,vit,hp,str,agi,vit,dex,hp,str,vit,mp,hp,vit,str,agi,vit,hp,str,dex,vit,hp,str,vit,luk,hp,str,vit,dex,agi,vit,hp,str,mp,vit,hp,str,vit,dex,hp,str,vit,agi,vit,hp,str,dex,vit,hp,str,mp,vit,agi,hp,str,vit,luk,dex,vit,hp,str,vit,hp,str,vit,agi,dex,hp,str,vit,mp,hp,vit,str,vit,dex,hp,str,agi,vit,hp,str,vit,luk,hp,str,vit,dex,vit,hp,str,agi,mp,vit,hp,str,vit,dex,hp,str,vit,agi,vit,hp,str,dex,vit,hp,str,vit,mp,luk,hp,str,vit,agi,dex,vit,hp,str,vit,hp,str,vit,dex,hp,str,vit,agi,mp,vit,hp,str,vit,hp,str,dex,vit,agi,hp,str,vit,luk,hp,str,vit,dex,vit,hp,str,mp,vit,agi,hp,str,vit,dex,hp,str,vit,agi,vit,hp,str,dex,vit,hp,str,vit,mp,hp,str,vit,luk,dex,vit,hp,str,agi,vit,hp,str,vit,dex,hp,str,vit,agi,mp,vit,hp,str,vit,hp,str,dex,vit,hp,str,vit,agi,luk,hp,str,vit,dex,vit,hp,str,mp,vit,hp,str,agi,vit,dex,hp,str,vit}'::text[], '{両手剣,斧,鈍器,刀}'::text[], 'phys', '{重戦士,戦士}'::text[]),
+  ('竜騎士', 'ichiji', 13, '槍使い', 30, '{str,vit,dex,agi,hp,str,vit,mp,dex,str,agi,vit,hp,str,dex,luk,str,vit,agi,str,dex,vit,hp,str,agi,vit,dex,str,mp,hp,vit,str,agi,dex,str,vit,hp,dex,str,agi,vit,str,luk,dex,vit,agi,str,hp,mp,str,vit,dex,agi,str,vit,hp,dex,str,vit,agi,str,dex,hp,vit,str,agi,mp,dex,str,vit,hp,str,luk,vit,dex,agi,str,vit,str,dex,hp,agi,str,vit,dex,str,mp,agi,vit,hp,str,dex,vit,str,agi,hp,dex,str,vit,luk,str,agi,vit,dex,str,hp,vit,mp,str,agi,dex,vit,str,hp,dex,agi,str,vit,str,dex,vit,hp,agi,str,mp,vit,dex,str,agi,hp,str,vit,dex,luk,str,vit,agi,str,dex,hp,vit,str,agi,dex,vit,str,hp,mp,str,vit,dex,agi,str,vit,hp,dex,str,agi,vit,str,luk,dex,hp,str,vit,agi,mp,str,dex,vit,str,agi,hp,vit,dex,str,vit,str,agi,dex,hp,str,vit,mp,dex,str,agi,vit,hp,str,luk,dex,vit,str,agi,hp,str,vit,dex,agi,str,vit,dex,str,mp,hp,vit,agi,str,dex,vit,str,agi,hp,dex,str,vit,luk,str,agi,vit,dex,str,hp,mp,vit,str,dex,agi,str,vit,hp,dex,str,agi,vit,str,dex,hp,vit,str,agi,mp,dex,str,vit,hp,str,agi,vit,dex,str,luk,vit,agi,str,dex,hp,vit,str,dex,agi,str,vit,hp,mp,str,dex,vit,agi,str,hp,vit,dex,str,agi,luk,str,vit,dex,str,hp,vit,agi,str,dex,mp,vit,str,hp,agi,dex,vit,str}'::text[], '{槍,片手剣,投擲}'::text[], 'phys', '{竜騎士,槍使い}'::text[]),
+  ('槍術士', 'ichiji', 14, '槍使い', 30, '{str,agi,dex,vit,hp,str,agi,dex,mp,str,agi,dex,vit,str,hp,agi,dex,luk,str,agi,dex,str,vit,hp,agi,str,dex,mp,agi,str,vit,dex,str,agi,hp,dex,str,agi,vit,dex,str,mp,agi,luk,hp,str,dex,agi,vit,str,dex,agi,str,hp,dex,agi,vit,str,dex,mp,agi,str,hp,dex,agi,str,vit,str,dex,agi,luk,str,hp,agi,dex,vit,str,mp,agi,dex,str,vit,agi,dex,str,hp,agi,dex,str,vit,agi,str,dex,hp,mp,agi,str,dex,vit,str,agi,dex,hp,luk,str,agi,dex,str,vit,agi,mp,dex,str,hp,agi,str,dex,vit,agi,str,dex,hp,agi,str,vit,dex,agi,str,mp,luk,dex,str,agi,hp,vit,str,dex,agi,str,dex,agi,hp,vit,str,dex,agi,mp,str,agi,dex,str,vit,hp,agi,dex,str,luk,agi,str,dex,vit,hp,agi,str,dex,mp,str,agi,dex,vit,str,agi,hp,dex,str,agi,vit,dex,str,mp,agi,hp,str,dex,agi,vit,str,dex,agi,str,luk,hp,dex,agi,str,vit,dex,str,agi,mp,hp,dex,str,agi,vit,str,dex,agi,hp,str,dex,agi,vit,str,mp,dex,agi,str,luk,hp,agi,dex,str,vit,agi,dex,str,vit,str,agi,dex,hp,mp,str,agi,dex,str,vit,agi,dex,hp,str,agi,dex,str,vit,agi,luk,str,dex,hp,mp,agi,str,dex,vit,agi,str,dex,hp,agi,str,dex,vit,str,agi,mp,dex,str,agi,hp,vit,str,dex,agi,str,luk,dex,agi,hp,str,vit,dex,agi,str,mp,dex,agi,str,hp,vit,dex,agi,str}'::text[], '{槍,片手剣,投擲}'::text[], 'phys', '{槍術士,槍使い}'::text[]),
+  ('体術師', 'ichiji', 15, '格闘家', 30, '{agi,str,dex,hp,vit,agi,str,mp,agi,dex,str,luk,agi,hp,str,vit,agi,dex,str,agi,hp,dex,agi,str,vit,agi,str,mp,luk,agi,dex,hp,str,agi,vit,str,agi,dex,hp,agi,str,dex,agi,vit,str,mp,agi,hp,str,dex,agi,luk,str,agi,vit,dex,hp,str,agi,agi,str,dex,vit,agi,hp,str,mp,agi,dex,str,luk,agi,vit,str,agi,hp,dex,str,agi,hp,agi,dex,str,vit,agi,str,mp,luk,agi,dex,str,hp,agi,vit,str,agi,dex,hp,agi,str,dex,agi,str,vit,mp,agi,str,dex,hp,agi,luk,str,agi,vit,dex,str,agi,hp,agi,str,dex,vit,agi,str,hp,mp,agi,dex,str,luk,agi,vit,str,agi,dex,hp,str,agi,dex,agi,str,vit,hp,agi,str,mp,dex,agi,luk,str,agi,hp,vit,str,agi,dex,agi,str,hp,dex,agi,str,vit,agi,mp,str,dex,agi,luk,hp,str,agi,vit,dex,str,agi,hp,agi,str,dex,vit,agi,str,mp,agi,hp,dex,str,agi,luk,vit,str,agi,dex,hp,str,agi,dex,agi,str,vit,agi,hp,str,mp,agi,dex,luk,str,agi,vit,hp,str,agi,dex,agi,str,dex,vit,agi,str,hp,agi,mp,str,dex,agi,luk,str,hp,agi,vit,dex,str,agi,hp,agi,str,dex,vit,agi,str,mp,agi,dex,str,luk,agi,hp,str,vit,agi,dex,str,agi,hp,dex,agi,str,vit,agi,str,mp,hp,agi,dex,luk,str,agi,vit,str,agi,dex,hp,agi,str,dex,agi,vit,str,hp,agi,mp,str,dex,agi,luk,str,agi,vit,hp,dex,str,agi}'::text[], '{拳,鈍器,杖}'::text[], 'phys', '{体術師,格闘家}'::text[]),
+  ('気功師', 'ichiji', 16, '格闘家', 30, '{str,dex,vit,agi,hp,str,dex,mp,vit,str,dex,agi,hp,str,luk,dex,vit,str,agi,dex,hp,str,mp,vit,dex,str,agi,dex,hp,str,vit,dex,agi,str,mp,vit,dex,str,hp,agi,dex,str,vit,luk,hp,str,dex,agi,str,vit,dex,mp,str,hp,dex,agi,vit,str,dex,hp,str,vit,dex,agi,str,mp,dex,vit,str,hp,agi,dex,str,luk,vit,dex,str,agi,hp,dex,str,mp,vit,str,dex,agi,hp,vit,str,dex,agi,str,dex,hp,vit,mp,str,dex,agi,str,vit,dex,hp,luk,str,dex,agi,str,vit,mp,dex,hp,str,agi,vit,dex,str,hp,dex,str,vit,agi,dex,str,mp,hp,vit,str,dex,agi,luk,str,dex,vit,hp,str,dex,agi,str,mp,dex,vit,hp,str,agi,dex,str,vit,dex,agi,str,hp,vit,dex,mp,str,agi,dex,str,hp,vit,luk,dex,str,agi,vit,dex,str,hp,mp,str,dex,agi,vit,str,dex,hp,str,dex,vit,agi,str,mp,dex,hp,vit,str,agi,dex,str,luk,hp,dex,vit,str,agi,dex,str,mp,vit,hp,dex,str,agi,dex,str,vit,hp,agi,str,dex,vit,mp,str,dex,hp,agi,str,dex,vit,luk,str,dex,agi,hp,str,vit,dex,mp,str,dex,agi,vit,str,hp,dex,str,vit,agi,dex,hp,str,mp,dex,str,vit,agi,luk,dex,str,hp,vit,str,dex,agi,mp,str,dex,hp,vit,str,agi,dex,vit,str,hp,dex,agi,str,dex,vit,mp,str,hp,dex,agi,str,vit,dex,luk,str,hp,agi,dex,str,vit,mp,dex,str,hp,agi,vit,dex,str}'::text[], '{拳,鈍器,杖}'::text[], 'phys', '{気功師,格闘家}'::text[]),
+  ('暗殺者', 'ichiji', 17, '盗賊', 30, '{agi,str,luk,dex,hp,agi,str,vit,agi,luk,mp,str,dex,agi,hp,agi,str,luk,dex,agi,str,luk,agi,hp,str,dex,agi,vit,luk,agi,str,mp,agi,dex,str,hp,agi,luk,str,agi,dex,luk,str,agi,hp,vit,agi,str,dex,luk,agi,str,mp,agi,hp,dex,luk,str,agi,agi,str,luk,dex,hp,agi,str,vit,agi,luk,dex,str,agi,mp,hp,agi,str,luk,dex,agi,str,agi,luk,hp,str,agi,dex,vit,luk,agi,str,dex,agi,str,hp,luk,agi,mp,str,agi,dex,luk,str,agi,hp,agi,str,dex,luk,vit,agi,str,hp,agi,dex,luk,str,agi,mp,agi,str,luk,dex,agi,hp,str,agi,vit,luk,dex,str,agi,hp,agi,str,luk,dex,agi,mp,str,agi,luk,hp,str,agi,dex,vit,str,agi,luk,dex,agi,str,hp,luk,agi,str,mp,agi,dex,luk,str,agi,hp,agi,str,dex,luk,agi,vit,str,hp,agi,dex,luk,str,agi,mp,agi,str,luk,dex,agi,hp,str,agi,vit,luk,dex,str,agi,hp,agi,str,luk,dex,agi,str,mp,agi,luk,hp,str,agi,dex,vit,agi,str,luk,dex,agi,str,hp,luk,agi,str,agi,dex,mp,luk,str,agi,hp,agi,str,dex,luk,agi,vit,str,agi,hp,dex,luk,str,agi,mp,agi,str,luk,dex,agi,hp,str,agi,vit,luk,str,dex,agi,hp,agi,str,luk,dex,agi,str,luk,agi,hp,str,dex,agi,mp,vit,agi,str,luk,agi,dex,str,hp,agi,luk,str,agi,dex,luk,str,agi,hp,mp,agi,str,dex,luk,agi,vit,str,agi,hp,dex,luk,str,agi}'::text[], '{短剣,片手剣,投擲,刀}'::text[], 'phys', '{暗殺者,盗賊}'::text[]),
+  ('忍者', 'ichiji', 18, '盗賊', 30, '{agi,dex,str,hp,luk,agi,dex,str,agi,mp,vit,dex,agi,str,hp,luk,agi,dex,str,agi,dex,agi,hp,str,luk,dex,agi,mp,vit,agi,str,dex,agi,hp,dex,str,luk,agi,dex,agi,str,hp,agi,dex,luk,str,agi,mp,dex,vit,agi,str,dex,agi,hp,luk,str,agi,dex,agi,str,dex,hp,luk,agi,mp,dex,str,agi,vit,agi,dex,str,hp,agi,luk,dex,str,agi,dex,agi,hp,str,luk,agi,dex,mp,vit,agi,str,dex,agi,hp,luk,str,dex,agi,str,agi,dex,hp,agi,luk,dex,str,agi,mp,dex,vit,agi,str,hp,agi,dex,luk,str,agi,dex,agi,str,hp,dex,agi,luk,str,mp,agi,dex,vit,agi,dex,str,hp,agi,luk,dex,str,agi,dex,agi,hp,str,luk,agi,dex,mp,str,agi,vit,dex,agi,hp,str,luk,agi,dex,agi,str,dex,hp,agi,luk,str,dex,agi,mp,vit,dex,agi,str,hp,agi,dex,luk,str,agi,dex,agi,str,hp,luk,dex,agi,str,agi,mp,dex,vit,agi,str,dex,hp,agi,luk,str,dex,agi,agi,dex,str,hp,luk,agi,mp,dex,agi,str,vit,dex,agi,hp,str,luk,agi,dex,agi,str,dex,hp,agi,luk,str,dex,agi,mp,vit,agi,str,dex,agi,hp,luk,dex,str,agi,dex,agi,str,hp,luk,agi,dex,str,agi,mp,dex,vit,agi,str,hp,dex,agi,luk,str,agi,dex,agi,hp,str,dex,luk,agi,mp,dex,agi,str,vit,agi,dex,hp,str,luk,agi,dex,agi,str,dex,agi,hp,luk,str,agi,dex,mp,vit,agi,str,dex,agi,hp,luk,str,dex,agi}'::text[], '{短剣,片手剣,投擲,刀}'::text[], 'phys', '{忍者,盗賊}'::text[]),
+  ('狩人', 'ichiji', 19, '弓使い', 30, '{dex,agi,str,luk,hp,dex,agi,str,vit,dex,mp,agi,luk,str,dex,hp,agi,dex,str,agi,luk,dex,vit,str,agi,hp,dex,mp,agi,dex,str,luk,dex,agi,hp,str,dex,agi,luk,str,vit,dex,agi,hp,dex,str,mp,agi,luk,dex,str,agi,dex,hp,vit,agi,str,dex,luk,agi,dex,str,hp,mp,agi,dex,luk,str,dex,agi,vit,str,dex,agi,luk,hp,dex,str,agi,dex,mp,luk,agi,str,dex,hp,agi,str,dex,vit,luk,agi,dex,hp,str,agi,dex,mp,str,luk,dex,agi,hp,dex,str,agi,vit,dex,luk,agi,str,dex,hp,agi,str,dex,luk,agi,mp,dex,str,vit,agi,hp,dex,str,luk,agi,dex,str,dex,agi,hp,luk,dex,agi,str,mp,vit,dex,agi,str,hp,dex,luk,agi,str,dex,agi,luk,dex,hp,str,agi,dex,vit,mp,str,agi,dex,luk,hp,agi,dex,str,dex,agi,str,luk,vit,dex,agi,hp,str,dex,mp,agi,luk,dex,str,agi,hp,dex,str,agi,luk,dex,vit,agi,str,dex,hp,mp,agi,dex,str,luk,dex,agi,str,hp,dex,agi,luk,vit,dex,str,agi,mp,dex,hp,str,agi,luk,dex,agi,str,dex,vit,hp,agi,luk,dex,str,agi,dex,str,mp,luk,dex,agi,hp,str,dex,agi,vit,dex,str,agi,luk,hp,dex,agi,str,dex,luk,agi,mp,str,dex,hp,agi,dex,vit,str,luk,agi,dex,str,hp,agi,dex,luk,str,dex,agi,mp,vit,dex,agi,str,hp,dex,luk,agi,str,dex,agi,hp,dex,str,luk,agi,mp,dex,vit,str,agi,dex,hp,luk,str,agi,dex}'::text[], '{弓,短剣,片手剣}'::text[], 'phys', '{狩人,弓使い}'::text[]),
+  ('狙撃手', 'ichiji', 20, '弓使い', 30, '{dex,luk,agi,str,dex,hp,luk,agi,dex,mp,vit,str,dex,luk,agi,dex,luk,hp,str,dex,agi,luk,dex,agi,str,dex,luk,mp,agi,dex,luk,hp,vit,dex,str,agi,luk,dex,str,dex,agi,luk,hp,dex,luk,agi,dex,str,mp,luk,dex,agi,vit,dex,luk,str,agi,dex,hp,luk,dex,agi,str,dex,luk,hp,agi,dex,luk,str,dex,agi,mp,luk,dex,vit,str,agi,dex,luk,hp,dex,agi,luk,dex,str,luk,agi,dex,hp,str,dex,luk,agi,mp,dex,vit,luk,dex,agi,str,luk,dex,hp,agi,dex,luk,str,dex,agi,luk,dex,mp,str,agi,dex,luk,hp,vit,dex,agi,luk,str,dex,agi,luk,dex,hp,str,dex,luk,agi,dex,mp,luk,str,agi,dex,vit,luk,dex,hp,agi,dex,str,luk,dex,agi,luk,str,dex,agi,hp,dex,luk,mp,vit,dex,agi,str,luk,dex,agi,luk,dex,str,hp,dex,luk,agi,dex,str,luk,agi,dex,mp,hp,luk,dex,agi,str,vit,dex,luk,agi,dex,str,luk,dex,agi,hp,dex,luk,str,agi,dex,luk,mp,dex,vit,agi,luk,dex,str,hp,dex,agi,luk,str,dex,luk,agi,dex,hp,luk,dex,agi,str,mp,dex,luk,vit,agi,dex,str,luk,dex,agi,hp,luk,dex,str,agi,dex,luk,hp,dex,agi,str,luk,dex,mp,vit,agi,dex,luk,str,dex,agi,luk,dex,hp,str,luk,dex,agi,dex,luk,agi,mp,str,dex,vit,luk,hp,dex,agi,luk,dex,str,agi,dex,luk,hp,dex,agi,str,luk,dex,agi,mp,dex,luk,str,vit,dex,agi,luk,hp,dex,str,agi,luk,dex}'::text[], '{弓,短剣,片手剣}'::text[], 'phys', '{狙撃手,弓使い}'::text[]),
+  ('魔銃士', 'ichiji', 21, '銃士', 30, '{str,int_stat,dex,agi,mp,hp,str,int_stat,dex,str,int_stat,agi,vit,mp,str,int_stat,dex,hp,agi,str,int_stat,dex,str,int_stat,mp,agi,dex,str,int_stat,hp,str,int_stat,dex,agi,mp,str,int_stat,dex,vit,str,int_stat,agi,hp,mp,str,int_stat,dex,agi,str,int_stat,dex,str,int_stat,mp,hp,agi,dex,str,int_stat,str,int_stat,dex,agi,mp,str,int_stat,hp,dex,str,int_stat,agi,vit,mp,str,int_stat,dex,agi,str,int_stat,dex,hp,str,int_stat,mp,agi,dex,str,int_stat,hp,str,int_stat,dex,agi,mp,str,int_stat,dex,str,int_stat,agi,vit,mp,str,int_stat,dex,hp,agi,str,int_stat,dex,str,int_stat,mp,agi,dex,str,int_stat,hp,str,int_stat,dex,agi,mp,str,int_stat,dex,hp,str,int_stat,agi,vit,mp,str,int_stat,dex,agi,str,int_stat,dex,hp,str,int_stat,mp,agi,dex,str,int_stat,str,int_stat,dex,agi,mp,hp,str,int_stat,dex,str,int_stat,agi,vit,mp,str,int_stat,dex,hp,agi,str,int_stat,dex,str,int_stat,mp,agi,dex,str,int_stat,hp,str,int_stat,dex,agi,mp,str,int_stat,dex,vit,str,int_stat,agi,hp,mp,str,int_stat,dex,agi,str,int_stat,dex,str,int_stat,mp,hp,agi,dex,str,int_stat,str,int_stat,dex,agi,mp,str,int_stat,hp,dex,str,int_stat,agi,vit,mp,str,int_stat,dex,agi,str,int_stat,dex,hp,str,int_stat,mp,agi,dex,str,int_stat,hp,str,int_stat,dex,agi,mp,str,int_stat,dex,str,int_stat,agi,vit,mp,str,int_stat,dex,hp,agi,str,int_stat,dex,str,int_stat,mp,agi,dex,str,int_stat,hp,str,int_stat,dex,agi,mp,str,int_stat,dex,hp,str,int_stat,agi,vit,mp,str,int_stat,dex,agi,str,int_stat,dex,hp,str,int_stat,mp,agi,dex,str,int_stat}'::text[], '{銃,片手剣,投擲}'::text[], 'phys', '{魔銃士,銃士}'::text[]),
+  ('砲撃士', 'ichiji', 22, '銃士', 30, '{dex,str,vit,hp,agi,dex,str,mp,dex,vit,luk,str,dex,hp,agi,dex,str,vit,dex,str,hp,mp,dex,vit,agi,str,dex,luk,vit,dex,str,hp,dex,str,agi,vit,dex,mp,str,hp,dex,vit,str,dex,agi,luk,dex,str,hp,vit,dex,mp,str,dex,agi,vit,str,dex,hp,dex,str,vit,agi,dex,hp,str,mp,dex,vit,luk,str,dex,agi,hp,dex,str,vit,dex,str,mp,dex,vit,hp,str,agi,dex,luk,vit,dex,str,hp,dex,str,agi,vit,dex,mp,str,dex,hp,vit,str,dex,agi,dex,str,luk,vit,hp,dex,mp,str,dex,agi,vit,str,dex,hp,dex,str,vit,agi,dex,mp,str,hp,dex,vit,luk,str,dex,agi,dex,str,vit,hp,dex,str,mp,dex,vit,agi,str,hp,dex,luk,str,dex,vit,dex,hp,str,agi,vit,dex,mp,str,dex,hp,vit,str,dex,agi,dex,str,luk,vit,dex,hp,str,mp,dex,agi,vit,str,dex,hp,dex,str,vit,agi,dex,str,mp,dex,hp,vit,luk,str,dex,agi,dex,str,vit,hp,dex,str,mp,dex,vit,agi,str,dex,hp,luk,dex,str,vit,dex,str,agi,hp,vit,dex,mp,str,dex,vit,str,dex,hp,agi,dex,str,luk,vit,dex,mp,str,hp,dex,agi,vit,str,dex,hp,dex,str,vit,agi,dex,str,mp,dex,vit,luk,str,dex,hp,agi,dex,str,vit,dex,hp,str,mp,dex,vit,agi,str,dex,luk,hp,dex,str,vit,dex,str,agi,vit,dex,hp,mp,str,dex,vit,str,dex,agi,hp,dex,str,luk,vit,dex,mp,str,dex,agi,hp,vit,str,dex}'::text[], '{銃,片手剣,投擲}'::text[], 'phys', '{砲撃士,銃士}'::text[]),
+  ('魔導士', 'ichiji', 23, '魔法使い', 30, '{int_stat,mp,agi,hp,int_stat,dex,mp,int_stat,vit,mp,int_stat,agi,luk,int_stat,mp,hp,dex,int_stat,agi,mp,int_stat,vit,mp,int_stat,hp,dex,int_stat,agi,mp,int_stat,mp,agi,int_stat,hp,dex,int_stat,mp,vit,int_stat,mp,agi,int_stat,luk,hp,mp,int_stat,dex,agi,int_stat,mp,int_stat,mp,vit,hp,int_stat,dex,agi,mp,int_stat,int_stat,mp,agi,hp,int_stat,dex,mp,int_stat,vit,mp,int_stat,agi,luk,int_stat,mp,hp,dex,int_stat,agi,mp,int_stat,mp,int_stat,hp,dex,agi,int_stat,mp,vit,int_stat,mp,int_stat,agi,hp,dex,int_stat,mp,int_stat,mp,agi,vit,int_stat,luk,mp,hp,int_stat,dex,int_stat,mp,agi,int_stat,mp,hp,dex,int_stat,agi,mp,int_stat,vit,int_stat,mp,agi,hp,int_stat,dex,mp,int_stat,luk,mp,int_stat,agi,vit,int_stat,mp,hp,dex,int_stat,agi,mp,int_stat,mp,int_stat,hp,dex,agi,int_stat,mp,int_stat,vit,mp,int_stat,agi,hp,dex,int_stat,mp,int_stat,mp,agi,luk,int_stat,hp,mp,int_stat,dex,vit,int_stat,mp,agi,int_stat,mp,hp,int_stat,dex,agi,mp,int_stat,vit,int_stat,mp,agi,int_stat,hp,dex,mp,int_stat,luk,mp,int_stat,agi,int_stat,hp,mp,dex,int_stat,vit,mp,agi,int_stat,mp,int_stat,hp,dex,agi,int_stat,mp,int_stat,vit,mp,int_stat,agi,hp,dex,int_stat,mp,int_stat,mp,agi,int_stat,luk,hp,mp,int_stat,dex,agi,int_stat,mp,vit,int_stat,mp,hp,int_stat,dex,agi,mp,int_stat,int_stat,mp,agi,vit,int_stat,hp,dex,mp,int_stat,mp,int_stat,agi,luk,int_stat,mp,hp,dex,int_stat,agi,mp,int_stat,vit,mp,int_stat,hp,dex,int_stat,agi,mp,int_stat,mp,agi,int_stat,hp,dex,int_stat,mp,vit,int_stat,mp,agi,int_stat,luk,hp,mp,int_stat,dex,agi,int_stat,mp,vit,int_stat,mp,hp,int_stat,dex,agi,mp,int_stat}'::text[], '{杖,書,短剣,宝珠}'::text[], 'mag', '{魔導士,魔法使い}'::text[]),
+  ('時魔導士', 'ichiji', 24, '魔法使い', 30, '{int_stat,agi,mp,hp,int_stat,agi,dex,vit,int_stat,mp,agi,int_stat,luk,agi,mp,hp,int_stat,agi,dex,int_stat,mp,agi,int_stat,vit,hp,agi,int_stat,mp,dex,int_stat,agi,mp,int_stat,agi,hp,int_stat,agi,mp,vit,int_stat,dex,agi,luk,int_stat,mp,agi,hp,int_stat,agi,mp,int_stat,dex,agi,int_stat,hp,vit,mp,agi,int_stat,int_stat,agi,mp,hp,int_stat,agi,dex,mp,int_stat,agi,vit,int_stat,luk,agi,mp,int_stat,hp,agi,dex,int_stat,mp,agi,int_stat,hp,agi,int_stat,mp,vit,dex,int_stat,agi,mp,int_stat,agi,hp,int_stat,agi,mp,dex,int_stat,agi,vit,int_stat,mp,hp,agi,int_stat,luk,agi,mp,int_stat,dex,agi,int_stat,hp,mp,agi,int_stat,vit,int_stat,agi,mp,hp,int_stat,agi,dex,mp,int_stat,agi,luk,int_stat,vit,agi,mp,int_stat,hp,agi,dex,int_stat,mp,agi,int_stat,hp,agi,int_stat,mp,vit,dex,int_stat,agi,mp,int_stat,agi,hp,int_stat,agi,mp,int_stat,dex,agi,luk,int_stat,mp,hp,agi,int_stat,vit,agi,mp,int_stat,dex,agi,int_stat,hp,mp,agi,int_stat,vit,int_stat,agi,mp,hp,int_stat,agi,dex,int_stat,mp,agi,luk,int_stat,agi,hp,mp,int_stat,vit,agi,dex,int_stat,mp,agi,int_stat,hp,agi,int_stat,mp,dex,int_stat,agi,vit,mp,int_stat,agi,hp,int_stat,agi,mp,int_stat,dex,agi,luk,int_stat,mp,hp,agi,int_stat,vit,agi,int_stat,mp,dex,agi,int_stat,hp,mp,agi,int_stat,vit,int_stat,agi,mp,hp,int_stat,agi,dex,int_stat,mp,agi,int_stat,luk,agi,mp,hp,int_stat,agi,dex,int_stat,vit,mp,agi,int_stat,hp,agi,int_stat,mp,dex,int_stat,agi,mp,int_stat,agi,hp,vit,int_stat,agi,mp,int_stat,dex,agi,luk,int_stat,mp,agi,hp,int_stat,agi,mp,int_stat,vit,dex,agi,int_stat,hp,mp,agi,int_stat}'::text[], '{杖,書,短剣,宝珠}'::text[], 'mag', '{時魔導士,魔法使い}'::text[]),
+  ('死霊術師', 'ichiji', 25, '呪術師', 30, '{int_stat,mp,hp,vit,int_stat,dex,mp,agi,int_stat,luk,hp,mp,int_stat,vit,int_stat,mp,dex,hp,int_stat,vit,mp,int_stat,agi,mp,int_stat,hp,vit,luk,int_stat,mp,dex,int_stat,hp,vit,mp,int_stat,agi,mp,int_stat,hp,vit,dex,int_stat,mp,int_stat,luk,hp,mp,int_stat,vit,agi,int_stat,mp,dex,hp,int_stat,vit,mp,int_stat,agi,mp,int_stat,hp,vit,dex,int_stat,mp,luk,int_stat,hp,mp,vit,int_stat,mp,int_stat,dex,agi,hp,vit,int_stat,mp,int_stat,mp,hp,vit,int_stat,luk,dex,mp,int_stat,agi,int_stat,hp,vit,mp,int_stat,mp,hp,int_stat,vit,dex,mp,int_stat,agi,int_stat,mp,hp,vit,int_stat,luk,mp,dex,int_stat,hp,vit,int_stat,mp,agi,int_stat,mp,hp,vit,int_stat,dex,mp,int_stat,luk,hp,int_stat,mp,vit,int_stat,agi,mp,dex,int_stat,hp,vit,mp,int_stat,int_stat,mp,hp,vit,int_stat,luk,mp,dex,agi,int_stat,hp,vit,mp,int_stat,int_stat,mp,hp,vit,int_stat,dex,mp,agi,int_stat,luk,mp,int_stat,hp,vit,int_stat,mp,dex,int_stat,hp,vit,mp,int_stat,agi,mp,int_stat,hp,vit,dex,int_stat,mp,luk,int_stat,hp,vit,mp,int_stat,agi,int_stat,mp,dex,hp,int_stat,vit,mp,int_stat,agi,mp,hp,int_stat,vit,luk,int_stat,mp,dex,int_stat,hp,vit,mp,int_stat,mp,agi,int_stat,hp,vit,dex,int_stat,mp,int_stat,luk,mp,hp,vit,int_stat,mp,int_stat,dex,agi,hp,int_stat,vit,mp,int_stat,mp,hp,int_stat,vit,dex,mp,int_stat,luk,agi,int_stat,mp,hp,vit,int_stat,mp,dex,int_stat,hp,vit,int_stat,mp,agi,int_stat,mp,hp,vit,int_stat,luk,mp,dex,int_stat,hp,vit,int_stat,mp,agi,int_stat,mp,hp,int_stat,vit,dex,mp,int_stat,luk,int_stat,mp,hp,vit,int_stat,agi,mp,dex,int_stat,hp,vit,mp,int_stat}'::text[], '{杖,短剣,投擲,宝珠}'::text[], 'mag', '{死霊術師,呪術師}'::text[]),
+  ('陰陽師', 'ichiji', 26, '呪術師', 30, '{int_stat,mp,dex,agi,hp,int_stat,mp,vit,int_stat,dex,luk,mp,int_stat,agi,dex,hp,int_stat,mp,int_stat,dex,agi,mp,int_stat,hp,vit,int_stat,mp,dex,luk,int_stat,agi,mp,dex,int_stat,hp,mp,int_stat,agi,dex,int_stat,mp,vit,int_stat,hp,dex,mp,agi,int_stat,luk,mp,int_stat,dex,hp,int_stat,mp,agi,dex,int_stat,mp,vit,int_stat,dex,agi,hp,int_stat,mp,luk,int_stat,dex,mp,int_stat,agi,hp,mp,dex,int_stat,vit,int_stat,mp,dex,agi,int_stat,mp,hp,int_stat,dex,luk,mp,int_stat,agi,dex,int_stat,mp,hp,vit,int_stat,agi,mp,dex,int_stat,hp,mp,int_stat,dex,agi,int_stat,mp,luk,dex,int_stat,vit,mp,int_stat,hp,agi,dex,int_stat,mp,int_stat,dex,mp,agi,int_stat,hp,luk,mp,int_stat,dex,vit,int_stat,mp,agi,dex,int_stat,hp,mp,int_stat,dex,agi,mp,int_stat,hp,int_stat,dex,mp,luk,agi,int_stat,vit,mp,dex,int_stat,hp,int_stat,mp,agi,dex,int_stat,mp,hp,int_stat,dex,vit,mp,int_stat,agi,luk,dex,int_stat,mp,hp,int_stat,agi,mp,dex,int_stat,mp,int_stat,dex,agi,hp,int_stat,mp,vit,int_stat,dex,luk,mp,int_stat,agi,hp,dex,int_stat,mp,int_stat,mp,dex,agi,int_stat,vit,hp,mp,int_stat,dex,luk,int_stat,mp,agi,dex,int_stat,hp,mp,int_stat,agi,dex,mp,int_stat,vit,hp,int_stat,mp,dex,agi,int_stat,luk,mp,int_stat,dex,hp,mp,int_stat,agi,dex,int_stat,vit,mp,int_stat,dex,agi,mp,int_stat,hp,luk,int_stat,mp,dex,int_stat,agi,mp,dex,hp,int_stat,vit,mp,int_stat,dex,agi,int_stat,mp,hp,int_stat,dex,mp,luk,int_stat,agi,vit,dex,int_stat,mp,hp,int_stat,mp,agi,dex,int_stat,mp,int_stat,hp,dex,agi,int_stat,mp,luk,vit,int_stat,dex,mp,int_stat,hp,agi,dex,mp,int_stat}'::text[], '{杖,短剣,投擲,宝珠}'::text[], 'mag', '{陰陽師,呪術師}'::text[]),
+  ('司祭', 'ichiji', 27, '僧侶', 30, '{int_stat,hp,vit,mp,agi,int_stat,hp,vit,mp,int_stat,hp,vit,dex,int_stat,hp,vit,mp,int_stat,luk,hp,vit,int_stat,agi,hp,mp,vit,int_stat,hp,mp,int_stat,vit,hp,int_stat,vit,agi,hp,mp,int_stat,vit,hp,int_stat,mp,vit,dex,hp,int_stat,luk,vit,hp,int_stat,mp,agi,vit,hp,int_stat,mp,vit,hp,int_stat,int_stat,hp,vit,mp,agi,int_stat,hp,vit,mp,int_stat,hp,vit,dex,int_stat,hp,vit,mp,int_stat,hp,vit,luk,int_stat,agi,hp,mp,vit,int_stat,hp,mp,int_stat,vit,hp,int_stat,vit,agi,hp,mp,int_stat,vit,hp,int_stat,mp,vit,hp,dex,int_stat,vit,hp,int_stat,mp,agi,vit,hp,int_stat,luk,mp,vit,hp,int_stat,int_stat,hp,vit,mp,int_stat,hp,vit,agi,mp,int_stat,hp,vit,dex,int_stat,hp,vit,mp,int_stat,hp,vit,int_stat,agi,mp,hp,vit,int_stat,hp,luk,mp,int_stat,vit,hp,int_stat,vit,hp,mp,agi,int_stat,vit,hp,int_stat,mp,vit,hp,int_stat,dex,vit,hp,int_stat,mp,agi,vit,hp,int_stat,mp,vit,hp,int_stat,luk,int_stat,hp,vit,mp,int_stat,hp,vit,agi,mp,int_stat,hp,vit,int_stat,dex,hp,vit,mp,int_stat,hp,vit,int_stat,agi,hp,mp,vit,int_stat,hp,mp,int_stat,vit,hp,luk,int_stat,vit,hp,mp,int_stat,agi,vit,hp,int_stat,mp,vit,hp,int_stat,dex,vit,hp,int_stat,mp,agi,vit,hp,int_stat,mp,vit,hp,int_stat,luk,int_stat,hp,vit,mp,int_stat,hp,vit,agi,mp,int_stat,hp,vit,int_stat,hp,dex,vit,mp,int_stat,hp,vit,int_stat,agi,hp,mp,vit,int_stat,hp,mp,int_stat,vit,hp,int_stat,vit,agi,hp,mp,int_stat,vit,hp,luk,int_stat,mp,vit,hp,int_stat,dex,vit,hp,int_stat,mp,agi,vit,hp,int_stat,mp,vit,hp,int_stat}'::text[], '{鈍器,杖,書,宝珠}'::text[], 'mag', '{司祭,僧侶}'::text[]),
+  ('祓魔師', 'ichiji', 28, '僧侶', 30, '{int_stat,mp,agi,vit,hp,int_stat,mp,dex,int_stat,agi,vit,mp,int_stat,hp,luk,int_stat,agi,mp,vit,int_stat,hp,mp,int_stat,agi,dex,vit,int_stat,mp,hp,int_stat,agi,mp,int_stat,vit,mp,agi,int_stat,hp,luk,int_stat,mp,vit,agi,int_stat,dex,mp,hp,int_stat,vit,agi,mp,int_stat,int_stat,hp,mp,vit,agi,int_stat,mp,dex,int_stat,agi,vit,hp,int_stat,mp,int_stat,agi,mp,vit,int_stat,hp,luk,mp,int_stat,agi,vit,int_stat,mp,dex,hp,int_stat,agi,mp,int_stat,vit,hp,mp,int_stat,agi,vit,int_stat,mp,dex,agi,int_stat,hp,mp,int_stat,vit,agi,mp,int_stat,luk,hp,int_stat,mp,vit,agi,int_stat,dex,mp,int_stat,hp,vit,agi,int_stat,mp,int_stat,agi,mp,vit,hp,int_stat,mp,int_stat,agi,vit,dex,int_stat,mp,hp,luk,int_stat,agi,mp,vit,int_stat,hp,mp,int_stat,agi,vit,int_stat,mp,dex,hp,int_stat,agi,mp,int_stat,vit,agi,int_stat,mp,hp,int_stat,vit,mp,agi,int_stat,luk,dex,mp,int_stat,hp,vit,agi,int_stat,mp,int_stat,hp,vit,mp,agi,int_stat,mp,int_stat,agi,vit,hp,int_stat,mp,dex,int_stat,agi,vit,mp,int_stat,hp,luk,int_stat,mp,agi,vit,int_stat,mp,hp,int_stat,agi,dex,mp,int_stat,vit,hp,int_stat,agi,mp,vit,int_stat,mp,agi,int_stat,hp,dex,mp,int_stat,vit,agi,int_stat,mp,luk,hp,int_stat,vit,mp,agi,int_stat,mp,int_stat,hp,vit,agi,int_stat,dex,mp,int_stat,agi,vit,mp,hp,int_stat,luk,int_stat,mp,agi,vit,int_stat,hp,mp,int_stat,dex,agi,mp,int_stat,vit,hp,int_stat,agi,mp,vit,int_stat,mp,hp,int_stat,agi,dex,mp,int_stat,vit,agi,int_stat,mp,hp,int_stat,vit,luk,mp,agi,int_stat,hp,int_stat,mp,vit,agi,int_stat,dex,mp,int_stat,hp,vit,agi,mp,int_stat}'::text[], '{鈍器,杖,書,宝珠}'::text[], 'mag', '{祓魔師,僧侶}'::text[]),
+  ('錬金術師', 'ichiji', 29, '薬師', 30, '{int_stat,dex,mp,hp,agi,int_stat,dex,vit,int_stat,mp,dex,int_stat,hp,luk,mp,agi,int_stat,dex,int_stat,dex,mp,hp,int_stat,vit,agi,dex,int_stat,mp,dex,int_stat,hp,mp,int_stat,dex,agi,vit,int_stat,mp,dex,hp,int_stat,luk,dex,int_stat,mp,agi,int_stat,dex,hp,mp,int_stat,vit,dex,int_stat,agi,mp,dex,int_stat,hp,int_stat,dex,mp,agi,int_stat,hp,dex,vit,int_stat,mp,dex,int_stat,luk,agi,mp,int_stat,dex,hp,int_stat,dex,mp,vit,int_stat,hp,dex,agi,int_stat,mp,dex,int_stat,hp,mp,int_stat,dex,agi,int_stat,vit,mp,dex,int_stat,hp,luk,dex,int_stat,mp,agi,int_stat,dex,hp,mp,int_stat,vit,dex,int_stat,agi,mp,dex,int_stat,hp,int_stat,dex,mp,agi,int_stat,vit,dex,hp,int_stat,mp,dex,int_stat,luk,agi,mp,int_stat,dex,hp,int_stat,dex,mp,vit,int_stat,agi,dex,hp,int_stat,mp,dex,int_stat,mp,int_stat,hp,dex,agi,int_stat,vit,mp,dex,int_stat,luk,hp,dex,int_stat,mp,agi,int_stat,dex,mp,int_stat,hp,dex,vit,int_stat,agi,mp,dex,int_stat,hp,int_stat,dex,mp,agi,int_stat,dex,vit,int_stat,mp,hp,dex,int_stat,luk,agi,mp,int_stat,dex,hp,int_stat,dex,mp,vit,int_stat,agi,dex,int_stat,mp,hp,int_stat,dex,mp,int_stat,dex,agi,hp,int_stat,vit,mp,dex,int_stat,luk,dex,int_stat,mp,hp,agi,int_stat,dex,mp,int_stat,vit,dex,hp,int_stat,agi,mp,dex,int_stat,hp,int_stat,dex,mp,agi,int_stat,dex,vit,int_stat,mp,hp,dex,int_stat,luk,mp,agi,int_stat,dex,int_stat,hp,dex,mp,int_stat,vit,agi,dex,int_stat,mp,hp,int_stat,dex,mp,int_stat,dex,agi,vit,int_stat,hp,mp,dex,int_stat,luk,dex,int_stat,mp,agi,hp,int_stat,dex,mp,int_stat,vit,dex,int_stat,agi,hp,mp,dex,int_stat}'::text[], '{短剣,投擲,書}'::text[], 'mag', '{錬金術師,薬師}'::text[]),
+  ('霊薬師', 'ichiji', 30, '薬師', 30, '{int_stat,mp,vit,hp,dex,int_stat,agi,mp,vit,int_stat,hp,mp,int_stat,luk,vit,hp,int_stat,mp,dex,agi,int_stat,vit,mp,hp,int_stat,mp,vit,int_stat,dex,hp,mp,int_stat,vit,agi,int_stat,mp,hp,vit,int_stat,mp,dex,hp,int_stat,luk,vit,mp,int_stat,agi,hp,int_stat,mp,vit,dex,int_stat,mp,hp,vit,int_stat,mp,agi,int_stat,vit,hp,mp,int_stat,dex,vit,int_stat,hp,mp,luk,int_stat,agi,mp,vit,int_stat,hp,dex,mp,int_stat,vit,hp,int_stat,mp,vit,agi,int_stat,mp,hp,dex,int_stat,vit,mp,int_stat,hp,vit,mp,int_stat,dex,agi,int_stat,hp,mp,vit,int_stat,luk,mp,hp,int_stat,vit,dex,mp,int_stat,agi,hp,vit,int_stat,mp,int_stat,vit,hp,mp,int_stat,dex,mp,agi,vit,int_stat,hp,luk,int_stat,mp,vit,hp,int_stat,mp,dex,int_stat,vit,mp,hp,int_stat,agi,vit,mp,int_stat,hp,dex,int_stat,mp,vit,agi,int_stat,hp,mp,vit,int_stat,dex,mp,int_stat,hp,vit,luk,int_stat,mp,agi,hp,int_stat,vit,mp,dex,int_stat,mp,hp,vit,int_stat,mp,int_stat,vit,hp,agi,int_stat,mp,dex,vit,int_stat,hp,mp,int_stat,luk,vit,mp,hp,int_stat,agi,dex,int_stat,mp,vit,hp,int_stat,mp,vit,int_stat,dex,hp,mp,int_stat,agi,vit,mp,int_stat,hp,vit,int_stat,mp,dex,luk,int_stat,hp,mp,vit,agi,int_stat,mp,hp,int_stat,vit,dex,int_stat,mp,hp,vit,int_stat,agi,mp,int_stat,vit,hp,mp,int_stat,dex,vit,mp,int_stat,hp,agi,int_stat,mp,vit,luk,hp,int_stat,dex,mp,int_stat,vit,hp,mp,int_stat,agi,vit,int_stat,mp,hp,dex,int_stat,vit,mp,int_stat,hp,mp,agi,vit,int_stat,dex,luk,int_stat,mp,hp,vit,int_stat,mp,hp,int_stat,vit,mp,agi,int_stat,dex,hp,vit,mp,int_stat}'::text[], '{短剣,投擲,書}'::text[], 'mag', '{霊薬師,薬師}'::text[])
 on conflict (id) do update set stage = excluded.stage, sort = excluded.sort,
   req_cls = excluded.req_cls, req_jlv = excluded.req_jlv, bonus_seq = excluded.bonus_seq,
   weapons = excluded.weapons, kind = excluded.kind, lineage = excluded.lineage;
-delete from public.v2cap_stages s where s.stage <> all('{shoki}'::text[])
+delete from public.v2cap_stages s where s.stage <> all('{shoki,ichiji}'::text[])
   and not exists (select 1 from public.v2cap_classes c where c.stage = s.stage);
 -- @@end:classes
 
@@ -183,7 +207,187 @@ insert into public.v2cap_skills (name, cls, mp, sort, passive) values
   ('傷薬', '薬師', 12, 2, false),
   ('毒薬', '薬師', 10, 3, false),
   ('強壮剤', '薬師', 9, 4, false),
-  ('気付け薬', '薬師', 8, 5, false);
+  ('気付け薬', '薬師', 8, 5, false),
+  ('バーサク', '狂戦士', 0, 1, true),
+  ('マッドラッシュ', '狂戦士', 6, 2, false),
+  ('血風斬', '狂戦士', 12, 3, false),
+  ('狂乱の咆哮', '狂戦士', 10, 4, false),
+  ('ブラッドスプラッシュ', '狂戦士', 11, 5, false),
+  ('狂撃', '狂戦士', 14, 6, false),
+  ('ブラッディロア', '狂戦士', 14, 7, false),
+  ('血の誓い', '狂戦士', 10, 8, false),
+  ('フルブレイカー', '狂戦士', 22, 9, false),
+  ('不動', '重戦士', 0, 1, true),
+  ('重撃', '重戦士', 6, 2, false),
+  ('鉄壁', '重戦士', 10, 3, false),
+  ('受け止め', '重戦士', 8, 4, false),
+  ('グランドスラム', '重戦士', 13, 5, false),
+  ('報復の一撃', '重戦士', 12, 6, false),
+  ('忍耐', '重戦士', 14, 7, false),
+  ('地鳴らし', '重戦士', 14, 8, false),
+  ('城塞崩し', '重戦士', 22, 9, false),
+  ('竜の血', '竜騎士', 0, 1, true),
+  ('ドラゴンスラスト', '竜騎士', 7, 2, false),
+  ('ジャンプ', '竜騎士', 14, 3, false),
+  ('ドラゴンファング', '竜騎士', 12, 4, false),
+  ('スカイスピア', '竜騎士', 11, 5, false),
+  ('ドラゴンロア', '竜騎士', 12, 6, false),
+  ('竜鱗', '竜騎士', 10, 7, false),
+  ('ハイジャンプ', '竜騎士', 18, 8, false),
+  ('天墜竜閃', '竜騎士', 24, 9, false),
+  ('槍の型', '槍術士', 0, 1, true),
+  ('連突き', '槍術士', 6, 2, false),
+  ('薙ぎ崩し', '槍術士', 9, 3, false),
+  ('スパイラルスラスト', '槍術士', 12, 4, false),
+  ('足払い', '槍術士', 9, 5, false),
+  ('流星突き', '槍術士', 15, 6, false),
+  ('間合い取り', '槍術士', 10, 7, false),
+  ('槍崩し', '槍術士', 12, 8, false),
+  ('千本突き', '槍術士', 22, 9, false),
+  ('心眼', '体術師', 0, 1, true),
+  ('半月蹴り', '体術師', 6, 2, false),
+  ('受け流し', '体術師', 8, 3, false),
+  ('五連殺', '体術師', 14, 4, false),
+  ('旋風脚', '体術師', 13, 5, false),
+  ('巴投げ', '体術師', 12, 6, false),
+  ('流水の構え', '体術師', 12, 7, false),
+  ('破衝掌', '体術師', 14, 8, false),
+  ('飛天三角蹴り', '体術師', 22, 9, false),
+  ('丹田', '気功師', 0, 1, true),
+  ('気弾', '気功師', 6, 2, false),
+  ('練気', '気功師', 8, 3, false),
+  ('掌底波', '気功師', 11, 4, false),
+  ('浸透勁', '気功師', 12, 5, false),
+  ('内功', '気功師', 10, 6, false),
+  ('気の鎧', '気功師', 10, 7, false),
+  ('闘気', '気功師', 12, 8, false),
+  ('天衝', '気功師', 20, 9, false),
+  ('血の匂い', '暗殺者', 0, 1, true),
+  ('刻み斬り', '暗殺者', 6, 2, false),
+  ('鬼影閃', '暗殺者', 12, 3, false),
+  ('ヴァイパーストライク', '暗殺者', 11, 4, false),
+  ('隠形', '暗殺者', 10, 5, false),
+  ('裂傷', '暗殺者', 10, 6, false),
+  ('影討ち', '暗殺者', 14, 7, false),
+  ('首狩り', '暗殺者', 16, 8, false),
+  ('急所突き', '暗殺者', 20, 9, false),
+  ('影の連携', '忍者', 0, 1, true),
+  ('手裏剣', '忍者', 6, 2, false),
+  ('分身の術', '忍者', 12, 3, false),
+  ('雷遁', '忍者', 12, 4, false),
+  ('火遁', '忍者', 12, 5, false),
+  ('影斬り', '忍者', 12, 6, false),
+  ('毒霧の術', '忍者', 10, 7, false),
+  ('変わり身', '忍者', 14, 8, false),
+  ('千本手裏剣', '忍者', 20, 9, false),
+  ('獲物の弱り目', '狩人', 0, 1, true),
+  ('毒矢', '狩人', 7, 2, false),
+  ('くくり罠', '狩人', 10, 3, false),
+  ('ハンターズマーク', '狩人', 8, 4, false),
+  ('裂き矢', '狩人', 10, 5, false),
+  ('目くらまし', '狩人', 10, 6, false),
+  ('三連射', '狩人', 14, 7, false),
+  ('狩猟の構え', '狩人', 10, 8, false),
+  ('仕留めの一矢', '狩人', 20, 9, false),
+  ('狙撃手の勘', '狙撃手', 0, 1, true),
+  ('急所射ち', '狙撃手', 7, 2, false),
+  ('照準', '狙撃手', 8, 3, false),
+  ('ラピッドショット', '狙撃手', 10, 4, false),
+  ('貫き矢', '狙撃手', 12, 5, false),
+  ('息を止める', '狙撃手', 10, 6, false),
+  ('強弓', '狙撃手', 16, 7, false),
+  ('弱点看破', '狙撃手', 12, 8, false),
+  ('絶影狙撃', '狙撃手', 22, 9, false),
+  ('魔力循環', '魔銃士', 0, 1, true),
+  ('マナショット', '魔銃士', 6, 2, false),
+  ('焼夷弾', '魔銃士', 11, 3, false),
+  ('雷撃弾', '魔銃士', 11, 4, false),
+  ('氷結弾', '魔銃士', 11, 5, false),
+  ('ブレイクショット', '魔銃士', 13, 6, false),
+  ('魔力装填', '魔銃士', 12, 7, false),
+  ('連装魔撃', '魔銃士', 16, 8, false),
+  ('アルカナバレット', '魔銃士', 22, 9, false),
+  ('砲台の構え', '砲撃士', 0, 1, true),
+  ('散弾', '砲撃士', 6, 2, false),
+  ('装填', '砲撃士', 6, 3, false),
+  ('キャノン', '砲撃士', 14, 4, false),
+  ('スモークシェル', '砲撃士', 10, 5, false),
+  ('速射', '砲撃士', 10, 6, false),
+  ('グレネード', '砲撃士', 12, 7, false),
+  ('弾薬補給', '砲撃士', 10, 8, false),
+  ('フルバースト', '砲撃士', 24, 9, false),
+  ('元素共鳴', '魔導士', 0, 1, true),
+  ('ファイアボール', '魔導士', 7, 2, false),
+  ('詠唱', '魔導士', 6, 3, false),
+  ('フロストノヴァ', '魔導士', 13, 4, false),
+  ('ウィンドカッター', '魔導士', 13, 5, false),
+  ('ライトニングボルト', '魔導士', 13, 6, false),
+  ('魔力集中', '魔導士', 10, 7, false),
+  ('メテオ', '魔導士', 22, 8, false),
+  ('カタストロフ', '魔導士', 28, 9, false),
+  ('刻の加護', '時魔導士', 0, 1, true),
+  ('クロノバレット', '時魔導士', 6, 2, false),
+  ('アクセル', '時魔導士', 10, 3, false),
+  ('スロウ', '時魔導士', 10, 4, false),
+  ('ディレイ', '時魔導士', 12, 5, false),
+  ('ストップ', '時魔導士', 16, 6, false),
+  ('クイック', '時魔導士', 14, 7, false),
+  ('リワインド', '時魔導士', 14, 8, false),
+  ('クロノブレイク', '時魔導士', 24, 9, false),
+  ('死者の盾', '死霊術師', 0, 1, true),
+  ('骸骨召喚', '死霊術師', 10, 2, false),
+  ('ソウルドレイン', '死霊術師', 10, 3, false),
+  ('ボーンスピア', '死霊術師', 11, 4, false),
+  ('恐怖の囁き', '死霊術師', 10, 5, false),
+  ('腐敗霧', '死霊術師', 14, 6, false),
+  ('死の行軍', '死霊術師', 12, 7, false),
+  ('魂喰らい', '死霊術師', 12, 8, false),
+  ('幽世ノ門', '死霊術師', 24, 9, false),
+  ('陰陽の理', '陰陽師', 0, 1, true),
+  ('式打ち', '陰陽師', 6, 2, false),
+  ('式神召喚', '陰陽師', 14, 3, false),
+  ('封の符', '陰陽師', 12, 4, false),
+  ('火炎符', '陰陽師', 12, 5, false),
+  ('陰陽結界', '陰陽師', 12, 6, false),
+  ('魂削りの符', '陰陽師', 12, 7, false),
+  ('鬼神降ろし', '陰陽師', 14, 8, false),
+  ('禁術・神降ろし', '陰陽師', 24, 9, false),
+  ('神聖加護', '司祭', 0, 1, true),
+  ('聖光', '司祭', 7, 2, false),
+  ('ハイヒール', '司祭', 12, 3, false),
+  ('ブレス', '司祭', 10, 4, false),
+  ('奇跡', '司祭', 16, 5, false),
+  ('祈りの結界', '司祭', 12, 6, false),
+  ('癒しの光撃', '司祭', 14, 7, false),
+  ('リザレクション', '司祭', 20, 8, false),
+  ('セイクリッドノヴァ', '司祭', 24, 9, false),
+  ('退魔の心得', '祓魔師', 0, 1, true),
+  ('破魔の光', '祓魔師', 7, 2, false),
+  ('封魔の印', '祓魔師', 12, 3, false),
+  ('ホーリーチェイン', '祓魔師', 12, 4, false),
+  ('聖水', '祓魔師', 10, 5, false),
+  ('狂信', '祓魔師', 12, 6, false),
+  ('浄化の炎', '祓魔師', 14, 7, false),
+  ('聖なる裁き', '祓魔師', 16, 8, false),
+  ('断罪', '祓魔師', 24, 9, false),
+  ('化学反応', '錬金術師', 0, 1, true),
+  ('火炎瓶', '錬金術師', 7, 2, false),
+  ('劇毒瓶', '錬金術師', 10, 3, false),
+  ('スパークボトル', '錬金術師', 10, 4, false),
+  ('腐食液', '錬金術師', 12, 5, false),
+  ('閃光弾', '錬金術師', 10, 6, false),
+  ('触媒', '錬金術師', 10, 7, false),
+  ('溶解液', '錬金術師', 14, 8, false),
+  ('メガボム', '錬金術師', 24, 9, false),
+  ('調合の極意', '霊薬師', 0, 1, true),
+  ('霊薬瓶', '霊薬師', 7, 2, false),
+  ('剛力薬', '霊薬師', 9, 3, false),
+  ('叡智の薬', '霊薬師', 9, 4, false),
+  ('鉄身薬', '霊薬師', 9, 5, false),
+  ('再生薬', '霊薬師', 14, 6, false),
+  ('霊薬', '霊薬師', 14, 7, false),
+  ('薬効解放', '霊薬師', 16, 8, false),
+  ('仙丹', '霊薬師', 22, 9, false);
 -- @@end:skills
 
 -- ---- 1-4. 装備の一覧（エリア × レア度 × 種類）----
@@ -2742,11 +2946,11 @@ returns int language sql immutable set search_path = public as $$
               else greatest(1, round(135::numeric * p_lv * p_lv * p_lv / 1000))::int end
 $$;
 
--- 必要ClassEXP ＝ 係数 × 段階の倍率 × ClassLV²。ClassLV30で0（jobs.js の jobNeed）
+-- 必要ClassEXP ＝ 係数 × 段階の倍率 × ClassLV²。段階の上限（初期30・一次50）で0（jobs.js の jobNeed）
 -- ⚠係数は10分率の整数（jobs.js の JOB_NEED_TENTHS と同じ値）
 create or replace function public.v2cap_job_need(p_stage text, p_jlv int)
 returns int language sql stable set search_path = public as $$
-  select case when p_jlv >= 30 then 0
+  select case when p_jlv >= coalesce((select s.max_jlv from public.v2cap_stages s where s.stage = p_stage), 30) then 0
               else greatest(1, round(44::numeric * coalesce((select s.mult from public.v2cap_stages s where s.stage = p_stage), 1)
                                      * p_jlv * p_jlv / 10))::int end
 $$;
@@ -2788,7 +2992,7 @@ returns int language sql stable set search_path = public as $$
     select count(*)::int
       from public.v2cap_classes c
       join public.v2cap_stages s on s.stage = c.stage,
-           unnest(c.bonus_seq[1:greatest(0, least(coalesce(p_jlv, 1), 30) - 1) * s.per_lv]) as x(k)
+           unnest(c.bonus_seq[1:greatest(0, least(coalesce(p_jlv, 1), s.max_jlv) - 1) * s.per_lv]) as x(k)
      where c.id = p_cls and x.k = 'mp'), 0) * 3
 $$;
 
@@ -2962,7 +3166,7 @@ create or replace function public.v2cap_apply_exp(p_player uuid, p_amount int)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   c_max_lv  constant int := 100;
-  c_job_max constant int := 30;
+  v_job_max int := 30;   -- いまの職業の段階のClassLV上限（初期30・一次50）
   v_row   public.v2cap_profiles;
   v_lv    int;
   v_exp   int;
@@ -2997,17 +3201,20 @@ begin
 
   -- ClassLV（いまの職業だけ。入るのはEXPと同じ量）
   v_cls := v_row.class;
-  select c.stage into v_stage from public.v2cap_classes c where c.id = v_cls;
+  select c.stage, coalesce(s.max_jlv, 30) into v_stage, v_job_max
+    from public.v2cap_classes c left join public.v2cap_stages s on s.stage = c.stage
+   where c.id = v_cls;
+  v_job_max := coalesce(v_job_max, 30);
   v_jlv  := coalesce((v_row.jobs -> v_cls ->> 'lv')::int, 1);
   v_jexp := coalesce((v_row.jobs -> v_cls ->> 'exp')::int, 0);
-  if v_stage is not null and coalesce(p_amount, 0) > 0 and v_jlv < c_job_max then
+  if v_stage is not null and coalesce(p_amount, 0) > 0 and v_jlv < v_job_max then
     v_jexp := v_jexp + p_amount;
-    while v_jlv < c_job_max and v_jexp >= public.v2cap_job_need(v_stage, v_jlv) loop
+    while v_jlv < v_job_max and v_jexp >= public.v2cap_job_need(v_stage, v_jlv) loop
       v_jexp := v_jexp - public.v2cap_job_need(v_stage, v_jlv);
       v_jlv  := v_jlv + 1;
       v_jups := v_jups + 1;
     end loop;
-    if v_jlv >= c_job_max then v_jexp := 0; end if;
+    if v_jlv >= v_job_max then v_jexp := 0; end if;
   end if;
 
   -- スキル（そのClassLVまでのぶんを覚える。覚えたものはずっと残る）

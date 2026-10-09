@@ -10,7 +10,7 @@ import {
 } from '../lib/sortie.js'
 import { toFighter as playerFighter } from '../lib/loadout.js'
 import { staminaMaxOf, MAX_LV, rollStamina } from '../lib/level.js'
-import { jobOf, JOB_MAX } from '../lib/jobs.js'
+import { jobOf, jobMaxOf } from '../lib/jobs.js'
 import { effectPct } from '../lib/gear.js'
 import { RARITY_COLOR, RARITIES, rarityLabel, reqLvOf } from '../lib/equipment.js'
 
@@ -98,9 +98,9 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       }
       const lv = data.level || {}
       const after = []
-      // ★LV100・ClassLV30（上限）のぶんは入らないので、そう出す
+      // ★LV100・ClassLVの上限（初期職30・一次職50）のぶんは入らないので、そう出す
       const lvMax = prof.lv >= MAX_LV
-      const jobMax = jobOf(prof.jobs, prof.class).lv >= JOB_MAX
+      const jobMax = jobOf(prof.jobs, prof.class).lv >= jobMaxOf(prof.class)
       const expText = `EXP +${data.exp}${lvMax ? '（LV上限のため入らない）' : ''}${jobMax ? '' : `（ClassEXP +${data.exp}）`}`
       if (win) {
         const bonus = enc.role === 'normal' ? '' : `（${enc.role === 'boss' ? 'ボス' : enc.role === 'rare' ? 'レア' : '時間帯限定'}で${mult(enc.role)}）`

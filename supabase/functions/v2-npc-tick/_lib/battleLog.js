@@ -125,6 +125,57 @@ export const buildBattleLog = (r, you, foe) => {
       out.push({ text:`🔮 ${actor}はダメージを${l.damage.toLocaleString()}跳ね返した！`, color:'#88ddff' })
     } else if (l.type === 'enCut') {
       out.push({ text:`🛡 ${actor}のエンチャントが攻撃を和らげた！`, color: LOG_COLOR.guard })
+    // ===== 一次職（「レベルキャップあり」版・2026-10-10）=====
+    } else if (l.type === 'stunned') {
+      out.push({ text:`💫 ${actor}は反動で動けない！`, color:'#ffdd44' })
+    } else if (l.type === 'jump') {
+      out.push({ text:`🐉 ${actor}の${l.skill}！ 高く跳び上がった！`, color: LOG_COLOR.extra })
+    } else if (l.type === 'airborne') {
+      out.push({ text:`🕊 ${actor}は空中で機をうかがっている！`, color: LOG_COLOR.extra })
+    } else if (l.type === 'airEvade') {
+      // side は攻撃した側。跳んでいる相手には当たらない
+      out.push({ text:`☁ ${actor}の${l.skill ? `「${l.skill}」` : '攻撃'}！ しかし${target}は空高くにいて当たらない`, color: LOG_COLOR.miss })
+    } else if (l.type === 'cloneTaken') {
+      // side は分身を持っている側
+      out.push({ text:`👥 ${actor}の分身が攻撃を受け止めた！（残り${l.left}体）`, color: LOG_COLOR.guard })
+    } else if (l.type === 'strike') {
+      // 着地・反撃・追撃・召喚の攻撃
+      out.push(l.hit
+        ? { text:`⚔ ${actor}の${l.label}！ ${target}に${(l.damage || 0).toLocaleString()}ダメージ！${l.crit ? ' 💥クリティカル！' : ''}`,
+            color: mine ? LOG_COLOR.mine : LOG_COLOR.foe }
+        : { text:`${actor}の${l.label}！ しかし${target}にかわされた`, color: LOG_COLOR.miss })
+    } else if (l.type === 'stackUse') {
+      out.push({ text:`🔸 ${actor}は${l.stack}を${l.n}使った！${l.left ? `（残り${l.left}）` : ''}`, color: LOG_COLOR.buff })
+    } else if (l.type === 'stackGain') {
+      out.push({ text:`🔹 ${actor}の${l.skill}！ ${l.stack}が${l.n}になった！`, color: LOG_COLOR.buff })
+    } else if (l.type === 'summon') {
+      out.push({ text:`💀 ${actor}の${l.skill}！ ${l.stack}が${l.n}体になった！`, color: LOG_COLOR.buff })
+    } else if (l.type === 'guardUp') {
+      out.push({ text:`🛡 ${actor}の${l.skill}！ ${l.turns}ターンのあいだ受けるダメージ-${l.cut}%！`, color: LOG_COLOR.guard })
+    } else if (l.type === 'guardHeal') {
+      out.push({ text:`💚 ${actor}の結界がHPを${(l.heal || 0).toLocaleString()}回復した！`, color: LOG_COLOR.heal })
+    } else if (l.type === 'endureStart') {
+      out.push({ text:`🧱 ${actor}の${l.skill}！ ${l.turns}ターンのあいだ痛みを溜める！`, color: LOG_COLOR.guard })
+    } else if (l.type === 'endureRelease') {
+      out.push({ text:`💥 ${actor}は溜めた痛みを返した！ ${target}に${(l.damage || 0).toLocaleString()}ダメージ！`,
+        color: mine ? LOG_COLOR.mine : LOG_COLOR.foe })
+    } else if (l.type === 'reviveReady') {
+      out.push({ text:`✝ ${actor}の${l.skill}！ 倒れても一度だけ立ち上がれる！`, color: LOG_COLOR.heal })
+    } else if (l.type === 'revive') {
+      out.push({ text:`✝ ${actor}は立ち上がった！（HP${(l.hp || 0).toLocaleString()}）`, color:'#ffcc44' })
+    } else if (l.type === 'immune') {
+      out.push({ text:`🛡 ${actor}は${l.ail}にならない！`, color: LOG_COLOR.guard })
+    } else if (l.type === 'debuffImmune') {
+      out.push({ text:`🛡 ${actor}は能力低下を受けつけない！`, color: LOG_COLOR.guard })
+    } else if (l.type === 'quick') {
+      out.push({ text:`⏩ ${actor}の${l.skill}！ もう一度行動する！`, color: LOG_COLOR.extra })
+    } else if (l.type === 'recoil') {
+      out.push({ text:`🩸 ${actor}は反動で${(l.damage || 0).toLocaleString()}ダメージを受けた！`, color:'#ff8844' })
+    } else if (l.type === 'ailBurst') {
+      // side は状態異常が弾けた側
+      out.push({ text:`💥 ${actor}の${l.ails}が弾けた！（威力+${l.pct}%）`, color: LOG_COLOR.ail })
+    } else if (l.type === 'mpGain') {
+      out.push({ text:`💙 ${actor}の${l.skill}！ MPが${(l.mp || 0).toLocaleString()}回復した！`, color:'#66aaff' })
     }
   }
   return out

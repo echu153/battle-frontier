@@ -12,7 +12,7 @@
 // ============================================================
 import { STAT_KEYS, calcPower } from '../../v2/lib/stats.js'
 import { ITEM_BY_ID, SLOTS } from './equipment.js'
-import { SKILL_BY_NAME, isPassive } from './skills.js'
+import { SKILL_BY_NAME, isPassive, passiveOf } from './skills.js'
 import { statsAt, effectPct, powerAt, armorEffects } from './gear.js'
 import { jobBonusStats, jobOf, canEquipType, attackKindOf, lineageOf } from './jobs.js'
 import { CAP_RULES } from './rules.js'
@@ -103,5 +103,8 @@ export const toFighter = (profile, inventory) => {
     enchants: [],
     evolutions: [],
     slots: slotsOf(currentSetOf(profile), profile?.class),
+    // ★パッシブはこの版の名簿から渡す（一次職だけ1つ・初期職は無し）。渡さないと戦闘エンジンが今のⅡの名簿を
+    //   職業名で引き、狂戦士・竜騎士など同じ名前の職業に今のⅡのパッシブが付いてしまう
+    passives: passiveOf(profile?.class) ? [passiveOf(profile?.class)] : [],
   }
 }

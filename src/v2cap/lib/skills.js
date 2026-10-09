@@ -15,6 +15,7 @@
 // ★サーバーの v2cap_skills はこの名簿から tools/v2cap-sql.mjs が作る（手で書き写さない）
 // ============================================================
 import { SKILLS as V2_SKILLS, isPassive, SKILL_SET_SLOTS, SKILL_USE_MAX } from '../../v2/lib/skills.js'
+import { ICHIJI_SKILLS } from './skillsIchiji.js'
 
 export { isPassive, SKILL_SET_SLOTS, SKILL_USE_MAX }
 
@@ -61,14 +62,21 @@ export const NEW_SKILLS = [
   { name:'気付け薬',   cls:'薬師', kind:'heal', proc:85, mp:8, mpRegen:{ rate:0.2, turns:4 }, desc:'しばらく毎ターンMPが戻る' },
 ]
 
-// この版のスキル全部。今のⅡの5職ぶんは、今のⅡの並び（＝覚える順）のまま
+// 魔法の属性（魔導士の元素共鳴が「直前と違う属性」を見る）。今のⅡの魔法使いの技は今のⅡの名簿を書き換えず、写しに付ける
+export const ELEM_OF_V2 = { ファイア:'fire', サンダー:'thunder', アイスランス:'ice' }
+
+// この版のスキル全部。今のⅡの5職ぶんは、今のⅡの並び（＝覚える順）のまま。一次職20職は skillsIchiji.js（2026-10-10）
 export const SKILLS = [
-  ...V2_SKILLS.filter(s => KEEP_FROM_V2.includes(s.cls)),
+  ...V2_SKILLS.filter(s => KEEP_FROM_V2.includes(s.cls)).map(s => (ELEM_OF_V2[s.name] ? { ...s, elem: ELEM_OF_V2[s.name] } : s)),
   ...NEW_SKILLS,
+  ...ICHIJI_SKILLS,
 ]
 export const SKILL_BY_NAME = Object.fromEntries(SKILLS.map(s => [s.name, s]))
 // 枠に置ける技（パッシブ以外）。並び＝覚える順
 export const skillsOf = (cls) => SKILLS.filter(s => s.cls === cls && !isPassive(s))
+// その職業のパッシブ（一次職だけ・1つ）。★今のⅡの passiveOf は今のⅡの名簿を職業名で引くので使わない
+//   （狂戦士・竜騎士など今のⅡと同じ名前の職業に、今のⅡのパッシブが付いてしまう）
+export const passiveOf = (cls) => SKILLS.find(s => s.cls === cls && isPassive(s)) || null
 
 // ===== 編成の想定利用MP・検証 =====
 // ★今のⅡの setMpCost／validateSkillSet は今のⅡの名簿で名前を引くうえ、他職の技を0.8倍・MP2倍で数える。

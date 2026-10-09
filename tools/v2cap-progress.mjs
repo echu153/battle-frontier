@@ -6,7 +6,10 @@
 //   ・場所は1本道（15エリア×①②③）。いつも「開いている一番先の場所」で戦う
 //   ・EXPとGold（場所の表×役割の倍率）／LVアップのステータスポイント／ClassEXP／スキル習得／必要LV不足
 //   ・**ステータスポイントは、その職業のクラスのステと同じ割合で振る**（jobs.js の JOB_BONUS の並び bonusSeqOf を順に）
-//   ・職業は最初の職業のまま（一次職は一旦なし）。--cls で選ぶ（既定は戦士）
+//   ・最初の職業は --cls で選ぶ（既定は戦士）。**ClassLV30になったら、その系統の一次職へすぐ転職する**（2026-10-10）。
+//     どちらの一次職か・組み方の例のどちらか（skillsIchiji.js の ICHIJI_BUILDS）は乱数の番号で決める
+//     （1＝1つ目の職・1つ目の組み方／2＝2つ目の職・1つ目／3＝1つ目の職・2つ目／4＝2つ目の職・2つ目）。
+//     まだ覚えていない枠は、系統の初期職の技（ふつうの並べ方）で埋める。剣士は一次職がまだ無いので剣士のまま
 //   ・**装備は「その時点で着けられるいちばん良いもの」**（2026-10-09 ユーザー指示「シミュレーターは最適の装備で進めて」）：
 //     行ったことのあるエリアの装備（レア度は全部）から、必要LVの不足ぶんも数えて、職業ごとのステの重み（STAT_WEIGHT）で
 //     いちばん強いものを各枠に着ける。拾った装備の運は数えない（ドロップの細かい決まりはまだ決めていないため）
@@ -35,7 +38,8 @@ const { CAP_RULES } = await import(B + 'v2cap/lib/rules.js')
 const { pickEncounter, rollRewards, nextBossRate, openUntilOf, clearSpot } = await import(B + 'v2cap/lib/sortie.js')
 const { LAST_SPOT, AREA_LIST, toFighter: enemyFighter, stdPowerAt } = areas
 const { applyExp, bodyPowerAt, totalExpTo, POINT_UNIT, totalPointsTo } = level
-const { applyJobExp, jobOf, learnOrderOf, attackKindOf, canEquipType, JOB_MAX, jobTotalTo } = jobsLib
+const { applyJobExp, jobOf, learnOrderOf, attackKindOf, canEquipType, JOB_MAX, jobTotalTo, nextClassesOf, CLASS_BY_ID } = jobsLib
+const { ICHIJI_BUILDS } = await import(B + 'v2cap/lib/skillsIchiji.js')
 
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] : d }
 const HOURS = Number(arg('hours', arg('days', 365)))   // 何時間ぶん回すか（--days は前の名前）
@@ -81,18 +85,37 @@ export const STAT_WEIGHT = {
   僧侶:     { int_stat:1.00, agi:0.31, dex:0.23, vit:0.03, str:0 },
   薬師:     { int_stat:1.00, agi:0.62, vit:0.17, dex:0.09, str:0 },
 }
-const weightOf = (cls) => STAT_WEIGHT[cls] || (attackKindOf(cls) === 'mag' ? { int_stat:1, agi:0.6 } : { str:1, agi:0.8 })
+// ★一次職はまだ測っていないので、系統の初期職の重みを使う
+const weightOf = (cls) => STAT_WEIGHT[cls] || STAT_WEIGHT[CLASS_BY_ID[cls]?.req?.cls]
+  || (attackKindOf(cls) === 'mag' ? { int_stat:1, agi:0.6 } : { str:1, agi:0.8 })
 // スキル編成：強化の技を先頭に1回ずつ・攻撃の技は後に覚えたもの（強い技）から・回復の技は最後に1回ずつ。
 //   MPだけを戻す技（気付け薬）は入れない。回数はMPに収まるだけ、攻撃の技へ前から1回ずつ足す（1枠5回まで）
 //   ⚠前は「覚えた技を後ろから5つ・全部均等」で、薬師は気付け薬と強壮剤が先頭に来て損をしていた
 //     （山登りで探した一番よい並べ方とくらべて、この並べ方は差が数%・2026-10-09）
 const isMpOnly = (sk) => sk.kind === 'heal' && sk.mpRegen && !sk.heal && !sk.regen
+const isAtk = (sk) => sk.kind === 'phys' || sk.kind === 'mag'
+const orderForSet = (sks) => [...sks.filter(sk => sk.kind === 'buff'), ...sks.filter(isAtk).reverse(), ...sks.filter(sk => sk.kind === 'heal')]
 export const typicalSet = (cls, learned, maxMp) => {
   const have = new Set(learned)
   const sks = learnOrderOf(cls).filter(sk => have.has(sk.name) && !isMpOnly(sk))
-  const isAtk = (sk) => sk.kind === 'phys' || sk.kind === 'mag'
-  const order = [...sks.filter(sk => sk.kind === 'buff'), ...sks.filter(isAtk).reverse(), ...sks.filter(sk => sk.kind === 'heal')]
-  const set = order.slice(0, 5).map(sk => ({ name: sk.name, uses: 1, atk: isAtk(sk) }))
+  return fitSet(orderForSet(sks).slice(0, 5), maxMp)
+}
+// 一次職：ユーザーの表の組み方の例（覚えた技だけ）＋足りない枠は系統の初期職の技（ふつうの並べ方）
+export const ichijiSet = (cls, buildIdx, learned, maxMp) => {
+  const have = new Set(learned)
+  const build = ICHIJI_BUILDS[cls]?.[buildIdx] || []
+  const own = learnOrderOf(cls).filter(sk => build.includes(sk.name) && have.has(sk.name))
+  const base = CLASS_BY_ID[cls]?.req?.cls
+  const fill = base
+    ? orderForSet(learnOrderOf(base).filter(sk => have.has(sk.name) && !isMpOnly(sk))).slice(0, Math.max(0, 5 - own.length))
+    : []
+  // 種類ごと（強化→攻撃→回復）に並べ、同じ種類では一次職の技を先に置く
+  const rank = (sk) => (sk.kind === 'buff' ? 0 : isAtk(sk) ? 1 : 2)
+  const merged = [...orderForSet(own), ...fill].map((sk, i) => ({ sk, i })).sort((a, b) => rank(a.sk) - rank(b.sk) || a.i - b.i).map(x => x.sk)
+  return fitSet(merged, maxMp)
+}
+const fitSet = (sks, maxMp) => {
+  const set = sks.map(sk => ({ name: sk.name, uses: 1, atk: isAtk(sk) }))
   const cost = () => setMpCost(set)
   while (set.length && cost() > maxMp) set.pop()
   for (let grew = true; grew;) {
@@ -110,7 +133,11 @@ export const typicalSet = (cls, learned, maxMp) => {
 export const simulate = ({ hours = HOURS, seed = SEED, start = START } = {}) => {
   const rng = rngOf(seed)
   const st = { lv: 1, exp: 0, ...INITIAL_STATS }
-  const cls = start
+  let cls = start
+  // 一次職の選び方（乱数の番号で決める）
+  const jobPick = (seed - 1) % 2
+  const buildPick = Math.floor((seed - 1) / 2) % 2
+  let advancedHour = null
   let jobs = { [cls]: { lv: 1, exp: 0 } }
   let learned = applyJobExp(jobs, cls, 0).learned
   let cleared = [], bossRate = 0, gold = 0, cumExp = 0
@@ -136,7 +163,7 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START } = {}) => 
   })
   // 装備は「その時点で着けられるいちばん良いもの」。行ったことのあるエリア（開いている一番先の場所のエリアまで）の装備を、
   // レア度は全部（エピック・レジェンダリーも）候補にし、必要LVの不足ぶん（1LVごとに-5%）も数えて職業の重みで比べる
-  const weight = weightOf(cls)
+  let weight = weightOf(cls)
   const valueAt = (item) => {
     const s = statsAt(item, item.lv, effectPct(item.lv, st.lv))
     return Object.entries(weight).reduce((t, [k, w]) => t + (s[k] || 0) * w, 0)
@@ -163,7 +190,7 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START } = {}) => 
     }
   }
   // ステータスポイントは、その職業のクラスのステと同じ割合で振る（並び bonusSeqOf を前から順に・一周したら頭から）
-  const pointSeq = jobsLib.bonusSeqOf(cls)
+  let pointSeq = jobsLib.bonusSeqOf(cls)
   let pointsUsed = 0
   const spendPoints = (n) => {
     for (let i = 0; i < n; i++) {
@@ -173,7 +200,24 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START } = {}) => 
     }
   }
   // スキル編成はふつうの人の並べ方（typicalSet）。覚えた技・最大MPが変わるたびに組み直す
-  const reset = () => { skillSet = typicalSet(cls, learned, totalStats(prof(), inventory).mp) }
+  const reset = () => {
+    const mp = totalStats(prof(), inventory).mp
+    skillSet = CLASS_BY_ID[cls]?.stage === 'ichiji' ? ichijiSet(cls, buildPick, learned, mp) : typicalSet(cls, learned, mp)
+  }
+  // 転職：系統の一次職へ（ClassLVは1から・クラスのステはその職のぶんだけ・武器は同じ）
+  const advance = (hour) => {
+    const opts = nextClassesOf(cls)
+    if (!opts.length) return false
+    cls = opts[jobPick % opts.length]
+    jobs = { ...jobs, [cls]: jobOf(jobs, cls) }
+    const got = applyJobExp(jobs, cls, 0, learned).learned
+    learned = [...learned, ...got]
+    weight = weightOf(cls)
+    pointSeq = jobsLib.bonusSeqOf(cls)
+    pointsUsed = 0
+    advancedHour = hour
+    return true
+  }
   regear()
   reset()
 
@@ -214,9 +258,13 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START } = {}) => 
       if (res.points) spendPoints(res.points)
       const j = applyJobExp(jobs, cls, exp, learned)
       jobs = j.jobs
-      if (job30Hour === null && j.lv >= JOB_MAX) job30Hour = hour
       let dirty = res.lv !== lvBefore || j.ups.length > 0
       if (j.learned.length) { learned = [...learned, ...j.learned]; dirty = true }
+      // 初期職がClassLV30（上限）になったら、すぐ系統の一次職へ（★最初の職業のClassLV30の時間は転職の前に数える）
+      if (CLASS_BY_ID[cls]?.stage === 'shoki' && j.lv >= JOB_MAX) {
+        if (job30Hour === null) job30Hour = hour
+        if (advance(hour)) dirty = true
+      }
       if (win && enc.isBoss && !cleared.includes(spot)) {
         cleared = clearSpot(cleared, spot)
         spotClearHour[spot] = hour
@@ -232,7 +280,7 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START } = {}) => 
   if (expAtLvHour === null) expAtLvHour = cumExp
   return {
     hourly, spotClearHour, lvAtSpotHour, expAtSpotHour, expInSpot, hoursInSpot, powerByLv,
-    learned, cls, jobs, job30Hour, expAtJobHour, expAtLvHour, gold,
+    learned, cls, start, jobs, job30Hour, advancedHour, expAtJobHour, expAtLvHour, gold,
     fightsInSpot,
     final: { profile: prof(), inventory },   // 最後のキャラ（職業ごとの強さを比べるのに使う）
   }

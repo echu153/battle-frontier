@@ -4,7 +4,8 @@ import { mmss } from '../../v2/lib/stamina.js'
 import { KIND_COLOR, SKILL_SET_SLOTS } from '../../v2/lib/skills.js'
 import { V2Tip } from '../../v2/components/V2ItemTip.jsx'
 import { MAX_LV, needExp, staminaMaxOf, rollStamina, msToNextStamina } from '../lib/level.js'
-import { JOB_MAX, jobNeed, jobOf, stageOf, stageLabelOf, stageColorOf, weaponsOf } from '../lib/jobs.js'
+import { jobMaxOf, jobNeed, jobOf, stageOf, stageLabelOf, stageColorOf, weaponsOf } from '../lib/jobs.js'
+import { passiveOf } from '../lib/skills.js'
 import { SKILL_BY_NAME } from '../lib/skills.js'
 import { SLOTS, SLOT_LABEL, kindLabel, itemLabel, RARITY_COLOR } from '../lib/equipment.js'
 import { equippedItems, statBreakdown, currentSetOf } from '../lib/loadout.js'
@@ -14,7 +15,7 @@ import V2capPoints from './V2capPoints.jsx'
 // ============================================================
 // 「レベルキャップあり」版 — ステータス欄（ホームの左）
 //   見た目は今のⅡ（V2Status.jsx）にそろえる。違うのは
-//   ・LVとClassLVの2本のバー（LV100・ClassLV30で止まる）
+//   ・LVとClassLVの2本のバー（LV100・ClassLVは職業の上限＝初期職30・一次職50で止まる）
 //   ・ステの内訳（本体＋クラス＋装備＋軽装のAGI）をカーソルで出す
 //   ・装備は7枠（武器1・頭・鎧・腕・足・アクセ2）。アイテムLVと、必要LVに足りないときの効果%
 //   ・防具のメリット（重鎧＝受けるダメージ−%／軽装＝AGI+%）の合計
@@ -145,9 +146,9 @@ export default function V2capStatus({ prof, inventory, onProfile }) {
       <Bar label={`LV ${prof.lv}${prof.lv >= MAX_LV ? '（上限）' : ''}`}
         val={prof.lv >= MAX_LV ? 'MAX' : `${prof.exp.toLocaleString()} / ${lvNeed.toLocaleString()}`}
         pct={prof.lv >= MAX_LV ? 100 : (prof.exp / lvNeed) * 100} color="#44ff88" />
-      <Bar label={`ClassLV ${job.lv}${job.lv >= JOB_MAX ? '（上限）' : ''}`}
-        val={job.lv >= JOB_MAX ? 'MAX' : `${job.exp.toLocaleString()} / ${jNeed.toLocaleString()}`}
-        pct={job.lv >= JOB_MAX ? 100 : (job.exp / jNeed) * 100} color="#ffcc00" />
+      <Bar label={`ClassLV ${job.lv}${job.lv >= jobMaxOf(prof.class) ? '（上限）' : ''}`}
+        val={job.lv >= jobMaxOf(prof.class) ? 'MAX' : `${job.exp.toLocaleString()} / ${jNeed.toLocaleString()}`}
+        pct={job.lv >= jobMaxOf(prof.class) ? 100 : (job.exp / jNeed) * 100} color="#ffcc00" />
       <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#7fa6d0', marginBottom:'6px' }}>
         <span>⚡ スタミナ</span>
         <span style={{ color: stamNow > 0 ? '#44ff88' : '#ff8844' }}>
@@ -178,6 +179,14 @@ export default function V2capStatus({ prof, inventory, onProfile }) {
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'2px' }}>
         {Array.from({ length: SKILL_SET_SLOTS }, (_, i) => skillCell(i))}
       </div>
+      {/* 一次職のパッシブ（枠を使わず、就いている間ずっと効く） */}
+      {passiveOf(prof.class) && (
+        <div style={{ ...cell, marginTop:'2px', fontSize:'10px' }}>
+          <span style={{ color:'#7fa6d0' }}>パッシブ </span>
+          <span style={{ color:'#ffcc66' }}>{passiveOf(prof.class).name}</span>
+          <span style={{ color:'#7fa6d0' }}>（{passiveOf(prof.class).desc}）</span>
+        </div>
+      )}
     </div>
   )
 }

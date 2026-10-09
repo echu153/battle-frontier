@@ -86,7 +86,8 @@ test('知らない種類の行は落とす（落ちない）', () => {
 //   戦闘が出すログの種類と、画面が出せる種類がズレたら落とす（片方だけ足すと気付く）。
 test('戦闘が出すログの種類は、すべて画面に出せる', () => {
   const emit = new Set()
-  for (const p of ['battle.js', 'atb.js']) {
+  // ★battleIchiji.js（一次職の仕組み・2026-10-10）もログを出すので一緒に見る（別ファイルに分けたぶんが漏れないように）
+  for (const p of ['battle.js', 'atb.js', 'battleIchiji.js']) {
     const src = readFileSync(new URL('./' + p, import.meta.url), 'utf8')
     for (const m of src.matchAll(/type:\s*'([a-zA-Z]+)'/g)) emit.add(m[1])
   }

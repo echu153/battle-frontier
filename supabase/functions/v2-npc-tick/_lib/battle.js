@@ -31,6 +31,11 @@ import {
   collectEvolutions, evoDmgPct, evoCutPct, EVO_STACK_MAX,
   LOW_HP_PCT as EVO_LOW_HP, FOE_LOW_PCT,
 } from './evolve.js'
+// ★一次職（「レベルキャップあり」版の20職・2026-10-10）の仕組み。今のⅡの技・敵はこの項目を持たないので何も起きない
+import {
+  initIchiji, collectExPassives, passiveDealMult, ichijiSkip, ichijiSkillPrep, consumeDodgeBoost,
+  incomingCut, guardHealPct, gainHp, ichijiAfterAction, tickIchiji, hpPctOf, STK_LABEL,
+} from './battleIchiji.js'
 
 export const NORMAL_ATTACK_MULT = 1.0 // 通常攻撃の倍率（消費MP0）
 export const MAX_TURNS = 100          // これを超えたら引き分け
@@ -107,6 +112,8 @@ const collectPassives = (passives) => {
     if (p.gamble)   pa.gamble = p.gamble
     if (p.dodgeCut) pa.dodgeCut = p.dodgeCut
   }
+  // ★一次職のパッシブ（battleIchiji.js の EX_PASSIVE_KEYS）
+  pa.ex = collectExPassives(passives)
   return pa
 }
 
@@ -164,6 +171,8 @@ export const liveStats = (side, acting = false) => {
   }
   // 元素共鳴：直前と違うスキルを使うときだけ（重複しない＝毎回同じ+10%）
   if (acting && side.switchOn) for (const s of side.pa.switches) add(s.stat, s.pct)
+  // ★一次職：影の連携（忍者）＝分身がいない間はAGI+
+  if (side.pa.ex?.noCloneAgi && !(side.stk?.clone > 0)) add('agi', side.pa.ex.noCloneAgi)
   // 武器の進化：かわすたびAGI＋／被弾するたびSTR＋（どちらも EVO_STACK_MAX 回まで）
   if (side.evo?.onDodge.agi && side.evoStacks?.dodge)
     add('agi', side.evo.onDodge.agi * Math.min(EVO_STACK_MAX, side.evoStacks.dodge))
@@ -209,7 +218,9 @@ export const createSide = (fighter, band = null) => {
     .map(s => ({ skill: s.skill, uses: s.uses ?? 3 }))
   // ★パッシブは枠から取らない。**その職業のものが最初から効いている**（2026-08-23）
   //   ＝他職のパッシブは持ち込めない。枠に紛れ込んでいても無視する
-  const passives = [passiveOf(fighter.cls)].filter(Boolean)
+  // ★fighter.passives を渡したときはそれを使う（「レベルキャップあり」版は自分の名簿のパッシブを渡す。
+  //   狂戦士・竜騎士など今のⅡと同じ名前の職業に、今のⅡのパッシブが付かないように）
+  const passives = (Array.isArray(fighter.passives) ? fighter.passives : [passiveOf(fighter.cls)]).filter(Boolean)
   const pa = collectPassives(passives)
   // ★noClassBonus … 「レベルキャップあり」版（src/v2cap）は職業補正を一旦なしにしている
   //   （2026-10-09 ユーザー決定）。渡さなければ今のⅡと同じ
@@ -225,7 +236,7 @@ export const createSide = (fighter, band = null) => {
   if (bonus?.stats) applyBuff(buffs, bonus.stats)   // 職業補正（就いている職業だけ）
   applyBuff(buffs, pa.statPct)                      // パッシブの常時ステータス補正
   applyBuff(buffs, en.statPct)                      // エンチャントの常時ステータス補正（時間帯ぶんを含む）
-  return {
+  const side = {
     name: fighter.name || fighter.cls || '?',
     cls: fighter.cls,
     kind: fighter.kind || attackKindOf(fighter.cls),
@@ -292,6 +303,8 @@ export const createSide = (fighter, band = null) => {
     taken: fighter.taken || null,
     boss: !!fighter.boss,                // ボスか（「大敵斬り」が見る）
   }
+  initIchiji(side, fighter)              // ★一次職の状態（溜め・期限つきの軽減・跳躍・召喚など）
+  return side
 }
 
 // このスキルを撃つのに要るMP。mpPct を持つスキルは「そのときの残りMPの割合」を払う
@@ -318,6 +331,7 @@ const findSlot = (side) => {
     if (!s || !s.skill) continue
     if (s.uses <= 0) continue
     if (sealed && usesMp(s.skill)) continue
+    if (ichijiSkip(side, s.skill)) continue   // ★一次職：溜めが足りない・続けて使えない・使い切った技
     // MP不足の枠は飛ばす（使用回数は減らない）。割合消費はMPが1でも残っていれば撃てる
     if (s.skill.mpPct) { if (side.mp <= 0) continue }
     else if (s.skill.mp > side.mp) continue
@@ -380,13 +394,34 @@ const applyIncoming = (me, foe, dmg, kind, rng, log) => {
     d *= (1 - dc.cut / 100)
     log.push({ side: foe.name, type: 'dodgeCut' })
   }
+  // ★一次職：期限つきの軽減（受け止め・気の鎧・結界）・砲台の構え・死者の盾。結界は減らしたぶんを回復
+  let guardHeal = 0
+  const gcut = incomingCut(foe)
+  if (gcut > 0) {
+    const before = d
+    d *= (1 - gcut / 100)
+    const hp = guardHealPct(foe)
+    if (hp > 0) guardHeal = Math.floor((before - d) * hp / 100)
+  }
   const out = Math.max(1, Math.floor(d))
   foe.hp -= out
+  // ★一次職：受けたダメージを覚える（報復の一撃・忍耐・リワインド）
+  foe.lastTaken = out
+  if (foe.takenLog) {
+    foe.takenLog.push({ turn: foe.turn || 0, dmg: out })
+    if (foe.takenLog.length > 12) foe.takenLog.shift()
+  }
+  if (foe.endure) foe.endure.acc += out
   // 不屈：致命傷をHP1で耐える（1戦に1回・確率）
   if (foe.hp <= 0 && foe.evo.guts && !foe.gutsUsed && roll(foe.evo.guts, rng)) {
     foe.gutsUsed = true
     foe.hp = 1
     log.push({ side: foe.name, type: 'guts' })
+  }
+  checkRevive(foe, log)
+  if (guardHeal > 0 && foe.hp > 0) {
+    const got = gainHp(foe, guardHeal)
+    if (got > 0) log.push({ side: foe.name, type: 'guardHeal', heal: got })
   }
   // 被弾したとき：STRが積み上がる／MPが回復する
   foe.evoStacks.hurt += 1
@@ -402,6 +437,15 @@ const applyIncoming = (me, foe, dmg, kind, rng, log) => {
   return out
 }
 
+// ★一次職：リザレクション（戦闘中1回、HPが0になったら立ち上がる）
+const checkRevive = (side, log) => {
+  if (side.hp > 0 || !side.reviveReady || side.reviveUsed) return
+  side.reviveUsed = true
+  side.hp = Math.max(1, Math.floor(side.base.hp * side.reviveReady / 100))
+  side.reviveReady = 0
+  log.push({ side: side.name, type: 'revive', hp: side.hp })
+}
+
 // 回復量。聖職者の「回復量+20%」と、異端審問官の「自身の回復量0.8倍」がここで効く
 // エンチャントの回復量+%と、状態異常「回復阻害」もここで掛かる
 const healAmount = (side, eff, rate) =>
@@ -410,6 +454,13 @@ const healAmount = (side, eff, rate) =>
     * (1 + side.en.healPct / 100) * healMultOf(side.ail)
     * Math.max(0, 1 + side.evo.heal / 100)   // 武器の進化：受ける回復量±%
   ))
+
+// ★一次職：最大HPの◯%を回復（内功・魂喰らい・奇跡・再生薬）。回復量の補正はふつうの回復と同じだけ掛ける
+const healMaxAmount = (side, pct) =>
+  Math.max(1, Math.floor(side.base.hp * pct / 100
+    * (1 + side.pa.healBonus / 100) * side.healMult
+    * (1 + side.en.healPct / 100) * healMultOf(side.ail)
+    * Math.max(0, 1 + side.evo.heal / 100)))
 
 // 「最大HPの◯%」のような割合の回復・消耗。最低1（0にすると付いていないのと同じになる）
 const pctHp = (max, pct) => (pct > 0 ? Math.max(1, Math.floor(max * pct / 100)) : 0)
@@ -439,6 +490,11 @@ const evoOnCrit = (me, foe, rng, log) => {
 // デバフを相手へ入れる。心身一如を持っていると1回だけ打ち消される
 const applyDebuff = (foe, table, log) => {
   const isDebuff = Object.values(table || {}).some(v => v < 0)
+  // ★一次職：狂信（その間、自分の能力低下を受けない）
+  if (isDebuff && foe.debuffImmune > 0) {
+    log.push({ side: foe.name, type: 'debuffImmune' })
+    return
+  }
   if (isDebuff && foe.guards > 0) {
     foe.guards -= 1
     log.push({ side: foe.name, type: 'debuffGuard' })
@@ -451,6 +507,11 @@ const applyDebuff = (foe, table, log) => {
 // エンチャント由来（onHitAils）とスキル由来（skill.ail）で同じ道を通す＝抵抗の効き方がズレない
 // me は入れる側。武器の進化は**入れる側の付与率＋**と**受ける側の抵抗**の両方が効く
 const tryInflict = (me, foe, a, rng, log) => {
+  // ★一次職：不動（麻痺・鈍足にかからない）
+  if (foe?.pa?.ex?.immune?.includes(a.key)) {
+    log.push({ side: foe.name, type: 'immune', ail: AIL_LABEL[a.key] })
+    return
+  }
   const base = a.chance + (me?.evo?.ail?.rate || 0)
   const raw = inflictChance(base, foe.en, a.key)
     - (foe?.evo?.ail?.resist || 0) + (foe?.evo?.ail?.weak || 0)
@@ -650,6 +711,14 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   me.ctx = { dodged: me.justDodged, hurt: me.justHurt }
   me.justDodged = false
   me.justHurt = false
+  // ★一次職：フルバーストの反動（このターンは動けない）
+  if (me.stunned > 0) {
+    me.stunned -= 1
+    log.push({ side: me.name, type: 'stunned' })
+    return
+  }
+  // ★一次職：跳躍中（竜騎士）。残りがあれば空中で待ち、最後の行動で着地して斬る
+  if (me.jumping) { airborneTurn(me, foe, rng, log); return }
   // 麻痺：このターンは動けない（見た時点で1ターンぶん消える）
   if (!opt.noParalyze && consumeParalyze(me.ail)) {
     log.push({ side: me.name, type: 'paralyzed' })
@@ -705,6 +774,19 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       log.push({ side: me.name, type: 'hpCost', skill: skill.name, damage: pay })
     }
   }
+  // ★一次職：最大HPの割合を払う（マッドラッシュはHP50%以上のときだけ・血の誓い）。払っても死なない
+  if (skill.hpCostMax && hpPctOf(me) >= (skill.hpCostMax.ifAbove ?? 0)) {
+    const pay = Math.min(Math.max(0, me.hp - 1), Math.floor(me.base.hp * skill.hpCostMax.pct / 100))
+    if (pay > 0) {
+      me.hp -= pay
+      log.push({ side: me.name, type: 'hpCost', skill: skill.name, damage: pay })
+    }
+  }
+  // ★一次職：溜めを使って出す技（内功・気の鎧・魂喰らい）。足りることは findSlot が確かめてある
+  if (skill.needStack) {
+    me.stk[skill.needStack.key] -= skill.needStack.n
+    log.push({ side: me.name, type: 'stackUse', stack: STK_LABEL[skill.needStack.key], n: skill.needStack.n, left: me.stk[skill.needStack.key] })
+  }
   slot.uses -= 1
   me.ptr = (idx + 1) % me.slots.length
 
@@ -728,141 +810,219 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   //   状態異常の付与確率に掛かる。発動率・消費MP・防御無視・必中などには掛からない
   const off = offClassMult(me.cls, skill, me.offClassCut)
 
+  // ★一次職：跳躍（竜騎士）。この行動は跳ぶだけ。次の行動（ハイジャンプは2つ先）で着地して斬る
+  if (skill.jump) {
+    me.jumping = { left: skill.jump.turns, mult: skill.jump.mult * off, name: skill.name }
+    log.push({ side: me.name, type: 'jump', skill: skill.name, turns: skill.jump.turns })
+    return
+  }
+
   if (skill.kind === 'phys' || skill.kind === 'mag') {
-    let raw = 0
-    let crit = false
-    let hits = 0
-    let missed = 0
-    // 第六感の「貫通+10%」はスキルの防御貫通に足す。武器の進化ぶんも同じ枠
-    const defPen = Math.min(1, (skill.defPen || 0) + (ws?.defPen || 0) + me.pa.defPenBonus / 100 + me.evo.defPen / 100
-      + (whileStackOn(skill, me) ? (skill.whileStack.defPen || 0) : 0))
-    // ★条件つき吸収（狂戦士の血啜り）：**撃つ前から**相手がその状態異常なら吸える
-    //   （この技自身が付けた出血では吸えない＝先に撒いてから吸う流れになる）
-    const drainIf = skill.drainIfAil && hasAilment(foe.ail, skill.drainIfAil.key)
-    // ★出血スタックの起爆（暗殺者の急所突き）。**相手に積んだ出血を全部消費して威力を上げる**
-    //   ＝「出血を撒く技」と「刈り取る技」で1つの流れになる（消費するので撒き直しが要る）
-    let burst = 1
-    if (skill.consumeAil) {
-      const c = skill.consumeAil
-      const st = c.key === 'bleed' ? (foe.ail.bleed?.stacks || 0) : (hasAilment(foe.ail, c.key) ? 1 : 0)
-      if (st > 0) {
-        burst = 1 + c.perStack * st
-        delete foe.ail[c.key]
-        log.push({ side: foe.name, type: 'consumeAil', ail: AIL_LABEL[c.key], stacks: st, mult: burst })
+    // ★一次職：跳躍中の相手には当たらない／分身が1回ぶん肩代わりする（どちらもダメージなし）
+    if (foe.jumping) {
+      log.push({ side: me.name, type: 'airEvade', skill: skill.name })
+      foe.justDodged = true
+      foe.justHurt = false
+    } else if (foe.stk?.clone > 0) {
+      foe.stk.clone -= 1
+      log.push({ side: foe.name, type: 'cloneTaken', skill: skill.name, left: foe.stk.clone })
+    } else {
+      let raw = 0
+      let crit = false
+      let hits = 0
+      let missed = 0
+      // 第六感の「貫通+10%」はスキルの防御貫通に足す。武器の進化ぶんも同じ枠
+      const defPen = Math.min(1, (skill.defPen || 0) + (ws?.defPen || 0) + me.pa.defPenBonus / 100 + me.evo.defPen / 100
+        + (whileStackOn(skill, me) ? (skill.whileStack.defPen || 0) : 0))
+      // ★条件つき吸収（狂戦士の血啜り）：**撃つ前から**相手がその状態異常なら吸える
+      //   （この技自身が付けた出血では吸えない＝先に撒いてから吸う流れになる）
+      const drainIf = skill.drainIfAil && hasAilment(foe.ail, skill.drainIfAil.key)
+      // ★出血スタックの起爆（暗殺者の急所突き）。**相手に積んだ出血を全部消費して威力を上げる**
+      //   ＝「出血を撒く技」と「刈り取る技」で1つの流れになる（消費するので撒き直しが要る）
+      let burst = 1
+      if (skill.consumeAil) {
+        const c = skill.consumeAil
+        const st = c.key === 'bleed' ? (foe.ail.bleed?.stacks || 0) : (hasAilment(foe.ail, c.key) ? 1 : 0)
+        if (st > 0) {
+          burst = 1 + c.perStack * st
+          delete foe.ail[c.key]
+          log.push({ side: foe.name, type: 'consumeAil', ail: AIL_LABEL[c.key], stacks: st, mult: burst })
+        }
       }
-    }
-    const varMult = varianceMultOf(skill, rng)   // ギャンブラー：1行動につき1回だけ振る
-    // ★「撃った」行より後ろに流したいログを貯める（1発ごとの状態異常）
-    const afterAil = []
-    for (let h = 0; h < (skill.hits || 1); h++) {
-      // ★多段で1発ごとに威力が上がる（体術師の飛天三角蹴り）。1発目は素のまま
-      const ramp = skill.rampHit ? 1 + (skill.rampHit / 100) * h : 1
-      const r = resolveAttack({
-        attacker: eMe, defender: eFoe, mult: ramp * skill.mult * burst * (stance?.mult || 1) * lowHpMultOf(skill, foe)
-          * highHpMultOf(skill, me) * vsBuffMultOf(skill, foe) * repeatMultOf(skill, me)
-          * switchKindMultOf(skill, prevKind) * varMult
-          * comboMultOf(skill, prevSkill) * airMultOf(skill, wasAir)
-          * stackMultOf(skill.useRitual, ritualUsed) * stackMultOf(skill.useCharge, chargeUsed)
-          * beastMultOf(skill, prevForm) * whileStackMultOf(skill, me)
-          * whileFormMultOf(skill, prevForm) * vsAilMultOf(skill, foe) * groundMultOf(skill, wasAir),
-        kind: skill.kind, atkStat: skill.src || null,
-        defPen, add: skill.add || null,
-        sureHit: !!skill.sureHit, sureCrit: !!skill.sureCrit, noCrit: !!skill.noCrit,
-        acc: skill.acc ?? 100,
-        // ★スキル自身の命中補正（skill.hitBonus）もここで足す＝「必中ではないが当てやすい技」を作れる
-        hitBonus: me.pa.hitBonus + me.en.hitBonus + evoHit(me, foe) + (skill.hitBonus || 0)
-          + ailAccPct(me.ail)   // 暗闇：命中-25%
-          + (wasAir ? (skill.whileAir?.hitBonus || 0) : 0),   // 空中からは狙いが通る（体術師）
-        evaBonus: foe.pa.evaBonus + foe.en.evaBonus + evoEva(foe) + foresightEva(foe, skill.name)
-          + (foe.air ? AIR_EVA : 0),
-        critBonus: me.pa.critBonus + evoCrit(me, foe) + critRateStackOf(me),
-        hitMult: hitMultOf(me, foe),
-        critDmg: critDmgOf(me),
-        redMult: (1 + (foe.pa.defRed || 0) / 100) * chargeGuardOf(foe),
-      }, rng)
-      // ★クリティカルの与ダメージ+%は**1発ずつ**掛ける（多段でクリした発だけ伸びる）
-      // ★ヒットごとに状態異常を試す技（連撃で少しずつ積む）
-      if (r.hit && skill.ailPerHit && skill.ail) {
-        tryInflict(me, foe, { ...skill.ail, chance: skill.ail.chance * off }, rng, afterAil)
+      const varMult = varianceMultOf(skill, rng)   // ギャンブラー：1行動につき1回だけ振る
+      // ★一次職：倍率・連撃数・クリティカル率・上乗せダメージ・溜めの消費（1行動につき1回）
+      const ip = ichijiSkillPrep(me, foe, skill, eMe, eFoe, log)
+      const dealMult = passiveDealMult(me, foe)
+      // ★一次職の「威力+％」「与ダメージ+％」は、AGI・DEXなど副参照のぶんも含めたダメージ全体に掛ける
+      //   （今のⅡの倍率は主のステにだけ掛かる＝damageOf の base。そちらは変えない）
+      const ichijiK = ip.mult * dealMult
+      const nHits = ip.hits ?? (skill.hitMults ? skill.hitMults.length : (skill.hits || 1))
+      // ★「撃った」行より後ろに流したいログを貯める（1発ごとの状態異常）
+      const afterAil = []
+      for (let h = 0; h < nHits; h++) {
+        // ★多段で1発ごとに威力が上がる（体術師の飛天三角蹴り）。1発目は素のまま
+        const ramp = skill.rampHit ? 1 + (skill.rampHit / 100) * h : 1
+        const r = resolveAttack({
+          attacker: eMe, defender: eFoe, mult: ramp * baseMultOf(skill, h, ip) * burst * (stance?.mult || 1) * lowHpMultOf(skill, foe)
+            * highHpMultOf(skill, me) * vsBuffMultOf(skill, foe) * repeatMultOf(skill, me)
+            * switchKindMultOf(skill, prevKind) * varMult
+            * comboMultOf(skill, prevSkill) * airMultOf(skill, wasAir)
+            * stackMultOf(skill.useRitual, ritualUsed) * stackMultOf(skill.useCharge, chargeUsed)
+            * beastMultOf(skill, prevForm) * whileStackMultOf(skill, me)
+            * whileFormMultOf(skill, prevForm) * vsAilMultOf(skill, foe) * groundMultOf(skill, wasAir),
+          kind: skill.kind, atkStat: skill.src || null,
+          defPen, add: skill.add || null,
+          sureHit: !!skill.sureHit, sureCrit: !!skill.sureCrit || ip.sureCrit, noCrit: !!skill.noCrit,
+          acc: skill.acc ?? 100,
+          // ★スキル自身の命中補正（skill.hitBonus）もここで足す＝「必中ではないが当てやすい技」を作れる
+          hitBonus: me.pa.hitBonus + me.en.hitBonus + evoHit(me, foe) + (skill.hitBonus || 0)
+            + ailAccPct(me.ail)   // 暗闇：命中-25%
+            + (wasAir ? (skill.whileAir?.hitBonus || 0) : 0),   // 空中からは狙いが通る（体術師）
+          evaBonus: foe.pa.evaBonus + foe.en.evaBonus + evoEva(foe) + foresightEva(foe, skill.name)
+            + (foe.air ? AIR_EVA : 0),
+          critBonus: me.pa.critBonus + evoCrit(me, foe) + critRateStackOf(me) + ip.crit + (me.critUp || 0),
+          hitMult: hitMultOf(me, foe),
+          critDmg: critDmgOf(me),
+          redMult: (1 + (foe.pa.defRed || 0) / 100) * chargeGuardOf(foe),
+        }, rng)
+        // ★一次職：物理と魔法の両方で殴る技（魔銃士）。魔法のぶんは同じ当たり・クリティカルのまま INT 同士で計算する
+        if (skill.hybrid && r.hit) {
+          const r2 = resolveAttack({
+            attacker: eMe, defender: eFoe, mult: skill.hybrid.mag * vsAilMultOf(skill, foe),
+            kind: 'mag', defPen, sureHit: true, sureCrit: !!r.crit, noCrit: !r.crit, acc: 100,
+            hitBonus: 0, evaBonus: 0, critBonus: 0, hitMult: 1, critDmg: critDmgOf(me),
+            redMult: 1 + (foe.pa.defRed || 0) / 100,
+          }, rng)
+          r.damage += r2.damage
+        }
+        if (r.hit && ichijiK !== 1) r.damage = Math.max(1, Math.floor(r.damage * ichijiK))
+        // ★一次職：クリティカルしたときだけ伸びる技（絶影狙撃）・当てるたびコンボ（槍の型）
+        if (skill.critMult && r.hit && r.crit) r.damage = Math.floor(r.damage * skill.critMult)
+        if (r.hit && me.pa.ex?.combo) me.combo = Math.min(me.pa.ex.combo.max, (me.combo || 0) + 1)
+        // ★クリティカルの与ダメージ+%は**1発ずつ**掛ける（多段でクリした発だけ伸びる）
+        // ★ヒットごとに状態異常を試す技（連撃で少しずつ積む）
+        if (r.hit && skill.ailPerHit && skill.ail) {
+          tryInflict(me, foe, { ...skill.ail, chance: skill.ail.chance * off }, rng, afterAil)
+        }
+        raw += r.hit && r.crit && me.evo.critDmg
+          ? Math.floor(r.damage * (1 + me.evo.critDmg / 100))
+          : r.damage
+        if (r.hit) hits++; else missed++
+        if (r.crit && r.hit) crit = true
       }
-      raw += r.hit && r.crit && me.evo.critDmg
-        ? Math.floor(r.damage * (1 + me.evo.critDmg / 100))
-        : r.damage
-      if (r.hit) hits++; else missed++
-      if (r.crit && r.hit) crit = true
-    }
-    // かわされたぶん／当てたぶんは、相手側の「かわすたび」フックと次の行動の条件になる
-    evoOnDodge(foe, missed)
-    foe.justDodged = hits === 0
-    foe.justHurt = hits > 0
-    if (crit) evoOnCrit(me, foe, rng, log)
-    // ギャンブルボディ：当たったとき、確率で威力が振れる
-    const g = me.pa.gamble
-    if (g && hits > 0) {
-      const v = rng() * 100
-      if (v < g.up) raw = Math.floor(raw * g.upMult)
-      else if (v < g.up + g.down) raw = Math.floor(raw * g.downMult)
-    }
-    // エンチャントの与ダメージ+%（物理／魔法で別枠。時間帯ぶんも畳み込み済み）
-    raw = Math.floor(raw * (1 + (skill.kind === 'mag' ? me.en.magDmgPct : me.en.physDmgPct) / 100))
-    if (off !== 1) raw = Math.floor(raw * off)
-    // 武器の進化（条件つきの与ダメージ+%をまとめて）
-    raw = Math.floor(raw * evoMult(me, foe, { kind: skill.kind, skill: true, multi: (skill.hits || 1) > 1 }))
-    rememberSkill(foe, skill.name)
-    // 受け手の反応（骸の壁・エンチャントの軽減・跳ね返し）も撃った行より後ろに出す
-    const afterHurt = []
-    const dmg = applyIncoming(me, foe, raw, skill.kind, rng, afterHurt)
-    // ★先に「撃った」行を置く（状態異常やスタックの行より前に出す）。吸収の額は後で埋める
-    const entry = { side: me.name, type: 'skill', skill: skill.name, kind: skill.kind,
-      damage: dmg, crit, hits, of: skill.hits || 1, drain: 0 }
-    log.push(entry)
-    for (const l of afterHurt) log.push(l)
-    for (const l of afterAil) log.push(l)
-    if (hits > 0) {
-      bumpHitStack(me, hits)
-      onHit(me, foe, skill.kind, rng, log)
-      evoOnHit(me)   // 武器の進化：当てるたびHP/MPが戻る
-      // ★スキル自身が持つ状態異常（どくのほうし＝毒、電撃＝麻痺 など）。**当たったときだけ**。
-      //   敵もプレイヤーと同じ takeAction を通るので、これで**敵→こちら**にも状態異常が飛ぶ
-      //   ＝エンチャントの抵抗（毒キノコ・払暁のワイバーン）が意味を持つ
-      if (skill.ail && !skill.ailPerHit) {
-        // 納刀ぶんで確率が上がる技がある（月影＝納刀中は出血100%）
-        // ★溜め（呪力・竜気）や獣の型が乗っていれば、状態異常が入りやすくなる技がある
-        const bonus = (whileStackOn(skill, me) ? (skill.whileStack.ailChance || 0) : 0)
-          + (skill.whileForm && prevForm ? (skill.whileForm.ailChance || 0) : 0)
-        const chance = ws?.ailChance ?? (skill.ail.chance * off + bonus)
-        tryInflict(me, foe, { ...skill.ail, chance }, rng, log)
+      // ★一次職：上乗せダメージ（報復の一撃・城塞崩し＝直前に受けたダメージ／セイクリッドノヴァ＝回復したHP）
+      if (hits > 0 && ip.flat > 0) raw += ip.flat
+      // かわされたぶん／当てたぶんは、相手側の「かわすたび」フックと次の行動の条件になる
+      evoOnDodge(foe, missed)
+      foe.justDodged = hits === 0
+      foe.justHurt = hits > 0
+      // ★一次職：流水の構え（回避するたび、次の攻撃の威力+）
+      if (hits === 0 && foe.dodgeBoost?.turns > 0) foe.dodgeStacks = Math.min(foe.dodgeBoost.max, (foe.dodgeStacks || 0) + 1)
+      if (crit) evoOnCrit(me, foe, rng, log)
+      // ギャンブルボディ：当たったとき、確率で威力が振れる
+      const g = me.pa.gamble
+      if (g && hits > 0) {
+        const v = rng() * 100
+        if (v < g.up) raw = Math.floor(raw * g.upMult)
+        else if (v < g.up + g.down) raw = Math.floor(raw * g.downMult)
       }
+      // エンチャントの与ダメージ+%（物理／魔法で別枠。時間帯ぶんも畳み込み済み）
+      raw = Math.floor(raw * (1 + (skill.kind === 'mag' ? me.en.magDmgPct : me.en.physDmgPct) / 100))
+      if (off !== 1) raw = Math.floor(raw * off)
+      // 武器の進化（条件つきの与ダメージ+%をまとめて）
+      raw = Math.floor(raw * evoMult(me, foe, { kind: skill.kind, skill: true, multi: nHits > 1 }))
+      rememberSkill(foe, skill.name)
+      // 受け手の反応（骸の壁・エンチャントの軽減・跳ね返し）も撃った行より後ろに出す
+      const afterHurt = []
+      const dmg = applyIncoming(me, foe, raw, skill.kind, rng, afterHurt)
+      // ★先に「撃った」行を置く（状態異常やスタックの行より前に出す）。吸収の額は後で埋める
+      const entry = { side: me.name, type: 'skill', skill: skill.name, kind: skill.kind,
+        damage: dmg, crit, hits, of: nHits, drain: 0 }
+      log.push(entry)
+      for (const l of afterHurt) log.push(l)
+      for (const l of afterAil) log.push(l)
+      if (hits > 0) {
+        bumpHitStack(me, hits)
+        onHit(me, foe, skill.kind, rng, log)
+        evoOnHit(me)   // 武器の進化：当てるたびHP/MPが戻る
+        // ★スキル自身が持つ状態異常（どくのほうし＝毒、電撃＝麻痺 など）。**当たったときだけ**。
+        //   敵もプレイヤーと同じ takeAction を通るので、これで**敵→こちら**にも状態異常が飛ぶ
+        //   ＝エンチャントの抵抗（毒キノコ・払暁のワイバーン）が意味を持つ
+        if (skill.ail && !skill.ailPerHit) {
+          // 納刀ぶんで確率が上がる技がある（月影＝納刀中は出血100%）
+          // ★溜め（呪力・竜気）や獣の型が乗っていれば、状態異常が入りやすくなる技がある
+          const bonus = (whileStackOn(skill, me) ? (skill.whileStack.ailChance || 0) : 0)
+            + (skill.whileForm && prevForm ? (skill.whileForm.ailChance || 0) : 0)
+          const chance = ws?.ailChance ?? (skill.ail.chance * off + bonus)
+          tryInflict(me, foe, { ...skill.ail, chance }, rng, log)
+        }
+        // ★一次職：状態異常を2つ以上持つ技（毒霧の術）。それぞれ判定する
+        if (skill.ails) for (const a of skill.ails) tryInflict(me, foe, { ...a, chance: a.chance * off }, rng, log)
+      }
+      // バーサク・執行本能：ダメージを与えたら+1スタック、全部外れたらリセット
+      if (me.pa.rages.length) me.rage = hits > 0 ? me.rage + 1 : 0
+      // 吸収：与えたダメージの一定割合を自分のHPへ（ソウルドレイン・ブラッティロアなど）
+      // ★吸収は全部いったん足してから、自分の最大HPの割合で頭を打つ
+      let drained = 0
+      // 条件つき吸収（血啜り）：相手が出血しているときだけ吸う
+      if (drainIf && dmg > 0) drained += Math.max(1, Math.floor(dmg * skill.drainIfAil.pct / 100))
+      // 武器の進化の吸収(%)はスキル自身の吸収と同じ枠で足す
+      const drainRate = (skill.drain || 0) + me.evo.drain / 100 + (ip.drainAdd || 0)
+      if (drainRate > 0 && dmg > 0) drained += Math.max(1, Math.floor(dmg * drainRate))
+      // コウモリ・暁のフレイムバット：物理で与えたダメージの一部を回復
+      if (skill.kind === 'phys' && me.en.drainPhysPct > 0 && dmg > 0) {
+        drained += Math.max(1, Math.floor(dmg * me.en.drainPhysPct / 100))
+      }
+      // 合成「閻魔」：**種別を問わず**与えたダメージの一部を回復
+      if (me.en.drainPct > 0 && dmg > 0) drained += Math.max(1, Math.floor(dmg * me.en.drainPct / 100))
+      // ★一次職：ブラッディロア（その間、攻撃のたびに与えたダメージの一部を回復）
+      if (me.lifeSteal?.turns > 0 && dmg > 0) drained += Math.max(1, Math.floor(dmg * me.lifeSteal.pct / 100))
+      if (drained > 0) {
+        drained = Math.min(drained, drainCapOf(me, crit))
+        gainHp(me, drained)
+      }
+      entry.drain = drained
+      // ★一次職：反動（狂撃＝与えたダメージの一部を自分も受ける・死なない）
+      if (skill.recoil && dmg > 0) {
+        const back = Math.min(Math.max(0, me.hp - 1), Math.floor(dmg * skill.recoil))
+        if (back > 0) {
+          me.hp -= back
+          log.push({ side: me.name, type: 'recoil', damage: back })
+        }
+      }
+      // ★一次職：反撃（心眼）・追撃（狙撃手の勘・影の連携）
+      afterAttack(me, foe, hits, crit, rng, log)
     }
-    // バーサク・執行本能：ダメージを与えたら+1スタック、全部外れたらリセット
-    if (me.pa.rages.length) me.rage = hits > 0 ? me.rage + 1 : 0
-    // 吸収：与えたダメージの一定割合を自分のHPへ（ソウルドレイン・ブラッティロアなど）
-    // ★吸収は全部いったん足してから、自分の最大HPの割合で頭を打つ
-    let drained = 0
-    // 条件つき吸収（血啜り）：相手が出血しているときだけ吸う
-    if (drainIf && dmg > 0) drained += Math.max(1, Math.floor(dmg * skill.drainIfAil.pct / 100))
-    // 武器の進化の吸収(%)はスキル自身の吸収と同じ枠で足す
-    const drainRate = (skill.drain || 0) + me.evo.drain / 100
-    if (drainRate > 0 && dmg > 0) drained += Math.max(1, Math.floor(dmg * drainRate))
-    // コウモリ・暁のフレイムバット：物理で与えたダメージの一部を回復
-    if (skill.kind === 'phys' && me.en.drainPhysPct > 0 && dmg > 0) {
-      drained += Math.max(1, Math.floor(dmg * me.en.drainPhysPct / 100))
-    }
-    // 合成「閻魔」：**種別を問わず**与えたダメージの一部を回復
-    if (me.en.drainPct > 0 && dmg > 0) drained += Math.max(1, Math.floor(dmg * me.en.drainPct / 100))
-    if (drained > 0) {
-      drained = Math.min(drained, drainCapOf(me, crit))
-      me.hp = Math.min(me.base.hp, me.hp + drained)
-    }
-    entry.drain = drained
   } else if (skill.kind === 'heal') {
     if (skill.heal) {
       const amt = healAmount(me, eMe, skill.heal.rate * off)
-      me.hp = Math.min(me.base.hp, me.hp + amt)
+      gainHp(me, amt)
       log.push({ side: me.name, type: 'heal', skill: skill.name, heal: amt })
     }
     if (skill.regen)   { me.regen   = { ...skill.regen,   rate: skill.regen.rate * off };   log.push({ side: me.name, type: 'regen', skill: skill.name }) }
     if (skill.mpRegen) { me.mpRegen = { ...skill.mpRegen, rate: skill.mpRegen.rate * off }; log.push({ side: me.name, type: 'mpRegen', skill: skill.name }) }
+    // ★一次職：最大HPの割合で回復（内功・魂喰らい）・MP回復（魂喰らい・霊薬）・
+    //   毎ターン最大HPの割合で回復（奇跡・再生薬）・受けたダメージを戻す（リワインド）
+    if (skill.healMax) {
+      const got = gainHp(me, healMaxAmount(me, skill.healMax * off))
+      log.push({ side: me.name, type: 'heal', skill: skill.name, heal: got })
+    }
+    if (skill.mpGain || skill.mpHeal) {
+      const add = (skill.mpGain || 0) + (skill.mpHeal ? Math.max(1, Math.floor((eMe.int_stat || 0) * skill.mpHeal.rate * off)) : 0)
+      const before = me.mp
+      me.mp = Math.min(me.base.mp, me.mp + add)
+      log.push({ side: me.name, type: 'mpGain', skill: skill.name, mp: me.mp - before })
+    }
+    if (skill.regenMax) {
+      me.regenMax = { pct: skill.regenMax.pct * off, turns: skill.regenMax.turns }
+      log.push({ side: me.name, type: 'regen', skill: skill.name })
+    }
+    if (skill.rewind) {
+      const from = (me.turn || 0) - (skill.rewind.turns - 1)
+      const taken = (me.takenLog || []).filter(t => t.turn >= from).reduce((t, x) => t + x.dmg, 0)
+      const got = taken > 0 ? gainHp(me, Math.floor(taken * skill.rewind.pct / 100 * off)) : 0
+      log.push({ side: me.name, type: 'heal', skill: skill.name, heal: got })
+    }
   }
 
   // 骸の壁：戦闘開始時と自分の行動5回ごとに得る（重複しないので、掛け直すだけ）
@@ -952,7 +1112,10 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   const spec = formBuff || skill.buff
   if (spec && skill.buffTurns) {
     if (spec.self) me.timedBuffs.push({ table: scaleTable(spec.self, off), turns: skill.buffTurns })
-    if (spec.enemy) foe.timedBuffs.push({ table: scaleTable(spec.enemy, off), turns: skill.buffTurns })
+    if (spec.enemy) {
+      if (foe.debuffImmune > 0 && Object.values(spec.enemy).some(v => v < 0)) log.push({ side: foe.name, type: 'debuffImmune' })
+      else foe.timedBuffs.push({ table: scaleTable(spec.enemy, off), turns: skill.buffTurns })
+    }
     log.push({ side: me.name, type: 'buff', skill: skill.name })
   } else if (spec) {
     if (spec.self)  applyBuff(me.buffs, scaleTable(spec.self, off))
@@ -966,10 +1129,108 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     if (!spec) log.push({ side: me.name, type: 'buff', skill: skill.name })
     tryInflict(me, foe, { ...skill.ail, chance: skill.ail.chance * off }, rng, log)
   }
+  // ★一次職：溜め・召喚・期限つきの効果（攻撃・補助・回復のどれでも）
+  ichijiAfterAction(me, foe, skill, log)
+  // ★一次職：クイック（このターン、もう一度行動する・戦闘中max回まで）
+  if (skill.extraTurn && (me.quickUsed || 0) < skill.extraTurn.max && me.hp > 0 && foe.hp > 0) {
+    me.quickUsed = (me.quickUsed || 0) + 1
+    log.push({ side: me.name, type: 'quick', skill: skill.name })
+    takeAction(me, foe, rng, log, opt)
+  }
+}
+
+// ★一次職：技の1発ぶんの倍率。物理と魔法の両方の技は物理のぶん・1発ごとに倍率が変わる技はその発の値
+//   （天衝のように溜めで倍率そのものが伸びる技は addMult を足す）
+const baseMultOf = (skill, h, ip) => (skill.hybrid ? skill.hybrid.phys
+  : skill.hitMults ? (skill.hitMults[h] ?? skill.hitMults[skill.hitMults.length - 1])
+  : (skill.mult || 0)) + (ip?.addMult || 0)
+
+// ★一次職：着地・反撃・追撃・召喚の攻撃。1回だけ殴る（反撃や追撃をさらに呼ばない）
+//   跳躍中の相手には当たらない。分身は肩代わりしない（行動の攻撃だけを肩代わりする）
+const strike = (me, foe, { mult, kind = 'phys', label, hits = 1 }, rng, log) => {
+  if (foe.hp <= 0 || me.hp <= 0) return 0
+  if (foe.jumping) { log.push({ side: me.name, type: 'airEvade', skill: label }); return 0 }
+  const eMe = liveStats(me, true)
+  const eFoe = liveStats(foe)
+  const dm = passiveDealMult(me, foe)   // 与ダメージ+％はダメージ全体に掛ける
+  let raw = 0
+  let hit = 0
+  let crit = false
+  for (let h = 0; h < hits; h++) {
+    const r = resolveAttack({
+      attacker: eMe, defender: eFoe, mult, kind,
+      defPen: me.pa.defPenBonus / 100 + me.evo.defPen / 100,
+      hitBonus: me.pa.hitBonus + me.en.hitBonus + ailAccPct(me.ail),
+      evaBonus: foe.pa.evaBonus + foe.en.evaBonus + (foe.air ? AIR_EVA : 0),
+      critBonus: me.pa.critBonus + (me.critUp || 0),
+      hitMult: hitMultOf(me, foe),
+      critDmg: critDmgOf(me),
+      redMult: 1 + (foe.pa.defRed || 0) / 100,
+    }, rng)
+    if (r.hit) { raw += Math.max(1, Math.floor(r.damage * dm)); hit++ }
+    if (r.hit && r.crit) crit = true
+  }
+  const after = []
+  const dmg = hit > 0 ? applyIncoming(me, foe, raw, kind, rng, after) : 0
+  log.push({ side: me.name, type: 'strike', label, damage: dmg, hit: hit > 0, crit })
+  for (const l of after) log.push(l)
+  return dmg
+}
+
+// ★一次職：攻撃のあと（スキルでも通常攻撃でも）。かわされたら相手の反撃、クリティカルなら追撃、分身がいれば追撃
+const afterAttack = (me, foe, hits, crit, rng, log) => {
+  if (hits === 0 && foe.pa.ex?.counterOnDodge && foe.hp > 0 && me.hp > 0) {
+    strike(foe, me, { mult: foe.pa.ex.counterOnDodge, kind: 'phys', label: '反撃' }, rng, log)
+  }
+  if (crit && me.pa.ex?.critFollow && foe.hp > 0) {
+    strike(me, foe, { mult: me.pa.ex.critFollow, kind: 'phys', label: '追撃' }, rng, log)
+  }
+  const n = me.stk?.clone || 0
+  if (n > 0 && me.pa.ex?.cloneFollow && foe.hp > 0) {
+    strike(me, foe, { mult: me.pa.ex.cloneFollow * n, kind: 'phys', label: `分身の追撃（${n}体）` }, rng, log)
+  }
+}
+
+// ★一次職：跳躍中の行動。残りがあれば空中で待ち、最後に着地して斬る（竜の血で着地ダメージ+）
+const airborneTurn = (me, foe, rng, log) => {
+  const j = me.jumping
+  if (j.left > 1) {
+    j.left -= 1
+    log.push({ side: me.name, type: 'airborne' })
+    return
+  }
+  me.jumping = null
+  me.landedTurn = me.turn || 0
+  const landPct = me.pa.ex?.landPct || 0
+  strike(me, foe, { mult: j.mult * (1 + landPct / 100), kind: 'phys', label: `${j.name}（着地）` }, rng, log)
+}
+
+// ★一次職：召喚（死霊・式神）の攻撃。毎ターン、両方の行動のあとに殴る（死霊は数ぶん・死の行軍／鬼神降ろしで強くなる）
+const summonAttacks = (me, foe, rng, log) => {
+  for (const key of ['undead', 'shiki']) {
+    const n = me.stk?.[key] || 0
+    if (n <= 0 || me.hp <= 0 || foe.hp <= 0) continue
+    const boost = 1 + (me.summonBoost?.[key]?.pct || 0) / 100
+    const hits = me.summonHits?.[key]?.hits || 1
+    strike(me, foe, { mult: (me.summonMult?.[key] || 0) * n * boost, kind: 'mag', hits,
+      label: `${STK_LABEL[key]}${n > 1 ? `${n}体` : ''}の攻撃` }, rng, log)
+  }
 }
 
 // 通常攻撃。mult は居合の構え（不発時2倍）のための倍率
 const normalAttack = (me, foe, rng, log, multScale = 1) => {
+  // ★一次職：跳躍中の相手には当たらない／分身が1回ぶん肩代わりする
+  if (foe.jumping) {
+    log.push({ side: me.name, type: 'airEvade', skill: null })
+    foe.justDodged = true
+    foe.justHurt = false
+    return
+  }
+  if (foe.stk?.clone > 0) {
+    foe.stk.clone -= 1
+    log.push({ side: foe.name, type: 'cloneTaken', skill: null, left: foe.stk.clone })
+    return
+  }
   const eMe = liveStats(me, true)
   const eFoe = liveStats(foe)
   const r = resolveAttack({
@@ -977,7 +1238,7 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
     defPen: me.pa.defPenBonus / 100 + me.evo.defPen / 100,
     hitBonus: me.pa.hitBonus + me.en.hitBonus + evoHit(me, foe) + ailAccPct(me.ail),
     evaBonus: foe.pa.evaBonus + foe.en.evaBonus + evoEva(foe) + foresightEva(foe, null),
-    critBonus: me.pa.critBonus + evoCrit(me, foe) + critRateStackOf(me),
+    critBonus: me.pa.critBonus + evoCrit(me, foe) + critRateStackOf(me) + (me.critUp || 0),
     hitMult: hitMultOf(me, foe),
     critDmg: critDmgOf(me),
     redMult: 1 + (foe.pa.defRed || 0) / 100,
@@ -985,7 +1246,13 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
   evoOnDodge(foe, r.hit ? 0 : 1)
   foe.justDodged = !r.hit
   foe.justHurt = !!r.hit
+  // ★一次職：流水の構え（回避するたび次の攻撃+）・槍の型（当てるたびコンボ）
+  if (!r.hit && foe.dodgeBoost?.turns > 0) foe.dodgeStacks = Math.min(foe.dodgeBoost.max, (foe.dodgeStacks || 0) + 1)
+  if (r.hit && me.pa.ex?.combo) me.combo = Math.min(me.pa.ex.combo.max, (me.combo || 0) + 1)
   if (r.hit && r.crit) evoOnCrit(me, foe, rng, log)
+  // ★一次職：与ダメージ+％（パッシブ）・流水の構えの溜め。ダメージ全体に掛ける
+  const ichijiK = passiveDealMult(me, foe) * consumeDodgeBoost(me)
+  if (r.hit && ichijiK !== 1) r.damage = Math.max(1, Math.floor(r.damage * ichijiK))
   // 通常攻撃も「物理攻撃」なのでエンチャントの与ダメージ+%とヒット時効果が乗る
   const critMult = r.hit && r.crit && me.evo.critDmg ? 1 + me.evo.critDmg / 100 : 1
   const raw = Math.floor(r.damage * (1 + (me.kind === 'mag' ? me.en.magDmgPct : me.en.physDmgPct) / 100)
@@ -1002,8 +1269,11 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
   if (me.en.drainPct > 0 && dmg > 0) {
     me.hp = Math.min(me.base.hp, me.hp + Math.max(1, Math.floor(dmg * me.en.drainPct / 100)))
   }
+  // ★一次職：ブラッディロア（その間、攻撃のたびに回復）
+  if (me.lifeSteal?.turns > 0 && dmg > 0) gainHp(me, Math.min(drainCapOf(me, !!r.crit), Math.max(1, Math.floor(dmg * me.lifeSteal.pct / 100))))
   log.push({ side: me.name, type: 'normal', kind: me.kind, damage: dmg, crit: r.crit, hit: r.hit, mult: multScale })
   for (const l of after) log.push(l)
+  afterAttack(me, foe, r.hit ? 1 : 0, !!(r.hit && r.crit), rng, log)
 }
 
 // 回避率。HPが減っているときだけ乗る「際の見切り」をここで足す
@@ -1023,6 +1293,7 @@ export const tickAil = (side, log, foe = null) => {
     t.damage = Math.max(1, Math.floor(t.damage * boost))
     side.hp -= t.damage
     log.push({ side: side.name, type: 'ailTick', ail: AIL_LABEL[t.key], damage: t.damage, stacks: t.stacks })
+    checkRevive(side, log)
     if (side.hp <= 0) return
   }
 }
@@ -1044,6 +1315,7 @@ export const tickBleedAfterAct = (side, log, foe = null) => {
   const dmg = Math.max(1, Math.floor(t.damage * boost))
   side.hp -= dmg
   log.push({ side: side.name, type: 'ailTick', ail: AIL_LABEL.bleed, damage: dmg, stacks: t.stacks })
+  checkRevive(side, log)
 }
 
 // 見切りの残りターン（ターン終わりに1つ減る）
@@ -1092,6 +1364,13 @@ export const tickRegen = (side, log, foe = null) => {
     side.mpRegen.turns -= 1
     log.push({ side: side.name, type: 'mpRegenTick', mp: amt })
   }
+  // ★一次職：毎ターン最大HPの割合で回復（奇跡・再生薬）
+  if (side.regenMax?.turns > 0) {
+    const got = gainHp(side, healMaxAmount(side, side.regenMax.pct))
+    side.regenMax.turns -= 1
+    log.push({ side: side.name, type: 'regenTick', heal: got })
+    if (side.regenMax.turns <= 0) side.regenMax = null
+  }
 }
 
 // 戦闘を最後まで回す。fighters は createSide に渡せる形
@@ -1128,13 +1407,19 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
       const em = liveStats(me)
       const ef = liveStats(foe)
       // 武器の進化「疾風の足」ぶんは追加行動率へ素直に足す
-      if (!me.bigGuard && (rollExtraAction(em, ef, rng) || (me.evo.extra > 0 && roll(me.evo.extra, rng)))) {
+      // ★一次職：跳躍中・反動で動けないときは出ない／刻の加護（AGIが相手より高いと確率で）
+      if (!me.bigGuard && !me.jumping && !(me.stunned > 0) && (rollExtraAction(em, ef, rng) || (me.evo.extra > 0 && roll(me.evo.extra, rng))
+        || (me.pa.ex?.extraIfFaster && em.agi > ef.agi && roll(me.pa.ex.extraIfFaster, rng)))) {
         log.push({ side: me.name, type: 'extra' })
         takeAction(me, foe, rng, log)
         tickBleedAfterAct(me, log, foe)
       }
     }
 
+    if (a.hp <= 0 || b.hp <= 0) break
+    // ★一次職：召喚（死霊・式神）の攻撃。両方の行動のあと
+    summonAttacks(a, b, rng, log)
+    summonAttacks(b, a, rng, log)
     if (a.hp <= 0 || b.hp <= 0) break
     a.bigGuard = 0   // 大防御は1ターンで切れる
     b.bigGuard = 0
@@ -1145,6 +1430,16 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
     tickRegen(b, log, a)
     tickForesight(a)
     tickForesight(b)
+    // ★一次職：期限つきの効果を減らす。忍耐が終わったら、溜めたダメージを相手へ
+    for (const [me, foe] of [[a, b], [b, a]]) {
+      const rel = tickIchiji(me)
+      if (rel > 0 && foe.hp > 0 && me.hp > 0) {
+        const after = []
+        const dmg = applyIncoming(me, foe, rel, 'phys', rng, after)
+        log.push({ side: me.name, type: 'endureRelease', damage: dmg })
+        for (const l of after) log.push(l)
+      }
+    }
     if (a.hp <= 0 || b.hp <= 0) break
     // 画面でHPバーを出すための、ターン終わりのスナップショット（戦闘の結果には影響しない）
     log.push({ type:'hp', turn, a: Math.max(0, a.hp), aMax: a.base.hp, b: Math.max(0, b.hp), bMax: b.base.hp })

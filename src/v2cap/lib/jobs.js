@@ -2,13 +2,16 @@
 // バトルフロンティアⅡ「レベルキャップあり」版（v2cap）— 職業とクラスLV（ClassLV）
 // ------------------------------------------------------------
 // 設計は docs/v2cap-design.md §4・§11。ユーザー決定（2026-10-09）：
-//   ・クラスLV（表記は **ClassLV**）は**職業ごと**に持ち、戻れば続きから。最大30
+//   ・クラスLV（表記は **ClassLV**）は**職業ごと**に持ち、戻れば続きから。上限は初期職30・一次職50（段階ごと＝STAGES の max）
 //   ・入るのは**いまの職業**のClassLVだけ（その戦闘で入ったEXPと同じ量）
 //   ・ClassLVが上がると、スキルを覚える／ステが上がる（ステは職業ごとに決まっていて、その職業の間だけ）
 //   ・職業補正（今のⅡの STR+5% など）は**一旦なし**
 //   ・**初期職は11職**（2026-10-09 に剣士を足した）。職業ごとに**装備できる武器が3〜4種**決まっている
 //     （刀を戦士・盗賊に、宝珠を魔法使い・呪術師・僧侶に足したので、その5職は4種）
-//   ・ノーブル・サモナーはなくす。**一次職も見直すまで一旦なし**（二次・三次もこれから）
+//   ・ノーブル・サモナーはなくす
+//   ・**一次職は20職**（2026-10-10 ユーザーの表「一次職スキル一覧」・初期職10系統に2職ずつ。剣士系はあとで足す）。
+//     系統の初期職がClassLV30で就ける／ClassLV上限50／必要ClassEXPは初期職の3倍／ステはClassLV1ごとに6点
+//     （ClassLV30で初期職の1.2倍）／武器は系統の初期職と同じ（どれもユーザー決定）。二次・三次はこれから
 //   ・スキルは**その職業でだけ使える**。**上位職は下位職のスキルをそのまま使える**（lineageOf）
 //
 // ★権威はサーバー（supabase_v2cap_core.sql の v2cap_classes / v2cap_job_need / v2cap_apply_exp）。
@@ -17,16 +20,22 @@
 import { STAT_KEYS, STAT_DEFS } from '../../v2/lib/stats.js'
 import { SKILLS, skillsOf, isPassive } from './skills.js'
 
+// 初期職のClassLVの上限。一次職は50（STAGES.ichiji.max）。職業ごとの上限は jobMaxOf を使う
 export const JOB_MAX = 30
 
 // ===== 段階 =====
 // mult … 必要ClassEXPの倍率（上の段階ほど重い）／perLv … ClassLVが1上がるごとのステの量（戦闘力換算）
 // learnAt … スキルを覚えるClassLV（並び＝スキルの名簿の順）
-// ★一次職は一旦なし（2026-10-09）。見直したらここへ段階を足す（前の案は 一次＝必要ClassEXP×3・ステ2ずつ）
+// max … ClassLVの上限
+// 【確定】2026-10-10 ユーザー決定：一次職は ClassLV上限50・必要ClassEXPは初期職の3倍・ClassLV1ごとに6点
+//   （効くのは一次職の分だけ。ClassLV30で174点＝初期職の145点の1.2倍、ClassLV50で294点）。
+//   技は ClassLV1／5／10／15／20／25／30／40 で8つ（ユーザーの表「一次職スキル一覧」）
 export const STAGES = {
-  shoki: { label:'初期', color:'#44aaff', mult:1, perLv:5, learnAt:[1, 5, 10, 15, 20] },
+  shoki:  { label:'初期', color:'#44aaff', mult:1, perLv:5, max:JOB_MAX, learnAt:[1, 5, 10, 15, 20] },
+  ichiji: { label:'一次', color:'#cc66ff', mult:3, perLv:6, max:50, learnAt:[1, 5, 10, 15, 20, 25, 30, 40] },
 }
-export const STAGE_ORDER = ['shoki']
+export const STAGE_ORDER = ['shoki', 'ichiji']
+export const jobMaxOfStage = (stage) => STAGES[stage]?.max || JOB_MAX
 
 // ===== 職業 =====
 // weapons … 装備できる武器の種類（3〜4つ）／kind … 通常攻撃が物理（STR）か魔法（INT）か
@@ -46,9 +55,49 @@ export const CLASS_INFO = {
   薬師:     { weapons:['短剣', '投擲', '書'],     kind:'mag',  desc:'薬で回復も強化もこなす。毒薬で削り、気付け薬でMPも戻す' },
 }
 export const START_CLASSES = Object.keys(CLASS_INFO)
-export const CLASSES = START_CLASSES.map((id, i) => ({ id, stage:'shoki', sort: i, req: null, ...CLASS_INFO[id] }))
+
+// ===== 一次職（2026-10-10 ユーザーの表「一次職スキル一覧」）=====
+// base … 系統の初期職（そのClassLV30で就ける・武器と通常攻撃もその初期職と同じ＝ユーザー決定）
+// desc … 神殿で出す特徴（ユーザーの表の各職の最初の一文）
+// ★剣士系の一次職はユーザーがあとで足す（2026-10-10「わすれた、あと追加するから先に他のやつ進めて」）
+export const ICHIJI_REQ_JLV = 30
+export const ICHIJI_INFO = {
+  狂戦士:   { base:'戦士',     desc:'HPを削るほど強くなる短期決戦型' },
+  重戦士:   { base:'戦士',     desc:'受けたダメージを力に変える長期戦型' },
+  竜騎士:   { base:'槍使い',   desc:'跳んで被弾を避け、着地で大ダメージを与える' },
+  槍術士:   { base:'槍使い',   desc:'連撃でコンボを重ね、突くほど鋭くなる' },
+  体術師:   { base:'格闘家',   desc:'当たらなければ反撃できる、回避と反撃の技巧型' },
+  気功師:   { base:'格闘家',   desc:'気を溜めて解放する。溜めるか使うかの配分が個性' },
+  暗殺者:   { base:'盗賊',     desc:'出血を重ねて急所を断つ。1ターン目の一撃も得意' },
+  忍者:     { base:'盗賊',     desc:'分身を増やし、手数と忍術で削る' },
+  狩人:     { base:'弓使い',   desc:'罠と毒で獲物を追い詰める' },
+  狙撃手:   { base:'弓使い',   desc:'一発必中の重い一撃が持ち味' },
+  魔銃士:   { base:'銃士',     desc:'弾に属性を込めて撃ち分ける。STRとINTの両方で威力が出る' },
+  砲撃士:   { base:'銃士',     desc:'装填を溜めて重い一発を撃つ。速射の小技も持つ' },
+  魔導士:   { base:'魔法使い', desc:'詠唱が長いほど強い大魔法の使い手' },
+  時魔導士: { base:'魔法使い', desc:'時間を操り、手数で圧倒する' },
+  死霊術師: { base:'呪術師',   desc:'死者を従え、数で押す' },
+  陰陽師:   { base:'呪術師',   desc:'札を敷き、式神を操る' },
+  司祭:     { base:'僧侶',     desc:'倒れない祈りの持久型' },
+  祓魔師:   { base:'僧侶',     desc:'魔を祓い、封じる' },
+  錬金術師: { base:'薬師',     desc:'混ぜて、燃やして、爆発させる' },
+  霊薬師:   { base:'薬師',     desc:'薬を重ねて、後半ほど強くなる' },
+}
+export const ICHIJI_CLASSES = Object.keys(ICHIJI_INFO)
+export const CLASSES = [
+  ...START_CLASSES.map((id, i) => ({ id, stage:'shoki', sort: i, req: null, ...CLASS_INFO[id] })),
+  ...ICHIJI_CLASSES.map((id, i) => {
+    const { base, desc } = ICHIJI_INFO[id]
+    return { id, stage:'ichiji', sort: START_CLASSES.length + i, req: { cls: base, jlv: ICHIJI_REQ_JLV },
+      weapons: CLASS_INFO[base].weapons, kind: CLASS_INFO[base].kind, desc }
+  }),
+]
 export const CLASS_BY_ID = Object.fromEntries(CLASSES.map(c => [c.id, c]))
 export const stageOf = (cls) => CLASS_BY_ID[cls]?.stage || null
+// その職業のClassLVの上限（初期職30・一次職50）
+export const jobMaxOf = (cls) => jobMaxOfStage(stageOf(cls))
+// その初期職から就ける一次職（神殿の並び用）
+export const nextClassesOf = (cls) => CLASSES.filter(c => c.req?.cls === cls).map(c => c.id)
 export const stageLabelOf = (cls) => STAGES[stageOf(cls)]?.label || ''
 export const stageColorOf = (cls) => STAGES[stageOf(cls)]?.color || '#88ccff'
 export const weaponsOf = (cls) => CLASS_BY_ID[cls]?.weapons || []
@@ -66,10 +115,10 @@ export const canEquipType = (cls, type) => weaponsOf(cls).includes(type)
 export let JOB_NEED_TENTHS = 44
 export const setJobNeedForTuning = (v) => { JOB_NEED_TENTHS = v }
 export const jobNeed = (stage, jlv) =>
-  (jlv >= JOB_MAX ? 0 : Math.max(1, Math.round(JOB_NEED_TENTHS * (STAGES[stage]?.mult || 1) * jlv * jlv / 10)))
+  (jlv >= jobMaxOfStage(stage) ? 0 : Math.max(1, Math.round(JOB_NEED_TENTHS * (STAGES[stage]?.mult || 1) * jlv * jlv / 10)))
 export const jobTotalTo = (stage, jlv) => {
   let t = 0
-  for (let j = 1; j < Math.min(jlv, JOB_MAX); j++) t += jobNeed(stage, j)
+  for (let j = 1; j < Math.min(jlv, jobMaxOfStage(stage)); j++) t += jobNeed(stage, j)
   return t
 }
 
@@ -93,6 +142,28 @@ export const JOB_BONUS = {
   呪術師:   { int_stat:42, mp:30, dex:20, luk:18, agi:15, hp:12, vit:8 },    // INT・MP（＋DEX・LUK）
   僧侶:     { int_stat:38, vit:30, hp:28, mp:25, agi:12, dex:7, luk:5 },     // INT・VIT・HP
   薬師:     { int_stat:38, dex:30, mp:25, hp:22, agi:15, vit:10, luk:5 },    // INT・DEX（＋MP）
+  // 一次職（合計294＝ClassLV50までの点数・ClassLV1ごとに6点）。2026-10-10 ユーザー承認の配分。
+  //   高い2〜3種（61点以上）はその職の技で使うステ
+  狂戦士:   { str:85, hp:70, agi:50, vit:34, dex:30, mp:15, luk:10 },
+  重戦士:   { vit:85, str:65, hp:65, dex:30, agi:24, mp:15, luk:10 },
+  竜騎士:   { str:80, vit:62, dex:50, agi:42, hp:35, mp:15, luk:10 },
+  槍術士:   { str:75, agi:66, dex:62, vit:34, hp:30, mp:17, luk:10 },
+  体術師:   { agi:85, str:70, dex:45, hp:34, vit:30, mp:15, luk:15 },
+  気功師:   { str:75, dex:68, vit:45, agi:40, hp:36, mp:20, luk:10 },
+  暗殺者:   { agi:85, str:65, luk:45, dex:40, hp:30, vit:15, mp:14 },
+  忍者:     { agi:85, dex:64, str:55, luk:30, hp:30, vit:15, mp:15 },
+  狩人:     { dex:75, agi:66, str:55, luk:34, hp:30, vit:18, mp:16 },
+  狙撃手:   { dex:85, luk:62, agi:55, str:40, hp:24, vit:14, mp:14 },
+  魔銃士:   { str:70, int_stat:70, dex:50, agi:40, mp:30, hp:24, vit:10 },
+  砲撃士:   { dex:85, str:65, vit:45, hp:34, agi:30, mp:20, luk:15 },
+  魔導士:   { int_stat:95, mp:70, agi:40, dex:30, hp:30, vit:19, luk:10 },
+  時魔導士: { int_stat:85, agi:75, mp:50, hp:30, dex:25, vit:19, luk:10 },
+  死霊術師: { int_stat:88, mp:65, vit:40, hp:40, dex:25, agi:21, luk:15 },
+  陰陽師:   { int_stat:85, mp:62, dex:50, agi:35, hp:30, vit:17, luk:15 },
+  司祭:     { int_stat:75, hp:70, vit:65, mp:45, agi:20, dex:10, luk:9 },
+  祓魔師:   { int_stat:85, mp:62, agi:45, vit:40, hp:35, dex:17, luk:10 },
+  錬金術師: { int_stat:85, dex:65, mp:50, hp:34, agi:30, vit:20, luk:10 },
+  霊薬師:   { int_stat:80, mp:62, vit:50, hp:45, dex:25, agi:22, luk:10 },
 }
 
 // 配分を「何点目にどのステが上がるか」の並びにする（ランダムではなく固定）。
@@ -121,7 +192,7 @@ const seqOf = (cls) => (SEQ_CACHE[cls] ||= bonusSeqOf(cls))
 
 // その職業のそのClassLVで入っている点数（戦闘力換算）
 export const bonusPointsAt = (cls, jlv) =>
-  Math.max(0, Math.min(JOB_MAX, jlv || 1) - 1) * (STAGES[stageOf(cls)]?.perLv || 0)
+  Math.max(0, Math.min(jobMaxOf(cls), jlv || 1) - 1) * (STAGES[stageOf(cls)]?.perLv || 0)
 
 // ステの値に直したもの（HPなら1点＝+8・MPなら+3・ほかは+1）
 export const jobBonusStats = (cls, jlv) => {
@@ -157,7 +228,7 @@ export const nextSkillOf = (cls, jlv) => {
 // 【確定】スキルは**その職業でだけ使える**。**上位職は下位職のスキルをそのまま使える**（効果も消費MPも同じ）
 //   （2026-10-09 ユーザー決定。今のⅡの「他職は0.8倍・MP2倍で使える」はやめた）
 // 下位職＝就く条件（req）の職業をさかのぼったもの。先頭が自分＝[自分, 下位職, その下位職, …]
-// ★いまは初期職だけ＝どの職業も自分だけ。一次職を入れると req からここが伸びる。
+// ★一次職は [自分, 系統の初期職]（2026-10-10 一次職を入れた）。
 //   サーバーの v2cap_classes.lineage はこの出力を写したもの（tools/v2cap-sql.mjs が作る）
 export const lineageOf = (cls, byId = CLASS_BY_ID) => {
   const out = []
@@ -171,7 +242,7 @@ export const usableSkillNames = (cls, learned = [], lineage = lineageOf(cls)) =>
 }
 
 // ===== 就けるか =====
-// ★いまは初期職だけ＝条件なし。一次職を入れるときに req（{ cls, jlv }）を使う
+// 初期職は条件なし。一次職は req（{ cls: 系統の初期職, jlv: 30 }）
 //   （req の職業が「下位職」になり、そのスキルも使えるようになる＝ lineageOf）
 export const reqOf = (cls) => CLASS_BY_ID[cls]?.req || null
 export const missingReqOf = (cls, jobs) => {
@@ -190,17 +261,18 @@ export const reqText = (cls) => {
 // jobs を書き換えず新しいオブジェクトを返す。learned は今回新しく覚えたスキル名
 export const applyJobExp = (jobs, cls, amount, known = []) => {
   const stage = stageOf(cls)
+  const max = jobMaxOf(cls)
   const cur = jobOf(jobs, cls)
   let { lv, exp } = cur
   const ups = []
-  if (stage && lv < JOB_MAX && amount > 0) {
+  if (stage && lv < max && amount > 0) {
     exp += amount
-    while (lv < JOB_MAX && exp >= jobNeed(stage, lv)) {
+    while (lv < max && exp >= jobNeed(stage, lv)) {
       exp -= jobNeed(stage, lv)
       lv += 1
       ups.push(lv)
     }
-    if (lv >= JOB_MAX) exp = 0
+    if (lv >= max) exp = 0
   }
   const have = new Set(known)
   const learned = skillsLearnedBy(cls, lv).filter(n => !have.has(n))
