@@ -210,7 +210,9 @@ export const createSide = (fighter, band = null) => {
   //   ＝他職のパッシブは持ち込めない。枠に紛れ込んでいても無視する
   const passives = [passiveOf(fighter.cls)].filter(Boolean)
   const pa = collectPassives(passives)
-  const bonus = classBonusOf(fighter.cls, fighter.jobCount)
+  // ★noClassBonus … 「レベルキャップあり」版（src/v2cap）は職業補正を一旦なしにしている
+  //   （2026-10-09 ユーザー決定）。渡さなければ今のⅡと同じ
+  const bonus = fighter.noClassBonus ? null : classBonusOf(fighter.cls, fighter.jobCount)
   const en = collectEnchants(fighter.enchants, band)
   // 武器の進化（戦闘記憶）。刻印とは別枠で、装備している武器に付いているぶんが乗る
   const evo = collectEvolutions(fighter.evolutions)
