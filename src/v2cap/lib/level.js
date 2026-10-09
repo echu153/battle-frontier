@@ -5,10 +5,10 @@
 // 今のⅡと同じなので src/v2/lib/stats.js をそのまま使う。違うのは次の3つだけ：
 //   ・**転職しても下がらない**。LV100で止まり、周回（LV1に戻る）は無い
 //   ・必要EXPはMMORPGのように、上がるほど重くなる（下の needExp）
-//   ・1勝で入るEXPは**敵のLV**で決まる（先のエリアほど敵のLVが高い＝EXPが多い）
+//   ・1勝で入るEXPは**場所ごとの表の値**（areas.js。先の場所ほど多い・朝昼晩1.5倍・レア3倍・ボス5倍）
 //
 // ★このファイルは表示とシミュレーション用の写し。**権威はサーバー**
-//   （supabase_v2cap_core.sql の v2cap_need / v2cap_exp_of / v2cap_apply_exp）。
+//   （supabase_v2cap_core.sql の v2cap_need / v2cap_sortie_settle / v2cap_apply_exp）。
 //   式を変えるときは必ず両方を直すこと（v2capsql.test.js が突き合わせる）。
 // ============================================================
 import { STAT_KEYS, ROLLS_PER_LV, INITIAL_STATS, calcPower, rollLevelUp, emptyGains } from '../../v2/lib/stats.js'
@@ -18,15 +18,18 @@ export { STAT_KEYS, ROLLS_PER_LV, INITIAL_STATS, calcPower }
 export const MAX_LV = 100
 
 // ===== 必要EXP =====
-// 次のLVまでの必要EXP ＝ 0.335 × LV² × (LV＋9)。
-//   「1勝で入るEXP（敵のLV＋9）」で割ると、そのLVで要る勝ち数が LV² に比例する。
-//   1日1時間で LV100 まで約1年になるように、tools/v2cap-progress.mjs --report で回して決めた
-//   （最初の机上の計算は0.368だったが、敵ごとにLVが決まっているぶん序盤のEXPが少なく、
-//     1年でLV96前後にしか届かなかった＝2026-10-09 実測で0.335へ）。
-//   ⚠小数（0.335）のまま掛けると、端数が .5 ちょうどになる所でSQLの round と食い違うことがある。
-//   なので**千分率の整数（335）で掛けてから1000で割る**（SQLの v2cap_need も同じ形）
-export const NEED_PERMIL = 335
-export const needExp = (lv) => (lv >= MAX_LV ? 0 : Math.max(1, Math.round(NEED_PERMIL * lv * lv * (lv + 9) / 1000)))
+// 次のLVまでの必要EXP ＝ 係数 × LV³（千分率の整数 NEED_PERMIL で持つ）。
+//   1勝のEXPは場所が進むほど増え、だいたいLVに比例する（始まりの森で2〜3・深淵の海溝で30強）。
+//   なのでLV³にすると、そのLVで要る勝ち数がLV²に比例する＝上がるほど重い（MMORPG式）。
+//   係数は「1日1時間でLV100まで約1年」になるように tools/v2cap-progress.mjs --tune で回して決める。
+//   （2026-10-09 エリアの作り替えで、1体のEXPが「敵のLV＋9」から場所ごとの表の値へ変わり、
+//     約1/4になったので式ごと作り直した。前は 0.335×LV²×(LV＋9)）
+//   ⚠小数のまま掛けると、端数が .5 ちょうどになる所でSQLの round と食い違うことがある。
+//   なので**千分率の整数で掛けてから1000で割る**（SQLの v2cap_need も同じ形）
+// ★let なのは tools/v2cap-progress.mjs --tune が回しながら差し替えるため（ゲームの中では変えない）
+export let NEED_PERMIL = 131
+export const setNeedPermilForTuning = (v) => { NEED_PERMIL = v }
+export const needExp = (lv) => (lv >= MAX_LV ? 0 : Math.max(1, Math.round(NEED_PERMIL * lv * lv * lv / 1000)))
 
 // LV1からそのLVに着くまでの合計
 export const totalExpTo = (lv) => {
@@ -35,23 +38,7 @@ export const totalExpTo = (lv) => {
   return t
 }
 
-// ===== 1勝で入るEXP =====
-// 基準は「敵のLV＋9」。雑魚と時間帯の敵は ±15% ばらつき、ボスは1.4倍（ばらつかない）。
-// ★今のⅡ（雑魚8〜11・ボス13）と、LV1の敵ならほぼ同じ数字になる。
-// ★EXPを決めるのは**サーバー**（v2cap_sortie_settle）。画面はサーバーが返した値を出すだけで、
-//   ここはシミュレーションと「この敵ならいくつ」の表示に使う写し。
-//   倍率は10分率の整数で持つ（小数のまま掛けるとSQLと端数が食い違うことがあるため）
-export const EXP_OFFSET = 9
-export const EXP_SPREAD_PCT = 15    // 雑魚と時間帯は ±15%
-export const EXP_BOSS_TENTHS = 14   // ボスは1.4倍
-export const baseExpOf = (enemyLv) => Math.max(1, Math.floor(enemyLv)) + EXP_OFFSET
-export const expMinOf = (enemyLv) => Math.round(baseExpOf(enemyLv) * (100 - EXP_SPREAD_PCT) / 100)
-export const expMaxOf = (enemyLv, isBoss = false) =>
-  isBoss ? Math.round(baseExpOf(enemyLv) * EXP_BOSS_TENTHS / 10) : Math.round(baseExpOf(enemyLv) * (100 + EXP_SPREAD_PCT) / 100)
-export const rollExp = (enemyLv, isBoss = false, rng = Math.random) =>
-  isBoss
-    ? Math.round(baseExpOf(enemyLv) * EXP_BOSS_TENTHS / 10)
-    : Math.round(baseExpOf(enemyLv) * (100 - EXP_SPREAD_PCT + rng() * EXP_SPREAD_PCT * 2) / 100)
+// ★1勝で入るEXP・Goldは sortie.js の rollRewards（場所の表 × 役割の倍率）。決めるのはサーバー
 
 // ===== 本体の戦闘力の目安 =====
 // LVアップ1回で戦闘力+5（5回抽選・どれに当たっても+1）。LV1の初期ステは戦闘力39
@@ -81,9 +68,28 @@ export const applyExp = (state, amount, rng = Math.random) => {
   return { lv, exp, stats, levelUps, gains: total, power: calcPower(stats) }
 }
 
-// ===== スタミナの最大値 =====
-// ★今のⅡは転職回数で伸びていた。この版は**LVで伸ばす**（2026-10-09 ユーザー決定）。
-//   10＋LV÷5（切り捨て）＝LV100で30。画面には「いま／最大」だけ出す
+// ===== スタミナ（オート出撃の燃料）=====
+// 【確定】**回復は3分に1**・**最大値はLVが1上がるごとに+1**（2026-10-09 ユーザー指示）。
+//   LV1で10＝「10＋(LV−1)」＝LV100で109。今のⅡ（5分に1・転職回数で伸びる）とは別に、この版で持つ。
+// ★数える権威はサーバー（v2cap_stamina_max / v2cap_stamina_roll）。ここはその写し（v2capsql.test.js が突き合わせる）
 export const STAMINA_BASE = 10
-export const STAMINA_PER_LV = 5
-export const staminaMaxOf = (lv) => STAMINA_BASE + Math.floor(Math.max(1, lv || 1) / STAMINA_PER_LV)
+export const staminaMaxOf = (lv) => STAMINA_BASE + Math.max(1, Math.floor(lv || 1)) - 1
+export const STAMINA_RECOVER_MS = 3 * 60 * 1000
+
+// 経過時間ぶんを足して数え直す（今のⅡの rollStamina と同じ数え方で、間隔だけこの版の3分）。at＝最後に数え直した時刻
+//   ・端数は捨てない＝消化したぶんだけ at を進める ／ 満タンになったら at は「いま」へ
+export const rollStamina = (stamina, at, max, now = Date.now()) => {
+  const cap = Math.max(0, Math.floor(Number(max) || 0))
+  const cur = Math.max(0, Math.min(cap, Math.floor(Number(stamina) || 0)))
+  const base = at ? new Date(at).getTime() : now
+  if (cur >= cap) return { n: cap, at: now }
+  const gained = Math.max(0, Math.floor((now - base) / STAMINA_RECOVER_MS))
+  const n = Math.min(cap, cur + gained)
+  return { n, at: n >= cap ? now : base + gained * STAMINA_RECOVER_MS }
+}
+// 次の1が溜まるまでの残りms。満タンなら0
+export const msToNextStamina = (stamina, at, max, now = Date.now()) => {
+  const r = rollStamina(stamina, at, max, now)
+  if (r.n >= Math.max(0, Math.floor(Number(max) || 0))) return 0
+  return Math.max(0, STAMINA_RECOVER_MS - (now - r.at))
+}

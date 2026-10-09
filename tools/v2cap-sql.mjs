@@ -8,9 +8,8 @@
 //                  スキルを使える職業＝自分と下位職）
 //   ・skills    … スキルの名簿（名前・職業・消費MP・覚える順）
 //   ・equipment … 装備の一覧（基本装備の部位・種類・系統）
-//   ・tiers     … 難易度帯（LV帯・次の帯が開くのに要る踏破数）
-//   ・areas     … エリア（帯・名前・落ちるランク）
-//   ・enemies   … 敵のLVと役割
+//   ・spots     … 場所（15エリア×①②③。経験値とGoldの範囲・敵のLV帯・アイテムLV・落ちるランク）
+//   ・enemies   … 敵（いる場所・LV・役割・時間帯）
 //
 //   node tools/v2cap-sql.mjs          … 差分があるかだけ表示
 //   node tools/v2cap-sql.mjs --write  … SQLへ書き込む
@@ -21,9 +20,7 @@ const B = new URL('../src/', import.meta.url).href
 const { STAGES, STAGE_ORDER, CLASSES, bonusSeqOf, lineageOf } = await import(B + 'v2cap/lib/jobs.js')
 const { SKILLS, isPassive } = await import(B + 'v2cap/lib/skills.js')
 const { BASE_ITEMS } = await import(B + 'v2cap/lib/equipment.js')
-const { TIER_LV, ENEMY_LEVELS } = await import(B + 'v2cap/lib/areas.js')
-const { AREAS_SORTED } = await import(B + 'v2/lib/enemies.js')
-const { TIER_REQ } = await import(B + 'v2/lib/sortie.js')
+const { SPOTS, spotLvOf, enemyLevels } = await import(B + 'v2cap/lib/areas.js')
 
 const q = (s) => `'${String(s).replace(/'/g, "''")}'`
 const arr = (list, cast = '') => `'{${list.join(',')}}'${cast}`
@@ -67,21 +64,20 @@ export const seeds = () => ({
     BASE_ITEMS.map(i => `  (${q(i.id)}, ${q(i.name)}, ${q(i.part)}, ${q(i.type)}, ${i.line ? q(i.line) : 'null'})`).join(',\n'),
     'on conflict (id) do update set name = excluded.name, part = excluded.part, type = excluded.type, line = excluded.line;',
   ].join('\n'),
-  tiers: [
-    'insert into public.v2cap_tiers (tier, lv_min, lv_max, req) values',
-    Object.entries(TIER_LV).map(([t, [a, b]]) => `  (${t}, ${a}, ${b}, ${TIER_REQ[t] || 1})`).join(',\n'),
-    'on conflict (tier) do update set lv_min = excluded.lv_min, lv_max = excluded.lv_max, req = excluded.req;',
-  ].join('\n'),
-  areas: [
-    'insert into public.v2cap_areas (id, tier, name, drop_ranks) values',
-    AREAS_SORTED.map(a => `  (${a.id}, ${a.tier}, ${q(a.name)}, ${q(JSON.stringify(a.dropRanks))}::jsonb)`).join(',\n'),
-    'on conflict (id) do update set tier = excluded.tier, name = excluded.name, drop_ranks = excluded.drop_ranks;',
+  spots: [
+    // ★消してから入れ直す（場所の数を変えたときに古い行が残らないように）。参照している外部キーは無い
+    'delete from public.v2cap_spots;',
+    'insert into public.v2cap_spots (id, area, sub, area_name, name, exp_min, exp_max, gold_min, gold_max, lv_min, lv_max, item_lv, drop_ranks) values',
+    SPOTS.map(s => {
+      const [lo, hi] = spotLvOf(s.id)
+      return `  (${s.id}, ${s.area}, ${s.sub}, ${q(s.areaName)}, ${q(s.name)}, ${s.exp[0]}, ${s.exp[1]}, ${s.gold[0]}, ${s.gold[1]}, ${lo}, ${hi}, ${s.itemLv}, ${q(JSON.stringify(s.dropRanks))}::jsonb)`
+    }).join(',\n') + ';',
   ].join('\n'),
   enemies: [
     // ★敵は消してから入れ直す（名前を変えたときに古い行が残らないように）。参照している外部キーは無い
     'delete from public.v2cap_enemies;',
-    'insert into public.v2cap_enemies (name, area, lv, role) values',
-    ENEMY_LEVELS.map(e => `  (${q(e.name)}, ${e.area}, ${e.lv}, ${q(e.role)})`).join(',\n') + ';',
+    'insert into public.v2cap_enemies (name, spot, lv, role, band) values',
+    enemyLevels().map(e => `  (${q(e.name)}, ${e.spot}, ${e.lv}, ${q(e.role)}, ${e.band ? q(e.band) : 'null'})`).join(',\n') + ';',
   ].join('\n'),
 })
 

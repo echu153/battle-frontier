@@ -3,32 +3,38 @@ import { supabase } from '../../supabase'
 import V2LogLine from '../../v2/components/V2LogLine.jsx'
 import { runBattle } from '../../v2/lib/battle.js'
 import { buildBattleLog } from '../../v2/lib/battleLog.js'
-import { rollStamina } from '../../v2/lib/stamina.js'
-import { biasLabelOf, BIAS_MULT } from '../../v2/lib/enemies.js'
 import { RANK_COLOR, LOG_PLAIN } from '../../v2/components/v2ui.js'
-import { AREAS_SORTED, areaOf, markOf, tierLvText, toFighter as enemyFighter } from '../lib/areas.js'
+import { SPOTS, spotOf, spotLabel, spotLvText, ROLE_TENTHS, toFighter as enemyFighter } from '../lib/areas.js'
 import {
-  pickEncounter, rollEquipDrop, nextBossRate, isAreaUnlocked, clearedAreasOf, isAreaCleared,
-  clearNext, unlockNext, restToOpenNext, LAST_TIER, SORTIE_CD,
+  pickEncounter, rollEquipDrop, nextBossRate, isSpotUnlocked, isSpotCleared, openUntilOf, rewardRangeOf, SORTIE_CD,
 } from '../lib/sortie.js'
 import { toFighter as playerFighter } from '../lib/loadout.js'
-import { staminaMaxOf, MAX_LV } from '../lib/level.js'
+import { staminaMaxOf, MAX_LV, rollStamina } from '../lib/level.js'
 import { jobOf, JOB_MAX } from '../lib/jobs.js'
 import { effectPct } from '../lib/gear.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — 出撃（ホームの右）
 //   作りは今のⅡの出撃（V2Sortie.jsx）と同じ：10秒に1回・オートはスタミナ1／回・手動は無消費。
-//   違うのは：
-//   ・敵が**LV**を持つ（エリアのLV帯の中で、敵ごとに決まっている）
-//   ・**EXPはサーバーが敵のLVから決める**＝ログのEXPは清算の返事を出す
+//   違うのは（2026-10-09 エリアの作り替え）：
+//   ・場所（15エリア×①②③）を1本道で進む。**その場所のボスを倒すと次の場所が開く**
+//   ・敵が**LV**を持つ（場所のLV帯の中で、敵ごとに決まっている）
+//   ・**EXPとGoldはサーバーが場所の表から決める**（朝昼晩1.5倍・レア3倍・ボス5倍）＝ログは精算の返事を出す
 //   ・ClassLVアップ／スキル習得もサーバーの返事から出す
 //   ・落ちる装備は「基本装備＋ランク」。武器はいまの職業が装備できる3種から（sortie.js）
-//   ・落ちた装備には**アイテムLV**（＝倒した敵のLV）が付く
+//   ・落ちた装備の**アイテムLV**はエリアごとに1つ
 // ============================================================
+const ROLE_LINE = {
+  boss:  (foe, lv) => ({ text:`⚠ ボス出現！ ${foe}（LV${lv}）が現れた！`, color:'#ff4444' }),
+  rare:  (foe, lv) => ({ text:`✨ レアモンスター！ ${foe}（LV${lv}）が現れた！`, color:'#ffcc00' }),
+  timed: (foe, lv, band) => ({ text:`${foe}（LV${lv}・${band}だけ）が現れた！`, color:'#aaddff' }),
+  normal: (foe, lv) => ({ text:`${foe}（LV${lv}）が現れた！`, color:'#88ccff' }),
+}
+const mult = (role) => `${ROLE_TENTHS[role] / 10}倍`
+
 export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   const [scene, setScene] = useState('town')
-  const [selectedArea, setSelectedArea] = useState(() => Number(localStorage.getItem('v2capSelectedArea')) || 1)
+  const [selectedSpot, setSelectedSpot] = useState(() => Number(localStorage.getItem('v2capSelectedSpot')) || 1)
   const [logs, setLogs] = useState([])
   const [bossRate, setBossRate] = useState(prof?.boss_rate || 0)
   const [now, setNow] = useState(Date.now())
@@ -43,10 +49,10 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   useEffect(() => { setStam({ n: prof?.stamina ?? 0, at: prof?.stamina_at || null }) }, [prof?.stamina, prof?.stamina_at])
   useEffect(() => { setBossRate(prof?.boss_rate || 0) }, [prof?.boss_rate])
 
-  const unlocked = prof?.unlocked_areas || [1]
-  const availableAreas = AREAS_SORTED.filter(a => isAreaUnlocked(unlocked, a.id))
-  const area = availableAreas.find(a => a.id === selectedArea) || availableAreas[0]
-  const cleared = clearedAreasOf(prof)
+  const cleared = prof?.cleared_spots || []
+  const availableSpots = SPOTS.filter(s => isSpotUnlocked(cleared, s.id))
+  // 選んでいた場所がまだ開いていなければ、開いている一番先の場所
+  const spot = availableSpots.find(s => s.id === selectedSpot) || spotOf(openUntilOf(cleared))
   const elapsed = (now - lastAt.current) / 1000
   const remaining = Math.max(0, SORTIE_CD - elapsed)
   const canAct = remaining <= 0 && !loading
@@ -55,14 +61,14 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   const stamNow = rollStamina(stam.n, stam.at, stamMax, now).n
 
   const doBattle = async (isAuto = false) => {
-    if (busy.current || !area) return
+    if (busy.current || !spot) return
     if (Date.now() - lastAt.current < SORTIE_CD * 1000) return
     busy.current = true
     lastAt.current = Date.now()
     setLoading(true); setScene('battle'); setLogs([])
     try {
       const me = playerFighter(prof, inventory)
-      const enc = pickEncounter(area.id, bossRate, new Date())
+      const enc = pickEncounter(spot.id, bossRate, new Date())
       const r = runBattle(me, { ...enemyFighter(enc.enemy, 8), boss: enc.isBoss })
       const win = r.winner === 'a'
       const drop = win ? rollEquipDrop(enc, prof.class, new Date()) : null
@@ -71,18 +77,16 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       const foe = enc.enemy.name
       const you = me.name
       const out = []
-      out.push(enc.isBoss
-        ? { text:`⚠ ボス出現！ ${foe}（LV${enc.lv}）が現れた！`, color:'#ff4444' }
-        : { text:`${foe}（LV${enc.lv}）が現れた！`, color:'#88ccff' })
+      out.push(ROLE_LINE[enc.role](foe, enc.lv, enc.band))
       out.push(...buildBattleLog(r, you, foe))
       out.push(win
         ? { text:`${foe}を倒した！（${r.turns}ターン）`, color:'#ffcc00' }
         : { text:`敗北…（${r.turns}ターン）`, color:'#ff4444' })
       setLogs(out)
 
-      // ★1戦ごとにその場で反映する。EXP・アイテムLVはサーバーが敵のLVから決める
+      // ★1戦ごとにその場で反映する。EXP・Gold・アイテムLVはサーバーが場所の表から決める
       const { data, error } = await supabase.rpc('v2cap_sortie_settle', {
-        p_area: area.id, p_enemy: foe, p_win: win, p_drop: drop ? drop.item.id : null, p_rank: drop ? drop.rank : null, p_auto: !!isAuto,
+        p_spot: spot.id, p_enemy: foe, p_win: win, p_drop: drop ? drop.item.id : null, p_rank: drop ? drop.rank : null, p_auto: !!isAuto,
       })
       if (data && data.stamina != null) setStam({ n: data.stamina, at: data.stamina_at || new Date().toISOString() })
       if (error || !data?.ok) {
@@ -92,14 +96,22 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       }
       const lv = data.level || {}
       const after = []
+      // ★LV100・ClassLV30（上限）のぶんは入らないので、そう出す
+      const lvMax = prof.lv >= MAX_LV
+      const jobMax = jobOf(prof.jobs, prof.class).lv >= JOB_MAX
+      const expText = `EXP +${data.exp}${lvMax ? '（LV上限のため入らない）' : ''}${jobMax ? '' : `（ClassEXP +${data.exp}）`}`
       if (win) {
-        // ★LV100・ClassLV30（上限）のぶんは入らないので、そう出す
-        const lvMax = prof.lv >= MAX_LV
-        const jobMax = jobOf(prof.jobs, prof.class).lv >= JOB_MAX
-        after.push({ text:`EXP +${data.exp}${lvMax ? '（LV上限のため入らない）' : ''}${jobMax ? '' : `（ClassEXP +${data.exp}）`}`, color:'#ffcc00' })
-        if (lv.level_ups > 0) after.push({ text:`🆙 レベルアップ！ LV${lv.lv}`, color:'#44ff88' })
-        if (lv.job_ups > 0) after.push({ text:`⭐ ClassLVアップ！ ${prof.class} ClassLV${lv.jlv}`, color:'#ffcc00' })
-        for (const name of lv.learned || []) after.push({ text:`📖 スキル「${name}」を覚えた！（スキルセットで編成できる）`, color:'#44ddff' })
+        const bonus = enc.role === 'normal' ? '' : `（${enc.role === 'boss' ? 'ボス' : enc.role === 'rare' ? 'レア' : '時間帯限定'}で${mult(enc.role)}）`
+        after.push({ text:`${expText}　Gold +${data.gold}${bonus}`, color:'#ffcc00' })
+      } else if (data.exp > 0) {
+        // 【確定】負けても経験値はその場所の最低値が入る（倍率なし・Goldは入らない・2026-10-09 ユーザー指示）
+        after.push({ text:`${expText}（負けても最低値は入る）`, color:'#c8a050' })
+      }
+      // 負けたときの経験値でもLVは上がりうる
+      if (lv.level_ups > 0) after.push({ text:`🆙 レベルアップ！ LV${lv.lv}`, color:'#44ff88' })
+      if (lv.job_ups > 0) after.push({ text:`⭐ ClassLVアップ！ ${prof.class} ClassLV${lv.jlv}`, color:'#ffcc00' })
+      for (const name of lv.learned || []) after.push({ text:`📖 スキル「${name}」を覚えた！（スキルセットで編成できる）`, color:'#44ddff' })
+      if (win) {
         if (data.drop && drop) {
           const ilv = data.drop.ilv
           const pct = effectPct(ilv, lv.lv || prof.lv)
@@ -112,17 +124,9 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
           if (pct < 100) line.parts.push({ text:` 必要LVに足りない＝効果${pct}%`, color:'#ff8844' })
           after.push(line)
         }
-        if (enc.isBoss) {
-          const nextCleared = clearNext(cleared, area.id, true, true)
-          const opened = unlockNext(unlocked, nextCleared).filter(id => !unlocked.includes(id))
-          if (opened.length) {
-            after.push({ text:`🔓 ${opened.map(id => areaOf(id)?.name).join('・')}が解放された！`, color:'#44ff88' })
-          } else {
-            const rest = restToOpenNext(nextCleared, area.tier)
-            if (rest > 0 && area.tier < LAST_TIER) {
-              after.push({ text:`あと${rest}エリア踏破で難易度${markOf(area.tier + 1)}が解放される`, color: LOG_PLAIN })
-            }
-          }
+        // ボスを倒すと次の場所が開く（1本道）。開いたかどうかはサーバーの返事で見る
+        if (enc.isBoss && Number(data.open_until) > openUntilOf(cleared)) {
+          after.push({ text:`🔓 ${spotLabel(data.open_until)}が解放された！`, color:'#44ff88' })
         }
       }
       if (after.length) setLogs(l => [...l, ...after])
@@ -138,14 +142,16 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
 
   // オート出撃。クールタイムが明けるたびに、スタミナを1使って勝手に出撃する
   useEffect(() => {
-    if (!auto || loading || !area || remaining > 0) return
+    if (!auto || loading || !spot || remaining > 0) return
     if (stamNow < 1) {
       setAuto(false)
       setLogs(l => [...l, { text:'⚡ スタミナ切れ。ここからは自分で出撃する', color:'#ffcc00' }])
       return
     }
     doBattle(true)
-  }, [auto, now, loading, area, remaining, stamNow])   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [auto, now, loading, spot, remaining, stamNow])   // eslint-disable-line react-hooks/exhaustive-deps
+
+  const normalRange = spot ? rewardRangeOf(spot, 'normal') : null
 
   const timerRow = (
     <>
@@ -183,7 +189,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
               border:`1px solid ${canAct ? '#ffcc00' : '#003366'}`,
               color: canAct ? '#ffcc00' : '#7fa6d0', cursor: canAct ? 'pointer' : 'not-allowed',
               fontFamily:'monospace', fontSize:'13px', marginBottom:'8px' }}>
-            {canAct ? `⚔ ${area?.name}へ再出撃！` : '⏳ 待機中...'}
+            {canAct ? `⚔ ${spot?.name}へ再出撃！` : '⏳ 待機中...'}
           </button>
         )}
         <button onClick={() => { setAuto(false); setScene('town') }} disabled={loading}
@@ -199,27 +205,32 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   return (
     <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', fontFamily:'monospace' }}>
       {timerRow}
-      <select value={area?.id || 1}
-        onChange={e => { const v = Number(e.target.value); setSelectedArea(v); localStorage.setItem('v2capSelectedArea', v) }}
+      <select value={spot?.id || 1}
+        onChange={e => { const v = Number(e.target.value); setSelectedSpot(v); localStorage.setItem('v2capSelectedSpot', v) }}
         style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>
-        {/* ★この版はエリアのLV帯を出す（敵のLVがその範囲に並んでいる） */}
-        {availableAreas.map(a => (
-          <option key={a.id} value={a.id}>
-            {a.name}　{tierLvText(a.tier)}{isAreaCleared(cleared, a.id) ? '　✔踏破済み' : ''}
+        {/* ★開いている場所だけ（1本道）。場所の敵のLV帯も出す */}
+        {availableSpots.map(s => (
+          <option key={s.id} value={s.id}>
+            {spotLabel(s)}　{spotLvText(s.id)}{isSpotCleared(cleared, s.id) ? '　✔' : ''}
           </option>
         ))}
       </select>
-      <div style={{ fontSize:'10px', color:'#7fa6d0', marginBottom:'8px', display:'flex', justifyContent:'space-between' }}>
-        <span>敵は{area ? tierLvText(area.tier) : ''}（ボスは上限のLV）</span>
-        <span style={{ color: area?.bias ? '#88ccff' : '#7fa6d0' }}>
-          {biasLabelOf(area?.bias)}{area?.bias ? `（与ダメージ+${Math.round((BIAS_MULT - 1) * 100)}%）` : ''}
-        </span>
-      </div>
+      {spot && (
+        <div style={{ fontSize:'10px', color:'#7fa6d0', marginBottom:'8px', lineHeight:1.7 }}>
+          <div>敵は{spotLvText(spot.id)}（ボスは上限のLV）・装備はLV{spot.itemLv}</div>
+          <div>
+            1体あたり EXP <span style={{ color:'#ffcc00' }}>{normalRange.exp.join('〜')}</span>・
+            Gold <span style={{ color:'#ffcc00' }}>{normalRange.gold.join('〜')}</span>
+            （朝昼晩の敵{mult('timed')}・レア{mult('rare')}・ボス{mult('boss')}）
+          </div>
+          {!isSpotCleared(cleared, spot.id) && <div style={{ color:'#ff8844' }}>ボスを倒すと次の場所が開く</div>}
+        </div>
+      )}
       <button onClick={() => doBattle(false)} disabled={!canAct}
         style={{ width:'100%', padding:'14px', background:'#001840', border:`1px solid ${canAct ? '#ffcc00' : '#003366'}`,
           color: canAct ? '#ffcc00' : '#7fa6d0', cursor: canAct ? 'pointer' : 'not-allowed',
           fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'8px' }}>
-        {canAct ? `⚔ ${area?.name}へ出撃！` : '⏳ 待機中...'}
+        {canAct ? `⚔ ${spot?.name}へ出撃！` : '⏳ 待機中...'}
       </button>
       <button onClick={() => setAuto(true)} disabled={stamNow < 1}
         style={{ width:'100%', padding:'8px', background: stamNow > 0 ? '#00281a' : '#000818',

@@ -7,8 +7,9 @@ import { readFileSync } from 'node:fs'
 import { STAT_KEYS, STAT_DEFS, ROLLS_PER_LV } from '../../v2/lib/stats.js'
 import { SKILL_SET_SLOTS, SKILL_USE_MAX } from '../../v2/lib/skills.js'
 import { DEFAULT_USES_MAX } from './skills.js'
-import { NEED_PERMIL, EXP_OFFSET, EXP_SPREAD_PCT, EXP_BOSS_TENTHS, MAX_LV, STAMINA_BASE, STAMINA_PER_LV } from './level.js'
+import { NEED_PERMIL, MAX_LV, STAMINA_BASE, STAMINA_RECOVER_MS } from './level.js'
 import { JOB_NEED_TENTHS, JOB_MAX } from './jobs.js'
+import { ROLE_TENTHS } from './areas.js'
 import { SLOTS } from './equipment.js'
 import { SORTIE_CD } from './sortie.js'
 import { rewrite } from '../../../tools/v2cap-sql.mjs'
@@ -20,26 +21,53 @@ const fnBody = (name) => {
   return m[0]
 }
 
-test('SQLの種（段階・職業・スキル・装備・帯・エリア・敵のLV）はJSから作ったものと一致する', () => {
+test('SQLの種（段階・職業・スキル・装備・場所・敵）はJSから作ったものと一致する', () => {
   assert.equal(rewrite(SQL), SQL, '`node tools/v2cap-sql.mjs --write` で作り直すこと')
   // ★改行が CRLF のファイル（Windowsで取り出し直したとき）でも、同じ中身なら食い違わない
   const crlf = SQL.replace(/\r?\n/g, '\r\n')
   assert.equal(rewrite(crlf), crlf, 'CRLF のファイルに LF の種を混ぜていない')
 })
 
-test('必要EXP・必要ClassEXP・1勝のEXP・スタミナの式がJSと同じ', () => {
+test('必要EXP・必要ClassEXP・スタミナの式と係数がJSと同じ', () => {
   const need = fnBody('v2cap_need')
   assert.match(need, new RegExp(`when p_lv >= ${MAX_LV} then 0`))
-  assert.match(need, new RegExp(`round\\(${NEED_PERMIL}::numeric \\* p_lv \\* p_lv \\* \\(p_lv \\+ 9\\) / 1000\\)`))
+  assert.match(need, new RegExp(`round\\(${NEED_PERMIL}::numeric \\* p_lv \\* p_lv \\* p_lv / 1000\\)`))
   const job = fnBody('v2cap_job_need')
   assert.match(job, new RegExp(`when p_jlv >= ${JOB_MAX} then 0`))
   assert.match(job, new RegExp(`round\\(${JOB_NEED_TENTHS}::numeric \\*`))
   assert.match(job, /\* p_jlv \* p_jlv \/ 10\)/)
+  // スタミナ：最大値は 10＋(LV−1)・回復は3分に1（2026-10-09 ユーザー指示）
+  assert.match(fnBody('v2cap_stamina_max'), new RegExp(`select ${STAMINA_BASE} \\+ greatest\\(1, coalesce\\(p_lv, 1\\)\\) - 1`))
+  assert.ok(fnBody('v2cap_stamina_roll').includes(`c_span constant interval := interval '${STAMINA_RECOVER_MS / 60000} minutes';`), '回復の間隔がJSと同じ')
+})
+
+test('【確定】1勝のEXPとGoldは場所の表 × 役割の倍率（朝昼晩1.5倍・レア3倍・ボス5倍）。サーバーが決める', () => {
   const settle = fnBody('v2cap_sortie_settle')
-  assert.match(settle, new RegExp(`v_base := v_en\\.lv \\+ ${EXP_OFFSET};`))
-  assert.match(settle, new RegExp(`round\\(v_base \\* ${EXP_BOSS_TENTHS} / 10\\.0\\)`))
-  assert.match(settle, new RegExp(`\\(${100 - EXP_SPREAD_PCT} \\+ random\\(\\) \\* ${EXP_SPREAD_PCT * 2}\\) / 100\\.0`))
-  assert.match(fnBody('v2cap_stamina_max'), new RegExp(`select ${STAMINA_BASE} \\+ greatest\\(1, coalesce\\(p_lv, 1\\)\\) / ${STAMINA_PER_LV}`))
+  assert.ok(settle.includes(`v_tenths := case v_en.role when 'timed' then ${ROLE_TENTHS.timed} when 'rare' then ${ROLE_TENTHS.rare} when 'boss' then ${ROLE_TENTHS.boss} else ${ROLE_TENTHS.normal} end;`),
+    '倍率がJS（areas.js の ROLE_TENTHS）と同じ')
+  // 範囲の中の整数を均等に1つ → 倍率を掛けて四捨五入（JSの rollRewards・scaleByRole と同じ）
+  assert.ok(settle.includes('v_exp  := ((v_spot.exp_min  + floor(random() * (v_spot.exp_max  - v_spot.exp_min  + 1))::int) * v_tenths + 5) / 10;'))
+  assert.ok(settle.includes('v_gold := ((v_spot.gold_min + floor(random() * (v_spot.gold_max - v_spot.gold_min + 1))::int) * v_tenths + 5) / 10;'))
+  assert.match(settle, /gold = gold \+ v_gold/)
+  // 負けても経験値はその場所の最低値（倍率なし・Goldなし＝ sortie.js の lossExpOf）
+  assert.match(settle, /else\s+--[^\n]*\n(\s*--[^\n]*\n)*\s*v_exp := v_spot\.exp_min;\s+end if;/)
+  // アイテムLVはエリアごとに1つ（場所の item_lv）・ランクはその場所の分布の中
+  assert.match(settle, /values \(v_uid, v_eq\.id, p_rank, v_spot\.item_lv\)/)
+  assert.match(settle, /v_spot\.drop_ranks \? coalesce\(p_rank, ''\)/)
+})
+
+test('【確定】場所は1本道。ボスを倒した一番先の場所の次まで開く（難易度帯の表はもう読まない）', () => {
+  assert.match(fnBody('v2cap_open_until'), /coalesce\(\(select max\(x\) from unnest\(coalesce\(p_cleared, '\{\}'\)\) as t\(x\)\), 0\) \+ 1/)
+  const settle = fnBody('v2cap_sortie_settle')
+  assert.match(settle, /if p_spot > public\.v2cap_open_until\(v_row\.cleared_spots\) then/)
+  assert.match(settle, /if v_boss and v_win and not \(v_cleared @> array\[p_spot\]\) then/)
+  assert.match(settle, /select \* into v_row from public\.v2cap_profiles where id = v_uid for update;/, '行をつかんでから間隔を見る')
+  // 前の形は落としてある・難易度帯とエリアの表は使っていない
+  assert.ok(SQL.includes('drop function if exists public.v2cap_unlocked_from_cleared(int[], int[]);'))
+  assert.ok(SQL.includes('drop table if exists public.v2cap_tiers;'))
+  assert.ok(SQL.includes('drop table if exists public.v2cap_areas;'))
+  const live = SQL.replace(/drop (table|function|column) if exists[^;]*;/g, '')
+  assert.ok(!/v2cap_tiers|v2cap_areas|unlocked_areas/.test(live.replace(/--[^\n]*/g, '')), '前の表・列を読み書きしていない')
 })
 
 test('LVアップの抽選（回数・並び・上がる量）がJSと同じ', () => {
@@ -108,7 +136,7 @@ test('★今のⅡ（v2_）のテーブルは読みも書きもしない（こ�
 test('【確定】武器は職業ごとに装備できる種類だけ（着ける・落ちる・転職で外す の3か所で見る）', () => {
   assert.match(fnBody('v2cap_equip'), /if not \(v_eq\.type = any\(coalesce\(v_cls\.weapons, '\{\}'\)\)\) then/)
   assert.match(fnBody('v2cap_sortie_settle'), /v_eq\.part <> '武器' or v_eq\.type = any\(coalesce\(v_cls\.weapons, '\{\}'\)\)/)
-  assert.match(fnBody('v2cap_sortie_settle'), /v_area\.drop_ranks \? coalesce\(p_rank, ''\)/)
+  assert.match(fnBody('v2cap_sortie_settle'), /v_spot\.drop_ranks \? coalesce\(p_rank, ''\)/)
   const change = fnBody('v2cap_change_class')
   assert.match(change, /select not \(e\.type = any\(coalesce\(v_cls\.weapons, '\{\}'\)\)\) into v_off/)
   assert.match(change, /v_equip := v_equip - 'weapon'/)
@@ -158,11 +186,16 @@ test('★今のⅡ・旧版のテーブルには書き込まない（v2cap_ 以�
   assert.deepEqual(bad, [])
 })
 
-test('★作り直し（キャラと装備を消す）は印を付けて1回だけ。2回目以降に全文を流し直しても消えない', () => {
-  const m = SQL.match(/do \$\$\s*begin\s*if not exists \(select 1 from public\.v2cap_migrations where key = 'reset_classes_20261009'\) then([\s\S]*?)end if;\s*end \$\$;/)
-  assert.ok(m, '印つきの do ブロックがある')
-  assert.match(m[1], /insert into public\.v2cap_migrations \(key\) values \('reset_classes_20261009'\)/)
+test('★作り直し（キャラと装備を消す）は印を付けて1回ずつだけ。2回目以降に全文を流し直しても消えない', () => {
+  // 初期職の見直し・エリアの作り替え（どちらも 2026-10-09 ユーザー承認）
+  let outside = SQL
+  for (const key of ['reset_classes_20261009', 'reset_areas_20261009']) {
+    const m = SQL.match(new RegExp(`do \\$\\$\\s*begin\\s*if not exists \\(select 1 from public\\.v2cap_migrations where key = '${key}'\\) then([\\s\\S]*?)end if;\\s*end \\$\\$;`))
+    assert.ok(m, `${key} の印つきの do ブロックがある`)
+    assert.ok(m[1].includes(`insert into public.v2cap_migrations (key) values ('${key}')`), `${key} の印を付けている`)
+    assert.match(m[1], /delete from public\.v2cap_profiles;/)
+    outside = outside.replace(m[0], '')
+  }
   // 印の外で消していない（全文流し直しのたびに消える事故を防ぐ）
-  const outside = SQL.replace(m[0], '')
   assert.ok(!/delete from public\.v2cap_(profiles|inventory)\s*;/.test(outside), '印の外で profiles / inventory を丸ごと消していない')
 })

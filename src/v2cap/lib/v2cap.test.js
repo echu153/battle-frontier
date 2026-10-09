@@ -5,11 +5,7 @@ import assert from 'node:assert/strict'
 import { STAT_KEYS, STAT_DEFS, calcPower, INITIAL_STATS } from '../../v2/lib/stats.js'
 import { skillValue, VALUE_TABLE, MP_TABLE, BUFF_PER_MP, HEAL_PER_MP, MPREGEN_PER_MP, SKILLS as V2_SKILLS, offClassMult } from '../../v2/lib/skills.js'
 import { createSide, mpCostOf } from '../../v2/lib/battle.js'
-import { AREAS } from '../../v2/lib/enemies.js'
-import {
-  MAX_LV, needExp, totalExpTo, applyExp, rollExp, expMinOf, expMaxOf, baseExpOf,
-  bodyPowerAt, staminaMaxOf,
-} from './level.js'
+import { MAX_LV, needExp, totalExpTo, applyExp, bodyPowerAt, staminaMaxOf, NEED_PERMIL, STAMINA_RECOVER_MS, rollStamina, msToNextStamina } from './level.js'
 import {
   CLASSES, START_CLASSES, STAGES, JOB_MAX, JOB_BONUS, jobNeed, jobTotalTo, bonusSeqOf,
   bonusPointsAt, jobBonusStats, learnOrderOf, learnAtOf, skillsLearnedBy, applyJobExp,
@@ -21,9 +17,17 @@ import {
   weaponsOfType, armorsOf, slotsFor, SLOT_LABEL, PARTS, partLabel, kindLabel,
 } from './equipment.js'
 import { powerAt, effectPct, statsAt, armorEffects, GEAR_RATIO, SET_PART_SUM } from './gear.js'
-import { TIER_LV, ENEMY_LEVELS, enemyLvOf, stdPowerAt, BOSS_RATIO, STD_RATIO, enemyPowerOf } from './areas.js'
+import {
+  AREA_LIST, SPOTS, SPOT_COUNT, SPOT_LV, spotOf, spotLvOf, spotLabel, itemLvOfArea, expRangeOf, goldRangeOf,
+  ROLE_TENTHS, scaleByRole, RANKS, meanRankOf, enemyLevels, enemyLvOf, enemyRoleOf,
+  stdPowerAt, AREA_BOSS, SUB_BOSS, bossRatioOf, STD_RATIO, NORMAL_RATIO, enemyPowerOf,
+} from './areas.js'
+import { AREA_ROSTERS } from './monsters.js'
 import { toFighter, statBreakdown, equippedItems, slotsOf, currentSetOf } from './loadout.js'
-import { rollBaseItem, rollEquipDrop, pickEncounter } from './sortie.js'
+import {
+  rollBaseItem, rollEquipDrop, pickEncounter, rollRewards, rewardRangeOf,
+  openUntilOf, isSpotUnlocked, unlockedSpotsOf, clearSpot,
+} from './sortie.js'
 
 const rngOf = (seed) => { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }
 
@@ -31,10 +35,11 @@ const rngOf = (seed) => { let s = seed >>> 0; return () => { s = (s * 1664525 + 
 test('【確定】LV上限は100。必要EXPは上がるほど重くなる（MMORPG式）', () => {
   assert.equal(MAX_LV, 100)
   assert.equal(needExp(100), 0)
-  for (let l = 1; l < 99; l++) assert.ok(needExp(l + 1) > needExp(l), `LV${l}→${l + 1} より LV${l + 1}→${l + 2} が重い`)
-  for (let l = 1; l < 99; l++) assert.ok(needExp(l + 1) / baseExpOf(l + 1) > needExp(l) / baseExpOf(l))
-  // 設計書§2の表（係数0.335＝tools/v2cap-progress.mjs で1年でLV100前後になるよう決めた）
-  assert.deepEqual([1, 5, 10, 20, 30, 50, 70, 90, 99].map(needExp), [3, 117, 637, 3886, 11759, 49413, 129679, 268637, 354600])
+  for (let l = 2; l < 99; l++) assert.ok(needExp(l + 1) > needExp(l), `LV${l}→${l + 1} より LV${l + 1}→${l + 2} が重い`)
+  // 必要EXP ＝ 係数 × LV³（千分率の整数で掛けてから割る＝SQLと同じ）
+  for (const l of [1, 5, 10, 20, 50, 99]) assert.equal(needExp(l), Math.max(1, Math.round(NEED_PERMIL * l * l * l / 1000)))
+  // 設計書§2の表（係数0.131＝tools/v2cap-progress.mjs --tune で「最後のボスの目安の日にLV100」になるよう決めた）
+  assert.deepEqual([1, 5, 10, 20, 30, 50, 70, 90, 99].map(needExp), [1, 16, 131, 1048, 3537, 16375, 44933, 95499, 127109])
 })
 
 test('【確定】LV100で止まり、あふれたEXPは捨てる。周回（LV1に戻る）は無い', () => {
@@ -53,22 +58,104 @@ test('LVアップごとに5回抽選＝戦闘力+5（ステータスは今のⅡ
   assert.equal(bodyPowerAt(31), calcPower(s.stats))
 })
 
-test('1勝のEXPは敵のLV＋9（雑魚±15%・ボス1.4倍）。先のエリアほど多い', () => {
-  assert.equal(baseExpOf(1), 10)
-  assert.equal(expMaxOf(20, true), Math.round(29 * 1.4))
-  const rng = rngOf(4)
-  for (let i = 0; i < 2000; i++) {
-    const lv = 1 + (i % 100)
-    const e = rollExp(lv, false, rng)
-    assert.ok(e >= expMinOf(lv) && e <= expMaxOf(lv), `LV${lv}の雑魚 ${e}`)
-  }
-  for (let t = 1; t < 8; t++) assert.ok(TIER_LV[t + 1][0] >= TIER_LV[t][0], '帯の下限は右肩上がり')
+// ===== エリアと場所 =====
+test('【確定】15エリア×①②③の名前はユーザーの表のとおり。1本道で、ボスを倒すと次の場所が開く', () => {
+  assert.equal(AREA_LIST.length, 15)
+  assert.equal(SPOT_COUNT, 45)
+  assert.deepEqual(AREA_LIST[0], { name:'始まりの森', spots:['木漏れ日の小径', '苔むした獣道', '森主の古樹'] })
+  assert.deepEqual(AREA_LIST[14], { name:'深淵の海溝', spots:['燐光の海棚', '沈みし古都', '原初の深淵'] })
+  assert.deepEqual(AREA_LIST.map(a => a.name), ['始まりの森', '荒廃した草原', '古代の洞窟', '蒼海の入り江', '灼砂の遺丘',
+    '巨峰山脈', '常闇の樹海', '白銀の霊峰', '雷鳴の断崖', '煉獄火山', '腐海の沼獄', '奈落の坑道', '蒼天の浮遊城', '星霜の遺跡', '深淵の海溝'])
+  assert.equal(new Set(SPOTS.map(s => s.name)).size, 45, '場所の名前は重ならない')
+  assert.equal(spotLabel(2), '始まりの森② 苔むした獣道')
+  // 1本道：最初は①だけ。ボスを倒した一番先の場所の次まで開く
+  assert.deepEqual(unlockedSpotsOf([]), [1])
+  assert.equal(isSpotUnlocked([], 2), false)
+  assert.deepEqual(unlockedSpotsOf(clearSpot([], 1)), [1, 2])
+  assert.equal(openUntilOf([1, 2, 3]), 4, '③のボスで次のエリアの①が開く')
+  assert.equal(spotOf(4).areaName, '荒廃した草原')
+  assert.equal(openUntilOf(Array.from({ length: 45 }, (_, i) => i + 1)), 45, '最後の場所より先は無い')
+  assert.deepEqual(clearSpot([1, 2], 2), [1, 2], '2回倒しても増えない')
 })
 
-test('【確定】スタミナの最大値はLVで伸びる（10＋LV÷5）', () => {
+test('【確定】経験値とGoldは場所の表の値（始まりの森・荒廃した草原はユーザーの表・先は同じ伸び方）', () => {
+  // ユーザーの表そのまま
+  assert.deepEqual([1, 2, 3].map(s => expRangeOf(1, s)), [[2, 3], [2, 4], [3, 5]])
+  assert.deepEqual([1, 2, 3].map(s => goldRangeOf(1, s)), [[10, 15], [10, 17], [10, 20]])
+  assert.deepEqual([1, 2, 3].map(s => expRangeOf(2, s)), [[4, 5], [4, 6], [5, 7]])
+  assert.deepEqual([1, 2, 3].map(s => goldRangeOf(2, s)), [[15, 20], [15, 22], [15, 25]])
+  // 古代の洞窟から先は1エリアごとに 経験値+2・Gold+5（ユーザー承認）。最後は深淵の海溝
+  assert.deepEqual([1, 2, 3].map(s => expRangeOf(15, s)), [[30, 31], [30, 32], [31, 33]])
+  assert.deepEqual([1, 2, 3].map(s => goldRangeOf(15, s)), [[80, 85], [80, 87], [80, 90]])
+  for (let i = 1; i < SPOT_COUNT; i++) {
+    assert.ok(SPOTS[i].exp[0] + SPOTS[i].exp[1] >= SPOTS[i - 1].exp[0] + SPOTS[i - 1].exp[1], `${SPOTS[i].name}の経験値は前より少なくない`)
+    assert.ok(SPOTS[i].gold[0] + SPOTS[i].gold[1] >= SPOTS[i - 1].gold[0] + SPOTS[i - 1].gold[1], `${SPOTS[i].name}のGoldは前より少なくない`)
+  }
+})
+
+test('【確定】朝昼晩の限定の敵1.5倍・レア3倍・ボス5倍（四捨五入）', () => {
+  assert.deepEqual(ROLE_TENTHS, { normal: 10, timed: 15, rare: 30, boss: 50 })
+  assert.equal(scaleByRole(3, 'timed'), 5, '3×1.5＝4.5→5')
+  assert.equal(scaleByRole(2, 'timed'), 3)
+  assert.equal(scaleByRole(3, 'rare'), 9)
+  assert.equal(scaleByRole(3, 'boss'), 15)
+  assert.equal(scaleByRole(17, 'normal'), 17)
+  assert.deepEqual(rewardRangeOf(spotOf(1), 'boss'), { exp: [10, 15], gold: [50, 75] })
+  const rng = rngOf(4)
+  for (let i = 0; i < 3000; i++) {
+    const spot = SPOTS[i % SPOT_COUNT]
+    const role = ['normal', 'timed', 'rare', 'boss'][i % 4]
+    const r = rollRewards({ spot, role }, rng)
+    const range = rewardRangeOf(spot, role)
+    assert.ok(r.exp >= range.exp[0] && r.exp <= range.exp[1], `${spot.name} ${role} EXP ${r.exp}`)
+    assert.ok(r.gold >= range.gold[0] && r.gold <= range.gold[1], `${spot.name} ${role} Gold ${r.gold}`)
+  }
+})
+
+test('【確定】負けても経験値はその場所の最低値（朝昼晩・レア・ボスの倍率は入れない）。Goldは入らない', () => {
+  for (const spot of SPOTS) {
+    for (const role of ['normal', 'timed', 'rare', 'boss']) {
+      assert.deepEqual(rollRewards({ spot, role }, Math.random, false), { exp: spot.exp[0], gold: 0 }, `${spotLabel(spot)} ${role}に負けた`)
+    }
+  }
+  assert.deepEqual(rollRewards({ spot: spotOf(1), role: 'boss' }, Math.random, false), { exp: 2, gold: 0 }, '始まりの森①はボスに負けても2')
+})
+
+test('【確定】後の場所ほど高いランクが出やすい。拾えるランクの種類はエリアの中で同じ', () => {
+  let prev = -1
+  for (const s of SPOTS) {
+    const m = meanRankOf(s.dropRanks)
+    assert.ok(m >= prev - 1e-9, `${spotLabel(s)}の平均ランク ${m.toFixed(2)} が前（${prev.toFixed(2)}）より下がらない`)
+    if (s.sub > 1) assert.ok(m > prev, `${spotLabel(s)}はエリアの中で前の場所より上がる`)
+    prev = m
+    assert.ok(Object.keys(s.dropRanks).every(r => RANKS.includes(r)))
+  }
+  for (const a of AREA_LIST.map((_, k) => SPOTS.slice(k * 3, k * 3 + 3))) {
+    assert.deepEqual(Object.keys(a[1].dropRanks), Object.keys(a[0].dropRanks), `${a[0].areaName}の①と②`)
+    assert.deepEqual(Object.keys(a[2].dropRanks), Object.keys(a[0].dropRanks), `${a[0].areaName}の①と③`)
+  }
+})
+
+test('【確定】装備のアイテムLVはエリアごとに1つ（①のボスのLV）。①②③どこで拾っても同じ', () => {
+  for (const s of SPOTS) {
+    assert.equal(s.itemLv, itemLvOfArea(s.area))
+    assert.equal(s.itemLv, spotLvOf((s.area - 1) * 3 + 1)[1], `${spotLabel(s)}は①のボスのLV`)
+  }
+  for (let k = 1; k < 15; k++) assert.ok(itemLvOfArea(k + 1) >= itemLvOfArea(k), '後のエリアほど高い')
+})
+
+test('【確定】スタミナは3分に1回復・最大値はLVが1上がるごとに+1（LV1で10）', () => {
   assert.equal(staminaMaxOf(1), 10)
-  assert.equal(staminaMaxOf(5), 11)
-  assert.equal(staminaMaxOf(100), 30)
+  assert.equal(staminaMaxOf(2), 11)
+  assert.equal(staminaMaxOf(5), 14)
+  assert.equal(staminaMaxOf(100), 109)
+  for (let l = 1; l < 100; l++) assert.equal(staminaMaxOf(l + 1) - staminaMaxOf(l), 1)
+  assert.equal(STAMINA_RECOVER_MS, 3 * 60 * 1000)
+  const t0 = Date.UTC(2026, 0, 1)
+  assert.equal(rollStamina(0, t0, 10, t0 + 2 * 60 * 1000 + 59 * 1000).n, 0, '2分59秒ではまだ')
+  assert.equal(rollStamina(0, t0, 10, t0 + 3 * 60 * 1000).n, 1, '3分で1')
+  assert.equal(rollStamina(0, t0, 10, t0 + 30 * 60 * 1000).n, 10, '30分で10（上限まで）')
+  assert.equal(msToNextStamina(0, t0, 10, t0 + 60 * 1000), 2 * 60 * 1000, '次まで2分')
 })
 
 // ===== 職業 =====
@@ -96,12 +183,13 @@ test('通常攻撃は 槍使い・盗賊・銃士・戦士・格闘家・弓使�
   for (const c of ['魔法使い', '呪術師', '僧侶', '薬師']) assert.equal(attackKindOf(c), 'mag', c)
 })
 
-test('【確定】ClassLVは最大30。初期職のClassLV30まで＝LV31のころに入っているEXP（実測で約2週間）', () => {
+test('【確定】ClassLVは最大30。初期職のClassLV30まで＝LV32のころに入っているEXP（実測で約2週間）', () => {
   assert.equal(JOB_MAX, 30)
   assert.equal(jobNeed('shoki', 30), 0)
   const total = jobTotalTo('shoki', 30)
-  assert.equal(total, 105228)
-  assert.ok(total >= totalExpTo(31) && total < totalExpTo(32), `初期職の合計 ${total} はLV31〜32のあいだ`)
+  // 係数4.2（tools/v2cap-progress.mjs --tune の後半4回の平均・2026-10-09 ボスを「エリアの値×①②③の倍率」にしたあと）
+  assert.equal(total, 35931)
+  assert.ok(total >= totalExpTo(32) && total < totalExpTo(33), `初期職の合計 ${total} はLV32〜33のあいだ`)
 })
 
 test('【確定】クラスのステは職業ごとに決まった配分で、その職業の間だけ（ClassLV30で29点）', () => {
@@ -370,37 +458,118 @@ test('【確定】武器はいまの職業が装備できる3種から落ちる�
   }
   const lines = new Set(Array.from({ length: 200 }, () => rollBaseItem('鎧', '戦士', rng).line))
   assert.deepEqual([...lines].sort(), ['軽装', '重鎧'])
-  // 落ちたものはアイテムLV＝敵のLV・ランクはエリアの分布の中
+  // 落ちたものはアイテムLV＝エリアのアイテムLV・ランクはその場所の分布の中
   let got = 0
   for (let i = 0; i < 20000 && got < 50; i++) {
-    const enc = pickEncounter(1, 0, new Date(Date.UTC(2026, 0, 1, i % 24)), rng)
+    const enc = pickEncounter(5, 0, new Date(Date.UTC(2026, 0, 1, i % 24)), rng)
     const d = rollEquipDrop(enc, '盗賊', new Date(), rng)
     if (!d) continue
     got++
-    assert.equal(d.ilv, enc.lv)
-    assert.ok(Object.keys(AREAS[0].dropRanks).includes(d.rank), d.rank)
+    assert.equal(d.ilv, itemLvOfArea(2))
+    assert.ok(Object.keys(spotOf(5).dropRanks).includes(d.rank), d.rank)
   }
   assert.ok(got >= 50, 'ドロップを拾えている')
 })
 
-// ===== 敵のLV =====
-test('【確定】敵は敵ごとに決まったLVを持つ（帯の中）。ボスは帯の上限', () => {
-  for (const a of AREAS) {
-    const [lo, hi] = TIER_LV[a.tier]
-    for (const e of [...a.enemies, ...(a.timed || [])]) {
-      const lv = enemyLvOf(e.name)
-      assert.ok(lv >= lo && lv < hi, `${e.name} LV${lv} は ${lo}〜${hi}（ボスより下）`)
+// ===== 敵 =====
+test('【確定】モンスターはユーザーの一覧のとおり（1エリア20体＝通常6・時間帯6・レア5・ボス3）', () => {
+  assert.equal(AREA_ROSTERS.length, 15)
+  for (const a of AREA_ROSTERS) {
+    assert.deepEqual([a.normals.length, a.timed.length, a.rares.length, a.bosses.length], [6, 6, 5, 3])
+    assert.deepEqual(a.timed.map(e => e.band).sort(), ['昼', '昼', '晩', '晩', '朝', '朝'], `${a.bosses[2].name}のエリア：時間帯は朝昼晩2体ずつ`)
+    assert.deepEqual(a.rares.map(e => e.band || '-').sort(), ['-', '-', '昼', '晩', '朝'], 'レアは一日中2体・朝昼晩1体ずつ')
+    for (const e of [...a.normals, ...a.timed, ...a.rares, ...a.bosses]) {
+      assert.ok(['phys', 'mag'].includes(e.kind) && e.skills.length >= 1 && e.skills.every(Boolean), `${e.name}の中身`)
+      assert.equal(Object.values(e.dist).reduce((x, y) => x + y, 0), 100, `${e.name}の配分の合計`)
     }
-    assert.equal(enemyLvOf(a.boss.name), hi, `${a.boss.name}は帯の上限`)
   }
-  assert.equal(new Set(ENEMY_LEVELS.map(e => e.name)).size, ENEMY_LEVELS.length, '名前は重複しない')
+  const all = AREA_ROSTERS.flatMap(a => [...a.normals, ...a.timed, ...a.rares, ...a.bosses])
+  assert.equal(new Set(all.map(e => e.name)).size, 300, '名前は全部のエリアで重ならない')
+  // 一覧の名前（最初と最後のエリア・ボス）
+  assert.deepEqual(AREA_ROSTERS[0].normals.map(e => e.name), ['スライム', 'コウモリ', '毒キノコ', '森ネズミ', 'オオアリ', 'つるヘビ'])
+  assert.deepEqual(AREA_ROSTERS[0].bosses.map(e => e.name), ['オヤブンネズミ', 'クイーンアント', 'ビッグスライム'])
+  assert.deepEqual(AREA_ROSTERS[14].bosses.map(e => e.name), ['大海月ルミナ', '深海魔女キルケ', '深海覇王リヴァイアサン'])
+  assert.deepEqual(AREA_ROSTERS[9].rares.map(e => [e.name, e.band || '-']),
+    [['マグマゴーレム', '-'], ['ケルベロス', '-'], ['ブレイズバット', '朝'], ['イフリートロード', '昼'], ['アークデーモン', '晩']])
 })
 
-test('敵の強さの基準（標準の戦闘力）は右肩上がり・ボスの倍率は8帯ぶんある', () => {
+test('【確定】通常は表の上から2体ずつ①②③。②には①の敵・③には②の敵も出る。時間帯とレアは①②③すべて', () => {
+  const [s1, s2, s3] = [1, 2, 3].map(id => spotOf(id).roster)
+  assert.deepEqual(s1.enemies.map(e => e.name), ['スライム', 'コウモリ'])
+  assert.deepEqual(s2.enemies.map(e => e.name), ['スライム', 'コウモリ', '毒キノコ', '森ネズミ'], '②には①の敵も出る')
+  assert.deepEqual(s3.enemies.map(e => e.name), ['毒キノコ', '森ネズミ', 'オオアリ', 'つるヘビ'], '③には②の敵が出る（①の敵は出ない）')
+  for (const s of SPOTS) {
+    const a = AREA_ROSTERS[s.area - 1]
+    assert.deepEqual(s.roster.timed.map(e => e.name), a.timed.map(e => e.name), `${spotLabel(s)}：時間帯の6体`)
+    assert.deepEqual(s.roster.rares.map(e => e.name), a.rares.map(e => e.name), `${spotLabel(s)}：レア5体`)
+    assert.equal(s.roster.boss.name, a.bosses[s.sub - 1].name, `${spotLabel(s)}のボス`)
+  }
+  const rows = enemyLevels()
+  assert.equal(new Set(rows.map(e => `${e.spot}|${e.name}`)).size, rows.length, '「名前＋場所」は重ならない（サーバーの主キー）')
+  for (const r of rows) assert.equal(spotOf(r.spot).area, SPOTS.find(s => s.roster.boss.name === r.name || [...s.roster.enemies, ...s.roster.timed, ...s.roster.rares].some(e => e.name === r.name)).area, `${r.name}は1つのエリアにだけいる`)
+})
+
+test('【確定】敵は敵ごとに決まったLVを持つ（場所のLV帯の中）。ボスとレアは帯の上限', () => {
+  for (const s of SPOTS) {
+    const [lo, hi] = spotLvOf(s.id)
+    for (const e of [...s.roster.enemies, ...s.roster.timed]) {
+      const lv = enemyLvOf(e.name, s.id)
+      assert.ok(lv >= lo && lv <= hi, `${e.name} LV${lv} は ${lo}〜${hi}`)
+    }
+    assert.equal(enemyLvOf(s.roster.boss.name, s.id), hi, `${s.roster.boss.name}は帯の上限`)
+    for (const e of s.roster.rares) assert.equal(enemyLvOf(e.name, s.id), hi)
+    assert.equal(enemyRoleOf(s.roster.boss.name, s.id), 'boss')
+  }
+  // 同じ敵でも、後の場所ではLVが高い（①のスライムより②のスライム）
+  assert.ok(enemyLvOf('スライム', 2) > enemyLvOf('スライム', 1))
+  for (let i = 1; i < SPOT_COUNT; i++) {
+    assert.ok(SPOT_LV[i][0] >= SPOT_LV[i - 1][0] && SPOT_LV[i][1] >= SPOT_LV[i - 1][1], `${spotLabel(i + 1)}のLV帯は前より下がらない`)
+    assert.ok(SPOT_LV[i][1] >= SPOT_LV[i][0])
+  }
+  assert.deepEqual(SPOT_LV[0].slice(0, 1), [1], '最初の場所はLV1から')
+  assert.equal(SPOT_LV[SPOT_COUNT - 1][1], 100, '最後のボスはLV100')
+})
+
+test('敵の出方：レアが先（0.5%）→ボス（遭遇率）→ふつう。朝昼晩の敵はその時間帯だけ', () => {
+  const rng = rngOf(9)
+  const spot = spotOf(3)
+  const at = (h) => new Date(Date.UTC(2026, 0, 1, (h + 24 - 9) % 24))   // JSTの h 時
+  // 遭遇率100%ならボス（レアに当たらなければ）
+  let boss = 0
+  for (let i = 0; i < 500; i++) if (pickEncounter(3, 100, at(10), rng).role === 'boss') boss++
+  assert.ok(boss > 480, `ボス ${boss}/500`)
+  // 遭遇率0ならボスは出ない。時間帯の敵はその時間帯の分だけ
+  const seen = new Map()
+  for (let i = 0; i < 5000; i++) {
+    const h = [8, 15, 23][i % 3]
+    const e = pickEncounter(3, 0, at(h), rng)
+    assert.notEqual(e.role, 'boss')
+    if (e.role === 'timed') seen.set(e.enemy.name, (seen.get(e.enemy.name) || new Set()).add(h))
+    if (e.role === 'normal') assert.ok(spot.roster.enemies.includes(e.enemy))
+  }
+  for (const [name, hours] of seen) {
+    const band = spot.roster.timed.find(x => x.name === name).band
+    const want = { 朝: 8, 昼: 15, 晩: 23 }[band]
+    assert.deepEqual([...hours], [want], `${name}は${band}だけ`)
+  }
+})
+
+test('敵の強さ：標準の戦闘力は右肩上がり・ボスの倍率はエリアごと（15）×①②③・ふつうの敵は0.6倍', () => {
   for (let l = 1; l < 100; l++) assert.ok(stdPowerAt(l + 1) >= stdPowerAt(l))
-  for (let t = 1; t <= 8; t++) assert.ok(BOSS_RATIO[t] > 0, `帯${t}のボスの倍率`)
+  assert.equal(AREA_BOSS.length, AREA_LIST.length)
+  for (const r of AREA_BOSS) assert.ok(r > 0)
   assert.equal(STD_RATIO[0][0], 1)
   assert.equal(STD_RATIO[STD_RATIO.length - 1][0], 100)
-  const slime = AREAS[0].enemies.find(e => e.name === 'スライム')
-  assert.equal(enemyPowerOf(slime), Math.round(stdPowerAt(enemyLvOf('スライム')) * 0.6))
+  const first = spotOf(1).roster.enemies[0]
+  assert.equal(enemyPowerOf(first), Math.round(stdPowerAt(enemyLvOf(first.name, 1)) * NORMAL_RATIO))
+})
+
+test('【確定】③のボスは特に強い：どのエリアでも ③のボス＞②のボス＞①のボス（戦闘力）', () => {
+  assert.deepEqual(SUB_BOSS, [1.0, 1.0, 1.25])
+  for (let k = 0; k < AREA_LIST.length; k++) {
+    const [b1, b2, b3] = [1, 2, 3].map(sub => spotOf(k * 3 + sub).roster.boss)
+    const [p1, p2, p3] = [b1, b2, b3].map(enemyPowerOf)
+    assert.ok(p3 > p2 && p2 >= p1, `${AREA_LIST[k].name}：①${p1}・②${p2}・③${p3}`)
+    assert.ok(bossRatioOf(k * 3 + 3) > bossRatioOf(k * 3 + 2), `${AREA_LIST[k].name}：③の倍率が①②より高い`)
+  }
 })

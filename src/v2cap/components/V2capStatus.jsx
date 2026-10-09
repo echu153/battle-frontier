@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { STAT_DEFS, STAT_KEYS, calcPower } from '../../v2/lib/stats.js'
-import { rollStamina, msToNextStamina, mmss } from '../../v2/lib/stamina.js'
+import { mmss } from '../../v2/lib/stamina.js'
 import { KIND_COLOR, SKILL_SET_SLOTS } from '../../v2/lib/skills.js'
 import { V2Tip } from '../../v2/components/V2ItemTip.jsx'
 import { RANK_COLOR } from '../../v2/components/v2ui.js'
-import { MAX_LV, needExp, staminaMaxOf } from '../lib/level.js'
+import { MAX_LV, needExp, staminaMaxOf, rollStamina, msToNextStamina } from '../lib/level.js'
 import { JOB_MAX, jobNeed, jobOf, stageOf, stageLabelOf, stageColorOf, weaponsOf } from '../lib/jobs.js'
 import { SKILL_BY_NAME } from '../lib/skills.js'
 import { SLOTS, SLOT_LABEL, kindLabel } from '../lib/equipment.js'
@@ -154,6 +154,11 @@ export default function V2capStatus({ prof, inventory }) {
           {stamNow} / {stamMax}
           {stamNow < stamMax && <span style={{ color:'#7fa6d0' }}>（次まで {mmss(stamNext)}）</span>}
         </span>
+      </div>
+      {/* ★Goldは貯まるだけ（使い道はまだ無い・2026-10-09 エリアの作り替えで入った） */}
+      <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#7fa6d0', marginBottom:'6px' }}>
+        <span>💰 Gold</span>
+        <span style={{ color:'#ffcc00' }}>{Number(prof.gold || 0).toLocaleString()}</span>
       </div>
 
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'2px', marginBottom:'6px' }}>
