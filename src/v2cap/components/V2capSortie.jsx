@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
-import V2LogLine from '../../v2/components/V2LogLine.jsx'
+import V2capLogLine from './V2capLogLine.jsx'
 import { runBattle } from '../../v2/lib/battle.js'
 import { buildBattleLog } from '../../v2/lib/battleLog.js'
 import { LOG_PLAIN } from '../../v2/components/v2ui.js'
@@ -106,8 +106,9 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
         const bonus = enc.role === 'normal' ? '' : `（${enc.role === 'boss' ? 'ボス' : enc.role === 'rare' ? 'レア' : '時間帯限定'}で${mult(enc.role)}）`
         after.push({ text:`${expText}　Gold +${data.gold}${bonus}`, color:'#ffcc00' })
       } else if (data.exp > 0) {
-        // 【確定】負けても経験値はその場所の最低値が入る（倍率なし・Goldは入らない・2026-10-09 ユーザー指示）
-        after.push({ text:`${expText}（負けても最低値は入る）`, color:'#c8a050' })
+        // 【確定】負けても経験値はその場所の最低値が入る（倍率なし・Goldは入らない・2026-10-09 ユーザー指示）。
+        //   文言は「EXP +2（ClassEXP +2）」だけ（「負けても最低値は入る」の添え書きはユーザー指示で外した）
+        after.push({ text: expText, color:'#c8a050' })
       }
       // 負けたときの経験値でもLVは上がりうる
       if (lv.level_ups > 0) after.push({ text:`🆙 レベルアップ！ LV${lv.lv}`, color:'#44ff88' })
@@ -175,7 +176,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
           {auto && <span style={{ color:'#44ff88', fontSize:'11px' }}>▶ オート出撃中（⚡{stamNow}）</span>}
         </div>
         <div style={{ marginBottom:'12px', maxHeight:'300px', overflowY:'auto' }}>
-          {logs.map((l, i) => <V2LogLine key={i} l={l} />)}
+          {logs.map((l, i) => <V2capLogLine key={i} l={l} />)}
         </div>
         {timerRow}
         {auto && (
