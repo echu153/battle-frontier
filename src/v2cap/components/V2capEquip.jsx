@@ -3,7 +3,7 @@ import { supabase } from '../../supabase'
 import { STAT_DEFS, STAT_KEYS } from '../../v2/lib/stats.js'
 import V2Modal from '../../v2/components/V2Modal.jsx'
 import { box, miniBtn, RANK_COLOR, TEXT } from '../../v2/components/v2ui.js'
-import { ITEM_BY_ID, SLOTS, SLOT_LABEL, PARTS, ARMOR_EFFECT, slotsFor, kindLabel } from '../lib/equipment.js'
+import { ITEM_BY_ID, SLOTS, SLOT_LABEL, PARTS, ARMOR_EFFECT, slotsFor, kindLabel, partLabel } from '../lib/equipment.js'
 import { canEquipType, weaponsOf } from '../lib/jobs.js'
 import { equippedItems, wornIdsOf } from '../lib/loadout.js'
 import { powerAt, statsAt, effectPct } from '../lib/gear.js'
@@ -101,7 +101,7 @@ export default function V2capEquip({ prof, inventory, onProfile }) {
           {['all', ...PARTS].map(p => (
             <button key={p} onClick={() => setPart(p)}
               style={{ ...miniBtn(part === p ? '#44aaff' : '#62789a'), color: part === p ? '#88ccff' : '#93a9be' }}>
-              {p === 'all' ? 'すべて' : p}
+              {p === 'all' ? 'すべて' : partLabel(p)}
             </button>
           ))}
         </div>

@@ -16,11 +16,15 @@
 export const RANKS = ['F', 'E', 'D', 'C', 'B', 'A', 'S']
 export const RANK_BASE = { F:10, E:20, D:30, C:40, B:50, A:60, S:70 }
 
-// 枠は7つ（武器1・頭・鎧・腕・足・アクセ2）
+// 枠は7つ（武器1・頭・鎧・腕・足・装飾品2）
 export const SLOTS = ['weapon', 'head', 'body', 'arm', 'foot', 'acc1', 'acc2']
-export const SLOT_LABEL = { weapon:'武器', head:'頭', body:'鎧', arm:'腕', foot:'足', acc1:'アクセ①', acc2:'アクセ②' }
+export const SLOT_LABEL = { weapon:'武器', head:'頭', body:'鎧', arm:'腕', foot:'足', acc1:'装飾品①', acc2:'装飾品②' }
 // 落ちる「部位」（1時間ごとに落ちやすい部位が入れ替わる仕組みは今のⅡと同じ並び）
+// ★装飾品の部位の**内部の名前は「アクセ」のまま**（サーバーの v2cap_equipment.part も同じ）。
+//   画面に出すときは必ず partLabel を通す（2026-10-09 ユーザー指示「アクセじゃなくて装飾品にして」）
 export const PARTS = ['武器', '頭', '鎧', '腕', '足', 'アクセ']
+export const PART_LABEL = { 武器:'武器', 頭:'頭', 鎧:'鎧', 腕:'腕', 足:'足', アクセ:'装飾品' }
+export const partLabel = (part) => PART_LABEL[part] || part
 // 部位の倍率。★武器は1本だけになったので2.0（今のⅡの片手2本ぶん）。
 //   7枠の合計は 2.0＋1.0＋1.3＋1.0＋1.0＋0.8×2 ＝ 7.9 で今のⅡと同じ
 //   ＝「同じLVのCランクを全部そろえると本体と同じくらい」（gear.js）はそのまま
@@ -117,6 +121,6 @@ export const slotsFor = (item) => {
 }
 // 表示用の名前。[B] レイピア のようにランクを頭に付ける
 export const itemLabel = (item, rank) => `[${rank}] ${item?.name || '?'}`
-// 種類の表示（武器は種類・防具は系統と部位・アクセはアクセ）
+// 種類の表示（武器は種類・防具は系統と部位・装飾品は「装飾品」）
 export const kindLabel = (item) =>
-  !item ? '' : item.part === '武器' ? item.type : item.part === 'アクセ' ? 'アクセ' : `${item.line}・${item.part}`
+  !item ? '' : item.part === '武器' ? item.type : item.part === 'アクセ' ? partLabel('アクセ') : `${item.line}・${item.part}`

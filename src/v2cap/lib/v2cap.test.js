@@ -18,7 +18,7 @@ import {
 import { SKILLS, NEW_SKILLS, SKILL_BY_NAME, setMpCost, validateSkillSet, defaultSetOf, DEFAULT_USES_MAX } from './skills.js'
 import {
   BASE_ITEMS, ITEM_BY_ID, WEAPON_TYPES, ARMOR_LINES, ARMOR_PARTS, PART_MULT, SLOTS, ARMOR_EFFECT,
-  weaponsOfType, armorsOf, slotsFor,
+  weaponsOfType, armorsOf, slotsFor, SLOT_LABEL, PARTS, partLabel, kindLabel,
 } from './equipment.js'
 import { powerAt, effectPct, statsAt, armorEffects, GEAR_RATIO, SET_PART_SUM } from './gear.js'
 import { TIER_LV, ENEMY_LEVELS, enemyLvOf, stdPowerAt, BOSS_RATIO, STD_RATIO, enemyPowerOf } from './areas.js'
@@ -285,6 +285,15 @@ test('【確定】必要LVに足りないと、不足1LVごとに効果-5%・下
       assert.equal(Object.values(s).reduce((a, b) => a + b, 0), Math.round(powerAt(item, 'B', ilv) * pct / 100), `${item.name} LV${ilv}`)
     }
   }
+})
+
+test('【確定】画面では「アクセ」ではなく「装飾品」と出す（内部の部位名はアクセのまま）', () => {
+  assert.equal(SLOT_LABEL.acc1, '装飾品①')
+  assert.equal(SLOT_LABEL.acc2, '装飾品②')
+  assert.equal(partLabel('アクセ'), '装飾品')
+  for (const i of BASE_ITEMS.filter(x => x.part === 'アクセ')) assert.equal(kindLabel(i), '装飾品', i.name)
+  for (const part of PARTS) assert.ok(!partLabel(part).includes('アクセ'), `${part}の表示`)
+  assert.ok(!Object.values(SLOT_LABEL).some(l => l.includes('アクセ')), '枠の名前にアクセが残っていない')
 })
 
 test('【確定】防具のメリットは 重鎧＝受けるダメージ−3%／軽装＝AGI+5%（1部位ごと・デメリットなし）', () => {
