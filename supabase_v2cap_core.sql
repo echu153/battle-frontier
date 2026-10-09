@@ -27,6 +27,9 @@
 --     エピックはレアとボスから・レジェンダリーはボスからだけ落ちる。武器は1本・盾なし・防具は重鎧／軽装
 --   ・スキルは**その職業でだけ使える**（他職の技は置けない）。上位職は下位職のスキルをそのまま使える。
 --     スキルセットは**職業ごと**に持つ（v2cap_profiles.skill_sets。転職して戻ると前の編成に戻る）
+--   ・装備の強化（2026-10-10）：+10まで・+1ごとに元の強さの0.1倍ずつ足す。使うのは Gold と、その装備のエリアの「残骸」だけ。
+--     残骸は装備を分解すると入る（ノーマル1・レア5・エピック10・レジェンダリー25）。失敗すると残骸とGoldは消え、強化値はそのまま。
+--     「捨てる」は分解に置き換えた
 -- ============================================================
 
 -- ===== 0. 開発限定ゲート =====
@@ -2847,6 +2850,9 @@ alter table public.v2cap_profiles add column if not exists gold bigint not null 
 alter table public.v2cap_profiles add column if not exists cleared_spots int[] not null default '{}';
 alter table public.v2cap_profiles drop column if exists unlocked_areas;
 alter table public.v2cap_profiles drop column if exists cleared_areas;
+-- ★2026-10-10 装備の強化と分解：持っている残骸（エリアごと）。{"1": 12, "2": 5} ＝エリアの番号→個数
+--   （名前は src/v2cap/lib/smith.js の SCRAP_NAMES。サーバーは番号だけで持つ）。キャラは消さない
+alter table public.v2cap_profiles add column if not exists materials jsonb not null default '{}'::jsonb;
 create unique index if not exists v2cap_profiles_username_lower_idx
   on public.v2cap_profiles (lower(username));
 -- 参照は認証済み全員（今のⅡと同じ）。書き込みはRPC経由だけ
@@ -2919,6 +2925,8 @@ alter table public.v2cap_inventory add column if not exists base_id text referen
 alter table public.v2cap_inventory alter column base_id set not null;
 -- 前の形（ランク F〜S）の列。レア度は装備の一覧（v2cap_equipment.rarity）が持つようになった
 alter table public.v2cap_inventory drop column if exists rank;
+-- ★2026-10-10 強化値（0〜10）。+1ごとに元の強さの0.1倍ずつ足す（強さの計算は src/v2cap/lib/gear.js。サーバーは数だけ持つ）
+alter table public.v2cap_inventory add column if not exists plus int not null default 0;
 -- 前の基本装備（ランクの形＝レア度を持たない行）を一覧から消す。持ち物から指されているものは残す
 --   （上の作り直しで持ち物は空になっているので、ふつうは全部消える）
 delete from public.v2cap_equipment e
@@ -3641,7 +3649,7 @@ revoke all on function public.v2cap_set_favorites(jsonb) from public, anon;
 grant execute on function public.v2cap_set_favorites(jsonb) to authenticated;
 
 -- ============================================================
--- ===== 8. 装備の着脱・捨てる =====
+-- ===== 8. 装備の着脱・分解・強化 =====
 -- ============================================================
 -- ★枠は 武器・頭・鎧・腕・足・装飾品①・装飾品② の7つ（盾なし・武器は1本）。装飾品の部位の内部名は「アクセ」
 -- ★武器は**いまの職業が装備できる種類だけ**。必要LVに足りなくても着けられる（効果が下がるだけ）
@@ -3709,28 +3717,120 @@ $$;
 revoke all on function public.v2cap_unequip(text) from public, anon;
 grant execute on function public.v2cap_unequip(text) to authenticated;
 
--- 捨てる（着けているものは捨てられない）
-create or replace function public.v2cap_discard(p_ids bigint[])
+-- ★2026-10-10「捨てる」は分解に置き換えた（ユーザー決定）。前の形を落とす
+drop function if exists public.v2cap_discard(bigint[]);
+
+-- 分解：選んだ装備を消して、その装備のエリアの残骸を入れる（着けているものは分解できない＝飛ばす）
+-- 【確定】2026-10-10 ユーザー決定：残骸の数はレア度で決まる＝ノーマル1・レア5・エピック10・レジェンダリー25
+--   （強化した装備でも同じ。強化に使った残骸とGoldは戻らない）。数の写しは src/v2cap/lib/smith.js の SCRAP_YIELD
+create or replace function public.v2cap_dismantle(p_ids bigint[])
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
-  v_uid uuid := auth.uid();
-  v_row public.v2cap_profiles;
-  v_n   int;
+  v_uid  uuid := auth.uid();
+  v_row  public.v2cap_profiles;
+  v_gain jsonb;
+  v_n    int;
+  v_mats jsonb;
+  v_key  text;
+  v_add  int;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
-  select * into v_row from public.v2cap_profiles where id = v_uid;
+  if coalesce(cardinality(p_ids), 0) = 0 then
+    return jsonb_build_object('ok', false, 'error', '分解する装備を選んでください');
+  end if;
+  -- ★行をつかんでから（強化と同時に届いても、残骸の数がずれないように）
+  select * into v_row from public.v2cap_profiles where id = v_uid for update;
   if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
-  delete from public.v2cap_inventory i
-   where i.player_id = v_uid and i.id = any(coalesce(p_ids, '{}'))
-     and not exists (select 1 from jsonb_each_text(coalesce(v_row.equipped, '{}'::jsonb)) q
-                      where q.value ~ '^[0-9]+$' and q.value::bigint = i.id);
-  get diagnostics v_n = row_count;
-  return jsonb_build_object('ok', true, 'deleted', v_n);
+  with del as (
+    delete from public.v2cap_inventory i
+     where i.player_id = v_uid and i.id = any(p_ids)
+       and not exists (select 1 from jsonb_each_text(coalesce(v_row.equipped, '{}'::jsonb)) q
+                        where q.value ~ '^[0-9]+$' and q.value::bigint = i.id)
+    returning i.base_id
+  ), got as (
+    select e.area, count(*)::int as n,
+           sum(case e.rarity when 'N' then 1 when 'R' then 5 when 'E' then 10 when 'L' then 25 else 0 end)::int as scrap
+      from del join public.v2cap_equipment e on e.id = del.base_id
+     group by e.area
+  )
+  select coalesce(jsonb_object_agg(got.area::text, got.scrap), '{}'::jsonb), coalesce(sum(got.n), 0)::int
+    into v_gain, v_n
+    from got;
+  v_mats := coalesce(v_row.materials, '{}'::jsonb);
+  for v_key, v_add in select key, value::int from jsonb_each_text(v_gain) loop
+    v_mats := jsonb_set(v_mats, array[v_key], to_jsonb(coalesce((v_mats ->> v_key)::int, 0) + v_add));
+  end loop;
+  update public.v2cap_profiles set materials = v_mats, updated_at = now() where id = v_uid;
+  return jsonb_build_object('ok', true, 'dismantled', v_n, 'gained', v_gain, 'materials', v_mats);
 end;
 $$;
-revoke all on function public.v2cap_discard(bigint[]) from public, anon;
-grant execute on function public.v2cap_discard(bigint[]) to authenticated;
+revoke all on function public.v2cap_dismantle(bigint[]) from public, anon;
+grant execute on function public.v2cap_dismantle(bigint[]) to authenticated;
+
+-- 強化：その装備の強化値を1つ上げる（失敗もある）。着けている装備も強化できる
+-- 【確定】2026-10-10 ユーザー決定：
+--   ・+10まで。+n にする回の 残骸＝1,2,3,4,5,7,8,9,10,11 個（その装備のエリアの残骸）・Gold＝必要LV×20×n・
+--     成功率＝+1が100%、そこから10%ずつ下がって+10で10%
+--   ・**失敗すると残骸とGoldはなくなり、強化値はそのまま**（下がらない・壊れない）
+-- ★表の写しは src/v2cap/lib/smith.js（ENHANCE_SCRAP・ENHANCE_RATE・ENHANCE_GOLD_PER_LV）。v2capsql.test.js が突き合わせる
+create or replace function public.v2cap_enhance(p_inventory_id bigint)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_max         constant int := 10;
+  c_scrap       constant int[] := array[1, 2, 3, 4, 5, 7, 8, 9, 10, 11];
+  c_rate        constant int[] := array[100, 90, 80, 70, 60, 50, 40, 30, 20, 10];
+  c_gold_per_lv constant int := 20;
+  v_uid  uuid := auth.uid();
+  v_row  public.v2cap_profiles;
+  v_inv  public.v2cap_inventory;
+  v_eq   public.v2cap_equipment;
+  v_plus int;
+  v_next int;
+  v_need int;
+  v_gold bigint;
+  v_key  text;
+  v_have int;
+  v_mats jsonb;
+  v_ok   boolean;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  -- ★行をつかんでから見る（連打しても・分解と同時に届いても、残骸とGoldを二重に使えないように）
+  select * into v_row from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  select * into v_inv from public.v2cap_inventory where id = p_inventory_id and player_id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'その装備を持っていません'); end if;
+  select * into v_eq from public.v2cap_equipment where id = v_inv.base_id;
+  v_plus := coalesce(v_inv.plus, 0);
+  if v_plus >= c_max then
+    return jsonb_build_object('ok', false, 'error', format('強化値は+%sが上限です', c_max));
+  end if;
+  v_next := v_plus + 1;
+  v_need := c_scrap[v_next];
+  v_gold := greatest(1, v_inv.ilv)::bigint * c_gold_per_lv * v_next;
+  v_key  := v_eq.area::text;
+  v_mats := coalesce(v_row.materials, '{}'::jsonb);
+  v_have := coalesce((v_mats ->> v_key)::int, 0);
+  if v_have < v_need then return jsonb_build_object('ok', false, 'error', '残骸が足りません'); end if;
+  if v_row.gold < v_gold then return jsonb_build_object('ok', false, 'error', 'Goldが足りません'); end if;
+
+  -- 抽選（成功率は%。+1は100%なので必ず成功する）
+  v_ok := random() * 100 < c_rate[v_next];
+  -- 成功でも失敗でも、残骸とGoldは使う
+  v_mats := jsonb_set(v_mats, array[v_key], to_jsonb(v_have - v_need));
+  update public.v2cap_profiles
+     set materials = v_mats, gold = gold - v_gold, updated_at = now()
+   where id = v_uid;
+  if v_ok then
+    update public.v2cap_inventory set plus = v_next where id = v_inv.id;
+  end if;
+  return jsonb_build_object('ok', true, 'success', v_ok, 'plus', case when v_ok then v_next else v_plus end,
+    'area', v_eq.area, 'scrap', v_need, 'gold', v_gold, 'materials', v_mats, 'gold_left', v_row.gold - v_gold);
+end;
+$$;
+revoke all on function public.v2cap_enhance(bigint) from public, anon;
+grant execute on function public.v2cap_enhance(bigint) to authenticated;
 
 -- ============================================================
 -- ===== 9. 開発用 =====

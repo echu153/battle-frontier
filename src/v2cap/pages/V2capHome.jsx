@@ -20,7 +20,7 @@ import { START_CLASSES, weaponsOf, attackKindOf, classDescOf } from '../lib/jobs
 // 土台で作ったのは：キャラ作成・ステータス・出撃・装備・神殿（転職）・スキルセット
 // ============================================================
 const MENU = [
-  { key:'equip',  label:'装備',         icon:'🛡', color:'#88ccff', action:'着ける・外す・捨てる' },
+  { key:'equip',  label:'装備',         icon:'🛡', color:'#88ccff', action:'着ける・強化・分解' },
   { key:'skills', label:'スキルセット', icon:'📖', color:'#44ff88', action:'編成する' },
   { key:'temple', label:'神殿',         icon:'🏛', color:'#ff88cc', action:'転職する' },
 ]

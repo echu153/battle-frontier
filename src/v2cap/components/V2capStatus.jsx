@@ -10,6 +10,7 @@ import { SKILL_BY_NAME } from '../lib/skills.js'
 import { SLOTS, SLOT_LABEL, kindLabel, itemLabel, RARITY_COLOR } from '../lib/equipment.js'
 import { equippedItems, statBreakdown, currentSetOf } from '../lib/loadout.js'
 import { effectPct, powerAt } from '../lib/gear.js'
+import { plusOf, plusLabel } from '../lib/smith.js'
 import V2capPoints from './V2capPoints.jsx'
 
 // ============================================================
@@ -17,7 +18,7 @@ import V2capPoints from './V2capPoints.jsx'
 //   見た目は今のⅡ（V2Status.jsx）にそろえる。違うのは
 //   ・LVとClassLVの2本のバー（LV100・ClassLVは職業の上限＝初期職30・一次職50で止まる）
 //   ・ステの内訳（本体＋クラス＋装備＋軽装のAGI）をカーソルで出す
-//   ・装備は7枠（武器1・頭・鎧・腕・足・アクセ2）。アイテムLVと、必要LVに足りないときの効果%
+//   ・装備は7枠（武器1・頭・鎧・腕・足・アクセ2）。強化値・アイテムLVと、必要LVに足りないときの効果%
 //   ・防具のメリット（重鎧＝受けるダメージ−%／軽装＝AGI+%）の合計
 //   ・スキルは**いまの職業の編成**（スキルセットは職業ごと）
 //   ・まだ振っていないステータスポイントがあれば、ステの下に「振る」ボタン（V2capPoints）
@@ -86,18 +87,24 @@ export default function V2capStatus({ prof, inventory, onProfile }) {
   const eqCell = (slot, i) => {
     const w = worn[slot]
     const pct = w ? effectPct(w.inv.ilv, prof.lv) : 100
+    const plus = w ? plusOf(w.inv) : 0
+    const power = w ? powerAt(w.item, w.inv.ilv, plus) : 0
     return (
       <div key={slot} style={cell}>
         <span style={{ color:'#7fa6d0', fontSize:'9px', flexShrink:0 }}>{SLOT_LABEL[slot]}</span>
         {w ? (
           <V2Tip alignRight={i % 2 === 1} width="230px" style={{ display:'block', flex:1, minWidth:0 }}
             body={<>
-              <div><span style={{ color: w.item.rarity === 'N' ? '#cfe2ff' : RARITY_COLOR[w.item.rarity] }}>{itemLabel(w.item)}</span>（{kindLabel(w.item)}）</div>
-              <div>アイテムLV {w.inv.ilv}（必要LV {w.inv.ilv}）</div>
-              <div>戦闘力 {powerAt(w.item, w.inv.ilv)}{pct < 100 && <span style={{ color:'#ff8844' }}> → {Math.round(powerAt(w.item, w.inv.ilv) * pct / 100)}（効果{pct}%）</span>}</div>
+              <div>
+                <span style={{ color: w.item.rarity === 'N' ? '#cfe2ff' : RARITY_COLOR[w.item.rarity] }}>{itemLabel(w.item)}</span>
+                {plus > 0 && <span style={{ color:'#ffcc00' }}> {plusLabel(plus)}</span>}（{kindLabel(w.item)}）
+              </div>
+              <div>アイテムLV {w.inv.ilv}（必要LV {w.inv.ilv}）{plus > 0 && <>・強化 {plusLabel(plus)}（強さ{100 + plus * 10}%）</>}</div>
+              <div>戦闘力 {power}{pct < 100 && <span style={{ color:'#ff8844' }}> → {Math.round(power * pct / 100)}（効果{pct}%）</span>}</div>
             </>}>
             <span style={{ ...valueCell, display:'block' }}>
               <span style={{ color: w.item.rarity === 'N' ? '#88ccff' : RARITY_COLOR[w.item.rarity] }}>{w.item.name}</span>
+              {plus > 0 && <span style={{ color:'#ffcc00' }}>{plusLabel(plus)}</span>}
               <span style={{ color:'#93a9be' }}> LV{w.inv.ilv}</span>
               {pct < 100 && <span style={{ color:'#ff8844' }}> {pct}%</span>}
             </span>
@@ -156,7 +163,7 @@ export default function V2capStatus({ prof, inventory, onProfile }) {
           {stamNow < stamMax && <span style={{ color:'#7fa6d0' }}>（次まで {mmss(stamNext)}）</span>}
         </span>
       </div>
-      {/* ★Goldは貯まるだけ（使い道はまだ無い・2026-10-09 エリアの作り替えで入った） */}
+      {/* ★Goldは出撃で入る（2026-10-09 エリアの作り替え）。使い道は装備の強化（2026-10-10） */}
       <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#7fa6d0', marginBottom:'6px' }}>
         <span>💰 Gold</span>
         <span style={{ color:'#ffcc00' }}>{Number(prof.gold || 0).toLocaleString()}</span>

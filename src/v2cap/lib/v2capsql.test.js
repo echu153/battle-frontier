@@ -10,8 +10,9 @@ import { DEFAULT_USES_MAX } from './skills.js'
 import { NEED_PERMIL, MAX_LV, STAMINA_BASE, STAMINA_RECOVER_MS, POINTS_PER_LV, POINTS_STEP, POINTS_ON_STEP, POINT_UNIT } from './level.js'
 import { JOB_NEED_TENTHS, JOB_MAX } from './jobs.js'
 import { ROLE_TENTHS } from './areas.js'
-import { SLOTS } from './equipment.js'
+import { SLOTS, RARITIES } from './equipment.js'
 import { SORTIE_CD, DROP_RARITY } from './sortie.js'
+import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD } from './smith.js'
 import { rewrite } from '../../../tools/v2cap-sql.mjs'
 
 const SQL = readFileSync(new URL('../../../supabase_v2cap_core.sql', import.meta.url), 'utf8')
@@ -198,6 +199,48 @@ test('【確定】枠は7つ（武器1・頭・鎧・腕・足・アクセ2）�
   const list = SLOTS.map(s => `'${s}'`).join(',')
   assert.ok(fnBody('v2cap_equip').includes(`if p_slot not in (${list}) then`), '着けられる枠がJSと同じ')
   assert.ok(!/'left'|'right'/.test(fnBody('v2cap_equip')), '右手・左手の枠は無い')
+})
+
+test('【確定】分解：その装備のエリアの残骸が、レア度で ノーマル1・レア5・エピック10・レジェンダリー25 入る（JSと同じ）。着けているものは分解できない', () => {
+  const d = fnBody('v2cap_dismantle')
+  const yieldCase = `case e.rarity ${RARITIES.map(r => `when '${r}' then ${SCRAP_YIELD[r]}`).join(' ')} else 0 end`
+  assert.ok(d.includes(yieldCase), `残骸の数が smith.js の SCRAP_YIELD と同じ（${yieldCase}）`)
+  assert.deepEqual(SCRAP_YIELD, { N:1, R:5, E:10, L:25 }, 'ユーザーの表')
+  assert.match(d, /select \* into v_row from public\.v2cap_profiles where id = v_uid for update;/, '行をつかんでから（強化と同時でも残骸がずれない）')
+  assert.match(d, /i\.player_id = v_uid and i\.id = any\(p_ids\)/, '自分の装備だけ')
+  assert.match(d, /not exists \(select 1 from jsonb_each_text\(coalesce\(v_row\.equipped, '\{\}'::jsonb\)\) q/, '着けているものは飛ばす')
+  assert.match(d, /group by e\.area/, '残骸はその装備のエリアごと')
+  assert.ok(d.includes('update public.v2cap_profiles set materials = v_mats'))
+  // 「捨てる」は分解に置き換えた（前の形を落とし、もう作らない）
+  assert.ok(SQL.includes('drop function if exists public.v2cap_discard(bigint[]);'))
+  assert.ok(!SQL.includes('create or replace function public.v2cap_discard('), '捨てるRPCはもう無い')
+})
+
+test('【確定】強化：+10まで・残骸は 1,2,3,4,5,7,8,9,10,11・Goldは必要LV×20×n・成功率は100%から10%ずつ下がる（JSと同じ）。失敗しても強化値はそのまま', () => {
+  const e = fnBody('v2cap_enhance')
+  assert.ok(e.includes(`c_max         constant int := ${PLUS_MAX};`), '上限がJSと同じ')
+  assert.ok(e.includes(`c_scrap       constant int[] := array[${ENHANCE_SCRAP.join(', ')}];`), '残骸の数がJSと同じ')
+  assert.ok(e.includes(`c_rate        constant int[] := array[${ENHANCE_RATE.join(', ')}];`), '成功率がJSと同じ')
+  assert.ok(e.includes(`c_gold_per_lv constant int := ${ENHANCE_GOLD_PER_LV};`), 'Goldの係数がJSと同じ')
+  assert.ok(e.includes('v_gold := greatest(1, v_inv.ilv)::bigint * c_gold_per_lv * v_next;'), 'Gold＝必要LV×20×n（smith.js の enhanceGoldOf）')
+  assert.ok(e.includes('v_ok := random() * 100 < c_rate[v_next];'), '抽選は smith.js の rollEnhance と同じ')
+  assert.match(e, /select \* into v_row from public\.v2cap_profiles where id = v_uid for update;/, '行をつかんでから見る（連打で二重に使えない）')
+  assert.match(e, /where id = p_inventory_id and player_id = v_uid for update;/, '自分の装備だけ')
+  // 残骸はその装備のエリアのもの。足りないと通さない
+  assert.ok(e.includes('v_key  := v_eq.area::text;'))
+  assert.ok(e.includes("if v_have < v_need then return jsonb_build_object('ok', false, 'error', '残骸が足りません'); end if;"))
+  assert.ok(e.includes("if v_row.gold < v_gold then return jsonb_build_object('ok', false, 'error', 'Goldが足りません'); end if;"))
+  // 成功でも失敗でも残骸とGoldは使う（分岐の前）・強化値を上げるのは成功のときだけ
+  const spend = e.indexOf('set materials = v_mats, gold = gold - v_gold')
+  const branch = e.search(/if v_ok then\s+update public\.v2cap_inventory set plus = v_next where id = v_inv\.id;\s+end if;/)
+  assert.ok(spend > 0 && branch > spend, '使うのは分岐の前・強化値は成功のときだけ上がる')
+  assert.ok(!/plus = v_plus - 1|plus = plus - 1|delete from public\.v2cap_inventory/.test(e), '失敗しても下がらない・壊れない')
+})
+
+test('強化値（持ち物の plus）と残骸（プロフィールの materials）の列がある。キャラは消さない', () => {
+  assert.ok(SQL.includes('alter table public.v2cap_inventory add column if not exists plus int not null default 0;'))
+  assert.ok(SQL.includes("alter table public.v2cap_profiles add column if not exists materials jsonb not null default '{}'::jsonb;"))
+  assert.ok(SQL.indexOf('add column if not exists plus int') > SQL.indexOf('create table if not exists public.v2cap_inventory'), '持ち物の表ができたあと')
 })
 
 test('出撃の間隔はサーバーでも見る（10秒・通信の揺れぶん2秒の余裕）', () => {
