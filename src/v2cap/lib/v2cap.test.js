@@ -13,20 +13,22 @@ import {
 } from './jobs.js'
 import { SKILLS, NEW_SKILLS, SKILL_BY_NAME, setMpCost, validateSkillSet, defaultSetOf, DEFAULT_USES_MAX } from './skills.js'
 import {
-  BASE_ITEMS, ITEM_BY_ID, WEAPON_TYPES, ARMOR_LINES, ARMOR_PARTS, PART_MULT, SLOTS, ARMOR_EFFECT,
-  weaponsOfType, armorsOf, slotsFor, SLOT_LABEL, PARTS, partLabel, kindLabel,
+  ITEMS, ITEM_BY_ID, KINDS, WEAPON_TYPES, ARMOR_LINES, ARMOR_PARTS, ACCESSORY_TYPES, PART_MULT, SLOTS, ARMOR_EFFECT,
+  RARITIES, RARITY_LABEL, RARITY_BASE, AREA_COUNT, itemOf, itemLabel, slotsFor, SLOT_LABEL, PARTS, partLabel, kindLabel,
 } from './equipment.js'
+import { GEAR_NAMES } from './gearNames.js'
 import { powerAt, effectPct, statsAt, armorEffects, GEAR_RATIO, SET_PART_SUM } from './gear.js'
 import {
   AREA_LIST, SPOTS, SPOT_COUNT, SPOT_LV, spotOf, spotLvOf, spotLabel, itemLvOfArea, expRangeOf, goldRangeOf,
-  ROLE_TENTHS, scaleByRole, RANKS, meanRankOf, enemyLevels, enemyLvOf, enemyRoleOf,
+  ROLE_TENTHS, scaleByRole, enemyLevels, enemyLvOf, enemyRoleOf,
   stdPowerAt, AREA_BOSS, SUB_BOSS, bossRatioOf, STD_RATIO, NORMAL_RATIO, enemyPowerOf,
 } from './areas.js'
 import { AREA_ROSTERS } from './monsters.js'
 import { toFighter, statBreakdown, equippedItems, slotsOf, currentSetOf } from './loadout.js'
 import {
-  rollBaseItem, rollEquipDrop, pickEncounter, rollRewards, rewardRangeOf,
+  rollDropKind, rollEquipDrop, pickEncounter, rollRewards, rewardRangeOf,
   openUntilOf, isSpotUnlocked, unlockedSpotsOf, clearSpot,
+  DROP_CHANCE, DROP_RARITY, SUB_RARE_MULT, dropRarityOf, rollDropRarity, canDropRarity,
 } from './sortie.js'
 
 const rngOf = (seed) => { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }
@@ -121,18 +123,34 @@ test('【確定】負けても経験値はその場所の最低値（朝昼晩�
   assert.deepEqual(rollRewards({ spot: spotOf(1), role: 'boss' }, Math.random, false), { exp: 2, gold: 0 }, '始まりの森①はボスに負けても2')
 })
 
-test('【確定】後の場所ほど高いランクが出やすい。拾えるランクの種類はエリアの中で同じ', () => {
-  let prev = -1
-  for (const s of SPOTS) {
-    const m = meanRankOf(s.dropRanks)
-    assert.ok(m >= prev - 1e-9, `${spotLabel(s)}の平均ランク ${m.toFixed(2)} が前（${prev.toFixed(2)}）より下がらない`)
-    if (s.sub > 1) assert.ok(m > prev, `${spotLabel(s)}はエリアの中で前の場所より上がる`)
-    prev = m
-    assert.ok(Object.keys(s.dropRanks).every(r => RANKS.includes(r)))
+test('【確定】落ちる装備のレア度：エピックはレアとボスから・レジェンダリーはボスからだけ。①②③でレア以上が出やすくなる', () => {
+  // 勝ったときに落ちる確率（%）と、落ちたときのレア度の内訳（2026-10-09 ユーザー承認の案）
+  assert.deepEqual(DROP_CHANCE, { normal: 3, timed: 3, rare: 10, boss: 10 })
+  assert.deepEqual(DROP_RARITY.normal, { N:85, R:15 })
+  assert.deepEqual(DROP_RARITY.timed, { N:85, R:15 })
+  assert.deepEqual(DROP_RARITY.rare, { N:50, R:35, E:15 })
+  assert.deepEqual(DROP_RARITY.boss, { N:40, R:35, E:20, L:5 })
+  assert.deepEqual(SUB_RARE_MULT, [1.0, 1.2, 1.4])
+  for (const role of ['normal', 'timed', 'rare', 'boss']) {
+    for (const sub of [1, 2, 3]) {
+      const d = dropRarityOf(role, sub)
+      assert.ok(Math.abs(Object.values(d).reduce((a, b) => a + b, 0) - 100) < 1e-6, `${role}の${sub}：合計100`)
+      assert.ok(d.N > 0, `${role}の${sub}：ノーマルも落ちる`)
+      assert.equal(!!d.E, role === 'rare' || role === 'boss', `${role}からエピック`)
+      assert.equal(!!d.L, role === 'boss', `${role}からレジェンダリー`)
+      if (sub > 1) assert.ok(d.N < dropRarityOf(role, sub - 1).N, `${role}：${sub}は前の場所よりノーマルが減る`)
+    }
+    assert.equal(canDropRarity(role, 'E'), role === 'rare' || role === 'boss')
+    assert.equal(canDropRarity(role, 'L'), role === 'boss')
+    assert.ok(canDropRarity(role, 'N') && canDropRarity(role, 'R'))
   }
-  for (const a of AREA_LIST.map((_, k) => SPOTS.slice(k * 3, k * 3 + 3))) {
-    assert.deepEqual(Object.keys(a[1].dropRanks), Object.keys(a[0].dropRanks), `${a[0].areaName}の①と②`)
-    assert.deepEqual(Object.keys(a[2].dropRanks), Object.keys(a[0].dropRanks), `${a[0].areaName}の①と③`)
+  assert.deepEqual(dropRarityOf('boss', 3), { N: 16, R: 49, E: 28, L: 7 }, '③のボスはレア以上が1.4倍')
+  assert.deepEqual(dropRarityOf('normal', 2), { N: 82, R: 18 })
+  // 実際に引いても、ふつうの敵からエピック・レジェンダリーは出ない
+  const rng = rngOf(7)
+  for (let i = 0; i < 3000; i++) {
+    assert.ok(['N', 'R'].includes(rollDropRarity('timed', 3, rng)))
+    assert.notEqual(rollDropRarity('rare', 3, rng), 'L')
   }
 })
 
@@ -326,37 +344,91 @@ test('【確定】スキルセットは職業ごと。初めて就いた職業�
 })
 
 // ===== 装備 =====
-test('【確定】武器は12種・盾なし。基本装備ごとに配分が違う（武器36・防具16・アクセ4）', () => {
+test('【確定】装備はエリアごとに24点（武器12種・重鎧4部位・軽装4部位・装飾品4種）× レア度4段階。名前はユーザーの表', () => {
   assert.deepEqual(WEAPON_TYPES, ['片手剣', '両手剣', '斧', '槍', '鈍器', '短剣', '拳', '弓', '銃', '杖', '書', '投擲'])
-  const weapons = BASE_ITEMS.filter(i => i.part === '武器')
-  assert.equal(weapons.length, 36)
-  for (const t of WEAPON_TYPES) assert.ok(weaponsOfType(t).length >= 2, `${t}は基本装備が2つ以上`)
-  assert.ok(!BASE_ITEMS.some(i => i.name.includes('盾') || i.type === '盾'), '盾は無い')
   assert.deepEqual(ARMOR_LINES, ['重鎧', '軽装'])
-  for (const part of ARMOR_PARTS) for (const line of ARMOR_LINES) assert.equal(armorsOf(part, line).length, 2, `${line}・${part}`)
-  assert.equal(BASE_ITEMS.filter(i => i.part === 'アクセ').length, 4)
-  for (const i of BASE_ITEMS) {
-    assert.equal(Object.values(i.dist).reduce((a, b) => a + b, 0), 100, `${i.name}の配分の合計`)
-    assert.ok(!('hp' in i.dist) && !('mp' in i.dist) && !('luk' in i.dist), `${i.name}：HP・MP・LUKは載せない`)
+  assert.deepEqual(ACCESSORY_TYPES, ['リング', 'イヤリング', 'ベルト', 'ネックレス'])
+  assert.deepEqual(RARITIES, ['N', 'R', 'E', 'L'])
+  assert.deepEqual(RARITY_LABEL, { N:'ノーマル', R:'レア', E:'エピック', L:'レジェンダリー' })
+  assert.equal(KINDS.length, 24)
+  assert.equal(AREA_COUNT, AREA_LIST.length)
+  assert.equal(ITEMS.length, AREA_LIST.length * 4 * 24)
+  assert.equal(new Set(ITEMS.map(i => i.id)).size, ITEMS.length, 'IDは重複しない')
+  assert.equal(new Set(ITEMS.map(i => i.name)).size, ITEMS.length, '名前も重複しない')
+  assert.ok(!ITEMS.some(i => i.name.includes('盾') || i.type === '盾'), '盾は無い')
+  for (let area = 1; area <= AREA_COUNT; area++) {
+    for (const r of RARITIES) {
+      const list = ITEMS.filter(i => i.area === area && i.rarity === r)
+      assert.equal(list.length, 24, `エリア${area}の${RARITY_LABEL[r]}は24点`)
+      assert.equal(list.filter(i => i.part === '武器').length, 12)
+      for (const line of ARMOR_LINES) assert.equal(list.filter(i => i.line === line).length, 4, `${line}は4部位`)
+      assert.equal(list.filter(i => i.part === 'アクセ').length, 4)
+    }
   }
-  assert.equal(new Set(BASE_ITEMS.map(i => i.id)).size, BASE_ITEMS.length, 'IDは重複しない')
+  for (const r of RARITIES) for (const k of KINDS) assert.equal(GEAR_NAMES[r][k.key].length, AREA_COUNT, `${r}の${k.key}は15エリアぶん`)
+  // 名前はユーザーの表のとおり（いくつか抜き出して固定）
+  assert.equal(itemOf(1, 'N', '片手剣').name, 'ブロンズソード')
+  assert.equal(itemOf(1, 'R', '片手剣').name, '若葉の剣')
+  assert.equal(itemOf(1, 'E', '片手剣').name, '翠玉剣ジェイド')
+  assert.equal(itemOf(1, 'L', '片手剣').name, '原初剣アルファ')
+  assert.equal(itemOf(15, 'L', '片手剣').name, '終焉剣オメガ')
+  assert.equal(itemOf(15, 'L', '書').name, '終わりの物語')
+  assert.equal(itemOf(1, 'N', '銃').name, 'マッチロック')
+  assert.equal(itemOf(8, 'N', '弓').name, 'ミスリルボウ')
+  assert.equal(itemOf(15, 'N', '書').name, '創世記')
+  assert.equal(itemOf(2, 'R', '軽装頭').name, 'ウルフハイドフード')
+  assert.equal(itemOf(1, 'E', '斧').name, '女王蟻の大顎')
+  // 画面の名前：ノーマルは名前だけ、ほかはレア度を頭に付ける
+  assert.equal(itemLabel(itemOf(1, 'N', '片手剣')), 'ブロンズソード')
+  assert.equal(itemLabel(itemOf(1, 'R', '片手剣')), '【レア】若葉の剣')
+  assert.equal(itemLabel(itemOf(1, 'L', '片手剣')), '【レジェンダリー】原初剣アルファ')
 })
 
-test('【確定】武器は1本だけ。枠は7つ（武器・頭・鎧・腕・足・アクセ2）', () => {
+test('【確定】配分は種類ごとに1つ（エリアとレア度では変わらない）。物理と魔法の両方が使う種類は間の配分', () => {
+  for (const i of ITEMS) {
+    assert.equal(Object.values(i.dist).reduce((a, b) => a + b, 0), 100, `${i.name}の配分の合計`)
+    assert.ok(!('hp' in i.dist) && !('mp' in i.dist) && !('luk' in i.dist), `${i.name}：HP・MP・LUKは載せない`)
+    assert.equal(i.dist, itemOf(1, 'N', i.kind).dist, `${i.name}はエリア1のノーマルと同じ配分`)
+  }
+  // 物理職だけが使う種類にINTは載せない・魔法職だけの種類にSTRは載せない・両方が使う種類はSTRとINTの両方を持つ
+  for (const t of WEAPON_TYPES) {
+    const users = CLASSES.filter(c => c.weapons.includes(t))
+    assert.ok(users.length > 0, `${t}を使う職業がいる`)
+    const phys = users.some(c => c.kind === 'phys'), mag = users.some(c => c.kind === 'mag')
+    const d = itemOf(1, 'N', t).dist
+    if (phys && mag) assert.ok(d.str > 0 && d.int_stat > 0, `${t}は物理と魔法の両方`)
+    else if (phys) assert.ok(!d.int_stat, `${t}は物理だけ`)
+    else assert.ok(!d.str, `${t}は魔法だけ`)
+  }
+  // 防具はどの職業も着けるので、STRとINTを同じだけ
+  for (const line of ARMOR_LINES) for (const p of ARMOR_PARTS) {
+    const d = itemOf(1, 'N', `${line}${p}`).dist
+    assert.ok(d.str > 0 && d.str === d.int_stat, `${line}・${p}はSTRとINTを同じだけ`)
+  }
+})
+
+test('【確定】武器は1本だけ。枠は7つ（武器・頭・鎧・腕・足・装飾品2）', () => {
   assert.deepEqual(SLOTS, ['weapon', 'head', 'body', 'arm', 'foot', 'acc1', 'acc2'])
-  for (const i of BASE_ITEMS) assert.ok(slotsFor(i).length >= 1, i.name)
-  assert.deepEqual(slotsFor(ITEM_BY_ID['w:大剣']), ['weapon'], '両手剣も武器の枠1つ')
+  for (const i of ITEMS) assert.ok(slotsFor(i).length >= 1, i.name)
+  assert.deepEqual(slotsFor(itemOf(1, 'N', '両手剣')), ['weapon'], '両手剣も武器の枠1つ')
+  assert.deepEqual(slotsFor(itemOf(1, 'N', 'リング')), ['acc1', 'acc2'])
+  assert.deepEqual(slotsFor(itemOf(1, 'N', '軽装足')), ['foot'])
   assert.equal(PART_MULT.武器, 2.0)
   const sum = PART_MULT.武器 + PART_MULT.頭 + PART_MULT.鎧 + PART_MULT.腕 + PART_MULT.足 + PART_MULT.アクセ * 2
   assert.ok(Math.abs(sum - SET_PART_SUM) < 1e-9, `7枠の倍率の合計 ${sum}`)
 })
 
-test('【確定】同じLVのCランクを全部の枠にそろえると、本体（LVぶん）と同じくらい', () => {
+test('【確定】強さはレア度で決まる（ノーマル1.0／レア1.25／エピック1.5／レジェンダリー1.75）。ノーマルを全部そろえると本体と同じくらい', () => {
   assert.equal(GEAR_RATIO, 1)
-  const set = ['w:ロングソード', 'a:鉄兜', 'a:プレートメイル', 'a:鉄の籠手', 'a:鉄靴', 'c:リング', 'c:リング'].map(id => ITEM_BY_ID[id])
+  assert.deepEqual(RARITY_BASE, { N:40, R:50, E:60, L:70 })
+  const set = (r) => ['片手剣', '重鎧頭', '重鎧鎧', '重鎧腕', '重鎧足', 'リング', 'リング'].map(k => itemOf(3, r, k))
   for (const lv of [20, 50, 100]) {
-    const sum = set.reduce((t, it) => t + powerAt(it, 'C', lv), 0)
-    assert.ok(Math.abs(sum - bodyPowerAt(lv)) / bodyPowerAt(lv) < 0.03, `LV${lv}：装備${sum} ≒ 本体${bodyPowerAt(lv)}`)
+    const sum = (r) => set(r).reduce((t, it) => t + powerAt(it, lv), 0)
+    assert.ok(Math.abs(sum('N') - bodyPowerAt(lv)) / bodyPowerAt(lv) < 0.03, `LV${lv}：ノーマル${sum('N')} ≒ 本体${bodyPowerAt(lv)}`)
+    for (const [r, m] of [['R', 1.25], ['E', 1.5], ['L', 1.75]]) {
+      // 1つずつ整数に丸めるので、LVが低いほど少しずれる（LV20で±3%）
+      assert.ok(Math.abs(sum(r) / sum('N') - m) < 0.04, `LV${lv}：${RARITY_LABEL[r]}はノーマルの${m}倍（${sum(r)}）`)
+    }
   }
 })
 
@@ -367,10 +439,10 @@ test('【確定】必要LVに足りないと、不足1LVごとに効果-5%・下
   assert.equal(effectPct(20, 10), 50)
   assert.equal(effectPct(28, 10), 10)
   assert.equal(effectPct(100, 1), 10, 'どれだけ足りなくても10%は残る')
-  for (const item of BASE_ITEMS) {
+  for (const item of ITEMS.filter(i => i.area === 1 || i.rarity === 'L')) {
     for (const [ilv, pct] of [[1, 100], [37, 100], [80, 55], [100, 10]]) {
-      const s = statsAt(item, 'B', ilv, pct)
-      assert.equal(Object.values(s).reduce((a, b) => a + b, 0), Math.round(powerAt(item, 'B', ilv) * pct / 100), `${item.name} LV${ilv}`)
+      const s = statsAt(item, ilv, pct)
+      assert.equal(Object.values(s).reduce((a, b) => a + b, 0), Math.round(powerAt(item, ilv) * pct / 100), `${item.name} LV${ilv}`)
     }
   }
 })
@@ -379,7 +451,7 @@ test('【確定】画面では「アクセ」ではなく「装飾品」と出�
   assert.equal(SLOT_LABEL.acc1, '装飾品①')
   assert.equal(SLOT_LABEL.acc2, '装飾品②')
   assert.equal(partLabel('アクセ'), '装飾品')
-  for (const i of BASE_ITEMS.filter(x => x.part === 'アクセ')) assert.equal(kindLabel(i), '装飾品', i.name)
+  for (const i of ITEMS.filter(x => x.part === 'アクセ')) assert.equal(kindLabel(i), '装飾品', i.name)
   for (const part of PARTS) assert.ok(!partLabel(part).includes('アクセ'), `${part}の表示`)
   assert.ok(!Object.values(SLOT_LABEL).some(l => l.includes('アクセ')), '枠の名前にアクセが残っていない')
 })
@@ -388,7 +460,7 @@ test('【確定】防具のメリットは 重鎧＝受けるダメージ−3%�
   assert.equal(ARMOR_EFFECT.重鎧.takenPct, -3)
   assert.equal(ARMOR_EFFECT.軽装.agiPct, 5)
   assert.ok(!ARMOR_EFFECT.重鎧.agiPct && !ARMOR_EFFECT.軽装.takenPct, 'デメリットは付けない')
-  const heavy = armorsOf('頭', '重鎧')[0], light = armorsOf('頭', '軽装')[0]
+  const heavy = itemOf(1, 'N', '重鎧頭'), light = itemOf(1, 'N', '軽装頭')
   assert.deepEqual(armorEffects([{ item: heavy, pct: 100 }, { item: heavy, pct: 100 }]), { takenPct: -6, agiPct: 0, takenMult: 0.94 })
   assert.deepEqual(armorEffects([{ item: light, pct: 100 }]), { takenPct: 0, agiPct: 5, takenMult: 1 })
   // 必要LVに足りないときは、メリットも同じ割合で弱まる
@@ -414,14 +486,14 @@ test('【確定】戦闘で使うのは、いまの職業の編成だけ。そ�
 
 test('戦闘のステ＝本体＋いまの職業のクラスのステ＋装備（必要LV不足ぶんを引く）＋軽装のAGI', () => {
   const inv = [
-    { id: 1, base_id: 'w:大剣', rank: 'C', ilv: 40 },
-    { id: 2, base_id: 'a:ブーツ', rank: 'C', ilv: 30 },
+    { id: 1, base_id: '3N:両手剣', ilv: 40 },
+    { id: 2, base_id: '3R:軽装足', ilv: 30 },
   ]
   const prof = baseProf({ equipped: { weapon: 1, foot: 2 } })
   const bd = statBreakdown(prof, inv)
   assert.deepEqual(bd.job, jobBonusStats('戦士', 30))
-  const gearW = Math.round(powerAt(ITEM_BY_ID['w:大剣'], 'C', 40) * 50 / 100)
-  const gearF = powerAt(ITEM_BY_ID['a:ブーツ'], 'C', 30)
+  const gearW = Math.round(powerAt(ITEM_BY_ID['3N:両手剣'], 40) * 50 / 100)
+  const gearF = powerAt(ITEM_BY_ID['3R:軽装足'], 30)
   assert.equal(calcPower(bd.gear), gearW + gearF, 'LV30でLV40の装備＝効果50%')
   assert.equal(bd.armor.agiPct, 5)
   assert.equal(bd.armorAgi, Math.round((bd.body.agi + bd.job.agi + bd.gear.agi) * 0.05))
@@ -429,14 +501,14 @@ test('戦闘のステ＝本体＋いまの職業のクラスのステ＋装備�
 })
 
 test('【確定】いまの職業で装備できない武器は効かない（数えない）', () => {
-  const inv = [{ id: 1, base_id: 'w:長杖', rank: 'C', ilv: 30 }]
+  const inv = [{ id: 1, base_id: '2N:杖', ilv: 30 }]
   assert.equal(Object.keys(equippedItems(baseProf({ equipped: { weapon: 1 } }), inv)).length, 0, '戦士は杖を装備できない')
   assert.equal(Object.keys(equippedItems(baseProf({ class:'魔法使い', equipped: { weapon: 1 } }), inv)).length, 1, '魔法使いはできる')
   assert.equal(canEquipType('戦士', '杖'), false)
 })
 
 test('【確定】職業補正は一旦なし（noClassBonus）。重鎧の軽減は taken、通常攻撃の種類は kind で渡す', () => {
-  const inv = [1, 2, 3, 4].map(id => ({ id, base_id: ['a:鉄兜', 'a:プレートメイル', 'a:鉄の籠手', 'a:鉄靴'][id - 1], rank: 'C', ilv: 30 }))
+  const inv = [1, 2, 3, 4].map(id => ({ id, base_id: ['3N:重鎧頭', '3N:重鎧鎧', '3N:重鎧腕', '3N:重鎧足'][id - 1], ilv: 30 }))
   const f = toFighter(baseProf({ class:'薬師', jobs: { 薬師: { lv: 5, exp: 0 } }, equipped: { head: 1, body: 2, arm: 3, foot: 4 } }), inv)
   assert.equal(f.noClassBonus, true)
   assert.equal(f.kind, 'mag', '薬師の通常攻撃は魔法')
@@ -448,27 +520,31 @@ test('【確定】職業補正は一旦なし（noClassBonus）。重鎧の軽�
 })
 
 // ===== ドロップ =====
-test('【確定】武器はいまの職業が装備できる3種から落ちる。防具は重鎧と軽装の両方が落ちる', () => {
+test('【確定】落ちるのはそのエリアの装備。武器はいまの職業が装備できる3種から・防具は重鎧と軽装の両方', () => {
   const rng = rngOf(7)
   for (const cls of START_CLASSES) {
-    for (let i = 0; i < 300; i++) {
-      const w = rollBaseItem('武器', cls, rng)
-      assert.ok(canEquipType(cls, w.type), `${cls}に${w.type}が落ちた`)
-    }
+    for (let i = 0; i < 300; i++) assert.ok(canEquipType(cls, rollDropKind('武器', cls, rng)), `${cls}に落ちた武器`)
   }
-  const lines = new Set(Array.from({ length: 200 }, () => rollBaseItem('鎧', '戦士', rng).line))
-  assert.deepEqual([...lines].sort(), ['軽装', '重鎧'])
-  // 落ちたものはアイテムLV＝エリアのアイテムLV・ランクはその場所の分布の中
+  const lines = new Set(Array.from({ length: 200 }, () => rollDropKind('鎧', '戦士', rng)))
+  assert.deepEqual([...lines].sort(), ['軽装鎧', '重鎧鎧'])
+  for (let i = 0; i < 50; i++) assert.ok(ACCESSORY_TYPES.includes(rollDropKind('アクセ', '戦士', rng)))
+  // 実際に出撃して拾う：エリア・アイテムLV・レア度の出どころ（荒廃した草原の②③。3回に1回はボスに会う）
+  const seen = { normal: new Set(), timed: new Set(), rare: new Set(), boss: new Set() }
   let got = 0
-  for (let i = 0; i < 20000 && got < 50; i++) {
-    const enc = pickEncounter(5, 0, new Date(Date.UTC(2026, 0, 1, i % 24)), rng)
+  for (let i = 0; i < 200000 && got < 400; i++) {
+    const enc = pickEncounter(5 + (i % 2), i % 3 === 0 ? 100 : 0, new Date(Date.UTC(2026, 0, 1, i % 24)), rng)
     const d = rollEquipDrop(enc, '盗賊', new Date(), rng)
     if (!d) continue
     got++
-    assert.equal(d.ilv, itemLvOfArea(2))
-    assert.ok(Object.keys(spotOf(5).dropRanks).includes(d.rank), d.rank)
+    assert.equal(d.item.area, enc.spot.area, 'そのエリアの装備')
+    assert.equal(d.ilv, itemLvOfArea(enc.spot.area), 'アイテムLVはエリアごとに1つ')
+    assert.ok(canDropRarity(enc.role, d.item.rarity), `${enc.role}から${RARITY_LABEL[d.item.rarity]}`)
+    seen[enc.role].add(d.item.rarity)
+    if (d.item.part === '武器') assert.ok(canEquipType('盗賊', d.item.type), d.item.type)
   }
-  assert.ok(got >= 50, 'ドロップを拾えている')
+  assert.ok(got >= 400, 'ドロップを拾えている')
+  assert.ok(seen.boss.has('E') && seen.boss.has('L'), 'ボスからエピックとレジェンダリーも落ちる')
+  assert.ok(!seen.normal.has('E') && !seen.timed.has('E'), 'ふつうの敵からエピックは落ちない')
 })
 
 // ===== 敵 =====

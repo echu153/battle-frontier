@@ -4,8 +4,8 @@
 // 2026-10-09 エリアの作り替え（ユーザー指示・docs/v2cap-design.md §3）：
 //   ・15エリアを1本道で進む。エリアごとに ①②③ の3か所（＝場所。全部で45か所）
 //   ・①のボスを倒すと②、②のボスで③、③のボスで次のエリアの①が開く。③のボスは特に強い
-//   ・後に開く場所ほど敵が強く、経験値とGoldが多く、高いランクの装備が出やすい
-//     （拾える装備の種類はエリアの中で同じ＝ランクの出やすさだけ変わる）
+//   ・後に開く場所ほど敵が強く、経験値とGoldが多い。装備は**エリアごとの一覧**（equipment.js）から落ち、
+//     ①→②→③でレア以上が少しずつ出やすくなる（sortie.js の dropRarityOf）
 //   ・経験値とGoldは場所ごとの表の値（1体ごとに範囲の中でランダム）。
 //     朝昼晩の限定の敵は1.5倍・レアは3倍・ボスは5倍
 //   ・装備のアイテムLV（＝必要LV）は**エリアごとに1つ**（①のボスのLV。①②③どこで拾っても同じ）
@@ -13,7 +13,7 @@
 //
 // 敵の名前・配分・技は monsters.js（名前はユーザーの一覧のとおり）。
 // 敵のLVは場所のLV帯の中で敵ごとに決まり、強さは「そのLVのプレイヤーの標準の戦闘力 × 役割の倍率」。
-// ★敵のLV・経験値とGoldの範囲・アイテムLV・ランクはサーバー（v2cap_spots / v2cap_enemies）にも持たせる。
+// ★敵のLV・経験値とGoldの範囲・アイテムLVはサーバー（v2cap_spots / v2cap_enemies）にも持たせる。
 //   ⚠ここを変えたら tools/v2cap-sql.mjs でSQLの種を作り直すこと（v2capsql.test.js が突き合わせる）
 // ============================================================
 import { statsOf } from '../../v2/lib/enemies.js'
@@ -70,65 +70,6 @@ export const spotLvText = (id) => { const [a, b] = spotLvOf(id); return a === b 
 // アイテムLV（＝必要LV）。【確定】エリアごとに1つ＝そのエリアの①のボスのLV（2026-10-09 ユーザー決定）
 export const itemLvOfArea = (areaNo) => spotLvOf((areaNo - 1) * 3 + 1)[1]
 
-// ===== 落ちる装備のランク =====
-// 【確定】後の場所ほど高いランクが出やすい。拾えるランクの種類はエリアの中で同じ（2026-10-09 ユーザー指示）。
-// エリアごとの元の分布（今のⅡの難易度帯の分布）を、場所ごとに決めた「平均のランク」へ傾けて作る。
-//   平均のランク … ②は帯の値を線でつなぎ、①は前の②から6割・③は次の②へ4割進んだところ
-//                  ＝45か所で必ず上がっていく（③と次の①が同じだと、丸めで逆転することがあった）
-//   傾け方 … 重み × m^(ランクの段) の m を、平均がちょうど目標になるように探す（種類は変わらない）
-export const RANKS = ['F', 'E', 'D', 'C', 'B', 'A', 'S']
-const DROP_BASE = [
-  { F:40, E:40, D:20 },                       // 始まりの森
-  { F:35, E:30, D:22, C:13 },                 // 荒廃した草原
-  { F:30, E:28, D:24, C:13, B:5 },            // 古代の洞窟
-  { F:26, E:26, D:23, C:15, B:10 },           // 蒼海の入り江
-  { F:26, E:26, D:23, C:15, B:10 },           // 灼砂の遺丘
-  { E:38, D:30, C:20, B:9, A:3 },             // 巨峰山脈
-  { E:38, D:30, C:20, B:9, A:3 },             // 常闇の樹海
-  { E:33, D:29, C:21, B:11, A:6 },            // 白銀の霊峰
-  { E:33, D:29, C:21, B:11, A:6 },            // 雷鳴の断崖
-  { D:40, C:30, B:20, A:10 },                 // 煉獄火山
-  { D:40, C:30, B:20, A:10 },                 // 腐海の沼獄
-  { D:40, C:30, B:20, A:10 },                 // 奈落の坑道
-  { D:35, C:29, B:22, A:14 },                 // 蒼天の浮遊城
-  { D:35, C:29, B:22, A:14 },                 // 星霜の遺跡
-  { D:35, C:29, B:22, A:14 },                 // 深淵の海溝
-]
-export const meanRankOf = (dist) => {
-  const tot = Object.values(dist).reduce((a, b) => a + b, 0)
-  return Object.entries(dist).reduce((t, [r, w]) => t + RANKS.indexOf(r) * w / tot, 0)
-}
-// ②の平均のランク：帯の最初のエリアは帯の分布のまま、同じ帯の2つ目以降は次の帯へ向けて線でつなぐ
-const TIER_FIRST = [0, 1, 2, 3, 5, 7, 9, 12]   // 帯の最初のエリア（0始まり）
-const MID_MEAN = (() => {
-  const anchors = TIER_FIRST.map(i => [i, meanRankOf(DROP_BASE[i])])
-  const last = anchors[anchors.length - 1]
-  anchors.push([AREA_LIST.length, last[1] + 0.3])   // 最後の帯の先（深淵の海溝の③のため）
-  return AREA_LIST.map((_, k) => {
-    for (let i = 1; i < anchors.length; i++) {
-      const [k1, m1] = anchors[i]
-      if (k < k1) { const [k0, m0] = anchors[i - 1]; return m0 + (m1 - m0) * (k - k0) / (k1 - k0) }
-    }
-    return last[1]
-  })
-})()
-const targetMeanOf = (k, sub) => {
-  const m = MID_MEAN[k]
-  if (sub === 2) return m
-  if (sub === 1) return k === 0 ? m - (MID_MEAN[1] - m) * 0.4 : MID_MEAN[k - 1] + (m - MID_MEAN[k - 1]) * 0.6
-  return k === AREA_LIST.length - 1 ? m + (m - MID_MEAN[k - 1]) * 0.4 : m + (MID_MEAN[k + 1] - m) * 0.4
-}
-const tilt = (base, mean) => {
-  const keys = Object.keys(base)
-  const at = (m) => Object.fromEntries(keys.map(r => [r, base[r] * Math.pow(m, RANKS.indexOf(r))]))
-  let lo = 0.01, hi = 100
-  for (let i = 0; i < 80; i++) { const mid = Math.sqrt(lo * hi); if (meanRankOf(at(mid)) < mean) lo = mid; else hi = mid }
-  const w = at(Math.sqrt(lo * hi))
-  const tot = Object.values(w).reduce((a, b) => a + b, 0)
-  return Object.fromEntries(keys.map(r => [r, Math.round(w[r] / tot * 1000) / 10]))
-}
-export const DROP_RANKS = AREA_LIST.flatMap((_, k) => [1, 2, 3].map(sub => tilt(DROP_BASE[k], targetMeanOf(k, sub))))
-
 // ===== 場所 =====
 // ★itemLv は SPOT_LV から毎回引く（--tune が SPOT_LV を差し替えても追従するように）
 // ★顔ぶれ（roster）の敵には、いる場所（spot）を付けて持つ。同じ敵が②と③の両方に出るので、
@@ -141,7 +82,6 @@ export const SPOTS = AREA_LIST.flatMap((a, k) => a.spots.map((name, j) => {
     id, area: k + 1, areaName: a.name, sub: j + 1, name,
     exp: expRangeOf(k + 1, j + 1), gold: goldRangeOf(k + 1, j + 1),
     get itemLv() { return itemLvOfArea(k + 1) },
-    dropRanks: DROP_RANKS[id - 1],
     roster: { enemies: withSpot(r.enemies, id), timed: withSpot(r.timed, id), rares: withSpot(r.rares, id), boss: { ...r.boss, spot: id } },
   }
 }))

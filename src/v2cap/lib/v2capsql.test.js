@@ -11,7 +11,7 @@ import { NEED_PERMIL, MAX_LV, STAMINA_BASE, STAMINA_RECOVER_MS } from './level.j
 import { JOB_NEED_TENTHS, JOB_MAX } from './jobs.js'
 import { ROLE_TENTHS } from './areas.js'
 import { SLOTS } from './equipment.js'
-import { SORTIE_CD } from './sortie.js'
+import { SORTIE_CD, DROP_RARITY } from './sortie.js'
 import { rewrite } from '../../../tools/v2cap-sql.mjs'
 
 const SQL = readFileSync(new URL('../../../supabase_v2cap_core.sql', import.meta.url), 'utf8')
@@ -51,9 +51,37 @@ test('【確定】1勝のEXPとGoldは場所の表 × 役割の倍率（朝昼�
   assert.match(settle, /gold = gold \+ v_gold/)
   // 負けても経験値はその場所の最低値（倍率なし・Goldなし＝ sortie.js の lossExpOf）
   assert.match(settle, /else\s+--[^\n]*\n(\s*--[^\n]*\n)*\s*v_exp := v_spot\.exp_min;\s+end if;/)
-  // アイテムLVはエリアごとに1つ（場所の item_lv）・ランクはその場所の分布の中
-  assert.match(settle, /values \(v_uid, v_eq\.id, p_rank, v_spot\.item_lv\)/)
-  assert.match(settle, /v_spot\.drop_ranks \? coalesce\(p_rank, ''\)/)
+  // アイテムLVはエリアごとに1つ（場所の item_lv）。レア度は装備が持つ（持ち物にランクの列は無い）
+  assert.match(settle, /values \(v_uid, v_eq\.id, v_spot\.item_lv\)/)
+})
+
+test('【確定】落ちた装備は「その場所のエリアの装備」で「その役割の敵から落ちるレア度」のときだけ持ち物に入る', () => {
+  const settle = fnBody('v2cap_sortie_settle')
+  assert.match(settle, /v_eq\.area = v_spot\.area/)
+  // JS（sortie.js の DROP_RARITY）から「そのレア度を落とす役割」を作って、SQLの条件と突き合わせる
+  const all = Object.keys(DROP_RARITY)
+  const roles = (r) => all.filter(role => (DROP_RARITY[role][r] || 0) > 0)
+  assert.deepEqual(roles('N'), all)
+  assert.deepEqual(roles('R'), all)
+  assert.deepEqual(roles('E'), ['rare', 'boss'], 'エピックはレアとボスから（ユーザー決定）')
+  assert.deepEqual(roles('L'), ['boss'], 'レジェンダリーはボスからだけ（ユーザー決定）')
+  assert.ok(settle.includes("v_eq.rarity in ('N', 'R')"), 'ノーマル・レアはどの敵からも')
+  assert.ok(settle.includes("(v_eq.rarity = 'E' and v_en.role in ('rare', 'boss'))"), 'エピックはレアとボス')
+  assert.ok(settle.includes("(v_eq.rarity = 'L' and v_en.role = 'boss')"), 'レジェンダリーはボスだけ')
+  assert.ok(!/p_rank|drop_ranks/.test(settle), 'ランクの引数・列はもう使わない')
+  assert.ok(SQL.includes('drop function if exists public.v2cap_sortie_settle(int, text, boolean, text, text, boolean);'), 'ランクのある前の形を落とす')
+})
+
+test('装備の一覧はエリアとレア度を持つ。ランクの列（持ち物の rank・場所の drop_ranks）は消し、前の基本装備は作り直しのあとで消す', () => {
+  assert.ok(SQL.includes('alter table public.v2cap_equipment add column if not exists area int;'))
+  assert.ok(SQL.includes('alter table public.v2cap_equipment add column if not exists rarity text;'))
+  assert.ok(SQL.includes('alter table public.v2cap_inventory drop column if exists rank;'))
+  assert.ok(SQL.indexOf('alter table public.v2cap_spots drop column if exists drop_ranks;') < SQL.indexOf('-- @@seed:spots'), '場所の種を入れる前に消す')
+  // 前の基本装備（レア度を持たない行）は、持ち物を空にする作り直しのあとで消す（持ち物から指されているものは残す）
+  const cleanup = SQL.search(/delete from public\.v2cap_equipment e\r?\n\s*where e\.rarity is null\r?\n\s*and not exists \(select 1 from public\.v2cap_inventory i where i\.base_id = e\.id\);/)
+  assert.ok(cleanup > 0, '前の基本装備を消す文がある')
+  assert.ok(cleanup > SQL.indexOf("key = 'reset_areas_20261009'"), '作り直しのあと')
+  assert.ok(cleanup > SQL.indexOf('create table if not exists public.v2cap_inventory'), '持ち物の表ができたあと')
 })
 
 test('【確定】場所は1本道。ボスを倒した一番先の場所の次まで開く（難易度帯の表はもう読まない）', () => {
@@ -136,7 +164,6 @@ test('★今のⅡ（v2_）のテーブルは読みも書きもしない（こ�
 test('【確定】武器は職業ごとに装備できる種類だけ（着ける・落ちる・転職で外す の3か所で見る）', () => {
   assert.match(fnBody('v2cap_equip'), /if not \(v_eq\.type = any\(coalesce\(v_cls\.weapons, '\{\}'\)\)\) then/)
   assert.match(fnBody('v2cap_sortie_settle'), /v_eq\.part <> '武器' or v_eq\.type = any\(coalesce\(v_cls\.weapons, '\{\}'\)\)/)
-  assert.match(fnBody('v2cap_sortie_settle'), /v_spot\.drop_ranks \? coalesce\(p_rank, ''\)/)
   const change = fnBody('v2cap_change_class')
   assert.match(change, /select not \(e\.type = any\(coalesce\(v_cls\.weapons, '\{\}'\)\)\) into v_off/)
   assert.match(change, /v_equip := v_equip - 'weapon'/)

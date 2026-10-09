@@ -4,9 +4,10 @@
 // 1日1時間（10秒に1戦＝360戦）を、この版のルールと**本物の戦闘（runBattle）**で回す。
 //   ・場所は1本道（15エリア×①②③）。いつも「開いている一番先の場所」で戦う
 //   ・EXPとGold（場所の表×役割の倍率）／LVアップの抽選／ClassEXP／スキル習得／
-//     装備ドロップ（基本装備・ランク・アイテムLV）／必要LV不足
+//     装備ドロップ（そのエリアの装備・レア度・アイテムLV）／必要LV不足
 //   ・職業は最初の職業のまま（一次職は一旦なし）。--cls で選ぶ（既定は戦士）
-//   ・装備は落ちたものから「その職業に効くステの合計」が一番大きいものを各枠に着ける
+//   ・装備は落ちたものから、職業ごとのステの重み（STAT_WEIGHT）で一番よいものを各枠に着ける
+//   ・スキル編成はふつうの人の並べ方（typicalSet）
 //   ・戦闘用のキャラは**画面と同じ toFighter**（loadout.js）で作る
 //
 //   node tools/v2cap-progress.mjs [--days 365] [--seed 1] [--cls 戦士] [--quiet]
@@ -14,6 +15,8 @@
 //   node tools/v2cap-progress.mjs --tune [--days 450] [--rounds 8] [--step 0.35]
 //     … 必要EXP・必要ClassEXPの係数、標準の戦闘力（STD_RATIO）、場所のLV帯（SPOT_LV）、
 //       ボスの倍率（エリアの値 AREA_BOSS）を、目安に合うまで回して作り直す（出力をそのまま貼る）
+//   node tools/v2cap-progress.mjs --statvalue [--areas 3,6,9,12] [--n 500]
+//     … 職業ごとに「どのステを足すと③のボスに効くか」を測る（装備を選ぶ重み STAT_WEIGHT・同じステでの職業の強さ）
 // ============================================================
 const B = new URL('../src/', import.meta.url).href
 const { runBattle } = await import(B + 'v2/lib/battle.js')
@@ -52,8 +55,51 @@ const LV100_DAY = 365   // LV100に着く日（1日1時間で1年・ユーザー
 const JOB30_DAY = 14    // 最初の職業がClassLV30に着く日（2週間くらい・ユーザー決定）
 
 const rngOf = (seed) => { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }
-const useful = (cls) => attackKindOf(cls) === 'mag' ? ['int_stat', 'dex', 'agi', 'vit'] : ['str', 'dex', 'agi', 'vit']
 const ARMOR_SLOT = { 頭:'head', 鎧:'body', 腕:'arm', 足:'foot' }
+
+// ===== ふつうの人の選び方 =====
+// 装備を選ぶときのステの重み（職業ごと）。「そのステを足すと③のボスにどれだけ効くか」を測ったもの
+//   （node tools/v2cap-progress.mjs --statvalue・エリア3/6/9/12の③のボスの平均・一番効くステを1にした）
+//   ★AGIはどの職業にもよく効く（回避・行動順・追加行動）。DEX・VITはあまり効かない
+//   ⚠前は職業を見ずに「物理なら STR/DEX/AGI/VIT の合計」で選んでいた。STRだけで殴る職業ほど
+//     要らないステの装備を着けて遅れていた（2026-10-09 実際に踏んだ）。スキルや戦闘を変えたら測り直す
+export const STAT_WEIGHT = {
+  戦士:     { str:1.00, agi:0.89, vit:0.37, dex:0.13, int_stat:0.08 },
+  槍使い:   { str:1.00, agi:0.77, vit:0.20, dex:0.17, int_stat:0.13 },
+  格闘家:   { str:1.00, agi:0.82, vit:0.07, dex:0.10, int_stat:0.06 },
+  盗賊:     { agi:1.00, str:0.62, vit:0.12, dex:0.08, int_stat:0.05 },
+  弓使い:   { agi:1.00, str:0.80, vit:0.14, dex:0.07, int_stat:0.11 },
+  銃士:     { agi:1.00, dex:0.95, str:0.61, vit:0.17, int_stat:0.21 },
+  魔法使い: { int_stat:1.00, agi:0.76, vit:0.16, dex:0.08, str:0 },
+  呪術師:   { int_stat:1.00, agi:0.64, vit:0.14, dex:0.11, str:0 },
+  僧侶:     { int_stat:1.00, agi:0.58, vit:0.16, dex:0.05, str:0 },
+  薬師:     { int_stat:1.00, agi:0.58, vit:0.14, dex:0.09, str:0 },
+}
+const weightOf = (cls) => STAT_WEIGHT[cls] || (attackKindOf(cls) === 'mag' ? { int_stat:1, agi:0.6 } : { str:1, agi:0.8 })
+// スキル編成：強化の技を先頭に1回ずつ・攻撃の技は後に覚えたもの（強い技）から・回復の技は最後に1回ずつ。
+//   MPだけを戻す技（気付け薬）は入れない。回数はMPに収まるだけ、攻撃の技へ前から1回ずつ足す（1枠5回まで）
+//   ⚠前は「覚えた技を後ろから5つ・全部均等」で、薬師は気付け薬と強壮剤が先頭に来て損をしていた
+//     （山登りで探した一番よい並べ方とくらべて、この並べ方は差が数%・2026-10-09）
+const isMpOnly = (sk) => sk.kind === 'heal' && sk.mpRegen && !sk.heal && !sk.regen
+export const typicalSet = (cls, learned, maxMp) => {
+  const have = new Set(learned)
+  const sks = learnOrderOf(cls).filter(sk => have.has(sk.name) && !isMpOnly(sk))
+  const isAtk = (sk) => sk.kind === 'phys' || sk.kind === 'mag'
+  const order = [...sks.filter(sk => sk.kind === 'buff'), ...sks.filter(isAtk).reverse(), ...sks.filter(sk => sk.kind === 'heal')]
+  const set = order.slice(0, 5).map(sk => ({ name: sk.name, uses: 1, atk: isAtk(sk) }))
+  const cost = () => setMpCost(set)
+  while (set.length && cost() > maxMp) set.pop()
+  for (let grew = true; grew;) {
+    grew = false
+    for (const e of set) {
+      if (!e.atk || e.uses >= 5) continue
+      e.uses++
+      if (cost() > maxMp) e.uses--
+      else grew = true
+    }
+  }
+  return set.map(({ name, uses }) => ({ name, uses }))
+}
 
 export const simulate = ({ days = DAYS, seed = SEED, start = START } = {}) => {
   const rng = rngOf(seed)
@@ -62,7 +108,7 @@ export const simulate = ({ days = DAYS, seed = SEED, start = START } = {}) => {
   let jobs = { [cls]: { lv: 1, exp: 0 } }
   let learned = applyJobExp(jobs, cls, 0).learned
   let cleared = [], bossRate = 0, gold = 0, cumExp = 0
-  let inventory = []                   // { id, base_id, rank, ilv }（画面の v2cap_inventory と同じ形）
+  let inventory = []                   // { id, base_id, ilv }（画面の v2cap_inventory と同じ形。レア度は装備が持つ）
   let equipped = {}
   let nextId = 1
   let skillSet = []
@@ -72,6 +118,7 @@ export const simulate = ({ days = DAYS, seed = SEED, start = START } = {}) => {
   const expAtSpotDay = {}              // 場所 → 目安の日までに稼いだEXPの合計
   const expInSpot = {}                 // 場所 → そこで稼いだEXP
   const daysInSpot = {}                // 場所 → そこにいた日数（1日1時間で数える）
+  const fightsInSpot = {}              // 場所 → { n, win, boss, bossWin }（どこで詰まっているかを見る）
   const powerByLv = {}                 // LV -> [戦闘力]
   let job30Day = null
   let expAtJobDay = null
@@ -82,9 +129,10 @@ export const simulate = ({ days = DAYS, seed = SEED, start = START } = {}) => {
     ...Object.fromEntries(STAT_KEYS.map(k => [k, st[k]])),
     jobs, learned, skill_sets: { [cls]: skillSet }, equipped,   // スキルセットは職業ごと（画面の v2cap_profiles と同じ形）
   })
+  const weight = weightOf(cls)
   const valueOf = (row) => {
-    const s = statsAt(ITEM_BY_ID[row.base_id], row.rank, row.ilv, effectPct(row.ilv, st.lv))
-    return useful(cls).reduce((t, k) => t + s[k], 0)
+    const s = statsAt(ITEM_BY_ID[row.base_id], row.ilv, effectPct(row.ilv, st.lv))
+    return Object.entries(weight).reduce((t, [k, w]) => t + (s[k] || 0) * w, 0)
   }
   const best = (rows) => [...rows].sort((a, b) => valueOf(b) - valueOf(a))
   const regear = () => {
@@ -104,24 +152,8 @@ export const simulate = ({ days = DAYS, seed = SEED, start = START } = {}) => {
     const keep = new Set(Object.values(equipped))
     if (inventory.length > 60) inventory = inventory.filter((r, i) => keep.has(r.id) || i >= inventory.length - 40)
   }
-  // スキル編成：いまの職業の覚えた技を後ろ（強い技）から5つ。回数はMPに収まるだけ均等に
-  const reset = () => {
-    const names = learnOrderOf(cls).map(s => s.name).filter(n => learned.includes(n)).slice(-5).reverse()
-    const mp = totalStats(prof(), inventory).mp
-    const uses = names.map(() => 1)
-    const cost = () => setMpCost(names.map((name, i) => ({ name, uses: uses[i] })))
-    let grew = true
-    while (grew) {
-      grew = false
-      for (let i = 0; i < names.length; i++) {
-        if (uses[i] >= 5) continue
-        uses[i]++
-        if (cost() > mp) uses[i]--
-        else grew = true
-      }
-    }
-    skillSet = cost() <= mp ? names.map((n, i) => ({ name: n, uses: uses[i] })) : []
-  }
+  // スキル編成はふつうの人の並べ方（typicalSet）。覚えた技・最大MPが変わるたびに組み直す
+  const reset = () => { skillSet = typicalSet(cls, learned, totalStats(prof(), inventory).mp) }
   reset()
 
   let t = Date.UTC(2026, 0, 1)
@@ -147,6 +179,9 @@ export const simulate = ({ days = DAYS, seed = SEED, start = START } = {}) => {
       daysInSpot[spot] = (daysInSpot[spot] || 0) + 1 / PER_DAY
       bossRate = nextBossRate(bossRate, enc.isBoss)
       if (win) wins++
+      const fs = (fightsInSpot[spot] ||= { n: 0, win: 0, boss: 0, bossWin: 0 })
+      fs.n++; if (win) fs.win++
+      if (enc.isBoss) { fs.boss++; if (win) fs.bossWin++ }
       // ★負けても経験値はその場所の最低値が入る（倍率なし・Goldなし）＝画面・サーバーと同じ
       const { exp, gold: g } = rollRewards(enc, rng, win)
       gold += g
@@ -163,7 +198,7 @@ export const simulate = ({ days = DAYS, seed = SEED, start = START } = {}) => {
       if (j.learned.length) { learned = [...learned, ...j.learned]; dirty = true }
       if (win) {
         const drop = rollEquipDrop(enc, cls, at, rng)
-        if (drop) { inventory.push({ id: nextId++, base_id: drop.item.id, rank: drop.rank, ilv: drop.ilv }); dirty = true }
+        if (drop) { inventory.push({ id: nextId++, base_id: drop.item.id, ilv: drop.ilv }); dirty = true }
         if (enc.isBoss && !cleared.includes(spot)) {
           cleared = clearSpot(cleared, spot)
           spotClearDay[spot] = day
@@ -180,6 +215,8 @@ export const simulate = ({ days = DAYS, seed = SEED, start = START } = {}) => {
   return {
     daily, spotClearDay, lvAtSpotDay, expAtSpotDay, expInSpot, daysInSpot, powerByLv,
     learned, cls, jobs, job30Day, expAtJobDay, expAtLvDay, gold,
+    fightsInSpot,
+    final: { profile: prof(), inventory },   // 最後の日のキャラ（職業ごとの強さを比べるのに使う）
   }
 }
 
@@ -315,10 +352,82 @@ const report = () => {
   console.log('中央値\t' + AREA_LIST.map((_, k) => { const a = all[k] || []; return a.length ? `${Math.round(median(a))}(${a.length}/${runs})` : '-' }).join('\t'))
 }
 
+// ===== --statvalue：職業ごとに「どのステを足すと③のボスに効くか」を測る（STAT_WEIGHT を作る）=====
+//   土台＝そのLVの本体の期待値＋クラスのステ（ClassLV30）＋装備ぶん（本体の1.2倍を STR/DEX/AGI/INT/VIT に等分）。
+//   スキルはふつうの並べ方（全部覚えた状態）。1つのステに「装備ぶんの10%」を足したとき、
+//   ③のボスに勝率50%になるボスの強さ（本物の何倍か）が何%上がるか。エリア3/6/9/12の平均
+//   ★いちばん左の「強さ」は、同じステの職業どうしの強さの比べ（平均を100%）
+const statValue = async () => {
+  const { STAT_DEFS } = await import(B + 'v2/lib/stats.js')
+  const { statsOf } = await import(B + 'v2/lib/enemies.js')
+  const { slotsOf } = await import(B + 'v2cap/lib/loadout.js')
+  const { skillsOf } = await import(B + 'v2cap/lib/skills.js')
+  const classes = ['戦士', '槍使い', '格闘家', '盗賊', '弓使い', '銃士', '魔法使い', '呪術師', '僧侶', '薬師']
+  const checks = String(arg('areas', '3,6,9,12')).split(',').map(Number)
+  const n = Number(arg('n', 500))
+  const GEAR = ['str', 'dex', 'agi', 'int_stat', 'vit']
+  const baseStats = (cls, lv) => {
+    const job = jobsLib.jobBonusStats(cls, JOB_MAX)
+    const gear = bodyPowerAt(lv) * 1.2
+    return Object.fromEntries(STAT_KEYS.map(k => [k, INITIAL_STATS[k] + Math.round((lv - 1) * 5 / 8) * STAT_DEFS[k].unit + job[k]
+      + (GEAR.includes(k) ? Math.round(gear / GEAR.length) : 0)]))
+  }
+  const fighter = (cls, stats) => ({
+    name: 'me', cls, kind: attackKindOf(cls), noClassBonus: true, stats, taken: null, enchants: [], evolutions: [],
+    slots: slotsOf(typicalSet(cls, skillsOf(cls).map(s => s.name), stats.mp), cls),
+  })
+  const foeOf = (boss, m) => ({
+    name: boss.name, kind: boss.kind,
+    stats: statsOf({ ...boss, power: Math.max(1, Math.round(areas.enemyPowerOf(boss) * m)) }),
+    slots: (boss.skills || []).map(s => ({ skill: s, uses: 8 })), taken: null, boss: true,
+  })
+  const winRate = (me, foe) => {
+    let w = 0
+    for (let i = 0; i < n; i++) if (runBattle(me, foe, { rng: rngOf(5 + i * 7919) }).winner === 'a') w++
+    return w / n
+  }
+  // 勝率がちょうど半分になるボスの強さ（本物の何倍か）
+  const m50 = (me, boss) => {
+    let lo = 0.05, hi = 8
+    for (let i = 0; i < 12; i++) {
+      const mid = Math.sqrt(lo * hi)
+      if (winRate(me, foeOf(boss, mid)) > 0.5) lo = mid
+      else hi = mid
+    }
+    return Math.sqrt(lo * hi)
+  }
+  const gain = Object.fromEntries(classes.map(c => [c, Object.fromEntries(GEAR.map(k => [k, 0]))]))
+  const power = Object.fromEntries(classes.map(c => [c, 0]))
+  for (const area of checks) {
+    const lv = areas.spotLvOf(area * 3)[1]
+    const boss = areas.spotOf(area * 3).roster.boss
+    const delta = Math.round(bodyPowerAt(lv) * 1.2 * 0.1)
+    const ms = {}
+    for (const cls of classes) {
+      const st = baseStats(cls, lv)
+      ms[cls] = m50(fighter(cls, st), boss)
+      for (const k of GEAR) gain[cls][k] += (m50(fighter(cls, { ...st, [k]: st[k] + delta }), boss) / ms[cls] - 1) * 100 / checks.length
+    }
+    const avg = classes.reduce((t, c) => t + ms[c], 0) / classes.length
+    for (const c of classes) power[c] += ms[c] / avg * 100 / checks.length
+    console.log(`エリア${area}（LV${lv}・${boss.name}）: ` + classes.map(c => `${c} ${Math.round(ms[c] / avg * 100)}%`).join('・'))
+  }
+  console.log('\n同じステでの強さ（平均100%）: ' + classes.map(c => `${c} ${Math.round(power[c])}%`).join('・'))
+  console.log('\n===== STAT_WEIGHT（そのまま貼る）=====\nexport const STAT_WEIGHT = {')
+  for (const c of classes) {
+    const mx = Math.max(...Object.values(gain[c]))
+    const w = GEAR.map(k => [k, Math.max(0, Math.round(gain[c][k] / mx * 100) / 100)]).sort((a, b) => b[1] - a[1])
+    console.log(`  ${(c + ':').padEnd(6, '　')} { ${w.map(([k, v]) => `${k}:${v.toFixed(2)}`).join(', ')} },`)
+  }
+  console.log('}')
+}
+
 if (process.argv.includes('--tune')) {
   await tune()
 } else if (process.argv.includes('--report')) {
   report()
+} else if (process.argv.includes('--statvalue')) {
+  await statValue()
 } else if (import.meta.url === `file:///${process.argv[1].replace(/\\/g, '/')}` || process.argv[1].endsWith('v2cap-progress.mjs')) {
   const r = simulate()
   const pick = [1, 2, 3, 5, 7, 10, 14, 21, 30, 45, 60, 90, 120, 180, 240, 270, 300, 365].filter(x => x <= DAYS)

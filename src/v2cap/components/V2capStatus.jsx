@@ -3,11 +3,10 @@ import { STAT_DEFS, STAT_KEYS, calcPower } from '../../v2/lib/stats.js'
 import { mmss } from '../../v2/lib/stamina.js'
 import { KIND_COLOR, SKILL_SET_SLOTS } from '../../v2/lib/skills.js'
 import { V2Tip } from '../../v2/components/V2ItemTip.jsx'
-import { RANK_COLOR } from '../../v2/components/v2ui.js'
 import { MAX_LV, needExp, staminaMaxOf, rollStamina, msToNextStamina } from '../lib/level.js'
 import { JOB_MAX, jobNeed, jobOf, stageOf, stageLabelOf, stageColorOf, weaponsOf } from '../lib/jobs.js'
 import { SKILL_BY_NAME } from '../lib/skills.js'
-import { SLOTS, SLOT_LABEL, kindLabel } from '../lib/equipment.js'
+import { SLOTS, SLOT_LABEL, kindLabel, itemLabel, RARITY_COLOR } from '../lib/equipment.js'
 import { equippedItems, statBreakdown, currentSetOf } from '../lib/loadout.js'
 import { effectPct, powerAt } from '../lib/gear.js'
 
@@ -90,13 +89,12 @@ export default function V2capStatus({ prof, inventory }) {
         {w ? (
           <V2Tip alignRight={i % 2 === 1} width="230px" style={{ display:'block', flex:1, minWidth:0 }}
             body={<>
-              <div><span style={{ color: RANK_COLOR[w.inv.rank] }}>[{w.inv.rank}]</span> {w.item.name}（{kindLabel(w.item)}）</div>
+              <div><span style={{ color: w.item.rarity === 'N' ? '#cfe2ff' : RARITY_COLOR[w.item.rarity] }}>{itemLabel(w.item)}</span>（{kindLabel(w.item)}）</div>
               <div>アイテムLV {w.inv.ilv}（必要LV {w.inv.ilv}）</div>
-              <div>戦闘力 {powerAt(w.item, w.inv.rank, w.inv.ilv)}{pct < 100 && <span style={{ color:'#ff8844' }}> → {Math.round(powerAt(w.item, w.inv.rank, w.inv.ilv) * pct / 100)}（効果{pct}%）</span>}</div>
+              <div>戦闘力 {powerAt(w.item, w.inv.ilv)}{pct < 100 && <span style={{ color:'#ff8844' }}> → {Math.round(powerAt(w.item, w.inv.ilv) * pct / 100)}（効果{pct}%）</span>}</div>
             </>}>
             <span style={{ ...valueCell, display:'block' }}>
-              <span style={{ color: RANK_COLOR[w.inv.rank] }}>[{w.inv.rank}]</span>{' '}
-              <span style={{ color:'#88ccff' }}>{w.item.name}</span>
+              <span style={{ color: w.item.rarity === 'N' ? '#88ccff' : RARITY_COLOR[w.item.rarity] }}>{w.item.name}</span>
               <span style={{ color:'#93a9be' }}> LV{w.inv.ilv}</span>
               {pct < 100 && <span style={{ color:'#ff8844' }}> {pct}%</span>}
             </span>

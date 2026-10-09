@@ -18,7 +18,7 @@ import { jobBonusStats, jobOf, canEquipType, attackKindOf, lineageOf } from './j
 
 const zero = () => Object.fromEntries(STAT_KEYS.map(k => [k, 0]))
 
-// 装着中の装備を { slot: { inv, item } } の形で引く（inv は { id, base_id, rank, ilv }）
+// 装着中の装備を { slot: { inv, item } } の形で引く（inv は { id, base_id, ilv }。レア度は装備 item が持つ）
 export const equippedItems = (profile, inventory) => {
   const byId = Object.fromEntries((inventory || []).map(i => [String(i.id), i]))
   const out = {}
@@ -40,7 +40,7 @@ export const wornIdsOf = (profile, inventory) =>
 export const gearStats = (profile, inventory) => {
   const total = zero()
   for (const { inv, item } of Object.values(equippedItems(profile, inventory))) {
-    const s = statsAt(item, inv.rank, inv.ilv, effectPct(inv.ilv, profile?.lv))
+    const s = statsAt(item, inv.ilv, effectPct(inv.ilv, profile?.lv))
     for (const k of STAT_KEYS) total[k] += s[k] || 0
   }
   return total
@@ -48,7 +48,7 @@ export const gearStats = (profile, inventory) => {
 // 装備ぶんの戦闘力（効果%込み）
 export const gearPower = (profile, inventory) =>
   Object.values(equippedItems(profile, inventory)).reduce((t, { inv, item }) =>
-    t + Math.round(powerAt(item, inv.rank, inv.ilv) * effectPct(inv.ilv, profile?.lv) / 100), 0)
+    t + Math.round(powerAt(item, inv.ilv) * effectPct(inv.ilv, profile?.lv) / 100), 0)
 
 // 防具のメリット（受けるダメージの倍率・AGIの上がり幅）
 export const armorOf = (profile, inventory) => armorEffects(

@@ -7,20 +7,19 @@
 //   ・レアは0.5%（今のⅡと同じ。その時間帯に出るレアから1体）
 //   ・ふつうの敵には、その時間帯（朝・昼・晩）の限定の敵も混ざる
 //   ・経験値とGoldは場所の表の値 × 役割の倍率（朝昼晩1.5倍・レア3倍・ボス5倍）。決めるのはサーバー
-//   ・装備は勝ったとき3%で落ちる。部位は1時間ごとに「落ちやすい部位」が入れ替わる（今のⅡと同じ）
-//   ・ランクは場所ごとの分布（後の場所ほど高いランクが出やすい）。アイテムLVはエリアごとに1つ
-//   ・**武器はいまの職業が装備できる3種から**落ちる。防具は重鎧／軽装を半々。アクセは4つから均等
+//   ・装備はそのエリアのものが落ちる。レア度（ノーマル・レア・エピック・レジェンダリー）は敵の役割と①②③で決まる
+//     （下の「落ちる装備」）。部位は1時間ごとに「落ちやすい部位」が入れ替わる（今のⅡと同じ）。アイテムLVはエリアごとに1つ
+//   ・**武器はいまの職業が装備できる3種から**落ちる。防具は重鎧／軽装を半々。装飾品は4種から均等
 // ============================================================
 import { spotOf, enemyLvOf, scaleByRole, LAST_SPOT } from './areas.js'
-import { rollDropRank } from '../../v2/lib/enemies.js'
-import { weaponsOfType, armorsOf, accessories, ARMOR_LINES } from './equipment.js'
+import { itemOf, RARITIES, ARMOR_LINES, ACCESSORY_TYPES } from './equipment.js'
 import { weaponsOf } from './jobs.js'
 import {
-  rollBoss, nextBossRate, bandAt, rollHasEquipDrop, rollDropPart, rollRare,
-  SORTIE_CD, EQUIP_DROP_RATE, BOSS_RATE_STEP, RARE_RATE,
+  rollBoss, nextBossRate, bandAt, rollDropPart, rollRare,
+  SORTIE_CD, BOSS_RATE_STEP, RARE_RATE,
 } from '../../v2/lib/sortie.js'
 
-export { nextBossRate, bandAt, SORTIE_CD, EQUIP_DROP_RATE, BOSS_RATE_STEP, RARE_RATE }
+export { nextBossRate, bandAt, SORTIE_CD, BOSS_RATE_STEP, RARE_RATE }
 
 const pick = (list, rng) => list[Math.floor(rng() * list.length)]
 
@@ -69,19 +68,55 @@ export const clearSpot = (cleared, id) =>
   (cleared || []).includes(id) ? [...(cleared || [])] : [...(cleared || []), id].sort((a, b) => a - b)
 
 // ===== 落ちる装備 =====
-// 落ちる基本装備を1つ選ぶ（部位は呼び出し側）
-export const rollBaseItem = (part, cls, rng = Math.random) => {
+// 【確定】2026-10-09 ユーザー決定：
+//   ・レア度は ノーマル・レア・エピック・レジェンダリー。**エピックはレアモンスターとボスから、レジェンダリーはボスからだけ**
+//   ・勝ったときに装備が落ちる確率（%）… ふつう・朝昼晩の敵3（前と同じ）／レアモンスター10／ボス10
+//   ・落ちたときのレア度（%）… DROP_RARITY。①②③で「レア以上」の割合を ①×1.0 ②×1.2 ③×1.4 にする
+//     （増えたぶんはノーマルから減らす）
+//   ・落ちるのは**そのエリアの装備**（種類ごと・レア度ごとに1つずつ）。アイテムLVはエリアごとに1つ
+// ★サーバー（v2cap_sortie_settle）は「そのエリアの装備か」「その役割の敵から落ちるレア度か」「いまの職業の武器か」を見る
+//   （落ちたかどうか・何が落ちたかは画面の申告。戦闘をサーバーで回すまでは今のⅡと同じ限界）
+export const DROP_CHANCE = { normal: 3, timed: 3, rare: 10, boss: 10 }
+export const DROP_RARITY = {
+  normal: { N:85, R:15 },
+  timed:  { N:85, R:15 },
+  rare:   { N:50, R:35, E:15 },
+  boss:   { N:40, R:35, E:20, L:5 },
+}
+export const SUB_RARE_MULT = [1.0, 1.2, 1.4]
+const r1 = (v) => Math.round(v * 10) / 10
+// その場所（①②③）でその役割の敵を倒したときのレア度の内訳（%・合計100）
+export const dropRarityOf = (role, sub = 1) => {
+  const base = DROP_RARITY[role] || DROP_RARITY.normal
+  const m = SUB_RARE_MULT[(sub || 1) - 1] ?? 1
+  const up = Object.fromEntries(RARITIES.filter(r => r !== 'N' && base[r]).map(r => [r, r1(base[r] * m)]))
+  return { N: r1(100 - Object.values(up).reduce((a, b) => a + b, 0)), ...up }
+}
+// その役割の敵から落ちるレア度か（サーバーの判定と同じ）
+export const canDropRarity = (role, rarity) => ((DROP_RARITY[role] || DROP_RARITY.normal)[rarity] || 0) > 0
+export const rollDropRarity = (role, sub, rng = Math.random) => {
+  const d = dropRarityOf(role, sub)
+  let x = rng() * 100
+  for (const r of RARITIES) {
+    if (!d[r]) continue
+    x -= d[r]
+    if (x < 0) return r
+  }
+  return 'N'
+}
+// 落ちる種類を1つ選ぶ（部位は呼び出し側）。武器はいまの職業が装備できる種類から
+export const rollDropKind = (part, cls, rng = Math.random) => {
   if (part === '武器') {
     const types = weaponsOf(cls)
-    return types.length ? pick(weaponsOfType(pick(types, rng)), rng) : null
+    return types.length ? pick(types, rng) : null
   }
-  if (part === 'アクセ') return pick(accessories(), rng)
-  return pick(armorsOf(part, pick(ARMOR_LINES, rng)), rng)
+  if (part === 'アクセ') return pick(ACCESSORY_TYPES, rng)
+  return `${pick(ARMOR_LINES, rng)}${part}`
 }
-
-// 勝ったときの装備。落ちたら { item, rank, ilv }。**アイテムLV＝エリアごとに1つ**（areas.js の itemLvOfArea）
+// 勝ったときの装備。落ちたら { item, ilv }（レア度は item.rarity）。**アイテムLV＝エリアごとに1つ**（areas.js の itemLvOfArea）
 export const rollEquipDrop = (enc, cls, at = new Date(), rng = Math.random) => {
-  if (!enc || !rollHasEquipDrop(rng)) return null
-  const item = rollBaseItem(rollDropPart(at, rng), cls, rng)
-  return item ? { item, rank: rollDropRank(enc.spot, rng), ilv: enc.spot.itemLv } : null
+  if (!enc || rng() * 100 >= (DROP_CHANCE[enc.role] ?? DROP_CHANCE.normal)) return null
+  const kind = rollDropKind(rollDropPart(at, rng), cls, rng)
+  const item = kind ? itemOf(enc.spot.area, rollDropRarity(enc.role, enc.spot.sub, rng), kind) : null
+  return item ? { item, ilv: enc.spot.itemLv } : null
 }

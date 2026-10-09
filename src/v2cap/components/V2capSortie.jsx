@@ -3,7 +3,7 @@ import { supabase } from '../../supabase'
 import V2LogLine from '../../v2/components/V2LogLine.jsx'
 import { runBattle } from '../../v2/lib/battle.js'
 import { buildBattleLog } from '../../v2/lib/battleLog.js'
-import { RANK_COLOR, LOG_PLAIN } from '../../v2/components/v2ui.js'
+import { LOG_PLAIN } from '../../v2/components/v2ui.js'
 import { SPOTS, spotOf, spotLabel, spotLvText, ROLE_TENTHS, toFighter as enemyFighter } from '../lib/areas.js'
 import {
   pickEncounter, rollEquipDrop, nextBossRate, isSpotUnlocked, isSpotCleared, openUntilOf, rewardRangeOf, SORTIE_CD,
@@ -12,6 +12,7 @@ import { toFighter as playerFighter } from '../lib/loadout.js'
 import { staminaMaxOf, MAX_LV, rollStamina } from '../lib/level.js'
 import { jobOf, JOB_MAX } from '../lib/jobs.js'
 import { effectPct } from '../lib/gear.js'
+import { RARITY_COLOR, rarityLabel } from '../lib/equipment.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — 出撃（ホームの右）
@@ -21,7 +22,8 @@ import { effectPct } from '../lib/gear.js'
 //   ・敵が**LV**を持つ（場所のLV帯の中で、敵ごとに決まっている）
 //   ・**EXPとGoldはサーバーが場所の表から決める**（朝昼晩1.5倍・レア3倍・ボス5倍）＝ログは精算の返事を出す
 //   ・ClassLVアップ／スキル習得もサーバーの返事から出す
-//   ・落ちる装備は「基本装備＋ランク」。武器はいまの職業が装備できる3種から（sortie.js）
+//   ・落ちる装備は**そのエリアの装備**で、レア度はノーマル・レア・エピック・レジェンダリー
+//     （エピックはレアとボスから・レジェンダリーはボスからだけ）。武器はいまの職業が装備できる3種から（sortie.js）
 //   ・落ちた装備の**アイテムLV**はエリアごとに1つ
 // ============================================================
 const ROLE_LINE = {
@@ -86,7 +88,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
 
       // ★1戦ごとにその場で反映する。EXP・Gold・アイテムLVはサーバーが場所の表から決める
       const { data, error } = await supabase.rpc('v2cap_sortie_settle', {
-        p_spot: spot.id, p_enemy: foe, p_win: win, p_drop: drop ? drop.item.id : null, p_rank: drop ? drop.rank : null, p_auto: !!isAuto,
+        p_spot: spot.id, p_enemy: foe, p_win: win, p_drop: drop ? drop.item.id : null, p_auto: !!isAuto,
       })
       if (data && data.stamina != null) setStam({ n: data.stamina, at: data.stamina_at || new Date().toISOString() })
       if (error || !data?.ok) {
@@ -115,10 +117,10 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
         if (data.drop && drop) {
           const ilv = data.drop.ilv
           const pct = effectPct(ilv, lv.lv || prof.lv)
-          // ★色を付けるのはランクと装備名だけ（今のⅡと同じ）
-          const color = RANK_COLOR[drop.rank]
+          // ★色を付けるのはレア度と装備名だけ（今のⅡと同じ形）
+          const color = RARITY_COLOR[drop.item.rarity]
           const line = { color: LOG_PLAIN, parts: [
-            { text:'🎁 ' }, { text:`${drop.rank}級`, color }, { text:'「' }, { text: drop.item.name, color },
+            { text:'🎁 ' }, { text:`【${rarityLabel(drop.item.rarity)}】`, color }, { text:'「' }, { text: drop.item.name, color },
             { text:`」を入手！（LV${ilv}）` },
           ] }
           if (pct < 100) line.parts.push({ text:` 必要LVに足りない＝効果${pct}%`, color:'#ff8844' })
@@ -218,6 +220,10 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       {spot && (
         <div style={{ fontSize:'10px', color:'#7fa6d0', marginBottom:'8px', lineHeight:1.7 }}>
           <div>敵は{spotLvText(spot.id)}（ボスは上限のLV）・装備はLV{spot.itemLv}</div>
+          <div>
+            装備：<span style={{ color: RARITY_COLOR.E }}>エピック</span>はレアとボス・
+            <span style={{ color: RARITY_COLOR.L }}>レジェンダリー</span>はボスだけが落とす
+          </div>
           <div>
             1体あたり EXP <span style={{ color:'#ffcc00' }}>{normalRange.exp.join('〜')}</span>・
             Gold <span style={{ color:'#ffcc00' }}>{normalRange.gold.join('〜')}</span>
