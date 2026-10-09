@@ -11,6 +11,9 @@
 //     名前はユーザーの表（gearNames.js）。ランク（F〜S）はやめてレア度にした
 //   ・強さはレア度で決まる：ノーマル1.0／レア1.25／エピック1.5／レジェンダリー1.75
 //     （前のランクの C／B／A／S と同じ幅。ノーマルを全部の枠にそろえると本体と同じくらい）
+//   ・**必要LV（＝アイテムLV）はエリアとレア度で決まる**（ユーザーの表）：ノーマル＝5×エリア、レア＋5・エピック＋10・レジェンダリー＋15
+//     （始まりの森 5／10／15／20 … 深淵の海溝 75／80／85／90）。強さは必要LVが高いほど上がり、レア度の倍率も掛かる
+//     （同じLV20でも、ノーマルよりレジェンダリーが強い。gear.js）
 //   ・**配分（どのステが上がるか）は種類ごとに1つ**で、エリアとレア度では変わらない。
 //     物理職と魔法職の両方が使う種類（鈍器・短剣・投擲・杖と防具）は、間の配分にした（ユーザー決定「固定で混ぜる」）
 //
@@ -25,6 +28,11 @@ export const RARITY_LABEL = { N:'ノーマル', R:'レア', E:'エピック', L:
 export const RARITY_BASE = { N:40, R:50, E:60, L:70 }
 export const RARITY_COLOR = { N:'#c8d2dc', R:'#4488ff', E:'#c060ff', L:'#ffaa00' }
 export const rarityLabel = (r) => RARITY_LABEL[r] || ''
+
+// ===== 必要LV（＝アイテムLV）=====
+// 【確定】2026-10-09 ユーザーの表。エリアが1つ進むごとに+5、レア度が1つ上がるごとに+5
+export const REQ_LV_STEP = 5
+export const reqLvOf = (area, rarity) => REQ_LV_STEP * area + REQ_LV_STEP * Math.max(0, RARITIES.indexOf(rarity))
 
 // 枠は7つ（武器1・頭・鎧・腕・足・装飾品2）
 export const SLOTS = ['weapon', 'head', 'body', 'arm', 'foot', 'acc1', 'acc2']
@@ -103,12 +111,12 @@ export const KIND_BY_KEY = Object.fromEntries(KINDS.map(k => [k.key, k]))
 export const AREA_COUNT = GEAR_NAMES.N[WEAPON_TYPES[0]].length
 
 // ===== 一覧（エリア × レア度 × 種類）=====
-// id は「エリアの番号＋レア度：種類」（例 1N:片手剣・15L:重鎧頭）。名前が変わってもIDは変わらない
+// id は「エリアの番号＋レア度：種類」（例 1N:片手剣・15L:重鎧頭）。名前が変わってもIDは変わらない。lv＝必要LV
 export const itemIdOf = (area, rarity, kindKey) => `${area}${rarity}:${kindKey}`
 export const ITEMS = Array.from({ length: AREA_COUNT }, (_, i) => i + 1).flatMap(area =>
   RARITIES.flatMap(rarity => KINDS.map(k => ({
     id: itemIdOf(area, rarity, k.key), name: GEAR_NAMES[rarity][k.key][area - 1],
-    part: k.part, type: k.type, line: k.line, kind: k.key, area, rarity, dist: k.dist,
+    part: k.part, type: k.type, line: k.line, kind: k.key, area, rarity, lv: reqLvOf(area, rarity), dist: k.dist,
   }))))
 export const ITEM_BY_ID = Object.fromEntries(ITEMS.map(i => [i.id, i]))
 export const itemOf = (area, rarity, kindKey) => ITEM_BY_ID[itemIdOf(area, rarity, kindKey)] || null

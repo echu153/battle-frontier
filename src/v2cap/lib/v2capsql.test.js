@@ -4,10 +4,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { STAT_KEYS, STAT_DEFS, ROLLS_PER_LV } from '../../v2/lib/stats.js'
+import { STAT_KEYS } from '../../v2/lib/stats.js'
 import { SKILL_SET_SLOTS, SKILL_USE_MAX } from '../../v2/lib/skills.js'
 import { DEFAULT_USES_MAX } from './skills.js'
-import { NEED_PERMIL, MAX_LV, STAMINA_BASE, STAMINA_RECOVER_MS } from './level.js'
+import { NEED_PERMIL, MAX_LV, STAMINA_BASE, STAMINA_RECOVER_MS, POINTS_PER_LV, POINTS_STEP, POINTS_ON_STEP, POINT_UNIT } from './level.js'
 import { JOB_NEED_TENTHS, JOB_MAX } from './jobs.js'
 import { ROLE_TENTHS } from './areas.js'
 import { SLOTS } from './equipment.js'
@@ -51,8 +51,9 @@ test('【確定】1勝のEXPとGoldは場所の表 × 役割の倍率（朝昼�
   assert.match(settle, /gold = gold \+ v_gold/)
   // 負けても経験値はその場所の最低値（倍率なし・Goldなし＝ sortie.js の lossExpOf）
   assert.match(settle, /else\s+--[^\n]*\n(\s*--[^\n]*\n)*\s*v_exp := v_spot\.exp_min;\s+end if;/)
-  // アイテムLVはエリアごとに1つ（場所の item_lv）。レア度は装備が持つ（持ち物にランクの列は無い）
-  assert.match(settle, /values \(v_uid, v_eq\.id, v_spot\.item_lv\)/)
+  // アイテムLV＝その装備の必要LV（v2cap_equipment.lv・エリア×レア度）。レア度も装備が持つ（持ち物にランクの列は無い）
+  assert.match(settle, /values \(v_uid, v_eq\.id, v_eq\.lv\)/)
+  assert.ok(!/item_lv/.test(settle), '場所のアイテムLVはもう使わない')
 })
 
 test('【確定】落ちた装備は「その場所のエリアの装備」で「その役割の敵から落ちるレア度」のときだけ持ち物に入る', () => {
@@ -76,6 +77,11 @@ test('装備の一覧はエリアとレア度を持つ。ランクの列（持�
   assert.ok(SQL.includes('alter table public.v2cap_equipment add column if not exists area int;'))
   assert.ok(SQL.includes('alter table public.v2cap_equipment add column if not exists rarity text;'))
   assert.ok(SQL.includes('alter table public.v2cap_inventory drop column if exists rank;'))
+  // 必要LVは装備ごと（エリア×レア度）。場所の item_lv は種より前に消し、持っている装備のアイテムLVは必要LVへそろえる
+  assert.ok(SQL.includes('alter table public.v2cap_equipment add column if not exists lv int;'))
+  assert.ok(SQL.indexOf('alter table public.v2cap_spots drop column if exists item_lv;') < SQL.indexOf('-- @@seed:spots'), '場所の種を入れる前に消す')
+  const align = SQL.search(/update public\.v2cap_inventory i set ilv = e\.lv/)
+  assert.ok(align > SQL.indexOf('create table if not exists public.v2cap_inventory'), '持ち物のアイテムLVをそろえる文がある')
   assert.ok(SQL.indexOf('alter table public.v2cap_spots drop column if exists drop_ranks;') < SQL.indexOf('-- @@seed:spots'), '場所の種を入れる前に消す')
   // 前の基本装備（レア度を持たない行）は、持ち物を空にする作り直しのあとで消す（持ち物から指されているものは残す）
   const cleanup = SQL.search(/delete from public\.v2cap_equipment e\r?\n\s*where e\.rarity is null\r?\n\s*and not exists \(select 1 from public\.v2cap_inventory i where i\.base_id = e\.id\);/)
@@ -98,14 +104,30 @@ test('【確定】場所は1本道。ボスを倒した一番先の場所の次�
   assert.ok(!/v2cap_tiers|v2cap_areas|unlocked_areas/.test(live.replace(/--[^\n]*/g, '')), '前の表・列を読み書きしていない')
 })
 
-test('LVアップの抽選（回数・並び・上がる量）がJSと同じ', () => {
+test('【確定】LVアップで入るステータスポイントがJSと同じ（ステは上がらない）', () => {
   const apply = fnBody('v2cap_apply_exp')
-  assert.match(apply, new RegExp(`c_rolls\\s+constant int := ${ROLLS_PER_LV};`))
   assert.match(apply, new RegExp(`c_max_lv\\s+constant int := ${MAX_LV};`))
   assert.match(apply, new RegExp(`c_job_max constant int := ${JOB_MAX};`))
-  const units = STAT_KEYS.map(k => STAT_DEFS[k].unit).join(', ')
-  assert.ok(apply.includes(`c_unit constant int[] := array[${units}];`), '上がる量の並びが STAT_KEYS と同じ')
-  STAT_KEYS.forEach((k, i) => assert.ok(apply.includes(`${k} = ${k} + v_gain[${i + 1}]`), `${k} は ${i + 1}番目`))
+  assert.ok(apply.includes(`v_pts := v_pts + case when v_lv % ${POINTS_STEP} = 0 then ${POINTS_ON_STEP} else ${POINTS_PER_LV} end;`), '入るポイントが level.js と同じ')
+  assert.ok(apply.includes('stat_points = stat_points + v_pts,'))
+  assert.ok(!/random\(\)/.test(apply), 'LVアップの抽選はもう無い')
+  for (const k of STAT_KEYS) assert.ok(!new RegExp(`\\b${k} = ${k} \\+`).test(apply), `LVアップで ${k} は上がらない`)
+})
+
+test('【確定】ステータスポイントを振る：8種・1ポイントで HP+8・MP+3・ほか+1・足りないと振れない（JSと同じ）', () => {
+  const alloc = fnBody('v2cap_allocate_points')
+  assert.ok(alloc.includes("v_keys constant text[] := array['" + STAT_KEYS.join("', '") + "'];"), '振れるのは8種（STAT_KEYS と同じ並び）')
+  for (const k of STAT_KEYS) {
+    const u = POINT_UNIT[k]
+    const want = u === 1 ? `${k} = ${k} + coalesce((p_add ->> '${k}')::int, 0)` : `${k} = ${k} + ${u} * coalesce((p_add ->> '${k}')::int, 0)`
+    assert.ok(alloc.replace(/\s+/g, ' ').includes(want), `${k} は1ポイントで+${u}`)
+  }
+  assert.match(alloc, /select \* into v_row from public\.v2cap_profiles where id = v_uid for update;/, '行をつかんでから見る')
+  assert.ok(alloc.includes("if v_sum > v_row.stat_points then return jsonb_build_object('ok', false, 'error', 'ポイントが足りません'); end if;"))
+  assert.ok(alloc.includes('stat_points = stat_points - v_sum::int,'))
+  assert.ok(SQL.includes('grant execute on function public.v2cap_allocate_points(jsonb) to authenticated;'))
+  assert.ok(SQL.includes('revoke all on function public.v2cap_allocate_points(jsonb) from public, anon;'))
+  assert.ok(SQL.includes('alter table public.v2cap_profiles add column if not exists stat_points int not null default 0;'))
 })
 
 test('スキルを覚える順はこの版の名簿（v2cap_skills の sort）', () => {
@@ -214,9 +236,9 @@ test('★今のⅡ・旧版のテーブルには書き込まない（v2cap_ 以�
 })
 
 test('★作り直し（キャラと装備を消す）は印を付けて1回ずつだけ。2回目以降に全文を流し直しても消えない', () => {
-  // 初期職の見直し・エリアの作り替え（どちらも 2026-10-09 ユーザー承認）
+  // 初期職の見直し・エリアの作り替え・ステータスポイント（どれも 2026-10-09 ユーザー承認）
   let outside = SQL
-  for (const key of ['reset_classes_20261009', 'reset_areas_20261009']) {
+  for (const key of ['reset_classes_20261009', 'reset_areas_20261009', 'reset_points_20261009']) {
     const m = SQL.match(new RegExp(`do \\$\\$\\s*begin\\s*if not exists \\(select 1 from public\\.v2cap_migrations where key = '${key}'\\) then([\\s\\S]*?)end if;\\s*end \\$\\$;`))
     assert.ok(m, `${key} の印つきの do ブロックがある`)
     assert.ok(m[1].includes(`insert into public.v2cap_migrations (key) values ('${key}')`), `${key} の印を付けている`)

@@ -7,8 +7,8 @@
 //   ・classes   … 職業（段階・就く条件・ClassLVで上がるステの並び・装備できる武器・通常攻撃の種類・
 //                  スキルを使える職業＝自分と下位職）
 //   ・skills    … スキルの名簿（名前・職業・消費MP・覚える順）
-//   ・equipment … 装備の一覧（エリア×レア度×種類の1440点。名前・部位・種類・系統・エリア・レア度）
-//   ・spots     … 場所（15エリア×①②③。経験値とGoldの範囲・敵のLV帯・アイテムLV）
+//   ・equipment … 装備の一覧（エリア×レア度×種類の1440点。名前・部位・種類・系統・エリア・レア度・必要LV）
+//   ・spots     … 場所（15エリア×①②③。経験値とGoldの範囲・敵のLVの範囲）
 //   ・enemies   … 敵（いる場所・LV・役割・時間帯）
 //
 //   node tools/v2cap-sql.mjs          … 差分があるかだけ表示
@@ -60,18 +60,18 @@ export const seeds = () => ({
   ].join('\n'),
   equipment: [
     // ★持ち物（v2cap_inventory）が参照するので消さずに入れ直す。一覧から外れた行は §2 の作り直しのあとで消す
-    'insert into public.v2cap_equipment (id, name, part, type, line, area, rarity) values',
-    ITEMS.map(i => `  (${q(i.id)}, ${q(i.name)}, ${q(i.part)}, ${q(i.type)}, ${i.line ? q(i.line) : 'null'}, ${i.area}, ${q(i.rarity)})`).join(',\n'),
+    'insert into public.v2cap_equipment (id, name, part, type, line, area, rarity, lv) values',
+    ITEMS.map(i => `  (${q(i.id)}, ${q(i.name)}, ${q(i.part)}, ${q(i.type)}, ${i.line ? q(i.line) : 'null'}, ${i.area}, ${q(i.rarity)}, ${i.lv})`).join(',\n'),
     'on conflict (id) do update set name = excluded.name, part = excluded.part, type = excluded.type, line = excluded.line,',
-    '  area = excluded.area, rarity = excluded.rarity;',
+    '  area = excluded.area, rarity = excluded.rarity, lv = excluded.lv;',
   ].join('\n'),
   spots: [
     // ★消してから入れ直す（場所の数を変えたときに古い行が残らないように）。参照している外部キーは無い
     'delete from public.v2cap_spots;',
-    'insert into public.v2cap_spots (id, area, sub, area_name, name, exp_min, exp_max, gold_min, gold_max, lv_min, lv_max, item_lv) values',
+    'insert into public.v2cap_spots (id, area, sub, area_name, name, exp_min, exp_max, gold_min, gold_max, lv_min, lv_max) values',
     SPOTS.map(s => {
       const [lo, hi] = spotLvOf(s.id)
-      return `  (${s.id}, ${s.area}, ${s.sub}, ${q(s.areaName)}, ${q(s.name)}, ${s.exp[0]}, ${s.exp[1]}, ${s.gold[0]}, ${s.gold[1]}, ${lo}, ${hi}, ${s.itemLv})`
+      return `  (${s.id}, ${s.area}, ${s.sub}, ${q(s.areaName)}, ${q(s.name)}, ${s.exp[0]}, ${s.exp[1]}, ${s.gold[0]}, ${s.gold[1]}, ${lo}, ${hi})`
     }).join(',\n') + ';',
   ].join('\n'),
   enemies: [

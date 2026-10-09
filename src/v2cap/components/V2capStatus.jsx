@@ -9,6 +9,7 @@ import { SKILL_BY_NAME } from '../lib/skills.js'
 import { SLOTS, SLOT_LABEL, kindLabel, itemLabel, RARITY_COLOR } from '../lib/equipment.js'
 import { equippedItems, statBreakdown, currentSetOf } from '../lib/loadout.js'
 import { effectPct, powerAt } from '../lib/gear.js'
+import V2capPoints from './V2capPoints.jsx'
 
 // ============================================================
 // 「レベルキャップあり」版 — ステータス欄（ホームの左）
@@ -18,6 +19,7 @@ import { effectPct, powerAt } from '../lib/gear.js'
 //   ・装備は7枠（武器1・頭・鎧・腕・足・アクセ2）。アイテムLVと、必要LVに足りないときの効果%
 //   ・防具のメリット（重鎧＝受けるダメージ−%／軽装＝AGI+%）の合計
 //   ・スキルは**いまの職業の編成**（スキルセットは職業ごと）
+//   ・まだ振っていないステータスポイントがあれば、ステの下に「振る」ボタン（V2capPoints）
 // ============================================================
 const cell = {
   background:'#000818', border:'1px solid #002244', padding:'3px 6px',
@@ -38,7 +40,7 @@ function Bar({ label, val, pct, color }) {
   )
 }
 
-export default function V2capStatus({ prof, inventory }) {
+export default function V2capStatus({ prof, inventory, onProfile }) {
   const [now, setNow] = useState(Date.now())
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t) }, [])
 
@@ -162,6 +164,7 @@ export default function V2capStatus({ prof, inventory }) {
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'2px', marginBottom:'6px' }}>
         {STAT_KEYS.map(statCell)}
       </div>
+      <V2capPoints prof={prof} onProfile={onProfile} />
 
       <div style={{ color:'#7fa6d0', fontSize:'9px', margin:'6px 0 2px', display:'flex', justifyContent:'space-between', gap:'6px' }}>
         <span>装備（{prof.class}の武器：{weaponsOf(prof.class).join('・')}）</span>

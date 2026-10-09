@@ -100,6 +100,7 @@ export default function V2capHome() {
     setProf(data.profile)
     const parts = [`EXP+${amount.toLocaleString()}`]
     if (data.level_ups > 0) parts.push(`LV${data.lv}（+${data.level_ups}）`)
+    if (data.points > 0) parts.push(`ステータスポイント+${data.points}`)
     if (data.job_ups > 0) parts.push(`ClassLV${data.jlv}（+${data.job_ups}）`)
     if ((data.learned || []).length) parts.push(`スキル「${data.learned.join('」「')}」`)
     setDevMsg(parts.join('　'))
@@ -199,7 +200,7 @@ export default function V2capHome() {
         {header}
         <div style={{ display:'flex', flexWrap:'wrap', gap:'8px', alignItems:'flex-start' }}>
           <div style={{ flex:'1 1 340px', minWidth:0 }}>
-            <V2capStatus prof={prof} inventory={inventory} />
+            <V2capStatus prof={prof} inventory={inventory} onProfile={refresh} />
           </div>
           <div style={{ flex:'999 1 340px', minWidth:0 }}>
             {screen === 'home' ? (

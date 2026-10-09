@@ -4,17 +4,19 @@
 // **プレイ時間**で数える：1時間＝10秒に1戦×360戦。この版のルールと**本物の戦闘（runBattle）**で回す。
 // ★2026-10-09 ユーザー指示「日数ていうか何時間かで計算してほしい」：前は「1日1時間」として日で数えていた（数字は同じ）
 //   ・場所は1本道（15エリア×①②③）。いつも「開いている一番先の場所」で戦う
-//   ・EXPとGold（場所の表×役割の倍率）／LVアップの抽選／ClassEXP／スキル習得／
-//     装備ドロップ（そのエリアの装備・レア度・アイテムLV）／必要LV不足
+//   ・EXPとGold（場所の表×役割の倍率）／LVアップのステータスポイント／ClassEXP／スキル習得／必要LV不足
+//   ・**ステータスポイントは、その職業のクラスのステと同じ割合で振る**（jobs.js の JOB_BONUS の並び bonusSeqOf を順に）
 //   ・職業は最初の職業のまま（一次職は一旦なし）。--cls で選ぶ（既定は戦士）
-//   ・装備は落ちたものから、職業ごとのステの重み（STAT_WEIGHT）で一番よいものを各枠に着ける
+//   ・**装備は「その時点で着けられるいちばん良いもの」**（2026-10-09 ユーザー指示「シミュレーターは最適の装備で進めて」）：
+//     行ったことのあるエリアの装備（レア度は全部）から、必要LVの不足ぶんも数えて、職業ごとのステの重み（STAT_WEIGHT）で
+//     いちばん強いものを各枠に着ける。拾った装備の運は数えない（ドロップの細かい決まりはまだ決めていないため）
 //   ・スキル編成はふつうの人の並べ方（typicalSet）
 //   ・戦闘用のキャラは**画面と同じ toFighter**（loadout.js）で作る
 //
 //   node tools/v2cap-progress.mjs [--hours 365] [--seed 1] [--cls 戦士] [--quiet]
 //   node tools/v2cap-progress.mjs --report [--hours 450]   … 初期10職×2で、エリアを抜けた時間と節目のLV
-//   node tools/v2cap-progress.mjs --tune [--hours 450] [--rounds 8] [--step 0.35]
-//     … 必要EXP・必要ClassEXPの係数、標準の戦闘力（STD_RATIO）、
+//   node tools/v2cap-progress.mjs --tune [--hours 450] [--rounds 8] [--step 0.35] [--clip 0.2] [--anneal 0.8] [--stddamp 0.5]
+//     … 必要EXP・必要ClassEXPの係数、標準の戦闘力（STD_RATIO・LV1とLV5の行は動かさない）、
 //       ボスの倍率（エリアの値 AREA_BOSS）を、目安に合うまで回して作り直す（出力をそのまま貼る）
 //   node tools/v2cap-progress.mjs --statvalue [--areas 3,6,9,12] [--n 500]
 //     … 職業ごとに「どのステを足すと③のボスに効くか」を測る（装備を選ぶ重み STAT_WEIGHT・同じステでの職業の強さ）
@@ -23,15 +25,15 @@ const B = new URL('../src/', import.meta.url).href
 const { runBattle } = await import(B + 'v2/lib/battle.js')
 const { STAT_KEYS, INITIAL_STATS, calcPower } = await import(B + 'v2/lib/stats.js')
 const { setMpCost } = await import(B + 'v2cap/lib/skills.js')
-const { ITEM_BY_ID } = await import(B + 'v2cap/lib/equipment.js')
+const { ITEMS } = await import(B + 'v2cap/lib/equipment.js')
 const areas = await import(B + 'v2cap/lib/areas.js')
 const level = await import(B + 'v2cap/lib/level.js')
 const jobsLib = await import(B + 'v2cap/lib/jobs.js')
 const { statsAt, effectPct } = await import(B + 'v2cap/lib/gear.js')
 const { toFighter, totalStats } = await import(B + 'v2cap/lib/loadout.js')
-const { pickEncounter, rollEquipDrop, rollRewards, nextBossRate, openUntilOf, clearSpot } = await import(B + 'v2cap/lib/sortie.js')
+const { pickEncounter, rollRewards, nextBossRate, openUntilOf, clearSpot } = await import(B + 'v2cap/lib/sortie.js')
 const { LAST_SPOT, AREA_LIST, toFighter: enemyFighter, stdPowerAt } = areas
-const { applyExp, bodyPowerAt, totalExpTo } = level
+const { applyExp, bodyPowerAt, totalExpTo, POINT_UNIT, totalPointsTo } = level
 const { applyJobExp, jobOf, learnOrderOf, attackKindOf, canEquipType, JOB_MAX, jobTotalTo } = jobsLib
 
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] : d }
@@ -109,9 +111,8 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START } = {}) => 
   let jobs = { [cls]: { lv: 1, exp: 0 } }
   let learned = applyJobExp(jobs, cls, 0).learned
   let cleared = [], bossRate = 0, gold = 0, cumExp = 0
-  let inventory = []                   // { id, base_id, ilv }（画面の v2cap_inventory と同じ形。レア度は装備が持つ）
+  let inventory = []                   // { id, base_id, ilv }（画面の v2cap_inventory と同じ形。着けている装備だけ）
   let equipped = {}
-  let nextId = 1
   let skillSet = []
   const hourly = []
   const spotClearHour = {}             // 場所 → ボスを倒した時間（小数）
@@ -130,31 +131,47 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START } = {}) => 
     ...Object.fromEntries(STAT_KEYS.map(k => [k, st[k]])),
     jobs, learned, skill_sets: { [cls]: skillSet }, equipped,   // スキルセットは職業ごと（画面の v2cap_profiles と同じ形）
   })
+  // 装備は「その時点で着けられるいちばん良いもの」。行ったことのあるエリア（開いている一番先の場所のエリアまで）の装備を、
+  // レア度は全部（エピック・レジェンダリーも）候補にし、必要LVの不足ぶん（1LVごとに-5%）も数えて職業の重みで比べる
   const weight = weightOf(cls)
-  const valueOf = (row) => {
-    const s = statsAt(ITEM_BY_ID[row.base_id], row.ilv, effectPct(row.ilv, st.lv))
+  const valueAt = (item) => {
+    const s = statsAt(item, item.lv, effectPct(item.lv, st.lv))
     return Object.entries(weight).reduce((t, [k, w]) => t + (s[k] || 0) * w, 0)
   }
-  const best = (rows) => [...rows].sort((a, b) => valueOf(b) - valueOf(a))
+  const bestOf = (list) => {
+    let b = null
+    let bv = -1
+    for (const x of list) { const v = valueAt(x); if (v > bv) { b = x; bv = v } }
+    return b
+  }
+  let gearArea = 0
   const regear = () => {
-    const item = (r) => ITEM_BY_ID[r.base_id]
-    const next = {}
-    const w = best(inventory.filter(r => item(r).part === '武器' && canEquipType(cls, item(r).type)))[0]
-    if (w) next.weapon = w.id
-    for (const [part, slot] of Object.entries(ARMOR_SLOT)) {
-      const a = best(inventory.filter(r => item(r).part === part))[0]
-      if (a) next[slot] = a.id
+    gearArea = areas.spotOf(openUntilOf(cleared)).area
+    const pool = ITEMS.filter(i => i.area <= gearArea)
+    const picks = { weapon: bestOf(pool.filter(i => i.part === '武器' && canEquipType(cls, i.type))) }
+    for (const [part, slot] of Object.entries(ARMOR_SLOT)) picks[slot] = bestOf(pool.filter(i => i.part === part))
+    picks.acc1 = picks.acc2 = bestOf(pool.filter(i => i.part === 'アクセ'))
+    inventory = []
+    equipped = {}
+    for (const [slot, item] of Object.entries(picks)) {
+      if (!item) continue
+      inventory.push({ id: inventory.length + 1, base_id: item.id, ilv: item.lv })
+      equipped[slot] = inventory.length
     }
-    const accs = best(inventory.filter(r => item(r).part === 'アクセ'))
-    if (accs[0]) next.acc1 = accs[0].id
-    if (accs[1]) next.acc2 = accs[1].id
-    equipped = next
-    // 持ち物は着けているもの＋新しいほうから40個まで（重くしない）
-    const keep = new Set(Object.values(equipped))
-    if (inventory.length > 60) inventory = inventory.filter((r, i) => keep.has(r.id) || i >= inventory.length - 40)
+  }
+  // ステータスポイントは、その職業のクラスのステと同じ割合で振る（並び bonusSeqOf を前から順に・一周したら頭から）
+  const pointSeq = jobsLib.bonusSeqOf(cls)
+  let pointsUsed = 0
+  const spendPoints = (n) => {
+    for (let i = 0; i < n; i++) {
+      const k = pointSeq[pointsUsed % pointSeq.length]
+      st[k] += POINT_UNIT[k]
+      pointsUsed++
+    }
   }
   // スキル編成はふつうの人の並べ方（typicalSet）。覚えた技・最大MPが変わるたびに組み直す
   const reset = () => { skillSet = typicalSet(cls, learned, totalStats(prof(), inventory).mp) }
+  regear()
   reset()
 
   let t = Date.UTC(2026, 0, 1)
@@ -189,21 +206,18 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START } = {}) => 
       cumExp += exp
       expInSpot[spot] = (expInSpot[spot] || 0) + exp
       const lvBefore = st.lv
-      const res = applyExp(st, exp, rng)
+      const res = applyExp(st, exp)
       st.lv = res.lv; st.exp = res.exp
-      for (const k of STAT_KEYS) st[k] = res.stats[k]
+      if (res.points) spendPoints(res.points)
       const j = applyJobExp(jobs, cls, exp, learned)
       jobs = j.jobs
       if (job30Hour === null && j.lv >= JOB_MAX) job30Hour = hour
       let dirty = res.lv !== lvBefore || j.ups.length > 0
       if (j.learned.length) { learned = [...learned, ...j.learned]; dirty = true }
-      if (win) {
-        const drop = rollEquipDrop(enc, cls, at, rng)
-        if (drop) { inventory.push({ id: nextId++, base_id: drop.item.id, ilv: drop.ilv }); dirty = true }
-        if (enc.isBoss && !cleared.includes(spot)) {
-          cleared = clearSpot(cleared, spot)
-          spotClearHour[spot] = hour
-        }
+      if (win && enc.isBoss && !cleared.includes(spot)) {
+        cleared = clearSpot(cleared, spot)
+        spotClearHour[spot] = hour
+        if (areas.spotOf(openUntilOf(cleared)).area !== gearArea) dirty = true   // 新しいエリアの装備が着けられる
       }
       if (dirty) { regear(); reset() }
       if (res.lv !== lvBefore) (powerByLv[st.lv] ||= []).push(calcPower(totalStats(prof(), inventory)))
@@ -235,6 +249,8 @@ const areaClearHour = (r, k) => r.spotClearHour[k * 3 + 3]   // エリアk（0�
 //   ・ボスの倍率 … その場所に**入ってから倒すまでの時間**（1人ずつの中央値）が目安に近づくように
 //   ⚠「目安の時間に実際に稼いだEXP」や「最初からの通算の時間」で合わせると、1か所の遅れが後ろ全部に響いて、
 //     回ごとに大きく振れた（2026-10-09 実際に踏んだ）
+// 測り直しで動かさない標準の戦闘力の行（このLV以下）。始まりの森①の敵（LV1・2）を装備なしのLV1で勝てる強さに保つ
+const STD_FIXED_LV = 5
 const tune = async () => {
   const classes = ['戦士', '盗賊', '魔法使い', '薬師']
   const seeds = String(arg('seeds', '1,2')).split(',').map(Number)
@@ -245,6 +261,10 @@ const tune = async () => {
   // 回を追うごとに動かす幅を小さくする（0.7なら 10%→7%→4.9%…）。終盤の場所は戦闘力の伸びがゆっくりで、
   // ボスの倍率を少し動かすだけで倒せる時間が大きく動く＝同じ幅のままだと行ったり来たりして収まらない
   const anneal = Number(arg('anneal', 1))
+  // 標準の戦闘力（STD_RATIO）を、測った値へ1回でどれだけ近づけるか（0.5なら差の半分ずつ・掛け算で）。
+  // ⚠1（測った値へそのまま置き換え）だと、出発点が遠いときに 速すぎ→遅すぎ→… と振れて収まらない（2026-10-09 実際に踏んだ）。
+  //   敵の強さは全部これに掛かるので、ここが一気に動くと全部の場所が一度に振れる
+  const stdDamp = Number(arg('stddamp', 0.5))
   const hist = []
   const meanExp = (id) => { const s = areas.spotOf(id); return (s.exp[0] + s.exp[1]) / 2 }
   const spotHours = (id) => SPOT_HOUR[id - 1] - (id > 1 ? SPOT_HOUR[id - 2] : 0)
@@ -273,15 +293,28 @@ const tune = async () => {
     const jobNow = jobsLib.JOB_NEED_TENTHS
     const jobNext = Math.max(1, Math.round(jobNow * cumAtHour(JOB30_HOUR) / jobTotalTo('shoki', JOB_MAX)))
     jobsLib.setJobNeedForTuning(jobNext)
-    // 4) 標準の戦闘力：そのLVに着いたときの戦闘力（本体に対する倍率）の平均
+    // 4) 標準の戦闘力：そのLVに着いたときの戦闘力（本体に対する倍率）の平均へ、stdDamp の割合で近づける
+    //    ★LVが STD_FIXED_LV 以下の行は動かさない：いちばん良い装備で回すとLV1から始まりの森の装備を全部着けている
+    //      （LV1で2.4倍と測れる）。始まりの森①の敵（LV1・2）は装備なしのLV1で勝てる強さのまま（ユーザー指示「未装備でも倒せるように」）
     const acc = {}
     for (const r of results) for (const [lv, arr] of Object.entries(r.powerByLv)) for (const p of arr) (acc[lv] ||= []).push(p / bodyPowerAt(Number(lv)))
     for (const row of areas.STD_RATIO) {
+      if (row[0] <= STD_FIXED_LV) continue
       const vals = []
       for (let l = row[0] - 2; l <= row[0] + 2; l++) if (acc[l]) vals.push(...acc[l])
-      if (vals.length) row[1] = round2(vals.reduce((a, b) => a + b, 0) / vals.length)
+      if (vals.length) row[1] = round2(row[1] * Math.pow(vals.reduce((a, b) => a + b, 0) / vals.length / row[1], stdDamp))
     }
-    for (let i = 1; i < areas.STD_RATIO.length; i++) areas.STD_RATIO[i][1] = Math.max(areas.STD_RATIO[i][1], areas.STD_RATIO[i - 1][1])
+    //    倍率はLVが上がって下がってもよい（ステータスポイントにしてから、実際の倍率はLV34あたりが山で少しずつ下がる）。
+    //    ただし標準の戦闘力（本体×倍率）は1LVごとに下がらないように：本体は1LVで3以上増えるので、
+    //    倍率の下がり方を「次の行の倍率 ≥ 前の行 × 本体(次) ÷ (本体(次)＋3×LVの差)」までにする（v2cap.test.js が全LVで見る）
+    //    ⚠前は「倍率がLVで下がらない」にしていて、一度高く測った行の値が後ろの行へ全部うつって戻らなかった
+    for (let i = 1; i < areas.STD_RATIO.length; i++) {
+      const [l0, r0] = areas.STD_RATIO[i - 1]
+      const l1 = areas.STD_RATIO[i][0]
+      const b1 = bodyPowerAt(l1)
+      const floor = Math.ceil(r0 * b1 / (b1 + 3 * (l1 - l0)) * 100) / 100
+      areas.STD_RATIO[i][1] = Math.max(areas.STD_RATIO[i][1], floor)
+    }
     // 5) ボスの倍率（エリアの値 AREA_BOSS）：そのエリアに入ってから③のボスを倒すまでの時間
     //    （1人ずつの中央値）が目安に近づくように。①②③の倍率（SUB_BOSS）は決まっていて動かさない。
     //    期間内に倒せなかった人は「期間の終わりまで＋30時間」として数える
@@ -350,7 +383,6 @@ const report = () => {
 //   ③のボスに勝率50%になるボスの強さ（本物の何倍か）が何%上がるか。エリア3/6/9/12の平均
 //   ★いちばん左の「強さ」は、同じステの職業どうしの強さの比べ（平均を100%）
 const statValue = async () => {
-  const { STAT_DEFS } = await import(B + 'v2/lib/stats.js')
   const { statsOf } = await import(B + 'v2/lib/enemies.js')
   const { slotsOf } = await import(B + 'v2cap/lib/loadout.js')
   const { skillsOf } = await import(B + 'v2cap/lib/skills.js')
@@ -361,7 +393,11 @@ const statValue = async () => {
   const baseStats = (cls, lv) => {
     const job = jobsLib.jobBonusStats(cls, JOB_MAX)
     const gear = bodyPowerAt(lv) * 1.2
-    return Object.fromEntries(STAT_KEYS.map(k => [k, INITIAL_STATS[k] + Math.round((lv - 1) * 5 / 8) * STAT_DEFS[k].unit + job[k]
+    // 本体＝初期値＋そのLVまでのポイントをクラスと同じ割合で振ったもの
+    const seq = jobsLib.bonusSeqOf(cls)
+    const body = { ...INITIAL_STATS }
+    for (let i = 0; i < totalPointsTo(lv); i++) body[seq[i % seq.length]] += POINT_UNIT[seq[i % seq.length]]
+    return Object.fromEntries(STAT_KEYS.map(k => [k, body[k] + job[k]
       + (GEAR.includes(k) ? Math.round(gear / GEAR.length) : 0)]))
   }
   const fighter = (cls, stats) => ({

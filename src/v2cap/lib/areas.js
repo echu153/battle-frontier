@@ -19,7 +19,7 @@
 // ============================================================
 import { statsOf } from '../../v2/lib/enemies.js'
 import { bodyPowerAt } from './level.js'
-import { ROSTERS, AREA_LEVELS, ENEMY_LV } from './monsters.js'
+import { ROSTERS, ENEMY_LV } from './monsters.js'
 
 // ===== エリアと場所の名前（【確定】2026-10-09 ユーザーの表）=====
 export const AREA_LIST = [
@@ -60,9 +60,7 @@ export const goldRangeOf = (areaNo, sub) => {
 export const ROLE_TENTHS = { normal: 10, timed: 15, rare: 30, boss: 50 }
 export const scaleByRole = (v, role) => Math.floor((v * (ROLE_TENTHS[role] || 10) + 5) / 10)
 
-// アイテムLV（＝必要LV）。【確定】エリアごとに1つ＝そのエリアの①のボスのLV（2026-10-09 ユーザー決定）。
-//   ボスのLVは monsters.js の AREA_LEVELS（敵ごとに一定）
-export const itemLvOfArea = (areaNo) => AREA_LEVELS[areaNo - 1]?.bosses[0] || 1
+// ★装備の必要LV（アイテムLV）は equipment.js の reqLvOf（エリア×レア度・ユーザーの表）。場所は持たない
 
 // ===== 場所 =====
 // ★顔ぶれ（roster）の敵には、いる場所（spot）を付けて持つ。同じ敵が②と③の両方に出る（LVはどこでも同じ。
@@ -74,7 +72,6 @@ export const SPOTS = AREA_LIST.flatMap((a, k) => a.spots.map((name, j) => {
   return {
     id, area: k + 1, areaName: a.name, sub: j + 1, name,
     exp: expRangeOf(k + 1, j + 1), gold: goldRangeOf(k + 1, j + 1),
-    get itemLv() { return itemLvOfArea(k + 1) },
     roster: { enemies: withSpot(r.enemies, id), timed: withSpot(r.timed, id), rares: withSpot(r.rares, id), boss: { ...r.boss, spot: id } },
   }
 }))
@@ -111,10 +108,11 @@ export const enemyLevels = () => [...PLACES.values()].map(p => ({ name: p.name, 
 
 // ===== 敵の強さ =====
 // そのLVのプレイヤーの「標準の戦闘力」（本体＋その時点の装備＋クラスのステ）。本体の戦闘力に対する倍率を
-// LVの折れ線で持つ（間は直線で補う）。
-// ★値は `node tools/v2cap-progress.mjs --tune` の出力をそのまま貼る（勘で書き換えないこと）
+// LVの折れ線で持つ（間は直線で補う）。倍率はLVが上がって少し下がることもあるが、標準の戦闘力そのものは下がらない。
+// ★値は `node tools/v2cap-progress.mjs --tune` の出力をそのまま貼る（勘で書き換えないこと）。
+//   LV1・LV5の行は測り直しでも動かさない（始まりの森①の敵を、装備なしのLV1で勝てる強さに保つ・ユーザー指示）
 export const STD_RATIO = [
-  [1, 1.02], [5, 1.07], [10, 1.39], [15, 1.8], [20, 1.95], [27, 2.07], [34, 2.12], [44, 2.17], [54, 2.17], [63, 2.17], [71, 2.17], [79, 2.17], [90, 2.19], [100, 2.19],
+  [1, 1.02], [5, 1.07], [10, 2.83], [15, 3.21], [20, 3.52], [27, 3.69], [34, 3.77], [44, 3.56], [54, 3.38], [63, 3.24], [71, 3.14], [79, 3.08], [90, 3.02], [100, 3.01],
 ]
 export const stdRatioAt = (lv) => {
   const l = Math.max(1, Math.min(100, lv || 1))
@@ -141,7 +139,7 @@ export const NORMAL_RATIO = 0.6
 export const RARE_RATIO = 0.8
 export const SUB_BOSS = [1.0, 1.0, 1.25]
 export const AREA_BOSS = [
-  1.16, 1.04, 1.12, 1.27, 1.25, 1.34, 1.32, 1.19, 1.19, 1.29, 1.42, 1.24, 1.29, 1.14, 1.3,
+  1.1, 0.98, 1.04, 1.2, 1.16, 1.24, 1.08, 0.99, 1.03, 1.14, 1.25, 1.13, 1.22, 1.14, 1.42,
 ]
 export const bossRatioOf = (spotId) => {
   const s = spotOf(spotId)

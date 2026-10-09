@@ -552,8 +552,7 @@ export const AREA_ROSTERS = [
 //     最初に出る場所のボスのLVまで
 //   ・朝昼晩の敵 … 2体目のふつうの敵と同じ ／ レア … ①のボスと同じ
 // 並び：normals は AREA_ROSTERS の normals と同じ順。timed・rares はそのエリアの全員が同じLV
-// ★装備のアイテムLV（＝必要LV）は「そのエリアの①のボスのLV」（areas.js の itemLvOfArea）＝ここから決まる
-// ★サーバーの v2cap_enemies.lv・v2cap_spots（LVの範囲・アイテムLV）はここから tools/v2cap-sql.mjs が作る
+// ★サーバーの v2cap_enemies.lv・v2cap_spots（LVの範囲）はここから tools/v2cap-sql.mjs が作る
 export const AREA_LEVELS = [
   { normals: [1, 2, 10, 11, 12, 13], timed: 2, rares: 10, bosses: [10, 12, 15] },                 // 始まりの森
   { normals: [16, 17, 17, 18, 18, 19], timed: 17, rares: 17, bosses: [17, 18, 20] },              // 荒廃した草原

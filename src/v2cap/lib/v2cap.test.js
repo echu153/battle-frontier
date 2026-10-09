@@ -5,7 +5,10 @@ import assert from 'node:assert/strict'
 import { STAT_KEYS, STAT_DEFS, calcPower, INITIAL_STATS } from '../../v2/lib/stats.js'
 import { skillValue, VALUE_TABLE, MP_TABLE, BUFF_PER_MP, HEAL_PER_MP, MPREGEN_PER_MP, SKILLS as V2_SKILLS, offClassMult } from '../../v2/lib/skills.js'
 import { createSide, mpCostOf, runBattle } from '../../v2/lib/battle.js'
-import { MAX_LV, needExp, totalExpTo, applyExp, bodyPowerAt, staminaMaxOf, NEED_PERMIL, STAMINA_RECOVER_MS, rollStamina, msToNextStamina } from './level.js'
+import {
+  MAX_LV, needExp, totalExpTo, applyExp, bodyPowerAt, staminaMaxOf, NEED_PERMIL, STAMINA_RECOVER_MS, rollStamina, msToNextStamina,
+  pointsForLv, totalPointsTo, POINT_UNIT, validateAllocation, applyAllocation,
+} from './level.js'
 import {
   CLASSES, START_CLASSES, STAGES, JOB_MAX, JOB_BONUS, jobNeed, jobTotalTo, bonusSeqOf,
   bonusPointsAt, jobBonusStats, learnOrderOf, learnAtOf, skillsLearnedBy, applyJobExp,
@@ -14,12 +17,12 @@ import {
 import { SKILLS, NEW_SKILLS, SKILL_BY_NAME, setMpCost, validateSkillSet, defaultSetOf, DEFAULT_USES_MAX } from './skills.js'
 import {
   ITEMS, ITEM_BY_ID, KINDS, WEAPON_TYPES, ARMOR_LINES, ARMOR_PARTS, ACCESSORY_TYPES, PART_MULT, SLOTS, ARMOR_EFFECT,
-  RARITIES, RARITY_LABEL, RARITY_BASE, AREA_COUNT, itemOf, itemLabel, slotsFor, SLOT_LABEL, PARTS, partLabel, kindLabel,
+  RARITIES, RARITY_LABEL, RARITY_BASE, AREA_COUNT, itemOf, itemLabel, slotsFor, SLOT_LABEL, PARTS, partLabel, kindLabel, reqLvOf,
 } from './equipment.js'
 import { GEAR_NAMES } from './gearNames.js'
 import { powerAt, effectPct, statsAt, armorEffects, GEAR_RATIO, SET_PART_SUM } from './gear.js'
 import {
-  AREA_LIST, SPOTS, SPOT_COUNT, spotOf, spotLvOf, spotLabel, itemLvOfArea, expRangeOf, goldRangeOf,
+  AREA_LIST, SPOTS, SPOT_COUNT, spotOf, spotLvOf, spotLabel, expRangeOf, goldRangeOf,
   ROLE_TENTHS, scaleByRole, enemyLevels, enemyLvOf, enemyRoleOf,
   stdPowerAt, AREA_BOSS, SUB_BOSS, bossRatioOf, STD_RATIO, NORMAL_RATIO, enemyPowerOf, toFighter as enemyFighter,
 } from './areas.js'
@@ -40,25 +43,49 @@ test('【確定】LV上限は100。必要EXPは上がるほど重くなる（MMO
   for (let l = 2; l < 99; l++) assert.ok(needExp(l + 1) > needExp(l), `LV${l}→${l + 1} より LV${l + 1}→${l + 2} が重い`)
   // 必要EXP ＝ 係数 × LV³（千分率の整数で掛けてから割る＝SQLと同じ）
   for (const l of [1, 5, 10, 20, 50, 99]) assert.equal(needExp(l), Math.max(1, Math.round(NEED_PERMIL * l * l * l / 1000)))
-  // 設計書§2の表（係数0.136＝tools/v2cap-progress.mjs --tune で「最後のボスの目安（365時間目）にLV100」になるよう決めた。
-  //   2026-10-09 敵のLVを一定にしたあとの測り直し）
-  assert.deepEqual([1, 5, 10, 20, 30, 50, 70, 90, 99].map(needExp), [1, 17, 136, 1088, 3672, 17000, 46648, 99144, 131961])
+  // 設計書§2の表（係数0.135＝tools/v2cap-progress.mjs --tune で「最後のボスの目安（365時間目）にLV100」になるよう決めた。
+  //   2026-10-09 ステータスポイントにしたあとの測り直し）
+  assert.deepEqual([1, 5, 10, 20, 30, 50, 70, 90, 99].map(needExp), [1, 17, 135, 1080, 3645, 16875, 46305, 98415, 130990])
 })
 
 test('【確定】LV100で止まり、あふれたEXPは捨てる。周回（LV1に戻る）は無い', () => {
-  const s = applyExp({ lv: 99, exp: 0, ...INITIAL_STATS }, needExp(99) * 3, rngOf(1))
+  const s = applyExp({ lv: 99, exp: 0 }, needExp(99) * 3)
   assert.equal(s.lv, 100)
   assert.equal(s.exp, 0)
-  const again = applyExp({ ...s, ...s.stats }, 1000000, rngOf(2))
+  assert.equal(s.points, pointsForLv(100), 'LV100に上がったぶんのポイントだけ入る')
+  const again = applyExp(s, 1000000)
   assert.equal(again.lv, 100)
   assert.equal(again.levelUps.length, 0)
+  assert.equal(again.points, 0, 'LV100ではもうポイントは入らない')
 })
 
-test('LVアップごとに5回抽選＝戦闘力+5（ステータスは今のⅡと同じ）', () => {
-  const s = applyExp({ lv: 1, exp: 0, ...INITIAL_STATS }, totalExpTo(31), rngOf(3))
+test('【確定】LVアップでステは上がらず、ステータスポイントが3（5の倍数のLVは5）入る', () => {
+  // ユーザー指示「通常のレベル上がるときはステータス一切上げないで、ステータスポイント3振れるようにしよう、5の倍数は3じゃなくて5ポイントで」
+  assert.deepEqual([2, 3, 4, 5, 6, 9, 10, 15, 99, 100].map(pointsForLv), [3, 3, 3, 5, 3, 3, 5, 5, 3, 5])
+  assert.deepEqual([1, 2, 5, 10, 32, 100].map(totalPointsTo), [0, 3, 14, 31, 105, 337])
+  const s = applyExp({ lv: 1, exp: 0, ...INITIAL_STATS }, totalExpTo(31))
   assert.equal(s.lv, 31)
-  assert.equal(calcPower(s.stats), calcPower(INITIAL_STATS) + 5 * 30)
-  assert.equal(bodyPowerAt(31), calcPower(s.stats))
+  assert.equal(s.points, totalPointsTo(31), 'LV31までのポイントが入る')
+  assert.deepEqual(s.levelUps.slice(0, 4).map(u => [u.lv, u.points]), [[2, 3], [3, 3], [4, 3], [5, 5]])
+  assert.ok(!('stats' in s), 'ステはLVアップで変わらない（返さない）')
+  // 本体の戦闘力の物差し＝初期値＋そのLVまでのポイントを全部振ったもの
+  assert.equal(bodyPowerAt(1), calcPower(INITIAL_STATS))
+  assert.equal(bodyPowerAt(100), calcPower(INITIAL_STATS) + 337)
+})
+
+test('【確定】ステータスポイントは8種すべてに振れる（1ポイントで HP+8・MP+3・ほか+1）。足りない・おかしい振り方は通さない', () => {
+  assert.deepEqual(POINT_UNIT, { hp: 8, mp: 3, str: 1, dex: 1, agi: 1, int_stat: 1, vit: 1, luk: 1 })
+  for (const k of STAT_KEYS) assert.equal(validateAllocation({ [k]: 1 }, 1), null, `${k}に振れる`)
+  const after = applyAllocation(INITIAL_STATS, { hp: 2, mp: 1, str: 3 })
+  assert.deepEqual([after.hp, after.mp, after.str, after.dex], [56, 15, 8, 5])
+  assert.equal(calcPower(after) - calcPower(INITIAL_STATS), 6, 'どれに振っても1ポイント＝戦闘力+1')
+  assert.equal(validateAllocation({ str: 4 }, 3), 'ポイントが足りません')
+  assert.equal(validateAllocation({}, 3), 'ポイントを1以上振ってください')
+  assert.equal(validateAllocation({ str: 0 }, 3), 'ポイントを1以上振ってください')
+  assert.equal(validateAllocation({ str: -1 }, 3), '振る数は0以上の整数で指定してください')
+  assert.equal(validateAllocation({ str: 1.5 }, 3), '振る数は0以上の整数で指定してください')
+  assert.equal(validateAllocation({ power: 1 }, 3), 'powerには振れません')
+  assert.equal(validateAllocation(null, 3), '振り方の形式が不正です')
 })
 
 // ===== エリアと場所 =====
@@ -155,13 +182,21 @@ test('【確定】落ちる装備のレア度：エピックはレアとボス�
   }
 })
 
-test('【確定】装備のアイテムLVはエリアごとに1つ（①のボスのLV）。①②③どこで拾っても同じ', () => {
-  for (const s of SPOTS) {
-    assert.equal(s.itemLv, itemLvOfArea(s.area))
-    assert.equal(s.itemLv, enemyLvOf(spotOf((s.area - 1) * 3 + 1).roster.boss.name, (s.area - 1) * 3 + 1), `${spotLabel(s)}は①のボスのLV`)
+test('【確定】装備の必要LV（アイテムLV）はエリアとレア度の表。必要LVが高いほど強く、同じLVならレア度が高いほど強い', () => {
+  // ユーザーの表：ノーマル＝5×エリア、レア＋5・エピック＋10・レジェンダリー＋15
+  assert.deepEqual(RARITIES.map(r => reqLvOf(1, r)), [5, 10, 15, 20], '始まりの森')
+  assert.deepEqual(RARITIES.map(r => reqLvOf(2, r)), [10, 15, 20, 25], '荒廃した草原')
+  assert.deepEqual(RARITIES.map(r => reqLvOf(15, r)), [75, 80, 85, 90], '深淵の海溝')
+  for (const i of ITEMS) assert.equal(i.lv, 5 * i.area + 5 * RARITIES.indexOf(i.rarity), i.name)
+  // 必要LVが高いほど強い（同じ種類・同じレア度でエリアが進むと強くなる）
+  for (const r of RARITIES) {
+    for (let a = 1; a < AREA_COUNT; a++) assert.ok(powerAt(itemOf(a + 1, r, '片手剣'), reqLvOf(a + 1, r)) > powerAt(itemOf(a, r, '片手剣'), reqLvOf(a, r)), `${r} エリア${a + 1}`)
   }
-  for (let k = 1; k < 15; k++) assert.ok(itemLvOfArea(k + 1) > itemLvOfArea(k), '後のエリアほど高い')
-  assert.deepEqual(Array.from({ length: 15 }, (_, k) => itemLvOfArea(k + 1)), [10, 17, 22, 27, 31, 37, 45, 51, 58, 63, 66, 69, 72, 75, 78])
+  // 例：ノーマルのLV20（蒼海の入り江）より、レジェンダリーのLV20（始まりの森）が強い（ユーザーの例）
+  const n20 = itemOf(4, 'N', '片手剣'), l20 = itemOf(1, 'L', '片手剣')
+  assert.deepEqual([n20.lv, l20.lv], [20, 20])
+  assert.ok(powerAt(l20, l20.lv) > powerAt(n20, n20.lv), 'LV20どうしならレジェンダリーのほうが強い')
+  assert.ok(Math.abs(powerAt(l20, 20) / powerAt(n20, 20) - 1.75) < 0.05, 'レジェンダリーはノーマルの1.75倍')
 })
 
 test('【確定】スタミナは3分に1回復・最大値はLVが1上がるごとに+1（LV1で10）', () => {
@@ -203,21 +238,26 @@ test('通常攻撃は 槍使い・盗賊・銃士・戦士・格闘家・弓使�
   for (const c of ['魔法使い', '呪術師', '僧侶', '薬師']) assert.equal(attackKindOf(c), 'mag', c)
 })
 
-test('【確定】ClassLVは最大30。初期職のClassLV30まで＝LV32のころに入っているEXP（目安は14時間）', () => {
+test('【確定】ClassLVは最大30。初期職のClassLV30まで＝LV33のころに入っているEXP（目安は14時間）', () => {
   assert.equal(JOB_MAX, 30)
   assert.equal(jobNeed('shoki', 30), 0)
   const total = jobTotalTo('shoki', 30)
-  // 係数4.4（tools/v2cap-progress.mjs --tune の後半4回の平均・2026-10-09 敵のLVを一定にしたあと）
+  // 係数4.4（tools/v2cap-progress.mjs --tune の後半4回の平均・2026-10-09 ステータスポイントにしたあと）
   assert.equal(total, 37642)
-  assert.ok(total >= totalExpTo(32) && total < totalExpTo(33), `初期職の合計 ${total} はLV32〜33のあいだ`)
+  assert.ok(total >= totalExpTo(33) && total < totalExpTo(34), `初期職の合計 ${total} はLV33〜34のあいだ`)
 })
 
-test('【確定】クラスのステは職業ごとに決まった配分で、その職業の間だけ（ClassLV30で29点）', () => {
+test('【確定】クラスのステはClassLVが1上がるごとに5点（ClassLV30で145点）。職業ごとに2〜3種が高く、ほかは低め', () => {
   for (const c of CLASSES) {
     const w = JOB_BONUS[c.id]
     assert.ok(w, `${c.id}の配分がある`)
     const sum = Object.values(w).reduce((a, b) => a + b, 0)
-    assert.equal(sum, 29, `${c.id}の合計`)
+    assert.equal(sum, 145, `${c.id}の合計（ClassLV30で145点）`)
+    // 2〜3種が高い（30点以上）・ほかはそれより低い・尖りすぎない（1種で半分を超えない）
+    const vals = Object.values(w).sort((a, b) => b - a)
+    const high = vals.filter(v => v >= 30).length
+    assert.ok(high >= 2 && high <= 3, `${c.id}：高いのは${high}種`)
+    assert.ok(vals[0] <= 145 / 2, `${c.id}：1種に寄りすぎない`)
     const seq = bonusSeqOf(c.id)
     assert.equal(seq.length, sum)
     for (const [k, v] of Object.entries(w)) assert.equal(seq.filter(x => x === k).length, v, `${c.id}の${k}`)
@@ -539,7 +579,7 @@ test('【確定】落ちるのはそのエリアの装備。武器はいまの�
     if (!d) continue
     got++
     assert.equal(d.item.area, enc.spot.area, 'そのエリアの装備')
-    assert.equal(d.ilv, itemLvOfArea(enc.spot.area), 'アイテムLVはエリアごとに1つ')
+    assert.equal(d.ilv, d.item.lv, 'アイテムLV＝その装備の必要LV')
     assert.ok(canDropRarity(enc.role, d.item.rarity), `${enc.role}から${RARITY_LABEL[d.item.rarity]}`)
     seen[enc.role].add(d.item.rarity)
     if (d.item.part === '武器') assert.ok(canEquipType('盗賊', d.item.type), d.item.type)

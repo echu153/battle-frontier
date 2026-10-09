@@ -1,8 +1,8 @@
 // ============================================================
 // バトルフロンティアⅡ「レベルキャップあり」版（v2cap）— LVとEXP
 // ------------------------------------------------------------
-// 設計は docs/v2cap-design.md。ステータスの種類と成長（LVアップごとに5回抽選）は
-// 今のⅡと同じなので src/v2/lib/stats.js をそのまま使う。違うのは次の3つだけ：
+// 設計は docs/v2cap-design.md。ステータスの種類（8種）と初期値・戦闘力の数え方は今のⅡと同じ（src/v2/lib/stats.js）。違うのは：
+//   ・**LVアップでステは上がらない**。かわりに**ステータスポイント**が入り、自分で振る（下の pointsForLv）
 //   ・**転職しても下がらない**。LV100で止まり、周回（LV1に戻る）は無い
 //   ・必要EXPはMMORPGのように、上がるほど重くなる（下の needExp）
 //   ・1勝で入るEXPは**場所ごとの表の値**（areas.js。先の場所ほど多い・朝昼晩1.5倍・レア3倍・ボス5倍）
@@ -11,9 +11,9 @@
 //   （supabase_v2cap_core.sql の v2cap_need / v2cap_sortie_settle / v2cap_apply_exp）。
 //   式を変えるときは必ず両方を直すこと（v2capsql.test.js が突き合わせる）。
 // ============================================================
-import { STAT_KEYS, ROLLS_PER_LV, INITIAL_STATS, calcPower, rollLevelUp, emptyGains } from '../../v2/lib/stats.js'
+import { STAT_KEYS, STAT_DEFS, INITIAL_STATS, calcPower } from '../../v2/lib/stats.js'
 
-export { STAT_KEYS, ROLLS_PER_LV, INITIAL_STATS, calcPower }
+export { STAT_KEYS, INITIAL_STATS, calcPower }
 
 export const MAX_LV = 100
 
@@ -27,7 +27,7 @@ export const MAX_LV = 100
 //   ⚠小数のまま掛けると、端数が .5 ちょうどになる所でSQLの round と食い違うことがある。
 //   なので**千分率の整数で掛けてから1000で割る**（SQLの v2cap_need も同じ形）
 // ★let なのは tools/v2cap-progress.mjs --tune が回しながら差し替えるため（ゲームの中では変えない）
-export let NEED_PERMIL = 136
+export let NEED_PERMIL = 135
 export const setNeedPermilForTuning = (v) => { NEED_PERMIL = v }
 export const needExp = (lv) => (lv >= MAX_LV ? 0 : Math.max(1, Math.round(NEED_PERMIL * lv * lv * lv / 1000)))
 
@@ -40,32 +40,64 @@ export const totalExpTo = (lv) => {
 
 // ★1勝で入るEXP・Goldは sortie.js の rollRewards（場所の表 × 役割の倍率）。決めるのはサーバー
 
+// ===== ステータスポイント =====
+// 【確定】2026-10-09 ユーザー指示「通常のレベル上がるときはステータス一切上げないで、ステータスポイント3振れるようにしよう、
+//   5の倍数は3じゃなくて5ポイントで」：LVアップではステは上がらず、そのLVに上がったときにポイントが入る
+//   （LV2・3・4は3、LV5は5、LV6〜9は3、LV10は5…）。LV100までの合計は337。
+// 【確定】振れるのは8種すべて（ユーザー決定）。1ポイントで HP+8・MP+3・ほか+1（どれに振っても戦闘力+1）。
+//   振り直しはいまはできない（ユーザー決定）。
+// ★サーバーの v2cap_apply_exp（入るポイント）と v2cap_allocate_points（振る）が同じ決まり（v2capsql.test.js が見張る）
+export const POINTS_PER_LV = 3
+export const POINTS_STEP = 5        // このLVの倍数では
+export const POINTS_ON_STEP = 5     // ポイントがこれだけ入る
+export const pointsForLv = (lv) => (lv % POINTS_STEP === 0 ? POINTS_ON_STEP : POINTS_PER_LV)
+const POINTS_TO = [0, 0]            // LV1からそのLVに着くまでに入るポイントの合計
+for (let l = 2; l <= MAX_LV; l++) POINTS_TO[l] = POINTS_TO[l - 1] + pointsForLv(l)
+export const totalPointsTo = (lv) => POINTS_TO[Math.max(1, Math.min(MAX_LV, Math.floor(lv || 1)))]
+// 1ポイントで上がる量（HP+8・MP+3・ほか+1＝今のⅡの「戦闘力1」と同じ換算）
+export const POINT_UNIT = Object.fromEntries(STAT_KEYS.map(k => [k, STAT_DEFS[k].unit]))
+// 振り方を確かめる。add＝{ str: 3, hp: 1, … }（8種のどれか・0以上の整数）。だめなら理由（サーバーと同じ文言）
+export const validateAllocation = (add, have) => {
+  if (!add || typeof add !== 'object' || Array.isArray(add)) return '振り方の形式が不正です'
+  let sum = 0
+  for (const [k, v] of Object.entries(add)) {
+    if (!STAT_KEYS.includes(k)) return `${k}には振れません`
+    if (!Number.isInteger(v) || v < 0) return '振る数は0以上の整数で指定してください'
+    sum += v
+  }
+  if (sum <= 0) return 'ポイントを1以上振ってください'
+  if (sum > (have || 0)) return 'ポイントが足りません'
+  return null
+}
+// 振ったあとのステ（state のステに足す）
+export const applyAllocation = (state, add) => Object.fromEntries(STAT_KEYS.map(k => [k, (state[k] || 0) + (add[k] || 0) * POINT_UNIT[k]]))
+
 // ===== 本体の戦闘力の目安 =====
-// LVアップ1回で戦闘力+5（5回抽選・どれに当たっても+1）。LV1の初期ステは戦闘力39
+// LV1の初期ステは戦闘力39。ポイントは1つで戦闘力+1なので、全部振ったときの本体＝39＋そのLVまでのポイント。
+// ★装備の強さ（gear.js：ノーマルを全部そろえると本体と同じくらい）と、敵の標準の戦闘力（areas.js）の物差し
 export const BODY_POWER_LV1 = calcPower(INITIAL_STATS)
-export const bodyPowerAt = (lv) => BODY_POWER_LV1 + ROLLS_PER_LV * (Math.max(1, lv) - 1)
+export const bodyPowerAt = (lv) => BODY_POWER_LV1 + totalPointsTo(lv)
 
 // ===== EXPを入れてLVアップまで処理する（純関数・表示とシミュレーション用）=====
 // 実際の保存は必ずRPC経由。state は書き換えず新しいオブジェクトを返す。
-export const applyExp = (state, amount, rng = Math.random) => {
+// LVアップではステは上がらず、ポイント（points）が入る。返すのは 新しいLV・EXP・入ったポイントの合計・LVごとの内訳
+export const applyExp = (state, amount) => {
   let lv = state.lv || 1
   let exp = state.exp || 0
-  const stats = {}
-  for (const k of STAT_KEYS) stats[k] = state[k] ?? state.stats?.[k] ?? 0
+  let points = 0
   const levelUps = []
-  const total = emptyGains()
   if (lv < MAX_LV && amount > 0) {
     exp += amount
     while (lv < MAX_LV && exp >= needExp(lv)) {
       exp -= needExp(lv)
       lv += 1
-      const gains = rollLevelUp(rng)
-      for (const k of STAT_KEYS) { stats[k] += gains[k]; total[k] += gains[k] }
-      levelUps.push({ lv, gains })
+      const p = pointsForLv(lv)
+      points += p
+      levelUps.push({ lv, points: p })
     }
     if (lv >= MAX_LV) exp = 0   // 上限に着いたら、あふれたぶんは捨てる
   }
-  return { lv, exp, stats, levelUps, gains: total, power: calcPower(stats) }
+  return { lv, exp, points, levelUps }
 }
 
 // ===== スタミナ（オート出撃の燃料）=====

@@ -23,7 +23,7 @@ export const JOB_MAX = 30
 // learnAt … スキルを覚えるClassLV（並び＝スキルの名簿の順）
 // ★一次職は一旦なし（2026-10-09）。見直したらここへ段階を足す（前の案は 一次＝必要ClassEXP×3・ステ2ずつ）
 export const STAGES = {
-  shoki: { label:'初期', color:'#44aaff', mult:1, perLv:1, learnAt:[1, 5, 10, 15, 20] },
+  shoki: { label:'初期', color:'#44aaff', mult:1, perLv:5, learnAt:[1, 5, 10, 15, 20] },
 }
 export const STAGE_ORDER = ['shoki']
 
@@ -74,18 +74,21 @@ export const jobTotalTo = (stage, jlv) => {
 export const jobOf = (jobs, cls) => ({ lv: jobs?.[cls]?.lv || 1, exp: jobs?.[cls]?.exp || 0 })
 
 // ===== ステ（クラスのステ）=====
-// 職業ごとの配分（戦闘力換算の点数）。合計29（ClassLV30まで1点ずつ）
+// 【確定】2026-10-09 ユーザー指示：LVアップでステが上がらなくなったぶん、**ClassLVが1上がるごとに5点**（ClassLV30で145点）。
+//   配分は「その職業に要らないステは極力上げないが、尖りすぎないように2〜3種が高く、ほかは少し低め」。
+//   1点＝戦闘力1（HPなら+8・MPなら+3・ほかは+1）。効くのはその職業でいるあいだだけ。
+// 職業ごとの配分（合計145＝ClassLV30までの点数）。説明文（CLASS_INFO.desc）の「◯◯が伸びる」と合わせてある
 export const JOB_BONUS = {
-  戦士:     { str:12, vit:7, hp:5, dex:5 },
-  槍使い:   { str:11, dex:9, vit:5, hp:4 },
-  格闘家:   { str:10, agi:9, hp:5, vit:5 },
-  盗賊:     { agi:12, dex:8, str:5, luk:4 },
-  弓使い:   { dex:12, agi:8, str:5, luk:4 },
-  銃士:     { dex:13, str:8, agi:4, luk:4 },
-  魔法使い: { int_stat:14, mp:6, dex:5, agi:4 },
-  呪術師:   { int_stat:13, mp:6, dex:5, luk:5 },
-  僧侶:     { int_stat:10, vit:7, mp:6, hp:6 },
-  薬師:     { int_stat:10, dex:7, mp:6, hp:6 },
+  戦士:     { str:40, vit:32, hp:28, dex:15, agi:15, mp:10, luk:5 },         // STR・VIT・HP
+  槍使い:   { str:40, dex:35, agi:22, vit:18, hp:15, mp:10, luk:5 },         // STR・DEX（＋AGI）
+  格闘家:   { str:40, agi:38, hp:22, vit:18, dex:12, mp:10, luk:5 },         // STR・AGI（＋HP）
+  盗賊:     { agi:42, str:32, dex:25, luk:18, hp:12, vit:8, mp:8 },          // AGI・STR（＋DEX）
+  弓使い:   { agi:40, dex:35, str:30, luk:12, hp:12, vit:8, mp:8 },          // AGI・DEX・STR
+  銃士:     { dex:45, agi:30, str:25, luk:15, hp:12, mp:10, vit:8 },         // DEX・AGI（＋STR）
+  魔法使い: { int_stat:45, mp:30, agi:25, dex:15, hp:15, vit:10, luk:5 },    // INT・MP（＋AGI）
+  呪術師:   { int_stat:42, mp:30, dex:20, luk:18, agi:15, hp:12, vit:8 },    // INT・MP（＋DEX・LUK）
+  僧侶:     { int_stat:38, vit:30, hp:28, mp:25, agi:12, dex:7, luk:5 },     // INT・VIT・HP
+  薬師:     { int_stat:38, dex:30, mp:25, hp:22, agi:15, vit:10, luk:5 },    // INT・DEX（＋MP）
 }
 
 // 配分を「何点目にどのステが上がるか」の並びにする（ランダムではなく固定）。

@@ -8,7 +8,7 @@
 //   ・ふつうの敵には、その時間帯（朝・昼・晩）の限定の敵も混ざる
 //   ・経験値とGoldは場所の表の値 × 役割の倍率（朝昼晩1.5倍・レア3倍・ボス5倍）。決めるのはサーバー
 //   ・装備はそのエリアのものが落ちる。レア度（ノーマル・レア・エピック・レジェンダリー）は敵の役割と①②③で決まる
-//     （下の「落ちる装備」）。部位は1時間ごとに「落ちやすい部位」が入れ替わる（今のⅡと同じ）。アイテムLVはエリアごとに1つ
+//     （下の「落ちる装備」）。部位は1時間ごとに「落ちやすい部位」が入れ替わる（今のⅡと同じ）。アイテムLV＝装備の必要LV
 //   ・**武器はいまの職業が装備できる3種から**落ちる。防具は重鎧／軽装を半々。装飾品は4種から均等
 // ============================================================
 import { spotOf, enemyLvOf, scaleByRole, LAST_SPOT } from './areas.js'
@@ -73,7 +73,7 @@ export const clearSpot = (cleared, id) =>
 //   ・勝ったときに装備が落ちる確率（%）… ふつう・朝昼晩の敵3（前と同じ）／レアモンスター10／ボス10
 //   ・落ちたときのレア度（%）… DROP_RARITY。①②③で「レア以上」の割合を ①×1.0 ②×1.2 ③×1.4 にする
 //     （増えたぶんはノーマルから減らす）
-//   ・落ちるのは**そのエリアの装備**（種類ごと・レア度ごとに1つずつ）。アイテムLVはエリアごとに1つ
+//   ・落ちるのは**そのエリアの装備**（種類ごと・レア度ごとに1つずつ）。アイテムLV＝その装備の必要LV（エリア×レア度）
 // ★サーバー（v2cap_sortie_settle）は「そのエリアの装備か」「その役割の敵から落ちるレア度か」「いまの職業の武器か」を見る
 //   （落ちたかどうか・何が落ちたかは画面の申告。戦闘をサーバーで回すまでは今のⅡと同じ限界）
 export const DROP_CHANCE = { normal: 3, timed: 3, rare: 10, boss: 10 }
@@ -113,10 +113,10 @@ export const rollDropKind = (part, cls, rng = Math.random) => {
   if (part === 'アクセ') return pick(ACCESSORY_TYPES, rng)
   return `${pick(ARMOR_LINES, rng)}${part}`
 }
-// 勝ったときの装備。落ちたら { item, ilv }（レア度は item.rarity）。**アイテムLV＝エリアごとに1つ**（areas.js の itemLvOfArea）
+// 勝ったときの装備。落ちたら { item, ilv }（レア度は item.rarity・アイテムLV＝item.lv）
 export const rollEquipDrop = (enc, cls, at = new Date(), rng = Math.random) => {
   if (!enc || rng() * 100 >= (DROP_CHANCE[enc.role] ?? DROP_CHANCE.normal)) return null
   const kind = rollDropKind(rollDropPart(at, rng), cls, rng)
   const item = kind ? itemOf(enc.spot.area, rollDropRarity(enc.role, enc.spot.sub, rng), kind) : null
-  return item ? { item, ilv: enc.spot.itemLv } : null
+  return item ? { item, ilv: item.lv } : null
 }

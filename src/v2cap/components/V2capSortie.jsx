@@ -12,7 +12,7 @@ import { toFighter as playerFighter } from '../lib/loadout.js'
 import { staminaMaxOf, MAX_LV, rollStamina } from '../lib/level.js'
 import { jobOf, JOB_MAX } from '../lib/jobs.js'
 import { effectPct } from '../lib/gear.js'
-import { RARITY_COLOR, rarityLabel } from '../lib/equipment.js'
+import { RARITY_COLOR, RARITIES, rarityLabel, reqLvOf } from '../lib/equipment.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — 出撃（ホームの右）
@@ -24,7 +24,7 @@ import { RARITY_COLOR, rarityLabel } from '../lib/equipment.js'
 //   ・ClassLVアップ／スキル習得もサーバーの返事から出す
 //   ・落ちる装備は**そのエリアの装備**で、レア度はノーマル・レア・エピック・レジェンダリー
 //     （エピックはレアとボスから・レジェンダリーはボスからだけ）。武器はいまの職業が装備できる3種から（sortie.js）
-//   ・落ちた装備の**アイテムLV**はエリアごとに1つ
+//   ・落ちた装備の**アイテムLV**＝その装備の必要LV（エリア×レア度・ユーザーの表）
 // ============================================================
 const ROLE_LINE = {
   boss:  (foe, lv) => ({ text:`⚠ ボス出現！ ${foe}（LV${lv}）が現れた！`, color:'#ff4444' }),
@@ -111,7 +111,12 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
         after.push({ text: expText, color:'#c8a050' })
       }
       // 負けたときの経験値でもLVは上がりうる
-      if (lv.level_ups > 0) after.push({ text:`🆙 レベルアップ！ LV${lv.lv}`, color:'#44ff88' })
+      // LVアップではステは上がらず、ステータスポイントが入る（ステータス欄の「振る」から振る）。
+      // サーバーが前の版（points を返さない）のあいだは数を出さない
+      if (lv.level_ups > 0) {
+        const pts = typeof lv.points === 'number' ? `（ステータスポイント+${lv.points}）` : ''
+        after.push({ text:`🆙 レベルアップ！ LV${lv.lv}${pts}`, color:'#44ff88' })
+      }
       if (lv.job_ups > 0) after.push({ text:`⭐ ClassLVアップ！ ${prof.class} ClassLV${lv.jlv}`, color:'#ffcc00' })
       for (const name of lv.learned || []) after.push({ text:`📖 スキル「${name}」を覚えた！（スキルセットで編成できる）`, color:'#44ddff' })
       if (win) {
@@ -220,7 +225,12 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       </select>
       {spot && (
         <div style={{ fontSize:'10px', color:'#7fa6d0', marginBottom:'8px', lineHeight:1.7 }}>
-          <div>敵は{spotLvText(spot.id)}（ボスは上限のLV）・装備はLV{spot.itemLv}</div>
+          <div>敵は{spotLvText(spot.id)}（ボスは上限のLV）</div>
+          <div>
+            装備の必要LV：{RARITIES.map((r, i) => (
+              <span key={r}>{i ? '・' : ''}<span style={{ color: r === 'N' ? '#cfe2ff' : RARITY_COLOR[r] }}>{rarityLabel(r)}</span>{reqLvOf(spot.area, r)}</span>
+            ))}
+          </div>
           <div>
             装備：<span style={{ color: RARITY_COLOR.E }}>エピック</span>はレアとボス・
             <span style={{ color: RARITY_COLOR.L }}>レジェンダリー</span>はボスだけが落とす
