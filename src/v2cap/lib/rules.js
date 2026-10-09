@@ -6,5 +6,7 @@
 // （出撃・シミュレーターの組み立てが別々にあるので、1か所に置いて付け忘れを防ぐ）。
 //   ・noClassBonus … 職業補正を一旦なし（2026-10-09 ユーザー決定）
 //   ・ailDiminish  … 麻痺・封印は受けるたび次の確率×0.8（2026-10-10 ユーザー決定）
+//   ・defRule      … 防御の式。'cap'＝魔法防御を INT×0.5＋VIT×0.5（物理防御はVITのまま）
+//                    （2026-10-09 ユーザー決定・10-10 入れた。combat.js の magDefCapOf）
 // ============================================================
-export const CAP_RULES = Object.freeze({ noClassBonus: true, ailDiminish: true })
+export const CAP_RULES = Object.freeze({ noClassBonus: true, ailDiminish: true, defRule: 'cap' })

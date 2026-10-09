@@ -380,7 +380,11 @@ const tune = async () => {
       if (durs.length < 3) continue
       const want = AREA_HOUR[k] - (k ? AREA_HOUR[k - 1] : 0)
       const c = clip * Math.pow(anneal, it - 1)
-      const f = Math.min(1 + c, Math.max(1 - c, Math.pow(want / Math.max(0.01, median(durs)), step)))
+      let f = Math.min(1 + c, Math.max(1 - c, Math.pow(want / Math.max(0.01, median(durs)), step)))
+      // ★そのエリアまで来られたのが半分未満なら、ボスを強くはしない（弱くする向きにだけ合わせる）。
+      //   ⚠来られた人だけで合わせると、後ろのエリアは速い職業（盗賊など）だけで決まり、ほかの職業には強すぎるボスになった
+      //   （2026-10-10 刀・宝珠と剣士のあとの測定で、エリア13〜15のボスが1.3〜1.5倍になった）。ユーザー承認の直し
+      if (durs.length < results.length / 2) f = Math.min(1, f)
       areas.AREA_BOSS[k] = round2(Math.max(0.3, areas.AREA_BOSS[k] * f))
     }
     hist.push({ need: needNext, job: jobNext, std: areas.STD_RATIO.map(r => r[1]), boss: [...areas.AREA_BOSS] })

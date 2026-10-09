@@ -29,6 +29,13 @@ export const MAG_DEF_INT  = 1.0  // 魔法防御に乗る INT の係数
 export const MAG_DEF_VIT  = 0.15 // 魔法防御に乗る VIT の係数（こちらはレンジなし）
 export const physDefOf = (s) => (s?.vit || 0) * PHYS_DEF_VIT
 export const magDefOf  = (s) => (s?.int_stat || 0) * MAG_DEF_INT + (s?.vit || 0) * MAG_DEF_VIT
+// ★「レベルキャップあり」版（src/v2cap）だけの魔法防御：INT×0.5＋VIT×0.5（2026-10-09 ユーザー決定・10-10 入れた）。
+//   物理防御は今のまま（VIT）。受ける側が defRule:'cap' を持つときだけ使う＝今のⅡは magDefOf のまま変わらない。
+//   ねらい：物理職が使わないINTを上げなくても、VITで魔法も少し受けられる（相性は残す）
+export const CAP_MAG_DEF_INT = 0.5
+export const CAP_MAG_DEF_VIT = 0.5
+export const magDefCapOf = (s) => (s?.int_stat || 0) * CAP_MAG_DEF_INT + (s?.vit || 0) * CAP_MAG_DEF_VIT
+export const magDefByRule = (s, defRule) => (defRule === 'cap' ? magDefCapOf(s) : magDefOf(s))
 
 // 軽減率の上限。物理は34%・魔法は50%までしか減らない（あるけみすとの 1.0〜0.66 / 1.0〜0.5 と対応）
 export const PHYS_REDUCTION_CAP = 0.34
@@ -169,12 +176,12 @@ export const attackStatOf = (s, kind, atkStat = null) =>
   (atkStat ? (s?.[atkStat] || 0) : kind === 'mag' ? (s?.int_stat || 0) : (s?.str || 0))
 // atkStat … **威力の参照だけ**を別のステにする。受ける側の防御は kind のまま
 //   ＝「相手の特防で受けるのにSTRで殴る（サイキッカー）」「素早さで斬る（暗殺者）」が書ける
-export const damageOf = ({ attacker, defender, mult = 1, kind = 'phys', crit = false, defPen = 0, add = null, critDmg = 0, redMult = 1, atkStat = null }) => {
+export const damageOf = ({ attacker, defender, mult = 1, kind = 'phys', crit = false, defPen = 0, add = null, critDmg = 0, redMult = 1, atkStat = null, defRule = null }) => {
   const phys = kind !== 'mag'
   const atk = attackStatOf(attacker, kind, atkStat)
   let base = atk * mult
   if (add) for (const a of add) base += (attacker?.[a.stat] || 0) * a.rate
-  let def = phys ? physDefOf(defender) : magDefOf(defender)
+  let def = phys ? physDefOf(defender) : magDefByRule(defender, defRule)
   if (crit) def /= CRIT_DEF_DIV
   const cap = phys ? PHYS_REDUCTION_CAP : MAG_REDUCTION_CAP
   // ★防御無視は「防御力」ではなく「軽減率」に掛ける。
@@ -230,7 +237,8 @@ export const damageFloor = (attacker, kind = 'phys', atkStat = null) => 1 - DMG_
 // hitMult    … 最終命中率に掛ける（鷹ノ目：1.1倍／相手が瀕死なら1.3倍）
 // critDmg    … クリティカルのダメージ+%（隠身・精密照準）
 // redMult    … 受ける側の軽減率に掛ける（聖騎士の心得）
-export const resolveAttack = ({ attacker, defender, mult = 1, kind = 'phys', atkStat = null, defPen = 0, add = null, sureHit = false, sureCrit = false, noCrit = false, hitBonus = 0, evaBonus = 0, critBonus = 0, acc = 100, hitMult = 1, critDmg = 0, redMult = 1 }, rng = Math.random) => {
+// defRule … 受ける側の防御の式（'cap'＝「レベルキャップあり」版の魔法防御。省けば今のⅡの式）
+export const resolveAttack = ({ attacker, defender, mult = 1, kind = 'phys', atkStat = null, defPen = 0, add = null, sureHit = false, sureCrit = false, noCrit = false, hitBonus = 0, evaBonus = 0, critBonus = 0, acc = 100, hitMult = 1, critDmg = 0, redMult = 1, defRule = null }, rng = Math.random) => {
   const crit = !noCrit && (sureCrit || roll(critRate(attacker, defender, critBonus), rng))
   const accStats = crit ? critAccuracyStats(attacker) : attacker
   const rate = clampPct(skillHitRate(accStats, defender, { acc, kind, hitBonus, evaBonus }) * hitMult, 0, 100)
@@ -239,6 +247,6 @@ export const resolveAttack = ({ attacker, defender, mult = 1, kind = 'phys', atk
   // ダメージの振れ幅。DEXが高いほど下限が1.00へ寄って安定する
   const lo = damageFloor(attacker, kind, atkStat)
   const scale = (lo + (1 - lo) * rng()) * DMG_COMP
-  const dmg = Math.max(1, Math.floor(damageOf({ attacker, defender, mult, kind, crit, defPen, add, critDmg, redMult, atkStat }) * scale))
+  const dmg = Math.max(1, Math.floor(damageOf({ attacker, defender, mult, kind, crit, defPen, add, critDmg, redMult, atkStat, defRule }) * scale))
   return { hit:true, crit, damage: dmg }
 }

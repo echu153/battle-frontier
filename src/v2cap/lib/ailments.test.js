@@ -23,7 +23,7 @@ const usersOf = (key) => {
 }
 
 test('この版の決まり（職業補正なし・麻痺/封印の0.8倍）は味方にも敵にも乗る', () => {
-  assert.deepEqual({ ...CAP_RULES }, { noClassBonus: true, ailDiminish: true })
+  assert.deepEqual({ ...CAP_RULES }, { noClassBonus: true, ailDiminish: true, defRule: 'cap' })
   const me = toFighter({ username:'t', class:'戦士', lv: 1, ...INITIAL_STATS, jobs: { 戦士: { lv: 1, exp: 0 } }, learned: [], skill_sets: {}, equipped: {} }, [])
   const foe = enemyFighter(SPOTS[0].roster.enemies[0])
   for (const [who, f] of [['味方', me], ['敵', foe]]) {

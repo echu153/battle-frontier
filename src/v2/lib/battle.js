@@ -302,6 +302,8 @@ export const createSide = (fighter, band = null) => {
     // ★エリアの相性（enemies.js の bias）。{ phys:1.1 } のように**受けるダメージへ掛ける**
     taken: fighter.taken || null,
     boss: !!fighter.boss,                // ボスか（「大敵斬り」が見る）
+    // ★受ける側の防御の式（'cap'＝「レベルキャップあり」版の魔法防御 INT×0.5＋VIT×0.5）。渡さなければ今のⅡの式
+    defRule: fighter.defRule || null,
   }
   initIchiji(side, fighter)              // ★一次職の状態（溜め・期限つきの軽減・跳躍・召喚など）
   return side
@@ -884,6 +886,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
           hitMult: hitMultOf(me, foe),
           critDmg: critDmgOf(me),
           redMult: (1 + (foe.pa.defRed || 0) / 100) * chargeGuardOf(foe),
+          defRule: foe.defRule,
         }, rng)
         // ★一次職：物理と魔法の両方で殴る技（魔銃士）。魔法のぶんは同じ当たり・クリティカルのまま INT 同士で計算する
         if (skill.hybrid && r.hit) {
@@ -891,7 +894,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
             attacker: eMe, defender: eFoe, mult: skill.hybrid.mag * vsAilMultOf(skill, foe),
             kind: 'mag', defPen, sureHit: true, sureCrit: !!r.crit, noCrit: !r.crit, acc: 100,
             hitBonus: 0, evaBonus: 0, critBonus: 0, hitMult: 1, critDmg: critDmgOf(me),
-            redMult: 1 + (foe.pa.defRed || 0) / 100,
+            redMult: 1 + (foe.pa.defRed || 0) / 100, defRule: foe.defRule,
           }, rng)
           r.damage += r2.damage
         }
@@ -1166,6 +1169,7 @@ const strike = (me, foe, { mult, kind = 'phys', label, hits = 1 }, rng, log) => 
       hitMult: hitMultOf(me, foe),
       critDmg: critDmgOf(me),
       redMult: 1 + (foe.pa.defRed || 0) / 100,
+      defRule: foe.defRule,
     }, rng)
     if (r.hit) { raw += Math.max(1, Math.floor(r.damage * dm)); hit++ }
     if (r.hit && r.crit) crit = true
@@ -1242,6 +1246,7 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
     hitMult: hitMultOf(me, foe),
     critDmg: critDmgOf(me),
     redMult: 1 + (foe.pa.defRed || 0) / 100,
+    defRule: foe.defRule,
   }, rng)
   evoOnDodge(foe, r.hit ? 0 : 1)
   foe.justDodged = !r.hit
