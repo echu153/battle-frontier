@@ -1,10 +1,10 @@
 // ============================================================
-// バトルフロンティアⅡ「レベルキャップあり」版（v2cap）— 職業とジョブLV（JBLV）
+// バトルフロンティアⅡ「レベルキャップあり」版（v2cap）— 職業とクラスLV（ClassLV）
 // ------------------------------------------------------------
 // 設計は docs/v2cap-design.md §4・§11。ユーザー決定（2026-10-09）：
-//   ・ジョブLV（表記は **JBLV**）は**職業ごと**に持ち、戻れば続きから。最大30
-//   ・入るのは**いまの職業**のJBLVだけ（その戦闘で入ったEXPと同じ量）
-//   ・JBLVが上がると、スキルを覚える／ステが上がる（ステは職業ごとに決まっていて、その職業の間だけ）
+//   ・クラスLV（表記は **ClassLV**）は**職業ごと**に持ち、戻れば続きから。最大30
+//   ・入るのは**いまの職業**のClassLVだけ（その戦闘で入ったEXPと同じ量）
+//   ・ClassLVが上がると、スキルを覚える／ステが上がる（ステは職業ごとに決まっていて、その職業の間だけ）
 //   ・職業補正（今のⅡの STR+5% など）は**一旦なし**
 //   ・**初期職は10職**。職業ごとに**装備できる武器が3種**決まっている
 //   ・ノーブル・サモナーはなくす。**一次職も見直すまで一旦なし**（二次・三次もこれから）
@@ -19,9 +19,9 @@ import { SKILLS, skillsOf, isPassive } from './skills.js'
 export const JOB_MAX = 30
 
 // ===== 段階 =====
-// mult … 必要JBEXPの倍率（上の段階ほど重い）／perLv … JBLVが1上がるごとのステの量（戦闘力換算）
-// learnAt … スキルを覚えるJBLV（並び＝スキルの名簿の順）
-// ★一次職は一旦なし（2026-10-09）。見直したらここへ段階を足す（前の案は 一次＝必要JBEXP×3・ステ2ずつ）
+// mult … 必要ClassEXPの倍率（上の段階ほど重い）／perLv … ClassLVが1上がるごとのステの量（戦闘力換算）
+// learnAt … スキルを覚えるClassLV（並び＝スキルの名簿の順）
+// ★一次職は一旦なし（2026-10-09）。見直したらここへ段階を足す（前の案は 一次＝必要ClassEXP×3・ステ2ずつ）
 export const STAGES = {
   shoki: { label:'初期', color:'#44aaff', mult:1, perLv:1, learnAt:[1, 5, 10, 15, 20] },
 }
@@ -29,7 +29,7 @@ export const STAGE_ORDER = ['shoki']
 
 // ===== 職業 =====
 // weapons … 装備できる武器の種類（3つ）／kind … 通常攻撃が物理（STR）か魔法（INT）か
-// desc … キャラ作成で出す特徴の説明（2026-10-09 ユーザー承認の文面）。技やジョブのステを変えたら合わせて直す
+// desc … キャラ作成で出す特徴の説明（2026-10-09 ユーザー承認の文面）。技やクラスのステを変えたら合わせて直す
 export const CLASS_INFO = {
   戦士:     { weapons:['両手剣', '斧', '鈍器'],   kind:'phys', desc:'STRとVITが伸びる頑丈な前衛。重い一撃と守りの構えで正面から戦う' },
   槍使い:   { weapons:['槍', '片手剣', '投擲'],   kind:'phys', desc:'STRとDEXが伸びるバランス型。必中の投げ槍や三段突きで着実に削る' },
@@ -54,8 +54,8 @@ export const classDescOf = (cls) => CLASS_BY_ID[cls]?.desc || ''
 // その職業がその武器の種類を装備できるか
 export const canEquipType = (cls, type) => weaponsOf(cls).includes(type)
 
-// ===== 必要JBEXP =====
-// JBLV² に比例。初期職は JBLV30 まで**約2週間**（1日1時間・ユーザー決定「2週間くらい」）。
+// ===== 必要ClassEXP =====
+// ClassLV² に比例。初期職は ClassLV30 まで**約2週間**（1日1時間・ユーザー決定「2週間くらい」）。
 //   係数は tools/v2cap-progress.mjs で回して決めた（最初の机上の18.4だと19日目だった→12.3で13日目）
 // ⚠係数12.3は10分率の整数（123）で掛けてから10で割る（SQLの v2cap_job_need と同じ形）
 export const JOB_NEED_TENTHS = 123
@@ -67,11 +67,11 @@ export const jobTotalTo = (stage, jlv) => {
   return t
 }
 
-// 職業ごとのJBLV。jobs = { "戦士": { lv: 12, exp: 345 } }。まだ就いたことが無ければ1
+// 職業ごとのClassLV。jobs = { "戦士": { lv: 12, exp: 345 } }。まだ就いたことが無ければ1
 export const jobOf = (jobs, cls) => ({ lv: jobs?.[cls]?.lv || 1, exp: jobs?.[cls]?.exp || 0 })
 
-// ===== ステ（ジョブのステ）=====
-// 職業ごとの配分（戦闘力換算の点数）。合計29（JBLV30まで1点ずつ）
+// ===== ステ（クラスのステ）=====
+// 職業ごとの配分（戦闘力換算の点数）。合計29（ClassLV30まで1点ずつ）
 export const JOB_BONUS = {
   戦士:     { str:12, vit:7, hp:5, dex:5 },
   槍使い:   { str:11, dex:9, vit:5, hp:4 },
@@ -86,7 +86,7 @@ export const JOB_BONUS = {
 }
 
 // 配分を「何点目にどのステが上がるか」の並びにする（ランダムではなく固定）。
-// 1点ずつ「配分に対して一番遅れているステ」を選ぶ＝どのJBLVで止めても配分どおりに近い。
+// 1点ずつ「配分に対して一番遅れているステ」を選ぶ＝どのClassLVで止めても配分どおりに近い。
 // 同点はステの並び（STAT_KEYS）の先を取る。★SQLの v2cap_classes.bonus_seq はこの出力を写したもの
 export const bonusSeqOf = (cls) => {
   const w = JOB_BONUS[cls] || {}
@@ -109,7 +109,7 @@ export const bonusSeqOf = (cls) => {
 const SEQ_CACHE = {}
 const seqOf = (cls) => (SEQ_CACHE[cls] ||= bonusSeqOf(cls))
 
-// その職業のそのJBLVで入っている点数（戦闘力換算）
+// その職業のそのClassLVで入っている点数（戦闘力換算）
 export const bonusPointsAt = (cls, jlv) =>
   Math.max(0, Math.min(JOB_MAX, jlv || 1) - 1) * (STAGES[stageOf(cls)]?.perLv || 0)
 
@@ -130,12 +130,12 @@ export const jobBonusText = (cls, jlv) => {
 // 覚える順＝この版のスキルの名簿の順（skills.js）
 export const learnOrderOf = (cls) => skillsOf(cls)
 export const learnAtOf = (cls) => STAGES[stageOf(cls)]?.learnAt || []
-// そのJBLVまでに覚えるスキル（名前の配列）
+// そのClassLVまでに覚えるスキル（名前の配列）
 export const skillsLearnedBy = (cls, jlv) => {
   const at = learnAtOf(cls)
   return learnOrderOf(cls).filter((_, i) => at[i] !== undefined && at[i] <= (jlv || 1)).map(s => s.name)
 }
-// 次に覚えるスキルとそのJBLV（無ければ null）
+// 次に覚えるスキルとそのClassLV（無ければ null）
 export const nextSkillOf = (cls, jlv) => {
   const at = learnAtOf(cls)
   const list = learnOrderOf(cls)
@@ -168,15 +168,15 @@ export const missingReqOf = (cls, jobs) => {
   const r = reqOf(cls)
   if (!r) return null
   const have = jobOf(jobs, r.cls).lv
-  return have >= r.jlv ? null : `${r.cls}のJBLV${r.jlv}（いま${have}）`
+  return have >= r.jlv ? null : `${r.cls}のClassLV${r.jlv}（いま${have}）`
 }
 export const canBecome = (cls, jobs) => !!CLASS_BY_ID[cls] && !missingReqOf(cls, jobs)
 export const reqText = (cls) => {
   const r = reqOf(cls)
-  return r ? `${r.cls}のJBLV${r.jlv}` : '条件なし'
+  return r ? `${r.cls}のClassLV${r.jlv}` : '条件なし'
 }
 
-// ===== JBEXPを入れる（純関数・表示とシミュレーション用）=====
+// ===== ClassEXPを入れる（純関数・表示とシミュレーション用）=====
 // jobs を書き換えず新しいオブジェクトを返す。learned は今回新しく覚えたスキル名
 export const applyJobExp = (jobs, cls, amount, known = []) => {
   const stage = stageOf(cls)

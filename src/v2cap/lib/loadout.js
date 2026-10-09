@@ -2,7 +2,7 @@
 // バトルフロンティアⅡ「レベルキャップあり」版（v2cap）— 編成から戦闘用のキャラを作る
 // ------------------------------------------------------------
 // 戦闘力の内訳は3つ：
-//   本体（LVアップの抽選で上がったステ）＋ ジョブのステ（いまの職業・そのJBLVぶん）
+//   本体（LVアップの抽選で上がったステ）＋ クラスのステ（いまの職業・そのClassLVぶん）
 //   ＋ 装備（アイテムLVで強さが決まり、必要LVに足りないぶん効果が下がる）
 // さらに防具のメリット（重鎧＝受けるダメージ−3%／軽装＝AGI+5%・1部位ごと）が乗る。
 // ★職業補正は**一旦なし**（2026-10-09 ユーザー決定）＝ runBattle に noClassBonus を渡す。
@@ -58,11 +58,11 @@ export const armorOf = (profile, inventory) => armorEffects(
 
 // 本体のステ
 export const bodyStats = (profile) => Object.fromEntries(STAT_KEYS.map(k => [k, profile?.[k] || 0]))
-// いまの職業のジョブのステ
+// いまの職業のクラスのステ
 export const jobStats = (profile) => jobBonusStats(profile?.class, jobOf(profile?.jobs, profile?.class).lv)
 
-// 合計。内訳も返す（ステータス画面で「本体＋ジョブ＋装備」を出すため）。
-// ★軽装のAGI+%は「本体＋ジョブ＋装備」のAGIに掛ける（上がったぶんは armorAgi に出す）
+// 合計。内訳も返す（ステータス画面で「本体＋クラス＋装備」を出すため）。
+// ★軽装のAGI+%は「本体＋クラス＋装備」のAGIに掛ける（上がったぶんは armorAgi に出す）
 export const statBreakdown = (profile, inventory) => {
   const body = bodyStats(profile)
   const job = jobStats(profile)

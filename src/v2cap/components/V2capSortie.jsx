@@ -22,7 +22,7 @@ import { effectPct } from '../lib/gear.js'
 //   違うのは：
 //   ・敵が**LV**を持つ（エリアのLV帯の中で、敵ごとに決まっている）
 //   ・**EXPはサーバーが敵のLVから決める**＝ログのEXPは清算の返事を出す
-//   ・JBLVアップ／スキル習得もサーバーの返事から出す
+//   ・ClassLVアップ／スキル習得もサーバーの返事から出す
 //   ・落ちる装備は「基本装備＋ランク」。武器はいまの職業が装備できる3種から（sortie.js）
 //   ・落ちた装備には**アイテムLV**（＝倒した敵のLV）が付く
 // ============================================================
@@ -93,12 +93,12 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       const lv = data.level || {}
       const after = []
       if (win) {
-        // ★LV100・JBLV30（上限）のぶんは入らないので、そう出す
+        // ★LV100・ClassLV30（上限）のぶんは入らないので、そう出す
         const lvMax = prof.lv >= MAX_LV
         const jobMax = jobOf(prof.jobs, prof.class).lv >= JOB_MAX
-        after.push({ text:`EXP +${data.exp}${lvMax ? '（LV上限のため入らない）' : ''}${jobMax ? '' : `（JBEXP +${data.exp}）`}`, color:'#ffcc00' })
+        after.push({ text:`EXP +${data.exp}${lvMax ? '（LV上限のため入らない）' : ''}${jobMax ? '' : `（ClassEXP +${data.exp}）`}`, color:'#ffcc00' })
         if (lv.level_ups > 0) after.push({ text:`🆙 レベルアップ！ LV${lv.lv}`, color:'#44ff88' })
-        if (lv.job_ups > 0) after.push({ text:`⭐ JBLVアップ！ ${prof.class} JBLV${lv.jlv}`, color:'#ffcc00' })
+        if (lv.job_ups > 0) after.push({ text:`⭐ ClassLVアップ！ ${prof.class} ClassLV${lv.jlv}`, color:'#ffcc00' })
         for (const name of lv.learned || []) after.push({ text:`📖 スキル「${name}」を覚えた！（スキルセットで編成できる）`, color:'#44ddff' })
         if (data.drop && drop) {
           const ilv = data.drop.ilv

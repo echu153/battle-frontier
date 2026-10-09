@@ -22,9 +22,12 @@ const fnBody = (name) => {
 
 test('SQLの種（段階・職業・スキル・装備・帯・エリア・敵のLV）はJSから作ったものと一致する', () => {
   assert.equal(rewrite(SQL), SQL, '`node tools/v2cap-sql.mjs --write` で作り直すこと')
+  // ★改行が CRLF のファイル（Windowsで取り出し直したとき）でも、同じ中身なら食い違わない
+  const crlf = SQL.replace(/\r?\n/g, '\r\n')
+  assert.equal(rewrite(crlf), crlf, 'CRLF のファイルに LF の種を混ぜていない')
 })
 
-test('必要EXP・必要JBEXP・1勝のEXP・スタミナの式がJSと同じ', () => {
+test('必要EXP・必要ClassEXP・1勝のEXP・スタミナの式がJSと同じ', () => {
   const need = fnBody('v2cap_need')
   assert.match(need, new RegExp(`when p_lv >= ${MAX_LV} then 0`))
   assert.match(need, new RegExp(`round\\(${NEED_PERMIL}::numeric \\* p_lv \\* p_lv \\* \\(p_lv \\+ 9\\) / 1000\\)`))

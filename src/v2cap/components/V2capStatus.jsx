@@ -14,8 +14,8 @@ import { effectPct, powerAt } from '../lib/gear.js'
 // ============================================================
 // 「レベルキャップあり」版 — ステータス欄（ホームの左）
 //   見た目は今のⅡ（V2Status.jsx）にそろえる。違うのは
-//   ・LVとJBLVの2本のバー（LV100・JBLV30で止まる）
-//   ・ステの内訳（本体＋ジョブ＋装備＋軽装のAGI）をカーソルで出す
+//   ・LVとClassLVの2本のバー（LV100・ClassLV30で止まる）
+//   ・ステの内訳（本体＋クラス＋装備＋軽装のAGI）をカーソルで出す
 //   ・装備は7枠（武器1・頭・鎧・腕・足・アクセ2）。アイテムLVと、必要LVに足りないときの効果%
 //   ・防具のメリット（重鎧＝受けるダメージ−%／軽装＝AGI+%）の合計
 //   ・スキルは**いまの職業の編成**（スキルセットは職業ごと）
@@ -66,7 +66,7 @@ export default function V2capStatus({ prof, inventory }) {
           <div style={{ marginTop:'2px' }}>{d.detail}</div>
           <div style={{ marginTop:'4px', color:'#cfe2ff' }}>
             本体 {bd.body[k]}
-            {bd.job[k] > 0 && <> ＋ ジョブ <span style={{ color:'#ffcc00' }}>{bd.job[k]}</span></>}
+            {bd.job[k] > 0 && <> ＋ クラス <span style={{ color:'#ffcc00' }}>{bd.job[k]}</span></>}
             {bd.gear[k] > 0 && <> ＋ 装備 <span style={{ color:'#44ff88' }}>{bd.gear[k]}</span></>}
             {extra > 0 && <> ＋ 軽装 <span style={{ color:'#88ddaa' }}>{extra}</span></>}
           </div>
@@ -138,14 +138,14 @@ export default function V2capStatus({ prof, inventory }) {
       <div style={{ color:'#ffcc00', fontSize:'11px', marginBottom:'6px' }}>
         戦闘力 {bd.power.toLocaleString()}
         <span style={{ color:'#7fa6d0', fontSize:'9px', marginLeft:'6px' }}>
-          （本体{calcPower(bd.body)}・ジョブ{calcPower(bd.job)}・装備{calcPower(bd.gear)}）
+          （本体{calcPower(bd.body)}・クラス{calcPower(bd.job)}・装備{calcPower(bd.gear)}）
         </span>
       </div>
 
       <Bar label={`LV ${prof.lv}${prof.lv >= MAX_LV ? '（上限）' : ''}`}
         val={prof.lv >= MAX_LV ? 'MAX' : `${prof.exp.toLocaleString()} / ${lvNeed.toLocaleString()}`}
         pct={prof.lv >= MAX_LV ? 100 : (prof.exp / lvNeed) * 100} color="#44ff88" />
-      <Bar label={`JBLV ${job.lv}${job.lv >= JOB_MAX ? '（上限）' : ''}`}
+      <Bar label={`ClassLV ${job.lv}${job.lv >= JOB_MAX ? '（上限）' : ''}`}
         val={job.lv >= JOB_MAX ? 'MAX' : `${job.exp.toLocaleString()} / ${jNeed.toLocaleString()}`}
         pct={job.lv >= JOB_MAX ? 100 : (job.exp / jNeed) * 100} color="#ffcc00" />
       <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#7fa6d0', marginBottom:'6px' }}>

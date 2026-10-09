@@ -100,7 +100,7 @@ export default function V2capHome() {
     setProf(data.profile)
     const parts = [`EXP+${amount.toLocaleString()}`]
     if (data.level_ups > 0) parts.push(`LV${data.lv}（+${data.level_ups}）`)
-    if (data.job_ups > 0) parts.push(`JBLV${data.jlv}（+${data.job_ups}）`)
+    if (data.job_ups > 0) parts.push(`ClassLV${data.jlv}（+${data.job_ups}）`)
     if ((data.learned || []).length) parts.push(`スキル「${data.learned.join('」「')}」`)
     setDevMsg(parts.join('　'))
   }
@@ -149,7 +149,7 @@ export default function V2capHome() {
         <div style={{ maxWidth:'760px', margin:'0 auto' }}>
           {header}
           {/* ★見せるのは「キャラクター名」と「クラス選択」だけ（2026-10-09 ユーザー指示）。
-               カードは職業名・物理／魔法・武器・特徴の説明1行（ジョブのステや技の一覧は神殿で見る） */}
+               カードは職業名・物理／魔法・武器・特徴の説明1行（クラスのステや技の一覧は神殿で見る） */}
           <form onSubmit={create} style={{ ...box, padding:'14px' }}>
             <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'6px' }}>キャラクター名</div>
             <input value={name} onChange={e => setName(e.target.value)} maxLength={16} placeholder="名前（1〜16文字）"
@@ -226,7 +226,7 @@ export default function V2capHome() {
                         ))}
                         <button onClick={() => setConfirmReset(true)} disabled={busy} style={miniBtn('#ff8844')}>キャラを作り直す</button>
                       </div>
-                      <div style={{ color: TEXT.sub, fontSize:'9px', marginTop:'4px' }}>EXPは戦闘と同じ扱い（いまの職業のJBEXPにも同じ量が入る）</div>
+                      <div style={{ color: TEXT.sub, fontSize:'9px', marginTop:'4px' }}>EXPは戦闘と同じ扱い（いまの職業のClassEXPにも同じ量が入る）</div>
                       {devMsg && <div style={{ color:'#cfe2ff', fontSize:'10px', marginTop:'4px' }}>{devMsg}</div>}
                     </div>
                   </>

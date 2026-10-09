@@ -14,7 +14,7 @@ import { learnOrderOf, learnAtOf, jobOf, lineageOf } from '../lib/jobs.js'
 //   ・【確定】スキルは**その職業でだけ使える**。上位職は下位職のスキルもそのまま使える（2026-10-09）
 //   ・スキルセットは**職業ごと**。ここで編成するのは、いまの職業の編成（転職して戻ると前の編成に戻る）
 //   ・想定利用MP（Σ 消費MP×回数）が最大MPを超える編成は保存できない（サーバーも同じ判定）
-//   ・一覧は、いまの職業（と下位職）の技だけ。まだ覚えていない技は「JBLV◯で習得」と出す
+//   ・一覧は、いまの職業（と下位職）の技だけ。まだ覚えていない技は「ClassLV◯で習得」と出す
 // ============================================================
 const normalize = (set) => {
   const out = Array.from({ length: SKILL_SET_SLOTS }, () => ({ name:'', uses:1 }))
@@ -47,11 +47,11 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
   const mpCost = setMpCost(compact)
   const setErr = validateSkillSet(compact, { lineage, learned, maxMp })
 
-  // 一覧：いまの職業（と下位職）の技だけ。覚えていない技には、覚えるJBLVを出す
+  // 一覧：いまの職業（と下位職）の技だけ。覚えていない技には、覚えるClassLVを出す
   const have = new Set(learned)
   const entries = lineage.flatMap(c => {
     const at = learnAtOf(c)
-    return learnOrderOf(c).map((s, i) => ({ s, lock: have.has(s.name) ? null : (c === cls ? `JBLV${at[i]}で習得` : `${c}のJBLV${at[i]}で習得`) }))
+    return learnOrderOf(c).map((s, i) => ({ s, lock: have.has(s.name) ? null : (c === cls ? `ClassLV${at[i]}で習得` : `${c}のClassLV${at[i]}で習得`) }))
   })
   const lockOf = Object.fromEntries(entries.map(e => [e.s.name, e.lock]))
   const filtered = filterSkills(entries.map(e => e.s), { tab, query, favorites })
@@ -137,7 +137,7 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
       <div style={{ ...box, padding:'14px' }}>
         <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'4px' }}>📖 {cls}のスキル</div>
         <div style={{ color: TEXT.sub, fontSize:'10px', marginBottom:'8px', lineHeight:1.7 }}>
-          スキルはJBLVで覚えます（いまの職業：{cls}・JBLV{jlv}）。まだ覚えていない技は、覚えるJBLVを出しています。
+          スキルはClassLVで覚えます（いまの職業：{cls}・ClassLV{jlv}）。まだ覚えていない技は、覚えるClassLVを出しています。
           ほかの職業で覚えたスキルは、その職業に戻れば使えます。
         </div>
         <div style={{ display:'flex', gap:'5px', marginBottom:'6px' }}>

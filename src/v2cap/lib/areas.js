@@ -46,7 +46,7 @@ export const enemyRoleOf = (name) => LEVELS.get(name)?.role || 'normal'
 export const ENEMY_LEVELS = [...LEVELS.entries()].map(([name, v]) => ({ name, ...v }))
 
 // ===== 敵の強さ =====
-// そのLVのプレイヤーの「標準の戦闘力」。本体＋その時点で持っている装備＋ジョブのステ。
+// そのLVのプレイヤーの「標準の戦闘力」。本体＋その時点で持っている装備＋クラスのステ。
 // 本体の戦闘力に対する倍率を、LVの折れ線で持つ（間は直線で補う）。
 // ★値は `node tools/v2cap-progress.mjs --tune` の出力をそのまま貼る（勘で書き換えないこと）。
 //   そのLVに着いたときの実際の戦闘力の平均（戦士・魔法使い×seed違いで回した平均）

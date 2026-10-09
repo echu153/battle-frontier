@@ -11,9 +11,9 @@ import { ITEM_BY_ID } from '../lib/equipment.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — 神殿（転職）
-//   ・いつでも無料。**LVはそのまま**、JBLVは職業ごとに続きから（2026-10-09 ユーザー決定）
+//   ・いつでも無料。**LVはそのまま**、ClassLVは職業ごとに続きから（2026-10-09 ユーザー決定）
 //   ・初期職は10職。職業ごとに装備できる武器が3種決まっている（転職で装備できなくなった武器は外れる）
-//   ・ジョブのステはその職業に就いている間だけ効く
+//   ・クラスのステはその職業に就いている間だけ効く
 //   ・スキルは**その職業でだけ使える**（覚えたものは消えず、戻れば使える）。スキルセットも**職業ごと**で、
 //     転職すると新しい職業の編成に切り替わる（初めてなら覚えている技を入れた編成で始まる）
 //   ・一次職は見直すまで一旦なし
@@ -49,8 +49,8 @@ export default function V2capTemple({ prof, inventory, onProfile }) {
           onConfirm={change} onClose={() => setConfirm(null)}>
           <div><span style={{ color:'#cfe2ff' }}>{prof.class}</span> → <span style={{ color:'#ffcc00' }}>{confirm}</span></div>
           <div style={{ color: TEXT.sub, fontSize:'11px', marginTop:'6px' }}>
-            LVはそのままです。{confirm}のJBLVは{jobOf(prof.jobs, confirm).lv}から続きます。
-            ジョブのステは{confirm}のものに入れ替わります。
+            LVはそのままです。{confirm}のClassLVは{jobOf(prof.jobs, confirm).lv}から続きます。
+            クラスのステは{confirm}のものに入れ替わります。
             スキルセットは{confirm}の編成に切り替わり、使えるのは{confirm}のスキルだけになります
             （{prof.class}の編成とスキルは残り、戻れば元どおり使えます）。
             {!Array.isArray(prof.skill_sets?.[confirm]) && <span>{confirm}は初めてなので、覚えている技を入れた編成で始まります。</span>}
@@ -63,8 +63,8 @@ export default function V2capTemple({ prof, inventory, onProfile }) {
       <div style={{ ...box, padding:'14px', marginBottom:'10px' }}>
         <div style={{ color:'#ff88cc', fontSize:'12px', marginBottom:'6px' }}>🏛 神殿（転職）</div>
         <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.8 }}>
-          いつでも無料で転職できます。LVは下がらず、JBLVは職業ごとに残ります（最大{JOB_MAX}）。
-          JBLVが上がると、その職業のスキルを覚え、その職業のステが上がります（ステは就いている間だけ）。
+          いつでも無料で転職できます。LVは下がらず、ClassLVは職業ごとに残ります（最大{JOB_MAX}）。
+          ClassLVが上がると、その職業のスキルを覚え、その職業のステが上がります（ステは就いている間だけ）。
           スキルはその職業でだけ使え、スキルセットも職業ごとに保存されます。
           職業ごとに装備できる武器が決まっています。
         </div>
@@ -92,7 +92,7 @@ export default function V2capTemple({ prof, inventory, onProfile }) {
                       {isNow && <span style={{ color:'#ff88cc', fontSize:'10px', marginLeft:'6px' }}>いまの職業</span>}
                     </span>
                     <span style={{ color: touched ? '#ffcc00' : TEXT.empty, fontSize:'11px' }}>
-                      JBLV{job.lv}{job.lv >= JOB_MAX ? '（上限）' : ''}
+                      ClassLV{job.lv}{job.lv >= JOB_MAX ? '（上限）' : ''}
                     </span>
                     {!isNow && (
                       <button onClick={() => { setMsg(''); setConfirm(c.id) }} disabled={busy || !canBecome(c.id, prof.jobs)}
@@ -100,13 +100,13 @@ export default function V2capTemple({ prof, inventory, onProfile }) {
                     )}
                   </div>
                   <div style={{ color: TEXT.sub, fontSize:'10px', marginTop:'3px', lineHeight:1.7 }}>
-                    <div>ジョブのステ：{jobBonusText(c.id, job.lv) || 'まだなし'}
-                      <span style={{ color: TEXT.label }}>（JBLV30で {jobBonusText(c.id, JOB_MAX)}）</span>
+                    <div>クラスのステ：{jobBonusText(c.id, job.lv) || 'まだなし'}
+                      <span style={{ color: TEXT.label }}>（ClassLV30で {jobBonusText(c.id, JOB_MAX)}）</span>
                     </div>
                     <div>
                       {order.map((s, i) => (
                         <span key={s.name} style={{ marginRight:'8px', opacity: learned.has(s.name) ? 1 : 0.55 }}>
-                          <span style={{ color: TEXT.label }}>JBLV{at[i]}</span>{' '}
+                          <span style={{ color: TEXT.label }}>ClassLV{at[i]}</span>{' '}
                           <span style={{ color: learned.has(s.name) ? KIND_COLOR[s.kind] : TEXT.sub }}>{s.name}</span>
                         </span>
                       ))}

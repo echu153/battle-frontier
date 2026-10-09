@@ -96,7 +96,7 @@ test('通常攻撃は 槍使い・盗賊・銃士・戦士・格闘家・弓使�
   for (const c of ['魔法使い', '呪術師', '僧侶', '薬師']) assert.equal(attackKindOf(c), 'mag', c)
 })
 
-test('【確定】JBLVは最大30。初期職のJBLV30まで＝LV31のころに入っているEXP（実測で約2週間）', () => {
+test('【確定】ClassLVは最大30。初期職のClassLV30まで＝LV31のころに入っているEXP（実測で約2週間）', () => {
   assert.equal(JOB_MAX, 30)
   assert.equal(jobNeed('shoki', 30), 0)
   const total = jobTotalTo('shoki', 30)
@@ -104,7 +104,7 @@ test('【確定】JBLVは最大30。初期職のJBLV30まで＝LV31のころに�
   assert.ok(total >= totalExpTo(31) && total < totalExpTo(32), `初期職の合計 ${total} はLV31〜32のあいだ`)
 })
 
-test('【確定】ジョブのステは職業ごとに決まった配分で、その職業の間だけ（JBLV30で29点）', () => {
+test('【確定】クラスのステは職業ごとに決まった配分で、その職業の間だけ（ClassLV30で29点）', () => {
   for (const c of CLASSES) {
     const w = JOB_BONUS[c.id]
     assert.ok(w, `${c.id}の配分がある`)
@@ -115,7 +115,7 @@ test('【確定】ジョブのステは職業ごとに決まった配分で、�
     for (const [k, v] of Object.entries(w)) assert.equal(seq.filter(x => x === k).length, v, `${c.id}の${k}`)
     const full = jobBonusStats(c.id, JOB_MAX)
     for (const k of STAT_KEYS) assert.equal(full[k], (w[k] || 0) * STAT_DEFS[k].unit)
-    assert.equal(calcPower(jobBonusStats(c.id, 1)), 0, 'JBLV1ではまだ何も上がっていない')
+    assert.equal(calcPower(jobBonusStats(c.id, 1)), 0, 'ClassLV1ではまだ何も上がっていない')
     assert.equal(bonusPointsAt(c.id, JOB_MAX), sum)
     // どこで止めても配分どおりに近い（1つのステへ偏らない）
     for (let n = 1; n <= sum; n++) {
@@ -136,12 +136,12 @@ test('【確定】キャラ作成のクラス選択に出す特徴の説明が�
 })
 
 // ===== スキル =====
-test('スキルはJBLV 1／5／10／15／20 で1つずつ覚える（どの職業も5個）', () => {
+test('スキルはClassLV 1／5／10／15／20 で1つずつ覚える（どの職業も5個）', () => {
   assert.deepEqual(STAGES.shoki.learnAt, [1, 5, 10, 15, 20])
   for (const c of CLASSES) {
     assert.equal(learnOrderOf(c.id).length, learnAtOf(c.id).length, `${c.id}のスキル数`)
-    assert.equal(skillsLearnedBy(c.id, 1).length, 1, `${c.id}はJBLV1で1つ`)
-    assert.equal(skillsLearnedBy(c.id, JOB_MAX).length, 5, `${c.id}はJBLV30で全部`)
+    assert.equal(skillsLearnedBy(c.id, 1).length, 1, `${c.id}はClassLV1で1つ`)
+    assert.equal(skillsLearnedBy(c.id, JOB_MAX).length, 5, `${c.id}はClassLV30で全部`)
   }
   const r = applyJobExp({}, '戦士', jobTotalTo('shoki', 30) + 999999, ['体当たり'])
   assert.equal(r.lv, 30)
@@ -218,7 +218,7 @@ test('【確定】上位職は下位職のスキルをそのまま使える（�
 })
 
 test('【確定】スキルセットは職業ごと。初めて就いた職業は、覚えている技を入れた編成で始まる', () => {
-  // JBLV1の技1つ。回数は最大MPに収まるだけ（1枠最大5回）
+  // ClassLV1の技1つ。回数は最大MPに収まるだけ（1枠最大5回）
   assert.deepEqual(defaultSetOf('戦士', ['体当たり'], 12), [{ name:'体当たり', uses: 3 }])
   assert.deepEqual(defaultSetOf('魔法使い', ['マジックアロー'], 999), [{ name:'マジックアロー', uses: DEFAULT_USES_MAX }])
   assert.deepEqual(defaultSetOf('戦士', ['体当たり'], 3), [], '1回も撃てなければ空')
@@ -315,7 +315,7 @@ test('【確定】戦闘で使うのは、いまの職業の編成だけ。そ�
   assert.deepEqual(toFighter({ ...p, class:'銃士' }, []).slots, [], '編成の無い職業は空（他の職業の編成を使わない）')
 })
 
-test('戦闘のステ＝本体＋いまの職業のジョブのステ＋装備（必要LV不足ぶんを引く）＋軽装のAGI', () => {
+test('戦闘のステ＝本体＋いまの職業のクラスのステ＋装備（必要LV不足ぶんを引く）＋軽装のAGI', () => {
   const inv = [
     { id: 1, base_id: 'w:大剣', rank: 'C', ilv: 40 },
     { id: 2, base_id: 'a:ブーツ', rank: 'C', ilv: 30 },

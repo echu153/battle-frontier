@@ -3,8 +3,8 @@
 // ------------------------------------------------------------
 // supabase_v2cap_core.sql の「-- @@seed:名前」〜「-- @@end:名前」のあいだを、
 // src/v2cap/lib の値から作った INSERT に差し替える（手で書き写さない）。
-//   ・stages    … 段階（必要JBEXPの倍率・ステの量・スキルを覚えるJBLV）
-//   ・classes   … 職業（段階・就く条件・JBLVで上がるステの並び・装備できる武器・通常攻撃の種類・
+//   ・stages    … 段階（必要ClassEXPの倍率・ステの量・スキルを覚えるClassLV）
+//   ・classes   … 職業（段階・就く条件・ClassLVで上がるステの並び・装備できる武器・通常攻撃の種類・
 //                  スキルを使える職業＝自分と下位職）
 //   ・skills    … スキルの名簿（名前・職業・消費MP・覚える順）
 //   ・equipment … 装備の一覧（基本装備の部位・種類・系統）
@@ -88,12 +88,15 @@ export const seeds = () => ({
 export const SQL_PATH = new URL('../supabase_v2cap_core.sql', import.meta.url)
 
 // SQLの中の種を差し替えた全文を返す
+// ★改行はSQLファイルに合わせる。Windowsで取り出し直すとファイルは CRLF になるので、種を LF で書くと
+//   「種がJSと食い違う」と出てしまう（2026-10-09 取り出し直した作業場所で実際に踏んだ）
 export const rewrite = (sql, s = seeds()) => {
+  const eol = sql.includes('\r\n') ? '\r\n' : '\n'
   let out = sql
   for (const [name, body] of Object.entries(s)) {
     const re = new RegExp(`(-- @@seed:${name}\\r?\\n)[\\s\\S]*?(-- @@end:${name})`)
     if (!re.test(out)) throw new Error(`SQLに -- @@seed:${name} 〜 -- @@end:${name} がありません`)
-    out = out.replace(re, (_, a, b) => `${a}${body}\n${b}`)
+    out = out.replace(re, (_, a, b) => `${a}${body.replace(/\n/g, eol)}${eol}${b}`)
   }
   return out
 }

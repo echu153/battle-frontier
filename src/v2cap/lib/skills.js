@@ -21,7 +21,7 @@ export { isPassive, SKILL_SET_SLOTS, SKILL_USE_MAX }
 // 今のⅡから持ってくる職業
 export const KEEP_FROM_V2 = ['戦士', '弓使い', '魔法使い', '僧侶', '格闘家']
 
-// 新しい5職（JBLV1／5／10／15／20 で上から順に覚える）
+// 新しい5職（ClassLV1／5／10／15／20 で上から順に覚える）
 export const NEW_SKILLS = [
   // 槍使い（物理・STR）
   { name:'突き',       cls:'槍使い', kind:'phys', mult:1.25, proc:95, mp:4,  desc:'槍で突く' },
