@@ -27,7 +27,7 @@ export const MAX_LV = 100
 //   ⚠小数のまま掛けると、端数が .5 ちょうどになる所でSQLの round と食い違うことがある。
 //   なので**千分率の整数で掛けてから1000で割る**（SQLの v2cap_need も同じ形）
 // ★let なのは tools/v2cap-progress.mjs --tune が回しながら差し替えるため（ゲームの中では変えない）
-export let NEED_PERMIL = 131
+export let NEED_PERMIL = 136
 export const setNeedPermilForTuning = (v) => { NEED_PERMIL = v }
 export const needExp = (lv) => (lv >= MAX_LV ? 0 : Math.max(1, Math.round(NEED_PERMIL * lv * lv * lv / 1000)))
 

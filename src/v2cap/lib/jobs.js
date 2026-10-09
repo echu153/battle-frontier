@@ -60,7 +60,7 @@ export const canEquipType = (cls, type) => weaponsOf(cls).includes(type)
 //   （2026-10-09 エリアの作り替えで1体のEXPが約1/4になったので測り直した。前は12.3）
 // ⚠係数は10分率の整数で掛けてから10で割る（SQLの v2cap_job_need と同じ形）
 // ★let なのは tools/v2cap-progress.mjs --tune が回しながら差し替えるため（ゲームの中では変えない）
-export let JOB_NEED_TENTHS = 42
+export let JOB_NEED_TENTHS = 44
 export const setJobNeedForTuning = (v) => { JOB_NEED_TENTHS = v }
 export const jobNeed = (stage, jlv) =>
   (jlv >= JOB_MAX ? 0 : Math.max(1, Math.round(JOB_NEED_TENTHS * (STAGES[stage]?.mult || 1) * jlv * jlv / 10)))

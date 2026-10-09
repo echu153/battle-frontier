@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { STAT_KEYS, STAT_DEFS, calcPower, INITIAL_STATS } from '../../v2/lib/stats.js'
 import { skillValue, VALUE_TABLE, MP_TABLE, BUFF_PER_MP, HEAL_PER_MP, MPREGEN_PER_MP, SKILLS as V2_SKILLS, offClassMult } from '../../v2/lib/skills.js'
-import { createSide, mpCostOf } from '../../v2/lib/battle.js'
+import { createSide, mpCostOf, runBattle } from '../../v2/lib/battle.js'
 import { MAX_LV, needExp, totalExpTo, applyExp, bodyPowerAt, staminaMaxOf, NEED_PERMIL, STAMINA_RECOVER_MS, rollStamina, msToNextStamina } from './level.js'
 import {
   CLASSES, START_CLASSES, STAGES, JOB_MAX, JOB_BONUS, jobNeed, jobTotalTo, bonusSeqOf,
@@ -19,11 +19,11 @@ import {
 import { GEAR_NAMES } from './gearNames.js'
 import { powerAt, effectPct, statsAt, armorEffects, GEAR_RATIO, SET_PART_SUM } from './gear.js'
 import {
-  AREA_LIST, SPOTS, SPOT_COUNT, SPOT_LV, spotOf, spotLvOf, spotLabel, itemLvOfArea, expRangeOf, goldRangeOf,
+  AREA_LIST, SPOTS, SPOT_COUNT, spotOf, spotLvOf, spotLabel, itemLvOfArea, expRangeOf, goldRangeOf,
   ROLE_TENTHS, scaleByRole, enemyLevels, enemyLvOf, enemyRoleOf,
-  stdPowerAt, AREA_BOSS, SUB_BOSS, bossRatioOf, STD_RATIO, NORMAL_RATIO, enemyPowerOf,
+  stdPowerAt, AREA_BOSS, SUB_BOSS, bossRatioOf, STD_RATIO, NORMAL_RATIO, enemyPowerOf, toFighter as enemyFighter,
 } from './areas.js'
-import { AREA_ROSTERS } from './monsters.js'
+import { AREA_ROSTERS, AREA_LEVELS, ENEMY_LV } from './monsters.js'
 import { toFighter, statBreakdown, equippedItems, slotsOf, currentSetOf } from './loadout.js'
 import {
   rollDropKind, rollEquipDrop, pickEncounter, rollRewards, rewardRangeOf,
@@ -40,8 +40,9 @@ test('【確定】LV上限は100。必要EXPは上がるほど重くなる（MMO
   for (let l = 2; l < 99; l++) assert.ok(needExp(l + 1) > needExp(l), `LV${l}→${l + 1} より LV${l + 1}→${l + 2} が重い`)
   // 必要EXP ＝ 係数 × LV³（千分率の整数で掛けてから割る＝SQLと同じ）
   for (const l of [1, 5, 10, 20, 50, 99]) assert.equal(needExp(l), Math.max(1, Math.round(NEED_PERMIL * l * l * l / 1000)))
-  // 設計書§2の表（係数0.131＝tools/v2cap-progress.mjs --tune で「最後のボスの目安の日にLV100」になるよう決めた）
-  assert.deepEqual([1, 5, 10, 20, 30, 50, 70, 90, 99].map(needExp), [1, 16, 131, 1048, 3537, 16375, 44933, 95499, 127109])
+  // 設計書§2の表（係数0.136＝tools/v2cap-progress.mjs --tune で「最後のボスの目安（365時間目）にLV100」になるよう決めた。
+  //   2026-10-09 敵のLVを一定にしたあとの測り直し）
+  assert.deepEqual([1, 5, 10, 20, 30, 50, 70, 90, 99].map(needExp), [1, 17, 136, 1088, 3672, 17000, 46648, 99144, 131961])
 })
 
 test('【確定】LV100で止まり、あふれたEXPは捨てる。周回（LV1に戻る）は無い', () => {
@@ -157,9 +158,10 @@ test('【確定】落ちる装備のレア度：エピックはレアとボス�
 test('【確定】装備のアイテムLVはエリアごとに1つ（①のボスのLV）。①②③どこで拾っても同じ', () => {
   for (const s of SPOTS) {
     assert.equal(s.itemLv, itemLvOfArea(s.area))
-    assert.equal(s.itemLv, spotLvOf((s.area - 1) * 3 + 1)[1], `${spotLabel(s)}は①のボスのLV`)
+    assert.equal(s.itemLv, enemyLvOf(spotOf((s.area - 1) * 3 + 1).roster.boss.name, (s.area - 1) * 3 + 1), `${spotLabel(s)}は①のボスのLV`)
   }
-  for (let k = 1; k < 15; k++) assert.ok(itemLvOfArea(k + 1) >= itemLvOfArea(k), '後のエリアほど高い')
+  for (let k = 1; k < 15; k++) assert.ok(itemLvOfArea(k + 1) > itemLvOfArea(k), '後のエリアほど高い')
+  assert.deepEqual(Array.from({ length: 15 }, (_, k) => itemLvOfArea(k + 1)), [10, 17, 22, 27, 31, 37, 45, 51, 58, 63, 66, 69, 72, 75, 78])
 })
 
 test('【確定】スタミナは3分に1回復・最大値はLVが1上がるごとに+1（LV1で10）', () => {
@@ -201,12 +203,12 @@ test('通常攻撃は 槍使い・盗賊・銃士・戦士・格闘家・弓使�
   for (const c of ['魔法使い', '呪術師', '僧侶', '薬師']) assert.equal(attackKindOf(c), 'mag', c)
 })
 
-test('【確定】ClassLVは最大30。初期職のClassLV30まで＝LV32のころに入っているEXP（実測で約2週間）', () => {
+test('【確定】ClassLVは最大30。初期職のClassLV30まで＝LV32のころに入っているEXP（目安は14時間）', () => {
   assert.equal(JOB_MAX, 30)
   assert.equal(jobNeed('shoki', 30), 0)
   const total = jobTotalTo('shoki', 30)
-  // 係数4.2（tools/v2cap-progress.mjs --tune の後半4回の平均・2026-10-09 ボスを「エリアの値×①②③の倍率」にしたあと）
-  assert.equal(total, 35931)
+  // 係数4.4（tools/v2cap-progress.mjs --tune の後半4回の平均・2026-10-09 敵のLVを一定にしたあと）
+  assert.equal(total, 37642)
   assert.ok(total >= totalExpTo(32) && total < totalExpTo(33), `初期職の合計 ${total} はLV32〜33のあいだ`)
 })
 
@@ -585,25 +587,45 @@ test('【確定】通常は表の上から2体ずつ①②③。②には①の�
   for (const r of rows) assert.equal(spotOf(r.spot).area, SPOTS.find(s => s.roster.boss.name === r.name || [...s.roster.enemies, ...s.roster.timed, ...s.roster.rares].some(e => e.name === r.name)).area, `${r.name}は1つのエリアにだけいる`)
 })
 
-test('【確定】敵は敵ごとに決まったLVを持つ（場所のLV帯の中）。ボスとレアは帯の上限', () => {
+test('【確定】敵のLVは敵ごとに一定（プレイヤーのLVに合わせない）。最後のボスはLV80・始まりの森①は装備なしで勝てる低さ', () => {
+  // どの場所に出ても同じLV（前は場所のLV帯から決めていて、②のスライムは①より高かった）
   for (const s of SPOTS) {
-    const [lo, hi] = spotLvOf(s.id)
-    for (const e of [...s.roster.enemies, ...s.roster.timed]) {
-      const lv = enemyLvOf(e.name, s.id)
-      assert.ok(lv >= lo && lv <= hi, `${e.name} LV${lv} は ${lo}〜${hi}`)
+    for (const e of [...s.roster.enemies, ...s.roster.timed, ...s.roster.rares, s.roster.boss]) {
+      assert.equal(enemyLvOf(e.name, s.id), ENEMY_LV[e.name], `${spotLabel(s)}の${e.name}`)
     }
-    assert.equal(enemyLvOf(s.roster.boss.name, s.id), hi, `${s.roster.boss.name}は帯の上限`)
-    for (const e of s.roster.rares) assert.equal(enemyLvOf(e.name, s.id), hi)
     assert.equal(enemyRoleOf(s.roster.boss.name, s.id), 'boss')
+    const [lo, hi] = spotLvOf(s.id)
+    assert.equal(hi, enemyLvOf(s.roster.boss.name, s.id), `${spotLabel(s)}：いちばん高いのはボス`)
+    assert.ok(lo >= 1 && lo <= hi)
   }
-  // 同じ敵でも、後の場所ではLVが高い（①のスライムより②のスライム）
-  assert.ok(enemyLvOf('スライム', 2) > enemyLvOf('スライム', 1))
-  for (let i = 1; i < SPOT_COUNT; i++) {
-    assert.ok(SPOT_LV[i][0] >= SPOT_LV[i - 1][0] && SPOT_LV[i][1] >= SPOT_LV[i - 1][1], `${spotLabel(i + 1)}のLV帯は前より下がらない`)
-    assert.ok(SPOT_LV[i][1] >= SPOT_LV[i][0])
+  assert.equal(enemyLvOf('スライム', 1), enemyLvOf('スライム', 2), 'スライムは①でも②でも同じLV')
+  // 表の形：1エリア＝ふつう6・朝昼晩1つ・レア1つ・ボス3
+  assert.equal(AREA_LEVELS.length, AREA_LIST.length)
+  for (const L of AREA_LEVELS) assert.deepEqual([L.normals.length, L.bosses.length], [6, 3])
+  // 【確定】ボスは後の場所ほど高く、最後（深淵の海溝③）がLV80（ユーザー指示）
+  const bosses = SPOTS.map(s => enemyLvOf(s.roster.boss.name, s.id))
+  for (let i = 1; i < bosses.length; i++) assert.ok(bosses[i] > bosses[i - 1], `${spotLabel(i + 1)}のボスは前の場所より高い`)
+  assert.equal(bosses[SPOT_COUNT - 1], 80, '最後のボスはLV80')
+  assert.ok(Object.values(ENEMY_LV).every(lv => lv >= 1 && lv <= 80), 'どの敵もLV80まで')
+  // ふつうの敵は、出てくる場所のボスを超えない
+  for (const s of SPOTS) for (const e of s.roster.enemies) assert.ok(ENEMY_LV[e.name] <= ENEMY_LV[s.roster.boss.name], `${spotLabel(s)}の${e.name}`)
+  // 【確定】始まりの森①：スライムLV1・コウモリLV2・朝昼晩の敵LV2（ユーザー指示「未装備でも倒せるように」）
+  assert.deepEqual(spotOf(1).roster.enemies.map(e => [e.name, ENEMY_LV[e.name]]), [['スライム', 1], ['コウモリ', 2]])
+  for (const e of spotOf(1).roster.timed) assert.equal(ENEMY_LV[e.name], 2, e.name)
+})
+
+test('【確定】始まりの森①のふつうの敵には、LV1・装備なし・最初の編成で、どの職業も勝てる', () => {
+  for (const cls of START_CLASSES) {
+    const learned = skillsLearnedBy(cls, 1)
+    const prof = { username:'t', class: cls, lv: 1, ...INITIAL_STATS, jobs: { [cls]: { lv: 1, exp: 0 } }, learned,
+      skill_sets: { [cls]: defaultSetOf(cls, learned, INITIAL_STATS.mp) }, equipped: {} }
+    const me = toFighter(prof, [])
+    for (const e of spotOf(1).roster.enemies) {
+      let w = 0
+      for (let i = 0; i < 100; i++) if (runBattle(me, { ...enemyFighter(e) }, { rng: rngOf(1 + i * 7919) }).winner === 'a') w++
+      assert.ok(w >= 95, `${cls}が${e.name}に ${w}/100`)
+    }
   }
-  assert.deepEqual(SPOT_LV[0].slice(0, 1), [1], '最初の場所はLV1から')
-  assert.equal(SPOT_LV[SPOT_COUNT - 1][1], 100, '最後のボスはLV100')
 })
 
 test('敵の出方：レアが先（0.5%）→ボス（遭遇率）→ふつう。朝昼晩の敵はその時間帯だけ', () => {

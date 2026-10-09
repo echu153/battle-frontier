@@ -11,14 +11,15 @@
 //   ・装備のアイテムLV（＝必要LV）は**エリアごとに1つ**（①のボスのLV。①②③どこで拾っても同じ）
 //   ・今のⅡの「難易度帯①〜⑧」と、帯の中で物理／魔法が通りやすいエリアの区別は無くした（1本道なので）
 //
-// 敵の名前・配分・技は monsters.js（名前はユーザーの一覧のとおり）。
-// 敵のLVは場所のLV帯の中で敵ごとに決まり、強さは「そのLVのプレイヤーの標準の戦闘力 × 役割の倍率」。
+// 敵の名前・配分・技・LVは monsters.js（名前はユーザーの一覧のとおり）。
+// 【確定】敵のLVは**敵ごとに一定**（プレイヤーの育ち方に合わせない・最後のボスがLV80）。
+// 強さは「そのLVのプレイヤーの標準の戦闘力 × 役割の倍率」。
 // ★敵のLV・経験値とGoldの範囲・アイテムLVはサーバー（v2cap_spots / v2cap_enemies）にも持たせる。
 //   ⚠ここを変えたら tools/v2cap-sql.mjs でSQLの種を作り直すこと（v2capsql.test.js が突き合わせる）
 // ============================================================
 import { statsOf } from '../../v2/lib/enemies.js'
 import { bodyPowerAt } from './level.js'
-import { ROSTERS } from './monsters.js'
+import { ROSTERS, AREA_LEVELS, ENEMY_LV } from './monsters.js'
 
 // ===== エリアと場所の名前（【確定】2026-10-09 ユーザーの表）=====
 export const AREA_LIST = [
@@ -59,21 +60,13 @@ export const goldRangeOf = (areaNo, sub) => {
 export const ROLE_TENTHS = { normal: 10, timed: 15, rare: 30, boss: 50 }
 export const scaleByRole = (v, role) => Math.floor((v * (ROLE_TENTHS[role] || 10) + 5) / 10)
 
-// ===== 場所のLV帯 =====
-// その場所に来たときのLV〜ボスを倒すときのLV（1日1時間あそぶ人の中央値）。
-// ★値は `node tools/v2cap-progress.mjs --tune` の出力をそのまま貼る（勘で書き換えないこと）
-export const SPOT_LV = [
-  [1, 13], [13, 15], [15, 19], [19, 21], [21, 23], [23, 25], [25, 28], [28, 29], [29, 32], [32, 34], [34, 36], [36, 38], [38, 39], [39, 40], [40, 43], [43, 46], [46, 49], [49, 54], [54, 56], [56, 58], [58, 61], [61, 64], [64, 66], [66, 70], [70, 72], [72, 74], [74, 77], [77, 78], [78, 79], [79, 81], [81, 82], [82, 83], [83, 85], [85, 86], [86, 87], [87, 89], [89, 90], [90, 91], [91, 93], [93, 94], [94, 94], [94, 96], [96, 97], [97, 98], [98, 100],
-]
-export const spotLvOf = (id) => SPOT_LV[id - 1] || [1, 1]
-export const spotLvText = (id) => { const [a, b] = spotLvOf(id); return a === b ? `LV${a}` : `LV${a}〜${b}` }
-// アイテムLV（＝必要LV）。【確定】エリアごとに1つ＝そのエリアの①のボスのLV（2026-10-09 ユーザー決定）
-export const itemLvOfArea = (areaNo) => spotLvOf((areaNo - 1) * 3 + 1)[1]
+// アイテムLV（＝必要LV）。【確定】エリアごとに1つ＝そのエリアの①のボスのLV（2026-10-09 ユーザー決定）。
+//   ボスのLVは monsters.js の AREA_LEVELS（敵ごとに一定）
+export const itemLvOfArea = (areaNo) => AREA_LEVELS[areaNo - 1]?.bosses[0] || 1
 
 // ===== 場所 =====
-// ★itemLv は SPOT_LV から毎回引く（--tune が SPOT_LV を差し替えても追従するように）
-// ★顔ぶれ（roster）の敵には、いる場所（spot）を付けて持つ。同じ敵が②と③の両方に出るので、
-//   LVと強さは「名前＋場所」で決まる（monsters.js）
+// ★顔ぶれ（roster）の敵には、いる場所（spot）を付けて持つ。同じ敵が②と③の両方に出る（LVはどこでも同じ。
+//   役割＝ふつう・朝昼晩・レア・ボスは「名前＋場所」で引く）
 const withSpot = (list, id) => list.map(e => ({ ...e, spot: id }))
 export const SPOTS = AREA_LIST.flatMap((a, k) => a.spots.map((name, j) => {
   const id = k * 3 + j + 1
@@ -92,35 +85,36 @@ export const spotLabel = (spotOrId) => {
 }
 
 // ===== 敵のLV =====
-// ふつうの敵はその場所での並び（表の順＝弱い順）に、場所のLV帯の 0〜NORMAL_SPAN の位置へ等間隔に並べる
-// （0＝下限・1＝上限。②③では前の場所から来た2体が下のほう）。
-// 朝昼晩の限定の敵は TIMED_POS、レアとボスは帯の上限。同じ敵でも場所が違えばLVも違う
-export const NORMAL_SPAN = 0.65
-export const TIMED_POS = 0.8
-const lvAt = (id, pos) => { const [a, b] = spotLvOf(id); return Math.round(a + (b - a) * pos) }
-// 「場所|名前」→ { name, role, spot, pos, band }。LVは SPOT_LV から毎回引く（--tune が差し替えても追従するように）
+// 【確定】敵ごとに一定（monsters.js の ENEMY_LV。場所が変わっても同じ）
+// 「場所|名前」→ { name, role, spot, band }（役割と時間帯）
 const PLACES = new Map()
 const placeKey = (spot, name) => `${spot}|${name}`
 for (const s of SPOTS) {
   const r = s.roster
-  const n = r.enemies.length
-  const put = (e, role, pos) => PLACES.set(placeKey(s.id, e.name), { name: e.name, role, spot: s.id, pos, band: e.band || null })
-  r.enemies.forEach((e, i) => put(e, 'normal', n > 1 ? NORMAL_SPAN * i / (n - 1) : 0))
-  for (const e of r.timed) put(e, 'timed', TIMED_POS)
-  for (const e of r.rares) put(e, 'rare', 1)
-  put(r.boss, 'boss', 1)
+  const put = (e, role) => PLACES.set(placeKey(s.id, e.name), { name: e.name, role, spot: s.id, band: e.band || null })
+  for (const e of r.enemies) put(e, 'normal')
+  for (const e of r.timed) put(e, 'timed')
+  for (const e of r.rares) put(e, 'rare')
+  put(r.boss, 'boss')
 }
-export const enemyLvOf = (name, spot) => { const p = PLACES.get(placeKey(spot, name)); return p ? lvAt(p.spot, p.pos) : 1 }
+// spot は顔ぶれの確かめ用（その場所にいない敵はLV1を返す＝前と同じ）
+export const enemyLvOf = (name, spot) => (PLACES.has(placeKey(spot, name)) ? ENEMY_LV[name] || 1 : 1)
 export const enemyRoleOf = (name, spot) => PLACES.get(placeKey(spot, name))?.role || 'normal'
+// その場所の敵のLVの範囲（いちばん低い敵〜いちばん高い敵＝ボス）。画面とサーバーの v2cap_spots に出す
+export const spotLvOf = (id) => {
+  const lvs = [...PLACES.values()].filter(p => p.spot === id).map(p => ENEMY_LV[p.name] || 1)
+  return lvs.length ? [Math.min(...lvs), Math.max(...lvs)] : [1, 1]
+}
+export const spotLvText = (id) => { const [a, b] = spotLvOf(id); return a === b ? `LV${a}` : `LV${a}〜${b}` }
 // サーバーの種（v2cap_enemies）を作るための一覧（名前＋場所ごとに1行）
-export const enemyLevels = () => [...PLACES.values()].map(p => ({ name: p.name, spot: p.spot, lv: lvAt(p.spot, p.pos), role: p.role, band: p.band }))
+export const enemyLevels = () => [...PLACES.values()].map(p => ({ name: p.name, spot: p.spot, lv: ENEMY_LV[p.name] || 1, role: p.role, band: p.band }))
 
 // ===== 敵の強さ =====
 // そのLVのプレイヤーの「標準の戦闘力」（本体＋その時点の装備＋クラスのステ）。本体の戦闘力に対する倍率を
 // LVの折れ線で持つ（間は直線で補う）。
 // ★値は `node tools/v2cap-progress.mjs --tune` の出力をそのまま貼る（勘で書き換えないこと）
 export const STD_RATIO = [
-  [1, 1], [5, 1.02], [10, 1.16], [15, 1.45], [20, 1.63], [27, 1.92], [34, 2.13], [44, 2.24], [54, 2.34], [63, 2.41], [71, 2.48], [79, 2.49], [90, 2.49], [100, 2.49],
+  [1, 1.02], [5, 1.07], [10, 1.39], [15, 1.8], [20, 1.95], [27, 2.07], [34, 2.12], [44, 2.17], [54, 2.17], [63, 2.17], [71, 2.17], [79, 2.17], [90, 2.19], [100, 2.19],
 ]
 export const stdRatioAt = (lv) => {
   const l = Math.max(1, Math.min(100, lv || 1))
@@ -135,9 +129,10 @@ export const stdRatioAt = (lv) => {
 }
 export const stdPowerAt = (lv) => Math.round(bodyPowerAt(lv) * stdRatioAt(lv))
 // 役割の倍率。ふつうの敵と朝昼晩の敵は「同じLVのプレイヤーの0.6倍」＝同じLVならまず勝てる。
-// レアは帯の上限LVの0.8倍。ボスは帯の上限LVのプレイヤーの何倍か（1回で勝てなくてよい）。
+// レアは0.8倍。ボスは同じLVのプレイヤーの何倍か（1回で勝てなくてよい）。
 // ボスの倍率＝エリアの値（AREA_BOSS）×①②③の倍率（SUB_BOSS）。
 //   【確定】③のボスは特に強い（ユーザー指示）＝③は①②の1.25倍。③はLVもエリアで一番高いので、③のボスが一番強い
+//   ★敵のLVは一定なので、目安の日に倒せる強さへ合わせるのはボスの倍率（AREA_BOSS）だけ
 //   ⚠前は45か所を1体ずつ日数で合わせていたが、②のボスが③より強いエリアが出た＋測りのぶれが大きかった
 //     （2026-10-09 実際に踏んだ）。なので合わせるのはエリアの値（15個）だけにした
 // ★AREA_BOSS は「そのエリアの③を倒すのが目安の日になる」ように `--tune` で逆算した値（勘で書き換えないこと）。
@@ -146,7 +141,7 @@ export const NORMAL_RATIO = 0.6
 export const RARE_RATIO = 0.8
 export const SUB_BOSS = [1.0, 1.0, 1.25]
 export const AREA_BOSS = [
-  0.93, 0.78, 0.88, 0.96, 0.96, 0.94, 0.93, 0.86, 0.89, 0.96, 1.04, 0.94, 1, 0.96, 1.09,
+  1.16, 1.04, 1.12, 1.27, 1.25, 1.34, 1.32, 1.19, 1.19, 1.29, 1.42, 1.24, 1.29, 1.14, 1.3,
 ]
 export const bossRatioOf = (spotId) => {
   const s = spotOf(spotId)
