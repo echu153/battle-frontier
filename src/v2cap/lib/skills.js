@@ -1,9 +1,9 @@
 // ============================================================
 // バトルフロンティアⅡ「レベルキャップあり」版（v2cap）— スキルの名簿
 // ------------------------------------------------------------
-// 2026-10-09 ユーザー決定（docs/v2cap-design.md §11）：初期職は10職。
+// 2026-10-09 ユーザー決定（docs/v2cap-design.md §11）：初期職は11職（剣士を同じ日に足した）。
 //   ・戦士・弓使い・魔法使い・僧侶・格闘家 … 今のⅡのスキルをそのまま使う（中身は src/v2/lib/skills.js）
-//   ・槍使い・盗賊・銃士・呪術師・薬師 … 新しく作った5個ずつ（下の NEW_SKILLS・ユーザー承認済み）
+//   ・槍使い・盗賊・銃士・剣士・呪術師・薬師 … 新しく作った5個ずつ（下の NEW_SKILLS・ユーザー承認済み）
 //   ・ノーブル・サモナーと一次職は**一旦なし**
 // 新しい技は今のⅡの値段の付け方（発動率ごとの価値 skillValue・消費MPの帯）で初期職の帯に合わせてある。
 //
@@ -21,7 +21,7 @@ export { isPassive, SKILL_SET_SLOTS, SKILL_USE_MAX }
 // 今のⅡから持ってくる職業
 export const KEEP_FROM_V2 = ['戦士', '弓使い', '魔法使い', '僧侶', '格闘家']
 
-// 新しい5職（ClassLV1／5／10／15／20 で上から順に覚える）
+// 新しい6職（ClassLV1／5／10／15／20 で上から順に覚える）
 export const NEW_SKILLS = [
   // 槍使い（物理・STR）
   { name:'突き',       cls:'槍使い', kind:'phys', mult:1.25, proc:95, mp:4,  desc:'槍で突く' },
@@ -41,6 +41,12 @@ export const NEW_SKILLS = [
   { name:'精密射撃',   cls:'銃士', kind:'phys', mult:0.6, add:[{ stat:'dex', rate:0.7 }], proc:88, mp:9, sureHit:true, desc:'必中。DEXが大きく威力になる' },
   { name:'徹甲弾',     cls:'銃士', kind:'phys', mult:0.67, add:[{ stat:'dex', rate:0.7 }], proc:85, mp:11, defPen:0.3, desc:'相手の防御を30%無視。DEXが大きく威力になる' },
   { name:'狙いを定める', cls:'銃士', kind:'buff', proc:100, mp:8, buff:{ self:{ dex:27 } }, priority:1, desc:'DEX+27%（重ねがけ可）' },
+  // 剣士（物理・STRにDEXやAGIも乗る・2026-10-09 ユーザー承認）
+  { name:'袈裟斬り',   cls:'剣士', kind:'phys', mult:0.95, add:[{ stat:'dex', rate:0.3 }], proc:95, mp:4, desc:'肩口から斬り下ろす。DEXも威力になる' },
+  { name:'燕返し',     cls:'剣士', kind:'phys', mult:0.55, add:[{ stat:'dex', rate:0.15 }], hits:2, proc:90, mp:8, noCrit:true, desc:'2連撃。DEXも威力になる。クリティカルしない' },
+  { name:'兜割り',     cls:'剣士', kind:'phys', mult:1.0, add:[{ stat:'dex', rate:0.27 }], proc:88, mp:9, defPen:0.3, desc:'相手の防御を30%無視。DEXも威力になる' },
+  { name:'一閃',       cls:'剣士', kind:'phys', mult:1.15, add:[{ stat:'agi', rate:0.25 }], proc:85, mp:11, ail:{ key:'bleed', chance:40 }, desc:'AGIも威力になる。40%で出血' },
+  { name:'剣の構え',   cls:'剣士', kind:'buff', proc:100, mp:8, buff:{ self:{ str:10, dex:9, agi:8 } }, priority:1, desc:'STR+10%・DEX+9%・AGI+8%（重ねがけ可）' },
   // 呪術師（魔法・状態異常）
   { name:'呪弾',       cls:'呪術師', kind:'mag', mult:1.45, proc:95, mp:5, desc:'呪いを込めた弾を放つ' },
   { name:'呪縛',       cls:'呪術師', kind:'mag', mult:1.44, proc:90, mp:9, ail:{ key:'slow', chance:40 }, desc:'40%で鈍足' },

@@ -214,27 +214,32 @@ test('【確定】スタミナは3分に1回復・最大値はLVが1上がるご
 })
 
 // ===== 職業 =====
-test('【確定】初期職は10職。装備できる武器は職業ごとに3種（ユーザーの表のとおり）', () => {
-  assert.deepEqual(START_CLASSES, ['戦士', '槍使い', '格闘家', '盗賊', '弓使い', '銃士', '魔法使い', '呪術師', '僧侶', '薬師'])
+test('【確定】初期職は11職（剣士を足した）。装備できる武器は職業ごとに3〜4種（ユーザーの表のとおり）', () => {
+  assert.deepEqual(START_CLASSES, ['戦士', '槍使い', '格闘家', '盗賊', '弓使い', '銃士', '剣士', '魔法使い', '呪術師', '僧侶', '薬師'])
+  // 2026-10-09 ユーザー決定：刀は戦士・盗賊・剣士、宝珠は魔法使い・呪術師・僧侶。剣士は刀・片手剣・両手剣
   const table = {
-    戦士: ['両手剣', '斧', '鈍器'], 槍使い: ['槍', '片手剣', '投擲'], 格闘家: ['拳', '鈍器', '杖'],
-    盗賊: ['短剣', '片手剣', '投擲'], 弓使い: ['弓', '短剣', '片手剣'], 銃士: ['銃', '片手剣', '投擲'],
-    魔法使い: ['杖', '書', '短剣'], 呪術師: ['杖', '短剣', '投擲'], 僧侶: ['鈍器', '杖', '書'], 薬師: ['短剣', '投擲', '書'],
+    戦士: ['両手剣', '斧', '鈍器', '刀'], 槍使い: ['槍', '片手剣', '投擲'], 格闘家: ['拳', '鈍器', '杖'],
+    盗賊: ['短剣', '片手剣', '投擲', '刀'], 弓使い: ['弓', '短剣', '片手剣'], 銃士: ['銃', '片手剣', '投擲'],
+    剣士: ['刀', '片手剣', '両手剣'],
+    魔法使い: ['杖', '書', '短剣', '宝珠'], 呪術師: ['杖', '短剣', '投擲', '宝珠'], 僧侶: ['鈍器', '杖', '書', '宝珠'], 薬師: ['短剣', '投擲', '書'],
   }
+  assert.deepEqual(Object.keys(table).sort(), [...START_CLASSES].sort())
   for (const [cls, list] of Object.entries(table)) assert.deepEqual(weaponsOf(cls), list, `${cls}の武器`)
-  for (const list of Object.values(table)) for (const w of list) assert.ok(WEAPON_TYPES.includes(w), `${w}は12種にある`)
+  for (const list of Object.values(table)) for (const w of list) assert.ok(WEAPON_TYPES.includes(w), `${w}は14種にある`)
+  // どの武器も、装備できる職業が1つ以上いる（拾っても誰も使えない武器が無い）
+  for (const w of WEAPON_TYPES) assert.ok(Object.values(table).some(list => list.includes(w)), `${w}を装備できる職業がいる`)
 })
 
 test('【確定】ノーブル・サモナーはなくし、一次職も一旦なし（初期職だけ）', () => {
-  assert.equal(CLASSES.length, 10)
+  assert.equal(CLASSES.length, 11)
   assert.ok(CLASSES.every(c => c.stage === 'shoki' && !c.req))
   for (const id of ['ノーブル', 'サモナー', '侍', '狂戦士', '聖職者', '賢者']) assert.ok(!CLASSES.some(c => c.id === id), `${id}は無い`)
   assert.deepEqual(Object.keys(STAGES), ['shoki'])
   for (const c of CLASSES) assert.equal(canBecome(c.id, {}), true, `${c.id}は条件なし`)
 })
 
-test('通常攻撃は 槍使い・盗賊・銃士・戦士・格闘家・弓使い＝物理／魔法使い・呪術師・僧侶・薬師＝魔法', () => {
-  for (const c of ['戦士', '槍使い', '格闘家', '盗賊', '弓使い', '銃士']) assert.equal(attackKindOf(c), 'phys', c)
+test('通常攻撃は 槍使い・盗賊・銃士・戦士・格闘家・弓使い・剣士＝物理／魔法使い・呪術師・僧侶・薬師＝魔法', () => {
+  for (const c of ['戦士', '槍使い', '格闘家', '盗賊', '弓使い', '銃士', '剣士']) assert.equal(attackKindOf(c), 'phys', c)
   for (const c of ['魔法使い', '呪術師', '僧侶', '薬師']) assert.equal(attackKindOf(c), 'mag', c)
 })
 
@@ -275,7 +280,7 @@ test('【確定】クラスのステはClassLVが1上がるごとに5点（Class
   }
 })
 
-test('【確定】キャラ作成のクラス選択に出す特徴の説明が、10職ぶんある（カードに収まる長さ）', () => {
+test('【確定】キャラ作成のクラス選択に出す特徴の説明が、11職ぶんある（カードに収まる長さ）', () => {
   for (const c of CLASSES) {
     const d = classDescOf(c.id)
     assert.ok(d, `${c.id}の説明がある`)
@@ -304,11 +309,11 @@ test('【確定】戦士・弓使い・魔法使い・僧侶・格闘家のス�
   }
 })
 
-test('【確定】新しい5職（槍使い・盗賊・銃士・呪術師・薬師）の25技は、今のⅡの初期職と同じ帯（価値・消費MP）', () => {
-  assert.equal(NEW_SKILLS.length, 25)
+test('【確定】新しい6職（槍使い・盗賊・銃士・剣士・呪術師・薬師）の30技は、今のⅡの初期職と同じ帯（価値・消費MP）', () => {
+  assert.equal(NEW_SKILLS.length, 30)
   const band = (t, proc) => { const ks = Object.keys(t).map(Number).sort((a, b) => b - a); return t[ks.find(k => proc >= k) ?? ks[ks.length - 1]] }
   for (const s of NEW_SKILLS) {
-    assert.ok(['槍使い', '盗賊', '銃士', '呪術師', '薬師'].includes(s.cls), s.name)
+    assert.ok(['槍使い', '盗賊', '銃士', '剣士', '呪術師', '薬師'].includes(s.cls), s.name)
     if (s.kind === 'phys' || s.kind === 'mag') {
       assert.ok(Math.abs(skillValue(s) - band(VALUE_TABLE.basic[s.kind], s.proc)) <= 0.03, `${s.name}の価値 ${skillValue(s)}`)
       assert.equal(s.mp, band(MP_TABLE.basic[s.kind], s.proc), `${s.name}の消費MP`)
@@ -386,23 +391,24 @@ test('【確定】スキルセットは職業ごと。初めて就いた職業�
 })
 
 // ===== 装備 =====
-test('【確定】装備はエリアごとに24点（武器12種・重鎧4部位・軽装4部位・装飾品4種）× レア度4段階。名前はユーザーの表', () => {
-  assert.deepEqual(WEAPON_TYPES, ['片手剣', '両手剣', '斧', '槍', '鈍器', '短剣', '拳', '弓', '銃', '杖', '書', '投擲'])
+test('【確定】装備はエリアごとに26点（武器14種・重鎧4部位・軽装4部位・装飾品4種）× レア度4段階。名前はユーザーの表', () => {
+  // 刀・宝珠は 2026-10-09 に足した（後ろに足したので前からある装備のIDは変わらない）
+  assert.deepEqual(WEAPON_TYPES, ['片手剣', '両手剣', '斧', '槍', '鈍器', '短剣', '拳', '弓', '銃', '杖', '書', '投擲', '刀', '宝珠'])
   assert.deepEqual(ARMOR_LINES, ['重鎧', '軽装'])
   assert.deepEqual(ACCESSORY_TYPES, ['リング', 'イヤリング', 'ベルト', 'ネックレス'])
   assert.deepEqual(RARITIES, ['N', 'R', 'E', 'L'])
   assert.deepEqual(RARITY_LABEL, { N:'ノーマル', R:'レア', E:'エピック', L:'レジェンダリー' })
-  assert.equal(KINDS.length, 24)
+  assert.equal(KINDS.length, 26)
   assert.equal(AREA_COUNT, AREA_LIST.length)
-  assert.equal(ITEMS.length, AREA_LIST.length * 4 * 24)
+  assert.equal(ITEMS.length, AREA_LIST.length * 4 * 26)
   assert.equal(new Set(ITEMS.map(i => i.id)).size, ITEMS.length, 'IDは重複しない')
   assert.equal(new Set(ITEMS.map(i => i.name)).size, ITEMS.length, '名前も重複しない')
   assert.ok(!ITEMS.some(i => i.name.includes('盾') || i.type === '盾'), '盾は無い')
   for (let area = 1; area <= AREA_COUNT; area++) {
     for (const r of RARITIES) {
       const list = ITEMS.filter(i => i.area === area && i.rarity === r)
-      assert.equal(list.length, 24, `エリア${area}の${RARITY_LABEL[r]}は24点`)
-      assert.equal(list.filter(i => i.part === '武器').length, 12)
+      assert.equal(list.length, 26, `エリア${area}の${RARITY_LABEL[r]}は26点`)
+      assert.equal(list.filter(i => i.part === '武器').length, 14)
       for (const line of ARMOR_LINES) assert.equal(list.filter(i => i.line === line).length, 4, `${line}は4部位`)
       assert.equal(list.filter(i => i.part === 'アクセ').length, 4)
     }
@@ -420,6 +426,18 @@ test('【確定】装備はエリアごとに24点（武器12種・重鎧4部位
   assert.equal(itemOf(15, 'N', '書').name, '創世記')
   assert.equal(itemOf(2, 'R', '軽装頭').name, 'ウルフハイドフード')
   assert.equal(itemOf(1, 'E', '斧').name, '女王蟻の大顎')
+  // 刀・宝珠（ユーザーの表「追加武器種（刀・宝珠）」）。始まりの森の初太刀と深淵の海溝の終の太刀が対
+  assert.equal(itemOf(1, 'N', '刀').name, 'ブロンズカタナ')
+  assert.equal(itemOf(1, 'R', '刀').name, '苔むした古刀')
+  assert.equal(itemOf(1, 'L', '刀').name, '初太刀')
+  assert.equal(itemOf(15, 'L', '刀').name, '終の太刀')
+  assert.equal(itemOf(1, 'N', '宝珠').name, 'グラスオーブ')
+  assert.equal(itemOf(8, 'N', '宝珠').name, 'ムーンストーンオーブ')
+  assert.equal(itemOf(10, 'L', '宝珠').name, '賢者の石')
+  assert.equal(itemOf(15, 'E', '宝珠').name, 'クラーケンの墨珠')
+  // 宝珠のノーマルは装飾品と同じ宝石（始まりの森だけグラス）・刀のノーマルは片手剣と同じ金属
+  for (let a = 2; a <= AREA_COUNT; a++) assert.equal(itemOf(a, 'N', '宝珠').name.replace('オーブ', ''), itemOf(a, 'N', 'リング').name.replace('リング', ''), `エリア${a}の宝珠の宝石`)
+  for (let a = 1; a <= AREA_COUNT; a++) assert.equal(itemOf(a, 'N', '刀').name.replace('カタナ', ''), itemOf(a, 'N', '片手剣').name.replace('ソード', ''), `エリア${a}の刀の金属`)
   // 画面の名前：ノーマルは名前だけ、ほかはレア度を頭に付ける
   assert.equal(itemLabel(itemOf(1, 'N', '片手剣')), 'ブロンズソード')
   assert.equal(itemLabel(itemOf(1, 'R', '片手剣')), '【レア】若葉の剣')
@@ -447,6 +465,29 @@ test('【確定】配分は種類ごとに1つ（エリアとレア度では変�
     const d = itemOf(1, 'N', `${line}${p}`).dist
     assert.ok(d.str > 0 && d.str === d.int_stat, `${line}・${p}はSTRとINTを同じだけ`)
   }
+})
+
+test('【確定】刀＝STR60・AGI25・DEX15、宝珠＝INT40・AGI30・VIT30（2026-10-09 ユーザー決定・特別な効果は付けない）', () => {
+  assert.deepEqual(itemOf(1, 'N', '刀').dist, { str:60, agi:25, dex:15 })
+  assert.deepEqual(itemOf(1, 'N', '宝珠').dist, { int_stat:40, agi:30, vit:30 })
+  // 強さ（戦闘力）はほかの武器と同じ物差し（部位の倍率は武器2.0・レア度と必要LVで決まる）
+  for (const r of RARITIES) assert.equal(powerAt(itemOf(5, r, '刀'), 50), powerAt(itemOf(5, r, '片手剣'), 50), `${r}の刀と片手剣は同じ戦闘力`)
+  for (const r of RARITIES) assert.equal(powerAt(itemOf(5, r, '宝珠'), 50), powerAt(itemOf(5, r, '杖'), 50), `${r}の宝珠と杖は同じ戦闘力`)
+  // 宝珠のINTは杖より控えめ（ドキュメントの「杖より威力は控えめ」）
+  assert.ok(itemOf(1, 'N', '宝珠').dist.int_stat < itemOf(1, 'N', '杖').dist.int_stat)
+})
+
+test('【確定】剣士（2026-10-09 ユーザー承認）：物理・刀／片手剣／両手剣・STR40 DEX32 AGI30・技5つ', () => {
+  assert.equal(attackKindOf('剣士'), 'phys')
+  assert.deepEqual(weaponsOf('剣士'), ['刀', '片手剣', '両手剣'])
+  assert.deepEqual(JOB_BONUS.剣士, { str:40, dex:32, agi:30, vit:15, hp:13, mp:10, luk:5 })
+  assert.equal(classDescOf('剣士'), 'STR・DEX・AGIがそろって伸びる剣の使い手。燕返しと兜割りで斬り崩す')
+  assert.deepEqual(learnOrderOf('剣士').map(s => s.name), ['袈裟斬り', '燕返し', '兜割り', '一閃', '剣の構え'])
+  const by = Object.fromEntries(learnOrderOf('剣士').map(s => [s.name, s]))
+  assert.equal(by.燕返し.hits, 2)
+  assert.equal(by.兜割り.defPen, 0.3)
+  assert.deepEqual(by.一閃.ail, { key:'bleed', chance:40 })
+  assert.deepEqual(by.剣の構え.buff, { self:{ str:10, dex:9, agi:8 } })
 })
 
 test('【確定】武器は1本だけ。枠は7つ（武器・頭・鎧・腕・足・装飾品2）', () => {
@@ -562,10 +603,13 @@ test('【確定】職業補正は一旦なし（noClassBonus）。重鎧の軽�
 })
 
 // ===== ドロップ =====
-test('【確定】落ちるのはそのエリアの装備。武器はいまの職業が装備できる3種から・防具は重鎧と軽装の両方', () => {
+test('【確定】落ちるのはそのエリアの装備。武器はいまの職業が装備できる種類（3〜4種）から・防具は重鎧と軽装の両方', () => {
   const rng = rngOf(7)
   for (const cls of START_CLASSES) {
     for (let i = 0; i < 300; i++) assert.ok(canEquipType(cls, rollDropKind('武器', cls, rng)), `${cls}に落ちた武器`)
+    // 4種の職業（刀・宝珠を足した職業）でも、装備できる武器が全部落ちる
+    const got = new Set(Array.from({ length: 400 }, () => rollDropKind('武器', cls, rng)))
+    assert.deepEqual([...got].sort(), [...weaponsOf(cls)].sort(), `${cls}には装備できる武器が全部落ちる`)
   }
   const lines = new Set(Array.from({ length: 200 }, () => rollDropKind('鎧', '戦士', rng)))
   assert.deepEqual([...lines].sort(), ['軽装鎧', '重鎧鎧'])

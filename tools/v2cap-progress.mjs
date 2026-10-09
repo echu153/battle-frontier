@@ -14,11 +14,11 @@
 //   ・戦闘用のキャラは**画面と同じ toFighter**（loadout.js）で作る
 //
 //   node tools/v2cap-progress.mjs [--hours 365] [--seed 1] [--cls 戦士] [--quiet]
-//   node tools/v2cap-progress.mjs --report [--hours 450]   … 初期10職×2で、エリアを抜けた時間と節目のLV
+//   node tools/v2cap-progress.mjs --report [--hours 450]   … 初期職（いまは11職）×2で、エリアを抜けた時間と節目のLV
 //   node tools/v2cap-progress.mjs --tune [--hours 450] [--rounds 8] [--step 0.35] [--clip 0.2] [--anneal 0.8] [--stddamp 0.5]
 //     … 必要EXP・必要ClassEXPの係数、標準の戦闘力（STD_RATIO・LV1とLV5の行は動かさない）、
 //       ボスの倍率（エリアの値 AREA_BOSS）を、目安に合うまで回して作り直す（出力をそのまま貼る）
-//   node tools/v2cap-progress.mjs --statvalue [--areas 3,6,9,12] [--n 500]
+//   node tools/v2cap-progress.mjs --statvalue [--areas 3,6,9,12] [--n 500] [--only 剣士]
 //     … 職業ごとに「どのステを足すと③のボスに効くか」を測る（装備を選ぶ重み STAT_WEIGHT・同じステでの職業の強さ）
 // ============================================================
 const B = new URL('../src/', import.meta.url).href
@@ -66,17 +66,19 @@ const ARMOR_SLOT = { 頭:'head', 鎧:'body', 腕:'arm', 足:'foot' }
 //   ★AGIはどの職業にもよく効く（回避・行動順・追加行動）。DEX・VITはあまり効かない
 //   ⚠前は職業を見ずに「物理なら STR/DEX/AGI/VIT の合計」で選んでいた。STRだけで殴る職業ほど
 //     要らないステの装備を着けて遅れていた（2026-10-09 実際に踏んだ）。スキルや戦闘を変えたら測り直す
+//   ★2026-10-09 ステータスポイントにしたあと・剣士を足したあとに全職業を測り直した（--statvalue）
 export const STAT_WEIGHT = {
-  戦士:     { str:1.00, agi:0.89, vit:0.37, dex:0.13, int_stat:0.08 },
-  槍使い:   { str:1.00, agi:0.77, vit:0.20, dex:0.17, int_stat:0.13 },
-  格闘家:   { str:1.00, agi:0.82, vit:0.07, dex:0.10, int_stat:0.06 },
-  盗賊:     { agi:1.00, str:0.62, vit:0.12, dex:0.08, int_stat:0.05 },
-  弓使い:   { agi:1.00, str:0.80, vit:0.14, dex:0.07, int_stat:0.11 },
-  銃士:     { agi:1.00, dex:0.95, str:0.61, vit:0.17, int_stat:0.21 },
-  魔法使い: { int_stat:1.00, agi:0.76, vit:0.16, dex:0.08, str:0 },
-  呪術師:   { int_stat:1.00, agi:0.64, vit:0.14, dex:0.11, str:0 },
-  僧侶:     { int_stat:1.00, agi:0.58, vit:0.16, dex:0.05, str:0 },
-  薬師:     { int_stat:1.00, agi:0.58, vit:0.14, dex:0.09, str:0 },
+  戦士:     { str:1.00, agi:0.63, vit:0.20, dex:0.16, int_stat:0.02 },
+  槍使い:   { str:1.00, agi:0.85, int_stat:0.25, vit:0.12, dex:0.09 },
+  格闘家:   { str:1.00, agi:0.70, dex:0.27, vit:0.17, int_stat:0.09 },
+  盗賊:     { agi:1.00, str:0.54, vit:0.15, int_stat:0.10, dex:0.05 },
+  弓使い:   { agi:1.00, str:0.67, vit:0.13, dex:0.08, int_stat:0.05 },
+  銃士:     { agi:1.00, dex:0.90, str:0.62, int_stat:0.27, vit:0.19 },
+  剣士:     { agi:1.00, str:0.90, dex:0.28, vit:0.25, int_stat:0.15 },
+  魔法使い: { int_stat:1.00, agi:0.74, dex:0.25, vit:0.19, str:0 },
+  呪術師:   { agi:1.00, int_stat:0.95, vit:0.19, dex:0.14, str:0 },
+  僧侶:     { int_stat:1.00, agi:0.31, dex:0.23, vit:0.03, str:0 },
+  薬師:     { int_stat:1.00, agi:0.62, vit:0.17, dex:0.09, str:0 },
 }
 const weightOf = (cls) => STAT_WEIGHT[cls] || (attackKindOf(cls) === 'mag' ? { int_stat:1, agi:0.6 } : { str:1, agi:0.8 })
 // スキル編成：強化の技を先頭に1回ずつ・攻撃の技は後に覚えたもの（強い技）から・回復の技は最後に1回ずつ。
@@ -358,7 +360,8 @@ const tune = async () => {
 // ===== --report：職業別に回して、エリアを抜けた時間と節目のLVを並べる =====
 // 初期職10 × seed 2通り
 const report = () => {
-  const classes = ['戦士', '槍使い', '格闘家', '盗賊', '弓使い', '銃士', '魔法使い', '呪術師', '僧侶', '薬師']
+  // ★職業の一覧は jobs.js から読む（直書きしていて、職業を足したときに漏れた）
+  const classes = jobsLib.START_CLASSES
   const seeds = [11, 12]
   const marks = [3, 7, 14, 30, 90, 180, 270, 365].filter(x => x <= HOURS)
   console.log(`エリアの③を倒した時間（目安 ${AREA_HOUR.join('/')}）／節目の時間のLV／ClassLV30の時間／365時間目のGold`)
@@ -386,7 +389,8 @@ const statValue = async () => {
   const { statsOf } = await import(B + 'v2/lib/enemies.js')
   const { slotsOf } = await import(B + 'v2cap/lib/loadout.js')
   const { skillsOf } = await import(B + 'v2cap/lib/skills.js')
-  const classes = ['戦士', '槍使い', '格闘家', '盗賊', '弓使い', '銃士', '魔法使い', '呪術師', '僧侶', '薬師']
+  // ★職業の一覧は jobs.js から読む。--only 剣士 のように一部だけも測れる（重みは職業ごとに決まるので、ほかの職業と一緒でなくてよい）
+  const classes = arg('only', null) ? String(arg('only')).split(',') : jobsLib.START_CLASSES
   const checks = String(arg('areas', '3,6,9,12')).split(',').map(Number)
   const n = Number(arg('n', 500))
   const GEAR = ['str', 'dex', 'agi', 'int_stat', 'vit']
