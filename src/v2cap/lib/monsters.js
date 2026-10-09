@@ -19,16 +19,45 @@
 // ⚠名前は全部のエリアで重ならないこと（サーバーの v2cap_enemies は「名前＋場所」が主キー。
 //   同じ敵が②と③に出るのは場所違いなのでよい）
 // ============================================================
-import { AREAS_SORTED, ENEMY_SKILLS as S } from '../../v2/lib/enemies.js'
+import { AREAS_SORTED, ENEMY_SKILLS as V2_SKILLS } from '../../v2/lib/enemies.js'
+
+// ===== 敵の技 =====
+// 今のⅡの技（src/v2/lib/enemies.js）を土台に、この版だけの状態異常を足したもの。
+// ⚠今のⅡの ENEMY_SKILLS は共有なので**書き換えない**（ここで写しを作る）
+// ★2026-10-10 ユーザー決定（火傷・封印・恐怖。割り当てと確率は案のまま承認）：
+//   ・火傷 … 火の技に付ける（名前どおりの技にだけ付ける決まり）。どのエリアで使われても付く
+//   ・封印 … 新しい技「封印の呪文」（攻撃しない）。魔女・ワイト・司書など
+//   ・恐怖 … 新しい技「咆哮」（攻撃しない・先に動く）。大型の獣・竜のボスなど。「威嚇の叫び」には付けない
+export const ENEMY_SKILLS = {
+  ...V2_SKILLS,
+  かえんだん:   { ...V2_SKILLS.かえんだん,   ail:{ key:'burn', chance:30 } },
+  ようがんけん: { ...V2_SKILLS.ようがんけん, ail:{ key:'burn', chance:30 } },
+  炎獄の審判:   { ...V2_SKILLS.炎獄の審判,   ail:{ key:'burn', chance:50 } },
+  深淵咆哮:     { ...V2_SKILLS.深淵咆哮,     ail:{ key:'fear', chance:50 } },
+  // 「かみつく」と同じ強さで、出血の代わりに火傷（ヘルハウンド・ケルベロス）
+  ほのおのきば: { name:'炎の牙',     kind:'phys', mult:1.5, proc:85, mp:4, ail:{ key:'burn', chance:25 } },
+  ふういん:     { name:'封印の呪文', kind:'buff', proc:85, mp:8, ail:{ key:'seal', chance:30 } },
+  ほうこう:     { name:'咆哮',       kind:'buff', proc:90, mp:7, ail:{ key:'fear', chance:50 }, priority:1 },
+}
+const S = ENEMY_SKILLS
+// 今のⅡの技 → この版の技（keep で持ってくる敵の技を差し替える）
+const SAME = new Map(Object.keys(V2_SKILLS).map(k => [V2_SKILLS[k], S[k]]))
 
 const V2 = new Map(AREAS_SORTED.flatMap(a => [...a.enemies, ...(a.timed || []), ...(a.rares || []), a.boss]).map(e => [e.name, e]))
 // 今のⅡの敵を使う。名前を変えたものは改名前の名前で引く（技・配分・物理か魔法か・時間帯はそのまま）
+// ★技はこの版の写し（S）へ差し替える＝今のⅡから持ってきた敵の火炎弾などにも火傷が付く（今のⅡの敵そのものは変わらない）
 const keep = (name, old = name) => {
   const e = V2.get(old)
   if (!e) throw new Error(`今のⅡに ${old} がいない`)
-  return { name, kind: e.kind, dist: { ...e.dist }, skills: e.skills, ...(e.band ? { band: e.band } : {}) }
+  return { name, kind: e.kind, dist: { ...e.dist }, skills: e.skills.map(s => SAME.get(s) || s), ...(e.band ? { band: e.band } : {}) }
 }
 const mk = (name, kind, dist, skills, band) => ({ name, kind, dist, skills, ...(band ? { band } : {}) })
+// keep した敵の技を足す（at＝何番目に入れるか）・入れ替える
+const withSkill = (e, skill, at) => ({ ...e, skills: [...e.skills.slice(0, at), skill, ...e.skills.slice(at)] })
+const swapSkill = (e, from, to) => {
+  if (!e.skills.includes(from)) throw new Error(`${e.name} は ${from.name} を持っていない`)
+  return { ...e, skills: e.skills.map(s => (s === from ? to : s)) }
+}
 
 // ===== 配分のひな形（合計100）=====
 const STURDY = { hp:34, mp:4, str:20, dex:9, agi:6, int_stat:3, vit:21, luk:3 }    // 硬い物理（ミミック・カメなど）
@@ -47,7 +76,7 @@ const NEW = Object.fromEntries([
   mk('スパークリザード', 'mag', { hp:26, mp:10, str:3, dex:13, agi:20, int_stat:23, vit:2, luk:3 }, [S.でんげき, S.すばやくなる]), // 元：断崖のコンドル
   mk('火吹きトカゲ', 'mag', { hp:30, mp:9, str:3, dex:12, agi:12, int_stat:28, vit:3, luk:3 }, [S.かえんだん, S.まりょくため], '昼'), // 元：陽炎のケルベロス
   mk('鬼火', 'mag', { hp:24, mp:12, str:2, dex:13, agi:18, int_stat:27, vit:2, luk:2 }, [S.かえんだん, S.すばやくなる], '晩'),          // 元：熾火のワイバーン
-  mk('ケルベロス', 'phys', { hp:38, mp:6, str:21, dex:11, agi:13, int_stat:3, vit:5, luk:3 }, [S.かみつく, S.さけび, S.ちからため]),  // 元：イフリートロード（レア）
+  mk('ケルベロス', 'phys', { hp:38, mp:6, str:21, dex:11, agi:13, int_stat:3, vit:5, luk:3 }, [S.ほのおのきば, S.さけび, S.ちからため]),  // 元：イフリートロード（レア）。10-10 かみつく→炎の牙
   { ...keep('イフリートロード'), band: '昼' },                                                              // 元：サラマンダーロード（中身は今のⅡのイフリートロード）
   mk('カミツキガメ', 'phys', STURDY, [S.かみつく, S.かたくなる], '昼'),                                      // 元：陽だまりのオオヘビ
   mk('クリスタルビートル', 'phys', { hp:32, mp:4, str:20, dex:9, agi:8, int_stat:3, vit:21, luk:3 }, [S.たいあたり, S.かたくなる], '朝'), // 元：曙光のクリスタルゴーレム
@@ -63,27 +92,27 @@ const NEW = Object.fromEntries([
   mk('鉄鋏ヨロイガニ', 'phys', BOSS_TANK, [S.ほねきり, S.しおのやり, S.かたくなる, S.じこさいせい]),
   mk('海賊船長ガルシオ', 'phys', BOSS_FAST, [S.だましうち, S.略奪, S.ちからため, S.さけび]),
   mk('砂地獄アントリオン', 'phys', BOSS_TANK, [S.かみつく, S.すなあらし, S.まるのみ, S.かたくなる]),
-  mk('ミイラ大神官', 'mag', BOSS_MAG, [S.すなあらし, S.きょうきのぜっきょう, S.まりょくため, S.じこさいせい]),
-  mk('岩砕きグリズリー', 'phys', BOSS_PHYS, [S.ひっかく, S.じわれ, S.ちからため, S.じこさいせい]),
+  mk('ミイラ大神官', 'mag', BOSS_MAG, [S.すなあらし, S.ふういん, S.きょうきのぜっきょう, S.まりょくため, S.じこさいせい]),
+  mk('岩砕きグリズリー', 'phys', BOSS_PHYS, [S.ほうこう, S.ひっかく, S.じわれ, S.ちからため, S.じこさいせい]),
   mk('峠守ギガトロール', 'phys', BOSS_TANK, [S.こんぼう, S.じわれ, S.ちからため, S.じこさいせい]),
   mk('妖蛾ポイズンモス', 'mag', BOSS_MAG, [S.どくのきり, S.どくのほうし, S.すばやくなる, S.まりょくため]),
-  mk('霧魔女ミルヴァ', 'mag', BOSS_MAG, [S.どくのきり, S.きょうきのぜっきょう, S.まりょくため, S.じこさいせい]),
-  mk('氷牙マンモス', 'phys', BOSS_TANK, [S.たいあたり, S.かみつく, S.かたくなる, S.じこさいせい]),
+  mk('霧魔女ミルヴァ', 'mag', BOSS_MAG, [S.どくのきり, S.ふういん, S.きょうきのぜっきょう, S.まりょくため, S.じこさいせい]),
+  mk('氷牙マンモス', 'phys', BOSS_TANK, [S.ほうこう, S.たいあたり, S.かみつく, S.かたくなる, S.じこさいせい]),
   mk('晶獣グラキエス', 'mag', BOSS_MAG, [S.つらら, S.まりょくため, S.かたくなる, S.じこさいせい]),
   mk('妖獣ヌエ', 'mag', BOSS_MAG, [S.でんげき, S.きょうきのぜっきょう, S.まりょくため, S.すばやくなる]),
   mk('雷槌ギガース', 'phys', BOSS_PHYS, [S.こんぼう, S.じわれ, S.ちからため, S.じこさいせい]),
   mk('岩甲亀ヴォルカン', 'phys', BOSS_TANK, [S.ようがんけん, S.たいあたり, S.かたくなる, S.じこさいせい]),
-  mk('溶岩竜ラヴァウルム', 'phys', BOSS_PHYS, [S.ようがんけん, S.かみつく, S.ちからため, S.じこさいせい]),
+  mk('溶岩竜ラヴァウルム', 'phys', BOSS_PHYS, [S.ほうこう, S.ようがんけん, S.かみつく, S.ちからため, S.じこさいせい]),
   mk('沼主ガヴィアル', 'phys', BOSS_TANK, [S.かみつく, S.まるのみ, S.かたくなる, S.じこさいせい]),
-  mk('沼呪師ザルグ', 'mag', BOSS_MAG, [S.どくのきり, S.きょうきのぜっきょう, S.まりょくため, S.じこさいせい]),
+  mk('沼呪師ザルグ', 'mag', BOSS_MAG, [S.どくのきり, S.ふういん, S.きょうきのぜっきょう, S.まりょくため, S.じこさいせい]),
   mk('掘削機兵ドリラー', 'phys', BOSS_TANK, [S.じわれ, S.いわなげ, S.かたくなる, S.ちからため]),
   mk('奈落蜘蛛アラクネ', 'phys', BOSS_FAST, [S.どくばり, S.つるのむち, S.ほねきり, S.すばやくなる]),
   mk('空鯨ネブラ', 'phys', BOSS_TANK, [S.たいあたり, S.まるのみ, S.かたくなる, S.じこさいせい]),
   mk('天騎士長セレスト', 'phys', BOSS_PHYS, [S.そうてんとつげき, S.ちからため, S.かたくなる, S.じこさいせい]),
   mk('古代機兵ゼクス', 'phys', BOSS_TANK, [S.そうてんとつげき, S.いわなげ, S.かたくなる, S.じこさいせい]),
-  mk('大司書ノクトゥア', 'mag', BOSS_MAG, [S.ほしくず, S.しんえんのめ, S.まりょくため, S.じこさいせい]),
+  mk('大司書ノクトゥア', 'mag', BOSS_MAG, [S.ほしくず, S.ふういん, S.しんえんのめ, S.まりょくため, S.じこさいせい]),
   mk('大海月ルミナ', 'mag', BOSS_MAG, [S.でんげき, S.どくのきり, S.まりょくため, S.じこさいせい]),
-  mk('深海魔女キルケ', 'mag', BOSS_MAG, [S.しんえんのめ, S.きょうきのぜっきょう, S.まりょくため, S.じこさいせい]),
+  mk('深海魔女キルケ', 'mag', BOSS_MAG, [S.しんえんのめ, S.ふういん, S.きょうきのぜっきょう, S.まりょくため, S.じこさいせい]),
 ].map(e => [e.name, e]))
 
 // ===== エリアごとの20体（並び＝ユーザーの一覧の順）=====
@@ -313,7 +342,7 @@ export const AREA_ROSTERS = [
       NEW['アイスエルク'],
       keep('樹氷精', '白光の樹氷精'),
       keep('スノーハーピー', '白光のスノーハーピー'),
-      keep('極夜ワイト', '極夜のワイト'),
+      withSkill(keep('極夜ワイト', '極夜のワイト'), S.ふういん, 1),
       keep('フロストリッチ', '極夜のリッチ'),
     ],
     rares: [
@@ -321,7 +350,7 @@ export const AREA_ROSTERS = [
       keep('グレイシアドラゴン'),
       keep('ブリザードウルフ'),
       keep('アイスドライアド'),
-      keep('ワイトキング'),
+      withSkill(keep('ワイトキング'), S.ふういん, 1),
     ],
     bosses: [
       NEW['氷牙マンモス'],
@@ -365,7 +394,7 @@ export const AREA_ROSTERS = [
       keep('溶岩ゴーレム'),
       keep('ファイアドレイク'),
       keep('マグマスライム', '溶岩スライム'),
-      keep('ヘルハウンド', '火口のヘルハウンド'),
+      swapSkill(keep('ヘルハウンド', '火口のヘルハウンド'), S.かみつく, S.ほのおのきば),
       keep('ファイアインプ', '燃えさかるインプ'),
     ],
     timed: [
@@ -381,7 +410,7 @@ export const AREA_ROSTERS = [
       NEW['ケルベロス'],
       keep('ブレイズバット'),
       NEW['イフリートロード'],
-      keep('アークデーモン'),
+      withSkill(keep('アークデーモン'), S.ほうこう, 0),
     ],
     bosses: [
       NEW['岩甲亀ヴォルカン'],
@@ -513,7 +542,7 @@ export const AREA_ROSTERS = [
     normals: [
       keep('クラーケン', '深淵のクラーケン'),
       keep('リヴァイアサン幼体', '海淵のリヴァイアサン幼体'),
-      keep('シーウィッチ', '冥暗のシーウィッチ'),
+      withSkill(keep('シーウィッチ', '冥暗のシーウィッチ'), S.ふういん, 1),
       keep('メガロドン', '深海のメガロドン'),
       keep('ダイオウイカ', '海溝のダイオウイカ'),
       keep('アビスマーマン', '冥暗のマーマン'),

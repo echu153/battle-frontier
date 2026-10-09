@@ -31,6 +31,7 @@ const level = await import(B + 'v2cap/lib/level.js')
 const jobsLib = await import(B + 'v2cap/lib/jobs.js')
 const { statsAt, effectPct } = await import(B + 'v2cap/lib/gear.js')
 const { toFighter, totalStats } = await import(B + 'v2cap/lib/loadout.js')
+const { CAP_RULES } = await import(B + 'v2cap/lib/rules.js')
 const { pickEncounter, rollRewards, nextBossRate, openUntilOf, clearSpot } = await import(B + 'v2cap/lib/sortie.js')
 const { LAST_SPOT, AREA_LIST, toFighter: enemyFighter, stdPowerAt } = areas
 const { applyExp, bodyPowerAt, totalExpTo, POINT_UNIT, totalPointsTo } = level
@@ -386,7 +387,6 @@ const report = () => {
 //   ③のボスに勝率50%になるボスの強さ（本物の何倍か）が何%上がるか。エリア3/6/9/12の平均
 //   ★いちばん左の「強さ」は、同じステの職業どうしの強さの比べ（平均を100%）
 const statValue = async () => {
-  const { statsOf } = await import(B + 'v2/lib/enemies.js')
   const { slotsOf } = await import(B + 'v2cap/lib/loadout.js')
   const { skillsOf } = await import(B + 'v2cap/lib/skills.js')
   // ★職業の一覧は jobs.js から読む。--only 剣士 のように一部だけも測れる（重みは職業ごとに決まるので、ほかの職業と一緒でなくてよい）
@@ -404,14 +404,14 @@ const statValue = async () => {
     return Object.fromEntries(STAT_KEYS.map(k => [k, body[k] + job[k]
       + (GEAR.includes(k) ? Math.round(gear / GEAR.length) : 0)]))
   }
+  // ★この版の決まり（CAP_RULES）は出撃と同じく味方・敵の両方に混ぜる（敵は出撃と同じ enemyFighter で作る）
   const fighter = (cls, stats) => ({
-    name: 'me', cls, kind: attackKindOf(cls), noClassBonus: true, stats, taken: null, enchants: [], evolutions: [],
+    ...CAP_RULES,
+    name: 'me', cls, kind: attackKindOf(cls), stats, taken: null, enchants: [], evolutions: [],
     slots: slotsOf(typicalSet(cls, skillsOf(cls).map(s => s.name), stats.mp), cls),
   })
   const foeOf = (boss, m) => ({
-    name: boss.name, kind: boss.kind,
-    stats: statsOf({ ...boss, power: Math.max(1, Math.round(areas.enemyPowerOf(boss) * m)) }),
-    slots: (boss.skills || []).map(s => ({ skill: s, uses: 8 })), taken: null, boss: true,
+    ...enemyFighter(boss, 8, Math.max(1, Math.round(areas.enemyPowerOf(boss) * m))), boss: true,
   })
   const winRate = (me, foe) => {
     let w = 0

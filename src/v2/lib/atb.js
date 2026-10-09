@@ -29,7 +29,7 @@ import {
   tickBleedAfterAct, BEAST_FORMS,
 } from './battle.js'
 import { STAT_KEYS } from './stats.js'
-import { AIL_KEYS, AIL_LABEL, poisonTickOf, hasAilment, SILENCE_PROC } from './ailments.js'
+import { AIL_KEYS, AIL_LABEL, poisonTickOf, burnTickOf, hasAilment, procCutOf, isSealed, usesMp } from './ailments.js'
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
 // 秒の比較に使うごく小さい余裕。実時間を足し込むと 30 が 30.000000000000004 になるため、
@@ -86,7 +86,7 @@ export const PRIORITY_CUT = 20
 //   （needOf は「発動率が低いほど重い」形なので、発動率を下げるのと同じ式に通せばよい）
 export const needFor = (side, skill) => {
   const cut = Math.min(60, PRIORITY_CUT * Math.max(0, priorityOf(side, skill)))
-  return Math.max(20, Math.round(needOf(skill, procBonusOf(side) - (hasAilment(side.ail, 'silence') ? SILENCE_PROC : 0)) * (1 - cut / 100)))
+  return Math.max(20, Math.round(needOf(skill, procBonusOf(side) - procCutOf(side.ail)) * (1 - cut / 100)))
 }
 
 // ===== 防御（全職共通・スキルではない）=====
@@ -113,7 +113,9 @@ export const buffSecOf = (totalPct, isDebuff = false) =>
 
 // ===== 状態異常（ATB用の別表）=====
 export const AIL_SEC  = { paralyze:5, healCut:15, bleed:20, poison:30, slow:30, silence:20,
-  blind:20, curse:20, frenzy:15, weaken:20 }
+  blind:20, curse:20, frenzy:15, weaken:20,
+  // ★2026-10-10 の3種（v2cap のユーザー指定）。1ターン＝TICK_SEC で読み替えた長さ
+  burn:15, seal:10, fear:15 }
 export const TICK_SEC = 5      // 出血・毒・継続回復が刻む間隔
 export const MAX_DT   = 0.25   // タブを裏に回したときに一気に進まないための上限（秒）
 export const MAX_SEC  = 180    // これを超えたら引き分け
@@ -243,6 +245,11 @@ const tickDot = (side, log, foe = null) => {
     side.hp -= d
     log.push({ side: side.name, type: 'ailTick', ail: AIL_LABEL.poison, damage: d })
   }
+  if (a.burn && side.hp > 0) {
+    const d = Math.max(1, Math.floor(burnTickOf(a.burn, side.base.hp) * boost))
+    side.hp -= d
+    log.push({ side: side.name, type: 'ailTick', ail: AIL_LABEL.burn, damage: d })
+  }
   if (side.hp > 0) tickRegen(side, log, foe)
 }
 
@@ -251,6 +258,7 @@ const tickDot = (side, log, foe = null) => {
 export const canUse = (side, idx) => {
   const s = side.slots[idx]
   if (!s?.skill || s.uses <= 0) return false
+  if (isSealed(side.ail) && usesMp(s.skill)) return false   // 封印中はMPを使う技が出せない
   if (s.skill.mpPct) return side.mp > 0
   return mpCostOf(side, s.skill) <= side.mp
 }

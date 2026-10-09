@@ -23,7 +23,7 @@
 // ============================================================
 
 export const AIL_KEYS = ['bleed', 'poison', 'slow', 'paralyze', 'healCut', 'silence',
-  'blind', 'curse', 'frenzy', 'weaken']
+  'blind', 'curse', 'frenzy', 'weaken', 'burn', 'seal', 'fear']
 
 // 出血（旧版準拠）
 export const BLEED_MAX_STACKS = 5
@@ -74,9 +74,31 @@ export const FRENZY_AIL_TURNS = 3
 export const WEAKEN_TURNS  = 4
 export const WEAKEN_DMG_PCT = 15    // 与えるダメージ-%
 
+// ★2026-10-10 追加の3種（「レベルキャップあり」版 src/v2cap のユーザー指定）。今のⅡには撒く技が無い
+//   ・火傷：ターン終わりに最大HPの2%・回復量-20%・3ターン。かかり直すと残りを3へ戻す（毒と違って入る）
+//   ・封印：MPを使う技が出せない＝通常攻撃になる（MP0の技は出せる）・2ターン
+//   ・恐怖：スキルの発動率-20%・3ターン（サイレンスと同じ効き方）
+export const BURN_TURNS    = 3
+export const BURN_RATE     = 0.02   // 最大HPに対する割合
+export const BURN_HEAL_PCT = 20     // 回復量-%
+export const BURN_CAP_RATE = 0.4    // 1刻みの上限＝付けた側の攻撃力 × これ（毒の上限と同じ考え方・割合が2/3なので上限も2/3）
+export const burnTickOf = (burn, maxHp) => {
+  const raw = maxHp * (burn?.rate ?? BURN_RATE)
+  return Math.max(1, Math.floor(Math.min(raw, burn?.cap || Infinity)))
+}
+export const SEAL_TURNS = 2
+export const FEAR_TURNS = 3
+export const FEAR_PROC  = 20
+// ★受けるたびに次のかかりやすさが下がる状態異常（2026-10-10 ユーザー指定・v2cap だけ）
+//   その戦闘でかかった回数ぶん、確率に AIL_DIMINISH_MULT を掛ける（100%→80%→64%…）。
+//   外れたぶんは数えない。キーごとに別々に数える。受ける側の fighter.ailDiminish が true のときだけ効く
+export const AIL_DIMINISH_KEYS = ['paralyze', 'seal']
+export const AIL_DIMINISH_MULT = 0.8
+
 export const AIL_LABEL = {
   bleed: '出血', poison: '毒', slow: '鈍足', paralyze: '麻痺', healCut: '回復阻害', silence: 'サイレンス',
   blind: '暗闇', curse: '呪い', frenzy: '狂乱', weaken: '衰弱',
+  burn: '火傷', seal: '封印', fear: '恐怖',
 }
 
 // 状態異常の入れ物。side.ail に持たせる
@@ -122,6 +144,16 @@ export const inflict = (ail, key, opt = {}) => {
     case 'weaken':
       ail.weaken = { turns: opt.turns || WEAKEN_TURNS }
       return true
+    // 2026-10-10 の3種。どれも数え直しの上書き（火傷の上限 cap は付けた側の攻撃力から）
+    case 'burn':
+      ail.burn = { turns: opt.turns || BURN_TURNS, rate: BURN_RATE, cap: opt.cap }
+      return true
+    case 'seal':
+      ail.seal = { turns: opt.turns || SEAL_TURNS }
+      return true
+    case 'fear':
+      ail.fear = { turns: opt.turns || FEAR_TURNS }
+      return true
     case 'paralyze':
       ail.paralyze = { turns: PARALYZE_TURNS }
       return true
@@ -149,9 +181,19 @@ export const ailTakenMult = (ail) => (hasAilment(ail, 'curse') ? 1 + CURSE_TAKEN
 export const ailDealMult = (ail) => (hasAilment(ail, 'weaken') ? 1 - WEAKEN_DMG_PCT / 100 : 1)
 // 狂乱：出る技がランダムになるか
 export const isFrenzied = (ail) => hasAilment(ail, 'frenzy')
-// 回復阻害の倍率（1.0＝阻害なし）
+// 回復量の倍率（1.0＝下がっていない）。回復阻害と火傷は掛け合わせる
 export const healMultOf = (ail) =>
-  hasAilment(ail, 'healCut') ? Math.max(0, 1 - (ail.healCut.pct || 0) / 100) : 1
+  (hasAilment(ail, 'healCut') ? Math.max(0, 1 - (ail.healCut.pct || 0) / 100) : 1)
+  * (hasAilment(ail, 'burn') ? 1 - BURN_HEAL_PCT / 100 : 1)
+// 封印：MPを使う技が出せない
+export const isSealed = (ail) => hasAilment(ail, 'seal')
+export const usesMp = (skill) => !!skill && (!!skill.mpPct || (skill.mp || 0) > 0)
+// 発動率から引く%（サイレンスと恐怖。両方なら足す）
+export const procCutOf = (ail) =>
+  (hasAilment(ail, 'silence') ? SILENCE_PROC : 0) + (hasAilment(ail, 'fear') ? FEAR_PROC : 0)
+// 受けるたびに下がるぶんを掛けた確率。times … その戦闘でそのキーにかかった回数
+export const diminishedChance = (pct, key, times = {}) =>
+  AIL_DIMINISH_KEYS.includes(key) ? pct * AIL_DIMINISH_MULT ** (times[key] || 0) : pct
 // このターン行動できないか。麻痺は「見たら1ターン消費する」ので判定と同時に減らす
 export const consumeParalyze = (ail) => {
   if (!hasAilment(ail, 'paralyze')) return false
@@ -181,8 +223,14 @@ export const tickAilments = (ail, { maxHp }) => {
     ail.poison.turns -= 1
     if (ail.poison.turns <= 0) delete ail.poison
   }
+  // 火傷も毒と同じくターン終わりに刻む（毒と重なってよい）
+  if (ail.burn?.turns > 0) {
+    out.push({ key: 'burn', damage: burnTickOf(ail.burn, maxHp) })
+    ail.burn.turns -= 1
+    if (ail.burn.turns <= 0) delete ail.burn
+  }
   // ターン数だけ持つもの
-  for (const k of ['slow', 'healCut', 'silence', 'blind', 'curse', 'frenzy', 'weaken']) {
+  for (const k of ['slow', 'healCut', 'silence', 'blind', 'curse', 'frenzy', 'weaken', 'seal', 'fear']) {
     if (ail[k]?.turns > 0) {
       ail[k].turns -= 1
       if (ail[k].turns <= 0) delete ail[k]

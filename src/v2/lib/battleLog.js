@@ -118,6 +118,9 @@ export const buildBattleLog = (r, you, foe) => {
       out.push({ text:`💢 ${actor}は倒れずに踏み止まった！`, color:'#ffcc44' })
     } else if (l.type === 'paralyzed') {
       out.push({ text:`⚡ ${actor}は麻痺して動けない！`, color:'#ffdd44' })
+    } else if (l.type === 'sealed') {
+      // 封印：このあと通常攻撃の行が続く
+      out.push({ text:`🔒 ${actor}は封印されて技が出せない！`, color: LOG_COLOR.ail })
     } else if (l.type === 'reflect') {
       out.push({ text:`🔮 ${actor}はダメージを${l.damage.toLocaleString()}跳ね返した！`, color:'#88ddff' })
     } else if (l.type === 'enCut') {

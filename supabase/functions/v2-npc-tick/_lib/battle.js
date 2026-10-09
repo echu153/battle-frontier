@@ -23,7 +23,8 @@ import { classBonusOf } from './classBonus.js'
 import {
   createAilments, inflict, tickAilments, ailStatPct, healMultOf, consumeParalyze, hasAilment, AIL_LABEL, AIL_KEYS,
   ailAccPct, ailTakenMult, ailDealMult, isFrenzied,
-  POISON_CAP_RATE, BLEED_CAP_RATE, tickBleed, SILENCE_PROC,
+  POISON_CAP_RATE, BLEED_CAP_RATE, BURN_CAP_RATE, tickBleed,
+  isSealed, usesMp, procCutOf, diminishedChance, AIL_DIMINISH_KEYS,
 } from './ailments.js'
 import { collectEnchants, inflictChance } from './enchant.js'
 import {
@@ -272,6 +273,10 @@ export const createSide = (fighter, band = null) => {
     // ===== エンチャント・状態異常 =====
     en,
     ail: createAilments(),
+    // ★ailDiminish … 「レベルキャップあり」版（src/v2cap）は麻痺・封印を受けるたび次の確率が下がる
+    //   （2026-10-10 ユーザー決定）。渡さなければ今のⅡと同じ。ailTimes はその戦闘でかかった回数
+    ailDiminish: !!fighter.ailDiminish,
+    ailTimes: {},
     enStacks: {},                        // 当てるたびに積むスタック（ステ名→合計%）
     enCut: en.startCut,                  // スケルトン：次に受けるダメージを軽減（受けるまで消えない）
     reflected: false,                    // ウラノス：跳ね返しは最初の1回だけ
@@ -303,13 +308,16 @@ export const mpCostOf = (side, skill) => {
 }
 
 // いま撃てる枠を ptr から探す。見つからなければ null（＝通常攻撃）
+// ★封印中はMPを使う技を飛ばす（MP0の技は出せる）
 const findSlot = (side) => {
   const n = side.slots.length
+  const sealed = isSealed(side.ail)
   for (let i = 0; i < n; i++) {
     const idx = (side.ptr + i) % n
     const s = side.slots[idx]
     if (!s || !s.skill) continue
     if (s.uses <= 0) continue
+    if (sealed && usesMp(s.skill)) continue
     // MP不足の枠は飛ばす（使用回数は減らない）。割合消費はMPが1でも残っていれば撃てる
     if (s.skill.mpPct) { if (side.mp <= 0) continue }
     else if (s.skill.mp > side.mp) continue
@@ -444,18 +452,24 @@ const applyDebuff = (foe, table, log) => {
 // me は入れる側。武器の進化は**入れる側の付与率＋**と**受ける側の抵抗**の両方が効く
 const tryInflict = (me, foe, a, rng, log) => {
   const base = a.chance + (me?.evo?.ail?.rate || 0)
-  const pct = inflictChance(base, foe.en, a.key)
+  const raw = inflictChance(base, foe.en, a.key)
     - (foe?.evo?.ail?.resist || 0) + (foe?.evo?.ail?.weak || 0)
     - (foe?.pa?.ailResist || 0)   // ★武僧：状態異常が効きづらい
+  // ★v2cap：麻痺・封印は受けた回数ぶん下がる（抵抗を引いたあとの確率に掛ける）
+  const pct = foe.ailDiminish ? diminishedChance(raw, a.key, foe.ailTimes) : raw
   if (!roll(pct, rng)) return
   // ★隠身（暗殺者）：自分が付ける出血はスタック上限が伸びる
   // ★ドットの1刻み上限は**付けた側の攻撃力**から決める（HPが桁違いの相手で壊れないように）
   const eAtk = liveStats(me, true)
   const atk = Math.max(eAtk.str || 0, eAtk.int_stat || 0)
   const cap = a.key === 'poison' ? atk * POISON_CAP_RATE
-    : a.key === 'bleed' ? atk * BLEED_CAP_RATE : undefined
+    : a.key === 'bleed' ? atk * BLEED_CAP_RATE
+    : a.key === 'burn' ? atk * BURN_CAP_RATE : undefined
   const opt = { ...a, cap, ...(me?.pa?.bleedMax ? { max: me.pa.bleedMax } : {}) }
-  if (inflict(foe.ail, a.key, opt)) log.push({ side: foe.name, type: 'ailment', ail: AIL_LABEL[a.key] })
+  if (inflict(foe.ail, a.key, opt)) {
+    if (foe.ailDiminish && AIL_DIMINISH_KEYS.includes(a.key)) foe.ailTimes[a.key] = (foe.ailTimes[a.key] || 0) + 1
+    log.push({ side: foe.name, type: 'ailment', ail: AIL_LABEL[a.key] })
+  }
 }
 
 // 攻撃が当たったときのエンチャント。状態異常の付与と、積み上がるステータス補正
@@ -644,22 +658,32 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   let idx = opt.idx !== undefined ? opt.idx : findSlot(me)
   // ★狂乱：自分では技を選べない。撃てる攻撃スキルからランダムに出る
   //   狂戦士の「狂心」（自分でなる）と、相手にかけられる状態異常の「狂乱」は同じ状態
+  const sealed = isSealed(me.ail)
   if (me.frenzy?.turns > 0 || isFrenzied(me.ail)) {
     const wild = me.slots
       .map((sl, i) => ({ sl, i }))
       .filter(({ sl }) => sl?.skill && sl.uses > 0 && (sl.skill.kind === 'phys' || sl.skill.kind === 'mag')
+        && !(sealed && usesMp(sl.skill))
         && (sl.skill.mpPct ? me.mp > 0 : mpCostOf(me, sl.skill) <= me.mp))
     if (wild.length) idx = wild[Math.floor(rng() * wild.length)].i
   }
+  // ★封印：MPを使う技は出せない。外から枠を指定されても（opt.idx）通常攻撃へ落とす
+  if (idx !== null && sealed && usesMp(me.slots[idx]?.skill)) idx = null
   const slot = idx === null ? null : me.slots[idx]
   const skill = slot?.skill || null
+  // 封印のせいで技が出せないときは、通常攻撃の前に1行出す（MPが尽きただけのときは出さない）
+  //   （findSlot と同じ見方：封印が無ければ撃てた枠があるか）
+  if (!skill && sealed && me.slots.some(s => s?.skill && s.uses > 0 && usesMp(s.skill)
+    && (s.skill.mpPct ? me.mp > 0 : s.skill.mp <= me.mp))) {
+    log.push({ side: me.name, type: 'sealed' })
+  }
 
   // 発動判定。不発ならMPも使用回数も減らず、ポインタも進めない
   //   ★不発はバーサク・執行本能のスタックをリセットする
   // ★納刀（侍）：次に撃つスキルの発動率+・威力×。不発では消えない（撃てるまで構えたまま）
   const stance = skill ? me.stance : null
-  // ★サイレンス：スキルの発動率-20%（ATBでは atb.js が必要ゲージへ読み替える）
-  const silenced = hasAilment(me.ail, 'silence') ? SILENCE_PROC : 0
+  // ★サイレンス・恐怖：スキルの発動率-20%（ATBでは atb.js が必要ゲージへ読み替える）
+  const silenced = procCutOf(me.ail)
   if (skill && !opt.noProc && !roll(skill.proc + me.pa.procBonus + me.en.procBonus + me.evo.proc + (stance?.proc || 0) - silenced, rng)) {
     log.push({ side: me.name, type: 'misfire', skill: skill.name })
     me.rage = 0
@@ -938,6 +962,8 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   // ★補助スキルの状態異常。攻撃スキルは「当たったとき」だけだが、
   //   補助は当たり判定が無いので発動した時点で確率判定する（イカサマ・威圧など）
   if (skill.kind === 'buff' && skill.ail) {
+    // 状態異常だけの補助技（v2cap の封印の呪文・咆哮）は、外れても使ったことが分かるように1行出す
+    if (!spec) log.push({ side: me.name, type: 'buff', skill: skill.name })
     tryInflict(me, foe, { ...skill.ail, chance: skill.ail.chance * off }, rng, log)
   }
 }

@@ -5,7 +5,7 @@
 //   本体（LVアップの抽選で上がったステ）＋ クラスのステ（いまの職業・そのClassLVぶん）
 //   ＋ 装備（アイテムLVで強さが決まり、必要LVに足りないぶん効果が下がる）
 // さらに防具のメリット（重鎧＝受けるダメージ−3%／軽装＝AGI+5%・1部位ごと）が乗る。
-// ★職業補正は**一旦なし**（2026-10-09 ユーザー決定）＝ runBattle に noClassBonus を渡す。
+// ★職業補正は**一旦なし**（2026-10-09 ユーザー決定）＝ runBattle に noClassBonus を渡す（rules.js の CAP_RULES）。
 // ★武器は職業ごとに装備できる種類が決まっている。いまの職業で装備できない武器は
 //   （サーバーが外すはずだが）念のためここでも数えない
 // ★スキルセットは**職業ごと**（skill_sets[職業]）。使えるのはその職業と下位職の技だけ
@@ -15,6 +15,7 @@ import { ITEM_BY_ID, SLOTS } from './equipment.js'
 import { SKILL_BY_NAME, isPassive } from './skills.js'
 import { statsAt, effectPct, powerAt, armorEffects } from './gear.js'
 import { jobBonusStats, jobOf, canEquipType, attackKindOf, lineageOf } from './jobs.js'
+import { CAP_RULES } from './rules.js'
 
 const zero = () => Object.fromEntries(STAT_KEYS.map(k => [k, 0]))
 
@@ -96,7 +97,7 @@ export const toFighter = (profile, inventory) => {
     name: profile?.username || 'あなた',
     cls: profile?.class,
     kind: attackKindOf(profile?.class),   // 通常攻撃が物理か魔法か（今のⅡの名簿に無い職業があるので明示する）
-    noClassBonus: true,                   // ★職業補正は一旦なし（battle.js の createSide が見る）
+    ...CAP_RULES,                         // ★この版だけの決まり（職業補正なし・麻痺/封印の0.8倍）。battle.js の createSide が見る
     stats: bd.total,
     taken: bd.armor.takenMult !== 1 ? { phys: bd.armor.takenMult, mag: bd.armor.takenMult } : null,
     enchants: [],
