@@ -17,7 +17,9 @@ import { ITEM_BY_ID } from '../lib/equipment.js'
 //       装備できる武器種：両手剣・斧・鈍器・刀
 //       上がりやすいステータス：STR・VIT（jobs.js の mainStatsOf＝配分の高い2〜3種）
 //   ・スキルの一覧・クラスのステの数・パッシブは出さない（ステータス欄・スキルセットで見る）
-//   ・右に ClassLV と「転職する」（いまの職業は「いまのクラス」）。一次クラスはまだ就けないときだけ条件を出す
+//   ・名前の右に ClassLV（転職したことのないクラスも ClassLV1）。「転職する」は右下（いまの職業は「いまのクラス」）。
+//     一次クラスはまだ就けないときだけ条件を出す（2026-10-11 ユーザー指示）
+//   ・特徴の一言は、スキル名・ステータス名を書かずに特徴だけ（jobs.js の desc・2026-10-11 ユーザー指示）
 //   仕組み：いつでも無料・LVはそのまま・ClassLVは職業ごとに続きから・スキルセットは職業ごと（転職の確認に出す）
 // ============================================================
 const statText = (cls) => mainStatsOf(cls).map(k => STAT_DEFS[k]?.label || k).join('・')
@@ -73,24 +75,29 @@ export default function V2capTemple({ prof, inventory, onProfile }) {
               const isNow = c.id === prof.class
               const miss = missingReqOf(c.id, prof.jobs)
               return (
-                <div key={c.id} style={{ background:'#000818', border:`1px solid ${isNow ? '#ff88cc' : '#002244'}`, padding:'8px 10px', opacity: miss ? 0.55 : 1 }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px' }}>
-                    <span style={{ color: isNow ? '#ff88cc' : '#cfe2ff', fontSize:'14px', flex:1, minWidth:0 }}>{c.id}</span>
-                    {prof.jobs?.[c.id] && (
-                      <span style={{ color:'#ffcc00', fontSize:'10px' }}>ClassLV{job.lv}{job.lv >= jobMaxOf(c.id) ? '（上限）' : ''}</span>
-                    )}
-                    {isNow
-                      ? <span style={{ color:'#ff88cc', fontSize:'10px' }}>いまのクラス</span>
-                      : <button onClick={() => { setMsg(''); setConfirm(c.id) }} disabled={busy || !canBecome(c.id, prof.jobs)}
-                          style={miniBtn(miss ? '#62789a' : '#ff88cc')}>転職する</button>}
+                <div key={c.id} style={{ background:'#000818', border:`1px solid ${isNow ? '#ff88cc' : '#002244'}`, padding:'8px 10px', opacity: miss ? 0.55 : 1,
+                  display:'flex', flexDirection:'column' }}>
+                  {/* 名前の右に ClassLV（転職したことのないクラスも ClassLV1 と出す＝2026-10-11 ユーザー指示） */}
+                  <div style={{ display:'flex', alignItems:'baseline', gap:'8px', marginBottom:'4px', flexWrap:'wrap' }}>
+                    <span style={{ color: isNow ? '#ff88cc' : '#cfe2ff', fontSize:'14px' }}>{c.id}</span>
+                    <span style={{ color: prof.jobs?.[c.id] ? '#ffcc00' : TEXT.sub, fontSize:'11px' }}>
+                      ClassLV{job.lv}{job.lv >= jobMaxOf(c.id) && <span style={{ color:'#ff8844' }}> MAX</span>}
+                    </span>
                   </div>
                   <div style={{ color:'#9fb8d0', fontSize:'11px', lineHeight:1.6, marginBottom:'4px' }}>{classDescOf(c.id)}</div>
-                  <div style={{ fontSize:'11px', lineHeight:1.7 }}>
+                  <div style={{ fontSize:'11px', lineHeight:1.7, flex:1 }}>
                     <div><span style={{ color: TEXT.label }}>装備できる武器種：</span><span style={{ color:'#cfe2ff' }}>{weaponsOf(c.id).join('・')}</span></div>
                     <div><span style={{ color: TEXT.label }}>上がりやすいステータス：</span><span style={{ color:'#44ff88' }}>{statText(c.id)}</span></div>
                     {miss && (
                       <div style={{ color:'#ff8844' }}>条件：{reqText(c.id)}（いま{jobOf(prof.jobs, c.req.cls).lv}）</div>
                     )}
+                  </div>
+                  {/* 転職するは右下（2026-10-11 ユーザー指示）。いまのクラスはその印 */}
+                  <div style={{ display:'flex', justifyContent:'flex-end', marginTop:'6px' }}>
+                    {isNow
+                      ? <span style={{ color:'#ff88cc', fontSize:'10px', padding:'3px 0' }}>いまのクラス</span>
+                      : <button onClick={() => { setMsg(''); setConfirm(c.id) }} disabled={busy || !canBecome(c.id, prof.jobs)}
+                          style={miniBtn(miss ? '#62789a' : '#ff88cc')}>転職する</button>}
                   </div>
                 </div>
               )

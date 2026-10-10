@@ -366,11 +366,16 @@ test('神殿の「上がりやすいステータス」は配分の高い2〜3種
   assert.deepEqual(mainStatsOf('ない職業'), [])
 })
 
-test('【確定】キャラ作成のクラス選択に出す特徴の説明が、11職ぶんある（カードに収まる長さ）', () => {
+test('【確定】キャラ作成と神殿に出す特徴の説明が全職ぶんある（カードに収まる長さ）。スキル名・ステータス名は書かない', () => {
+  // 2026-10-11 ユーザー指示「説明文は具体的なスキル名やステータス名を記載しないで、どういった特徴があるのかだけを簡単にまとめて」
+  const skillNames = [...new Set(SKILLS.map(s => s.name))]
+  const statWords = STAT_KEYS.flatMap(k => [STAT_DEFS[k].label, STAT_DEFS[k].jp]).filter(Boolean)
   for (const c of CLASSES) {
     const d = classDescOf(c.id)
     assert.ok(d, `${c.id}の説明がある`)
     assert.ok(d.length <= 40, `${c.id}の説明は40字まで（${d.length}字）`)
+    for (const n of skillNames) assert.ok(!d.includes(n), `${c.id}の説明にスキル名「${n}」が入っている`)
+    for (const w of statWords) assert.ok(!d.includes(w), `${c.id}の説明にステータス名「${w}」が入っている`)
   }
 })
 
@@ -606,7 +611,8 @@ test('【確定】剣士（2026-10-09 ユーザー承認）：物理・刀／片
   assert.equal(attackKindOf('剣士'), 'phys')
   assert.deepEqual(weaponsOf('剣士'), ['刀', '片手剣', '両手剣'])
   assert.deepEqual(JOB_BONUS.剣士, { str:40, dex:32, agi:30, vit:15, hp:13, mp:10, luk:5 })
-  assert.equal(classDescOf('剣士'), 'STR・DEX・AGIがそろって伸びる剣の使い手。燕返しと兜割りで斬り崩す')
+  // 説明文は 2026-10-11 ユーザー指示「具体的なスキル名やステータス名を記載しないで」で書き直した（前は承認済みの「STR・DEX・AGIがそろって…燕返しと兜割りで斬り崩す」）
+  assert.equal(classDescOf('剣士'), '鋭い剣さばきで、攻めと身のこなしを両立する')
   assert.deepEqual(learnOrderOf('剣士').map(s => s.name), ['袈裟斬り', '燕返し', '兜割り', '一閃', '剣の構え'])
   const by = Object.fromEntries(learnOrderOf('剣士').map(s => [s.name, s]))
   assert.equal(by.燕返し.hits, 2)
