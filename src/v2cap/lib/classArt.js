@@ -7,13 +7,14 @@
 //       public/V2newjob/web/<名前>-m.webp・-f.webp（詳細の大きい絵・幅720）
 //       public/V2newjob/thumb/<名前>-m.webp・-f.webp（一覧の小さい絵・幅240）
 //   ・男女どちらを見せるかは画面で切り替え、端末で覚えておく
-// 名前の読み（ユーザーのファイル名から判断）：
-//   sensi＝戦士（斧の絵。もう一組の「戦士男・sennsionnna」は背景つき・大剣で作りが違うので使っていない＝ユーザーに確認中）
-//   sisai＝僧侶（白い法衣・杖と聖書の回復役。初期クラスで絵が無いのが僧侶だけなので僧侶に当てた＝ユーザーに確認中）
-// ★絵が無いクラス（剣士・一次クラス）は「イラスト準備中」。絵を足したら ART_BASE に足して `node tools/v2cap-art.mjs` を回す
+// 名前の読み（ユーザーのファイル名から判断・確かめ済み）：
+//   sisai＝僧侶（ユーザー「sisaiは僧侶でOK」）
+//   kensi＝剣士（ユーザー「戦士男とsennsionnnaは剣士用」→ ほかに合わせて kensiotoko.png・kensionna.png に改名した）
+// ★絵が無いクラス（一次クラス）は「イラスト準備中」。絵を足したら ART_BASE に足して `node tools/v2cap-art.mjs` を回す
 // ============================================================
 export const ART_BASE = {
   戦士: 'sensi',
+  剣士: 'kensi',
   槍使い: 'yaritukai',
   格闘家: 'kakutouka',
   盗賊: 'touzoku',
@@ -24,12 +25,16 @@ export const ART_BASE = {
   僧侶: 'sisai',
   薬師: 'yakusi',
 }
+// 背景つきの絵（ほかは透明な背景）。枠いっぱいに出す＝3:4 に合わせ、足りない左右は同じ絵をぼかして埋める（tools/v2cap-art.mjs）。
+// 透明な背景の版が来たら、元の絵を差し替えてここから外し、`node tools/v2cap-art.mjs --force` を回す
+export const ART_FULL = new Set(['剣士'])
 export const ART_GENDERS = [
   { key:'m', label:'男性', mark:'♂', color:'#66aaff', src:['otoko'] },
   { key:'f', label:'女性', mark:'♀', color:'#ff88bb', src:['onna', 'onnna'] },   // ユーザーのファイル名に onna と onnna の両方がある
 ]
 export const ART_DIR = '/V2newjob'
 export const hasArt = (cls) => !!ART_BASE[cls]
+export const isFullArt = (cls) => ART_FULL.has(cls)
 // 表示に使う絵の場所（無いクラスは null）。size は 'web'（詳細）か 'thumb'（一覧）
 export const artSrcOf = (cls, gender = 'm', size = 'web') => {
   const base = ART_BASE[cls]

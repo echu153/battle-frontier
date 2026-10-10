@@ -10,7 +10,7 @@ import {
 } from '../lib/jobs.js'
 import { passiveOf } from '../lib/skills.js'
 import { ITEM_BY_ID } from '../lib/equipment.js'
-import { ART_GENDERS, artSrcOf, hasArt } from '../lib/classArt.js'
+import { ART_GENDERS, artSrcOf, hasArt, isFullArt } from '../lib/classArt.js'
 import { useStored } from '../../v2/lib/prefs.js'
 
 // ============================================================
@@ -26,7 +26,7 @@ import { useStored } from '../../v2/lib/prefs.js'
 //   ・イラストは男女それぞれ（ユーザー「男女それぞれのイラストを用意してるから、良い感じに見えるようにして」）。
 //     対応表と軽い版の場所は src/v2cap/lib/classArt.js（作るのは tools/v2cap-art.mjs）。
 //     詳細はクラスの色の淡い光の背景＋足元の影に大きく、一覧はカードの左に小さく。「♂ 男性／♀ 女性」で切り替え・端末で覚えておく。
-//     絵が無いクラスは「イラスト準備中」
+//     背景つきの絵（剣士）は枠いっぱいに出す（光と影は絵の背景にまかせる）。絵が無いクラスは「イラスト準備中」
 //   仕組み：いつでも無料・LVはそのまま・ClassLVは職業ごとに続きから・スキルセットは職業ごと（詳細の画面に添えて出す）
 // ============================================================
 const statText = (cls) => mainStatsOf(cls).map(k => STAT_DEFS[k]?.label || k).join('・')
@@ -63,17 +63,22 @@ function ArtPanel({ cls, gender, onGender }) {
   const [failed, setFailed] = useState(false)
   useEffect(() => { setLoaded(false); setFailed(false) }, [src])
   const show = src && !failed
+  const full = isFullArt(cls)   // 背景つきの絵は枠いっぱい（足元の影・絵の影はつけない）
   return (
     <div style={ART_COL}>
       <div style={{ position:'relative', width:'100%', aspectRatio:'3 / 4', overflow:'hidden', background: glowOf(cls), border:`1px solid ${stageColorOf(cls)}55` }}>
         {/* 足元の影 */}
-        <div style={{ position:'absolute', left:'18%', right:'18%', bottom:'2%', height:'6%', borderRadius:'50%',
-          background:'radial-gradient(ellipse at center, rgba(0,0,0,0.75), rgba(0,0,0,0) 70%)' }} />
+        {!full && (
+          <div style={{ position:'absolute', left:'18%', right:'18%', bottom:'2%', height:'6%', borderRadius:'50%',
+            background:'radial-gradient(ellipse at center, rgba(0,0,0,0.75), rgba(0,0,0,0) 70%)' }} />
+        )}
         {show ? (
           <img src={src} alt={`${cls}（${ART_GENDERS.find(g => g.key === gender)?.label || ''}）`}
             onLoad={() => setLoaded(true)} onError={() => setFailed(true)}
-            style={{ position:'absolute', top:'3%', left:'3%', width:'94%', height:'93%', objectFit:'contain', objectPosition:'center bottom',
-              opacity: loaded ? 1 : 0, transition:'opacity .35s ease', filter:'drop-shadow(0 6px 12px rgba(0,0,0,0.55))' }} />
+            style={{ position:'absolute', ...(full
+              ? { top:0, left:0, width:'100%', height:'100%', objectFit:'cover' }
+              : { top:'3%', left:'3%', width:'94%', height:'93%', objectFit:'contain', objectPosition:'center bottom', filter:'drop-shadow(0 6px 12px rgba(0,0,0,0.55))' }),
+              opacity: loaded ? 1 : 0, transition:'opacity .35s ease' }} />
         ) : (
           <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color: TEXT.empty, fontSize:'11px' }}>
             イラスト準備中
@@ -95,7 +100,9 @@ function ArtThumb({ cls, gender }) {
       display:'flex', alignItems:'center', justifyContent:'center' }}>
       {src && !failed ? (
         <img src={src} alt="" loading="lazy" onError={() => setFailed(true)}
-          style={{ width:'100%', height:'100%', objectFit:'contain', objectPosition:'center bottom', filter:'drop-shadow(0 2px 4px rgba(0,0,0,0.6))' }} />
+          style={isFullArt(cls)
+            ? { width:'100%', height:'100%', objectFit:'cover' }
+            : { width:'100%', height:'100%', objectFit:'contain', objectPosition:'center bottom', filter:'drop-shadow(0 2px 4px rgba(0,0,0,0.6))' }} />
       ) : (
         <span style={{ color: TEXT.empty, fontSize:'9px' }}>準備中</span>
       )}

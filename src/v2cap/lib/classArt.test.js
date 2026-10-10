@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { CLASS_BY_ID } from './jobs.js'
-import { ART_BASE, ART_GENDERS, ART_DIR, hasArt, artSrcOf } from './classArt.js'
+import { ART_BASE, ART_FULL, ART_GENDERS, ART_DIR, hasArt, isFullArt, artSrcOf } from './classArt.js'
 
 const PUBLIC = fileURLToPath(new URL('../../../public', import.meta.url))
 
@@ -33,10 +33,19 @@ test('絵のあるクラスは、男女とも 詳細用（web）と一覧用（t
   }
 })
 
+test('背景つきの絵（枠いっぱいに出す）は、絵のあるクラスだけ。いまは剣士だけ（ユーザー「戦士男とsennsionnnaは剣士用」）', () => {
+  for (const cls of ART_FULL) assert.ok(ART_BASE[cls], `${cls}は ART_BASE にない`)
+  assert.deepEqual([...ART_FULL], ['剣士'])
+  assert.equal(isFullArt('剣士'), true)
+  assert.equal(isFullArt('戦士'), false)
+})
+
 test('絵の無いクラスは null（画面は「イラスト準備中」）。知らない性別は男性の絵にする', () => {
   assert.equal(hasArt('戦士'), true)
-  assert.equal(hasArt('剣士'), false)
-  assert.equal(artSrcOf('剣士', 'm'), null)
+  assert.equal(hasArt('剣士'), true)
+  assert.equal(hasArt('狂戦士'), false)
+  assert.ok(CLASS_BY_ID['狂戦士'])
+  assert.equal(artSrcOf('狂戦士', 'm'), null)
   assert.equal(artSrcOf('ないクラス', 'f'), null)
   assert.equal(artSrcOf('戦士', 'x'), artSrcOf('戦士', 'm'))
   assert.equal(artSrcOf('戦士'), `${ART_DIR}/web/sensi-m.webp`)
