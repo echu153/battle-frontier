@@ -10,7 +10,7 @@ import {
 } from '../lib/jobs.js'
 import { passiveOf } from '../lib/skills.js'
 import { ITEM_BY_ID } from '../lib/equipment.js'
-import { ART_GENDERS, artSrcOf, hasArt, isFullArt } from '../lib/classArt.js'
+import { ART_GENDERS, artSrcOf, hasArt } from '../lib/classArt.js'
 import { useStored } from '../../v2/lib/prefs.js'
 
 // ============================================================
@@ -25,8 +25,9 @@ import { useStored } from '../../v2/lib/prefs.js'
 //     一番下の「このクラスに転職する」で転職する（詳細の画面が確認の役＝確認のポップアップは出さない）
 //   ・イラストは男女それぞれ（ユーザー「男女それぞれのイラストを用意してるから、良い感じに見えるようにして」）。
 //     対応表と軽い版の場所は src/v2cap/lib/classArt.js（作るのは tools/v2cap-art.mjs）。
-//     詳細はクラスの色の淡い光の背景＋足元の影に大きく、一覧はカードの左に小さく。「♂ 男性／♀ 女性」で切り替え・端末で覚えておく。
-//     背景つきの絵（剣士）は枠いっぱいに出す（光と影は絵の背景にまかせる）。絵が無いクラスは「イラスト準備中」
+//     詳細は全身をクラスの色の淡い光の背景＋足元の影に大きく。一覧はカードの左に顔のまわりだけのアップ
+//     （ユーザー「職業選択するときは顔の周りだけアップするだけでいい」）。「♂ 男性／♀ 女性」で切り替え・端末で覚えておく。
+//     絵が無いクラスは「イラスト準備中」。並びは剣士が先頭（ユーザー「剣士の位置は一番上にして」＝jobs.js の CLASS_INFO の順）
 //   仕組み：いつでも無料・LVはそのまま・ClassLVは職業ごとに続きから・スキルセットは職業ごと（詳細の画面に添えて出す）
 // ============================================================
 const statText = (cls) => mainStatsOf(cls).map(k => STAT_DEFS[k]?.label || k).join('・')
@@ -55,7 +56,7 @@ function GenderToggle({ value, onChange, style }) {
   )
 }
 
-// 詳細の大きい絵。クラスの色の淡い光の背景＋足元の影。読み込めたらふわっと出す。男女の切り替えは絵の下
+// 詳細の大きい絵（全身）。クラスの色の淡い光の背景＋足元の影。読み込めたらふわっと出す。男女の切り替えは絵の下
 const ART_COL = { width:'min(100%, 300px)', flexShrink:0 }
 function ArtPanel({ cls, gender, onGender }) {
   const src = artSrcOf(cls, gender, 'web')
@@ -63,22 +64,17 @@ function ArtPanel({ cls, gender, onGender }) {
   const [failed, setFailed] = useState(false)
   useEffect(() => { setLoaded(false); setFailed(false) }, [src])
   const show = src && !failed
-  const full = isFullArt(cls)   // 背景つきの絵は枠いっぱい（足元の影・絵の影はつけない）
   return (
     <div style={ART_COL}>
       <div style={{ position:'relative', width:'100%', aspectRatio:'3 / 4', overflow:'hidden', background: glowOf(cls), border:`1px solid ${stageColorOf(cls)}55` }}>
         {/* 足元の影 */}
-        {!full && (
-          <div style={{ position:'absolute', left:'18%', right:'18%', bottom:'2%', height:'6%', borderRadius:'50%',
-            background:'radial-gradient(ellipse at center, rgba(0,0,0,0.75), rgba(0,0,0,0) 70%)' }} />
-        )}
+        <div style={{ position:'absolute', left:'18%', right:'18%', bottom:'2%', height:'6%', borderRadius:'50%',
+          background:'radial-gradient(ellipse at center, rgba(0,0,0,0.75), rgba(0,0,0,0) 70%)' }} />
         {show ? (
           <img src={src} alt={`${cls}（${ART_GENDERS.find(g => g.key === gender)?.label || ''}）`}
             onLoad={() => setLoaded(true)} onError={() => setFailed(true)}
-            style={{ position:'absolute', ...(full
-              ? { top:0, left:0, width:'100%', height:'100%', objectFit:'cover' }
-              : { top:'3%', left:'3%', width:'94%', height:'93%', objectFit:'contain', objectPosition:'center bottom', filter:'drop-shadow(0 6px 12px rgba(0,0,0,0.55))' }),
-              opacity: loaded ? 1 : 0, transition:'opacity .35s ease' }} />
+            style={{ position:'absolute', top:'3%', left:'3%', width:'94%', height:'93%', objectFit:'contain', objectPosition:'center bottom',
+              opacity: loaded ? 1 : 0, transition:'opacity .35s ease', filter:'drop-shadow(0 6px 12px rgba(0,0,0,0.55))' }} />
         ) : (
           <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color: TEXT.empty, fontSize:'11px' }}>
             イラスト準備中
@@ -90,19 +86,17 @@ function ArtPanel({ cls, gender, onGender }) {
   )
 }
 
-// 一覧の小さい絵（全身を縮めて出す＝顔や武器が切れない）。絵の無いクラスは同じ大きさの空き枠
-function ArtThumb({ cls, gender }) {
-  const src = artSrcOf(cls, gender, 'thumb')
+// 一覧の小さい絵＝顔のまわりだけのアップ（ユーザー「職業選択するときは顔の周りだけアップするだけでいい」）。
+// 切り取りは tools/v2cap-art.mjs が classArt.js の ART_FACE で作る。絵の無いクラスは同じ大きさの空き枠
+function ArtFace({ cls, gender }) {
+  const src = artSrcOf(cls, gender, 'face')
   const [failed, setFailed] = useState(false)
   useEffect(() => { setFailed(false) }, [src])
   return (
-    <div style={{ width:'66px', height:'88px', flexShrink:0, overflow:'hidden', background: glowOf(cls, '30'), border:'1px solid #002244',
+    <div style={{ width:'60px', height:'60px', flexShrink:0, overflow:'hidden', background: glowOf(cls, '30'), border:'1px solid #002244',
       display:'flex', alignItems:'center', justifyContent:'center' }}>
       {src && !failed ? (
-        <img src={src} alt="" loading="lazy" onError={() => setFailed(true)}
-          style={isFullArt(cls)
-            ? { width:'100%', height:'100%', objectFit:'cover' }
-            : { width:'100%', height:'100%', objectFit:'contain', objectPosition:'center bottom', filter:'drop-shadow(0 2px 4px rgba(0,0,0,0.6))' }} />
+        <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} style={{ width:'100%', height:'100%', objectFit:'cover' }} />
       ) : (
         <span style={{ color: TEXT.empty, fontSize:'9px' }}>準備中</span>
       )}
@@ -158,7 +152,7 @@ export default function V2capTemple({ prof, inventory, onProfile }) {
                   <button key={c.id} onClick={() => open(c.id)}
                     style={{ textAlign:'left', background:'#000818', border:`1px solid ${isNow ? '#ff88cc' : '#002244'}`, padding: thumbs ? '6px 10px 6px 6px' : '8px 10px',
                       opacity: miss ? 0.55 : 1, cursor:'pointer', fontFamily:'monospace', color:'#88ccff', display:'flex', gap:'10px', alignItems:'center' }}>
-                    {thumbs && <ArtThumb cls={c.id} gender={gender} />}
+                    {thumbs && <ArtFace cls={c.id} gender={gender} />}
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ display:'flex', alignItems:'baseline', gap:'8px', marginBottom:'4px', flexWrap:'wrap' }}>
                         <span style={{ color: isNow ? '#ff88cc' : '#cfe2ff', fontSize:'14px' }}>{c.id}</span>

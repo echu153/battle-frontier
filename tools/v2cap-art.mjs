@@ -1,57 +1,65 @@
 // ============================================================
-// v2cap のクラスのイラストを、画面で使う軽い版（WebP）にする
+// v2cap のクラスのイラストを、画面で使う軽い版（WebP・透明な背景のまま）にする
 // ------------------------------------------------------------
-// 元の絵（ユーザーが置く）：public/V2newjob/<ローマ字のクラス名><otoko|onna|onnna>.png
-// 作るもの：public/V2newjob/web/<名前>-m.webp・-f.webp（幅720）と thumb/<名前>-m.webp・-f.webp（幅240）
-//   ・透明な背景の絵は、透明なまま縮めるだけ
-//   ・背景つきの絵（classArt.js の ART_FULL）は 3:4 の枠いっぱいにする。絵は切らずに縦を合わせ、足りない左右は同じ絵をぼかして埋める
-// 対応表は src/v2cap/lib/classArt.js の ART_BASE。絵を足したらそこに足してから回す：
-//   node tools/v2cap-art.mjs           … 元の絵が新しくなったものだけ作り直す（日時で見る）
+// 元の絵（ユーザーが置く）：public/V2newjob/<ローマ字のクラス名><otoko|onna|onnna>.png（透明な背景）
+// 作るもの：
+//   public/V2newjob/web/<名前>-m.webp・-f.webp   … 詳細の全身（幅720）
+//   public/V2newjob/face/<名前>-m.webp・-f.webp  … 一覧の顔のアップ（192×192。切り取りは classArt.js の ART_FACE）
+// 対応表は src/v2cap/lib/classArt.js の ART_BASE・ART_FACE。絵を足したらそこに足してから回す：
+//   node tools/v2cap-art.mjs           … 全身は元の絵が新しくなったものだけ・顔のアップは毎回作り直す（切り取りを直しても効くように）
 //   node tools/v2cap-art.mjs --force   … 全部作り直す（作り方を変えたとき）
-// ★ffmpeg（libwebp）を使う
+// ★ffmpeg（libwebp）を使う。元の絵に透明が無いときは知らせる（背景つきの絵がまぎれ込んだ印）
 // ============================================================
 import { existsSync, mkdirSync, statSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 
 const ROOT = path.resolve(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))
-const { ART_BASE, ART_FULL, ART_GENDERS } = await import(new URL('../src/v2cap/lib/classArt.js', import.meta.url).href)
+const { ART_BASE, ART_FACE, ART_GENDERS } = await import(new URL('../src/v2cap/lib/classArt.js', import.meta.url).href)
 const SRC = path.join(ROOT, 'public', 'V2newjob')
-const OUT = {
-  web:   { dir: path.join(SRC, 'web'),   width: 720, quality: 82, blur: 28 },
-  thumb: { dir: path.join(SRC, 'thumb'), width: 240, quality: 80, blur: 10 },
-}
+const WEB = { dir: path.join(SRC, 'web'), width: 720, quality: 82 }
+const FACE = { dir: path.join(SRC, 'face'), size: 192, quality: 82 }
 const FORCE = process.argv.includes('--force')
-for (const o of Object.values(OUT)) mkdirSync(o.dir, { recursive: true })
+for (const o of [WEB, FACE]) mkdirSync(o.dir, { recursive: true })
 
-// 透明な背景：幅だけ合わせて縮める（透明はそのまま）
-const plainArgs = (o) => ['-vf', `scale=${o.width}:-1:flags=lanczos`, '-c:v', 'libwebp', '-pix_fmt', 'yuva420p']
-// 背景つき：3:4 の枠いっぱい。後ろ＝枠を覆うまで広げてぼかし少し暗く／前＝絵を切らずに枠の中へ
-const fullArgs = (o) => {
-  const W = o.width, H = Math.round(o.width * 4 / 3)
-  return ['-filter_complex',
-    `[0:v]split[a][b];` +
-    `[a]scale=${W}:${H}:force_original_aspect_ratio=increase:flags=lanczos,crop=${W}:${H},boxblur=${o.blur}:2,eq=brightness=-0.05[bg];` +
-    `[b]scale=${W}:${H}:force_original_aspect_ratio=decrease:flags=lanczos[fg];` +
-    `[bg][fg]overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/2,format=yuv420p`,
-    '-c:v', 'libwebp']
+const probe = (file) => {
+  const [w, h, fmt] = execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0',
+    '-show_entries', 'stream=width,height,pix_fmt', '-of', 'csv=p=0', file]).toString().trim().split(',')
+  return { w: Number(w), h: Number(h), alpha: /^(rgba|bgra|argb|abgr|ya8|ya16|gbrap|yuva|pal8)/.test(fmt), fmt }
 }
+const webp = (o) => ['-c:v', 'libwebp', '-pix_fmt', 'yuva420p', '-quality', String(o.quality)]
 
-const missing = []
+const missing = [], warn = []
 let made = 0
 for (const [cls, base] of Object.entries(ART_BASE)) {
   for (const g of ART_GENDERS) {
     const src = g.src.map(s => path.join(SRC, `${base}${s}.png`)).find(existsSync)
     if (!src) { missing.push(`${cls}（${g.label}）：${base}${g.src[0]}.png`); continue }
-    for (const [kind, o] of Object.entries(OUT)) {
-      const out = path.join(o.dir, `${base}-${g.key}.webp`)
-      if (!FORCE && existsSync(out) && statSync(out).mtimeMs >= statSync(src).mtimeMs) continue
+    const info = probe(src)
+    if (!info.alpha) warn.push(`${cls}（${g.label}）：${path.basename(src)} に透明が無い（${info.fmt}）。背景を抜いた版に差し替える`)
+
+    // 詳細の全身：幅だけ合わせて縮める（透明はそのまま）
+    const outWeb = path.join(WEB.dir, `${base}-${g.key}.webp`)
+    if (FORCE || !existsSync(outWeb) || statSync(outWeb).mtimeMs < statSync(src).mtimeMs) {
       execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', src,
-        ...(ART_FULL.has(cls) ? fullArgs(o) : plainArgs(o)), '-quality', String(o.quality), out])
+        '-vf', `scale=${WEB.width}:-1:flags=lanczos`, ...webp(WEB), outWeb])
       made++
-      console.log(`${cls}（${g.label}・${kind}${ART_FULL.has(cls) ? '・背景つき' : ''}）→ ${path.relative(ROOT, out)}`)
+      console.log(`${cls}（${g.label}・全身）→ ${path.relative(ROOT, outWeb)}`)
     }
+
+    // 一覧の顔のアップ：顔の中心を真ん中にした正方形。端に近いときは透明で足して、顔を真ん中のままにする
+    const face = ART_FACE[base]?.[g.key]
+    if (!face) { missing.push(`${cls}（${g.label}）：classArt.js の ART_FACE.${base}.${g.key}`); continue }
+    const [fx, fy, fs] = face
+    const S = Math.round(fs * info.w), P = Math.ceil(S / 2)
+    const X = Math.round(fx * info.w - S / 2 + P), Y = Math.round(fy * info.h - S / 2 + P)
+    const outFace = path.join(FACE.dir, `${base}-${g.key}.webp`)
+    execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', src,
+      '-vf', `format=rgba,pad=iw+${2 * P}:ih+${2 * P}:${P}:${P}:color=0x00000000,crop=${S}:${S}:${X}:${Y},scale=${FACE.size}:${FACE.size}:flags=lanczos`,
+      ...webp(FACE), outFace])
+    made++
   }
 }
-console.log(`作った：${made}枚`)
-if (missing.length) { console.log('元の絵が無い：'); for (const m of missing) console.log(`  ${m}`) }
+console.log(`作った：${made}枚（顔のアップは毎回作り直す）`)
+if (missing.length) { console.log('足りないもの：'); for (const m of missing) console.log(`  ${m}`) }
+if (warn.length) { console.log('⚠ 透明な背景になっていない元の絵：'); for (const m of warn) console.log(`  ${m}`); process.exitCode = 1 }
