@@ -10,6 +10,8 @@ import {
 } from '../lib/jobs.js'
 import { passiveOf } from '../lib/skills.js'
 import { ITEM_BY_ID } from '../lib/equipment.js'
+import { ART_GENDERS, artSrcOf, hasArt } from '../lib/classArt.js'
+import { useStored } from '../../v2/lib/prefs.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — 神殿（転職）
@@ -21,31 +23,83 @@ import { ITEM_BY_ID } from '../lib/equipment.js'
 //     カードを押すとそのクラスの詳細（イラスト・特徴の一言（スキル名・ステータス名を書かない＝jobs.js の desc）・武器種・
 //     上がりやすいステータス（mainStatsOf）・ClassEXP・覚えるスキル・パッシブ・クラスのステ・この先のクラスや条件）。
 //     一番下の「このクラスに転職する」で転職する（詳細の画面が確認の役＝確認のポップアップは出さない）
-//   ・イラストは public/V2newjob/<クラス名>.png（.webp・.jpg・.jpeg も可）。無いあいだは「イラスト準備中」の枠（ユーザーがあとで入れる）
+//   ・イラストは男女それぞれ（ユーザー「男女それぞれのイラストを用意してるから、良い感じに見えるようにして」）。
+//     対応表と軽い版の場所は src/v2cap/lib/classArt.js（作るのは tools/v2cap-art.mjs）。
+//     詳細はクラスの色の淡い光の背景＋足元の影に大きく、一覧はカードの左に小さく。「♂ 男性／♀ 女性」で切り替え・端末で覚えておく。
+//     絵が無いクラスは「イラスト準備中」
 //   仕組み：いつでも無料・LVはそのまま・ClassLVは職業ごとに続きから・スキルセットは職業ごと（詳細の画面に添えて出す）
 // ============================================================
 const statText = (cls) => mainStatsOf(cls).map(k => STAT_DEFS[k]?.label || k).join('・')
 const STAGE_TITLE = { shoki:'初期クラス', ichiji:'一次クラス' }
 const label = { color: TEXT.label }
 
-// クラスのイラスト。public/V2newjob/<クラス名>.<拡張子> を順に試し、どれも無ければ「イラスト準備中」の枠
-const ART_DIR = '/V2newjob'
-const ART_EXTS = ['png', 'webp', 'jpg', 'jpeg']
-const ART_BOX = { width:'min(100%, 240px)', height:'300px', flexShrink:0 }
-function ClassArt({ cls }) {
-  const [i, setI] = useState(0)
-  useEffect(() => { setI(0) }, [cls])
-  if (i >= ART_EXTS.length) {
-    return (
-      <div style={{ ...ART_BOX, border:'1px dashed #223a5e', color: TEXT.empty, fontSize:'10px',
-        display:'flex', alignItems:'center', justifyContent:'center', background:'#000818' }}>
-        イラスト準備中
-      </div>
-    )
-  }
+// クラスの色の淡い光（絵の後ろ）
+const glowOf = (cls, strength = '38') => `radial-gradient(ellipse at 50% 40%, ${stageColorOf(cls)}${strength} 0%, #001030 55%, #000818 100%)`
+
+// 「♂ 男性／♀ 女性」の切り替え（一覧と詳細で同じ設定）。
+// ★絵の上には重ねない（どの絵も上から下まで使い、斧・槍・弓・杖が四隅まで届くので、重ねると隠れる）
+function GenderToggle({ value, onChange, style }) {
   return (
-    <img src={`${ART_DIR}/${encodeURIComponent(cls)}.${ART_EXTS[i]}`} alt={cls} onError={() => setI(n => n + 1)}
-      style={{ ...ART_BOX, objectFit:'contain', background:'#000818' }} />
+    <div style={{ display:'flex', gap:'4px', ...style }}>
+      {ART_GENDERS.map(g => {
+        const on = value === g.key
+        return (
+          <button key={g.key} onClick={() => onChange(g.key)} aria-pressed={on}
+            style={{ ...miniBtn(on ? g.color : '#2a4466'), color: on ? g.color : TEXT.label, background: on ? '#00163a' : '#000818',
+              padding:'5px 10px', fontSize:'11px' }}>
+            {g.mark} {g.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// 詳細の大きい絵。クラスの色の淡い光の背景＋足元の影。読み込めたらふわっと出す。男女の切り替えは絵の下
+const ART_COL = { width:'min(100%, 300px)', flexShrink:0 }
+function ArtPanel({ cls, gender, onGender }) {
+  const src = artSrcOf(cls, gender, 'web')
+  const [loaded, setLoaded] = useState(false)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => { setLoaded(false); setFailed(false) }, [src])
+  const show = src && !failed
+  return (
+    <div style={ART_COL}>
+      <div style={{ position:'relative', width:'100%', aspectRatio:'3 / 4', overflow:'hidden', background: glowOf(cls), border:`1px solid ${stageColorOf(cls)}55` }}>
+        {/* 足元の影 */}
+        <div style={{ position:'absolute', left:'18%', right:'18%', bottom:'2%', height:'6%', borderRadius:'50%',
+          background:'radial-gradient(ellipse at center, rgba(0,0,0,0.75), rgba(0,0,0,0) 70%)' }} />
+        {show ? (
+          <img src={src} alt={`${cls}（${ART_GENDERS.find(g => g.key === gender)?.label || ''}）`}
+            onLoad={() => setLoaded(true)} onError={() => setFailed(true)}
+            style={{ position:'absolute', top:'3%', left:'3%', width:'94%', height:'93%', objectFit:'contain', objectPosition:'center bottom',
+              opacity: loaded ? 1 : 0, transition:'opacity .35s ease', filter:'drop-shadow(0 6px 12px rgba(0,0,0,0.55))' }} />
+        ) : (
+          <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color: TEXT.empty, fontSize:'11px' }}>
+            イラスト準備中
+          </div>
+        )}
+      </div>
+      {hasArt(cls) && <GenderToggle value={gender} onChange={onGender} style={{ justifyContent:'center', marginTop:'6px' }} />}
+    </div>
+  )
+}
+
+// 一覧の小さい絵（全身を縮めて出す＝顔や武器が切れない）。絵の無いクラスは同じ大きさの空き枠
+function ArtThumb({ cls, gender }) {
+  const src = artSrcOf(cls, gender, 'thumb')
+  const [failed, setFailed] = useState(false)
+  useEffect(() => { setFailed(false) }, [src])
+  return (
+    <div style={{ width:'66px', height:'88px', flexShrink:0, overflow:'hidden', background: glowOf(cls, '30'), border:'1px solid #002244',
+      display:'flex', alignItems:'center', justifyContent:'center' }}>
+      {src && !failed ? (
+        <img src={src} alt="" loading="lazy" onError={() => setFailed(true)}
+          style={{ width:'100%', height:'100%', objectFit:'contain', objectPosition:'center bottom', filter:'drop-shadow(0 2px 4px rgba(0,0,0,0.6))' }} />
+      ) : (
+        <span style={{ color: TEXT.empty, fontSize:'9px' }}>準備中</span>
+      )}
+    </div>
   )
 }
 
@@ -54,6 +108,7 @@ export default function V2capTemple({ prof, inventory, onProfile }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [msg, setMsg] = useState('')
+  const [gender, setGender] = useStored('capArtGender', 'm')   // イラストを男女どちらで見せるか（端末で覚えておく）
 
   const open = (cls) => { setView(cls); setMsg(''); setError('') }
   const change = async (cls) => {
@@ -68,50 +123,61 @@ export default function V2capTemple({ prof, inventory, onProfile }) {
 
   if (view && CLASS_BY_ID[view]) {
     return (
-      <ClassDetail cls={view} prof={prof} inventory={inventory} busy={busy} msg={msg} error={error}
+      <ClassDetail cls={view} prof={prof} inventory={inventory} busy={busy} msg={msg} error={error} gender={gender} onGender={setGender}
         onChange={() => change(view)} onOpen={open} onBack={() => open(null)} />
     )
   }
 
   return (
     <div style={{ fontFamily:'monospace' }}>
-      {STAGE_ORDER.map(stage => (
-        <div key={stage} style={{ ...box, padding:'12px', marginBottom:'10px' }}>
-          <div style={{ color: STAGES[stage].color, fontSize:'13px', marginBottom:'8px' }}>{STAGE_TITLE[stage] || `${STAGES[stage].label}クラス`}</div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))', gap:'6px' }}>
-            {CLASSES.filter(c => c.stage === stage).map(c => {
-              const job = jobOf(prof.jobs, c.id)
-              const isNow = c.id === prof.class
-              const miss = missingReqOf(c.id, prof.jobs)
-              return (
-                // ★カード全体を押すと、そのクラスの詳細が開く（転職はそこで決める）。
-                //   一覧は 名前・ClassLV・装備できる武器種だけ（特徴と上がりやすいステータスは詳細で出す）
-                <button key={c.id} onClick={() => open(c.id)}
-                  style={{ textAlign:'left', background:'#000818', border:`1px solid ${isNow ? '#ff88cc' : '#002244'}`, padding:'8px 10px',
-                    opacity: miss ? 0.55 : 1, cursor:'pointer', fontFamily:'monospace', color:'#88ccff' }}>
-                  <div style={{ display:'flex', alignItems:'baseline', gap:'8px', marginBottom:'4px', flexWrap:'wrap' }}>
-                    <span style={{ color: isNow ? '#ff88cc' : '#cfe2ff', fontSize:'14px' }}>{c.id}</span>
-                    <span style={{ color: prof.jobs?.[c.id] ? '#ffcc00' : TEXT.sub, fontSize:'11px' }}>
-                      ClassLV{job.lv}{job.lv >= jobMaxOf(c.id) && <span style={{ color:'#ff8844' }}> MAX</span>}
-                    </span>
-                    {isNow && <span style={{ color:'#ff88cc', fontSize:'10px', marginLeft:'auto' }}>いまのクラス</span>}
-                  </div>
-                  <div style={{ fontSize:'11px', lineHeight:1.7 }}>
-                    <div><span style={label}>装備できる武器種：</span><span style={{ color:'#cfe2ff' }}>{weaponsOf(c.id).join('・')}</span></div>
-                    {miss && <div style={{ color:'#ff8844' }}>条件：{reqText(c.id)}（いま{jobOf(prof.jobs, c.req.cls).lv}）</div>}
-                  </div>
-                </button>
-              )
-            })}
+      <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', gap:'6px', marginBottom:'8px' }}>
+        <span style={{ color: TEXT.label, fontSize:'11px' }}>イラスト：</span>
+        <GenderToggle value={gender} onChange={setGender} />
+      </div>
+      {STAGE_ORDER.map(stage => {
+        const list = CLASSES.filter(c => c.stage === stage)
+        const thumbs = list.some(c => hasArt(c.id))   // 絵が1枚も無い段（いまは一次クラス）は小さい絵の枠を出さない
+        return (
+          <div key={stage} style={{ ...box, padding:'12px', marginBottom:'10px' }}>
+            <div style={{ color: STAGES[stage].color, fontSize:'13px', marginBottom:'8px' }}>{STAGE_TITLE[stage] || `${STAGES[stage].label}クラス`}</div>
+            <div style={{ display:'grid', gridTemplateColumns:`repeat(auto-fill, minmax(${thumbs ? 250 : 220}px, 1fr))`, gap:'6px' }}>
+              {list.map(c => {
+                const job = jobOf(prof.jobs, c.id)
+                const isNow = c.id === prof.class
+                const miss = missingReqOf(c.id, prof.jobs)
+                return (
+                  // ★カード全体を押すと、そのクラスの詳細が開く（転職はそこで決める）。
+                  //   一覧は 小さい絵・名前・ClassLV・装備できる武器種だけ（特徴と上がりやすいステータスは詳細で出す）
+                  <button key={c.id} onClick={() => open(c.id)}
+                    style={{ textAlign:'left', background:'#000818', border:`1px solid ${isNow ? '#ff88cc' : '#002244'}`, padding: thumbs ? '6px 10px 6px 6px' : '8px 10px',
+                      opacity: miss ? 0.55 : 1, cursor:'pointer', fontFamily:'monospace', color:'#88ccff', display:'flex', gap:'10px', alignItems:'center' }}>
+                    {thumbs && <ArtThumb cls={c.id} gender={gender} />}
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ display:'flex', alignItems:'baseline', gap:'8px', marginBottom:'4px', flexWrap:'wrap' }}>
+                        <span style={{ color: isNow ? '#ff88cc' : '#cfe2ff', fontSize:'14px' }}>{c.id}</span>
+                        <span style={{ color: prof.jobs?.[c.id] ? '#ffcc00' : TEXT.sub, fontSize:'11px' }}>
+                          ClassLV{job.lv}{job.lv >= jobMaxOf(c.id) && <span style={{ color:'#ff8844' }}> MAX</span>}
+                        </span>
+                        {isNow && <span style={{ color:'#ff88cc', fontSize:'10px', marginLeft:'auto' }}>いまのクラス</span>}
+                      </div>
+                      <div style={{ fontSize:'11px', lineHeight:1.7 }}>
+                        <div><span style={label}>装備できる武器種：</span><span style={{ color:'#cfe2ff' }}>{weaponsOf(c.id).join('・')}</span></div>
+                        {miss && <div style={{ color:'#ff8844' }}>条件：{reqText(c.id)}（いま{jobOf(prof.jobs, c.req.cls).lv}）</div>}
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
           </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
 
 // そのクラスの詳細。一番下の「このクラスに転職する」で転職する
-function ClassDetail({ cls, prof, inventory, busy, msg, error, onChange, onOpen, onBack }) {
+function ClassDetail({ cls, prof, inventory, busy, msg, error, gender, onGender, onChange, onOpen, onBack }) {
   const c = CLASS_BY_ID[cls]
   const stage = stageOf(cls)
   const job = jobOf(prof.jobs, cls)
@@ -143,7 +209,7 @@ function ClassDetail({ cls, prof, inventory, busy, msg, error, onChange, onOpen,
 
       {/* イラスト（左）＋ 名前・ClassLV・特徴（右）。狭い画面では縦に並ぶ */}
       <div style={{ ...section, borderColor: isNow ? '#ff88cc' : '#0044aa', display:'flex', gap:'14px', flexWrap:'wrap', alignItems:'flex-start' }}>
-        <ClassArt cls={cls} />
+        <ArtPanel cls={cls} gender={gender} onGender={onGender} />
         <div style={{ flex:'1 1 240px', minWidth:0 }}>
         <div style={{ display:'flex', alignItems:'baseline', gap:'10px', flexWrap:'wrap' }}>
           <span style={{ color, fontSize:'10px' }}>[{stageLabelOf(cls)}]</span>
