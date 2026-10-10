@@ -25,6 +25,9 @@ import { RARITY_COLOR, RARITIES, rarityLabel, reqLvOf } from '../lib/equipment.j
 //   ・落ちる装備は**そのエリアの装備**で、レア度はノーマル・レア・エピック・レジェンダリー
 //     （エピックはレアとボスから・レジェンダリーはボスからだけ）。武器はいまの職業が装備できる種類（3〜4種）から（sortie.js）
 //   ・落ちた装備の**アイテムLV**＝その装備の必要LV（エリア×レア度・ユーザーの表）
+//   ・【確定】2026-10-10 ユーザー指示：戦闘ログは**自動で一番下へ**送る。チェックでオン・オフできる（最初はオン・この端末で覚えておく）。
+//     動かすのはログの枠の中だけ（scrollIntoView はページごと動いてしまうので使わない）。
+//     オフのときは、新しい戦闘のたびに一番上から出す
 // ============================================================
 const ROLE_LINE = {
   boss:  (foe, lv) => ({ text:`⚠ ボス出現！ ${foe}（LV${lv}）が現れた！`, color:'#ff4444' }),
@@ -33,6 +36,10 @@ const ROLE_LINE = {
   normal: (foe, lv) => ({ text:`${foe}（LV${lv}）が現れた！`, color:'#88ccff' }),
 }
 const mult = (role) => `${ROLE_TENTHS[role] / 10}倍`
+// ログを自動で一番下へ送るか（この端末で覚えておく。読めない・書けないときはオンのまま動く）
+const LOG_FOLLOW_KEY = 'v2capLogFollow'
+const readFollow = () => { try { return localStorage.getItem(LOG_FOLLOW_KEY) !== '0' } catch { return true } }
+const saveFollow = (on) => { try { localStorage.setItem(LOG_FOLLOW_KEY, on ? '1' : '0') } catch { /* 覚えられなくても切り替えは効く */ } }
 
 export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   const [scene, setScene] = useState('town')
@@ -43,10 +50,24 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   const [loading, setLoading] = useState(false)
   const [auto, setAuto] = useState(false)   // ★覚えておかない（リロードで勝手に走らないように）
   const [stam, setStam] = useState(() => ({ n: prof?.stamina ?? 0, at: prof?.stamina_at || null }))
+  const [follow, setFollow] = useState(readFollow)   // ログを自動で一番下へ
+  const [battleNo, setBattleNo] = useState(0)         // 何戦目か（オフのとき、新しい戦闘で一番上に戻すため）
   const lastAt = useRef(0)
   const busy = useRef(false)
+  const logBox = useRef(null)
 
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 100); return () => clearInterval(t) }, [])
+  // オン：行が増えるたび（精算の行が後から足されたときも）枠の一番下へ
+  useEffect(() => {
+    const el = logBox.current
+    if (el && follow) el.scrollTop = el.scrollHeight
+  }, [logs, follow])
+  // オフ：新しい戦闘のたびに一番上から（前の戦闘で下まで読んだ位置のままにしない）
+  useEffect(() => {
+    const el = logBox.current
+    if (el && !follow) el.scrollTop = 0
+  }, [battleNo])   // eslint-disable-line react-hooks/exhaustive-deps
+  const toggleFollow = (on) => { setFollow(on); saveFollow(on) }
   useEffect(() => { onScene?.(scene) }, [scene, onScene])
   useEffect(() => { setStam({ n: prof?.stamina ?? 0, at: prof?.stamina_at || null }) }, [prof?.stamina, prof?.stamina_at])
   useEffect(() => { setBossRate(prof?.boss_rate || 0) }, [prof?.boss_rate])
@@ -67,7 +88,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
     if (Date.now() - lastAt.current < SORTIE_CD * 1000) return
     busy.current = true
     lastAt.current = Date.now()
-    setLoading(true); setScene('battle'); setLogs([])
+    setLoading(true); setScene('battle'); setLogs([]); setBattleNo(n => n + 1)
     try {
       const me = playerFighter(prof, inventory)
       const enc = pickEncounter(spot.id, bossRate, new Date())
@@ -176,11 +197,18 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   if (scene === 'battle') {
     return (
       <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', fontFamily:'monospace' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:'10px' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px', gap:'8px', flexWrap:'wrap' }}>
           <span style={{ color:'#ff6644', fontSize:'13px' }}>⚔ バトル！</span>
-          {auto && <span style={{ color:'#44ff88', fontSize:'11px' }}>▶ オート出撃中（⚡{stamNow}）</span>}
+          <span style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap' }}>
+            {auto && <span style={{ color:'#44ff88', fontSize:'11px' }}>▶ オート出撃中（⚡{stamNow}）</span>}
+            <label style={{ display:'flex', alignItems:'center', gap:'4px', color:'#93a9be', fontSize:'10px', cursor:'pointer' }}>
+              <input type="checkbox" checked={follow} onChange={e => toggleFollow(e.target.checked)}
+                style={{ accentColor:'#44ff88', margin:0, cursor:'pointer' }} />
+              ログを自動で一番下へ
+            </label>
+          </span>
         </div>
-        <div style={{ marginBottom:'12px', maxHeight:'300px', overflowY:'auto' }}>
+        <div ref={logBox} style={{ marginBottom:'12px', maxHeight:'300px', overflowY:'auto' }}>
           {logs.map((l, i) => <V2capLogLine key={i} l={l} />)}
         </div>
         {timerRow}
