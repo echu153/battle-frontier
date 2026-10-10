@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../../supabase'
 import { box, btn, miniBtn, TEXT } from '../../v2/components/v2ui.js'
 import { STAT_DEFS } from '../../v2/lib/stats.js'
@@ -15,15 +15,39 @@ import { ITEM_BY_ID } from '../lib/equipment.js'
 // 「レベルキャップあり」版 — 神殿（転職）
 //   【確定】2026-10-11 ユーザー指示：
 //   ・一覧は「初期クラス」「一次クラス」の見出しの下にカード。1枚に 名前＋ClassLV（転職したことのないクラスも ClassLV1）／
-//     特徴の一言（スキル名・ステータス名を書かない＝jobs.js の desc）／装備できる武器種／上がりやすいステータス（mainStatsOf）だけ
+//     装備できる武器種だけ（就けないクラスは条件も）。特徴の一言と上がりやすいステータスは詳細の画面で出す
+//     （ユーザー「クラス選択するとき、上がりやすいステータスとクラスの詳細は乗せなくていいや、クラス詳細で説明するから」）
 //   ・「そのクラス名を押してそのクラスの詳細が開かれてる画面で転職確定させるようにしたい。グラブルみたいなイメージ」：
-//     カードを押すとそのクラスの詳細（ClassEXP・覚えるスキル・パッシブ・クラスのステ・この先のクラスや条件）。
+//     カードを押すとそのクラスの詳細（イラスト・特徴の一言（スキル名・ステータス名を書かない＝jobs.js の desc）・武器種・
+//     上がりやすいステータス（mainStatsOf）・ClassEXP・覚えるスキル・パッシブ・クラスのステ・この先のクラスや条件）。
 //     一番下の「このクラスに転職する」で転職する（詳細の画面が確認の役＝確認のポップアップは出さない）
+//   ・イラストは public/V2newjob/<クラス名>.png（.webp・.jpg・.jpeg も可）。無いあいだは「イラスト準備中」の枠（ユーザーがあとで入れる）
 //   仕組み：いつでも無料・LVはそのまま・ClassLVは職業ごとに続きから・スキルセットは職業ごと（詳細の画面に添えて出す）
 // ============================================================
 const statText = (cls) => mainStatsOf(cls).map(k => STAT_DEFS[k]?.label || k).join('・')
 const STAGE_TITLE = { shoki:'初期クラス', ichiji:'一次クラス' }
 const label = { color: TEXT.label }
+
+// クラスのイラスト。public/V2newjob/<クラス名>.<拡張子> を順に試し、どれも無ければ「イラスト準備中」の枠
+const ART_DIR = '/V2newjob'
+const ART_EXTS = ['png', 'webp', 'jpg', 'jpeg']
+const ART_BOX = { width:'min(100%, 240px)', height:'300px', flexShrink:0 }
+function ClassArt({ cls }) {
+  const [i, setI] = useState(0)
+  useEffect(() => { setI(0) }, [cls])
+  if (i >= ART_EXTS.length) {
+    return (
+      <div style={{ ...ART_BOX, border:'1px dashed #223a5e', color: TEXT.empty, fontSize:'10px',
+        display:'flex', alignItems:'center', justifyContent:'center', background:'#000818' }}>
+        イラスト準備中
+      </div>
+    )
+  }
+  return (
+    <img src={`${ART_DIR}/${encodeURIComponent(cls)}.${ART_EXTS[i]}`} alt={cls} onError={() => setI(n => n + 1)}
+      style={{ ...ART_BOX, objectFit:'contain', background:'#000818' }} />
+  )
+}
 
 export default function V2capTemple({ prof, inventory, onProfile }) {
   const [view, setView] = useState(null)    // 詳細を開いているクラス（null は一覧）
@@ -54,13 +78,14 @@ export default function V2capTemple({ prof, inventory, onProfile }) {
       {STAGE_ORDER.map(stage => (
         <div key={stage} style={{ ...box, padding:'12px', marginBottom:'10px' }}>
           <div style={{ color: STAGES[stage].color, fontSize:'13px', marginBottom:'8px' }}>{STAGE_TITLE[stage] || `${STAGES[stage].label}クラス`}</div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:'6px' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))', gap:'6px' }}>
             {CLASSES.filter(c => c.stage === stage).map(c => {
               const job = jobOf(prof.jobs, c.id)
               const isNow = c.id === prof.class
               const miss = missingReqOf(c.id, prof.jobs)
               return (
-                // ★カード全体を押すと、そのクラスの詳細が開く（転職はそこで決める）
+                // ★カード全体を押すと、そのクラスの詳細が開く（転職はそこで決める）。
+                //   一覧は 名前・ClassLV・装備できる武器種だけ（特徴と上がりやすいステータスは詳細で出す）
                 <button key={c.id} onClick={() => open(c.id)}
                   style={{ textAlign:'left', background:'#000818', border:`1px solid ${isNow ? '#ff88cc' : '#002244'}`, padding:'8px 10px',
                     opacity: miss ? 0.55 : 1, cursor:'pointer', fontFamily:'monospace', color:'#88ccff' }}>
@@ -71,10 +96,8 @@ export default function V2capTemple({ prof, inventory, onProfile }) {
                     </span>
                     {isNow && <span style={{ color:'#ff88cc', fontSize:'10px', marginLeft:'auto' }}>いまのクラス</span>}
                   </div>
-                  <div style={{ color:'#9fb8d0', fontSize:'11px', lineHeight:1.6, marginBottom:'4px' }}>{classDescOf(c.id)}</div>
                   <div style={{ fontSize:'11px', lineHeight:1.7 }}>
                     <div><span style={label}>装備できる武器種：</span><span style={{ color:'#cfe2ff' }}>{weaponsOf(c.id).join('・')}</span></div>
-                    <div><span style={label}>上がりやすいステータス：</span><span style={{ color:'#44ff88' }}>{statText(c.id)}</span></div>
                     {miss && <div style={{ color:'#ff8844' }}>条件：{reqText(c.id)}（いま{jobOf(prof.jobs, c.req.cls).lv}）</div>}
                   </div>
                 </button>
@@ -118,8 +141,10 @@ function ClassDetail({ cls, prof, inventory, busy, msg, error, onChange, onOpen,
     <div style={{ fontFamily:'monospace' }}>
       <button onClick={onBack} style={{ ...miniBtn('#88aaff'), marginBottom:'10px' }}>← クラス一覧へ</button>
 
-      {/* 名前・ClassLV・特徴 */}
-      <div style={{ ...section, borderColor: isNow ? '#ff88cc' : '#0044aa' }}>
+      {/* イラスト（左）＋ 名前・ClassLV・特徴（右）。狭い画面では縦に並ぶ */}
+      <div style={{ ...section, borderColor: isNow ? '#ff88cc' : '#0044aa', display:'flex', gap:'14px', flexWrap:'wrap', alignItems:'flex-start' }}>
+        <ClassArt cls={cls} />
+        <div style={{ flex:'1 1 240px', minWidth:0 }}>
         <div style={{ display:'flex', alignItems:'baseline', gap:'10px', flexWrap:'wrap' }}>
           <span style={{ color, fontSize:'10px' }}>[{stageLabelOf(cls)}]</span>
           <span style={{ color: isNow ? '#ff88cc' : '#ffcc00', fontSize:'20px', letterSpacing:'2px' }}>{cls}</span>
@@ -144,6 +169,7 @@ function ClassDetail({ cls, prof, inventory, busy, msg, error, onChange, onOpen,
           <div><span style={label}>装備できる武器種：</span><span style={{ color:'#cfe2ff' }}>{weaponsOf(cls).join('・')}</span></div>
           <div><span style={label}>上がりやすいステータス：</span><span style={{ color:'#44ff88' }}>{statText(cls)}</span></div>
           <div><span style={label}>通常攻撃：</span><span style={{ color:'#cfe2ff' }}>{c.kind === 'mag' ? '魔法' : '物理'}</span></div>
+        </div>
         </div>
       </div>
 
