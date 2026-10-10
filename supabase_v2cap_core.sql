@@ -2894,6 +2894,11 @@ alter table public.v2cap_profiles add column if not exists daily_claimed boolean
 -- ★2026-10-11 アイコン（ユーザー指示「自分で設定できるように」）：avatars バケット（旧版・今のⅡと同じ置き場）の中の場所。
 --   用意された8枚か、自分のフォルダ（<ユーザーID>/…）の画像だけ（v2cap_set_avatar が見る）。null は画像なし
 alter table public.v2cap_profiles add column if not exists avatar text;
+-- ★2026-10-11 ユグレシアの宝樹（§8-3）：最後に祈った時刻・結果・回数・直近10回（新しい順 [{"at":"10/11 21:03","fortune":"大吉"}]）
+alter table public.v2cap_profiles add column if not exists last_pray_at timestamptz;
+alter table public.v2cap_profiles add column if not exists last_fortune text;
+alter table public.v2cap_profiles add column if not exists pray_count int not null default 0;
+alter table public.v2cap_profiles add column if not exists pray_log jsonb not null default '[]'::jsonb;
 create unique index if not exists v2cap_profiles_username_lower_idx
   on public.v2cap_profiles (lower(username));
 -- 参照は認証済み全員（今のⅡと同じ）。書き込みはRPC経由だけ
@@ -3960,6 +3965,92 @@ end;
 $$;
 revoke all on function public.v2cap_set_avatar(text) from public, anon;
 grant execute on function public.v2cap_set_avatar(text) to authenticated;
+
+-- ============================================================
+-- ===== 8-3. ユグレシアの宝樹（2026-10-11）=====
+-- ============================================================
+-- 【確定】ユーザー指示「祈ったら大凶～大吉が出る、出た結果によって経験値もらえる」＋決めたこと（写しは src/v2cap/lib/tree.js）：
+--   ・ごほうびは経験値だけ。基準＝祈った時点のLVの必要EXP × 2%（〜30）・1%（31〜50）・0.5%（51〜80）・0.1%（81〜）、
+--     それに運勢の倍率（大吉×3〜大凶×0.2・今のⅡと同じ）。端数は切り上げ。EXPは戦闘と同じ扱い（v2cap_apply_exp）
+--   ・運勢の並び・出やすさは今のⅡ（v2_pray・src/v2/lib/tree.js の FORTUNES）と同じ
+--   ・1日1回（日本時間の5時で切り替わる）。この版は管理者しか入れないので、管理者だけ何回でも、はしない
+create or replace function public.v2cap_pray()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_names  constant text[] := array['大吉', '中吉', '小吉', '吉', '末吉', '凶', '大凶'];
+  c_weight constant int[]  := array[5, 10, 15, 25, 20, 15, 10];
+  c_mult   constant int[]  := array[30, 20, 15, 10, 7, 4, 2];   -- 運勢の倍率（10分率）
+  c_keep   constant int    := 10;                               -- 履歴として残す件数
+  v_uid   uuid := auth.uid();
+  v_roll  int;
+  v_acc   int := 0;
+  v_idx   int := 7;
+  v_name  text;
+  v_lv    int;
+  v_permil int;
+  v_exp   int;
+  v_count int;
+  v_log   jsonb;
+  v_res   jsonb := null;
+  i       int;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+
+  -- 先に引く。祈れなかったときは下のUPDATEが空振りして、この結果は捨てられる
+  v_roll := floor(random() * 100)::int;   -- 0〜99
+  for i in 1 .. array_length(c_names, 1) loop
+    v_acc := v_acc + c_weight[i];
+    if v_roll < v_acc then v_idx := i; exit; end if;
+  end loop;
+  v_name := c_names[v_idx];
+
+  -- ★「今日まだ祈っていないこと」の確認と記録を1文でやる＝連打しても2回引けない
+  update public.v2cap_profiles p
+     set last_pray_at = now(),
+         last_fortune = v_name,
+         pray_count   = p.pray_count + 1,
+         -- 新しいものを先頭に積んで、c_keep 件で切る
+         pray_log     = (
+           select coalesce(jsonb_agg(s.e order by s.ord), '[]'::jsonb)
+             from (
+               select e, ord
+                 from jsonb_array_elements(
+                        jsonb_build_array(jsonb_build_object(
+                          'at',      to_char(now() at time zone 'Asia/Tokyo', 'MM/DD HH24:MI'),
+                          'fortune', v_name))
+                        || coalesce(p.pray_log, '[]'::jsonb)
+                      ) with ordinality as t(e, ord)
+                order by ord
+                limit c_keep
+             ) s
+         ),
+         updated_at   = now()
+   where p.id = v_uid
+     and (p.last_pray_at is null
+          or ((p.last_pray_at at time zone 'Asia/Tokyo') - interval '5 hours')::date
+           < ((now()           at time zone 'Asia/Tokyo') - interval '5 hours')::date)
+   returning p.lv, p.pray_count, p.pray_log into v_lv, v_count, v_log;
+
+  if not found then
+    if not exists (select 1 from public.v2cap_profiles where id = v_uid) then
+      return jsonb_build_object('ok', false, 'error', 'キャラクターがいません');
+    end if;
+    return jsonb_build_object('ok', false, 'error', '今日はもう祈りました（日本時間の5時に変わります）');
+  end if;
+
+  -- 経験値：祈った時点のLVの必要EXP × 千分率 × 倍率（10分率）。切り上げは整数で（tree.js の prayExpOf と同じ）
+  v_lv     := greatest(1, coalesce(v_lv, 1));
+  v_permil := case when v_lv <= 30 then 20 when v_lv <= 50 then 10 when v_lv <= 80 then 5 else 1 end;
+  v_exp    := (public.v2cap_need(v_lv) * v_permil * c_mult[v_idx] + 9999) / 10000;
+  if v_exp > 0 then v_res := public.v2cap_apply_exp(v_uid, v_exp); end if;
+
+  return jsonb_build_object('ok', true, 'fortune', v_name, 'lv', v_lv, 'exp', v_exp,
+                            'pray_count', v_count, 'pray_log', v_log, 'level', v_res);
+end;
+$$;
+revoke all on function public.v2cap_pray() from public, anon;
+grant execute on function public.v2cap_pray() to authenticated;
 
 -- ============================================================
 -- ===== 9. 開発用 =====

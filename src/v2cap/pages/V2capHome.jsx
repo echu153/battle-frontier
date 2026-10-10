@@ -15,6 +15,7 @@ import V2capSkills from '../components/V2capSkills.jsx'
 import V2capTemple from '../components/V2capTemple.jsx'
 import V2capDaily from '../components/V2capDaily.jsx'
 import V2capProfile from '../components/V2capProfile.jsx'
+import V2capTree from '../components/V2capTree.jsx'
 import { START_CLASSES, weaponsOf, attackKindOf, classDescOf } from '../lib/jobs.js'
 
 // ============================================================
@@ -40,8 +41,12 @@ const MENU = [
     { key:'smith',  label:'鍛冶屋', icon:'🔨', color:'#ffcc00', action:'強化・分解・作成' },
     { key:'temple', label:'神殿',   icon:'🏛', color:'#ff88cc', action:'転職する' },
   ],
+  // 宝樹は1つだけのまとまり＝横いっぱい（今のⅡと同じ並び方）
+  [
+    { key:'tree', label:'ユグレシアの宝樹', icon:'🌳', color:'#44dd99', action:'祈る' },
+  ],
 ]
-const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', smith:'🔨 鍛冶屋', temple:'🏛 神殿' }
+const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', smith:'🔨 鍛冶屋', temple:'🏛 神殿', tree:'🌳 ユグレシアの宝樹' }
 
 // 今のⅡと同じ2列（grid の auto-fit は列を同じ幅にしかできないので flex で組む）
 //   左 … flex:'1 1 340px'／右 … flex:'999 1 340px'＝余った幅はほぼ右へ。688px より狭いと折り返して1列
@@ -278,6 +283,7 @@ export default function V2capHome() {
             {screen === 'smith' && <V2capSmith prof={prof} inventory={inventory} onProfile={refresh} onGo={setScreen} />}
             {screen === 'skills' && <V2capSkills prof={prof} inventory={inventory} onProfile={refresh} />}
             {screen === 'temple' && <V2capTemple prof={prof} inventory={inventory} onProfile={refresh} />}
+            {screen === 'tree' && <V2capTree prof={prof} onProfile={refresh} />}
           </div>
         )}
       </div>

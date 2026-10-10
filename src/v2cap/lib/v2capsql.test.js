@@ -15,6 +15,7 @@ import { SORTIE_CD, DROP_RARITY } from './sortie.js'
 import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV } from './smith.js'
 import { DAILY_EXP_PCT, DAILY_GOLD_PER_LV, DAY_RESET_HOUR } from './daily.js'
 import { AVATAR_PRESETS, AVATAR_FILE_RE } from './avatar.js'
+import { FORTUNES, PRAY_PERMIL, multTenthsOf } from './tree.js'
 import { rewrite } from '../../../tools/v2cap-sql.mjs'
 
 const SQL = readFileSync(new URL('../../../supabase_v2cap_core.sql', import.meta.url), 'utf8')
@@ -326,6 +327,26 @@ test('【確定】アイコン：入れられるのは用意された8枚（JS�
   assert.ok(f.includes("return jsonb_build_object('ok', false, 'error', 'その画像は選べません');"))
   assert.ok(SQL.includes('grant execute on function public.v2cap_set_avatar(text) to authenticated;'))
   assert.ok(!/gold/.test(f), 'アップロードは無料（Goldを引かない）')
+})
+
+test('【確定】ユグレシアの宝樹：運勢の並び・出やすさ・倍率と経験値の割合がJSと同じ。1日1回（管理者も）・ごほうびは経験値だけ', () => {
+  for (const col of ['last_pray_at timestamptz', 'last_fortune text', 'pray_count int not null default 0', "pray_log jsonb not null default '[]'::jsonb"]) {
+    assert.ok(SQL.includes(`alter table public.v2cap_profiles add column if not exists ${col};`), col)
+  }
+  const f = fnBody('v2cap_pray')
+  assert.ok(f.includes(`c_names  constant text[] := array[${FORTUNES.map(x => `'${x.name}'`).join(', ')}];`), '並びがJSと同じ')
+  assert.ok(f.includes(`c_weight constant int[]  := array[${FORTUNES.map(x => x.weight).join(', ')}];`), '出やすさがJSと同じ')
+  assert.ok(f.includes(`c_mult   constant int[]  := array[${FORTUNES.map(multTenthsOf).join(', ')}];`), '倍率がJSと同じ')
+  const tiers = PRAY_PERMIL.filter(([max]) => Number.isFinite(max)).map(([max, p]) => `when v_lv <= ${max} then ${p}`).join(' ')
+  assert.ok(f.includes(`v_permil := case ${tiers} else ${PRAY_PERMIL[PRAY_PERMIL.length - 1][1]} end;`), '割合の段がJSと同じ')
+  assert.ok(f.includes('v_exp    := (public.v2cap_need(v_lv) * v_permil * c_mult[v_idx] + 9999) / 10000;'), '切り上げ（tree.js の prayExpOf）')
+  assert.match(f, /returning p\.lv, p\.pray_count, p\.pray_log into v_lv, v_count, v_log;/, '祈った時点のLV')
+  assert.ok(f.includes('v_res := public.v2cap_apply_exp(v_uid, v_exp);'), 'EXPは戦闘と同じ扱い')
+  // 1日1回：確認と記録を1文で（日本時間の5時で切り替わる）。管理者だけ何回でも、は入れない
+  assert.ok(f.includes("< ((now()           at time zone 'Asia/Tokyo') - interval '5 hours')::date)"))
+  assert.ok(!/is_admin|v_admin/.test(f), '管理者だけ何回でも、は入れない（この版は管理者しか入れない）')
+  assert.ok(!/gold/.test(f), 'ごほうびは経験値だけ（ユーザー決定）')
+  assert.ok(SQL.includes('grant execute on function public.v2cap_pray() to authenticated;'))
 })
 
 test('出撃の間隔はサーバーでも見る（10秒・通信の揺れぶん2秒の余裕）', () => {
