@@ -29,10 +29,12 @@ import { RARITY_COLOR, RARITIES, rarityLabel, reqLvOf } from '../lib/equipment.j
 //     動かすのはログの枠の中だけ（scrollIntoView はページごと動いてしまうので使わない）。
 //     オフのときは、新しい戦闘のたびに一番上から出す
 // ============================================================
+// ★ログに注記は付けない（2026-10-10 ユーザー指示「（朝だけ）とか（時間帯限定で1.5倍）とか倒した時の（1ターン）の部分いらない」）：
+//   時間帯の敵の「（朝だけ）」・報酬の「（ボスで5倍）（レアで3倍）（時間帯限定で1.5倍）」・勝ち負けの「（◯ターン）」は出さない
 const ROLE_LINE = {
   boss:  (foe, lv) => ({ text:`⚠ ボス出現！ ${foe}（LV${lv}）が現れた！`, color:'#ff4444' }),
   rare:  (foe, lv) => ({ text:`✨ レアモンスター！ ${foe}（LV${lv}）が現れた！`, color:'#ffcc00' }),
-  timed: (foe, lv, band) => ({ text:`${foe}（LV${lv}・${band}だけ）が現れた！`, color:'#aaddff' }),
+  timed: (foe, lv) => ({ text:`${foe}（LV${lv}）が現れた！`, color:'#aaddff' }),
   normal: (foe, lv) => ({ text:`${foe}（LV${lv}）が現れた！`, color:'#88ccff' }),
 }
 const mult = (role) => `${ROLE_TENTHS[role] / 10}倍`
@@ -100,11 +102,11 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       const foe = enc.enemy.name
       const you = me.name
       const out = []
-      out.push(ROLE_LINE[enc.role](foe, enc.lv, enc.band))
+      out.push(ROLE_LINE[enc.role](foe, enc.lv))
       out.push(...buildBattleLog(r, you, foe))
       out.push(win
-        ? { text:`${foe}を倒した！（${r.turns}ターン）`, color:'#ffcc00' }
-        : { text:`敗北…（${r.turns}ターン）`, color:'#ff4444' })
+        ? { text:`${foe}を倒した！`, color:'#ffcc00' }
+        : { text:'敗北…', color:'#ff4444' })
       setLogs(out)
 
       // ★1戦ごとにその場で反映する。EXP・Gold・アイテムLVはサーバーが場所の表から決める
@@ -124,8 +126,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       const jobMax = jobOf(prof.jobs, prof.class).lv >= jobMaxOf(prof.class)
       const expText = `EXP +${data.exp}${lvMax ? '（LV上限のため入らない）' : ''}${jobMax ? '' : `（ClassEXP +${data.exp}）`}`
       if (win) {
-        const bonus = enc.role === 'normal' ? '' : `（${enc.role === 'boss' ? 'ボス' : enc.role === 'rare' ? 'レア' : '時間帯限定'}で${mult(enc.role)}）`
-        after.push({ text:`${expText}　Gold +${data.gold}${bonus}`, color:'#ffcc00' })
+        after.push({ text:`${expText}　Gold +${data.gold}`, color:'#ffcc00' })
       } else if (data.exp > 0) {
         // 【確定】負けても経験値はその場所の最低値が入る（倍率なし・Goldは入らない・2026-10-09 ユーザー指示）。
         //   文言は「EXP +2（ClassEXP +2）」だけ（「負けても最低値は入る」の添え書きはユーザー指示で外した）
