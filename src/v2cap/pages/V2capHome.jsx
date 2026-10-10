@@ -16,6 +16,7 @@ import V2capTemple from '../components/V2capTemple.jsx'
 import V2capDaily from '../components/V2capDaily.jsx'
 import V2capProfile from '../components/V2capProfile.jsx'
 import V2capTree from '../components/V2capTree.jsx'
+import V2capDex from '../components/V2capDex.jsx'
 import { START_CLASSES, weaponsOf, attackKindOf, classDescOf } from '../lib/jobs.js'
 
 // ============================================================
@@ -36,6 +37,7 @@ const MENU = [
     { key:'profile', label:'プロフィール', icon:'👤', color:'#88aaff', action:'アイコンを設定する' },
     { key:'skills',  label:'スキルセット', icon:'📖', color:'#44ff88', action:'編成する' },
     { key:'equip',   label:'装備',         icon:'🛡', color:'#88ccff', action:'着ける・外す' },
+    { key:'dex',     label:'モンスター図鑑', icon:'📕', color:'#c0b0ff', action:'敵とドロップを見る' },
   ],
   [
     { key:'smith',  label:'鍛冶屋', icon:'🔨', color:'#ffcc00', action:'強化・分解・作成' },
@@ -46,7 +48,7 @@ const MENU = [
     { key:'tree', label:'ユグレシアの宝樹', icon:'🌳', color:'#44dd99', action:'祈る' },
   ],
 ]
-const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', smith:'🔨 鍛冶屋', temple:'🏛 神殿', tree:'🌳 ユグレシアの宝樹' }
+const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', tree:'🌳 ユグレシアの宝樹' }
 
 // 今のⅡと同じ2列（grid の auto-fit は列を同じ幅にしかできないので flex で組む）
 //   左 … flex:'1 1 340px'／右 … flex:'999 1 340px'＝余った幅はほぼ右へ。688px より狭いと折り返して1列
@@ -284,6 +286,7 @@ export default function V2capHome() {
             {screen === 'skills' && <V2capSkills prof={prof} inventory={inventory} onProfile={refresh} />}
             {screen === 'temple' && <V2capTemple prof={prof} inventory={inventory} onProfile={refresh} />}
             {screen === 'tree' && <V2capTree prof={prof} onProfile={refresh} />}
+            {screen === 'dex' && <V2capDex prof={prof} />}
           </div>
         )}
       </div>

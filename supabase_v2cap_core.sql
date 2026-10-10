@@ -2982,6 +2982,20 @@ delete from public.v2cap_equipment e
 update public.v2cap_inventory i set ilv = e.lv
   from public.v2cap_equipment e
  where e.id = i.base_id and e.lv is not null and i.ilv is distinct from e.lv;
+-- ★2026-10-11 モンスター図鑑（設計 §6-4）：討伐数（プレイヤー × 敵の名前）。出撃の精算で勝ったときに1つ足す。
+--   ⚠敵の表 v2cap_enemies は流し直すたびに消して入れ直すので、**外部キーでつながない**
+--     （今のⅡの v2_kills はつないでいて、敵の表を入れ直すたびに連鎖削除で討伐数が消えていた）
+create table if not exists public.v2cap_kills (
+  player_id uuid not null references auth.users(id) on delete cascade,
+  enemy     text not null,
+  n         int  not null default 0,
+  primary key (player_id, enemy)
+);
+alter table public.v2cap_kills enable row level security;
+drop policy if exists v2cap_kills_own on public.v2cap_kills;
+create policy v2cap_kills_own on public.v2cap_kills for select to authenticated using (player_id = auth.uid());
+revoke all on table public.v2cap_kills from anon;
+grant select on table public.v2cap_kills to authenticated;
 create index if not exists v2cap_inventory_player_idx on public.v2cap_inventory(player_id);
 alter table public.v2cap_inventory enable row level security;
 drop policy if exists v2cap_inventory_own on public.v2cap_inventory;
@@ -3509,6 +3523,9 @@ begin
   -- デイリーミッション（§10）：勝ったら「出撃に勝つ」を1つ数える（受注していない日は数えない）
   if v_win then
     perform public.v2cap_daily_bump(v_uid, 'win', 1);
+    -- モンスター図鑑：勝った敵の討伐数を1つ足す（敵の名前はこの場所にいることを上で確かめてある）
+    insert into public.v2cap_kills (player_id, enemy, n) values (v_uid, v_en.name, 1)
+    on conflict (player_id, enemy) do update set n = public.v2cap_kills.n + 1;
   end if;
 
   v_res := public.v2cap_apply_exp(v_uid, v_exp);
@@ -4074,6 +4091,7 @@ begin
   if auth.uid() is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   delete from public.v2cap_inventory where player_id = auth.uid();
+  delete from public.v2cap_kills where player_id = auth.uid();
   delete from public.v2cap_profiles where id = auth.uid();
   return jsonb_build_object('ok', true);
 end;

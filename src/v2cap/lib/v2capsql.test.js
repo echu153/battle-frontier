@@ -299,7 +299,9 @@ test('【確定】デイリーミッション：受注した時点のLVで報酬
   assert.match(bump, /not exists \(select 1 from public\.v2cap_daily_tasks t where t\.key = p_key\)/)
   assert.ok(bump.includes('where id = p_player and daily_lv is not null and not daily_claimed;'), '受注してから数える（ユーザー決定）')
   // 出撃の精算：勝ったときだけ「出撃に勝つ」を数える
-  assert.match(fnBody('v2cap_sortie_settle'), /if v_win then\s+perform public\.v2cap_daily_bump\(v_uid, 'win', 1\);\s+end if;/)
+  // （同じ枝で図鑑の討伐数も足すので、枝の中にほかの行があってもよい）
+  assert.match(fnBody('v2cap_sortie_settle'), /if v_win then\s+perform public\.v2cap_daily_bump\(v_uid, 'win', 1\);[\s\S]*?end if;/)
+  assert.equal((fnBody('v2cap_sortie_settle').match(/v2cap_daily_bump/g) || []).length, 1, '数えるのは勝ったときの1か所だけ')
   // 受け取り：受注している・受け取っていない・一覧を全部満たす。二重に受け取れない。EXPは戦闘と同じ扱い
   const cl = fnBody('v2cap_daily_claim')
   assert.match(cl, /perform 1 from public\.v2cap_profiles where id = v_uid for update;/)
@@ -347,6 +349,24 @@ test('【確定】ユグレシアの宝樹：運勢の並び・出やすさ・�
   assert.ok(!/is_admin|v_admin/.test(f), '管理者だけ何回でも、は入れない（この版は管理者しか入れない）')
   assert.ok(!/gold/.test(f), 'ごほうびは経験値だけ（ユーザー決定）')
   assert.ok(SQL.includes('grant execute on function public.v2cap_pray() to authenticated;'))
+})
+
+test('【確定】モンスター図鑑：討伐数は勝ったときだけサーバーが数える。敵の表につながない（流し直しても消えない）。自分の分だけ読める', () => {
+  const m = SQL.match(/create table if not exists public\.v2cap_kills \(([\s\S]*?)\);/)
+  assert.ok(m, 'v2cap_kills がある')
+  assert.ok(!/v2cap_enemies/.test(m[1]), '敵の表（流し直すたびに消して入れ直す）に外部キーでつながない')
+  assert.match(m[1], /primary key \(player_id, enemy\)/)
+  assert.ok(SQL.includes('create policy v2cap_kills_own on public.v2cap_kills for select to authenticated using (player_id = auth.uid());'))
+  assert.ok(!/grant (insert|update|delete|all)[^;]*v2cap_kills/.test(SQL), '書き込みは開けない（RPCの中だけ）')
+  // 出撃の精算：勝ったときだけ、この場所にいると確かめた敵（v_en）の名前で足す
+  const settle = fnBody('v2cap_sortie_settle')
+  const win = settle.match(/if v_win then\s+perform public\.v2cap_daily_bump\(v_uid, 'win', 1\);([\s\S]*?)end if;/)
+  assert.ok(win, '勝ったときの枝')
+  assert.ok(win[1].includes('insert into public.v2cap_kills (player_id, enemy, n) values (v_uid, v_en.name, 1)'))
+  assert.ok(win[1].includes('on conflict (player_id, enemy) do update set n = public.v2cap_kills.n + 1;'))
+  assert.equal((SQL.match(/insert into public\.v2cap_kills/g) || []).length, 1, '数えるのは出撃の精算だけ')
+  // 作り直すと図鑑も空になる
+  assert.ok(fnBody('v2cap_dev_reset').includes('delete from public.v2cap_kills where player_id = auth.uid();'))
 })
 
 test('出撃の間隔はサーバーでも見る（10秒・通信の揺れぶん2秒の余裕）', () => {
