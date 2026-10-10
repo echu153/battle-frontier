@@ -7,7 +7,7 @@ import {
 } from '../lib/daily.js'
 
 // ============================================================
-// 「レベルキャップあり」版 — デイリーミッション（ホームのステータスの下）
+// 「レベルキャップあり」版 — デイリーミッション（ホームの右の一番上・今のⅡと同じ場所）
 //   見た目は今のⅡの V2Daily にそろえる（畳んだ見出しに進み具合を出す）。違うのは（2026-10-10 ユーザー決定）：
 //   ・難易度はなし。「受注する」を押してから数える（今のⅡのような、選ぶまで閉じられないポップアップは出さない）
 //   ・報酬は受注した時点のLVで決まる（受注する前は「いま受注すると」の報酬を出す）
@@ -63,7 +63,7 @@ export default function V2capDaily({ prof, onProfile }) {
   const hot = !d.accepted || (done && !d.claimed)
 
   return (
-    <div style={{ ...box, padding:'10px', marginTop:'8px', borderColor: hot ? '#ffcc00' : '#0044aa' }}>
+    <div style={{ ...box, padding:'12px', marginBottom:'8px', borderColor: hot ? '#ffcc00' : '#0044aa' }}>
       <button onClick={() => setOpen(v => !v)}
         style={{ ...miniBtn(hot ? '#ffcc00' : '#7fa6d0'), width:'100%', padding:'5px', textAlign:'left' }}>
         {open ? '▲ ' : '▼ '}{head}

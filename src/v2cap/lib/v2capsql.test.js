@@ -14,6 +14,7 @@ import { SLOTS, RARITIES } from './equipment.js'
 import { SORTIE_CD, DROP_RARITY } from './sortie.js'
 import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV } from './smith.js'
 import { DAILY_EXP_PCT, DAILY_GOLD_PER_LV, DAY_RESET_HOUR } from './daily.js'
+import { AVATAR_PRESETS, AVATAR_FILE_RE } from './avatar.js'
 import { rewrite } from '../../../tools/v2cap-sql.mjs'
 
 const SQL = readFileSync(new URL('../../../supabase_v2cap_core.sql', import.meta.url), 'utf8')
@@ -314,6 +315,17 @@ test('【確定】デイリーミッション：受注した時点のLVで報酬
   }
   assert.ok(SQL.includes('grant execute on function public.v2cap_daily_accept() to authenticated;'))
   assert.ok(SQL.includes('grant execute on function public.v2cap_daily_claim() to authenticated;'))
+})
+
+test('【確定】アイコン：入れられるのは用意された8枚（JSと同じ名前）か自分のフォルダの画像だけ（判定の形もJSと同じ）', () => {
+  assert.ok(SQL.includes('alter table public.v2cap_profiles add column if not exists avatar text;'))
+  const f = fnBody('v2cap_set_avatar')
+  assert.ok(f.includes(`p_path = any(array[${AVATAR_PRESETS.map(p => `'${p.file}'`).join(', ')}])`), '8枚の名前がJS（avatar.js）と同じ')
+  // 自分のフォルダ：「<ユーザーID>/」（36字＋1）のあとに、JSと同じ名前の形
+  assert.ok(f.includes(`(left(p_path, 37) = v_uid::text || '/' and substr(p_path, 38) ~ '${AVATAR_FILE_RE.source}')`), '名前の形がJSと同じ')
+  assert.ok(f.includes("return jsonb_build_object('ok', false, 'error', 'その画像は選べません');"))
+  assert.ok(SQL.includes('grant execute on function public.v2cap_set_avatar(text) to authenticated;'))
+  assert.ok(!/gold/.test(f), 'アップロードは無料（Goldを引かない）')
 })
 
 test('出撃の間隔はサーバーでも見る（10秒・通信の揺れぶん2秒の余裕）', () => {

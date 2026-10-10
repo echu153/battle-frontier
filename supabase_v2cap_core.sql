@@ -2891,6 +2891,9 @@ alter table public.v2cap_profiles add column if not exists daily_day date;
 alter table public.v2cap_profiles add column if not exists daily_lv int;
 alter table public.v2cap_profiles add column if not exists daily_counts jsonb not null default '{}'::jsonb;
 alter table public.v2cap_profiles add column if not exists daily_claimed boolean not null default false;
+-- ★2026-10-11 アイコン（ユーザー指示「自分で設定できるように」）：avatars バケット（旧版・今のⅡと同じ置き場）の中の場所。
+--   用意された8枚か、自分のフォルダ（<ユーザーID>/…）の画像だけ（v2cap_set_avatar が見る）。null は画像なし
+alter table public.v2cap_profiles add column if not exists avatar text;
 create unique index if not exists v2cap_profiles_username_lower_idx
   on public.v2cap_profiles (lower(username));
 -- 参照は認証済み全員（今のⅡと同じ）。書き込みはRPC経由だけ
@@ -3930,6 +3933,33 @@ end;
 $$;
 revoke all on function public.v2cap_craft(text) from public, anon;
 grant execute on function public.v2cap_craft(text) to authenticated;
+
+-- ============================================================
+-- ===== 8-2. アイコン（2026-10-11）=====
+-- ============================================================
+-- 【確定】ユーザー指示「自分で設定できるように」：用意された8枚から選ぶか、自分でアップロードした画像にする（アップロードは無料）。
+-- ★入れられるのは avatars バケットの「用意された8枚」か「自分のフォルダ（<ユーザーID>/名前）」だけ。
+--   他人の画像・外のURL・おかしな名前は入れない（写しは src/v2cap/lib/avatar.js の isAllowedAvatar）
+create or replace function public.v2cap_set_avatar(p_path text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if p_path is not null and not (
+       p_path = any(array['warrior1.png', 'knight1.png', 'samurai.png', 'hunter1.png', 'hunter2.png', 'wizard1.png', 'wizard2.png', 'priest.png'])
+    or (left(p_path, 37) = v_uid::text || '/' and substr(p_path, 38) ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$')
+  ) then
+    return jsonb_build_object('ok', false, 'error', 'その画像は選べません');
+  end if;
+  update public.v2cap_profiles set avatar = p_path, updated_at = now() where id = v_uid;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  return jsonb_build_object('ok', true, 'avatar', p_path);
+end;
+$$;
+revoke all on function public.v2cap_set_avatar(text) from public, anon;
+grant execute on function public.v2cap_set_avatar(text) to authenticated;
 
 -- ============================================================
 -- ===== 9. 開発用 =====

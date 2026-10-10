@@ -4,7 +4,9 @@ import { supabase } from '../../supabase'
 import { validateName } from '../../lib/nameFilter'
 import { reportDevAccess } from '../../lib/devAccess'
 import V2Modal from '../../v2/components/V2Modal.jsx'
+import { V2Menu } from '../../v2/components/V2Status.jsx'
 import { box, btn, miniBtn, TEXT } from '../../v2/components/v2ui.js'
+import { useStored } from '../../v2/lib/prefs.js'
 import V2capStatus from '../components/V2capStatus.jsx'
 import V2capSortie from '../components/V2capSortie.jsx'
 import V2capEquip from '../components/V2capEquip.jsx'
@@ -12,6 +14,7 @@ import V2capSmith from '../components/V2capSmith.jsx'
 import V2capSkills from '../components/V2capSkills.jsx'
 import V2capTemple from '../components/V2capTemple.jsx'
 import V2capDaily from '../components/V2capDaily.jsx'
+import V2capProfile from '../components/V2capProfile.jsx'
 import { START_CLASSES, weaponsOf, attackKindOf, classDescOf } from '../lib/jobs.js'
 
 // ============================================================
@@ -19,17 +22,32 @@ import { START_CLASSES, weaponsOf, attackKindOf, classDescOf } from '../lib/jobs
 // ------------------------------------------------------------
 // 2026-10-09 着手。今のⅡ（/v2）は仮として残し、別のキャラ・別のデータで作る。
 // 設計は docs/v2cap-design.md。入れるのは is_admin だけ（サーバーの v2cap_is_dev も同じ）。
-// 土台で作ったのは：キャラ作成・ステータス・出撃・装備・神殿（転職）・スキルセット
-// 2026-10-10 鍛冶屋（強化・分解・作成）を足した（ユーザー指示）。強化と分解は鍛冶屋だけ
-// 2026-10-10 デイリーミッションを足した（ユーザー指示「V2と一緒で」）。今のⅡと同じく、ホームのステータスの下に出す
+// 【確定】2026-10-11 ユーザー指示「UIはV2みたいにこんな感じにしてほしい」：今のⅡのホーム（V2Home.jsx）と同じ形にした
+//   ・上に貼り付く細い帯（BATTLE FRONTIER Ⅱ・旧版へ戻る）
+//   ・ホームは左右2列（左＝ステータス 340px／右＝今日のミッション→出撃→メニュー）。最大980px・狭いと1列に折り返す
+//   ・メニューは今のⅡと同じ部品（V2Menu：2列・まとまりごと・色つきの枠・「メニューを閉じる」）。この版にある施設だけ並べる
+//   ・施設は別の画面（ステータスは出さない・横いっぱい）。「← ホームへ」で戻る
+//   ・ステータスとメニューの開け閉めは覚えておく（今のⅡとは別のキー）
+//   ・出撃のタブ（アリーナ・ATB）はこの版に無いので出さない
 // ============================================================
 const MENU = [
-  { key:'equip',  label:'装備',         icon:'🛡', color:'#88ccff', action:'着ける・外す' },
-  { key:'smith',  label:'鍛冶屋',       icon:'🔨', color:'#ffaa44', action:'強化・分解・作成' },
-  { key:'skills', label:'スキルセット', icon:'📖', color:'#44ff88', action:'編成する' },
-  { key:'temple', label:'神殿',         icon:'🏛', color:'#ff88cc', action:'転職する' },
+  [
+    { key:'profile', label:'プロフィール', icon:'👤', color:'#88aaff', action:'アイコンを設定する' },
+    { key:'skills',  label:'スキルセット', icon:'📖', color:'#44ff88', action:'編成する' },
+    { key:'equip',   label:'装備',         icon:'🛡', color:'#88ccff', action:'着ける・外す' },
+  ],
+  [
+    { key:'smith',  label:'鍛冶屋', icon:'🔨', color:'#ffcc00', action:'強化・分解・作成' },
+    { key:'temple', label:'神殿',   icon:'🏛', color:'#ff88cc', action:'転職する' },
+  ],
 ]
-const SCREEN_TITLE = { equip:'🛡 装備', smith:'🔨 鍛冶屋', skills:'📖 スキルセット', temple:'🏛 神殿' }
+const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', smith:'🔨 鍛冶屋', temple:'🏛 神殿' }
+
+// 今のⅡと同じ2列（grid の auto-fit は列を同じ幅にしかできないので flex で組む）
+//   左 … flex:'1 1 340px'／右 … flex:'999 1 340px'＝余った幅はほぼ右へ。688px より狭いと折り返して1列
+const TWO_COLUMN = { display:'flex', flexWrap:'wrap', gap:'8px', alignItems:'flex-start', maxWidth:'980px', margin:'0 auto' }
+const COL_LEFT  = { flex:'1 1 340px', minWidth:0 }
+const COL_RIGHT = { flex:'999 1 340px', minWidth:0 }
 
 export default function V2capHome() {
   const nav = useNavigate()
@@ -45,6 +63,9 @@ export default function V2capHome() {
   const [error, setError] = useState('')
   const [devMsg, setDevMsg] = useState('')
   const [confirmReset, setConfirmReset] = useState(false)
+  // ★開け閉めは覚えておく。今のⅡ（v2:openStatus・v2:openMenu）とは別のキー
+  const [openStatus, setOpenStatus] = useStored('capOpenStatus', true)
+  const [openMenu, setOpenMenu] = useStored('capOpenMenu', true)
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -84,6 +105,7 @@ export default function V2capHome() {
     try { await load() } catch (err) { setError(err.message || String(err)) }
   }, [load])
   const onScene = useCallback((s) => setInBattle(s === 'battle'), [])
+  const goHome = () => setScreen('home')
 
   const create = async (e) => {
     e.preventDefault()
@@ -118,24 +140,30 @@ export default function V2capHome() {
     setProf(null); setInventory([]); setScreen('home'); setDevMsg('')
   }
 
-  const page = { minHeight:'100vh', background:'#000820', color:'#88ccff', fontFamily:'monospace', padding:'12px' }
-  if (loading) return <div style={{ ...page, textAlign:'center', paddingTop:'40px', color:'#0088ff' }}>読み込み中...</div>
-
+  // index.css の #root が text-align:center なので、この版の中は左揃えに戻す（今のⅡと同じ）
+  const page = { minHeight:'100vh', background:'#000820', color:'#88ccff', fontFamily:'monospace', textAlign:'left' }
+  // ヘッダ。今のⅡと同じで、上に貼り付く細い帯（枠では囲まない）
   const header = (
-    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px', gap:'8px', flexWrap:'wrap' }}>
-      <div>
-        <div style={{ color:'#ffcc00', fontSize:'14px' }}>バトルフロンティアⅡ <span style={{ color:'#ff88cc' }}>レベルキャップあり</span></div>
-        <div style={{ color: TEXT.label, fontSize:'10px' }}>開発中（is_admin だけが入れます）</div>
+    <div style={{ background:'#000820', borderBottom:'1px solid #003366', padding:'6px 12px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:'8px', position:'sticky', top:0, zIndex:100 }}>
+      <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', minWidth:0 }}>
+        <div style={{ color:'#ffcc00', fontSize:'13px', letterSpacing:'2px' }}>BATTLE FRONTIER Ⅱ</div>
+        <span style={{ color:'#ff88cc', fontSize:'10px' }}>レベルキャップあり</span>
+        <span style={{ color:'#a89ccc', fontSize:'10px' }}>[開発]</span>
       </div>
-      <button onClick={() => nav('/game')} style={miniBtn('#88aaff')}>← 旧版へ戻る</button>
+      <button onClick={() => nav('/game')}
+        style={{ background:'none', border:'1px solid #7fa6d0', color:'#7fa6d0', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', flexShrink:0 }}>
+        ← 旧版へ戻る
+      </button>
     </div>
   )
+
+  if (loading) return <div style={{ ...page, textAlign:'center', paddingTop:'40px', color:'#0088ff' }}>読み込み中...</div>
 
   if (sqlError) {
     return (
       <div style={page}>
-        <div style={{ maxWidth:'640px', margin:'0 auto' }}>
-          {header}
+        {header}
+        <div style={{ padding:'8px 12px', maxWidth:'640px', margin:'0 auto' }}>
           <div style={{ ...box, padding:'14px', borderColor:'#ff8844' }}>
             <div style={{ color:'#ff8844', marginBottom:'6px' }}>⚠ データを読み込めませんでした</div>
             <div style={{ color: TEXT.sub, fontSize:'11px', lineHeight:1.8 }}>
@@ -152,8 +180,8 @@ export default function V2capHome() {
   if (!prof) {
     return (
       <div style={page}>
-        <div style={{ maxWidth:'760px', margin:'0 auto' }}>
-          {header}
+        {header}
+        <div style={{ padding:'8px 12px', maxWidth:'760px', margin:'0 auto' }}>
           {/* ★見せるのは「キャラクター名」と「クラス選択」だけ（2026-10-09 ユーザー指示）。
                カードは職業名・物理／魔法・武器・特徴の説明1行（クラスのステや技の一覧は神殿で見る） */}
           <form onSubmit={create} style={{ ...box, padding:'14px' }}>
@@ -192,7 +220,7 @@ export default function V2capHome() {
     )
   }
 
-  // ===== ホーム =====
+  const isHome = screen === 'home'
   return (
     <div style={page}>
       {confirmReset && (
@@ -201,59 +229,57 @@ export default function V2capHome() {
           この版のキャラクターと装備を消します（今のⅡ・旧版のデータには触りません）。元には戻せません。
         </V2Modal>
       )}
-      <div style={{ maxWidth:'980px', margin:'0 auto' }}>
-        {header}
-        <div style={{ display:'flex', flexWrap:'wrap', gap:'8px', alignItems:'flex-start' }}>
-          <div style={{ flex:'1 1 340px', minWidth:0 }}>
-            <V2capStatus prof={prof} inventory={inventory} onProfile={refresh} />
-            {/* ★今のⅡと同じく、ホームにいて戦闘中でないときだけ出す */}
-            {screen === 'home' && !inBattle && <V2capDaily prof={prof} onProfile={refresh} />}
-          </div>
-          <div style={{ flex:'999 1 340px', minWidth:0 }}>
-            {screen === 'home' ? (
-              <>
+      {header}
+      <div style={{ padding:'8px 12px' }}>
+        {error && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'8px' }}>⚠ {error}</div>}
+        {isHome ? (
+          <div style={TWO_COLUMN}>
+            {/* ===== 左：キャラクターの状態（ホームだけ） ===== */}
+            <div style={COL_LEFT}>
+              <V2capStatus prof={prof} inventory={inventory} onProfile={refresh}
+                open={openStatus} onToggle={() => setOpenStatus(v => !v)} onAvatar={() => setScreen('profile')} />
+            </div>
+
+            {/* ===== 右：やること（今日のミッション・出撃・メニュー・開発用） ===== */}
+            <div style={COL_RIGHT}>
+              {!inBattle && <V2capDaily prof={prof} onProfile={refresh} />}
+              <div style={{ marginBottom:'8px' }}>
                 <V2capSortie prof={prof} inventory={inventory} onProfile={refresh} onScene={onScene} />
-                {!inBattle && (
-                  <>
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(150px, 1fr))', gap:'6px', marginTop:'8px' }}>
-                      {MENU.map(m => (
-                        <button key={m.key} onClick={() => setScreen(m.key)}
-                          style={{ ...box, padding:'10px', textAlign:'left', cursor:'pointer', borderColor:'#003366' }}>
-                          <div style={{ color: m.color, fontSize:'12px' }}>{m.icon} {m.label}</div>
-                          <div style={{ color: TEXT.label, fontSize:'10px', marginTop:'2px' }}>{m.action}</div>
+              </div>
+              {!inBattle && (
+                <>
+                  <V2Menu groups={MENU} open={openMenu} onToggle={() => setOpenMenu(v => !v)} onPick={setScreen} />
+                  <div style={{ ...box, padding:'10px', borderColor:'#553366' }}>
+                    <div style={{ color:'#ff88cc', fontSize:'11px', marginBottom:'6px' }}>🧪 開発用</div>
+                    <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
+                      {[100, 10000, 1000000].map(n => (
+                        <button key={n} onClick={() => gainExp(n)} disabled={busy} style={miniBtn('#44ff88')}>
+                          EXP+{n.toLocaleString()}
                         </button>
                       ))}
+                      <button onClick={() => setConfirmReset(true)} disabled={busy} style={miniBtn('#ff8844')}>キャラを作り直す</button>
                     </div>
-                    <div style={{ ...box, padding:'10px', marginTop:'8px', borderColor:'#553366' }}>
-                      <div style={{ color:'#ff88cc', fontSize:'11px', marginBottom:'6px' }}>🧪 開発用</div>
-                      <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
-                        {[100, 10000, 1000000].map(n => (
-                          <button key={n} onClick={() => gainExp(n)} disabled={busy} style={miniBtn('#44ff88')}>
-                            EXP+{n.toLocaleString()}
-                          </button>
-                        ))}
-                        <button onClick={() => setConfirmReset(true)} disabled={busy} style={miniBtn('#ff8844')}>キャラを作り直す</button>
-                      </div>
-                      <div style={{ color: TEXT.sub, fontSize:'9px', marginTop:'4px' }}>EXPは戦闘と同じ扱い（いまの職業のClassEXPにも同じ量が入る）</div>
-                      {devMsg && <div style={{ color:'#cfe2ff', fontSize:'10px', marginTop:'4px' }}>{devMsg}</div>}
-                    </div>
-                  </>
-                )}
-              </>
-            ) : (
-              <>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
-                  <button onClick={() => setScreen('home')} style={miniBtn('#88aaff')}>← ホームへ</button>
-                  <span style={{ color:'#88ccff', fontSize:'12px' }}>{SCREEN_TITLE[screen]}</span>
-                </div>
-                {screen === 'equip' && <V2capEquip prof={prof} inventory={inventory} onProfile={refresh} onGo={setScreen} />}
-                {screen === 'smith' && <V2capSmith prof={prof} inventory={inventory} onProfile={refresh} onGo={setScreen} />}
-                {screen === 'skills' && <V2capSkills prof={prof} inventory={inventory} onProfile={refresh} />}
-                {screen === 'temple' && <V2capTemple prof={prof} inventory={inventory} onProfile={refresh} />}
-              </>
-            )}
+                    <div style={{ color: TEXT.sub, fontSize:'9px', marginTop:'4px' }}>EXPは戦闘と同じ扱い（いまの職業のClassEXPにも同じ量が入る）</div>
+                    {devMsg && <div style={{ color:'#cfe2ff', fontSize:'10px', marginTop:'4px' }}>{devMsg}</div>}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-        </div>
+        ) : (
+          // ===== 施設（ステータスは出さない・横いっぱい） =====
+          <div>
+            <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px' }}>
+              <button onClick={goHome} style={miniBtn('#88aaff')}>← ホームへ</button>
+              <span style={{ color:'#88ccff', fontSize:'13px' }}>{SCREEN_TITLE[screen]}</span>
+            </div>
+            {screen === 'profile' && <V2capProfile prof={prof} onProfile={refresh} />}
+            {screen === 'equip' && <V2capEquip prof={prof} inventory={inventory} onProfile={refresh} onGo={setScreen} />}
+            {screen === 'smith' && <V2capSmith prof={prof} inventory={inventory} onProfile={refresh} onGo={setScreen} />}
+            {screen === 'skills' && <V2capSkills prof={prof} inventory={inventory} onProfile={refresh} />}
+            {screen === 'temple' && <V2capTemple prof={prof} inventory={inventory} onProfile={refresh} />}
+          </div>
+        )}
       </div>
     </div>
   )
