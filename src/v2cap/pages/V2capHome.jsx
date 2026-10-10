@@ -11,6 +11,7 @@ import V2capEquip from '../components/V2capEquip.jsx'
 import V2capSmith from '../components/V2capSmith.jsx'
 import V2capSkills from '../components/V2capSkills.jsx'
 import V2capTemple from '../components/V2capTemple.jsx'
+import V2capDaily from '../components/V2capDaily.jsx'
 import { START_CLASSES, weaponsOf, attackKindOf, classDescOf } from '../lib/jobs.js'
 
 // ============================================================
@@ -20,6 +21,7 @@ import { START_CLASSES, weaponsOf, attackKindOf, classDescOf } from '../lib/jobs
 // 設計は docs/v2cap-design.md。入れるのは is_admin だけ（サーバーの v2cap_is_dev も同じ）。
 // 土台で作ったのは：キャラ作成・ステータス・出撃・装備・神殿（転職）・スキルセット
 // 2026-10-10 鍛冶屋（強化・分解・作成）を足した（ユーザー指示）。強化と分解は鍛冶屋だけ
+// 2026-10-10 デイリーミッションを足した（ユーザー指示「V2と一緒で」）。今のⅡと同じく、ホームのステータスの下に出す
 // ============================================================
 const MENU = [
   { key:'equip',  label:'装備',         icon:'🛡', color:'#88ccff', action:'着ける・外す' },
@@ -204,6 +206,8 @@ export default function V2capHome() {
         <div style={{ display:'flex', flexWrap:'wrap', gap:'8px', alignItems:'flex-start' }}>
           <div style={{ flex:'1 1 340px', minWidth:0 }}>
             <V2capStatus prof={prof} inventory={inventory} onProfile={refresh} />
+            {/* ★今のⅡと同じく、ホームにいて戦闘中でないときだけ出す */}
+            {screen === 'home' && !inBattle && <V2capDaily prof={prof} onProfile={refresh} />}
           </div>
           <div style={{ flex:'999 1 340px', minWidth:0 }}>
             {screen === 'home' ? (

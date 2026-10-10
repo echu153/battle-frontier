@@ -32,6 +32,8 @@
 --     「捨てる」は分解に置き換えた
 --   ・鍛冶屋（2026-10-10）：強化・分解・作成をする所。作成はレア・エピック・レジェンダリーを Gold とその装備のエリアの残骸で作る
 --     （残骸 30／100／300・Gold 必要LV×50／100／200・必ずできる・武器は14種どれでも）
+--   ・デイリーミッション（2026-10-10・§10）：1日1組・難易度なし。受注してから数え、報酬は受注した時点のLVで決まる
+--     （EXP＝必要EXP×10／5／3／1%・Gold＝LV×100）。内容はあとで決める（いまは仮の「出撃に10回勝つ」）
 -- ============================================================
 
 -- ===== 0. 開発限定ゲート =====
@@ -2813,6 +2815,29 @@ begin
   end if;
 end $$;
 
+-- ---- 1-7. デイリーミッション（2026-10-10）----
+-- key … v2cap_profiles.daily_counts のキー／goal … これだけ数えると達成。全部そろうと受け取れる（§10）
+-- ★ミッションの内容はあとで決める（ユーザー指示）。いまは仮の「出撃に10回勝つ」1つ。
+--   種は src/v2cap/lib/daily.js の DAILY_TASKS から tools/v2cap-sql.mjs が作る
+create table if not exists public.v2cap_daily_tasks (
+  key   text primary key,
+  label text not null,
+  goal  int  not null,
+  sort  int  not null default 0
+);
+alter table public.v2cap_daily_tasks enable row level security;
+drop policy if exists v2cap_daily_tasks_read on public.v2cap_daily_tasks;
+create policy v2cap_daily_tasks_read on public.v2cap_daily_tasks for select to authenticated using (true);
+revoke all on table public.v2cap_daily_tasks from anon;
+grant select on table public.v2cap_daily_tasks to authenticated;
+
+-- @@seed:daily_tasks
+delete from public.v2cap_daily_tasks where key <> all('{win}'::text[]);
+insert into public.v2cap_daily_tasks (key, label, goal, sort) values
+  ('win', '出撃に勝つ', 10, 1)
+on conflict (key) do update set label = excluded.label, goal = excluded.goal, sort = excluded.sort;
+-- @@end:daily_tasks
+
 -- ============================================================
 -- ===== 2. プレイヤー =====
 -- ============================================================
@@ -2860,6 +2885,12 @@ alter table public.v2cap_profiles drop column if exists cleared_areas;
 -- ★2026-10-10 装備の強化と分解：持っている残骸（エリアごと）。{"1": 12, "2": 5} ＝エリアの番号→個数
 --   （名前は src/v2cap/lib/smith.js の SCRAP_NAMES。サーバーは番号だけで持つ）。キャラは消さない
 alter table public.v2cap_profiles add column if not exists materials jsonb not null default '{}'::jsonb;
+-- ★2026-10-10 デイリーミッション（§10）：その日（日本時間の5時で切り替わる）・受注した時点のLV（null＝まだ受注していない）・
+--   進み（{"win": 3}）・受け取ったか。日付が変わると v2cap_daily_roll が空にする。キャラは消さない
+alter table public.v2cap_profiles add column if not exists daily_day date;
+alter table public.v2cap_profiles add column if not exists daily_lv int;
+alter table public.v2cap_profiles add column if not exists daily_counts jsonb not null default '{}'::jsonb;
+alter table public.v2cap_profiles add column if not exists daily_claimed boolean not null default false;
 create unique index if not exists v2cap_profiles_username_lower_idx
   on public.v2cap_profiles (lower(username));
 -- 参照は認証済み全員（今のⅡと同じ）。書き込みはRPC経由だけ
@@ -3467,6 +3498,11 @@ begin
    where id = v_uid
    returning stamina, stamina_at into v_stam, v_stam_at;
 
+  -- デイリーミッション（§10）：勝ったら「出撃に勝つ」を1つ数える（受注していない日は数えない）
+  if v_win then
+    perform public.v2cap_daily_bump(v_uid, 'win', 1);
+  end if;
+
   v_res := public.v2cap_apply_exp(v_uid, v_exp);
   return jsonb_build_object('ok', true, 'win', v_win, 'boss', v_boss, 'role', v_en.role, 'enemy_lv', v_en.lv,
     'exp', v_exp, 'gold', v_gold, 'drop', v_drop,
@@ -3923,3 +3959,123 @@ end;
 $$;
 revoke all on function public.v2cap_dev_reset() from public, anon;
 grant execute on function public.v2cap_dev_reset() to authenticated;
+
+-- ============================================================
+-- ===== 10. デイリーミッション（2026-10-10）=====
+-- ============================================================
+-- 【確定】ユーザー指示「V2と一緒でデイリーミッションを追加したい、報酬は自分のレベルによって変わる」＋決めたこと
+--   （設計 docs/v2cap-design.md「デイリーミッション」・写しは src/v2cap/lib/daily.js）：
+--   ・1日1組・**難易度はなし**。「受注」してから数える（受注する前にやったことは数えない）
+--   ・日付が変わるのは日本時間の5時（今のⅡの v2_daily_roll と同じ式）
+--   ・報酬は**受注した時点のLV**（daily_lv）で決まる：EXP＝そのLVの必要EXP×%（〜10は10%・〜30は5%・〜50は3%・51〜は1%・切り上げ）／
+--     Gold＝LV×100。EXPは戦闘と同じ扱い（v2cap_apply_exp＝いまの職業のClassEXPにも同じ量）
+--   ・ミッションの一覧は v2cap_daily_tasks（いまは仮の「出撃に10回勝つ」）。数えるのは各RPC（いまは出撃の精算だけ）
+
+-- 日付が変わっていたら、その日の状態を空にする（内部ヘルパ）
+create or replace function public.v2cap_daily_roll(p_player uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_today date := ((now() at time zone 'Asia/Tokyo') - interval '5 hours')::date;
+begin
+  update public.v2cap_profiles
+     set daily_day = v_today, daily_lv = null, daily_counts = '{}'::jsonb, daily_claimed = false
+   where id = p_player and daily_day is distinct from v_today;
+end;
+$$;
+revoke all on function public.v2cap_daily_roll(uuid) from public, anon, authenticated;
+
+-- 進みを数える（内部ヘルパ・各RPCから呼ぶ）。一覧に無いキー・受注していない日・受け取ったあとは数えない
+create or replace function public.v2cap_daily_bump(p_player uuid, p_key text, p_n int default 1)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if coalesce(p_n, 0) <= 0 or not exists (select 1 from public.v2cap_daily_tasks t where t.key = p_key) then
+    return;
+  end if;
+  perform public.v2cap_daily_roll(p_player);
+  update public.v2cap_profiles
+     set daily_counts = jsonb_set(coalesce(daily_counts, '{}'::jsonb), array[p_key],
+                                  to_jsonb(coalesce((daily_counts ->> p_key)::int, 0) + p_n))
+   where id = p_player and daily_lv is not null and not daily_claimed;
+end;
+$$;
+revoke all on function public.v2cap_daily_bump(uuid, text, int) from public, anon, authenticated;
+
+-- 報酬（受注した時点のLVで決まる）。切り上げは整数で：(必要EXP×% + 99) ÷ 100（daily.js の dailyRewardOf と同じ）
+create or replace function public.v2cap_daily_reward(p_lv int)
+returns jsonb language sql stable set search_path = public as $$
+  select jsonb_build_object(
+    'exp', (public.v2cap_need(greatest(1, coalesce(p_lv, 1)))
+            * (case when greatest(1, coalesce(p_lv, 1)) <= 10 then 10
+                    when greatest(1, coalesce(p_lv, 1)) <= 30 then 5
+                    when greatest(1, coalesce(p_lv, 1)) <= 50 then 3
+                    else 1 end) + 99) / 100,
+    'gold', greatest(1, coalesce(p_lv, 1)) * 100)
+$$;
+revoke all on function public.v2cap_daily_reward(int) from public, anon;
+
+-- 受注する：今日のミッションを受ける。報酬はこの時点のLVで決まる（daily_lv に入れる）。1日1回
+create or replace function public.v2cap_daily_accept()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_row public.v2cap_profiles;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  -- ★行をつかんでから（同時に2回押しても、受注は1回だけ）
+  perform 1 from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  perform public.v2cap_daily_roll(v_uid);
+  select * into v_row from public.v2cap_profiles where id = v_uid;
+  if v_row.daily_lv is not null then
+    return jsonb_build_object('ok', false, 'error', '今日のミッションはもう受注しました');
+  end if;
+  update public.v2cap_profiles
+     set daily_lv = lv, daily_counts = '{}'::jsonb, daily_claimed = false, updated_at = now()
+   where id = v_uid
+   returning * into v_row;
+  return jsonb_build_object('ok', true, 'daily_lv', v_row.daily_lv, 'reward', public.v2cap_daily_reward(v_row.daily_lv));
+end;
+$$;
+revoke all on function public.v2cap_daily_accept() from public, anon;
+grant execute on function public.v2cap_daily_accept() to authenticated;
+
+-- 受け取る：全部そろっていたら、受注した時点のLVの報酬を入れる。1日1回
+create or replace function public.v2cap_daily_claim()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid  uuid := auth.uid();
+  v_row  public.v2cap_profiles;
+  v_rw   jsonb;
+  v_exp  int;
+  v_gold int;
+  v_n    int;
+  v_res  jsonb := null;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  -- ★行をつかんでから見る（同時に2回押しても、受け取りは1回だけ）
+  perform 1 from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  perform public.v2cap_daily_roll(v_uid);
+  select * into v_row from public.v2cap_profiles where id = v_uid;
+  if v_row.daily_lv is null then return jsonb_build_object('ok', false, 'error', 'まだ受注していません'); end if;
+  if v_row.daily_claimed then return jsonb_build_object('ok', false, 'error', '今日はもう受け取りました'); end if;
+  if exists (select 1 from public.v2cap_daily_tasks t
+              where coalesce((v_row.daily_counts ->> t.key)::int, 0) < t.goal) then
+    return jsonb_build_object('ok', false, 'error', 'まだ達成していない項目があります');
+  end if;
+  v_rw   := public.v2cap_daily_reward(v_row.daily_lv);
+  v_exp  := (v_rw ->> 'exp')::int;
+  v_gold := (v_rw ->> 'gold')::int;
+  update public.v2cap_profiles
+     set daily_claimed = true, gold = gold + v_gold, updated_at = now()
+   where id = v_uid and not daily_claimed;
+  get diagnostics v_n = row_count;
+  if v_n = 0 then return jsonb_build_object('ok', false, 'error', '今日はもう受け取りました'); end if;
+  if v_exp > 0 then v_res := public.v2cap_apply_exp(v_uid, v_exp); end if;
+  return jsonb_build_object('ok', true, 'daily_lv', v_row.daily_lv, 'exp', v_exp, 'gold', v_gold, 'level', v_res);
+end;
+$$;
+revoke all on function public.v2cap_daily_claim() from public, anon;
+grant execute on function public.v2cap_daily_claim() to authenticated;

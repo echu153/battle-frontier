@@ -10,6 +10,7 @@
 //   ・equipment … 装備の一覧（エリア×レア度×種類の1560点。名前・部位・種類・系統・エリア・レア度・必要LV）
 //   ・spots     … 場所（15エリア×①②③。経験値とGoldの範囲・敵のLVの範囲）
 //   ・enemies   … 敵（いる場所・LV・役割・時間帯）
+//   ・daily_tasks … デイリーミッション（数えるキー・名前・目標の回数）
 //
 //   node tools/v2cap-sql.mjs          … 差分があるかだけ表示
 //   node tools/v2cap-sql.mjs --write  … SQLへ書き込む
@@ -21,6 +22,7 @@ const { STAGES, STAGE_ORDER, CLASSES, bonusSeqOf, lineageOf, JOB_LV_HPMP } = awa
 const { SKILLS, isPassive } = await import(B + 'v2cap/lib/skills.js')
 const { ITEMS } = await import(B + 'v2cap/lib/equipment.js')
 const { SPOTS, spotLvOf, enemyLevels } = await import(B + 'v2cap/lib/areas.js')
+const { DAILY_TASKS } = await import(B + 'v2cap/lib/daily.js')
 
 const q = (s) => `'${String(s).replace(/'/g, "''")}'`
 const arr = (list, cast = '') => `'{${list.join(',')}}'${cast}`
@@ -80,6 +82,13 @@ export const seeds = () => ({
     'delete from public.v2cap_enemies;',
     'insert into public.v2cap_enemies (name, spot, lv, role, band) values',
     enemyLevels().map(e => `  (${q(e.name)}, ${e.spot}, ${e.lv}, ${q(e.role)}, ${e.band ? q(e.band) : 'null'})`).join(',\n') + ';',
+  ].join('\n'),
+  daily_tasks: [
+    // ★一覧から外したミッションを消してから入れ直す（参照している外部キーは無い。進みは profiles の jsonb にキーで入っている）
+    `delete from public.v2cap_daily_tasks where key <> all(${arr(DAILY_TASKS.map(t => t.key), '::text[]')});`,
+    'insert into public.v2cap_daily_tasks (key, label, goal, sort) values',
+    DAILY_TASKS.map((t, i) => `  (${q(t.key)}, ${q(t.label)}, ${t.goal}, ${i + 1})`).join(',\n'),
+    'on conflict (key) do update set label = excluded.label, goal = excluded.goal, sort = excluded.sort;',
   ].join('\n'),
 })
 

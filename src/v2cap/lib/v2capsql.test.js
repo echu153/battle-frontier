@@ -13,6 +13,7 @@ import { ROLE_TENTHS } from './areas.js'
 import { SLOTS, RARITIES } from './equipment.js'
 import { SORTIE_CD, DROP_RARITY } from './sortie.js'
 import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV } from './smith.js'
+import { DAILY_EXP_PCT, DAILY_GOLD_PER_LV, DAY_RESET_HOUR } from './daily.js'
 import { rewrite } from '../../../tools/v2cap-sql.mjs'
 
 const SQL = readFileSync(new URL('../../../supabase_v2cap_core.sql', import.meta.url), 'utf8')
@@ -270,6 +271,49 @@ test('強化値（持ち物の plus）と残骸（プロフィールの material
   assert.ok(SQL.includes('alter table public.v2cap_inventory add column if not exists plus int not null default 0;'))
   assert.ok(SQL.includes("alter table public.v2cap_profiles add column if not exists materials jsonb not null default '{}'::jsonb;"))
   assert.ok(SQL.indexOf('add column if not exists plus int') > SQL.indexOf('create table if not exists public.v2cap_inventory'), '持ち物の表ができたあと')
+})
+
+test('【確定】デイリーミッション：受注した時点のLVで報酬が決まる（%とGoldはJSと同じ）。受注してから数え、1日1回だけ受け取れる', () => {
+  for (const col of ["daily_day date", "daily_lv int", "daily_counts jsonb not null default '{}'::jsonb", 'daily_claimed boolean not null default false']) {
+    assert.ok(SQL.includes(`alter table public.v2cap_profiles add column if not exists ${col};`), col)
+  }
+  // 日付の区切りは日本時間の5時（JS・今のⅡと同じ）
+  assert.ok(fnBody('v2cap_daily_roll').includes(`v_today date := ((now() at time zone 'Asia/Tokyo') - interval '${DAY_RESET_HOUR} hours')::date;`))
+  // 報酬の式：%の段（JSの DAILY_EXP_PCT と同じ）・切り上げ・Gold＝LV×100
+  const rw = fnBody('v2cap_daily_reward').replace(/\s+/g, ' ')
+  const tiers = DAILY_EXP_PCT.filter(([max]) => Number.isFinite(max))
+    .map(([max, pct]) => `when greatest(1, coalesce(p_lv, 1)) <= ${max} then ${pct}`).join(' ')
+  const last = DAILY_EXP_PCT[DAILY_EXP_PCT.length - 1][1]
+  assert.ok(rw.includes(`(case ${tiers} else ${last} end) + 99) / 100`), `%の段がJSと同じ（${tiers} else ${last}）・切り上げ`)
+  assert.ok(rw.includes('public.v2cap_need(greatest(1, coalesce(p_lv, 1)))'), '必要EXPはLVの表（v2cap_need）')
+  assert.ok(rw.includes(`'gold', greatest(1, coalesce(p_lv, 1)) * ${DAILY_GOLD_PER_LV})`))
+  // 受注：その時点のLVを入れる・1日1回・行をつかんでから
+  const acc = fnBody('v2cap_daily_accept')
+  assert.match(acc, /perform 1 from public\.v2cap_profiles where id = v_uid for update;/)
+  assert.ok(acc.includes("if v_row.daily_lv is not null then"))
+  assert.match(acc, /set daily_lv = lv, daily_counts = '\{\}'::jsonb, daily_claimed = false/, '受注した時点のLV・受注してから数える')
+  // 数える：一覧にあるキーだけ・受注した日だけ・受け取ったあとは数えない
+  const bump = fnBody('v2cap_daily_bump')
+  assert.match(bump, /not exists \(select 1 from public\.v2cap_daily_tasks t where t\.key = p_key\)/)
+  assert.ok(bump.includes('where id = p_player and daily_lv is not null and not daily_claimed;'), '受注してから数える（ユーザー決定）')
+  // 出撃の精算：勝ったときだけ「出撃に勝つ」を数える
+  assert.match(fnBody('v2cap_sortie_settle'), /if v_win then\s+perform public\.v2cap_daily_bump\(v_uid, 'win', 1\);\s+end if;/)
+  // 受け取り：受注している・受け取っていない・一覧を全部満たす。二重に受け取れない。EXPは戦闘と同じ扱い
+  const cl = fnBody('v2cap_daily_claim')
+  assert.match(cl, /perform 1 from public\.v2cap_profiles where id = v_uid for update;/)
+  assert.ok(cl.indexOf("'まだ受注していません'") < cl.indexOf("'今日はもう受け取りました'"), '見る順はJSの claimErrorOf と同じ')
+  assert.ok(cl.indexOf("'今日はもう受け取りました'") < cl.indexOf("'まだ達成していない項目があります'"))
+  assert.match(cl, /where coalesce\(\(v_row\.daily_counts ->> t\.key\)::int, 0\) < t\.goal\)/)
+  assert.ok(cl.includes('v_rw   := public.v2cap_daily_reward(v_row.daily_lv);'), '報酬は受注した時点のLV')
+  assert.ok(cl.includes('where id = v_uid and not daily_claimed;'))
+  assert.ok(cl.includes('v_res := public.v2cap_apply_exp(v_uid, v_exp);'))
+  // 内部ヘルパは閉じてある・受注と受け取りだけ開ける
+  for (const name of ['v2cap_daily_roll(uuid)', 'v2cap_daily_bump(uuid, text, int)']) {
+    assert.ok(SQL.includes(`revoke all on function public.${name} from public, anon, authenticated;`), name)
+    assert.ok(!SQL.includes(`grant execute on function public.${name}`), name)
+  }
+  assert.ok(SQL.includes('grant execute on function public.v2cap_daily_accept() to authenticated;'))
+  assert.ok(SQL.includes('grant execute on function public.v2cap_daily_claim() to authenticated;'))
 })
 
 test('出撃の間隔はサーバーでも見る（10秒・通信の揺れぶん2秒の余裕）', () => {
