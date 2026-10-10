@@ -134,6 +134,17 @@ test('【確定】ステータスポイントを振る：8種・1ポイントで
   assert.ok(SQL.includes('alter table public.v2cap_profiles add column if not exists stat_points int not null default 0;'))
 })
 
+test('【確定】クラスのMP（スキル編成の最大MP）は、点数のMP ＋ ClassLVが上がるたびに必ず上がるMP（lv_mp × 上がった回数）＝JSの jobBonusStats と同じ', () => {
+  assert.ok(SQL.includes('alter table public.v2cap_classes add column if not exists lv_hp int not null default 0;'))
+  assert.ok(SQL.includes('alter table public.v2cap_classes add column if not exists lv_mp int not null default 0;'))
+  const f = fnBody('v2cap_job_bonus_mp')
+  assert.match(f, /unnest\(c\.bonus_seq\[1:greatest\(0, least\(coalesce\(p_jlv, 1\), s\.max_jlv\) - 1\) \* s\.per_lv\]\)/, '点数のぶん')
+  assert.ok(f.includes('select greatest(0, least(coalesce(p_jlv, 1), s.max_jlv) - 1) * c.lv_mp'), '毎回のMP × 上がった回数（上限より上は増えない）')
+  // 種の lv_hp・lv_mp は jobs.js の JOB_LV_HPMP から作る（種の突き合わせのテストで見ている）。書き方だけここで見る
+  assert.ok(SQL.includes("insert into public.v2cap_classes (id, stage, sort, req_cls, req_jlv, bonus_seq, weapons, kind, lineage, lv_hp, lv_mp) values"))
+  assert.ok(SQL.includes('lv_hp = excluded.lv_hp, lv_mp = excluded.lv_mp;'), '流し直したら値も入れ直す')
+})
+
 test('スキルを覚える順はこの版の名簿（v2cap_skills の sort）', () => {
   const learn = fnBody('v2cap_learn')
   assert.match(learn, /from public\.v2cap_skills k/)

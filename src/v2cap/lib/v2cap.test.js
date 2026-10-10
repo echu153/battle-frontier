@@ -10,7 +10,7 @@ import {
   pointsForLv, totalPointsTo, POINT_UNIT, validateAllocation, applyAllocation,
 } from './level.js'
 import {
-  CLASSES, START_CLASSES, STAGES, JOB_MAX, JOB_BONUS, jobNeed, jobTotalTo, bonusSeqOf,
+  CLASSES, START_CLASSES, STAGES, JOB_MAX, JOB_BONUS, JOB_LV_HPMP, jobLevelsGained, jobNeed, jobTotalTo, bonusSeqOf,
   ICHIJI_CLASSES, ICHIJI_INFO, ICHIJI_REQ_JLV, jobMaxOf, nextClassesOf, CLASS_INFO,
   bonusPointsAt, jobBonusStats, learnOrderOf, learnAtOf, skillsLearnedBy, applyJobExp,
   canBecome, weaponsOf, canEquipType, attackKindOf, lineageOf, usableSkillNames, classDescOf,
@@ -306,8 +306,11 @@ test('【確定】クラスのステはClassLVが1上がるごとに初期職5�
     const seq = bonusSeqOf(c.id)
     assert.equal(seq.length, sum)
     for (const [k, v] of Object.entries(w)) assert.equal(seq.filter(x => x === k).length, v, `${c.id}の${k}`)
+    // 上限のClassLVでのステ＝配分の点数 ＋ 毎回のHP・MP（JOB_LV_HPMP）× 上がった回数
     const full = jobBonusStats(c.id, jobMaxOf(c.id))
-    for (const k of STAT_KEYS) assert.equal(full[k], (w[k] || 0) * STAT_DEFS[k].unit)
+    const ups = jobMaxOf(c.id) - 1
+    const extra = { hp: JOB_LV_HPMP[c.id].hp * ups, mp: JOB_LV_HPMP[c.id].mp * ups }
+    for (const k of STAT_KEYS) assert.equal(full[k], (w[k] || 0) * STAT_DEFS[k].unit + (extra[k] || 0), `${c.id}の${k}`)
     assert.equal(calcPower(jobBonusStats(c.id, 1)), 0, 'ClassLV1ではまだ何も上がっていない')
     assert.equal(bonusPointsAt(c.id, jobMaxOf(c.id)), sum)
     assert.equal(bonusPointsAt(c.id, 99), sum, '上限より上は増えない')
@@ -319,6 +322,35 @@ test('【確定】クラスのステはClassLVが1上がるごとに初期職5�
       }
     }
   }
+})
+
+test('【確定】ClassLVが上がるたびに、どの職業でも必ずHPとMPが上がる（点数とは別・職業ごとの量＝ユーザー承認の表）', () => {
+  // 2026-10-10 ユーザー指示「レベルアップするとき、HPとMPは絶対あげるようにしてほしい、クラスによって差があってもいいから」
+  assert.deepEqual(Object.keys(JOB_LV_HPMP).sort(), CLASSES.map(c => c.id).sort(), '全職業ぶんある')
+  const want = {
+    戦士: [8, 1], 槍使い: [6, 1], 格闘家: [8, 1], 盗賊: [4, 1], 弓使い: [4, 1], 銃士: [4, 1], 剣士: [6, 1],
+    魔法使い: [6, 3], 呪術師: [4, 3], 僧侶: [8, 3], 薬師: [8, 3],
+    狂戦士: [10, 2], 重戦士: [10, 2], 竜騎士: [8, 2], 槍術士: [6, 2], 体術師: [8, 2], 気功師: [8, 3],
+    暗殺者: [6, 2], 忍者: [6, 2], 狩人: [6, 2], 狙撃手: [6, 2], 魔銃士: [6, 3], 砲撃士: [8, 3],
+    魔導士: [6, 4], 時魔導士: [6, 4], 死霊術師: [8, 4], 陰陽師: [6, 4], 司祭: [10, 4], 祓魔師: [8, 4], 錬金術師: [8, 4], 霊薬師: [10, 4],
+  }
+  for (const [cls, [hp, mp]] of Object.entries(want)) assert.deepEqual(JOB_LV_HPMP[cls], { hp, mp }, cls)
+  for (const c of CLASSES) {
+    // 1回ずつ見て、HPとMPが必ず上がっている（点数の配りでHP・MPに当たった回はそのぶんも上乗せ）
+    for (let j = 2; j <= jobMaxOf(c.id); j++) {
+      const a = jobBonusStats(c.id, j - 1), b = jobBonusStats(c.id, j)
+      assert.ok(b.hp - a.hp >= JOB_LV_HPMP[c.id].hp, `${c.id} ClassLV${j}でHPが上がる`)
+      assert.ok(b.mp - a.mp >= JOB_LV_HPMP[c.id].mp, `${c.id} ClassLV${j}でMPが上がる`)
+    }
+    // 点数（5点・6点）はそのまま（毎回のHP・MPは別に足す）
+    assert.equal(bonusPointsAt(c.id, jobMaxOf(c.id)), STAGES[c.stage].perLv * (jobMaxOf(c.id) - 1))
+    assert.equal(jobLevelsGained(c.id, 1), 0)
+    assert.equal(jobLevelsGained(c.id, 99), jobMaxOf(c.id) - 1, '上限より上は増えない')
+  }
+  // ユーザーに見せた例（上限のClassLVでの合計）
+  assert.deepEqual([jobBonusStats('戦士', 30).hp, jobBonusStats('戦士', 30).mp], [456, 59])
+  assert.deepEqual([jobBonusStats('魔法使い', 30).hp, jobBonusStats('魔法使い', 30).mp], [294, 177])
+  assert.deepEqual([jobBonusStats('司祭', 50).hp, jobBonusStats('司祭', 50).mp], [1050, 331])
 })
 
 test('【確定】キャラ作成のクラス選択に出す特徴の説明が、11職ぶんある（カードに収まる長さ）', () => {

@@ -127,6 +127,7 @@ export const jobOf = (jobs, cls) => ({ lv: jobs?.[cls]?.lv || 1, exp: jobs?.[cls
 
 // ===== ステ（クラスのステ）=====
 // 【確定】2026-10-09 ユーザー指示：LVアップでステが上がらなくなったぶん、**ClassLVが1上がるごとに5点**（ClassLV30で145点）。
+//   2026-10-10 さらに、ClassLVが上がるたびに必ずHPとMPが上がるようにした（下の JOB_LV_HPMP・点数とは別）。
 //   配分は「その職業に要らないステは極力上げないが、尖りすぎないように2〜3種が高く、ほかは少し低め」。
 //   1点＝戦闘力1（HPなら+8・MPなら+3・ほかは+1）。効くのはその職業でいるあいだだけ。
 // 職業ごとの配分（合計145＝ClassLV30までの点数）。説明文（CLASS_INFO.desc）の「◯◯が伸びる」と合わせてある
@@ -166,6 +167,46 @@ export const JOB_BONUS = {
   霊薬師:   { int_stat:80, mp:62, vit:50, hp:45, dex:25, agi:22, luk:10 },
 }
 
+// 【確定】2026-10-10 ユーザー指示「レベルアップするとき、HPとMPは絶対あげるようにしてほしい、クラスによって差があってもいいから」＋案を承認：
+//   ClassLVが1上がるたびに、上の点数（初期職5点・一次職6点）とは**別に**、必ずHPとMPが上がる（その職業でいるあいだだけ）。
+//   量は、今の配分（JOB_BONUS）でHP・MPを多くもらっている職業ほど多い
+//   （初期職 HP 8／6／4・MP 3／1、一次職 HP 10／8／6・MP 4／3／2）
+// ★SQLの v2cap_classes.lv_hp・lv_mp はこの表を写したもの（tools/v2cap-sql.mjs が作る）。
+//   サーバーが数えるのはMPだけ（スキル編成の最大MP＝ v2cap_job_bonus_mp）
+export const JOB_LV_HPMP = {
+  戦士:     { hp:8, mp:1 },
+  槍使い:   { hp:6, mp:1 },
+  格闘家:   { hp:8, mp:1 },
+  盗賊:     { hp:4, mp:1 },
+  弓使い:   { hp:4, mp:1 },
+  銃士:     { hp:4, mp:1 },
+  剣士:     { hp:6, mp:1 },
+  魔法使い: { hp:6, mp:3 },
+  呪術師:   { hp:4, mp:3 },
+  僧侶:     { hp:8, mp:3 },
+  薬師:     { hp:8, mp:3 },
+  狂戦士:   { hp:10, mp:2 },
+  重戦士:   { hp:10, mp:2 },
+  竜騎士:   { hp:8, mp:2 },
+  槍術士:   { hp:6, mp:2 },
+  体術師:   { hp:8, mp:2 },
+  気功師:   { hp:8, mp:3 },
+  暗殺者:   { hp:6, mp:2 },
+  忍者:     { hp:6, mp:2 },
+  狩人:     { hp:6, mp:2 },
+  狙撃手:   { hp:6, mp:2 },
+  魔銃士:   { hp:6, mp:3 },
+  砲撃士:   { hp:8, mp:3 },
+  魔導士:   { hp:6, mp:4 },
+  時魔導士: { hp:6, mp:4 },
+  死霊術師: { hp:8, mp:4 },
+  陰陽師:   { hp:6, mp:4 },
+  司祭:     { hp:10, mp:4 },
+  祓魔師:   { hp:8, mp:4 },
+  錬金術師: { hp:8, mp:4 },
+  霊薬師:   { hp:10, mp:4 },
+}
+
 // 配分を「何点目にどのステが上がるか」の並びにする（ランダムではなく固定）。
 // 1点ずつ「配分に対して一番遅れているステ」を選ぶ＝どのClassLVで止めても配分どおりに近い。
 // 同点はステの並び（STAT_KEYS）の先を取る。★SQLの v2cap_classes.bonus_seq はこの出力を写したもの
@@ -190,14 +231,18 @@ export const bonusSeqOf = (cls) => {
 const SEQ_CACHE = {}
 const seqOf = (cls) => (SEQ_CACHE[cls] ||= bonusSeqOf(cls))
 
-// その職業のそのClassLVで入っている点数（戦闘力換算）
-export const bonusPointsAt = (cls, jlv) =>
-  Math.max(0, Math.min(jobMaxOf(cls), jlv || 1) - 1) * (STAGES[stageOf(cls)]?.perLv || 0)
+// そのClassLVまでに上がった回数（ClassLV1は0回・上限より上は増えない）
+export const jobLevelsGained = (cls, jlv) => Math.max(0, Math.min(jobMaxOf(cls), jlv || 1) - 1)
+// その職業のそのClassLVで入っている点数（戦闘力換算）。毎回のHP・MP（JOB_LV_HPMP）は入れない
+export const bonusPointsAt = (cls, jlv) => jobLevelsGained(cls, jlv) * (STAGES[stageOf(cls)]?.perLv || 0)
 
-// ステの値に直したもの（HPなら1点＝+8・MPなら+3・ほかは+1）
+// ステの値に直したもの（HPなら1点＝+8・MPなら+3・ほかは+1）＋ 毎回のHP・MP × 上がった回数
 export const jobBonusStats = (cls, jlv) => {
   const out = Object.fromEntries(STAT_KEYS.map(k => [k, 0]))
   for (const k of seqOf(cls).slice(0, bonusPointsAt(cls, jlv))) out[k] += STAT_DEFS[k].unit
+  const n = jobLevelsGained(cls, jlv)
+  out.hp += n * (JOB_LV_HPMP[cls]?.hp || 0)
+  out.mp += n * (JOB_LV_HPMP[cls]?.mp || 0)
   return out
 }
 // 表示用。「STR+12・VIT+7」のように多い順

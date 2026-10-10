@@ -5,7 +5,7 @@
 // src/v2cap/lib の値から作った INSERT に差し替える（手で書き写さない）。
 //   ・stages    … 段階（必要ClassEXPの倍率・ステの量・スキルを覚えるClassLV・ClassLVの上限）
 //   ・classes   … 職業（段階・就く条件・ClassLVで上がるステの並び・装備できる武器・通常攻撃の種類・
-//                  スキルを使える職業＝自分と下位職）
+//                  スキルを使える職業＝自分と下位職・ClassLVが上がるたびに必ず上がるHPとMP）
 //   ・skills    … スキルの名簿（名前・職業・消費MP・覚える順）
 //   ・equipment … 装備の一覧（エリア×レア度×種類の1560点。名前・部位・種類・系統・エリア・レア度・必要LV）
 //   ・spots     … 場所（15エリア×①②③。経験値とGoldの範囲・敵のLVの範囲）
@@ -17,7 +17,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 
 const B = new URL('../src/', import.meta.url).href
-const { STAGES, STAGE_ORDER, CLASSES, bonusSeqOf, lineageOf } = await import(B + 'v2cap/lib/jobs.js')
+const { STAGES, STAGE_ORDER, CLASSES, bonusSeqOf, lineageOf, JOB_LV_HPMP } = await import(B + 'v2cap/lib/jobs.js')
 const { SKILLS, isPassive } = await import(B + 'v2cap/lib/skills.js')
 const { ITEMS } = await import(B + 'v2cap/lib/equipment.js')
 const { SPOTS, spotLvOf, enemyLevels } = await import(B + 'v2cap/lib/areas.js')
@@ -43,11 +43,12 @@ export const seeds = () => ({
     // ★なくした職業（ノーブル・サモナー・一次職）を消してから入れ直す。参照している外部キーは無い
     //   （キャラの職業は §2 の一度だけの作り直しで消えている）
     `delete from public.v2cap_classes where id <> all(${arr(CLASSES.map(c => c.id), '::text[]')});`,
-    'insert into public.v2cap_classes (id, stage, sort, req_cls, req_jlv, bonus_seq, weapons, kind, lineage) values',
-    CLASSES.map(c => `  (${q(c.id)}, ${q(c.stage)}, ${c.sort}, ${c.req ? q(c.req.cls) : 'null'}, ${c.req ? c.req.jlv : 'null'}, ${arr(bonusSeqOf(c.id), '::text[]')}, ${arr(c.weapons, '::text[]')}, ${q(c.kind)}, ${arr(lineageOf(c.id), '::text[]')})`).join(',\n'),
+    'insert into public.v2cap_classes (id, stage, sort, req_cls, req_jlv, bonus_seq, weapons, kind, lineage, lv_hp, lv_mp) values',
+    CLASSES.map(c => `  (${q(c.id)}, ${q(c.stage)}, ${c.sort}, ${c.req ? q(c.req.cls) : 'null'}, ${c.req ? c.req.jlv : 'null'}, ${arr(bonusSeqOf(c.id), '::text[]')}, ${arr(c.weapons, '::text[]')}, ${q(c.kind)}, ${arr(lineageOf(c.id), '::text[]')}, ${JOB_LV_HPMP[c.id]?.hp || 0}, ${JOB_LV_HPMP[c.id]?.mp || 0})`).join(',\n'),
     'on conflict (id) do update set stage = excluded.stage, sort = excluded.sort,',
     '  req_cls = excluded.req_cls, req_jlv = excluded.req_jlv, bonus_seq = excluded.bonus_seq,',
-    '  weapons = excluded.weapons, kind = excluded.kind, lineage = excluded.lineage;',
+    '  weapons = excluded.weapons, kind = excluded.kind, lineage = excluded.lineage,',
+    '  lv_hp = excluded.lv_hp, lv_mp = excluded.lv_mp;',
     // 使われなくなった段階（一次）を消す
     `delete from public.v2cap_stages s where s.stage <> all(${arr(STAGE_ORDER, '::text[]')})`,
     '  and not exists (select 1 from public.v2cap_classes c where c.stage = s.stage);',

@@ -4,7 +4,7 @@ import V2Modal from '../../v2/components/V2Modal.jsx'
 import { box, miniBtn, TEXT } from '../../v2/components/v2ui.js'
 import { KIND_COLOR } from '../../v2/lib/skills.js'
 import {
-  CLASSES, STAGES, STAGE_ORDER, jobOf, jobMaxOf, jobBonusText, missingReqOf, canBecome, reqText,
+  CLASSES, STAGES, STAGE_ORDER, JOB_LV_HPMP, jobOf, jobMaxOf, jobBonusText, missingReqOf, canBecome, reqText,
   learnOrderOf, learnAtOf, weaponsOf, canEquipType, classDescOf,
 } from '../lib/jobs.js'
 import { passiveOf } from '../lib/skills.js'
@@ -14,7 +14,7 @@ import { ITEM_BY_ID } from '../lib/equipment.js'
 // 「レベルキャップあり」版 — 神殿（転職）
 //   ・いつでも無料。**LVはそのまま**、ClassLVは職業ごとに続きから（2026-10-09 ユーザー決定）
 //   ・初期職は11職。職業ごとに装備できる武器が3〜4種決まっている（転職で装備できなくなった武器は外れる）
-//   ・クラスのステはその職業に就いている間だけ効く
+//   ・クラスのステはその職業に就いている間だけ効く。ClassLVが上がるたびに必ずHPとMPも上がる（量は職業ごと・2026-10-10）
 //   ・スキルは**その職業でだけ使える**（覚えたものは消えず、戻れば使える）。スキルセットも**職業ごと**で、
 //     転職すると新しい職業の編成に切り替わる（初めてなら覚えている技を入れた編成で始まる）
 //   ・一次職（2026-10-10・20職）は、系統の初期職がClassLV30で就ける。ClassLVの上限は50。パッシブを1つ持つ（就いている間だけ効く）
@@ -66,6 +66,7 @@ export default function V2capTemple({ prof, inventory, onProfile }) {
         <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.8 }}>
           いつでも無料で転職できます。LVは下がらず、ClassLVは職業ごとに残ります（初期職は最大{STAGES.shoki.max}・一次職は最大{STAGES.ichiji.max}）。
           ClassLVが上がると、その職業のスキルを覚え、その職業のステが上がります（ステは就いている間だけ）。
+          HPとMPは毎回必ず上がります（量は職業ごと）。
           スキルはその職業でだけ使え、スキルセットも職業ごとに保存されます。
           職業ごとに装備できる武器が決まっています。
         </div>
@@ -105,6 +106,7 @@ export default function V2capTemple({ prof, inventory, onProfile }) {
                     <div>クラスのステ：{jobBonusText(c.id, job.lv) || 'まだなし'}
                       <span style={{ color: TEXT.label }}>（ClassLV{jobMaxOf(c.id)}で {jobBonusText(c.id, jobMaxOf(c.id))}）</span>
                     </div>
+                    <div>ClassLVが上がるたびに必ず <span style={{ color:'#cfe2ff' }}>HP+{JOB_LV_HPMP[c.id]?.hp || 0}・MP+{JOB_LV_HPMP[c.id]?.mp || 0}</span>（ほかのステとは別）</div>
                     {passiveOf(c.id) && (
                       <div>パッシブ：<span style={{ color:'#ffcc66' }}>{passiveOf(c.id).name}</span>（{passiveOf(c.id).desc}）</div>
                     )}
