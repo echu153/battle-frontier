@@ -2,12 +2,13 @@
 // 【確定】2026-10-11 ユーザー指示「男女それぞれのイラストを用意してるから、良い感じに見えるようにして」
 //   「職業選択するときは顔の周りだけアップするだけでいい」（一覧は顔のアップ）
 //   「剣士のイラストだけ背景おかしい、他と合わせて」（剣士の絵も透明な背景のまま使う）
+//   「男のイラストの顔アップの大きさが統一されてなくて空白が気になる。もっと全体統一して」（顔の大きさに合わせて切り取る）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { CLASS_BY_ID } from './jobs.js'
-import { ART_BASE, ART_FACE, ART_GENDERS, ART_DIR, ART_SIZES, hasArt, artSrcOf } from './classArt.js'
+import { ART_BASE, ART_FACE, FACE_FIT, ART_GENDERS, ART_DIR, ART_SIZES, hasArt, artSrcOf, faceCropOf } from './classArt.js'
 
 const PUBLIC = fileURLToPath(new URL('../../../public', import.meta.url))
 
@@ -35,17 +36,48 @@ test('男女の2つ。キーは m と f。大きさは 詳細の全身（web）�
   assert.deepEqual(ART_SIZES, ['web', 'face'])
 })
 
-test('顔のアップの切り取りは、絵のあるクラスの男女すべてにある（中心は絵の中・一辺は幅の1〜5割）', () => {
+// 元の絵（PNG）の幅と高さ（IHDR）
+const pngSize = (file) => {
+  const b = readFileSync(file)
+  assert.equal(b.toString('ascii', 12, 16), 'IHDR', file)
+  return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) }
+}
+const srcOf = (base, g) => g.src.map(s => `${PUBLIC}${ART_DIR}/${base}${s}.png`).find(existsSync)
+
+test('顔の目印（両目のまんなか・あご）は、絵のあるクラスの男女すべてにあり、ありえる大きさ（測り間違いの見張り）', () => {
   assert.deepEqual(Object.keys(ART_FACE).sort(), Object.values(ART_BASE).sort())
   for (const [base, byG] of Object.entries(ART_FACE)) {
     for (const g of ART_GENDERS) {
       const f = byG[g.key]
-      assert.ok(Array.isArray(f) && f.length === 3, `${base}-${g.key}`)
-      const [x, y, s] = f
-      assert.ok(x > 0 && x < 1 && y > 0 && y < 1, `${base}-${g.key} の中心`)
-      assert.ok(s >= 0.1 && s <= 0.5, `${base}-${g.key} の一辺`)
+      const key = `${base}-${g.key}`
+      assert.ok(Array.isArray(f) && f.length === 4 && f.every(v => v > 0 && v < 1), key)
+      const [ex, ey, cx, cy] = f
+      assert.ok(cy > ey, `${key}：あごは目より下`)
+      assert.ok(Math.abs(cx - ex) < 0.05, `${key}：あごは目のほぼ真下`)
+      const src = srcOf(base, g)
+      assert.ok(src, `${key} の元の絵`)
+      const { w, h } = pngSize(src)
+      // 目〜あごは全身の絵の高さの3〜7%（いまは4.1〜5.4%）。外れたら目印の打ち間違い
+      const len = Math.hypot((cx - ex) * w, (cy - ey) * h)
+      assert.ok(len / h > 0.03 && len / h < 0.07, `${key}：目〜あご ${(len / h * 100).toFixed(1)}%`)
+      // 切り取る正方形は絵からはみ出しすぎない（はみ出しは透明で足すが、顔のまわりは絵の中）
+      const c = faceCropOf(f, w, h)
+      assert.ok(c.size > 0.1 * w && c.size < 0.3 * w, `${key}：一辺 ${Math.round(c.size)}px`)
+      assert.ok(c.x > -0.1 * c.size && c.x + c.size < w + 0.1 * c.size, `${key}：横`)
     }
   }
+})
+
+test('顔のアップの写し方：どの顔も目の高さと目〜あごの長さが同じになる（ユーザー「顔アップの大きさが統一されてなくて…もっと全体統一して」）', () => {
+  assert.deepEqual(FACE_FIT, { eyeAt: 0.40, eyeToChin: 0.38 })
+  // 目が (500,300)・あごが (500,376) の絵（1000×1000）→ 目〜あご 76px＝一辺の38%＝一辺200px・目は上から40%
+  const c = faceCropOf([0.5, 0.3, 0.5, 0.376], 1000, 1000)
+  assert.ok(Math.abs(c.size - 200) < 1e-6)
+  assert.ok(Math.abs(c.x - 400) < 1e-6)
+  assert.ok(Math.abs(c.y - (300 - 0.40 * 200)) < 1e-6)
+  // 顔が倍の大きさなら、切り取りも倍（＝写る顔の大きさは同じ）
+  const big = faceCropOf([0.5, 0.3, 0.5, 0.452], 1000, 1000)
+  assert.ok(Math.abs(big.size - 400) < 1e-6)
 })
 
 test('絵のあるクラスは、男女とも 全身と顔のアップの軽い版が置いてあり、どれも透明な背景（tools/v2cap-art.mjs で作る）', () => {

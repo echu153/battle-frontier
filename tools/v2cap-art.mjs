@@ -4,7 +4,7 @@
 // 元の絵（ユーザーが置く）：public/V2newjob/<ローマ字のクラス名><otoko|onna|onnna>.png（透明な背景）
 // 作るもの：
 //   public/V2newjob/web/<名前>-m.webp・-f.webp   … 詳細の全身（幅720）
-//   public/V2newjob/face/<名前>-m.webp・-f.webp  … 一覧の顔のアップ（192×192。切り取りは classArt.js の ART_FACE）
+//   public/V2newjob/face/<名前>-m.webp・-f.webp  … 一覧の顔のアップ（192×192。顔の目印 ART_FACE と写し方 FACE_FIT で切り取る）
 // 対応表は src/v2cap/lib/classArt.js の ART_BASE・ART_FACE。絵を足したらそこに足してから回す：
 //   node tools/v2cap-art.mjs           … 全身は元の絵が新しくなったものだけ・顔のアップは毎回作り直す（切り取りを直しても効くように）
 //   node tools/v2cap-art.mjs --force   … 全部作り直す（作り方を変えたとき）
@@ -15,7 +15,7 @@ import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 
 const ROOT = path.resolve(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))
-const { ART_BASE, ART_FACE, ART_GENDERS } = await import(new URL('../src/v2cap/lib/classArt.js', import.meta.url).href)
+const { ART_BASE, ART_FACE, ART_GENDERS, faceCropOf } = await import(new URL('../src/v2cap/lib/classArt.js', import.meta.url).href)
 const SRC = path.join(ROOT, 'public', 'V2newjob')
 const WEB = { dir: path.join(SRC, 'web'), width: 720, quality: 82 }
 const FACE = { dir: path.join(SRC, 'face'), size: 192, quality: 82 }
@@ -47,12 +47,13 @@ for (const [cls, base] of Object.entries(ART_BASE)) {
       console.log(`${cls}（${g.label}・全身）→ ${path.relative(ROOT, outWeb)}`)
     }
 
-    // 一覧の顔のアップ：顔の中心を真ん中にした正方形。端に近いときは透明で足して、顔を真ん中のままにする
+    // 一覧の顔のアップ：顔の目印から、どの顔も同じ大きさ・同じ位置になる正方形を切り取る（classArt.js の faceCropOf）。
+    // 端に近いときは透明で足して、顔の位置を変えない
     const face = ART_FACE[base]?.[g.key]
     if (!face) { missing.push(`${cls}（${g.label}）：classArt.js の ART_FACE.${base}.${g.key}`); continue }
-    const [fx, fy, fs] = face
-    const S = Math.round(fs * info.w), P = Math.ceil(S / 2)
-    const X = Math.round(fx * info.w - S / 2 + P), Y = Math.round(fy * info.h - S / 2 + P)
+    const crop = faceCropOf(face, info.w, info.h)
+    const S = Math.round(crop.size), P = S
+    const X = Math.round(crop.x + P), Y = Math.round(crop.y + P)
     const outFace = path.join(FACE.dir, `${base}-${g.key}.webp`)
     execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', src,
       '-vf', `format=rgba,pad=iw+${2 * P}:ih+${2 * P}:${P}:${P}:color=0x00000000,crop=${S}:${S}:${X}:${Y},scale=${FACE.size}:${FACE.size}:flags=lanczos`,
