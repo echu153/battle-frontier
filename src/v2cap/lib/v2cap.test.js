@@ -10,7 +10,7 @@ import {
   pointsForLv, totalPointsTo, POINT_UNIT, validateAllocation, applyAllocation,
 } from './level.js'
 import {
-  CLASSES, START_CLASSES, STAGES, JOB_MAX, JOB_BONUS, JOB_LV_HPMP, jobLevelsGained, jobNeed, jobTotalTo, bonusSeqOf,
+  CLASSES, START_CLASSES, STAGES, JOB_MAX, JOB_BONUS, JOB_LV_HPMP, jobLevelsGained, mainStatsOf, jobNeed, jobTotalTo, bonusSeqOf,
   ICHIJI_CLASSES, ICHIJI_INFO, ICHIJI_REQ_JLV, jobMaxOf, nextClassesOf, CLASS_INFO,
   bonusPointsAt, jobBonusStats, learnOrderOf, learnAtOf, skillsLearnedBy, applyJobExp,
   canBecome, weaponsOf, canEquipType, attackKindOf, lineageOf, usableSkillNames, classDescOf,
@@ -351,6 +351,19 @@ test('【確定】ClassLVが上がるたびに、どの職業でも必ずHPとMP
   assert.deepEqual([jobBonusStats('戦士', 30).hp, jobBonusStats('戦士', 30).mp], [456, 59])
   assert.deepEqual([jobBonusStats('魔法使い', 30).hp, jobBonusStats('魔法使い', 30).mp], [294, 177])
   assert.deepEqual([jobBonusStats('司祭', 50).hp, jobBonusStats('司祭', 50).mp], [1050, 331])
+})
+
+test('神殿の「上がりやすいステータス」は配分の高い2〜3種（多い順）。例：戦士＝STR・VIT', () => {
+  for (const c of CLASSES) {
+    const m = mainStatsOf(c.id)
+    assert.ok(m.length >= 2 && m.length <= 3, `${c.id}：${m.join('・')}`)
+    const w = JOB_BONUS[c.id]
+    for (let i = 1; i < m.length; i++) assert.ok(w[m[i - 1]] >= w[m[i]], `${c.id}は多い順`)
+  }
+  assert.deepEqual(mainStatsOf('戦士'), ['str', 'vit'])
+  assert.deepEqual(mainStatsOf('銃士'), ['dex', 'agi'])
+  assert.deepEqual(mainStatsOf('魔法使い'), ['int_stat', 'mp'])
+  assert.deepEqual(mainStatsOf('ない職業'), [])
 })
 
 test('【確定】キャラ作成のクラス選択に出す特徴の説明が、11職ぶんある（カードに収まる長さ）', () => {

@@ -245,6 +245,13 @@ export const jobBonusStats = (cls, jlv) => {
   out.mp += n * (JOB_LV_HPMP[cls]?.mp || 0)
   return out
 }
+// 上がりやすいステータス（神殿に出す）。配分の高い2〜3種＝初期職30点以上・一次職61点以上（多い順のキー）
+// ★「高い2〜3種」の決まりは v2cap.test.js が見張っている（2026-10-09 ユーザー指示「2種～3種が高く」）
+export const MAIN_STAT_MIN = { shoki: 30, ichiji: 61 }
+export const mainStatsOf = (cls) => Object.entries(JOB_BONUS[cls] || {})
+  .filter(([, v]) => v >= (MAIN_STAT_MIN[stageOf(cls)] ?? Infinity))
+  .sort((a, b) => b[1] - a[1])
+  .map(([k]) => k)
 // 表示用。「STR+12・VIT+7」のように多い順
 export const jobBonusText = (cls, jlv) => {
   const s = jobBonusStats(cls, jlv)
