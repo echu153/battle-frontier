@@ -104,9 +104,10 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       const out = []
       out.push(ROLE_LINE[enc.role](foe, enc.lv))
       out.push(...buildBattleLog(r, you, foe))
+      // ★勝ち負けの行は大きく出す（big・V2capLogLine。2026-10-10 ユーザー指示「倒した時のテロップ、わかりやすいように他よりも大きく」）
       out.push(win
-        ? { text:`${foe}を倒した！`, color:'#ffcc00' }
-        : { text:'敗北…', color:'#ff4444' })
+        ? { text:`${foe}を倒した！`, color:'#ffcc00', big: true }
+        : { text:'敗北…', color:'#ff4444', big: true })
       setLogs(out)
 
       // ★1戦ごとにその場で反映する。EXP・Gold・アイテムLVはサーバーが場所の表から決める
@@ -257,7 +258,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
           <div>敵は{spotLvText(spot.id)}（ボスは上限のLV）</div>
           <div>
             装備の必要LV：{RARITIES.map((r, i) => (
-              <span key={r}>{i ? '・' : ''}<span style={{ color: r === 'N' ? '#cfe2ff' : RARITY_COLOR[r] }}>{rarityLabel(r)}</span>{reqLvOf(spot.area, r)}</span>
+              <span key={r}>{i ? '・' : ''}<span style={{ color: RARITY_COLOR[r] }}>{rarityLabel(r)}</span>{reqLvOf(spot.area, r)}</span>
             ))}
           </div>
           <div>

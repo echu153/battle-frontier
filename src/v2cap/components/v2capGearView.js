@@ -11,7 +11,8 @@ import { plusOf, scrapNameOf } from '../lib/smith.js'
 //   画面の部品（レア度・強化値の印・絞り込みの帯）は v2capGear.jsx
 // ============================================================
 export const statLine = (s) => STAT_KEYS.filter(k => s[k] > 0).map(k => `${STAT_DEFS[k].label}+${s[k]}`).join(' ')
-export const nameColor = (item) => (item.rarity === 'N' ? '#88ccff' : RARITY_COLOR[item.rarity])
+// 名前の色はレア度の色（ノーマル灰色・レア青・エピック紫・レジェンダリー黄色＝2026-10-10 ユーザー指示）
+export const nameColor = (item) => RARITY_COLOR[item?.rarity] || '#88ccff'
 export const PLUS_COLOR = '#ffcc00'
 // 選んでいる／いないの小さいボタン
 export const chip = (on) => ({ ...miniBtn(on ? '#44aaff' : '#62789a'), color: on ? '#88ccff' : '#93a9be' })

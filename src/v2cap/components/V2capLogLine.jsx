@@ -7,6 +7,8 @@ import V2LogLine from '../../v2/components/V2LogLine.jsx'
 //     共通の枠（旧版の BattleLogLine）は状態異常の印の場所を名前の上に空けて取るので、名前とHPが枠の下に寄っていた。
 //     この版では **ターンの見出しのすぐ下に 名前とHP → HPバー**、状態異常の印は**あるときだけ**バーの下に出す。
 //   ⚠旧版・今のⅡのログ（BattleLogLine）は変えていない
+//   ★2026-10-10 ユーザー指示「倒した時のテロップ、わかりやすいように他よりも大きくして」：
+//     big の付いた行（勝ち負けの行）は、ふつうの行（12px）より大きく太く出す。共通の V2LogLine は触らない
 // ============================================================
 const Status = ({ list, align }) => (!list || !list.length) ? null : (
   <div style={{ display:'flex', flexWrap:'wrap', gap:'3px', justifyContent: align, marginTop:'3px' }}>
@@ -33,6 +35,14 @@ const Side = ({ name, cur, max, color, status, align }) => {
 }
 
 export default function V2capLogLine({ l }) {
+  if (l?.big) {
+    return (
+      <div style={{ color: l.color, fontSize:'16px', fontWeight:'bold', lineHeight:1.8, letterSpacing:'1px',
+        borderBottom:'1px solid #001428', padding:'4px 0', textAlign:'left', textShadow:`0 0 8px ${l.color}66` }}>
+        {l.text}
+      </div>
+    )
+  }
   if (l?.type !== 'hp') return <V2LogLine l={l} />
   return (
     <div style={{ borderBottom:'1px solid #24405e', padding:'6px', background:'#16263c', borderRadius:'3px', margin:'2px 0' }}>

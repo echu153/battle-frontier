@@ -26,7 +26,9 @@ export const RARITIES = ['N', 'R', 'E', 'L']
 export const RARITY_LABEL = { N:'ノーマル', R:'レア', E:'エピック', L:'レジェンダリー' }
 // 強さの基礎。ノーマル40＝前のCランク（gear.js の「ノーマルを全部そろえると本体と同じくらい」の基準）
 export const RARITY_BASE = { N:40, R:50, E:60, L:70 }
-export const RARITY_COLOR = { N:'#c8d2dc', R:'#4488ff', E:'#c060ff', L:'#ffaa00' }
+// 【確定】2026-10-10 ユーザー指示「ノーマル灰色、レアは青、エピックは紫、レジェンダリーは黄色」（ドロップのログ・装備の名前・レア度の印で同じ色）
+//   ★背景が濃紺なので、灰色も黄色も明るめ（暗い色は読めない＝v2ui.js の TEXT の注意）
+export const RARITY_COLOR = { N:'#aab4be', R:'#4488ff', E:'#c060ff', L:'#ffe033' }
 export const rarityLabel = (r) => RARITY_LABEL[r] || ''
 
 // ===== 必要LV（＝アイテムLV）=====

@@ -96,14 +96,14 @@ export default function V2capStatus({ prof, inventory, onProfile }) {
           <V2Tip alignRight={i % 2 === 1} width="230px" style={{ display:'block', flex:1, minWidth:0 }}
             body={<>
               <div>
-                <span style={{ color: w.item.rarity === 'N' ? '#cfe2ff' : RARITY_COLOR[w.item.rarity] }}>{itemLabel(w.item)}</span>
+                <span style={{ color: RARITY_COLOR[w.item.rarity] }}>{itemLabel(w.item)}</span>
                 {plus > 0 && <span style={{ color:'#ffcc00' }}> {plusLabel(plus)}</span>}（{kindLabel(w.item)}）
               </div>
               <div>アイテムLV {w.inv.ilv}（必要LV {w.inv.ilv}）{plus > 0 && <>・強化 {plusLabel(plus)}（強さ{100 + plus * 10}%）</>}</div>
               <div>戦闘力 {power}{pct < 100 && <span style={{ color:'#ff8844' }}> → {Math.round(power * pct / 100)}（効果{pct}%）</span>}</div>
             </>}>
             <span style={{ ...valueCell, display:'block' }}>
-              <span style={{ color: w.item.rarity === 'N' ? '#88ccff' : RARITY_COLOR[w.item.rarity] }}>{w.item.name}</span>
+              <span style={{ color: RARITY_COLOR[w.item.rarity] }}>{w.item.name}</span>
               {plus > 0 && <span style={{ color:'#ffcc00' }}>{plusLabel(plus)}</span>}
               <span style={{ color:'#93a9be' }}> LV{w.inv.ilv}</span>
               {pct < 100 && <span style={{ color:'#ff8844' }}> {pct}%</span>}
