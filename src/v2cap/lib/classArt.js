@@ -64,6 +64,55 @@ export const ART_GENDERS = [
 export const ART_DIR = '/V2newjob'
 export const ART_SIZES = ['web', 'face']
 export const hasArt = (cls) => !!ART_BASE[cls]
+
+// ===== デフォルメ（SD）の絵 ＝ 戦闘ログの自分のアイコン =====
+// 【確定】2026-10-12 ユーザー指示「自分のアイコンは職業イラストをデフォルメしたキャラを入れる予定」
+//   ・元の絵：public/V2newjob/SD/SD<クラス名><男|女>.png（ユーザーが置く・透明な背景）。⚠git に入れない（.gitignore）
+//   ・画面で使う版：public/V2newjob/icon/<ローマ字>-<m|f>.webp（体がちょうど収まる正方形・192×192）。作るのは tools/v2cap-art.mjs
+//     ★フォルダ名を sd にしないこと（Windows は大文字小文字を区別しないので SD と同じフォルダになる）
+//   ・作れたものを ART_SD に足す（ツールが「足りない」と知らせる。classArt.test.js が突き合わせる）
+//   ・SDの絵がまだ無いクラスは、一覧の顔のアップ（face）で代わりに出す（battleIconOf）
+// 2026-10-12 初期11職の男女22枚（どれも全身の絵と見比べた）。一次職はまだ
+export const ART_SD = {
+  剣士: ['m', 'f'],
+  戦士: ['m', 'f'],
+  槍使い: ['m', 'f'],
+  格闘家: ['m', 'f'],
+  盗賊: ['m', 'f'],
+  弓使い: ['m', 'f'],
+  銃士: ['m', 'f'],
+  魔法使い: ['m', 'f'],
+  呪術師: ['m', 'f'],
+  僧侶: ['m', 'f'],
+  薬師: ['m', 'f'],
+}
+export const SD_DIR = 'SD'          // public/V2newjob の下・元の絵
+export const SD_OUT = 'icon'        // public/V2newjob の下・画面で使う版
+// 名前どおりに読まないファイル名 → [クラス, 'm'|'f']（絵を見て確かめたものだけ）。null は「確かめ中なので使わない」
+// ⚠ファイル名のクラスと絵が違うことがある。足したら必ず神殿の全身の絵（web）と見比べる
+//   2026-10-12 剣士の2枚が最初「SD戦士.png」「SD戦士女.png」の名前で届き、のちにユーザーが「SD剣士」に直した
+//   （「SD戦士女.png」はそのあと斧の戦士の絵に入れ替わった）
+export const SD_ALIAS = {
+  'SD剣士': ['剣士', 'm'],   // 男女の字が無い。絵は剣士の男性（全身の絵と見比べた）
+}
+// SDのファイル名（拡張子なし）→ { cls, g }。g は男女が書いていなければ null。クラスが読めなければ null。
+// 確かめ中（SD_ALIAS が null）は { hold: true }
+export const sdTargetOf = (stem) => {
+  if (stem in SD_ALIAS) {
+    const alias = SD_ALIAS[stem]
+    return alias ? { cls: alias[0], g: alias[1] } : { hold: true }
+  }
+  const m = String(stem ?? '').normalize('NFKC').match(/^SD(.+?)(男|女)?$/i)
+  if (!m || !ART_BASE[m[1]]) return null
+  return { cls: m[1], g: m[2] === '男' ? 'm' : m[2] === '女' ? 'f' : null }
+}
+export const sdSrcOf = (cls, gender = 'm') => (ART_SD[cls]?.includes(gender) ? `${ART_DIR}/${SD_OUT}/${ART_BASE[cls]}-${gender}.webp` : null)
+// 戦闘ログの自分のアイコン：SDの絵 → 無ければ顔のアップ → 絵の無いクラスは null（画面は名前の1文字目の枠）
+// gender は神殿の「♂ 男性／♀ 女性」の切り替え（端末で覚えている capArtGender）
+export const battleIconOf = (cls, gender = 'm') => {
+  const g = ART_GENDERS.some(x => x.key === gender) ? gender : 'm'
+  return sdSrcOf(cls, g) || artSrcOf(cls, g, 'face')
+}
 // 表示に使う絵の場所（無いクラスは null）。size は 'web'（詳細の全身）か 'face'（一覧の顔のアップ）
 export const artSrcOf = (cls, gender = 'm', size = 'web') => {
   const base = ART_BASE[cls]

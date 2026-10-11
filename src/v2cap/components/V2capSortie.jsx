@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import V2capLogLine from './V2capLogLine.jsx'
 import { runBattle } from '../../v2/lib/battle.js'
-import { buildBattleLog } from '../../v2/lib/battleLog.js'
 import { LOG_PLAIN } from '../../v2/components/v2ui.js'
+import { loadPref } from '../../v2/lib/prefs.js'
 import { SPOTS, spotOf, spotLabel, spotLvText, ROLE_TENTHS, toFighter as enemyFighter } from '../lib/areas.js'
 import {
   pickEncounter, rollEquipDrop, nextBossRate, isSpotUnlocked, isSpotCleared, openUntilOf, rewardRangeOf, SORTIE_CD,
@@ -13,6 +13,9 @@ import { staminaMaxOf, MAX_LV, rollStamina } from '../lib/level.js'
 import { jobOf, jobMaxOf } from '../lib/jobs.js'
 import { effectPct } from '../lib/gear.js'
 import { RARITY_COLOR, RARITIES, rarityLabel, reqLvOf } from '../lib/equipment.js'
+import { buildCapBattleView } from '../lib/battleView.js'
+import { enemyArtSrc } from '../lib/enemyArt.js'
+import { battleIconOf } from '../lib/classArt.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — 出撃（ホームの右）
@@ -28,6 +31,10 @@ import { RARITY_COLOR, RARITIES, rarityLabel, reqLvOf } from '../lib/equipment.j
 //   ・【確定】2026-10-10 ユーザー指示：戦闘ログは**自動で一番下へ**送る。チェックでオン・オフできる（最初はオン・この端末で覚えておく）。
 //     動かすのはログの枠の中だけ（scrollIntoView はページごと動いてしまうので使わない）。
 //     オフのときは、新しい戦闘のたびに一番上から出す
+//   ・【確定】2026-10-12 ユーザー指示：戦闘ログは**あるけみすと風**（ターンの頭に両方のアイコン＋HPの表・
+//     行動ごとに動いた側のアイコン）。並びは battleView.js・見た目は V2capLogLine.jsx。
+//     敵のアイコンは enemyArt.js（エリア①から絵を足していく）、自分のアイコンは classArt.js の battleIconOf
+//     （SDの絵 → 無ければ顔のアップ。男女は神殿の切り替えと同じ capArtGender）
 // ============================================================
 // ★ログに注記は付けない（2026-10-10 ユーザー指示「（朝だけ）とか（時間帯限定で1.5倍）とか倒した時の（1ターン）の部分いらない」）：
 //   時間帯の敵の「（朝だけ）」・報酬の「（ボスで5倍）（レアで3倍）（時間帯限定で1.5倍）」・勝ち負けの「（◯ターン）」は出さない
@@ -54,6 +61,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   const [stam, setStam] = useState(() => ({ n: prof?.stamina ?? 0, at: prof?.stamina_at || null }))
   const [follow, setFollow] = useState(readFollow)   // ログを自動で一番下へ
   const [battleNo, setBattleNo] = useState(0)         // 何戦目か（オフのとき、新しい戦闘で一番上に戻すため）
+  const [art, setArt] = useState(null)                // 戦闘ログのアイコン（{ me:{ src, name }, foe:{ src, name } }）
   const lastAt = useRef(0)
   const busy = useRef(false)
   const logBox = useRef(null)
@@ -101,9 +109,13 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
 
       const foe = enc.enemy.name
       const you = me.name
+      // 自分のアイコンの男女は神殿の切り替えと同じ（戦闘のたびに読む＝神殿で変えたら次の戦闘から）
+      const gender = loadPref('capArtGender', 'm')
+      setArt({ me: { src: battleIconOf(prof.class, gender), name: you }, foe: { src: enemyArtSrc(foe), name: foe } })
       const out = []
-      out.push(ROLE_LINE[enc.role](foe, enc.lv))
-      out.push(...buildBattleLog(r, you, foe))
+      // 「◯◯が現れた！」も敵のアイコンを付けて出す（あるけみすとの「◯◯が襲いかかってきた！」の形）
+      out.push({ kind:'act', who:'foe', appear: true, lines: [ROLE_LINE[enc.role](foe, enc.lv)] })
+      out.push(...buildCapBattleView(r, you, foe))
       // ★勝ち負けの行は大きく出す（big・V2capLogLine。2026-10-10 ユーザー指示「倒した時のテロップ、わかりやすいように他よりも大きく」）
       out.push(win
         ? { text:`${foe}を倒した！`, color:'#ffcc00', big: true }
@@ -211,7 +223,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
           </span>
         </div>
         <div ref={logBox} style={{ marginBottom:'12px', maxHeight:'300px', overflowY:'auto' }}>
-          {logs.map((l, i) => <V2capLogLine key={i} l={l} />)}
+          {logs.map((l, i) => <V2capLogLine key={i} l={l} art={art} />)}
         </div>
         {timerRow}
         {auto && (

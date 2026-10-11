@@ -29,3 +29,8 @@ _sim_data.json
 # 調整用シミュレータの esbuild 出力（生成物なので追跡しない）
 _*_b.mjs
 tools/v2-skills.html
+
+# v2cap のモンスターの元の絵（ユーザーが置く・300枚で約500MB）。画面で使う軽い版は public/enemy-art（tools/v2cap-enemy-art.mjs）
+/public/エネミー/
+# v2cap の自分のアイコン（デフォルメの絵）の元の絵（ユーザーが置く・1枚約2.5MB）。画面で使う版は public/V2newjob/icon（tools/v2cap-art.mjs）
+/public/V2newjob/SD/

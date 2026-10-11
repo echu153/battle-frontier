@@ -8,7 +8,10 @@ import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { CLASS_BY_ID } from './jobs.js'
-import { ART_BASE, ART_FACE, FACE_FIT, ART_GENDERS, ART_DIR, ART_SIZES, hasArt, artSrcOf, faceCropOf } from './classArt.js'
+import {
+  ART_BASE, ART_FACE, FACE_FIT, ART_GENDERS, ART_DIR, ART_SIZES, hasArt, artSrcOf, faceCropOf,
+  ART_SD, SD_DIR, SD_OUT, SD_ALIAS, sdTargetOf, sdSrcOf, battleIconOf,
+} from './classArt.js'
 
 const PUBLIC = fileURLToPath(new URL('../../../public', import.meta.url))
 
@@ -96,8 +99,9 @@ test('絵のあるクラスは、男女とも 全身と顔のアップの軽い�
 })
 
 test('使っていない大きさのフォルダが残っていない（一覧の全身の小さい絵 thumb/ はやめた）', () => {
-  const dirs = readdirSync(PUBLIC + ART_DIR, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name).sort()
-  assert.deepEqual(dirs, [...ART_SIZES].sort())
+  // SD/ はユーザーが置くSDの元の絵（git に入れない）・icon/ はそこから作る戦闘ログのアイコン
+  const dirs = readdirSync(PUBLIC + ART_DIR, { withFileTypes: true }).filter(d => d.isDirectory() && d.name !== SD_DIR).map(d => d.name).sort()
+  assert.deepEqual(dirs, [...ART_SIZES, SD_OUT].sort())
 })
 
 test('絵の無いクラスは null（画面は「イラスト準備中」）。知らない性別は男性・知らない大きさは全身の絵にする', () => {
@@ -111,4 +115,52 @@ test('絵の無いクラスは null（画面は「イラスト準備中」）。
   assert.equal(artSrcOf('戦士'), `${ART_DIR}/web/sensi-m.webp`)
   assert.equal(artSrcOf('剣士', 'f', 'face'), `${ART_DIR}/face/kensi-f.webp`)
   assert.equal(artSrcOf('剣士', 'f', 'thumb'), `${ART_DIR}/web/kensi-f.webp`)
+})
+
+// ===== デフォルメ（SD）の絵＝戦闘ログの自分のアイコン =====
+// 【確定】2026-10-12 ユーザー指示「自分のアイコンは職業イラストをデフォルメしたキャラを入れる予定」
+test('SDのファイル名の読み方：SD<クラス名><男|女>。男女が無い・知らないクラスは使わない。確かめ中の名前は使わない', () => {
+  assert.deepEqual(sdTargetOf('SD呪術師男'), { cls:'呪術師', g:'m' })
+  assert.deepEqual(sdTargetOf('SD魔法使い女'), { cls:'魔法使い', g:'f' })
+  assert.deepEqual(sdTargetOf('SD盗賊'), { cls:'盗賊', g:null })
+  assert.equal(sdTargetOf('SDないクラス男'), null)
+  assert.equal(sdTargetOf('呪術師男'), null)
+  for (const [stem, to] of Object.entries(SD_ALIAS)) {
+    if (to === null) { assert.deepEqual(sdTargetOf(stem), { hold: true }); continue }
+    assert.ok(ART_BASE[to[0]] && ['m', 'f'].includes(to[1]), stem)
+  }
+  // 男女の字が無い「SD剣士.png」は剣士の男性（絵を見て確かめた）
+  assert.deepEqual(sdTargetOf('SD剣士'), { cls:'剣士', g:'m' })
+  assert.deepEqual(sdTargetOf('SD剣士女'), { cls:'剣士', g:'f' })
+})
+
+test('ART_SD のクラスと男女には、アイコン（192×192・透明な背景）がある。icon/ の絵はどれも ART_SD に載っている', () => {
+  const listed = new Set()
+  for (const [cls, gs] of Object.entries(ART_SD)) {
+    assert.ok(ART_BASE[cls], `${cls}は絵のあるクラスではない`)
+    for (const g of gs) {
+      const src = sdSrcOf(cls, g)
+      assert.equal(src, `${ART_DIR}/${SD_OUT}/${ART_BASE[cls]}-${g}.webp`)
+      assert.ok(existsSync(PUBLIC + src), `${cls}（${g}）のアイコンが無い：public${src}。node tools/v2cap-art.mjs を回す`)
+      assert.ok(webpHasAlpha(PUBLIC + src), `${cls}（${g}）のアイコンに透明が無い`)
+      const b = readFileSync(PUBLIC + src)
+      assert.deepEqual([1 + b.readUIntLE(24, 3), 1 + b.readUIntLE(27, 3)], [192, 192], src)
+      listed.add(`${ART_BASE[cls]}-${g}.webp`)
+    }
+  }
+  for (const f of readdirSync(`${PUBLIC}${ART_DIR}/${SD_OUT}`)) assert.ok(listed.has(f), `${f} が ART_SD に無い`)
+})
+
+test('戦闘ログの自分のアイコン：SDの絵 → 無ければ顔のアップ → 絵の無いクラスは null。知らない性別は男性', () => {
+  const [cls, gs] = Object.entries(ART_SD)[0]
+  assert.equal(battleIconOf(cls, gs[0]), sdSrcOf(cls, gs[0]))
+  const noSd = Object.keys(ART_BASE).find(c => !ART_SD[c])
+  if (noSd) assert.equal(battleIconOf(noSd, 'f'), artSrcOf(noSd, 'f', 'face'))
+  assert.equal(battleIconOf('狂戦士', 'm'), null)
+  assert.equal(battleIconOf(cls, 'x'), battleIconOf(cls, 'm'))
+})
+
+test('SDの元の絵（public/V2newjob/SD）は git に入れない（1枚約2.5MB）', () => {
+  const ignore = readFileSync(fileURLToPath(new URL('../../../.gitignore', import.meta.url)), 'utf8').split(/\r?\n/)
+  assert.ok(ignore.includes(`/public${ART_DIR}/${SD_DIR}/`))
 })
