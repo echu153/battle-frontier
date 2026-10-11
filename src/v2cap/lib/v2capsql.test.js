@@ -420,3 +420,18 @@ test('★作り直し（キャラと装備を消す）は印を付けて1回ず�
   // 印の外で消していない（全文流し直しのたびに消える事故を防ぐ）
   assert.ok(!/delete from public\.v2cap_(profiles|inventory)\s*;/.test(outside), '印の外で profiles / inventory を丸ごと消していない')
 })
+
+test('★いまの職業で装備できない武器を着けているキャラは、流し直しで外れる（武器種を減らしたとき用・持ち物は残る）', () => {
+  // 2026-10-11 ユーザー指示「クラスごとに装備できる武器種は3つまでに」。PGlite で前の版→新しい版を2回流して確かめた
+  const m = SQL.match(/update public\.v2cap_profiles p\s+set equipped = p\.equipped - 'weapon', updated_at = now\(\)\s+where p\.equipped \? 'weapon'\s+and not exists \(([\s\S]*?)\);/)
+  assert.ok(m, '外す update がある')
+  assert.match(m[1], /join public\.v2cap_classes c on c\.id = p\.class/)
+  assert.match(m[1], /e\.type = any\(c\.weapons\)/)
+  assert.match(m[1], /i\.player_id = p\.id/)
+  // 表を作ったあと（まっさらから流しても落ちない）・持ち物は消さない
+  const at = SQL.indexOf(m[0])
+  for (const t of ['v2cap_classes', 'v2cap_equipment', 'v2cap_profiles', 'v2cap_inventory']) {
+    assert.ok(SQL.indexOf(`create table if not exists public.${t}`) < at, `${t} を作ったあと`)
+  }
+  assert.doesNotMatch(m[0], /delete/)
+})
