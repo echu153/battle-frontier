@@ -84,23 +84,27 @@ export const spotLabel = (spotOrId) => {
 
 // ===== 敵のLV =====
 // 【確定】敵ごとに一定（monsters.js の ENEMY_LV。場所が変わっても同じ）
-// 「場所|名前」→ { name, role, spot, band }（役割と時間帯）
+// 【確定】2026-10-13 ユーザー指示「時間限定の敵はエリアごとに強くなるように」→案から「いちばん強いふつうの敵と同じLV」：
+//   **朝昼晩の敵だけ**は場所ごとにLVが変わる＝その場所に出るふつうの敵のうち、いちばん高いLV
+//   （①はいまのまま＝表の2体目・②は4体目・③は6体目のLV。始まりの森は 2→11→13）。強さもその敵と同じ（下の enemyPowerOf）
+// 「場所|名前」→ { name, role, spot, band, lv }（役割・時間帯・その場所でのLV）
 const PLACES = new Map()
 const placeKey = (spot, name) => `${spot}|${name}`
 for (const s of SPOTS) {
   const r = s.roster
-  const put = (e, role) => PLACES.set(placeKey(s.id, e.name), { name: e.name, role, spot: s.id, band: e.band || null })
+  const topLv = Math.max(...r.enemies.map(e => ENEMY_LV[e.name] || 1))
+  const put = (e, role, lv = ENEMY_LV[e.name] || 1) => PLACES.set(placeKey(s.id, e.name), { name: e.name, role, spot: s.id, band: e.band || null, lv })
   for (const e of r.enemies) put(e, 'normal')
-  for (const e of r.timed) put(e, 'timed')
+  for (const e of r.timed) put(e, 'timed', topLv)
   for (const e of r.rares) put(e, 'rare')
   put(r.boss, 'boss')
 }
 // spot は顔ぶれの確かめ用（その場所にいない敵はLV1を返す＝前と同じ）
-export const enemyLvOf = (name, spot) => (PLACES.has(placeKey(spot, name)) ? ENEMY_LV[name] || 1 : 1)
+export const enemyLvOf = (name, spot) => PLACES.get(placeKey(spot, name))?.lv || 1
 export const enemyRoleOf = (name, spot) => PLACES.get(placeKey(spot, name))?.role || 'normal'
 // その場所の敵のLVの範囲（いちばん低い敵〜いちばん高い敵＝ボス）。画面とサーバーの v2cap_spots に出す
 export const spotLvOf = (id) => {
-  const lvs = [...PLACES.values()].filter(p => p.spot === id).map(p => ENEMY_LV[p.name] || 1)
+  const lvs = [...PLACES.values()].filter(p => p.spot === id).map(p => p.lv)
   return lvs.length ? [Math.min(...lvs), Math.max(...lvs)] : [1, 1]
 }
 export const spotLvText = (id) => { const [a, b] = spotLvOf(id); return a === b ? `LV${a}` : `LV${a}〜${b}` }
@@ -111,13 +115,19 @@ export const spotLvText = (id) => { const [a, b] = spotLvOf(id); return a === b 
 //   ・各エリアの③ … ボスを初めて倒したときのLVの中央値（tools/v2cap-progress.mjs の lvAtClear）。
 //     A1〜15＝14/18/22/23/29/36/39/44/47/50/51/53/66/70/77（最後は77→ユーザー指示どおり80。目安なのでボスの強さは変えていない）
 //   ・各エリアの①② … 前の③との間を3等分（①②のボスは③より弱く、前の③で止まっていた人が着いてすぐ倒す＝測ると③と同じLVになるため）
-//   ・①-① … 5（ユーザー「レベル5ぐらいで倒せる」＝下の BOSS_SPOT_ADJ でボスを合わせた）・①-②は①-①と①-③のまんなか
+//   ・①-① … 5（ユーザー「レベル5ぐらいで倒せる」＝下の BOSS_SPOT_POWER でボスを合わせた）・①-②は①-①と①-③のまんなか
 //   画面は「推奨LV（前の場所の目安）〜（この場所の目安）」＝①-①は「推奨LV1〜5」。前と同じ数なら「推奨LV22」（表記ルールで「レベル」は数の前では LV）
-//   ★測り直したら貼り直す（scratchpad の rec-measure.mjs と同じ測り方）
+// 【確定】2026-10-13 敵を全部測り直したので測り直した。ユーザー「80、レベルがどうこうッテよりかは、実際には戦闘力が大事だから、
+//   レベル80以下でも戦闘力しっかり高かったら勝てるぐらいでいい」＝最後は80のまま：
+//   ・各場所 … **その場所の目安の時間に、真ん中の人が何LVか**（初期職11職×2人・450時間・落ちた装備＋鍛冶屋。tools/v2cap-progress.mjs の lvAtSpotHour）。
+//     ボスを初めて倒したLVはエリア8から倒せる人が少なく（速い職業だけ）ばらつくので、こちらにした（エリア7まではどちらでもほぼ同じ）
+//   ・エリア8から先は、測った値（〜90）を「7-③の59〜最後80」に縮めた ／ ①-①は5のまま
+//   ・③＝18/25/31/37/41/52/59/64/68/71/73/75/77/79/80
+//   ★測り直したら貼り直す（scratchpad の lv-at-target.mjs と同じ測り方）
 export const SPOT_REC_LV = [
-  5, 10, 14, 15, 17, 18, 19, 21, 22, 22, 23, 23, 25, 27, 29,
-  31, 34, 36, 37, 38, 39, 41, 42, 44, 45, 46, 47, 48, 49, 50,
-  50, 51, 51, 52, 52, 53, 57, 62, 66, 67, 69, 70, 73, 77, 80,
+  5, 15, 18, 20, 22, 25, 27, 29, 31, 33, 34, 37, 38, 39, 41,
+  44, 47, 52, 54, 56, 59, 60, 62, 64, 65, 66, 68, 69, 70, 71,
+  71, 72, 73, 73, 74, 75, 75, 75, 77, 77, 77, 79, 79, 79, 80,
 ]
 export const recLvOf = (spotId) => SPOT_REC_LV[Math.min(SPOT_REC_LV.length, Math.max(1, spotId)) - 1]
 export const recRangeOf = (spotId) => [spotId > 1 ? recLvOf(spotId - 1) : 1, recLvOf(spotId)]
@@ -129,7 +139,7 @@ export const recSpotOfLv = (lv) => SPOTS.find(s => recLvOf(s.id) >= Math.max(1, 
 // ★サーバーの v2cap_ten_sortie_exp と同じ（v2cap_spots.rec_lv・exp_min・exp_max）
 export const tenSortieExpOf = (lv) => { const s = recSpotOfLv(lv); return 5 * (s.exp[0] + s.exp[1]) }
 // サーバーの種（v2cap_enemies）を作るための一覧（名前＋場所ごとに1行）
-export const enemyLevels = () => [...PLACES.values()].map(p => ({ name: p.name, spot: p.spot, lv: ENEMY_LV[p.name] || 1, role: p.role, band: p.band }))
+export const enemyLevels = () => [...PLACES.values()].map(p => ({ name: p.name, spot: p.spot, lv: p.lv, role: p.role, band: p.band }))
 
 // ===== 敵の強さ =====
 // そのLVのプレイヤーの「標準の戦闘力」（本体＋その時点の装備＋クラスのステ）。本体の戦闘力に対する倍率を
@@ -149,8 +159,11 @@ export const enemyLevels = () => [...PLACES.values()].map(p => ({ name: p.name, 
 //   ・LV5・LV10の行を1.6倍、LV15を1.3倍、LV20を1.15倍（1.07→1.71・1.69→2.70・2.26→2.94・2.65→3.05）。
 //     エリア1にLV3〜9の敵はいないので、強くなるのは①-②・①-③の敵（LV10〜15）とエリア2、エリア3の初め
 //   ・前は始まりの森の敵が弱く、AGIの高い職業は敵の技をほとんどよけていた
+// 【確定】2026-10-13 全部の行を測り直した（ユーザー承認「見込みの表を上限に実際に強化」）：落ちた装備＋鍛冶屋の人（11職×2人・450時間）の
+//   **強化なしの**戦闘力で測る（強化ぶんは ENH_MULT）。前の値のままだと、一次職（約5時間目）や CLASS LV の上がりやすさで
+//   自分の戦闘力がこの線の1.3〜1.6倍あり、エリア10までが目安の2〜3倍速かった。LV1・LV2の行は固定・LV5〜20の行は上の値より下げない
 export const STD_RATIO = [
-  [1, 0.75], [2, 0.83], [5, 1.71], [10, 2.7], [15, 2.94], [20, 3.05], [27, 2.99], [34, 2.74], [44, 3.55], [54, 3.37], [63, 3.22], [71, 3.14], [79, 3.06], [90, 2.99], [100, 2.98],
+  [1, 0.75], [2, 0.83], [5, 2.69], [10, 3.36], [15, 3.86], [20, 4.21], [27, 3.74], [34, 4.3], [44, 4.55], [54, 4.61], [63, 4.27], [71, 4], [79, 3.77], [90, 3.63], [100, 3.52],
 ]
 export const stdRatioAt = (lv) => {
   const l = Math.max(1, Math.min(100, lv || 1))
@@ -179,24 +192,100 @@ export const NORMAL_RATIO = 0.6
 export const RARE_RATIO = 0.8
 export const SUB_BOSS = [1.0, 1.0, 1.25]
 export const AREA_BOSS = [
-  1.19, 1.05, 1.09, 1.19, 1.3, 1.2, 1.13, 1.04, 1.04, 1.17, 1.31, 1.15, 1.42, 1.22, 1.5,
+  1.14, 0.94, 1, 1.12, 0.55, 1.23, 0.3, 0.3, 0.41, 1.17, 0.97, 0.3, 1.28, 0.45, 0.99,
 ]
-// 場所ごとのボスの手直し（エリアの値 × ①②③の倍率に、さらに掛ける）
+// 場所ごとのボスの戦闘力（決めた値で止める）
 // 【確定】2026-10-12 ユーザー指示「ボスをそんなすぐに倒されても困る、レベル5ぐらいで倒せるようになればいい※目安」：
-//   ①-①のボス（オヤブンネズミLV10）を 0.6倍（戦闘力225→135）。初期装備・その LV の CLASS LV・最初の編成で、
+//   ①-①のボス（オヤブンネズミLV10）は戦闘力135。初期装備・その LV の CLASS LV・最初の編成で、
 //   11職の勝率の中央値は LV4 2%・LV5 67%（いちばん低い職業46%）・LV6 99%。序盤の敵を1.6倍にしたときに一緒に強くなりすぎていた
 //   （LV10の行を使うので。①-①を抜けるのが7分→24分になっていた＝実機テストで見つけた）
-export const BOSS_SPOT_ADJ = { 1: 0.6 }
+//   ★2026-10-13 標準の戦闘力を測り直すと LV10 の行が動くので、倍率（前は BOSS_SPOT_ADJ 0.6倍）ではなく戦闘力で止めた（「①-①はいまのまま」）
+export const BOSS_SPOT_POWER = { 1: 135 }
 export const bossRatioOf = (spotId) => {
   const s = spotOf(spotId)
-  return s ? AREA_BOSS[s.area - 1] * SUB_BOSS[s.sub - 1] * (BOSS_SPOT_ADJ[spotId] || 1) : 1
+  return s ? AREA_BOSS[s.area - 1] * SUB_BOSS[s.sub - 1] : 1
 }
 export const roleRatioOf = (role, spotId) =>
   role === 'boss' ? bossRatioOf(spotId) : role === 'rare' ? RARE_RATIO : NORMAL_RATIO
+
+// ===== 装備の強化の見込み =====
+// 【確定】2026-10-13 ユーザー指示「装備の強化で戦闘力上がる予定だから、敵の戦闘力もっと上げていい」
+//   「エリアごとに変えてほしくて、1は未強化、2～3は＋３、4～10は＋６、１１～＋10にして」：
+//   エリアの敵を「着けている装備をこの強化値まで上げた人」に合う強さにする＝ENH_MULT を掛ける（強化しない人は目安より遅れる）。
+//   ★〇-①に入った時点の見込みは前のエリアのまま（下の「エリアの境目」で〇-①を前の③にそろえる）
+//   ★シミュレーターの人は、この値を上限に Gold と残骸で実際に強化する（tools/v2cap-progress.mjs の鍛冶屋）
+export const ASSUMED_PLUS = [0, 3, 3, 6, 6, 6, 6, 6, 6, 6, 10, 10, 10, 10, 10]
+export const assumedPlusAt = (spotId) => {
+  const s = spotOf(spotId)
+  return s ? ASSUMED_PLUS[(s.sub === 1 && s.area > 1 ? s.area - 1 : s.area) - 1] : 0
+}
+// エリアの敵に掛ける倍率＝そのエリアにいる人の戦闘力が、強化で何倍になっているか（測った値。勘で書き換えないこと）。
+// 測る人：落ちた装備＋鍛冶屋でGoldと残骸を使って実際に強化する人（**見込みの強化値が上限**・2026-10-13 ユーザー「見込みの表を上限に実際に強化」）。
+// `node tools/v2cap-progress.mjs --tune` が標準の戦闘力（強化なしで測る）・ボスの倍率と一緒に作り直す（確かめは --enh）
+export const ENH_MULT = [1, 1.05, 1.07, 1.12, 1.11, 1.12, 1.11, 1.11, 1.12, 1.12, 1.18, 1.2, 1.2, 1.21, 1.25]
+
+// ===== エリアの境目とボスの並び =====
+// 【確定】2026-10-13 ユーザー指示「〇ー１はひとつ前の〇ー3と同じくらいの強さに、ボスだけちょっと強く」
+//   「10－①の強さを9－3よりも強くしてって言ってんの」：
+//   ・〇-①のふつうの敵（表の上の2体＝②にも出る）は、前のエリアの③のふつうの敵（4体）の平均と同じ強さにそろえる
+//     （2体の比はLVのまま）。前は1〜32%強かった（1-③→2-① 124→164）。朝昼晩の敵はその場所のいちばん強いふつうの敵と同じ
+//   ・ボスは45か所で必ず前の場所より強い：〇-①＝前の③×BOSS_STEP_IN、③は①の BOSS_TOP_MIN 倍以上、②は①と③の間（掛け算のまんなか）。
+//     ③の強さは今までどおり AREA_BOSS（目安の時間で測り直す）。前は〇-①のボスが前の③の0.70〜0.99倍だった
+//   ・始まりの森は今のまま（①-①のボスは BOSS_SPOT_POWER＝戦闘力135・②③は AREA_BOSS×SUB_BOSS）
+// 【確定】2026-10-13 ユーザー指示「〇－１中ボス　〇－２中ボス　〇－３大ボス」「〇＋１ー１の中ボスは戦闘力的にはそりゃ強くしたい
+//   ※職業のかみ合わせ次第ではそのままの戦闘力でも行ける」→案から「自分の伸びに合わせる」：
+//   〇-③（大ボス）は同じエリアの〇-①（中ボス）の BOSS_TOP_MIN 倍以上で、あとは AREA_BOSS（目安の時間）で決める。
+//   ⚠下限を大きくすると、ボスは1エリアで「BOSS_STEP_IN×下限」倍ずつ必ず強くなる。自分の伸びは目安どおりに進んで
+//     エリア2〜7が1エリア1.13〜1.28倍・エリア8から1.04〜1.09倍（LVが100に近づく・二次職がまだ無い）なので、
+//     下限1.05倍（1エリア1.1025倍）でエリア7から先のボスが全部下限で決まり、エリア8から多くの人が止まった（測り直し tune14）。
+//     下限1.1倍なら最後のボスが前の2倍になった
+export const BOSS_STEP_IN = 1.05
+export const BOSS_TOP_MIN = 1.01
+
+// 全部の敵の戦闘力の表（「場所|名前」→ 戦闘力）。一度作ったら使い回す。
+// ⚠STD_RATIO・AREA_BOSS・ENH_MULT を書き換えたら resetEnemyCache() を呼ぶ（tools/v2cap-progress.mjs の --tune が呼ぶ）
+let POWER = null
+export const resetEnemyCache = () => { POWER = null }
+const buildPowers = () => {
+  const out = new Map()
+  const boss = []   // 場所の番号 → ボスの戦闘力（丸める前）
+  for (let k = 0; k < AREA_LIST.length; k++) {
+    const enh = ENH_MULT[k] ?? 1
+    const [s1, s2, s3] = [1, 2, 3].map(sub => spotOf(k * 3 + sub))
+    const natural = (spot, name, ratio) => stdPowerAt(enemyLvOf(name, spot.id)) * ratio * enh
+    // ふつうの敵（名前ごとに1つ＝①②どちらに出ても同じ強さ）
+    const normal = new Map()
+    for (const s of [s1, s2, s3]) for (const e of s.roster.enemies) if (!normal.has(e.name)) normal.set(e.name, natural(s, e.name, NORMAL_RATIO))
+    if (k > 0) {
+      const prev3 = spotOf(k * 3).roster.enemies.map(e => out.get(placeKey(k * 3, e.name)))
+      const target = prev3.reduce((t, p) => t + p, 0) / prev3.length
+      const pair = s1.roster.enemies.map(e => e.name)
+      const f = target / (pair.reduce((t, n) => t + normal.get(n), 0) / pair.length)
+      for (const n of pair) normal.set(n, normal.get(n) * f)
+    }
+    for (const s of [s1, s2, s3]) {
+      let top = 0
+      for (const e of s.roster.enemies) { const p = normal.get(e.name); out.set(placeKey(s.id, e.name), p); top = Math.max(top, p) }
+      for (const e of s.roster.timed) out.set(placeKey(s.id, e.name), top)
+      for (const e of s.roster.rares) out.set(placeKey(s.id, e.name), natural(s, e.name, RARE_RATIO))
+    }
+    // ボス
+    const nat = (s) => BOSS_SPOT_POWER[s.id] ?? stdPowerAt(enemyLvOf(s.roster.boss.name, s.id)) * bossRatioOf(s.id) * enh
+    let b1 = nat(s1), b2 = nat(s2), b3 = nat(s3)
+    if (k > 0) {
+      b1 = boss[k * 3] * BOSS_STEP_IN
+      b3 = Math.max(b3, b1 * BOSS_TOP_MIN)
+      b2 = Math.sqrt(b1 * b3)
+    }
+    ;[b1, b2, b3].forEach((b, i) => { boss[k * 3 + i + 1] = b; out.set(placeKey(k * 3 + i + 1, [s1, s2, s3][i].roster.boss.name), b) })
+  }
+  for (const [key, p] of out) out.set(key, Math.max(1, Math.round(p)))
+  return out
+}
 // enemy は場所の顔ぶれ（SPOTS の roster）の敵＝いる場所（spot）を持っている
 export const enemyPowerOf = (enemy) => {
-  const p = PLACES.get(placeKey(enemy.spot, enemy.name))
-  return Math.max(1, Math.round(stdPowerAt(enemyLvOf(enemy.name, enemy.spot)) * roleRatioOf(p?.role, p?.spot)))
+  POWER ||= buildPowers()
+  return POWER.get(placeKey(enemy.spot, enemy.name)) ?? 1
 }
 
 // 戦闘用。uses＝1回の戦闘でそれぞれの技を何回使えるか

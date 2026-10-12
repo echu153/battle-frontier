@@ -29,7 +29,7 @@ import {
   AREA_LIST, SPOTS, SPOT_COUNT, spotOf, spotLvOf, spotLabel, expRangeOf, goldRangeOf,
   ROLE_TENTHS, scaleByRole, enemyLevels, enemyLvOf, enemyRoleOf,
   stdPowerAt, stdRatioAt, AREA_BOSS, SUB_BOSS, bossRatioOf, STD_RATIO, NORMAL_RATIO, enemyPowerOf, toFighter as enemyFighter,
-  BOSS_SPOT_ADJ, SPOT_REC_LV, recLvOf, recRangeOf, recLvText, recSpotOfLv,
+  BOSS_SPOT_POWER, SPOT_REC_LV, recLvOf, recRangeOf, recLvText, recSpotOfLv,
 } from './areas.js'
 import { AREA_ROSTERS, AREA_LEVELS, ENEMY_LV } from './monsters.js'
 import { toFighter, statBreakdown, equippedItems, slotsOf, currentSetOf } from './loadout.js'
@@ -928,10 +928,15 @@ test('【確定】通常は表の上から2体ずつ①②③。②には①の�
 
 test('【確定】敵のLVは敵ごとに一定（プレイヤーのLVに合わせない）。最後のボスはLV80・始まりの森①は装備なしで勝てる低さ', () => {
   // どの場所に出ても同じLV（前は場所のLV帯から決めていて、②のスライムは①より高かった）
+  // ★2026-10-13 ユーザー指示「時間限定の敵はエリアごとに強くなるように」：**朝昼晩の敵だけ**は場所ごとに
+  //   「その場所のいちばん高いふつうの敵」と同じLV（①はいままでどおり表の2体目と同じ）
   for (const s of SPOTS) {
-    for (const e of [...s.roster.enemies, ...s.roster.timed, ...s.roster.rares, s.roster.boss]) {
+    for (const e of [...s.roster.enemies, ...s.roster.rares, s.roster.boss]) {
       assert.equal(enemyLvOf(e.name, s.id), ENEMY_LV[e.name], `${spotLabel(s)}の${e.name}`)
     }
+    const top = Math.max(...s.roster.enemies.map(e => ENEMY_LV[e.name]))
+    for (const e of s.roster.timed) assert.equal(enemyLvOf(e.name, s.id), top, `${spotLabel(s)}の${e.name}（朝昼晩）`)
+    if (s.sub === 1) for (const e of s.roster.timed) assert.equal(enemyLvOf(e.name, s.id), ENEMY_LV[e.name], `${spotLabel(s)}の${e.name}は①ではいままでのLV`)
     assert.equal(enemyRoleOf(s.roster.boss.name, s.id), 'boss')
     const [lo, hi] = spotLvOf(s.id)
     assert.equal(hi, enemyLvOf(s.roster.boss.name, s.id), `${spotLabel(s)}：いちばん高いのはボス`)
@@ -970,9 +975,12 @@ test('【確定】始まりの森①のふつう・朝昼晩の敵には、LV1�
   }
 })
 
-test('【確定】2026-10-12 序盤の敵：①-①（LV1〜2）は前のまま・LV5〜20の行は 1.6／1.6／1.3／1.15倍', () => {
+test('【確定】2026-10-12 序盤の敵：①-①（LV1〜2）は前のまま・LV5〜20の行は 1.6／1.6／1.3／1.15倍より弱くしない', () => {
   // ユーザー指示「序盤の敵が弱すぎる、技全部交わせちゃうからもう少し強くてもいい」→「1.6倍」・「１－１は弱くていい」
-  assert.deepEqual(STD_RATIO.slice(0, 6), [[1, 0.75], [2, 0.83], [5, 1.71], [10, 2.7], [15, 2.94], [20, 3.05]])
+  // ★2026-10-13 標準の戦闘力を測り直した（鍛冶屋つき・ユーザー承認）。LV1・LV2の行は固定、LV5〜20の行は10-12の値より下げない（--stdkeepmin 20）
+  assert.deepEqual(STD_RATIO.slice(0, 2), [[1, 0.75], [2, 0.83]])
+  const was = { 5: 1.71, 10: 2.7, 15: 2.94, 20: 3.05 }
+  for (const [lv, r] of STD_RATIO.slice(2, 6)) assert.ok(r >= was[lv], `LV${lv}の行 ${r} は10-12の ${was[lv]} 以上`)
   // ①-①の敵の強さは前の線（LV1 0.75〜LV5 1.07）の上と同じ
   for (const e of [...spotOf(1).roster.enemies, ...spotOf(1).roster.timed]) {
     const lv = ENEMY_LV[e.name]
@@ -983,8 +991,8 @@ test('【確定】2026-10-12 序盤の敵：①-①（LV1〜2）は前のまま�
   for (const e of [...forest.normals, ...forest.timed, ...forest.rares, ...forest.bosses]) {
     assert.ok(ENEMY_LV[e.name] <= 2 || ENEMY_LV[e.name] >= 10, `${e.name}（LV${ENEMY_LV[e.name]}）`)
   }
-  // ①-②の始まりの森の敵（LV10）は前の1.6倍
-  assert.ok(Math.abs(stdRatioAt(10) / 1.69 - 1.6) < 0.01)
+  // ①-②の始まりの森の敵（LV10）は前の1.6倍以上
+  assert.ok(stdRatioAt(10) / 1.69 >= 1.6 - 0.01)
 })
 
 test('敵の出方：レアが先（0.5%）→ボス（遭遇率）→ふつう。朝昼晩の敵はその時間帯だけ', () => {
@@ -1021,22 +1029,26 @@ test('敵の強さ：標準の戦闘力は右肩上がり・ボスの倍率は�
   assert.equal(enemyPowerOf(first), Math.round(stdPowerAt(enemyLvOf(first.name, 1)) * NORMAL_RATIO))
 })
 
-test('【確定】③のボスは特に強い：どのエリアでも ③のボス＞②のボス＞①のボス（戦闘力）', () => {
+test('【確定】ボスは45か所で必ず前の場所より強い（どのエリアでも ③＞②＞①・次のエリアの①は前の③より強い）', () => {
+  // ③の強さは AREA_BOSS×SUB_BOSS（目安の時間で測る）。①②は 2026-10-13 から「前の③×1.05・①と③の間」（エリアの境目・enemyStrength.test.js）
   assert.deepEqual(SUB_BOSS, [1.0, 1.0, 1.25])
   for (let k = 0; k < AREA_LIST.length; k++) {
     const [b1, b2, b3] = [1, 2, 3].map(sub => spotOf(k * 3 + sub).roster.boss)
     const [p1, p2, p3] = [b1, b2, b3].map(enemyPowerOf)
-    assert.ok(p3 > p2 && p2 >= p1, `${AREA_LIST[k].name}：①${p1}・②${p2}・③${p3}`)
+    assert.ok(p3 > p2 && p2 > p1, `${AREA_LIST[k].name}：①${p1}・②${p2}・③${p3}`)
     assert.ok(bossRatioOf(k * 3 + 3) > bossRatioOf(k * 3 + 2), `${AREA_LIST[k].name}：③の倍率が①②より高い`)
   }
+  const all = SPOTS.map(s => enemyPowerOf(s.roster.boss))
+  for (let i = 1; i < all.length; i++) assert.ok(all[i] > all[i - 1], `${spotLabel(i + 1)}のボス ${all[i]} は前の場所 ${all[i - 1]} より強い`)
 })
 
-test('【確定】2026-10-12 ①-①のボスは LV5 くらいで倒せる（0.6倍）：LV4ではまず勝てない・LV6ならほぼ勝てる', () => {
+test('【確定】2026-10-12 ①-①のボスは LV5 くらいで倒せる（戦闘力135）：LV4ではまず勝てない・LV6ならほぼ勝てる', () => {
   // ユーザー指示「ボスをそんなすぐに倒されても困る、レベル5ぐらいで倒せるようになればいい※目安」
   // ⚠序盤の敵を1.6倍にしたとき、①-①のボス（LV10）も一緒に1.6倍になっていた（実機テストで見つけた）
-  assert.deepEqual(BOSS_SPOT_ADJ, { 1: 0.6 })
+  // ★2026-10-13 標準の戦闘力の測り直しで LV10 の行が動いても変わらないように、倍率（0.6倍）ではなく戦闘力135で止めた
+  assert.deepEqual(BOSS_SPOT_POWER, { 1: 135 })
   const boss = spotOf(1).roster.boss
-  assert.equal(enemyPowerOf(boss), Math.round(stdPowerAt(ENEMY_LV[boss.name]) * AREA_BOSS[0] * SUB_BOSS[0] * 0.6))
+  assert.equal(enemyPowerOf(boss), 135)
   assert.equal(bossRatioOf(2), AREA_BOSS[0] * SUB_BOSS[1], '①-②から先は手直しなし')
   // 初期装備・ポイントは職業の並びで振る・CLASS LV はそのLVのころ（初期職の必要EXP）・最初の編成。11職×200戦の勝率（%）
   const jlvAt = (lv) => { let j = 1; while (j < JOB_MAX && jobTotalTo('shoki', j + 1) <= totalExpTo(lv)) j++; return j }
@@ -1070,17 +1082,17 @@ test('【確定】2026-10-12 ①-①のボスは LV5 くらいで倒せる（0.6
 test('【確定】2026-10-12 推奨LV：上限はボスを倒せる目安のLV（測った値）・最後は80・場所の選択肢は「推奨LV（前の場所の目安）〜（この場所の目安）」', () => {
   // ユーザー指示「推奨レベル　って表記の仕方にして上限のレベルはボスを倒せる目安のレベルで　最後のボスは80になるようにして」
   assert.equal(SPOT_REC_LV.length, SPOT_COUNT)
-  assert.equal(recLvOf(1), 5, '①-①は LV5（ボスを0.6倍にして合わせた）')
-  assert.equal(recLvOf(SPOT_COUNT), 80, '最後は80（測ると77）')
+  assert.equal(recLvOf(1), 5, '①-①は LV5（ボスを戦闘力135にして合わせた）')
+  assert.equal(recLvOf(SPOT_COUNT), 80, '最後は80（2026-10-13 に測ると90＝ユーザー「80、…戦闘力しっかり高かったら勝てるぐらいでいい」）')
   for (let id = 2; id <= SPOT_COUNT; id++) assert.ok(recLvOf(id) >= recLvOf(id - 1), `${spotLabel(id)}は前の場所より下がらない`)
-  // 各エリアの③＝ボスを初めて倒したときのLVの中央値（初期職11職×2人・実際に落ちた装備）。最後だけ80
-  assert.deepEqual(AREA_LIST.map((_, k) => recLvOf(k * 3 + 3)), [14, 18, 22, 23, 29, 36, 39, 44, 47, 50, 51, 53, 66, 70, 80])
+  // 各エリアの③＝目安の時間に真ん中の人が何LVか（2026-10-13・初期職11職×2人・落ちた装備＋鍛冶屋）。エリア8から先は最後が80になるよう縮めた
+  assert.deepEqual(AREA_LIST.map((_, k) => recLvOf(k * 3 + 3)), [18, 25, 31, 37, 41, 52, 59, 64, 68, 71, 73, 75, 77, 79, 80])
   // 画面の文言（表記ルールで「レベル」は数の前では LV）。前の場所と同じ数なら1つだけ
   assert.deepEqual(recRangeOf(1), [1, 5])
   assert.equal(recLvText(1), '推奨LV1〜5')
-  assert.equal(recLvText(2), '推奨LV5〜10')
-  assert.equal(recLvText(10), '推奨LV22')
-  assert.equal(recLvText(SPOT_COUNT), '推奨LV77〜80')
+  assert.equal(recLvText(2), '推奨LV5〜15')
+  assert.equal(recLvText(31), '推奨LV71')
+  assert.equal(recLvText(SPOT_COUNT), '推奨LV79〜80')
   // そのLVの推奨の場所（デイリーミッションと宝樹のEXPの基準）＝推奨LVの上限がそのLV以上の、いちばん手前の場所
-  assert.deepEqual([1, 5, 6, 10, 11, 77, 78, 80, 100].map(lv => recSpotOfLv(lv).id), [1, 1, 2, 2, 3, 44, 45, 45, 45])
+  assert.deepEqual([1, 5, 6, 15, 16, 77, 78, 80, 100].map(lv => recSpotOfLv(lv).id), [1, 1, 2, 2, 3, 39, 42, 45, 45])
 })

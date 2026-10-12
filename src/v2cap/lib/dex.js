@@ -21,20 +21,27 @@ export const DEX_ROLES = [
 ]
 export const DEX_ROLE = Object.fromEntries(DEX_ROLES.map(r => [r.key, r]))
 
-// 敵ごとに「出る場所（①②③の番号）」をまとめる
+// 敵ごとに「出る場所（①②③の番号）」と、そこでのLVの範囲をまとめる
+// ★2026-10-13〜 朝昼晩の敵は場所ごとにLVが変わる（areas.js の enemyLvOf）＝図鑑は「LV2〜13」のように幅で出す
 const SPOTS_OF = (() => {
   const out = {}
-  for (const p of enemyLevels()) (out[p.name] ||= new Set()).add(p.spot)
-  return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, [...v].sort((a, b) => a - b)]))
+  for (const p of enemyLevels()) {
+    const o = (out[p.name] ||= { spots: new Set(), lvs: [] })
+    o.spots.add(p.spot)
+    o.lvs.push(p.lv)
+  }
+  return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, { spots: [...v.spots].sort((a, b) => a - b), lo: Math.min(...v.lvs), hi: Math.max(...v.lvs) }]))
 })()
 
-// そのエリアの20体（図鑑の並び）。{ name, role, band, kind, lv, spots:[場所の番号], subs:[1,2,3] }
+// そのエリアの20体（図鑑の並び）。{ name, role, band, kind, lv, lvMax, spots:[場所の番号], subs:[1,2,3] }
+// lv＝いちばん低い場所でのLV・lvMax＝いちばん高い場所でのLV（朝昼晩の敵だけ違う。ほかは同じ）
 export const dexAreaOf = (areaNo) => {
   const r = AREA_ROSTERS[areaNo - 1]
   if (!r) return []
   const row = (e, role) => {
-    const spots = SPOTS_OF[e.name] || []
-    return { name: e.name, role, band: e.band || null, kind: e.kind, lv: ENEMY_LV[e.name] || 1, spots, subs: spots.map(s => ((s - 1) % 3) + 1) }
+    const at = SPOTS_OF[e.name] || { spots: [], lo: ENEMY_LV[e.name] || 1, hi: ENEMY_LV[e.name] || 1 }
+    const spots = at.spots
+    return { name: e.name, role, band: e.band || null, kind: e.kind, lv: at.lo, lvMax: at.hi, spots, subs: spots.map(s => ((s - 1) % 3) + 1) }
   }
   return [
     ...r.normals.map(e => row(e, 'normal')),

@@ -100,7 +100,7 @@ export default function V2capDex({ prof }) {
                         {role.label}{e.band ? `・${e.band}` : ''}
                       </span>
                       <span style={{ color: found ? '#cfe2ff' : TEXT.empty, flex:1, minWidth:0 }}>{found ? e.name : '???'}</span>
-                      <span style={{ color: found ? '#cfe2ff' : TEXT.empty, fontSize:'11px' }}>LV{found ? e.lv : '??'}</span>
+                      <span style={{ color: found ? '#cfe2ff' : TEXT.empty, fontSize:'11px' }}>LV{found ? (e.lvMax > e.lv ? `${e.lv}〜${e.lvMax}` : e.lv) : '??'}</span>
                       <span style={{ color: TEXT.label, fontSize:'10px' }}>{e.subs.map(s => SUB_MARK[s - 1]).join('')}</span>
                     </div>
                     <div style={{ display:'flex', gap:'10px', flexWrap:'wrap', fontSize:'10px', marginTop:'3px', color: TEXT.sub }}>
