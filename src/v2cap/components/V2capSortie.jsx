@@ -221,31 +221,19 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   )
 
   // 右下に浮かぶ出撃ボタン（街でも戦闘中でも出す）。押すと上の「出撃！／再出撃！」と同じ（手動の出撃・スタミナは使わない）。
-  // 待っているあいだは**下から上へ貯まるゲージ**（上の時間のバーと同じ進み＝timerPct）。満タンになると黄色く光って押せる。
-  //   【確定】2026-10-12 ユーザー指示「秒数じゃなくて下から上にゲージが貯まっていくようにして」（前は残りの秒数）
-  // オートのあいだは押せない（上のボタンも出ていないので同じ）。ゲージは次のオート出撃までの進みとして出す
+  // 押せるときは黄色く光る。押せないとき（待ち時間・精算中・オート中）は**暗くするだけ**（秒数もゲージも出さない）。
+  //   【確定】2026-10-12 ユーザー指示「やっぱ押せるときに押せるように、押せないときは非アクティブにするだけでいいや」
+  //   （前は残りの秒数→下から上へ貯まるゲージ）。オートのあいだは上のボタンも出ていないので同じく押せない
   const fabReady = canAct && !auto
   const fab = fabOn && spot && (
     <button onClick={() => doBattle(false)} disabled={!fabReady} aria-label="出撃"
       title={auto ? 'オート出撃中' : `${spot.name}へ出撃（上の出撃ボタンと同じ）`}
       style={{ position:'fixed', right:'16px', bottom:'calc(16px + env(safe-area-inset-bottom, 0px))', zIndex:300,
-        width:'64px', height:'64px', borderRadius:'50%', padding:0, overflow:'hidden', fontFamily:'monospace', lineHeight:1.15,
+        width:'64px', height:'64px', borderRadius:'50%', padding:0, fontFamily:'monospace', lineHeight:1.15,
         background: fabReady ? '#001840' : '#000c1c', border:`2px solid ${fabReady ? '#ffcc00' : '#2a4a66'}`,
-        color: fabReady ? '#ffcc00' : '#e0f0ff', cursor: fabReady ? 'pointer' : 'not-allowed',
+        color: fabReady ? '#ffcc00' : '#4d6f92', cursor: fabReady ? 'pointer' : 'not-allowed',
         boxShadow: fabReady ? '0 0 12px rgba(255,204,0,0.45), 0 4px 12px rgba(0,0,0,0.6)' : '0 4px 12px rgba(0,0,0,0.6)' }}>
-      {/* ゲージ（丸の中で下から上へ・上の端を明るく）。出撃した直後は0から（戻るときは動かさない）。
-          ⚠下の色を暗くしすぎると背景（#000c1c）と見分けにくく、貯まり始めが見えない */}
-      {!fabReady && (
-        <span aria-hidden="true" data-fab-gauge=""
-          style={{ position:'absolute', left:0, right:0, bottom:0, height:`${timerPct}%`,
-            background:'linear-gradient(0deg,#0058b0,#0099ff)', boxShadow:'inset 0 2px 0 rgba(160,220,255,0.6)',
-            transition: timerPct < 5 ? 'none' : 'height 0.2s linear' }} />
-      )}
-      <span style={{ position:'relative', display:'block', textShadow: fabReady ? 'none' : '0 1px 2px rgba(0,0,0,0.9)' }}>
-        {auto
-          ? <span style={{ fontSize:'11px' }}>オート<br />中</span>
-          : <><span style={{ fontSize:'20px' }}>⚔</span><br /><span style={{ fontSize:'11px' }}>出撃</span></>}
-      </span>
+      <span style={{ fontSize:'20px' }}>⚔</span><br /><span style={{ fontSize:'11px' }}>出撃</span>
     </button>
   )
 
