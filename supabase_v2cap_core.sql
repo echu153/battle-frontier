@@ -2047,10 +2047,13 @@ create table if not exists public.v2cap_spots (
   gold_min   int  not null,
   gold_max   int  not null,
   lv_min     int  not null,
-  lv_max     int  not null
+  lv_max     int  not null,
+  rec_lv     int  not null default 1
 );
 -- 前の形（ランクの重み drop_ranks）の列を消す。★種を入れる前に（列が残っていると入れられない）
 alter table public.v2cap_spots drop column if exists drop_ranks;
+-- 推奨LVの上限（ボスを倒せる目安のLV・2026-10-12 ユーザー指示「推奨レベル」）。デイリーミッションと宝樹のEXPで「そのLVの推奨の場所」を引く（areas.js の SPOT_REC_LV）
+alter table public.v2cap_spots add column if not exists rec_lv int not null default 1;
 -- 前の形（アイテムLVを場所ごとに持っていた item_lv）の列も消す。アイテムLVは装備の必要LV（v2cap_equipment.lv）
 alter table public.v2cap_spots drop column if exists item_lv;
 alter table public.v2cap_spots enable row level security;
@@ -2061,52 +2064,52 @@ grant select on table public.v2cap_spots to authenticated;
 
 -- @@seed:spots
 delete from public.v2cap_spots;
-insert into public.v2cap_spots (id, area, sub, area_name, name, exp_min, exp_max, gold_min, gold_max, lv_min, lv_max) values
-  (1, 1, 1, '始まりの森', '木漏れ日の小径', 2, 3, 10, 15, 1, 10),
-  (2, 1, 2, '始まりの森', '苔むした獣道', 2, 4, 10, 17, 1, 12),
-  (3, 1, 3, '始まりの森', '森主の古樹', 3, 5, 10, 20, 2, 15),
-  (4, 2, 1, '荒廃した草原', '風吹く丘陵', 4, 5, 15, 20, 16, 17),
-  (5, 2, 2, '荒廃した草原', '焼け落ちた廃村', 4, 6, 15, 22, 16, 18),
-  (6, 2, 3, '荒廃した草原', '骸の古戦場', 5, 7, 15, 25, 17, 20),
-  (7, 3, 1, '古代の洞窟', '鍾乳の回廊', 6, 7, 20, 25, 21, 22),
-  (8, 3, 2, '古代の洞窟', '刻印の大広間', 6, 8, 20, 27, 21, 23),
-  (9, 3, 3, '古代の洞窟', '封じられし石室', 7, 9, 20, 30, 22, 26),
-  (10, 4, 1, '蒼海の入り江', '白砂の浜辺', 8, 9, 25, 30, 27, 27),
-  (11, 4, 2, '蒼海の入り江', '難破船の墓場', 8, 10, 25, 32, 27, 29),
-  (12, 4, 3, '蒼海の入り江', '大渦の海蝕洞', 9, 11, 25, 35, 27, 30),
-  (13, 5, 1, '灼砂の遺丘', '陽炎の砂原', 10, 11, 30, 35, 31, 31),
-  (14, 5, 2, '灼砂の遺丘', '埋もれし神殿', 10, 12, 30, 37, 31, 32),
-  (15, 5, 3, '灼砂の遺丘', '砂王の玄室', 11, 13, 30, 40, 31, 34),
-  (16, 6, 1, '巨峰山脈', '岩肌の山道', 12, 13, 35, 40, 35, 37),
-  (17, 6, 2, '巨峰山脈', '風哭きの峠', 12, 14, 35, 42, 35, 39),
-  (18, 6, 3, '巨峰山脈', '天衝く頂', 13, 15, 35, 45, 36, 43),
-  (19, 7, 1, '常闇の樹海', '黄昏の境界', 14, 15, 40, 45, 44, 45),
-  (20, 7, 2, '常闇の樹海', '惑い霧の迷路', 14, 16, 40, 47, 44, 46),
-  (21, 7, 3, '常闇の樹海', '光喰らいの大樹', 15, 17, 40, 50, 45, 49),
-  (22, 8, 1, '白銀の霊峰', '凍てつく雪原', 16, 17, 45, 50, 50, 51),
-  (23, 8, 2, '白銀の霊峰', '氷晶の大洞', 16, 18, 45, 52, 50, 53),
-  (24, 8, 3, '白銀の霊峰', '白霊の祭壇', 17, 19, 45, 55, 51, 56),
-  (25, 9, 1, '雷鳴の断崖', '稲光の岩棚', 18, 19, 50, 55, 57, 58),
-  (26, 9, 2, '雷鳴の断崖', '轟雷の架け橋', 18, 20, 50, 57, 57, 59),
-  (27, 9, 3, '雷鳴の断崖', '雷帝の玉座', 19, 21, 50, 60, 58, 62),
-  (28, 10, 1, '煉獄火山', '噴煙の山麓', 20, 21, 55, 60, 63, 63),
-  (29, 10, 2, '煉獄火山', '溶岩の大河', 20, 22, 55, 62, 63, 64),
-  (30, 10, 3, '煉獄火山', '業火の炉心', 21, 23, 55, 65, 63, 65),
-  (31, 11, 1, '腐海の沼獄', '瘴気漂う湿原', 22, 23, 60, 65, 66, 66),
-  (32, 11, 2, '腐海の沼獄', '沈みし廃村', 22, 24, 60, 67, 66, 67),
-  (33, 11, 3, '腐海の沼獄', '腐王の苗床', 23, 25, 60, 70, 66, 68),
-  (34, 12, 1, '奈落の坑道', '廃れた採掘場', 24, 25, 65, 70, 69, 69),
-  (35, 12, 2, '奈落の坑道', '底なしの大縦穴', 24, 26, 65, 72, 69, 70),
-  (36, 12, 3, '奈落の坑道', '掘り当てられし禁域', 25, 27, 65, 75, 69, 71),
-  (37, 13, 1, '蒼天の浮遊城', '雲海の桟橋', 26, 27, 70, 75, 72, 72),
-  (38, 13, 2, '蒼天の浮遊城', '浮かぶ空中庭園', 26, 28, 70, 77, 72, 73),
-  (39, 13, 3, '蒼天の浮遊城', '天主の謁見の間', 27, 29, 70, 80, 72, 74),
-  (40, 14, 1, '星霜の遺跡', '風化した列柱廊', 28, 29, 75, 80, 75, 75),
-  (41, 14, 2, '星霜の遺跡', '時止まりの大書庫', 28, 30, 75, 82, 75, 76),
-  (42, 14, 3, '星霜の遺跡', '星墜ちる観測台', 29, 31, 75, 85, 75, 77),
-  (43, 15, 1, '深淵の海溝', '燐光の海棚', 30, 31, 80, 85, 78, 78),
-  (44, 15, 2, '深淵の海溝', '沈みし古都', 30, 32, 80, 87, 78, 79),
-  (45, 15, 3, '深淵の海溝', '原初の深淵', 31, 33, 80, 90, 78, 80);
+insert into public.v2cap_spots (id, area, sub, area_name, name, exp_min, exp_max, gold_min, gold_max, lv_min, lv_max, rec_lv) values
+  (1, 1, 1, '始まりの森', '木漏れ日の小径', 2, 3, 10, 15, 1, 10, 5),
+  (2, 1, 2, '始まりの森', '苔むした獣道', 2, 4, 10, 17, 1, 12, 10),
+  (3, 1, 3, '始まりの森', '森主の古樹', 3, 5, 10, 20, 2, 15, 14),
+  (4, 2, 1, '荒廃した草原', '風吹く丘陵', 4, 5, 15, 20, 16, 17, 15),
+  (5, 2, 2, '荒廃した草原', '焼け落ちた廃村', 4, 6, 15, 22, 16, 18, 17),
+  (6, 2, 3, '荒廃した草原', '骸の古戦場', 5, 7, 15, 25, 17, 20, 18),
+  (7, 3, 1, '古代の洞窟', '鍾乳の回廊', 6, 7, 20, 25, 21, 22, 19),
+  (8, 3, 2, '古代の洞窟', '刻印の大広間', 6, 8, 20, 27, 21, 23, 21),
+  (9, 3, 3, '古代の洞窟', '封じられし石室', 7, 9, 20, 30, 22, 26, 22),
+  (10, 4, 1, '蒼海の入り江', '白砂の浜辺', 8, 9, 25, 30, 27, 27, 22),
+  (11, 4, 2, '蒼海の入り江', '難破船の墓場', 8, 10, 25, 32, 27, 29, 23),
+  (12, 4, 3, '蒼海の入り江', '大渦の海蝕洞', 9, 11, 25, 35, 27, 30, 23),
+  (13, 5, 1, '灼砂の遺丘', '陽炎の砂原', 10, 11, 30, 35, 31, 31, 25),
+  (14, 5, 2, '灼砂の遺丘', '埋もれし神殿', 10, 12, 30, 37, 31, 32, 27),
+  (15, 5, 3, '灼砂の遺丘', '砂王の玄室', 11, 13, 30, 40, 31, 34, 29),
+  (16, 6, 1, '巨峰山脈', '岩肌の山道', 12, 13, 35, 40, 35, 37, 31),
+  (17, 6, 2, '巨峰山脈', '風哭きの峠', 12, 14, 35, 42, 35, 39, 34),
+  (18, 6, 3, '巨峰山脈', '天衝く頂', 13, 15, 35, 45, 36, 43, 36),
+  (19, 7, 1, '常闇の樹海', '黄昏の境界', 14, 15, 40, 45, 44, 45, 37),
+  (20, 7, 2, '常闇の樹海', '惑い霧の迷路', 14, 16, 40, 47, 44, 46, 38),
+  (21, 7, 3, '常闇の樹海', '光喰らいの大樹', 15, 17, 40, 50, 45, 49, 39),
+  (22, 8, 1, '白銀の霊峰', '凍てつく雪原', 16, 17, 45, 50, 50, 51, 41),
+  (23, 8, 2, '白銀の霊峰', '氷晶の大洞', 16, 18, 45, 52, 50, 53, 42),
+  (24, 8, 3, '白銀の霊峰', '白霊の祭壇', 17, 19, 45, 55, 51, 56, 44),
+  (25, 9, 1, '雷鳴の断崖', '稲光の岩棚', 18, 19, 50, 55, 57, 58, 45),
+  (26, 9, 2, '雷鳴の断崖', '轟雷の架け橋', 18, 20, 50, 57, 57, 59, 46),
+  (27, 9, 3, '雷鳴の断崖', '雷帝の玉座', 19, 21, 50, 60, 58, 62, 47),
+  (28, 10, 1, '煉獄火山', '噴煙の山麓', 20, 21, 55, 60, 63, 63, 48),
+  (29, 10, 2, '煉獄火山', '溶岩の大河', 20, 22, 55, 62, 63, 64, 49),
+  (30, 10, 3, '煉獄火山', '業火の炉心', 21, 23, 55, 65, 63, 65, 50),
+  (31, 11, 1, '腐海の沼獄', '瘴気漂う湿原', 22, 23, 60, 65, 66, 66, 50),
+  (32, 11, 2, '腐海の沼獄', '沈みし廃村', 22, 24, 60, 67, 66, 67, 51),
+  (33, 11, 3, '腐海の沼獄', '腐王の苗床', 23, 25, 60, 70, 66, 68, 51),
+  (34, 12, 1, '奈落の坑道', '廃れた採掘場', 24, 25, 65, 70, 69, 69, 52),
+  (35, 12, 2, '奈落の坑道', '底なしの大縦穴', 24, 26, 65, 72, 69, 70, 52),
+  (36, 12, 3, '奈落の坑道', '掘り当てられし禁域', 25, 27, 65, 75, 69, 71, 53),
+  (37, 13, 1, '蒼天の浮遊城', '雲海の桟橋', 26, 27, 70, 75, 72, 72, 57),
+  (38, 13, 2, '蒼天の浮遊城', '浮かぶ空中庭園', 26, 28, 70, 77, 72, 73, 62),
+  (39, 13, 3, '蒼天の浮遊城', '天主の謁見の間', 27, 29, 70, 80, 72, 74, 66),
+  (40, 14, 1, '星霜の遺跡', '風化した列柱廊', 28, 29, 75, 80, 75, 75, 67),
+  (41, 14, 2, '星霜の遺跡', '時止まりの大書庫', 28, 30, 75, 82, 75, 76, 69),
+  (42, 14, 3, '星霜の遺跡', '星墜ちる観測台', 29, 31, 75, 85, 75, 77, 70),
+  (43, 15, 1, '深淵の海溝', '燐光の海棚', 30, 31, 80, 85, 78, 78, 73),
+  (44, 15, 2, '深淵の海溝', '沈みし古都', 30, 32, 80, 87, 78, 79, 77),
+  (45, 15, 3, '深淵の海溝', '原初の深淵', 31, 33, 80, 90, 78, 80, 80);
 -- @@end:spots
 
 -- ---- 1-6. 敵 ----
@@ -3073,6 +3076,19 @@ returns int language sql stable set search_path = public as $$
                                         * p_jlv * p_jlv * p_jlv) / 100000))::int end
 $$;
 
+-- そのLVの推奨の場所で10回出撃したくらいのEXP（areas.js の tenSortieExpOf と同じ）。デイリーミッションと宝樹（吉）の基準
+-- 【確定】2026-10-12 ユーザー指示「そのレベルの推奨エリアを10回出撃したときくらいの経験値にして」：
+--   推奨の場所＝推奨LVの上限（rec_lv）がそのLV以上の、いちばん手前の場所（上限より上のLVは最後の場所）。
+--   EXP＝ふつうの敵の1体あたりのEXPのまんなか × 10 ＝ 5 ×（最小＋最大）
+create or replace function public.v2cap_ten_sortie_exp(p_lv int)
+returns int language sql stable set search_path = public as $$
+  select coalesce(
+    (select 5 * (s.exp_min + s.exp_max) from public.v2cap_spots s
+      where s.rec_lv >= greatest(1, coalesce(p_lv, 1)) order by s.id limit 1),
+    (select 5 * (s.exp_min + s.exp_max) from public.v2cap_spots s order by s.id desc limit 1),
+    0)
+$$;
+
 -- スタミナの最大値 ＝ 10＋(LV−1)＝LVが1上がるごとに+1（level.js の staminaMaxOf・2026-10-09 ユーザー指示）
 create or replace function public.v2cap_stamina_max(p_lv int)
 returns int language sql immutable set search_path = public as $$
@@ -3211,6 +3227,59 @@ begin
 end;
 $$;
 
+-- 覚えた技を編成の空き枠へ入れる（skills.js の fillSetOf と同じ規則）。
+-- 【確定】2026-10-12 ユーザー指示「スキルスロット余ってる場合はうめるようにして」：
+--   p_names（覚えた順）のうち、その職業で使える技で、まだ編成に無いものを、空き枠（5枠）に入る数だけ・最大MPに収まるなら1回で入れる
+--   （収まらない技はとばして次へ）。そのあと残りのMPで、入れた技に前から1回ずつ足す（1枠最大5回＝ v2cap_default_set と同じ）。
+--   前から入っている技にはさわらない。使うのは v2cap_apply_exp（覚えたとき）と、今いるキャラを一度だけ埋める移行
+create or replace function public.v2cap_fill_set(p_set jsonb, p_names jsonb, p_cls text, p_max int)
+returns jsonb language plpgsql stable set search_path = public as $$
+declare
+  c_slots    constant int := 5;
+  c_uses_max constant int := 5;
+  v_set   jsonb := case when jsonb_typeof(p_set) = 'array' then p_set else '[]'::jsonb end;
+  v_cost  int;
+  v_names text[] := '{}';
+  v_mp    int[]  := '{}';
+  v_uses  int[];
+  v_n     int := 0;
+  v_grew  boolean := true;
+  r       record;
+  i       int;
+begin
+  v_cost := public.v2cap_set_cost(v_set);
+  for r in select s.name, s.mp
+             from jsonb_array_elements_text(case when jsonb_typeof(p_names) = 'array' then p_names else '[]'::jsonb end)
+                  with ordinality as t(name, i)
+             join public.v2cap_skills s on s.name = t.name
+            where not s.passive and s.cls = any(public.v2cap_lineage(p_cls))
+            order by t.i
+  loop
+    exit when jsonb_array_length(v_set) + v_n >= c_slots;
+    continue when v_set @> jsonb_build_array(jsonb_build_object('name', r.name)) or r.name = any(v_names);
+    continue when v_cost + r.mp > coalesce(p_max, 0);
+    v_names := array_append(v_names, r.name);
+    v_mp    := array_append(v_mp, r.mp);
+    v_n     := v_n + 1;
+    v_cost  := v_cost + r.mp;
+  end loop;
+  if v_n = 0 then return v_set; end if;
+  v_uses := array_fill(1, array[v_n]);
+  while v_grew loop
+    v_grew := false;
+    for i in 1..v_n loop
+      if v_uses[i] < c_uses_max and v_cost + v_mp[i] <= coalesce(p_max, 0) then
+        v_uses[i] := v_uses[i] + 1;
+        v_cost := v_cost + v_mp[i];
+        v_grew := true;
+      end if;
+    end loop;
+  end loop;
+  return v_set || (select jsonb_agg(jsonb_build_object('name', v_names[g], 'uses', v_uses[g]) order by g)
+                     from generate_series(1, v_n) as g);
+end;
+$$;
+
 -- 開いている一番先の場所（1本道）＝ボスを倒した一番先の場所の次。最後の場所より先は無い。
 -- sortie.js の openUntilOf と同じ。★難易度帯で開く形（v2cap_unlocked_from_cleared）は作り替えでやめた
 drop function if exists public.v2cap_unlocked_from_cleared(int[], int[]);
@@ -3223,6 +3292,7 @@ $$;
 -- ⚠ここまでの計算は書き込みをしないが、外から叩く理由も無いので閉じておく
 revoke all on function public.v2cap_need(int) from public, anon;
 revoke all on function public.v2cap_job_need(text, int) from public, anon;
+revoke all on function public.v2cap_ten_sortie_exp(int) from public, anon, authenticated;
 revoke all on function public.v2cap_stamina_max(int) from public, anon;
 revoke all on function public.v2cap_learn(jsonb, text, int) from public, anon, authenticated;
 revoke all on function public.v2cap_job_bonus_mp(text, int) from public, anon, authenticated;
@@ -3230,6 +3300,7 @@ revoke all on function public.v2cap_lineage(text) from public, anon, authenticat
 revoke all on function public.v2cap_set_cost(jsonb) from public, anon, authenticated;
 revoke all on function public.v2cap_fit_set(jsonb, text, jsonb, int) from public, anon, authenticated;
 revoke all on function public.v2cap_default_set(text, jsonb, int) from public, anon, authenticated;
+revoke all on function public.v2cap_fill_set(jsonb, jsonb, text, int) from public, anon, authenticated;
 revoke all on function public.v2cap_open_until(int[]) from public, anon, authenticated;
 
 -- ---- 一度だけの移し替え：スキルセットを職業ごとに（2026-10-09 ユーザー決定）----
@@ -3304,6 +3375,31 @@ begin
   end if;
 end $$;
 
+-- ---- 一度だけ：編成の空き枠を、覚えている技で埋める（2026-10-12 ユーザー指示「スキルスロット余ってる場合はうめるようにして」）----
+-- これからは覚えたときに入れる（v2cap_apply_exp）。今いるキャラは、いまの職業（と下位職）で覚えているのに編成に入っていない技を、
+-- 覚えた順に入れる（v2cap_fill_set＝空き枠に入るだけ・最大MPに収まるだけ1回ずつ、残りのMPで1回ずつ足す・前から入っている技にはさわらない）。
+-- ★印 fill_skill_sets_20261012 を付けるので、2回目以降に全文を流し直しても何もしない
+do $$
+declare
+  r      record;
+  v_set  jsonb;
+  v_fill jsonb;
+begin
+  if not exists (select 1 from public.v2cap_migrations where key = 'fill_skill_sets_20261012') then
+    for r in select p.id, p.class, p.mp, p.jobs, p.learned, p.skill_sets from public.v2cap_profiles p loop
+      v_set  := case when jsonb_typeof(coalesce(r.skill_sets, '{}'::jsonb) -> r.class) = 'array' then r.skill_sets -> r.class else '[]'::jsonb end;
+      v_fill := public.v2cap_fill_set(v_set, r.learned, r.class,
+                  r.mp + public.v2cap_job_bonus_mp(r.class, coalesce((r.jobs -> r.class ->> 'lv')::int, 1)));
+      if jsonb_array_length(v_fill) > jsonb_array_length(v_set) then
+        update public.v2cap_profiles
+           set skill_sets = jsonb_set(coalesce(skill_sets, '{}'::jsonb), array[r.class], v_fill), updated_at = now()
+         where id = r.id;
+      end if;
+    end loop;
+    insert into public.v2cap_migrations (key) values ('fill_skill_sets_20261012');
+  end if;
+end $$;
+
 -- ===== スタミナを数え直す（数え方は今のⅡの v2_stamina_roll と同じ。間隔は**3分に1**・最大値はLVで決まる）=====
 -- ⚠SECURITY DEFINER の内部ヘルパは既定で PUBLIC 実行可＝必ず REVOKE する
 -- ⚠間隔は level.js の STAMINA_RECOVER_MS と同じにすること（2026-10-09 ユーザー指示で5分→3分）
@@ -3357,6 +3453,10 @@ declare
   v_old   jsonb;
   v_new   jsonb;
   v_added jsonb;
+  v_sets  jsonb;
+  v_set   jsonb;
+  v_fill  jsonb;
+  v_setadd jsonb;
 begin
   select * into v_row from public.v2cap_profiles where id = p_player for update;
   if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがありません'); end if;
@@ -3397,8 +3497,18 @@ begin
   -- スキル（そのClassLVまでのぶんを覚える。覚えたものはずっと残る）
   v_old := coalesce(v_row.learned, '[]'::jsonb);
   v_new := public.v2cap_learn(v_old, v_cls, v_jlv);
-  select coalesce(jsonb_agg(t.name), '[]'::jsonb) into v_added
-    from jsonb_array_elements_text(v_new) as t(name) where not (v_old ? t.name);
+  select coalesce(jsonb_agg(t.name order by t.i), '[]'::jsonb) into v_added
+    from jsonb_array_elements_text(v_new) with ordinality as t(name, i) where not (v_old ? t.name);
+
+  -- 【確定】2026-10-12 ユーザー指示「スキルスロット余ってる場合はうめるようにして」：
+  --   いま覚えた技は、いまの職業の編成に空き枠（5枠）があり、最大MP（本体のMP＋クラスのMP）に収まるなら入れる（v2cap_fill_set）。
+  --   1回ずつ入れてから、残りのMPで1回ずつ足す（1枠最大5回）。前から入っている技にはさわらない。1回ぶんのMPも無ければ入れない
+  v_sets := coalesce(v_row.skill_sets, '{}'::jsonb);
+  v_set  := case when jsonb_typeof(v_sets -> v_cls) = 'array' then v_sets -> v_cls else '[]'::jsonb end;
+  v_fill := public.v2cap_fill_set(v_set, v_added, v_cls, v_row.mp + public.v2cap_job_bonus_mp(v_cls, v_jlv));
+  select coalesce(jsonb_agg(t.e -> 'name' order by t.i), '[]'::jsonb) into v_setadd
+    from jsonb_array_elements(v_fill) with ordinality as t(e, i) where t.i > jsonb_array_length(v_set);
+  if jsonb_array_length(v_setadd) > 0 then v_sets := jsonb_set(v_sets, array[v_cls], v_fill); end if;
 
   update public.v2cap_profiles set
     lv = v_lv, exp = v_exp,
@@ -3406,6 +3516,7 @@ begin
     stat_points = stat_points + v_pts,
     jobs = jsonb_set(coalesce(jobs, '{}'::jsonb), array[v_cls], jsonb_build_object('lv', v_jlv, 'exp', v_jexp)),
     learned = v_new,
+    skill_sets = v_sets,
     updated_at = now()
   where id = p_player
   returning * into v_row;
@@ -3415,6 +3526,7 @@ begin
     'level_ups', v_ups, 'lv', v_lv,
     'job_ups', v_jups, 'jlv', v_jlv,
     'learned', v_added,
+    'set_added', v_setadd,
     'points', v_pts,
     'profile', to_jsonb(v_row));
 end;
@@ -4114,8 +4226,8 @@ grant execute on function public.v2cap_set_avatar(text) to authenticated;
 -- ===== 8-3. ユグレシアの宝樹（2026-10-11）=====
 -- ============================================================
 -- 【確定】ユーザー指示「祈ったら大凶～大吉が出る、出た結果によって経験値もらえる」＋決めたこと（写しは src/v2cap/lib/tree.js）：
---   ・ごほうびは経験値だけ。基準＝祈った時点のLVの必要EXP × 2%（〜30）・1%（31〜50）・0.5%（51〜80）・0.1%（81〜）、
---     それに運勢の倍率（大吉×3〜大凶×0.2・今のⅡと同じ）。端数は切り上げ。EXPは戦闘と同じ扱い（v2cap_apply_exp）
+--   ・ごほうびは経験値だけ。基準＝【確定】2026-10-12「デイリーミッションと同じにする」：祈った時点のLVの推奨の場所で10回出撃したくらい
+--     （v2cap_ten_sortie_exp・前は必要EXP × 2〜0.1%）、それに運勢の倍率（大吉×3〜大凶×0.2・今のⅡと同じ）。端数は切り上げ。EXPは戦闘と同じ扱い（v2cap_apply_exp）
 --   ・運勢の並び・出やすさは今のⅡ（v2_pray・src/v2/lib/tree.js の FORTUNES）と同じ
 --   ・1日1回（日本時間の5時で切り替わる）。この版は管理者しか入れないので、管理者だけ何回でも、はしない
 create or replace function public.v2cap_pray()
@@ -4131,7 +4243,6 @@ declare
   v_idx   int := 7;
   v_name  text;
   v_lv    int;
-  v_permil int;
   v_exp   int;
   v_count int;
   v_log   jsonb;
@@ -4183,10 +4294,9 @@ begin
     return jsonb_build_object('ok', false, 'error', '今日はもう祈りました（日本時間の5時に変わります）');
   end if;
 
-  -- 経験値：祈った時点のLVの必要EXP × 千分率 × 倍率（10分率）。切り上げは整数で（tree.js の prayExpOf と同じ）
+  -- 経験値：祈った時点のLVの推奨の場所で10回出撃したくらい × 倍率（10分率）。切り上げは整数で（tree.js の prayExpOf と同じ）
   v_lv     := greatest(1, coalesce(v_lv, 1));
-  v_permil := case when v_lv <= 30 then 20 when v_lv <= 50 then 10 when v_lv <= 80 then 5 else 1 end;
-  v_exp    := (public.v2cap_need(v_lv) * v_permil * c_mult[v_idx] + 9999) / 10000;
+  v_exp    := (public.v2cap_ten_sortie_exp(v_lv) * c_mult[v_idx] + 9) / 10;
   if v_exp > 0 then v_res := public.v2cap_apply_exp(v_uid, v_exp); end if;
 
   return jsonb_build_object('ok', true, 'fortune', v_name, 'lv', v_lv, 'exp', v_exp,
@@ -4266,15 +4376,13 @@ end;
 $$;
 revoke all on function public.v2cap_daily_bump(uuid, text, int) from public, anon, authenticated;
 
--- 報酬（受注した時点のLVで決まる）。切り上げは整数で：(必要EXP×% + 99) ÷ 100（daily.js の dailyRewardOf と同じ）
+-- 報酬（受注した時点のLVで決まる・daily.js の dailyRewardOf と同じ）。Gold＝LV×100
+-- 【確定】2026-10-12 ユーザー指示「後半で大きくもらいすぎないように調整してた、そのレベルの推奨エリアを10回出撃したときくらいの経験値にして」：
+--   EXP＝そのLVの推奨の場所で10回出撃したくらい（v2cap_ten_sortie_exp）。前は「必要EXP × 10／5／3／1%」
 create or replace function public.v2cap_daily_reward(p_lv int)
 returns jsonb language sql stable set search_path = public as $$
   select jsonb_build_object(
-    'exp', (public.v2cap_need(greatest(1, coalesce(p_lv, 1)))
-            * (case when greatest(1, coalesce(p_lv, 1)) <= 10 then 10
-                    when greatest(1, coalesce(p_lv, 1)) <= 30 then 5
-                    when greatest(1, coalesce(p_lv, 1)) <= 50 then 3
-                    else 1 end) + 99) / 100,
+    'exp', public.v2cap_ten_sortie_exp(p_lv),
     'gold', greatest(1, coalesce(p_lv, 1)) * 100)
 $$;
 revoke all on function public.v2cap_daily_reward(int) from public, anon;

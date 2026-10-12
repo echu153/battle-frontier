@@ -3,8 +3,8 @@ import { supabase } from '../../supabase'
 import V2capLogLine from './V2capLogLine.jsx'
 import { runBattle } from '../../v2/lib/battle.js'
 import { LOG_PLAIN } from '../../v2/components/v2ui.js'
-import { loadPref } from '../../v2/lib/prefs.js'
-import { SPOTS, spotOf, spotLabel, spotLvText, toFighter as enemyFighter } from '../lib/areas.js'
+import { loadPref, savePref } from '../../v2/lib/prefs.js'
+import { SPOTS, spotOf, spotLabel, recLvText, toFighter as enemyFighter } from '../lib/areas.js'
 import {
   pickEncounter, rollEquipDrop, nextBossRate, isSpotUnlocked, isSpotCleared, openUntilOf, SORTIE_CD,
 } from '../lib/sortie.js'
@@ -45,6 +45,10 @@ const ROLE_LINE = {
   normal: (foe, lv) => ({ text:`${foe}（LV${lv}）が現れた！`, color:'#88ccff' }),
 }
 // ログを自動で一番下へ送るか（この端末で覚えておく。読めない・書けないときはオンのまま動く）
+// 右下の出撃ボタンを出すか（この端末で覚えておく・最初は出す）
+//   【確定】2026-10-12 ユーザー指示「基本ステータスを閉じてもらう想定だけど、右下の方に独立して出撃ボタン設置して、
+//   押したら設定している出撃ボタンと同じ、オンオフで表示切り替えられるように」
+const FAB_PREF = 'capSortieFab'
 const LOG_FOLLOW_KEY = 'v2capLogFollow'
 const readFollow = () => { try { return localStorage.getItem(LOG_FOLLOW_KEY) !== '0' } catch { return true } }
 const saveFollow = (on) => { try { localStorage.setItem(LOG_FOLLOW_KEY, on ? '1' : '0') } catch { /* 覚えられなくても切り替えは効く */ } }
@@ -59,6 +63,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   const [auto, setAuto] = useState(false)   // ★覚えておかない（リロードで勝手に走らないように）
   const [stam, setStam] = useState(() => ({ n: prof?.stamina ?? 0, at: prof?.stamina_at || null }))
   const [follow, setFollow] = useState(readFollow)   // ログを自動で一番下へ
+  const [fabOn, setFabOn] = useState(() => loadPref(FAB_PREF, true) !== false)   // 右下の出撃ボタン
   const [battleNo, setBattleNo] = useState(0)         // 何戦目か（オフのとき、新しい戦闘で一番上に戻すため）
   const [art, setArt] = useState(null)                // 戦闘ログのアイコン（{ me:{ src, name }, foe:{ src, name } }）
   const lastAt = useRef(0)
@@ -77,6 +82,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
     if (el && !follow) el.scrollTop = 0
   }, [battleNo])   // eslint-disable-line react-hooks/exhaustive-deps
   const toggleFollow = (on) => { setFollow(on); saveFollow(on) }
+  const toggleFab = (on) => { setFabOn(on); savePref(FAB_PREF, on) }
   useEffect(() => { onScene?.(scene) }, [scene, onScene])
   useEffect(() => { setStam({ n: prof?.stamina ?? 0, at: prof?.stamina_at || null }) }, [prof?.stamina, prof?.stamina_at])
   useEffect(() => { setBossRate(prof?.boss_rate || 0) }, [prof?.boss_rate])
@@ -158,7 +164,11 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
         const note = jobUpNote(prof.class, lv)
         if (note) after.push({ text: note, color:'#ffcc00' })
       }
-      for (const name of lv.learned || []) after.push({ text:`📖 スキル「${name}」を覚えた！（スキルセットで編成できる）`, color:'#44ddff' })
+      // 編成の空き枠に入ったか（2026-10-12 ユーザー指示「スキルスロット余ってる場合はうめるようにして」＝サーバーが set_added で返す）
+      for (const name of lv.learned || []) {
+        const into = (lv.set_added || []).includes(name)
+        after.push({ text:`📖 スキル「${name}」を覚えた！${into ? '（スキルセットの空き枠に入れた）' : '（スキルセットで編成できる）'}`, color:'#44ddff' })
+      }
       if (win) {
         if (data.drop && drop) {
           // ★色を付けるのはレア度と装備名だけ（今のⅡと同じ形）。
@@ -210,9 +220,29 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
     </>
   )
 
+  // 右下に浮かぶ出撃ボタン（街でも戦闘中でも出す）。押すと上の「出撃！／再出撃！」と同じ（手動の出撃・スタミナは使わない）。
+  // 待っているあいだは残りの秒数、オートのあいだは押せない（上のボタンも出ていないので同じ）
+  const fabReady = canAct && !auto
+  const fab = fabOn && spot && (
+    <button onClick={() => doBattle(false)} disabled={!fabReady} aria-label="出撃"
+      title={auto ? 'オート出撃中' : `${spot.name}へ出撃（上の出撃ボタンと同じ）`}
+      style={{ position:'fixed', right:'16px', bottom:'calc(16px + env(safe-area-inset-bottom, 0px))', zIndex:300,
+        width:'64px', height:'64px', borderRadius:'50%', padding:0, fontFamily:'monospace', lineHeight:1.15,
+        background: fabReady ? '#001840' : '#000c1c', border:`2px solid ${fabReady ? '#ffcc00' : '#2a4a66'}`,
+        color: fabReady ? '#ffcc00' : '#7fa6d0', cursor: fabReady ? 'pointer' : 'not-allowed',
+        boxShadow: fabReady ? '0 0 12px rgba(255,204,0,0.45), 0 4px 12px rgba(0,0,0,0.6)' : '0 4px 12px rgba(0,0,0,0.6)' }}>
+      {auto
+        ? <span style={{ fontSize:'11px' }}>オート<br />中</span>
+        : fabReady
+          ? <><span style={{ fontSize:'20px' }}>⚔</span><br /><span style={{ fontSize:'11px' }}>出撃</span></>
+          : <span style={{ fontSize:'13px' }}>{remaining.toFixed(1)}</span>}
+    </button>
+  )
+
   if (scene === 'battle') {
     return (
       <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', fontFamily:'monospace' }}>
+        {fab}
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px', gap:'8px', flexWrap:'wrap' }}>
           <span style={{ color:'#ff6644', fontSize:'13px' }}>⚔ バトル！</span>
           <span style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap' }}>
@@ -256,19 +286,20 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
 
   return (
     <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', fontFamily:'monospace' }}>
+      {fab}
       {timerRow}
       <select value={spot?.id || 1}
         onChange={e => { const v = Number(e.target.value); setSelectedSpot(v); localStorage.setItem('v2capSelectedSpot', v) }}
         style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>
-        {/* ★開いている場所だけ（1本道）。場所の敵のLV帯も出す */}
+        {/* ★開いている場所だけ（1本道）。推奨LV（上限＝ボスを倒せる目安・2026-10-12 ユーザー指示）も出す */}
         {availableSpots.map(s => (
           <option key={s.id} value={s.id}>
-            {spotLabel(s)}　{spotLvText(s.id)}{isSpotCleared(cleared, s.id) ? '　✔' : ''}
+            {spotLabel(s)}　{recLvText(s.id)}{isSpotCleared(cleared, s.id) ? '　✔' : ''}
           </option>
         ))}
       </select>
       {/* ★場所の説明（敵のLV・装備の必要LV・落とすレア度・1体あたりのEXPとGold・「ボスを倒すと次の場所が開く」）は出さない
-           （2026-10-12 ユーザー指示「画像の部分いらない」）。場所の敵のLV帯は上の選択肢に出ている */}
+           （2026-10-12 ユーザー指示「画像の部分いらない」）。場所の推奨LVは上の選択肢に出ている */}
       <button onClick={() => doBattle(false)} disabled={!canAct}
         style={{ width:'100%', padding:'14px', background:'#001840', border:`1px solid ${canAct ? '#ffcc00' : '#003366'}`,
           color: canAct ? '#ffcc00' : '#7fa6d0', cursor: canAct ? 'pointer' : 'not-allowed',
@@ -285,6 +316,11 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       {stamNow < 1 && (
         <div style={{ color:'#4d6f92', fontSize:'10px', marginTop:'5px', textAlign:'center' }}>自分でクリックする出撃はスタミナを使いません</div>
       )}
+      <label style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'4px', color:'#93a9be', fontSize:'10px', cursor:'pointer', marginTop:'6px' }}>
+        <input type="checkbox" checked={fabOn} onChange={e => toggleFab(e.target.checked)}
+          style={{ accentColor:'#ffcc00', margin:0, cursor:'pointer' }} />
+        右下に出撃ボタンを出す
+      </label>
     </div>
   )
 }

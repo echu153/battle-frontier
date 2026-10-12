@@ -8,7 +8,7 @@ import { jobMaxOf, jobNeed, jobOf, stageOf, stageColorOf, weaponsOf, JOB_LV_HPMP
 import { passiveOf, SKILL_BY_NAME } from '../lib/skills.js'
 import { SLOTS, SLOT_LABEL, ARMOR_LINES, ARMOR_EFFECT, kindLabel, itemLabel, RARITY_COLOR } from '../lib/equipment.js'
 import { equippedItems, statBreakdown, currentSetOf } from '../lib/loadout.js'
-import { effectPct, powerAt, statsAt, armorEffectText } from '../lib/gear.js'
+import { effectPct, powerAt, statsAt, armorEffectText, underLvPowerOf } from '../lib/gear.js'
 import { plusOf, plusLabel } from '../lib/smith.js'
 import { avatarUrlOf } from './v2capAvatarUrl.js'
 import { StatGain } from './v2capGear.jsx'
@@ -117,7 +117,7 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
               <div style={{ fontSize:'11px' }}><StatGain s={gain} /></div>
               {w.item.line && <div style={{ color:'#88ddaa' }}>{w.item.line}：{armorEffectText(w.item, pct)}</div>}
               <div>アイテムLV {w.inv.ilv}（必要LV {w.inv.ilv}）{plus > 0 && <>・強化 {plusLabel(plus)}</>}</div>
-              <div>戦闘力 {power}{pct < 100 && <span style={{ color:'#ff8844' }}> → {Math.round(power * pct / 100)}（効果{pct}%）</span>}</div>
+              <div>戦闘力 {power}{pct < 100 && <span style={{ color:'#ff8844' }}> → {underLvPowerOf(power, pct)}（効果{pct}%）</span>}</div>
             </>}>
             <span style={{ ...valueCell, display:'block' }}>
               <span style={{ color: RARITY_COLOR[w.item.rarity] }}>{w.item.name}</span>
@@ -185,9 +185,9 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
             {lvMax && <span style={{ color:'#ff8844' }}> MAX</span>}
           </div>
           <div style={{ fontSize:'11px', color:'#9ec2e6' }}>
-            クラス：<span style={{ color: classColor }}>{prof.class}</span>
+            CLASS：<span style={{ color: classColor }}>{prof.class}</span>
             <V2Tip color="#ffcc00" width="250px" style={{ borderBottom:'1px dotted #7fa6d0', marginLeft:'10px' }}
-              body={`ClassLV（クラスのレベル）は職業ごと。上がるとその職業のスキルを覚え、その職業のステが上がります（就いている間だけ）。HPとMPは毎回必ず上がります（${prof.class}はHP+${JOB_LV_HPMP[prof.class]?.hp || 0}・MP+${JOB_LV_HPMP[prof.class]?.mp || 0}）。`}>
+              body={`CLASS LV（クラスのレベル）は職業ごと。上がるとその職業のスキルを覚え、その職業のステが上がります（就いている間だけ）。HPとMPは毎回必ず上がります（${prof.class}はHP+${JOB_LV_HPMP[prof.class]?.hp || 0}・MP+${JOB_LV_HPMP[prof.class]?.mp || 0}）。`}>
               <span style={{ color:'#66ddff' }}>LV{job.lv}</span>/{jobMaxOf(prof.class)}
             </V2Tip>
             {jMax && <span style={{ color:'#ff8844' }}> MAX</span>}
@@ -213,7 +213,7 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
       {/* EXP と ClassEXP は閉じていても常に見せる */}
       <MiniBar label="EXP" val={lvMax ? 'MAX' : `${prof.exp.toLocaleString()}/${lvNeed.toLocaleString()}`}
         pct={lvMax ? 100 : (prof.exp / lvNeed) * 100} color="#cc8800" />
-      <MiniBar label="ClassEXP" val={jMax ? 'MAX' : `${job.exp.toLocaleString()}/${jNeed.toLocaleString()}`}
+      <MiniBar label="CLASS EXP" val={jMax ? 'MAX' : `${job.exp.toLocaleString()}/${jNeed.toLocaleString()}`}
         pct={jMax ? 100 : (job.exp / jNeed) * 100} color="#3399cc" />
 
       {/* ★折りたたみは上（今のⅡと同じ）。中身が長いので、下に置くと閉じるたびに端まで送られる */}

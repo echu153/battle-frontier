@@ -13,7 +13,7 @@
 import { STAT_KEYS, calcPower } from '../../v2/lib/stats.js'
 import { ITEM_BY_ID, SLOTS } from './equipment.js'
 import { SKILL_BY_NAME, isPassive, passiveOf } from './skills.js'
-import { statsAt, effectPct, powerAt, armorEffects } from './gear.js'
+import { statsAt, effectPct, powerAt, armorEffects, underLvPowerOf } from './gear.js'
 import { plusOf } from './smith.js'
 import { jobBonusStats, jobOf, canEquipType, attackKindOf, lineageOf } from './jobs.js'
 import { CAP_RULES } from './rules.js'
@@ -50,7 +50,7 @@ export const gearStats = (profile, inventory) => {
 // 装備ぶんの戦闘力（強化値・効果%込み）
 export const gearPower = (profile, inventory) =>
   Object.values(equippedItems(profile, inventory)).reduce((t, { inv, item }) =>
-    t + Math.round(powerAt(item, inv.ilv, plusOf(inv)) * effectPct(inv.ilv, profile?.lv) / 100), 0)
+    t + underLvPowerOf(powerAt(item, inv.ilv, plusOf(inv)), effectPct(inv.ilv, profile?.lv)), 0)
 
 // 防具のメリット（受けるダメージの倍率・AGIの上がり幅）
 export const armorOf = (profile, inventory) => armorEffects(

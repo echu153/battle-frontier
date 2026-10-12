@@ -3,7 +3,7 @@ import { STAT_DEFS, STAT_KEYS } from '../../v2/lib/stats.js'
 import { miniBtn } from '../../v2/components/v2ui.js'
 import { RARITY_COLOR } from '../lib/equipment.js'
 import { AREA_LIST } from '../lib/areas.js'
-import { powerAt, effectPct } from '../lib/gear.js'
+import { powerAt, effectPct, underLvPowerOf } from '../lib/gear.js'
 import { plusOf, scrapNameOf } from '../lib/smith.js'
 
 // ============================================================
@@ -35,7 +35,7 @@ export const useGearRows = (all, lv) => {
     const list = all.filter(r => (part === 'all' || r.item.part === part)
       && (rarity === 'all' || r.item.rarity === rarity)
       && (area === 'all' || r.item.area === area))
-    const pw = (r) => Math.round(powerAt(r.item, r.inv.ilv, plusOf(r.inv)) * effectPct(r.inv.ilv, lv) / 100)
+    const pw = (r) => underLvPowerOf(powerAt(r.item, r.inv.ilv, plusOf(r.inv)), effectPct(r.inv.ilv, lv))
     if (sort === 'power') list.sort((a, b) => pw(b) - pw(a) || b.inv.ilv - a.inv.ilv)
     else if (sort === 'ilv') list.sort((a, b) => b.inv.ilv - a.inv.ilv || pw(b) - pw(a))
     else list.sort((a, b) => b.inv.id - a.inv.id)

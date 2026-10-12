@@ -46,10 +46,15 @@ export const PENALTY_MIN_PCT = 10  // どれだけ足りなくても10%は残る
 export const effectPct = (ilv, lv) =>
   Math.max(PENALTY_MIN_PCT, 100 - PENALTY_PER_LV * Math.max(0, (ilv || 1) - (lv || 1)))
 
+// 必要LVに足りないときの戦闘力：効果%を掛けて丸め、**最低でも1下げる**（下は0まで）。効果100%ならそのまま
+// 【確定】2026-10-12 ユーザー指示「最低でも1下げるようにして」（前は「戦闘力 7 → 7（効果95%）」のように、丸めで下がらないことがあった）
+export const underLvPowerOf = (power, pct = 100) =>
+  (pct >= 100 ? power : Math.max(0, Math.min(Math.round(power * pct / 100), power - 1)))
+
 // 戦闘力を配分どおりにステへ散らす（今のⅡの statsOf と同じ散らし方）。
-// pct は必要LV不足の効果(%)。散らす前の戦闘力（強化値ぶん込み）に掛ける
+// pct は必要LV不足の効果(%)。散らす前の戦闘力（強化値ぶん込み）に掛ける（最低でも1下げる＝underLvPowerOf）
 export const statsAt = (item, ilv, pct = 100, plus = 0) => {
-  const p = Math.round(powerAt(item, ilv, plus) * pct / 100)
+  const p = underLvPowerOf(powerAt(item, ilv, plus), pct)
   const out = Object.fromEntries(STAT_KEYS.map(k => [k, 0]))
   if (p <= 0 || !item) return out
   for (const [k, v] of Object.entries(item.dist)) out[k] = Math.round(p * v / 100)
@@ -58,7 +63,7 @@ export const statsAt = (item, ilv, pct = 100, plus = 0) => {
   return out
 }
 // いまのLVで着けたときの戦闘力（必要LV不足ぶんを引いたもの）
-export const effectivePowerAt = (item, ilv, lv, plus = 0) => Math.round(powerAt(item, ilv, plus) * effectPct(ilv, lv) / 100)
+export const effectivePowerAt = (item, ilv, lv, plus = 0) => underLvPowerOf(powerAt(item, ilv, plus), effectPct(ilv, lv))
 
 // ===== 防具のメリット =====
 // worn = [{ item, pct }]（着けている防具と、その効果%）。

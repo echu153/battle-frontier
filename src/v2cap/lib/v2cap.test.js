@@ -16,18 +16,20 @@ import {
   canBecome, weaponsOf, canEquipType, attackKindOf, lineageOf, usableSkillNames, classDescOf,
   jobBonusGain, jobGainText, jobUpHead, jobUpNote,
 } from './jobs.js'
-import { SKILLS, NEW_SKILLS, SKILL_BY_NAME, setMpCost, validateSkillSet, defaultSetOf, DEFAULT_USES_MAX, passiveOf } from './skills.js'
+import { SKILLS, NEW_SKILLS, SKILL_BY_NAME, setMpCost, validateSkillSet, defaultSetOf, fillSetOf, SKILL_SET_SLOTS, DEFAULT_USES_MAX, passiveOf } from './skills.js'
 import { ICHIJI_SKILLS, ICHIJI_BUILDS } from './skillsIchiji.js'
 import {
   ITEMS, ITEM_BY_ID, KINDS, WEAPON_TYPES, ARMOR_LINES, ARMOR_PARTS, ACCESSORY_TYPES, PART_MULT, SLOTS, ARMOR_EFFECT,
   RARITIES, RARITY_LABEL, RARITY_BASE, AREA_COUNT, itemOf, itemLabel, slotsFor, SLOT_LABEL, PARTS, partLabel, kindLabel, reqLvOf,
+  starterIdsOf,
 } from './equipment.js'
 import { GEAR_NAMES } from './gearNames.js'
-import { powerAt, effectPct, statsAt, armorEffects, armorEffectText, GEAR_RATIO, SET_PART_SUM } from './gear.js'
+import { powerAt, effectPct, statsAt, armorEffects, armorEffectText, underLvPowerOf, GEAR_RATIO, SET_PART_SUM } from './gear.js'
 import {
   AREA_LIST, SPOTS, SPOT_COUNT, spotOf, spotLvOf, spotLabel, expRangeOf, goldRangeOf,
   ROLE_TENTHS, scaleByRole, enemyLevels, enemyLvOf, enemyRoleOf,
   stdPowerAt, stdRatioAt, AREA_BOSS, SUB_BOSS, bossRatioOf, STD_RATIO, NORMAL_RATIO, enemyPowerOf, toFighter as enemyFighter,
+  BOSS_SPOT_ADJ, SPOT_REC_LV, recLvOf, recRangeOf, recLvText, recSpotOfLv,
 } from './areas.js'
 import { AREA_ROSTERS, AREA_LEVELS, ENEMY_LV } from './monsters.js'
 import { toFighter, statBreakdown, equippedItems, slotsOf, currentSetOf } from './loadout.js'
@@ -579,6 +581,43 @@ test('【確定】スキルセットは職業ごと。初めて就いた職業�
   assert.deepEqual(currentSetOf({ class:'銃士' }), [])
 })
 
+test('【確定】2026-10-12 覚えた技は編成の空き枠へ入れる：1回ずつ入れてから、残りのMPで前から1回ずつ足す（fillSetOf）', () => {
+  // ユーザー指示「スキルスロット余ってる場合はうめるようにして」。サーバーの v2cap_fill_set と同じ規則（PGlite で突き合わせた）
+  const berserk = { lineage: lineageOf('狂戦士') }
+  const learned = [...skillsLearnedBy('戦士', JOB_MAX), ...skillsLearnedBy('狂戦士', 10)]
+  // ⚠最初の形（入れた技に残りのMPで使えるだけ回数を付ける）だと、体当たり×5・強撃×3 でMPを使い切って2枠しか埋まらなかった
+  assert.deepEqual(fillSetOf([], learned, { ...berserk, maxMp: 54 }), [
+    { name:'体当たり', uses: 2 }, { name:'強撃', uses: 2 }, { name:'防御崩し', uses: 1 }, { name:'防御態勢', uses: 1 }, { name:'シールドアタック', uses: 1 },
+  ], '5枠とも埋まる（4＋11＋8＋8＋8＝39・残り15で 体当たり+1・強撃+1）')
+  // 前から入っている技にはさわらない（回数も）。空き枠に入るだけ
+  const mine = [{ name:'マッドラッシュ', uses: 4 }]
+  const s = fillSetOf(mine, learned, { ...berserk, maxMp: 60 })
+  assert.deepEqual(s[0], { name:'マッドラッシュ', uses: 4 })
+  assert.equal(s.length, SKILL_SET_SLOTS)
+  assert.deepEqual(mine, [{ name:'マッドラッシュ', uses: 4 }], '渡した編成は書き換えない')
+  // 収まらない技はとばして次の技へ（強撃11は入らず、防御崩し8は入る）
+  assert.deepEqual(fillSetOf([{ name:'体当たり', uses: 1 }], ['強撃', '防御崩し'], { lineage: ['戦士'], maxMp: 12 }), [{ name:'体当たり', uses: 1 }, { name:'防御崩し', uses: 1 }])
+  // 入れないもの：ほかの職業の技・パッシブ・名簿に無い名前・もう入っている技・1回ぶんもMPが無い・枠がいっぱい
+  assert.deepEqual(fillSetOf([], ['呪弾', '体当たり'], { lineage: ['戦士'], maxMp: 4 }), [{ name:'体当たり', uses: 1 }])
+  const passive = SKILLS.find(k => k.cls === '戦士' && k.passive)
+  if (passive) assert.deepEqual(fillSetOf([], [passive.name], { lineage: ['戦士'], maxMp: 999 }), [])
+  assert.deepEqual(fillSetOf([], ['ないスキル'], { lineage: ['戦士'], maxMp: 999 }), [])
+  assert.deepEqual(fillSetOf([{ name:'体当たり', uses: 1 }], ['体当たり'], { lineage: ['戦士'], maxMp: 999 }), [{ name:'体当たり', uses: 1 }])
+  assert.deepEqual(fillSetOf([], ['体当たり'], { lineage: ['戦士'], maxMp: 3 }), [])
+  const full = skillsLearnedBy('戦士', JOB_MAX).map(name => ({ name, uses: 1 }))
+  assert.deepEqual(fillSetOf(full, ['マッドラッシュ'], { ...berserk, maxMp: 999 }), full)
+  // 空から入れるときは、収まる限り「初めて就いた職業の編成」（defaultSetOf）と同じ
+  for (const cls of START_CLASSES) {
+    for (let j = 1; j <= JOB_MAX; j++) {
+      const L = skillsLearnedBy(cls, j)
+      const maxMp = INITIAL_STATS.mp + jobBonusStats(cls, j).mp
+      const filled = fillSetOf([], L, { lineage: [cls], maxMp })
+      assert.equal(validateSkillSet(filled, { lineage: [cls], learned: L, maxMp }), null, `${cls} CLASS LV${j}`)
+      if (setMpCost(L.slice(0, SKILL_SET_SLOTS).map(name => ({ name, uses: 1 }))) <= maxMp) assert.deepEqual(filled, defaultSetOf(cls, L, maxMp), `${cls} CLASS LV${j}`)
+    }
+  }
+})
+
 // ===== 装備 =====
 test('【確定】装備はエリアごとに26点（武器14種・重鎧4部位・軽装4部位・装飾品4種）× レア度4段階。名前はユーザーの表', () => {
   // 刀・宝珠は 2026-10-09 に足した（後ろに足したので前からある装備のIDは変わらない）
@@ -706,6 +745,22 @@ test('【確定】強さはレア度で決まる（ノーマル1.0／レア1.25�
   }
 })
 
+test('【確定】2026-10-12 必要LVに足りないときの戦闘力は、最低でも1下がる（丸めで下がらないことをなくした）', () => {
+  // ユーザー指示「最低でも1下げるようにして」（前は「戦闘力 7 → 7（効果95%）」のように、95%でも丸めで7のままだった）
+  assert.equal(underLvPowerOf(7, 95), 6)
+  assert.equal(underLvPowerOf(7, 100), 7, '足りていればそのまま')
+  assert.equal(underLvPowerOf(100, 50), 50, '丸めで十分に下がるときはそのまま')
+  for (const item of ITEMS) {
+    const p = powerAt(item, item.lv)
+    for (const pct of [95, 90, 50, 10]) {
+      const u = underLvPowerOf(p, pct)
+      assert.ok(u <= p - 1, `${item.id} 効果${pct}%：${p}→${u}`)
+      assert.equal(u, Math.max(0, Math.min(Math.round(p * pct / 100), p - 1)))
+      assert.equal(Object.values(statsAt(item, item.lv, pct)).reduce((a, b) => a + b, 0), u, 'ステの合計も同じ')
+    }
+  }
+})
+
 test('【確定】必要LVに足りないと、不足1LVごとに効果-5%・下げ幅は最大90%', () => {
   assert.equal(effectPct(10, 10), 100)
   assert.equal(effectPct(5, 10), 100, '足りていれば100%')
@@ -716,7 +771,7 @@ test('【確定】必要LVに足りないと、不足1LVごとに効果-5%・下
   for (const item of ITEMS.filter(i => i.area === 1 || i.rarity === 'L')) {
     for (const [ilv, pct] of [[1, 100], [37, 100], [80, 55], [100, 10]]) {
       const s = statsAt(item, ilv, pct)
-      assert.equal(Object.values(s).reduce((a, b) => a + b, 0), Math.round(powerAt(item, ilv) * pct / 100), `${item.name} LV${ilv}`)
+      assert.equal(Object.values(s).reduce((a, b) => a + b, 0), underLvPowerOf(powerAt(item, ilv), pct), `${item.name} LV${ilv}`)
     }
   }
 })
@@ -775,7 +830,7 @@ test('戦闘のステ＝本体＋いまの職業のクラスのステ＋装備�
   const prof = baseProf({ equipped: { weapon: 1, foot: 2 } })
   const bd = statBreakdown(prof, inv)
   assert.deepEqual(bd.job, jobBonusStats('戦士', 30))
-  const gearW = Math.round(powerAt(ITEM_BY_ID['3N:両手剣'], 40) * 50 / 100)
+  const gearW = underLvPowerOf(powerAt(ITEM_BY_ID['3N:両手剣'], 40), 50)
   const gearF = powerAt(ITEM_BY_ID['3R:軽装足'], 30)
   assert.equal(calcPower(bd.gear), gearW + gearF, 'LV30でLV40の装備＝効果50%')
   assert.equal(bd.armor.agiPct, 1)
@@ -974,4 +1029,58 @@ test('【確定】③のボスは特に強い：どのエリアでも ③のボ�
     assert.ok(p3 > p2 && p2 >= p1, `${AREA_LIST[k].name}：①${p1}・②${p2}・③${p3}`)
     assert.ok(bossRatioOf(k * 3 + 3) > bossRatioOf(k * 3 + 2), `${AREA_LIST[k].name}：③の倍率が①②より高い`)
   }
+})
+
+test('【確定】2026-10-12 ①-①のボスは LV5 くらいで倒せる（0.6倍）：LV4ではまず勝てない・LV6ならほぼ勝てる', () => {
+  // ユーザー指示「ボスをそんなすぐに倒されても困る、レベル5ぐらいで倒せるようになればいい※目安」
+  // ⚠序盤の敵を1.6倍にしたとき、①-①のボス（LV10）も一緒に1.6倍になっていた（実機テストで見つけた）
+  assert.deepEqual(BOSS_SPOT_ADJ, { 1: 0.6 })
+  const boss = spotOf(1).roster.boss
+  assert.equal(enemyPowerOf(boss), Math.round(stdPowerAt(ENEMY_LV[boss.name]) * AREA_BOSS[0] * SUB_BOSS[0] * 0.6))
+  assert.equal(bossRatioOf(2), AREA_BOSS[0] * SUB_BOSS[1], '①-②から先は手直しなし')
+  // 初期装備・ポイントは職業の並びで振る・CLASS LV はそのLVのころ（初期職の必要EXP）・最初の編成。11職×200戦の勝率（%）
+  const jlvAt = (lv) => { let j = 1; while (j < JOB_MAX && jobTotalTo('shoki', j + 1) <= totalExpTo(lv)) j++; return j }
+  const meOf = (cls, lv) => {
+    const jlv = jlvAt(lv)
+    const inventory = starterIdsOf(cls).map((base_id, i) => ({ id: i + 1, base_id, ilv: 1, plus: 0 }))
+    const equipped = Object.fromEntries(SLOTS.map((s, i) => [s, i + 1]))
+    const st = { ...INITIAL_STATS }
+    const seq = bonusSeqOf(cls)
+    for (let i = 0; i < totalPointsTo(lv); i++) { const k = seq[i % seq.length]; st[k] += STAT_DEFS[k].unit }
+    const learned = skillsLearnedBy(cls, jlv)
+    const maxMp = st.mp + jobBonusStats(cls, jlv).mp
+    return toFighter({ username:'t', class: cls, lv, ...st, jobs: { [cls]: { lv: jlv, exp: 0 } }, learned,
+      skill_sets: { [cls]: defaultSetOf(cls, learned, maxMp) }, equipped }, inventory)
+  }
+  const foe = { ...enemyFighter(boss), boss: true }
+  const ratesAt = (lv) => START_CLASSES.map(cls => {
+    const me = meOf(cls, lv)
+    let w = 0
+    for (let i = 0; i < 200; i++) if (runBattle(me, { ...foe }, { rng: rngOf(1 + i * 7919) }).winner === 'a') w++
+    return w / 2
+  })
+  const med = (a) => [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)]
+  const [r4, r5, r6] = [4, 5, 6].map(ratesAt)
+  assert.ok(med(r4) <= 15, `LV4 中央値${med(r4)}%（測ったときは2%）`)
+  assert.ok(med(r5) >= 50 && med(r5) <= 85, `LV5 中央値${med(r5)}%（測ったときは67%）`)
+  assert.ok(Math.min(...r5) >= 30, `LV5 いちばん低い職業${Math.min(...r5)}%（測ったときは46%）`)
+  assert.ok(med(r6) >= 90, `LV6 中央値${med(r6)}%（測ったときは99%）`)
+})
+
+test('【確定】2026-10-12 推奨LV：上限はボスを倒せる目安のLV（測った値）・最後は80・場所の選択肢は「推奨LV（前の場所の目安）〜（この場所の目安）」', () => {
+  // ユーザー指示「推奨レベル　って表記の仕方にして上限のレベルはボスを倒せる目安のレベルで　最後のボスは80になるようにして」
+  assert.equal(SPOT_REC_LV.length, SPOT_COUNT)
+  assert.equal(recLvOf(1), 5, '①-①は LV5（ボスを0.6倍にして合わせた）')
+  assert.equal(recLvOf(SPOT_COUNT), 80, '最後は80（測ると77）')
+  for (let id = 2; id <= SPOT_COUNT; id++) assert.ok(recLvOf(id) >= recLvOf(id - 1), `${spotLabel(id)}は前の場所より下がらない`)
+  // 各エリアの③＝ボスを初めて倒したときのLVの中央値（初期職11職×2人・実際に落ちた装備）。最後だけ80
+  assert.deepEqual(AREA_LIST.map((_, k) => recLvOf(k * 3 + 3)), [14, 18, 22, 23, 29, 36, 39, 44, 47, 50, 51, 53, 66, 70, 80])
+  // 画面の文言（表記ルールで「レベル」は数の前では LV）。前の場所と同じ数なら1つだけ
+  assert.deepEqual(recRangeOf(1), [1, 5])
+  assert.equal(recLvText(1), '推奨LV1〜5')
+  assert.equal(recLvText(2), '推奨LV5〜10')
+  assert.equal(recLvText(10), '推奨LV22')
+  assert.equal(recLvText(SPOT_COUNT), '推奨LV77〜80')
+  // そのLVの推奨の場所（デイリーミッションと宝樹のEXPの基準）＝推奨LVの上限がそのLV以上の、いちばん手前の場所
+  assert.deepEqual([1, 5, 6, 10, 11, 77, 78, 80, 100].map(lv => recSpotOfLv(lv).id), [1, 1, 2, 2, 3, 44, 45, 45, 45])
 })

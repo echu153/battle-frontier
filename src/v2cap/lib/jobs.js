@@ -350,12 +350,12 @@ export const missingReqOf = (cls, jobs) => {
   const r = reqOf(cls)
   if (!r) return null
   const have = jobOf(jobs, r.cls).lv
-  return have >= r.jlv ? null : `${r.cls}のClassLV${r.jlv}（いま${have}）`
+  return have >= r.jlv ? null : `${r.cls}のCLASS LV${r.jlv}（いま${have}）`
 }
 export const canBecome = (cls, jobs) => !!CLASS_BY_ID[cls] && !missingReqOf(cls, jobs)
 export const reqText = (cls) => {
   const r = reqOf(cls)
-  return r ? `${r.cls}のClassLV${r.jlv}` : '条件なし'
+  return r ? `${r.cls}のCLASS LV${r.jlv}` : '条件なし'
 }
 
 // ===== ClassEXPを入れる（純関数・表示とシミュレーション用）=====

@@ -3,9 +3,10 @@ import { supabase } from '../../supabase'
 import V2Modal from '../../v2/components/V2Modal.jsx'
 import { box, btn, miniBtn, TEXT } from '../../v2/components/v2ui.js'
 import {
-  DAILY_TASKS, dailyOf, dailyRewardOf, dailyPctOf, taskProgressOf, doneCountOf, isDailyComplete, claimErrorOf, nextResetAt,
+  DAILY_TASKS, DAILY_SORTIES, dailyOf, dailyRewardOf, taskProgressOf, doneCountOf, isDailyComplete, claimErrorOf, nextResetAt,
 } from '../lib/daily.js'
 import { jobUpHead, jobUpNote } from '../lib/jobs.js'
+import { recSpotOfLv, spotLabel } from '../lib/areas.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — デイリーミッション（ホームの右の一番上・今のⅡと同じ場所）
@@ -88,7 +89,7 @@ export default function V2capDaily({ prof, onProfile }) {
         <div style={{ color: TEXT.label, fontSize:'10px', margin:'6px 0', lineHeight:1.7 }}>
           {d.accepted ? `報酬（受注したLV${d.lv}）` : `いま受注すると（LV${rewardLv}）`}
           <span style={{ color:'#ffcc00', marginLeft:'6px' }}>EXP +{reward.exp.toLocaleString()}・Gold +{reward.gold.toLocaleString()}</span>
-          <span style={{ color: TEXT.sub }}>（EXPは必要EXPの{dailyPctOf(rewardLv)}%・GoldはLV×100）</span>
+          <span style={{ color: TEXT.sub }}>（EXPはLV{rewardLv}の推奨の場所「{spotLabel(recSpotOfLv(rewardLv))}」で{DAILY_SORTIES}回出撃したくらい・GoldはLV×100）</span>
         </div>
         {!d.accepted ? (
           <button onClick={accept} disabled={busy}
@@ -126,7 +127,7 @@ export default function V2capDaily({ prof, onProfile }) {
               <div>{jobUpNote(prof.class, got.level)}</div>
             </div>
           )}
-          {(got.level?.learned || []).map(n => <div key={n} style={{ color:'#44ddff', marginTop:'4px' }}>📖 スキル「{n}」を覚えた！</div>)}
+          {(got.level?.learned || []).map(n => <div key={n} style={{ color:'#44ddff', marginTop:'4px' }}>📖 スキル「{n}」を覚えた！{(got.level?.set_added || []).includes(n) ? '（スキルセットの空き枠に入れた）' : ''}</div>)}
           <div style={{ color: TEXT.label, fontSize:'10px', marginTop:'6px' }}>次のミッションは日本時間の5時に切り替わります。</div>
         </V2Modal>
       )}

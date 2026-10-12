@@ -2,33 +2,31 @@
 // 【確定】2026-10-10 ユーザー指示（docs/v2cap-design.md「デイリーミッション」）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { needExp, MAX_LV } from './level.js'
+import { MAX_LV } from './level.js'
+import { SPOTS, recSpotOfLv, recLvOf, tenSortieExpOf } from './areas.js'
 import { DAY_RESET_HOUR as V2_DAY_RESET_HOUR } from '../../v2/lib/daily.js'
 import {
-  DAILY_TASKS, DAILY_TASK_KEYS, DAILY_EXP_PCT, dailyPctOf, DAILY_GOLD_PER_LV, dailyRewardOf,
+  DAILY_TASKS, DAILY_TASK_KEYS, DAILY_SORTIES, DAILY_GOLD_PER_LV, dailyRewardOf,
   dailyOf, taskProgressOf, doneCountOf, isDailyComplete, claimErrorOf, dayOf, DAY_RESET_HOUR,
 } from './daily.js'
 
-test('【確定】報酬は受注した時点のLVで決まる：EXP＝必要EXP×%（〜10は10%・〜30は5%・〜50は3%・51〜は1%・切り上げ）／Gold＝LV×100', () => {
-  assert.deepEqual(DAILY_EXP_PCT, [[10, 10], [30, 5], [50, 3], [Infinity, 1]])
-  for (const [lv, pct] of [[1, 10], [10, 10], [11, 5], [30, 5], [31, 3], [50, 3], [51, 1], [99, 1], [100, 1]]) {
-    assert.equal(dailyPctOf(lv), pct, `LV${lv}は${pct}%`)
-  }
+test('【確定】報酬は受注した時点のLVで決まる：EXP＝そのLVの推奨の場所で10回出撃したくらい（2026-10-12）／Gold＝LV×100', () => {
+  // ユーザー指示「後半で大きくもらいすぎないように調整してた、そのレベルの推奨エリアを10回出撃したときくらいの経験値にして」（前は必要EXPの10〜1%）
+  assert.equal(DAILY_SORTIES, 10)
   assert.equal(DAILY_GOLD_PER_LV, 100)
   for (let lv = 1; lv <= MAX_LV; lv++) {
+    const s = recSpotOfLv(lv)
     const r = dailyRewardOf(lv)
-    assert.equal(r.exp, Math.ceil(needExp(lv) * dailyPctOf(lv) / 100), `LV${lv}のEXPは切り上げ`)
+    assert.equal(r.exp, DAILY_SORTIES * (s.exp[0] + s.exp[1]) / 2, `LV${lv}：${s.name}の1体あたりのまんなか×10`)
+    assert.equal(r.exp, tenSortieExpOf(lv))
     assert.equal(r.gold, lv * 100)
+    assert.ok(recLvOf(s.id) >= lv || s.id === SPOTS.length, `LV${lv}の推奨の場所は、推奨LVの上限がLV${lv}以上`)
   }
-  // ユーザーに見せた表（切り上げ）。★最初に見せた表は LV30・40・50・51・90 を四捨五入で出していて1少なかった（2026-10-10 に訂正して伝えた）
-  // ★2026-10-12 必要EXPを「20＋0.162×LV³」にした（ユーザー指示「通常のレベルはもう少しレベル上げにくく」）ので、EXPは同じ%のまま約1.2倍になった
-  //   （前の表：LV1 1・LV10 14・LV30 183・LV50 507・LV99 1310）
-  const shown = {
-    1: [2, 100], 5: [4, 500], 10: [19, 1000], 11: [12, 1100], 20: [66, 2000], 30: [220, 3000], 31: [146, 3100],
-    40: [312, 4000], 50: [609, 5000], 51: [216, 5100], 60: [351, 6000], 75: [684, 7500], 90: [1182, 9000],
-    99: [1573, 9900], 100: [0, 10000],
-  }
-  for (const [lv, [exp, gold]] of Object.entries(shown)) assert.deepEqual(dailyRewardOf(Number(lv)), { exp, gold }, `LV${lv}`)
+  // 始まりの森①（1体 EXP2〜3）のLV1〜5：EXP+25（前はLV1でEXP+1・LV5で+2）／いちばん後ろ（深淵の海溝③・1体31〜33）：320
+  for (const lv of [1, 5]) assert.equal(dailyRewardOf(lv).exp, 25)
+  assert.equal(dailyRewardOf(MAX_LV).exp, 320)
+  // 後ろほど大きくなる（下がらない）
+  for (let lv = 2; lv <= MAX_LV; lv++) assert.ok(dailyRewardOf(lv).exp >= dailyRewardOf(lv - 1).exp, `LV${lv}`)
 })
 
 test('【仮】ミッションは「出撃に10回勝つ」1つ（内容はあとで決める＝ユーザー指示）', () => {

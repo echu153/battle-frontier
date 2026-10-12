@@ -2,8 +2,9 @@
 // 【確定】2026-10-11 ユーザー指示・承認の表（docs/v2cap-design.md「ユグレシアの宝樹」）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { needExp, MAX_LV } from './level.js'
-import { FORTUNES, FORTUNE_BY_NAME, PRAY_PERMIL, prayPermilOf, prayPctText, multTenthsOf, prayExpOf, canPray, DAY_RESET_HOUR } from './tree.js'
+import { MAX_LV } from './level.js'
+import { tenSortieExpOf } from './areas.js'
+import { FORTUNES, FORTUNE_BY_NAME, multTenthsOf, prayExpOf, canPray, DAY_RESET_HOUR } from './tree.js'
 
 test('【確定】運勢は今のⅡと同じ7つ（出やすさ・倍率＝ユーザー承認の表。大吉で3倍）', () => {
   assert.deepEqual(FORTUNES.map(f => f.name), ['大吉', '中吉', '小吉', '吉', '末吉', '凶', '大凶'])
@@ -13,32 +14,18 @@ test('【確定】運勢は今のⅡと同じ7つ（出やすさ・倍率＝ユ�
   assert.deepEqual(FORTUNES.map(multTenthsOf), [30, 20, 15, 10, 7, 4, 2])
 })
 
-test('【確定】経験値＝祈った時点のLVの必要EXP×（〜30は2%・〜50は1%・〜80は0.5%・81〜は0.1%）×運勢の倍率・切り上げ', () => {
-  assert.deepEqual(PRAY_PERMIL, [[30, 20], [50, 10], [80, 5], [Infinity, 1]])
-  for (const [lv, txt] of [[1, '2%'], [30, '2%'], [31, '1%'], [50, '1%'], [51, '0.5%'], [80, '0.5%'], [81, '0.1%'], [100, '0.1%']]) {
-    assert.equal(prayPctText(lv), txt, `LV${lv}`)
-  }
+test('【確定】2026-10-12 経験値＝祈った時点のLVの推奨の場所で10回出撃したくらい（デイリーと同じ）×運勢の倍率・切り上げ', () => {
+  // ユーザー指示「そのレベルの推奨エリアを10回出撃したときくらいの経験値にして」→宝樹も「同じにする」を選んだ（前は必要EXPの2〜0.1%）
   for (let lv = 1; lv <= MAX_LV; lv++) {
-    for (const f of FORTUNES) {
-      const want = Math.ceil(needExp(lv) * prayPermilOf(lv) * multTenthsOf(f) / 10000)
-      assert.equal(prayExpOf(lv, f), want, `LV${lv} ${f.name}`)
-    }
+    for (const f of FORTUNES) assert.equal(prayExpOf(lv, f), Math.ceil(tenSortieExpOf(lv) * multTenthsOf(f) / 10), `LV${lv} ${f.name}`)
   }
-  // ユーザーに見せて承認された表（大吉・中吉・小吉・吉・末吉・凶・大凶）
-  // ★2026-10-12 必要EXPを「20＋0.162×LV³」にした（ユーザー指示「通常のレベルはもう少しレベル上げにくく」）ので、同じ%のまま約1.2倍になった
-  //   （前の表：LV30 219/146/110/73/52/30/15・LV50 507/…・LV80 1037/…・LV99 393/…）
-  const shown = {
-    1: [2, 1, 1, 1, 1, 1, 1],
-    30: [264, 176, 132, 88, 62, 36, 18],
-    50: [609, 406, 305, 203, 142, 82, 41],
-    80: [1245, 830, 623, 415, 291, 166, 83],
-    99: [472, 315, 236, 158, 111, 63, 32],
-    100: [0, 0, 0, 0, 0, 0, 0],
+  // 吉＝10回ぶんそのまま・大吉＝30回ぶん・大凶＝2回ぶん
+  for (const lv of [1, 5, 30, 80, 100]) {
+    assert.equal(prayExpOf(lv, FORTUNE_BY_NAME['吉']), tenSortieExpOf(lv))
+    assert.equal(prayExpOf(lv, FORTUNE_BY_NAME['大吉']), tenSortieExpOf(lv) * 3)
   }
-  for (const [lv, row] of Object.entries(shown)) {
-    assert.deepEqual(FORTUNES.map(f => prayExpOf(Number(lv), f)), row, `LV${lv}`)
-  }
-  assert.equal(prayExpOf(40, FORTUNE_BY_NAME['吉']), 104)
+  // 始まりの森①（1体 EXP2〜3）のLV：吉で25・大吉で75（前は吉でEXP+1）
+  assert.deepEqual(FORTUNES.map(f => prayExpOf(1, f)), [75, 50, 38, 25, 18, 10, 5])
 })
 
 test('1日1回・日付が変わるのは日本時間の5時（今のⅡと同じ）', () => {

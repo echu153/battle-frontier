@@ -9,13 +9,13 @@ import { SKILL_SET_SLOTS, SKILL_USE_MAX } from '../../v2/lib/skills.js'
 import { DEFAULT_USES_MAX } from './skills.js'
 import { NEED_BASE, NEED_PERMIL, MAX_LV, STAMINA_BASE, STAMINA_RECOVER_MS, POINTS_PER_LV, POINTS_STEP, POINTS_ON_STEP, POINT_UNIT } from './level.js'
 import { JOB_NEED_PCT, JOB_NEED_BASE_PERMIL, JOB_MAX } from './jobs.js'
-import { ROLE_TENTHS } from './areas.js'
+import { ROLE_TENTHS, SPOTS as SPOTS_ALL, recLvOf } from './areas.js'
 import { SLOTS, RARITIES, STARTER_AREA } from './equipment.js'
 import { SORTIE_CD, DROP_RARITY } from './sortie.js'
 import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV, scrapAreaOf, enhanceScrapOf, ENHANCE_GOLD_ONLY_RARITY } from './smith.js'
-import { DAILY_EXP_PCT, DAILY_GOLD_PER_LV, DAY_RESET_HOUR } from './daily.js'
+import { DAILY_SORTIES, DAILY_GOLD_PER_LV, DAY_RESET_HOUR } from './daily.js'
 import { AVATAR_PRESETS, AVATAR_FILE_RE } from './avatar.js'
-import { FORTUNES, PRAY_PERMIL, multTenthsOf } from './tree.js'
+import { FORTUNES, multTenthsOf } from './tree.js'
 import { rewrite } from '../../../tools/v2cap-sql.mjs'
 
 // ★改行はLFにそろえてから見る（Windowsで core.autocrlf=true のまま取り出すとCRLFになり、改行を含む正規表現が合わなくなる。
@@ -314,14 +314,16 @@ test('【確定】デイリーミッション：受注した時点のLVで報酬
   }
   // 日付の区切りは日本時間の5時（JS・今のⅡと同じ）
   assert.ok(fnBody('v2cap_daily_roll').includes(`v_today date := ((now() at time zone 'Asia/Tokyo') - interval '${DAY_RESET_HOUR} hours')::date;`))
-  // 報酬の式：%の段（JSの DAILY_EXP_PCT と同じ）・切り上げ・Gold＝LV×100
+  // 報酬の式：EXP＝そのLVの推奨の場所で10回出撃したくらい（2026-10-12・JSの tenSortieExpOf）・Gold＝LV×100
   const rw = fnBody('v2cap_daily_reward').replace(/\s+/g, ' ')
-  const tiers = DAILY_EXP_PCT.filter(([max]) => Number.isFinite(max))
-    .map(([max, pct]) => `when greatest(1, coalesce(p_lv, 1)) <= ${max} then ${pct}`).join(' ')
-  const last = DAILY_EXP_PCT[DAILY_EXP_PCT.length - 1][1]
-  assert.ok(rw.includes(`(case ${tiers} else ${last} end) + 99) / 100`), `%の段がJSと同じ（${tiers} else ${last}）・切り上げ`)
-  assert.ok(rw.includes('public.v2cap_need(greatest(1, coalesce(p_lv, 1)))'), '必要EXPはLVの表（v2cap_need）')
+  assert.ok(rw.includes("'exp', public.v2cap_ten_sortie_exp(p_lv),"), 'EXPは推奨の場所で10回ぶん')
   assert.ok(rw.includes(`'gold', greatest(1, coalesce(p_lv, 1)) * ${DAILY_GOLD_PER_LV})`))
+  const ten = fnBody('v2cap_ten_sortie_exp').replace(/\s+/g, ' ')
+  assert.ok(ten.includes(`select ${DAILY_SORTIES / 2} * (s.exp_min + s.exp_max) from public.v2cap_spots s where s.rec_lv >= greatest(1, coalesce(p_lv, 1)) order by s.id limit 1`),
+    '推奨の場所＝推奨LVの上限がそのLV以上のいちばん手前・EXP＝まんなか×10＝5×（最小＋最大）')
+  assert.ok(ten.includes('order by s.id desc limit 1'), '上限より上のLVは最後の場所')
+  assert.ok(SQL.includes('alter table public.v2cap_spots add column if not exists rec_lv int not null default 1;'))
+  for (const s of SPOTS_ALL) assert.ok(SQL.includes(`, ${recLvOf(s.id)})`), `場所${s.id}の推奨LVが種に入っている`)
   // 受注：その時点のLVを入れる・1日1回・行をつかんでから
   const acc = fnBody('v2cap_daily_accept')
   assert.match(acc, /perform 1 from public\.v2cap_profiles where id = v_uid for update;/)
@@ -372,9 +374,9 @@ test('【確定】ユグレシアの宝樹：運勢の並び・出やすさ・�
   assert.ok(f.includes(`c_names  constant text[] := array[${FORTUNES.map(x => `'${x.name}'`).join(', ')}];`), '並びがJSと同じ')
   assert.ok(f.includes(`c_weight constant int[]  := array[${FORTUNES.map(x => x.weight).join(', ')}];`), '出やすさがJSと同じ')
   assert.ok(f.includes(`c_mult   constant int[]  := array[${FORTUNES.map(multTenthsOf).join(', ')}];`), '倍率がJSと同じ')
-  const tiers = PRAY_PERMIL.filter(([max]) => Number.isFinite(max)).map(([max, p]) => `when v_lv <= ${max} then ${p}`).join(' ')
-  assert.ok(f.includes(`v_permil := case ${tiers} else ${PRAY_PERMIL[PRAY_PERMIL.length - 1][1]} end;`), '割合の段がJSと同じ')
-  assert.ok(f.includes('v_exp    := (public.v2cap_need(v_lv) * v_permil * c_mult[v_idx] + 9999) / 10000;'), '切り上げ（tree.js の prayExpOf）')
+  // 2026-10-12「デイリーと同じにする」：推奨の場所で10回出撃したくらい × 運勢の倍率（10分率）・切り上げ（tree.js の prayExpOf）
+  assert.ok(f.includes('v_exp    := (public.v2cap_ten_sortie_exp(v_lv) * c_mult[v_idx] + 9) / 10;'), '基準と切り上げがJSと同じ')
+  assert.ok(!/v_permil|v2cap_need\(/.test(f), '前の「必要EXPの%」は使わない')
   assert.match(f, /returning p\.lv, p\.pray_count, p\.pray_log into v_lv, v_count, v_log;/, '祈った時点のLV')
   assert.ok(f.includes('v_res := public.v2cap_apply_exp(v_uid, v_exp);'), 'EXPは戦闘と同じ扱い')
   // 1日1回：確認と記録を1文で（日本時間の5時で切り替わる）。管理者だけ何回でも、は入れない
@@ -452,6 +454,36 @@ test('★作り直し（キャラと装備を消す）は印を付けて1回ず�
   }
   // 印の外で消していない（全文流し直しのたびに消える事故を防ぐ）
   assert.ok(!/delete from public\.v2cap_(profiles|inventory)\s*;/.test(outside), '印の外で profiles / inventory を丸ごと消していない')
+})
+
+test('【確定】2026-10-12 覚えた技は編成の空き枠へ入れる（v2cap_fill_set＝skills.js の fillSetOf）。今いるキャラは1回だけ埋める', () => {
+  // ユーザー指示「スキルスロット余ってる場合はうめるようにして」
+  const f = fnBody('v2cap_fill_set')
+  assert.match(f, new RegExp(`c_slots\\s+constant int := ${SKILL_SET_SLOTS};`), '枠の数はJSと同じ（5）')
+  assert.match(f, new RegExp(`c_uses_max constant int := ${DEFAULT_USES_MAX};`), '1枠の回数の上限は defaultSetOf と同じ（5）')
+  assert.ok(f.includes('where not s.passive and s.cls = any(public.v2cap_lineage(p_cls))'), 'パッシブ・ほかの職業の技は入れない')
+  assert.ok(f.includes('order by t.i'), '覚えた順')
+  assert.ok(f.includes('exit when jsonb_array_length(v_set) + v_n >= c_slots;'), '空き枠に入るだけ')
+  assert.ok(f.includes("continue when v_set @> jsonb_build_array(jsonb_build_object('name', r.name)) or r.name = any(v_names);"), 'もう入っている技は入れない')
+  assert.ok(f.includes('continue when v_cost + r.mp > coalesce(p_max, 0);'), '1回ぶんも収まらない技はとばして次へ')
+  assert.ok(f.includes('v_uses := array_fill(1, array[v_n]);'), 'まず1回ずつ入れる')
+  assert.ok(f.includes('if v_uses[i] < c_uses_max and v_cost + v_mp[i] <= coalesce(p_max, 0) then'), '残りのMPで、入れた技に前から1回ずつ足す')
+  assert.ok(f.includes('return v_set ||'), '前から入っている技にはさわらない（後ろに足すだけ）')
+  assert.ok(SQL.includes('revoke all on function public.v2cap_fill_set(jsonb, jsonb, text, int) from public, anon, authenticated;'), '内部ヘルパは閉じる')
+  const a = fnBody('v2cap_apply_exp')
+  assert.ok(a.includes('v_fill := public.v2cap_fill_set(v_set, v_added, v_cls, v_row.mp + public.v2cap_job_bonus_mp(v_cls, v_jlv));'),
+    '入れるのはいま覚えた技・最大MP＝本体のMP＋クラスのMP（上がったあとのCLASS LV）')
+  assert.ok(a.includes('skill_sets = v_sets,'), '編成を書く')
+  assert.ok(a.includes("'set_added', v_setadd,"), '入れた技を画面へ返す（ログの「空き枠に入れた」）')
+  // 今いるキャラは1回だけ
+  const key = 'fill_skill_sets_20261012'
+  const m = SQL.match(new RegExp(`if not exists \\(select 1 from public\\.v2cap_migrations where key = '${key}'\\) then([\\s\\S]*?)\\n  end if;\\nend \\$\\$;`))
+  assert.ok(m, '印つきの do ブロックがある')
+  assert.ok(m[1].includes(`insert into public.v2cap_migrations (key) values ('${key}')`))
+  assert.ok(m[1].includes('v_fill := public.v2cap_fill_set(v_set, r.learned, r.class,'), '覚えている技を覚えた順に（同じ規則）')
+  assert.ok(!/delete from/.test(m[1]), 'キャラは消さない')
+  // 関数は移行より前に作る（全文を上から流すので）
+  assert.ok(SQL.indexOf('create or replace function public.v2cap_fill_set(') < SQL.indexOf(`where key = '${key}'`))
 })
 
 test('★ClassLVの数え直し（2026-10-12「LVの5割」）は印を付けて1回だけ。前の式でためた合計から、新しい式で数え直す', () => {

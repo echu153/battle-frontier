@@ -160,6 +160,7 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
   let skillSet = []
   const hourly = []
   const spotClearHour = {}             // 場所 → ボスを倒した時間（小数）
+  const lvAtClear = {}                 // 場所 → ボスを初めて倒したときのLV
   const lvAtSpotHour = {}              // 場所 → 目安の時間のLV
   const expAtSpotHour = {}             // 場所 → 目安の時間までに稼いだEXPの合計
   const expInSpot = {}                 // 場所 → そこで稼いだEXP
@@ -298,6 +299,7 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
       if (win && enc.isBoss && !cleared.includes(spot)) {
         cleared = clearSpot(cleared, spot)
         spotClearHour[spot] = hour
+        lvAtClear[spot] = st.lv   // ボスを初めて倒したときのLV（推奨LVの目安＝areas.js の SPOT_REC_LV を測る・2026-10-12）
         if (areas.spotOf(openUntilOf(cleared)).area !== gearArea) dirty = true   // 新しいエリアの装備が着けられる
       }
       if (dirty) { regear(); reset() }
@@ -309,7 +311,7 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
   if (expAtJobHour === null) expAtJobHour = cumExp
   if (expAtLvHour === null) expAtLvHour = cumExp
   return {
-    hourly, spotClearHour, lvAtSpotHour, expAtSpotHour, expInSpot, hoursInSpot, powerByLv,
+    hourly, spotClearHour, lvAtClear, lvAtSpotHour, expAtSpotHour, expInSpot, hoursInSpot, powerByLv,
     learned, cls, start, jobs, job30Hour, advancedHour, expAtJobHour, expAtLvHour, gold,
     fightsInSpot,
     final: { profile: prof(), inventory },   // 最後のキャラ（職業ごとの強さを比べるのに使う）

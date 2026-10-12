@@ -51,7 +51,7 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
   const have = new Set(learned)
   const entries = lineage.flatMap(c => {
     const at = learnAtOf(c)
-    return learnOrderOf(c).map((s, i) => ({ s, lock: have.has(s.name) ? null : (c === cls ? `ClassLV${at[i]}で習得` : `${c}のClassLV${at[i]}で習得`) }))
+    return learnOrderOf(c).map((s, i) => ({ s, lock: have.has(s.name) ? null : (c === cls ? `CLASS LV${at[i]}で習得` : `${c}のCLASS LV${at[i]}で習得`) }))
   })
   const lockOf = Object.fromEntries(entries.map(e => [e.s.name, e.lock]))
   const filtered = filterSkills(entries.map(e => e.s), { tab, query, favorites })
@@ -137,7 +137,7 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
       <div style={{ ...box, padding:'14px' }}>
         <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'4px' }}>📖 {cls}のスキル</div>
         <div style={{ color: TEXT.sub, fontSize:'10px', marginBottom:'8px', lineHeight:1.7 }}>
-          スキルはClassLVで覚えます（いまの職業：{cls}・ClassLV{jlv}）。まだ覚えていない技は、覚えるClassLVを出しています。
+          スキルはCLASS LVで覚えます（いまの職業：{cls}・CLASS LV{jlv}）。まだ覚えていない技は、覚えるCLASS LVを出しています。
           ほかの職業で覚えたスキルは、その職業に戻れば使えます。
         </div>
         <div style={{ display:'flex', gap:'5px', marginBottom:'6px' }}>

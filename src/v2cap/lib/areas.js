@@ -104,6 +104,30 @@ export const spotLvOf = (id) => {
   return lvs.length ? [Math.min(...lvs), Math.max(...lvs)] : [1, 1]
 }
 export const spotLvText = (id) => { const [a, b] = spotLvOf(id); return a === b ? `LV${a}` : `LV${a}〜${b}` }
+
+// ===== 推奨LV（場所の選択肢に出す）=====
+// 【確定】2026-10-12 ユーザー指示「推奨レベル　って表記の仕方にして上限のレベルはボスを倒せる目安のレベルで　最後のボスは80になるようにして」：
+//   SPOT_REC_LV ＝ 場所ごとの「ボスを倒せる目安のLV」。測り方（2026-10-12・初期職11職×2人・450時間・実際に落ちた装備）：
+//   ・各エリアの③ … ボスを初めて倒したときのLVの中央値（tools/v2cap-progress.mjs の lvAtClear）。
+//     A1〜15＝14/18/22/23/29/36/39/44/47/50/51/53/66/70/77（最後は77→ユーザー指示どおり80。目安なのでボスの強さは変えていない）
+//   ・各エリアの①② … 前の③との間を3等分（①②のボスは③より弱く、前の③で止まっていた人が着いてすぐ倒す＝測ると③と同じLVになるため）
+//   ・①-① … 5（ユーザー「レベル5ぐらいで倒せる」＝下の BOSS_SPOT_ADJ でボスを合わせた）・①-②は①-①と①-③のまんなか
+//   画面は「推奨LV（前の場所の目安）〜（この場所の目安）」＝①-①は「推奨LV1〜5」。前と同じ数なら「推奨LV22」（表記ルールで「レベル」は数の前では LV）
+//   ★測り直したら貼り直す（scratchpad の rec-measure.mjs と同じ測り方）
+export const SPOT_REC_LV = [
+  5, 10, 14, 15, 17, 18, 19, 21, 22, 22, 23, 23, 25, 27, 29,
+  31, 34, 36, 37, 38, 39, 41, 42, 44, 45, 46, 47, 48, 49, 50,
+  50, 51, 51, 52, 52, 53, 57, 62, 66, 67, 69, 70, 73, 77, 80,
+]
+export const recLvOf = (spotId) => SPOT_REC_LV[Math.min(SPOT_REC_LV.length, Math.max(1, spotId)) - 1]
+export const recRangeOf = (spotId) => [spotId > 1 ? recLvOf(spotId - 1) : 1, recLvOf(spotId)]
+export const recLvText = (spotId) => { const [a, b] = recRangeOf(spotId); return a === b ? `推奨LV${b}` : `推奨LV${a}〜${b}` }
+// そのLVの推奨の場所＝推奨LVの上限がそのLV以上の、いちばん手前の場所（最後の場所の上限より上のLVは最後の場所）
+export const recSpotOfLv = (lv) => SPOTS.find(s => recLvOf(s.id) >= Math.max(1, lv || 1)) || SPOTS[SPOTS.length - 1]
+// その場所で10回出撃したくらいのEXP＝ふつうの敵の1体あたりのEXPのまんなか × 10 ＝ 5 ×（最小＋最大）。
+// デイリーミッションと宝樹（吉）のEXP（2026-10-12 ユーザー指示「そのレベルの推奨エリアを10回出撃したときくらいの経験値にして」）。
+// ★サーバーの v2cap_ten_sortie_exp と同じ（v2cap_spots.rec_lv・exp_min・exp_max）
+export const tenSortieExpOf = (lv) => { const s = recSpotOfLv(lv); return 5 * (s.exp[0] + s.exp[1]) }
 // サーバーの種（v2cap_enemies）を作るための一覧（名前＋場所ごとに1行）
 export const enemyLevels = () => [...PLACES.values()].map(p => ({ name: p.name, spot: p.spot, lv: ENEMY_LV[p.name] || 1, role: p.role, band: p.band }))
 
@@ -157,9 +181,15 @@ export const SUB_BOSS = [1.0, 1.0, 1.25]
 export const AREA_BOSS = [
   1.19, 1.05, 1.09, 1.19, 1.3, 1.2, 1.13, 1.04, 1.04, 1.17, 1.31, 1.15, 1.42, 1.22, 1.5,
 ]
+// 場所ごとのボスの手直し（エリアの値 × ①②③の倍率に、さらに掛ける）
+// 【確定】2026-10-12 ユーザー指示「ボスをそんなすぐに倒されても困る、レベル5ぐらいで倒せるようになればいい※目安」：
+//   ①-①のボス（オヤブンネズミLV10）を 0.6倍（戦闘力225→135）。初期装備・その LV の CLASS LV・最初の編成で、
+//   11職の勝率の中央値は LV4 2%・LV5 67%（いちばん低い職業46%）・LV6 99%。序盤の敵を1.6倍にしたときに一緒に強くなりすぎていた
+//   （LV10の行を使うので。①-①を抜けるのが7分→24分になっていた＝実機テストで見つけた）
+export const BOSS_SPOT_ADJ = { 1: 0.6 }
 export const bossRatioOf = (spotId) => {
   const s = spotOf(spotId)
-  return s ? AREA_BOSS[s.area - 1] * SUB_BOSS[s.sub - 1] : 1
+  return s ? AREA_BOSS[s.area - 1] * SUB_BOSS[s.sub - 1] * (BOSS_SPOT_ADJ[spotId] || 1) : 1
 }
 export const roleRatioOf = (role, spotId) =>
   role === 'boss' ? bossRatioOf(spotId) : role === 'rare' ? RARE_RATIO : NORMAL_RATIO

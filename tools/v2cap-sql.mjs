@@ -21,7 +21,7 @@ const B = new URL('../src/', import.meta.url).href
 const { STAGES, STAGE_ORDER, CLASSES, bonusSeqOf, lineageOf, JOB_LV_HPMP } = await import(B + 'v2cap/lib/jobs.js')
 const { SKILLS, isPassive } = await import(B + 'v2cap/lib/skills.js')
 const { ITEMS, STARTER_ITEMS, starterIdsOf } = await import(B + 'v2cap/lib/equipment.js')
-const { SPOTS, spotLvOf, enemyLevels } = await import(B + 'v2cap/lib/areas.js')
+const { SPOTS, spotLvOf, enemyLevels, recLvOf } = await import(B + 'v2cap/lib/areas.js')
 const { DAILY_TASKS } = await import(B + 'v2cap/lib/daily.js')
 
 const q = (s) => `'${String(s).replace(/'/g, "''")}'`
@@ -72,10 +72,10 @@ export const seeds = () => ({
   spots: [
     // ★消してから入れ直す（場所の数を変えたときに古い行が残らないように）。参照している外部キーは無い
     'delete from public.v2cap_spots;',
-    'insert into public.v2cap_spots (id, area, sub, area_name, name, exp_min, exp_max, gold_min, gold_max, lv_min, lv_max) values',
+    'insert into public.v2cap_spots (id, area, sub, area_name, name, exp_min, exp_max, gold_min, gold_max, lv_min, lv_max, rec_lv) values',
     SPOTS.map(s => {
       const [lo, hi] = spotLvOf(s.id)
-      return `  (${s.id}, ${s.area}, ${s.sub}, ${q(s.areaName)}, ${q(s.name)}, ${s.exp[0]}, ${s.exp[1]}, ${s.gold[0]}, ${s.gold[1]}, ${lo}, ${hi})`
+      return `  (${s.id}, ${s.area}, ${s.sub}, ${q(s.areaName)}, ${q(s.name)}, ${s.exp[0]}, ${s.exp[1]}, ${s.gold[0]}, ${s.gold[1]}, ${lo}, ${hi}, ${recLvOf(s.id)})`
     }).join(',\n') + ';',
   ].join('\n'),
   enemies: [

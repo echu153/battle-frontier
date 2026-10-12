@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../supabase'
 import { box, btn } from '../../v2/components/v2ui.js'
-import { FORTUNE_BY_NAME, canPray, remainUntilPray, prayExpOf, prayPctText } from '../lib/tree.js'
+import { FORTUNE_BY_NAME, canPray, remainUntilPray, prayExpOf } from '../lib/tree.js'
 import { jobUpHead, jobUpNote } from '../lib/jobs.js'
+import { recSpotOfLv, spotLabel } from '../lib/areas.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — ユグレシアの宝樹（1日1回祈る）
@@ -45,7 +46,7 @@ export default function V2capTree({ prof, onProfile }) {
       <div style={{ color:'#7fa6d0', fontSize:'10px', lineHeight:'1.8', marginBottom:'10px' }}>
         1日1回だけ祈れます。宝樹の返す言葉（大凶〜大吉）で、もらえる経験値が変わります
         （LV{prof.lv}なら 吉で <span style={{ color:'#ffcc00' }}>EXP +{kichi.toLocaleString()}</span>・
-        大吉で <span style={{ color:'#ffcc00' }}>EXP +{daikichi.toLocaleString()}</span>。基準は必要EXPの{prayPctText(prof.lv)}）。
+        大吉で <span style={{ color:'#ffcc00' }}>EXP +{daikichi.toLocaleString()}</span>。吉はLV{prof.lv}の推奨の場所「{spotLabel(recSpotOfLv(prof.lv))}」で10回出撃したくらい）。
         <br />日付が変わるのは日本時間の5時です。
       </div>
 
@@ -68,7 +69,7 @@ export default function V2capTree({ prof, onProfile }) {
               <div>{jobUpNote(prof.class, result.level)}</div>
             </div>
           )}
-          {(result.level?.learned || []).map(n => <div key={n} style={{ color:'#44ddff', fontSize:'11px', marginTop:'4px' }}>📖 スキル「{n}」を覚えた！</div>)}
+          {(result.level?.learned || []).map(n => <div key={n} style={{ color:'#44ddff', fontSize:'11px', marginTop:'4px' }}>📖 スキル「{n}」を覚えた！{(result.level?.set_added || []).includes(n) ? '（スキルセットの空き枠に入れた）' : ''}</div>)}
         </div>
       )}
 

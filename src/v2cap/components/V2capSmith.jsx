@@ -7,7 +7,7 @@ import { spotOf } from '../lib/areas.js'
 import { openUntilOf } from '../lib/sortie.js'
 import { canEquipType } from '../lib/jobs.js'
 import { wornIdsOf } from '../lib/loadout.js'
-import { powerAt, statsAt, effectPct } from '../lib/gear.js'
+import { powerAt, statsAt, effectPct, underLvPowerOf } from '../lib/gear.js'
 import {
   PLUS_MAX, plusOf, scrapNameOf, scrapOf, scrapAreaOf, dismantleGainOf, bulkPickable, enhanceCostOf, enhanceErrorOf,
   SCRAP_NAMES, SCRAP_YIELD, CRAFT_RARITIES, craftCostOf, craftErrorOf,
@@ -329,7 +329,7 @@ function ItemStats({ inv, item, pct }) {
   const power = powerAt(item, inv.ilv, plusOf(inv))
   return (
     <div style={{ fontSize:'10px', color: TEXT.sub, margin:'3px 0', display:'flex', gap:'8px', flexWrap:'wrap' }}>
-      <span>戦闘力 {power}{pct < 100 && <span style={{ color:'#ff8844' }}> → {Math.round(power * pct / 100)}（効果{pct}%）</span>}</span>
+      <span>戦闘力 {power}{pct < 100 && <span style={{ color:'#ff8844' }}> → {underLvPowerOf(power, pct)}（効果{pct}%）</span>}</span>
       <span>{statLine(statsAt(item, inv.ilv, pct, plusOf(inv)))}</span>
     </div>
   )

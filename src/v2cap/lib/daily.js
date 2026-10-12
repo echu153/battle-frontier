@@ -4,15 +4,17 @@
 // 【確定】2026-10-10 ユーザー指示「V2と一緒でデイリーミッションを追加したい、報酬は自分のレベルによって変わる」＋決めたこと：
 //   ・1日1組。**難易度はなし**（1種類）。「受注」してから進みを数える（受注する前にやったことは数えない）
 //   ・報酬は**受注した時点のLV**で決まる：
-//       EXP  … そのLVの必要EXP × %（LV1〜10は10%・11〜30は5%・31〜50は3%・51〜は1%）。端数は切り上げ（LV1でも1）。
-//               LV100は必要EXPが0なので0。EXPは戦闘と同じ扱い（いまの職業のClassEXPにも同じ量が入る）
+//       EXP  … 【確定】2026-10-12 ユーザー指示「後半で大きくもらいすぎないように調整してた、そのレベルの推奨エリアを10回出撃したときくらいの経験値にして」：
+//               **そのLVの推奨の場所（areas.js の recSpotOfLv）で10回出撃したくらい**＝ふつうの敵の1体あたりのEXPのまんなか×10（tenSortieExpOf）。
+//               前は「必要EXP × %（LV1〜10は10%・11〜30は5%・31〜50は3%・51〜は1%）」で、序盤はEXP+3など1戦ぶんしかなかった。
+//               EXPは戦闘と同じ扱い（いまの職業のClassEXPにも同じ量が入る）
 //       Gold … そのLV × 100
 //   ・日付が変わるのは日本時間の5時（今のⅡと同じ＝ src/v2/lib/daily.js の dayOf をそのまま使う）
 //   ・**ミッションの内容はあとで決める**（ユーザー指示）。それまでは仮の「出撃に10回勝つ」1つ（ユーザー決定）
 // ★数える権威はサーバー（出撃の精算が v2cap_daily_bump を呼ぶ）。受注・受け取りもサーバー（v2cap_daily_accept／_claim）。
 //   ここは表示と判定の写し。ミッションの一覧はSQLの種（v2cap_daily_tasks）を tools/v2cap-sql.mjs がここから作る
 // ============================================================
-import { needExp } from './level.js'
+import { tenSortieExpOf } from './areas.js'
 import { dayOf, isToday, nextResetAt, DAY_RESET_HOUR } from '../../v2/lib/daily.js'
 
 export { dayOf, isToday, nextResetAt, DAY_RESET_HOUR }
@@ -26,14 +28,12 @@ export const DAILY_TASKS = [
 export const DAILY_TASK_KEYS = DAILY_TASKS.map(t => t.key)
 
 // ===== 報酬 =====
-// EXPの%（受注した時点のLVで決まる）。[このLVまで, %]
-export const DAILY_EXP_PCT = [[10, 10], [30, 5], [50, 3], [Infinity, 1]]
-export const dailyPctOf = (lv) => DAILY_EXP_PCT.find(([max]) => Math.max(1, lv || 1) <= max)[1]
+// EXPはそのLVの推奨の場所で10回出撃したくらい（SQLの v2cap_daily_reward も v2cap_ten_sortie_exp で同じ）・Gold＝LV×100
+export const DAILY_SORTIES = 10
 export const DAILY_GOLD_PER_LV = 100
-// 切り上げは整数で計算する（SQLの v2cap_daily_reward と同じ：(必要EXP×% + 99) ÷ 100）
 export const dailyRewardOf = (lv) => {
   const l = Math.max(1, lv || 1)
-  return { exp: Math.floor((needExp(l) * dailyPctOf(l) + 99) / 100), gold: l * DAILY_GOLD_PER_LV }
+  return { exp: tenSortieExpOf(l), gold: l * DAILY_GOLD_PER_LV }
 }
 
 // ===== 今日の状態 =====

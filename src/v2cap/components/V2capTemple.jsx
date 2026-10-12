@@ -157,7 +157,7 @@ export default function V2capTemple({ prof, inventory, onProfile }) {
                       <div style={{ display:'flex', alignItems:'baseline', gap:'8px', marginBottom:'4px', flexWrap:'wrap' }}>
                         <span style={{ color: isNow ? '#ff88cc' : '#cfe2ff', fontSize:'14px' }}>{c.id}</span>
                         <span style={{ color: prof.jobs?.[c.id] ? '#ffcc00' : TEXT.sub, fontSize:'11px' }}>
-                          ClassLV{job.lv}{job.lv >= jobMaxOf(c.id) && <span style={{ color:'#ff8844' }}> MAX</span>}
+                          CLASS LV{job.lv}{job.lv >= jobMaxOf(c.id) && <span style={{ color:'#ff8844' }}> MAX</span>}
                         </span>
                         {isNow && <span style={{ color:'#ff88cc', fontSize:'10px', marginLeft:'auto' }}>いまのクラス</span>}
                       </div>
@@ -216,7 +216,7 @@ function ClassDetail({ cls, prof, inventory, busy, msg, error, gender, onGender,
           <span style={{ color, fontSize:'10px' }}>[{stageLabelOf(cls)}]</span>
           <span style={{ color: isNow ? '#ff88cc' : '#ffcc00', fontSize:'20px', letterSpacing:'2px' }}>{cls}</span>
           <span style={{ color: touched ? '#ffcc00' : TEXT.sub, fontSize:'12px' }}>
-            ClassLV{job.lv}／{max}{isMax && <span style={{ color:'#ff8844' }}> MAX</span>}
+            CLASS LV{job.lv}／{max}{isMax && <span style={{ color:'#ff8844' }}> MAX</span>}
           </span>
           {isNow && <span style={{ color:'#ff88cc', fontSize:'11px', marginLeft:'auto' }}>いまのクラス</span>}
         </div>
@@ -224,7 +224,7 @@ function ClassDetail({ cls, prof, inventory, busy, msg, error, gender, onGender,
         {touched && !isMax && (
           <div style={{ marginTop:'6px' }}>
             <div style={{ fontSize:'10px', display:'flex', justifyContent:'space-between', color:'#7fa6d0', marginBottom:'1px' }}>
-              <span>ClassEXP</span><span style={{ color:'#3399cc' }}>{job.exp.toLocaleString()}/{need.toLocaleString()}</span>
+              <span>CLASS EXP</span><span style={{ color:'#3399cc' }}>{job.exp.toLocaleString()}/{need.toLocaleString()}</span>
             </div>
             <div style={{ background:'#001028', height:'4px', border:'1px solid #002244' }}>
               <div style={{ height:'100%', width:`${Math.min(100, (job.exp / Math.max(1, need)) * 100)}%`, background:'linear-gradient(90deg,#001,#3399cc)' }} />
@@ -248,7 +248,7 @@ function ClassDetail({ cls, prof, inventory, busy, msg, error, gender, onGender,
             const has = learned.has(s.name)
             return (
               <div key={s.name} style={{ background:'#000818', border:'1px solid #002244', padding:'4px 7px', fontSize:'11px', display:'flex', gap:'6px', alignItems:'center' }}>
-                <span style={{ color: has ? '#44ff88' : TEXT.label, fontSize:'10px', flexShrink:0, width:'64px' }}>ClassLV{at[i]}</span>
+                <span style={{ color: has ? '#44ff88' : TEXT.label, fontSize:'10px', flexShrink:0, width:'72px' }}>CLASS LV{at[i]}</span>
                 <V2SkillTip skill={s} alignRight={i % 2 === 1} style={{ display:'block', flex:1, minWidth:0 }}>
                   <span style={{ color: has ? KIND_COLOR[s.kind] : TEXT.sub }}>{s.name}</span>
                 </V2SkillTip>
@@ -269,9 +269,9 @@ function ClassDetail({ cls, prof, inventory, busy, msg, error, gender, onGender,
       <div style={section}>
         <div style={head}>📈 クラスのステ（このクラスに就いている間だけ）</div>
         <div style={{ fontSize:'11px', lineHeight:1.8 }}>
-          <div><span style={label}>ClassLVが上がるたびに：</span><span style={{ color:'#cfe2ff' }}>必ず HP+{hpmp.hp}・MP+{hpmp.mp}、ほかに{STAGES[stage]?.perLv || 0}点</span></div>
-          <div><span style={label}>いま（ClassLV{job.lv}）：</span><span style={{ color:'#44ff88' }}>{jobBonusText(cls, job.lv) || 'まだなし'}</span></div>
-          {!isMax && <div><span style={label}>ClassLV{max}で：</span><span style={{ color:'#cfe2ff' }}>{jobBonusText(cls, max)}</span></div>}
+          <div><span style={label}>CLASS LVが上がるたびに：</span><span style={{ color:'#cfe2ff' }}>必ず HP+{hpmp.hp}・MP+{hpmp.mp}、ほかに{STAGES[stage]?.perLv || 0}点</span></div>
+          <div><span style={label}>いま（CLASS LV{job.lv}）：</span><span style={{ color:'#44ff88' }}>{jobBonusText(cls, job.lv) || 'まだなし'}</span></div>
+          {!isMax && <div><span style={label}>CLASS LV{max}で：</span><span style={{ color:'#cfe2ff' }}>{jobBonusText(cls, max)}</span></div>}
         </div>
       </div>
 
@@ -288,7 +288,7 @@ function ClassDetail({ cls, prof, inventory, busy, msg, error, gender, onGender,
             )}
             {nexts.length > 0 && (
               <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap' }}>
-                <span style={label}>ClassLV30で就けるクラス：</span>
+                <span style={label}>CLASS LV30で就けるクラス：</span>
                 {nexts.map(n => <button key={n} onClick={() => onOpen(n)} style={miniBtn(stageColorOf(n))}>{n}</button>)}
               </div>
             )}
@@ -300,7 +300,7 @@ function ClassDetail({ cls, prof, inventory, busy, msg, error, gender, onGender,
       <div style={{ ...section, borderColor: isNow ? '#0044aa' : '#ff88cc' }}>
         {!isNow && !miss && (
           <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.8, marginBottom:'8px' }}>
-            LVはそのまま、ClassLVは{job.lv}から続きます。スキルセットは{cls}のものに切り替わります（{prof.class}の編成は残ります）。
+            LVはそのまま、CLASS LVは{job.lv}から続きます。スキルセットは{cls}のものに切り替わります（{prof.class}の編成は残ります）。
             {dropWeapon && <span style={{ color:'#ff8844' }}> いま着けている{wornWeapon.name}（{wornWeapon.type}）は外れます。</span>}
           </div>
         )}

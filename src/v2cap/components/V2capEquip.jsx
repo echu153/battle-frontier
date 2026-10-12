@@ -4,7 +4,7 @@ import { box, miniBtn, TEXT } from '../../v2/components/v2ui.js'
 import { ITEM_BY_ID, SLOTS, SLOT_LABEL, ARMOR_EFFECT, slotsFor, kindLabel } from '../lib/equipment.js'
 import { canEquipType, weaponsOf } from '../lib/jobs.js'
 import { equippedItems, wornIdsOf } from '../lib/loadout.js'
-import { powerAt, statsAt, effectPct } from '../lib/gear.js'
+import { powerAt, statsAt, effectPct, underLvPowerOf } from '../lib/gear.js'
 import { PLUS_MAX, plusOf } from '../lib/smith.js'
 import { DROP_CHANCE } from '../lib/sortie.js'
 import { statLine, nameColor, useGearRows } from './v2capGearView.js'
@@ -115,7 +115,7 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
                   <span style={{ color: inv.ilv > prof.lv ? '#ff8844' : '#cfe2ff', fontSize:'11px' }}>LV{inv.ilv}</span>
                 </div>
                 <div style={{ fontSize:'10px', color: TEXT.sub, margin:'3px 0', display:'flex', gap:'8px', flexWrap:'wrap' }}>
-                  <span>戦闘力 {power}{pct < 100 && <span style={{ color:'#ff8844' }}> → {Math.round(power * pct / 100)}（効果{pct}%・必要LVまであと{inv.ilv - prof.lv}）</span>}</span>
+                  <span>戦闘力 {power}{pct < 100 && <span style={{ color:'#ff8844' }}> → {underLvPowerOf(power, pct)}（効果{pct}%・必要LVまであと{inv.ilv - prof.lv}）</span>}</span>
                   <span>{statLine(statsAt(item, inv.ilv, pct, plus))}</span>
                 </div>
                 <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', alignItems:'center' }}>

@@ -130,3 +130,38 @@ export const defaultSetOf = (cls, learned = [], maxMp = 0) => {
   }
   return set
 }
+
+// ===== 覚えた技を編成の空き枠へ入れる =====
+// 【確定】2026-10-12 ユーザー指示「スキルスロット余ってる場合はうめるようにして」：
+//   names（覚えた順）のうち、その職業で使える技で、まだ編成に無いものを、空き枠（5枠）に入る数だけ・最大MPに収まるなら1回で入れる
+//   （収まらない技はとばして次へ）。そのあと残りのMPで、入れた技に前から1回ずつ足す（1枠最大5回＝ defaultSetOf と同じ）。
+//   前から入っている技にはさわらない
+//   ⚠最初は「入れた技に残りのMPで使えるだけ回数を付ける」形で、1つ目の技がMPを使い切って次の技が入らなかった（PGlite で見つけた）
+// lineage … その職業で使える技の職業（jobs.js の lineageOf）／maxMp … 最大MP
+// ★サーバーの v2cap_fill_set と同じ規則（覚えたとき＝v2cap_apply_exp と、今いるキャラを一度だけ埋める移行で使う）
+export const fillSetOf = (set, names = [], { lineage = [], maxMp = 0 } = {}) => {
+  const out = (Array.isArray(set) ? set : []).map(e => ({ ...e }))
+  const added = []
+  let cost = setMpCost(out)
+  for (const name of names) {
+    if (out.length >= SKILL_SET_SLOTS) break
+    const s = SKILL_BY_NAME[name]
+    if (!s || isPassive(s) || !lineage.includes(s.cls) || out.some(e => e.name === name)) continue
+    if (cost + s.mp > maxMp) continue
+    const e = { name, uses: 1 }
+    out.push(e)
+    added.push(e)
+    cost += s.mp
+  }
+  for (let grew = true; grew;) {
+    grew = false
+    for (const e of added) {
+      const mp = SKILL_BY_NAME[e.name].mp
+      if (e.uses >= DEFAULT_USES_MAX || cost + mp > maxMp) continue
+      e.uses += 1
+      cost += mp
+      grew = true
+    }
+  }
+  return out
+}

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { INITIAL_STATS, calcPower } from '../../v2/lib/stats.js'
 import { ITEMS, ITEM_BY_ID, STARTER_ITEMS, AREA_COUNT, itemOf } from './equipment.js'
 import { AREA_LIST } from './areas.js'
-import { powerAt, statsAt, effectPct } from './gear.js'
+import { powerAt, statsAt, effectPct, underLvPowerOf } from './gear.js'
 import { statBreakdown } from './loadout.js'
 import {
   PLUS_MAX, plusOf, plusMultOf, plusLabel, SCRAP_NAMES, scrapNameOf, scrapOf, SCRAP_YIELD, scrapYieldOf,
@@ -90,7 +90,7 @@ test('強化した強さは必要LVの弱まり方の前に掛ける（ステの
     for (const plus of [0, 4, 10]) {
       for (const [lv, pct] of [[item.lv, 100], [item.lv - 10, effectPct(item.lv, item.lv - 10)]]) {
         const s = statsAt(item, item.lv, pct, plus)
-        assert.equal(Object.values(s).reduce((a, b) => a + b, 0), Math.round(powerAt(item, item.lv, plus) * pct / 100), `${item.id} +${plus} LV${lv}`)
+        assert.equal(Object.values(s).reduce((a, b) => a + b, 0), underLvPowerOf(powerAt(item, item.lv, plus), pct), `${item.id} +${plus} LV${lv}`)
       }
     }
   }
