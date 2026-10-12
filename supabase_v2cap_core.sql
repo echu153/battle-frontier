@@ -5101,173 +5101,499 @@ grant execute on function public.v2cap_roulette_spin(jsonb) to authenticated;
 -- ============================================================
 -- 【確定】2026-10-13 ユーザー指示（AION2 のダエバニオンを参考に）＋選んだこと（設計 §4-2・正は src/v2cap/lib/ascension.js）：
 --   ・CLASS LVが1上がるごとにAPを1（職業ごと）。どのマスも1AP。盤面は職業ごとで、効くのはその職業でいる間だけ
---   ・枝分かれの木：起点から4本の道。道は起点の側から順に開く＝**道ごとに「何マス開いたか」だけ**を持てば足りる
---     （v2cap_profiles.ascension ＝ {"剣士":[5,3,0,12]}）
+--   ・同じ日に「もっとツリーっぽく」「アイオン2みたいにまばらに配置（決まった道がなく、欲しい能力までどのルートで届かせるか）」：
+--     起点から4方向に枝分かれした木。**起点か開いたマスにつながったマスだけ開ける**。形は段階ごとに1つ（中身は職業ごと）
+--     ＝プレイヤーが持つのは**開いたマスの番号**（v2cap_profiles.ascension ＝ {"剣士":[1,2,5]}）
 --   ・振り直しは LV×100 Gold（その職業の盤面を全部戻してAPを返す）
--- ★サーバーが数えるのは「APが足りるか」と「スキル編成の最大MP（MPの道のマス）」だけ。
+-- ★サーバーが数えるのは「つながっているか」「APが足りるか」と「スキル編成の最大MP（MPのマス）」だけ。
 --   ステ・スキルの強さは戦闘（画面側の src/v2cap/lib/loadout.js）で効く（サーバーは戦闘を計算しない）
--- ★道の形（マスの数・MPのマス・大マスの%）は ascension.js の treeOf から tools/v2cap-sql.mjs が種を作る（手で書き写さない）
+-- ★盤面の形（v2cap_asc_nodes）と MPのマス（v2cap_asc_mp）の種は ascension.js から tools/v2cap-sql.mjs が作る（手で書き写さない）
 alter table public.v2cap_profiles add column if not exists ascension jsonb not null default '{}'::jsonb;
 
--- 道の種。mp … マスごとに上がるMP（起点の側から。MPの道だけ持つ・ほかの道は空）／big_pct … 道の終わりの大マス（道のステ+%）
-create table if not exists public.v2cap_asc_roads (
-  cls     text not null,
-  road    int  not null,
-  stat    text not null,
-  len     int  not null,
-  mp      int[] not null default '{}',
-  big_pct int  not null default 0,
-  primary key (cls, road)
+-- ---- 最初の版（4本の道）を片づける ----
+-- 同じ日の最初の版は「道ごとに何マス開いたか」で持っていた＝マスの番号で持つ今の形では読めないので、
+-- **一度だけ**全員の盤面を空にしてAPを返す（印 asc_graph_20261013・2回目以降に流し直しても消えない）
+drop function if exists public.v2cap_ascend(text, int, int);
+drop function if exists public.v2cap_asc_depth(jsonb, text, int, int);
+drop table if exists public.v2cap_asc_roads;
+do $$
+begin
+  if not exists (select 1 from public.v2cap_migrations where key = 'asc_graph_20261013') then
+    update public.v2cap_profiles set ascension = '{}'::jsonb where ascension <> '{}'::jsonb;
+    insert into public.v2cap_migrations (key) values ('asc_graph_20261013');
+  end if;
+end $$;
+
+-- 盤面の形（段階ごと）：マスの番号とつながり。0は起点
+create table if not exists public.v2cap_asc_nodes (
+  stage text not null,
+  id    int  not null,
+  links int[] not null default '{}',
+  primary key (stage, id)
 );
-alter table public.v2cap_asc_roads enable row level security;
-drop policy if exists v2cap_asc_roads_read on public.v2cap_asc_roads;
-create policy v2cap_asc_roads_read on public.v2cap_asc_roads for select to authenticated using (true);
-revoke all on table public.v2cap_asc_roads from anon;
-grant select on table public.v2cap_asc_roads to authenticated;
+alter table public.v2cap_asc_nodes enable row level security;
+drop policy if exists v2cap_asc_nodes_read on public.v2cap_asc_nodes;
+create policy v2cap_asc_nodes_read on public.v2cap_asc_nodes for select to authenticated using (true);
+revoke all on table public.v2cap_asc_nodes from anon;
+grant select on table public.v2cap_asc_nodes to authenticated;
 
--- @@seed:asc_roads
-delete from public.v2cap_asc_roads;
-insert into public.v2cap_asc_roads (cls, road, stat, len, mp, big_pct) values
-  ('剣士', 0, 'str', 14, '{}'::int[], 5),
-  ('剣士', 1, 'dex', 14, '{}'::int[], 5),
-  ('剣士', 2, 'agi', 14, '{}'::int[], 5),
-  ('剣士', 3, 'vit', 14, '{}'::int[], 5),
-  ('戦士', 0, 'str', 14, '{}'::int[], 5),
-  ('戦士', 1, 'vit', 14, '{}'::int[], 5),
-  ('戦士', 2, 'hp', 14, '{}'::int[], 5),
-  ('戦士', 3, 'dex', 14, '{}'::int[], 5),
-  ('槍使い', 0, 'str', 14, '{}'::int[], 5),
-  ('槍使い', 1, 'dex', 14, '{}'::int[], 5),
-  ('槍使い', 2, 'agi', 14, '{}'::int[], 5),
-  ('槍使い', 3, 'vit', 14, '{}'::int[], 5),
-  ('格闘家', 0, 'str', 14, '{}'::int[], 5),
-  ('格闘家', 1, 'agi', 14, '{}'::int[], 5),
-  ('格闘家', 2, 'hp', 14, '{}'::int[], 5),
-  ('格闘家', 3, 'vit', 14, '{}'::int[], 5),
-  ('盗賊', 0, 'agi', 14, '{}'::int[], 5),
-  ('盗賊', 1, 'str', 14, '{}'::int[], 5),
-  ('盗賊', 2, 'dex', 14, '{}'::int[], 5),
-  ('盗賊', 3, 'luk', 14, '{}'::int[], 5),
-  ('弓使い', 0, 'agi', 14, '{}'::int[], 5),
-  ('弓使い', 1, 'dex', 14, '{}'::int[], 5),
-  ('弓使い', 2, 'str', 14, '{}'::int[], 5),
-  ('弓使い', 3, 'hp', 14, '{}'::int[], 5),
-  ('銃士', 0, 'dex', 14, '{}'::int[], 5),
-  ('銃士', 1, 'agi', 14, '{}'::int[], 5),
-  ('銃士', 2, 'str', 14, '{}'::int[], 5),
-  ('銃士', 3, 'luk', 14, '{}'::int[], 5),
-  ('魔法使い', 0, 'int_stat', 14, '{}'::int[], 5),
-  ('魔法使い', 1, 'mp', 14, '{6,6,6,6,9,9,0,9,9,12,12,12,12,0}'::int[], 5),
-  ('魔法使い', 2, 'agi', 14, '{}'::int[], 5),
-  ('魔法使い', 3, 'hp', 14, '{}'::int[], 5),
-  ('呪術師', 0, 'int_stat', 14, '{}'::int[], 5),
-  ('呪術師', 1, 'mp', 14, '{6,6,6,6,9,9,0,9,9,12,12,12,12,0}'::int[], 5),
-  ('呪術師', 2, 'dex', 14, '{}'::int[], 5),
-  ('呪術師', 3, 'luk', 14, '{}'::int[], 5),
-  ('僧侶', 0, 'int_stat', 14, '{}'::int[], 5),
-  ('僧侶', 1, 'vit', 14, '{}'::int[], 5),
-  ('僧侶', 2, 'hp', 14, '{}'::int[], 5),
-  ('僧侶', 3, 'mp', 14, '{6,6,6,6,9,9,0,9,9,12,12,12,12,0}'::int[], 5),
-  ('薬師', 0, 'int_stat', 14, '{}'::int[], 5),
-  ('薬師', 1, 'dex', 14, '{}'::int[], 5),
-  ('薬師', 2, 'mp', 14, '{6,6,6,6,9,9,0,9,9,12,12,12,12,0}'::int[], 5),
-  ('薬師', 3, 'hp', 14, '{}'::int[], 5),
-  ('狂戦士', 0, 'str', 24, '{}'::int[], 5),
-  ('狂戦士', 1, 'hp', 24, '{}'::int[], 5),
-  ('狂戦士', 2, 'agi', 24, '{}'::int[], 5),
-  ('狂戦士', 3, 'vit', 24, '{}'::int[], 5),
-  ('重戦士', 0, 'vit', 24, '{}'::int[], 5),
-  ('重戦士', 1, 'hp', 24, '{}'::int[], 5),
-  ('重戦士', 2, 'str', 24, '{}'::int[], 5),
-  ('重戦士', 3, 'dex', 24, '{}'::int[], 5),
-  ('竜騎士', 0, 'str', 24, '{}'::int[], 5),
-  ('竜騎士', 1, 'vit', 24, '{}'::int[], 5),
-  ('竜騎士', 2, 'dex', 24, '{}'::int[], 5),
-  ('竜騎士', 3, 'agi', 24, '{}'::int[], 5),
-  ('槍術士', 0, 'str', 24, '{}'::int[], 5),
-  ('槍術士', 1, 'agi', 24, '{}'::int[], 5),
-  ('槍術士', 2, 'dex', 24, '{}'::int[], 5),
-  ('槍術士', 3, 'vit', 24, '{}'::int[], 5),
-  ('体術師', 0, 'agi', 24, '{}'::int[], 5),
-  ('体術師', 1, 'str', 24, '{}'::int[], 5),
-  ('体術師', 2, 'dex', 24, '{}'::int[], 5),
-  ('体術師', 3, 'hp', 24, '{}'::int[], 5),
-  ('気功師', 0, 'str', 24, '{}'::int[], 5),
-  ('気功師', 1, 'dex', 24, '{}'::int[], 5),
-  ('気功師', 2, 'vit', 24, '{}'::int[], 5),
-  ('気功師', 3, 'agi', 24, '{}'::int[], 5),
-  ('暗殺者', 0, 'agi', 24, '{}'::int[], 5),
-  ('暗殺者', 1, 'str', 24, '{}'::int[], 5),
-  ('暗殺者', 2, 'luk', 24, '{}'::int[], 5),
-  ('暗殺者', 3, 'dex', 24, '{}'::int[], 5),
-  ('忍者', 0, 'agi', 24, '{}'::int[], 5),
-  ('忍者', 1, 'dex', 24, '{}'::int[], 5),
-  ('忍者', 2, 'str', 24, '{}'::int[], 5),
-  ('忍者', 3, 'hp', 24, '{}'::int[], 5),
-  ('狩人', 0, 'dex', 24, '{}'::int[], 5),
-  ('狩人', 1, 'agi', 24, '{}'::int[], 5),
-  ('狩人', 2, 'str', 24, '{}'::int[], 5),
-  ('狩人', 3, 'luk', 24, '{}'::int[], 5),
-  ('狙撃手', 0, 'dex', 24, '{}'::int[], 5),
-  ('狙撃手', 1, 'luk', 24, '{}'::int[], 5),
-  ('狙撃手', 2, 'agi', 24, '{}'::int[], 5),
-  ('狙撃手', 3, 'str', 24, '{}'::int[], 5),
-  ('魔銃士', 0, 'str', 24, '{}'::int[], 5),
-  ('魔銃士', 1, 'int_stat', 24, '{}'::int[], 5),
-  ('魔銃士', 2, 'dex', 24, '{}'::int[], 5),
-  ('魔銃士', 3, 'agi', 24, '{}'::int[], 5),
-  ('砲撃士', 0, 'dex', 24, '{}'::int[], 5),
-  ('砲撃士', 1, 'str', 24, '{}'::int[], 5),
-  ('砲撃士', 2, 'vit', 24, '{}'::int[], 5),
-  ('砲撃士', 3, 'hp', 24, '{}'::int[], 5),
-  ('魔導士', 0, 'int_stat', 24, '{}'::int[], 5),
-  ('魔導士', 1, 'mp', 24, '{9,9,9,9,9,9,9,0,12,12,12,12,12,12,12,0,15,15,15,15,15,15,15,0}'::int[], 5),
-  ('魔導士', 2, 'agi', 24, '{}'::int[], 5),
-  ('魔導士', 3, 'hp', 24, '{}'::int[], 5),
-  ('時魔導士', 0, 'int_stat', 24, '{}'::int[], 5),
-  ('時魔導士', 1, 'agi', 24, '{}'::int[], 5),
-  ('時魔導士', 2, 'mp', 24, '{9,9,9,9,9,9,9,0,12,12,12,12,12,12,12,0,15,15,15,15,15,15,15,0}'::int[], 5),
-  ('時魔導士', 3, 'hp', 24, '{}'::int[], 5),
-  ('死霊術師', 0, 'int_stat', 24, '{}'::int[], 5),
-  ('死霊術師', 1, 'mp', 24, '{9,9,9,9,9,9,9,0,12,12,12,12,12,12,12,0,15,15,15,15,15,15,15,0}'::int[], 5),
-  ('死霊術師', 2, 'hp', 24, '{}'::int[], 5),
-  ('死霊術師', 3, 'vit', 24, '{}'::int[], 5),
-  ('陰陽師', 0, 'int_stat', 24, '{}'::int[], 5),
-  ('陰陽師', 1, 'mp', 24, '{9,9,9,9,9,9,9,0,12,12,12,12,12,12,12,0,15,15,15,15,15,15,15,0}'::int[], 5),
-  ('陰陽師', 2, 'dex', 24, '{}'::int[], 5),
-  ('陰陽師', 3, 'agi', 24, '{}'::int[], 5),
-  ('司祭', 0, 'int_stat', 24, '{}'::int[], 5),
-  ('司祭', 1, 'hp', 24, '{}'::int[], 5),
-  ('司祭', 2, 'vit', 24, '{}'::int[], 5),
-  ('司祭', 3, 'mp', 24, '{9,9,9,9,9,9,9,0,12,12,12,12,12,12,12,0,15,15,15,15,15,15,15,0}'::int[], 5),
-  ('祓魔師', 0, 'int_stat', 24, '{}'::int[], 5),
-  ('祓魔師', 1, 'mp', 24, '{9,9,9,9,9,9,9,0,12,12,12,12,12,12,12,0,15,15,15,15,15,15,15,0}'::int[], 5),
-  ('祓魔師', 2, 'agi', 24, '{}'::int[], 5),
-  ('祓魔師', 3, 'vit', 24, '{}'::int[], 5),
-  ('錬金術師', 0, 'int_stat', 24, '{}'::int[], 5),
-  ('錬金術師', 1, 'dex', 24, '{}'::int[], 5),
-  ('錬金術師', 2, 'mp', 24, '{9,9,9,9,9,9,9,0,12,12,12,12,12,12,12,0,15,15,15,15,15,15,15,0}'::int[], 5),
-  ('錬金術師', 3, 'hp', 24, '{}'::int[], 5),
-  ('霊薬師', 0, 'int_stat', 24, '{}'::int[], 5),
-  ('霊薬師', 1, 'mp', 24, '{9,9,9,9,9,9,9,0,12,12,12,12,12,12,12,0,15,15,15,15,15,15,15,0}'::int[], 5),
-  ('霊薬師', 2, 'vit', 24, '{}'::int[], 5),
-  ('霊薬師', 3, 'hp', 24, '{}'::int[], 5);
--- @@end:asc_roads
+-- スキル編成の最大MPに入るマス（職業ごと）：MPの小マス（mp＝上がるMP）・MPの大マス（pct＝MP+%）
+create table if not exists public.v2cap_asc_mp (
+  cls text not null,
+  id  int  not null,
+  mp  int  not null default 0,
+  pct int  not null default 0,
+  primary key (cls, id)
+);
+alter table public.v2cap_asc_mp enable row level security;
+drop policy if exists v2cap_asc_mp_read on public.v2cap_asc_mp;
+create policy v2cap_asc_mp_read on public.v2cap_asc_mp for select to authenticated using (true);
+revoke all on table public.v2cap_asc_mp from anon;
+grant select on table public.v2cap_asc_mp to authenticated;
 
--- その道を何マス開いたか（0〜len に収める・形が違えば0）。ascension.js の ascStateOf
-create or replace function public.v2cap_asc_depth(p_asc jsonb, p_cls text, p_road int, p_len int)
-returns int language sql immutable set search_path = public as $$
-  select least(greatest(coalesce(p_len, 0), 0), greatest(0,
-    case when jsonb_typeof(coalesce(p_asc, '{}'::jsonb) -> p_cls -> p_road) = 'number'
-         then floor((p_asc -> p_cls ->> p_road)::numeric)::int else 0 end))
+-- @@seed:asc_nodes
+delete from public.v2cap_asc_nodes;
+insert into public.v2cap_asc_nodes (stage, id, links) values
+  ('shoki', 0, '{1,15,29,43}'::int[]),
+  ('shoki', 1, '{0,2}'::int[]),
+  ('shoki', 2, '{1,3,4}'::int[]),
+  ('shoki', 3, '{2,11,50}'::int[]),
+  ('shoki', 4, '{2,5}'::int[]),
+  ('shoki', 5, '{4,6}'::int[]),
+  ('shoki', 6, '{5,7,8}'::int[]),
+  ('shoki', 7, '{6,10}'::int[]),
+  ('shoki', 8, '{6,9,17}'::int[]),
+  ('shoki', 9, '{8,25}'::int[]),
+  ('shoki', 10, '{7,13}'::int[]),
+  ('shoki', 11, '{3,12,14,51}'::int[]),
+  ('shoki', 12, '{11}'::int[]),
+  ('shoki', 13, '{10}'::int[]),
+  ('shoki', 14, '{11}'::int[]),
+  ('shoki', 15, '{0,16}'::int[]),
+  ('shoki', 16, '{15,17,18}'::int[]),
+  ('shoki', 17, '{8,16,25}'::int[]),
+  ('shoki', 18, '{16,19}'::int[]),
+  ('shoki', 19, '{18,20}'::int[]),
+  ('shoki', 20, '{19,21,22}'::int[]),
+  ('shoki', 21, '{20,24}'::int[]),
+  ('shoki', 22, '{20,23,31}'::int[]),
+  ('shoki', 23, '{22,39}'::int[]),
+  ('shoki', 24, '{21,27}'::int[]),
+  ('shoki', 25, '{9,17,26,28}'::int[]),
+  ('shoki', 26, '{25}'::int[]),
+  ('shoki', 27, '{24}'::int[]),
+  ('shoki', 28, '{25}'::int[]),
+  ('shoki', 29, '{0,30}'::int[]),
+  ('shoki', 30, '{29,31,32}'::int[]),
+  ('shoki', 31, '{22,30,39}'::int[]),
+  ('shoki', 32, '{30,33}'::int[]),
+  ('shoki', 33, '{32,34}'::int[]),
+  ('shoki', 34, '{33,35,36}'::int[]),
+  ('shoki', 35, '{34,38}'::int[]),
+  ('shoki', 36, '{34,37,45}'::int[]),
+  ('shoki', 37, '{36,53}'::int[]),
+  ('shoki', 38, '{35,41}'::int[]),
+  ('shoki', 39, '{23,31,40,42}'::int[]),
+  ('shoki', 40, '{39}'::int[]),
+  ('shoki', 41, '{38}'::int[]),
+  ('shoki', 42, '{39}'::int[]),
+  ('shoki', 43, '{0,44}'::int[]),
+  ('shoki', 44, '{43,45,46}'::int[]),
+  ('shoki', 45, '{36,44,53}'::int[]),
+  ('shoki', 46, '{44,47}'::int[]),
+  ('shoki', 47, '{46,48}'::int[]),
+  ('shoki', 48, '{47,49,50}'::int[]),
+  ('shoki', 49, '{48,52}'::int[]),
+  ('shoki', 50, '{3,48,51}'::int[]),
+  ('shoki', 51, '{11,50}'::int[]),
+  ('shoki', 52, '{49,55}'::int[]),
+  ('shoki', 53, '{37,45,54,56}'::int[]),
+  ('shoki', 54, '{53}'::int[]),
+  ('shoki', 55, '{52}'::int[]),
+  ('shoki', 56, '{53}'::int[]),
+  ('ichiji', 0, '{1,25,49,73}'::int[]),
+  ('ichiji', 1, '{0,2}'::int[]),
+  ('ichiji', 2, '{1,3,6}'::int[]),
+  ('ichiji', 3, '{2,4,90}'::int[]),
+  ('ichiji', 4, '{3,5,94}'::int[]),
+  ('ichiji', 5, '{4,7,8}'::int[]),
+  ('ichiji', 6, '{2}'::int[]),
+  ('ichiji', 7, '{5}'::int[]),
+  ('ichiji', 8, '{5,9}'::int[]),
+  ('ichiji', 9, '{8,10,11}'::int[]),
+  ('ichiji', 10, '{9,16}'::int[]),
+  ('ichiji', 11, '{9,12}'::int[]),
+  ('ichiji', 12, '{11,13}'::int[]),
+  ('ichiji', 13, '{12,14}'::int[]),
+  ('ichiji', 14, '{13,15,19}'::int[]),
+  ('ichiji', 15, '{14,17}'::int[]),
+  ('ichiji', 16, '{10,18}'::int[]),
+  ('ichiji', 17, '{15,20}'::int[]),
+  ('ichiji', 18, '{16,22,27}'::int[]),
+  ('ichiji', 19, '{14}'::int[]),
+  ('ichiji', 20, '{17,21}'::int[]),
+  ('ichiji', 21, '{20,23}'::int[]),
+  ('ichiji', 22, '{18,24,28}'::int[]),
+  ('ichiji', 23, '{21}'::int[]),
+  ('ichiji', 24, '{22}'::int[]),
+  ('ichiji', 25, '{0,26}'::int[]),
+  ('ichiji', 26, '{25,27,30}'::int[]),
+  ('ichiji', 27, '{18,26,28}'::int[]),
+  ('ichiji', 28, '{22,27,29}'::int[]),
+  ('ichiji', 29, '{28,31,32}'::int[]),
+  ('ichiji', 30, '{26}'::int[]),
+  ('ichiji', 31, '{29}'::int[]),
+  ('ichiji', 32, '{29,33}'::int[]),
+  ('ichiji', 33, '{32,34,35}'::int[]),
+  ('ichiji', 34, '{33,40}'::int[]),
+  ('ichiji', 35, '{33,36}'::int[]),
+  ('ichiji', 36, '{35,37}'::int[]),
+  ('ichiji', 37, '{36,38}'::int[]),
+  ('ichiji', 38, '{37,39,43}'::int[]),
+  ('ichiji', 39, '{38,41}'::int[]),
+  ('ichiji', 40, '{34,42}'::int[]),
+  ('ichiji', 41, '{39,44}'::int[]),
+  ('ichiji', 42, '{40,46,51}'::int[]),
+  ('ichiji', 43, '{38}'::int[]),
+  ('ichiji', 44, '{41,45}'::int[]),
+  ('ichiji', 45, '{44,47}'::int[]),
+  ('ichiji', 46, '{42,48,52}'::int[]),
+  ('ichiji', 47, '{45}'::int[]),
+  ('ichiji', 48, '{46}'::int[]),
+  ('ichiji', 49, '{0,50}'::int[]),
+  ('ichiji', 50, '{49,51,54}'::int[]),
+  ('ichiji', 51, '{42,50,52}'::int[]),
+  ('ichiji', 52, '{46,51,53}'::int[]),
+  ('ichiji', 53, '{52,55,56}'::int[]),
+  ('ichiji', 54, '{50}'::int[]),
+  ('ichiji', 55, '{53}'::int[]),
+  ('ichiji', 56, '{53,57}'::int[]),
+  ('ichiji', 57, '{56,58,59}'::int[]),
+  ('ichiji', 58, '{57,64}'::int[]),
+  ('ichiji', 59, '{57,60}'::int[]),
+  ('ichiji', 60, '{59,61}'::int[]),
+  ('ichiji', 61, '{60,62}'::int[]),
+  ('ichiji', 62, '{61,63,67}'::int[]),
+  ('ichiji', 63, '{62,65}'::int[]),
+  ('ichiji', 64, '{58,66}'::int[]),
+  ('ichiji', 65, '{63,68}'::int[]),
+  ('ichiji', 66, '{64,70,75}'::int[]),
+  ('ichiji', 67, '{62}'::int[]),
+  ('ichiji', 68, '{65,69}'::int[]),
+  ('ichiji', 69, '{68,71}'::int[]),
+  ('ichiji', 70, '{66,72,76}'::int[]),
+  ('ichiji', 71, '{69}'::int[]),
+  ('ichiji', 72, '{70}'::int[]),
+  ('ichiji', 73, '{0,74}'::int[]),
+  ('ichiji', 74, '{73,75,78}'::int[]),
+  ('ichiji', 75, '{66,74,76}'::int[]),
+  ('ichiji', 76, '{70,75,77}'::int[]),
+  ('ichiji', 77, '{76,79,80}'::int[]),
+  ('ichiji', 78, '{74}'::int[]),
+  ('ichiji', 79, '{77}'::int[]),
+  ('ichiji', 80, '{77,81}'::int[]),
+  ('ichiji', 81, '{80,82,83}'::int[]),
+  ('ichiji', 82, '{81,88}'::int[]),
+  ('ichiji', 83, '{81,84}'::int[]),
+  ('ichiji', 84, '{83,85}'::int[]),
+  ('ichiji', 85, '{84,86}'::int[]),
+  ('ichiji', 86, '{85,87,91}'::int[]),
+  ('ichiji', 87, '{86,89}'::int[]),
+  ('ichiji', 88, '{82,90}'::int[]),
+  ('ichiji', 89, '{87,92}'::int[]),
+  ('ichiji', 90, '{3,88,94}'::int[]),
+  ('ichiji', 91, '{86}'::int[]),
+  ('ichiji', 92, '{89,93}'::int[]),
+  ('ichiji', 93, '{92,95}'::int[]),
+  ('ichiji', 94, '{4,90,96}'::int[]),
+  ('ichiji', 95, '{93}'::int[]),
+  ('ichiji', 96, '{94}'::int[]);
+-- @@end:asc_nodes
+
+-- @@seed:asc_mp
+delete from public.v2cap_asc_mp;
+insert into public.v2cap_asc_mp (cls, id, mp, pct) values
+  ('剣士', 16, 6, 0),
+  ('剣士', 38, 12, 0),
+  ('剣士', 47, 9, 0),
+  ('戦士', 17, 6, 0),
+  ('戦士', 25, 9, 0),
+  ('戦士', 53, 9, 0),
+  ('槍使い', 19, 9, 0),
+  ('槍使い', 24, 12, 0),
+  ('槍使い', 45, 6, 0),
+  ('格闘家', 7, 12, 0),
+  ('格闘家', 24, 12, 0),
+  ('格闘家', 50, 9, 0),
+  ('盗賊', 11, 9, 0),
+  ('盗賊', 30, 6, 0),
+  ('盗賊', 45, 6, 0),
+  ('弓使い', 19, 9, 0),
+  ('弓使い', 44, 6, 0),
+  ('弓使い', 50, 9, 0),
+  ('銃士', 35, 12, 0),
+  ('銃士', 39, 9, 0),
+  ('銃士', 46, 6, 0),
+  ('魔法使い', 8, 9, 0),
+  ('魔法使い', 9, 12, 0),
+  ('魔法使い', 19, 9, 0),
+  ('魔法使い', 23, 12, 0),
+  ('魔法使い', 27, 0, 5),
+  ('魔法使い', 32, 6, 0),
+  ('魔法使い', 42, 12, 0),
+  ('魔法使い', 45, 6, 0),
+  ('魔法使い', 50, 9, 0),
+  ('魔法使い', 52, 12, 0),
+  ('魔法使い', 53, 9, 0),
+  ('呪術師', 3, 6, 0),
+  ('呪術師', 4, 6, 0),
+  ('呪術師', 19, 9, 0),
+  ('呪術師', 27, 0, 5),
+  ('呪術師', 28, 12, 0),
+  ('呪術師', 30, 6, 0),
+  ('呪術師', 31, 6, 0),
+  ('呪術師', 37, 12, 0),
+  ('呪術師', 39, 9, 0),
+  ('呪術師', 42, 12, 0),
+  ('呪術師', 50, 9, 0),
+  ('僧侶', 1, 6, 0),
+  ('僧侶', 5, 9, 0),
+  ('僧侶', 6, 12, 0),
+  ('僧侶', 31, 6, 0),
+  ('僧侶', 34, 12, 0),
+  ('僧侶', 36, 9, 0),
+  ('僧侶', 45, 6, 0),
+  ('僧侶', 52, 12, 0),
+  ('僧侶', 55, 0, 5),
+  ('薬師', 6, 12, 0),
+  ('薬師', 11, 9, 0),
+  ('薬師', 16, 6, 0),
+  ('薬師', 25, 9, 0),
+  ('薬師', 28, 12, 0),
+  ('薬師', 29, 6, 0),
+  ('薬師', 30, 6, 0),
+  ('薬師', 39, 9, 0),
+  ('薬師', 41, 0, 5),
+  ('狂戦士', 9, 12, 0),
+  ('狂戦士', 29, 9, 0),
+  ('狂戦士', 41, 15, 0),
+  ('狂戦士', 92, 15, 0),
+  ('重戦士', 11, 12, 0),
+  ('重戦士', 17, 15, 0),
+  ('重戦士', 50, 9, 0),
+  ('重戦士', 54, 9, 0),
+  ('竜騎士', 16, 9, 0),
+  ('竜騎士', 51, 9, 0),
+  ('竜騎士', 67, 15, 0),
+  ('竜騎士', 76, 9, 0),
+  ('槍術士', 17, 15, 0),
+  ('槍術士', 58, 12, 0),
+  ('槍術士', 86, 15, 0),
+  ('槍術士', 90, 9, 0),
+  ('槍術士', 91, 15, 0),
+  ('体術師', 25, 9, 0),
+  ('体術師', 67, 15, 0),
+  ('体術師', 69, 15, 0),
+  ('体術師', 86, 15, 0),
+  ('気功師', 1, 9, 0),
+  ('気功師', 2, 9, 0),
+  ('気功師', 3, 9, 0),
+  ('気功師', 14, 15, 0),
+  ('気功師', 41, 15, 0),
+  ('気功師', 65, 15, 0),
+  ('暗殺者', 1, 9, 0),
+  ('暗殺者', 13, 15, 0),
+  ('暗殺者', 58, 12, 0),
+  ('暗殺者', 81, 12, 0),
+  ('忍者', 15, 15, 0),
+  ('忍者', 33, 12, 0),
+  ('忍者', 68, 15, 0),
+  ('忍者', 93, 15, 0),
+  ('狩人', 57, 12, 0),
+  ('狩人', 61, 15, 0),
+  ('狩人', 65, 15, 0),
+  ('狩人', 66, 9, 0),
+  ('狩人', 92, 15, 0),
+  ('狙撃手', 16, 9, 0),
+  ('狙撃手', 19, 15, 0),
+  ('狙撃手', 40, 9, 0),
+  ('狙撃手', 92, 15, 0),
+  ('魔銃士', 10, 12, 0),
+  ('魔銃士', 22, 9, 0),
+  ('魔銃士', 29, 9, 0),
+  ('魔銃士', 42, 9, 0),
+  ('魔銃士', 51, 9, 0),
+  ('魔銃士', 67, 15, 0),
+  ('魔銃士', 77, 9, 0),
+  ('魔銃士', 86, 15, 0),
+  ('魔銃士', 89, 15, 0),
+  ('砲撃士', 8, 12, 0),
+  ('砲撃士', 16, 9, 0),
+  ('砲撃士', 32, 12, 0),
+  ('砲撃士', 41, 15, 0),
+  ('砲撃士', 59, 12, 0),
+  ('砲撃士', 94, 9, 0),
+  ('魔導士', 1, 9, 0),
+  ('魔導士', 3, 9, 0),
+  ('魔導士', 4, 9, 0),
+  ('魔導士', 8, 12, 0),
+  ('魔導士', 18, 9, 0),
+  ('魔導士', 27, 9, 0),
+  ('魔導士', 38, 15, 0),
+  ('魔導士', 40, 9, 0),
+  ('魔導士', 43, 15, 0),
+  ('魔導士', 47, 0, 5),
+  ('魔導士', 57, 12, 0),
+  ('魔導士', 64, 9, 0),
+  ('魔導士', 65, 15, 0),
+  ('魔導士', 66, 9, 0),
+  ('魔導士', 67, 15, 0),
+  ('魔導士', 73, 9, 0),
+  ('魔導士', 74, 9, 0),
+  ('魔導士', 77, 9, 0),
+  ('魔導士', 78, 9, 0),
+  ('魔導士', 84, 12, 0),
+  ('魔導士', 85, 15, 0),
+  ('時魔導士', 16, 9, 0),
+  ('時魔導士', 30, 9, 0),
+  ('時魔導士', 34, 12, 0),
+  ('時魔導士', 37, 15, 0),
+  ('時魔導士', 50, 9, 0),
+  ('時魔導士', 52, 9, 0),
+  ('時魔導士', 56, 12, 0),
+  ('時魔導士', 63, 15, 0),
+  ('時魔導士', 64, 9, 0),
+  ('時魔導士', 67, 15, 0),
+  ('時魔導士', 71, 0, 5),
+  ('時魔導士', 73, 9, 0),
+  ('時魔導士', 78, 9, 0),
+  ('時魔導士', 86, 15, 0),
+  ('時魔導士', 88, 9, 0),
+  ('死霊術師', 1, 9, 0),
+  ('死霊術師', 10, 12, 0),
+  ('死霊術師', 14, 15, 0),
+  ('死霊術師', 19, 15, 0),
+  ('死霊術師', 21, 15, 0),
+  ('死霊術師', 29, 9, 0),
+  ('死霊術師', 39, 15, 0),
+  ('死霊術師', 42, 9, 0),
+  ('死霊術師', 46, 9, 0),
+  ('死霊術師', 47, 0, 5),
+  ('死霊術師', 67, 15, 0),
+  ('死霊術師', 75, 9, 0),
+  ('死霊術師', 76, 9, 0),
+  ('死霊術師', 77, 9, 0),
+  ('死霊術師', 78, 9, 0),
+  ('死霊術師', 81, 12, 0),
+  ('死霊術師', 83, 12, 0),
+  ('死霊術師', 84, 12, 0),
+  ('死霊術師', 86, 15, 0),
+  ('死霊術師', 90, 9, 0),
+  ('陰陽師', 4, 9, 0),
+  ('陰陽師', 13, 15, 0),
+  ('陰陽師', 14, 15, 0),
+  ('陰陽師', 19, 15, 0),
+  ('陰陽師', 21, 15, 0),
+  ('陰陽師', 22, 9, 0),
+  ('陰陽師', 25, 9, 0),
+  ('陰陽師', 28, 9, 0),
+  ('陰陽師', 33, 12, 0),
+  ('陰陽師', 37, 15, 0),
+  ('陰陽師', 42, 9, 0),
+  ('陰陽師', 46, 9, 0),
+  ('陰陽師', 47, 0, 5),
+  ('陰陽師', 58, 12, 0),
+  ('陰陽師', 66, 9, 0),
+  ('陰陽師', 68, 15, 0),
+  ('陰陽師', 74, 9, 0),
+  ('陰陽師', 90, 9, 0),
+  ('陰陽師', 93, 15, 0),
+  ('司祭', 2, 9, 0),
+  ('司祭', 8, 12, 0),
+  ('司祭', 27, 9, 0),
+  ('司祭', 28, 9, 0),
+  ('司祭', 36, 12, 0),
+  ('司祭', 37, 15, 0),
+  ('司祭', 39, 15, 0),
+  ('司祭', 50, 9, 0),
+  ('司祭', 54, 9, 0),
+  ('司祭', 57, 12, 0),
+  ('司祭', 58, 12, 0),
+  ('司祭', 82, 12, 0),
+  ('司祭', 89, 15, 0),
+  ('司祭', 95, 0, 5),
+  ('祓魔師', 6, 9, 0),
+  ('祓魔師', 15, 15, 0),
+  ('祓魔師', 19, 15, 0),
+  ('祓魔師', 22, 9, 0),
+  ('祓魔師', 26, 9, 0),
+  ('祓魔師', 28, 9, 0),
+  ('祓魔師', 29, 9, 0),
+  ('祓魔師', 32, 12, 0),
+  ('祓魔師', 33, 12, 0),
+  ('祓魔師', 36, 12, 0),
+  ('祓魔師', 46, 9, 0),
+  ('祓魔師', 47, 0, 5),
+  ('祓魔師', 68, 15, 0),
+  ('祓魔師', 70, 9, 0),
+  ('祓魔師', 77, 9, 0),
+  ('祓魔師', 84, 12, 0),
+  ('祓魔師', 88, 9, 0),
+  ('祓魔師', 89, 15, 0),
+  ('祓魔師', 92, 15, 0),
+  ('錬金術師', 2, 9, 0),
+  ('錬金術師', 4, 9, 0),
+  ('錬金術師', 10, 12, 0),
+  ('錬金術師', 11, 12, 0),
+  ('錬金術師', 12, 12, 0),
+  ('錬金術師', 19, 15, 0),
+  ('錬金術師', 39, 15, 0),
+  ('錬金術師', 44, 15, 0),
+  ('錬金術師', 51, 9, 0),
+  ('錬金術師', 56, 12, 0),
+  ('錬金術師', 61, 15, 0),
+  ('錬金術師', 71, 0, 5),
+  ('錬金術師', 75, 9, 0),
+  ('錬金術師', 87, 15, 0),
+  ('錬金術師', 89, 15, 0),
+  ('霊薬師', 2, 9, 0),
+  ('霊薬師', 3, 9, 0),
+  ('霊薬師', 6, 9, 0),
+  ('霊薬師', 8, 12, 0),
+  ('霊薬師', 35, 12, 0),
+  ('霊薬師', 37, 15, 0),
+  ('霊薬師', 40, 9, 0),
+  ('霊薬師', 41, 15, 0),
+  ('霊薬師', 42, 9, 0),
+  ('霊薬師', 47, 0, 5),
+  ('霊薬師', 50, 9, 0),
+  ('霊薬師', 51, 9, 0),
+  ('霊薬師', 54, 9, 0),
+  ('霊薬師', 62, 15, 0),
+  ('霊薬師', 63, 15, 0),
+  ('霊薬師', 76, 9, 0),
+  ('霊薬師', 78, 9, 0),
+  ('霊薬師', 81, 12, 0),
+  ('霊薬師', 86, 15, 0);
+-- @@end:asc_mp
+
+-- その職業で開いたマス（盤面に無い番号・数でないもの・重なりは捨てて小さい順・起点の0は入れない）。ascension.js の ascStateOf
+create or replace function public.v2cap_asc_state(p_asc jsonb, p_cls text)
+returns int[] language sql stable set search_path = public as $$
+  select coalesce(array_agg(n.id order by n.id), '{}')
+    from public.v2cap_classes c
+    join public.v2cap_asc_nodes n on n.stage = c.stage
+   where c.id = p_cls and n.id > 0
+     and jsonb_typeof(coalesce(p_asc, '{}'::jsonb) -> p_cls) = 'array'
+     and exists (select 1 from jsonb_array_elements(p_asc -> p_cls) as e(v)
+                  where jsonb_typeof(e.v) = 'number' and (e.v #>> '{}')::numeric = n.id)
 $$;
-revoke all on function public.v2cap_asc_depth(jsonb, text, int, int) from public, anon, authenticated;
+revoke all on function public.v2cap_asc_state(jsonb, text) from public, anon, authenticated;
 
--- 使ったAP（道ごとの「開いたマスの数」の合計＝どのマスも1AP）。ascension.js の apSpentOf
+-- 使ったAP（開いたマスの数＝どのマスも1AP）。ascension.js の apSpentOf
 create or replace function public.v2cap_asc_spent(p_asc jsonb, p_cls text)
 returns int language sql stable set search_path = public as $$
-  select coalesce(sum(public.v2cap_asc_depth(p_asc, p_cls, r.road, r.len)), 0)::int
-    from public.v2cap_asc_roads r where r.cls = p_cls
+  select coalesce(cardinality(public.v2cap_asc_state(p_asc, p_cls)), 0)
 $$;
 revoke all on function public.v2cap_asc_spent(jsonb, text) from public, anon, authenticated;
 
@@ -5282,24 +5608,20 @@ $$;
 revoke all on function public.v2cap_asc_ap(jsonb, text) from public, anon, authenticated;
 
 -- アセンションで上がるMP（スキル編成の最大MP）。loadout.js の statBreakdown と同じ数え方：
---   MPの道の開いた小マスの合計 ＋ 大マスまで開いていれば（p_base＋小マスのMP）× big_pct% の四捨五入（ascension.js の ascPctGain）
+--   開いたMPの小マスの合計 ＋ 開いたMPの大マスの%×（p_base＋小マスのMP）の四捨五入（ascension.js の ascPctGain）
 --   p_base ＝ 本体のMP＋クラスのMP（装備にMPは無い＝画面の「本体＋クラス＋装備」と同じ）
 create or replace function public.v2cap_asc_mp(p_asc jsonb, p_cls text, p_base int)
 returns int language sql stable set search_path = public as $$
-  with d as (
-    select r.len, r.mp, r.big_pct, public.v2cap_asc_depth(p_asc, p_cls, r.road, r.len) as depth
-      from public.v2cap_asc_roads r
-     where r.cls = p_cls and r.stat = 'mp'
-  ), f as (
-    select coalesce(sum((select coalesce(sum(x), 0) from unnest(d.mp[1:d.depth]) as x)), 0)::int as flat,
-           coalesce(sum(case when d.depth >= d.len then d.big_pct else 0 end), 0)::int as pct
-      from d
+  with f as (
+    select coalesce(sum(m.mp), 0)::int as flat, coalesce(sum(m.pct), 0)::int as pct
+      from public.v2cap_asc_mp m
+     where m.cls = p_cls and m.id = any(public.v2cap_asc_state(p_asc, p_cls))
   )
   select f.flat + round((coalesce(p_base, 0) + f.flat) * f.pct / 100.0)::int from f
 $$;
 revoke all on function public.v2cap_asc_mp(jsonb, text, int) from public, anon, authenticated;
 
--- スキル編成の最大MP＝本体のMP＋クラスのMP＋アセンションのMP（いまの職業・転職先・覚えた技を空き枠へ入れるときに使う）
+-- スキル編成の最大MP＝本体のMP＋クラスのMP＋アセンションのMP（いまの職業・転職先・覚えた技を空き枠へ入れる・キャラ作成で使う）
 create or replace function public.v2cap_max_mp(p_mp int, p_asc jsonb, p_cls text, p_jlv int)
 returns int language sql stable set search_path = public as $$
   select b.base + public.v2cap_asc_mp(p_asc, p_cls, b.base)
@@ -5308,51 +5630,61 @@ $$;
 revoke all on function public.v2cap_max_mp(int, jsonb, text, int) from public, anon, authenticated;
 
 -- ---- 開く ----
--- p_class の盤面の p_road（0〜3）の道を、起点の側から p_to マス目まで開く。
+-- p_class の盤面の p_nodes を順に開く。どのマスも、起点・開いたマス・この中で先に開くマスのどれかにつながっていること。
 -- 確かめる順と文言は ascension.js の ascendError と同じ（いまの職業でなくても、APがあれば開ける）
-create or replace function public.v2cap_ascend(p_class text, p_road int, p_to int)
+create or replace function public.v2cap_ascend(p_class text, p_nodes int[])
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
-  v_uid  uuid := auth.uid();
-  v_row  public.v2cap_profiles;
-  v_road public.v2cap_asc_roads;
-  v_asc  jsonb;
-  v_cur  int;
-  v_left int;
-  v_arr  jsonb;
+  v_uid   uuid := auth.uid();
+  v_row   public.v2cap_profiles;
+  v_stage text;
+  v_asc   jsonb;
+  v_open  int[];
+  v_id    int;
+  v_links int[];
+  v_left  int;
+  v_save  jsonb;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   select * into v_row from public.v2cap_profiles where id = v_uid for update;
   if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
-  if not exists (select 1 from public.v2cap_asc_roads r where r.cls = p_class) then
+  select c.stage into v_stage from public.v2cap_classes c where c.id = p_class;
+  if v_stage is null or not exists (select 1 from public.v2cap_asc_nodes n where n.stage = v_stage) then
     return jsonb_build_object('ok', false, 'error', 'その職業にはアセンションがありません');
   end if;
-  select * into v_road from public.v2cap_asc_roads r where r.cls = p_class and r.road = p_road;
-  if not found then return jsonb_build_object('ok', false, 'error', 'その道はありません'); end if;
-  v_asc := case when jsonb_typeof(v_row.ascension) = 'object' then v_row.ascension else '{}'::jsonb end;
-  v_cur := public.v2cap_asc_depth(v_asc, p_class, p_road, v_road.len);
-  if p_to is null or p_to <= v_cur then return jsonb_build_object('ok', false, 'error', 'もう開いています'); end if;
-  if p_to > v_road.len then return jsonb_build_object('ok', false, 'error', 'その道はそこまでありません'); end if;
+  if p_nodes is null or coalesce(cardinality(p_nodes), 0) = 0 then
+    return jsonb_build_object('ok', false, 'error', 'マスを選んでください');
+  end if;
+  v_asc  := case when jsonb_typeof(v_row.ascension) = 'object' then v_row.ascension else '{}'::jsonb end;
+  v_open := array[0] || public.v2cap_asc_state(v_asc, p_class);
+  foreach v_id in array p_nodes loop
+    if v_id is null or v_id <= 0 then return jsonb_build_object('ok', false, 'error', 'そのマスはありません'); end if;
+    select n.links into v_links from public.v2cap_asc_nodes n where n.stage = v_stage and n.id = v_id;
+    if not found then return jsonb_build_object('ok', false, 'error', 'そのマスはありません'); end if;
+    if v_id = any(v_open) then return jsonb_build_object('ok', false, 'error', 'もう開いています'); end if;
+    if not (coalesce(v_links, '{}') && v_open) then
+      return jsonb_build_object('ok', false, 'error', 'つながっていないマスは開けません');
+    end if;
+    v_open := v_open || v_id;
+  end loop;
   v_left := public.v2cap_asc_ap(v_row.jobs, p_class) - public.v2cap_asc_spent(v_asc, p_class);
-  if p_to - v_cur > v_left then return jsonb_build_object('ok', false, 'error', 'APが足りません'); end if;
-  -- 道ごとの数を作り直す（道の数ぶん・整数にそろえる）
-  select jsonb_agg(case when r.road = p_road then p_to else public.v2cap_asc_depth(v_asc, p_class, r.road, r.len) end order by r.road)
-    into v_arr
-    from public.v2cap_asc_roads r where r.cls = p_class;
+  if cardinality(p_nodes) > v_left then return jsonb_build_object('ok', false, 'error', 'APが足りません'); end if;
+  -- 保存は起点の0を除いて小さい順
+  select coalesce(jsonb_agg(x order by x), '[]'::jsonb) into v_save from unnest(v_open) as t(x) where x > 0;
   update public.v2cap_profiles
-     set ascension = jsonb_set(v_asc, array[p_class], v_arr), updated_at = now()
+     set ascension = jsonb_set(v_asc, array[p_class], v_save), updated_at = now()
    where id = v_uid
    returning * into v_row;
   return jsonb_build_object('ok', true, 'profile', to_jsonb(v_row));
 end;
 $$;
-revoke all on function public.v2cap_ascend(text, int, int) from public, anon;
-grant execute on function public.v2cap_ascend(text, int, int) to authenticated;
+revoke all on function public.v2cap_ascend(text, int[]) from public, anon;
+grant execute on function public.v2cap_ascend(text, int[]) to authenticated;
 
 -- ---- 振り直し ----
 -- p_class の盤面を全部戻してAPを返す。費用は LV×100 Gold（ascension.js の ascResetGoldOf）。
--- いまの職業なら、スキル編成を新しい最大MPに収める（MPの道を戻すと最大MPが下がるため・v2cap_fit_set）。
+-- いまの職業なら、スキル編成を新しい最大MPに収める（MPのマスを戻すと最大MPが下がるため・v2cap_fit_set）。
 -- ほかの職業の編成は、転職したときに v2cap_change_class が収める
 create or replace function public.v2cap_ascend_reset(p_class text)
 returns jsonb language plpgsql security definer set search_path = public as $$
@@ -5368,7 +5700,7 @@ begin
   if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   select * into v_row from public.v2cap_profiles where id = v_uid for update;
   if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
-  if not exists (select 1 from public.v2cap_asc_roads r where r.cls = p_class) then
+  if not exists (select 1 from public.v2cap_classes c join public.v2cap_asc_nodes n on n.stage = c.stage where c.id = p_class) then
     return jsonb_build_object('ok', false, 'error', 'その職業にはアセンションがありません');
   end if;
   v_asc := case when jsonb_typeof(v_row.ascension) = 'object' then v_row.ascension else '{}'::jsonb end;

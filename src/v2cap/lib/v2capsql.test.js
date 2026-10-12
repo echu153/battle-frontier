@@ -610,35 +610,57 @@ test('【確定】ルーレット（ラッキーナンバー付き）：払い�
   assert.ok(f.includes('v_res := floor(random() * 37)::int;'))
 })
 
-test('【確定】アセンション（2026-10-13）：APの数え方・開くときの確かめ・振り直しの費用・スキル編成の最大MPがJSと同じ', async () => {
-  const { ASC_ROADS, ASC_CLASSES, ASC_RESET_GOLD_PER_LV, ascendError } = await import('./ascension.js')
+test('【確定】アセンション（2026-10-13）：つながったマスだけ開ける・APの数え方・振り直しの費用・スキル編成の最大MPがJSと同じ', async () => {
+  const { ASC_CLASSES, ASC_RESET_GOLD_PER_LV, ascendError, treeOf, routeTo, mpNodesOf } = await import('./ascension.js')
+  const { ASC_LAYOUT } = await import('./ascLayout.js')
   const { ASC_AP_PER_JLV } = await import('./jobs.js')
   assert.ok(SQL.includes("alter table public.v2cap_profiles add column if not exists ascension jsonb not null default '{}'::jsonb;"))
-  // 道の種は ascension.js の treeOf から作る（中身は種の突き合わせのテストで見ている）。どの職業にも4本
-  const seed = SQL.match(/-- @@seed:asc_roads\n([\s\S]*?)-- @@end:asc_roads/)[1]
-  for (const cls of ASC_CLASSES) for (let r = 0; r < ASC_ROADS; r++) assert.ok(seed.includes(`('${cls}', ${r}, `), `${cls} の${r + 1}本目`)
+  // 最初の版（4本の道）は片づけて、盤面を一度だけ空にする（印つき＝流し直しても消えない）
+  for (const s of ['drop function if exists public.v2cap_ascend(text, int, int);', 'drop table if exists public.v2cap_asc_roads;']) assert.ok(SQL.includes(s), s)
+  const m = SQL.match(/if not exists \(select 1 from public\.v2cap_migrations where key = 'asc_graph_20261013'\) then([\s\S]*?)end if;/)
+  assert.ok(m, '印つきの do ブロックがある')
+  assert.ok(m[1].includes("update public.v2cap_profiles set ascension = '{}'::jsonb where ascension <> '{}'::jsonb;"))
+  assert.ok(m[1].includes("insert into public.v2cap_migrations (key) values ('asc_graph_20261013');"))
+  assert.ok(!/\bv2cap_asc_roads\b/.test(SQL.replace('drop table if exists public.v2cap_asc_roads;', '').replace(/--[^\n]*/g, '')), '前の表は読まない')
+  // 種：盤面の形は段階ごと・MPのマスは職業ごと（中身は種の突き合わせのテストで見ている）
+  const nodes = SQL.match(/-- @@seed:asc_nodes\n([\s\S]*?)-- @@end:asc_nodes/)[1]
+  for (const [stage, L] of Object.entries(ASC_LAYOUT)) for (const n of L.nodes) assert.ok(nodes.includes(`('${stage}', ${n.id}, '{${n.links.join(',')}}'::int[])`), `${stage} ${n.id}`)
+  const mp = SQL.match(/-- @@seed:asc_mp\n([\s\S]*?)-- @@end:asc_mp/)[1]
+  assert.equal((mp.match(/^ {2}\('/gm) || []).length, ASC_CLASSES.reduce((t, c) => t + mpNodesOf(c).length, 0))
+  // 開いたマス＝数で、盤面にある番号だけ（JSの ascStateOf と同じ）
+  const st = fnBody('v2cap_asc_state')
+  assert.ok(st.includes("where jsonb_typeof(e.v) = 'number' and (e.v #>> '{}')::numeric = n.id"))
+  assert.ok(st.includes('where c.id = p_cls and n.id > 0'), '起点の0は入れない')
   // AP＝CLASS LVが上がった回数×1（上限より上は増えない）＝ jobs.js の jobLevelsGained × ASC_AP_PER_JLV
   assert.ok(fnBody('v2cap_asc_ap').includes(`select greatest(0, least(coalesce((p_jobs -> p_cls ->> 'lv')::int, 1), s.max_jlv) - 1) * ${ASC_AP_PER_JLV}`))
+  assert.ok(fnBody('v2cap_asc_spent').includes('cardinality(public.v2cap_asc_state(p_asc, p_cls))'), '使ったAP＝開いたマスの数')
   // 開く：確かめる順と文言が ascension.js の ascendError と同じ
+  const t = treeOf('剣士')
+  const root = t.byId[0].links[0]
+  const p = { class: '剣士', jobs: { 剣士: { lv: 2 } }, ascension: { 剣士: [root] } }
+  const far = routeTo('剣士', [root], t.nodes.find(n => n.type === 'big').id)
+  const msgs = [ascendError(p, 'なし', [1]), ascendError(p, '剣士', []), ascendError(p, '剣士', [0]), ascendError(p, '剣士', [root]),
+    ascendError(p, '剣士', [far[far.length - 1]]), ascendError(p, '剣士', far)]
+  assert.deepEqual(msgs, ['その職業にはアセンションがありません', 'マスを選んでください', 'そのマスはありません', 'もう開いています', 'つながっていないマスは開けません', 'APが足りません'])
   const asc = fnBody('v2cap_ascend')
-  const p = { class: '剣士', jobs: { 剣士: { lv: 3 } }, ascension: { 剣士: [1, 0, 0, 0] } }
-  const msgs = [ascendError(p, 'なし', 0, 1), ascendError(p, '剣士', 9, 1), ascendError(p, '剣士', 0, 1), ascendError(p, '剣士', 0, 15), ascendError(p, '剣士', 0, 3)]
-  assert.deepEqual(msgs, ['その職業にはアセンションがありません', 'その道はありません', 'もう開いています', 'その道はそこまでありません', 'APが足りません'])
   let at = -1
-  for (const m of msgs) {
-    const i = asc.indexOf(`'${m}'`)
-    assert.ok(i > at, `「${m}」がこの順で出てくる`)
+  for (const s of msgs) {
+    const i = asc.indexOf(`'${s}'`)
+    assert.ok(i > at, `「${s}」がこの順で出てくる`)
     at = i
   }
+  assert.ok(asc.includes("if not (coalesce(v_links, '{}') && v_open) then"), '起点・開いたマス・先に開くマスのどれかにつながっている')
+  assert.ok(asc.includes('v_open := v_open || v_id;'), '先に開くマスも数える')
   // 振り直し：費用は LV×100 Gold・いまの職業なら編成を新しい最大MPに収める
   const reset = fnBody('v2cap_ascend_reset')
   assert.match(reset, new RegExp(`c_gold_per_lv constant int := ${ASC_RESET_GOLD_PER_LV};`))
   assert.ok(reset.includes('v_gold := greatest(1, v_row.lv)::bigint * c_gold_per_lv;'))
   assert.ok(reset.includes("'Goldが足りません'"))
   assert.ok(reset.includes('public.v2cap_fit_set(v_sets -> p_class, p_class, v_row.learned,'))
-  // スキル編成の最大MP＝本体＋クラス＋アセンション（覚えた技を入れる・転職・編成の保存の3か所）
+  // スキル編成の最大MP＝本体＋クラス＋アセンション（覚えた技を入れる・転職・編成の保存・キャラ作成）
   assert.ok(fnBody('v2cap_change_class').includes('v_max  := public.v2cap_max_mp(v_row.mp, v_row.ascension, v_cls.id, v_jlv);'))
   assert.ok(fnBody('v2cap_set_skills').includes("v_max  := public.v2cap_max_mp(v_row.mp, v_row.ascension, v_row.class, coalesce((v_row.jobs -> v_row.class ->> 'lv')::int, 1));"))
+  assert.ok(fnBody('v2cap_create_character').includes('public.v2cap_max_mp(v_row.mp, v_row.ascension, v_cls, 1)'))
   assert.equal([...SQL.matchAll(/v_row\.mp \+ public\.v2cap_job_bonus_mp\(/g)].length, 0, 'アセンションを数えない最大MPの形が残っていない')
   // MPの大マスは（本体＋クラス＋小マスのMP）の%を四捨五入（JSの ascPctGain と同じ）
   assert.ok(fnBody('v2cap_asc_mp').includes('round((coalesce(p_base, 0) + f.flat) * f.pct / 100.0)::int'))

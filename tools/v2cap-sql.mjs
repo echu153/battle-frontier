@@ -11,7 +11,8 @@
 //   ・spots     … 場所（15エリア×①②③。経験値とGoldの範囲・敵のLVの範囲）
 //   ・enemies   … 敵（いる場所・LV・役割・時間帯）
 //   ・daily_tasks … デイリーミッション（数えるキー・名前・目標の回数）
-//   ・asc_roads … アセンションの道（職業ごとに4本。道のステ・マスの数・MPのマス・大マスの%＝ascension.js の treeOf）
+//   ・asc_nodes … アセンションの盤面の形（段階ごと。マスの番号とつながり＝ascLayout.js）
+//   ・asc_mp    … アセンションのMPのマス（職業ごと。スキル編成の最大MP用＝ascension.js の mpNodesOf）
 //
 //   node tools/v2cap-sql.mjs          … 差分があるかだけ表示
 //   node tools/v2cap-sql.mjs --write  … SQLへ書き込む
@@ -24,7 +25,8 @@ const { SKILLS, isPassive } = await import(B + 'v2cap/lib/skills.js')
 const { ITEMS, STARTER_ITEMS, starterIdsOf } = await import(B + 'v2cap/lib/equipment.js')
 const { SPOTS, spotLvOf, enemyLevels, recLvOf } = await import(B + 'v2cap/lib/areas.js')
 const { DAILY_TASKS } = await import(B + 'v2cap/lib/daily.js')
-const { treeOf, ASC_CLASSES } = await import(B + 'v2cap/lib/ascension.js')
+const { mpNodesOf, ASC_CLASSES } = await import(B + 'v2cap/lib/ascension.js')
+const { ASC_LAYOUT } = await import(B + 'v2cap/lib/ascLayout.js')
 
 const q = (s) => `'${String(s).replace(/'/g, "''")}'`
 const arr = (list, cast = '') => `'{${list.join(',')}}'${cast}`
@@ -93,17 +95,18 @@ export const seeds = () => ({
     DAILY_TASKS.map((t, i) => `  (${q(t.key)}, ${q(t.label)}, ${t.goal}, ${i + 1})`).join(',\n'),
     'on conflict (key) do update set label = excluded.label, goal = excluded.goal, sort = excluded.sort;',
   ].join('\n'),
-  asc_roads: [
-    // ★消してから入れ直す（木の形を変えたときに古い道が残らないように）。参照している外部キーは無い。
-    //   プレイヤーが開いたマスの数は v2cap_profiles.ascension にある＝道の形（マスの並び）を変えたら、振ったAPをどうするかユーザーと決める
-    'delete from public.v2cap_asc_roads;',
-    'insert into public.v2cap_asc_roads (cls, road, stat, len, mp, big_pct) values',
-    ASC_CLASSES.flatMap(cls => treeOf(cls).roads.map(r => {
-      // MPの道だけ、マスごとのMP（小マス以外は0）を持つ（スキル編成の最大MP＝ v2cap_asc_mp）
-      const mp = r.stat === 'mp' ? arr(r.nodes.map(n => (n.type === 'stat' ? n.amount : 0)), '::int[]') : "'{}'::int[]"
-      return `  (${q(cls)}, ${r.road}, ${q(r.stat)}, ${r.nodes.length}, ${mp}, ${r.nodes[r.nodes.length - 1].pct || 0})`
-    })).join(',\n') + ';',
+  asc_nodes: [
+    // ★消してから入れ直す（形を変えたときに古いマスが残らないように）。参照している外部キーは無い。
+    //   プレイヤーが開いたマスの番号は v2cap_profiles.ascension にある＝形を変えたら、振ったAPをどうするかユーザーと決める
+    'delete from public.v2cap_asc_nodes;',
+    'insert into public.v2cap_asc_nodes (stage, id, links) values',
+    Object.entries(ASC_LAYOUT).flatMap(([stage, L]) => L.nodes.map(n => `  (${q(stage)}, ${n.id}, ${arr(n.links, '::int[]')})`)).join(',\n') + ';',
   ].join('\n'),
+  asc_mp: (() => {
+    // MPの小マス・MPの大マスだけ（スキル編成の最大MP＝ v2cap_asc_mp）
+    const rows = ASC_CLASSES.flatMap(cls => mpNodesOf(cls).map(m => `  (${q(cls)}, ${m.id}, ${m.mp}, ${m.pct})`))
+    return ['delete from public.v2cap_asc_mp;', ...(rows.length ? ['insert into public.v2cap_asc_mp (cls, id, mp, pct) values', rows.join(',\n') + ';'] : [])].join('\n')
+  })(),
 })
 
 export const SQL_PATH = new URL('../supabase_v2cap_core.sql', import.meta.url)
