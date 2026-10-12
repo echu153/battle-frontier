@@ -133,7 +133,8 @@ export const ITEMS = Array.from({ length: AREA_COUNT }, (_, i) => i + 1).flatMap
 //   ・武器＝その職業の代表の種類／防具＝前に出て受ける職業（戦士・槍使い・僧侶）は重鎧、ほかは軽装／
 //     装飾品＝物理職は耳飾り（イヤリング・STR寄り）、魔法職は指輪（リング・INT寄り）
 //   ・名前は「見習いの◯◯」、装飾品だけ「古びた◯◯」
-//   ・どこにも落ちない（エリア0）・作れない（ノーマル）。分解・強化で使う残骸は始まりの森のもの（smith.js の scrapAreaOf）
+//   ・どこにも落ちない（エリア0）・作れない（ノーマル）。分解すると始まりの森の残骸（smith.js の scrapAreaOf）。
+//     強化は残骸を使わずGoldだけ（smith.js の enhanceScrapOf・2026-10-12 ユーザー指示「初期装備は残骸不要、Goldだけで強化できるように」）
 // ★サーバーの v2cap_equipment（エリア0の行）と v2cap_classes.starter は tools/v2cap-sql.mjs がここから作る
 export const STARTER_AREA = 0
 export const STARTER_LV = 1

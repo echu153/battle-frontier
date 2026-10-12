@@ -67,3 +67,10 @@ export const armorEffects = (worn) => {
   const r = (v) => Math.round(v * 100) / 100
   return { takenPct: r(takenPct), agiPct: r(agiPct), takenMult: r(1 + takenPct / 100) }
 }
+// 1つの防具の効果の文（重鎧＝「受けるダメージ−3%」・軽装＝「AGI+5%」）。必要LVに足りないときは上と同じ割合で弱まる。防具でなければ ''
+export const armorEffectText = (item, pct = 100) => {
+  const e = ARMOR_EFFECT[item?.line]
+  if (!e) return ''
+  const r = (v) => Math.round(v * (pct ?? 100)) / 100
+  return e.takenPct ? `受けるダメージ−${r(-e.takenPct)}%` : `AGI+${r(e.agiPct)}%`
+}

@@ -6,11 +6,12 @@ import { V2Tip, V2SkillTip } from '../../v2/components/V2ItemTip.jsx'
 import { MAX_LV, needExp, staminaMaxOf, rollStamina, msToNextStamina, POINTS_PER_LV, POINTS_ON_STEP, POINTS_STEP } from '../lib/level.js'
 import { jobMaxOf, jobNeed, jobOf, stageOf, stageLabelOf, stageColorOf, weaponsOf, JOB_LV_HPMP } from '../lib/jobs.js'
 import { passiveOf, SKILL_BY_NAME } from '../lib/skills.js'
-import { SLOTS, SLOT_LABEL, kindLabel, itemLabel, RARITY_COLOR } from '../lib/equipment.js'
+import { SLOTS, SLOT_LABEL, ARMOR_LINES, ARMOR_EFFECT, kindLabel, itemLabel, RARITY_COLOR } from '../lib/equipment.js'
 import { equippedItems, statBreakdown, currentSetOf } from '../lib/loadout.js'
-import { effectPct, powerAt } from '../lib/gear.js'
+import { effectPct, powerAt, statsAt, armorEffectText } from '../lib/gear.js'
 import { plusOf, plusLabel } from '../lib/smith.js'
 import { avatarUrlOf } from './v2capAvatarUrl.js'
+import { StatGain } from './v2capGear.jsx'
 import V2capPoints from './V2capPoints.jsx'
 
 // ============================================================
@@ -20,8 +21,10 @@ import V2capPoints from './V2capPoints.jsx'
 //   この版だけのもの：
 //   ・左上のアイコンは自分で設定する（プロフィール。無いときは点線の枠＝押すとプロフィールへ）
 //   ・LVの下に ClassLV（初期職30・一次職50で止まる）・EXPとClassEXPの2本のバー
-//   ・ステの内訳（本体＋クラス＋装備＋軽装のAGI）をカーソルで出す・まだ振っていないステータスポイントの「振る」
-//   ・装備は7枠（武器1・頭・鎧・腕・足・装飾品2）。名前はレア度の色・強化値・必要LV不足の効果%
+//   ・ステの升目は合計だけ（2026-10-12 ユーザー指示「ホーム画面の数値は最終値だけ」）。内訳（本体＋クラス＋装備＋軽装のAGI）は
+//     カーソルで出す＋プロフィールに表で出す（V2capProfile）・まだ振っていないステータスポイントの「振る」
+//   ・装備は7枠（武器1・頭・鎧・腕・足・装飾品2）。名前はレア度の色・強化値・必要LV不足の効果%。
+//     カーソルで上がるステ・防具の効果も出す（2026-10-12 ユーザー指示「どの能力が上がってるのかわかるように」）
 //   ・スキルは**いまの職業の編成**（スキルセットは職業ごと）。職業パッシブは一次職だけ
 // ============================================================
 const cell = {
@@ -67,10 +70,10 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
   const classColor = stageColorOf(prof.class)
 
   // map の (値, 添字)。添字が奇数＝右の列（右端をそろえて左へ伸ばす）
+  // ★升目の数は合計だけ（2026-10-12 ユーザー指示「ホーム画面の数値は最終値だけ」）。内訳はカーソルとプロフィールで見る
   const statCell = (k, i) => {
     const d = STAT_DEFS[k]
     const extra = k === 'agi' ? bd.armorAgi : 0
-    const add = bd.job[k] + bd.gear[k] + extra
     return (
       <V2Tip key={k} alignRight={i % 2 === 1} color={d.color} width="max(100%, 230px)"
         style={{ ...cell, justifyContent:'flex-start' }}
@@ -87,20 +90,19 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
         </>}>
         <span style={{ color: d.color, fontSize:'9px', flexShrink:0 }}>{d.label}</span>
         <span style={{ color:'#82a2c2', fontSize:'9px', flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{d.desc}</span>
-        <span style={{ flexShrink:0 }}>
-          <span style={{ color: d.color, fontSize:'10px' }}>{bd.total[k].toLocaleString()}</span>
-          {add > 0 && <span style={{ color:'#44ff88', fontSize:'9px', marginLeft:'2px' }}>+{add.toLocaleString()}</span>}
-        </span>
+        <span style={{ color: d.color, fontSize:'10px', flexShrink:0 }}>{bd.total[k].toLocaleString()}</span>
       </V2Tip>
     )
   }
 
-  // 装備の升目。カーソルを合わせる（スマホはタップ）と、レア度・強化値・アイテムLV・戦闘力が出る
+  // 装備の升目。カーソルを合わせる（スマホはタップ）と、上がるステ・防具の効果・レア度・強化値・アイテムLV・戦闘力が出る
+  // ★上がるステは強化値と必要LV不足の効果%を入れたあとの数（2026-10-12 ユーザー指示「どの能力が上がってるのかわかるように」）
   const eqCell = (slot, i) => {
     const w = worn[slot]
     const pct = w ? effectPct(w.inv.ilv, prof.lv) : 100
     const plus = w ? plusOf(w.inv) : 0
     const power = w ? powerAt(w.item, w.inv.ilv, plus) : 0
+    const gain = w ? statsAt(w.item, w.inv.ilv, pct, plus) : null
     return (
       <div key={slot} style={cell}>
         <span style={{ color:'#7fa6d0', fontSize:'9px', flexShrink:0 }}>{SLOT_LABEL[slot]}</span>
@@ -111,6 +113,8 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
                 <span style={{ color: RARITY_COLOR[w.item.rarity] }}>{itemLabel(w.item)}</span>
                 {plus > 0 && <span style={{ color:'#ffcc00' }}> {plusLabel(plus)}</span>}（{kindLabel(w.item)}）
               </div>
+              <div style={{ fontSize:'11px' }}><StatGain s={gain} /></div>
+              {w.item.line && <div style={{ color:'#88ddaa' }}>{w.item.line}：{armorEffectText(w.item, pct)}</div>}
               <div>アイテムLV {w.inv.ilv}（必要LV {w.inv.ilv}）{plus > 0 && <>・強化 {plusLabel(plus)}（強さ{100 + plus * 10}%）</>}</div>
               <div>戦闘力 {power}{pct < 100 && <span style={{ color:'#ff8844' }}> → {Math.round(power * pct / 100)}（効果{pct}%）</span>}</div>
             </>}>
@@ -148,6 +152,10 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
   const armorParts = []
   if (bd.armor.takenPct) armorParts.push(`受けるダメージ${bd.armor.takenPct}%`)
   if (bd.armor.agiPct) armorParts.push(`AGI+${bd.armor.agiPct}%`)
+  // 防具の効果の内訳（何部位か・必要LVに足りなくて弱まっているものがあるか）。カーソルで出す
+  const armorWorn = Object.values(worn).filter(w => w.item.line)
+  const lineCount = (line) => armorWorn.filter(w => w.item.line === line).length
+  const armorWeak = armorWorn.some(w => effectPct(w.inv.ilv, prof.lv) < 100)
 
   return (
     <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'10px', marginBottom:'8px', fontFamily:'monospace' }}>
@@ -238,7 +246,19 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
 
         <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'2px', display:'flex', justifyContent:'space-between', gap:'6px', flexWrap:'wrap' }}>
           <span>装備<span style={{ fontSize:'9px' }}>（{prof.class}の武器：{weaponsOf(prof.class).join('・')}）</span></span>
-          {armorParts.length > 0 && <span style={{ color:'#88ddaa', fontSize:'9px' }}>{armorParts.join('・')}</span>}
+          {armorParts.length > 0 && (
+            <V2Tip alignRight width="250px" color="#88ddaa" style={{ color:'#88ddaa', fontSize:'9px', borderBottom:'1px dotted #88ddaa' }}
+              body={<>
+                <div style={{ color:'#88ddaa' }}>防具の効果（1部位ごとに足す）</div>
+                {ARMOR_LINES.filter(l => lineCount(l) > 0).map(l => (
+                  <div key={l}>{l} {lineCount(l)}部位：1部位ごとに{ARMOR_EFFECT[l].label}</div>
+                ))}
+                {bd.armorAgi > 0 && <div>AGI+%は本体＋クラス＋装備のAGIに掛ける（いまは<span style={{ color:'#ff8844', whiteSpace:'nowrap' }}> AGI+{bd.armorAgi}</span>）</div>}
+                {armorWeak && <div style={{ color:'#ff8844' }}>必要LVに足りない防具は、効果%ぶん弱まる</div>}
+              </>}>
+              {armorParts.join('・')}
+            </V2Tip>
+          )}
         </div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'2px', marginBottom:'6px' }}>
           {SLOTS.map(eqCell)}

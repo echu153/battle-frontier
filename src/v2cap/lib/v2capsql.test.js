@@ -10,9 +10,9 @@ import { DEFAULT_USES_MAX } from './skills.js'
 import { NEED_PERMIL, MAX_LV, STAMINA_BASE, STAMINA_RECOVER_MS, POINTS_PER_LV, POINTS_STEP, POINTS_ON_STEP, POINT_UNIT } from './level.js'
 import { JOB_NEED_TENTHS, JOB_MAX } from './jobs.js'
 import { ROLE_TENTHS } from './areas.js'
-import { SLOTS, RARITIES } from './equipment.js'
+import { SLOTS, RARITIES, STARTER_AREA } from './equipment.js'
 import { SORTIE_CD, DROP_RARITY } from './sortie.js'
-import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV, scrapAreaOf } from './smith.js'
+import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV, scrapAreaOf, enhanceScrapOf } from './smith.js'
 import { DAILY_EXP_PCT, DAILY_GOLD_PER_LV, DAY_RESET_HOUR } from './daily.js'
 import { AVATAR_PRESETS, AVATAR_FILE_RE } from './avatar.js'
 import { FORTUNES, PRAY_PERMIL, multTenthsOf } from './tree.js'
@@ -254,8 +254,14 @@ test('【確定】強化：+10まで・残骸は 1,2,3,4,5,7,8,9,10,11・Goldは
   assert.ok(e.includes('v_ok := random() * 100 < c_rate[v_next];'), '抽選は smith.js の rollEnhance と同じ')
   assert.match(e, /select \* into v_row from public\.v2cap_profiles where id = v_uid for update;/, '行をつかんでから見る（連打で二重に使えない）')
   assert.match(e, /where id = p_inventory_id and player_id = v_uid for update;/, '自分の装備だけ')
-  // 残骸はその装備のエリアのもの（初期装備＝エリア0は始まりの森の残骸）。足りないと通さない
+  // 残骸はその装備のエリアのもの。足りないと通さない
   assert.ok(e.includes('v_key  := greatest(1, coalesce(v_eq.area, 1))::text;'))
+  // 【確定】2026-10-12 初期装備（エリア0）は残骸を使わない＝Goldだけ（smith.js の enhanceScrapOf と同じ）。残骸の数にはさわらない
+  assert.equal(STARTER_AREA, 0)
+  assert.ok(e.includes(`v_need := case when coalesce(v_eq.area, 1) = ${STARTER_AREA} then 0 else c_scrap[v_next] end;`), '初期装備は残骸0')
+  assert.match(e, /if v_need > 0 then\s+v_mats := jsonb_set\(v_mats, array\[v_key\], to_jsonb\(v_have - v_need\)\);\s+end if;/, '残骸0のときは materials を書かない')
+  assert.equal(enhanceScrapOf({ area: STARTER_AREA }, 3), 0)
+  assert.equal(enhanceScrapOf({ area: 1 }, 3), ENHANCE_SCRAP[2])
   assert.ok(e.includes("if v_have < v_need then return jsonb_build_object('ok', false, 'error', '残骸が足りません'); end if;"))
   assert.ok(e.includes("if v_row.gold < v_gold then return jsonb_build_object('ok', false, 'error', 'Goldが足りません'); end if;"))
   // 成功でも失敗でも残骸とGoldは使う（分岐の前）・強化値を上げるのは成功のときだけ

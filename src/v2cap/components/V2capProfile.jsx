@@ -4,17 +4,20 @@ import { box, btn, miniBtn, TEXT } from '../../v2/components/v2ui.js'
 import { AVATAR_PRESETS, AVATAR_MAX_BYTES, uploadPathOf } from '../lib/avatar.js'
 import { stageColorOf } from '../lib/jobs.js'
 import { avatarUrlOf } from './v2capAvatarUrl.js'
+import V2capBreakdown from './V2capBreakdown.jsx'
 
 // ============================================================
-// 「レベルキャップあり」版 — プロフィール（アイコンを設定する）
+// 「レベルキャップあり」版 — プロフィール（アイコンを設定する・ステータスの内訳）
 //   【確定】2026-10-11 ユーザー指示「自分で設定できるように」：
 //   ・用意された8枚（旧版・今のⅡと同じ）から選ぶ／前にアップロードした画像から選ぶ／新しくアップロードする（無料・2MBまで）
 //   ・画像の置き場は avatars バケット（自分のフォルダ <ユーザーID>/）。サーバーは「8枚か自分のフォルダ」だけ通す
 //   作りは今のⅡの V2Profile のアイコン選びと同じ（アップロードした画像は旧版・今のⅡと同じフォルダに並ぶ）
+//   【確定】2026-10-12 ユーザー指示「装備とかどのくらいプラスされてるかはプロフから確認できればいい」：
+//   ・名前の下にステータスの内訳（本体・クラス・装備・軽装・合計と、装備ごとの上がるステ＝V2capBreakdown）。ホームの升目は合計だけ
 // ============================================================
 const THUMB = { width:'64px', height:'64px', objectFit:'cover', display:'block' }
 
-export default function V2capProfile({ prof, onProfile }) {
+export default function V2capProfile({ prof, inventory, onProfile }) {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)          // { text, ok }
   const [uploaded, setUploaded] = useState([])  // 自分のフォルダの画像（新しい順）
@@ -88,6 +91,8 @@ export default function V2capProfile({ prof, onProfile }) {
           )}
         </div>
       </div>
+
+      <V2capBreakdown prof={prof} inventory={inventory} />
 
       <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
         <div style={{ color:'#88aaff', fontSize:'12px', marginBottom:'8px' }}>🖼 用意されたアイコン</div>

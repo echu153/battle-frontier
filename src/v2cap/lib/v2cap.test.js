@@ -22,7 +22,7 @@ import {
   RARITIES, RARITY_LABEL, RARITY_BASE, AREA_COUNT, itemOf, itemLabel, slotsFor, SLOT_LABEL, PARTS, partLabel, kindLabel, reqLvOf,
 } from './equipment.js'
 import { GEAR_NAMES } from './gearNames.js'
-import { powerAt, effectPct, statsAt, armorEffects, GEAR_RATIO, SET_PART_SUM } from './gear.js'
+import { powerAt, effectPct, statsAt, armorEffects, armorEffectText, GEAR_RATIO, SET_PART_SUM } from './gear.js'
 import {
   AREA_LIST, SPOTS, SPOT_COUNT, spotOf, spotLvOf, spotLabel, expRangeOf, goldRangeOf,
   ROLE_TENTHS, scaleByRole, enemyLevels, enemyLvOf, enemyRoleOf,
@@ -689,6 +689,12 @@ test('【確定】防具のメリットは 重鎧＝受けるダメージ−3%�
   assert.deepEqual(armorEffects([{ item: light, pct: 100 }]), { takenPct: 0, agiPct: 5, takenMult: 1 })
   // 必要LVに足りないときは、メリットも同じ割合で弱まる
   assert.deepEqual(armorEffects([{ item: heavy, pct: 50 }]), { takenPct: -1.5, agiPct: 0, takenMult: 0.99 })
+  // 1部位の文（ホームの装備にカーソルを合わせたとき・プロフィールの内訳）。効果100%なら表の文と同じ
+  assert.equal(armorEffectText(heavy), ARMOR_EFFECT.重鎧.label)
+  assert.equal(armorEffectText(light, 100), ARMOR_EFFECT.軽装.label)
+  assert.equal(armorEffectText(heavy, 50), '受けるダメージ−1.5%')
+  assert.equal(armorEffectText(light, 45), 'AGI+2.25%')
+  assert.equal(armorEffectText(itemOf(1, 'N', '片手剣')), '', '武器・装飾品は防具の効果なし')
 })
 
 // ===== 戦闘用のキャラ =====

@@ -10,7 +10,7 @@ import { statBreakdown } from './loadout.js'
 import {
   PLUS_MAX, plusOf, plusMultOf, plusLabel, SCRAP_NAMES, scrapNameOf, scrapOf, SCRAP_YIELD, scrapYieldOf,
   dismantleGainOf, bulkPickable, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, enhanceGoldOf,
-  enhanceCostOf, enhanceErrorOf, rollEnhance, expectedEnhanceCost,
+  enhanceScrapOf, enhanceCostOf, enhanceErrorOf, rollEnhance, expectedEnhanceCost,
   CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV, canCraft, craftCostOf, craftErrorOf,
 } from './smith.js'
 
@@ -121,6 +121,20 @@ test('強化できないわけ：上限・その装備のエリアの残骸が�
   assert.equal(enhanceErrorOf(item, inv, prof({ 1: 99, 2: 2 }, 99999)), '荒野の残骸が足りません', 'ほかのエリアの残骸では強化できない')
   assert.equal(enhanceErrorOf(item, inv, prof({ 2: 3 }, 599)), 'Goldが足りません')
   assert.equal(enhanceErrorOf(item, inv, prof({ 2: 3 }, 600)), null)
+})
+
+test('【確定】2026-10-12 初期装備はGoldだけで強化できる（残骸0）。Gold・成功率はほかの装備と同じ', () => {
+  const item = ITEM_BY_ID['0N:短剣']   // 見習いの短剣（エリア0・必要LV1）
+  assert.equal(item.name, '見習いの短剣')
+  for (let n = 1; n <= PLUS_MAX; n++) {
+    assert.equal(enhanceScrapOf(item, n), 0, `+${n}は残骸なし`)
+    assert.equal(enhanceScrapOf(itemOf(1, 'N', '短剣'), n), ENHANCE_SCRAP[n - 1], '落ちた装備は今までどおり')
+  }
+  assert.deepEqual(enhanceCostOf(item, { ilv: 1, plus: 0 }), { next: 1, area: 1, scrap: 0, gold: 20, rate: 100 })
+  assert.deepEqual(enhanceCostOf(item, { ilv: 1, plus: 9 }), { next: 10, area: 1, scrap: 0, gold: 200, rate: 10 })
+  // 残骸を1つも持っていなくても、Goldがあれば強化できる
+  assert.equal(enhanceErrorOf(item, { id: 1, ilv: 1, plus: 4 }, { materials: {}, gold: 100 }), null)
+  assert.equal(enhanceErrorOf(item, { id: 1, ilv: 1, plus: 4 }, { gold: 99 }), 'Goldが足りません')
 })
 
 test('抽選は「乱数×100 < 成功率」（+1は必ず成功・+10は1割）', () => {

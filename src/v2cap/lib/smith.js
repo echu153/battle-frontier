@@ -12,9 +12,12 @@
 //   ・**失敗すると残骸とGoldはなくなり、強化値はそのまま**（下がらない・壊れない）
 //   ・今の「捨てる」は分解に置き換えた。まとめて分解できる（レア度で選ぶ・1つずつ選ぶ・表示中を全部選ぶ）
 // 強くなるのはステータスだけ（重鎧・軽装の効果はそのまま）。必要LVが足りないときの弱まり方も今のまま。
+// 【確定】2026-10-12 ユーザー指示「初期装備は残骸不要、Goldだけで強化できるように」：
+//   初期装備（エリア0）の強化は残骸を使わない（Gold・成功率・失敗したときはほかの装備と同じ）
 // ★抽選と残骸・Goldの出し入れはサーバー（v2cap_enhance・v2cap_dismantle）。ここは表示とテストのための写し
 //   （v2capsql.test.js が表の数を突き合わせる）
 // ============================================================
+import { STARTER_AREA } from './equipment.js'
 
 // ===== 強化値 =====
 export const PLUS_MAX = 10
@@ -33,8 +36,8 @@ export const SCRAP_NAMES = [
   '腐海の残骸', '奈落の残骸', '蒼天の残骸', '星霜の残骸', '深海の残骸',
 ]
 export const scrapNameOf = (area) => SCRAP_NAMES[area - 1] || '残骸'
-// その装備の分解・強化で出し入れする残骸のエリア。初期装備（エリア0・2026-10-12）は始まりの森（1）の残骸を使う
-// ★サーバー（v2cap_dismantle・v2cap_enhance）も greatest(1, エリア) で同じにしている
+// その装備の分解で手に入る（強化で使う）残骸のエリア。初期装備（エリア0・2026-10-12）は分解すると始まりの森（1）の残骸になる
+// （初期装備の強化は残骸を使わない＝下の enhanceScrapOf）。★サーバー（v2cap_dismantle・v2cap_enhance）も greatest(1, エリア) で同じにしている
 export const scrapAreaOf = (item) => Math.max(1, Number(item?.area) || 1)
 // 持っている数。サーバーは v2cap_profiles.materials に {"エリアの番号": 個数} で持つ
 export const scrapOf = (materials, area) => Math.max(0, Math.floor(Number(materials?.[String(area)]) || 0))
@@ -63,14 +66,16 @@ export const ENHANCE_SCRAP = [1, 2, 3, 4, 5, 7, 8, 9, 10, 11]
 export const ENHANCE_RATE = [100, 90, 80, 70, 60, 50, 40, 30, 20, 10]
 export const ENHANCE_GOLD_PER_LV = 20
 export const enhanceGoldOf = (ilv, next) => Math.max(1, ilv || 1) * ENHANCE_GOLD_PER_LV * next
-// 次の強化にかかるもの。上限なら null
+// +n にする回の残骸の数。初期装備（エリア0）は0＝Goldだけ（2026-10-12 ユーザー指示）。★サーバーも エリア0 なら0
+export const enhanceScrapOf = (item, next) => (Number(item?.area) === STARTER_AREA ? 0 : ENHANCE_SCRAP[next - 1])
+// 次の強化にかかるもの。上限なら null（scrap が0なら残骸は使わない）
 export const enhanceCostOf = (item, inv) => {
   const plus = plusOf(inv)
   if (!item || plus >= PLUS_MAX) return null
   const next = plus + 1
   return {
     next, area: scrapAreaOf(item),
-    scrap: ENHANCE_SCRAP[next - 1],
+    scrap: enhanceScrapOf(item, next),
     gold: enhanceGoldOf(inv?.ilv, next),
     rate: ENHANCE_RATE[next - 1],
   }
@@ -80,7 +85,7 @@ export const enhanceErrorOf = (item, inv, prof) => {
   if (!item || !inv) return 'その装備を持っていません'
   const c = enhanceCostOf(item, inv)
   if (!c) return `強化値は+${PLUS_MAX}が上限です`
-  if (scrapOf(prof?.materials, c.area) < c.scrap) return `${scrapNameOf(c.area)}が足りません`
+  if (c.scrap > 0 && scrapOf(prof?.materials, c.area) < c.scrap) return `${scrapNameOf(c.area)}が足りません`
   if ((Number(prof?.gold) || 0) < c.gold) return 'Goldが足りません'
   return null
 }

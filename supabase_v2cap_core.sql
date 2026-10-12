@@ -3905,7 +3905,8 @@ grant execute on function public.v2cap_dismantle(bigint[]) to authenticated;
 --   ・+10まで。+n にする回の 残骸＝1,2,3,4,5,7,8,9,10,11 個（その装備のエリアの残骸）・Gold＝必要LV×20×n・
 --     成功率＝+1が100%、そこから10%ずつ下がって+10で10%
 --   ・**失敗すると残骸とGoldはなくなり、強化値はそのまま**（下がらない・壊れない）
--- ★表の写しは src/v2cap/lib/smith.js（ENHANCE_SCRAP・ENHANCE_RATE・ENHANCE_GOLD_PER_LV）。v2capsql.test.js が突き合わせる
+-- 【確定】2026-10-12 ユーザー指示「初期装備は残骸不要、Goldだけで強化できるように」：初期装備（エリア0）は残骸を使わない
+-- ★表の写しは src/v2cap/lib/smith.js（ENHANCE_SCRAP・ENHANCE_RATE・ENHANCE_GOLD_PER_LV・enhanceScrapOf）。v2capsql.test.js が突き合わせる
 create or replace function public.v2cap_enhance(p_inventory_id bigint)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
@@ -3939,9 +3940,10 @@ begin
     return jsonb_build_object('ok', false, 'error', format('強化値は+%sが上限です', c_max));
   end if;
   v_next := v_plus + 1;
-  v_need := c_scrap[v_next];
+  -- ★初期装備（エリア0）は残骸を使わない＝Goldだけ（smith.js の enhanceScrapOf）
+  v_need := case when coalesce(v_eq.area, 1) = 0 then 0 else c_scrap[v_next] end;
   v_gold := greatest(1, v_inv.ilv)::bigint * c_gold_per_lv * v_next;
-  v_key  := greatest(1, coalesce(v_eq.area, 1))::text;   -- ★初期装備（エリア0）は始まりの森の残骸を使う（smith.js の scrapAreaOf）
+  v_key  := greatest(1, coalesce(v_eq.area, 1))::text;
   v_mats := coalesce(v_row.materials, '{}'::jsonb);
   v_have := coalesce((v_mats ->> v_key)::int, 0);
   if v_have < v_need then return jsonb_build_object('ok', false, 'error', '残骸が足りません'); end if;
@@ -3949,8 +3951,10 @@ begin
 
   -- 抽選（成功率は%。+1は100%なので必ず成功する）
   v_ok := random() * 100 < c_rate[v_next];
-  -- 成功でも失敗でも、残骸とGoldは使う
-  v_mats := jsonb_set(v_mats, array[v_key], to_jsonb(v_have - v_need));
+  -- 成功でも失敗でも、残骸とGoldは使う（残骸を使わない初期装備は、残骸の数にさわらない）
+  if v_need > 0 then
+    v_mats := jsonb_set(v_mats, array[v_key], to_jsonb(v_have - v_need));
+  end if;
   update public.v2cap_profiles
      set materials = v_mats, gold = gold - v_gold, updated_at = now()
    where id = v_uid;

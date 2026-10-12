@@ -6,7 +6,7 @@ import { START_CLASSES, canEquipType, attackKindOf } from './jobs.js'
 import { ITEMS, ITEM_BY_ID, STARTER_ITEMS, STARTER_SET, STARTER_LV, STARTER_AREA, starterIdsOf, SLOTS, slotsFor } from './equipment.js'
 import { powerAt } from './gear.js'
 import { bodyPowerAt } from './level.js'
-import { scrapAreaOf, canCraft } from './smith.js'
+import { scrapAreaOf, canCraft, enhanceCostOf } from './smith.js'
 
 test('どの初期職にも7枠そろった初期装備がある（枠の順・必要LV1・その職業が装備できる武器）', () => {
   assert.deepEqual(Object.keys(STARTER_SET).sort(), [...START_CLASSES].sort())
@@ -53,7 +53,8 @@ test('初期装備はどこにも落ちない・作れない（エリア×レア
   for (const it of STARTER_ITEMS) {
     assert.ok(!ITEMS.includes(it), `${it.id}は落ちる・作る一覧に入らない`)
     assert.equal(canCraft(it), false)
-    assert.equal(scrapAreaOf(it), 1, '分解・強化の残骸は始まりの森')
+    assert.equal(scrapAreaOf(it), 1, '分解すると始まりの森の残骸')
+    assert.equal(enhanceCostOf(it, { ilv: STARTER_LV, plus: 0 }).scrap, 0, '強化は残骸なし（Goldだけ・2026-10-12 ユーザー指示）')
   }
   for (const cls of START_CLASSES) {
     const total = starterIdsOf(cls).reduce((t, id) => t + powerAt(ITEM_BY_ID[id], STARTER_LV), 0)

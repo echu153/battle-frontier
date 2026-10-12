@@ -34,7 +34,7 @@ import { START_CLASSES, weaponsOf, attackKindOf, classDescOf } from '../lib/jobs
 // ============================================================
 const MENU = [
   [
-    { key:'profile', label:'プロフィール', icon:'👤', color:'#88aaff', action:'アイコンを設定する' },
+    { key:'profile', label:'プロフィール', icon:'👤', color:'#88aaff', action:'アイコン・ステの内訳' },
     { key:'skills',  label:'スキルセット', icon:'📖', color:'#44ff88', action:'編成する' },
     { key:'equip',   label:'装備',         icon:'🛡', color:'#88ccff', action:'着ける・外す' },
     { key:'dex',     label:'モンスター図鑑', icon:'📕', color:'#c0b0ff', action:'敵とドロップを見る' },
@@ -280,7 +280,7 @@ export default function V2capHome() {
               <button onClick={goHome} style={miniBtn('#88aaff')}>← ホームへ</button>
               <span style={{ color:'#88ccff', fontSize:'13px' }}>{SCREEN_TITLE[screen]}</span>
             </div>
-            {screen === 'profile' && <V2capProfile prof={prof} onProfile={refresh} />}
+            {screen === 'profile' && <V2capProfile prof={prof} inventory={inventory} onProfile={refresh} />}
             {screen === 'equip' && <V2capEquip prof={prof} inventory={inventory} onProfile={refresh} onGo={setScreen} />}
             {screen === 'smith' && <V2capSmith prof={prof} inventory={inventory} onProfile={refresh} onGo={setScreen} />}
             {screen === 'skills' && <V2capSkills prof={prof} inventory={inventory} onProfile={refresh} />}

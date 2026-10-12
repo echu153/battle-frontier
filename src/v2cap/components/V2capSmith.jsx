@@ -19,7 +19,8 @@ import { RarityTag, PlusTag, GearFilterBar } from './v2capGear.jsx'
 // 「レベルキャップあり」版 — 鍛冶屋（強化・分解・作成）
 // ------------------------------------------------------------
 // 【確定】2026-10-10 ユーザー指示「鍛冶屋を追加、ここで装備の強化・分解・作成が可能」。数の正は src/v2cap/lib/smith.js
-//   ・強化 … Goldとその装備のエリアの残骸で+1（+10まで・+1ごとに強さ+10%）。失敗すると残骸とGoldはなくなり、強化値はそのまま
+//   ・強化 … Goldとその装備のエリアの残骸で+1（+10まで・+1ごとに強さ+10%）。失敗すると残骸とGoldはなくなり、強化値はそのまま。
+//            初期装備はGoldだけ（残骸なし・2026-10-12 ユーザー指示）
 //   ・分解 … 装備をその装備のエリアの残骸にする（ノーマル1・レア5・エピック10・レジェンダリー25）。
 //            まとめて選べる（レア度で・チェックで・表示中を全部。まとめて選ぶときは装備中と強化したものは選ばない）
 //   ・作成 … レア・エピック・レジェンダリーを、Goldとそのエリアの残骸で作る（残骸30／100／300・Gold 必要LV×50／100／200）。
@@ -27,7 +28,7 @@ import { RarityTag, PlusTag, GearFilterBar } from './v2capGear.jsx'
 //   ・強化と分解は鍛冶屋だけ（装備画面は着ける・外すだけ・ユーザー決定）
 // ============================================================
 const TABS = [
-  { key:'enhance',   label:'強化', desc:`Goldとその装備のエリアの残骸で強化値を+1（+${PLUS_MAX}まで・+1ごとに強さ+10%）。失敗すると残骸とGoldはなくなり、強化値はそのままです。着けている装備も強化できます。` },
+  { key:'enhance',   label:'強化', desc:`Goldとその装備のエリアの残骸で強化値を+1（+${PLUS_MAX}まで・+1ごとに強さ+10%）。初期装備はGoldだけで強化できます。失敗すると残骸とGoldはなくなり、強化値はそのままです。着けている装備も強化できます。` },
   { key:'dismantle', label:'分解', desc:`装備を、その装備のエリアの残骸にします（${RARITIES.map(r => `${rarityLabel(r)}${SCRAP_YIELD[r]}`).join('・')}個）。着けている装備は分解できません。` },
   { key:'craft',     label:'作成', desc:'レア・エピック・レジェンダリーの装備を、Goldとそのエリアの残骸で作ります（必ずできます・+0で持ち物に入ります）。武器はどの職業のものでも作れます。' },
 ]
@@ -114,7 +115,7 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call }) {
     if (error) { setMsg({ ok: false, text: `⚠ ${error}` }); return }
     setMsg(data.success
       ? { ok: true, text: `✨ 成功！ +${data.plus} になりました` }
-      : { ok: false, text: `💥 失敗… +${data.plus} のまま（${scrapNameOf(data.area)} ${data.scrap}個と Gold ${Number(data.gold).toLocaleString()} はなくなりました）` })
+      : { ok: false, text: `💥 失敗… +${data.plus} のまま（${data.scrap > 0 ? `${scrapNameOf(data.area)} ${data.scrap}個と ` : ''}Gold ${Number(data.gold).toLocaleString()} はなくなりました）` })
   }
   return (
     <>
@@ -139,7 +140,7 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call }) {
                 {cost ? (
                   <span style={{ color: TEXT.sub, flex:1, minWidth:0 }}>
                     次は <span style={{ color: PLUS_COLOR }}>+{cost.next}</span>：
-                    <span style={{ color: scrapShort ? SHORT : '#cfe2ff' }}>{scrapNameOf(cost.area)} {cost.scrap}個</span>・
+                    {cost.scrap > 0 && <><span style={{ color: scrapShort ? SHORT : '#cfe2ff' }}>{scrapNameOf(cost.area)} {cost.scrap}個</span>・</>}
                     <span style={{ color: goldShort ? SHORT : '#ffcc00' }}>Gold {cost.gold.toLocaleString()}</span>・成功率 {cost.rate}%
                   </span>
                 ) : <span style={{ color: PLUS_COLOR, flex:1 }}>+{PLUS_MAX}（上限）</span>}
@@ -349,7 +350,7 @@ function SmithModal({ row, prof, busy, msg, onEnhance, onClose }) {
   const err = enhanceErrorOf(item, inv, prof)
   const pct = effectPct(inv.ilv, prof.lv)
   const now = powerAt(item, inv.ilv, plus)
-  const have = scrapOf(prof.materials, item.area)
+  const have = cost ? scrapOf(prof.materials, cost.area) : 0
   const gold = Number(prof.gold) || 0
   const short = { color: SHORT }
   return (
@@ -372,13 +373,18 @@ function SmithModal({ row, prof, busy, msg, onEnhance, onClose }) {
             {statLine(statsAt(item, inv.ilv, pct, plus))}<br />→ {statLine(statsAt(item, inv.ilv, pct, cost.next))}
           </div>
           <div style={{ marginTop:'4px' }}>
-            使うもの：<span style={have < cost.scrap ? short : { color:'#cfe2ff' }}>{scrapNameOf(item.area)} {cost.scrap}個</span>
-            <span style={{ color: TEXT.sub, fontSize:'11px' }}>（持っている {have.toLocaleString()}）</span>
-            ・<span style={gold < cost.gold ? short : { color:'#ffcc00' }}>Gold {cost.gold.toLocaleString()}</span>
+            使うもの：
+            {cost.scrap > 0 && <>
+              <span style={have < cost.scrap ? short : { color:'#cfe2ff' }}>{scrapNameOf(cost.area)} {cost.scrap}個</span>
+              <span style={{ color: TEXT.sub, fontSize:'11px' }}>（持っている {have.toLocaleString()}）</span>・
+            </>}
+            <span style={gold < cost.gold ? short : { color:'#ffcc00' }}>Gold {cost.gold.toLocaleString()}</span>
             <span style={{ color: TEXT.sub, fontSize:'11px' }}>（持っている {gold.toLocaleString()}）</span>
           </div>
           <div>成功率 <span style={{ color: cost.rate >= 50 ? '#44ff88' : SHORT }}>{cost.rate}%</span></div>
-          <div style={{ color: TEXT.sub, fontSize:'11px' }}>失敗すると残骸とGoldはなくなり、強化値はそのままです。</div>
+          <div style={{ color: TEXT.sub, fontSize:'11px' }}>
+            {cost.scrap > 0 ? '失敗すると残骸とGoldはなくなり、強化値はそのままです。' : '初期装備は残骸を使いません（Goldだけ）。失敗するとGoldはなくなり、強化値はそのままです。'}
+          </div>
           {err && <div style={short}>⚠ {err}</div>}
         </>
       ) : <div style={{ color: PLUS_COLOR }}>強化値は+{PLUS_MAX}（上限）です</div>}
