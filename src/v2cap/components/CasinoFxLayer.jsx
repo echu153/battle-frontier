@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { fxSubscribe, reducedMotion, sfx } from './casinoFx.js'
 import { CountUp } from './casinoParts.jsx'
+import { DISPLAY_FONT, RAINBOW_BASE } from './casinoStyle.js'
 
 const KEYFRAMES = `
 @keyframes csPop { 0% { transform: translate(-50%,-50%) scale(0.2); opacity: 0 } 18% { transform: translate(-50%,-50%) scale(1.25); opacity: 1 }
@@ -15,6 +16,7 @@ const KEYFRAMES = `
 @keyframes csShine { 0% { background-position: -200% 0 } 100% { background-position: 200% 0 } }
 @keyframes csPulse { 0%,100% { transform: scale(1) } 50% { transform: scale(1.06) } }
 @keyframes csBlink { 0%,100% { opacity: 1 } 50% { opacity: 0.35 } }
+@keyframes csHue { from { filter: hue-rotate(0deg) } to { filter: hue-rotate(360deg) } }
 @keyframes csShake { 0% { transform: translate(0,0) } 20% { transform: translate(var(--p),calc(var(--p) * -0.6)) } 40% { transform: translate(calc(var(--p) * -1),calc(var(--p) * 0.4)) }
   60% { transform: translate(calc(var(--p) * 0.7),var(--p)) } 80% { transform: translate(calc(var(--p) * -0.5),calc(var(--p) * -0.8)) } 100% { transform: translate(0,0) } }
 `
@@ -143,26 +145,32 @@ export default function CasinoFxLayer({ children }) {
           maskImage:'radial-gradient(circle, #000 0%, transparent 55%)', WebkitMaskImage:'radial-gradient(circle, #000 0%, transparent 55%)',
           animation:'csRays 6s linear infinite' }} />
       )}
-      {popups.map(p => (
-        <div key={p.key} style={{ position:'fixed', left:'50%', top: p.top || '40%', zIndex:410, pointerEvents:'none', textAlign:'center', whiteSpace:'nowrap',
-          animation:`csPop ${(p.ms || 1500)}ms ease-out forwards`, fontFamily:"'Arial Black', Impact, monospace" }}>
-          <div style={{ fontSize: p.size || 34, fontWeight:900, color: p.color || '#ffcc00', letterSpacing:'2px',
-            textShadow:`0 0 8px ${p.color || '#ffcc00'}, 0 0 22px ${p.color || '#ffcc00'}, 2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000` }}>{p.text}</div>
-          {p.sub && <div style={{ fontSize:14, color:'#fff', textShadow:'0 0 6px #000, 1px 1px 0 #000', marginTop:4 }}>{p.sub}</div>}
-        </div>
-      ))}
+      {popups.map(p => {
+        const rainbow = p.color === 'rainbow'
+        const c = rainbow ? RAINBOW_BASE : (p.color || '#ffcc00')
+        return (
+          <div key={p.key} style={{ position:'fixed', left:'50%', top: p.top || '40%', zIndex:410, pointerEvents:'none', textAlign:'center', whiteSpace:'nowrap',
+            animation:`csPop ${(p.ms || 1500)}ms ease-out forwards`, fontFamily: DISPLAY_FONT }}>
+            <div style={{ fontSize: p.size || 34, fontWeight:'bold', color: c, letterSpacing:'2px',
+              textShadow:`0 0 8px ${c}, 0 0 22px ${c}, 2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000`,
+              animation: rainbow ? 'csHue 1.2s linear infinite' : undefined }}>{p.text}</div>
+            {p.sub && <div style={{ fontSize:14, fontWeight:'bold', color:'#fff', textShadow:'0 0 6px #000, 1px 1px 0 #000', marginTop:4 }}>{p.sub}</div>}
+          </div>
+        )
+      })}
       {banner && (
         <div key={banner.key} onClick={() => setBanner(null)} style={{ position:'fixed', inset:0, zIndex:420, display:'flex', alignItems:'center', justifyContent:'center',
           background:'radial-gradient(circle, #000a 0%, #000d 70%)', cursor:'pointer' }}>
           <div style={{ textAlign:'center', animation:'csBanner 0.9s cubic-bezier(.2,1.6,.4,1) both', padding:'0 16px' }}>
-            {banner.title && <div style={{ color:'#fff', fontSize:16, letterSpacing:'3px', marginBottom:6, textShadow:'0 0 8px #000' }}>{banner.title}</div>}
-            <div style={{ fontFamily:"'Arial Black', Impact, sans-serif", fontWeight:900, fontSize: 40 + bannerLv * 10, lineHeight:1.05, letterSpacing:'2px',
+            {banner.title && <div style={{ color:'#fff', fontSize:16, fontWeight:'bold', fontFamily: DISPLAY_FONT, letterSpacing:'3px', marginBottom:6, textShadow:'0 0 8px #000' }}>{banner.title}</div>}
+            {/* ★グラデーションの切り抜き（background-clip:text）は英字だけのここに限る（日本語はつぶれる・casinoStyle.js） */}
+            <div style={{ fontFamily: DISPLAY_FONT, fontWeight:900, fontSize: 40 + bannerLv * 10, lineHeight:1.05, letterSpacing:'2px',
               background:`linear-gradient(90deg, #fff 0%, ${banner.tier.color} 25%, #fff 50%, ${banner.tier.color} 75%, #fff 100%)`, backgroundSize:'200% 100%',
               WebkitBackgroundClip:'text', backgroundClip:'text', color:'transparent', animation:'csShine 1.6s linear infinite',
               filter:`drop-shadow(0 0 12px ${banner.tier.color}) drop-shadow(0 0 2px #000)` }}>
               {banner.tier.label}
             </div>
-            <div style={{ marginTop:10, fontSize: 30 + bannerLv * 4, fontWeight:900, color:'#ffe680', fontFamily:"'Arial Black', Impact, monospace",
+            <div style={{ marginTop:10, fontSize: 30 + bannerLv * 4, fontWeight:'bold', color:'#ffe680', fontFamily: DISPLAY_FONT,
               textShadow:'0 0 10px #ffb300, 2px 2px 0 #000', animation:'csPulse 0.6s ease-in-out infinite' }}>
               +<CountUp value={banner.amount} start={0} ms={900 + bannerLv * 700} onTick={sfx.tick} />枚
             </div>

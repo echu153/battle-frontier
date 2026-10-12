@@ -141,7 +141,7 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call }) {
       )}
       {fxJob && (
         <V2capEnhanceFx job={fxJob}
-          nextLabel={nextCost && !nextErr ? `+${nextCost.next}にする` : null}
+          nextLabel={nextCost && !nextErr ? `+${nextCost.next}に強化する` : null}
           nextReason={!nextCost ? `強化値は+${PLUS_MAX}（上限）です` : nextErr ? `次の強化：${nextErr}` : ''}
           onAgain={enhance} onClose={() => setFxJob(null)} />
       )}
@@ -377,7 +377,7 @@ function SmithModal({ row, prof, busy, msg, onEnhance, onClose }) {
   const short = { color: SHORT }
   return (
     <V2Modal title="🔨 装備の強化" color="#ffcc00" busy={busy}
-      confirmLabel={cost ? `+${cost.next}にする` : '強化する'} cancelLabel="閉じる"
+      confirmLabel={cost ? `+${cost.next}に強化する` : '強化する'} cancelLabel="閉じる"
       onConfirm={err ? undefined : onEnhance} onClose={onClose}>
       <div>
         <RarityTag item={item} /><span style={{ color: nameColor(item) }}>{item.name}</span><PlusTag inv={inv} />

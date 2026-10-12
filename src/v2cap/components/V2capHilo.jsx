@@ -11,7 +11,7 @@ import { supabase } from '../../supabase'
 import { useStored } from '../../v2/lib/prefs.js'
 import { HILO_BETS, HILO_MIN_BET, HILO_MAX_BET, HILO_MAX_STREAK, HILO_CAP_MULT, hiloMult100Of, hiloChanceOf, hiloNextPotOf, hiloPayoutOf, winTierOf } from '../lib/casino.js'
 import { sfx, fx, celebrate, vibrate } from './casinoFx.js'
-import { CASINO, panel, bigBtn, pill, fmt } from './casinoStyle.js'
+import { CASINO, panel, bigBtn, pill, fmt, DISPLAY_FONT } from './casinoStyle.js'
 import { CountUp, PlayingCard } from './casinoParts.jsx'
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
@@ -131,7 +131,7 @@ export default function V2capHilo({ init, medals, onMoney }) {
         })}
       </div>
       {g.streak >= 5 && g.active && (
-        <div style={{ textAlign:'center', color:'#ff7043', fontWeight:900, letterSpacing:'3px', fontFamily:"'Arial Black', Impact, sans-serif",
+        <div style={{ textAlign:'center', color:'#ff7043', fontWeight:'bold', letterSpacing:'3px', fontFamily: DISPLAY_FONT,
           textShadow:'0 0 10px #ff3d00', animation:'csPulse 0.7s ease-in-out infinite', marginBottom:'6px' }}>🔥 {g.streak}連勝 FEVER 🔥</div>
       )}
 
@@ -153,7 +153,7 @@ export default function V2capHilo({ init, medals, onMoney }) {
         {g.active ? (
           <>
             <div style={{ fontSize:'11px', color:CASINO.label }}>持ち分（{fmt(g.bet)}枚から・{g.streak}連勝）</div>
-            <div style={{ fontSize:'26px', fontWeight:900, color:CASINO.gold, textShadow:'0 0 10px #ffcc0066', fontFamily:"'Arial Black', Impact, monospace" }}>
+            <div style={{ fontSize:'26px', fontWeight:'bold', color:CASINO.gold, textShadow:'0 0 10px #ffcc0066', fontFamily: DISPLAY_FONT }}>
               <CountUp value={hiloPayoutOf(g.pot)} ms={500} />枚
             </div>
           </>

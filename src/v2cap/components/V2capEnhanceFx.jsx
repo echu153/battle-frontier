@@ -12,6 +12,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createParticles } from './fxParticles.js'
 import { enhanceTierOf, enhanceChargeMsOf, enhanceTitleOf } from '../lib/fxStyle.js'
+import { DISPLAY_FONT, JP_BOLD, RAINBOW_BASE } from './casinoStyle.js'
 
 const KF = `
 @keyframes efFadeIn { from { opacity: 0 } to { opacity: 1 } }
@@ -24,10 +25,9 @@ const KF = `
 @keyframes efTextFail { 0% { transform: translateY(-14px); opacity: 0 } 50% { transform: translateY(3px); opacity: 1 } 100% { transform: translateY(0); opacity: 1 } }
 @keyframes efDrop { 0% { transform: translateY(0) rotate(0); opacity: 1 } 100% { transform: translateY(70px) rotate(8deg); opacity: 0 } }
 @keyframes efPanel { from { transform: translateY(16px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
-@keyframes efShine { 0% { background-position: -200% 0 } 100% { background-position: 200% 0 } }
 @keyframes efPulse { 0%,100% { opacity: 0.55 } 50% { opacity: 1 } }
+@keyframes efHue { from { filter: hue-rotate(0deg) } to { filter: hue-rotate(360deg) } }
 `
-const RAINBOW = 'linear-gradient(90deg,#ff3355,#ffcc00,#44ff88,#33e0ff,#a77bff,#ff4fa3,#ff3355)'
 const RING = 260   // 魔法陣の大きさ
 
 // 装備の絵（武器・防具・装飾品）
@@ -208,6 +208,7 @@ export default function V2capEnhanceFx({ job, nextLabel, nextReason, onAgain, on
   const ended = phase !== 'charge'
   const circleColor = ended && !success ? '#ff5a6a' : tier.color
   const glow = phase === 'charge' ? tier.color : success ? tier.color : '#ff3355'
+  const titleGlow = tier.key === 'max' ? RAINBOW_BASE : tier.color
   const itemStyle = {
     position:'absolute', left:'50%', top:'50%', width:96, height:96, marginLeft:-48, marginTop:-48, borderRadius:14,
     background:'radial-gradient(circle at 50% 40%, #1d2a4a 0%, #0a1024 75%)', border:`2px solid ${job.color}`,
@@ -233,15 +234,15 @@ export default function V2capEnhanceFx({ job, nextLabel, nextReason, onAgain, on
             <div style={{ color: tier.color, fontSize:16, letterSpacing:6, animation:'efPulse 0.9s ease-in-out infinite', textShadow:`0 0 10px ${tier.color}` }}>強化中…</div>
           )}
           {ended && success && (
-            <div style={{ fontFamily:"'Arial Black', Impact, sans-serif", fontWeight:900, fontSize: tier.key === 'max' ? 40 : 36, letterSpacing:6,
-              background: tier.key === 'max' ? RAINBOW : `linear-gradient(90deg,#fff 0%,${tier.color} 30%,#fff 50%,${tier.color} 70%,#fff 100%)`, backgroundSize:'200% 100%',
-              WebkitBackgroundClip:'text', backgroundClip:'text', color:'transparent', filter:`drop-shadow(0 0 10px ${tier.color})`,
-              animation:'efText 0.6s cubic-bezier(.2,1.4,.4,1) both, efShine 1.6s linear infinite' }}>
+            <div style={{ fontFamily: JP_BOLD, fontWeight:'bold', fontSize: tier.key === 'max' ? 40 : 36, letterSpacing:6,
+              color: tier.key === 'max' ? RAINBOW_BASE : '#ffffff',
+              textShadow: `0 0 6px ${titleGlow}, 0 0 16px ${titleGlow}, 0 0 30px ${titleGlow}, 0 2px 0 #000`,
+              animation: tier.key === 'max' ? 'efText 0.6s cubic-bezier(.2,1.4,.4,1) both, efHue 1.2s linear infinite' : 'efText 0.6s cubic-bezier(.2,1.4,.4,1) both' }}>
               強化成功{tier.key === 'max' ? '!!' : '!'}
             </div>
           )}
           {ended && !success && (
-            <div style={{ fontWeight:900, fontSize:30, letterSpacing:6, color:'#ff6677', textShadow:'0 0 8px #ff2244, 2px 2px 0 #000', animation:'efTextFail 0.5s ease-out both' }}>強化失敗…</div>
+            <div style={{ fontFamily: JP_BOLD, fontWeight:'bold', fontSize:30, letterSpacing:6, color:'#ff6677', textShadow:'0 0 8px #ff2244, 2px 2px 0 #000', animation:'efTextFail 0.5s ease-out both' }}>強化失敗…</div>
           )}
         </div>
 
@@ -267,7 +268,7 @@ export default function V2capEnhanceFx({ job, nextLabel, nextReason, onAgain, on
           )}
           <div style={itemStyle}>
             <GearGlyph part={job.part} color={job.color} />
-            <div style={{ fontWeight:900, fontSize:15, color: ended && success ? tier.color : '#ffffff', textShadow:'0 0 6px #000, 1px 1px 0 #000', marginTop:-4 }}>
+            <div style={{ fontFamily: DISPLAY_FONT, fontWeight:'bold', fontSize:15, color: ended && success ? tier.color : '#ffffff', textShadow:'0 0 6px #000, 1px 1px 0 #000', marginTop:-4 }}>
               +{ended && success ? job.plusTo : job.plusFrom}
             </div>
           </div>

@@ -16,7 +16,7 @@ import { useStored } from '../../v2/lib/prefs.js'
 import { SLOT_BET, SLOT_RATES, SLOT_ROLES, SLOT_ORDERS, SLOT_AT_GAMES, SLOT_CZ_GAMES, SLOT_PREMIUM_GAMES, SLOT_TOKU_GAMES, SLOT_MISS_PAY, orderIndexOf, winTierOf } from '../lib/casino.js'
 import { REEL_LEN, REELS, displayTable, classOf, winLinesOf, noticeLevelOf, NOTICE_LEVELS, DISPLAY_OF_ROLE } from '../lib/slotReels.js'
 import { sfx, fx, celebrate, vibrate } from './casinoFx.js'
-import { CASINO, panel, bigBtn, pill, fmt, signed } from './casinoStyle.js'
+import { CASINO, panel, bigBtn, pill, fmt, signed, DISPLAY_FONT, JP_BOLD, RAINBOW_BASE } from './casinoStyle.js'
 import { CountUp, SlotDefs, SlotSymbol } from './casinoParts.jsx'
 
 const CELL = 54        // 1コマの高さ
@@ -24,7 +24,6 @@ const SYM = 50         // 絵柄の幅
 const REEL_W = 74
 const SPEED = 21       // 回っている速さ（コマ/秒）
 const mod = (n) => ((n % REEL_LEN) + REEL_LEN) % REEL_LEN
-const RAINBOW = 'linear-gradient(90deg,#ff3355,#ffcc00,#44ff88,#33e0ff,#a77bff,#ff4fa3)'
 const RARE_LABEL = {
   wcherry: ['弱チェリー', '#ff88aa'], scherry: ['強チェリー', '#ff3366'], suika: ['スイカ', '#44dd66'],
   chance: ['チャンス目', '#ffaa33'], premium: ['中段チェリー', 'rainbow'],
@@ -382,6 +381,7 @@ export default function V2capSlot({ init, medals, onMoney, active = true }) {
   const nextNav = nav ? nav.find(k => !stopped[k]) : null
   const lit = new Set(lines.flatMap(l => l.line.map((row, reel) => `${reel}:${row}`)))
   const nt = notice ? NOTICE_LEVELS[notice] : null
+  const ntColor = nt ? (nt.color === 'rainbow' ? RAINBOW_BASE : nt.color) : null
   const leverLabel = phase === 'push' ? 'PUSH!!' : phase === 'intro' ? '7を狙え！' : `レバー（${fmt(bet)}枚）`
   const leverOn = phase === 'push' || phase === 'intro' || (phase === 'idle' && medals >= bet)
   const leverColor = phase === 'push' ? CASINO.red : phase === 'intro' ? '#ffffff' : theme.color
@@ -391,7 +391,7 @@ export default function V2capSlot({ init, medals, onMoney, active = true }) {
       <SlotDefs />
       {/* ===== 上：状態 ===== */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'8px' }}>
-        <div style={{ fontFamily:"'Arial Black', Impact, monospace", fontWeight:900, letterSpacing:'2px', fontSize:'15px',
+        <div style={{ fontFamily: DISPLAY_FONT, fontWeight:'bold', letterSpacing:'2px', fontSize:'15px',
           color: theme.color, textShadow:`0 0 8px ${theme.color}` , animation: sv.mode !== 'normal' ? 'csPulse 1.2s ease-in-out infinite' : undefined }}>
           {theme.name}
         </div>
@@ -457,14 +457,12 @@ export default function V2capSlot({ init, medals, onMoney, active = true }) {
         {/* 予告 */}
         {nt && (
           <div style={{ position:'absolute', left:0, right:0, top:'38%', textAlign:'center', pointerEvents:'none' }}>
-            <span style={{ display:'inline-block', padding:'4px 12px', borderRadius:'6px', fontWeight:900, fontSize: 14 + notice * 3, letterSpacing:'2px',
-              fontFamily:"'Arial Black', Impact, sans-serif", background:'#000c',
-              border:`2px solid ${nt.color === 'rainbow' ? '#fff' : nt.color}`,
-              boxShadow:`0 0 ${6 + notice * 4}px ${nt.color === 'rainbow' ? '#fff' : nt.color}`,
-              animation:'csPulse 0.5s ease-in-out infinite' }}>
-              <span style={nt.color === 'rainbow'
-                ? { background: RAINBOW, WebkitBackgroundClip:'text', backgroundClip:'text', color:'transparent' }
-                : { color: nt.color }}>
+            <span style={{ display:'inline-block', padding:'4px 12px', borderRadius:'6px', fontWeight:'bold', fontSize: 14 + notice * 3, letterSpacing:'2px',
+              fontFamily: DISPLAY_FONT, background:'#000c',
+              border:`2px solid ${ntColor}`,
+              boxShadow:`0 0 ${6 + notice * 4}px ${ntColor}`,
+              animation: nt.color === 'rainbow' ? 'csPulse 0.5s ease-in-out infinite, csHue 1.2s linear infinite' : 'csPulse 0.5s ease-in-out infinite' }}>
+              <span style={{ color: ntColor, textShadow:`0 0 6px ${ntColor}` }}>
                 {phase === 'spin' && res.current?.intro ? '7を狙え!!' : nt.text}
               </span>
             </span>
@@ -475,8 +473,8 @@ export default function V2capSlot({ init, medals, onMoney, active = true }) {
         {/* 小役の名前・払い出し */}
         <div style={{ height:'22px', marginTop:'6px', display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'12px' }}>
           <span style={label ? (label.color === 'rainbow'
-            ? { background: RAINBOW, WebkitBackgroundClip:'text', backgroundClip:'text', color:'transparent', fontWeight:900 }
-            : { color: label.color, fontWeight:900, textShadow:`0 0 6px ${label.color}` }) : undefined}>{label?.text || ''}</span>
+            ? { display:'inline-block', color: RAINBOW_BASE, fontFamily: JP_BOLD, fontWeight:'bold', textShadow:`0 0 6px ${RAINBOW_BASE}`, animation:'csHue 1.2s linear infinite' }
+            : { color: label.color, fontFamily: JP_BOLD, fontWeight:'bold', textShadow:`0 0 6px ${label.color}` }) : undefined}>{label?.text || ''}</span>
           <span style={{ color: win > 0 ? CASINO.gold : CASINO.dim, fontWeight:'bold' }}>{win > 0 ? `+${fmt(win)}枚` : ''}</span>
         </div>
       </div>
@@ -488,7 +486,7 @@ export default function V2capSlot({ init, medals, onMoney, active = true }) {
           const isNext = nextNav === i
           return (
             <button key={i} onClick={() => stopReel(i)} disabled={!on}
-              style={{ width: REEL_W, padding:'10px 0', borderRadius:'50px', fontFamily:'monospace', fontWeight:900, fontSize:'13px',
+              style={{ width: REEL_W, padding:'10px 0', borderRadius:'50px', fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'13px',
                 cursor: on ? 'pointer' : 'default', touchAction:'manipulation',
                 color: on ? '#fff' : '#555', border:`2px solid ${on ? (isNext ? CASINO.pink : '#ff4466') : '#333'}`,
                 background: on ? (isNext ? 'radial-gradient(circle,#ff7ac0,#c2185b)' : 'radial-gradient(circle,#ff6680,#a8002a)') : '#1a1a1a',
@@ -544,7 +542,7 @@ export default function V2capSlot({ init, medals, onMoney, active = true }) {
             <div>・レア役（チェリー・スイカ・チャンス目）で <b style={{ color:CASINO.cyan }}>CZ（{SLOT_CZ_GAMES}G）</b> か <b style={{ color:CASINO.pink }}>AT</b> に入る</div>
             <div>・<b style={{ color:CASINO.pink }}>AT（{SLOT_AT_GAMES}G〜）</b>はナビ（①②③）どおりに止めると押し順ベルが全部9枚。レア役で上乗せ、強チェリー・チャンス目で<b style={{ color:'#ffd700' }}>上乗せ特化ゾーン（{SLOT_TOKU_GAMES}G・毎G上乗せ）</b></div>
             <div>・<b>中段チェリー</b>はフリーズ＝AT確定（{SLOT_PREMIUM_GAMES}G）</div>
-            <div>・予告は 青→緑→赤→金→<span style={{ background: RAINBOW, WebkitBackgroundClip:'text', backgroundClip:'text', color:'transparent', fontWeight:900 }}>虹（AT確定）</span></div>
+            <div>・予告は 青→緑→赤→金→<span style={{ display:'inline-block', color: RAINBOW_BASE, fontWeight:'bold', animation:'csHue 1.2s linear infinite' }}>虹（AT確定）</span></div>
             <div style={{ color:CASINO.dim }}>キーボード：スペース＝レバー　← ↓ →＝止める</div>
           </div>
         )}

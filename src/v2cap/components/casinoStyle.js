@@ -34,5 +34,12 @@ export const pill = (color, active) => ({
   border: `1px solid ${color}`, borderRadius: '12px', fontWeight: active ? 'bold' : 'normal',
   touchAction: 'manipulation',
 })
+// 大きな文字の字体。【確定】2026-10-13 ユーザー指摘「強化成功がつぶれてる」で直した
+//   ★日本語は太字を持つ字体を名指しする。monospace や sans-serif 任せのまま font-weight 900 にすると、
+//     細い字体を無理に太らせて線がつぶれる。太さは 'bold' で足りる（英数字の Arial Black はもともと極太）
+//   ★虹色の文字は background-clip:text のグラデーションで作らない（日本語がつぶれる）。色を回す（hue-rotate）
+export const JP_BOLD = "'Yu Gothic','YuGothic','Hiragino Kaku Gothic ProN','Hiragino Sans',Meiryo,'Noto Sans JP',sans-serif"
+export const DISPLAY_FONT = `'Arial Black',${JP_BOLD}`
+export const RAINBOW_BASE = '#ff4f6a'   // 虹にするときの元の色（hue-rotate で回す）
 export const fmt = (n) => Math.floor(Number(n) || 0).toLocaleString()
 export const signed = (n) => `${n > 0 ? '+' : n < 0 ? '−' : '±'}${Math.abs(Math.floor(Number(n) || 0)).toLocaleString()}`
