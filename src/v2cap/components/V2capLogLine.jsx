@@ -1,5 +1,5 @@
-import { useState } from 'react'
 import V2LogLine from '../../v2/components/V2LogLine.jsx'
+import V2capIcon from './V2capIcon.jsx'
 import { richSegments, RICH } from '../../lib/battleLogRich'
 
 // ============================================================
@@ -18,21 +18,9 @@ import { richSegments, RICH } from '../../lib/battleLogRich'
 // ============================================================
 const SIDE_COLOR = { me: '#33dd66', foe: '#ff6655' }
 
-// アイコン。絵が読めないときも名前の1文字目の枠にする（key に src を付けて、絵が変わったら読み直す）
-function Icon({ src, name, side, size, down }) {
-  const [broken, setBroken] = useState(false)
-  const ring = SIDE_COLOR[side] || '#7fa6d0'
-  return (
-    <div style={{ width: size, height: size, flexShrink: 0, borderRadius: '6px', border: `1px solid ${ring}55`,
-      background: 'radial-gradient(circle at 50% 40%, #1d3554 0%, #0b1a2e 75%)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      overflow: 'hidden', filter: down ? 'grayscale(1)' : undefined, opacity: down ? 0.45 : 1 }}>
-      {src && !broken
-        ? <img src={src} alt={name} width={size} height={size} draggable={false} onError={() => setBroken(true)}
-            style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
-        : <span style={{ color: ring, fontSize: Math.round(size * 0.42), fontWeight: 'bold', lineHeight: 1 }}>{[...(name || '？')][0]}</span>}
-    </div>
-  )
-}
+// アイコン。絵が読めないときも名前の1文字目の枠にする（key に src を付けて、絵が変わったら読み直す）。
+// 枠そのものは図鑑と同じ部品（V2capIcon.jsx）
+const Icon = ({ side, ...rest }) => <V2capIcon ring={SIDE_COLOR[side] || '#7fa6d0'} {...rest} />
 
 // 表の片側：アイコン＋（名前・HP・HPバー）
 function Cell({ who, art, st }) {

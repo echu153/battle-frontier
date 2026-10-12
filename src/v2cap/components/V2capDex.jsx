@@ -5,14 +5,20 @@ import { AREA_LIST, SUB_MARK, spotOf } from '../lib/areas.js'
 import { openUntilOf } from '../lib/sortie.js'
 import { RARITY_COLOR, rarityLabel } from '../lib/equipment.js'
 import { DEX_ROLES, DEX_ROLE, DEX_ALL, DEX_AREA_COUNT, dexAreaOf, dropInfoOf, killsOf, isFound, dexProgressOf } from '../lib/dex.js'
+import { enemyArtSrc } from '../lib/enemyArt.js'
 import { chip } from './v2capGearView.js'
+import V2capIcon from './V2capIcon.jsx'
 
 // ============================================================
 // 「レベルキャップあり」版 — モンスター図鑑
 //   【確定】2026-10-11 ユーザー指示：まずは見るだけ（ステが上がる要素はあとから足す）。仕組みの正は src/v2cap/lib/dex.js
 //   ・行ったことのあるエリアごとのタブ。1エリア20体（通常→時間帯→レア→ボス）。倒すまでは名前もLVも「???」
-//   ・1体ごとに：役割（時間帯の敵は朝・昼・晩）・出る場所（①②③）・LV・物理／魔法・討伐数・落とす装備（確率とレア度）
+//   ・1体ごとに：役割（時間帯の敵は朝・昼・晩）・出る場所（①②③）・LV・物理／魔法・討伐数・落とす装備（レア度）
 //   ・討伐数はサーバーが数える（出撃の精算で勝ったとき）。ここは v2cap_kills を読むだけ
+//   【確定】2026-10-12 ユーザー指示「モンスター図鑑にモンスターのアイコン載せるようにしてほしい」：
+//     左にアイコン（戦闘ログと同じ絵＝enemyArt.js・同じ枠＝V2capIcon）。絵の無いモンスターは名前の1文字目の枠。
+//     まだ倒していない敵は名前と同じく隠す（絵は黒い影・絵が無ければ「？」）
+//   【確定】同じ日にユーザー指示「装備8%とかはいらない」：落とす確率（%）は出さない（落とすレア度だけ）
 // ============================================================
 const kindText = (k) => (k === 'mag' ? '魔法' : '物理')
 
@@ -49,7 +55,7 @@ export default function V2capDex({ prof }) {
       <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
         <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.8 }}>
           出撃で倒した敵が載ります（倒すまでは名前もLVも ???）。討伐数は出撃で勝ったときに数えます。
-          落とす装備はそのエリアの装備で、ふつうの敵と時間帯の敵は{dropInfoOf('normal').chance}%、レアとボスは{dropInfoOf('boss').chance}%です。
+          落とす装備はそのエリアの装備です。
         </div>
         <div style={{ color:'#c0b0ff', fontSize:'12px', marginTop:'6px' }}>
           見つけた敵 全体 <span style={{ color:'#ffcc00' }}>{total.done}</span> / {total.total}体
@@ -83,29 +89,35 @@ export default function V2capDex({ prof }) {
               const found = isFound(kills, e.name)
               const role = DEX_ROLE[e.role]
               const drop = dropInfoOf(e.role)
+              const art = enemyArtSrc(e.name)
               return (
-                <div key={e.name} style={{ background:'#000818', border:`1px solid ${found ? '#002244' : '#001428'}`, padding:'6px 8px' }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12px', flexWrap:'wrap' }}>
-                    <span style={{ color: role.color, fontSize:'9px', border:`1px solid ${role.color}`, padding:'0 4px', flexShrink:0 }}>
-                      {role.label}{e.band ? `・${e.band}` : ''}
-                    </span>
-                    <span style={{ color: found ? '#cfe2ff' : TEXT.empty, flex:1, minWidth:0 }}>{found ? e.name : '???'}</span>
-                    <span style={{ color: found ? '#cfe2ff' : TEXT.empty, fontSize:'11px' }}>LV{found ? e.lv : '??'}</span>
-                    <span style={{ color: TEXT.label, fontSize:'10px' }}>{e.subs.map(s => SUB_MARK[s - 1]).join('')}</span>
-                  </div>
-                  <div style={{ display:'flex', gap:'10px', flexWrap:'wrap', fontSize:'10px', marginTop:'3px', color: TEXT.sub }}>
-                    <span>⚔ 討伐 <span style={{ color: found ? '#ffcc00' : TEXT.empty }}>{killsOf(kills, e.name).toLocaleString()}</span></span>
-                    {found ? (
-                      <>
-                        <span>{kindText(e.kind)}</span>
-                        <span>
-                          装備 {drop.chance}%：
-                          {drop.rarities.map((r, i) => (
-                            <span key={r}>{i ? '・' : ''}<span style={{ color: RARITY_COLOR[r] }}>{rarityLabel(r)}</span></span>
-                          ))}
-                        </span>
-                      </>
-                    ) : <span style={{ color: TEXT.empty }}>倒すと載ります</span>}
+                <div key={e.name} style={{ background:'#000818', border:`1px solid ${found ? '#002244' : '#001428'}`, padding:'6px 8px',
+                  display:'flex', gap:'8px', alignItems:'center' }}>
+                  <V2capIcon key={`${art || 'none'}:${found}`} src={art} name={e.name} ring={role.color} size={44} hidden={!found} />
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12px', flexWrap:'wrap' }}>
+                      <span style={{ color: role.color, fontSize:'9px', border:`1px solid ${role.color}`, padding:'0 4px', flexShrink:0 }}>
+                        {role.label}{e.band ? `・${e.band}` : ''}
+                      </span>
+                      <span style={{ color: found ? '#cfe2ff' : TEXT.empty, flex:1, minWidth:0 }}>{found ? e.name : '???'}</span>
+                      <span style={{ color: found ? '#cfe2ff' : TEXT.empty, fontSize:'11px' }}>LV{found ? e.lv : '??'}</span>
+                      <span style={{ color: TEXT.label, fontSize:'10px' }}>{e.subs.map(s => SUB_MARK[s - 1]).join('')}</span>
+                    </div>
+                    <div style={{ display:'flex', gap:'10px', flexWrap:'wrap', fontSize:'10px', marginTop:'3px', color: TEXT.sub }}>
+                      <span>⚔ 討伐 <span style={{ color: found ? '#ffcc00' : TEXT.empty }}>{killsOf(kills, e.name).toLocaleString()}</span></span>
+                      {found ? (
+                        <>
+                          <span>{kindText(e.kind)}</span>
+                          {/* 落とす確率（%）は出さない（2026-10-12 ユーザー指示「装備8%とかはいらない」） */}
+                          <span>
+                            落とす装備：
+                            {drop.rarities.map((r, i) => (
+                              <span key={r}>{i ? '・' : ''}<span style={{ color: RARITY_COLOR[r] }}>{rarityLabel(r)}</span></span>
+                            ))}
+                          </span>
+                        </>
+                      ) : <span style={{ color: TEXT.empty }}>倒すと載ります</span>}
+                    </div>
                   </div>
                 </div>
               )
