@@ -8,7 +8,9 @@ import { richSegments, RICH } from '../../lib/battleLogRich'
 //     「自分が動くときは自分のアイコンが、敵が動くときは敵のアイコンが表示されるようにして、
 //      HPの横にもあるけみすと参考に載せるようにしてほしい」
 //   ・kind:'turn' … 「◯ターン」の見出し＋両方のアイコンとHPの表（味方は左・敵は右）。決着の表は倒れた側のアイコンを暗くする
-//   ・kind:'act'  … 動いた側のアイコンを左に置き、その行動の行を右にまとめる（appear＝「◯◯が現れた！」は少し大きく）
+//   ・kind:'act'  … 動いた側のアイコンを左に置き、その行動の行を右にまとめる（appear＝「◯◯が現れた！」は少し大きく、
+//     **枠なしでモンスターの絵だけ**＝2026-10-12 ユーザー指示「モンスター出現するとき、枠いらない、モンスターのイラストだけでいい」。
+//     絵の無いモンスターはアイコンを出さない＝文だけ。ターンの表と行動の行のアイコンは枠のまま）
 //   並びを作るのは src/v2cap/lib/battleView.js。アイコンの絵は art（{ me:{ src, name }, foe:{ src, name } }）で受け取る
 //     敵の絵：src/v2cap/lib/enemyArt.js（public/enemy-art）／自分の絵：src/v2cap/lib/classArt.js の battleIconOf
 //     （SD（デフォルメ）の絵 → 無ければ神殿の顔のアップ）。絵が無いときは名前の1文字目を入れた枠
@@ -74,7 +76,7 @@ function ActGroup({ l, art }) {
   const big = !!l.appear
   return (
     <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', padding: '4px 0', borderBottom: '1px solid #001428' }}>
-      <Icon key={a?.src || 'none'} src={a?.src} name={a?.name} side={l.who} size={big ? 52 : 44} />
+      <Icon key={a?.src || 'none'} src={a?.src} name={a?.name} side={l.who} size={big ? 52 : 44} bare={big} />
       <div style={{ flex: 1, minWidth: 0, alignSelf: 'center' }}>
         {l.lines.map((x, i) => <Line key={i} l={x} size={big ? '13px' : '12px'} />)}
       </div>
