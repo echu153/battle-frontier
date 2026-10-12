@@ -833,13 +833,16 @@ test('【確定】敵のLVは敵ごとに一定（プレイヤーのLVに合わ�
   for (const e of spotOf(1).roster.timed) assert.equal(ENEMY_LV[e.name], 2, e.name)
 })
 
-test('【確定】始まりの森①のふつうの敵には、LV1・装備なし・最初の編成で、どの職業も勝てる', () => {
+test('【確定】始まりの森①のふつう・朝昼晩の敵には、LV1・装備なし・ポイントなし・最初の編成で、どの職業も勝てる', () => {
+  // 2026-10-12 ユーザー指示「少なくとも、エリア①の①の通常の敵は装備とかなくても倒せるくらいの強さでいい」。
+  // ⚠前は ふつうの敵（スライム・コウモリ）だけを見ていて、朝昼晩の魔法型（ひなたアゲハ・モヤガエル）に
+  //   魔法職が63%・84%しか勝てないのを見逃していた（朝昼晩の時間帯は出会う敵の半分が朝昼晩の敵）
   for (const cls of START_CLASSES) {
     const learned = skillsLearnedBy(cls, 1)
     const prof = { username:'t', class: cls, lv: 1, ...INITIAL_STATS, jobs: { [cls]: { lv: 1, exp: 0 } }, learned,
       skill_sets: { [cls]: defaultSetOf(cls, learned, INITIAL_STATS.mp) }, equipped: {} }
     const me = toFighter(prof, [])
-    for (const e of spotOf(1).roster.enemies) {
+    for (const e of [...spotOf(1).roster.enemies, ...spotOf(1).roster.timed]) {
       let w = 0
       for (let i = 0; i < 100; i++) if (runBattle(me, { ...enemyFighter(e) }, { rng: rngOf(1 + i * 7919) }).winner === 'a') w++
       assert.ok(w >= 95, `${cls}が${e.name}に ${w}/100`)
