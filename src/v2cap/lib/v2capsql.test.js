@@ -16,6 +16,12 @@ import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD
 import { DAILY_SORTIES, DAILY_GOLD_PER_LV, DAY_RESET_HOUR } from './daily.js'
 import { AVATAR_PRESETS, AVATAR_FILE_RE } from './avatar.js'
 import { FORTUNES, multTenthsOf } from './tree.js'
+import {
+  GOLD_PER_MEDAL, EXCHANGE_MAX, SLOT_BET, SLOT_RATES, SLOT_TOTAL, SLOT_ROLES, SLOT_ROLE_BY_KEY, SLOT_MISS_PAY, SLOT_NORMAL_AT, SLOT_NORMAL_CZ,
+  SLOT_CZ_GAMES, SLOT_CZ_WIN, SLOT_AT_GAMES, SLOT_PREMIUM_GAMES, SLOT_AT_ADD, SLOT_AT_TOKU, SLOT_TOKU_GAMES, SLOT_TOKU_ADDS, SLOT_ORDERS, slotArrayOf,
+  HILO_MIN_BET, HILO_MAX_BET, HILO_FIRST_X13, HILO_NEXT_X13, HILO_MAX_STREAK, HILO_CAP_MULT,
+  ROULETTE_MAX_TOTAL, ROULETTE_MAX_BETS, ROULETTE_STRAIGHT, RED_NUMBERS, LUCKY_COUNT_W, LUCKY_MULTS, BET_KINDS,
+} from './casino.js'
 import { rewrite } from '../../../tools/v2cap-sql.mjs'
 
 // ★改行はLFにそろえてから見る（Windowsで core.autocrlf=true のまま取り出すとCRLFになり、改行を含む正規表現が合わなくなる。
@@ -515,4 +521,91 @@ test('★いまの職業で装備できない武器を着けているキャラ�
     assert.ok(SQL.indexOf(`create table if not exists public.${t}`) < at, `${t} を作ったあと`)
   }
   assert.doesNotMatch(m[0], /delete/)
+})
+
+// ===== 賭博場（§11・2026-10-13）=====
+// 定数の配列を取り出す（例：c_weight constant int[] := array[1, 2]）
+const constOf = (body, name) => {
+  const m = body.match(new RegExp(`\\b${name}\\s+constant\\s+[a-z\\[\\]]+\\s+:=\\s+([^;]+);`))
+  assert.ok(m, `${name} がある`)
+  return m[1].trim()
+}
+const arr = (xs) => `array[${xs.join(', ')}]`
+
+test('【確定】賭博場：両替は100 Gold＝1枚・メダルからGoldへは戻せない・表は画面から読ませない（押し順ベルの正解が入っている）', () => {
+  assert.ok(SQL.includes('alter table public.v2cap_profiles add column if not exists medals bigint not null default 0;'))
+  const ex = fnBody('v2cap_casino_exchange')
+  assert.equal(constOf(ex, 'c_gold_per_medal'), String(GOLD_PER_MEDAL))
+  assert.equal(constOf(ex, 'c_max'), String(EXCHANGE_MAX))
+  assert.ok(ex.includes('set gold = gold - v_gold, medals = medals + p_medals'))
+  assert.ok(!/medals = medals - [^\n]*gold = gold \+/.test(SQL) && !/gold = gold \+ [^\n]*medals/.test(SQL), 'メダル→Goldの道は無い')
+  assert.ok(SQL.includes('revoke all on table public.v2cap_casino from anon, authenticated;'))
+  assert.ok(!/grant [^;]*on table public\.v2cap_casino\b/.test(SQL), 'v2cap_casino は grant しない')
+  assert.ok(!/create policy [^;]*on public\.v2cap_casino\b/.test(SQL), 'v2cap_casino に読めるポリシーを作らない')
+  // 正解は ATのナビとして出したときだけ返す
+  assert.ok(fnBody('v2cap_casino_state').includes("'nav', case when v_c.slot_pending_at then v_c.slot_pending end"))
+  assert.ok(fnBody('v2cap_slot_spin').includes("'nav', case when v_pending is not null and v_before = 'at' then v_pending end"))
+  // 作り直すと賭博場の行も消える
+  assert.ok(fnBody('v2cap_dev_reset').includes('delete from public.v2cap_casino where player_id = auth.uid();'))
+})
+
+test('【確定】スロット（AT機）：役・払い出し・CZ・AT・上乗せ・特化ゾーンの表がJSと同じ', () => {
+  const f = fnBody('v2cap_slot_spin')
+  assert.equal(constOf(f, 'c_bet'), String(SLOT_BET))
+  assert.equal(constOf(f, 'c_rates'), arr(SLOT_RATES))
+  assert.equal(constOf(f, 'c_total'), String(SLOT_TOTAL))
+  assert.equal(constOf(f, 'c_keys'), arr(SLOT_ROLES.map(r => `'${r.key}'`)))
+  assert.equal(constOf(f, 'c_weight'), arr(SLOT_ROLES.map(r => r.weight)))
+  assert.equal(constOf(f, 'c_pay'), arr(SLOT_ROLES.map(r => r.pay)))
+  assert.equal(constOf(f, 'c_miss_pay'), String(SLOT_MISS_PAY))
+  assert.equal(constOf(f, 'c_n_at'), arr(slotArrayOf(SLOT_NORMAL_AT)))
+  assert.equal(constOf(f, 'c_n_cz'), arr(slotArrayOf(SLOT_NORMAL_CZ)))
+  assert.equal(constOf(f, 'c_cz_games'), String(SLOT_CZ_GAMES))
+  assert.equal(constOf(f, 'c_cz_win'), arr(slotArrayOf(SLOT_CZ_WIN)))
+  assert.equal(constOf(f, 'c_at_games'), String(SLOT_AT_GAMES))
+  assert.equal(constOf(f, 'c_premium_games'), String(SLOT_PREMIUM_GAMES))
+  assert.equal(constOf(f, 'c_add_rate'), arr(slotArrayOf(SLOT_AT_ADD, v => v[0])))
+  assert.equal(constOf(f, 'c_add_games'), arr(slotArrayOf(SLOT_AT_ADD, v => v[1])))
+  assert.equal(constOf(f, 'c_toku_rate'), arr(slotArrayOf(SLOT_AT_TOKU)))
+  assert.equal(constOf(f, 'c_toku_games'), String(SLOT_TOKU_GAMES))
+  assert.equal(constOf(f, 'c_toku_add'), arr(SLOT_TOKU_ADDS.map(x => x.g)))
+  assert.equal(constOf(f, 'c_toku_w'), arr(SLOT_TOKU_ADDS.map(x => x.w)))
+  assert.equal(constOf(f, 'c_obell'), String(SLOT_ROLE_BY_KEY.obell.index + 1))
+  assert.equal(constOf(f, 'c_premium'), String(SLOT_ROLE_BY_KEY.premium.index + 1))
+  // CZ・ATの間は入ったときのレート
+  assert.ok(f.includes('v_rate := v_c.slot_rate;'))
+  const stop = fnBody('v2cap_slot_stop')
+  assert.equal(constOf(stop, 'c_bell_pay'), String(SLOT_ROLE_BY_KEY.obell.pay))
+  assert.equal(constOf(stop, 'c_miss_pay'), String(SLOT_MISS_PAY))
+  assert.ok(stop.includes('p_order < 0 or p_order > 5') && SLOT_ORDERS.length === 6)
+})
+
+test('【確定】ハイ&ロー（連勝はしご）：賭け・倍率（1回目97%・2回目から確率どおり）・10連勝・1000倍がJSと同じ', () => {
+  const s = fnBody('v2cap_hilo_start')
+  assert.equal(constOf(s, 'c_min'), String(HILO_MIN_BET))
+  assert.equal(constOf(s, 'c_max'), String(HILO_MAX_BET))
+  assert.ok(s.includes('v_card := floor(random() * 52)::int;'))
+  const g = fnBody('v2cap_hilo_guess')
+  assert.equal(constOf(g, 'c_first_x13'), String(HILO_FIRST_X13))
+  assert.equal(constOf(g, 'c_next_x13'), String(HILO_NEXT_X13))
+  assert.equal(constOf(g, 'c_max_streak'), String(HILO_MAX_STREAK))
+  assert.equal(constOf(g, 'c_cap_mult'), String(HILO_CAP_MULT))
+  assert.ok(g.includes('v_mult := (case when v_c.hilo_streak > 0 then c_next_x13 else c_first_x13 end) / v_n;'))
+  assert.ok(g.includes('v_win := case when p_high then v_nrank > v_rank else v_nrank < v_rank end;'), '同じ数字は負け')
+  assert.ok(g.includes('v_pot := v_c.hilo_pot * v_mult / 100;'), '持ち分の掛け方（切り捨て）がJSと同じ')
+  assert.ok(fnBody('v2cap_hilo_take').includes('v_payout := v_c.hilo_pot / 100;'))
+})
+
+test('【確定】ルーレット（ラッキーナンバー付き）：払い出し・赤の数字・雷の数と倍率がJSと同じ', () => {
+  const f = fnBody('v2cap_roulette_spin')
+  assert.equal(constOf(f, 'c_max_total'), String(ROULETTE_MAX_TOTAL))
+  assert.equal(constOf(f, 'c_max_bets'), String(ROULETTE_MAX_BETS))
+  assert.equal(constOf(f, 'c_straight'), String(ROULETTE_STRAIGHT))
+  assert.equal(constOf(f, 'c_red'), arr(RED_NUMBERS))
+  assert.equal(constOf(f, 'c_count_w'), arr(LUCKY_COUNT_W))
+  assert.equal(constOf(f, 'c_mults'), arr(LUCKY_MULTS.map(x => x.m)))
+  assert.equal(constOf(f, 'c_mult_w'), arr(LUCKY_MULTS.map(x => x.w)))
+  assert.ok(f.includes("v_pay := v_a::bigint * 3;") && BET_KINDS.dozen.pay === 3 && BET_KINDS.col.pay === 3)
+  assert.ok(f.includes("v_pay := v_a::bigint * 2;") && BET_KINDS.red.pay === 2)
+  assert.ok(f.includes('v_res := floor(random() * 37)::int;'))
 })

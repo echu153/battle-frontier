@@ -17,6 +17,7 @@ import V2capDaily from '../components/V2capDaily.jsx'
 import V2capProfile from '../components/V2capProfile.jsx'
 import V2capTree from '../components/V2capTree.jsx'
 import V2capDex from '../components/V2capDex.jsx'
+import V2capCasino from '../components/V2capCasino.jsx'
 import { START_CLASSES, weaponsOf, attackKindOf, classDescOf } from '../lib/jobs.js'
 
 // ============================================================
@@ -47,8 +48,12 @@ const MENU = [
   [
     { key:'tree', label:'ユグレシアの宝樹', icon:'🌳', color:'#44dd99', action:'祈る' },
   ],
+  // 【確定】2026-10-13 賭博場（スロット・ハイ&ロー・ルーレット・両替所）。景品の交換所はあとで
+  [
+    { key:'casino', label:'賭博場', icon:'🎰', color:'#ff4fa3', action:'スロット・ハイ&ロー・ルーレット' },
+  ],
 ]
-const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', tree:'🌳 ユグレシアの宝樹' }
+const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場' }
 
 // 今のⅡと同じ2列（grid の auto-fit は列を同じ幅にしかできないので flex で組む）
 //   左 … flex:'1 1 340px'／右 … flex:'999 1 340px'＝余った幅はほぼ右へ。688px より狭いと折り返して1列
@@ -138,6 +143,14 @@ export default function V2capHome() {
     if (data.job_ups > 0) parts.push(`CLASS LV${data.jlv}（+${data.job_ups}）`)
     if ((data.learned || []).length) parts.push(`スキル「${data.learned.join('」「')}」`)
     setDevMsg(parts.join('　'))
+  }
+  const gainMedals = async (amount) => {
+    setBusy(true); setDevMsg('')
+    const { data, error: rpcErr } = await supabase.rpc('v2cap_debug_gain_medals', { p_amount: amount })
+    setBusy(false)
+    if (rpcErr || !data?.ok) { setDevMsg(`⚠ ${rpcErr?.message || data?.error || '失敗しました'}`); return }
+    setDevMsg(`メダル+${data.got.toLocaleString()}（${Number(data.medals).toLocaleString()}枚）`)
+    await refresh()
   }
   const resetChar = async () => {
     setBusy(true)
@@ -264,6 +277,11 @@ export default function V2capHome() {
                           EXP+{n.toLocaleString()}
                         </button>
                       ))}
+                      {[1000, 100000].map(n => (
+                        <button key={`m${n}`} onClick={() => gainMedals(n)} disabled={busy} style={miniBtn('#ffcc00')}>
+                          メダル+{n.toLocaleString()}
+                        </button>
+                      ))}
                       <button onClick={() => setConfirmReset(true)} disabled={busy} style={miniBtn('#ff8844')}>キャラを作り直す</button>
                     </div>
                     {/* ★「EXPは戦闘と同じ扱い（いまの職業のClassEXPにも同じ量が入る）」の説明は出さない（2026-10-12 ユーザー指示＝出撃の「（ClassEXP +◯）」と一緒に外した） */}
@@ -287,6 +305,7 @@ export default function V2capHome() {
             {screen === 'temple' && <V2capTemple prof={prof} inventory={inventory} onProfile={refresh} />}
             {screen === 'tree' && <V2capTree prof={prof} onProfile={refresh} />}
             {screen === 'dex' && <V2capDex prof={prof} />}
+            {screen === 'casino' && <V2capCasino prof={prof} onProfile={refresh} />}
           </div>
         )}
       </div>

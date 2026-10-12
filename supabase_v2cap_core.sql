@@ -34,6 +34,8 @@
 --     （残骸 30／100／300・Gold 必要LV×50／100／200・必ずできる・武器は14種どれでも）
 --   ・デイリーミッション（2026-10-10・§10）：1日1組・難易度なし。受注してから数え、報酬は受注した時点のLVで決まる
 --     （EXP＝必要EXP×10／5／3／1%・Gold＝LV×100）。内容はあとで決める（いまは仮の「出撃に10回勝つ」）
+--   ・賭博場（2026-10-13・§11）：メダル（100 Gold＝1枚・Goldへは戻せない）・スロット（AT機）・ハイ&ロー（連勝はしご）・
+--     ルーレット（ラッキーナンバー付き）。還元率はどれも約97%。景品の交換所はあとで
 -- ============================================================
 
 -- ===== 0. 開発限定ゲート =====
@@ -4321,6 +4323,22 @@ $$;
 revoke all on function public.v2cap_debug_gain_exp(int) from public, anon;
 grant execute on function public.v2cap_debug_gain_exp(int) to authenticated;
 
+-- メダルを入れる（2026-10-13・賭博場を試す用。開発用の欄のボタン）
+create or replace function public.v2cap_debug_gain_medals(p_amount int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_n int := greatest(1, least(coalesce(p_amount, 0), 1000000));
+begin
+  if auth.uid() is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  update public.v2cap_profiles set medals = medals + v_n, updated_at = now() where id = auth.uid();
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  return jsonb_build_object('ok', true, 'got', v_n, 'medals', (select medals from public.v2cap_profiles where id = auth.uid()));
+end;
+$$;
+revoke all on function public.v2cap_debug_gain_medals(int) from public, anon;
+grant execute on function public.v2cap_debug_gain_medals(int) to authenticated;
+
 -- 自分のキャラを消して作り直せるようにする（この版のデータだけ。今のⅡ・旧版には触らない）
 create or replace function public.v2cap_dev_reset()
 returns jsonb language plpgsql security definer set search_path = public as $$
@@ -4329,6 +4347,7 @@ begin
   if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   delete from public.v2cap_inventory where player_id = auth.uid();
   delete from public.v2cap_kills where player_id = auth.uid();
+  delete from public.v2cap_casino where player_id = auth.uid();
   delete from public.v2cap_profiles where id = auth.uid();
   return jsonb_build_object('ok', true);
 end;
@@ -4453,3 +4472,625 @@ end;
 $$;
 revoke all on function public.v2cap_daily_claim() from public, anon;
 grant execute on function public.v2cap_daily_claim() to authenticated;
+
+-- ============================================================
+-- ===== 11. 賭博場（2026-10-13）=====
+-- ============================================================
+-- 【確定】2026-10-13 ユーザー指示「V2capに無印の時みたいに賭博場を設置したい、新たにルーレットも追加したい。
+--   交換所はあと設置するからまずは土台を」＋選んだこと（設計 §6-5）：
+--   ・通貨は**メダル**（v2cap_profiles.medals）。両替所で **100 Gold＝1枚**。メダルからGoldへは戻せない。景品の交換所はあとで
+--   ・還元率は**どのゲームも約97%**
+--   ・スロット＝AT機（押し順ベル・CZ・AT・上乗せ・特化ゾーン・中段チェリー）／ハイ&ロー＝連勝はしご／ルーレット＝ラッキーナンバー付き
+-- ★抽選と払い出しは全部ここ。画面（src/v2cap/components/V2capCasino.jsx ほか）は返事を見せるだけ
+-- ★表と倍率の写しは src/v2cap/lib/casino.js（v2capsql.test.js が突き合わせる）
+-- ★v2cap_casino は**画面から読ませない**（押し順ベルの正解 slot_pending が入っている）。中身は v2cap_casino_state で返す
+alter table public.v2cap_profiles add column if not exists medals bigint not null default 0;
+
+create table if not exists public.v2cap_casino (
+  player_id    uuid primary key references auth.users(id) on delete cascade,
+  day          date,                                  -- 当日の収支の日付（日本時間の5時で切り替え）
+  day_net      bigint not null default 0,             -- 当日の収支（払い出し − 賭けたメダル。両替は数えない）
+  stats        jsonb  not null default '{}'::jsonb,   -- {"slot":{"n":回数,"bet":賭けた,"won":戻った,"best":一番}} ゲームごと
+  -- スロット
+  slot_mode    text   not null default 'normal',      -- normal／cz／at
+  slot_rate    int    not null default 1,             -- レート（CZ・ATの間は入ったときのまま）
+  slot_cz      int    not null default 0,             -- CZの残りG
+  slot_at      int    not null default 0,             -- ATの残りG
+  slot_toku    int    not null default 0,             -- 特化ゾーンの残りG（ATの残りGは減らない）
+  slot_pending smallint,                              -- 押し順ベルの正解（並びの番号0〜5）。止めるまで持つ
+  slot_pending_rate int,
+  slot_pending_at boolean not null default false,     -- AT中の押し順ベル（ナビを出した）
+  slot_at_net  bigint not null default 0,             -- 今の（最後の）ATの純増
+  -- ハイ&ロー
+  hilo_active  boolean not null default false,
+  hilo_bet     int    not null default 0,
+  hilo_pot     bigint not null default 0,             -- 持ち分（1/100枚）
+  hilo_card    smallint,                              -- 今のカード（0〜51）
+  hilo_streak  int    not null default 0,
+  hilo_cards   smallint[] not null default '{}',      -- この勝負で出たカード
+  -- ルーレット
+  roul_hist    smallint[] not null default '{}',      -- 出た数字（新しい順・20件）
+  updated_at   timestamptz not null default now()
+);
+alter table public.v2cap_casino enable row level security;
+revoke all on table public.v2cap_casino from anon, authenticated;
+
+-- 今日（日本時間の5時で切り替え）
+create or replace function public.v2cap_casino_today()
+returns date language sql stable set search_path = public as $$
+  select ((now() at time zone 'Asia/Tokyo') - interval '5 hours')::date
+$$;
+revoke all on function public.v2cap_casino_today() from public, anon, authenticated;
+
+-- 賭博場の行をつかむ（無ければ作る）。日付が変わっていたら当日の収支を0に（内部ヘルパ）
+create or replace function public.v2cap_casino_lock(p_uid uuid)
+returns public.v2cap_casino language plpgsql security definer set search_path = public as $$
+declare
+  v_row   public.v2cap_casino;
+  v_today date := public.v2cap_casino_today();
+begin
+  insert into public.v2cap_casino (player_id, day) values (p_uid, v_today) on conflict (player_id) do nothing;
+  select * into v_row from public.v2cap_casino where player_id = p_uid for update;
+  if v_row.day is distinct from v_today then
+    update public.v2cap_casino set day = v_today, day_net = 0 where player_id = p_uid returning * into v_row;
+  end if;
+  return v_row;
+end;
+$$;
+revoke all on function public.v2cap_casino_lock(uuid) from public, anon, authenticated;
+
+-- 収支をつける（内部ヘルパ）。p_best … そのゲームの「一番」の候補（スロットはATの純増・ほかは1回の払い出し）
+create or replace function public.v2cap_casino_book(p_uid uuid, p_game text, p_bet bigint, p_won bigint, p_best bigint)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_s jsonb;
+begin
+  select coalesce(stats -> p_game, '{}'::jsonb) into v_s from public.v2cap_casino where player_id = p_uid;
+  update public.v2cap_casino
+     set day_net = day_net + p_won - p_bet,
+         stats = jsonb_set(stats, array[p_game], jsonb_build_object(
+           'n',    coalesce((v_s ->> 'n')::bigint, 0) + case when p_bet > 0 then 1 else 0 end,
+           'bet',  coalesce((v_s ->> 'bet')::bigint, 0) + p_bet,
+           'won',  coalesce((v_s ->> 'won')::bigint, 0) + p_won,
+           'best', greatest(coalesce((v_s ->> 'best')::bigint, 0), coalesce(p_best, 0)))),
+         updated_at = now()
+   where player_id = p_uid;
+end;
+$$;
+revoke all on function public.v2cap_casino_book(uuid, text, bigint, bigint, bigint) from public, anon, authenticated;
+
+-- 残高と当日の収支（内部ヘルパ・どのRPCも返事に足す）
+create or replace function public.v2cap_casino_money(p_uid uuid)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'medals',  (select p.medals from public.v2cap_profiles p where p.id = p_uid),
+    'gold',    (select p.gold from public.v2cap_profiles p where p.id = p_uid),
+    'day_net', coalesce((select c.day_net from public.v2cap_casino c where c.player_id = p_uid and c.day = public.v2cap_casino_today()), 0))
+$$;
+revoke all on function public.v2cap_casino_money(uuid) from public, anon, authenticated;
+
+-- 開いたとき：残高・当日の収支・記録・途中の勝負（ATの残り・ハイ&ローの持ち分など）
+create or replace function public.v2cap_casino_state()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_c   public.v2cap_casino;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  perform 1 from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  v_c := public.v2cap_casino_lock(v_uid);
+  return jsonb_build_object(
+    'ok', true,
+    'stats', v_c.stats,
+    -- ★押し順ベルの正解は、ATのナビとして出したものだけ返す（通常・CZでは隠す）
+    'slot', jsonb_build_object('mode', v_c.slot_mode, 'rate', v_c.slot_rate, 'cz', v_c.slot_cz, 'at', v_c.slot_at,
+                               'toku', v_c.slot_toku, 'pending', v_c.slot_pending is not null,
+                               'nav', case when v_c.slot_pending_at then v_c.slot_pending end, 'at_net', v_c.slot_at_net),
+    'hilo', jsonb_build_object('active', v_c.hilo_active, 'bet', v_c.hilo_bet, 'pot', v_c.hilo_pot, 'card', v_c.hilo_card,
+                               'streak', v_c.hilo_streak, 'cards', to_jsonb(v_c.hilo_cards)),
+    'roulette', jsonb_build_object('hist', to_jsonb(v_c.roul_hist))
+  ) || public.v2cap_casino_money(v_uid);
+end;
+$$;
+revoke all on function public.v2cap_casino_state() from public, anon;
+grant execute on function public.v2cap_casino_state() to authenticated;
+
+-- ---- 11-1. 両替所：Gold → メダル（戻せない）----
+create or replace function public.v2cap_casino_exchange(p_medals int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_gold_per_medal constant int := 100;
+  c_max            constant int := 1000000;
+  v_uid  uuid := auth.uid();
+  v_row  public.v2cap_profiles;
+  v_gold bigint;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if p_medals is null or p_medals < 1 or p_medals > c_max then
+    return jsonb_build_object('ok', false, 'error', '枚数が正しくありません');
+  end if;
+  select * into v_row from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  v_gold := p_medals::bigint * c_gold_per_medal;
+  if v_row.gold < v_gold then return jsonb_build_object('ok', false, 'error', 'Goldが足りません'); end if;
+  perform public.v2cap_casino_lock(v_uid);
+  update public.v2cap_profiles set gold = gold - v_gold, medals = medals + p_medals, updated_at = now() where id = v_uid;
+  return jsonb_build_object('ok', true, 'got', p_medals, 'spent', v_gold) || public.v2cap_casino_money(v_uid);
+end;
+$$;
+revoke all on function public.v2cap_casino_exchange(int) from public, anon;
+grant execute on function public.v2cap_casino_exchange(int) to authenticated;
+
+-- ---- 11-2. スロット（AT機）----
+-- レバー：役を引いて、払い出し（押し順ベルは止めるまで保留）とCZ・AT・上乗せを決める。
+--   役の並び：1リプレイ 2押し順ベル 3共通ベル 4弱チェリー 5強チェリー 6スイカ 7チャンス目 8中段チェリー 9ハズレ
+--   ★前のゲームの押し順ベルを止めずに回したときは、こぼし（1枚×レート）にしてから回す
+create or replace function public.v2cap_slot_spin(p_rate int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_bet          constant int    := 3;
+  c_rates        constant int[]  := array[1, 10, 100];
+  c_total        constant int    := 65536;
+  c_keys         constant text[] := array['replay', 'obell', 'cbell', 'wcherry', 'scherry', 'suika', 'chance', 'premium', 'miss'];
+  c_weight       constant int[]  := array[8978, 31457, 1820, 819, 273, 728, 328, 8, 21125];
+  c_pay          constant int[]  := array[3, 9, 9, 2, 2, 6, 0, 2, 0];
+  c_miss_pay     constant int    := 1;
+  c_n_at         constant int[]  := array[0, 0, 0, 10, 200, 15, 50, 0, 0];
+  c_n_cz         constant int[]  := array[0, 0, 0, 180, 420, 220, 480, 0, 1];
+  c_cz_games     constant int    := 10;
+  c_cz_win       constant int[]  := array[35, 18, 150, 500, 1000, 500, 1000, 1000, 12];
+  c_at_games     constant int    := 40;
+  c_premium_games constant int   := 100;
+  c_add_rate     constant int[]  := array[0, 0, 0, 400, 1000, 400, 0, 1000, 0];
+  c_add_games    constant int[]  := array[0, 0, 0, 10, 30, 20, 0, 100, 0];
+  c_toku_rate    constant int[]  := array[0, 0, 0, 0, 250, 0, 400, 0, 0];
+  c_toku_games   constant int    := 5;
+  c_toku_add     constant int[]  := array[10, 20, 30, 50, 100];
+  c_toku_w       constant int[]  := array[45, 30, 15, 7, 3];
+  c_obell        constant int    := 2;
+  c_premium      constant int    := 8;
+  v_uid  uuid := auth.uid();
+  v_p    public.v2cap_profiles;
+  v_c    public.v2cap_casino;
+  v_rate int;
+  v_bet  int;
+  v_r    int;
+  v_u    int;
+  v_acc  int := 0;
+  v_role int := 9;
+  v_pay  int := 0;
+  v_prev int := 0;
+  v_mode text;
+  v_before text;
+  v_cz   int;
+  v_at   int;
+  v_toku int;
+  v_net  bigint;
+  v_pending smallint := null;
+  v_cz_in boolean := false;
+  v_cz_end boolean := false;
+  v_at_in boolean := false;
+  v_at_from text := null;
+  v_at_end boolean := false;
+  v_add  int := 0;
+  v_toku_in boolean := false;
+  v_toku_add int := 0;
+  i int;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  -- ★行をつかんでから（連打しても1回ずつ）
+  select * into v_p from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  v_c := public.v2cap_casino_lock(v_uid);
+
+  -- 前のゲームの押し順ベルが止められていない → こぼし
+  if v_c.slot_pending is not null then
+    v_prev := c_miss_pay * coalesce(v_c.slot_pending_rate, 1);
+    if v_c.slot_pending_at then v_c.slot_at_net := v_c.slot_at_net + v_prev; end if;
+    update public.v2cap_profiles set medals = medals + v_prev where id = v_uid;
+    update public.v2cap_casino
+       set slot_pending = null, slot_pending_rate = null, slot_pending_at = false, slot_at_net = v_c.slot_at_net
+     where player_id = v_uid;
+    perform public.v2cap_casino_book(v_uid, 'slot', 0, v_prev, case when v_c.slot_pending_at then v_c.slot_at_net else 0 end);
+    v_p.medals := v_p.medals + v_prev;
+  end if;
+
+  v_mode := v_c.slot_mode;
+  v_before := v_mode;
+  if v_mode = 'normal' then
+    if p_rate is null or not (p_rate = any(c_rates)) then
+      return jsonb_build_object('ok', false, 'error', 'レートが正しくありません');
+    end if;
+    v_rate := p_rate;
+  else
+    v_rate := v_c.slot_rate;   -- CZ・ATの間は入ったときのレート
+  end if;
+  v_bet := c_bet * v_rate;
+  if v_p.medals < v_bet then return jsonb_build_object('ok', false, 'error', 'メダルが足りません'); end if;
+
+  -- 役
+  v_r := floor(random() * c_total)::int;
+  for i in 1 .. array_length(c_weight, 1) loop
+    v_acc := v_acc + c_weight[i];
+    if v_r < v_acc then v_role := i; exit; end if;
+  end loop;
+  if v_role = c_obell then
+    v_pending := floor(random() * 6)::int;   -- 正解の押し順（止めるまで払い出しは保留）
+  else
+    v_pay := c_pay[v_role] * v_rate;
+  end if;
+
+  v_cz := v_c.slot_cz; v_at := v_c.slot_at; v_toku := v_c.slot_toku; v_net := v_c.slot_at_net;
+  if v_mode = 'normal' then
+    if v_role = c_premium then
+      v_mode := 'at'; v_at := c_premium_games; v_at_in := true; v_at_from := 'premium';
+    else
+      v_u := floor(random() * 1000)::int;
+      if v_u < c_n_at[v_role] then
+        v_mode := 'at'; v_at := c_at_games; v_at_in := true; v_at_from := 'direct';
+      elsif v_u < c_n_at[v_role] + c_n_cz[v_role] then
+        v_mode := 'cz'; v_cz := c_cz_games; v_cz_in := true;
+      end if;
+    end if;
+  elsif v_mode = 'cz' then
+    v_cz := v_cz - 1;
+    v_u := floor(random() * 1000)::int;
+    if v_u < c_cz_win[v_role] then
+      v_mode := 'at'; v_cz := 0; v_at_in := true;
+      v_at := case when v_role = c_premium then c_premium_games else c_at_games end;
+      v_at_from := case when v_role = c_premium then 'premium' else 'cz' end;
+    elsif v_cz <= 0 then
+      v_mode := 'normal'; v_cz := 0; v_cz_end := true;
+    end if;
+  else
+    -- AT（純増は押し順ベルのぶんを止めたときに足す）
+    v_net := v_net + v_pay - v_bet;
+    if v_toku > 0 then
+      v_toku := v_toku - 1;      -- 特化ゾーン：ATの残りは減らず、毎G上乗せ
+      v_u := floor(random() * 100)::int;
+      v_acc := 0;
+      for i in 1 .. array_length(c_toku_add, 1) loop
+        v_acc := v_acc + c_toku_w[i];
+        if v_u < v_acc then v_toku_add := c_toku_add[i]; exit; end if;
+      end loop;
+      v_at := v_at + v_toku_add;
+    else
+      v_at := v_at - 1;
+      if floor(random() * 1000)::int < c_toku_rate[v_role] then v_toku := v_toku + c_toku_games; v_toku_in := true; end if;
+    end if;
+    if floor(random() * 1000)::int < c_add_rate[v_role] then v_add := c_add_games[v_role]; v_at := v_at + v_add; end if;
+    if v_at <= 0 and v_toku <= 0 then v_mode := 'normal'; v_at := 0; v_at_end := true; end if;
+  end if;
+  if v_at_in then v_net := 0; v_toku := 0; end if;   -- 新しいATの純増は0から
+
+  update public.v2cap_profiles set medals = medals - v_bet + v_pay, updated_at = now() where id = v_uid;
+  update public.v2cap_casino
+     set slot_mode = v_mode, slot_rate = v_rate, slot_cz = v_cz, slot_at = v_at, slot_toku = v_toku,
+         slot_pending = v_pending,
+         slot_pending_rate = case when v_pending is null then null else v_rate end,
+         slot_pending_at = (v_pending is not null and v_before = 'at'),
+         slot_at_net = v_net, updated_at = now()
+   where player_id = v_uid;
+  perform public.v2cap_casino_book(v_uid, 'slot', v_bet, v_pay, case when v_before = 'at' then v_net else 0 end);
+  return jsonb_build_object(
+    'ok', true, 'role', c_keys[v_role], 'payout', v_pay, 'prev_paid', v_prev, 'rate', v_rate, 'bet', v_bet,
+    'pending', v_pending is not null,
+    -- ★ナビ（正解の押し順）はAT中だけ渡す
+    'nav', case when v_pending is not null and v_before = 'at' then v_pending end,
+    'mode_before', v_before, 'mode', v_mode, 'cz', v_cz, 'at', v_at, 'toku', v_toku, 'at_net', v_net,
+    'cz_in', v_cz_in, 'cz_end', v_cz_end, 'at_in', v_at_in, 'at_from', v_at_from, 'at_end', v_at_end,
+    'add', v_add, 'toku_in', v_toku_in, 'toku_add', v_toku_add
+  ) || public.v2cap_casino_money(v_uid);
+end;
+$$;
+revoke all on function public.v2cap_slot_spin(int) from public, anon;
+grant execute on function public.v2cap_slot_spin(int) to authenticated;
+
+-- 押し順ベルを止めた：押した順番（並びの番号0〜5：0＝左中右 1＝左右中 2＝中左右 3＝中右左 4＝右左中 5＝右中左）で払い出す
+create or replace function public.v2cap_slot_stop(p_order int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_bell_pay constant int := 9;
+  c_miss_pay constant int := 1;
+  v_uid uuid := auth.uid();
+  v_c   public.v2cap_casino;
+  v_hit boolean;
+  v_pay int;
+  v_net bigint;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  perform 1 from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  v_c := public.v2cap_casino_lock(v_uid);
+  if v_c.slot_pending is null then return jsonb_build_object('ok', false, 'error', '止める押し順ベルがありません'); end if;
+  if p_order is null or p_order < 0 or p_order > 5 then
+    return jsonb_build_object('ok', false, 'error', '押し順が正しくありません');
+  end if;
+  v_hit := p_order = v_c.slot_pending;
+  v_pay := (case when v_hit then c_bell_pay else c_miss_pay end) * coalesce(v_c.slot_pending_rate, 1);
+  v_net := v_c.slot_at_net + case when v_c.slot_pending_at then v_pay else 0 end;
+  update public.v2cap_profiles set medals = medals + v_pay, updated_at = now() where id = v_uid;
+  update public.v2cap_casino
+     set slot_pending = null, slot_pending_rate = null, slot_pending_at = false, slot_at_net = v_net, updated_at = now()
+   where player_id = v_uid;
+  perform public.v2cap_casino_book(v_uid, 'slot', 0, v_pay, case when v_c.slot_pending_at then v_net else 0 end);
+  return jsonb_build_object('ok', true, 'hit', v_hit, 'payout', v_pay, 'answer', v_c.slot_pending, 'at_net', v_net)
+         || public.v2cap_casino_money(v_uid);
+end;
+$$;
+revoke all on function public.v2cap_slot_stop(int) from public, anon;
+grant execute on function public.v2cap_slot_stop(int) to authenticated;
+
+-- ---- 11-3. ハイ&ロー（連勝はしご）----
+-- 始める：賭けて1枚目を引く（カード0〜51・強さは card % 13：0＝2 … 12＝A）
+create or replace function public.v2cap_hilo_start(p_bet int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_min constant int := 10;
+  c_max constant int := 1000;
+  v_uid  uuid := auth.uid();
+  v_p    public.v2cap_profiles;
+  v_c    public.v2cap_casino;
+  v_card int;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select * into v_p from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  v_c := public.v2cap_casino_lock(v_uid);
+  if v_c.hilo_active then return jsonb_build_object('ok', false, 'error', 'ハイ&ローの勝負の途中です'); end if;
+  if p_bet is null or p_bet < c_min or p_bet > c_max then
+    return jsonb_build_object('ok', false, 'error', format('賭けるのは%s〜%s枚です', c_min, c_max));
+  end if;
+  if v_p.medals < p_bet then return jsonb_build_object('ok', false, 'error', 'メダルが足りません'); end if;
+  v_card := floor(random() * 52)::int;
+  update public.v2cap_profiles set medals = medals - p_bet, updated_at = now() where id = v_uid;
+  update public.v2cap_casino
+     set hilo_active = true, hilo_bet = p_bet, hilo_pot = p_bet::bigint * 100, hilo_card = v_card,
+         hilo_streak = 0, hilo_cards = array[v_card]::smallint[], updated_at = now()
+   where player_id = v_uid;
+  perform public.v2cap_casino_book(v_uid, 'hilo', p_bet, 0, 0);
+  return jsonb_build_object('ok', true, 'card', v_card, 'bet', p_bet, 'pot', p_bet::bigint * 100, 'streak', 0)
+         || public.v2cap_casino_money(v_uid);
+end;
+$$;
+revoke all on function public.v2cap_hilo_start(int) from public, anon;
+grant execute on function public.v2cap_hilo_start(int) to authenticated;
+
+-- 上か下かを当てる。同じ数字は負け。倍率（小数2桁・切り捨て）は
+--   1回目＝1261 ÷ 当たりの枚数（0.97 × 13）／2回目から＝1300 ÷ 当たりの枚数（確率どおり）＝どこで降りても全体で約97%
+--   【確定】2026-10-13 ユーザー選択「2回目からは確率どおり」。10連勝か、賭けたメダルの1000倍で自動で受け取る
+create or replace function public.v2cap_hilo_guess(p_high boolean)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_first_x13  constant int := 1261;
+  c_next_x13   constant int := 1300;
+  c_max_streak constant int := 10;
+  c_cap_mult   constant int := 1000;
+  v_uid    uuid := auth.uid();
+  v_c      public.v2cap_casino;
+  v_rank   int;
+  v_n      int;
+  v_mult   int;
+  v_next   int;
+  v_nrank  int;
+  v_win    boolean;
+  v_pot    bigint;
+  v_cap    bigint;
+  v_streak int;
+  v_payout bigint := 0;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  perform 1 from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  v_c := public.v2cap_casino_lock(v_uid);
+  if not v_c.hilo_active then return jsonb_build_object('ok', false, 'error', '勝負していません'); end if;
+  if p_high is null then return jsonb_build_object('ok', false, 'error', '上か下かを選んでください'); end if;
+  v_rank := v_c.hilo_card % 13;
+  v_n := case when p_high then 12 - v_rank else v_rank end;
+  if v_n <= 0 then return jsonb_build_object('ok', false, 'error', 'その向きは選べません'); end if;
+  v_mult := (case when v_c.hilo_streak > 0 then c_next_x13 else c_first_x13 end) / v_n;
+  v_next := floor(random() * 52)::int;
+  v_nrank := v_next % 13;
+  v_win := case when p_high then v_nrank > v_rank else v_nrank < v_rank end;
+  if not v_win then
+    update public.v2cap_casino
+       set hilo_active = false, hilo_pot = 0, hilo_card = v_next, hilo_cards = hilo_cards || v_next::smallint, updated_at = now()
+     where player_id = v_uid;
+    return jsonb_build_object('ok', true, 'win', false, 'card', v_next, 'mult', v_mult, 'pot', 0, 'streak', v_c.hilo_streak,
+                              'payout', 0, 'done', true) || public.v2cap_casino_money(v_uid);
+  end if;
+  v_pot := v_c.hilo_pot * v_mult / 100;
+  v_streak := v_c.hilo_streak + 1;
+  v_cap := v_c.hilo_bet::bigint * c_cap_mult * 100;
+  if v_pot > v_cap then v_pot := v_cap; end if;
+  if v_streak >= c_max_streak or v_pot >= v_cap then
+    -- 自動で受け取る
+    v_payout := v_pot / 100;
+    update public.v2cap_profiles set medals = medals + v_payout, updated_at = now() where id = v_uid;
+    update public.v2cap_casino
+       set hilo_active = false, hilo_pot = v_pot, hilo_card = v_next, hilo_streak = v_streak,
+           hilo_cards = hilo_cards || v_next::smallint, updated_at = now()
+     where player_id = v_uid;
+    perform public.v2cap_casino_book(v_uid, 'hilo', 0, v_payout, v_payout);
+    return jsonb_build_object('ok', true, 'win', true, 'card', v_next, 'mult', v_mult, 'pot', v_pot, 'streak', v_streak,
+                              'payout', v_payout, 'done', true, 'auto', true) || public.v2cap_casino_money(v_uid);
+  end if;
+  update public.v2cap_casino
+     set hilo_pot = v_pot, hilo_card = v_next, hilo_streak = v_streak, hilo_cards = hilo_cards || v_next::smallint, updated_at = now()
+   where player_id = v_uid;
+  return jsonb_build_object('ok', true, 'win', true, 'card', v_next, 'mult', v_mult, 'pot', v_pot, 'streak', v_streak,
+                            'payout', 0, 'done', false) || public.v2cap_casino_money(v_uid);
+end;
+$$;
+revoke all on function public.v2cap_hilo_guess(boolean) from public, anon;
+grant execute on function public.v2cap_hilo_guess(boolean) to authenticated;
+
+-- 受け取る（1回は当ててから）。持ち分の1/100枚は切り捨て
+create or replace function public.v2cap_hilo_take()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid    uuid := auth.uid();
+  v_c      public.v2cap_casino;
+  v_payout bigint;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  perform 1 from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  v_c := public.v2cap_casino_lock(v_uid);
+  if not v_c.hilo_active then return jsonb_build_object('ok', false, 'error', '勝負していません'); end if;
+  if v_c.hilo_streak < 1 then return jsonb_build_object('ok', false, 'error', '1回当ててから受け取れます'); end if;
+  v_payout := v_c.hilo_pot / 100;
+  update public.v2cap_profiles set medals = medals + v_payout, updated_at = now() where id = v_uid;
+  update public.v2cap_casino set hilo_active = false, updated_at = now() where player_id = v_uid;
+  perform public.v2cap_casino_book(v_uid, 'hilo', 0, v_payout, v_payout);
+  return jsonb_build_object('ok', true, 'payout', v_payout, 'streak', v_c.hilo_streak, 'pot', v_c.hilo_pot)
+         || public.v2cap_casino_money(v_uid);
+end;
+$$;
+revoke all on function public.v2cap_hilo_take() from public, anon;
+grant execute on function public.v2cap_hilo_take() to authenticated;
+
+-- ---- 11-4. ルーレット（ラッキーナンバー付き）----
+-- p_bets … [{"k":"n","v":17,"a":10},{"k":"red","a":50},{"k":"dozen","v":2,"a":5}]（k＝種類・v＝数字や番号・a＝枚数）
+--   1点30倍・赤黒/奇数偶数/1〜18・19〜36は2倍・ダズン/列は3倍（賭けたぶんこみ）。0は1点賭けだけ当たる
+--   毎回1〜5個の数字に雷（ラッキーナンバー）。そこへの1点賭けは50〜500倍
+create or replace function public.v2cap_roulette_spin(p_bets jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_max_total constant int   := 1000;
+  c_max_bets  constant int   := 60;
+  c_straight  constant int   := 30;
+  c_red       constant int[] := array[1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
+  c_count_w   constant int[] := array[30, 25, 20, 15, 10];
+  c_mults     constant int[] := array[50, 100, 150, 200, 300, 500];
+  c_mult_w    constant int[] := array[45, 25, 12, 9, 5, 4];
+  v_uid    uuid := auth.uid();
+  v_p      public.v2cap_profiles;
+  v_c      public.v2cap_casino;
+  v_b      jsonb;
+  v_k      text;
+  v_v      int;
+  v_a      int;
+  v_total  int := 0;
+  v_u      int;
+  v_acc    int;
+  v_count  int := 1;
+  v_nums   int[];
+  v_lucky  jsonb := '[]'::jsonb;
+  v_lmult  int[] := '{}';
+  v_res    int;
+  v_win    boolean;
+  v_pay    bigint;
+  v_payout bigint := 0;
+  v_wins   jsonb := '[]'::jsonb;
+  i int;
+  j int;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if p_bets is null or jsonb_typeof(p_bets) <> 'array' or jsonb_array_length(p_bets) = 0 then
+    return jsonb_build_object('ok', false, 'error', 'チップを置いてください');
+  end if;
+  if jsonb_array_length(p_bets) > c_max_bets then
+    return jsonb_build_object('ok', false, 'error', format('賭けられるのは%s か所までです', c_max_bets));
+  end if;
+  -- 形を確かめる（数は整数・枚数は1以上）。★数でないものを数に直してエラーにならないよう、型を見てから直す
+  for v_b in select value from jsonb_array_elements(p_bets) loop
+    v_k := v_b ->> 'k';
+    if jsonb_typeof(v_b) is distinct from 'object' or jsonb_typeof(v_b -> 'a') is distinct from 'number' then
+      return jsonb_build_object('ok', false, 'error', '賭けの枚数が正しくありません');
+    end if;
+    if (v_b ->> 'a')::numeric <> floor((v_b ->> 'a')::numeric) or (v_b ->> 'a')::numeric < 1 or (v_b ->> 'a')::numeric > c_max_total then
+      return jsonb_build_object('ok', false, 'error', '賭けの枚数が正しくありません');
+    end if;
+    if v_k in ('n', 'dozen', 'col') then
+      if jsonb_typeof(v_b -> 'v') is distinct from 'number' then
+        return jsonb_build_object('ok', false, 'error', '賭けた場所が正しくありません');
+      end if;
+      if (v_b ->> 'v')::numeric <> floor((v_b ->> 'v')::numeric)
+         or (v_b ->> 'v')::numeric < (case when v_k = 'n' then 0 else 1 end)
+         or (v_b ->> 'v')::numeric > (case when v_k = 'n' then 36 else 3 end) then
+        return jsonb_build_object('ok', false, 'error', '賭けた場所が正しくありません');
+      end if;
+    elsif v_k is null or v_k not in ('red', 'black', 'odd', 'even', 'low', 'high') then
+      return jsonb_build_object('ok', false, 'error', '賭けた場所が正しくありません');
+    end if;
+    v_total := v_total + (v_b ->> 'a')::int;
+  end loop;
+  if v_total > c_max_total then
+    return jsonb_build_object('ok', false, 'error', format('1回に賭けられるのは%s枚までです', c_max_total));
+  end if;
+  select * into v_p from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  v_c := public.v2cap_casino_lock(v_uid);
+  if v_p.medals < v_total then return jsonb_build_object('ok', false, 'error', 'メダルが足りません'); end if;
+
+  -- ラッキーナンバー（数と倍率）
+  v_u := floor(random() * 100)::int;
+  v_acc := 0;
+  for i in 1 .. array_length(c_count_w, 1) loop
+    v_acc := v_acc + c_count_w[i];
+    if v_u < v_acc then v_count := i; exit; end if;
+  end loop;
+  select array_agg(n) into v_nums from (select n from generate_series(0, 36) n order by random() limit v_count) s;
+  for i in 1 .. v_count loop
+    v_u := floor(random() * 100)::int;
+    v_acc := 0;
+    for j in 1 .. array_length(c_mults, 1) loop
+      v_acc := v_acc + c_mult_w[j];
+      if v_u < v_acc then v_lmult := v_lmult || c_mults[j]; exit; end if;
+    end loop;
+    v_lucky := v_lucky || jsonb_build_array(jsonb_build_object('n', v_nums[i], 'm', v_lmult[i]));
+  end loop;
+
+  -- 玉
+  v_res := floor(random() * 37)::int;
+  for v_b in select value from jsonb_array_elements(p_bets) loop
+    v_k := v_b ->> 'k';
+    v_a := (v_b ->> 'a')::int;
+    v_v := case when v_k in ('n', 'dozen', 'col') then (v_b ->> 'v')::int end;
+    v_win := case v_k
+      when 'n'     then v_v = v_res
+      when 'red'   then v_res <> 0 and v_res = any(c_red)
+      when 'black' then v_res <> 0 and not (v_res = any(c_red))
+      when 'odd'   then v_res <> 0 and v_res % 2 = 1
+      when 'even'  then v_res <> 0 and v_res % 2 = 0
+      when 'low'   then v_res between 1 and 18
+      when 'high'  then v_res >= 19
+      when 'dozen' then v_res <> 0 and (v_res - 1) / 12 + 1 = v_v
+      when 'col'   then v_res <> 0 and (v_res - 1) % 3 + 1 = v_v
+      else false end;
+    v_pay := 0;
+    if v_win then
+      if v_k = 'n' then
+        v_pay := v_a::bigint * coalesce((select v_lmult[x] from generate_subscripts(v_nums, 1) x where v_nums[x] = v_res), c_straight);
+      elsif v_k in ('dozen', 'col') then
+        v_pay := v_a::bigint * 3;
+      else
+        v_pay := v_a::bigint * 2;
+      end if;
+    end if;
+    v_payout := v_payout + v_pay;
+    v_wins := v_wins || to_jsonb(v_pay);
+  end loop;
+
+  update public.v2cap_profiles set medals = medals - v_total + v_payout, updated_at = now() where id = v_uid;
+  update public.v2cap_casino
+     set roul_hist = (array[v_res::smallint] || roul_hist)[1:20], updated_at = now()
+   where player_id = v_uid;
+  perform public.v2cap_casino_book(v_uid, 'roulette', v_total, v_payout, v_payout);
+  return jsonb_build_object('ok', true, 'result', v_res, 'lucky', v_lucky, 'total', v_total, 'payout', v_payout, 'wins', v_wins,
+                            'hist', to_jsonb((array[v_res::smallint] || v_c.roul_hist)[1:20]))
+         || public.v2cap_casino_money(v_uid);
+end;
+$$;
+revoke all on function public.v2cap_roulette_spin(jsonb) from public, anon;
+grant execute on function public.v2cap_roulette_spin(jsonb) to authenticated;
