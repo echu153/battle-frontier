@@ -6,6 +6,7 @@ import { canEquipType, weaponsOf } from '../lib/jobs.js'
 import { equippedItems, wornIdsOf } from '../lib/loadout.js'
 import { powerAt, statsAt, effectPct } from '../lib/gear.js'
 import { PLUS_MAX, plusOf } from '../lib/smith.js'
+import { DROP_CHANCE } from '../lib/sortie.js'
 import { statLine, nameColor, useGearRows } from './v2capGearView.js'
 import { RarityTag, PlusTag, GearFilterBar } from './v2capGear.jsx'
 
@@ -89,7 +90,10 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
         <div style={{ display:'grid', gap:'4px', maxHeight:'520px', overflowY:'auto' }}>
           {rows.length === 0 && (
             <div style={{ color: TEXT.label, fontSize:'11px', padding:'8px' }}>
-              {all.length === 0 ? '装備がありません（出撃で勝つと落ちることがあります。ふつうの敵は3%・レアとボスは10%。鍛冶屋で作ることもできます）' : 'この絞り込みに当てはまる装備はありません'}
+              {/* ★落ちる確率は sortie.js の DROP_CHANCE から出す（直書きしていて 3%→8% のときに古いまま残った） */}
+              {all.length === 0
+                ? `装備がありません（出撃で勝つと落ちることがあります。ふつうの敵は${DROP_CHANCE.normal}%・レアとボスは${DROP_CHANCE.boss}%。鍛冶屋で作ることもできます）`
+                : 'この絞り込みに当てはまる装備はありません'}
             </div>
           )}
           {rows.map(({ inv, item }) => {
