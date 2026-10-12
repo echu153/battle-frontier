@@ -18,7 +18,9 @@ import { AVATAR_PRESETS, AVATAR_FILE_RE } from './avatar.js'
 import { FORTUNES, PRAY_PERMIL, multTenthsOf } from './tree.js'
 import { rewrite } from '../../../tools/v2cap-sql.mjs'
 
-const SQL = readFileSync(new URL('../../../supabase_v2cap_core.sql', import.meta.url), 'utf8')
+// ★改行はLFにそろえてから見る（Windowsで core.autocrlf=true のまま取り出すとCRLFになり、改行を含む正規表現が合わなくなる。
+//   2026-10-12 別セッションの作業ツリーで「ClassLVの数え直し」のテストが落ちたので直した）。CRLFの書き直しは下の種のテストで別に見る
+const SQL = readFileSync(new URL('../../../supabase_v2cap_core.sql', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 const fnBody = (name) => {
   const m = SQL.match(new RegExp(`create or replace function public\\.${name}\\([\\s\\S]*?\\n\\$\\$;`))
   assert.ok(m, `${name} が見つかる`)
