@@ -14,7 +14,7 @@ import {
   ICHIJI_CLASSES, ICHIJI_INFO, ICHIJI_REQ_JLV, jobMaxOf, nextClassesOf, CLASS_INFO, JOB_NEED_BASE_PERMIL, JOB_NEED_PCT,
   bonusPointsAt, jobBonusStats, learnOrderOf, learnAtOf, skillsLearnedBy, applyJobExp,
   canBecome, weaponsOf, canEquipType, attackKindOf, lineageOf, usableSkillNames, classDescOf,
-  jobBonusGain, jobGainText, jobUpNote,
+  jobBonusGain, jobGainText, jobUpHead, jobUpNote,
 } from './jobs.js'
 import { SKILLS, NEW_SKILLS, SKILL_BY_NAME, setMpCost, validateSkillSet, defaultSetOf, DEFAULT_USES_MAX, passiveOf } from './skills.js'
 import { ICHIJI_SKILLS, ICHIJI_BUILDS } from './skillsIchiji.js'
@@ -27,7 +27,7 @@ import { powerAt, effectPct, statsAt, armorEffects, armorEffectText, GEAR_RATIO,
 import {
   AREA_LIST, SPOTS, SPOT_COUNT, spotOf, spotLvOf, spotLabel, expRangeOf, goldRangeOf,
   ROLE_TENTHS, scaleByRole, enemyLevels, enemyLvOf, enemyRoleOf,
-  stdPowerAt, AREA_BOSS, SUB_BOSS, bossRatioOf, STD_RATIO, NORMAL_RATIO, enemyPowerOf, toFighter as enemyFighter,
+  stdPowerAt, stdRatioAt, AREA_BOSS, SUB_BOSS, bossRatioOf, STD_RATIO, NORMAL_RATIO, enemyPowerOf, toFighter as enemyFighter,
 } from './areas.js'
 import { AREA_ROSTERS, AREA_LEVELS, ENEMY_LV } from './monsters.js'
 import { toFighter, statBreakdown, equippedItems, slotsOf, currentSetOf } from './loadout.js'
@@ -375,6 +375,11 @@ test('【確定】2026-10-12 CLASS LEVEL UP の行に、上がったクラスの
   assert.equal(jobUpNote('盗賊', { jlv: 8, job_ups: 3 }), `（${jobGainText('盗賊', 5, 8)}）`, '2つ以上上がったら合計')
   assert.equal(jobUpNote('盗賊', { jlv: 3, job_ups: 0 }), '')
   assert.equal(jobUpNote('盗賊', null), '')
+  // 1行目（2026-10-12 ユーザー指示「クラスレベル上がるときはこの表記で」＝「⭐ CLASS LEVEL UP！盗賊　LV3 → 4」。Lv は表記ルールで LV）
+  assert.equal(jobUpHead('盗賊', { jlv: 4, job_ups: 1 }), '⭐ CLASS LEVEL UP！盗賊　LV3 → 4')
+  assert.equal(jobUpHead('狂戦士', { jlv: 8, job_ups: 3 }), '⭐ CLASS LEVEL UP！狂戦士　LV5 → 8', '2つ以上は「上がる前 → 上がったあと」')
+  assert.equal(jobUpHead('盗賊', { jlv: 4, job_ups: 0 }), '')
+  assert.ok(!/Lv/.test(jobUpHead('盗賊', { jlv: 4, job_ups: 1 })), '表記ルール：Lv は使わない')
 })
 
 test('【確定】ClassLVが上がるたびに、どの職業でも必ずHPとMPが上がる（点数とは別・職業ごとの量＝ユーザー承認の表）', () => {
@@ -908,6 +913,23 @@ test('【確定】始まりの森①のふつう・朝昼晩の敵には、LV1�
       assert.ok(w >= 95, `${cls}が${e.name}に ${w}/100`)
     }
   }
+})
+
+test('【確定】2026-10-12 序盤の敵：①-①（LV1〜2）は前のまま・LV5〜20の行は 1.6／1.6／1.3／1.15倍', () => {
+  // ユーザー指示「序盤の敵が弱すぎる、技全部交わせちゃうからもう少し強くてもいい」→「1.6倍」・「１－１は弱くていい」
+  assert.deepEqual(STD_RATIO.slice(0, 6), [[1, 0.75], [2, 0.83], [5, 1.71], [10, 2.7], [15, 2.94], [20, 3.05]])
+  // ①-①の敵の強さは前の線（LV1 0.75〜LV5 1.07）の上と同じ
+  for (const e of [...spotOf(1).roster.enemies, ...spotOf(1).roster.timed]) {
+    const lv = ENEMY_LV[e.name]
+    assert.ok(Math.abs(stdRatioAt(lv) - (0.75 + (1.07 - 0.75) * (lv - 1) / 4)) < 0.005, `${e.name}（LV${lv}）は前のまま`)
+  }
+  // エリア1に LV3〜9 の敵はいない＝LV5の行が効くのは①-②から先の敵（LV10〜）だけ
+  const forest = AREA_ROSTERS[0]
+  for (const e of [...forest.normals, ...forest.timed, ...forest.rares, ...forest.bosses]) {
+    assert.ok(ENEMY_LV[e.name] <= 2 || ENEMY_LV[e.name] >= 10, `${e.name}（LV${ENEMY_LV[e.name]}）`)
+  }
+  // ①-②の始まりの森の敵（LV10）は前の1.6倍
+  assert.ok(Math.abs(stdRatioAt(10) / 1.69 - 1.6) < 0.01)
 })
 
 test('敵の出方：レアが先（0.5%）→ボス（遭遇率）→ふつう。朝昼晩の敵はその時間帯だけ', () => {

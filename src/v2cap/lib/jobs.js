@@ -276,8 +276,17 @@ export const jobGainText = (cls, fromJlv, toJlv) => {
   const g = jobBonusGain(cls, fromJlv, toJlv)
   return STAT_KEYS.filter(k => g[k] > 0).map(k => `${STAT_DEFS[k].label}+${g[k]}`).join('・')
 }
-// サーバーの返事の level（{ jlv: 上がったあとのClassLV, job_ups: 上がった回数 }）から「（HP+13・MP+2・…）」。上がっていなければ ''
-//   出撃のログ・宝樹・デイリーミッションの「CLASS LEVEL UP！」に添える
+// サーバーの返事の level（{ jlv: 上がったあとのClassLV, job_ups: 上がった回数 }）から、出撃のログ・宝樹・デイリーミッションに出す2行。
+// 【確定】2026-10-12 ユーザー指示「クラスレベル上がるときはこの表記で」：
+//   ⭐ CLASS LEVEL UP！盗賊　LV3 → 4
+//   （HP+14・MP+5・STR+2・DEX+1・AGI+2・LUK+1）
+//   （ユーザーの文は「Lv3 → 4」。表記ルール（docs/notation-rules.md）どおり LV にした）
+// 1行目。上がっていなければ ''
+export const jobUpHead = (cls, level) => {
+  const ups = Math.floor(Number(level?.job_ups) || 0)
+  return ups > 0 ? `⭐ CLASS LEVEL UP！${cls}　LV${level.jlv - ups} → ${level.jlv}` : ''
+}
+// 2行目「（HP+13・MP+2・…）」。上がっていなければ ''
 export const jobUpNote = (cls, level) => {
   const ups = Math.floor(Number(level?.job_ups) || 0)
   if (ups <= 0) return ''

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../supabase'
 import { box, btn } from '../../v2/components/v2ui.js'
 import { FORTUNE_BY_NAME, canPray, remainUntilPray, prayExpOf, prayPctText } from '../lib/tree.js'
-import { jobUpNote } from '../lib/jobs.js'
+import { jobUpHead, jobUpNote } from '../lib/jobs.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — ユグレシアの宝樹（1日1回祈る）
@@ -62,7 +62,12 @@ export default function V2capTree({ prof, onProfile }) {
             </div>
           )}
           {/* 上がったクラスのステも書く（2026-10-12 ユーザー指示・出撃のログと同じ） */}
-          {result.level?.job_ups > 0 && <div style={{ color:'#ffcc00', fontSize:'11px', marginTop:'4px' }}>⭐ CLASS LEVEL UP！ ClassLV{result.level.jlv}{jobUpNote(prof.class, result.level)}</div>}
+          {result.level?.job_ups > 0 && (
+            <div style={{ color:'#ffcc00', fontSize:'11px', marginTop:'4px' }}>
+              <div>{jobUpHead(prof.class, result.level)}</div>
+              <div>{jobUpNote(prof.class, result.level)}</div>
+            </div>
+          )}
           {(result.level?.learned || []).map(n => <div key={n} style={{ color:'#44ddff', fontSize:'11px', marginTop:'4px' }}>📖 スキル「{n}」を覚えた！</div>)}
         </div>
       )}

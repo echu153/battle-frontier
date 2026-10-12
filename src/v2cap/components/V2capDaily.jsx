@@ -5,7 +5,7 @@ import { box, btn, miniBtn, TEXT } from '../../v2/components/v2ui.js'
 import {
   DAILY_TASKS, dailyOf, dailyRewardOf, dailyPctOf, taskProgressOf, doneCountOf, isDailyComplete, claimErrorOf, nextResetAt,
 } from '../lib/daily.js'
-import { jobUpNote } from '../lib/jobs.js'
+import { jobUpHead, jobUpNote } from '../lib/jobs.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — デイリーミッション（ホームの右の一番上・今のⅡと同じ場所）
@@ -120,7 +120,12 @@ export default function V2capDaily({ prof, onProfile }) {
             </div>
           )}
           {/* 上がったクラスのステも書く（2026-10-12 ユーザー指示・出撃のログと同じ） */}
-          {got.level?.job_ups > 0 && <div style={{ color:'#ffcc00', marginTop:'4px' }}>⭐ CLASS LEVEL UP！ ClassLV{got.level.jlv}{jobUpNote(prof.class, got.level)}</div>}
+          {got.level?.job_ups > 0 && (
+            <div style={{ color:'#ffcc00', marginTop:'4px' }}>
+              <div>{jobUpHead(prof.class, got.level)}</div>
+              <div>{jobUpNote(prof.class, got.level)}</div>
+            </div>
+          )}
           {(got.level?.learned || []).map(n => <div key={n} style={{ color:'#44ddff', marginTop:'4px' }}>📖 スキル「{n}」を覚えた！</div>)}
           <div style={{ color: TEXT.label, fontSize:'10px', marginTop:'6px' }}>次のミッションは日本時間の5時に切り替わります。</div>
         </V2Modal>

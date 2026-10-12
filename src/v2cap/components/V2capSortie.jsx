@@ -4,14 +4,14 @@ import V2capLogLine from './V2capLogLine.jsx'
 import { runBattle } from '../../v2/lib/battle.js'
 import { LOG_PLAIN } from '../../v2/components/v2ui.js'
 import { loadPref } from '../../v2/lib/prefs.js'
-import { SPOTS, spotOf, spotLabel, spotLvText, ROLE_TENTHS, toFighter as enemyFighter } from '../lib/areas.js'
+import { SPOTS, spotOf, spotLabel, spotLvText, toFighter as enemyFighter } from '../lib/areas.js'
 import {
-  pickEncounter, rollEquipDrop, nextBossRate, isSpotUnlocked, isSpotCleared, openUntilOf, rewardRangeOf, SORTIE_CD,
+  pickEncounter, rollEquipDrop, nextBossRate, isSpotUnlocked, isSpotCleared, openUntilOf, SORTIE_CD,
 } from '../lib/sortie.js'
 import { toFighter as playerFighter } from '../lib/loadout.js'
 import { staminaMaxOf, MAX_LV, rollStamina } from '../lib/level.js'
-import { jobUpNote } from '../lib/jobs.js'
-import { RARITY_COLOR, RARITIES, rarityLabel, reqLvOf } from '../lib/equipment.js'
+import { jobUpHead, jobUpNote } from '../lib/jobs.js'
+import { RARITY_COLOR, rarityLabel } from '../lib/equipment.js'
 import { buildCapBattleView } from '../lib/battleView.js'
 import { enemyArtSrc } from '../lib/enemyArt.js'
 import { battleIconOf } from '../lib/classArt.js'
@@ -44,7 +44,6 @@ const ROLE_LINE = {
   timed: (foe, lv) => ({ text:`${foe}（LV${lv}）が現れた！`, color:'#aaddff' }),
   normal: (foe, lv) => ({ text:`${foe}（LV${lv}）が現れた！`, color:'#88ccff' }),
 }
-const mult = (role) => `${ROLE_TENTHS[role] / 10}倍`
 // ログを自動で一番下へ送るか（この端末で覚えておく。読めない・書けないときはオンのまま動く）
 const LOG_FOLLOW_KEY = 'v2capLogFollow'
 const readFollow = () => { try { return localStorage.getItem(LOG_FOLLOW_KEY) !== '0' } catch { return true } }
@@ -153,7 +152,12 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
         after.push({ text:`🆙 LEVEL UP！ LV${lv.lv}${pts}`, color:'#44ff88' })
       }
       // ★上がったクラスのステも書く（2026-10-12 ユーザー指示「クラスレベルアップしたときはステータスの上昇値も記載すること」・2つ以上なら合計）
-      if (lv.job_ups > 0) after.push({ text:`⭐ CLASS LEVEL UP！ ${prof.class} ClassLV${lv.jlv}${jobUpNote(prof.class, lv)}`, color:'#ffcc00' })
+      // 「⭐ CLASS LEVEL UP！盗賊　LV3 → 4」の次の行に「（HP+14・…）」（2026-10-12 ユーザー指示の表記）
+      if (lv.job_ups > 0) {
+        after.push({ text: jobUpHead(prof.class, lv), color:'#ffcc00' })
+        const note = jobUpNote(prof.class, lv)
+        if (note) after.push({ text: note, color:'#ffcc00' })
+      }
       for (const name of lv.learned || []) after.push({ text:`📖 スキル「${name}」を覚えた！（スキルセットで編成できる）`, color:'#44ddff' })
       if (win) {
         if (data.drop && drop) {
@@ -193,8 +197,6 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
     }
     doBattle(true)
   }, [auto, now, loading, spot, remaining, stamNow])   // eslint-disable-line react-hooks/exhaustive-deps
-
-  const normalRange = spot ? rewardRangeOf(spot, 'normal') : null
 
   const timerRow = (
     <>
@@ -265,26 +267,8 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
           </option>
         ))}
       </select>
-      {spot && (
-        <div style={{ fontSize:'10px', color:'#7fa6d0', marginBottom:'8px', lineHeight:1.7 }}>
-          <div>敵は{spotLvText(spot.id)}（ボスは上限のLV）</div>
-          <div>
-            装備の必要LV：{RARITIES.map((r, i) => (
-              <span key={r}>{i ? '・' : ''}<span style={{ color: RARITY_COLOR[r] }}>{rarityLabel(r)}</span>{reqLvOf(spot.area, r)}</span>
-            ))}
-          </div>
-          <div>
-            装備：<span style={{ color: RARITY_COLOR.E }}>エピック</span>はレアとボス・
-            <span style={{ color: RARITY_COLOR.L }}>レジェンダリー</span>はボスだけが落とす
-          </div>
-          <div>
-            1体あたり EXP <span style={{ color:'#ffcc00' }}>{normalRange.exp.join('〜')}</span>・
-            Gold <span style={{ color:'#ffcc00' }}>{normalRange.gold.join('〜')}</span>
-            （朝昼晩の敵{mult('timed')}・レア{mult('rare')}・ボス{mult('boss')}）
-          </div>
-          {!isSpotCleared(cleared, spot.id) && <div style={{ color:'#ff8844' }}>ボスを倒すと次の場所が開く</div>}
-        </div>
-      )}
+      {/* ★場所の説明（敵のLV・装備の必要LV・落とすレア度・1体あたりのEXPとGold・「ボスを倒すと次の場所が開く」）は出さない
+           （2026-10-12 ユーザー指示「画像の部分いらない」）。場所の敵のLV帯は上の選択肢に出ている */}
       <button onClick={() => doBattle(false)} disabled={!canAct}
         style={{ width:'100%', padding:'14px', background:'#001840', border:`1px solid ${canAct ? '#ffcc00' : '#003366'}`,
           color: canAct ? '#ffcc00' : '#7fa6d0', cursor: canAct ? 'pointer' : 'not-allowed',
@@ -297,9 +281,10 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
           cursor: stamNow > 0 ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'12px' }}>
         {stamNow > 0 ? `▶ オート出撃（あと${stamNow}回）` : '⚡ スタミナ切れ'}
       </button>
-      <div style={{ color:'#4d6f92', fontSize:'10px', marginTop:'5px', textAlign:'center' }}>
-        {stamNow > 0 ? 'スタミナ1につき1回、10秒ごとに自動で出撃します' : '自分でクリックする出撃はスタミナを使いません'}
-      </div>
+      {/* 「スタミナ1につき1回、10秒ごとに自動で出撃します」は出さない（2026-10-12 ユーザー指示）。スタミナ切れのときの案内だけ残す */}
+      {stamNow < 1 && (
+        <div style={{ color:'#4d6f92', fontSize:'10px', marginTop:'5px', textAlign:'center' }}>自分でクリックする出撃はスタミナを使いません</div>
+      )}
     </div>
   )
 }

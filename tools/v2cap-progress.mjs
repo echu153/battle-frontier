@@ -333,7 +333,8 @@ const areaClearHour = (r, k) => r.spotClearHour[k * 3 + 3]   // エリアk（0�
 //   ⚠「目安の時間に実際に稼いだEXP」や「最初からの通算の時間」で合わせると、1か所の遅れが後ろ全部に響いて、
 //     回ごとに大きく振れた（2026-10-09 実際に踏んだ）
 // 測り直しで動かさない標準の戦闘力の行（このLV以下）。始まりの森①の敵（LV1・2）を装備なしのLV1で勝てる強さに保つ
-const STD_FIXED_LV = 5
+// ★2026-10-12 LV2の行を足して①-①の強さをそこで止め、LV5から上を強くした（ユーザー「１－１は弱くていい」）＝止めるのはLV2まで
+const STD_FIXED_LV = 2
 const tune = async () => {
   // --classes all で初期職を全部（いまは11職）。既定は4職（速い・ふつう・魔法・回復の代表）
   const classes = arg('classes', null) === 'all' ? jobsLib.START_CLASSES : ['戦士', '盗賊', '魔法使い', '薬師']

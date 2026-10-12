@@ -20,8 +20,8 @@ import V2capPoints from './V2capPoints.jsx'
 //   （枠 #0044aa／背景 #001040／padding 10px、名前13px・行11px、升目9〜10px、EXPバー4px、折りたたみは上）。
 //   この版だけのもの：
 //   ・左上のアイコンは自分で設定する（プロフィール。無いときは点線の枠＝押すとプロフィールへ）
-//   ・名前の下に「LV2/100」、その下に「クラス：盗賊　3/30」（ClassLV＝初期職30・一次職50で止まる）・EXPとClassEXPの2本のバー
-//     （2026-10-12 ユーザー指示「この書き方にして」。前は「[初期] 盗賊 LV2／100」「ClassLV: 2／30」）
+//   ・名前の下に「LV2/100」、その下に「クラス：盗賊　LV3/30」（ClassLV＝初期職30・一次職50で止まる）・EXPとClassEXPの2本のバー
+//     （2026-10-12 ユーザー指示「この書き方にして」「クラス：盗賊　Lv3/30　にして」＝表記ルールどおり LV。前は「[初期] 盗賊 LV2／100」「ClassLV: 2／30」）
 //   ・ステの升目は合計だけ（2026-10-12 ユーザー指示「ホーム画面の数値は最終値だけ」）。内訳（本体＋クラス＋装備＋軽装のAGI）は
 //     カーソルで出す＋プロフィールに表で出す（V2capProfile）・まだ振っていないステータスポイントの「振る」
 //   ・装備は7枠（武器1・頭・鎧・腕・足・装飾品2）。名前はレア度の色・強化値・必要LV不足の効果%。
@@ -174,7 +174,7 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
           </button>
         )}
         <div style={{ flex:1, minWidth:0 }}>
-          {/* ★名前の下は「LV2/100」「クラス：盗賊　3/30」の2行（2026-10-12 ユーザー指示「この書き方にして」・[初期] の印は出さない） */}
+          {/* ★名前の下は「LV2/100」「クラス：盗賊　LV3/30」の2行（2026-10-12 ユーザー指示・[初期] の印は出さない） */}
           <div style={{ color:'#ffcc00', fontSize:'13px' }}>{prof.username}</div>
           <div style={{ fontSize:'11px', color:'#9ec2e6' }}>
             {/* 上がり方の説明は長いので、LVに合わせたときだけ出す */}
@@ -188,7 +188,7 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
             クラス：<span style={{ color: classColor }}>{prof.class}</span>
             <V2Tip color="#ffcc00" width="250px" style={{ borderBottom:'1px dotted #7fa6d0', marginLeft:'10px' }}
               body={`ClassLV（クラスのレベル）は職業ごと。上がるとその職業のスキルを覚え、その職業のステが上がります（就いている間だけ）。HPとMPは毎回必ず上がります（${prof.class}はHP+${JOB_LV_HPMP[prof.class]?.hp || 0}・MP+${JOB_LV_HPMP[prof.class]?.mp || 0}）。`}>
-              <span style={{ color:'#66ddff' }}>{job.lv}</span>/{jobMaxOf(prof.class)}
+              <span style={{ color:'#66ddff' }}>LV{job.lv}</span>/{jobMaxOf(prof.class)}
             </V2Tip>
             {jMax && <span style={{ color:'#ff8844' }}> MAX</span>}
           </div>
