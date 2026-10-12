@@ -7,8 +7,8 @@ import { readFileSync } from 'node:fs'
 import { STAT_KEYS } from '../../v2/lib/stats.js'
 import { SKILL_SET_SLOTS, SKILL_USE_MAX } from '../../v2/lib/skills.js'
 import { DEFAULT_USES_MAX } from './skills.js'
-import { NEED_PERMIL, MAX_LV, STAMINA_BASE, STAMINA_RECOVER_MS, POINTS_PER_LV, POINTS_STEP, POINTS_ON_STEP, POINT_UNIT } from './level.js'
-import { JOB_NEED_PCT, JOB_MAX } from './jobs.js'
+import { NEED_BASE, NEED_PERMIL, MAX_LV, STAMINA_BASE, STAMINA_RECOVER_MS, POINTS_PER_LV, POINTS_STEP, POINTS_ON_STEP, POINT_UNIT } from './level.js'
+import { JOB_NEED_PCT, JOB_NEED_BASE_PERMIL, JOB_MAX } from './jobs.js'
 import { ROLE_TENTHS } from './areas.js'
 import { SLOTS, RARITIES, STARTER_AREA } from './equipment.js'
 import { SORTIE_CD, DROP_RARITY } from './sortie.js'
@@ -35,12 +35,15 @@ test('SQLの種（段階・職業・スキル・装備・場所・敵）はJSか
 test('必要EXP・必要ClassEXP・スタミナの式と係数がJSと同じ', () => {
   const need = fnBody('v2cap_need')
   assert.match(need, new RegExp(`when p_lv >= ${MAX_LV} then 0`))
-  assert.match(need, new RegExp(`round\\(${NEED_PERMIL}::numeric \\* p_lv \\* p_lv \\* p_lv / 1000\\)`))
+  // 2026-10-12「+20・全体1.2倍」：20 ＋ 係数 × LV³（千分率の整数で掛けてから1000で割る＝JSの needExp と同じ）
+  assert.ok(need.includes(`round((${NEED_BASE} * 1000 + ${NEED_PERMIL}::numeric * p_lv * p_lv * p_lv) / 1000)`), '20と係数がJSと同じ')
+  assert.deepEqual([NEED_BASE, NEED_PERMIL], [20, 162], 'ユーザーが選んだ「+20・全体1.2倍」')
   const job = fnBody('v2cap_job_need')
   // 上限は段階ごと（初期30・一次50＝v2cap_stages.max_jlv）。種が無いときは初期職の上限
   assert.ok(job.includes(`when p_jlv >= coalesce((select s.max_jlv from public.v2cap_stages s where s.stage = p_stage), ${JOB_MAX}) then 0`))
-  // 【確定】2026-10-12「LVの5割」：LVの係数（NEED_PERMIL）× 割合（JOB_NEED_PCT）× 段階の倍率 × ClassLV³ ／ 100000
-  assert.ok(job.includes(`round(${NEED_PERMIL}::numeric * ${JOB_NEED_PCT} * coalesce((select s.mult from public.v2cap_stages s where s.stage = p_stage), 1)`), '係数と割合がJSと同じ')
+  // 【確定】2026-10-12「LVの5割」：係数135（そのときのLVの係数・LVとは切り離した）× 割合（JOB_NEED_PCT）× 段階の倍率 × ClassLV³ ／ 100000
+  assert.ok(job.includes(`round(${JOB_NEED_BASE_PERMIL}::numeric * ${JOB_NEED_PCT} * coalesce((select s.mult from public.v2cap_stages s where s.stage = p_stage), 1)`), '係数と割合がJSと同じ')
+  assert.equal(JOB_NEED_BASE_PERMIL, 135, 'LVを重くしてもClassLVは変えない（ユーザー「通常のレベルは」）')
   assert.match(job, /\* p_jlv \* p_jlv \* p_jlv \/ 100000\)\)::int end/, 'ClassLV³ を100000で割る（JSの jobNeed と同じ）')
   assert.equal(JOB_NEED_PCT, 50, 'ユーザーが選んだ「LVの5割」')
   // スタミナ：最大値は 10＋(LV−1)・回復は3分に1（2026-10-09 ユーザー指示）

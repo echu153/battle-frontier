@@ -18,7 +18,7 @@ export { STAT_KEYS, INITIAL_STATS, calcPower }
 export const MAX_LV = 100
 
 // ===== 必要EXP =====
-// 次のLVまでの必要EXP ＝ 係数 × LV³（千分率の整数 NEED_PERMIL で持つ）。
+// 次のLVまでの必要EXP ＝ 20 ＋ 係数 × LV³（係数は千分率の整数 NEED_PERMIL で持つ・20は 2026-10-12 から＝下の注）。
 //   1勝のEXPは場所が進むほど増え、だいたいLVに比例する（始まりの森で2〜3・深淵の海溝で30強）。
 //   なのでLV³にすると、そのLVで要る勝ち数がLV²に比例する＝上がるほど重い（MMORPG式）。
 //   係数は「1日1時間でLV100まで約1年」になるように tools/v2cap-progress.mjs --tune で回して決める。
@@ -26,10 +26,14 @@ export const MAX_LV = 100
 //     約1/4になったので式ごと作り直した。前は 0.335×LV²×(LV＋9)）
 //   ⚠小数のまま掛けると、端数が .5 ちょうどになる所でSQLの round と食い違うことがある。
 //   なので**千分率の整数で掛けてから1000で割る**（SQLの v2cap_need も同じ形）
+// 【確定】2026-10-12 ユーザー指示「通常のレベルはもう少しレベル上げにくくていい／レベル1時点で必要経験値20」→案から「+20・全体1.2倍」：
+//   必要EXP ＝ **20 ＋ 0.162 × LV³**（前は 0.135 × LV³＝LV1→2が1・LV5→6が17だった）。LV1→2が20・LV5→6が40・LV10→11が182。
+//   ClassLVの必要量は変えない（jobs.js の jobNeed は前の係数135の5割で固定）。今いるキャラのLVは下げない（次のLVからこの式）
 // ★let なのは tools/v2cap-progress.mjs --tune が回しながら差し替えるため（ゲームの中では変えない）
-export let NEED_PERMIL = 135
+export const NEED_BASE = 20
+export let NEED_PERMIL = 162
 export const setNeedPermilForTuning = (v) => { NEED_PERMIL = v }
-export const needExp = (lv) => (lv >= MAX_LV ? 0 : Math.max(1, Math.round(NEED_PERMIL * lv * lv * lv / 1000)))
+export const needExp = (lv) => (lv >= MAX_LV ? 0 : Math.max(1, Math.round((NEED_BASE * 1000 + NEED_PERMIL * lv * lv * lv) / 1000)))
 
 // LV1からそのLVに着くまでの合計
 export const totalExpTo = (lv) => {

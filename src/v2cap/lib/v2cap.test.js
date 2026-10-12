@@ -6,12 +6,12 @@ import { STAT_KEYS, STAT_DEFS, calcPower, INITIAL_STATS } from '../../v2/lib/sta
 import { skillValue, VALUE_TABLE, MP_TABLE, BUFF_PER_MP, HEAL_PER_MP, MPREGEN_PER_MP, SKILLS as V2_SKILLS, offClassMult } from '../../v2/lib/skills.js'
 import { createSide, mpCostOf, runBattle } from '../../v2/lib/battle.js'
 import {
-  MAX_LV, needExp, totalExpTo, applyExp, bodyPowerAt, staminaMaxOf, NEED_PERMIL, STAMINA_RECOVER_MS, rollStamina, msToNextStamina,
+  MAX_LV, needExp, totalExpTo, applyExp, bodyPowerAt, staminaMaxOf, NEED_BASE, NEED_PERMIL, STAMINA_RECOVER_MS, rollStamina, msToNextStamina,
   pointsForLv, totalPointsTo, POINT_UNIT, validateAllocation, applyAllocation,
 } from './level.js'
 import {
   CLASSES, START_CLASSES, STAGES, JOB_MAX, JOB_BONUS, JOB_LV_HPMP, jobLevelsGained, mainStatsOf, jobNeed, jobTotalTo, bonusSeqOf,
-  ICHIJI_CLASSES, ICHIJI_INFO, ICHIJI_REQ_JLV, jobMaxOf, nextClassesOf, CLASS_INFO,
+  ICHIJI_CLASSES, ICHIJI_INFO, ICHIJI_REQ_JLV, jobMaxOf, nextClassesOf, CLASS_INFO, JOB_NEED_BASE_PERMIL, JOB_NEED_PCT,
   bonusPointsAt, jobBonusStats, learnOrderOf, learnAtOf, skillsLearnedBy, applyJobExp,
   canBecome, weaponsOf, canEquipType, attackKindOf, lineageOf, usableSkillNames, classDescOf,
 } from './jobs.js'
@@ -43,11 +43,13 @@ test('【確定】LV上限は100。必要EXPは上がるほど重くなる（MMO
   assert.equal(MAX_LV, 100)
   assert.equal(needExp(100), 0)
   for (let l = 2; l < 99; l++) assert.ok(needExp(l + 1) > needExp(l), `LV${l}→${l + 1} より LV${l + 1}→${l + 2} が重い`)
-  // 必要EXP ＝ 係数 × LV³（千分率の整数で掛けてから割る＝SQLと同じ）
-  for (const l of [1, 5, 10, 20, 50, 99]) assert.equal(needExp(l), Math.max(1, Math.round(NEED_PERMIL * l * l * l / 1000)))
-  // 設計書§2の表（係数0.135＝tools/v2cap-progress.mjs --tune で「最後のボスの目安（365時間目）にLV100」になるよう決めた。
-  //   2026-10-09 ステータスポイントにしたあとの測り直し）
-  assert.deepEqual([1, 5, 10, 20, 30, 50, 70, 90, 99].map(needExp), [1, 17, 135, 1080, 3645, 16875, 46305, 98415, 130990])
+  // 必要EXP ＝ 20 ＋ 係数 × LV³（千分率の整数で掛けてから割る＝SQLと同じ）
+  for (const l of [1, 5, 10, 20, 50, 99]) assert.equal(needExp(l), Math.max(1, Math.round((NEED_BASE * 1000 + NEED_PERMIL * l * l * l) / 1000)))
+  // 【確定】2026-10-12 ユーザー指示「通常のレベルはもう少しレベル上げにくくていい／レベル1時点で必要経験値20」→「+20・全体1.2倍」
+  //   （前は係数0.135だけ＝LV1→2が1。0.135 は tools/v2cap-progress.mjs --tune で「365時間目にLV100」に合わせた値）
+  assert.equal(needExp(1), 20, 'LV1→2は20（ユーザー指示）')
+  assert.deepEqual([NEED_BASE, NEED_PERMIL], [20, 162])
+  assert.deepEqual([1, 5, 10, 20, 30, 50, 70, 90, 99].map(needExp), [20, 40, 182, 1316, 4394, 20270, 55586, 118118, 157208])
 })
 
 test('【確定】LV100で止まり、あふれたEXPは捨てる。周回（LV1に戻る）は無い', () => {
@@ -288,26 +290,28 @@ test('通常攻撃は 槍使い・盗賊・銃士・戦士・格闘家・弓使�
   for (const c of ['魔法使い', '呪術師', '僧侶', '薬師']) assert.equal(attackKindOf(c), 'mag', c)
 })
 
-test('【確定】ClassLVは最大30。初期職のClassLV30まで＝LV25のころに入っているEXP（2026-10-12「LVの5割」・前はLV33）', () => {
+test('【確定】ClassLVは最大30。初期職のClassLV30まで＝LV23のころに入っているEXP（2026-10-12「LVの5割」＋LVだけ重くしたあと・前はLV33）', () => {
   assert.equal(JOB_MAX, 30)
   assert.equal(jobNeed('shoki', 30), 0)
   const total = jobTotalTo('shoki', 30)
-  assert.equal(total, 12775)
-  assert.ok(total >= totalExpTo(25) && total < totalExpTo(26), `初期職の合計 ${total} はLV25〜26のあいだ`)
+  assert.equal(total, 12775, 'LVを重くしてもClassLVの合計は変えない')
+  assert.ok(total >= totalExpTo(23) && total < totalExpTo(24), `初期職の合計 ${total} はLV23〜24のあいだ`)
 })
 
-test('【確定】2026-10-12 ClassLVはLVより上がりやすい：ClassLV◯の必要量＝LV◯の必要EXPの5割（×段階の倍率）。最初の職業ならいつでもClassLV≧LV', () => {
-  // ユーザー指示「通常のレベルよりもクラスレベルのほうが上がりやすくして」→案から「LVの5割」を選んだ
+test('【確定】2026-10-12 ClassLVはLVより上がりやすい：ClassLV◯の必要量＝係数0.135×ClassLV³の5割（×段階の倍率）。最初の職業ならいつでもClassLV≧LV', () => {
+  // ユーザー指示「通常のレベルよりもクラスレベルのほうが上がりやすくして」→案から「LVの5割」を選んだ。
+  //   同じ日に「通常のレベルはもう少しレベル上げにくくていい」でLVだけ 20＋0.162×LV³ にした＝ClassLVは係数135のまま（切り離した）
+  assert.deepEqual([JOB_NEED_BASE_PERMIL, JOB_NEED_PCT], [135, 50])
   for (let j = 1; j < JOB_MAX; j++) {
-    assert.ok(jobNeed('shoki', j) <= needExp(j), `ClassLV${j}はLV${j}より少ない（以下）`)
-    assert.ok(Math.abs(jobNeed('shoki', j) - needExp(j) / 2) <= 0.75, `ClassLV${j}：${jobNeed('shoki', j)}（LV${j}の${needExp(j)}の半分）`)
+    assert.ok(jobNeed('shoki', j) < needExp(j), `ClassLV${j}はLV${j}より少ない`)
+    assert.ok(Math.abs(jobNeed('shoki', j) - 0.135 * j * j * j / 2) <= 0.5 || jobNeed('shoki', j) === 1, `ClassLV${j}：${jobNeed('shoki', j)}（0.135×ClassLV³の半分）`)
   }
-  // LV1から同じEXPを入れていくと、LV25まではどの時点でもClassLVのほうが高いか同じ
+  // LV1から同じEXPを入れていくと、LV23まではどの時点でもClassLVのほうが高いか同じ
   const jlvAt = (exp) => { let j = 1; while (j < JOB_MAX && jobTotalTo('shoki', j + 1) <= exp) j++; return j }
-  for (let lv = 2; lv <= 25; lv++) assert.ok(jlvAt(totalExpTo(lv)) >= lv, `LV${lv}のときClassLV${jlvAt(totalExpTo(lv))}`)
-  // 選んだ表の数（LV10でClassLV11・LV20で23）
-  assert.equal(jlvAt(totalExpTo(10)), 11)
-  assert.equal(jlvAt(totalExpTo(20)), 23)
+  for (let lv = 2; lv <= 23; lv++) assert.ok(jlvAt(totalExpTo(lv)) >= lv, `LV${lv}のときClassLV${jlvAt(totalExpTo(lv))}`)
+  // いまの数（LV10でClassLV13・LV20で25）
+  assert.equal(jlvAt(totalExpTo(10)), 13)
+  assert.equal(jlvAt(totalExpTo(20)), 25)
 })
 
 test('【確定】クラスのステはClassLVが1上がるごとに初期職8点（ClassLV30で232点）・一次職10点（ClassLV50で490点）。職業ごとに2〜3種が高く、ほかは低め', () => {

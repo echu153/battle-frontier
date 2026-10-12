@@ -3045,18 +3045,21 @@ update public.v2cap_profiles p
 -- ============================================================
 -- ===== 3. 計算（src/v2cap/lib と同じ式。片方だけ直さないこと）=====
 -- ============================================================
--- 次のLVまでの必要EXP ＝ 係数 × LV³。LV100で0（level.js の needExp）
--- ⚠係数は千分率の整数で掛けてから割る＝JSと端数の丸めをそろえるため（level.js の NEED_PERMIL と同じ値）
+-- 次のLVまでの必要EXP ＝ 20 ＋ 係数 × LV³。LV100で0（level.js の needExp）
+-- 【確定】2026-10-12 ユーザー指示「通常のレベルはもう少しレベル上げにくくていい／レベル1時点で必要経験値20」→「+20・全体1.2倍」：
+--   20 ＋ 0.162 × LV³（前は 0.135 × LV³）。ClassLV（v2cap_job_need）は変えない
+-- ⚠千分率の整数で掛けてから割る＝JSと端数の丸めをそろえるため（level.js の NEED_BASE・NEED_PERMIL と同じ値）
 create or replace function public.v2cap_need(p_lv int)
 returns int language sql immutable set search_path = public as $$
   select case when p_lv >= 100 then 0
-              else greatest(1, round(135::numeric * p_lv * p_lv * p_lv / 1000))::int end
+              else greatest(1, round((20 * 1000 + 162::numeric * p_lv * p_lv * p_lv) / 1000))::int end
 $$;
 
 -- 必要ClassEXP ＝ LVの係数 × 割合（%）× 段階の倍率 × ClassLV³ ／ 100000。段階の上限（初期30・一次50）で0（jobs.js の jobNeed）
 -- 【確定】2026-10-12 ユーザー指示「通常のレベルよりもクラスレベルのほうが上がりやすくして」→「LVの5割」：
 --   同じ数のLVの必要EXP（v2cap_need と同じ LV³ の形）の5割 × 段階の倍率（一次職3倍）。前は 4.4 × 段階の倍率 × ClassLV²
--- ⚠LVの係数は v2cap_need と同じ千分率の整数（level.js の NEED_PERMIL）・割合は jobs.js の JOB_NEED_PCT
+-- ⚠係数135はClassLVだけの値（jobs.js の JOB_NEED_BASE_PERMIL＝2026-10-12 に決めたときのLVの係数）・割合は jobs.js の JOB_NEED_PCT。
+--   同じ日にLVだけ重くした（v2cap_need＝20＋0.162×LV³）ので、ここはLVの係数とは切り離してある
 create or replace function public.v2cap_job_need(p_stage text, p_jlv int)
 returns int language sql stable set search_path = public as $$
   select case when p_jlv >= coalesce((select s.max_jlv from public.v2cap_stages s where s.stage = p_stage), 30) then 0
