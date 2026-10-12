@@ -55,16 +55,19 @@ $$;
 -- ============================================================
 -- ---- 1-1. 段階 ----
 -- mult … 必要ClassEXPの倍率／per_lv … ClassLVが1上がるごとのステの点数／
--- learn_at … スキルを覚えるClassLV（その職業の技を v2cap_skills の sort 順に当てる）／max_jlv … ClassLVの上限
+-- learn_at … スキルを覚えるClassLV（その職業の技を v2cap_skills の sort 順に当てる）／max_jlv … ClassLVの上限／
+-- need_base … 必要ClassEXPに毎回足す量（2026-10-12 ユーザー指示「初期クラスは必要経験値15にして、上位職は30で」）
 -- ★初期（ClassLV30まで）と一次（2026-10-10・ClassLV50まで）
 create table if not exists public.v2cap_stages (
-  stage    text primary key,
-  mult     int  not null,
-  per_lv   int  not null,
-  learn_at int[] not null,
-  max_jlv  int  not null default 30
+  stage     text primary key,
+  mult      int  not null,
+  per_lv    int  not null,
+  learn_at  int[] not null,
+  max_jlv   int  not null default 30,
+  need_base int  not null default 0
 );
 alter table public.v2cap_stages add column if not exists max_jlv int not null default 30;
+alter table public.v2cap_stages add column if not exists need_base int not null default 0;
 alter table public.v2cap_stages enable row level security;
 drop policy if exists v2cap_stages_read on public.v2cap_stages;
 create policy v2cap_stages_read on public.v2cap_stages for select to authenticated using (true);
@@ -72,10 +75,10 @@ revoke all on table public.v2cap_stages from anon;
 grant select on table public.v2cap_stages to authenticated;
 
 -- @@seed:stages
-insert into public.v2cap_stages (stage, mult, per_lv, learn_at, max_jlv) values
-  ('shoki', 1, 8, '{1,5,10,15,20}'::int[], 30),
-  ('ichiji', 3, 10, '{1,5,10,15,20,25,30,40}'::int[], 50)
-on conflict (stage) do update set mult = excluded.mult, per_lv = excluded.per_lv, learn_at = excluded.learn_at, max_jlv = excluded.max_jlv;
+insert into public.v2cap_stages (stage, mult, per_lv, learn_at, max_jlv, need_base) values
+  ('shoki', 1, 8, '{1,5,10,15,20}'::int[], 30, 15),
+  ('ichiji', 3, 10, '{1,5,10,15,20,25,30,40}'::int[], 50, 30)
+on conflict (stage) do update set mult = excluded.mult, per_lv = excluded.per_lv, learn_at = excluded.learn_at, max_jlv = excluded.max_jlv, need_base = excluded.need_base;
 -- @@end:stages
 
 -- ---- 1-2. 職業 ----
@@ -3060,11 +3063,14 @@ $$;
 --   同じ数のLVの必要EXP（v2cap_need と同じ LV³ の形）の5割 × 段階の倍率（一次職3倍）。前は 4.4 × 段階の倍率 × ClassLV²
 -- ⚠係数135はClassLVだけの値（jobs.js の JOB_NEED_BASE_PERMIL＝2026-10-12 に決めたときのLVの係数）・割合は jobs.js の JOB_NEED_PCT。
 --   同じ日にLVだけ重くした（v2cap_need＝20＋0.162×LV³）ので、ここはLVの係数とは切り離してある
+-- 【確定】さらに同じ日に「クラスレベルも最初の必要量少なすぎ、初期クラスは必要経験値15にして、上位職は30で」：
+--   段階ごとの量（v2cap_stages.need_base＝初期15・一次30＝jobs.js の STAGES の needBase）を毎回足す
 create or replace function public.v2cap_job_need(p_stage text, p_jlv int)
 returns int language sql stable set search_path = public as $$
   select case when p_jlv >= coalesce((select s.max_jlv from public.v2cap_stages s where s.stage = p_stage), 30) then 0
-              else greatest(1, round(135::numeric * 50 * coalesce((select s.mult from public.v2cap_stages s where s.stage = p_stage), 1)
-                                     * p_jlv * p_jlv * p_jlv / 100000))::int end
+              else greatest(1, round((coalesce((select s.need_base from public.v2cap_stages s where s.stage = p_stage), 0) * 100000
+                                      + 135::numeric * 50 * coalesce((select s.mult from public.v2cap_stages s where s.stage = p_stage), 1)
+                                        * p_jlv * p_jlv * p_jlv) / 100000))::int end
 $$;
 
 -- スタミナの最大値 ＝ 10＋(LV−1)＝LVが1上がるごとに+1（level.js の staminaMaxOf・2026-10-09 ユーザー指示）

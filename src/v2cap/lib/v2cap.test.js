@@ -274,11 +274,11 @@ test('【確定】一次職は20職（ユーザーの表「一次職スキル一
     assert.equal(canBecome(id, { [base]: { lv: 29 } }), false)
     assert.equal(canBecome(id, { [base]: { lv: 30 } }), true)
   }
-  // 必要ClassEXP：初期職の3倍（丸めの差は1まで）・ClassLV50で0
-  for (let j = 5; j < 30; j++) assert.ok(Math.abs(jobNeed('ichiji', j) - 3 * jobNeed('shoki', j)) <= 1, `ClassLV${j}`)
+  // 必要ClassEXP：毎回足す量（初期15・一次30）を除いたぶんが初期職の3倍（丸めの差は1まで）・ClassLV50で0
+  for (let j = 5; j < 30; j++) assert.ok(Math.abs((jobNeed('ichiji', j) - 30) - 3 * (jobNeed('shoki', j) - 15)) <= 1, `ClassLV${j}`)
   assert.equal(jobNeed('ichiji', 49) > 0 && jobNeed('ichiji', 50), 0)
   assert.equal(jobNeed('shoki', 30), 0)
-  assert.equal(jobTotalTo('ichiji', 50), 303880, '2026-10-12「LVの5割」×3')
+  assert.equal(jobTotalTo('ichiji', 50), 305349, '2026-10-12「LVの5割」×3＋毎回30')
   // ClassEXPを入れると50で止まる
   const r = applyJobExp({}, '狂戦士', jobTotalTo('ichiji', 50) + 99999, [])
   assert.deepEqual([r.lv, r.exp], [50, 0])
@@ -290,28 +290,34 @@ test('通常攻撃は 槍使い・盗賊・銃士・戦士・格闘家・弓使�
   for (const c of ['魔法使い', '呪術師', '僧侶', '薬師']) assert.equal(attackKindOf(c), 'mag', c)
 })
 
-test('【確定】ClassLVは最大30。初期職のClassLV30まで＝LV23のころに入っているEXP（2026-10-12「LVの5割」＋LVだけ重くしたあと・前はLV33）', () => {
+test('【確定】ClassLVは最大30。初期職のClassLV30まで＝LV24のころに入っているEXP（2026-10-12「LVの5割」＋毎回15・LVは 20＋0.162×LV³・前はLV33）', () => {
   assert.equal(JOB_MAX, 30)
   assert.equal(jobNeed('shoki', 30), 0)
   const total = jobTotalTo('shoki', 30)
-  assert.equal(total, 12775, 'LVを重くしてもClassLVの合計は変えない')
-  assert.ok(total >= totalExpTo(23) && total < totalExpTo(24), `初期職の合計 ${total} はLV23〜24のあいだ`)
+  assert.equal(total, 13209)
+  assert.ok(total >= totalExpTo(24) && total < totalExpTo(25), `初期職の合計 ${total} はLV24〜25のあいだ`)
 })
 
-test('【確定】2026-10-12 ClassLVはLVより上がりやすい：ClassLV◯の必要量＝係数0.135×ClassLV³の5割（×段階の倍率）。最初の職業ならいつでもClassLV≧LV', () => {
+test('【確定】2026-10-12 必要ClassEXP＝段階ごとの量（初期15・一次30）＋係数0.135×ClassLV³の5割×段階の倍率。最初の職業ならClassLV≧LV', () => {
   // ユーザー指示「通常のレベルよりもクラスレベルのほうが上がりやすくして」→案から「LVの5割」を選んだ。
-  //   同じ日に「通常のレベルはもう少しレベル上げにくくていい」でLVだけ 20＋0.162×LV³ にした＝ClassLVは係数135のまま（切り離した）
+  //   同じ日に「通常のレベルはもう少しレベル上げにくくていい」でLVだけ 20＋0.162×LV³ にした＝ClassLVの係数は135のまま（切り離した）。
+  //   さらに「クラスレベルも最初の必要量少なすぎ、初期クラスは必要経験値15にして、上位職は30で」＝毎回 needBase を足す
   assert.deepEqual([JOB_NEED_BASE_PERMIL, JOB_NEED_PCT], [135, 50])
-  for (let j = 1; j < JOB_MAX; j++) {
-    assert.ok(jobNeed('shoki', j) < needExp(j), `ClassLV${j}はLV${j}より少ない`)
-    assert.ok(Math.abs(jobNeed('shoki', j) - 0.135 * j * j * j / 2) <= 0.5 || jobNeed('shoki', j) === 1, `ClassLV${j}：${jobNeed('shoki', j)}（0.135×ClassLV³の半分）`)
+  assert.deepEqual([STAGES.shoki.needBase, STAGES.ichiji.needBase], [15, 30])
+  assert.deepEqual([jobNeed('shoki', 1), jobNeed('ichiji', 1)], [15, 30], 'ClassLV1→2は初期職15・一次職30（ユーザー指示）')
+  for (const stage of ['shoki', 'ichiji']) {
+    for (let j = 1; j < jobMaxOf(stage === 'shoki' ? '戦士' : '狂戦士'); j++) {
+      const want = STAGES[stage].needBase + 0.135 * j * j * j / 2 * STAGES[stage].mult
+      assert.ok(Math.abs(jobNeed(stage, j) - want) <= 0.5, `${stage} ClassLV${j}：${jobNeed(stage, j)}（${want}）`)
+    }
   }
-  // LV1から同じEXPを入れていくと、LV23まではどの時点でもClassLVのほうが高いか同じ
+  for (let j = 1; j < JOB_MAX; j++) assert.ok(jobNeed('shoki', j) < needExp(j), `ClassLV${j}はLV${j}より少ない`)
+  // LV1から同じEXPを入れていくと、LV24まではどの時点でもClassLVのほうが高いか同じ
   const jlvAt = (exp) => { let j = 1; while (j < JOB_MAX && jobTotalTo('shoki', j + 1) <= exp) j++; return j }
-  for (let lv = 2; lv <= 23; lv++) assert.ok(jlvAt(totalExpTo(lv)) >= lv, `LV${lv}のときClassLV${jlvAt(totalExpTo(lv))}`)
-  // いまの数（LV10でClassLV13・LV20で25）
-  assert.equal(jlvAt(totalExpTo(10)), 13)
-  assert.equal(jlvAt(totalExpTo(20)), 25)
+  for (let lv = 2; lv <= 24; lv++) assert.ok(jlvAt(totalExpTo(lv)) >= lv, `LV${lv}のときClassLV${jlvAt(totalExpTo(lv))}`)
+  // いまの数（LV10でClassLV12・LV20で24）
+  assert.equal(jlvAt(totalExpTo(10)), 12)
+  assert.equal(jlvAt(totalExpTo(20)), 24)
 })
 
 test('【確定】クラスのステはClassLVが1上がるごとに初期職8点（ClassLV30で232点）・一次職10点（ClassLV50で490点）。職業ごとに2〜3種が高く、ほかは低め', () => {

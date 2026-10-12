@@ -3,7 +3,7 @@
 // ------------------------------------------------------------
 // supabase_v2cap_core.sql の「-- @@seed:名前」〜「-- @@end:名前」のあいだを、
 // src/v2cap/lib の値から作った INSERT に差し替える（手で書き写さない）。
-//   ・stages    … 段階（必要ClassEXPの倍率・ステの量・スキルを覚えるClassLV・ClassLVの上限）
+//   ・stages    … 段階（必要ClassEXPの倍率・ステの量・スキルを覚えるClassLV・ClassLVの上限・必要ClassEXPに毎回足す量）
 //   ・classes   … 職業（段階・就く条件・ClassLVで上がるステの並び・装備できる武器・通常攻撃の種類・
 //                  スキルを使える職業＝自分と下位職・ClassLVが上がるたびに必ず上がるHPとMP・キャラ作成で配る初期装備）
 //   ・skills    … スキルの名簿（名前・職業・消費MP・覚える順）
@@ -37,9 +37,9 @@ const sortOf = (() => {
 
 export const seeds = () => ({
   stages: [
-    'insert into public.v2cap_stages (stage, mult, per_lv, learn_at, max_jlv) values',
-    STAGE_ORDER.map(k => `  (${q(k)}, ${STAGES[k].mult}, ${STAGES[k].perLv}, ${arr(STAGES[k].learnAt, '::int[]')}, ${STAGES[k].max})`).join(',\n'),
-    'on conflict (stage) do update set mult = excluded.mult, per_lv = excluded.per_lv, learn_at = excluded.learn_at, max_jlv = excluded.max_jlv;',
+    'insert into public.v2cap_stages (stage, mult, per_lv, learn_at, max_jlv, need_base) values',
+    STAGE_ORDER.map(k => `  (${q(k)}, ${STAGES[k].mult}, ${STAGES[k].perLv}, ${arr(STAGES[k].learnAt, '::int[]')}, ${STAGES[k].max}, ${STAGES[k].needBase || 0})`).join(',\n'),
+    'on conflict (stage) do update set mult = excluded.mult, per_lv = excluded.per_lv, learn_at = excluded.learn_at, max_jlv = excluded.max_jlv, need_base = excluded.need_base;',
   ].join('\n'),
   classes: [
     // ★なくした職業（ノーブル・サモナー・一次職）を消してから入れ直す。参照している外部キーは無い

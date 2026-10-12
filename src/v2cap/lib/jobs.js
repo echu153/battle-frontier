@@ -32,9 +32,11 @@ export const JOB_MAX = 30
 // 【確定】2026-10-12 ユーザー指示「敵のキャラ弱くするってよりかはこっちが弱すぎる気がする、くらすれべるあがるとき、もっと上昇量伸ばしていい」
 //   ＋案「初期クラスは8」・一次職は「10点（初期職の1.2倍のまま）」を選んだ：ClassLVごとの点数を **初期職 5→8・一次職 6→10**
 //   （ClassLV30で 145→232・一次職のClassLV50で 294→490。毎回のHP・MP（JOB_LV_HPMP）も1.6倍）
+// needBase … 必要ClassEXPに毎回足す量（【確定】2026-10-12 ユーザー指示「クラスレベルも最初の必要量少なすぎ、初期クラスは必要経験値15にして、上位職は30で」
+//   ＝ClassLV1→2が初期職15・一次職30。LVの「+20」と同じく、どのClassLVにも足す。下の jobNeed）
 export const STAGES = {
-  shoki:  { label:'初期', color:'#44aaff', mult:1, perLv:8, max:JOB_MAX, learnAt:[1, 5, 10, 15, 20] },
-  ichiji: { label:'一次', color:'#cc66ff', mult:3, perLv:10, max:50, learnAt:[1, 5, 10, 15, 20, 25, 30, 40] },
+  shoki:  { label:'初期', color:'#44aaff', mult:1, perLv:8, max:JOB_MAX, learnAt:[1, 5, 10, 15, 20], needBase:15 },
+  ichiji: { label:'一次', color:'#cc66ff', mult:3, perLv:10, max:50, learnAt:[1, 5, 10, 15, 20, 25, 30, 40], needBase:30 },
 }
 export const STAGE_ORDER = ['shoki', 'ichiji']
 export const jobMaxOfStage = (stage) => STAGES[stage]?.max || JOB_MAX
@@ -118,15 +120,19 @@ export const canEquipType = (cls, type) => weaponsOf(cls).includes(type)
 //   前は「係数4.4 × ClassLV²」（ClassLV30がLV33＝LVより遅れていた。tools/v2cap-progress.mjs --tune で決めていた）
 //   ⚠今いるキャラは SQL の一度だけの数え直し（印 job_need_half_lv_20261012）で、ためたClassEXPの合計からClassLVを数え直した
 // 【確定】同じ日にユーザー指示「通常のレベルはもう少しレベル上げにくくていい」でLVだけ重くした（level.js の needExp＝20＋0.162×LV³）。
-//   **ClassLVは変えない**＝係数は135（そのときのLVの係数）で固定し、LVの係数（NEED_PERMIL）とは切り離した。
-//   最初の職業なら、いつでもClassLVがLVより先に上がる（LV10でClassLV13・LV20で25・ClassLV30はLV23ごろ）
-// ⚠「係数135 × 割合（%）」を整数で掛けてから100000で割る（SQLの v2cap_job_need と同じ形・端数の丸めをそろえる）
+//   ClassLVの係数は135（そのときのLVの係数）で固定し、LVの係数（NEED_PERMIL）とは切り離した。
+// 【確定】さらに同じ日にユーザー指示「クラスレベルも最初の必要量少なすぎ、初期クラスは必要経験値15にして、上位職は30で」：
+//   **段階ごとの量（STAGES の needBase＝初期職15・一次職30）を毎回足す**（LVの「+20」と同じ形）。
+//   ＝ 必要ClassEXP ＝ needBase ＋ 0.135×ClassLV³ の5割 × 段階の倍率。ClassLV1→2が初期職15・一次職30（前はどちらも1）。
+//   最初の職業でも、ClassLVはLVと同じか先に上がる（LV10でClassLV12・LV20で24・ClassLV30はLV24ごろ）
+// ⚠「needBase×100000 ＋ 係数135 × 割合（%）× 倍率 × ClassLV³」を整数で出してから100000で割る（SQLの v2cap_job_need と同じ形・端数の丸めをそろえる）
 // ★let なのは tools/v2cap-progress.mjs が試しに差し替えるため（ゲームの中では変えない）
 export const JOB_NEED_BASE_PERMIL = 135
 export let JOB_NEED_PCT = 50
 export const setJobNeedPctForTuning = (v) => { JOB_NEED_PCT = v }
 export const jobNeed = (stage, jlv) =>
-  (jlv >= jobMaxOfStage(stage) ? 0 : Math.max(1, Math.round(JOB_NEED_BASE_PERMIL * JOB_NEED_PCT * (STAGES[stage]?.mult || 1) * jlv * jlv * jlv / 100000)))
+  (jlv >= jobMaxOfStage(stage) ? 0 : Math.max(1, Math.round(
+    ((STAGES[stage]?.needBase || 0) * 100000 + JOB_NEED_BASE_PERMIL * JOB_NEED_PCT * (STAGES[stage]?.mult || 1) * jlv * jlv * jlv) / 100000)))
 export const jobTotalTo = (stage, jlv) => {
   let t = 0
   for (let j = 1; j < Math.min(jlv, jobMaxOfStage(stage)); j++) t += jobNeed(stage, j)
