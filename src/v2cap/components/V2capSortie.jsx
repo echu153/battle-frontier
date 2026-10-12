@@ -10,7 +10,6 @@ import {
 } from '../lib/sortie.js'
 import { toFighter as playerFighter } from '../lib/loadout.js'
 import { staminaMaxOf, MAX_LV, rollStamina } from '../lib/level.js'
-import { jobOf, jobMaxOf } from '../lib/jobs.js'
 import { effectPct } from '../lib/gear.js'
 import { RARITY_COLOR, RARITIES, rarityLabel, reqLvOf } from '../lib/equipment.js'
 import { buildCapBattleView } from '../lib/battleView.js'
@@ -38,6 +37,7 @@ import { battleIconOf } from '../lib/classArt.js'
 // ============================================================
 // ★ログに注記は付けない（2026-10-10 ユーザー指示「（朝だけ）とか（時間帯限定で1.5倍）とか倒した時の（1ターン）の部分いらない」）：
 //   時間帯の敵の「（朝だけ）」・報酬の「（ボスで5倍）（レアで3倍）（時間帯限定で1.5倍）」・勝ち負けの「（◯ターン）」は出さない
+//   ＋EXPの「（ClassEXP +5）」も出さない（2026-10-12 ユーザー指示「この表記なくして（経験値はどっちにも入る）」）
 const ROLE_LINE = {
   boss:  (foe, lv) => ({ text:`⚠ ボス出現！ ${foe}（LV${lv}）が現れた！`, color:'#ff4444' }),
   rare:  (foe, lv) => ({ text:`✨ レアモンスター！ ${foe}（LV${lv}）が現れた！`, color:'#ffcc00' }),
@@ -134,15 +134,14 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       }
       const lv = data.level || {}
       const after = []
-      // ★LV100・ClassLVの上限（初期職30・一次職50）のぶんは入らないので、そう出す
+      // ★LV100のぶんは入らないので、そう出す。ClassEXPは書かない（同じ量がいまの職業にも入る＝ユーザー指示で表記を外した）
       const lvMax = prof.lv >= MAX_LV
-      const jobMax = jobOf(prof.jobs, prof.class).lv >= jobMaxOf(prof.class)
-      const expText = `EXP +${data.exp}${lvMax ? '（LV上限のため入らない）' : ''}${jobMax ? '' : `（ClassEXP +${data.exp}）`}`
+      const expText = `EXP +${data.exp}${lvMax ? '（LV上限のため入らない）' : ''}`
       if (win) {
         after.push({ text:`${expText}　Gold +${data.gold}`, color:'#ffcc00' })
       } else if (data.exp > 0) {
         // 【確定】負けても経験値はその場所の最低値が入る（倍率なし・Goldは入らない・2026-10-09 ユーザー指示）。
-        //   文言は「EXP +2（ClassEXP +2）」だけ（「負けても最低値は入る」の添え書きはユーザー指示で外した）
+        //   文言は「EXP +2」だけ（「負けても最低値は入る」「（ClassEXP +2）」の添え書きはユーザー指示で外した）
         after.push({ text: expText, color:'#c8a050' })
       }
       // 負けたときの経験値でもLVは上がりうる
