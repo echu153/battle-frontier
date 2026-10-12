@@ -66,8 +66,8 @@ test('public/enemy-art の WebP はどれも一覧に載っている（載せ忘
   for (const f of readdirSync(`${PUBLIC}${ENEMY_ART_DIR}`)) assert.ok(listed.has(f), `${f} が一覧に無い`)
 })
 
-test('★エリア①の20体は全部絵がある（2026-10-12 ユーザーが置いた分）', () => {
-  for (const name of ENEMY_NAMES_BY_AREA[0]) assert.ok(hasEnemyArt(name), `${name} の絵が無い`)
+test('★エリア①②の40体は全部絵がある（2026-10-12 ユーザーが置いた分）', () => {
+  for (const name of ENEMY_NAMES_BY_AREA.slice(0, 2).flat()) assert.ok(hasEnemyArt(name), `${name} の絵が無い`)
 })
 
 test('元の絵（public/エネミー）は git に入れない（300枚で約500MBになるため）', () => {
