@@ -14,6 +14,7 @@ import {
 } from '../lib/smith.js'
 import { statLine, nameColor, PLUS_COLOR, chip, gainText, areaOptionLabel, useGearRows } from './v2capGearView.js'
 import { RarityTag, PlusTag, GearFilterBar } from './v2capGear.jsx'
+import V2capEnhanceFx from './V2capEnhanceFx.jsx'
 
 // ============================================================
 // 「レベルキャップあり」版 — 鍛冶屋（強化・分解・作成）
@@ -106,22 +107,43 @@ export default function V2capSmith({ prof, inventory, onProfile, onGo }) {
 function EnhanceTab({ prof, all, wornIds, list, busy, call }) {
   const [smithId, setSmithId] = useState(null)   // 強化の画面を開いている持ち物のID
   const [msg, setMsg] = useState(null)           // 直前の強化の結果 { ok, text }
+  // 【確定】2026-10-13 ユーザー指示「黒い砂漠の強化みたいな演出」「強化の成否もポップアップ」＝強化の演出（V2capEnhanceFx.jsx）
+  //   押した時点の装備の様子を job に写して演出を始め、サーバーの結果が届いたら job.result に入れる
+  const [fxJob, setFxJob] = useState(null)
   const row = smithId === null ? null : all.find(r => String(r.inv.id) === smithId) || null
   const gold = Number(prof.gold) || 0
   const enhance = async () => {
-    if (!row) return
-    setMsg(null)
-    const { data, error } = await call('v2cap_enhance', { p_inventory_id: row.inv.id })
-    if (error) { setMsg({ ok: false, text: `⚠ ${error}` }); return }
+    if (!row || busy) return
+    const { inv, item } = row
+    const cost = enhanceCostOf(item, inv)
+    if (!cost || enhanceErrorOf(item, inv, prof)) return
+    const plus = plusOf(inv)
+    const job = {
+      id: Date.now(), name: item.name, color: nameColor(item), part: item.part, plusFrom: plus, plusTo: cost.next, rate: cost.rate,
+      powerFrom: powerAt(item, inv.ilv, plus), powerTo: powerAt(item, inv.ilv, cost.next), scrapName: scrapNameOf(cost.area), result: null,
+    }
+    setMsg(null); setFxJob(job)
+    const { data, error } = await call('v2cap_enhance', { p_inventory_id: inv.id })
+    if (error) { setFxJob(null); setMsg({ ok: false, text: `⚠ ${error}` }); return }
+    setFxJob(j => (j && j.id === job.id ? { ...j, result: data } : j))
     setMsg(data.success
       ? { ok: true, text: `✨ 成功！ +${data.plus} になりました` }
       : { ok: false, text: `💥 失敗… +${data.plus} のまま（${data.scrap > 0 ? `${scrapNameOf(data.area)} ${data.scrap}個と ` : ''}Gold ${Number(data.gold).toLocaleString()} はなくなりました）` })
   }
+  // 結果のポップアップの「続けて +N にする」（次も強化できるときだけ）
+  const nextCost = row ? enhanceCostOf(row.item, row.inv) : null
+  const nextErr = row && nextCost ? enhanceErrorOf(row.item, row.inv, prof) : null
   return (
     <>
       {row && (
         <SmithModal row={row} prof={prof} busy={busy} msg={msg}
           onEnhance={enhance} onClose={() => { if (!busy) { setSmithId(null); setMsg(null) } }} />
+      )}
+      {fxJob && (
+        <V2capEnhanceFx job={fxJob}
+          nextLabel={nextCost && !nextErr ? `+${nextCost.next}にする` : null}
+          nextReason={!nextCost ? `強化値は+${PLUS_MAX}（上限）です` : nextErr ? `次の強化：${nextErr}` : ''}
+          onAgain={enhance} onClose={() => setFxJob(null)} />
       )}
       <GearFilterBar g={list} />
       <div style={{ display:'grid', gap:'4px', maxHeight:'560px', overflowY:'auto' }}>

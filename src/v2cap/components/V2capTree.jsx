@@ -4,6 +4,7 @@ import { box, btn } from '../../v2/components/v2ui.js'
 import { FORTUNE_BY_NAME, canPray, remainUntilPray, prayExpOf } from '../lib/tree.js'
 import { jobUpHead, jobUpNote } from '../lib/jobs.js'
 import { recSpotOfLv, spotLabel } from '../lib/areas.js'
+import V2capOmikujiFx from './V2capOmikujiFx.jsx'
 
 // ============================================================
 // 「レベルキャップあり」版 — ユグレシアの宝樹（1日1回祈る）
@@ -30,11 +31,17 @@ export default function V2capTree({ prof, onProfile }) {
   const kichi = prayExpOf(prof.lv, FORTUNE_BY_NAME['吉'])
   const daikichi = prayExpOf(prof.lv, FORTUNE_BY_NAME['大吉'])
 
+  // 【確定】2026-10-13 ユーザー指示「ユグレシアの祈りにも演出加えてほしい、結果が出る過程の、おみくじみたいな感じで」
+  //   祈ると すぐ おみくじの演出（V2capOmikujiFx.jsx）が始まり、結果が届くまで箱を振る。閉じたあと「演出をもう一度見る」
+  const [fx, setFx] = useState(null)   // { key, result }
   const pray = async () => {
     if (!ready || busy) return
     setBusy(true); setError(''); setResult(null)
+    const key = Date.now()
+    setFx({ key, result: null })
     const { data, error: err } = await supabase.rpc('v2cap_pray')
-    if (err || !data?.ok) { setBusy(false); setError(err?.message || data?.error || '祈れませんでした'); return }
+    if (err || !data?.ok) { setBusy(false); setFx(null); setError(err?.message || data?.error || '祈れませんでした'); return }
+    setFx(f => (f && f.key === key ? { ...f, result: data } : f))
     setResult(data)
     await onProfile(null)   // last_pray_at / pray_log / LV を取り直す
     setBusy(false)
@@ -42,6 +49,7 @@ export default function V2capTree({ prof, onProfile }) {
 
   return (
     <div style={{ ...box, padding:'12px', marginBottom:'8px' }}>
+      {fx && <V2capOmikujiFx key={fx.key} result={fx.result} onClose={() => setFx(null)} />}
       <div style={{ color:'#44dd99', fontSize:'13px', marginBottom:'8px' }}>🌳 ユグレシアの宝樹</div>
       <div style={{ color:'#7fa6d0', fontSize:'10px', lineHeight:'1.8', marginBottom:'10px' }}>
         1日1回だけ祈れます。宝樹の返す言葉（大凶〜大吉）で、もらえる経験値が変わります
@@ -70,6 +78,8 @@ export default function V2capTree({ prof, onProfile }) {
             </div>
           )}
           {(result.level?.learned || []).map(n => <div key={n} style={{ color:'#44ddff', fontSize:'11px', marginTop:'4px' }}>📖 スキル「{n}」を覚えた！{(result.level?.set_added || []).includes(n) ? '（スキルセットの空き枠に入れた）' : ''}</div>)}
+          <button onClick={() => setFx({ key: Date.now(), result })} disabled={!!fx}
+            style={{ ...btn('#7fa6d0'), marginTop:'10px', padding:'4px 10px', fontSize:'10px' }}>▶ 演出をもう一度見る</button>
         </div>
       )}
 
