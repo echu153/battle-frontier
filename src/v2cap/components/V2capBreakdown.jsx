@@ -12,27 +12,31 @@ import { RarityTag, PlusTag, StatGain } from './v2capGear.jsx'
 // ============================================================
 // 「レベルキャップあり」版 — ステータスの内訳（プロフィールの中）
 //   【確定】2026-10-12 ユーザー指示「ホーム画面の数値は最終値だけ記載するでいい、装備とかどのくらいプラスされてるかはプロフから確認できればいい」
-//   ・ステごとに 本体・クラス（いまの職業）・装備・軽装（AGIだけ）・合計 を表で出す。戦闘力も同じ列で
+//   ・ステごとに 本体・クラス（いまの職業）・装備・アセンション・軽装（AGIだけ）・合計 を表で出す。戦闘力も同じ列で
+//     （アセンションの列は 2026-10-13。開いたマスがあるときだけ出す）
 //   ・その下に、装備ごとの上がるステ（強化値と必要LV不足の効果%込み）と防具の効果
 //   数は戦闘で使うものと同じ（loadout.js の statBreakdown）
 // ============================================================
 const NUM = { textAlign:'right', whiteSpace:'nowrap' }
-const COLOR = { body:'#cfe2ff', job:'#ffcc00', gear:'#44ff88', armor:'#88ddaa' }
+// 「アセンション」は長いので、狭い画面では「アセン／ション」で折り返す（変な所で折れないように2つに分けて置く）
+const ASC_LABEL = <><span style={{ display:'inline-block' }}>アセン</span><span style={{ display:'inline-block' }}>ション</span></>
+const COLOR = { body:'#cfe2ff', job:'#ffcc00', gear:'#44ff88', asc:'#ffaa44', armor:'#88ddaa' }
 
 export default function V2capBreakdown({ prof, inventory }) {
   const bd = statBreakdown(prof, inventory)
   const worn = equippedItems(prof, inventory)
   const job = jobOf(prof.jobs, prof.class)
   const showArmor = bd.armorAgi > 0   // 軽装の列は、軽装でAGIが上がっているときだけ
-  const cols = [['body', '本体'], ['job', 'クラス'], ['gear', '装備'], ...(showArmor ? [['armor', '軽装']] : []), ['total', '合計']]
+  const showAsc = STAT_KEYS.some(k => bd.asc[k] > 0)   // アセンションの列は、開いたマスがあるときだけ
+  const cols = [['body', '本体'], ['job', 'クラス'], ['gear', '装備'], ...(showAsc ? [['asc', ASC_LABEL]] : []), ...(showArmor ? [['armor', '軽装']] : []), ['total', '合計']]
   // 広い画面で横に伸びすぎると行を目で追いにくいので、表は幅を決めておく
   const grid = { display:'grid', gridTemplateColumns:`48px repeat(${cols.length}, minmax(0, 1fr))`, gap:'3px 6px', alignItems:'baseline', maxWidth:'480px' }
   const num = (key, v, color) => <span key={key} style={{ ...NUM, color: v ? color : TEXT.empty }}>{v ? v.toLocaleString() : '—'}</span>
   // ステの行の数（軽装はAGIだけ）
   const valueOf = (key, k) => (key === 'armor' ? (k === 'agi' ? bd.armorAgi : 0) : bd[key][k])
-  // 戦闘力の行。軽装のぶん＝合計から「本体＋クラス＋装備」の戦闘力を引いたもの
-  const base = Object.fromEntries(STAT_KEYS.map(k => [k, bd.body[k] + bd.job[k] + bd.gear[k]]))
-  const power = { body: calcPower(bd.body), job: calcPower(bd.job), gear: calcPower(bd.gear), armor: bd.power - calcPower(base), total: bd.power }
+  // 戦闘力の行。軽装のぶん＝合計から「本体＋クラス＋装備＋アセンション」の戦闘力を引いたもの
+  const base = Object.fromEntries(STAT_KEYS.map(k => [k, bd.body[k] + bd.job[k] + bd.gear[k] + bd.asc[k]]))
+  const power = { body: calcPower(bd.body), job: calcPower(bd.job), gear: calcPower(bd.gear), asc: calcPower(bd.asc), armor: bd.power - calcPower(base), total: bd.power }
   const armorParts = []
   if (bd.armor.takenPct) armorParts.push(`受けるダメージ${bd.armor.takenPct}%`)
   if (bd.armor.agiPct) armorParts.push(`AGI+${bd.armor.agiPct}%`)
@@ -43,7 +47,9 @@ export default function V2capBreakdown({ prof, inventory }) {
       <div style={{ ...grid, fontSize:'11px' }}>
         <span />
         {cols.map(([key, label]) => (
-          <span key={key} style={{ ...NUM, fontSize:'10px', color: key === 'total' ? '#cfe2ff' : COLOR[key] }}>{label}</span>
+          // ★「アセンション」は狭い画面では2行に折り返す（数字の列の幅を広げない）
+          <span key={key} style={{ ...NUM, fontSize:'10px', color: key === 'total' ? '#cfe2ff' : COLOR[key],
+            ...(key === 'asc' ? { whiteSpace:'normal', lineHeight:1.15 } : {}) }}>{label}</span>
         ))}
         {STAT_KEYS.map(k => (
           <Fragment key={k}>
@@ -63,6 +69,7 @@ export default function V2capBreakdown({ prof, inventory }) {
         <div><span style={{ color: COLOR.body }}>本体</span>＝キャラそのもの（振ったステータスポイントを含む）</div>
         <div><span style={{ color: COLOR.job }}>クラス</span>＝いまの職業（{prof.class}・CLASS LV{job.lv}）のぶん。就いている間だけ</div>
         <div><span style={{ color: COLOR.gear }}>装備</span>＝着けている装備の合計（強化値と、必要LVに足りないときの効果%を入れたあと）</div>
+        {showAsc && <div><span style={{ color: COLOR.asc }}>アセンション</span>＝いまの職業の盤面で開いたマス（道の終わりの「+%」は本体＋クラス＋装備＋アセンションに掛ける）</div>}
         {showArmor && <div><span style={{ color: COLOR.armor }}>軽装</span>＝軽装1部位ごとに{ARMOR_EFFECT.軽装.label}（本体＋クラス＋装備のAGIに掛ける）</div>}
       </div>
 

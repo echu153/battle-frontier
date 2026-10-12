@@ -373,8 +373,9 @@ test('【確定】2026-10-12 CLASS LEVEL UP の行に、上がったクラスの
     assert.equal(jobGainText(c.id, max, max + 1), '', `${c.id}：上限より上は何も増えない`)
   }
   assert.equal(jobGainText('盗賊', 1, 2), 'HP+14・MP+5・STR+2・DEX+1・AGI+2・LUK+1', 'ステの並び順・増えたものだけ')
-  assert.equal(jobUpNote('盗賊', { jlv: 2, job_ups: 1 }), '（HP+14・MP+5・STR+2・DEX+1・AGI+2・LUK+1）')
-  assert.equal(jobUpNote('盗賊', { jlv: 8, job_ups: 3 }), `（${jobGainText('盗賊', 5, 8)}）`, '2つ以上上がったら合計')
+  // 最後の「AP+◯」は 2026-10-13 のアセンション（ユーザーが選んだ「2行目の最後に足す」）
+  assert.equal(jobUpNote('盗賊', { jlv: 2, job_ups: 1 }), '（HP+14・MP+5・STR+2・DEX+1・AGI+2・LUK+1・AP+1）')
+  assert.equal(jobUpNote('盗賊', { jlv: 8, job_ups: 3 }), `（${jobGainText('盗賊', 5, 8)}・AP+3）`, '2つ以上上がったら合計')
   assert.equal(jobUpNote('盗賊', { jlv: 3, job_ups: 0 }), '')
   assert.equal(jobUpNote('盗賊', null), '')
   // 1行目（2026-10-12 ユーザー指示「クラスレベル上がるときはこの表記で」＝「⭐ CLASS LEVEL UP！盗賊　LV3 → 4」。Lv は表記ルールで LV）

@@ -286,12 +286,14 @@ export const jobUpHead = (cls, level) => {
   const ups = Math.floor(Number(level?.job_ups) || 0)
   return ups > 0 ? `⭐ CLASS LEVEL UP！${cls}　LV${level.jlv - ups} → ${level.jlv}` : ''
 }
-// 2行目「（HP+13・MP+2・…）」。上がっていなければ ''
+// 【確定】2026-10-13 アセンション（ascension.js）：CLASS LVが1上がるごとにAPを1。
+//   ユーザーが選んだ「2行目の最後に足す」＝（HP+14・MP+5・STR+2・DEX+1・AP+1）
+export const ASC_AP_PER_JLV = 1
+// 2行目「（HP+13・MP+2・…・AP+1）」。上がっていなければ ''
 export const jobUpNote = (cls, level) => {
   const ups = Math.floor(Number(level?.job_ups) || 0)
   if (ups <= 0) return ''
-  const t = jobGainText(cls, level.jlv - ups, level.jlv)
-  return t ? `（${t}）` : ''
+  return `（${[jobGainText(cls, level.jlv - ups, level.jlv), `AP+${ups * ASC_AP_PER_JLV}`].filter(Boolean).join('・')}）`
 }
 // 上がりやすいステータス（神殿に出す）。配分の高い2〜3種＝初期職48点以上・一次職102点以上（多い順のキー）
 //   （2026-10-12 に点数を1.6倍にしたので、前の30点・61点も同じ割合で上げた＝選ばれるステは前と同じ）

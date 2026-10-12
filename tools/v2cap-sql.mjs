@@ -11,6 +11,7 @@
 //   ・spots     … 場所（15エリア×①②③。経験値とGoldの範囲・敵のLVの範囲）
 //   ・enemies   … 敵（いる場所・LV・役割・時間帯）
 //   ・daily_tasks … デイリーミッション（数えるキー・名前・目標の回数）
+//   ・asc_roads … アセンションの道（職業ごとに4本。道のステ・マスの数・MPのマス・大マスの%＝ascension.js の treeOf）
 //
 //   node tools/v2cap-sql.mjs          … 差分があるかだけ表示
 //   node tools/v2cap-sql.mjs --write  … SQLへ書き込む
@@ -23,6 +24,7 @@ const { SKILLS, isPassive } = await import(B + 'v2cap/lib/skills.js')
 const { ITEMS, STARTER_ITEMS, starterIdsOf } = await import(B + 'v2cap/lib/equipment.js')
 const { SPOTS, spotLvOf, enemyLevels, recLvOf } = await import(B + 'v2cap/lib/areas.js')
 const { DAILY_TASKS } = await import(B + 'v2cap/lib/daily.js')
+const { treeOf, ASC_CLASSES } = await import(B + 'v2cap/lib/ascension.js')
 
 const q = (s) => `'${String(s).replace(/'/g, "''")}'`
 const arr = (list, cast = '') => `'{${list.join(',')}}'${cast}`
@@ -90,6 +92,17 @@ export const seeds = () => ({
     'insert into public.v2cap_daily_tasks (key, label, goal, sort) values',
     DAILY_TASKS.map((t, i) => `  (${q(t.key)}, ${q(t.label)}, ${t.goal}, ${i + 1})`).join(',\n'),
     'on conflict (key) do update set label = excluded.label, goal = excluded.goal, sort = excluded.sort;',
+  ].join('\n'),
+  asc_roads: [
+    // ★消してから入れ直す（木の形を変えたときに古い道が残らないように）。参照している外部キーは無い。
+    //   プレイヤーが開いたマスの数は v2cap_profiles.ascension にある＝道の形（マスの並び）を変えたら、振ったAPをどうするかユーザーと決める
+    'delete from public.v2cap_asc_roads;',
+    'insert into public.v2cap_asc_roads (cls, road, stat, len, mp, big_pct) values',
+    ASC_CLASSES.flatMap(cls => treeOf(cls).roads.map(r => {
+      // MPの道だけ、マスごとのMP（小マス以外は0）を持つ（スキル編成の最大MP＝ v2cap_asc_mp）
+      const mp = r.stat === 'mp' ? arr(r.nodes.map(n => (n.type === 'stat' ? n.amount : 0)), '::int[]') : "'{}'::int[]"
+      return `  (${q(cls)}, ${r.road}, ${q(r.stat)}, ${r.nodes.length}, ${mp}, ${r.nodes[r.nodes.length - 1].pct || 0})`
+    })).join(',\n') + ';',
   ].join('\n'),
 })
 

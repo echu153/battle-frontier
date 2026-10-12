@@ -18,7 +18,9 @@ import V2capProfile from '../components/V2capProfile.jsx'
 import V2capTree from '../components/V2capTree.jsx'
 import V2capDex from '../components/V2capDex.jsx'
 import V2capCasino from '../components/V2capCasino.jsx'
+import V2capAscension from '../components/V2capAscension.jsx'
 import { START_CLASSES, weaponsOf, attackKindOf, classDescOf } from '../lib/jobs.js'
+import { apLeftOf } from '../lib/ascension.js'
 
 // ============================================================
 // バトルフロンティアⅡ「レベルキャップあり」版 — ホーム（開発限定）
@@ -44,6 +46,10 @@ const MENU = [
     { key:'smith',  label:'鍛冶屋', icon:'🔨', color:'#ffcc00', action:'強化・分解・作成' },
     { key:'temple', label:'神殿',   icon:'🏛', color:'#ff88cc', action:'転職する' },
   ],
+  // 【確定】2026-10-13 アセンション（スキルツリー）。説明は残りのAPで変わる（menuOf）
+  [
+    { key:'asc', label:'アセンション', icon:'✨', color:'#ffaa44', action:'APを振る' },
+  ],
   // 宝樹は1つだけのまとまり＝横いっぱい（今のⅡと同じ並び方）
   [
     { key:'tree', label:'ユグレシアの宝樹', icon:'🌳', color:'#44dd99', action:'祈る' },
@@ -53,7 +59,12 @@ const MENU = [
     { key:'casino', label:'賭博場', icon:'🎰', color:'#ff4fa3', action:'スロット・ハイ&ロー・ルーレット' },
   ],
 ]
-const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場' }
+const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場' }
+// メニューの説明に、いまの職業で残っているAPを出す（振り忘れに気づけるように）
+const menuOf = (prof) => {
+  const left = Math.max(0, apLeftOf(prof))
+  return MENU.map(g => g.map(m => (m.key === 'asc' && left > 0 ? { ...m, action:`APを振る（残り${left}）` } : m)))
+}
 
 // 今のⅡと同じ2列（grid の auto-fit は列を同じ幅にしかできないので flex で組む）
 //   左 … flex:'1 1 340px'／右 … flex:'999 1 340px'＝余った幅はほぼ右へ。688px より狭いと折り返して1列
@@ -268,7 +279,7 @@ export default function V2capHome() {
               </div>
               {!inBattle && (
                 <>
-                  <V2Menu groups={MENU} open={openMenu} onToggle={() => setOpenMenu(v => !v)} onPick={setScreen} />
+                  <V2Menu groups={menuOf(prof)} open={openMenu} onToggle={() => setOpenMenu(v => !v)} onPick={setScreen} />
                   <div style={{ ...box, padding:'10px', borderColor:'#553366' }}>
                     <div style={{ color:'#ff88cc', fontSize:'11px', marginBottom:'6px' }}>🧪 開発用</div>
                     <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
@@ -303,6 +314,7 @@ export default function V2capHome() {
             {screen === 'smith' && <V2capSmith prof={prof} inventory={inventory} onProfile={refresh} onGo={setScreen} />}
             {screen === 'skills' && <V2capSkills prof={prof} inventory={inventory} onProfile={refresh} />}
             {screen === 'temple' && <V2capTemple prof={prof} inventory={inventory} onProfile={refresh} />}
+            {screen === 'asc' && <V2capAscension prof={prof} onProfile={refresh} />}
             {screen === 'tree' && <V2capTree prof={prof} onProfile={refresh} />}
             {screen === 'dex' && <V2capDex prof={prof} />}
             {screen === 'casino' && <V2capCasino prof={prof} onProfile={refresh} />}

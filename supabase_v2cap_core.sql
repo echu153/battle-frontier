@@ -3503,11 +3503,11 @@ begin
     from jsonb_array_elements_text(v_new) with ordinality as t(name, i) where not (v_old ? t.name);
 
   -- 【確定】2026-10-12 ユーザー指示「スキルスロット余ってる場合はうめるようにして」：
-  --   いま覚えた技は、いまの職業の編成に空き枠（5枠）があり、最大MP（本体のMP＋クラスのMP）に収まるなら入れる（v2cap_fill_set）。
+  --   いま覚えた技は、いまの職業の編成に空き枠（5枠）があり、最大MP（本体のMP＋クラスのMP＋アセンションのMP＝v2cap_max_mp）に収まるなら入れる（v2cap_fill_set）。
   --   1回ずつ入れてから、残りのMPで1回ずつ足す（1枠最大5回）。前から入っている技にはさわらない。1回ぶんのMPも無ければ入れない
   v_sets := coalesce(v_row.skill_sets, '{}'::jsonb);
   v_set  := case when jsonb_typeof(v_sets -> v_cls) = 'array' then v_sets -> v_cls else '[]'::jsonb end;
-  v_fill := public.v2cap_fill_set(v_set, v_added, v_cls, v_row.mp + public.v2cap_job_bonus_mp(v_cls, v_jlv));
+  v_fill := public.v2cap_fill_set(v_set, v_added, v_cls, public.v2cap_max_mp(v_row.mp, v_row.ascension, v_cls, v_jlv));
   select coalesce(jsonb_agg(t.e -> 'name' order by t.i), '[]'::jsonb) into v_setadd
     from jsonb_array_elements(v_fill) with ordinality as t(e, i) where t.i > jsonb_array_length(v_set);
   if jsonb_array_length(v_setadd) > 0 then v_sets := jsonb_set(v_sets, array[v_cls], v_fill); end if;
@@ -3632,11 +3632,11 @@ begin
       v_equip := v_equip || jsonb_build_object(v_slots[v_i], v_inv);
     end if;
   end loop;
-  -- 最大MP＝本体の初期MP（列の既定値）＋クラスのMP（ClassLV1では0）
-  --   ★装備のMPはサーバーでは数えない（スキル編成の最大MPは本体＋クラスのぶん＝前と同じ）
+  -- 最大MP＝本体の初期MP（列の既定値）＋クラスのMP（ClassLV1では0）＋アセンションのMP（作ったばかりなので0）
+  --   ★装備のMPはサーバーでは数えない（スキル編成の最大MPは本体＋クラス＋アセンションのぶん＝ v2cap_max_mp）
   update public.v2cap_profiles
      set skill_sets = jsonb_build_object(v_cls,
-           public.v2cap_default_set(v_cls, v_learn, v_row.mp + public.v2cap_job_bonus_mp(v_cls, 1))),
+           public.v2cap_default_set(v_cls, v_learn, public.v2cap_max_mp(v_row.mp, v_row.ascension, v_cls, 1))),
          equipped = v_equip
    where id = v_uid
    returning * into v_row;
@@ -3826,8 +3826,8 @@ begin
   select coalesce(jsonb_agg(t.name), '[]'::jsonb) into v_added
     from jsonb_array_elements_text(v_new) as t(name) where not (v_old ? t.name);
 
-  -- スキルセット（職業ごと）。最大MP＝本体のMP＋新しい職業のクラスのMP
-  v_max  := v_row.mp + public.v2cap_job_bonus_mp(v_cls.id, v_jlv);
+  -- スキルセット（職業ごと）。最大MP＝本体のMP＋新しい職業のクラスのMP＋その職業のアセンションのMP（§12 の v2cap_max_mp）
+  v_max  := public.v2cap_max_mp(v_row.mp, v_row.ascension, v_cls.id, v_jlv);
   v_sets := case when jsonb_typeof(v_row.skill_sets) = 'object' then v_row.skill_sets else '{}'::jsonb end;
   if v_sets ? v_cls.id then
     v_set := public.v2cap_fit_set(v_sets -> v_cls.id, v_cls.id, v_new, v_max);
@@ -3913,7 +3913,8 @@ begin
     end if;
   end loop;
   v_cost := public.v2cap_set_cost(v_set);
-  v_max  := v_row.mp + public.v2cap_job_bonus_mp(v_row.class, coalesce((v_row.jobs -> v_row.class ->> 'lv')::int, 1));
+  -- 最大MP＝本体のMP＋クラスのMP＋アセンションのMP（§12 の v2cap_max_mp）
+  v_max  := public.v2cap_max_mp(v_row.mp, v_row.ascension, v_row.class, coalesce((v_row.jobs -> v_row.class ->> 'lv')::int, 1));
   if v_cost > v_max then
     return jsonb_build_object('ok', false, 'error', format('想定利用MPが最大MPを超えています（%s / %s）', v_cost, v_max));
   end if;
@@ -5094,3 +5095,298 @@ end;
 $$;
 revoke all on function public.v2cap_roulette_spin(jsonb) from public, anon;
 grant execute on function public.v2cap_roulette_spin(jsonb) to authenticated;
+
+-- ============================================================
+-- ===== 12. アセンション（2026-10-13）=====
+-- ============================================================
+-- 【確定】2026-10-13 ユーザー指示（AION2 のダエバニオンを参考に）＋選んだこと（設計 §4-2・正は src/v2cap/lib/ascension.js）：
+--   ・CLASS LVが1上がるごとにAPを1（職業ごと）。どのマスも1AP。盤面は職業ごとで、効くのはその職業でいる間だけ
+--   ・枝分かれの木：起点から4本の道。道は起点の側から順に開く＝**道ごとに「何マス開いたか」だけ**を持てば足りる
+--     （v2cap_profiles.ascension ＝ {"剣士":[5,3,0,12]}）
+--   ・振り直しは LV×100 Gold（その職業の盤面を全部戻してAPを返す）
+-- ★サーバーが数えるのは「APが足りるか」と「スキル編成の最大MP（MPの道のマス）」だけ。
+--   ステ・スキルの強さは戦闘（画面側の src/v2cap/lib/loadout.js）で効く（サーバーは戦闘を計算しない）
+-- ★道の形（マスの数・MPのマス・大マスの%）は ascension.js の treeOf から tools/v2cap-sql.mjs が種を作る（手で書き写さない）
+alter table public.v2cap_profiles add column if not exists ascension jsonb not null default '{}'::jsonb;
+
+-- 道の種。mp … マスごとに上がるMP（起点の側から。MPの道だけ持つ・ほかの道は空）／big_pct … 道の終わりの大マス（道のステ+%）
+create table if not exists public.v2cap_asc_roads (
+  cls     text not null,
+  road    int  not null,
+  stat    text not null,
+  len     int  not null,
+  mp      int[] not null default '{}',
+  big_pct int  not null default 0,
+  primary key (cls, road)
+);
+alter table public.v2cap_asc_roads enable row level security;
+drop policy if exists v2cap_asc_roads_read on public.v2cap_asc_roads;
+create policy v2cap_asc_roads_read on public.v2cap_asc_roads for select to authenticated using (true);
+revoke all on table public.v2cap_asc_roads from anon;
+grant select on table public.v2cap_asc_roads to authenticated;
+
+-- @@seed:asc_roads
+delete from public.v2cap_asc_roads;
+insert into public.v2cap_asc_roads (cls, road, stat, len, mp, big_pct) values
+  ('剣士', 0, 'str', 14, '{}'::int[], 5),
+  ('剣士', 1, 'dex', 14, '{}'::int[], 5),
+  ('剣士', 2, 'agi', 14, '{}'::int[], 5),
+  ('剣士', 3, 'vit', 14, '{}'::int[], 5),
+  ('戦士', 0, 'str', 14, '{}'::int[], 5),
+  ('戦士', 1, 'vit', 14, '{}'::int[], 5),
+  ('戦士', 2, 'hp', 14, '{}'::int[], 5),
+  ('戦士', 3, 'dex', 14, '{}'::int[], 5),
+  ('槍使い', 0, 'str', 14, '{}'::int[], 5),
+  ('槍使い', 1, 'dex', 14, '{}'::int[], 5),
+  ('槍使い', 2, 'agi', 14, '{}'::int[], 5),
+  ('槍使い', 3, 'vit', 14, '{}'::int[], 5),
+  ('格闘家', 0, 'str', 14, '{}'::int[], 5),
+  ('格闘家', 1, 'agi', 14, '{}'::int[], 5),
+  ('格闘家', 2, 'hp', 14, '{}'::int[], 5),
+  ('格闘家', 3, 'vit', 14, '{}'::int[], 5),
+  ('盗賊', 0, 'agi', 14, '{}'::int[], 5),
+  ('盗賊', 1, 'str', 14, '{}'::int[], 5),
+  ('盗賊', 2, 'dex', 14, '{}'::int[], 5),
+  ('盗賊', 3, 'luk', 14, '{}'::int[], 5),
+  ('弓使い', 0, 'agi', 14, '{}'::int[], 5),
+  ('弓使い', 1, 'dex', 14, '{}'::int[], 5),
+  ('弓使い', 2, 'str', 14, '{}'::int[], 5),
+  ('弓使い', 3, 'hp', 14, '{}'::int[], 5),
+  ('銃士', 0, 'dex', 14, '{}'::int[], 5),
+  ('銃士', 1, 'agi', 14, '{}'::int[], 5),
+  ('銃士', 2, 'str', 14, '{}'::int[], 5),
+  ('銃士', 3, 'luk', 14, '{}'::int[], 5),
+  ('魔法使い', 0, 'int_stat', 14, '{}'::int[], 5),
+  ('魔法使い', 1, 'mp', 14, '{6,6,6,6,9,9,0,9,9,12,12,12,12,0}'::int[], 5),
+  ('魔法使い', 2, 'agi', 14, '{}'::int[], 5),
+  ('魔法使い', 3, 'hp', 14, '{}'::int[], 5),
+  ('呪術師', 0, 'int_stat', 14, '{}'::int[], 5),
+  ('呪術師', 1, 'mp', 14, '{6,6,6,6,9,9,0,9,9,12,12,12,12,0}'::int[], 5),
+  ('呪術師', 2, 'dex', 14, '{}'::int[], 5),
+  ('呪術師', 3, 'luk', 14, '{}'::int[], 5),
+  ('僧侶', 0, 'int_stat', 14, '{}'::int[], 5),
+  ('僧侶', 1, 'vit', 14, '{}'::int[], 5),
+  ('僧侶', 2, 'hp', 14, '{}'::int[], 5),
+  ('僧侶', 3, 'mp', 14, '{6,6,6,6,9,9,0,9,9,12,12,12,12,0}'::int[], 5),
+  ('薬師', 0, 'int_stat', 14, '{}'::int[], 5),
+  ('薬師', 1, 'dex', 14, '{}'::int[], 5),
+  ('薬師', 2, 'mp', 14, '{6,6,6,6,9,9,0,9,9,12,12,12,12,0}'::int[], 5),
+  ('薬師', 3, 'hp', 14, '{}'::int[], 5),
+  ('狂戦士', 0, 'str', 24, '{}'::int[], 5),
+  ('狂戦士', 1, 'hp', 24, '{}'::int[], 5),
+  ('狂戦士', 2, 'agi', 24, '{}'::int[], 5),
+  ('狂戦士', 3, 'vit', 24, '{}'::int[], 5),
+  ('重戦士', 0, 'vit', 24, '{}'::int[], 5),
+  ('重戦士', 1, 'hp', 24, '{}'::int[], 5),
+  ('重戦士', 2, 'str', 24, '{}'::int[], 5),
+  ('重戦士', 3, 'dex', 24, '{}'::int[], 5),
+  ('竜騎士', 0, 'str', 24, '{}'::int[], 5),
+  ('竜騎士', 1, 'vit', 24, '{}'::int[], 5),
+  ('竜騎士', 2, 'dex', 24, '{}'::int[], 5),
+  ('竜騎士', 3, 'agi', 24, '{}'::int[], 5),
+  ('槍術士', 0, 'str', 24, '{}'::int[], 5),
+  ('槍術士', 1, 'agi', 24, '{}'::int[], 5),
+  ('槍術士', 2, 'dex', 24, '{}'::int[], 5),
+  ('槍術士', 3, 'vit', 24, '{}'::int[], 5),
+  ('体術師', 0, 'agi', 24, '{}'::int[], 5),
+  ('体術師', 1, 'str', 24, '{}'::int[], 5),
+  ('体術師', 2, 'dex', 24, '{}'::int[], 5),
+  ('体術師', 3, 'hp', 24, '{}'::int[], 5),
+  ('気功師', 0, 'str', 24, '{}'::int[], 5),
+  ('気功師', 1, 'dex', 24, '{}'::int[], 5),
+  ('気功師', 2, 'vit', 24, '{}'::int[], 5),
+  ('気功師', 3, 'agi', 24, '{}'::int[], 5),
+  ('暗殺者', 0, 'agi', 24, '{}'::int[], 5),
+  ('暗殺者', 1, 'str', 24, '{}'::int[], 5),
+  ('暗殺者', 2, 'luk', 24, '{}'::int[], 5),
+  ('暗殺者', 3, 'dex', 24, '{}'::int[], 5),
+  ('忍者', 0, 'agi', 24, '{}'::int[], 5),
+  ('忍者', 1, 'dex', 24, '{}'::int[], 5),
+  ('忍者', 2, 'str', 24, '{}'::int[], 5),
+  ('忍者', 3, 'hp', 24, '{}'::int[], 5),
+  ('狩人', 0, 'dex', 24, '{}'::int[], 5),
+  ('狩人', 1, 'agi', 24, '{}'::int[], 5),
+  ('狩人', 2, 'str', 24, '{}'::int[], 5),
+  ('狩人', 3, 'luk', 24, '{}'::int[], 5),
+  ('狙撃手', 0, 'dex', 24, '{}'::int[], 5),
+  ('狙撃手', 1, 'luk', 24, '{}'::int[], 5),
+  ('狙撃手', 2, 'agi', 24, '{}'::int[], 5),
+  ('狙撃手', 3, 'str', 24, '{}'::int[], 5),
+  ('魔銃士', 0, 'str', 24, '{}'::int[], 5),
+  ('魔銃士', 1, 'int_stat', 24, '{}'::int[], 5),
+  ('魔銃士', 2, 'dex', 24, '{}'::int[], 5),
+  ('魔銃士', 3, 'agi', 24, '{}'::int[], 5),
+  ('砲撃士', 0, 'dex', 24, '{}'::int[], 5),
+  ('砲撃士', 1, 'str', 24, '{}'::int[], 5),
+  ('砲撃士', 2, 'vit', 24, '{}'::int[], 5),
+  ('砲撃士', 3, 'hp', 24, '{}'::int[], 5),
+  ('魔導士', 0, 'int_stat', 24, '{}'::int[], 5),
+  ('魔導士', 1, 'mp', 24, '{9,9,9,9,9,9,9,0,12,12,12,12,12,12,12,0,15,15,15,15,15,15,15,0}'::int[], 5),
+  ('魔導士', 2, 'agi', 24, '{}'::int[], 5),
+  ('魔導士', 3, 'hp', 24, '{}'::int[], 5),
+  ('時魔導士', 0, 'int_stat', 24, '{}'::int[], 5),
+  ('時魔導士', 1, 'agi', 24, '{}'::int[], 5),
+  ('時魔導士', 2, 'mp', 24, '{9,9,9,9,9,9,9,0,12,12,12,12,12,12,12,0,15,15,15,15,15,15,15,0}'::int[], 5),
+  ('時魔導士', 3, 'hp', 24, '{}'::int[], 5),
+  ('死霊術師', 0, 'int_stat', 24, '{}'::int[], 5),
+  ('死霊術師', 1, 'mp', 24, '{9,9,9,9,9,9,9,0,12,12,12,12,12,12,12,0,15,15,15,15,15,15,15,0}'::int[], 5),
+  ('死霊術師', 2, 'hp', 24, '{}'::int[], 5),
+  ('死霊術師', 3, 'vit', 24, '{}'::int[], 5),
+  ('陰陽師', 0, 'int_stat', 24, '{}'::int[], 5),
+  ('陰陽師', 1, 'mp', 24, '{9,9,9,9,9,9,9,0,12,12,12,12,12,12,12,0,15,15,15,15,15,15,15,0}'::int[], 5),
+  ('陰陽師', 2, 'dex', 24, '{}'::int[], 5),
+  ('陰陽師', 3, 'agi', 24, '{}'::int[], 5),
+  ('司祭', 0, 'int_stat', 24, '{}'::int[], 5),
+  ('司祭', 1, 'hp', 24, '{}'::int[], 5),
+  ('司祭', 2, 'vit', 24, '{}'::int[], 5),
+  ('司祭', 3, 'mp', 24, '{9,9,9,9,9,9,9,0,12,12,12,12,12,12,12,0,15,15,15,15,15,15,15,0}'::int[], 5),
+  ('祓魔師', 0, 'int_stat', 24, '{}'::int[], 5),
+  ('祓魔師', 1, 'mp', 24, '{9,9,9,9,9,9,9,0,12,12,12,12,12,12,12,0,15,15,15,15,15,15,15,0}'::int[], 5),
+  ('祓魔師', 2, 'agi', 24, '{}'::int[], 5),
+  ('祓魔師', 3, 'vit', 24, '{}'::int[], 5),
+  ('錬金術師', 0, 'int_stat', 24, '{}'::int[], 5),
+  ('錬金術師', 1, 'dex', 24, '{}'::int[], 5),
+  ('錬金術師', 2, 'mp', 24, '{9,9,9,9,9,9,9,0,12,12,12,12,12,12,12,0,15,15,15,15,15,15,15,0}'::int[], 5),
+  ('錬金術師', 3, 'hp', 24, '{}'::int[], 5),
+  ('霊薬師', 0, 'int_stat', 24, '{}'::int[], 5),
+  ('霊薬師', 1, 'mp', 24, '{9,9,9,9,9,9,9,0,12,12,12,12,12,12,12,0,15,15,15,15,15,15,15,0}'::int[], 5),
+  ('霊薬師', 2, 'vit', 24, '{}'::int[], 5),
+  ('霊薬師', 3, 'hp', 24, '{}'::int[], 5);
+-- @@end:asc_roads
+
+-- その道を何マス開いたか（0〜len に収める・形が違えば0）。ascension.js の ascStateOf
+create or replace function public.v2cap_asc_depth(p_asc jsonb, p_cls text, p_road int, p_len int)
+returns int language sql immutable set search_path = public as $$
+  select least(greatest(coalesce(p_len, 0), 0), greatest(0,
+    case when jsonb_typeof(coalesce(p_asc, '{}'::jsonb) -> p_cls -> p_road) = 'number'
+         then floor((p_asc -> p_cls ->> p_road)::numeric)::int else 0 end))
+$$;
+revoke all on function public.v2cap_asc_depth(jsonb, text, int, int) from public, anon, authenticated;
+
+-- 使ったAP（道ごとの「開いたマスの数」の合計＝どのマスも1AP）。ascension.js の apSpentOf
+create or replace function public.v2cap_asc_spent(p_asc jsonb, p_cls text)
+returns int language sql stable set search_path = public as $$
+  select coalesce(sum(public.v2cap_asc_depth(p_asc, p_cls, r.road, r.len)), 0)::int
+    from public.v2cap_asc_roads r where r.cls = p_cls
+$$;
+revoke all on function public.v2cap_asc_spent(jsonb, text) from public, anon, authenticated;
+
+-- その職業のAP＝CLASS LVが上がった回数×1（上限より上は増えない）。jobs.js の jobLevelsGained × ASC_AP_PER_JLV
+create or replace function public.v2cap_asc_ap(p_jobs jsonb, p_cls text)
+returns int language sql stable set search_path = public as $$
+  select coalesce((
+    select greatest(0, least(coalesce((p_jobs -> p_cls ->> 'lv')::int, 1), s.max_jlv) - 1) * 1
+      from public.v2cap_classes c join public.v2cap_stages s on s.stage = c.stage
+     where c.id = p_cls), 0)
+$$;
+revoke all on function public.v2cap_asc_ap(jsonb, text) from public, anon, authenticated;
+
+-- アセンションで上がるMP（スキル編成の最大MP）。loadout.js の statBreakdown と同じ数え方：
+--   MPの道の開いた小マスの合計 ＋ 大マスまで開いていれば（p_base＋小マスのMP）× big_pct% の四捨五入（ascension.js の ascPctGain）
+--   p_base ＝ 本体のMP＋クラスのMP（装備にMPは無い＝画面の「本体＋クラス＋装備」と同じ）
+create or replace function public.v2cap_asc_mp(p_asc jsonb, p_cls text, p_base int)
+returns int language sql stable set search_path = public as $$
+  with d as (
+    select r.len, r.mp, r.big_pct, public.v2cap_asc_depth(p_asc, p_cls, r.road, r.len) as depth
+      from public.v2cap_asc_roads r
+     where r.cls = p_cls and r.stat = 'mp'
+  ), f as (
+    select coalesce(sum((select coalesce(sum(x), 0) from unnest(d.mp[1:d.depth]) as x)), 0)::int as flat,
+           coalesce(sum(case when d.depth >= d.len then d.big_pct else 0 end), 0)::int as pct
+      from d
+  )
+  select f.flat + round((coalesce(p_base, 0) + f.flat) * f.pct / 100.0)::int from f
+$$;
+revoke all on function public.v2cap_asc_mp(jsonb, text, int) from public, anon, authenticated;
+
+-- スキル編成の最大MP＝本体のMP＋クラスのMP＋アセンションのMP（いまの職業・転職先・覚えた技を空き枠へ入れるときに使う）
+create or replace function public.v2cap_max_mp(p_mp int, p_asc jsonb, p_cls text, p_jlv int)
+returns int language sql stable set search_path = public as $$
+  select b.base + public.v2cap_asc_mp(p_asc, p_cls, b.base)
+    from (select coalesce(p_mp, 0) + public.v2cap_job_bonus_mp(p_cls, p_jlv) as base) as b
+$$;
+revoke all on function public.v2cap_max_mp(int, jsonb, text, int) from public, anon, authenticated;
+
+-- ---- 開く ----
+-- p_class の盤面の p_road（0〜3）の道を、起点の側から p_to マス目まで開く。
+-- 確かめる順と文言は ascension.js の ascendError と同じ（いまの職業でなくても、APがあれば開ける）
+create or replace function public.v2cap_ascend(p_class text, p_road int, p_to int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid  uuid := auth.uid();
+  v_row  public.v2cap_profiles;
+  v_road public.v2cap_asc_roads;
+  v_asc  jsonb;
+  v_cur  int;
+  v_left int;
+  v_arr  jsonb;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select * into v_row from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  if not exists (select 1 from public.v2cap_asc_roads r where r.cls = p_class) then
+    return jsonb_build_object('ok', false, 'error', 'その職業にはアセンションがありません');
+  end if;
+  select * into v_road from public.v2cap_asc_roads r where r.cls = p_class and r.road = p_road;
+  if not found then return jsonb_build_object('ok', false, 'error', 'その道はありません'); end if;
+  v_asc := case when jsonb_typeof(v_row.ascension) = 'object' then v_row.ascension else '{}'::jsonb end;
+  v_cur := public.v2cap_asc_depth(v_asc, p_class, p_road, v_road.len);
+  if p_to is null or p_to <= v_cur then return jsonb_build_object('ok', false, 'error', 'もう開いています'); end if;
+  if p_to > v_road.len then return jsonb_build_object('ok', false, 'error', 'その道はそこまでありません'); end if;
+  v_left := public.v2cap_asc_ap(v_row.jobs, p_class) - public.v2cap_asc_spent(v_asc, p_class);
+  if p_to - v_cur > v_left then return jsonb_build_object('ok', false, 'error', 'APが足りません'); end if;
+  -- 道ごとの数を作り直す（道の数ぶん・整数にそろえる）
+  select jsonb_agg(case when r.road = p_road then p_to else public.v2cap_asc_depth(v_asc, p_class, r.road, r.len) end order by r.road)
+    into v_arr
+    from public.v2cap_asc_roads r where r.cls = p_class;
+  update public.v2cap_profiles
+     set ascension = jsonb_set(v_asc, array[p_class], v_arr), updated_at = now()
+   where id = v_uid
+   returning * into v_row;
+  return jsonb_build_object('ok', true, 'profile', to_jsonb(v_row));
+end;
+$$;
+revoke all on function public.v2cap_ascend(text, int, int) from public, anon;
+grant execute on function public.v2cap_ascend(text, int, int) to authenticated;
+
+-- ---- 振り直し ----
+-- p_class の盤面を全部戻してAPを返す。費用は LV×100 Gold（ascension.js の ascResetGoldOf）。
+-- いまの職業なら、スキル編成を新しい最大MPに収める（MPの道を戻すと最大MPが下がるため・v2cap_fit_set）。
+-- ほかの職業の編成は、転職したときに v2cap_change_class が収める
+create or replace function public.v2cap_ascend_reset(p_class text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_gold_per_lv constant int := 100;
+  v_uid  uuid := auth.uid();
+  v_row  public.v2cap_profiles;
+  v_asc  jsonb;
+  v_gold bigint;
+  v_sets jsonb;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select * into v_row from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  if not exists (select 1 from public.v2cap_asc_roads r where r.cls = p_class) then
+    return jsonb_build_object('ok', false, 'error', 'その職業にはアセンションがありません');
+  end if;
+  v_asc := case when jsonb_typeof(v_row.ascension) = 'object' then v_row.ascension else '{}'::jsonb end;
+  if public.v2cap_asc_spent(v_asc, p_class) <= 0 then return jsonb_build_object('ok', false, 'error', 'まだAPを振っていません'); end if;
+  v_gold := greatest(1, v_row.lv)::bigint * c_gold_per_lv;
+  if v_row.gold < v_gold then return jsonb_build_object('ok', false, 'error', 'Goldが足りません'); end if;
+  v_asc := v_asc - p_class;
+  v_sets := case when jsonb_typeof(v_row.skill_sets) = 'object' then v_row.skill_sets else '{}'::jsonb end;
+  if p_class = v_row.class and jsonb_typeof(v_sets -> p_class) = 'array' then
+    v_sets := jsonb_set(v_sets, array[p_class], public.v2cap_fit_set(v_sets -> p_class, p_class, v_row.learned,
+      public.v2cap_max_mp(v_row.mp, v_asc, p_class, coalesce((v_row.jobs -> p_class ->> 'lv')::int, 1))));
+  end if;
+  update public.v2cap_profiles
+     set gold = gold - v_gold, ascension = v_asc, skill_sets = v_sets, updated_at = now()
+   where id = v_uid
+   returning * into v_row;
+  return jsonb_build_object('ok', true, 'gold', v_gold, 'profile', to_jsonb(v_row));
+end;
+$$;
+revoke all on function public.v2cap_ascend_reset(text) from public, anon;
+grant execute on function public.v2cap_ascend_reset(text) to authenticated;

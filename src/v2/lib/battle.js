@@ -811,10 +811,14 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   // ★他職のスキルは効果が落ちる（skills.js の OFF_CLASS_MULT）。ダメージ・回復・バフ幅・
   //   状態異常の付与確率に掛かる。発動率・消費MP・防御無視・必中などには掛からない
   const off = offClassMult(me.cls, skill, me.offClassCut)
+  // ★v2cap のアセンション（src/v2cap/lib/ascension.js）：その技の威力+%（ascDmg＝ダメージ全体）・回復量+%（ascHeal）。
+  //   今のⅡの技はこの項目を持たないので1倍のまま
+  const ascDmgMult = 1 + (skill.ascDmg || 0) / 100
+  const healOff = off * (1 + (skill.ascHeal || 0) / 100)
 
   // ★一次職：跳躍（竜騎士）。この行動は跳ぶだけ。次の行動（ハイジャンプは2つ先）で着地して斬る
   if (skill.jump) {
-    me.jumping = { left: skill.jump.turns, mult: skill.jump.mult * off, name: skill.name }
+    me.jumping = { left: skill.jump.turns, mult: skill.jump.mult * off * ascDmgMult, name: skill.name }
     log.push({ side: me.name, type: 'jump', skill: skill.name, turns: skill.jump.turns })
     return
   }
@@ -932,6 +936,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       // エンチャントの与ダメージ+%（物理／魔法で別枠。時間帯ぶんも畳み込み済み）
       raw = Math.floor(raw * (1 + (skill.kind === 'mag' ? me.en.magDmgPct : me.en.physDmgPct) / 100))
       if (off !== 1) raw = Math.floor(raw * off)
+      if (ascDmgMult !== 1) raw = Math.floor(raw * ascDmgMult)
       // 武器の進化（条件つきの与ダメージ+%をまとめて）
       raw = Math.floor(raw * evoMult(me, foe, { kind: skill.kind, skill: true, multi: nHits > 1 }))
       rememberSkill(foe, skill.name)
@@ -997,33 +1002,36 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       afterAttack(me, foe, hits, crit, rng, log)
     }
   } else if (skill.kind === 'heal') {
+    // ★回復量は healOff（他職の弱まり×アセンションの回復量+%）。今のⅡの技は off と同じ
     if (skill.heal) {
-      const amt = healAmount(me, eMe, skill.heal.rate * off)
+      const amt = healAmount(me, eMe, skill.heal.rate * healOff)
       gainHp(me, amt)
       log.push({ side: me.name, type: 'heal', skill: skill.name, heal: amt })
     }
-    if (skill.regen)   { me.regen   = { ...skill.regen,   rate: skill.regen.rate * off };   log.push({ side: me.name, type: 'regen', skill: skill.name }) }
-    if (skill.mpRegen) { me.mpRegen = { ...skill.mpRegen, rate: skill.mpRegen.rate * off }; log.push({ side: me.name, type: 'mpRegen', skill: skill.name }) }
+    if (skill.regen)   { me.regen   = { ...skill.regen,   rate: skill.regen.rate * healOff };   log.push({ side: me.name, type: 'regen', skill: skill.name }) }
+    if (skill.mpRegen) { me.mpRegen = { ...skill.mpRegen, rate: skill.mpRegen.rate * healOff }; log.push({ side: me.name, type: 'mpRegen', skill: skill.name }) }
     // ★一次職：最大HPの割合で回復（内功・魂喰らい）・MP回復（魂喰らい・霊薬）・
     //   毎ターン最大HPの割合で回復（奇跡・再生薬）・受けたダメージを戻す（リワインド）
     if (skill.healMax) {
-      const got = gainHp(me, healMaxAmount(me, skill.healMax * off))
+      const got = gainHp(me, healMaxAmount(me, skill.healMax * healOff))
       log.push({ side: me.name, type: 'heal', skill: skill.name, heal: got })
     }
     if (skill.mpGain || skill.mpHeal) {
-      const add = (skill.mpGain || 0) + (skill.mpHeal ? Math.max(1, Math.floor((eMe.int_stat || 0) * skill.mpHeal.rate * off)) : 0)
+      // 決まった量のMP回復（魂喰らい）は他職でも弱まらない（前から）。アセンションの回復量+%だけ掛ける
+      const add = (skill.mpGain ? Math.floor(skill.mpGain * (1 + (skill.ascHeal || 0) / 100)) : 0)
+        + (skill.mpHeal ? Math.max(1, Math.floor((eMe.int_stat || 0) * skill.mpHeal.rate * healOff)) : 0)
       const before = me.mp
       me.mp = Math.min(me.base.mp, me.mp + add)
       log.push({ side: me.name, type: 'mpGain', skill: skill.name, mp: me.mp - before })
     }
     if (skill.regenMax) {
-      me.regenMax = { pct: skill.regenMax.pct * off, turns: skill.regenMax.turns }
+      me.regenMax = { pct: skill.regenMax.pct * healOff, turns: skill.regenMax.turns }
       log.push({ side: me.name, type: 'regen', skill: skill.name })
     }
     if (skill.rewind) {
       const from = (me.turn || 0) - (skill.rewind.turns - 1)
       const taken = (me.takenLog || []).filter(t => t.turn >= from).reduce((t, x) => t + x.dmg, 0)
-      const got = taken > 0 ? gainHp(me, Math.floor(taken * skill.rewind.pct / 100 * off)) : 0
+      const got = taken > 0 ? gainHp(me, Math.floor(taken * skill.rewind.pct / 100 * healOff)) : 0
       log.push({ side: me.name, type: 'heal', skill: skill.name, heal: got })
     }
   }

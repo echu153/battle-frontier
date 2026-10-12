@@ -477,8 +477,8 @@ test('【確定】2026-10-12 覚えた技は編成の空き枠へ入れる（v2c
   assert.ok(f.includes('return v_set ||'), '前から入っている技にはさわらない（後ろに足すだけ）')
   assert.ok(SQL.includes('revoke all on function public.v2cap_fill_set(jsonb, jsonb, text, int) from public, anon, authenticated;'), '内部ヘルパは閉じる')
   const a = fnBody('v2cap_apply_exp')
-  assert.ok(a.includes('v_fill := public.v2cap_fill_set(v_set, v_added, v_cls, v_row.mp + public.v2cap_job_bonus_mp(v_cls, v_jlv));'),
-    '入れるのはいま覚えた技・最大MP＝本体のMP＋クラスのMP（上がったあとのCLASS LV）')
+  assert.ok(a.includes('v_fill := public.v2cap_fill_set(v_set, v_added, v_cls, public.v2cap_max_mp(v_row.mp, v_row.ascension, v_cls, v_jlv));'),
+    '入れるのはいま覚えた技・最大MP＝本体のMP＋クラスのMP（上がったあとのCLASS LV）＋アセンションのMP（2026-10-13）')
   assert.ok(a.includes('skill_sets = v_sets,'), '編成を書く')
   assert.ok(a.includes("'set_added', v_setadd,"), '入れた技を画面へ返す（ログの「空き枠に入れた」）')
   // 今いるキャラは1回だけ
@@ -608,4 +608,39 @@ test('【確定】ルーレット（ラッキーナンバー付き）：払い�
   assert.ok(f.includes("v_pay := v_a::bigint * 3;") && BET_KINDS.dozen.pay === 3 && BET_KINDS.col.pay === 3)
   assert.ok(f.includes("v_pay := v_a::bigint * 2;") && BET_KINDS.red.pay === 2)
   assert.ok(f.includes('v_res := floor(random() * 37)::int;'))
+})
+
+test('【確定】アセンション（2026-10-13）：APの数え方・開くときの確かめ・振り直しの費用・スキル編成の最大MPがJSと同じ', async () => {
+  const { ASC_ROADS, ASC_CLASSES, ASC_RESET_GOLD_PER_LV, ascendError } = await import('./ascension.js')
+  const { ASC_AP_PER_JLV } = await import('./jobs.js')
+  assert.ok(SQL.includes("alter table public.v2cap_profiles add column if not exists ascension jsonb not null default '{}'::jsonb;"))
+  // 道の種は ascension.js の treeOf から作る（中身は種の突き合わせのテストで見ている）。どの職業にも4本
+  const seed = SQL.match(/-- @@seed:asc_roads\n([\s\S]*?)-- @@end:asc_roads/)[1]
+  for (const cls of ASC_CLASSES) for (let r = 0; r < ASC_ROADS; r++) assert.ok(seed.includes(`('${cls}', ${r}, `), `${cls} の${r + 1}本目`)
+  // AP＝CLASS LVが上がった回数×1（上限より上は増えない）＝ jobs.js の jobLevelsGained × ASC_AP_PER_JLV
+  assert.ok(fnBody('v2cap_asc_ap').includes(`select greatest(0, least(coalesce((p_jobs -> p_cls ->> 'lv')::int, 1), s.max_jlv) - 1) * ${ASC_AP_PER_JLV}`))
+  // 開く：確かめる順と文言が ascension.js の ascendError と同じ
+  const asc = fnBody('v2cap_ascend')
+  const p = { class: '剣士', jobs: { 剣士: { lv: 3 } }, ascension: { 剣士: [1, 0, 0, 0] } }
+  const msgs = [ascendError(p, 'なし', 0, 1), ascendError(p, '剣士', 9, 1), ascendError(p, '剣士', 0, 1), ascendError(p, '剣士', 0, 15), ascendError(p, '剣士', 0, 3)]
+  assert.deepEqual(msgs, ['その職業にはアセンションがありません', 'その道はありません', 'もう開いています', 'その道はそこまでありません', 'APが足りません'])
+  let at = -1
+  for (const m of msgs) {
+    const i = asc.indexOf(`'${m}'`)
+    assert.ok(i > at, `「${m}」がこの順で出てくる`)
+    at = i
+  }
+  // 振り直し：費用は LV×100 Gold・いまの職業なら編成を新しい最大MPに収める
+  const reset = fnBody('v2cap_ascend_reset')
+  assert.match(reset, new RegExp(`c_gold_per_lv constant int := ${ASC_RESET_GOLD_PER_LV};`))
+  assert.ok(reset.includes('v_gold := greatest(1, v_row.lv)::bigint * c_gold_per_lv;'))
+  assert.ok(reset.includes("'Goldが足りません'"))
+  assert.ok(reset.includes('public.v2cap_fit_set(v_sets -> p_class, p_class, v_row.learned,'))
+  // スキル編成の最大MP＝本体＋クラス＋アセンション（覚えた技を入れる・転職・編成の保存の3か所）
+  assert.ok(fnBody('v2cap_change_class').includes('v_max  := public.v2cap_max_mp(v_row.mp, v_row.ascension, v_cls.id, v_jlv);'))
+  assert.ok(fnBody('v2cap_set_skills').includes("v_max  := public.v2cap_max_mp(v_row.mp, v_row.ascension, v_row.class, coalesce((v_row.jobs -> v_row.class ->> 'lv')::int, 1));"))
+  assert.equal([...SQL.matchAll(/v_row\.mp \+ public\.v2cap_job_bonus_mp\(/g)].length, 0, 'アセンションを数えない最大MPの形が残っていない')
+  // MPの大マスは（本体＋クラス＋小マスのMP）の%を四捨五入（JSの ascPctGain と同じ）
+  assert.ok(fnBody('v2cap_asc_mp').includes('round((coalesce(p_base, 0) + f.flat) * f.pct / 100.0)::int'))
+  assert.ok(fnBody('v2cap_max_mp').includes('select b.base + public.v2cap_asc_mp(p_asc, p_cls, b.base)'))
 })

@@ -1,10 +1,12 @@
 // ============================================================
 // バトルフロンティアⅡ「レベルキャップあり」版（v2cap）— 編成から戦闘用のキャラを作る
 // ------------------------------------------------------------
-// 戦闘力の内訳は3つ：
+// 戦闘力の内訳は4つ：
 //   本体（LVアップの抽選で上がったステ）＋ クラスのステ（いまの職業・そのClassLVぶん）
 //   ＋ 装備（アイテムLVで強さが決まり、強化値ぶん強くなり、必要LVに足りないぶん効果が下がる）
-// さらに防具のメリット（重鎧＝受けるダメージ−1%／軽装＝AGI+1%・1部位ごと）が乗る。
+//   ＋ アセンション（いまの職業の木で開いたマス。2026-10-13・ascension.js）
+// さらに防具のメリット（重鎧＝受けるダメージ−1%／軽装＝AGI+1%・1部位ごと）と、アセンションの大マス（道のステ+5%）が乗る。
+// アセンションのスキルマスは、その技を戦闘に渡すときに強くする（slotsOf）。
 // ★職業補正は**一旦なし**（2026-10-09 ユーザー決定）＝ runBattle に noClassBonus を渡す（rules.js の CAP_RULES）。
 // ★武器は職業ごとに装備できる種類が決まっている。いまの職業で装備できない武器は
 //   （サーバーが外すはずだが）念のためここでも数えない
@@ -17,6 +19,7 @@ import { statsAt, effectPct, powerAt, armorEffects, underLvPowerOf } from './gea
 import { plusOf } from './smith.js'
 import { jobBonusStats, jobOf, canEquipType, attackKindOf, lineageOf } from './jobs.js'
 import { CAP_RULES } from './rules.js'
+import { ascEffectsOf, ascPctGain, ascendSkill } from './ascension.js'
 
 const zero = () => Object.fromEntries(STAT_KEYS.map(k => [k, 0]))
 
@@ -63,17 +66,22 @@ export const bodyStats = (profile) => Object.fromEntries(STAT_KEYS.map(k => [k, 
 // いまの職業のクラスのステ
 export const jobStats = (profile) => jobBonusStats(profile?.class, jobOf(profile?.jobs, profile?.class).lv)
 
-// 合計。内訳も返す（ステータス画面で「本体＋クラス＋装備」を出すため）。
-// ★軽装のAGI+%は「本体＋クラス＋装備」のAGIに掛ける（上がったぶんは armorAgi に出す）
+// 合計。内訳も返す（ステータス画面で「本体＋クラス＋装備＋アセンション」を出すため）。
+// ★軽装のAGI+%とアセンションの大マス（道のステ+%）は、どちらも「本体＋クラス＋装備＋アセンションの小マス」に掛ける
+//   （上がったぶんは armorAgi・asc に出す）。MPの大マスはサーバーのスキル編成の最大MP（v2cap_asc_mp）と同じ数え方
 export const statBreakdown = (profile, inventory) => {
   const body = bodyStats(profile)
   const job = jobStats(profile)
   const gear = gearStats(profile, inventory)
   const armor = armorOf(profile, inventory)
-  const total = Object.fromEntries(STAT_KEYS.map(k => [k, body[k] + job[k] + gear[k]]))
-  const armorAgi = Math.round(total.agi * armor.agiPct / 100)
+  const eff = ascEffectsOf(profile)
+  const base = Object.fromEntries(STAT_KEYS.map(k => [k, body[k] + job[k] + gear[k] + eff.flat[k]]))
+  const big = ascPctGain(base, eff.pct)
+  const asc = Object.fromEntries(STAT_KEYS.map(k => [k, eff.flat[k] + big[k]]))
+  const armorAgi = Math.round(base.agi * armor.agiPct / 100)
+  const total = Object.fromEntries(STAT_KEYS.map(k => [k, base[k] + big[k]]))
   total.agi += armorAgi
-  return { body, job, gear, armor, armorAgi, total, power: calcPower(total) }
+  return { body, job, gear, asc, armor, armorAgi, total, power: calcPower(total) }
 }
 export const totalStats = (profile, inventory) => statBreakdown(profile, inventory).total
 
@@ -86,10 +94,12 @@ export const currentSetOf = (profile) => {
 // 戦闘の枠にする。その職業（と下位職）の技でないものは置かない（サーバーが保存のときに弾いているが念のため）。
 // ★下位職の技は「自分の職業の技」として渡す＝今のⅡの戦闘エンジンが他職扱い（効果0.8倍・消費MP2倍）にしない。
 //   【確定】上位職は下位職のスキルを**そのまま**使える（2026-10-09）
-export const slotsOf = (set, cls, lineage = lineageOf(cls)) => (set || [])
+// ups … アセンションのスキルマス（{ 技の名前: 上がり幅 }・ascension.js の ascEffectsOf）。その技を強くした形で渡す
+export const slotsOf = (set, cls, lineage = lineageOf(cls), ups = {}) => (set || [])
   .map(e => ({ skill: SKILL_BY_NAME[e?.name], uses: e?.uses || 1 }))
   .filter(e => e.skill && !isPassive(e.skill) && lineage.includes(e.skill.cls))
   .map(e => (e.skill.cls === cls ? e : { ...e, skill: { ...e.skill, cls } }))
+  .map(e => (ups[e.skill.name] ? { ...e, skill: ascendSkill(e.skill, ups[e.skill.name]) } : e))
 
 // runBattle に渡す形。重鎧の「受けるダメージ−%」は taken（物理・魔法とも）で渡す
 export const toFighter = (profile, inventory) => {
@@ -103,7 +113,7 @@ export const toFighter = (profile, inventory) => {
     taken: bd.armor.takenMult !== 1 ? { phys: bd.armor.takenMult, mag: bd.armor.takenMult } : null,
     enchants: [],
     evolutions: [],
-    slots: slotsOf(currentSetOf(profile), profile?.class),
+    slots: slotsOf(currentSetOf(profile), profile?.class, lineageOf(profile?.class), ascEffectsOf(profile).ups),
     // ★パッシブはこの版の名簿から渡す（一次職だけ1つ・初期職は無し）。渡さないと戦闘エンジンが今のⅡの名簿を
     //   職業名で引き、狂戦士・竜騎士など同じ名前の職業に今のⅡのパッシブが付いてしまう
     passives: passiveOf(profile?.class) ? [passiveOf(profile?.class)] : [],
