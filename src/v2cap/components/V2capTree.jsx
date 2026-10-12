@@ -57,10 +57,10 @@ export default function V2capTree({ prof, onProfile }) {
           <div style={{ color:'#ffcc00', fontSize:'12px', marginTop:'8px' }}>EXP +{Number(result.exp).toLocaleString()}</div>
           {result.level?.level_ups > 0 && (
             <div style={{ color:'#44ff88', fontSize:'11px', marginTop:'4px' }}>
-              🆙 レベルアップ！ LV{result.level.lv}{typeof result.level.points === 'number' ? `（ステータスポイント+${result.level.points}）` : ''}
+              🆙 LEVEL UP！ LV{result.level.lv}{typeof result.level.points === 'number' ? `（ステータスポイント+${result.level.points}）` : ''}
             </div>
           )}
-          {result.level?.job_ups > 0 && <div style={{ color:'#ffcc00', fontSize:'11px', marginTop:'4px' }}>⭐ ClassLVアップ！ ClassLV{result.level.jlv}</div>}
+          {result.level?.job_ups > 0 && <div style={{ color:'#ffcc00', fontSize:'11px', marginTop:'4px' }}>⭐ CLASS LEVEL UP！ ClassLV{result.level.jlv}</div>}
           {(result.level?.learned || []).map(n => <div key={n} style={{ color:'#44ddff', fontSize:'11px', marginTop:'4px' }}>📖 スキル「{n}」を覚えた！</div>)}
         </div>
       )}

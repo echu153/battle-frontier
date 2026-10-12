@@ -115,10 +115,10 @@ export default function V2capDaily({ prof, onProfile }) {
           </div>
           {got.level?.level_ups > 0 && (
             <div style={{ color:'#44ff88', marginTop:'4px' }}>
-              🆙 レベルアップ！ LV{got.level.lv}{typeof got.level.points === 'number' ? `（ステータスポイント+${got.level.points}）` : ''}
+              🆙 LEVEL UP！ LV{got.level.lv}{typeof got.level.points === 'number' ? `（ステータスポイント+${got.level.points}）` : ''}
             </div>
           )}
-          {got.level?.job_ups > 0 && <div style={{ color:'#ffcc00', marginTop:'4px' }}>⭐ ClassLVアップ！ ClassLV{got.level.jlv}</div>}
+          {got.level?.job_ups > 0 && <div style={{ color:'#ffcc00', marginTop:'4px' }}>⭐ CLASS LEVEL UP！ ClassLV{got.level.jlv}</div>}
           {(got.level?.learned || []).map(n => <div key={n} style={{ color:'#44ddff', marginTop:'4px' }}>📖 スキル「{n}」を覚えた！</div>)}
           <div style={{ color: TEXT.label, fontSize:'10px', marginTop:'6px' }}>次のミッションは日本時間の5時に切り替わります。</div>
         </V2Modal>

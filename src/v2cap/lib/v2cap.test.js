@@ -272,11 +272,11 @@ test('【確定】一次職は20職（ユーザーの表「一次職スキル一
     assert.equal(canBecome(id, { [base]: { lv: 29 } }), false)
     assert.equal(canBecome(id, { [base]: { lv: 30 } }), true)
   }
-  // 必要ClassEXP：初期職の3倍・ClassLV50で0
-  assert.equal(jobNeed('ichiji', 10), 3 * jobNeed('shoki', 10))
+  // 必要ClassEXP：初期職の3倍（丸めの差は1まで）・ClassLV50で0
+  for (let j = 5; j < 30; j++) assert.ok(Math.abs(jobNeed('ichiji', j) - 3 * jobNeed('shoki', j)) <= 1, `ClassLV${j}`)
   assert.equal(jobNeed('ichiji', 49) > 0 && jobNeed('ichiji', 50), 0)
   assert.equal(jobNeed('shoki', 30), 0)
-  assert.equal(jobTotalTo('ichiji', 50), 533610)
+  assert.equal(jobTotalTo('ichiji', 50), 303880, '2026-10-12「LVの5割」×3')
   // ClassEXPを入れると50で止まる
   const r = applyJobExp({}, '狂戦士', jobTotalTo('ichiji', 50) + 99999, [])
   assert.deepEqual([r.lv, r.exp], [50, 0])
@@ -288,13 +288,26 @@ test('通常攻撃は 槍使い・盗賊・銃士・戦士・格闘家・弓使�
   for (const c of ['魔法使い', '呪術師', '僧侶', '薬師']) assert.equal(attackKindOf(c), 'mag', c)
 })
 
-test('【確定】ClassLVは最大30。初期職のClassLV30まで＝LV33のころに入っているEXP（目安は14時間）', () => {
+test('【確定】ClassLVは最大30。初期職のClassLV30まで＝LV25のころに入っているEXP（2026-10-12「LVの5割」・前はLV33）', () => {
   assert.equal(JOB_MAX, 30)
   assert.equal(jobNeed('shoki', 30), 0)
   const total = jobTotalTo('shoki', 30)
-  // 係数4.4（tools/v2cap-progress.mjs --tune の後半4回の平均・2026-10-09 ステータスポイントにしたあと）
-  assert.equal(total, 37642)
-  assert.ok(total >= totalExpTo(33) && total < totalExpTo(34), `初期職の合計 ${total} はLV33〜34のあいだ`)
+  assert.equal(total, 12775)
+  assert.ok(total >= totalExpTo(25) && total < totalExpTo(26), `初期職の合計 ${total} はLV25〜26のあいだ`)
+})
+
+test('【確定】2026-10-12 ClassLVはLVより上がりやすい：ClassLV◯の必要量＝LV◯の必要EXPの5割（×段階の倍率）。最初の職業ならいつでもClassLV≧LV', () => {
+  // ユーザー指示「通常のレベルよりもクラスレベルのほうが上がりやすくして」→案から「LVの5割」を選んだ
+  for (let j = 1; j < JOB_MAX; j++) {
+    assert.ok(jobNeed('shoki', j) <= needExp(j), `ClassLV${j}はLV${j}より少ない（以下）`)
+    assert.ok(Math.abs(jobNeed('shoki', j) - needExp(j) / 2) <= 0.75, `ClassLV${j}：${jobNeed('shoki', j)}（LV${j}の${needExp(j)}の半分）`)
+  }
+  // LV1から同じEXPを入れていくと、LV25まではどの時点でもClassLVのほうが高いか同じ
+  const jlvAt = (exp) => { let j = 1; while (j < JOB_MAX && jobTotalTo('shoki', j + 1) <= exp) j++; return j }
+  for (let lv = 2; lv <= 25; lv++) assert.ok(jlvAt(totalExpTo(lv)) >= lv, `LV${lv}のときClassLV${jlvAt(totalExpTo(lv))}`)
+  // 選んだ表の数（LV10でClassLV11・LV20で23）
+  assert.equal(jlvAt(totalExpTo(10)), 11)
+  assert.equal(jlvAt(totalExpTo(20)), 23)
 })
 
 test('【確定】クラスのステはClassLVが1上がるごとに初期職8点（ClassLV30で232点）・一次職10点（ClassLV50で490点）。職業ごとに2〜3種が高く、ほかは低め', () => {
@@ -680,20 +693,23 @@ test('【確定】画面では「アクセ」ではなく「装飾品」と出�
   assert.ok(!Object.values(SLOT_LABEL).some(l => l.includes('アクセ')), '枠の名前にアクセが残っていない')
 })
 
-test('【確定】防具のメリットは 重鎧＝受けるダメージ−3%／軽装＝AGI+5%（1部位ごと・デメリットなし）', () => {
-  assert.equal(ARMOR_EFFECT.重鎧.takenPct, -3)
-  assert.equal(ARMOR_EFFECT.軽装.agiPct, 5)
+test('【確定】防具のメリットは 重鎧＝受けるダメージ−1%／軽装＝AGI+1%（1部位ごと・デメリットなし・2026-10-12 に −3%／+5% から下げた）', () => {
+  // 2026-10-12 ユーザー指示「防具の軽装重鎧で％で上がるパッシブは1％でいい」
+  assert.equal(ARMOR_EFFECT.重鎧.takenPct, -1)
+  assert.equal(ARMOR_EFFECT.軽装.agiPct, 1)
+  assert.equal(ARMOR_EFFECT.重鎧.label, '受けるダメージ−1%')
+  assert.equal(ARMOR_EFFECT.軽装.label, 'AGI+1%')
   assert.ok(!ARMOR_EFFECT.重鎧.agiPct && !ARMOR_EFFECT.軽装.takenPct, 'デメリットは付けない')
   const heavy = itemOf(1, 'N', '重鎧頭'), light = itemOf(1, 'N', '軽装頭')
-  assert.deepEqual(armorEffects([{ item: heavy, pct: 100 }, { item: heavy, pct: 100 }]), { takenPct: -6, agiPct: 0, takenMult: 0.94 })
-  assert.deepEqual(armorEffects([{ item: light, pct: 100 }]), { takenPct: 0, agiPct: 5, takenMult: 1 })
+  assert.deepEqual(armorEffects([{ item: heavy, pct: 100 }, { item: heavy, pct: 100 }]), { takenPct: -2, agiPct: 0, takenMult: 0.98 })
+  assert.deepEqual(armorEffects([{ item: light, pct: 100 }]), { takenPct: 0, agiPct: 1, takenMult: 1 })
   // 必要LVに足りないときは、メリットも同じ割合で弱まる
-  assert.deepEqual(armorEffects([{ item: heavy, pct: 50 }]), { takenPct: -1.5, agiPct: 0, takenMult: 0.99 })
+  assert.deepEqual(armorEffects([{ item: heavy, pct: 50 }]), { takenPct: -0.5, agiPct: 0, takenMult: 0.995 }, '倍率は小数4桁（0.5%も消えない）')
   // 1部位の文（ホームの装備にカーソルを合わせたとき・プロフィールの内訳）。効果100%なら表の文と同じ
   assert.equal(armorEffectText(heavy), ARMOR_EFFECT.重鎧.label)
   assert.equal(armorEffectText(light, 100), ARMOR_EFFECT.軽装.label)
-  assert.equal(armorEffectText(heavy, 50), '受けるダメージ−1.5%')
-  assert.equal(armorEffectText(light, 45), 'AGI+2.25%')
+  assert.equal(armorEffectText(heavy, 50), '受けるダメージ−0.5%')
+  assert.equal(armorEffectText(light, 45), 'AGI+0.45%')
   assert.equal(armorEffectText(itemOf(1, 'N', '片手剣')), '', '武器・装飾品は防具の効果なし')
 })
 
@@ -725,8 +741,8 @@ test('戦闘のステ＝本体＋いまの職業のクラスのステ＋装備�
   const gearW = Math.round(powerAt(ITEM_BY_ID['3N:両手剣'], 40) * 50 / 100)
   const gearF = powerAt(ITEM_BY_ID['3R:軽装足'], 30)
   assert.equal(calcPower(bd.gear), gearW + gearF, 'LV30でLV40の装備＝効果50%')
-  assert.equal(bd.armor.agiPct, 5)
-  assert.equal(bd.armorAgi, Math.round((bd.body.agi + bd.job.agi + bd.gear.agi) * 0.05))
+  assert.equal(bd.armor.agiPct, 1)
+  assert.equal(bd.armorAgi, Math.round((bd.body.agi + bd.job.agi + bd.gear.agi) * 0.01))
   assert.equal(bd.total.agi, bd.body.agi + bd.job.agi + bd.gear.agi + bd.armorAgi)
 })
 
@@ -742,7 +758,7 @@ test('【確定】職業補正は一旦なし（noClassBonus）。重鎧の軽�
   const f = toFighter(baseProf({ class:'薬師', jobs: { 薬師: { lv: 5, exp: 0 } }, equipped: { head: 1, body: 2, arm: 3, foot: 4 } }), inv)
   assert.equal(f.noClassBonus, true)
   assert.equal(f.kind, 'mag', '薬師の通常攻撃は魔法')
-  assert.deepEqual(f.taken, { phys: 0.88, mag: 0.88 }, '重鎧4部位＝受けるダメージ−12%')
+  assert.deepEqual(f.taken, { phys: 0.96, mag: 0.96 }, '重鎧4部位＝受けるダメージ−4%')
   // 今のⅡの戦闘エンジンは noClassBonus を見て職業補正を掛けない（渡さなければ従来どおり）
   const berserk = createSide({ name:'b', cls:'狂戦士', stats:{ ...INITIAL_STATS }, slots:[], noClassBonus: true })
   assert.equal(berserk.buffs.str || 0, 0)

@@ -7,23 +7,27 @@
 //   ・強化に使うのは **Gold と、その装備が落ちるエリアの「残骸」だけ**（強化石は使わない）
 //   ・残骸は**装備を分解すると手に入る**（その装備のエリアの残骸）。数はレア度で決まる
 //     ＝ ノーマル1・レア5・エピック10・レジェンダリー25
-//   ・強化値は **+10 まで**。+1 ごとに元の強さの0.1倍ずつ足す（**足し算**：+5で1.5倍・+10で2.0倍）
+//   ・強化値は **+10 まで**。+1 ごとに元の強さの0.1倍ずつ足す（**足し算**：+5で1.5倍・+10で2.0倍）。
+//     ただし1回の強化で戦闘力は**最低でも+1**（2026-10-12・下の注）
 //   ・1回の強化（+n にする回）にかかる量と成功率は下の表。Gold＝**必要LV × 20 × n**
 //   ・**失敗すると残骸とGoldはなくなり、強化値はそのまま**（下がらない・壊れない）
 //   ・今の「捨てる」は分解に置き換えた。まとめて分解できる（レア度で選ぶ・1つずつ選ぶ・表示中を全部選ぶ）
 // 強くなるのはステータスだけ（重鎧・軽装の効果はそのまま）。必要LVが足りないときの弱まり方も今のまま。
-// 【確定】2026-10-12 ユーザー指示「初期装備は残骸不要、Goldだけで強化できるように」：
-//   初期装備（エリア0）の強化は残骸を使わない（Gold・成功率・失敗したときはほかの装備と同じ）
+// 【確定】2026-10-12 ユーザー指示「初期装備は残骸不要、Goldだけで強化できるように」→ 同じ日に
+//   「全装備のノーマル装備の強化で残骸の消費は不要に、※Goldのみで」：**ノーマルの装備（初期装備もノーマル）は残骸を使わない**
+//   （Gold・成功率・失敗したときはほかの装備と同じ）
+// 【確定】2026-10-12 ユーザーが選んだ「最低でも+1にする」：1回の強化で戦闘力は最低でも+1（gear.js の powerAt）。
+//   +1ごとに元の強さの10%だと、弱い装備（元の強さが10未満）は数字が動かない回があった
 // ★抽選と残骸・Goldの出し入れはサーバー（v2cap_enhance・v2cap_dismantle）。ここは表示とテストのための写し
 //   （v2capsql.test.js が表の数を突き合わせる）
 // ============================================================
-import { STARTER_AREA } from './equipment.js'
 
 // ===== 強化値 =====
 export const PLUS_MAX = 10
 // 持ち物の行の強化値（SQLを流す前の行には plus が無いので0として扱う）
 export const plusOf = (inv) => Math.max(0, Math.min(PLUS_MAX, Math.floor(Number(inv?.plus) || 0)))
-// 強さの倍率（足し算）。+0 はちょうど1（強化していない装備の強さは前と変わらない）
+// 強さの倍率（足し算）。+0 はちょうど1（強化していない装備の強さは前と変わらない）。
+// ★戦闘力は「元の強さ×この倍率」と「元の強さ＋強化値」の大きいほう（gear.js の powerAt＝最低でも+1ずつ）
 export const plusMultOf = (plus) => (plus > 0 ? 1 + Math.min(PLUS_MAX, plus) / 10 : 1)
 export const plusLabel = (plus) => (plus > 0 ? `+${plus}` : '')
 
@@ -37,7 +41,7 @@ export const SCRAP_NAMES = [
 ]
 export const scrapNameOf = (area) => SCRAP_NAMES[area - 1] || '残骸'
 // その装備の分解で手に入る（強化で使う）残骸のエリア。初期装備（エリア0・2026-10-12）は分解すると始まりの森（1）の残骸になる
-// （初期装備の強化は残骸を使わない＝下の enhanceScrapOf）。★サーバー（v2cap_dismantle・v2cap_enhance）も greatest(1, エリア) で同じにしている
+// （ノーマルの強化は残骸を使わない＝下の enhanceScrapOf）。★サーバー（v2cap_dismantle・v2cap_enhance）も greatest(1, エリア) で同じにしている
 export const scrapAreaOf = (item) => Math.max(1, Number(item?.area) || 1)
 // 持っている数。サーバーは v2cap_profiles.materials に {"エリアの番号": 個数} で持つ
 export const scrapOf = (materials, area) => Math.max(0, Math.floor(Number(materials?.[String(area)]) || 0))
@@ -66,8 +70,9 @@ export const ENHANCE_SCRAP = [1, 2, 3, 4, 5, 7, 8, 9, 10, 11]
 export const ENHANCE_RATE = [100, 90, 80, 70, 60, 50, 40, 30, 20, 10]
 export const ENHANCE_GOLD_PER_LV = 20
 export const enhanceGoldOf = (ilv, next) => Math.max(1, ilv || 1) * ENHANCE_GOLD_PER_LV * next
-// +n にする回の残骸の数。初期装備（エリア0）は0＝Goldだけ（2026-10-12 ユーザー指示）。★サーバーも エリア0 なら0
-export const enhanceScrapOf = (item, next) => (Number(item?.area) === STARTER_AREA ? 0 : ENHANCE_SCRAP[next - 1])
+// +n にする回の残骸の数。ノーマル（初期装備もノーマル）は0＝Goldだけ（2026-10-12 ユーザー指示）。★サーバーも rarity = 'N' なら0
+export const ENHANCE_GOLD_ONLY_RARITY = 'N'
+export const enhanceScrapOf = (item, next) => (item?.rarity === ENHANCE_GOLD_ONLY_RARITY ? 0 : ENHANCE_SCRAP[next - 1])
 // 次の強化にかかるもの。上限なら null（scrap が0なら残骸は使わない）
 export const enhanceCostOf = (item, inv) => {
   const plus = plusOf(inv)

@@ -10,7 +10,6 @@ import {
 } from '../lib/sortie.js'
 import { toFighter as playerFighter } from '../lib/loadout.js'
 import { staminaMaxOf, MAX_LV, rollStamina } from '../lib/level.js'
-import { effectPct } from '../lib/gear.js'
 import { RARITY_COLOR, RARITIES, rarityLabel, reqLvOf } from '../lib/equipment.js'
 import { buildCapBattleView } from '../lib/battleView.js'
 import { enemyArtSrc } from '../lib/enemyArt.js'
@@ -147,24 +146,23 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       // 負けたときの経験値でもLVは上がりうる
       // LVアップではステは上がらず、ステータスポイントが入る（ステータス欄の「振る」から振る）。
       // サーバーが前の版（points を返さない）のあいだは数を出さない
+      // ★レベルアップは英語で出す（2026-10-12 ユーザー指示「レベルアップするとき英語表記で」・ClassLVは「CLASS LEVEL UP！」を選んだ）
       if (lv.level_ups > 0) {
         const pts = typeof lv.points === 'number' ? `（ステータスポイント+${lv.points}）` : ''
-        after.push({ text:`🆙 レベルアップ！ LV${lv.lv}${pts}`, color:'#44ff88' })
+        after.push({ text:`🆙 LEVEL UP！ LV${lv.lv}${pts}`, color:'#44ff88' })
       }
-      if (lv.job_ups > 0) after.push({ text:`⭐ ClassLVアップ！ ${prof.class} ClassLV${lv.jlv}`, color:'#ffcc00' })
+      if (lv.job_ups > 0) after.push({ text:`⭐ CLASS LEVEL UP！ ${prof.class} ClassLV${lv.jlv}`, color:'#ffcc00' })
       for (const name of lv.learned || []) after.push({ text:`📖 スキル「${name}」を覚えた！（スキルセットで編成できる）`, color:'#44ddff' })
       if (win) {
         if (data.drop && drop) {
           const ilv = data.drop.ilv
-          const pct = effectPct(ilv, lv.lv || prof.lv)
-          // ★色を付けるのはレア度と装備名だけ（今のⅡと同じ形）
+          // ★色を付けるのはレア度と装備名だけ（今のⅡと同じ形）。
+          //   「必要LVに足りない＝効果◯%」はここでは出さない（2026-10-12 ユーザー指示「ここで説明しなくていい」）
           const color = RARITY_COLOR[drop.item.rarity]
-          const line = { color: LOG_PLAIN, parts: [
+          after.push({ color: LOG_PLAIN, parts: [
             { text:'🎁 ' }, { text:`【${rarityLabel(drop.item.rarity)}】`, color }, { text:'「' }, { text: drop.item.name, color },
             { text:`」を入手！（LV${ilv}）` },
-          ] }
-          if (pct < 100) line.parts.push({ text:` 必要LVに足りない＝効果${pct}%`, color:'#ff8844' })
-          after.push(line)
+          ] })
         }
         // ボスを倒すと次の場所が開く（1本道）。開いたかどうかはサーバーの返事で見る
         if (enc.isBoss && Number(data.open_until) > openUntilOf(cleared)) {
@@ -187,7 +185,8 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
     if (!auto || loading || !spot || remaining > 0) return
     if (stamNow < 1) {
       setAuto(false)
-      setLogs(l => [...l, { text:'⚡ スタミナ切れ。ここからは自分で出撃する', color:'#ffcc00' }])
+      // 「ここからは自分で出撃する」は付けない（2026-10-12 ユーザー指示）
+      setLogs(l => [...l, { text:'⚡ スタミナ切れ', color:'#ffcc00' }])
       return
     }
     doBattle(true)

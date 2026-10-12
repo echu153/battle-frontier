@@ -3,7 +3,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { INITIAL_STATS, calcPower } from '../../v2/lib/stats.js'
-import { ITEMS, ITEM_BY_ID, AREA_COUNT, itemOf } from './equipment.js'
+import { ITEMS, ITEM_BY_ID, STARTER_ITEMS, AREA_COUNT, itemOf } from './equipment.js'
 import { AREA_LIST } from './areas.js'
 import { powerAt, statsAt, effectPct } from './gear.js'
 import { statBreakdown } from './loadout.js'
@@ -59,16 +59,30 @@ test('【確定】強化値は+10まで。+1ごとに元の強さの0.1倍ずつ
   assert.equal(plusLabel(0), '')
   assert.equal(plusLabel(3), '+3')
   for (const item of ITEMS.filter(i => i.area === 1 || i.area === 15)) {
-    let prev = 0
-    for (let p = 0; p <= PLUS_MAX; p++) {
-      const pw = powerAt(item, item.lv, p)
-      assert.ok(pw >= prev, `${item.id} +${p} は弱くならない`)
-      prev = pw
-    }
-    // 丸めは倍率を掛けたあとに1回だけ＝+10は+0のほぼ2倍（丸めの差は1まで）
-    assert.ok(Math.abs(powerAt(item, item.lv, 10) - 2 * powerAt(item, item.lv)) <= 1, `${item.id} +10 ≒ 2倍`)
+    // 丸めは倍率を掛けたあとに1回だけ＝元の強さが10以上なら+10は+0のほぼ2倍（丸めの差は1まで）
+    if (powerAt(item, item.lv) >= 10) assert.ok(Math.abs(powerAt(item, item.lv, 10) - 2 * powerAt(item, item.lv)) <= 1, `${item.id} +10 ≒ 2倍`)
     assert.equal(powerAt(item, item.lv, 0), powerAt(item, item.lv), '+0は前と同じ強さ')
   }
+})
+
+test('【確定】2026-10-12 強化は1回ごとに戦闘力が最低でも+1（どの装備・どのアイテムLVでも）。元の強さが10未満なら「元＋強化値」', () => {
+  // ユーザー「装備強化するとき、1.1倍だから数値が上がらない場合がある、初期の装備とかは上り幅わかりづらい」→「最低でも+1にする」を選んだ
+  for (const item of [...ITEMS, ...STARTER_ITEMS]) {
+    for (const ilv of [item.lv, item.lv + 7]) {
+      for (let p = 0; p < PLUS_MAX; p++) {
+        assert.ok(powerAt(item, ilv, p + 1) >= powerAt(item, ilv, p) + 1, `${item.id} LV${ilv} +${p}→+${p + 1}`)
+      }
+    }
+  }
+  // 古びた耳飾り（元の強さ4）：前は 4/4/5/5/6/…/8 → いまは 4/5/6/7/…/14
+  const ear = ITEM_BY_ID['0N:イヤリング']
+  assert.deepEqual([0, 1, 2, 3, 5, 10].map(p => powerAt(ear, 1, p)), [4, 5, 6, 7, 9, 14])
+  // 強い装備は今までどおり（元の強さの10%ずつ）
+  const big = itemOf(15, 'L', '両手剣')
+  assert.equal(powerAt(big, big.lv, 10), 2 * powerAt(big, big.lv) - 1, '丸めの差は1まで')
+  assert.equal(powerAt(big, big.lv, 1), Math.round(powerAt(big, big.lv) * 1.1))
+  // 上限より上は+10と同じ
+  assert.equal(powerAt(ear, 1, 12), powerAt(ear, 1, 10))
 })
 
 test('強化した強さは必要LVの弱まり方の前に掛ける（ステの合計＝強化後の戦闘力×効果%）', () => {
@@ -114,24 +128,27 @@ test('【確定】1回の強化：残骸 1,2,3,4,5,7,8,9,10,11・Gold＝必要LV
 })
 
 test('強化できないわけ：上限・その装備のエリアの残骸が足りない・Goldが足りない（見る順はサーバーと同じ）', () => {
-  const item = itemOf(2, 'N', '斧')   // 荒野の残骸・必要LV10
-  const inv = { id: 7, base_id: item.id, ilv: 10, plus: 2 }   // 次は+3：残骸3・Gold600
+  const item = itemOf(2, 'R', '斧')   // 荒野の残骸・必要LV15（ノーマルは残骸を使わないのでレアで見る）
+  const inv = { id: 7, base_id: item.id, ilv: 15, plus: 2 }   // 次は+3：残骸3・Gold900
   const prof = (materials, gold) => ({ materials, gold })
   assert.equal(enhanceErrorOf(item, { ...inv, plus: 10 }, prof({ 2: 99 }, 99999)), '強化値は+10が上限です')
   assert.equal(enhanceErrorOf(item, inv, prof({ 1: 99, 2: 2 }, 99999)), '荒野の残骸が足りません', 'ほかのエリアの残骸では強化できない')
-  assert.equal(enhanceErrorOf(item, inv, prof({ 2: 3 }, 599)), 'Goldが足りません')
-  assert.equal(enhanceErrorOf(item, inv, prof({ 2: 3 }, 600)), null)
+  assert.equal(enhanceErrorOf(item, inv, prof({ 2: 3 }, 899)), 'Goldが足りません')
+  assert.equal(enhanceErrorOf(item, inv, prof({ 2: 3 }, 900)), null)
 })
 
-test('【確定】2026-10-12 初期装備はGoldだけで強化できる（残骸0）。Gold・成功率はほかの装備と同じ', () => {
+test('【確定】2026-10-12 ノーマル（初期装備も）はGoldだけで強化できる（残骸0）。Gold・成功率はほかの装備と同じ', () => {
+  // ユーザー指示「初期装備は残骸不要、Goldだけで強化できるように」→「全装備のノーマル装備の強化で残骸の消費は不要に、※Goldのみで」
   const item = ITEM_BY_ID['0N:短剣']   // 見習いの短剣（エリア0・必要LV1）
   assert.equal(item.name, '見習いの短剣')
   for (let n = 1; n <= PLUS_MAX; n++) {
     assert.equal(enhanceScrapOf(item, n), 0, `+${n}は残骸なし`)
-    assert.equal(enhanceScrapOf(itemOf(1, 'N', '短剣'), n), ENHANCE_SCRAP[n - 1], '落ちた装備は今までどおり')
+    for (const it of ITEMS.filter(i => i.rarity === 'N' && i.part === '武器' && i.type === '短剣')) assert.equal(enhanceScrapOf(it, n), 0, `${it.id}（落ちたノーマル）も残骸なし`)
+    for (const r of ['R', 'E', 'L']) assert.equal(enhanceScrapOf(itemOf(1, r, '短剣'), n), ENHANCE_SCRAP[n - 1], `${r}は今までどおり残骸を使う`)
   }
   assert.deepEqual(enhanceCostOf(item, { ilv: 1, plus: 0 }), { next: 1, area: 1, scrap: 0, gold: 20, rate: 100 })
   assert.deepEqual(enhanceCostOf(item, { ilv: 1, plus: 9 }), { next: 10, area: 1, scrap: 0, gold: 200, rate: 10 })
+  assert.deepEqual(enhanceCostOf(itemOf(15, 'N', '両手剣'), { ilv: 75, plus: 4 }), { next: 5, area: 15, scrap: 0, gold: 7500, rate: 60 }, 'エリア15のノーマルもGoldだけ')
   // 残骸を1つも持っていなくても、Goldがあれば強化できる
   assert.equal(enhanceErrorOf(item, { id: 1, ilv: 1, plus: 4 }, { materials: {}, gold: 100 }), null)
   assert.equal(enhanceErrorOf(item, { id: 1, ilv: 1, plus: 4 }, { gold: 99 }), 'Goldが足りません')

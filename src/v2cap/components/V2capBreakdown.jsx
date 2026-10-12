@@ -1,7 +1,7 @@
 import { Fragment } from 'react'
 import { STAT_DEFS, STAT_KEYS, calcPower } from '../../v2/lib/stats.js'
 import { box, TEXT } from '../../v2/components/v2ui.js'
-import { SLOTS, SLOT_LABEL } from '../lib/equipment.js'
+import { SLOTS, SLOT_LABEL, ARMOR_EFFECT } from '../lib/equipment.js'
 import { jobOf } from '../lib/jobs.js'
 import { equippedItems, statBreakdown } from '../lib/loadout.js'
 import { effectPct, statsAt, armorEffectText } from '../lib/gear.js'
@@ -63,7 +63,7 @@ export default function V2capBreakdown({ prof, inventory }) {
         <div><span style={{ color: COLOR.body }}>本体</span>＝キャラそのもの（振ったステータスポイントを含む）</div>
         <div><span style={{ color: COLOR.job }}>クラス</span>＝いまの職業（{prof.class}・ClassLV{job.lv}）のぶん。就いている間だけ</div>
         <div><span style={{ color: COLOR.gear }}>装備</span>＝着けている装備の合計（強化値と、必要LVに足りないときの効果%を入れたあと）</div>
-        {showArmor && <div><span style={{ color: COLOR.armor }}>軽装</span>＝軽装1部位ごとにAGI+5%（本体＋クラス＋装備のAGIに掛ける）</div>}
+        {showArmor && <div><span style={{ color: COLOR.armor }}>軽装</span>＝軽装1部位ごとに{ARMOR_EFFECT.軽装.label}（本体＋クラス＋装備のAGIに掛ける）</div>}
       </div>
 
       <div style={{ color:'#88aaff', fontSize:'11px', margin:'10px 0 4px', display:'flex', justifyContent:'space-between', gap:'6px', flexWrap:'wrap' }}>

@@ -3053,13 +3053,15 @@ returns int language sql immutable set search_path = public as $$
               else greatest(1, round(135::numeric * p_lv * p_lv * p_lv / 1000))::int end
 $$;
 
--- 必要ClassEXP ＝ 係数 × 段階の倍率 × ClassLV²。段階の上限（初期30・一次50）で0（jobs.js の jobNeed）
--- ⚠係数は10分率の整数（jobs.js の JOB_NEED_TENTHS と同じ値）
+-- 必要ClassEXP ＝ LVの係数 × 割合（%）× 段階の倍率 × ClassLV³ ／ 100000。段階の上限（初期30・一次50）で0（jobs.js の jobNeed）
+-- 【確定】2026-10-12 ユーザー指示「通常のレベルよりもクラスレベルのほうが上がりやすくして」→「LVの5割」：
+--   同じ数のLVの必要EXP（v2cap_need と同じ LV³ の形）の5割 × 段階の倍率（一次職3倍）。前は 4.4 × 段階の倍率 × ClassLV²
+-- ⚠LVの係数は v2cap_need と同じ千分率の整数（level.js の NEED_PERMIL）・割合は jobs.js の JOB_NEED_PCT
 create or replace function public.v2cap_job_need(p_stage text, p_jlv int)
 returns int language sql stable set search_path = public as $$
   select case when p_jlv >= coalesce((select s.max_jlv from public.v2cap_stages s where s.stage = p_stage), 30) then 0
-              else greatest(1, round(44::numeric * coalesce((select s.mult from public.v2cap_stages s where s.stage = p_stage), 1)
-                                     * p_jlv * p_jlv / 10))::int end
+              else greatest(1, round(135::numeric * 50 * coalesce((select s.mult from public.v2cap_stages s where s.stage = p_stage), 1)
+                                     * p_jlv * p_jlv * p_jlv / 100000))::int end
 $$;
 
 -- スタミナの最大値 ＝ 10＋(LV−1)＝LVが1上がるごとに+1（level.js の staminaMaxOf・2026-10-09 ユーザー指示）
@@ -3237,6 +3239,59 @@ begin
        where p.skill_sets = '{}'::jsonb
     $m$;
     alter table public.v2cap_profiles drop column skill_set;
+  end if;
+end $$;
+
+-- ---- 一度だけの数え直し：ClassLVの必要ClassEXPを「LVの5割」にした（2026-10-12 ユーザー指示）----
+-- 今いるキャラは、前の式（4.4 × 段階の倍率 × ClassLV²）でためたClassEXPの合計（今のClassLVまで＋今のClassLVの中のぶん）から、
+-- 新しい式（上の v2cap_job_need）で職業ごとにClassLVを数え直す。上がったClassLVのぶんのスキルも覚える（v2cap_learn）。
+-- ★印 job_need_half_lv_20261012 を付けるので、2回目以降に全文を流し直しても何もしない（数え直しを重ねない）
+do $$
+declare
+  r         record;
+  j         record;
+  v_jobs    jsonb;
+  v_learned jsonb;
+  v_stage   text;
+  v_mult    int;
+  v_max     int;
+  v_total   bigint;
+  v_lv      int;
+  v_need    int;
+  k         int;
+begin
+  if not exists (select 1 from public.v2cap_migrations where key = 'job_need_half_lv_20261012') then
+    for r in select p.id, p.jobs, p.learned from public.v2cap_profiles p loop
+      v_jobs    := coalesce(r.jobs, '{}'::jsonb);
+      v_learned := coalesce(r.learned, '[]'::jsonb);
+      for j in select e.key as cls, e.value as v from jsonb_each(coalesce(r.jobs, '{}'::jsonb)) e loop
+        v_stage := null;
+        select c.stage, coalesce(s.mult, 1), coalesce(s.max_jlv, 30) into v_stage, v_mult, v_max
+          from public.v2cap_classes c left join public.v2cap_stages s on s.stage = c.stage
+         where c.id = j.cls;
+        continue when v_stage is null;
+        -- 前の式でためた合計
+        v_lv    := least(greatest(coalesce((j.v ->> 'lv')::int, 1), 1), v_max);
+        v_total := greatest(coalesce((j.v ->> 'exp')::bigint, 0), 0);
+        for k in 1 .. v_lv - 1 loop
+          v_total := v_total + greatest(1, round(44::numeric * v_mult * k * k / 10))::int;
+        end loop;
+        -- 新しい式で数え直す（上限に着いたらClassEXPは0＝出撃の精算と同じ）
+        v_lv := 1;
+        loop
+          exit when v_lv >= v_max;
+          v_need := public.v2cap_job_need(v_stage, v_lv);
+          exit when v_total < v_need;
+          v_total := v_total - v_need;
+          v_lv    := v_lv + 1;
+        end loop;
+        if v_lv >= v_max then v_total := 0; end if;
+        v_jobs    := jsonb_set(v_jobs, array[j.cls], jsonb_build_object('lv', v_lv, 'exp', v_total));
+        v_learned := public.v2cap_learn(v_learned, j.cls, v_lv);
+      end loop;
+      update public.v2cap_profiles set jobs = v_jobs, learned = v_learned, updated_at = now() where id = r.id;
+    end loop;
+    insert into public.v2cap_migrations (key) values ('job_need_half_lv_20261012');
   end if;
 end $$;
 
@@ -3905,7 +3960,8 @@ grant execute on function public.v2cap_dismantle(bigint[]) to authenticated;
 --   ・+10まで。+n にする回の 残骸＝1,2,3,4,5,7,8,9,10,11 個（その装備のエリアの残骸）・Gold＝必要LV×20×n・
 --     成功率＝+1が100%、そこから10%ずつ下がって+10で10%
 --   ・**失敗すると残骸とGoldはなくなり、強化値はそのまま**（下がらない・壊れない）
--- 【確定】2026-10-12 ユーザー指示「初期装備は残骸不要、Goldだけで強化できるように」：初期装備（エリア0）は残骸を使わない
+-- 【確定】2026-10-12 ユーザー指示「初期装備は残骸不要、Goldだけで強化できるように」→「全装備のノーマル装備の強化で残骸の消費は不要に、※Goldのみで」：
+--   **ノーマル（初期装備もノーマル）は残骸を使わない**（Gold・成功率・失敗したときは同じ）
 -- ★表の写しは src/v2cap/lib/smith.js（ENHANCE_SCRAP・ENHANCE_RATE・ENHANCE_GOLD_PER_LV・enhanceScrapOf）。v2capsql.test.js が突き合わせる
 create or replace function public.v2cap_enhance(p_inventory_id bigint)
 returns jsonb language plpgsql security definer set search_path = public as $$
@@ -3940,8 +3996,8 @@ begin
     return jsonb_build_object('ok', false, 'error', format('強化値は+%sが上限です', c_max));
   end if;
   v_next := v_plus + 1;
-  -- ★初期装備（エリア0）は残骸を使わない＝Goldだけ（smith.js の enhanceScrapOf）
-  v_need := case when coalesce(v_eq.area, 1) = 0 then 0 else c_scrap[v_next] end;
+  -- ★ノーマル（初期装備もノーマル）は残骸を使わない＝Goldだけ（smith.js の enhanceScrapOf）
+  v_need := case when v_eq.rarity = 'N' then 0 else c_scrap[v_next] end;
   v_gold := greatest(1, v_inv.ilv)::bigint * c_gold_per_lv * v_next;
   v_key  := greatest(1, coalesce(v_eq.area, 1))::text;
   v_mats := coalesce(v_row.materials, '{}'::jsonb);
@@ -3951,7 +4007,7 @@ begin
 
   -- 抽選（成功率は%。+1は100%なので必ず成功する）
   v_ok := random() * 100 < c_rate[v_next];
-  -- 成功でも失敗でも、残骸とGoldは使う（残骸を使わない初期装備は、残骸の数にさわらない）
+  -- 成功でも失敗でも、残骸とGoldは使う（残骸を使わないノーマルは、残骸の数にさわらない）
   if v_need > 0 then
     v_mats := jsonb_set(v_mats, array[v_key], to_jsonb(v_have - v_need));
   end if;

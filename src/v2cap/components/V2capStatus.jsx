@@ -115,7 +115,7 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
               </div>
               <div style={{ fontSize:'11px' }}><StatGain s={gain} /></div>
               {w.item.line && <div style={{ color:'#88ddaa' }}>{w.item.line}：{armorEffectText(w.item, pct)}</div>}
-              <div>アイテムLV {w.inv.ilv}（必要LV {w.inv.ilv}）{plus > 0 && <>・強化 {plusLabel(plus)}（強さ{100 + plus * 10}%）</>}</div>
+              <div>アイテムLV {w.inv.ilv}（必要LV {w.inv.ilv}）{plus > 0 && <>・強化 {plusLabel(plus)}</>}</div>
               <div>戦闘力 {power}{pct < 100 && <span style={{ color:'#ff8844' }}> → {Math.round(power * pct / 100)}（効果{pct}%）</span>}</div>
             </>}>
             <span style={{ ...valueCell, display:'block' }}>

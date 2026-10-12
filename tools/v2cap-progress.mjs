@@ -24,7 +24,8 @@
 //   node tools/v2cap-progress.mjs [--hours 365] [--seed 1] [--cls 戦士] [--gear drops|best|none] [--quiet]
 //   node tools/v2cap-progress.mjs --report [--hours 450] [--gear …]   … 初期職（いまは11職）×2で、エリアを抜けた時間と節目のLV
 //   node tools/v2cap-progress.mjs --tune [--hours 450] [--rounds 8] [--step 0.35] [--clip 0.2] [--anneal 0.8] [--stddamp 0.5]
-//     … 必要EXP・必要ClassEXPの係数、標準の戦闘力（STD_RATIO・LV1とLV5の行は動かさない）、
+//     … 必要EXPの係数、標準の戦闘力（STD_RATIO・LV1とLV5の行は動かさない）、
+//       （必要ClassEXPは回さない：2026-10-12 ユーザー決定で「同じLVの必要EXPの5割」に決まった＝jobs.js の JOB_NEED_PCT）
 //       ボスの倍率（エリアの値 AREA_BOSS）を、目安に合うまで回して作り直す（出力をそのまま貼る）
 //     そのほかの指定：--classes all（初期職全部で回す・既定は4職）／--stdinit（前の値で1回回して測った標準の戦闘力を出発点に）／
 //       --stdmax 34・--bossmax 5（その行・そのエリアまでだけ動かす）／--keepexp（必要EXPの係数を動かさない）／
@@ -49,7 +50,7 @@ const { CAP_RULES } = await import(B + 'v2cap/lib/rules.js')
 const { pickEncounter, rollRewards, nextBossRate, openUntilOf, clearSpot, rollEquipDrop } = await import(B + 'v2cap/lib/sortie.js')
 const { LAST_SPOT, AREA_LIST, toFighter: enemyFighter, stdPowerAt } = areas
 const { applyExp, bodyPowerAt, totalExpTo, POINT_UNIT, totalPointsTo } = level
-const { applyJobExp, jobOf, learnOrderOf, attackKindOf, canEquipType, JOB_MAX, jobTotalTo, nextClassesOf, CLASS_BY_ID } = jobsLib
+const { applyJobExp, jobOf, learnOrderOf, attackKindOf, canEquipType, JOB_MAX, nextClassesOf, CLASS_BY_ID } = jobsLib
 const { ICHIJI_BUILDS } = await import(B + 'v2cap/lib/skillsIchiji.js')
 
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] : d }
@@ -73,7 +74,7 @@ export const SPOT_HOUR = AREA_HOUR.flatMap((end, k) => {
   return SUB_SHARE.map(f => start + (end - start) * f)
 })
 const LV100_HOUR = 365   // LV100に着くプレイ時間（1日1時間なら1年・ユーザー決定）
-const JOB30_HOUR = 14    // 最初の職業がClassLV30に着くプレイ時間（1日1時間なら2週間くらい・ユーザー決定）
+const JOB30_HOUR = 14    // 前の目安「最初の職業がClassLV30に着くプレイ時間」（2026-10-12 から必要ClassEXPは回さない＝その時間のEXPを記録するだけ）
 
 const rngOf = (seed) => { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }
 const ARMOR_SLOT = { 頭:'head', 鎧:'body', 腕:'arm', 足:'foot' }
@@ -405,18 +406,11 @@ const tune = async () => {
     // 目安どおりに進んだときの、その場所の目安の時間までの合計EXP
     const cumAt = [0]
     for (let id = 1; id <= LAST_SPOT; id++) cumAt[id] = cumAt[id - 1] + rate[id] * spotHours(id)
-    const cumAtHour = (d) => {
-      for (let id = 1; id <= LAST_SPOT; id++) if (d <= SPOT_HOUR[id - 1]) return cumAt[id - 1] + rate[id] * (d - (id > 1 ? SPOT_HOUR[id - 2] : 0))
-      return cumAt[LAST_SPOT]
-    }
     // 2) 必要EXP：最後のボスの目安（365時間目）に、ちょうどLV100までの合計になるように
     const needNow = level.NEED_PERMIL
     const needNext = Math.max(1, Math.round(needNow * cumAt[LAST_SPOT] / totalExpTo(level.MAX_LV)))
     if (!KEEP_EXP) level.setNeedPermilForTuning(needNext)
-    // 3) 必要ClassEXP：14時間目に、ちょうどClassLV30までの合計になるように（最初の職業のまま進んだとき）
-    const jobNow = jobsLib.JOB_NEED_TENTHS
-    const jobNext = Math.max(1, Math.round(jobNow * cumAtHour(JOB30_HOUR) / jobTotalTo('shoki', JOB_MAX)))
-    if (!KEEP_EXP) jobsLib.setJobNeedForTuning(jobNext)
+    // 3) 必要ClassEXPは回さない（2026-10-12 ユーザー決定「LVの5割」＝jobs.js の JOB_NEED_PCT。必要EXPに合わせて自然に動く）
     // 4) 標準の戦闘力（上の updateStd）
     updateStd(results, stdDamp)
     // 5) ボスの倍率（エリアの値 AREA_BOSS）：そのエリアに入ってから③のボスを倒すまでの時間
@@ -440,7 +434,7 @@ const tune = async () => {
       if (durs.length < results.length / 2) f = Math.min(1, f)
       areas.AREA_BOSS[k] = round2(Math.max(0.3, areas.AREA_BOSS[k] * f))
     }
-    hist.push({ need: KEEP_EXP ? needNow : needNext, job: KEEP_EXP ? jobNow : jobNext, std: areas.STD_RATIO.map(r => r[1]), boss: [...areas.AREA_BOSS] })
+    hist.push({ need: KEEP_EXP ? needNow : needNext, std: areas.STD_RATIO.map(r => r[1]), boss: [...areas.AREA_BOSS] })
 
     // ---- 毎回の様子 ----
     const areaDays = AREA_LIST.map((a, k) => {
@@ -449,7 +443,7 @@ const tune = async () => {
     })
     const lv365 = median(results.map(r => r.hourly[Math.min(LV100_HOUR, r.hourly.length) - 1].lv))
     const job30 = median(results.map(r => r.job30Hour ?? HOURS + 60))
-    console.log(`--- ${it}回目  365時間目のLV ${lv365}・ClassLV30 ${job30?.toFixed(1)}時間目・必要EXP ${needNow}→${needNext}・必要ClassEXP ${jobNow}→${jobNext}`)
+    console.log(`--- ${it}回目  365時間目のLV ${lv365}・ClassLV30 ${job30?.toFixed(1)}時間目・必要EXP ${needNow}→${needNext}`)
     console.log(`エリアの③を倒した時間（中央値・目安 ${AREA_HOUR.join('/')}）: ${areaDays.join(' ')}`)
   }
 
@@ -458,7 +452,6 @@ const tune = async () => {
   const avg = (f) => last.reduce((t, h) => t + f(h), 0) / last.length
   console.log(`\n===== 後半${last.length}回の平均（そのまま貼る）=====`)
   console.log(`export let NEED_PERMIL = ${Math.round(avg(h => h.need))}       // level.js と SQL の v2cap_need`)
-  console.log(`export let JOB_NEED_TENTHS = ${Math.round(avg(h => h.job))}    // jobs.js と SQL の v2cap_job_need`)
   console.log('export const STD_RATIO = [\n  ' + areas.STD_RATIO.map(([l], i) => `[${l}, ${round2(avg(h => h.std[i]))}]`).join(', ') + ',\n]')
   console.log('export const AREA_BOSS = [\n  ' + areas.AREA_BOSS.map((_, i) => round2(avg(h => h.boss[i]))).join(', ') + ',\n]')
 }

@@ -19,8 +19,8 @@ import { RarityTag, PlusTag, GearFilterBar } from './v2capGear.jsx'
 // 「レベルキャップあり」版 — 鍛冶屋（強化・分解・作成）
 // ------------------------------------------------------------
 // 【確定】2026-10-10 ユーザー指示「鍛冶屋を追加、ここで装備の強化・分解・作成が可能」。数の正は src/v2cap/lib/smith.js
-//   ・強化 … Goldとその装備のエリアの残骸で+1（+10まで・+1ごとに強さ+10%）。失敗すると残骸とGoldはなくなり、強化値はそのまま。
-//            初期装備はGoldだけ（残骸なし・2026-10-12 ユーザー指示）
+//   ・強化 … Goldとその装備のエリアの残骸で+1（+10まで・+1ごとに強さ+10%・最低でも戦闘力+1）。失敗すると残骸とGoldはなくなり、強化値はそのまま。
+//            ノーマル（初期装備も）はGoldだけ（残骸なし・2026-10-12 ユーザー指示）
 //   ・分解 … 装備をその装備のエリアの残骸にする（ノーマル1・レア5・エピック10・レジェンダリー25）。
 //            まとめて選べる（レア度で・チェックで・表示中を全部。まとめて選ぶときは装備中と強化したものは選ばない）
 //   ・作成 … レア・エピック・レジェンダリーを、Goldとそのエリアの残骸で作る（残骸30／100／300・Gold 必要LV×50／100／200）。
@@ -28,7 +28,7 @@ import { RarityTag, PlusTag, GearFilterBar } from './v2capGear.jsx'
 //   ・強化と分解は鍛冶屋だけ（装備画面は着ける・外すだけ・ユーザー決定）
 // ============================================================
 const TABS = [
-  { key:'enhance',   label:'強化', desc:`Goldとその装備のエリアの残骸で強化値を+1（+${PLUS_MAX}まで・+1ごとに強さ+10%）。初期装備はGoldだけで強化できます。失敗すると残骸とGoldはなくなり、強化値はそのままです。着けている装備も強化できます。` },
+  { key:'enhance',   label:'強化', desc:`Goldとその装備のエリアの残骸で強化値を+1（+${PLUS_MAX}まで・+1ごとに強さ+10%・最低でも戦闘力+1）。ノーマルの装備はGoldだけで強化できます。失敗すると残骸とGoldはなくなり、強化値はそのままです。着けている装備も強化できます。` },
   { key:'dismantle', label:'分解', desc:`装備を、その装備のエリアの残骸にします（${RARITIES.map(r => `${rarityLabel(r)}${SCRAP_YIELD[r]}`).join('・')}個）。着けている装備は分解できません。` },
   { key:'craft',     label:'作成', desc:'レア・エピック・レジェンダリーの装備を、Goldとそのエリアの残骸で作ります（必ずできます・+0で持ち物に入ります）。武器はどの職業のものでも作れます。' },
 ]
@@ -363,9 +363,8 @@ function SmithModal({ row, prof, busy, msg, onEnhance, onClose }) {
       </div>
       {cost ? (
         <>
-          <div>強化値 +{plus} → <span style={{ color: PLUS_COLOR }}>+{cost.next}</span>
-            <span style={{ color: TEXT.sub, fontSize:'11px' }}>（強さ {100 + plus * 10}% → {100 + cost.next * 10}%）</span>
-          </div>
+          {/* ★「強さ110%」のような%は出さない（弱い装備は最低+1のほうが大きく、%と合わない）。上がり幅は下の戦闘力で見せる */}
+          <div>強化値 +{plus} → <span style={{ color: PLUS_COLOR }}>+{cost.next}</span></div>
           <div>戦闘力 {now} → <span style={{ color:'#44ff88' }}>{powerAt(item, inv.ilv, cost.next)}</span>
             {pct < 100 && <span style={{ color: SHORT, fontSize:'11px' }}>（いまは効果{pct}%）</span>}
           </div>
@@ -383,7 +382,7 @@ function SmithModal({ row, prof, busy, msg, onEnhance, onClose }) {
           </div>
           <div>成功率 <span style={{ color: cost.rate >= 50 ? '#44ff88' : SHORT }}>{cost.rate}%</span></div>
           <div style={{ color: TEXT.sub, fontSize:'11px' }}>
-            {cost.scrap > 0 ? '失敗すると残骸とGoldはなくなり、強化値はそのままです。' : '初期装備は残骸を使いません（Goldだけ）。失敗するとGoldはなくなり、強化値はそのままです。'}
+            {cost.scrap > 0 ? '失敗すると残骸とGoldはなくなり、強化値はそのままです。' : 'ノーマルの装備は残骸を使いません（Goldだけ）。失敗するとGoldはなくなり、強化値はそのままです。'}
           </div>
           {err && <div style={short}>⚠ {err}</div>}
         </>

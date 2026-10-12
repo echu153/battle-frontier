@@ -8,11 +8,11 @@ import { STAT_KEYS } from '../../v2/lib/stats.js'
 import { SKILL_SET_SLOTS, SKILL_USE_MAX } from '../../v2/lib/skills.js'
 import { DEFAULT_USES_MAX } from './skills.js'
 import { NEED_PERMIL, MAX_LV, STAMINA_BASE, STAMINA_RECOVER_MS, POINTS_PER_LV, POINTS_STEP, POINTS_ON_STEP, POINT_UNIT } from './level.js'
-import { JOB_NEED_TENTHS, JOB_MAX } from './jobs.js'
+import { JOB_NEED_PCT, JOB_MAX } from './jobs.js'
 import { ROLE_TENTHS } from './areas.js'
 import { SLOTS, RARITIES, STARTER_AREA } from './equipment.js'
 import { SORTIE_CD, DROP_RARITY } from './sortie.js'
-import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV, scrapAreaOf, enhanceScrapOf } from './smith.js'
+import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV, scrapAreaOf, enhanceScrapOf, ENHANCE_GOLD_ONLY_RARITY } from './smith.js'
 import { DAILY_EXP_PCT, DAILY_GOLD_PER_LV, DAY_RESET_HOUR } from './daily.js'
 import { AVATAR_PRESETS, AVATAR_FILE_RE } from './avatar.js'
 import { FORTUNES, PRAY_PERMIL, multTenthsOf } from './tree.js'
@@ -39,8 +39,10 @@ test('必要EXP・必要ClassEXP・スタミナの式と係数がJSと同じ', (
   const job = fnBody('v2cap_job_need')
   // 上限は段階ごと（初期30・一次50＝v2cap_stages.max_jlv）。種が無いときは初期職の上限
   assert.ok(job.includes(`when p_jlv >= coalesce((select s.max_jlv from public.v2cap_stages s where s.stage = p_stage), ${JOB_MAX}) then 0`))
-  assert.match(job, new RegExp(`round\\(${JOB_NEED_TENTHS}::numeric \\*`))
-  assert.match(job, /\* p_jlv \* p_jlv \/ 10\)/)
+  // 【確定】2026-10-12「LVの5割」：LVの係数（NEED_PERMIL）× 割合（JOB_NEED_PCT）× 段階の倍率 × ClassLV³ ／ 100000
+  assert.ok(job.includes(`round(${NEED_PERMIL}::numeric * ${JOB_NEED_PCT} * coalesce((select s.mult from public.v2cap_stages s where s.stage = p_stage), 1)`), '係数と割合がJSと同じ')
+  assert.match(job, /\* p_jlv \* p_jlv \* p_jlv \/ 100000\)\)::int end/, 'ClassLV³ を100000で割る（JSの jobNeed と同じ）')
+  assert.equal(JOB_NEED_PCT, 50, 'ユーザーが選んだ「LVの5割」')
   // スタミナ：最大値は 10＋(LV−1)・回復は3分に1（2026-10-09 ユーザー指示）
   assert.match(fnBody('v2cap_stamina_max'), new RegExp(`select ${STAMINA_BASE} \\+ greatest\\(1, coalesce\\(p_lv, 1\\)\\) - 1`))
   assert.ok(fnBody('v2cap_stamina_roll').includes(`c_span constant interval := interval '${STAMINA_RECOVER_MS / 60000} minutes';`), '回復の間隔がJSと同じ')
@@ -256,12 +258,13 @@ test('【確定】強化：+10まで・残骸は 1,2,3,4,5,7,8,9,10,11・Goldは
   assert.match(e, /where id = p_inventory_id and player_id = v_uid for update;/, '自分の装備だけ')
   // 残骸はその装備のエリアのもの。足りないと通さない
   assert.ok(e.includes('v_key  := greatest(1, coalesce(v_eq.area, 1))::text;'))
-  // 【確定】2026-10-12 初期装備（エリア0）は残骸を使わない＝Goldだけ（smith.js の enhanceScrapOf と同じ）。残骸の数にはさわらない
-  assert.equal(STARTER_AREA, 0)
-  assert.ok(e.includes(`v_need := case when coalesce(v_eq.area, 1) = ${STARTER_AREA} then 0 else c_scrap[v_next] end;`), '初期装備は残骸0')
+  // 【確定】2026-10-12 ノーマル（初期装備もノーマル）は残骸を使わない＝Goldだけ（smith.js の enhanceScrapOf と同じ）。残骸の数にはさわらない
+  assert.equal(ENHANCE_GOLD_ONLY_RARITY, 'N')
+  assert.ok(e.includes(`v_need := case when v_eq.rarity = '${ENHANCE_GOLD_ONLY_RARITY}' then 0 else c_scrap[v_next] end;`), 'ノーマルは残骸0')
   assert.match(e, /if v_need > 0 then\s+v_mats := jsonb_set\(v_mats, array\[v_key\], to_jsonb\(v_have - v_need\)\);\s+end if;/, '残骸0のときは materials を書かない')
-  assert.equal(enhanceScrapOf({ area: STARTER_AREA }, 3), 0)
-  assert.equal(enhanceScrapOf({ area: 1 }, 3), ENHANCE_SCRAP[2])
+  assert.equal(enhanceScrapOf({ area: STARTER_AREA, rarity: 'N' }, 3), 0, '初期装備（ノーマル）')
+  assert.equal(enhanceScrapOf({ area: 7, rarity: 'N' }, 3), 0, '落ちたノーマル')
+  for (const r of ['R', 'E', 'L']) assert.equal(enhanceScrapOf({ area: 1, rarity: r }, 3), ENHANCE_SCRAP[2], `${r}は今までどおり残骸を使う`)
   assert.ok(e.includes("if v_have < v_need then return jsonb_build_object('ok', false, 'error', '残骸が足りません'); end if;"))
   assert.ok(e.includes("if v_row.gold < v_gold then return jsonb_build_object('ok', false, 'error', 'Goldが足りません'); end if;"))
   // 成功でも失敗でも残骸とGoldは使う（分岐の前）・強化値を上げるのは成功のときだけ
@@ -439,6 +442,22 @@ test('★作り直し（キャラと装備を消す）は印を付けて1回ず�
   }
   // 印の外で消していない（全文流し直しのたびに消える事故を防ぐ）
   assert.ok(!/delete from public\.v2cap_(profiles|inventory)\s*;/.test(outside), '印の外で profiles / inventory を丸ごと消していない')
+})
+
+test('★ClassLVの数え直し（2026-10-12「LVの5割」）は印を付けて1回だけ。前の式でためた合計から、新しい式で数え直す', () => {
+  const key = 'job_need_half_lv_20261012'
+  const m = SQL.match(new RegExp(`if not exists \\(select 1 from public\\.v2cap_migrations where key = '${key}'\\) then([\\s\\S]*?)\\n  end if;\\nend \\$\\$;`))
+  assert.ok(m, '印つきの do ブロックがある')
+  const body = m[1]
+  assert.ok(body.includes(`insert into public.v2cap_migrations (key) values ('${key}')`), '印を付けている')
+  assert.ok(body.includes('greatest(1, round(44::numeric * v_mult * k * k / 10))::int'), '前の式（4.4 × 段階の倍率 × ClassLV²）で合計を出す')
+  assert.ok(body.includes('v_need := public.v2cap_job_need(v_stage, v_lv);'), '新しい式で数え直す')
+  assert.ok(body.includes('if v_lv >= v_max then v_total := 0; end if;'), '上限に着いたらClassEXPは0（精算と同じ）')
+  assert.ok(body.includes('v_learned := public.v2cap_learn(v_learned, j.cls, v_lv);'), '上がったぶんのスキルも覚える')
+  assert.ok(!/delete from/.test(body), 'キャラは消さない')
+  // 数え直しは新しい v2cap_job_need を作ったあと（前に置くと前の式で数え直してしまう）
+  assert.ok(SQL.indexOf(m[0]) > SQL.indexOf('create or replace function public.v2cap_job_need('))
+  assert.ok(SQL.indexOf(m[0]) > SQL.indexOf('create or replace function public.v2cap_learn('))
 })
 
 test('★いまの職業で装備できない武器を着けているキャラは、流し直しで外れる（武器種を減らしたとき用・持ち物は残る）', () => {

@@ -19,6 +19,7 @@
 // ============================================================
 import { STAT_KEYS, STAT_DEFS } from '../../v2/lib/stats.js'
 import { SKILLS, skillsOf, isPassive } from './skills.js'
+import { NEED_PERMIL } from './level.js'
 
 // 初期職のClassLVの上限。一次職は50（STAGES.ichiji.max）。職業ごとの上限は jobMaxOf を使う
 export const JOB_MAX = 30
@@ -113,15 +114,17 @@ export const classDescOf = (cls) => CLASS_BY_ID[cls]?.desc || ''
 export const canEquipType = (cls, type) => weaponsOf(cls).includes(type)
 
 // ===== 必要ClassEXP =====
-// ClassLV² に比例。初期職は ClassLV30 まで**約2週間**（1日1時間・ユーザー決定「2週間くらい」）。
-//   係数は tools/v2cap-progress.mjs --tune で回して決める
-//   （2026-10-09 エリアの作り替えで1体のEXPが約1/4になったので測り直した。前は12.3）
-// ⚠係数は10分率の整数で掛けてから10で割る（SQLの v2cap_job_need と同じ形）
-// ★let なのは tools/v2cap-progress.mjs --tune が回しながら差し替えるため（ゲームの中では変えない）
-export let JOB_NEED_TENTHS = 44
-export const setJobNeedForTuning = (v) => { JOB_NEED_TENTHS = v }
+// 【確定】2026-10-12 ユーザー指示「通常のレベルよりもクラスレベルのほうが上がりやすくして」→案から「LVの5割」を選んだ：
+//   ClassLV◯→◯+1 の必要ClassEXP ＝ LV◯→◯+1 の必要EXP（level.js の needExp と同じ LV³ の形）の **5割** × 段階の倍率（一次職3倍）。
+//   最初の職業なら、いつでもClassLVがLVより先に上がる（LV10でClassLV11・LV20で23・ClassLV30はLV25ごろ）。
+//   前は「係数4.4 × ClassLV²」（ClassLV30がLV33＝LVより遅れていた。tools/v2cap-progress.mjs --tune で決めていた）
+//   ⚠今いるキャラは SQL の一度だけの数え直し（印 job_need_half_lv_20261012）で、ためたClassEXPの合計からClassLVを数え直した
+// ⚠「LVの係数（千分率 NEED_PERMIL）× 割合（%）」を整数で掛けてから100000で割る（SQLの v2cap_job_need と同じ形・端数の丸めをそろえる）
+// ★let なのは tools/v2cap-progress.mjs が試しに差し替えるため（ゲームの中では変えない）
+export let JOB_NEED_PCT = 50
+export const setJobNeedPctForTuning = (v) => { JOB_NEED_PCT = v }
 export const jobNeed = (stage, jlv) =>
-  (jlv >= jobMaxOfStage(stage) ? 0 : Math.max(1, Math.round(JOB_NEED_TENTHS * (STAGES[stage]?.mult || 1) * jlv * jlv / 10)))
+  (jlv >= jobMaxOfStage(stage) ? 0 : Math.max(1, Math.round(NEED_PERMIL * JOB_NEED_PCT * (STAGES[stage]?.mult || 1) * jlv * jlv * jlv / 100000)))
 export const jobTotalTo = (stage, jlv) => {
   let t = 0
   for (let j = 1; j < Math.min(jlv, jobMaxOfStage(stage)); j++) t += jobNeed(stage, j)

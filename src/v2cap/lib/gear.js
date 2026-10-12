@@ -7,10 +7,11 @@
 //     （必要LVが高いほど強い：同じLVの本体の戦闘力に合わせて伸びる＝LVが5上がるごとに同じだけ上がる）。
 //     **同じLVのノーマルを全部の枠にそろえると、本体（LVぶんの戦闘力）と同じくらい**
 //   ・必要LVに足りなくても装備はできる。**不足1LVごとに効果-5%・下げ幅は最大90%**
-//   ・防具のメリット：重鎧＝受けるダメージ−3%／軽装＝AGI+5%（1部位ごと）。
+//   ・防具のメリット：重鎧＝受けるダメージ−1%／軽装＝AGI+1%（1部位ごと・2026-10-12 ユーザー指示で −3%／+5% から下げた）。
 //     ★必要LVに足りないときは、ステと同じ割合でメリットも弱まる
 //
 //   ・【確定】2026-10-10 強化値（+1〜+10）：+1 ごとに元の強さの0.1倍ずつ足す（足し算・+10で2倍。smith.js）。
+//     2026-10-12 から**最低でも+1ずつ**（下の powerAt）。
 //     強くなるのはステだけ（防具のメリットは変わらない）。必要LV不足の弱まり方は強化したあとの強さに掛ける
 //
 // ★ルーン・合成・進化は作らない（決まったら足す）。
@@ -18,7 +19,7 @@
 import { STAT_KEYS } from '../../v2/lib/stats.js'
 import { RARITY_BASE, PART_MULT, ARMOR_EFFECT } from './equipment.js'
 import { bodyPowerAt } from './level.js'
-import { plusMultOf } from './smith.js'
+import { plusMultOf, PLUS_MAX } from './smith.js'
 
 // 「同じLVのノーマルを全部の枠にそろえたとき、本体の何倍か」（2026-10-09 ユーザー決定＝1倍。前のCランクと同じ）
 export const GEAR_RATIO = 1
@@ -27,9 +28,17 @@ export const SET_PART_SUM = 7.9
 export const N_SET_BASE = RARITY_BASE.N * SET_PART_SUM   // 316
 
 // 装備の戦闘力（レア度の基礎×部位倍率を、アイテムLVの本体の戦闘力で伸ばす）。レア度は装備そのものが持つ。
-// plus＝強化値（+1ごとに0.1倍ずつ足す）。丸めは強化の倍率を掛けたあとに1回だけ
-export const powerAt = (item, ilv, plus = 0) =>
-  Math.max(1, Math.round((RARITY_BASE[item?.rarity] || 0) * (PART_MULT[item?.part] || 1) * bodyPowerAt(ilv) * GEAR_RATIO / N_SET_BASE * plusMultOf(plus)))
+// plus＝強化値（+1ごとに0.1倍ずつ足す）。丸めは強化の倍率を掛けたあとに1回だけ。
+// 【確定】2026-10-12 ユーザーが選んだ「最低でも+1にする」：強化値ぶんは**最低でも+1ずつ**
+//   （元の強さが10未満の装備は0.1倍が1に届かず、+1しても数字が動かない回があった＝古びた耳飾り 4→4→5→5…）。
+//   元の強さが10以上なら0.1倍が1以上なので今までと同じ
+const basePowerOf = (item, ilv) =>
+  (RARITY_BASE[item?.rarity] || 0) * (PART_MULT[item?.part] || 1) * bodyPowerAt(ilv) * GEAR_RATIO / N_SET_BASE
+export const powerAt = (item, ilv, plus = 0) => {
+  const base = basePowerOf(item, ilv)
+  const n = plus > 0 ? Math.min(PLUS_MAX, plus) : 0
+  return Math.max(1, Math.round(base * plusMultOf(n)), Math.round(base) + n)
+}
 
 // ===== 必要LV =====
 export const PENALTY_PER_LV = 5    // 不足1LVごとに -5%
@@ -65,9 +74,10 @@ export const armorEffects = (worn) => {
     if (e.agiPct) agiPct += e.agiPct * k
   }
   const r = (v) => Math.round(v * 100) / 100
-  return { takenPct: r(takenPct), agiPct: r(agiPct), takenMult: r(1 + takenPct / 100) }
+  // ★倍率は小数4桁まで（1部位1%にしたので、2桁だと必要LV不足で弱まった0.5%などが丸めで消える）
+  return { takenPct: r(takenPct), agiPct: r(agiPct), takenMult: Math.round((1 + takenPct / 100) * 10000) / 10000 }
 }
-// 1つの防具の効果の文（重鎧＝「受けるダメージ−3%」・軽装＝「AGI+5%」）。必要LVに足りないときは上と同じ割合で弱まる。防具でなければ ''
+// 1つの防具の効果の文（重鎧＝「受けるダメージ−1%」・軽装＝「AGI+1%」）。必要LVに足りないときは上と同じ割合で弱まる。防具でなければ ''
 export const armorEffectText = (item, pct = 100) => {
   const e = ARMOR_EFFECT[item?.line]
   if (!e) return ''
