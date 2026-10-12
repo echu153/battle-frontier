@@ -12,7 +12,7 @@ import { JOB_NEED_TENTHS, JOB_MAX } from './jobs.js'
 import { ROLE_TENTHS } from './areas.js'
 import { SLOTS, RARITIES } from './equipment.js'
 import { SORTIE_CD, DROP_RARITY } from './sortie.js'
-import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV } from './smith.js'
+import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV, scrapAreaOf } from './smith.js'
 import { DAILY_EXP_PCT, DAILY_GOLD_PER_LV, DAY_RESET_HOUR } from './daily.js'
 import { AVATAR_PRESETS, AVATAR_FILE_RE } from './avatar.js'
 import { FORTUNES, PRAY_PERMIL, multTenthsOf } from './tree.js'
@@ -144,8 +144,19 @@ test('【確定】クラスのMP（スキル編成の最大MP）は、点数のM
   assert.match(f, /unnest\(c\.bonus_seq\[1:greatest\(0, least\(coalesce\(p_jlv, 1\), s\.max_jlv\) - 1\) \* s\.per_lv\]\)/, '点数のぶん')
   assert.ok(f.includes('select greatest(0, least(coalesce(p_jlv, 1), s.max_jlv) - 1) * c.lv_mp'), '毎回のMP × 上がった回数（上限より上は増えない）')
   // 種の lv_hp・lv_mp は jobs.js の JOB_LV_HPMP から作る（種の突き合わせのテストで見ている）。書き方だけここで見る
-  assert.ok(SQL.includes("insert into public.v2cap_classes (id, stage, sort, req_cls, req_jlv, bonus_seq, weapons, kind, lineage, lv_hp, lv_mp) values"))
-  assert.ok(SQL.includes('lv_hp = excluded.lv_hp, lv_mp = excluded.lv_mp;'), '流し直したら値も入れ直す')
+  assert.ok(SQL.includes("insert into public.v2cap_classes (id, stage, sort, req_cls, req_jlv, bonus_seq, weapons, kind, lineage, lv_hp, lv_mp, starter) values"))
+  assert.ok(SQL.includes('lv_hp = excluded.lv_hp, lv_mp = excluded.lv_mp, starter = excluded.starter;'), '流し直したら値も入れ直す')
+})
+
+test('【確定】キャラ作成で初期装備（その職業の7点・必要LV1）を持ち物に入れて全部着ける（2026-10-12 ユーザー指示）', () => {
+  assert.ok(SQL.includes("alter table public.v2cap_classes add column if not exists starter text[] not null default '{}';"))
+  const f = fnBody('v2cap_create_character')
+  assert.match(f, /select c\.starter into v_start from public\.v2cap_classes c where c\.id = v_cls;/, '職業ごとの初期装備は種から')
+  assert.ok(f.includes(`v_slots text[] := array[${SLOTS.map(s => `'${s}'`).join(', ')}];`), '枠の順がJS（SLOTS）と同じ')
+  assert.match(f, /insert into public\.v2cap_inventory \(player_id, base_id, ilv\)\s+select v_uid, e\.id, coalesce\(e\.lv, 1\) from public\.v2cap_equipment e where e\.id = v_start\[v_i\]/)
+  assert.match(f, /equipped = v_equip/, '全部着ける')
+  // 作るのは初めての1回だけ（すでにキャラがいれば何も配らない）
+  assert.ok(f.indexOf("if found then return jsonb_build_object('ok', true, 'already', true") < f.indexOf('select c.starter into v_start'))
 })
 
 test('スキルを覚える順はこの版の名簿（v2cap_skills の sort）', () => {
@@ -223,7 +234,10 @@ test('【確定】分解：その装備のエリアの残骸が、レア度で �
   assert.match(d, /select \* into v_row from public\.v2cap_profiles where id = v_uid for update;/, '行をつかんでから（強化と同時でも残骸がずれない）')
   assert.match(d, /i\.player_id = v_uid and i\.id = any\(p_ids\)/, '自分の装備だけ')
   assert.match(d, /not exists \(select 1 from jsonb_each_text\(coalesce\(v_row\.equipped, '\{\}'::jsonb\)\) q/, '着けているものは飛ばす')
-  assert.match(d, /group by e\.area/, '残骸はその装備のエリアごと')
+  // 残骸はその装備のエリアごと。初期装備（エリア0・2026-10-12）は始まりの森（1）の残骸（smith.js の scrapAreaOf と同じ）
+  assert.match(d, /group by greatest\(1, coalesce\(e\.area, 1\)\)/, '残骸はその装備のエリアごと（エリア0は1）')
+  assert.equal(scrapAreaOf({ area: 0 }), 1)
+  assert.equal(scrapAreaOf({ area: 7 }), 7)
   assert.ok(d.includes('update public.v2cap_profiles set materials = v_mats'))
   // 「捨てる」は分解に置き換えた（前の形を落とし、もう作らない）
   assert.ok(SQL.includes('drop function if exists public.v2cap_discard(bigint[]);'))
@@ -240,8 +254,8 @@ test('【確定】強化：+10まで・残骸は 1,2,3,4,5,7,8,9,10,11・Goldは
   assert.ok(e.includes('v_ok := random() * 100 < c_rate[v_next];'), '抽選は smith.js の rollEnhance と同じ')
   assert.match(e, /select \* into v_row from public\.v2cap_profiles where id = v_uid for update;/, '行をつかんでから見る（連打で二重に使えない）')
   assert.match(e, /where id = p_inventory_id and player_id = v_uid for update;/, '自分の装備だけ')
-  // 残骸はその装備のエリアのもの。足りないと通さない
-  assert.ok(e.includes('v_key  := v_eq.area::text;'))
+  // 残骸はその装備のエリアのもの（初期装備＝エリア0は始まりの森の残骸）。足りないと通さない
+  assert.ok(e.includes('v_key  := greatest(1, coalesce(v_eq.area, 1))::text;'))
   assert.ok(e.includes("if v_have < v_need then return jsonb_build_object('ok', false, 'error', '残骸が足りません'); end if;"))
   assert.ok(e.includes("if v_row.gold < v_gold then return jsonb_build_object('ok', false, 'error', 'Goldが足りません'); end if;"))
   // 成功でも失敗でも残骸とGoldは使う（分岐の前）・強化値を上げるのは成功のときだけ

@@ -12,7 +12,7 @@
 //     まだ覚えていない枠は、系統の初期職の技（ふつうの並べ方）で埋める。剣士は一次職がまだ無いので剣士のまま
 //   ・**装備の持ち方は --gear で選ぶ**（どの持ち方でも、持っている中から必要LVの不足ぶんも数えて、職業ごとのステの重み
 //     STAT_WEIGHT でいちばん強いものを各枠に着ける）：
-//       drops（既定）… **実際に落ちた装備だけ**（画面と同じ rollEquipDrop・ドロップ率どおり）。最初は装備なしから始まる
+//       drops（既定）… **実際に落ちた装備だけ**（画面と同じ rollEquipDrop・ドロップ率どおり）＋キャラ作成でもらう初期装備（2026-10-12〜）
 //         【確定】2026-10-12 ユーザー指示「とくに最初は装備全然そろっていないと思うからそれも想定して敵の強さ考えて」
 //       best … 行ったことのあるエリアの装備をレア度全部（レジェンダリーまで）持っている（2026-10-09〜10-11 の既定。
 //         ユーザー「シミュレーターは最適の装備で進めて」。実際より強いので、これで測った敵は序盤が目安の2〜3倍かかった）
@@ -39,7 +39,7 @@ const B = new URL('../src/', import.meta.url).href
 const { runBattle } = await import(B + 'v2/lib/battle.js')
 const { STAT_KEYS, INITIAL_STATS, calcPower } = await import(B + 'v2/lib/stats.js')
 const { setMpCost } = await import(B + 'v2cap/lib/skills.js')
-const { ITEMS, ITEM_BY_ID } = await import(B + 'v2cap/lib/equipment.js')
+const { ITEMS, ITEM_BY_ID, starterIdsOf } = await import(B + 'v2cap/lib/equipment.js')
 const areas = await import(B + 'v2cap/lib/areas.js')
 const level = await import(B + 'v2cap/lib/level.js')
 const jobsLib = await import(B + 'v2cap/lib/jobs.js')
@@ -189,6 +189,8 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
   }
   // gear＝drops のときの持ち物（拾った装備の base_id → 個数）。同じものは2つまで（装飾品は2枠に同じものを着けられる）
   const bag = new Map()
+  // ★キャラ作成で初期装備（必要LV1の7点）をもらう（2026-10-12〜・画面と同じ starterIdsOf）。装飾品は同じものが2つ
+  if (gear === 'drops') for (const id of starterIdsOf(start)) bag.set(id, Math.min(2, (bag.get(id) || 0) + 1))
   let gearArea = 0
   const regear = () => {
     gearArea = areas.spotOf(openUntilOf(cleared)).area

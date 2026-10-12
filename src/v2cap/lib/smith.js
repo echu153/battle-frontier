@@ -33,6 +33,9 @@ export const SCRAP_NAMES = [
   '腐海の残骸', '奈落の残骸', '蒼天の残骸', '星霜の残骸', '深海の残骸',
 ]
 export const scrapNameOf = (area) => SCRAP_NAMES[area - 1] || '残骸'
+// その装備の分解・強化で出し入れする残骸のエリア。初期装備（エリア0・2026-10-12）は始まりの森（1）の残骸を使う
+// ★サーバー（v2cap_dismantle・v2cap_enhance）も greatest(1, エリア) で同じにしている
+export const scrapAreaOf = (item) => Math.max(1, Number(item?.area) || 1)
 // 持っている数。サーバーは v2cap_profiles.materials に {"エリアの番号": 個数} で持つ
 export const scrapOf = (materials, area) => Math.max(0, Math.floor(Number(materials?.[String(area)]) || 0))
 
@@ -44,7 +47,8 @@ export const dismantleGainOf = (rows) => {
   const out = {}
   for (const { item } of rows || []) {
     if (!item) continue
-    out[item.area] = (out[item.area] || 0) + scrapYieldOf(item)
+    const area = scrapAreaOf(item)
+    out[area] = (out[area] || 0) + scrapYieldOf(item)
   }
   return out
 }
@@ -65,7 +69,7 @@ export const enhanceCostOf = (item, inv) => {
   if (!item || plus >= PLUS_MAX) return null
   const next = plus + 1
   return {
-    next, area: item.area,
+    next, area: scrapAreaOf(item),
     scrap: ENHANCE_SCRAP[next - 1],
     gold: enhanceGoldOf(inv?.ilv, next),
     rate: ENHANCE_RATE[next - 1],

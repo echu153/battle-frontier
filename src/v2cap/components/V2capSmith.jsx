@@ -9,7 +9,7 @@ import { canEquipType } from '../lib/jobs.js'
 import { wornIdsOf } from '../lib/loadout.js'
 import { powerAt, statsAt, effectPct } from '../lib/gear.js'
 import {
-  PLUS_MAX, plusOf, scrapNameOf, scrapOf, dismantleGainOf, bulkPickable, enhanceCostOf, enhanceErrorOf,
+  PLUS_MAX, plusOf, scrapNameOf, scrapOf, scrapAreaOf, dismantleGainOf, bulkPickable, enhanceCostOf, enhanceErrorOf,
   SCRAP_NAMES, SCRAP_YIELD, CRAFT_RARITIES, craftCostOf, craftErrorOf,
 } from '../lib/smith.js'
 import { statLine, nameColor, PLUS_COLOR, chip, gainText, areaOptionLabel, useGearRows } from './v2capGearView.js'
@@ -129,7 +129,7 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call }) {
           const pct = effectPct(inv.ilv, prof.lv)
           const cost = enhanceCostOf(item, inv)
           const isWorn = wornIds.has(String(inv.id))
-          const scrapShort = cost && scrapOf(prof.materials, item.area) < cost.scrap
+          const scrapShort = cost && scrapOf(prof.materials, cost.area) < cost.scrap
           const goldShort = cost && gold < cost.gold
           return (
             <div key={inv.id} style={rowBox(isWorn ? '#0055aa' : '#002244')}>
@@ -139,7 +139,7 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call }) {
                 {cost ? (
                   <span style={{ color: TEXT.sub, flex:1, minWidth:0 }}>
                     次は <span style={{ color: PLUS_COLOR }}>+{cost.next}</span>：
-                    <span style={{ color: scrapShort ? SHORT : '#cfe2ff' }}>{scrapNameOf(item.area)} {cost.scrap}個</span>・
+                    <span style={{ color: scrapShort ? SHORT : '#cfe2ff' }}>{scrapNameOf(cost.area)} {cost.scrap}個</span>・
                     <span style={{ color: goldShort ? SHORT : '#ffcc00' }}>Gold {cost.gold.toLocaleString()}</span>・成功率 {cost.rate}%
                   </span>
                 ) : <span style={{ color: PLUS_COLOR, flex:1 }}>+{PLUS_MAX}（上限）</span>}
@@ -212,7 +212,7 @@ function DismantleTab({ all, wornIds, list, busy, call, setError, setNotice }) {
                   title={isWorn ? '着けている装備は分解できません' : '分解に選ぶ'} style={{ accentColor:'#ff8844', margin:0, flexShrink:0 }} />} />
               <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center', fontSize:'10px' }}>
                 <span style={{ color: TEXT.sub, flex:1, minWidth:0 }}>
-                  分解すると <span style={{ color:'#cfe2ff' }}>{scrapNameOf(item.area)} +{SCRAP_YIELD[item.rarity]}</span>
+                  分解すると <span style={{ color:'#cfe2ff' }}>{scrapNameOf(scrapAreaOf(item))} +{SCRAP_YIELD[item.rarity]}</span>
                 </span>
                 {isWorn
                   ? <span style={{ color: TEXT.empty }}>装備中は分解できない</span>

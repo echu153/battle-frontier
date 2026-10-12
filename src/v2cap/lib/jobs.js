@@ -27,12 +27,14 @@ export const JOB_MAX = 30
 // mult … 必要ClassEXPの倍率（上の段階ほど重い）／perLv … ClassLVが1上がるごとのステの量（戦闘力換算）
 // learnAt … スキルを覚えるClassLV（並び＝スキルの名簿の順）
 // max … ClassLVの上限
-// 【確定】2026-10-10 ユーザー決定：一次職は ClassLV上限50・必要ClassEXPは初期職の3倍・ClassLV1ごとに6点
-//   （効くのは一次職の分だけ。ClassLV30で174点＝初期職の145点の1.2倍、ClassLV50で294点）。
-//   技は ClassLV1／5／10／15／20／25／30／40 で8つ（ユーザーの表「一次職スキル一覧」）
+// 【確定】2026-10-10 ユーザー決定：一次職は ClassLV上限50・必要ClassEXPは初期職の3倍・ClassLVごとの点数は初期職の1.2倍
+//   （効くのは一次職の分だけ）。技は ClassLV1／5／10／15／20／25／30／40 で8つ（ユーザーの表「一次職スキル一覧」）
+// 【確定】2026-10-12 ユーザー指示「敵のキャラ弱くするってよりかはこっちが弱すぎる気がする、くらすれべるあがるとき、もっと上昇量伸ばしていい」
+//   ＋案「初期クラスは8」・一次職は「10点（初期職の1.2倍のまま）」を選んだ：ClassLVごとの点数を **初期職 5→8・一次職 6→10**
+//   （ClassLV30で 145→232・一次職のClassLV50で 294→490。毎回のHP・MP（JOB_LV_HPMP）も1.6倍）
 export const STAGES = {
-  shoki:  { label:'初期', color:'#44aaff', mult:1, perLv:5, max:JOB_MAX, learnAt:[1, 5, 10, 15, 20] },
-  ichiji: { label:'一次', color:'#cc66ff', mult:3, perLv:6, max:50, learnAt:[1, 5, 10, 15, 20, 25, 30, 40] },
+  shoki:  { label:'初期', color:'#44aaff', mult:1, perLv:8, max:JOB_MAX, learnAt:[1, 5, 10, 15, 20] },
+  ichiji: { label:'一次', color:'#cc66ff', mult:3, perLv:10, max:50, learnAt:[1, 5, 10, 15, 20, 25, 30, 40] },
 }
 export const STAGE_ORDER = ['shoki', 'ichiji']
 export const jobMaxOfStage = (stage) => STAGES[stage]?.max || JOB_MAX
@@ -130,85 +132,88 @@ export const jobTotalTo = (stage, jlv) => {
 export const jobOf = (jobs, cls) => ({ lv: jobs?.[cls]?.lv || 1, exp: jobs?.[cls]?.exp || 0 })
 
 // ===== ステ（クラスのステ）=====
-// 【確定】2026-10-09 ユーザー指示：LVアップでステが上がらなくなったぶん、**ClassLVが1上がるごとに5点**（ClassLV30で145点）。
+// 【確定】2026-10-09 ユーザー指示：LVアップでステが上がらなくなったぶん、**ClassLVが上がるごとにクラスのステが入る**。
 //   2026-10-10 さらに、ClassLVが上がるたびに必ずHPとMPが上がるようにした（下の JOB_LV_HPMP・点数とは別）。
 //   配分は「その職業に要らないステは極力上げないが、尖りすぎないように2〜3種が高く、ほかは少し低め」。
 //   1点＝戦闘力1（HPなら+8・MPなら+3・ほかは+1）。効くのはその職業でいるあいだだけ。
-// 職業ごとの配分（合計145＝ClassLV30までの点数）。説明文（CLASS_INFO.desc）の「◯◯が伸びる」と合わせてある
+//   【確定】2026-10-12 ClassLVごとの点数を 初期職 5→8・一次職 6→10 にした（ユーザー指示・上の STAGES）。
+//   配分の割合は承認ずみのまま、合計を 初期職 145→232・一次職 294→490 に伸ばした（端数は最大剰余で合わせた）
+// 職業ごとの配分（合計232＝ClassLV30までの点数）。説明文（CLASS_INFO.desc）の「◯◯が伸びる」と合わせてある
 export const JOB_BONUS = {
-  戦士:     { str:40, vit:32, hp:28, dex:15, agi:15, mp:10, luk:5 },         // STR・VIT・HP
-  槍使い:   { str:40, dex:35, agi:22, vit:18, hp:15, mp:10, luk:5 },         // STR・DEX（＋AGI）
-  格闘家:   { str:40, agi:38, hp:22, vit:18, dex:12, mp:10, luk:5 },         // STR・AGI（＋HP）
-  盗賊:     { agi:42, str:32, dex:25, luk:18, hp:12, vit:8, mp:8 },          // AGI・STR（＋DEX）
-  弓使い:   { agi:40, dex:35, str:30, luk:12, hp:12, vit:8, mp:8 },          // AGI・DEX・STR
-  銃士:     { dex:45, agi:30, str:25, luk:15, hp:12, mp:10, vit:8 },         // DEX・AGI（＋STR）
-  剣士:     { str:40, dex:32, agi:30, vit:15, hp:13, mp:10, luk:5 },         // STR・DEX・AGI
-  魔法使い: { int_stat:45, mp:30, agi:25, dex:15, hp:15, vit:10, luk:5 },    // INT・MP（＋AGI）
-  呪術師:   { int_stat:42, mp:30, dex:20, luk:18, agi:15, hp:12, vit:8 },    // INT・MP（＋DEX・LUK）
-  僧侶:     { int_stat:38, vit:30, hp:28, mp:25, agi:12, dex:7, luk:5 },     // INT・VIT・HP
-  薬師:     { int_stat:38, dex:30, mp:25, hp:22, agi:15, vit:10, luk:5 },    // INT・DEX（＋MP）
-  // 一次職（合計294＝ClassLV50までの点数・ClassLV1ごとに6点）。2026-10-10 ユーザー承認の配分。
-  //   高い2〜3種（61点以上）はその職の技で使うステ
-  狂戦士:   { str:85, hp:70, agi:50, vit:34, dex:30, mp:15, luk:10 },
-  重戦士:   { vit:85, str:65, hp:65, dex:30, agi:24, mp:15, luk:10 },
-  竜騎士:   { str:80, vit:62, dex:50, agi:42, hp:35, mp:15, luk:10 },
-  槍術士:   { str:75, agi:66, dex:62, vit:34, hp:30, mp:17, luk:10 },
-  体術師:   { agi:85, str:70, dex:45, hp:34, vit:30, mp:15, luk:15 },
-  気功師:   { str:75, dex:68, vit:45, agi:40, hp:36, mp:20, luk:10 },
-  暗殺者:   { agi:85, str:65, luk:45, dex:40, hp:30, vit:15, mp:14 },
-  忍者:     { agi:85, dex:64, str:55, luk:30, hp:30, vit:15, mp:15 },
-  狩人:     { dex:75, agi:66, str:55, luk:34, hp:30, vit:18, mp:16 },
-  狙撃手:   { dex:85, luk:62, agi:55, str:40, hp:24, vit:14, mp:14 },
-  魔銃士:   { str:70, int_stat:70, dex:50, agi:40, mp:30, hp:24, vit:10 },
-  砲撃士:   { dex:85, str:65, vit:45, hp:34, agi:30, mp:20, luk:15 },
-  魔導士:   { int_stat:95, mp:70, agi:40, dex:30, hp:30, vit:19, luk:10 },
-  時魔導士: { int_stat:85, agi:75, mp:50, hp:30, dex:25, vit:19, luk:10 },
-  死霊術師: { int_stat:88, mp:65, vit:40, hp:40, dex:25, agi:21, luk:15 },
-  陰陽師:   { int_stat:85, mp:62, dex:50, agi:35, hp:30, vit:17, luk:15 },
-  司祭:     { int_stat:75, hp:70, vit:65, mp:45, agi:20, dex:10, luk:9 },
-  祓魔師:   { int_stat:85, mp:62, agi:45, vit:40, hp:35, dex:17, luk:10 },
-  錬金術師: { int_stat:85, dex:65, mp:50, hp:34, agi:30, vit:20, luk:10 },
-  霊薬師:   { int_stat:80, mp:62, vit:50, hp:45, dex:25, agi:22, luk:10 },
+  戦士:     { str:64, vit:51, hp:45, dex:24, agi:24, mp:16, luk:8 },         // STR・VIT・HP
+  槍使い:   { str:64, dex:56, agi:35, vit:29, hp:24, mp:16, luk:8 },         // STR・DEX（＋AGI）
+  格闘家:   { str:64, agi:61, hp:35, vit:29, dex:19, mp:16, luk:8 },         // STR・AGI（＋HP）
+  盗賊:     { agi:67, str:51, dex:40, luk:29, hp:19, vit:13, mp:13 },        // AGI・STR（＋DEX）
+  弓使い:   { agi:64, dex:56, str:48, hp:19, luk:19, vit:13, mp:13 },        // AGI・DEX・STR
+  銃士:     { dex:72, agi:48, str:40, luk:24, hp:19, mp:16, vit:13 },        // DEX・AGI（＋STR）
+  剣士:     { str:64, dex:51, agi:48, vit:24, hp:21, mp:16, luk:8 },         // STR・DEX・AGI
+  魔法使い: { int_stat:72, mp:48, agi:40, dex:24, hp:24, vit:16, luk:8 },    // INT・MP（＋AGI）
+  呪術師:   { int_stat:67, mp:48, dex:32, luk:29, agi:24, hp:19, vit:13 },   // INT・MP（＋DEX・LUK）
+  僧侶:     { int_stat:61, vit:48, hp:45, mp:40, agi:19, dex:11, luk:8 },    // INT・VIT・HP
+  薬師:     { int_stat:61, dex:48, mp:40, hp:35, agi:24, vit:16, luk:8 },    // INT・DEX（＋MP）
+  // 一次職（合計490＝ClassLV50までの点数・ClassLVごとに10点）。2026-10-10 ユーザー承認の配分（の割合）。
+  //   高い2〜3種（102点以上）はその職の技で使うステ
+  狂戦士:   { str:141, hp:117, agi:83, vit:57, dex:50, mp:25, luk:17 },
+  重戦士:   { vit:142, str:108, hp:108, dex:50, agi:40, mp:25, luk:17 },
+  竜騎士:   { str:134, vit:103, dex:83, agi:70, hp:58, mp:25, luk:17 },
+  槍術士:   { str:125, agi:110, dex:103, vit:57, hp:50, mp:28, luk:17 },
+  体術師:   { agi:141, str:117, dex:75, hp:57, vit:50, mp:25, luk:25 },
+  気功師:   { str:125, dex:113, vit:75, agi:67, hp:60, mp:33, luk:17 },
+  暗殺者:   { agi:142, str:108, luk:75, dex:67, hp:50, vit:25, mp:23 },
+  忍者:     { agi:141, dex:107, str:92, hp:50, luk:50, vit:25, mp:25 },
+  狩人:     { dex:125, agi:110, str:92, luk:56, hp:50, vit:30, mp:27 },
+  狙撃手:   { dex:142, luk:103, agi:92, str:67, hp:40, vit:23, mp:23 },
+  魔銃士:   { str:117, int_stat:117, dex:83, agi:67, mp:50, hp:40, vit:16 },
+  砲撃士:   { dex:142, str:108, vit:75, hp:57, agi:50, mp:33, luk:25 },
+  魔導士:   { int_stat:158, mp:117, agi:67, dex:50, hp:50, vit:32, luk:16 },
+  時魔導士: { int_stat:141, agi:125, mp:83, hp:50, dex:42, vit:32, luk:17 },
+  死霊術師: { int_stat:146, mp:108, vit:67, hp:67, dex:42, agi:35, luk:25 },
+  陰陽師:   { int_stat:142, mp:103, dex:83, agi:59, hp:50, vit:28, luk:25 },
+  司祭:     { int_stat:125, hp:117, vit:108, mp:75, agi:33, dex:17, luk:15 },
+  祓魔師:   { int_stat:142, mp:103, agi:75, vit:67, hp:58, dex:28, luk:17 },
+  錬金術師: { int_stat:142, dex:108, mp:83, hp:57, agi:50, vit:33, luk:17 },
+  霊薬師:   { int_stat:133, mp:103, vit:83, hp:75, dex:42, agi:37, luk:17 },
 }
 
 // 【確定】2026-10-10 ユーザー指示「レベルアップするとき、HPとMPは絶対あげるようにしてほしい、クラスによって差があってもいいから」＋案を承認：
-//   ClassLVが1上がるたびに、上の点数（初期職5点・一次職6点）とは**別に**、必ずHPとMPが上がる（その職業でいるあいだだけ）。
+//   ClassLVが1上がるたびに、上の点数（初期職8点・一次職10点）とは**別に**、必ずHPとMPが上がる（その職業でいるあいだだけ）。
 //   量は、今の配分（JOB_BONUS）でHP・MPを多くもらっている職業ほど多い
-//   （初期職 HP 8／6／4・MP 3／1、一次職 HP 10／8／6・MP 4／3／2）
+//   【確定】2026-10-12 点数と一緒に1.6倍にした（ユーザー指示「くらすれべるあがるとき、もっと上昇量伸ばしていい」）：
+//   初期職 HP 13／10／6・MP 5／2、一次職 HP 16／13／10・MP 6／5／3（前は 初期 HP 8／6／4・MP 3／1、一次 HP 10／8／6・MP 4／3／2）
 // ★SQLの v2cap_classes.lv_hp・lv_mp はこの表を写したもの（tools/v2cap-sql.mjs が作る）。
 //   サーバーが数えるのはMPだけ（スキル編成の最大MP＝ v2cap_job_bonus_mp）
 export const JOB_LV_HPMP = {
-  戦士:     { hp:8, mp:1 },
-  槍使い:   { hp:6, mp:1 },
-  格闘家:   { hp:8, mp:1 },
-  盗賊:     { hp:4, mp:1 },
-  弓使い:   { hp:4, mp:1 },
-  銃士:     { hp:4, mp:1 },
-  剣士:     { hp:6, mp:1 },
-  魔法使い: { hp:6, mp:3 },
-  呪術師:   { hp:4, mp:3 },
-  僧侶:     { hp:8, mp:3 },
-  薬師:     { hp:8, mp:3 },
-  狂戦士:   { hp:10, mp:2 },
-  重戦士:   { hp:10, mp:2 },
-  竜騎士:   { hp:8, mp:2 },
-  槍術士:   { hp:6, mp:2 },
-  体術師:   { hp:8, mp:2 },
-  気功師:   { hp:8, mp:3 },
-  暗殺者:   { hp:6, mp:2 },
-  忍者:     { hp:6, mp:2 },
-  狩人:     { hp:6, mp:2 },
-  狙撃手:   { hp:6, mp:2 },
-  魔銃士:   { hp:6, mp:3 },
-  砲撃士:   { hp:8, mp:3 },
-  魔導士:   { hp:6, mp:4 },
-  時魔導士: { hp:6, mp:4 },
-  死霊術師: { hp:8, mp:4 },
-  陰陽師:   { hp:6, mp:4 },
-  司祭:     { hp:10, mp:4 },
-  祓魔師:   { hp:8, mp:4 },
-  錬金術師: { hp:8, mp:4 },
-  霊薬師:   { hp:10, mp:4 },
+  戦士:     { hp:13, mp:2 },
+  槍使い:   { hp:10, mp:2 },
+  格闘家:   { hp:13, mp:2 },
+  盗賊:     { hp:6, mp:2 },
+  弓使い:   { hp:6, mp:2 },
+  銃士:     { hp:6, mp:2 },
+  剣士:     { hp:10, mp:2 },
+  魔法使い: { hp:10, mp:5 },
+  呪術師:   { hp:6, mp:5 },
+  僧侶:     { hp:13, mp:5 },
+  薬師:     { hp:13, mp:5 },
+  狂戦士:   { hp:16, mp:3 },
+  重戦士:   { hp:16, mp:3 },
+  竜騎士:   { hp:13, mp:3 },
+  槍術士:   { hp:10, mp:3 },
+  体術師:   { hp:13, mp:3 },
+  気功師:   { hp:13, mp:5 },
+  暗殺者:   { hp:10, mp:3 },
+  忍者:     { hp:10, mp:3 },
+  狩人:     { hp:10, mp:3 },
+  狙撃手:   { hp:10, mp:3 },
+  魔銃士:   { hp:10, mp:5 },
+  砲撃士:   { hp:13, mp:5 },
+  魔導士:   { hp:10, mp:6 },
+  時魔導士: { hp:10, mp:6 },
+  死霊術師: { hp:13, mp:6 },
+  陰陽師:   { hp:10, mp:6 },
+  司祭:     { hp:16, mp:6 },
+  祓魔師:   { hp:13, mp:6 },
+  錬金術師: { hp:13, mp:6 },
+  霊薬師:   { hp:16, mp:6 },
 }
 
 // 配分を「何点目にどのステが上がるか」の並びにする（ランダムではなく固定）。
@@ -249,9 +254,10 @@ export const jobBonusStats = (cls, jlv) => {
   out.mp += n * (JOB_LV_HPMP[cls]?.mp || 0)
   return out
 }
-// 上がりやすいステータス（神殿に出す）。配分の高い2〜3種＝初期職30点以上・一次職61点以上（多い順のキー）
+// 上がりやすいステータス（神殿に出す）。配分の高い2〜3種＝初期職48点以上・一次職102点以上（多い順のキー）
+//   （2026-10-12 に点数を1.6倍にしたので、前の30点・61点も同じ割合で上げた＝選ばれるステは前と同じ）
 // ★「高い2〜3種」の決まりは v2cap.test.js が見張っている（2026-10-09 ユーザー指示「2種～3種が高く」）
-export const MAIN_STAT_MIN = { shoki: 30, ichiji: 61 }
+export const MAIN_STAT_MIN = { shoki: 48, ichiji: 102 }
 export const mainStatsOf = (cls) => Object.entries(JOB_BONUS[cls] || {})
   .filter(([, v]) => v >= (MAIN_STAT_MIN[stageOf(cls)] ?? Infinity))
   .sort((a, b) => b[1] - a[1])

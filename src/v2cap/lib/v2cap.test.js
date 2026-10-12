@@ -244,12 +244,13 @@ test('【確定】ノーブル・サモナーはなくした。初期職11職は
   for (const c of shoki) { assert.equal(c.req, null); assert.equal(canBecome(c.id, {}), true, `${c.id}は条件なし`) }
 })
 
-test('【確定】一次職は20職（ユーザーの表「一次職スキル一覧」）：系統の初期職のClassLV30で就ける・上限50・必要ClassEXP3倍・ステ6点・武器は系統の初期職と同じ', () => {
-  // 2026-10-10 ユーザー決定（転職の条件・ClassLV上限50・必要ClassEXP3倍・クラスのステはClassLV30で初期職の1.2倍・武器）
+test('【確定】一次職は20職（ユーザーの表「一次職スキル一覧」）：系統の初期職のClassLV30で就ける・上限50・必要ClassEXP3倍・ステは初期職の1.2倍（10点）・武器は系統の初期職と同じ', () => {
+  // 2026-10-10 ユーザー決定（転職の条件・ClassLV上限50・必要ClassEXP3倍・クラスのステは初期職の1.2倍・武器）
   assert.deepEqual(Object.keys(STAGES), ['shoki', 'ichiji'])
   assert.deepEqual([STAGES.shoki.max, STAGES.ichiji.max], [30, 50])
-  assert.deepEqual([STAGES.ichiji.mult, STAGES.ichiji.perLv], [3, 6])
-  assert.equal(STAGES.ichiji.perLv * 29, Math.round(STAGES.shoki.perLv * 29 * 1.2), 'ClassLV30で初期職の1.2倍')
+  // ClassLVごとの点数：2026-10-12 ユーザー指示で 初期職5→8・一次職6→10（一次職は初期職の1.2倍のまま＝ユーザーが選んだ）
+  assert.deepEqual([STAGES.ichiji.mult, STAGES.ichiji.perLv], [3, 10])
+  assert.equal(STAGES.ichiji.perLv, Math.round(STAGES.shoki.perLv * 1.2), 'ClassLVごとの点数は初期職の1.2倍')
   assert.deepEqual(STAGES.ichiji.learnAt, [1, 5, 10, 15, 20, 25, 30, 40])
   assert.equal(CLASSES.length, 31)
   assert.deepEqual(ICHIJI_CLASSES, ['狂戦士', '重戦士', '竜騎士', '槍術士', '体術師', '気功師', '暗殺者', '忍者', '狩人', '狙撃手',
@@ -296,16 +297,18 @@ test('【確定】ClassLVは最大30。初期職のClassLV30まで＝LV33のこ�
   assert.ok(total >= totalExpTo(33) && total < totalExpTo(34), `初期職の合計 ${total} はLV33〜34のあいだ`)
 })
 
-test('【確定】クラスのステはClassLVが1上がるごとに初期職5点（ClassLV30で145点）・一次職6点（ClassLV50で294点）。職業ごとに2〜3種が高く、ほかは低め', () => {
+test('【確定】クラスのステはClassLVが1上がるごとに初期職8点（ClassLV30で232点）・一次職10点（ClassLV50で490点）。職業ごとに2〜3種が高く、ほかは低め', () => {
+  // 2026-10-12 ユーザー指示「くらすれべるあがるとき、もっと上昇量伸ばしていい」で 5点→8点・6点→10点（配分の割合はそのまま）
+  assert.deepEqual([STAGES.shoki.perLv, STAGES.ichiji.perLv], [8, 10])
   for (const c of CLASSES) {
     const w = JOB_BONUS[c.id]
     assert.ok(w, `${c.id}の配分がある`)
     const sum = Object.values(w).reduce((a, b) => a + b, 0)
-    const total = c.stage === 'ichiji' ? 294 : 145
+    const total = c.stage === 'ichiji' ? 490 : 232
     assert.equal(sum, total, `${c.id}の合計（上限のClassLVで${total}点）`)
-    // 2〜3種が高い（初期職30点以上・一次職61点以上＝同じ割合）・ほかはそれより低い・尖りすぎない（1種で半分を超えない）
+    // 2〜3種が高い（初期職48点以上・一次職102点以上＝同じ割合・神殿の MAIN_STAT_MIN）・ほかはそれより低い・尖りすぎない（1種で半分を超えない）
     const vals = Object.values(w).sort((a, b) => b - a)
-    const high = vals.filter(v => v >= (c.stage === 'ichiji' ? 61 : 30)).length
+    const high = vals.filter(v => v >= (c.stage === 'ichiji' ? 102 : 48)).length
     assert.ok(high >= 2 && high <= 3, `${c.id}：高いのは${high}種`)
     assert.ok(vals[0] <= total / 2, `${c.id}：1種に寄りすぎない`)
     const seq = bonusSeqOf(c.id)
@@ -331,13 +334,14 @@ test('【確定】クラスのステはClassLVが1上がるごとに初期職5�
 
 test('【確定】ClassLVが上がるたびに、どの職業でも必ずHPとMPが上がる（点数とは別・職業ごとの量＝ユーザー承認の表）', () => {
   // 2026-10-10 ユーザー指示「レベルアップするとき、HPとMPは絶対あげるようにしてほしい、クラスによって差があってもいいから」
+  // 2026-10-12 点数と一緒に1.6倍（ユーザー指示「くらすれべるあがるとき、もっと上昇量伸ばしていい」＋案「8点（HP・MPも同じ倍率）」）
   assert.deepEqual(Object.keys(JOB_LV_HPMP).sort(), CLASSES.map(c => c.id).sort(), '全職業ぶんある')
   const want = {
-    戦士: [8, 1], 槍使い: [6, 1], 格闘家: [8, 1], 盗賊: [4, 1], 弓使い: [4, 1], 銃士: [4, 1], 剣士: [6, 1],
-    魔法使い: [6, 3], 呪術師: [4, 3], 僧侶: [8, 3], 薬師: [8, 3],
-    狂戦士: [10, 2], 重戦士: [10, 2], 竜騎士: [8, 2], 槍術士: [6, 2], 体術師: [8, 2], 気功師: [8, 3],
-    暗殺者: [6, 2], 忍者: [6, 2], 狩人: [6, 2], 狙撃手: [6, 2], 魔銃士: [6, 3], 砲撃士: [8, 3],
-    魔導士: [6, 4], 時魔導士: [6, 4], 死霊術師: [8, 4], 陰陽師: [6, 4], 司祭: [10, 4], 祓魔師: [8, 4], 錬金術師: [8, 4], 霊薬師: [10, 4],
+    戦士: [13, 2], 槍使い: [10, 2], 格闘家: [13, 2], 盗賊: [6, 2], 弓使い: [6, 2], 銃士: [6, 2], 剣士: [10, 2],
+    魔法使い: [10, 5], 呪術師: [6, 5], 僧侶: [13, 5], 薬師: [13, 5],
+    狂戦士: [16, 3], 重戦士: [16, 3], 竜騎士: [13, 3], 槍術士: [10, 3], 体術師: [13, 3], 気功師: [13, 5],
+    暗殺者: [10, 3], 忍者: [10, 3], 狩人: [10, 3], 狙撃手: [10, 3], 魔銃士: [10, 5], 砲撃士: [13, 5],
+    魔導士: [10, 6], 時魔導士: [10, 6], 死霊術師: [13, 6], 陰陽師: [10, 6], 司祭: [16, 6], 祓魔師: [13, 6], 錬金術師: [13, 6], 霊薬師: [16, 6],
   }
   for (const [cls, [hp, mp]] of Object.entries(want)) assert.deepEqual(JOB_LV_HPMP[cls], { hp, mp }, cls)
   for (const c of CLASSES) {
@@ -347,15 +351,15 @@ test('【確定】ClassLVが上がるたびに、どの職業でも必ずHPとMP
       assert.ok(b.hp - a.hp >= JOB_LV_HPMP[c.id].hp, `${c.id} ClassLV${j}でHPが上がる`)
       assert.ok(b.mp - a.mp >= JOB_LV_HPMP[c.id].mp, `${c.id} ClassLV${j}でMPが上がる`)
     }
-    // 点数（5点・6点）はそのまま（毎回のHP・MPは別に足す）
+    // 点数（8点・10点）はそのまま（毎回のHP・MPは別に足す）
     assert.equal(bonusPointsAt(c.id, jobMaxOf(c.id)), STAGES[c.stage].perLv * (jobMaxOf(c.id) - 1))
     assert.equal(jobLevelsGained(c.id, 1), 0)
     assert.equal(jobLevelsGained(c.id, 99), jobMaxOf(c.id) - 1, '上限より上は増えない')
   }
   // ユーザーに見せた例（上限のClassLVでの合計）
-  assert.deepEqual([jobBonusStats('戦士', 30).hp, jobBonusStats('戦士', 30).mp], [456, 59])
-  assert.deepEqual([jobBonusStats('魔法使い', 30).hp, jobBonusStats('魔法使い', 30).mp], [294, 177])
-  assert.deepEqual([jobBonusStats('司祭', 50).hp, jobBonusStats('司祭', 50).mp], [1050, 331])
+  assert.deepEqual([jobBonusStats('戦士', 30).hp, jobBonusStats('戦士', 30).mp], [737, 106])
+  assert.deepEqual([jobBonusStats('魔法使い', 30).hp, jobBonusStats('魔法使い', 30).mp], [482, 289])
+  assert.deepEqual([jobBonusStats('司祭', 50).hp, jobBonusStats('司祭', 50).mp], [1720, 519])
 })
 
 test('神殿の「上がりやすいステータス」は配分の高い2〜3種（多い順）。例：戦士＝STR・VIT', () => {
@@ -612,10 +616,11 @@ test('【確定】刀＝STR60・AGI25・DEX15、宝珠＝INT40・AGI30・VIT30�
   assert.ok(itemOf(1, 'N', '宝珠').dist.int_stat < itemOf(1, 'N', '杖').dist.int_stat)
 })
 
-test('【確定】剣士（2026-10-09 ユーザー承認）：物理・刀／片手剣／両手剣・STR40 DEX32 AGI30・技5つ', () => {
+test('【確定】剣士（2026-10-09 ユーザー承認）：物理・刀／片手剣／両手剣・STR・DEX・AGIが高い・技5つ', () => {
   assert.equal(attackKindOf('剣士'), 'phys')
   assert.deepEqual(weaponsOf('剣士'), ['刀', '片手剣', '両手剣'])
-  assert.deepEqual(JOB_BONUS.剣士, { str:40, dex:32, agi:30, vit:15, hp:13, mp:10, luk:5 })
+  // 承認は STR40 DEX32 AGI30 VIT15 HP13 MP10 LUK5（合計145）。2026-10-12 ClassLVごとの点数を5→8にしたので同じ割合で232点へ
+  assert.deepEqual(JOB_BONUS.剣士, { str:64, dex:51, agi:48, vit:24, hp:21, mp:16, luk:8 })
   // 説明文は 2026-10-11 ユーザー指示「具体的なスキル名やステータス名を記載しないで」で書き直した（前は承認済みの「STR・DEX・AGIがそろって…燕返しと兜割りで斬り崩す」）
   assert.equal(classDescOf('剣士'), '鋭い剣さばきで、攻めと身のこなしを両立する')
   assert.deepEqual(learnOrderOf('剣士').map(s => s.name), ['袈裟斬り', '燕返し', '兜割り', '一閃', '剣の構え'])

@@ -20,7 +20,8 @@ export const chip = (on) => ({ ...miniBtn(on ? '#44aaff' : '#62789a'), color: on
 export const gainText = (gain) => Object.entries(gain).sort((a, b) => a[0] - b[0])
   .map(([a, n]) => `${scrapNameOf(Number(a))} +${n}`).join('・')
 // エリアの選択肢の名前
-export const areaOptionLabel = (a) => `${a} ${AREA_LIST[a - 1]?.name || ''}`
+// ★エリア0＝初期装備（キャラ作成で配る・2026-10-12）
+export const areaOptionLabel = (a) => (a === 0 ? '初期装備' : `${a} ${AREA_LIST[a - 1]?.name || ''}`)
 
 // 持ち物の絞り込み（部位・レア度・エリア）と並べ替え（強い順・LVの高い順・新しい順）。
 // all = [{ inv, item }]・lv = いまのLV（強い順は強化値と必要LV不足の効果%込み）。

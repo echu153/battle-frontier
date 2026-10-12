@@ -125,7 +125,55 @@ export const ITEMS = Array.from({ length: AREA_COUNT }, (_, i) => i + 1).flatMap
     id: itemIdOf(area, rarity, k.key), name: GEAR_NAMES[rarity][k.key][area - 1],
     part: k.part, type: k.type, line: k.line, kind: k.key, area, rarity, lv: reqLvOf(area, rarity), dist: k.dist,
   }))))
-export const ITEM_BY_ID = Object.fromEntries(ITEMS.map(i => [i.id, i]))
+
+// ===== 初期装備（キャラ作成のときに1回だけ配る）=====
+// 【確定】2026-10-12 ユーザー指示「キャラ作成時そのクラスに対応する装備一式（lv１）」＋案を承認（装飾品だけ「古びた◯◯」にした）：
+//   ・7枠すべて（武器・頭・鎧・腕・足・装飾品2つ）。**必要LV1**（アイテムLV1）・ノーマルと同じ作り
+//     （7枠そろうとLV1の本体と同じくらい＝LV1の戦闘力39→78。始まりの森のノーマル（必要LV5）が落ちればそちらが強い）
+//   ・武器＝その職業の代表の種類／防具＝前に出て受ける職業（戦士・槍使い・僧侶）は重鎧、ほかは軽装／
+//     装飾品＝物理職は耳飾り（イヤリング・STR寄り）、魔法職は指輪（リング・INT寄り）
+//   ・名前は「見習いの◯◯」、装飾品だけ「古びた◯◯」
+//   ・どこにも落ちない（エリア0）・作れない（ノーマル）。分解・強化で使う残骸は始まりの森のもの（smith.js の scrapAreaOf）
+// ★サーバーの v2cap_equipment（エリア0の行）と v2cap_classes.starter は tools/v2cap-sql.mjs がここから作る
+export const STARTER_AREA = 0
+export const STARTER_LV = 1
+export const STARTER_NAMES = {
+  刀:'見習いの刀', 両手剣:'見習いの大剣', 槍:'見習いの槍', 拳:'見習いの拳当て', 短剣:'見習いの短剣',
+  弓:'見習いの弓', 銃:'見習いの銃', 杖:'見習いの杖', 書:'見習いの書',
+  重鎧頭:'見習いの兜', 重鎧鎧:'見習いの鎧', 重鎧腕:'見習いの籠手', 重鎧足:'見習いの具足',
+  軽装頭:'見習いの帽子', 軽装鎧:'見習いの服', 軽装腕:'見習いの手袋', 軽装足:'見習いの靴',
+  イヤリング:'古びた耳飾り', リング:'古びた指輪',
+}
+export const STARTER_ITEMS = Object.entries(STARTER_NAMES).map(([key, name]) => {
+  const k = KIND_BY_KEY[key]
+  return { id: itemIdOf(STARTER_AREA, 'N', key), name, part: k.part, type: k.type, line: k.line, kind: key,
+    area: STARTER_AREA, rarity: 'N', lv: STARTER_LV, dist: k.dist }
+})
+// 職業 → 初期装備（武器の種類・防具の系統・装飾品の種類）。初期職だけ（一次職は作成で選べない）
+export const STARTER_SET = {
+  剣士:     { weapon:'刀',     line:'軽装', acc:'イヤリング' },
+  戦士:     { weapon:'両手剣', line:'重鎧', acc:'イヤリング' },
+  槍使い:   { weapon:'槍',     line:'重鎧', acc:'イヤリング' },
+  格闘家:   { weapon:'拳',     line:'軽装', acc:'イヤリング' },
+  盗賊:     { weapon:'短剣',   line:'軽装', acc:'イヤリング' },
+  弓使い:   { weapon:'弓',     line:'軽装', acc:'イヤリング' },
+  銃士:     { weapon:'銃',     line:'軽装', acc:'イヤリング' },
+  魔法使い: { weapon:'杖',     line:'軽装', acc:'リング' },
+  呪術師:   { weapon:'杖',     line:'軽装', acc:'リング' },
+  僧侶:     { weapon:'杖',     line:'重鎧', acc:'リング' },
+  薬師:     { weapon:'書',     line:'軽装', acc:'リング' },
+}
+// 枠の順（SLOTS＝武器・頭・鎧・腕・足・装飾品①・装飾品②）に並べた初期装備のID。無い職業は空
+export const starterIdsOf = (cls) => {
+  const s = STARTER_SET[cls]
+  if (!s) return []
+  const id = (key) => itemIdOf(STARTER_AREA, 'N', key)
+  return [id(s.weapon), id(`${s.line}頭`), id(`${s.line}鎧`), id(`${s.line}腕`), id(`${s.line}足`), id(s.acc), id(s.acc)]
+}
+
+// ★ID から引く一覧には初期装備も入れる（持ち物・装備の画面・戦闘は ITEM_BY_ID で引く）。
+//   ITEMS（エリア×レア度の1560点）には入れない＝落ちる・作る一覧やシミュの「いちばん良い装備」には出ない
+export const ITEM_BY_ID = Object.fromEntries([...ITEMS, ...STARTER_ITEMS].map(i => [i.id, i]))
 export const itemOf = (area, rarity, kindKey) => ITEM_BY_ID[itemIdOf(area, rarity, kindKey)] || null
 
 // この装備をどの枠に着けられるか
