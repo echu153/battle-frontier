@@ -10,6 +10,7 @@ import {
 } from '../lib/sortie.js'
 import { toFighter as playerFighter } from '../lib/loadout.js'
 import { staminaMaxOf, MAX_LV, rollStamina } from '../lib/level.js'
+import { jobUpNote } from '../lib/jobs.js'
 import { RARITY_COLOR, RARITIES, rarityLabel, reqLvOf } from '../lib/equipment.js'
 import { buildCapBattleView } from '../lib/battleView.js'
 import { enemyArtSrc } from '../lib/enemyArt.js'
@@ -151,17 +152,18 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
         const pts = typeof lv.points === 'number' ? `（ステータスポイント+${lv.points}）` : ''
         after.push({ text:`🆙 LEVEL UP！ LV${lv.lv}${pts}`, color:'#44ff88' })
       }
-      if (lv.job_ups > 0) after.push({ text:`⭐ CLASS LEVEL UP！ ${prof.class} ClassLV${lv.jlv}`, color:'#ffcc00' })
+      // ★上がったクラスのステも書く（2026-10-12 ユーザー指示「クラスレベルアップしたときはステータスの上昇値も記載すること」・2つ以上なら合計）
+      if (lv.job_ups > 0) after.push({ text:`⭐ CLASS LEVEL UP！ ${prof.class} ClassLV${lv.jlv}${jobUpNote(prof.class, lv)}`, color:'#ffcc00' })
       for (const name of lv.learned || []) after.push({ text:`📖 スキル「${name}」を覚えた！（スキルセットで編成できる）`, color:'#44ddff' })
       if (win) {
         if (data.drop && drop) {
-          const ilv = data.drop.ilv
           // ★色を付けるのはレア度と装備名だけ（今のⅡと同じ形）。
-          //   「必要LVに足りない＝効果◯%」はここでは出さない（2026-10-12 ユーザー指示「ここで説明しなくていい」）
+          //   「必要LVに足りない＝効果◯%」も「（LV◯）」も出さない（2026-10-12 ユーザー指示「ここで説明しなくていい」
+          //   「装備ドロップしたとき要求レベル書かなくていい」）
           const color = RARITY_COLOR[drop.item.rarity]
           after.push({ color: LOG_PLAIN, parts: [
             { text:'🎁 ' }, { text:`【${rarityLabel(drop.item.rarity)}】`, color }, { text:'「' }, { text: drop.item.name, color },
-            { text:`」を入手！（LV${ilv}）` },
+            { text:'」を入手！' },
           ] })
         }
         // ボスを倒すと次の場所が開く（1本道）。開いたかどうかはサーバーの返事で見る

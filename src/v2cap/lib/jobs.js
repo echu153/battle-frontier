@@ -265,6 +265,25 @@ export const jobBonusStats = (cls, jlv) => {
   out.mp += n * (JOB_LV_HPMP[cls]?.mp || 0)
   return out
 }
+// ClassLVが from → to に上がったときに増えたクラスのステ（{ ステ: 量 }）と、その文（「HP+13・MP+2・STR+4」・多い・少ないでなくステの並び順）。
+// 【確定】2026-10-12 ユーザー指示「クラスレベルアップしたときはステータスの上昇値も記載すること」＝「CLASS LEVEL UP！」の行に添える
+//   （1回で2つ以上上がったときは合計）
+export const jobBonusGain = (cls, fromJlv, toJlv) => {
+  const a = jobBonusStats(cls, fromJlv), b = jobBonusStats(cls, toJlv)
+  return Object.fromEntries(STAT_KEYS.map(k => [k, b[k] - a[k]]))
+}
+export const jobGainText = (cls, fromJlv, toJlv) => {
+  const g = jobBonusGain(cls, fromJlv, toJlv)
+  return STAT_KEYS.filter(k => g[k] > 0).map(k => `${STAT_DEFS[k].label}+${g[k]}`).join('・')
+}
+// サーバーの返事の level（{ jlv: 上がったあとのClassLV, job_ups: 上がった回数 }）から「（HP+13・MP+2・…）」。上がっていなければ ''
+//   出撃のログ・宝樹・デイリーミッションの「CLASS LEVEL UP！」に添える
+export const jobUpNote = (cls, level) => {
+  const ups = Math.floor(Number(level?.job_ups) || 0)
+  if (ups <= 0) return ''
+  const t = jobGainText(cls, level.jlv - ups, level.jlv)
+  return t ? `（${t}）` : ''
+}
 // 上がりやすいステータス（神殿に出す）。配分の高い2〜3種＝初期職48点以上・一次職102点以上（多い順のキー）
 //   （2026-10-12 に点数を1.6倍にしたので、前の30点・61点も同じ割合で上げた＝選ばれるステは前と同じ）
 // ★「高い2〜3種」の決まりは v2cap.test.js が見張っている（2026-10-09 ユーザー指示「2種～3種が高く」）

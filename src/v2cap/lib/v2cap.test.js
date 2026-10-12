@@ -14,6 +14,7 @@ import {
   ICHIJI_CLASSES, ICHIJI_INFO, ICHIJI_REQ_JLV, jobMaxOf, nextClassesOf, CLASS_INFO, JOB_NEED_BASE_PERMIL, JOB_NEED_PCT,
   bonusPointsAt, jobBonusStats, learnOrderOf, learnAtOf, skillsLearnedBy, applyJobExp,
   canBecome, weaponsOf, canEquipType, attackKindOf, lineageOf, usableSkillNames, classDescOf,
+  jobBonusGain, jobGainText, jobUpNote,
 } from './jobs.js'
 import { SKILLS, NEW_SKILLS, SKILL_BY_NAME, setMpCost, validateSkillSet, defaultSetOf, DEFAULT_USES_MAX, passiveOf } from './skills.js'
 import { ICHIJI_SKILLS, ICHIJI_BUILDS } from './skillsIchiji.js'
@@ -353,6 +354,27 @@ test('【確定】クラスのステはClassLVが1上がるごとに初期職8�
       }
     }
   }
+})
+
+test('【確定】2026-10-12 CLASS LEVEL UP の行に、上がったクラスのステを書く（jobGainText・jobUpNote。2つ以上なら合計）', () => {
+  // ユーザー指示「クラスレベルアップしたときはステータスの上昇値も記載すること」
+  for (const c of CLASSES) {
+    const max = jobMaxOf(c.id)
+    const hpmp = JOB_LV_HPMP[c.id]
+    for (let j = 1; j < max; j++) {
+      const g = jobBonusGain(c.id, j, j + 1)
+      assert.ok(g.hp >= hpmp.hp && g.mp >= hpmp.mp, `${c.id} ${j}→${j + 1}：HP・MPは必ず上がる`)
+      // 1回で入るのは「点数（HP8・MP3・ほか1が1点）」＋毎回のHP・MP
+      const pts = STAT_KEYS.reduce((t, k) => t + (g[k] - (k === 'hp' ? hpmp.hp : k === 'mp' ? hpmp.mp : 0)) / STAT_DEFS[k].unit, 0)
+      assert.equal(pts, STAGES[c.stage].perLv, `${c.id} ${j}→${j + 1}：${pts}点`)
+    }
+    assert.equal(jobGainText(c.id, max, max + 1), '', `${c.id}：上限より上は何も増えない`)
+  }
+  assert.equal(jobGainText('盗賊', 1, 2), 'HP+14・MP+5・STR+2・DEX+1・AGI+2・LUK+1', 'ステの並び順・増えたものだけ')
+  assert.equal(jobUpNote('盗賊', { jlv: 2, job_ups: 1 }), '（HP+14・MP+5・STR+2・DEX+1・AGI+2・LUK+1）')
+  assert.equal(jobUpNote('盗賊', { jlv: 8, job_ups: 3 }), `（${jobGainText('盗賊', 5, 8)}）`, '2つ以上上がったら合計')
+  assert.equal(jobUpNote('盗賊', { jlv: 3, job_ups: 0 }), '')
+  assert.equal(jobUpNote('盗賊', null), '')
 })
 
 test('【確定】ClassLVが上がるたびに、どの職業でも必ずHPとMPが上がる（点数とは別・職業ごとの量＝ユーザー承認の表）', () => {
