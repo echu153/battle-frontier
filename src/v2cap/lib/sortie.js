@@ -87,16 +87,20 @@ export const DROP_RARITY = {
 export const SUB_RARE_MULT = [1.0, 1.2, 1.4]
 const r1 = (v) => Math.round(v * 10) / 10
 // その場所（①②③）でその役割の敵を倒したときのレア度の内訳（%・合計100）
-export const dropRarityOf = (role, sub = 1) => {
+// rareMult … レア以上の割合にさらに掛ける倍率（防具のセット能力「海賊の嗅覚」＝1.2・armorSets.js）。
+//   掛けて100%を超えたら（ボスの③×1.2）、ノーマルを0にしてレア以上を合計100へ割り戻す
+export const dropRarityOf = (role, sub = 1, rareMult = 1) => {
   const base = DROP_RARITY[role] || DROP_RARITY.normal
-  const m = SUB_RARE_MULT[(sub || 1) - 1] ?? 1
-  const up = Object.fromEntries(RARITIES.filter(r => r !== 'N' && base[r]).map(r => [r, r1(base[r] * m)]))
-  return { N: r1(100 - Object.values(up).reduce((a, b) => a + b, 0)), ...up }
+  const m = (SUB_RARE_MULT[(sub || 1) - 1] ?? 1) * (rareMult || 1)
+  let up = Object.fromEntries(RARITIES.filter(r => r !== 'N' && base[r]).map(r => [r, r1(base[r] * m)]))
+  const sum = Object.values(up).reduce((a, b) => a + b, 0)
+  if (sum > 100) up = Object.fromEntries(Object.entries(up).map(([r, v]) => [r, r1(v * 100 / sum)]))
+  return { N: Math.max(0, r1(100 - Object.values(up).reduce((a, b) => a + b, 0))), ...up }
 }
 // その役割の敵から落ちるレア度か（サーバーの判定と同じ）
 export const canDropRarity = (role, rarity) => ((DROP_RARITY[role] || DROP_RARITY.normal)[rarity] || 0) > 0
-export const rollDropRarity = (role, sub, rng = Math.random) => {
-  const d = dropRarityOf(role, sub)
+export const rollDropRarity = (role, sub, rng = Math.random, rareMult = 1) => {
+  const d = dropRarityOf(role, sub, rareMult)
   let x = rng() * 100
   for (const r of RARITIES) {
     if (!d[r]) continue
@@ -115,9 +119,10 @@ export const rollDropKind = (part, cls, rng = Math.random) => {
   return `${pick(ARMOR_LINES, rng)}${part}`
 }
 // 勝ったときの装備。落ちたら { item, ilv }（レア度は item.rarity・アイテムLV＝item.lv）
-export const rollEquipDrop = (enc, cls, at = new Date(), rng = Math.random) => {
+// rareMult … 防具のセット能力「海賊の嗅覚」（落ちる確率そのものは変えない＝レア以上の割合だけ）
+export const rollEquipDrop = (enc, cls, at = new Date(), rng = Math.random, rareMult = 1) => {
   if (!enc || rng() * 100 >= (DROP_CHANCE[enc.role] ?? DROP_CHANCE.normal)) return null
   const kind = rollDropKind(rollDropPart(at, rng), cls, rng)
-  const item = kind ? itemOf(enc.spot.area, rollDropRarity(enc.role, enc.spot.sub, rng), kind) : null
+  const item = kind ? itemOf(enc.spot.area, rollDropRarity(enc.role, enc.spot.sub, rng, rareMult), kind) : null
   return item ? { item, ilv: item.lv } : null
 }

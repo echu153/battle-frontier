@@ -8,6 +8,7 @@
 // ★純関数ではなく side（createSide の戻り値）を書き換える。rng は使わない（再現性は battle.js と同じ）。
 // ============================================================
 import { AIL_KEYS, AIL_LABEL, hasAilment } from './ailments.js'
+import { setTurnsUp } from './battleSet.js'
 
 // 溜め（気・照準・装填・詠唱・薬効・死霊・式神・分身）
 export const STK_KEYS = ['ki', 'aim', 'load', 'chant', 'potion', 'undead', 'shiki', 'clone']
@@ -221,6 +222,8 @@ export const gainHp = (side, amt) => {
 // ===== 行動のあとに乗る効果（攻撃・補助・回復のどれでも）=====
 // heal … battle.js の healAmount（回復量の補正を通した値を返す）
 export const ichijiAfterAction = (me, foe, skill, log) => {
+  // ★防具のセット能力（v2cap）：悠久の守り＝自分にかける期限つきの効果の持続+（持っていなければ0）
+  const up = setTurnsUp(me)
   if (skill.gain) {
     const g = skill.gain
     me.stk[g.key] = Math.min(g.max, (me.stk[g.key] || 0) + g.n)
@@ -234,19 +237,19 @@ export const ichijiAfterAction = (me, foe, skill, log) => {
     log.push({ side: me.name, type: 'summon', skill: skill.name, stack: STK_LABEL[s.key], n: me.stk[s.key] })
   }
   if (skill.summonBoost) {
-    me.summonBoost[skill.summonBoost.key] = { pct: skill.summonBoost.pct, turns: skill.summonBoost.turns }
+    me.summonBoost[skill.summonBoost.key] = { pct: skill.summonBoost.pct, turns: skill.summonBoost.turns + up }
     log.push({ side: me.name, type: 'buff', skill: skill.name })
   }
   if (skill.summonHits) {
-    me.summonHits[skill.summonHits.key] = { hits: skill.summonHits.hits, turns: skill.summonHits.turns }
+    me.summonHits[skill.summonHits.key] = { hits: skill.summonHits.hits, turns: skill.summonHits.turns + up }
     log.push({ side: me.name, type: 'buff', skill: skill.name })
   }
   if (skill.guard) {
-    me.guardsT.push({ cut: skill.guard.cut, turns: skill.guard.turns, healPct: skill.guard.healPct || 0 })
-    log.push({ side: me.name, type: 'guardUp', skill: skill.name, cut: skill.guard.cut, turns: skill.guard.turns })
+    me.guardsT.push({ cut: skill.guard.cut, turns: skill.guard.turns + up, healPct: skill.guard.healPct || 0 })
+    log.push({ side: me.name, type: 'guardUp', skill: skill.name, cut: skill.guard.cut, turns: skill.guard.turns + up })
   }
   if (skill.lifeSteal) {
-    me.lifeSteal = { ...skill.lifeSteal }
+    me.lifeSteal = { ...skill.lifeSteal, ...(up ? { turns: skill.lifeSteal.turns + up } : {}) }
     log.push({ side: me.name, type: 'buff', skill: skill.name })
   }
   if (skill.endure) {
@@ -254,7 +257,7 @@ export const ichijiAfterAction = (me, foe, skill, log) => {
     log.push({ side: me.name, type: 'endureStart', skill: skill.name, turns: skill.endure.turns })
   }
   if (skill.dodgeBoost) {
-    me.dodgeBoost = { ...skill.dodgeBoost }
+    me.dodgeBoost = { ...skill.dodgeBoost, ...(up ? { turns: skill.dodgeBoost.turns + up } : {}) }
     me.dodgeBoostPct = skill.dodgeBoost.pct
     log.push({ side: me.name, type: 'buff', skill: skill.name })
   }
@@ -263,7 +266,7 @@ export const ichijiAfterAction = (me, foe, skill, log) => {
     log.push({ side: me.name, type: 'reviveReady', skill: skill.name })
   }
   if (skill.debuffImmune) {
-    me.debuffImmune = skill.debuffImmune.turns
+    me.debuffImmune = skill.debuffImmune.turns + up
     log.push({ side: me.name, type: 'buff', skill: skill.name })
   }
   if (skill.critUp) me.critUp = (me.critUp || 0) + skill.critUp

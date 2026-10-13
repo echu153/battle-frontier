@@ -23,7 +23,7 @@ import { classBonusOf } from './classBonus.js'
 import {
   createAilments, inflict, tickAilments, ailStatPct, healMultOf, consumeParalyze, hasAilment, AIL_LABEL, AIL_KEYS,
   ailAccPct, ailTakenMult, ailDealMult, isFrenzied,
-  POISON_CAP_RATE, BLEED_CAP_RATE, BURN_CAP_RATE, tickBleed,
+  POISON_CAP_RATE, POISON_RATE, BLEED_CAP_RATE, BURN_CAP_RATE, tickBleed,
   isSealed, usesMp, procCutOf, diminishedChance, AIL_DIMINISH_KEYS,
 } from './ailments.js'
 import { collectEnchants, inflictChance } from './enchant.js'
@@ -36,6 +36,11 @@ import {
   initIchiji, collectExPassives, passiveDealMult, ichijiSkip, ichijiSkillPrep, consumeDodgeBoost,
   incomingCut, guardHealPct, gainHp, ichijiAfterAction, tickIchiji, hpPctOf, STK_LABEL,
 } from './battleIchiji.js'
+// ★防具のセット能力（「レベルキャップあり」版・2026-10-14）。今のⅡのキャラ・敵は setFx を持たないので何も起きない
+import {
+  initSet, setResistMult, setInflictMult, setPoisonMult, shortenAil, ailCountOfSide,
+  setTakenMult, setCritTakenMult, setDealMult, useSetDodge, setAfterDamage, setTurnsUp, tickSet,
+} from './battleSet.js'
 
 export const NORMAL_ATTACK_MULT = 1.0 // 通常攻撃の倍率（消費MP0）
 export const MAX_TURNS = 100          // これを超えたら引き分け
@@ -173,6 +178,10 @@ export const liveStats = (side, acting = false) => {
   if (acting && side.switchOn) for (const s of side.pa.switches) add(s.stat, s.pct)
   // ★一次職：影の連携（忍者）＝分身がいない間はAGI+
   if (side.pa.ex?.noCloneAgi && !(side.stk?.clone > 0)) add('agi', side.pa.ex.noCloneAgi)
+  // ★防具のセット能力：毒龍の鱗（自分が状態異常の間ステ+%）
+  if (side.setFx?.whileAilStat && ailCountOfSide(side) > 0) {
+    for (const [k, v] of Object.entries(side.setFx.whileAilStat)) add(k, v)
+  }
   // 武器の進化：かわすたびAGI＋／被弾するたびSTR＋（どちらも EVO_STACK_MAX 回まで）
   if (side.evo?.onDodge.agi && side.evoStacks?.dodge)
     add('agi', side.evo.onDodge.agi * Math.min(EVO_STACK_MAX, side.evoStacks.dodge))
@@ -306,6 +315,7 @@ export const createSide = (fighter, band = null) => {
     defRule: fighter.defRule || null,
   }
   initIchiji(side, fighter)              // ★一次職の状態（溜め・期限つきの軽減・跳躍・召喚など）
+  initSet(side, fighter)                 // ★防具のセット能力（v2cap。setFx が無ければ何もしない）
   return side
 }
 
@@ -377,6 +387,8 @@ const applyIncoming = (me, foe, dmg, kind, rng, log) => {
   d *= ailTakenMult(foe.ail)
   // エリアの相性：そのエリアの敵は片方の型が少し通りやすい（enemies.js の bias）
   if (foe.taken?.[kind]) d *= foe.taken[kind]
+  // ★防具のセット能力（v2cap）：深淵の加護・古兵の意地（HP30%以下）・氷河の守り（鈍足の相手から）
+  if (foe.setFx) d *= setTakenMult(me, foe)
   // 武器の進化：被ダメージ−%（代償で付いた「被ダメージ+%」はここでマイナスに効く）
   const evoCut = evoCutPct(foe.evo, { hpPct: (foe.hp / Math.max(1, foe.base.hp)) * 100, kind })
   if (evoCut) d *= Math.max(0.1, 1 - evoCut / 100)
@@ -414,12 +426,15 @@ const applyIncoming = (me, foe, dmg, kind, rng, log) => {
     if (foe.takenLog.length > 12) foe.takenLog.shift()
   }
   if (foe.endure) foe.endure.acc += out
+  if (foe.setFx?.rootHealPct) foe.rootAcc += out   // ★防具のセット能力：根を張る（ターンの終わりに回復）
   // 不屈：致命傷をHP1で耐える（1戦に1回・確率）
   if (foe.hp <= 0 && foe.evo.guts && !foe.gutsUsed && roll(foe.evo.guts, rng)) {
     foe.gutsUsed = true
     foe.hp = 1
     log.push({ side: foe.name, type: 'guts' })
   }
+  // ★防具のセット能力：番人の守り（戦闘中1回、HP1で耐える）・天騎士の誓い（戦闘中1回、HP30%以下で回復）
+  setAfterDamage(foe, log, healMaxAmount, gainHp)
   checkRevive(foe, log)
   if (guardHeal > 0 && foe.hp > 0) {
     const got = gainHp(foe, guardHeal)
@@ -435,6 +450,17 @@ const applyIncoming = (me, foe, dmg, kind, rng, log) => {
     const back = Math.max(1, Math.floor(out * rf.pct / 100))
     me.hp -= back
     log.push({ side: foe.name, type: 'reflect', damage: back })
+  }
+  // ★防具のセット能力：攻撃を受けると確率で相手に状態異常（帯電装甲＝麻痺15%・炎獄の鎧＝火傷20%）。
+  //   1回の攻撃につき1回（連撃でも1回）。相手の抵抗・麻痺の0.8倍は通常どおり効く
+  if (me && foe.setFx?.counterAil && foe.hp > 0 && me.hp > 0) {
+    for (const c of foe.setFx.counterAil) {
+      const got = []
+      if (tryInflict(foe, me, { key: c.key, chance: c.chance }, rng, got)) {
+        log.push({ side: foe.name, type: 'setFx', name: foe.setFx.names?.counterAil || '', text: `${me.name}に${AIL_LABEL[c.key]}を返した！` })
+      }
+      for (const l of got) log.push(l)
+    }
   }
   return out
 }
@@ -508,19 +534,22 @@ const applyDebuff = (foe, table, log) => {
 // 状態異常を1つ試す。**相手のエンチャント抵抗（ailResist）を引いてから**判定する。
 // エンチャント由来（onHitAils）とスキル由来（skill.ail）で同じ道を通す＝抵抗の効き方がズレない
 // me は入れる側。武器の進化は**入れる側の付与率＋**と**受ける側の抵抗**の両方が効く
+// 入ったら true（防具のセット能力の「攻撃を受けると相手に状態異常」がログの並びに使う）
 const tryInflict = (me, foe, a, rng, log) => {
   // ★一次職：不動（麻痺・鈍足にかからない）
   if (foe?.pa?.ex?.immune?.includes(a.key)) {
     log.push({ side: foe.name, type: 'immune', ail: AIL_LABEL[a.key] })
-    return
+    return false
   }
   const base = a.chance + (me?.evo?.ail?.rate || 0)
   const raw = inflictChance(base, foe.en, a.key)
     - (foe?.evo?.ail?.resist || 0) + (foe?.evo?.ail?.weak || 0)
     - (foe?.pa?.ailResist || 0)   // ★武僧：状態異常が効きづらい
+  // ★防具のセット能力（v2cap）：付ける側の付けやすさ（×1.1 など）と、受ける側のかかりにくさ（2部位＝×0.7）を掛ける
+  const setPct = raw * setInflictMult(me, a.key) * setResistMult(foe, a.key)
   // ★v2cap：麻痺・封印は受けた回数ぶん下がる（抵抗を引いたあとの確率に掛ける）
-  const pct = foe.ailDiminish ? diminishedChance(raw, a.key, foe.ailTimes) : raw
-  if (!roll(pct, rng)) return
+  const pct = foe.ailDiminish ? diminishedChance(setPct, a.key, foe.ailTimes) : setPct
+  if (!roll(pct, rng)) return false
   // ★隠身（暗殺者）：自分が付ける出血はスタック上限が伸びる
   // ★ドットの1刻み上限は**付けた側の攻撃力**から決める（HPが桁違いの相手で壊れないように）
   const eAtk = liveStats(me, true)
@@ -528,11 +557,18 @@ const tryInflict = (me, foe, a, rng, log) => {
   const cap = a.key === 'poison' ? atk * POISON_CAP_RATE
     : a.key === 'bleed' ? atk * BLEED_CAP_RATE
     : a.key === 'burn' ? atk * BURN_CAP_RATE : undefined
-  const opt = { ...a, cap, ...(me?.pa?.bleedMax ? { max: me.pa.bleedMax } : {}) }
+  // ★防具のセット能力：瘴気（自分が付ける毒の1刻み+%。上限も同じだけ上げる）
+  const pm = a.key === 'poison' ? setPoisonMult(me) : 1
+  const opt = { ...a, cap: pm !== 1 && cap !== undefined ? cap * pm : cap,
+    ...(pm !== 1 ? { rate: POISON_RATE * pm } : {}),
+    ...(me?.pa?.bleedMax ? { max: me.pa.bleedMax } : {}) }
   if (inflict(foe.ail, a.key, opt)) {
     if (foe.ailDiminish && AIL_DIMINISH_KEYS.includes(a.key)) foe.ailTimes[a.key] = (foe.ailTimes[a.key] || 0) + 1
+    shortenAil(foe, a.key)   // ★防具のセット能力：遺物の加護・深淵の加護（受けた状態異常の持続−1）
     log.push({ side: foe.name, type: 'ailment', ail: AIL_LABEL[a.key] })
+    return true
   }
+  return false
 }
 
 // 攻撃が当たったときのエンチャント。状態異常の付与と、積み上がるステータス補正
@@ -858,7 +894,11 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       const varMult = varianceMultOf(skill, rng)   // ギャンブラー：1行動につき1回だけ振る
       // ★一次職：倍率・連撃数・クリティカル率・上乗せダメージ・溜めの消費（1行動につき1回）
       const ip = ichijiSkillPrep(me, foe, skill, eMe, eFoe, log)
-      const dealMult = passiveDealMult(me, foe)
+      // ★防具のセット能力：与ダメージ+％（深淵の力・群狼の牙・業火・蜘蛛の糸・峰風）は一次職のぶんと同じくダメージ全体に掛ける
+      const dealMult = passiveDealMult(me, foe) * setDealMult(me, foe, eMe, eFoe)
+      // ★防具のセット能力：蜃気楼（受ける側が戦闘中1回、この攻撃を完全にかわす＝全部の発が外れる）
+      const mirageLog = []
+      const mirage = useSetDodge(foe, mirageLog)
       // ★一次職の「威力+％」「与ダメージ+％」は、AGI・DEXなど副参照のぶんも含めたダメージ全体に掛ける
       //   （今のⅡの倍率は主のステにだけ掛かる＝damageOf の base。そちらは変えない）
       const ichijiK = ip.mult * dealMult
@@ -866,6 +906,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       // ★「撃った」行より後ろに流したいログを貯める（1発ごとの状態異常）
       const afterAil = []
       for (let h = 0; h < nHits; h++) {
+        if (mirage) { missed++; continue }
         // ★多段で1発ごとに威力が上がる（体術師の飛天三角蹴り）。1発目は素のまま
         const ramp = skill.rampHit ? 1 + (skill.rampHit / 100) * h : 1
         const r = resolveAttack({
@@ -903,6 +944,8 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
           r.damage += r2.damage
         }
         if (r.hit && ichijiK !== 1) r.damage = Math.max(1, Math.floor(r.damage * ichijiK))
+        // ★防具のセット能力：大地の守り（受けるクリティカルダメージ−%・1発ごと）
+        if (r.hit && r.crit && foe.setFx?.critTakenCut) r.damage = Math.max(1, Math.floor(r.damage * setCritTakenMult(foe)))
         // ★一次職：クリティカルしたときだけ伸びる技（絶影狙撃）・当てるたびコンボ（槍の型）
         if (skill.critMult && r.hit && r.crit) r.damage = Math.floor(r.damage * skill.critMult)
         if (r.hit && me.pa.ex?.combo) me.combo = Math.min(me.pa.ex.combo.max, (me.combo || 0) + 1)
@@ -947,6 +990,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       const entry = { side: me.name, type: 'skill', skill: skill.name, kind: skill.kind,
         damage: dmg, crit, hits, of: nHits, drain: 0 }
       log.push(entry)
+      for (const l of mirageLog) log.push(l)
       for (const l of afterHurt) log.push(l)
       for (const l of afterAil) log.push(l)
       if (hits > 0) {
@@ -1008,8 +1052,10 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       gainHp(me, amt)
       log.push({ side: me.name, type: 'heal', skill: skill.name, heal: amt })
     }
-    if (skill.regen)   { me.regen   = { ...skill.regen,   rate: skill.regen.rate * healOff };   log.push({ side: me.name, type: 'regen', skill: skill.name }) }
-    if (skill.mpRegen) { me.mpRegen = { ...skill.mpRegen, rate: skill.mpRegen.rate * healOff }; log.push({ side: me.name, type: 'mpRegen', skill: skill.name }) }
+    // ★防具のセット能力：悠久の守り（自分にかける期限つきの効果の持続+）。setTurnsUp は持っていなければ0
+    const up = setTurnsUp(me)
+    if (skill.regen)   { me.regen   = { ...skill.regen,   rate: skill.regen.rate * healOff,   ...(up ? { turns: skill.regen.turns + up } : {}) };   log.push({ side: me.name, type: 'regen', skill: skill.name }) }
+    if (skill.mpRegen) { me.mpRegen = { ...skill.mpRegen, rate: skill.mpRegen.rate * healOff, ...(up ? { turns: skill.mpRegen.turns + up } : {}) }; log.push({ side: me.name, type: 'mpRegen', skill: skill.name }) }
     // ★一次職：最大HPの割合で回復（内功・魂喰らい）・MP回復（魂喰らい・霊薬）・
     //   毎ターン最大HPの割合で回復（奇跡・再生薬）・受けたダメージを戻す（リワインド）
     if (skill.healMax) {
@@ -1025,7 +1071,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       log.push({ side: me.name, type: 'mpGain', skill: skill.name, mp: me.mp - before })
     }
     if (skill.regenMax) {
-      me.regenMax = { pct: skill.regenMax.pct * healOff, turns: skill.regenMax.turns }
+      me.regenMax = { pct: skill.regenMax.pct * healOff, turns: skill.regenMax.turns + up }
       log.push({ side: me.name, type: 'regen', skill: skill.name })
     }
     if (skill.rewind) {
@@ -1113,7 +1159,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   }
   // ★見切り：一定ターンのあいだ回避が上がり、受けた技ほど見切れる
   if (skill.foresight) {
-    me.foresight = { ...skill.foresight, byName: me.foresight?.byName || {} }
+    me.foresight = { ...skill.foresight, ...(setTurnsUp(me) ? { turns: skill.foresight.turns + setTurnsUp(me) } : {}), byName: me.foresight?.byName || {} }
     log.push({ side: me.name, type: 'foresight', skill: skill.name, turns: skill.foresight.turns })
   }
   // バフ・デバフ（攻撃スキルに付いていることもある）
@@ -1122,7 +1168,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   const formBuff = skill.formBuff ? { self: skill.formBuff[me.form || 'none'] } : null
   const spec = formBuff || skill.buff
   if (spec && skill.buffTurns) {
-    if (spec.self) me.timedBuffs.push({ table: scaleTable(spec.self, off), turns: skill.buffTurns })
+    if (spec.self) me.timedBuffs.push({ table: scaleTable(spec.self, off), turns: skill.buffTurns + setTurnsUp(me) })
     if (spec.enemy) {
       if (foe.debuffImmune > 0 && Object.values(spec.enemy).some(v => v < 0)) log.push({ side: foe.name, type: 'debuffImmune' })
       else foe.timedBuffs.push({ table: scaleTable(spec.enemy, off), turns: skill.buffTurns })
@@ -1163,11 +1209,15 @@ const strike = (me, foe, { mult, kind = 'phys', label, hits = 1 }, rng, log) => 
   if (foe.jumping) { log.push({ side: me.name, type: 'airEvade', skill: label }); return 0 }
   const eMe = liveStats(me, true)
   const eFoe = liveStats(foe)
-  const dm = passiveDealMult(me, foe)   // 与ダメージ+％はダメージ全体に掛ける
+  const dm = passiveDealMult(me, foe) * setDealMult(me, foe, eMe, eFoe)   // 与ダメージ+％はダメージ全体に掛ける（防具のセット能力も）
+  // ★防具のセット能力：蜃気楼（受ける側が戦闘中1回、この攻撃を完全にかわす）
+  const mirageLog = []
+  const mirage = useSetDodge(foe, mirageLog)
   let raw = 0
   let hit = 0
   let crit = false
   for (let h = 0; h < hits; h++) {
+    if (mirage) continue
     const r = resolveAttack({
       attacker: eMe, defender: eFoe, mult, kind,
       defPen: me.pa.defPenBonus / 100 + me.evo.defPen / 100,
@@ -1179,12 +1229,14 @@ const strike = (me, foe, { mult, kind = 'phys', label, hits = 1 }, rng, log) => 
       redMult: 1 + (foe.pa.defRed || 0) / 100,
       defRule: foe.defRule,
     }, rng)
-    if (r.hit) { raw += Math.max(1, Math.floor(r.damage * dm)); hit++ }
+    // ★防具のセット能力：大地の守り（受けるクリティカルダメージ−%）
+    if (r.hit) { raw += Math.max(1, Math.floor(r.damage * dm * (r.crit ? setCritTakenMult(foe) : 1))); hit++ }
     if (r.hit && r.crit) crit = true
   }
   const after = []
   const dmg = hit > 0 ? applyIncoming(me, foe, raw, kind, rng, after) : 0
   log.push({ side: me.name, type: 'strike', label, damage: dmg, hit: hit > 0, crit })
+  for (const l of mirageLog) log.push(l)
   for (const l of after) log.push(l)
   return dmg
 }
@@ -1245,7 +1297,9 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
   }
   const eMe = liveStats(me, true)
   const eFoe = liveStats(foe)
-  const r = resolveAttack({
+  // ★防具のセット能力：蜃気楼（受ける側が戦闘中1回、この攻撃を完全にかわす＝外れたのと同じ扱い）
+  const mirageLog = []
+  const r = useSetDodge(foe, mirageLog) ? { hit: false, crit: false, damage: 0 } : resolveAttack({
     attacker: eMe, defender: eFoe, mult: NORMAL_ATTACK_MULT * multScale, kind: me.kind,
     defPen: me.pa.defPenBonus / 100 + me.evo.defPen / 100,
     hitBonus: me.pa.hitBonus + me.en.hitBonus + evoHit(me, foe) + ailAccPct(me.ail),
@@ -1264,8 +1318,10 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
   if (r.hit && me.pa.ex?.combo) me.combo = Math.min(me.pa.ex.combo.max, (me.combo || 0) + 1)
   if (r.hit && r.crit) evoOnCrit(me, foe, rng, log)
   // ★一次職：与ダメージ+％（パッシブ）・流水の構えの溜め。ダメージ全体に掛ける
-  const ichijiK = passiveDealMult(me, foe) * consumeDodgeBoost(me)
+  // ★防具のセット能力：与ダメージ+％も同じ枠・大地の守り（受けるクリティカルダメージ−%）
+  const ichijiK = passiveDealMult(me, foe) * consumeDodgeBoost(me) * setDealMult(me, foe, eMe, eFoe)
   if (r.hit && ichijiK !== 1) r.damage = Math.max(1, Math.floor(r.damage * ichijiK))
+  if (r.hit && r.crit && foe.setFx?.critTakenCut) r.damage = Math.max(1, Math.floor(r.damage * setCritTakenMult(foe)))
   // 通常攻撃も「物理攻撃」なのでエンチャントの与ダメージ+%とヒット時効果が乗る
   const critMult = r.hit && r.crit && me.evo.critDmg ? 1 + me.evo.critDmg / 100 : 1
   const raw = Math.floor(r.damage * (1 + (me.kind === 'mag' ? me.en.magDmgPct : me.en.physDmgPct) / 100)
@@ -1285,6 +1341,7 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
   // ★一次職：ブラッディロア（その間、攻撃のたびに回復）
   if (me.lifeSteal?.turns > 0 && dmg > 0) gainHp(me, Math.min(drainCapOf(me, !!r.crit), Math.max(1, Math.floor(dmg * me.lifeSteal.pct / 100))))
   log.push({ side: me.name, type: 'normal', kind: me.kind, damage: dmg, crit: r.crit, hit: r.hit, mult: multScale })
+  for (const l of mirageLog) log.push(l)
   for (const l of after) log.push(l)
   afterAttack(me, foe, r.hit ? 1 : 0, !!(r.hit && r.crit), rng, log)
 }
@@ -1306,6 +1363,7 @@ export const tickAil = (side, log, foe = null) => {
     t.damage = Math.max(1, Math.floor(t.damage * boost))
     side.hp -= t.damage
     log.push({ side: side.name, type: 'ailTick', ail: AIL_LABEL[t.key], damage: t.damage, stacks: t.stacks })
+    setAfterDamage(side, log, healMaxAmount, gainHp)   // ★防具のセット能力：番人の守り・天騎士の誓い
     checkRevive(side, log)
     if (side.hp <= 0) return
   }
@@ -1328,6 +1386,7 @@ export const tickBleedAfterAct = (side, log, foe = null) => {
   const dmg = Math.max(1, Math.floor(t.damage * boost))
   side.hp -= dmg
   log.push({ side: side.name, type: 'ailTick', ail: AIL_LABEL.bleed, damage: dmg, stacks: t.stacks })
+  setAfterDamage(side, log, healMaxAmount, gainHp)   // ★防具のセット能力：番人の守り・天騎士の誓い
   checkRevive(side, log)
 }
 
@@ -1384,6 +1443,8 @@ export const tickRegen = (side, log, foe = null) => {
     log.push({ side: side.name, type: 'regenTick', heal: got })
     if (side.regenMax.turns <= 0) side.regenMax = null
   }
+  // ★防具のセット能力：森の恵み（最大HPの%）・根を張る（そのターンに受けたダメージの%）
+  tickSet(side, log, healMaxAmount, gainHp, healMultOf(side.ail))
 }
 
 // 戦闘を最後まで回す。fighters は createSide に渡せる形

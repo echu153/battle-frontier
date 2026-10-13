@@ -123,7 +123,8 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       const enc = sh ? shrineEncounterOf(sh.spot) : pickEncounter(spot.id, bossRate, new Date())
       const r = runBattle(me, { ...(sh ? enemyFighter(enc.enemy, 8, enc.power) : enemyFighter(enc.enemy, 8)), boss: enc.isBoss })
       const win = r.winner === 'a'
-      const drop = win && !sh ? rollEquipDrop(enc, prof.class, new Date()) : null
+      // ★防具のセット能力「海賊の嗅覚」：レア以上が落ちる確率1.2倍（me.setFx は loadout.js の toFighter が入れる）
+      const drop = win && !sh ? rollEquipDrop(enc, prof.class, new Date(), Math.random, me.setFx?.rareDropMult || 1) : null
       if (!sh) setBossRate(nextBossRate(bossRate, enc.isBoss))
       setShrineBattle(!!sh)
       const stamBefore = Math.max(0, stamNow - (isAuto ? 1 : 0))   // 最深部の演出でゲージを満たし始める値

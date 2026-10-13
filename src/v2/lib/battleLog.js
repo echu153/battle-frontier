@@ -60,7 +60,13 @@ export const buildBattleLog = (r, you, foe) => {
     } else if (l.type === 'heal') {
       out.push({ text:`💚 ${actor}の${l.skill}！ HPが${l.heal.toLocaleString()}回復した！`, color: LOG_COLOR.heal })
     } else if (l.type === 'regenTick') {
-      out.push({ text:`💚 ${actor}のHPが${l.heal.toLocaleString()}回復した！`, color: LOG_COLOR.heal })
+      // name … 防具のセット能力（森の恵み・根を張る）の回復のときだけ入る（v2cap）
+      out.push({ text: l.name
+        ? `💚 ${actor}の${l.name}！ HPが${l.heal.toLocaleString()}回復した！`
+        : `💚 ${actor}のHPが${l.heal.toLocaleString()}回復した！`, color: LOG_COLOR.heal })
+    } else if (l.type === 'setFx') {
+      // ★防具のセット能力（「レベルキャップあり」版・2026-10-14）：蜃気楼・番人の守り・天騎士の誓い・帯電装甲・炎獄の鎧
+      out.push({ text:`🛡 ${actor}の${l.name}！ ${l.text}`, color: LOG_COLOR.guard })
     } else if (l.type === 'buff') {
       out.push({ text:`✨ ${actor}の${l.skill}！`, color: LOG_COLOR.buff })
     } else if (l.type === 'extra') {

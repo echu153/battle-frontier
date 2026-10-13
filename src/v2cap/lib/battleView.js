@@ -21,6 +21,7 @@ import { buildBattleLog } from '../../v2/lib/battleLog.js'
 export const REACTION_TYPES = new Set([
   'ailment', 'immune', 'debuffImmune', 'debuffGuard', 'wall', 'enCut', 'dodgeCut', 'guts', 'guardHeal',
   'reflect', 'cloneTaken', 'consumeAil', 'dispel', 'ailBurst', 'revive',
+  'setFx',   // 防具のセット能力（蜃気楼・番人の守り・天騎士の誓い・攻撃を受けて返す状態異常）＝相手の攻撃への反応
 ])
 // 行動ではなく、時間で起きる行（毒・出血のダメージ、じわじわ回復、溜めた痛みを返す）。
 // 直前の行動のまとまりには入れず、いつも別のまとまりにする（同じ側の時間の行が続くときだけ1つに）

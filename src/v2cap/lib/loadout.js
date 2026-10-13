@@ -20,6 +20,7 @@ import { plusOf } from './smith.js'
 import { jobBonusStats, jobOf, canEquipType, attackKindOf, lineageOf } from './jobs.js'
 import { CAP_RULES } from './rules.js'
 import { ascEffectsOf, ascPctGain, ascendSkill } from './ascension.js'
+import { armorSetsOf, setStatPctOf, setFxOf } from './armorSets.js'
 
 const zero = () => Object.fromEntries(STAT_KEYS.map(k => [k, 0]))
 
@@ -61,6 +62,11 @@ export const armorOf = (profile, inventory) => armorEffects(
     .filter(w => w.item.line)
     .map(w => ({ item: w.item, pct: reqPctOf(w.item, w.inv.ilv, profile?.lv) })))
 
+// 防具のセット能力（armorSets.js）。発動している組だけ：[{ area, line, count, tiers, def }]
+// ★レア以上・同じエリア・同じ系統の防具で数える。必要LVに足りない防具も数える（2026-10-14 ユーザー選択）
+export const setsOf = (profile, inventory) =>
+  armorSetsOf(Object.values(equippedItems(profile, inventory)).map(w => w.item))
+
 // 本体のステ
 export const bodyStats = (profile) => Object.fromEntries(STAT_KEYS.map(k => [k, profile?.[k] || 0]))
 // いまの職業のクラスのステ
@@ -81,7 +87,12 @@ export const statBreakdown = (profile, inventory) => {
   const armorAgi = Math.round(base.agi * armor.agiPct / 100)
   const total = Object.fromEntries(STAT_KEYS.map(k => [k, base[k] + big[k]]))
   total.agi += armorAgi
-  return { body, job, gear, asc, armor, armorAgi, total, power: calcPower(total) }
+  // ★防具のセット能力の3部位（能力値+%）は、ここまでの合計に掛ける（上がったぶんは set に出す）
+  const sets = setsOf(profile, inventory)
+  const sp = setStatPctOf(sets)
+  const set = Object.fromEntries(STAT_KEYS.map(k => [k, Math.round(total[k] * (sp[k] || 0) / 100)]))
+  for (const k of STAT_KEYS) total[k] += set[k]
+  return { body, job, gear, asc, armor, armorAgi, set, sets, total, power: calcPower(total) }
 }
 export const totalStats = (profile, inventory) => statBreakdown(profile, inventory).total
 
@@ -117,5 +128,7 @@ export const toFighter = (profile, inventory) => {
     // ★パッシブはこの版の名簿から渡す（一次職だけ1つ・初期職は無し）。渡さないと戦闘エンジンが今のⅡの名簿を
     //   職業名で引き、狂戦士・竜騎士など同じ名前の職業に今のⅡのパッシブが付いてしまう
     passives: passiveOf(profile?.class) ? [passiveOf(profile?.class)] : [],
+    // ★防具のセット能力（2部位・4部位の戦闘の効果。3部位の能力値は stats に入っている）。無ければ null
+    setFx: setFxOf(bd.sets),
   }
 }

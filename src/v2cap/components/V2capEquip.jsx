@@ -9,6 +9,8 @@ import { plusOf } from '../lib/smith.js'
 import { DROP_CHANCE } from '../lib/sortie.js'
 import { statLine, nameColor, useGearRows } from './v2capGearView.js'
 import { PlusTag, GearFilterBar } from './v2capGear.jsx'
+import { V2Tip } from '../../v2/components/V2ItemTip.jsx'
+import { isSetPiece, setLabel, setTierText, armorSetOf, SET_TIERS } from '../lib/armorSets.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — 装備（着ける・外すと持ち物）
@@ -104,6 +106,17 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
                     {item.name}<PlusTag inv={inv} />
                     <span style={{ color: TEXT.sub, fontSize:'10px', marginLeft:'5px' }}>{kindLabel(item)}</span>
                     {effect && <span style={{ color:'#88ddaa', fontSize:'10px', marginLeft:'5px' }}>{effect}</span>}
+                    {/* 防具のセット能力（2026-10-14）：レア以上の防具はどのセットか。カーソルで2・3・4部位の中身 */}
+                    {isSetPiece(item) && (
+                      <V2Tip width="270px" color="#88ddaa" style={{ color:'#88ddaa', fontSize:'10px', marginLeft:'5px', borderBottom:'1px dotted #88ddaa' }}
+                        body={<>
+                          <div style={{ color:'#88ddaa' }}>セット：{setLabel(item.area, item.line)}</div>
+                          {SET_TIERS.map(n => <div key={n}>{n}部位：{setTierText(armorSetOf(item.area), n, item.line)}</div>)}
+                          <div style={{ color:'#7fa6d0', marginTop:'3px' }}>同じエリア・同じ系統（重鎧／軽装）のレア以上の防具を2部位以上着けると発動</div>
+                        </>}>
+                        セット：{setLabel(item.area, item.line)}
+                      </V2Tip>
+                    )}
                     {isWorn && <span style={{ color:'#44aaff', fontSize:'10px', marginLeft:'5px' }}>装備中</span>}
                   </span>
                   {/* 2026-10-14 ユーザー指示「LV〇は『要求レベル〇LV』にして」 */}

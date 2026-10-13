@@ -120,7 +120,8 @@ export const inflict = (ail, key, opt = {}) => {
     case 'poison': {
       // 旧版と同じ：すでに毒なら入らない
       if (ail.poison?.turns > 0) return false
-      ail.poison = { turns: POISON_TURNS, rate: POISON_RATE, cap: opt.cap }
+      // ★opt.rate … 付ける側が1刻みの割合を上げられる（v2cap の防具のセット能力「瘴気」＝毒のダメージ+20%）
+      ail.poison = { turns: POISON_TURNS, rate: opt.rate ?? POISON_RATE, cap: opt.cap }
       return true
     }
     case 'silence': {
