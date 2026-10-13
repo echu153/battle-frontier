@@ -16,7 +16,7 @@ import { createParticles } from './fxParticles.js'
 import { CountUp } from './casinoParts.jsx'
 import { JP_BOLD } from './casinoStyle.js'
 import { FORTUNE_BY_NAME } from '../lib/tree.js'
-import { revelationStyleOf, TREE_ART, ART_PRAY, ART_DESCEND, ART_BY_FORTUNE, artFilterOf } from '../lib/fxStyle.js'
+import { revelationStyleOf, TREE_ART, ART_PRAY, ART_DESCEND, ART_BY_FORTUNE, artFilterOf, MINCHO } from '../lib/fxStyle.js'
 
 const KF = `
 @keyframes rvFadeIn { from { opacity: 0 } to { opacity: 1 } }
@@ -34,7 +34,6 @@ const KF = `
 @keyframes rvBolt { 0%,100% { opacity: 0 } 5%,18% { opacity: 1 } 10% { opacity: 0.2 } }
 @keyframes rvRays { from { transform: translate(-50%,-50%) rotate(0deg) } to { transform: translate(-50%,-50%) rotate(360deg) } }
 `
-const MINCHO = "'Yu Mincho','YuMincho','Hiragino Mincho ProN','Noto Serif JP','MS PMincho',serif"
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 const seeded = (seed) => { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }
 

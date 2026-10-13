@@ -88,3 +88,24 @@ test('【確定】天啓の背景はユーザーの宝樹の絵：ファイル�
   assert.equal(artFilterOf({ b: 1, s: 1, h: 0 }), 'brightness(1) saturate(1)')
   assert.equal(artFilterOf({ b: 0.3, s: 0.4, h: 300 }), 'brightness(0.3) saturate(0.4) hue-rotate(300deg)')
 })
+
+// 【確定】2026-10-13 ユーザー指示「ユグレシアの宝樹、今こんな感じでパッとしないから、良い感じにしてほしい」：
+//   画面の上に宝樹の絵を敷き、今日の運勢で明るさを変える（天啓の半分だけ・色相は回さない）。説明文はユーザーの文
+test('【確定】宝樹の画面：絵の明るさは運勢しだい（大吉がいちばん明るい）・暗くしすぎない・色相は回さない', async () => {
+  const { stageArtOf, STAGE_IDLE } = await import('./fxStyle.js')
+  assert.deepEqual(stageArtOf(null), STAGE_IDLE)
+  const b = (n) => stageArtOf(n).b
+  assert.ok(b('大吉') > b('中吉') && b('中吉') > b('小吉') && b('小吉') > b('吉') && b('吉') > b('末吉') && b('末吉') > b('凶') && b('凶') > b('大凶'))
+  for (const n of FORTUNE_NAMES) {
+    assert.equal(stageArtOf(n).h, 0, `${n}：色相は回さない`)
+    assert.ok(stageArtOf(n).b >= 0.6, `${n}：画面は暗くしすぎない`)
+  }
+})
+
+test('【確定】宝樹の画面の説明文はユーザーの文（前の「LV10なら 吉で EXP +30…10回出撃したくらい」は出さない）', () => {
+  const src = readFileSync(new URL('../components/V2capTree.jsx', import.meta.url), 'utf8')
+  assert.ok(src.includes('1日1回だけ祈れます。宝樹の返す言葉（大凶〜大吉）で、もらえる経験値が変わります'))
+  assert.ok(src.includes('（AM 5：00更新）'))
+  assert.ok(!src.includes('日付が変わるのは日本時間の5時です'))
+  assert.ok(!/吉で <span/.test(src) && !src.includes('で10回出撃したくらい）'), '吉と大吉のEXPの例は出さない')
+})

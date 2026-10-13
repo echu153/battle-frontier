@@ -61,3 +61,15 @@ export const ART_BY_FORTUNE = {
 }
 export const artFilterOf = (a) => `brightness(${a.b}) saturate(${a.s})${a.h ? ` hue-rotate(${a.h}deg)` : ''}`
 export const FORTUNE_NAMES = FORTUNES.map(f => f.name)
+
+// ===== 宝樹の画面（祈る前・祈ったあと）=====
+// 【確定】2026-10-13 ユーザー指示「ユグレシアの宝樹、今こんな感じでパッとしないから、良い感じにしてほしい」：
+//   画面の上に宝樹の絵（TREE_ART）を大きく敷く。今日の運勢で絵の明るさを変える＝天啓の ART_BY_FORTUNE を半分だけ効かせる
+//   （画面は読み物なので暗くしすぎない・色相は回さない＝凶と大凶は上に紫／赤黒の色を重ねる）。まだ祈っていない日は STAGE_IDLE
+export const MINCHO = "'Yu Mincho','YuMincho','Hiragino Mincho ProN','Noto Serif JP','MS PMincho',serif"
+export const STAGE_IDLE = { b: 0.95, s: 1.05, h: 0 }
+const half = (v) => Math.round((0.5 + v * 0.5) * 100) / 100
+export const stageArtOf = (fortune) => {
+  const a = ART_BY_FORTUNE[fortune]
+  return a ? { b: half(a.b), s: half(a.s), h: 0 } : STAGE_IDLE
+}
