@@ -16,7 +16,7 @@ import { SHRINE_FAIRY_NAME, SHRINE_PCT, SHRINE_FIGHTS, SHRINE_EXP_TENTHS, SHRINE
 import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV, scrapAreaOf, enhanceScrapOf, ENHANCE_GOLD_ONLY_RARITY } from './smith.js'
 import { DAILY_SORTIES, DAILY_GOLD_PER_LV, DAY_RESET_HOUR } from './daily.js'
 import { AVATAR_PRESETS, AVATAR_FILE_RE } from './avatar.js'
-import { FORTUNES, multTenthsOf } from './tree.js'
+import { FORTUNES, multTenthsOf, STREAK_PCT } from './tree.js'
 import {
   GOLD_PER_MEDAL, EXCHANGE_MAX, SLOT_BET, SLOT_RATES, SLOT_TOTAL, SLOT_ROLES, SLOT_ROLE_BY_KEY, SLOT_MISS_PAY, SLOT_NORMAL_AT, SLOT_NORMAL_CZ,
   SLOT_CZ_GAMES, SLOT_CZ_WIN, SLOT_AT_GAMES, SLOT_PREMIUM_GAMES, SLOT_AT_ADD, SLOT_AT_TOKU, SLOT_TOKU_GAMES, SLOT_TOKU_ADDS, SLOT_ORDERS, slotArrayOf,
@@ -382,9 +382,10 @@ test('【確定】ユグレシアの宝樹：運勢の並び・出やすさ・�
   assert.ok(f.includes(`c_weight constant int[]  := array[${FORTUNES.map(x => x.weight).join(', ')}];`), '出やすさがJSと同じ')
   assert.ok(f.includes(`c_mult   constant int[]  := array[${FORTUNES.map(multTenthsOf).join(', ')}];`), '倍率がJSと同じ')
   // 2026-10-12「デイリーと同じにする」：推奨の場所で10回出撃したくらい × 運勢の倍率（10分率）・切り上げ（tree.js の prayExpOf）
-  assert.ok(f.includes('v_exp    := (public.v2cap_ten_sortie_exp(v_lv) * c_mult[v_idx] + 9) / 10;'), '基準と切り上げがJSと同じ')
+  //   ＋【確定】2026-10-14 毎日祈ったときのボーナス：× 連続日数の倍率（百分率）
+  assert.ok(f.includes('v_exp    := (public.v2cap_ten_sortie_exp(v_lv) * c_mult[v_idx] * v_spct + 999) / 1000;'), '基準と切り上げがJSと同じ')
   assert.ok(!/v_permil|v2cap_need\(/.test(f), '前の「必要EXPの%」は使わない')
-  assert.match(f, /returning p\.lv, p\.pray_count, p\.pray_log into v_lv, v_count, v_log;/, '祈った時点のLV')
+  assert.match(f, /returning p\.lv, p\.pray_count, p\.pray_log, p\.pray_streak into v_lv, v_count, v_log, v_streak;/, '祈った時点のLV')
   assert.ok(f.includes('v_res := public.v2cap_apply_exp(v_uid, v_exp);'), 'EXPは戦闘と同じ扱い')
   // 1日1回：確認と記録を1文で（日本時間の5時で切り替わる）。【確定】2026-10-13「開発中祈りは何回でも」＝管理者（is_admin）は日付を見ない
   assert.ok(f.includes("< ((now()           at time zone 'Asia/Tokyo') - interval '5 hours')::date)"))
@@ -392,6 +393,20 @@ test('【確定】ユグレシアの宝樹：運勢の並び・出やすさ・�
   assert.match(f, /where p\.id = v_uid\s+and \(v_admin\b[^\n]*\n\s+or p\.last_pray_at is null/, '管理者は日付の確認を飛ばす（一般の人は1日1回）')
   assert.ok(!/gold/.test(f), 'ごほうびは経験値だけ（ユーザー決定）')
   assert.ok(SQL.includes('grant execute on function public.v2cap_pray() to authenticated;'))
+})
+
+test('【確定】2026-10-14 宝樹の毎日のボーナス：連続日数の倍率がJSと同じ・昨日なら+1／今日ならそのまま／それより前は1（日本時間5時区切り）', () => {
+  assert.ok(SQL.includes('alter table public.v2cap_profiles add column if not exists pray_streak int not null default 0;'))
+  const f = fnBody('v2cap_pray')
+  assert.ok(f.includes(`c_streak constant int[]  := array[${STREAK_PCT.join(', ')}];`), '1〜10日目の倍率がJSと同じ')
+  assert.ok(f.includes('v_spct   := c_streak[least(v_streak, array_length(c_streak, 1))];'), '11日目からは10日目と同じ')
+  const day = (col) => `((${col} at time zone 'Asia/Tokyo') - interval '5 hours')::date`
+  const c = f.replace(/\s+/g, ' ')
+  assert.ok(c.includes('when p.last_pray_at is null then 1'), 'はじめては1日目')
+  assert.ok(c.includes(`when ${day('p.last_pray_at')} = ${day('now()')} then greatest(p.pray_streak, 1)`), '同じ日はそのまま（管理者がもう一度）')
+  assert.ok(c.includes(`when ${day('p.last_pray_at')} = ${day('now()')} - 1 then greatest(p.pray_streak, 1) + 1`), '昨日なら+1')
+  assert.ok(c.includes('else 1 end,'), '途切れたら1日目から')
+  assert.ok(f.includes("'streak', v_streak, 'streak_pct', v_spct,"), '画面へ返す')
 })
 
 test('【確定】モンスター図鑑：討伐数は勝ったときだけサーバーが数える。敵の表につながない（流し直しても消えない）。自分の分だけ読める', () => {

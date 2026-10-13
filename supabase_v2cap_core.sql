@@ -2932,6 +2932,8 @@ alter table public.v2cap_profiles add column if not exists last_pray_at timestam
 alter table public.v2cap_profiles add column if not exists last_fortune text;
 alter table public.v2cap_profiles add column if not exists pray_count int not null default 0;
 alter table public.v2cap_profiles add column if not exists pray_log jsonb not null default '[]'::jsonb;
+-- ★2026-10-14 毎日祈ったときのボーナス：何日続けて祈っているか（日本時間の5時区切り・1日でも空くと1に戻る）。0＝まだ数えていない
+alter table public.v2cap_profiles add column if not exists pray_streak int not null default 0;
 -- ★2026-10-13 安息の祠（§5・src/v2cap/lib/shrine.js）：祠のある場所（null＝祠にいない）・最深部までの残りの戦闘の数・全部の数。キャラは消さない
 alter table public.v2cap_profiles add column if not exists shrine_spot int;
 alter table public.v2cap_profiles add column if not exists shrine_left int not null default 0;
@@ -4303,12 +4305,16 @@ grant execute on function public.v2cap_set_avatar(text) to authenticated;
 --   ・1日1回（日本時間の5時で切り替わる）
 --   ・【確定】2026-10-13 ユーザー指示「開発中祈りは何回でもできるようにして」：**管理者（is_admin）は何回でも祈れる**（日付の確認を飛ばす）。
 --     今はこの版に管理者しか入れないので、開発中はだれでも何回でも。公開したあとも一般の人は1日1回のまま（前は「管理者も1日1回」）
+--   ・【確定】2026-10-14 ユーザー指示「毎日祈ってたらもらえる経験値が少しだけ増えるようにして。2日目で1.1倍、10日目で2倍になるように。
+--     途切れたらやり直し、更新タイミングはAM5時」＋ユーザーが選んだ：毎日+0.1倍・10日目だけ+0.2倍（c_streak）・11日目からは2倍のまま。
+--     前に祈った日が 昨日＝連続+1／今日＝そのまま（管理者が同じ日にもう一度）／それより前・はじめて＝1。0（数える前のキャラ）は前の日を1日目とみなす
 create or replace function public.v2cap_pray()
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   c_names  constant text[] := array['大吉', '中吉', '小吉', '吉', '末吉', '凶', '大凶'];
   c_weight constant int[]  := array[5, 10, 15, 25, 20, 15, 10];
   c_mult   constant int[]  := array[30, 20, 15, 10, 7, 4, 2];   -- 運勢の倍率（10分率）
+  c_streak constant int[]  := array[100, 110, 120, 130, 140, 150, 160, 170, 180, 200];   -- 連続1〜10日目の倍率（百分率）。11日目からは10日目と同じ
   c_keep   constant int    := 10;                               -- 履歴として残す件数
   v_uid   uuid := auth.uid();
   v_roll  int;
@@ -4319,6 +4325,8 @@ declare
   v_exp   int;
   v_count int;
   v_log   jsonb;
+  v_streak int;
+  v_spct  int;
   v_res   jsonb := null;
   v_admin boolean := coalesce((select pr.is_admin from public.profiles pr where pr.id = auth.uid()), false);
   i       int;
@@ -4339,6 +4347,14 @@ begin
      set last_pray_at = now(),
          last_fortune = v_name,
          pray_count   = p.pray_count + 1,
+         -- 連続日数（右辺の p.last_pray_at は祈る前の値）
+         pray_streak  = case
+           when p.last_pray_at is null then 1
+           when ((p.last_pray_at at time zone 'Asia/Tokyo') - interval '5 hours')::date
+              = ((now()           at time zone 'Asia/Tokyo') - interval '5 hours')::date     then greatest(p.pray_streak, 1)
+           when ((p.last_pray_at at time zone 'Asia/Tokyo') - interval '5 hours')::date
+              = ((now()           at time zone 'Asia/Tokyo') - interval '5 hours')::date - 1 then greatest(p.pray_streak, 1) + 1
+           else 1 end,
          -- 新しいものを先頭に積んで、c_keep 件で切る
          pray_log     = (
            select coalesce(jsonb_agg(s.e order by s.ord), '[]'::jsonb)
@@ -4360,7 +4376,7 @@ begin
           or p.last_pray_at is null
           or ((p.last_pray_at at time zone 'Asia/Tokyo') - interval '5 hours')::date
            < ((now()           at time zone 'Asia/Tokyo') - interval '5 hours')::date)
-   returning p.lv, p.pray_count, p.pray_log into v_lv, v_count, v_log;
+   returning p.lv, p.pray_count, p.pray_log, p.pray_streak into v_lv, v_count, v_log, v_streak;
 
   if not found then
     if not exists (select 1 from public.v2cap_profiles where id = v_uid) then
@@ -4369,12 +4385,16 @@ begin
     return jsonb_build_object('ok', false, 'error', '今日はもう祈りました（日本時間の5時に変わります）');
   end if;
 
-  -- 経験値：祈った時点のLVの推奨の場所で10回出撃したくらい × 倍率（10分率）。切り上げは整数で（tree.js の prayExpOf と同じ）
+  -- 経験値：祈った時点のLVの推奨の場所で10回出撃したくらい × 運勢の倍率（10分率）× 連続日数の倍率（百分率）。
+  --   切り上げは整数で（tree.js の prayExpOf と同じ）
   v_lv     := greatest(1, coalesce(v_lv, 1));
-  v_exp    := (public.v2cap_ten_sortie_exp(v_lv) * c_mult[v_idx] + 9) / 10;
+  v_streak := greatest(1, coalesce(v_streak, 1));
+  v_spct   := c_streak[least(v_streak, array_length(c_streak, 1))];
+  v_exp    := (public.v2cap_ten_sortie_exp(v_lv) * c_mult[v_idx] * v_spct + 999) / 1000;
   if v_exp > 0 then v_res := public.v2cap_apply_exp(v_uid, v_exp); end if;
 
   return jsonb_build_object('ok', true, 'fortune', v_name, 'lv', v_lv, 'exp', v_exp,
+                            'streak', v_streak, 'streak_pct', v_spct,
                             'pray_count', v_count, 'pray_log', v_log, 'level', v_res);
 end;
 $$;

@@ -15,7 +15,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createParticles } from './fxParticles.js'
 import { CountUp } from './casinoParts.jsx'
 import { JP_BOLD } from './casinoStyle.js'
-import { FORTUNE_BY_NAME } from '../lib/tree.js'
+import { FORTUNE_BY_NAME, streakText } from '../lib/tree.js'
 import { revelationStyleOf, TREE_ART, ART_PRAY, ART_DESCEND, ART_BY_FORTUNE, artFilterOf, MINCHO } from '../lib/fxStyle.js'
 
 const KF = `
@@ -320,6 +320,8 @@ export default function V2capRevelationFx({ result, onClose }) {
           <div style={{ color:'#ffcc00', fontSize:22, fontWeight:'bold', fontFamily: JP_BOLD, textShadow:'0 0 10px #ffb30088' }}>
             EXP +<CountUp value={Number(result.exp) || 0} start={0} ms={900} />
           </div>
+          {/* 毎日祈ったときのボーナス（2026-10-14） */}
+          {result.streak_pct > 100 && <div style={{ color:'#e9d39a', fontSize:12, marginTop:2 }}>連続{result.streak}日目のボーナス ×{streakText(result.streak_pct)}</div>}
           {result.level?.level_ups > 0 && <div style={{ color:'#44ff88', fontSize:13, marginTop:4 }}>🆙 LEVEL UP！ LV{result.level.lv}</div>}
           {result.level?.job_ups > 0 && <div style={{ color:'#ffcc00', fontSize:12, marginTop:2 }}>⭐ CLASS LEVEL UP！</div>}
           <button onClick={onClose} style={{ marginTop:12, minWidth:180, background:'#03201a', border:'1px solid #44dd99', color:'#44dd99', padding:'10px', cursor:'pointer', fontFamily:'monospace', fontSize:13 }}>
