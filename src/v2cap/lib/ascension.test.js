@@ -11,7 +11,7 @@ import { ASC_LAYOUT } from './ascLayout.js'
 import {
   ASC_DIRS, ASC_SHAPE, ASC_UP_DEFAULT, ASC_SKILL_UP, ASC_COUNT_UP, ASC_CLASSES, ASC_RESET_GOLD_PER_LV,
   treeOf, treeSizeOf, areaStatsOf, statCountsOf, ascKindOf, ascUpOf, ascendSkill, splitUp, ascStateOf, apTotalOf, apSpentOf, apLeftOf,
-  ascEffectsOf, ascPctGain, ascendError, ascResetGoldOf, nodeLines, ascSkillDetail, routeTo, mpNodesOf,
+  ascEffectsOf, ascPctGain, ascendError, ascResetGoldOf, nodeLines, ascSkillDetail, routeTo, mpNodesOf, ASC_STAT_COLOR,
 } from './ascension.js'
 
 const prof = (cls, jlv, asc = {}, over = {}) => ({
@@ -312,5 +312,16 @@ test('スキルの名簿のどの攻撃・回復・バフにも種類が決ま�
     const k = ascKindOf(s)
     if (isPassive(s)) assert.equal(k, null)
     else assert.ok(['attack', 'heal', 'buff', 'count'].includes(k), `${s.name}：${s.kind}`)
+  }
+})
+
+test('【確定】盤面のステの色は8色とも見分けられる（マスの中に文字を出さず色でステを見分ける・2026-10-14 ユーザー指示）', () => {
+  assert.deepEqual(Object.keys(ASC_STAT_COLOR).sort(), [...STAT_KEYS].sort())
+  const rgb = (h) => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16))
+  const dist = (a, b) => Math.hypot(...rgb(a).map((v, i) => v - rgb(b)[i]))
+  const cols = Object.entries(ASC_STAT_COLOR)
+  for (let i = 0; i < cols.length; i++) {
+    for (let j = i + 1; j < cols.length; j++) assert.ok(dist(cols[i][1], cols[j][1]) >= 60, `${cols[i][0]} と ${cols[j][0]} が近すぎる`)
+    assert.ok(dist(cols[i][1], '#5ce1e6') >= 60, `${cols[i][0]} とスキルマスの水色が近すぎる`)
   }
 })

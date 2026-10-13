@@ -1,12 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import V2Modal from '../../v2/components/V2Modal.jsx'
 import { box, miniBtn, TEXT } from '../../v2/components/v2ui.js'
 import { STAT_DEFS, STAT_KEYS } from '../../v2/lib/stats.js'
 import { CLASSES, jobOf, jobMaxOf, stageColorOf, stageLabelOf } from '../lib/jobs.js'
 import {
-  treeOf, treeSizeOf, ascStateOf, apTotalOf, apSpentOf, ascEffectsOf, nodeLines, nodeText, ascendError, ascResetGoldOf,
-  routeTo,
+  treeOf, treeSizeOf, ascStateOf, apTotalOf, apSpentOf, ascEffectsOf, ascSkillDetail, ascendError, ascResetGoldOf, routeTo, ASC_STAT_COLOR,
 } from '../lib/ascension.js'
 
 // ============================================================
@@ -14,56 +13,104 @@ import {
 //   【確定】2026-10-13 ユーザー指示（AION2 のダエバニオンを参考に）＋選んだこと（設計 §4-2）：
 //   ・CLASS LVが1上がるごとにAPを1。APでマスを開くと、ステや技が強くなる（どのマスも1AP）
 //   ・職業ごとの盤面で、効くのはその職業でいる間だけ
-//   ・同じ日に「もっとツリーっぽく」「アイオン2みたいにまばらに配置（決まった道がなく、欲しい能力までどのルートで届かせるか）」：
+//   ・「もっとツリーっぽく」「アイオン2みたいにまばらに配置（決まった道がなく、欲しい能力までどのルートで届かせるか）」：
 //     起点から4方向に枝分かれした木を線でつないで描く。起点か開いたマスにつながったマスだけ開ける。
-//     小マスのステは盤面全体に混ぜてある（ユーザーが選んだ）＝方向の名前は出さない
 //     マスを押すと、いま開いている所からのいちばん近いルートが光り、「このルートで開く（◯AP）」で間のマスもまとめて開く
 //     （別のルートを通りたいときは、通りたいマスを1つずつ押して開く）
+//   ・【確定】2026-10-14 ユーザー指示「文字が枠からはみ出ちゃってる、クリックしたらどの能力が上がるかわかるようにして、
+//     どのステータス上がるかは色で判断できるようにしたい」「取得したマスは発光する感じ」「選択した後マスが光る演出も欲しい、そこまで凝らなくていい」：
+//     マスの中に文字は出さない（ステは色・スキルは水色の丸・大マスはひし形）。押すと下の欄に「STR+3（腕力）」のように出す。
+//     開いたマスは光る。開いたときは、開いたマスが順に光る短い演出（選んだマスはゆっくり明滅）
 //   ・振り直しは LV×100 Gold（v2cap_ascend_reset）。開くのはサーバー（v2cap_ascend）
 //   数え方は src/v2cap/lib/ascension.js（戦闘・ステの内訳と同じもの）
 // ============================================================
-const SKILL_C = '#5ce1e6'
-const BIG_C = '#ff88cc'
+
+const SKILL_C = '#5ce1e6'   // スキルマス（水色）
 const GOLD = '#ffcc00'
-// ★ルートは白の点線（腕力＝STRの黄色と見分けるため）
-const ROUTE = '#ffffff'
-const colorOf = (node) => (node.type === 'skill' ? SKILL_C : node.type === 'big' ? BIG_C : node.type === 'start' ? GOLD : STAT_DEFS[node.stat]?.color || '#88ccff')
+const LINK_ON = '#ffe7a3'   // 開いたマスどうしの線（光る）
+const ROUTE = '#ffffff'     // 選んだルート（白の点線）
+const colorOf = (node) => (node.type === 'skill' ? SKILL_C : node.type === 'start' ? GOLD : ASC_STAT_COLOR[node.stat] || '#88ccff')
 // 盤の座標 → 画面の座標（1方向目＝上・時計回りに 右・下・左）
 const sx = (n) => n.y
 const sy = (n) => -n.x
 // 「大きく」のときの1マスの幅の最小（これより狭い画面では盤を横にスクロール）。「全体」は画面の幅に収める
-const CELL_MIN_PX = 42
-const short = (s, n = 4) => ([...s].length > n ? `${[...s].slice(0, n).join('')}…` : s)
+const CELL_MIN_PX = 40
+const FLASH_STEP_MS = 90    // 開いたときの演出：1マスごとの遅れ
 
-// マス1つ（SVG）。owned＝開いた／onRoute＝選んだルートに入っている／reach＝起点か開いたマスのとなり
-function NodeShape({ node, owned, onRoute, reach, selected, onPick }) {
+// 押したマスの文（下の欄）。ステは「STR+3（腕力）」
+const statText = (stat, v, pct = false) => `${STAT_DEFS[stat]?.label || stat}+${v}${pct ? '%' : ''}（${STAT_DEFS[stat]?.jp || ''}）`
+const nodeInfo = (node) => {
+  if (!node) return ''
+  if (node.type === 'start') return '起点'
+  if (node.type === 'stat') return statText(node.stat, node.amount)
+  if (node.type === 'big') return `大マス：${statText(node.stat, node.pct, true)}`
+  return `スキル：${node.skill}　${ascSkillDetail(node.skill)}`
+}
+
+// 演出（CSS）。動きを減らす設定の端末では止める
+const CSS = `
+.asc-node { transform-box: fill-box; transform-origin: center; }
+@media (prefers-reduced-motion: no-preference) {
+  .asc-sel { transform-box: fill-box; transform-origin: center; animation: ascSel 1.4s ease-in-out infinite; }
+  .asc-pop { animation: ascPop 0.7s ease-out both; }
+  .asc-ring { transform-box: fill-box; transform-origin: center; animation: ascRing 0.9s ease-out both; }
+}
+@keyframes ascSel { 0%, 100% { opacity: 0.95; transform: scale(1); } 50% { opacity: 0.35; transform: scale(1.18); } }
+@keyframes ascPop { 0% { transform: scale(1); filter: brightness(1); } 35% { transform: scale(1.45); filter: brightness(2.4); } 100% { transform: scale(1); filter: brightness(1); } }
+@keyframes ascRing { 0% { transform: scale(0.4); opacity: 0; } 12% { opacity: 1; } 100% { transform: scale(2.4); opacity: 0; } }
+`
+
+// 4つの角の星（スキルマスの中・起点）
+const sparkle = (x, y, r) => `M ${x} ${y - r} L ${x + r * 0.28} ${y - r * 0.28} L ${x + r} ${y} L ${x + r * 0.28} ${y + r * 0.28} L ${x} ${y + r} L ${x - r * 0.28} ${y + r * 0.28} L ${x - r} ${y} L ${x - r * 0.28} ${y - r * 0.28} Z`
+const star8 = (x, y, r1, r2) => Array.from({ length: 16 }, (_, i) => {
+  const a = (Math.PI * i) / 8 - Math.PI / 2
+  const r = i % 2 === 0 ? r1 : r2
+  return `${(x + Math.cos(a) * r).toFixed(3)},${(y + Math.sin(a) * r).toFixed(3)}`
+}).join(' ')
+
+// マス1つ（SVG・文字は出さない）。owned＝開いた／onRoute＝選んだルートに入っている／reach＝起点か開いたマスのとなり
+function NodeShape({ node, owned, onRoute, reach, selected, flash, onPick }) {
   const c = colorOf(node)
   const x = sx(node), y = sy(node)
-  const stroke = owned ? c : onRoute ? ROUTE : reach ? `${c}aa` : '#2a3a55'
-  const fill = owned ? `${c}33` : '#000818'
-  const text = owned ? c : onRoute ? '#ffffff' : reach ? '#b8c8dc' : '#5a6a85'
-  const sw = selected ? 0.07 : 0.04
-  const dash = onRoute && !owned ? '0.12 0.08' : undefined
-  const [l1] = nodeLines(node)
+  const dim = !owned && !reach && !onRoute   // 遠いマス（まだ届かない）は少し暗く
+  const fill = owned ? c : `${c}2e`
+  const stroke = owned ? '#ffffff' : c
+  const glow = owned ? (node.type === 'big' ? 'url(#ascGlowBig)' : 'url(#ascGlow)') : undefined
   let shape
   if (node.type === 'start') {
-    shape = <circle cx={x} cy={y} r={0.4} fill="#1a1400" stroke={GOLD} strokeWidth={0.06} />
+    shape = <polygon points={star8(x, y, 0.42, 0.2)} fill={GOLD} stroke="#fff6cc" strokeWidth={0.03} filter="url(#ascGlowBig)" />
   } else if (node.type === 'skill') {
-    shape = <circle cx={x} cy={y} r={0.43} fill={fill} stroke={stroke} strokeWidth={sw} strokeDasharray={dash} />
+    shape = (
+      <g filter={glow}>
+        <circle cx={x} cy={y} r={0.33} fill={fill} stroke={stroke} strokeWidth={owned ? 0.04 : 0.05} strokeOpacity={owned ? 0.9 : 0.85} />
+        <path d={sparkle(x, y, 0.2)} fill={owned ? '#ffffff' : c} opacity={owned ? 0.95 : 0.8} />
+      </g>
+    )
   } else if (node.type === 'big') {
-    const s = 0.5
-    shape = <polygon points={`${x},${y - s} ${x + s},${y} ${x},${y + s} ${x - s},${y}`} fill={fill} stroke={stroke} strokeWidth={sw + 0.02} strokeDasharray={dash} />
+    const s = 0.46
+    const t = 0.2
+    shape = (
+      <g filter={glow}>
+        <polygon points={`${x},${y - s} ${x + s},${y} ${x},${y + s} ${x - s},${y}`} fill={fill} stroke={stroke} strokeWidth={owned ? 0.05 : 0.06} />
+        <polygon points={`${x},${y - t} ${x + t},${y} ${x},${y + t} ${x - t},${y}`} fill={owned ? '#ffffff' : c} opacity={owned ? 0.9 : 0.75} />
+      </g>
+    )
   } else {
-    shape = <rect x={x - 0.42} y={y - 0.26} width={0.84} height={0.52} rx={0.08} fill={fill} stroke={stroke} strokeWidth={sw} strokeDasharray={dash} />
+    shape = <rect x={x - 0.27} y={y - 0.27} width={0.54} height={0.54} rx={0.1} fill={fill} stroke={stroke}
+      strokeWidth={owned ? 0.04 : 0.05} strokeOpacity={owned ? 0.85 : 0.85} filter={glow} />
   }
-  const label = node.type === 'start' ? '★' : node.type === 'skill' ? short(node.skill) : l1
-  const fs = node.type === 'start' ? 0.4 : node.type === 'skill' ? ([...label].length > 3 ? 0.17 : 0.21) : node.type === 'big' ? 0.19 : 0.21
+  const ring = node.type === 'big' ? 0.62 : node.type === 'skill' ? 0.48 : 0.44
   return (
-    <g onClick={() => onPick(node.id)} style={{ cursor:'pointer' }}>
-      {selected && <circle cx={x} cy={y} r={0.56} fill="none" stroke="#ffffff" strokeWidth={0.03} opacity={0.7} />}
-      {shape}
-      <text x={x} y={y} fill={node.type === 'start' ? GOLD : text} fontSize={fs} textAnchor="middle" dominantBaseline="central"
-        style={{ fontFamily:'monospace', pointerEvents:'none', fontWeight: node.type === 'big' ? 'bold' : 'normal' }}>{label}</text>
+    <g onClick={() => onPick(node.id)} style={{ cursor: node.type === 'start' ? 'default' : 'pointer' }} opacity={dim ? 0.55 : 1} data-node={node.id}>
+      {/* PCはマウスを乗せると中身が出る（マスの中に文字は出さないため） */}
+      <title>{nodeInfo(node)}{owned ? '（開いています）' : ''}</title>
+      {/* 押せる広さはマス目いっぱい（小さいマスでも押しやすく） */}
+      <rect x={x - 0.5} y={y - 0.5} width={1} height={1} fill="transparent" />
+      {onRoute && !owned && <circle cx={x} cy={y} r={ring} fill="none" stroke={ROUTE} strokeWidth={0.035} strokeDasharray="0.1 0.07" />}
+      {selected && <circle className="asc-sel" cx={x} cy={y} r={ring + 0.06} fill="none" stroke="#ffffff" strokeWidth={0.045} />}
+      <g className={flash != null ? 'asc-node asc-pop' : 'asc-node'} style={flash != null ? { animationDelay: `${flash}ms` } : undefined}>{shape}</g>
+      {flash != null && <circle className="asc-ring" cx={x} cy={y} r={0.36} fill="none" stroke={c} strokeWidth={0.06}
+        style={{ animationDelay: `${flash}ms` }} />}
     </g>
   )
 }
@@ -75,8 +122,12 @@ export default function V2capAscension({ prof, onProfile }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [msg, setMsg] = useState('')
-  // true＝大きく（文字が読める大きさ・狭い画面は横にスクロール）／false＝全体（画面の幅に収める）。スマホは全体から
+  // true＝大きく（狭い画面は横にスクロール）／false＝全体（画面の幅に収める）。スマホは全体から
   const [zoom, setZoom] = useState(() => typeof window === 'undefined' || window.innerWidth >= 600)
+  // 開いたときの演出：{ マスの番号: 遅れ(ms) }
+  const [flash, setFlash] = useState({})
+  const flashTimer = useRef(null)
+  useEffect(() => () => clearTimeout(flashTimer.current), [])
 
   const tree = treeOf(cls)
   // 見られる職業＝就いたことのある職業といまの職業（並びは神殿と同じ）
@@ -92,10 +143,10 @@ export default function V2capAscension({ prof, onProfile }) {
   const isCur = cls === prof.class
   const eff = ascEffectsOf(prof, cls)
   const resetGold = ascResetGoldOf(prof.lv)
-  const flatText = STAT_KEYS.filter(k => eff.flat[k] > 0).map(k => `${STAT_DEFS[k].label}+${eff.flat[k]}`).join('・')
-  const pctText = Object.entries(eff.pct).map(([k, v]) => `${STAT_DEFS[k]?.label || k}+${v}%`).join('・')
   const skillNodes = tree.nodes.filter(n => n.type === 'skill' && open.has(n.id))
   const allSkillNodes = tree.nodes.filter(n => n.type === 'skill')
+  // 凡例に出すステ＝この盤面にあるステ（ステの並び）
+  const boardStats = STAT_KEYS.filter(k => tree.nodes.some(n => n.stat === k))
 
   const selNode = sel != null ? tree.byId[sel] : null
   const route = selNode ? (routeTo(cls, state, sel) || []) : []
@@ -114,17 +165,22 @@ export default function V2capAscension({ prof, onProfile }) {
   const openRoute = async () => {
     const err = ascendError(prof, cls, route)
     if (err) { setError(err); return }
-    if (await call('v2cap_ascend', { p_class: cls, p_nodes: route })) {
-      setMsg(`${route.length}マスを開きました（${route.length}AP）`)
+    const ids = [...route]
+    if (await call('v2cap_ascend', { p_class: cls, p_nodes: ids })) {
+      setMsg(`${ids.length}マスを開きました（${ids.length}AP）`)
+      // 起点に近い順に、少しずつ遅らせて光らせる
+      setFlash(Object.fromEntries(ids.map((id, i) => [id, i * FLASH_STEP_MS])))
+      clearTimeout(flashTimer.current)
+      flashTimer.current = setTimeout(() => setFlash({}), ids.length * FLASH_STEP_MS + 1000)
     }
   }
   const reset = async () => {
     if (await call('v2cap_ascend_reset', { p_class: cls })) {
-      setConfirmReset(false); setSel(null)
+      setConfirmReset(false); setSel(null); setFlash({})
       setMsg(`${cls}の盤面を振り直しました（${resetGold.toLocaleString()} Gold）`)
     }
   }
-  const pick = (id) => { setSel(id === sel || id === 0 ? null : id); setError(''); setMsg('') }
+  const pick = (id) => { if (id === 0) return; setSel(id === sel ? null : id); setError(''); setMsg('') }
 
   // 線（同じ線を2回描かない）
   const edges = []
@@ -132,8 +188,15 @@ export default function V2capAscension({ prof, onProfile }) {
   const R = tree.R
   const pad = 0.75
 
+  // いま効いているもの（ステはその色で）
+  const effParts = [
+    ...STAT_KEYS.filter(k => eff.flat[k] > 0).map(k => ({ k, t: `${STAT_DEFS[k].label}+${eff.flat[k]}` })),
+    ...Object.entries(eff.pct).map(([k, v]) => ({ k, t: `${STAT_DEFS[k]?.label || k}+${v}%` })),
+  ]
+
   return (
     <div style={{ maxWidth:'820px', margin:'0 auto' }}>
+      <style>{CSS}</style>
       {confirmReset && (
         <V2Modal title="アセンションを振り直す" color="#ff8844" danger busy={busy}
           confirmLabel={`振り直す（${resetGold.toLocaleString()} Gold）`}
@@ -151,7 +214,7 @@ export default function V2capAscension({ prof, onProfile }) {
               const on = id === cls
               const l = apTotalOf(id, jobOf(prof.jobs, id).lv) - apSpentOf(ascStateOf(prof, id))
               return (
-                <button key={id} onClick={() => { setCls(id); setSel(null); setMsg(''); setError('') }} aria-pressed={on}
+                <button key={id} onClick={() => { setCls(id); setSel(null); setMsg(''); setError(''); setFlash({}) }} aria-pressed={on}
                   style={{ ...miniBtn(on ? stageColorOf(id) : '#2a4466'), color: on ? stageColorOf(id) : TEXT.label, background: on ? '#00163a' : '#000818' }}>
                   {id}{id === prof.class ? '（いま）' : ''}{l > 0 && <span style={{ color: GOLD, marginLeft:'3px' }}>AP{l}</span>}
                 </button>
@@ -171,12 +234,20 @@ export default function V2capAscension({ prof, onProfile }) {
         </div>
         <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.7, marginTop:'4px' }}>
           CLASS LVが1上がるごとにAP+1。起点か開いたマスにつながったマスを、1マス1APで開けます。
-          マスを押すと、いちばん近いルートが光ります（別のルートを通りたいときは、1マスずつ押して開く）。
+          マスを押すと中身が下に出て、いちばん近いルートが光ります（別のルートを通りたいときは、1マスずつ押して開く）。
           {isCur ? '' : <span style={{ color:'#ff8844' }}>　いまの職業ではないので、この盤面は{cls}に転職するまで効きません。</span>}
         </div>
-        <div style={{ color: TEXT.label, fontSize:'10px', marginTop:'2px' }}>
-          □ ステ　<span style={{ color: SKILL_C }}>○ スキル</span>　<span style={{ color: BIG_C }}>◇ 大マス（+%）</span>
-          <button onClick={() => setZoom(z => !z)} style={{ ...miniBtn('#88aaff'), marginLeft:'8px', padding:'1px 6px' }}>{zoom ? '全体を見る' : '大きく見る'}</button>
+        {/* 色の見方（マスの中には文字を出さない） */}
+        <div style={{ display:'flex', flexWrap:'wrap', gap:'4px 10px', alignItems:'center', marginTop:'6px', fontSize:'10px' }}>
+          {boardStats.map(k => (
+            <span key={k} style={{ display:'inline-flex', alignItems:'center', gap:'3px', color: ASC_STAT_COLOR[k] }}>
+              <span style={{ width:'9px', height:'9px', borderRadius:'2px', background: ASC_STAT_COLOR[k], boxShadow:`0 0 4px ${ASC_STAT_COLOR[k]}` }} />
+              {STAT_DEFS[k].label}
+            </span>
+          ))}
+          <span style={{ color: SKILL_C }}>● スキル</span>
+          <span style={{ color: TEXT.sub }}>◆ 大マス（+%）</span>
+          <button onClick={() => setZoom(z => !z)} style={{ ...miniBtn('#88aaff'), padding:'1px 6px', marginLeft:'auto' }}>{zoom ? '全体を見る' : '大きく見る'}</button>
         </div>
         {msg && <div style={{ color:'#44ff88', fontSize:'11px', marginTop:'4px' }}>{msg}</div>}
       </div>
@@ -184,19 +255,39 @@ export default function V2capAscension({ prof, onProfile }) {
       {/* ===== 盤面 ===== */}
       <div style={{ ...box, padding:'6px', marginBottom:'0', overflowX:'auto' }}>
         <svg viewBox={`${-R - pad} ${-R - pad} ${2 * R + 2 * pad} ${2 * R + 2 * pad}`}
-          style={{ display:'block', width:'100%', minWidth: zoom ? `${(2 * R + 2) * CELL_MIN_PX}px` : 0, background:'radial-gradient(circle at 50% 50%, #06204a 0%, #000c26 70%)' }}>
+          style={{ display:'block', width:'100%', minWidth: zoom ? `${(2 * R + 2) * CELL_MIN_PX}px` : 0, background:'radial-gradient(circle at 50% 50%, #0b2a5c 0%, #04122e 45%, #000818 80%)' }}>
+          <defs>
+            {/* 開いたマスの光（マスの色のままぼかして重ねる） */}
+            <filter id="ascGlow" x="-120%" y="-120%" width="340%" height="340%">
+              <feGaussianBlur stdDeviation="0.08" result="b" />
+              <feMerge><feMergeNode in="b" /><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+            <filter id="ascGlowBig" x="-150%" y="-150%" width="400%" height="400%">
+              <feGaussianBlur stdDeviation="0.16" result="b" />
+              <feMerge><feMergeNode in="b" /><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+          </defs>
+          {/* ★線にぼかし（filter）は掛けない：真横・真上の線は大きさ0とみなされて消える。開いた線は「太く薄い線」＋「細く明るい線」で光らせる */}
           {edges.map(([a, b]) => {
             const both = open.has(a.id) && open.has(b.id)
-            const rt = (onRoute.has(a.id) || open.has(a.id)) && (onRoute.has(b.id) || open.has(b.id)) && (onRoute.has(a.id) || onRoute.has(b.id))
-            const c = both ? (a.type === 'start' ? colorOf(b) : colorOf(a)) : rt ? ROUTE : '#1f3358'
+            const rt = !both && (onRoute.has(a.id) || open.has(a.id)) && (onRoute.has(b.id) || open.has(b.id))
+            const pos = { x1: sx(a), y1: sy(a), x2: sx(b), y2: sy(b) }
+            if (both) {
+              return (
+                <g key={`${a.id}-${b.id}`}>
+                  <line {...pos} stroke={LINK_ON} strokeWidth={0.22} strokeLinecap="round" opacity={0.22} />
+                  <line {...pos} stroke={LINK_ON} strokeWidth={0.08} strokeLinecap="round" opacity={1} />
+                </g>
+              )
+            }
             return (
-              <line key={`${a.id}-${b.id}`} x1={sx(a)} y1={sy(a)} x2={sx(b)} y2={sy(b)} stroke={c}
-                strokeWidth={both ? 0.09 : rt ? 0.08 : 0.06} strokeDasharray={rt && !both ? '0.15 0.1' : undefined} opacity={both || rt ? 0.95 : 0.8} />
+              <line key={`${a.id}-${b.id}`} {...pos} stroke={rt ? ROUTE : '#2a4a7c'} strokeWidth={rt ? 0.06 : 0.05}
+                strokeDasharray={rt ? '0.14 0.1' : undefined} opacity={rt ? 0.9 : 0.8} />
             )
           })}
           {tree.nodes.map(n => (
             <NodeShape key={n.id} node={n} owned={open.has(n.id) && n.type !== 'start'} onRoute={onRoute.has(n.id)}
-              reach={reachable(n)} selected={n.id === sel} onPick={pick} />
+              reach={reachable(n)} selected={n.id === sel} flash={flash[n.id]} onPick={pick} />
           ))}
         </svg>
       </div>
@@ -204,16 +295,20 @@ export default function V2capAscension({ prof, onProfile }) {
       {/* ===== 選んだマス（画面の下に貼り付く） ===== */}
       <div style={{ position:'sticky', bottom:0, zIndex:5, ...box, borderColor: selNode ? colorOf(selNode) : '#0044aa', padding:'8px 12px', marginBottom:'8px', minHeight:'40px' }}>
         {!selNode ? (
-          <div style={{ color: TEXT.label, fontSize:'11px' }}>マスを押すと、中身と開くためのルートが出ます</div>
+          <div style={{ color: TEXT.label, fontSize:'11px' }}>マスを押すと、どの能力が上がるかと、開くためのルートが出ます</div>
         ) : (
           <div style={{ display:'flex', gap:'8px', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap' }}>
-            <div style={{ fontSize:'11px', minWidth:0 }}>
-              <div style={{ color: colorOf(selNode) }}>{nodeText(selNode)}</div>
+            <div style={{ fontSize:'12px', minWidth:0 }}>
+              <div style={{ color: colorOf(selNode), display:'flex', alignItems:'center', gap:'6px' }}>
+                <span style={{ width:'12px', height:'12px', flexShrink:0, background: colorOf(selNode), boxShadow:`0 0 6px ${colorOf(selNode)}`,
+                  borderRadius: selNode.type === 'skill' ? '50%' : '2px', transform: selNode.type === 'big' ? 'rotate(45deg) scale(0.85)' : 'none' }} />
+                <span>{nodeInfo(selNode)}</span>
+              </div>
               {open.has(selNode.id) ? (
                 <div style={{ color:'#44ff88', fontSize:'10px' }}>開いています</div>
               ) : (
                 <div style={{ color: TEXT.sub, fontSize:'10px' }}>
-                  {route.length > 1 ? `いちばん近いルートは${route.length}マス（光っている所）` : 'となりのマスなので1マスで開けます'}・残り {left}AP
+                  {route.length > 1 ? `いちばん近いルートは${route.length}マス（白く光っている所）` : 'となりのマスなので1マスで開けます'}・残り {left}AP
                   {routeErr && <span style={{ color:'#ff8844', marginLeft:'4px' }}>⚠ {routeErr}{routeErr === 'APが足りません' ? `（あと${route.length - left}AP）` : ''}</span>}
                   {!isCur && <span style={{ color:'#ff8844', marginLeft:'4px' }}>※{cls}に転職するまで効きません</span>}
                 </div>
@@ -237,9 +332,10 @@ export default function V2capAscension({ prof, onProfile }) {
           <div style={{ color: TEXT.empty, fontSize:'11px' }}>まだ開いたマスはありません</div>
         ) : (
           <div style={{ fontSize:'11px', lineHeight:1.8 }}>
-            {flatText && <div style={{ color: TEXT.bright }}>{flatText}</div>}
-            {pctText && <div style={{ color: BIG_C }}>{pctText}</div>}
-            {skillNodes.map(n => <div key={n.id} style={{ color: SKILL_C }}>{nodeText(n)}</div>)}
+            {effParts.length > 0 && (
+              <div>{effParts.map((p, i) => <span key={i} style={{ color: ASC_STAT_COLOR[p.k], marginRight:'8px', whiteSpace:'nowrap' }}>{p.t}</span>)}</div>
+            )}
+            {skillNodes.map(n => <div key={n.id} style={{ color: SKILL_C }}>{n.skill}：{ascSkillDetail(n.skill)}</div>)}
           </div>
         )}
         <div style={{ color:'#88aaff', fontSize:'11px', margin:'8px 0 2px' }}>スキルマス（押すと盤面で光ります）</div>

@@ -36,6 +36,18 @@ export const ASC_SHAPE = {
   shoki:  { tiers: [2, 3, 4], bigPct: 5 },
   ichiji: { tiers: [3, 4, 5], bigPct: 5 },
 }
+// ★盤面のステの色（2026-10-14）。ステータス画面の色（STAT_DEFS）は STR/LUK・HP/DEX・MP/VIT が似ていて
+//   色だけでは見分けにくいので、盤面だけ8色をはっきり分ける（画面 V2capAscension.jsx・画像を作るときもこの色に合わせる＝設計 §4-2）
+export const ASC_STAT_COLOR = {
+  hp: '#ff5a6e',       // 赤
+  mp: '#4f8dff',       // 青
+  str: '#ffc933',      // 金
+  dex: '#3fe07f',      // 緑
+  agi: '#ff8a3d',      // 橙
+  int_stat: '#b866ff', // 紫
+  vit: '#c6d2e4',      // 銀
+  luk: '#ff7fd0',      // 桃
+}
 // 振り直しの費用（LV×これ Gold）
 export const ASC_RESET_GOLD_PER_LV = 100
 export const ascResetGoldOf = (lv) => Math.max(1, lv || 1) * ASC_RESET_GOLD_PER_LV
