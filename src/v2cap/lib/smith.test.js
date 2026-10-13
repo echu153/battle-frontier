@@ -2,7 +2,7 @@
 // 【確定】は 2026-10-10 ユーザー決定（docs/v2cap-design.md §5「強化と分解」）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { INITIAL_STATS, calcPower } from '../../v2/lib/stats.js'
+import { STAT_KEYS, INITIAL_STATS, calcPower } from '../../v2/lib/stats.js'
 import { ITEMS, ITEM_BY_ID, STARTER_ITEMS, AREA_COUNT, itemOf } from './equipment.js'
 import { AREA_LIST } from './areas.js'
 import { powerAt, statsAt, effectPct, underLvPowerOf } from './gear.js'
@@ -94,6 +94,36 @@ test('強化した強さは必要LVの弱まり方の前に掛ける（ステの
       }
     }
   }
+})
+
+test('【2026-10-13】強化して戦闘力が上がっても、ステは1つも下がらない（効果100%も、必要LV不足の効果%も）', () => {
+  // 全装備（初期装備も）・アイテムLV＝必要LV で、+0→+1 … +9→+10 の段を、効果100〜10%（5%きざみ）で全部見る
+  // ⚠前の散らし方（四捨五入して、合計のずれをいちばん重いステへ）は、効果100%の15,790段のうち524段で下がっていた
+  //   （ユーザー指摘：蟻帝の聖鎧 +3→+4・効果60% で VIT 15→14）
+  // ★最大剰余だけだと、軽装頭の戦闘力9→10 で STR が2→1に下がる段が残った（アラバマのパラドックス）。
+  //   端数が同じときに「戦闘力が1少ないときに端数の1点をもらっていたステ」を先にして0にした（gear.js の spreadStats）
+  const down = []
+  for (const item of [...ITEMS, ...STARTER_ITEMS]) {
+    for (let pct = 100; pct >= 10; pct -= 5) {
+      let a = statsAt(item, item.lv, pct, 0)
+      for (let plus = 1; plus <= PLUS_MAX; plus++) {
+        const b = statsAt(item, item.lv, pct, plus)
+        for (const k of STAT_KEYS) if (b[k] < a[k]) down.push(`${item.id} ${pct}% +${plus - 1}→+${plus} ${k} ${a[k]}→${b[k]}`)
+        a = b
+      }
+    }
+  }
+  assert.deepEqual(down, [])
+  // ユーザーが見つけた例：蟻帝の聖鎧（重鎧の鎧・VIT60 STR15 INT15 AGI10）+3→+4・効果60%（戦闘力23→25）
+  //   前は STR3 AGI2 INT3 VIT15 → STR4 AGI3 INT4 VIT14 で VIT が下がっていた
+  const armor = ITEMS.find(i => i.name === '蟻帝の聖鎧')
+  const zero = Object.fromEntries(STAT_KEYS.map(k => [k, 0]))
+  assert.deepEqual(statsAt(armor, armor.lv, 60, 3), { ...zero, str:4, agi:2, int_stat:3, vit:14 })
+  assert.deepEqual(statsAt(armor, armor.lv, 60, 4), { ...zero, str:4, agi:2, int_stat:4, vit:15 })
+  // 前に見つかった例：見習いの短剣 +2→+3（戦闘力12→13）。前は STR2 DEX2 AGI6 INT2 → STR3 DEX3 AGI4 INT3 で AGI が下がっていた
+  const dagger = ITEM_BY_ID['0N:短剣']
+  assert.deepEqual(statsAt(dagger, 1, 100, 2), { ...zero, str:2, dex:3, agi:5, int_stat:2 })
+  assert.deepEqual(statsAt(dagger, 1, 100, 3), { ...zero, str:3, dex:3, agi:5, int_stat:2 })
 })
 
 test('戦闘のステは強化値ぶん上がる。防具のメリット（重鎧・軽装）は変わらない。SQLを流す前の持ち物（plus なし）は+0', () => {

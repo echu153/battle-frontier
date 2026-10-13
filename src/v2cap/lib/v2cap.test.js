@@ -21,10 +21,10 @@ import { ICHIJI_SKILLS, ICHIJI_BUILDS } from './skillsIchiji.js'
 import {
   ITEMS, ITEM_BY_ID, KINDS, WEAPON_TYPES, ARMOR_LINES, ARMOR_PARTS, ACCESSORY_TYPES, PART_MULT, SLOTS, ARMOR_EFFECT,
   RARITIES, RARITY_LABEL, RARITY_BASE, AREA_COUNT, itemOf, slotsFor, SLOT_LABEL, PARTS, partLabel, kindLabel, reqLvOf,
-  starterIdsOf,
+  starterIdsOf, STARTER_ITEMS,
 } from './equipment.js'
 import { GEAR_NAMES } from './gearNames.js'
-import { powerAt, effectPct, statsAt, armorEffects, armorEffectText, underLvPowerOf, GEAR_RATIO, SET_PART_SUM } from './gear.js'
+import { powerAt, effectPct, statsAt, spreadStats, armorEffects, armorEffectText, underLvPowerOf, GEAR_RATIO, SET_PART_SUM } from './gear.js'
 import {
   AREA_LIST, SPOTS, SPOT_COUNT, spotOf, spotLvOf, spotLabel, expRangeOf, goldRangeOf,
   ROLE_TENTHS, scaleByRole, enemyLevels, enemyLvOf, enemyRoleOf,
@@ -771,6 +771,40 @@ test('【確定】必要LVに足りないと、不足1LVごとに効果-5%・下
       assert.equal(Object.values(s).reduce((a, b) => a + b, 0), underLvPowerOf(powerAt(item, ilv), pct), `${item.name} LV${ilv}`)
     }
   }
+})
+
+test('【2026-10-13】装備のステの端数は最大剰余：どの配分でも、どのステも配分どおりの値の切り捨てか切り上げ・戦闘力が1上がって下がるステは無い', () => {
+  // 戦闘力の式（powerAt）が変わっても見られるように、配分ごとに戦闘力を0から1000まで1ずつ上げて見る
+  // ⚠前は四捨五入して、合計のずれをいちばん重いステへ足していた＝重いステが配分どおりの値から1以上ずれ、強化で下がることもあった
+  //   （蟻帝の聖鎧 +3・効果60%＝戦闘力23：配分どおりなら VIT 13.8 のところが 15、戦闘力25 で 14 に下がった）
+  const dists = [...new Map([...ITEMS, ...STARTER_ITEMS].map(i => [JSON.stringify(i.dist), i.dist])).values()]
+  const bad = []
+  for (const dist of dists) {
+    const key = JSON.stringify(dist)
+    let prev = spreadStats(0, dist)
+    for (let p = 1; p <= 1000; p++) {
+      const cur = spreadStats(p, dist)
+      if (Object.values(cur).reduce((a, b) => a + b, 0) !== p) bad.push(`${key} 戦闘力${p}：合計`)
+      for (const k of STAT_KEYS) {
+        const q = p * (dist[k] || 0) / 100
+        if (cur[k] !== Math.floor(q) && cur[k] !== Math.ceil(q)) bad.push(`${key} 戦闘力${p}：${k} ${cur[k]}（配分どおりなら ${q}）`)
+        if (cur[k] < prev[k]) bad.push(`${key} 戦闘力${p - 1}→${p}：${k} ${prev[k]}→${cur[k]}`)
+      }
+      prev = cur
+    }
+  }
+  assert.deepEqual(bad, [])
+  // 端数が同じときの決め方（軽装頭＝AGI45・DEX25・STR15・INT15）
+  //   戦闘力9：AGI4.05・DEX2.25・STR1.35・INT1.35 → 残り1点は STR と INT が並ぶので、dist に書いた順で STR
+  //   戦闘力10：4つとも .5 で並ぶ → 残り2点は、戦闘力9で端数の1点をもらっていた STR と、配分の重い AGI
+  //     （配分の重さだけで決めると AGI・DEX になり、STR が2→1に下がっていた＝アラバマのパラドックス）
+  const light = itemOf(1, 'N', '軽装頭').dist
+  const zero = Object.fromEntries(STAT_KEYS.map(k => [k, 0]))
+  assert.deepEqual(spreadStats(9, light), { ...zero, agi:4, dex:2, str:2, int_stat:1 })
+  assert.deepEqual(spreadStats(10, light), { ...zero, agi:5, dex:2, str:2, int_stat:1 })
+  assert.deepEqual(spreadStats(11, light), { ...zero, agi:5, dex:3, str:2, int_stat:1 })
+  assert.deepEqual(spreadStats(0, light), zero)
+  assert.deepEqual(statsAt(null, 1), zero, '装備が無ければ0')
 })
 
 test('【確定】画面では「アクセ」ではなく「装飾品」と出す（内部の部位名はアクセのまま）', () => {

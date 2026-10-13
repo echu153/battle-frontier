@@ -55,17 +55,37 @@ export const reqPctOf = (item, ilv, lv) => effectPct(needLvOf(item, ilv), lv)
 export const underLvPowerOf = (power, pct = 100) =>
   (pct >= 100 ? power : Math.max(0, Math.min(Math.round(power * pct / 100), power - 1)))
 
-// 戦闘力を配分どおりにステへ散らす（今のⅡの statsOf と同じ散らし方）。
-// pct は必要LV不足の効果(%)。散らす前の戦闘力（強化値ぶん込み）に掛ける（最低でも1下げる＝underLvPowerOf）
-export const statsAt = (item, ilv, pct = 100, plus = 0) => {
-  const p = underLvPowerOf(powerAt(item, ilv, plus), pct)
+// ===== 戦闘力をステへ散らす =====
+// 【2026-10-13】端数は最大剰余：ステごとに切り捨ててから、残りの点を端数の大きいステから1点ずつ配る（合計はいつも戦闘力と同じ）。
+//   端数が同じときは ①戦闘力が1少ないときに端数の1点をもらっていたステ ②配分の重いステ ③dist に書いた順
+//   ★①が無いと、軽装頭（AGI45・DEX25・STR15・INT15）は戦闘力9→10・29→30…（20ごと）で STR が1下がった
+//     （戦闘力10で端数が4つとも .5 にそろい、重い AGI・DEX が先にもらう＝アラバマのパラドックス）。
+//     ①を足して、どの配分でも戦闘力が上がってステが下がる所は0（v2cap.test.js が配分ごとに見張る）
+//   ⚠前は今のⅡの statsOf と同じく四捨五入して、合計のずれ（マイナスもある）をいちばん重いステへ足していた＝
+//     強化して戦闘力が上がったのにステが下がることがあった（ユーザー指摘：蟻帝の聖鎧 +3→+4・効果60% で VIT 15→14。
+//     全装備の +0→+10 の15,790段のうち524段・必要LV不足では18,482段）。
+//     直し方は 2026-10-12 の別の作業（ユーザーが「残りも0にする」を選んだもの）と同じ。そのときは入らずに残っていた
+// 配分の合計は100（v2cap.test.js が見張る）＝残りの点はステの数より少ない
+const largestRemainder = (p, dist, tie) => {
   const out = Object.fromEntries(STAT_KEYS.map(k => [k, 0]))
-  if (p <= 0 || !item) return out
-  for (const [k, v] of Object.entries(item.dist)) out[k] = Math.round(p * v / 100)
-  const top = Object.entries(item.dist).sort((a, b) => b[1] - a[1])[0][0]
-  out[top] += p - Object.values(out).reduce((a, b) => a + b, 0)
+  if (!(p > 0) || !dist) return out
+  const rows = Object.entries(dist).map(([k, v], i) => ({ k, v, i, rem: (p * v) % 100 }))
+  for (const r of rows) out[r.k] = Math.floor(p * r.v / 100)
+  const left = p - rows.reduce((t, r) => t + out[r.k], 0)
+  rows.sort((a, b) => b.rem - a.rem || tie(a, b))
+  for (let j = 0; j < left; j++) out[rows[j].k]++
   return out
 }
+const byWeight = (a, b) => b.v - a.v || a.i - b.i
+// 戦闘力 p を配分 dist どおりにステへ散らす
+export const spreadStats = (p, dist) => {
+  const prev = largestRemainder(p - 1, dist, byWeight)
+  const had = (r) => (prev[r.k] > Math.floor((p - 1) * r.v / 100) ? 1 : 0)   // ①
+  return largestRemainder(p, dist, (a, b) => had(b) - had(a) || byWeight(a, b))
+}
+// 装備のステ。pct は必要LV不足の効果(%)。散らす前の戦闘力（強化値ぶん込み）に掛ける（最低でも1下げる＝underLvPowerOf）
+export const statsAt = (item, ilv, pct = 100, plus = 0) =>
+  spreadStats(item ? underLvPowerOf(powerAt(item, ilv, plus), pct) : 0, item?.dist)
 // いまのLVで着けたときの戦闘力（必要LV不足ぶんを引いたもの）
 export const effectivePowerAt = (item, ilv, lv, plus = 0) => underLvPowerOf(powerAt(item, ilv, plus), reqPctOf(item, ilv, lv))
 
