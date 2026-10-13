@@ -15,6 +15,9 @@ import { RARITY_COLOR } from '../lib/equipment.js'
 import { buildCapBattleView } from '../lib/battleView.js'
 import { enemyArtSrc } from '../lib/enemyArt.js'
 import { battleIconOf } from '../lib/classArt.js'
+import { shrineOf, shrineEncounterOf, shrineStepText, SHRINE_NAME } from '../lib/shrine.js'
+import { SHRINE_ART, SHRINE_TEXT, MINCHO } from '../lib/fxStyle.js'
+import V2capShrineFx from './V2capShrineFx.jsx'
 
 // ============================================================
 // 「レベルキャップあり」版 — 出撃（ホームの右）
@@ -34,6 +37,9 @@ import { battleIconOf } from '../lib/classArt.js'
 //     行動ごとに動いた側のアイコン）。並びは battleView.js・見た目は V2capLogLine.jsx。
 //     敵のアイコンは enemyArt.js（エリア①から絵を足していく）、自分のアイコンは classArt.js の battleIconOf
 //     （SDの絵 → 無ければ顔のアップ。男女は神殿の切り替えと同じ capArtGender）
+//   ・【確定】2026-10-13 ユーザー指示「安息の祠を追加」（決まりは lib/shrine.js・決めるのはサーバー）：
+//     精算の返事（shrine）で祠を見つけたら、次の出撃から祠の中＝見つけた場所でハピネスフェアリーと戦う（場所は選べない）。
+//     最後の1戦のあとは最深部の演出（V2capShrineFx）。祠のことはプロフィールの列（shrine_spot・shrine_left・shrine_total）でも持つ
 // ============================================================
 // ★ログに注記は付けない（2026-10-10 ユーザー指示「（朝だけ）とか（時間帯限定で1.5倍）とか倒した時の（1ターン）の部分いらない」）：
 //   時間帯の敵の「（朝だけ）」・報酬の「（ボスで5倍）（レアで3倍）（時間帯限定で1.5倍）」・勝ち負けの「（◯ターン）」は出さない
@@ -43,6 +49,7 @@ const ROLE_LINE = {
   rare:  (foe, lv) => ({ text:`✨ レアモンスター！ ${foe}（LV${lv}）が現れた！`, color:'#ffcc00' }),
   timed: (foe, lv) => ({ text:`${foe}（LV${lv}）が現れた！`, color:'#aaddff' }),
   normal: (foe, lv) => ({ text:`${foe}（LV${lv}）が現れた！`, color:'#88ccff' }),
+  shrine: (foe, lv) => ({ text:`${foe}（LV${lv}）が現れた！`, color:'#ffb8e8' }),
 }
 // ログを自動で一番下へ送るか（この端末で覚えておく。読めない・書けないときはオンのまま動く）
 // 右下の出撃ボタンを出すか（この端末で覚えておく・最初は出す）
@@ -66,6 +73,9 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   const [fabOn, setFabOn] = useState(() => loadPref(FAB_PREF, true) !== false)   // 右下の出撃ボタン
   const [battleNo, setBattleNo] = useState(0)         // 何戦目か（オフのとき、新しい戦闘で一番上に戻すため）
   const [art, setArt] = useState(null)                // 戦闘ログのアイコン（{ me:{ src, name }, foe:{ src, name } }）
+  const [shrine, setShrine] = useState(() => shrineOf(prof))   // 安息の祠（いなければ null）。精算の返事とプロフィールから
+  const [shrineTag, setShrineTag] = useState('')      // 表示中の戦闘が祠の中なら「2/5」
+  const [fx, setFx] = useState(null)                  // 祠の演出（{ kind:'found'|'deepest', … }）
   const lastAt = useRef(0)
   const busy = useRef(false)
   const logBox = useRef(null)
@@ -86,6 +96,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   useEffect(() => { onScene?.(scene) }, [scene, onScene])
   useEffect(() => { setStam({ n: prof?.stamina ?? 0, at: prof?.stamina_at || null }) }, [prof?.stamina, prof?.stamina_at])
   useEffect(() => { setBossRate(prof?.boss_rate || 0) }, [prof?.boss_rate])
+  useEffect(() => { setShrine(shrineOf(prof)) }, [prof?.shrine_spot, prof?.shrine_left, prof?.shrine_total])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const cleared = prof?.cleared_spots || []
   const availableSpots = SPOTS.filter(s => isSpotUnlocked(cleared, s.id))
@@ -106,11 +117,15 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
     setLoading(true); setScene('battle'); setLogs([]); setBattleNo(n => n + 1)
     try {
       const me = playerFighter(prof, inventory)
-      const enc = pickEncounter(spot.id, bossRate, new Date())
-      const r = runBattle(me, { ...enemyFighter(enc.enemy, 8), boss: enc.isBoss })
+      // 安息の祠の中なら、祠のある場所でハピネスフェアリーと戦う（装備は落ちない・ボスの出やすさは変わらない）
+      const sh = shrine
+      const enc = sh ? shrineEncounterOf(sh.spot) : pickEncounter(spot.id, bossRate, new Date())
+      const r = runBattle(me, { ...(sh ? enemyFighter(enc.enemy, 8, enc.power) : enemyFighter(enc.enemy, 8)), boss: enc.isBoss })
       const win = r.winner === 'a'
-      const drop = win ? rollEquipDrop(enc, prof.class, new Date()) : null
-      setBossRate(nextBossRate(bossRate, enc.isBoss))
+      const drop = win && !sh ? rollEquipDrop(enc, prof.class, new Date()) : null
+      if (!sh) setBossRate(nextBossRate(bossRate, enc.isBoss))
+      setShrineTag(sh ? shrineStepText(sh) : '')
+      const stamBefore = Math.max(0, stamNow - (isAuto ? 1 : 0))   // 最深部の演出でゲージを満たし始める値
 
       const foe = enc.enemy.name
       const you = me.name
@@ -129,12 +144,13 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
 
       // ★1戦ごとにその場で反映する。EXP・Gold・アイテムLVはサーバーが場所の表から決める
       const { data, error } = await supabase.rpc('v2cap_sortie_settle', {
-        p_spot: spot.id, p_enemy: foe, p_win: win, p_drop: drop ? drop.item.id : null, p_auto: !!isAuto,
+        p_spot: sh ? sh.spot : spot.id, p_enemy: foe, p_win: win, p_drop: drop ? drop.item.id : null, p_auto: !!isAuto,
       })
       if (data && data.stamina != null) setStam({ n: data.stamina, at: data.stamina_at || new Date().toISOString() })
       if (error || !data?.ok) {
         setAuto(false)
         setLogs(l => [...l, { text:`⚠ 反映に失敗しました（${error?.message || data?.error}）`, color:'#ff8844' }])
+        if (sh) onProfile(null)   // 祠のことがサーバーと食い違っていたら（別の画面で進めた など）取り直す
         return
       }
       const lv = data.level || {}
@@ -185,6 +201,23 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
           after.push({ text:`🔓 ${spotLabel(data.open_until)}が解放された！`, color:'#44ff88' })
         }
       }
+      // 安息の祠（サーバーが前の版のあいだは shrine が無い＝何も出さない）
+      const sr = data.shrine
+      if (sr) {
+        const next = shrineOf(sr)
+        setShrine(next)
+        if (sr.found && next) {
+          after.push({ text:`⛲ ${SHRINE_TEXT.found}`, color:'#9fe8ff', big: true })
+          after.push({ text:`最深部まで ${next.total}回の戦闘`, color:'#9fe8ff' })
+          setFx({ kind:'found', total: next.total, place: spotLabel(next.spot), key: Date.now() })
+        } else if (sr.deepest) {
+          after.push({ text:`⛲ ${SHRINE_TEXT.deepest}`, color:'#9fe8ff', big: true })
+          after.push({ text:`⚡ ${SHRINE_TEXT.healed}（${data.stamina}/${data.stamina_max}）`, color:'#44ff88' })
+          setFx({ kind:'deepest', stamina: { before: stamBefore, after: data.stamina, max: data.stamina_max }, key: Date.now() })
+        } else if (sh && next) {
+          after.push({ text:`⛲ 祠の奥へ進んだ…（最深部まで あと${next.left}回）`, color:'#9fe8ff' })
+        }
+      }
       if (after.length) setLogs(l => [...l, ...after])
       onProfile(null)
     } finally {
@@ -227,7 +260,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   const fabReady = canAct && !auto
   const fab = fabOn && spot && (
     <button onClick={() => doBattle(false)} disabled={!fabReady} aria-label="出撃"
-      title={auto ? 'オート出撃中' : `${spot.name}へ出撃（上の出撃ボタンと同じ）`}
+      title={auto ? 'オート出撃中' : shrine ? `${SHRINE_NAME}の奥へ進む（上の出撃ボタンと同じ）` : `${spot.name}へ出撃（上の出撃ボタンと同じ）`}
       style={{ position:'fixed', right:'16px', bottom:'calc(16px + env(safe-area-inset-bottom, 0px))', zIndex:300,
         width:'64px', height:'64px', borderRadius:'50%', padding:0, fontFamily:'monospace', lineHeight:1.15,
         background: fabReady ? '#001840' : '#000c1c', border:`2px solid ${fabReady ? '#ffcc00' : '#2a4a66'}`,
@@ -236,13 +269,22 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       <span style={{ fontSize:'20px' }}>⚔</span><br /><span style={{ fontSize:'11px' }}>出撃</span>
     </button>
   )
+  // 安息の祠の演出（見つけたとき・最深部）。出撃の画面の上に重ねる＝オートは後ろで続く
+  const fxLayer = fx && (
+    <V2capShrineFx key={fx.key} kind={fx.kind} total={fx.total} place={fx.place} stamina={fx.stamina} onClose={() => setFx(null)} />
+  )
+  // 祠にいる間の出撃のボタン
+  const shrineGo = '⛲ 祠の奥へ進む！'
 
   if (scene === 'battle') {
     return (
       <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', fontFamily:'monospace' }}>
         {fab}
+        {fxLayer}
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px', gap:'8px', flexWrap:'wrap' }}>
-          <span style={{ color:'#ff6644', fontSize:'13px' }}>⚔ バトル！</span>
+          {shrineTag
+            ? <span style={{ color:'#9fe8ff', fontSize:'13px' }}>⛲ {SHRINE_NAME}（{shrineTag}）</span>
+            : <span style={{ color:'#ff6644', fontSize:'13px' }}>⚔ バトル！</span>}
           <span style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap' }}>
             {auto && <span style={{ color:'#44ff88', fontSize:'11px' }}>▶ オート出撃中（⚡{stamNow}）</span>}
             <label style={{ display:'flex', alignItems:'center', gap:'4px', color:'#93a9be', fontSize:'10px', cursor:'pointer' }}>
@@ -269,7 +311,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
               border:`1px solid ${canAct ? '#ffcc00' : '#003366'}`,
               color: canAct ? '#ffcc00' : '#7fa6d0', cursor: canAct ? 'pointer' : 'not-allowed',
               fontFamily:'monospace', fontSize:'13px', marginBottom:'8px' }}>
-            {canAct ? `⚔ ${spot?.name}へ再出撃！` : '⏳ 待機中...'}
+            {!canAct ? '⏳ 待機中...' : shrine ? shrineGo : `⚔ ${spot?.name}へ再出撃！`}
           </button>
         )}
         <button onClick={() => { setAuto(false); setScene('town') }} disabled={loading}
@@ -285,24 +327,36 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   return (
     <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', fontFamily:'monospace' }}>
       {fab}
+      {fxLayer}
       {timerRow}
-      <select value={spot?.id || 1}
-        onChange={e => { const v = Number(e.target.value); setSelectedSpot(v); localStorage.setItem('v2capSelectedSpot', v) }}
-        style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>
-        {/* ★開いている場所だけ（1本道）。推奨LV（上限＝ボスを倒せる目安・2026-10-12 ユーザー指示）も出す */}
-        {availableSpots.map(s => (
-          <option key={s.id} value={s.id}>
-            {spotLabel(s)}　{recLvText(s.id)}{isSpotCleared(cleared, s.id) ? '　✔' : ''}
-          </option>
-        ))}
-      </select>
+      {shrine ? (
+        // ★祠にいる間は場所を選べない（見つけた場所の祠で戦う）。入口の絵を敷いて、最深部までの残りを出す
+        <div style={{ position:'relative', minHeight:'84px', marginBottom:'8px', border:'1px solid #2a7fa0', padding:'10px 12px',
+          backgroundImage:`linear-gradient(90deg, rgba(0,10,26,0.94) 0%, rgba(0,10,26,0.7) 48%, rgba(0,10,26,0.15) 100%), url(${SHRINE_ART})`,
+          backgroundSize:'cover', backgroundPosition:'60% 58%', boxShadow:'inset 0 0 18px rgba(79,216,255,0.18)' }}>
+          <div style={{ color:'#d8f7ff', fontFamily: MINCHO, fontWeight:'bold', fontSize:'16px', letterSpacing:'3px', textShadow:'0 0 8px #3fb8ff' }}>⛲ {SHRINE_NAME}</div>
+          <div style={{ color:'#9fb8d0', fontSize:'10px', marginTop:'2px' }}>{spotLabel(shrine.spot)}</div>
+          <div style={{ color:'#ffe9a0', fontSize:'12px', marginTop:'6px' }}>最深部まで あと{shrine.left}回の戦闘</div>
+        </div>
+      ) : (
+        <select value={spot?.id || 1}
+          onChange={e => { const v = Number(e.target.value); setSelectedSpot(v); localStorage.setItem('v2capSelectedSpot', v) }}
+          style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>
+          {/* ★開いている場所だけ（1本道）。推奨LV（上限＝ボスを倒せる目安・2026-10-12 ユーザー指示）も出す */}
+          {availableSpots.map(s => (
+            <option key={s.id} value={s.id}>
+              {spotLabel(s)}　{recLvText(s.id)}{isSpotCleared(cleared, s.id) ? '　✔' : ''}
+            </option>
+          ))}
+        </select>
+      )}
       {/* ★場所の説明（敵のLV・装備の必要LV・落とすレア度・1体あたりのEXPとGold・「ボスを倒すと次の場所が開く」）は出さない
            （2026-10-12 ユーザー指示「画像の部分いらない」）。場所の推奨LVは上の選択肢に出ている */}
       <button onClick={() => doBattle(false)} disabled={!canAct}
         style={{ width:'100%', padding:'14px', background:'#001840', border:`1px solid ${canAct ? '#ffcc00' : '#003366'}`,
           color: canAct ? '#ffcc00' : '#7fa6d0', cursor: canAct ? 'pointer' : 'not-allowed',
           fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'8px' }}>
-        {canAct ? `⚔ ${spot?.name}へ出撃！` : '⏳ 待機中...'}
+        {!canAct ? '⏳ 待機中...' : shrine ? shrineGo : `⚔ ${spot?.name}へ出撃！`}
       </button>
       <button onClick={() => setAuto(true)} disabled={stamNow < 1}
         style={{ width:'100%', padding:'8px', background: stamNow > 0 ? '#00281a' : '#000818',

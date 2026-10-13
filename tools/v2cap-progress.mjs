@@ -42,6 +42,8 @@
 //         --pct 0.7 --pctmid 0.5 --midfrom 6 をつけてもう一度
 //     そのほか：--bossmin 6（エリア6から先のボスだけ動かす）／--stdkeepmin 20（LV20以下の行は出発点より下げない）
 //   node tools/v2cap-progress.mjs --enh   … 強化で、エリアごとに自分の戦闘力が何倍になるか（ENH_MULT の確かめ。--tune も毎回作り直す）
+//   node tools/v2cap-progress.mjs --shrine [--hours 450]   … 安息の祠のハピネスフェアリーにエリアごとどれだけ勝てるか（2026-10-13）
+//     ★祠そのもの（0.1%・経験値×5・スタミナ全回復）は進み方の計算には入れていない（1000戦に1回・EXPは2〜3%ほど増えるだけ）
 //   鍛冶屋：--gear drops では既定で使う（--nosmith で使わない・--smithcap none で強化の上限を+10に）
 //   node tools/v2cap-progress.mjs --statvalue [--areas 3,6,9,12] [--n 500] [--only 剣士]
 //     … 職業ごとに「どのステを足すと③のボスに効くか」を測る（装備を選ぶ重み STAT_WEIGHT・同じステでの職業の強さ）
@@ -63,6 +65,7 @@ const { applyExp, bodyPowerAt, totalExpTo, POINT_UNIT, totalPointsTo } = level
 const { applyJobExp, jobOf, learnOrderOf, attackKindOf, canEquipType, JOB_MAX, nextClassesOf, CLASS_BY_ID } = jobsLib
 const { ICHIJI_BUILDS } = await import(B + 'v2cap/lib/skillsIchiji.js')
 const { enhanceCostOf, rollEnhance, scrapYieldOf, scrapAreaOf } = await import(B + 'v2cap/lib/smith.js')
+const { shrineEncounterOf } = await import(B + 'v2cap/lib/shrine.js')
 
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] : d }
 const HOURS = Number(arg('hours', arg('days', 365)))   // 何時間ぶん回すか（--days は前の名前）
@@ -169,7 +172,8 @@ const fitSet = (sks, maxMp) => {
   return set.map(({ name, uses }) => ({ name, uses }))
 }
 
-export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEAR_MODE, plus = PLUS_ON, smith = SMITH_ON } = {}) => {
+// probe … 1時間ごとに呼ぶ（{ hour, spot＝いまの場所, fighter＝いまの自分の戦闘用キャラを作る関数 }）。本筋の進み方は変えない（--shrine が使う）
+export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEAR_MODE, plus = PLUS_ON, smith = SMITH_ON, probe = null } = {}) => {
   const rng = rngOf(seed)
   // 鍛冶屋を実際に使うとき（--smith）は、見込みの強化値は使わない（実際に強化した値で戦う）
   const smithOn = smith && gear === 'drops'
@@ -396,6 +400,7 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
     const here = openUntilOf(cleared)
     // 鍛冶屋：1時間ごとに強化する（強くなったら着け直す）
     if (smithOn && enhance()) { regear(); reset() }
+    probe?.({ hour: d, spot: here, fighter: () => toFighter(prof(), invAt(here)) })
     hourly.push({ d, lv: st.lv, power: calcPower(totalStats(prof(), invAt(here))), body: bodyPowerAt(st.lv), win: wins / fights,
       spot: here, cls, jlv: jobOf(jobs, cls).lv, gold, slots: Object.keys(equipped).length })
     const area = areas.spotOf(here).area
@@ -729,8 +734,49 @@ const enh = () => {
   console.log('export const ENH_MULT = [' + mult.join(', ') + ']')
 }
 
+// ===== --shrine：安息の祠のハピネスフェアリーに勝てるか =====
+// 【確定】2026-10-13 ユーザー決定「弱い（ほぼ必ず勝てる）」の確かめ（src/v2cap/lib/shrine.js の SHRINE_FAIRY_RATIO）。
+//   初期職×2人を回し、1時間ごとに「いまの場所（開いている一番先）のハピネスフェアリー」と別の乱数で10戦する
+//   （本筋の進み方は変えない）。エリアごとに、フェアリーの勝率（全員・いちばん低い人）とふつうの敵（ボス以外）の勝率を並べる
+const shrineReport = () => {
+  const classes = jobsLib.START_CLASSES
+  const seeds = [11, 12]
+  const fairy = AREA_LIST.map(() => ({ n: 0, win: 0 }))
+  const normal = AREA_LIST.map(() => ({ n: 0, win: 0 }))
+  const worst = AREA_LIST.map(() => null)
+  for (const c of classes) for (const s of seeds) {
+    const prng = rngOf(s * 7919 + c.length)
+    const mine = AREA_LIST.map(() => ({ n: 0, win: 0 }))
+    const r = simulate({ hours: HOURS, seed: s, start: c, probe: ({ spot, fighter }) => {
+      const enc = shrineEncounterOf(spot)
+      const a = enc.spot.area - 1
+      for (let i = 0; i < 10; i++) {
+        const win = runBattle(fighter(), { ...enemyFighter(enc.enemy, 8, enc.power), boss: false }, { rng: prng }).winner === 'a'
+        fairy[a].n++; mine[a].n++
+        if (win) { fairy[a].win++; mine[a].win++ }
+      }
+    } })
+    for (const [spot, fs] of Object.entries(r.fightsInSpot)) {
+      const a = areas.spotOf(Number(spot)).area - 1
+      normal[a].n += fs.n - fs.boss
+      normal[a].win += fs.win - fs.bossWin
+    }
+    mine.forEach((v, a) => { if (v.n) worst[a] = Math.min(worst[a] ?? 1, v.win / v.n) })
+  }
+  const pct = (v) => (v.n ? `${(v.win / v.n * 100).toFixed(1)}%` : '-')
+  console.log(`ハピネスフェアリーの勝率（${classes.length}職×${seeds.length}人・${HOURS}時間・1時間ごとにいまの場所で10戦）`)
+  console.log(['エリア', 'フェアリー', 'いちばん低い人', 'ふつうの敵（ボス以外）', '数えた戦闘'].join('\t'))
+  AREA_LIST.forEach((ar, a) => {
+    console.log([`E${a + 1} ${ar.name}`, pct(fairy[a]), worst[a] === null ? '-' : `${(worst[a] * 100).toFixed(0)}%`, pct(normal[a]), fairy[a].n].join('\t'))
+  })
+  const all = fairy.reduce((t, v) => ({ n: t.n + v.n, win: t.win + v.win }), { n: 0, win: 0 })
+  console.log(`全体：${pct(all)}`)
+}
+
 if (process.argv.includes('--tune')) {
   await tune()
+} else if (process.argv.includes('--shrine')) {
+  shrineReport()
 } else if (process.argv.includes('--enh')) {
   enh()
 } else if (process.argv.includes('--report')) {

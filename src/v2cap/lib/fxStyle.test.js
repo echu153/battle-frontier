@@ -118,3 +118,14 @@ test('【確定】宝樹の画面の絵（祈るアイコン・天啓の石板�
   for (const a of arts) assert.ok(existsSync(new URL(`../../../public${a}`, import.meta.url)), `public${a} がある`)
   assert.ok(!src.includes("'🙏 祈る'") && src.includes('src={PRAY_ICON}'), '祈るボタンは🙏ではなくユーザーのアイコン')
 })
+
+// 【確定】2026-10-13 ユーザー指示「最深部に到達した！　スタミナが全回復した！　って表示される演出が欲しい ※暗転後に泉が見えるような演出」
+test('【確定】安息の祠の演出：ユーザーの絵（入口・泉）がある・文言はユーザーの書いたまま・最深部は暗転から始まる', async () => {
+  const { SHRINE_ART, SPRING_ART, SHRINE_TEXT } = await import('./fxStyle.js')
+  for (const art of [SHRINE_ART, SPRING_ART]) assert.ok(existsSync(new URL(`../../../public${art}`, import.meta.url)), `public${art} がある`)
+  assert.equal(SHRINE_TEXT.deepest, '最深部に到達した！')
+  assert.equal(SHRINE_TEXT.healed, 'スタミナが全回復した！')
+  const src = readFileSync(new URL('../components/V2capShrineFx.jsx', import.meta.url), 'utf8')
+  assert.ok(src.includes("useState('dark')"), '最初は暗転')
+  assert.ok(src.includes("'brightness(0) saturate(0.5)'"), '暗転のあいだ絵は真っ暗＝そこから見えてくる')
+})

@@ -12,6 +12,7 @@ import { JOB_NEED_PCT, JOB_NEED_BASE_PERMIL, JOB_MAX } from './jobs.js'
 import { ROLE_TENTHS, SPOTS as SPOTS_ALL, recLvOf } from './areas.js'
 import { SLOTS, RARITIES, STARTER_AREA } from './equipment.js'
 import { SORTIE_CD, DROP_RARITY } from './sortie.js'
+import { SHRINE_FAIRY_NAME, SHRINE_PCT, SHRINE_FIGHTS, SHRINE_EXP_TENTHS, SHRINE_GOLD_TENTHS } from './shrine.js'
 import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV, scrapAreaOf, enhanceScrapOf, ENHANCE_GOLD_ONLY_RARITY } from './smith.js'
 import { DAILY_SORTIES, DAILY_GOLD_PER_LV, DAY_RESET_HOUR } from './daily.js'
 import { AVATAR_PRESETS, AVATAR_FILE_RE } from './avatar.js'
@@ -400,15 +401,48 @@ test('【確定】モンスター図鑑：討伐数は勝ったときだけサ�
   assert.match(m[1], /primary key \(player_id, enemy\)/)
   assert.ok(SQL.includes('create policy v2cap_kills_own on public.v2cap_kills for select to authenticated using (player_id = auth.uid());'))
   assert.ok(!/grant (insert|update|delete|all)[^;]*v2cap_kills/.test(SQL), '書き込みは開けない（RPCの中だけ）')
-  // 出撃の精算：勝ったときだけ、この場所にいると確かめた敵（v_en）の名前で足す
+  // 出撃の精算：勝ったときだけ、この場所にいると確かめた敵（v_en）の名前で足す（安息の祠の中はハピネスフェアリー・2026-10-13）
   const settle = fnBody('v2cap_sortie_settle')
   const win = settle.match(/if v_win then\s+perform public\.v2cap_daily_bump\(v_uid, 'win', 1\);([\s\S]*?)end if;/)
   assert.ok(win, '勝ったときの枝')
-  assert.ok(win[1].includes('insert into public.v2cap_kills (player_id, enemy, n) values (v_uid, v_en.name, 1)'))
+  assert.ok(win[1].includes('insert into public.v2cap_kills (player_id, enemy, n) values (v_uid, case when v_shrine then c_shrine_fairy else v_en.name end, 1)'))
   assert.ok(win[1].includes('on conflict (player_id, enemy) do update set n = public.v2cap_kills.n + 1;'))
   assert.equal((SQL.match(/insert into public\.v2cap_kills/g) || []).length, 1, '数えるのは出撃の精算だけ')
   // 作り直すと図鑑も空になる
   assert.ok(fnBody('v2cap_dev_reset').includes('delete from public.v2cap_kills where player_id = auth.uid();'))
+})
+
+test('【確定】安息の祠（2026-10-13）：見つかる確率・戦闘の数・経験値とGoldの倍率がJSと同じ。祠の中だけハピネスフェアリー・装備なし・最深部でスタミナ全回復', () => {
+  const settle = fnBody('v2cap_sortie_settle')
+  assert.ok(settle.includes(`c_shrine_fairy constant text := '${SHRINE_FAIRY_NAME}';`))
+  assert.ok(settle.includes(`c_shrine_rate  constant numeric := ${SHRINE_PCT / 100};`), '0.1%')
+  assert.ok(settle.includes(`c_shrine_min   constant int := ${SHRINE_FIGHTS[0]};`) && settle.includes(`c_shrine_max   constant int := ${SHRINE_FIGHTS[1]};`), '3〜8回')
+  assert.ok(settle.includes(`c_shrine_exp   constant int := ${SHRINE_EXP_TENTHS};`) && settle.includes(`c_shrine_gold  constant int := ${SHRINE_GOLD_TENTHS};`), '経験値×5・Goldはふつう')
+  // 祠の中の戦闘は、祠のある場所で残りがあるときだけ（敵の表は見ない）
+  assert.ok(settle.includes('if coalesce(v_row.shrine_left, 0) <= 0 or v_row.shrine_spot is distinct from p_spot then'))
+  assert.ok(settle.includes("v_boss := not v_shrine and v_en.role = 'boss';"))
+  // 経験値とGold：表の値（範囲の中の整数を均等に1つ）× 倍率 を四捨五入（JSの rollShrineRewards と同じ）
+  assert.ok(settle.includes('v_exp  := ((v_spot.exp_min  + floor(random() * (v_spot.exp_max  - v_spot.exp_min  + 1))::int) * c_shrine_exp + 5) / 10;'))
+  assert.ok(settle.includes('v_gold := ((v_spot.gold_min + floor(random() * (v_spot.gold_max - v_spot.gold_min + 1))::int) * c_shrine_gold + 5) / 10;'))
+  // 装備は落とさない：落ちた装備を見るのは祠の外の勝ち（elsif v_win）の中だけ。負けはふつうと同じ（最低EXP）
+  const a = settle.indexOf('if v_win and v_shrine then'), b = settle.indexOf('elsif v_win then'), c = settle.indexOf('if p_drop is not null then')
+  assert.ok(a > 0 && a < b && b < c, '祠の勝ちの枝に装備の判定が無い')
+  // 勝ち負けを問わず1つ奥へ・祠の外なら見つける（祠にいる間は見つからない）・戦闘の数は 3〜8 を均等に
+  assert.match(settle, /if v_shrine then\s+v_sh_left := v_sh_left - 1;\s+v_deep := v_sh_left <= 0;\s+elsif v_sh_left <= 0 and random\(\) < c_shrine_rate then/)
+  assert.ok(settle.includes('v_sh_total := c_shrine_min + floor(random() * (c_shrine_max - c_shrine_min + 1))::int;'))
+  // 祠の中ではボスの出やすさを変えない
+  assert.ok(settle.includes('v_rate := case when v_shrine then v_row.boss_rate when v_boss then 0 else least(100, v_row.boss_rate + 0.3) end;'))
+  // 最深部：EXPが入ったあと（LVが上がったあとの最大値）でスタミナを戻す
+  const exp = settle.indexOf('v_res := public.v2cap_apply_exp(v_uid, v_exp);')
+  const deep = settle.indexOf('set stamina = greatest(stamina, public.v2cap_stamina_max(lv)), stamina_at = now()')
+  assert.ok(exp > 0 && deep > exp, '最深部のスタミナはEXPのあと')
+  for (const col of ['shrine_spot int', 'shrine_left int not null default 0', 'shrine_total int not null default 0']) {
+    assert.ok(SQL.includes(`alter table public.v2cap_profiles add column if not exists ${col};`), col)
+  }
+  // 開発用（演出を試す）：開いている場所だけ・戦闘の数は同じ
+  const dbg = fnBody('v2cap_debug_shrine')
+  assert.ok(dbg.includes(`c_shrine_min constant int := ${SHRINE_FIGHTS[0]};`) && dbg.includes(`c_shrine_max constant int := ${SHRINE_FIGHTS[1]};`))
+  assert.ok(dbg.includes('p_spot > public.v2cap_open_until(v_row.cleared_spots)'))
 })
 
 test('出撃の間隔はサーバーでも見る（10秒・通信の揺れぶん2秒の余裕）', () => {

@@ -625,3 +625,11 @@ export const rosterOf = (areaNo, sub) => {
 }
 // 場所のid（1〜45）→ { enemies, timed, rares, boss }
 export const ROSTERS = Object.fromEntries(AREA_ROSTERS.flatMap((_, k) => [1, 2, 3].map(sub => [k * 3 + sub, rosterOf(k + 1, sub)])))
+
+// ===== 場所の顔ぶれにいない特別なモンスター =====
+// 【確定】2026-10-13 ユーザー指示「安息の祠を追加…敵はハピネスフェアリーのみ」：安息の祠（shrine.js）の中だけに出る。
+//   強さはユーザー決定「弱い（ほぼ必ず勝てる）」＝その場所のふつうの敵の半分（shrine.js の SHRINE_FAIRY_RATIO）。
+//   LVはその場所のふつうの敵でいちばん高いLV（朝昼晩の敵と同じ決め方）。配分は魔法・守りは薄め。技はきらきらした魔法1つだけ
+//   ★名前は全エリアの敵と重ならないこと（絵のファイル名・サーバーの判定が名前で決まる）
+export const SHRINE_FAIRY = mk('ハピネスフェアリー', 'mag', { hp:30, mp:10, str:3, dex:12, agi:10, int_stat:26, vit:6, luk:3 }, [S.ほしくず])
+export const SPECIAL_ENEMIES = [SHRINE_FAIRY]

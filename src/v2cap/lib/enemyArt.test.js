@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import {
-  ENEMY_ART_ALIAS, ENEMY_ART_DIR, ENEMY_ART_SIZE, ENEMY_NAMES, ENEMY_NAMES_BY_AREA, normalizeArtName, enemyNameOfFile, enemyArtId, enemyArtSrc, hasEnemyArt,
+  ENEMY_ART_ALIAS, ENEMY_ART_DIR, ENEMY_ART_SIZE, ENEMY_NAMES, ENEMY_NAMES_BY_AREA, SPECIAL_ENEMY_NAMES, ART_NAMES, normalizeArtName, enemyNameOfFile, enemyArtId, enemyArtSrc, hasEnemyArt,
 } from './enemyArt.js'
 import { ENEMY_ART_IDS } from './enemyArtList.js'
 import { AREA_LIST } from './areas.js'
@@ -47,7 +47,7 @@ test('ファイル名の読み方：ひらがな／カタカナ・記号の違�
 
 test('一覧（enemyArtList.js）のモンスターは本当にいて、id は名前どおり。絵は 192×192 の透明つき WebP', () => {
   for (const [name, id] of Object.entries(ENEMY_ART_IDS)) {
-    assert.ok(ENEMY_NAMES.includes(name), `${name} はモンスターの一覧にいない`)
+    assert.ok(ART_NAMES.includes(name), `${name} はモンスターの一覧にいない`)
     assert.equal(id, enemyArtId(name), name)
     assert.equal(enemyArtSrc(name), `${ENEMY_ART_DIR}/${id}.webp`)
     const file = `${PUBLIC}${ENEMY_ART_DIR}/${id}.webp`
@@ -64,6 +64,16 @@ test('一覧（enemyArtList.js）のモンスターは本当にいて、id は�
 test('public/enemy-art の WebP はどれも一覧に載っている（載せ忘れ・名前を変えて残った絵がない）', () => {
   const listed = new Set(Object.values(ENEMY_ART_IDS).map(id => `${id}.webp`))
   for (const f of readdirSync(`${PUBLIC}${ENEMY_ART_DIR}`)) assert.ok(listed.has(f), `${f} が一覧に無い`)
+})
+
+test('【確定】2026-10-13 安息の祠のハピネスフェアリー：エリアの一覧（15×20体）には入れず、絵は特別なモンスターとして持つ', () => {
+  assert.deepEqual(SPECIAL_ENEMY_NAMES, ['ハピネスフェアリー'])
+  for (const n of SPECIAL_ENEMY_NAMES) assert.ok(!ENEMY_NAMES.includes(n), `${n} はエリアの敵ではない`)
+  // 比べ方をそろえても、エリアの敵と重ならない（ファイル名から1体に決められる）
+  assert.equal(new Set(ART_NAMES.map(normalizeArtName)).size, ART_NAMES.length)
+  assert.equal(new Set(ART_NAMES.map(enemyArtId)).size, ART_NAMES.length)
+  assert.equal(enemyNameOfFile('ハピネスフェアリー'), 'ハピネスフェアリー')
+  assert.ok(hasEnemyArt('ハピネスフェアリー'), 'ユーザーの絵（public/エネミー/特別）から作った WebP がある')
 })
 
 test('★エリア①②の40体は全部絵がある（2026-10-12 ユーザーが置いた分）', () => {

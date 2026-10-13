@@ -14,7 +14,7 @@
 //     ツールが「どのモンスターにも当てはまらない絵」を知らせるので、そのときにここへ足す
 // ★絵の無いモンスターは、画面では名前の1文字目を入れた枠で代わりに出す（V2capLogLine）
 // ============================================================
-import { AREA_ROSTERS } from './monsters.js'
+import { AREA_ROSTERS, SPECIAL_ENEMIES } from './monsters.js'
 import { ENEMY_ART_IDS } from './enemyArtList.js'
 
 export const ENEMY_ART_SRC_DIR = 'エネミー'     // public の下・元の絵
@@ -37,6 +37,11 @@ export const ENEMY_ART_ALIAS = {
 // エリアごとのモンスターの名前（並び＝monsters.js の一覧の順）
 export const ENEMY_NAMES_BY_AREA = AREA_ROSTERS.map(a => [...a.normals, ...a.timed, ...a.rares, ...a.bosses].map(e => e.name))
 export const ENEMY_NAMES = ENEMY_NAMES_BY_AREA.flat()
+// 場所の顔ぶれにいない特別なモンスター（安息の祠のハピネスフェアリー・2026-10-13）。元の絵は public/エネミー/特別/<名前>.png
+//   ★エリアの一覧（ENEMY_NAMES）には入れない（図鑑とエリアごとの数は15エリア×20体のまま）。絵を探す・一覧を書くときだけ一緒に見る
+export const SPECIAL_ART_DIR = '特別'
+export const SPECIAL_ENEMY_NAMES = SPECIAL_ENEMIES.map(e => e.name)
+export const ART_NAMES = [...ENEMY_NAMES, ...SPECIAL_ENEMY_NAMES]
 
 // 名前の比べ方：全角半角をそろえ、カタカナをひらがなに、英字を小文字にし、文字と数字だけ残す（長音の「ー」は残す）
 export const normalizeArtName = (s) => String(s ?? '')
@@ -45,7 +50,7 @@ export const normalizeArtName = (s) => String(s ?? '')
   .toLowerCase()
   .replace(/[^\p{L}\p{N}]/gu, '')
 
-const BY_NORM = new Map(ENEMY_NAMES.map(n => [normalizeArtName(n), n]))
+const BY_NORM = new Map(ART_NAMES.map(n => [normalizeArtName(n), n]))
 const ALIAS_BY_NORM = new Map(Object.entries(ENEMY_ART_ALIAS).map(([k, v]) => [normalizeArtName(k), v]))
 // ファイル名（拡張子なし）→ モンスターの名前（当てはまらなければ null）
 export const enemyNameOfFile = (stem) => {

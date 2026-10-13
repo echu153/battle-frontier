@@ -2,6 +2,7 @@
 // v2cap のモンスターのイラストを、画面で使う軽い版（背景を抜いた正方形の WebP）にする
 // ------------------------------------------------------------
 // 元の絵（ユーザーが置く）：public/エネミー/エリア<番号>/<モンスターの名前>.png（灰色の背景つき・1254×1254）
+//   場所の顔ぶれにいない特別なモンスター（安息の祠のハピネスフェアリー）は public/エネミー/特別/<名前>.png（2026-10-13）
 // 作るもの：
 //   public/enemy-art/<id>.webp     … 192×192。灰色の背景を抜き、体がちょうど収まるように切り取る
 //   src/v2cap/lib/enemyArtList.js  … 絵があるモンスターの一覧（画面はこれを見て、無いものは代わりの枠を出す）
@@ -22,7 +23,7 @@ import { each4 as each4WH, decode, bleed, alphaBox, encodeSquare } from './v2cap
 
 const ROOT = path.resolve(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))
 const lib = (f) => import(new URL(`../src/v2cap/lib/${f}`, import.meta.url).href)
-const { ENEMY_ART_SRC_DIR, ENEMY_ART_DIR, ENEMY_ART_SIZE, ENEMY_NAMES_BY_AREA, ENEMY_NAMES, enemyNameOfFile, enemyArtId } = await lib('enemyArt.js')
+const { ENEMY_ART_SRC_DIR, ENEMY_ART_DIR, ENEMY_ART_SIZE, ENEMY_NAMES_BY_AREA, SPECIAL_ENEMY_NAMES, SPECIAL_ART_DIR, ART_NAMES, enemyNameOfFile, enemyArtId } = await lib('enemyArt.js')
 const { AREA_LIST } = await lib('areas.js')
 const SRC = path.join(ROOT, 'public', ENEMY_ART_SRC_DIR)
 const OUT = path.join(ROOT, 'public', ENEMY_ART_DIR.replace(/^\//, ''))
@@ -135,10 +136,10 @@ for (const [name, src] of pick) {
 }
 
 // ===== 一覧を書く（WebP があるものだけ）=====
-const have = new Set(ENEMY_NAMES.filter(n => existsSync(path.join(OUT, `${enemyArtId(n)}.webp`))))
-const body = ENEMY_NAMES_BY_AREA.map((names, k) => {
+const have = new Set(ART_NAMES.filter(n => existsSync(path.join(OUT, `${enemyArtId(n)}.webp`))))
+const body = [...ENEMY_NAMES_BY_AREA, SPECIAL_ENEMY_NAMES].map((names, k) => {
   const rows = names.filter(n => have.has(n)).map(n => `  '${n}': '${enemyArtId(n)}',`)
-  return rows.length ? [`  // ${AREA_LIST[k].name}`, ...rows].join('\n') : null
+  return rows.length ? [`  // ${AREA_LIST[k]?.name || SPECIAL_ART_DIR}`, ...rows].join('\n') : null
 }).filter(Boolean).join('\n')
 writeFileSync(LIST, `// tools/v2cap-enemy-art.mjs が書くファイル（手で直さない）。絵があるモンスターの名前 → public/enemy-art/<id>.webp
 export const ENEMY_ART_IDS = {
@@ -146,14 +147,18 @@ ${body ? `${body}\n` : ''}}
 `)
 
 // ===== 知らせ =====
-const known = new Set(ENEMY_NAMES.map(n => `${enemyArtId(n)}.webp`))
+const known = new Set(ART_NAMES.map(n => `${enemyArtId(n)}.webp`))
 const orphans = readdirSync(OUT).filter(f => f.endsWith('.webp') && !known.has(f))
-console.log(`作った：${made}枚／絵があるモンスター：${have.size} / ${ENEMY_NAMES.length}体`)
+console.log(`作った：${made}枚／絵があるモンスター：${have.size} / ${ART_NAMES.length}体`)
 ENEMY_NAMES_BY_AREA.forEach((names, k) => {
   const lack = names.filter(n => !have.has(n))
   if (lack.length === names.length) return
   console.log(`  エリア${k + 1} ${AREA_LIST[k].name}：${names.length - lack.length} / ${names.length}${lack.length ? `（まだ：${lack.join('・')}）` : ''}`)
 })
+{
+  const lack = SPECIAL_ENEMY_NAMES.filter(n => !have.has(n))
+  console.log(`  ${SPECIAL_ART_DIR}：${SPECIAL_ENEMY_NAMES.length - lack.length} / ${SPECIAL_ENEMY_NAMES.length}${lack.length ? `（まだ：${lack.join('・')}）` : ''}`)
+}
 const warnList = (title, list) => { if (list.length) { console.log(title); for (const m of list) console.log(`  ${m}`) } }
 warnList('⚠ どのモンスターにも当てはまらない絵（enemyArt.js の ENEMY_ART_ALIAS に足す）：', unmatched)
 warnList('⚠ 置いたフォルダと違うエリアのモンスターに当てはまった絵：', wrongArea)

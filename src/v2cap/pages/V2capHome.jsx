@@ -21,6 +21,8 @@ import V2capCasino from '../components/V2capCasino.jsx'
 import V2capAscension from '../components/V2capAscension.jsx'
 import { START_CLASSES, weaponsOf, attackKindOf, classDescOf } from '../lib/jobs.js'
 import { apLeftOf } from '../lib/ascension.js'
+import { openUntilOf } from '../lib/sortie.js'
+import { spotLabel } from '../lib/areas.js'
 
 // ============================================================
 // バトルフロンティアⅡ「レベルキャップあり」版 — ホーム（開発限定）
@@ -165,6 +167,19 @@ export default function V2capHome() {
     setDevMsg(`メダル+${data.got.toLocaleString()}（${Number(data.medals).toLocaleString()}枚）`)
     await refresh()
   }
+  // 安息の祠を出す（2026-10-13・演出を試す用）：出撃で選んでいる場所（開いていなければ開いている一番先）に置く
+  const placeShrine = async () => {
+    setBusy(true); setDevMsg('')
+    const open = openUntilOf(prof?.cleared_spots)
+    let picked = 1
+    try { picked = Number(localStorage.getItem('v2capSelectedSpot')) || 1 } catch { /* 読めなければ①-① */ }
+    const spot = picked >= 1 && picked <= open ? picked : open
+    const { data, error: rpcErr } = await supabase.rpc('v2cap_debug_shrine', { p_spot: spot })
+    setBusy(false)
+    if (rpcErr || !data?.ok) { setDevMsg(`⚠ ${rpcErr?.message || data?.error || '失敗しました'}`); return }
+    setProf(data.profile)
+    setDevMsg(`安息の祠を置いた（${spotLabel(spot)}・${data.total}回の戦闘）`)
+  }
   const resetChar = async () => {
     setBusy(true)
     const { data, error: rpcErr } = await supabase.rpc('v2cap_dev_reset')
@@ -295,6 +310,7 @@ export default function V2capHome() {
                           メダル+{n.toLocaleString()}
                         </button>
                       ))}
+                      <button onClick={placeShrine} disabled={busy} style={miniBtn('#9fe8ff')}>⛲ 安息の祠を出す</button>
                       <button onClick={() => setConfirmReset(true)} disabled={busy} style={miniBtn('#ff8844')}>キャラを作り直す</button>
                     </div>
                     {/* ★「EXPは戦闘と同じ扱い（いまの職業のClassEXPにも同じ量が入る）」の説明は出さない（2026-10-12 ユーザー指示＝出撃の「（ClassEXP +◯）」と一緒に外した） */}

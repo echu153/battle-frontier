@@ -62,6 +62,18 @@ export const ART_BY_FORTUNE = {
 export const artFilterOf = (a) => `brightness(${a.b}) saturate(${a.s})${a.h ? ` hue-rotate(${a.h}deg)` : ''}`
 export const FORTUNE_NAMES = FORTUNES.map(f => f.name)
 
+// ===== 安息の祠（2026-10-13）=====
+// 【確定】ユーザー指示「最深部に到達した！　スタミナが全回復した！　って表示される演出が欲しい ※暗転後に泉が見えるような演出がいいかなー」
+//   絵はユーザーが用意した2枚（public/V2ホーム の 安息の祠.png・安息の祠泉.png → 画面で使う WebP・まわりは透明）。
+//   泉＝最深部の演出（V2capShrineFx.jsx の deepest）。入口＝見つけたときの演出（found）と、祠にいる間の出撃の欄
+export const SHRINE_ART = '/v2cap-art/shrine.webp'
+export const SPRING_ART = '/v2cap-art/shrine-spring.webp'
+export const SHRINE_TEXT = { found: '安息の祠を見つけた！', deepest: '最深部に到達した！', healed: 'スタミナが全回復した！' }
+// 絵の中の場所（絵の幅・高さに対する割合）：入口の奥・泉の水面・天井の光
+export const SHRINE_DOOR = { x: 0.5, y: 0.6 }
+export const SPRING_POOL = { x: 0.5, y: 0.7 }
+export const SPRING_LIGHT = { x: 0.52, y: 0.02 }
+
 // ===== 宝樹の画面（祈る前・祈ったあと）=====
 // 【確定】2026-10-13 ユーザー指示「ユグレシアの宝樹、今こんな感じでパッとしないから、良い感じにしてほしい」：
 //   画面の上に宝樹の絵（TREE_ART）を大きく敷く。今日の運勢で絵の明るさを変える＝天啓の ART_BY_FORTUNE を半分だけ効かせる

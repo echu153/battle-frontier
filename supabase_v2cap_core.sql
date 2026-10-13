@@ -2932,6 +2932,10 @@ alter table public.v2cap_profiles add column if not exists last_pray_at timestam
 alter table public.v2cap_profiles add column if not exists last_fortune text;
 alter table public.v2cap_profiles add column if not exists pray_count int not null default 0;
 alter table public.v2cap_profiles add column if not exists pray_log jsonb not null default '[]'::jsonb;
+-- ★2026-10-13 安息の祠（§5・src/v2cap/lib/shrine.js）：祠のある場所（null＝祠にいない）・最深部までの残りの戦闘の数・全部の数。キャラは消さない
+alter table public.v2cap_profiles add column if not exists shrine_spot int;
+alter table public.v2cap_profiles add column if not exists shrine_left int not null default 0;
+alter table public.v2cap_profiles add column if not exists shrine_total int not null default 0;
 create unique index if not exists v2cap_profiles_username_lower_idx
   on public.v2cap_profiles (lower(username));
 -- 参照は認証済み全員（今のⅡと同じ）。書き込みはRPC経由だけ
@@ -3663,6 +3667,13 @@ grant execute on function public.v2cap_create_character(text, text) to authentic
 --   （戦闘と敵の抽選をサーバーで回すまでは、今のⅡと同じ限界）
 -- ★落ちた装備（p_drop）は「その場所のエリアの装備か」「その役割の敵から落ちるレア度か」
 --   （エピックはレアとボスだけ・レジェンダリーはボスだけ）「いまの職業の武器か」を見てから持ち物に入れる
+-- ★安息の祠（2026-10-13 ユーザー指示・src/v2cap/lib/shrine.js と同じ数）：
+--   ・祠の外の1戦ごとに 0.1% で祠を見つける（勝ち負け・ボスを問わない。祠にいる間は見つからない）。
+--     戦闘の数は 3〜8 を均等に1つ。祠は見つけた場所に置く（v2cap_profiles の shrine_spot・shrine_left・shrine_total）
+--   ・祠の中の戦闘（p_enemy＝ハピネスフェアリー）は、祠のある場所で残りがあるときだけ通す。
+--     勝てば経験値＝場所の表の値×5・Gold＝ふつうの敵と同じ・装備は落とさない。負けたらふつうの負けと同じ（最低EXP・Goldなし）。
+--     勝ち負けを問わず1つ奥へ進む。ボスの出やすさは変えない。スタミナはふつうと同じ（オートは1使う）
+--   ・最後の1戦のあと（最深部）は、泉の力でスタミナをそのLV（この戦闘のEXPが入ったあと）の最大値まで戻す
 -- ⚠引数を変えた（p_area → p_spot・ランクの p_rank をなくした）ので、前の形を落としてから作る
 drop function if exists public.v2cap_sortie_settle(int, text, boolean, text, boolean);
 drop function if exists public.v2cap_sortie_settle(int, text, boolean, text, text, boolean);
@@ -3672,6 +3683,13 @@ create or replace function public.v2cap_sortie_settle(
 language plpgsql security definer set search_path = public as $$
 declare
   c_cd constant interval := interval '8 seconds';
+  -- 安息の祠（shrine.js の SHRINE_FAIRY_NAME・SHRINE_PCT・SHRINE_FIGHTS・SHRINE_EXP_TENTHS・SHRINE_GOLD_TENTHS）
+  c_shrine_fairy constant text := 'ハピネスフェアリー';
+  c_shrine_rate  constant numeric := 0.001;
+  c_shrine_min   constant int := 3;
+  c_shrine_max   constant int := 8;
+  c_shrine_exp   constant int := 50;
+  c_shrine_gold  constant int := 10;
   v_uid    uuid := auth.uid();
   v_row    public.v2cap_profiles;
   v_cls    public.v2cap_classes;
@@ -3679,6 +3697,12 @@ declare
   v_en     public.v2cap_enemies;
   v_eq     public.v2cap_equipment;
   v_boss   boolean;
+  v_shrine boolean;          -- 祠の中の戦闘か
+  v_found  boolean := false; -- この戦闘のあとで祠を見つけたか
+  v_deep   boolean := false; -- 最深部に着いたか（祠の最後の1戦）
+  v_sh_spot  int;
+  v_sh_left  int;
+  v_sh_total int;
   v_win    boolean := coalesce(p_win, false);
   v_tenths int;
   v_exp    int := 0;
@@ -3703,12 +3727,20 @@ begin
   if p_spot > public.v2cap_open_until(v_row.cleared_spots) then
     return jsonb_build_object('ok', false, 'error', 'この場所はまだ解放されていません');
   end if;
-  select * into v_en from public.v2cap_enemies where name = p_enemy and spot = p_spot;
-  if not found then return jsonb_build_object('ok', false, 'error', 'その敵はこの場所にいません'); end if;
+  -- 祠の中の戦闘：相手はハピネスフェアリーだけ。祠のある場所で、最深部までの残りがあるときだけ
+  v_shrine := p_enemy = c_shrine_fairy;
+  if v_shrine then
+    if coalesce(v_row.shrine_left, 0) <= 0 or v_row.shrine_spot is distinct from p_spot then
+      return jsonb_build_object('ok', false, 'error', 'いまは安息の祠にいません');
+    end if;
+  else
+    select * into v_en from public.v2cap_enemies where name = p_enemy and spot = p_spot;
+    if not found then return jsonb_build_object('ok', false, 'error', 'その敵はこの場所にいません'); end if;
+  end if;
   if v_row.last_sortie_at is not null and v_row.last_sortie_at > now() - c_cd then
     return jsonb_build_object('ok', false, 'error', '出撃の間隔が短すぎます');
   end if;
-  v_boss := v_en.role = 'boss';
+  v_boss := not v_shrine and v_en.role = 'boss';
 
   -- オートはスタミナを1使う。足りなければ通さない（手動は使わない）
   if coalesce(p_auto, false) then
@@ -3719,7 +3751,11 @@ begin
     end if;
   end if;
 
-  if v_win then
+  if v_win and v_shrine then
+    -- 安息の祠：経験値は場所の表の値×5・Goldはふつうの敵と同じ・装備は落とさない（p_drop は見ない）
+    v_exp  := ((v_spot.exp_min  + floor(random() * (v_spot.exp_max  - v_spot.exp_min  + 1))::int) * c_shrine_exp + 5) / 10;
+    v_gold := ((v_spot.gold_min + floor(random() * (v_spot.gold_max - v_spot.gold_min + 1))::int) * c_shrine_gold + 5) / 10;
+  elsif v_win then
     -- 役割の倍率（10分率）。朝昼晩1.5倍・レア3倍・ボス5倍
     v_tenths := case v_en.role when 'timed' then 15 when 'rare' then 30 when 'boss' then 50 else 10 end;
     v_exp  := ((v_spot.exp_min  + floor(random() * (v_spot.exp_max  - v_spot.exp_min  + 1))::int) * v_tenths + 5) / 10;
@@ -3746,11 +3782,29 @@ begin
   if v_boss and v_win and not (v_cleared @> array[p_spot]) then
     v_cleared := array_append(v_cleared, p_spot);
   end if;
-  v_rate := case when v_boss then 0 else least(100, v_row.boss_rate + 0.3) end;
+  -- 祠の中ではボスの出やすさを変えない（外へ出たら続きから）
+  v_rate := case when v_shrine then v_row.boss_rate when v_boss then 0 else least(100, v_row.boss_rate + 0.3) end;
+
+  -- 安息の祠：祠の中なら勝ち負けを問わず1つ奥へ（残りが0＝最深部）。祠の外なら 0.1% で見つける（祠にいる間は見つからない）
+  v_sh_spot  := v_row.shrine_spot;
+  v_sh_left  := coalesce(v_row.shrine_left, 0);
+  v_sh_total := coalesce(v_row.shrine_total, 0);
+  if v_shrine then
+    v_sh_left := v_sh_left - 1;
+    v_deep := v_sh_left <= 0;
+  elsif v_sh_left <= 0 and random() < c_shrine_rate then
+    v_found := true;
+    v_sh_spot := p_spot;
+    v_sh_total := c_shrine_min + floor(random() * (c_shrine_max - c_shrine_min + 1))::int;
+    v_sh_left := v_sh_total;
+  end if;
 
   update public.v2cap_profiles
      set cleared_spots = v_cleared, boss_rate = v_rate, gold = gold + v_gold,
          stamina = greatest(0, stamina - v_cost),
+         shrine_spot = case when v_sh_left > 0 then v_sh_spot end,
+         shrine_left = greatest(0, v_sh_left),
+         shrine_total = case when v_sh_left > 0 then v_sh_total else 0 end,
          last_sortie_at = now(), updated_at = now()
    where id = v_uid
    returning stamina, stamina_at into v_stam, v_stam_at;
@@ -3758,18 +3812,28 @@ begin
   -- デイリーミッション（§10）：勝ったら「出撃に勝つ」を1つ数える（受注していない日は数えない）
   if v_win then
     perform public.v2cap_daily_bump(v_uid, 'win', 1);
-    -- モンスター図鑑：勝った敵の討伐数を1つ足す（敵の名前はこの場所にいることを上で確かめてある）
-    insert into public.v2cap_kills (player_id, enemy, n) values (v_uid, v_en.name, 1)
+    -- モンスター図鑑：勝った敵の討伐数を1つ足す（敵の名前はこの場所にいることを上で確かめてある。祠ではハピネスフェアリー）
+    insert into public.v2cap_kills (player_id, enemy, n) values (v_uid, case when v_shrine then c_shrine_fairy else v_en.name end, 1)
     on conflict (player_id, enemy) do update set n = public.v2cap_kills.n + 1;
   end if;
 
   v_res := public.v2cap_apply_exp(v_uid, v_exp);
-  return jsonb_build_object('ok', true, 'win', v_win, 'boss', v_boss, 'role', v_en.role, 'enemy_lv', v_en.lv,
+  -- 最深部：泉の力でスタミナを全回復（この戦闘のEXPが入ったあとのLVの最大値まで。最大より多ければそのまま）
+  if v_deep then
+    update public.v2cap_profiles
+       set stamina = greatest(stamina, public.v2cap_stamina_max(lv)), stamina_at = now(), updated_at = now()
+     where id = v_uid
+     returning stamina, stamina_at into v_stam, v_stam_at;
+  end if;
+  return jsonb_build_object('ok', true, 'win', v_win, 'boss', v_boss,
+    'role', case when v_shrine then 'shrine' else v_en.role end, 'enemy_lv', v_en.lv,
     'exp', v_exp, 'gold', v_gold, 'drop', v_drop,
     'cleared', to_jsonb(v_cleared), 'open_until', public.v2cap_open_until(v_cleared), 'boss_rate', v_rate,
     'level', v_res,
     'stamina', v_stam, 'stamina_at', v_stam_at,
-    'stamina_max', public.v2cap_stamina_max(coalesce((v_res -> 'profile' ->> 'lv')::int, v_row.lv)));
+    'stamina_max', public.v2cap_stamina_max(coalesce((v_res -> 'profile' ->> 'lv')::int, v_row.lv)),
+    'shrine', jsonb_build_object('found', v_found, 'deepest', v_deep, 'spot', v_sh_spot,
+      'left', greatest(0, v_sh_left), 'total', v_sh_total));
 end;
 $$;
 revoke all on function public.v2cap_sortie_settle(int, text, boolean, text, boolean) from public, anon;
@@ -4343,6 +4407,32 @@ end;
 $$;
 revoke all on function public.v2cap_debug_gain_medals(int) from public, anon;
 grant execute on function public.v2cap_debug_gain_medals(int) to authenticated;
+
+-- 安息の祠を出す（2026-10-13・演出を試す用。開発用の欄のボタン）：開いている場所に祠を置く（戦闘の数は 3〜8 を引く・
+--   いま祠にいれば置き直す）。ふつうは出撃の精算が 0.1% で置く（§5）
+create or replace function public.v2cap_debug_shrine(p_spot int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_shrine_min constant int := 3;
+  c_shrine_max constant int := 8;
+  v_row public.v2cap_profiles;
+  v_n   int := c_shrine_min + floor(random() * (c_shrine_max - c_shrine_min + 1))::int;
+begin
+  if auth.uid() is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select * into v_row from public.v2cap_profiles where id = auth.uid() for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  if p_spot is null or p_spot < 1 or p_spot > public.v2cap_open_until(v_row.cleared_spots) then
+    return jsonb_build_object('ok', false, 'error', 'この場所はまだ解放されていません');
+  end if;
+  update public.v2cap_profiles set shrine_spot = p_spot, shrine_left = v_n, shrine_total = v_n, updated_at = now()
+   where id = auth.uid()
+   returning * into v_row;
+  return jsonb_build_object('ok', true, 'total', v_n, 'profile', to_jsonb(v_row));
+end;
+$$;
+revoke all on function public.v2cap_debug_shrine(int) from public, anon;
+grant execute on function public.v2cap_debug_shrine(int) to authenticated;
 
 -- 自分のキャラを消して作り直せるようにする（この版のデータだけ。今のⅡ・旧版には触らない）
 create or replace function public.v2cap_dev_reset()
