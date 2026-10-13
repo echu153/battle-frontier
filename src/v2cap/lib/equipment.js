@@ -37,10 +37,11 @@ export const rarityLabel = (r) => RARITY_LABEL[r] || ''
 export const REQ_LV_STEP = 5
 export const reqLvOf = (area, rarity) => REQ_LV_STEP * area + REQ_LV_STEP * Math.max(0, RARITIES.indexOf(rarity))
 // 【確定】2026-10-13 ユーザー指示「必要武器レベルのハードル少し下げる。今あるレア、エピック、レジェンドの必要レベル5さげて、
-//   戦闘力はそのままでいい」：必要LV（装備の条件・足りないと効果が下がる）＝アイテムLV − 5（レア・エピック・レジェンダリー）。
-//   ノーマル（初期装備も）はアイテムLVのまま。強さ（戦闘力）はアイテムLVで決まるので変わらない。
+//   戦闘力はそのままでいい」→ 同じ日に「現状レアはノーマルでいいんだっけ？そしたらレアはそのままでいいや」：
+//   必要LV（装備の条件・足りないと効果が下がる）＝アイテムLV − 5（**エピック・レジェンダリーだけ**）。
+//   ノーマル（初期装備も）とレアはアイテムLVのまま。強さ（戦闘力）はアイテムLVで決まるので変わらない。
 //   ★サーバーは必要LVを使っていない（効果の下がり方は画面と戦闘の計算だけ）＝SQLは変わらない
-export const REQ_LV_DISCOUNT = { N:0, R:5, E:5, L:5 }
+export const REQ_LV_DISCOUNT = { N:0, R:0, E:5, L:5 }
 export const needLvOf = (item, ilv = item?.lv) => Math.max(1, (ilv || 1) - (REQ_LV_DISCOUNT[item?.rarity] || 0))
 
 // 枠は7つ（武器1・頭・鎧・腕・足・装飾品2）

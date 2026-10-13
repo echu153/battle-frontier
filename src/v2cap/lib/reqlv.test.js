@@ -1,22 +1,22 @@
-// v2cap：必要LV（2026-10-13 ユーザー指示「レア、エピック、レジェンドの必要レベル5さげて、戦闘力はそのままでいい」）：node --test
+// v2cap：必要LV（2026-10-13 ユーザー指示「エピック、レジェンドの必要レベル5さげて、戦闘力はそのままでいい」・レアはそのまま）：node --test
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
 import { ITEMS, ITEM_BY_ID, STARTER_ITEMS, needLvOf, reqLvOf, REQ_LV_DISCOUNT } from './equipment.js'
 import { powerAt, effectPct, reqPctOf, PENALTY_PER_LV } from './gear.js'
 
-test('【確定】必要LV＝アイテムLV − 5（レア・エピック・レジェンダリー）・ノーマルと初期装備はそのまま', () => {
-  assert.deepEqual(REQ_LV_DISCOUNT, { N:0, R:5, E:5, L:5 })
+test('【確定】必要LV＝アイテムLV − 5（エピック・レジェンダリー）・ノーマルとレアと初期装備はそのまま', () => {
+  assert.deepEqual(REQ_LV_DISCOUNT, { N:0, R:0, E:5, L:5 })
   for (const item of ITEMS) {
     assert.equal(item.lv, reqLvOf(item.area, item.rarity), 'アイテムLVは前の表のまま')
-    assert.equal(needLvOf(item), item.rarity === 'N' ? item.lv : item.lv - 5, item.id)
+    assert.equal(needLvOf(item), item.rarity === 'N' || item.rarity === 'R' ? item.lv : item.lv - 5, item.id)
   }
-  // 始まりの森：ノーマル5・レア5・エピック10・レジェンダリー15（前は 5/10/15/20）
+  // 始まりの森：ノーマル5・レア10・エピック10・レジェンダリー15（前は 5/10/15/20）
   const forest = (r) => needLvOf(ITEMS.find(i => i.area === 1 && i.rarity === r))
-  assert.deepEqual(['N', 'R', 'E', 'L'].map(forest), [5, 5, 10, 15])
-  // 深淵の海溝：75/75/80/85（前は 75/80/85/90）
+  assert.deepEqual(['N', 'R', 'E', 'L'].map(forest), [5, 10, 10, 15])
+  // 深淵の海溝：75/80/80/85（前は 75/80/85/90）
   const abyss = (r) => needLvOf(ITEMS.find(i => i.area === 15 && i.rarity === r))
-  assert.deepEqual(['N', 'R', 'E', 'L'].map(abyss), [75, 75, 80, 85])
+  assert.deepEqual(['N', 'R', 'E', 'L'].map(abyss), [75, 80, 80, 85])
   for (const it of Object.values(STARTER_ITEMS || {})) assert.equal(needLvOf(it), 1, '初期装備はLV1')
   assert.equal(needLvOf({ rarity:'L', lv:3 }), 1, '1より下にはならない')
 })
