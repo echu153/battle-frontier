@@ -8,6 +8,7 @@ const codeOf = (f) => readFileSync(new URL(f, import.meta.url), 'utf8')
   .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
 const EQUIP = codeOf('../components/V2capEquip.jsx')
 const GEAR = codeOf('../components/v2capGear.jsx')
+const SMITH = codeOf('../components/V2capSmith.jsx')
 
 test('【確定】装備中の説明文（装備できる武器・重鎧と軽装・必要LV・強化の説明）は出さない', () => {
   assert.ok(!/装備できる武器は/.test(EQUIP), '装備できる武器の説明は出さない')
@@ -19,6 +20,12 @@ test('【確定】装備中の行にLVは出さない・持っている装備の
   assert.ok(!/needLvOf\(w\.item/.test(EQUIP), '装備中の行（w.item）に必要LVを出さない')
   assert.ok(/>要求レベル\{needLvOf\(item, inv\.ilv\)\}LV</.test(EQUIP), '持っている装備の右は「要求レベル〇LV」')
   assert.ok(!/>LV\{needLvOf/.test(EQUIP), '「LV〇」の書き方は使わない')
+})
+
+test('【確定】鍛冶屋の一覧（強化・分解・作成）の右も「要求レベル〇LV」（ユーザーが装備画面にそろえるを選んだ・確認の画面の「（LV〇）」はそのまま）', () => {
+  assert.ok(/>要求レベル\{needLvOf\(item, inv\.ilv\)\}LV</.test(SMITH), '強化・分解の一覧（ItemHead）')
+  assert.ok(/>要求レベル\{needLvOf\(item\)\}LV</.test(SMITH), '作成の一覧')
+  assert.ok(!/>LV\{needLvOf/.test(SMITH), '一覧の右に「LV〇」の書き方は使わない')
 })
 
 test('【確定】絞り込みは 部位・レア度・エリア の3つのプルダウンを横並び（ボタンの列に戻さない）', () => {

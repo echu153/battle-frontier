@@ -354,7 +354,7 @@ function CraftTab({ prof, all, busy, call, setError, setNotice }) {
                   {/* 2026-10-13 ユーザー指示「持っている 1 じゃなくて〇個所持って表示させて」 */}
                   {n > 0 && <span style={{ color:'#44aaff', fontSize:'10px', marginLeft:'5px' }}>{n}個所持</span>}
                 </span>
-                <span style={{ color: needLvOf(item) > prof.lv ? '#ff8844' : '#cfe2ff', fontSize:'11px' }}>LV{needLvOf(item)}</span>
+                <span style={{ color: needLvOf(item) > prof.lv ? '#ff8844' : '#cfe2ff', fontSize:'11px', whiteSpace:'nowrap' }}>要求レベル{needLvOf(item)}LV</span>
               </div>
               <ItemStats inv={{ ilv: item.lv, plus: 0 }} item={item} pct={pct} />
               <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center', fontSize:'10px' }}>
@@ -370,7 +370,8 @@ function CraftTab({ prof, all, busy, call, setError, setNotice }) {
 }
 
 // ===== 部品 =====
-// 名前の行（レア度・名前・強化値・種類・防具の効果・装備中・LV）
+// 名前の行（レア度・名前・強化値・種類・防具の効果・装備中・要求レベル）
+// ★一覧の右は「要求レベル〇LV」（2026-10-14 ユーザーが装備画面にそろえるを選んだ）。確認の画面の「（LV〇）」はそのまま
 function ItemHead({ inv, item, lv, isWorn, check }) {
   const effect = item.line ? ARMOR_EFFECT[item.line]?.label : null
   return (
@@ -382,7 +383,7 @@ function ItemHead({ inv, item, lv, isWorn, check }) {
         {effect && <span style={{ color:'#88ddaa', fontSize:'10px', marginLeft:'5px' }}>{effect}</span>}
         {isWorn && <span style={{ color:'#44aaff', fontSize:'10px', marginLeft:'5px' }}>装備中</span>}
       </span>
-      <span style={{ color: lv && needLvOf(item, inv.ilv) > lv ? '#ff8844' : '#cfe2ff', fontSize:'11px' }}>LV{needLvOf(item, inv.ilv)}</span>
+      <span style={{ color: lv && needLvOf(item, inv.ilv) > lv ? '#ff8844' : '#cfe2ff', fontSize:'11px', whiteSpace:'nowrap' }}>要求レベル{needLvOf(item, inv.ilv)}LV</span>
     </div>
   )
 }
