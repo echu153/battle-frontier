@@ -16,7 +16,8 @@ import { TREE_ART } from '../lib/fxStyle.js'
 // ============================================================
 const pad = (n) => String(n).padStart(2, '0')
 
-export default function V2capTree({ prof, onProfile }) {
+// 【確定】2026-10-13 ユーザー指示「開発中祈りは何回でもできるようにして」：管理者（unlimited）は何回でも祈れる（サーバーも is_admin なら日付を見ない）
+export default function V2capTree({ prof, onProfile, unlimited = false }) {
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)   // 祈った直後の結果
   const [error, setError] = useState('')
@@ -26,7 +27,7 @@ export default function V2capTree({ prof, onProfile }) {
   useEffect(() => { if (TREE_ART) { const img = new Image(); img.src = TREE_ART } }, [])   // 祈りの演出の絵を先に読み込む
 
   const at = new Date(now)
-  const ready = canPray(prof.last_pray_at, at)
+  const ready = unlimited || canPray(prof.last_pray_at, at)
   const remain = remainUntilPray(prof.last_pray_at, at)
   const shown = result ? FORTUNE_BY_NAME[result.fortune] : null
   const log = prof.pray_log || []          // 新しい順に最大10件（サーバーが積む）
@@ -58,6 +59,7 @@ export default function V2capTree({ prof, onProfile }) {
         （LV{prof.lv}なら 吉で <span style={{ color:'#ffcc00' }}>EXP +{kichi.toLocaleString()}</span>・
         大吉で <span style={{ color:'#ffcc00' }}>EXP +{daikichi.toLocaleString()}</span>。吉はLV{prof.lv}の推奨の場所「{spotLabel(recSpotOfLv(prof.lv))}」で10回出撃したくらい）。
         <br />日付が変わるのは日本時間の5時です。
+        {unlimited && <><br /><span style={{ color:'#ff88cc' }}>🧪 開発中：管理者は何回でも祈れます</span></>}
       </div>
 
       {/* 祈った結果 */}

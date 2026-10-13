@@ -372,7 +372,7 @@ test('【確定】アイコン：入れられるのは用意された8枚（JS�
   assert.ok(!/gold/.test(f), 'アップロードは無料（Goldを引かない）')
 })
 
-test('【確定】ユグレシアの宝樹：運勢の並び・出やすさ・倍率と経験値の割合がJSと同じ。1日1回（管理者も）・ごほうびは経験値だけ', () => {
+test('【確定】ユグレシアの宝樹：運勢の並び・出やすさ・倍率と経験値の割合がJSと同じ。1日1回（管理者は何回でも）・ごほうびは経験値だけ', () => {
   for (const col of ['last_pray_at timestamptz', 'last_fortune text', 'pray_count int not null default 0', "pray_log jsonb not null default '[]'::jsonb"]) {
     assert.ok(SQL.includes(`alter table public.v2cap_profiles add column if not exists ${col};`), col)
   }
@@ -385,9 +385,10 @@ test('【確定】ユグレシアの宝樹：運勢の並び・出やすさ・�
   assert.ok(!/v_permil|v2cap_need\(/.test(f), '前の「必要EXPの%」は使わない')
   assert.match(f, /returning p\.lv, p\.pray_count, p\.pray_log into v_lv, v_count, v_log;/, '祈った時点のLV')
   assert.ok(f.includes('v_res := public.v2cap_apply_exp(v_uid, v_exp);'), 'EXPは戦闘と同じ扱い')
-  // 1日1回：確認と記録を1文で（日本時間の5時で切り替わる）。管理者だけ何回でも、は入れない
+  // 1日1回：確認と記録を1文で（日本時間の5時で切り替わる）。【確定】2026-10-13「開発中祈りは何回でも」＝管理者（is_admin）は日付を見ない
   assert.ok(f.includes("< ((now()           at time zone 'Asia/Tokyo') - interval '5 hours')::date)"))
-  assert.ok(!/is_admin|v_admin/.test(f), '管理者だけ何回でも、は入れない（この版は管理者しか入れない）')
+  assert.ok(f.includes('v_admin boolean := coalesce((select pr.is_admin from public.profiles pr where pr.id = auth.uid()), false);'), '管理者かどうかは profiles.is_admin')
+  assert.match(f, /where p\.id = v_uid\s+and \(v_admin\b[^\n]*\n\s+or p\.last_pray_at is null/, '管理者は日付の確認を飛ばす（一般の人は1日1回）')
   assert.ok(!/gold/.test(f), 'ごほうびは経験値だけ（ユーザー決定）')
   assert.ok(SQL.includes('grant execute on function public.v2cap_pray() to authenticated;'))
 })

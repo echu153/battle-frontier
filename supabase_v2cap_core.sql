@@ -4232,7 +4232,9 @@ grant execute on function public.v2cap_set_avatar(text) to authenticated;
 --   ・ごほうびは経験値だけ。基準＝【確定】2026-10-12「デイリーミッションと同じにする」：祈った時点のLVの推奨の場所で10回出撃したくらい
 --     （v2cap_ten_sortie_exp・前は必要EXP × 2〜0.1%）、それに運勢の倍率（大吉×3〜大凶×0.2・今のⅡと同じ）。端数は切り上げ。EXPは戦闘と同じ扱い（v2cap_apply_exp）
 --   ・運勢の並び・出やすさは今のⅡ（v2_pray・src/v2/lib/tree.js の FORTUNES）と同じ
---   ・1日1回（日本時間の5時で切り替わる）。この版は管理者しか入れないので、管理者だけ何回でも、はしない
+--   ・1日1回（日本時間の5時で切り替わる）
+--   ・【確定】2026-10-13 ユーザー指示「開発中祈りは何回でもできるようにして」：**管理者（is_admin）は何回でも祈れる**（日付の確認を飛ばす）。
+--     今はこの版に管理者しか入れないので、開発中はだれでも何回でも。公開したあとも一般の人は1日1回のまま（前は「管理者も1日1回」）
 create or replace function public.v2cap_pray()
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
@@ -4250,6 +4252,7 @@ declare
   v_count int;
   v_log   jsonb;
   v_res   jsonb := null;
+  v_admin boolean := coalesce((select pr.is_admin from public.profiles pr where pr.id = auth.uid()), false);
   i       int;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
@@ -4285,7 +4288,8 @@ begin
          ),
          updated_at   = now()
    where p.id = v_uid
-     and (p.last_pray_at is null
+     and (v_admin                 -- 管理者は何回でも（2026-10-13）
+          or p.last_pray_at is null
           or ((p.last_pray_at at time zone 'Asia/Tokyo') - interval '5 hours')::date
            < ((now()           at time zone 'Asia/Tokyo') - interval '5 hours')::date)
    returning p.lv, p.pray_count, p.pray_log into v_lv, v_count, v_log;

@@ -81,6 +81,7 @@ export default function V2capHome() {
   const [screen, setScreen] = useState('home')
   const [inBattle, setInBattle] = useState(false)
   const [name, setName] = useState('')
+  const [isAdmin, setIsAdmin] = useState(false)   // 宝樹を何回でも祈れる（2026-10-13・開発中）
   const [pick, setPick] = useState('戦士')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -114,6 +115,7 @@ export default function V2capHome() {
         if (!p?.is_admin) { reportDevAccess('v2cap', 'V2レベルキャップあり[開発]'); nav('/game'); return }
         if (!alive) return
         setName(p?.username || '')
+        setIsAdmin(!!p?.is_admin)
         await load()
       } catch (err) {
         if (alive) setSqlError(err.message || String(err))
@@ -315,7 +317,7 @@ export default function V2capHome() {
             {screen === 'skills' && <V2capSkills prof={prof} inventory={inventory} onProfile={refresh} />}
             {screen === 'temple' && <V2capTemple prof={prof} inventory={inventory} onProfile={refresh} />}
             {screen === 'asc' && <V2capAscension prof={prof} onProfile={refresh} />}
-            {screen === 'tree' && <V2capTree prof={prof} onProfile={refresh} />}
+            {screen === 'tree' && <V2capTree prof={prof} onProfile={refresh} unlimited={isAdmin} />}
             {screen === 'dex' && <V2capDex prof={prof} />}
             {screen === 'casino' && <V2capCasino prof={prof} onProfile={refresh} />}
           </div>
