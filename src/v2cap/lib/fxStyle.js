@@ -59,6 +59,24 @@ export const ART_BY_FORTUNE = {
   大吉: { b: 1.12, s: 1.15, h: 0 }, 中吉: { b: 1.0, s: 1.05, h: 0 }, 小吉: { b: 0.9, s: 1.0, h: 0 }, 吉: { b: 0.82, s: 0.95, h: 0 },
   末吉: { b: 0.66, s: 0.8, h: 0 }, 凶: { b: 0.42, s: 0.4, h: 200 }, 大凶: { b: 0.26, s: 0.35, h: 300 },
 }
+// ===== 大凶の嵐（天啓の演出）=====
+// 【確定】2026-10-14 ユーザー指示「大凶の時の演出、雷とか魔法陣の演出安っぽいから修正したい」→「絵を用意する＋動きはコード」を選んだ。
+//   絵はユーザーが用意した3枚（public/V2ホーム の ユグレシア雷.png＝3本を1本ずつに切った・ユグレシア大凶魔法陣.png・ユグレシア雲.png → WebP・まわりは透明）。
+//   大凶の宝樹の絵は「今のかんじのままでいい」（ユーザー）＝ART_BY_FORTUNE の暗い赤黒のまま
+//   ・暗雲が上から垂れ込め、雨が降る。空に赤黒い魔法陣が現れて逆に回る（天啓の「大凶」の文字の後ろ）
+//   ・雷は2回（STORM_STRIKES：画面の横の位置・どの絵・高さvh・揺れpx）。落ちるたび画面が光って揺れ、宝樹が一瞬照らされる
+//   ・天啓が出たあとも、遠くで時々雷（STORM_AMBIENT_MS の間隔・小さく・揺れない）
+export const STORM_ART = {
+  bolts: ['/v2cap-art/storm-bolt-1.webp', '/v2cap-art/storm-bolt-2.webp', '/v2cap-art/storm-bolt-3.webp'],
+  sigil: '/v2cap-art/storm-sigil.webp',
+  cloud: '/v2cap-art/storm-cloud.webp',
+}
+export const STORM_STRIKES = [
+  { at: 650,  x: 0.36, bolt: 0, h: 62, shake: 6 },
+  { at: 1250, x: 0.64, bolt: 1, h: 68, shake: 10 },
+]
+export const STORM_AMBIENT_MS = [2600, 4600]
+export const STORM_DESCEND_MS = 1700   // 雷が2回落ちてから天啓へ
 export const artFilterOf = (a) => `brightness(${a.b}) saturate(${a.s})${a.h ? ` hue-rotate(${a.h}deg)` : ''}`
 export const FORTUNE_NAMES = FORTUNES.map(f => f.name)
 

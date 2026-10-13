@@ -3,7 +3,7 @@
 // ------------------------------------------------------------
 // 【確定】2026-10-13 ユーザー指示「賭博場の演出めっちゃいい、他のコンテンツにも演出追加してみたい（音はなくていい）」
 //   強化（V2capEnhanceFx.jsx）と宝樹のおみくじ（V2capOmikujiFx.jsx）が使う。音は鳴らさない
-//   createParticles(canvas) → { converge, burst, rise, fall, shards, mist, clear, destroy }（fall は葉・花びら・羽根）
+//   createParticles(canvas) → { converge, burst, rise, fall, shards, mist, rain, clear, destroy }（fall は葉・花びら・羽根）
 //   ・座標はキャンバスの中の px（CSS の大きさ）。粒が無くなると描くのを止める
 // ============================================================
 const TAU = Math.PI * 2
@@ -88,6 +88,17 @@ export function createParticles(canvas) {
       case 'shard': {
         ctx.rotate(p.rot); ctx.fillStyle = p.color
         ctx.beginPath(); ctx.moveTo(-s, -s * 0.4); ctx.lineTo(s * 0.8, -s * 0.7); ctx.lineTo(s * 0.3, s); ctx.closePath(); ctx.fill()
+        break
+      }
+      case 'rain': {
+        // 雨（2026-10-14 大凶の嵐）：進む向きと逆へ伸びる細い筋
+        const v = Math.hypot(p.vx, p.vy) || 1
+        const len = p.len * dpr
+        const tx = -p.vx / v * len, ty = -p.vy / v * len
+        const g = ctx.createLinearGradient(tx, ty, 0, 0)
+        g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, p.color)
+        ctx.strokeStyle = g; ctx.lineWidth = Math.max(1, dpr * 0.9); ctx.lineCap = 'round'
+        ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(0, 0); ctx.stroke()
         break
       }
       case 'mist': {
@@ -184,6 +195,15 @@ export function createParticles(canvas) {
       for (let i = 0; i < n; i++) {
         add({ shape: 'mist', x: cx + rand(-spread, spread), y: cy + rand(-spread * 0.6, spread * 0.6), vx: rand(-15, 15), vy: rand(-20, 5),
           size: rand(40, 90), color: pick(colors), life: rand(2.5, 4), fadeIn: 0.8, alpha: 0.9 })
+      }
+      kick()
+    },
+    // 雨（大凶の嵐）。上から斜めに速く落ちる筋。続けて降らせるときは呼ぶ側が間隔をあけて何度も呼ぶ
+    rain(n, { colors = ['rgba(200,180,230,0.55)'], speed = [900, 1300], slant = -0.2, len = [14, 28] } = {}) {
+      for (let i = 0; i < n; i++) {
+        const vy = rand(speed[0], speed[1])
+        add({ shape: 'rain', x: rand(-W * 0.1, W * 1.25), y: rand(-80, -10), vx: vy * slant, vy, len: rand(len[0], len[1]),
+          size: 1, color: pick(colors), life: 3 })
       }
       kick()
     },
