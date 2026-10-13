@@ -11,7 +11,7 @@ import {
 import { toFighter as playerFighter } from '../lib/loadout.js'
 import { staminaMaxOf, MAX_LV, rollStamina } from '../lib/level.js'
 import { jobUpHead, jobUpNote } from '../lib/jobs.js'
-import { RARITY_COLOR, rarityLabel } from '../lib/equipment.js'
+import { RARITY_COLOR } from '../lib/equipment.js'
 import { buildCapBattleView } from '../lib/battleView.js'
 import { enemyArtSrc } from '../lib/enemyArt.js'
 import { battleIconOf } from '../lib/classArt.js'
@@ -171,12 +171,12 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       }
       if (win) {
         if (data.drop && drop) {
-          // ★色を付けるのはレア度と装備名だけ（今のⅡと同じ形）。
+          // ★装備名だけをレア度の色で（【レア】のような頭の表記は付けない＝2026-10-13 ユーザーが「ログも外す」を選んだ）。
           //   「必要LVに足りない＝効果◯%」も「（LV◯）」も出さない（2026-10-12 ユーザー指示「ここで説明しなくていい」
           //   「装備ドロップしたとき要求レベル書かなくていい」）
           const color = RARITY_COLOR[drop.item.rarity]
           after.push({ color: LOG_PLAIN, parts: [
-            { text:'🎁 ' }, { text:`【${rarityLabel(drop.item.rarity)}】`, color }, { text:'「' }, { text: drop.item.name, color },
+            { text:'🎁 「' }, { text: drop.item.name, color },
             { text:'」を入手！' },
           ] })
         }
