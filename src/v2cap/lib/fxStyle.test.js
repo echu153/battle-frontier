@@ -102,10 +102,18 @@ test('【確定】宝樹の画面：絵の明るさは運勢しだい（大吉�
   }
 })
 
-test('【確定】宝樹の画面の説明文はユーザーの文（前の「LV10なら 吉で EXP +30…10回出撃したくらい」は出さない）', () => {
+test('【確定】宝樹の画面の説明文はユーザーの文（2026-10-14 の4行・前の「LV10なら 吉で EXP +30…10回出撃したくらい」は出さない）', () => {
   const src = readFileSync(new URL('../components/V2capTree.jsx', import.meta.url), 'utf8')
-  assert.ok(src.includes('1日1回だけ祈れます。宝樹の返す言葉（大凶〜大吉）で、もらえる経験値が変わります'))
-  assert.ok(src.includes('（AM 5：00更新）'))
+  const lines = ['1日1回だけ祈れます。', '宝樹の返す天啓（大凶〜大吉）で、もらえる経験値が変わります。', '毎日祈ることで信仰心が上がっていきます。', '（AM 5：00更新）']
+  for (const l of lines) assert.ok(src.includes(l), l)
+  assert.ok(!src.includes('宝樹の返す言葉（大凶〜大吉）'), '前の文')
+  // 【確定】2026-10-14「説明以外に信仰心の文言いらない、連続ボーナスの詳細な記載もいらない」
+  const fx = readFileSync(new URL('../components/V2capRevelationFx.jsx', import.meta.url), 'utf8')
+  for (const [name, code] of [['V2capTree.jsx', src], ['V2capRevelationFx.jsx', fx]]) {
+    const shown = code.split(/\r?\n/).filter(l => !l.trim().startsWith('//') && !l.includes('{/*'))
+    assert.equal(shown.filter(l => l.includes('信仰心')).length, name === 'V2capTree.jsx' ? 1 : 0, `${name}：信仰心は説明文の1か所だけ`)
+    assert.ok(!shown.some(l => /streak|連続/.test(l)), `${name}：連続の日数や倍率は出さない`)
+  }
   assert.ok(!src.includes('日付が変わるのは日本時間の5時です'))
   assert.ok(!/吉で <span/.test(src) && !src.includes('で10回出撃したくらい）'), '吉と大吉のEXPの例は出さない')
 })

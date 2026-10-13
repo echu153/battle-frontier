@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { MAX_LV } from './level.js'
 import { tenSortieExpOf } from './areas.js'
-import { FORTUNES, FORTUNE_BY_NAME, multTenthsOf, prayExpOf, canPray, DAY_RESET_HOUR, STREAK_PCT, streakPctOf, nextStreakOf, streakStateOf } from './tree.js'
+import { FORTUNES, FORTUNE_BY_NAME, multTenthsOf, prayExpOf, canPray, DAY_RESET_HOUR, STREAK_PCT, streakPctOf, nextStreakOf } from './tree.js'
 
 test('【確定】運勢は今のⅡと同じ7つ（出やすさ・倍率＝ユーザー承認の表。大吉で3倍）', () => {
   assert.deepEqual(FORTUNES.map(f => f.name), ['大吉', '中吉', '小吉', '吉', '末吉', '凶', '大凶'])
@@ -68,11 +68,4 @@ test('【確定】連続日数：前に祈った日が昨日なら+1・今日な
   assert.equal(nextStreakOf(at('2026-10-13T04:59:00'), 9, now), 1, '1日空いた＝1日目から')
   assert.equal(nextStreakOf(at('2026-10-13T21:00:00'), 0, now), 2, '数える前のキャラ（0）は前の日を1日目とみなす')
   assert.equal(nextStreakOf(at('2026-10-14T23:00:00'), 5, at('2026-10-15T05:00:00')), 6, '翌朝5時で次の日')
-
-  // 画面の様子
-  assert.deepEqual(streakStateOf(at('2026-10-13T21:00:00'), 3, now), { prayedToday: false, day: 4, pct: 130, nextPct: 140, broken: false })
-  assert.deepEqual(streakStateOf(at('2026-10-14T08:00:00'), 4, now), { prayedToday: true, day: 4, pct: 130, nextPct: 140, broken: false })
-  assert.deepEqual(streakStateOf(at('2026-10-12T08:00:00'), 5, now), { prayedToday: false, day: 1, pct: 100, nextPct: 110, broken: true })
-  assert.equal(streakStateOf(null, 0, now).broken, false)
-  assert.equal(streakStateOf(at('2026-10-14T08:00:00'), 12, now).nextPct, 200)
 })

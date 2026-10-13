@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../supabase'
 import { TEXT } from '../../v2/components/v2ui.js'
-import { FORTUNE_BY_NAME, canPray, remainUntilPray, prayDayOf, STREAK_PCT, STREAK_MAX_DAY, streakStateOf, streakText } from '../lib/tree.js'
+import { FORTUNE_BY_NAME, canPray, remainUntilPray, prayDayOf } from '../lib/tree.js'
 import { jobUpHead, jobUpNote } from '../lib/jobs.js'
 import V2capRevelationFx from './V2capRevelationFx.jsx'
 import { JP_BOLD } from './casinoStyle.js'
@@ -11,12 +11,13 @@ import { TREE_ART, MINCHO, revelationStyleOf, stageArtOf, artFilterOf } from '..
 // 「レベルキャップあり」版 — ユグレシアの宝樹（1日1回祈る）
 //   ・ごほうびは経験値だけ（祈った時点のLVの推奨の場所で10回出撃したくらい × 運勢の倍率 × 連続日数の倍率）
 //   ・【確定】2026-10-14 毎日祈ったときのボーナス（1日目1.0 → 毎日+0.1 → 10日目2.0・11日目からも2.0・空くと1日目に戻る・AM5時区切り）。
-//     祈るボタンの上に「連続◯日目・EXP ×◯」と10日ぶんの印（StreakBar）。祈ったあとは石板の下と演出の最後に「連続◯日目のボーナス」
+//     【確定】同じ日にユーザー指示「説明以外に信仰心の文言いらない、連続ボーナスの詳細な記載もいらない」＝画面に出すのは説明文の
+//     「毎日祈ることで信仰心が上がっていきます。」だけ（連続日数・倍率・10日ぶんの印・「連続◯日目のボーナス」は出さない。EXPには掛かっている）
 //   ★出る確率は画面に出さない（今のⅡと同じ）。抽選と経験値はサーバー（v2cap_pray）。仕組みの正は src/v2cap/lib/tree.js
 // 【確定】2026-10-13 ユーザー指示「ユグレシアの宝樹、今こんな感じでパッとしないから、良い感じにしてほしい」：見た目を作り直した
 //   ・上に宝樹の絵（天啓の演出と同じ TREE_ART）を大きく敷く。ゆっくり寄る・根元から光の粒が昇る・葉から光がしたたる・きらめき
 //     今日の運勢で絵の明るさと光を変える（lib/fxStyle.js の stageArtOf・大吉は金の光の筋／凶と大凶は紫・赤黒く沈む）
-//   ・説明文はユーザーの文（「1日1回だけ祈れます。…変わります」「（AM 5：00更新）」）。前の「LV10なら 吉で EXP +30…」は消した
+//   ・説明文はユーザーの文（2026-10-14 の4行）。前の「LV10なら 吉で EXP +30…」は消した
 //   ・結果は「─ 今日の天啓 ─」の札。祈ったあとに画面を開き直しても、今日の運勢（last_fortune）を札で出す（EXPは祈った直後だけ）
 //   ・祈るボタンは光る祭壇風。祈れないときは「次に祈れるまで」と残り時間を大きく
 //   ・これまでの結果（直近10回）は運勢の札を並べる（開け閉めのボタンはやめた）
@@ -118,44 +119,6 @@ function Ornament({ color, width = 64 }) {
   )
 }
 
-// 毎日祈ったときのボーナス（【確定】2026-10-14・倍率と数え方の正は lib/tree.js）。
-//   10日ぶんの印：続けて祈った日は光る・今日まだ祈っていなければ今日の印がまたたく・10日目（×2.0）は大きい。下に各日の倍率
-function StreakBar({ st }) {
-  const lit = st.prayedToday ? st.day : st.day - 1          // 光らせる日数（11日目からは全部）
-  const todayMark = st.prayedToday ? 0 : Math.min(st.day, STREAK_MAX_DAY)
-  return (
-    <div style={{ marginTop:'12px', padding:'8px 10px 7px', border:'1px solid #2f6f5888', background:'linear-gradient(180deg, #04170f 0%, #020a10 100%)' }}>
-      <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:'8px', flexWrap:'wrap' }}>
-        <span style={{ fontFamily: MINCHO, fontWeight:'bold', fontSize:'13px', color:'#ecd9a0' }}>
-          {st.prayedToday ? `連続${st.day}日目` : `今日祈ると 連続${st.day}日目`}
-        </span>
-        <span style={{ fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'13px', color:'#ffcc00', textShadow:'0 0 6px #ffb30055' }}>EXP ×{streakText(st.pct)}</span>
-      </div>
-      <div style={{ display:'grid', gridTemplateColumns:`repeat(${STREAK_MAX_DAY}, 1fr)`, gap:'3px', marginTop:'6px' }}>
-        {STREAK_PCT.map((pct, i) => {
-          const d = i + 1, on = d <= lit, now = d === todayMark, big = d === STREAK_MAX_DAY
-          return (
-            <div key={d} style={{ textAlign:'center' }}>
-              <div style={{ height:'16px', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <span className={now ? 'yt-anim' : undefined} style={{ width: big ? 12 : 9, height: big ? 12 : 9, transform:'rotate(45deg)', boxSizing:'border-box',
-                  background: on ? (big ? 'linear-gradient(135deg, #fff3a0, #ffb300)' : 'linear-gradient(135deg, #f3e3a8, #c99a2e)') : 'transparent',
-                  border:`1px solid ${on || now ? '#ffd75e' : '#2f6f58'}`, boxShadow: on ? '0 0 6px #ffcc0088' : 'none',
-                  animation: now ? 'ytGlow 1.2s ease-in-out infinite' : 'none' }} />
-              </div>
-              <div style={{ fontSize:'8px', lineHeight:1.2, color: on ? '#e9d39a' : TEXT.empty, fontWeight: big ? 'bold' : 'normal' }}>{streakText(pct)}</div>
-            </div>
-          )
-        })}
-      </div>
-      <div style={{ fontSize:'9px', lineHeight:1.6, color: st.broken ? '#e0a8a8' : TEXT.label, marginTop:'4px', textAlign:'center' }}>
-        {st.broken ? '連続が途切れました。今日から1日目です'
-          : st.prayedToday ? (st.day >= STREAK_MAX_DAY ? '途切れるまで EXP ×2.0 のまま' : `明日も祈ると EXP ×${streakText(st.nextPct)}`)
-          : '1日でも祈らない日があると、1日目に戻ります'}
-      </div>
-    </div>
-  )
-}
-
 // 【確定】2026-10-13 ユーザー指示「開発中祈りは何回でもできるようにして」：管理者（unlimited）は何回でも祈れる（サーバーも is_admin なら日付を見ない）
 export default function V2capTree({ prof, onProfile, unlimited = false }) {
   const [busy, setBusy] = useState(false)
@@ -173,8 +136,6 @@ export default function V2capTree({ prof, onProfile, unlimited = false }) {
   const shown = FORTUNE_BY_NAME[result?.fortune || todayFortune] || null
   const bad = !!shown && revelationStyleOf(shown.name).level < 0
   const log = prof.pray_log || []          // 新しい順に最大10件（サーバーが積む）
-  // 連続日数（pray_streak）。SQLを流す前（列が無い）は出さない＝サーバーがまだ倍率を掛けていないので
-  const streak = 'pray_streak' in prof ? streakStateOf(prof.last_pray_at, prof.pray_streak, at) : null
 
   // 【確定】2026-10-13 ユーザー指示「ユグレシアの祈りにも演出加えてほしい」→ 同じ日に「木に『祈る』って感じだから神から天啓をもらう感じの演出に」
   //   祈ると すぐ 天啓の演出（V2capRevelationFx.jsx）が始まり、結果が届くまで光の粒が宝樹へ昇る。閉じたあと「演出をもう一度見る」
@@ -202,9 +163,11 @@ export default function V2capTree({ prof, onProfile, unlimited = false }) {
       <TreeStage fortune={shown?.name || null} />
 
       <div style={{ padding:'10px 12px 14px' }}>
-        {/* 説明（2026-10-13 ユーザーの文） */}
+        {/* 説明（【確定】2026-10-14 ユーザーの文・改行もユーザーのとおり。「天啓で（大凶〜大吉）で」の「で」の重なりはユーザーの選んだ形に直した） */}
         <div style={{ textAlign:'center', color:'#b9cbd6', fontSize:'11px', lineHeight:'1.9' }}>
-          1日1回だけ祈れます。宝樹の返す言葉（大凶〜大吉）で、もらえる経験値が変わります
+          1日1回だけ祈れます。
+          <br />宝樹の返す天啓（大凶〜大吉）で、もらえる経験値が変わります。
+          <br />毎日祈ることで信仰心が上がっていきます。
           <br />（AM 5：00更新）
           {unlimited && <div style={{ color:'#ff88cc', fontSize:'10px', marginTop:'2px' }}>🧪 開発中：管理者は何回でも祈れます</div>}
         </div>
@@ -231,11 +194,8 @@ export default function V2capTree({ prof, onProfile, unlimited = false }) {
                 </div>
               )}
             </div>
-            {/* 石板の下：毎日のボーナス・LEVEL UP など・演出をもう一度 */}
+            {/* 石板の下：LEVEL UP など・演出をもう一度 */}
             {result && (<>
-              {result.streak_pct > 100 && (
-                <div style={{ color:'#e9d39a', fontSize:'11px', marginTop:'6px' }}>連続{result.streak}日目のボーナス EXP ×{streakText(result.streak_pct)}</div>
-              )}
               {result.level?.level_ups > 0 && (
                 <div style={{ color:'#44ff88', fontSize:'11px', marginTop:'6px' }}>
                   🆙 LEVEL UP！ LV{result.level.lv}{typeof result.level.points === 'number' ? `（ステータスポイント+${result.level.points}）` : ''}
@@ -259,9 +219,6 @@ export default function V2capTree({ prof, onProfile, unlimited = false }) {
         )}
 
         {error && <div style={{ color:'#ff6666', fontSize:'11px', marginTop:'10px' }}>⚠ {error}</div>}
-
-        {/* 毎日のボーナス（2026-10-14） */}
-        {streak && <StreakBar st={streak} />}
 
         {/* 祈る */}
         <button onClick={pray} disabled={!canPress} className={canPress ? 'yt-anim' : undefined} aria-label={busy ? '祈っています' : ready ? '祈る' : undefined}

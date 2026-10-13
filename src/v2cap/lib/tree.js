@@ -27,11 +27,12 @@ export const multTenthsOf = (f) => Math.round((f?.mult ?? 1) * 10)
 //   ・11日目からは2倍のまま（途切れるまで）
 //   ・日付の区切りは祈りと同じ日本時間の5時。1日でも祈らない日があると1日目に戻る
 //   ・数えるのは「日」。管理者が同じ日に何回祈っても日数は増えない
+//   ・【確定】同じ日にユーザー指示「説明以外に信仰心の文言いらない、連続ボーナスの詳細な記載もいらない」＝画面には日数も倍率も出さない
+//     （説明文の「毎日祈ることで信仰心が上がっていきます。」だけ）。ここはサーバーの写しとテストのため
 // ★サーバー（v2cap_pray の c_streak・pray_streak）と同じ。v2capsql.test.js が突き合わせる
 export const STREAK_PCT = [100, 110, 120, 130, 140, 150, 160, 170, 180, 200]   // 1〜10日目の倍率（百分率）
 export const STREAK_MAX_DAY = STREAK_PCT.length
 export const streakPctOf = (day) => STREAK_PCT[Math.min(STREAK_MAX_DAY, Math.max(1, Math.floor(Number(day)) || 1)) - 1]
-export const streakText = (pct) => (pct / 100).toFixed(1)   // 110 → "1.1"
 const DAY_MS = 24 * 60 * 60 * 1000
 const asDate = (at) => (at instanceof Date ? at : new Date(at))
 // 祈ったあとの連続日数。前に祈った日（日本時間5時区切り）が 今日＝そのまま／昨日＝+1／それより前・はじめて＝1
@@ -44,15 +45,6 @@ export const nextStreakOf = (lastPrayAt, streak, at = new Date()) => {
   if (last === prayDayOf(now)) return s
   if (last === prayDayOf(new Date(now.getTime() - DAY_MS))) return s + 1
   return 1
-}
-// 画面に出す連続の様子
-//   prayedToday：今日もう祈った／day：今日の（まだなら「今日祈ると」の）何日目／pct・nextPct：その日と次の日の倍率／broken：2日以上続いていたのが途切れた
-export const streakStateOf = (lastPrayAt, streak, at = new Date()) => {
-  const now = asDate(at)
-  const s = Math.max(0, Math.floor(Number(streak)) || 0)
-  const prayedToday = !!lastPrayAt && prayDayOf(lastPrayAt) === prayDayOf(now)
-  const day = prayedToday ? Math.max(1, s) : nextStreakOf(lastPrayAt, s, now)
-  return { prayedToday, day, pct: streakPctOf(day), nextPct: streakPctOf(day + 1), broken: !prayedToday && day === 1 && s >= 2 }
 }
 
 // その運勢でもらえるEXP＝推奨の場所で10回出撃したくらい × 運勢の倍率 × 連続日数の倍率。
