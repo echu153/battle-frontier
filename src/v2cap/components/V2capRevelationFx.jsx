@@ -11,8 +11,8 @@
 //   ★宝樹はユーザーの絵（lib/fxStyle.js の TREE_ART）を場面の背景にする。明るさを 祈り→降りる→天啓（運勢しだい）で変え、
 //     ことばの後ろだけ少し暗くして読めるようにする。TREE_ART が null なら星空と影絵の木（SacredTree）
 // 【確定】2026-10-14 ユーザー指示「大凶の時の演出、雷とか魔法陣の演出安っぽいから修正したい」→ ユーザーの絵（STORM_ART）で作り直した：
-//   ・暗雲の絵が上から垂れ込めて流れ、雨が降る（fxParticles の rain）。天の光輪と光の柱は出さない
-//   ・空に赤黒い魔法陣の絵が回りながら現れ、逆向きにゆっくり回る（天啓の「大凶」の文字の後ろ）。雷が落ちると光る
+//   ・暗雲の絵が上から垂れ込めて流れ、雨が降る（fxParticles の rain）。光の柱は出さない
+//   ・【確定】同じ日にユーザー「魔法陣は初期のままでよさそうかも、違和感ある」＝魔法陣の絵はやめ、天の光輪は前のまま（大凶の色・0.45）
 //   ・雷の絵が2回落ちる（STORM_STRIKES）→「大凶」が出るときにもう1回。落ちるたび画面が光って揺れ、宝樹が一瞬照らされる
 //   ・天啓のあとも遠くで時々雷（小さく・揺れない）。大凶の絵は大凶になったときに読み込み始め、降りる前に最大1.5秒待つ
 // ============================================================
@@ -40,17 +40,11 @@ const KF = `
 @keyframes rvStrike { 0% { opacity: 0 } 4% { opacity: 1 } 10% { opacity: 0.15 } 16% { opacity: 1 } 40% { opacity: 0.9 } 100% { opacity: 0 } }
 @keyframes rvStormIn { from { transform: translateY(-60%); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
 @keyframes rvStormDrift { from { transform: translateX(-3%) } to { transform: translateX(3%) } }
-@keyframes rvSigilIn { from { opacity: 0; transform: translate(-50%,-50%) scale(0.45) rotate(100deg); filter: blur(6px) brightness(2) } to { opacity: 0.92; transform: translate(-50%,-50%) scale(1) rotate(0deg); filter: blur(0) brightness(1) } }
-@keyframes rvSigilSpin { from { transform: rotate(0deg) } to { transform: rotate(-360deg) } }
-@keyframes rvSigilGlow { 0%,100% { opacity: 0.4 } 50% { opacity: 0.85 } }
 `
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 const rand = (a, b) => a + Math.random() * (b - a)
-// 大凶の魔法陣：「大凶」の文字の真ん中に重ねる（文字は上から172px・「─ 天 啓 ─」の下・大きさは clamp(54px, 15vw, 84px)）
-const SIGIL_TOP = 'calc(197px + clamp(54px, 15vw, 84px) * 0.575)'
-const SIGIL_SIZE = 'min(84vw, 360px)'
 // 大凶の絵を先に読み込む（読み込めなくても演出は進む）
-const preloadStorm = () => Promise.all([...STORM_ART.bolts, STORM_ART.sigil, STORM_ART.cloud].map(src => new Promise(res => {
+const preloadStorm = () => Promise.all([...STORM_ART.bolts, STORM_ART.cloud].map(src => new Promise(res => {
   const img = new Image(); img.onload = img.onerror = () => res(); img.src = src
 })))
 const seeded = (seed) => { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }
@@ -126,7 +120,6 @@ export default function V2capRevelationFx({ result, onClose }) {
   const [chars, setChars] = useState(0)
   const [flash, setFlash] = useState(null)
   const [strikes, setStrikes] = useState([])     // 落ちている雷（大凶）
-  const [sigilFlare, setSigilFlare] = useState(0)
   const rootRef = useRef(null)
   const artRef = useRef(null)
   const strikeSeq = useRef(0)
@@ -167,7 +160,6 @@ export default function V2capRevelationFx({ result, onClose }) {
     setStrikes(a => [...a, { key, src, x, h, top, soft, flip: Math.random() < 0.5 }])
     setTimeout(() => setStrikes(a => a.filter(s => s.key !== key)), 900)
     setFlash({ color: soft ? '#b98cff' : '#f1e2ff', key: `s${key}`, soft })
-    setSigilFlare(n => n + 1)
     if (soft) return
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
     if (shake && !reduce) {
@@ -177,9 +169,8 @@ export default function V2capRevelationFx({ result, onClose }) {
         { transform: `translate(${-k * 0.4}px,${k * 0.3}px)` }, { transform: 'translate(0,0)' },
       ], { duration: 360, easing: 'ease-out' })
     }
-    // 宝樹が一瞬照らされる
-    const art = artRef.current
-    if (art?.animate) art.animate([{ filter: 'brightness(1.05) saturate(0.55)' }, { filter: getComputedStyle(art).filter }], { duration: 520, easing: 'ease-out' })
+    // 宝樹が一瞬照らされる（明るい状態から、もとの明るさ（CSS の値）へ戻る。途中の値を拾わないように終わりは書かない）
+    artRef.current?.animate?.([{ offset: 0, filter: 'brightness(1.05) saturate(0.55)' }], { duration: 520, easing: 'ease-out' })
   }
 
   // 天啓が出たときの光
@@ -333,23 +324,8 @@ export default function V2capRevelationFx({ result, onClose }) {
           </div>
         </>
       )}
-      {/* 大凶：赤黒い魔法陣（ユーザーの絵）。「大凶」の文字の後ろで逆向きに回る・雷が落ちると光る */}
-      {lit && storm && (
-        <div style={{ position:'absolute', left:'50%', top: SIGIL_TOP, width: SIGIL_SIZE, height: SIGIL_SIZE, pointerEvents:'none',
-          animation:'rvSigilIn 1.2s cubic-bezier(.2,.9,.3,1) both' }}>
-          <div style={{ position:'absolute', inset:'-14%', borderRadius:'50%', background:'radial-gradient(circle, rgba(255,40,80,0.42) 0%, transparent 62%)',
-            animation:'rvSigilGlow 2.4s ease-in-out infinite' }} />
-          <img src={STORM_ART.sigil} alt="" style={{ position:'relative', display:'block', width:'100%', height:'100%', animation:'rvSigilSpin 48s linear infinite' }} />
-          {/* 真ん中だけ暗く（「大凶」と「─ 天 啓 ─」を読めるように。外の輪はそのまま光る） */}
-          <div style={{ position:'absolute', inset:0, borderRadius:'50%', background:'radial-gradient(circle, rgba(10,0,8,0.78) 0%, rgba(10,0,8,0.55) 30%, transparent 52%)' }} />
-          {sigilFlare > 0 && (
-            <div key={sigilFlare} style={{ position:'absolute', inset:0, borderRadius:'50%', mixBlendMode:'screen',
-              background:'radial-gradient(circle, rgba(255,190,215,0.6) 0%, rgba(255,60,110,0.25) 45%, transparent 68%)', animation:'rvFlash 0.55s ease-out forwards' }} />
-          )}
-        </div>
-      )}
-      {/* 天の光輪（大凶は魔法陣） */}
-      {lit && !storm && (
+      {/* 天の光輪（大凶も前のまま＝大凶の色で薄く） */}
+      {lit && (
         <div style={{ position:'absolute', left:'50%', top:-14, width:180, height:180, marginLeft:-90, pointerEvents:'none', opacity: bad ? 0.45 : 1,
           animation:'rvHaloIn 0.8s ease-out both' }}>
           <div style={{ width:180, height:180, animation:'rvSpin 18s linear infinite' }}><Halo color={beamColor} size={180} /></div>

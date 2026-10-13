@@ -139,10 +139,10 @@ test('【確定】安息の祠の演出：ユーザーの絵（入口・泉）�
 })
 
 // 【確定】2026-10-14 ユーザー指示「大凶の時の演出、雷とか魔法陣の演出安っぽいから修正したい」→ ユーザーの絵（雷・魔法陣・暗雲）で作り直した
-test('【確定】大凶の嵐：ユーザーの絵（雷3本・魔法陣・暗雲）がある・雷は降りる間に2回・天啓のあとも遠くで時々・光輪と線の稲妻は使わない', async () => {
+test('【確定】大凶の嵐：ユーザーの絵（雷3本・暗雲）がある・雷は降りる間に2回・天啓のあとも遠くで時々・線の稲妻と光の柱は使わない・光輪は前のまま', async () => {
   const { STORM_ART, STORM_STRIKES, STORM_AMBIENT_MS, STORM_DESCEND_MS } = await import('./fxStyle.js')
   assert.equal(STORM_ART.bolts.length, 3, '雷の絵は3本（ユーザーの1枚を1本ずつに切った）')
-  for (const a of [...STORM_ART.bolts, STORM_ART.sigil, STORM_ART.cloud]) assert.ok(existsSync(new URL(`../../../public${a}`, import.meta.url)), `public${a} がある`)
+  for (const a of [...STORM_ART.bolts, STORM_ART.cloud]) assert.ok(existsSync(new URL(`../../../public${a}`, import.meta.url)), `public${a} がある`)
   assert.equal(STORM_STRIKES.length, 2)
   for (const k of STORM_STRIKES) {
     assert.ok(k.x > 0 && k.x < 1 && k.bolt >= 0 && k.bolt < STORM_ART.bolts.length && k.h > 0 && k.h <= 100)
@@ -151,6 +151,9 @@ test('【確定】大凶の嵐：ユーザーの絵（雷3本・魔法陣・暗�
   assert.ok(STORM_AMBIENT_MS[0] > 0 && STORM_AMBIENT_MS[0] < STORM_AMBIENT_MS[1])
   const src = readFileSync(new URL('../components/V2capRevelationFx.jsx', import.meta.url), 'utf8')
   assert.ok(!src.includes('<polyline'), '線で描いた稲妻は使わない')
-  assert.equal((src.match(/\{lit && !storm && \(/g) || []).length, 2, '大凶は天の光輪と光の柱を出さない（魔法陣の絵にする）')
-  assert.ok(src.includes('STORM_ART.sigil') && src.includes('STORM_ART.cloud'), '魔法陣と暗雲はユーザーの絵')
+  assert.equal((src.match(/\{lit && !storm && \(/g) || []).length, 1, '大凶は光の柱を出さない')
+  // 【確定】2026-10-14 ユーザー「魔法陣は初期のままでよさそうかも、違和感ある」＝魔法陣の絵はやめて、天の光輪（Halo）は大凶でも前のまま
+  assert.ok(!('sigil' in STORM_ART) && !/sigil/i.test(src), '魔法陣の絵は使わない')
+  assert.match(src, /\{lit && \(\s*<div[^\n]*opacity: bad \? 0\.45 : 1/, '天の光輪は大凶でも出す（前のまま 0.45）')
+  assert.ok(src.includes('STORM_ART.cloud'), '暗雲はユーザーの絵')
 })

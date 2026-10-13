@@ -61,14 +61,14 @@ export const ART_BY_FORTUNE = {
 }
 // ===== 大凶の嵐（天啓の演出）=====
 // 【確定】2026-10-14 ユーザー指示「大凶の時の演出、雷とか魔法陣の演出安っぽいから修正したい」→「絵を用意する＋動きはコード」を選んだ。
-//   絵はユーザーが用意した3枚（public/V2ホーム の ユグレシア雷.png＝3本を1本ずつに切った・ユグレシア大凶魔法陣.png・ユグレシア雲.png → WebP・まわりは透明）。
+//   絵はユーザーが用意した ユグレシア雷.png（3本を1本ずつに切った）・ユグレシア雲.png（public/V2ホーム → WebP・まわりは透明）。
+//   【確定】同じ日にユーザー「魔法陣は初期のままでよさそうかも、違和感ある」＝ユグレシア大凶魔法陣.png は使わない（天の光輪は前のまま）。
 //   大凶の宝樹の絵は「今のかんじのままでいい」（ユーザー）＝ART_BY_FORTUNE の暗い赤黒のまま
-//   ・暗雲が上から垂れ込め、雨が降る。空に赤黒い魔法陣が現れて逆に回る（天啓の「大凶」の文字の後ろ）
+//   ・暗雲が上から垂れ込め、雨が降る
 //   ・雷は2回（STORM_STRIKES：画面の横の位置・どの絵・高さvh・揺れpx）。落ちるたび画面が光って揺れ、宝樹が一瞬照らされる
 //   ・天啓が出たあとも、遠くで時々雷（STORM_AMBIENT_MS の間隔・小さく・揺れない）
 export const STORM_ART = {
   bolts: ['/v2cap-art/storm-bolt-1.webp', '/v2cap-art/storm-bolt-2.webp', '/v2cap-art/storm-bolt-3.webp'],
-  sigil: '/v2cap-art/storm-sigil.webp',
   cloud: '/v2cap-art/storm-cloud.webp',
 }
 export const STORM_STRIKES = [
