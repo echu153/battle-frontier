@@ -1,36 +1,33 @@
-// v2cap：必要LV（2026-10-13 ユーザー指示「エピック、レジェンドの必要レベル5さげて、戦闘力はそのままでいい」・レアはそのまま）：node --test
+// v2cap：必要LV（2026-10-13 一度エピック・レジェンダリーを −5 にして、同じ日にユーザー「やっぱ必要レベル戻していいや」で元の表に戻した）：node --test
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
 import { ITEMS, ITEM_BY_ID, STARTER_ITEMS, needLvOf, reqLvOf, REQ_LV_DISCOUNT } from './equipment.js'
 import { powerAt, effectPct, reqPctOf, PENALTY_PER_LV } from './gear.js'
 
-test('【確定】必要LV＝アイテムLV − 5（エピック・レジェンダリー）・ノーマルとレアと初期装備はそのまま', () => {
-  assert.deepEqual(REQ_LV_DISCOUNT, { N:0, R:0, E:5, L:5 })
+test('【確定】必要LVはアイテムLVと同じ（元の表に戻した）', () => {
+  assert.deepEqual(REQ_LV_DISCOUNT, { N:0, R:0, E:0, L:0 })
   for (const item of ITEMS) {
     assert.equal(item.lv, reqLvOf(item.area, item.rarity), 'アイテムLVは前の表のまま')
-    assert.equal(needLvOf(item), item.rarity === 'N' || item.rarity === 'R' ? item.lv : item.lv - 5, item.id)
+    assert.equal(needLvOf(item), item.lv, item.id)
   }
-  // 始まりの森：ノーマル5・レア10・エピック10・レジェンダリー15（前は 5/10/15/20）
+  // 始まりの森：ノーマル5・レア10・エピック15・レジェンダリー20
   const forest = (r) => needLvOf(ITEMS.find(i => i.area === 1 && i.rarity === r))
-  assert.deepEqual(['N', 'R', 'E', 'L'].map(forest), [5, 10, 10, 15])
-  // 深淵の海溝：75/80/80/85（前は 75/80/85/90）
+  assert.deepEqual(['N', 'R', 'E', 'L'].map(forest), [5, 10, 15, 20])
+  // 深淵の海溝：75/80/85/90
   const abyss = (r) => needLvOf(ITEMS.find(i => i.area === 15 && i.rarity === r))
-  assert.deepEqual(['N', 'R', 'E', 'L'].map(abyss), [75, 80, 80, 85])
+  assert.deepEqual(['N', 'R', 'E', 'L'].map(abyss), [75, 80, 85, 90])
   for (const it of Object.values(STARTER_ITEMS || {})) assert.equal(needLvOf(it), 1, '初期装備はLV1')
-  assert.equal(needLvOf({ rarity:'L', lv:3 }), 1, '1より下にはならない')
+  assert.equal(needLvOf({ rarity:'L', lv:0 }), 1, '1より下にはならない')
 })
 
-test('【確定】戦闘力はそのまま（アイテムLVで決まる）・効果の下がり方だけ必要LVで見る', () => {
-  const l = ITEMS.find(i => i.area === 4 && i.rarity === 'L' && i.part === '武器')   // アイテムLV35・必要LV30
+test('【確定】強さはアイテムLVで決まる・効果の下がり方は必要LV（＝アイテムLV）で見る', () => {
+  const l = ITEMS.find(i => i.area === 4 && i.rarity === 'L' && i.part === '武器')   // アイテムLV35・必要LV35
   assert.equal(l.lv, 35)
-  // 強さはアイテムLVのまま（必要LVの数字では計算しない）
   assert.equal(powerAt(l, l.lv), powerAt(ITEM_BY_ID[l.id], 35))
-  assert.notEqual(powerAt(l, l.lv), powerAt(l, needLvOf(l)))
-  // LV30なら100%（前はアイテムLV35と比べて75%だった）
-  assert.equal(reqPctOf(l, l.lv, 30), 100)
-  assert.equal(effectPct(l.lv, 30), 100 - PENALTY_PER_LV * 5, '（前の見方なら75%）')
-  assert.equal(reqPctOf(l, l.lv, 28), 100 - PENALTY_PER_LV * 2)
+  assert.equal(reqPctOf(l, l.lv, 35), 100)
+  assert.equal(reqPctOf(l, l.lv, 30), 100 - PENALTY_PER_LV * 5, '5足りないと75%（元のまま）')
+  assert.equal(reqPctOf(l, l.lv, 30), effectPct(l.lv, 30))
 })
 
 test('★装備の効果%は必ず reqPctOf（必要LV）で出す：effectPct にアイテムLVをそのまま渡す書き方が戻らないように', () => {
