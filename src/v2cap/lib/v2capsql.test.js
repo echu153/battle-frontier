@@ -57,7 +57,7 @@ test('必要EXP・必要ClassEXP・スタミナの式と係数がJSと同じ', (
   assert.match(job, /\* p_jlv \* p_jlv \* p_jlv\) \/ 100000\)\)::int end/, 'ClassLV³ を足してから100000で割る（JSの jobNeed と同じ）')
   assert.equal(JOB_NEED_PCT, 50, 'ユーザーが選んだ「LVの5割」')
   // 段階の表（種）に毎回足す量が入っている（ユーザー指示「初期クラスは必要経験値15にして、上位職は30で」）
-  assert.ok(SQL.includes("('shoki', 1, 8, '{1,5,10,15,20}'::int[], 30, 15)"), '初期は15')
+  assert.ok(SQL.includes("('shoki', 1, 8, '{1,5,10,15,20,25,30}'::int[], 30, 15)"), '初期は15（2026-10-14 から技はCLASS LV25・30でも覚える）')
   assert.ok(SQL.includes("('ichiji', 3, 10, '{1,5,10,15,20,25,30,40}'::int[], 50, 30)"), '一次は30')
   assert.ok(SQL.includes('alter table public.v2cap_stages add column if not exists need_base int not null default 0;'), '前からある表にも列を足す')
   // スタミナ：最大値は 10＋(LV−1)・回復は3分に1（2026-10-09 ユーザー指示）

@@ -34,8 +34,9 @@ export const JOB_MAX = 30
 //   （ClassLV30で 145→232・一次職のClassLV50で 294→490。毎回のHP・MP（JOB_LV_HPMP）も1.6倍）
 // needBase … 必要ClassEXPに毎回足す量（【確定】2026-10-12 ユーザー指示「クラスレベルも最初の必要量少なすぎ、初期クラスは必要経験値15にして、上位職は30で」
 //   ＝ClassLV1→2が初期職15・一次職30。LVの「+20」と同じく、どのClassLVにも足す。下の jobNeed）
+// 【確定】2026-10-14 ユーザー承認：初期職も CLASS LV25・30 で1つずつ覚える（技7つ・skills.js の LATE_SKILLS）
 export const STAGES = {
-  shoki:  { label:'初期', color:'#44aaff', mult:1, perLv:8, max:JOB_MAX, learnAt:[1, 5, 10, 15, 20], needBase:15 },
+  shoki:  { label:'初期', color:'#44aaff', mult:1, perLv:8, max:JOB_MAX, learnAt:[1, 5, 10, 15, 20, 25, 30], needBase:15 },
   ichiji: { label:'一次', color:'#cc66ff', mult:3, perLv:10, max:50, learnAt:[1, 5, 10, 15, 20, 25, 30, 40], needBase:30 },
 }
 export const STAGE_ORDER = ['shoki', 'ichiji']
@@ -152,12 +153,14 @@ export const jobOf = (jobs, cls) => ({ lv: jobs?.[cls]?.lv || 1, exp: jobs?.[cls
 // 職業ごとの配分（合計232＝ClassLV30までの点数）。説明文（CLASS_INFO.desc）の「◯◯が伸びる」と合わせてある
 export const JOB_BONUS = {
   戦士:     { str:64, vit:51, hp:45, dex:24, agi:24, mp:16, luk:8 },         // STR・VIT・HP
-  槍使い:   { str:64, dex:56, agi:35, vit:29, hp:24, mp:16, luk:8 },         // STR・DEX（＋AGI）
+  // 【確定】2026-10-14 ユーザー承認：槍使い・剣士はHPが低く、ボス戦で平均の約9割・対人で2〜3割だった＝DEX・AGIからVIT・HPへ（合計232のまま）
+  槍使い:   { str:64, dex:50, vit:38, agi:30, hp:26, mp:16, luk:8 },         // STR・DEX（＋VIT）
   格闘家:   { str:64, agi:61, hp:35, vit:29, dex:19, mp:16, luk:8 },         // STR・AGI（＋HP）
   盗賊:     { agi:67, str:51, dex:40, luk:29, hp:19, vit:13, mp:13 },        // AGI・STR（＋DEX）
   弓使い:   { agi:64, dex:56, str:48, hp:19, luk:19, vit:13, mp:13 },        // AGI・DEX・STR
   銃士:     { dex:72, agi:48, str:40, luk:24, hp:19, mp:16, vit:13 },        // DEX・AGI（＋STR）
-  剣士:     { str:64, dex:51, agi:48, vit:24, hp:21, mp:16, luk:8 },         // STR・DEX・AGI
+  //   剣士は案の DEX45・AGI42 だと「高い2〜3種」（48点以上）が STR だけになるので DEX48・AGI39 にした
+  剣士:     { str:64, dex:48, agi:39, vit:30, hp:27, mp:16, luk:8 },         // STR・DEX（＋AGI）
   魔法使い: { int_stat:72, mp:48, agi:40, dex:24, hp:24, vit:16, luk:8 },    // INT・MP（＋AGI）
   呪術師:   { int_stat:67, mp:48, dex:32, luk:29, agi:24, hp:19, vit:13 },   // INT・MP（＋DEX・LUK）
   僧侶:     { int_stat:61, vit:48, hp:45, mp:40, agi:19, dex:11, luk:8 },    // INT・VIT・HP
@@ -193,14 +196,15 @@ export const JOB_BONUS = {
 //   初期職 HP 13／10／6・MP 5／2、一次職 HP 16／13／10・MP 6／5／3（前は 初期 HP 8／6／4・MP 3／1、一次 HP 10／8／6・MP 4／3／2）
 // ★SQLの v2cap_classes.lv_hp・lv_mp はこの表を写したもの（tools/v2cap-sql.mjs が作る）。
 //   サーバーが数えるのはMPだけ（スキル編成の最大MP＝ v2cap_job_bonus_mp）
+//   【確定】2026-10-14 ユーザー承認：剣士・槍使いのHP 10→13（戦士・格闘家なみ。HPが低くボス戦・対人とも下だった）
 export const JOB_LV_HPMP = {
   戦士:     { hp:13, mp:2 },
-  槍使い:   { hp:10, mp:2 },
+  槍使い:   { hp:13, mp:2 },
   格闘家:   { hp:13, mp:2 },
   盗賊:     { hp:6, mp:2 },
   弓使い:   { hp:6, mp:2 },
   銃士:     { hp:6, mp:2 },
-  剣士:     { hp:10, mp:2 },
+  剣士:     { hp:13, mp:2 },
   魔法使い: { hp:10, mp:5 },
   呪術師:   { hp:6, mp:5 },
   僧侶:     { hp:13, mp:5 },

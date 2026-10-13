@@ -16,7 +16,7 @@ import {
   canBecome, weaponsOf, canEquipType, attackKindOf, lineageOf, usableSkillNames, classDescOf,
   jobBonusGain, jobGainText, jobUpHead, jobUpNote,
 } from './jobs.js'
-import { SKILLS, NEW_SKILLS, SKILL_BY_NAME, setMpCost, validateSkillSet, defaultSetOf, fillSetOf, SKILL_SET_SLOTS, DEFAULT_USES_MAX, passiveOf } from './skills.js'
+import { SKILLS, NEW_SKILLS, LATE_SKILLS, SKILL_BY_NAME, setMpCost, validateSkillSet, defaultSetOf, fillSetOf, SKILL_SET_SLOTS, DEFAULT_USES_MAX, passiveOf } from './skills.js'
 import { ICHIJI_SKILLS, ICHIJI_BUILDS } from './skillsIchiji.js'
 import {
   ITEMS, ITEM_BY_ID, KINDS, WEAPON_TYPES, ARMOR_LINES, ARMOR_PARTS, ACCESSORY_TYPES, PART_MULT, SLOTS, ARMOR_EFFECT,
@@ -388,9 +388,10 @@ test('【確定】2026-10-12 CLASS LEVEL UP の行に、上がったクラスの
 test('【確定】ClassLVが上がるたびに、どの職業でも必ずHPとMPが上がる（点数とは別・職業ごとの量＝ユーザー承認の表）', () => {
   // 2026-10-10 ユーザー指示「レベルアップするとき、HPとMPは絶対あげるようにしてほしい、クラスによって差があってもいいから」
   // 2026-10-12 点数と一緒に1.6倍（ユーザー指示「くらすれべるあがるとき、もっと上昇量伸ばしていい」＋案「8点（HP・MPも同じ倍率）」）
+  // 2026-10-14 ユーザー承認：剣士・槍使いのHP 10→13
   assert.deepEqual(Object.keys(JOB_LV_HPMP).sort(), CLASSES.map(c => c.id).sort(), '全職業ぶんある')
   const want = {
-    戦士: [13, 2], 槍使い: [10, 2], 格闘家: [13, 2], 盗賊: [6, 2], 弓使い: [6, 2], 銃士: [6, 2], 剣士: [10, 2],
+    戦士: [13, 2], 槍使い: [13, 2], 格闘家: [13, 2], 盗賊: [6, 2], 弓使い: [6, 2], 銃士: [6, 2], 剣士: [13, 2],
     魔法使い: [10, 5], 呪術師: [6, 5], 僧侶: [13, 5], 薬師: [13, 5],
     狂戦士: [16, 3], 重戦士: [16, 3], 竜騎士: [13, 3], 槍術士: [10, 3], 体術師: [13, 3], 気功師: [13, 5],
     暗殺者: [10, 3], 忍者: [10, 3], 狩人: [10, 3], 狙撃手: [10, 3], 魔銃士: [10, 5], 砲撃士: [13, 5],
@@ -442,10 +443,11 @@ test('【確定】キャラ作成と神殿に出す特徴の説明が全職ぶ�
 })
 
 // ===== スキル =====
-test('スキルは初期職ClassLV 1／5／10／15／20 で5個・一次職ClassLV 1／5／10／15／20／25／30／40 で8個', () => {
-  assert.deepEqual(STAGES.shoki.learnAt, [1, 5, 10, 15, 20])
+// 【確定】2026-10-14 ユーザー承認：初期職も CLASS LV25・30 で1つずつ（技7つ・5枠から選ぶ）
+test('スキルは初期職ClassLV 1／5／10／15／20／25／30 で7個・一次職ClassLV 1／5／10／15／20／25／30／40 で8個', () => {
+  assert.deepEqual(STAGES.shoki.learnAt, [1, 5, 10, 15, 20, 25, 30])
   for (const c of CLASSES) {
-    const n = c.stage === 'ichiji' ? 8 : 5
+    const n = c.stage === 'ichiji' ? 8 : 7
     assert.equal(learnOrderOf(c.id).length, learnAtOf(c.id).length, `${c.id}のスキル数`)
     assert.equal(learnOrderOf(c.id).length, n)
     assert.equal(skillsLearnedBy(c.id, 1).length, 1, `${c.id}はClassLV1で1つ`)
@@ -455,15 +457,21 @@ test('スキルは初期職ClassLV 1／5／10／15／20 で5個・一次職Class
   const r = applyJobExp({}, '戦士', jobTotalTo('shoki', 30) + 999999, ['体当たり'])
   assert.equal(r.lv, 30)
   assert.equal(r.exp, 0)
-  assert.deepEqual(r.learned, ['強撃', '防御崩し', '防御態勢', 'シールドアタック'])
+  assert.deepEqual(r.learned, ['強撃', '防御崩し', '防御態勢', 'シールドアタック', '叩きつけ', '雄叫び'])
+  // CLASS LV25・30 の技は、そのCLASS LVで覚える
+  assert.deepEqual(skillsLearnedBy('剣士', 24).slice(5), [])
+  assert.deepEqual(skillsLearnedBy('剣士', 25).slice(5), ['霞斬り'])
+  assert.deepEqual(skillsLearnedBy('剣士', 30).slice(5), ['霞斬り', '乱れ斬り'])
 })
 
-test('【確定】戦士・弓使い・魔法使い・僧侶・格闘家のスキルは今のⅡのまま（中身も並びも同じ）', () => {
+test('【確定】戦士・弓使い・魔法使い・僧侶・格闘家のCLASS LV1〜20の5技は今のⅡのまま（中身も並びも同じ）', () => {
   for (const cls of ['戦士', '弓使い', '魔法使い', '僧侶', '格闘家']) {
     const v2 = V2_SKILLS.filter(s => s.cls === cls)
     // ★魔法の属性（elem）だけはこの版の写しに付けている（魔導士の元素共鳴が見る・2026-10-10）。それ以外は同じ
     const noElem = (s) => { const { elem: _e, ...rest } = s; return rest }
-    assert.deepEqual(learnOrderOf(cls).map(noElem), v2, `${cls}`)
+    assert.deepEqual(learnOrderOf(cls).slice(0, 5).map(noElem), v2, `${cls}`)
+    // 6つ目・7つ目は CLASS LV25・30 の技（2026-10-14・LATE_SKILLS）
+    assert.deepEqual(learnOrderOf(cls).slice(5).map(s => s.name), LATE_SKILLS.filter(s => s.cls === cls).map(s => s.name), `${cls}の後の2技`)
   }
   assert.deepEqual(['ファイア', 'サンダー', 'アイスランス'].map(n => SKILL_BY_NAME[n].elem), ['fire', 'thunder', 'ice'])
   assert.ok(V2_SKILLS.every(s => !('elem' in s)), '今のⅡの名簿は書き換えていない')
@@ -521,6 +529,36 @@ test('【確定】新しい6職（槍使い・盗賊・銃士・剣士・呪術�
   }
   assert.equal(new Set(SKILLS.map(s => s.name)).size, SKILLS.length, 'スキル名は重複しない')
   assert.ok(!NEW_SKILLS.some(s => V2_SKILLS.some(v => v.name === s.name)), '今のⅡの技と名前がぶつからない')
+})
+
+test('【確定】2026-10-14 初期11職の CLASS LV25・30 の22技は、初期職の帯（価値・消費MP）どおり・名前が重ならない', () => {
+  assert.equal(LATE_SKILLS.length, 22)
+  assert.deepEqual([...new Set(LATE_SKILLS.map(s => s.cls))].sort(), [...START_CLASSES].sort())
+  for (const cls of START_CLASSES) assert.equal(LATE_SKILLS.filter(s => s.cls === cls).length, 2, `${cls}は2つ`)
+  const band = (t, proc) => { const ks = Object.keys(t).map(Number).sort((a, b) => b - a); return t[ks.find(k => proc >= k) ?? ks[ks.length - 1]] }
+  for (const s of LATE_SKILLS) {
+    if (s.kind === 'phys' || s.kind === 'mag') {
+      assert.ok(Math.abs(skillValue(s) - band(VALUE_TABLE.basic[s.kind], s.proc)) <= 0.03, `${s.name}の価値 ${skillValue(s)}`)
+      assert.equal(s.mp, band(MP_TABLE.basic[s.kind], s.proc), `${s.name}の消費MP`)
+      assert.ok(s.proc >= 85, `${s.name}：初期職は発動率85%以上`)
+    } else if (s.kind === 'buff') {
+      const tot = [...Object.values(s.buff.self || {}), ...Object.values(s.buff.enemy || {})].reduce((a, b) => a + Math.abs(b), 0)
+      assert.ok(tot <= s.mp * BUFF_PER_MP.basic + 0.01, `${s.name}：バフの合計 ${tot}% は MP×3.4 まで`)
+    } else {
+      assert.equal(s.kind, 'heal', s.name)
+      assert.ok(s.heal.rate <= s.mp * HEAL_PER_MP.basic + 1e-9, `${s.name}の回復量`)
+    }
+  }
+  // 今のⅡの技・武器の進化の名前とも重ならない（同じ名前だと戦闘ログで見分けにくい）
+  assert.ok(!LATE_SKILLS.some(s => V2_SKILLS.some(v => v.name === s.name)), '今のⅡの技と名前がぶつからない')
+  // 中身（ユーザーが承認した案）
+  const by = SKILL_BY_NAME
+  assert.equal(by.叩きつけ.sureHit, true)
+  assert.deepEqual(by.雄叫び.buff, { self:{ str:12 }, enemy:{ agi:-5 } })
+  assert.equal(by.鎧通し.defPen, 0.5)
+  assert.deepEqual(by.盗み取る.dispel, { chance:40 })
+  assert.equal(by.生命吸収.drain, 0.25)
+  assert.equal(by.万能薬.cure, 2)
 })
 
 test('編成の想定利用MPは、この版の名簿で数える（新しい技の消費MPが0に見えない）', () => {
@@ -702,19 +740,23 @@ test('【確定】刀＝STR60・AGI25・DEX15、宝珠＝INT40・AGI30・VIT30�
   assert.ok(itemOf(1, 'N', '宝珠').dist.int_stat < itemOf(1, 'N', '杖').dist.int_stat)
 })
 
-test('【確定】剣士（2026-10-09 ユーザー承認）：物理・刀／片手剣／両手剣・STR・DEX・AGIが高い・技5つ', () => {
+test('【確定】剣士（2026-10-09 ユーザー承認・2026-10-14 直し）：物理・刀／片手剣／両手剣・STR・DEXが高い・技7つ', () => {
   assert.equal(attackKindOf('剣士'), 'phys')
   assert.deepEqual(weaponsOf('剣士'), ['刀', '片手剣', '両手剣'])
   // 承認は STR40 DEX32 AGI30 VIT15 HP13 MP10 LUK5（合計145）。2026-10-12 ClassLVごとの点数を5→8にしたので同じ割合で232点へ
-  assert.deepEqual(JOB_BONUS.剣士, { str:64, dex:51, agi:48, vit:24, hp:21, mp:16, luk:8 })
+  // 2026-10-14 ユーザー承認：HPが低くボス戦で平均の約9割だった＝DEX・AGIからVIT・HPへ（案の DEX45・AGI42 は「高い2〜3種」を守るため DEX48・AGI39）
+  assert.deepEqual(JOB_BONUS.剣士, { str:64, dex:48, agi:39, vit:30, hp:27, mp:16, luk:8 })
+  assert.deepEqual(mainStatsOf('剣士'), ['str', 'dex'])
   // 説明文は 2026-10-11 ユーザー指示「具体的なスキル名やステータス名を記載しないで」で書き直した（前は承認済みの「STR・DEX・AGIがそろって…燕返しと兜割りで斬り崩す」）
   assert.equal(classDescOf('剣士'), '鋭い剣さばきで、攻めと身のこなしを両立する')
-  assert.deepEqual(learnOrderOf('剣士').map(s => s.name), ['袈裟斬り', '燕返し', '兜割り', '一閃', '剣の構え'])
+  assert.deepEqual(learnOrderOf('剣士').map(s => s.name), ['袈裟斬り', '燕返し', '兜割り', '一閃', '剣の構え', '霞斬り', '乱れ斬り'])
   const by = Object.fromEntries(learnOrderOf('剣士').map(s => [s.name, s]))
   assert.equal(by.燕返し.hits, 2)
   assert.equal(by.兜割り.defPen, 0.3)
   assert.deepEqual(by.一閃.ail, { key:'bleed', chance:40 })
-  assert.deepEqual(by.剣の構え.buff, { self:{ str:10, dex:9, agi:8 } })
+  // 2026-10-14 ユーザー承認：威力をSTR寄りに（価値は同じ）・剣の構えは STR+15%・AGI+12%
+  assert.deepEqual([by.袈裟斬り.mult, by.燕返し.mult, by.兜割り.mult, by.一閃.mult], [1.15, 0.65, 1.17, 1.3])
+  assert.deepEqual(by.剣の構え.buff, { self:{ str:15, agi:12 } })
 })
 
 test('【確定】武器は1本だけ。枠は7つ（武器・頭・鎧・腕・足・装飾品2）', () => {

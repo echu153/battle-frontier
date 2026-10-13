@@ -4,7 +4,8 @@
 // 2026-10-09 ユーザー決定（docs/v2cap-design.md §11）：初期職は11職（剣士を同じ日に足した）。
 //   ・戦士・弓使い・魔法使い・僧侶・格闘家 … 今のⅡのスキルをそのまま使う（中身は src/v2/lib/skills.js）
 //   ・槍使い・盗賊・銃士・剣士・呪術師・薬師 … 新しく作った5個ずつ（下の NEW_SKILLS・ユーザー承認済み）
-//   ・ノーブル・サモナーと一次職は**一旦なし**
+//   ・ノーブル・サモナーと一次職は**一旦なし**（一次職は 2026-10-10 に skillsIchiji.js で足した）
+//   ・2026-10-14：11職とも CLASS LV25・30 で1つずつ足した（下の LATE_SKILLS＝技7つから5枠を選ぶ）
 // 新しい技は今のⅡの値段の付け方（発動率ごとの価値 skillValue・消費MPの帯）で初期職の帯に合わせてある。
 //
 // 【確定】スキルは**その職業でだけ使える**（2026-10-09 ユーザー決定・今のⅡの「他職は0.8倍・MP2倍」はやめた）。
@@ -29,7 +30,8 @@ export const NEW_SKILLS = [
   { name:'薙ぎ払い',   cls:'槍使い', kind:'phys', mult:1.31, proc:90, mp:8,  buff:{ enemy:{ agi:-15 } }, desc:'足元を払う。相手のAGI-15%（重ねがけ可）' },
   { name:'投げ槍',     cls:'槍使い', kind:'phys', mult:1.0, add:[{ stat:'dex', rate:0.3 }], proc:88, mp:9, sureHit:true, desc:'必中。DEXも威力になる' },
   { name:'三段突き',   cls:'槍使い', kind:'phys', mult:0.52, hits:3, proc:85, mp:11, noCrit:true, desc:'3連撃。1発ずつ命中判定。クリティカルしない' },
-  { name:'槍衾',       cls:'槍使い', kind:'buff', proc:100, mp:8, buff:{ self:{ str:15, vit:12 } }, priority:1, desc:'STR+15%・VIT+12%（重ねがけ可）' },
+  // 【確定】2026-10-14 ユーザー承認：槍衾を STR+15%・VIT+12% → STR+12%・AGI+15%（合計27%のまま・槍使いのHP・配分の直しと一緒）
+  { name:'槍衾',       cls:'槍使い', kind:'buff', proc:100, mp:8, buff:{ self:{ str:12, agi:15 } }, priority:1, desc:'STR+12%・AGI+15%（重ねがけ可）' },
   // 盗賊（物理・AGIも威力に乗る）
   { name:'切りつけ',   cls:'盗賊', kind:'phys', mult:0.85, add:[{ stat:'agi', rate:0.4 }], proc:95, mp:4, desc:'素早く切る。AGIも威力になる' },
   { name:'早業',       cls:'盗賊', kind:'phys', mult:0.4, add:[{ stat:'agi', rate:0.3 }], hits:2, proc:90, mp:8, noCrit:true, desc:'2連撃。AGIも威力になる。クリティカルしない' },
@@ -43,11 +45,13 @@ export const NEW_SKILLS = [
   { name:'徹甲弾',     cls:'銃士', kind:'phys', mult:0.67, add:[{ stat:'dex', rate:0.7 }], proc:85, mp:11, defPen:0.3, desc:'相手の防御を30%無視。DEXが大きく威力になる' },
   { name:'狙いを定める', cls:'銃士', kind:'buff', proc:100, mp:8, buff:{ self:{ dex:27 } }, priority:1, desc:'DEX+27%（重ねがけ可）' },
   // 剣士（物理・STRにDEXやAGIも乗る・2026-10-09 ユーザー承認）
-  { name:'袈裟斬り',   cls:'剣士', kind:'phys', mult:0.95, add:[{ stat:'dex', rate:0.3 }], proc:95, mp:4, desc:'肩口から斬り下ろす。DEXも威力になる' },
-  { name:'燕返し',     cls:'剣士', kind:'phys', mult:0.55, add:[{ stat:'dex', rate:0.15 }], hits:2, proc:90, mp:8, noCrit:true, desc:'2連撃。DEXも威力になる。クリティカルしない' },
-  { name:'兜割り',     cls:'剣士', kind:'phys', mult:1.0, add:[{ stat:'dex', rate:0.27 }], proc:88, mp:9, defPen:0.3, desc:'相手の防御を30%無視。DEXも威力になる' },
-  { name:'一閃',       cls:'剣士', kind:'phys', mult:1.15, add:[{ stat:'agi', rate:0.25 }], proc:85, mp:11, ail:{ key:'bleed', chance:40 }, desc:'AGIも威力になる。40%で出血' },
-  { name:'剣の構え',   cls:'剣士', kind:'buff', proc:100, mp:8, buff:{ self:{ str:10, dex:9, agi:8 } }, priority:1, desc:'STR+10%・DEX+9%・AGI+8%（重ねがけ可）' },
+  // 【確定】2026-10-14 ユーザー承認：威力をSTR寄りにした（価値は同じ）。副参照（DEX・AGI）はSTRより低いのに値段はSTRと同じに数えるので、
+  //   副参照が多いほど実際の威力が下がっていた（剣士がボス戦で平均の約9割）。剣の構えは STR+10%・DEX+9%・AGI+8% → STR+15%・AGI+12%
+  { name:'袈裟斬り',   cls:'剣士', kind:'phys', mult:1.15, add:[{ stat:'dex', rate:0.1 }], proc:95, mp:4, desc:'肩口から斬り下ろす。DEXも威力になる' },
+  { name:'燕返し',     cls:'剣士', kind:'phys', mult:0.65, add:[{ stat:'dex', rate:0.05 }], hits:2, proc:90, mp:8, noCrit:true, desc:'2連撃。DEXも威力になる。クリティカルしない' },
+  { name:'兜割り',     cls:'剣士', kind:'phys', mult:1.17, add:[{ stat:'dex', rate:0.1 }], proc:88, mp:9, defPen:0.3, desc:'相手の防御を30%無視。DEXも威力になる' },
+  { name:'一閃',       cls:'剣士', kind:'phys', mult:1.3, add:[{ stat:'agi', rate:0.1 }], proc:85, mp:11, ail:{ key:'bleed', chance:40 }, desc:'AGIも威力になる。40%で出血' },
+  { name:'剣の構え',   cls:'剣士', kind:'buff', proc:100, mp:8, buff:{ self:{ str:15, agi:12 } }, priority:1, desc:'STR+15%・AGI+12%（重ねがけ可）' },
   // 呪術師（魔法・状態異常）
   { name:'呪弾',       cls:'呪術師', kind:'mag', mult:1.45, proc:95, mp:5, desc:'呪いを込めた弾を放つ' },
   { name:'呪縛',       cls:'呪術師', kind:'mag', mult:1.44, proc:90, mp:9, ail:{ key:'slow', chance:40 }, desc:'40%で鈍足' },
@@ -58,17 +62,51 @@ export const NEW_SKILLS = [
   { name:'薬瓶投げ',   cls:'薬師', kind:'mag', mult:1.45, proc:95, mp:5, desc:'薬瓶を投げつける' },
   { name:'傷薬',       cls:'薬師', kind:'heal', proc:85, mp:12, heal:{ rate:1.2 }, desc:'傷薬でHPを戻す' },
   { name:'毒薬',       cls:'薬師', kind:'mag', mult:1.4, proc:88, mp:10, ail:{ key:'poison', chance:60 }, desc:'60%で毒' },
-  { name:'強壮剤',     cls:'薬師', kind:'buff', proc:100, mp:9, buff:{ self:{ str:15, int_stat:15 } }, priority:1, desc:'STR+15%・INT+15%（重ねがけ可）' },
+  // 【確定】2026-10-14 ユーザー承認：魔法職にSTRは要らないので STR+15% → VIT+12%
+  { name:'強壮剤',     cls:'薬師', kind:'buff', proc:100, mp:9, buff:{ self:{ int_stat:15, vit:12 } }, priority:1, desc:'INT+15%・VIT+12%（重ねがけ可）' },
   { name:'気付け薬',   cls:'薬師', kind:'heal', proc:85, mp:8, mpRegen:{ rate:0.2, turns:4 }, desc:'しばらく毎ターンMPが戻る' },
+]
+
+// ===== 初期職11職の CLASS LV25・30 の技（各職2つ・覚える順に上から）=====
+// 【確定】2026-10-14 ユーザー承認（案「初期職に技を足す」）。前は技5つ＝枠5つで、初期職のうちは「どの技を入れるか」を選べなかった
+//   （CLASS LV21〜30は何も覚えなかった）。7つから5枠を選ぶ。どれも初期職の帯（価値・消費MP）どおり＝強さは同じで中身が違う。
+//   中身は職業の弱点を埋めるもの（DEXが低い職業に必中・AGIを下げる、回復の無い職業に吸収、など）。
+//   ★名前が重なるものは替えた：焼夷弾・火炎瓶（一次職）→炸裂弾・発火薬／峰打ち（今のⅡの侍）→霞斬り／
+//     足払い（一次職の槍術士）→水面蹴り／乱れ撃ち（今のⅡの武器の進化）→五月雨撃ち
+export const LATE_SKILLS = [
+  { name:'霞斬り',     cls:'剣士', kind:'phys', mult:1.31, buff:{ enemy:{ dex:-15 } }, proc:90, mp:8, desc:'相手のDEX-15%（重ねがけ可）' },
+  { name:'乱れ斬り',   cls:'剣士', kind:'phys', mult:0.35, add:[{ stat:'agi', rate:0.17 }], hits:3, proc:85, mp:11, noCrit:true, desc:'3連撃。AGIも威力になる。クリティカルしない' },
+  { name:'叩きつけ',   cls:'戦士', kind:'phys', mult:1.4, proc:85, mp:11, sureHit:true, desc:'必中の重い一撃' },
+  { name:'雄叫び',     cls:'戦士', kind:'buff', proc:100, mp:5, buff:{ self:{ str:12 }, enemy:{ agi:-5 } }, priority:1, desc:'STR+12%・相手のAGI-5%（重ねがけ可）' },
+  { name:'鎧通し',     cls:'槍使い', kind:'phys', mult:1.25, proc:85, mp:11, defPen:0.5, desc:'相手の防御を50%無視' },
+  { name:'穿ち',       cls:'槍使い', kind:'phys', mult:1.24, proc:90, mp:8, ail:{ key:'bleed', chance:40 }, desc:'40%で出血' },
+  { name:'水面蹴り',   cls:'格闘家', kind:'phys', mult:1.31, buff:{ enemy:{ agi:-15 } }, proc:90, mp:8, desc:'相手のAGI-15%（重ねがけ可）' },
+  { name:'百裂拳',     cls:'格闘家', kind:'phys', mult:0.31, hits:5, proc:85, mp:11, noCrit:true, desc:'5連撃。1発ずつ命中判定。クリティカルしない' },
+  { name:'投げナイフ', cls:'盗賊', kind:'phys', mult:1.0, add:[{ stat:'agi', rate:0.25 }], proc:90, mp:8, sureHit:true, desc:'必中。AGIも威力になる' },
+  { name:'盗み取る',   cls:'盗賊', kind:'phys', mult:0.85, add:[{ stat:'agi', rate:0.4 }], proc:90, mp:8, dispel:{ chance:40 }, desc:'AGIも威力になる。40%で相手のバフを1つ消す' },
+  { name:'足止めの矢', cls:'弓使い', kind:'phys', mult:0.65, add:[{ stat:'agi', rate:0.45 }], proc:95, mp:4, ail:{ key:'slow', chance:40 }, desc:'AGIも威力になる。40%で鈍足' },
+  { name:'五月雨撃ち', cls:'弓使い', kind:'phys', mult:0.3, add:[{ stat:'agi', rate:0.22 }], hits:3, proc:85, mp:11, noCrit:true, desc:'3連射。AGIも威力になる。クリティカルしない' },
+  { name:'しびれ弾',   cls:'銃士', kind:'phys', mult:0.55, add:[{ stat:'dex', rate:0.65 }], proc:88, mp:9, ail:{ key:'paralyze', chance:12 }, desc:'DEXが大きく威力になる。12%で麻痺' },
+  { name:'炸裂弾',     cls:'銃士', kind:'phys', mult:0.6, add:[{ stat:'dex', rate:0.8 }], proc:85, mp:11, ail:{ key:'burn', chance:40 }, desc:'DEXが大きく威力になる。40%で火傷' },
+  { name:'ウインド',   cls:'魔法使い', kind:'mag', mult:1.6, proc:90, mp:9, elem:'wind', desc:'風の魔法' },
+  { name:'ディスペル', cls:'魔法使い', kind:'mag', mult:1.25, proc:95, mp:5, dispel:{ chance:50 }, desc:'50%で相手のバフを1つ消す' },
+  { name:'封印の呪い', cls:'呪術師', kind:'mag', mult:1.45, proc:88, mp:10, ail:{ key:'seal', chance:25 }, desc:'25%で封印' },
+  { name:'生命吸収',   cls:'呪術師', kind:'mag', mult:1.4, proc:90, mp:9, drain:0.25, desc:'与えたダメージの25%をHP回復' },
+  { name:'ホーリー',   cls:'僧侶', kind:'mag', mult:1.33, proc:95, mp:5, cure:1, desc:'自分の状態異常を1つ治す' },
+  { name:'神罰',       cls:'僧侶', kind:'mag', mult:1.62, proc:85, mp:13, ail:{ key:'weaken', chance:30 }, desc:'30%で衰弱' },
+  { name:'発火薬',     cls:'薬師', kind:'mag', mult:1.44, proc:90, mp:9, ail:{ key:'burn', chance:40 }, desc:'40%で火傷' },
+  { name:'万能薬',     cls:'薬師', kind:'heal', proc:85, mp:10, heal:{ rate:0.8 }, cure:2, desc:'HPを戻し、自分の状態異常を2つ治す' },
 ]
 
 // 魔法の属性（魔導士の元素共鳴が「直前と違う属性」を見る）。今のⅡの魔法使いの技は今のⅡの名簿を書き換えず、写しに付ける
 export const ELEM_OF_V2 = { ファイア:'fire', サンダー:'thunder', アイスランス:'ice' }
 
 // この版のスキル全部。今のⅡの5職ぶんは、今のⅡの並び（＝覚える順）のまま。一次職20職は skillsIchiji.js（2026-10-10）
+// ★職業ごとの並び＝覚える順（CLASS LV1・5・10・15・20 の5つ → CLASS LV25・30 の LATE_SKILLS）
 export const SKILLS = [
   ...V2_SKILLS.filter(s => KEEP_FROM_V2.includes(s.cls)).map(s => (ELEM_OF_V2[s.name] ? { ...s, elem: ELEM_OF_V2[s.name] } : s)),
   ...NEW_SKILLS,
+  ...LATE_SKILLS,
   ...ICHIJI_SKILLS,
 ]
 export const SKILL_BY_NAME = Object.fromEntries(SKILLS.map(s => [s.name, s]))

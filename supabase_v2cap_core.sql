@@ -78,7 +78,7 @@ grant select on table public.v2cap_stages to authenticated;
 
 -- @@seed:stages
 insert into public.v2cap_stages (stage, mult, per_lv, learn_at, max_jlv, need_base) values
-  ('shoki', 1, 8, '{1,5,10,15,20}'::int[], 30, 15),
+  ('shoki', 1, 8, '{1,5,10,15,20,25,30}'::int[], 30, 15),
   ('ichiji', 3, 10, '{1,5,10,15,20,25,30,40}'::int[], 50, 30)
 on conflict (stage) do update set mult = excluded.mult, per_lv = excluded.per_lv, learn_at = excluded.learn_at, max_jlv = excluded.max_jlv, need_base = excluded.need_base;
 -- @@end:stages
@@ -119,9 +119,9 @@ grant select on table public.v2cap_classes to authenticated;
 -- @@seed:classes
 delete from public.v2cap_classes where id <> all('{剣士,戦士,槍使い,格闘家,盗賊,弓使い,銃士,魔法使い,呪術師,僧侶,薬師,狂戦士,重戦士,竜騎士,槍術士,体術師,気功師,暗殺者,忍者,狩人,狙撃手,魔銃士,砲撃士,魔導士,時魔導士,死霊術師,陰陽師,司祭,祓魔師,錬金術師,霊薬師}'::text[]);
 insert into public.v2cap_classes (id, stage, sort, req_cls, req_jlv, bonus_seq, weapons, kind, lineage, lv_hp, lv_mp, starter) values
-  ('剣士', 'shoki', 0, null, null, '{str,dex,agi,vit,hp,str,dex,agi,mp,str,dex,agi,str,luk,vit,dex,str,agi,hp,str,dex,agi,mp,str,vit,dex,agi,str,hp,dex,str,agi,vit,dex,str,mp,agi,str,dex,hp,agi,str,luk,dex,vit,str,agi,dex,str,hp,agi,mp,dex,str,vit,agi,str,dex,hp,str,agi,dex,vit,str,mp,agi,dex,str,luk,agi,dex,str,hp,vit,str,agi,dex,str,mp,dex,agi,str,vit,hp,dex,agi,str,dex,str,agi,vit,str,dex,hp,agi,mp,str,dex,agi,str,luk,vit,dex,str,agi,hp,dex,str,agi,mp,str,dex,vit,agi,str,hp,dex,str,agi,vit,dex,str,mp,agi,str,dex,hp,agi,str,dex,vit,luk,str,agi,dex,str,mp,agi,hp,dex,str,vit,agi,str,dex,str,agi,dex,hp,vit,str,mp,agi,dex,str,luk,dex,agi,str,vit,hp,str,dex,agi,str,dex,agi,mp,str,vit,dex,agi,str,hp,dex,str,agi,vit,str,dex,mp,agi,hp,str,dex,agi,str,luk,vit,dex,str,agi,hp,dex,str,agi,mp,str,dex,vit,agi,str,dex,hp,str,agi,dex,vit,str,mp,agi,dex,str,luk,agi,str,dex,hp,vit,str,agi,dex,str,mp,agi,dex,str,hp,vit,agi,dex,str}'::text[], '{刀,片手剣,両手剣}'::text[], 'phys', '{剣士}'::text[], 10, 2, '{0N:刀,0N:軽装頭,0N:軽装鎧,0N:軽装腕,0N:軽装足,0N:イヤリング,0N:イヤリング}'::text[]),
+  ('剣士', 'shoki', 0, null, null, '{str,dex,agi,vit,hp,str,mp,dex,agi,str,vit,dex,str,hp,agi,luk,str,dex,vit,str,agi,hp,dex,mp,str,dex,agi,str,vit,hp,str,dex,agi,vit,str,mp,dex,str,agi,hp,dex,str,vit,luk,agi,str,dex,hp,str,vit,agi,dex,mp,str,hp,dex,str,agi,vit,str,dex,agi,str,hp,mp,dex,vit,str,agi,dex,str,luk,hp,vit,str,agi,dex,str,mp,dex,agi,str,vit,hp,dex,str,agi,vit,str,dex,hp,agi,str,mp,dex,str,vit,agi,hp,dex,str,luk,str,dex,agi,vit,str,hp,dex,mp,agi,str,vit,dex,str,hp,agi,str,dex,vit,str,agi,mp,dex,hp,str,vit,agi,dex,str,luk,str,dex,hp,agi,vit,str,dex,mp,str,agi,hp,dex,str,vit,agi,str,dex,hp,vit,str,agi,dex,mp,str,luk,dex,str,agi,vit,hp,str,dex,agi,str,vit,dex,mp,hp,str,agi,dex,str,vit,agi,str,dex,hp,str,mp,dex,agi,vit,str,hp,dex,str,agi,luk,vit,str,dex,hp,agi,str,dex,mp,str,vit,agi,dex,str,hp,vit,str,agi,dex,str,mp,dex,hp,agi,str,vit,dex,str,luk,agi,hp,str,dex,vit,str,agi,dex,mp,str,hp,vit,agi,dex,str}'::text[], '{刀,片手剣,両手剣}'::text[], 'phys', '{剣士}'::text[], 13, 2, '{0N:刀,0N:軽装頭,0N:軽装鎧,0N:軽装腕,0N:軽装足,0N:イヤリング,0N:イヤリング}'::text[]),
   ('戦士', 'shoki', 1, null, null, '{str,vit,hp,dex,agi,str,vit,hp,mp,str,vit,luk,str,hp,dex,agi,vit,str,hp,str,vit,mp,hp,str,dex,vit,agi,str,hp,vit,str,dex,agi,hp,vit,str,mp,str,vit,hp,luk,str,vit,dex,hp,agi,str,vit,str,hp,mp,vit,str,dex,agi,hp,str,vit,hp,str,vit,dex,agi,str,hp,mp,vit,str,hp,luk,vit,str,dex,agi,str,hp,vit,str,mp,vit,hp,str,dex,agi,vit,str,hp,vit,str,hp,dex,agi,str,vit,mp,hp,str,vit,luk,str,hp,dex,agi,vit,str,hp,vit,str,mp,dex,str,hp,vit,agi,str,hp,vit,str,dex,agi,vit,hp,str,mp,str,vit,hp,luk,str,vit,dex,agi,hp,str,vit,str,hp,mp,vit,str,dex,agi,hp,str,vit,hp,str,vit,dex,agi,str,hp,vit,mp,str,luk,vit,hp,str,dex,agi,str,vit,hp,str,vit,mp,hp,str,dex,agi,vit,str,hp,vit,str,hp,dex,agi,str,vit,mp,hp,str,vit,luk,str,hp,dex,vit,agi,str,hp,vit,str,mp,dex,str,vit,hp,agi,str,vit,hp,str,dex,vit,agi,str,hp,mp,vit,str,hp,luk,str,vit,dex,agi,str,hp,vit,str,hp,mp,vit,str,dex,agi,hp,vit,str}'::text[], '{両手剣,斧,鈍器}'::text[], 'phys', '{戦士}'::text[], 13, 2, '{0N:両手剣,0N:重鎧頭,0N:重鎧鎧,0N:重鎧腕,0N:重鎧足,0N:イヤリング,0N:イヤリング}'::text[]),
-  ('槍使い', 'shoki', 2, null, null, '{str,dex,agi,vit,hp,str,dex,mp,str,agi,dex,vit,str,luk,dex,hp,str,agi,dex,str,vit,mp,dex,str,agi,hp,dex,str,vit,agi,str,dex,hp,str,dex,vit,agi,mp,str,dex,luk,str,agi,dex,hp,vit,str,dex,str,agi,mp,dex,vit,str,hp,dex,str,agi,vit,str,dex,hp,agi,str,dex,mp,str,vit,dex,agi,str,luk,dex,hp,str,vit,agi,dex,str,mp,dex,str,hp,agi,vit,dex,str,str,dex,agi,hp,vit,str,dex,mp,str,agi,dex,luk,str,vit,dex,hp,str,agi,dex,str,vit,mp,agi,dex,str,hp,dex,str,agi,vit,str,dex,hp,str,dex,agi,mp,vit,str,dex,luk,str,agi,dex,hp,str,vit,dex,str,agi,mp,dex,str,vit,hp,agi,dex,str,str,dex,vit,agi,hp,str,dex,mp,str,dex,agi,vit,str,luk,dex,hp,str,agi,dex,vit,str,mp,dex,str,agi,hp,dex,str,vit,agi,str,dex,hp,str,vit,dex,mp,agi,str,dex,luk,str,vit,dex,agi,hp,str,dex,str,mp,agi,vit,dex,str,hp,dex,str,agi,vit,str,dex,hp,str,agi,dex,mp,vit,str,dex,agi,str,luk,dex,hp,str,vit,dex,agi,str,mp,dex,str,hp,vit,agi,dex,str}'::text[], '{槍,片手剣,投擲}'::text[], 'phys', '{槍使い}'::text[], 10, 2, '{0N:槍,0N:重鎧頭,0N:重鎧鎧,0N:重鎧腕,0N:重鎧足,0N:イヤリング,0N:イヤリング}'::text[]),
+  ('槍使い', 'shoki', 2, null, null, '{str,dex,vit,agi,hp,str,dex,mp,str,vit,agi,dex,str,hp,luk,vit,str,dex,agi,str,dex,vit,mp,hp,str,dex,agi,str,vit,dex,str,hp,vit,agi,str,dex,mp,str,dex,vit,hp,str,agi,luk,dex,str,vit,hp,dex,str,agi,mp,vit,str,dex,str,hp,dex,vit,agi,str,dex,str,vit,mp,agi,hp,str,dex,vit,str,dex,luk,agi,str,hp,vit,dex,str,mp,agi,dex,str,vit,hp,str,dex,vit,str,agi,dex,str,hp,mp,vit,dex,str,agi,luk,str,dex,vit,hp,str,dex,agi,vit,str,mp,dex,str,hp,agi,vit,dex,str,str,dex,vit,agi,hp,str,dex,mp,str,vit,agi,dex,str,hp,luk,vit,str,dex,agi,str,dex,vit,mp,hp,str,dex,agi,str,vit,dex,str,hp,vit,agi,str,dex,mp,str,dex,vit,hp,str,agi,luk,dex,str,vit,hp,dex,str,agi,mp,vit,str,dex,str,hp,dex,vit,agi,str,dex,str,vit,mp,agi,hp,str,dex,vit,str,dex,luk,agi,str,hp,vit,dex,str,mp,agi,dex,str,vit,hp,str,dex,vit,str,agi,dex,str,hp,mp,vit,dex,str,agi,luk,str,dex,vit,hp,str,dex,agi,vit,str,mp,dex,str,hp,agi,vit,dex,str}'::text[], '{槍,片手剣,投擲}'::text[], 'phys', '{槍使い}'::text[], 13, 2, '{0N:槍,0N:重鎧頭,0N:重鎧鎧,0N:重鎧腕,0N:重鎧足,0N:イヤリング,0N:イヤリング}'::text[]),
   ('格闘家', 'shoki', 3, null, null, '{str,agi,hp,vit,dex,str,agi,mp,str,agi,hp,vit,str,agi,luk,hp,str,agi,dex,str,vit,agi,mp,hp,str,agi,str,vit,agi,hp,str,dex,agi,str,mp,vit,agi,hp,str,agi,luk,str,dex,hp,agi,vit,str,agi,str,hp,mp,agi,vit,str,dex,agi,str,hp,agi,str,vit,hp,agi,str,mp,dex,agi,str,vit,hp,agi,str,luk,agi,str,vit,hp,str,agi,dex,mp,str,agi,hp,vit,str,agi,hp,str,agi,dex,vit,str,agi,mp,hp,str,agi,luk,str,vit,agi,hp,str,agi,dex,str,vit,agi,hp,mp,str,agi,str,dex,hp,agi,vit,str,agi,str,mp,hp,agi,vit,str,dex,agi,str,hp,luk,agi,str,vit,agi,hp,str,mp,agi,str,vit,dex,agi,hp,str,agi,str,vit,hp,agi,str,mp,dex,agi,str,hp,vit,str,agi,luk,str,agi,hp,vit,str,agi,dex,mp,str,agi,hp,vit,str,agi,hp,str,agi,dex,str,vit,agi,mp,hp,str,agi,luk,str,vit,agi,hp,str,dex,agi,str,mp,hp,agi,vit,str,agi,dex,str,hp,agi,vit,str,agi,hp,str,mp,agi,vit,str,dex,agi,hp,str,luk,agi,str,vit,hp,agi,str,mp,dex,agi,str,vit,hp,agi,str}'::text[], '{拳,鈍器,杖}'::text[], 'phys', '{格闘家}'::text[], 13, 2, '{0N:拳,0N:軽装頭,0N:軽装鎧,0N:軽装腕,0N:軽装足,0N:イヤリング,0N:イヤリング}'::text[]),
   ('盗賊', 'shoki', 4, null, null, '{agi,str,dex,luk,agi,hp,str,mp,agi,dex,vit,str,agi,luk,dex,agi,str,hp,agi,luk,dex,str,agi,mp,str,agi,dex,vit,luk,agi,str,hp,dex,agi,str,luk,agi,dex,str,agi,hp,mp,str,agi,dex,luk,vit,agi,str,dex,agi,luk,str,agi,hp,dex,str,agi,luk,mp,agi,dex,str,vit,agi,str,dex,agi,hp,luk,str,agi,dex,agi,str,luk,mp,agi,dex,str,hp,agi,vit,luk,str,agi,dex,agi,str,dex,hp,agi,luk,str,agi,dex,mp,str,agi,vit,luk,dex,agi,str,hp,agi,str,dex,luk,agi,str,agi,dex,mp,vit,hp,agi,str,luk,dex,agi,str,agi,luk,dex,str,agi,hp,str,agi,dex,luk,mp,agi,str,vit,dex,agi,str,luk,agi,hp,dex,str,agi,luk,agi,str,dex,mp,agi,vit,str,hp,agi,dex,luk,str,agi,dex,agi,str,luk,hp,agi,dex,str,agi,mp,vit,str,agi,dex,luk,agi,str,dex,hp,agi,str,luk,agi,dex,str,agi,mp,vit,luk,dex,agi,str,hp,agi,str,dex,agi,luk,str,agi,dex,hp,str,agi,luk,mp,vit,agi,dex,str,agi,str,dex,luk,agi,hp,str,agi,dex,luk,agi,str,mp,vit,agi,dex,str,hp,agi,luk,dex,str,agi}'::text[], '{短剣,投擲,刀}'::text[], 'phys', '{盗賊}'::text[], 6, 2, '{0N:短剣,0N:軽装頭,0N:軽装鎧,0N:軽装腕,0N:軽装足,0N:イヤリング,0N:イヤリング}'::text[]),
   ('弓使い', 'shoki', 5, null, null, '{agi,dex,str,hp,luk,agi,dex,str,mp,agi,dex,vit,str,agi,dex,agi,str,hp,dex,luk,agi,str,dex,agi,mp,vit,str,dex,agi,hp,agi,dex,str,luk,agi,dex,str,agi,dex,hp,str,agi,luk,dex,mp,agi,str,vit,dex,agi,str,dex,agi,hp,luk,str,dex,agi,mp,agi,dex,str,vit,agi,dex,str,hp,agi,dex,luk,str,agi,dex,agi,str,dex,mp,agi,hp,str,luk,dex,agi,vit,str,dex,agi,agi,dex,str,hp,luk,agi,dex,str,agi,mp,dex,vit,str,agi,dex,hp,agi,str,luk,dex,agi,str,dex,agi,mp,str,dex,agi,hp,luk,vit,agi,dex,str,agi,dex,str,agi,dex,hp,str,agi,luk,dex,agi,str,mp,dex,vit,agi,str,dex,agi,hp,luk,str,dex,agi,agi,dex,str,mp,vit,agi,dex,str,hp,agi,luk,dex,str,agi,dex,agi,str,hp,dex,agi,luk,str,dex,agi,mp,vit,str,dex,agi,hp,agi,dex,str,luk,agi,dex,str,agi,dex,mp,str,agi,vit,dex,hp,agi,str,luk,dex,agi,str,dex,agi,hp,str,dex,agi,luk,mp,agi,dex,str,vit,agi,dex,str,agi,hp,dex,luk,str,agi,dex,agi,str,mp,dex,agi,vit,str,dex,agi,hp,luk,str,dex,agi}'::text[], '{弓,短剣,片手剣}'::text[], 'phys', '{弓使い}'::text[], 6, 2, '{0N:弓,0N:軽装頭,0N:軽装鎧,0N:軽装腕,0N:軽装足,0N:イヤリング,0N:イヤリング}'::text[]),
@@ -231,6 +231,28 @@ insert into public.v2cap_skills (name, cls, mp, sort, passive) values
   ('毒薬', '薬師', 10, 3, false),
   ('強壮剤', '薬師', 9, 4, false),
   ('気付け薬', '薬師', 8, 5, false),
+  ('霞斬り', '剣士', 8, 6, false),
+  ('乱れ斬り', '剣士', 11, 7, false),
+  ('叩きつけ', '戦士', 11, 6, false),
+  ('雄叫び', '戦士', 5, 7, false),
+  ('鎧通し', '槍使い', 11, 6, false),
+  ('穿ち', '槍使い', 8, 7, false),
+  ('水面蹴り', '格闘家', 8, 6, false),
+  ('百裂拳', '格闘家', 11, 7, false),
+  ('投げナイフ', '盗賊', 8, 6, false),
+  ('盗み取る', '盗賊', 8, 7, false),
+  ('足止めの矢', '弓使い', 4, 6, false),
+  ('五月雨撃ち', '弓使い', 11, 7, false),
+  ('しびれ弾', '銃士', 9, 6, false),
+  ('炸裂弾', '銃士', 11, 7, false),
+  ('ウインド', '魔法使い', 9, 6, false),
+  ('ディスペル', '魔法使い', 5, 7, false),
+  ('封印の呪い', '呪術師', 10, 6, false),
+  ('生命吸収', '呪術師', 9, 7, false),
+  ('ホーリー', '僧侶', 5, 6, false),
+  ('神罰', '僧侶', 13, 7, false),
+  ('発火薬', '薬師', 9, 6, false),
+  ('万能薬', '薬師', 10, 7, false),
   ('バーサク', '狂戦士', 0, 1, true),
   ('マッドラッシュ', '狂戦士', 6, 2, false),
   ('血風斬', '狂戦士', 12, 3, false),
@@ -5450,67 +5472,64 @@ insert into public.v2cap_asc_nodes (stage, id, links) values
 -- @@seed:asc_mp
 delete from public.v2cap_asc_mp;
 insert into public.v2cap_asc_mp (cls, id, mp, pct) values
+  ('剣士', 9, 12, 0),
   ('剣士', 16, 6, 0),
-  ('剣士', 38, 12, 0),
   ('剣士', 47, 9, 0),
   ('戦士', 17, 6, 0),
-  ('戦士', 25, 9, 0),
+  ('戦士', 30, 6, 0),
   ('戦士', 53, 9, 0),
   ('槍使い', 19, 9, 0),
-  ('槍使い', 24, 12, 0),
+  ('槍使い', 22, 9, 0),
   ('槍使い', 45, 6, 0),
-  ('格闘家', 7, 12, 0),
-  ('格闘家', 24, 12, 0),
+  ('格闘家', 22, 9, 0),
+  ('格闘家', 43, 6, 0),
   ('格闘家', 50, 9, 0),
-  ('盗賊', 11, 9, 0),
-  ('盗賊', 30, 6, 0),
+  ('盗賊', 33, 9, 0),
   ('盗賊', 45, 6, 0),
-  ('弓使い', 19, 9, 0),
+  ('弓使い', 31, 6, 0),
   ('弓使い', 44, 6, 0),
   ('弓使い', 50, 9, 0),
-  ('銃士', 35, 12, 0),
-  ('銃士', 39, 9, 0),
+  ('銃士', 2, 6, 0),
+  ('銃士', 38, 12, 0),
   ('銃士', 46, 6, 0),
-  ('魔法使い', 8, 9, 0),
-  ('魔法使い', 9, 12, 0),
-  ('魔法使い', 19, 9, 0),
-  ('魔法使い', 23, 12, 0),
+  ('魔法使い', 4, 6, 0),
+  ('魔法使い', 17, 6, 0),
+  ('魔法使い', 21, 12, 0),
   ('魔法使い', 27, 0, 5),
-  ('魔法使い', 32, 6, 0),
-  ('魔法使い', 42, 12, 0),
+  ('魔法使い', 31, 6, 0),
+  ('魔法使い', 34, 12, 0),
   ('魔法使い', 45, 6, 0),
   ('魔法使い', 50, 9, 0),
   ('魔法使い', 52, 12, 0),
   ('魔法使い', 53, 9, 0),
-  ('呪術師', 3, 6, 0),
-  ('呪術師', 4, 6, 0),
-  ('呪術師', 19, 9, 0),
+  ('呪術師', 1, 6, 0),
+  ('呪術師', 11, 9, 0),
+  ('呪術師', 17, 6, 0),
+  ('呪術師', 24, 12, 0),
   ('呪術師', 27, 0, 5),
-  ('呪術師', 28, 12, 0),
   ('呪術師', 30, 6, 0),
-  ('呪術師', 31, 6, 0),
-  ('呪術師', 37, 12, 0),
+  ('呪術師', 36, 9, 0),
+  ('呪術師', 38, 12, 0),
   ('呪術師', 39, 9, 0),
-  ('呪術師', 42, 12, 0),
   ('呪術師', 50, 9, 0),
-  ('僧侶', 1, 6, 0),
   ('僧侶', 5, 9, 0),
-  ('僧侶', 6, 12, 0),
-  ('僧侶', 31, 6, 0),
-  ('僧侶', 34, 12, 0),
-  ('僧侶', 36, 9, 0),
+  ('僧侶', 9, 12, 0),
+  ('僧侶', 11, 9, 0),
+  ('僧侶', 16, 6, 0),
+  ('僧侶', 30, 6, 0),
+  ('僧侶', 33, 9, 0),
   ('僧侶', 45, 6, 0),
   ('僧侶', 52, 12, 0),
   ('僧侶', 55, 0, 5),
   ('薬師', 6, 12, 0),
-  ('薬師', 11, 9, 0),
   ('薬師', 16, 6, 0),
+  ('薬師', 23, 12, 0),
+  ('薬師', 24, 12, 0),
   ('薬師', 25, 9, 0),
-  ('薬師', 28, 12, 0),
   ('薬師', 29, 6, 0),
-  ('薬師', 30, 6, 0),
-  ('薬師', 39, 9, 0),
+  ('薬師', 38, 12, 0),
   ('薬師', 41, 0, 5),
+  ('薬師', 49, 12, 0),
   ('狂戦士', 9, 12, 0),
   ('狂戦士', 29, 9, 0),
   ('狂戦士', 41, 15, 0),
@@ -5859,3 +5878,49 @@ end;
 $$;
 revoke all on function public.v2cap_ascend_reset(text) from public, anon;
 grant execute on function public.v2cap_ascend_reset(text) to authenticated;
+
+-- ===== 一度だけ：初期職の技を CLASS LV25・30 で1つずつ足した（2026-10-14 ユーザー承認）=====
+-- 初期11職の技が5つ→7つになり（skills.js の LATE_SKILLS・v2cap_stages.learn_at が {1,5,10,15,20,25,30}）、
+-- 剣士・槍使いはクラスのステの配分も変わった（jobs.js の JOB_BONUS）。アセンションの盤面は「技の数」と「配分」から中身を作るので、
+-- 初期11職の盤面の中身が入れ替わる（ascension.js の placeSkillsOf・mixStatsOf）。今いるキャラは一度だけ：
+--   ①初期職の盤面を空にする（ユーザーが選んだ「1回だけ戻してAPを返す」・Goldは取らない。APは CLASS LV から数え直すので戻る）
+--   ②就いたことのある職業ぜんぶ、その CLASS LV までの技を覚える（v2cap_learn。CLASS LV25・30 を越えている人に新しい技が入る）
+--   ③編成のある職業ぜんぶ：盤面を戻して最大MPが減ったぶん収め（v2cap_fit_set）、新しく覚えた技を空き枠へ入れる（v2cap_fill_set）
+-- ★印 shoki_skills_2530_20261014 を付けるので、2回目以降に全文を流し直しても何もしない
+do $$
+declare
+  r         record;
+  j         record;
+  v_asc     jsonb;
+  v_old     jsonb;
+  v_learned jsonb;
+  v_added   jsonb;
+  v_sets    jsonb;
+  v_set     jsonb;
+  v_max     int;
+begin
+  if not exists (select 1 from public.v2cap_migrations where key = 'shoki_skills_2530_20261014') then
+    for r in select p.id, p.mp, p.jobs, p.learned, p.skill_sets, p.ascension from public.v2cap_profiles p loop
+      v_asc := case when jsonb_typeof(r.ascension) = 'object' then r.ascension else '{}'::jsonb end;
+      v_asc := v_asc - array(select c.id from public.v2cap_classes c where c.stage = 'shoki');
+      v_old := coalesce(r.learned, '[]'::jsonb);
+      v_learned := v_old;
+      for j in select e.key as cls, e.value as v from jsonb_each(coalesce(r.jobs, '{}'::jsonb)) e loop
+        v_learned := public.v2cap_learn(v_learned, j.cls, coalesce((j.v ->> 'lv')::int, 1));
+      end loop;
+      select coalesce(jsonb_agg(t.name order by t.i), '[]'::jsonb) into v_added
+        from jsonb_array_elements_text(v_learned) with ordinality as t(name, i) where not (v_old ? t.name);
+      v_sets := case when jsonb_typeof(r.skill_sets) = 'object' then r.skill_sets else '{}'::jsonb end;
+      for j in select e.key as cls, e.value as v from jsonb_each(v_sets) e where jsonb_typeof(e.value) = 'array' loop
+        v_max := public.v2cap_max_mp(r.mp, v_asc, j.cls, coalesce((r.jobs -> j.cls ->> 'lv')::int, 1));
+        v_set := public.v2cap_fit_set(j.v, j.cls, v_learned, v_max);
+        v_set := public.v2cap_fill_set(v_set, v_added, j.cls, v_max);
+        v_sets := jsonb_set(v_sets, array[j.cls], v_set);
+      end loop;
+      update public.v2cap_profiles
+         set ascension = v_asc, learned = v_learned, skill_sets = v_sets, updated_at = now()
+       where id = r.id;
+    end loop;
+    insert into public.v2cap_migrations (key) values ('shoki_skills_2530_20261014');
+  end if;
+end $$;
