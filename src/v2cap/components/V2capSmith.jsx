@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
 import { supabase } from '../../supabase'
 import V2Modal from '../../v2/components/V2Modal.jsx'
+import { useStored } from '../../v2/lib/prefs.js'
 import { box, btn, miniBtn, TEXT } from '../../v2/components/v2ui.js'
-import { ITEMS, ITEM_BY_ID, PARTS, RARITIES, RARITY_COLOR, ARMOR_EFFECT, kindLabel, partLabel, rarityLabel, itemLabel } from '../lib/equipment.js'
+import { ITEMS, ITEM_BY_ID, PARTS, SLOTS, RARITIES, RARITY_COLOR, ARMOR_EFFECT, kindLabel, partLabel, rarityLabel, itemLabel } from '../lib/equipment.js'
 import { spotOf } from '../lib/areas.js'
 import { openUntilOf } from '../lib/sortie.js'
-import { canEquipType } from '../lib/jobs.js'
+import { canEquipType, weaponsOf } from '../lib/jobs.js'
 import { wornIdsOf } from '../lib/loadout.js'
 import { powerAt, statsAt, effectPct, underLvPowerOf } from '../lib/gear.js'
 import {
@@ -113,6 +114,13 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call }) {
   const [fxJob, setFxJob] = useState(null)
   const row = smithId === null ? null : all.find(r => String(r.inv.id) === smithId) || null
   const gold = Number(prof.gold) || 0
+  // 【確定】2026-10-13 ユーザー指示「強化は装備している装備を上に優先して表示させて」：
+  //   着けている装備を上に（武器→頭→鎧→腕→足→装飾品①②の順）。そのほかは絞り込み・並べ替えのとおり
+  const wornRank = Object.fromEntries(SLOTS.map((slot, i) => [String(prof.equipped?.[slot]), i]))
+  const rows = [
+    ...list.rows.filter(r => wornIds.has(String(r.inv.id))).sort((a, b) => wornRank[String(a.inv.id)] - wornRank[String(b.inv.id)]),
+    ...list.rows.filter(r => !wornIds.has(String(r.inv.id))),
+  ]
   const enhance = async () => {
     if (!row || busy) return
     const { inv, item } = row
@@ -148,8 +156,8 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call }) {
       )}
       <GearFilterBar g={list} />
       <div style={{ display:'grid', gap:'4px', maxHeight:'560px', overflowY:'auto' }}>
-        {list.rows.length === 0 && <Empty all={all} />}
-        {list.rows.map(({ inv, item }) => {
+        {rows.length === 0 && <Empty all={all} />}
+        {rows.map(({ inv, item }) => {
           const pct = effectPct(inv.ilv, prof.lv)
           const cost = enhanceCostOf(item, inv)
           const isWorn = wornIds.has(String(inv.id))
@@ -258,7 +266,11 @@ function CraftTab({ prof, all, busy, call, setError, setNotice }) {
   const [rarity, setRarity] = useState('R')
   const [part, setPart] = useState('all')
   const [confirm, setConfirm] = useState(null)   // 作る装備（item）
-  const items = ITEMS.filter(i => i.area === area && i.rarity === rarity && (part === 'all' || i.part === part))
+  // 【確定】2026-10-13 ユーザー指示「作成はその時装備できる武器種、防具の表示させるようにして、チェックのオンオフで変えれるように」：
+  //   オン（最初）＝いまの職業で装備できる武器種だけ。防具・装飾品はどの職業も着けられるので全部出す。オフ＝全部。端末で覚えておく
+  const [usableOnly, setUsableOnly] = useStored('capCraftUsableOnly', true)
+  const items = ITEMS.filter(i => i.area === area && i.rarity === rarity && (part === 'all' || i.part === part)
+    && (!usableOnly || i.part !== '武器' || canEquipType(prof.class, i.type)))
   const cost = craftCostOf(ITEMS.find(i => i.area === area && i.rarity === rarity))
   const have = scrapOf(prof.materials, area)
   const gold = Number(prof.gold) || 0
@@ -315,6 +327,11 @@ function CraftTab({ prof, all, busy, call, setError, setNotice }) {
           <button key={p} onClick={() => setPart(p)} style={chip(part === p)}>{p === 'all' ? 'すべて' : partLabel(p)}</button>
         ))}
       </div>
+      <label style={{ display:'flex', alignItems:'center', gap:'5px', fontSize:'11px', color: TEXT.label, marginBottom:'6px', cursor:'pointer', width:'fit-content' }}>
+        <input type="checkbox" checked={usableOnly} onChange={e => setUsableOnly(e.target.checked)} style={{ accentColor:'#ffaa44', margin:0 }} />
+        いまの職業（{prof.class}）で装備できるものだけ
+        <span style={{ color: TEXT.sub }}>（武器は {weaponsOf(prof.class).join('・')}／防具・装飾品はどれも）</span>
+      </label>
       {cost && (
         <div style={{ background:'#000818', border:'1px solid #553322', padding:'6px 8px', marginBottom:'8px', fontSize:'10px', color: TEXT.sub, lineHeight:1.7 }}>
           1つ作るのに：<span style={{ color: have < cost.scrap ? SHORT : '#cfe2ff' }}>{scrapNameOf(area)} {cost.scrap}個</span>（持っている {have.toLocaleString()}）・
