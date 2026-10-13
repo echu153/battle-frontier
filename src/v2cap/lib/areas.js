@@ -242,10 +242,49 @@ export const ENH_MULT = [1, 1.05, 1.07, 1.12, 1.11, 1.12, 1.11, 1.11, 1.12, 1.12
 export const BOSS_STEP_IN = 1.05
 export const BOSS_TOP_MIN = 1.01
 
+// ===== 序盤の手直し（エリア1〜5）=====
+// 【確定】2026-10-14 ユーザー指示「序盤の敵の強さとボスの強さやっぱり強すぎる」「中ボスの強さ1割下げて、大ボスも2割下げて」
+//   →案から「〇-②より少し強い所で止める」「序盤だけ（エリア1〜5）」「（ふつうの敵も）1割下げる」：
+//   ・エリア1〜5の中ボス（〇-①・〇-②）×0.9（①-①のボスも 135→122）
+//   ・エリア1〜5の大ボス（〇-③）×0.8。ただし同じエリアの〇-②（下げたあと）の BOSS_TOP_MIN 倍より弱くはしない
+//     （そのまま2割下げると、エリア2・3・5で大ボスが中ボスより弱くなった）
+//   ・エリア1〜5のふつうの敵 ×0.9。朝昼晩の敵は「その場所のいちばん強いふつうの敵」なので一緒に下がる。
+//     ①-①の敵（スライム・コウモリ＝①-②にも出る）とレアの敵はいまのまま
+//   ・エリア6から先はいまのまま（6-①のボスとふつうの敵は、下げる前の 5-③ から決める＝5-③→6-① で約1〜2割強くなる）
+//   ★目安の時間で測った強さ（STD_RATIO・AREA_BOSS）の上から掛ける。⚠測り直すと、この手直しを打ち消す向きに合わせてしまうので、
+//     測り直すときはエリア1〜5のボスの倍率とLV34以下の行を動かさない（tools/v2cap-progress.mjs の --bossmin 6 --stdmax 2）
+export const EARLY_AREAS = 5
+export const EARLY_NORMAL_CUT = 0.9
+export const EARLY_MID_BOSS_CUT = 0.9
+export const EARLY_BIG_BOSS_CUT = 0.8
+
 // 全部の敵の戦闘力の表（「場所|名前」→ 戦闘力）。一度作ったら使い回す。
+// now＝いまの強さ／base＝序盤の手直しの前（テストと測り直しの確かめ用）
 // ⚠STD_RATIO・AREA_BOSS・ENH_MULT を書き換えたら resetEnemyCache() を呼ぶ（tools/v2cap-progress.mjs の --tune が呼ぶ）
 let POWER = null
 export const resetEnemyCache = () => { POWER = null }
+const roundPowers = (m) => new Map([...m].map(([key, p]) => [key, Math.max(1, Math.round(p))]))
+// 序盤の手直しを掛ける（out は丸める前の表。書き換える）
+const applyEarlyCut = (out) => {
+  const firstSpot = new Set(spotOf(1).roster.enemies.map(e => e.name))   // ①-①の敵はいまのまま
+  for (let k = 0; k < EARLY_AREAS; k++) {
+    const spots = [1, 2, 3].map(sub => spotOf(k * 3 + sub))
+    for (const s of spots) {
+      let top = 0
+      for (const e of s.roster.enemies) {
+        const key = placeKey(s.id, e.name)
+        if (!firstSpot.has(e.name)) out.set(key, out.get(key) * EARLY_NORMAL_CUT)
+        top = Math.max(top, out.get(key))
+      }
+      for (const e of s.roster.timed) out.set(placeKey(s.id, e.name), top)
+    }
+    const [k1, k2, k3] = spots.map(s => placeKey(s.id, s.roster.boss.name))
+    const b2 = out.get(k2) * EARLY_MID_BOSS_CUT
+    out.set(k1, out.get(k1) * EARLY_MID_BOSS_CUT)
+    out.set(k2, b2)
+    out.set(k3, Math.max(out.get(k3) * EARLY_BIG_BOSS_CUT, b2 * BOSS_TOP_MIN))
+  }
+}
 const buildPowers = () => {
   const out = new Map()
   const boss = []   // 場所の番号 → ボスの戦闘力（丸める前）
@@ -279,13 +318,19 @@ const buildPowers = () => {
     }
     ;[b1, b2, b3].forEach((b, i) => { boss[k * 3 + i + 1] = b; out.set(placeKey(k * 3 + i + 1, [s1, s2, s3][i].roster.boss.name), b) })
   }
-  for (const [key, p] of out) out.set(key, Math.max(1, Math.round(p)))
-  return out
+  const base = roundPowers(out)
+  applyEarlyCut(out)
+  return { now: roundPowers(out), base }
 }
 // enemy は場所の顔ぶれ（SPOTS の roster）の敵＝いる場所（spot）を持っている
 export const enemyPowerOf = (enemy) => {
   POWER ||= buildPowers()
-  return POWER.get(placeKey(enemy.spot, enemy.name)) ?? 1
+  return POWER.now.get(placeKey(enemy.spot, enemy.name)) ?? 1
+}
+// 序盤の手直しの前の強さ（エリア6から先は enemyPowerOf と同じ）
+export const enemyBasePowerOf = (enemy) => {
+  POWER ||= buildPowers()
+  return POWER.base.get(placeKey(enemy.spot, enemy.name)) ?? 1
 }
 
 // 戦闘用。uses＝1回の戦闘でそれぞれの技を何回使えるか

@@ -28,7 +28,7 @@ import { powerAt, effectPct, statsAt, spreadStats, armorEffects, armorEffectText
 import {
   AREA_LIST, SPOTS, SPOT_COUNT, spotOf, spotLvOf, spotLabel, expRangeOf, goldRangeOf,
   ROLE_TENTHS, scaleByRole, enemyLevels, enemyLvOf, enemyRoleOf,
-  stdPowerAt, stdRatioAt, AREA_BOSS, SUB_BOSS, bossRatioOf, STD_RATIO, NORMAL_RATIO, enemyPowerOf, toFighter as enemyFighter,
+  stdPowerAt, stdRatioAt, AREA_BOSS, SUB_BOSS, bossRatioOf, STD_RATIO, NORMAL_RATIO, enemyPowerOf, enemyBasePowerOf, toFighter as enemyFighter,
   BOSS_SPOT_POWER, SPOT_REC_LV, recLvOf, recRangeOf, recLvText, recSpotOfLv,
 } from './areas.js'
 import { AREA_ROSTERS, AREA_LEVELS, ENEMY_LV } from './monsters.js'
@@ -1073,13 +1073,15 @@ test('【確定】ボスは45か所で必ず前の場所より強い（どのエ
   for (let i = 1; i < all.length; i++) assert.ok(all[i] > all[i - 1], `${spotLabel(i + 1)}のボス ${all[i]} は前の場所 ${all[i - 1]} より強い`)
 })
 
-test('【確定】2026-10-12 ①-①のボスは LV5 くらいで倒せる（戦闘力135）：LV4ではまず勝てない・LV6ならほぼ勝てる', () => {
+test('【確定】2026-10-12 ①-①のボスは LV5 くらいで倒せる（戦闘力135→10-14 から122）：LV4ではまず勝てない・LV6ならほぼ勝てる', () => {
   // ユーザー指示「ボスをそんなすぐに倒されても困る、レベル5ぐらいで倒せるようになればいい※目安」
   // ⚠序盤の敵を1.6倍にしたとき、①-①のボス（LV10）も一緒に1.6倍になっていた（実機テストで見つけた）
   // ★2026-10-13 標準の戦闘力の測り直しで LV10 の行が動いても変わらないように、倍率（0.6倍）ではなく戦闘力135で止めた
+  // ★2026-10-14 ユーザー「中ボスの強さ1割下げて」（序盤の手直し・areas.js の EARLY_MID_BOSS_CUT）で 135→122
   assert.deepEqual(BOSS_SPOT_POWER, { 1: 135 })
   const boss = spotOf(1).roster.boss
-  assert.equal(enemyPowerOf(boss), 135)
+  assert.equal(enemyBasePowerOf(boss), 135)
+  assert.equal(enemyPowerOf(boss), 122)
   assert.equal(bossRatioOf(2), AREA_BOSS[0] * SUB_BOSS[1], '①-②から先は手直しなし')
   // 初期装備・ポイントは職業の並びで振る・CLASS LV はそのLVのころ（初期職の必要EXP）・最初の編成。11職×200戦の勝率（%）
   const jlvAt = (lv) => { let j = 1; while (j < JOB_MAX && jobTotalTo('shoki', j + 1) <= totalExpTo(lv)) j++; return j }
@@ -1104,10 +1106,12 @@ test('【確定】2026-10-12 ①-①のボスは LV5 くらいで倒せる（戦
   })
   const med = (a) => [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)]
   const [r4, r5, r6] = [4, 5, 6].map(ratesAt)
-  assert.ok(med(r4) <= 15, `LV4 中央値${med(r4)}%（測ったときは2%）`)
-  assert.ok(med(r5) >= 50 && med(r5) <= 85, `LV5 中央値${med(r5)}%（測ったときは67%）`)
-  assert.ok(Math.min(...r5) >= 30, `LV5 いちばん低い職業${Math.min(...r5)}%（測ったときは46%）`)
-  assert.ok(med(r6) >= 90, `LV6 中央値${med(r6)}%（測ったときは99%）`)
+  // 測ったとき（10-14・戦闘力122）：LV4 中央値15%・LV5 中央値89%（いちばん低い職業79.5%）・LV6 中央値99.5%
+  //   （135のときは LV4 2%・LV5 67%（46%）・LV6 99%）
+  assert.ok(med(r4) <= 30, `LV4 中央値${med(r4)}%（測ったときは15%）`)
+  assert.ok(med(r5) >= 75, `LV5 中央値${med(r5)}%（測ったときは89%）`)
+  assert.ok(Math.min(...r5) >= 60, `LV5 いちばん低い職業${Math.min(...r5)}%（測ったときは79.5%）`)
+  assert.ok(med(r6) >= 90, `LV6 中央値${med(r6)}%（測ったときは99.5%）`)
 })
 
 test('【確定】2026-10-12 推奨LV：上限はボスを倒せる目安のLV（測った値）・最後は80・場所の選択肢は「推奨LV（前の場所の目安）〜（この場所の目安）」', () => {
