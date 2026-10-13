@@ -4,7 +4,8 @@ import { box, btn } from '../../v2/components/v2ui.js'
 import { FORTUNE_BY_NAME, canPray, remainUntilPray, prayExpOf } from '../lib/tree.js'
 import { jobUpHead, jobUpNote } from '../lib/jobs.js'
 import { recSpotOfLv, spotLabel } from '../lib/areas.js'
-import V2capOmikujiFx from './V2capOmikujiFx.jsx'
+import V2capRevelationFx from './V2capRevelationFx.jsx'
+import { TREE_ART } from '../lib/fxStyle.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — ユグレシアの宝樹（1日1回祈る）
@@ -22,6 +23,7 @@ export default function V2capTree({ prof, onProfile }) {
   const [now, setNow] = useState(Date.now())
   const [showLog, setShowLog] = useState(false)
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t) }, [])
+  useEffect(() => { if (TREE_ART) { const img = new Image(); img.src = TREE_ART } }, [])   // 祈りの演出の絵を先に読み込む
 
   const at = new Date(now)
   const ready = canPray(prof.last_pray_at, at)
@@ -31,8 +33,8 @@ export default function V2capTree({ prof, onProfile }) {
   const kichi = prayExpOf(prof.lv, FORTUNE_BY_NAME['吉'])
   const daikichi = prayExpOf(prof.lv, FORTUNE_BY_NAME['大吉'])
 
-  // 【確定】2026-10-13 ユーザー指示「ユグレシアの祈りにも演出加えてほしい、結果が出る過程の、おみくじみたいな感じで」
-  //   祈ると すぐ おみくじの演出（V2capOmikujiFx.jsx）が始まり、結果が届くまで箱を振る。閉じたあと「演出をもう一度見る」
+  // 【確定】2026-10-13 ユーザー指示「ユグレシアの祈りにも演出加えてほしい」→ 同じ日に「木に『祈る』って感じだから神から天啓をもらう感じの演出に」
+  //   祈ると すぐ 天啓の演出（V2capRevelationFx.jsx）が始まり、結果が届くまで光の粒が宝樹へ昇る。閉じたあと「演出をもう一度見る」
   const [fx, setFx] = useState(null)   // { key, result }
   const pray = async () => {
     if (!ready || busy) return
@@ -49,7 +51,7 @@ export default function V2capTree({ prof, onProfile }) {
 
   return (
     <div style={{ ...box, padding:'12px', marginBottom:'8px' }}>
-      {fx && <V2capOmikujiFx key={fx.key} result={fx.result} onClose={() => setFx(null)} />}
+      {fx && <V2capRevelationFx key={fx.key} result={fx.result} onClose={() => setFx(null)} />}
       <div style={{ color:'#44dd99', fontSize:'13px', marginBottom:'8px' }}>🌳 ユグレシアの宝樹</div>
       <div style={{ color:'#7fa6d0', fontSize:'10px', lineHeight:'1.8', marginBottom:'10px' }}>
         1日1回だけ祈れます。宝樹の返す言葉（大凶〜大吉）で、もらえる経験値が変わります

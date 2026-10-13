@@ -1,10 +1,13 @@
 // ============================================================
-// v2cap — 演出の段階と色（強化・宝樹のおみくじ）。画面だけで使う（サーバーは関係ない）
+// v2cap — 演出の段階と色（強化・作成・宝樹の天啓）。画面だけで使う（サーバーは関係ない）
 // ------------------------------------------------------------
 // 【確定】2026-10-13 ユーザー指示「強化…黒い砂漠の強化みたいな演出が欲しい、強化の成否もポップアップ」
-//   「ユグレシアの祈りにも演出加えてほしい、結果が出る過程の、おみくじみたいな感じで」（音はなし）
+//   「作成にも演出付けてほしい（具体的な装備のアイコンはないからそれを考慮して）」
+//   「ユグレシアの祈り…木に『祈る』って感じだから神から天啓をもらう感じの演出にしてほしい」（音はなし）
+//   ※宝樹の祈りは最初おみくじ（箱を振る→棒→紙）にしていたが、同じ日に天啓へ作り直した
 // ============================================================
 import { FORTUNES } from './tree.js'
+import { RARITY_COLOR } from './equipment.js'
 
 // ===== 強化 =====
 // 強化値（上がったあと）で色と派手さを変える。+10 は虹
@@ -20,25 +23,41 @@ export const enhanceChargeMsOf = (rate) => 1500 + Math.max(0, Math.min(100, 100 
 // 結果のポップアップの1行目（ユーザーの書き方「○○の強化に成功！ 失敗…」）
 export const enhanceTitleOf = (name, success) => (success ? `${name}の強化に成功！` : `${name}の強化に失敗…`)
 
-// ===== 宝樹のおみくじ =====
-// 運勢ごとの見た目。level が大きいほど派手（大吉5 … 大凶-2）
-export const OMIKUJI_STYLE = {
-  大吉: { level: 5, glow: '#ffcc00', fall: { shape: 'petal', colors: ['#ffd1dc', '#ffb7c5', '#ffe680'] }, burst: ['#ffe680', '#ffffff', '#ffcc00'] },
-  中吉: { level: 4, glow: '#ffaa44', fall: { shape: 'petal', colors: ['#ffd1dc', '#ffb7c5'] }, burst: ['#ffd08a', '#ffffff'] },
-  小吉: { level: 3, glow: '#88ddaa', fall: { shape: 'leaf', colors: ['#7ad99a', '#a8e6b8'] }, burst: ['#a8f0c0', '#ffffff'] },
-  吉:   { level: 2, glow: '#88ccff', fall: { shape: 'leaf', colors: ['#6fcf8f'] }, burst: ['#b8e2ff', '#ffffff'] },
-  末吉: { level: 1, glow: '#7f95c4', fall: { shape: 'leaf', colors: ['#5f9f73'] }, burst: null },
-  凶:   { level: -1, glow: '#aa77cc', mist: ['rgba(140,95,185,0.32)', 'rgba(90,55,140,0.36)'] },
-  大凶: { level: -2, glow: '#ff6666', mist: ['rgba(160,45,95,0.34)', 'rgba(95,35,130,0.38)'] },
+// ===== 作成（鍛冶）=====
+// 作れるのはレア・エピック・レジェンダリー。色は装備の一覧と同じレア度の色。level が大きいほど派手
+//   ★装備ごとの絵は無いので、形は 武器・防具・装飾品 の3種（v2capFxParts.jsx の GearGlyph）。主役はレア度の色と名前
+export const CRAFT_TIERS = {
+  R: { level: 1, color: RARITY_COLOR.R, colors: ['#9fd0ff', RARITY_COLOR.R, '#ffffff'] },
+  E: { level: 2, color: RARITY_COLOR.E, colors: ['#e2b8ff', RARITY_COLOR.E, '#ffffff'] },
+  L: { level: 3, color: RARITY_COLOR.L, colors: ['#fff3a0', RARITY_COLOR.L, '#ffffff', '#ffb300'] },
 }
-export const omikujiStyleOf = (name) => OMIKUJI_STYLE[name] || OMIKUJI_STYLE.吉
-export const OMIKUJI_FORTUNE_NAMES = FORTUNES.map(f => f.name)
+export const craftTierOf = (rarity) => CRAFT_TIERS[rarity] || CRAFT_TIERS.R
+export const CRAFT_STRIKES = 3                 // 金槌で打つ回数
+export const craftTitleOf = (name) => `${name}を作成しました！`
 
-// みくじ棒の番号（漢数字・1〜100）。番号は飾り（運勢はサーバーが決める）
-const KANJI = ['〇', '一', '二', '三', '四', '五', '六', '七', '八', '九']
-export const kanjiNumberOf = (n) => {
-  const v = Math.max(1, Math.min(100, Math.floor(n)))
-  if (v === 100) return '百'
-  const t = Math.floor(v / 10), o = v % 10
-  return `${t === 0 ? '' : t === 1 ? '十' : `${KANJI[t]}十`}${o === 0 ? '' : KANJI[o]}`
+// ===== 宝樹の祈り＝天啓 =====
+// 祈る（光の粒が宝樹へ昇る）→ 天から光が降りる → 運勢が「天啓」として現れる。運勢ごとの光
+//   level：大吉5 … 末吉1・凶-1・大凶-2。beam＝降りる光の色・glow＝宝樹と文字の光・fall＝降るもの・feathers＝羽根の数
+//   凶と大凶は光が弱くまたたいて消える（flicker）・もや。大凶は暗雲と稲光（storm）
+export const REVELATION_STYLE = {
+  大吉: { level: 5, beam: '#fff1b8', glow: '#ffcc00', fall: { shape: 'leaf', colors: ['#ffd75e', '#ffe9a0', '#f5b800'] }, feathers: 40, burst: ['#ffe680', '#ffffff', '#ffcc00'] },
+  中吉: { level: 4, beam: '#ffe2bd', glow: '#ffaa44', fall: { shape: 'leaf', colors: ['#ffc06b', '#ffe0a8'] }, feathers: 24, burst: ['#ffd08a', '#ffffff'] },
+  小吉: { level: 3, beam: '#dcffe8', glow: '#88ddaa', fall: { shape: 'leaf', colors: ['#7ad99a', '#a8e6b8'] }, feathers: 14, burst: ['#a8f0c0', '#ffffff'] },
+  吉:   { level: 2, beam: '#e2f2ff', glow: '#88ccff', fall: { shape: 'leaf', colors: ['#6fcf8f'] }, feathers: 8, burst: ['#b8e2ff', '#ffffff'] },
+  末吉: { level: 1, beam: '#cdd7ee', glow: '#7f95c4', fall: null, feathers: 4, burst: null },
+  凶:   { level: -1, beam: '#b48ad8', glow: '#aa77cc', mist: ['rgba(140,95,185,0.32)', 'rgba(90,55,140,0.36)'], flicker: true },
+  大凶: { level: -2, beam: '#a0304a', glow: '#ff6666', mist: ['rgba(160,45,95,0.34)', 'rgba(95,35,130,0.38)'], flicker: true, storm: true },
 }
+export const revelationStyleOf = (name) => REVELATION_STYLE[name] || REVELATION_STYLE.吉
+// 宝樹の絵。【確定】2026-10-13 ユーザーが用意した絵（空・山・湖まで入った1枚の景色 1672×941）＝天啓の場面の背景にする。
+//   null にすると影絵（V2capRevelationFx.jsx の SacredTree）に戻る
+export const TREE_ART = '/v2cap-art/yugresia-tree.webp'
+// 背景の絵の明るさ。祈っている間は夜の暗さ → 光が降りると少し明るく → 天啓は運勢しだい（大吉がいちばん明るい・凶は青白く・大凶は赤黒く）
+export const ART_PRAY = { b: 0.36, s: 0.7, h: 0 }
+export const ART_DESCEND = { b: 0.58, s: 0.85, h: 0 }
+export const ART_BY_FORTUNE = {
+  大吉: { b: 1.12, s: 1.15, h: 0 }, 中吉: { b: 1.0, s: 1.05, h: 0 }, 小吉: { b: 0.9, s: 1.0, h: 0 }, 吉: { b: 0.82, s: 0.95, h: 0 },
+  末吉: { b: 0.66, s: 0.8, h: 0 }, 凶: { b: 0.42, s: 0.4, h: 200 }, 大凶: { b: 0.26, s: 0.35, h: 300 },
+}
+export const artFilterOf = (a) => `brightness(${a.b}) saturate(${a.s})${a.h ? ` hue-rotate(${a.h}deg)` : ''}`
+export const FORTUNE_NAMES = FORTUNES.map(f => f.name)

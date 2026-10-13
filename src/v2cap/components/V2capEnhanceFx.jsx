@@ -11,12 +11,14 @@
 // ============================================================
 import { useEffect, useRef, useState } from 'react'
 import { createParticles } from './fxParticles.js'
+import { GearGlyph } from './v2capFxParts.jsx'
 import { enhanceTierOf, enhanceChargeMsOf, enhanceTitleOf } from '../lib/fxStyle.js'
 import { DISPLAY_FONT, JP_BOLD, RAINBOW_BASE } from './casinoStyle.js'
 
 const KF = `
 @keyframes efFadeIn { from { opacity: 0 } to { opacity: 1 } }
 @keyframes efFlash { 0% { opacity: 0.9 } 100% { opacity: 0 } }
+@keyframes efFlashFail { 0% { opacity: 0.4 } 100% { opacity: 0 } }
 @keyframes efShock { 0% { transform: translate(-50%,-50%) scale(0.3); opacity: 1 } 100% { transform: translate(-50%,-50%) scale(2.6); opacity: 0 } }
 @keyframes efPillar { 0% { opacity: 0; transform: translateX(-50%) scaleX(0.2) } 25% { opacity: 1; transform: translateX(-50%) scaleX(1) } 100% { opacity: 0; transform: translateX(-50%) scaleX(0.6) } }
 @keyframes efPop { 0% { transform: scale(1) } 30% { transform: scale(1.32) } 55% { transform: scale(0.94) } 75% { transform: scale(1.06) } 100% { transform: scale(1) } }
@@ -29,36 +31,6 @@ const KF = `
 @keyframes efHue { from { filter: hue-rotate(0deg) } to { filter: hue-rotate(360deg) } }
 `
 const RING = 260   // 魔法陣の大きさ
-
-// 装備の絵（武器・防具・装飾品）
-function GearGlyph({ part, color }) {
-  if (part === '武器') {
-    return (
-      <svg width="58" height="58" viewBox="0 0 60 60" aria-hidden="true">
-        <path d="M44 6 L54 6 L54 16 L26 44 L16 34 Z" fill="#e8eef8" stroke={color} strokeWidth="2" strokeLinejoin="round" />
-        <path d="M48 10 L22 36" stroke="#ffffff99" strokeWidth="1.5" />
-        <path d="M12 30 L30 48" stroke={color} strokeWidth="5" strokeLinecap="round" />
-        <path d="M18 42 L8 52" stroke="#8a5a2b" strokeWidth="6" strokeLinecap="round" />
-        <circle cx="7" cy="53" r="3.5" fill={color} />
-      </svg>
-    )
-  }
-  if (part === 'アクセ') {
-    return (
-      <svg width="58" height="58" viewBox="0 0 60 60" aria-hidden="true">
-        <circle cx="30" cy="36" r="16" fill="none" stroke="#f2d27a" strokeWidth="5" />
-        <path d="M22 16 L30 6 L38 16 L30 24 Z" fill={color} stroke="#ffffff" strokeWidth="1.5" strokeLinejoin="round" />
-        <path d="M27 12 L30 9" stroke="#ffffffcc" strokeWidth="1.5" />
-      </svg>
-    )
-  }
-  return (
-    <svg width="58" height="58" viewBox="0 0 60 60" aria-hidden="true">
-      <path d="M30 6 L50 14 L48 34 C46 44 38 51 30 55 C22 51 14 44 12 34 L10 14 Z" fill="#c8d2e2" stroke={color} strokeWidth="2.5" strokeLinejoin="round" />
-      <path d="M30 12 L30 49 M17 22 L43 22" stroke="#ffffff88" strokeWidth="1.5" />
-    </svg>
-  )
-}
 
 // 魔法陣（外の輪・内の輪・星形）。angle で回す
 function MagicCircle({ angle, color, broken }) {
@@ -225,7 +197,7 @@ export default function V2capEnhanceFx({ job, nextLabel, nextReason, onAgain, on
         display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
       <style>{KF}</style>
       <canvas ref={canvasRef} style={{ position:'absolute', inset:0, width:'100%', height:'100%', pointerEvents:'none' }} />
-      {flash && <div key={flash.key} style={{ position:'absolute', inset:0, background: flash.color, pointerEvents:'none', animation:`efFlash ${success ? 0.6 : 0.45}s ease-out forwards`, mixBlendMode: success ? 'screen' : 'normal', opacity: success ? 0.9 : 0.35 }} />}
+      {flash && <div key={flash.key} style={{ position:'absolute', inset:0, background: flash.color, pointerEvents:'none', opacity:0, animation: success ? 'efFlash 0.6s ease-out forwards' : 'efFlashFail 0.45s ease-out forwards', mixBlendMode: success ? 'screen' : 'normal' }} />}
 
       <div style={{ position:'relative', display:'flex', flexDirection:'column', alignItems:'center', width:'min(420px, 100%)' }}>
         {/* 上の文字 */}

@@ -3,7 +3,7 @@
 // ------------------------------------------------------------
 // 【確定】2026-10-13 ユーザー指示「賭博場の演出めっちゃいい、他のコンテンツにも演出追加してみたい（音はなくていい）」
 //   強化（V2capEnhanceFx.jsx）と宝樹のおみくじ（V2capOmikujiFx.jsx）が使う。音は鳴らさない
-//   createParticles(canvas) → { converge, burst, rise, fall, shards, mist, clear, destroy }
+//   createParticles(canvas) → { converge, burst, rise, fall, shards, mist, clear, destroy }（fall は葉・花びら・羽根）
 //   ・座標はキャンバスの中の px（CSS の大きさ）。粒が無くなると描くのを止める
 // ============================================================
 const TAU = Math.PI * 2
@@ -75,6 +75,14 @@ export function createParticles(canvas) {
         ctx.bezierCurveTo(s * 0.9, -s * 0.6, s * 0.7, s * 0.6, 0, s)
         ctx.bezierCurveTo(-s * 0.7, s * 0.6, -s * 0.9, -s * 0.6, 0, -s)
         ctx.fill()
+        break
+      }
+      case 'feather': {
+        ctx.rotate(p.rot); ctx.scale(1, Math.max(0.25, Math.abs(Math.cos(p.flip))))
+        ctx.fillStyle = p.color
+        ctx.beginPath(); ctx.ellipse(0, 0, s * 0.42, s, 0, 0, TAU); ctx.fill()
+        ctx.strokeStyle = 'rgba(200,215,240,0.9)'; ctx.lineWidth = Math.max(0.8, dpr * 0.8)
+        ctx.beginPath(); ctx.moveTo(0, -s * 0.95); ctx.lineTo(0, s * 1.25); ctx.stroke()
         break
       }
       case 'shard': {
@@ -155,9 +163,9 @@ export function createParticles(canvas) {
       kick()
     },
     // 上から降る（葉・花びら・金の葉）
-    fall(n, { shape = 'leaf', colors = ['#4fbf7a'], speed = [40, 110], size = [5, 10] } = {}) {
+    fall(n, { shape = 'leaf', colors = ['#4fbf7a'], speed = [40, 110], size = [5, 10], x = null } = {}) {
       for (let i = 0; i < n; i++) {
-        add({ shape, x: rand(-20, W + 20), y: rand(-H * 0.5, -10), vx: rand(-25, 25), vy: rand(speed[0], speed[1]), sway: rand(1.2, 2.6), phase: rand(0, TAU),
+        add({ shape, x: x ? rand(x[0], x[1]) : rand(-20, W + 20), y: rand(-H * 0.5, -10), vx: rand(-25, 25), vy: rand(speed[0], speed[1]), sway: rand(1.2, 2.6), phase: rand(0, TAU),
           size: rand(size[0], size[1]), color: pick(colors), life: rand(5, 8), rot: rand(0, TAU), vr: rand(-2, 2), flip: rand(0, TAU), vf: rand(2, 5) })
       }
       kick()

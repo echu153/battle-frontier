@@ -15,6 +15,7 @@ import {
 import { statLine, nameColor, PLUS_COLOR, chip, gainText, areaOptionLabel, useGearRows } from './v2capGearView.js'
 import { RarityTag, PlusTag, GearFilterBar } from './v2capGear.jsx'
 import V2capEnhanceFx from './V2capEnhanceFx.jsx'
+import V2capCraftFx from './V2capCraftFx.jsx'
 
 // ============================================================
 // 「レベルキャップあり」版 — 鍛冶屋（強化・分解・作成）
@@ -267,16 +268,38 @@ function CraftTab({ prof, all, busy, call, setError, setNotice }) {
     for (const r of all) out[r.item.id] = (out[r.item.id] || 0) + 1
     return out
   }, [all])
-  const craft = async () => {
-    const item = confirm
+  // 【確定】2026-10-13 ユーザー指示「作成にも演出付けてほしい（具体的な装備のアイコンはないからそれを考慮して）」＝作成の演出（V2capCraftFx.jsx）
+  //   確認の「作る」で演出を始め、サーバーの結果が届いたら job.result に入れる。演出の最後から「続けて作る」（同じ装備・確認なし）
+  const [fxJob, setFxJob] = useState(null)
+  const startCraft = async (item) => {
+    if (!item || busy) return
+    const c = craftCostOf(item)
+    if (!c || craftErrorOf(item, prof)) return
+    const pct = effectPct(item.lv, prof.lv)
+    const job = {
+      id: Date.now(), item, name: item.name, rarity: item.rarity, rarityLabel: rarityLabel(item.rarity), part: item.part, kind: kindLabel(item), lv: item.lv,
+      power: powerAt(item, item.lv, 0), pct, statText: statLine(statsAt(item, item.lv, pct, 0)), scrapName: scrapNameOf(c.area), scrap: c.scrap, gold: c.gold, result: null,
+    }
+    setConfirm(null); setFxJob(job)
     const { data, error } = await call('v2cap_craft', { p_equip_id: item.id })
-    setConfirm(null)
-    if (error) { setError(error); return }
+    if (error) { setFxJob(null); setError(error); return }
+    setFxJob(j => (j && j.id === job.id ? { ...j, result: data } : j))
     setNotice(`🔨 ${itemLabel(item)}（LV${data.ilv}）を作りました`)
   }
+  const craft = () => startCraft(confirm)
+  // 演出の最後の「続けて作る」（同じ装備をもう1つ。作れる数も出す）
+  const again = fxJob ? craftErrorOf(fxJob.item, prof) : null
+  const againCost = fxJob ? craftCostOf(fxJob.item) : null
+  const againTimes = againCost ? Math.min(Math.floor(scrapOf(prof.materials, againCost.area) / againCost.scrap), Math.floor((Number(prof.gold) || 0) / againCost.gold)) : 0
   return (
     <>
       {confirm && <CraftModal item={confirm} prof={prof} busy={busy} onConfirm={craft} onClose={() => setConfirm(null)} />}
+      {fxJob && (
+        <V2capCraftFx job={fxJob}
+          nextLabel={!again && againTimes > 0 ? `続けて作る（あと${againTimes}個）` : null}
+          nextReason={again ? `続けて作るには：${again}` : ''}
+          onAgain={() => startCraft(fxJob.item)} onClose={() => setFxJob(null)} />
+      )}
       <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginBottom:'4px', alignItems:'center' }}>
         <select value={area} onChange={e => setArea(Number(e.target.value))}
           style={{ background:'#000818', border:'1px solid #62789a', color:'#cfe2ff', fontFamily:'monospace', fontSize:'11px', padding:'3px 4px' }}>
