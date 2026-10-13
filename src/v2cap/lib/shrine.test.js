@@ -4,10 +4,11 @@
 //   ＋選択式で決めたこと：フェアリーは弱い／Goldはふつう・装備なし／負けても奥へ進む／スタミナはふつうと同じく使う
 // サーバーとの突き合わせは v2capsql.test.js
 import { test } from 'node:test'
+import { readFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import {
   SHRINE_PCT, SHRINE_FIGHTS, SHRINE_EXP_TENTHS, SHRINE_GOLD_TENTHS, SHRINE_FAIRY_RATIO, SHRINE_FAIRY_NAME,
-  fairyLvOf, fairyPowerOf, shrineEncounterOf, rollShrineRewards, shrineRewardRangeOf, rollShrineFights, shrineOf, shrineStepText,
+  fairyLvOf, fairyPowerOf, shrineEncounterOf, rollShrineRewards, shrineRewardRangeOf, rollShrineFights, shrineOf,
 } from './shrine.js'
 import { SPOTS, enemyLvOf, enemyPowerOf, toFighter } from './areas.js'
 import { ENEMY_NAMES } from './enemyArt.js'
@@ -58,13 +59,20 @@ test('祠の中の戦闘の数は 3〜8 を均等に（サーバーと同じ引�
   assert.equal(rollShrineFights(() => 0.99999), 8)
 })
 
+test('【確定】2026-10-14 画面には最深部まであと何回かを出さない（ユーザー指示「最深部まであといくつかは記載しなくていい」）', () => {
+  for (const f of ['../components/V2capSortie.jsx', '../components/V2capShrineFx.jsx', '../pages/V2capHome.jsx']) {
+    // コメント（// の行末まで・/* */）は見ない
+    const src = readFileSync(new URL(f, import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
+    assert.ok(!/最深部まで|\.left\}|\.total\}|回の戦闘/.test(src), `${f}：最深部までの残り・戦闘の数を出していない`)
+  }
+})
+
 test('いまの祠：プロフィールの列か精算の返事から。残りが0なら祠にいない', () => {
   assert.equal(shrineOf(null), null)
   assert.equal(shrineOf({ shrine_spot: null, shrine_left: 0, shrine_total: 0 }), null)
   assert.equal(shrineOf({ shrine_spot: 99, shrine_left: 2, shrine_total: 3 }), null, '無い場所')
   const p = shrineOf({ shrine_spot: 5, shrine_left: 3, shrine_total: 5 })
   assert.deepEqual(p, { spot: 5, left: 3, total: 5, done: 2, next: 3 })
-  assert.equal(shrineStepText(p), '3/5')
   assert.deepEqual(shrineOf({ found: true, deepest: false, spot: 7, left: 4, total: 4 }), { spot: 7, left: 4, total: 4, done: 0, next: 1 })
   assert.equal(shrineOf({ found: false, deepest: true, spot: 7, left: 0, total: 4 }), null, '最深部のあとは祠にいない')
 })

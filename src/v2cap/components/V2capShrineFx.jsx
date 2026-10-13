@@ -6,7 +6,8 @@
 //   ・最深部（kind:'deepest'）：暗転 → 闇の中から泉（ユーザーの絵）が少しずつ見えてくる・天井から光が差し、泉から光の粒が昇る
 //     → 「最深部に到達した！」 → 泉から光の波が広がり「スタミナが全回復した！」とスタミナのゲージが満ちる → 閉じる
 //   ・見つけたとき（kind:'found'）：暗転 → 祠の入口（ユーザーの絵）が見えてくる・入口の奥から青い光の粒
-//     → 「安息の祠を見つけた！」＋最深部までの戦闘の数 → 閉じる（こちらで足した。ユーザーが入口の絵も用意していたので）
+//     → 「安息の祠を見つけた！」 → 閉じる（こちらで足した。ユーザーが入口の絵も用意していたので）
+//   ★最深部まであと何回か（戦闘の数）はどこにも出さない（2026-10-14 ユーザー指示「最深部まであといくつかは記載しなくていい」）
 //   ・押すと飛ばせる（Enter／スペース／Esc も）。最後は「閉じる」（Enter／Esc）
 //   ★出撃の画面の上に重ねる（zIndex 1100）。オート出撃は止めない（後ろで続く）
 //   ★日本語の大きな文字は字体を名指しする（明朝＝MINCHO・ゴシック＝JP_BOLD）。グラデーションで切り抜かない
@@ -35,7 +36,7 @@ const FLOW = {
 }
 const REVEAL_MS = { deepest: 2600, found: 2000 }
 
-export default function V2capShrineFx({ kind = 'deepest', total = 0, place = '', stamina = null, onClose }) {
+export default function V2capShrineFx({ kind = 'deepest', place = '', stamina = null, onClose }) {
   const deep = kind === 'deepest'
   const art = deep ? SPRING_ART : SHRINE_ART
   const spot = deep ? SPRING_POOL : SHRINE_DOOR
@@ -171,11 +172,6 @@ export default function V2capShrineFx({ kind = 'deepest', total = 0, place = '',
               textShadow:'0 0 3px #000, 0 0 12px #7fe3ff, 0 0 28px #3fb8ff, 0 2px 0 #000', animation:'shWord 0.9s cubic-bezier(.2,1,.3,1) both' }}>
               {deep ? SHRINE_TEXT.deepest : SHRINE_TEXT.found}
             </div>
-            {!deep && total > 0 && (
-              <div style={{ marginTop:10, color:'#ffe9a0', fontFamily: JP_BOLD, fontWeight:'bold', fontSize:15, textShadow:'0 0 6px #000, 0 0 2px #000', animation:'shUp 0.5s ease-out 0.4s both' }}>
-                最深部まで {total}回の戦闘
-              </div>
-            )}
           </>
         )}
       </div>

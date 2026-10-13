@@ -2936,6 +2936,8 @@ alter table public.v2cap_profiles add column if not exists pray_log jsonb not nu
 alter table public.v2cap_profiles add column if not exists shrine_spot int;
 alter table public.v2cap_profiles add column if not exists shrine_left int not null default 0;
 alter table public.v2cap_profiles add column if not exists shrine_total int not null default 0;
+-- 開発用（2026-10-14）：次の祠の外の出撃で必ず祠を見つける（v2cap_debug_shrine_next が付け、見つけたら外れる）
+alter table public.v2cap_profiles add column if not exists shrine_force boolean not null default false;
 create unique index if not exists v2cap_profiles_username_lower_idx
   on public.v2cap_profiles (lower(username));
 -- 参照は認証済み全員（今のⅡと同じ）。書き込みはRPC経由だけ
@@ -3786,13 +3788,14 @@ begin
   v_rate := case when v_shrine then v_row.boss_rate when v_boss then 0 else least(100, v_row.boss_rate + 0.3) end;
 
   -- 安息の祠：祠の中なら勝ち負けを問わず1つ奥へ（残りが0＝最深部）。祠の外なら 0.1% で見つける（祠にいる間は見つからない）
+  --   開発用の「次の出撃で祠を見つける」（shrine_force・v2cap_debug_shrine_next）が付いていれば必ず見つける（見つけたら外す）
   v_sh_spot  := v_row.shrine_spot;
   v_sh_left  := coalesce(v_row.shrine_left, 0);
   v_sh_total := coalesce(v_row.shrine_total, 0);
   if v_shrine then
     v_sh_left := v_sh_left - 1;
     v_deep := v_sh_left <= 0;
-  elsif v_sh_left <= 0 and random() < c_shrine_rate then
+  elsif v_sh_left <= 0 and (coalesce(v_row.shrine_force, false) or random() < c_shrine_rate) then
     v_found := true;
     v_sh_spot := p_spot;
     v_sh_total := c_shrine_min + floor(random() * (c_shrine_max - c_shrine_min + 1))::int;
@@ -3805,6 +3808,7 @@ begin
          shrine_spot = case when v_sh_left > 0 then v_sh_spot end,
          shrine_left = greatest(0, v_sh_left),
          shrine_total = case when v_sh_left > 0 then v_sh_total else 0 end,
+         shrine_force = case when v_found then false else shrine_force end,
          last_sortie_at = now(), updated_at = now()
    where id = v_uid
    returning stamina, stamina_at into v_stam, v_stam_at;
@@ -4433,6 +4437,25 @@ end;
 $$;
 revoke all on function public.v2cap_debug_shrine(int) from public, anon;
 grant execute on function public.v2cap_debug_shrine(int) to authenticated;
+
+-- 次の出撃で安息の祠を見つける（2026-10-14・ユーザー「出撃で見つけたときの挙動確認したい」。開発用の欄のボタン）：
+--   印（shrine_force）を付けるだけ。次の祠の外の出撃の精算（§5）が 0.1% の代わりに必ず見つけ、印を外す。祠の中にいれば出たあと
+create or replace function public.v2cap_debug_shrine_next()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_row public.v2cap_profiles;
+begin
+  if auth.uid() is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  update public.v2cap_profiles set shrine_force = true, updated_at = now()
+   where id = auth.uid()
+   returning * into v_row;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  return jsonb_build_object('ok', true, 'in_shrine', coalesce(v_row.shrine_left, 0) > 0, 'profile', to_jsonb(v_row));
+end;
+$$;
+revoke all on function public.v2cap_debug_shrine_next() from public, anon;
+grant execute on function public.v2cap_debug_shrine_next() to authenticated;
 
 -- 自分のキャラを消して作り直せるようにする（この版のデータだけ。今のⅡ・旧版には触らない）
 create or replace function public.v2cap_dev_reset()

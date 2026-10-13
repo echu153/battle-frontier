@@ -178,7 +178,17 @@ export default function V2capHome() {
     setBusy(false)
     if (rpcErr || !data?.ok) { setDevMsg(`⚠ ${rpcErr?.message || data?.error || '失敗しました'}`); return }
     setProf(data.profile)
-    setDevMsg(`安息の祠を置いた（${spotLabel(spot)}・${data.total}回の戦闘）`)
+    setDevMsg(`安息の祠を置いた（${spotLabel(spot)}）`)
+  }
+  // 次の出撃で安息の祠を見つける（2026-10-14 ユーザー「出撃で見つけたときの挙動確認したい」→「本物の精算で必ず見つける」を選んだ）：
+  //   サーバーに印を付けるだけ。次の祠の外の出撃の精算が 0.1% の代わりに必ず見つける
+  const shrineNext = async () => {
+    setBusy(true); setDevMsg('')
+    const { data, error: rpcErr } = await supabase.rpc('v2cap_debug_shrine_next')
+    setBusy(false)
+    if (rpcErr || !data?.ok) { setDevMsg(`⚠ ${rpcErr?.message || data?.error || '失敗しました'}`); return }
+    setProf(data.profile)
+    setDevMsg(data.in_shrine ? 'いまの祠を出たあと、次の出撃で安息の祠を見つけます' : '次の出撃で安息の祠を見つけます')
   }
   const resetChar = async () => {
     setBusy(true)
@@ -310,6 +320,9 @@ export default function V2capHome() {
                           メダル+{n.toLocaleString()}
                         </button>
                       ))}
+                      <button onClick={shrineNext} disabled={busy || prof?.shrine_force} style={miniBtn('#9fe8ff')}>
+                        {prof?.shrine_force ? '⛲ 次の出撃で祠を見つける（待機中）' : '⛲ 次の出撃で祠を見つける'}
+                      </button>
                       <button onClick={placeShrine} disabled={busy} style={miniBtn('#9fe8ff')}>⛲ 安息の祠を出す</button>
                       <button onClick={() => setConfirmReset(true)} disabled={busy} style={miniBtn('#ff8844')}>キャラを作り直す</button>
                     </div>

@@ -71,6 +71,7 @@ export const rollShrineFights = (rng = Math.random) => SHRINE_FIGHTS[0] + Math.f
 // ===== いまの祠 =====
 // プロフィール（v2cap_profiles の shrine_spot・shrine_left・shrine_total）か、精算の返事の shrine から。
 // 祠にいなければ null。done＝もう終えた戦闘の数・next＝次が何戦目か
+// ★画面には最深部まであと何回か（left・total）を出さない（2026-10-14 ユーザー指示「最深部まであといくつかは記載しなくていい」）
 export const shrineOf = (src) => {
   const spot = Number(src?.shrine_spot ?? src?.spot)
   const left = Number(src?.shrine_left ?? src?.left) || 0
@@ -79,5 +80,3 @@ export const shrineOf = (src) => {
   const t = Math.max(total, left)
   return { spot, left, total: t, done: t - left, next: t - left + 1 }
 }
-// 「2/5」＝何戦目か／全部の数
-export const shrineStepText = (sh) => (sh ? `${sh.next}/${sh.total}` : '')

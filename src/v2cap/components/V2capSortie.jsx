@@ -15,7 +15,7 @@ import { RARITY_COLOR } from '../lib/equipment.js'
 import { buildCapBattleView } from '../lib/battleView.js'
 import { enemyArtSrc } from '../lib/enemyArt.js'
 import { battleIconOf } from '../lib/classArt.js'
-import { shrineOf, shrineEncounterOf, shrineStepText, SHRINE_NAME } from '../lib/shrine.js'
+import { shrineOf, shrineEncounterOf, SHRINE_NAME } from '../lib/shrine.js'
 import { SHRINE_ART, SHRINE_TEXT, MINCHO } from '../lib/fxStyle.js'
 import V2capShrineFx from './V2capShrineFx.jsx'
 
@@ -74,7 +74,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   const [battleNo, setBattleNo] = useState(0)         // 何戦目か（オフのとき、新しい戦闘で一番上に戻すため）
   const [art, setArt] = useState(null)                // 戦闘ログのアイコン（{ me:{ src, name }, foe:{ src, name } }）
   const [shrine, setShrine] = useState(() => shrineOf(prof))   // 安息の祠（いなければ null）。精算の返事とプロフィールから
-  const [shrineTag, setShrineTag] = useState('')      // 表示中の戦闘が祠の中なら「2/5」
+  const [shrineBattle, setShrineBattle] = useState(false)   // 表示中の戦闘が祠の中か（何戦目かは出さない）
   const [fx, setFx] = useState(null)                  // 祠の演出（{ kind:'found'|'deepest', … }）
   const lastAt = useRef(0)
   const busy = useRef(false)
@@ -124,7 +124,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       const win = r.winner === 'a'
       const drop = win && !sh ? rollEquipDrop(enc, prof.class, new Date()) : null
       if (!sh) setBossRate(nextBossRate(bossRate, enc.isBoss))
-      setShrineTag(sh ? shrineStepText(sh) : '')
+      setShrineBattle(!!sh)
       const stamBefore = Math.max(0, stamNow - (isAuto ? 1 : 0))   // 最深部の演出でゲージを満たし始める値
 
       const foe = enc.enemy.name
@@ -202,20 +202,20 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
         }
       }
       // 安息の祠（サーバーが前の版のあいだは shrine が無い＝何も出さない）
+      // ★最深部まであと何回かは出さない（2026-10-14 ユーザー指示「最深部まであといくつかは記載しなくていい」）
       const sr = data.shrine
       if (sr) {
         const next = shrineOf(sr)
         setShrine(next)
         if (sr.found && next) {
           after.push({ text:`⛲ ${SHRINE_TEXT.found}`, color:'#9fe8ff', big: true })
-          after.push({ text:`最深部まで ${next.total}回の戦闘`, color:'#9fe8ff' })
-          setFx({ kind:'found', total: next.total, place: spotLabel(next.spot), key: Date.now() })
+          setFx({ kind:'found', place: spotLabel(next.spot), key: Date.now() })
         } else if (sr.deepest) {
           after.push({ text:`⛲ ${SHRINE_TEXT.deepest}`, color:'#9fe8ff', big: true })
           after.push({ text:`⚡ ${SHRINE_TEXT.healed}（${data.stamina}/${data.stamina_max}）`, color:'#44ff88' })
           setFx({ kind:'deepest', stamina: { before: stamBefore, after: data.stamina, max: data.stamina_max }, key: Date.now() })
         } else if (sh && next) {
-          after.push({ text:`⛲ 祠の奥へ進んだ…（最深部まで あと${next.left}回）`, color:'#9fe8ff' })
+          after.push({ text:'⛲ 祠の奥へ進んだ…', color:'#9fe8ff' })
         }
       }
       if (after.length) setLogs(l => [...l, ...after])
@@ -271,7 +271,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   )
   // 安息の祠の演出（見つけたとき・最深部）。出撃の画面の上に重ねる＝オートは後ろで続く
   const fxLayer = fx && (
-    <V2capShrineFx key={fx.key} kind={fx.kind} total={fx.total} place={fx.place} stamina={fx.stamina} onClose={() => setFx(null)} />
+    <V2capShrineFx key={fx.key} kind={fx.kind} place={fx.place} stamina={fx.stamina} onClose={() => setFx(null)} />
   )
   // 祠にいる間の出撃のボタン
   const shrineGo = '⛲ 祠の奥へ進む！'
@@ -282,8 +282,8 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
         {fab}
         {fxLayer}
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px', gap:'8px', flexWrap:'wrap' }}>
-          {shrineTag
-            ? <span style={{ color:'#9fe8ff', fontSize:'13px' }}>⛲ {SHRINE_NAME}（{shrineTag}）</span>
+          {shrineBattle
+            ? <span style={{ color:'#9fe8ff', fontSize:'13px' }}>⛲ {SHRINE_NAME}</span>
             : <span style={{ color:'#ff6644', fontSize:'13px' }}>⚔ バトル！</span>}
           <span style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap' }}>
             {auto && <span style={{ color:'#44ff88', fontSize:'11px' }}>▶ オート出撃中（⚡{stamNow}）</span>}
@@ -330,13 +330,13 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       {fxLayer}
       {timerRow}
       {shrine ? (
-        // ★祠にいる間は場所を選べない（見つけた場所の祠で戦う）。入口の絵を敷いて、最深部までの残りを出す
-        <div style={{ position:'relative', minHeight:'84px', marginBottom:'8px', border:'1px solid #2a7fa0', padding:'10px 12px',
+        // ★祠にいる間は場所を選べない（見つけた場所の祠で戦う）。入口の絵を敷いて、祠の名前と場所を出す
+        //   （最深部まであと何回かは出さない＝2026-10-14 ユーザー指示）
+        <div style={{ position:'relative', minHeight:'64px', marginBottom:'8px', border:'1px solid #2a7fa0', padding:'12px',
           backgroundImage:`linear-gradient(90deg, rgba(0,10,26,0.94) 0%, rgba(0,10,26,0.7) 48%, rgba(0,10,26,0.15) 100%), url(${SHRINE_ART})`,
           backgroundSize:'cover', backgroundPosition:'60% 58%', boxShadow:'inset 0 0 18px rgba(79,216,255,0.18)' }}>
           <div style={{ color:'#d8f7ff', fontFamily: MINCHO, fontWeight:'bold', fontSize:'16px', letterSpacing:'3px', textShadow:'0 0 8px #3fb8ff' }}>⛲ {SHRINE_NAME}</div>
-          <div style={{ color:'#9fb8d0', fontSize:'10px', marginTop:'2px' }}>{spotLabel(shrine.spot)}</div>
-          <div style={{ color:'#ffe9a0', fontSize:'12px', marginTop:'6px' }}>最深部まで あと{shrine.left}回の戦闘</div>
+          <div style={{ color:'#9fb8d0', fontSize:'10px', marginTop:'4px' }}>{spotLabel(shrine.spot)}</div>
         </div>
       ) : (
         <select value={spot?.id || 1}

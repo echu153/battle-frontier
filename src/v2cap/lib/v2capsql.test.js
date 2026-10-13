@@ -428,7 +428,9 @@ test('【確定】安息の祠（2026-10-13）：見つかる確率・戦闘の�
   const a = settle.indexOf('if v_win and v_shrine then'), b = settle.indexOf('elsif v_win then'), c = settle.indexOf('if p_drop is not null then')
   assert.ok(a > 0 && a < b && b < c, '祠の勝ちの枝に装備の判定が無い')
   // 勝ち負けを問わず1つ奥へ・祠の外なら見つける（祠にいる間は見つからない）・戦闘の数は 3〜8 を均等に
-  assert.match(settle, /if v_shrine then\s+v_sh_left := v_sh_left - 1;\s+v_deep := v_sh_left <= 0;\s+elsif v_sh_left <= 0 and random\(\) < c_shrine_rate then/)
+  //   （開発用の印 shrine_force があれば必ず見つけて、印を外す・2026-10-14）
+  assert.match(settle, /if v_shrine then\s+v_sh_left := v_sh_left - 1;\s+v_deep := v_sh_left <= 0;\s+elsif v_sh_left <= 0 and \(coalesce\(v_row\.shrine_force, false\) or random\(\) < c_shrine_rate\) then/)
+  assert.ok(settle.includes('shrine_force = case when v_found then false else shrine_force end,'))
   assert.ok(settle.includes('v_sh_total := c_shrine_min + floor(random() * (c_shrine_max - c_shrine_min + 1))::int;'))
   // 祠の中ではボスの出やすさを変えない
   assert.ok(settle.includes('v_rate := case when v_shrine then v_row.boss_rate when v_boss then 0 else least(100, v_row.boss_rate + 0.3) end;'))
@@ -443,6 +445,11 @@ test('【確定】安息の祠（2026-10-13）：見つかる確率・戦闘の�
   const dbg = fnBody('v2cap_debug_shrine')
   assert.ok(dbg.includes(`c_shrine_min constant int := ${SHRINE_FIGHTS[0]};`) && dbg.includes(`c_shrine_max constant int := ${SHRINE_FIGHTS[1]};`))
   assert.ok(dbg.includes('p_spot > public.v2cap_open_until(v_row.cleared_spots)'))
+  // 開発用「次の出撃で祠を見つける」：印を付けるだけ（祠は置かない＝出撃の精算が見つける）
+  const next = fnBody('v2cap_debug_shrine_next')
+  assert.ok(next.includes('set shrine_force = true'))
+  assert.ok(!/shrine_left =|shrine_spot =/.test(next), '祠そのものは置かない')
+  assert.ok(SQL.includes('alter table public.v2cap_profiles add column if not exists shrine_force boolean not null default false;'))
 })
 
 test('出撃の間隔はサーバーでも見る（10秒・通信の揺れぶん2秒の余裕）', () => {
