@@ -1,25 +1,31 @@
 // ============================================================
 // v2cap のモンスターのイラストを、画面で使う軽い版（背景を抜いた正方形の WebP）にする
 // ------------------------------------------------------------
-// 元の絵（ユーザーが置く）：public/エネミー/エリア<番号>/<モンスターの名前>.png（灰色の背景つき・1254×1254）
+// 元の絵（ユーザーが置く）：public/エネミー/エリア<番号>/<モンスターの名前>.png（1254×1254。灰色の背景つき／透明な背景）
 //   場所の顔ぶれにいない特別なモンスター（安息の祠のハピネスフェアリー）は public/エネミー/特別/<名前>.png（2026-10-13）
 // 作るもの：
-//   public/enemy-art/<id>.webp     … 192×192。灰色の背景を抜き、体がちょうど収まるように切り取る
+//   public/enemy-art/<id>.webp     … 192×192。背景を透明にして（下の「背景の扱い」）、体がちょうど収まるように切り取る
 //   src/v2cap/lib/enemyArtList.js  … 絵があるモンスターの一覧（画面はこれを見て、無いものは代わりの枠を出す）
 // 名前の読み方・別名・<id> の決め方は src/v2cap/lib/enemyArt.js
 //   node tools/v2cap-enemy-art.mjs          … 元の絵が新しくなったものだけ作る
 //   node tools/v2cap-enemy-art.mjs --force  … 全部作り直す（抜き方・切り取り方を変えたとき）
-// 背景の抜き方：
-//   ・縁の色のまんなか（中央値）を背景の色とし、縁からつながっていて背景の色に近いところを透明にする
-//   ・体に囲まれたすき間（ヘビのとぐろの内側・脚のあいだ）も、かたまりが大きく色がほぼ背景のままなら透明にする
-//     （毛並みの灰色はまだらで小さいかたまりにしかならないので残る）
-//   ・透明にしたところの3pxまわりは、背景の色との近さで半透明にして灰色を差し引く（縁に灰色のにじみを残さない）
+// 背景の扱い（1枚ずつ見分ける）：
+//   ・透明つき（縁の半分以上が透明な PNG）… 抜かずに、その透明をそのまま使う（半透明のもや・光もそのまま）
+//     【確定】2026-10-14 エリア③は20枚中17枚が透明つきだった。前は透明を捨てて灰色を抜いていたので、
+//     半透明のもやが白い塊になり、縁に透明の下に隠れた色（赤など）がにじんでいた
+//   ・背景つき … 縁の色から背景を見立てて抜く（tools/v2cap-art-lib.mjs の keyBackground）
+//     灰色1色（エリア①②）／2色の灰色のチェック模様（AIが「透明」を絵として描き込んだもの・エリア③のコボルト・スケルトン）
+//     ・縁からつながっていて背景の色に近いところを透明にする
+//     ・体に囲まれたすき間（ヘビのとぐろの内側・脚のあいだ）も、大きくて背景のままなら透明にする
+//       （毛並みの灰色・骨の白など1色だけのかたまりは残る）
+//     ・透明にしたところの3pxまわりは、背景の色との近さで半透明にして背景の色を差し引く（縁ににじみを残さない）
+//   ★抜いたあとも縁に体（不透明）が多く残ったら「背景が抜けていない」と知らせて、終わりのコードを1にする
 // ★元の絵が無くても（別のPCなど）、作ってある WebP は消さない。一覧は「WebP があるもの」で作る
 // ★ffmpeg（libwebp）を使う
 // ============================================================
 import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { each4 as each4WH, decode, bleed, alphaBox, encodeSquare } from './v2cap-art-lib.mjs'
+import { probe, decode, bleed, alphaBox, encodeSquare, keyBackground, transparentBorderRatio, borderOf } from './v2cap-art-lib.mjs'
 
 const ROOT = path.resolve(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))
 const lib = (f) => import(new URL(`../src/v2cap/lib/${f}`, import.meta.url).href)
@@ -31,63 +37,35 @@ const LIST = path.join(ROOT, 'src', 'v2cap', 'lib', 'enemyArtList.js')
 const FORCE = process.argv.includes('--force')
 mkdirSync(OUT, { recursive: true })
 
-// ===== 抜き方の決まり（作業は長いほうの辺627px＝元の半分で行う）=====
-const WORK = 627
-const T_IN = 14      // 背景の色からこれ以内（RGBのいちばん大きい差）なら背景
-const T_OUT = 40     // 縁の近くでこれ以上離れていれば体（あいだは半透明）
-const BAND = 3       // 半透明にする幅（px）
-const POCKET_MIN = 25, POCKET_MEAN = 6   // 囲まれたすき間を抜く条件：25px以上で、背景の色との差の平均が6以下
-const MARGIN = 0.04  // 切り取りの余白（体の大きいほうの辺に対する割合）
+// ===== 作り方の決まり =====
+const WORK = 627          // 背景を抜く作業は長いほうの辺627px（元の半分）で行う
+const ALPHA_MIN = 0.5     // 縁のこれ以上が透明なら「透明つき」
+const MARGIN = 0.04       // 切り取りの余白（体の大きいほうの辺に対する割合）
 const QUALITY = 82
-
-const keyOut = ({ data: rgb, W, H }) => {
-  const N = W * H
-  const border = []
-  for (let x = 0; x < W; x++) border.push(x, (H - 1) * W + x)
-  for (let y = 1; y < H - 1; y++) border.push(y * W, y * W + W - 1)
-  const bg = [0, 1, 2].map(c => { const v = border.map(p => rgb[p * 3 + c]).sort((a, b) => a - b); return v[v.length >> 1] })
-  const dist = new Float32Array(N)
-  for (let p = 0; p < N; p++) {
-    dist[p] = Math.max(Math.abs(rgb[p * 3] - bg[0]), Math.abs(rgb[p * 3 + 1] - bg[1]), Math.abs(rgb[p * 3 + 2] - bg[2]))
-  }
-  const each4 = (p, fn) => each4WH(W, H, p, fn)
-  // 縁からつながる背景（lay 0）
-  const lay = new Int16Array(N).fill(-1)
-  const core = []
-  for (const p of border) if (lay[p] < 0 && dist[p] <= T_IN) { lay[p] = 0; core.push(p) }
-  for (let h = 0; h < core.length; h++) each4(core[h], r => { if (lay[r] < 0 && dist[r] <= T_IN) { lay[r] = 0; core.push(r) } })
-  // 囲まれたすき間
-  const seen = new Uint8Array(N)
-  for (let s = 0; s < N; s++) {
-    if (seen[s] || lay[s] >= 0 || dist[s] > T_IN) continue
-    const blob = [s]; seen[s] = 1; let sum = 0
-    for (let h = 0; h < blob.length; h++) { sum += dist[blob[h]]; each4(blob[h], r => { if (!seen[r] && lay[r] < 0 && dist[r] <= T_IN) { seen[r] = 1; blob.push(r) } }) }
-    if (blob.length >= POCKET_MIN && sum / blob.length <= POCKET_MEAN) for (const p of blob) { lay[p] = 0; core.push(p) }
-  }
-  // 背景のまわり BAND px（lay 1..BAND）
-  let front = core
-  for (let b = 1; b <= BAND; b++) { const next = []; for (const p of front) each4(p, r => { if (lay[r] < 0) { lay[r] = b; next.push(r) } }); front = next }
-  const rgba = Buffer.alloc(N * 4)
-  for (let p = 0; p < N; p++) {
-    const a = lay[p] === 0 ? 0 : lay[p] > 0 ? Math.min(1, Math.max(0, (dist[p] - T_IN) / (T_OUT - T_IN))) : 1
-    for (let c = 0; c < 3; c++) {
-      let v = rgb[p * 3 + c]
-      if (a > 0 && a < 1) v = bg[c] + (v - bg[c]) / a   // 混ざった灰色を差し引く
-      rgba[p * 4 + c] = Math.max(0, Math.min(255, Math.round(v)))
-    }
-    rgba[p * 4 + 3] = Math.round(a * 255)
-  }
-  // 透明なところの色を近くの体の色で埋める（縮めるときに灰色が縁へ混ざらないように）
-  const img = { data: rgba, W, H }
-  bleed(img)
-  return { img, box: alphaBox(img), clear: core.length / N }
-}
+const EDGE_LEFT_MAX = 0.3 // 抜いたあと縁に残った体の割合がこれを超えたら「背景が抜けていない」
+const MODE_LABEL = { alpha:'透明つき', flat:'灰色の背景', checker:'チェック模様の背景' }
 
 const makeOne = (src, out) => {
-  const { img, box, clear } = keyOut(decode(src, WORK, 'rgb24'))
+  const info = probe(src)
+  let r = null
+  if (info.alpha) {
+    // 透明つき：元の大きさのまま読む（縮める前に、透明なところに隠れた色を埋めるため）
+    const img = decode(src, Math.max(info.w, info.h), 'rgba')
+    if (transparentBorderRatio(img) >= ALPHA_MIN) {
+      const N = img.W * img.H
+      let clear = 0
+      for (let p = 0; p < N; p++) if (img.data[p * 4 + 3] === 0) clear++
+      const border = borderOf(img.W, img.H)
+      r = { img, mode: 'alpha', clear: clear / N, edgeLeft: border.filter(p => img.data[p * 4 + 3] > 128).length / border.length }
+    }
+  }
+  if (!r) r = keyBackground(decode(src, WORK, 'rgb24'))
+  // 透明なところの色を近くの体の色で埋める（縮めるときに背景の色が縁へ混ざらないように）
+  bleed(r.img)
+  const box = alphaBox(r.img)
   if (!box) throw new Error('体が見つからない（全部が背景の色）')
-  encodeSquare(img, box, out, { size: ENEMY_ART_SIZE, margin: MARGIN, quality: QUALITY })
-  return clear
+  encodeSquare(r.img, box, out, { size: ENEMY_ART_SIZE, margin: MARGIN, quality: QUALITY })
+  return r
 }
 
 // ===== 元の絵を集める =====
@@ -107,7 +85,7 @@ const areaNoOfDir = (file) => {
 }
 const areaNoOfName = new Map(ENEMY_NAMES_BY_AREA.flatMap((names, k) => names.map(n => [n, k + 1])))
 
-const unmatched = [], wrongArea = [], dup = [], failed = [], light = []
+const unmatched = [], wrongArea = [], dup = [], failed = [], light = [], notKeyed = []
 const pick = new Map()   // 名前 → 元の絵（同じ名前に2枚あれば新しいほう）
 for (const f of files) {
   const name = enemyNameOfFile(path.basename(f, path.extname(f)))
@@ -125,11 +103,12 @@ for (const [name, src] of pick) {
   const out = path.join(OUT, `${enemyArtId(name)}.webp`)
   if (!FORCE && existsSync(out) && statSync(out).mtimeMs >= statSync(src).mtimeMs) continue
   try {
-    const clear = makeOne(src, out)
+    const { clear, mode, edgeLeft } = makeOne(src, out)
     made++
     // 背景がほとんど抜けなかった絵（背景の色が違う・体が縁いっぱい）は知らせる
     if (clear < 0.15) light.push(`${name}（${path.relative(SRC, src)}）：透明にできたのは${Math.round(clear * 100)}%だけ`)
-    console.log(`${name} ← ${path.relative(SRC, src)}`)
+    if (edgeLeft > EDGE_LEFT_MAX) notKeyed.push(`${name}（${path.relative(SRC, src)}・${MODE_LABEL[mode]}）：縁の${Math.round(edgeLeft * 100)}%が透明になっていない`)
+    console.log(`${name} ← ${path.relative(SRC, src)}（${MODE_LABEL[mode]}）`)
   } catch (e) {
     failed.push(`${name}（${path.relative(SRC, src)}）：${e.message}`)
   }
@@ -164,6 +143,7 @@ warnList('⚠ どのモンスターにも当てはまらない絵（enemyArt.js 
 warnList('⚠ 置いたフォルダと違うエリアのモンスターに当てはまった絵：', wrongArea)
 warnList('⚠ 同じモンスターに2枚ある（新しいほうを使った）：', dup)
 warnList('⚠ 背景があまり抜けなかった絵（目で確かめる）：', light)
+warnList('⚠ 背景が抜けていない絵（縁に背景が残っている。目で確かめて、抜き方を直すか絵を差し替えてもらう）：', notKeyed)
 warnList('⚠ 作れなかった絵：', failed)
 warnList('⚠ どのモンスターのものでもない WebP（名前を変えた？）：', orphans)
-if (unmatched.length || failed.length) process.exitCode = 1
+if (unmatched.length || failed.length || notKeyed.length) process.exitCode = 1

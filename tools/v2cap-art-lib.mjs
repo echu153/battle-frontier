@@ -65,6 +65,153 @@ export const alphaBox = ({ data: rgba, W, H }, thr = 8) => {
   return x1 < 0 ? null : { x0, y0, x1, y1 }
 }
 
+// ===== 背景を抜く（モンスターの絵・tools/v2cap-enemy-art.mjs）=====
+// 背景の見立ては縁の色から決める（bgModelOf）：
+//   flat    … 1色（縁の色の中央値）。エリア①②の灰色の背景
+//   checker … 2色の灰色のチェック模様。AIが「透明」を絵として描き込んだもの（2026-10-14 エリア③のコボルト・スケルトン）。
+//             暗いほうと明るいほうの色、そのあいだの色（升目の境のぼかし）を背景とみなす
+// ★透明つきの元の絵（PNG の透明）は抜かずに、その透明をそのまま使う（transparentBorderRatio で見分ける・2026-10-14）
+export const borderOf = (W, H) => {
+  const border = []
+  for (let x = 0; x < W; x++) border.push(x, (H - 1) * W + x)
+  for (let y = 1; y < H - 1; y++) border.push(y * W, y * W + W - 1)
+  return border
+}
+
+// 縁の画素のうち、透明（アルファ16未満）なものの割合。rgba だけ
+export const transparentBorderRatio = ({ data: rgba, W, H }) => {
+  const border = borderOf(W, H)
+  return border.filter(p => rgba[p * 4 + 3] < 16).length / border.length
+}
+
+export const KEY = {
+  T_IN: 14,          // 背景の色からこれ以内（RGBのいちばん大きい差）なら背景
+  T_OUT: 40,         // 縁の近くでこれ以上離れていれば体（あいだは半透明）
+  BAND: 3,           // 半透明にする幅（px）
+  POCKET_MIN: 25,    // 体に囲まれたすき間を抜く大きさ（px）
+  POCKET_MEAN: 6,    // flat：すき間の背景の色との差の平均がこれ以下なら抜く
+  POCKET_TONE: 0.15, // checker：すき間に2色の両方がこの割合以上あれば抜く（1色だけのかたまりは体の白・灰色として残す）
+  CHECKER_GAP: 24,   // checker と見る2色の明るさの差（これ以上）
+  CHECKER_MASS: 0.25,// checker と見る、縁に占める2色それぞれの割合（これ以上）
+  CHECKER_SAT: 6,    // checker と見る、縁の色の鮮やかさ（RGBの最大−最小）の上限（95%の画素）
+  CHECKER_MIN_LUM: 150, // checker の暗いほうの明るさの下限（AIの透明の模様は白と薄い灰色）
+}
+
+const lumOf = (rgb, p) => (rgb[p * 3] + rgb[p * 3 + 1] + rgb[p * 3 + 2]) / 3
+
+export const bgModelOf = ({ data: rgb, W, H }, k = KEY) => {
+  const border = borderOf(W, H)
+  const med = [0, 1, 2].map(c => { const v = border.map(p => rgb[p * 3 + c]).sort((a, b) => a - b); return v[v.length >> 1] })
+  const flat = { mode: 'flat', bg: med }
+  // 2色のチェック模様か：縁の明るさに、CHECKER_GAP 以上離れた2つの山があり、どちらも縁の CHECKER_MASS 以上を占め、色が無い（灰色）
+  const sats = border.map(p => Math.max(rgb[p * 3], rgb[p * 3 + 1], rgb[p * 3 + 2]) - Math.min(rgb[p * 3], rgb[p * 3 + 1], rgb[p * 3 + 2])).sort((a, b) => a - b)
+  if (sats[Math.floor(0.95 * (sats.length - 1))] > k.CHECKER_SAT) return flat
+  const hist = new Array(256).fill(0)
+  for (const p of border) hist[Math.round(lumOf(rgb, p))]++
+  const mass = (l) => { let s = 0; for (let v = Math.max(0, l - 10); v <= Math.min(255, l + 10); v++) s += hist[v]; return s / border.length }
+  let a = 0
+  for (let v = 0; v < 256; v++) if (mass(v) > mass(a)) a = v
+  let b = -1
+  for (let v = 0; v < 256; v++) if (Math.abs(v - a) >= k.CHECKER_GAP && (b < 0 || mass(v) > mass(b))) b = v
+  if (b < 0 || mass(a) < k.CHECKER_MASS || mass(b) < k.CHECKER_MASS || Math.min(a, b) < k.CHECKER_MIN_LUM) return flat
+  const [lo, hi] = a < b ? [a, b] : [b, a]
+  const meanColor = (l) => {
+    const s = [0, 0, 0]; let n = 0
+    for (const p of border) if (Math.abs(lumOf(rgb, p) - l) <= 10) { n++; for (let c = 0; c < 3; c++) s[c] += rgb[p * 3 + c] }
+    return s.map(v => v / n)
+  }
+  return { mode: 'checker', lo: meanColor(lo), hi: meanColor(hi) }
+}
+
+// 背景を抜いた rgba を返す：{ img, clear（透明にできた割合）, mode, edgeLeft（抜いたあとも縁に残った体の割合） }
+export const keyBackground = (img, k = KEY) => {
+  const { data: rgb, W, H } = img
+  const N = W * H
+  const model = bgModelOf(img, k)
+  const border = borderOf(W, H)
+  // 画素ごとの「背景の色」と、そこからの差
+  const bgAt = new Float32Array(N * 3)
+  const dist = new Float32Array(N)
+  const tone = new Float32Array(N)   // checker：暗いほう0〜明るいほう1
+  if (model.mode === 'flat') {
+    const bg = model.bg
+    for (let p = 0; p < N; p++) {
+      dist[p] = Math.max(Math.abs(rgb[p * 3] - bg[0]), Math.abs(rgb[p * 3 + 1] - bg[1]), Math.abs(rgb[p * 3 + 2] - bg[2]))
+      bgAt[p * 3] = bg[0]; bgAt[p * 3 + 1] = bg[1]; bgAt[p * 3 + 2] = bg[2]
+    }
+  } else {
+    const { lo, hi } = model
+    const L0 = (lo[0] + lo[1] + lo[2]) / 3, L1 = (hi[0] + hi[1] + hi[2]) / 3
+    for (let p = 0; p < N; p++) {
+      const t = Math.min(1, Math.max(0, (lumOf(rgb, p) - L0) / (L1 - L0)))
+      tone[p] = t
+      let d = 0
+      for (let c = 0; c < 3; c++) {
+        const q = lo[c] + t * (hi[c] - lo[c])
+        bgAt[p * 3 + c] = q
+        d = Math.max(d, Math.abs(rgb[p * 3 + c] - q))
+      }
+      dist[p] = d
+    }
+  }
+  const each = (p, fn) => each4(W, H, p, fn)
+  // 縁からつながる背景（lay 0）
+  const lay = new Int16Array(N).fill(-1)
+  const core = []
+  for (const p of border) if (lay[p] < 0 && dist[p] <= k.T_IN) { lay[p] = 0; core.push(p) }
+  for (let h = 0; h < core.length; h++) each(core[h], r => { if (lay[r] < 0 && dist[r] <= k.T_IN) { lay[r] = 0; core.push(r) } })
+  // 体に囲まれたすき間
+  const seen = new Uint8Array(N)
+  for (let s = 0; s < N; s++) {
+    if (seen[s] || lay[s] >= 0 || dist[s] > k.T_IN) continue
+    const blob = [s]; seen[s] = 1; let sum = 0, dark = 0, light = 0
+    for (let h = 0; h < blob.length; h++) {
+      const p = blob[h]
+      sum += dist[p]
+      if (tone[p] < 0.35) dark++
+      else if (tone[p] > 0.65) light++
+      each(p, r => { if (!seen[r] && lay[r] < 0 && dist[r] <= k.T_IN) { seen[r] = 1; blob.push(r) } })
+    }
+    const n = blob.length
+    const isBg = n >= k.POCKET_MIN && (model.mode === 'flat'
+      ? sum / n <= k.POCKET_MEAN
+      : dark / n >= k.POCKET_TONE && light / n >= k.POCKET_TONE)
+    if (isBg) for (const p of blob) { lay[p] = 0; core.push(p) }
+  }
+  // 背景のまわり BAND px（lay 1..BAND）。checker は、いちばん近い背景の画素の色をその場所の背景の色にする
+  //   （升目の色はとなりで変わるので、明るさから決めた色より正確。flat は1色なので同じ）
+  const from = new Int32Array(N).fill(-1)
+  for (const p of core) from[p] = p
+  let front = core
+  for (let b = 1; b <= k.BAND; b++) {
+    const next = []
+    for (const p of front) each(p, r => { if (lay[r] < 0) { lay[r] = b; from[r] = from[p]; next.push(r) } })
+    front = next
+  }
+  if (model.mode === 'checker') {
+    for (let p = 0; p < N; p++) {
+      if (!(lay[p] > 0)) continue
+      const q = from[p]
+      let d = 0
+      for (let c = 0; c < 3; c++) { bgAt[p * 3 + c] = rgb[q * 3 + c]; d = Math.max(d, Math.abs(rgb[p * 3 + c] - rgb[q * 3 + c])) }
+      dist[p] = d
+    }
+  }
+  const rgba = Buffer.alloc(N * 4)
+  for (let p = 0; p < N; p++) {
+    const a = lay[p] === 0 ? 0 : lay[p] > 0 ? Math.min(1, Math.max(0, (dist[p] - k.T_IN) / (k.T_OUT - k.T_IN))) : 1
+    for (let c = 0; c < 3; c++) {
+      let v = rgb[p * 3 + c]
+      const q = bgAt[p * 3 + c]
+      if (a > 0 && a < 1) v = q + (v - q) / a   // 混ざった背景の色を差し引く
+      rgba[p * 4 + c] = Math.max(0, Math.min(255, Math.round(v)))
+    }
+    rgba[p * 4 + 3] = Math.round(a * 255)
+  }
+  const out = { data: rgba, W, H }
+  return { img: out, clear: core.length / N, mode: model.mode, edgeLeft: border.filter(p => rgba[p * 4 + 3] > 128).length / border.length }
+}
+
 // box を真ん中にした正方形（余白 margin）に切り取り、size×size の WebP（透明つき）で書く。はみ出すぶんは透明で足す
 export const encodeSquare = ({ data: rgba, W, H }, box, out, { size = 192, margin = 0.04, quality = 82 } = {}) => {
   const side = Math.max(box.x1 - box.x0 + 1, box.y1 - box.y0 + 1)
