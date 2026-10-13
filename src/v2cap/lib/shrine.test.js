@@ -67,6 +67,14 @@ test('【確定】2026-10-14 画面には最深部まであと何回かを出さ
   }
 })
 
+test('【確定】2026-10-14 祠の演出が出ている間は出撃しない（オートも手動も。ユーザー指示「演出が入ってるとき、オートでも出撃進まないようにして」）', () => {
+  const src = readFileSync(new URL('../components/V2capSortie.jsx', import.meta.url), 'utf8')
+  assert.ok(src.includes('if (busy.current || !spot || fx) return'), '出撃そのもの（右下のボタン・オート）が演出の間は止まる')
+  assert.ok(src.includes('if (!auto || loading || !spot || remaining > 0 || fx) return'), 'オートは演出の間は待つ（切らない）')
+  assert.ok(src.includes('}, [auto, now, loading, spot, remaining, stamNow, fx])'), '閉じたらオートが動き出す')
+  assert.ok(src.includes('const canAct = remaining <= 0 && !loading && !fx'), 'ボタンも押せない')
+})
+
 test('いまの祠：プロフィールの列か精算の返事から。残りが0なら祠にいない', () => {
   assert.equal(shrineOf(null), null)
   assert.equal(shrineOf({ shrine_spot: null, shrine_left: 0, shrine_total: 0 }), null)

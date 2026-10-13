@@ -104,13 +104,14 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   const spot = availableSpots.find(s => s.id === selectedSpot) || spotOf(openUntilOf(cleared))
   const elapsed = (now - lastAt.current) / 1000
   const remaining = Math.max(0, SORTIE_CD - elapsed)
-  const canAct = remaining <= 0 && !loading
+  const canAct = remaining <= 0 && !loading && !fx   // 祠の演出の間は押せない（右下のボタンも）
   const timerPct = Math.min(100, (elapsed / SORTIE_CD) * 100)
   const stamMax = staminaMaxOf(prof?.lv)
   const stamNow = rollStamina(stam.n, stam.at, stamMax, now).n
 
   const doBattle = async (isAuto = false) => {
-    if (busy.current || !spot) return
+    // ★祠の演出が出ている間は出撃しない（オートも手動も・2026-10-14 ユーザー指示「演出が入ってるとき、オートでも出撃進まないようにして」）
+    if (busy.current || !spot || fx) return
     if (Date.now() - lastAt.current < SORTIE_CD * 1000) return
     busy.current = true
     lastAt.current = Date.now()
@@ -230,8 +231,9 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   }
 
   // オート出撃。クールタイムが明けるたびに、スタミナを1使って勝手に出撃する
+  // ★祠の演出が出ている間は止まって待つ（オートは切らない＝閉じたら続きから・2026-10-14 ユーザー指示）
   useEffect(() => {
-    if (!auto || loading || !spot || remaining > 0) return
+    if (!auto || loading || !spot || remaining > 0 || fx) return
     if (stamNow < 1) {
       setAuto(false)
       // 「ここからは自分で出撃する」は付けない（2026-10-12 ユーザー指示）
@@ -239,7 +241,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       return
     }
     doBattle(true)
-  }, [auto, now, loading, spot, remaining, stamNow])   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [auto, now, loading, spot, remaining, stamNow, fx])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const timerRow = (
     <>
@@ -269,7 +271,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       <span style={{ fontSize:'20px' }}>⚔</span><br /><span style={{ fontSize:'11px' }}>出撃</span>
     </button>
   )
-  // 安息の祠の演出（見つけたとき・最深部）。出撃の画面の上に重ねる＝オートは後ろで続く
+  // 安息の祠の演出（見つけたとき・最深部）。出撃の画面の上に重ねる。出ている間はオートも止まって待ち、閉じると続きから
   const fxLayer = fx && (
     <V2capShrineFx key={fx.key} kind={fx.kind} place={fx.place} stamina={fx.stamina} onClose={() => setFx(null)} />
   )
