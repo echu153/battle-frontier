@@ -109,3 +109,12 @@ test('【確定】宝樹の画面の説明文はユーザーの文（前の「LV
   assert.ok(!src.includes('日付が変わるのは日本時間の5時です'))
   assert.ok(!/吉で <span/.test(src) && !src.includes('で10回出撃したくらい）'), '吉と大吉のEXPの例は出さない')
 })
+
+// 【確定】2026-10-13 ユーザーが用意した絵：祈るアイコン（祈るボタン）と「今日の天啓」の石板（ユグレシアUI）
+test('【確定】宝樹の画面の絵（祈るアイコン・天啓の石板）がある・祈るボタンは 🙏 ではなくアイコン', () => {
+  const src = readFileSync(new URL('../components/V2capTree.jsx', import.meta.url), 'utf8')
+  const arts = [...src.matchAll(/'(\/v2cap-art\/[^']+\.webp)'/g)].map(m => m[1])
+  assert.ok(arts.includes('/v2cap-art/pray-icon.webp') && arts.includes('/v2cap-art/oracle-frame.webp'), arts.join(','))
+  for (const a of arts) assert.ok(existsSync(new URL(`../../../public${a}`, import.meta.url)), `public${a} がある`)
+  assert.ok(!src.includes("'🙏 祈る'") && src.includes('src={PRAY_ICON}'), '祈るボタンは🙏ではなくユーザーのアイコン')
+})

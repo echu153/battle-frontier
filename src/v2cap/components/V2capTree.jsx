@@ -19,7 +19,17 @@ import { TREE_ART, MINCHO, revelationStyleOf, stageArtOf, artFilterOf } from '..
 //   ・祈るボタンは光る祭壇風。祈れないときは「次に祈れるまで」と残り時間を大きく
 //   ・これまでの結果（直近10回）は運勢の札を並べる（開け閉めのボタンはやめた）
 //   ・動きは prefers-reduced-motion なら止める
+// 【確定】2026-10-13 ユーザーが用意した絵（public/V2ホーム の元の絵 → 画面で使う WebP・まわりは透明）：
+//   ・祈るアイコン.png → PRAY_ICON（金の手と葉・192×192）＝祈るボタンの 🙏 の代わり
+//   ・ユグレシアUI.png → ORACLE_FRAME（金のつるの石板・石板の縁で切って 1040×594）＝「今日の天啓」の札。
+//     石板の縦横の比のまま広がる（最大520px）。中の文字は石板の幅に合わせて大きさを変える（cqw）。
+//     LEVEL UP などの行と「演出をもう一度見る」は石板の下に出す（石板の中に収まらないので）
 // ============================================================
+const PRAY_ICON = '/v2cap-art/pray-icon.webp'
+const ORACLE_FRAME = '/v2cap-art/oracle-frame.webp'
+// 石板の内側（金の線の内側。上の飾りとつるをよける）＝ padding。% は幅に対する割合（高さ594 ÷ 幅1040 を掛けて直す）
+const FRAME_RATIO = '1040 / 594'
+const FRAME_PAD = '10.5% 10% 7%'
 const pad = (n) => String(n).padStart(2, '0')
 const seeded = (seed) => { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }
 
@@ -113,6 +123,7 @@ export default function V2capTree({ prof, onProfile, unlimited = false }) {
   const [error, setError] = useState('')
   const [now, setNow] = useState(Date.now())
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t) }, [])
+  useEffect(() => { const img = new Image(); img.src = ORACLE_FRAME }, [])   // 祈ったあとの札を先に読み込む
 
   const at = new Date(now)
   const ready = unlimited || canPray(prof.last_pray_at, at)
@@ -156,21 +167,30 @@ export default function V2capTree({ prof, onProfile, unlimited = false }) {
           {unlimited && <div style={{ color:'#ff88cc', fontSize:'10px', marginTop:'2px' }}>🧪 開発中：管理者は何回でも祈れます</div>}
         </div>
 
-        {/* 今日の天啓 */}
+        {/* 今日の天啓（ユーザーの石板の絵） */}
         {shown && (
-          <div key={`${prof.pray_count ?? 0}-${shown.name}`} style={{ marginTop:'12px', textAlign:'center', padding:'14px 12px 12px',
-            border:`1px solid ${shown.color}77`, background:`radial-gradient(ellipse 70% 90% at 50% 0%, ${shown.color}26 0%, transparent 70%), #020a10`,
-            boxShadow:`inset 0 0 0 3px #020a10, inset 0 0 0 4px ${shown.color}26, 0 0 18px ${shown.color}22`, animation:'ytIn 0.5s ease-out both' }}>
-            <div style={{ fontFamily: MINCHO, fontSize:'11px', letterSpacing:'0.5em', paddingLeft:'0.5em', color:'#cdbf95' }}>─ 今日の天啓 ─</div>
-            <div style={{ fontFamily: MINCHO, fontWeight:'bold', fontSize:'40px', letterSpacing:'0.25em', paddingLeft:'0.25em', lineHeight:1.3, color: shown.color,
-              textShadow: bad ? `0 0 3px #000, 0 0 12px ${shown.color}66` : `0 0 3px #000, 0 0 10px ${shown.color}, 0 0 24px ${shown.color}88` }}>{shown.name}</div>
-            <div style={{ fontFamily: MINCHO, fontSize:'13px', lineHeight:'1.8', color: bad ? '#c6b6d8' : '#efe6cc' }}>「{shown.text}」</div>
-            {/* 経験値はサーバーが決めて返す（画面では計算しない）。祈った直後だけ出す */}
+          <div key={`${prof.pray_count ?? 0}-${shown.name}`} style={{ marginTop:'12px', textAlign:'center', animation:'ytIn 0.5s ease-out both' }}>
+            <div style={{ position:'relative', maxWidth:'520px', margin:'0 auto', aspectRatio: FRAME_RATIO, boxSizing:'border-box', padding: FRAME_PAD,
+              containerType:'inline-size', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
+              <div aria-hidden="true" style={{ position:'absolute', inset:0, backgroundImage:`url(${ORACLE_FRAME})`, backgroundSize:'100% 100%',
+                filter: bad ? `brightness(0.8) saturate(0.6) drop-shadow(0 0 10px ${shown.color}44)` : `drop-shadow(0 0 12px ${shown.color}55)` }} />
+              <div style={{ position:'relative', fontFamily: MINCHO, fontSize:'max(10px, 2.3cqw)', letterSpacing:'0.45em', paddingLeft:'0.45em', color:'#ecd9a0',
+                textShadow:'0 0 3px #000, 0 1px 0 #000' }}>─ 今日の天啓 ─</div>
+              <div style={{ position:'relative', fontFamily: MINCHO, fontWeight:'bold', fontSize:'clamp(30px, 10.5cqw, 54px)', letterSpacing:'0.25em', paddingLeft:'0.25em',
+                lineHeight:1.2, color: shown.color,
+                textShadow: bad ? `0 0 3px #000, 0 0 12px ${shown.color}66, 0 2px 0 #000` : `0 0 3px #000, 0 0 10px ${shown.color}, 0 0 24px ${shown.color}88, 0 2px 0 #000` }}>{shown.name}</div>
+              <div style={{ position:'relative', fontFamily: MINCHO, fontSize:'clamp(10.5px, 3cqw, 15px)', lineHeight:'1.7', color: bad ? '#d2c4e2' : '#f3ead2',
+                textShadow:'0 0 4px #000, 0 1px 0 #000' }}>「{shown.text}」</div>
+              {/* 経験値はサーバーが決めて返す（画面では計算しない）。祈った直後だけ出す */}
+              {result && (
+                <div style={{ position:'relative', marginTop:'1.6cqw', padding:'0.3em 1.1em', border:'1px solid #ffcc0077', background:'rgba(0,0,0,0.45)',
+                  color:'#ffcc00', fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'clamp(12px, 3.2cqw, 16px)', textShadow:'0 0 8px #ffb30066' }}>
+                  EXP +{Number(result.exp).toLocaleString()}
+                </div>
+              )}
+            </div>
+            {/* 石板の下：LEVEL UP など・演出をもう一度 */}
             {result && (<>
-              <div style={{ display:'inline-block', marginTop:'10px', padding:'3px 16px', border:'1px solid #ffcc0066', background:'#ffcc0012',
-                color:'#ffcc00', fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'15px', textShadow:'0 0 8px #ffb30066' }}>
-                EXP +{Number(result.exp).toLocaleString()}
-              </div>
               {result.level?.level_ups > 0 && (
                 <div style={{ color:'#44ff88', fontSize:'11px', marginTop:'6px' }}>
                   🆙 LEVEL UP！ LV{result.level.lv}{typeof result.level.points === 'number' ? `（ステータスポイント+${result.level.points}）` : ''}
@@ -196,7 +216,7 @@ export default function V2capTree({ prof, onProfile, unlimited = false }) {
         {error && <div style={{ color:'#ff6666', fontSize:'11px', marginTop:'10px' }}>⚠ {error}</div>}
 
         {/* 祈る */}
-        <button onClick={pray} disabled={!canPress} className={canPress ? 'yt-anim' : undefined}
+        <button onClick={pray} disabled={!canPress} className={canPress ? 'yt-anim' : undefined} aria-label={busy ? '祈っています' : ready ? '祈る' : undefined}
           style={{ position:'relative', overflow:'hidden', display:'block', width:'100%', marginTop:'12px', padding: ready ? '14px' : '9px 14px',
             background: ready ? 'linear-gradient(180deg, #0f4532 0%, #06261b 55%, #03140e 100%)' : '#030c12',
             border:`1px solid ${ready ? '#6fe0a8' : '#1d3346'}`, color: ready ? '#eafff3' : '#7f95a6',
@@ -206,7 +226,12 @@ export default function V2capTree({ prof, onProfile, unlimited = false }) {
             <span aria-hidden="true" className="yt-anim" style={{ position:'absolute', top:0, bottom:0, left:0, width:'28%', pointerEvents:'none',
               background:'linear-gradient(90deg, transparent, rgba(255,255,255,0.16), transparent)', animation:'ytSheen 3.8s ease-in-out infinite' }} />
           )}
-          {busy ? '祈っています...' : ready ? '🙏 祈る' : (
+          {ready || busy ? (
+            <span style={{ position:'relative', display:'inline-flex', alignItems:'center', justifyContent:'center', gap:'10px' }}>
+              <img src={PRAY_ICON} alt="" width={34} height={34} style={{ display:'block', filter:'drop-shadow(0 0 6px #ffd75e99)' }} />
+              {busy ? '祈っています...' : '祈る'}
+            </span>
+          ) : (
             <>
               <span style={{ display:'block', fontFamily:'monospace', fontWeight:'normal', fontSize:'10px', letterSpacing:'0.1em', color: TEXT.label }}>次に祈れるまで</span>
               <span style={{ display:'block', fontFamily:'monospace', fontSize:'22px', letterSpacing:'0.12em', color:'#a8d8c0', marginTop:'2px' }}>
