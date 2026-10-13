@@ -11,7 +11,8 @@
 //   ★宝樹はユーザーの絵（lib/fxStyle.js の TREE_ART）を場面の背景にする。明るさを 祈り→降りる→天啓（運勢しだい）で変え、
 //     ことばの後ろだけ少し暗くして読めるようにする。TREE_ART が null なら星空と影絵の木（SacredTree）
 // 【確定】2026-10-14 ユーザー指示「大凶の時の演出、雷とか魔法陣の演出安っぽいから修正したい」→ ユーザーの絵（STORM_ART）で作り直した：
-//   ・暗雲の絵が上から垂れ込めて流れ、雨が降る（fxParticles の rain）。光の柱は出さない
+//   ・暗雲の絵が左右からゆっくり覆って流れ、雨が降る（fxParticles の rain）。光の柱は出さない
+//     （【確定】同じ日にユーザー「雲も急に上から出てきてるから、初期みたいに左右からゆっくり雲が覆うように」＝上から落とすのはやめた）
 //   ・【確定】同じ日にユーザー「魔法陣は初期のままでよさそうかも、違和感ある」＝魔法陣の絵はやめ、天の光輪は前のまま（大凶の色・0.45）
 //   ・雷の絵が2回落ちる（STORM_STRIKES）→「大凶」が出るときにもう1回。落ちるたび画面が光って揺れ、宝樹が一瞬照らされる
 //   ・天啓のあとも遠くで時々雷（小さく・揺れない）。大凶の絵は大凶になったときに読み込み始め、降りる前に最大1.5秒待つ
@@ -22,7 +23,7 @@ import { CountUp } from './casinoParts.jsx'
 import { JP_BOLD } from './casinoStyle.js'
 import { FORTUNE_BY_NAME } from '../lib/tree.js'
 import { revelationStyleOf, TREE_ART, ART_PRAY, ART_DESCEND, ART_BY_FORTUNE, artFilterOf, MINCHO,
-  STORM_ART, STORM_STRIKES, STORM_AMBIENT_MS, STORM_DESCEND_MS } from '../lib/fxStyle.js'
+  STORM_ART, STORM_STRIKES, STORM_AMBIENT_MS, STORM_DESCEND_MS, STORM_CLOUD_MS } from '../lib/fxStyle.js'
 
 const KF = `
 @keyframes rvFadeIn { from { opacity: 0 } to { opacity: 1 } }
@@ -38,7 +39,8 @@ const KF = `
 @keyframes rvRays { from { transform: translate(-50%,-50%) rotate(0deg) } to { transform: translate(-50%,-50%) rotate(360deg) } }
 @keyframes rvFlashSoft { 0% { opacity: 0.28 } 100% { opacity: 0 } }
 @keyframes rvStrike { 0% { opacity: 0 } 4% { opacity: 1 } 10% { opacity: 0.15 } 16% { opacity: 1 } 40% { opacity: 0.9 } 100% { opacity: 0 } }
-@keyframes rvStormIn { from { transform: translateY(-60%); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+@keyframes rvCloudInL { from { transform: translateX(-75%); opacity: 0 } 35% { opacity: 1 } to { transform: translateX(0); opacity: 1 } }
+@keyframes rvCloudInR { from { transform: translateX(75%); opacity: 0 } 35% { opacity: 1 } to { transform: translateX(0); opacity: 1 } }
 @keyframes rvStormDrift { from { transform: translateX(-3%) } to { transform: translateX(3%) } }
 `
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
@@ -313,14 +315,17 @@ export default function V2capRevelationFx({ result, onClose }) {
           maskImage:'radial-gradient(circle, #000 0%, transparent 50%)', WebkitMaskImage:'radial-gradient(circle, #000 0%, transparent 50%)',
           animation:'rvRays 10s linear infinite' }} />
       )}
-      {/* 大凶：暗雲（ユーザーの絵）が上から垂れ込めて流れる・下に赤黒いもや */}
+      {/* 大凶：暗雲（ユーザーの絵）が左右からゆっくり覆って流れる・下に赤黒いもや
+          雲の絵を左半分・右半分に分け（同じ絵をマスクで切る）、左右から真ん中へ寄せる。寄り切ると1枚の絵に戻る */}
       {lit && storm && (
         <>
-          <div style={{ position:'absolute', left:0, right:0, top:'26vh', height:'34vh', pointerEvents:'none', animation:'rvFadeIn 1.2s ease-out both',
+          <div style={{ position:'absolute', left:0, right:0, top:'26vh', height:'34vh', pointerEvents:'none', animation:`rvFadeIn ${STORM_CLOUD_MS}ms ease-out both`,
             background:'linear-gradient(180deg, rgba(70,0,28,0.55) 0%, rgba(40,0,20,0.25) 55%, transparent 100%)' }} />
-          <div style={{ position:'absolute', left:'-8%', right:'-8%', top:0, height:'44vh', pointerEvents:'none', animation:'rvStormIn 1.1s cubic-bezier(.2,.9,.3,1) both' }}>
-            <div style={{ position:'absolute', inset:0, backgroundImage:`url(${STORM_ART.cloud})`, backgroundSize:'cover', backgroundPosition:'50% 100%',
-              animation:'rvStormDrift 14s ease-in-out infinite alternate' }} />
+          <div style={{ position:'absolute', left:'-8%', right:'-8%', top:0, height:'44vh', pointerEvents:'none', animation:'rvStormDrift 14s ease-in-out infinite alternate' }}>
+            {[['rvCloudInL', 'linear-gradient(90deg, #000 0%, #000 46%, transparent 62%)'], ['rvCloudInR', 'linear-gradient(90deg, transparent 38%, #000 54%, #000 100%)']].map(([anim, mask]) => (
+              <div key={anim} style={{ position:'absolute', inset:0, backgroundImage:`url(${STORM_ART.cloud})`, backgroundSize:'cover', backgroundPosition:'50% 100%',
+                maskImage: mask, WebkitMaskImage: mask, animation:`${anim} ${STORM_CLOUD_MS}ms cubic-bezier(.3,.1,.25,1) both` }} />
+            ))}
           </div>
         </>
       )}

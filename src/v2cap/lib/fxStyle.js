@@ -64,19 +64,21 @@ export const ART_BY_FORTUNE = {
 //   絵はユーザーが用意した ユグレシア雷.png（3本を1本ずつに切った）・ユグレシア雲.png（public/V2ホーム → WebP・まわりは透明）。
 //   【確定】同じ日にユーザー「魔法陣は初期のままでよさそうかも、違和感ある」＝ユグレシア大凶魔法陣.png は使わない（天の光輪は前のまま）。
 //   大凶の宝樹の絵は「今のかんじのままでいい」（ユーザー）＝ART_BY_FORTUNE の暗い赤黒のまま
-//   ・暗雲が上から垂れ込め、雨が降る
+//   ・暗雲が左右からゆっくり覆い、雨が降る（【確定】同じ日にユーザー「雲も急に上から出てきてるから、初期みたいに左右からゆっくり雲が覆うようにしてほしい」＝
+//     雲の絵を左半分・右半分に分けて、左右から真ん中へ STORM_CLOUD_MS かけて寄せる。雷は雲がだいたい覆ってから）
 //   ・雷は2回（STORM_STRIKES：画面の横の位置・どの絵・高さvh・揺れpx）。落ちるたび画面が光って揺れ、宝樹が一瞬照らされる
 //   ・天啓が出たあとも、遠くで時々雷（STORM_AMBIENT_MS の間隔・小さく・揺れない）
 export const STORM_ART = {
   bolts: ['/v2cap-art/storm-bolt-1.webp', '/v2cap-art/storm-bolt-2.webp', '/v2cap-art/storm-bolt-3.webp'],
   cloud: '/v2cap-art/storm-cloud.webp',
 }
+export const STORM_CLOUD_MS = 1800     // 雲が左右から覆うまで
 export const STORM_STRIKES = [
-  { at: 650,  x: 0.36, bolt: 0, h: 62, shake: 6 },
-  { at: 1250, x: 0.64, bolt: 1, h: 68, shake: 10 },
+  { at: 1150, x: 0.36, bolt: 0, h: 62, shake: 6 },
+  { at: 1750, x: 0.64, bolt: 1, h: 68, shake: 10 },
 ]
 export const STORM_AMBIENT_MS = [2600, 4600]
-export const STORM_DESCEND_MS = 1700   // 雷が2回落ちてから天啓へ
+export const STORM_DESCEND_MS = 2200   // 雷が2回落ちてから天啓へ
 export const artFilterOf = (a) => `brightness(${a.b}) saturate(${a.s})${a.h ? ` hue-rotate(${a.h}deg)` : ''}`
 export const FORTUNE_NAMES = FORTUNES.map(f => f.name)
 

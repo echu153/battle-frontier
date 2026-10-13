@@ -156,4 +156,9 @@ test('【確定】大凶の嵐：ユーザーの絵（雷3本・暗雲）があ�
   assert.ok(!('sigil' in STORM_ART) && !/sigil/i.test(src), '魔法陣の絵は使わない')
   assert.match(src, /\{lit && \(\s*<div[^\n]*opacity: bad \? 0\.45 : 1/, '天の光輪は大凶でも出す（前のまま 0.45）')
   assert.ok(src.includes('STORM_ART.cloud'), '暗雲はユーザーの絵')
+  // 【確定】2026-10-14 ユーザー「雲も急に上から出てきてるから、初期みたいに左右からゆっくり雲が覆うようにしてほしい」
+  const { STORM_CLOUD_MS } = await import('./fxStyle.js')
+  assert.ok(src.includes('rvCloudInL') && src.includes('rvCloudInR') && !src.includes('rvStormIn'), '雲は左右から（上から落とさない）')
+  assert.ok(STORM_CLOUD_MS >= 1500, '雲はゆっくり（1.5秒以上）')
+  assert.ok(STORM_STRIKES[0].at >= STORM_CLOUD_MS * 0.6, '雷は雲がだいたい覆ってから')
 })
