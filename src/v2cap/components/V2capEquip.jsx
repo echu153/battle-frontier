@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
 import { supabase } from '../../supabase'
 import { box, miniBtn, TEXT } from '../../v2/components/v2ui.js'
-import { ITEM_BY_ID, SLOTS, SLOT_LABEL, ARMOR_EFFECT, slotsFor, kindLabel } from '../lib/equipment.js'
+import { ITEM_BY_ID, SLOTS, SLOT_LABEL, ARMOR_EFFECT, slotsFor, kindLabel, needLvOf } from '../lib/equipment.js'
 import { canEquipType, weaponsOf } from '../lib/jobs.js'
 import { equippedItems, wornIdsOf } from '../lib/loadout.js'
-import { powerAt, statsAt, effectPct, underLvPowerOf } from '../lib/gear.js'
+import { powerAt, statsAt, reqPctOf, underLvPowerOf } from '../lib/gear.js'
 import { PLUS_MAX, plusOf } from '../lib/smith.js'
 import { DROP_CHANCE } from '../lib/sortie.js'
 import { statLine, nameColor, useGearRows } from './v2capGearView.js'
@@ -56,7 +56,7 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
         <div style={{ display:'grid', gap:'3px' }}>
           {SLOTS.map(slot => {
             const w = worn[slot]
-            const pct = w ? effectPct(w.inv.ilv, prof.lv) : 100
+            const pct = w ? reqPctOf(w.item, w.inv.ilv, prof.lv) : 100
             return (
               <div key={slot} style={{ background:'#000818', border:'1px solid #002244', padding:'5px 7px', display:'flex', alignItems:'center', gap:'6px', fontSize:'11px', flexWrap:'wrap' }}>
                 <span style={{ color: TEXT.label, width:'52px', flexShrink:0 }}>{SLOT_LABEL[slot]}</span>
@@ -66,7 +66,7 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
                       <RarityTag item={w.item} />
                       <span style={{ color: nameColor(w.item) }}>{w.item.name}</span>
                       <PlusTag inv={w.inv} />
-                      <span style={{ color: w.inv.ilv > prof.lv ? '#ff8844' : TEXT.sub }}> LV{w.inv.ilv}</span>
+                      <span style={{ color: needLvOf(w.item, w.inv.ilv) > prof.lv ? '#ff8844' : TEXT.sub }}> LV{needLvOf(w.item, w.inv.ilv)}</span>
                       {pct < 100 && <span style={{ color:'#ff8844' }}> 効果{pct}%</span>}
                     </span>
                     <span style={{ color: TEXT.sub, fontSize:'10px' }}>{statLine(statsAt(w.item, w.inv.ilv, pct, plusOf(w.inv)))}</span>
@@ -97,7 +97,7 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
             </div>
           )}
           {rows.map(({ inv, item }) => {
-            const pct = effectPct(inv.ilv, prof.lv)
+            const pct = reqPctOf(item, inv.ilv, prof.lv)
             const plus = plusOf(inv)
             const isWorn = wornIds.has(String(inv.id))
             const usable = item.part !== '武器' || canEquipType(prof.class, item.type)
@@ -112,7 +112,7 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
                     {effect && <span style={{ color:'#88ddaa', fontSize:'10px', marginLeft:'5px' }}>{effect}</span>}
                     {isWorn && <span style={{ color:'#44aaff', fontSize:'10px', marginLeft:'5px' }}>装備中</span>}
                   </span>
-                  <span style={{ color: inv.ilv > prof.lv ? '#ff8844' : '#cfe2ff', fontSize:'11px' }}>LV{inv.ilv}</span>
+                  <span style={{ color: needLvOf(item, inv.ilv) > prof.lv ? '#ff8844' : '#cfe2ff', fontSize:'11px' }}>LV{needLvOf(item, inv.ilv)}</span>
                 </div>
                 <div style={{ fontSize:'10px', color: TEXT.sub, margin:'3px 0', display:'flex', gap:'8px', flexWrap:'wrap' }}>
                   <span>戦闘力 {power}{pct < 100 && <span style={{ color:'#ff8844' }}> → {underLvPowerOf(power, pct)}（効果{pct}%・必要LVまであと{inv.ilv - prof.lv}）</span>}</span>

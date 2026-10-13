@@ -2,7 +2,8 @@
 // バトルフロンティアⅡ「レベルキャップあり」版（v2cap）— 装備の数値
 // ------------------------------------------------------------
 // 装備の一覧は equipment.js（エリア×レア度×種類）。ユーザー決定（2026-10-09）：
-//   ・装備は**アイテムLV**を持つ。アイテムLV＝**必要LV**＝**エリアとレア度で決まる**（equipment.js の reqLvOf・ユーザーの表）
+//   ・装備は**アイテムLV**を持つ。**エリアとレア度で決まる**（equipment.js の reqLvOf・ユーザーの表）。
+//     【確定】2026-10-13 必要LVはアイテムLVと別：レア・エピック・レジェンダリーは アイテムLV − 5（equipment.js の needLvOf・強さはアイテムLVのまま）
 //   ・強さはレア度（ノーマル1.0／レア1.25／エピック1.5／レジェンダリー1.75）とアイテムLVで決まる
 //     （必要LVが高いほど強い：同じLVの本体の戦闘力に合わせて伸びる＝LVが5上がるごとに同じだけ上がる）。
 //     **同じLVのノーマルを全部の枠にそろえると、本体（LVぶんの戦闘力）と同じくらい**
@@ -17,7 +18,7 @@
 // ★ルーン・合成・進化は作らない（決まったら足す）。
 // ============================================================
 import { STAT_KEYS } from '../../v2/lib/stats.js'
-import { RARITY_BASE, PART_MULT, ARMOR_EFFECT } from './equipment.js'
+import { RARITY_BASE, PART_MULT, ARMOR_EFFECT, needLvOf } from './equipment.js'
 import { bodyPowerAt } from './level.js'
 import { plusMultOf, PLUS_MAX } from './smith.js'
 
@@ -43,8 +44,11 @@ export const powerAt = (item, ilv, plus = 0) => {
 // ===== 必要LV =====
 export const PENALTY_PER_LV = 5    // 不足1LVごとに -5%
 export const PENALTY_MIN_PCT = 10  // どれだけ足りなくても10%は残る（下げ幅は最大90%）
-export const effectPct = (ilv, lv) =>
-  Math.max(PENALTY_MIN_PCT, 100 - PENALTY_PER_LV * Math.max(0, (ilv || 1) - (lv || 1)))
+// need＝必要LV・lv＝いまのLV。★装備から出すときは下の reqPctOf を使う（アイテムLVをそのまま渡さない）
+export const effectPct = (need, lv) =>
+  Math.max(PENALTY_MIN_PCT, 100 - PENALTY_PER_LV * Math.max(0, (need || 1) - (lv || 1)))
+// 装備（item と アイテムLV ilv）を、いまのLVで着けたときの効果(%)。必要LVは equipment.js の needLvOf（2026-10-13）
+export const reqPctOf = (item, ilv, lv) => effectPct(needLvOf(item, ilv), lv)
 
 // 必要LVに足りないときの戦闘力：効果%を掛けて丸め、**最低でも1下げる**（下は0まで）。効果100%ならそのまま
 // 【確定】2026-10-12 ユーザー指示「最低でも1下げるようにして」（前は「戦闘力 7 → 7（効果95%）」のように、丸めで下がらないことがあった）
@@ -63,7 +67,7 @@ export const statsAt = (item, ilv, pct = 100, plus = 0) => {
   return out
 }
 // いまのLVで着けたときの戦闘力（必要LV不足ぶんを引いたもの）
-export const effectivePowerAt = (item, ilv, lv, plus = 0) => underLvPowerOf(powerAt(item, ilv, plus), effectPct(ilv, lv))
+export const effectivePowerAt = (item, ilv, lv, plus = 0) => underLvPowerOf(powerAt(item, ilv, plus), reqPctOf(item, ilv, lv))
 
 // ===== 防具のメリット =====
 // worn = [{ item, pct }]（着けている防具と、その効果%）。

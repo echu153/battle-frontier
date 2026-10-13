@@ -3,12 +3,12 @@ import { supabase } from '../../supabase'
 import V2Modal from '../../v2/components/V2Modal.jsx'
 import { useStored } from '../../v2/lib/prefs.js'
 import { box, btn, miniBtn, TEXT } from '../../v2/components/v2ui.js'
-import { ITEMS, ITEM_BY_ID, PARTS, SLOTS, RARITIES, RARITY_COLOR, ARMOR_EFFECT, kindLabel, partLabel, rarityLabel, itemLabel } from '../lib/equipment.js'
+import { ITEMS, ITEM_BY_ID, PARTS, SLOTS, RARITIES, RARITY_COLOR, ARMOR_EFFECT, kindLabel, partLabel, rarityLabel, itemLabel, needLvOf } from '../lib/equipment.js'
 import { spotOf } from '../lib/areas.js'
 import { openUntilOf } from '../lib/sortie.js'
-import { canEquipType, weaponsOf } from '../lib/jobs.js'
+import { canEquipType } from '../lib/jobs.js'
 import { wornIdsOf } from '../lib/loadout.js'
-import { powerAt, statsAt, effectPct, underLvPowerOf } from '../lib/gear.js'
+import { powerAt, statsAt, reqPctOf, underLvPowerOf } from '../lib/gear.js'
 import {
   PLUS_MAX, plusOf, scrapNameOf, scrapOf, scrapAreaOf, dismantleGainOf, bulkPickable, enhanceCostOf, enhanceErrorOf,
   SCRAP_NAMES, SCRAP_YIELD, CRAFT_RARITIES, craftCostOf, craftErrorOf,
@@ -158,7 +158,7 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call }) {
       <div style={{ display:'grid', gap:'4px', maxHeight:'560px', overflowY:'auto' }}>
         {rows.length === 0 && <Empty all={all} />}
         {rows.map(({ inv, item }) => {
-          const pct = effectPct(inv.ilv, prof.lv)
+          const pct = reqPctOf(item, inv.ilv, prof.lv)
           const cost = enhanceCostOf(item, inv)
           const isWorn = wornIds.has(String(inv.id))
           const scrapShort = cost && scrapOf(prof.materials, cost.area) < cost.scrap
@@ -287,16 +287,16 @@ function CraftTab({ prof, all, busy, call, setError, setNotice }) {
     if (!item || busy) return
     const c = craftCostOf(item)
     if (!c || craftErrorOf(item, prof)) return
-    const pct = effectPct(item.lv, prof.lv)
+    const pct = reqPctOf(item, item.lv, prof.lv)
     const job = {
-      id: Date.now(), item, name: item.name, rarity: item.rarity, rarityLabel: rarityLabel(item.rarity), part: item.part, kind: kindLabel(item), lv: item.lv,
+      id: Date.now(), item, name: item.name, rarity: item.rarity, rarityLabel: rarityLabel(item.rarity), part: item.part, kind: kindLabel(item), lv: needLvOf(item),
       power: powerAt(item, item.lv, 0), pct, statText: statLine(statsAt(item, item.lv, pct, 0)), scrapName: scrapNameOf(c.area), scrap: c.scrap, gold: c.gold, result: null,
     }
     setConfirm(null); setFxJob(job)
     const { data, error } = await call('v2cap_craft', { p_equip_id: item.id })
     if (error) { setFxJob(null); setError(error); return }
     setFxJob(j => (j && j.id === job.id ? { ...j, result: data } : j))
-    setNotice(`🔨 ${itemLabel(item)}（LV${data.ilv}）を作りました`)
+    setNotice(`🔨 ${itemLabel(item)}（LV${needLvOf(item, data.ilv)}）を作りました`)
   }
   const craft = () => startCraft(confirm)
   // 演出の最後の「続けて作る」（同じ装備をもう1つ。作れる数も出す）
@@ -330,7 +330,6 @@ function CraftTab({ prof, all, busy, call, setError, setNotice }) {
       <label style={{ display:'flex', alignItems:'center', gap:'5px', fontSize:'11px', color: TEXT.label, marginBottom:'6px', cursor:'pointer', width:'fit-content' }}>
         <input type="checkbox" checked={usableOnly} onChange={e => setUsableOnly(e.target.checked)} style={{ accentColor:'#ffaa44', margin:0 }} />
         いまの職業（{prof.class}）で装備できるものだけ
-        <span style={{ color: TEXT.sub }}>（武器は {weaponsOf(prof.class).join('・')}／防具・装飾品はどれも）</span>
       </label>
       {cost && (
         <div style={{ background:'#000818', border:'1px solid #553322', padding:'6px 8px', marginBottom:'8px', fontSize:'10px', color: TEXT.sub, lineHeight:1.7 }}>
@@ -343,7 +342,7 @@ function CraftTab({ prof, all, busy, call, setError, setNotice }) {
         {items.map(item => {
           const usable = item.part !== '武器' || canEquipType(prof.class, item.type)
           const err = craftErrorOf(item, prof)
-          const pct = effectPct(item.lv, prof.lv)
+          const pct = reqPctOf(item, item.lv, prof.lv)
           const n = ownCount[item.id] || 0
           return (
             <div key={item.id} style={rowBox('#002244')}>
@@ -354,7 +353,7 @@ function CraftTab({ prof, all, busy, call, setError, setNotice }) {
                   {item.line && <span style={{ color:'#88ddaa', fontSize:'10px', marginLeft:'5px' }}>{ARMOR_EFFECT[item.line]?.label}</span>}
                   {n > 0 && <span style={{ color:'#44aaff', fontSize:'10px', marginLeft:'5px' }}>持っている {n}</span>}
                 </span>
-                <span style={{ color: item.lv > prof.lv ? '#ff8844' : '#cfe2ff', fontSize:'11px' }}>LV{item.lv}</span>
+                <span style={{ color: needLvOf(item) > prof.lv ? '#ff8844' : '#cfe2ff', fontSize:'11px' }}>LV{needLvOf(item)}</span>
               </div>
               <ItemStats inv={{ ilv: item.lv, plus: 0 }} item={item} pct={pct} />
               <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center', fontSize:'10px' }}>
@@ -382,7 +381,7 @@ function ItemHead({ inv, item, lv, isWorn, check }) {
         {effect && <span style={{ color:'#88ddaa', fontSize:'10px', marginLeft:'5px' }}>{effect}</span>}
         {isWorn && <span style={{ color:'#44aaff', fontSize:'10px', marginLeft:'5px' }}>装備中</span>}
       </span>
-      <span style={{ color: lv && inv.ilv > lv ? '#ff8844' : '#cfe2ff', fontSize:'11px' }}>LV{inv.ilv}</span>
+      <span style={{ color: lv && needLvOf(item, inv.ilv) > lv ? '#ff8844' : '#cfe2ff', fontSize:'11px' }}>LV{needLvOf(item, inv.ilv)}</span>
     </div>
   )
 }
@@ -410,7 +409,7 @@ function SmithModal({ row, prof, busy, msg, onEnhance, onClose }) {
   const plus = plusOf(inv)
   const cost = enhanceCostOf(item, inv)
   const err = enhanceErrorOf(item, inv, prof)
-  const pct = effectPct(inv.ilv, prof.lv)
+  const pct = reqPctOf(item, inv.ilv, prof.lv)
   const now = powerAt(item, inv.ilv, plus)
   const have = cost ? scrapOf(prof.materials, cost.area) : 0
   const gold = Number(prof.gold) || 0
@@ -421,7 +420,7 @@ function SmithModal({ row, prof, busy, msg, onEnhance, onClose }) {
       onConfirm={err ? undefined : onEnhance} onClose={onClose}>
       <div>
         <RarityTag item={item} /><span style={{ color: nameColor(item) }}>{item.name}</span><PlusTag inv={inv} />
-        <span style={{ color: TEXT.sub, fontSize:'11px' }}>（{kindLabel(item)}・LV{inv.ilv}）</span>
+        <span style={{ color: TEXT.sub, fontSize:'11px' }}>（{kindLabel(item)}・LV{needLvOf(item, inv.ilv)}）</span>
       </div>
       {cost ? (
         <>
@@ -463,7 +462,7 @@ function DismantleModal({ list, busy, onConfirm, onClose }) {
     <V2Modal title="🔨 装備を分解する" color={SHORT} danger busy={busy}
       confirmLabel={`${list.length}個を分解する`} onConfirm={onConfirm} onClose={onClose}>
       {one
-        ? <div><span style={{ color: nameColor(one.item) }}>{itemLabel(one.item)}</span><PlusTag inv={one.inv} />（LV{one.inv.ilv}）を分解します。</div>
+        ? <div><span style={{ color: nameColor(one.item) }}>{itemLabel(one.item)}</span><PlusTag inv={one.inv} />（LV{needLvOf(one.item, one.inv.ilv)}）を分解します。</div>
         : <div>{list.length}個を分解します。</div>}
       <div style={{ color: TEXT.sub }}>
         {counts.map(([r, n]) => <span key={r} style={{ marginRight:'8px' }}><span style={{ color: RARITY_COLOR[r] }}>{rarityLabel(r)}</span> {n}</span>)}
@@ -478,12 +477,12 @@ function DismantleModal({ list, busy, onConfirm, onClose }) {
 // 作成の確認
 function CraftModal({ item, prof, busy, onConfirm, onClose }) {
   const cost = craftCostOf(item)
-  const pct = effectPct(item.lv, prof.lv)
+  const pct = reqPctOf(item, item.lv, prof.lv)
   return (
     <V2Modal title="🔨 装備を作る" color="#ffaa44" busy={busy} confirmLabel="作る" onConfirm={onConfirm} onClose={onClose}>
       <div>
         <RarityTag item={item} /><span style={{ color: nameColor(item) }}>{item.name}</span>
-        <span style={{ color: TEXT.sub, fontSize:'11px' }}>（{kindLabel(item)}・LV{item.lv}）</span>を作ります。
+        <span style={{ color: TEXT.sub, fontSize:'11px' }}>（{kindLabel(item)}・LV{needLvOf(item)}）</span>を作ります。
       </div>
       <ItemStats inv={{ ilv: item.lv, plus: 0 }} item={item} pct={pct} />
       <div>使うもの：<span style={{ color:'#cfe2ff' }}>{scrapNameOf(item.area)} {cost.scrap}個</span>

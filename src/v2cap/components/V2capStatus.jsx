@@ -8,7 +8,8 @@ import { jobMaxOf, jobNeed, jobOf, stageOf, stageColorOf, weaponsOf, JOB_LV_HPMP
 import { passiveOf, SKILL_BY_NAME } from '../lib/skills.js'
 import { SLOTS, SLOT_LABEL, ARMOR_LINES, ARMOR_EFFECT, kindLabel, itemLabel, RARITY_COLOR } from '../lib/equipment.js'
 import { equippedItems, statBreakdown, currentSetOf } from '../lib/loadout.js'
-import { effectPct, powerAt, statsAt, armorEffectText, underLvPowerOf } from '../lib/gear.js'
+import { reqPctOf, powerAt, statsAt, armorEffectText, underLvPowerOf } from '../lib/gear.js'
+import { needLvOf } from '../lib/equipment.js'
 import { plusOf, plusLabel } from '../lib/smith.js'
 import { avatarUrlOf } from './v2capAvatarUrl.js'
 import { StatGain } from './v2capGear.jsx'
@@ -100,7 +101,7 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
   // ★上がるステは強化値と必要LV不足の効果%を入れたあとの数（2026-10-12 ユーザー指示「どの能力が上がってるのかわかるように」）
   const eqCell = (slot, i) => {
     const w = worn[slot]
-    const pct = w ? effectPct(w.inv.ilv, prof.lv) : 100
+    const pct = w ? reqPctOf(w.item, w.inv.ilv, prof.lv) : 100
     const plus = w ? plusOf(w.inv) : 0
     const power = w ? powerAt(w.item, w.inv.ilv, plus) : 0
     const gain = w ? statsAt(w.item, w.inv.ilv, pct, plus) : null
@@ -116,7 +117,7 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
               </div>
               <div style={{ fontSize:'11px' }}><StatGain s={gain} /></div>
               {w.item.line && <div style={{ color:'#88ddaa' }}>{w.item.line}：{armorEffectText(w.item, pct)}</div>}
-              <div>アイテムLV {w.inv.ilv}（必要LV {w.inv.ilv}）{plus > 0 && <>・強化 {plusLabel(plus)}</>}</div>
+              <div>アイテムLV {w.inv.ilv}（必要LV {needLvOf(w.item, w.inv.ilv)}）{plus > 0 && <>・強化 {plusLabel(plus)}</>}</div>
               <div>戦闘力 {power}{pct < 100 && <span style={{ color:'#ff8844' }}> → {underLvPowerOf(power, pct)}（効果{pct}%）</span>}</div>
             </>}>
             <span style={{ ...valueCell, display:'block' }}>
@@ -156,7 +157,7 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
   // 防具の効果の内訳（何部位か・必要LVに足りなくて弱まっているものがあるか）。カーソルで出す
   const armorWorn = Object.values(worn).filter(w => w.item.line)
   const lineCount = (line) => armorWorn.filter(w => w.item.line === line).length
-  const armorWeak = armorWorn.some(w => effectPct(w.inv.ilv, prof.lv) < 100)
+  const armorWeak = armorWorn.some(w => reqPctOf(w.item, w.inv.ilv, prof.lv) < 100)
 
   return (
     <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'10px', marginBottom:'8px', fontFamily:'monospace' }}>

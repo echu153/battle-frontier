@@ -54,7 +54,7 @@ const { ITEMS, ITEM_BY_ID, starterIdsOf } = await import(B + 'v2cap/lib/equipmen
 const areas = await import(B + 'v2cap/lib/areas.js')
 const level = await import(B + 'v2cap/lib/level.js')
 const jobsLib = await import(B + 'v2cap/lib/jobs.js')
-const { statsAt, effectPct } = await import(B + 'v2cap/lib/gear.js')
+const { statsAt, reqPctOf } = await import(B + 'v2cap/lib/gear.js')
 const { toFighter, totalStats } = await import(B + 'v2cap/lib/loadout.js')
 const { CAP_RULES } = await import(B + 'v2cap/lib/rules.js')
 const { pickEncounter, rollRewards, nextBossRate, openUntilOf, clearSpot, rollEquipDrop } = await import(B + 'v2cap/lib/sortie.js')
@@ -218,7 +218,7 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
   // レア度は全部（エピック・レジェンダリーも）候補にし、必要LVの不足ぶん（1LVごとに-5%）も数えて職業の重みで比べる
   let weight = weightOf(cls)
   // 装備の値打ち（職業の重み）。強化値も数える（鍛冶屋を使わないときは強化値0）
-  const valueAt = (item, pct = effectPct(item.lv, st.lv), p = plusById.get(item.id) || 0) => {
+  const valueAt = (item, pct = reqPctOf(item, item.lv, st.lv), p = plusById.get(item.id) || 0) => {
     const s = statsAt(item, item.lv, pct, p)
     return Object.entries(weight).reduce((t, [k, w]) => t + (s[k] || 0) * w, 0)
   }

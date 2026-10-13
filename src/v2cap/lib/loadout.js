@@ -15,7 +15,7 @@
 import { STAT_KEYS, calcPower } from '../../v2/lib/stats.js'
 import { ITEM_BY_ID, SLOTS } from './equipment.js'
 import { SKILL_BY_NAME, isPassive, passiveOf } from './skills.js'
-import { statsAt, effectPct, powerAt, armorEffects, underLvPowerOf } from './gear.js'
+import { statsAt, reqPctOf, powerAt, armorEffects, underLvPowerOf } from './gear.js'
 import { plusOf } from './smith.js'
 import { jobBonusStats, jobOf, canEquipType, attackKindOf, lineageOf } from './jobs.js'
 import { CAP_RULES } from './rules.js'
@@ -45,7 +45,7 @@ export const wornIdsOf = (profile, inventory) =>
 export const gearStats = (profile, inventory) => {
   const total = zero()
   for (const { inv, item } of Object.values(equippedItems(profile, inventory))) {
-    const s = statsAt(item, inv.ilv, effectPct(inv.ilv, profile?.lv), plusOf(inv))
+    const s = statsAt(item, inv.ilv, reqPctOf(item, inv.ilv, profile?.lv), plusOf(inv))
     for (const k of STAT_KEYS) total[k] += s[k] || 0
   }
   return total
@@ -53,13 +53,13 @@ export const gearStats = (profile, inventory) => {
 // 装備ぶんの戦闘力（強化値・効果%込み）
 export const gearPower = (profile, inventory) =>
   Object.values(equippedItems(profile, inventory)).reduce((t, { inv, item }) =>
-    t + underLvPowerOf(powerAt(item, inv.ilv, plusOf(inv)), effectPct(inv.ilv, profile?.lv)), 0)
+    t + underLvPowerOf(powerAt(item, inv.ilv, plusOf(inv)), reqPctOf(item, inv.ilv, profile?.lv)), 0)
 
 // 防具のメリット（受けるダメージの倍率・AGIの上がり幅）
 export const armorOf = (profile, inventory) => armorEffects(
   Object.values(equippedItems(profile, inventory))
     .filter(w => w.item.line)
-    .map(w => ({ item: w.item, pct: effectPct(w.inv.ilv, profile?.lv) })))
+    .map(w => ({ item: w.item, pct: reqPctOf(w.item, w.inv.ilv, profile?.lv) })))
 
 // 本体のステ
 export const bodyStats = (profile) => Object.fromEntries(STAT_KEYS.map(k => [k, profile?.[k] || 0]))

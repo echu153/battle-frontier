@@ -4,7 +4,8 @@ import { box, TEXT } from '../../v2/components/v2ui.js'
 import { SLOTS, SLOT_LABEL, ARMOR_EFFECT } from '../lib/equipment.js'
 import { jobOf } from '../lib/jobs.js'
 import { equippedItems, statBreakdown } from '../lib/loadout.js'
-import { effectPct, statsAt, armorEffectText } from '../lib/gear.js'
+import { reqPctOf, statsAt, armorEffectText } from '../lib/gear.js'
+import { needLvOf } from '../lib/equipment.js'
 import { plusOf } from '../lib/smith.js'
 import { nameColor } from './v2capGearView.js'
 import { RarityTag, PlusTag, StatGain } from './v2capGear.jsx'
@@ -80,7 +81,7 @@ export default function V2capBreakdown({ prof, inventory }) {
       <div style={{ display:'grid', gap:'2px' }}>
         {SLOTS.map(slot => {
           const w = worn[slot]
-          const pct = w ? effectPct(w.inv.ilv, prof.lv) : 100
+          const pct = w ? reqPctOf(w.item, w.inv.ilv, prof.lv) : 100
           return (
             <div key={slot} style={{ display:'flex', gap:'8px', background:'#000818', border:'1px solid #002244', padding:'4px 7px', fontSize:'11px' }}>
               <span style={{ color:'#7fa6d0', fontSize:'10px', width:'52px', flexShrink:0 }}>{SLOT_LABEL[slot]}</span>
@@ -88,7 +89,7 @@ export default function V2capBreakdown({ prof, inventory }) {
                 <div style={{ flex:1, minWidth:0 }}>
                   <div>
                     <span style={{ color: nameColor(w.item) }}><RarityTag item={w.item} />{w.item.name}</span><PlusTag inv={w.inv} />
-                    {pct < 100 && <span style={{ color:'#ff8844', fontSize:'10px' }}> 効果{pct}%（必要LV{w.inv.ilv}）</span>}
+                    {pct < 100 && <span style={{ color:'#ff8844', fontSize:'10px' }}> 効果{pct}%（必要LV{needLvOf(w.item, w.inv.ilv)}）</span>}
                   </div>
                   <div style={{ fontSize:'10px' }}>
                     <StatGain s={statsAt(w.item, w.inv.ilv, pct, plusOf(w.inv))} />
