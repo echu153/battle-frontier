@@ -6,12 +6,9 @@ import { PLUS_COLOR, chip, areaOptionLabel } from './v2capGearView.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — 装備の見せ方の部品（装備画面と鍛冶屋で同じものを使う。上がるステはホームとプロフィールでも）
-//   ・名前：ノーマルは名前だけ、ほかは【レア】のように頭に付けてレア度の色。強化値は名前の後ろに +3 のように出す
+//   ・名前：名前だけをレア度の色で出す（【レア】のような頭の表記は付けない＝2026-10-13 ユーザー指示「【レジェンダリー】【レア】ここら辺の表記もいらない」）。強化値は名前の後ろに +3 のように出す
 //   ・持ち物の絞り込みの帯（状態は v2capGearView.js の useGearRows）
 // ============================================================
-// レア度の印（ノーマルは付けない）
-export const RarityTag = ({ item }) => (item.rarity === 'N' ? null
-  : <span style={{ color: RARITY_COLOR[item.rarity] }}>【{rarityLabel(item.rarity)}】</span>)
 // 強化値の印（+0は付けない）
 export const PlusTag = ({ inv }) => (plusOf(inv) > 0 ? <span style={{ color: PLUS_COLOR }}> {plusLabel(plusOf(inv))}</span> : null)
 // 上がるステ（「STR+3 DEX+2」をステの色で）。s = statsAt などの { ステ: 数 }

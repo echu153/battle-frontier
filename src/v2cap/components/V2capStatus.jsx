@@ -6,7 +6,7 @@ import { V2Tip, V2SkillTip } from '../../v2/components/V2ItemTip.jsx'
 import { MAX_LV, needExp, staminaMaxOf, rollStamina, msToNextStamina, POINTS_PER_LV, POINTS_ON_STEP, POINTS_STEP } from '../lib/level.js'
 import { jobMaxOf, jobNeed, jobOf, stageOf, stageColorOf, weaponsOf, JOB_LV_HPMP } from '../lib/jobs.js'
 import { passiveOf, SKILL_BY_NAME } from '../lib/skills.js'
-import { SLOTS, SLOT_LABEL, ARMOR_LINES, ARMOR_EFFECT, kindLabel, itemLabel, RARITY_COLOR } from '../lib/equipment.js'
+import { SLOTS, SLOT_LABEL, ARMOR_LINES, ARMOR_EFFECT, kindLabel, RARITY_COLOR } from '../lib/equipment.js'
 import { equippedItems, statBreakdown, currentSetOf } from '../lib/loadout.js'
 import { reqPctOf, powerAt, statsAt, armorEffectText, underLvPowerOf } from '../lib/gear.js'
 import { needLvOf } from '../lib/equipment.js'
@@ -112,7 +112,7 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
           <V2Tip alignRight={i % 2 === 1} width="230px" style={{ display:'block', flex:1, minWidth:0 }}
             body={<>
               <div>
-                <span style={{ color: RARITY_COLOR[w.item.rarity] }}>{itemLabel(w.item)}</span>
+                <span style={{ color: RARITY_COLOR[w.item.rarity] }}>{w.item.name}</span>
                 {plus > 0 && <span style={{ color:'#ffcc00' }}> {plusLabel(plus)}</span>}（{kindLabel(w.item)}）
               </div>
               <div style={{ fontSize:'11px' }}><StatGain s={gain} /></div>

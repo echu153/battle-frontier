@@ -20,7 +20,7 @@ import { SKILLS, NEW_SKILLS, SKILL_BY_NAME, setMpCost, validateSkillSet, default
 import { ICHIJI_SKILLS, ICHIJI_BUILDS } from './skillsIchiji.js'
 import {
   ITEMS, ITEM_BY_ID, KINDS, WEAPON_TYPES, ARMOR_LINES, ARMOR_PARTS, ACCESSORY_TYPES, PART_MULT, SLOTS, ARMOR_EFFECT,
-  RARITIES, RARITY_LABEL, RARITY_BASE, AREA_COUNT, itemOf, itemLabel, slotsFor, SLOT_LABEL, PARTS, partLabel, kindLabel, reqLvOf,
+  RARITIES, RARITY_LABEL, RARITY_BASE, AREA_COUNT, itemOf, slotsFor, SLOT_LABEL, PARTS, partLabel, kindLabel, reqLvOf,
   starterIdsOf,
 } from './equipment.js'
 import { GEAR_NAMES } from './gearNames.js'
@@ -667,10 +667,6 @@ test('【確定】装備はエリアごとに26点（武器14種・重鎧4部位
   // 宝珠のノーマルは装飾品と同じ宝石（始まりの森だけグラス）・刀のノーマルは片手剣と同じ金属
   for (let a = 2; a <= AREA_COUNT; a++) assert.equal(itemOf(a, 'N', '宝珠').name.replace('オーブ', ''), itemOf(a, 'N', 'リング').name.replace('リング', ''), `エリア${a}の宝珠の宝石`)
   for (let a = 1; a <= AREA_COUNT; a++) assert.equal(itemOf(a, 'N', '刀').name.replace('カタナ', ''), itemOf(a, 'N', '片手剣').name.replace('ソード', ''), `エリア${a}の刀の金属`)
-  // 画面の名前：ノーマルは名前だけ、ほかはレア度を頭に付ける
-  assert.equal(itemLabel(itemOf(1, 'N', '片手剣')), 'ブロンズソード')
-  assert.equal(itemLabel(itemOf(1, 'R', '片手剣')), '【レア】若葉の剣')
-  assert.equal(itemLabel(itemOf(1, 'L', '片手剣')), '【レジェンダリー】原初剣アルファ')
 })
 
 test('【確定】配分は種類ごとに1つ（エリアとレア度では変わらない）。物理と魔法の両方が使う種類は間の配分', () => {

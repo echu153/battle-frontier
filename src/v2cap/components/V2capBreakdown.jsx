@@ -8,7 +8,7 @@ import { reqPctOf, statsAt, armorEffectText } from '../lib/gear.js'
 import { needLvOf } from '../lib/equipment.js'
 import { plusOf } from '../lib/smith.js'
 import { nameColor } from './v2capGearView.js'
-import { RarityTag, PlusTag, StatGain } from './v2capGear.jsx'
+import { PlusTag, StatGain } from './v2capGear.jsx'
 
 // ============================================================
 // 「レベルキャップあり」版 — ステータスの内訳（プロフィールの中）
@@ -88,7 +88,7 @@ export default function V2capBreakdown({ prof, inventory }) {
               {w ? (
                 <div style={{ flex:1, minWidth:0 }}>
                   <div>
-                    <span style={{ color: nameColor(w.item) }}><RarityTag item={w.item} />{w.item.name}</span><PlusTag inv={w.inv} />
+                    <span style={{ color: nameColor(w.item) }}>{w.item.name}</span><PlusTag inv={w.inv} />
                     {pct < 100 && <span style={{ color:'#ff8844', fontSize:'10px' }}> 効果{pct}%（必要LV{needLvOf(w.item, w.inv.ilv)}）</span>}
                   </div>
                   <div style={{ fontSize:'10px' }}>

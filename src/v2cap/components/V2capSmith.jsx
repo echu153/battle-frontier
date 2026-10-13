@@ -3,7 +3,7 @@ import { supabase } from '../../supabase'
 import V2Modal from '../../v2/components/V2Modal.jsx'
 import { useStored } from '../../v2/lib/prefs.js'
 import { box, btn, miniBtn, TEXT } from '../../v2/components/v2ui.js'
-import { ITEMS, ITEM_BY_ID, PARTS, SLOTS, RARITIES, RARITY_COLOR, ARMOR_EFFECT, kindLabel, partLabel, rarityLabel, itemLabel, needLvOf } from '../lib/equipment.js'
+import { ITEMS, ITEM_BY_ID, PARTS, SLOTS, RARITIES, RARITY_COLOR, ARMOR_EFFECT, kindLabel, partLabel, rarityLabel, needLvOf } from '../lib/equipment.js'
 import { spotOf } from '../lib/areas.js'
 import { openUntilOf } from '../lib/sortie.js'
 import { canEquipType } from '../lib/jobs.js'
@@ -14,7 +14,7 @@ import {
   SCRAP_NAMES, SCRAP_YIELD, CRAFT_RARITIES, craftCostOf, craftErrorOf,
 } from '../lib/smith.js'
 import { statLine, nameColor, PLUS_COLOR, chip, gainText, areaOptionLabel, useGearRows } from './v2capGearView.js'
-import { RarityTag, PlusTag, GearFilterBar } from './v2capGear.jsx'
+import { PlusTag, GearFilterBar } from './v2capGear.jsx'
 import V2capEnhanceFx from './V2capEnhanceFx.jsx'
 import V2capCraftFx from './V2capCraftFx.jsx'
 
@@ -289,14 +289,14 @@ function CraftTab({ prof, all, busy, call, setError, setNotice }) {
     if (!c || craftErrorOf(item, prof)) return
     const pct = reqPctOf(item, item.lv, prof.lv)
     const job = {
-      id: Date.now(), item, name: item.name, rarity: item.rarity, rarityLabel: rarityLabel(item.rarity), part: item.part, kind: kindLabel(item), lv: needLvOf(item),
+      id: Date.now(), item, name: item.name, rarity: item.rarity, part: item.part, kind: kindLabel(item), lv: needLvOf(item),
       power: powerAt(item, item.lv, 0), pct, statText: statLine(statsAt(item, item.lv, pct, 0)), scrapName: scrapNameOf(c.area), scrap: c.scrap, gold: c.gold, result: null,
     }
     setConfirm(null); setFxJob(job)
     const { data, error } = await call('v2cap_craft', { p_equip_id: item.id })
     if (error) { setFxJob(null); setError(error); return }
     setFxJob(j => (j && j.id === job.id ? { ...j, result: data } : j))
-    setNotice(`🔨 ${itemLabel(item)}（LV${needLvOf(item, data.ilv)}）を作りました`)
+    setNotice(`🔨 ${item.name}（LV${needLvOf(item, data.ilv)}）を作りました`)
   }
   const craft = () => startCraft(confirm)
   // 演出の最後の「続けて作る」（同じ装備をもう1つ。作れる数も出す）
@@ -348,10 +348,11 @@ function CraftTab({ prof, all, busy, call, setError, setNotice }) {
             <div key={item.id} style={rowBox('#002244')}>
               <div style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12px' }}>
                 <span style={{ color: nameColor(item), flex:1, minWidth:0 }}>
-                  <RarityTag item={item} />{item.name}
+                  {item.name}
                   <span style={{ color: TEXT.sub, fontSize:'10px', marginLeft:'5px' }}>{kindLabel(item)}</span>
                   {item.line && <span style={{ color:'#88ddaa', fontSize:'10px', marginLeft:'5px' }}>{ARMOR_EFFECT[item.line]?.label}</span>}
-                  {n > 0 && <span style={{ color:'#44aaff', fontSize:'10px', marginLeft:'5px' }}>持っている {n}</span>}
+                  {/* 2026-10-13 ユーザー指示「持っている 1 じゃなくて〇個所持って表示させて」 */}
+                  {n > 0 && <span style={{ color:'#44aaff', fontSize:'10px', marginLeft:'5px' }}>{n}個所持</span>}
                 </span>
                 <span style={{ color: needLvOf(item) > prof.lv ? '#ff8844' : '#cfe2ff', fontSize:'11px' }}>LV{needLvOf(item)}</span>
               </div>
@@ -376,7 +377,7 @@ function ItemHead({ inv, item, lv, isWorn, check }) {
     <div style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12px' }}>
       {check}
       <span style={{ color: nameColor(item), flex:1, minWidth:0 }}>
-        <RarityTag item={item} />{item.name}<PlusTag inv={inv} />
+        {item.name}<PlusTag inv={inv} />
         <span style={{ color: TEXT.sub, fontSize:'10px', marginLeft:'5px' }}>{kindLabel(item)}</span>
         {effect && <span style={{ color:'#88ddaa', fontSize:'10px', marginLeft:'5px' }}>{effect}</span>}
         {isWorn && <span style={{ color:'#44aaff', fontSize:'10px', marginLeft:'5px' }}>装備中</span>}
@@ -419,7 +420,7 @@ function SmithModal({ row, prof, busy, msg, onEnhance, onClose }) {
       confirmLabel={cost ? `+${cost.next}に強化する` : '強化する'} cancelLabel="閉じる"
       onConfirm={err ? undefined : onEnhance} onClose={onClose}>
       <div>
-        <RarityTag item={item} /><span style={{ color: nameColor(item) }}>{item.name}</span><PlusTag inv={inv} />
+        <span style={{ color: nameColor(item) }}>{item.name}</span><PlusTag inv={inv} />
         <span style={{ color: TEXT.sub, fontSize:'11px' }}>（{kindLabel(item)}・LV{needLvOf(item, inv.ilv)}）</span>
       </div>
       {cost ? (
@@ -462,7 +463,7 @@ function DismantleModal({ list, busy, onConfirm, onClose }) {
     <V2Modal title="🔨 装備を分解する" color={SHORT} danger busy={busy}
       confirmLabel={`${list.length}個を分解する`} onConfirm={onConfirm} onClose={onClose}>
       {one
-        ? <div><span style={{ color: nameColor(one.item) }}>{itemLabel(one.item)}</span><PlusTag inv={one.inv} />（LV{needLvOf(one.item, one.inv.ilv)}）を分解します。</div>
+        ? <div><span style={{ color: nameColor(one.item) }}>{one.item.name}</span><PlusTag inv={one.inv} />（LV{needLvOf(one.item, one.inv.ilv)}）を分解します。</div>
         : <div>{list.length}個を分解します。</div>}
       <div style={{ color: TEXT.sub }}>
         {counts.map(([r, n]) => <span key={r} style={{ marginRight:'8px' }}><span style={{ color: RARITY_COLOR[r] }}>{rarityLabel(r)}</span> {n}</span>)}
@@ -481,7 +482,7 @@ function CraftModal({ item, prof, busy, onConfirm, onClose }) {
   return (
     <V2Modal title="🔨 装備を作る" color="#ffaa44" busy={busy} confirmLabel="作る" onConfirm={onConfirm} onClose={onClose}>
       <div>
-        <RarityTag item={item} /><span style={{ color: nameColor(item) }}>{item.name}</span>
+        <span style={{ color: nameColor(item) }}>{item.name}</span>
         <span style={{ color: TEXT.sub, fontSize:'11px' }}>（{kindLabel(item)}・LV{needLvOf(item)}）</span>を作ります。
       </div>
       <ItemStats inv={{ ilv: item.lv, plus: 0 }} item={item} pct={pct} />

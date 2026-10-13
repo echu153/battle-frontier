@@ -8,7 +8,7 @@ import { powerAt, statsAt, reqPctOf, underLvPowerOf } from '../lib/gear.js'
 import { PLUS_MAX, plusOf } from '../lib/smith.js'
 import { DROP_CHANCE } from '../lib/sortie.js'
 import { statLine, nameColor, useGearRows } from './v2capGearView.js'
-import { RarityTag, PlusTag, GearFilterBar } from './v2capGear.jsx'
+import { PlusTag, GearFilterBar } from './v2capGear.jsx'
 
 // ============================================================
 // 「レベルキャップあり」版 — 装備（着ける・外すと持ち物）
@@ -17,7 +17,7 @@ import { RarityTag, PlusTag, GearFilterBar } from './v2capGear.jsx'
 //   ・防具は重鎧（受けるダメージ−1%）／軽装（AGI+1%）・1部位ごと。どの職業でも着けられる
 //   ・装備は**アイテムLV**を持つ（＝必要LV）。足りなくても着けられるが、不足1LVごとに効果-5%（最低10%）
 //   ・装備はエリアごとの一覧で、レア度（ノーマル・レア・エピック・レジェンダリー）を持つ。
-//     ノーマルは名前だけ、ほかは【レア】のように頭に付けてレア度の色で出す
+//     名前だけをレア度の色で出す（【レア】のような頭の表記は 2026-10-13 ユーザー指示でやめた）
 //   ・【確定】2026-10-10 強化・分解・作成は**鍛冶屋だけ**（V2capSmith.jsx）。ここは着ける・外すだけ（ユーザー決定）
 // ============================================================
 export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
@@ -63,7 +63,6 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
                 {w ? (
                   <>
                     <span style={{ flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                      <RarityTag item={w.item} />
                       <span style={{ color: nameColor(w.item) }}>{w.item.name}</span>
                       <PlusTag inv={w.inv} />
                       <span style={{ color: needLvOf(w.item, w.inv.ilv) > prof.lv ? '#ff8844' : TEXT.sub }}> LV{needLvOf(w.item, w.inv.ilv)}</span>
@@ -107,7 +106,7 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
               <div key={inv.id} style={{ background:'#000818', border:`1px solid ${isWorn ? '#0055aa' : '#002244'}`, padding:'6px 8px', opacity: usable ? 1 : 0.6 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12px' }}>
                   <span style={{ color: nameColor(item), flex:1, minWidth:0 }}>
-                    <RarityTag item={item} />{item.name}<PlusTag inv={inv} />
+                    {item.name}<PlusTag inv={inv} />
                     <span style={{ color: TEXT.sub, fontSize:'10px', marginLeft:'5px' }}>{kindLabel(item)}</span>
                     {effect && <span style={{ color:'#88ddaa', fontSize:'10px', marginLeft:'5px' }}>{effect}</span>}
                     {isWorn && <span style={{ color:'#44aaff', fontSize:'10px', marginLeft:'5px' }}>装備中</span>}

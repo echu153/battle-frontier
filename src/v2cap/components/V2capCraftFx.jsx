@@ -203,7 +203,7 @@ export default function V2capCraftFx({ job, nextLabel, nextReason, onAgain, onCl
 
         {/* 下の文字 */}
         <div style={{ marginTop:4, textAlign:'center', fontSize:12, color:'#cfe2ff', minHeight:20 }}>
-          <span style={{ color: tier.color, fontWeight:'bold' }}>【{job.rarityLabel}】</span><span style={{ color: tier.color }}>{job.name}</span>
+          <span style={{ color: tier.color }}>{job.name}</span>
           <span style={{ marginLeft:6, color:'#93a9be' }}>（{job.kind}・LV{job.lv}）</span>
         </div>
         {phase !== 'result' && <div style={{ marginTop:8, fontSize:10, color:'#62789a' }}>押すと飛ばせます</div>}

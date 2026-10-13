@@ -192,8 +192,6 @@ export const slotsFor = (item) => {
   if (item.part === 'アクセ') return ['acc1', 'acc2']
   return [{ 頭:'head', 鎧:'body', 腕:'arm', 足:'foot' }[item.part]]
 }
-// 表示用の名前。ノーマルは名前だけ、ほかは【レア】若葉の剣 のようにレア度を頭に付ける
-export const itemLabel = (item) => !item ? '?' : item.rarity === 'N' ? item.name : `【${rarityLabel(item.rarity)}】${item.name}`
 // 種類の表示（武器は種類・防具は系統と部位・装飾品は「装飾品」）
 export const kindLabel = (item) =>
   !item ? '' : item.part === '武器' ? item.type : item.part === 'アクセ' ? partLabel('アクセ') : `${item.line}・${item.part}`
