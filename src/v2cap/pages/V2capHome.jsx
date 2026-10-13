@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../supabase'
 import { validateName } from '../../lib/nameFilter'
@@ -133,6 +133,11 @@ export default function V2capHome() {
   }, [load])
   const onScene = useCallback((s) => setInBattle(s === 'battle'), [])
   const goHome = () => setScreen('home')
+  // 画面を切り替えたら一番上から見せる（ホームへ戻るときも）。
+  // 【確定】2026-10-14 ユーザー指示「装備押すと中途半端なところで遷移する、一番上で遷移するようにして」
+  //   ＝ページ全体（window）のスクロールが前の画面の位置のまま残っていた（ホームの下のメニューから開くと途中から見える）。
+  //   描く前（useLayoutEffect）に戻すので、途中の位置は一瞬も見えない
+  useLayoutEffect(() => { window.scrollTo(0, 0) }, [screen])
 
   const create = async (e) => {
     e.preventDefault()

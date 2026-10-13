@@ -2,7 +2,7 @@ import { STAT_DEFS, STAT_KEYS } from '../../v2/lib/stats.js'
 import { TEXT } from '../../v2/components/v2ui.js'
 import { PARTS, RARITIES, RARITY_COLOR, partLabel, rarityLabel } from '../lib/equipment.js'
 import { plusOf, plusLabel } from '../lib/smith.js'
-import { PLUS_COLOR, chip, areaOptionLabel } from './v2capGearView.js'
+import { PLUS_COLOR, chip, areaOptionLabel, filterSelect, optionStyle } from './v2capGearView.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — 装備の見せ方の部品（装備画面と鍛冶屋で同じものを使う。上がるステはホームとプロフィールでも）
@@ -19,14 +19,6 @@ export const StatGain = ({ s }) => {
     <span key={k} style={{ color: STAT_DEFS[k].color, marginRight:'6px', whiteSpace:'nowrap' }}>{STAT_DEFS[k].label}+{s[k].toLocaleString()}</span>
   ))
 }
-
-// 絞り込みのプルダウン。選んでいる（すべて以外）ときは枠と文字を明るく。color＝その色にする（レア度の色）
-const filterSelect = (on, color) => ({
-  flex:'1 1 0', minWidth:0, background:'#000818', border:`1px solid ${on ? color || '#44aaff' : '#62789a'}`,
-  color: on ? color || '#88ccff' : '#93a9be', fontFamily:'monospace', fontSize:'11px', padding:'3px 4px', cursor:'pointer',
-})
-// 選択肢の色（開いた一覧はプルダウンの色を引き継ぐので、1つずつ決める）
-const optionStyle = (color) => ({ background:'#000818', color: color || '#cfe2ff' })
 
 // 絞り込み（部位・レア度・エリア）と並べ替えの帯。g = useGearRows の返り値
 // 【確定】2026-10-14 ユーザー指示「全てプルダウンにして、部位 レア度 エリアを横並びにして」（前は部位とレア度がボタンの列）

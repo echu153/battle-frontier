@@ -9,6 +9,7 @@ const codeOf = (f) => readFileSync(new URL(f, import.meta.url), 'utf8')
 const EQUIP = codeOf('../components/V2capEquip.jsx')
 const GEAR = codeOf('../components/v2capGear.jsx')
 const SMITH = codeOf('../components/V2capSmith.jsx')
+const HOME = codeOf('../pages/V2capHome.jsx')
 
 test('【確定】装備中の説明文（装備できる武器・重鎧と軽装・必要LV・強化の説明）は出さない', () => {
   assert.ok(!/装備できる武器は/.test(EQUIP), '装備できる武器の説明は出さない')
@@ -33,4 +34,17 @@ test('【確定】絞り込みは 部位・レア度・エリア の3つのプ�
   const selects = [...bar.matchAll(/<select value=\{g\.(\w+)\}/g)].map(m => m[1])
   assert.deepEqual(selects, ['part', 'rarity', 'area'])
   assert.ok(!/onClick=\{\(\) => g\.set(Part|Rarity)\(/.test(bar), '部位・レア度はボタンにしない')
+})
+
+test('【確定】鍛冶屋の作成の選び方も 部位・レア度・エリア の3つのプルダウンを横並び（2026-10-14 ユーザー指示「作成もプルダウンの横並びで」）', () => {
+  const start = SMITH.indexOf('function CraftTab')
+  const craft = SMITH.slice(start, SMITH.indexOf('\nfunction ', start + 1))
+  const selects = [...craft.matchAll(/<select value=\{(\w+)\}/g)].map(m => m[1])
+  assert.deepEqual(selects, ['part', 'rarity', 'area'])
+  assert.ok(!/onClick=\{\(\) => set(Part|Rarity|Area)\(/.test(craft), '部位・レア度・エリアはボタンにしない')
+})
+
+test('【確定】画面を切り替えたら一番上から見せる（2026-10-14 ユーザー指示「装備押すと中途半端なところで遷移する、一番上で遷移するようにして」）', () => {
+  assert.ok(/useLayoutEffect\(\(\) => \{ window\.scrollTo\(0, 0\) \}, \[screen\]\)/.test(HOME),
+    'V2capHome：screen が変わったら描く前に window を一番上へ戻す')
 })

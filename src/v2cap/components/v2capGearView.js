@@ -17,6 +17,14 @@ export const nameColor = (item) => RARITY_COLOR[item?.rarity] || '#88ccff'
 export const PLUS_COLOR = '#ffcc00'
 // 選んでいる／いないの小さいボタン
 export const chip = (on) => ({ ...miniBtn(on ? '#44aaff' : '#62789a'), color: on ? '#88ccff' : '#93a9be' })
+// 絞り込みのプルダウン（横並びで同じ幅になる）。選んでいる（すべて以外）ときは枠と文字を明るく。color＝その色にする（レア度の色）
+//   持ち物の絞り込み（v2capGear.jsx の GearFilterBar）と鍛冶屋の作成の選び方で同じものを使う（2026-10-14 ユーザー指示でどちらもプルダウンの横並び）
+export const filterSelect = (on, color) => ({
+  flex:'1 1 0', minWidth:0, background:'#000818', border:`1px solid ${on ? color || '#44aaff' : '#62789a'}`,
+  color: on ? color || '#88ccff' : '#93a9be', fontFamily:'monospace', fontSize:'11px', padding:'3px 4px', cursor:'pointer',
+})
+// 選択肢の色（開いた一覧はプルダウンの色を引き継ぐので、1つずつ決める）
+export const optionStyle = (color) => ({ background:'#000818', color: color || '#cfe2ff' })
 // 手に入る残骸の一覧の文（{エリアの番号: 個数} → 「新緑の残骸 +3・荒野の残骸 +1」）
 export const gainText = (gain) => Object.entries(gain).sort((a, b) => a[0] - b[0])
   .map(([a, n]) => `${scrapNameOf(Number(a))} +${n}`).join('・')

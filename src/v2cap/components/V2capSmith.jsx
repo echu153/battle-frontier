@@ -13,7 +13,7 @@ import {
   PLUS_MAX, plusOf, scrapNameOf, scrapOf, scrapAreaOf, dismantleGainOf, bulkPickable, enhanceCostOf, enhanceErrorOf,
   SCRAP_NAMES, SCRAP_YIELD, CRAFT_RARITIES, craftCostOf, craftErrorOf,
 } from '../lib/smith.js'
-import { statLine, nameColor, PLUS_COLOR, chip, gainText, areaOptionLabel, useGearRows } from './v2capGearView.js'
+import { statLine, nameColor, PLUS_COLOR, gainText, areaOptionLabel, filterSelect, optionStyle, useGearRows } from './v2capGearView.js'
 import { PlusTag, GearFilterBar } from './v2capGear.jsx'
 import V2capEnhanceFx from './V2capEnhanceFx.jsx'
 import V2capCraftFx from './V2capCraftFx.jsx'
@@ -312,20 +312,19 @@ function CraftTab({ prof, all, busy, call, setError, setNotice }) {
           nextReason={again ? `続けて作るには：${again}` : ''}
           onAgain={() => startCraft(fxJob.item)} onClose={() => setFxJob(null)} />
       )}
-      <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginBottom:'4px', alignItems:'center' }}>
-        <select value={area} onChange={e => setArea(Number(e.target.value))}
-          style={{ background:'#000818', border:'1px solid #62789a', color:'#cfe2ff', fontFamily:'monospace', fontSize:'11px', padding:'3px 4px' }}>
-          {Array.from({ length: maxArea }, (_, i) => i + 1).map(a => <option key={a} value={a}>{areaOptionLabel(a)}</option>)}
+      {/* 【確定】2026-10-14 ユーザー指示「作成もプルダウンの横並びで」＝持ち物の絞り込み（GearFilterBar）と同じ 部位・レア度・エリア の順。
+           レア度とエリアは「すべて」なし（作るものを1つに決める）なので、いつも選んでいる色 */}
+      <div style={{ display:'flex', gap:'4px', marginBottom:'6px' }}>
+        <select value={part} onChange={e => setPart(e.target.value)} style={filterSelect(part !== 'all')}>
+          <option value="all" style={optionStyle(TEXT.sub)}>すべての部位</option>
+          {PARTS.map(p => <option key={p} value={p} style={optionStyle()}>{partLabel(p)}</option>)}
         </select>
-        {CRAFT_RARITIES.map(r => (
-          <button key={r} onClick={() => setRarity(r)}
-            style={rarity === r ? { ...miniBtn(RARITY_COLOR[r]), color: RARITY_COLOR[r] } : chip(false)}>{rarityLabel(r)}</button>
-        ))}
-      </div>
-      <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginBottom:'6px' }}>
-        {['all', ...PARTS].map(p => (
-          <button key={p} onClick={() => setPart(p)} style={chip(part === p)}>{p === 'all' ? 'すべて' : partLabel(p)}</button>
-        ))}
+        <select value={rarity} onChange={e => setRarity(e.target.value)} style={filterSelect(true, RARITY_COLOR[rarity])}>
+          {CRAFT_RARITIES.map(r => <option key={r} value={r} style={optionStyle(RARITY_COLOR[r])}>{rarityLabel(r)}</option>)}
+        </select>
+        <select value={area} onChange={e => setArea(Number(e.target.value))} style={filterSelect(true)}>
+          {Array.from({ length: maxArea }, (_, i) => i + 1).map(a => <option key={a} value={a} style={optionStyle()}>{areaOptionLabel(a)}</option>)}
+        </select>
       </div>
       <label style={{ display:'flex', alignItems:'center', gap:'5px', fontSize:'11px', color: TEXT.label, marginBottom:'6px', cursor:'pointer', width:'fit-content' }}>
         <input type="checkbox" checked={usableOnly} onChange={e => setUsableOnly(e.target.checked)} style={{ accentColor:'#ffaa44', margin:0 }} />
