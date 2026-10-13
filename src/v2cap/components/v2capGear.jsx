@@ -1,5 +1,5 @@
 import { STAT_DEFS, STAT_KEYS } from '../../v2/lib/stats.js'
-import { miniBtn, TEXT } from '../../v2/components/v2ui.js'
+import { TEXT } from '../../v2/components/v2ui.js'
 import { PARTS, RARITIES, RARITY_COLOR, partLabel, rarityLabel } from '../lib/equipment.js'
 import { plusOf, plusLabel } from '../lib/smith.js'
 import { PLUS_COLOR, chip, areaOptionLabel } from './v2capGearView.js'
@@ -20,26 +20,31 @@ export const StatGain = ({ s }) => {
   ))
 }
 
+// 絞り込みのプルダウン。選んでいる（すべて以外）ときは枠と文字を明るく。color＝その色にする（レア度の色）
+const filterSelect = (on, color) => ({
+  flex:'1 1 0', minWidth:0, background:'#000818', border:`1px solid ${on ? color || '#44aaff' : '#62789a'}`,
+  color: on ? color || '#88ccff' : '#93a9be', fontFamily:'monospace', fontSize:'11px', padding:'3px 4px', cursor:'pointer',
+})
+// 選択肢の色（開いた一覧はプルダウンの色を引き継ぐので、1つずつ決める）
+const optionStyle = (color) => ({ background:'#000818', color: color || '#cfe2ff' })
+
 // 絞り込み（部位・レア度・エリア）と並べ替えの帯。g = useGearRows の返り値
+// 【確定】2026-10-14 ユーザー指示「全てプルダウンにして、部位 レア度 エリアを横並びにして」（前は部位とレア度がボタンの列）
 export function GearFilterBar({ g }) {
   return (
     <>
-      <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginBottom:'4px' }}>
-        {['all', ...PARTS].map(p => (
-          <button key={p} onClick={() => g.setPart(p)} style={chip(g.part === p)}>{p === 'all' ? 'すべて' : partLabel(p)}</button>
-        ))}
-      </div>
-      <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginBottom:'4px', alignItems:'center' }}>
-        {['all', ...RARITIES].map(r => (
-          <button key={r} onClick={() => g.setRarity(r)}
-            style={r !== 'all' && g.rarity === r ? { ...miniBtn(RARITY_COLOR[r]), color: RARITY_COLOR[r] } : chip(g.rarity === r)}>
-            {r === 'all' ? 'すべてのレア度' : rarityLabel(r)}
-          </button>
-        ))}
-        <select value={g.area} onChange={e => g.setArea(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-          style={{ background:'#000818', border:'1px solid #62789a', color:'#93a9be', fontFamily:'monospace', fontSize:'10px', padding:'2px 4px' }}>
-          <option value="all">すべてのエリア</option>
-          {g.areas.map(a => <option key={a} value={a}>{areaOptionLabel(a)}</option>)}
+      <div style={{ display:'flex', gap:'4px', marginBottom:'6px' }}>
+        <select value={g.part} onChange={e => g.setPart(e.target.value)} style={filterSelect(g.part !== 'all')}>
+          <option value="all" style={optionStyle(TEXT.sub)}>すべての部位</option>
+          {PARTS.map(p => <option key={p} value={p} style={optionStyle()}>{partLabel(p)}</option>)}
+        </select>
+        <select value={g.rarity} onChange={e => g.setRarity(e.target.value)} style={filterSelect(g.rarity !== 'all', RARITY_COLOR[g.rarity])}>
+          <option value="all" style={optionStyle(TEXT.sub)}>すべてのレア度</option>
+          {RARITIES.map(r => <option key={r} value={r} style={optionStyle(RARITY_COLOR[r])}>{rarityLabel(r)}</option>)}
+        </select>
+        <select value={g.area} onChange={e => g.setArea(e.target.value === 'all' ? 'all' : Number(e.target.value))} style={filterSelect(g.area !== 'all')}>
+          <option value="all" style={optionStyle(TEXT.sub)}>すべてのエリア</option>
+          {g.areas.map(a => <option key={a} value={a} style={optionStyle()}>{areaOptionLabel(a)}</option>)}
         </select>
       </div>
       <div style={{ display:'flex', alignItems:'center', gap:'4px', marginBottom:'8px', fontSize:'10px', color: TEXT.label, flexWrap:'wrap' }}>
