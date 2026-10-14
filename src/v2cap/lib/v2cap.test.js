@@ -280,7 +280,8 @@ test('【確定】上位職は22職（ユーザーの表「一次職スキル一
   // ClassLVごとの点数：2026-10-12 ユーザー指示で 初期職5→8・上位職6→10（上位職は初期職の1.2倍のまま＝ユーザーが選んだ）
   assert.deepEqual([STAGES.ichiji.mult, STAGES.ichiji.perLv], [3, 10])
   assert.equal(STAGES.ichiji.perLv, Math.round(STAGES.shoki.perLv * 1.2), 'ClassLVごとの点数は初期職の1.2倍')
-  assert.deepEqual(STAGES.ichiji.learnAt, [1, 5, 10, 15, 20, 25, 30, 40])
+  // 【確定】2026-10-15 チャット版の設計で CLASS LV35・45 を足して10個
+  assert.deepEqual(STAGES.ichiji.learnAt, [1, 5, 10, 15, 20, 25, 30, 35, 40, 45])
   assert.equal(CLASSES.length, 33)
   // 2026-10-14 ユーザー承認の並び替え：V1の職業を続投・横文字の名前も入れた・剣士系（侍・魔法剣士）を足した
   assert.deepEqual(ICHIJI_CLASSES, ['侍', '魔法剣士', '狂戦士', '聖騎士', '竜騎士', 'ストームランサー', '体術師', 'サイキッカー', '暗殺者', '忍者',
@@ -313,7 +314,7 @@ test('【確定】上位職は22職（ユーザーの表「一次職スキル一
   // ClassEXPを入れると50で止まる
   const r = applyJobExp({}, '狂戦士', jobTotalTo('ichiji', 50) + 99999, [])
   assert.deepEqual([r.lv, r.exp], [50, 0])
-  assert.equal(r.learned.length, 8, 'ClassLV50で8つ全部')
+  assert.equal(r.learned.length, 10, 'ClassLV50で10個全部（45で最後の技）')
 })
 
 test('通常攻撃は 槍使い・盗賊・銃士・戦士・格闘家・弓使い・剣士＝物理／魔法使い・呪術師・僧侶・薬師＝魔法', () => {
@@ -473,16 +474,18 @@ test('【確定】キャラ作成と神殿に出す特徴の説明が全職ぶ�
 
 // ===== スキル =====
 // 【確定】2026-10-14 ユーザー承認：初期職も CLASS LV25・30 で1つずつ（技7つ・5枠から選ぶ）
-test('スキルは初期職ClassLV 1／5／10／15／20／25／30 で7個・上位職ClassLV 1／5／10／15／20／25／30／40 で8個', () => {
+test('スキルは初期職ClassLV 1／5／10／15／20／25／30 で7個・上位職ClassLV 1／5／10／15／20／25／30／35／40／45 で10個', () => {
   assert.deepEqual(STAGES.shoki.learnAt, [1, 5, 10, 15, 20, 25, 30])
   for (const c of CLASSES) {
-    const n = c.stage === 'ichiji' ? 8 : 7
+    const n = c.stage === 'ichiji' ? 10 : 7
     assert.equal(learnOrderOf(c.id).length, learnAtOf(c.id).length, `${c.id}のスキル数`)
     assert.equal(learnOrderOf(c.id).length, n)
     assert.equal(skillsLearnedBy(c.id, 1).length, 1, `${c.id}はClassLV1で1つ`)
     assert.equal(skillsLearnedBy(c.id, jobMaxOf(c.id)).length, n, `${c.id}は上限のClassLVで全部`)
   }
-  assert.equal(skillsLearnedBy('狂戦士', 39).length, 7, 'ClassLV40の技は40で覚える')
+  assert.equal(skillsLearnedBy('狂戦士', 34).length, 7, 'ClassLV35の技は35で覚える')
+  assert.equal(skillsLearnedBy('狂戦士', 39).length, 8, 'ClassLV40の技は40で覚える')
+  assert.equal(skillsLearnedBy('狂戦士', 44).length, 9, 'ClassLV45の技は45で覚える')
   const r = applyJobExp({}, '戦士', jobTotalTo('shoki', 30) + 999999, ['体当たり'])
   assert.equal(r.lv, 30)
   assert.equal(r.exp, 0)
@@ -506,16 +509,17 @@ test('【確定】戦士・弓使い・魔法使い・僧侶・格闘家のCLASS
   assert.ok(V2_SKILLS.every(s => !('elem' in s)), '今のⅡの名簿は書き換えていない')
 })
 
-test('【確定】上位職の技はユーザーの表「一次職スキル一覧」のとおり（各職8技＋パッシブ1つ・組み方の例2つ）', () => {
-  assert.equal(ICHIJI_SKILLS.length, 198, '22職×9（2026-10-14 の並び替え）')
+test('【確定】上位職の技はチャット版の設計（2026-10-15）のとおり（各職10技＋パッシブ1つ・組み方の例2つ）', () => {
+  assert.equal(ICHIJI_SKILLS.length, 242, '22職×11（2026-10-15 CLASS LV35・45 の技を足した）')
   for (const id of ICHIJI_CLASSES) {
     const mine = ICHIJI_SKILLS.filter(x => x.cls === id)
     assert.equal(mine.filter(x => x.kind === 'passive').length, 1, `${id}のパッシブは1つ`)
-    assert.equal(mine.filter(x => x.kind !== 'passive').length, 8, `${id}の技は8つ`)
+    assert.equal(mine.filter(x => x.kind !== 'passive').length, 10, `${id}の技は10個`)
     assert.equal(passiveOf(id)?.cls, id)
     for (const x of mine) {
       assert.ok(x.desc, `${x.name}の説明`)
-      if (x.kind !== 'passive') assert.ok(x.mp > 0 && x.proc >= 70 && x.proc <= 100, `${x.name}の消費MP・発動率`)
+      // 消費MPは決まった量か、そのときの残りMPの割合（オーバーロードショット＝30%）
+      if (x.kind !== 'passive') assert.ok((x.mp > 0 || x.mpPct > 0) && x.proc >= 70 && x.proc <= 100, `${x.name}の消費MP・発動率`)
     }
     assert.equal(ICHIJI_BUILDS[id].length, 2, `${id}の組み方の例は2つ`)
     for (const b of ICHIJI_BUILDS[id]) {
@@ -523,11 +527,13 @@ test('【確定】上位職の技はユーザーの表「一次職スキル一�
       for (const n of b) assert.equal(SKILL_BY_NAME[n]?.cls, id, `${id}の組み方の${n}は${id}の技`)
     }
   }
-  // 表の値（抜き出して固定）。並び＝覚える順（ClassLV1／5／10／15／20／25／30／40）
+  // 設計の値（抜き出して固定）。並び＝覚える順（ClassLV1／5／10／15／20／25／30／35／40／45）。
+  //   狂戦士の攻撃の技は最大HPを払うぶん消費MPが半分（2026-10-15 チャット版の設計）
   assert.deepEqual(learnOrderOf('狂戦士').map(x => [x.name, x.mp, x.proc]), [
-    ['マッドラッシュ', 6, 95], ['血風斬', 12, 85], ['狂乱の咆哮', 10, 100], ['ブラッドスプラッシュ', 11, 88],
-    ['狂撃', 14, 85], ['ブラッディロア', 14, 100], ['血の誓い', 10, 100], ['フルブレイカー', 22, 80]])
-  assert.deepEqual(learnOrderOf('霊薬師').map(x => x.name), ['霊薬瓶', '剛力薬', '叡智の薬', '鉄身薬', '再生薬', '霊薬', '薬効解放', '仙丹'])
+    ['マッドラッシュ', 3, 95], ['血風斬', 12, 85], ['狂乱の咆哮', 10, 100], ['ブラッドスプラッシュ', 6, 88],
+    ['狂撃', 14, 85], ['ブラッディロア', 14, 100], ['血の誓い', 10, 100], ['ブラッドサクリファイス', 6, 85],
+    ['フルブレイカー', 11, 80], ['狂鬼化', 10, 100]])
+  assert.deepEqual(learnOrderOf('霊薬師').map(x => x.name), ['霊薬瓶', '剛力薬', '叡智の薬', '鉄身薬', '再生薬', '霊薬', '薬効解放', '浸透薬', '仙丹', 'エリクサー'])
   // 消費MP・発動率は表のまま。倍率は 2026-10-14 にユーザー指示「どのクラスも平均的な強さになるように揃えて」で変えた（ichijiRoster.test.js が見張る）
   assert.deepEqual([SKILL_BY_NAME['カタストロフ'].mp, SKILL_BY_NAME['カタストロフ'].proc], [28, 70])
   assert.equal(SKILL_BY_NAME['マナショット'].hybrid.phys, SKILL_BY_NAME['マナショット'].hybrid.mag, '物理と魔法が同じ（STRとINTが半分ずつ）')

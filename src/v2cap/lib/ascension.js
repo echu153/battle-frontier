@@ -66,6 +66,10 @@ export const ASC_COUNT_UP = {
   装填:       { key: 'gain',         field: 'n',     label: '1回で増える装填',   unit: '' },
   鬼神降ろし: { key: 'summonHits',   field: 'turns', label: '続くターン',        unit: 'ターン' },
   狂信:       { key: 'debuffImmune', field: 'turns', label: '続くターン',        unit: 'ターン' },
+  // 2026-10-15 上位クラスの作り直し（チャット版の設計）で入った技。field: null は技の項目そのものが数
+  照準:       { key: 'gain',         field: 'n',     label: '1回で増える照準',   unit: '' },
+  弾帯換装:   { key: 'gain',         field: 'n',     label: '1回で増える装填',   unit: '' },
+  詠唱:       { key: 'resoGain',     field: null,    label: '1回で増える共鳴',   unit: '' },
 }
 // ステの表を持たないバフの「上がり幅」（%の数）。上から見て最初に持っているものに足す。
 // scale … 1点の大きさ（召喚の倍率は ×0.25＝25% の形なので 0.01）
@@ -81,6 +85,19 @@ export const ASC_BUFF_PARAMS = [
   // 2026-10-14 上位職の並び替えで入った技（今のⅡの侍・聖騎士から）
   { key: 'stance',      field: 'proc', label: '次の技の発動率', sign: 1, scale: 1 },     // 納刀（+20%→+30%）
   { key: 'bigGuard',    field: 'cut',  label: '1ターンの受けるダメージ', sign: -1, scale: 1 }, // 大防御（−60%→−70%）
+  // 2026-10-15 上位クラスの作り直し（チャット版の設計）で入った技。neg … 値を小さくする向きに足す（相手のAGI−20%→−30%・MP×0.5→×0.4）
+  { key: 'lastStand',   field: 'costCut', label: '耐えるまでに払うHP', sign: -1, scale: 1 },  // 狂鬼化（−50%→−60%）
+  { key: 'vow',         field: 'cut',  label: '受けるダメージ', sign: -1, scale: 1 },     // 不動の誓い（−15%→−25%）
+  { key: 'soar',        field: 'land', label: '着地ダメージ',   sign: 1, scale: 1 },      // 竜翔（+20%→+30%）
+  { key: 'counterBoost', field: 'pct', label: '回避したときの反撃の威力', sign: 1, scale: 1 }, // 後の先（+60%→+70%）
+  { key: 'ailUp',       field: 'pct',  label: '状態異常を付ける確率', sign: 1, scale: 1 }, // 死の刻印（+25%→+35%）
+  { key: 'trap',        field: 'mult', label: '罠の威力',       sign: 1, scale: 0.01 },   // くくり罠・トラバサミ（×1.54→×1.64）
+  { key: 'lockOn',      field: 'critDmg', label: 'クリティカルのダメージ', sign: 1, scale: 1 }, // ロックオン（+10%→+20%）
+  { key: 'repeatLast',  field: 'mpMult', label: '繰り返す技のMP', sign: 1, scale: 0.01, neg: true }, // リピート（×0.5→×0.4）
+  { key: 'bind',        field: 'foeAgi', label: '相手のAGI',    sign: 1, scale: 1, neg: true },  // 封縛結界（−20%→−30%）
+  { key: 'shieldGain',  field: 'pct',  label: 'バリア（最大HPの）', sign: 1, scale: 1 },  // 光の帳（12%→22%）
+  { key: 'gospel',      field: 'healMult', label: '回復量',     sign: 1, scale: 0.01 },   // ゴスペル（×1.5→×1.6）
+  { key: 'philo',       field: 'ailUp', label: '状態異常を付ける確率', sign: 1, scale: 1 }, // 賢者の石（+20%→+30%）
 ]
 
 // スキルマスの種類（攻撃・回復・バフ・回数）。パッシブと知らない種類は null（マスを作らない）
@@ -130,6 +147,7 @@ export const ascendSkill = (skill, up = ascUpOf(skill?.name)) => {
   if (kind === 'heal') return { ...skill, ascHeal: (skill.ascHeal || 0) + up }
   if (kind === 'count') {
     const c = ASC_COUNT_UP[skill.name]
+    if (c.field == null) return { ...skill, [c.key]: (skill[c.key] || 0) + up }
     return { ...skill, [c.key]: { ...skill[c.key], [c.field]: (skill[c.key]?.[c.field] || 0) + up } }
   }
   const ents = buffEntries(skill)
@@ -142,7 +160,7 @@ export const ascendSkill = (skill, up = ascUpOf(skill?.name)) => {
   }
   const p = ASC_BUFF_PARAMS.find(x => skill[x.key]?.[x.field] !== undefined)
   if (!p) return skill
-  return { ...skill, [p.key]: { ...skill[p.key], [p.field]: round3(skill[p.key][p.field] + up * p.scale) } }
+  return { ...skill, [p.key]: { ...skill[p.key], [p.field]: round3(skill[p.key][p.field] + up * p.scale * (p.neg ? -1 : 1)) } }
 }
 
 // ===== 文 =====
@@ -170,7 +188,8 @@ export const ascSkillDetail = (name) => {
   const a = ascendSkill(s, up)
   if (kind === 'count') {
     const c = ASC_COUNT_UP[name]
-    return `${c.label} ${s[c.key][c.field]}${c.unit}→${a[c.key][c.field]}${c.unit}`
+    const v = (x) => (c.field == null ? x[c.key] : x[c.key][c.field])
+    return `${c.label} ${v(s)}${c.unit}→${v(a)}${c.unit}`
   }
   const ents = buffEntries(s)
   if (ents.length) {
@@ -202,7 +221,11 @@ export const skillAffinity = (skill) => {
   return a
 }
 
-// n 個を4方向へ（なるべく同じ数・余りは上の方向から）。どの方向もスキルマスの置き場は2つまで（ascLayout の skill1・skill2）
+// 【確定】2026-10-15 ユーザー決定（上位クラスの技が10個になった）：上位クラスは技10個すべてにマスを作る。
+//   盤面の形とマスの数（96）は変えず、方向0・1（上・右）の i 番目の小マス（起点から12・枝の先）を3つ目のスキルマス（skill3）にする
+//   ★ascLayout.js（形）は書き換えない＝保存してある番号はそのまま。上位クラスの盤面の中身は変わるので、2026-10-15 の移し替えで一度戻す
+export const ASC_EXTRA_SKILL = { ichiji: { i: 18, dirs: [0, 1] } }
+// n 個を4方向へ（なるべく同じ数・余りは上の方向から）。どの方向もスキルマスの置き場は2つまで（ascLayout の skill1・skill2）＋上位クラスは方向0・1に3つ目
 const capacityOf = (n) => Array.from({ length: ASC_DIRS }, (_, r) => Math.floor(n / ASC_DIRS) + (r < n % ASC_DIRS ? 1 : 0))
 
 // 技を方向へ置く。覚える順に、その技がよく使うステの方向（空きがあるところ）へ。
@@ -268,7 +291,9 @@ const buildBoard = (cls) => {
   const stats = areaStatsOf(cls)
   if (stats.length < ASC_DIRS) return null
   const placed = placeSkillsOf(cls, stats)
-  const skillOf = (n) => (n.role === 'skill1' ? placed[n.q][0] : n.role === 'skill2' ? placed[n.q][1] : null) || null
+  const ex = ASC_EXTRA_SKILL[stage]
+  const isSkill3 = (n) => !!ex && n.role === 'stat' && ex.dirs.includes(n.q) && n.id - 1 - n.q * layout.perQuad === ex.i
+  const skillOf = (n) => (n.role === 'skill1' ? placed[n.q][0] : n.role === 'skill2' ? placed[n.q][1] : isSkill3(n) ? placed[n.q][2] : null) || null
   // 小マス（技の入らなかったスキルの置き場も小マス）の番号の順にステを混ぜて置く
   const statIds = layout.nodes.filter(n => n.role !== 'start' && n.role !== 'big' && !skillOf(n)).map(n => n.id)
   const mixed = mixStatsOf(cls, statIds)

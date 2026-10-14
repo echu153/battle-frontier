@@ -110,8 +110,9 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
                 </span>
                 <span style={{ color: TEXT.label, width:'62px', textAlign:'right' }}>{s ? (s.mpPct ? mpLabel(s) : `MP${s.mp}×${row.uses}`) : ''}</span>
                 <span style={{ color: TEXT.label, width:'34px', textAlign:'right' }}>{s ? `${s.proc}%` : ''}</span>
-                <input type="number" min={1} max={SKILL_USE_MAX} value={row.uses} disabled={!row.name}
-                  onChange={e => setSlot(i, { uses: Math.max(1, Math.min(SKILL_USE_MAX, Number(e.target.value) || 1)) })}
+                {/* ★回数の上限がある技（狂鬼化＝1回まで など・2026-10-15）はその数まで */}
+                <input type="number" min={1} max={s?.usesMax ?? SKILL_USE_MAX} value={row.uses} disabled={!row.name}
+                  onChange={e => setSlot(i, { uses: Math.max(1, Math.min(s?.usesMax ?? SKILL_USE_MAX, Number(e.target.value) || 1)) })}
                   style={{ width:'42px', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', fontFamily:'monospace', fontSize:'11px', padding:'3px', textAlign:'center' }} />
                 <button onClick={() => moveSlot(i, -1)} disabled={i === 0 || !row.name} style={miniBtn('#7fa6d0')}>↑</button>
                 <button onClick={() => moveSlot(i, 1)} disabled={i === SKILL_SET_SLOTS - 1 || !row.name} style={miniBtn('#7fa6d0')}>↓</button>

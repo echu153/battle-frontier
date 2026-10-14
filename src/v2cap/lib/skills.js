@@ -139,7 +139,9 @@ export const validateSkillSet = (set, { lineage = [], learned = [], maxMp = Infi
     if (!lineage.includes(s.cls)) return `${e.name}は${lineage[0] || 'いまの職業'}では使えません（${s.cls}のスキル）`
     if (!have.has(e.name)) return `${e.name}はまだ覚えていません`
     const uses = Number(e.uses)
-    if (!Number.isInteger(uses) || uses < 1 || uses > SKILL_USE_MAX) return `${e.name}の使用回数は1〜${SKILL_USE_MAX}です`
+    // ★回数の上限がある技（usesMax・狂鬼化＝1回まで など・2026-10-15）はその数まで（サーバーの v2cap_set_skills と同じ文言）
+    const max = s.usesMax ?? SKILL_USE_MAX
+    if (!Number.isInteger(uses) || uses < 1 || uses > max) return `${e.name}の使用回数は1〜${max}です`
   }
   const cost = setMpCost(set)
   if (cost > maxMp) return `想定利用MPが最大MPを超えています（${cost} / ${maxMp}）`
@@ -152,6 +154,8 @@ export const validateSkillSet = (set, { lineage = [], learned = [], maxMp = Infi
 // 1回ずつでも収まらなければ後ろの枠から外す。
 // ★サーバーの v2cap_default_set と同じ規則（キャラ作成と、初めての転職で使う）
 export const DEFAULT_USES_MAX = 5
+// その技に足せる回数の上限（1枠最大5回・回数の上限がある技はその数まで）
+export const usesCapOf = (name) => Math.min(DEFAULT_USES_MAX, SKILL_BY_NAME[name]?.usesMax ?? DEFAULT_USES_MAX)
 export const defaultSetOf = (cls, learned = [], maxMp = 0) => {
   const have = new Set(learned)
   const names = skillsOf(cls).filter(s => have.has(s.name)).slice(0, SKILL_SET_SLOTS).map(s => s.name)
@@ -160,7 +164,7 @@ export const defaultSetOf = (cls, learned = [], maxMp = 0) => {
   for (let grew = true; grew;) {
     grew = false
     for (const e of set) {
-      if (e.uses >= DEFAULT_USES_MAX) continue
+      if (e.uses >= usesCapOf(e.name)) continue
       e.uses += 1
       if (setMpCost(set) > maxMp) e.uses -= 1
       else grew = true
@@ -195,7 +199,7 @@ export const fillSetOf = (set, names = [], { lineage = [], maxMp = 0 } = {}) => 
     grew = false
     for (const e of added) {
       const mp = SKILL_BY_NAME[e.name].mp
-      if (e.uses >= DEFAULT_USES_MAX || cost + mp > maxMp) continue
+      if (e.uses >= usesCapOf(e.name) || cost + mp > maxMp) continue
       e.uses += 1
       cost += mp
       grew = true

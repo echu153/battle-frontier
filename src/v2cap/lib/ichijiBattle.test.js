@@ -36,7 +36,9 @@ test('パッシブはこの版の名簿から渡る（狂戦士に今のⅡの�
   const f = toFighter(prof('狂戦士'), [])
   assert.deepEqual(f.passives.map(p => p.name), ['バーサク'])
   const sd = createSide(f)
-  assert.deepEqual(sd.pa.ex.lowHpDmg, [{ at: 50, pct: 15 }, { at: 25, pct: 30 }])
+  // 段の数字は 2026-10-15 に測って +15/+30 → +10/+20 にした（名簿から読む）
+  assert.deepEqual(sd.pa.ex.lowHpDmg, passiveOf('狂戦士').passive.lowHpDmg)
+  assert.deepEqual(sd.pa.ex.lowHpDmg.map(t => t.at), [50, 25])
   assert.equal(sd.pa.hpSteps.length, 0, '今のⅡのバーサク（HPの段でステが上がる）は付いていない')
   assert.deepEqual(toFighter(prof('戦士'), []).passives, [])
   // 竜騎士・体術師・暗殺者・狩人・魔銃士も今のⅡと同じ名前の職業。この版のパッシブだけが付く
@@ -46,7 +48,7 @@ test('パッシブはこの版の名簿から渡る（狂戦士に今のⅡの�
   }
 })
 
-test('バーサク：HP50%以下で与ダメージ+15%・25%以下で+30%', () => {
+test('バーサク：HP50%以下・25%以下で与ダメージ+（2026-10-15 に測って+10%・+20%）', () => {
   const dmgAt = (hpPct) => {
     const me = side('狂', '狂戦士', [])
     me.hp = Math.floor(me.base.hp * hpPct / 100)
@@ -56,11 +58,14 @@ test('バーサク：HP50%以下で与ダメージ+15%・25%以下で+30%', () =
     return log.find(l => l.type === 'normal').damage
   }
   const full = dmgAt(100)
-  assert.ok(Math.abs(dmgAt(50) / full - 1.15) < 0.01)
-  assert.ok(Math.abs(dmgAt(20) / full - 1.30) < 0.01)
+  const [hi, lo] = passiveOf('狂戦士').passive.lowHpDmg
+  assert.ok(Math.abs(dmgAt(50) / full - (1 + hi.pct / 100)) < 0.01)
+  assert.ok(Math.abs(dmgAt(20) / full - (1 + lo.pct / 100)) < 0.01)
 })
 
-test('跳躍：ジャンプは1ターン敵の攻撃を受けず、次の行動で着地して物理×着地の倍率（竜の血で+15%）', () => {
+test('跳躍：ジャンプは跳んでいる間30%で回避し、次の行動で着地して物理×着地の倍率（竜の血で+15%）', () => {
+  // 【確定】2026-10-15 チャット版の設計：「跳躍中は完全回避」をやめて30%で回避 → 測って40%にした
+  assert.equal(SKILL_BY_NAME['ジャンプ'].jump.evade, 40)
   const me = side('竜', '竜騎士', ['ジャンプ'])
   const foe = dummy()
   const log = []
@@ -68,9 +73,11 @@ test('跳躍：ジャンプは1ターン敵の攻撃を受けず、次の行動�
   assert.ok(me.jumping)
   assert.equal(log.at(-1).type, 'jump')
   const hp0 = me.hp
-  takeAction(foe, me, mid, log)
-  assert.equal(me.hp, hp0, '跳んでいるあいだは当たらない')
+  takeAction(foe, me, fixed(0.1), log)   // 乱数10 < 40 ＝ かわす
+  assert.equal(me.hp, hp0, '回避に入れば当たらない')
   assert.ok(log.some(l => l.type === 'airEvade'))
+  takeAction(foe, me, mid, log)          // 乱数50 ≥ 40 ＝ 当たる
+  assert.ok(me.hp < hp0, '回避に入らなければ跳んでいても当たる')
   const fhp = foe.hp
   takeAction(me, foe, mid, log)
   assert.equal(me.jumping, null)
@@ -90,29 +97,37 @@ test('跳躍：ハイジャンプは2ターン敵の攻撃を受けず、その�
   const foe = dummy()
   const log = []
   takeAction(me, foe, mid, log)            // 跳ぶ
-  takeAction(foe, me, mid, log)
+  takeAction(foe, me, fixed(0.1), log)
   takeAction(me, foe, mid, log)            // 空中で待つ
   assert.ok(me.jumping)
   assert.ok(log.some(l => l.type === 'airborne'))
-  takeAction(foe, me, mid, log)
-  assert.equal(me.hp, me.base.hp, '2ターンとも当たらない')
+  takeAction(foe, me, fixed(0.1), log)
+  assert.equal(me.hp, me.base.hp, '回避に入れば当たらない（2ターン目も跳んでいる）')
   takeAction(me, foe, mid, log)            // 着地
   assert.equal(me.jumping, null)
   assert.ok(log.some(l => l.type === 'strike' && l.label === 'ハイジャンプ（着地）'))
 })
 
-test('分身：分身の術で1体 → 相手の攻撃を1回肩代わりして消える（影の連携：分身1体につき追撃）', () => {
+test('分身：分身の術で1体 → 攻撃を受けたとき決まった%で身代わりになって消える（影の連携：分身1体につき追撃）', () => {
+  // 【確定】2026-10-15 チャット版の設計：分身は最大3体・30%で身代わり（全部は肩代わりしない）
+  // 身代わりの%は 2026-10-15 に測って 30→15 にした（名簿から読む）。乱数10なら身代わり・50なら当たる
+  const guard = passiveOf('忍者').passive.cloneGuard
+  assert.ok(guard > 10 && guard <= 50)
   const me = side('忍', '忍者', ['分身の術'])
   const foe = dummy()
   const log = []
   takeAction(me, foe, mid, log)
   assert.equal(me.stk.clone, 1)
-  takeAction(foe, me, mid, log)
-  assert.equal(me.hp, me.base.hp)
+  takeAction(foe, me, mid, log)          // 乱数50 ≥ 身代わりの% ＝ 身代わりにならない
+  assert.ok(me.hp < me.base.hp)
+  assert.equal(me.stk.clone, 1)
+  const hp1 = me.hp
+  takeAction(foe, me, fixed(0.1), log)   // 乱数10 < 身代わりの% ＝ 身代わり
+  assert.equal(me.hp, hp1)
   assert.equal(me.stk.clone, 0)
   assert.ok(log.some(l => l.type === 'cloneTaken'))
   // 分身がいると、自分の攻撃のあとに分身の追撃
-  const me2 = side('忍2', '忍者', ['影斬り'])
+  const me2 = side('忍2', '忍者', ['手裏剣'])   // 影斬りは当てると分身+1（2026-10-15）なので、分身の増えない技で見る
   me2.stk.clone = 2
   const l2 = []
   takeAction(me2, dummy(), mid, l2)
@@ -175,14 +190,14 @@ test('魔銃士：物理と魔法の両方で殴る（同じ倍率の物理だ�
   assert.ok(l3.find(l => l.type === 'skill').damage < hybrid)
 })
 
-test('リザレクション：戦闘中1回だけ、HPが0になったらHP50%で立ち上がる', () => {
+test('リザレクション：戦闘中1回だけ、HPが0になったら決まったHP%で立ち上がる（2026-10-15 に測って50%→35%）', () => {
   const me = side('司', '聖職者', ['リザレクション'])
   const foe = dummy({ str: 100000 })
   const log = []
   takeAction(me, foe, mid, log)
-  assert.equal(me.reviveReady, 50)
+  assert.equal(me.reviveReady, S('リザレクション').revive.pct)
   takeAction(foe, me, mid, log)
-  assert.equal(me.hp, Math.floor(me.base.hp * 0.5))
+  assert.equal(me.hp, Math.floor(me.base.hp * S('リザレクション').revive.pct / 100))
   assert.ok(log.some(l => l.type === 'revive'))
   takeAction(foe, me, mid, log)
   assert.ok(me.hp <= 0, '2回目は立ち上がらない')
@@ -299,17 +314,27 @@ test('続けて使えない技・溜めが無いと出ない技は飛ばして�
   assert.ok(l2.some(l => l.type === 'skill' && l.skill === '気弾'), '気が無いので内功は飛ばす')
 })
 
-test('照準：溜めた数だけ次の射撃が+15%ずつ（使うとリセット）', () => {
-  const shot = (aims) => {
-    const me = side('狙', 'アークアーチャー', [...Array(aims).fill('照準'), '強弓'])
-    for (let i = 0; i < aims; i++) takeAction(me, dummy(), mid, [])
+test('照準：照準1つにつきクリティカル率+5%（最大3・射撃しても減らない）', () => {
+  // 【確定】2026-10-15 チャット版の設計（前は「次の射撃が+15%ずつ・使うとリセット」）
+  const me = side('狙', 'アークアーチャー', ['照準', '照準', '強弓'])
+  takeAction(me, dummy(), mid, [])
+  takeAction(me, dummy(), mid, [])
+  assert.equal(me.stk.aim, 2)
+  assert.equal(me.aimCritPer, 5)
+  takeAction(me, dummy(), mid, [])
+  assert.equal(me.stk.aim, 2, '射撃しても減らない')
+  // クリティカル率に乗る：乱数を、照準なしでは外れ・照準2つ（+10%）なら入る値にして比べる
+  const critAt = (aims, r) => {
+    const m = side('狙2', 'アークアーチャー', ['強弓'])
+    m.stk.aim = aims
+    m.aimCritPer = 5
     const log = []
-    takeAction(me, dummy(), mid, log)
-    assert.equal(me.stk.aim, 0)
-    return log.find(l => l.type === 'skill' && l.skill === '強弓').damage
+    takeAction(m, dummy(), fixed(r), log)
+    return log.find(l => l.type === 'skill').crit
   }
-  const d0 = shot(0)
-  assert.ok(Math.abs(shot(2) / d0 - 1.3) < 0.02)
+  // 当てる・出すの判定（発動率80・命中）にも同じ乱数が使われるので、どちらも通る小さめの値で見る
+  const base = [0.05, 0.1, 0.15, 0.2, 0.25].find(r => !critAt(0, r) && critAt(2, r))
+  assert.ok(base !== undefined, '照準2つでクリティカルになる乱数がある（照準なしでは出ない）')
 })
 
 test('槍の型：当てるたびにコンボ+1（コンボ1につき与ダメージ+1%）', () => {

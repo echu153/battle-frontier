@@ -35,6 +35,7 @@ import {
 import {
   initIchiji, collectExPassives, passiveDealMult, ichijiSkip, ichijiSkillPrep, consumeDodgeBoost,
   incomingCut, guardHealPct, gainHp, ichijiAfterAction, tickIchiji, hpPctOf, STK_LABEL,
+  imbueFxOf, IMBUE_FX, agitCutOf, AGIT_MAX, shieldAbsorb, holyGain, ailUpOf,
 } from './battleIchiji.js'
 // ★防具のセット能力（「レベルキャップあり」版・2026-10-14）。今のⅡのキャラ・敵は setFx を持たないので何も起きない
 import {
@@ -178,6 +179,8 @@ export const liveStats = (side, acting = false) => {
   if (acting && side.switchOn) for (const s of side.pa.switches) add(s.stat, s.pct)
   // ★一次職：影の連携（忍者）＝分身がいない間はAGI+
   if (side.pa.ex?.noCloneAgi && !(side.stk?.clone > 0)) add('agi', side.pa.ex.noCloneAgi)
+  // ★上位クラス（2026-10-15）：光の帳＝バリアがある間のステ+%
+  if (side.shieldStat && side.shield > 0) for (const [k, v] of Object.entries(side.shieldStat)) add(k, v)
   // ★防具のセット能力：毒龍の鱗（自分が状態異常の間ステ+%）
   if (side.setFx?.whileAilStat && ailCountOfSide(side) > 0) {
     for (const [k, v] of Object.entries(side.setFx.whileAilStat)) add(k, v)
@@ -213,6 +216,9 @@ export const liveStats = (side, acting = false) => {
   for (const c of side.en.convertAdds) {
     eff[c.to] = (eff[c.to] || 0) + Math.round((eff[c.from] || 0) * (c.pct / 100))
   }
+  // ★上位クラス（2026-10-15）：魔法剣士のエンチャント＝宿りがある間、INTの◯%をSTRに上乗せ（INTは減らない）
+  const imb = side.pa.ex?.imbue
+  if (imb?.intToStr && side.imbue?.turns > 0) eff.str = (eff.str || 0) + Math.round((eff.int_stat || 0) * imb.intToStr / 100)
   return eff
 }
 
@@ -222,9 +228,10 @@ export const liveStats = (side, acting = false) => {
 export const createSide = (fighter, band = null) => {
   const stats = {}
   for (const k of STAT_KEYS) stats[k] = fighter.stats?.[k] ?? fighter[k] ?? 0
+  // ★usesMax … 回数の上限がある技（v2cap の狂鬼化＝1回まで など）。編成で多く置いても戦闘ではそこまで
   const all = (fighter.slots || skillsOf(fighter.cls).map(s => ({ skill: s, uses: 3 })))
     .filter(s => s?.skill)
-    .map(s => ({ skill: s.skill, uses: s.uses ?? 3 }))
+    .map(s => ({ skill: s.skill, uses: Math.min(s.uses ?? 3, s.skill.usesMax ?? Infinity) }))
   // ★パッシブは枠から取らない。**その職業のものが最初から効いている**（2026-08-23）
   //   ＝他職のパッシブは持ち込めない。枠に紛れ込んでいても無視する
   // ★fighter.passives を渡したときはそれを使う（「レベルキャップあり」版は自分の名簿のパッシブを渡す。
@@ -378,7 +385,8 @@ const rememberSkill = (side, skillName) => {
 
 // 受けるとき側の軽減。骸の壁（1回きり）と竜鱗の加護（確率）はここでまとめて掛ける
 // me は攻撃した側（跳ね返しの戻り先）。kind は 'phys' | 'mag'
-const applyIncoming = (me, foe, dmg, kind, rng, log) => {
+// pre … 防御で減る前のダメージ（v2cap の聖騎士の聖光が「防御や軽減で減らしたぶん」を数える）。無ければ dmg
+const applyIncoming = (me, foe, dmg, kind, rng, log, pre = null) => {
   if (dmg <= 0) return 0
   let d = dmg
   // 衰弱：撃つ側が弱っていると、与えるダメージが減る（物理も魔法もまとめて）
@@ -418,7 +426,11 @@ const applyIncoming = (me, foe, dmg, kind, rng, log) => {
     if (hp > 0) guardHeal = Math.floor((before - d) * hp / 100)
   }
   const out = Math.max(1, Math.floor(d))
-  foe.hp -= out
+  // ★上位クラス（2026-10-15）：聖騎士の聖光（防御と軽減で減らしたぶんの%を溜める）・聖職者のバリア（HPより先に削れる）
+  if (foe.pa.ex?.holy) holyGain(foe, Math.max(0, (pre ?? dmg) - out))
+  const sh = shieldAbsorb(foe, out)
+  if (sh.absorbed > 0) log.push({ side: foe.name, type: 'shieldHit', n: sh.absorbed, left: foe.shield })
+  foe.hp -= sh.left
   // ★一次職：受けたダメージを覚える（報復の一撃・忍耐・リワインド）
   foe.lastTaken = out
   if (foe.takenLog) {
@@ -432,6 +444,12 @@ const applyIncoming = (me, foe, dmg, kind, rng, log) => {
     foe.gutsUsed = true
     foe.hp = 1
     log.push({ side: foe.name, type: 'guts' })
+  }
+  // ★上位クラス（2026-10-15）：狂鬼化（次に倒れるダメージを1度だけHP1で耐える）
+  if (foe.hp <= 0 && foe.lastStand) {
+    foe.lastStand = false
+    foe.hp = 1
+    log.push({ side: foe.name, type: 'lastStand' })
   }
   // ★防具のセット能力：番人の守り（戦闘中1回、HP1で耐える）・天騎士の誓い（戦闘中1回、HP30%以下で回復）
   setAfterDamage(foe, log, healMaxAmount, gainHp)
@@ -476,11 +494,14 @@ const checkRevive = (side, log) => {
 
 // 回復量。聖職者の「回復量+20%」と、異端審問官の「自身の回復量0.8倍」がここで効く
 // エンチャントの回復量+%と、状態異常「回復阻害」もここで掛かる
+// ★上位クラス（2026-10-15）：ゴスペルの間は回復量×
+const gospelMultOf = (side) => (side.gospel?.turns > 0 ? (side.gospel.healMult || 1) : 1)
 const healAmount = (side, eff, rate) =>
   Math.max(1, Math.floor(
     healOf(eff, rate) * (1 + side.pa.healBonus / 100) * side.healMult
     * (1 + side.en.healPct / 100) * healMultOf(side.ail)
     * Math.max(0, 1 + side.evo.heal / 100)   // 武器の進化：受ける回復量±%
+    * gospelMultOf(side)
   ))
 
 // ★一次職：最大HPの◯%を回復（内功・魂喰らい・奇跡・再生薬）。回復量の補正はふつうの回復と同じだけ掛ける
@@ -488,7 +509,7 @@ const healMaxAmount = (side, pct) =>
   Math.max(1, Math.floor(side.base.hp * pct / 100
     * (1 + side.pa.healBonus / 100) * side.healMult
     * (1 + side.en.healPct / 100) * healMultOf(side.ail)
-    * Math.max(0, 1 + side.evo.heal / 100)))
+    * Math.max(0, 1 + side.evo.heal / 100) * gospelMultOf(side)))
 
 // 「最大HPの◯%」のような割合の回復・消耗。最低1（0にすると付いていないのと同じになる）
 const pctHp = (max, pct) => (pct > 0 ? Math.max(1, Math.floor(max * pct / 100)) : 0)
@@ -541,7 +562,13 @@ const tryInflict = (me, foe, a, rng, log) => {
     log.push({ side: foe.name, type: 'immune', ail: AIL_LABEL[a.key] })
     return false
   }
-  const base = a.chance + (me?.evo?.ail?.rate || 0)
+  // ★上位クラス（2026-10-15）：不動の誓い・ゴスペルの間は状態異常にかからない
+  if (foe?.ailImmune > 0) {
+    log.push({ side: foe.name, type: 'immune', ail: AIL_LABEL[a.key] })
+    return false
+  }
+  // ★上位クラス：死の刻印・賢者の石（付ける確率+）
+  const base = a.chance + (me?.evo?.ail?.rate || 0) + ailUpOf(me, a.key)
   const raw = inflictChance(base, foe.en, a.key)
     - (foe?.evo?.ail?.resist || 0) + (foe?.evo?.ail?.weak || 0)
     - (foe?.pa?.ailResist || 0)   // ★武僧：状態異常が効きづらい
@@ -565,10 +592,23 @@ const tryInflict = (me, foe, a, rng, log) => {
   if (inflict(foe.ail, a.key, opt)) {
     if (foe.ailDiminish && AIL_DIMINISH_KEYS.includes(a.key)) foe.ailTimes[a.key] = (foe.ailTimes[a.key] || 0) + 1
     shortenAil(foe, a.key)   // ★防具のセット能力：遺物の加護・深淵の加護（受けた状態異常の持続−1）
+    // ★上位クラス（2026-10-15）：封縛結界の間、相手にかけた状態異常は1ターン長く続く
+    if (me?.bind?.turns > 0 && me.bind.ailExtend && foe.ail[a.key]?.turns > 0) foe.ail[a.key].turns += me.bind.ailExtend
     log.push({ side: foe.name, type: 'ailment', ail: AIL_LABEL[a.key] })
+    // ★上位クラス：異端審問官は相手に封印をかけるたびに罪+1
+    if (a.key === 'seal') gainSin(me, 1, log)
     return true
   }
   return false
+}
+
+// ★上位クラス（2026-10-15）：異端審問官の罪（相手が強化・回復を使うたび／相手に封印をかけるたび）
+const gainSin = (side, n, log) => {
+  const s = side?.pa?.ex?.sin
+  if (!s || n <= 0) return
+  const before = side.sin || 0
+  side.sin = Math.min(s.max, before + n)
+  if (side.sin > before) log.push({ side: side.name, type: 'sin', n: side.sin })
 }
 
 // 攻撃が当たったときのエンチャント。状態異常の付与と、積み上がるステータス補正
@@ -726,7 +766,17 @@ export const hitMultOf = (me, foe) => {
 export const critDmgOf = (me) => {
   const st = me.pa.hitStack
   return me.pa.critDmg + (st ? Math.min(st.max, me.hitStacks) * (st.critDmg || 0) : 0)
+    + (me.lockOn?.turns > 0 ? (me.lockOn.critDmg || 0) : 0)   // ★上位クラス：ロックオン
 }
+// ★上位クラス（2026-10-15）：照準1つにつきクリティカル率+（スキル以外の攻撃にも乗る）
+const aimCritOf = (me) => (me.aimCritPer ? (me.stk?.aim || 0) * me.aimCritPer : 0)
+// ★上位クラス：嵐の構えの間は1ヒットでコンボ+n
+const comboStepOf = (me) => (me.comboBoost?.turns > 0 ? me.comboBoost.n : 1)
+// ★上位クラス：跳躍中の相手に当たらないか（竜騎士。evade＝回避の%・無ければ必ず当たらない＝前の形）
+const airDodges = (foe, rng) => !!foe.jumping && (foe.jumping.evade == null || roll(foe.jumping.evade, rng))
+// ★上位クラス：分身が身代わりになるか（忍者。cloneGuard＝身代わりの%・無ければ必ず＝前の形）
+const cloneTakes = (foe, rng) => foe.stk?.clone > 0
+  && (foe.pa?.ex?.cloneGuard == null || roll(foe.pa.ex.cloneGuard, rng))
 // 精密照準の積み上げぶん（クリティカル率）
 export const critRateStackOf = (me) => {
   const st = me.pa.hitStack
@@ -777,7 +827,8 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   // ★封印：MPを使う技は出せない。外から枠を指定されても（opt.idx）通常攻撃へ落とす
   if (idx !== null && sealed && usesMp(me.slots[idx]?.skill)) idx = null
   const slot = idx === null ? null : me.slots[idx]
-  const skill = slot?.skill || null
+  // ★let … リピート（v2cap のクロノマンサー）は発動したあと「直前に撃った技」へ差し替わる
+  let skill = slot?.skill || null
   // 封印のせいで技が出せないときは、通常攻撃の前に1行出す（MPが尽きただけのときは出さない）
   //   （findSlot と同じ見方：封印が無ければ撃てた枠があるか）
   if (!skill && sealed && me.slots.some(s => s?.skill && s.uses > 0 && usesMp(s.skill)
@@ -791,19 +842,54 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   const stance = skill ? me.stance : null
   // ★サイレンス・恐怖：スキルの発動率-20%（ATBでは atb.js が必要ゲージへ読み替える）
   const silenced = procCutOf(me.ail)
-  if (skill && !opt.noProc && !roll(skill.proc + me.pa.procBonus + me.en.procBonus + me.evo.proc + (stance?.proc || 0) - silenced, rng)) {
+  // ★上位クラス（2026-10-15）：動揺（サイキッカーにかけられた数×3%）・竜翔（跳躍の技の発動率+）
+  const procUp = (skill?.jump && me.soar?.turns > 0 ? (me.soar.proc || 0) : 0) - agitCutOf(me)
+  if (skill && !opt.noProc && !roll(skill.proc + me.pa.procBonus + me.en.procBonus + me.evo.proc + (stance?.proc || 0) - silenced + procUp, rng)) {
     log.push({ side: me.name, type: 'misfire', skill: skill.name })
     me.rage = 0
     // 居合の構えはここで威力2倍。武器の進化「居合の心得」も同じ枠で乗る
     normalAttack(me, foe, rng, log, me.pa.misfireAtkMult * (1 + me.evo.misfireDmg / 100))
+    // ★上位クラス：居合の構え（不発の通常攻撃のあと納刀状態になる）
+    const ms = me.pa.ex?.misfireStance
+    if (ms && !me.stance && me.hp > 0) {
+      me.stance = { ...ms }
+      log.push({ side: me.name, type: 'stance', skill: '居合の構え' })
+    }
+    // ★上位クラス：精神感応（相手のスキルが不発するたび、念動の追撃）
+    const mc = foe.pa.ex?.misfireChase
+    if (mc && foe.hp > 0 && me.hp > 0) {
+      strike(foe, me, { mult: mc.mult, kind: 'mag', atkStat: 'str', add: [{ stat: 'int_stat', rate: mc.mult }], label: '念動の追撃' }, rng, log)
+    }
     return
   }
   if (!skill) { me.rage = 0; normalAttack(me, foe, rng, log); return }
 
+  // ★上位クラス（2026-10-15）：リピート＝直前に撃った技をもう一度（その技のMPは半分）。
+  //   直前が切り札・奥義・クイック・リピート（noRepeatTarget）か、まだ何も撃っていなければ通常攻撃（MPと回数は減らさず、次の枠へ）
+  let mpCost = mpCostOf(me, skill)
+  if (skill.repeatLast) {
+    const prev = me.lastExec
+    if (!prev || prev.noRepeatTarget || prev.repeatLast || prev.extraTurn) {
+      me.ptr = (idx + 1) % me.slots.length
+      log.push({ side: me.name, type: 'repeatFail', skill: skill.name })
+      normalAttack(me, foe, rng, log)
+      return
+    }
+    log.push({ side: me.name, type: 'repeat', skill: skill.name, target: prev.name })
+    mpCost = Math.floor(mpCostOf(me, prev) * (skill.repeatLast.mpMult ?? 0.5))
+    skill = prev
+  }
+
   // 納刀を使う：この行動だけ威力×mult。条件つきの効果（whileStance）もここで開く
   const ws = stance ? (skill.whileStance || null) : null
   if (stance) me.stance = null
-  me.mp -= mpCostOf(me, skill)
+  // ★上位クラス：二の太刀が見る「直前の技を納刀中に撃ったか」（この行動の前の値を残してから入れ替える）
+  me.prevStanced = me.thisStanced || false
+  me.thisStanced = !!stance
+  // ★上位クラス：払ったMP・払う前のMP（魔銃士の魔弾・エーテルバレット・アルカナバレット・オーバーロードショット）
+  me.mpBefore = me.mp
+  me.mpPaid = Math.min(me.mp, mpCost)
+  me.mp -= mpCost
   // ★すてみ（狂戦士）：現在HPの n% を払って撃つ。払っても死なない（1は残る）
   if (skill.hpCostPct) {
     const pay = Math.min(Math.max(0, me.hp - 1), Math.floor(me.hp * skill.hpCostPct / 100))
@@ -813,10 +899,14 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     }
   }
   // ★一次職：最大HPの割合を払う（マッドラッシュはHP50%以上のときだけ・血の誓い）。払っても死なない
+  // ★上位クラス（2026-10-15）：狂鬼化で耐えるまでのあいだは払うHPが半分。払った量はブラッドサクリファイスが使う
+  me.lastPaid = 0
   if (skill.hpCostMax && hpPctOf(me) >= (skill.hpCostMax.ifAbove ?? 0)) {
-    const pay = Math.min(Math.max(0, me.hp - 1), Math.floor(me.base.hp * skill.hpCostMax.pct / 100))
+    const half = me.lastStand ? Math.max(0, 1 - (me.lastStandCut ?? 50) / 100) : 1
+    const pay = Math.min(Math.max(0, me.hp - 1), Math.floor(me.base.hp * skill.hpCostMax.pct / 100 * half))
     if (pay > 0) {
       me.hp -= pay
+      me.lastPaid = pay
       log.push({ side: me.name, type: 'hpCost', skill: skill.name, damage: pay })
     }
   }
@@ -838,6 +928,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   me.repeatCount = me.lastSkill === skill.name ? (me.repeatCount || 0) + 1 : 0
   me.switchOn = me.lastSkill !== null && me.lastSkill !== skill.name
   me.lastSkill = skill.name
+  me.lastExec = skill   // ★上位クラス：リピートが撃ち直す「直前に撃った技」
   const prevKind = me.lastKind
   me.lastKind = (skill.kind === 'phys' || skill.kind === 'mag') ? skill.kind : me.lastKind
   me.acts += 1
@@ -854,27 +945,36 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
 
   // ★一次職：跳躍（竜騎士）。この行動は跳ぶだけ。次の行動（ハイジャンプは2つ先）で着地して斬る
   if (skill.jump) {
-    me.jumping = { left: skill.jump.turns, mult: skill.jump.mult * off * ascDmgMult, name: skill.name }
+    // ★上位クラス（2026-10-15）：evade＝跳んでいる間の回避%（無ければ必ず当たらない）・着地の防御無視と状態異常（天竜落とし）
+    me.jumping = { left: skill.jump.turns, mult: skill.jump.mult * off * ascDmgMult, name: skill.name,
+      evade: skill.jump.evade ?? null, defPen: skill.jump.defPen || 0, ail: skill.jump.ail || null }
     log.push({ side: me.name, type: 'jump', skill: skill.name, turns: skill.jump.turns })
     return
   }
 
   if (skill.kind === 'phys' || skill.kind === 'mag') {
+    // ★上位クラス（2026-10-15）：相手の罠が先に発動する（狩人）。罠で倒れたら攻撃は出ない
+    springTrap(me, foe, rng, log)
+    if (me.hp <= 0) return
     // ★一次職：跳躍中の相手には当たらない／分身が1回ぶん肩代わりする（どちらもダメージなし）
-    if (foe.jumping) {
+    //   ★上位クラス：跳躍は evade％で回避（竜騎士の30%）・分身は cloneGuard％で身代わり（忍者の30%）
+    if (airDodges(foe, rng)) {
       log.push({ side: me.name, type: 'airEvade', skill: skill.name })
       foe.justDodged = true
       foe.justHurt = false
-    } else if (foe.stk?.clone > 0) {
+      foe.dodgeCount = (foe.dodgeCount || 0) + 1
+    } else if (cloneTakes(foe, rng)) {
       foe.stk.clone -= 1
       log.push({ side: foe.name, type: 'cloneTaken', skill: skill.name, left: foe.stk.clone })
     } else {
       let raw = 0
+      let rawPre = 0   // ★上位クラス：防御で減る前のぶん（聖騎士の聖光）
       let crit = false
       let hits = 0
       let missed = 0
       // 第六感の「貫通+10%」はスキルの防御貫通に足す。武器の進化ぶんも同じ枠
-      const defPen = Math.min(1, (skill.defPen || 0) + (ws?.defPen || 0) + me.pa.defPenBonus / 100 + me.evo.defPen / 100
+      // ★上位クラス：準備（ip）が足す防御無視（コンボ・薬効）と、雷の宿りのぶんは ip のあとで足す
+      let defPen = Math.min(1, (skill.defPen || 0) + (ws?.defPen || 0) + me.pa.defPenBonus / 100 + me.evo.defPen / 100
         + (whileStackOn(skill, me) ? (skill.whileStack.defPen || 0) : 0))
       // ★条件つき吸収（狂戦士の血啜り）：**撃つ前から**相手がその状態異常なら吸える
       //   （この技自身が付けた出血では吸えない＝先に撒いてから吸う流れになる）
@@ -894,6 +994,8 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       const varMult = varianceMultOf(skill, rng)   // ギャンブラー：1行動につき1回だけ振る
       // ★一次職：倍率・連撃数・クリティカル率・上乗せダメージ・溜めの消費（1行動につき1回）
       const ip = ichijiSkillPrep(me, foe, skill, eMe, eFoe, log)
+      // ★上位クラス（2026-10-15）：先に状態異常を付ける技（爆炎毒＝両方付けばこの一撃から化学反応が乗る）
+      if (skill.preAil && skill.ails) for (const a of skill.ails) tryInflict(me, foe, { ...a, chance: a.chance * off }, rng, log)
       // ★防具のセット能力：与ダメージ+％（深淵の力・群狼の牙・業火・蜘蛛の糸・峰風）は一次職のぶんと同じくダメージ全体に掛ける
       const dealMult = passiveDealMult(me, foe) * setDealMult(me, foe, eMe, eFoe)
       // ★防具のセット能力：蜃気楼（受ける側が戦闘中1回、この攻撃を完全にかわす＝全部の発が外れる）
@@ -903,14 +1005,23 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       //   （今のⅡの倍率は主のステにだけ掛かる＝damageOf の base。そちらは変えない）
       const ichijiK = ip.mult * dealMult
       const nHits = ip.hits ?? (skill.hitMults ? skill.hitMults.length : (skill.hits || 1))
+      // ★上位クラス（2026-10-15）：宿り（魔法剣士）。雷は防御無視＋15%（トリニティブレイドは雷の段だけ）
+      const imb = imbueFxOf(me, skill)
+      defPen = Math.min(1, defPen + (ip.defPen || 0) + (imb && !skill.hitElems && imb.elem === 'thunder' ? IMBUE_FX.thunder.defPen * imb.k : 0))
+      const wantPre = !!foe.pa.ex?.holy
+      const elemHit = []   // トリニティブレイド：当たった段の属性
       // ★「撃った」行より後ろに流したいログを貯める（1発ごとの状態異常）
       const afterAil = []
       for (let h = 0; h < nHits; h++) {
         if (mirage) { missed++; continue }
         // ★多段で1発ごとに威力が上がる（体術師の飛天三角蹴り）。1発目は素のまま
         const ramp = skill.rampHit ? 1 + (skill.rampHit / 100) * h : 1
+        // ★上位クラス（2026-10-15）：納刀の倍率を技が上書きする（秘剣・叢雲＝納刀中1.8倍・納刀していないと0.8倍）
+        const stanceMult = stance ? (skill.stanceMult ?? stance.mult ?? 1) : (skill.noStanceMult ?? 1)
+        // ★上位クラス：トリニティブレイドは雷の段だけ防御無視+（宿りの雷と同じ量）
+        const hitDefPen = skill.hitElems?.[h] === 'thunder' ? Math.min(1, defPen + IMBUE_FX.thunder.defPen) : defPen
         const r = resolveAttack({
-          attacker: eMe, defender: eFoe, mult: ramp * baseMultOf(skill, h, ip) * burst * (stance?.mult || 1) * lowHpMultOf(skill, foe)
+          attacker: eMe, defender: eFoe, mult: ramp * baseMultOf(skill, h, ip) * burst * stanceMult * lowHpMultOf(skill, foe)
             * highHpMultOf(skill, me) * vsBuffMultOf(skill, foe) * repeatMultOf(skill, me)
             * switchKindMultOf(skill, prevKind) * varMult
             * comboMultOf(skill, prevSkill) * airMultOf(skill, wasAir)
@@ -918,37 +1029,45 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
             * beastMultOf(skill, prevForm) * whileStackMultOf(skill, me)
             * whileFormMultOf(skill, prevForm) * vsAilMultOf(skill, foe) * groundMultOf(skill, wasAir),
           kind: skill.kind, atkStat: skill.src || null,
-          defPen, add: skill.add || null,
-          sureHit: !!skill.sureHit, sureCrit: !!skill.sureCrit || ip.sureCrit, noCrit: !!skill.noCrit,
-          acc: skill.acc ?? 100,
+          defPen: hitDefPen, add: skill.add || null,
+          sureHit: !!skill.sureHit || !!ip.sureHit, sureCrit: !!skill.sureCrit || ip.sureCrit, noCrit: !!skill.noCrit,
+          acc: skill.acc ?? 100, wantPre,
           // ★スキル自身の命中補正（skill.hitBonus）もここで足す＝「必中ではないが当てやすい技」を作れる
           hitBonus: me.pa.hitBonus + me.en.hitBonus + evoHit(me, foe) + (skill.hitBonus || 0)
             + ailAccPct(me.ail)   // 暗闇：命中-25%
             + (wasAir ? (skill.whileAir?.hitBonus || 0) : 0),   // 空中からは狙いが通る（体術師）
           evaBonus: foe.pa.evaBonus + foe.en.evaBonus + evoEva(foe) + foresightEva(foe, skill.name)
             + (foe.air ? AIR_EVA : 0),
-          critBonus: me.pa.critBonus + evoCrit(me, foe) + critRateStackOf(me) + ip.crit + (me.critUp || 0),
+          // ★上位クラス：納刀中にクリティカル率+の技（居合斬）
+          critBonus: me.pa.critBonus + evoCrit(me, foe) + critRateStackOf(me) + ip.crit + (me.critUp || 0) + (ws?.crit || 0),
           hitMult: hitMultOf(me, foe),
           critDmg: critDmgOf(me),
           redMult: (1 + (foe.pa.defRed || 0) / 100) * chargeGuardOf(foe),
           defRule: foe.defRule,
         }, rng)
+        let dmgAtResolve = r.damage
+        let preAtResolve = r.pre ?? r.damage
         // ★一次職：物理と魔法の両方で殴る技（魔銃士）。魔法のぶんは同じ当たり・クリティカルのまま INT 同士で計算する
         if (skill.hybrid && r.hit) {
           const r2 = resolveAttack({
             attacker: eMe, defender: eFoe, mult: skill.hybrid.mag * vsAilMultOf(skill, foe),
-            kind: 'mag', defPen, sureHit: true, sureCrit: !!r.crit, noCrit: !r.crit, acc: 100,
+            kind: 'mag', defPen: hitDefPen, sureHit: true, sureCrit: !!r.crit, noCrit: !r.crit, acc: 100,
             hitBonus: 0, evaBonus: 0, critBonus: 0, hitMult: 1, critDmg: critDmgOf(me),
-            redMult: 1 + (foe.pa.defRed || 0) / 100, defRule: foe.defRule,
+            redMult: 1 + (foe.pa.defRed || 0) / 100, defRule: foe.defRule, wantPre,
           }, rng)
           r.damage += r2.damage
+          dmgAtResolve += r2.damage
+          preAtResolve += r2.pre ?? r2.damage
         }
         if (r.hit && ichijiK !== 1) r.damage = Math.max(1, Math.floor(r.damage * ichijiK))
         // ★防具のセット能力：大地の守り（受けるクリティカルダメージ−%・1発ごと）
         if (r.hit && r.crit && foe.setFx?.critTakenCut) r.damage = Math.max(1, Math.floor(r.damage * setCritTakenMult(foe)))
         // ★一次職：クリティカルしたときだけ伸びる技（絶影狙撃）・当てるたびコンボ（槍の型）
         if (skill.critMult && r.hit && r.crit) r.damage = Math.floor(r.damage * skill.critMult)
-        if (r.hit && me.pa.ex?.combo) me.combo = Math.min(me.pa.ex.combo.max, (me.combo || 0) + 1)
+        if (r.hit && me.pa.ex?.combo) me.combo = Math.min(me.pa.ex.combo.max, (me.combo || 0) + comboStepOf(me))
+        // ★上位クラス：防御で減る前のぶん（この発の倍率は当たったあとと同じだけ掛ける）・当たった段の属性
+        if (r.hit && wantPre) rawPre += Math.floor(r.damage * preAtResolve / Math.max(1, dmgAtResolve))
+        if (r.hit && skill.hitElems) elemHit.push(skill.hitElems[h])
         // ★クリティカルの与ダメージ+%は**1発ずつ**掛ける（多段でクリした発だけ伸びる）
         // ★ヒットごとに状態異常を試す技（連撃で少しずつ積む）
         if (r.hit && skill.ailPerHit && skill.ail) {
@@ -961,11 +1080,14 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
         if (r.crit && r.hit) crit = true
       }
       // ★一次職：上乗せダメージ（報復の一撃・城塞崩し＝直前に受けたダメージ／セイクリッドノヴァ＝回復したHP）
-      if (hits > 0 && ip.flat > 0) raw += ip.flat
+      if (hits > 0 && ip.flat > 0) { raw += ip.flat; rawPre += ip.flat }
+      // ★上位クラス：防御で減る前のぶんと、当たったぶんの比（このあと掛かる倍率はどちらにも同じだけ掛かる）
+      const preScale = wantPre && raw > 0 ? Math.max(1, rawPre / raw) : 1
       // かわされたぶん／当てたぶんは、相手側の「かわすたび」フックと次の行動の条件になる
       evoOnDodge(foe, missed)
       foe.justDodged = hits === 0
       foe.justHurt = hits > 0
+      if (hits === 0) foe.dodgeCount = (foe.dodgeCount || 0) + 1   // ★上位クラス：流転掌が見る
       // ★一次職：流水の構え（回避するたび、次の攻撃の威力+）
       if (hits === 0 && foe.dodgeBoost?.turns > 0) foe.dodgeStacks = Math.min(foe.dodgeBoost.max, (foe.dodgeStacks || 0) + 1)
       if (crit) evoOnCrit(me, foe, rng, log)
@@ -985,7 +1107,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       rememberSkill(foe, skill.name)
       // 受け手の反応（骸の壁・エンチャントの軽減・跳ね返し）も撃った行より後ろに出す
       const afterHurt = []
-      const dmg = applyIncoming(me, foe, raw, skill.kind, rng, afterHurt)
+      const dmg = applyIncoming(me, foe, raw, skill.kind, rng, afterHurt, wantPre ? Math.floor(raw * preScale) : null)
       // ★先に「撃った」行を置く（状態異常やスタックの行より前に出す）。吸収の額は後で埋める
       const entry = { side: me.name, type: 'skill', skill: skill.name, kind: skill.kind,
         damage: dmg, crit, hits, of: nHits, drain: 0 }
@@ -1008,9 +1130,14 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
           const chance = ws?.ailChance ?? (skill.ail.chance * off + bonus)
           tryInflict(me, foe, { ...skill.ail, chance }, rng, log)
         }
-        // ★一次職：状態異常を2つ以上持つ技（毒霧の術）。それぞれ判定する
-        if (skill.ails) for (const a of skill.ails) tryInflict(me, foe, { ...a, chance: a.chance * off }, rng, log)
+        // ★一次職：状態異常を2つ以上持つ技（毒霧の術）。それぞれ判定する（先に付ける技＝爆炎毒は撃つ前に済ませてある）
+        if (skill.ails && !skill.preAil) for (const a of skill.ails) tryInflict(me, foe, { ...a, chance: a.chance * off }, rng, log)
+        // ★上位クラス（2026-10-15）：当てたときの効果
+        onHitRework(me, foe, skill, ip, imb, elemHit, off, rng, log)
       }
+      // ★上位クラス：共鳴・罪を使い切る技は、当たり外れに関係なく撃ったら0（プリズムバースト・断罪）
+      if (ip.resoUsed) me.reso = 0
+      if (ip.sinUsed) me.sin = 0
       // バーサク・執行本能：ダメージを与えたら+1スタック、全部外れたらリセット
       if (me.pa.rages.length) me.rage = hits > 0 ? me.rage + 1 : 0
       // 吸収：与えたダメージの一定割合を自分のHPへ（ソウルドレイン・ブラッティロアなど）
@@ -1188,9 +1315,12 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   }
   // ★一次職：溜め・召喚・期限つきの効果（攻撃・補助・回復のどれでも）
   ichijiAfterAction(me, foe, skill, log)
+  // ★上位クラス（2026-10-15）：相手（異端審問官）の罪＝こちらが強化か回復を使うたび+1
+  if (skill.kind === 'buff' || skill.kind === 'heal') gainSin(foe, 1, log)
   // ★一次職：クイック（このターン、もう一度行動する・戦闘中max回まで）
   if (skill.extraTurn && (me.quickUsed || 0) < skill.extraTurn.max && me.hp > 0 && foe.hp > 0) {
     me.quickUsed = (me.quickUsed || 0) + 1
+    me.extraActs = (me.extraActs || 0) + 1   // ★上位クラス：パラドックスが見る
     log.push({ side: me.name, type: 'quick', skill: skill.name })
     takeAction(me, foe, rng, log, opt)
   }
@@ -1204,37 +1334,46 @@ const baseMultOf = (skill, h, ip) => (skill.hybrid ? skill.hybrid.phys
 
 // ★一次職：着地・反撃・追撃・召喚の攻撃。1回だけ殴る（反撃や追撃をさらに呼ばない）
 //   跳躍中の相手には当たらない。分身は肩代わりしない（行動の攻撃だけを肩代わりする）
-const strike = (me, foe, { mult, kind = 'phys', label, hits = 1 }, rng, log) => {
+// ★上位クラス（2026-10-15）：atkStat・add（念動の追撃＝STR×0.3＋INT×0.3）・defPen（天竜落としの着地）・sureHit（罠）
+const strike = (me, foe, { mult, kind = 'phys', label, hits = 1, atkStat = null, add = null, defPen = 0, sureHit = false }, rng, log) => {
   if (foe.hp <= 0 || me.hp <= 0) return 0
-  if (foe.jumping) { log.push({ side: me.name, type: 'airEvade', skill: label }); return 0 }
+  if (airDodges(foe, rng)) { log.push({ side: me.name, type: 'airEvade', skill: label }); return 0 }
   const eMe = liveStats(me, true)
   const eFoe = liveStats(foe)
   const dm = passiveDealMult(me, foe) * setDealMult(me, foe, eMe, eFoe)   // 与ダメージ+％はダメージ全体に掛ける（防具のセット能力も）
   // ★防具のセット能力：蜃気楼（受ける側が戦闘中1回、この攻撃を完全にかわす）
   const mirageLog = []
   const mirage = useSetDodge(foe, mirageLog)
+  const wantPre = !!foe.pa.ex?.holy
   let raw = 0
+  let rawPre = 0
   let hit = 0
   let crit = false
   for (let h = 0; h < hits; h++) {
     if (mirage) continue
     const r = resolveAttack({
-      attacker: eMe, defender: eFoe, mult, kind,
-      defPen: me.pa.defPenBonus / 100 + me.evo.defPen / 100,
+      attacker: eMe, defender: eFoe, mult, kind, atkStat, add,
+      defPen: Math.min(1, defPen + me.pa.defPenBonus / 100 + me.evo.defPen / 100),
+      sureHit, wantPre,
       hitBonus: me.pa.hitBonus + me.en.hitBonus + ailAccPct(me.ail),
       evaBonus: foe.pa.evaBonus + foe.en.evaBonus + (foe.air ? AIR_EVA : 0),
-      critBonus: me.pa.critBonus + (me.critUp || 0),
+      critBonus: me.pa.critBonus + (me.critUp || 0) + aimCritOf(me),
       hitMult: hitMultOf(me, foe),
       critDmg: critDmgOf(me),
       redMult: 1 + (foe.pa.defRed || 0) / 100,
       defRule: foe.defRule,
     }, rng)
     // ★防具のセット能力：大地の守り（受けるクリティカルダメージ−%）
-    if (r.hit) { raw += Math.max(1, Math.floor(r.damage * dm * (r.crit ? setCritTakenMult(foe) : 1))); hit++ }
+    if (r.hit) {
+      const d = Math.max(1, Math.floor(r.damage * dm * (r.crit ? setCritTakenMult(foe) : 1)))
+      raw += d
+      if (wantPre) rawPre += Math.floor(d * (r.pre ?? r.damage) / Math.max(1, r.damage))
+      hit++
+    }
     if (r.hit && r.crit) crit = true
   }
   const after = []
-  const dmg = hit > 0 ? applyIncoming(me, foe, raw, kind, rng, after) : 0
+  const dmg = hit > 0 ? applyIncoming(me, foe, raw, kind, rng, after, wantPre ? rawPre : null) : 0
   log.push({ side: me.name, type: 'strike', label, damage: dmg, hit: hit > 0, crit })
   for (const l of mirageLog) log.push(l)
   for (const l of after) log.push(l)
@@ -1244,7 +1383,9 @@ const strike = (me, foe, { mult, kind = 'phys', label, hits = 1 }, rng, log) => 
 // ★一次職：攻撃のあと（スキルでも通常攻撃でも）。かわされたら相手の反撃、クリティカルなら追撃、分身がいれば追撃
 const afterAttack = (me, foe, hits, crit, rng, log) => {
   if (hits === 0 && foe.pa.ex?.counterOnDodge && foe.hp > 0 && me.hp > 0) {
-    strike(foe, me, { mult: foe.pa.ex.counterOnDodge, kind: 'phys', label: '反撃' }, rng, log)
+    // ★上位クラス（2026-10-15）：後の先（その間、回避したときの反撃の威力+%）
+    const cb = foe.counterBoost?.turns > 0 ? 1 + foe.counterBoost.pct / 100 : 1
+    strike(foe, me, { mult: foe.pa.ex.counterOnDodge * cb, kind: 'phys', label: '反撃' }, rng, log)
   }
   if (crit && me.pa.ex?.critFollow && foe.hp > 0) {
     strike(me, foe, { mult: me.pa.ex.critFollow, kind: 'phys', label: '追撃' }, rng, log)
@@ -1265,8 +1406,75 @@ const airborneTurn = (me, foe, rng, log) => {
   }
   me.jumping = null
   me.landedTurn = me.turn || 0
-  const landPct = me.pa.ex?.landPct || 0
-  strike(me, foe, { mult: j.mult * (1 + landPct / 100), kind: 'phys', label: `${j.name}（着地）` }, rng, log)
+  // ★上位クラス（2026-10-15）：着地も攻撃なので、相手の罠が先に発動する
+  springTrap(me, foe, rng, log)
+  if (me.hp <= 0) return
+  // ★上位クラス：竜翔の間は着地ダメージ+%・天竜落としは着地で防御無視と恐怖
+  const landPct = (me.pa.ex?.landPct || 0) + (me.soar?.turns > 0 ? (me.soar.land || 0) : 0)
+  const dmg = strike(me, foe, { mult: j.mult * (1 + landPct / 100), kind: 'phys', label: `${j.name}（着地）`, defPen: j.defPen || 0 }, rng, log)
+  if (j.ail && dmg > 0 && foe.hp > 0) tryInflict(me, foe, j.ail, rng, log)
+}
+
+// ===== 上位クラス（2026-10-15 チャット版の設計）=====
+// 罠（狩人）：相手（me）が攻撃するとき、罠の持ち主（foe）の古い罠が1つ発動する。必ず当たり、状態異常・能力ダウンを付けて消える
+const springTrap = (me, foe, rng, log) => {
+  if (!foe.traps?.length || foe.hp <= 0 || me.hp <= 0) return
+  const t = foe.traps.shift()
+  log.push({ side: foe.name, type: 'trapFire', skill: t.name })
+  strike(foe, me, { mult: t.mult, kind: 'phys', label: t.name, sureHit: true }, rng, log)
+  if (me.hp <= 0) return
+  if (t.ail) tryInflict(foe, me, t.ail, rng, log)
+  if (t.debuff) applyDebuff(me, t.debuff, log)
+}
+// 宿り（魔法剣士）の追加効果。k＝効果の倍（エレメンタルエッジは2倍）
+const applyImbueFx = (me, foe, elem, k, rng, log) => {
+  const fx = IMBUE_FX[elem]
+  if (!fx || foe.hp <= 0 || me.hp <= 0) return
+  if (fx.chase) strike(me, foe, { mult: fx.chase * k, kind: 'mag', label: `${fx.label}の追撃` }, rng, log)
+  if (fx.agi && foe.hp > 0) {
+    // 氷で下げるAGIは合計 agiMax まで（どちらもマイナス）
+    const down = Math.max(fx.agiMax - (me.iceDown || 0), fx.agi * k)
+    if (down < 0) {
+      me.iceDown = (me.iceDown || 0) + down
+      applyDebuff(foe, { agi: down }, log)
+    }
+  }
+  if (fx.ail && foe.hp > 0) tryInflict(me, foe, { key: fx.ail, chance: fx.chance * k }, rng, log)
+}
+// 召喚の攻撃を1回だけ（急急如律令＝式神も1回攻撃）
+const summonStrikeOnce = (me, foe, key, rng, log) => {
+  const n = me.stk?.[key] || 0
+  if (n <= 0 || me.hp <= 0 || foe.hp <= 0) return
+  const boost = 1 + (me.summonBoost?.[key]?.pct || 0) / 100
+  const hits = me.summonHits?.[key]?.hits || 1
+  strike(me, foe, { mult: (me.summonMult?.[key] || 0) * n * boost, kind: 'mag', hits,
+    label: `${STK_LABEL[key]}${n > 1 ? `${n}体` : ''}の攻撃` }, rng, log)
+}
+// 攻撃の技を当てたときの効果（宿り・動揺・当てたら溜まる・二の太刀・宿りの状態異常・共鳴の状態異常・式神の追撃）
+const onHitRework = (me, foe, skill, ip, imb, elemHit, off, rng, log) => {
+  if (skill.hitElems) for (const e of elemHit) applyImbueFx(me, foe, e, 1, rng, log)
+  else if (imb) applyImbueFx(me, foe, imb.elem, imb.k, rng, log)
+  if (skill.imbue && me.pa.ex?.imbue) {
+    me.imbue = { elem: skill.imbue, turns: me.pa.ex.imbue.turns }
+    log.push({ side: me.name, type: 'imbue', elem: IMBUE_FX[skill.imbue]?.label || skill.imbue, turns: me.imbue.turns })
+  }
+  if (ip.imbueAil && foe.hp > 0) tryInflict(me, foe, { ...ip.imbueAil, chance: ip.imbueAil.chance * off }, rng, log)
+  if (ip.resoAils && foe.hp > 0) for (const a of ip.resoAils) tryInflict(me, foe, { ...a, chance: a.chance * off }, rng, log)
+  if (skill.agitate && foe.hp > 0 && (skill.agitate.chance == null || roll(skill.agitate.chance, rng))) {
+    const before = foe.agit || 0
+    foe.agit = Math.min(AGIT_MAX, before + skill.agitate.n)
+    if (foe.agit > before) log.push({ side: foe.name, type: 'agit', n: foe.agit })
+  }
+  if (skill.gainOnHit) {
+    const g = skill.gainOnHit
+    me.stk[g.key] = Math.min(g.max, (me.stk[g.key] || 0) + g.n)
+    log.push({ side: me.name, type: 'stackGain', skill: skill.name, stack: STK_LABEL[g.key], n: me.stk[g.key] })
+  }
+  if (ip.reStance && skill.afterStance?.reStance) {
+    me.stance = { ...skill.afterStance.reStance }
+    log.push({ side: me.name, type: 'stance', skill: skill.name })
+  }
+  if (skill.summonStrike) summonStrikeOnce(me, foe, skill.summonStrike.key, rng, log)
 }
 
 // ★一次職：召喚（死霊・式神）の攻撃。毎ターン、両方の行動のあとに殴る（死霊は数ぶん・死の行軍／鬼神降ろしで強くなる）
@@ -1283,39 +1491,50 @@ const summonAttacks = (me, foe, rng, log) => {
 
 // 通常攻撃。mult は居合の構え（不発時2倍）のための倍率
 const normalAttack = (me, foe, rng, log, multScale = 1) => {
+  // ★上位クラス（2026-10-15）：相手の罠が先に発動する（狩人）。罠で倒れたら攻撃は出ない
+  springTrap(me, foe, rng, log)
+  if (me.hp <= 0) return
   // ★一次職：跳躍中の相手には当たらない／分身が1回ぶん肩代わりする
-  if (foe.jumping) {
+  //   ★上位クラス：跳躍は evade％で回避・分身は cloneGuard％で身代わり
+  if (airDodges(foe, rng)) {
     log.push({ side: me.name, type: 'airEvade', skill: null })
     foe.justDodged = true
     foe.justHurt = false
+    foe.dodgeCount = (foe.dodgeCount || 0) + 1
     return
   }
-  if (foe.stk?.clone > 0) {
+  if (cloneTakes(foe, rng)) {
     foe.stk.clone -= 1
     log.push({ side: foe.name, type: 'cloneTaken', skill: null, left: foe.stk.clone })
     return
   }
   const eMe = liveStats(me, true)
   const eFoe = liveStats(foe)
+  // ★上位クラス：宿り（魔法剣士の通常攻撃にも乗る）・ロックオン（必中）・聖光（防御で減る前のぶん）
+  const imb = imbueFxOf(me)
+  const wantPre = !!foe.pa.ex?.holy
   // ★防具のセット能力：蜃気楼（受ける側が戦闘中1回、この攻撃を完全にかわす＝外れたのと同じ扱い）
   const mirageLog = []
   const r = useSetDodge(foe, mirageLog) ? { hit: false, crit: false, damage: 0 } : resolveAttack({
     attacker: eMe, defender: eFoe, mult: NORMAL_ATTACK_MULT * multScale, kind: me.kind,
-    defPen: me.pa.defPenBonus / 100 + me.evo.defPen / 100,
+    defPen: Math.min(1, me.pa.defPenBonus / 100 + me.evo.defPen / 100 + (imb?.elem === 'thunder' ? IMBUE_FX.thunder.defPen * imb.k : 0)),
+    sureHit: me.lockOn?.turns > 0, wantPre,
     hitBonus: me.pa.hitBonus + me.en.hitBonus + evoHit(me, foe) + ailAccPct(me.ail),
     evaBonus: foe.pa.evaBonus + foe.en.evaBonus + evoEva(foe) + foresightEva(foe, null),
-    critBonus: me.pa.critBonus + evoCrit(me, foe) + critRateStackOf(me) + (me.critUp || 0),
+    critBonus: me.pa.critBonus + evoCrit(me, foe) + critRateStackOf(me) + (me.critUp || 0) + aimCritOf(me),
     hitMult: hitMultOf(me, foe),
     critDmg: critDmgOf(me),
     redMult: 1 + (foe.pa.defRed || 0) / 100,
     defRule: foe.defRule,
   }, rng)
+  const preRatio = r.hit && r.pre ? r.pre / Math.max(1, r.damage) : 1
   evoOnDodge(foe, r.hit ? 0 : 1)
   foe.justDodged = !r.hit
   foe.justHurt = !!r.hit
+  if (!r.hit) foe.dodgeCount = (foe.dodgeCount || 0) + 1   // ★上位クラス：流転掌が見る
   // ★一次職：流水の構え（回避するたび次の攻撃+）・槍の型（当てるたびコンボ）
   if (!r.hit && foe.dodgeBoost?.turns > 0) foe.dodgeStacks = Math.min(foe.dodgeBoost.max, (foe.dodgeStacks || 0) + 1)
-  if (r.hit && me.pa.ex?.combo) me.combo = Math.min(me.pa.ex.combo.max, (me.combo || 0) + 1)
+  if (r.hit && me.pa.ex?.combo) me.combo = Math.min(me.pa.ex.combo.max, (me.combo || 0) + comboStepOf(me))
   if (r.hit && r.crit) evoOnCrit(me, foe, rng, log)
   // ★一次職：与ダメージ+％（パッシブ）・流水の構えの溜め。ダメージ全体に掛ける
   // ★防具のセット能力：与ダメージ+％も同じ枠・大地の守り（受けるクリティカルダメージ−%）
@@ -1328,7 +1547,7 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
     * critMult * evoMult(me, foe, { kind: me.kind, skill: false }))
   // 撃った行を先に出すため、受け手の反応と当てたときの効果はいったん貯める
   const after = []
-  const dmg = applyIncoming(me, foe, raw, me.kind, rng, after)
+  const dmg = applyIncoming(me, foe, raw, me.kind, rng, after, wantPre && r.hit ? Math.floor(raw * preRatio) : null)
   if (r.hit) { bumpHitStack(me, 1); onHit(me, foe, me.kind, rng, after); evoOnHit(me) }
   const drainRate = me.evo.drain / 100
   if (drainRate > 0 && dmg > 0) me.hp = Math.min(me.base.hp, me.hp + Math.max(1, Math.floor(dmg * drainRate)))
@@ -1343,6 +1562,8 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
   log.push({ side: me.name, type: 'normal', kind: me.kind, damage: dmg, crit: r.crit, hit: r.hit, mult: multScale })
   for (const l of mirageLog) log.push(l)
   for (const l of after) log.push(l)
+  // ★上位クラス：宿りの追加効果（炎の追撃・氷・雷）
+  if (r.hit && imb) applyImbueFx(me, foe, imb.elem, imb.k, rng, log)
   afterAttack(me, foe, r.hit ? 1 : 0, !!(r.hit && r.crit), rng, log)
 }
 
@@ -1485,6 +1706,7 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
       if (!me.bigGuard && !me.jumping && !(me.stunned > 0) && (rollExtraAction(em, ef, rng) || (me.evo.extra > 0 && roll(me.evo.extra, rng))
         || (me.pa.ex?.extraIfFaster && em.agi > ef.agi && roll(me.pa.ex.extraIfFaster, rng)))) {
         log.push({ side: me.name, type: 'extra' })
+        me.extraActs = (me.extraActs || 0) + 1   // ★上位クラス（2026-10-15）：パラドックスが見る
         takeAction(me, foe, rng, log)
         tickBleedAfterAct(me, log, foe)
       }

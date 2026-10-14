@@ -28,7 +28,7 @@ export const JOB_MAX = 30
 // learnAt … スキルを覚えるClassLV（並び＝スキルの名簿の順）
 // max … ClassLVの上限
 // 【確定】2026-10-10 ユーザー決定：上位職は ClassLV上限50・必要ClassEXPは初期職の3倍・ClassLVごとの点数は初期職の1.2倍
-//   （効くのは上位職の分だけ）。技は ClassLV1／5／10／15／20／25／30／40 で8つ（ユーザーの表「一次職スキル一覧」）
+//   （効くのは上位職の分だけ）。技は ClassLV1／5／10／15／20／25／30／40 で8つ（ユーザーの表「一次職スキル一覧」）→【確定】2026-10-15 チャット版の設計で35・45を足して10個
 // 【確定】2026-10-12 ユーザー指示「敵のキャラ弱くするってよりかはこっちが弱すぎる気がする、くらすれべるあがるとき、もっと上昇量伸ばしていい」
 //   ＋案「初期クラスは8」・上位職は「10点（初期職の1.2倍のまま）」を選んだ：ClassLVごとの点数を **初期職 5→8・上位職 6→10**
 //   （ClassLV30で 145→232・上位職のClassLV50で 294→490。毎回のHP・MP（JOB_LV_HPMP）も1.6倍）
@@ -39,7 +39,7 @@ export const JOB_MAX = 30
 //   前の名前は「一次」。コードの中の名前（ichiji・ICHIJI_INFO・skillsIchiji.js など）はそのまま
 export const STAGES = {
   shoki:  { label:'初期', color:'#44aaff', mult:1, perLv:8, max:JOB_MAX, learnAt:[1, 5, 10, 15, 20, 25, 30], needBase:15 },
-  ichiji: { label:'上位', color:'#cc66ff', mult:3, perLv:10, max:50, learnAt:[1, 5, 10, 15, 20, 25, 30, 40], needBase:30 },
+  ichiji: { label:'上位', color:'#cc66ff', mult:3, perLv:10, max:50, learnAt:[1, 5, 10, 15, 20, 25, 30, 35, 40, 45], needBase:30 },
 }
 export const STAGE_ORDER = ['shoki', 'ichiji']
 export const jobMaxOfStage = (stage) => STAGES[stage]?.max || JOB_MAX

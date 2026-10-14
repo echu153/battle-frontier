@@ -182,6 +182,39 @@ export const buildBattleLog = (r, you, foe) => {
       out.push({ text:`💥 ${actor}の${l.ails}が弾けた！（威力+${l.pct}%）`, color: LOG_COLOR.ail })
     } else if (l.type === 'mpGain') {
       out.push({ text:`💙 ${actor}の${l.skill}！ MPが${(l.mp || 0).toLocaleString()}回復した！`, color:'#66aaff' })
+    // ===== 上位クラス（「レベルキャップあり」版・2026-10-15 チャット版の設計）=====
+    } else if (l.type === 'imbue') {
+      out.push({ text:`✨ ${actor}の剣に${l.elem}が宿った！（あと${l.turns}ターン）`, color: LOG_COLOR.buff })
+    } else if (l.type === 'imbueUse') {
+      out.push({ text:`✨ ${actor}は剣に宿した${l.elem}を解き放った！`, color: LOG_COLOR.buff })
+    } else if (l.type === 'holyUse') {
+      out.push({ text:`🌟 ${actor}は聖光を${(l.n || 0).toLocaleString()}使った！${l.left ? `（残り${l.left.toLocaleString()}）` : ''}`, color: LOG_COLOR.buff })
+    } else if (l.type === 'lastStandUp') {
+      out.push({ text:`👹 ${actor}の${l.skill}！ 一度だけ倒れずに踏み止まる！`, color: LOG_COLOR.buff })
+    } else if (l.type === 'lastStand') {
+      out.push({ text:`👹 ${actor}は鬼の形相で踏み止まった！`, color:'#ffcc44' })
+    } else if (l.type === 'trapSet') {
+      out.push({ text:`🪤 ${actor}の${l.skill}！ 罠を仕掛けた（${l.n}つ）`, color: LOG_COLOR.buff })
+    } else if (l.type === 'trapFire') {
+      // side は罠を仕掛けた側。このあと罠の攻撃（strike）の行が続く
+      out.push({ text:`🪤 ${target}が${actor}の${l.skill}にかかった！`, color: LOG_COLOR.ail })
+    } else if (l.type === 'reso') {
+      out.push({ text:`🔷 ${actor}の共鳴が${l.n}になった！`, color: LOG_COLOR.buff })
+    } else if (l.type === 'barrier') {
+      out.push({ text:`⛩ ${actor}の${l.skill}！ ${l.turns}ターンの結界を張った！`, color: LOG_COLOR.guard })
+    } else if (l.type === 'shieldUp') {
+      out.push({ text:`🔰 ${actor}の${l.skill}！ バリアが${(l.total || 0).toLocaleString()}になった！`, color: LOG_COLOR.guard })
+    } else if (l.type === 'shieldHit') {
+      out.push({ text:`🔰 ${actor}のバリアが${(l.n || 0).toLocaleString()}ダメージを受け止めた！${l.left ? `（残り${l.left.toLocaleString()}）` : '（バリアが消えた）'}`, color: LOG_COLOR.guard })
+    } else if (l.type === 'sin') {
+      out.push({ text:`⚖ ${actor}の罪が${l.n}になった！`, color: LOG_COLOR.ail })
+    } else if (l.type === 'agit') {
+      // side は動揺した側
+      out.push({ text:`🌀 ${actor}は動揺している！（スキルの発動率-${(l.n || 0) * 3}%）`, color: LOG_COLOR.ail })
+    } else if (l.type === 'repeat') {
+      out.push({ text:`🔁 ${actor}の${l.skill}！ 「${l.target}」をもう一度！`, color: LOG_COLOR.extra })
+    } else if (l.type === 'repeatFail') {
+      out.push({ text:`🔁 ${actor}の${l.skill}！ しかし繰り返せる技が無い`, color: LOG_COLOR.miss })
     }
   }
   return out

@@ -62,8 +62,9 @@ export const seeds = () => ({
   skills: [
     // ★消してから入れ直す（名前を変えた・職業をなくしたときに古い行が残らないように）。参照している外部キーは無い
     'delete from public.v2cap_skills;',
-    'insert into public.v2cap_skills (name, cls, mp, sort, passive) values',
-    SKILLS.map(s => `  (${q(s.name)}, ${q(s.cls)}, ${s.mp || 0}, ${sortOf[s.name]}, ${isPassive(s) ? 'true' : 'false'})`).join(',\n') + ';',
+    // ★uses_max … 回数の上限がある技（狂鬼化＝1 など・2026-10-15）。無ければ null
+    'insert into public.v2cap_skills (name, cls, mp, sort, passive, uses_max) values',
+    SKILLS.map(s => `  (${q(s.name)}, ${q(s.cls)}, ${s.mp || 0}, ${sortOf[s.name]}, ${isPassive(s) ? 'true' : 'false'}, ${s.usesMax ?? 'null'})`).join(',\n') + ';',
   ].join('\n'),
   equipment: [
     // ★持ち物（v2cap_inventory）が参照するので消さずに入れ直す。一覧から外れた行は §2 の作り直しのあとで消す

@@ -89,10 +89,13 @@ test('狙撃手の勘：クリティカルしたら物理×0.5で追撃', () => 
   assert.ok(log.some(l => l.type === 'strike' && l.label === '追撃'))
 })
 
-test('元素共鳴：直前と違う属性の魔法は+15%（同じ属性では乗らない）・今の魔法使いの技にも属性がある', () => {
+test('元素共鳴：直前と違う属性の魔法を撃つたび共鳴+1（共鳴1つにつき与ダメージ+5%）・同じ属性で0・今の魔法使いの技にも属性がある', () => {
+  // 【確定】2026-10-15 チャット版の設計（前は「直前と違う属性なら+15%」）
   const a = castThen('元素使い', ['フロストノヴァ'], 'ファイアボール')
   const b = castThen('元素使い', ['メテオ'], 'ファイアボール')
-  assert.ok(Math.abs(a.dmg / b.dmg - 1.15) < 0.02, `${a.dmg} ／ ${b.dmg}`)
+  assert.ok(Math.abs(a.dmg / b.dmg - 1.05) < 0.02, `${a.dmg} ／ ${b.dmg}`)
+  assert.equal(a.me.reso, 1)
+  assert.equal(b.me.reso, 0)
   assert.deepEqual(['ファイア', 'サンダー', 'アイスランス'].map(n => S(n).elem), ['fire', 'thunder', 'ice'])
 })
 
@@ -129,7 +132,7 @@ test('召喚の強化：死の行軍で死霊の攻撃+50%・鬼神降ろしで�
   assert.ok(Math.abs(two / one - 2) < 0.1, `${two} ／ ${one}`)
 })
 
-test('奇跡：4ターンのあいだ毎ターン最大HPの6%を回復（神聖加護で+30%）', () => {
+test('奇跡：4ターンのあいだ毎ターン最大HPの6%を回復（神聖加護で+20%＝2026-10-15 に+30%から）', () => {
   const r = runBattle(
     { name: '司', cls: '聖職者', kind: 'mag', stats: stats(), noClassBonus: true, passives: [passiveOf('聖職者')], startHp: 1000,
       slots: [{ skill: S('奇跡'), uses: 1 }] },
@@ -137,7 +140,7 @@ test('奇跡：4ターンのあいだ毎ターン最大HPの6%を回復（神聖
     { rng: mid, maxTurns: 6 })
   const ticks = r.log.filter(l => l.type === 'regenTick' && l.side === '司')
   assert.equal(ticks.length, 4)
-  assert.equal(ticks[0].heal, Math.floor(10000 * 0.06 * 1.3))
+  assert.equal(ticks[0].heal, Math.floor(10000 * 0.06 * 1.2))
 })
 
 test('溜めで伸びる技：ボーンスピア（死霊1体+10%）・掌底波（気1で×1.4）・ソウルドレイン（死霊1体で吸収+5%）', () => {
@@ -160,7 +163,8 @@ test('クロノブレイク（AGIの差1%につき+1%・最大+60%）・聖な�
   assert.ok(Math.abs(fast / even - 1.6) < 0.03, `${fast} ／ ${even}`)
   const plain = castThen('異端審問官', [], '聖なる裁き').dmg
   const sealed = castThen('異端審問官', [], '聖なる裁き', (m, f) => { inflict(f.ail, 'seal') })
-  assert.ok(sealed.dmg / plain > 1.3, '封印中×1.3（退魔の心得の+20%も乗る）')
+  // 2026-10-15：退魔の心得の「封印中+20%」は無くなった（封印中の上乗せは聖なる裁きに残す）
+  assert.ok(Math.abs(sealed.dmg / plain - 1.3) < 0.02, '封印中×1.3')
   // 毒60%・暗闇40%を別々に判定する（乱数0.1なら両方入る・0.5なら毒だけ）
   const fog = side('忍', '忍者', ['毒霧の術'])
   const ff = dummy()
@@ -189,7 +193,7 @@ test('魂喰らい：死霊を1体使い、最大HPの15%とMP10を戻す／霊�
   assert.ok(r.hp > 100 && r.mp > 10)
 })
 
-test('砲台の構え（装填がある間-15%）・死者の盾（死霊1体につき-5%）', () => {
+test('砲台の構え（装填がある間-15%）・死者の盾（死霊1体につき−%・2026-10-15 に測って5%→4%）', () => {
   const taken = (cls, setup) => {
     const me = side('私', cls, [], { stats: { vit: 50 } })
     setup(me)
@@ -201,7 +205,8 @@ test('砲台の構え（装填がある間-15%）・死者の盾（死霊1体に
   const base = taken('デストロイヤー', () => {})
   assert.ok(Math.abs(taken('デストロイヤー', (m) => { m.stk.load = 1 }) / base - 0.85) < 0.02)
   const nb = taken('死霊使い', () => {})
-  assert.ok(Math.abs(taken('死霊使い', (m) => { m.stk.undead = 3 }) / nb - 0.85) < 0.02)
+  const cut = passiveOf('死霊使い').passive.guardPerStack.cut
+  assert.ok(Math.abs(taken('死霊使い', (m) => { m.stk.undead = 3 }) / nb - (1 - cut * 3 / 100)) < 0.02)
 })
 
 test('刻の加護：AGIが相手より高いと20%で追加行動（低いと出ない）', () => {

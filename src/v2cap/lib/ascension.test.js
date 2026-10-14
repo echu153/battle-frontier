@@ -132,7 +132,8 @@ test('【確定】スキルマスの上がり幅：攻撃＝威力+20%・回復�
   assert.deepEqual(ascendSkill(SKILL_BY_NAME['剣の構え']).buff.self, { str: 21, agi: 16 }, '2026-10-14 から剣の構えは STR+15%・AGI+12%')
   assert.deepEqual(ascendSkill(SKILL_BY_NAME['精神統一']).buff.self, { int_stat: 35 })
   assert.deepEqual(ascendSkill(SKILL_BY_NAME['衰弱の呪詛']).buff.enemy, { str: -20, int_stat: -20 }, '相手を下げる技は下げ幅が+10')
-  assert.deepEqual(ascendSkill(SKILL_BY_NAME['仙丹']).buff.self, { str: 17, dex: 17, agi: 17, int_stat: 17, vit: 16, luk: 16 })
+  // 仙丹は 2026-10-15 に測って全能力+15%→+10%（+10を6つに分ける）
+  assert.deepEqual(ascendSkill(SKILL_BY_NAME['仙丹']).buff.self, { str: 12, dex: 12, agi: 12, int_stat: 12, vit: 11, luk: 11 })
   assert.equal(ascendSkill(SKILL_BY_NAME['祈りの結界']).guard.cut, 30, '受け止め（重戦士）は 2026-10-14 に無くなった＝同じ形の祈りの結界で見る')
   // 2026-10-14 上位職の並び替えで入った技：納刀は次の技の発動率+20%→+30%・大防御は1ターンの受けるダメージ−60%→−70%
   assert.equal(ascendSkill(SKILL_BY_NAME['納刀']).stance.proc, 30)
@@ -141,8 +142,20 @@ test('【確定】スキルマスの上がり幅：攻撃＝威力+20%・回復�
   assert.equal(ascendSkill(SKILL_BY_NAME['ブラッディロア']).lifeSteal.pct, 20)
   // 召喚の攻撃は +0.10（魔法×0.25→×0.35 の形）。元の倍率は 2026-10-14 に強さをそろえて変えた＝名簿から読む
   assert.ok(Math.abs(ascendSkill(SKILL_BY_NAME['骸骨召喚']).summon.mult - (SKILL_BY_NAME['骸骨召喚'].summon.mult + 0.1)) < 1e-9, '召喚の攻撃+0.10')
-  assert.equal(ascendSkill(SKILL_BY_NAME['リザレクション']).revive.pct, 60)
-  assert.equal(ascendSkill(SKILL_BY_NAME['詠唱']).nextBoost.per, 25)
+  assert.equal(ascendSkill(SKILL_BY_NAME['リザレクション']).revive.pct, SKILL_BY_NAME['リザレクション'].revive.pct + 10, '復活のHP+10（2026-10-15 に測って元は35%）')
+  // 2026-10-15 上位クラスの作り直し：詠唱は共鳴+1（技のマスで+2）・照準と弾帯換装は1回で増える数+1
+  assert.equal(ascendSkill(SKILL_BY_NAME['詠唱']).resoGain, 2)
+  assert.equal(ascendSkill(SKILL_BY_NAME['照準']).gain.n, 2)
+  assert.equal(ascendSkill(SKILL_BY_NAME['弾帯換装']).gain.n, 3)
+  // 新しい補助の技の上がり幅（%の値に+10・倍率は+0.1・下げる向きの値は下げ幅+10）
+  assert.equal(ascendSkill(SKILL_BY_NAME['竜翔']).soar.land, 30)
+  assert.equal(ascendSkill(SKILL_BY_NAME['不動の誓い']).vow.cut, 25)
+  assert.equal(ascendSkill(SKILL_BY_NAME['狂鬼化']).lastStand.costCut, 60)
+  assert.equal(ascendSkill(SKILL_BY_NAME['封縛結界']).bind.foeAgi, -30)
+  assert.ok(Math.abs(ascendSkill(SKILL_BY_NAME['リピート']).repeatLast.mpMult - 0.4) < 1e-9)
+  assert.ok(Math.abs(ascendSkill(SKILL_BY_NAME['トラバサミ']).trap.mult - (SKILL_BY_NAME['トラバサミ'].trap.mult + 0.1)) < 1e-9)
+  assert.equal(ascSkillDetail('封縛結界'), '相手のAGI −20%→−30%')
+  assert.equal(ascSkillDetail('詠唱'), '1回で増える共鳴 1→2')
   assert.equal(ascendSkill(SKILL_BY_NAME['クイック']).extraTurn.max, 3)
   assert.equal(ascendSkill(SKILL_BY_NAME['分身の術']).gain.n, 2)
   assert.equal(ascendSkill(SKILL_BY_NAME['装填']).gain.n, 2)
@@ -165,7 +178,7 @@ test('★スキルマスのある技は、どれも何かが変わる（効か�
       assert.ok(ascSkillDetail(n.skill), `${n.skill} の説明がある`)
     }
   }
-  assert.deepEqual(Object.keys(ASC_COUNT_UP).sort(), ['クイック', '分身の術', '狂信', '装填', '鬼神降ろし'].sort())
+  assert.deepEqual(Object.keys(ASC_COUNT_UP).sort(), ['クイック', '分身の術', '狂信', '装填', '鬼神降ろし', '照準', '弾帯換装', '詠唱'].sort())
 })
 
 test('技ごとの上がり幅は ASC_SKILL_UP で差し替えられる（ユーザーがあとで決める）', () => {

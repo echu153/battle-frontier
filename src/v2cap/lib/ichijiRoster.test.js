@@ -1,13 +1,12 @@
-// 2026-10-14 上位職の並び替え（ユーザー承認）の見張り（node --test）
+// 2026-10-14 上位職の並び替え（ユーザー承認）・2026-10-15 上位クラスの作り直し（チャット版の設計＋測って合わせた数字）の見張り（node --test）
 //   ・V1の職業を続投（侍・魔法剣士・聖騎士・サイキッカーを足した・10職は名前だけ変えた）
 //   ・新しい4職の技は今のⅡの同じ職業から8つ。強さは上位職の帯（初期職の帯×1.3）
 //   ・ユーザー指示：サイキッカー（と魔銃士）は STRとINTを半分ずつ／聖騎士は VITも火力に直結（STRとVITを半分ずつ）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createSide, takeAction } from '../../v2/lib/battle.js'
-import { skillValue, effectPrice, VALUE_TABLE } from '../../v2/lib/skills.js'
 import { SKILL_BY_NAME, passiveOf } from './skills.js'
-import { ICHIJI_SKILLS, ICHIJI_CLASS_POWER } from './skillsIchiji.js'
+import { ICHIJI_SKILLS, ICHIJI_TUNE } from './skillsIchiji.js'
 import { ICHIJI_INFO, ICHIJI_RENAMED, CLASS_BY_ID, attackKindOf, learnOrderOf, JOB_BONUS } from './jobs.js'
 
 const stats = (over = {}) => ({ hp: 100000, mp: 2000, str: 300, dex: 150, agi: 150, int_stat: 300, vit: 150, luk: 30, ...over })
@@ -40,40 +39,45 @@ test('【確定】2026-10-14 上位職の並び替え：22職・V1の職業を�
   assert.deepEqual([ICHIJI_INFO.侍.base, ICHIJI_INFO.魔法剣士.base], ['剣士', '剣士'])
 })
 
-test('【確定】2026-10-14 強さをそろえた：攻撃の技は「目標の強さ（初期職の帯×1.3）×職業の倍率」に近い・新しい4職の覚える順・LUKを少し持つ', () => {
-  const pick = (t, p) => { const ks = Object.keys(t).map(Number).sort((a, b) => b - a); return t[ks.find(k => p >= k) ?? ks[ks.length - 1]] }
-  // 初期職の帯（85%まで）×1.3。85%より低い発動率は今のⅡの上位職の帯の伸び方（85%との比）で延ばす
-  const band = (s) => {
-    const basic = VALUE_TABLE.basic[s.kind], adv = VALUE_TABLE.advanced[s.kind]
-    return (s.proc >= 85 ? pick(basic, s.proc) : pick(basic, 85) * pick(adv, s.proc) / pick(adv, 85)) * 1.3
+test('2026-10-15 測って合わせた（チャットの設計の値×ICHIJI_TUNE）：職業の倍率は極端にしない（0.8〜1.25倍）・連撃はクリティカルなし・4職の覚える順・LUKを少し持つ', () => {
+  // ユーザーの決まり（2026-10-15）「どのクラスも技倍率は極端に上げたり下げたりしないで」
+  for (const [cls, k] of Object.entries(ICHIJI_TUNE)) {
+    assert.ok(ICHIJI_INFO[cls], `${cls}は上位クラス`)
+    assert.ok(k >= 0.8 && k <= 1.25, `${cls}の倍率 ${k} は 0.8〜1.25`)
   }
-  const PRICED = new Set(['name','cls','kind','mult','add','hits','noCrit','sureHit','defPen','buff','ail','proc','mp','desc','drain','elem','dispel','cure','src','priority','hitBonus','switchKind','vsAil','consumeAil'])
-  assert.deepEqual(Object.keys(ICHIJI_CLASS_POWER).sort(), Object.keys(ICHIJI_INFO).sort(), '22職ぶんある')
-  let checked = 0
-  for (const s of ICHIJI_SKILLS) {
-    if (!(s.kind === 'phys' || s.kind === 'mag') || !Object.keys(s).every(k => PRICED.has(k))) continue
-    const power = ICHIJI_CLASS_POWER[s.cls]
-    assert.ok(power > 0, `${s.cls}の倍率`)
-    // 威力のぶん（効果の値段を除く）で比べる＝倍率を大きく下げた職業でも、効果の値段は変わらないので
-    const eff = effectPrice(s)
-    const r = (skillValue(s) - eff) / (band(s) - eff) / power
-    assert.ok(Math.abs(r - 1) <= 0.05, `${s.name}（${s.cls}）：目標×${power}に対して ${r.toFixed(3)}`)
-    checked++
-  }
-  assert.ok(checked >= 70, `見た技 ${checked}`)
   // 連撃はクリティカルしない（初期職と同じ）。「回避したら全段クリティカル」の飛天三角蹴りだけは例外
   for (const s of ICHIJI_SKILLS) if ((s.kind === 'phys' || s.kind === 'mag') && ((s.hits || 1) >= 2 || s.hitMults)) {
     assert.equal(!!s.noCrit, !s.critIfDodged, `${s.name}`)
   }
   for (const cls of ['侍', '魔法剣士', '聖騎士', 'サイキッカー']) {
-    assert.equal(ICHIJI_SKILLS.filter(s => s.cls === cls && s.kind !== 'passive').length, 8, `${cls}の技は8つ`)
+    assert.equal(ICHIJI_SKILLS.filter(s => s.cls === cls && s.kind !== 'passive').length, 10, `${cls}の技は10個`)
     assert.ok(JOB_BONUS[cls].luk > 0, `${cls}はLUKを持つ（0だと相手のクリティカルが上限になる）`)
   }
-  assert.deepEqual(learnOrderOf('侍').map(s => s.name), ['居合斬', '納刀', '抜刀術', '断空', '明鏡止水', '二段斬り', '桜花一閃', '月影'])
-  assert.deepEqual(learnOrderOf('魔法剣士').map(s => s.name), ['マナエッジ', '雷光斬', '魔剣開放', 'フロストエッジ', 'マナバースト', '双極斬', 'ソードオーラ', 'エレメンタルエッジ'])
-  assert.deepEqual(learnOrderOf('聖騎士').map(s => s.name), ['ホーリーエッジ', 'オースシールド', 'シールドバッシュ', 'ディバインスマイト', 'ホーリーケア', '大防御', 'ジャッジメントブロウ', '神聖覚醒'])
-  assert.deepEqual(learnOrderOf('サイキッカー').map(s => s.name), ['サイコショット', '精神集中', 'テレキネシス', 'マインドブレイク', 'マインドスパイク', 'マインドアクセル', 'サイキックチェイン', 'サイコブラスト'])
-  assert.deepEqual(['侍', '魔法剣士', '聖騎士', 'サイキッカー'].map(c => passiveOf(c)?.name), ['居合の構え', '魔導剣術', '聖騎士の心得', '第六感'])
+  assert.deepEqual(learnOrderOf('侍').map(s => s.name), ['居合斬', '納刀', '抜刀術', '断空', '明鏡止水', '二段斬り', '桜花一閃', '二の太刀', '月影', '秘剣・叢雲'])
+  assert.deepEqual(learnOrderOf('魔法剣士').map(s => s.name), ['マナエッジ', '雷光斬', '魔剣開放', 'フロストエッジ', 'マナバースト', '双極斬', 'ソードオーラ', 'フレイムエッジ', 'エレメンタルエッジ', 'トリニティブレイド'])
+  assert.deepEqual(learnOrderOf('聖騎士').map(s => s.name), ['ホーリーエッジ', 'オースシールド', 'シールドバッシュ', 'ディバインスマイト', 'ホーリーケア', '大防御', 'ジャッジメントブロウ', '不動の誓い', '神聖覚醒', 'グランドクロス'])
+  assert.deepEqual(learnOrderOf('サイキッカー').map(s => s.name), ['サイコショット', '精神集中', 'テレキネシス', 'マインドブレイク', 'マインドスパイク', 'マインドアクセル', 'サイキックチェイン', 'マインドジャック', 'サイコブラスト', 'メンタルクラッシュ'])
+  // パッシブは設計で名前が変わったもの（魔導剣術→エンチャント・第六感→精神感応・魔力循環→魔弾）
+  assert.deepEqual(['侍', '魔法剣士', '聖騎士', 'サイキッカー', '魔銃士'].map(c => passiveOf(c)?.name), ['居合の構え', 'エンチャント', '聖騎士の心得', '精神感応', '魔弾'])
+})
+
+test('2026-10-15 測って直した仕組みの数字（強さの元を先に直した・理由は skillsIchiji.js の②）', () => {
+  const v = (n) => SKILL_BY_NAME[n]
+  // 狂戦士：HPを払う技と狂撃の「+15%」をやめた・バーサク +10/+20%（★狂鬼化は設計のまま＝ユーザーと相談）
+  assert.deepEqual(['マッドラッシュ', 'ブラッドスプラッシュ', 'ブラッドサクリファイス', 'フルブレイカー', '狂撃'].map(n => v(n).mult), [1.63, 1.71, 1.76, 1.74, 2.02])
+  assert.deepEqual(passiveOf('狂戦士').passive.lowHpDmg, [{ at: 50, pct: 10 }, { at: 25, pct: 20 }])
+  assert.deepEqual(v('狂鬼化').lastStand, { costCut: 50 }, '狂鬼化の「払うHPが半分」は設計どおり')
+  assert.equal(v('隠形').buff.self.agi, 10)
+  assert.equal(v('影斬り').mult, 1.35)
+  assert.deepEqual(passiveOf('忍者').passive, { cloneFollow: 0.1, noCloneAgi: 10, cloneGuard: 15 })
+  assert.deepEqual([v('骸骨召喚').summon.mult, v('レイズデッド').summon.mult, v('ソウルハーヴェスト').perStackAdd.addMult], [0.35, 0.35, 0.2])
+  assert.equal(passiveOf('死霊使い').passive.guardPerStack.cut, 4)
+  assert.equal(v('仙丹').buff.self.str, 10)
+  assert.equal(v('リザレクション').revive.pct, 35)
+  assert.deepEqual(['ジャンプ', 'ハイジャンプ', '天竜落とし'].map(n => v(n).jump.evade), [40, 40, 40])
+  assert.equal(v('秘剣・叢雲').stanceMult, 1.7)
+  // 跳躍の技の倍率（説明用の mult）と着地の倍率は同じ
+  for (const n of ['ジャンプ', 'ハイジャンプ', '天竜落とし']) assert.equal(v(n).mult, v(n).jump.mult, n)
 })
 
 test('【確定】ユーザー指示：サイキッカーはSTRとINTが半分ずつ威力になる（念の技は相手の魔法防御で受ける）', () => {

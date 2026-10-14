@@ -238,7 +238,9 @@ export const damageFloor = (attacker, kind = 'phys', atkStat = null) => 1 - DMG_
 // critDmg    … クリティカルのダメージ+%（隠身・精密照準）
 // redMult    … 受ける側の軽減率に掛ける（聖騎士の心得）
 // defRule … 受ける側の防御の式（'cap'＝「レベルキャップあり」版の魔法防御。省けば今のⅡの式）
-export const resolveAttack = ({ attacker, defender, mult = 1, kind = 'phys', atkStat = null, defPen = 0, add = null, sureHit = false, sureCrit = false, noCrit = false, hitBonus = 0, evaBonus = 0, critBonus = 0, acc = 100, hitMult = 1, critDmg = 0, redMult = 1, defRule = null }, rng = Math.random) => {
+// wantPre … 防御で減る前のダメージ（pre）も返す（v2cap の聖騎士の聖光が「防御で減らしたぶん」を数える）。
+//   渡さなければ今までと同じ（乱数の引き方も同じ）
+export const resolveAttack = ({ attacker, defender, mult = 1, kind = 'phys', atkStat = null, defPen = 0, add = null, sureHit = false, sureCrit = false, noCrit = false, hitBonus = 0, evaBonus = 0, critBonus = 0, acc = 100, hitMult = 1, critDmg = 0, redMult = 1, defRule = null, wantPre = false }, rng = Math.random) => {
   const crit = !noCrit && (sureCrit || roll(critRate(attacker, defender, critBonus), rng))
   const accStats = crit ? critAccuracyStats(attacker) : attacker
   const rate = clampPct(skillHitRate(accStats, defender, { acc, kind, hitBonus, evaBonus }) * hitMult, 0, 100)
@@ -248,5 +250,8 @@ export const resolveAttack = ({ attacker, defender, mult = 1, kind = 'phys', atk
   const lo = damageFloor(attacker, kind, atkStat)
   const scale = (lo + (1 - lo) * rng()) * DMG_COMP
   const dmg = Math.max(1, Math.floor(damageOf({ attacker, defender, mult, kind, crit, defPen, add, critDmg, redMult, atkStat, defRule }) * scale))
-  return { hit:true, crit, damage: dmg }
+  if (!wantPre) return { hit:true, crit, damage: dmg }
+  // 防御を全部無視したときの値＝防御で減る前のダメージ
+  const pre = Math.max(dmg, Math.floor(damageOf({ attacker, defender, mult, kind, crit, defPen: 1, add, critDmg, redMult, atkStat, defRule }) * scale))
+  return { hit:true, crit, damage: dmg, pre }
 }

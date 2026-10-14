@@ -59,7 +59,8 @@ test('必要EXP・必要ClassEXP・スタミナの式と係数がJSと同じ', (
   assert.equal(JOB_NEED_PCT, 50, 'ユーザーが選んだ「LVの5割」')
   // 段階の表（種）に毎回足す量が入っている（ユーザー指示「初期クラスは必要経験値15にして、上位職は30で」）
   assert.ok(SQL.includes("('shoki', 1, 8, '{1,5,10,15,20,25,30}'::int[], 30, 15)"), '初期は15（2026-10-14 から技はCLASS LV25・30でも覚える）')
-  assert.ok(SQL.includes("('ichiji', 3, 10, '{1,5,10,15,20,25,30,40}'::int[], 50, 30)"), '上位は30')
+  // 上位の技は 2026-10-15 に CLASS LV35・45 を足して10個
+  assert.ok(SQL.includes("('ichiji', 3, 10, '{1,5,10,15,20,25,30,35,40,45}'::int[], 50, 30)"), '上位は30')
   assert.ok(SQL.includes('alter table public.v2cap_stages add column if not exists need_base int not null default 0;'), '前からある表にも列を足す')
   // スタミナ：最大値は 10＋(LV−1)・回復は3分に1（2026-10-09 ユーザー指示）
   assert.match(fnBody('v2cap_stamina_max'), new RegExp(`select ${STAMINA_BASE} \\+ greatest\\(1, coalesce\\(p_lv, 1\\)\\) - 1`))
@@ -548,7 +549,9 @@ test('【確定】2026-10-12 覚えた技は編成の空き枠へ入れる（v2c
   assert.ok(f.includes("continue when v_set @> jsonb_build_array(jsonb_build_object('name', r.name)) or r.name = any(v_names);"), 'もう入っている技は入れない')
   assert.ok(f.includes('continue when v_cost + r.mp > coalesce(p_max, 0);'), '1回ぶんも収まらない技はとばして次へ')
   assert.ok(f.includes('v_uses := array_fill(1, array[v_n]);'), 'まず1回ずつ入れる')
-  assert.ok(f.includes('if v_uses[i] < c_uses_max and v_cost + v_mp[i] <= coalesce(p_max, 0) then'), '残りのMPで、入れた技に前から1回ずつ足す')
+  // 足せる回数の上限は1枠5回・回数の上限がある技（uses_max・2026-10-15）はその数まで
+  assert.ok(f.includes('if v_uses[i] < v_cap[i] and v_cost + v_mp[i] <= coalesce(p_max, 0) then'), '残りのMPで、入れた技に前から1回ずつ足す')
+  assert.ok(f.includes('v_cap   := array_append(v_cap, least(c_uses_max, coalesce(r.uses_max, c_uses_max)));'))
   assert.ok(f.includes('return v_set ||'), '前から入っている技にはさわらない（後ろに足すだけ）')
   assert.ok(SQL.includes('revoke all on function public.v2cap_fill_set(jsonb, jsonb, text, int) from public, anon, authenticated;'), '内部ヘルパは閉じる')
   const a = fnBody('v2cap_apply_exp')
@@ -787,4 +790,32 @@ test('塔の守護者の表：読むのは開発者だけ・書くのはRPCだ�
   assert.ok(SQL.includes('create policy v2cap_tower_read on public.v2cap_tower_floors for select to authenticated using (public.v2cap_is_dev());'))
   assert.ok(!/create policy \w+ on public\.v2cap_tower_floors for (insert|update|delete|all)/.test(SQL), '書き込みのポリシーは無い')
   assert.ok(/create policy \w+ on public\.v2cap_tower_floors for select/.test(SQL), '（同じ形で読みのポリシーは拾える）')
+})
+
+test('【確定】2026-10-15 回数の上限がある技（v2cap_skills.uses_max＝skills.js の usesMax）：保存・初めての編成・空き枠・収め直しで同じ上限', () => {
+  assert.ok(SQL.includes('alter table public.v2cap_skills add column if not exists uses_max int;'))
+  // 種：狂鬼化・ゴスペル・エリクサーは1・不動の誓いは2・ほかは null
+  for (const [n, v] of [['狂鬼化', 1], ['ゴスペル', 1], ['エリクサー', 1], ['不動の誓い', 2]]) {
+    assert.match(SQL, new RegExp(`\\('${n}', '[^']+', \\d+, \\d+, false, ${v}\\)`), n)
+  }
+  assert.match(SQL, /\('袈裟斬り', '剣士', \d+, \d+, false, null\)/)
+  const set = fnBody('v2cap_set_skills')
+  assert.ok(set.includes("(e ->> 'uses')::numeric > least(c_use_max, coalesce(v_sk.uses_max, c_use_max))"), '保存：上限を超えたら弾く')
+  assert.ok(set.includes("format('%sの使用回数は1〜%sです', v_name, least(c_use_max, coalesce(v_sk.uses_max, c_use_max)))"), '文言は validateSkillSet と同じ')
+  assert.ok(fnBody('v2cap_default_set').includes('if v_uses[i] < v_cap[i] and v_cost + v_mp[i] <= p_max then'), '初めての編成')
+  assert.ok(fnBody('v2cap_fit_set').includes("'uses', least(coalesce(s.uses_max, 99), greatest(1,"), '収め直し')
+})
+
+test('【確定】2026-10-15 上位クラスの作り直しの移し替え（一度だけ）：技の名前の付け替え・覚え直し・上位の盤面を空に・編成を収め直して空き枠を埋める', () => {
+  const m = SQL.match(/if not exists \(select 1 from public\.v2cap_migrations where key = 'ichiji_rework_20261015'\) then([\s\S]*?)insert into public\.v2cap_migrations \(key\) values \('ichiji_rework_20261015'\);/)
+  assert.ok(m, '印つきで一度だけ')
+  const b = m[1]
+  assert.ok(SQL.includes(`v_ren     jsonb := '{"間合い取り":"嵐の構え"}'::jsonb;`), '間合い取り→嵐の構え')
+  assert.ok(b.includes("v_learned := public.v2cap_learn(v_learned, j.key, coalesce((j.value ->> 'lv')::int, 1));"), 'CLASS LV35・45 の技を覚え直す')
+  assert.ok(b.includes("v_asc := v_asc - array(select c.id from public.v2cap_classes c where c.stage = 'ichiji');"), '上位の盤面を空に（APは CLASS LV から数え直す）')
+  assert.ok(b.includes('v_set := public.v2cap_fit_set(j.value, j.key, v_learned, v_max);'))
+  assert.ok(b.includes('v_set := public.v2cap_fill_set(v_set, v_new, j.key, v_max);'), '空き枠に新しく覚えた技')
+  // 前の移し替え（ichiji_roster_20261014）と、使う関数より後ろに置く
+  assert.ok(SQL.indexOf(m[0]) > SQL.indexOf("values ('ichiji_roster_20261014');"))
+  assert.ok(SQL.indexOf(m[0]) > SQL.indexOf('create or replace function public.v2cap_fill_set('))
 })
