@@ -23,7 +23,7 @@ import {
 //   ★戦闘はここで回して、結果を v2cap_tower_fight へ申告する（出撃と同じ形）
 //   ・【確定】ユーザー指示「該当者は画像みたいに現在の職業のアイコンが表示されるように」：
 //     一覧は 層・職業のアイコン（デフォルメの絵・丸い枠）・LV・名前（ユーザーが見せた画像の形）。自分の行は黄色。
-//     枠の色は通常攻撃が物理なら赤・魔法なら青。一次職は絵がまだ無いので系統の初期職の絵
+//     枠の色は通常攻撃が物理なら赤・魔法なら青。上位職は絵がまだ無いので系統の初期職の絵
 //   ・戦闘ログは出撃と同じ あるけみすと風（battleView.js・V2capLogLine.jsx）。精算のあとの行も出撃と同じ（settleLines.js）
 //   ・待ち時間は出撃と共有（サーバーの last_sortie_at から10秒）
 // ============================================================
@@ -109,7 +109,7 @@ export default function V2capTower({ prof, inventory, onProfile }) {
       const win = r.winner === 'a'
       // 装備は出撃のふつうの敵と同じ（開いている一番先の場所・勝ち負けによらず）
       const drop = rollTowerDrop(prof.cleared_spots, prof.class, new Date(), Math.random, me.setFx?.rareDropMult || 1)
-      // 自分のアイコンも一覧と同じ（一次職は系統の初期職のデフォルメの絵）
+      // 自分のアイコンも一覧と同じ（上位職は系統の初期職のデフォルメの絵）
       setArt({ me: { src: towerIconSrc({ cls: iconClassOf(prof.class), g: gender }), name: me.name }, foe: { src: towerIconSrc(champ.icon), name: champ.name } })
       const out = []
       out.push({ kind:'act', who:'foe', appear: true, lines: [

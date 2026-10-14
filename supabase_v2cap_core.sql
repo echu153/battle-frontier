@@ -19,9 +19,9 @@
 --   ・場所（15エリア×①②③＝45か所）を1本道で進む。その場所のボスを倒すと次の場所が開く
 --   ・1勝で入るEXPとGoldは**場所の表の値**×役割の倍率（朝昼晩1.5倍・レア3倍・ボス5倍）。
 --     サーバーが決める（画面からは受け取らない）
---   ・クラスLV（表記は ClassLV）を職業ごとに持つ。上限は初期職30・一次職50（v2cap_stages.max_jlv）。入るのは今の職業。上がるとスキルを覚える
---   ・一次職は20職（2026-10-10）：系統の初期職のClassLV30で就ける・必要ClassEXPは初期職の3倍・ClassLV1ごとに6点・武器は系統の初期職と同じ
---   ・初期職は11職（2026-10-09 に剣士を足した）。職業ごとに装備できる武器が3〜4種決まっている。一次職は一旦なし
+--   ・クラスLV（表記は ClassLV）を職業ごとに持つ。上限は初期職30・上位職50（v2cap_stages.max_jlv）。入るのは今の職業。上がるとスキルを覚える
+--   ・上位職は20職（2026-10-10）：系統の初期職のClassLV30で就ける・必要ClassEXPは初期職の3倍・ClassLV1ごとに6点・武器は系統の初期職と同じ
+--   ・初期職は11職（2026-10-09 に剣士を足した）。職業ごとに装備できる武器が3〜4種決まっている。上位職は一旦なし
 --   ・装備は**エリアごと**に、武器14種（刀・宝珠を足した）・重鎧4部位・軽装4部位・装飾品4種の26点が、レア度
 --     （ノーマル・レア・エピック・レジェンダリー）ごとに1つずつ。アイテムLV＝装備の必要LV（エリア×レア度）。
 --     エピックはレアとボスから・レジェンダリーはボスからだけ落ちる。武器は1本・盾なし・防具は重鎧／軽装
@@ -61,7 +61,7 @@ $$;
 -- mult … 必要ClassEXPの倍率／per_lv … ClassLVが1上がるごとのステの点数／
 -- learn_at … スキルを覚えるClassLV（その職業の技を v2cap_skills の sort 順に当てる）／max_jlv … ClassLVの上限／
 -- need_base … 必要ClassEXPに毎回足す量（2026-10-12 ユーザー指示「初期クラスは必要経験値15にして、上位職は30で」）
--- ★初期（ClassLV30まで）と一次（2026-10-10・ClassLV50まで）
+-- ★初期（ClassLV30まで）と上位（2026-10-10・ClassLV50まで）
 create table if not exists public.v2cap_stages (
   stage     text primary key,
   mult      int  not null,
@@ -88,14 +88,14 @@ on conflict (stage) do update set mult = excluded.mult, per_lv = excluded.per_lv
 -- ---- 1-2. 職業 ----
 -- req_cls / req_jlv … 就くのに要る職業とClassLV（初期職は null）
 -- bonus_seq … ClassLVで上がるステの並び（1点ずつ。jobs.js の bonusSeqOf と同じ）
--- weapons … 装備できる武器の種類（3つまで・一次職は系統の初期職と同じ）／kind … 通常攻撃が物理（phys）か魔法（mag）か
+-- weapons … 装備できる武器の種類（3つまで・上位職は系統の初期職と同じ）／kind … 通常攻撃が物理（phys）か魔法（mag）か
 --   ★2026-10-11 ユーザー指示「クラスごとに装備できる武器種は3つまでに」：戦士から刀・盗賊から片手剣・魔法使いから短剣・
 --     呪術師から投擲・僧侶から宝珠を外した。着けていた人の武器は §2 の後ろで外す（持ち物には残る）
 -- lineage … スキルを使える職業＝[自分, 下位職, その下位職, …]（jobs.js の lineageOf。req_cls をさかのぼったもの）
 --   ★スキルは「その職業でだけ使える。上位職は下位職のスキルも使える」（2026-10-09 ユーザー決定）
 -- lv_hp / lv_mp … ClassLVが1上がるたびに必ず上がるHP・MP（bonus_seq の点数とは別。jobs.js の JOB_LV_HPMP）
 --   ★2026-10-10 ユーザー指示「レベルアップするとき、HPとMPは絶対あげるようにしてほしい、クラスによって差があってもいい」
---   ★2026-10-12 ユーザー指示で ClassLVごとの点数（v2cap_stages.per_lv）を 初期職5→8・一次職6→10、lv_hp・lv_mp も1.6倍
+--   ★2026-10-12 ユーザー指示で ClassLVごとの点数（v2cap_stages.per_lv）を 初期職5→8・上位職6→10、lv_hp・lv_mp も1.6倍
 -- starter … キャラ作成で配る初期装備（v2cap_equipment の id を 武器・頭・鎧・腕・足・装飾品①・装飾品② の順。初期職だけ）
 --   ★2026-10-12 ユーザー指示「キャラ作成時そのクラスに対応する装備一式（lv１）」（equipment.js の STARTER_SET）
 create table if not exists public.v2cap_classes (
@@ -3115,13 +3115,13 @@ returns int language sql immutable set search_path = public as $$
               else greatest(1, round((20 * 1000 + 162::numeric * p_lv * p_lv * p_lv) / 1000))::int end
 $$;
 
--- 必要ClassEXP ＝ LVの係数 × 割合（%）× 段階の倍率 × ClassLV³ ／ 100000。段階の上限（初期30・一次50）で0（jobs.js の jobNeed）
+-- 必要ClassEXP ＝ LVの係数 × 割合（%）× 段階の倍率 × ClassLV³ ／ 100000。段階の上限（初期30・上位50）で0（jobs.js の jobNeed）
 -- 【確定】2026-10-12 ユーザー指示「通常のレベルよりもクラスレベルのほうが上がりやすくして」→「LVの5割」：
---   同じ数のLVの必要EXP（v2cap_need と同じ LV³ の形）の5割 × 段階の倍率（一次職3倍）。前は 4.4 × 段階の倍率 × ClassLV²
+--   同じ数のLVの必要EXP（v2cap_need と同じ LV³ の形）の5割 × 段階の倍率（上位職3倍）。前は 4.4 × 段階の倍率 × ClassLV²
 -- ⚠係数135はClassLVだけの値（jobs.js の JOB_NEED_BASE_PERMIL＝2026-10-12 に決めたときのLVの係数）・割合は jobs.js の JOB_NEED_PCT。
 --   同じ日にLVだけ重くした（v2cap_need＝20＋0.162×LV³）ので、ここはLVの係数とは切り離してある
 -- 【確定】さらに同じ日に「クラスレベルも最初の必要量少なすぎ、初期クラスは必要経験値15にして、上位職は30で」：
---   段階ごとの量（v2cap_stages.need_base＝初期15・一次30＝jobs.js の STAGES の needBase）を毎回足す
+--   段階ごとの量（v2cap_stages.need_base＝初期15・上位30＝jobs.js の STAGES の needBase）を毎回足す
 create or replace function public.v2cap_job_need(p_stage text, p_jlv int)
 returns int language sql stable set search_path = public as $$
   select case when p_jlv >= coalesce((select s.max_jlv from public.v2cap_stages s where s.stage = p_stage), 30) then 0
@@ -3493,7 +3493,7 @@ create or replace function public.v2cap_apply_exp(p_player uuid, p_amount int)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   c_max_lv  constant int := 100;
-  v_job_max int := 30;   -- いまの職業の段階のClassLV上限（初期30・一次50）
+  v_job_max int := 30;   -- いまの職業の段階のClassLV上限（初期30・上位50）
   v_row   public.v2cap_profiles;
   v_lv    int;
   v_exp   int;
@@ -6171,7 +6171,7 @@ $$;
 revoke all on function public.v2cap_tower_retire() from public, anon;
 grant execute on function public.v2cap_tower_retire() to authenticated;
 
--- ===== 一度だけ：一次職の並び替え（2026-10-14 ユーザー承認）=====
+-- ===== 一度だけ：上位職の並び替え（2026-10-14 ユーザー承認）=====
 -- V1の職業を続投し、横文字の名前も入れた（jobs.js の ICHIJI_INFO・ICHIJI_RENAMED）。職業と技の表（v2cap_classes・v2cap_skills）は上の種で入れ替わる。
 --   ・名前だけ変えた10職：槍術士→ストームランサー・狙撃手→アークアーチャー・砲撃士→デストロイヤー・魔導士→元素使い・時魔導士→クロノマンサー・
 --     死霊術師→死霊使い・陰陽師→式神使い・司祭→聖職者・祓魔師→異端審問官・錬金術師→アルケミスト（技は同じ＝編成もそのまま移す）
@@ -6179,7 +6179,7 @@ grant execute on function public.v2cap_tower_retire() to authenticated;
 -- 今いるキャラは一度だけ：
 --   ①いまの職業・CLASS LV（jobs）・編成（skill_sets）を新しい名前へ移す（CLASS LVはそのまま）
 --   ②覚えた技（learned）から名簿に無い技（重戦士・気功師の技）を外し、就いたことのある職業ぜんぶ、その CLASS LV までの技を覚え直す
---   ③一次職のアセンションの盤面を空にする（盤面は職業の名前と技・配分から作るので中身が変わる。APは CLASS LV から数え直すので戻る・Goldは取らない）
+--   ③上位職のアセンションの盤面を空にする（盤面は職業の名前と技・配分から作るので中身が変わる。APは CLASS LV から数え直すので戻る・Goldは取らない）
 --   ④編成：最大MPに収め直す。編成が無い職業（入れ替えた2職）がいまの職業なら、覚えた技で作り直す（v2cap_default_set）
 -- ★印 ichiji_roster_20261014 を付けるので、2回目以降に全文を流し直しても何もしない
 do $$
@@ -6216,7 +6216,7 @@ begin
       for j in select e.key, e.value from jsonb_each(v_jobs) e loop
         v_learned := public.v2cap_learn(v_learned, j.key, coalesce((j.value ->> 'lv')::int, 1));
       end loop;
-      -- ③ 一次職の盤面（前の名前のぶんも）を空にする
+      -- ③ 上位職の盤面（前の名前のぶんも）を空にする
       v_asc := case when jsonb_typeof(r.ascension) = 'object' then r.ascension else '{}'::jsonb end;
       v_asc := v_asc - array(select c.id from public.v2cap_classes c where c.stage = 'ichiji');
       v_asc := v_asc - array(select jsonb_object_keys(v_map));

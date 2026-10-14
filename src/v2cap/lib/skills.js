@@ -4,7 +4,7 @@
 // 2026-10-09 ユーザー決定（docs/v2cap-design.md §11）：初期職は11職（剣士を同じ日に足した）。
 //   ・戦士・弓使い・魔法使い・僧侶・格闘家 … 今のⅡのスキルをそのまま使う（中身は src/v2/lib/skills.js）
 //   ・槍使い・盗賊・銃士・剣士・呪術師・薬師 … 新しく作った5個ずつ（下の NEW_SKILLS・ユーザー承認済み）
-//   ・ノーブル・サモナーと一次職は**一旦なし**（一次職は 2026-10-10 に skillsIchiji.js で足した）
+//   ・ノーブル・サモナーと上位職は**一旦なし**（上位職は 2026-10-10 に skillsIchiji.js で足した）
 //   ・2026-10-14：11職とも CLASS LV25・30 で1つずつ足した（下の LATE_SKILLS＝技7つから5枠を選ぶ）
 // 新しい技は今のⅡの値段の付け方（発動率ごとの価値 skillValue・消費MPの帯）で初期職の帯に合わせてある。
 //
@@ -71,8 +71,8 @@ export const NEW_SKILLS = [
 // 【確定】2026-10-14 ユーザー承認（案「初期職に技を足す」）。前は技5つ＝枠5つで、初期職のうちは「どの技を入れるか」を選べなかった
 //   （CLASS LV21〜30は何も覚えなかった）。7つから5枠を選ぶ。どれも初期職の帯（価値・消費MP）どおり＝強さは同じで中身が違う。
 //   中身は職業の弱点を埋めるもの（DEXが低い職業に必中・AGIを下げる、回復の無い職業に吸収、など）。
-//   ★名前が重なるものは替えた：焼夷弾・火炎瓶（一次職）→炸裂弾・発火薬／峰打ち（今のⅡの侍）→霞斬り／
-//     足払い（一次職の槍術士）→水面蹴り／乱れ撃ち（今のⅡの武器の進化）→五月雨撃ち
+//   ★名前が重なるものは替えた：焼夷弾・火炎瓶（上位職）→炸裂弾・発火薬／峰打ち（今のⅡの侍）→霞斬り／
+//     足払い（上位職の槍術士）→水面蹴り／乱れ撃ち（今のⅡの武器の進化）→五月雨撃ち
 export const LATE_SKILLS = [
   { name:'霞斬り',     cls:'剣士', kind:'phys', mult:1.31, buff:{ enemy:{ dex:-15 } }, proc:90, mp:8, desc:'相手のDEX-15%（重ねがけ可）' },
   { name:'乱れ斬り',   cls:'剣士', kind:'phys', mult:0.35, add:[{ stat:'agi', rate:0.17 }], hits:3, proc:85, mp:11, noCrit:true, desc:'3連撃。AGIも威力になる。クリティカルしない' },
@@ -101,7 +101,7 @@ export const LATE_SKILLS = [
 // 魔法の属性（魔導士の元素共鳴が「直前と違う属性」を見る）。今のⅡの魔法使いの技は今のⅡの名簿を書き換えず、写しに付ける
 export const ELEM_OF_V2 = { ファイア:'fire', サンダー:'thunder', アイスランス:'ice' }
 
-// この版のスキル全部。今のⅡの5職ぶんは、今のⅡの並び（＝覚える順）のまま。一次職20職は skillsIchiji.js（2026-10-10）
+// この版のスキル全部。今のⅡの5職ぶんは、今のⅡの並び（＝覚える順）のまま。上位職20職は skillsIchiji.js（2026-10-10）
 // ★職業ごとの並び＝覚える順（CLASS LV1・5・10・15・20 の5つ → CLASS LV25・30 の LATE_SKILLS）
 export const SKILLS = [
   ...V2_SKILLS.filter(s => KEEP_FROM_V2.includes(s.cls)).map(s => (ELEM_OF_V2[s.name] ? { ...s, elem: ELEM_OF_V2[s.name] } : s)),
@@ -112,7 +112,7 @@ export const SKILLS = [
 export const SKILL_BY_NAME = Object.fromEntries(SKILLS.map(s => [s.name, s]))
 // 枠に置ける技（パッシブ以外）。並び＝覚える順
 export const skillsOf = (cls) => SKILLS.filter(s => s.cls === cls && !isPassive(s))
-// その職業のパッシブ（一次職だけ・1つ）。★今のⅡの passiveOf は今のⅡの名簿を職業名で引くので使わない
+// その職業のパッシブ（上位職だけ・1つ）。★今のⅡの passiveOf は今のⅡの名簿を職業名で引くので使わない
 //   （狂戦士・竜騎士など今のⅡと同じ名前の職業に、今のⅡのパッシブが付いてしまう）
 export const passiveOf = (cls) => SKILLS.find(s => s.cls === cls && isPassive(s)) || null
 

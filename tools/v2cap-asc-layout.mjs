@@ -16,7 +16,7 @@
 // ============================================================
 import { readFileSync, writeFileSync } from 'node:fs'
 
-// 段階ごとの大きさ。perQuad … 1方向のマスの数（4方向で初期職56・一次職96）／R … 盤の半径（盤は (2R+1)×(2R+1)）
+// 段階ごとの大きさ。perQuad … 1方向のマスの数（4方向で初期職56・上位職96）／R … 盤の半径（盤は (2R+1)×(2R+1)）
 export const STAGE_SHAPE = {
   shoki:  { perQuad: 14, R: 5, skills: 2 },
   ichiji: { perQuad: 24, R: 7, skills: 2 },

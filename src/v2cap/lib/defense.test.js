@@ -42,7 +42,7 @@ test('戦闘：受ける側の印で魔法防御が切り替わる（印の無�
 })
 
 test('戦闘エンジンでダメージを計算する所（resolveAttack）は、どこも受ける側の防御の式を渡している', () => {
-  // ★一次職で計算する所が増えた（着地・反撃・召喚・物理＋魔法の魔法のぶん）。足したときの渡し忘れを見つける
+  // ★上位職で計算する所が増えた（着地・反撃・召喚・物理＋魔法の魔法のぶん）。足したときの渡し忘れを見つける
   const src = readFileSync(new URL('../../v2/lib/battle.js', import.meta.url), 'utf8')
   const calls = (src.match(/resolveAttack\(\{/g) || []).length
   const passed = (src.match(/defRule: foe\.defRule/g) || []).length

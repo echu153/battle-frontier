@@ -16,7 +16,7 @@ import { useStored } from '../../v2/lib/prefs.js'
 // ============================================================
 // 「レベルキャップあり」版 — 神殿（転職）
 //   【確定】2026-10-11 ユーザー指示：
-//   ・一覧は「初期クラス」「一次クラス」の見出しの下にカード。1枚に 名前＋ClassLV（転職したことのないクラスも ClassLV1）／
+//   ・一覧は「初期クラス」「上位クラス」の見出しの下にカード。1枚に 名前＋ClassLV（転職したことのないクラスも ClassLV1）／
 //     装備できる武器種だけ（就けないクラスは条件も）。特徴の一言と上がりやすいステータスは詳細の画面で出す
 //     （ユーザー「クラス選択するとき、上がりやすいステータスとクラスの詳細は乗せなくていいや、クラス詳細で説明するから」）
 //   ・「そのクラス名を押してそのクラスの詳細が開かれてる画面で転職確定させるようにしたい。グラブルみたいなイメージ」：
@@ -31,7 +31,7 @@ import { useStored } from '../../v2/lib/prefs.js'
 //   仕組み：いつでも無料・LVはそのまま・ClassLVは職業ごとに続きから・スキルセットは職業ごと（詳細の画面に添えて出す）
 // ============================================================
 const statText = (cls) => mainStatsOf(cls).map(k => STAT_DEFS[k]?.label || k).join('・')
-const STAGE_TITLE = { shoki:'初期クラス', ichiji:'一次クラス' }
+const STAGE_TITLE = { shoki:'初期クラス', ichiji:'上位クラス' }
 const label = { color: TEXT.label }
 
 // クラスの色の淡い光（絵の後ろ）
@@ -137,7 +137,7 @@ export default function V2capTemple({ prof, inventory, onProfile }) {
       </div>
       {STAGE_ORDER.map(stage => {
         const list = CLASSES.filter(c => c.stage === stage)
-        const thumbs = list.some(c => hasArt(c.id))   // 絵が1枚も無い段（いまは一次クラス）は小さい絵の枠を出さない
+        const thumbs = list.some(c => hasArt(c.id))   // 絵が1枚も無い段（いまは上位クラス）は小さい絵の枠を出さない
         return (
           <div key={stage} style={{ ...box, padding:'12px', marginBottom:'10px' }}>
             <div style={{ color: STAGES[stage].color, fontSize:'13px', marginBottom:'8px' }}>{STAGE_TITLE[stage] || `${STAGES[stage].label}クラス`}</div>

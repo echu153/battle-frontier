@@ -2,14 +2,14 @@
 // バトルフロンティアⅡ「レベルキャップあり」版（v2cap）— 職業とクラスLV（ClassLV）
 // ------------------------------------------------------------
 // 設計は docs/v2cap-design.md §4・§11。ユーザー決定（2026-10-09）：
-//   ・クラスLV（表記は **ClassLV**）は**職業ごと**に持ち、戻れば続きから。上限は初期職30・一次職50（段階ごと＝STAGES の max）
+//   ・クラスLV（表記は **ClassLV**）は**職業ごと**に持ち、戻れば続きから。上限は初期職30・上位職50（段階ごと＝STAGES の max）
 //   ・入るのは**いまの職業**のClassLVだけ（その戦闘で入ったEXPと同じ量）
 //   ・ClassLVが上がると、スキルを覚える／ステが上がる（ステは職業ごとに決まっていて、その職業の間だけ）
 //   ・職業補正（今のⅡの STR+5% など）は**一旦なし**
 //   ・**初期職は11職**（2026-10-09 に剣士を足した）。職業ごとに**装備できる武器は3種**決まっている
 //     （2026-10-11 ユーザー指示「クラスごとに装備できる武器種は3つまでに」で、4種だった5職から1種ずつ外した）
 //   ・ノーブル・サモナーはなくす
-//   ・**一次職は20職**（2026-10-10 ユーザーの表「一次職スキル一覧」・初期職10系統に2職ずつ。剣士系はあとで足す）。
+//   ・**上位職は20職**（2026-10-10 ユーザーの表「一次職スキル一覧」・初期職10系統に2職ずつ。剣士系はあとで足す）。
 //     系統の初期職がClassLV30で就ける／ClassLV上限50／必要ClassEXPは初期職の3倍／ステはClassLV1ごとに6点
 //     （ClassLV30で初期職の1.2倍）／武器は系統の初期職と同じ（どれもユーザー決定）。二次・三次はこれから
 //   ・スキルは**その職業でだけ使える**。**上位職は下位職のスキルをそのまま使える**（lineageOf）
@@ -20,24 +20,26 @@
 import { STAT_KEYS, STAT_DEFS } from '../../v2/lib/stats.js'
 import { SKILLS, skillsOf, isPassive } from './skills.js'
 
-// 初期職のClassLVの上限。一次職は50（STAGES.ichiji.max）。職業ごとの上限は jobMaxOf を使う
+// 初期職のClassLVの上限。上位職は50（STAGES.ichiji.max）。職業ごとの上限は jobMaxOf を使う
 export const JOB_MAX = 30
 
 // ===== 段階 =====
 // mult … 必要ClassEXPの倍率（上の段階ほど重い）／perLv … ClassLVが1上がるごとのステの量（戦闘力換算）
 // learnAt … スキルを覚えるClassLV（並び＝スキルの名簿の順）
 // max … ClassLVの上限
-// 【確定】2026-10-10 ユーザー決定：一次職は ClassLV上限50・必要ClassEXPは初期職の3倍・ClassLVごとの点数は初期職の1.2倍
-//   （効くのは一次職の分だけ）。技は ClassLV1／5／10／15／20／25／30／40 で8つ（ユーザーの表「一次職スキル一覧」）
+// 【確定】2026-10-10 ユーザー決定：上位職は ClassLV上限50・必要ClassEXPは初期職の3倍・ClassLVごとの点数は初期職の1.2倍
+//   （効くのは上位職の分だけ）。技は ClassLV1／5／10／15／20／25／30／40 で8つ（ユーザーの表「一次職スキル一覧」）
 // 【確定】2026-10-12 ユーザー指示「敵のキャラ弱くするってよりかはこっちが弱すぎる気がする、くらすれべるあがるとき、もっと上昇量伸ばしていい」
-//   ＋案「初期クラスは8」・一次職は「10点（初期職の1.2倍のまま）」を選んだ：ClassLVごとの点数を **初期職 5→8・一次職 6→10**
-//   （ClassLV30で 145→232・一次職のClassLV50で 294→490。毎回のHP・MP（JOB_LV_HPMP）も1.6倍）
+//   ＋案「初期クラスは8」・上位職は「10点（初期職の1.2倍のまま）」を選んだ：ClassLVごとの点数を **初期職 5→8・上位職 6→10**
+//   （ClassLV30で 145→232・上位職のClassLV50で 294→490。毎回のHP・MP（JOB_LV_HPMP）も1.6倍）
 // needBase … 必要ClassEXPに毎回足す量（【確定】2026-10-12 ユーザー指示「クラスレベルも最初の必要量少なすぎ、初期クラスは必要経験値15にして、上位職は30で」
-//   ＝ClassLV1→2が初期職15・一次職30。LVの「+20」と同じく、どのClassLVにも足す。下の jobNeed）
+//   ＝ClassLV1→2が初期職15・上位職30。LVの「+20」と同じく、どのClassLVにも足す。下の jobNeed）
 // 【確定】2026-10-14 ユーザー承認：初期職も CLASS LV25・30 で1つずつ覚える（技7つ・skills.js の LATE_SKILLS）
+// 【確定】2026-10-15 ユーザー指示「一次クラス→上位クラスに文言全修正して」：画面の名前は「上位クラス」（label '上位'）。
+//   前の名前は「一次」。コードの中の名前（ichiji・ICHIJI_INFO・skillsIchiji.js など）はそのまま
 export const STAGES = {
   shoki:  { label:'初期', color:'#44aaff', mult:1, perLv:8, max:JOB_MAX, learnAt:[1, 5, 10, 15, 20, 25, 30], needBase:15 },
-  ichiji: { label:'一次', color:'#cc66ff', mult:3, perLv:10, max:50, learnAt:[1, 5, 10, 15, 20, 25, 30, 40], needBase:30 },
+  ichiji: { label:'上位', color:'#cc66ff', mult:3, perLv:10, max:50, learnAt:[1, 5, 10, 15, 20, 25, 30, 40], needBase:30 },
 }
 export const STAGE_ORDER = ['shoki', 'ichiji']
 export const jobMaxOfStage = (stage) => STAGES[stage]?.max || JOB_MAX
@@ -65,12 +67,12 @@ export const CLASS_INFO = {
 }
 export const START_CLASSES = Object.keys(CLASS_INFO)
 
-// ===== 一次職（2026-10-10 ユーザーの表「一次職スキル一覧」）=====
+// ===== 上位職（2026-10-10 ユーザーの表「一次職スキル一覧」）=====
 // base … 系統の初期職（そのClassLV30で就ける・武器と通常攻撃もその初期職と同じ＝ユーザー決定）
 // desc … 神殿で出す特徴（スキル名・ステータス名を書かず特徴だけ＝2026-10-11 ユーザー指示。前はユーザーの表の各職の最初の一文）
-// ★剣士系の一次職はユーザーがあとで足す（2026-10-10「わすれた、あと追加するから先に他のやつ進めて」）
+// ★剣士系の上位職はユーザーがあとで足す（2026-10-10「わすれた、あと追加するから先に他のやつ進めて」）
 export const ICHIJI_REQ_JLV = 30
-// 【確定】2026-10-14 ユーザー承認：一次職の並び替え（22職）。V1の職業を続投し（「V1にある職業は続投させたい」）、
+// 【確定】2026-10-14 ユーザー承認：上位職の並び替え（22職）。V1の職業を続投し（「V1にある職業は続投させたい」）、
 //   横文字の名前も入れた（「漢字ばっかりだから、横文字もいくつか」）。技は skillsIchiji.js
 //   ・剣士系を足した：侍・魔法剣士（どちらもV1）
 //   ・入れ替え：重戦士→聖騎士・気功師→サイキッカー（どちらもV1）
@@ -118,9 +120,9 @@ export const CLASSES = [
 ]
 export const CLASS_BY_ID = Object.fromEntries(CLASSES.map(c => [c.id, c]))
 export const stageOf = (cls) => CLASS_BY_ID[cls]?.stage || null
-// その職業のClassLVの上限（初期職30・一次職50）
+// その職業のClassLVの上限（初期職30・上位職50）
 export const jobMaxOf = (cls) => jobMaxOfStage(stageOf(cls))
-// その初期職から就ける一次職（神殿の並び用）
+// その初期職から就ける上位職（神殿の並び用）
 export const nextClassesOf = (cls) => CLASSES.filter(c => c.req?.cls === cls).map(c => c.id)
 export const stageLabelOf = (cls) => STAGES[stageOf(cls)]?.label || ''
 export const stageColorOf = (cls) => STAGES[stageOf(cls)]?.color || '#88ccff'
@@ -132,14 +134,14 @@ export const canEquipType = (cls, type) => weaponsOf(cls).includes(type)
 
 // ===== 必要ClassEXP =====
 // 【確定】2026-10-12 ユーザー指示「通常のレベルよりもクラスレベルのほうが上がりやすくして」→案から「LVの5割」を選んだ：
-//   ClassLV◯→◯+1 の必要ClassEXP ＝ そのときのLVの式（係数0.135 × LV³）の **5割** × 段階の倍率（一次職3倍）。
+//   ClassLV◯→◯+1 の必要ClassEXP ＝ そのときのLVの式（係数0.135 × LV³）の **5割** × 段階の倍率（上位職3倍）。
 //   前は「係数4.4 × ClassLV²」（ClassLV30がLV33＝LVより遅れていた。tools/v2cap-progress.mjs --tune で決めていた）
 //   ⚠今いるキャラは SQL の一度だけの数え直し（印 job_need_half_lv_20261012）で、ためたClassEXPの合計からClassLVを数え直した
 // 【確定】同じ日にユーザー指示「通常のレベルはもう少しレベル上げにくくていい」でLVだけ重くした（level.js の needExp＝20＋0.162×LV³）。
 //   ClassLVの係数は135（そのときのLVの係数）で固定し、LVの係数（NEED_PERMIL）とは切り離した。
 // 【確定】さらに同じ日にユーザー指示「クラスレベルも最初の必要量少なすぎ、初期クラスは必要経験値15にして、上位職は30で」：
-//   **段階ごとの量（STAGES の needBase＝初期職15・一次職30）を毎回足す**（LVの「+20」と同じ形）。
-//   ＝ 必要ClassEXP ＝ needBase ＋ 0.135×ClassLV³ の5割 × 段階の倍率。ClassLV1→2が初期職15・一次職30（前はどちらも1）。
+//   **段階ごとの量（STAGES の needBase＝初期職15・上位職30）を毎回足す**（LVの「+20」と同じ形）。
+//   ＝ 必要ClassEXP ＝ needBase ＋ 0.135×ClassLV³ の5割 × 段階の倍率。ClassLV1→2が初期職15・上位職30（前はどちらも1）。
 //   最初の職業でも、ClassLVはLVと同じか先に上がる（LV10でClassLV12・LV20で24・ClassLV30はLV24ごろ）
 // ⚠「needBase×100000 ＋ 係数135 × 割合（%）× 倍率 × ClassLV³」を整数で出してから100000で割る（SQLの v2cap_job_need と同じ形・端数の丸めをそろえる）
 // ★let なのは tools/v2cap-progress.mjs が試しに差し替えるため（ゲームの中では変えない）
@@ -163,8 +165,8 @@ export const jobOf = (jobs, cls) => ({ lv: jobs?.[cls]?.lv || 1, exp: jobs?.[cls
 //   2026-10-10 さらに、ClassLVが上がるたびに必ずHPとMPが上がるようにした（下の JOB_LV_HPMP・点数とは別）。
 //   配分は「その職業に要らないステは極力上げないが、尖りすぎないように2〜3種が高く、ほかは少し低め」。
 //   1点＝戦闘力1（HPなら+8・MPなら+3・ほかは+1）。効くのはその職業でいるあいだだけ。
-//   【確定】2026-10-12 ClassLVごとの点数を 初期職 5→8・一次職 6→10 にした（ユーザー指示・上の STAGES）。
-//   配分の割合は承認ずみのまま、合計を 初期職 145→232・一次職 294→490 に伸ばした（端数は最大剰余で合わせた）
+//   【確定】2026-10-12 ClassLVごとの点数を 初期職 5→8・上位職 6→10 にした（ユーザー指示・上の STAGES）。
+//   配分の割合は承認ずみのまま、合計を 初期職 145→232・上位職 294→490 に伸ばした（端数は最大剰余で合わせた）
 // 職業ごとの配分（合計232＝ClassLV30までの点数）。説明文（CLASS_INFO.desc）の「◯◯が伸びる」と合わせてある
 export const JOB_BONUS = {
   戦士:     { str:64, vit:51, hp:45, dex:24, agi:24, mp:16, luk:8 },         // STR・VIT・HP
@@ -180,7 +182,7 @@ export const JOB_BONUS = {
   呪術師:   { int_stat:67, mp:48, dex:32, luk:29, agi:24, hp:19, vit:13 },   // INT・MP（＋DEX・LUK）
   僧侶:     { int_stat:61, vit:48, hp:45, mp:40, agi:19, dex:11, luk:8 },    // INT・VIT・HP
   薬師:     { int_stat:61, dex:48, mp:40, hp:35, agi:24, vit:16, luk:8 },    // INT・DEX（＋MP）
-  // 一次職（合計490＝ClassLV50までの点数・ClassLVごとに10点）。2026-10-10 ユーザー承認の配分（の割合）。
+  // 上位職（合計490＝ClassLV50までの点数・ClassLVごとに10点）。2026-10-10 ユーザー承認の配分（の割合）。
   //   高い2〜3種（102点以上）はその職の技で使うステ
   //   2026-10-14 ユーザー承認の並び替え：新しく入った4職の配分はこちらの案（高い2〜3種が102点以上・LUKも少し入れる＝LUKが0だと相手のクリティカルが上限になる）
   侍:             { str:142, dex:125, agi:75, hp:50, vit:40, mp:33, luk:25 },
@@ -195,7 +197,7 @@ export const JOB_BONUS = {
   忍者:           { agi:141, dex:107, str:92, hp:50, luk:50, vit:25, mp:25 },
   狩人:           { dex:125, agi:110, str:92, luk:56, hp:50, vit:30, mp:27 },
   アークアーチャー: { dex:142, luk:103, agi:92, str:67, hp:40, vit:23, mp:23 },
-  //   魔銃士は 2026-10-14 にHPとLUKを足した（前はHP40・LUK0＝一次職でHPが一番低く、LUK5で相手のクリティカルが上限＝対人の勝率1%だった）。
+  //   魔銃士は 2026-10-14 にHPとLUKを足した（前はHP40・LUK0＝上位職でHPが一番低く、LUK5で相手のクリティカルが上限＝対人の勝率1%だった）。
   //   技は物理と魔法の両方（STRとINTが半分ずつ・ユーザー指示「魔銃士はSTRやINTを半分ずつ参照」）なので、STRとINTは同じ
   魔銃士:         { str:108, int_stat:108, dex:75, hp:66, agi:58, luk:33, mp:25, vit:17 },
   デストロイヤー: { dex:142, str:108, vit:75, hp:57, agi:50, mp:33, luk:25 },
@@ -210,10 +212,10 @@ export const JOB_BONUS = {
 }
 
 // 【確定】2026-10-10 ユーザー指示「レベルアップするとき、HPとMPは絶対あげるようにしてほしい、クラスによって差があってもいいから」＋案を承認：
-//   ClassLVが1上がるたびに、上の点数（初期職8点・一次職10点）とは**別に**、必ずHPとMPが上がる（その職業でいるあいだだけ）。
+//   ClassLVが1上がるたびに、上の点数（初期職8点・上位職10点）とは**別に**、必ずHPとMPが上がる（その職業でいるあいだだけ）。
 //   量は、今の配分（JOB_BONUS）でHP・MPを多くもらっている職業ほど多い
 //   【確定】2026-10-12 点数と一緒に1.6倍にした（ユーザー指示「くらすれべるあがるとき、もっと上昇量伸ばしていい」）：
-//   初期職 HP 13／10／6・MP 5／2、一次職 HP 16／13／10・MP 6／5／3（前は 初期 HP 8／6／4・MP 3／1、一次 HP 10／8／6・MP 4／3／2）
+//   初期職 HP 13／10／6・MP 5／2、上位職 HP 16／13／10・MP 6／5／3（前は 初期 HP 8／6／4・MP 3／1、上位 HP 10／8／6・MP 4／3／2）
 // ★SQLの v2cap_classes.lv_hp・lv_mp はこの表を写したもの（tools/v2cap-sql.mjs が作る）。
 //   サーバーが数えるのはMPだけ（スキル編成の最大MP＝ v2cap_job_bonus_mp）
 //   【確定】2026-10-14 ユーザー承認：剣士・槍使いのHP 10→13（戦士・格闘家なみ。HPが低くボス戦・対人とも下だった）
@@ -321,7 +323,7 @@ export const jobUpNote = (cls, level) => {
   if (ups <= 0) return ''
   return `（${[jobGainText(cls, level.jlv - ups, level.jlv), `AP+${ups * ASC_AP_PER_JLV}`].filter(Boolean).join('・')}）`
 }
-// 上がりやすいステータス（神殿に出す）。配分の高い2〜3種＝初期職48点以上・一次職102点以上（多い順のキー）
+// 上がりやすいステータス（神殿に出す）。配分の高い2〜3種＝初期職48点以上・上位職102点以上（多い順のキー）
 //   （2026-10-12 に点数を1.6倍にしたので、前の30点・61点も同じ割合で上げた＝選ばれるステは前と同じ）
 // ★「高い2〜3種」の決まりは v2cap.test.js が見張っている（2026-10-09 ユーザー指示「2種～3種が高く」）
 export const MAIN_STAT_MIN = { shoki: 48, ichiji: 102 }
@@ -357,7 +359,7 @@ export const nextSkillOf = (cls, jlv) => {
 // 【確定】スキルは**その職業でだけ使える**。**上位職は下位職のスキルをそのまま使える**（効果も消費MPも同じ）
 //   （2026-10-09 ユーザー決定。今のⅡの「他職は0.8倍・MP2倍で使える」はやめた）
 // 下位職＝就く条件（req）の職業をさかのぼったもの。先頭が自分＝[自分, 下位職, その下位職, …]
-// ★一次職は [自分, 系統の初期職]（2026-10-10 一次職を入れた）。
+// ★上位職は [自分, 系統の初期職]（2026-10-10 上位職を入れた）。
 //   サーバーの v2cap_classes.lineage はこの出力を写したもの（tools/v2cap-sql.mjs が作る）
 export const lineageOf = (cls, byId = CLASS_BY_ID) => {
   const out = []
@@ -371,7 +373,7 @@ export const usableSkillNames = (cls, learned = [], lineage = lineageOf(cls)) =>
 }
 
 // ===== 就けるか =====
-// 初期職は条件なし。一次職は req（{ cls: 系統の初期職, jlv: 30 }）
+// 初期職は条件なし。上位職は req（{ cls: 系統の初期職, jlv: 30 }）
 //   （req の職業が「下位職」になり、そのスキルも使えるようになる＝ lineageOf）
 export const reqOf = (cls) => CLASS_BY_ID[cls]?.req || null
 export const missingReqOf = (cls, jobs) => {

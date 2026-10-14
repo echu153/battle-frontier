@@ -46,7 +46,7 @@ export const seeds = () => ({
     'on conflict (stage) do update set mult = excluded.mult, per_lv = excluded.per_lv, learn_at = excluded.learn_at, max_jlv = excluded.max_jlv, need_base = excluded.need_base;',
   ].join('\n'),
   classes: [
-    // ★なくした職業（ノーブル・サモナー・一次職）を消してから入れ直す。参照している外部キーは無い
+    // ★なくした職業（ノーブル・サモナー・上位職）を消してから入れ直す。参照している外部キーは無い
     //   （キャラの職業は §2 の一度だけの作り直しで消えている）
     `delete from public.v2cap_classes where id <> all(${arr(CLASSES.map(c => c.id), '::text[]')});`,
     'insert into public.v2cap_classes (id, stage, sort, req_cls, req_jlv, bonus_seq, weapons, kind, lineage, lv_hp, lv_mp, starter) values',
@@ -55,7 +55,7 @@ export const seeds = () => ({
     '  req_cls = excluded.req_cls, req_jlv = excluded.req_jlv, bonus_seq = excluded.bonus_seq,',
     '  weapons = excluded.weapons, kind = excluded.kind, lineage = excluded.lineage,',
     '  lv_hp = excluded.lv_hp, lv_mp = excluded.lv_mp, starter = excluded.starter;',
-    // 使われなくなった段階（一次）を消す
+    // 使われなくなった段階（上位）を消す
     `delete from public.v2cap_stages s where s.stage <> all(${arr(STAGE_ORDER, '::text[]')})`,
     '  and not exists (select 1 from public.v2cap_classes c where c.stage = s.stage);',
   ].join('\n'),

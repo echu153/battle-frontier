@@ -17,7 +17,7 @@
 //   ・出撃と**待ち時間を共有**する（10秒・サーバーの last_sortie_at）
 //   ・**守護者でいるあいだ、出撃の装備のドロップ率+1%**（ふつうの敵 8→9%・レアとボス 10→11%）
 //   ・空いている層には**NPCの守護者**（n層＝LVnの標準の強さ。ただし挑戦する人の戦闘力×NPC_MIN_RATIO より弱くしない）
-//   ・一覧は守護者の**職業のアイコン（デフォルメの絵）・LV・名前**（ユーザーの画像の形）。一次職は絵がまだ無いので系統の初期職の絵
+//   ・一覧は守護者の**職業のアイコン（デフォルメの絵）・LV・名前**（ユーザーの画像の形）。上位職は絵がまだ無いので系統の初期職の絵
 // こちらで決めた既定（報告済み）：
 //   ・対人のHPは pvp.js の倍率（LV25 ×3.5・LV50 ×5・LV80以上 ×6・2人のうち高いほうのLV）
 //   ・守護者の残りHPは「最大HPの千分率」で持つ（相手のLVで倍率が変わっても割合で引き継ぐ）。MPはそのままの値
@@ -77,7 +77,7 @@ export const applyStreakBonus = (stats, pct) => {
 }
 
 // ===== アイコン =====
-// デフォルメの絵があるクラスはその絵。一次職は絵がまだ無いので系統の初期職の絵（classArt.js の battleIconOf）
+// デフォルメの絵があるクラスはその絵。上位職は絵がまだ無いので系統の初期職の絵（classArt.js の battleIconOf）
 export const iconClassOf = (cls) => {
   if (ART_BASE[cls]) return cls
   const base = CLASS_BY_ID[cls]?.req?.cls
@@ -92,8 +92,8 @@ export const towerIconSrc = (icon) => (icon?.cls ? battleIconOf(icon.cls, icon.g
 //   2026-10-14 測った勝率（node tools/v2cap-progress.mjs --tower --hours 450・初期職11職×2人・NPCの層は1〜自分のLV）：
 //     自分の戦闘力の ×0.6 100%・×0.7 98%・×0.8 89%・×0.9 77%・×1.0 60%・×1.1 49%・×1.2 37%（LV80〜は×0.8で85%）。
 //     ターン数の中央値 6〜12（対人のHP倍率こみ）
-//   2026-10-15 一次職の強さをそろえたあと（21c3a11a）に測り直した：×0.7 99%・×0.8 94%・×0.9 83%・×1.0 68%・×1.2 44%（LV80〜は×0.8で89%）。
-//     ターン数の中央値 6〜9。×0.8のまま（1層あたり約1.2戦。一次職の調整が落ち着いたらもう一度測る）
+//   2026-10-15 上位職の強さをそろえたあと（21c3a11a）に測り直した：×0.7 99%・×0.8 94%・×0.9 83%・×1.0 68%・×1.2 44%（LV80〜は×0.8で89%）。
+//     ターン数の中央値 6〜9。×0.8のまま（1層あたり約1.2戦。上位職の調整が落ち着いたらもう一度測る）
 //   → **×0.8**（勝率約9割＝1層あたり約1.5戦で上がる・9戦に1回ほど負けて2つ下がる。今のⅡのアリーナと同じ値）。
 //     ×1.0（同じ強さ）だと勝率6割＝上がれない。人が座っている層には効かない（本人の実力そのもの）
 //   ⚠数字を変えたら --tower で測り直す
@@ -102,7 +102,7 @@ export const floorPowerOf = (floor) => stdPowerAt(clampFloor(floor))
 export const npcPowerFor = (floor, myPower = 0) =>
   Math.max(floorPowerOf(floor), Math.round((myPower || 0) * NPC_MIN_RATIO))
 
-// 職業：25層より下は初期職、25層からは一次職を順に回す（一次職に就けるのはCLASS LV30＝LV24ごろ）
+// 職業：25層より下は初期職、25層からは上位職を順に回す（上位職に就けるのはCLASS LV30＝LV24ごろ）
 export const NPC_ICHIJI_FROM = 25
 export const npcClassOf = (floor) => {
   const f = clampFloor(floor)
@@ -114,7 +114,7 @@ export const NPC_TITLES = ['流浪の', '無名の', '古参の', '歴戦の', '
 export const npcNameOf = (floor) => `${NPC_TITLES[(clampFloor(floor) - 1) % NPC_TITLES.length]}${npcClassOf(floor)}`
 export const npcGenderOf = (floor) => (clampFloor(floor) % 2 ? 'm' : 'f')
 
-// NPCのCLASS LV。初期職はLVの1.2倍（最大30）＝最初の職業の進み方。一次職はシミュの進み方（LV24でCLASS LV10・27で20・34で30・43で40・53で50）
+// NPCのCLASS LV。初期職はLVの1.2倍（最大30）＝最初の職業の進み方。上位職はシミュの進み方（LV24でCLASS LV10・27で20・34で30・43で40・53で50）
 const ICHIJI_JLV_AT = [[24, 10], [27, 20], [34, 30], [43, 40], [53, 50]]
 export const npcJlvOf = (cls, lv) => {
   const L = Math.max(1, Math.floor(lv || 1))
@@ -156,7 +156,7 @@ export const npcStatsOf = (cls, lv, power) => {
   for (const [k, v] of w) out[k] += Math.round((power - base) * v / total)
   return out
 }
-// 覚えている技（一次職は系統の初期職の技も）
+// 覚えている技（上位職は系統の初期職の技も）
 const npcLearnedOf = (cls, lv) => {
   const jlv = npcJlvOf(cls, lv)
   return lineageOf(cls).flatMap(c => skillsLearnedBy(c, c === cls ? jlv : jobMaxOf(c)))

@@ -158,7 +158,7 @@ export const STARTER_ITEMS = Object.entries(STARTER_NAMES).map(([key, name]) => 
   return { id: itemIdOf(STARTER_AREA, 'N', key), name, part: k.part, type: k.type, line: k.line, kind: key,
     area: STARTER_AREA, rarity: 'N', lv: STARTER_LV, dist: k.dist }
 })
-// 職業 → 初期装備（武器の種類・防具の系統・装飾品の種類）。初期職だけ（一次職は作成で選べない）
+// 職業 → 初期装備（武器の種類・防具の系統・装飾品の種類）。初期職だけ（上位職は作成で選べない）
 export const STARTER_SET = {
   剣士:     { weapon:'刀',     line:'軽装', acc:'イヤリング' },
   戦士:     { weapon:'両手剣', line:'重鎧', acc:'イヤリング' },

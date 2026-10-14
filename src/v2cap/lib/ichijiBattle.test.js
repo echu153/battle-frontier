@@ -1,4 +1,4 @@
-// 一次職の仕組み（battle.js ＋ battleIchiji.js）の回帰テスト（node --test）
+// 上位職の仕組み（battle.js ＋ battleIchiji.js）の回帰テスト（node --test）
 // ★2026-10-10 ユーザーの表「一次職スキル一覧」の効果が、戦闘で実際にそのとおり動くか
 import { test } from 'node:test'
 import assert from 'node:assert/strict'

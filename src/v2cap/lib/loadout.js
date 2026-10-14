@@ -125,7 +125,7 @@ export const toFighter = (profile, inventory) => {
     enchants: [],
     evolutions: [],
     slots: slotsOf(currentSetOf(profile), profile?.class, lineageOf(profile?.class), ascEffectsOf(profile).ups),
-    // ★パッシブはこの版の名簿から渡す（一次職だけ1つ・初期職は無し）。渡さないと戦闘エンジンが今のⅡの名簿を
+    // ★パッシブはこの版の名簿から渡す（上位職だけ1つ・初期職は無し）。渡さないと戦闘エンジンが今のⅡの名簿を
     //   職業名で引き、狂戦士・竜騎士など同じ名前の職業に今のⅡのパッシブが付いてしまう
     passives: passiveOf(profile?.class) ? [passiveOf(profile?.class)] : [],
     // ★防具のセット能力（2部位・4部位の戦闘の効果。3部位の能力値は stats に入っている）。無ければ null

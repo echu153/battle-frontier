@@ -244,18 +244,40 @@ test('【確定】初期職は11職（剣士を足した）。装備できる武
 
 test('【確定】ノーブル・サモナーはなくした。初期職11職は条件なし', () => {
   for (const id of ['ノーブル', 'サモナー', '賢者', 'ギャンブラー', '精霊召喚士', 'ブリーダー']) assert.ok(!CLASSES.some(c => c.id === id), `${id}は無い`)
-  // 2026-10-14：侍・聖職者などV1の職業は一次職として続投した（初期職ではない）
-  for (const id of ['侍', '聖職者']) assert.equal(CLASSES.find(c => c.id === id)?.stage, 'ichiji', `${id}は一次職`)
+  // 2026-10-14：侍・聖職者などV1の職業は上位職として続投した（初期職ではない）
+  for (const id of ['侍', '聖職者']) assert.equal(CLASSES.find(c => c.id === id)?.stage, 'ichiji', `${id}は上位職`)
   const shoki = CLASSES.filter(c => c.stage === 'shoki')
   assert.deepEqual(shoki.map(c => c.id), START_CLASSES)
   for (const c of shoki) { assert.equal(c.req, null); assert.equal(canBecome(c.id, {}), true, `${c.id}は条件なし`) }
 })
 
-test('【確定】一次職は22職（ユーザーの表「一次職スキル一覧」＋2026-10-14 の並び替え）：系統の初期職のClassLV30で就ける・上限50・必要ClassEXP3倍・ステは初期職の1.2倍（10点）・武器は系統の初期職と同じ', () => {
+test('【確定】2026-10-15 画面の名前は「上位クラス」（前の名前「一次」は使わない）', async () => {
+  // ユーザー指示「一次クラス→上位クラスに文言全修正して」。コードの中の名前（ichiji）はそのまま
+  assert.deepEqual([STAGES.shoki.label, STAGES.ichiji.label], ['初期', '上位'])
+  const { readFileSync, readdirSync, statSync } = await import('node:fs')
+  const { join } = await import('node:path')
+  const { fileURLToPath } = await import('node:url')
+  const root = fileURLToPath(new URL('..', import.meta.url))
+  const temple = readFileSync(join(root, 'components/V2capTemple.jsx'), 'utf8')
+  assert.ok(temple.includes("ichiji:'上位クラス'"), '神殿の見出しは「上位クラス」')
+  // v2cap のファイルに「一次」が残っていない。残すのは、かぎかっこで引いたものだけ
+  //   （ユーザーの表の題・共有の戦闘エンジンの節の名前・今回の指示の文・前の名前として書いた「一次」）
+  const KEEP = ['「一次職スキル一覧」', '「一次職の仕組み」', '「一次クラス→上位クラスに文言全修正して」', '「一次」']
+  const OLD = '一' + '次'
+  const walk = (d) => readdirSync(d).flatMap(f => { const p = join(d, f); return statSync(p).isDirectory() ? walk(p) : [p] })
+  const left = walk(root).filter(p => /\.(js|jsx|mjs)$/.test(p)).flatMap(p => {
+    let s = readFileSync(p, 'utf8')
+    for (const k of KEEP) s = s.split(k).join('')
+    return s.split('\n').map((l, i) => l.includes(OLD) ? `${p.slice(root.length)}:${i + 1}` : null).filter(Boolean)
+  })
+  assert.deepEqual(left, [], '「一次」は「上位」に（2026-10-15 ユーザー指示）')
+})
+
+test('【確定】上位職は22職（ユーザーの表「一次職スキル一覧」＋2026-10-14 の並び替え）：系統の初期職のClassLV30で就ける・上限50・必要ClassEXP3倍・ステは初期職の1.2倍（10点）・武器は系統の初期職と同じ', () => {
   // 2026-10-10 ユーザー決定（転職の条件・ClassLV上限50・必要ClassEXP3倍・クラスのステは初期職の1.2倍・武器）
   assert.deepEqual(Object.keys(STAGES), ['shoki', 'ichiji'])
   assert.deepEqual([STAGES.shoki.max, STAGES.ichiji.max], [30, 50])
-  // ClassLVごとの点数：2026-10-12 ユーザー指示で 初期職5→8・一次職6→10（一次職は初期職の1.2倍のまま＝ユーザーが選んだ）
+  // ClassLVごとの点数：2026-10-12 ユーザー指示で 初期職5→8・上位職6→10（上位職は初期職の1.2倍のまま＝ユーザーが選んだ）
   assert.deepEqual([STAGES.ichiji.mult, STAGES.ichiji.perLv], [3, 10])
   assert.equal(STAGES.ichiji.perLv, Math.round(STAGES.shoki.perLv * 1.2), 'ClassLVごとの点数は初期職の1.2倍')
   assert.deepEqual(STAGES.ichiji.learnAt, [1, 5, 10, 15, 20, 25, 30, 40])
@@ -268,7 +290,7 @@ test('【確定】一次職は22職（ユーザーの表「一次職スキル一
     assert.ok(CLASS_BY_ID[ICHIJI_RENAMED[old]], `${old}の移し先 ${ICHIJI_RENAMED[old]}がある`)
   }
   // 系統（初期職11系統に2職ずつ）
-  for (const b of START_CLASSES) assert.equal(nextClassesOf(b).length, 2, `${b}から就ける一次職は2つ`)
+  for (const b of START_CLASSES) assert.equal(nextClassesOf(b).length, 2, `${b}から就ける上位職は2つ`)
   assert.deepEqual(nextClassesOf('剣士'), ['侍', '魔法剣士'])
   for (const id of ICHIJI_CLASSES) {
     const c = CLASSES.find(x => x.id === id)
@@ -283,7 +305,7 @@ test('【確定】一次職は22職（ユーザーの表「一次職スキル一
     assert.equal(canBecome(id, { [base]: { lv: 29 } }), false)
     assert.equal(canBecome(id, { [base]: { lv: 30 } }), true)
   }
-  // 必要ClassEXP：毎回足す量（初期15・一次30）を除いたぶんが初期職の3倍（丸めの差は1まで）・ClassLV50で0
+  // 必要ClassEXP：毎回足す量（初期15・上位30）を除いたぶんが初期職の3倍（丸めの差は1まで）・ClassLV50で0
   for (let j = 5; j < 30; j++) assert.ok(Math.abs((jobNeed('ichiji', j) - 30) - 3 * (jobNeed('shoki', j) - 15)) <= 1, `ClassLV${j}`)
   assert.equal(jobNeed('ichiji', 49) > 0 && jobNeed('ichiji', 50), 0)
   assert.equal(jobNeed('shoki', 30), 0)
@@ -307,13 +329,13 @@ test('【確定】ClassLVは最大30。初期職のClassLV30まで＝LV24のこ�
   assert.ok(total >= totalExpTo(24) && total < totalExpTo(25), `初期職の合計 ${total} はLV24〜25のあいだ`)
 })
 
-test('【確定】2026-10-12 必要ClassEXP＝段階ごとの量（初期15・一次30）＋係数0.135×ClassLV³の5割×段階の倍率。最初の職業ならClassLV≧LV', () => {
+test('【確定】2026-10-12 必要ClassEXP＝段階ごとの量（初期15・上位30）＋係数0.135×ClassLV³の5割×段階の倍率。最初の職業ならClassLV≧LV', () => {
   // ユーザー指示「通常のレベルよりもクラスレベルのほうが上がりやすくして」→案から「LVの5割」を選んだ。
   //   同じ日に「通常のレベルはもう少しレベル上げにくくていい」でLVだけ 20＋0.162×LV³ にした＝ClassLVの係数は135のまま（切り離した）。
   //   さらに「クラスレベルも最初の必要量少なすぎ、初期クラスは必要経験値15にして、上位職は30で」＝毎回 needBase を足す
   assert.deepEqual([JOB_NEED_BASE_PERMIL, JOB_NEED_PCT], [135, 50])
   assert.deepEqual([STAGES.shoki.needBase, STAGES.ichiji.needBase], [15, 30])
-  assert.deepEqual([jobNeed('shoki', 1), jobNeed('ichiji', 1)], [15, 30], 'ClassLV1→2は初期職15・一次職30（ユーザー指示）')
+  assert.deepEqual([jobNeed('shoki', 1), jobNeed('ichiji', 1)], [15, 30], 'ClassLV1→2は初期職15・上位職30（ユーザー指示）')
   for (const stage of ['shoki', 'ichiji']) {
     for (let j = 1; j < jobMaxOf(stage === 'shoki' ? '戦士' : '狂戦士'); j++) {
       const want = STAGES[stage].needBase + 0.135 * j * j * j / 2 * STAGES[stage].mult
@@ -329,7 +351,7 @@ test('【確定】2026-10-12 必要ClassEXP＝段階ごとの量（初期15・�
   assert.equal(jlvAt(totalExpTo(20)), 24)
 })
 
-test('【確定】クラスのステはClassLVが1上がるごとに初期職8点（ClassLV30で232点）・一次職10点（ClassLV50で490点）。職業ごとに2〜3種が高く、ほかは低め', () => {
+test('【確定】クラスのステはClassLVが1上がるごとに初期職8点（ClassLV30で232点）・上位職10点（ClassLV50で490点）。職業ごとに2〜3種が高く、ほかは低め', () => {
   // 2026-10-12 ユーザー指示「くらすれべるあがるとき、もっと上昇量伸ばしていい」で 5点→8点・6点→10点（配分の割合はそのまま）
   assert.deepEqual([STAGES.shoki.perLv, STAGES.ichiji.perLv], [8, 10])
   for (const c of CLASSES) {
@@ -338,7 +360,7 @@ test('【確定】クラスのステはClassLVが1上がるごとに初期職8�
     const sum = Object.values(w).reduce((a, b) => a + b, 0)
     const total = c.stage === 'ichiji' ? 490 : 232
     assert.equal(sum, total, `${c.id}の合計（上限のClassLVで${total}点）`)
-    // 2〜3種が高い（初期職48点以上・一次職102点以上＝同じ割合・神殿の MAIN_STAT_MIN）・ほかはそれより低い・尖りすぎない（1種で半分を超えない）
+    // 2〜3種が高い（初期職48点以上・上位職102点以上＝同じ割合・神殿の MAIN_STAT_MIN）・ほかはそれより低い・尖りすぎない（1種で半分を超えない）
     const vals = Object.values(w).sort((a, b) => b - a)
     const high = vals.filter(v => v >= (c.stage === 'ichiji' ? 102 : 48)).length
     assert.ok(high >= 2 && high <= 3, `${c.id}：高いのは${high}種`)
@@ -399,7 +421,7 @@ test('【確定】ClassLVが上がるたびに、どの職業でも必ずHPとMP
   const want = {
     戦士: [13, 2], 槍使い: [13, 2], 格闘家: [13, 2], 盗賊: [6, 2], 弓使い: [6, 2], 銃士: [6, 2], 剣士: [13, 2],
     魔法使い: [10, 5], 呪術師: [6, 5], 僧侶: [13, 5], 薬師: [13, 5],
-    // 2026-10-14 一次職の並び替え：侍・魔法剣士・聖騎士・サイキッカーを足した・魔銃士 10→13（HPが一番低かった）
+    // 2026-10-14 上位職の並び替え：侍・魔法剣士・聖騎士・サイキッカーを足した・魔銃士 10→13（HPが一番低かった）
     侍: [13, 3], 魔法剣士: [13, 5], 狂戦士: [16, 3], 聖騎士: [16, 5], 竜騎士: [13, 3], ストームランサー: [10, 3], 体術師: [13, 3], サイキッカー: [13, 5],
     暗殺者: [10, 3], 忍者: [10, 3], 狩人: [10, 3], アークアーチャー: [10, 3], 魔銃士: [13, 5], デストロイヤー: [13, 5],
     元素使い: [10, 6], クロノマンサー: [10, 6], 死霊使い: [13, 6], 式神使い: [10, 6], 聖職者: [16, 6], 異端審問官: [13, 6], アルケミスト: [13, 6], 霊薬師: [16, 6],
@@ -451,7 +473,7 @@ test('【確定】キャラ作成と神殿に出す特徴の説明が全職ぶ�
 
 // ===== スキル =====
 // 【確定】2026-10-14 ユーザー承認：初期職も CLASS LV25・30 で1つずつ（技7つ・5枠から選ぶ）
-test('スキルは初期職ClassLV 1／5／10／15／20／25／30 で7個・一次職ClassLV 1／5／10／15／20／25／30／40 で8個', () => {
+test('スキルは初期職ClassLV 1／5／10／15／20／25／30 で7個・上位職ClassLV 1／5／10／15／20／25／30／40 で8個', () => {
   assert.deepEqual(STAGES.shoki.learnAt, [1, 5, 10, 15, 20, 25, 30])
   for (const c of CLASSES) {
     const n = c.stage === 'ichiji' ? 8 : 7
@@ -484,7 +506,7 @@ test('【確定】戦士・弓使い・魔法使い・僧侶・格闘家のCLASS
   assert.ok(V2_SKILLS.every(s => !('elem' in s)), '今のⅡの名簿は書き換えていない')
 })
 
-test('【確定】一次職の技はユーザーの表「一次職スキル一覧」のとおり（各職8技＋パッシブ1つ・組み方の例2つ）', () => {
+test('【確定】上位職の技はユーザーの表「一次職スキル一覧」のとおり（各職8技＋パッシブ1つ・組み方の例2つ）', () => {
   assert.equal(ICHIJI_SKILLS.length, 198, '22職×9（2026-10-14 の並び替え）')
   for (const id of ICHIJI_CLASSES) {
     const mine = ICHIJI_SKILLS.filter(x => x.cls === id)
@@ -577,7 +599,7 @@ test('編成の想定利用MPは、この版の名簿で数える（新しい技
 })
 
 test('【確定】スキルはその職業でだけ使える。他の職業の技は、覚えていても置けない（0.8倍・MP2倍で使う形はやめた）', () => {
-  for (const c of CLASSES) assert.deepEqual(lineageOf(c.id), c.req ? [c.id, c.req.cls] : [c.id], `${c.id}：自分（一次職は系統の初期職も）`)
+  for (const c of CLASSES) assert.deepEqual(lineageOf(c.id), c.req ? [c.id, c.req.cls] : [c.id], `${c.id}：自分（上位職は系統の初期職も）`)
   const lin = lineageOf('戦士')
   const learned = ['体当たり', '強撃', '呪弾']
   assert.equal(validateSkillSet([{ name:'呪弾', uses: 1 }], { lineage: lin, learned, maxMp: 99 }), '呪弾は戦士では使えません（呪術師のスキル）')

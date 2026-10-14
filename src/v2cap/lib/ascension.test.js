@@ -69,7 +69,7 @@ test('【確定】盤面の形（段階ごとに1つ）：起点から4方向に
   }
 })
 
-test('【確定】どの職業にも盤面がある。初期職56マス・一次職96マス＝全部は埋まらず半分くらい', () => {
+test('【確定】どの職業にも盤面がある。初期職56マス・上位職96マス＝全部は埋まらず半分くらい', () => {
   assert.equal(ASC_CLASSES.length, CLASSES.length, '31職すべて')
   for (const cls of ASC_CLASSES) {
     const size = treeSizeOf(cls)
@@ -111,7 +111,7 @@ test('【確定】小マスのステは盤面全体に混ぜる（数はクラ�
       const kinds = new Set(smalls.filter(n => n.q === q).map(n => n.stat))
       assert.ok(kinds.size >= 3, `${cls} 方向${q}：${[...kinds].join(',')}`)
     }
-    // 小マスの値は起点から遠いほど上（初期職 +2→+3→+4・一次職 +3→+4→+5）・HPは×8・MPは×3
+    // 小マスの値は起点から遠いほど上（初期職 +2→+3→+4・上位職 +3→+4→+5）・HPは×8・MPは×3
     for (const n of smalls) {
       assert.ok(ASC_SHAPE[stageOf(cls)].tiers.includes(n.pts))
       assert.equal(n.amount, n.pts * STAT_DEFS[n.stat].unit)
@@ -134,7 +134,7 @@ test('【確定】スキルマスの上がり幅：攻撃＝威力+20%・回復�
   assert.deepEqual(ascendSkill(SKILL_BY_NAME['衰弱の呪詛']).buff.enemy, { str: -20, int_stat: -20 }, '相手を下げる技は下げ幅が+10')
   assert.deepEqual(ascendSkill(SKILL_BY_NAME['仙丹']).buff.self, { str: 17, dex: 17, agi: 17, int_stat: 17, vit: 16, luk: 16 })
   assert.equal(ascendSkill(SKILL_BY_NAME['祈りの結界']).guard.cut, 30, '受け止め（重戦士）は 2026-10-14 に無くなった＝同じ形の祈りの結界で見る')
-  // 2026-10-14 一次職の並び替えで入った技：納刀は次の技の発動率+20%→+30%・大防御は1ターンの受けるダメージ−60%→−70%
+  // 2026-10-14 上位職の並び替えで入った技：納刀は次の技の発動率+20%→+30%・大防御は1ターンの受けるダメージ−60%→−70%
   assert.equal(ascendSkill(SKILL_BY_NAME['納刀']).stance.proc, 30)
   assert.equal(ascendSkill(SKILL_BY_NAME['納刀']).stance.mult, 1.5, '威力の倍率はそのまま')
   assert.equal(ascendSkill(SKILL_BY_NAME['大防御']).bigGuard.cut, 70)

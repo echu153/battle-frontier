@@ -6,10 +6,10 @@
 //   ・場所は1本道（15エリア×①②③）。いつも「開いている一番先の場所」で戦う
 //   ・EXPとGold（場所の表×役割の倍率）／LVアップのステータスポイント／ClassEXP／スキル習得／必要LV不足
 //   ・**ステータスポイントは、その職業のクラスのステと同じ割合で振る**（jobs.js の JOB_BONUS の並び bonusSeqOf を順に）
-//   ・最初の職業は --cls で選ぶ（既定は戦士）。**ClassLV30になったら、その系統の一次職へすぐ転職する**（2026-10-10）。
-//     どちらの一次職か・組み方の例のどちらか（skillsIchiji.js の ICHIJI_BUILDS）は乱数の番号で決める
+//   ・最初の職業は --cls で選ぶ（既定は戦士）。**ClassLV30になったら、その系統の上位職へすぐ転職する**（2026-10-10）。
+//     どちらの上位職か・組み方の例のどちらか（skillsIchiji.js の ICHIJI_BUILDS）は乱数の番号で決める
 //     （1＝1つ目の職・1つ目の組み方／2＝2つ目の職・1つ目／3＝1つ目の職・2つ目／4＝2つ目の職・2つ目）。
-//     まだ覚えていない枠は、系統の初期職の技（ふつうの並べ方）で埋める。剣士は一次職がまだ無いので剣士のまま
+//     まだ覚えていない枠は、系統の初期職の技（ふつうの並べ方）で埋める。剣士は上位職がまだ無いので剣士のまま
 //   ・**装備の持ち方は --gear で選ぶ**（どの持ち方でも、持っている中から必要LVの不足ぶんも数えて、職業ごとのステの重み
 //     STAT_WEIGHT でいちばん強いものを各枠に着ける）：
 //       drops（既定）… **実際に落ちた装備だけ**（画面と同じ rollEquipDrop・ドロップ率どおり）＋キャラ作成でもらう初期装備（2026-10-12〜）
@@ -133,13 +133,13 @@ export const STAT_WEIGHT = {
   呪術師:   { agi:1.00, int_stat:0.95, vit:0.19, dex:0.14, str:0 },
   僧侶:     { int_stat:1.00, agi:0.31, dex:0.23, vit:0.03, str:0 },
   薬師:     { int_stat:1.00, agi:0.62, vit:0.17, dex:0.09, str:0 },
-  // ★一次職のうち、系統の初期職と使うステが違う職業（2026-10-14 の並び替え）。まだ測っていない仮の重み（--statvalue で測り直す）
+  // ★上位職のうち、系統の初期職と使うステが違う職業（2026-10-14 の並び替え）。まだ測っていない仮の重み（--statvalue で測り直す）
   魔法剣士:     { str:1.00, int_stat:0.80, agi:0.50, dex:0.20, vit:0.15 },
   聖騎士:       { vit:1.00, str:1.00, agi:0.40, int_stat:0.20, dex:0.15 },
   サイキッカー: { str:1.00, int_stat:1.00, agi:0.50, dex:0.20, vit:0.15 },
   魔銃士:       { str:1.00, int_stat:1.00, agi:0.50, dex:0.40, vit:0.15 },
 }
-// ★ほかの一次職はまだ測っていないので、系統の初期職の重みを使う
+// ★ほかの上位職はまだ測っていないので、系統の初期職の重みを使う
 const weightOf = (cls) => STAT_WEIGHT[cls] || STAT_WEIGHT[CLASS_BY_ID[cls]?.req?.cls]
   || (attackKindOf(cls) === 'mag' ? { int_stat:1, agi:0.6 } : { str:1, agi:0.8 })
 // スキル編成：強化の技を先頭に1回ずつ・攻撃の技は後に覚えたもの（強い技）から・回復の技は最後に1回ずつ。
@@ -154,7 +154,7 @@ export const typicalSet = (cls, learned, maxMp) => {
   const sks = learnOrderOf(cls).filter(sk => have.has(sk.name) && !isMpOnly(sk))
   return fitSet(orderForSet(sks).slice(0, 5), maxMp)
 }
-// 一次職：ユーザーの表の組み方の例（覚えた技だけ）＋足りない枠は系統の初期職の技（ふつうの並べ方）
+// 上位職：ユーザーの表の組み方の例（覚えた技だけ）＋足りない枠は系統の初期職の技（ふつうの並べ方）
 export const ichijiSet = (cls, buildIdx, learned, maxMp) => {
   const have = new Set(learned)
   const build = ICHIJI_BUILDS[cls]?.[buildIdx] || []
@@ -163,7 +163,7 @@ export const ichijiSet = (cls, buildIdx, learned, maxMp) => {
   const fill = base
     ? orderForSet(learnOrderOf(base).filter(sk => have.has(sk.name) && !isMpOnly(sk))).slice(0, Math.max(0, 5 - own.length))
     : []
-  // 種類ごと（強化→攻撃→回復）に並べ、同じ種類では一次職の技を先に置く
+  // 種類ごと（強化→攻撃→回復）に並べ、同じ種類では上位職の技を先に置く
   const rank = (sk) => (sk.kind === 'buff' ? 0 : isAtk(sk) ? 1 : 2)
   const merged = [...orderForSet(own), ...fill].map((sk, i) => ({ sk, i })).sort((a, b) => rank(a.sk) - rank(b.sk) || a.i - b.i).map(x => x.sk)
   return fitSet(merged, maxMp)
@@ -203,7 +203,7 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
   const enhByArea = {}
   const st = { lv: 1, exp: 0, ...INITIAL_STATS }
   let cls = start
-  // 一次職の選び方（乱数の番号で決める）
+  // 上位職の選び方（乱数の番号で決める）
   const jobPick = (seed - 1) % 2
   const buildPick = Math.floor((seed - 1) / 2) % 2
   let advancedHour = null
@@ -333,7 +333,7 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
     const mp = totalStats(prof(), invAt(openUntilOf(cleared))).mp
     skillSet = CLASS_BY_ID[cls]?.stage === 'ichiji' ? ichijiSet(cls, buildPick, learned, mp) : typicalSet(cls, learned, mp)
   }
-  // 転職：系統の一次職へ（ClassLVは1から・クラスのステはその職のぶんだけ・武器は同じ）
+  // 転職：系統の上位職へ（ClassLVは1から・クラスのステはその職のぶんだけ・武器は同じ）
   const advance = (hour) => {
     const opts = nextClassesOf(cls)
     if (!opts.length) return false
@@ -405,7 +405,7 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
           if (k) { scrap[enc.spot.area] = (scrap[enc.spot.area] || 0) + k; scrapGot.chest += k }
         }
       }
-      // 初期職がClassLV30（上限）になったら、すぐ系統の一次職へ（★最初の職業のClassLV30の時間は転職の前に数える）
+      // 初期職がClassLV30（上限）になったら、すぐ系統の上位職へ（★最初の職業のClassLV30の時間は転職の前に数える）
       if (CLASS_BY_ID[cls]?.stage === 'shoki' && j.lv >= JOB_MAX) {
         if (job30Hour === null) job30Hour = hour
         if (advance(hour)) dirty = true

@@ -75,7 +75,7 @@ test('【確定】連勝補正：n連勝中の守護者に挑むと +5n%（HP/MP
   assert.equal(s.str, 120)
 })
 
-test('アイコン：初期職はその職業のデフォルメの絵・一次職は系統の初期職の絵（男女）', () => {
+test('アイコン：初期職はその職業のデフォルメの絵・上位職は系統の初期職の絵（男女）', () => {
   for (const c of START_CLASSES) assert.equal(iconClassOf(c), c)
   for (const c of ICHIJI_CLASSES) assert.equal(iconClassOf(c), CLASS_BY_ID[c].req.cls, c)
   for (const c of Object.keys(CLASS_BY_ID)) assert.ok(ART_BASE[iconClassOf(c)], `${c} の絵がある`)
@@ -99,7 +99,7 @@ test('空いている層のNPC：n層はLVn・強さはLVnの標準の強さ以�
   assert.ok(floorPowerOf(100) > floorPowerOf(1), '上の層ほど強い')
 })
 
-test('空いている層のNPC：職業は層で決まる（25層から一次職）・名前も同じ・技はその職業で使える覚えた技だけ・MPに収まる', () => {
+test('空いている層のNPC：職業は層で決まる（25層から上位職）・名前も同じ・技はその職業で使える覚えた技だけ・MPに収まる', () => {
   assert.equal(NPC_ICHIJI_FROM, 25)
   for (let f = 1; f <= FLOORS; f++) {
     const cls = npcClassOf(f)
@@ -135,7 +135,7 @@ test('守護者の姿：保存して戻しても、戦闘に使う中身（ス�
   assert.equal(back.kind, me.kind)
   assert.equal(back.defRule, me.defRule)
   assert.equal(back.lv, 40)
-  assert.deepEqual(back.icon, { cls: '戦士', g: 'f' }, '一次職のアイコンは系統の初期職の絵・男女はそのとき選んでいた方')
+  assert.deepEqual(back.icon, { cls: '戦士', g: 'f' }, '上位職のアイコンは系統の初期職の絵・男女はそのとき選んでいた方')
   // 同じ乱数なら、元のキャラと戻した姿で同じ戦いになる
   const foe = npcFighterOf(30, 0)
   const r1 = runBattle(me, foe, { rng: seq(0.3, 0.7, 0.1, 0.9, 0.5) })

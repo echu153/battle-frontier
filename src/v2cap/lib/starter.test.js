@@ -21,7 +21,7 @@ test('どの初期職にも7枠そろった初期装備がある（枠の順・�
     })
     assert.ok(canEquipType(cls, ITEM_BY_ID[ids[0]].type), `${cls}は初期装備の武器を装備できる`)
   }
-  assert.deepEqual(starterIdsOf('狂戦士'), [], '一次職には無い（キャラ作成で選べない）')
+  assert.deepEqual(starterIdsOf('狂戦士'), [], '上位職には無い（キャラ作成で選べない）')
   assert.deepEqual(starterIdsOf('ないクラス'), [])
 })
 
