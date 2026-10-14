@@ -133,7 +133,11 @@ test('【確定】スキルマスの上がり幅：攻撃＝威力+20%・回復�
   assert.deepEqual(ascendSkill(SKILL_BY_NAME['精神統一']).buff.self, { int_stat: 35 })
   assert.deepEqual(ascendSkill(SKILL_BY_NAME['衰弱の呪詛']).buff.enemy, { str: -20, int_stat: -20 }, '相手を下げる技は下げ幅が+10')
   assert.deepEqual(ascendSkill(SKILL_BY_NAME['仙丹']).buff.self, { str: 17, dex: 17, agi: 17, int_stat: 17, vit: 16, luk: 16 })
-  assert.equal(ascendSkill(SKILL_BY_NAME['受け止め']).guard.cut, 30)
+  assert.equal(ascendSkill(SKILL_BY_NAME['祈りの結界']).guard.cut, 30, '受け止め（重戦士）は 2026-10-14 に無くなった＝同じ形の祈りの結界で見る')
+  // 2026-10-14 一次職の並び替えで入った技：納刀は次の技の発動率+20%→+30%・大防御は1ターンの受けるダメージ−60%→−70%
+  assert.equal(ascendSkill(SKILL_BY_NAME['納刀']).stance.proc, 30)
+  assert.equal(ascendSkill(SKILL_BY_NAME['納刀']).stance.mult, 1.5, '威力の倍率はそのまま')
+  assert.equal(ascendSkill(SKILL_BY_NAME['大防御']).bigGuard.cut, 70)
   assert.equal(ascendSkill(SKILL_BY_NAME['ブラッディロア']).lifeSteal.pct, 20)
   assert.equal(ascendSkill(SKILL_BY_NAME['骸骨召喚']).summon.mult, 0.35, '魔法×0.25→×0.35')
   assert.equal(ascendSkill(SKILL_BY_NAME['リザレクション']).revive.pct, 60)
@@ -146,7 +150,9 @@ test('【確定】スキルマスの上がり幅：攻撃＝威力+20%・回復�
   assert.deepEqual(SKILL_BY_NAME['剣の構え'].buff.self, { str: 15, agi: 12 }, '元の技は書き換えない')
   assert.equal(SKILL_BY_NAME['クイック'].extraTurn.max, 2)
   assert.equal(ascSkillDetail('剣の構え'), 'STR+15%→+21%・AGI+12%→+16%')
-  assert.equal(ascSkillDetail('受け止め'), '受けるダメージ −20%→−30%')
+  assert.equal(ascSkillDetail('祈りの結界'), '受けるダメージ −20%→−30%')
+  assert.equal(ascSkillDetail('納刀'), '次の技の発動率 +20%→+30%')
+  assert.equal(ascSkillDetail('大防御'), '1ターンの受けるダメージ −60%→−70%')
   assert.equal(ascSkillDetail('クイック'), '戦闘中に使える回数 2回→3回')
 })
 

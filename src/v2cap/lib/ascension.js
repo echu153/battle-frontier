@@ -78,6 +78,9 @@ export const ASC_BUFF_PARAMS = [
   { key: 'revive',      field: 'pct',  label: '復活したときのHP', sign: 1, scale: 1 },   // リザレクション
   { key: 'nextBoost',   field: 'per',  label: '溜め1つの威力',  sign: 1, scale: 1 },     // 照準・詠唱
   { key: 'summon',      field: 'mult', label: '召喚の攻撃',     sign: 1, scale: 0.01 },  // 骸骨召喚・式神召喚（魔法×0.25→×0.35）
+  // 2026-10-14 一次職の並び替えで入った技（今のⅡの侍・聖騎士から）
+  { key: 'stance',      field: 'proc', label: '次の技の発動率', sign: 1, scale: 1 },     // 納刀（+20%→+30%）
+  { key: 'bigGuard',    field: 'cut',  label: '1ターンの受けるダメージ', sign: -1, scale: 1 }, // 大防御（−60%→−70%）
 ]
 
 // スキルマスの種類（攻撃・回復・バフ・回数）。パッシブと知らない種類は null（マスを作らない）

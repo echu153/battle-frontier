@@ -133,8 +133,13 @@ export const STAT_WEIGHT = {
   呪術師:   { agi:1.00, int_stat:0.95, vit:0.19, dex:0.14, str:0 },
   僧侶:     { int_stat:1.00, agi:0.31, dex:0.23, vit:0.03, str:0 },
   薬師:     { int_stat:1.00, agi:0.62, vit:0.17, dex:0.09, str:0 },
+  // ★一次職のうち、系統の初期職と使うステが違う職業（2026-10-14 の並び替え）。まだ測っていない仮の重み（--statvalue で測り直す）
+  魔法剣士:     { str:1.00, int_stat:0.80, agi:0.50, dex:0.20, vit:0.15 },
+  聖騎士:       { vit:1.00, str:1.00, agi:0.40, int_stat:0.20, dex:0.15 },
+  サイキッカー: { str:1.00, int_stat:1.00, agi:0.50, dex:0.20, vit:0.15 },
+  魔銃士:       { str:1.00, int_stat:1.00, agi:0.50, dex:0.40, vit:0.15 },
 }
-// ★一次職はまだ測っていないので、系統の初期職の重みを使う
+// ★ほかの一次職はまだ測っていないので、系統の初期職の重みを使う
 const weightOf = (cls) => STAT_WEIGHT[cls] || STAT_WEIGHT[CLASS_BY_ID[cls]?.req?.cls]
   || (attackKindOf(cls) === 'mag' ? { int_stat:1, agi:0.6 } : { str:1, agi:0.8 })
 // スキル編成：強化の技を先頭に1回ずつ・攻撃の技は後に覚えたもの（強い技）から・回復の技は最後に1回ずつ。

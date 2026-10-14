@@ -14,7 +14,7 @@ import {
   ICHIJI_CLASSES, ICHIJI_INFO, ICHIJI_REQ_JLV, jobMaxOf, nextClassesOf, CLASS_INFO, JOB_NEED_BASE_PERMIL, JOB_NEED_PCT,
   bonusPointsAt, jobBonusStats, learnOrderOf, learnAtOf, skillsLearnedBy, applyJobExp,
   canBecome, weaponsOf, canEquipType, attackKindOf, lineageOf, usableSkillNames, classDescOf,
-  jobBonusGain, jobGainText, jobUpHead, jobUpNote,
+  jobBonusGain, jobGainText, jobUpHead, jobUpNote, CLASS_BY_ID, ICHIJI_RENAMED,
 } from './jobs.js'
 import { SKILLS, NEW_SKILLS, LATE_SKILLS, SKILL_BY_NAME, setMpCost, validateSkillSet, defaultSetOf, fillSetOf, SKILL_SET_SLOTS, DEFAULT_USES_MAX, passiveOf } from './skills.js'
 import { ICHIJI_SKILLS, ICHIJI_BUILDS } from './skillsIchiji.js'
@@ -243,13 +243,15 @@ test('【確定】初期職は11職（剣士を足した）。装備できる武
 })
 
 test('【確定】ノーブル・サモナーはなくした。初期職11職は条件なし', () => {
-  for (const id of ['ノーブル', 'サモナー', '侍', '聖職者', '賢者']) assert.ok(!CLASSES.some(c => c.id === id), `${id}は無い`)
+  for (const id of ['ノーブル', 'サモナー', '賢者', 'ギャンブラー', '精霊召喚士', 'ブリーダー']) assert.ok(!CLASSES.some(c => c.id === id), `${id}は無い`)
+  // 2026-10-14：侍・聖職者などV1の職業は一次職として続投した（初期職ではない）
+  for (const id of ['侍', '聖職者']) assert.equal(CLASSES.find(c => c.id === id)?.stage, 'ichiji', `${id}は一次職`)
   const shoki = CLASSES.filter(c => c.stage === 'shoki')
   assert.deepEqual(shoki.map(c => c.id), START_CLASSES)
   for (const c of shoki) { assert.equal(c.req, null); assert.equal(canBecome(c.id, {}), true, `${c.id}は条件なし`) }
 })
 
-test('【確定】一次職は20職（ユーザーの表「一次職スキル一覧」）：系統の初期職のClassLV30で就ける・上限50・必要ClassEXP3倍・ステは初期職の1.2倍（10点）・武器は系統の初期職と同じ', () => {
+test('【確定】一次職は22職（ユーザーの表「一次職スキル一覧」＋2026-10-14 の並び替え）：系統の初期職のClassLV30で就ける・上限50・必要ClassEXP3倍・ステは初期職の1.2倍（10点）・武器は系統の初期職と同じ', () => {
   // 2026-10-10 ユーザー決定（転職の条件・ClassLV上限50・必要ClassEXP3倍・クラスのステは初期職の1.2倍・武器）
   assert.deepEqual(Object.keys(STAGES), ['shoki', 'ichiji'])
   assert.deepEqual([STAGES.shoki.max, STAGES.ichiji.max], [30, 50])
@@ -257,13 +259,17 @@ test('【確定】一次職は20職（ユーザーの表「一次職スキル一
   assert.deepEqual([STAGES.ichiji.mult, STAGES.ichiji.perLv], [3, 10])
   assert.equal(STAGES.ichiji.perLv, Math.round(STAGES.shoki.perLv * 1.2), 'ClassLVごとの点数は初期職の1.2倍')
   assert.deepEqual(STAGES.ichiji.learnAt, [1, 5, 10, 15, 20, 25, 30, 40])
-  assert.equal(CLASSES.length, 31)
-  assert.deepEqual(ICHIJI_CLASSES, ['狂戦士', '重戦士', '竜騎士', '槍術士', '体術師', '気功師', '暗殺者', '忍者', '狩人', '狙撃手',
-    '魔銃士', '砲撃士', '魔導士', '時魔導士', '死霊術師', '陰陽師', '司祭', '祓魔師', '錬金術師', '霊薬師'])
-  // 系統（初期職10系統に2職ずつ・剣士系はあとでユーザーが足す）
-  const bases = ['戦士', '槍使い', '格闘家', '盗賊', '弓使い', '銃士', '魔法使い', '呪術師', '僧侶', '薬師']
-  for (const b of bases) assert.equal(nextClassesOf(b).length, 2, `${b}から就ける一次職は2つ`)
-  assert.deepEqual(nextClassesOf('剣士'), [], '剣士系はまだ無い')
+  assert.equal(CLASSES.length, 33)
+  // 2026-10-14 ユーザー承認の並び替え：V1の職業を続投・横文字の名前も入れた・剣士系（侍・魔法剣士）を足した
+  assert.deepEqual(ICHIJI_CLASSES, ['侍', '魔法剣士', '狂戦士', '聖騎士', '竜騎士', 'ストームランサー', '体術師', 'サイキッカー', '暗殺者', '忍者',
+    '狩人', 'アークアーチャー', '魔銃士', 'デストロイヤー', '元素使い', 'クロノマンサー', '死霊使い', '式神使い', '聖職者', '異端審問官', 'アルケミスト', '霊薬師'])
+  for (const old of ['重戦士', '気功師', '槍術士', '狙撃手', '砲撃士', '魔導士', '時魔導士', '死霊術師', '陰陽師', '司祭', '祓魔師', '錬金術師']) {
+    assert.ok(!CLASS_BY_ID[old], `${old}は無い（前の名前）`)
+    assert.ok(CLASS_BY_ID[ICHIJI_RENAMED[old]], `${old}の移し先 ${ICHIJI_RENAMED[old]}がある`)
+  }
+  // 系統（初期職11系統に2職ずつ）
+  for (const b of START_CLASSES) assert.equal(nextClassesOf(b).length, 2, `${b}から就ける一次職は2つ`)
+  assert.deepEqual(nextClassesOf('剣士'), ['侍', '魔法剣士'])
   for (const id of ICHIJI_CLASSES) {
     const c = CLASSES.find(x => x.id === id)
     const base = ICHIJI_INFO[id].base
@@ -393,9 +399,10 @@ test('【確定】ClassLVが上がるたびに、どの職業でも必ずHPとMP
   const want = {
     戦士: [13, 2], 槍使い: [13, 2], 格闘家: [13, 2], 盗賊: [6, 2], 弓使い: [6, 2], 銃士: [6, 2], 剣士: [13, 2],
     魔法使い: [10, 5], 呪術師: [6, 5], 僧侶: [13, 5], 薬師: [13, 5],
-    狂戦士: [16, 3], 重戦士: [16, 3], 竜騎士: [13, 3], 槍術士: [10, 3], 体術師: [13, 3], 気功師: [13, 5],
-    暗殺者: [10, 3], 忍者: [10, 3], 狩人: [10, 3], 狙撃手: [10, 3], 魔銃士: [10, 5], 砲撃士: [13, 5],
-    魔導士: [10, 6], 時魔導士: [10, 6], 死霊術師: [13, 6], 陰陽師: [10, 6], 司祭: [16, 6], 祓魔師: [13, 6], 錬金術師: [13, 6], 霊薬師: [16, 6],
+    // 2026-10-14 一次職の並び替え：侍・魔法剣士・聖騎士・サイキッカーを足した・魔銃士 10→13（HPが一番低かった）
+    侍: [13, 3], 魔法剣士: [13, 5], 狂戦士: [16, 3], 聖騎士: [16, 5], 竜騎士: [13, 3], ストームランサー: [10, 3], 体術師: [13, 3], サイキッカー: [13, 5],
+    暗殺者: [10, 3], 忍者: [10, 3], 狩人: [10, 3], アークアーチャー: [10, 3], 魔銃士: [13, 5], デストロイヤー: [13, 5],
+    元素使い: [10, 6], クロノマンサー: [10, 6], 死霊使い: [13, 6], 式神使い: [10, 6], 聖職者: [16, 6], 異端審問官: [13, 6], アルケミスト: [13, 6], 霊薬師: [16, 6],
   }
   for (const [cls, [hp, mp]] of Object.entries(want)) assert.deepEqual(JOB_LV_HPMP[cls], { hp, mp }, cls)
   for (const c of CLASSES) {
@@ -413,7 +420,7 @@ test('【確定】ClassLVが上がるたびに、どの職業でも必ずHPとMP
   // ユーザーに見せた例（上限のClassLVでの合計）
   assert.deepEqual([jobBonusStats('戦士', 30).hp, jobBonusStats('戦士', 30).mp], [737, 106])
   assert.deepEqual([jobBonusStats('魔法使い', 30).hp, jobBonusStats('魔法使い', 30).mp], [482, 289])
-  assert.deepEqual([jobBonusStats('司祭', 50).hp, jobBonusStats('司祭', 50).mp], [1720, 519])
+  assert.deepEqual([jobBonusStats('聖職者', 50).hp, jobBonusStats('聖職者', 50).mp], [1720, 519], '司祭から改名（2026-10-14）')
 })
 
 test('神殿の「上がりやすいステータス」は配分の高い2〜3種（多い順）。例：戦士＝STR・VIT', () => {
@@ -478,7 +485,7 @@ test('【確定】戦士・弓使い・魔法使い・僧侶・格闘家のCLASS
 })
 
 test('【確定】一次職の技はユーザーの表「一次職スキル一覧」のとおり（各職8技＋パッシブ1つ・組み方の例2つ）', () => {
-  assert.equal(ICHIJI_SKILLS.length, 180)
+  assert.equal(ICHIJI_SKILLS.length, 198, '22職×9（2026-10-14 の並び替え）')
   for (const id of ICHIJI_CLASSES) {
     const mine = ICHIJI_SKILLS.filter(x => x.cls === id)
     assert.equal(mine.filter(x => x.kind === 'passive').length, 1, `${id}のパッシブは1つ`)

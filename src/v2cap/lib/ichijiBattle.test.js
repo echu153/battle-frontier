@@ -7,12 +7,14 @@ import { tickIchiji } from '../../v2/lib/battleIchiji.js'
 import { inflict, hasAilment } from '../../v2/lib/ailments.js'
 import { buildBattleLog } from '../../v2/lib/battleLog.js'
 import { SKILL_BY_NAME, passiveOf } from './skills.js'
+import { RETIRED_BY_NAME, retiredPassiveOf } from './retiredIchiji.fixture.js'
 import { ICHIJI_BUILDS } from './skillsIchiji.js'
 import { ICHIJI_CLASSES, attackKindOf } from './jobs.js'
 import { toFighter } from './loadout.js'
 
 const S = (n) => {
-  const s = SKILL_BY_NAME[n]
+  // 2026-10-14 に無くなった重戦士・気功師の技は、テスト用の写し（retiredIchiji.fixture.js）から引く
+  const s = SKILL_BY_NAME[n] || RETIRED_BY_NAME[n]
   assert.ok(s, `${n}がある`)
   return s
 }
@@ -20,7 +22,7 @@ const stats = (over = {}) => ({ hp: 10000, mp: 2000, str: 300, dex: 150, agi: 15
 const side = (name, cls, skills = [], over = {}) => createSide({
   name, cls, kind: attackKindOf(cls), stats: stats(over.stats), noClassBonus: true,
   slots: skills.map(n => ({ skill: S(n), uses: 9 })),
-  passives: passiveOf(cls) ? [passiveOf(cls)] : [],
+  passives: passiveOf(cls) ? [passiveOf(cls)] : retiredPassiveOf(cls) ? [retiredPassiveOf(cls)] : [],
 })
 // 的：殴ってくるだけの相手（技なし）
 const dummy = (over = {}) => createSide({ name: '的', cls: null, kind: 'phys', stats: stats({ hp: 10000000, ...over }), slots: [], passives: [], noClassBonus: true })
@@ -173,7 +175,7 @@ test('魔銃士：物理と魔法の両方で殴る（同じ倍率の物理だ�
 })
 
 test('リザレクション：戦闘中1回だけ、HPが0になったらHP50%で立ち上がる', () => {
-  const me = side('司', '司祭', ['リザレクション'])
+  const me = side('司', '聖職者', ['リザレクション'])
   const foe = dummy({ str: 100000 })
   const log = []
   takeAction(me, foe, mid, log)
@@ -184,7 +186,7 @@ test('リザレクション：戦闘中1回だけ、HPが0になったらHP50%�
   takeAction(foe, me, mid, log)
   assert.ok(me.hp <= 0, '2回目は立ち上がらない')
   // 使ったあとは、もう一度は撃たない（飛ばす）
-  const me2 = side('司2', '司祭', ['リザレクション', '聖光'])
+  const me2 = side('司2', '聖職者', ['リザレクション', '聖光'])
   takeAction(me2, dummy(), mid, [])
   const l2 = []
   takeAction(me2, dummy(), mid, l2)
@@ -193,7 +195,7 @@ test('リザレクション：戦闘中1回だけ、HPが0になったらHP50%�
 
 test('召喚：骸骨召喚で死霊が増え（最大3体）、毎ターン死霊の数だけ魔法で攻撃する', () => {
   const r = runBattle(
-    { name: '死', cls: '死霊術師', kind: 'mag', stats: stats(), noClassBonus: true, passives: [passiveOf('死霊術師')],
+    { name: '死', cls: '死霊使い', kind: 'mag', stats: stats(), noClassBonus: true, passives: [passiveOf('死霊使い')],
       slots: [{ skill: S('骸骨召喚'), uses: 9 }] },
     { name: '的', cls: null, kind: 'phys', stats: stats({ hp: 10000000, str: 1 }), slots: [], passives: [], noClassBonus: true },
     { rng: lcg(1), maxTurns: 5 })
@@ -204,7 +206,7 @@ test('召喚：骸骨召喚で死霊が増え（最大3体）、毎ターン死�
 })
 
 test('クイック：このターンもう一度行動する（戦闘中2回まで）', () => {
-  const me = side('時', '時魔導士', ['クイック', 'クロノバレット'])
+  const me = side('時', 'クロノマンサー', ['クイック', 'クロノバレット'])
   const foe = dummy()
   const log = []
   takeAction(me, foe, mid, log)
@@ -219,7 +221,7 @@ test('クイック：このターンもう一度行動する（戦闘中2回ま�
 })
 
 test('フルバースト：装填を全部使って撃ち、そのあと1回は動けない', () => {
-  const me = side('砲', '砲撃士', ['装填', '装填', 'フルバースト', '散弾'])
+  const me = side('砲', 'デストロイヤー', ['装填', '装填', 'フルバースト', '散弾'])
   const foe = dummy()
   takeAction(me, foe, mid, [])
   takeAction(me, foe, mid, [])
@@ -241,7 +243,7 @@ test('不動：麻痺・鈍足にかからない／狂信：その間は能力�
   takeAction(foe, tank, mid, log)
   assert.equal(hasAilment(tank.ail, 'paralyze'), false)
   assert.ok(log.some(l => l.type === 'immune'))
-  const ex = side('祓', '祓魔師', ['狂信'])
+  const ex = side('祓', '異端審問官', ['狂信'])
   takeAction(ex, dummy(), mid, [])
   const debuffer = createSide({ name: '敵2', cls: null, kind: 'phys', stats: stats(), noClassBonus: true, passives: [],
     slots: [{ skill: { name: '威圧', cls: null, kind: 'buff', proc: 100, mp: 0, buff: { enemy: { str: -20 } } }, uses: 9 }] })
@@ -262,7 +264,7 @@ test('忍耐：4ターンのあいだに受けたダメージの40%を、終わ�
 })
 
 test('リワインド：直前2ターンで受けたダメージの50%を回復', () => {
-  const me = side('時', '時魔導士', ['リワインド'])
+  const me = side('時', 'クロノマンサー', ['リワインド'])
   me.hp -= 3000
   me.takenLog = [{ turn: 0, dmg: 1000 }, { turn: 1, dmg: 1000 }, { turn: 2, dmg: 1000 }]
   me.turn = 2
@@ -272,7 +274,7 @@ test('リワインド：直前2ターンで受けたダメージの50%を回復'
 })
 
 test('メガボム：相手の状態異常をすべて解除し、1つにつき威力+30%（最大+120%）', () => {
-  const me = side('錬', '錬金術師', ['メガボム'])
+  const me = side('錬', 'アルケミスト', ['メガボム'])
   const foe = dummy()
   for (const k of ['poison', 'burn', 'slow']) inflict(foe.ail, k)
   const log = []
@@ -283,7 +285,7 @@ test('メガボム：相手の状態異常をすべて解除し、1つにつき�
 })
 
 test('続けて使えない技・溜めが無いと出ない技は飛ばして次の技を撃つ', () => {
-  const on = side('陰', '陰陽師', ['禁術・神降ろし', '式打ち'])
+  const on = side('陰', '式神使い', ['禁術・神降ろし', '式打ち'])
   const foe = dummy()
   takeAction(on, foe, mid, [])
   on.ptr = 0                          // 次も禁術の枠から探す
@@ -298,7 +300,7 @@ test('続けて使えない技・溜めが無いと出ない技は飛ばして�
 
 test('照準：溜めた数だけ次の射撃が+15%ずつ（使うとリセット）', () => {
   const shot = (aims) => {
-    const me = side('狙', '狙撃手', [...Array(aims).fill('照準'), '強弓'])
+    const me = side('狙', 'アークアーチャー', [...Array(aims).fill('照準'), '強弓'])
     for (let i = 0; i < aims; i++) takeAction(me, dummy(), mid, [])
     const log = []
     takeAction(me, dummy(), mid, log)
@@ -310,7 +312,7 @@ test('照準：溜めた数だけ次の射撃が+15%ずつ（使うとリセッ�
 })
 
 test('槍の型：当てるたびにコンボ+1（コンボ1につき与ダメージ+1%）', () => {
-  const me = side('槍', '槍術士', ['連突き'])
+  const me = side('槍', 'ストームランサー', ['連突き'])
   takeAction(me, dummy(), mid, [])
   assert.equal(me.combo, 3)
 })
