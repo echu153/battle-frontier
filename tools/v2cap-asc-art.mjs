@@ -5,7 +5,8 @@
 // 元の絵（ユーザーが置く・git に入れない＝.gitignore）：public/アセンション/<名前>.png（1254×1254）
 //   ステ8枚 HP・MP・STR・DEX・AGI・INT・VIT・LUK（STR は「SRT」でも読む）／スキル（丸い枠）／大枠（大マスのひし形の枠）／起点／背景
 // 作るもの：
-//   public/asc-art/<key>.webp   … ステ・スキル 160px／大枠・起点 256px（透明つき・見えている所がちょうど収まる正方形）／背景 1280px（透明なし）
+//   public/asc-art/<key>.webp   … ステ・スキル 256px／大枠・起点 384px（透明つき・見えている所がちょうど収まる正方形）／背景 1600px（透明なし）
+//     ★2026-10-14 盤面を拡大できるようにしたので大きめに（前は 160／256／1280。いちばん大きくすると1マスが200px台になる）
 //   src/v2cap/lib/ascArtList.js … 絵がある key と中身の印（画面はこれを見て、無いものは図形で描く・印は URL の ?v= ＝絵を替えたら読み直させる）
 //   node tools/v2cap-asc-art.mjs          … 元の絵が新しくなったものだけ作る
 //   node tools/v2cap-asc-art.mjs --force  … 全部作り直す
@@ -29,18 +30,18 @@ mkdirSync(OUT, { recursive: true })
 // key → 元の絵の名前（拡張子なし・どれか1つ）・大きさ
 export const STAT_KEYS_ART = ['hp', 'mp', 'str', 'dex', 'agi', 'int_stat', 'vit', 'luk']
 const PARTS = {
-  hp: { names: ['HP'], size: 160 },
-  mp: { names: ['MP'], size: 160 },
-  str: { names: ['STR', 'SRT'], size: 160 },   // ★ユーザーの絵は「SRT.png」（2026-10-14）
-  dex: { names: ['DEX'], size: 160 },
-  agi: { names: ['AGI'], size: 160 },
-  int_stat: { names: ['INT'], size: 160 },
-  vit: { names: ['VIT'], size: 160 },
-  luk: { names: ['LUK'], size: 160 },
-  skill: { names: ['スキル'], size: 160 },
-  big: { names: ['大枠', '大マス'], size: 256 },
-  start: { names: ['起点'], size: 256 },
-  bg: { names: ['背景'], size: 1280, opaque: true },
+  hp: { names: ['HP'], size: 256 },
+  mp: { names: ['MP'], size: 256 },
+  str: { names: ['STR', 'SRT'], size: 256 },   // ★ユーザーの絵は「SRT.png」（2026-10-14）
+  dex: { names: ['DEX'], size: 256 },
+  agi: { names: ['AGI'], size: 256 },
+  int_stat: { names: ['INT'], size: 256 },
+  vit: { names: ['VIT'], size: 256 },
+  luk: { names: ['LUK'], size: 256 },
+  skill: { names: ['スキル'], size: 256 },
+  big: { names: ['大枠', '大マス'], size: 384 },
+  start: { names: ['起点'], size: 384 },
+  bg: { names: ['背景'], size: 1600, opaque: true },
 }
 const MARGIN = 0.02
 const QUALITY = 84

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import V2Modal from '../../v2/components/V2Modal.jsx'
 import { box, miniBtn, TEXT } from '../../v2/components/v2ui.js'
@@ -8,6 +8,7 @@ import {
   treeOf, treeSizeOf, ascStateOf, apTotalOf, apSpentOf, ascEffectsOf, ascSkillDetail, ascendError, ascResetGoldOf, routeTo, ASC_STAT_COLOR,
 } from '../lib/ascension.js'
 import { ASC_ART } from '../lib/ascArtList.js'
+import { fitView, viewBoxOf, zoomAt, panBy, toBoard, unitsPerPx, wheelFactorOf, zoomMaxOf, isInView } from '../lib/ascView.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — アセンション（スキルツリー）
@@ -26,6 +27,10 @@ import { ASC_ART } from '../lib/ascArtList.js'
 //     盤面の背景・起点・ステ8種のマス・スキルの丸枠・大マスのひし形の枠をユーザーの絵で描く（public/asc-art＝tools/v2cap-asc-art.mjs）。
 //     開いていないマスは暗く、開いたマスはそのステの色の光を後ろに置く。大マスは枠の中にそのステの絵を小さく入れる。
 //     スキルの丸枠は中が暗い石なので、開いたら中を水色に光らせる。絵が無いもの（ascArtList.js に無い key）は図形で描く
+//   ・【確定】2026-10-14 ユーザー指示「スキルツリーをマウスのホイールとかでズームインできるようにして」：
+//     ホイールでマウスのある所を中心に拡大・縮小（それ以上変わらないときはページのスクロールに任せる）。拡大したらドラッグで動かす。
+//     スマホは2本指で拡大・1本指で動かす（全体のときの1本指はページのスクロール）。＋・−・全体のボタンでも。計算は src/v2cap/lib/ascView.js
+//     （前の「全体を見る／大きく見る」の切り替えはこれに置き換えた）
 //   ・振り直しは LV×100 Gold（v2cap_ascend_reset）。開くのはサーバー（v2cap_ascend）
 //   数え方は src/v2cap/lib/ascension.js（戦闘・ステの内訳と同じもの）
 // ============================================================
@@ -38,8 +43,9 @@ const colorOf = (node) => (node.type === 'skill' ? SKILL_C : node.type === 'star
 // 盤の座標 → 画面の座標（1方向目＝上・時計回りに 右・下・左）
 const sx = (n) => n.y
 const sy = (n) => -n.x
-// 「大きく」のときの1マスの幅の最小（これより狭い画面では盤を横にスクロール）。「全体」は画面の幅に収める
-const CELL_MIN_PX = 40
+const PAD = 0.75           // 盤のまわりの余白（マス目＝1）
+const DRAG_PX = 6          // これだけ動かしたら「ドラッグ」（マスを押したことにしない）
+const ZOOM_BTN = 1.5       // ＋・−のボタン1回の倍率
 const FLASH_STEP_MS = 90    // 開いたときの演出：1マスごとの遅れ
 // 絵（public/asc-art/<key>.webp）。無ければ null＝図形で描く。?v= は中身の印（絵を替えたら読み直させる）
 const artUrl = (key) => (ASC_ART[key] ? `/asc-art/${key}.webp?v=${ASC_ART[key]}` : null)
@@ -115,7 +121,7 @@ function ArtShape({ node, owned, x, y }) {
 }
 
 // マス1つ（SVG・文字は出さない）。owned＝開いた／onRoute＝選んだルートに入っている／reach＝起点か開いたマスのとなり
-function NodeShape({ node, owned, onRoute, reach, selected, flash, onPick }) {
+const NodeShape = memo(function NodeShape({ node, owned, onRoute, reach, selected, flash, onPick }) {
   const c = colorOf(node)
   const x = sx(node), y = sy(node)
   const dim = !owned && !reach && !onRoute   // 遠いマス（まだ届かない）は少し暗く
@@ -162,7 +168,7 @@ function NodeShape({ node, owned, onRoute, reach, selected, flash, onPick }) {
         style={{ animationDelay: `${flash}ms` }} />}
     </g>
   )
-}
+})
 
 export default function V2capAscension({ prof, onProfile }) {
   const [cls, setCls] = useState(prof.class)
@@ -171,14 +177,98 @@ export default function V2capAscension({ prof, onProfile }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [msg, setMsg] = useState('')
-  // true＝大きく（狭い画面は横にスクロール）／false＝全体（画面の幅に収める）。スマホは全体から
-  const [zoom, setZoom] = useState(() => typeof window === 'undefined' || window.innerWidth >= 600)
   // 開いたときの演出：{ マスの番号: 遅れ(ms) }
   const [flash, setFlash] = useState({})
   const flashTimer = useRef(null)
   useEffect(() => () => clearTimeout(flashTimer.current), [])
 
   const tree = treeOf(cls)
+  // ===== 拡大・移動（ascView.js）=====
+  const R = tree?.R ?? 5
+  const bounds = { min: -R - PAD, max: R + PAD }
+  const [view, setView] = useState(() => fitView(bounds))
+  const svgRef = useRef(null)
+  const live = useRef({})            // イベントの中から今の値を見る（古い値をつかまない）
+  live.current = { view, bounds }
+  const gesture = useRef({ pointers: new Map(), pan: null, pinch: null, moved: false })
+  const suppressClick = useRef(false) // ドラッグのあとの「押した」は無視
+  // ホイール：マウスのある所を中心に拡大・縮小。それ以上変わらない向きは、ページのスクロールに任せる
+  //   （React の onWheel は passive で止められないので、自分で passive:false で付ける）
+  useEffect(() => {
+    const el = svgRef.current
+    if (!el) return undefined
+    const onWheel = (e) => {
+      const { view: v, bounds: b } = live.current
+      const f = wheelFactorOf(e.deltaY, e.deltaMode)
+      const stuck = (f < 1 && v.k <= 1 + 1e-9) || (f > 1 && v.k >= zoomMaxOf(b) - 1e-9)
+      if (stuck && !e.ctrlKey) return
+      e.preventDefault()
+      if (stuck) return
+      const [ux, uy] = toBoard(v, b, el.getBoundingClientRect(), e.clientX, e.clientY)
+      setView(zoomAt(v, f, ux, uy, b))
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [cls])
+  const onPointerDown = (e) => {
+    const g = gesture.current
+    g.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (g.pointers.size === 1) {
+      g.pan = { x: e.clientX, y: e.clientY, v: live.current.view }
+      g.moved = false
+    } else if (g.pointers.size === 2) {
+      // 2本指：開いた幅で拡大し、指のまんなかの点を指の下に保つ
+      const [a, b] = [...g.pointers.values()]
+      const mid = [(a.x + b.x) / 2, (a.y + b.y) / 2]
+      g.pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, mid, v: live.current.view,
+        u: toBoard(live.current.view, live.current.bounds, svgRef.current.getBoundingClientRect(), mid[0], mid[1]) }
+      g.pan = null
+      g.moved = true
+    }
+  }
+  const onPointerMove = (e) => {
+    const g = gesture.current
+    if (!g.pointers.has(e.pointerId)) return
+    g.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    const { bounds: b } = live.current
+    const rect = svgRef.current.getBoundingClientRect()
+    if (g.pinch && g.pointers.size >= 2) {
+      const [p1, p2] = [...g.pointers.values()]
+      const d = Math.hypot(p1.x - p2.x, p1.y - p2.y) || 1
+      let v = zoomAt(g.pinch.v, d / g.pinch.d, g.pinch.u[0], g.pinch.u[1], b)
+      const upp = unitsPerPx(v, b, rect)
+      v = panBy(v, -((p1.x + p2.x) / 2 - g.pinch.mid[0]) * upp, -((p1.y + p2.y) / 2 - g.pinch.mid[1]) * upp, b)
+      setView(v)
+      return
+    }
+    if (!g.pan || g.pan.v.k <= 1 + 1e-9) return   // 全体のときは動かさない（スマホはページのスクロール）
+    const dx = e.clientX - g.pan.x, dy = e.clientY - g.pan.y
+    if (!g.moved && Math.hypot(dx, dy) < DRAG_PX) return
+    if (!g.moved) { g.moved = true; svgRef.current.setPointerCapture?.(e.pointerId) }
+    const upp = unitsPerPx(g.pan.v, b, rect)
+    setView(panBy(g.pan.v, -dx * upp, -dy * upp, b))
+  }
+  const onPointerEnd = (e) => {
+    const g = gesture.current
+    g.pointers.delete(e.pointerId)
+    if (g.moved) {
+      suppressClick.current = true
+      setTimeout(() => { suppressClick.current = false }, 0)
+    }
+    if (g.pointers.size < 2) g.pinch = null
+    if (g.pointers.size === 0) {
+      g.pan = null
+      g.moved = false
+    } else if (g.pointers.size === 1) {
+      // 2本指から1本指へ：そこから動かす
+      const [q] = [...g.pointers.values()]
+      g.pan = { x: q.x, y: q.y, v: live.current.view }
+    }
+  }
+  const zoomBy = (f) => setView(v => zoomAt(v, f, v.cx, v.cy, live.current.bounds))
+  // マスを押した（memo したマスに渡すので同じ関数のまま・中身は今の値を見る）
+  const pickRef = useRef(null)
+  const onPick = useCallback((id) => pickRef.current?.(id), [])
   // 見られる職業＝就いたことのある職業といまの職業（並びは神殿と同じ）
   const classes = CLASSES.map(c => c.id).filter(id => id === prof.class || prof.jobs?.[id])
   if (!tree) return <div style={{ ...box, padding:'12px', color: TEXT.sub, fontSize:'11px' }}>この職業にはアセンションがありません</div>
@@ -229,13 +319,21 @@ export default function V2capAscension({ prof, onProfile }) {
       setMsg(`${cls}の盤面を振り直しました（${resetGold.toLocaleString()} Gold）`)
     }
   }
-  const pick = (id) => { if (id === 0) return; setSel(id === sel ? null : id); setError(''); setMsg('') }
+  const pick = (id) => {
+    if (id === 0 || suppressClick.current) return
+    setSel(id === sel ? null : id); setError(''); setMsg('')
+  }
+  pickRef.current = pick
+  // スキルマスの一覧から選んだとき：拡大していて見えない所なら、そのマスを真ん中へ
+  const pickFromList = (n) => {
+    pick(n.id)
+    if (!isInView(view, bounds, sx(n), sy(n), 0.6)) setView(v => panBy(v, sx(n) - v.cx, sy(n) - v.cy, bounds))
+  }
 
   // 線（同じ線を2回描かない）
   const edges = []
   for (const n of tree.nodes) for (const l of n.links) if (l > n.id) edges.push([n, tree.byId[l]])
-  const R = tree.R
-  const pad = 0.75
+  const pad = PAD
 
   // いま効いているもの（ステはその色で）
   const effParts = [
@@ -263,7 +361,7 @@ export default function V2capAscension({ prof, onProfile }) {
               const on = id === cls
               const l = apTotalOf(id, jobOf(prof.jobs, id).lv) - apSpentOf(ascStateOf(prof, id))
               return (
-                <button key={id} onClick={() => { setCls(id); setSel(null); setMsg(''); setError(''); setFlash({}) }} aria-pressed={on}
+                <button key={id} onClick={() => { setCls(id); setSel(null); setMsg(''); setError(''); setFlash({}); setView(fitView({ min: -(treeOf(id)?.R ?? 5) - PAD, max: (treeOf(id)?.R ?? 5) + PAD })) }} aria-pressed={on}
                   style={{ ...miniBtn(on ? stageColorOf(id) : '#2a4466'), color: on ? stageColorOf(id) : TEXT.label, background: on ? '#00163a' : '#000818' }}>
                   {id}{id === prof.class ? '（いま）' : ''}{l > 0 && <span style={{ color: GOLD, marginLeft:'3px' }}>AP{l}</span>}
                 </button>
@@ -284,6 +382,7 @@ export default function V2capAscension({ prof, onProfile }) {
         <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.7, marginTop:'4px' }}>
           CLASS LVが1上がるごとにAP+1。起点か開いたマスにつながったマスを、1マス1APで開けます。
           マスを押すと中身が下に出て、いちばん近いルートが光ります（別のルートを通りたいときは、1マスずつ押して開く）。
+          マウスのホイール（スマホは2本指）で拡大・縮小、拡大したらドラッグで動かせます。
           {isCur ? '' : <span style={{ color:'#ff8844' }}>　いまの職業ではないので、この盤面は{cls}に転職するまで効きません。</span>}
         </div>
         {/* 色の見方（マスの中には文字を出さない） */}
@@ -300,15 +399,26 @@ export default function V2capAscension({ prof, onProfile }) {
           <span style={{ display:'inline-flex', alignItems:'center', gap:'3px', color: TEXT.sub }}>
             {artUrl('big') ? <img src={artUrl('big')} alt="" width={16} height={16} style={{ display:'block' }} /> : '◆'} 大マス（+%）
           </span>
-          <button onClick={() => setZoom(z => !z)} style={{ ...miniBtn('#88aaff'), padding:'1px 6px', marginLeft:'auto' }}>{zoom ? '全体を見る' : '大きく見る'}</button>
         </div>
         {msg && <div style={{ color:'#44ff88', fontSize:'11px', marginTop:'4px' }}>{msg}</div>}
       </div>
 
       {/* ===== 盤面 ===== */}
-      <div style={{ ...box, padding:'6px', marginBottom:'0', overflowX:'auto' }}>
-        <svg viewBox={`${-R - pad} ${-R - pad} ${2 * R + 2 * pad} ${2 * R + 2 * pad}`}
-          style={{ display:'block', width:'100%', minWidth: zoom ? `${(2 * R + 2) * CELL_MIN_PX}px` : 0, background:'radial-gradient(circle at 50% 50%, #0b2a5c 0%, #04122e 45%, #000818 80%)' }}>
+      <div style={{ ...box, padding:'6px', marginBottom:'0', overflow:'hidden', position:'relative' }}>
+        {/* 拡大・縮小のボタン（右上） */}
+        <div style={{ position:'absolute', top:'12px', right:'12px', zIndex:2, display:'flex', flexDirection:'column', gap:'4px' }}>
+          {[['＋', () => zoomBy(ZOOM_BTN), view.k >= zoomMaxOf(bounds) - 1e-9], ['−', () => zoomBy(1 / ZOOM_BTN), view.k <= 1 + 1e-9],
+            ['全体', () => setView(fitView(bounds)), view.k <= 1 + 1e-9]].map(([label, fn, off]) => (
+            <button key={label} onClick={fn} disabled={off} aria-label={label === '全体' ? '全体を見る' : label === '＋' ? '拡大' : '縮小'}
+              style={{ ...miniBtn(off ? '#2a3a55' : '#88aaff'), minWidth:'34px', padding:'3px 6px', fontSize: label === '全体' ? '10px' : '14px',
+                background:'rgba(0,8,24,0.78)', cursor: off ? 'default' : 'pointer' }}>{label}</button>
+          ))}
+        </div>
+        <svg ref={svgRef} viewBox={(({ x, y, w }) => `${x} ${y} ${w} ${w}`)(viewBoxOf(view, bounds))}
+          onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd}
+          style={{ display:'block', width:'100%', background:'radial-gradient(circle at 50% 50%, #0b2a5c 0%, #04122e 45%, #000818 80%)',
+            // 拡大しているときは指で盤を動かす。全体のときの1本指はページのスクロール
+            touchAction: view.k > 1 + 1e-9 ? 'none' : 'pan-y', cursor: view.k > 1 + 1e-9 ? 'grab' : 'default', userSelect:'none' }}>
           <defs>
             {/* 開いたマスの光（マスの色のままぼかして重ねる） */}
             <filter id="ascGlow" x="-120%" y="-120%" width="340%" height="340%">
@@ -360,7 +470,7 @@ export default function V2capAscension({ prof, onProfile }) {
           })}
           {tree.nodes.map(n => (
             <NodeShape key={n.id} node={n} owned={open.has(n.id) && n.type !== 'start'} onRoute={onRoute.has(n.id)}
-              reach={reachable(n)} selected={n.id === sel} flash={flash[n.id]} onPick={pick} />
+              reach={reachable(n)} selected={n.id === sel} flash={flash[n.id]} onPick={onPick} />
           ))}
         </svg>
       </div>
@@ -416,7 +526,7 @@ export default function V2capAscension({ prof, onProfile }) {
         <div style={{ color:'#88aaff', fontSize:'11px', margin:'8px 0 2px' }}>スキルマス（押すと盤面で光ります）</div>
         <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
           {allSkillNodes.map(n => (
-            <button key={n.id} onClick={() => pick(n.id)}
+            <button key={n.id} onClick={() => pickFromList(n)}
               style={{ ...miniBtn(open.has(n.id) ? SKILL_C : '#2a4466'), color: open.has(n.id) ? SKILL_C : TEXT.sub, borderRadius:'10px' }}>
               {n.skill}{open.has(n.id) ? ' ✓' : ''}
             </button>
