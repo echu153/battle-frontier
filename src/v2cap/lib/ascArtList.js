@@ -12,5 +12,5 @@ export const ASC_ART = {
   skill: 'fcda2617',
   big: 'd196a387',
   start: '2373fb79',
-  bg: 'fc73ed27'
+  bg: 'dbf8abf4'
 }

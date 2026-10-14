@@ -4,8 +4,10 @@
 // 【確定】2026-10-14 ユーザー「見た目AION２みたいにしたいからしっかり画像作ろうと思う」→ こちらから出したリストで作ってもらった（設計 §4-2）
 // 元の絵（ユーザーが置く・git に入れない＝.gitignore）：public/アセンション/<名前>.png（1254×1254）
 //   ステ8枚 HP・MP・STR・DEX・AGI・INT・VIT・LUK（STR は「SRT」でも読む）／スキル（丸い枠）／大枠（大マスのひし形の枠）／起点／背景
+//   ★背景は、名前に「背景」が入った絵のうち**いちばん新しいもの**（2026-10-14 ユーザーが暗い石板の「アセンション背景２.png」を足した。
+//     前の星図の「背景.png」は置いたまま＝描き直したら新しい名前で置けばよい。前のに戻すときは、新しい方を消すか名前を変える）
 // 作るもの：
-//   public/asc-art/<key>.webp   … ステ・スキル 256px／大枠・起点 384px（透明つき・見えている所がちょうど収まる正方形）／背景 1600px（透明なし）
+//   public/asc-art/<key>.webp   … ステ・スキル 256px／大枠・起点 384px（透明つき・見えている所がちょうど収まる正方形）／背景 1600px まで（透明なし・元の絵より大きくはしない）
 //     ★2026-10-14 盤面を拡大できるようにしたので大きめに（前は 160／256／1280。いちばん大きくすると1マスが200px台になる）
 //   src/v2cap/lib/ascArtList.js … 絵がある key と中身の印（画面はこれを見て、無いものは図形で描く・印は URL の ?v= ＝絵を替えたら読み直させる）
 //   node tools/v2cap-asc-art.mjs          … 元の絵が新しくなったものだけ作る
@@ -41,7 +43,7 @@ const PARTS = {
   skill: { names: ['スキル'], size: 256 },
   big: { names: ['大枠', '大マス'], size: 384 },
   start: { names: ['起点'], size: 384 },
-  bg: { names: ['背景'], size: 1600, opaque: true },
+  bg: { names: ['背景'], size: 1600, opaque: true, newest: true },   // newest＝名前に入っていればよい・いちばん新しいもの
 }
 const MARGIN = 0.02
 const QUALITY = 84
@@ -50,7 +52,13 @@ const BG_QUALITY = 78
 // 元の絵を探す（大文字・小文字、全角・半角の違いは気にしない）
 const norm = (s) => s.normalize('NFKC').toUpperCase()
 const files = existsSync(SRC) ? readdirSync(SRC).filter(f => /\.(png|webp|jpe?g)$/i.test(f)) : []
+const has = (f, n) => norm(path.parse(f).name).includes(norm(n))
 const srcOf = (key) => {
+  if (PARTS[key].newest) {
+    const list = files.filter(f => PARTS[key].names.some(n => has(f, n)))
+      .sort((a, b) => statSync(path.join(SRC, b)).mtimeMs - statSync(path.join(SRC, a)).mtimeMs)
+    return list.length ? path.join(SRC, list[0]) : null
+  }
   for (const n of PARTS[key].names) {
     const f = files.find(x => norm(path.parse(x).name) === norm(n))
     if (f) return path.join(SRC, f)
@@ -70,7 +78,7 @@ const readRgba = (src) => {
 }
 
 let made = 0
-const unknown = files.filter(f => !Object.keys(PARTS).some(k => PARTS[k].names.some(n => norm(n) === norm(path.parse(f).name))))
+const unknown = files.filter(f => !Object.keys(PARTS).some(k => PARTS[k].names.some(n => (PARTS[k].newest ? has(f, n) : norm(n) === norm(path.parse(f).name)))))
 for (const f of unknown) console.log(`⚠ 当てはまらない絵：${f}（名前を PARTS に足すか、ファイルの名前を直す）`)
 
 // ステ8枚：同じ切り取り
@@ -90,7 +98,8 @@ for (const key of ['skill', 'big', 'start', 'bg']) {
   const s = srcOf(key)
   if (!s || !stale(s, outOf(key))) continue
   if (PARTS[key].opaque) {
-    execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', s, '-vf', `scale=${PARTS[key].size}:${PARTS[key].size}:flags=lanczos`,
+    const side = Math.min(PARTS[key].size, probe(s).w)   // 元の絵より大きくはしない
+    execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', s, '-vf', `scale=${side}:${side}:flags=lanczos`,
       '-c:v', 'libwebp', '-quality', String(BG_QUALITY), '-frames:v', '1', outOf(key)])
   } else {
     const img = readRgba(s)

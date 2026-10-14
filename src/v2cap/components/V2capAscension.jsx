@@ -39,6 +39,8 @@ const SKILL_C = '#5ce1e6'   // スキルマス（水色）
 const GOLD = '#ffcc00'
 const LINK_ON = '#ffe7a3'   // 開いたマスどうしの線（光る）
 const ROUTE = '#ffffff'     // 選んだルート（白の点線）
+// まだ開いていない線（くすんだ真鍮色＝2026-10-14 背景を暗い石板にしたので、背景の象嵌・タイルの枠に合わせた。前は青）
+const LINK_OFF = '#8a7350'
 const colorOf = (node) => (node.type === 'skill' ? SKILL_C : node.type === 'start' ? GOLD : ASC_STAT_COLOR[node.stat] || '#88ccff')
 // 盤の座標 → 画面の座標（1方向目＝上・時計回りに 右・下・左）
 const sx = (n) => n.y
@@ -464,7 +466,7 @@ export default function V2capAscension({ prof, onProfile }) {
               )
             }
             return (
-              <line key={`${a.id}-${b.id}`} {...pos} stroke={rt ? ROUTE : '#2a4a7c'} strokeWidth={rt ? 0.06 : 0.05}
+              <line key={`${a.id}-${b.id}`} {...pos} stroke={rt ? ROUTE : LINK_OFF} strokeWidth={rt ? 0.06 : 0.05}
                 strokeDasharray={rt ? '0.14 0.1' : undefined} opacity={rt ? 0.9 : 0.8} />
             )
           })}
