@@ -12,7 +12,7 @@
 //   { kind:'act', who:'me'|'foe', lines:[ログの行…] }               … 行動のまとまり
 // 行の文面は今のⅡと同じ（src/v2/lib/battleLog.js の buildBattleLog を1件ずつ通す）。今のⅡの画面は変えない
 // ★runBattle の HP の記録（type:'hp'）は「ターンの終わり」に出る。ここでは「次のターンの頭」として使う
-//   （1ターン目の頭は満タン。HPが減った状態から始まる戦闘はない）
+//   （1ターン目の頭は満タン。ただし塔の階層守護者は前の防衛で減ったHPから始まる＝start で始まりのHPを渡す・2026-10-14）
 // ============================================================
 import { buildBattleLog } from '../../v2/lib/battleLog.js'
 
@@ -28,14 +28,15 @@ export const REACTION_TYPES = new Set([
 export const TICK_TYPES = new Set(['ailTick', 'regenTick', 'mpRegenTick', 'endureRelease'])
 
 // r … runBattle の返り値 ／ you … 自分の名前 ／ foe … 相手の名前
-export const buildCapBattleView = (r, you, foe) => {
+// start … 始まりのHP（{ a, b }・渡さなければ満タン）。塔の守護者は回復しないので、減ったHPから始まる（runBattle の startHp と同じ値を渡す）
+export const buildCapBattleView = (r, you, foe, start = {}) => {
   const log = r?.log || []
   const out = []
   const firstHp = log.find(l => l.type === 'hp')
   const table = (turn, l, final = false) => ({
     kind:'turn', turn, final, me:{ hp: l.a, max: l.aMax }, foe:{ hp: l.b, max: l.bMax },
   })
-  if (firstHp) out.push(table(1, { a: firstHp.aMax, aMax: firstHp.aMax, b: firstHp.bMax, bMax: firstHp.bMax }))
+  if (firstHp) out.push(table(1, { a: start.a ?? firstHp.aMax, aMax: firstHp.aMax, b: start.b ?? firstHp.bMax, bMax: firstHp.bMax }))
   let group = null   // いま行を足しているまとまり（表をはさんだら切る）
   log.forEach((l, i) => {
     if (l.type === 'hp') {

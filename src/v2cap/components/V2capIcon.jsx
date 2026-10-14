@@ -8,9 +8,10 @@ import { useState } from 'react'
 //   ・hidden … 図鑑でまだ倒していない敵（名前もLVも ??? のあいだ）。絵は影（灰色）だけ、絵が無ければ「？」
 //   ・bare … 枠なしで絵だけ。絵が無い（読めない）ときは何も出さない（名前の1文字目の枠も出さない）。
 //     戦闘ログの「◯◯が現れた！」＝2026-10-12 ユーザー指示「モンスター出現するとき、枠いらない、モンスターのイラストだけでいい」
+//   ・round … 丸い枠（塔の階層守護者の一覧＝2026-10-14 ユーザーが見せた画像の形）
 //   ★key に src を付けて使うと、絵が変わったときに「読めなかった」を持ち越さない
 // ============================================================
-export default function V2capIcon({ src, name, ring = '#7fa6d0', size, down = false, hidden = false, bare = false }) {
+export default function V2capIcon({ src, name, ring = '#7fa6d0', size, down = false, hidden = false, bare = false, round = false }) {
   const [broken, setBroken] = useState(false)
   const showArt = src && !broken
   if (bare) {
@@ -20,7 +21,7 @@ export default function V2capIcon({ src, name, ring = '#7fa6d0', size, down = fa
       : null
   }
   return (
-    <div style={{ width: size, height: size, flexShrink: 0, borderRadius: '6px', border: `1px solid ${ring}55`,
+    <div style={{ width: size, height: size, flexShrink: 0, borderRadius: round ? '50%' : '6px', border: `${round ? 2 : 1}px solid ${ring}${round ? 'cc' : '55'}`,
       background: 'radial-gradient(circle at 50% 40%, #1d3554 0%, #0b1a2e 75%)', display: 'flex', alignItems: 'center', justifyContent: 'center',
       overflow: 'hidden', filter: down ? 'grayscale(1)' : undefined, opacity: down ? 0.45 : 1 }}>
       {showArt

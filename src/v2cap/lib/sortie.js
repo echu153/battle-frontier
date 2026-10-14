@@ -122,8 +122,10 @@ export const rollDropKind = (part, cls, rng = Math.random) => {
 }
 // 勝ったときの装備。落ちたら { item, ilv }（レア度は item.rarity・アイテムLV＝item.lv）
 // rareMult … 防具のセット能力「海賊の嗅覚」（落ちる確率そのものは変えない＝レア以上の割合だけ）
-export const rollEquipDrop = (enc, cls, at = new Date(), rng = Math.random, rareMult = 1) => {
-  if (!enc || rng() * 100 >= (DROP_CHANCE[enc.role] ?? DROP_CHANCE.normal)) return null
+// bonusPct … 落ちる確率に足す%。塔の階層守護者でいるあいだ +1（tower.js の GUARD_DROP_BONUS・2026-10-14 ユーザー指示「ドロップ率1%増加」）
+//   ⚠画面の確率（サーバーは何が落ちたかの条件だけを見る＝セット能力と同じ扱い）
+export const rollEquipDrop = (enc, cls, at = new Date(), rng = Math.random, rareMult = 1, bonusPct = 0) => {
+  if (!enc || rng() * 100 >= (DROP_CHANCE[enc.role] ?? DROP_CHANCE.normal) + (bonusPct || 0)) return null
   const kind = rollDropKind(rollDropPart(at, rng), cls, rng)
   const item = kind ? itemOf(enc.spot.area, rollDropRarity(enc.role, enc.spot.sub, rng, rareMult), kind) : null
   return item ? { item, ilv: item.lv } : null

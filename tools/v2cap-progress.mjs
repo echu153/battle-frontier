@@ -45,6 +45,8 @@
 //     そのほか：--bossmin 6（エリア6から先のボスだけ動かす）／--stdkeepmin 20（LV20以下の行は出発点より下げない）
 //   node tools/v2cap-progress.mjs --enh   … 強化で、エリアごとに自分の戦闘力が何倍になるか（ENH_MULT の確かめ。--tune も毎回作り直す）
 //   node tools/v2cap-progress.mjs --shrine [--hours 450]   … 安息の祠のハピネスフェアリーにエリアごとどれだけ勝てるか（2026-10-13）
+//   node tools/v2cap-progress.mjs --tower [--hours 450] [--seeds 1,2] [--ratios 0.5,0.6,0.7,0.8,0.9,1] [--n 8]
+//     … 塔の空いている層のNPCに、強さ（自分の戦闘力×倍率）ごとにどれだけ勝てるか・何ターンかかるか（2026-10-14・tower.js の NPC_MIN_RATIO を決める）
 //     ★祠そのもの（0.1%・経験値×5・スタミナ全回復）は進み方の計算には入れていない（1000戦に1回・EXPは2〜3%ほど増えるだけ）
 //   鍛冶屋：--gear drops では既定で使う（--nosmith で使わない・--smithcap none で強化の上限を+10に）
 //   node tools/v2cap-progress.mjs --statvalue [--areas 3,6,9,12] [--n 500] [--only 剣士]
@@ -68,6 +70,7 @@ const { applyJobExp, jobOf, learnOrderOf, attackKindOf, canEquipType, JOB_MAX, n
 const { ICHIJI_BUILDS } = await import(B + 'v2cap/lib/skillsIchiji.js')
 const { enhanceCostOf, rollEnhance, scrapYieldOf, scrapAreaOf } = await import(B + 'v2cap/lib/smith.js')
 const { shrineEncounterOf } = await import(B + 'v2cap/lib/shrine.js')
+const tower = await import(B + 'v2cap/lib/tower.js')
 
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] : d }
 const HOURS = Number(arg('hours', arg('days', 365)))   // 何時間ぶん回すか（--days は前の名前）
@@ -176,7 +179,7 @@ const fitSet = (sks, maxMp) => {
   return set.map(({ name, uses }) => ({ name, uses }))
 }
 
-// probe … 1時間ごとに呼ぶ（{ hour, spot＝いまの場所, fighter＝いまの自分の戦闘用キャラを作る関数 }）。本筋の進み方は変えない（--shrine が使う）
+// probe … 1時間ごとに呼ぶ（{ hour, spot＝いまの場所, lv＝いまのLV, fighter＝いまの自分の戦闘用キャラを作る関数 }）。本筋の進み方は変えない（--shrine・--tower が使う）
 export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEAR_MODE, plus = PLUS_ON, smith = SMITH_ON, probe = null } = {}) => {
   const rng = rngOf(seed)
   // 鍛冶屋を実際に使うとき（--smith）は、見込みの強化値は使わない（実際に強化した値で戦う）
@@ -415,7 +418,7 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
     const here = openUntilOf(cleared)
     // 鍛冶屋：1時間ごとに強化する（強くなったら着け直す）
     if (smithOn && enhance()) { regear(); reset() }
-    probe?.({ hour: d, spot: here, fighter: () => toFighter(prof(), invAt(here)) })
+    probe?.({ hour: d, spot: here, lv: st.lv, fighter: () => toFighter(prof(), invAt(here)) })
     hourly.push({ d, lv: st.lv, power: calcPower(totalStats(prof(), invAt(here))), body: bodyPowerAt(st.lv), win: wins / fights,
       spot: here, cls, jlv: jobOf(jobs, cls).lv, gold, slots: Object.keys(equipped).length })
     const area = areas.spotOf(here).area
@@ -794,10 +797,66 @@ const shrineReport = () => {
   console.log(`全体：${pct(all)}`)
 }
 
+// ===== --tower：塔の空いている層のNPCにどれだけ勝てるか（2026-10-14）=====
+// 【確定】2026-10-14 ユーザー決定「負けたら2つ下（あるけみと同じ）」＝上がっていくには3回に2回より多く勝つ必要がある。
+//   空いている層のNPCは「n層＝LVnの標準の強さ」と「挑戦する人の戦闘力×NPC_MIN_RATIO」の高いほう（src/v2cap/lib/tower.js）。
+//   その倍率を決めるため、初期職×2人を回し、決まった時間に「いまの自分」と、強さ＝自分の戦闘力×倍率 のNPCを別の乱数で戦わせる
+//   （NPCの層＝職業・技は「1層〜自分のLVの層」から均等に選ぶ＝下から上っていくときに会う相手。本筋の進み方は変えない）。
+//   対人のHP倍率（pvp.js）も掛けるので、ターン数（8〜10の目安）も一緒に見る
+const towerReport = () => {
+  const classes = jobsLib.START_CLASSES
+  const seeds = String(arg('seeds', '1,2')).split(',').map(Number)
+  const ratios = String(arg('ratios', '0.5,0.6,0.7,0.8,0.9,1')).split(',').map(Number)
+  const n = Number(arg('n', 8))
+  const hoursAt = [3, 7, 14, 30, 60, 120, 240, 365, 450].filter(h => h <= HOURS)
+  const BANDS = [[1, 24, 'LV1〜24'], [25, 49, 'LV25〜49'], [50, 79, 'LV50〜79'], [80, 100, 'LV80〜']]
+  const bandOf = (lv) => BANDS.findIndex(([lo, hi]) => lv >= lo && lv <= hi)
+  const acc = BANDS.map(() => ratios.map(() => ({ n: 0, win: 0, turns: [] })))
+  const byCls = {}   // そのときの職業 → 倍率ごとの { n, win }
+  for (const c of classes) for (const s of seeds) {
+    const prng = rngOf(s * 104729 + c.length * 31)
+    simulate({ hours: HOURS, seed: s, start: c, probe: ({ hour, lv, fighter }) => {
+      if (!hoursAt.includes(hour)) return
+      const me = fighter()
+      const myPower = calcPower(me.stats)
+      const band = bandOf(lv)
+      ratios.forEach((r, ri) => {
+        for (let i = 0; i < n; i++) {
+          const floor = 1 + Math.floor(prng() * Math.max(1, Math.min(tower.FLOORS, lv)))
+          const npc = tower.npcFighterAt(floor, myPower * r)
+          const champ = { ...npc, playerId: null, hpPm: 1000, mpNow: npc.stats.mp, streak: 0 }
+          const { a, b } = tower.towerBattleOf({ me, myLv: lv, champ, floor })
+          const res = runBattle(a, b, { rng: prng })
+          const win = res.winner === 'a'
+          const v = acc[band][ri]
+          v.n++; if (win) v.win++
+          v.turns.push(res.turns)
+          const k = (byCls[me.cls] ||= ratios.map(() => ({ n: 0, win: 0 })))[ri]
+          k.n++; if (win) k.win++
+        }
+      })
+    } })
+  }
+  const pct = (v) => (v.n ? `${Math.round(v.win / v.n * 100)}%` : '-')
+  const med = (a) => { if (!a.length) return '-'; const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)] }
+  console.log(`塔のNPC（強さ＝自分の戦闘力×倍率）への勝率（${classes.length}職×${seeds.length}人・${hoursAt.join('/')}時間目・倍率ごとに${n}戦・NPCの層は1〜自分のLVから）`)
+  console.log(['LV', ...ratios.map(r => `×${r}`)].join('\t'))
+  BANDS.forEach(([, , label], b) => console.log([label, ...acc[b].map(pct)].join('\t')))
+  const all = ratios.map((_, ri) => acc.reduce((t, row) => ({ n: t.n + row[ri].n, win: t.win + row[ri].win }), { n: 0, win: 0 }))
+  console.log(['全体', ...all.map(pct)].join('\t'))
+  console.log('\nターン数の中央値（勝ち負けとも）')
+  BANDS.forEach(([, , label], b) => console.log([label, ...acc[b].map(v => med(v.turns))].join('\t')))
+  console.log(`\n職業ごと（いまの NPC_MIN_RATIO＝${tower.NPC_MIN_RATIO} に近い倍率の列）`)
+  const ri = ratios.reduce((best, r, i) => (Math.abs(r - tower.NPC_MIN_RATIO) < Math.abs(ratios[best] - tower.NPC_MIN_RATIO) ? i : best), 0)
+  console.log(Object.entries(byCls).map(([c, v]) => `${c} ${pct(v[ri])}（${v[ri].n}戦）`).join('　'))
+}
+
 if (process.argv.includes('--tune')) {
   await tune()
 } else if (process.argv.includes('--shrine')) {
   shrineReport()
+} else if (process.argv.includes('--tower')) {
+  towerReport()
 } else if (process.argv.includes('--enh')) {
   enh()
 } else if (process.argv.includes('--report')) {

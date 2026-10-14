@@ -19,8 +19,10 @@ import V2capTree from '../components/V2capTree.jsx'
 import V2capDex from '../components/V2capDex.jsx'
 import V2capCasino from '../components/V2capCasino.jsx'
 import V2capAscension from '../components/V2capAscension.jsx'
+import V2capTower from '../components/V2capTower.jsx'
 import { START_CLASSES, weaponsOf, attackKindOf, classDescOf } from '../lib/jobs.js'
 import { apLeftOf } from '../lib/ascension.js'
+import { TOWER_NAME, floorLabel, clampFloor } from '../lib/tower.js'
 import { openUntilOf } from '../lib/sortie.js'
 import { spotLabel } from '../lib/areas.js'
 
@@ -52,6 +54,10 @@ const MENU = [
   [
     { key:'asc', label:'アセンション', icon:'✨', color:'#ffaa44', action:'APを振る' },
   ],
+  // 【確定】2026-10-14 塔（あるけみすと型の対人・1〜100層）。説明はいまの層で変わる（menuOf）
+  [
+    { key:'tower', label: TOWER_NAME, icon:'🗼', color:'#b48cff', action:'階層守護者に挑む' },
+  ],
   // 宝樹は1つだけのまとまり＝横いっぱい（今のⅡと同じ並び方）
   [
     { key:'tree', label:'ユグレシアの宝樹', icon:'🌳', color:'#44dd99', action:'祈る' },
@@ -61,11 +67,18 @@ const MENU = [
     { key:'casino', label:'賭博場', icon:'🎰', color:'#ff4fa3', action:'スロット・ハイ&ロー・ルーレット' },
   ],
 ]
-const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場' }
-// メニューの説明に、いまの職業で残っているAPを出す（振り忘れに気づけるように）
+const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場', tower:`🗼 ${TOWER_NAME}` }
+// メニューの説明に、いまの職業で残っているAPを出す（振り忘れに気づけるように）。塔はいまの層（守っていればその層）
+const towerActionOf = (prof) => (prof?.tower_guard
+  ? `👑 ${floorLabel(prof.tower_guard)}を守っている`
+  : `${floorLabel(clampFloor(prof?.tower_floor || 1))}の階層守護者に挑む`)
 const menuOf = (prof) => {
   const left = Math.max(0, apLeftOf(prof))
-  return MENU.map(g => g.map(m => (m.key === 'asc' && left > 0 ? { ...m, action:`APを振る（残り${left}）` } : m)))
+  return MENU.map(g => g.map(m => {
+    if (m.key === 'asc' && left > 0) return { ...m, action:`APを振る（残り${left}）` }
+    if (m.key === 'tower') return { ...m, action: towerActionOf(prof) }
+    return m
+  }))
 }
 
 // 今のⅡと同じ2列（grid の auto-fit は列を同じ幅にしかできないので flex で組む）
@@ -354,6 +367,7 @@ export default function V2capHome() {
             {screen === 'tree' && <V2capTree prof={prof} onProfile={refresh} unlimited={isAdmin} />}
             {screen === 'dex' && <V2capDex prof={prof} />}
             {screen === 'casino' && <V2capCasino prof={prof} onProfile={refresh} />}
+            {screen === 'tower' && <V2capTower prof={prof} inventory={inventory} onProfile={refresh} />}
           </div>
         )}
       </div>

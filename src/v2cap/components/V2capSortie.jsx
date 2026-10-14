@@ -2,16 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import V2capLogLine from './V2capLogLine.jsx'
 import { runBattle } from '../../v2/lib/battle.js'
-import { LOG_PLAIN } from '../../v2/components/v2ui.js'
 import { loadPref, savePref } from '../../v2/lib/prefs.js'
 import { SPOTS, spotOf, spotLabel, recLvText, toFighter as enemyFighter } from '../lib/areas.js'
 import {
   pickEncounter, rollEquipDrop, nextBossRate, isSpotUnlocked, isSpotCleared, openUntilOf, SORTIE_CD, chestText,
 } from '../lib/sortie.js'
 import { toFighter as playerFighter } from '../lib/loadout.js'
-import { staminaMaxOf, MAX_LV, rollStamina } from '../lib/level.js'
-import { jobUpHead, jobUpNote } from '../lib/jobs.js'
-import { RARITY_COLOR } from '../lib/equipment.js'
+import { staminaMaxOf, rollStamina } from '../lib/level.js'
+import { expText as expTextOf, levelUpLines, dropLineOf } from '../lib/settleLines.js'
+import { guardDropBonusOf, floorLabel, TOWER_NAME } from '../lib/tower.js'
 import { buildCapBattleView } from '../lib/battleView.js'
 import { enemyArtSrc } from '../lib/enemyArt.js'
 import { battleIconOf } from '../lib/classArt.js'
@@ -42,6 +41,9 @@ import V2capShrineFx from './V2capShrineFx.jsx'
 //     最後の1戦のあとは最深部の演出（V2capShrineFx）。祠のことはプロフィールの列（shrine_spot・shrine_left・shrine_total）でも持つ
 //   ・【確定】2026-10-14 ユーザー指示「装備が落ちなかったとき5%の確率で宝箱を見つけて開けられる」（決まりは lib/sortie.js・決めるのはサーバー）：
 //     精算の返事（chest）に宝箱があれば「宝箱を見つけた！◯◯の残骸×◯を獲得した！」の1行だけ（演出なし・オートも止めない）
+//   ・【確定】2026-10-14 塔（lib/tower.js・画面 V2capTower.jsx）：出撃と**待ち時間を共有**（サーバーの last_sortie_at から数える）・
+//     塔の**階層守護者でいるあいだは装備のドロップ率+1%**（ユーザー指示「階層守護者になっている間はドロップ率1%増加」）。
+//     精算のあとのログの行（EXP・LEVEL UP・CLASS LEVEL UP・覚えた技・落ちた装備）は塔と同じ lib/settleLines.js
 // ============================================================
 // ★ログに注記は付けない（2026-10-10 ユーザー指示「（朝だけ）とか（時間帯限定で1.5倍）とか倒した時の（1ターン）の部分いらない」）：
 //   時間帯の敵の「（朝だけ）」・報酬の「（ボスで5倍）（レアで3倍）（時間帯限定で1.5倍）」・勝ち負けの「（◯ターン）」は出さない
@@ -98,6 +100,12 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   useEffect(() => { onScene?.(scene) }, [scene, onScene])
   useEffect(() => { setStam({ n: prof?.stamina ?? 0, at: prof?.stamina_at || null }) }, [prof?.stamina, prof?.stamina_at])
   useEffect(() => { setBossRate(prof?.boss_rate || 0) }, [prof?.boss_rate])
+  // ★塔と待ち時間を共有する（2026-10-14・あるけみすとの「探索」と「闘技場」と同じ）：
+  //   サーバーの最後の精算の時刻（last_sortie_at＝塔の挑戦も書く）が新しければ、そこから10秒を数える
+  useEffect(() => {
+    const t = prof?.last_sortie_at ? new Date(prof.last_sortie_at).getTime() : 0
+    if (t > lastAt.current) lastAt.current = t
+  }, [prof?.last_sortie_at])
   useEffect(() => { setShrine(shrineOf(prof)) }, [prof?.shrine_spot, prof?.shrine_left, prof?.shrine_total])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const cleared = prof?.cleared_spots || []
@@ -126,7 +134,10 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       const r = runBattle(me, { ...(sh ? enemyFighter(enc.enemy, 8, enc.power) : enemyFighter(enc.enemy, 8)), boss: enc.isBoss })
       const win = r.winner === 'a'
       // ★防具のセット能力「海賊の嗅覚」：レア以上が落ちる確率1.2倍（me.setFx は loadout.js の toFighter が入れる）
-      const drop = win && !sh ? rollEquipDrop(enc, prof.class, new Date(), Math.random, me.setFx?.rareDropMult || 1) : null
+      // ★塔の階層守護者でいるあいだは装備のドロップ率+1%（tower.js の guardDropBonusOf・2026-10-14 ユーザー指示「ドロップ率1%増加」）
+      const drop = win && !sh
+        ? rollEquipDrop(enc, prof.class, new Date(), Math.random, me.setFx?.rareDropMult || 1, guardDropBonusOf(prof))
+        : null
       if (!sh) setBossRate(nextBossRate(bossRate, enc.isBoss))
       setShrineBattle(!!sh)
       const stamBefore = Math.max(0, stamNow - (isAuto ? 1 : 0))   // 最深部の演出でゲージを満たし始める値
@@ -157,11 +168,10 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
         if (sh) onProfile(null)   // 祠のことがサーバーと食い違っていたら（別の画面で進めた など）取り直す
         return
       }
-      const lv = data.level || {}
       const after = []
       // ★LV100のぶんは入らないので、そう出す。ClassEXPは書かない（同じ量がいまの職業にも入る＝ユーザー指示で表記を外した）
-      const lvMax = prof.lv >= MAX_LV
-      const expText = `EXP +${data.exp}${lvMax ? '（LV上限のため入らない）' : ''}`
+      //   文面は settleLines.js（塔と同じものを使う）
+      const expText = expTextOf(data.exp, prof.lv)
       if (win) {
         after.push({ text:`${expText}　Gold +${data.gold}`, color:'#ffcc00' })
       } else if (data.exp > 0) {
@@ -169,37 +179,12 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
         //   文言は「EXP +2」だけ（「負けても最低値は入る」「（ClassEXP +2）」の添え書きはユーザー指示で外した）
         after.push({ text: expText, color:'#c8a050' })
       }
-      // 負けたときの経験値でもLVは上がりうる
-      // LVアップではステは上がらず、ステータスポイントが入る（ステータス欄の「振る」から振る）。
-      // サーバーが前の版（points を返さない）のあいだは数を出さない
-      // ★レベルアップは英語で出す（2026-10-12 ユーザー指示「レベルアップするとき英語表記で」・ClassLVは「CLASS LEVEL UP！」を選んだ）
-      if (lv.level_ups > 0) {
-        const pts = typeof lv.points === 'number' ? `（ステータスポイント+${lv.points}）` : ''
-        after.push({ text:`🆙 LEVEL UP！ LV${lv.lv}${pts}`, color:'#44ff88' })
-      }
-      // ★上がったクラスのステも書く（2026-10-12 ユーザー指示「クラスレベルアップしたときはステータスの上昇値も記載すること」・2つ以上なら合計）
-      // 「⭐ CLASS LEVEL UP！盗賊　LV3 → 4」の次の行に「（HP+14・…）」（2026-10-12 ユーザー指示の表記）
-      if (lv.job_ups > 0) {
-        after.push({ text: jobUpHead(prof.class, lv), color:'#ffcc00' })
-        const note = jobUpNote(prof.class, lv)
-        if (note) after.push({ text: note, color:'#ffcc00' })
-      }
-      // 編成の空き枠に入ったか（2026-10-12 ユーザー指示「スキルスロット余ってる場合はうめるようにして」＝サーバーが set_added で返す）
-      for (const name of lv.learned || []) {
-        const into = (lv.set_added || []).includes(name)
-        after.push({ text:`📖 スキル「${name}」を覚えた！${into ? '（スキルセットの空き枠に入れた）' : '（スキルセットで編成できる）'}`, color:'#44ddff' })
-      }
+      // 負けたときの経験値でもLVは上がりうる。LVアップ（英語の表記）・CLASS LVアップ（上がったクラスのステも）・
+      // 覚えた技（空き枠に入ったか）の行は settleLines.js（2026-10-12 のユーザー指示の文面のまま移した・塔と同じ）
+      after.push(...levelUpLines(prof.class, data.level))
       if (win) {
-        if (data.drop && drop) {
-          // ★装備名だけをレア度の色で（【レア】のような頭の表記は付けない＝2026-10-13 ユーザーが「ログも外す」を選んだ）。
-          //   「必要LVに足りない＝効果◯%」も「（LV◯）」も出さない（2026-10-12 ユーザー指示「ここで説明しなくていい」
-          //   「装備ドロップしたとき要求レベル書かなくていい」）
-          const color = RARITY_COLOR[drop.item.rarity]
-          after.push({ color: LOG_PLAIN, parts: [
-            { text:'🎁 「' }, { text: drop.item.name, color },
-            { text:'」を入手！' },
-          ] })
-        }
+        // ★装備名だけをレア度の色で（頭の表記・必要LV・効果%は出さない＝settleLines.js の dropLineOf）
+        if (data.drop && drop) after.push(dropLineOf(drop.item))
         // 宝箱（2026-10-14 ユーザー指示・決まりは sortie.js の「宝箱」）：装備が落ちなかった勝ちで、サーバーが5%で見つけて開ける。
         //   中身（その場所のエリアの残骸1〜10個）はサーバーの返事 chest＝{ area, n }。サーバーが前の版のあいだは chest が無い＝何も出さない
         if (data.chest?.n > 0) {
@@ -359,6 +344,12 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
             </option>
           ))}
         </select>
+      )}
+      {/* 塔の階層守護者でいるあいだは、装備のドロップ率が上がっていることだけ出す（2026-10-14 ユーザー指示「ドロップ率1%増加」） */}
+      {guardDropBonusOf(prof) > 0 && !shrine && (
+        <div style={{ color:'#ffcc00', fontSize:'10px', marginBottom:'6px' }}>
+          👑 {TOWER_NAME}の{floorLabel(prof.tower_guard)}を守っています：装備のドロップ率+{guardDropBonusOf(prof)}%
+        </div>
       )}
       {/* ★場所の説明（敵のLV・装備の必要LV・落とすレア度・1体あたりのEXPとGold・「ボスを倒すと次の場所が開く」）は出さない
            （2026-10-12 ユーザー指示「画像の部分いらない」）。場所の推奨LVは上の選択肢に出ている */}

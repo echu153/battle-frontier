@@ -36,6 +36,8 @@
 --     （EXP＝必要EXP×10／5／3／1%・Gold＝LV×100）。内容はあとで決める（いまは仮の「出撃に10回勝つ」）
 --   ・賭博場（2026-10-13・§11）：メダル（100 Gold＝1枚・Goldへは戻せない）・スロット（AT機）・ハイ&ロー（連勝はしご）・
 --     ルーレット（ラッキーナンバー付き）。還元率はどれも約97%。景品の交換所はあとで
+--   ・塔（2026-10-14・§13）：あるけみすと型の対人。1〜100層の階層守護者に挑む・負けたら2つ下・守護者のHP/MPは回復しない・
+--     勝ち負けによらず出撃と同じ報酬・出撃と待ち時間を共有・守護者でいるあいだは出撃の装備のドロップ率+1%
 -- ============================================================
 
 -- ===== 0. 開発限定ゲート =====
@@ -5941,3 +5943,196 @@ begin
     insert into public.v2cap_migrations (key) values ('shoki_skills_2530_20261014');
   end if;
 end $$;
+
+-- ============================================================
+-- ===== 13. 塔（あるけみすと型の対人・2026-10-14）=====
+-- ============================================================
+-- 【確定】2026-10-14 ユーザー指示「普通にあるケミ風のPVPも用意しておく・○○の塔みたいな感じで1層～100層くらいまで
+--   どんどん塔に上る感じ・仕様はあるケミと一緒、階層守護者になっている間はドロップ率1%増加」
+--   ＋選択式で決めたこと：負けたら2つ下（あるけみと同じ）／空き層にNPC＋席を降りられる（今のⅡと同じ）／報酬は出撃と同じ旨み
+-- 決まり（src/v2cap/lib/tower.js が正。今のⅡのアリーナ §10 と同じ形）：
+--   ・1〜100層。各層に階層守護者が1人（行が無い層＝空き。画面が tower.js のNPCを置く＝サーバーは「空き」として扱うだけ）
+--   ・勝つとその層の守護者になる。**守っているあいだは挑戦できない**
+--   ・守っている層を破られた人は、1つ上の層へ挑戦できるようになる。自分から降りても1つ上へ（v2cap_tower_retire）
+--   ・挑戦して負けると **2つ下** の層へ（あるけみと同じ・1層より下には行かない）
+--   ・**守護者のHP/MPは回復しない**（残りHPは最大HPの千分率 hp_pm で持つ＝相手のLVで対人のHP倍率が変わっても割合で引き継ぐ）。
+--     挑戦する側は毎回満タン。守護者が守り切るたびに連勝数 streak が1つ増える（挑戦する側のステ +5n% の元）
+--   ・**勝ち負けによらず**、出撃と同じ旨み：開いている一番先の場所の「ふつうの敵1体ぶん」のEXP・Gold（倍率なし）＋
+--     装備（その場所のエリアの装備・ノーマルかレア・武器はいまの職業の種類＝出撃のふつうの敵と同じ条件）
+--   ・出撃と**待ち時間を共有**する（last_sortie_at を出撃と同じに見て、同じに書く。8秒）
+--   ・守護者でいるあいだ、出撃の装備のドロップ率+1%（画面の確率＝サーバーは何が落ちたかの条件だけを見る。tower_guard で分かる）
+-- ★戦闘は画面で回し、ここへ結果を申告する（出撃と同じ形）。**対人なので申告を信じる穴が残る**（勝ち負け・残りHP・守護者の姿）。
+--   公開の前に、出撃と一緒にサーバーで戦闘を回すか決める（設計書 §10）
+-- ★戦った相手が今の守護者か（p_foe＝守護者の id・空きなら null）を見る。画面が古いあいだに入れ替わっていたら何もせずに返す
+--   （待ち時間も使わない・changed を返す＝画面が一覧を読み直して、もう一度挑戦してもらう）
+alter table public.v2cap_profiles add column if not exists tower_floor  int not null default 1;  -- 次に挑戦する層
+alter table public.v2cap_profiles add column if not exists tower_guard  int;                     -- 守っている層（守っていなければ null）
+alter table public.v2cap_profiles add column if not exists tower_wins   int not null default 0;
+alter table public.v2cap_profiles add column if not exists tower_losses int not null default 0;
+
+-- 各層の階層守護者。行が無い層＝空き（NPC）。1人が守れるのは1層だけ。キャラを消すと（作り直し）行も消える
+create table if not exists public.v2cap_tower_floors (
+  floor     int primary key check (floor between 1 and 100),
+  player_id uuid not null unique references public.v2cap_profiles(id) on delete cascade,
+  snapshot  jsonb not null,                -- 守護者になったときの姿（tower.js の snapshotOf）
+  hp_pm     int not null default 1000,     -- 残りHP（最大HPの千分率・1〜1000）。★回復しない
+  mp        int not null default 0,        -- 残りMP。★回復しない
+  streak    int not null default 0,        -- 守り切った回数（連勝数）
+  since     timestamptz not null default now()
+);
+alter table public.v2cap_tower_floors enable row level security;
+-- 一覧は誰でも読める（誰が何層を守っているかは公開の情報）。書き込みはRPCだけ（ポリシーを足さない）
+drop policy if exists v2cap_tower_read on public.v2cap_tower_floors;
+create policy v2cap_tower_read on public.v2cap_tower_floors for select to authenticated using (public.v2cap_is_dev());
+
+-- ===== 挑戦の結果を反映する =====
+-- p_floor      … 挑戦した層（画面が見ていた層。サーバーの tower_floor と違えば通さない）
+-- p_foe        … 戦った守護者の id（空きの層＝NPCなら null）
+-- p_win        … 勝ったか
+-- p_my_hp_pm・p_my_mp   … 戦い終わったときの自分の残りHP（千分率）・MP（勝って守護者になるときに座る値）
+-- p_foe_hp_pm・p_foe_mp … 戦い終わったときの守護者の残りHP（千分率）・MP（負けたとき、守護者がその値で座り直す）
+-- p_snapshot   … 自分の姿（勝って守護者になるとき用）
+-- p_drop       … 画面が引いた装備（出撃と同じ形。条件に合わなければ入れない）
+drop function if exists public.v2cap_tower_fight(int, uuid, boolean, int, int, int, int, jsonb, text);
+create or replace function public.v2cap_tower_fight(
+  p_floor int, p_foe uuid, p_win boolean,
+  p_my_hp_pm int, p_my_mp int, p_foe_hp_pm int, p_foe_mp int,
+  p_snapshot jsonb, p_drop text default null
+) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  c_cd     constant interval := interval '8 seconds';   -- 出撃と同じ（待ち時間を共有）
+  c_floors constant int := 100;                         -- tower.js の FLOORS
+  c_lose   constant int := 2;                           -- tower.js の LOSE_DROP（負けたら2つ下）
+  v_uid   uuid := auth.uid();
+  v_row   public.v2cap_profiles;
+  v_cls   public.v2cap_classes;
+  v_spot  public.v2cap_spots;
+  v_eq    public.v2cap_equipment;
+  v_champ public.v2cap_tower_floors;
+  v_has   boolean;
+  v_floor int;
+  v_next  int;
+  v_win   boolean := coalesce(p_win, false);
+  v_exp   int;
+  v_gold  int;
+  v_inv   bigint;
+  v_drop  jsonb := null;
+  v_res   jsonb;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  -- ★行をつかんでから見る（同時に2回届いても、待ち時間の判定をすり抜けないように）
+  select * into v_row from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  -- 守っているあいだは挑戦できない（あるけみと同じ）
+  if v_row.tower_guard is not null or exists (select 1 from public.v2cap_tower_floors where player_id = v_uid) then
+    return jsonb_build_object('ok', false, 'error', '守っているあいだは挑戦できません');
+  end if;
+  if v_row.last_sortie_at is not null and v_row.last_sortie_at > now() - c_cd then
+    return jsonb_build_object('ok', false, 'error', '待ち時間が終わっていません');
+  end if;
+  v_floor := least(greatest(coalesce(v_row.tower_floor, 1), 1), c_floors);
+  if p_floor is distinct from v_floor then
+    return jsonb_build_object('ok', false, 'error', '挑戦する層が変わりました。もう一度挑戦してください', 'changed', true);
+  end if;
+
+  -- その層の守護者（いれば行をつかむ）。戦った相手と違えば（画面が古いあいだに入れ替わった）何もしない
+  select * into v_champ from public.v2cap_tower_floors where floor = v_floor for update;
+  v_has := found;
+  if (v_has and v_champ.player_id is distinct from p_foe) or (not v_has and p_foe is not null) then
+    return jsonb_build_object('ok', false, 'error', '守護者が入れ替わりました。もう一度挑戦してください', 'changed', true);
+  end if;
+
+  if v_win then
+    -- 破られた守護者は「1つ上へ挑戦できる」状態に戻す（席は空ける）
+    if v_has then
+      update public.v2cap_profiles
+         set tower_floor = least(c_floors, v_floor + 1), tower_guard = null, tower_losses = tower_losses + 1, updated_at = now()
+       where id = v_champ.player_id;
+      delete from public.v2cap_tower_floors where floor = v_floor;
+    end if;
+    -- 自分がその層の守護者になる。**HP/MPは戦い終わった値のまま座る**。
+    --   空きの層に同時に2人が勝ったときは、あとの人を通さない（入れ替わった扱い）
+    insert into public.v2cap_tower_floors (floor, player_id, snapshot, hp_pm, mp, streak, since)
+    values (v_floor, v_uid, coalesce(p_snapshot, '{}'::jsonb),
+            least(1000, greatest(1, coalesce(p_my_hp_pm, 1000))), greatest(0, coalesce(p_my_mp, 0)), 0, now())
+    on conflict (floor) do nothing;
+    if not found then
+      return jsonb_build_object('ok', false, 'error', '守護者が入れ替わりました。もう一度挑戦してください', 'changed', true);
+    end if;
+    v_next := v_floor;
+    update public.v2cap_profiles
+       set tower_guard = v_floor, tower_floor = v_floor, tower_wins = tower_wins + 1, updated_at = now()
+     where id = v_uid;
+  else
+    -- 負け。守護者は**HP/MPが減ったまま**居座り、連勝数が1つ増える
+    if v_has then
+      update public.v2cap_tower_floors
+         set hp_pm = least(1000, greatest(1, coalesce(p_foe_hp_pm, hp_pm))), mp = greatest(0, coalesce(p_foe_mp, mp)),
+             streak = streak + 1
+       where floor = v_floor;
+      update public.v2cap_profiles set tower_wins = tower_wins + 1, updated_at = now() where id = v_champ.player_id;
+    end if;
+    -- 2つ下へ（あるけみと同じ・1層より下には行かない）
+    v_next := greatest(1, v_floor - c_lose);
+    update public.v2cap_profiles
+       set tower_floor = v_next, tower_losses = tower_losses + 1, updated_at = now()
+     where id = v_uid;
+  end if;
+
+  -- 報酬（勝ち負けによらず・出撃と同じ旨み）：開いている一番先の場所の「ふつうの敵1体ぶん」（場所の表の値・倍率なし）
+  select * into v_spot from public.v2cap_spots where id = public.v2cap_open_until(v_row.cleared_spots);
+  v_exp  := v_spot.exp_min  + floor(random() * (v_spot.exp_max  - v_spot.exp_min  + 1))::int;
+  v_gold := v_spot.gold_min + floor(random() * (v_spot.gold_max - v_spot.gold_min + 1))::int;
+  -- 装備：その場所のエリアの装備で、ふつうの敵から落ちるレア度（ノーマル・レア）、武器ならいまの職業の種類のときだけ入れる
+  if p_drop is not null then
+    select * into v_cls from public.v2cap_classes where id = v_row.class;
+    select * into v_eq from public.v2cap_equipment e where e.id = p_drop;
+    if found and v_eq.area = v_spot.area and v_eq.rarity in ('N', 'R')
+       and (v_eq.part <> '武器' or v_eq.type = any(coalesce(v_cls.weapons, '{}'))) then
+      insert into public.v2cap_inventory (player_id, base_id, ilv)
+      values (v_uid, v_eq.id, v_eq.lv) returning id into v_inv;
+      v_drop := jsonb_build_object('id', v_inv, 'base_id', v_eq.id, 'rarity', v_eq.rarity, 'ilv', v_eq.lv);
+    end if;
+  end if;
+  -- 待ち時間は出撃と共有（出撃の精算と同じ列）
+  update public.v2cap_profiles set gold = gold + v_gold, last_sortie_at = now(), updated_at = now() where id = v_uid;
+  v_res := public.v2cap_apply_exp(v_uid, v_exp);
+  return jsonb_build_object('ok', true, 'win', v_win, 'floor', v_floor, 'next_floor', v_next,
+    'guard', case when v_win then v_floor end, 'exp', v_exp, 'gold', v_gold, 'drop', v_drop, 'level', v_res);
+end;
+$$;
+revoke all on function public.v2cap_tower_fight(int, uuid, boolean, int, int, int, int, jsonb, text) from public, anon;
+grant execute on function public.v2cap_tower_fight(int, uuid, boolean, int, int, int, int, jsonb, text) to authenticated;
+
+-- ===== 席を降りる（守るのをやめる）=====
+-- ★あるけみすとに「降りる」は無い（破られるまで上へ行けない）。人が少ないと詰むので足した（今のⅡと同じ・ユーザーが選んだ）。
+--   降りると破られたときと同じ扱い＝次は1つ上の層へ挑戦できる。待ち時間は使わない
+drop function if exists public.v2cap_tower_retire();
+create or replace function public.v2cap_tower_retire()
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  c_floors constant int := 100;   -- tower.js の FLOORS
+  v_uid   uuid := auth.uid();
+  v_floor int;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  perform 1 from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  delete from public.v2cap_tower_floors where player_id = v_uid returning floor into v_floor;
+  if v_floor is null then
+    -- 守っていない（念のため印もそろえておく）
+    update public.v2cap_profiles set tower_guard = null where id = v_uid and tower_guard is not null;
+    return jsonb_build_object('ok', false, 'error', 'どの層も守っていません');
+  end if;
+  update public.v2cap_profiles
+     set tower_guard = null, tower_floor = least(c_floors, v_floor + 1), updated_at = now()
+   where id = v_uid;
+  return jsonb_build_object('ok', true, 'floor', v_floor, 'next_floor', least(c_floors, v_floor + 1));
+end;
+$$;
+revoke all on function public.v2cap_tower_retire() from public, anon;
+grant execute on function public.v2cap_tower_retire() to authenticated;

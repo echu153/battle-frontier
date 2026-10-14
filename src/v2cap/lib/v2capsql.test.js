@@ -23,6 +23,7 @@ import {
   HILO_MIN_BET, HILO_MAX_BET, HILO_FIRST_X13, HILO_NEXT_X13, HILO_MAX_STREAK, HILO_CAP_MULT,
   ROULETTE_MAX_TOTAL, ROULETTE_MAX_BETS, ROULETTE_STRAIGHT, RED_NUMBERS, LUCKY_COUNT_W, LUCKY_MULTS, BET_KINDS,
 } from './casino.js'
+import { FLOORS as TOWER_FLOORS, LOSE_DROP as TOWER_LOSE } from './tower.js'
 import { rewrite } from '../../../tools/v2cap-sql.mjs'
 
 // ★改行はLFにそろえてから見る（Windowsで core.autocrlf=true のまま取り出すとCRLFになり、改行を含む正規表現が合わなくなる。
@@ -739,4 +740,51 @@ test('【確定】アセンション（2026-10-13）：つながったマスだ�
   // MPの大マスは（本体＋クラス＋小マスのMP）の%を四捨五入（JSの ascPctGain と同じ）
   assert.ok(fnBody('v2cap_asc_mp').includes('round((coalesce(p_base, 0) + f.flat) * f.pct / 100.0)::int'))
   assert.ok(fnBody('v2cap_max_mp').includes('select b.base + public.v2cap_asc_mp(p_asc, p_cls, b.base)'))
+})
+
+test('【確定】塔（2026-10-14）：100層・負けたら2つ下・待ち時間は出撃と同じ8秒を共有（数はJSと同じ）', () => {
+  const fight = fnBody('v2cap_tower_fight')
+  const retire = fnBody('v2cap_tower_retire')
+  assert.equal(TOWER_FLOORS, 100)
+  assert.equal(TOWER_LOSE, 2)
+  assert.ok(fight.includes(`c_floors constant int := ${TOWER_FLOORS};`), '層の数（挑戦）')
+  assert.ok(retire.includes(`c_floors constant int := ${TOWER_FLOORS};`), '層の数（降りる）')
+  assert.ok(fight.includes(`c_lose   constant int := ${TOWER_LOSE};`), '負けたら2つ下')
+  assert.ok(SQL.includes(`floor     int primary key check (floor between 1 and ${TOWER_FLOORS}),`), '層の番号の範囲')
+  // 待ち時間は出撃と同じ列（last_sortie_at）・同じ長さ（10秒・通信の揺れぶん2秒の余裕で8秒）
+  assert.equal(SORTIE_CD, 10)
+  assert.ok(fight.includes("c_cd     constant interval := interval '8 seconds';"), '8秒（出撃と同じ）')
+  assert.ok(fight.includes('v_row.last_sortie_at > now() - c_cd'), '出撃の時刻から数える')
+  assert.ok(fight.includes('last_sortie_at = now()'), '挑戦したら出撃と同じ列に書く')
+  // 負けたら2つ下（1層より下には行かない）・勝てば守護者・破られた人と降りた人は1つ上
+  assert.ok(fight.includes('v_next := greatest(1, v_floor - c_lose);'))
+  assert.ok(fight.includes('set tower_floor = least(c_floors, v_floor + 1), tower_guard = null, tower_losses = tower_losses + 1'))
+  assert.ok(fight.includes('set tower_guard = v_floor, tower_floor = v_floor, tower_wins = tower_wins + 1'))
+  assert.ok(retire.includes('set tower_guard = null, tower_floor = least(c_floors, v_floor + 1)'))
+  // 守っているあいだは挑戦できない・戦った相手が今の守護者でなければ何もしない（待ち時間も使わない）
+  assert.ok(fight.includes("'守っているあいだは挑戦できません'"))
+  assert.ok(fight.includes('(v_has and v_champ.player_id is distinct from p_foe) or (not v_has and p_foe is not null)'))
+  assert.ok(fight.indexOf("'changed', true") < fight.indexOf('last_sortie_at = now()'), '入れ替わっていたら待ち時間を書く前に返す')
+  // 守護者は回復しない：負けたときは守護者の残りHP（千分率）とMPを書き、連勝数を1つ増やす
+  assert.ok(fight.includes('set hp_pm = least(1000, greatest(1, coalesce(p_foe_hp_pm, hp_pm))), mp = greatest(0, coalesce(p_foe_mp, mp)),'))
+  assert.ok(fight.includes('streak = streak + 1'))
+})
+
+test('【確定】塔の報酬は出撃と同じ：開いている一番先の場所のふつうの敵1体ぶん（倍率なし）・装備はふつうの敵と同じ条件', () => {
+  const fight = fnBody('v2cap_tower_fight')
+  assert.ok(fight.includes('where id = public.v2cap_open_until(v_row.cleared_spots);'), '開いている一番先の場所')
+  assert.ok(fight.includes('v_exp  := v_spot.exp_min  + floor(random() * (v_spot.exp_max  - v_spot.exp_min  + 1))::int;'), 'EXPは場所の表の値（倍率なし）')
+  assert.ok(fight.includes('v_gold := v_spot.gold_min + floor(random() * (v_spot.gold_max - v_spot.gold_min + 1))::int;'), 'Goldも')
+  // ふつうの敵から落ちるレア度（sortie.js の DROP_RARITY.normal）＝ノーマル・レア
+  assert.deepEqual(Object.keys(DROP_RARITY.normal).sort(), ['N', 'R'])
+  assert.ok(fight.includes("v_eq.area = v_spot.area and v_eq.rarity in ('N', 'R')"))
+  assert.ok(fight.includes("(v_eq.part <> '武器' or v_eq.type = any(coalesce(v_cls.weapons, '{}')))"), '武器はいまの職業の種類')
+  assert.ok(fight.includes('public.v2cap_apply_exp(v_uid, v_exp)'), 'EXPは出撃と同じ入れ方（ClassEXP・技を覚える）')
+})
+
+test('塔の守護者の表：読むのは開発者だけ・書くのはRPCだけ・キャラを消す（作り直し）と行も消える', () => {
+  assert.ok(SQL.includes('player_id uuid not null unique references public.v2cap_profiles(id) on delete cascade,'))
+  assert.ok(SQL.includes('create policy v2cap_tower_read on public.v2cap_tower_floors for select to authenticated using (public.v2cap_is_dev());'))
+  assert.ok(!/create policy \w+ on public\.v2cap_tower_floors for (insert|update|delete|all)/.test(SQL), '書き込みのポリシーは無い')
+  assert.ok(/create policy \w+ on public\.v2cap_tower_floors for select/.test(SQL), '（同じ形で読みのポリシーは拾える）')
 })

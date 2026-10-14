@@ -94,3 +94,12 @@ test('本物の戦闘：行は1つも落とさず、どの行もどちらかの�
     for (const x of v.filter(y => y.kind === 'act')) assert.ok(x.who === 'me' || x.who === 'foe')
   }
 })
+
+test('始まりのHP（start）を渡すと、1ターン目の表はその値から（塔の守護者は前の防衛で減ったHPから始まる・2026-10-14）', () => {
+  const log = [{ side: YOU, type:'normal', hit:true, damage:30 }, hp(1, 100, 15)]
+  const v = buildCapBattleView({ log }, YOU, FOE, { b: 45 })
+  assert.equal(v[0].foe.hp, 45, '相手は45から')
+  assert.equal(v[0].foe.max, 80, '最大HPはそのまま')
+  assert.equal(v[0].me.hp, 100, '渡さなかった側は満タン')
+  assert.equal(buildCapBattleView({ log }, YOU, FOE)[0].foe.hp, 80, '渡さなければ今までどおり満タン')
+})
