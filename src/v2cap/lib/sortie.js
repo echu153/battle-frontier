@@ -10,10 +10,12 @@
 //   ・装備はそのエリアのものが落ちる。レア度（ノーマル・レア・エピック・レジェンダリー）は敵の役割と①②③で決まる
 //     （下の「落ちる装備」）。部位は1時間ごとに「落ちやすい部位」が入れ替わる（今のⅡと同じ）。アイテムLV＝装備の必要LV
 //   ・**武器はいまの職業が装備できる種類（3種）から**落ちる。防具は重鎧／軽装を半々。装飾品は4種から均等
+//   ・勝って装備が落ちなかったら、5%で宝箱（その場所のエリアの残骸が1〜10個・下の「宝箱」・2026-10-14）
 // ============================================================
 import { spotOf, enemyLvOf, scaleByRole, LAST_SPOT } from './areas.js'
 import { itemOf, RARITIES, ARMOR_LINES, ACCESSORY_TYPES } from './equipment.js'
 import { weaponsOf } from './jobs.js'
+import { scrapNameOf } from './smith.js'
 import {
   rollBoss, nextBossRate, bandAt, rollDropPart, rollRare,
   SORTIE_CD, BOSS_RATE_STEP, RARE_RATE,
@@ -126,3 +128,22 @@ export const rollEquipDrop = (enc, cls, at = new Date(), rng = Math.random, rare
   const item = kind ? itemOf(enc.spot.area, rollDropRarity(enc.role, enc.spot.sub, rng, rareMult), kind) : null
   return item ? { item, ilv: item.lv } : null
 }
+
+// ===== 宝箱 =====
+// 【確定】2026-10-14 ユーザー指示「出撃して敵を倒した時、装備が落ちなかったとき5%の確率で宝箱を見つけて開けられる」
+//   「宝箱を開けるとそのエリアの残骸を「1～10」個」・メッセージは「宝箱を見つけた！○○の残骸×〇を獲得した！」
+// こちらで決めた細部：
+//   ・見つけたらその場で開ける（ログの1行だけ・演出なし・オートも止まらない）
+//   ・勝った敵なら役割（ふつう・朝昼晩・レア・ボス）を問わない。装備が落ちた戦闘では見つからない
+//   ・安息の祠の中では見つからない（祠は装備も落ちない場所＝前に決めた報酬のまま）
+//   ・残骸の数は1〜10を均等に1つ（平均5.5個）。入るのはその場所のエリアの残骸（鍛冶屋の強化・作成に使うものと同じ）
+// ★決めるのはサーバー（v2cap_sortie_settle の c_chest_…）。ここはシミュレーションと表示のための写し
+//   ⚠数を変えたら SQL の c_chest_… も直す（v2capsql.test.js が突き合わせる）
+export const CHEST_PCT = 5            // 装備が落ちなかった勝ちで、宝箱を見つける確率（%）
+export const CHEST_SCRAP = [1, 10]    // 中の残骸の数（この範囲の整数を均等に1つ）
+// 宝箱を引く。見つけたら中の残骸の数、見つけなければ0（装備が落ちたかどうかは呼び出し側で見る）
+export const rollChest = (rng = Math.random) => (rng() * 100 < CHEST_PCT
+  ? CHEST_SCRAP[0] + Math.floor(rng() * (CHEST_SCRAP[1] - CHEST_SCRAP[0] + 1))
+  : 0)
+// ログの1行（ユーザーの文のまま）
+export const chestText = (area, n) => `宝箱を見つけた！${scrapNameOf(area)}×${n}を獲得した！`

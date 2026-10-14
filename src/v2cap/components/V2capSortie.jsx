@@ -6,7 +6,7 @@ import { LOG_PLAIN } from '../../v2/components/v2ui.js'
 import { loadPref, savePref } from '../../v2/lib/prefs.js'
 import { SPOTS, spotOf, spotLabel, recLvText, toFighter as enemyFighter } from '../lib/areas.js'
 import {
-  pickEncounter, rollEquipDrop, nextBossRate, isSpotUnlocked, isSpotCleared, openUntilOf, SORTIE_CD,
+  pickEncounter, rollEquipDrop, nextBossRate, isSpotUnlocked, isSpotCleared, openUntilOf, SORTIE_CD, chestText,
 } from '../lib/sortie.js'
 import { toFighter as playerFighter } from '../lib/loadout.js'
 import { staminaMaxOf, MAX_LV, rollStamina } from '../lib/level.js'
@@ -40,6 +40,8 @@ import V2capShrineFx from './V2capShrineFx.jsx'
 //   ・【確定】2026-10-13 ユーザー指示「安息の祠を追加」（決まりは lib/shrine.js・決めるのはサーバー）：
 //     精算の返事（shrine）で祠を見つけたら、次の出撃から祠の中＝見つけた場所でハピネスフェアリーと戦う（場所は選べない）。
 //     最後の1戦のあとは最深部の演出（V2capShrineFx）。祠のことはプロフィールの列（shrine_spot・shrine_left・shrine_total）でも持つ
+//   ・【確定】2026-10-14 ユーザー指示「装備が落ちなかったとき5%の確率で宝箱を見つけて開けられる」（決まりは lib/sortie.js・決めるのはサーバー）：
+//     精算の返事（chest）に宝箱があれば「宝箱を見つけた！◯◯の残骸×◯を獲得した！」の1行だけ（演出なし・オートも止めない）
 // ============================================================
 // ★ログに注記は付けない（2026-10-10 ユーザー指示「（朝だけ）とか（時間帯限定で1.5倍）とか倒した時の（1ターン）の部分いらない」）：
 //   時間帯の敵の「（朝だけ）」・報酬の「（ボスで5倍）（レアで3倍）（時間帯限定で1.5倍）」・勝ち負けの「（◯ターン）」は出さない
@@ -197,6 +199,11 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
             { text:'🎁 「' }, { text: drop.item.name, color },
             { text:'」を入手！' },
           ] })
+        }
+        // 宝箱（2026-10-14 ユーザー指示・決まりは sortie.js の「宝箱」）：装備が落ちなかった勝ちで、サーバーが5%で見つけて開ける。
+        //   中身（その場所のエリアの残骸1〜10個）はサーバーの返事 chest＝{ area, n }。サーバーが前の版のあいだは chest が無い＝何も出さない
+        if (data.chest?.n > 0) {
+          after.push({ text: chestText(data.chest.area, data.chest.n), color:'#ffcc66' })
         }
         // ボスを倒すと次の場所が開く（1本道）。開いたかどうかはサーバーの返事で見る
         if (enc.isBoss && Number(data.open_until) > openUntilOf(cleared)) {

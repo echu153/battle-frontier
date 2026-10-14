@@ -11,7 +11,7 @@ import { NEED_BASE, NEED_PERMIL, MAX_LV, STAMINA_BASE, STAMINA_RECOVER_MS, POINT
 import { JOB_NEED_PCT, JOB_NEED_BASE_PERMIL, JOB_MAX } from './jobs.js'
 import { ROLE_TENTHS, SPOTS as SPOTS_ALL, recLvOf } from './areas.js'
 import { SLOTS, RARITIES, STARTER_AREA } from './equipment.js'
-import { SORTIE_CD, DROP_RARITY } from './sortie.js'
+import { SORTIE_CD, DROP_RARITY, CHEST_PCT, CHEST_SCRAP } from './sortie.js'
 import { SHRINE_FAIRY_NAME, SHRINE_PCT, SHRINE_FIGHTS, SHRINE_EXP_TENTHS, SHRINE_GOLD_TENTHS } from './shrine.js'
 import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV, scrapAreaOf, enhanceScrapOf, ENHANCE_GOLD_ONLY_RARITY } from './smith.js'
 import { DAILY_SORTIES, DAILY_GOLD_PER_LV, DAY_RESET_HOUR } from './daily.js'
@@ -465,6 +465,23 @@ test('【確定】安息の祠（2026-10-13）：見つかる確率・戦闘の�
   assert.ok(next.includes('set shrine_force = true'))
   assert.ok(!/shrine_left =|shrine_spot =/.test(next), '祠そのものは置かない')
   assert.ok(SQL.includes('alter table public.v2cap_profiles add column if not exists shrine_force boolean not null default false;'))
+})
+
+test('【確定】宝箱（2026-10-14）：祠の外で勝って装備が入らなかったときだけ5%・その場所のエリアの残骸1〜10個。数はJSと同じ', () => {
+  const settle = fnBody('v2cap_sortie_settle')
+  assert.ok(settle.includes(`c_chest_rate   constant numeric := ${CHEST_PCT / 100};`), '5%')
+  assert.ok(settle.includes(`c_chest_min    constant int := ${CHEST_SCRAP[0]};`) && settle.includes(`c_chest_max    constant int := ${CHEST_SCRAP[1]};`), '1〜10個')
+  // 引くのは祠の外の勝ち（elsif v_win）の中・落ちた装備を見たあと・装備が入らなかったときだけ（祠の勝ち・負けの枝には無い）
+  const roll = 'if v_drop is null and random() < c_chest_rate then\n      v_chest := c_chest_min + floor(random() * (c_chest_max - c_chest_min + 1))::int;\n    end if;'
+  const a = settle.indexOf('if v_win and v_shrine then'), b = settle.indexOf('elsif v_win then'), c = settle.indexOf('if p_drop is not null then')
+  const r = settle.indexOf(roll), loss = settle.indexOf('v_exp := v_spot.exp_min;')
+  assert.ok(r > 0, '宝箱を引く文がある')
+  assert.ok(a < b && b < c && c < r && r < loss, '祠の外の勝ちの枝で、落ちた装備のあと')
+  assert.equal(settle.split('c_chest_rate').length - 1, 2, '宝箱を引くのは1か所だけ（定数と引く所）')
+  // 残骸はその場所のエリアの番号に足す（分解・強化・作成と同じ materials の {"エリアの番号": 個数}）
+  assert.ok(settle.includes("materials = case when v_chest > 0\n           then jsonb_set(coalesce(materials, '{}'::jsonb), array[v_spot.area::text],\n                          to_jsonb(coalesce((materials ->> v_spot.area::text)::int, 0) + v_chest))\n           else materials end,"))
+  // 返事：見つけたときだけ { area, n }（画面がログを出す）
+  assert.ok(settle.includes("'chest', case when v_chest > 0 then jsonb_build_object('area', v_spot.area, 'n', v_chest) end,"))
 })
 
 test('出撃の間隔はサーバーでも見る（10秒・通信の揺れぶん2秒の余裕）', () => {

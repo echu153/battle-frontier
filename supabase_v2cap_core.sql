@@ -3700,6 +3700,9 @@ grant execute on function public.v2cap_create_character(text, text) to authentic
 --     勝てば経験値＝場所の表の値×5・Gold＝ふつうの敵と同じ・装備は落とさない。負けたらふつうの負けと同じ（最低EXP・Goldなし）。
 --     勝ち負けを問わず1つ奥へ進む。ボスの出やすさは変えない。スタミナはふつうと同じ（オートは1使う）
 --   ・最後の1戦のあと（最深部）は、泉の力でスタミナをそのLV（この戦闘のEXPが入ったあと）の最大値まで戻す
+-- ★宝箱（2026-10-14 ユーザー指示・src/v2cap/lib/sortie.js の CHEST_PCT・CHEST_SCRAP と同じ数）：
+--   祠の外で勝って、装備が持ち物に入らなかったとき（落ちなかった・条件に合わなかった）だけ 5% で見つけて、その場で開ける。
+--   中身はその場所のエリアの残骸 1〜10 個（均等に1つ）＝ materials（{"エリアの番号": 個数}）に足す。返事の chest＝{ area, n }（無ければ null）
 -- ⚠引数を変えた（p_area → p_spot・ランクの p_rank をなくした）ので、前の形を落としてから作る
 drop function if exists public.v2cap_sortie_settle(int, text, boolean, text, boolean);
 drop function if exists public.v2cap_sortie_settle(int, text, boolean, text, text, boolean);
@@ -3716,6 +3719,10 @@ declare
   c_shrine_max   constant int := 8;
   c_shrine_exp   constant int := 50;
   c_shrine_gold  constant int := 10;
+  -- 宝箱（sortie.js の CHEST_PCT・CHEST_SCRAP）
+  c_chest_rate   constant numeric := 0.05;
+  c_chest_min    constant int := 1;
+  c_chest_max    constant int := 10;
   v_uid    uuid := auth.uid();
   v_row    public.v2cap_profiles;
   v_cls    public.v2cap_classes;
@@ -3735,6 +3742,7 @@ declare
   v_gold   int := 0;
   v_inv    bigint;
   v_drop   jsonb := null;
+  v_chest  int := 0;         -- 宝箱から出た残骸の数（見つけなければ0）
   v_cleared int[];
   v_rate   numeric;
   v_cost   int := 0;
@@ -3798,6 +3806,10 @@ begin
         v_drop := jsonb_build_object('id', v_inv, 'base_id', v_eq.id, 'rarity', v_eq.rarity, 'ilv', v_eq.lv);
       end if;
     end if;
+    -- 宝箱：装備が入らなかったときだけ 5% で見つけて開ける（中身はその場所のエリアの残骸 1〜10 個）
+    if v_drop is null and random() < c_chest_rate then
+      v_chest := c_chest_min + floor(random() * (c_chest_max - c_chest_min + 1))::int;
+    end if;
   else
     -- 【確定】負けても経験値は**その場所の最低値**（朝昼晩・レア・ボスの倍率は掛けない）。Goldは入らない
     --   （2026-10-09 ユーザー指示。sortie.js の lossExpOf と同じ）
@@ -3828,6 +3840,10 @@ begin
 
   update public.v2cap_profiles
      set cleared_spots = v_cleared, boss_rate = v_rate, gold = gold + v_gold,
+         materials = case when v_chest > 0
+           then jsonb_set(coalesce(materials, '{}'::jsonb), array[v_spot.area::text],
+                          to_jsonb(coalesce((materials ->> v_spot.area::text)::int, 0) + v_chest))
+           else materials end,
          stamina = greatest(0, stamina - v_cost),
          shrine_spot = case when v_sh_left > 0 then v_sh_spot end,
          shrine_left = greatest(0, v_sh_left),
@@ -3856,6 +3872,7 @@ begin
   return jsonb_build_object('ok', true, 'win', v_win, 'boss', v_boss,
     'role', case when v_shrine then 'shrine' else v_en.role end, 'enemy_lv', v_en.lv,
     'exp', v_exp, 'gold', v_gold, 'drop', v_drop,
+    'chest', case when v_chest > 0 then jsonb_build_object('area', v_spot.area, 'n', v_chest) end,
     'cleared', to_jsonb(v_cleared), 'open_until', public.v2cap_open_until(v_cleared), 'boss_rate', v_rate,
     'level', v_res,
     'stamina', v_stam, 'stamina_at', v_stam_at,
