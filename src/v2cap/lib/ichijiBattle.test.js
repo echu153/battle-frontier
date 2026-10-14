@@ -60,7 +60,7 @@ test('バーサク：HP50%以下で与ダメージ+15%・25%以下で+30%', () =
   assert.ok(Math.abs(dmgAt(20) / full - 1.30) < 0.01)
 })
 
-test('跳躍：ジャンプは1ターン敵の攻撃を受けず、次の行動で着地して物理×2.0（竜の血で+15%）', () => {
+test('跳躍：ジャンプは1ターン敵の攻撃を受けず、次の行動で着地して物理×着地の倍率（竜の血で+15%）', () => {
   const me = side('竜', '竜騎士', ['ジャンプ'])
   const foe = dummy()
   const log = []
@@ -76,12 +76,13 @@ test('跳躍：ジャンプは1ターン敵の攻撃を受けず、次の行動�
   assert.equal(me.jumping, null)
   const land = log.find(l => l.type === 'strike' && l.label === 'ジャンプ（着地）')
   assert.ok(land && land.damage > 0 && foe.hp < fhp)
-  // 通常攻撃（×1.0）と比べて ×2.0×1.15
+  // 通常攻撃（×1.0）と比べて ×着地の倍率×1.15（倍率は 2026-10-14 に強さをそろえて変えた＝名簿から読む）
+  const landMult = SKILL_BY_NAME['ジャンプ'].jump.mult
   const me2 = side('竜2', '竜騎士', [])
   const l2 = []
   takeAction(me2, dummy(), mid, l2)
   const normal = l2.find(l => l.type === 'normal').damage
-  assert.ok(Math.abs(land.damage / normal - 2.0 * 1.15) < 0.05, `着地 ${land.damage} ／ 通常 ${normal}`)
+  assert.ok(Math.abs(land.damage / normal - landMult * 1.15) < 0.05 * landMult, `着地 ${land.damage} ／ 通常 ${normal}（×${landMult}）`)
 })
 
 test('跳躍：ハイジャンプは2ターン敵の攻撃を受けず、その次の行動で着地', () => {

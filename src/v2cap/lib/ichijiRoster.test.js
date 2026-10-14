@@ -5,9 +5,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createSide, takeAction } from '../../v2/lib/battle.js'
-import { skillValue, VALUE_TABLE } from '../../v2/lib/skills.js'
+import { skillValue, effectPrice, VALUE_TABLE } from '../../v2/lib/skills.js'
 import { SKILL_BY_NAME, passiveOf } from './skills.js'
-import { ICHIJI_SKILLS } from './skillsIchiji.js'
+import { ICHIJI_SKILLS, ICHIJI_CLASS_POWER } from './skillsIchiji.js'
 import { ICHIJI_INFO, ICHIJI_RENAMED, CLASS_BY_ID, attackKindOf, learnOrderOf, JOB_BONUS } from './jobs.js'
 
 const stats = (over = {}) => ({ hp: 100000, mp: 2000, str: 300, dex: 150, agi: 150, int_stat: 300, vit: 150, luk: 30, ...over })
@@ -40,19 +40,33 @@ test('【確定】2026-10-14 一次職の並び替え：22職・V1の職業を�
   assert.deepEqual([ICHIJI_INFO.侍.base, ICHIJI_INFO.魔法剣士.base], ['剣士', '剣士'])
 })
 
-test('【確定】新しい4職の技は一次職の帯（初期職の帯×1.3・±0.03）・覚える順は表のとおり・LUKを少し持つ', () => {
-  const band = (kind, proc) => {
-    // 初期職の帯（85%まで）×1.3。85%より低い発動率は今のⅡの上位職の帯の伸び方（85%との比）で延ばす
-    const basic = VALUE_TABLE.basic[kind], adv = VALUE_TABLE.advanced[kind]
-    const pick = (t, p) => { const ks = Object.keys(t).map(Number).sort((a, b) => b - a); return t[ks.find(k => p >= k) ?? ks[ks.length - 1]] }
-    return proc >= 85 ? pick(basic, proc) * 1.3 : pick(basic, 85) * 1.3 * pick(adv, proc) / pick(adv, 85)
+test('【確定】2026-10-14 強さをそろえた：攻撃の技は「目標の強さ（初期職の帯×1.3）×職業の倍率」に近い・新しい4職の覚える順・LUKを少し持つ', () => {
+  const pick = (t, p) => { const ks = Object.keys(t).map(Number).sort((a, b) => b - a); return t[ks.find(k => p >= k) ?? ks[ks.length - 1]] }
+  // 初期職の帯（85%まで）×1.3。85%より低い発動率は今のⅡの上位職の帯の伸び方（85%との比）で延ばす
+  const band = (s) => {
+    const basic = VALUE_TABLE.basic[s.kind], adv = VALUE_TABLE.advanced[s.kind]
+    return (s.proc >= 85 ? pick(basic, s.proc) : pick(basic, 85) * pick(adv, s.proc) / pick(adv, 85)) * 1.3
+  }
+  const PRICED = new Set(['name','cls','kind','mult','add','hits','noCrit','sureHit','defPen','buff','ail','proc','mp','desc','drain','elem','dispel','cure','src','priority','hitBonus','switchKind','vsAil','consumeAil'])
+  assert.deepEqual(Object.keys(ICHIJI_CLASS_POWER).sort(), Object.keys(ICHIJI_INFO).sort(), '22職ぶんある')
+  let checked = 0
+  for (const s of ICHIJI_SKILLS) {
+    if (!(s.kind === 'phys' || s.kind === 'mag') || !Object.keys(s).every(k => PRICED.has(k))) continue
+    const power = ICHIJI_CLASS_POWER[s.cls]
+    assert.ok(power > 0, `${s.cls}の倍率`)
+    // 威力のぶん（効果の値段を除く）で比べる＝倍率を大きく下げた職業でも、効果の値段は変わらないので
+    const eff = effectPrice(s)
+    const r = (skillValue(s) - eff) / (band(s) - eff) / power
+    assert.ok(Math.abs(r - 1) <= 0.05, `${s.name}（${s.cls}）：目標×${power}に対して ${r.toFixed(3)}`)
+    checked++
+  }
+  assert.ok(checked >= 70, `見た技 ${checked}`)
+  // 連撃はクリティカルしない（初期職と同じ）。「回避したら全段クリティカル」の飛天三角蹴りだけは例外
+  for (const s of ICHIJI_SKILLS) if ((s.kind === 'phys' || s.kind === 'mag') && ((s.hits || 1) >= 2 || s.hitMults)) {
+    assert.equal(!!s.noCrit, !s.critIfDodged, `${s.name}`)
   }
   for (const cls of ['侍', '魔法剣士', '聖騎士', 'サイキッカー']) {
-    const mine = ICHIJI_SKILLS.filter(s => s.cls === cls && s.kind !== 'passive')
-    assert.equal(mine.length, 8, `${cls}の技は8つ`)
-    for (const s of mine.filter(x => x.kind === 'phys' || x.kind === 'mag')) {
-      assert.ok(Math.abs(skillValue(s) - band(s.kind, s.proc)) <= 0.03, `${s.name}の価値 ${skillValue(s)}／帯 ${band(s.kind, s.proc).toFixed(3)}`)
-    }
+    assert.equal(ICHIJI_SKILLS.filter(s => s.cls === cls && s.kind !== 'passive').length, 8, `${cls}の技は8つ`)
     assert.ok(JOB_BONUS[cls].luk > 0, `${cls}はLUKを持つ（0だと相手のクリティカルが上限になる）`)
   }
   assert.deepEqual(learnOrderOf('侍').map(s => s.name), ['居合斬', '納刀', '抜刀術', '断空', '明鏡止水', '二段斬り', '桜花一閃', '月影'])

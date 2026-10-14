@@ -139,7 +139,8 @@ test('【確定】スキルマスの上がり幅：攻撃＝威力+20%・回復�
   assert.equal(ascendSkill(SKILL_BY_NAME['納刀']).stance.mult, 1.5, '威力の倍率はそのまま')
   assert.equal(ascendSkill(SKILL_BY_NAME['大防御']).bigGuard.cut, 70)
   assert.equal(ascendSkill(SKILL_BY_NAME['ブラッディロア']).lifeSteal.pct, 20)
-  assert.equal(ascendSkill(SKILL_BY_NAME['骸骨召喚']).summon.mult, 0.35, '魔法×0.25→×0.35')
+  // 召喚の攻撃は +0.10（魔法×0.25→×0.35 の形）。元の倍率は 2026-10-14 に強さをそろえて変えた＝名簿から読む
+  assert.ok(Math.abs(ascendSkill(SKILL_BY_NAME['骸骨召喚']).summon.mult - (SKILL_BY_NAME['骸骨召喚'].summon.mult + 0.1)) < 1e-9, '召喚の攻撃+0.10')
   assert.equal(ascendSkill(SKILL_BY_NAME['リザレクション']).revive.pct, 60)
   assert.equal(ascendSkill(SKILL_BY_NAME['詠唱']).nextBoost.per, 25)
   assert.equal(ascendSkill(SKILL_BY_NAME['クイック']).extraTurn.max, 3)

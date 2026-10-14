@@ -506,14 +506,15 @@ test('【確定】一次職の技はユーザーの表「一次職スキル一�
     ['マッドラッシュ', 6, 95], ['血風斬', 12, 85], ['狂乱の咆哮', 10, 100], ['ブラッドスプラッシュ', 11, 88],
     ['狂撃', 14, 85], ['ブラッディロア', 14, 100], ['血の誓い', 10, 100], ['フルブレイカー', 22, 80]])
   assert.deepEqual(learnOrderOf('霊薬師').map(x => x.name), ['霊薬瓶', '剛力薬', '叡智の薬', '鉄身薬', '再生薬', '霊薬', '薬効解放', '仙丹'])
-  assert.deepEqual([SKILL_BY_NAME['カタストロフ'].mult, SKILL_BY_NAME['カタストロフ'].mp, SKILL_BY_NAME['カタストロフ'].proc], [2.6, 28, 70])
-  assert.deepEqual(SKILL_BY_NAME['マナショット'].hybrid, { phys:1.2, mag:1.2 })
+  // 消費MP・発動率は表のまま。倍率は 2026-10-14 にユーザー指示「どのクラスも平均的な強さになるように揃えて」で変えた（ichijiRoster.test.js が見張る）
+  assert.deepEqual([SKILL_BY_NAME['カタストロフ'].mp, SKILL_BY_NAME['カタストロフ'].proc], [28, 70])
+  assert.equal(SKILL_BY_NAME['マナショット'].hybrid.phys, SKILL_BY_NAME['マナショット'].hybrid.mag, '物理と魔法が同じ（STRとINTが半分ずつ）')
   assert.equal(passiveOf('狂戦士').name, 'バーサク')
   assert.equal(passiveOf('戦士'), null, '初期職にパッシブは無い')
   // 今のⅡと同じ名前の技がある（表の「過去作の名前も引き継ぐ」）。この版の名簿の中では重ならない
   assert.equal(new Set(SKILLS.map(x => x.name)).size, SKILLS.length)
   assert.equal(SKILL_BY_NAME['マッドラッシュ'].cls, '狂戦士')
-  assert.equal(SKILL_BY_NAME['マッドラッシュ'].mult, 1.45, 'この版の中身（表の値）')
+  assert.equal(SKILL_BY_NAME['マッドラッシュ'].hits, undefined, 'この版の中身（1発の技。今のⅡのマッドラッシュは3連撃）')
 })
 
 test('【確定】新しい6職（槍使い・盗賊・銃士・剣士・呪術師・薬師）の30技は、今のⅡの初期職と同じ帯（価値・消費MP）', () => {
