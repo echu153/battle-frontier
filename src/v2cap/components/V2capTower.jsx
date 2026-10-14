@@ -181,7 +181,7 @@ export default function V2capTower({ prof, inventory, onProfile }) {
     <div>
       {/* 見出しと決まり（決まりは畳んでおく） */}
       <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'8px' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
           <span style={{ color:'#ff88cc', fontSize:'14px', letterSpacing:'2px' }}>🗼 {TOWER_NAME}</span>
           <span style={{ display:'flex', alignItems:'center', gap:'8px' }}>
             <span style={{ color: TEXT.sub, fontSize:'10px' }}>戦績 {record}</span>

@@ -7,7 +7,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
-  FLOORS, LOSE_DROP, STREAK_PCT, LOW_FLOOR, GUARD_DROP_BONUS, NPC_MIN_RATIO, NPC_ICHIJI_FROM,
+  TOWER_NAME, FLOORS, LOSE_DROP, STREAK_PCT, LOW_FLOOR, GUARD_DROP_BONUS, NPC_MIN_RATIO, NPC_ICHIJI_FROM,
   clampFloor, floorAfterLose, floorAfterDefended, canChallenge, guardDropBonusOf,
   streakBonusPct, applyStreakBonus, iconClassOf, towerIconSrc,
   floorPowerOf, npcPowerFor, npcClassOf, npcNameOf, npcFighterOf, npcFighterAt,
@@ -219,4 +219,13 @@ test('NPCの強さを測る道具と同じ作り方（npcFighterAt）で、強�
   const n = npcFighterAt(70, 900)
   assert.ok(Math.abs(calcPower(n.stats) - 900) <= 3)
   assert.equal(n.lv, 70)
+})
+
+test('【確定】名前はユーザーが決めた「ジークヴァルトの覇天塔」。画面は TOWER_NAME だけを使う（名前を直書きしない）', () => {
+  assert.equal(TOWER_NAME, 'ジークヴァルトの覇天塔')
+  for (const f of ['../components/V2capTower.jsx', '../components/V2capSortie.jsx', '../pages/V2capHome.jsx']) {
+    const src = readFileSync(new URL(f, import.meta.url), 'utf8')
+    assert.ok(src.includes('TOWER_NAME'), `${f} は TOWER_NAME を使う`)
+    assert.ok(!src.includes('天空の塔') && !src.includes(TOWER_NAME), `${f} に名前を直書きしていない`)
+  }
 })
