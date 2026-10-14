@@ -28,10 +28,10 @@
 // ============================================================
 import { STAT_KEYS, INITIAL_STATS, calcPower, totalPointsTo, POINT_UNIT } from './level.js'
 import {
-  START_CLASSES, ICHIJI_CLASSES, CLASS_BY_ID, JOB_BONUS, attackKindOf, lineageOf, skillsLearnedBy,
+  START_CLASSES, ICHIJI_CLASSES, ICHIJI_RENAMED, CLASS_BY_ID, JOB_BONUS, attackKindOf, lineageOf, skillsLearnedBy,
   jobMaxOf, bonusSeqOf, jobBonusStats, stageOf,
 } from './jobs.js'
-import { defaultSetOf, fillSetOf, passiveOf } from './skills.js'
+import { defaultSetOf, fillSetOf, passiveOf, SKILL_BY_NAME } from './skills.js'
 import { slotsOf } from './loadout.js'
 import { CAP_RULES } from './rules.js'
 import { stdPowerAt, spotOf } from './areas.js'
@@ -193,39 +193,64 @@ export const npcFighterAt = (floor, power) => {
 }
 
 // ===== 守護者の姿（守護者になったときのまま戦う）=====
-// 技は**中身ごと**持つ（アセンションで強くした値も、下位職の技を自分の職業の技として渡す形もそのまま）。
-// パッシブは職業から引き直す（名簿の中身が変わったら新しいほうで戦う）
-export const snapshotOf = (fighter, { lv = 1, gender = 'm' } = {}) => ({
-  v: 1,
-  name: fighter?.name || '？',
-  cls: fighter?.cls || null,
-  kind: fighter?.kind || attackKindOf(fighter?.cls),
-  lv: Math.max(1, Math.floor(lv || 1)),
-  stats: Object.fromEntries(STAT_KEYS.map(k => [k, fighter?.stats?.[k] || 0])),
-  taken: fighter?.taken || null,
-  setFx: fighter?.setFx || null,
-  slots: (fighter?.slots || []).filter(s => s?.skill?.name).map(s => ({ skill: s.skill, uses: s.uses || 1 })),
-  icon: { cls: iconClassOf(fighter?.cls), g: gender === 'f' ? 'f' : 'm' },
-})
+// ステ・防具の耐性とセット能力・LV・アイコンは、守護者になったときの値のまま。
+// ★技は**名前・回数・アセンションの上がり幅（ups）だけ**持ち、戦うときに今の名簿から引き直す（今のⅡのアリーナと同じ）。
+//   【2026-10-15 直した】最初の版（v:1）は技の中身ごと持っていた＝あとで技の数字を直しても守護者は古い数字のまま戦い、
+//   名簿から消えた技も使い続けた（別セッションの上位クラスの作り直しで技の中身と名前が変わったときに指摘をもらった）。
+//   いまは名簿に無い技は外れ、下位職の技を自分の職業の技として渡す形・アセンションの強化は loadout.js の slotsOf で付け直す。
+//   v:1 の姿も読める（名前と回数だけ使う＝アセンションの上がり幅は持っていないので付かない）
+// パッシブも職業から引き直す。前の名前の職業（上位クラスの並び替え・jobs.js の ICHIJI_RENAMED）は今の名前で読む
+export const SNAPSHOT_V = 2
+// ups … アセンションの技のマス（{ 技の名前: 上がり幅 }・ascension.js の ascEffectsOf(profile).ups）
+export const snapshotOf = (fighter, { lv = 1, gender = 'm', ups = {} } = {}) => {
+  const set = (fighter?.slots || []).filter(s => s?.skill?.name)
+    .map(s => ({ name: s.skill.name, uses: Math.max(1, Math.floor(s.uses || 1)) }))
+  return {
+    v: SNAPSHOT_V,
+    name: fighter?.name || '？',
+    cls: fighter?.cls || null,
+    kind: fighter?.kind || attackKindOf(fighter?.cls),
+    lv: Math.max(1, Math.floor(lv || 1)),
+    stats: Object.fromEntries(STAT_KEYS.map(k => [k, fighter?.stats?.[k] || 0])),
+    taken: fighter?.taken || null,
+    setFx: fighter?.setFx || null,
+    set,
+    ups: Object.fromEntries(set.filter(e => Number(ups?.[e.name]) > 0).map(e => [e.name, Number(ups[e.name])])),
+    icon: { cls: iconClassOf(fighter?.cls), g: gender === 'f' ? 'f' : 'm' },
+  }
+}
+// 姿の職業（前の名前なら今の名前）
+export const snapClassOf = (cls) => (CLASS_BY_ID[cls] ? cls : ICHIJI_RENAMED[cls] || cls || null)
+// 姿の技（名前と回数）。v:1 は技の中身ごと持っていた＝名前と回数だけ使う
+const snapSetOf = (snap) => (Array.isArray(snap?.set)
+  ? snap.set
+  : (snap?.slots || []).map(s => ({ name: s?.skill?.name, uses: s?.uses })))
+  .filter(e => e?.name)
+  .map(e => ({ name: e.name, uses: Math.max(1, Math.floor(e.uses || 1)) }))
 export const fromSnapshot = (snap) => {
-  const passive = passiveOf(snap?.cls)
+  const cls = snapClassOf(snap?.cls)
+  const passive = passiveOf(cls)
   const stats = Object.fromEntries(STAT_KEYS.map(k => [k, Math.max(0, Number(snap?.stats?.[k]) || 0)]))
   stats.hp = Math.max(1, stats.hp)
+  const set = snapSetOf(snap)
+  // 使える技の職業（自分と下位職）。名簿から消えた職業なら、技の職業で絞らない（名簿にある技はそのまま使う）
+  const lineage = CLASS_BY_ID[cls] ? lineageOf(cls) : [...new Set(set.map(e => SKILL_BY_NAME[e.name]?.cls).filter(Boolean))]
+  const ups = snap?.ups && typeof snap.ups === 'object' ? snap.ups : {}
   return {
     ...CAP_RULES,
     npc: false,
     name: snap?.name || '？',
-    cls: snap?.cls || null,
-    kind: snap?.kind || attackKindOf(snap?.cls),
+    cls,
+    kind: snap?.kind || attackKindOf(cls),
     lv: Math.max(1, Math.floor(snap?.lv || 1)),
     stats,
     taken: snap?.taken || null,
     enchants: [],
     evolutions: [],
-    slots: (snap?.slots || []).filter(s => s?.skill?.name).map(s => ({ skill: s.skill, uses: Math.max(1, Math.floor(s.uses || 1)) })),
+    slots: slotsOf(set, cls, lineage, ups),
     passives: passive ? [passive] : [],
     setFx: snap?.setFx || null,
-    icon: snap?.icon?.cls ? snap.icon : { cls: iconClassOf(snap?.cls), g: 'm' },
+    icon: snap?.icon?.cls ? snap.icon : { cls: iconClassOf(cls), g: 'm' },
   }
 }
 
@@ -254,9 +279,10 @@ export const champOf = (floor, row, myPower = 0) => {
 export const floorInfoOf = (floor, row) => {
   if (row?.snapshot) {
     const s = row.snapshot
+    const cls = snapClassOf(s.cls)
     return {
-      npc: false, playerId: row.player_id, name: s.name || '？', cls: s.cls, lv: Math.max(1, Math.floor(s.lv || 1)),
-      icon: s.icon?.cls ? s.icon : { cls: iconClassOf(s.cls), g: 'm' },
+      npc: false, playerId: row.player_id, name: s.name || '？', cls, lv: Math.max(1, Math.floor(s.lv || 1)),
+      icon: s.icon?.cls ? s.icon : { cls: iconClassOf(cls), g: 'm' },
       streak: Math.max(0, Math.floor(row.streak || 0)), hpPm: clampPm(row.hp_pm ?? 1000),
     }
   }

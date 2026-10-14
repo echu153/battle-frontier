@@ -7,6 +7,7 @@ import { loadPref } from '../../v2/lib/prefs.js'
 import { box, btn, miniBtn, TEXT } from '../../v2/components/v2ui.js'
 import { toFighter as playerFighter } from '../lib/loadout.js'
 import { calcPower } from '../lib/level.js'
+import { ascEffectsOf } from '../lib/ascension.js'
 import { SORTIE_CD } from '../lib/sortie.js'
 import { attackKindOf } from '../lib/jobs.js'
 import { buildCapBattleView } from '../lib/battleView.js'
@@ -127,7 +128,7 @@ export default function V2capTower({ prof, inventory, onProfile }) {
         p_floor: floor, p_foe: champ.playerId || null, p_win: win,
         p_my_hp_pm: hpPmOf(r.a), p_my_mp: Math.max(0, Math.round(r.a.mp)),
         p_foe_hp_pm: hpPmOf(r.b), p_foe_mp: Math.max(0, Math.round(r.b.mp)),
-        p_snapshot: snapshotOf(me, { lv: prof.lv, gender }), p_drop: drop ? drop.item.id : null,
+        p_snapshot: snapshotOf(me, { lv: prof.lv, gender, ups: ascEffectsOf(prof).ups }), p_drop: drop ? drop.item.id : null,
       })
       if (error || !data?.ok) {
         setLogs(l => [...l, { text:`⚠ 反映に失敗しました（${error?.message || data?.error}）`, color:'#ff8844' }])

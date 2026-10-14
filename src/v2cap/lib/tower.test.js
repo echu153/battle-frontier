@@ -12,10 +12,12 @@ import {
   streakBonusPct, applyStreakBonus, iconClassOf, towerIconSrc,
   floorPowerOf, npcPowerFor, npcClassOf, npcNameOf, npcFighterOf, npcFighterAt,
   snapshotOf, fromSnapshot, champOf, floorInfoOf, towerBattleOf, hpPmOf, clampPm, rewardSpotOf, rollTowerDrop,
+  SNAPSHOT_V, snapClassOf,
 } from './tower.js'
 import { STAT_KEYS, calcPower } from './level.js'
-import { CLASS_BY_ID, START_CLASSES, ICHIJI_CLASSES, stageOf, lineageOf, weaponsOf } from './jobs.js'
-import { SKILL_BY_NAME, setMpCost } from './skills.js'
+import { CLASS_BY_ID, START_CLASSES, ICHIJI_CLASSES, ICHIJI_RENAMED, stageOf, lineageOf, weaponsOf } from './jobs.js'
+import { SKILL_BY_NAME, setMpCost, skillsOf, passiveOf } from './skills.js'
+import { ascendSkill } from './ascension.js'
 import { stdPowerAt, spotOf } from './areas.js'
 import { rollEquipDrop, DROP_CHANCE, openUntilOf } from './sortie.js'
 import { ART_BASE } from './classArt.js'
@@ -228,4 +230,65 @@ test('【確定】名前はユーザーが決めた「ジークヴァルトの�
     assert.ok(src.includes('TOWER_NAME'), `${f} は TOWER_NAME を使う`)
     assert.ok(!src.includes('天空の塔') && !src.includes(TOWER_NAME), `${f} に名前を直書きしていない`)
   }
+})
+
+// ===== 守護者の姿（2026-10-15 直した：技は名前・回数・アセンションの上がり幅で持ち、戦うときに今の名簿から引き直す）=====
+const SNAP_STATS = { hp: 300, mp: 60, str: 40, dex: 10, agi: 10, int_stat: 5, vit: 20, luk: 5 }
+
+test('姿には技の名前・回数と、編成にある技のぶんだけのアセンションの上がり幅を入れる（技の中身は持たない）', () => {
+  const me = npcFighterOf(40, 0)
+  const names = me.slots.map(x => x.skill.name)
+  const snap = snapshotOf(me, { lv: 40, ups: { [names[0]]: 10, 編成に無い技: 5 } })
+  assert.equal(snap.v, SNAPSHOT_V)
+  assert.equal(SNAPSHOT_V, 2)
+  assert.deepEqual(snap.set, me.slots.map(x => ({ name: x.skill.name, uses: x.uses })))
+  assert.deepEqual(snap.ups, { [names[0]]: 10 })
+  assert.ok(!('slots' in snap), '技の中身は持たない')
+  const src = readFileSync(new URL('../components/V2capTower.jsx', import.meta.url), 'utf8')
+  assert.ok(src.includes('snapshotOf(me, { lv: prof.lv, gender, ups: ascEffectsOf(prof).ups })'), '画面はアセンションの上がり幅を渡している')
+})
+
+test('守護者の技は今の名簿から引き直す：名簿に無い技は外れる・アセンションの上がり幅は付け直す', () => {
+  const real = skillsOf('戦士')[0].name
+  const f = fromSnapshot(JSON.parse(JSON.stringify({
+    v: 2, name: 'x', cls: '戦士', kind: 'phys', lv: 20, stats: SNAP_STATS,
+    set: [{ name: 'もう無い技', uses: 3 }, { name: real, uses: 2 }], ups: { [real]: 20 },
+  })))
+  assert.deepEqual(f.slots.map(x => x.skill.name), [real], '名簿に無い技は外れる')
+  assert.deepEqual(f.slots[0].skill, ascendSkill(SKILL_BY_NAME[real], 20), 'アセンションの上がり幅を付け直す')
+  assert.equal(f.slots[0].uses, 2)
+})
+
+test('最初の版（v:1・技の中身ごと）の姿も読める：中身は今の名簿の数字で戦う', () => {
+  const real = skillsOf('戦士')[0].name
+  const old = {
+    v: 1, name: 'x', cls: '戦士', kind: 'phys', lv: 20, stats: SNAP_STATS,
+    slots: [{ skill: { ...SKILL_BY_NAME[real], mult: 99 }, uses: 2 }, { skill: { name: 'もう無い技', cls: '戦士', kind: 'phys', mult: 5 }, uses: 1 }],
+  }
+  const f = fromSnapshot(JSON.parse(JSON.stringify(old)))
+  assert.deepEqual(f.slots, [{ skill: SKILL_BY_NAME[real], uses: 2 }])
+})
+
+test('上位職の守護者：系統の初期職の技も自分の職業の技として使える（姿に入れて戻しても同じ）', () => {
+  const cls = ICHIJI_CLASSES[0]
+  const base = CLASS_BY_ID[cls].req.cls
+  const set = [{ name: skillsOf(cls)[0].name, uses: 2 }, { name: skillsOf(base)[0].name, uses: 1 }]
+  const f = fromSnapshot({ v: 2, name: 'x', cls, lv: 40, stats: SNAP_STATS, set })
+  assert.deepEqual(f.slots.map(x => x.skill.name), set.map(e => e.name))
+  for (const x of f.slots) assert.equal(x.skill.cls, cls, '戦闘エンジンが他職扱いにしない')
+})
+
+test('前の名前の職業（上位クラスの並び替え）は今の名前で読む（パッシブ・一覧の職業も）', () => {
+  for (const [oldName, newName] of Object.entries(ICHIJI_RENAMED)) {
+    assert.equal(snapClassOf(oldName), newName)
+    const f = fromSnapshot({ v: 2, name: 'x', cls: oldName, lv: 40, stats: SNAP_STATS, set: [] })
+    assert.equal(f.cls, newName)
+    assert.deepEqual(f.passives, passiveOf(newName) ? [passiveOf(newName)] : [])
+    assert.equal(floorInfoOf(5, { floor: 5, player_id: 'p', snapshot: { name: 'x', cls: oldName, lv: 40 }, hp_pm: 500, streak: 0 }).cls, newName)
+  }
+  assert.equal(snapClassOf('戦士'), '戦士')
+  // 名簿から消えた職業でも、名簿にある技は使える（技の職業で絞らない）
+  const real = skillsOf('戦士')[0].name
+  const g = fromSnapshot({ v: 2, name: 'x', cls: '消えた職業', lv: 40, stats: SNAP_STATS, set: [{ name: real, uses: 1 }] })
+  assert.deepEqual(g.slots.map(x => x.skill.name), [real])
 })
