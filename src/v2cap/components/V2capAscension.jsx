@@ -7,6 +7,7 @@ import { CLASSES, jobOf, jobMaxOf, stageColorOf, stageLabelOf } from '../lib/job
 import {
   treeOf, treeSizeOf, ascStateOf, apTotalOf, apSpentOf, ascEffectsOf, ascSkillDetail, ascendError, ascResetGoldOf, routeTo, ASC_STAT_COLOR,
 } from '../lib/ascension.js'
+import { ASC_ART } from '../lib/ascArtList.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — アセンション（スキルツリー）
@@ -21,6 +22,10 @@ import {
 //     どのステータス上がるかは色で判断できるようにしたい」「取得したマスは発光する感じ」「選択した後マスが光る演出も欲しい、そこまで凝らなくていい」：
 //     マスの中に文字は出さない（ステは色・スキルは水色の丸・大マスはひし形）。押すと下の欄に「STR+3（腕力）」のように出す。
 //     開いたマスは光る。開いたときは、開いたマスが順に光る短い演出（選んだマスはゆっくり明滅）
+//   ・【確定】2026-10-14 ユーザー「見た目AION２みたいにしたいからしっかり画像作ろうと思う」→「画像作った」：
+//     盤面の背景・起点・ステ8種のマス・スキルの丸枠・大マスのひし形の枠をユーザーの絵で描く（public/asc-art＝tools/v2cap-asc-art.mjs）。
+//     開いていないマスは暗く、開いたマスはそのステの色の光を後ろに置く。大マスは枠の中にそのステの絵を小さく入れる。
+//     スキルの丸枠は中が暗い石なので、開いたら中を水色に光らせる。絵が無いもの（ascArtList.js に無い key）は図形で描く
 //   ・振り直しは LV×100 Gold（v2cap_ascend_reset）。開くのはサーバー（v2cap_ascend）
 //   数え方は src/v2cap/lib/ascension.js（戦闘・ステの内訳と同じもの）
 // ============================================================
@@ -36,6 +41,11 @@ const sy = (n) => -n.x
 // 「大きく」のときの1マスの幅の最小（これより狭い画面では盤を横にスクロール）。「全体」は画面の幅に収める
 const CELL_MIN_PX = 40
 const FLASH_STEP_MS = 90    // 開いたときの演出：1マスごとの遅れ
+// 絵（public/asc-art/<key>.webp）。無ければ null＝図形で描く。?v= は中身の印（絵を替えたら読み直させる）
+const artUrl = (key) => (ASC_ART[key] ? `/asc-art/${key}.webp?v=${ASC_ART[key]}` : null)
+const artKeyOf = (node) => (node.type === 'stat' ? node.stat : node.type)   // ステ・skill・big・start
+// 絵の大きさ（マス目＝1）。起点のとなりのマスと重ならない大きさ
+const ART_SIZE = { stat: 0.84, skill: 0.84, big: 1.14, start: 1.12 }
 
 // 押したマスの文（下の欄）。ステは「STR+3（腕力）」
 const statText = (stat, v, pct = false) => `${STAT_DEFS[stat]?.label || stat}+${v}${pct ? '%' : ''}（${STAT_DEFS[stat]?.jp || ''}）`
@@ -68,6 +78,42 @@ const star8 = (x, y, r1, r2) => Array.from({ length: 16 }, (_, i) => {
   return `${(x + Math.cos(a) * r).toFixed(3)},${(y + Math.sin(a) * r).toFixed(3)}`
 }).join(' ')
 
+// 絵で描くマス。開いていないマスは暗く（透けさせる）・開いたマスはそのステの色の光を後ろに置く
+function ArtShape({ node, owned, x, y }) {
+  const S = ART_SIZE[node.type] || 0.84
+  const img = (key, size) => <image href={artUrl(key)} x={x - size / 2} y={y - size / 2} width={size} height={size} />
+  if (node.type === 'start') {
+    return <><circle cx={x} cy={y} r={0.8} fill="url(#ascHalo-start)" />{img('start', S)}</>
+  }
+  const halo = owned ? <circle cx={x} cy={y} r={node.type === 'big' ? 0.86 : 0.64} fill={`url(#ascHalo-${node.type === 'skill' ? 'skill' : node.stat})`} /> : null
+  if (node.type === 'skill') {
+    // 丸枠の中（暗い石）を、開いたら水色に光らせる。開いていなくても水色の星でスキルと分かる
+    return (
+      <>
+        {halo}
+        <g opacity={owned ? 1 : 0.62}>{img('skill', S)}</g>
+        {owned && <circle cx={x} cy={y} r={0.26} fill="url(#ascHalo-skillIn)" />}
+        <path d={sparkle(x, y, 0.17)} fill={owned ? '#ffffff' : SKILL_C} opacity={owned ? 0.95 : 0.6} />
+      </>
+    )
+  }
+  if (node.type === 'big') {
+    // 枠の中にそのステの絵（小さく）。絵が無いステはそのステの色のひし形
+    return (
+      <>
+        {halo}
+        <g opacity={owned ? 1 : 0.6}>
+          {artUrl(node.stat)
+            ? img(node.stat, 0.5)
+            : <polygon points={`${x},${y - 0.24} ${x + 0.24},${y} ${x},${y + 0.24} ${x - 0.24},${y}`} fill={colorOf(node)} />}
+          {img('big', S)}
+        </g>
+      </>
+    )
+  }
+  return <>{halo}<g opacity={owned ? 1 : 0.62}>{img(node.stat, S)}</g></>
+}
+
 // マス1つ（SVG・文字は出さない）。owned＝開いた／onRoute＝選んだルートに入っている／reach＝起点か開いたマスのとなり
 function NodeShape({ node, owned, onRoute, reach, selected, flash, onPick }) {
   const c = colorOf(node)
@@ -76,8 +122,11 @@ function NodeShape({ node, owned, onRoute, reach, selected, flash, onPick }) {
   const fill = owned ? c : `${c}2e`
   const stroke = owned ? '#ffffff' : c
   const glow = owned ? (node.type === 'big' ? 'url(#ascGlowBig)' : 'url(#ascGlow)') : undefined
+  const art = !!artUrl(artKeyOf(node))
   let shape
-  if (node.type === 'start') {
+  if (art) {
+    shape = <ArtShape node={node} owned={owned} x={x} y={y} />
+  } else if (node.type === 'start') {
     shape = <polygon points={star8(x, y, 0.42, 0.2)} fill={GOLD} stroke="#fff6cc" strokeWidth={0.03} filter="url(#ascGlowBig)" />
   } else if (node.type === 'skill') {
     shape = (
@@ -99,9 +148,9 @@ function NodeShape({ node, owned, onRoute, reach, selected, flash, onPick }) {
     shape = <rect x={x - 0.27} y={y - 0.27} width={0.54} height={0.54} rx={0.1} fill={fill} stroke={stroke}
       strokeWidth={owned ? 0.04 : 0.05} strokeOpacity={owned ? 0.85 : 0.85} filter={glow} />
   }
-  const ring = node.type === 'big' ? 0.62 : node.type === 'skill' ? 0.48 : 0.44
+  const ring = node.type === 'big' ? (art ? 0.68 : 0.62) : art ? 0.5 : node.type === 'skill' ? 0.48 : 0.44
   return (
-    <g onClick={() => onPick(node.id)} style={{ cursor: node.type === 'start' ? 'default' : 'pointer' }} opacity={dim ? 0.55 : 1} data-node={node.id}>
+    <g onClick={() => onPick(node.id)} style={{ cursor: node.type === 'start' ? 'default' : 'pointer' }} opacity={dim ? (art ? 0.72 : 0.55) : 1} data-node={node.id}>
       {/* PCはマウスを乗せると中身が出る（マスの中に文字は出さないため） */}
       <title>{nodeInfo(node)}{owned ? '（開いています）' : ''}</title>
       {/* 押せる広さはマス目いっぱい（小さいマスでも押しやすく） */}
@@ -241,12 +290,16 @@ export default function V2capAscension({ prof, onProfile }) {
         <div style={{ display:'flex', flexWrap:'wrap', gap:'4px 10px', alignItems:'center', marginTop:'6px', fontSize:'10px' }}>
           {boardStats.map(k => (
             <span key={k} style={{ display:'inline-flex', alignItems:'center', gap:'3px', color: ASC_STAT_COLOR[k] }}>
-              <span style={{ width:'9px', height:'9px', borderRadius:'2px', background: ASC_STAT_COLOR[k], boxShadow:`0 0 4px ${ASC_STAT_COLOR[k]}` }} />
+              {artUrl(k)
+                ? <img src={artUrl(k)} alt="" width={16} height={16} style={{ display:'block' }} />
+                : <span style={{ width:'9px', height:'9px', borderRadius:'2px', background: ASC_STAT_COLOR[k], boxShadow:`0 0 4px ${ASC_STAT_COLOR[k]}` }} />}
               {STAT_DEFS[k].label}
             </span>
           ))}
           <span style={{ color: SKILL_C }}>● スキル</span>
-          <span style={{ color: TEXT.sub }}>◆ 大マス（+%）</span>
+          <span style={{ display:'inline-flex', alignItems:'center', gap:'3px', color: TEXT.sub }}>
+            {artUrl('big') ? <img src={artUrl('big')} alt="" width={16} height={16} style={{ display:'block' }} /> : '◆'} 大マス（+%）
+          </span>
           <button onClick={() => setZoom(z => !z)} style={{ ...miniBtn('#88aaff'), padding:'1px 6px', marginLeft:'auto' }}>{zoom ? '全体を見る' : '大きく見る'}</button>
         </div>
         {msg && <div style={{ color:'#44ff88', fontSize:'11px', marginTop:'4px' }}>{msg}</div>}
@@ -262,11 +315,31 @@ export default function V2capAscension({ prof, onProfile }) {
               <feGaussianBlur stdDeviation="0.08" result="b" />
               <feMerge><feMergeNode in="b" /><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
             </filter>
+            {/* 絵のマスの後ろに置く光（そのステの色・スキル＝水色・起点＝金） */}
+            {[...Object.entries(ASC_STAT_COLOR), ['skill', SKILL_C], ['start', GOLD]].map(([k, col]) => (
+              <radialGradient key={k} id={`ascHalo-${k}`}>
+                <stop offset="0%" stopColor={col} stopOpacity={0.9} />
+                <stop offset="45%" stopColor={col} stopOpacity={0.4} />
+                <stop offset="100%" stopColor={col} stopOpacity={0} />
+              </radialGradient>
+            ))}
+            <radialGradient id="ascHalo-skillIn">
+              <stop offset="0%" stopColor="#ffffff" stopOpacity={0.95} />
+              <stop offset="55%" stopColor={SKILL_C} stopOpacity={0.85} />
+              <stop offset="100%" stopColor={SKILL_C} stopOpacity={0.15} />
+            </radialGradient>
             <filter id="ascGlowBig" x="-150%" y="-150%" width="400%" height="400%">
               <feGaussianBlur stdDeviation="0.16" result="b" />
               <feMerge><feMergeNode in="b" /><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
             </filter>
           </defs>
+          {artUrl('bg') && (
+            <>
+              <image href={artUrl('bg')} x={-R - pad} y={-R - pad} width={2 * R + 2 * pad} height={2 * R + 2 * pad} preserveAspectRatio="xMidYMid slice" />
+              {/* マスが見やすいように少しだけ暗く */}
+              <rect x={-R - pad} y={-R - pad} width={2 * R + 2 * pad} height={2 * R + 2 * pad} fill="#000818" opacity={0.18} />
+            </>
+          )}
           {/* ★線にぼかし（filter）は掛けない：真横・真上の線は大きさ0とみなされて消える。開いた線は「太く薄い線」＋「細く明るい線」で光らせる */}
           {edges.map(([a, b]) => {
             const both = open.has(a.id) && open.has(b.id)
@@ -300,8 +373,10 @@ export default function V2capAscension({ prof, onProfile }) {
           <div style={{ display:'flex', gap:'8px', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap' }}>
             <div style={{ fontSize:'12px', minWidth:0 }}>
               <div style={{ color: colorOf(selNode), display:'flex', alignItems:'center', gap:'6px' }}>
-                <span style={{ width:'12px', height:'12px', flexShrink:0, background: colorOf(selNode), boxShadow:`0 0 6px ${colorOf(selNode)}`,
-                  borderRadius: selNode.type === 'skill' ? '50%' : '2px', transform: selNode.type === 'big' ? 'rotate(45deg) scale(0.85)' : 'none' }} />
+                {(selNode.type === 'stat' || selNode.type === 'big') && artUrl(selNode.stat)
+                  ? <img src={artUrl(selNode.stat)} alt="" width={20} height={20} style={{ display:'block', flexShrink:0 }} />
+                  : <span style={{ width:'12px', height:'12px', flexShrink:0, background: colorOf(selNode), boxShadow:`0 0 6px ${colorOf(selNode)}`,
+                    borderRadius: selNode.type === 'skill' ? '50%' : '2px', transform: selNode.type === 'big' ? 'rotate(45deg) scale(0.85)' : 'none' }} />}
                 <span>{nodeInfo(selNode)}</span>
               </div>
               {open.has(selNode.id) ? (

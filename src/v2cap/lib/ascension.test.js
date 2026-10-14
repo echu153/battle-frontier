@@ -2,12 +2,15 @@
 // ★盤面の形・中身・効果・APの数え方がユーザーの決めたとおりか。サーバー（SQL §12）との突き合わせは v2capsql.test.js
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { existsSync, readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { STAT_KEYS, STAT_DEFS, calcPower } from '../../v2/lib/stats.js'
 import { createSide, takeAction } from '../../v2/lib/battle.js'
 import { SKILLS, SKILL_BY_NAME, skillsOf, isPassive } from './skills.js'
 import { CLASSES, JOB_BONUS, stageOf, jobMaxOf, attackKindOf, jobUpNote, jobGainText } from './jobs.js'
 import { statBreakdown, toFighter } from './loadout.js'
 import { ASC_LAYOUT } from './ascLayout.js'
+import { ASC_ART } from './ascArtList.js'
 import {
   ASC_DIRS, ASC_SHAPE, ASC_UP_DEFAULT, ASC_SKILL_UP, ASC_COUNT_UP, ASC_CLASSES, ASC_RESET_GOLD_PER_LV,
   treeOf, treeSizeOf, areaStatsOf, statCountsOf, ascKindOf, ascUpOf, ascendSkill, splitUp, ascStateOf, apTotalOf, apSpentOf, apLeftOf,
@@ -323,5 +326,16 @@ test('【確定】盤面のステの色は8色とも見分けられる（マス�
   for (let i = 0; i < cols.length; i++) {
     for (let j = i + 1; j < cols.length; j++) assert.ok(dist(cols[i][1], cols[j][1]) >= 60, `${cols[i][0]} と ${cols[j][0]} が近すぎる`)
     assert.ok(dist(cols[i][1], '#5ce1e6') >= 60, `${cols[i][0]} とスキルマスの水色が近すぎる`)
+  }
+})
+
+test('【確定】盤面の絵（ユーザーの絵・2026-10-14）は一覧（ascArtList.js）どおりに public/asc-art にあり、中身の印も合っている', () => {
+  // 背景・起点・ステ8種・スキルの丸枠・大マスの枠。どれかが欠けたら、画面はそのマスだけ図形で描く
+  for (const k of [...STAT_KEYS, 'skill', 'big', 'start', 'bg']) assert.ok(ASC_ART[k], `${k} の絵が一覧にある`)
+  for (const [k, v] of Object.entries(ASC_ART)) {
+    const file = new URL(`../../../public/asc-art/${k}.webp`, import.meta.url)
+    assert.ok(existsSync(file), `public/asc-art/${k}.webp がある`)
+    // 印（URL の ?v=）は中身の sha1 の先頭8文字＝絵を替えたら tools/v2cap-asc-art.mjs で一覧も作り直す
+    assert.equal(createHash('sha1').update(readFileSync(file)).digest('hex').slice(0, 8), v, `${k} の印が中身と合っている`)
   }
 })
