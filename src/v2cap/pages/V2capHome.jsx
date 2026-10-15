@@ -6,7 +6,7 @@ import { reportDevAccess } from '../../lib/devAccess'
 import V2Modal from '../../v2/components/V2Modal.jsx'
 import { V2Menu } from '../../v2/components/V2Status.jsx'
 import { box, btn, miniBtn, TEXT } from '../../v2/components/v2ui.js'
-import { useStored } from '../../v2/lib/prefs.js'
+import { useCapFold } from '../components/useCapFold.js'
 import V2capStatus from '../components/V2capStatus.jsx'
 import V2capSortie from '../components/V2capSortie.jsx'
 import V2capEquip from '../components/V2capEquip.jsx'
@@ -36,7 +36,7 @@ import { spotLabel } from '../lib/areas.js'
 //   ・ホームは左右2列（左＝ステータス 340px／右＝今日のミッション→出撃→メニュー）。最大980px・狭いと1列に折り返す
 //   ・メニューは今のⅡと同じ部品（V2Menu：2列・まとまりごと・色つきの枠・「メニューを閉じる」）。この版にある施設だけ並べる
 //   ・施設は別の画面（ステータスは出さない・横いっぱい）。「← ホームへ」で戻る
-//   ・ステータスとメニューの開け閉めは覚えておく（今のⅡとは別のキー）
+//   ・ステータスとメニュー（と今日のミッション）の開け閉めは覚えておく（今のⅡとは別のキー・2026-10-15 からキャラのデータにも）
 //   ・出撃のタブ（アリーナ・ATB）はこの版に無いので出さない
 // ============================================================
 const MENU = [
@@ -102,9 +102,12 @@ export default function V2capHome() {
   const [error, setError] = useState('')
   const [devMsg, setDevMsg] = useState('')
   const [confirmReset, setConfirmReset] = useState(false)
-  // ★開け閉めは覚えておく。今のⅡ（v2:openStatus・v2:openMenu）とは別のキー
-  const [openStatus, setOpenStatus] = useStored('capOpenStatus', true)
-  const [openMenu, setOpenMenu] = useStored('capOpenMenu', true)
+  // ★開け閉めは覚えておく。今のⅡ（v2:openStatus・v2:openMenu）とは別のキー。
+  //   【確定】2026-10-15 ユーザー指示「閉じたら閉じる、開いたら開くを継続させて」：端末だけでなくキャラのデータにも覚える（useCapFold）。
+  //   今日のミッションの開け閉めも同じに覚える（前は毎回畳んで始めていた）
+  const [openStatus, toggleStatus] = useCapFold(prof, 'openStatus')
+  const [openMenu, toggleMenu] = useCapFold(prof, 'openMenu')
+  const [openDaily, toggleDaily] = useCapFold(prof, 'openDaily')
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -313,18 +316,18 @@ export default function V2capHome() {
             {/* ===== 左：キャラクターの状態（ホームだけ） ===== */}
             <div style={COL_LEFT}>
               <V2capStatus prof={prof} inventory={inventory} onProfile={refresh}
-                open={openStatus} onToggle={() => setOpenStatus(v => !v)} onAvatar={() => setScreen('profile')} />
+                open={openStatus} onToggle={toggleStatus} onAvatar={() => setScreen('profile')} />
             </div>
 
             {/* ===== 右：やること（今日のミッション・出撃・メニュー・開発用） ===== */}
             <div style={COL_RIGHT}>
-              {!inBattle && <V2capDaily prof={prof} onProfile={refresh} />}
+              {!inBattle && <V2capDaily prof={prof} onProfile={refresh} open={openDaily} onToggle={toggleDaily} />}
               <div style={{ marginBottom:'8px' }}>
                 <V2capSortie prof={prof} inventory={inventory} onProfile={refresh} onScene={onScene} />
               </div>
               {!inBattle && (
                 <>
-                  <V2Menu groups={menuOf(prof)} open={openMenu} onToggle={() => setOpenMenu(v => !v)} onPick={setScreen} />
+                  <V2Menu groups={menuOf(prof)} open={openMenu} onToggle={toggleMenu} onPick={setScreen} />
                   <div style={{ ...box, padding:'10px', borderColor:'#553366' }}>
                     <div style={{ color:'#ff88cc', fontSize:'11px', marginBottom:'6px' }}>🧪 開発用</div>
                     <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>

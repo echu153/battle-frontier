@@ -14,7 +14,8 @@ import { SLOTS, RARITIES, STARTER_AREA } from './equipment.js'
 import { SORTIE_CD, DROP_RARITY, CHEST_PCT, CHEST_SCRAP } from './sortie.js'
 import { SHRINE_FAIRY_NAME, SHRINE_PCT, SHRINE_FIGHTS, SHRINE_EXP_TENTHS, SHRINE_GOLD_TENTHS } from './shrine.js'
 import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV, scrapAreaOf, enhanceScrapOf, ENHANCE_GOLD_ONLY_RARITY } from './smith.js'
-import { DAILY_SORTIES, DAILY_GOLD_PER_LV, DAY_RESET_HOUR } from './daily.js'
+import { DAILY_SORTIES, DAILY_GOLD_PER_LV, DAY_RESET_HOUR, DAILY_TASK_KEYS, GUARD_DONE_KEY } from './daily.js'
+import { FOLD_KEYS } from './uiPrefs.js'
 import { AVATAR_PRESETS, AVATAR_FILE_RE } from './avatar.js'
 import { FORTUNES, multTenthsOf, STREAK_PCT } from './tree.js'
 import {
@@ -333,15 +334,24 @@ test('【確定】デイリーミッション：受注した時点のLVで報酬
   assert.ok(ten.includes('order by s.id desc limit 1'), '上限より上のLVは最後の場所')
   assert.ok(SQL.includes('alter table public.v2cap_spots add column if not exists rec_lv int not null default 1;'))
   for (const s of SPOTS_ALL) assert.ok(SQL.includes(`, ${recLvOf(s.id)})`), `場所${s.id}の推奨LVが種に入っている`)
-  // 受注：その時点のLVを入れる・1日1回・行をつかんでから
+  // 【確定】2026-10-15 受注は自動：日付が変わったら（とまだ受注していない今日の行も）、その時点のLVで受注した状態で始める。
+  //   守護者なら塔だけ達成済み（ユーザーが選んだ「守っていれば達成」＝daily.js の startCountsOf・GUARD_DONE_KEY と同じ）
+  const roll = fnBody('v2cap_daily_roll').replace(/\s+/g, ' ')
+  assert.ok(roll.includes('set daily_day = v_today, daily_lv = lv,'), '受注した時点のLV＝日付が変わってはじめて見たときのLV')
+  assert.ok(roll.includes(`daily_counts = case when tower_guard is not null then jsonb_build_object('${GUARD_DONE_KEY}', 1) else '{}'::jsonb end,`))
+  assert.ok(roll.includes('daily_claimed = false'))
+  assert.ok(roll.includes('where id = p_player and (daily_day is distinct from v_today or daily_lv is null);'), '受注済みの今日の行には触らない')
+  // 受注：行をつかんでから roll を通すだけ（何度呼んでも ok＝画面がホームを開くたびに呼んでよい）
   const acc = fnBody('v2cap_daily_accept')
   assert.match(acc, /perform 1 from public\.v2cap_profiles where id = v_uid for update;/)
-  assert.ok(acc.includes("if v_row.daily_lv is not null then"))
-  assert.match(acc, /set daily_lv = lv, daily_counts = '\{\}'::jsonb, daily_claimed = false/, '受注した時点のLV・受注してから数える')
-  // 数える：一覧にあるキーだけ・受注した日だけ・受け取ったあとは数えない
+  assert.ok(acc.indexOf('for update;') < acc.indexOf('perform public.v2cap_daily_roll(v_uid);'), '行をつかんでから受注する')
+  assert.ok(!acc.includes('もう受注しました'), '受注済みでもエラーにしない（自動の受注が何度届いてもよい）')
+  assert.ok(!/update public\.v2cap_profiles/.test(acc), '受注のしかたは roll の1か所だけ')
+  // 数える：一覧にあるキーだけ・受け取ったあとは数えない（受注していない日は roll が受注してから数える）
   const bump = fnBody('v2cap_daily_bump')
   assert.match(bump, /not exists \(select 1 from public\.v2cap_daily_tasks t where t\.key = p_key\)/)
-  assert.ok(bump.includes('where id = p_player and daily_lv is not null and not daily_claimed;'), '受注してから数える（ユーザー決定）')
+  assert.ok(bump.indexOf('perform public.v2cap_daily_roll(p_player);') < bump.indexOf('update public.v2cap_profiles'), '先に今日の状態にそろえる')
+  assert.ok(bump.includes('where id = p_player and daily_lv is not null and not daily_claimed;'), '受け取ったあとは数えない')
   // 出撃の精算：勝ったときだけ「出撃に勝つ」を数える
   // （同じ枝で図鑑の討伐数も足すので、枝の中にほかの行があってもよい）
   assert.match(fnBody('v2cap_sortie_settle'), /if v_win then\s+perform public\.v2cap_daily_bump\(v_uid, 'win', 1\);[\s\S]*?end if;/)
@@ -362,6 +372,65 @@ test('【確定】デイリーミッション：受注した時点のLVで報酬
   }
   assert.ok(SQL.includes('grant execute on function public.v2cap_daily_accept() to authenticated;'))
   assert.ok(SQL.includes('grant execute on function public.v2cap_daily_claim() to authenticated;'))
+})
+
+test('【確定】2026-10-15 デイリーミッションの4つは、それぞれ数える所が1か所ずつある（足したのに数えない、を防ぐ）', () => {
+  // キー → 数えるRPC と、数えるときの形
+  const WHERE = {
+    win:   { fn: 'v2cap_sortie_settle', n: 1 },
+    smith: { fn: ['v2cap_enhance', 'v2cap_dismantle'], n: 2 },
+    tower: { fn: 'v2cap_tower_fight', n: 1 },
+    pray:  { fn: 'v2cap_pray', n: 1 },
+  }
+  assert.deepEqual(Object.keys(WHERE), DAILY_TASK_KEYS, 'daily.js の一覧と同じ（足したらここにも数える所を書く）')
+  for (const key of DAILY_TASK_KEYS) {
+    const calls = SQL.match(new RegExp(`perform public\\.v2cap_daily_bump\\(v_uid, '${key}', 1\\);`, 'g')) || []
+    assert.equal(calls.length, WHERE[key].n, `${key} を数える所の数`)
+    for (const fn of [WHERE[key].fn].flat()) {
+      assert.ok(fnBody(fn).includes(`perform public.v2cap_daily_bump(v_uid, '${key}', 1);`), `${fn} が ${key} を数える`)
+    }
+  }
+  // 強化は失敗しても数える（抽選の結果で分けない）・分解は1つでも分解できたときだけ（まとめても1回）
+  assert.match(fnBody('v2cap_enhance'),
+    /if v_ok then\s+update public\.v2cap_inventory set plus = v_next where id = v_inv\.id;\s+end if;\s+--[^\n]*\n\s+perform public\.v2cap_daily_bump\(v_uid, 'smith', 1\);/,
+    '成功の枝の外＝失敗しても数える')
+  assert.match(fnBody('v2cap_dismantle'), /if v_n > 0 then\s+perform public\.v2cap_daily_bump\(v_uid, 'smith', 1\);\s+end if;/)
+  // 塔は勝ち負けで分かれる前に数える（守護者になる前・経験値を入れる前）。入れ替わって戦えなかったとき（changed）は数えない
+  const tf = fnBody('v2cap_tower_fight')
+  const tb = tf.indexOf("perform public.v2cap_daily_bump(v_uid, 'tower', 1);")
+  assert.ok(tb > tf.indexOf("'守護者が入れ替わりました。もう一度挑戦してください', 'changed', true);"), '入れ替わりの確かめのあと')
+  assert.ok(tb < tf.indexOf('if v_win then'), '勝ち負けの枝より前＝どちらでも1回')
+  assert.ok(tb < tf.indexOf('v_res := public.v2cap_apply_exp(v_uid, v_exp);'), '経験値を入れる前（はじめてなら挑戦する前のLVで受注）')
+  // 宝樹は祈れたとき（「今日はもう祈りました」のあと）・経験値を入れる前
+  const pr = fnBody('v2cap_pray')
+  const pb = pr.indexOf("perform public.v2cap_daily_bump(v_uid, 'pray', 1);")
+  assert.ok(pb > pr.indexOf("'今日はもう祈りました（日本時間の5時に変わります）'"))
+  assert.ok(pb < pr.indexOf('v_res := public.v2cap_apply_exp(v_uid, v_exp);'))
+})
+
+test('【確定】2026-10-15 「守っていれば達成」の移し替え（一度だけ）：流した日にもう受注していた守護者は、塔の項目を達成済みに', () => {
+  const m = SQL.match(/if not exists \(select 1 from public\.v2cap_migrations where key = 'daily_guard_20261015'\) then([\s\S]*?)insert into public\.v2cap_migrations \(key\) values \('daily_guard_20261015'\);/)
+  assert.ok(m, '印つきで一度だけ')
+  const b = m[1].replace(/\s+/g, ' ')
+  assert.ok(b.includes(`set daily_counts = jsonb_set(coalesce(daily_counts, '{}'::jsonb), '{${GUARD_DONE_KEY}}', to_jsonb(greatest(1, coalesce((daily_counts ->> '${GUARD_DONE_KEY}')::int, 0))))`), '塔だけ1（もっと多ければそのまま）')
+  assert.ok(b.includes('where tower_guard is not null and daily_lv is not null and not daily_claimed'), 'いま守護者・受注済み・まだ受け取っていない人だけ')
+  assert.ok(b.includes(`and daily_day = ((now() at time zone 'Asia/Tokyo') - interval '${DAY_RESET_HOUR} hours')::date;`), '今日のぶんだけ（日付の区切りは roll と同じ）')
+  // 列（daily_* と塔の tower_guard）ができたあと・前の移し替えより後ろに置く
+  assert.ok(SQL.indexOf(m[0]) > SQL.indexOf('alter table public.v2cap_profiles add column if not exists tower_guard  int;'))
+  assert.ok(SQL.indexOf(m[0]) > SQL.indexOf("values ('touzoku_luk_20261015');"))
+})
+
+test('【確定】2026-10-15 ホームの開け閉め：キャラのデータ（ui_prefs）に覚えるのは uiPrefs.js の3つだけ', () => {
+  assert.ok(SQL.includes("alter table public.v2cap_profiles add column if not exists ui_prefs jsonb not null default '{}'::jsonb;"))
+  const f = fnBody('v2cap_set_ui_pref')
+  assert.ok(f.includes(`not (p_key = any(array[${FOLD_KEYS.map(k => `'${k}'`).join(', ')}]))`), 'キーの一覧が uiPrefs.js の FOLD_KEYS と同じ')
+  assert.deepEqual(FOLD_KEYS, ['openStatus', 'openMenu', 'openDaily'])
+  assert.ok(f.includes('if p_open is null or p_key is null'))
+  assert.ok(f.includes("set ui_prefs = jsonb_set(coalesce(ui_prefs, '{}'::jsonb), array[p_key], to_jsonb(p_open))"))
+  assert.ok(f.includes('where id = v_uid;'), '自分の行だけ')
+  assert.ok(f.indexOf('if not public.v2cap_is_dev() then') < f.indexOf('update public.v2cap_profiles'), '開発者だけ（ほかの公開RPCと同じ）')
+  assert.ok(SQL.includes('revoke all on function public.v2cap_set_ui_pref(text, boolean) from public, anon;'))
+  assert.ok(SQL.includes('grant execute on function public.v2cap_set_ui_pref(text, boolean) to authenticated;'))
 })
 
 test('【確定】アイコン：入れられるのは用意された8枚（JSと同じ名前）か自分のフォルダの画像だけ（判定の形もJSと同じ）', () => {

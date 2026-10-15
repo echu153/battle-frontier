@@ -1,24 +1,27 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import V2Modal from '../../v2/components/V2Modal.jsx'
 import { box, btn, miniBtn, TEXT } from '../../v2/components/v2ui.js'
 import {
-  DAILY_TASKS, DAILY_SORTIES, dailyOf, dailyRewardOf, taskProgressOf, doneCountOf, isDailyComplete, claimErrorOf, nextResetAt,
+  DAILY_TASKS, DAILY_SORTIES, dailyOf, dailyRewardOf, taskProgressOf, doneCountOf, isDailyComplete, claimErrorOf, nextResetAt, dayOf,
 } from '../lib/daily.js'
 import { jobUpHead, jobUpNote } from '../lib/jobs.js'
 import { recSpotOfLv, spotLabel } from '../lib/areas.js'
+import { TOWER_NAME } from '../lib/tower.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — デイリーミッション（ホームの右の一番上・今のⅡと同じ場所）
 //   見た目は今のⅡの V2Daily にそろえる（畳んだ見出しに進み具合を出す）。違うのは（2026-10-10 ユーザー決定）：
-//   ・難易度はなし。「受注する」を押してから数える（今のⅡのような、選ぶまで閉じられないポップアップは出さない）
+//   ・難易度はなし。受注してから数える（今のⅡのような、選ぶまで閉じられないポップアップは出さない）
 //   ・報酬は受注した時点のLVで決まる（受注する前は「いま受注すると」の報酬を出す）
+//   ・【確定】2026-10-15 ユーザー指示「ミッションログイン時に自動で受注するように ※ミッションは朝5時リセット」：
+//     **受注は自動**。ホームを開いたとき・開いたまま5時を過ぎたときに受注する。「受注する」のボタンは、自動の受注に失敗したときだけ出る
+//   ・開け閉めはホーム（V2capHome の useCapFold）が覚えておく（2026-10-15・前は毎回畳んで始めていた）
 //   仕組みの正は src/v2cap/lib/daily.js。数える・受注・受け取りはサーバー（v2cap_daily_accept／_claim）
 // ============================================================
 const resetText = (at) => at.toLocaleString('ja-JP', { timeZone:'Asia/Tokyo', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' })
 
-export default function V2capDaily({ prof, onProfile }) {
-  const [open, setOpen] = useState(false)
+export default function V2capDaily({ prof, onProfile, open = false, onToggle }) {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
   const [got, setGot] = useState(null)   // 受け取った結果のポップアップ
@@ -46,12 +49,24 @@ export default function V2capDaily({ prof, onProfile }) {
     if (data) setGot(data)
   }
 
-  // ★畳んでいても状態が分かるように、見出しに「受注していない」「1/1」「受け取れます」を出す
+  // ★自動で受注する（ホームを開いたとき＝ログインしたとき・開いたまま5時を過ぎて日付が変わったとき）。
+  //   1日1回だけ試す（失敗したら、下の「受注する」で押し直せる）。戦闘のあいだはこの欄ごと隠れるので、戻ってきたときにもう一度見る
+  const today = dayOf(now)
+  const tried = useRef('')
+  const acceptRef = useRef(accept)
+  acceptRef.current = accept
+  useEffect(() => {
+    if (d.accepted || tried.current === today) return
+    tried.current = today
+    acceptRef.current()
+  }, [d.accepted, today])
+
+  // ★畳んでいても状態が分かるように、見出しに「受注していない」「1/4」「受け取れます」を出す
   const head = (
     <span>
       📋 今日のミッション
       {!d.accepted
-        ? <span style={{ color:'#ffcc00', fontSize:'10px', marginLeft:'6px' }}>まだ受注していません</span>
+        ? <span style={{ color:'#ffcc00', fontSize:'10px', marginLeft:'6px' }}>{busy ? '受注しています...' : 'まだ受注していません'}</span>
         : (
           <>
             <span style={{ color: done ? '#44ff88' : '#ffcc00', fontSize:'11px', marginLeft:'6px' }}>{doneCountOf(d)}/{DAILY_TASKS.length}</span>
@@ -66,7 +81,7 @@ export default function V2capDaily({ prof, onProfile }) {
 
   return (
     <div style={{ ...box, padding:'12px', marginBottom:'8px', borderColor: hot ? '#ffcc00' : '#0044aa' }}>
-      <button onClick={() => setOpen(v => !v)}
+      <button onClick={onToggle}
         style={{ ...miniBtn(hot ? '#ffcc00' : '#7fa6d0'), width:'100%', padding:'5px', textAlign:'left' }}>
         {open ? '▲ ' : '▼ '}{head}
       </button>
@@ -104,7 +119,8 @@ export default function V2capDaily({ prof, onProfile }) {
           </button>
         )}
         <div style={{ color: TEXT.sub, fontSize:'9px', marginTop:'6px', lineHeight:1.7 }}>
-          報酬は受注した時点のLVで決まり、受注してからのぶんだけ数えます。
+          ミッションはログインすると自動で受注します（報酬はそのときのLVで決まります）。
+          {TOWER_NAME}は、受注したときに守護者なら達成済みです。
           日付が変わるのは日本時間の5時です（次は {resetText(nextResetAt(now))}）。
         </div>
         {msg && <div style={{ color:'#ff6666', fontSize:'11px', marginTop:'6px' }}>⚠ {msg}</div>}

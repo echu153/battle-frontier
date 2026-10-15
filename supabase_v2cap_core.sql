@@ -33,7 +33,8 @@
 --   ・鍛冶屋（2026-10-10）：強化・分解・作成をする所。作成はレア・エピック・レジェンダリーを Gold とその装備のエリアの残骸で作る
 --     （残骸 30／100／300・Gold 必要LV×50／100／200・必ずできる・武器は14種どれでも）
 --   ・デイリーミッション（2026-10-10・§10）：1日1組・難易度なし。受注してから数え、報酬は受注した時点のLVで決まる
---     （EXP＝必要EXP×10／5／3／1%・Gold＝LV×100）。内容はあとで決める（いまは仮の「出撃に10回勝つ」）
+--     （EXP＝そのLVの推奨の場所で10回出撃したくらい・Gold＝LV×100）。受注は自動（2026-10-15・ログインしたとき／日付が変わって最初に数えるとき）。
+--     内容は 出撃に10回勝つ・装備を強化または分解する・塔に挑戦する（守護者なら達成済み）・宝樹に祈る（2026-10-15 に3つ足した）
 --   ・賭博場（2026-10-13・§11）：メダル（100 Gold＝1枚・Goldへは戻せない）・スロット（AT機）・ハイ&ロー（連勝はしご）・
 --     ルーレット（ラッキーナンバー付き）。還元率はどれも約97%。景品の交換所はあとで
 --   ・塔（2026-10-14・§13）：あるけみすと型の対人。1〜100層の階層守護者に挑む・負けたら2つ下・守護者のHP/MPは回復しない・
@@ -2940,8 +2941,8 @@ end $$;
 
 -- ---- 1-7. デイリーミッション（2026-10-10）----
 -- key … v2cap_profiles.daily_counts のキー／goal … これだけ数えると達成。全部そろうと受け取れる（§10）
--- ★ミッションの内容はあとで決める（ユーザー指示）。いまは仮の「出撃に10回勝つ」1つ。
---   種は src/v2cap/lib/daily.js の DAILY_TASKS から tools/v2cap-sql.mjs が作る
+-- ★はじめは仮の「出撃に10回勝つ」1つ。2026-10-15 ユーザー指示で「装備を強化または分解する」「塔に挑戦する」「宝樹に祈る」を足した。
+--   種は src/v2cap/lib/daily.js の DAILY_TASKS から tools/v2cap-sql.mjs が作る（足したら数える所＝v2cap_daily_bump も足す）
 create table if not exists public.v2cap_daily_tasks (
   key   text primary key,
   label text not null,
@@ -2955,9 +2956,12 @@ revoke all on table public.v2cap_daily_tasks from anon;
 grant select on table public.v2cap_daily_tasks to authenticated;
 
 -- @@seed:daily_tasks
-delete from public.v2cap_daily_tasks where key <> all('{win}'::text[]);
+delete from public.v2cap_daily_tasks where key <> all('{win,smith,tower,pray}'::text[]);
 insert into public.v2cap_daily_tasks (key, label, goal, sort) values
-  ('win', '出撃に勝つ', 10, 1)
+  ('win', '出撃に勝つ', 10, 1),
+  ('smith', '装備を強化または分解する', 1, 2),
+  ('tower', 'ジークヴァルトの覇天塔に挑戦する', 1, 3),
+  ('pray', 'ユグレシアの宝樹に祈りをささげる', 1, 4)
 on conflict (key) do update set label = excluded.label, goal = excluded.goal, sort = excluded.sort;
 -- @@end:daily_tasks
 
@@ -4256,6 +4260,10 @@ begin
     v_mats := jsonb_set(v_mats, array[v_key], to_jsonb(coalesce((v_mats ->> v_key)::int, 0) + v_add));
   end loop;
   update public.v2cap_profiles set materials = v_mats, updated_at = now() where id = v_uid;
+  -- デイリーミッション（§10）：「装備を強化または分解する」を1つ数える（まとめて分解しても1回・1つも分解できなければ数えない）
+  if v_n > 0 then
+    perform public.v2cap_daily_bump(v_uid, 'smith', 1);
+  end if;
   return jsonb_build_object('ok', true, 'dismantled', v_n, 'gained', v_gain, 'materials', v_mats);
 end;
 $$;
@@ -4324,6 +4332,8 @@ begin
   if v_ok then
     update public.v2cap_inventory set plus = v_next where id = v_inv.id;
   end if;
+  -- デイリーミッション（§10）：「装備を強化または分解する」を1つ数える（失敗しても1回）
+  perform public.v2cap_daily_bump(v_uid, 'smith', 1);
   return jsonb_build_object('ok', true, 'success', v_ok, 'plus', case when v_ok then v_next else v_plus end,
     'area', greatest(1, coalesce(v_eq.area, 1)), 'scrap', v_need, 'gold', v_gold, 'materials', v_mats, 'gold_left', v_row.gold - v_gold);
 end;
@@ -4498,6 +4508,9 @@ begin
     return jsonb_build_object('ok', false, 'error', '今日はもう祈りました（日本時間の5時に変わります）');
   end if;
 
+  -- デイリーミッション（§10）：「宝樹に祈りをささげる」を1つ数える（経験値を入れる前＝この日はじめてなら、祈る前のLVで受注する）
+  perform public.v2cap_daily_bump(v_uid, 'pray', 1);
+
   -- 経験値：祈った時点のLVの推奨の場所で10回出撃したくらい × 運勢の倍率（10分率）× 連続日数の倍率（百分率）。
   --   切り上げは整数で（tree.js の prayExpOf と同じ）
   v_lv     := greatest(1, coalesce(v_lv, 1));
@@ -4513,6 +4526,35 @@ end;
 $$;
 revoke all on function public.v2cap_pray() from public, anon;
 grant execute on function public.v2cap_pray() to authenticated;
+
+-- ============================================================
+-- ===== 8-4. ホームの開け閉め（2026-10-15）=====
+-- ============================================================
+-- 【確定】2026-10-15 ユーザー指示「ホーム画面のステータスを表示、毎回開いてるから閉じたら閉じる、開いたら開くを継続させて」：
+--   前は端末（localStorage）にだけ覚えていた＝端末・ブラウザが変わる／閲覧データが消えると、最初の「開く」に戻っていた。
+--   キャラのデータにも覚えて、どこで開いても前の開け閉めから始める（写しは src/v2cap/lib/uiPrefs.js の FOLD_KEYS）
+--   ・覚えるのは ステータス（openStatus）・メニュー（openMenu）・今日のミッション（openDaily）の開け閉めだけ（true＝開いている）
+alter table public.v2cap_profiles add column if not exists ui_prefs jsonb not null default '{}'::jsonb;
+
+create or replace function public.v2cap_set_ui_pref(p_key text, p_open boolean)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if p_open is null or p_key is null or not (p_key = any(array['openStatus', 'openMenu', 'openDaily'])) then
+    return jsonb_build_object('ok', false, 'error', '覚えられない設定です');
+  end if;
+  update public.v2cap_profiles
+     set ui_prefs = jsonb_set(coalesce(ui_prefs, '{}'::jsonb), array[p_key], to_jsonb(p_open))
+   where id = v_uid;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  return jsonb_build_object('ok', true);
+end;
+$$;
+revoke all on function public.v2cap_set_ui_pref(text, boolean) from public, anon;
+grant execute on function public.v2cap_set_ui_pref(text, boolean) to authenticated;
 
 -- ============================================================
 -- ===== 9. 開発用 =====
@@ -4613,24 +4655,35 @@ grant execute on function public.v2cap_dev_reset() to authenticated;
 --   （設計 docs/v2cap-design.md「デイリーミッション」・写しは src/v2cap/lib/daily.js）：
 --   ・1日1組・**難易度はなし**。「受注」してから数える（受注する前にやったことは数えない）
 --   ・日付が変わるのは日本時間の5時（今のⅡの v2_daily_roll と同じ式）
---   ・報酬は**受注した時点のLV**（daily_lv）で決まる：EXP＝そのLVの必要EXP×%（〜10は10%・〜30は5%・〜50は3%・51〜は1%・切り上げ）／
+--   ・報酬は**受注した時点のLV**（daily_lv）で決まる：EXP＝そのLVの推奨の場所で10回出撃したくらい（2026-10-12・v2cap_daily_reward）／
 --     Gold＝LV×100。EXPは戦闘と同じ扱い（v2cap_apply_exp＝いまの職業のClassEXPにも同じ量）
---   ・ミッションの一覧は v2cap_daily_tasks（いまは仮の「出撃に10回勝つ」）。数えるのは各RPC（いまは出撃の精算だけ）
+--   ・ミッションの一覧は v2cap_daily_tasks。数えるのは各RPC（v2cap_daily_bump を呼ぶ所）：
+--       win＝出撃の精算で勝ったとき／smith＝鍛冶屋の強化（失敗しても）・分解／tower＝塔の挑戦（勝ち負けによらず）／pray＝宝樹に祈ったとき
+--   ・【確定】2026-10-15 ユーザー指示「ミッションログイン時に自動で受注するように ※ミッションは朝5時リセット」：
+--     **受注は自動**。画面がホームを開いたとき（と開いたまま5時を過ぎたとき）に v2cap_daily_accept を呼ぶ。
+--     サーバーも、日付が変わってから最初に見たとき（v2cap_daily_roll＝数える・受注・受け取りの入口）に「その時点のLVで受注した」状態で始める
+--     （画面を開いたまま5時を過ぎてすぐ出撃しても、その勝ちを落とさないように）
+--   ・【確定】2026-10-15 ユーザーが選んだ「守っていれば達成」：塔は守護者でいるあいだ挑戦できないので、
+--     **受注したときに守護者なら「塔に挑戦する」は達成済み**で始める（daily.js の startCountsOf と同じ）
 
--- 日付が変わっていたら、その日の状態を空にする（内部ヘルパ）
+-- 今日の状態にそろえる（内部ヘルパ）。日付が変わっていたら（とまだ受注していない今日の行＝前の版で空にした行も）、
+-- **その時点のLVで受注した状態**で始める：進みは空（守護者なら塔だけ1）・受け取っていない
 create or replace function public.v2cap_daily_roll(p_player uuid)
 returns void language plpgsql security definer set search_path = public as $$
 declare
   v_today date := ((now() at time zone 'Asia/Tokyo') - interval '5 hours')::date;
 begin
   update public.v2cap_profiles
-     set daily_day = v_today, daily_lv = null, daily_counts = '{}'::jsonb, daily_claimed = false
-   where id = p_player and daily_day is distinct from v_today;
+     set daily_day = v_today, daily_lv = lv,
+         daily_counts = case when tower_guard is not null then jsonb_build_object('tower', 1) else '{}'::jsonb end,
+         daily_claimed = false
+   where id = p_player and (daily_day is distinct from v_today or daily_lv is null);
 end;
 $$;
 revoke all on function public.v2cap_daily_roll(uuid) from public, anon, authenticated;
 
--- 進みを数える（内部ヘルパ・各RPCから呼ぶ）。一覧に無いキー・受注していない日・受け取ったあとは数えない
+-- 進みを数える（内部ヘルパ・各RPCから呼ぶ）。一覧に無いキー・受け取ったあとは数えない
+-- （日付が変わってはじめてなら、上の roll がその時点のLVで受注してから数える）
 create or replace function public.v2cap_daily_bump(p_player uuid, p_key text, p_n int default 1)
 returns void language plpgsql security definer set search_path = public as $$
 begin
@@ -4658,6 +4711,8 @@ $$;
 revoke all on function public.v2cap_daily_reward(int) from public, anon;
 
 -- 受注する：今日のミッションを受ける。報酬はこの時点のLVで決まる（daily_lv に入れる）。1日1回
+-- 【確定】2026-10-15 受注は自動＝画面がホームを開いたときに呼ぶ。受注のしかたは roll と同じ（守護者なら塔は達成済み）。
+--   もう受注していれば何もしない（何度呼んでも ok＝前は「今日のミッションはもう受注しました」を返していた）
 create or replace function public.v2cap_daily_accept()
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
@@ -4666,18 +4721,11 @@ declare
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
-  -- ★行をつかんでから（同時に2回押しても、受注は1回だけ）
+  -- ★行をつかんでから（2つの画面から同時に届いても、受注は1回だけ）
   perform 1 from public.v2cap_profiles where id = v_uid for update;
   if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
   perform public.v2cap_daily_roll(v_uid);
   select * into v_row from public.v2cap_profiles where id = v_uid;
-  if v_row.daily_lv is not null then
-    return jsonb_build_object('ok', false, 'error', '今日のミッションはもう受注しました');
-  end if;
-  update public.v2cap_profiles
-     set daily_lv = lv, daily_counts = '{}'::jsonb, daily_claimed = false, updated_at = now()
-   where id = v_uid
-   returning * into v_row;
   return jsonb_build_object('ok', true, 'daily_lv', v_row.daily_lv, 'reward', public.v2cap_daily_reward(v_row.daily_lv));
 end;
 $$;
@@ -6123,6 +6171,10 @@ begin
     return jsonb_build_object('ok', false, 'error', '守護者が入れ替わりました。もう一度挑戦してください', 'changed', true);
   end if;
 
+  -- デイリーミッション（§10・2026-10-15）：「塔に挑戦する」を1つ数える（勝ち負けによらず）。
+  --   守護者になる前・経験値を入れる前に数える（この日はじめてなら、挑戦する前の姿＝守っていない・挑戦する前のLVで受注する）
+  perform public.v2cap_daily_bump(v_uid, 'tower', 1);
+
   if v_win then
     -- 破られた守護者は「1つ上へ挑戦できる」状態に戻す（席は空ける）
     if v_has then
@@ -6388,5 +6440,23 @@ begin
        where id = r.id;
     end loop;
     insert into public.v2cap_migrations (key) values ('touzoku_luk_20261015');
+  end if;
+end $$;
+
+-- ===== 一度だけ：今日のミッションを「守っていれば達成」にそろえる（2026-10-15 ユーザーが選んだ）=====
+-- 受注したときに塔の守護者なら「塔に挑戦する」は達成済みで始まる（§10 の v2cap_daily_roll）。
+-- この版を流した日にもう受注していた人は roll を通らない（守っているあいだは挑戦もできない）ので、一度だけ：
+-- 今日のぶんを受注済み・まだ受け取っていない・いま守護者の人は、塔の項目を達成済み（1）にする
+-- ★印 daily_guard_20261015 を付けるので、2回目以降に全文を流し直しても何もしない
+do $$
+begin
+  if not exists (select 1 from public.v2cap_migrations where key = 'daily_guard_20261015') then
+    update public.v2cap_profiles
+       set daily_counts = jsonb_set(coalesce(daily_counts, '{}'::jsonb), '{tower}',
+                                    to_jsonb(greatest(1, coalesce((daily_counts ->> 'tower')::int, 0))))
+     where tower_guard is not null
+       and daily_lv is not null and not daily_claimed
+       and daily_day = ((now() at time zone 'Asia/Tokyo') - interval '5 hours')::date;
+    insert into public.v2cap_migrations (key) values ('daily_guard_20261015');
   end if;
 end $$;
