@@ -105,11 +105,20 @@ export const EVA_CURVE = 5       // 大きいほど「同格では避けにく�
 export const evasionScoreOf = (s) =>
   (s?.agi || 0) * EVA_AGI + (s?.vit || 0) * EVA_VIT + (s?.luk || 0) * EVA_LUK
 
+// ★「レベルキャップあり」版（src/v2cap）だけの回避率（2026-10-15 ユーザー決定「回避の決まりを緩める」）：
+//   ステから出した回避率が CAP_EVA.knee を超えたぶんは CAP_EVA.rate 倍しか伸びない。
+//   ねらい：AGIを上げる強化を重ねた組み方が、ボスの攻撃を4割かわして強くなりすぎていた（比の5乗で急に伸びるため）。
+//   受ける側が defRule:'cap' を持つときだけ＝今のⅡは今のまま。
+//   パッシブ・装備・技の「回避+n%」「命中+n%」（evaBonus／hitBonus）は、ゆるめたあとに素直に足し引きする
+export const CAP_EVA = { knee: 20, rate: 0.5 }
+export const capEvaOf = (base) => (base <= CAP_EVA.knee ? base : CAP_EVA.knee + (base - CAP_EVA.knee) * CAP_EVA.rate)
 // 回避率(%)。hitBonus は攻撃側の命中補正、evaBonus は防御側の回避補正（どちらもポイント）
-export const evasionRate = (attacker, defender, hitBonus = 0, evaBonus = 0) => {
+// defRule … 受ける側の決まり（'cap'＝「レベルキャップあり」版の回避）。省けば今のⅡの式
+export const evasionRate = (attacker, defender, hitBonus = 0, evaBonus = 0, defRule = null) => {
   const eva = Math.max(0, evasionScoreOf(defender))
   const dex = Math.max(1, attacker?.dex || 0)
-  const base = EVA_COEF * Math.pow(eva / (eva + dex), EVA_CURVE)
+  const raw = EVA_COEF * Math.pow(eva / (eva + dex), EVA_CURVE)
+  const base = defRule === 'cap' ? capEvaOf(raw) : raw
   return clampPct(base + evaBonus - hitBonus, 0, EVA_RATE_MAX)
 }
 // スキルごとの命中率(acc)を織り込んだ最終命中率(%)。
@@ -121,10 +130,10 @@ export const evasionRate = (attacker, defender, hitBonus = 0, evaBonus = 0) => {
 //   ・acc=70 なら 同格で80% → DEX2倍で89.2% → DEX5倍で95%（伸びしろ+18.8%）
 // ⚠ 発動率とは別の確率なので掛け算になる（発動75%×命中80%＝実際に当たるのは63.8%）。
 //   accを下げるのは一部の技だけにすること。多段は1発ずつ判定するのでさらに荒れる。
-export const skillHitRate = (attacker, defender, { acc = 100, kind = 'phys', hitBonus = 0, evaBonus = 0 } = {}) => {
+export const skillHitRate = (attacker, defender, { acc = 100, kind = 'phys', hitBonus = 0, evaBonus = 0, defRule = null } = {}) => {
   const a = Math.max(0, Math.min(100, acc))
   const base = a + (100 - a) * stabilityOf(attacker, kind)
-  return clampPct(base - evasionRate(attacker, defender, hitBonus, evaBonus), 0, 100)
+  return clampPct(base - evasionRate(attacker, defender, hitBonus, evaBonus, defRule), 0, 100)
 }
 export const hitRate = (attacker, defender, hitBonus = 0, evaBonus = 0) =>
   skillHitRate(attacker, defender, { hitBonus, evaBonus })
@@ -237,13 +246,13 @@ export const damageFloor = (attacker, kind = 'phys', atkStat = null) => 1 - DMG_
 // hitMult    … 最終命中率に掛ける（鷹ノ目：1.1倍／相手が瀕死なら1.3倍）
 // critDmg    … クリティカルのダメージ+%（隠身・精密照準）
 // redMult    … 受ける側の軽減率に掛ける（聖騎士の心得）
-// defRule … 受ける側の防御の式（'cap'＝「レベルキャップあり」版の魔法防御。省けば今のⅡの式）
+// defRule … 受ける側の防御の式（'cap'＝「レベルキャップあり」版の魔法防御と回避。省けば今のⅡの式）
 // wantPre … 防御で減る前のダメージ（pre）も返す（v2cap の聖騎士の聖光が「防御で減らしたぶん」を数える）。
 //   渡さなければ今までと同じ（乱数の引き方も同じ）
 export const resolveAttack = ({ attacker, defender, mult = 1, kind = 'phys', atkStat = null, defPen = 0, add = null, sureHit = false, sureCrit = false, noCrit = false, hitBonus = 0, evaBonus = 0, critBonus = 0, acc = 100, hitMult = 1, critDmg = 0, redMult = 1, defRule = null, wantPre = false }, rng = Math.random) => {
   const crit = !noCrit && (sureCrit || roll(critRate(attacker, defender, critBonus), rng))
   const accStats = crit ? critAccuracyStats(attacker) : attacker
-  const rate = clampPct(skillHitRate(accStats, defender, { acc, kind, hitBonus, evaBonus }) * hitMult, 0, 100)
+  const rate = clampPct(skillHitRate(accStats, defender, { acc, kind, hitBonus, evaBonus, defRule }) * hitMult, 0, 100)
   const hit = sureHit || roll(rate, rng)
   if (!hit) return { hit:false, crit, damage:0 }
   // ダメージの振れ幅。DEXが高いほど下限が1.00へ寄って安定する

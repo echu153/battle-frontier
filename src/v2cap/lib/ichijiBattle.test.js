@@ -110,9 +110,9 @@ test('跳躍：ハイジャンプは2ターン敵の攻撃を受けず、その�
 
 test('分身：分身の術で1体 → 攻撃を受けたとき決まった%で身代わりになって消える（影の連携：分身1体につき追撃）', () => {
   // 【確定】2026-10-15 チャット版の設計：分身は最大3体・30%で身代わり（全部は肩代わりしない）
-  // 身代わりの%は 2026-10-15 に測って 30→15 にした（名簿から読む）。乱数10なら身代わり・50なら当たる
+  // 身代わりの%は 2026-10-15 に測って 30→15→10 にした（名簿から読む）。乱数が身代わりの%の半分なら身代わり・50なら当たる
   const guard = passiveOf('忍者').passive.cloneGuard
-  assert.ok(guard > 10 && guard <= 50)
+  assert.ok(guard > 0 && guard < 50)
   const me = side('忍', '忍者', ['分身の術'])
   const foe = dummy()
   const log = []
@@ -122,7 +122,7 @@ test('分身：分身の術で1体 → 攻撃を受けたとき決まった%で�
   assert.ok(me.hp < me.base.hp)
   assert.equal(me.stk.clone, 1)
   const hp1 = me.hp
-  takeAction(foe, me, fixed(0.1), log)   // 乱数10 < 身代わりの% ＝ 身代わり
+  takeAction(foe, me, fixed(guard / 200), log)   // 乱数（身代わりの%の半分）< 身代わりの% ＝ 身代わり
   assert.equal(me.hp, hp1)
   assert.equal(me.stk.clone, 0)
   assert.ok(log.some(l => l.type === 'cloneTaken'))

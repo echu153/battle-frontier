@@ -187,6 +187,7 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
                   {s.priority > 0 && <span style={{ color:'#a888e0', marginRight:'5px' }}>先制{s.priority >= 2 ? `+${s.priority}` : ''}</span>}
                   {s.noCrit && <span style={{ color:'#c09060', marginRight:'5px' }}>クリ無</span>}
                   {s.sureHit && <span style={{ color:'#66bb99', marginRight:'5px' }}>必中</span>}
+                  {!s.sureHit && s.hitBonus > 0 && <span style={{ color:'#66bb99', marginRight:'5px' }}>命中しやすい</span>}
                   {powerText(s)}
                 </div>
                 <div style={{ display:'flex', alignItems:'center', gap:'4px', paddingLeft:ROW_INDENT }}>

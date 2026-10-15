@@ -947,7 +947,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   if (skill.jump) {
     // ★上位クラス（2026-10-15）：evade＝跳んでいる間の回避%（無ければ必ず当たらない）・着地の防御無視と状態異常（天竜落とし）
     me.jumping = { left: skill.jump.turns, mult: skill.jump.mult * off * ascDmgMult, name: skill.name,
-      evade: skill.jump.evade ?? null, defPen: skill.jump.defPen || 0, ail: skill.jump.ail || null }
+      evade: skill.jump.evade ?? null, defPen: skill.jump.defPen || 0, ail: skill.jump.ail || null, hitBonus: skill.hitBonus || 0 }
     log.push({ side: me.name, type: 'jump', skill: skill.name, turns: skill.jump.turns })
     return
   }
@@ -1334,8 +1334,9 @@ const baseMultOf = (skill, h, ip) => (skill.hybrid ? skill.hybrid.phys
 
 // ★一次職：着地・反撃・追撃・召喚の攻撃。1回だけ殴る（反撃や追撃をさらに呼ばない）
 //   跳躍中の相手には当たらない。分身は肩代わりしない（行動の攻撃だけを肩代わりする）
-// ★上位クラス（2026-10-15）：atkStat・add（念動の追撃＝STR×0.3＋INT×0.3）・defPen（天竜落としの着地）・sureHit（罠）
-const strike = (me, foe, { mult, kind = 'phys', label, hits = 1, atkStat = null, add = null, defPen = 0, sureHit = false }, rng, log) => {
+// ★上位クラス（2026-10-15）：atkStat・add（念動の追撃＝STR×0.3＋INT×0.3）・defPen（天竜落としの着地）・sureHit（罠）・
+//   hitBonus（技の「命中しやすい」。跳躍の技の着地にも乗せる）
+const strike = (me, foe, { mult, kind = 'phys', label, hits = 1, atkStat = null, add = null, defPen = 0, sureHit = false, hitBonus = 0 }, rng, log) => {
   if (foe.hp <= 0 || me.hp <= 0) return 0
   if (airDodges(foe, rng)) { log.push({ side: me.name, type: 'airEvade', skill: label }); return 0 }
   const eMe = liveStats(me, true)
@@ -1355,7 +1356,7 @@ const strike = (me, foe, { mult, kind = 'phys', label, hits = 1, atkStat = null,
       attacker: eMe, defender: eFoe, mult, kind, atkStat, add,
       defPen: Math.min(1, defPen + me.pa.defPenBonus / 100 + me.evo.defPen / 100),
       sureHit, wantPre,
-      hitBonus: me.pa.hitBonus + me.en.hitBonus + ailAccPct(me.ail),
+      hitBonus: me.pa.hitBonus + me.en.hitBonus + ailAccPct(me.ail) + hitBonus,
       evaBonus: foe.pa.evaBonus + foe.en.evaBonus + (foe.air ? AIR_EVA : 0),
       critBonus: me.pa.critBonus + (me.critUp || 0) + aimCritOf(me),
       hitMult: hitMultOf(me, foe),
@@ -1411,7 +1412,7 @@ const airborneTurn = (me, foe, rng, log) => {
   if (me.hp <= 0) return
   // ★上位クラス：竜翔の間は着地ダメージ+%・天竜落としは着地で防御無視と恐怖
   const landPct = (me.pa.ex?.landPct || 0) + (me.soar?.turns > 0 ? (me.soar.land || 0) : 0)
-  const dmg = strike(me, foe, { mult: j.mult * (1 + landPct / 100), kind: 'phys', label: `${j.name}（着地）`, defPen: j.defPen || 0 }, rng, log)
+  const dmg = strike(me, foe, { mult: j.mult * (1 + landPct / 100), kind: 'phys', label: `${j.name}（着地）`, defPen: j.defPen || 0, hitBonus: j.hitBonus || 0 }, rng, log)
   if (j.ail && dmg > 0 && foe.hp > 0) tryInflict(me, foe, j.ail, rng, log)
 }
 

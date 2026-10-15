@@ -69,7 +69,10 @@ test('2026-10-15 測って直した仕組みの数字（強さの元を先に直
   assert.deepEqual(v('狂鬼化').lastStand, { costCut: 50 }, '狂鬼化の「払うHPが半分」は設計どおり')
   assert.equal(v('隠形').buff.self.agi, 10)
   assert.equal(v('影斬り').mult, 1.35)
-  assert.deepEqual(passiveOf('忍者').passive, { cloneFollow: 0.1, noCloneAgi: 10, cloneGuard: 15 })
+  // 忍者：身代わり 15→10%・毒霧の術 毒60→40%・暗闇40→20%（2026-10-15 回避をゆるめても「暗闇・毒・分身」の重なりで強かった）
+  assert.deepEqual(passiveOf('忍者').passive, { cloneFollow: 0.1, noCloneAgi: 10, cloneGuard: 10 })
+  assert.deepEqual(v('毒霧の術').ails, [{ key: 'poison', chance: 40 }, { key: 'blind', chance: 20 }])
+  assert.equal(v('毒霧の術').desc, '40%で毒・20%で暗闇')
   assert.deepEqual([v('骸骨召喚').summon.mult, v('レイズデッド').summon.mult, v('ソウルハーヴェスト').perStackAdd.addMult], [0.35, 0.35, 0.2])
   assert.equal(passiveOf('死霊使い').passive.guardPerStack.cut, 4)
   assert.equal(v('仙丹').buff.self.str, 10)

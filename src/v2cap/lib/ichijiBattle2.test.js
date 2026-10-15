@@ -165,14 +165,16 @@ test('クロノブレイク（AGIの差1%につき+1%・最大+60%）・聖な�
   const sealed = castThen('異端審問官', [], '聖なる裁き', (m, f) => { inflict(f.ail, 'seal') })
   // 2026-10-15：退魔の心得の「封印中+20%」は無くなった（封印中の上乗せは聖なる裁きに残す）
   assert.ok(Math.abs(sealed.dmg / plain - 1.3) < 0.02, '封印中×1.3')
-  // 毒60%・暗闇40%を別々に判定する（乱数0.1なら両方入る・0.5なら毒だけ）
+  // 毒と暗闇を別々に判定する（2026-10-15 毒40%・暗闇20%。確率は名簿から読む：どちらより低い乱数なら両方・あいだなら毒だけ）
+  const [pPoison, pBlind] = ['poison', 'blind'].map(k => SKILL_BY_NAME['毒霧の術'].ails.find(a => a.key === k).chance)
+  assert.ok(pBlind < pPoison)
   const fog = side('忍', '忍者', ['毒霧の術'])
   const ff = dummy()
-  takeAction(fog, ff, fixed(0.1), [])
+  takeAction(fog, ff, fixed(pBlind / 200), [])
   assert.ok(hasAilment(ff.ail, 'poison') && hasAilment(ff.ail, 'blind'))
   const fog2 = side('忍2', '忍者', ['毒霧の術'])
   const ff2 = dummy()
-  takeAction(fog2, ff2, mid, [])
+  takeAction(fog2, ff2, fixed((pBlind + pPoison) / 200), [])
   assert.ok(hasAilment(ff2.ail, 'poison') && !hasAilment(ff2.ail, 'blind'))
 })
 
