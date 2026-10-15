@@ -359,3 +359,37 @@ test('【確定】盤面の絵（ユーザーの絵・2026-10-14）は一覧（a
     assert.equal(createHash('sha1').update(readFileSync(file)).digest('hex').slice(0, 8), v, `${k} の印が中身と合っている`)
   }
 })
+
+test('【確定】2026-10-15 状態異常を付ける攻撃の技のマスは、威力の代わりに状態異常の確率+15ポイント（上限100%・もう100%の技は威力のまま）', async () => {
+  const A = await import('./ascension.js')
+  assert.equal(A.ASC_AIL_UP, 15)
+  // 型：状態異常を付ける攻撃の技＝ail・付けない攻撃の技／もう100%の技＝power・攻撃でない技＝null
+  assert.deepEqual(['毒矢', '毒霧の術', '天竜落とし', 'マナバースト', '居合斬', '突き', '急所突き', '火刑', 'くくり罠', 'ヒール'].map(n => A.ascTypeOf(SKILL_BY_NAME[n])),
+    ['ail', 'ail', 'ail', 'ail', 'ail', 'power', 'power', 'power', null, null])
+  assert.equal(A.ascUpOf('毒矢'), 15)
+  assert.equal(A.ascUpOf('突き'), 20)
+  // 付ける所はどれも+15：ail・ails・跳躍の着地・宿りを消したときの付与
+  assert.equal(A.ascendSkill(SKILL_BY_NAME['毒矢']).ail.chance, 85)
+  assert.deepEqual(A.ascendSkill(SKILL_BY_NAME['毒霧の術']).ails.map(a => a.chance), [55, 35])
+  assert.equal(A.ascendSkill(SKILL_BY_NAME['天竜落とし']).jump.ail.chance, 45)
+  assert.equal(A.ascendSkill(SKILL_BY_NAME['マナバースト']).consumeImbue.ailChance, 55)
+  // 威力は上がらない・上限100%・前の上がり幅（威力20）を持っていても+15まで（塔の守護者の姿）
+  assert.equal(A.ascendSkill(SKILL_BY_NAME['毒矢']).ascDmg, undefined)
+  assert.equal(A.ascendSkill({ ...SKILL_BY_NAME['毒矢'], ail: { key: 'poison', chance: 95 } }, 15).ail.chance, 100)
+  assert.equal(A.ascendSkill(SKILL_BY_NAME['毒矢'], 20).ail.chance, 85)
+  // 文
+  assert.equal(A.ascSkillDetail('毒霧の術'), '毒 40%→55%・暗闇 20%→35%')
+  assert.equal(A.ascSkillShort('毒矢'), '確率+15%')
+  assert.equal(A.ascSkillShort('突き'), '威力+20%')
+  // 戦闘：乱数が「元の確率〜上げた確率」のあいだなら、マスを開いたときだけ毒が入る
+  const r = 0.78
+  const poisoned = (skill) => {
+    const me = createSide({ name: '狩', cls: null, kind: 'phys', stats: { hp: 9999, mp: 999, str: 300, dex: 300, agi: 100, int_stat: 50, vit: 100, luk: 0 }, noClassBonus: true, passives: [], slots: [{ skill, uses: 9 }] })
+    const foe = createSide({ name: '的', cls: null, kind: 'phys', stats: { hp: 99999, mp: 0, str: 10, dex: 10, agi: 10, int_stat: 10, vit: 100, luk: 0 }, noClassBonus: true, passives: [], slots: [] })
+    takeAction(me, foe, () => r, [])
+    return !!foe.ail.poison
+  }
+  assert.ok(SKILL_BY_NAME['毒矢'].proc > r * 100)
+  assert.equal(poisoned(SKILL_BY_NAME['毒矢']), false)
+  assert.equal(poisoned(A.ascendSkill(SKILL_BY_NAME['毒矢'])), true)
+})

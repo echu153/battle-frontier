@@ -16,6 +16,8 @@
 //     バフの技＝上がり幅を**合計で+10**（剣の構え STR+15%・AGI+12% → STR+21%・AGI+16%）。
 //     %で書けないバフ（クイック・分身の術・装填・鬼神降ろし・狂信）は回数・ターンを+1。
 //     ★上がり幅は**技ごとに変える予定**（ユーザー）＝ ASC_SKILL_UP に技の名前で書けば差し替わる
+//     【確定】2026-10-15 ユーザー選択「技ごとに型を決める」「+15ポイント」：**状態異常を付ける攻撃の技は、威力の代わりに状態異常の確率+15ポイント**
+//     （上限100%・下の ascTypeOf）。状態異常の無い攻撃の技は威力+か追加効果を技ごとに決める（追加効果の案はユーザーと決める＝まだ無い）
 //   ・大マス：4方向のいちばん遠い枝の先・伸びるステの上位4つ（JOB_BONUS の多い順・上→右→下→左）の+5%（初期職・上位職とも）。
 //     スキルマスは、その技がよく使うステの大マスと同じ方向の枝の先に置く
 //   ・振り直しは **LV×100 Gold**。その職業の盤面を全部戻してAPを返す
@@ -26,6 +28,7 @@
 // ★サーバーが数えるのは「つながっているか」「APが足りるか」と「スキル編成の最大MP」（MPのマス）だけ。ほかの効果は戦闘（この写し）で効く
 // ============================================================
 import { STAT_KEYS, STAT_DEFS } from '../../v2/lib/stats.js'
+import { AIL_LABEL } from '../../v2/lib/ailments.js'
 import { SKILL_BY_NAME, skillsOf, isPassive } from './skills.js'
 import { JOB_BONUS, CLASSES, stageOf, jobOf, jobLevelsGained, ASC_AP_PER_JLV } from './jobs.js'
 import { ASC_LAYOUT } from './ascLayout.js'
@@ -108,10 +111,37 @@ export const ascKindOf = (skill) => {
   if (skill.kind === 'buff') return ASC_COUNT_UP[skill.name] ? 'count' : 'buff'
   return null
 }
-export const ascUpOf = (name) => {
-  const k = ascKindOf(SKILL_BY_NAME[name])
-  return k ? (ASC_SKILL_UP[name] ?? ASC_UP_DEFAULT[k]) : 0
+// ===== 攻撃の技のマスの型（2026-10-15 ユーザー選択「技ごとに型を決める」）=====
+//   power … 威力+（ASC_UP_DEFAULT.attack＝20%）
+//   ail   … 状態異常を付ける攻撃の技は、威力の代わりに**状態異常の確率+15ポイント**（ユーザーが選んだ・上限100%）。
+//           付ける所＝ail・ails（1発ごとも）・跳躍の着地（天竜落とし）・宿りを消したときの付与（マナバースト）。
+//           もう100%の技（火刑）は上げても変わらないので威力のまま。補助の技（罠・ストップなど）はバフのマスのまま
+export const ASC_AIL_UP = 15
+const ailChancesOf = (s) => [
+  ...(s?.ail ? [s.ail.chance] : []),
+  ...((s?.ails || []).map(a => a.chance)),
+  ...(s?.jump?.ail ? [s.jump.ail.chance] : []),
+  ...(s?.consumeImbue?.ailChance ? [s.consumeImbue.ailChance] : []),
+]
+export const ascTypeOf = (skill) => {
+  if (ascKindOf(skill) !== 'attack') return null
+  return ailChancesOf(skill).some(c => c < 100) ? 'ail' : 'power'
 }
+export const ascUpOf = (name) => {
+  const s = SKILL_BY_NAME[name]
+  const k = ascKindOf(s)
+  if (!k) return 0
+  return ASC_SKILL_UP[name] ?? (ascTypeOf(s) === 'ail' ? ASC_AIL_UP : ASC_UP_DEFAULT[k])
+}
+// 状態異常の確率を n ポイント上げた形（上限100%）
+const plusPct = (c, n) => Math.min(100, c + n)
+const raiseAil = (s, n) => ({
+  ...s,
+  ...(s.ail ? { ail: { ...s.ail, chance: plusPct(s.ail.chance, n) } } : {}),
+  ...(s.ails ? { ails: s.ails.map(a => ({ ...a, chance: plusPct(a.chance, n) })) } : {}),
+  ...(s.jump?.ail ? { jump: { ...s.jump, ail: { ...s.jump.ail, chance: plusPct(s.jump.ail.chance, n) } } } : {}),
+  ...(s.consumeImbue?.ailChance ? { consumeImbue: { ...s.consumeImbue, ailChance: plusPct(s.consumeImbue.ailChance, n) } } : {}),
+})
 
 // 合計 total を表の値の大きさの割合で分ける（整数・端数は余りの大きい順＝同じなら表の並びの先）。符号は元の値に合わせる
 export const splitUp = (table, total) => {
@@ -143,6 +173,8 @@ const round3 = (v) => Math.round(v * 1000) / 1000
 export const ascendSkill = (skill, up = ascUpOf(skill?.name)) => {
   const kind = ascKindOf(skill)
   if (!kind || !up) return skill
+  // ★状態異常の型は今の上がり幅より大きくしない（塔の守護者の姿が、型を変える前の上がり幅＝威力20を持っていても+15に収める）
+  if (kind === 'attack' && ascTypeOf(skill) === 'ail') return raiseAil(skill, Math.min(up, ASC_SKILL_UP[skill.name] ?? ASC_AIL_UP))
   if (kind === 'attack') return { ...skill, ascDmg: (skill.ascDmg || 0) + up }
   if (kind === 'heal') return { ...skill, ascHeal: (skill.ascHeal || 0) + up }
   if (kind === 'count') {
@@ -170,7 +202,7 @@ const signed = (v) => (v < 0 ? `−${-v}` : `+${v}`)
 export const ascSkillShort = (name) => {
   const kind = ascKindOf(SKILL_BY_NAME[name])
   const up = ascUpOf(name)
-  if (kind === 'attack') return `威力+${up}%`
+  if (kind === 'attack') return ascTypeOf(SKILL_BY_NAME[name]) === 'ail' ? `確率+${up}%` : `威力+${up}%`
   if (kind === 'heal') return `回復量+${up}%`
   if (kind === 'count') return `${ASC_COUNT_UP[name].unit === 'ターン' ? 'ターン' : '回数'}+${up}`
   // バフは上がり幅を合計で足す（ユーザーの言い方「合計10%上昇」。1.1倍と読み違えないように「効果+」にはしない）
@@ -183,6 +215,17 @@ export const ascSkillDetail = (name) => {
   const kind = ascKindOf(s)
   const up = ascUpOf(name)
   if (!kind) return ''
+  if (kind === 'attack' && ascTypeOf(s) === 'ail') {
+    // 例「毒 70%→85%・暗闇 20%→35%」（宿りの付与は属性で変わるので「宿りの属性の状態異常」）
+    const a = ascendSkill(s, up)
+    const pairs = [
+      ...(s.ail ? [[AIL_LABEL[s.ail.key], s.ail.chance, a.ail.chance]] : []),
+      ...((s.ails || []).map((x, i) => [AIL_LABEL[x.key], x.chance, a.ails[i].chance])),
+      ...(s.jump?.ail ? [[AIL_LABEL[s.jump.ail.key], s.jump.ail.chance, a.jump.ail.chance]] : []),
+      ...(s.consumeImbue?.ailChance ? [['宿りの属性の状態異常', s.consumeImbue.ailChance, a.consumeImbue.ailChance]] : []),
+    ]
+    return pairs.map(([l, b, c]) => `${l} ${b}%→${c}%`).join('・') + (s.ailPerHit ? '（1発ごと）' : '')
+  }
   if (kind === 'attack') return `威力+${up}%（ダメージ全体）`
   if (kind === 'heal') return `回復量+${up}%`
   const a = ascendSkill(s, up)
