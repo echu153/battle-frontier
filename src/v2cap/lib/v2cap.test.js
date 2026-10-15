@@ -16,7 +16,7 @@ import {
   canBecome, weaponsOf, canEquipType, attackKindOf, lineageOf, usableSkillNames, classDescOf,
   jobBonusGain, jobGainText, jobUpHead, jobUpNote, CLASS_BY_ID, ICHIJI_RENAMED,
 } from './jobs.js'
-import { SKILLS, NEW_SKILLS, LATE_SKILLS, SKILL_BY_NAME, setMpCost, validateSkillSet, defaultSetOf, fillSetOf, SKILL_SET_SLOTS, DEFAULT_USES_MAX, passiveOf, SHOKI_TUNE } from './skills.js'
+import { SKILLS, NEW_SKILLS, LATE_SKILLS, SKILL_BY_NAME, setMpCost, validateSkillSet, defaultSetOf, fillSetOf, SKILL_SET_SLOTS, DEFAULT_USES_MAX, passiveOf } from './skills.js'
 import { ICHIJI_SKILLS, ICHIJI_BUILDS } from './skillsIchiji.js'
 import {
   ITEMS, ITEM_BY_ID, KINDS, WEAPON_TYPES, ARMOR_LINES, ARMOR_PARTS, ACCESSORY_TYPES, PART_MULT, SLOTS, ARMOR_EFFECT,
@@ -496,17 +496,13 @@ test('スキルは初期職ClassLV 1／5／10／15／20／25／30 で7個・上�
   assert.deepEqual(skillsLearnedBy('剣士', 30).slice(5), ['霞斬り', '乱れ斬り'])
 })
 
-test('【確定】戦士・弓使い・魔法使い・僧侶・格闘家のCLASS LV1〜20の5技は今のⅡのまま（中身も並びも同じ・この版の倍率 SHOKI_TUNE だけ写しに掛ける）', () => {
+test('【確定】戦士・弓使い・魔法使い・僧侶・格闘家のCLASS LV1〜20の5技は今のⅡのまま（中身も並びも同じ）', () => {
   for (const cls of ['戦士', '弓使い', '魔法使い', '僧侶', '格闘家']) {
     const v2 = V2_SKILLS.filter(s => s.cls === cls)
-    // ★魔法の属性（elem）だけはこの版の写しに付けている（魔導士の元素共鳴が見る・2026-10-10）
-    // ★2026-10-15「クラス間の格差が出すぎないように」：弓使いは攻撃の技の倍率×1.08（SHOKI_TUNE）を写しに掛ける。それ以外は同じ
-    const k = SHOKI_TUNE[cls] || 1
-    const r2 = (x) => Math.round(x * 100) / 100
+    // ★魔法の属性（elem）だけはこの版の写しに付けている（魔導士の元素共鳴が見る・2026-10-10）。それ以外は同じ
+    //   （2026-10-15〜16 の弓使いの倍率×1.08＝SHOKI_TUNE はやめた＝ユーザー「倍率かけないで×1」）
     const noElem = (s) => { const { elem: _e, ...rest } = s; return rest }
-    const tuned = (s) => (k === 1 || (s.kind !== 'phys' && s.kind !== 'mag') ? s
-      : { ...s, mult: r2(s.mult * k), ...(s.add ? { add: s.add.map(a => ({ ...a, rate: r2(a.rate * k) })) } : {}) })
-    assert.deepEqual(learnOrderOf(cls).slice(0, 5).map(noElem), v2.map(tuned), `${cls}`)
+    assert.deepEqual(learnOrderOf(cls).slice(0, 5).map(noElem), v2, `${cls}`)
     // 6つ目・7つ目は CLASS LV25・30 の技（2026-10-14・LATE_SKILLS）
     assert.deepEqual(learnOrderOf(cls).slice(5).map(s => s.name), LATE_SKILLS.filter(s => s.cls === cls).map(s => s.name), `${cls}の後の2技`)
   }
@@ -1215,16 +1211,39 @@ test('【確定】2026-10-12 推奨LV：上限はボスを倒せる目安のLV�
   assert.deepEqual([1, 5, 6, 15, 16, 77, 78, 80, 100].map(lv => recSpotOfLv(lv).id), [1, 1, 2, 2, 3, 39, 42, 45, 45])
 })
 
-test('【確定】2026-10-15「クラス間の格差が出すぎないように」：盗賊の配分 LUK19・STR61（合計232）・初期職の倍率は弓使い1.08・槍使い1.05（今のⅡの名簿は変えない）', () => {
+test('【確定】2026-10-15「クラス間の格差が出すぎないように」：盗賊の配分 LUK19・STR61（合計232）', () => {
   assert.deepEqual(JOB_BONUS.盗賊, { agi: 67, str: 61, dex: 40, luk: 19, hp: 19, vit: 13, mp: 13 })
   assert.equal(Object.values(JOB_BONUS.盗賊).reduce((a, b) => a + b, 0), 232)
-  assert.deepEqual(SHOKI_TUNE, { 弓使い: 1.08, 槍使い: 1.05 })
-  // 弓使いの狙撃は今のⅡの技の写し：この版は×1.08・今のⅡは0.65のまま
-  assert.equal(V2_SKILLS.find(s => s.name === '狙撃').mult, 0.65)
-  assert.equal(SKILL_BY_NAME['狙撃'].mult, 0.7)
-  assert.deepEqual(SKILL_BY_NAME['狙撃'].add, [{ stat: 'agi', rate: 0.65 }])
-  // 槍使いはこの版の技（NEW_SKILLS・LATE_SKILLS）。名簿の値×1.05
-  assert.equal(SKILL_BY_NAME['突き'].mult, Math.round(NEW_SKILLS.find(s => s.name === '突き').mult * 1.05 * 100) / 100)
-  // 補助の技は倍率を掛けない
-  assert.equal(SKILL_BY_NAME['駆け足'], V2_SKILLS.find(s => s.name === '駆け足'))
+})
+
+test('【確定】2026-10-16 ユーザー「17の案とりあえず入れてほしい」：職業ごとの倍率をやめて×1・能力で直した（配分は「高い2〜3種」を守る形）', async () => {
+  const { ICHIJI_TUNE } = await import('./skillsIchiji.js')
+  assert.deepEqual(ICHIJI_TUNE, {}, '上位クラスの倍率はやめた')
+  // 弓使いの狙撃は今のⅡの技そのもの（初期職の倍率もやめた）・槍使いの技はこの版の名簿の値のまま
+  assert.equal(SKILL_BY_NAME['狙撃'], V2_SKILLS.find(s => s.name === '狙撃'))
+  assert.equal(SKILL_BY_NAME['突き'], NEW_SKILLS.find(s => s.name === '突き'))
+  // 配分（9職）
+  assert.deepEqual(JOB_BONUS.弓使い, { agi: 64, str: 48, dex: 41, hp: 34, luk: 19, vit: 13, mp: 13 })
+  assert.deepEqual(JOB_BONUS.槍使い, { str: 79, dex: 50, agi: 30, hp: 26, vit: 23, mp: 16, luk: 8 })
+  assert.deepEqual(JOB_BONUS.狂戦士, { str: 168, hp: 102, agi: 83, dex: 50, vit: 45, mp: 25, luk: 17 })
+  assert.deepEqual(JOB_BONUS.魔銃士, { str: 108, int_stat: 108, dex: 75, agi: 58, hp: 46, mp: 45, luk: 33, vit: 17 })
+  assert.deepEqual(JOB_BONUS.アークアーチャー, { dex: 142, luk: 103, agi: 92, hp: 55, str: 52, vit: 23, mp: 23 })
+  assert.deepEqual(JOB_BONUS.元素使い, { int_stat: 158, mp: 102, hp: 75, agi: 67, dex: 40, vit: 32, luk: 16 })
+  assert.deepEqual(JOB_BONUS.ストームランサー, { str: 125, dex: 103, agi: 85, hp: 75, vit: 57, mp: 28, luk: 17 })
+  assert.deepEqual(JOB_BONUS.異端審問官, { int_stat: 142, mp: 102, hp: 78, vit: 67, agi: 56, dex: 28, luk: 17 })
+  assert.deepEqual(JOB_BONUS.魔法剣士, { str: 133, int_stat: 125, hp: 70, agi: 67, vit: 40, mp: 38, luk: 17 })
+  // 技とパッシブ
+  const p = (c) => passiveOf(c).passive
+  assert.equal(SKILL_BY_NAME['エリクサー'].healMax, 15)
+  assert.equal(SKILL_BY_NAME['霊薬'].heal.rate, 1)
+  assert.equal(SKILL_BY_NAME['ハイヒール'].heal.rate, 1.3)
+  assert.equal(SKILL_BY_NAME['傷薬'].heal.rate, 0.8)
+  assert.equal(p('聖職者').healBonus, undefined)
+  assert.equal(p('式神使い').whileSummonOrGuard, 8)
+  assert.deepEqual(p('死霊使い').guardPerStack, { key: 'undead', cut: 2 })
+  assert.equal(p('クロノマンサー').extraIfFaster, 35)
+  // 説明文も数字に合わせた
+  assert.ok(SKILL_BY_NAME['エリクサー'].desc.startsWith('最大HPの15%を回復'))
+  assert.ok(passiveOf('式神使い').desc.includes('+8%') && passiveOf('死霊使い').desc.includes('-2%') && passiveOf('クロノマンサー').desc.includes('35%'))
+  assert.ok(!passiveOf('聖職者').desc.includes('回復量+20%'))
 })

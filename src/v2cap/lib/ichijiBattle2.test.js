@@ -132,7 +132,7 @@ test('召喚の強化：死の行軍で死霊の攻撃+50%・鬼神降ろしで�
   assert.ok(Math.abs(two / one - 2) < 0.1, `${two} ／ ${one}`)
 })
 
-test('奇跡：4ターンのあいだ毎ターン最大HPの6%を回復（神聖加護で+20%＝2026-10-15 に+30%から）', () => {
+test('奇跡：4ターンのあいだ毎ターン最大HPの6%を回復（神聖加護の回復量+は 2026-10-16 になくした＝名簿から読む）', () => {
   const r = runBattle(
     { name: '司', cls: '聖職者', kind: 'mag', stats: stats(), noClassBonus: true, passives: [passiveOf('聖職者')], startHp: 1000,
       slots: [{ skill: S('奇跡'), uses: 1 }] },
@@ -140,7 +140,9 @@ test('奇跡：4ターンのあいだ毎ターン最大HPの6%を回復（神聖
     { rng: mid, maxTurns: 6 })
   const ticks = r.log.filter(l => l.type === 'regenTick' && l.side === '司')
   assert.equal(ticks.length, 4)
-  assert.equal(ticks[0].heal, Math.floor(10000 * 0.06 * 1.2))
+  const bonus = 1 + (passiveOf('聖職者').passive.healBonus || 0) / 100
+  assert.equal(passiveOf('聖職者').passive.healBonus, undefined, '2026-10-16 回復量+20%をなくした')
+  assert.equal(ticks[0].heal, Math.floor(10000 * 0.06 * bonus))
 })
 
 test('溜めで伸びる技：ボーンスピア（死霊1体+10%）・掌底波（気1で×1.4）・ソウルドレイン（死霊1体で吸収+5%）', () => {

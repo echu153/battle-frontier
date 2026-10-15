@@ -394,8 +394,9 @@ test('結界は1つだけ（張り直すと上書き）・封縛結界：相手�
   const kk = hit('式神使い', '急急如律令', (m) => { m.stk.shiki = 1; m.summonMult.shiki = 0.766; m.bind = { turns: 3 } })
   assert.ok(kk.log.some(l => l.type === 'strike' && /式神/.test(l.label)))
   const k0 = hit('式神使い', '急急如律令')
-  // 結界の+20%と、陰陽の理（結界がある間+15%）
-  assert.ok(near(kk.dmg / k0.dmg, 1.2 * 1.15), `${kk.dmg} ／ ${k0.dmg}`)
+  // 結界の+20%と、陰陽の理（結界がある間+％＝2026-10-16 に+15%→+8%・名簿から読む）
+  const yin = passiveOf('式神使い').passive.whileSummonOrGuard
+  assert.ok(near(kk.dmg / k0.dmg, 1.2 * (1 + yin / 100)), `${kk.dmg} ／ ${k0.dmg}`)
 })
 
 // ===== 聖職者【バリア】=====
@@ -456,7 +457,7 @@ test('爆炎毒：撃つ前に毒と火傷を付ける（両方付けばこの�
 })
 
 // ===== 霊薬師【薬効】=====
-test('浸透薬：薬効1つにつき防御3%無視／エリクサー：最大HPの30%回復・状態異常を全部治す・薬効+3', () => {
+test('浸透薬：薬効1つにつき防御3%無視／エリクサー：最大HPの一部を回復（2026-10-16 に30%→15%・名簿から読む）・状態異常を全部治す・薬効+3', () => {
   const five = hit('霊薬師', '浸透薬', (m) => { m.stk.potion = 5 }, mid, dummy({ int_stat: 900, vit: 900 }))
   const zero = hit('霊薬師', '浸透薬', () => {}, mid, dummy({ int_stat: 900, vit: 900 }))
   assert.ok(five.dmg / zero.dmg > 1.25 + 0.01, '薬効5の与ダメージ+25%より伸びる（防御無視のぶん）')
@@ -465,7 +466,7 @@ test('浸透薬：薬効1つにつき防御3%無視／エリクサー：最大HP
   // 回復してから治す（初期職の万能薬と同じ順）＝回復量を下げる火傷・回復阻害は入れずに見る
   inflict(me.ail, 'poison'); inflict(me.ail, 'slow')
   takeAction(me, dummy(), mid, [])
-  assert.equal(me.hp, 1000 + 3000)
+  assert.equal(me.hp, 1000 + Math.floor(me.base.hp * SKILL_BY_NAME['エリクサー'].healMax / 100))
   assert.equal(hasAilment(me.ail, 'poison') || hasAilment(me.ail, 'slow'), false)
   assert.equal(me.stk.potion, 3)
 })

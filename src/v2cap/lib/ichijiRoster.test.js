@@ -76,7 +76,7 @@ test('2026-10-15 測って直した仕組みの数字（強さの元を先に直
   // 死霊使い：召喚 ×0.35→×0.3（2026-10-15「クラス間の格差」・対人73〜74%）
   assert.deepEqual([v('骸骨召喚').summon.mult, v('レイズデッド').summon.mult, v('ソウルハーヴェスト').perStackAdd.addMult], [0.3, 0.3, 0.2])
   assert.ok(v('骸骨召喚').desc.includes('×0.3で攻撃'))
-  assert.equal(passiveOf('死霊使い').passive.guardPerStack.cut, 4)
+  assert.equal(passiveOf('死霊使い').passive.guardPerStack.cut, 2, '2026-10-16 死者の盾 −4%→−2%（能力表の案）')
   assert.equal(v('仙丹').buff.self.str, 10)
   assert.equal(v('リザレクション').revive.pct, 35)
   assert.deepEqual(['ジャンプ', 'ハイジャンプ', '天竜落とし'].map(n => v(n).jump.evade), [40, 40, 40])
@@ -148,7 +148,8 @@ test('【確定】侍：納刀で次の技が威力1.5倍／聖騎士：大防�
 test('【確定】魔銃士：技は物理と魔法の両方（STRとINTが半分ずつ）のまま・クラスのステはSTRとINTが同じ・HPとLUKを足した', () => {
   for (const s of ICHIJI_SKILLS.filter(x => x.cls === '魔銃士' && x.hybrid)) assert.equal(s.hybrid.phys, s.hybrid.mag, s.name)
   assert.equal(JOB_BONUS.魔銃士.str, JOB_BONUS.魔銃士.int_stat)
-  assert.ok(JOB_BONUS.魔銃士.luk >= 30 && JOB_BONUS.魔銃士.hp >= 60, '2026-10-14 HPとLUKを足した（前はLUK0・HP40）')
+  // 2026-10-14 HPとLUKを足した（前はLUK0・HP40＝対人1%）→ 2026-10-16 能力表でHP66→46（火力も倒れにくさも平均より上だった）
+  assert.ok(JOB_BONUS.魔銃士.luk >= 30 && JOB_BONUS.魔銃士.hp === 46)
   assert.equal(attackKindOf('魔銃士'), 'phys', 'ユーザー決定：通常攻撃は物理（STR）のまま')
 })
 

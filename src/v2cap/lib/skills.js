@@ -60,7 +60,8 @@ export const NEW_SKILLS = [
   { name:'衰弱の呪詛', cls:'呪術師', kind:'buff', proc:100, mp:9, buff:{ enemy:{ str:-15, int_stat:-15 } }, priority:1, desc:'相手のSTR-15%・INT-15%（重ねがけ可）' },
   // 薬師（魔法・回復と補助）
   { name:'薬瓶投げ',   cls:'薬師', kind:'mag', mult:1.45, proc:95, mp:5, desc:'薬瓶を投げつける' },
-  { name:'傷薬',       cls:'薬師', kind:'heal', proc:85, mp:12, heal:{ rate:1.2 }, desc:'傷薬でHPを戻す' },
+  // 2026-10-16 回復1.2→0.8（能力表：倒れにくさ146・ボス戦108で強めだった。元は傷薬の回復）
+  { name:'傷薬',       cls:'薬師', kind:'heal', proc:85, mp:12, heal:{ rate:0.8 }, desc:'傷薬でHPを戻す' },
   { name:'毒薬',       cls:'薬師', kind:'mag', mult:1.4, proc:88, mp:10, ail:{ key:'poison', chance:60 }, desc:'60%で毒' },
   // 【確定】2026-10-14 ユーザー承認：魔法職にSTRは要らないので STR+15% → VIT+12%
   { name:'強壮剤',     cls:'薬師', kind:'buff', proc:100, mp:9, buff:{ self:{ int_stat:15, vit:12 } }, priority:1, desc:'INT+15%・VIT+12%（重ねがけ可）' },
@@ -101,24 +102,15 @@ export const LATE_SKILLS = [
 // 魔法の属性（魔導士の元素共鳴が「直前と違う属性」を見る）。今のⅡの魔法使いの技は今のⅡの名簿を書き換えず、写しに付ける
 export const ELEM_OF_V2 = { ファイア:'fire', サンダー:'thunder', アイスランス:'ice' }
 
-// ★初期職の攻撃の技の倍率（名簿の値×これ・小数2桁）。2026-10-15 職業どうしの差を詰めた
-//   （ユーザー「PVEはあとで調整するから、クラス間の格差が出すぎないようにだけして」）。
-//   弓使い 1.08・槍使い 1.05 … 対人の勝率が25〜30%と低かった（ボス戦も93〜98）。回避を緩めたあと、よけて耐えていたぶんが減った
-//   ⚠今のⅡから持ってきた技（弓使いの狙撃など）は写しに掛ける＝今のⅡの名簿は書き換えない
-export const SHOKI_TUNE = { 弓使い: 1.08, 槍使い: 1.05 }
-const round2 = (v) => Math.round(v * 100) / 100
-const tunedShoki = (s) => {
-  const k = SHOKI_TUNE[s.cls]
-  if (!k || (s.kind !== 'phys' && s.kind !== 'mag')) return s
-  return { ...s, mult: round2(s.mult * k), ...(s.add ? { add: s.add.map(a => ({ ...a, rate: round2(a.rate * k) })) } : {}) }
-}
+// ★初期職の攻撃の技の倍率（SHOKI_TUNE・弓使い1.08・槍使い1.05）は 2026-10-16 にやめた（ユーザー「倍率かけないで×1」）。
+//   弓使い・槍使いの差はクラスのステの配分で付けた（jobs.js の JOB_BONUS）
 
 // この版のスキル全部。今のⅡの5職ぶんは、今のⅡの並び（＝覚える順）のまま。上位職20職は skillsIchiji.js（2026-10-10）
 // ★職業ごとの並び＝覚える順（CLASS LV1・5・10・15・20 の5つ → CLASS LV25・30 の LATE_SKILLS）
 export const SKILLS = [
-  ...V2_SKILLS.filter(s => KEEP_FROM_V2.includes(s.cls)).map(s => tunedShoki(ELEM_OF_V2[s.name] ? { ...s, elem: ELEM_OF_V2[s.name] } : s)),
-  ...NEW_SKILLS.map(tunedShoki),
-  ...LATE_SKILLS.map(tunedShoki),
+  ...V2_SKILLS.filter(s => KEEP_FROM_V2.includes(s.cls)).map(s => (ELEM_OF_V2[s.name] ? { ...s, elem: ELEM_OF_V2[s.name] } : s)),
+  ...NEW_SKILLS,
+  ...LATE_SKILLS,
   ...ICHIJI_SKILLS,
 ]
 export const SKILL_BY_NAME = Object.fromEntries(SKILLS.map(s => [s.name, s]))
