@@ -173,7 +173,9 @@ export const JOB_BONUS = {
   // 【確定】2026-10-14 ユーザー承認：槍使い・剣士はHPが低く、ボス戦で平均の約9割・対人で2〜3割だった＝DEX・AGIからVIT・HPへ（合計232のまま）
   槍使い:   { str:64, dex:50, vit:38, agi:30, hp:26, mp:16, luk:8 },         // STR・DEX（＋VIT）
   格闘家:   { str:64, agi:61, hp:35, vit:29, dex:19, mp:16, luk:8 },         // STR・AGI（＋HP）
-  盗賊:     { agi:67, str:51, dex:40, luk:29, hp:19, vit:13, mp:13 },        // AGI・STR（＋DEX）
+  // 【確定】2026-10-15 ユーザー選択：盗賊は LUK29→19・STR51→61（合計232のまま）。対人の勝率が74〜75%で初期職で飛び抜けていた。
+  //   元はLUKの多さ＝クリティカルの出やすさ（技の倍率を−5%しても72%まで）。SQL の bonus_seq と盗賊のアセンションの盤面も変わる（印 touzoku_luk_20261015）
+  盗賊:     { agi:67, str:61, dex:40, luk:19, hp:19, vit:13, mp:13 },        // AGI・STR（＋DEX）
   弓使い:   { agi:64, dex:56, str:48, hp:19, luk:19, vit:13, mp:13 },        // AGI・DEX・STR
   銃士:     { dex:72, agi:48, str:40, luk:24, hp:19, mp:16, vit:13 },        // DEX・AGI（＋STR）
   //   剣士は案の DEX45・AGI42 だと「高い2〜3種」（48点以上）が STR だけになるので DEX48・AGI39 にした

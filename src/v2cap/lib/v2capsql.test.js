@@ -819,3 +819,15 @@ test('【確定】2026-10-15 上位クラスの作り直しの移し替え（一
   assert.ok(SQL.indexOf(m[0]) > SQL.indexOf("values ('ichiji_roster_20261014');"))
   assert.ok(SQL.indexOf(m[0]) > SQL.indexOf('create or replace function public.v2cap_fill_set('))
 })
+
+test('【確定】2026-10-15 盗賊の配分（LUK29→19・STR+10）の移し替え（一度だけ）：盗賊の盤面だけ空に・編成を収め直す', () => {
+  const m = SQL.match(/if not exists \(select 1 from public\.v2cap_migrations where key = 'touzoku_luk_20261015'\) then([\s\S]*?)insert into public\.v2cap_migrations \(key\) values \('touzoku_luk_20261015'\);/)
+  assert.ok(m, '印つきで一度だけ')
+  const b = m[1]
+  assert.ok(b.includes("where jsonb_typeof(p.ascension) = 'object' and p.ascension ? '盗賊' loop"), '盗賊の盤面がある人だけ')
+  assert.ok(b.includes("v_asc := r.ascension - '盗賊';"), '盗賊の盤面だけ空に（APは CLASS LV から数え直す）')
+  assert.ok(b.includes("public.v2cap_fit_set(j.v, j.cls, coalesce(r.learned, '[]'::jsonb), v_max)"), '最大MPが減ったぶん編成を収める')
+  // 種（v2cap_classes.bonus_seq）より後ろ・前の移し替えより後ろに置く
+  assert.ok(SQL.indexOf(m[0]) > SQL.indexOf('insert into public.v2cap_classes'))
+  assert.ok(SQL.indexOf(m[0]) > SQL.indexOf("values ('ichiji_rework_20261015');"))
+})

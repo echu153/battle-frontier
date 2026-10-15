@@ -73,12 +73,19 @@ test('2026-10-15 測って直した仕組みの数字（強さの元を先に直
   assert.deepEqual(passiveOf('忍者').passive, { cloneFollow: 0.1, noCloneAgi: 10, cloneGuard: 10 })
   assert.deepEqual(v('毒霧の術').ails, [{ key: 'poison', chance: 40 }, { key: 'blind', chance: 20 }])
   assert.equal(v('毒霧の術').desc, '40%で毒・20%で暗闇')
-  assert.deepEqual([v('骸骨召喚').summon.mult, v('レイズデッド').summon.mult, v('ソウルハーヴェスト').perStackAdd.addMult], [0.35, 0.35, 0.2])
+  // 死霊使い：召喚 ×0.35→×0.3（2026-10-15「クラス間の格差」・対人73〜74%）
+  assert.deepEqual([v('骸骨召喚').summon.mult, v('レイズデッド').summon.mult, v('ソウルハーヴェスト').perStackAdd.addMult], [0.3, 0.3, 0.2])
+  assert.ok(v('骸骨召喚').desc.includes('×0.3で攻撃'))
   assert.equal(passiveOf('死霊使い').passive.guardPerStack.cut, 4)
   assert.equal(v('仙丹').buff.self.str, 10)
   assert.equal(v('リザレクション').revive.pct, 35)
   assert.deepEqual(['ジャンプ', 'ハイジャンプ', '天竜落とし'].map(n => v(n).jump.evade), [40, 40, 40])
   assert.equal(v('秘剣・叢雲').stanceMult, 1.7)
+  // 2026-10-15「クラス間の格差が出すぎないように」：侍 明鏡止水 STR+20%・DEX+15%／ストームランサー コンボ1つにつき+2%
+  assert.deepEqual(v('明鏡止水').buff.self, { str: 20, dex: 15 })
+  assert.equal(v('明鏡止水').desc, 'STR+20%・DEX+15%（重ねがけ可）。納刀状態になる')
+  assert.deepEqual(passiveOf('ストームランサー').passive.combo, { max: 20, pct: 2 })
+  assert.ok(passiveOf('ストームランサー').desc.includes('与ダメージ+2%'))
   // 跳躍の技の倍率（説明用の mult）と着地の倍率は同じ
   for (const n of ['ジャンプ', 'ハイジャンプ', '天竜落とし']) assert.equal(v(n).mult, v(n).jump.mult, n)
 })

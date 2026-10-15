@@ -68,11 +68,12 @@ test('二の太刀：直前の技を納刀中に撃っていれば威力+25%・�
   assert.deepEqual(after.me.stance, STANCE)
   assert.equal(plain.me.stance, null)
 })
-test('明鏡止水：STR+30%・DEX+20%に加えて納刀状態になる', () => {
+test('明鏡止水：STRとDEXが上がり、納刀状態になる（2026-10-15 STR+30%・DEX+20%→STR+20%・DEX+15%＝名簿から読む）', () => {
   const me = side('侍', '侍', ['明鏡止水'])
   takeAction(me, dummy(), mid, [])
   assert.deepEqual(me.stance, STANCE)
-  assert.deepEqual([me.buffs.str, me.buffs.dex], [30, 20])
+  const up = SKILL_BY_NAME['明鏡止水'].buff.self
+  assert.deepEqual([me.buffs.str, me.buffs.dex], [up.str, up.dex])
 })
 
 // ===== 魔法剣士【属性の宿り】=====
@@ -208,8 +209,9 @@ test('嵐の構え：1ヒットでコンボ+2／テンペストランス：コ�
   assert.equal(me.combo, 6)
   const full = hit('ストームランサー', 'テンペストランス', (m) => { m.combo = 20 })
   const zero = hit('ストームランサー', 'テンペストランス')
-  // コンボ20＝技の+60%と、槍の型の与ダメージ+20%
-  assert.ok(near(full.dmg / zero.dmg, 1.6 * 1.2), `${full.dmg} ／ ${zero.dmg}`)
+  // コンボ20＝技の+60%と、槍の型の与ダメージ（コンボ1につき+2%＝2026-10-15 に+1%から・名簿から読む）
+  const pct = passiveOf('ストームランサー').passive.combo.pct
+  assert.ok(near(full.dmg / zero.dmg, 1.6 * (1 + 20 * pct / 100)), `${full.dmg} ／ ${zero.dmg}`)
 })
 
 // ===== 体術師【回避と反撃】=====

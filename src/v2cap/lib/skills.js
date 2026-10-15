@@ -101,12 +101,24 @@ export const LATE_SKILLS = [
 // 魔法の属性（魔導士の元素共鳴が「直前と違う属性」を見る）。今のⅡの魔法使いの技は今のⅡの名簿を書き換えず、写しに付ける
 export const ELEM_OF_V2 = { ファイア:'fire', サンダー:'thunder', アイスランス:'ice' }
 
+// ★初期職の攻撃の技の倍率（名簿の値×これ・小数2桁）。2026-10-15 職業どうしの差を詰めた
+//   （ユーザー「PVEはあとで調整するから、クラス間の格差が出すぎないようにだけして」）。
+//   弓使い 1.08・槍使い 1.05 … 対人の勝率が25〜30%と低かった（ボス戦も93〜98）。回避を緩めたあと、よけて耐えていたぶんが減った
+//   ⚠今のⅡから持ってきた技（弓使いの狙撃など）は写しに掛ける＝今のⅡの名簿は書き換えない
+export const SHOKI_TUNE = { 弓使い: 1.08, 槍使い: 1.05 }
+const round2 = (v) => Math.round(v * 100) / 100
+const tunedShoki = (s) => {
+  const k = SHOKI_TUNE[s.cls]
+  if (!k || (s.kind !== 'phys' && s.kind !== 'mag')) return s
+  return { ...s, mult: round2(s.mult * k), ...(s.add ? { add: s.add.map(a => ({ ...a, rate: round2(a.rate * k) })) } : {}) }
+}
+
 // この版のスキル全部。今のⅡの5職ぶんは、今のⅡの並び（＝覚える順）のまま。上位職20職は skillsIchiji.js（2026-10-10）
 // ★職業ごとの並び＝覚える順（CLASS LV1・5・10・15・20 の5つ → CLASS LV25・30 の LATE_SKILLS）
 export const SKILLS = [
-  ...V2_SKILLS.filter(s => KEEP_FROM_V2.includes(s.cls)).map(s => (ELEM_OF_V2[s.name] ? { ...s, elem: ELEM_OF_V2[s.name] } : s)),
-  ...NEW_SKILLS,
-  ...LATE_SKILLS,
+  ...V2_SKILLS.filter(s => KEEP_FROM_V2.includes(s.cls)).map(s => tunedShoki(ELEM_OF_V2[s.name] ? { ...s, elem: ELEM_OF_V2[s.name] } : s)),
+  ...NEW_SKILLS.map(tunedShoki),
+  ...LATE_SKILLS.map(tunedShoki),
   ...ICHIJI_SKILLS,
 ]
 export const SKILL_BY_NAME = Object.fromEntries(SKILLS.map(s => [s.name, s]))
