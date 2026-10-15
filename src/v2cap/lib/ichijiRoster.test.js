@@ -151,3 +151,10 @@ test('【確定】魔銃士：技は物理と魔法の両方（STRとINTが半�
   assert.ok(JOB_BONUS.魔銃士.luk >= 30 && JOB_BONUS.魔銃士.hp >= 60, '2026-10-14 HPとLUKを足した（前はLUK0・HP40）')
   assert.equal(attackKindOf('魔銃士'), 'phys', 'ユーザー決定：通常攻撃は物理（STR）のまま')
 })
+
+test('【確定】2026-10-16 ユーザー「○○の切り札とか○○の奥義みたいな括り入らない」：技の説明に「切り札」「奥義」を書かない', () => {
+  for (const s of ICHIJI_SKILLS) assert.ok(!/切り札|奥義/.test(s.desc || ''), `${s.name}：${s.desc}`)
+  // リピートが繰り返せない技は名前で書く
+  assert.ok(SKILL_BY_NAME['リピート'].desc.includes('直前がクロノブレイク・パラドックス・クイック・リピートのときは繰り返さず'))
+  assert.deepEqual(ICHIJI_SKILLS.filter(s => s.noRepeatTarget).map(s => s.name), ['クロノブレイク', 'パラドックス'])
+})
