@@ -116,7 +116,12 @@ export const ascKindOf = (skill) => {
 //   ail   … 状態異常を付ける攻撃の技は、威力の代わりに**状態異常の確率+15ポイント**（ユーザーが選んだ・上限100%）。
 //           付ける所＝ail・ails（1発ごとも）・跳躍の着地（天竜落とし）・宿りを消したときの付与（マナバースト）。
 //           もう100%の技（火刑・裂傷）は上げても変わらないので威力のまま。補助の技（罠・ストップなど）はバフのマスのまま
+//   【確定】2026-10-16 ユーザー「案の通りいれる」（状態異常の無い攻撃の技は、今ある効果を伸ばす。ほかはこれまで通り威力+20%）：
+//   defPen … 防御無視+10%（例：鎧通し 50%→60%）／debuff … 相手の能力ダウンの下げ幅+5%（薙ぎ払い AGI−15%→−20%）／
+//   drain … 吸収+10%（生命吸収 25%→35%）／dispel … 相手の強化を消す確率+15%（盗み取る 40%→55%・もう100%の聖水・異端の烙印は威力）／
+//   critMult … クリティカル時のダメージ+0.1（絶影狙撃 ×1.3→×1.4）。同じ技に2つあるときは上の並び（状態異常が先）
 export const ASC_AIL_UP = 15
+export const ASC_EFFECT_UP = { ail: ASC_AIL_UP, defPen: 10, debuff: 5, drain: 10, dispel: 15, critMult: 10 }
 const ailChancesOf = (s) => [
   ...(s?.ail ? [s.ail.chance] : []),
   ...((s?.ails || []).map(a => a.chance)),
@@ -125,13 +130,20 @@ const ailChancesOf = (s) => [
 ]
 export const ascTypeOf = (skill) => {
   if (ascKindOf(skill) !== 'attack') return null
-  return ailChancesOf(skill).some(c => c < 100) ? 'ail' : 'power'
+  if (ailChancesOf(skill).some(c => c < 100)) return 'ail'
+  if (skill.defPen > 0 && skill.defPen < 1) return 'defPen'
+  if (Object.values(skill.buff?.enemy || {}).some(v => v)) return 'debuff'
+  if (skill.drain > 0) return 'drain'
+  if (skill.dispel && (skill.dispel.chance ?? 100) < 100) return 'dispel'
+  if (skill.critMult > 0) return 'critMult'
+  return 'power'
 }
 export const ascUpOf = (name) => {
   const s = SKILL_BY_NAME[name]
   const k = ascKindOf(s)
   if (!k) return 0
-  return ASC_SKILL_UP[name] ?? (ascTypeOf(s) === 'ail' ? ASC_AIL_UP : ASC_UP_DEFAULT[k])
+  const type = ascTypeOf(s)
+  return ASC_SKILL_UP[name] ?? (type && type !== 'power' ? ASC_EFFECT_UP[type] : ASC_UP_DEFAULT[k])
 }
 // 状態異常の確率を n ポイント上げた形（上限100%）
 const plusPct = (c, n) => Math.min(100, c + n)
@@ -173,9 +185,19 @@ const round3 = (v) => Math.round(v * 1000) / 1000
 export const ascendSkill = (skill, up = ascUpOf(skill?.name)) => {
   const kind = ascKindOf(skill)
   if (!kind || !up) return skill
-  // ★状態異常の型は今の上がり幅より大きくしない（塔の守護者の姿が、型を変える前の上がり幅＝威力20を持っていても+15に収める）
-  if (kind === 'attack' && ascTypeOf(skill) === 'ail') return raiseAil(skill, Math.min(up, ASC_SKILL_UP[skill.name] ?? ASC_AIL_UP))
-  if (kind === 'attack') return { ...skill, ascDmg: (skill.ascDmg || 0) + up }
+  if (kind === 'attack') {
+    const type = ascTypeOf(skill)
+    if (type === 'power') return { ...skill, ascDmg: (skill.ascDmg || 0) + up }
+    // ★効果の型は今の上がり幅より大きくしない（塔の守護者の姿が、型を変える前の上がり幅＝威力20を持っていても型の値に収める）
+    const n = Math.min(up, ASC_SKILL_UP[skill.name] ?? ASC_EFFECT_UP[type])
+    if (type === 'ail') return raiseAil(skill, n)
+    if (type === 'defPen') return { ...skill, defPen: round3(Math.min(1, skill.defPen + n / 100)) }
+    if (type === 'debuff') return { ...skill, buff: { ...skill.buff, enemy: Object.fromEntries(Object.entries(skill.buff.enemy).map(([k, v]) => [k, v < 0 ? v - n : v + n])) } }
+    if (type === 'drain') return { ...skill, drain: round3(skill.drain + n / 100) }
+    if (type === 'dispel') return { ...skill, dispel: { ...skill.dispel, chance: plusPct(skill.dispel.chance ?? 100, n) } }
+    if (type === 'critMult') return { ...skill, critMult: round3(skill.critMult + n / 100) }
+    return skill
+  }
   if (kind === 'heal') return { ...skill, ascHeal: (skill.ascHeal || 0) + up }
   if (kind === 'count') {
     const c = ASC_COUNT_UP[skill.name]
@@ -198,11 +220,16 @@ export const ascendSkill = (skill, up = ascUpOf(skill?.name)) => {
 // ===== 文 =====
 const STAT_LABEL = (k) => STAT_DEFS[k]?.label || k
 const signed = (v) => (v < 0 ? `−${-v}` : `+${v}`)
+// 攻撃の技のマスの型ごとの短い文
+const ASC_SHORT = {
+  power: (up) => `威力+${up}%`, ail: (up) => `確率+${up}%`, defPen: (up) => `防御無視+${up}%`, debuff: (up) => `下げ幅+${up}%`,
+  drain: (up) => `吸収+${up}%`, dispel: (up) => `解除+${up}%`, critMult: (up) => `クリダメ+${up}%`,
+}
 // スキルマスの短い文（木のマスに出す2行目）
 export const ascSkillShort = (name) => {
   const kind = ascKindOf(SKILL_BY_NAME[name])
   const up = ascUpOf(name)
-  if (kind === 'attack') return ascTypeOf(SKILL_BY_NAME[name]) === 'ail' ? `確率+${up}%` : `威力+${up}%`
+  if (kind === 'attack') return ASC_SHORT[ascTypeOf(SKILL_BY_NAME[name])](up)
   if (kind === 'heal') return `回復量+${up}%`
   if (kind === 'count') return `${ASC_COUNT_UP[name].unit === 'ターン' ? 'ターン' : '回数'}+${up}`
   // バフは上がり幅を合計で足す（ユーザーの言い方「合計10%上昇」。1.1倍と読み違えないように「効果+」にはしない）
@@ -226,7 +253,17 @@ export const ascSkillDetail = (name) => {
     ]
     return pairs.map(([l, b, c]) => `${l} ${b}%→${c}%`).join('・') + (s.ailPerHit ? '（1発ごと）' : '')
   }
-  if (kind === 'attack') return `威力+${up}%（ダメージ全体）`
+  if (kind === 'attack') {
+    const type = ascTypeOf(s)
+    const a = ascendSkill(s, up)
+    const pct = (v) => `${Math.round(v * 100)}%`
+    if (type === 'defPen') return `防御無視 ${pct(s.defPen)}→${pct(a.defPen)}`
+    if (type === 'debuff') return Object.entries(s.buff.enemy).map(([k, v]) => `相手の${STAT_LABEL(k)}${signed(v)}%→${signed(a.buff.enemy[k])}%`).join('・')
+    if (type === 'drain') return `吸収 ${pct(s.drain)}→${pct(a.drain)}`
+    if (type === 'dispel') return `相手の強化を消す ${s.dispel.chance ?? 100}%→${a.dispel.chance}%`
+    if (type === 'critMult') return `クリティカル時のダメージ ×${s.critMult}→×${a.critMult}`
+    return `威力+${up}%（ダメージ全体）`
+  }
   if (kind === 'heal') return `回復量+${up}%`
   const a = ascendSkill(s, up)
   if (kind === 'count') {

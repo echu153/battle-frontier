@@ -393,3 +393,29 @@ test('【確定】2026-10-15 状態異常を付ける攻撃の技のマスは、
   assert.equal(poisoned(SKILL_BY_NAME['毒矢']), false)
   assert.equal(poisoned(A.ascendSkill(SKILL_BY_NAME['毒矢'])), true)
 })
+
+test('【確定】2026-10-16 状態異常の無い攻撃の技は、今ある効果を伸ばす（防御無視+10%・下げ幅+5%・吸収+10%・解除+15%・クリティカルのダメージ+0.1）。ほかはこれまで通り威力+20%', async () => {
+  const A = await import('./ascension.js')
+  assert.deepEqual(A.ASC_EFFECT_UP, { ail: 15, defPen: 10, debuff: 5, drain: 10, dispel: 15, critMult: 10 })
+  const type = (n) => A.ascTypeOf(SKILL_BY_NAME[n])
+  assert.deepEqual(['鎧通し', '薙ぎ払い', '生命吸収', '盗み取る', '絶影狙撃', '聖水', '突き', '毒矢', '弱点看破'].map(type),
+    ['defPen', 'debuff', 'drain', 'dispel', 'critMult', 'power', 'power', 'ail', 'debuff'])
+  const up = (n) => A.ascendSkill(SKILL_BY_NAME[n])
+  assert.equal(up('鎧通し').defPen, 0.6)
+  assert.deepEqual(up('腐食液').buff.enemy, { vit: -25, int_stat: -20 })
+  assert.equal(up('生命吸収').drain, 0.35)
+  assert.equal(up('盗み取る').dispel.chance, 55)
+  assert.equal(up('絶影狙撃').critMult, 1.4)
+  assert.equal(up('突き').ascDmg, 20)
+  // 効果の型は威力が上がらない・前の上がり幅（威力20）を持っていても型の値まで
+  assert.equal(up('鎧通し').ascDmg, undefined)
+  assert.equal(A.ascendSkill(SKILL_BY_NAME['盗み取る'], 20).dispel.chance, 55)
+  // 数：状態異常60・効果を伸ばす39・威力112（攻撃の技211）
+  const cnt = {}
+  for (const c of CLASSES) for (const s of skillsOf(c.id)) { const t = A.ascTypeOf(s); if (t) cnt[t] = (cnt[t] || 0) + 1 }
+  assert.deepEqual(cnt, { power: 112, ail: 60, defPen: 16, debuff: 15, drain: 5, dispel: 2, critMult: 1 })
+  // 文
+  assert.equal(A.ascSkillShort('鎧通し'), '防御無視+10%')
+  assert.equal(A.ascSkillDetail('薙ぎ払い'), '相手のAGI−15%→−20%')
+  assert.equal(A.ascSkillDetail('絶影狙撃'), 'クリティカル時のダメージ ×1.3→×1.4')
+})
