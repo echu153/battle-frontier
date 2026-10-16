@@ -73,12 +73,15 @@ export const ASC_COUNT_UP = {
   照準:       { key: 'gain',         field: 'n',     label: '1回で増える照準',   unit: '' },
   弾帯換装:   { key: 'gain',         field: 'n',     label: '1回で増える装填',   unit: '' },
   詠唱:       { key: 'resoGain',     field: null,    label: '1回で増える共鳴',   unit: '' },
+  // 2026-10-16 ユーザーがスキル一覧のシートで書いた（ブラッディロア「4ターン→5ターン」・狂鬼化「3ターン→4ターン」）
+  ブラッディロア: { key: 'lifeSteal', field: 'turns', label: '続くターン',      unit: 'ターン' },
+  狂鬼化:         { key: 'berserk',   field: 'turns', label: '続くターン',      unit: 'ターン' },
 }
 // ステの表を持たないバフの「上がり幅」（%の数）。上から見て最初に持っているものに足す。
 // scale … 1点の大きさ（召喚の倍率は ×0.25＝25% の形なので 0.01）
 export const ASC_BUFF_PARAMS = [
   { key: 'guard',       field: 'cut',  label: '受けるダメージ', sign: -1, scale: 1 },    // 受け止め・気の鎧・陰陽結界・祈りの結界
-  { key: 'lifeSteal',   field: 'pct',  label: '与えたダメージの吸収', sign: 1, scale: 1 }, // ブラッディロア
+  // ★ブラッディロア（吸収+10%）と狂鬼化（払うHP−10%）は 2026-10-16 に「続くターン+1」へ（ASC_COUNT_UP・ユーザーがシートで書いた）
   { key: 'endure',      field: 'pct',  label: '返すダメージ',   sign: 1, scale: 1 },     // 忍耐
   { key: 'dodgeBoost',  field: 'pct',  label: '回避したあとの威力', sign: 1, scale: 1 }, // 流水の構え
   { key: 'summonBoost', field: 'pct',  label: '召喚の攻撃力',   sign: 1, scale: 1 },     // 死の行軍
@@ -89,7 +92,6 @@ export const ASC_BUFF_PARAMS = [
   { key: 'stance',      field: 'proc', label: '次の技の発動率', sign: 1, scale: 1 },     // 納刀（+20%→+30%）
   { key: 'bigGuard',    field: 'cut',  label: '1ターンの受けるダメージ', sign: -1, scale: 1 }, // 大防御（−60%→−70%）
   // 2026-10-15 上位クラスの作り直し（チャット版の設計）で入った技。neg … 値を小さくする向きに足す（相手のAGI−20%→−30%・MP×0.5→×0.4）
-  { key: 'lastStand',   field: 'costCut', label: '耐えるまでに払うHP', sign: -1, scale: 1 },  // 狂鬼化（−50%→−60%）
   { key: 'vow',         field: 'cut',  label: '受けるダメージ', sign: -1, scale: 1 },     // 不動の誓い（−15%→−25%）
   { key: 'soar',        field: 'land', label: '着地ダメージ',   sign: 1, scale: 1 },      // 竜翔（+20%→+30%）
   { key: 'counterBoost', field: 'pct', label: '回避したときの反撃の威力', sign: 1, scale: 1 }, // 後の先（+60%→+70%）
@@ -113,14 +115,21 @@ export const ascKindOf = (skill) => {
 }
 // ===== 攻撃の技のマスの型（2026-10-15 ユーザー選択「技ごとに型を決める」）=====
 //   power … 威力+（ASC_UP_DEFAULT.attack＝20%）
-//   ail   … 状態異常を付ける攻撃の技は、威力の代わりに**状態異常の確率+15ポイント**（ユーザーが選んだ・上限100%）。
+//   ail   … 状態異常を付ける攻撃の技は、威力の代わりに**状態異常の確率+**（上限100%）。2026-10-15 は一律+15ポイント→
+//           2026-10-16 から状態異常ごと（下の ASC_AIL_UP_BY：毒+15〜麻痺+3）。
 //           付ける所＝ail・ails（1発ごとも）・跳躍の着地（天竜落とし）・宿りを消したときの付与（マナバースト）。
+//   custom … 技ごとの特別なマス（下の ASC_CUSTOM・ユーザーがシートで書いたもの）。どの型より先に見る
 //           もう100%の技（火刑・裂傷）は上げても変わらないので威力のまま。補助の技（罠・ストップなど）はバフのマスのまま
 //   【確定】2026-10-16 ユーザー「案の通りいれる」（状態異常の無い攻撃の技は、今ある効果を伸ばす。ほかはこれまで通り威力+20%）：
 //   defPen … 防御無視+10%（例：鎧通し 50%→60%）／debuff … 相手の能力ダウンの下げ幅+5%（薙ぎ払い AGI−15%→−20%）／
 //   drain … 吸収+10%（生命吸収 25%→35%）／dispel … 相手の強化を消す確率+15%（盗み取る 40%→55%・もう100%の聖水・異端の烙印は威力）／
 //   critMult … クリティカル時のダメージ+0.1（絶影狙撃 ×1.3→×1.4）。同じ技に2つあるときは上の並び（状態異常が先）
-export const ASC_AIL_UP = 15
+// 【確定】2026-10-16 ユーザー「麻痺とか8%でしょう？それに+15%はおかしいから状態異常によって増える%変えて」：
+//   上がる確率は状態異常ごと。もとの確率が高くて効き目の軽いもの（毒・火傷・出血・鈍足）は大きく、
+//   低くて重いもの（1ターン止める麻痺・技を封じる封印・技がでたらめになる狂乱）は小さく
+export const ASC_AIL_UP_BY = { poison: 15, burn: 15, bleed: 15, slow: 15, blind: 10, curse: 10, weaken: 10, fear: 10, seal: 5, frenzy: 5, paralyze: 3 }
+export const ASC_AIL_UP_OTHER = 10   // 表に無い状態異常・宿りを消したときの付与（マナバースト＝属性で火傷・麻痺・鈍足が変わるので真ん中）
+export const ASC_AIL_UP = Math.max(...Object.values(ASC_AIL_UP_BY))   // いちばん大きい上がり幅（前の一律の+15と同じ）
 export const ASC_EFFECT_UP = { ail: ASC_AIL_UP, defPen: 10, debuff: 5, drain: 10, dispel: 15, critMult: 10 }
 const ailChancesOf = (s) => [
   ...(s?.ail ? [s.ail.chance] : []),
@@ -128,8 +137,63 @@ const ailChancesOf = (s) => [
   ...(s?.jump?.ail ? [s.jump.ail.chance] : []),
   ...(s?.consumeImbue?.ailChance ? [s.consumeImbue.ailChance] : []),
 ]
+// その技の状態異常ごとの上がり幅（ail・ails・跳躍の着地・宿りの付与の並び）。ASC_SKILL_UP に書いた技は全部その値
+const ailUpOf = (key, name) => ASC_SKILL_UP[name] ?? ASC_AIL_UP_BY[key] ?? ASC_AIL_UP_OTHER
+const ailUpsOf = (s) => [
+  ...(s?.ail ? [ailUpOf(s.ail.key, s.name)] : []),
+  ...((s?.ails || []).map(a => ailUpOf(a.key, s.name))),
+  ...(s?.jump?.ail ? [ailUpOf(s.jump.ail.key, s.name)] : []),
+  ...(s?.consumeImbue?.ailChance ? [ASC_SKILL_UP[s.name] ?? ASC_AIL_UP_OTHER] : []),
+]
+
+// ===== 技ごとの特別なマス（2026-10-16 ユーザーがスキル一覧のシートで書いた）=====
+//   ユーザー「こんなかんじにがっつり能力追加変える効果とかもあって欲しい」。威力や確率の代わりに、その技の効果を足す・変える。
+//   apply … マスを開いた技の形（開いていれば1回だけ効く＝上がり幅の数は見ない）／short・detail … 文
+const round3x = (v) => Math.round(v * 1000) / 1000
+export const ASC_CUSTOM = {
+  // 侍
+  居合斬: {
+    short: '納刀中のクリ率+20%',
+    detail: (s) => `納刀中のクリティカル率 +${s.whileStance?.crit || 0}%→+${(s.whileStance?.crit || 0) + 20}%`,
+    apply: (s) => ({ ...s, whileStance: { ...s.whileStance, crit: (s.whileStance?.crit || 0) + 20 } }),
+  },
+  納刀: {
+    short: '回避+10%',
+    detail: () => '納刀状態のあいだ（次にスキルを撃つまで）回避率+10%',
+    apply: (s) => ({ ...s, stance: { ...s.stance, eva: (s.stance?.eva || 0) + 10 } }),
+  },
+  明鏡止水: {
+    // ★ユーザーの書いた形：合計+10%を STR と DEX に半分ずつ（大きさの割合で分ける ASC の決まりではなく）
+    short: '合計+10%',
+    detail: (s) => `STR+${s.buff.self.str}%→+${s.buff.self.str + 5}%・DEX+${s.buff.self.dex}%→+${s.buff.self.dex + 5}%`,
+    apply: (s) => ({ ...s, buff: { ...s.buff, self: { ...s.buff.self, str: s.buff.self.str + 5, dex: s.buff.self.dex + 5 } } }),
+  },
+  桜花一閃: {
+    short: '納刀中の威力+30%',
+    detail: () => '納刀中に撃つと威力+30%（ダメージ全体）',
+    apply: (s) => ({ ...s, whileStance: { ...s.whileStance, dmg: (s.whileStance?.dmg || 0) + 30 } }),
+  },
+  二の太刀: {
+    short: '発動率+10%',
+    detail: (s) => `発動率 ${s.proc}%→${Math.min(100, s.proc + 10)}%`,
+    apply: (s) => ({ ...s, proc: Math.min(100, s.proc + 10) }),
+  },
+  '秘剣・叢雲': {
+    short: '納刀中の倍率+0.2',
+    detail: (s) => `納刀中の威力 ×${s.stanceMult}→×${round3x(s.stanceMult + 0.2)}`,
+    apply: (s) => ({ ...s, stanceMult: round3x((s.stanceMult ?? 1.5) + 0.2) }),
+  },
+  // 狂戦士
+  ブラッドサクリファイス: {
+    short: '払うHP+3%・追加+10%',
+    detail: (s) => `払うHP 最大HPの${s.hpCostMax.pct}%→${s.hpCostMax.pct + 3}%・追加ダメージ 払ったHPの${Math.round(s.paidDmg * 100)}%→${Math.round(s.paidDmg * 100) + 10}%`,
+    apply: (s) => ({ ...s, hpCostMax: { ...s.hpCostMax, pct: s.hpCostMax.pct + 3 }, paidDmg: round3x(s.paidDmg + 0.1) }),
+  },
+}
+
 export const ascTypeOf = (skill) => {
   if (ascKindOf(skill) !== 'attack') return null
+  if (ASC_CUSTOM[skill.name]) return 'custom'
   if (ailChancesOf(skill).some(c => c < 100)) return 'ail'
   if (skill.defPen > 0 && skill.defPen < 1) return 'defPen'
   if (Object.values(skill.buff?.enemy || {}).some(v => v)) return 'debuff'
@@ -142,18 +206,24 @@ export const ascUpOf = (name) => {
   const s = SKILL_BY_NAME[name]
   const k = ascKindOf(s)
   if (!k) return 0
+  if (ASC_CUSTOM[name]) return 1
   const type = ascTypeOf(s)
+  // 状態異常の型は、その技の状態異常の上がり幅のいちばん大きい値（1つずつの値は ascendSkill が状態異常ごとに見る）
+  if (type === 'ail') return Math.max(...ailUpsOf(s))
   return ASC_SKILL_UP[name] ?? (type && type !== 'power' ? ASC_EFFECT_UP[type] : ASC_UP_DEFAULT[k])
 }
-// 状態異常の確率を n ポイント上げた形（上限100%）
+// 状態異常の確率を状態異常ごとの上がり幅だけ上げた形（上限100%）。cap … マスの上がり幅（塔の守護者の姿が前の+15・威力20を持っていても、状態異常ごとの値まで）
 const plusPct = (c, n) => Math.min(100, c + n)
-const raiseAil = (s, n) => ({
-  ...s,
-  ...(s.ail ? { ail: { ...s.ail, chance: plusPct(s.ail.chance, n) } } : {}),
-  ...(s.ails ? { ails: s.ails.map(a => ({ ...a, chance: plusPct(a.chance, n) })) } : {}),
-  ...(s.jump?.ail ? { jump: { ...s.jump, ail: { ...s.jump.ail, chance: plusPct(s.jump.ail.chance, n) } } } : {}),
-  ...(s.consumeImbue?.ailChance ? { consumeImbue: { ...s.consumeImbue, ailChance: plusPct(s.consumeImbue.ailChance, n) } } : {}),
-})
+const raiseAil = (s, cap = Infinity) => {
+  const n = (key) => Math.min(cap, ailUpOf(key, s.name))
+  return {
+    ...s,
+    ...(s.ail ? { ail: { ...s.ail, chance: plusPct(s.ail.chance, n(s.ail.key)) } } : {}),
+    ...(s.ails ? { ails: s.ails.map(a => ({ ...a, chance: plusPct(a.chance, n(a.key)) })) } : {}),
+    ...(s.jump?.ail ? { jump: { ...s.jump, ail: { ...s.jump.ail, chance: plusPct(s.jump.ail.chance, n(s.jump.ail.key)) } } } : {}),
+    ...(s.consumeImbue?.ailChance ? { consumeImbue: { ...s.consumeImbue, ailChance: plusPct(s.consumeImbue.ailChance, Math.min(cap, ASC_SKILL_UP[s.name] ?? ASC_AIL_UP_OTHER)) } } : {}),
+  }
+}
 
 // 合計 total を表の値の大きさの割合で分ける（整数・端数は余りの大きい順＝同じなら表の並びの先）。符号は元の値に合わせる
 export const splitUp = (table, total) => {
@@ -185,12 +255,15 @@ const round3 = (v) => Math.round(v * 1000) / 1000
 export const ascendSkill = (skill, up = ascUpOf(skill?.name)) => {
   const kind = ascKindOf(skill)
   if (!kind || !up) return skill
+  // ★技ごとの特別なマス（2026-10-16）：開いていれば1回だけ（前の型の上がり幅を持つ塔の守護者の姿でも同じ形）
+  if (ASC_CUSTOM[skill.name]) return ASC_CUSTOM[skill.name].apply(skill)
   if (kind === 'attack') {
     const type = ascTypeOf(skill)
     if (type === 'power') return { ...skill, ascDmg: (skill.ascDmg || 0) + up }
+    // ★状態異常は状態異常ごとの上がり幅（up は上限として見る＝塔の守護者の姿が前の+15・威力20を持っていても今の値まで）
+    if (type === 'ail') return raiseAil(skill, up)
     // ★効果の型は今の上がり幅より大きくしない（塔の守護者の姿が、型を変える前の上がり幅＝威力20を持っていても型の値に収める）
     const n = Math.min(up, ASC_SKILL_UP[skill.name] ?? ASC_EFFECT_UP[type])
-    if (type === 'ail') return raiseAil(skill, n)
     if (type === 'defPen') return { ...skill, defPen: round3(Math.min(1, skill.defPen + n / 100)) }
     if (type === 'debuff') return { ...skill, buff: { ...skill.buff, enemy: Object.fromEntries(Object.entries(skill.buff.enemy).map(([k, v]) => [k, v < 0 ? v - n : v + n])) } }
     if (type === 'drain') return { ...skill, drain: round3(skill.drain + n / 100) }
@@ -201,8 +274,10 @@ export const ascendSkill = (skill, up = ascUpOf(skill?.name)) => {
   if (kind === 'heal') return { ...skill, ascHeal: (skill.ascHeal || 0) + up }
   if (kind === 'count') {
     const c = ASC_COUNT_UP[skill.name]
-    if (c.field == null) return { ...skill, [c.key]: (skill[c.key] || 0) + up }
-    return { ...skill, [c.key]: { ...skill[c.key], [c.field]: (skill[c.key]?.[c.field] || 0) + up } }
+    // ★回数・ターンは今の上がり幅まで（ブラッディロア・狂鬼化は 2026-10-16 にバフの「合計+10」から変わった＝塔の守護者の姿の10を+10ターンにしない）
+    const n = Math.min(up, ASC_SKILL_UP[skill.name] ?? ASC_UP_DEFAULT.count)
+    if (c.field == null) return { ...skill, [c.key]: (skill[c.key] || 0) + n }
+    return { ...skill, [c.key]: { ...skill[c.key], [c.field]: (skill[c.key]?.[c.field] || 0) + n } }
   }
   const ents = buffEntries(skill)
   if (ents.length) {
@@ -229,6 +304,12 @@ const ASC_SHORT = {
 export const ascSkillShort = (name) => {
   const kind = ascKindOf(SKILL_BY_NAME[name])
   const up = ascUpOf(name)
+  if (kind && ASC_CUSTOM[name]) return ASC_CUSTOM[name].short
+  if (kind === 'attack' && ascTypeOf(SKILL_BY_NAME[name]) === 'ail') {
+    // 状態異常ごとの上がり幅（同じなら1つ。違えば並べる＝毒霧の術「確率+15%・+10%」）
+    const ns = [...new Set(ailUpsOf(SKILL_BY_NAME[name]))]
+    return `確率${ns.map(n => `+${n}%`).join('・')}`
+  }
   if (kind === 'attack') return ASC_SHORT[ascTypeOf(SKILL_BY_NAME[name])](up)
   if (kind === 'heal') return `回復量+${up}%`
   if (kind === 'count') return `${ASC_COUNT_UP[name].unit === 'ターン' ? 'ターン' : '回数'}+${up}`
@@ -242,6 +323,7 @@ export const ascSkillDetail = (name) => {
   const kind = ascKindOf(s)
   const up = ascUpOf(name)
   if (!kind) return ''
+  if (ASC_CUSTOM[name]) return ASC_CUSTOM[name].detail(s)
   if (kind === 'attack' && ascTypeOf(s) === 'ail') {
     // 例「毒 70%→85%・暗闇 20%→35%」（宿りの付与は属性で変わるので「宿りの属性の状態異常」）
     const a = ascendSkill(s, up)

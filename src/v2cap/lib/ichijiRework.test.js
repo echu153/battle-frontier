@@ -2,8 +2,8 @@
 // 設計：https://claude.ai/artifact/DvAQoMxY6sChec3wQhsFBE ・ docs/v2cap-design.md §4
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createSide, takeAction, liveStats } from '../../v2/lib/battle.js'
-import { tickIchiji } from '../../v2/lib/battleIchiji.js'
+import { createSide, takeAction, liveStats, tickForesight, tickAil, tickRegen } from '../../v2/lib/battle.js'
+import { tickIchiji, gainHp } from '../../v2/lib/battleIchiji.js'
 import { inflict, hasAilment } from '../../v2/lib/ailments.js'
 import { SKILL_BY_NAME, passiveOf } from './skills.js'
 import { attackKindOf } from './jobs.js'
@@ -120,22 +120,71 @@ test('トリニティブレイド：炎→氷→雷の順に各段の追加効�
 })
 
 // ===== 狂戦士【HPを払う】=====
-test('HPを払う：マッドラッシュは最大HPの3%・狂鬼化で耐えるまでは半分（倒れるダメージを1度だけHP1で耐える）', () => {
+test('HPを払う：マッドラッシュは最大HPの3%', () => {
   const me = side('狂', '狂戦士', ['マッドラッシュ'])
   takeAction(me, dummy(), mid, [])
   assert.equal(me.base.hp - me.hp, 300)
-  const me2 = side('狂2', '狂戦士', ['狂鬼化', 'マッドラッシュ'])
-  takeAction(me2, dummy(), mid, [])
-  assert.equal(me2.lastStand, true)
-  takeAction(me2, dummy(), mid, [])
-  assert.equal(me2.base.hp - me2.hp, 150, '払うHPが半分')
-  // 倒れるダメージ → HP1で耐える（1回だけ）
-  const big = side('巨', '戦士', [], { stats: { str: 100000 } })
+})
+test('【確定】2026-10-16 狂鬼化（ユーザーがシートで書き直した）：HPが1になる・3ターンHPが1より下がらない・回復を受けない・STR+50%（バトル中1回）', () => {
+  const me = side('狂', '狂戦士', ['狂鬼化', 'マッドラッシュ'])
+  const str0 = liveStats(me).str
   const log = []
-  takeAction(big, me2, mid, log)
-  assert.equal(me2.hp, 1)
-  assert.equal(me2.lastStand, false)
-  assert.ok(log.some(l => l.type === 'lastStand'))
+  takeAction(me, dummy(), mid, log)
+  assert.equal(me.hp, 1, 'HPが1になる')
+  assert.deepEqual(me.berserk, { turns: 3 })
+  assert.ok(log.some(l => l.type === 'berserkUp' && l.turns === 3 && l.str === 50))
+  assert.ok(near(liveStats(me).str / str0, 1.5), 'STR+50%')
+  // 倒れるダメージ・毒でもHP1のまま
+  const big = side('巨', '戦士', [], { stats: { str: 100000 } })
+  const l2 = []
+  takeAction(big, me, mid, l2)
+  assert.equal(me.hp, 1)
+  assert.ok(l2.some(l => l.type === 'berserkHold'))
+  me.ail.poison = { turns: 3, rate: 0.5 }
+  tickAil(me, [], big)
+  assert.equal(me.hp, 1, '毒でも倒れない')
+  // 回復を受けない（技・ブラッディロアの吸収・毎ターンの回復も gainHp を通る）
+  assert.equal(gainHp(me, 5000), 0)
+  me.regenMax = { pct: 10, turns: 2 }
+  tickRegen(me, [], big)
+  assert.equal(me.hp, 1)
+  // 続いているあいだは撃ち直さない（バトル中1回）
+  takeAction(me, dummy(), mid, [])
+  assert.deepEqual(me.berserk, { turns: 3 }, 'まだ3ターン（ターンの終わりで減る）')
+  // 3ターンの終わりで切れる（STRも戻る）→ 回復を受ける・倒れる
+  for (let i = 0; i < 3; i++) { tickForesight(me); tickIchiji(me) }
+  assert.equal(me.berserk, null)
+  assert.ok(near(liveStats(me).str / str0, 1), 'STRが戻る')
+  delete me.ail.poison
+  assert.ok(gainHp(me, 500) > 0, '切れたら回復を受ける')
+  takeAction(big, me, mid, [])
+  assert.ok(me.hp <= 0, '切れたら倒れる')
+})
+test('【確定】2026-10-16 アセンションの特別なマス：狂鬼化は4ターン・ブラッドサクリファイスは最大HPの15%を払って50%を追加ダメージ', async () => {
+  const { ascendSkill } = await import('./ascension.js')
+  const me = side('狂', '狂戦士', [ascendSkill(S('狂鬼化'))])
+  takeAction(me, dummy(), mid, [])
+  assert.deepEqual(me.berserk, { turns: 4 })
+  const plainSkill = { ...S('ブラッドサクリファイス'), paidDmg: 0 }
+  const asc = ascendSkill(S('ブラッドサクリファイス'))
+  const dmgOf = (skill) => {
+    const m = side('狂', '狂戦士', [skill])
+    const log = []
+    takeAction(m, dummy(), mid, log)
+    return { dmg: log.find(l => l.type === 'skill').damage, paid: m.base.hp - m.hp }
+  }
+  const a = dmgOf(asc)
+  assert.equal(a.paid, 1500, '最大HPの15%')
+  assert.equal(a.dmg - dmgOf({ ...plainSkill, hpCostMax: { pct: 15 } }).dmg, Math.floor(1500 * 0.5))
+})
+test('【確定】2026-10-16 アセンションの特別なマス：桜花一閃は納刀中に威力+30%（納刀していなければ変わらない）', async () => {
+  const { ascendSkill } = await import('./ascension.js')
+  const asc = ascendSkill(S('桜花一閃'))
+  const base = S('桜花一閃')
+  const inStance = (skill) => hit('侍', skill.name === base.name ? base.name : base.name, (me) => { me.slots = [{ skill, uses: 9 }]; me.stance = { ...STANCE } }).dmg
+  const noStance = (skill) => hit('侍', base.name, (me) => { me.slots = [{ skill, uses: 9 }] }).dmg
+  assert.ok(near(inStance(asc) / inStance(base), 1.3), `納刀中 ${inStance(asc)}／${inStance(base)}`)
+  assert.equal(noStance(asc), noStance(base), '納刀していなければ同じ')
 })
 test('ブラッドサクリファイス：払ったHP（最大HPの12%）の40%を防御無視の追加ダメージにする', () => {
   const r = hit('狂戦士', 'ブラッドサクリファイス')

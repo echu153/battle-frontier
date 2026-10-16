@@ -87,3 +87,27 @@ test('【確定】命中しやすい（相手の回避−10%）は、対人で�
   // 説明に「命中しやすい」と書いた技は、全部 hitBonus を持つ（書き忘れ・付け忘れを見つける）
   for (const s of SKILLS) if (s.desc?.includes('命中しやすい')) assert.equal(s.hitBonus, EASY_HIT, s.name)
 })
+
+test('【確定】2026-10-16 納刀のアセンション（ユーザーがシートで書いた「次にスキルを発動するまで回避率+10%」）：技でも通常攻撃でもよけやすい・撃つと消える', async () => {
+  const { ascendSkill } = await import('./ascension.js')
+  const { SKILL_BY_NAME } = await import('./skills.js')
+  const nato = ascendSkill(SKILL_BY_NAME['納刀'])
+  const hit0 = 100 - evasionRate(st({ dex: 100 }), st({ agi: 400 }), 0, 0, 'cap')
+  const hit1 = 100 - evasionRate(st({ dex: 100 }), st({ agi: 400 }), 0, 10, 'cap')
+  const r = (hit0 + hit1) / 2 / 100   // 回避+10なら外れ、なければ当たる乱数
+  const tryHit = (stanceSkill, skill) => {
+    const me = createSide({ name: '撃', cls: null, kind: 'phys', stats: st({ dex: 100 }), noClassBonus: true, passives: [], ...CAP_RULES, slots: skill ? [{ skill, uses: 9 }] : [] })
+    const foe = createSide({ name: '避', cls: null, kind: 'phys', stats: st({ agi: 400 }), noClassBonus: true, passives: [], ...CAP_RULES, slots: [{ skill: stanceSkill, uses: 9 }] })
+    takeAction(foe, me, () => 0, [])   // 納刀を撃って構える
+    const log = []
+    takeAction(me, foe, () => r, log)
+    const e = log.find(l => l.type === 'skill' || l.type === 'normal')
+    return { hit: e.type === 'normal' ? e.hit : e.hits > 0, stance: foe.stance }
+  }
+  // 技（弾）でも通常攻撃でも：アセンションの納刀なら外れる・ふつうの納刀なら当たる
+  assert.equal(tryHit(nato, BALL).hit, false)
+  assert.equal(tryHit(SKILL_BY_NAME['納刀'], BALL).hit, true)
+  assert.equal(tryHit(nato, null).hit, false)
+  assert.equal(tryHit(SKILL_BY_NAME['納刀'], null).hit, true)
+  assert.equal(tryHit(nato, null).stance.eva, 10, '構えているあいだ')
+})

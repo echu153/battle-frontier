@@ -62,14 +62,15 @@
 //   2026-10-15 の作り直しで足したもの …
 //     usesMax                   編成に置ける回数の上限（狂鬼化・ゴスペル・エリクサー＝1・不動の誓い＝2）
 //     stanceMult・noStanceMult  納刀の倍率の上書き（秘剣・叢雲＝納刀中1.8倍・納刀していないと0.8倍）
-//     whileStance {crit}        納刀中ならクリティカル率+（居合斬）
+//     whileStance {crit}        納刀中ならクリティカル率+（居合斬）／dmg＝納刀中は威力+%（桜花一閃のアセンション・2026-10-16）
+//     stance {eva}              納刀状態のあいだ回避率+（納刀のアセンション・2026-10-16）
 //     afterStance {mult, reStance}  直前の技を納刀中に撃っていれば威力×・当てたらもう一度納刀（二の太刀）
 //     imbue                     当てたらその属性が剣に宿る（fire・ice・thunder）／imbueExtend＝宿りの残りターン+
 //     consumeImbue {mult, ailChance}  宿りを消して威力×・その属性の状態異常（マナバースト）
 //     whileImbue {mult}         宿りがあれば威力×（双極斬）／imbueMult＝宿りの追加効果×（エレメンタルエッジ）
 //     hitElems [..]             1発ごとにその属性の追加効果（トリニティブレイド）
 //     paidDmg                   払ったHPのこの割合を追加ダメージ（防御無視・ブラッドサクリファイス）
-//     lastStand {costCut}       次に倒れるダメージを1度だけHP1で耐える・耐えるまで払うHPが−costCut％（狂鬼化＝半分）
+//     berserk {turns, str}      HPを1にする・その間HPが1より下がらず回復を受けない・STR+str％（狂鬼化・2026-10-16 作り直し。前は lastStand）
 //     holyTurn                  そのターンに溜まる聖光×（大防御）／useHoly {frac}＝聖光のこの割合を使って追加ダメージ（防御無視）
 //     vow {turns, cut, holyPct} その間、受けるダメージ−cut％・状態異常にかからない・溜まる聖光+holyPct％（不動の誓い）
 //     soar {turns, land, proc}  その間、着地ダメージ+land％・跳躍の技の発動率+proc（竜翔）
@@ -152,7 +153,9 @@ export const ICHIJI_SKILLS = [
   { name:'血の誓い', cls:'狂戦士', kind:B, proc:100, mp:10, hpCostMax:{ pct:10 }, buff:{ self:{ str:30 } }, priority:1, desc:'自分の最大HPの10%を消費し、STR+30%' },
   { name:'ブラッドサクリファイス', cls:'狂戦士', kind:P, mult:1.76, proc:85, mp:6, hpCostMax:{ pct:12 }, paidDmg:0.4, desc:'最大HPの12%を払う。払ったHPの40%を追加ダメージにする（防御無視）' },
   { name:'フルブレイカー', cls:'狂戦士', kind:P, mult:1.74, proc:80, mp:11, hpCostMax:{ pct:8 }, defPen:0.3, selfLowHp:{ at:25, mult:1.5 }, desc:'最大HPの8%を払う。相手の防御を30%無視。自分のHPが25%以下なら威力×1.5' },
-  { name:'狂鬼化', cls:'狂戦士', kind:B, proc:100, mp:10, lastStand:{ costCut:50 }, usesMax:1, priority:1, desc:'次に受ける倒れるダメージを1度だけHP1で耐える。耐えるまでの間、技で払うHPが半分になる（編成に置けるのは1回まで）' },
+  // 【確定】2026-10-16 ユーザーがスキル一覧のシートで書き直した「HPが1になる、3ターンHPが1以下にならない、回復効果を受けつかない、
+  //   STRが50%UP（バトル中1回のみ）」。3つとも同じ3ターン（アセンションで4ターン）。前は「次に倒れるダメージを1度だけHP1で耐える・耐えるまで払うHPが半分」
+  { name:'狂鬼化', cls:'狂戦士', kind:B, proc:100, mp:10, berserk:{ turns:3, str:50 }, usesMax:1, priority:1, desc:'HPが1になる。3ターンの間HPが1より下がらず、回復効果を受けつけない。その間STR+50%（バトル中1回のみ）' },
   // 聖騎士【聖光】：防御や軽減で減らしたダメージを聖光として溜め、攻撃の技で追加ダメージにする。STRとVITが半分ずつ威力になる
   { name:'聖騎士の心得', cls:'聖騎士', kind:'passive', mp:0, passive:{ statPct:{ vit:5 }, defRed:10, holy:{ pct:20, cap:15 } }, desc:'VIT+5%・受けるときの軽減率+10%・防御や軽減で減らしたダメージの20%を聖光として溜める（上限は最大HPの15%）' },
   { name:'ホーリーエッジ', cls:'聖騎士', kind:P, mult:0.86, add:[{ stat:'vit', rate:0.86 }], proc:90, mp:10, buff:{ self:{ vit:15 } }, desc:'自分のVIT+15%（重ねがけ可）' },

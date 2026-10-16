@@ -133,7 +133,7 @@ export const initIchiji = (side, fighter) => {
   side.holy = 0             // 聖騎士の聖光（ダメージの量）
   side.holyTurnMult = 1     // 大防御のターンは聖光が2倍
   side.holyUp = null        // 不動の誓い：溜まる聖光+% { pct, turns }
-  side.lastStand = false    // 狂鬼化：次に倒れるダメージを1度だけHP1で耐える（耐えるまで払うHPが半分）
+  side.berserk = null       // 狂鬼化（2026-10-16）：{ turns }＝そのあいだHPが1より下がらず、回復を受けない（STR+は timedBuffs）
   side.lastPaid = 0         // この行動で払ったHP（ブラッドサクリファイス）
   side.soar = null          // 竜翔 { turns, land, proc }
   side.comboBoost = null    // 嵐の構え { turns, n }
@@ -207,8 +207,8 @@ export const ichijiSkip = (side, skill) => {
   // 溜める・呼ぶだけの補助技は、満杯なら撃たない（ほかの効果を持つ技は撃つ）
   const g = skill.gain || skill.summon
   if (skill.kind === 'buff' && g && !skill.buff && !skill.mpGainPct && (side.stk?.[g.key] || 0) >= Math.max(g.max, side.summonMax?.[g.key] || 0)) return true
-  // 狂鬼化：まだ耐えていないあいだは撃ち直さない
-  if (skill.lastStand && side.lastStand) return true
+  // 狂鬼化：続いているあいだは撃ち直さない
+  if (skill.berserk && side.berserk?.turns > 0) return true
   return false
 }
 
@@ -416,9 +416,19 @@ export const guardHealPct = (side) => {
   return p
 }
 
+// ===== 狂鬼化（2026-10-16）=====
+// 続いているあいだは回復を受けない（battle.js の回復はどれもここを見る）・HPが1より下がらない（HPが減る所のあとで呼ぶ）
+export const canHeal = (side) => !(side?.berserk?.turns > 0)
+export const keepAlive = (side, log) => {
+  if (side.hp >= 1 || !(side.berserk?.turns > 0)) return
+  side.hp = 1
+  if (log) log.push({ side: side.name, type: 'berserkHold' })
+}
+
 // ===== HPを戻す（回復した量を数える）=====
 // ★聖職者（神聖加護）：満タンからあふれたぶんはバリアになる（上限は最大HPの%）。バリアになったぶんも「回復した量」に数える
 export const gainHp = (side, amt) => {
+  if (!canHeal(side)) return 0
   const before = side.hp
   const want = Math.max(0, amt)
   side.hp = Math.min(side.base.hp, side.hp + want)
@@ -458,10 +468,14 @@ export const ichijiAfterAction = (me, foe, skill, log) => {
     me.imbue.turns += skill.imbueExtend
     log.push({ side: me.name, type: 'imbue', elem: IMBUE_FX[me.imbue.elem]?.label || me.imbue.elem, turns: me.imbue.turns })
   }
-  if (skill.lastStand) {
-    me.lastStand = true
-    me.lastStandCut = skill.lastStand.costCut ?? 50
-    log.push({ side: me.name, type: 'lastStandUp', skill: skill.name })
+  // ★狂鬼化（2026-10-16 ユーザーがシートで書き直した）：HPを1にする。turns ターンのあいだHPが1より下がらず・回復を受けない・STR+%。
+  //   3つとも同じターン数（timedBuffs と同じくターンの終わりに1つ減る＝使ったターンも数える）
+  if (skill.berserk) {
+    const turns = skill.berserk.turns + up
+    if (me.hp > 1) me.hp = 1
+    me.berserk = { turns }
+    if (skill.berserk.str) me.timedBuffs.push({ table: { str: skill.berserk.str }, turns })
+    log.push({ side: me.name, type: 'berserkUp', skill: skill.name, turns, str: skill.berserk.str || 0 })
   }
   if (skill.holyTurn) me.holyTurnMult = skill.holyTurn
   if (skill.vow) {
@@ -571,6 +585,7 @@ export const tickIchiji = (side) => {
     side.guardsT = side.guardsT.filter(g => g.turns > 0)
   }
   if (side.lifeSteal?.turns > 0 && --side.lifeSteal.turns <= 0) side.lifeSteal = null
+  if (side.berserk?.turns > 0 && --side.berserk.turns <= 0) side.berserk = null   // 狂鬼化（STR+は timedBuffs が同じターンで切れる）
   if (side.dodgeBoost?.turns > 0 && --side.dodgeBoost.turns <= 0) side.dodgeBoost = null
   if (side.debuffImmune > 0) side.debuffImmune -= 1
   for (const m of [side.summonBoost, side.summonHits]) {

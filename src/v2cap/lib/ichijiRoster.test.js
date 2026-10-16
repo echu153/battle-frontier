@@ -67,7 +67,9 @@ test('2026-10-15 測って直した仕組みの数字（強さの元を先に直
   // 狂戦士：HPを払う技と狂撃の「+15%」をやめた・バーサク +10/+20%（★狂鬼化は設計のまま＝ユーザーと相談）
   assert.deepEqual(['マッドラッシュ', 'ブラッドスプラッシュ', 'ブラッドサクリファイス', 'フルブレイカー', '狂撃'].map(n => v(n).mult), [1.63, 1.71, 1.76, 1.74, 2.02])
   assert.deepEqual(passiveOf('狂戦士').passive.lowHpDmg, [{ at: 50, pct: 10 }, { at: 25, pct: 20 }])
-  assert.deepEqual(v('狂鬼化').lastStand, { costCut: 50 }, '狂鬼化の「払うHPが半分」は設計どおり')
+  // 狂鬼化は 2026-10-16 にユーザーがシートで書き直した（HPが1・3ターン倒れない・回復を受けない・STR+50%・バトル中1回）
+  assert.deepEqual(v('狂鬼化').berserk, { turns: 3, str: 50 })
+  assert.equal(v('狂鬼化').lastStand, undefined, '前の「1度だけ耐える・払うHPが半分」はやめた')
   assert.equal(v('隠形').buff.self.agi, 10)
   assert.equal(v('影斬り').mult, 1.35)
   // 忍者：身代わり 15→10%・毒霧の術 毒60→40%・暗闇40→20%（2026-10-15 回避をゆるめても「暗闇・毒・分身」の重なりで強かった）

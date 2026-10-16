@@ -189,10 +189,11 @@ export const buildBattleLog = (r, you, foe) => {
       out.push({ text:`✨ ${actor}は剣に宿した${l.elem}を解き放った！`, color: LOG_COLOR.buff })
     } else if (l.type === 'holyUse') {
       out.push({ text:`🌟 ${actor}は聖光を${(l.n || 0).toLocaleString()}使った！${l.left ? `（残り${l.left.toLocaleString()}）` : ''}`, color: LOG_COLOR.buff })
-    } else if (l.type === 'lastStandUp') {
-      out.push({ text:`👹 ${actor}の${l.skill}！ 一度だけ倒れずに踏み止まる！`, color: LOG_COLOR.buff })
-    } else if (l.type === 'lastStand') {
-      out.push({ text:`👹 ${actor}は鬼の形相で踏み止まった！`, color:'#ffcc44' })
+    } else if (l.type === 'berserkUp') {
+      // ★狂鬼化（2026-10-16 作り直し）：HPが1になり、そのあいだ倒れない・回復を受けない・STR+%
+      out.push({ text:`👹 ${actor}の${l.skill}！ HPが1になった。${l.turns}ターンのあいだ倒れない（回復を受けない${l.str ? `・STR+${l.str}%` : ''}）`, color: LOG_COLOR.buff })
+    } else if (l.type === 'berserkHold') {
+      out.push({ text:`👹 ${actor}は鬼の形相でHP1に踏み止まった！`, color:'#ffcc44' })
     } else if (l.type === 'trapSet') {
       out.push({ text:`🪤 ${actor}の${l.skill}！ 罠を仕掛けた（${l.n}つ）`, color: LOG_COLOR.buff })
     } else if (l.type === 'trapFire') {

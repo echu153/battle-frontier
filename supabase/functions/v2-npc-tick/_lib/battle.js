@@ -35,7 +35,7 @@ import {
 import {
   initIchiji, collectExPassives, passiveDealMult, ichijiSkip, ichijiSkillPrep, consumeDodgeBoost,
   incomingCut, guardHealPct, gainHp, ichijiAfterAction, tickIchiji, hpPctOf, STK_LABEL,
-  imbueFxOf, IMBUE_FX, agitCutOf, AGIT_MAX, shieldAbsorb, holyGain, ailUpOf,
+  imbueFxOf, IMBUE_FX, agitCutOf, AGIT_MAX, shieldAbsorb, holyGain, ailUpOf, canHeal, keepAlive,
 } from './battleIchiji.js'
 // ★防具のセット能力（「レベルキャップあり」版・2026-10-14）。今のⅡのキャラ・敵は setFx を持たないので何も起きない
 import {
@@ -445,12 +445,8 @@ const applyIncoming = (me, foe, dmg, kind, rng, log, pre = null) => {
     foe.hp = 1
     log.push({ side: foe.name, type: 'guts' })
   }
-  // ★上位クラス（2026-10-15）：狂鬼化（次に倒れるダメージを1度だけHP1で耐える）
-  if (foe.hp <= 0 && foe.lastStand) {
-    foe.lastStand = false
-    foe.hp = 1
-    log.push({ side: foe.name, type: 'lastStand' })
-  }
+  // ★上位クラス（2026-10-16 作り直し）：狂鬼化のあいだはHPが1より下がらない
+  keepAlive(foe, log)
   // ★防具のセット能力：番人の守り（戦闘中1回、HP1で耐える）・天騎士の誓い（戦闘中1回、HP30%以下で回復）
   setAfterDamage(foe, log, healMaxAmount, gainHp)
   checkRevive(foe, log)
@@ -468,6 +464,7 @@ const applyIncoming = (me, foe, dmg, kind, rng, log, pre = null) => {
     const back = Math.max(1, Math.floor(out * rf.pct / 100))
     me.hp -= back
     log.push({ side: foe.name, type: 'reflect', damage: back })
+    keepAlive(me, log)
   }
   // ★防具のセット能力：攻撃を受けると確率で相手に状態異常（帯電装甲＝麻痺15%・炎獄の鎧＝火傷20%）。
   //   1回の攻撃につき1回（連撃でも1回）。相手の抵抗・麻痺の0.8倍は通常どおり効く
@@ -511,25 +508,28 @@ const healMaxAmount = (side, pct) =>
     * (1 + side.en.healPct / 100) * healMultOf(side.ail)
     * Math.max(0, 1 + side.evo.heal / 100) * gospelMultOf(side)))
 
+// ★v2cap のアセンション（2026-10-16）：納刀のマス＝納刀状態のあいだ（次にスキルを撃つまで）回避率+。納刀していなければ0
+const stanceEvaOf = (side) => side?.stance?.eva || 0
+
 // 「最大HPの◯%」のような割合の回復・消耗。最低1（0にすると付いていないのと同じになる）
 const pctHp = (max, pct) => (pct > 0 ? Math.max(1, Math.floor(max * pct / 100)) : 0)
 
 // 攻撃を当てたとき・かわしたときに走る、武器の進化のフック
 const evoOnHit = (me) => {
-  if (me.evo.onHit.hpHeal) me.hp = Math.min(me.base.hp, me.hp + pctHp(me.base.hp, me.evo.onHit.hpHeal))
+  if (me.evo.onHit.hpHeal && canHeal(me)) me.hp = Math.min(me.base.hp, me.hp + pctHp(me.base.hp, me.evo.onHit.hpHeal))
   if (me.evo.onHit.mpHeal) me.mp = Math.min(me.base.mp, me.mp + pctHp(me.base.mp, me.evo.onHit.mpHeal))
 }
 const evoOnDodge = (foe, times = 1) => {
   if (times <= 0) return
   foe.evoStacks.dodge += 1
-  if (foe.evo.onDodge.hpHeal) {
+  if (foe.evo.onDodge.hpHeal && canHeal(foe)) {
     foe.hp = Math.min(foe.base.hp, foe.hp + pctHp(foe.base.hp, foe.evo.onDodge.hpHeal) * Math.min(times, EVO_STACK_MAX))
   }
 }
 // クリティカルしたとき。★多段でも**1回の行動につき1回**だけ走る（得も代償も同じ扱い）
 const evoOnCrit = (me, foe, rng, log) => {
   const e = me.evo.onCrit
-  if (e.hpHeal) me.hp = Math.min(me.base.hp, me.hp + pctHp(me.base.hp, e.hpHeal))
+  if (e.hpHeal && canHeal(me)) me.hp = Math.min(me.base.hp, me.hp + pctHp(me.base.hp, e.hpHeal))
   if (e.mpHeal) me.mp = Math.min(me.base.mp, me.mp + pctHp(me.base.mp, e.mpHeal))
   if (e.hpCost) me.hp = Math.max(1, me.hp - pctHp(me.base.hp, e.hpCost))
   if (e.mpCost) me.mp = Math.max(0, me.mp - pctHp(me.base.mp, e.mpCost))
@@ -899,11 +899,10 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     }
   }
   // ★一次職：最大HPの割合を払う（マッドラッシュはHP50%以上のときだけ・血の誓い）。払っても死なない
-  // ★上位クラス（2026-10-15）：狂鬼化で耐えるまでのあいだは払うHPが半分。払った量はブラッドサクリファイスが使う
+  // ★上位クラス（2026-10-15）：払った量はブラッドサクリファイスが使う（狂鬼化の「払うHPが半分」は 2026-10-16 の作り直しでなくなった）
   me.lastPaid = 0
   if (skill.hpCostMax && hpPctOf(me) >= (skill.hpCostMax.ifAbove ?? 0)) {
-    const half = me.lastStand ? Math.max(0, 1 - (me.lastStandCut ?? 50) / 100) : 1
-    const pay = Math.min(Math.max(0, me.hp - 1), Math.floor(me.base.hp * skill.hpCostMax.pct / 100 * half))
+    const pay = Math.min(Math.max(0, me.hp - 1), Math.floor(me.base.hp * skill.hpCostMax.pct / 100))
     if (pay > 0) {
       me.hp -= pay
       me.lastPaid = pay
@@ -1037,7 +1036,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
             + ailAccPct(me.ail)   // 暗闇：命中-25%
             + (wasAir ? (skill.whileAir?.hitBonus || 0) : 0),   // 空中からは狙いが通る（体術師）
           evaBonus: foe.pa.evaBonus + foe.en.evaBonus + evoEva(foe) + foresightEva(foe, skill.name)
-            + (foe.air ? AIR_EVA : 0),
+            + (foe.air ? AIR_EVA : 0) + stanceEvaOf(foe),
           // ★上位クラス：納刀中にクリティカル率+の技（居合斬）
           critBonus: me.pa.critBonus + evoCrit(me, foe) + critRateStackOf(me) + ip.crit + (me.critUp || 0) + (ws?.crit || 0),
           hitMult: hitMultOf(me, foe),
@@ -1102,6 +1101,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       raw = Math.floor(raw * (1 + (skill.kind === 'mag' ? me.en.magDmgPct : me.en.physDmgPct) / 100))
       if (off !== 1) raw = Math.floor(raw * off)
       if (ascDmgMult !== 1) raw = Math.floor(raw * ascDmgMult)
+      if (ws?.dmg) raw = Math.floor(raw * (1 + ws.dmg / 100))   // ★v2cap のアセンション（2026-10-16）：桜花一閃＝納刀中は威力+
       // 武器の進化（条件つきの与ダメージ+%をまとめて）
       raw = Math.floor(raw * evoMult(me, foe, { kind: skill.kind, skill: true, multi: nHits > 1 }))
       rememberSkill(foe, skill.name)
@@ -1357,7 +1357,7 @@ const strike = (me, foe, { mult, kind = 'phys', label, hits = 1, atkStat = null,
       defPen: Math.min(1, defPen + me.pa.defPenBonus / 100 + me.evo.defPen / 100),
       sureHit, wantPre,
       hitBonus: me.pa.hitBonus + me.en.hitBonus + ailAccPct(me.ail) + hitBonus,
-      evaBonus: foe.pa.evaBonus + foe.en.evaBonus + (foe.air ? AIR_EVA : 0),
+      evaBonus: foe.pa.evaBonus + foe.en.evaBonus + (foe.air ? AIR_EVA : 0) + stanceEvaOf(foe),
       critBonus: me.pa.critBonus + (me.critUp || 0) + aimCritOf(me),
       hitMult: hitMultOf(me, foe),
       critDmg: critDmgOf(me),
@@ -1521,7 +1521,7 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
     defPen: Math.min(1, me.pa.defPenBonus / 100 + me.evo.defPen / 100 + (imb?.elem === 'thunder' ? IMBUE_FX.thunder.defPen * imb.k : 0)),
     sureHit: me.lockOn?.turns > 0, wantPre,
     hitBonus: me.pa.hitBonus + me.en.hitBonus + evoHit(me, foe) + ailAccPct(me.ail),
-    evaBonus: foe.pa.evaBonus + foe.en.evaBonus + evoEva(foe) + foresightEva(foe, null),
+    evaBonus: foe.pa.evaBonus + foe.en.evaBonus + evoEva(foe) + foresightEva(foe, null) + stanceEvaOf(foe),
     critBonus: me.pa.critBonus + evoCrit(me, foe) + critRateStackOf(me) + (me.critUp || 0) + aimCritOf(me),
     hitMult: hitMultOf(me, foe),
     critDmg: critDmgOf(me),
@@ -1551,11 +1551,11 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
   const dmg = applyIncoming(me, foe, raw, me.kind, rng, after, wantPre && r.hit ? Math.floor(raw * preRatio) : null)
   if (r.hit) { bumpHitStack(me, 1); onHit(me, foe, me.kind, rng, after); evoOnHit(me) }
   const drainRate = me.evo.drain / 100
-  if (drainRate > 0 && dmg > 0) me.hp = Math.min(me.base.hp, me.hp + Math.max(1, Math.floor(dmg * drainRate)))
-  if (me.kind === 'phys' && me.en.drainPhysPct > 0 && dmg > 0) {
+  if (drainRate > 0 && dmg > 0 && canHeal(me)) me.hp = Math.min(me.base.hp, me.hp + Math.max(1, Math.floor(dmg * drainRate)))
+  if (me.kind === 'phys' && me.en.drainPhysPct > 0 && dmg > 0 && canHeal(me)) {
     me.hp = Math.min(me.base.hp, me.hp + Math.max(1, Math.floor(dmg * me.en.drainPhysPct / 100)))
   }
-  if (me.en.drainPct > 0 && dmg > 0) {
+  if (me.en.drainPct > 0 && dmg > 0 && canHeal(me)) {
     me.hp = Math.min(me.base.hp, me.hp + Math.max(1, Math.floor(dmg * me.en.drainPct / 100)))
   }
   // ★一次職：ブラッディロア（その間、攻撃のたびに回復）
@@ -1585,6 +1585,7 @@ export const tickAil = (side, log, foe = null) => {
     t.damage = Math.max(1, Math.floor(t.damage * boost))
     side.hp -= t.damage
     log.push({ side: side.name, type: 'ailTick', ail: AIL_LABEL[t.key], damage: t.damage, stacks: t.stacks })
+    keepAlive(side, log)
     setAfterDamage(side, log, healMaxAmount, gainHp)   // ★防具のセット能力：番人の守り・天騎士の誓い
     checkRevive(side, log)
     if (side.hp <= 0) return
@@ -1608,6 +1609,7 @@ export const tickBleedAfterAct = (side, log, foe = null) => {
   const dmg = Math.max(1, Math.floor(t.damage * boost))
   side.hp -= dmg
   log.push({ side: side.name, type: 'ailTick', ail: AIL_LABEL.bleed, damage: dmg, stacks: t.stacks })
+  keepAlive(side, log)
   setAfterDamage(side, log, healMaxAmount, gainHp)   // ★防具のセット能力：番人の守り・天騎士の誓い
   checkRevive(side, log)
 }
@@ -1632,7 +1634,7 @@ export const tickForesight = (side) => {
 export const tickRegen = (side, log, foe = null) => {
   const eff = liveStats(side)
   // 武器の進化：毎ターンの自動回復（スキルの継続回復とは別枠）
-  if (side.evo?.regen) {
+  if (side.evo?.regen && canHeal(side)) {
     const amt = Math.max(1, Math.floor(side.base.hp * side.evo.regen / 100))
     side.hp = Math.min(side.base.hp, side.hp + amt)
     log.push({ side: side.name, type: 'regenTick', heal: amt })
@@ -1641,16 +1643,17 @@ export const tickRegen = (side, log, foe = null) => {
     side.mp = Math.min(side.base.mp, side.mp + Math.max(1, Math.floor(side.base.mp * side.evo.mpRegen / 100)))
   }
   // 相手が状態異常のときだけ効く回復
-  if (side.evo?.ail.drain && foe && Object.keys(foe.ail || {}).length > 0) {
+  if (side.evo?.ail.drain && foe && Object.keys(foe.ail || {}).length > 0 && canHeal(side)) {
     const amt = Math.max(1, Math.floor(side.base.hp * side.evo.ail.drain / 100))
     side.hp = Math.min(side.base.hp, side.hp + amt)
     log.push({ side: side.name, type: 'regenTick', heal: amt })
   }
   if (side.regen?.turns > 0) {
-    const amt = healAmount(side, eff, side.regen.rate)
-    side.hp = Math.min(side.base.hp, side.hp + amt)
+    const ok = canHeal(side)
+    const amt = ok ? healAmount(side, eff, side.regen.rate) : 0
+    if (ok) side.hp = Math.min(side.base.hp, side.hp + amt)
     side.regen.turns -= 1
-    log.push({ side: side.name, type: 'regenTick', heal: amt })
+    if (ok) log.push({ side: side.name, type: 'regenTick', heal: amt })
   }
   if (side.mpRegen?.turns > 0) {
     const amt = healAmount(side, eff, side.mpRegen.rate)
@@ -1662,7 +1665,7 @@ export const tickRegen = (side, log, foe = null) => {
   if (side.regenMax?.turns > 0) {
     const got = gainHp(side, healMaxAmount(side, side.regenMax.pct))
     side.regenMax.turns -= 1
-    log.push({ side: side.name, type: 'regenTick', heal: got })
+    if (canHeal(side)) log.push({ side: side.name, type: 'regenTick', heal: got })
     if (side.regenMax.turns <= 0) side.regenMax = null
   }
   // ★防具のセット能力：森の恵み（最大HPの%）・根を張る（そのターンに受けたダメージの%）
