@@ -5,7 +5,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createSide, takeAction } from '../../v2/lib/battle.js'
-import { SKILL_BY_NAME, passiveOf } from './skills.js'
+import { SKILL_BY_NAME, SKILLS, passiveOf, capPowerText } from './skills.js'
+import { powerText, isPassive } from '../../v2/lib/skills.js'
 import { ICHIJI_SKILLS, ICHIJI_TUNE } from './skillsIchiji.js'
 import { ICHIJI_INFO, ICHIJI_RENAMED, CLASS_BY_ID, attackKindOf, learnOrderOf, JOB_BONUS } from './jobs.js'
 
@@ -158,4 +159,23 @@ test('【確定】2026-10-16 ユーザー「○○の切り札とか○○の奥
   // リピートが繰り返せない技は名前で書く
   assert.ok(SKILL_BY_NAME['リピート'].desc.includes('直前がクロノブレイク・パラドックス・クイック・リピートのときは繰り返さず'))
   assert.deepEqual(ICHIJI_SKILLS.filter(s => s.noRepeatTarget).map(s => s.name), ['クロノブレイク', 'パラドックス'])
+})
+
+test('【確定】2026-10-16 ユーザー「○○も威力になるみたいな説明文いらない」：上位クラスの技の説明に威力のステを書かない（威力はスキル画面の威力の行が出す）', () => {
+  const RE = /(STR|INT|DEX|AGI|VIT|LUK)(も|が大きく)威力になる|半分ずつ威力になる|威力に乗る|両方で撃つ/
+  for (const s of ICHIJI_SKILLS) assert.ok(!RE.test(s.desc || ''), `${s.name}：${s.desc}`)
+  // 威力の行（capPowerText）は上位クラスの項目も書ける。前は今のⅡの powerText のままで「STR×undefined」「HPを INT×0 回復」が出ていた
+  for (const s of ICHIJI_SKILLS.filter(x => !isPassive(x))) {
+    const p = capPowerText(s)
+    assert.ok(p && !/undefined|NaN|INT×0 回復/.test(p), `${s.name}：${p}`)
+  }
+  const v = (n) => SKILL_BY_NAME[n]
+  assert.equal(capPowerText(v('マナショット')), `物理 STR×${v('マナショット').hybrid.phys} ＋ 魔法 INT×${v('マナショット').hybrid.mag}`)
+  assert.ok(capPowerText(v('旋風脚')).startsWith(`STR×${v('旋風脚').hitMults.join('→')}`))
+  assert.ok(capPowerText(v('ジャンプ')).startsWith(`着地で STR×${v('ジャンプ').jump.mult}`))
+  assert.equal(capPowerText(v('エリクサー')), `最大HPの${v('エリクサー').healMax}%回復`)
+  // 攻撃のステ（副参照）は威力の行に出る＝説明から消しても分かる
+  assert.equal(capPowerText(v('居合斬')), `STR×${v('居合斬').mult} ＋ DEX×${v('居合斬').add[0].rate}`)
+  // 初期職（上位クラス以外）の威力の行は今のⅡの powerText のまま
+  for (const s of SKILLS.filter(x => !ICHIJI_SKILLS.includes(x))) assert.equal(capPowerText(s), powerText(s), s.name)
 })

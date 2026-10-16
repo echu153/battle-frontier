@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../supabase'
 import {
-  KIND_COLOR, KIND_LABEL, KIND_TABS, powerText, filterSkills, sortSkills, SKILL_SET_SLOTS, SKILL_USE_MAX,
+  KIND_COLOR, KIND_LABEL, KIND_TABS, filterSkills, sortSkills, SKILL_SET_SLOTS, SKILL_USE_MAX,
 } from '../../v2/lib/skills.js'
 // ★名前で引くもの（名簿・想定利用MP・検証）はこの版の名簿で引く。今のⅡの名簿には新しい5職の技が無い
-import { SKILL_BY_NAME, setMpCost, validateSkillSet } from '../lib/skills.js'
+//   威力の行もこの版の capPowerText（上位クラスの物理＋魔法・連撃・跳躍・割合の回復を書ける）
+import { SKILL_BY_NAME, setMpCost, validateSkillSet, capPowerText } from '../lib/skills.js'
 import { box, btn, miniBtn, TEXT } from '../../v2/components/v2ui.js'
 import { totalStats, currentSetOf } from '../lib/loadout.js'
 import { learnOrderOf, learnAtOf, jobOf, lineageOf } from '../lib/jobs.js'
@@ -188,11 +189,11 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
                   {s.noCrit && <span style={{ color:'#c09060', marginRight:'5px' }}>クリ無</span>}
                   {s.sureHit && <span style={{ color:'#66bb99', marginRight:'5px' }}>必中</span>}
                   {!s.sureHit && s.hitBonus > 0 && <span style={{ color:'#66bb99', marginRight:'5px' }}>命中しやすい</span>}
-                  {powerText(s)}
+                  {capPowerText(s)}
                 </div>
                 <div style={{ display:'flex', alignItems:'center', gap:'4px', paddingLeft:ROW_INDENT }}>
                   <span style={{ color:'#8fa8bb', fontSize:'10px', flex:1, minWidth:0, lineHeight:'1.6' }}>
-                    {powerText(s) === s.desc ? '' : s.desc}
+                    {capPowerText(s) === s.desc ? '' : s.desc}
                   </span>
                   {!lock && Array.from({ length: SKILL_SET_SLOTS }).map((_, i) => {
                     const here = draft[i]?.name === s.name

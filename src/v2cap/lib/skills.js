@@ -15,7 +15,7 @@
 // ★戦闘（battle.js）はスキルの中身を受け取って動くので、名簿をこの版で持てば足りる。
 // ★サーバーの v2cap_skills はこの名簿から tools/v2cap-sql.mjs が作る（手で書き写さない）
 // ============================================================
-import { SKILLS as V2_SKILLS, isPassive, SKILL_SET_SLOTS, SKILL_USE_MAX } from '../../v2/lib/skills.js'
+import { SKILLS as V2_SKILLS, isPassive, SKILL_SET_SLOTS, SKILL_USE_MAX, powerText, statLabel } from '../../v2/lib/skills.js'
 import { ICHIJI_SKILLS } from './skillsIchiji.js'
 
 export { isPassive, SKILL_SET_SLOTS, SKILL_USE_MAX }
@@ -119,6 +119,36 @@ export const skillsOf = (cls) => SKILLS.filter(s => s.cls === cls && !isPassive(
 // その職業のパッシブ（上位職だけ・1つ）。★今のⅡの passiveOf は今のⅡの名簿を職業名で引くので使わない
 //   （狂戦士・竜騎士など今のⅡと同じ名前の職業に、今のⅡのパッシブが付いてしまう）
 export const passiveOf = (cls) => SKILLS.find(s => s.cls === cls && isPassive(s)) || null
+
+// ===== スキル画面の威力の行 =====
+// ★今のⅡの powerText は上位クラスの項目（物理＋魔法の両方・1発ずつ強くなる連撃・跳躍・最大HPの割合の回復など）を知らず、
+//   「STR×undefined」「HPを INT×0 回復」と出ていた（2026-10-16 に見つけた）。この版の項目だけここで書き、ほかは今のⅡの powerText のまま。
+//   技の説明には威力のステを書かない（ユーザー「○○も威力になるみたいな説明文いらない」）＝威力はこの行だけが出す
+export const capPowerText = (s) => {
+  if (!s) return ''
+  if (s.kind === 'phys' || s.kind === 'mag') {
+    if (s.hybrid) return `物理 STR×${s.hybrid.phys} ＋ 魔法 INT×${s.hybrid.mag}${s.hits > 1 ? ` ×${s.hits}回` : ''}`
+    if (s.hitMults) {
+      const main = statLabel(s.src || (s.kind === 'mag' ? 'int_stat' : 'str'))
+      const sub = (s.add || []).map(a => ` ＋ ${statLabel(a.stat)}×${a.rate}`).join('')
+      return `${main}×${s.hitMults.join('→')}${sub}（${s.hitMults.length}連撃・1発ずつ強くなる）`
+    }
+    if (s.jump) return `着地で ${powerText({ ...s, mult: s.jump.mult })}`
+    return powerText(s)
+  }
+  if (s.kind === 'heal' && (s.healMax || s.regenMax || s.mpHeal || s.mpGain || s.rewind)) {
+    const p = []
+    if (s.heal) p.push(`HPを INT×${s.heal.rate} 回復`)
+    if (s.healMax) p.push(`最大HPの${s.healMax}%回復`)
+    if (s.regen) p.push(`毎ターン HPを INT×${s.regen.rate} 回復 ×${s.regen.turns}T`)
+    if (s.regenMax) p.push(`毎ターン 最大HPの${s.regenMax.pct}%回復 ×${s.regenMax.turns}T`)
+    if (s.mpHeal) p.push(`MPを INT×${s.mpHeal.rate} 回復`)
+    if (s.mpGain) p.push(`MP+${s.mpGain}`)
+    if (s.rewind) p.push(`直前${s.rewind.turns}ターンに受けたダメージの${s.rewind.pct}%回復`)
+    return p.join('・')
+  }
+  return powerText(s)
+}
 
 // ===== 編成の想定利用MP・検証 =====
 // ★今のⅡの setMpCost／validateSkillSet は今のⅡの名簿で名前を引くうえ、他職の技を0.8倍・MP2倍で数える。
