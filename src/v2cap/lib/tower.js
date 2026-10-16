@@ -17,7 +17,7 @@
 //   ・出撃と**待ち時間を共有**する（10秒・サーバーの last_sortie_at）
 //   ・**守護者でいるあいだ、出撃の装備のドロップ率+1%**（ふつうの敵 8→9%・レアとボス 10→11%）
 //   ・空いている層には**NPCの守護者**（n層＝LVnの標準の強さ。ただし挑戦する人の戦闘力×NPC_MIN_RATIO より弱くしない）
-//   ・一覧は守護者の**職業のアイコン（デフォルメの絵）・LV・名前**（ユーザーの画像の形）。上位職は絵がまだ無いので系統の初期職の絵
+//   ・一覧は守護者の**職業のアイコン（デフォルメの絵）・LV・名前**（ユーザーの画像の形）。上位職はデフォルメの絵がまだ無いので系統の初期職の絵
 // こちらで決めた既定（報告済み）：
 //   ・対人のHPは pvp.js の倍率（LV25 ×3.5・LV50 ×5・LV80以上 ×6・2人のうち高いほうのLV）
 //   ・守護者の残りHPは「最大HPの千分率」で持つ（相手のLVで倍率が変わっても割合で引き継ぐ）。MPはそのままの値
@@ -36,7 +36,7 @@ import { slotsOf } from './loadout.js'
 import { CAP_RULES } from './rules.js'
 import { stdPowerAt, spotOf } from './areas.js'
 import { openUntilOf, rollEquipDrop } from './sortie.js'
-import { ART_BASE, battleIconOf } from './classArt.js'
+import { ART_SD, battleIconOf } from './classArt.js'
 import { pvpHpMultFor, withPvpHp } from './pvp.js'
 
 // 【確定】2026-10-14 ユーザーが決めた名前（「○○の塔みたいな感じ」→ 仮の「天空の塔」から選び直した）。画面の名前はここだけ
@@ -77,11 +77,12 @@ export const applyStreakBonus = (stats, pct) => {
 }
 
 // ===== アイコン =====
-// デフォルメの絵があるクラスはその絵。上位職は絵がまだ無いので系統の初期職の絵（classArt.js の battleIconOf）
+// デフォルメの絵（SD）があるクラスはその絵。上位職はSDがまだ無いので系統の初期職のSD（classArt.js の battleIconOf）。
+// ★2026-10-17 上位職の全身の絵（顔のアップ）が入ったが、塔はデフォルメの絵でそろえるので ART_SD で決める（ART_BASE ではない）
 export const iconClassOf = (cls) => {
-  if (ART_BASE[cls]) return cls
+  if (ART_SD[cls]) return cls
   const base = CLASS_BY_ID[cls]?.req?.cls
-  return base && ART_BASE[base] ? base : cls
+  return base && ART_SD[base] ? base : cls
 }
 export const towerIconSrc = (icon) => (icon?.cls ? battleIconOf(icon.cls, icon.g === 'f' ? 'f' : 'm') : null)
 

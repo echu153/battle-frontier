@@ -2,6 +2,7 @@
 // v2cap のクラスのイラストを、画面で使う軽い版（WebP・透明な背景のまま）にする
 // ------------------------------------------------------------
 // 元の絵（ユーザーが置く）：public/V2newjob/<ローマ字のクラス名><otoko|onna|onnna>.png（透明な背景）
+//   上位クラスは public/V2newjob/上位職/<クラス名><男|女>.png（2026-10-17・探し方は classArt.js の artSrcFilesOf）
 // 作るもの：
 //   public/V2newjob/web/<名前>-m.webp・-f.webp   … 詳細の全身（幅720）
 //   public/V2newjob/face/<名前>-m.webp・-f.webp  … 一覧の顔のアップ（192×192。顔の目印 ART_FACE と写し方 FACE_FIT で切り取る）
@@ -11,14 +12,15 @@
 //   node tools/v2cap-art.mjs           … 全身は元の絵が新しくなったものだけ・顔のアップは毎回作り直す（切り取りを直しても効くように）
 //   node tools/v2cap-art.mjs --force   … 全部作り直す（作り方を変えたとき）
 // ★ffmpeg（libwebp）を使う。元の絵に透明が無いときは知らせる（背景つきの絵がまぎれ込んだ印）
+//   ただし classArt.js の ART_KEYED に載せた絵（背景が白いまま届き、抜いた絵を確かめたもの）は、背景を抜いてから使う
 // ============================================================
 import { existsSync, mkdirSync, readdirSync, statSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import path from 'node:path'
-import { decode, bleed, alphaBox, encodeSquare } from './v2cap-art-lib.mjs'
+import { decode, bleed, alphaBox, encodeSquare, keyBackground, KEY } from './v2cap-art-lib.mjs'
 
 const ROOT = path.resolve(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))
-const { ART_BASE, ART_FACE, ART_GENDERS, faceCropOf, ART_SD, SD_DIR, SD_OUT, sdTargetOf } = await import(new URL('../src/v2cap/lib/classArt.js', import.meta.url).href)
+const { ART_BASE, ART_FACE, ART_GENDERS, faceCropOf, artSrcFilesOf, ART_KEYED, ART_SD, SD_DIR, SD_OUT, sdTargetOf } = await import(new URL('../src/v2cap/lib/classArt.js', import.meta.url).href)
 const SRC = path.join(ROOT, 'public', 'V2newjob')
 const WEB = { dir: path.join(SRC, 'web'), width: 720, quality: 82 }
 const FACE = { dir: path.join(SRC, 'face'), size: 192, quality: 82 }
@@ -32,23 +34,37 @@ const probe = (file) => {
   return { w: Number(w), h: Number(h), alpha: /^(rgba|bgra|argb|abgr|ya8|ya16|gbrap|yuva|pal8)/.test(fmt), fmt }
 }
 const webp = (o) => ['-c:v', 'libwebp', '-pix_fmt', 'yuva420p', '-quality', String(o.quality)]
+// クラスの絵の背景の抜き方（モンスターの絵の KEY から変える所だけ）。
+// 体に囲まれた白いすき間は「大きくて（300px以上）ほぼ真っ白（背景の色との差の平均3以下）」なものだけ抜く。
+// モンスターの絵と同じ（25px以上・平均6以下）だと、白い服・白い鎧の照り・鼻の光まで穴になった（2026-10-17 侍女・魔法剣士女で確かめた）
+const ART_KEY = { ...KEY, POCKET_MIN: 300, POCKET_MEAN: 3 }
+// 元の絵を ffmpeg に渡す引数。背景を抜いた絵は生の画素（rgba）を標準入力から渡す
+const inputOf = (src, keyed) => {
+  if (!keyed) return { args: ['-i', src] }
+  const { img } = keyBackground(decode(src, 1 << 14, 'rgb24'), ART_KEY)
+  return { args: ['-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${img.W}x${img.H}`, '-i', '-'], input: img.data }
+}
 
 const missing = [], warn = []
 let made = 0
 for (const [cls, base] of Object.entries(ART_BASE)) {
   for (const g of ART_GENDERS) {
-    const src = g.src.map(s => path.join(SRC, `${base}${s}.png`)).find(existsSync)
-    if (!src) { missing.push(`${cls}（${g.label}）：${base}${g.src[0]}.png`); continue }
+    const cands = artSrcFilesOf(cls, g.key)
+    const src = cands.map(p => path.join(SRC, p)).find(existsSync)
+    if (!src) { missing.push(`${cls}（${g.label}）：${cands.join(' か ')}`); continue }
     const info = probe(src)
-    if (!info.alpha) warn.push(`${cls}（${g.label}）：${path.basename(src)} に透明が無い（${info.fmt}）。背景を抜いた版に差し替える`)
+    const keyed = !info.alpha && ART_KEYED.includes(`${cls}:${g.key}`)
+    if (!info.alpha && !keyed) warn.push(`${cls}（${g.label}）：${path.basename(src)} に透明が無い（${info.fmt}）。背景を抜いた版に差し替える（抜いて使うなら、抜いた絵を確かめてから classArt.js の ART_KEYED に足す）`)
+    let input = null
+    const inp = () => (input ||= inputOf(src, keyed))
 
     // 詳細の全身：幅だけ合わせて縮める（透明はそのまま）
     const outWeb = path.join(WEB.dir, `${base}-${g.key}.webp`)
     if (FORCE || !existsSync(outWeb) || statSync(outWeb).mtimeMs < statSync(src).mtimeMs) {
-      execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', src,
-        '-vf', `scale=${WEB.width}:-1:flags=lanczos`, ...webp(WEB), outWeb])
+      execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...inp().args,
+        '-vf', `scale=${WEB.width}:-1:flags=lanczos`, ...webp(WEB), '-frames:v', '1', outWeb], { input: inp().input })
       made++
-      console.log(`${cls}（${g.label}・全身）→ ${path.relative(ROOT, outWeb)}`)
+      console.log(`${cls}（${g.label}・全身${keyed ? '・背景を抜いた' : ''}）→ ${path.relative(ROOT, outWeb)}`)
     }
 
     // 一覧の顔のアップ：顔の目印から、どの顔も同じ大きさ・同じ位置になる正方形を切り取る（classArt.js の faceCropOf）。
@@ -59,9 +75,9 @@ for (const [cls, base] of Object.entries(ART_BASE)) {
     const S = Math.round(crop.size), P = S
     const X = Math.round(crop.x + P), Y = Math.round(crop.y + P)
     const outFace = path.join(FACE.dir, `${base}-${g.key}.webp`)
-    execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', src,
+    execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...inp().args,
       '-vf', `format=rgba,pad=iw+${2 * P}:ih+${2 * P}:${P}:${P}:color=0x00000000,crop=${S}:${S}:${X}:${Y},scale=${FACE.size}:${FACE.size}:flags=lanczos`,
-      ...webp(FACE), outFace])
+      ...webp(FACE), '-frames:v', '1', outFace], { input: inp().input })
     made++
   }
 }

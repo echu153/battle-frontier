@@ -20,7 +20,7 @@ import { SKILL_BY_NAME, setMpCost, skillsOf, passiveOf } from './skills.js'
 import { ascendSkill } from './ascension.js'
 import { stdPowerAt, spotOf } from './areas.js'
 import { rollEquipDrop, DROP_CHANCE, openUntilOf } from './sortie.js'
-import { ART_BASE } from './classArt.js'
+import { ART_SD } from './classArt.js'
 import { pvpHpMultFor } from './pvp.js'
 import { toFighter } from './loadout.js'
 import { runBattle } from '../../v2/lib/battle.js'
@@ -80,7 +80,9 @@ test('【確定】連勝補正：n連勝中の守護者に挑むと +5n%（HP/MP
 test('アイコン：初期職はその職業のデフォルメの絵・上位職は系統の初期職の絵（男女）', () => {
   for (const c of START_CLASSES) assert.equal(iconClassOf(c), c)
   for (const c of ICHIJI_CLASSES) assert.equal(iconClassOf(c), CLASS_BY_ID[c].req.cls, c)
-  for (const c of Object.keys(CLASS_BY_ID)) assert.ok(ART_BASE[iconClassOf(c)], `${c} の絵がある`)
+  // 上位職に全身の絵（顔のアップ）が入っても（2026-10-17）、塔はデフォルメの絵でそろえる＝SDの無い上位職は系統の初期職のSD
+  for (const c of Object.keys(CLASS_BY_ID)) assert.ok(ART_SD[iconClassOf(c)], `${c} のデフォルメの絵がある`)
+  for (const c of ICHIJI_CLASSES) if (!ART_SD[c]) assert.match(towerIconSrc({ cls: iconClassOf(c), g: 'f' }), /\/icon\//, c)
   assert.match(towerIconSrc({ cls: '盗賊', g: 'f' }), /touzoku-f\.webp$/)
   assert.match(towerIconSrc({ cls: '盗賊', g: 'x' }), /touzoku-m\.webp$/, '男女が読めなければ男性')
   assert.equal(towerIconSrc(null), null)

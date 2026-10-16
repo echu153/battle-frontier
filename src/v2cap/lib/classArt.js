@@ -13,7 +13,11 @@
 //   kensi＝剣士（ユーザー「戦士男とsennsionnnaは剣士用」→ ほかに合わせて kensiotoko.png・kensionna.png に改名した）
 //   ⚠剣士の2枚も透明な背景（透明なところに隠れた色が残っているだけ）。透明を無視する見方だと背景つきに見えるので、
 //     背景の有無はマゼンタの上に重ねて確かめる。透明が消えた版を作ると classArt.test.js が落ちる
-// ★絵が無いクラス（上位クラス）は「イラスト準備中」。絵を足したら ART_BASE と ART_FACE（顔の目印）に足して `node tools/v2cap-art.mjs` を回す
+// 【確定】2026-10-17 ユーザー「上位職のイラスト用意した」→ 上位クラス22職×男女の44枚を足した（全クラスに絵がある）
+//   ・元の絵は public/V2newjob/上位職/<クラス名><男|女>.png（ユーザーが置く・1枚約3MB×44枚）。⚠git に入れない（.gitignore）
+//   ・名前どおりに読めないファイルは ART_SRC_ALIAS（男女の字が無い「体術師.png」＝男性・顔を見て確かめた）。「霊薬師otoko.png」は otoko で読む
+//   ・5枚は背景が白いまま（透明が無い）→ ツールが背景を抜く（ART_KEYED・抜いた絵はマゼンタと暗い色の上で確かめた）
+// ★絵が無いクラスは「イラスト準備中」。絵を足したら ART_BASE と ART_FACE（顔の目印）に足して `node tools/v2cap-art.mjs` を回す
 // ============================================================
 export const ART_BASE = {
   剣士: 'kensi',
@@ -27,7 +31,39 @@ export const ART_BASE = {
   呪術師: 'zyuzyutusi',
   僧侶: 'sisai',
   薬師: 'yakusi',
+  // 上位クラス（2026-10-17）。ローマ字は初期クラスと同じ書き方（じ＝zi・つ＝tu・し＝si・ちゃ＝tya）
+  侍: 'samurai',
+  魔法剣士: 'mahoukensi',
+  狂戦士: 'kyousensi',
+  聖騎士: 'seikisi',
+  竜騎士: 'ryuukisi',
+  ストームランサー: 'sutoomuransaa',
+  体術師: 'taizyutusi',
+  サイキッカー: 'saikikkaa',
+  暗殺者: 'ansatusya',
+  忍者: 'ninzya',
+  狩人: 'kariudo',
+  アークアーチャー: 'aakuaatyaa',
+  魔銃士: 'mazyuusi',
+  デストロイヤー: 'desutoroiyaa',
+  元素使い: 'gensotukai',
+  クロノマンサー: 'kuronomansaa',
+  死霊使い: 'sireitukai',
+  式神使い: 'sikigamitukai',
+  聖職者: 'seisyokusya',
+  異端審問官: 'itansinmonkan',
+  アルケミスト: 'arukemisuto',
+  霊薬師: 'reiyakusi',
 }
+// 上位クラスの元の絵のフォルダ（public/V2newjob の下）。ファイル名はクラス名そのまま：<クラス名><男|女>.png
+export const ART_UPPER_DIR = '上位職'
+// 名前どおりに読めない元の絵 → 'クラス:m|f' ごとの候補（public/V2newjob からの道）。絵を見て確かめたものだけ
+export const ART_SRC_ALIAS = {
+  '体術師:m': ['上位職/体術師.png'],   // 男女の字が無い。絵は男性（顔を見て確かめた）
+}
+// 背景が白いまま届いた元の絵（透明が無い）。ツールが背景を抜いて使う（tools/v2cap-art-lib.mjs の keyBackground）。
+// ⚠抜いた絵をマゼンタと暗い色の上で確かめてから足す（白い服・白い布まで抜けていないか）。ここに無い透明なしの絵はツールが止める
+export const ART_KEYED = ['侍:f', '狂戦士:m', '狂戦士:f', '魔法剣士:m', '魔法剣士:f']
 // 一覧の顔のアップ（tools/v2cap-art.mjs だけが使う）。
 // 【確定】2026-10-11 ユーザー指示「男のイラストの顔アップの大きさが統一されてなくて空白が気になる。もっと全体統一して」
 //   → 切り取りを絵の幅で決めるのをやめ、顔そのものの大きさに合わせる。顔の目印を1枚ずつ測って置き、
@@ -45,6 +81,29 @@ export const ART_FACE = {
   zyuzyutusi: { m:[0.463, 0.094, 0.482, 0.137], f:[0.549, 0.095, 0.543, 0.143] },
   sisai:      { m:[0.487, 0.124, 0.497, 0.163], f:[0.487, 0.118, 0.506, 0.166] },
   yakusi:     { m:[0.471, 0.099, 0.490, 0.148], f:[0.477, 0.132, 0.472, 0.176] },
+  // 上位クラス（2026-10-17・目盛りつきの拡大図で測り、目とあごに点を打った図で確かめた）
+  samurai:       { m:[0.631, 0.091, 0.624, 0.133], f:[0.555, 0.120, 0.570, 0.158] },
+  mahoukensi:    { m:[0.515, 0.087, 0.530, 0.131], f:[0.458, 0.107, 0.466, 0.147] },
+  kyousensi:     { m:[0.534, 0.101, 0.523, 0.146], f:[0.680, 0.144, 0.683, 0.199] },
+  seikisi:       { m:[0.472, 0.229, 0.474, 0.271], f:[0.529, 0.379, 0.535, 0.408] },
+  ryuukisi:      { m:[0.514, 0.241, 0.512, 0.279], f:[0.351, 0.197, 0.354, 0.232] },
+  sutoomuransaa: { m:[0.605, 0.294, 0.608, 0.341], f:[0.500, 0.227, 0.514, 0.266] },
+  taizyutusi:    { m:[0.314, 0.302, 0.316, 0.338], f:[0.588, 0.329, 0.613, 0.366] },
+  saikikkaa:     { m:[0.621, 0.106, 0.610, 0.152], f:[0.573, 0.151, 0.598, 0.189] },
+  ansatusya:     { m:[0.614, 0.255, 0.615, 0.300], f:[0.593, 0.086, 0.585, 0.131] },
+  ninzya:        { m:[0.441, 0.278, 0.452, 0.322], f:[0.568, 0.290, 0.570, 0.333] },
+  kariudo:       { m:[0.537, 0.252, 0.540, 0.296], f:[0.794, 0.205, 0.805, 0.253] },
+  aakuaatyaa:    { m:[0.414, 0.237, 0.416, 0.272], f:[0.463, 0.224, 0.455, 0.261] },
+  mazyuusi:      { m:[0.640, 0.093, 0.648, 0.131], f:[0.489, 0.158, 0.498, 0.195] },
+  desutoroiyaa:  { m:[0.576, 0.070, 0.569, 0.116], f:[0.381, 0.154, 0.378, 0.201] },
+  gensotukai:    { m:[0.486, 0.263, 0.496, 0.296], f:[0.557, 0.219, 0.561, 0.254] },
+  kuronomansaa:  { m:[0.512, 0.144, 0.516, 0.177], f:[0.518, 0.156, 0.524, 0.196] },
+  sireitukai:    { m:[0.481, 0.118, 0.500, 0.154], f:[0.485, 0.145, 0.510, 0.177] },
+  sikigamitukai: { m:[0.615, 0.197, 0.604, 0.239], f:[0.533, 0.141, 0.550, 0.175] },
+  seisyokusya:   { m:[0.605, 0.252, 0.604, 0.286], f:[0.532, 0.215, 0.554, 0.255] },
+  itansinmonkan: { m:[0.618, 0.186, 0.632, 0.221], f:[0.594, 0.125, 0.589, 0.170] },
+  arukemisuto:   { m:[0.512, 0.109, 0.520, 0.151], f:[0.527, 0.170, 0.572, 0.220] },
+  reiyakusi:     { m:[0.568, 0.143, 0.560, 0.180], f:[0.469, 0.091, 0.497, 0.138] },
 }
 // ★男性の絵は 2026-10-11 にユーザーが描き直した版へ差し替えた（盗賊だけ前のまま）。差し替えたら目印も測り直す
 // 顔のアップの写し方（切り取る正方形に対する割合）：目の高さ eyeAt・目〜あごの長さ eyeToChin。
@@ -58,9 +117,20 @@ export const faceCropOf = ([ex, ey, cx, cy], w, h, fit = FACE_FIT) => {
   return { x: midX - size / 2, y: ey * h - fit.eyeAt * size, size }
 }
 export const ART_GENDERS = [
-  { key:'m', label:'男性', mark:'♂', color:'#66aaff', src:['otoko'] },
-  { key:'f', label:'女性', mark:'♀', color:'#ff88bb', src:['onna', 'onnna'] },   // ユーザーのファイル名に onna と onnna の両方がある
+  { key:'m', label:'男性', mark:'♂', color:'#66aaff', src:['otoko'], kanji:'男' },
+  { key:'f', label:'女性', mark:'♀', color:'#ff88bb', src:['onna', 'onnna'], kanji:'女' },   // ユーザーのファイル名に onna と onnna の両方がある
 ]
+// 元の絵の候補（public/V2newjob からの道・先にあるものを使う。tools/v2cap-art.mjs だけが使う）：
+//   初期クラス <ローマ字><otoko|onna|onnna>.png ／ 上位クラス 上位職/<クラス名><男|女>.png（otoko・onna でも可）／ ART_SRC_ALIAS
+export const artSrcFilesOf = (cls, gender) => {
+  const base = ART_BASE[cls], g = ART_GENDERS.find(x => x.key === gender)
+  if (!base || !g) return []
+  return [
+    ...g.src.map(s => `${base}${s}.png`),
+    ...[g.kanji, ...g.src].map(s => `${ART_UPPER_DIR}/${cls}${s}.png`),
+    ...(ART_SRC_ALIAS[`${cls}:${gender}`] || []),
+  ]
+}
 export const ART_DIR = '/V2newjob'
 export const ART_SIZES = ['web', 'face']
 export const hasArt = (cls) => !!ART_BASE[cls]
@@ -72,7 +142,7 @@ export const hasArt = (cls) => !!ART_BASE[cls]
 //     ★フォルダ名を sd にしないこと（Windows は大文字小文字を区別しないので SD と同じフォルダになる）
 //   ・作れたものを ART_SD に足す（ツールが「足りない」と知らせる。classArt.test.js が突き合わせる）
 //   ・SDの絵がまだ無いクラスは、一覧の顔のアップ（face）で代わりに出す（battleIconOf）
-// 2026-10-12 初期11職の男女22枚（どれも全身の絵と見比べた）。上位職はまだ
+// 2026-10-12 初期11職の男女22枚（どれも全身の絵と見比べた）。上位職はまだ（＝戦闘ログは顔のアップ・塔は系統の初期職のSD＝tower.js の iconClassOf）
 export const ART_SD = {
   剣士: ['m', 'f'],
   戦士: ['m', 'f'],

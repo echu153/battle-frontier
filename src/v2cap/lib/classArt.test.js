@@ -3,6 +3,7 @@
 //   「職業選択するときは顔の周りだけアップするだけでいい」（一覧は顔のアップ）
 //   「剣士のイラストだけ背景おかしい、他と合わせて」（剣士の絵も透明な背景のまま使う）
 //   「男のイラストの顔アップの大きさが統一されてなくて空白が気になる。もっと全体統一して」（顔の大きさに合わせて切り取る）
+// 【確定】2026-10-17 ユーザー「上位職のイラスト用意した」（上位クラス22職×男女・元の絵は public/V2newjob/上位職）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
@@ -10,6 +11,7 @@ import { fileURLToPath } from 'node:url'
 import { CLASS_BY_ID } from './jobs.js'
 import {
   ART_BASE, ART_FACE, FACE_FIT, ART_GENDERS, ART_DIR, ART_SIZES, hasArt, artSrcOf, faceCropOf,
+  ART_UPPER_DIR, ART_SRC_ALIAS, ART_KEYED, artSrcFilesOf,
   ART_SD, SD_DIR, SD_OUT, SD_ALIAS, sdTargetOf, sdSrcOf, battleIconOf,
 } from './classArt.js'
 
@@ -39,13 +41,13 @@ test('男女の2つ。キーは m と f。大きさは 詳細の全身（web）�
   assert.deepEqual(ART_SIZES, ['web', 'face'])
 })
 
-// 元の絵（PNG）の幅と高さ（IHDR）
-const pngSize = (file) => {
+// 詳細の全身（web の WebP・VP8X）の幅と高さ。元の絵と縦横比が同じ（幅だけ合わせて縮めた）なので、目印の割合の見張りに使える。
+// ★元の絵で見ないのは、上位クラスの元の絵（public/V2newjob/上位職）を git に入れないため（2026-10-17）
+const webSize = (file) => {
   const b = readFileSync(file)
-  assert.equal(b.toString('ascii', 12, 16), 'IHDR', file)
-  return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) }
+  assert.equal(b.toString('ascii', 12, 16), 'VP8X', file)
+  return { w: 1 + b.readUIntLE(24, 3), h: 1 + b.readUIntLE(27, 3) }
 }
-const srcOf = (base, g) => g.src.map(s => `${PUBLIC}${ART_DIR}/${base}${s}.png`).find(existsSync)
 
 test('顔の目印（両目のまんなか・あご）は、絵のあるクラスの男女すべてにあり、ありえる大きさ（測り間違いの見張り）', () => {
   assert.deepEqual(Object.keys(ART_FACE).sort(), Object.values(ART_BASE).sort())
@@ -57,12 +59,13 @@ test('顔の目印（両目のまんなか・あご）は、絵のあるクラ�
       const [ex, ey, cx, cy] = f
       assert.ok(cy > ey, `${key}：あごは目より下`)
       assert.ok(Math.abs(cx - ex) < 0.05, `${key}：あごは目のほぼ真下`)
-      const src = srcOf(base, g)
-      assert.ok(src, `${key} の元の絵`)
-      const { w, h } = pngSize(src)
-      // 目〜あごは全身の絵の高さの3〜7%（いまは4.1〜5.4%）。外れたら目印の打ち間違い
+      const web = `${PUBLIC}${ART_DIR}/web/${key}.webp`
+      assert.ok(existsSync(web), `${key} の全身の絵`)
+      const { w, h } = webSize(web)
+      // 目〜あごは全身の絵の高さの2.5〜7%（いまは2.9〜5.8%。いちばん小さいのは聖騎士の女性＝剣と光輪で体が小さく描かれている）。
+      // 外れたら目印の打ち間違い
       const len = Math.hypot((cx - ex) * w, (cy - ey) * h)
-      assert.ok(len / h > 0.03 && len / h < 0.07, `${key}：目〜あご ${(len / h * 100).toFixed(1)}%`)
+      assert.ok(len / h > 0.025 && len / h < 0.07, `${key}：目〜あご ${(len / h * 100).toFixed(1)}%`)
       // 切り取る正方形は絵からはみ出しすぎない（はみ出しは透明で足すが、顔のまわりは絵の中）
       const c = faceCropOf(f, w, h)
       assert.ok(c.size > 0.1 * w && c.size < 0.3 * w, `${key}：一辺 ${Math.round(c.size)}px`)
@@ -91,25 +94,64 @@ test('絵のあるクラスは、男女とも 全身と顔のアップの軽い�
         assert.ok(src.startsWith(`${ART_DIR}/${size}/`), src)
         const file = PUBLIC + src
         assert.ok(existsSync(file), `${cls}（${g.label}・${size}）が無い：public${src}。node tools/v2cap-art.mjs を回す`)
-        // ★背景の色が出てしまった版（2026-10-11 剣士で起きた）をここで止める
-        assert.ok(webpHasAlpha(file), `${cls}（${g.label}・${size}）に透明が無い：public${src}`)
+        // ★背景の色が出てしまった版（2026-10-11 剣士で起きた）をここで止める。全身の絵は必ずまわりが透明。
+        //   顔のアップは髪が四隅まで埋めると透明が1画素も無く、WebP が透明なしで保存する（2026-10-17 狂戦士の女性）＝
+        //   同じ元の絵から作る全身の絵の透明で見張る
+        if (size === 'web') assert.ok(webpHasAlpha(file), `${cls}（${g.label}・${size}）に透明が無い：public${src}`)
       }
     }
   }
 })
 
 test('使っていない大きさのフォルダが残っていない（一覧の全身の小さい絵 thumb/ はやめた）', () => {
-  // SD/ はユーザーが置くSDの元の絵（git に入れない）・icon/ はそこから作る戦闘ログのアイコン
-  const dirs = readdirSync(PUBLIC + ART_DIR, { withFileTypes: true }).filter(d => d.isDirectory() && d.name !== SD_DIR).map(d => d.name).sort()
+  // SD/ はユーザーが置くSDの元の絵・上位職/ は上位クラスの元の絵（どちらも git に入れない）・icon/ はSDから作る戦闘ログのアイコン
+  const dirs = readdirSync(PUBLIC + ART_DIR, { withFileTypes: true })
+    .filter(d => d.isDirectory() && d.name !== SD_DIR && d.name !== ART_UPPER_DIR).map(d => d.name).sort()
   assert.deepEqual(dirs, [...ART_SIZES, SD_OUT].sort())
+})
+
+test('全クラス（初期・上位）に絵がある（2026-10-17 上位クラスの44枚を足した）', () => {
+  for (const cls of Object.keys(CLASS_BY_ID)) assert.ok(hasArt(cls), `${cls} の絵が無い`)
+  assert.equal(Object.keys(ART_BASE).length, Object.keys(CLASS_BY_ID).length)
+})
+
+test('元の絵の探し方：初期は <ローマ字><otoko|onna>.png・上位は 上位職/<クラス名><男|女>.png・読めない名前は ART_SRC_ALIAS', () => {
+  assert.deepEqual(artSrcFilesOf('剣士', 'm').slice(0, 1), ['kensiotoko.png'])
+  assert.deepEqual(artSrcFilesOf('剣士', 'f').slice(0, 2), ['kensionna.png', 'kensionnna.png'])
+  assert.ok(artSrcFilesOf('侍', 'm').includes(`${ART_UPPER_DIR}/侍男.png`))
+  assert.ok(artSrcFilesOf('侍', 'f').includes(`${ART_UPPER_DIR}/侍女.png`))
+  // ユーザーのファイル名「霊薬師otoko.png」「体術師.png」（男女の字が無い＝男性・顔を見て確かめた）
+  assert.ok(artSrcFilesOf('霊薬師', 'm').includes(`${ART_UPPER_DIR}/霊薬師otoko.png`))
+  assert.ok(artSrcFilesOf('体術師', 'm').includes(`${ART_UPPER_DIR}/体術師.png`))
+  assert.ok(!artSrcFilesOf('体術師', 'f').includes(`${ART_UPPER_DIR}/体術師.png`))
+  assert.deepEqual(artSrcFilesOf('ないクラス', 'm'), [])
+  for (const [k, paths] of Object.entries(ART_SRC_ALIAS)) {
+    const [cls, g] = k.split(':')
+    assert.ok(ART_BASE[cls] && ['m', 'f'].includes(g), k)
+    assert.ok(paths.length > 0, k)
+  }
+})
+
+test('背景を抜いて使う絵（ART_KEYED）は、絵のあるクラスと男女。抜いた全身の絵も透明つき', () => {
+  for (const k of ART_KEYED) {
+    const [cls, g] = k.split(':')
+    assert.ok(ART_BASE[cls] && ['m', 'f'].includes(g), k)
+    assert.ok(webpHasAlpha(PUBLIC + artSrcOf(cls, g, 'web')), k)
+  }
+  assert.equal(new Set(ART_KEYED).size, ART_KEYED.length)
+})
+
+test('上位クラスの元の絵（public/V2newjob/上位職・44枚で約120MB）は git に入れない', () => {
+  const ignore = readFileSync(fileURLToPath(new URL('../../../.gitignore', import.meta.url)), 'utf8').split(/\r?\n/)
+  assert.ok(ignore.includes(`/public${ART_DIR}/${ART_UPPER_DIR}/`))
 })
 
 test('絵の無いクラスは null（画面は「イラスト準備中」）。知らない性別は男性・知らない大きさは全身の絵にする', () => {
   assert.equal(hasArt('戦士'), true)
   assert.equal(hasArt('剣士'), true)
-  assert.equal(hasArt('狂戦士'), false)
-  assert.ok(CLASS_BY_ID['狂戦士'])
-  assert.equal(artSrcOf('狂戦士', 'm'), null)
+  assert.equal(hasArt('狂戦士'), true)
+  assert.equal(hasArt('ないクラス'), false)
+  assert.equal(artSrcOf('狂戦士', 'f', 'face'), `${ART_DIR}/face/kyousensi-f.webp`)
   assert.equal(artSrcOf('ないクラス', 'f'), null)
   assert.equal(artSrcOf('戦士', 'x'), artSrcOf('戦士', 'm'))
   assert.equal(artSrcOf('戦士'), `${ART_DIR}/web/sensi-m.webp`)
@@ -156,7 +198,9 @@ test('戦闘ログの自分のアイコン：SDの絵 → 無ければ顔のア�
   assert.equal(battleIconOf(cls, gs[0]), sdSrcOf(cls, gs[0]))
   const noSd = Object.keys(ART_BASE).find(c => !ART_SD[c])
   if (noSd) assert.equal(battleIconOf(noSd, 'f'), artSrcOf(noSd, 'f', 'face'))
-  assert.equal(battleIconOf('狂戦士', 'm'), null)
+  assert.equal(battleIconOf('ないクラス', 'm'), null)
+  // 上位クラスはSDがまだ無い＝顔のアップ（2026-10-17 から。それまでは絵が無く null＝名前の1文字目の枠）
+  assert.equal(battleIconOf('狂戦士', 'f'), `${ART_DIR}/face/kyousensi-f.webp`)
   assert.equal(battleIconOf(cls, 'x'), battleIconOf(cls, 'm'))
 })
 
