@@ -209,6 +209,8 @@ export const ichijiSkip = (side, skill) => {
   if (skill.kind === 'buff' && g && !skill.buff && !skill.mpGainPct && (side.stk?.[g.key] || 0) >= Math.max(g.max, side.summonMax?.[g.key] || 0)) return true
   // 狂鬼化：続いているあいだは撃ち直さない
   if (skill.berserk && side.berserk?.turns > 0) return true
+  // HPがこの%より多いあいだは使わない（狂鬼化＝30%・2026-10-17）。編成の順で回ってきたときに見る
+  if (skill.useBelowHp && hpPctOf(side) > skill.useBelowHp) return true
   return false
 }
 

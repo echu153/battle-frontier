@@ -69,6 +69,7 @@ test('2026-10-15 測って直した仕組みの数字（強さの元を先に直
   assert.deepEqual(passiveOf('狂戦士').passive.lowHpDmg, [{ at: 50, pct: 10 }, { at: 25, pct: 20 }])
   // 狂鬼化は 2026-10-16 にユーザーがシートで書き直した（HPが1・3ターン倒れない・回復を受けない・STR+50%・バトル中1回）
   assert.deepEqual(v('狂鬼化').berserk, { turns: 3, str: 50 })
+  assert.equal(v('狂鬼化').useBelowHp, 30, '2026-10-17 ユーザー選択：HP30%以下で使う')
   assert.equal(v('狂鬼化').lastStand, undefined, '前の「1度だけ耐える・払うHPが半分」はやめた')
   assert.equal(v('隠形').buff.self.agi, 10)
   assert.equal(v('影斬り').mult, 1.35)

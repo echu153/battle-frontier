@@ -125,9 +125,16 @@ test('HPを払う：マッドラッシュは最大HPの3%', () => {
   takeAction(me, dummy(), mid, [])
   assert.equal(me.base.hp - me.hp, 300)
 })
-test('【確定】2026-10-16 狂鬼化（ユーザーがシートで書き直した）：HPが1になる・3ターンHPが1より下がらない・回復を受けない・STR+50%（バトル中1回）', () => {
+test('【確定】2026-10-16 狂鬼化（ユーザーがシートで書き直した）：HPが1になる・3ターンHPが1より下がらない・回復を受けない・STR+50%（バトル中1回）・HP30%以下で使う（10-17）', () => {
   const me = side('狂', '狂戦士', ['狂鬼化', 'マッドラッシュ'])
   const str0 = liveStats(me).str
+  // HPが30%より多いあいだは使わない（2026-10-17 ユーザー選択）＝次の技（マッドラッシュ）を撃つ
+  const l0 = []
+  takeAction(me, dummy(), mid, l0)
+  assert.ok(!l0.some(l => l.type === 'berserkUp') && me.berserk === null, 'HP97%では使わない')
+  assert.ok(l0.some(l => l.type === 'skill' && l.skill === 'マッドラッシュ'))
+  me.hp = Math.floor(me.base.hp * 0.3)
+  me.ptr = 0
   const log = []
   takeAction(me, dummy(), mid, log)
   assert.equal(me.hp, 1, 'HPが1になる')
@@ -163,6 +170,7 @@ test('【確定】2026-10-16 狂鬼化（ユーザーがシートで書き直し
 test('【確定】2026-10-16 アセンションの特別なマス：狂鬼化は4ターン・ブラッドサクリファイスは最大HPの15%を払って50%を追加ダメージ', async () => {
   const { ascendSkill } = await import('./ascension.js')
   const me = side('狂', '狂戦士', [ascendSkill(S('狂鬼化'))])
+  me.hp = Math.floor(me.base.hp * 0.3)   // HP30%以下で使う
   takeAction(me, dummy(), mid, [])
   assert.deepEqual(me.berserk, { turns: 4 })
   const plainSkill = { ...S('ブラッドサクリファイス'), paidDmg: 0 }
