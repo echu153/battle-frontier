@@ -28,29 +28,29 @@ export const NEW_SKILLS = [
   // 槍使い（物理・STR）
   { name:'突き',       cls:'槍使い', kind:'phys', mult:1.25, proc:95, mp:4,  desc:'槍で突く' },
   { name:'薙ぎ払い',   cls:'槍使い', kind:'phys', mult:1.31, proc:90, mp:8,  buff:{ enemy:{ agi:-15 } }, desc:'足元を払う。相手のAGI-15%（重ねがけ可）' },
-  { name:'投げ槍',     cls:'槍使い', kind:'phys', mult:1.0, add:[{ stat:'dex', rate:0.3 }], proc:88, mp:9, sureHit:true, desc:'必中。DEXも威力になる' },
+  { name:'投げ槍',     cls:'槍使い', kind:'phys', mult:1.0, add:[{ stat:'dex', rate:0.3 }], proc:88, mp:9, sureHit:true, desc:'必中' },
   { name:'三段突き',   cls:'槍使い', kind:'phys', mult:0.52, hits:3, proc:85, mp:11, noCrit:true, desc:'3連撃。1発ずつ命中判定。クリティカルしない' },
   // 【確定】2026-10-14 ユーザー承認：槍衾を STR+15%・VIT+12% → STR+12%・AGI+15%（合計27%のまま・槍使いのHP・配分の直しと一緒）
   { name:'槍衾',       cls:'槍使い', kind:'buff', proc:100, mp:8, buff:{ self:{ str:12, agi:15 } }, priority:1, desc:'STR+12%・AGI+15%（重ねがけ可）' },
   // 盗賊（物理・AGIも威力に乗る）
-  { name:'切りつけ',   cls:'盗賊', kind:'phys', mult:0.85, add:[{ stat:'agi', rate:0.4 }], proc:95, mp:4, desc:'素早く切る。AGIも威力になる' },
-  { name:'早業',       cls:'盗賊', kind:'phys', mult:0.4, add:[{ stat:'agi', rate:0.3 }], hits:2, proc:90, mp:8, noCrit:true, desc:'2連撃。AGIも威力になる。クリティカルしない' },
+  { name:'切りつけ',   cls:'盗賊', kind:'phys', mult:0.85, add:[{ stat:'agi', rate:0.4 }], proc:95, mp:4, desc:'素早く切る' },
+  { name:'早業',       cls:'盗賊', kind:'phys', mult:0.4, add:[{ stat:'agi', rate:0.3 }], hits:2, proc:90, mp:8, noCrit:true, desc:'2連撃。クリティカルしない' },
   { name:'毒塗りの刃', cls:'盗賊', kind:'phys', mult:0.85, add:[{ stat:'agi', rate:0.4 }], proc:88, mp:9, ail:{ key:'poison', chance:40 }, desc:'40%で毒' },
   { name:'目つぶし',   cls:'盗賊', kind:'phys', mult:0.95, add:[{ stat:'agi', rate:0.4 }], proc:85, mp:11, ail:{ key:'blind', chance:40 }, desc:'40%で暗闇（命中-25%）' },
   { name:'影走り',     cls:'盗賊', kind:'buff', proc:100, mp:8, buff:{ self:{ agi:15, dex:12 } }, priority:1, desc:'AGI+15%・DEX+12%（重ねがけ可）' },
   // 銃士（物理・DEXが大きく威力に乗る）
-  { name:'早撃ち',     cls:'銃士', kind:'phys', mult:0.65, add:[{ stat:'dex', rate:0.6 }], proc:95, mp:4, desc:'すばやく撃つ。DEXが大きく威力になる' },
-  { name:'連射',       cls:'銃士', kind:'phys', mult:0.2, add:[{ stat:'dex', rate:0.27 }], hits:3, proc:90, mp:8, noCrit:true, desc:'3連射。DEXが大きく威力になる。クリティカルしない' },
-  { name:'精密射撃',   cls:'銃士', kind:'phys', mult:0.6, add:[{ stat:'dex', rate:0.7 }], proc:88, mp:9, sureHit:true, desc:'必中。DEXが大きく威力になる' },
-  { name:'徹甲弾',     cls:'銃士', kind:'phys', mult:0.67, add:[{ stat:'dex', rate:0.7 }], proc:85, mp:11, defPen:0.3, desc:'相手の防御を30%無視。DEXが大きく威力になる' },
+  { name:'早撃ち',     cls:'銃士', kind:'phys', mult:0.65, add:[{ stat:'dex', rate:0.6 }], proc:95, mp:4, desc:'すばやく撃つ' },
+  { name:'連射',       cls:'銃士', kind:'phys', mult:0.2, add:[{ stat:'dex', rate:0.27 }], hits:3, proc:90, mp:8, noCrit:true, desc:'3連射。クリティカルしない' },
+  { name:'精密射撃',   cls:'銃士', kind:'phys', mult:0.6, add:[{ stat:'dex', rate:0.7 }], proc:88, mp:9, sureHit:true, desc:'必中' },
+  { name:'徹甲弾',     cls:'銃士', kind:'phys', mult:0.67, add:[{ stat:'dex', rate:0.7 }], proc:85, mp:11, defPen:0.3, desc:'相手の防御を30%無視' },
   { name:'狙いを定める', cls:'銃士', kind:'buff', proc:100, mp:8, buff:{ self:{ dex:27 } }, priority:1, desc:'DEX+27%（重ねがけ可）' },
   // 剣士（物理・STRにDEXやAGIも乗る・2026-10-09 ユーザー承認）
   // 【確定】2026-10-14 ユーザー承認：威力をSTR寄りにした（価値は同じ）。副参照（DEX・AGI）はSTRより低いのに値段はSTRと同じに数えるので、
   //   副参照が多いほど実際の威力が下がっていた（剣士がボス戦で平均の約9割）。剣の構えは STR+10%・DEX+9%・AGI+8% → STR+15%・AGI+12%
-  { name:'袈裟斬り',   cls:'剣士', kind:'phys', mult:1.15, add:[{ stat:'dex', rate:0.1 }], proc:95, mp:4, desc:'肩口から斬り下ろす。DEXも威力になる' },
-  { name:'燕返し',     cls:'剣士', kind:'phys', mult:0.65, add:[{ stat:'dex', rate:0.05 }], hits:2, proc:90, mp:8, noCrit:true, desc:'2連撃。DEXも威力になる。クリティカルしない' },
-  { name:'兜割り',     cls:'剣士', kind:'phys', mult:1.17, add:[{ stat:'dex', rate:0.1 }], proc:88, mp:9, defPen:0.3, desc:'相手の防御を30%無視。DEXも威力になる' },
-  { name:'一閃',       cls:'剣士', kind:'phys', mult:1.3, add:[{ stat:'agi', rate:0.1 }], proc:85, mp:11, ail:{ key:'bleed', chance:40 }, desc:'AGIも威力になる。40%で出血' },
+  { name:'袈裟斬り',   cls:'剣士', kind:'phys', mult:1.15, add:[{ stat:'dex', rate:0.1 }], proc:95, mp:4, desc:'肩口から斬り下ろす' },
+  { name:'燕返し',     cls:'剣士', kind:'phys', mult:0.65, add:[{ stat:'dex', rate:0.05 }], hits:2, proc:90, mp:8, noCrit:true, desc:'2連撃。クリティカルしない' },
+  { name:'兜割り',     cls:'剣士', kind:'phys', mult:1.17, add:[{ stat:'dex', rate:0.1 }], proc:88, mp:9, defPen:0.3, desc:'相手の防御を30%無視' },
+  { name:'一閃',       cls:'剣士', kind:'phys', mult:1.3, add:[{ stat:'agi', rate:0.1 }], proc:85, mp:11, ail:{ key:'bleed', chance:40 }, desc:'40%で出血' },
   { name:'剣の構え',   cls:'剣士', kind:'buff', proc:100, mp:8, buff:{ self:{ str:15, agi:12 } }, priority:1, desc:'STR+15%・AGI+12%（重ねがけ可）' },
   // 呪術師（魔法・状態異常）
   { name:'呪弾',       cls:'呪術師', kind:'mag', mult:1.45, proc:95, mp:5, desc:'呪いを込めた弾を放つ' },
@@ -76,19 +76,19 @@ export const NEW_SKILLS = [
 //     足払い（上位職の槍術士）→水面蹴り／乱れ撃ち（今のⅡの武器の進化）→五月雨撃ち
 export const LATE_SKILLS = [
   { name:'霞斬り',     cls:'剣士', kind:'phys', mult:1.31, buff:{ enemy:{ dex:-15 } }, proc:90, mp:8, desc:'相手のDEX-15%（重ねがけ可）' },
-  { name:'乱れ斬り',   cls:'剣士', kind:'phys', mult:0.35, add:[{ stat:'agi', rate:0.17 }], hits:3, proc:85, mp:11, noCrit:true, desc:'3連撃。AGIも威力になる。クリティカルしない' },
+  { name:'乱れ斬り',   cls:'剣士', kind:'phys', mult:0.35, add:[{ stat:'agi', rate:0.17 }], hits:3, proc:85, mp:11, noCrit:true, desc:'3連撃。クリティカルしない' },
   { name:'叩きつけ',   cls:'戦士', kind:'phys', mult:1.4, proc:85, mp:11, sureHit:true, desc:'必中の重い一撃' },
   { name:'雄叫び',     cls:'戦士', kind:'buff', proc:100, mp:5, buff:{ self:{ str:12 }, enemy:{ agi:-5 } }, priority:1, desc:'STR+12%・相手のAGI-5%（重ねがけ可）' },
   { name:'鎧通し',     cls:'槍使い', kind:'phys', mult:1.25, proc:85, mp:11, defPen:0.5, desc:'相手の防御を50%無視' },
   { name:'穿ち',       cls:'槍使い', kind:'phys', mult:1.24, proc:90, mp:8, ail:{ key:'bleed', chance:40 }, desc:'40%で出血' },
   { name:'水面蹴り',   cls:'格闘家', kind:'phys', mult:1.31, buff:{ enemy:{ agi:-15 } }, proc:90, mp:8, desc:'相手のAGI-15%（重ねがけ可）' },
   { name:'百裂拳',     cls:'格闘家', kind:'phys', mult:0.31, hits:5, proc:85, mp:11, noCrit:true, desc:'5連撃。1発ずつ命中判定。クリティカルしない' },
-  { name:'投げナイフ', cls:'盗賊', kind:'phys', mult:1.0, add:[{ stat:'agi', rate:0.25 }], proc:90, mp:8, sureHit:true, desc:'必中。AGIも威力になる' },
-  { name:'盗み取る',   cls:'盗賊', kind:'phys', mult:0.85, add:[{ stat:'agi', rate:0.4 }], proc:90, mp:8, dispel:{ chance:40 }, desc:'AGIも威力になる。40%で相手のバフを1つ消す' },
-  { name:'足止めの矢', cls:'弓使い', kind:'phys', mult:0.65, add:[{ stat:'agi', rate:0.45 }], proc:95, mp:4, ail:{ key:'slow', chance:40 }, desc:'AGIも威力になる。40%で鈍足' },
-  { name:'五月雨撃ち', cls:'弓使い', kind:'phys', mult:0.3, add:[{ stat:'agi', rate:0.22 }], hits:3, proc:85, mp:11, noCrit:true, desc:'3連射。AGIも威力になる。クリティカルしない' },
-  { name:'しびれ弾',   cls:'銃士', kind:'phys', mult:0.55, add:[{ stat:'dex', rate:0.65 }], proc:88, mp:9, ail:{ key:'paralyze', chance:12 }, desc:'DEXが大きく威力になる。12%で麻痺' },
-  { name:'炸裂弾',     cls:'銃士', kind:'phys', mult:0.6, add:[{ stat:'dex', rate:0.8 }], proc:85, mp:11, ail:{ key:'burn', chance:40 }, desc:'DEXが大きく威力になる。40%で火傷' },
+  { name:'投げナイフ', cls:'盗賊', kind:'phys', mult:1.0, add:[{ stat:'agi', rate:0.25 }], proc:90, mp:8, sureHit:true, desc:'必中' },
+  { name:'盗み取る',   cls:'盗賊', kind:'phys', mult:0.85, add:[{ stat:'agi', rate:0.4 }], proc:90, mp:8, dispel:{ chance:40 }, desc:'40%で相手のバフを1つ消す' },
+  { name:'足止めの矢', cls:'弓使い', kind:'phys', mult:0.65, add:[{ stat:'agi', rate:0.45 }], proc:95, mp:4, ail:{ key:'slow', chance:40 }, desc:'40%で鈍足' },
+  { name:'五月雨撃ち', cls:'弓使い', kind:'phys', mult:0.3, add:[{ stat:'agi', rate:0.22 }], hits:3, proc:85, mp:11, noCrit:true, desc:'3連射。クリティカルしない' },
+  { name:'しびれ弾',   cls:'銃士', kind:'phys', mult:0.55, add:[{ stat:'dex', rate:0.65 }], proc:88, mp:9, ail:{ key:'paralyze', chance:12 }, desc:'12%で麻痺' },
+  { name:'炸裂弾',     cls:'銃士', kind:'phys', mult:0.6, add:[{ stat:'dex', rate:0.8 }], proc:85, mp:11, ail:{ key:'burn', chance:40 }, desc:'40%で火傷' },
   { name:'ウインド',   cls:'魔法使い', kind:'mag', mult:1.6, proc:90, mp:9, elem:'wind', desc:'風の魔法' },
   { name:'ディスペル', cls:'魔法使い', kind:'mag', mult:1.25, proc:95, mp:5, dispel:{ chance:50 }, desc:'50%で相手のバフを1つ消す' },
   { name:'封印の呪い', cls:'呪術師', kind:'mag', mult:1.45, proc:88, mp:10, ail:{ key:'seal', chance:25 }, desc:'25%で封印' },
@@ -105,10 +105,21 @@ export const ELEM_OF_V2 = { ファイア:'fire', サンダー:'thunder', アイ�
 // ★初期職の攻撃の技の倍率（SHOKI_TUNE・弓使い1.08・槍使い1.05）は 2026-10-16 にやめた（ユーザー「倍率かけないで×1」）。
 //   弓使い・槍使いの差はクラスのステの配分で付けた（jobs.js の JOB_BONUS）
 
+// ★技の説明に威力のステ（「DEXも威力になる」「AGIが大きく威力になる」など）を書かない（2026-10-16 ユーザー「○○も威力になるみたいな説明文いらない」
+//   「21個とも消す」）。威力はスキル画面の威力の行（capPowerText）が出す。この版の技は説明文そのものから消した。
+//   今のⅡから持ってきた技（シールドアタック・狙撃・疾風矢）は、写しの説明だけここで消す（今のⅡの名簿は書き換えない）
+const POWER_WORDS = /(?:STR|INT|DEX|AGI|VIT|LUK)(?:も|が大きく)威力になる/g
+export const withoutPowerWords = (desc) => String(desc || '').replace(POWER_WORDS, '').replace(/。{2,}/g, '。').replace(/^。/, '').replace(/。$/, '')
+const copyOfV2 = (s) => {
+  const desc = withoutPowerWords(s.desc)
+  if (!ELEM_OF_V2[s.name] && desc === s.desc) return s
+  return { ...s, ...(ELEM_OF_V2[s.name] ? { elem: ELEM_OF_V2[s.name] } : {}), ...(desc !== s.desc ? { desc } : {}) }
+}
+
 // この版のスキル全部。今のⅡの5職ぶんは、今のⅡの並び（＝覚える順）のまま。上位職20職は skillsIchiji.js（2026-10-10）
 // ★職業ごとの並び＝覚える順（CLASS LV1・5・10・15・20 の5つ → CLASS LV25・30 の LATE_SKILLS）
 export const SKILLS = [
-  ...V2_SKILLS.filter(s => KEEP_FROM_V2.includes(s.cls)).map(s => (ELEM_OF_V2[s.name] ? { ...s, elem: ELEM_OF_V2[s.name] } : s)),
+  ...V2_SKILLS.filter(s => KEEP_FROM_V2.includes(s.cls)).map(copyOfV2),
   ...NEW_SKILLS,
   ...LATE_SKILLS,
   ...ICHIJI_SKILLS,

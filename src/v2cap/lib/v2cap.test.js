@@ -16,7 +16,7 @@ import {
   canBecome, weaponsOf, canEquipType, attackKindOf, lineageOf, usableSkillNames, classDescOf,
   jobBonusGain, jobGainText, jobUpHead, jobUpNote, CLASS_BY_ID, ICHIJI_RENAMED,
 } from './jobs.js'
-import { SKILLS, NEW_SKILLS, LATE_SKILLS, SKILL_BY_NAME, setMpCost, validateSkillSet, defaultSetOf, fillSetOf, SKILL_SET_SLOTS, DEFAULT_USES_MAX, passiveOf } from './skills.js'
+import { SKILLS, NEW_SKILLS, LATE_SKILLS, SKILL_BY_NAME, setMpCost, validateSkillSet, defaultSetOf, fillSetOf, SKILL_SET_SLOTS, DEFAULT_USES_MAX, passiveOf, withoutPowerWords } from './skills.js'
 import { ICHIJI_SKILLS, ICHIJI_BUILDS } from './skillsIchiji.js'
 import {
   ITEMS, ITEM_BY_ID, KINDS, WEAPON_TYPES, ARMOR_LINES, ARMOR_PARTS, ACCESSORY_TYPES, PART_MULT, SLOTS, ARMOR_EFFECT,
@@ -496,18 +496,25 @@ test('スキルは初期職ClassLV 1／5／10／15／20／25／30 で7個・上�
   assert.deepEqual(skillsLearnedBy('剣士', 30).slice(5), ['霞斬り', '乱れ斬り'])
 })
 
-test('【確定】戦士・弓使い・魔法使い・僧侶・格闘家のCLASS LV1〜20の5技は今のⅡのまま（中身も並びも同じ）', () => {
+test('【確定】戦士・弓使い・魔法使い・僧侶・格闘家のCLASS LV1〜20の5技は今のⅡのまま（中身も並びも同じ・説明だけは威力のステを消す）', () => {
   for (const cls of ['戦士', '弓使い', '魔法使い', '僧侶', '格闘家']) {
     const v2 = V2_SKILLS.filter(s => s.cls === cls)
     // ★魔法の属性（elem）だけはこの版の写しに付けている（魔導士の元素共鳴が見る・2026-10-10）。それ以外は同じ
     //   （2026-10-15〜16 の弓使いの倍率×1.08＝SHOKI_TUNE はやめた＝ユーザー「倍率かけないで×1」）
-    const noElem = (s) => { const { elem: _e, ...rest } = s; return rest }
-    assert.deepEqual(learnOrderOf(cls).slice(0, 5).map(noElem), v2, `${cls}`)
+    // ★説明（desc）は「AGIが大きく威力になる」などを消した写し（2026-10-16 ユーザー「21個とも消す」・今のⅡの名簿は書き換えない）
+    const noElem = (s) => { const { elem: _e, desc: _d, ...rest } = s; return rest }
+    assert.deepEqual(learnOrderOf(cls).slice(0, 5).map(noElem), v2.map(noElem), `${cls}`)
+    assert.deepEqual(learnOrderOf(cls).slice(0, 5).map(s => s.desc), v2.map(s => withoutPowerWords(s.desc)), `${cls}の説明`)
     // 6つ目・7つ目は CLASS LV25・30 の技（2026-10-14・LATE_SKILLS）
     assert.deepEqual(learnOrderOf(cls).slice(5).map(s => s.name), LATE_SKILLS.filter(s => s.cls === cls).map(s => s.name), `${cls}の後の2技`)
   }
   assert.deepEqual(['ファイア', 'サンダー', 'アイスランス'].map(n => SKILL_BY_NAME[n].elem), ['fire', 'thunder', 'ice'])
   assert.ok(V2_SKILLS.every(s => !('elem' in s)), '今のⅡの名簿は書き換えていない')
+  // 説明を変えたのは威力のステを書いていた3つだけ。今のⅡの説明はそのまま
+  const copies = ['戦士', '弓使い', '魔法使い', '僧侶', '格闘家'].flatMap(c => learnOrderOf(c).slice(0, 5))
+  assert.deepEqual(copies.filter(s => V2_SKILLS.find(v => v.cls === s.cls && v.name === s.name).desc !== s.desc).map(s => `${s.name}：${s.desc}`),
+    ['シールドアタック：盾で殴る', '狙撃：必中', '疾風矢：速射'])
+  assert.equal(V2_SKILLS.find(s => s.name === '狙撃').desc, '必中。AGIが大きく威力になる', '今のⅡの名簿は書き換えていない')
 })
 
 test('【確定】上位職の技はチャット版の設計（2026-10-15）のとおり（各職10技＋パッシブ1つ・組み方の例2つ）', () => {
@@ -1220,7 +1227,7 @@ test('【確定】2026-10-16 ユーザー「17の案とりあえず入れてほ�
   const { ICHIJI_TUNE } = await import('./skillsIchiji.js')
   assert.deepEqual(ICHIJI_TUNE, {}, '上位クラスの倍率はやめた')
   // 弓使いの狙撃は今のⅡの技そのもの（初期職の倍率もやめた）・槍使いの技はこの版の名簿の値のまま
-  assert.equal(SKILL_BY_NAME['狙撃'], V2_SKILLS.find(s => s.name === '狙撃'))
+  { const { desc: _a, ...mine } = SKILL_BY_NAME['狙撃']; const { desc: _b, ...v2 } = V2_SKILLS.find(s => s.name === '狙撃'); assert.deepEqual(mine, v2) }  // 説明だけ写し（2026-10-16）
   assert.equal(SKILL_BY_NAME['突き'], NEW_SKILLS.find(s => s.name === '突き'))
   // 配分（9職）
   assert.deepEqual(JOB_BONUS.弓使い, { agi: 64, str: 48, dex: 41, hp: 34, luk: 19, vit: 13, mp: 13 })

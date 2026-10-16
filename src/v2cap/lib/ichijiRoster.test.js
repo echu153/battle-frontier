@@ -164,6 +164,8 @@ test('【確定】2026-10-16 ユーザー「○○の切り札とか○○の奥
 test('【確定】2026-10-16 ユーザー「○○も威力になるみたいな説明文いらない」：上位クラスの技の説明に威力のステを書かない（威力はスキル画面の威力の行が出す）', () => {
   const RE = /(STR|INT|DEX|AGI|VIT|LUK)(も|が大きく)威力になる|半分ずつ威力になる|威力に乗る|両方で撃つ/
   for (const s of ICHIJI_SKILLS) assert.ok(!RE.test(s.desc || ''), `${s.name}：${s.desc}`)
+  // 初期職も（ユーザー「21個とも消す」）。今のⅡから持ってきた技は写しの説明だけ消す（v2cap.test の5技の【確定】）
+  for (const s of SKILLS) assert.ok(!RE.test(s.desc || ''), `${s.cls}・${s.name}：${s.desc}`)
   // 威力の行（capPowerText）は上位クラスの項目も書ける。前は今のⅡの powerText のままで「STR×undefined」「HPを INT×0 回復」が出ていた
   for (const s of ICHIJI_SKILLS.filter(x => !isPassive(x))) {
     const p = capPowerText(s)
