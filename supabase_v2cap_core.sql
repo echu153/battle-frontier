@@ -421,7 +421,7 @@ insert into public.v2cap_skills (name, cls, mp, sort, passive, uses_max) values
   ('ウィンドカッター', '元素使い', 13, 5, false, null),
   ('ライトニングボルト', '元素使い', 13, 6, false, null),
   ('魔力集中', '元素使い', 10, 7, false, null),
-  ('メテオ', '元素使い', 22, 8, false, null),
+  ('メテオストライク', '元素使い', 22, 8, false, null),
   ('アースクエイク', '元素使い', 14, 9, false, null),
   ('カタストロフ', '元素使い', 28, 10, false, null),
   ('プリズムバースト', '元素使い', 30, 11, false, null),
@@ -6486,5 +6486,49 @@ begin
        where id = r.id;
     end loop;
     insert into public.v2cap_migrations (key) values ('nouryoku17_20261016');
+  end if;
+end $$;
+
+-- ===== 一度だけ：技の名前を変えた（2026-10-18 ユーザーがスキル一覧のシートで「メテオ」→「メテオストライク」）=====
+-- 3〜5連撃（毎回ランダム）・1ヒットごとに10%で火傷の技になった（skillsIchiji.js）。技の表（v2cap_skills）は上の種で入れ替わる。
+-- 今いるキャラは一度だけ、覚えた技（learned）と全部の職業の編成（skill_sets）で名前を付け替える（10-15 の「間合い取り→嵐の構え」と同じやり方）。
+-- 塔の姿（守護者・NPC）の前の名前は JS で読み替える（skills.js の SKILL_RENAMED）
+-- ★印 meteor_rename_20261018 を付けるので、2回目以降に全文を流し直しても何もしない
+do $$
+declare
+  r         record;
+  j         record;
+  v_ren     jsonb := '{"メテオ":"メテオストライク"}'::jsonb;
+  v_sets    jsonb;
+  v_set     jsonb;
+  v_learned jsonb;
+begin
+  if not exists (select 1 from public.v2cap_migrations where key = 'meteor_rename_20261018') then
+    for r in select p.id, p.learned, p.skill_sets from public.v2cap_profiles p
+              where p.learned::text like '%"メテオ"%' or p.skill_sets::text like '%"メテオ"%' loop
+      -- 覚えた技：名前を付け替える（同じ技が2つにならないように・並びはそのまま）
+      select coalesce(jsonb_agg(x.n order by x.i), '[]'::jsonb) into v_learned
+        from (select distinct on (coalesce(v_ren ->> t.n, t.n)) coalesce(v_ren ->> t.n, t.n) as n, t.i
+                from jsonb_array_elements_text(case when jsonb_typeof(r.learned) = 'array' then r.learned else '[]'::jsonb end) with ordinality as t(n, i)
+               order by coalesce(v_ren ->> t.n, t.n), t.i) x;
+      -- 編成の名前も付け替える
+      v_sets := '{}'::jsonb;
+      for j in select e.key, e.value from jsonb_each(case when jsonb_typeof(r.skill_sets) = 'object' then r.skill_sets else '{}'::jsonb end) e loop
+        if jsonb_typeof(j.value) = 'array' then
+          select coalesce(jsonb_agg(case when v_ren ? (t.e ->> 'name')
+                                         then jsonb_set(t.e, '{name}', to_jsonb(v_ren ->> (t.e ->> 'name')))
+                                         else t.e end order by t.i), '[]'::jsonb)
+            into v_set
+            from jsonb_array_elements(j.value) with ordinality as t(e, i);
+          v_sets := v_sets || jsonb_build_object(j.key, v_set);
+        else
+          v_sets := v_sets || jsonb_build_object(j.key, j.value);
+        end if;
+      end loop;
+      update public.v2cap_profiles
+         set learned = v_learned, skill_sets = v_sets, updated_at = now()
+       where id = r.id;
+    end loop;
+    insert into public.v2cap_migrations (key) values ('meteor_rename_20261018');
   end if;
 end $$;

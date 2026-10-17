@@ -289,7 +289,7 @@ test('リワインド：直前2ターンで受けたダメージの50%を回復'
   assert.equal(log.find(l => l.type === 'heal').heal, 1000, '直前2ターン（1・2）の2000の半分')
 })
 
-test('メガボム：相手の状態異常をすべて解除し、1つにつき威力+30%（最大+120%）', () => {
+test('メガボム：相手の状態異常をすべて解除し、1つにつき威力+25%（最大+90%・2026-10-18 ユーザーがシートで30→25%）', () => {
   const me = side('錬', 'アルケミスト', ['メガボム'])
   const foe = dummy()
   for (const k of ['poison', 'burn', 'slow']) inflict(foe.ail, k)
@@ -297,7 +297,7 @@ test('メガボム：相手の状態異常をすべて解除し、1つにつき�
   takeAction(me, foe, mid, log)
   assert.equal(['poison', 'burn', 'slow'].some(k => hasAilment(foe.ail, k)), false)
   const b = log.find(l => l.type === 'ailBurst')
-  assert.deepEqual([b.n, b.pct], [3, 90])
+  assert.deepEqual([b.n, b.pct], [3, 75])
 })
 
 test('続けて使えない技・溜めが無いと出ない技は飛ばして次の技を撃つ', () => {

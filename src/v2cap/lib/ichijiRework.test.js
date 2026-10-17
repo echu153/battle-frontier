@@ -7,6 +7,7 @@ import { tickIchiji, gainHp } from '../../v2/lib/battleIchiji.js'
 import { inflict, hasAilment } from '../../v2/lib/ailments.js'
 import { SKILL_BY_NAME, passiveOf } from './skills.js'
 import { attackKindOf } from './jobs.js'
+import { ascendSkill as ascUp } from './ascension.js'
 
 const S = (n) => { const s = SKILL_BY_NAME[n]; assert.ok(s, `${n}がある`); return s }
 const stats = (over = {}) => ({ hp: 10000, mp: 2000, str: 300, dex: 150, agi: 150, int_stat: 300, vit: 150, luk: 30, ...over })
@@ -514,7 +515,7 @@ test('爆炎毒：撃つ前に毒と火傷を付ける（両方付けばこの�
 })
 
 // ===== 霊薬師【薬効】=====
-test('浸透薬：薬効1つにつき防御3%無視／エリクサー：最大HPの一部を回復（2026-10-16 に30%→15%・名簿から読む）・状態異常を全部治す・薬効+3', () => {
+test('浸透薬：薬効1つにつき防御3%無視／エリクサー：最大HPの一部を回復（2026-10-16 に30%→15%・10-18 ユーザーがシートで100%＝名簿から読む）・状態異常を全部治す・薬効+3', () => {
   const five = hit('霊薬師', '浸透薬', (m) => { m.stk.potion = 5 }, mid, dummy({ int_stat: 900, vit: 900 }))
   const zero = hit('霊薬師', '浸透薬', () => {}, mid, dummy({ int_stat: 900, vit: 900 }))
   assert.ok(five.dmg / zero.dmg > 1.25 + 0.01, '薬効5の与ダメージ+25%より伸びる（防御無視のぶん）')
@@ -523,7 +524,7 @@ test('浸透薬：薬効1つにつき防御3%無視／エリクサー：最大HP
   // 回復してから治す（初期職の万能薬と同じ順）＝回復量を下げる火傷・回復阻害は入れずに見る
   inflict(me.ail, 'poison'); inflict(me.ail, 'slow')
   takeAction(me, dummy(), mid, [])
-  assert.equal(me.hp, 1000 + Math.floor(me.base.hp * SKILL_BY_NAME['エリクサー'].healMax / 100))
+  assert.equal(me.hp, Math.min(me.base.hp, 1000 + Math.floor(me.base.hp * SKILL_BY_NAME['エリクサー'].healMax / 100)))
   assert.equal(hasAilment(me.ail, 'poison') || hasAilment(me.ail, 'slow'), false)
   assert.equal(me.stk.potion, 3)
 })
@@ -556,8 +557,11 @@ test('【確定】2026-10-17 ユーザー「スキルによって地上状態と
     assert.deepEqual([g.e.hits, g.me.air], [5, false])
     assert.deepEqual([a.e.hits, a.me.air], [6, true])
   }
-  // 破衝掌：空中なら防御無視が足される（計50%）／飛天三角蹴り：空中ならクリティカル率+して留まる
-  assert.ok(Math.abs(S('破衝掌').defPen + S('破衝掌').inAir.defPen - 0.5) < 1e-9)
+  // 破衝掌：2026-10-18 ユーザーがシートで「空中の防御無視 計50%」をアセンションのマスへ移した（元は空中でも30%）／
+  //   飛天三角蹴り：空中ならクリティカル率+して留まる
+  assert.equal(S('破衝掌').defPen, 0.3)
+  assert.equal(S('破衝掌').inAir.defPen, undefined)
+  assert.ok(Math.abs(ascUp(S('破衝掌')).inAir.defPen - 0.2) < 1e-9, 'マスで空中の防御無視 計30%→計50%')
   assert.ok(S('飛天三角蹴り').inAir.crit > 0)
   assert.equal(hit('体術師', '飛天三角蹴り', inAir).me.air, true)
   // 補助の技は地上でも空中でも同じ（ユーザー「補助skillは統一でいい」）。流転掌も同じ（空中で撃つと着地）

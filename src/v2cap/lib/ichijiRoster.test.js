@@ -81,7 +81,7 @@ test('2026-10-15 測って直した仕組みの数字（強さの元を先に直
   assert.deepEqual([v('骸骨召喚').summon.mult, v('レイズデッド').summon.mult, v('ソウルハーヴェスト').perStackAdd.addMult], [0.3, 0.3, 0.2])
   assert.ok(v('骸骨召喚').desc.includes('×0.3で攻撃'))
   assert.equal(passiveOf('死霊使い').passive.guardPerStack.cut, 2, '2026-10-16 死者の盾 −4%→−2%（能力表の案）')
-  assert.equal(v('仙丹').buff.self.str, 10)
+  assert.equal(v('仙丹').buff.self.str, 5, '2026-10-18 ユーザーがシートで全能力+10%→+5%')
   assert.equal(v('リザレクション').revive.pct, 35)
   assert.deepEqual(['ジャンプ', 'ハイジャンプ', '天竜落とし'].map(n => v(n).jump.evade), [15, 15, 15], '2026-10-17 40%→15%（直接の回避は最高15%・ユーザー）')
   assert.equal(v('秘剣・叢雲').stanceMult, 1.7)

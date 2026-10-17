@@ -150,6 +150,24 @@ const ailUpsOf = (s) => [
 //   ユーザー「こんなかんじにがっつり能力追加変える効果とかもあって欲しい」。威力や確率の代わりに、その技の効果を足す・変える。
 //   apply … マスを開いた技の形（開いていれば1回だけ効く＝上がり幅の数は見ない）／short・detail … 文
 const round3x = (v) => Math.round(v * 1000) / 1000
+// 数字を1つ動かすマス（path の値に by を足す）。text(前, 後) が説明の文。base … 値が無いときの元（倍率なら1）
+const getIn = (o, path) => path.reduce((x, k) => x?.[k], o)
+const setIn = (o, [k, ...rest], v) => ({ ...o, [k]: rest.length ? setIn(o?.[k] || {}, rest, v) : v })
+const bump = (path, by, short, text, base = 0) => ({
+  short,
+  detail: (s) => text(getIn(s, path) ?? base, round3x((getIn(s, path) ?? base) + by)),
+  apply: (s) => setIn(s, path, round3x((getIn(s, path) ?? base) + by)),
+})
+// 数字を2つ動かすマス（「1つにつき+○%（最大+○%）」の両方など）
+const bump2 = (p1, by1, p2, by2, short, text) => ({
+  short,
+  detail: (s) => text(getIn(s, p1) ?? 0, round3x((getIn(s, p1) ?? 0) + by1), getIn(s, p2) ?? 0, round3x((getIn(s, p2) ?? 0) + by2)),
+  apply: (s) => setIn(setIn(s, p1, round3x((getIn(s, p1) ?? 0) + by1)), p2, round3x((getIn(s, p2) ?? 0) + by2)),
+})
+// 効果を足す・変えるマス（patch(s) を技に重ねる）
+const grant = (short, detail, patch) => ({ short, detail: () => detail, apply: (s) => ({ ...s, ...patch(s) }) })
+const pctOf = (m) => Math.round((m - 1) * 100)   // ×1.25 → 25
+const turnsText = (a, b) => `続くターン ${a}ターン→${b}ターン`
 export const ASC_CUSTOM = {
   // 侍
   居合斬: {
@@ -189,6 +207,146 @@ export const ASC_CUSTOM = {
     detail: (s) => `払うHP 最大HPの${s.hpCostMax.pct}%→${s.hpCostMax.pct + 3}%・追加ダメージ 払ったHPの${Math.round(s.paidDmg * 100)}%→${Math.round(s.paidDmg * 100) + 10}%`,
     apply: (s) => ({ ...s, hpCostMax: { ...s.hpCostMax, pct: s.hpCostMax.pct + 3 }, paidDmg: round3x(s.paidDmg + 0.1) }),
   },
+  // ===== 2026-10-18 ほかの20職（ユーザーがシートで採用した案・書き直した案）=====
+  // 魔法剣士
+  双極斬: bump(['whileImbue', 'mult'], 0.2, '宿りの威力+20%', (a, b) => `宿りがあれば威力 +${pctOf(a)}%→+${pctOf(b)}%`),
+  マナエッジ: grant('宿りで威力+30%', '宿りがあれば威力+30%', () => ({ whileImbue: { mult: 1.3 } })),
+  魔剣開放: bump(['imbueExtend'], 1, '宿り+1ターン', (a, b) => `宿りの残りターン +${a}→+${b}`),
+  エレメンタルエッジ: bump(['imbueMult'], 1, '追加効果3倍', (a, b) => `宿りの追加効果 ${a}倍→${b}倍`),
+  マナバースト: bump(['consumeImbue', 'mult'], 0.2, '宿りを消す威力+20%', (a, b) => `宿りを消したときの威力 +${pctOf(a)}%→+${pctOf(b)}%`),
+  雷光斬: grant('雷の宿り+1ターン', '雷が宿るターン 3ターン→4ターン', (s) => ({ imbueTurnsUp: (s.imbueTurnsUp || 0) + 1 })),
+  トリニティブレイド: grant('クリティカルあり', 'クリティカルするようになる', () => ({ noCrit: false })),
+  // 聖騎士
+  不動の誓い: bump(['vow', 'turns'], 1, '+1ターン', turnsText),
+  大防御: bump(['holyTurn'], 1, '聖光3倍', (a, b) => `そのターンに溜まる聖光 ${a}倍→${b}倍`),
+  グランドクロス: bump(['useHoly', 'mult'], 0.4, '聖光の追加×1.4', (a, b) => `使った聖光の追加ダメージ ×${a}→×${b}`, 1),
+  神聖覚醒: grant('当てるとVIT+10%', '当てると自分のVIT+10%（重ねがけ可）', (s) => ({ buff: { ...s.buff, self: { ...s.buff?.self, vit: (s.buff?.self?.vit || 0) + 10 } } })),
+  ホーリーケア: grant('回復の20%を聖光に', '回復した量の20%を聖光として溜める', () => ({ healToHoly: 20 })),
+  ジャッジメントブロウ: bump(['useHoly', 'mult'], 0.3, '聖光の追加×1.3', (a, b) => `使った聖光の追加ダメージ ×${a}→×${b}`, 1),
+  シールドバッシュ: grant('VIT×0.8を追加', 'VIT×0.8の追加ダメージ', (s) => ({ add: (s.add || []).map(x => x.stat === 'vit' ? { ...x, rate: round3x(x.rate + 0.8) } : x) })),
+  オースシールド: grant('受けるダメージ−5%', '3ターンの間、受けるダメージ−5%も付く', () => ({ guard: { cut: 5, turns: 3 } })),
+  // 竜騎士
+  竜翔: bump(['soar', 'turns'], 1, '+1ターン', turnsText),
+  スカイスピア: grant('着地の次に×1.3', '直前のターンに着地していれば威力×1.3', () => ({ afterLand: 1.3 })),
+  天竜落とし: bump(['jump', 'defPen'], 0.2, '着地の防御無視+20%', (a, b) => `着地の防御無視 ${Math.round(a * 100)}%→${Math.round(b * 100)}%`),
+  天墜竜閃: bump(['afterLand'], 0.3, '着地の次に×1.5', (a, b) => `直前に着地していれば ×${a}→×${b}`),
+  // ストームランサー
+  テンペストランス: bump2(['comboPower', 'per'], 1, ['comboPower', 'max'], 20, 'コンボの威力+1%',
+    (a, b, m, n) => `コンボ1につき威力 +${a}%→+${b}%（最大+${m}%→+${n}%）`),
+  流星突き: grant('コンボ10で8連撃', 'コンボが10以上なら8連撃', () => ({ comboHits: { at: 10, hits: 8 } })),
+  嵐の構え: bump(['comboBoost', 'turns'], 1, '+1ターン', turnsText),
+  千本突き: bump(['comboHits', 'hits'], 2, 'コンボ10で12連撃', (a, b) => `コンボ10以上なら ${a}連撃→${b}連撃`),
+  連突き: grant('50%でコンボ+2', '50%の確率で1ヒットごとのコンボ +1→+2', () => ({ comboStep2: 50 })),
+  疾風連突: bump(['comboDefPen', 'defPen'], 0.15, 'コンボ10で防御無視25%', (a, b) => `コンボ10以上の防御無視 ${Math.round(a * 100)}%→${Math.round(b * 100)}%`),
+  // 体術師
+  後の先: bump(['counterBoost', 'turns'], 2, '+2ターン', turnsText),
+  破衝掌: bump(['inAir', 'defPen'], 0.2, '空中の防御無視50%', (a, b) => `空中で叩きつけたときの防御無視 計${Math.round((0.3 + a) * 100)}%→計${Math.round((0.3 + b) * 100)}%`),
+  半月蹴り: bump(['inAir', 'mult'], 20, '空中の威力+20%', (a, b) => `空中から蹴り下ろしたときの威力 +${a}%→+${b}%`),
+  旋風脚: bump(['inAir', 'mult'], 25, '空中の威力+25%', (a, b) => `空中での威力 +${a}%→+${b}%`),
+  飛天三角蹴り: bump(['inAir', 'crit'], 20, '空中のクリ率+20%', (a, b) => `空中でのクリティカル率 +${a}%→+${b}%`),
+  受け流し: grant('回避率+3%', '回避率+3%（重複不可）', () => ({ evaUp: 3 })),
+  流転掌: bump2(['dodgeCountPower', 'per'], 3, ['dodgeCountPower', 'max'], 30, '回避1回の威力+3%',
+    (a, b, m, n) => `回避1回につき威力 +${a}%→+${b}%（最大+${m}%→+${n}%）`),
+  // サイキッカー
+  メンタルクラッシュ: bump2(['agitPower', 'per'], 4, ['agitPower', 'max'], 20, '動揺1つの威力+4%',
+    (a, b, m, n) => `動揺1つにつき威力 +${a}%→+${b}%（最大+${m}%→+${n}%）`),
+  テレキネシス: grant('動揺+1が必ず付く', '動揺+1が必ず付く（50%→100%）', (s) => ({ agitate: { ...s.agitate, chance: 100 } })),
+  サイコショット: grant('40%で動揺+1', '当てると40%で動揺+1', () => ({ agitate: { n: 1, chance: 40 } })),
+  サイコブラスト: grant('動揺1つで威力+6%', '相手の動揺1つにつき威力+6%（最大+30%）', () => ({ agitPower: { per: 6, max: 30 } })),
+  マインドスパイク: grant('動揺1つで威力+5%', '相手の動揺1つにつき威力+5%（最大+25%）', () => ({ agitPower: { per: 5, max: 25 } })),
+  // 暗殺者
+  裂傷: bump(['ail', 'stacks'], 1, '出血+1', (a, b) => `出血 +${a}→+${b}`),
+  ヴァイパーストライク: grant('30%で出血も', '毒と同時に30%で出血も付く', (s) => ({ ails: [...(s.ails || []), { key: 'bleed', chance: 30, stacks: 1 }] })),
+  絶命: {
+    short: '威力4倍',
+    detail: (s) => `相手のHPが${s.foeLowHp.at}%以下なら威力${s.foeLowHp.mult}倍→${s.foeLowHp.mult + 1}倍`,
+    apply: (s) => ({ ...s, foeLowHp: { ...s.foeLowHp, mult: s.foeLowHp.mult + 1 } }),
+  },
+  影討ち: grant('2ターン目まで', '1ターン目だけ→2ターン目まで効く', (s) => ({ firstTurn: { ...s.firstTurn, turns: 2 } })),
+  急所突き: bump(['burstAil', 'perStack'], 0.1, '出血1つの威力+10%', (a, b) => `出血1つにつき威力 +${Math.round(a * 100)}%→+${Math.round(b * 100)}%`),
+  首狩り: bump(['foeLowHp', 'mult'], 0.3, 'HP50%以下の威力+30%', (a, b) => `相手のHPが50%以下なら威力 +${pctOf(a)}%→+${pctOf(b)}%`),
+  隠形: grant('次の攻撃が必ずクリ', '次に撃つ攻撃の技が必ずクリティカル', () => ({ nextCrit: true })),
+  // 忍者
+  影斬り: bump(['gainOnHit', 'n'], 1, '分身+2', (a, b) => `当てると分身 +${a}→+${b}`),
+  微塵隠れの術: bump(['useAll', 'addMult'], 0.24, '分身の追加×0.7', (a, b) => `分身1体につき追加ダメージ STR×${a}→×${b}`),
+  手裏剣: grant('分身1体で+1連撃', '分身1体につき+1連撃', () => ({ hitsPerStack: { key: 'clone', n: 1 } })),
+  雷遁: bump(['perStack', 'pct'], 10, '分身1体の威力+10%', (a, b) => `分身1体につき威力 +${a}%→+${b}%`),
+  千本手裏剣: bump(['hitsPerStack', 'n'], 1, '分身1体で+2連撃', (a, b) => `分身1体につき +${a}連撃→+${b}連撃`),
+  // 狩人
+  ワイルドハント: grant('連射+1', '状態異常2つ以上で+2連射・4つ以上で+3連射', () => ({ hitsByAil: [{ at: 2, n: 2 }, { at: 4, n: 3 }] })),
+  ハンターズマーク: grant('40%で鈍足', '40%で鈍足も付く', () => ({ ail: { key: 'slow', chance: 40 } })),
+  三連射: grant('状態異常1つで威力+10%', '相手の状態異常1つにつき威力+10%', () => ({ vsAil: { per: 10, max: 100 } })),
+  仕留めの一矢: bump(['vsAil', 'per'], 5, '状態異常1つの威力+5%', (a, b) => `状態異常1つにつき威力 +${a}%→+${b}%`),
+  // アークアーチャー
+  息を止める: bump(['critUp'], 10, 'クリ率+10%', (a, b) => `クリティカル率 +${a}%→+${b}%`),
+  急所射ち: grant('クリ率+20%', 'クリティカル率+20%', (s) => ({ critBonus: (s.critBonus || 0) + 20 })),
+  強弓: grant('照準1つで威力+10%', '照準1つにつき威力+10%', () => ({ perStack: { key: 'aim', pct: 10 } })),
+  天穿の矢: grant('照準1つで威力+15%', '照準1つにつき威力+15%', () => ({ perStack: { key: 'aim', pct: 15 } })),
+  ラピッドショット: grant('クリティカルあり', 'クリティカルするようになる', () => ({ noCrit: false })),
+  ロックオン: bump(['lockOn', 'turns'], 2, '+2ターン', turnsText),
+  // 魔銃士
+  連装魔撃: bump(['hits'], 1, '5連撃', (a, b) => `${a}連撃→${b}連撃`),
+  エーテルバレット: bump(['mpRatioPower', 'max'], 30, 'MP満タンの威力+30%', (a, b) => `MP満タンで威力 +${a}%→+${b}%`),
+  アルカナバレット: bump(['mpAbove', 'at'], -20, 'MP50%以上で威力+20%', (a, b) => `MP ${a}%以上→${b}%以上で威力+20%`),
+  オーバーロードショット: bump2(['mpPct'], 0.1, ['mpUsedPower', 'max'], 10, '使うMP40%',
+    (a, b, m, n) => `使うMP 今の${Math.round(a * 100)}%→${Math.round(b * 100)}%（威力の上限 +${m}%→+${n}%）`),
+  // デストロイヤー
+  キャノン: bump(['useAll', 'per'], 0.15, '装填1つの威力+15%', (a, b) => `装填1つにつき威力 +${Math.round(a * 100)}%→+${Math.round(b * 100)}%`),
+  弾薬補給: bump(['gain', 'n'], 1, '装填+2', (a, b) => `装填 +${a}→+${b}`),
+  散弾: grant('装填1つで+1連撃', '装填1つにつき+1連撃（装填は使わない）', () => ({ hitsPerStack: { key: 'load', n: 1 } })),
+  フルバースト: grant('動けなくならない', '使ったあと動けなくならない', () => ({ selfStun: 0 })),
+  カーペットボム: grant('クリティカルあり', 'クリティカル判定ありになる', () => ({ noCrit: false })),
+  速射: bump(['gain', 'n'], 1, '装填+2', (a, b) => `装填 +${a}→+${b}`),
+  // 元素使い
+  ウィンドカッター: grant('共鳴+1多く', '当てると共鳴+1多く増える', () => ({ resoBonus: 1 })),
+  メテオストライク: bump(['proc'], 15, '発動率+15%', (a, b) => `発動率 ${a}%→${b}%`),
+  カタストロフ: bump(['proc'], 15, '発動率+15%', (a, b) => `発動率 ${a}%→${b}%`),
+  プリズムバースト: bump2(['useReso', 'per'], 5, ['useReso', 'max'], 20, '共鳴1つの威力+5%',
+    (a, b, m, n) => `共鳴1つにつき威力 +${a}%→+${b}%（最大+${m}%→+${n}%）`),
+  // クロノマンサー
+  クロノブレイク: bump2(['agiDiff', 'per'], 0.5, ['agiDiff', 'max'], 30, 'AGIの差の威力+0.5%',
+    (a, b, m, n) => `AGIの差1%につき威力 +${a}%→+${b}%（最大+${m}%→+${n}%）`),
+  パラドックス: bump2(['extraCountPower', 'per'], 4, ['extraCountPower', 'max'], 40, '追加行動の威力+4%',
+    (a, b, m, n) => `追加行動1回につき威力 +${a}%→+${b}%（最大+${m}%→+${n}%）`),
+  ストップ: bump(['ail', 'chance'], 10, '麻痺+10%', (a, b) => `麻痺 ${a}%→${b}%`),
+  // 死霊使い
+  死の行軍: bump(['summonBoost', 'turns'], 1, '+1ターン', turnsText),
+  幽世ノ門: bump(['useAll', 'per'], 0.15, '死霊1体の威力+15%', (a, b) => `死霊1体につき威力 +${Math.round(a * 100)}%→+${Math.round(b * 100)}%`),
+  レイズデッド: grant('死霊の最大5体', '死霊の最大 4体→5体', (s) => ({ summon: { ...s.summon, max: 5, setMax: 5 } })),
+  ボーンスピア: bump(['perStack', 'pct'], 10, '死霊1体の威力+10%', (a, b) => `死霊1体につき威力 +${a}%→+${b}%`),
+  骸骨召喚: bump(['summon', 'n'], 1, '2体召喚', () => '1回で死霊を2体召喚'),
+  // 式神使い
+  封縛結界: bump(['bind', 'ailExtend'], 1, '状態異常+1ターン', (a, b) => `状態異常が長く続く ${a}ターン→${b}ターン`),
+  陰陽結界: bump(['guard', 'turns'], 2, '+2ターン', turnsText),
+  式打ち: grant('式神も攻撃', '式神がいれば式神も1回攻撃', () => ({ summonStrike: { key: 'shiki' } })),
+  急急如律令: bump(['whileBarrier', 'mult'], 0.3, '結界で×1.5', (a, b) => `結界があれば威力 ×${a}→×${b}`),
+  // 聖職者
+  光の帳: bump(['shieldGain', 'stat', 'int_stat'], 15, 'バリア中のINT+15%', (a, b) => `バリアがある間のINT +${a}%→+${b}%`),
+  セイクリッドノヴァ: bump2(['healDmg', 'pct'], 5, ['healDmg', 'capMult'], 0.5, '回復の15%',
+    (a, b, m, n) => `回復したHPの ${a}%→${b}%（上限 ×${m}→×${n}）`),
+  奇跡: bump(['regenMax', 'turns'], 2, '+2ターン', turnsText),
+  ゴスペル: bump(['gospel', 'turns'], 2, '+2ターン', turnsText),
+  祈りの結界: bump(['guard', 'turns'], 2, '+2ターン', turnsText),
+  // 異端審問官
+  聖水: grant('強化を2つ解除', '相手の強化を2つ解除', (s) => ({ dispel: { ...s.dispel, n: 2 } })),
+  異端の烙印: bump(['sinGain'], 1, '罪+3', (a, b) => `罪 +${a}→+${b}`),
+  断罪: bump(['useSin', 'per'], 4, '罪1つの威力+4%', (a, b) => `罪1つにつき威力 +${a}%→+${b}%`),
+  火刑: bump(['proc'], 10, '発動率+10%', (a, b) => `発動率 ${a}%→${b}%`),
+  聖なる裁き: bump(['vsAilMult', 'mult'], 0.3, '封印中×1.6', (a, b) => `相手が封印中なら ×${a}→×${b}`),
+  破魔の光: grant('当てると罪+1', '当てると罪+1', (s) => ({ sinGain: (s.sinGain || 0) + 1 })),
+  // アルケミスト
+  メガボム: bump(['consumeAllAil', 'per'], 10, '状態異常1つの威力+10%', (a, b) => `状態異常1つにつき威力 +${a}%→+${b}%`),
+  賢者の石: bump(['philo', 'turns'], 2, '+2ターン', turnsText),
+  // 霊薬師
+  仙丹: grant('毎ターン最大HPの4%回復', '3ターンの間、毎ターン最大HPの4%を回復', () => ({ regenMax: { pct: 4, turns: 3 } })),
+  再生薬: bump(['regenMax', 'turns'], 2, '+2ターン', turnsText),
+  霊薬瓶: grant('当てると薬効+1', '当てると薬効+1', () => ({ gain: { key: 'potion', n: 1, max: 20 } })),
+  叡智の薬: bump(['gain', 'n'], 1, '薬効+2', (a, b) => `薬効 +${a}→+${b}`),
+  剛力薬: bump(['gain', 'n'], 1, '薬効+2', (a, b) => `薬効 +${a}→+${b}`),
+  鉄身薬: bump(['gain', 'n'], 1, '薬効+2', (a, b) => `薬効 +${a}→+${b}`),   // ユーザー選択（案の「VIT+20%→+40%」は補助技をそろえる前の数字だった）
+  エリクサー: bump(['gain', 'n'], 2, '薬効+5', (a, b) => `薬効 +${a}→+${b}`),   // ユーザー選択（100%回復にしたので回復量のマスの代わり）
+  浸透薬: bump(['defPenPerStack', 'per'], 0.03, '薬効1つの防御無視6%', (a, b) => `薬効1つにつき防御無視 ${Math.round(a * 100)}%→${Math.round(b * 100)}%（最大60%）`),
+  薬効解放: bump(['perStack', 'pct'], 5, '薬効1つの威力+10%', (a, b) => `薬効1つにつき与ダメージ +${a}%→+${b}%（最大200%）`),
 }
 
 export const ascTypeOf = (skill) => {

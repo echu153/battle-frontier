@@ -133,31 +133,36 @@ test('【確定】スキルマスの上がり幅：攻撃＝威力+20%・回復�
   assert.deepEqual(ascendSkill(SKILL_BY_NAME['剣の構え']).buff.self, { str: 25, agi: 25 })
   assert.deepEqual(ascendSkill(SKILL_BY_NAME['精神統一']).buff.self, { int_stat: 40 })
   assert.deepEqual(ascendSkill(SKILL_BY_NAME['衰弱の呪詛']).buff.enemy, { str: -20, int_stat: -20 }, '相手を下げる技は下げ幅が+10')
-  // 仙丹は 2026-10-15 に測って全能力+15%→+10%（+10を6つに分ける）
-  assert.deepEqual(ascendSkill(SKILL_BY_NAME['仙丹']).buff.self, { str: 12, dex: 12, agi: 12, int_stat: 12, vit: 11, luk: 11 })
-  assert.equal(ascendSkill(SKILL_BY_NAME['祈りの結界']).guard.cut, 30, '受け止め（重戦士）は 2026-10-14 に無くなった＝同じ形の祈りの結界で見る')
+  // 2026-10-18 ユーザーがシートで書いた／採用した特別なマス（ASC_CUSTOM）：仙丹＝毎ターン最大HPの4%回復（全能力は+5%のまま）・祈りの結界＝3→5ターン
+  assert.deepEqual(ascendSkill(SKILL_BY_NAME['仙丹']).buff.self, { str: 5, dex: 5, agi: 5, int_stat: 5, vit: 5, luk: 5 })
+  assert.deepEqual(ascendSkill(SKILL_BY_NAME['仙丹']).regenMax, { pct: 4, turns: 3 })
+  assert.deepEqual(ascendSkill(SKILL_BY_NAME['祈りの結界']).guard, { cut: 20, turns: 5 })
   // 2026-10-14 上位職の並び替えで入った技：大防御は1ターンの受けるダメージ−60%→−70%
   //   （納刀の「次の技の発動率+20%→+30%」は 2026-10-16 にユーザーがシートで「回避+10%」へ＝ASC_CUSTOM・下の【確定】）
   assert.equal(ascendSkill(SKILL_BY_NAME['納刀']).stance.proc, 20, '納刀のマスは発動率を上げない（2026-10-16 から回避）')
   assert.equal(ascendSkill(SKILL_BY_NAME['納刀']).stance.mult, 1.5, '威力の倍率はそのまま')
-  assert.equal(ascendSkill(SKILL_BY_NAME['大防御']).bigGuard.cut, 70)
+  assert.equal(ascendSkill(SKILL_BY_NAME['大防御']).bigGuard.cut, 60, '2026-10-18 から大防御のマスは「聖光2倍→3倍」')
+  assert.equal(ascendSkill(SKILL_BY_NAME['大防御']).holyTurn, 3)
   // ブラッディロアは 2026-10-16 にユーザーがシートで「4ターン→5ターン」へ（吸収の%は上げない）
   assert.deepEqual(ascendSkill(SKILL_BY_NAME['ブラッディロア']).lifeSteal, { pct: 10, turns: 5 })
-  // 召喚の攻撃は +0.10（魔法×0.25→×0.35 の形）。元の倍率は 2026-10-14 に強さをそろえて変えた＝名簿から読む
-  assert.ok(Math.abs(ascendSkill(SKILL_BY_NAME['骸骨召喚']).summon.mult - (SKILL_BY_NAME['骸骨召喚'].summon.mult + 0.1)) < 1e-9, '召喚の攻撃+0.10')
+  // 骸骨召喚は 2026-10-18 から「1回で死霊を2体召喚」（召喚の攻撃の倍率は上げない）
+  assert.equal(ascendSkill(SKILL_BY_NAME['骸骨召喚']).summon.n, 2)
+  assert.equal(ascendSkill(SKILL_BY_NAME['骸骨召喚']).summon.mult, SKILL_BY_NAME['骸骨召喚'].summon.mult)
   assert.equal(ascendSkill(SKILL_BY_NAME['リザレクション']).revive.pct, SKILL_BY_NAME['リザレクション'].revive.pct + 10, '復活のHP+10（2026-10-15 に測って元は35%）')
   // 2026-10-15 上位クラスの作り直し：詠唱は共鳴+1（技のマスで+2）・照準と弾帯換装は1回で増える数+1
   assert.equal(ascendSkill(SKILL_BY_NAME['詠唱']).resoGain, 2)
   assert.equal(ascendSkill(SKILL_BY_NAME['照準']).gain.n, 2)
   assert.equal(ascendSkill(SKILL_BY_NAME['弾帯換装']).gain.n, 3)
   // 新しい補助の技の上がり幅（%の値に+10・倍率は+0.1・下げる向きの値は下げ幅+10）
-  assert.equal(ascendSkill(SKILL_BY_NAME['竜翔']).soar.land, 30)
-  assert.equal(ascendSkill(SKILL_BY_NAME['不動の誓い']).vow.cut, 25)
+  // 竜翔・不動の誓いは 2026-10-18 から「続くターン+1」（着地ダメージ・軽減は上げない）
+  assert.deepEqual(ascendSkill(SKILL_BY_NAME['竜翔']).soar, { ...SKILL_BY_NAME['竜翔'].soar, turns: 4 })
+  assert.deepEqual(ascendSkill(SKILL_BY_NAME['不動の誓い']).vow, { ...SKILL_BY_NAME['不動の誓い'].vow, turns: 4 })
   assert.equal(ascendSkill(SKILL_BY_NAME['狂鬼化']).berserk.turns, 4, '狂鬼化は 2026-10-16 の作り直しで「3ターン→4ターン」')
-  assert.equal(ascendSkill(SKILL_BY_NAME['封縛結界']).bind.foeAgi, -30)
+  assert.equal(ascendSkill(SKILL_BY_NAME['封縛結界']).bind.foeAgi, -20, '2026-10-18 から封縛結界のマスは「状態異常が長く続く 1→2ターン」')
+  assert.equal(ascendSkill(SKILL_BY_NAME['封縛結界']).bind.ailExtend, 2)
   assert.ok(Math.abs(ascendSkill(SKILL_BY_NAME['リピート']).repeatLast.mpMult - 0.4) < 1e-9)
   assert.ok(Math.abs(ascendSkill(SKILL_BY_NAME['トラバサミ']).trap.mult - (SKILL_BY_NAME['トラバサミ'].trap.mult + 0.1)) < 1e-9)
-  assert.equal(ascSkillDetail('封縛結界'), '相手のAGI −20%→−30%')
+  assert.equal(ascSkillDetail('封縛結界'), '状態異常が長く続く 1ターン→2ターン')
   assert.equal(ascSkillDetail('詠唱'), '1回で増える共鳴 1→2')
   assert.equal(ascendSkill(SKILL_BY_NAME['クイック']).extraTurn.max, 3)
   assert.equal(ascendSkill(SKILL_BY_NAME['分身の術']).gain.n, 2)
@@ -167,9 +172,9 @@ test('【確定】スキルマスの上がり幅：攻撃＝威力+20%・回復�
   assert.deepEqual(SKILL_BY_NAME['剣の構え'].buff.self, { str: 20, agi: 20 }, '元の技は書き換えない（2026-10-17 から STR+20%・AGI+20%）')
   assert.equal(SKILL_BY_NAME['クイック'].extraTurn.max, 2)
   assert.equal(ascSkillDetail('剣の構え'), 'STR+20%→+25%・AGI+20%→+25%')
-  assert.equal(ascSkillDetail('祈りの結界'), '受けるダメージ −20%→−30%')
+  assert.equal(ascSkillDetail('祈りの結界'), '続くターン 3ターン→5ターン')
   assert.equal(ascSkillDetail('納刀'), '納刀状態のあいだ（次にスキルを撃つまで）回避率+10%', '2026-10-16 ユーザーがシートで書いた')
-  assert.equal(ascSkillDetail('大防御'), '1ターンの受けるダメージ −60%→−70%')
+  assert.equal(ascSkillDetail('大防御'), 'そのターンに溜まる聖光 2倍→3倍')
   assert.equal(ascSkillDetail('クイック'), '戦闘中に使える回数 2回→3回')
 })
 
@@ -367,27 +372,30 @@ test('【確定】2026-10-15 状態異常を付ける攻撃の技のマスは、
   const A = await import('./ascension.js')
   assert.equal(A.ASC_AIL_UP, 15, 'いちばん大きい上がり幅（毒・火傷・出血・鈍足）')
   // 型：状態異常を付ける攻撃の技＝ail・付けない攻撃の技／もう100%の技＝power・攻撃でない技＝null
-  //   （居合斬は 2026-10-16 にユーザーがシートで書いた特別なマス＝custom）
+  //   （居合斬は 2026-10-16、天竜落とし・マナバースト・急所突き・火刑は 2026-10-18 にユーザーがシートで書いた／採用した特別なマス＝custom。
+  //    型の決まりは名前を変えた写し＝特別なマスの無い同じ形の技で見る）
+  const copy = (n) => ({ ...SKILL_BY_NAME[n], name: n + '（写し）' })
   assert.deepEqual(['毒矢', '毒霧の術', '天竜落とし', 'マナバースト', '居合斬', '突き', '急所突き', '火刑', 'くくり罠', 'ヒール'].map(n => A.ascTypeOf(SKILL_BY_NAME[n])),
-    ['ail', 'ail', 'ail', 'ail', 'custom', 'power', 'power', 'power', null, null])
+    ['ail', 'ail', 'custom', 'custom', 'custom', 'power', 'custom', 'custom', null, null])
+  assert.deepEqual(['天竜落とし', 'マナバースト', '急所突き', '火刑'].map(n => A.ascTypeOf(copy(n))), ['ail', 'ail', 'power', 'power'])
   assert.equal(A.ascUpOf('毒矢'), 15)
   assert.equal(A.ascUpOf('突き'), 20)
   // 付ける所はどれも上がる：ail・ails（状態異常ごと）・跳躍の着地・宿りを消したときの付与
-  assert.equal(A.ascendSkill(SKILL_BY_NAME['毒矢']).ail.chance, 85)
+  assert.equal(A.ascendSkill(SKILL_BY_NAME['毒矢']).ail.chance, 65, '毒矢は 2026-10-18 から50%（+15）')
   assert.deepEqual(A.ascendSkill(SKILL_BY_NAME['毒霧の術']).ails.map(a => a.chance), [55, 30], '毒+15・暗闇+10')
-  assert.equal(A.ascendSkill(SKILL_BY_NAME['天竜落とし']).jump.ail.chance, 40, '恐怖+10')
-  assert.equal(A.ascendSkill(SKILL_BY_NAME['マナバースト']).consumeImbue.ailChance, 50, '宿りの付与は+10')
+  assert.equal(A.ascendSkill(copy('天竜落とし'), 10).jump.ail.chance, 40, '恐怖+10（写しは名簿に無い＝上がり幅を渡す）')
+  assert.equal(A.ascendSkill(copy('マナバースト'), 10).consumeImbue.ailChance, 50, '宿りの付与は+10')
   // 威力は上がらない・上限100%・前の上がり幅（威力20）を持っていても+15まで（塔の守護者の姿）
   assert.equal(A.ascendSkill(SKILL_BY_NAME['毒矢']).ascDmg, undefined)
   assert.equal(A.ascendSkill({ ...SKILL_BY_NAME['毒矢'], ail: { key: 'poison', chance: 95 } }, 15).ail.chance, 100)
-  assert.equal(A.ascendSkill(SKILL_BY_NAME['毒矢'], 20).ail.chance, 85)
+  assert.equal(A.ascendSkill(SKILL_BY_NAME['毒矢'], 20).ail.chance, 65)
   // 文
   assert.equal(A.ascSkillDetail('毒霧の術'), '毒 40%→55%・暗闇 20%→30%')
   assert.equal(A.ascSkillShort('毒霧の術'), '確率+15%・+10%')
   assert.equal(A.ascSkillShort('毒矢'), '確率+15%')
   assert.equal(A.ascSkillShort('突き'), '威力+20%')
   // 戦闘：乱数が「元の確率〜上げた確率」のあいだなら、マスを開いたときだけ毒が入る
-  const r = 0.78
+  const r = 0.6   // 元の50%〜上げた65%のあいだ
   const poisoned = (skill) => {
     const me = createSide({ name: '狩', cls: null, kind: 'phys', stats: { hp: 9999, mp: 999, str: 300, dex: 300, agi: 100, int_stat: 50, vit: 100, luk: 0 }, noClassBonus: true, passives: [], slots: [{ skill, uses: 9 }] })
     const foe = createSide({ name: '的', cls: null, kind: 'phys', stats: { hp: 99999, mp: 0, str: 10, dex: 10, agi: 10, int_stat: 10, vit: 100, luk: 0 }, noClassBonus: true, passives: [], slots: [] })
@@ -403,8 +411,9 @@ test('【確定】2026-10-16 状態異常の無い攻撃の技は、今ある効
   const A = await import('./ascension.js')
   assert.deepEqual(A.ASC_EFFECT_UP, { ail: 15, defPen: 10, debuff: 5, drain: 10, dispel: 15, critMult: 10 })
   const type = (n) => A.ascTypeOf(SKILL_BY_NAME[n])
+  // 聖水（もう100%で解除＝威力だった）は 2026-10-18 から「強化を2つ解除」の特別なマス
   assert.deepEqual(['鎧通し', '薙ぎ払い', '生命吸収', '盗み取る', '絶影狙撃', '聖水', '突き', '毒矢', '弱点看破'].map(type),
-    ['defPen', 'debuff', 'drain', 'dispel', 'critMult', 'power', 'power', 'ail', 'debuff'])
+    ['defPen', 'debuff', 'drain', 'dispel', 'critMult', 'custom', 'power', 'ail', 'debuff'])
   const up = (n) => A.ascendSkill(SKILL_BY_NAME[n])
   assert.equal(up('鎧通し').defPen, 0.6)
   assert.deepEqual(up('腐食液').buff.enemy, { vit: -25, int_stat: -20 })
@@ -415,11 +424,12 @@ test('【確定】2026-10-16 状態異常の無い攻撃の技は、今ある効
   // 効果の型は威力が上がらない・前の上がり幅（威力20）を持っていても型の値まで
   assert.equal(up('鎧通し').ascDmg, undefined)
   assert.equal(A.ascendSkill(SKILL_BY_NAME['盗み取る'], 20).dispel.chance, 55)
-  // 数：状態異常58・効果を伸ばす39・威力109・技ごとの特別なマス5（攻撃の技211）
-  //   （2026-10-16 にユーザーがシートで書いた侍・狂戦士の攻撃の技5つ＝居合斬・桜花一閃（前は状態異常）・二の太刀・秘剣・叢雲・ブラッドサクリファイス（前は威力））
+  // 数：状態異常50・効果を伸ばす36・威力44・技ごとの特別なマス81（攻撃の技211）
+  //   （2026-10-16 にユーザーがシートで書いた侍・狂戦士の攻撃の技5つ＝居合斬・桜花一閃（前は状態異常）・二の太刀・秘剣・叢雲・ブラッドサクリファイス（前は威力）
+  //    ＋2026-10-18 にほかの20職でシートの案を採用・書き直した攻撃の技76）
   const cnt = {}
   for (const c of CLASSES) for (const s of skillsOf(c.id)) { const t = A.ascTypeOf(s); if (t) cnt[t] = (cnt[t] || 0) + 1 }
-  assert.deepEqual(cnt, { power: 109, ail: 58, defPen: 16, debuff: 15, drain: 5, dispel: 2, critMult: 1, custom: 5 })
+  assert.deepEqual(cnt, { power: 44, ail: 50, defPen: 13, debuff: 15, drain: 5, dispel: 2, critMult: 1, custom: 81 })
   // 文
   assert.equal(A.ascSkillShort('鎧通し'), '防御無視+10%')
   assert.equal(A.ascSkillDetail('薙ぎ払い'), '相手のAGI−15%→−20%')
@@ -430,17 +440,17 @@ test('【確定】2026-10-16 ユーザー「麻痺とか8%でしょう？それ�
   const A = await import('./ascension.js')
   assert.deepEqual(A.ASC_AIL_UP_BY, { poison: 15, burn: 15, bleed: 15, slow: 15, blind: 10, curse: 10, weaken: 10, fear: 10, seal: 5, frenzy: 5, paralyze: 3 })
   const up = (n) => A.ascendSkill(SKILL_BY_NAME[n])
-  // 麻痺は+3（シールドバッシュ 8%→11%）・封印+5・狂乱+5・恐怖+10・毒と火傷+15
-  assert.equal(up('シールドバッシュ').ail.chance, 11)
-  assert.equal(A.ascSkillDetail('シールドバッシュ'), '麻痺 8%→11%')
-  assert.equal(A.ascSkillShort('シールドバッシュ'), '確率+3%')
-  assert.equal(A.ascUpOf('シールドバッシュ'), 3)
+  // 麻痺は+3（しびれ弾 12%→15%。シールドバッシュは 2026-10-18 にユーザーがシートで「VIT×0.8の追加ダメージ」へ）・封印+5・狂乱+5・恐怖+10・毒と火傷+15
+  assert.equal(up('しびれ弾').ail.chance, 15)
+  assert.equal(A.ascSkillDetail('しびれ弾'), '麻痺 12%→15%')
+  assert.equal(A.ascSkillShort('しびれ弾'), '確率+3%')
+  assert.equal(A.ascUpOf('しびれ弾'), 3)
   assert.equal(up('封の符').ail.chance, 45)
   assert.equal(up('マインドジャック').ail.chance, 25)
   assert.deepEqual([up('爆炎毒').ail, ...(up('爆炎毒').ails || [])].filter(Boolean).map(a => a.chance).sort(), [60, 60])
   // 前の一律+15・威力20を持つ塔の守護者の姿でも、状態異常ごとの値まで
-  assert.equal(A.ascendSkill(SKILL_BY_NAME['シールドバッシュ'], 15).ail.chance, 11)
-  assert.equal(A.ascendSkill(SKILL_BY_NAME['シールドバッシュ'], 20).ail.chance, 11)
+  assert.equal(A.ascendSkill(SKILL_BY_NAME['しびれ弾'], 15).ail.chance, 15)
+  assert.equal(A.ascendSkill(SKILL_BY_NAME['しびれ弾'], 20).ail.chance, 15)
 })
 
 test('【確定】2026-10-16 ユーザーがスキル一覧のシートで書いた技ごとの特別なマス（侍・狂戦士）＝「がっつり能力追加変える効果」', async () => {

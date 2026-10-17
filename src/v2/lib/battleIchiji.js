@@ -81,6 +81,15 @@ export const holyGain = (side, reduced) => {
   side.holy = Math.min(cap, before + add)
   return side.holy - before
 }
+// ホーリーケアのアセンション：回復した量の◯%を聖光として溜める（上限は同じ）
+export const holyFromHeal = (side, healed, pct) => {
+  const h = side?.pa?.ex?.holy
+  if (!h || !(healed > 0) || !(pct > 0)) return 0
+  const cap = Math.floor(side.base.hp * h.cap / 100)
+  const before = side.holy || 0
+  side.holy = Math.min(cap, before + Math.floor(healed * pct / 100))
+  return side.holy - before
+}
 
 // ===== 狩人の罠・死の刻印など「状態異常を付ける確率+」=====
 export const ailUpOf = (side, key) => {
@@ -121,6 +130,7 @@ export const initIchiji = (side, fighter) => {
   side.lastTaken = 0        // 直前に受けたダメージ（報復の一撃）
   side.combo = 0            // 槍の型のコンボ
   side.critUp = 0           // 息を止める：クリティカル率+（戦闘中ずっと）
+  side.nextCrit = false     // 隠形のアセンション：次の攻撃の技が必ずクリティカル
   side.nextBoost = {}       // 照準・詠唱：{ key: { kind, per } }
   side.summonMult = {}      // 召喚1体の攻撃の倍率 { undead: 0.25, shiki: 0.5 }
   side.summonBoost = {}     // { key: { pct, turns } }
@@ -179,7 +189,7 @@ export const passiveDealMult = (me, foe) => {
     if (hit) pct += hit.pct
   }
   if (x.combo) pct += Math.min(x.combo.max, me.combo || 0) * x.combo.pct
-  if (x.perStackDmg) pct += (me.stk?.[x.perStackDmg.key] || 0) * x.perStackDmg.pct
+  if (x.perStackDmg) pct += Math.min(x.perStackDmg.max ?? Infinity, (me.stk?.[x.perStackDmg.key] || 0) * x.perStackDmg.pct)
   if (x.perFoeBleed) pct += (foe.ail?.bleed?.stacks || 0) * x.perFoeBleed
   if (x.perFoeAil) pct += Math.min(x.perFoeAil.max, ailCount(foe) * x.perFoeAil.pct)
   if (x.vsAnyAil && ailCount(foe) > 0) pct += x.vsAnyAil
@@ -259,7 +269,7 @@ export const ichijiSkillPrep = (me, foe, skill, eMe, eFoe, log) => {
     const used = Math.floor(me.holy * skill.useHoly.frac)
     if (used > 0) {
       me.holy -= used
-      out.flat += used
+      out.flat += Math.floor(used * (skill.useHoly.mult || 1))   // アセンションで聖光の追加ダメージ×1.3など
       log.push({ side: me.name, type: 'holyUse', n: used, left: me.holy })
     }
   }
@@ -286,7 +296,7 @@ export const ichijiSkillPrep = (me, foe, skill, eMe, eFoe, log) => {
   if (mpm !== 1) out.mult *= mpm
   // 元素使い：共鳴（属性の魔法を撃つたび。同じ属性を続けると0）
   if (skill.elem && x.reso) {
-    if (me.lastElem && me.lastElem !== skill.elem) me.reso = Math.min(x.reso.max, (me.reso || 0) + 1)
+    if (me.lastElem && me.lastElem !== skill.elem) me.reso = Math.min(x.reso.max, (me.reso || 0) + 1 + (skill.resoBonus || 0))
     else if (me.lastElem === skill.elem) me.reso = 0
   }
   // プリズムバースト：共鳴を全部使って威力+（撃ったあとで0にする＝この技にも共鳴の与ダメージ+は乗る）
@@ -332,9 +342,12 @@ export const ichijiSkillPrep = (me, foe, skill, eMe, eFoe, log) => {
   }
   if (skill.selfLowHp && hpPctOf(me) <= skill.selfLowHp.at) out.mult *= skill.selfLowHp.mult
   if (skill.afterLand && (me.turn || 0) - me.landedTurn === 1) out.mult *= skill.afterLand
-  if (skill.firstTurn && (me.turn || 0) === 0) { out.mult *= skill.firstTurn.mult; out.crit += skill.firstTurn.crit || 0 }
+  // 影討ち：1ターン目だけ（アセンションで turns:2＝2ターン目まで）
+  if (skill.firstTurn && (me.turn || 0) < (skill.firstTurn.turns || 1)) { out.mult *= skill.firstTurn.mult; out.crit += skill.firstTurn.crit || 0 }
   if (skill.critBonus) out.crit += skill.critBonus
   if (skill.critIfDodged && me.ctx?.dodged) out.sureCrit = true
+  // 隠形のアセンション：次に撃つ攻撃の技が必ずクリティカル（クリティカルしない技では使わずに残す）
+  if (me.nextCrit && !skill.noCrit) { out.sureCrit = true; me.nextCrit = false }
   // 溜めを使う
   if (skill.useOne) {
     const u = skill.useOne
@@ -365,7 +378,7 @@ export const ichijiSkillPrep = (me, foe, skill, eMe, eFoe, log) => {
       log.push({ side: foe.name, type: 'consumeAil', ail: AIL_LABEL[b.key], stacks: st, mult: m })
     }
   }
-  if (skill.perStack) out.mult *= 1 + (me.stk[skill.perStack.key] || 0) * skill.perStack.pct / 100
+  if (skill.perStack) out.mult *= 1 + Math.min(skill.perStack.max ?? Infinity, (me.stk[skill.perStack.key] || 0) * skill.perStack.pct) / 100
   if (skill.drainPerStack) out.drainAdd += (me.stk[skill.drainPerStack.key] || 0) * skill.drainPerStack.pct
   if (skill.hitsPerStack) out.hits = (skill.hits || 1) + (me.stk[skill.hitsPerStack.key] || 0) * skill.hitsPerStack.n
   if (skill.comboHits && (me.combo || 0) >= skill.comboHits.at) out.hits = skill.comboHits.hits
@@ -586,6 +599,8 @@ export const ichijiAfterAction = (me, foe, skill, log) => {
     log.push({ side: me.name, type: 'buff', skill: skill.name })
   }
   if (skill.critUp) me.critUp = (me.critUp || 0) + skill.critUp
+  if (skill.nextCrit) me.nextCrit = true
+  if (skill.evaUp) me.evaUp = Math.max(me.evaUp || 0, skill.evaUp)   // 受け流しのアセンション（重複不可）
   if (skill.selfStun) me.stunned = skill.selfStun
 }
 

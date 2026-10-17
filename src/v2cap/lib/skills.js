@@ -159,6 +159,8 @@ export const SKILLS = [
   ...ICHIJI_SKILLS,
 ]
 export const SKILL_BY_NAME = Object.fromEntries(SKILLS.map(s => [s.name, s]))
+// 名前を変えた技（前の名前→今の名前）。保存済みの覚えた技・編成は SQL で付け替える。塔の姿（snapshot）はここで読み替える
+export const SKILL_RENAMED = { 間合い取り: '嵐の構え', メテオ: 'メテオストライク' }
 // 枠に置ける技（パッシブ以外）。並び＝覚える順
 export const skillsOf = (cls) => SKILLS.filter(s => s.cls === cls && !isPassive(s))
 // その職業のパッシブ（上位職だけ・1つ）。★今のⅡの passiveOf は今のⅡの名簿を職業名で引くので使わない
@@ -179,6 +181,8 @@ export const capPowerText = (s) => {
       return `${main}×${s.hitMults.join('→')}${sub}（${s.hitMults.length}連撃・1発ずつ強くなる）`
     }
     if (s.jump) return `着地で ${powerText({ ...s, mult: s.jump.mult })}`
+    // メテオストライク：連撃の数が毎回ランダム（hits は目安の平均）
+    if (s.hitsRange) return `${powerText({ ...s, hits: 1 })} ×${s.hitsRange[0]}〜${s.hitsRange[1]}回`
     return powerText(s)
   }
   if (s.kind === 'heal' && (s.healMax || s.regenMax || s.mpHeal || s.mpGain || s.rewind)) {

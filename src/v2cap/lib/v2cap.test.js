@@ -1245,17 +1245,17 @@ test('【確定】2026-10-16 ユーザー「17の案とりあえず入れてほ�
   assert.deepEqual(JOB_BONUS.魔法剣士, { str: 133, int_stat: 125, hp: 70, agi: 67, vit: 40, mp: 38, luk: 17 })
   // 技とパッシブ
   const p = (c) => passiveOf(c).passive
-  assert.equal(SKILL_BY_NAME['エリクサー'].healMax, 15)
+  assert.equal(SKILL_BY_NAME['エリクサー'].healMax, 100, '2026-10-18 ユーザーがシートで15%→100%')
   assert.equal(SKILL_BY_NAME['霊薬'].heal.rate, 1)
   assert.equal(SKILL_BY_NAME['ハイヒール'].heal.rate, 1.3)
   assert.equal(SKILL_BY_NAME['傷薬'].heal.rate, 0.8)
   assert.equal(p('聖職者').healBonus, undefined)
-  assert.equal(p('式神使い').whileSummonOrGuard, 8)
+  assert.equal(p('式神使い').whileSummonOrGuard, 10, '2026-10-18 ユーザーがシートで+8%→+10%')
   assert.deepEqual(p('死霊使い').guardPerStack, { key: 'undead', cut: 2 })
   assert.equal(p('クロノマンサー').extraIfFaster, 35)
   // 説明文も数字に合わせた
-  assert.ok(SKILL_BY_NAME['エリクサー'].desc.startsWith('最大HPの15%を回復'))
-  assert.ok(passiveOf('式神使い').desc.includes('+8%') && passiveOf('死霊使い').desc.includes('-2%') && passiveOf('クロノマンサー').desc.includes('35%'))
+  assert.ok(SKILL_BY_NAME['エリクサー'].desc.startsWith('最大HPの100%を回復'))
+  assert.ok(passiveOf('式神使い').desc.includes('+10%') && passiveOf('死霊使い').desc.includes('-2%') && passiveOf('クロノマンサー').desc.includes('35%'))
   assert.ok(!passiveOf('聖職者').desc.includes('回復量+20%'))
 })
 

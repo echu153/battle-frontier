@@ -35,7 +35,7 @@ import {
 import {
   initIchiji, collectExPassives, passiveDealMult, ichijiSkip, ichijiSkillPrep, consumeDodgeBoost,
   incomingCut, guardHealPct, gainHp, ichijiAfterAction, tickIchiji, hpPctOf, STK_LABEL,
-  imbueFxOf, IMBUE_FX, agitCutOf, AGIT_MAX, shieldAbsorb, holyGain, ailUpOf, canHeal, keepAlive,
+  imbueFxOf, IMBUE_FX, agitCutOf, AGIT_MAX, shieldAbsorb, holyGain, holyFromHeal, ailUpOf, canHeal, keepAlive,
 } from './battleIchiji.js'
 // ★防具のセット能力（「レベルキャップあり」版・2026-10-14）。今のⅡのキャラ・敵は setFx を持たないので何も起きない
 import {
@@ -509,7 +509,8 @@ const healMaxAmount = (side, pct) =>
     * Math.max(0, 1 + side.evo.heal / 100) * gospelMultOf(side)))
 
 // ★v2cap のアセンション（2026-10-16）：納刀のマス＝納刀状態のあいだ（次にスキルを撃つまで）回避率+。納刀していなければ0
-const stanceEvaOf = (side) => side?.stance?.eva || 0
+// 納刀の回避＋受け流しのアセンション（evaUp＝回避率+○%・重ねても増えない）。どちらも直接の回避なので上限15%に入る
+const stanceEvaOf = (side) => (side?.stance?.eva || 0) + (side?.evaUp || 0)
 
 // 「最大HPの◯%」のような割合の回復・消耗。最低1（0にすると付いていないのと同じになる）
 const pctHp = (max, pct) => (pct > 0 ? Math.max(1, Math.floor(max * pct / 100)) : 0)
@@ -1003,7 +1004,9 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       // ★一次職の「威力+％」「与ダメージ+％」は、AGI・DEXなど副参照のぶんも含めたダメージ全体に掛ける
       //   （今のⅡの倍率は主のステにだけ掛かる＝damageOf の base。そちらは変えない）
       const ichijiK = ip.mult * dealMult
-      const nHits = ip.hits ?? (skill.hitMults ? skill.hitMults.length : (skill.hits || 1))
+      // メテオストライク：hitsRange [下, 上] の連撃数を毎回ランダムに（hits はAIなどの目安の平均）
+      const nHits = ip.hits ?? (skill.hitsRange ? skill.hitsRange[0] + Math.floor(rng() * (skill.hitsRange[1] - skill.hitsRange[0] + 1))
+        : (skill.hitMults ? skill.hitMults.length : (skill.hits || 1)))
       // ★上位クラス（2026-10-15）：宿り（魔法剣士）。雷は防御無視＋15%（トリニティブレイドは雷の段だけ）
       const imb = imbueFxOf(me, skill)
       defPen = Math.min(1, defPen + (ip.defPen || 0) + (imb && !skill.hitElems && imb.elem === 'thunder' ? IMBUE_FX.thunder.defPen * imb.k : 0))
@@ -1063,7 +1066,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
         if (r.hit && r.crit && foe.setFx?.critTakenCut) r.damage = Math.max(1, Math.floor(r.damage * setCritTakenMult(foe)))
         // ★一次職：クリティカルしたときだけ伸びる技（絶影狙撃）・当てるたびコンボ（槍の型）
         if (skill.critMult && r.hit && r.crit) r.damage = Math.floor(r.damage * skill.critMult)
-        if (r.hit && me.pa.ex?.combo) me.combo = Math.min(me.pa.ex.combo.max, (me.combo || 0) + comboStepOf(me))
+        if (r.hit && me.pa.ex?.combo) me.combo = Math.min(me.pa.ex.combo.max, (me.combo || 0) + comboStepOf(me) + (skill.comboStep2 && roll(skill.comboStep2, rng) ? 1 : 0))
         // ★上位クラス：防御で減る前のぶん（この発の倍率は当たったあとと同じだけ掛ける）・当たった段の属性
         if (r.hit && wantPre) rawPre += Math.floor(r.damage * preAtResolve / Math.max(1, dmgAtResolve))
         if (r.hit && skill.hitElems) elemHit.push(skill.hitElems[h])
@@ -1176,7 +1179,9 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     // ★回復量は healOff（他職の弱まり×アセンションの回復量+%）。今のⅡの技は off と同じ
     if (skill.heal) {
       const amt = healAmount(me, eMe, skill.heal.rate * healOff)
-      gainHp(me, amt)
+      const got = gainHp(me, amt)
+      // ホーリーケアのアセンション：回復した量の◯%を聖光に
+      if (skill.healToHoly) holyFromHeal(me, got, skill.healToHoly)
       log.push({ side: me.name, type: 'heal', skill: skill.name, heal: amt })
     }
     // ★防具のセット能力：悠久の守り（自分にかける期限つきの効果の持続+）。setTurnsUp は持っていなければ0
@@ -1208,12 +1213,18 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       log.push({ side: me.name, type: 'heal', skill: skill.name, heal: got })
     }
   }
+  // ★仙丹のアセンション：補助技でも「◯ターンの間、毎ターン最大HPの◯%を回復」
+  if (skill.kind === 'buff' && skill.regenMax) {
+    me.regenMax = { pct: skill.regenMax.pct * healOff, turns: skill.regenMax.turns + setTurnsUp(me) }
+    log.push({ side: me.name, type: 'regen', skill: skill.name })
+  }
 
   // 骸の壁：戦闘開始時と自分の行動5回ごとに得る（重複しないので、掛け直すだけ）
   if (me.pa.wall && me.acts % me.pa.wall.every === 0) me.wallPct = me.pa.wall.pct
 
   // ★バフ消去（異端審問官）：相手に乗っているプラス補正を確率で1つ消す
-  if (skill.dispel && roll(skill.dispel.chance, rng)) {
+  // 聖水のアセンション＝dispel.n:2 で2つまで消す
+  if (skill.dispel && roll(skill.dispel.chance, rng)) for (let di = 0; di < (skill.dispel.n || 1); di++) {
     const ups = Object.entries(foe.buffs).filter(([, v]) => v > 0)
     if (ups.length) {
       const [k] = ups[Math.floor(rng() * ups.length)]
@@ -1460,7 +1471,7 @@ const onHitRework = (me, foe, skill, ip, imb, elemHit, off, rng, log) => {
   if (skill.hitElems) for (const e of elemHit) applyImbueFx(me, foe, e, 1, rng, log)
   else if (imb) applyImbueFx(me, foe, imb.elem, imb.k, rng, log)
   if (skill.imbue && me.pa.ex?.imbue) {
-    me.imbue = { elem: skill.imbue, turns: me.pa.ex.imbue.turns }
+    me.imbue = { elem: skill.imbue, turns: me.pa.ex.imbue.turns + (skill.imbueTurnsUp || 0) }   // 雷光斬のアセンション＝+1ターン
     log.push({ side: me.name, type: 'imbue', elem: IMBUE_FX[skill.imbue]?.label || skill.imbue, turns: me.imbue.turns })
   }
   if (ip.imbueAil && foe.hp > 0) tryInflict(me, foe, { ...ip.imbueAil, chance: ip.imbueAil.chance * off }, rng, log)

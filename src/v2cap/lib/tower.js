@@ -31,7 +31,7 @@ import {
   START_CLASSES, ICHIJI_CLASSES, ICHIJI_RENAMED, CLASS_BY_ID, JOB_BONUS, attackKindOf, lineageOf, skillsLearnedBy,
   jobMaxOf, bonusSeqOf, jobBonusStats, stageOf,
 } from './jobs.js'
-import { defaultSetOf, fillSetOf, passiveOf, SKILL_BY_NAME } from './skills.js'
+import { defaultSetOf, fillSetOf, passiveOf, SKILL_BY_NAME, SKILL_RENAMED } from './skills.js'
 import { slotsOf } from './loadout.js'
 import { CAP_RULES } from './rules.js'
 import { stdPowerAt, spotOf } from './areas.js'
@@ -222,7 +222,7 @@ const snapSetOf = (snap) => (Array.isArray(snap?.set)
   ? snap.set
   : (snap?.slots || []).map(s => ({ name: s?.skill?.name, uses: s?.uses })))
   .filter(e => e?.name)
-  .map(e => ({ name: e.name, uses: Math.max(1, Math.floor(e.uses || 1)) }))
+  .map(e => ({ name: SKILL_RENAMED[e.name] || e.name, uses: Math.max(1, Math.floor(e.uses || 1)) }))
 export const fromSnapshot = (snap) => {
   const cls = snapClassOf(snap?.cls)
   const passive = passiveOf(cls)
@@ -231,7 +231,9 @@ export const fromSnapshot = (snap) => {
   const set = snapSetOf(snap)
   // 使える技の職業（自分と下位職）。名簿から消えた職業なら、技の職業で絞らない（名簿にある技はそのまま使う）
   const lineage = CLASS_BY_ID[cls] ? lineageOf(cls) : [...new Set(set.map(e => SKILL_BY_NAME[e.name]?.cls).filter(Boolean))]
-  const ups = snap?.ups && typeof snap.ups === 'object' ? snap.ups : {}
+  // アセンションの上がり幅も、前の名前の技は今の名前で読む
+  const ups = snap?.ups && typeof snap.ups === 'object'
+    ? Object.fromEntries(Object.entries(snap.ups).map(([k, v]) => [SKILL_RENAMED[k] || k, v])) : {}
   return {
     ...CAP_RULES,
     npc: false,
