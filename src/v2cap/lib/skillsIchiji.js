@@ -176,15 +176,15 @@ export const ICHIJI_SKILLS = [
   // 竜騎士【跳躍】：跳んでいる間（1〜2ターン）は相手の攻撃を30%で回避し、着地で大きく攻める
   { name:'竜の血', cls:'竜騎士', kind:'passive', mp:0, passive:{ landPct:15, statPct:{ vit:10 } }, desc:'跳躍スキルの着地ダメージ+15%・自分のVIT+10%' },
   { name:'ドラゴンスラスト', cls:'竜騎士', kind:P, mult:1.57, proc:95, mp:7, defPen:0.1, desc:'相手の防御を10%無視' },
-  { name:'ジャンプ', cls:'竜騎士', kind:P, mult:4.18, proc:85, mp:14, jump:{ turns:1, mult:4.18, evade:40 }, desc:'跳躍して、次のターンに着地して攻撃。跳躍中は相手の攻撃を40%で回避' },
+  { name:'ジャンプ', cls:'竜騎士', kind:P, mult:4.18, proc:85, mp:14, jump:{ turns:1, mult:4.18, evade:15 }, desc:'跳躍して、次のターンに着地して攻撃。跳躍中は相手の攻撃を15%で回避' },
   { name:'ドラゴンファング', cls:'竜騎士', kind:P, mult:0.87, hits:2, noCrit:true, proc:88, mp:12, defPen:0.2, desc:'2連撃。相手の防御を20%無視・クリティカルなし' },
   { name:'スカイスピア', cls:'竜騎士', kind:P, mult:1.41, add:[{ stat:'dex', rate:0.33 }], proc:88, mp:11, sureHit:true, desc:'必ず当たる' },
   { name:'ドラゴンロア', cls:'竜騎士', kind:B, proc:100, mp:12, buff:{ enemy:{ str:-15, int_stat:-15 } }, ail:{ key:'fear', chance:40 }, priority:1, desc:'相手のSTR-15%・INT-15%・40%で恐怖' },
   { name:'竜鱗', cls:'竜騎士', kind:B, proc:100, mp:10, buff:{ self:{ vit:20, agi:20 } }, priority:1, desc:'自分のVIT+20%・AGI+20%' },
-  { name:'ハイジャンプ', cls:'竜騎士', kind:P, mult:6.44, proc:80, mp:18, jump:{ turns:2, mult:6.44, evade:40 }, desc:'跳躍して、2ターン後に着地して攻撃。跳躍中は相手の攻撃を40%で回避' },
+  { name:'ハイジャンプ', cls:'竜騎士', kind:P, mult:6.44, proc:80, mp:18, jump:{ turns:2, mult:6.44, evade:15 }, desc:'跳躍して、2ターン後に着地して攻撃。跳躍中は相手の攻撃を15%で回避' },
   { name:'竜翔', cls:'竜騎士', kind:B, proc:100, mp:12, soar:{ turns:3, land:20, proc:10 }, priority:1, desc:'3ターンの間、着地ダメージ+20%・跳躍の技の発動率+10%' },
   { name:'天墜竜閃', cls:'竜騎士', kind:P, mult:1.83, proc:75, mp:24, defPen:0.3, afterLand:1.2, desc:'溜めなしで撃つ。相手の防御を30%無視。直前のターンに着地していれば×1.2' },
-  { name:'天竜落とし', cls:'竜騎士', kind:P, mult:4.21, proc:75, mp:28, jump:{ turns:1, mult:4.21, evade:40, defPen:0.3, ail:{ key:'fear', chance:30 } }, desc:'跳躍して1ターン後に着地して攻撃（跳躍中は40%で回避）。相手の防御を30%無視・30%で恐怖' },
+  { name:'天竜落とし', cls:'竜騎士', kind:P, mult:4.21, proc:75, mp:28, jump:{ turns:1, mult:4.21, evade:15, defPen:0.3, ail:{ key:'fear', chance:30 } }, desc:'跳躍して1ターン後に着地して攻撃（跳躍中は15%で回避）。相手の防御を30%無視・30%で恐怖' },
   // ストームランサー【コンボ】：1ヒットごとにコンボ+1（最大20）。多段で稼ぎ、決め技に乗せる
   { name:'槍の型', cls:'ストームランサー', kind:'passive', mp:0, passive:{ combo:{ max:20, pct:2 } }, desc:'攻撃が1ヒットするごとにコンボ+1（最大20）。コンボ1につき与ダメージ+2%' },
   { name:'連突き', cls:'ストームランサー', kind:P, mult:0.54, hits:3, proc:95, mp:6, noCrit:true, desc:'3連撃。クリティカルなし' },
@@ -434,6 +434,7 @@ export const ICHIJI_TUNE = {}
 //   霊薬師 … 仙丹 全能力+15%→+10%
 //   聖職者 … リザレクション HP50%→35%
 //   竜騎士 … 跳躍中の回避 30%→40%（対人で跳んでいる間に殴られ続けた）
+//            ★2026-10-17 40%→15%（ユーザー「回避力が直接上がるやつ、最高でも15％にして」・combat.js の CAP_EVA_BONUS_MAX）
 //   侍     … 秘剣・叢雲 納刀中1.8倍→1.7倍（対人で強かった）・明鏡止水 STR+30%・DEX+20%→STR+20%・DEX+15%
 //            （2026-10-15 対人75%。1回使うと戦いの最後まで残るので、対人の長い戦いほど効く。ボス戦はほぼ変わらない）
 // ③ 2026-10-15 ユーザー決定：AGIを上げる強化（影走り・駆け足・変わり身）を重ねた組み方が強かった（回避は AGIの比の5乗で伸びる）

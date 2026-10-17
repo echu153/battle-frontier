@@ -111,3 +111,23 @@ test('【確定】2026-10-16 納刀のアセンション（ユーザーがシー
   assert.equal(tryHit(SKILL_BY_NAME['納刀'], null).hit, true)
   assert.equal(tryHit(nato, null).stance.eva, 10, '構えているあいだ')
 })
+
+test('【確定】2026-10-17 ユーザー「回避力が直接上がるやつ、最高でも15％にして、40％とかだと強すぎる」：直接の回避は1つでも重ねても15%まで', async () => {
+  const { CAP_EVA_BONUS_MAX } = await import('../../v2/lib/combat.js')
+  const { ASC_CUSTOM } = await import('./ascension.js')
+  const { ARMOR_SETS } = await import('./armorSets.js')
+  assert.equal(CAP_EVA_BONUS_MAX, 15)
+  // 重ねても+15%まで（この版の印 cap）。今のⅡ（印なし）は今のまま
+  const a = st({ dex: 100 }), d = st({ agi: 400 })
+  assert.equal(evasionRate(a, d, 0, 30, 'cap'), evasionRate(a, d, 0, 15, 'cap'))
+  assert.ok(evasionRate(a, d, 0, 10, 'cap') < evasionRate(a, d, 0, 15, 'cap'))
+  assert.ok(evasionRate(a, d, 0, 30, null) > evasionRate(a, d, 0, 15, null), '今のⅡは上限なし')
+  // 1つずつも15%まで：竜騎士の跳躍中の回避（前は40%）・技とパッシブ・防具のセット能力・アセンション（納刀）
+  const big = []
+  const walk = (o, path) => { if (!o || typeof o !== 'object') return; for (const [k, v] of Object.entries(o)) { const p = path + '.' + k; if (/^(evade|evaBonus|eva)$/.test(k) && typeof v === 'number' && v > 15) big.push(`${p}=${v}`); walk(v, p) } }
+  for (const s of SKILLS) walk(s, s.name)
+  walk(ARMOR_SETS, '防具のセット能力')
+  for (const [n, c] of Object.entries(ASC_CUSTOM)) walk(c.apply({ ...SKILLS.find(s => s.name === n) }), 'アセンション・' + n)
+  assert.deepEqual(big, [])
+  assert.deepEqual(['ジャンプ', 'ハイジャンプ', '天竜落とし'].map(n => SKILLS.find(s => s.name === n).jump.evade), [15, 15, 15])
+})

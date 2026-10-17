@@ -114,12 +114,16 @@ export const CAP_EVA = { knee: 20, rate: 0.5 }
 export const capEvaOf = (base) => (base <= CAP_EVA.knee ? base : CAP_EVA.knee + (base - CAP_EVA.knee) * CAP_EVA.rate)
 // 回避率(%)。hitBonus は攻撃側の命中補正、evaBonus は防御側の回避補正（どちらもポイント）
 // defRule … 受ける側の決まり（'cap'＝「レベルキャップあり」版の回避）。省けば今のⅡの式
+// ★v2cap（defRule:'cap'）：回避を直接上げる効果（防具のセット能力・納刀のアセンションなど＝evaBonus）は重ねても+15%まで
+//   （2026-10-17 ユーザー「回避力が直接上がるやつ、最高でも15％にして、40％とかだと強すぎる」）。今のⅡは今のまま
+export const CAP_EVA_BONUS_MAX = 15
 export const evasionRate = (attacker, defender, hitBonus = 0, evaBonus = 0, defRule = null) => {
   const eva = Math.max(0, evasionScoreOf(defender))
   const dex = Math.max(1, attacker?.dex || 0)
   const raw = EVA_COEF * Math.pow(eva / (eva + dex), EVA_CURVE)
   const base = defRule === 'cap' ? capEvaOf(raw) : raw
-  return clampPct(base + evaBonus - hitBonus, 0, EVA_RATE_MAX)
+  const bonus = defRule === 'cap' ? Math.min(CAP_EVA_BONUS_MAX, evaBonus) : evaBonus
+  return clampPct(base + bonus - hitBonus, 0, EVA_RATE_MAX)
 }
 // スキルごとの命中率(acc)を織り込んだ最終命中率(%)。
 //   最終命中率 = acc +(100 − acc)× 安定度 − 回避率

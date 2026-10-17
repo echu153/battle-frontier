@@ -83,7 +83,7 @@ test('2026-10-15 測って直した仕組みの数字（強さの元を先に直
   assert.equal(passiveOf('死霊使い').passive.guardPerStack.cut, 2, '2026-10-16 死者の盾 −4%→−2%（能力表の案）')
   assert.equal(v('仙丹').buff.self.str, 10)
   assert.equal(v('リザレクション').revive.pct, 35)
-  assert.deepEqual(['ジャンプ', 'ハイジャンプ', '天竜落とし'].map(n => v(n).jump.evade), [40, 40, 40])
+  assert.deepEqual(['ジャンプ', 'ハイジャンプ', '天竜落とし'].map(n => v(n).jump.evade), [15, 15, 15], '2026-10-17 40%→15%（直接の回避は最高15%・ユーザー）')
   assert.equal(v('秘剣・叢雲').stanceMult, 1.7)
   // 2026-10-15「クラス間の格差が出すぎないように」：侍 明鏡止水 STR+20%・DEX+15%／ストームランサー コンボ1つにつき+2%
   //   → 2026-10-17 補助技の上げ幅をそろえて STR+20%・DEX+20%（ユーザー「全クラス基本統一してよ」）
