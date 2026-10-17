@@ -402,7 +402,7 @@ export const ICHIJI_SKILLS = [
   { name:'メガボム', cls:'アルケミスト', kind:M, mult:1.91, proc:75, mp:24, consumeAllAil:{ per:25, max:90 }, desc:'相手の状態異常をすべて解除し、1つにつき威力+25%（最大+90%）' },
   { name:'賢者の石', cls:'アルケミスト', kind:B, proc:100, mp:22, philo:{ turns:4, ailUp:20, react:10 }, priority:1, desc:'4ターンの間、状態異常を付ける確率+20%・化学反応の上乗せが+20%→+30%' },
   // 霊薬師【薬効】：強化の薬で薬効が溜まり（最大20・2026-10-18 ユーザー選択で5→20）、薬効1つにつき与ダメージ+5%。薬効解放でまとめて使うか、溜めたまま戦う
-  { name:'調合の極意', cls:'霊薬師', kind:'passive', mp:0, passive:{ perStackDmg:{ key:'potion', pct:5 } }, desc:'薬効1つにつき与ダメージ+5%' },
+  { name:'調合の極意', cls:'霊薬師', kind:'passive', mp:0, passive:{ perStackDmg:{ key:'potion', pct:5, max:25 } }, desc:'薬効1つにつき与ダメージ+5%（最大+25%）' },
   { name:'霊薬瓶', cls:'霊薬師', kind:M, mult:1.88, proc:95, mp:7, desc:'霊薬の瓶を投げつける' },
   { name:'剛力薬', cls:'霊薬師', kind:B, proc:100, mp:9, buff:{ self:{ str:30 } }, gain:{ key:'potion', n:1, max:20 }, priority:1, desc:'自分のSTR+30%・薬効+1' },
   { name:'叡智の薬', cls:'霊薬師', kind:B, proc:100, mp:9, buff:{ self:{ int_stat:30 } }, gain:{ key:'potion', n:1, max:20 }, priority:1, desc:'自分のINT+30%・薬効+1' },

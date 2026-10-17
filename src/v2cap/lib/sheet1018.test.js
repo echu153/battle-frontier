@@ -68,6 +68,9 @@ test('【確定】2026-10-18 シートで直した技の元の値と説明', () 
   assert.deepEqual(S('浸透薬').defPenPerStack, { key: 'potion', per: 0.03, max: 0.6 })
   assert.equal(S('薬効解放').useAll, undefined, '薬効を減らさない（ユーザー選択）')
   assert.deepEqual([S('薬効解放').mult, S('薬効解放').perStack], [1.1, { key: 'potion', pct: 5, max: 100 }])
+  // 調合の極意は薬効5つぶん（最大+25%）で止める（ユーザー選択＝上限を20にしても今と同じ）
+  assert.deepEqual(passiveOf('霊薬師').passive.perStackDmg, { key: 'potion', pct: 5, max: 25 })
+  assert.equal(passiveOf('霊薬師').desc, '薬効1つにつき与ダメージ+5%（最大+25%）')
 })
 
 test('【確定】2026-10-18 シートで採用・書き直したアセンションの特別なマス（ほかの20職）', () => {
@@ -216,6 +219,10 @@ test('薬効の上限20／薬効解放は薬効を減らさず、1つにつき+5
   assert.ok(Math.abs(multAt(asc, 20) - 2) < 1e-9, '上限は+100%のまま')
   const r = cast('霊薬師', '薬効解放', (m) => { m.stk.potion = 8 })
   assert.equal(r.me.stk.potion, 8, '撃っても減らない')
+  // 調合の極意は5つ（+25%）で止まる（ユーザー選択）：薬効で伸びない技（霊薬瓶）は5つと10個で同じ
+  const bottle = (n) => cast('霊薬師', '霊薬瓶', (m) => { m.stk.potion = n }).e.damage
+  assert.equal(bottle(10), bottle(5))
+  assert.ok(bottle(5) > bottle(0) * 1.2, `${bottle(5)}／${bottle(0)}`)
 })
 
 test('名前を変えた技：塔の姿（前の名前）は今の名前で読む／SQL は名簿の名前と、覚えた技・編成の付け替えを一度だけ', () => {
