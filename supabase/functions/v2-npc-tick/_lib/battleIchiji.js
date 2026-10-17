@@ -26,6 +26,8 @@ export const EX_PASSIVE_KEYS = [
   'perFoeAil', 'critFollow', 'vsAnyAil', 'whileStackGuard', 'elemSwitch', 'chantBonus', 'extraIfFaster', 'guardPerStack',
   'whileSummonOrGuard', 'vsRaceOrAil', 'bothAil', 'vsDebuff',
   'misfireStance', 'imbue', 'holy', 'misfireChase', 'cloneGuard', 'mpPower', 'reso', 'overShield', 'vsRace', 'sin',
+  // 2026-10-17 体術師の地上と空中：counterAirMult（空中にいるあいだの反撃の倍率・0＝空中では反撃しない）
+  'counterAirMult',
 ]
 
 // ===== 魔法剣士：属性の宿り（2026-10-15）=====
@@ -264,6 +266,15 @@ export const ichijiSkillPrep = (me, foe, skill, eMe, eFoe, log) => {
   // ストームランサー：コンボで威力+／コンボが多ければ防御無視
   if (skill.comboPower) out.mult *= 1 + Math.min(skill.comboPower.max, (me.combo || 0) * skill.comboPower.per) / 100
   if (skill.comboDefPen && (me.combo || 0) >= skill.comboDefPen.at) out.defPen += skill.comboDefPen.defPen
+  // 体術師（2026-10-17）：地上と空中で同じ技の効き目が変わる。撃ち始めの状態（me.air）で onGround／inAir を足す
+  //   mult＝威力+%・crit＝クリティカル率+・defPen＝防御無視+・hits＝連撃+n（跳び上がる・留まるは battle.js の空中の所）
+  const st = me.air ? skill.inAir : skill.onGround
+  if (st) {
+    if (st.mult) out.mult *= 1 + st.mult / 100
+    if (st.crit) out.crit += st.crit
+    if (st.defPen) out.defPen += st.defPen
+    if (st.hits) out.hits = (out.hits ?? (skill.hitMults ? skill.hitMults.length : (skill.hits || 1))) + st.hits
+  }
   // 体術師：この戦闘で回避した回数で威力+
   if (skill.dodgeCountPower) out.mult *= 1 + Math.min(skill.dodgeCountPower.max, (me.dodgeCount || 0) * skill.dodgeCountPower.per) / 100
   // サイキッカー：相手の動揺で威力+（動揺は残る）

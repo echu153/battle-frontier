@@ -527,3 +527,62 @@ test('浸透薬：薬効1つにつき防御3%無視／エリクサー：最大HP
   assert.equal(hasAilment(me.ail, 'poison') || hasAilment(me.ail, 'slow'), false)
   assert.equal(me.stk.potion, 3)
 })
+
+// ===== 体術師【地上と空中】（2026-10-17）=====
+test('【確定】2026-10-17 ユーザー「スキルによって地上状態と空中状態が切り替わるようにして、同じスキルでも状態によって効果や威力代わるようにして、補助skillは統一でいい」：体術師', () => {
+  const inAir = (me) => { me.air = true }
+  // 戦闘は地上から。跳び上がる技（半月蹴り・旋風脚・飛天三角蹴り）を地上で撃つと空中へ
+  for (const n of ['半月蹴り', '旋風脚', '飛天三角蹴り']) {
+    const r = hit('体術師', n)
+    assert.equal(r.me.air, true, `${n}：地上で撃つと空中へ`)
+    assert.ok(r.log.some(l => l.type === 'air'), n)
+  }
+  // 空中で撃つと：半月蹴り・巴投げ・破衝掌は威力+して着地
+  for (const n of ['半月蹴り', '巴投げ', '破衝掌']) {
+    const g = hit('体術師', n), a = hit('体術師', n, inAir)
+    assert.equal(a.me.air, false, `${n}：空中で撃つと着地`)
+    assert.ok(a.log.some(l => l.type === 'land'), n)
+    assert.ok(a.dmg > g.dmg * (1 + S(n).inAir.mult / 100) * 0.97, `${n}：空中なら威力+${S(n).inAir.mult}%（${a.dmg}／${g.dmg}）`)
+  }
+  // 旋風脚：空中なら威力+して空中に留まる
+  {
+    const g = hit('体術師', '旋風脚'), a = hit('体術師', '旋風脚', inAir)
+    assert.equal(a.me.air, true, '旋風脚：空中なら留まる')
+    assert.ok(near(a.dmg / g.dmg, 1 + S('旋風脚').inAir.mult / 100, 0.03), `${a.dmg}／${g.dmg}`)
+  }
+  // 五連殺：地上は5連撃でそのまま地上／空中は+1連撃して留まる
+  {
+    const g = hit('体術師', '五連殺'), a = hit('体術師', '五連殺', inAir)
+    assert.deepEqual([g.e.hits, g.me.air], [5, false])
+    assert.deepEqual([a.e.hits, a.me.air], [6, true])
+  }
+  // 破衝掌：空中なら防御無視が足される（計50%）／飛天三角蹴り：空中ならクリティカル率+して留まる
+  assert.ok(Math.abs(S('破衝掌').defPen + S('破衝掌').inAir.defPen - 0.5) < 1e-9)
+  assert.ok(S('飛天三角蹴り').inAir.crit > 0)
+  assert.equal(hit('体術師', '飛天三角蹴り', inAir).me.air, true)
+  // 補助の技は地上でも空中でも同じ（ユーザー「補助skillは統一でいい」）。流転掌も同じ（空中で撃つと着地）
+  for (const n of ['受け流し', '流水の構え', '後の先', '流転掌']) assert.ok(!S(n).onGround && !S(n).inAir, n)
+  assert.equal(hit('体術師', '流転掌', inAir).me.air, false)
+  // 撃ち始めの状態で決まる：地上→飛天三角蹴り（空中へ）→破衝掌（空中なので威力+して着地）→旋風脚（空中へ）→半月蹴り（着地）
+  const me = side('体', '体術師', ['飛天三角蹴り', '破衝掌', '旋風脚', '半月蹴り'])
+  const path = []
+  for (let i = 0; i < 4; i++) { takeAction(me, dummy(), mid, []); path.push(me.air ? '空' : '地') }
+  assert.deepEqual(path, ['空', '地', '空', '地'])
+})
+
+test('【確定】2026-10-17 体術師の心眼：地上＝回避したら物理×0.6で反撃／空中＝反撃しないが回避+10%（直接の回避は15%まで）', async () => {
+  const { AIR_EVA } = await import('../../v2/lib/battle.js')
+  assert.deepEqual(passiveOf('体術師').passive, { counterOnDodge: 0.6, counterAirMult: 0 })
+  assert.equal(AIR_EVA, 10)
+  // 相手の攻撃が必ず外れる乱数で：地上なら反撃が出る・空中なら出ない
+  const counters = (air) => {
+    const me = side('体', '体術師', [])
+    me.air = air
+    const foe = side('敵', '戦士', [], { stats: { dex: 1 } })
+    const log = []
+    takeAction(foe, me, fixed(0.999), log)
+    return log.filter(l => l.label === '反撃' || l.type === 'counter' || (l.type === 'strike' && l.label === '反撃')).length
+  }
+  assert.ok(counters(false) > 0, '地上なら反撃')
+  assert.equal(counters(true), 0, '空中では反撃しない')
+})

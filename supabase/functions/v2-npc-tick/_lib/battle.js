@@ -1248,10 +1248,12 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     }
   }
   // ★体術師：跳び上がる技で空中へ。叩きつける技や、ふつうに殴る技を出すと着地する
-  if (skill.airUp) {
+  //   ★v2cap（2026-10-17）：撃ち始めの状態で決まる onGround／inAir の airUp・keepAir も見る（地上なら跳び上がる・空中なら留まる など）
+  const airSt = wasAir ? skill.inAir : skill.onGround
+  if (skill.airUp || airSt?.airUp) {
     me.air = true
     log.push({ side: me.name, type: 'air', skill: skill.name })
-  } else if ((skill.kind === 'phys' || skill.kind === 'mag') && !skill.keepAir) {
+  } else if ((skill.kind === 'phys' || skill.kind === 'mag') && !skill.keepAir && !airSt?.keepAir) {
     // keepAir を持つ技は蹴り続けて空中に留まる（体術師）
     // ★降りたことも必ずログに出す。空中かどうかで威力が変わるので、黙って戻ると分からない
     if (me.air) log.push({ side: me.name, type: 'land', skill: skill.name })
@@ -1386,7 +1388,9 @@ const afterAttack = (me, foe, hits, crit, rng, log) => {
   if (hits === 0 && foe.pa.ex?.counterOnDodge && foe.hp > 0 && me.hp > 0) {
     // ★上位クラス（2026-10-15）：後の先（その間、回避したときの反撃の威力+%）
     const cb = foe.counterBoost?.turns > 0 ? 1 + foe.counterBoost.pct / 100 : 1
-    strike(foe, me, { mult: foe.pa.ex.counterOnDodge * cb, kind: 'phys', label: '反撃' }, rng, log)
+    // ★体術師（2026-10-17）：空中にいるあいだの反撃の倍率（counterAirMult・0＝空中では反撃しない）。持たなければ今のまま
+    const ak = foe.air ? (foe.pa.ex.counterAirMult ?? 1) : 1
+    if (ak > 0) strike(foe, me, { mult: foe.pa.ex.counterOnDodge * cb * ak, kind: 'phys', label: '反撃' }, rng, log)
   }
   if (crit && me.pa.ex?.critFollow && foe.hp > 0) {
     strike(me, foe, { mult: me.pa.ex.critFollow, kind: 'phys', label: '追撃' }, rng, log)

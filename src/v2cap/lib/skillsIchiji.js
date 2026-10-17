@@ -200,17 +200,23 @@ export const ICHIJI_SKILLS = [
 
   // ===== 格闘家系 =====
   // 体術師【回避と反撃】：回避するたびに反撃する。この戦闘で回避した回数を決め技の威力にする
-  { name:'心眼', cls:'体術師', kind:'passive', mp:0, passive:{ counterOnDodge:0.6 }, desc:'攻撃を回避するたびに物理 ×0.6で反撃' },
-  { name:'半月蹴り', cls:'体術師', kind:P, mult:1.63, proc:95, mp:6, desc:'鋭い蹴り' },
+  // 【地上と空中】2026-10-17 ユーザー「体術師のパッシブとスキル、スキルによって地上状態と空中状態が切り替わるようにして、
+  //   同じスキルでも状態によって効果や威力代わるようにして、補助skillは統一でいい、スキルによっては状態関わらず同じ内容のスキルがあってもいい」
+  //   戦闘は地上から。跳び上がる技で空中へ（空中のあいだ回避+10%＝battle.js の AIR_EVA・直接の回避は重ねても15%まで）。
+  //   空中で留まる技以外の攻撃を撃つと着地する。onGround／inAir＝撃ち始めの状態で足す効き目（battleIchiji.js の ichijiSkillPrep・battle.js の空中の所）。
+  //   補助の技（受け流し・流水の構え・後の先）と流転掌は、地上でも空中でも同じ
+  //   心眼は地上と空中で役目が分かれる：地上＝回避したら反撃／空中＝反撃しないが回避+10%（測った：地上で受けるダメージ−10%も付けた形はボス戦106／110で強すぎた）
+  { name:'心眼', cls:'体術師', kind:'passive', mp:0, passive:{ counterOnDodge:0.6, counterAirMult:0 }, desc:'地上：攻撃を回避するたびに物理 ×0.6で反撃／空中：反撃はしないが、回避+10%' },
+  { name:'半月蹴り', cls:'体術師', kind:P, mult:1.63, proc:95, mp:6, onGround:{ airUp:true }, inAir:{ mult:30 }, desc:'地上：蹴り上げて跳び上がる（空中へ）／空中：蹴り下ろして着地（威力+30%）' },
   { name:'受け流し', cls:'体術師', kind:B, proc:100, mp:8, buff:{ self:{ agi:30 } }, buffTurns:3, priority:1, desc:'3ターンの間、自分のAGI+30%' },
-  { name:'五連殺', cls:'体術師', kind:P, mult:0.4, hits:5, proc:85, mp:14, noCrit:true, desc:'5連撃。クリティカルなし' },
-  { name:'旋風脚', cls:'体術師', kind:P, hitMults:[0.45, 0.68, 0.89], noCrit:true, proc:85, mp:13, desc:'3連撃（1発ごとに強くなる）。クリティカルなし' },
-  { name:'巴投げ', cls:'体術師', kind:P, mult:1.56, add:[{ stat:'agi', rate:0.36 }], proc:85, mp:12, buff:{ enemy:{ agi:-15 } }, desc:'相手のAGI-15%' },
+  { name:'五連殺', cls:'体術師', kind:P, mult:0.4, hits:5, proc:85, mp:14, noCrit:true, inAir:{ hits:1, keepAir:true }, desc:'5連撃。クリティカルなし／空中：6連撃・空中に留まる' },
+  { name:'旋風脚', cls:'体術師', kind:P, hitMults:[0.45, 0.68, 0.89], noCrit:true, proc:85, mp:13, onGround:{ airUp:true }, inAir:{ mult:20, keepAir:true }, desc:'3連撃（1発ごとに強くなる）。クリティカルなし／地上：回りながら跳び上がる（空中へ）／空中：威力+20%・空中に留まる' },
+  { name:'巴投げ', cls:'体術師', kind:P, mult:1.56, add:[{ stat:'agi', rate:0.36 }], proc:85, mp:12, buff:{ enemy:{ agi:-15 } }, inAir:{ mult:40 }, desc:'相手のAGI-15%／空中：投げ落として着地（威力+40%）' },
   { name:'流水の構え', cls:'体術師', kind:B, proc:100, mp:12, dodgeBoost:{ turns:3, pct:20, max:3 }, priority:1, desc:'3ターンの間、回避するたびに次の攻撃の威力+20%（最大3回分）' },
-  { name:'破衝掌', cls:'体術師', kind:P, mult:1.84, proc:85, mp:14, defPen:0.3, desc:'相手の防御を30%無視' },
+  { name:'破衝掌', cls:'体術師', kind:P, mult:1.84, proc:85, mp:14, defPen:0.3, inAir:{ mult:40, defPen:0.2 }, desc:'相手の防御を30%無視／空中：叩きつけて着地（威力+40%・防御無視は計50%）' },
   { name:'後の先', cls:'体術師', kind:B, proc:100, mp:12, counterBoost:{ turns:3, pct:60 }, priority:1, desc:'3ターンの間、回避したときの反撃の威力+60%' },
-  { name:'飛天三角蹴り', cls:'体術師', kind:P, hitMults:[0.47, 0.66, 0.93], proc:80, mp:22, critIfDodged:true, desc:'3連撃（1発ごとに強くなる）。直前のターンに回避していれば全段クリティカル' },
-  { name:'流転掌', cls:'体術師', kind:P, mult:1.83, proc:78, mp:28, dodgeCountPower:{ per:5, max:50 }, desc:'この戦闘で回避した回数1回につき威力+5%（最大+50%）' },
+  { name:'飛天三角蹴り', cls:'体術師', kind:P, hitMults:[0.47, 0.66, 0.93], proc:80, mp:22, critIfDodged:true, onGround:{ airUp:true }, inAir:{ crit:30, keepAir:true }, desc:'3連撃（1発ごとに強くなる）。直前のターンに回避していれば全段クリティカル／地上：跳び上がる（空中へ）／空中：クリティカル率+30%・空中に留まる' },
+  { name:'流転掌', cls:'体術師', kind:P, mult:1.83, proc:78, mp:28, dodgeCountPower:{ per:5, max:50 }, desc:'この戦闘で回避した回数1回につき威力+5%（最大+50%）。地上でも空中でも同じ（空中で撃つと着地）' },
   // サイキッカー【動揺】：念で心を乱し（動揺＝相手のスキル発動率−3%・最大−15%）、相手の技を空振りさせる。
   //   STRとINTが半分ずつ威力になる（念の技は相手の魔法防御で受ける）
   { name:'精神感応', cls:'サイキッカー', kind:'passive', mp:0, passive:{ misfireChase:{ mult:0.3 } }, desc:'相手のスキルが不発するたび、STR×0.3＋INT×0.3で念動の追撃（相手の魔法防御で受ける）。動揺は相手のスキル発動率を−3%する（重ねがけ可・最大−15%）' },
