@@ -90,7 +90,7 @@ test('宿り：属性の剣技を当てると宿る（上書き）・宿って�
   assert.equal(me.imbue.turns, 5, '魔剣開放で残りターン+2')
   for (let i = 0; i < 5; i++) tickIchiji(me)
   assert.equal(me.imbue, null)
-  assert.equal(liveStats(me).str, str0 + Math.round(str0 * 0.3), '宿りが消えたら上乗せも消える（魔剣開放のSTR+30%は残る）')
+  assert.equal(liveStats(me).str, str0 + Math.round(str0 * 0.2), '宿りが消えたら上乗せも消える（魔剣開放のSTR+20%は残る・2026-10-17 に+30%から）')
 })
 test('宿りの追加効果：炎＝INT×0.2の追撃／氷＝相手のAGI−5%（宿りで下げるのは合計−20%まで）／エレメンタルエッジは2倍', () => {
   const fire = hit('魔法剣士', 'マナエッジ', (me) => { me.imbue = { elem: 'fire', turns: 3 } })

@@ -16,7 +16,7 @@ import {
   canBecome, weaponsOf, canEquipType, attackKindOf, lineageOf, usableSkillNames, classDescOf,
   jobBonusGain, jobGainText, jobUpHead, jobUpNote, CLASS_BY_ID, ICHIJI_RENAMED,
 } from './jobs.js'
-import { SKILLS, NEW_SKILLS, LATE_SKILLS, SKILL_BY_NAME, setMpCost, validateSkillSet, defaultSetOf, fillSetOf, SKILL_SET_SLOTS, DEFAULT_USES_MAX, passiveOf, withoutPowerWords } from './skills.js'
+import { SKILLS, NEW_SKILLS, LATE_SKILLS, SKILL_BY_NAME, setMpCost, validateSkillSet, defaultSetOf, fillSetOf, SKILL_SET_SLOTS, DEFAULT_USES_MAX, passiveOf, withoutPowerWords, ruledBuffOf, BUFF_RULE, BUFF_RULE_EXEMPT } from './skills.js'
 import { ICHIJI_SKILLS, ICHIJI_BUILDS } from './skillsIchiji.js'
 import {
   ITEMS, ITEM_BY_ID, KINDS, WEAPON_TYPES, ARMOR_LINES, ARMOR_PARTS, ACCESSORY_TYPES, PART_MULT, SLOTS, ARMOR_EFFECT,
@@ -496,15 +496,18 @@ test('スキルは初期職ClassLV 1／5／10／15／20／25／30 で7個・上�
   assert.deepEqual(skillsLearnedBy('剣士', 30).slice(5), ['霞斬り', '乱れ斬り'])
 })
 
-test('【確定】戦士・弓使い・魔法使い・僧侶・格闘家のCLASS LV1〜20の5技は今のⅡのまま（中身も並びも同じ・説明だけは威力のステを消す）', () => {
+test('【確定】戦士・弓使い・魔法使い・僧侶・格闘家のCLASS LV1〜20の5技は今のⅡのまま（中身も並びも同じ・説明の威力のステを消す・補助技の上げ幅は全職業の決まり）', () => {
   for (const cls of ['戦士', '弓使い', '魔法使い', '僧侶', '格闘家']) {
     const v2 = V2_SKILLS.filter(s => s.cls === cls)
     // ★魔法の属性（elem）だけはこの版の写しに付けている（魔導士の元素共鳴が見る・2026-10-10）。それ以外は同じ
     //   （2026-10-15〜16 の弓使いの倍率×1.08＝SHOKI_TUNE はやめた＝ユーザー「倍率かけないで×1」）
     // ★説明（desc）は「AGIが大きく威力になる」などを消した写し（2026-10-16 ユーザー「21個とも消す」・今のⅡの名簿は書き換えない）
-    const noElem = (s) => { const { elem: _e, desc: _d, ...rest } = s; return rest }
-    assert.deepEqual(learnOrderOf(cls).slice(0, 5).map(noElem), v2.map(noElem), `${cls}`)
-    assert.deepEqual(learnOrderOf(cls).slice(0, 5).map(s => s.desc), v2.map(s => withoutPowerWords(s.desc)), `${cls}の説明`)
+    // ★補助技（防御態勢・駆け足・精神統一・プロテク・残心）の上げ幅は全職業の決まり（2026-10-17 ユーザー「全クラス基本統一してよ」「初期職もそろえる」）
+    const noElem = (s) => { const { elem: _e, desc: _d, buff: _b, ...rest } = s; return rest }
+    const mine = learnOrderOf(cls).slice(0, 5)
+    assert.deepEqual(mine.map(noElem), v2.map(noElem), `${cls}`)
+    assert.deepEqual(mine.map(s => s.buff), v2.map(s => (ruledBuffOf(s) ? { ...s.buff, ...ruledBuffOf(s) } : s.buff)), `${cls}の補助技`)
+    for (const [i, s] of mine.entries()) if (s.kind !== 'buff') assert.equal(s.desc, withoutPowerWords(v2[i].desc), `${s.name}の説明`)
     // 6つ目・7つ目は CLASS LV25・30 の技（2026-10-14・LATE_SKILLS）
     assert.deepEqual(learnOrderOf(cls).slice(5).map(s => s.name), LATE_SKILLS.filter(s => s.cls === cls).map(s => s.name), `${cls}の後の2技`)
   }
@@ -513,7 +516,8 @@ test('【確定】戦士・弓使い・魔法使い・僧侶・格闘家のCLASS
   // 説明を変えたのは威力のステを書いていた3つだけ。今のⅡの説明はそのまま
   const copies = ['戦士', '弓使い', '魔法使い', '僧侶', '格闘家'].flatMap(c => learnOrderOf(c).slice(0, 5))
   assert.deepEqual(copies.filter(s => V2_SKILLS.find(v => v.cls === s.cls && v.name === s.name).desc !== s.desc).map(s => `${s.name}：${s.desc}`),
-    ['シールドアタック：盾で殴る', '狙撃：必中', '疾風矢：速射'])
+    ['防御態勢：VIT+30%（重ねがけ可）', 'シールドアタック：盾で殴る', '狙撃：必中', '駆け足：AGI+30%（重ねがけ可）', '疾風矢：速射',
+      '精神統一：INT+30%（重ねがけ可）', 'プロテク：VIT+20%・INT+20%（重ねがけ可）', '残心：DEX+20%・AGI+20%（重ねがけ可）'].sort((a, b) => copies.findIndex(s => a.startsWith(s.name + '：')) - copies.findIndex(s => b.startsWith(s.name + '：'))))
   assert.equal(V2_SKILLS.find(s => s.name === '狙撃').desc, '必中。AGIが大きく威力になる', '今のⅡの名簿は書き換えていない')
 })
 
@@ -563,8 +567,8 @@ test('【確定】新しい6職（槍使い・盗賊・銃士・剣士・呪術�
       assert.equal(s.mp, band(MP_TABLE.basic[s.kind], s.proc), `${s.name}の消費MP`)
       assert.ok(s.proc >= 85, `${s.name}：初期職は発動率85%以上`)
     } else if (s.kind === 'buff') {
-      const tot = [...Object.values(s.buff.self || {}), ...Object.values(s.buff.enemy || {})].reduce((a, b) => a + Math.abs(b), 0)
-      assert.ok(tot <= s.mp * BUFF_PER_MP.basic + 0.01, `${s.name}：バフの合計 ${tot}% は MP×3.4 まで`)
+      // ★2026-10-17 から補助技の上げ幅は全職業の決まり（MP×3.4までの帯はやめた・ユーザー「全クラス基本統一してよ」）
+      assert.deepEqual(s.buff, ruledBuffOf(s), `${s.name}：補助技の上げ幅は決まりどおり`)
     } else if (s.heal) {
       assert.ok(s.heal.rate <= s.mp * HEAL_PER_MP.basic + 1e-9, `${s.name}の回復量`)
     } else if (s.mpRegen) {
@@ -586,8 +590,8 @@ test('【確定】2026-10-14 初期11職の CLASS LV25・30 の22技は、初期
       assert.equal(s.mp, band(MP_TABLE.basic[s.kind], s.proc), `${s.name}の消費MP`)
       assert.ok(s.proc >= 85, `${s.name}：初期職は発動率85%以上`)
     } else if (s.kind === 'buff') {
-      const tot = [...Object.values(s.buff.self || {}), ...Object.values(s.buff.enemy || {})].reduce((a, b) => a + Math.abs(b), 0)
-      assert.ok(tot <= s.mp * BUFF_PER_MP.basic + 0.01, `${s.name}：バフの合計 ${tot}% は MP×3.4 まで`)
+      // ★2026-10-17 から補助技の上げ幅は全職業の決まり（MP×3.4までの帯はやめた）
+      assert.deepEqual(s.buff, ruledBuffOf(s), `${s.name}：補助技の上げ幅は決まりどおり`)
     } else {
       assert.equal(s.kind, 'heal', s.name)
       assert.ok(s.heal.rate <= s.mp * HEAL_PER_MP.basic + 1e-9, `${s.name}の回復量`)
@@ -598,7 +602,7 @@ test('【確定】2026-10-14 初期11職の CLASS LV25・30 の22技は、初期
   // 中身（ユーザーが承認した案）
   const by = SKILL_BY_NAME
   assert.equal(by.叩きつけ.sureHit, true)
-  assert.deepEqual(by.雄叫び.buff, { self:{ str:12 }, enemy:{ agi:-5 } })
+  assert.deepEqual(by.雄叫び.buff, { self:{ str:20 }, enemy:{ agi:-15 } }, '2026-10-17 補助技の上げ幅をそろえた（前は STR+12%・相手のAGI−5%）')
   assert.equal(by.鎧通し.defPen, 0.5)
   assert.deepEqual(by.盗み取る.dispel, { chance:40 })
   assert.equal(by.生命吸収.drain, 0.25)
@@ -798,9 +802,9 @@ test('【確定】剣士（2026-10-09 ユーザー承認・2026-10-14 直し）�
   assert.equal(by.燕返し.hits, 2)
   assert.equal(by.兜割り.defPen, 0.3)
   assert.deepEqual(by.一閃.ail, { key:'bleed', chance:40 })
-  // 2026-10-14 ユーザー承認：威力をSTR寄りに（価値は同じ）・剣の構えは STR+15%・AGI+12%
+  // 2026-10-14 ユーザー承認：威力をSTR寄りに（価値は同じ）・剣の構えは STR+15%・AGI+12% → 2026-10-17 補助技の上げ幅をそろえて STR+20%・AGI+20%
   assert.deepEqual([by.袈裟斬り.mult, by.燕返し.mult, by.兜割り.mult, by.一閃.mult], [1.15, 0.65, 1.17, 1.3])
-  assert.deepEqual(by.剣の構え.buff, { self:{ str:15, agi:12 } })
+  assert.deepEqual(by.剣の構え.buff, { self:{ str:20, agi:20 } })
 })
 
 test('【確定】武器は1本だけ。枠は7つ（武器・頭・鎧・腕・足・装飾品2）', () => {
@@ -1253,4 +1257,28 @@ test('【確定】2026-10-16 ユーザー「17の案とりあえず入れてほ�
   assert.ok(SKILL_BY_NAME['エリクサー'].desc.startsWith('最大HPの15%を回復'))
   assert.ok(passiveOf('式神使い').desc.includes('+8%') && passiveOf('死霊使い').desc.includes('-2%') && passiveOf('クロノマンサー').desc.includes('35%'))
   assert.ok(!passiveOf('聖職者').desc.includes('回復量+20%'))
+})
+
+test('【確定】2026-10-17 ユーザー「なんで暗殺者の補助技上昇値低いの？全クラス基本統一してよ」：補助技の上げ幅は全職業で同じ決まり', () => {
+  // 自分のステを上げる＝1つ+30%・2つ+20%ずつ／相手のステを下げる＝1つ−20%・2つ−15%ずつ（自分1つ＋相手1つ＝2つ）。仙丹（全能力）は別
+  assert.deepEqual(BUFF_RULE, { up: { 1: 30, 2: 20 }, down: { 1: -20, 2: -15 } })
+  assert.deepEqual(BUFF_RULE_EXEMPT, ['仙丹'])
+  const word = (k) => (k === 'int_stat' ? 'INT' : k.toUpperCase())
+  let n = 0
+  for (const s of SKILLS) {
+    const r = ruledBuffOf(s)
+    if (!r) continue
+    n++
+    assert.deepEqual({ ...(s.buff.self ? { self: s.buff.self } : {}), ...(s.buff.enemy ? { enemy: s.buff.enemy } : {}) }, r, `${s.cls}・${s.name}`)
+    // 説明文の数字も同じ（「AGI+30%」「相手のAGI-15%」）
+    for (const [k, v] of Object.entries(r.self || {})) assert.ok(s.desc.includes(`${word(k)}+${v}%`), `${s.name}：${s.desc}`)
+    for (const [k, v] of Object.entries(r.enemy || {})) assert.ok(s.desc.includes(`${word(k)}-${-v}%`) || s.desc.includes(`${word(k)}−${-v}%`), `${s.name}：${s.desc}`)
+  }
+  assert.ok(n >= 40, `決まりで見る補助技 ${n}個`)
+  // 暗殺者の隠形（10-15 に+30→+10 にしていた）・魔法剣士の魔剣開放（+30ずつ）もほかと同じ
+  assert.deepEqual(SKILL_BY_NAME['隠形'].buff.self, { agi: 30 })
+  assert.deepEqual(SKILL_BY_NAME['魔剣開放'].buff.self, { str: 20, int_stat: 20 })
+  assert.deepEqual(SKILL_BY_NAME['雄叫び'].buff, { self: { str: 20 }, enemy: { agi: -15 } })
+  // 今のⅡの名簿は書き換えていない
+  assert.deepEqual(V2_SKILLS.find(s => s.name === '駆け足').buff.self, { agi: 20 })
 })

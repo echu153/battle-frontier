@@ -31,19 +31,19 @@ export const NEW_SKILLS = [
   { name:'投げ槍',     cls:'槍使い', kind:'phys', mult:1.0, add:[{ stat:'dex', rate:0.3 }], proc:88, mp:9, sureHit:true, desc:'必中' },
   { name:'三段突き',   cls:'槍使い', kind:'phys', mult:0.52, hits:3, proc:85, mp:11, noCrit:true, desc:'3連撃。1発ずつ命中判定。クリティカルしない' },
   // 【確定】2026-10-14 ユーザー承認：槍衾を STR+15%・VIT+12% → STR+12%・AGI+15%（合計27%のまま・槍使いのHP・配分の直しと一緒）
-  { name:'槍衾',       cls:'槍使い', kind:'buff', proc:100, mp:8, buff:{ self:{ str:12, agi:15 } }, priority:1, desc:'STR+12%・AGI+15%（重ねがけ可）' },
+  { name:'槍衾',       cls:'槍使い', kind:'buff', proc:100, mp:8, buff:{ self:{ str:20, agi:20 } }, priority:1, desc:'STR+20%・AGI+20%（重ねがけ可）' },
   // 盗賊（物理・AGIも威力に乗る）
   { name:'切りつけ',   cls:'盗賊', kind:'phys', mult:0.85, add:[{ stat:'agi', rate:0.4 }], proc:95, mp:4, desc:'素早く切る' },
   { name:'早業',       cls:'盗賊', kind:'phys', mult:0.4, add:[{ stat:'agi', rate:0.3 }], hits:2, proc:90, mp:8, noCrit:true, desc:'2連撃。クリティカルしない' },
   { name:'毒塗りの刃', cls:'盗賊', kind:'phys', mult:0.85, add:[{ stat:'agi', rate:0.4 }], proc:88, mp:9, ail:{ key:'poison', chance:40 }, desc:'40%で毒' },
   { name:'目つぶし',   cls:'盗賊', kind:'phys', mult:0.95, add:[{ stat:'agi', rate:0.4 }], proc:85, mp:11, ail:{ key:'blind', chance:40 }, desc:'40%で暗闇（命中-25%）' },
-  { name:'影走り',     cls:'盗賊', kind:'buff', proc:100, mp:8, buff:{ self:{ agi:15, dex:12 } }, priority:1, desc:'AGI+15%・DEX+12%（重ねがけ可）' },
+  { name:'影走り',     cls:'盗賊', kind:'buff', proc:100, mp:8, buff:{ self:{ agi:20, dex:20 } }, priority:1, desc:'AGI+20%・DEX+20%（重ねがけ可）' },
   // 銃士（物理・DEXが大きく威力に乗る）
   { name:'早撃ち',     cls:'銃士', kind:'phys', mult:0.65, add:[{ stat:'dex', rate:0.6 }], proc:95, mp:4, desc:'すばやく撃つ' },
   { name:'連射',       cls:'銃士', kind:'phys', mult:0.2, add:[{ stat:'dex', rate:0.27 }], hits:3, proc:90, mp:8, noCrit:true, desc:'3連射。クリティカルしない' },
   { name:'精密射撃',   cls:'銃士', kind:'phys', mult:0.6, add:[{ stat:'dex', rate:0.7 }], proc:88, mp:9, sureHit:true, desc:'必中' },
   { name:'徹甲弾',     cls:'銃士', kind:'phys', mult:0.67, add:[{ stat:'dex', rate:0.7 }], proc:85, mp:11, defPen:0.3, desc:'相手の防御を30%無視' },
-  { name:'狙いを定める', cls:'銃士', kind:'buff', proc:100, mp:8, buff:{ self:{ dex:27 } }, priority:1, desc:'DEX+27%（重ねがけ可）' },
+  { name:'狙いを定める', cls:'銃士', kind:'buff', proc:100, mp:8, buff:{ self:{ dex:30 } }, priority:1, desc:'DEX+30%（重ねがけ可）' },
   // 剣士（物理・STRにDEXやAGIも乗る・2026-10-09 ユーザー承認）
   // 【確定】2026-10-14 ユーザー承認：威力をSTR寄りにした（価値は同じ）。副参照（DEX・AGI）はSTRより低いのに値段はSTRと同じに数えるので、
   //   副参照が多いほど実際の威力が下がっていた（剣士がボス戦で平均の約9割）。剣の構えは STR+10%・DEX+9%・AGI+8% → STR+15%・AGI+12%
@@ -51,7 +51,7 @@ export const NEW_SKILLS = [
   { name:'燕返し',     cls:'剣士', kind:'phys', mult:0.65, add:[{ stat:'dex', rate:0.05 }], hits:2, proc:90, mp:8, noCrit:true, desc:'2連撃。クリティカルしない' },
   { name:'兜割り',     cls:'剣士', kind:'phys', mult:1.17, add:[{ stat:'dex', rate:0.1 }], proc:88, mp:9, defPen:0.3, desc:'相手の防御を30%無視' },
   { name:'一閃',       cls:'剣士', kind:'phys', mult:1.3, add:[{ stat:'agi', rate:0.1 }], proc:85, mp:11, ail:{ key:'bleed', chance:40 }, desc:'40%で出血' },
-  { name:'剣の構え',   cls:'剣士', kind:'buff', proc:100, mp:8, buff:{ self:{ str:15, agi:12 } }, priority:1, desc:'STR+15%・AGI+12%（重ねがけ可）' },
+  { name:'剣の構え',   cls:'剣士', kind:'buff', proc:100, mp:8, buff:{ self:{ str:20, agi:20 } }, priority:1, desc:'STR+20%・AGI+20%（重ねがけ可）' },
   // 呪術師（魔法・状態異常）
   { name:'呪弾',       cls:'呪術師', kind:'mag', mult:1.45, proc:95, mp:5, desc:'呪いを込めた弾を放つ' },
   { name:'呪縛',       cls:'呪術師', kind:'mag', mult:1.44, proc:90, mp:9, ail:{ key:'slow', chance:40 }, desc:'40%で鈍足' },
@@ -64,7 +64,7 @@ export const NEW_SKILLS = [
   { name:'傷薬',       cls:'薬師', kind:'heal', proc:85, mp:12, heal:{ rate:0.8 }, desc:'傷薬でHPを戻す' },
   { name:'毒薬',       cls:'薬師', kind:'mag', mult:1.4, proc:88, mp:10, ail:{ key:'poison', chance:60 }, desc:'60%で毒' },
   // 【確定】2026-10-14 ユーザー承認：魔法職にSTRは要らないので STR+15% → VIT+12%
-  { name:'強壮剤',     cls:'薬師', kind:'buff', proc:100, mp:9, buff:{ self:{ int_stat:15, vit:12 } }, priority:1, desc:'INT+15%・VIT+12%（重ねがけ可）' },
+  { name:'強壮剤',     cls:'薬師', kind:'buff', proc:100, mp:9, buff:{ self:{ int_stat:20, vit:20 } }, priority:1, desc:'INT+20%・VIT+20%（重ねがけ可）' },
   { name:'気付け薬',   cls:'薬師', kind:'heal', proc:85, mp:8, mpRegen:{ rate:0.2, turns:4 }, desc:'しばらく毎ターンMPが戻る' },
 ]
 
@@ -78,7 +78,7 @@ export const LATE_SKILLS = [
   { name:'霞斬り',     cls:'剣士', kind:'phys', mult:1.31, buff:{ enemy:{ dex:-15 } }, proc:90, mp:8, desc:'相手のDEX-15%（重ねがけ可）' },
   { name:'乱れ斬り',   cls:'剣士', kind:'phys', mult:0.35, add:[{ stat:'agi', rate:0.17 }], hits:3, proc:85, mp:11, noCrit:true, desc:'3連撃。クリティカルしない' },
   { name:'叩きつけ',   cls:'戦士', kind:'phys', mult:1.4, proc:85, mp:11, sureHit:true, desc:'必中の重い一撃' },
-  { name:'雄叫び',     cls:'戦士', kind:'buff', proc:100, mp:5, buff:{ self:{ str:12 }, enemy:{ agi:-5 } }, priority:1, desc:'STR+12%・相手のAGI-5%（重ねがけ可）' },
+  { name:'雄叫び',     cls:'戦士', kind:'buff', proc:100, mp:5, buff:{ self:{ str:20 }, enemy:{ agi:-15 } }, priority:1, desc:'STR+20%・相手のAGI-15%（重ねがけ可）' },
   { name:'鎧通し',     cls:'槍使い', kind:'phys', mult:1.25, proc:85, mp:11, defPen:0.5, desc:'相手の防御を50%無視' },
   { name:'穿ち',       cls:'槍使い', kind:'phys', mult:1.24, proc:90, mp:8, ail:{ key:'bleed', chance:40 }, desc:'40%で出血' },
   { name:'水面蹴り',   cls:'格闘家', kind:'phys', mult:1.31, buff:{ enemy:{ agi:-15 } }, proc:90, mp:8, desc:'相手のAGI-15%（重ねがけ可）' },
@@ -110,10 +110,44 @@ export const ELEM_OF_V2 = { ファイア:'fire', サンダー:'thunder', アイ�
 //   今のⅡから持ってきた技（シールドアタック・狙撃・疾風矢）は、写しの説明だけここで消す（今のⅡの名簿は書き換えない）
 const POWER_WORDS = /(?:STR|INT|DEX|AGI|VIT|LUK)(?:も|が大きく)威力になる/g
 export const withoutPowerWords = (desc) => String(desc || '').replace(POWER_WORDS, '').replace(/。{2,}/g, '。').replace(/^。/, '').replace(/。$/, '')
+
+// ★補助技の上げ幅は全職業で同じ決まり（2026-10-17 ユーザー「なんで暗殺者の補助技上昇値低いの？全クラス基本統一してよ」「初期職もそろえる」）：
+//   自分のステを上げる＝1つなら+30%・2つなら+20%ずつ／相手のステを下げる＝1つなら−20%・2つなら−15%ずつ（自分1つ＋相手1つ＝2つ扱い）。
+//   全能力を上げる仙丹（6つ）は別。補助技（kind:'buff'）だけ＝攻撃の技に付いた下げ効果は技ごとのまま。
+//   この版の技は名簿の数字そのもの（skillsIchiji.js・上の NEW/LATE）。今のⅡから持ってきた技は写しだけ（下の copyOfV2・今のⅡの名簿は書き換えない）。
+//   ⚠そろえて広がった差（暗殺者のボス戦など）は PVE の調整のときに見る（ユーザー選択）
+export const BUFF_RULE = { up: { 1: 30, 2: 20 }, down: { 1: -20, 2: -15 } }
+export const BUFF_RULE_EXEMPT = ['仙丹']
+export const ruledBuffOf = (s) => {
+  if (s?.kind !== 'buff' || !s.buff || BUFF_RULE_EXEMPT.includes(s.name)) return null
+  const self = Object.entries(s.buff.self || {}).filter(([, v]) => v)
+  const en = Object.entries(s.buff.enemy || {}).filter(([, v]) => v)
+  const n = self.length + en.length
+  if (!n || n > 2) return null
+  return {
+    ...(self.length ? { self: Object.fromEntries(self.map(([k]) => [k, BUFF_RULE.up[n]])) } : {}),
+    ...(en.length ? { enemy: Object.fromEntries(en.map(([k]) => [k, BUFF_RULE.down[n]])) } : {}),
+  }
+}
+// 説明文の数字を、決まりの値に書き換える（「VIT+25%」→「VIT+30%」・「相手のAGI-5%」→「相手のAGI-15%」）
+const statWord = (k) => (k === 'int_stat' ? 'INT' : k.toUpperCase())
+const ruledDescOf = (desc, before, after) => {
+  let d = desc
+  for (const [k, v] of Object.entries(before.self || {})) d = d.split(`${statWord(k)}+${v}%`).join(`${statWord(k)}+${after.self[k]}%`)
+  for (const [k, v] of Object.entries(before.enemy || {})) {
+    for (const minus of ['-', '−']) d = d.split(`${statWord(k)}${minus}${-v}%`).join(`${statWord(k)}${minus}${-after.enemy[k]}%`)
+  }
+  return d
+}
 const copyOfV2 = (s) => {
-  const desc = withoutPowerWords(s.desc)
-  if (!ELEM_OF_V2[s.name] && desc === s.desc) return s
-  return { ...s, ...(ELEM_OF_V2[s.name] ? { elem: ELEM_OF_V2[s.name] } : {}), ...(desc !== s.desc ? { desc } : {}) }
+  const ruled = ruledBuffOf(s)
+  const buffChanged = ruled && JSON.stringify(ruled) !== JSON.stringify({ ...(s.buff.self ? { self: s.buff.self } : {}), ...(s.buff.enemy ? { enemy: s.buff.enemy } : {}) })
+  const desc = withoutPowerWords(buffChanged ? ruledDescOf(s.desc, s.buff, ruled) : s.desc)
+  if (!ELEM_OF_V2[s.name] && desc === s.desc && !buffChanged) return s
+  return {
+    ...s, ...(ELEM_OF_V2[s.name] ? { elem: ELEM_OF_V2[s.name] } : {}), ...(desc !== s.desc ? { desc } : {}),
+    ...(buffChanged ? { buff: { ...s.buff, ...ruled } } : {}),
+  }
 }
 
 // この版のスキル全部。今のⅡの5職ぶんは、今のⅡの並び（＝覚える順）のまま。上位職20職は skillsIchiji.js（2026-10-10）

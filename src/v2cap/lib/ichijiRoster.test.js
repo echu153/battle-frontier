@@ -71,7 +71,7 @@ test('2026-10-15 測って直した仕組みの数字（強さの元を先に直
   assert.deepEqual(v('狂鬼化').berserk, { turns: 3, str: 50 })
   assert.equal(v('狂鬼化').useBelowHp, 30, '2026-10-17 ユーザー選択：HP30%以下で使う')
   assert.equal(v('狂鬼化').lastStand, undefined, '前の「1度だけ耐える・払うHPが半分」はやめた')
-  assert.equal(v('隠形').buff.self.agi, 10)
+  assert.equal(v('隠形').buff.self.agi, 30, '2026-10-17 補助技の上げ幅をそろえた（10-15 に+30→+10 にしたのを戻した形）')
   assert.equal(v('影斬り').mult, 1.35)
   // 忍者：身代わり 15→10%・毒霧の術 毒60→40%・暗闇40→20%（2026-10-15 回避をゆるめても「暗闇・毒・分身」の重なりで強かった）
   assert.deepEqual(passiveOf('忍者').passive, { cloneFollow: 0.1, noCloneAgi: 10, cloneGuard: 10 })
@@ -86,8 +86,9 @@ test('2026-10-15 測って直した仕組みの数字（強さの元を先に直
   assert.deepEqual(['ジャンプ', 'ハイジャンプ', '天竜落とし'].map(n => v(n).jump.evade), [40, 40, 40])
   assert.equal(v('秘剣・叢雲').stanceMult, 1.7)
   // 2026-10-15「クラス間の格差が出すぎないように」：侍 明鏡止水 STR+20%・DEX+15%／ストームランサー コンボ1つにつき+2%
-  assert.deepEqual(v('明鏡止水').buff.self, { str: 20, dex: 15 })
-  assert.equal(v('明鏡止水').desc, 'STR+20%・DEX+15%（重ねがけ可）。納刀状態になる')
+  //   → 2026-10-17 補助技の上げ幅をそろえて STR+20%・DEX+20%（ユーザー「全クラス基本統一してよ」）
+  assert.deepEqual(v('明鏡止水').buff.self, { str: 20, dex: 20 })
+  assert.equal(v('明鏡止水').desc, 'STR+20%・DEX+20%（重ねがけ可）。納刀状態になる')
   assert.deepEqual(passiveOf('ストームランサー').passive.combo, { max: 20, pct: 2 })
   assert.ok(passiveOf('ストームランサー').desc.includes('与ダメージ+2%'))
   // 跳躍の技の倍率（説明用の mult）と着地の倍率は同じ
