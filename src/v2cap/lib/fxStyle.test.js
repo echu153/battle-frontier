@@ -40,7 +40,7 @@ test('【確定】作成の演出：作れるレア度（レア・エピック�
   }
   assert.ok(craftTierOf('L').level > craftTierOf('E').level && craftTierOf('E').level > craftTierOf('R').level)
   assert.equal(CRAFT_STRIKES, 3)
-  assert.equal(craftTitleOf('黒騎士の魔剣'), '黒騎士の魔剣を作成しました！')
+  assert.equal(craftTitleOf('封剣セルディア'), '封剣セルディアを作成しました！')
 })
 
 test('【確定】宝樹の祈り＝天啓：どの運勢にも見た目があり、大吉がいちばん明るい・凶と大凶は光がまたたいて消える・暗雲と稲光は大凶だけ', () => {

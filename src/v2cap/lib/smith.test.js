@@ -114,9 +114,9 @@ test('【2026-10-13】強化して戦闘力が上がっても、ステは1つも
     }
   }
   assert.deepEqual(down, [])
-  // ユーザーが見つけた例：蟻帝の聖鎧（重鎧の鎧・VIT60 STR15 INT15 AGI10）+3→+4・効果60%（戦闘力23→25）
-  //   前は STR3 AGI2 INT3 VIT15 → STR4 AGI3 INT4 VIT14 で VIT が下がっていた
-  const armor = ITEMS.find(i => i.name === '蟻帝の聖鎧')
+  // ユーザーが見つけた例：蟻帝の聖鎧（始まりの森のレジェンダリーの重鎧の鎧・VIT60 STR15 INT15 AGI10。2026-10-18 から名前は森主の鎧）
+  //   +3→+4・効果60%（戦闘力23→25）。前は STR3 AGI2 INT3 VIT15 → STR4 AGI3 INT4 VIT14 で VIT が下がっていた
+  const armor = ITEM_BY_ID['1L:重鎧鎧']
   const zero = Object.fromEntries(STAT_KEYS.map(k => [k, 0]))
   assert.deepEqual(statsAt(armor, armor.lv, 60, 3), { ...zero, str:4, agi:2, int_stat:3, vit:14 })
   assert.deepEqual(statsAt(armor, armor.lv, 60, 4), { ...zero, str:4, agi:2, int_stat:4, vit:15 })

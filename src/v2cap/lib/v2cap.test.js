@@ -732,27 +732,44 @@ test('【確定】装備はエリアごとに26点（武器14種・重鎧4部位
   // 名前はユーザーの表のとおり（いくつか抜き出して固定）
   assert.equal(itemOf(1, 'N', '片手剣').name, 'ブロンズソード')
   assert.equal(itemOf(1, 'R', '片手剣').name, '若葉の剣')
-  assert.equal(itemOf(1, 'E', '片手剣').name, '翠玉剣ジェイド')
-  assert.equal(itemOf(1, 'L', '片手剣').name, '原初剣アルファ')
-  assert.equal(itemOf(15, 'L', '片手剣').name, '終焉剣オメガ')
-  assert.equal(itemOf(15, 'L', '書').name, '終わりの物語')
+  // エピック・レジェンダリーは 2026-10-18 の総入れ替え（gearNames.js の冒頭）
+  assert.equal(itemOf(1, 'E', '片手剣').name, '木漏れ日の宝剣')
+  assert.equal(itemOf(1, 'L', '片手剣').name, '森剣シルヴァ')
+  assert.equal(itemOf(15, 'L', '片手剣').name, '原初剣タラッサ')
+  assert.equal(itemOf(15, 'L', '書').name, '深淵の黙示録')
   assert.equal(itemOf(1, 'N', '銃').name, 'マッチロック')
   assert.equal(itemOf(8, 'N', '弓').name, 'ミスリルボウ')
   assert.equal(itemOf(15, 'N', '書').name, '創世記')
   assert.equal(itemOf(2, 'R', '軽装頭').name, 'ウルフハイドフード')
-  assert.equal(itemOf(1, 'E', '斧').name, '女王蟻の大顎')
-  // 刀・宝珠（ユーザーの表「追加武器種（刀・宝珠）」）。始まりの森の初太刀と深淵の海溝の終の太刀が対
+  assert.equal(itemOf(1, 'E', '斧').name, '獣道の大斧')
+  // 刀・宝珠（ノーマル・レアはユーザーの表「追加武器種（刀・宝珠）」）
   assert.equal(itemOf(1, 'N', '刀').name, 'ブロンズカタナ')
   assert.equal(itemOf(1, 'R', '刀').name, '苔むした古刀')
-  assert.equal(itemOf(1, 'L', '刀').name, '初太刀')
-  assert.equal(itemOf(15, 'L', '刀').name, '終の太刀')
+  assert.equal(itemOf(1, 'L', '刀').name, '青嵐')
+  assert.equal(itemOf(15, 'L', '刀').name, '凪')
   assert.equal(itemOf(1, 'N', '宝珠').name, 'グラスオーブ')
   assert.equal(itemOf(8, 'N', '宝珠').name, 'ムーンストーンオーブ')
-  assert.equal(itemOf(10, 'L', '宝珠').name, '賢者の石')
-  assert.equal(itemOf(15, 'E', '宝珠').name, 'クラーケンの墨珠')
+  assert.equal(itemOf(10, 'L', '宝珠').name, '炉心核')
+  assert.equal(itemOf(15, 'E', '宝珠').name, '夜光虫の宝珠')
   // 宝珠のノーマルは装飾品と同じ宝石（始まりの森だけグラス）・刀のノーマルは片手剣と同じ金属
   for (let a = 2; a <= AREA_COUNT; a++) assert.equal(itemOf(a, 'N', '宝珠').name.replace('オーブ', ''), itemOf(a, 'N', 'リング').name.replace('リング', ''), `エリア${a}の宝珠の宝石`)
   for (let a = 1; a <= AREA_COUNT; a++) assert.equal(itemOf(a, 'N', '刀').name.replace('カタナ', ''), itemOf(a, 'N', '片手剣').name.replace('ソード', ''), `エリア${a}の刀の金属`)
+})
+
+test('【確定】2026-10-18 エピック・レジェンダリーの名前に敵の名前を使わない（敵にちなむ名前は、上の等級「ユニーク」のために空けておく）', () => {
+  const mons = new Set()
+  for (const s of SPOTS) { const r = s.roster; for (const e of [...r.enemies, ...r.timed, ...r.rares, r.boss]) mons.add(e.name) }
+  // 敵の名前そのものと、名前の中のカタカナの部分（3文字以上＝ガルシオ・ケラウノス・スライム など）
+  const words = [...new Set([...mons, ...[...mons].flatMap(n => n.match(/[ァ-ヶー]{3,}/g) || [])])]
+  const bad = ITEMS.filter(i => i.rarity === 'E' || i.rarity === 'L')
+    .flatMap(i => words.filter(w => i.name.includes(w)).map(w => `${i.id} ${i.name}（${w}）`))
+  assert.deepEqual(bad, [])
+  // 防具は同じエリア・同じ系統の4部位で名前の頭をそろえる（セットだと分かるように）
+  const head = (n) => n.replace(/の?(兜|鎧|篭手|具足|帽子|頭巾|冠|ハット|ティアラ|衣|外套|長衣|羽衣|羽織|上着|ドレス|ローブ|手袋|手甲|グローブ|靴|長靴|履|サンダル|ブーツ)$/, '')
+  for (const r of ['E', 'L']) for (let a = 1; a <= AREA_COUNT; a++) for (const line of ARMOR_LINES) {
+    const heads = ['頭', '鎧', '腕', '足'].map(p => head(itemOf(a, r, line + p).name))
+    assert.equal(new Set(heads).size, 1, `エリア${a}の${RARITY_LABEL[r]}の${line}：${heads.join('・')}`)
+  }
 })
 
 test('【確定】配分は種類ごとに1つ（エリアとレア度では変わらない）。物理と魔法の両方が使う種類は間の配分', () => {
