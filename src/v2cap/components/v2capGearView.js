@@ -3,7 +3,7 @@ import { STAT_DEFS, STAT_KEYS } from '../../v2/lib/stats.js'
 import { miniBtn } from '../../v2/components/v2ui.js'
 import { RARITY_COLOR } from '../lib/equipment.js'
 import { AREA_LIST } from '../lib/areas.js'
-import { powerAt, reqPctOf, underLvPowerOf } from '../lib/gear.js'
+import { effectivePowerAt } from '../lib/gear.js'
 import { needLvOf } from '../lib/equipment.js'
 import { plusOf, scrapNameOf } from '../lib/smith.js'
 
@@ -33,7 +33,7 @@ export const gainText = (gain) => Object.entries(gain).sort((a, b) => a[0] - b[0
 export const areaOptionLabel = (a) => (a === 0 ? '初期装備' : `${a} ${AREA_LIST[a - 1]?.name || ''}`)
 
 // 持ち物の絞り込み（部位・レア度・エリア）と並べ替え（強い順・LVの高い順・新しい順）。
-// all = [{ inv, item }]・lv = いまのLV（強い順は強化値と必要LV不足の効果%込み）。
+// all = [{ inv, item }]・lv = いまのLV（強い順は強化値と、必要LVに足りない装備のLV相当込み）。
 // 返すのは 並べたあとの行（rows）・エリアの選択肢（areas）・選んでいる条件と変える関数（帯は v2capGear.jsx の GearFilterBar）
 export const useGearRows = (all, lv) => {
   const [part, setPart] = useState('all')
@@ -44,7 +44,7 @@ export const useGearRows = (all, lv) => {
     const list = all.filter(r => (part === 'all' || r.item.part === part)
       && (rarity === 'all' || r.item.rarity === rarity)
       && (area === 'all' || r.item.area === area))
-    const pw = (r) => underLvPowerOf(powerAt(r.item, r.inv.ilv, plusOf(r.inv)), reqPctOf(r.item, r.inv.ilv, lv))
+    const pw = (r) => effectivePowerAt(r.item, r.inv.ilv, lv, plusOf(r.inv))
     const need = (r) => needLvOf(r.item, r.inv.ilv)   // 「LVの高い順」は画面に出す必要LVで並べる
     if (sort === 'power') list.sort((a, b) => pw(b) - pw(a) || need(b) - need(a))
     else if (sort === 'ilv') list.sort((a, b) => need(b) - need(a) || pw(b) - pw(a))

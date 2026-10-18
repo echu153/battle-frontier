@@ -15,7 +15,7 @@
 import { STAT_KEYS, calcPower } from '../../v2/lib/stats.js'
 import { ITEM_BY_ID, SLOTS } from './equipment.js'
 import { SKILL_BY_NAME, isPassive, passiveOf } from './skills.js'
-import { statsAt, reqPctOf, powerAt, armorEffects, underLvPowerOf } from './gear.js'
+import { statsAt, effectivePowerAt, armorEffects } from './gear.js'
 import { plusOf } from './smith.js'
 import { jobBonusStats, jobOf, canEquipType, attackKindOf, lineageOf } from './jobs.js'
 import { CAP_RULES } from './rules.js'
@@ -42,25 +42,27 @@ export const equippedItems = (profile, inventory) => {
 export const wornIdsOf = (profile, inventory) =>
   new Set(Object.values(equippedItems(profile, inventory)).map(w => String(w.inv.id)))
 
-// 装備ぶんのステ（強化値ぶんを足し、必要LV不足ぶんを引いたもの）
+// いまのLV（必要LVと比べる。LVが無ければ1＝前と同じ見方）
+const lvOf = (profile) => profile?.lv || 1
+// 装備ぶんのステ（強化値ぶんを足し、必要LVに足りない装備はいまのLV相当にしたもの）
 export const gearStats = (profile, inventory) => {
   const total = zero()
   for (const { inv, item } of Object.values(equippedItems(profile, inventory))) {
-    const s = statsAt(item, inv.ilv, reqPctOf(item, inv.ilv, profile?.lv), plusOf(inv))
+    const s = statsAt(item, inv.ilv, lvOf(profile), plusOf(inv))
     for (const k of STAT_KEYS) total[k] += s[k] || 0
   }
   return total
 }
-// 装備ぶんの戦闘力（強化値・効果%込み）
+// 装備ぶんの戦闘力（強化値・必要LV不足のLV相当込み）
 export const gearPower = (profile, inventory) =>
   Object.values(equippedItems(profile, inventory)).reduce((t, { inv, item }) =>
-    t + underLvPowerOf(powerAt(item, inv.ilv, plusOf(inv)), reqPctOf(item, inv.ilv, profile?.lv)), 0)
+    t + effectivePowerAt(item, inv.ilv, lvOf(profile), plusOf(inv)), 0)
 
-// 防具のメリット（受けるダメージの倍率・AGIの上がり幅）
+// 防具のメリット（受けるダメージの倍率・AGIの上がり幅）。必要LVに足りなくても弱めない（2026-10-18〜）
 export const armorOf = (profile, inventory) => armorEffects(
   Object.values(equippedItems(profile, inventory))
     .filter(w => w.item.line)
-    .map(w => ({ item: w.item, pct: reqPctOf(w.item, w.inv.ilv, profile?.lv) })))
+    .map(w => ({ item: w.item })))
 
 // 防具のセット能力（armorSets.js）。発動している組だけ：[{ area, line, count, tiers, def }]
 // ★レア以上・同じエリア・同じ系統の防具で数える。必要LVに足りない防具も数える（2026-10-14 ユーザー選択）

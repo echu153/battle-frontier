@@ -4,7 +4,7 @@ import { box, TEXT } from '../../v2/components/v2ui.js'
 import { SLOTS, SLOT_LABEL, ARMOR_EFFECT } from '../lib/equipment.js'
 import { jobOf } from '../lib/jobs.js'
 import { equippedItems, statBreakdown } from '../lib/loadout.js'
-import { reqPctOf, statsAt, armorEffectText } from '../lib/gear.js'
+import { syncLabelOf, statsAt, armorEffectText } from '../lib/gear.js'
 import { needLvOf } from '../lib/equipment.js'
 import { plusOf } from '../lib/smith.js'
 import { nameColor } from './v2capGearView.js'
@@ -16,7 +16,7 @@ import V2capArmorSets from './V2capArmorSets.jsx'
 //   【確定】2026-10-12 ユーザー指示「ホーム画面の数値は最終値だけ記載するでいい、装備とかどのくらいプラスされてるかはプロフから確認できればいい」
 //   ・ステごとに 本体・クラス（いまの職業）・装備・アセンション・軽装（AGIだけ）・合計 を表で出す。戦闘力も同じ列で
 //     （アセンションの列は 2026-10-13。開いたマスがあるときだけ出す）
-//   ・その下に、装備ごとの上がるステ（強化値と必要LV不足の効果%込み）と防具の効果
+//   ・その下に、装備ごとの上がるステ（強化値と、必要LVに足りない装備のLV相当込み）と防具の効果
 //   数は戦闘で使うものと同じ（loadout.js の statBreakdown）
 // ============================================================
 const NUM = { textAlign:'right', whiteSpace:'nowrap' }
@@ -75,7 +75,7 @@ export default function V2capBreakdown({ prof, inventory }) {
       <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.7, marginTop:'8px' }}>
         <div><span style={{ color: COLOR.body }}>本体</span>＝キャラそのもの（振ったステータスポイントを含む）</div>
         <div><span style={{ color: COLOR.job }}>クラス</span>＝いまの職業（{prof.class}・CLASS LV{job.lv}）のぶん。就いている間だけ</div>
-        <div><span style={{ color: COLOR.gear }}>装備</span>＝着けている装備の合計（強化値と、必要LVに足りないときの効果%を入れたあと）</div>
+        <div><span style={{ color: COLOR.gear }}>装備</span>＝着けている装備の合計（強化値を入れたあと。必要LVに足りない装備は、いまのLV相当の強さ）</div>
         {showAsc && <div><span style={{ color: COLOR.asc }}>アセンション</span>＝いまの職業の盤面で開いたマス（道の終わりの「+%」は本体＋クラス＋装備＋アセンションに掛ける）</div>}
         {showArmor && <div><span style={{ color: COLOR.armor }}>軽装</span>＝軽装1部位ごとに{ARMOR_EFFECT.軽装.label}（本体＋クラス＋装備のAGIに掛ける）</div>}
         {showSet && <div><span style={{ color: COLOR.set }}>セット</span>＝防具のセット能力の3部位（能力値+%。ここまでの合計に掛ける）</div>}
@@ -93,7 +93,7 @@ export default function V2capBreakdown({ prof, inventory }) {
       <div style={{ display:'grid', gap:'2px' }}>
         {SLOTS.map(slot => {
           const w = worn[slot]
-          const pct = w ? reqPctOf(w.item, w.inv.ilv, prof.lv) : 100
+          const sync = w ? syncLabelOf(w.item, w.inv.ilv, prof.lv) : ''
           return (
             <div key={slot} style={{ display:'flex', gap:'8px', background:'#000818', border:'1px solid #002244', padding:'4px 7px', fontSize:'11px' }}>
               <span style={{ color:'#7fa6d0', fontSize:'10px', width:'52px', flexShrink:0 }}>{SLOT_LABEL[slot]}</span>
@@ -101,11 +101,11 @@ export default function V2capBreakdown({ prof, inventory }) {
                 <div style={{ flex:1, minWidth:0 }}>
                   <div>
                     <span style={{ color: nameColor(w.item) }}>{w.item.name}</span><PlusTag inv={w.inv} />
-                    {pct < 100 && <span style={{ color:'#ff8844', fontSize:'10px' }}> 効果{pct}%（必要LV{needLvOf(w.item, w.inv.ilv)}）</span>}
+                    {sync && <span style={{ color:'#ff8844', fontSize:'10px' }}> {sync}（必要LV{needLvOf(w.item, w.inv.ilv)}）</span>}
                   </div>
                   <div style={{ fontSize:'10px' }}>
-                    <StatGain s={statsAt(w.item, w.inv.ilv, pct, plusOf(w.inv))} />
-                    {w.item.line && <span style={{ color: COLOR.armor, whiteSpace:'nowrap' }}>{w.item.line}：{armorEffectText(w.item, pct)}</span>}
+                    <StatGain s={statsAt(w.item, w.inv.ilv, prof.lv, plusOf(w.inv))} />
+                    {w.item.line && <span style={{ color: COLOR.armor, whiteSpace:'nowrap' }}>{w.item.line}：{armorEffectText(w.item)}</span>}
                   </div>
                 </div>
               ) : <span style={{ color: TEXT.empty }}>—</span>}

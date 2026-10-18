@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { STAT_KEYS, INITIAL_STATS, calcPower } from '../../v2/lib/stats.js'
 import { ITEMS, ITEM_BY_ID, STARTER_ITEMS, AREA_COUNT, itemOf } from './equipment.js'
 import { AREA_LIST } from './areas.js'
-import { powerAt, statsAt, effectPct, underLvPowerOf } from './gear.js'
+import { powerAt, statsAt, spreadStats, effectivePowerAt } from './gear.js'
 import { statBreakdown } from './loadout.js'
 import {
   PLUS_MAX, plusOf, plusMultOf, plusLabel, SCRAP_NAMES, scrapNameOf, scrapOf, SCRAP_YIELD, scrapYieldOf,
@@ -85,30 +85,34 @@ test('【確定】2026-10-12 強化は1回ごとに戦闘力が最低でも+1（
   assert.equal(powerAt(ear, 1, 12), powerAt(ear, 1, 10))
 })
 
-test('強化した強さは必要LVの弱まり方の前に掛ける（ステの合計＝強化後の戦闘力×効果%）', () => {
+test('強化値は必要LVに足りないときも掛ける（2026-10-18〜 LV相当の強さに強化値を掛ける＝ステの合計はその戦闘力）', () => {
   for (const item of ITEMS.filter(i => i.area === 2 || i.rarity === 'L')) {
     for (const plus of [0, 4, 10]) {
-      for (const [lv, pct] of [[item.lv, 100], [item.lv - 10, effectPct(item.lv, item.lv - 10)]]) {
-        const s = statsAt(item, item.lv, pct, plus)
-        assert.equal(Object.values(s).reduce((a, b) => a + b, 0), underLvPowerOf(powerAt(item, item.lv, plus), pct), `${item.id} +${plus} LV${lv}`)
+      for (const lv of [item.lv, item.lv - 10]) {
+        const s = statsAt(item, item.lv, lv, plus)
+        assert.equal(Object.values(s).reduce((a, b) => a + b, 0), effectivePowerAt(item, item.lv, lv, plus), `${item.id} +${plus} LV${lv}`)
       }
+      assert.equal(effectivePowerAt(item, item.lv, item.lv - 10, plus),
+        Math.min(powerAt(item, item.lv - 10, plus), powerAt(item, item.lv, plus) - 1), `${item.id} +${plus} 10LV足りない＝LV相当`)
     }
   }
 })
 
-test('【2026-10-13】強化して戦闘力が上がっても、ステは1つも下がらない（効果100%も、必要LV不足の効果%も）', () => {
-  // 全装備（初期装備も）・アイテムLV＝必要LV で、+0→+1 … +9→+10 の段を、効果100〜10%（5%きざみ）で全部見る
+test('【2026-10-13】強化して戦闘力が上がっても、ステは1つも下がらない（必要LVが足りていても、足りなくても）', () => {
+  // 全装備（初期装備も）・アイテムLV＝必要LV で、+0→+1 … +9→+10 の段を、足りないLV 0〜18 で全部見る（2026-10-18 から LV相当）
   // ⚠前の散らし方（四捨五入して、合計のずれをいちばん重いステへ）は、効果100%の15,790段のうち524段で下がっていた
   //   （ユーザー指摘：蟻帝の聖鎧 +3→+4・効果60% で VIT 15→14）
   // ★最大剰余だけだと、軽装頭の戦闘力9→10 で STR が2→1に下がる段が残った（アラバマのパラドックス）。
   //   端数が同じときに「戦闘力が1少ないときに端数の1点をもらっていたステ」を先にして0にした（gear.js の spreadStats）
   const down = []
   for (const item of [...ITEMS, ...STARTER_ITEMS]) {
-    for (let pct = 100; pct >= 10; pct -= 5) {
-      let a = statsAt(item, item.lv, pct, 0)
+    for (let short = 0; short <= 18; short++) {
+      const lv = item.lv - short
+      if (lv < 1) continue
+      let a = statsAt(item, item.lv, lv, 0)
       for (let plus = 1; plus <= PLUS_MAX; plus++) {
-        const b = statsAt(item, item.lv, pct, plus)
-        for (const k of STAT_KEYS) if (b[k] < a[k]) down.push(`${item.id} ${pct}% +${plus - 1}→+${plus} ${k} ${a[k]}→${b[k]}`)
+        const b = statsAt(item, item.lv, lv, plus)
+        for (const k of STAT_KEYS) if (b[k] < a[k]) down.push(`${item.id} LV${lv} +${plus - 1}→+${plus} ${k} ${a[k]}→${b[k]}`)
         a = b
       }
     }
@@ -116,14 +120,15 @@ test('【2026-10-13】強化して戦闘力が上がっても、ステは1つも
   assert.deepEqual(down, [])
   // ユーザーが見つけた例：蟻帝の聖鎧（始まりの森のレジェンダリーの重鎧の鎧・VIT60 STR15 INT15 AGI10。2026-10-18 から名前は森主の鎧）
   //   +3→+4・効果60%（戦闘力23→25）。前は STR3 AGI2 INT3 VIT15 → STR4 AGI3 INT4 VIT14 で VIT が下がっていた
+  //   （効果%は 2026-10-18 になくなったので、そのときの戦闘力23→25 の散らし方で見る）
   const armor = ITEM_BY_ID['1L:重鎧鎧']
   const zero = Object.fromEntries(STAT_KEYS.map(k => [k, 0]))
-  assert.deepEqual(statsAt(armor, armor.lv, 60, 3), { ...zero, str:4, agi:2, int_stat:3, vit:14 })
-  assert.deepEqual(statsAt(armor, armor.lv, 60, 4), { ...zero, str:4, agi:2, int_stat:4, vit:15 })
+  assert.deepEqual(spreadStats(23, armor.dist), { ...zero, str:4, agi:2, int_stat:3, vit:14 })
+  assert.deepEqual(spreadStats(25, armor.dist), { ...zero, str:4, agi:2, int_stat:4, vit:15 })
   // 前に見つかった例：見習いの短剣 +2→+3（戦闘力12→13）。前は STR2 DEX2 AGI6 INT2 → STR3 DEX3 AGI4 INT3 で AGI が下がっていた
   const dagger = ITEM_BY_ID['0N:短剣']
-  assert.deepEqual(statsAt(dagger, 1, 100, 2), { ...zero, str:2, dex:3, agi:5, int_stat:2 })
-  assert.deepEqual(statsAt(dagger, 1, 100, 3), { ...zero, str:3, dex:3, agi:5, int_stat:2 })
+  assert.deepEqual(statsAt(dagger, 1, null, 2), { ...zero, str:2, dex:3, agi:5, int_stat:2 })
+  assert.deepEqual(statsAt(dagger, 1, null, 3), { ...zero, str:3, dex:3, agi:5, int_stat:2 })
 })
 
 test('戦闘のステは強化値ぶん上がる。防具のメリット（重鎧・軽装）は変わらない。SQLを流す前の持ち物（plus なし）は+0', () => {

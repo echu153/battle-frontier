@@ -60,7 +60,7 @@ const { ITEMS, ITEM_BY_ID, starterIdsOf } = await import(B + 'v2cap/lib/equipmen
 const areas = await import(B + 'v2cap/lib/areas.js')
 const level = await import(B + 'v2cap/lib/level.js')
 const jobsLib = await import(B + 'v2cap/lib/jobs.js')
-const { statsAt, reqPctOf } = await import(B + 'v2cap/lib/gear.js')
+const { statsAt } = await import(B + 'v2cap/lib/gear.js')
 const { toFighter, totalStats } = await import(B + 'v2cap/lib/loadout.js')
 const { CAP_RULES } = await import(B + 'v2cap/lib/rules.js')
 const { pickEncounter, rollRewards, nextBossRate, openUntilOf, clearSpot, rollEquipDrop, rollChest } = await import(B + 'v2cap/lib/sortie.js')
@@ -232,11 +232,12 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
     jobs, learned, skill_sets: { [cls]: skillSet }, equipped,   // スキルセットは職業ごと（画面の v2cap_profiles と同じ形）
   })
   // 装備は「その時点で着けられるいちばん良いもの」。行ったことのあるエリア（開いている一番先の場所のエリアまで）の装備を、
-  // レア度は全部（エピック・レジェンダリーも）候補にし、必要LVの不足ぶん（1LVごとに-5%）も数えて職業の重みで比べる
+  // レア度は全部（エピック・レジェンダリーも）候補にし、必要LVに足りない装備はいまのLV相当（2026-10-18〜・gear.js）で数えて職業の重みで比べる
   let weight = weightOf(cls)
   // 装備の値打ち（職業の重み）。強化値も数える（鍛冶屋を使わないときは強化値0）
-  const valueAt = (item, pct = reqPctOf(item, item.lv, st.lv), p = plusById.get(item.id) || 0) => {
-    const s = statsAt(item, item.lv, pct, p)
+  // lv＝いまのLV（null なら必要LVまで育ったときの見込み）
+  const valueAt = (item, lv = st.lv, p = plusById.get(item.id) || 0) => {
+    const s = statsAt(item, item.lv, lv, p)
     return Object.entries(weight).reduce((t, [k, w]) => t + (s[k] || 0) * w, 0)
   }
   const bestOf = (list) => {
@@ -283,7 +284,7 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
       const now = item.part === '武器' ? (canEquipType(cls, item.type) ? valOf('weapon') : Infinity)
         : item.part === 'アクセ' ? Math.min(valOf('acc1'), valOf('acc2'))
         : valOf(ARMOR_SLOT[item.part])
-      if (valueAt(item, 100, 0) > now) continue   // 育てば着ける見込みがあるので残す
+      if (valueAt(item, null, 0) > now) continue   // 育てば着ける見込みがあるので残す
       bag.delete(id)
       const a = scrapAreaOf(item)
       scrap[a] = (scrap[a] || 0) + scrapYieldOf(item) * n

@@ -24,7 +24,7 @@ import {
   starterIdsOf, STARTER_ITEMS,
 } from './equipment.js'
 import { GEAR_NAMES } from './gearNames.js'
-import { powerAt, effectPct, statsAt, spreadStats, armorEffects, armorEffectText, underLvPowerOf, GEAR_RATIO, SET_PART_SUM } from './gear.js'
+import { powerAt, effectivePowerAt, syncIlvOf, syncLabelOf, statsAt, spreadStats, armorEffects, armorEffectText, GEAR_RATIO, SET_PART_SUM } from './gear.js'
 import {
   AREA_LIST, SPOTS, SPOT_COUNT, spotOf, spotLvOf, spotLabel, expRangeOf, goldRangeOf,
   ROLE_TENTHS, scaleByRole, enemyLevels, enemyLvOf, enemyRoleOf,
@@ -32,7 +32,7 @@ import {
   BOSS_SPOT_POWER, SPOT_REC_LV, recLvOf, recRangeOf, recLvText, recSpotOfLv,
 } from './areas.js'
 import { AREA_ROSTERS, AREA_LEVELS, ENEMY_LV } from './monsters.js'
-import { toFighter, statBreakdown, equippedItems, slotsOf, currentSetOf } from './loadout.js'
+import { toFighter, statBreakdown, equippedItems, slotsOf, currentSetOf, armorOf } from './loadout.js'
 import {
   rollDropKind, rollEquipDrop, pickEncounter, rollRewards, rewardRangeOf,
   openUntilOf, isSpotUnlocked, unlockedSpotsOf, clearSpot,
@@ -851,32 +851,43 @@ test('【確定】強さはレア度で決まる（ノーマル1.0／レア1.25�
 
 test('【確定】2026-10-12 必要LVに足りないときの戦闘力は、最低でも1下がる（丸めで下がらないことをなくした）', () => {
   // ユーザー指示「最低でも1下げるようにして」（前は「戦闘力 7 → 7（効果95%）」のように、95%でも丸めで7のままだった）
-  assert.equal(underLvPowerOf(7, 95), 6)
-  assert.equal(underLvPowerOf(7, 100), 7, '足りていればそのまま')
-  assert.equal(underLvPowerOf(100, 50), 50, '丸めで十分に下がるときはそのまま')
+  // 2026-10-18 からは「LV相当の強さ」と「元の強さ−1」の低いほう
   for (const item of ITEMS) {
     const p = powerAt(item, item.lv)
-    for (const pct of [95, 90, 50, 10]) {
-      const u = underLvPowerOf(p, pct)
-      assert.ok(u <= p - 1, `${item.id} 効果${pct}%：${p}→${u}`)
-      assert.equal(u, Math.max(0, Math.min(Math.round(p * pct / 100), p - 1)))
-      assert.equal(Object.values(statsAt(item, item.lv, pct)).reduce((a, b) => a + b, 0), u, 'ステの合計も同じ')
+    for (const short of [1, 2, 5, 18]) {
+      const lv = item.lv - short
+      if (lv < 1) continue
+      const u = effectivePowerAt(item, item.lv, lv)
+      assert.ok(u <= p - 1, `${item.id} ${short}LV足りない：${p}→${u}`)
+      assert.equal(u, Math.max(0, Math.min(powerAt(item, lv), p - 1)))
+      assert.equal(Object.values(statsAt(item, item.lv, lv)).reduce((a, b) => a + b, 0), u, 'ステの合計も同じ')
     }
   }
 })
 
-test('【確定】必要LVに足りないと、不足1LVごとに効果-5%・下げ幅は最大90%', () => {
-  assert.equal(effectPct(10, 10), 100)
-  assert.equal(effectPct(5, 10), 100, '足りていれば100%')
-  assert.equal(effectPct(11, 10), 95)
-  assert.equal(effectPct(20, 10), 50)
-  assert.equal(effectPct(28, 10), 10)
-  assert.equal(effectPct(100, 1), 10, 'どれだけ足りなくても10%は残る')
-  for (const item of ITEMS.filter(i => i.area === 1 || i.rarity === 'L')) {
-    for (const [ilv, pct] of [[1, 100], [37, 100], [80, 55], [100, 10]]) {
-      const s = statsAt(item, ilv, pct)
-      assert.equal(Object.values(s).reduce((a, b) => a + b, 0), underLvPowerOf(powerAt(item, ilv), pct), `${item.name} LV${ilv}`)
+test('【確定】2026-10-18 必要LVに足りないと、いまのLV相当（いまのLVで着けられる同じレア度・同じ種類の装備と同じ強さ）', () => {
+  // ユーザー「必要レベル90の装備を20くらいで装備したら、20レベル相当の能力になってる？」→「そのLV相当にする」を選んだ
+  // ⚠前は「不足1LVごとに効果−5%・最低10%」＝LV20でLV90の剣は15（LV20のノーマル26より弱い）
+  const top = itemOf(15, 'L', '片手剣'), forest = itemOf(1, 'L', '片手剣')
+  assert.equal(top.lv, 90)
+  assert.equal(forest.lv, 20)
+  assert.equal(effectivePowerAt(top, top.lv, 20), powerAt(forest, forest.lv), 'LV20で必要LV90のレジェンダリー＝必要LV20のレジェンダリー')
+  assert.equal(effectivePowerAt(top, top.lv, 20, 10), powerAt(forest, forest.lv, 10), '強化値はそのまま掛ける')
+  assert.deepEqual(statsAt(top, top.lv, 20), statsAt(forest, forest.lv, 20), 'ステも同じ')
+  assert.equal(syncIlvOf(top, top.lv, 20), 20)
+  assert.equal(syncLabelOf(top, top.lv, 20), 'LV20相当')
+  assert.equal(syncLabelOf(top, top.lv, 90), '', '足りていれば書かない')
+  // どの装備も：いまのLVで着けられる同じレア度・同じ種類の装備があれば、それと同じ強さ（強化値も）
+  const kindOf = (i) => i.id.split(':')[1]   // 種類（防具は「重鎧頭」のように系統＋部位）
+  for (const item of ITEMS) {
+    for (const other of ITEMS.filter(o => kindOf(o) === kindOf(item) && o.rarity === item.rarity && o.lv < item.lv)) {
+      for (const plus of [0, 5]) {
+        assert.equal(effectivePowerAt(item, item.lv, other.lv, plus), powerAt(other, other.lv, plus), `${item.id} をLV${other.lv}で（+${plus}）`)
+      }
     }
+    assert.equal(effectivePowerAt(item, item.lv, item.lv), powerAt(item, item.lv), '足りていれば元のまま')
+    assert.equal(effectivePowerAt(item, item.lv, item.lv + 30), powerAt(item, item.lv), 'LVが上でも元のまま（上がらない）')
+    assert.equal(effectivePowerAt(item, item.lv, null), powerAt(item, item.lv), 'LVを渡さなければ足りている扱い')
   }
 })
 
@@ -931,16 +942,16 @@ test('【確定】防具のメリットは 重鎧＝受けるダメージ−1%�
   assert.equal(ARMOR_EFFECT.軽装.label, 'AGI+1%')
   assert.ok(!ARMOR_EFFECT.重鎧.agiPct && !ARMOR_EFFECT.軽装.takenPct, 'デメリットは付けない')
   const heavy = itemOf(1, 'N', '重鎧頭'), light = itemOf(1, 'N', '軽装頭')
-  assert.deepEqual(armorEffects([{ item: heavy, pct: 100 }, { item: heavy, pct: 100 }]), { takenPct: -2, agiPct: 0, takenMult: 0.98 })
-  assert.deepEqual(armorEffects([{ item: light, pct: 100 }]), { takenPct: 0, agiPct: 1, takenMult: 1 })
-  // 必要LVに足りないときは、メリットも同じ割合で弱まる
-  assert.deepEqual(armorEffects([{ item: heavy, pct: 50 }]), { takenPct: -0.5, agiPct: 0, takenMult: 0.995 }, '倍率は小数4桁（0.5%も消えない）')
-  // 1部位の文（ホームの装備にカーソルを合わせたとき・プロフィールの内訳）。効果100%なら表の文と同じ
+  assert.deepEqual(armorEffects([{ item: heavy }, { item: heavy }]), { takenPct: -2, agiPct: 0, takenMult: 0.98 })
+  assert.deepEqual(armorEffects([{ item: light }]), { takenPct: 0, agiPct: 1, takenMult: 1 })
+  // 1部位の文（ホームの装備にカーソルを合わせたとき・プロフィールの内訳）＝表の文と同じ
   assert.equal(armorEffectText(heavy), ARMOR_EFFECT.重鎧.label)
-  assert.equal(armorEffectText(light, 100), ARMOR_EFFECT.軽装.label)
-  assert.equal(armorEffectText(heavy, 50), '受けるダメージ−0.5%')
-  assert.equal(armorEffectText(light, 45), 'AGI+0.45%')
+  assert.equal(armorEffectText(light), ARMOR_EFFECT.軽装.label)
   assert.equal(armorEffectText(itemOf(1, 'N', '片手剣')), '', '武器・装飾品は防具の効果なし')
+  // 【2026-10-18】必要LVに足りなくても、メリットは弱めない（LV相当の防具と同じ。前はステと同じ割合で弱まっていた）
+  const highHeavy = itemOf(15, 'L', '重鎧頭')
+  const prof = { class:'戦士', lv: 10, jobs: { 戦士: { lv: 1, exp: 0 } }, equipped: { head: 1 } }
+  assert.deepEqual(armorOf(prof, [{ id: 1, base_id: highHeavy.id, ilv: highHeavy.lv }]), { takenPct: -1, agiPct: 0, takenMult: 0.99 }, 'LV10でLV90の重鎧も−1%')
 })
 
 // ===== 戦闘用のキャラ =====
@@ -960,7 +971,7 @@ test('【確定】戦闘で使うのは、いまの職業の編成だけ。そ�
   assert.deepEqual(toFighter({ ...p, class:'銃士' }, []).slots, [], '編成の無い職業は空（他の職業の編成を使わない）')
 })
 
-test('戦闘のステ＝本体＋いまの職業のクラスのステ＋装備（必要LV不足ぶんを引く）＋軽装のAGI', () => {
+test('戦闘のステ＝本体＋いまの職業のクラスのステ＋装備（必要LVに足りない装備はLV相当）＋軽装のAGI', () => {
   const inv = [
     { id: 1, base_id: '3N:両手剣', ilv: 40 },
     { id: 2, base_id: '3R:軽装足', ilv: 30 },
@@ -968,9 +979,10 @@ test('戦闘のステ＝本体＋いまの職業のクラスのステ＋装備�
   const prof = baseProf({ equipped: { weapon: 1, foot: 2 } })
   const bd = statBreakdown(prof, inv)
   assert.deepEqual(bd.job, jobBonusStats('戦士', 30))
-  const gearW = underLvPowerOf(powerAt(ITEM_BY_ID['3N:両手剣'], 40), 50)
+  const gearW = effectivePowerAt(ITEM_BY_ID['3N:両手剣'], 40, 30)
   const gearF = powerAt(ITEM_BY_ID['3R:軽装足'], 30)
-  assert.equal(calcPower(bd.gear), gearW + gearF, 'LV30でLV40の装備＝効果50%')
+  assert.equal(gearW, powerAt(ITEM_BY_ID['3N:両手剣'], 30), 'LV30でアイテムLV40の装備＝LV30相当')
+  assert.equal(calcPower(bd.gear), gearW + gearF)
   assert.equal(bd.armor.agiPct, 1)
   assert.equal(bd.armorAgi, Math.round((bd.body.agi + bd.job.agi + bd.gear.agi) * 0.01))
   assert.equal(bd.total.agi, bd.body.agi + bd.job.agi + bd.gear.agi + bd.armorAgi)

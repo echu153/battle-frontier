@@ -4,7 +4,7 @@ import { box, miniBtn, TEXT } from '../../v2/components/v2ui.js'
 import { ITEM_BY_ID, SLOTS, SLOT_LABEL, ARMOR_EFFECT, slotsFor, kindLabel, needLvOf } from '../lib/equipment.js'
 import { canEquipType } from '../lib/jobs.js'
 import { equippedItems, wornIdsOf } from '../lib/loadout.js'
-import { powerAt, statsAt, reqPctOf, underLvPowerOf } from '../lib/gear.js'
+import { powerAt, statsAt, effectivePowerAt, syncLabelOf } from '../lib/gear.js'
 import { plusOf } from '../lib/smith.js'
 import { DROP_CHANCE } from '../lib/sortie.js'
 import { statLine, nameColor, useGearRows } from './v2capGearView.js'
@@ -53,7 +53,7 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
         <div style={{ display:'grid', gap:'3px' }}>
           {SLOTS.map(slot => {
             const w = worn[slot]
-            const pct = w ? reqPctOf(w.item, w.inv.ilv, prof.lv) : 100
+            const sync = w ? syncLabelOf(w.item, w.inv.ilv, prof.lv) : ''
             return (
               <div key={slot} style={{ background:'#000818', border:'1px solid #002244', padding:'5px 7px', display:'flex', alignItems:'center', gap:'6px', fontSize:'11px', flexWrap:'wrap' }}>
                 <span style={{ color: TEXT.label, width:'52px', flexShrink:0 }}>{SLOT_LABEL[slot]}</span>
@@ -62,10 +62,10 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
                     <span style={{ flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                       <span style={{ color: nameColor(w.item) }}>{w.item.name}</span>
                       <PlusTag inv={w.inv} />
-                      {/* 装備中の行にLVは出さない（2026-10-14 ユーザー指示）。足りないときの効果%だけ出す */}
-                      {pct < 100 && <span style={{ color:'#ff8844' }}> 効果{pct}%</span>}
+                      {/* 装備中の行にLVは出さない（2026-10-14 ユーザー指示）。必要LVに足りないときの「LV〇相当」だけ出す（2026-10-18〜） */}
+                      {sync && <span style={{ color:'#ff8844' }}> {sync}</span>}
                     </span>
-                    <span style={{ color: TEXT.sub, fontSize:'10px' }}>{statLine(statsAt(w.item, w.inv.ilv, pct, plusOf(w.inv)))}</span>
+                    <span style={{ color: TEXT.sub, fontSize:'10px' }}>{statLine(statsAt(w.item, w.inv.ilv, prof.lv, plusOf(w.inv)))}</span>
                     <button onClick={() => unequip(slot)} disabled={busy} style={miniBtn('#aa5566')}>外す</button>
                   </>
                 ) : <span style={{ color: TEXT.empty }}>—</span>}
@@ -93,7 +93,7 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
             </div>
           )}
           {rows.map(({ inv, item }) => {
-            const pct = reqPctOf(item, inv.ilv, prof.lv)
+            const sync = syncLabelOf(item, inv.ilv, prof.lv)
             const plus = plusOf(inv)
             const isWorn = wornIds.has(String(inv.id))
             const usable = item.part !== '武器' || canEquipType(prof.class, item.type)
@@ -124,8 +124,8 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
                 </div>
                 <div style={{ fontSize:'10px', color: TEXT.sub, margin:'3px 0', display:'flex', gap:'8px', flexWrap:'wrap' }}>
                   {/* 右上の「要求レベル〇LV」と同じ言い方・同じ値（アイテムLVではなく needLvOf）で出す */}
-                  <span>戦闘力 {power}{pct < 100 && <span style={{ color:'#ff8844' }}> → {underLvPowerOf(power, pct)}（効果{pct}%・要求レベルまであと{needLvOf(item, inv.ilv) - prof.lv}LV）</span>}</span>
-                  <span>{statLine(statsAt(item, inv.ilv, pct, plus))}</span>
+                  <span>戦闘力 {power}{sync && <span style={{ color:'#ff8844' }}> → {effectivePowerAt(item, inv.ilv, prof.lv, plus)}（{sync}・要求レベルまであと{needLvOf(item, inv.ilv) - prof.lv}LV）</span>}</span>
+                  <span>{statLine(statsAt(item, inv.ilv, prof.lv, plus))}</span>
                 </div>
                 <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', alignItems:'center' }}>
                   {usable

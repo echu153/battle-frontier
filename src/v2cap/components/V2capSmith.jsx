@@ -8,7 +8,7 @@ import { spotOf } from '../lib/areas.js'
 import { openUntilOf } from '../lib/sortie.js'
 import { canEquipType } from '../lib/jobs.js'
 import { wornIdsOf } from '../lib/loadout.js'
-import { powerAt, statsAt, reqPctOf, underLvPowerOf } from '../lib/gear.js'
+import { powerAt, statsAt, effectivePowerAt, syncLabelOf } from '../lib/gear.js'
 import {
   PLUS_MAX, plusOf, scrapNameOf, scrapOf, scrapAreaOf, dismantleGainOf, bulkPickable, enhanceCostOf, enhanceErrorOf,
   SCRAP_NAMES, SCRAP_YIELD, CRAFT_RARITIES, craftCostOf, craftErrorOf,
@@ -158,7 +158,6 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call }) {
       <div style={{ display:'grid', gap:'4px', maxHeight:'560px', overflowY:'auto' }}>
         {rows.length === 0 && <Empty all={all} />}
         {rows.map(({ inv, item }) => {
-          const pct = reqPctOf(item, inv.ilv, prof.lv)
           const cost = enhanceCostOf(item, inv)
           const isWorn = wornIds.has(String(inv.id))
           const scrapShort = cost && scrapOf(prof.materials, cost.area) < cost.scrap
@@ -166,7 +165,7 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call }) {
           return (
             <div key={inv.id} style={rowBox(isWorn ? '#0055aa' : '#002244')}>
               <ItemHead inv={inv} item={item} lv={prof.lv} isWorn={isWorn} />
-              <ItemStats inv={inv} item={item} pct={pct} />
+              <ItemStats inv={inv} item={item} lv={prof.lv} />
               <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center', fontSize:'10px' }}>
                 {cost ? (
                   <span style={{ color: TEXT.sub, flex:1, minWidth:0 }}>
@@ -287,10 +286,9 @@ function CraftTab({ prof, all, busy, call, setError, setNotice }) {
     if (!item || busy) return
     const c = craftCostOf(item)
     if (!c || craftErrorOf(item, prof)) return
-    const pct = reqPctOf(item, item.lv, prof.lv)
     const job = {
       id: Date.now(), item, name: item.name, rarity: item.rarity, part: item.part, kind: kindLabel(item), lv: needLvOf(item),
-      power: powerAt(item, item.lv, 0), pct, statText: statLine(statsAt(item, item.lv, pct, 0)), scrapName: scrapNameOf(c.area), scrap: c.scrap, gold: c.gold, result: null,
+      power: powerAt(item, item.lv, 0), sync: syncLabelOf(item, item.lv, prof.lv), statText: statLine(statsAt(item, item.lv, prof.lv, 0)), scrapName: scrapNameOf(c.area), scrap: c.scrap, gold: c.gold, result: null,
     }
     setConfirm(null); setFxJob(job)
     const { data, error } = await call('v2cap_craft', { p_equip_id: item.id })
@@ -341,7 +339,6 @@ function CraftTab({ prof, all, busy, call, setError, setNotice }) {
         {items.map(item => {
           const usable = item.part !== '武器' || canEquipType(prof.class, item.type)
           const err = craftErrorOf(item, prof)
-          const pct = reqPctOf(item, item.lv, prof.lv)
           const n = ownCount[item.id] || 0
           return (
             <div key={item.id} style={rowBox('#002244')}>
@@ -355,7 +352,7 @@ function CraftTab({ prof, all, busy, call, setError, setNotice }) {
                 </span>
                 <span style={{ color: needLvOf(item) > prof.lv ? '#ff8844' : '#cfe2ff', fontSize:'11px', whiteSpace:'nowrap' }}>要求レベル{needLvOf(item)}LV</span>
               </div>
-              <ItemStats inv={{ ilv: item.lv, plus: 0 }} item={item} pct={pct} />
+              <ItemStats inv={{ ilv: item.lv, plus: 0 }} item={item} lv={prof.lv} />
               <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center', fontSize:'10px' }}>
                 <span style={{ flex:1, minWidth:0, color:'#c69a5c' }}>{usable ? '' : `${prof.class}は${item.type}を装備できない（作ることはできる）`}</span>
                 <button onClick={() => setConfirm(item)} disabled={busy || !!err} title={err || ''} style={miniBtn('#ffaa44')}>作る</button>
@@ -386,13 +383,14 @@ function ItemHead({ inv, item, lv, isWorn, check }) {
     </div>
   )
 }
-// 戦闘力とステ（強化値・必要LV不足の効果%込み）
-function ItemStats({ inv, item, pct }) {
+// 戦闘力とステ（強化値と、必要LVに足りない装備のLV相当込み）
+function ItemStats({ inv, item, lv }) {
   const power = powerAt(item, inv.ilv, plusOf(inv))
+  const sync = syncLabelOf(item, inv.ilv, lv)
   return (
     <div style={{ fontSize:'10px', color: TEXT.sub, margin:'3px 0', display:'flex', gap:'8px', flexWrap:'wrap' }}>
-      <span>戦闘力 {power}{pct < 100 && <span style={{ color:'#ff8844' }}> → {underLvPowerOf(power, pct)}（効果{pct}%）</span>}</span>
-      <span>{statLine(statsAt(item, inv.ilv, pct, plusOf(inv)))}</span>
+      <span>戦闘力 {power}{sync && <span style={{ color:'#ff8844' }}> → {effectivePowerAt(item, inv.ilv, lv, plusOf(inv))}（{sync}）</span>}</span>
+      <span>{statLine(statsAt(item, inv.ilv, lv, plusOf(inv)))}</span>
     </div>
   )
 }
@@ -410,7 +408,7 @@ function SmithModal({ row, prof, busy, msg, onEnhance, onClose }) {
   const plus = plusOf(inv)
   const cost = enhanceCostOf(item, inv)
   const err = enhanceErrorOf(item, inv, prof)
-  const pct = reqPctOf(item, inv.ilv, prof.lv)
+  const sync = syncLabelOf(item, inv.ilv, prof.lv)
   const now = powerAt(item, inv.ilv, plus)
   const have = cost ? scrapOf(prof.materials, cost.area) : 0
   const gold = Number(prof.gold) || 0
@@ -428,10 +426,10 @@ function SmithModal({ row, prof, busy, msg, onEnhance, onClose }) {
           {/* ★「強さ110%」のような%は出さない（弱い装備は最低+1のほうが大きく、%と合わない）。上がり幅は下の戦闘力で見せる */}
           <div>強化値 +{plus} → <span style={{ color: PLUS_COLOR }}>+{cost.next}</span></div>
           <div>戦闘力 {now} → <span style={{ color:'#44ff88' }}>{powerAt(item, inv.ilv, cost.next)}</span>
-            {pct < 100 && <span style={{ color: SHORT, fontSize:'11px' }}>（いまは効果{pct}%）</span>}
+            {sync && <span style={{ color: SHORT, fontSize:'11px' }}>（いまは{sync}）</span>}
           </div>
           <div style={{ color: TEXT.sub, fontSize:'11px' }}>
-            {statLine(statsAt(item, inv.ilv, pct, plus))}<br />→ {statLine(statsAt(item, inv.ilv, pct, cost.next))}
+            {statLine(statsAt(item, inv.ilv, prof.lv, plus))}<br />→ {statLine(statsAt(item, inv.ilv, prof.lv, cost.next))}
           </div>
           <div style={{ marginTop:'4px' }}>
             使うもの：
@@ -478,14 +476,13 @@ function DismantleModal({ list, busy, onConfirm, onClose }) {
 // 作成の確認
 function CraftModal({ item, prof, busy, onConfirm, onClose }) {
   const cost = craftCostOf(item)
-  const pct = reqPctOf(item, item.lv, prof.lv)
   return (
     <V2Modal title="🔨 装備を作る" color="#ffaa44" busy={busy} confirmLabel="作る" onConfirm={onConfirm} onClose={onClose}>
       <div>
         <span style={{ color: nameColor(item) }}>{item.name}</span>
         <span style={{ color: TEXT.sub, fontSize:'11px' }}>（{kindLabel(item)}・LV{needLvOf(item)}）</span>を作ります。
       </div>
-      <ItemStats inv={{ ilv: item.lv, plus: 0 }} item={item} pct={pct} />
+      <ItemStats inv={{ ilv: item.lv, plus: 0 }} item={item} lv={prof.lv} />
       <div>使うもの：<span style={{ color:'#cfe2ff' }}>{scrapNameOf(item.area)} {cost.scrap}個</span>
         <span style={{ color: TEXT.sub, fontSize:'11px' }}>（持っている {scrapOf(prof.materials, item.area).toLocaleString()}）</span>
         ・<span style={{ color:'#ffcc00' }}>Gold {cost.gold.toLocaleString()}</span>

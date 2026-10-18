@@ -216,7 +216,7 @@ export default function V2capCraftFx({ job, nextLabel, nextReason, onAgain, onCl
               🔨 {craftTitleOf(job.name)}
             </div>
             <div style={{ padding:'10px 12px', fontSize:12, color:'#88ccff', lineHeight:1.8 }}>
-              <div>戦闘力 <span style={{ color:'#44ff88' }}>{job.power}</span>{job.pct < 100 && <span style={{ color:'#ff8844', fontSize:11 }}>（いまは効果{job.pct}%）</span>}</div>
+              <div>戦闘力 <span style={{ color:'#44ff88' }}>{job.power}</span>{job.sync && <span style={{ color:'#ff8844', fontSize:11 }}>（いまは{job.sync}）</span>}</div>
               <div style={{ color:'#93a9be', fontSize:11 }}>{job.statText}</div>
               <div>使ったもの：<span style={{ color:'#cfe2ff' }}>{job.scrapName} {job.scrap}個</span>・<span style={{ color:'#ffcc00' }}>Gold {Number(job.gold).toLocaleString()}</span></div>
               <div style={{ color:'#93a9be', fontSize:11 }}>+0で持ち物に入りました</div>
