@@ -31,6 +31,8 @@
 //   takenCut         受けるダメージ−%（深淵の加護）
 //   dealPct          与ダメージ+%（深淵の力）
 //   rareDropMult     レア以上が落ちる確率の倍率（海賊の嗅覚。戦闘ではなく出撃のドロップ＝src/v2cap/lib/sortie.js が読む）
+//   sexDeal          与えるダメージ+%（性別：男性・2026-10-21＝src/v2cap/lib/gender.js）。端数は確率で丸める（下の sexAdjust）
+//   sexCut           受けるダメージ−%（性別：女性）。同じ
 //   names {項目: 能力の名前}  ログに出す名前
 //
 // ★ユニーク装備の能力（「レベルキャップあり」版・2026-10-21）も同じ入れ物に入る（src/v2cap/lib/fxMerge.js が防具のセット能力と1つにまとめる）。
@@ -177,6 +179,19 @@ export const setDealMult = (me, foe, eMe, eFoe, kind = null) => {
   if (kind && fx.kindDeal?.[kind]) pct += fx.kindDeal[kind]
   if (fx.tide?.odd && (me.turn || 0) % 2 === 0) pct += fx.tide.odd
   return 1 + pct / 100
+}
+// ★性別（v2cap・2026-10-21・src/v2cap/lib/gender.js）：sexDeal＝撃つ側の与えるダメージ+%（男性）・sexCut＝受ける側の受けるダメージ−%（女性）。
+//   1発のダメージ（切り捨てたあとの整数 out）に掛け、**端数は確率で丸める**＝どの大きさのダメージでも平均でちょうど±%。
+//   （ほかの能力と同じに切り捨ての前で掛けると、1発が数ダメージの序盤は 2→1.96→1 のように−2%が−27%（LV5で測った）になり、
+//     +2%は 37→37.74→37 のように消える）
+//   どちらも持たなければ何もしない（乱数も引かない＝今のⅡや性別の無いキャラ・敵の戦闘は1つも変わらない）
+export const sexAdjust = (me, foe, out, rng) => {
+  const up = me?.setFx?.sexDeal || 0
+  const cut = foe?.setFx?.sexCut || 0
+  if (!up && !cut) return out
+  const x = out * (1 + up / 100) * (1 - cut / 100)
+  const n = Math.floor(x)
+  return Math.max(1, n + (rng() < x - n ? 1 : 0))
 }
 // ★ユニーク：防御無視（虚葬の錫杖＝魔法・パンツァーブレッヒャー＝物理）。防御無視の枠に足す割合（0〜1）
 export const setDefPen = (me, kind) => (me?.setFx?.defIgnore?.[kind] || 0) / 100

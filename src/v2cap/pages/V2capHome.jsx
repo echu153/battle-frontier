@@ -27,6 +27,8 @@ import { TOWER_NAME, floorLabel, clampFloor } from '../lib/tower.js'
 import { openUntilOf } from '../lib/sortie.js'
 import { spotLabel } from '../lib/areas.js'
 import { RARITY_COLOR } from '../lib/equipment.js'
+import { GENDER_BY_KEY, genderOf } from '../lib/gender.js'
+import V2capGenderPick from '../components/V2capGenderPick.jsx'
 
 // ============================================================
 // バトルフロンティアⅡ「レベルキャップあり」版 — ホーム（開発限定）
@@ -101,6 +103,7 @@ export default function V2capHome() {
   const [name, setName] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)   // 宝樹を何回でも祈れる（2026-10-13・開発中）
   const [pick, setPick] = useState('戦士')
+  const [sex, setSex] = useState('m')   // 性別（キャラ作成と、性別が無い前からのキャラの1回だけの選択・2026-10-21）
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [devMsg, setDevMsg] = useState('')
@@ -163,11 +166,19 @@ export default function V2capHome() {
     const nameErr = validateName(name)
     if (nameErr) { setError(nameErr); return }
     setBusy(true); setError('')
-    const { data, error: rpcErr } = await supabase.rpc('v2cap_create_character', { p_username: name.trim(), p_class: pick })
+    const { data, error: rpcErr } = await supabase.rpc('v2cap_create_character', { p_username: name.trim(), p_class: pick, p_gender: sex })
     setBusy(false)
     if (rpcErr || !data?.ok) { setError(rpcErr?.message || data?.error || '作成に失敗しました'); return }
     setProf(data.profile)
     setInventory([])
+  }
+  // 性別を持たない前からのキャラが、ホームで1回だけ選ぶ（サーバーは性別が空のときだけ通す）
+  const saveGender = async () => {
+    setBusy(true); setError('')
+    const { data, error: rpcErr } = await supabase.rpc('v2cap_set_gender', { p_gender: sex })
+    setBusy(false)
+    if (rpcErr || !data?.ok) { setError(rpcErr?.message || data?.error || '保存に失敗しました'); return }
+    setProf(data.profile)
   }
 
   const gainExp = async (amount) => {
@@ -281,12 +292,17 @@ export default function V2capHome() {
       <div style={page}>
         {header}
         <div style={{ padding:'8px 12px', maxWidth:'760px', margin:'0 auto' }}>
-          {/* ★見せるのは「キャラクター名」と「クラス選択」だけ（2026-10-09 ユーザー指示）。
-               カードは職業名・物理／魔法・武器・特徴の説明1行（クラスのステや技の一覧は神殿で見る） */}
+          {/* ★見せるのは「キャラクター名」と「性別」と「クラス選択」だけ（2026-10-09 ユーザー指示・性別は 2026-10-21 ユーザー指示で足した）。
+               カードは職業名・物理／魔法・武器・特徴の説明1行（クラスのステや技の一覧は神殿で見る）。
+               性別は「♂ 男性＝与えるダメージ+2%／♀ 女性＝受けるダメージ−2%」（lib/gender.js）。作成のあとは変えられない（変えるアイテムはあとで） */}
           <form onSubmit={create} style={{ ...box, padding:'14px' }}>
             <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'6px' }}>キャラクター名</div>
             <input value={name} onChange={e => setName(e.target.value)} maxLength={16} placeholder="名前（1〜16文字）"
               style={{ width:'100%', boxSizing:'border-box', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px', marginBottom:'14px' }} />
+            <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'6px' }}>
+              性別<span style={{ color: TEXT.label, fontSize:'10px' }}>※あとから変えるにはアイテムが必要</span>
+            </div>
+            <div style={{ marginBottom:'14px' }}><V2capGenderPick value={sex} onChange={setSex} disabled={busy} /></div>
             <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'6px' }}>
               クラス選択<span style={{ color: TEXT.label, fontSize:'10px' }}>※いつでも変更可能</span>
             </div>
@@ -331,6 +347,19 @@ export default function V2capHome() {
       {header}
       <div style={{ padding:'8px 12px' }}>
         {error && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'8px' }}>⚠ {error}</div>}
+        {/* ★性別を持たない前からのキャラ（2026-10-21 より前に作った）は、ホームの上で1回だけ選ぶ。選ぶまで性能差は付かない */}
+        {isHome && !genderOf(prof) && (
+          <div style={{ ...box, padding:'12px', marginBottom:'8px', border:'1px solid #ffcc00' }}>
+            <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'4px' }}>性別を選んでください</div>
+            <div style={{ color: TEXT.sub, fontSize:'10px', marginBottom:'8px', lineHeight:1.6 }}>
+              キャラクターに性別ができました。ここで1回だけ選べます（あとから変えるにはアイテムが必要）
+            </div>
+            <V2capGenderPick value={sex} onChange={setSex} disabled={busy} />
+            <button onClick={saveGender} disabled={busy} style={{ ...btn('#ffcc00'), width:'100%', padding:'8px', marginTop:'8px' }}>
+              {busy ? '保存中...' : `${GENDER_BY_KEY[sex]?.label || ''}にする`}
+            </button>
+          </div>
+        )}
         {isHome ? (
           <div style={TWO_COLUMN}>
             {/* ===== 左：キャラクターの状態（ホームだけ） ===== */}

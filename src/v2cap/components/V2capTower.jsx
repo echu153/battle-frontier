@@ -4,6 +4,7 @@ import V2capLogLine from './V2capLogLine.jsx'
 import V2capIcon from './V2capIcon.jsx'
 import { runBattle } from '../../v2/lib/battle.js'
 import { loadPref } from '../../v2/lib/prefs.js'
+import { artGenderOf } from '../lib/gender.js'
 import { box, btn, miniBtn, TEXT } from '../../v2/components/v2ui.js'
 import { toFighter as playerFighter } from '../lib/loadout.js'
 import { calcPower } from '../lib/level.js'
@@ -103,8 +104,8 @@ export default function V2capTower({ prof, inventory, onProfile }) {
     lastAt.current = Date.now()
     let freeCd = false   // 守護者が入れ替わっていた（待ち時間を使っていない）
     try {
-      // 自分のアイコンの男女は神殿の切り替えと同じ（守護者になったときの姿にも入れる）
-      const gender = loadPref('capArtGender', 'm')
+      // 自分のアイコンの男女はキャラの性別（2026-10-21・gender.js。まだ決めていないキャラだけ神殿の切り替え）。守護者になったときの姿にも入れる
+      const gender = artGenderOf(prof, loadPref('capArtGender', 'm'))
       const { a, b, bonus } = towerBattleOf({ me, myLv: prof.lv, champ, floor })
       const r = runBattle(a, b)
       const win = r.winner === 'a'

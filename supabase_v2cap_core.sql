@@ -3098,6 +3098,12 @@ alter table public.v2cap_profiles add column if not exists shrine_total int not 
 alter table public.v2cap_profiles add column if not exists shrine_force boolean not null default false;
 -- 開発用（2026-10-21）：次にボスに勝ったとき必ずユニークを落とす（v2cap_debug_unique_next が付け、落ちたら外れる）
 alter table public.v2cap_profiles add column if not exists unique_force boolean not null default false;
+-- 【確定】2026-10-21 ユーザー指示「キャラクター作成時に性別選択できるようにして、性別によってほんの少し性能差出るようにしたい」：
+--   性別（'m'＝男性・'f'＝女性。決めていなければ null）。性能差（男性＝与えるダメージ+2%・女性＝受けるダメージ−2%）は
+--   画面の戦闘（gender.js）。キャラ作成で決め、前からのキャラは v2cap_set_gender で1回だけ選ぶ（変えるアイテムはあとで）
+alter table public.v2cap_profiles add column if not exists gender text;
+alter table public.v2cap_profiles drop constraint if exists v2cap_profiles_gender_check;
+alter table public.v2cap_profiles add constraint v2cap_profiles_gender_check check (gender is null or gender in ('m', 'f'));
 create unique index if not exists v2cap_profiles_username_lower_idx
   on public.v2cap_profiles (lower(username));
 -- 参照は認証済み全員（今のⅡと同じ）。書き込みはRPC経由だけ
@@ -3760,12 +3766,16 @@ grant execute on function public.v2cap_allocate_points(jsonb) to authenticated;
 -- ============================================================
 -- 名前と、最初の職業（初期職10から）。ClassLV1で覚えるスキルを1つ持って始め、その職業の編成にも入れておく
 -- （回数は最大MPに収まるだけ・最大5回＝ v2cap_default_set）
-create or replace function public.v2cap_create_character(p_username text, p_class text)
+-- ★性別（2026-10-21）：p_gender は 'm'／'f'。前の画面（p_gender を送らない）から作ったときは null＝ホームで1回だけ選ぶ（v2cap_set_gender）
+--   引数が2つの前の版は消してから作る（同じ名前で引数の数が違う関数が2つ並ぶと、2つで呼んだときにどちらか決まらない）
+drop function if exists public.v2cap_create_character(text, text);
+create or replace function public.v2cap_create_character(p_username text, p_class text, p_gender text default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_uid   uuid := auth.uid();
   v_name  text := btrim(coalesce(p_username, ''));
   v_cls   text := btrim(coalesce(p_class, ''));
+  v_sex   text := nullif(btrim(coalesce(p_gender, '')), '');
   v_row   public.v2cap_profiles;
   v_learn jsonb;
   v_start text[];
@@ -3782,6 +3792,9 @@ begin
   if not exists (select 1 from public.v2cap_classes c where c.id = v_cls and c.stage = 'shoki') then
     return jsonb_build_object('ok', false, 'error', '最初の職業は初期職から選んでください');
   end if;
+  if v_sex is not null and v_sex not in ('m', 'f') then
+    return jsonb_build_object('ok', false, 'error', '性別は男性か女性から選んでください');
+  end if;
   select * into v_row from public.v2cap_profiles where id = v_uid;
   if found then return jsonb_build_object('ok', true, 'already', true, 'profile', to_jsonb(v_row)); end if;
   if exists (select 1 from public.v2cap_profiles where lower(username) = lower(v_name)) then
@@ -3789,8 +3802,8 @@ begin
   end if;
 
   v_learn := public.v2cap_learn('[]'::jsonb, v_cls, 1);
-  insert into public.v2cap_profiles (id, username, class, jobs, learned)
-  values (v_uid, v_name, v_cls, jsonb_build_object(v_cls, jsonb_build_object('lv', 1, 'exp', 0)), v_learn)
+  insert into public.v2cap_profiles (id, username, class, jobs, learned, gender)
+  values (v_uid, v_name, v_cls, jsonb_build_object(v_cls, jsonb_build_object('lv', 1, 'exp', 0)), v_learn, v_sex)
   returning * into v_row;
   -- ★初期装備（2026-10-12 ユーザー指示「キャラ作成時そのクラスに対応する装備一式（lv１）」）：
   --   v2cap_classes.starter（武器・頭・鎧・腕・足・装飾品①・装飾品② の順）を持ち物に入れて、全部着ける。アイテムLV＝必要LV1
@@ -3816,8 +3829,37 @@ exception when unique_violation then
   return jsonb_build_object('ok', false, 'error', 'その名前はすでに使われています');
 end;
 $$;
-revoke all on function public.v2cap_create_character(text, text) from public, anon;
-grant execute on function public.v2cap_create_character(text, text) to authenticated;
+revoke all on function public.v2cap_create_character(text, text, text) from public, anon;
+grant execute on function public.v2cap_create_character(text, text, text) to authenticated;
+
+-- 性別を持たない前からのキャラ（2026-10-21 より前に作った）が1回だけ選ぶ。
+-- ★性別が空のときだけ通す（決めたあとは変えられない＝変えるアイテムはあとで足す・ユーザー「一旦作成でだけ」）
+create or replace function public.v2cap_set_gender(p_gender text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_sex text := btrim(coalesce(p_gender, ''));
+  v_row public.v2cap_profiles;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if v_sex not in ('m', 'f') then
+    return jsonb_build_object('ok', false, 'error', '性別は男性か女性から選んでください');
+  end if;
+  update public.v2cap_profiles set gender = v_sex, updated_at = now()
+   where id = v_uid and gender is null
+   returning * into v_row;
+  if not found then
+    if exists (select 1 from public.v2cap_profiles where id = v_uid) then
+      return jsonb_build_object('ok', false, 'error', '性別はもう決まっています（変えるにはアイテムが必要です）');
+    end if;
+    return jsonb_build_object('ok', false, 'error', 'キャラクターがいません');
+  end if;
+  return jsonb_build_object('ok', true, 'profile', to_jsonb(v_row));
+end;
+$$;
+revoke all on function public.v2cap_set_gender(text) from public, anon;
+grant execute on function public.v2cap_set_gender(text) to authenticated;
 
 -- ============================================================
 -- ===== 5. 出撃の精算（1戦ごと）=====

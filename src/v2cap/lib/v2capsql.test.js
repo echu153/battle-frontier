@@ -181,6 +181,26 @@ test('【確定】キャラ作成で初期装備（その職業の7点・必要L
   assert.ok(f.indexOf("if found then return jsonb_build_object('ok', true, 'already', true") < f.indexOf('select c.starter into v_start'))
 })
 
+test('【確定】性別（2026-10-21）：キャラ作成で選ぶ・前からのキャラは1回だけ選べる・男女だけ', () => {
+  assert.ok(SQL.includes('alter table public.v2cap_profiles add column if not exists gender text;'))
+  assert.ok(SQL.includes("add constraint v2cap_profiles_gender_check check (gender is null or gender in ('m', 'f'));"))
+  // 作成：引数2つの前の版は消してから作る（前の画面＝p_gender を送らなくても作れる・性別は空）
+  assert.ok(SQL.indexOf('drop function if exists public.v2cap_create_character(text, text);') < SQL.indexOf('create or replace function public.v2cap_create_character('))
+  const f = fnBody('v2cap_create_character')
+  assert.ok(f.startsWith('create or replace function public.v2cap_create_character(p_username text, p_class text, p_gender text default null)'))
+  assert.ok(f.includes("if v_sex is not null and v_sex not in ('m', 'f') then"), '男女以外は弾く')
+  assert.match(f, /insert into public\.v2cap_profiles \(id, username, class, jobs, learned, gender\)[\s\S]*?v_learn, v_sex\)/)
+  assert.ok(SQL.includes('grant execute on function public.v2cap_create_character(text, text, text) to authenticated;'))
+  assert.ok(!SQL.includes('grant execute on function public.v2cap_create_character(text, text) to'), '前の引数の権限は残さない')
+  // 1回だけ選ぶ：性別が空のときだけ書く
+  const s = fnBody('v2cap_set_gender')
+  assert.ok(s.includes('if not public.v2cap_is_dev() then'), '開発限定（この版は管理者だけ）')
+  assert.ok(s.includes("if v_sex not in ('m', 'f') then"))
+  assert.match(s, /update public\.v2cap_profiles set gender = v_sex, updated_at = now\(\)\s+where id = v_uid and gender is null/)
+  assert.ok(SQL.includes('revoke all on function public.v2cap_set_gender(text) from public, anon;'))
+  assert.ok(SQL.includes('grant execute on function public.v2cap_set_gender(text) to authenticated;'))
+})
+
 test('スキルを覚える順はこの版の名簿（v2cap_skills の sort）', () => {
   const learn = fnBody('v2cap_learn')
   assert.match(learn, /from public\.v2cap_skills k/)

@@ -12,6 +12,7 @@ import { passiveOf } from '../lib/skills.js'
 import { ITEM_BY_ID } from '../lib/equipment.js'
 import { ART_GENDERS, artSrcOf, hasArt } from '../lib/classArt.js'
 import { useStored } from '../../v2/lib/prefs.js'
+import { artGenderOf } from '../lib/gender.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — 神殿（転職）
@@ -109,7 +110,8 @@ export default function V2capTemple({ prof, inventory, onProfile }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [msg, setMsg] = useState('')
-  const [gender, setGender] = useStored('capArtGender', 'm')   // イラストを男女どちらで見せるか（端末で覚えておく）
+  // イラストを男女どちらで見せるか（端末で覚えておく・見るだけの切り替え）。はじめはキャラの性別（2026-10-21・gender.js）
+  const [gender, setGender] = useStored('capArtGender', artGenderOf(prof))
 
   const open = (cls) => { setView(cls); setMsg(''); setError('') }
   const change = async (cls) => {

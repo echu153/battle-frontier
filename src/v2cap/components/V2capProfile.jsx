@@ -3,6 +3,7 @@ import { supabase } from '../../supabase'
 import { box, btn, miniBtn, TEXT } from '../../v2/components/v2ui.js'
 import { AVATAR_PRESETS, AVATAR_MAX_BYTES, uploadPathOf } from '../lib/avatar.js'
 import { stageColorOf } from '../lib/jobs.js'
+import { GENDER_BY_KEY, genderOf } from '../lib/gender.js'
 import { avatarUrlOf } from './v2capAvatarUrl.js'
 import V2capBreakdown from './V2capBreakdown.jsx'
 
@@ -25,6 +26,7 @@ export default function V2capProfile({ prof, inventory, onProfile }) {
   const [preview, setPreview] = useState(null)
   const uploading = useRef(false)               // 連打での二重アップロード対策
   const fileRef = useRef(null)
+  const gender = GENDER_BY_KEY[genderOf(prof)] || null
 
   // 自分のフォルダの画像を読む（旧版・今のⅡでアップロードしたものも並ぶ）
   useEffect(() => {
@@ -86,6 +88,12 @@ export default function V2capProfile({ prof, inventory, onProfile }) {
           <div style={{ fontSize:'11px', color:'#9ec2e6', marginTop:'2px' }}>
             <span style={{ color: stageColorOf(prof.class) }}>{prof.class}</span>　LV{prof.lv}
           </div>
+          {/* 性別と性能差（2026-10-21・lib/gender.js）。まだ決めていないキャラはホームで選ぶ */}
+          {gender && (
+            <div style={{ fontSize:'10px', color: TEXT.sub, marginTop:'2px' }}>
+              <span style={{ color: gender.color }}>{gender.mark}</span> {gender.label}（{gender.text}）
+            </div>
+          )}
           {prof.avatar && (
             <button onClick={() => setAvatar(null)} disabled={busy} style={{ ...miniBtn('#aa5566'), marginTop:'8px' }}>アイコンを外す</button>
           )}

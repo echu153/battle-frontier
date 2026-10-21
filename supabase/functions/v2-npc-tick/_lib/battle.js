@@ -43,6 +43,8 @@ import {
   setTakenMult, setCritTakenMult, setDealMult, useSetDodge, setAfterDamage, setTurnsUp, tickSet,
   // ★ユニーク装備の能力（「レベルキャップあり」版・2026-10-21）。セット能力と同じ入れ物（setFx）に入っている
   setDefPen, setCritDmg, setImmune, setDrainPct, addSetStats, addSetFlat, fxName, ALL_SKILLS_SLOTS,
+  // ★性別（「レベルキャップあり」版・2026-10-21）。同じ入れ物（setFx の sexDeal・sexCut）
+  sexAdjust,
 } from './battleSet.js'
 
 export const NORMAL_ATTACK_MULT = 1.0 // 通常攻撃の倍率（消費MP0）
@@ -436,7 +438,8 @@ const applyIncoming = (me, foe, dmg, kind, rng, log, pre = null) => {
     const hp = guardHealPct(foe)
     if (hp > 0) guardHeal = Math.floor((before - d) * hp / 100)
   }
-  const out = Math.max(1, Math.floor(d))
+  // ★性別（v2cap）：男性＝与えるダメージ+2%・女性＝受けるダメージ−2%。切り捨てたあとに掛けて端数は確率で丸める（battleSet.js の sexAdjust）
+  const out = sexAdjust(me, foe, Math.max(1, Math.floor(d)), rng)
   // ★上位クラス（2026-10-15）：聖騎士の聖光（防御と軽減で減らしたぶんの%を溜める）・聖職者のバリア（HPより先に削れる）
   if (foe.pa.ex?.holy) holyGain(foe, Math.max(0, (pre ?? dmg) - out))
   const sh = shieldAbsorb(foe, out)

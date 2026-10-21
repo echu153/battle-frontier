@@ -21,7 +21,8 @@ import { jobBonusStats, jobOf, canEquipType, attackKindOf, lineageOf } from './j
 import { CAP_RULES } from './rules.js'
 import { ascEffectsOf, ascPctGain, ascendSkill } from './ascension.js'
 import { armorSetsOf, setStatPctOf, setFxOf } from './armorSets.js'
-import { combinedFxOf } from './fxMerge.js'
+import { combinedFxOf, mergeFx } from './fxMerge.js'
+import { GENDER_BY_KEY, genderOf, genderFxOf } from './gender.js'
 
 const zero = () => Object.fromEntries(STAT_KEYS.map(k => [k, 0]))
 
@@ -142,7 +143,9 @@ export const toFighter = (profile, inventory) => {
     //   職業名で引き、狂戦士・竜騎士など同じ名前の職業に今のⅡのパッシブが付いてしまう
     passives: passiveOf(profile?.class) ? [passiveOf(profile?.class)] : [],
     // ★防具のセット能力（2部位・4部位の戦闘の効果。3部位の能力値は stats に入っている）と、
-    //   着けているユニークの固有の能力（2026-10-21）を1つにまとめたもの（fxMerge.js）。どちらも無ければ null
-    setFx: combinedFxOf(setFxOf(bd.sets), wornUniquesOf(profile, inventory)),
+    //   着けているユニークの固有の能力（2026-10-21）を1つにまとめたもの（fxMerge.js）。どれも無ければ null
+    // ★性別（2026-10-21・gender.js）：男性＝与えるダメージ+2%（sexDeal）・女性＝受けるダメージ−2%（sexCut）も同じ入れ物に重ねる
+    setFx: mergeFx(combinedFxOf(setFxOf(bd.sets), wornUniquesOf(profile, inventory)),
+      genderFxOf(genderOf(profile)), GENDER_BY_KEY[genderOf(profile)]?.label),
   }
 }

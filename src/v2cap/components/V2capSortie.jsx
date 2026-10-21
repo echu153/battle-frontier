@@ -15,6 +15,7 @@ import { guardDropBonusOf, floorLabel, TOWER_NAME } from '../lib/tower.js'
 import { buildCapBattleView } from '../lib/battleView.js'
 import { enemyArtSrc } from '../lib/enemyArt.js'
 import { battleIconOf } from '../lib/classArt.js'
+import { artGenderOf } from '../lib/gender.js'
 import { shrineOf, shrineEncounterOf, SHRINE_NAME } from '../lib/shrine.js'
 import { SHRINE_ART, SHRINE_TEXT, MINCHO } from '../lib/fxStyle.js'
 import V2capShrineFx from './V2capShrineFx.jsx'
@@ -36,7 +37,7 @@ import V2capShrineFx from './V2capShrineFx.jsx'
 //   ・【確定】2026-10-12 ユーザー指示：戦闘ログは**あるけみすと風**（ターンの頭に両方のアイコン＋HPの表・
 //     行動ごとに動いた側のアイコン）。並びは battleView.js・見た目は V2capLogLine.jsx。
 //     敵のアイコンは enemyArt.js（エリア①から絵を足していく）、自分のアイコンは classArt.js の battleIconOf
-//     （SDの絵 → 無ければ顔のアップ。男女は神殿の切り替えと同じ capArtGender）
+//     （SDの絵 → 無ければ顔のアップ。男女はキャラの性別＝gender.js の artGenderOf。性別が無いキャラは神殿の切り替え capArtGender）
 //   ・【確定】2026-10-13 ユーザー指示「安息の祠を追加」（決まりは lib/shrine.js・決めるのはサーバー）：
 //     精算の返事（shrine）で祠を見つけたら、次の出撃から祠の中＝見つけた場所でハピネスフェアリーと戦う（場所は選べない）。
 //     最後の1戦のあとは最深部の演出（V2capShrineFx）。祠のことはプロフィールの列（shrine_spot・shrine_left・shrine_total）でも持つ
@@ -145,8 +146,8 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
 
       const foe = enc.enemy.name
       const you = me.name
-      // 自分のアイコンの男女は神殿の切り替えと同じ（戦闘のたびに読む＝神殿で変えたら次の戦闘から）
-      const gender = loadPref('capArtGender', 'm')
+      // 自分のアイコンの男女はキャラの性別（2026-10-21・gender.js）。まだ決めていないキャラだけ神殿の切り替え（戦闘のたびに読む）
+      const gender = artGenderOf(prof, loadPref('capArtGender', 'm'))
       setArt({ me: { src: battleIconOf(prof.class, gender), name: you }, foe: { src: enemyArtSrc(foe), name: foe } })
       const out = []
       // 「◯◯が現れた！」も敵のアイコンを付けて出す（あるけみすとの「◯◯が襲いかかってきた！」の形）
