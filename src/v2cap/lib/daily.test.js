@@ -27,9 +27,10 @@ test('【確定】報酬は受注した時点のLVで決まる：EXP＝そのLV�
     assert.equal(r.gold, lv * 100)
     assert.ok(recLvOf(s.id) >= lv || s.id === SPOTS.length, `LV${lv}の推奨の場所は、推奨LVの上限がLV${lv}以上`)
   }
-  // 始まりの森①（1体 EXP2〜3）のLV1〜5：EXP+25（前はLV1でEXP+1・LV5で+2）／いちばん後ろ（深淵の海溝③・1体31〜33）：320
-  for (const lv of [1, 5]) assert.equal(dailyRewardOf(lv).exp, 25)
-  assert.equal(dailyRewardOf(MAX_LV).exp, 320)
+  // 始まりの森①（1体 EXP3〜4）のLV1〜5：EXP+35（前はLV1でEXP+1・LV5で+2）／いちばん後ろ（深淵の海溝③・1体32〜34）：330
+  // （2026-10-21 場所の経験値を最小・最大とも+1 → 25→35・320→330）
+  for (const lv of [1, 5]) assert.equal(dailyRewardOf(lv).exp, 35)
+  assert.equal(dailyRewardOf(MAX_LV).exp, 330)
   // 後ろほど大きくなる（下がらない）
   for (let lv = 2; lv <= MAX_LV; lv++) assert.ok(dailyRewardOf(lv).exp >= dailyRewardOf(lv - 1).exp, `LV${lv}`)
 })

@@ -48,8 +48,9 @@ export const LAST_SPOT = SPOT_COUNT
 // 【確定】始まりの森・荒廃した草原はユーザーの表の値。古代の洞窟から先は「同じ伸び方で埋める」（ユーザー承認）：
 //   エリアが1つ進むごとに 経験値+2・Gold+5。①②③の幅は表と同じ
 //   （経験値 ① a〜a+1 ／ ② a〜a+2 ／ ③ a+1〜a+3、Gold ① g〜g+5 ／ ② g〜g+7 ／ ③ g〜g+10）
+// 【確定】2026-10-21 ユーザー指示「最小値と最大値1ずつ上げて」：経験値は全部の場所で最小・最大とも+1（a＝エリア×2＋1。始まりの森① 3〜4）
 export const expRangeOf = (areaNo, sub) => {
-  const a = 2 * areaNo
+  const a = 2 * areaNo + 1
   return sub === 1 ? [a, a + 1] : sub === 2 ? [a, a + 2] : [a + 1, a + 3]
 }
 export const goldRangeOf = (areaNo, sub) => {

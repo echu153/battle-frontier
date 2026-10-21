@@ -24,8 +24,8 @@ test('【確定】2026-10-12 経験値＝祈った時点のLVの推奨の場所�
     assert.equal(prayExpOf(lv, FORTUNE_BY_NAME['吉']), tenSortieExpOf(lv))
     assert.equal(prayExpOf(lv, FORTUNE_BY_NAME['大吉']), tenSortieExpOf(lv) * 3)
   }
-  // 始まりの森①（1体 EXP2〜3）のLV：吉で25・大吉で75（前は吉でEXP+1）
-  assert.deepEqual(FORTUNES.map(f => prayExpOf(1, f)), [75, 50, 38, 25, 18, 10, 5])
+  // 始まりの森①（1体 EXP3〜4）のLV：吉で35・大吉で105（前は吉でEXP+1。2026-10-21 場所の経験値+1で 25→35）
+  assert.deepEqual(FORTUNES.map(f => prayExpOf(1, f)), [105, 70, 53, 35, 25, 14, 7])
 })
 
 test('1日1回・日付が変わるのは日本時間の5時（今のⅡと同じ）', () => {
@@ -50,8 +50,8 @@ test('【確定】毎日祈ったときのボーナス：1日目1倍・2日目1.
     assert.equal(prayExpOf(lv, FORTUNE_BY_NAME['吉'], 10), prayExpOf(lv, FORTUNE_BY_NAME['吉']) * 2)
     assert.equal(prayExpOf(lv, FORTUNE_BY_NAME['大吉'], 10), prayExpOf(lv, FORTUNE_BY_NAME['大吉']) * 2)
   }
-  // LV10の吉：30 → 33 → 36 … → 54 → 60
-  assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(d => prayExpOf(10, FORTUNE_BY_NAME['吉'], d)), [30, 33, 36, 39, 42, 45, 48, 51, 54, 60])
+  // LV10の吉：40 → 44 → 48 … → 72 → 80
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(d => prayExpOf(10, FORTUNE_BY_NAME['吉'], d)), [40, 44, 48, 52, 56, 60, 64, 68, 72, 80])
   // 切り上げは整数で：(基準 × 運勢10分率 × 連続の百分率 + 999) ÷ 1000（サーバーと同じ）
   for (let lv = 1; lv <= MAX_LV; lv += 7) for (const f of FORTUNES) for (let d = 1; d <= 12; d++) {
     assert.equal(prayExpOf(lv, f, d), Math.ceil(tenSortieExpOf(lv) * multTenthsOf(f) * streakPctOf(d) / 1000), `LV${lv} ${f.name} ${d}日目`)

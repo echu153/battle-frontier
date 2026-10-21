@@ -116,13 +116,13 @@ test('【確定】15エリア×①②③の名前はユーザーの表のとお�
 })
 
 test('【確定】経験値とGoldは場所の表の値（始まりの森・荒廃した草原はユーザーの表・先は同じ伸び方）', () => {
-  // ユーザーの表そのまま
-  assert.deepEqual([1, 2, 3].map(s => expRangeOf(1, s)), [[2, 3], [2, 4], [3, 5]])
+  // ユーザーの表そのまま（経験値は 2026-10-21 ユーザー指示「最小値と最大値1ずつ上げて」で最小・最大とも+1）
+  assert.deepEqual([1, 2, 3].map(s => expRangeOf(1, s)), [[3, 4], [3, 5], [4, 6]])
   assert.deepEqual([1, 2, 3].map(s => goldRangeOf(1, s)), [[10, 15], [10, 17], [10, 20]])
-  assert.deepEqual([1, 2, 3].map(s => expRangeOf(2, s)), [[4, 5], [4, 6], [5, 7]])
+  assert.deepEqual([1, 2, 3].map(s => expRangeOf(2, s)), [[5, 6], [5, 7], [6, 8]])
   assert.deepEqual([1, 2, 3].map(s => goldRangeOf(2, s)), [[15, 20], [15, 22], [15, 25]])
   // 古代の洞窟から先は1エリアごとに 経験値+2・Gold+5（ユーザー承認）。最後は深淵の海溝
-  assert.deepEqual([1, 2, 3].map(s => expRangeOf(15, s)), [[30, 31], [30, 32], [31, 33]])
+  assert.deepEqual([1, 2, 3].map(s => expRangeOf(15, s)), [[31, 32], [31, 33], [32, 34]])
   assert.deepEqual([1, 2, 3].map(s => goldRangeOf(15, s)), [[80, 85], [80, 87], [80, 90]])
   for (let i = 1; i < SPOT_COUNT; i++) {
     assert.ok(SPOTS[i].exp[0] + SPOTS[i].exp[1] >= SPOTS[i - 1].exp[0] + SPOTS[i - 1].exp[1], `${SPOTS[i].name}の経験値は前より少なくない`)
@@ -137,7 +137,7 @@ test('【確定】朝昼晩の限定の敵1.5倍・レア3倍・ボス5倍（四
   assert.equal(scaleByRole(3, 'rare'), 9)
   assert.equal(scaleByRole(3, 'boss'), 15)
   assert.equal(scaleByRole(17, 'normal'), 17)
-  assert.deepEqual(rewardRangeOf(spotOf(1), 'boss'), { exp: [10, 15], gold: [50, 75] })
+  assert.deepEqual(rewardRangeOf(spotOf(1), 'boss'), { exp: [15, 20], gold: [50, 75] })
   const rng = rngOf(4)
   for (let i = 0; i < 3000; i++) {
     const spot = SPOTS[i % SPOT_COUNT]
@@ -155,7 +155,7 @@ test('【確定】負けても経験値はその場所の最低値（朝昼晩�
       assert.deepEqual(rollRewards({ spot, role }, Math.random, false), { exp: spot.exp[0], gold: 0 }, `${spotLabel(spot)} ${role}に負けた`)
     }
   }
-  assert.deepEqual(rollRewards({ spot: spotOf(1), role: 'boss' }, Math.random, false), { exp: 2, gold: 0 }, '始まりの森①はボスに負けても2')
+  assert.deepEqual(rollRewards({ spot: spotOf(1), role: 'boss' }, Math.random, false), { exp: 3, gold: 0 }, '始まりの森①はボスに負けても3')
 })
 
 test('【確定】落ちる装備のレア度：エピックはレアとボスから・レジェンダリーはボスからだけ。①②③でレア以上が出やすくなる', () => {
