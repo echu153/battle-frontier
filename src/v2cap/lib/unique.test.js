@@ -18,6 +18,7 @@ import { checkAllUniques, CHECK } from './uniqueCheck.js'
 import { createSide, runBattle } from '../../v2/lib/battle.js'
 import { regenPctOf, REGEN_CAP_PCT } from '../../v2/lib/battleSet.js'
 import { canCraft, craftErrorOf, scrapYieldOf, bulkPickable } from './smith.js'
+import { dropLineOf } from './settleLines.js'
 
 const POINTS = { 武器: 160, 鎧: 105, 頭: 80, 腕: 80, 足: 80, アクセ: 65 }
 const sum = (s) => Object.values(s).reduce((t, v) => t + v, 0)
@@ -146,6 +147,16 @@ test('今のⅡの戦闘（setFx を持たないキャラ）にはユニーク�
   const r = runBattle(f('a'), f('b'), { rng })
   assert.ok(!r.log.some(l => l.type === 'uniqueFx' || l.type === 'uniqueAct'))
   assert.equal(r.a.uq, undefined)
+})
+
+test('【確定】2026-10-21 ユーザー指示：ユニークが落ちた行はふつうの装備と同じ形（「ユニーク」の文字なし・名前だけユニークの赤・ふつうの大きさ）', () => {
+  const u = UNIQUE_ITEMS.find(x => x.name === '影縫いのブーツ')
+  const l = dropLineOf(u)
+  const text = l.parts.map(p => p.text).join('')
+  assert.equal(text, '🎁 「影縫いのブーツ」を入手！')
+  assert.ok(!text.includes('ユニーク'), '「ユニーク」の文字は付けない')
+  assert.equal(l.parts.find(p => p.text === u.name).color, RARITY_COLOR.U, '名前はユニークの赤')
+  assert.ok(!l.big, '大きな字にしない')
 })
 
 test('一覧（uniqueDefs.js）は案のシートの名前・能力の文をそのまま持つ（手で書き写していない）', () => {

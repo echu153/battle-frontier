@@ -39,9 +39,9 @@ export const levelUpLines = (cls, level) => {
 }
 
 // 落ちた装備の行（名前だけをレア度の色で）
+// ★ユニークも同じ形（名前はユニークの赤）。【確定】2026-10-21 ユーザー指示「ドロップしたときユニークの文言いらない、普通の赤文字でいい」
+//   ＝「💎 ユニーク「◯◯」を入手！」（大きな字）はやめた
 export const dropLineOf = (item) => ({ color: LOG_PLAIN, parts: [
   { text:'🎁 「' }, { text: item.name, color: RARITY_COLOR[item.rarity] },
   { text:'」を入手！' },
 ] })
-// ユニークが落ちた行（2026-10-21・ボスに勝ったとき0.5%）。めったに出ないので、倒したときの行と同じく大きく出す（ユニークの赤）
-export const uniqueDropLineOf = (item) => ({ text:`💎 ユニーク「${item.name}」を入手！`, color: RARITY_COLOR.U, big: true })
