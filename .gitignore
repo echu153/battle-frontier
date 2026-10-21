@@ -38,3 +38,5 @@ tools/v2-skills.html
 /public/V2newjob/上位職/
 # v2cap アセンションの盤面の元の絵（ユーザーが置く・12枚で約22MB）。画面で使う軽い版は public/asc-art（tools/v2cap-asc-art.mjs）
 /public/アセンション/
+# v2cap のホームの自分のアイコン（待機の動く絵）の元の絵（ユーザーが置く）。画面で使う版は public/V2newjob/gif（tools/v2cap-art.mjs）
+/public/V2newjob/ギフ/

@@ -11,8 +11,8 @@ import { equippedItems, statBreakdown, currentSetOf } from '../lib/loadout.js'
 import { syncLabelOf, powerAt, statsAt, armorEffectText, effectivePowerAt } from '../lib/gear.js'
 import { needLvOf } from '../lib/equipment.js'
 import { plusOf, plusLabel } from '../lib/smith.js'
-import { avatarUrlOf } from './v2capAvatarUrl.js'
-import { avatarImgStyle } from '../lib/avatar.js'
+import { myIconOf } from './v2capAvatarUrl.js'
+import { avatarImgStyle, AVATAR_CUSTOM_ON } from '../lib/avatar.js'
 import { StatGain } from './v2capGear.jsx'
 import V2capPoints from './V2capPoints.jsx'
 import V2capArmorSets from './V2capArmorSets.jsx'
@@ -72,7 +72,8 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
   const stamMax = staminaMaxOf(prof.lv)
   const stamNow = rollStamina(prof.stamina, prof.stamina_at, stamMax, now).n
   const stamNext = msToNextStamina(prof.stamina, prof.stamina_at, stamMax, now)
-  const avatar = avatarUrlOf(prof.avatar)
+  const avatar = myIconOf(prof)
+  const pickAvatar = AVATAR_CUSTOM_ON ? onAvatar : null   // 自分の画像を止めているあいだ（2026-10-22〜）はアイコンを押しても何もしない
   const classColor = stageColorOf(prof.class)
 
   // map の (値, 添字)。添字が奇数＝右の列（右端をそろえて左へ伸ばす）
@@ -168,12 +169,13 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
       {/* アイコン＋名前・職業とLV・ClassLV・戦闘力・Gold・スタミナ（今のⅡと同じ並び。画像に枠は無い） */}
       <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
         {/* 横幅76pxで、縦長の画像（モーションのぶん縦に大きい GIF）は切らずに縦に伸ばす（2026-10-21・lib/avatar.js の avatarImgStyle） */}
+        {/* 2026-10-22〜 クラスの待機の GIF（男女はキャラの性別・v2capAvatarUrl.js の myIconOf） */}
         {avatar ? (
-          <img src={avatar} alt="avatar" onClick={onAvatar} title="プロフィールでアイコンを変える"
-            style={{ ...avatarImgStyle(76), cursor: onAvatar ? 'pointer' : 'default' }}
+          <img src={avatar} alt="avatar" onClick={pickAvatar || undefined} title={pickAvatar ? 'プロフィールでアイコンを変える' : prof.class}
+            style={{ ...avatarImgStyle(76), cursor: pickAvatar ? 'pointer' : 'default' }}
             onError={e => { e.target.style.display = 'none' }} />
-        ) : onAvatar && (
-          <button onClick={onAvatar} title="プロフィールでアイコンを設定する"
+        ) : pickAvatar && (
+          <button onClick={pickAvatar} title="プロフィールでアイコンを設定する"
             style={{ width:'76px', height:'76px', flexShrink:0, background:'transparent', border:'1px dashed #223a5e',
               color:'#62789a', fontSize:'9px', fontFamily:'monospace', cursor:'pointer', lineHeight:1.6 }}>
             アイコンを<br />設定する

@@ -190,3 +190,51 @@ export const artSrcOf = (cls, gender = 'm', size = 'web') => {
   const g = ART_GENDERS.some(x => x.key === gender) ? gender : 'm'
   return `${ART_DIR}/${ART_SIZES.includes(size) ? size : 'web'}/${base}-${g}.webp`
 }
+
+// ===== 待機の動く絵（GIF）＝ ホームの自分のアイコン =====
+// 【確定】2026-10-22 ユーザー指示「初期クラスのギフ画像全員分作った、ホーム画面の画像はすべて対応するgif画像になるようにして、
+//   自分の画像は一旦廃止」（自分でアップロードする画像は lib/avatar.js の AVATAR_CUSTOM_ON で止めた）：
+//   ・元の絵：public/V2newjob/ギフ/<クラス名><男|女>待機.gif（ユーザーが置く・224×224・透明な背景）。⚠git に入れない（.gitignore）
+//     体の大きさはユーザーが画像の作り方でそろえる（2026-10-21「体の大きさは画像1に統一」。画面は横幅を決めて縦長なら縦に伸ばすだけ＝avatarImgStyle）
+//   ・画面で使う版：public/V2newjob/gif/<ローマ字>-<m|f>.gif（元のまま写す＝コマも透明もそのまま。作るのは tools/v2cap-art.mjs）
+//   ・作れたものを ART_GIF に足す（ツールが「足りない」と知らせる。classArt.test.js が突き合わせる）
+//   ・GIF が無いクラス（上位クラスの大半）は系統の初期クラスの GIF（塔のアイコンの iconClassOf と同じ考え方）。それも無ければ戦闘ログのアイコン
+// 2026-10-22 初期11職の男女22枚＋暗殺者の女性1枚（1コマ目を並べて、ファイル名どおりの職業・男女か見た）
+export const ART_GIF = {
+  剣士: ['m', 'f'],
+  戦士: ['m', 'f'],
+  槍使い: ['m', 'f'],
+  格闘家: ['m', 'f'],
+  盗賊: ['m', 'f'],
+  弓使い: ['m', 'f'],
+  銃士: ['m', 'f'],
+  魔法使い: ['m', 'f'],
+  呪術師: ['m', 'f'],
+  僧侶: ['m', 'f'],
+  薬師: ['m', 'f'],
+  暗殺者: ['f'],
+}
+export const GIF_DIR = 'ギフ'       // public/V2newjob の下・元の絵
+export const GIF_OUT = 'gif'        // public/V2newjob の下・画面で使う版
+// ユーザーのファイル名での職業の呼び方 → ゲームの職業名
+export const GIF_CLASS_ALIAS = { 銃使い: '銃士' }
+// 男女の字が無いファイル名（拡張子なし）→ [クラス, 'm'|'f']（絵を見て確かめたものだけ）
+export const GIF_ALIAS = {
+  '戦士待機': ['戦士', 'm'],     // 斧の男性（女性は「戦士女待機」）
+  '槍使い待機': ['槍使い', 'm'], // 槍の男性（女性は「槍使い女待機」）
+}
+// GIF のファイル名（拡張子なし）→ { cls, g }。g は男女が書いていなければ null。クラスが読めなければ null
+//   「待機」は付いていてもいなくてもよい（ユーザーのファイル名に両方ある：呪術師男.gif・魔法使い女.gif）
+export const gifTargetOf = (stem) => {
+  if (stem in GIF_ALIAS) return { cls: GIF_ALIAS[stem][0], g: GIF_ALIAS[stem][1] }
+  const m = String(stem ?? '').normalize('NFKC').replace(/待機$/, '').match(/^(.+?)(男|女)?$/)
+  const cls = m && (GIF_CLASS_ALIAS[m[1]] || m[1])
+  if (!cls || !ART_BASE[cls]) return null
+  return { cls, g: m[2] === '男' ? 'm' : m[2] === '女' ? 'f' : null }
+}
+export const gifSrcOf = (cls, gender = 'm') => (ART_GIF[cls]?.includes(gender) ? `${ART_DIR}/${GIF_OUT}/${ART_BASE[cls]}-${gender}.gif` : null)
+// ホームの自分のアイコン：そのクラスの GIF → 系統の初期クラス（baseCls＝jobs.js の CLASS_BY_ID[cls].req.cls）の GIF → 戦闘ログのアイコン
+export const homeIconOf = (cls, gender = 'm', baseCls = null) => {
+  const g = ART_GENDERS.some(x => x.key === gender) ? gender : 'm'
+  return gifSrcOf(cls, g) || (baseCls && gifSrcOf(baseCls, g)) || battleIconOf(cls, g)
+}

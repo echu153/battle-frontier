@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import { box, btn, miniBtn, TEXT } from '../../v2/components/v2ui.js'
-import { AVATAR_PRESETS, AVATAR_MAX_BYTES, uploadPathOf, avatarImgStyle } from '../lib/avatar.js'
+import { AVATAR_PRESETS, AVATAR_MAX_BYTES, AVATAR_CUSTOM_ON, uploadPathOf, avatarImgStyle } from '../lib/avatar.js'
 import { stageColorOf } from '../lib/jobs.js'
 import { GENDER_BY_KEY, genderOf } from '../lib/gender.js'
-import { avatarUrlOf } from './v2capAvatarUrl.js'
+import { avatarUrlOf, myIconOf } from './v2capAvatarUrl.js'
 import V2capBreakdown from './V2capBreakdown.jsx'
 
 // ============================================================
@@ -13,6 +13,7 @@ import V2capBreakdown from './V2capBreakdown.jsx'
 //   ・用意された8枚（旧版・今のⅡと同じ）から選ぶ／前にアップロードした画像から選ぶ／新しくアップロードする（無料・2MBまで）
 //   ・画像の置き場は avatars バケット（自分のフォルダ <ユーザーID>/）。サーバーは「8枚か自分のフォルダ」だけ通す
 //   作りは今のⅡの V2Profile のアイコン選びと同じ（アップロードした画像は旧版・今のⅡと同じフォルダに並ぶ）
+//   【確定】2026-10-22 ユーザー指示「自分の画像は一旦廃止」：アイコンはクラスの待機の GIF だけ。選ぶところは出さない（lib/avatar.js の AVATAR_CUSTOM_ON）
 //   【確定】2026-10-12 ユーザー指示「装備とかどのくらいプラスされてるかはプロフから確認できればいい」：
 //   ・名前の下にステータスの内訳（本体・クラス・装備・軽装・合計と、装備ごとの上がるステ＝V2capBreakdown）。ホームの升目は合計だけ
 // ============================================================
@@ -32,6 +33,7 @@ export default function V2capProfile({ prof, inventory, onProfile }) {
   useEffect(() => {
     let alive = true
     ;(async () => {
+      if (!AVATAR_CUSTOM_ON) return   // 自分の画像を止めているあいだは読まない（2026-10-22〜）
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
       const { data } = await supabase.storage.from('avatars').list(user.id, { limit: 60, sortBy: { column:'created_at', order:'desc' } })
@@ -73,7 +75,7 @@ export default function V2capProfile({ prof, inventory, onProfile }) {
     } finally { setBusy(false); uploading.current = false }
   }
 
-  const current = avatarUrlOf(prof.avatar)
+  const current = myIconOf(prof)
   const pick = (path) => { if (!busy && path !== prof.avatar) setAvatar(path) }
   const thumbBox = (on) => ({ padding:'3px', background:'#000818', border:`1px solid ${on ? '#ffcc00' : '#002244'}`, cursor: busy ? 'wait' : 'pointer' })
 
@@ -95,7 +97,7 @@ export default function V2capProfile({ prof, inventory, onProfile }) {
               <span style={{ color: gender.color }}>{gender.mark}</span> {gender.label}（{gender.text}）
             </div>
           )}
-          {prof.avatar && (
+          {AVATAR_CUSTOM_ON && prof.avatar && (
             <button onClick={() => setAvatar(null)} disabled={busy} style={{ ...miniBtn('#aa5566'), marginTop:'8px' }}>アイコンを外す</button>
           )}
         </div>
@@ -103,6 +105,8 @@ export default function V2capProfile({ prof, inventory, onProfile }) {
 
       <V2capBreakdown prof={prof} inventory={inventory} />
 
+      {/* 用意されたアイコン・自分の画像は 2026-10-22 から一旦止めている（lib/avatar.js の AVATAR_CUSTOM_ON） */}
+      {AVATAR_CUSTOM_ON && <>
       <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
         <div style={{ color:'#88aaff', fontSize:'12px', marginBottom:'8px' }}>🖼 用意されたアイコン</div>
         <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
@@ -138,6 +142,7 @@ export default function V2capProfile({ prof, inventory, onProfile }) {
           </div>
         )}
       </div>
+      </>}
       {msg && <div style={{ color: msg.ok ? '#44ff88' : '#ff8844', fontSize:'11px', marginTop:'8px' }}>{msg.ok ? '' : '⚠ '}{msg.text}</div>}
     </div>
   )

@@ -13,6 +13,7 @@ import {
   ART_BASE, ART_FACE, FACE_FIT, ART_GENDERS, ART_DIR, ART_SIZES, hasArt, artSrcOf, faceCropOf,
   ART_UPPER_DIR, ART_SRC_ALIAS, ART_KEYED, artSrcFilesOf,
   ART_SD, SD_DIR, SD_OUT, SD_ALIAS, sdTargetOf, sdSrcOf, battleIconOf,
+  ART_GIF, GIF_DIR, GIF_OUT, GIF_ALIAS, gifTargetOf, gifSrcOf, homeIconOf,
 } from './classArt.js'
 
 const PUBLIC = fileURLToPath(new URL('../../../public', import.meta.url))
@@ -106,8 +107,8 @@ test('絵のあるクラスは、男女とも 全身と顔のアップの軽い�
 test('使っていない大きさのフォルダが残っていない（一覧の全身の小さい絵 thumb/ はやめた）', () => {
   // SD/ はユーザーが置くSDの元の絵・上位職/ は上位クラスの元の絵（どちらも git に入れない）・icon/ はSDから作る戦闘ログのアイコン
   const dirs = readdirSync(PUBLIC + ART_DIR, { withFileTypes: true })
-    .filter(d => d.isDirectory() && d.name !== SD_DIR && d.name !== ART_UPPER_DIR).map(d => d.name).sort()
-  assert.deepEqual(dirs, [...ART_SIZES, SD_OUT].sort())
+    .filter(d => d.isDirectory() && d.name !== SD_DIR && d.name !== ART_UPPER_DIR && d.name !== GIF_DIR).map(d => d.name).sort()
+  assert.deepEqual(dirs, [...ART_SIZES, SD_OUT, GIF_OUT].sort())
 })
 
 test('全クラス（初期・上位）に絵がある（2026-10-17 上位クラスの44枚を足した）', () => {
@@ -207,4 +208,41 @@ test('戦闘ログの自分のアイコン：SDの絵 → 無ければ顔のア�
 test('SDの元の絵（public/V2newjob/SD）は git に入れない（1枚約2.5MB）', () => {
   const ignore = readFileSync(fileURLToPath(new URL('../../../.gitignore', import.meta.url)), 'utf8').split(/\r?\n/)
   assert.ok(ignore.includes(`/public${ART_DIR}/${SD_DIR}/`))
+})
+
+// 2026-10-22 ユーザー指示「初期クラスのギフ画像全員分作った、ホーム画面の画像はすべて対応するgif画像になるようにして、自分の画像は一旦廃止」
+test('ホームの待機の GIF：初期11職は男女とも・載せたものは全部ファイルがある（tools/v2cap-art.mjs が写す）', () => {
+  for (const cls of Object.values(CLASS_BY_ID).filter(c => !c.req).map(c => c.id)) {
+    assert.deepEqual(ART_GIF[cls], ['m', 'f'], `${cls} の GIF`)
+  }
+  for (const [cls, gs] of Object.entries(ART_GIF)) {
+    assert.ok(ART_BASE[cls], `${cls} のローマ字`)
+    for (const g of gs) {
+      assert.ok(existsSync(PUBLIC + gifSrcOf(cls, g)), `${cls}（${g}）の GIF が無い：${gifSrcOf(cls, g)}`)
+      assert.equal(readFileSync(PUBLIC + gifSrcOf(cls, g)).subarray(0, 6).toString(), 'GIF89a', `${cls}（${g}）は GIF`)
+    }
+  }
+})
+
+test('GIF のファイル名の読み方（ユーザーのファイル名そのまま）', () => {
+  assert.deepEqual(gifTargetOf('僧侶女待機'), { cls: '僧侶', g: 'f' })
+  assert.deepEqual(gifTargetOf('呪術師男'), { cls: '呪術師', g: 'm' }, '「待機」が無くてもよい')
+  assert.deepEqual(gifTargetOf('銃使い男待機'), { cls: '銃士', g: 'm' }, '銃使い＝銃士')
+  assert.deepEqual(gifTargetOf('暗殺者女待機'), { cls: '暗殺者', g: 'f' }, '上位クラス')
+  assert.deepEqual(gifTargetOf('戦士待機'), { cls: '戦士', g: 'm' }, '男女の字が無い＝GIF_ALIAS')
+  assert.deepEqual(gifTargetOf('槍使い待機'), { cls: '槍使い', g: 'm' })
+  assert.deepEqual(gifTargetOf('剣士待機'), { cls: '剣士', g: null }, '男女が分からないものは使わない（ツールが知らせる）')
+  assert.equal(gifTargetOf('謎の男'), null)
+  for (const [stem, [cls]] of Object.entries(GIF_ALIAS)) assert.ok(ART_BASE[cls], stem)
+})
+
+test('ホームのアイコン：そのクラスの GIF → 系統の初期クラスの GIF → 戦闘ログのアイコン', () => {
+  assert.equal(homeIconOf('戦士', 'f'), '/V2newjob/gif/sensi-f.gif')
+  const base = CLASS_BY_ID['暗殺者'].req.cls
+  assert.equal(homeIconOf('暗殺者', 'f', base), '/V2newjob/gif/ansatusya-f.gif', '暗殺者の女性は自分の GIF')
+  assert.equal(homeIconOf('暗殺者', 'm', base), gifSrcOf(base, 'm'), '暗殺者の男性は系統の初期クラスの GIF')
+  for (const c of Object.values(CLASS_BY_ID)) {
+    for (const g of ['m', 'f']) assert.match(homeIconOf(c.id, g, c.req?.cls) || '', /.gif$/, `${c.id}（${g}）も GIF になる`)
+  }
+  assert.equal(homeIconOf('戦士', 'x'), '/V2newjob/gif/sensi-m.gif', '性別が読めなければ男性')
 })

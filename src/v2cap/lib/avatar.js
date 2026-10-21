@@ -19,6 +19,11 @@ export const AVATAR_PRESETS = [
   { file:'priest.png',   label:'僧侶' },
 ]
 export const AVATAR_MAX_BYTES = 2 * 1024 * 1024
+// 【確定】2026-10-22 ユーザー指示「ホーム画面の画像はすべて対応するgif画像になるようにして、自分の画像は一旦廃止」：
+//   false のあいだは、ホーム・プロフィールの自分のアイコンはクラスの待機の GIF（classArt.js の homeIconOf）。
+//   プロフィールの「用意されたアイコン」「自分の画像」も出さない。選んだ画像（avatar 列）とアップロードした画像は消さずに残す
+//   （true に戻せば前のとおり：選んだ画像があればそれ・無ければクラスの GIF）
+export const AVATAR_CUSTOM_ON = false
 // 自分のフォルダの中の名前（先頭は英数字・使える字は英数字と . _ -・100字まで）
 export const AVATAR_FILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/
 
