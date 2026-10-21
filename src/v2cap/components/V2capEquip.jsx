@@ -95,7 +95,7 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
             <div style={{ color: TEXT.label, fontSize:'11px', padding:'8px' }}>
               {/* ★落ちる確率は sortie.js の DROP_CHANCE から出す（直書きしていて 3%→8% のときに古いまま残った） */}
               {all.length === 0
-                ? `装備がありません（出撃で勝つと落ちることがあります。ふつうの敵は${DROP_CHANCE.normal}%・レアとボスは${DROP_CHANCE.boss}%。鍛冶屋で作ることもできます）`
+                ? `装備がありません（出撃で勝つと落ちることがあります。ふつうの敵は${DROP_CHANCE.normal}%・レアは${DROP_CHANCE.rare}%・ボスは${DROP_CHANCE.boss}%。鍛冶屋で作ることもできます）`
                 : 'この絞り込みに当てはまる装備はありません'}
             </div>
           )}

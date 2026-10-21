@@ -161,7 +161,8 @@ test('【確定】負けても経験値はその場所の最低値（朝昼晩�
 test('【確定】落ちる装備のレア度：エピックはレアとボスから・レジェンダリーはボスからだけ。①②③でレア以上が出やすくなる', () => {
   // 勝ったときに落ちる確率（%）と、落ちたときのレア度の内訳（2026-10-09 ユーザー承認の案）。
   // ふつう・朝昼晩は 2026-10-12 ユーザー指示「装備のドロップ率渋すぎるから8％にして」で 3→8
-  assert.deepEqual(DROP_CHANCE, { normal: 8, timed: 8, rare: 10, boss: 10 })
+  // レアとボスは 2026-10-22 ユーザー指示「レアのモンスターから装備ドロップする確率3倍にして、ボスは６倍」で 10→30・10→60（内訳はそのまま）
+  assert.deepEqual(DROP_CHANCE, { normal: 8, timed: 8, rare: 30, boss: 60 })
   assert.deepEqual(DROP_RARITY.normal, { N:85, R:15 })
   assert.deepEqual(DROP_RARITY.timed, { N:85, R:15 })
   assert.deepEqual(DROP_RARITY.rare, { N:50, R:35, E:15 })

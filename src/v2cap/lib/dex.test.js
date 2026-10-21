@@ -36,12 +36,13 @@ test('1エリアの並びは 通常6 → 時間帯6 → レア5 → ボス3（�
   assert.equal(dexAreaOf(15)[19].lv, 80, '最後のボスはLV80')
 })
 
-test('落とす装備は役割で決まる：ふつう・時間帯は8%でノーマル・レア／レアは10%でエピックまで／ボスは10%でレジェンダリーまで', () => {
+test('落とす装備は役割で決まる：ふつう・時間帯は8%でノーマル・レア／レアは30%でエピックまで／ボスは60%でレジェンダリーまで', () => {
   // ふつう・時間帯は 2026-10-12 ユーザー指示「装備のドロップ率渋すぎるから8％にして」で 3→8
+  // レア・ボスは 2026-10-22 ユーザー指示「レアのモンスターから装備ドロップする確率3倍にして、ボスは６倍」で 10→30・10→60（落ちるレア度は同じ）
   assert.deepEqual(dropInfoOf('normal'), { chance: 8, rarities: ['N', 'R'], uniques: [] })
   assert.deepEqual(dropInfoOf('timed'), { chance: 8, rarities: ['N', 'R'], uniques: [] })
-  assert.deepEqual(dropInfoOf('rare'), { chance: 10, rarities: ['N', 'R', 'E'], uniques: [] })
-  assert.deepEqual(dropInfoOf('boss'), { chance: 10, rarities: ['N', 'R', 'E', 'L'], uniques: [] })
+  assert.deepEqual(dropInfoOf('rare'), { chance: 30, rarities: ['N', 'R', 'E'], uniques: [] })
+  assert.deepEqual(dropInfoOf('boss'), { chance: 60, rarities: ['N', 'R', 'E', 'L'], uniques: [] })
 })
 
 test('【2026-10-21】ボスの行には、そのボスが落とすユニーク（①②は1つ・大ボスは2つ）も載る。ボス以外には無い', () => {
