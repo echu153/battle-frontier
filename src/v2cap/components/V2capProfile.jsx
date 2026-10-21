@@ -17,7 +17,8 @@ import V2capBreakdown from './V2capBreakdown.jsx'
 //   【確定】2026-10-12 ユーザー指示「装備とかどのくらいプラスされてるかはプロフから確認できればいい」：
 //   ・名前の下にステータスの内訳（本体・クラス・装備・軽装・合計と、装備ごとの上がるステ＝V2capBreakdown）。ホームの升目は合計だけ
 // ============================================================
-// アイコンの絵はどこも V2capAvatar（見える部分が枠いっぱいに入る・2026-10-21）。ホームと同じ見え方で選べる
+// アイコンの絵はどこも V2capAvatar（見える部分が枠いっぱいに入る・2026-10-21）。ホームと同じ大きさで選べる
+//   一覧は正方形のまま（ふだんの姿からはみ出す動きは切れる）。今のアイコンだけ縦に伸ばして全部の動きを入れる
 const THUMB = 64
 
 export default function V2capProfile({ prof, inventory, onProfile }) {
@@ -83,7 +84,7 @@ export default function V2capProfile({ prof, inventory, onProfile }) {
     <div style={{ fontFamily:'monospace' }}>
       <div style={{ ...box, padding:'12px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'12px' }}>
         {current
-          ? <V2capAvatar src={current} size={96} />
+          ? <V2capAvatar src={current} size={96} maxHeight={144} />
           : <div style={{ width:'96px', height:'96px', flexShrink:0, border:'1px dashed #223a5e', color: TEXT.empty, fontSize:'10px', display:'flex', alignItems:'center', justifyContent:'center' }}>画像なし</div>}
         <div style={{ minWidth:0 }}>
           <div style={{ color:'#ffcc00', fontSize:'14px' }}>{prof.username}</div>

@@ -1,7 +1,7 @@
 // v2cap：アイコン（2026-10-11 ユーザー指示「自分で設定できるように」）の決まりを固定するテスト（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { AVATAR_PRESETS, AVATAR_MAX_BYTES, AVATAR_FILE_RE, AVATAR_PAD, isAllowedAvatar, uploadPathOf, visibleBoxOf, mergeLook, avatarFitOf } from './avatar.js'
+import { AVATAR_PRESETS, AVATAR_MAX_BYTES, AVATAR_FILE_RE, AVATAR_PAD, isAllowedAvatar, uploadPathOf, visibleBoxOf, lookOfFrames, avatarFitOf } from './avatar.js'
 
 const UID = '11111111-2222-3333-4444-555555555555'
 
@@ -52,31 +52,49 @@ test('見える部分＝透明でない点を囲む範囲（ふちの薄い点�
   assert.deepEqual(visibleBoxOf(rgba(3, 2, [], 255), 3, 2), { box: { x: 0, y: 0, w: 3, h: 2 }, opaque: true }, '写真など')
 })
 
-test('動く画像は全部のコマの見える部分を合わせる', () => {
-  const a = { w: 10, h: 10, box: { x: 2, y: 5, w: 3, h: 3 }, opaque: false }
-  const b = { w: 10, h: 10, box: { x: 4, y: 1, w: 4, h: 2 }, opaque: false }
-  assert.deepEqual(mergeLook(a, b), { w: 10, h: 10, box: { x: 2, y: 1, w: 6, h: 7 }, opaque: false })
-  assert.deepEqual(mergeLook(null, a), a)
-  assert.equal(mergeLook({ ...a, opaque: true }, { ...b, opaque: true }).opaque, true)
-  assert.equal(mergeLook({ ...a, opaque: true }, b).opaque, false)
+// 戦士男待機.gif の51コマ（ffmpeg で数えた見える範囲）。構えは y192/196〜475・6コマ（42〜47）は斧を頭の上まで振り上げて y24 から
+const WARRIOR = Array.from({ length: 51 }, (_, i) => {
+  const [x0, y0, x1] = i >= 44 && i <= 47 ? [32, 24, 223] : i >= 42 && i <= 43 ? [16, 24, 227] : i >= 40 && i <= 41 ? [16, 220, 227]
+    : i >= 48 && i <= 49 ? [24, 164, 235] : [16, i % 8 < 4 ? 192 : 196, 235]
+  return { w: 256, h: 480, box: { x: x0, y: y0, w: x1 - x0 + 1, h: 476 - y0 }, opaque: false }
+})
+// 暗殺者女待機.gif（224×224・45コマ）。動きが小さいのでふだんの姿と全部のコマの範囲はほぼ同じ
+const ASSASSIN = { w: 224, h: 224, box: { x: 28, y: 16, w: 148, h: 204 }, main: { x: 30, y: 18, w: 144, h: 202 }, opaque: false }
+
+test('コマをまとめる：全部のコマを合わせた範囲と、ふだんの姿（8割のコマが入る範囲＝一瞬の振り上げは入れない）', () => {
+  const look = lookOfFrames(WARRIOR)
+  assert.deepEqual(look.box, { x: 16, y: 24, w: 220, h: 452 }, '全部のコマ')
+  assert.deepEqual(look.main, { x: 16, y: 192, w: 220, h: 284 }, 'ふだんの姿（構え）')
+  const one = lookOfFrames([WARRIOR[0]])
+  assert.deepEqual(one.main, one.box, '1コマだけなら同じ')
+  assert.deepEqual(lookOfFrames([{ w: 3, h: 3, box: null, opaque: false }]), { w: 3, h: 3, box: null, main: null, opaque: false }, '全部透明')
+  assert.equal(lookOfFrames([{ ...WARRIOR[0], opaque: true }, WARRIOR[1]]).opaque, false, '透明なコマが1つでもあれば opaque ではない')
 })
 
-test('縦長で上が空白の全身の絵（戦士男 256×480）も、全部のコマ（斧を振り上げたコマも）が枠に入って真ん中に来る', () => {
-  // 戦士男待機.gif の51コマを合わせた範囲（構えは y192〜475・斧を振り上げた6コマは y24 から）
-  const look = { w: 256, h: 480, box: { x: 16, y: 24, w: 220, h: 452 }, opaque: false }
-  const fit = avatarFitOf(look, 76)
+test('戦士男（256×480・斧を振り上げる）は暗殺者女と同じ大きさ。ホームは振り上げた斧のぶん縦に伸ばして全部のコマが入る', () => {
+  // ユーザー指示「やっぱ女暗殺者と同じ大きさにしたい、これだとちっちゃすぎる」＋「全身・全部のモーションはいるようにしてほしい」
+  const look = lookOfFrames(WARRIOR)
+  const fit = avatarFitOf(look, 76, 136)
   const s = fit.width / 256
+  const mainPx = 284 * s, assassinPx = 202 * (avatarFitOf(ASSASSIN, 76, 136).width / 224)
+  assert.ok(Math.abs(mainPx - assassinPx) < 0.01, `構えの姿の高さ ${mainPx.toFixed(1)}px＝暗殺者女 ${assassinPx.toFixed(1)}px`)
+  assert.ok(Math.abs(mainPx - 76 / (1 + AVATAR_PAD * 2)) < 0.01, '正方形の枠いっぱい')
   const top = fit.top + 24 * s, bottom = fit.top + 476 * s, left = fit.left + 16 * s, right = fit.left + 236 * s
-  assert.ok(top >= 0 && bottom <= 76 && left >= 0 && right <= 76, '頭から足まで・振り上げた斧まで枠の中')
-  assert.ok(bottom - top >= 76 / (1 + AVATAR_PAD * 2) - 0.01, '長い辺が枠いっぱい（余白は少しだけ）')
-  assert.ok(Math.abs((top + bottom) / 2 - 38) < 0.01 && Math.abs((left + right) / 2 - 38) < 0.01, '真ん中')
+  assert.ok(top >= 0 && bottom <= fit.boxH && left >= 0 && right <= 76, '頭から足まで・振り上げた斧まで枠の中')
+  assert.ok(fit.boxH > 76 && fit.boxH <= 136, `縦に伸びる（${fit.boxH.toFixed(1)}px）・横の文字の列より高くしない`)
+  assert.equal(avatarFitOf(ASSASSIN, 76, 136).boxH, 76, '暗殺者女は伸ばさない（ふだんの姿からはみ出す動きがほぼ無い）')
+  // 伸ばせない正方形（プロフィールの一覧）は同じ大きさで、振り上げた斧が上で切れる
+  const sq = avatarFitOf(look, 76)
+  assert.equal(sq.boxH, 76)
+  assert.equal(sq.width, fit.width)
+  assert.ok(sq.top + 24 * s < 0, '斧は枠の上で切れる')
   assert.equal(fit.pixel, false)
 })
 
 test('透明なところが無い画像は今までどおり正方形に切り取る・分からないときは全体を入れる・小さいドット絵は点のまま広げる', () => {
   assert.deepEqual(avatarFitOf({ w: 200, h: 100, box: { x: 0, y: 0, w: 200, h: 100 }, opaque: true }, 76),
-    { width: 152, height: 76, left: -38, top: 0, pixel: false })
+    { width: 152, height: 76, left: -38, top: 0, boxH: 76, pixel: false })
   assert.deepEqual(avatarFitOf({ w: 200, h: 100, box: null, opaque: false }, 76),
-    { width: 76, height: 38, left: 0, top: 19, pixel: false })
+    { width: 76, height: 38, left: 0, top: 19, boxH: 76, pixel: false })
   assert.equal(avatarFitOf({ w: 56, h: 56, box: { x: 14, y: 10, w: 28, h: 30 }, opaque: false }, 76).pixel, true)
 })

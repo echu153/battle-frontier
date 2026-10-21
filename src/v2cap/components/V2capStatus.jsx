@@ -167,9 +167,10 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
     <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'10px', marginBottom:'8px', fontFamily:'monospace' }}>
       {/* アイコン＋名前・職業とLV・ClassLV・戦闘力・Gold・スタミナ（今のⅡと同じ並び。画像に枠は無い） */}
       <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
-        {/* 全身の絵（縦長・まわりが透明の GIF など）も見える部分が枠いっぱいに入る（2026-10-21・V2capAvatar） */}
+        {/* 全身の絵（縦長・まわりが透明の GIF など）も見える部分が枠いっぱいに入る（2026-10-21・V2capAvatar）。
+            ふだんの姿からはみ出す動き（振り上げた斧など）は、横の文字の列（約140px）を越えない高さまで縦に伸ばして入れる */}
         {avatar ? (
-          <V2capAvatar src={avatar} size={76} onClick={onAvatar} title="プロフィールでアイコンを変える" />
+          <V2capAvatar src={avatar} size={76} maxHeight={136} onClick={onAvatar} title="プロフィールでアイコンを変える" />
         ) : onAvatar && (
           <button onClick={onAvatar} title="プロフィールでアイコンを設定する"
             style={{ width:'76px', height:'76px', flexShrink:0, background:'transparent', border:'1px dashed #223a5e',
