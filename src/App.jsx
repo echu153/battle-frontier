@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useEffect, useState, useRef, lazy, Suspense } from 'react'
 import { supabase } from './supabase'
 import Login from './pages/Login' // 最初に出る画面は即時読み込み（チラつき防止）
@@ -87,6 +87,52 @@ function LoadingFallback() {
   return <div style={{ minHeight: '100vh', background: '#000820', color: '#0088ff', fontFamily: 'monospace', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>読み込み中...</div>
 }
 
+// ルートのプリフェッチ：ログイン後、旧版（V1）の画面にいるあいだのアイドル時間に主要ページのJSを先読みする。
+// 遷移時に出る「読み込み中」(チャンク取得待ち)を消し、SWの資産キャッシュも温める。
+// lazy() と同じ動的importなのでバンドラがdedupe＝二重取得にならない。
+// ⚠Ⅱ（/v2・/v2cap）では先読みしない。前はどの画面でも先読みしていて、Ⅱの人にも
+//   使わない V1 の18画面（約640KB）を読ませていた（2026-10-22）。途中でⅡへ移ったらそこで止める。
+const NOT_V1 = /^\/(v2|v2cap|login|create)(\/|$)/
+function V1Prefetch() {
+  const onV1 = !NOT_V1.test(useLocation().pathname)
+  useEffect(() => {
+    if (!onV1) return
+    const thunks = [
+      () => import('./pages/Pets'),
+      () => import('./pages/Dungeon'),
+      () => import('./pages/Shop'),
+      () => import('./pages/Equipment'),
+      () => import('./pages/Skills'),
+      () => import('./pages/Smithy'),
+      () => import('./pages/Fishing'),
+      () => import('./pages/Casino'),
+      () => import('./pages/RaidBoss'),
+      () => import('./pages/Exchange'),
+      () => import('./pages/Ranking'),
+      () => import('./pages/Profile'),
+      () => import('./pages/Alchemy'),
+      () => import('./pages/Titles'),
+      () => import('./pages/Museum'),
+      () => import('./pages/Abyss'),
+      () => import('./pages/Tenkyuu'),
+      () => import('./pages/Territory'),
+    ]
+    let i = 0
+    let cancelled = false
+    const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 300))
+    const cancel = window.cancelIdleCallback || clearTimeout
+    let handle
+    const run = () => {
+      if (cancelled || i >= thunks.length) return
+      thunks[i++]().catch(() => {})
+      handle = idle(run)
+    }
+    handle = idle(run)
+    return () => { cancelled = true; if (handle != null) cancel(handle) }
+  }, [onV1])
+  return null
+}
+
 function App() {
   const [session, setSession] = useState(undefined)
   const [hasChar, setHasChar] = useState(undefined)
@@ -162,45 +208,6 @@ function App() {
     return () => subscription.unsubscribe()
   }, [])
 
-  // ルートのプリフェッチ：ログイン後のアイドル時間に主要ページのJSを先読みする。
-  // 遷移時に出る「読み込み中」(チャンク取得待ち)を消し、SWの資産キャッシュも温める。
-  // lazy() と同じ動的importなのでバンドラがdedupe＝二重取得にならない。
-  useEffect(() => {
-    if (!session || !hasChar) return
-    const thunks = [
-      () => import('./pages/Pets'),
-      () => import('./pages/Dungeon'),
-      () => import('./pages/Shop'),
-      () => import('./pages/Equipment'),
-      () => import('./pages/Skills'),
-      () => import('./pages/Smithy'),
-      () => import('./pages/Fishing'),
-      () => import('./pages/Casino'),
-      () => import('./pages/RaidBoss'),
-      () => import('./pages/Exchange'),
-      () => import('./pages/Ranking'),
-      () => import('./pages/Profile'),
-      () => import('./pages/Alchemy'),
-      () => import('./pages/Titles'),
-      () => import('./pages/Museum'),
-      () => import('./pages/Abyss'),
-      () => import('./pages/Tenkyuu'),
-      () => import('./pages/Territory'),
-    ]
-    let i = 0
-    let cancelled = false
-    const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 300))
-    const cancel = window.cancelIdleCallback || clearTimeout
-    let handle
-    const run = () => {
-      if (cancelled || i >= thunks.length) return
-      thunks[i++]().catch(() => {})
-      handle = idle(run)
-    }
-    handle = idle(run)
-    return () => { cancelled = true; if (handle != null) cancel(handle) }
-  }, [session, hasChar])
-
   // キャラ有無の判定。profilesクエリがネット瞬断/ハングで失敗すると hasChar が undefined の
   // まま「読み込み中」で永久に固まる穴があったため、タイムアウト＋リトライ＋最終フォールバックで
   // 必ず hasChar を確定させる(リロード時の固まりの主因)。
@@ -249,6 +256,7 @@ function App() {
     <BrowserRouter>
       <ErrorBoundary>
       {session && <InviteListener userId={session.user.id} />}
+      {session && hasChar && <V1Prefetch />}
       <Suspense fallback={<LoadingFallback />}>
       <Routes>
         <Route path="/login" element={isPasswordRecovery || !session ? <Login isPasswordRecovery={isPasswordRecovery} /> : <Navigate to={hasChar ? '/game' : '/create'} />} />

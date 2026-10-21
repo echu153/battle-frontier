@@ -1,4 +1,5 @@
-import { BattleLogLine } from '../../pages/Game'
+// ⚠旧版の pages/Game から取らない（ホーム画面まるごと約400KBが v2cap にも付いてくる・2026-10-22）
+import { BattleLogLine } from '../../components/BattleLogLine'
 
 // バトルフロンティアⅡ（リメイク版）— 戦闘ログの1行
 // ------------------------------------------------------------
