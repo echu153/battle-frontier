@@ -21,8 +21,9 @@ export const LOG_COLOR = {
   ail:   '#cc66ff',
   guard: '#66ccff',
 }
-// ユニーク装備の固有の能力の行（「レベルキャップあり」版のユニークの名前の色と同じ赤）
-export const UNIQUE_COLOR = '#ff6b84'
+// ユニーク装備の固有の能力の行（「レベルキャップあり」版のユニークの名前の色と同じ赤＝equipment.js の RARITY_COLOR.U・ユーザー指定 #ff6b82）
+//   ★このファイルは今のⅡ（src/v2）にあり v2cap を読めないので、同じ値を書いている（unique.test.js が同じかを見る）
+export const UNIQUE_COLOR = '#ff6b82'
 
 // r … runBattle の返り値 ／ you … 自分の名前 ／ foe … 相手の名前
 export const buildBattleLog = (r, you, foe) => {

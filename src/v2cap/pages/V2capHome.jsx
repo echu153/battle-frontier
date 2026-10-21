@@ -26,6 +26,7 @@ import { apLeftOf } from '../lib/ascension.js'
 import { TOWER_NAME, floorLabel, clampFloor } from '../lib/tower.js'
 import { openUntilOf } from '../lib/sortie.js'
 import { spotLabel } from '../lib/areas.js'
+import { RARITY_COLOR } from '../lib/equipment.js'
 
 // ============================================================
 // バトルフロンティアⅡ「レベルキャップあり」版 — ホーム（開発限定）
@@ -365,11 +366,11 @@ export default function V2capHome() {
                       </button>
                       <button onClick={placeShrine} disabled={busy} style={miniBtn('#9fe8ff')}>⛲ 安息の祠を出す</button>
                       {/* ユニーク（2026-10-21）：もらう・次のボスで必ず落とす・60個の能力の確かめ */}
-                      <button onClick={giveUniques} disabled={busy} style={miniBtn('#ff6b84')}>💎 ユニークを全部もらう</button>
-                      <button onClick={uniqueNext} disabled={busy || prof?.unique_force} style={miniBtn('#ff6b84')}>
+                      <button onClick={giveUniques} disabled={busy} style={miniBtn(RARITY_COLOR.U)}>💎 ユニークを全部もらう</button>
+                      <button onClick={uniqueNext} disabled={busy || prof?.unique_force} style={miniBtn(RARITY_COLOR.U)}>
                         {prof?.unique_force ? '💎 次のボスでユニーク（待機中）' : '💎 次のボスでユニークを落とす'}
                       </button>
-                      <button onClick={() => setScreen('uniqueCheck')} style={miniBtn('#ff6b84')}>💎 ユニークの能力を確かめる</button>
+                      <button onClick={() => setScreen('uniqueCheck')} style={miniBtn(RARITY_COLOR.U)}>💎 ユニークの能力を確かめる</button>
                       <button onClick={() => setConfirmReset(true)} disabled={busy} style={miniBtn('#ff8844')}>キャラを作り直す</button>
                     </div>
                     {/* ★「EXPは戦闘と同じ扱い（いまの職業のClassEXPにも同じ量が入る）」の説明は出さない（2026-10-12 ユーザー指示＝出撃の「（ClassEXP +◯）」と一緒に外した） */}

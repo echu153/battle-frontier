@@ -33,8 +33,9 @@ export const RARITY_LABEL = { N:'ノーマル', R:'レア', E:'エピック', L:
 export const RARITY_BASE = { N:40, R:50, E:60, L:70 }
 // 【確定】2026-10-10 ユーザー指示「ノーマル灰色、レアは青、エピックは紫、レジェンダリーは黄色」（ドロップのログ・装備の名前・レア度の印で同じ色）
 //   ★背景が濃紺なので、灰色も黄色も明るめ（暗い色は読めない＝v2ui.js の TEXT の注意）
-//   ユニークは赤（2026-10-18 の案のシート「名前の色は赤」・2026-10-21 ユーザー「一旦今のままで実装して」）
-export const RARITY_COLOR = { N:'#aab4be', R:'#4488ff', E:'#c060ff', L:'#ffe033', U:'#ff4d6a' }
+//   ユニークは赤（2026-10-18 の案のシート「名前の色は赤」）。【確定】2026-10-21 ユーザー指定「この色ね」＝案のシートの「ユニーク」の文字の色 #ff6b82
+//   （前は #ff4d6a。戦闘ログの行の色 battleLog.js の UNIQUE_COLOR も同じ）
+export const RARITY_COLOR = { N:'#aab4be', R:'#4488ff', E:'#c060ff', L:'#ffe033', U:'#ff6b82' }
 export const rarityLabel = (r) => RARITY_LABEL[r] || ''
 
 // ===== アイテムLV（強さの元）と必要LV =====

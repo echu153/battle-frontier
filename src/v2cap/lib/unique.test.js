@@ -17,6 +17,7 @@ import { setFxOf, armorSetsOf, isSetPiece } from './armorSets.js'
 import { checkAllUniques, CHECK } from './uniqueCheck.js'
 import { createSide, runBattle } from '../../v2/lib/battle.js'
 import { regenPctOf, REGEN_CAP_PCT } from '../../v2/lib/battleSet.js'
+import { UNIQUE_COLOR } from '../../v2/lib/battleLog.js'
 import { canCraft, craftErrorOf, scrapYieldOf, bulkPickable } from './smith.js'
 import { dropLineOf } from './settleLines.js'
 
@@ -60,7 +61,9 @@ test('【確定】必要LVはどれも80。ステはユーザーが決めた値�
     for (const [k, v] of Object.entries(u.dist)) assert.equal(s10[k], v * 2, `${u.name} +10 の ${k}`)
   }
   assert.equal(RARITY_LABEL.U, 'ユニーク')
-  assert.ok(RARITY_COLOR.U, '名前の色（赤）')
+  // 【確定】2026-10-21 ユーザー指定「この色ね」＝案のシートの「ユニーク」の文字の色。戦闘ログの行（今のⅡの battleLog.js）も同じ色
+  assert.equal(RARITY_COLOR.U, '#ff6b82', '名前の色（赤）')
+  assert.equal(UNIQUE_COLOR, RARITY_COLOR.U, '戦闘ログの「💎 ◯◯の△△！」の行も同じ色')
 })
 
 test('【確定】LV80より低いLVで着けると、ステは同じ割合のままそのLV相当に小さくなる（能力は全部効く）', () => {
