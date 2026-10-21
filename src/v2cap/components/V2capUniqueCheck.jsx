@@ -54,7 +54,7 @@ export default function V2capUniqueCheck({ prof, inventory }) {
       stats: { hp: 999999, mp: 100, str: Math.max(30, Math.round((me.stats.vit || 0) * 0.8)), dex: 120, agi: 80, int_stat: 60, vit: 120, luk: 40 } }
     const r = runBattle(me, dummy, { maxTurns: 10 })
     const lines = r.log.filter(l => (l.type === 'uniqueAct' || l.type === 'uniqueFx') || (l.name && worn.some(u => (l.name || '').includes(u.name))))
-    setLog({ view: buildCapBattleView(r, me.name, FOE), n: lines.length, names: [...new Set(lines.map(l => l.name).filter(Boolean))] })
+    setLog({ view: buildCapBattleView(r, me.name, FOE), n: lines.length, names: [...new Set(lines.map(l => l.name).filter(Boolean))], me: me.name })
   }
 
   return (
@@ -112,7 +112,8 @@ export default function V2capUniqueCheck({ prof, inventory }) {
               ユニークの能力の行：{log.n}行{log.names.length ? `（${log.names.join('・')}）` : ''}
             </div>
             <div style={{ maxHeight:'420px', overflowY:'auto', background:'#000818', padding:'6px' }}>
-              {log.view.map((l, i) => <V2capLogLine key={i} l={l} art={null} />)}
+              {/* 表の名前は art から出る（絵は無いので名前の1文字目の枠） */}
+              {log.view.map((l, i) => <V2capLogLine key={i} l={l} art={{ me: { src: null, name: log.me }, foe: { src: null, name: FOE } }} />)}
             </div>
           </div>
         )}
