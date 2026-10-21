@@ -70,7 +70,7 @@ export const UNIQUE_DEFS = [
   { spot: 40, boss: '古代機兵ゼクス', kind: 'ベルト', name: 'クロックワークベルト', text: '3ターンごとに、次の攻撃の与ダメージ+50％（歯車がかみ合う）', stats: {str: 20, dex: 20, vit: 25}, fx: {burstEvery: {every: 3, pct: 50}} },
   { spot: 41, boss: '大司書ノクトゥア', kind: '書', name: '禁書アポクリファ', text: '戦闘開始から3ターン目、8ターン目、13ターン目に相手にかかっている強化バフをすべて消す', stats: {dex: 30, int_stat: 100, luk: 30}, fx: {dispelTurns: [3, 8, 13]} },
   { spot: 42, boss: '時星龍アイオーン', kind: '刀', name: '刹那の星刀', text: 'その戦闘で初めて使うスキルのダメージ＋80％', stats: {str: 80, dex: 40, agi: 30, luk: 10}, fx: {firstSkill: 80} },
-  { spot: 42, boss: '時星龍アイオーン', kind: '弓', name: '刻弓レトログラー', text: '5ターンごとに、その間に与えたダメージの30％をもう一度与える（時の反響）', stats: {str: 30, dex: 70, agi: 40, luk: 20}, fx: {echo: {every: 5, pct: 30}} },
+  { spot: 42, boss: '時星龍アイオーン', kind: '弓', name: '刻弓レトログラード', text: '5ターンごとに、その間に与えたダメージの30％をもう一度与える（時の反響）', stats: {str: 30, dex: 70, agi: 40, luk: 20}, fx: {echo: {every: 5, pct: 30}} },
   { spot: 43, boss: '大海月ルミナ', kind: '軽装腕', name: '常若の手甲', text: '戦闘中1回、倒れるダメージを受けてもHP30％で復活する', stats: {dex: 20, agi: 30, int_stat: 10, vit: 20}, fx: {revive: 30} },
   { spot: 44, boss: '深海魔女キルケ', kind: '鈍器', name: 'ヴァンドルング', text: '攻撃ヒット時、20％で相手のSTR・INT−15％（2ターン）', stats: {str: 50, int_stat: 80, vit: 30}, fx: {onHitTimed: [{chance: 20, turns: 2, table: {str: -15, int_stat: -15}}]} },
   { spot: 45, boss: '深海覇王リヴァイアサン', kind: 'ネックレス', name: '海王の潮汐ペンダント', text: '奇数ターンは与ダメージ+20％、偶数ターンは受けるダメージ−15％（潮の満ち引き）', stats: {str: 15, int_stat: 15, vit: 25, luk: 10}, fx: {tide: {odd: 20, even: 15}} },

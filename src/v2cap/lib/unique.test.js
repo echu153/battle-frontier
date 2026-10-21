@@ -169,3 +169,8 @@ test('一覧（uniqueDefs.js）は案のシートの名前・能力の文をそ�
     assert.ok(d.fx && Object.keys(d.fx).length > 0, `${d.name} の戦闘の中身`)
   }
 })
+
+test('【確定】2026-10-21 ユーザー指示：時星龍アイオーンの弓は「刻弓レトログラード」（前の「刻弓レトログラー」に戻さない）', () => {
+  assert.equal(ITEM_BY_ID[uniqueIdOf(42, '弓')].name, '刻弓レトログラード')
+  assert.ok(!UNIQUE_DEFS.some(d => /レトログラー(?!ド)/.test(d.name)), '「ド」の抜けた名前が残っていない')
+})

@@ -450,7 +450,7 @@ const applyIncoming = (me, foe, dmg, kind, rng, log, pre = null) => {
   }
   if (foe.endure) foe.endure.acc += out
   if (foe.setFx?.rootHealPct) foe.rootAcc += out   // ★防具のセット能力：根を張る（ターンの終わりに回復）
-  if (me?.uq && me.setFx?.echo) me.uq.echoAcc += out   // ★ユニーク：刻弓レトログラー（その間に与えたダメージを数える）
+  if (me?.uq && me.setFx?.echo) me.uq.echoAcc += out   // ★ユニーク：刻弓レトログラード（その間に与えたダメージを数える）
   // 不屈：致命傷をHP1で耐える（1戦に1回・確率）
   if (foe.hp <= 0 && foe.evo.guts && !foe.gutsUsed && roll(foe.evo.guts, rng)) {
     foe.gutsUsed = true
@@ -673,7 +673,7 @@ function uniqueTurnStart(me, foe, turn, log) {
   }
 }
 
-// ターンの終わり：刻弓レトログラー（その間に与えたダメージをもう一度）・フューネラルクラウン（治った状態異常の数だけ回復）
+// ターンの終わり：刻弓レトログラード（その間に与えたダメージをもう一度）・フューネラルクラウン（治った状態異常の数だけ回復）
 function uniqueTurnEnd(me, foe, turn, log) {
   const fx = me.setFx
   const uq = me.uq
@@ -2017,7 +2017,7 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
         for (const l of after) log.push(l)
       }
     }
-    // ★ユニーク：ターンの終わりの能力（刻弓レトログラー・フューネラルクラウン）
+    // ★ユニーク：ターンの終わりの能力（刻弓レトログラード・フューネラルクラウン）
     if (a.hp > 0 && b.hp > 0) uniqueTurnEnd(a, b, turn, log)
     if (a.hp > 0 && b.hp > 0) uniqueTurnEnd(b, a, turn, log)
     if (a.hp <= 0 || b.hp <= 0) break
