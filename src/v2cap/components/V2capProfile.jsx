@@ -5,7 +5,6 @@ import { AVATAR_PRESETS, AVATAR_MAX_BYTES, uploadPathOf } from '../lib/avatar.js
 import { stageColorOf } from '../lib/jobs.js'
 import { GENDER_BY_KEY, genderOf } from '../lib/gender.js'
 import { avatarUrlOf } from './v2capAvatarUrl.js'
-import V2capAvatar from './V2capAvatar.jsx'
 import V2capBreakdown from './V2capBreakdown.jsx'
 
 // ============================================================
@@ -17,9 +16,7 @@ import V2capBreakdown from './V2capBreakdown.jsx'
 //   【確定】2026-10-12 ユーザー指示「装備とかどのくらいプラスされてるかはプロフから確認できればいい」：
 //   ・名前の下にステータスの内訳（本体・クラス・装備・軽装・合計と、装備ごとの上がるステ＝V2capBreakdown）。ホームの升目は合計だけ
 // ============================================================
-// アイコンの絵はどこも V2capAvatar（見える部分が枠いっぱいに入る・2026-10-21）。ホームと同じ大きさで選べる
-//   一覧は正方形のまま（ふだんの姿からはみ出す動きは切れる）。今のアイコンだけ縦に伸ばして全部の動きを入れる
-const THUMB = 64
+const THUMB = { width:'64px', height:'64px', objectFit:'cover', display:'block' }
 
 export default function V2capProfile({ prof, inventory, onProfile }) {
   const [busy, setBusy] = useState(false)
@@ -84,7 +81,7 @@ export default function V2capProfile({ prof, inventory, onProfile }) {
     <div style={{ fontFamily:'monospace' }}>
       <div style={{ ...box, padding:'12px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'12px' }}>
         {current
-          ? <V2capAvatar src={current} size={96} maxHeight={144} />
+          ? <img src={current} alt="" style={{ width:'96px', height:'96px', objectFit:'cover', flexShrink:0 }} onError={e => { e.target.style.display = 'none' }} />
           : <div style={{ width:'96px', height:'96px', flexShrink:0, border:'1px dashed #223a5e', color: TEXT.empty, fontSize:'10px', display:'flex', alignItems:'center', justifyContent:'center' }}>画像なし</div>}
         <div style={{ minWidth:0 }}>
           <div style={{ color:'#ffcc00', fontSize:'14px' }}>{prof.username}</div>
@@ -110,7 +107,7 @@ export default function V2capProfile({ prof, inventory, onProfile }) {
         <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
           {AVATAR_PRESETS.map(p => (
             <button key={p.file} onClick={() => pick(p.file)} title={p.label} style={thumbBox(prof.avatar === p.file)}>
-              <V2capAvatar src={avatarUrlOf(p.file)} size={THUMB} />
+              <img src={avatarUrlOf(p.file)} alt={p.label} style={THUMB} />
               <div style={{ color: TEXT.sub, fontSize:'9px', marginTop:'2px', textAlign:'center' }}>{p.label}</div>
             </button>
           ))}
@@ -125,7 +122,7 @@ export default function V2capProfile({ prof, inventory, onProfile }) {
         <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'8px' }}>
           <input ref={fileRef} type="file" accept="image/*" onChange={chooseFile} disabled={busy}
             style={{ color: TEXT.sub, fontSize:'11px', maxWidth:'100%' }} />
-          {preview && <V2capAvatar src={preview} size={48} />}
+          {preview && <img src={preview} alt="" style={{ width:'48px', height:'48px', objectFit:'cover' }} />}
           {file && (
             <button onClick={upload} disabled={busy} style={btn('#ffcc00')}>{busy ? 'アップロード中...' : 'アップロードしてアイコンにする'}</button>
           )}
@@ -134,7 +131,7 @@ export default function V2capProfile({ prof, inventory, onProfile }) {
           <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
             {uploaded.map(path => (
               <button key={path} onClick={() => pick(path)} style={thumbBox(prof.avatar === path)}>
-                <V2capAvatar src={avatarUrlOf(path)} size={THUMB} onError={e => { e.target.closest('button').style.display = 'none' }} />
+                <img src={avatarUrlOf(path)} alt="" style={THUMB} onError={e => { e.target.parentElement.style.display = 'none' }} />
               </button>
             ))}
           </div>
