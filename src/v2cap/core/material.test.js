@@ -1,5 +1,5 @@
 // 素材とルーン抽出のテスト。数値の正は docs/v2-enchant-design.md。
-// ⚠**同じ計算が supabase_v2_core.sql の v2_extract_essence にもある**。
+// ⚠**同じ計算が supabase_v2_core.sql（V2 初期構成・2026-10-22 に消した） の v2_extract_essence にもある**。
 //   ここが通っても向こうが直っていなければ、表示と実値がズレる。
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -275,7 +275,7 @@ test('ボス素材は2つのステータスが両方とも、それぞれ別に�
 })
 
 // ===== 売却（v2で唯一Goldが湧く場所）=====
-// ★数値の正は docs/v2-gold-design.md。**同じ表が supabase_v2_core.sql にもある**（v2sql.test.js が突き合わせる）
+// ★数値の正は docs/v2-gold-design.md。**同じ表が supabase_v2_core.sql（V2 初期構成・2026-10-22 に消した） にもある**
 test('素材の売値は全種類に付いていて、レア度で 1 / 4 / 20 倍', () => {
   for (const m of MATERIALS) {
     assert.ok(sellPriceOf(m) > 0, `${m.name} の売値`)

@@ -1,12 +1,11 @@
 // レイドボスのテスト。数値の正は docs/v2-raid-design.md。
-// ★SQL（supabase_v2_raid_20260906.sql）にも同じ数字の写しがあるので、
-//   **片方だけ直したら落ちる**ように突き合わせている（v2sql.test.js と同じ考え方）。
+// ★前は SQL（supabase_v2_raid_20260906.sql）の写しと突き合わせていたが、V2 初期構成のサーバーは 2026-10-22 に SQL ごと消した。
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
   RAID_BOSSES, RAID_BOSS_BY_KEY, raidBossOf, rollRaid,
-  RAID_MINUTES, RAID_MAX_MEMBERS, RAID_TURNS, RAMP_ATK, RAMP_DEF, rampAt,
+  RAID_MINUTES, RAID_TURNS, RAMP_ATK, RAMP_DEF, rampAt,
   RAID_RATE, RAID_DAILY_MAX, ROTATE_HOURS, raidSlotAt, raidBossAt, nextRotateAt, rotateSchedule,
   RAID_POWER_MULT, RAID_ATK_MULT, RAID_HP, raidPowerOfTier, raidAtkPowerOfTier, raidHpOfTier,
   VISIBILITIES, VISIBILITY_LABEL, VISIBILITY_HINT, DEFAULT_VISIBILITY, isVisibility,
@@ -18,11 +17,11 @@ import {
   fusionChanceOf, FUSION_PCT, FUSION_MAX_PER_PART,
   BOX_KINDS, BOX_MAT_COUNT, BOX_RARITY, BOX_FUSION_PCT, boxRarityTable,
   RAID_EXP_MIN, RAID_EXP_MAX, raidExpOf,
-  CALL_KINDS, CALL_MAX, ONLINE_MINUTES, TIERS,
+  CALL_KINDS, TIERS,
   secondsLeft, isOver, timeText,
 } from './raid.js'
 import {
-  FUSIONS, FUSION_BY_ID, fusedName, canFuseItem, checkFuse, fusedAbilitiesOf,
+  FUSIONS, fusedName, canFuseItem, checkFuse, fusedAbilitiesOf,
   fusionOfBoss,
 } from './fusion.js'
 import { FUSION_ABILITIES, ABILITY_OF, ENCHANTS, collectEnchants, abilityText } from './enchant.js'
@@ -32,30 +31,8 @@ import { runBattle, createSide, liveStats } from './battle.js'
 import { AIL_LABEL, createAilments, inflict, healMultOf, HEAL_CUT_TURNS } from './ailments.js'
 import { SORTIE_CD, EXP_ZAKO_MIN, EXP_ZAKO_MAX } from './sortie.js'
 
-// ★SQLは**依存の順に3本**に分かれている（2026-09-06 ユーザー指示「複数出して」）
-//     ① supabase_v2_friends_20260906.sql   フレンド
-//     ② supabase_v2_fusion_20260906.sql    合成素材と「合成」
-//     ③ supabase_v2_raid_20260906.sql      レイドボスと救援
-//   ⚠かつて④ supabase_v2_ability_move_20260906.sql（特殊能力をルーンから合成へ移す）が
-//     あったが、2026-09-07 のユーザー指示で**廃止**した。打ち消すのが
-//     supabase_v2_fusion_undo_20260907.sql。**④を復活させないこと**
-const sqlOf = (n) => readFileSync(new URL(`../../../supabase_v2_${n}_20260906.sql`, import.meta.url), 'utf8')
-const SQL = sqlOf('raid')
-const SQL_FUSION = sqlOf('fusion')
-// SQLの関数の本体だけを切り出す（v2は同名オーバーロードを作らない運用）
-const bodyOf = (name) => {
-  const i = SQL.indexOf('create or replace function public.' + name + '(')
-  if (i < 0) throw new Error(name + ' がSQLに無い')
-  const end = SQL.indexOf('\n' + '$$;', i)
-  if (end < 0) throw new Error(name + ' の終わりが見つからない')
-  return SQL.slice(i, end)
-}
-const SQL_FRIENDS = sqlOf('friends')
-// v2_raid_tiers の1行 (tier, power, hp, ultra_pct) を拾う
-// (tier, power, hp, ultra_pct, mat_mult) の5列
-const ROW_RE = /\(\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/g
-// v2_raid_bosses の1行 (idx, 'key') を拾う
-const BOSS_ROW_RE = /\(\s*(\d+),\s*'([^']+)'\)/g
+// ★V2 初期構成のサーバー側（supabase_v2_friends／fusion／raid_20260906.sql・fusion_undo_20260907.sql）との突き合わせは、
+//   2026-10-22 に SQL ごと消した（データベースの v2_ の表・関数も消した）
 const rngOf = (s0) => { let s = s0 >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }
 
 // ===== 5体 =====
@@ -100,16 +77,10 @@ test('★踏破済みのエリアでだけ3%で引く（相手がボスかどう
   assert.equal(RAID_RATE, 3)
   assert.equal(rollRaid(() => 0.029), true)
   assert.equal(rollRaid(() => 0.031), false)
-  // ★サーバーも踏破済みかを見る（解放だけでは立たない）
-  assert.ok(SQL.includes("p_area = any(coalesce(p.cleared_areas, '{}'))"), 'SQLが踏破を見ていない')
-  assert.ok(!SQL.includes('unlocked_areas'), 'SQLが解放だけで通している')
 })
 
 test('★1人1日2回まで（数えるのはサーバー）', () => {
   assert.equal(RAID_DAILY_MAX, 2)
-  assert.ok(SQL.includes("(v_c->>'daily_max')::int"), '1日の上限がSQLに無い')
-  // 日本時間の5時で切り替わる（宝樹・デイリーと同じ区切り）
-  assert.ok(SQL.includes("at time zone 'Asia/Tokyo') - interval '5 hours'"), '日付の区切りが5時になっていない')
 })
 
 // ===== 出るボスは時間帯で決まる（2時間ごとのローテ） =====
@@ -139,19 +110,6 @@ test('次の入れ替え時刻と、このあとの順番が出せる', () => {
   assert.equal(sched.length, 5)
   assert.equal(new Set(sched.map(s => s.boss.key)).size, 5, '5枠に同じ顔が混ざっている')
   assert.equal(sched[0].boss.key, raidBossAt(t0).key)
-})
-
-test('★SQL も同じ規則でボスを選ぶ（クライアントの言い値は使わない）', () => {
-  assert.ok(SQL.includes('create or replace function public.v2_raid_boss_now()'), 'ボスを選ぶ関数がSQLに無い')
-  assert.ok(SQL.includes("interval '9 hours'"), 'JSTに直していない')
-  assert.ok(SQL.includes("->>'rotate_hours')::int"), 'ローテの間隔が定数から来ていない')
-  // 名簿の並びが raid.js と同じ
-  const seed = SQL.slice(SQL.indexOf('insert into public.v2_raid_bosses'))
-  const rows = [...seed.slice(0, seed.indexOf('on conflict')).matchAll(BOSS_ROW_RE)]
-  assert.equal(rows.length, RAID_BOSSES.length, '行数が違う')
-  for (const [, idx, key] of rows) {
-    assert.equal(key, RAID_BOSSES[Number(idx)].key, `${idx}番目の並びが違う`)
-  }
 })
 
 // ===== 強さ（エリアの難易度帯で決まる） =====
@@ -563,162 +521,13 @@ test('fusedAbilitiesOf は fused の入った装備だけを拾う', () => {
   assert.deepEqual(fusedAbilitiesOf([{ fused: '閻魔' }, { fused: null }, { fused: 'いないボス' }, {}]), ['閻魔'])
 })
 
-// ===== SQLとの突き合わせ =====
-test('SQL の v2_raid_const が raid.js と同じ数字になっている', () => {
-  const body = SQL.slice(SQL.indexOf('create or replace function public.v2_raid_const'))
-  const num = (k) => {
-    const m = body.match(new RegExp(`'${k}',\\s*([0-9.]+)`))
-    assert.ok(m, `${k} がSQLに無い`)
-    return Number(m[1])
-  }
-  assert.equal(num('minutes'), RAID_MINUTES)
-  assert.equal(num('max_members'), RAID_MAX_MEMBERS)
-  assert.equal(num('rate'), RAID_RATE)
-  assert.equal(num('daily_max'), RAID_DAILY_MAX)
-  assert.equal(num('rotate_hours'), ROTATE_HOURS)
-  assert.equal(num('turns'), RAID_TURNS)
-  assert.equal(num('ramp_atk'), RAMP_ATK)
-  assert.equal(num('ramp_def'), RAMP_DEF)
-  assert.equal(num('power_mult'), RAID_POWER_MULT)
-  assert.equal(num('atk_mult'), RAID_ATK_MULT)
-  assert.equal(num('call_max'), CALL_MAX)
-  assert.equal(num('online_minutes'), ONLINE_MINUTES)
-  assert.equal(num('tier_share_a'), TIER_SHARE.A)
-  assert.equal(num('tier_share_b'), TIER_SHARE.B)
-  assert.equal(num('tier_share_c'), TIER_SHARE.C)
-  assert.equal(num('fusion_pct'), FUSION_PCT)
-})
-
-test('★SQL の v2_raid_tiers が raid.js の強さ・激レアの表と一致している', () => {
-  const seed = SQL.slice(SQL.indexOf('insert into public.v2_raid_tiers'))
-  const rows = [...seed.slice(0, seed.indexOf('on conflict')).matchAll(ROW_RE)]
-  assert.equal(rows.length, TIER_MAX, '行数が帯の数と違う')
-  for (const [, tier, power, hp, ultra] of rows) {
-    assert.equal(Number(power), raidPowerOfTier(Number(tier)), `帯${tier}の戦闘力がSQLと違う`)
-    assert.equal(Number(hp), raidHpOfTier(Number(tier)), `帯${tier}のHPがSQLと違う`)
-    assert.equal(Number(ultra), ultraPctOf(Number(tier)), `帯${tier}の激レアの確率がSQLと違う`)
-  }
-})
-
-test('★SQL の貢献度ティアの判定が raid.js と一致している（主催・MVPの優遇は無い）', () => {
-  const body = SQL.slice(SQL.indexOf('create or replace function public.v2_raid_reward_tier'))
-  assert.ok(body.includes('v2_raid_reward_tier(p_share numeric)'), '引数が share だけになっていない')
-  assert.ok(!body.includes('p_is_host'), '主催者の優遇がSQLに残っている')
-  assert.ok(body.includes("p_share >= " + TIER_SHARE.A + " then 'A'"), 'Aのしきい値が違う')
-  assert.ok(body.includes("p_share >= " + TIER_SHARE.B.toFixed(2) + " then 'B'"), 'Bのしきい値が違う')
-  assert.ok(body.includes("p_share >= " + TIER_SHARE.C.toFixed(2) + " then 'C'"), 'Cのしきい値が違う')
-})
-
-test('★SQL の報酬の中身が raid.js と一致している', () => {
-  const body = SQL.slice(SQL.indexOf('create or replace function public.v2_raid_claim'))
-  // 素材の数の範囲（ティアごと）
-  const lo = "when 'A' then " + TIER_MAT_RANGE.A[0] + " when 'B' then " + TIER_MAT_RANGE.B[0]
-    + " when 'C' then " + TIER_MAT_RANGE.C[0] + " else " + TIER_MAT_RANGE.D[0] + " end"
-  const hi = "when 'A' then " + TIER_MAT_RANGE.A[1] + " when 'B' then " + TIER_MAT_RANGE.B[1]
-    + " when 'C' then " + TIER_MAT_RANGE.C[1] + " else " + TIER_MAT_RANGE.D[1] + " end"
-  assert.ok(body.includes(lo), '素材の数の下限がSQLと違う')
-  assert.ok(body.includes(hi), '素材の数の上限がSQLと違う')
-  assert.ok(!body.includes('floor(v_r.tier / 3.0)'), '帯ボーナスがSQLに残っている')
-  // 激レアは v2_raid_tiers.ultra_pct（帯だけ）から引いている
-  assert.ok(body.includes('select ultra_pct, mat_mult into v_ultra, v_mult from public.v2_raid_tiers'),
-    '激レアを帯の表から引いていない')
-  // レアはティアだけ
-  const rare = "when 'A' then " + TIER_RARE.A + " when 'B' then " + TIER_RARE.B
-    + " when 'C' then " + TIER_RARE.C + " else " + TIER_RARE.D + " end)"
-  assert.ok(body.includes(rare), 'レアの表がSQLと違う')
-  // 3枠（貢献度・主催の箱・MVPの箱）
-  assert.ok(body.includes("'kind', 'share'"), '貢献度の枠がSQLに無い')
-  for (const k of BOX_KINDS) assert.ok(body.includes("'kind', '" + k + "'"), k + ' の箱がSQLに無い')
-  assert.ok(body.includes("(v_c->>'box_mat')::int"), '箱の素材の数が定数から来ていない')
-  // 1発の上限
-  assert.ok(SQL.includes('v_r.hp_max / ' + HIT_CAP_DIV), '1発の上限がSQLと違う')
-})
-
-// ★2026-09-07 ユーザー指示「レイドボスの報酬は出現したエリアのランダムなルーン素材にして」
-test('★ルーン素材はそのエリアからランダムに引く（ボス素材固定ではない）', () => {
-  const body = SQL.slice(SQL.indexOf('create or replace function public.v2_raid_grant'))
-  const one = body.slice(0, body.indexOf('合成素材は'))
-  assert.ok(one.includes('where area = p_area and rarity = v_rarity'), 'エリアで絞っていない')
-  assert.ok(one.includes('order by random() limit 1'), 'ランダムに引いていない')
-  assert.ok(!one.includes('is_boss'), 'ボス素材に固定されたままになっている')
-  // 合成素材のほうは別枠のまま（レイドボスの5種・討伐したときだけ）
-  assert.ok(body.includes("'fu:' || p_boss_key"), '合成素材がレイドボスから引かれていない')
-  assert.ok(body.includes('coalesce(p_killed, false)'), '合成素材が討伐条件から外れている')
-})
-
-test('★SQL の定数が箱とEXPの値と一致している', () => {
-  const body = SQL.slice(SQL.indexOf('create or replace function public.v2_raid_const'))
-  const num = (k) => {
-    const m = body.match(new RegExp("'" + k + "'," + String.raw`\s*([0-9.]+)`))
-    assert.ok(m, k + ' がSQLに無い')
-    return Number(m[1])
-  }
-  assert.equal(num('box_mat'), BOX_MAT_COUNT)
-  assert.equal(num('box_ultra'), BOX_RARITY.ultra)
-  assert.equal(num('box_rare'), BOX_RARITY.rare)
-  assert.equal(num('box_fusion_pct'), BOX_FUSION_PCT)
-  assert.equal(num('exp_min'), RAID_EXP_MIN)
-  assert.equal(num('exp_max'), RAID_EXP_MAX)
-})
-
-test('★SQL の v2_raid_attack がEXPをサーバーで抽選して配っている', () => {
-  const body = SQL.slice(SQL.indexOf('create or replace function public.v2_raid_attack'))
-  assert.ok(body.includes("(v_c->>'exp_min')::int"), 'EXPの抽選がSQLに無い')
-  assert.ok(body.includes('public.v2_apply_exp(v_me, v_exp)'), 'EXPを配っていない')
-  // ★言い値では入らない（引数でEXPを受け取っていない）
-  assert.ok(body.includes('v2_raid_attack(p_raid_id bigint, p_damage bigint)'), '引数が増えている')
-})
-
-test('SQL の合成素材の名簿が fusion.js と一致している', () => {
-  const seed = SQL_FUSION.slice(SQL_FUSION.indexOf('insert into public.v2_fusion_materials'))
-  const rows = [...seed.slice(0, seed.indexOf('on conflict')).matchAll(
-    /\('([^']+)',\s*'([^']+)',\s*'([^']+)',\s*'([^']+)',\s*'([^']+)'\)/g)]
-  assert.equal(rows.length, FUSIONS.length, '行数が違う')
-  for (const [, id, name, source, boss, crown] of rows) {
-    const f = FUSION_BY_ID[id]
-    assert.ok(f, `${id} が fusion.js に無い`)
-    assert.equal(name, f.name)
-    assert.equal(source, f.source)
-    assert.equal(boss, f.boss)
-    assert.equal(crown, f.crown)
-  }
-})
-
-test('★強さも報酬もサーバーが決める（クライアントは戦闘力を送らない）', () => {
-  assert.ok(SQL.includes('create or replace function public.v2_raid_spawn(p_area int, p_boss_key text default null)'),
-    'v2_raid_spawn の引数が変わっている')
-  assert.ok(!SQL.includes('p_power'), 'クライアントから戦闘力を受け取る引数が残っている')
-})
-
 test('救援の宛先の種別は online と friend の2つ（国はまだ無い）', () => {
   assert.deepEqual(CALL_KINDS, ['online', 'friend'])
-  assert.ok(!SQL.includes("'country'"), '国はまだ作っていないはず')
-  assert.ok(SQL_FRIENDS.includes('create table if not exists public.v2_friends'), 'フレンドのSQLが無い')
 })
 
 test('1時間の枠で殴れる回数と、HPの決め方の前提が合っている', () => {
   // ★HPは「360回で削り切れる量」。クールタイムか挑戦時間を変えたらHPも測り直す
   assert.equal(Math.floor((RAID_MINUTES * 60) / SORTIE_CD), 360)
-})
-
-// ===== 「因子」の廃止を巻き戻さないための見張り（2026-09-07）=====
-// 一度この形にして戻した経緯があるので、機械的に止めておく。
-test('★打ち消しSQLが揃っている（因子を消し、抽出で能力が付く版へ戻す）', () => {
-  const undo = readFileSync(new URL('../../../supabase_v2_fusion_undo_20260907.sql', import.meta.url), 'utf8')
-  assert.match(undo, /delete from public\.v2_player_fusions/, '所持ぶんを消していない（外部キーで落ちる）')
-  assert.match(undo, /delete from public\.v2_fusion_materials where source = 'enemy'/, '敵ぶんの名簿を消していない')
-  assert.match(undo, /drop function if exists public\.v2_grant_fusion_drop\(text\)/, '配っていたRPCを落としていない')
-  assert.match(undo, /create or replace function public\.v2_extract_essence/, '抽出を戻していない')
-  // ★戻した抽出が**能力を抽選している**こと（ここが本題）
-  assert.match(undo, /when 'ultra' then 3 when 'rare' then 1 else 0 end/, '能力の抽選が入っていない')
-  // 所持ぶん→名簿 の順であること（逆にすると外部キーで落ちる）
-  assert.ok(undo.indexOf('delete from public.v2_player_fusions') < undo.indexOf('delete from public.v2_fusion_materials'),
-    '消す順番が逆（先に名簿を消すと外部キーで落ちる）')
-})
-
-test('★合成素材のSQLに敵ぶんが残っていない', () => {
-  assert.ok(!/source = 'enemy'|'enemy',/.test(SQL_FUSION), 'SQLに敵ぶんの合成素材が残っている')
-  assert.ok(!SQL_FUSION.includes('の因子'), 'SQLに「◯◯の因子」が残っている')
 })
 
 // ===== 救援の公開範囲（2026-09-28 ユーザー指示「誰でもか、フレンドか、選択できる」）=====
@@ -728,35 +537,6 @@ test('★公開範囲は3つ。既定は「呼んだ人だけ」', () => {
   assert.equal(isVisibility('all'), true)
   assert.equal(isVisibility('everyone'), false)
   for (const v of VISIBILITIES) assert.ok(VISIBILITY_LABEL[v] && VISIBILITY_HINT[v], `${v} の文が無い`)
-})
-
-// ★判定はサーバー。画面が送った範囲をそのまま信じない／主催者以外は変えられない
-test('★公開範囲はサーバーが見ている（主催者だけが変えられる）', () => {
-  assert.ok(SQL.includes("alter table public.v2_raids add column if not exists visibility text not null default 'invite'"),
-    '列が無い（既定は invite）')
-  const pub = bodyOf('v2_raid_publish')
-  assert.match(pub, /not in \('invite', 'friend', 'all'\)/, '知らない値を弾いていない')
-  assert.match(pub, /v_r\.host_id <> v_me/, '主催者以外も変えられてしまう')
-  assert.match(pub, /killed_at is not null or v_r\.ends_at <= now\(\)/, '終わったレイドでも変えられる')
-
-  // 入れるかどうかは v2_raid_visible が決める（呼ばれた人はどの範囲でも入れる）
-  const vis = bodyOf('v2_raid_visible')
-  assert.match(vis, /p_raid\.host_id = p_me/, '主催者が入れない')
-  assert.match(vis, /v2_raid_calls/, '呼ばれた人が入れない')
-  assert.match(vis, /p_raid\.visibility = 'all'/, '「誰でも」が効いていない')
-  assert.match(vis, /v2_friends/, '「フレンドまで」が効いていない')
-
-  // 参加の入口がその判定を通っていること
-  const join = bodyOf('v2_raid_join')
-  assert.match(join, /v2_raid_visible\(v_r, v_me\)/, '参加が公開範囲を見ていない')
-})
-
-test('★救援一覧は「公開されていて満員でない」ものだけ', () => {
-  const list = bodyOf('v2_raid_list')
-  assert.match(list, /r\.visibility in \('friend', 'all'\)/, '非公開のレイドまで並べている')
-  assert.match(list, /r\.host_id <> v_me/, '自分のレイドが一覧に出てしまう')
-  assert.match(list, /< \(v_c->>'max_members'\)::int/, '満員のレイドを並べている')
-  assert.match(list, /killed_at is null and r\.ends_at > now\(\)/, '終わったレイドを並べている')
 })
 
 
@@ -785,21 +565,4 @@ test('★合成素材は素材1個ごとに引く（1枠につき1個まで）',
   assert.ok(fusionChanceOf(12) > fusionChanceOf(6), '個数が増えても当たりやすくなっていない')
   assert.equal(fusionChanceOf(1), 1)
   assert.equal(fusionChanceOf(0), 0)
-
-  // サーバーも同じ形になっていること
-  const grant = bodyOf('v2_raid_grant')
-  const loopAt = grant.indexOf('for v_i in 1..')
-  const endAt = grant.indexOf('end loop;')
-  const inLoop = grant.slice(loopAt, endAt)
-  assert.match(inLoop, /v_fusion is null and coalesce\(p_killed, false\)/, '合成素材の判定がループの中にない')
-  assert.match(inLoop, /'fu:' \|\| p_boss_key/, '倒したボスの素材になっていない（乱択はだめ）')
-  // ループの外に古い判定が残っていないこと（残すと2回引いてしまう）
-  const after = grant.slice(endAt)
-  assert.ok(!/random\(\) \* 100 < coalesce\(p_fusion_pct/.test(after), 'ループの外にも判定が残っている')
-
-  // 個数に帯の倍率が掛かっていること
-  const claim = bodyOf('v2_raid_claim')
-  assert.match(claim, /mat_mult into v_ultra, v_mult/, '倍率を読んでいない')
-  assert.match(claim, /round\(v_lo \* coalesce\(v_mult, 1\)\)/, '下限に倍率が掛かっていない')
-  assert.match(claim, /round\(v_hi \* coalesce\(v_mult, 1\)\)/, '上限に倍率が掛かっていない')
 })

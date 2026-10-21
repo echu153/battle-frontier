@@ -8,7 +8,7 @@ import {
 } from './tree.js'
 
 test('大吉〜大凶の並びと重みはサーバー（v2_pray）と同じ', () => {
-  // ★ここを変えたら supabase_v2_core.sql の v2_pray の c_names / c_weight も直すこと。
+  // ★ここを変えたら supabase_v2_core.sql（V2 初期構成・2026-10-22 に消した） の v2_pray の c_names / c_weight も直すこと。
   //   片方だけ直すと「画面に出ている確率」と「実際に引かれる確率」がズレる。
   assert.deepEqual(FORTUNES.map(f => f.name), ['大吉', '中吉', '小吉', '吉', '末吉', '凶', '大凶'])
   assert.deepEqual(FORTUNES.map(f => f.weight), [5, 10, 15, 25, 20, 15, 10])

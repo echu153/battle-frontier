@@ -1,5 +1,5 @@
 // バトルフロンティアⅡ スキルの習得中・習得済み・編成のテスト（node --test）
-// ※サーバー側の規則は supabase_v2_core.sql の v2_apply_exp / v2_change_job / v2_set_skills。
+// ※サーバー側の規則は supabase_v2_core.sql（V2 初期構成・2026-10-22 に消した） の v2_apply_exp / v2_change_job / v2_set_skills。
 //   ここで固定しているのは同じ規則のクライアント側実装。
 import { test } from 'node:test'
 import assert from 'node:assert/strict'

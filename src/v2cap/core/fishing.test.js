@@ -1,29 +1,19 @@
 // バトルフロンティアⅡ 拠点の釣り場（node --test）
 // ------------------------------------------------------------
-// ★抽選と付与の権威はサーバー（supabase_v2_core.sql §11）。ここは仕様の固定と、
-//   SQLとの突き合わせ、そして**図鑑ボーナスの渡し忘れ検出**をやる。
+// ★仕様の固定（V2 初期構成のサーバー側 supabase_v2_core.sql との突き合わせは、2026-10-22 に SQL ごと消した）。
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { totalStats } from './loadout.js'
 import {
   DEX_STATS,
-  TIERS, TIER_SHORT, TIER_LABEL, TIER_RATE, TIER_PCT, TIER_MEDAL, medalOf,
+  TIERS, TIER_LABEL, TIER_RATE, TIER_PCT, TIER_MEDAL, medalOf,
   SPOT_MAX, FISH_PER_SPOT, SPOTS, spotName, FISH, fishOfSpot,
   ENTRIES, ENTRY_BY_ID, DEX_SLOTS, entryId,
   fishDexPct, fishDexText, dexIdsOf, DEX_FULL_TOTAL,
   fishPerHour, MATERIAL_PCT, EQUIP_PCT, dropTierMax,
   SHOP_MATERIAL_COST, materialShopCost, PROTECT_COST,
 } from './fishing.js'
-
-const SQL = readFileSync(new URL('../../../supabase_v2_core.sql', import.meta.url), 'utf8')
-const bodyOf = (name) => {
-  const i = SQL.indexOf(`create or replace function public.${name}(`)
-  assert.notEqual(i, -1, `${name} がSQLに無い`)
-  const end = SQL.indexOf('\n$$;', i)
-  assert.notEqual(end, -1, `${name} の終わりが見つからない`)
-  return SQL.slice(i, end)
-}
 
 // ===== 構成 =====
 test('釣り場エリアは9つ・各6種で全54種。図鑑は216枠', () => {
@@ -138,96 +128,11 @@ test('交換所の値段', () => {
   assert.equal(PROTECT_COST, 150)
 })
 
-// ===== SQLとの突き合わせ =====
-test('魚54種の名前と並びがSQLと fishing.js で一致している', () => {
-  const i = SQL.indexOf('insert into public.v2_fish (id, name, spot, idx, tier, stat, pct, medal)')
-  assert.notEqual(i, -1, '魚のINSERTがSQLにある')
-  const block = SQL.slice(i, SQL.indexOf('on conflict (id) do update', i))
-  for (const f of FISH) {
-    assert.ok(block.includes(`(${f.spot},${f.idx},'${f.name}')`.replace(/,/g, ', ')) ||
-              block.includes(`(${f.spot},${f.idx},'${f.name}')`),
-      `${f.name}（第${f.spot}エリア・${f.idx}番）がSQLに無い／位置が違う`)
-  }
-  // グレードの表
-  for (const t of TIERS) {
-    assert.ok(block.includes(`('${t}','${TIER_SHORT[t]}',${TIER_PCT[t]},${TIER_MEDAL[t]})`),
-      `${TIER_LABEL[t]} の行がSQLと違う`)
-  }
-  // ステータスの割り当ては「通し番号 % 6」。HPとMPはSQL側の配列にも入っていないこと
-  assert.ok(block.includes(`array['${DEX_STATS.join("','")}']`), 'ステータスの並びがSQLと違う')
-  assert.doesNotMatch(block, /'hp'|'mp'/, 'HPかMPがSQL側の割り当てに残っている')
-  assert.match(block, new RegExp(`\\(\\(f\\.spot - 1\\) \\* 6 \\+ f\\.idx\\) % ${DEX_STATS.length} \\+ 1`),
-    '割り当ての式がSQLと違う')
-})
-
-test('釣りの数字がSQLと fishing.js で一致している', () => {
-  const rate = bodyOf('v2_base_rate')
-  assert.match(rate, /2::numeric \+ 0\.5 \* \(greatest\(1, least\(9,/, '匹/h の式')
-
-  const haul = bodyOf('v2_base_fish_haul')
-  // グレードの累積（70 / 92 / 99）。TIER_RATE から組み立てて突き合わせる
-  let acc = 0
-  const cum = TIERS.slice(0, 3).map(t => (acc += TIER_RATE[t]))
-  assert.match(haul, new RegExp(`v_r < ${cum[0]} then 'c' when v_r < ${cum[1]} then 'r' when v_r < ${cum[2]} then 'e'`),
-    `グレードの抽選が [${cum.join(', ')}] になっていない`)
-  assert.match(haul, /v_mat_pct numeric := 1 \+ v_g/, 'ルーン素材の確率')
-  assert.match(haul, /v_eq_pct  numeric := 0\.5 \* v_g/, '装備の確率')
-  assert.match(haul, /least\(8, v_g\)/, '副産物のエリアの頭打ち')
-  assert.match(haul, /floor\(random\(\) \* 6\)/, '6種から選んでいない')
-  // 本人以外を弾いている
-  assert.match(haul, /p_uid is distinct from auth\.uid\(\)/, '本人以外を弾いていない')
-
-  // 交換所
-  const shop = SQL.slice(SQL.indexOf("insert into public.v2_fish_shop (id, label, cost, kind, payload, sort)"))
-  for (const [rarity, cost] of Object.entries(SHOP_MATERIAL_COST)) {
-    assert.ok(shop.includes(`'${rarity}',`) && shop.includes(`,${cost},`),
-      `${rarity} の値段 ${cost} がSQLに無い`)
-  }
-  assert.ok(shop.includes(`'protect', '{}'::jsonb`) || shop.includes(`${PROTECT_COST}, 'protect'`),
-    `保護札 ${PROTECT_COST}枚 がSQLに無い`)
-})
-
-test('副産物の装備ランクは「そのエリアの重み」で引く（出撃と同じ分布）', () => {
-  // ★drop_ranks は {"F":40,"E":40,"D":20} の重み表。`?` でキーの有無だけを見て
-  //   装備から一様に選ぶと、上位ランクが本来よりずっと出やすくなる
-  const haul = bodyOf('v2_base_fish_haul')
-  assert.match(haul, /jsonb_each_text\(a\.drop_ranks\)/, '重みを読んでいない')
-  assert.match(haul, /if v_pick < v_acc then v_rank := v_rec\.rank/, '重みで引いていない')
-  assert.match(haul, /where e\.rank = v_rank order by random\(\) limit 1/, '引いたランクで絞っていない')
-  assert.doesNotMatch(haul, /drop_ranks \? e\.rank/, 'キーの有無だけで選ぶ書き方が残っている')
-  // JS側（出撃）も重みで引いていること
+test('出撃の装備ランクは「そのエリアの重み」で引く（rollDropRank）', () => {
+  // ★drop_ranks は {"F":40,"E":40,"D":20} の重み表。キーの有無だけを見て装備から一様に選ぶと、
+  //   上位ランクが本来よりずっと出やすくなる（釣りの副産物の SQL の確かめは 2026-10-22 に SQL ごと消した）
   const enemies = readFileSync(new URL('./enemies.js', import.meta.url), 'utf8')
   assert.match(enemies, /export const rollDropRank[\s\S]{0,240}r -= w/, 'rollDropRank が重みを使っていない')
-})
-
-test('釣り場エリアの切り替えは、切り替える前に必ず釣り上げる', () => {
-  // ★ここが抜けると、第1エリアで貯めてから第9エリアへ替えるだけで
-  //   メダルが最大40倍に化ける（pending は匹数しか持っていないため）
-  const body = bodyOf('v2_base_set_spot')
-  const collectAt = body.search(/v2_base_collect\('fishing'\)/)
-  const updateAt = body.search(/update public\.v2_base_facilities set spot/)
-  assert.notEqual(collectAt, -1, '切り替え前に回収していない')
-  assert.ok(collectAt < updateAt, '回収より先にエリアを書き換えている')
-  assert.match(body, /p_spot > v_grade/, '解放していないエリアを選べてしまう')
-})
-
-test('魚→メダルは検証を全部済ませてから引く（部分的に消えない）', () => {
-  const body = bodyOf('v2_fish_to_medal')
-  const checkAt = body.search(/if v_ok <> v_req then/)
-  const updateAt = body.search(/update public\.v2_player_fish/)
-  assert.ok(checkAt !== -1 && updateAt !== -1)
-  assert.ok(checkAt < updateAt, '検証より前に魚を引いている')
-  assert.match(body, /sum\(q\.qty \* f\.medal\)/, '枚数は v2_fish.medal から計算する')
-})
-
-test('メダルの交換もメダルを引く前に検証している', () => {
-  const body = bodyOf('v2_fish_shop_buy')
-  const checkAt = body.search(/if v_have < v_cost then/)
-  const payAt = body.search(/update public\.v2_base set fish_medals = fish_medals - v_cost/)
-  assert.ok(checkAt !== -1 && payAt !== -1)
-  assert.ok(checkAt < payAt, '足りるか見る前にメダルを引いている')
-  // 値段はサーバーの表から取る（クライアントの申告を使わない）
-  assert.match(body, /v_cost := v_row\.cost::bigint \* v_n/, '値段を v2_fish_shop.cost から取っていない')
 })
 
 // ===== 渡し忘れの検出 =====

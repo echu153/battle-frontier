@@ -20,7 +20,7 @@ const makeRng = (seed) => {
 const START_POWER = calcPower(INITIAL_STATS)
 
 test('ステータスは8種で、抽選の並びがSQLと一致する', () => {
-  // ★この並びは supabase_v2_core.sql の v_gain/v_unit/v_stat 配列の順序と一致させること。
+  // ★この並びは supabase_v2_core.sql（V2 初期構成・2026-10-22 に消した） の v_gain/v_unit/v_stat 配列の順序と一致させること。
   //   並べ替えるとサーバーの抽選結果と表示がズレるため、変更時はSQLも同時に直す。
   assert.deepEqual(STAT_KEYS, ['hp', 'mp', 'str', 'dex', 'agi', 'int_stat', 'vit', 'luk'])
   for (const k of STAT_KEYS) assert.ok(STAT_DEFS[k], `${k} の定義がある`)

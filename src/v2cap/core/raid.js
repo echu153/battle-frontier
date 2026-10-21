@@ -21,7 +21,7 @@
 // ★特殊能力の中身は enchant.js の FUSION_ABILITIES（刻印と同じ枠で戦闘に乗せるため）。
 //   合成素材そのものは fusion.js（ユニークボスぶんも後で同じ表へ足す）。
 //
-// ⚠数値の正はこのファイル。supabase_v2_raid_20260906.sql に同じ値が入っていて、
+// ⚠数値の正はこのファイル。supabase_v2_raid_20260906.sql（V2 初期構成・2026-10-22 に消した） に同じ値が入っていて、
 //   raid.test.js が両方を突き合わせている（片方だけ直すと落ちる）。
 // ============================================================
 import { ENEMY_SKILLS, statsOf, toFighter, areasOfTier, tierOf, TIER_MAX, markOf } from './enemies.js'
