@@ -117,7 +117,7 @@ test('【確定】2026-10-18 シートで採用・書き直したアセンショ
     assert.notDeepEqual(c.apply(S(n)), S(n), `${n}のマスで技が変わる`)
     assert.ok(c.short && c.detail(S(n)) && !/undefined|NaN/.test(c.detail(S(n))), `${n}の文`)
   }
-  assert.equal(Object.keys(ASC_CUSTOM).length, 114, '前からの7つ（侍・狂戦士）＋シートで直した107（ディバインスマイト・毒矢はふつうのマスのまま）')
+  assert.equal(Object.keys(ASC_CUSTOM).length, 117, '前からの7つ（侍・狂戦士）＋シートで直した107（ディバインスマイト・毒矢はふつうのマスのまま）＋10-21 の3つ')
   assert.equal(ascTypeOf(S('聖水')), 'custom')
 })
 
@@ -236,4 +236,23 @@ test('名前を変えた技：塔の姿（前の名前）は今の名前で読�
   assert.ok(!SQL.includes("('メテオ', '元素使い'"))
   assert.ok(SQL.includes(`v_ren     jsonb := '{"メテオ":"メテオストライク"}'::jsonb;`))
   assert.ok(SQL.includes("key = 'meteor_rename_20261018'") && SQL.includes("values ('meteor_rename_20261018')"))
+})
+
+test('【確定】2026-10-21 シートの直し3つ：死の刻印 続くターン3→5・ジャンプ 着地で防御20%無視・ハイジャンプ 着地で30%で恐怖（どれも威力+20%の代わり）', () => {
+  assert.deepEqual(ascendSkill(S('死の刻印')).ailUp, { ...S('死の刻印').ailUp, turns: 5 })
+  assert.equal(ascSkillDetail('死の刻印'), '続くターン 3ターン→5ターン')
+  const j = ascendSkill(S('ジャンプ'))
+  assert.deepEqual([j.jump.defPen, j.jump.mult, j.ascDmg], [0.2, S('ジャンプ').jump.mult, undefined])
+  assert.equal(ascSkillDetail('ジャンプ'), '着地で相手の防御を20%無視')
+  const h = ascendSkill(S('ハイジャンプ'))
+  assert.deepEqual([h.jump.ail, h.jump.mult, h.ascDmg], [{ key: 'fear', chance: 30 }, S('ハイジャンプ').jump.mult, undefined])
+  // 戦闘：ハイジャンプのマスがあると着地で恐怖（乱数0.1＝30%に入る）
+  const land = (skill) => {
+    const me = side('竜', '竜騎士', [skill])
+    const foe = dummy()
+    for (let i = 0; i < 3; i++) takeAction(me, foe, fixed(0.1), [])
+    return foe
+  }
+  assert.ok(land(h).ail.fear, 'マスあり：恐怖')
+  assert.ok(!land(S('ハイジャンプ')).ail.fear, 'マスなし：恐怖なし')
 })

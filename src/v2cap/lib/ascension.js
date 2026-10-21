@@ -229,6 +229,9 @@ export const ASC_CUSTOM = {
   竜翔: bump(['soar', 'turns'], 1, '+1ターン', turnsText),
   スカイスピア: grant('着地の次に×1.3', '直前のターンに着地していれば威力×1.3', () => ({ afterLand: 1.3 })),
   天竜落とし: bump(['jump', 'defPen'], 0.2, '着地の防御無視+20%', (a, b) => `着地の防御無視 ${Math.round(a * 100)}%→${Math.round(b * 100)}%`),
+  // 2026-10-21 ユーザーがシートで採用（威力+20%の代わり）
+  ジャンプ: bump(['jump', 'defPen'], 0.2, '着地で防御無視20%', (a, b) => `着地で相手の防御を${Math.round(b * 100)}%無視`),
+  ハイジャンプ: grant('着地で30%恐怖', '着地で30%で恐怖', (s) => ({ jump: { ...s.jump, ail: { key: 'fear', chance: 30 } } })),
   天墜竜閃: bump(['afterLand'], 0.3, '着地の次の倍率+0.3', (a, b) => `直前に着地していれば ×${a}→×${b}`),
   // ストームランサー
   テンペストランス: bump2(['comboPower', 'per'], 1, ['comboPower', 'max'], 20, 'コンボの威力+1%',
@@ -263,6 +266,7 @@ export const ASC_CUSTOM = {
     apply: (s) => ({ ...s, foeLowHp: { ...s.foeLowHp, mult: s.foeLowHp.mult + 1 } }),
   },
   影討ち: grant('2ターン目まで', '1ターン目だけ→2ターン目まで効く', (s) => ({ firstTurn: { ...s.firstTurn, turns: 2 } })),
+  死の刻印: bump(['ailUp', 'turns'], 2, '+2ターン', turnsText),   // 2026-10-21 ユーザーがシートで採用
   急所突き: bump(['burstAil', 'perStack'], 0.1, '出血1つの威力+10%', (a, b) => `出血1つにつき威力 +${Math.round(a * 100)}%→+${Math.round(b * 100)}%`),
   首狩り: bump(['foeLowHp', 'mult'], 0.3, 'HP50%以下の威力+30%', (a, b) => `相手のHPが50%以下なら威力 +${pctOf(a)}%→+${pctOf(b)}%`),
   隠形: grant('次の攻撃が必ずクリ', '次に撃つ攻撃の技が必ずクリティカル', () => ({ nextCrit: true })),

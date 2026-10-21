@@ -313,9 +313,11 @@ test('【確定】戦闘：攻撃の技は威力+20%（ダメージ全体）・�
   const me = side('剣士', '剣の構え', true)
   act(me)
   assert.deepEqual({ str: me.buffs.str, dex: me.buffs.dex, agi: me.buffs.agi }, { str: 25, dex: undefined, agi: 25 })
-  const j = side('竜騎士', 'ジャンプ', true)
+  // 跳躍の着地にも威力+%が乗る（ジャンプは 2026-10-21 から特別なマス＝威力のマスを付けた写しで見る）
+  const jc = { ...SKILL_BY_NAME['ジャンプ'], name: 'ジャンプ（写し）' }
+  const j = createSide({ name: '自分', cls: '竜騎士', kind: 'phys', stats: st, noClassBonus: true, slots: [{ skill: ascendSkill(jc, 20), uses: 9 }], passives: [] })
   act(j)
-  assert.ok(Math.abs(j.jumping.mult - SKILL_BY_NAME['ジャンプ'].jump.mult * 1.2) < 1e-9, '着地で斬る技も威力+20%')
+  assert.ok(Math.abs(j.jumping.mult - jc.jump.mult * 1.2) < 1e-9, '着地で斬る技も威力+20%')
 })
 
 test('toFighter：いまの職業のスキルマスだけを技に乗せる（下位職の技・ほかの職業の盤面は乗らない）', () => {
@@ -424,12 +426,12 @@ test('【確定】2026-10-16 状態異常の無い攻撃の技は、今ある効
   // 効果の型は威力が上がらない・前の上がり幅（威力20）を持っていても型の値まで
   assert.equal(up('鎧通し').ascDmg, undefined)
   assert.equal(A.ascendSkill(SKILL_BY_NAME['盗み取る'], 20).dispel.chance, 55)
-  // 数：状態異常50・効果を伸ばす36・威力44・技ごとの特別なマス81（攻撃の技211）
+  // 数：状態異常50・効果を伸ばす36・威力42・技ごとの特別なマス83（攻撃の技211・10-21 にジャンプとハイジャンプも特別なマスへ）
   //   （2026-10-16 にユーザーがシートで書いた侍・狂戦士の攻撃の技5つ＝居合斬・桜花一閃（前は状態異常）・二の太刀・秘剣・叢雲・ブラッドサクリファイス（前は威力）
   //    ＋2026-10-18 にほかの20職でシートの案を採用・書き直した攻撃の技76）
   const cnt = {}
   for (const c of CLASSES) for (const s of skillsOf(c.id)) { const t = A.ascTypeOf(s); if (t) cnt[t] = (cnt[t] || 0) + 1 }
-  assert.deepEqual(cnt, { power: 44, ail: 50, defPen: 13, debuff: 15, drain: 5, dispel: 2, critMult: 1, custom: 81 })
+  assert.deepEqual(cnt, { power: 42, ail: 50, defPen: 13, debuff: 15, drain: 5, dispel: 2, critMult: 1, custom: 83 })
   // 文
   assert.equal(A.ascSkillShort('鎧通し'), '防御無視+10%')
   assert.equal(A.ascSkillDetail('薙ぎ払い'), '相手のAGI−15%→−20%')
