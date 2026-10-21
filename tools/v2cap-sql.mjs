@@ -22,7 +22,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 const B = new URL('../src/', import.meta.url).href
 const { STAGES, STAGE_ORDER, CLASSES, bonusSeqOf, lineageOf, JOB_LV_HPMP } = await import(B + 'v2cap/lib/jobs.js')
 const { SKILLS, isPassive } = await import(B + 'v2cap/lib/skills.js')
-const { ITEMS, STARTER_ITEMS, starterIdsOf } = await import(B + 'v2cap/lib/equipment.js')
+const { ITEMS, STARTER_ITEMS, UNIQUE_ITEMS, starterIdsOf } = await import(B + 'v2cap/lib/equipment.js')
 const { SPOTS, spotLvOf, enemyLevels, recLvOf } = await import(B + 'v2cap/lib/areas.js')
 const { DAILY_TASKS } = await import(B + 'v2cap/lib/daily.js')
 const { mpNodesOf, ASC_CLASSES } = await import(B + 'v2cap/lib/ascension.js')
@@ -68,11 +68,11 @@ export const seeds = () => ({
   ].join('\n'),
   equipment: [
     // ★持ち物（v2cap_inventory）が参照するので消さずに入れ直す。一覧から外れた行は §2 の作り直しのあとで消す
-    'insert into public.v2cap_equipment (id, name, part, type, line, area, rarity, lv) values',
-    // ★初期装備（エリア0・必要LV1・2026-10-12）も同じ表に入れる（持ち物が参照するため）
-    [...ITEMS, ...STARTER_ITEMS].map(i => `  (${q(i.id)}, ${q(i.name)}, ${q(i.part)}, ${q(i.type)}, ${i.line ? q(i.line) : 'null'}, ${i.area}, ${q(i.rarity)}, ${i.lv})`).join(',\n'),
+    'insert into public.v2cap_equipment (id, name, part, type, line, area, rarity, lv, spot) values',
+    // ★初期装備（エリア0・必要LV1・2026-10-12）とユニーク（ボス固有・必要LV80・spot＝落とすボスの場所・2026-10-21）も同じ表に入れる
+    [...ITEMS, ...STARTER_ITEMS, ...UNIQUE_ITEMS].map(i => `  (${q(i.id)}, ${q(i.name)}, ${q(i.part)}, ${q(i.type)}, ${i.line ? q(i.line) : 'null'}, ${i.area}, ${q(i.rarity)}, ${i.lv}, ${i.spot ?? 'null'})`).join(',\n'),
     'on conflict (id) do update set name = excluded.name, part = excluded.part, type = excluded.type, line = excluded.line,',
-    '  area = excluded.area, rarity = excluded.rarity, lv = excluded.lv;',
+    '  area = excluded.area, rarity = excluded.rarity, lv = excluded.lv, spot = excluded.spot;',
   ].join('\n'),
   spots: [
     // ★消してから入れ直す（場所の数を変えたときに古い行が残らないように）。参照している外部キーは無い

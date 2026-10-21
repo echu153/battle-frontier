@@ -19,8 +19,9 @@ import { AIL_LABEL } from '../../v2/lib/ailments.js'
 import { AREA_LIST } from './areas.js'
 
 // セットに数える部位とレア度
+// ★ユニーク（U）の防具もそのボスのエリアのセットに数える（2026-10-18 の案のシート「防具はそのエリアのセットに数える」・2026-10-21 実装）
 export const SET_PARTS = ['頭', '鎧', '腕', '足']
-export const SET_RARITIES = ['R', 'E', 'L']
+export const SET_RARITIES = ['R', 'E', 'L', 'U']
 export const SET_TIERS = [2, 3, 4]
 // 2部位の「かかる確率−%」（深淵の海溝は ALL で20%）
 export const SET_RESIST_PCT = 30

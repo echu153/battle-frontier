@@ -10,7 +10,7 @@ import { DEFAULT_USES_MAX } from './skills.js'
 import { NEED_BASE, NEED_PERMIL, MAX_LV, STAMINA_BASE, STAMINA_RECOVER_MS, POINTS_PER_LV, POINTS_STEP, POINTS_ON_STEP, POINT_UNIT } from './level.js'
 import { JOB_NEED_PCT, JOB_NEED_BASE_PERMIL, JOB_MAX } from './jobs.js'
 import { ROLE_TENTHS, SPOTS as SPOTS_ALL, recLvOf } from './areas.js'
-import { SLOTS, RARITIES, STARTER_AREA } from './equipment.js'
+import { SLOTS, RARITIES, ALL_RARITIES, STARTER_AREA, UNIQUE_ITEMS, UNIQUE_DROP_PCT, UNIQUE_LV } from './equipment.js'
 import { SORTIE_CD, DROP_RARITY, CHEST_PCT, CHEST_SCRAP } from './sortie.js'
 import { SHRINE_FAIRY_NAME, SHRINE_PCT, SHRINE_FIGHTS, SHRINE_EXP_TENTHS, SHRINE_GOLD_TENTHS } from './shrine.js'
 import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV, scrapAreaOf, enhanceScrapOf, ENHANCE_GOLD_ONLY_RARITY } from './smith.js'
@@ -248,11 +248,12 @@ test('【確定】枠は7つ（武器1・頭・鎧・腕・足・アクセ2）�
   assert.ok(!/'left'|'right'/.test(fnBody('v2cap_equip')), '右手・左手の枠は無い')
 })
 
-test('【確定】分解：その装備のエリアの残骸が、レア度で ノーマル1・レア5・エピック10・レジェンダリー25 入る（JSと同じ）。着けているものは分解できない', () => {
+test('【確定】分解：その装備のエリアの残骸が、レア度で ノーマル1・レア5・エピック10・レジェンダリー25・ユニーク50 入る（JSと同じ）。着けているものは分解できない', () => {
   const d = fnBody('v2cap_dismantle')
-  const yieldCase = `case e.rarity ${RARITIES.map(r => `when '${r}' then ${SCRAP_YIELD[r]}`).join(' ')} else 0 end`
+  const yieldCase = `case e.rarity ${ALL_RARITIES.map(r => `when '${r}' then ${SCRAP_YIELD[r]}`).join(' ')} else 0 end`
   assert.ok(d.includes(yieldCase), `残骸の数が smith.js の SCRAP_YIELD と同じ（${yieldCase}）`)
-  assert.deepEqual(SCRAP_YIELD, { N:1, R:5, E:10, L:25 }, 'ユーザーの表')
+  // ユニークの50は 2026-10-18 の案のシート（2026-10-21 ユーザー「一旦今のままで実装して」）
+  assert.deepEqual(SCRAP_YIELD, { N:1, R:5, E:10, L:25, U:50 }, 'ユーザーの表')
   assert.match(d, /select \* into v_row from public\.v2cap_profiles where id = v_uid for update;/, '行をつかんでから（強化と同時でも残骸がずれない）')
   assert.match(d, /i\.player_id = v_uid and i\.id = any\(p_ids\)/, '自分の装備だけ')
   assert.match(d, /not exists \(select 1 from jsonb_each_text\(coalesce\(v_row\.equipped, '\{\}'::jsonb\)\) q/, '着けているものは飛ばす')
@@ -310,6 +311,47 @@ test('【確定】作成（鍛冶屋）：レア・エピック・レジェン�
   assert.match(c, /values \(v_uid, v_eq\.id, v_eq\.lv\) returning id into v_inv;/, '+0・アイテムLV＝必要LVで持ち物に入る（落ちたものと同じ）')
   assert.ok(!/weapons|v_cls/.test(c), '武器は14種どれでも作れる（いまの職業を見ない・ユーザー決定）')
   assert.ok(!/random\(\)/.test(c), '必ずできる（抽選しない）')
+})
+
+// ===== ユニーク（2026-10-21）=====
+test('【確定】ユニーク：ボスに勝ったとき0.5%でサーバーが引く・その場所のボスのものだけ（大ボスは2つから1つ）・武器は職業を見ない', () => {
+  const s = fnBody('v2cap_sortie_settle')
+  assert.ok(s.includes(`c_unique_rate  constant numeric := ${UNIQUE_DROP_PCT / 100};`), '確率が equipment.js の UNIQUE_DROP_PCT と同じ')
+  assert.equal(UNIQUE_DROP_PCT, 0.5, 'ユーザー「ボス0.５」')
+  const block = s.slice(s.indexOf('if v_boss and (coalesce(v_row.unique_force, false) or random() < c_unique_rate) then'))
+  assert.ok(block.length > 0 && s.includes('if v_boss and (coalesce(v_row.unique_force, false) or random() < c_unique_rate) then'), 'ボスに勝ったときだけ（祠の中はボスではない）')
+  assert.match(block, /where e\.rarity = 'U' and e\.spot = p_spot\s+order by random\(\) limit 1;/, 'その場所のボスのユニークから1つ（2つなら50%ずつ）')
+  assert.ok(!/weapons/.test(block.slice(0, block.indexOf('end if;\n    end if;'))), '武器はいまの職業が使えない種類でもそのまま落とす')
+  assert.ok(s.indexOf('if v_boss and (coalesce(v_row.unique_force') > s.indexOf('elsif v_win then'), '勝ったときの枝の中')
+  assert.match(s, /'unique', v_unique/, '画面に何が落ちたかを返す')
+  assert.match(s, /unique_force = case when v_uforce then false else unique_force end/, '開発用の印は落ちたら外す')
+  assert.ok(SQL.includes('alter table public.v2cap_equipment add column if not exists spot int;'))
+  assert.ok(SQL.includes('alter table public.v2cap_profiles add column if not exists unique_force boolean not null default false;'))
+  // 種：60個・必要LV80・spot つき（tools/v2cap-sql.mjs が equipment.js の UNIQUE_ITEMS から作る）
+  assert.equal(UNIQUE_ITEMS.length, 60)
+  for (const u of UNIQUE_ITEMS) {
+    assert.ok(SQL.includes(`(${[`'${u.id}'`, `'${u.name}'`].join(', ')}, `), `${u.name} の行がある`)
+    assert.equal(u.lv, UNIQUE_LV)
+  }
+})
+
+test('【確定】ユニーク：同じものは1つまで着けられる（装飾品の2枠に同じものは着けられない）', () => {
+  const e = fnBody('v2cap_equip')
+  assert.match(e, /if v_eq\.rarity = 'U' and exists \(/)
+  assert.match(e, /i\.base_id = v_eq\.id and i\.id <> p_inventory_id/, '同じユニーク（ほかの持ち物の行）')
+  assert.match(e, /where q\.key <> p_slot and q\.value = i\.id::text/, 'ほかの枠に着いていたら弾く')
+  assert.ok(e.indexOf("if v_eq.rarity = 'U'") < e.indexOf("v_new := coalesce(v_row.equipped, '{}'::jsonb);"), '着ける前に見る')
+})
+
+test('【確定】ユニーク：作れない（作成の文はJSと同じ）・開発用の「もらう」「次のボスで必ず」は開発限定', () => {
+  assert.ok(fnBody('v2cap_craft').includes("case when v_eq.rarity = 'U' then 'ユニークの装備は作れません' else 'ノーマルの装備は作れません' end"))
+  for (const fn of ['v2cap_debug_give_uniques', 'v2cap_debug_unique_next']) {
+    const b = fnBody(fn)
+    assert.match(b, /if not public\.v2cap_is_dev\(\) then return jsonb_build_object\('ok', false, 'error', '開発限定です'\); end if;/, `${fn} は開発限定`)
+  }
+  assert.match(fnBody('v2cap_debug_give_uniques'), /and not exists \(select 1 from public\.v2cap_inventory i where i\.player_id = auth\.uid\(\) and i\.base_id = e\.id\)/, '持っていないものだけ')
+  assert.ok(SQL.includes('revoke all on function public.v2cap_debug_give_uniques(text[]) from public, anon;'))
+  assert.ok(SQL.includes('revoke all on function public.v2cap_debug_unique_next() from public, anon;'))
 })
 
 test('強化値（持ち物の plus）と残骸（プロフィールの materials）の列がある。キャラは消さない', () => {

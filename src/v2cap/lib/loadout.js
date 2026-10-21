@@ -13,7 +13,7 @@
 // ★スキルセットは**職業ごと**（skill_sets[職業]）。使えるのはその職業と下位職の技だけ
 // ============================================================
 import { STAT_KEYS, calcPower } from '../../v2/lib/stats.js'
-import { ITEM_BY_ID, SLOTS } from './equipment.js'
+import { ITEM_BY_ID, SLOTS, isUnique } from './equipment.js'
 import { SKILL_BY_NAME, isPassive, passiveOf } from './skills.js'
 import { statsAt, effectivePowerAt, armorEffects } from './gear.js'
 import { plusOf } from './smith.js'
@@ -21,13 +21,17 @@ import { jobBonusStats, jobOf, canEquipType, attackKindOf, lineageOf } from './j
 import { CAP_RULES } from './rules.js'
 import { ascEffectsOf, ascPctGain, ascendSkill } from './ascension.js'
 import { armorSetsOf, setStatPctOf, setFxOf } from './armorSets.js'
+import { combinedFxOf } from './fxMerge.js'
 
 const zero = () => Object.fromEntries(STAT_KEYS.map(k => [k, 0]))
 
 // 装着中の装備を { slot: { inv, item } } の形で引く（inv は { id, base_id, ilv, plus }。レア度は装備 item が持つ）
+// ★【確定】2026-10-21 ユーザー選択「1つまで」：同じユニークは1つしか着けられない（装飾品の2枠に同じものは着けられない）。
+//   サーバー（v2cap_equip）も弾くが、前に着けていたものが残っていても、ここで後ろの枠のほうを数えない
 export const equippedItems = (profile, inventory) => {
   const byId = Object.fromEntries((inventory || []).map(i => [String(i.id), i]))
   const out = {}
+  const uniques = new Set()
   for (const slot of SLOTS) {
     const invId = profile?.equipped?.[slot]
     if (invId === undefined || invId === null) continue
@@ -35,10 +39,17 @@ export const equippedItems = (profile, inventory) => {
     const item = inv && ITEM_BY_ID[inv.base_id]
     if (!inv || !item) continue
     if (item.part === '武器' && !canEquipType(profile?.class, item.type)) continue
+    if (isUnique(item)) {
+      if (uniques.has(item.id)) continue
+      uniques.add(item.id)
+    }
     out[slot] = { inv, item }
   }
   return out
 }
+// 着けているユニーク（固有の能力を戦闘へ渡す・画面に出す）
+export const wornUniquesOf = (profile, inventory) =>
+  Object.values(equippedItems(profile, inventory)).map(w => w.item).filter(isUnique)
 export const wornIdsOf = (profile, inventory) =>
   new Set(Object.values(equippedItems(profile, inventory)).map(w => String(w.inv.id)))
 
@@ -130,7 +141,8 @@ export const toFighter = (profile, inventory) => {
     // ★パッシブはこの版の名簿から渡す（上位職だけ1つ・初期職は無し）。渡さないと戦闘エンジンが今のⅡの名簿を
     //   職業名で引き、狂戦士・竜騎士など同じ名前の職業に今のⅡのパッシブが付いてしまう
     passives: passiveOf(profile?.class) ? [passiveOf(profile?.class)] : [],
-    // ★防具のセット能力（2部位・4部位の戦闘の効果。3部位の能力値は stats に入っている）。無ければ null
-    setFx: setFxOf(bd.sets),
+    // ★防具のセット能力（2部位・4部位の戦闘の効果。3部位の能力値は stats に入っている）と、
+    //   着けているユニークの固有の能力（2026-10-21）を1つにまとめたもの（fxMerge.js）。どちらも無ければ null
+    setFx: combinedFxOf(setFxOf(bd.sets), wornUniquesOf(profile, inventory)),
   }
 }

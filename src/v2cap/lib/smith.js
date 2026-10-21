@@ -47,7 +47,8 @@ export const scrapAreaOf = (item) => Math.max(1, Number(item?.area) || 1)
 export const scrapOf = (materials, area) => Math.max(0, Math.floor(Number(materials?.[String(area)]) || 0))
 
 // ===== 分解 =====
-export const SCRAP_YIELD = { N:1, R:5, E:10, L:25 }
+// ★ユニーク（U）は50（2026-10-18 の案のシート「分解で残骸50」・2026-10-21 実装）。残骸はそのボスのエリアのもの
+export const SCRAP_YIELD = { N:1, R:5, E:10, L:25, U:50 }
 export const scrapYieldOf = (item) => SCRAP_YIELD[item?.rarity] || 0
 // 分解したら手に入る残骸（エリアごと）。rows = [{ item }]
 export const dismantleGainOf = (rows) => {
@@ -59,8 +60,9 @@ export const dismantleGainOf = (rows) => {
   }
   return out
 }
-// まとめて選ぶときの対象：着けているものと、強化したもの（+1以上）は選ばない（1つずつなら選べる）
-export const bulkPickable = ({ inv }, wornIds) => !wornIds.has(String(inv.id)) && plusOf(inv) === 0
+// まとめて選ぶときの対象：着けているものと、強化したもの（+1以上）と、ユニークは選ばない（1つずつなら選べる）
+//   ★ユニークは0.5%のボス固有なので、まとめての分解でうっかり消さないようにした（2026-10-21）
+export const bulkPickable = ({ inv, item }, wornIds) => !wornIds.has(String(inv.id)) && plusOf(inv) === 0 && item?.rarity !== 'U'
 
 // ===== 強化 =====
 // +n にする回（n＝1〜10）の 残骸の数・成功率(%)。【確定】2026-10-10 ユーザーの表
@@ -115,7 +117,7 @@ export const craftCostOf = (item) => (canCraft(item)
 export const craftErrorOf = (item, prof) => {
   if (!item) return 'その装備はありません'
   const c = craftCostOf(item)
-  if (!c) return 'ノーマルの装備は作れません'
+  if (!c) return item.rarity === 'U' ? 'ユニークの装備は作れません' : 'ノーマルの装備は作れません'
   if (scrapOf(prof?.materials, c.area) < c.scrap) return `${scrapNameOf(c.area)}が足りません`
   if ((Number(prof?.gold) || 0) < c.gold) return 'Goldが足りません'
   return null

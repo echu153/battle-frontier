@@ -17,7 +17,7 @@
 import {
   resolveAttack, healOf, roll, goesFirst, rollExtraAction,
 } from './combat.js'
-import { STAT_KEYS, calcPower } from './stats.js'
+import { STAT_KEYS, STAT_DEFS, calcPower } from './stats.js'
 import { skillsOf, isPassive, passiveOf, offClassMult, scaleTable, mpOf, mpPctOf } from './skills.js'
 import { classBonusOf } from './classBonus.js'
 import {
@@ -41,6 +41,8 @@ import {
 import {
   initSet, setResistMult, setInflictMult, setPoisonMult, shortenAil, ailCountOfSide,
   setTakenMult, setCritTakenMult, setDealMult, useSetDodge, setAfterDamage, setTurnsUp, tickSet,
+  // ★ユニーク装備の能力（「レベルキャップあり」版・2026-10-21）。セット能力と同じ入れ物（setFx）に入っている
+  setDefPen, setCritDmg, setImmune, setDrainPct, addSetStats, addSetFlat, fxName, ALL_SKILLS_SLOTS,
 } from './battleSet.js'
 
 export const NORMAL_ATTACK_MULT = 1.0 // 通常攻撃の倍率（消費MP0）
@@ -185,6 +187,8 @@ export const liveStats = (side, acting = false) => {
   if (side.setFx?.whileAilStat && ailCountOfSide(side) > 0) {
     for (const [k, v] of Object.entries(side.setFx.whileAilStat)) add(k, v)
   }
+  // ★ユニーク：いつものステ+%・ターンや攻撃で積み上がるステ・スキルを全部使ったときのステ（バフではないので消されない）
+  if (side.setFx) addSetStats(side, add)
   // 武器の進化：かわすたびAGI＋／被弾するたびSTR＋（どちらも EVO_STACK_MAX 回まで）
   if (side.evo?.onDodge.agi && side.evoStacks?.dodge)
     add('agi', side.evo.onDodge.agi * Math.min(EVO_STACK_MAX, side.evoStacks.dodge))
@@ -206,6 +210,8 @@ export const liveStats = (side, acting = false) => {
     if (side.ramp.def) add('vit', side.ramp.def * n)
   }
   const eff = effectiveStats(side.base, b)
+  // ★ユニーク：影縫いのブーツで奪ったAGI（固定の値。変換・加算より先に足す）
+  if (side.uq) addSetFlat(side, eff)
   // 魔導剣術：INTの20%をSTRへ「変換」する。移した元は減る
   for (const c of side.pa.converts) {
     const moved = Math.round((eff[c.from] || 0) * (c.pct / 100))
@@ -397,6 +403,11 @@ const applyIncoming = (me, foe, dmg, kind, rng, log, pre = null) => {
   if (foe.taken?.[kind]) d *= foe.taken[kind]
   // ★防具のセット能力（v2cap）：深淵の加護・古兵の意地（HP30%以下）・氷河の守り（鈍足の相手から）
   if (foe.setFx) d *= setTakenMult(me, foe)
+  // ★ユニーク：磯蟹の大篭手（同じ種類のダメージを受けたら、次の同じ種類のダメージ−%）
+  if (foe.setFx?.nextSameCut && foe.uq) {
+    if (foe.uq.seen[kind]) d *= 1 - foe.setFx.nextSameCut / 100
+    foe.uq.seen[kind] = true
+  }
   // 武器の進化：被ダメージ−%（代償で付いた「被ダメージ+%」はここでマイナスに効く）
   const evoCut = evoCutPct(foe.evo, { hpPct: (foe.hp / Math.max(1, foe.base.hp)) * 100, kind })
   if (evoCut) d *= Math.max(0.1, 1 - evoCut / 100)
@@ -439,6 +450,7 @@ const applyIncoming = (me, foe, dmg, kind, rng, log, pre = null) => {
   }
   if (foe.endure) foe.endure.acc += out
   if (foe.setFx?.rootHealPct) foe.rootAcc += out   // ★防具のセット能力：根を張る（ターンの終わりに回復）
+  if (me?.uq && me.setFx?.echo) me.uq.echoAcc += out   // ★ユニーク：刻弓レトログラー（その間に与えたダメージを数える）
   // 不屈：致命傷をHP1で耐える（1戦に1回・確率）
   if (foe.hp <= 0 && foe.evo.guts && !foe.gutsUsed && roll(foe.evo.guts, rng)) {
     foe.gutsUsed = true
@@ -477,7 +489,216 @@ const applyIncoming = (me, foe, dmg, kind, rng, log, pre = null) => {
       for (const l of got) log.push(l)
     }
   }
+  if (me && foe.setFx) uniqueOnHurt(me, foe, out, rng, log)
   return out
+}
+
+// ===== ユニーク装備の能力（「レベルキャップあり」版・2026-10-21）=====
+// 項目の意味は battleSet.js の冒頭。今のⅡのキャラ・敵は setFx を持たないので、ここは呼ばれても何もしない
+const uniLog = (side, key, text, react = false) =>
+  ({ side: side.name, type: react ? 'uniqueFx' : 'uniqueAct', name: fxName(side, key), text })
+const STAT_LABEL = Object.fromEntries(Object.entries(STAT_DEFS).map(([k, d]) => [k, d.label]))
+
+// 攻撃を受けたとき（受けた側 foe の能力）：嵐纏の重鎧（返す）・フロストバーンの聖鎧（鈍足の相手を麻痺）・天罰の剛甲（スキルなら封印）
+function uniqueOnHurt(me, foe, out, rng, log) {
+  const fx = foe.setFx
+  if (fx.reflect && foe.hp > 0 && me.hp > 0) {
+    const back = Math.max(1, Math.floor(out * fx.reflect / 100))
+    me.hp -= back
+    log.push(uniLog(foe, 'reflect', `${me.name}に${back.toLocaleString()}ダメージを返した！`, true))
+    keepAlive(me, log)
+    setAfterDamage(me, log, healMaxAmount, gainHp)
+    checkRevive(me, log)
+  }
+  if (foe.hp <= 0 || me.hp <= 0) return
+  for (const c of fx.counterAilIf || []) {
+    if (!hasAilment(me.ail, c.if)) continue
+    const got = []
+    if (tryInflict(foe, me, { key: c.key, chance: c.chance }, rng, got)) {
+      log.push(uniLog(foe, 'counterAilIf', `${AIL_LABEL[c.if]}の${me.name}に${AIL_LABEL[c.key]}を返した！`, true))
+    }
+    for (const l of got) log.push(l)
+  }
+  // 天罰の剛甲：スキルで攻撃されたときだけ。封印は相手の次のターンまで（このターンの終わりに1つ減る＝2で渡す）
+  if (fx.counterSeal && me.curAtk === 'skill') {
+    const got = []
+    if (tryInflict(foe, me, { key: 'seal', chance: fx.counterSeal.chance, turns: 2 }, rng, got)) {
+      log.push(uniLog(foe, 'counterSeal', `${me.name}を封印した！（次のターン、MPを使うスキルが使えない）`, true))
+    }
+    for (const l of got) log.push(l)
+  }
+}
+
+// 自分の攻撃（スキル・通常攻撃）の与ダメージ倍率のうち、その攻撃だけに乗るもの：
+//   プリズムハート（スキル）・刹那の星刀（最初の攻撃スキル）・デスロール（当て続けた数）・クロックワークベルト（溜まった一撃）
+function uniqueMainMult(me, isSkill, uLog) {
+  const fx = me.setFx
+  const uq = me.uq
+  if (!fx || !uq) return 1
+  let pct = 0
+  if (isSkill && fx.skillDeal) pct += fx.skillDeal
+  if (isSkill && fx.firstSkill && !uq.firstDone) {
+    uq.firstDone = true
+    pct += fx.firstSkill
+    uLog.push(uniLog(me, 'firstSkill', `この戦闘で最初のスキル！ 与ダメージ+${fx.firstSkill}%`))
+  }
+  if (fx.hitStreak && uq.streak > 0) pct += fx.hitStreak.per * uq.streak
+  if (fx.burstEvery && uq.burst) {
+    uq.burst = false
+    pct += fx.burstEvery.pct
+    uLog.push(uniLog(me, 'burstEvery', `溜まった一撃！ 与ダメージ+${fx.burstEvery.pct}%`))
+  }
+  return 1 + pct / 100
+}
+
+// 自分の攻撃が終わったとき（hits＝当たった数・preAil＝攻撃の前に相手がかかっていた状態異常・mult＝その攻撃の1発目の倍率）
+function uniqueAfterAttack(me, foe, { hits, crit, kind, mult, preAil }, rng, log) {
+  const fx = me.setFx
+  const uq = me.uq
+  if (!fx || !uq) return
+  // デスロール：当てたら+1・全部外れたら0へ
+  if (fx.hitStreak) uq.streak = hits > 0 ? Math.min(Math.floor(fx.hitStreak.max / fx.hitStreak.per), uq.streak + 1) : 0
+  if (hits <= 0 || foe.hp <= 0 || me.hp <= 0) return
+  for (const g of fx.hitGrow || []) {
+    const before = uq.grow[g.stat] || 0
+    uq.grow[g.stat] = Math.min(g.max, before + g.per)
+    if (uq.grow[g.stat] > before) log.push(uniLog(me, 'hitGrow', `${STAT_LABEL[g.stat] || g.stat}+${g.per}%（合わせて+${uq.grow[g.stat]}%）`))
+  }
+  if (fx.critDmgStack && uq.critDmg < fx.critDmgStack.max) {
+    uq.critDmg = Math.min(fx.critDmgStack.max, uq.critDmg + fx.critDmgStack.per)
+    log.push(uniLog(me, 'critDmgStack', `クリティカルのダメージ+${uq.critDmg}%`))
+  }
+  if (crit && fx.critGrow) {
+    const top = Math.floor(fx.critGrow.max / fx.critGrow.per)
+    if (uq.critStacks < top) {
+      uq.critStacks += 1
+      log.push(uniLog(me, 'critGrow', `${fx.critGrow.stats.map(k => STAT_LABEL[k] || k).join('・')}+${fx.critGrow.per}%（合わせて+${uq.critStacks * fx.critGrow.per}%）`))
+    }
+  }
+  for (const c of fx.onHitAilIf || []) if (preAil.includes(c.if)) tryInflict(me, foe, { key: c.key, chance: c.chance }, rng, log)
+  for (const s of fx.onHitStack || []) {
+    if (!roll(s.chance, rng)) continue
+    const cur = foe.enStacks[s.stat] || 0
+    const next = Math.max(s.cap, cur + s.pct)
+    if (next === cur) continue
+    foe.enStacks[s.stat] = next
+    log.push(uniLog(me, 'onHitStack', `${foe.name}の${STAT_LABEL[s.stat] || s.stat}${s.pct}%（合わせて${next}%）`))
+  }
+  // ★重ねない（文に「重複」が無い）：かかっている間にまた当たったら、長さだけ戻す
+  for (const t of fx.onHitTimed || []) {
+    if (!roll(t.chance, rng)) continue
+    if (foe.debuffImmune > 0) { log.push({ side: foe.name, type: 'debuffImmune' }); continue }
+    const tag = `uq:${fxName(me, 'onHitTimed')}`
+    const cur = foe.timedBuffs.find(b => b.uq === tag && b.turns > 0)
+    if (cur) cur.turns = t.turns
+    else foe.timedBuffs.push({ table: { ...t.table }, turns: t.turns, uq: tag })
+    log.push(uniLog(me, 'onHitTimed', `${foe.name}の${Object.entries(t.table).map(([k, v]) => `${STAT_LABEL[k] || k}${v}%`).join('・')}（${t.turns}ターン${cur ? '・長さを戻した' : ''}）`))
+  }
+  for (const a of fx.addDmg || []) {
+    if (foe.hp <= 0) break
+    strike(me, foe, { mult: a.rate, kind: a.kind, atkStat: a.stat, label: fxName(me, 'addDmg', '追加ダメージ'), sureHit: true }, rng, log)
+  }
+  for (const c of fx.chaseIfAil || []) {
+    if (foe.hp <= 0 || !preAil.includes(c.key) || !roll(c.chance, rng)) continue
+    strike(me, foe, { mult: mult * c.mult, kind, label: `${fxName(me, 'chaseIfAil', '追撃')}（もう1回）`, sureHit: true }, rng, log)
+  }
+}
+
+// 攻撃をかわしたとき（かわした側 foe）：エウロスブーツ（HP回復）。1回の攻撃につき1回
+function uniqueDodged(foe, log) {
+  const p = foe.setFx?.dodgeHeal
+  if (!p || foe.hp <= 0) return
+  const got = gainHp(foe, healMaxAmount(foe, p))
+  if (got > 0) log.push(uniLog(foe, 'dodgeHeal', `かわしてHPが${got.toLocaleString()}回復した！`, true))
+}
+
+// スキルを撃ったとき（使った枠を覚える）：深紅の牙輪・深紅の魔眼石（5つの枠を全部うめて、全部を1回ずつ使ったら+%）
+function uniqueSkillUsed(me, idx, log) {
+  const fx = me.setFx
+  const uq = me.uq
+  if (!fx?.allSkillsBuff || !uq || uq.allOn) return
+  uq.used.add(idx)
+  if (me.slots.length >= ALL_SKILLS_SLOTS && uq.used.size >= me.slots.length) {
+    uq.allOn = true
+    log.push(uniLog(me, 'allSkillsBuff', `セットしたスキルを全部使った！ ${Object.entries(fx.allSkillsBuff).map(([k, v]) => `${STAT_LABEL[k] || k}+${v}%`).join('・')}`))
+  }
+}
+
+// 相手の強化（プラスの補正）をすべて消す（禁書アポクリファ）。消した数を返す
+function dispelAll(foe) {
+  let n = 0
+  for (const [k, v] of Object.entries(foe.buffs)) if (v > 0) { delete foe.buffs[k]; n++ }
+  for (const t of foe.timedBuffs || []) {
+    for (const [k, v] of Object.entries(t.table || {})) if (v > 0) { delete t.table[k]; n++ }
+  }
+  foe.timedBuffs = (foe.timedBuffs || []).filter(t => Object.keys(t.table || {}).length > 0)
+  return n
+}
+
+// 戦闘の始め：影縫いのブーツ（AGIを奪う）・亡将の鉄兜（状態異常を1回防ぐ）
+function uniqueBattleStart(me, foe, log) {
+  const fx = me.setFx
+  if (!fx || !me.uq) return
+  if (fx.agiSteal) {
+    const amt = Math.round((liveStats(foe).agi || 0) * fx.agiSteal / 100)
+    const guards = foe.guards
+    const blocked = foe.debuffImmune > 0
+    if (!blocked) applyDebuff(foe, { agi: -fx.agiSteal }, log)
+    if (!blocked && foe.guards === guards && amt > 0) {
+      me.uq.flat.agi = (me.uq.flat.agi || 0) + amt
+      log.push(uniLog(me, 'agiSteal', `${foe.name}のAGIを${amt.toLocaleString()}奪った！`))
+    }
+  }
+  if (fx.ward) {
+    me.uq.ward = 1
+    log.push(uniLog(me, 'ward', '状態異常を1回防ぐ守りを得た！'))
+  }
+}
+
+// ターンの頭（turn＝1から数えるターン）：禁書アポクリファ（強化を消す）・亡将の鉄兜（守りを得る）・クロックワークベルト（次の攻撃が溜まる）
+function uniqueTurnStart(me, foe, turn, log) {
+  const fx = me.setFx
+  if (!fx || !me.uq || me.hp <= 0) return
+  if (fx.dispelTurns?.includes(turn)) {
+    const n = dispelAll(foe)
+    log.push(uniLog(me, 'dispelTurns', n > 0 ? `${foe.name}の強化を${n}つ消した！` : `${foe.name}の強化を消そうとした（強化はなかった）`))
+  }
+  if (fx.ward && turn > 1 && (turn - 1) % fx.ward.every === 0 && me.uq.ward <= 0) {
+    me.uq.ward = 1
+    log.push(uniLog(me, 'ward', '状態異常を1回防ぐ守りを得た！'))
+  }
+  if (fx.burstEvery && turn % fx.burstEvery.every === 0 && !me.uq.burst) {
+    me.uq.burst = true
+    log.push(uniLog(me, 'burstEvery', `歯車がかみ合った！（次の攻撃の与ダメージ+${fx.burstEvery.pct}%）`))
+  }
+}
+
+// ターンの終わり：刻弓レトログラー（その間に与えたダメージをもう一度）・フューネラルクラウン（治った状態異常の数だけ回復）
+function uniqueTurnEnd(me, foe, turn, log) {
+  const fx = me.setFx
+  const uq = me.uq
+  if (!fx || !uq) return
+  if (fx.echo && turn % fx.echo.every === 0) {
+    const acc = uq.echoAcc
+    uq.echoAcc = 0
+    if (acc > 0 && foe.hp > 0 && me.hp > 0) {
+      const dmg = Math.max(1, Math.floor(acc * fx.echo.pct / 100))
+      foe.hp -= dmg
+      log.push(uniLog(me, 'echo', `時の反響！ ${foe.name}に${dmg.toLocaleString()}ダメージ！（${fx.echo.every}ターンの与ダメージの${fx.echo.pct}%）`))
+      keepAlive(foe, log)
+      setAfterDamage(foe, log, healMaxAmount, gainHp)
+      checkRevive(foe, log)
+    }
+  }
+  if (fx.cureHeal) {
+    const now = AIL_KEYS.filter(k => hasAilment(me.ail, k))
+    const cured = uq.ails.filter(k => !now.includes(k))
+    uq.ails = now
+    if (cured.length && me.hp > 0) {
+      const got = gainHp(me, healMaxAmount(me, fx.cureHeal * cured.length))
+      log.push(uniLog(me, 'cureHeal', `${cured.map(k => AIL_LABEL[k]).join('・')}が治った！ HPが${got.toLocaleString()}回復した！`))
+    }
+  }
 }
 
 // ★一次職：リザレクション（戦闘中1回、HPが0になったら立ち上がる）
@@ -558,8 +779,8 @@ const applyDebuff = (foe, table, log) => {
 // me は入れる側。武器の進化は**入れる側の付与率＋**と**受ける側の抵抗**の両方が効く
 // 入ったら true（防具のセット能力の「攻撃を受けると相手に状態異常」がログの並びに使う）
 const tryInflict = (me, foe, a, rng, log) => {
-  // ★一次職：不動（麻痺・鈍足にかからない）
-  if (foe?.pa?.ex?.immune?.includes(a.key)) {
+  // ★一次職：不動（麻痺・鈍足にかからない）／★ユニーク：炎竜鱗の手甲・九頭の鱗衣・深淵歩きの脚甲
+  if (foe?.pa?.ex?.immune?.includes(a.key) || setImmune(foe, a.key)) {
     log.push({ side: foe.name, type: 'immune', ail: AIL_LABEL[a.key] })
     return false
   }
@@ -578,6 +799,12 @@ const tryInflict = (me, foe, a, rng, log) => {
   // ★v2cap：麻痺・封印は受けた回数ぶん下がる（抵抗を引いたあとの確率に掛ける）
   const pct = foe.ailDiminish ? diminishedChance(setPct, a.key, foe.ailTimes) : setPct
   if (!roll(pct, rng)) return false
+  // ★ユニーク：亡将の鉄兜（状態異常を1回防ぐ守り）。かかるはずだったものだけ防ぐ（毒の上から毒は元から入らないので使わない）
+  if (foe.uq?.ward > 0 && !(a.key === 'poison' && foe.ail.poison?.turns > 0)) {
+    foe.uq.ward = 0
+    log.push(uniLog(foe, 'ward', `${AIL_LABEL[a.key]}を防いだ！`, true))
+    return false
+  }
   // ★隠身（暗殺者）：自分が付ける出血はスタック上限が伸びる
   // ★ドットの1刻み上限は**付けた側の攻撃力**から決める（HPが桁違いの相手で壊れないように）
   const eAtk = liveStats(me, true)
@@ -768,6 +995,7 @@ export const critDmgOf = (me) => {
   const st = me.pa.hitStack
   return me.pa.critDmg + (st ? Math.min(st.max, me.hitStacks) * (st.critDmg || 0) : 0)
     + (me.lockOn?.turns > 0 ? (me.lockOn.critDmg || 0) : 0)   // ★上位クラス：ロックオン
+    + setCritDmg(me)   // ★ユニーク：ウラノスの天砲（当てるたび積む）
 }
 // ★上位クラス（2026-10-15）：照準1つにつきクリティカル率+（スキル以外の攻撃にも乗る）
 const aimCritOf = (me) => (me.aimCritPer ? (me.stk?.aim || 0) * me.aimCritPer : 0)
@@ -917,6 +1145,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   }
   slot.uses -= 1
   me.ptr = (idx + 1) % me.slots.length
+  if (me.uq) uniqueSkillUsed(me, idx, log)   // ★ユニーク：深紅の牙輪・深紅の魔眼石（使った枠を覚える）
 
   // 元素共鳴：直前に使ったスキルと違えば、この行動だけ補正が乗る
   const prevSkill = me.lastSkill        // 元素使いのコンボが見る「直前に使った技」
@@ -975,10 +1204,14 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       // 第六感の「貫通+10%」はスキルの防御貫通に足す。武器の進化ぶんも同じ枠
       // ★上位クラス：準備（ip）が足す防御無視（コンボ・薬効）と、雷の宿りのぶんは ip のあとで足す
       let defPen = Math.min(1, (skill.defPen || 0) + (ws?.defPen || 0) + me.pa.defPenBonus / 100 + me.evo.defPen / 100
-        + (whileStackOn(skill, me) ? (skill.whileStack.defPen || 0) : 0))
+        + (whileStackOn(skill, me) ? (skill.whileStack.defPen || 0) : 0) + setDefPen(me, skill.kind))
       // ★条件つき吸収（狂戦士の血啜り）：**撃つ前から**相手がその状態異常なら吸える
       //   （この技自身が付けた出血では吸えない＝先に撒いてから吸う流れになる）
       const drainIf = skill.drainIfAil && hasAilment(foe.ail, skill.drainIfAil.key)
+      // ★ユニーク：簒奪の刃（撃つ前から出血の相手なら吸う）・攻撃の前の相手の状態異常（絶零の魔導砲・ブライトレインが見る）
+      const uDrain = me.uq ? setDrainPct(me, foe) : 0
+      const preAil = me.uq ? AIL_KEYS.filter(k => hasAilment(foe.ail, k)) : []
+      const uLog = []
       // ★出血スタックの起爆（暗殺者の急所突き）。**相手に積んだ出血を全部消費して威力を上げる**
       //   ＝「出血を撒く技」と「刈り取る技」で1つの流れになる（消費するので撒き直しが要る）
       let burst = 1
@@ -997,7 +1230,8 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       // ★上位クラス（2026-10-15）：先に状態異常を付ける技（爆炎毒＝両方付けばこの一撃から化学反応が乗る）
       if (skill.preAil && skill.ails) for (const a of skill.ails) tryInflict(me, foe, { ...a, chance: a.chance * off }, rng, log)
       // ★防具のセット能力：与ダメージ+％（深淵の力・群狼の牙・業火・蜘蛛の糸・峰風）は一次職のぶんと同じくダメージ全体に掛ける
-      const dealMult = passiveDealMult(me, foe) * setDealMult(me, foe, eMe, eFoe)
+      // ★ユニーク：物理／魔法の与ダメージ+%は種別で（setDealMult の kind）・この攻撃だけに乗るもの（uniqueMainMult）
+      const dealMult = passiveDealMult(me, foe) * setDealMult(me, foe, eMe, eFoe, skill.kind) * uniqueMainMult(me, true, uLog)
       // ★防具のセット能力：蜃気楼（受ける側が戦闘中1回、この攻撃を完全にかわす＝全部の発が外れる）
       const mirageLog = []
       const mirage = useSetDodge(foe, mirageLog)
@@ -1087,6 +1321,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       const preScale = wantPre && raw > 0 ? Math.max(1, rawPre / raw) : 1
       // かわされたぶん／当てたぶんは、相手側の「かわすたび」フックと次の行動の条件になる
       evoOnDodge(foe, missed)
+      if (missed > 0 && foe.setFx) uniqueDodged(foe, uLog)   // ★ユニーク：エウロスブーツ（かわしたら回復）
       foe.justDodged = hits === 0
       foe.justHurt = hits > 0
       if (hits === 0) foe.dodgeCount = (foe.dodgeCount || 0) + 1   // ★上位クラス：流転掌が見る
@@ -1110,7 +1345,10 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       rememberSkill(foe, skill.name)
       // 受け手の反応（骸の壁・エンチャントの軽減・跳ね返し）も撃った行より後ろに出す
       const afterHurt = []
+      // ★ユニーク：天罰の剛甲が「スキルで攻撃されたか」を見る（applyIncoming の間だけ立てる）
+      me.curAtk = 'skill'
       const dmg = applyIncoming(me, foe, raw, skill.kind, rng, afterHurt, wantPre ? Math.floor(raw * preScale) : null)
+      me.curAtk = null
       // ★先に「撃った」行を置く（状態異常やスタックの行より前に出す）。吸収の額は後で埋める
       const entry = { side: me.name, type: 'skill', skill: skill.name, kind: skill.kind,
         damage: dmg, crit, hits, of: nHits, drain: 0 }
@@ -1118,6 +1356,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       for (const l of mirageLog) log.push(l)
       for (const l of afterHurt) log.push(l)
       for (const l of afterAil) log.push(l)
+      for (const l of uLog) log.push(l)
       if (hits > 0) {
         bumpHitStack(me, hits)
         onHit(me, foe, skill.kind, rng, log)
@@ -1138,6 +1377,8 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
         // ★上位クラス（2026-10-15）：当てたときの効果
         onHitRework(me, foe, skill, ip, imb, elemHit, off, rng, log)
       }
+      // ★ユニーク：当てたとき・外したときの能力（全部外れてもデスロールを0へ戻すので、当たり外れによらず呼ぶ）
+      if (me.uq) uniqueAfterAttack(me, foe, { hits, crit, kind: skill.kind, mult: baseMultOf(skill, 0, ip), preAil }, rng, log)
       // ★上位クラス：共鳴・罪を使い切る技は、当たり外れに関係なく撃ったら0（プリズムバースト・断罪）
       if (ip.resoUsed) me.reso = 0
       if (ip.sinUsed) me.sin = 0
@@ -1159,6 +1400,8 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       if (me.en.drainPct > 0 && dmg > 0) drained += Math.max(1, Math.floor(dmg * me.en.drainPct / 100))
       // ★一次職：ブラッディロア（その間、攻撃のたびに与えたダメージの一部を回復）
       if (me.lifeSteal?.turns > 0 && dmg > 0) drained += Math.max(1, Math.floor(dmg * me.lifeSteal.pct / 100))
+      // ★ユニーク：簒奪の刃（出血の相手を攻撃したとき、与ダメの%を回復）。吸収の上限はほかと同じ
+      if (uDrain > 0 && dmg > 0) drained += Math.max(1, Math.floor(dmg * uDrain / 100))
       if (drained > 0) {
         drained = Math.min(drained, drainCapOf(me, crit))
         gainHp(me, drained)
@@ -1354,7 +1597,7 @@ const strike = (me, foe, { mult, kind = 'phys', label, hits = 1, atkStat = null,
   if (airDodges(foe, rng)) { log.push({ side: me.name, type: 'airEvade', skill: label }); return 0 }
   const eMe = liveStats(me, true)
   const eFoe = liveStats(foe)
-  const dm = passiveDealMult(me, foe) * setDealMult(me, foe, eMe, eFoe)   // 与ダメージ+％はダメージ全体に掛ける（防具のセット能力も）
+  const dm = passiveDealMult(me, foe) * setDealMult(me, foe, eMe, eFoe, kind)   // 与ダメージ+％はダメージ全体に掛ける（防具のセット能力・ユニークも）
   // ★防具のセット能力：蜃気楼（受ける側が戦闘中1回、この攻撃を完全にかわす）
   const mirageLog = []
   const mirage = useSetDodge(foe, mirageLog)
@@ -1367,7 +1610,7 @@ const strike = (me, foe, { mult, kind = 'phys', label, hits = 1, atkStat = null,
     if (mirage) continue
     const r = resolveAttack({
       attacker: eMe, defender: eFoe, mult, kind, atkStat, add,
-      defPen: Math.min(1, defPen + me.pa.defPenBonus / 100 + me.evo.defPen / 100),
+      defPen: Math.min(1, defPen + me.pa.defPenBonus / 100 + me.evo.defPen / 100 + setDefPen(me, kind)),
       sureHit, wantPre,
       hitBonus: me.pa.hitBonus + me.en.hitBonus + ailAccPct(me.ail) + hitBonus,
       evaBonus: foe.pa.evaBonus + foe.en.evaBonus + (foe.air ? AIR_EVA : 0) + stanceEvaOf(foe),
@@ -1529,11 +1772,15 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
   // ★上位クラス：宿り（魔法剣士の通常攻撃にも乗る）・ロックオン（必中）・聖光（防御で減る前のぶん）
   const imb = imbueFxOf(me)
   const wantPre = !!foe.pa.ex?.holy
+  // ★ユニーク：簒奪の刃（攻撃の前から出血の相手なら吸う）・攻撃の前の相手の状態異常
+  const uDrain = me.uq ? setDrainPct(me, foe) : 0
+  const preAil = me.uq ? AIL_KEYS.filter(k => hasAilment(foe.ail, k)) : []
   // ★防具のセット能力：蜃気楼（受ける側が戦闘中1回、この攻撃を完全にかわす＝外れたのと同じ扱い）
   const mirageLog = []
   const r = useSetDodge(foe, mirageLog) ? { hit: false, crit: false, damage: 0 } : resolveAttack({
     attacker: eMe, defender: eFoe, mult: NORMAL_ATTACK_MULT * multScale, kind: me.kind,
-    defPen: Math.min(1, me.pa.defPenBonus / 100 + me.evo.defPen / 100 + (imb?.elem === 'thunder' ? IMBUE_FX.thunder.defPen * imb.k : 0)),
+    defPen: Math.min(1, me.pa.defPenBonus / 100 + me.evo.defPen / 100 + (imb?.elem === 'thunder' ? IMBUE_FX.thunder.defPen * imb.k : 0)
+      + setDefPen(me, me.kind)),
     sureHit: me.lockOn?.turns > 0, wantPre,
     hitBonus: me.pa.hitBonus + me.en.hitBonus + evoHit(me, foe) + ailAccPct(me.ail),
     evaBonus: foe.pa.evaBonus + foe.en.evaBonus + evoEva(foe) + foresightEva(foe, null) + stanceEvaOf(foe),
@@ -1545,6 +1792,8 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
   }, rng)
   const preRatio = r.hit && r.pre ? r.pre / Math.max(1, r.damage) : 1
   evoOnDodge(foe, r.hit ? 0 : 1)
+  const uLog = []   // ★ユニーク：この攻撃で出た行（撃った行の後ろに出す）
+  if (!r.hit && foe.setFx) uniqueDodged(foe, uLog)   // ★ユニーク：エウロスブーツ（かわしたら回復）
   foe.justDodged = !r.hit
   foe.justHurt = !!r.hit
   if (!r.hit) foe.dodgeCount = (foe.dodgeCount || 0) + 1   // ★上位クラス：流転掌が見る
@@ -1554,7 +1803,9 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
   if (r.hit && r.crit) evoOnCrit(me, foe, rng, log)
   // ★一次職：与ダメージ+％（パッシブ）・流水の構えの溜め。ダメージ全体に掛ける
   // ★防具のセット能力：与ダメージ+％も同じ枠・大地の守り（受けるクリティカルダメージ−%）
-  const ichijiK = passiveDealMult(me, foe) * consumeDodgeBoost(me) * setDealMult(me, foe, eMe, eFoe)
+  // ★ユニーク：物理／魔法の与ダメージ+%（kind）・この攻撃だけに乗るもの（デスロール・クロックワークベルト。スキルのものは乗らない）
+  const ichijiK = passiveDealMult(me, foe) * consumeDodgeBoost(me) * setDealMult(me, foe, eMe, eFoe, me.kind)
+    * uniqueMainMult(me, false, uLog)
   if (r.hit && ichijiK !== 1) r.damage = Math.max(1, Math.floor(r.damage * ichijiK))
   if (r.hit && r.crit && foe.setFx?.critTakenCut) r.damage = Math.max(1, Math.floor(r.damage * setCritTakenMult(foe)))
   // 通常攻撃も「物理攻撃」なのでエンチャントの与ダメージ+%とヒット時効果が乗る
@@ -1575,9 +1826,14 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
   }
   // ★一次職：ブラッディロア（その間、攻撃のたびに回復）
   if (me.lifeSteal?.turns > 0 && dmg > 0) gainHp(me, Math.min(drainCapOf(me, !!r.crit), Math.max(1, Math.floor(dmg * me.lifeSteal.pct / 100))))
+  // ★ユニーク：簒奪の刃（出血の相手を攻撃したとき、与ダメの%を回復・吸収の上限はほかと同じ）
+  if (uDrain > 0 && dmg > 0) gainHp(me, Math.min(drainCapOf(me, !!r.crit), Math.max(1, Math.floor(dmg * uDrain / 100))))
   log.push({ side: me.name, type: 'normal', kind: me.kind, damage: dmg, crit: r.crit, hit: r.hit, mult: multScale })
   for (const l of mirageLog) log.push(l)
   for (const l of after) log.push(l)
+  for (const l of uLog) log.push(l)
+  // ★ユニーク：当てたとき・外したときの能力（外れたらデスロールを0へ）
+  if (me.uq) uniqueAfterAttack(me, foe, { hits: r.hit ? 1 : 0, crit: !!(r.hit && r.crit), kind: me.kind, mult: NORMAL_ATTACK_MULT * multScale, preAil }, rng, log)
   // ★上位クラス：宿りの追加効果（炎の追撃・氷・雷）
   if (r.hit && imb) applyImbueFx(me, foe, imb.elem, imb.k, rng, log)
   afterAttack(me, foe, r.hit ? 1 : 0, !!(r.hit && r.crit), rng, log)
@@ -1694,6 +1950,9 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
   const b = createSide(fighterB, band)
   const log = []
   let turn = 1
+  // ★ユニーク：戦闘の始めの能力（影縫いのブーツ・亡将の鉄兜）。setFx が無ければ何もしない
+  uniqueBattleStart(a, b, log)
+  uniqueBattleStart(b, a, log)
 
   for (; turn <= maxTurns; turn++) {
     // 「経過したターン数」で効くもの（1ターン目は素の値）
@@ -1701,6 +1960,9 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
     b.turn = turn - 1
     if (a.ramp) a.ramp.turn = a.turn
     if (b.ramp) b.ramp.turn = b.turn
+    // ★ユニーク：ターンの頭の能力（禁書アポクリファ・亡将の鉄兜・クロックワークベルト）
+    uniqueTurnStart(a, b, turn, log)
+    uniqueTurnStart(b, a, turn, log)
     // 行動順：このターン撃つ予定のスキルの優先度 → AGI → ランダム
     const eA = liveStats(a)
     const eB = liveStats(b)
@@ -1755,6 +2017,9 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
         for (const l of after) log.push(l)
       }
     }
+    // ★ユニーク：ターンの終わりの能力（刻弓レトログラー・フューネラルクラウン）
+    if (a.hp > 0 && b.hp > 0) uniqueTurnEnd(a, b, turn, log)
+    if (a.hp > 0 && b.hp > 0) uniqueTurnEnd(b, a, turn, log)
     if (a.hp <= 0 || b.hp <= 0) break
     // 画面でHPバーを出すための、ターン終わりのスナップショット（戦闘の結果には影響しない）
     log.push({ type:'hp', turn, a: Math.max(0, a.hp), aMax: a.base.hp, b: Math.max(0, b.hp), bMax: b.base.hp })

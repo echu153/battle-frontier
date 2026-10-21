@@ -3,7 +3,7 @@ import { supabase } from '../../supabase'
 import V2Modal from '../../v2/components/V2Modal.jsx'
 import { useStored } from '../../v2/lib/prefs.js'
 import { box, btn, miniBtn, TEXT } from '../../v2/components/v2ui.js'
-import { ITEMS, ITEM_BY_ID, PARTS, SLOTS, RARITIES, RARITY_COLOR, ARMOR_EFFECT, kindLabel, partLabel, rarityLabel, needLvOf } from '../lib/equipment.js'
+import { ITEMS, ITEM_BY_ID, PARTS, SLOTS, RARITIES, ALL_RARITIES, RARITY_COLOR, ARMOR_EFFECT, kindLabel, partLabel, rarityLabel, needLvOf } from '../lib/equipment.js'
 import { spotOf } from '../lib/areas.js'
 import { openUntilOf } from '../lib/sortie.js'
 import { canEquipType } from '../lib/jobs.js'
@@ -32,7 +32,7 @@ import V2capCraftFx from './V2capCraftFx.jsx'
 // ============================================================
 const TABS = [
   { key:'enhance',   label:'強化', desc:`Goldとその装備のエリアの残骸で強化値を+1（+${PLUS_MAX}まで・+1ごとに強さ+10%・最低でも戦闘力+1）。ノーマルの装備はGoldだけで強化できます。失敗すると残骸とGoldはなくなり、強化値はそのままです。着けている装備も強化できます。` },
-  { key:'dismantle', label:'分解', desc:`装備を、その装備のエリアの残骸にします（${RARITIES.map(r => `${rarityLabel(r)}${SCRAP_YIELD[r]}`).join('・')}個）。着けている装備は分解できません。` },
+  { key:'dismantle', label:'分解', desc:`装備を、その装備のエリアの残骸にします（${ALL_RARITIES.map(r => `${rarityLabel(r)}${SCRAP_YIELD[r]}`).join('・')}個）。着けている装備は分解できません。ユニークはまとめての分解に入りません（1つずつなら分解できます）。` },
   { key:'craft',     label:'作成', desc:'レア・エピック・レジェンダリーの装備を、Goldとそのエリアの残骸で作ります（必ずできます・+0で持ち物に入ります）。武器はどの職業のものでも作れます。' },
 ]
 const rowBox = (border, bg = '#000818') => ({ background: bg, border:`1px solid ${border}`, padding:'6px 8px' })
@@ -454,7 +454,7 @@ function SmithModal({ row, prof, busy, msg, onEnhance, onClose }) {
 
 // 分解の確認。何個・どのレア度・どの残骸がいくつ入るかを出す
 function DismantleModal({ list, busy, onConfirm, onClose }) {
-  const counts = RARITIES.map(r => [r, list.filter(x => x.item.rarity === r).length]).filter(([, n]) => n > 0)
+  const counts = ALL_RARITIES.map(r => [r, list.filter(x => x.item.rarity === r).length]).filter(([, n]) => n > 0)
   const enhanced = list.filter(x => plusOf(x.inv) > 0).length
   const one = list.length === 1 ? list[0] : null
   return (

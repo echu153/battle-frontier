@@ -10,6 +10,8 @@ import { plusOf } from '../lib/smith.js'
 import { nameColor } from './v2capGearView.js'
 import { PlusTag, StatGain } from './v2capGear.jsx'
 import V2capArmorSets from './V2capArmorSets.jsx'
+import V2capUniqueFx from './V2capUniqueFx.jsx'
+import { isUnique } from '../lib/equipment.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — ステータスの内訳（プロフィールの中）
@@ -84,6 +86,11 @@ export default function V2capBreakdown({ prof, inventory }) {
       {bd.sets.length > 0 && (<>
         <div style={{ color:'#88aaff', fontSize:'11px', margin:'10px 0 4px' }}>防具のセット能力</div>
         <V2capArmorSets sets={bd.sets} />
+      </>)}
+      {/* ユニークの固有の能力（2026-10-21） */}
+      {Object.values(worn).some(w => isUnique(w.item)) && (<>
+        <div style={{ color:'#88aaff', fontSize:'11px', margin:'10px 0 4px' }}>ユニークの固有の能力</div>
+        <V2capUniqueFx items={Object.values(worn).map(w => w.item).filter(isUnique)} />
       </>)}
 
       <div style={{ color:'#88aaff', fontSize:'11px', margin:'10px 0 4px', display:'flex', justifyContent:'space-between', gap:'6px', flexWrap:'wrap' }}>

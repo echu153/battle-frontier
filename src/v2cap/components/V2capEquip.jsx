@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { supabase } from '../../supabase'
 import { box, miniBtn, TEXT } from '../../v2/components/v2ui.js'
-import { ITEM_BY_ID, SLOTS, SLOT_LABEL, ARMOR_EFFECT, slotsFor, kindLabel, needLvOf } from '../lib/equipment.js'
+import { ITEM_BY_ID, SLOTS, SLOT_LABEL, ARMOR_EFFECT, slotsFor, kindLabel, needLvOf, isUnique, RARITY_COLOR } from '../lib/equipment.js'
+import { UniqueText } from './V2capUniqueFx.jsx'
 import { canEquipType } from '../lib/jobs.js'
 import { equippedItems, wornIdsOf } from '../lib/loadout.js'
 import { powerAt, statsAt, effectivePowerAt, syncLabelOf } from '../lib/gear.js'
@@ -60,7 +61,13 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
                 {w ? (
                   <>
                     <span style={{ flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                      <span style={{ color: nameColor(w.item) }}>{w.item.name}</span>
+                      {/* ユニーク（2026-10-21）はカーソルで固有の能力 */}
+                      {isUnique(w.item)
+                        ? <V2Tip width="260px" color={RARITY_COLOR.U} style={{ color: nameColor(w.item), borderBottom:`1px dotted ${RARITY_COLOR.U}` }}
+                            body={<><div style={{ color: RARITY_COLOR.U }}>{w.item.name}（{w.item.boss}が落とす）</div><UniqueText item={w.item} /></>}>
+                            {w.item.name}
+                          </V2Tip>
+                        : <span style={{ color: nameColor(w.item) }}>{w.item.name}</span>}
                       <PlusTag inv={w.inv} />
                       {/* 装備中の行にLVは出さない（2026-10-14 ユーザー指示）。必要LVに足りないときの「LV〇相当」だけ出す（2026-10-18〜） */}
                       {sync && <span style={{ color:'#ff8844' }}> {sync}</span>}
@@ -127,12 +134,25 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
                   <span>戦闘力 {power}{sync && <span style={{ color:'#ff8844' }}> → {effectivePowerAt(item, inv.ilv, prof.lv, plus)}（{sync}・要求レベルまであと{needLvOf(item, inv.ilv) - prof.lv}LV）</span>}</span>
                   <span>{statLine(statsAt(item, inv.ilv, prof.lv, plus))}</span>
                 </div>
+                {/* ユニーク（2026-10-21）：固有の能力と落とすボス。LV80より低くても能力は全部効く */}
+                {isUnique(item) && (
+                  <div style={{ fontSize:'10px', margin:'2px 0 4px', padding:'3px 6px', border:'1px solid #3a1c23', background:'#12060a' }}>
+                    <UniqueText item={item} />
+                    <div style={{ color:'#7fa6d0' }}>{item.boss}が落とす・同じものは1つまで着けられる</div>
+                  </div>
+                )}
                 <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', alignItems:'center' }}>
                   {usable
-                    ? slotsFor(item).map(slot => (
-                      <button key={slot} onClick={() => equip(slot, inv)} disabled={busy || String(prof.equipped?.[slot]) === String(inv.id)}
-                        style={miniBtn('#44aaff')}>{SLOT_LABEL[slot]}に着ける</button>
-                    ))
+                    ? slotsFor(item).map(slot => {
+                      // ★同じユニークは1つまで（2026-10-21 ユーザー選択）：ほかの枠に同じユニークが着いていたら、その枠には着けられない
+                      const twin = isUnique(item) && SLOTS.some(s => s !== slot && worn[s]?.item.id === item.id && String(worn[s].inv.id) !== String(inv.id))
+                      return twin
+                        ? <span key={slot} style={{ color:'#c69a5c', fontSize:'10px' }}>{SLOT_LABEL[slot]}：同じユニークは1つまで</span>
+                        : (
+                          <button key={slot} onClick={() => equip(slot, inv)} disabled={busy || String(prof.equipped?.[slot]) === String(inv.id)}
+                            style={miniBtn('#44aaff')}>{SLOT_LABEL[slot]}に着ける</button>
+                        )
+                    })
                     : <span style={{ color:'#c69a5c', fontSize:'10px' }}>{prof.class}は{item.type}を装備できない</span>}
                 </div>
               </div>

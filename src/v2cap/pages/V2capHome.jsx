@@ -20,6 +20,7 @@ import V2capDex from '../components/V2capDex.jsx'
 import V2capCasino from '../components/V2capCasino.jsx'
 import V2capAscension from '../components/V2capAscension.jsx'
 import V2capTower from '../components/V2capTower.jsx'
+import V2capUniqueCheck from '../components/V2capUniqueCheck.jsx'
 import { START_CLASSES, weaponsOf, attackKindOf, classDescOf } from '../lib/jobs.js'
 import { apLeftOf } from '../lib/ascension.js'
 import { TOWER_NAME, floorLabel, clampFloor } from '../lib/tower.js'
@@ -67,7 +68,8 @@ const MENU = [
     { key:'casino', label:'賭博場', icon:'🎰', color:'#ff4fa3', action:'スロット・ハイ&ロー・ルーレット' },
   ],
 ]
-const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場', tower:`🗼 ${TOWER_NAME}` }
+const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場', tower:`🗼 ${TOWER_NAME}`,
+  uniqueCheck:'💎 ユニークの能力の確かめ［開発］' }
 // メニューの説明に、いまの職業で残っているAPを出す（振り忘れに気づけるように）。塔はいまの層（守っていればその層）
 const towerActionOf = (prof) => (prof?.tower_guard
   ? `👑 ${floorLabel(prof.tower_guard)}を守っている`
@@ -211,6 +213,23 @@ export default function V2capHome() {
     setProf(data.profile)
     setDevMsg(data.in_shrine ? 'いまの祠を出たあと、次の出撃で安息の祠を見つけます' : '次の出撃で安息の祠を見つけます')
   }
+  // ユニーク（2026-10-21・効果を試す用）：持っていないものを60個ぜんぶもらう／次にボスに勝ったとき必ず落とす
+  const giveUniques = async () => {
+    setBusy(true); setDevMsg('')
+    const { data, error: rpcErr } = await supabase.rpc('v2cap_debug_give_uniques', { p_ids: null })
+    setBusy(false)
+    if (rpcErr || !data?.ok) { setDevMsg(`⚠ ${rpcErr?.message || data?.error || '失敗しました'}`); return }
+    setDevMsg(data.got > 0 ? `ユニークを${data.got}個もらった（装備の画面で着けられます）` : 'ユニークはもう全部持っています')
+    await refresh()
+  }
+  const uniqueNext = async () => {
+    setBusy(true); setDevMsg('')
+    const { data, error: rpcErr } = await supabase.rpc('v2cap_debug_unique_next')
+    setBusy(false)
+    if (rpcErr || !data?.ok) { setDevMsg(`⚠ ${rpcErr?.message || data?.error || '失敗しました'}`); return }
+    setProf(data.profile)
+    setDevMsg('次にボスに勝ったとき、必ずユニークを落とします')
+  }
   const resetChar = async () => {
     setBusy(true)
     const { data, error: rpcErr } = await supabase.rpc('v2cap_dev_reset')
@@ -345,6 +364,12 @@ export default function V2capHome() {
                         {prof?.shrine_force ? '⛲ 次の出撃で祠を見つける（待機中）' : '⛲ 次の出撃で祠を見つける'}
                       </button>
                       <button onClick={placeShrine} disabled={busy} style={miniBtn('#9fe8ff')}>⛲ 安息の祠を出す</button>
+                      {/* ユニーク（2026-10-21）：もらう・次のボスで必ず落とす・60個の能力の確かめ */}
+                      <button onClick={giveUniques} disabled={busy} style={miniBtn('#ff6b84')}>💎 ユニークを全部もらう</button>
+                      <button onClick={uniqueNext} disabled={busy || prof?.unique_force} style={miniBtn('#ff6b84')}>
+                        {prof?.unique_force ? '💎 次のボスでユニーク（待機中）' : '💎 次のボスでユニークを落とす'}
+                      </button>
+                      <button onClick={() => setScreen('uniqueCheck')} style={miniBtn('#ff6b84')}>💎 ユニークの能力を確かめる</button>
                       <button onClick={() => setConfirmReset(true)} disabled={busy} style={miniBtn('#ff8844')}>キャラを作り直す</button>
                     </div>
                     {/* ★「EXPは戦闘と同じ扱い（いまの職業のClassEXPにも同じ量が入る）」の説明は出さない（2026-10-12 ユーザー指示＝出撃の「（ClassEXP +◯）」と一緒に外した） */}
@@ -371,6 +396,7 @@ export default function V2capHome() {
             {screen === 'dex' && <V2capDex prof={prof} />}
             {screen === 'casino' && <V2capCasino prof={prof} onProfile={refresh} />}
             {screen === 'tower' && <V2capTower prof={prof} inventory={inventory} onProfile={refresh} />}
+            {screen === 'uniqueCheck' && <V2capUniqueCheck prof={prof} inventory={inventory} />}
           </div>
         )}
       </div>

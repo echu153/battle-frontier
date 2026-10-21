@@ -20,15 +20,21 @@
 // ★サーバーの v2cap_equipment はこの一覧から tools/v2cap-sql.mjs が作る（手で書き写さない）
 // ============================================================
 import { GEAR_NAMES } from './gearNames.js'
+import { UNIQUE_DEFS } from './uniqueDefs.js'
 
 // ===== レア度 =====
+// ★RARITIES はエリアごとの一覧（落ちる・作る）のレア度。ユニーク（U）はボス固有なので入れない（下の「ユニーク」）
 export const RARITIES = ['N', 'R', 'E', 'L']
-export const RARITY_LABEL = { N:'ノーマル', R:'レア', E:'エピック', L:'レジェンダリー' }
-// 強さの基礎。ノーマル40＝前のCランク（gear.js の「ノーマルを全部そろえると本体と同じくらい」の基準）
+export const UNIQUE_RARITY = 'U'
+// 持ち物の絞り込みなどで出すレア度（ユニークを含む）
+export const ALL_RARITIES = [...RARITIES, UNIQUE_RARITY]
+export const RARITY_LABEL = { N:'ノーマル', R:'レア', E:'エピック', L:'レジェンダリー', U:'ユニーク' }
+// 強さの基礎。ノーマル40＝前のCランク（gear.js の「ノーマルを全部そろえると本体と同じくらい」の基準）。ユニークはステを1つずつ決めている（下の「ユニーク」）
 export const RARITY_BASE = { N:40, R:50, E:60, L:70 }
 // 【確定】2026-10-10 ユーザー指示「ノーマル灰色、レアは青、エピックは紫、レジェンダリーは黄色」（ドロップのログ・装備の名前・レア度の印で同じ色）
 //   ★背景が濃紺なので、灰色も黄色も明るめ（暗い色は読めない＝v2ui.js の TEXT の注意）
-export const RARITY_COLOR = { N:'#aab4be', R:'#4488ff', E:'#c060ff', L:'#ffe033' }
+//   ユニークは赤（2026-10-18 の案のシート「名前の色は赤」・2026-10-21 ユーザー「一旦今のままで実装して」）
+export const RARITY_COLOR = { N:'#aab4be', R:'#4488ff', E:'#c060ff', L:'#ffe033', U:'#ff4d6a' }
 export const rarityLabel = (r) => RARITY_LABEL[r] || ''
 
 // ===== アイテムLV（強さの元）と必要LV =====
@@ -180,9 +186,31 @@ export const starterIdsOf = (cls) => {
   return [id(s.weapon), id(`${s.line}頭`), id(`${s.line}鎧`), id(`${s.line}腕`), id(`${s.line}足`), id(s.acc), id(s.acc)]
 }
 
-// ★ID から引く一覧には初期装備も入れる（持ち物・装備の画面・戦闘は ITEM_BY_ID で引く）。
+// ===== ユニーク（ボス固有・2026-10-21）=====
+// 【確定】ユーザーが決めたこと（一覧と能力は uniqueDefs.js）：
+//   ・ボスだけが落とす（①②のボスは1つ・大ボスは2つ＝60個）。ボスに勝ったとき0.5%・大ボスは落ちたら2つのどちらかを50%ずつ
+//     （サーバーの v2cap_sortie_settle が引く＝宝箱と同じ）。武器はいまの職業が使えない種類でもそのまま落とす
+//   ・必要LVはどれも80。ステはユーザーが1つずつ決めた値（LV80・+0）＝配分（dist）にそのまま入れる（gear.js が合計を戦闘力にする）
+//   ・同じユニークは1つまで（loadout.js・サーバーの v2cap_equip）
+// こちらの案のまま（2026-10-21 ユーザー「一旦今のままで実装して」）：強化できる（+10まで）・作れない・分解で残骸50・
+//   防具はそのエリアのセットに数える・名前の色は赤・モンスター図鑑に出す
+// id は「U＋場所の番号：種類」（例 U1:短剣・U3:リング）。area＝そのボスのエリア（残骸とセットに使う）
+export const UNIQUE_LV = 80
+export const UNIQUE_DROP_PCT = 0.5
+export const uniqueIdOf = (spot, kindKey) => `U${spot}:${kindKey}`
+export const UNIQUE_ITEMS = UNIQUE_DEFS.map(u => {
+  const k = KIND_BY_KEY[u.kind]
+  return { id: uniqueIdOf(u.spot, u.kind), name: u.name, part: k.part, type: k.type, line: k.line, kind: u.kind,
+    area: Math.ceil(u.spot / 3), spot: u.spot, boss: u.boss, rarity: UNIQUE_RARITY, lv: UNIQUE_LV,
+    dist: { ...u.stats }, text: u.text, fx: u.fx }
+})
+export const isUnique = (item) => item?.rarity === UNIQUE_RARITY
+// その場所のボスが落とすユニーク（1つか2つ）
+export const uniquesOfSpot = (spot) => UNIQUE_ITEMS.filter(u => u.spot === spot)
+
+// ★ID から引く一覧には初期装備とユニークも入れる（持ち物・装備の画面・戦闘は ITEM_BY_ID で引く）。
 //   ITEMS（エリア×レア度の1560点）には入れない＝落ちる・作る一覧やシミュの「いちばん良い装備」には出ない
-export const ITEM_BY_ID = Object.fromEntries([...ITEMS, ...STARTER_ITEMS].map(i => [i.id, i]))
+export const ITEM_BY_ID = Object.fromEntries([...ITEMS, ...STARTER_ITEMS, ...UNIQUE_ITEMS].map(i => [i.id, i]))
 export const itemOf = (area, rarity, kindKey) => ITEM_BY_ID[itemIdOf(area, rarity, kindKey)] || null
 
 // この装備をどの枠に着けられるか

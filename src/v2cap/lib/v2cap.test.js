@@ -712,7 +712,8 @@ test('【確定】装備はエリアごとに26点（武器14種・重鎧4部位
   assert.deepEqual(ARMOR_LINES, ['重鎧', '軽装'])
   assert.deepEqual(ACCESSORY_TYPES, ['リング', 'イヤリング', 'ベルト', 'ネックレス'])
   assert.deepEqual(RARITIES, ['N', 'R', 'E', 'L'])
-  assert.deepEqual(RARITY_LABEL, { N:'ノーマル', R:'レア', E:'エピック', L:'レジェンダリー' })
+  // ユニーク（U）は2026-10-21 に足した（ボス固有・エリア×種類の一覧 ITEMS には入らない＝下の26点×4段階はそのまま）
+  assert.deepEqual(RARITY_LABEL, { N:'ノーマル', R:'レア', E:'エピック', L:'レジェンダリー', U:'ユニーク' })
   assert.equal(KINDS.length, 26)
   assert.equal(AREA_COUNT, AREA_LIST.length)
   assert.equal(ITEMS.length, AREA_LIST.length * 4 * 26)

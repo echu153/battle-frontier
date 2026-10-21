@@ -33,8 +33,9 @@ test('【確定】残骸はエリアごとに1種（ユーザーの表・星霧�
   assert.equal(scrapOf(undefined, 1), 0)
 })
 
-test('【確定】分解で入る残骸はレア度で決まる：ノーマル1・レア5・エピック10・レジェンダリー25（その装備のエリアの残骸）', () => {
-  assert.deepEqual(SCRAP_YIELD, { N:1, R:5, E:10, L:25 })
+test('【確定】分解で入る残骸はレア度で決まる：ノーマル1・レア5・エピック10・レジェンダリー25・ユニーク50（その装備のエリアの残骸）', () => {
+  // ユニークの50は 2026-10-18 の案のシート（2026-10-21 ユーザー「一旦今のままで実装して」）
+  assert.deepEqual(SCRAP_YIELD, { N:1, R:5, E:10, L:25, U:50 })
   for (const item of ITEMS) assert.equal(scrapYieldOf(item), SCRAP_YIELD[item.rarity], item.id)
   const rows = ['1N:片手剣', '1N:リング', '1R:斧', '2L:重鎧鎧', '2E:杖'].map(id => ({ item: ITEM_BY_ID[id] }))
   assert.deepEqual(dismantleGainOf(rows), { 1: 1 + 1 + 5, 2: 25 + 10 })

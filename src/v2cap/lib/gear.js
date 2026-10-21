@@ -18,7 +18,7 @@
 // ★ルーン・合成・進化は作らない（決まったら足す）。
 // ============================================================
 import { STAT_KEYS } from '../../v2/lib/stats.js'
-import { RARITY_BASE, PART_MULT, ARMOR_EFFECT, needLvOf } from './equipment.js'
+import { RARITY_BASE, PART_MULT, ARMOR_EFFECT, needLvOf, UNIQUE_LV, isUnique } from './equipment.js'
 import { bodyPowerAt } from './level.js'
 import { plusMultOf, PLUS_MAX } from './smith.js'
 
@@ -33,8 +33,12 @@ export const N_SET_BASE = RARITY_BASE.N * SET_PART_SUM   // 316
 // 【確定】2026-10-12 ユーザーが選んだ「最低でも+1にする」：強化値ぶんは**最低でも+1ずつ**
 //   （元の強さが10未満の装備は0.1倍が1に届かず、+1しても数字が動かない回があった＝古びた耳飾り 4→4→5→5…）。
 //   元の強さが10以上なら0.1倍が1以上なので今までと同じ
-const basePowerOf = (item, ilv) =>
-  (RARITY_BASE[item?.rarity] || 0) * (PART_MULT[item?.part] || 1) * bodyPowerAt(ilv) * GEAR_RATIO / N_SET_BASE
+// ★ユニーク（2026-10-21）：ステはユーザーが1つずつ決めた値（LV80・+0）＝その合計がLV80の戦闘力。
+//   ほかのLVでは本体の戦闘力の比で増える・減る（LV80より低いLVで着けると、同じ割合のままそのLV相当まで小さくなる＝案のシートの決まり）
+const distSum = (dist) => Object.values(dist || {}).reduce((t, v) => t + v, 0)
+const basePowerOf = (item, ilv) => (isUnique(item)
+  ? distSum(item.dist) * bodyPowerAt(ilv) / bodyPowerAt(UNIQUE_LV)
+  : (RARITY_BASE[item?.rarity] || 0) * (PART_MULT[item?.part] || 1) * bodyPowerAt(ilv) * GEAR_RATIO / N_SET_BASE)
 export const powerAt = (item, ilv, plus = 0) => {
   const base = basePowerOf(item, ilv)
   const n = plus > 0 ? Math.min(PLUS_MAX, plus) : 0
@@ -74,12 +78,15 @@ export const syncLabelOf = (item, ilv, lv) => (isUnderLv(item, ilv, lv) ? `LV${l
 //     強化して戦闘力が上がったのにステが下がることがあった（ユーザー指摘：蟻帝の聖鎧 +3→+4・効果60% で VIT 15→14。
 //     全装備の +0→+10 の15,790段のうち524段・必要LV不足では18,482段）。
 //     直し方は 2026-10-12 の別の作業（ユーザーが「残りも0にする」を選んだもの）と同じ。そのときは入らずに残っていた
-// 配分の合計は100（v2cap.test.js が見張る）＝残りの点はステの数より少ない
+// 配分の合計は100（v2cap.test.js が見張る）＝残りの点はステの数より少ない。
+// ★ユニークの配分はユーザーが決めたステそのもの（合計＝LV80の戦闘力・160 など）なので、合計 w で割る形にした（合計100なら前と同じ）。
+//   戦闘力がちょうど合計のとき（LV80・+0）は決めたステのまま・+10（2倍）でちょうど2倍になる
 const largestRemainder = (p, dist, tie) => {
   const out = Object.fromEntries(STAT_KEYS.map(k => [k, 0]))
   if (!(p > 0) || !dist) return out
-  const rows = Object.entries(dist).map(([k, v], i) => ({ k, v, i, rem: (p * v) % 100 }))
-  for (const r of rows) out[r.k] = Math.floor(p * r.v / 100)
+  const w = distSum(dist) || 100
+  const rows = Object.entries(dist).map(([k, v], i) => ({ k, v, i, rem: (p * v) % w }))
+  for (const r of rows) out[r.k] = Math.floor(p * r.v / w)
   const left = p - rows.reduce((t, r) => t + out[r.k], 0)
   rows.sort((a, b) => b.rem - a.rem || tie(a, b))
   for (let j = 0; j < left; j++) out[rows[j].k]++
@@ -88,8 +95,9 @@ const largestRemainder = (p, dist, tie) => {
 const byWeight = (a, b) => b.v - a.v || a.i - b.i
 // 戦闘力 p を配分 dist どおりにステへ散らす
 export const spreadStats = (p, dist) => {
+  const w = distSum(dist) || 100
   const prev = largestRemainder(p - 1, dist, byWeight)
-  const had = (r) => (prev[r.k] > Math.floor((p - 1) * r.v / 100) ? 1 : 0)   // ①
+  const had = (r) => (prev[r.k] > Math.floor((p - 1) * r.v / w) ? 1 : 0)   // ①
   return largestRemainder(p, dist, (a, b) => had(b) - had(a) || byWeight(a, b))
 }
 // 装備のステ。lv＝いまのLV（必要LVに足りなければLV相当＝effectivePowerAt。null なら足りている扱い）・plus＝強化値

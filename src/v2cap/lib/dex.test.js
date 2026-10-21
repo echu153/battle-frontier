@@ -38,10 +38,23 @@ test('1エリアの並びは 通常6 → 時間帯6 → レア5 → ボス3（�
 
 test('落とす装備は役割で決まる：ふつう・時間帯は8%でノーマル・レア／レアは10%でエピックまで／ボスは10%でレジェンダリーまで', () => {
   // ふつう・時間帯は 2026-10-12 ユーザー指示「装備のドロップ率渋すぎるから8％にして」で 3→8
-  assert.deepEqual(dropInfoOf('normal'), { chance: 8, rarities: ['N', 'R'] })
-  assert.deepEqual(dropInfoOf('timed'), { chance: 8, rarities: ['N', 'R'] })
-  assert.deepEqual(dropInfoOf('rare'), { chance: 10, rarities: ['N', 'R', 'E'] })
-  assert.deepEqual(dropInfoOf('boss'), { chance: 10, rarities: ['N', 'R', 'E', 'L'] })
+  assert.deepEqual(dropInfoOf('normal'), { chance: 8, rarities: ['N', 'R'], uniques: [] })
+  assert.deepEqual(dropInfoOf('timed'), { chance: 8, rarities: ['N', 'R'], uniques: [] })
+  assert.deepEqual(dropInfoOf('rare'), { chance: 10, rarities: ['N', 'R', 'E'], uniques: [] })
+  assert.deepEqual(dropInfoOf('boss'), { chance: 10, rarities: ['N', 'R', 'E', 'L'], uniques: [] })
+})
+
+test('【2026-10-21】ボスの行には、そのボスが落とすユニーク（①②は1つ・大ボスは2つ）も載る。ボス以外には無い', () => {
+  for (let a = 1; a <= DEX_AREA_COUNT; a++) {
+    const rows = dexAreaOf(a)
+    for (const e of rows) {
+      const u = dropInfoOf(e.role, e).uniques
+      if (e.role !== 'boss') { assert.equal(u.length, 0, e.name); continue }
+      assert.equal(u.length, e.subs[0] === 3 ? 2 : 1, `${e.name}のユニーク`)
+      for (const x of u) assert.equal(x.boss, e.name)
+    }
+  }
+  assert.deepEqual(dropInfoOf('boss', dexAreaOf(1)[19]).uniques.map(u => u.name), ['蒼蝕の魔剣', 'ビッグスライムの指輪'])
 })
 
 test('倒すまでは見つけていない（???）。見つけた数と割合', () => {

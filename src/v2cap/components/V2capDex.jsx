@@ -3,7 +3,9 @@ import { supabase } from '../../supabase'
 import { box, miniBtn, TEXT } from '../../v2/components/v2ui.js'
 import { AREA_LIST, SUB_MARK, spotOf } from '../lib/areas.js'
 import { openUntilOf } from '../lib/sortie.js'
-import { RARITY_COLOR, rarityLabel } from '../lib/equipment.js'
+import { RARITY_COLOR, rarityLabel, kindLabel } from '../lib/equipment.js'
+import { V2Tip } from '../../v2/components/V2ItemTip.jsx'
+import { UniqueText } from './V2capUniqueFx.jsx'
 import { DEX_ROLES, DEX_ROLE, DEX_ALL, DEX_AREA_COUNT, dexAreaOf, dropInfoOf, killsOf, isFound, dexProgressOf } from '../lib/dex.js'
 import { enemyArtSrc } from '../lib/enemyArt.js'
 import { chip } from './v2capGearView.js'
@@ -88,7 +90,7 @@ export default function V2capDex({ prof }) {
             {rows.map(e => {
               const found = isFound(kills, e.name)
               const role = DEX_ROLE[e.role]
-              const drop = dropInfoOf(e.role)
+              const drop = dropInfoOf(e.role, e)
               const art = enemyArtSrc(e.name)
               return (
                 <div key={e.name} style={{ background:'#000818', border:`1px solid ${found ? '#002244' : '#001428'}`, padding:'6px 8px',
@@ -115,6 +117,20 @@ export default function V2capDex({ prof }) {
                               <span key={r}>{i ? '・' : ''}<span style={{ color: RARITY_COLOR[r] }}>{rarityLabel(r)}</span></span>
                             ))}
                           </span>
+                          {/* ボスのユニーク（2026-10-21）：名前を赤で・カーソルで固有の能力 */}
+                          {drop.uniques.length > 0 && (
+                            <span>
+                              ユニーク：
+                              {drop.uniques.map((u, i) => (
+                                <span key={u.id}>{i ? '・' : ''}
+                                  <V2Tip width="250px" color={RARITY_COLOR.U} style={{ color: RARITY_COLOR.U, borderBottom:`1px dotted ${RARITY_COLOR.U}` }}
+                                    body={<><div style={{ color: RARITY_COLOR.U }}>{u.name}（{kindLabel(u)}・必要LV{u.lv}）</div><UniqueText item={u} /></>}>
+                                    {u.name}
+                                  </V2Tip>
+                                </span>
+                              ))}
+                            </span>
+                          )}
                         </>
                       ) : <span style={{ color: TEXT.empty }}>倒すと載ります</span>}
                     </div>

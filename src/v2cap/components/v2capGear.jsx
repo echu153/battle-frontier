@@ -1,6 +1,6 @@
 import { STAT_DEFS, STAT_KEYS } from '../../v2/lib/stats.js'
 import { TEXT } from '../../v2/components/v2ui.js'
-import { PARTS, RARITIES, RARITY_COLOR, partLabel, rarityLabel } from '../lib/equipment.js'
+import { PARTS, ALL_RARITIES, RARITY_COLOR, partLabel, rarityLabel } from '../lib/equipment.js'
 import { plusOf, plusLabel } from '../lib/smith.js'
 import { PLUS_COLOR, chip, areaOptionLabel, filterSelect, optionStyle } from './v2capGearView.js'
 
@@ -32,7 +32,8 @@ export function GearFilterBar({ g }) {
         </select>
         <select value={g.rarity} onChange={e => g.setRarity(e.target.value)} style={filterSelect(g.rarity !== 'all', RARITY_COLOR[g.rarity])}>
           <option value="all" style={optionStyle(TEXT.sub)}>すべてのレア度</option>
-          {RARITIES.map(r => <option key={r} value={r} style={optionStyle(RARITY_COLOR[r])}>{rarityLabel(r)}</option>)}
+          {/* ★ユニーク（2026-10-21）も選べる */}
+          {ALL_RARITIES.map(r => <option key={r} value={r} style={optionStyle(RARITY_COLOR[r])}>{rarityLabel(r)}</option>)}
         </select>
         <select value={g.area} onChange={e => g.setArea(e.target.value === 'all' ? 'all' : Number(e.target.value))} style={filterSelect(g.area !== 'all')}>
           <option value="all" style={optionStyle(TEXT.sub)}>すべてのエリア</option>

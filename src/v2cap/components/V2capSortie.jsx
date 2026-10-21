@@ -9,7 +9,8 @@ import {
 } from '../lib/sortie.js'
 import { toFighter as playerFighter } from '../lib/loadout.js'
 import { staminaMaxOf, rollStamina } from '../lib/level.js'
-import { expText as expTextOf, levelUpLines, dropLineOf } from '../lib/settleLines.js'
+import { expText as expTextOf, levelUpLines, dropLineOf, uniqueDropLineOf } from '../lib/settleLines.js'
+import { ITEM_BY_ID } from '../lib/equipment.js'
 import { guardDropBonusOf, floorLabel, TOWER_NAME } from '../lib/tower.js'
 import { buildCapBattleView } from '../lib/battleView.js'
 import { enemyArtSrc } from '../lib/enemyArt.js'
@@ -185,6 +186,9 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       if (win) {
         // ★装備名だけをレア度の色で（頭の表記・必要LV・効果%は出さない＝settleLines.js の dropLineOf）
         if (data.drop && drop) after.push(dropLineOf(drop.item))
+        // ★ユニーク（2026-10-21）：ボスに勝ったとき0.5%でサーバーが引く（画面は申告しない）。落ちたら返事の unique に入っている
+        const uq = data.unique ? ITEM_BY_ID[data.unique.base_id] : null
+        if (uq) after.push(uniqueDropLineOf(uq))
         // 宝箱（2026-10-14 ユーザー指示・決まりは sortie.js の「宝箱」）：装備が落ちなかった勝ちで、サーバーが5%で見つけて開ける。
         //   中身（その場所のエリアの残骸1〜10個）はサーバーの返事 chest＝{ area, n }。サーバーが前の版のあいだは chest が無い＝何も出さない
         if (data.chest?.n > 0) {

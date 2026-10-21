@@ -15,6 +15,8 @@ import { avatarUrlOf } from './v2capAvatarUrl.js'
 import { StatGain } from './v2capGear.jsx'
 import V2capPoints from './V2capPoints.jsx'
 import V2capArmorSets from './V2capArmorSets.jsx'
+import V2capUniqueFx from './V2capUniqueFx.jsx'
+import { isUnique } from '../lib/equipment.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — ステータス欄（ホームの左）
@@ -266,6 +268,8 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
         </div>
         {/* 防具のセット能力（2026-10-14）。発動している組だけ（カーソルで2・3・4部位の中身） */}
         <V2capArmorSets sets={bd.sets} compact cell={cell} valueCell={valueCell} />
+        {/* ユニークの固有の能力（2026-10-21）。着けているものだけ（カーソルで能力の文） */}
+        <V2capUniqueFx items={Object.values(worn).map(w => w.item).filter(isUnique)} compact cell={cell} valueCell={valueCell} />
 
         <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'2px' }}>スキル編成</div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'2px' }}>

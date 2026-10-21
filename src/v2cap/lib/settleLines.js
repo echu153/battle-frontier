@@ -43,3 +43,5 @@ export const dropLineOf = (item) => ({ color: LOG_PLAIN, parts: [
   { text:'🎁 「' }, { text: item.name, color: RARITY_COLOR[item.rarity] },
   { text:'」を入手！' },
 ] })
+// ユニークが落ちた行（2026-10-21・ボスに勝ったとき0.5%）。めったに出ないので、倒したときの行と同じく大きく出す（ユニークの赤）
+export const uniqueDropLineOf = (item) => ({ text:`💎 ユニーク「${item.name}」を入手！`, color: RARITY_COLOR.U, big: true })

@@ -21,6 +21,8 @@ export const LOG_COLOR = {
   ail:   '#cc66ff',
   guard: '#66ccff',
 }
+// ユニーク装備の固有の能力の行（「レベルキャップあり」版のユニークの名前の色と同じ赤）
+export const UNIQUE_COLOR = '#ff6b84'
 
 // r … runBattle の返り値 ／ you … 自分の名前 ／ foe … 相手の名前
 export const buildBattleLog = (r, you, foe) => {
@@ -67,6 +69,9 @@ export const buildBattleLog = (r, you, foe) => {
     } else if (l.type === 'setFx') {
       // ★防具のセット能力（「レベルキャップあり」版・2026-10-14）：蜃気楼・番人の守り・天騎士の誓い・帯電装甲・炎獄の鎧
       out.push({ text:`🛡 ${actor}の${l.name}！ ${l.text}`, color: LOG_COLOR.guard })
+    } else if (l.type === 'uniqueFx' || l.type === 'uniqueAct') {
+      // ★ユニーク装備の固有の能力（「レベルキャップあり」版・2026-10-21）。uniqueFx＝相手の攻撃への反応・uniqueAct＝自分で起こしたもの
+      out.push({ text:`💎 ${actor}の${l.name}！ ${l.text}`, color: UNIQUE_COLOR })
     } else if (l.type === 'buff') {
       out.push({ text:`✨ ${actor}の${l.skill}！`, color: LOG_COLOR.buff })
     } else if (l.type === 'extra') {
