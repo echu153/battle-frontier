@@ -1,4 +1,4 @@
-import { V2Tip } from '../../v2/components/V2ItemTip.jsx'
+import { V2Tip } from './V2ItemTip.jsx'
 import { SET_TIERS, setTierText, setLabel } from '../lib/armorSets.js'
 
 // ============================================================

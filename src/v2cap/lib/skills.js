@@ -2,7 +2,7 @@
 // バトルフロンティアⅡ「レベルキャップあり」版（v2cap）— スキルの名簿
 // ------------------------------------------------------------
 // 2026-10-09 ユーザー決定（docs/v2cap-design.md §11）：初期職は11職（剣士を同じ日に足した）。
-//   ・戦士・弓使い・魔法使い・僧侶・格闘家 … 今のⅡのスキルをそのまま使う（中身は src/v2/lib/skills.js）
+//   ・戦士・弓使い・魔法使い・僧侶・格闘家 … 今のⅡのスキルをそのまま使う（中身は src/v2cap/core/skills.js）
 //   ・槍使い・盗賊・銃士・剣士・呪術師・薬師 … 新しく作った5個ずつ（下の NEW_SKILLS・ユーザー承認済み）
 //   ・ノーブル・サモナーと上位職は**一旦なし**（上位職は 2026-10-10 に skillsIchiji.js で足した）
 //   ・2026-10-14：11職とも CLASS LV25・30 で1つずつ足した（下の LATE_SKILLS＝技7つから5枠を選ぶ）
@@ -15,7 +15,7 @@
 // ★戦闘（battle.js）はスキルの中身を受け取って動くので、名簿をこの版で持てば足りる。
 // ★サーバーの v2cap_skills はこの名簿から tools/v2cap-sql.mjs が作る（手で書き写さない）
 // ============================================================
-import { SKILLS as V2_SKILLS, isPassive, SKILL_SET_SLOTS, SKILL_USE_MAX, powerText, statLabel } from '../../v2/lib/skills.js'
+import { SKILLS as V2_SKILLS, isPassive, SKILL_SET_SLOTS, SKILL_USE_MAX, powerText, statLabel } from '../core/skills.js'
 import { ICHIJI_SKILLS } from './skillsIchiji.js'
 
 export { isPassive, SKILL_SET_SLOTS, SKILL_USE_MAX }

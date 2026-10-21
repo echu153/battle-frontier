@@ -12,7 +12,7 @@
 //   （サーバーが外すはずだが）念のためここでも数えない
 // ★スキルセットは**職業ごと**（skill_sets[職業]）。使えるのはその職業と下位職の技だけ
 // ============================================================
-import { STAT_KEYS, calcPower } from '../../v2/lib/stats.js'
+import { STAT_KEYS, calcPower } from '../core/stats.js'
 import { ITEM_BY_ID, SLOTS, isUnique } from './equipment.js'
 import { SKILL_BY_NAME, isPassive, passiveOf } from './skills.js'
 import { statsAt, effectivePowerAt, armorEffects } from './gear.js'

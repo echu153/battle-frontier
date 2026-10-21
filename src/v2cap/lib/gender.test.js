@@ -6,8 +6,8 @@ import { GENDERS, GENDER_BY_KEY, isGender, genderOf, genderFxOf, artGenderOf } f
 import { ART_GENDERS } from './classArt.js'
 import { toFighter } from './loadout.js'
 import { snapshotOf, fromSnapshot } from './tower.js'
-import { sexAdjust } from '../../v2/lib/battleSet.js'
-import { runBattle } from '../../v2/lib/battle.js'
+import { sexAdjust } from '../core/battleSet.js'
+import { runBattle } from '../core/battle.js'
 import { spotOf, toFighter as enemyFighter } from './areas.js'
 
 const rngOf = (seed) => { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { STAT_DEFS, STAT_KEYS } from '../../v2/lib/stats.js'
-import { miniBtn } from '../../v2/components/v2ui.js'
+import { STAT_DEFS, STAT_KEYS } from '../core/stats.js'
+import { miniBtn } from './v2ui.js'
 import { RARITY_COLOR } from '../lib/equipment.js'
 import { AREA_LIST } from '../lib/areas.js'
 import { effectivePowerAt } from '../lib/gear.js'

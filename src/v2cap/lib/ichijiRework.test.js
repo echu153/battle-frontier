@@ -2,9 +2,9 @@
 // 設計：https://claude.ai/artifact/DvAQoMxY6sChec3wQhsFBE ・ docs/v2cap-design.md §4
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createSide, takeAction, liveStats, tickForesight, tickAil, tickRegen } from '../../v2/lib/battle.js'
-import { tickIchiji, gainHp } from '../../v2/lib/battleIchiji.js'
-import { inflict, hasAilment } from '../../v2/lib/ailments.js'
+import { createSide, takeAction, liveStats, tickForesight, tickAil, tickRegen } from '../core/battle.js'
+import { tickIchiji, gainHp } from '../core/battleIchiji.js'
+import { inflict, hasAilment } from '../core/ailments.js'
 import { SKILL_BY_NAME, passiveOf } from './skills.js'
 import { attackKindOf } from './jobs.js'
 import { ascendSkill as ascUp } from './ascension.js'
@@ -575,7 +575,7 @@ test('【確定】2026-10-17 ユーザー「スキルによって地上状態と
 })
 
 test('【確定】2026-10-17 体術師の心眼：地上＝回避したら物理×0.6で反撃／空中＝反撃しないが回避+10%（直接の回避は15%まで）', async () => {
-  const { AIR_EVA } = await import('../../v2/lib/battle.js')
+  const { AIR_EVA } = await import('../core/battle.js')
   assert.deepEqual(passiveOf('体術師').passive, { counterOnDodge: 0.6, counterAirMult: 0 })
   assert.equal(AIR_EVA, 10)
   // 相手の攻撃が必ず外れる乱数で：地上なら反撃が出る・空中なら出ない

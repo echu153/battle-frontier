@@ -4,9 +4,9 @@
 //   ・ユーザー指示：サイキッカー（と魔銃士）は STRとINTを半分ずつ／聖騎士は VITも火力に直結（STRとVITを半分ずつ）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createSide, takeAction } from '../../v2/lib/battle.js'
+import { createSide, takeAction } from '../core/battle.js'
 import { SKILL_BY_NAME, SKILLS, passiveOf, capPowerText } from './skills.js'
-import { powerText, isPassive } from '../../v2/lib/skills.js'
+import { powerText, isPassive } from '../core/skills.js'
 import { ICHIJI_SKILLS, ICHIJI_TUNE } from './skillsIchiji.js'
 import { ICHIJI_INFO, ICHIJI_RENAMED, CLASS_BY_ID, attackKindOf, learnOrderOf, JOB_BONUS } from './jobs.js'
 

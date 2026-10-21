@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../supabase'
-import { TEXT } from '../../v2/components/v2ui.js'
+import { TEXT } from './v2ui.js'
 import { FORTUNE_BY_NAME, canPray, remainUntilPray, prayDayOf } from '../lib/tree.js'
 import { jobUpHead, jobUpNote } from '../lib/jobs.js'
 import V2capRevelationFx from './V2capRevelationFx.jsx'

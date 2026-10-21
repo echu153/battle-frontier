@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { supabase } from '../../supabase'
-import { box, miniBtn, TEXT } from '../../v2/components/v2ui.js'
+import { box, miniBtn, TEXT } from './v2ui.js'
 import { ITEM_BY_ID, SLOTS, SLOT_LABEL, ARMOR_EFFECT, slotsFor, kindLabel, needLvOf, isUnique, RARITY_COLOR } from '../lib/equipment.js'
 import { UniqueText } from './V2capUniqueFx.jsx'
 import { canEquipType } from '../lib/jobs.js'
@@ -10,7 +10,7 @@ import { plusOf } from '../lib/smith.js'
 import { DROP_CHANCE } from '../lib/sortie.js'
 import { statLine, nameColor, useGearRows } from './v2capGearView.js'
 import { PlusTag, GearFilterBar } from './v2capGear.jsx'
-import { V2Tip } from '../../v2/components/V2ItemTip.jsx'
+import { V2Tip } from './V2ItemTip.jsx'
 import { isSetPiece, setLabel, setTierText, armorSetOf, SET_TIERS } from '../lib/armorSets.js'
 
 // ============================================================

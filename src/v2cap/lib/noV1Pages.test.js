@@ -16,8 +16,8 @@ const PAGES = join(SRC, 'pages')
 const walk = (d) => readdirSync(d).flatMap(f => { const p = join(d, f); return statSync(p).isDirectory() ? walk(p) : [p] })
 const IMPORT = /(?:from\s+|import\s*\(\s*)['"](\.[^'"]+)['"]/g
 
-test('v2cap と V2 の部品は旧版の画面（src/pages）から import しない', () => {
-  const files = [...walk(join(SRC, 'v2cap')), ...walk(join(SRC, 'v2'))]
+test('v2cap（V2 から移した core も）は旧版の画面（src/pages）から import しない', () => {
+  const files = [...walk(join(SRC, 'v2cap'))]   // src/v2（V2 初期構成）は 2026-10-22 に v2cap へまとめた
     .filter(p => /\.(js|jsx|mjs)$/.test(p) && !p.endsWith('.test.js'))
   const bad = files.flatMap(p => [...readFileSync(p, 'utf8').matchAll(IMPORT)]
     .filter(m => resolve(dirname(p), m[1]).startsWith(PAGES))

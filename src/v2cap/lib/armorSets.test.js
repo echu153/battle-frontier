@@ -2,8 +2,8 @@
 // 【確定】2026-10-14 ユーザーの表（2部位・3部位・4部位）＋ユーザーの選択（armorSets.js の冒頭）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { INITIAL_STATS } from '../../v2/lib/stats.js'
-import { AIL_KEYS } from '../../v2/lib/ailments.js'
+import { INITIAL_STATS } from '../core/stats.js'
+import { AIL_KEYS } from '../core/ailments.js'
 import { ITEM_BY_ID, ITEMS } from './equipment.js'
 import { AREA_LIST } from './areas.js'
 import {

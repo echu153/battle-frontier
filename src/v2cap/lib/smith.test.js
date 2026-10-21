@@ -2,7 +2,7 @@
 // 【確定】は 2026-10-10 ユーザー決定（docs/v2cap-design.md §5「強化と分解」）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { STAT_KEYS, INITIAL_STATS, calcPower } from '../../v2/lib/stats.js'
+import { STAT_KEYS, INITIAL_STATS, calcPower } from '../core/stats.js'
 import { ITEMS, ITEM_BY_ID, STARTER_ITEMS, AREA_COUNT, itemOf } from './equipment.js'
 import { AREA_LIST } from './areas.js'
 import { powerAt, statsAt, spreadStats, effectivePowerAt } from './gear.js'

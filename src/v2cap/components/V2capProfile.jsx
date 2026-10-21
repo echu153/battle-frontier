@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
-import { box, btn, miniBtn, TEXT } from '../../v2/components/v2ui.js'
+import { box, btn, miniBtn, TEXT } from './v2ui.js'
 import { AVATAR_PRESETS, AVATAR_MAX_BYTES, AVATAR_CUSTOM_ON, uploadPathOf, avatarImgStyle } from '../lib/avatar.js'
 import { stageColorOf } from '../lib/jobs.js'
 import { GENDER_BY_KEY, genderOf } from '../lib/gender.js'

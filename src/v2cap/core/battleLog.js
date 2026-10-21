@@ -1,0 +1,228 @@
+// ============================================================
+// バトルフロンティアⅡ（リメイク版）— 戦闘ログの文面
+// ------------------------------------------------------------
+// runBattle が返す log を、画面（V2LogLine）が読める行に組み立てる。
+//
+// ★出撃とアリーナで**同じ関数を使う**。2か所に書いていたころ、アリーナ側だけ
+//   状態異常・不発・追加行動などの行が抜けていた（後から足した行が片方に入らない）。
+//
+// ★**どちらの行動かが必ず分かるように、行の頭に必ず名前を出す**（2026-08-17 ユーザー指摘）。
+//   それまで自分の行だけ名前が無く、「ライト！ 盗賊に756ダメージ！」が誰の攻撃か
+//   分からなかった。敵側は最初から「盗賊の〜」と出ていたので、そちらへ揃える。
+// ============================================================
+
+export const LOG_COLOR = {
+  mine:  '#ffcc00',   // 自分が与えた
+  foe:   '#ff4444',   // 自分が受けた
+  miss:  '#94a7bb',
+  heal:  '#44ff88',
+  buff:  '#44aaff',
+  extra: '#ffcc44',
+  ail:   '#cc66ff',
+  guard: '#66ccff',
+}
+// ユニーク装備の固有の能力の行（「レベルキャップあり」版のユニークの名前の色と同じ赤＝equipment.js の RARITY_COLOR.U・ユーザー指定 #ff6b82）
+//   ★このファイルは今のⅡ（src/v2）にあり v2cap を読めないので、同じ値を書いている（unique.test.js が同じかを見る）
+export const UNIQUE_COLOR = '#ff6b82'
+
+// r … runBattle の返り値 ／ you … 自分の名前 ／ foe … 相手の名前
+export const buildBattleLog = (r, you, foe) => {
+  const out = []
+  for (const l of r?.log || []) {
+    // side は行動した側（または効果を受けた側）の名前
+    const mine = l.side === you
+    const actor = mine ? you : foe          // その行の主語
+    const target = mine ? foe : you         // その行の相手
+
+    if (l.type === 'hp') {
+      out.push({ type:'hp', turn:l.turn, playerHp:l.a, playerMax:l.aMax, playerName:you,
+        enemyHp:l.b, enemyMax:l.bMax, enemyName:foe })
+    } else if (l.type === 'skill') {
+      if (l.hits === 0) {
+        out.push({ text:`⚔ ${actor}の「${l.skill}」！ しかし${target}にかわされた`, color: LOG_COLOR.miss })
+      } else {
+        out.push({
+          text: `⚔ ${actor}の「${l.skill}」！ ${target}に${l.damage.toLocaleString()}ダメージ！`
+            + (l.crit ? ' 💥クリティカル！' : '')
+            + (mine && l.drain ? ` HPが${l.drain.toLocaleString()}回復した！` : ''),
+          color: mine ? LOG_COLOR.mine : LOG_COLOR.foe,
+        })
+      }
+    } else if (l.type === 'normal') {
+      if (!l.hit) {
+        out.push({ text:`${actor}の攻撃！ しかし${target}にかわされた`, color: LOG_COLOR.miss })
+      } else {
+        out.push({
+          text: `${actor}の攻撃！ ${target}に${l.damage.toLocaleString()}ダメージ！`
+            + (l.crit ? ' 💥クリティカル！' : ''),
+          color: mine ? LOG_COLOR.mine : LOG_COLOR.foe,
+        })
+      }
+    } else if (l.type === 'misfire') {
+      out.push({ text:`${actor}は${l.skill}を出そうとしたが不発！`, color: LOG_COLOR.miss })
+    } else if (l.type === 'heal') {
+      out.push({ text:`💚 ${actor}の${l.skill}！ HPが${l.heal.toLocaleString()}回復した！`, color: LOG_COLOR.heal })
+    } else if (l.type === 'regenTick') {
+      // name … 防具のセット能力（森の恵み・根を張る）の回復のときだけ入る（v2cap）
+      out.push({ text: l.name
+        ? `💚 ${actor}の${l.name}！ HPが${l.heal.toLocaleString()}回復した！`
+        : `💚 ${actor}のHPが${l.heal.toLocaleString()}回復した！`, color: LOG_COLOR.heal })
+    } else if (l.type === 'setFx') {
+      // ★防具のセット能力（「レベルキャップあり」版・2026-10-14）：蜃気楼・番人の守り・天騎士の誓い・帯電装甲・炎獄の鎧
+      out.push({ text:`🛡 ${actor}の${l.name}！ ${l.text}`, color: LOG_COLOR.guard })
+    } else if (l.type === 'uniqueFx' || l.type === 'uniqueAct') {
+      // ★ユニーク装備の固有の能力（「レベルキャップあり」版・2026-10-21）。uniqueFx＝相手の攻撃への反応・uniqueAct＝自分で起こしたもの
+      out.push({ text:`💎 ${actor}の${l.name}！ ${l.text}`, color: UNIQUE_COLOR })
+    } else if (l.type === 'buff') {
+      out.push({ text:`✨ ${actor}の${l.skill}！`, color: LOG_COLOR.buff })
+    } else if (l.type === 'extra') {
+      out.push({ text:`⚡ ${actor}は素早く動いた！`, color: LOG_COLOR.extra })
+    } else if (l.type === 'wall') {
+      out.push({ text:`💀 ${actor}の骸の壁が攻撃を和らげた！`, color:'#cc44ff' })
+    } else if (l.type === 'debuffGuard') {
+      out.push({ text:`🛡 ${actor}の心身一如！ 弱体化を打ち消した！`, color:'#44ffaa' })
+    } else if (l.type === 'ailment') {
+      // 状態異常が入ったとき。side は「かかった側」
+      out.push({ text:`☠ ${actor}は${l.ail}になった！`, color: LOG_COLOR.ail })
+    } else if (l.type === 'ailTick') {
+      out.push({ text:`☠ ${l.ail}！ ${actor}に${l.damage.toLocaleString()}ダメージ！`
+        + (l.stacks > 1 ? `（${l.stacks}スタック）` : ''), color: LOG_COLOR.ail })
+    } else if (l.type === 'consumeAil') {
+      out.push({ text:`🩸 ${actor}の${l.ail}が弾けた！（${l.stacks}スタック消費・威力${l.mult.toFixed(1)}倍）`, color: LOG_COLOR.ail })
+    } else if (l.type === 'guard') {
+      // ATB専用（オート戦闘は出さない）
+      out.push({ text:`🛡 ${actor}は身を守っている！（${l.sec}秒・被ダメージ-${l.cut}%）`, color: LOG_COLOR.guard })
+    } else if (l.type === 'air') {
+      out.push({ text:`🕊 ${actor}は跳び上がった！`, color: LOG_COLOR.extra })
+    } else if (l.type === 'land') {
+      out.push({ text:`🥾 ${actor}は地上へ降りた！`, color: LOG_COLOR.extra })
+    } else if (l.type === 'form') {
+      out.push({ text:`🐾 ${actor}の${l.skill}！ ${l.form}を呼んだ！`, color: LOG_COLOR.buff })
+    } else if (l.type === 'ritual') {
+      out.push({ text:`🔯 ${actor}の${l.skill}！ 呪力が${l.stacks}になった！`, color: LOG_COLOR.buff })
+    } else if (l.type === 'charge') {
+      out.push({ text:`🐉 ${actor}の${l.skill}！ 竜気が${l.stacks}になった！`, color: LOG_COLOR.buff })
+    } else if (l.type === 'stance') {
+      out.push({ text:`🗡 ${actor}の${l.skill}！ 構えた！`, color: LOG_COLOR.buff })
+    } else if (l.type === 'frenzy') {
+      out.push({ text:`💢 ${actor}の${l.skill}！ 我を忘れた！`, color:'#ff8844' })
+    } else if (l.type === 'foresight') {
+      out.push({ text:`👁 ${actor}の${l.skill}！ 相手の動きを見切っている！`, color: LOG_COLOR.guard })
+    } else if (l.type === 'dispel') {
+      out.push({ text:`✂ ${actor}の強化が1つ消えた！`, color: LOG_COLOR.ail })
+    } else if (l.type === 'bigGuard') {
+      const span = l.sec > 0 ? `${l.sec}秒のあいだ` : '1ターンのあいだ'
+      out.push({ text:`🛡 ${actor}の${l.skill}！ ${span}受けるダメージ-${l.cut}%！`, color: LOG_COLOR.guard })
+    } else if (l.type === 'cure') {
+      out.push({ text:`🌿 ${actor}の${l.skill}！ ${l.ail}が治った！`, color: LOG_COLOR.heal })
+    } else if (l.type === 'hpCost') {
+      out.push({ text:`🩸 ${actor}は${l.skill}のために${l.damage.toLocaleString()}のHPを削った！`, color:'#ff8844' })
+    } else if (l.type === 'regen') {
+      out.push({ text:`💚 ${actor}の${l.skill}！ しばらくHPが戻り続ける！`, color: LOG_COLOR.heal })
+    } else if (l.type === 'mpRegen') {
+      out.push({ text:`💙 ${actor}の${l.skill}！ しばらくMPが戻り続ける！`, color:'#66aaff' })
+    } else if (l.type === 'mpRegenTick') {
+      out.push({ text:`💙 ${actor}のMPが${(l.mp || 0).toLocaleString()}回復した！`, color:'#66aaff' })
+    } else if (l.type === 'dodgeCut') {
+      out.push({ text:`🐉 ${actor}の鱗が攻撃を弾いた！`, color: LOG_COLOR.guard })
+    } else if (l.type === 'guts') {
+      // 武器の進化「不屈」。1戦に1回だけ致命傷をHP1で耐える
+      out.push({ text:`💢 ${actor}は倒れずに踏み止まった！`, color:'#ffcc44' })
+    } else if (l.type === 'paralyzed') {
+      out.push({ text:`⚡ ${actor}は麻痺して動けない！`, color:'#ffdd44' })
+    } else if (l.type === 'sealed') {
+      // 封印：このあと通常攻撃の行が続く
+      out.push({ text:`🔒 ${actor}は封印されて技が出せない！`, color: LOG_COLOR.ail })
+    } else if (l.type === 'reflect') {
+      out.push({ text:`🔮 ${actor}はダメージを${l.damage.toLocaleString()}跳ね返した！`, color:'#88ddff' })
+    } else if (l.type === 'enCut') {
+      out.push({ text:`🛡 ${actor}のエンチャントが攻撃を和らげた！`, color: LOG_COLOR.guard })
+    // ===== 上位職（「レベルキャップあり」版・2026-10-10）=====
+    } else if (l.type === 'stunned') {
+      out.push({ text:`💫 ${actor}は反動で動けない！`, color:'#ffdd44' })
+    } else if (l.type === 'jump') {
+      out.push({ text:`🐉 ${actor}の${l.skill}！ 高く跳び上がった！`, color: LOG_COLOR.extra })
+    } else if (l.type === 'airborne') {
+      out.push({ text:`🕊 ${actor}は空中で機をうかがっている！`, color: LOG_COLOR.extra })
+    } else if (l.type === 'airEvade') {
+      // side は攻撃した側。跳んでいる相手には当たらない
+      out.push({ text:`☁ ${actor}の${l.skill ? `「${l.skill}」` : '攻撃'}！ しかし${target}は空高くにいて当たらない`, color: LOG_COLOR.miss })
+    } else if (l.type === 'cloneTaken') {
+      // side は分身を持っている側
+      out.push({ text:`👥 ${actor}の分身が攻撃を受け止めた！（残り${l.left}体）`, color: LOG_COLOR.guard })
+    } else if (l.type === 'strike') {
+      // 着地・反撃・追撃・召喚の攻撃
+      out.push(l.hit
+        ? { text:`⚔ ${actor}の${l.label}！ ${target}に${(l.damage || 0).toLocaleString()}ダメージ！${l.crit ? ' 💥クリティカル！' : ''}`,
+            color: mine ? LOG_COLOR.mine : LOG_COLOR.foe }
+        : { text:`${actor}の${l.label}！ しかし${target}にかわされた`, color: LOG_COLOR.miss })
+    } else if (l.type === 'stackUse') {
+      out.push({ text:`🔸 ${actor}は${l.stack}を${l.n}使った！${l.left ? `（残り${l.left}）` : ''}`, color: LOG_COLOR.buff })
+    } else if (l.type === 'stackGain') {
+      out.push({ text:`🔹 ${actor}の${l.skill}！ ${l.stack}が${l.n}になった！`, color: LOG_COLOR.buff })
+    } else if (l.type === 'summon') {
+      out.push({ text:`💀 ${actor}の${l.skill}！ ${l.stack}が${l.n}体になった！`, color: LOG_COLOR.buff })
+    } else if (l.type === 'guardUp') {
+      out.push({ text:`🛡 ${actor}の${l.skill}！ ${l.turns}ターンのあいだ受けるダメージ-${l.cut}%！`, color: LOG_COLOR.guard })
+    } else if (l.type === 'guardHeal') {
+      out.push({ text:`💚 ${actor}の結界がHPを${(l.heal || 0).toLocaleString()}回復した！`, color: LOG_COLOR.heal })
+    } else if (l.type === 'endureStart') {
+      out.push({ text:`🧱 ${actor}の${l.skill}！ ${l.turns}ターンのあいだ痛みを溜める！`, color: LOG_COLOR.guard })
+    } else if (l.type === 'endureRelease') {
+      out.push({ text:`💥 ${actor}は溜めた痛みを返した！ ${target}に${(l.damage || 0).toLocaleString()}ダメージ！`,
+        color: mine ? LOG_COLOR.mine : LOG_COLOR.foe })
+    } else if (l.type === 'reviveReady') {
+      out.push({ text:`✝ ${actor}の${l.skill}！ 倒れても一度だけ立ち上がれる！`, color: LOG_COLOR.heal })
+    } else if (l.type === 'revive') {
+      out.push({ text:`✝ ${actor}は立ち上がった！（HP${(l.hp || 0).toLocaleString()}）`, color:'#ffcc44' })
+    } else if (l.type === 'immune') {
+      out.push({ text:`🛡 ${actor}は${l.ail}にならない！`, color: LOG_COLOR.guard })
+    } else if (l.type === 'debuffImmune') {
+      out.push({ text:`🛡 ${actor}は能力低下を受けつけない！`, color: LOG_COLOR.guard })
+    } else if (l.type === 'quick') {
+      out.push({ text:`⏩ ${actor}の${l.skill}！ もう一度行動する！`, color: LOG_COLOR.extra })
+    } else if (l.type === 'recoil') {
+      out.push({ text:`🩸 ${actor}は反動で${(l.damage || 0).toLocaleString()}ダメージを受けた！`, color:'#ff8844' })
+    } else if (l.type === 'ailBurst') {
+      // side は状態異常が弾けた側
+      out.push({ text:`💥 ${actor}の${l.ails}が弾けた！（威力+${l.pct}%）`, color: LOG_COLOR.ail })
+    } else if (l.type === 'mpGain') {
+      out.push({ text:`💙 ${actor}の${l.skill}！ MPが${(l.mp || 0).toLocaleString()}回復した！`, color:'#66aaff' })
+    // ===== 上位クラス（「レベルキャップあり」版・2026-10-15 チャット版の設計）=====
+    } else if (l.type === 'imbue') {
+      out.push({ text:`✨ ${actor}の剣に${l.elem}が宿った！（あと${l.turns}ターン）`, color: LOG_COLOR.buff })
+    } else if (l.type === 'imbueUse') {
+      out.push({ text:`✨ ${actor}は剣に宿した${l.elem}を解き放った！`, color: LOG_COLOR.buff })
+    } else if (l.type === 'holyUse') {
+      out.push({ text:`🌟 ${actor}は聖光を${(l.n || 0).toLocaleString()}使った！${l.left ? `（残り${l.left.toLocaleString()}）` : ''}`, color: LOG_COLOR.buff })
+    } else if (l.type === 'berserkUp') {
+      // ★狂鬼化（2026-10-16 作り直し）：HPが1になり、そのあいだ倒れない・回復を受けない・STR+%
+      out.push({ text:`👹 ${actor}の${l.skill}！ HPが1になった。${l.turns}ターンのあいだ倒れない（回復を受けない${l.str ? `・STR+${l.str}%` : ''}）`, color: LOG_COLOR.buff })
+    } else if (l.type === 'berserkHold') {
+      out.push({ text:`👹 ${actor}は鬼の形相でHP1に踏み止まった！`, color:'#ffcc44' })
+    } else if (l.type === 'trapSet') {
+      out.push({ text:`🪤 ${actor}の${l.skill}！ 罠を仕掛けた（${l.n}つ）`, color: LOG_COLOR.buff })
+    } else if (l.type === 'trapFire') {
+      // side は罠を仕掛けた側。このあと罠の攻撃（strike）の行が続く
+      out.push({ text:`🪤 ${target}が${actor}の${l.skill}にかかった！`, color: LOG_COLOR.ail })
+    } else if (l.type === 'reso') {
+      out.push({ text:`🔷 ${actor}の共鳴が${l.n}になった！`, color: LOG_COLOR.buff })
+    } else if (l.type === 'barrier') {
+      out.push({ text:`⛩ ${actor}の${l.skill}！ ${l.turns}ターンの結界を張った！`, color: LOG_COLOR.guard })
+    } else if (l.type === 'shieldUp') {
+      out.push({ text:`🔰 ${actor}の${l.skill}！ バリアが${(l.total || 0).toLocaleString()}になった！`, color: LOG_COLOR.guard })
+    } else if (l.type === 'shieldHit') {
+      out.push({ text:`🔰 ${actor}のバリアが${(l.n || 0).toLocaleString()}ダメージを受け止めた！${l.left ? `（残り${l.left.toLocaleString()}）` : '（バリアが消えた）'}`, color: LOG_COLOR.guard })
+    } else if (l.type === 'sin') {
+      out.push({ text:`⚖ ${actor}の罪が${l.n}になった！`, color: LOG_COLOR.ail })
+    } else if (l.type === 'agit') {
+      // side は動揺した側
+      out.push({ text:`🌀 ${actor}は動揺している！（スキルの発動率-${(l.n || 0) * 3}%）`, color: LOG_COLOR.ail })
+    } else if (l.type === 'repeat') {
+      out.push({ text:`🔁 ${actor}の${l.skill}！ 「${l.target}」をもう一度！`, color: LOG_COLOR.extra })
+    } else if (l.type === 'repeatFail') {
+      out.push({ text:`🔁 ${actor}の${l.skill}！ しかし繰り返せる技が無い`, color: LOG_COLOR.miss })
+    }
+  }
+  return out
+}

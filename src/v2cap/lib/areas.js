@@ -17,7 +17,7 @@
 // ★敵のLV・経験値とGoldの範囲・アイテムLVはサーバー（v2cap_spots / v2cap_enemies）にも持たせる。
 //   ⚠ここを変えたら tools/v2cap-sql.mjs でSQLの種を作り直すこと（v2capsql.test.js が突き合わせる）
 // ============================================================
-import { statsOf } from '../../v2/lib/enemies.js'
+import { statsOf } from '../core/enemies.js'
 import { bodyPowerAt } from './level.js'
 import { ROSTERS, ENEMY_LV } from './monsters.js'
 import { CAP_RULES } from './rules.js'

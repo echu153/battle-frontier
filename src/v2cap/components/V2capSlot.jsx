@@ -12,7 +12,7 @@
 // ============================================================
 import { useEffect, useReducer, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
-import { useStored } from '../../v2/lib/prefs.js'
+import { useStored } from '../core/prefs.js'
 import { SLOT_BET, SLOT_RATES, SLOT_ROLES, SLOT_ORDERS, SLOT_AT_GAMES, SLOT_CZ_GAMES, SLOT_PREMIUM_GAMES, SLOT_TOKU_GAMES, SLOT_MISS_PAY, orderIndexOf, winTierOf } from '../lib/casino.js'
 import { REEL_LEN, REELS, displayTable, classOf, winLinesOf, noticeLevelOf, NOTICE_LEVELS, DISPLAY_OF_ROLE } from '../lib/slotReels.js'
 import { sfx, fx, celebrate, vibrate } from './casinoFx.js'

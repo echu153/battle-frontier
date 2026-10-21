@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../supabase'
 import {
   KIND_COLOR, KIND_LABEL, KIND_TABS, filterSkills, sortSkills, SKILL_SET_SLOTS, SKILL_USE_MAX,
-} from '../../v2/lib/skills.js'
+} from '../core/skills.js'
 // ★名前で引くもの（名簿・想定利用MP・検証）はこの版の名簿で引く。今のⅡの名簿には新しい5職の技が無い
 //   威力の行もこの版の capPowerText（上位クラスの物理＋魔法・連撃・跳躍・割合の回復を書ける）
 import { SKILL_BY_NAME, setMpCost, validateSkillSet, capPowerText } from '../lib/skills.js'
-import { box, btn, miniBtn, TEXT } from '../../v2/components/v2ui.js'
+import { box, btn, miniBtn, TEXT } from './v2ui.js'
 import { totalStats, currentSetOf } from '../lib/loadout.js'
 import { learnOrderOf, learnAtOf, jobOf, lineageOf } from '../lib/jobs.js'
 

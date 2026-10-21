@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
-import V2Modal from '../../v2/components/V2Modal.jsx'
-import { box, btn, miniBtn, TEXT } from '../../v2/components/v2ui.js'
+import V2Modal from './V2Modal.jsx'
+import { box, btn, miniBtn, TEXT } from './v2ui.js'
 import {
   DAILY_TASKS, DAILY_SORTIES, dailyOf, dailyRewardOf, taskProgressOf, doneCountOf, isDailyComplete, claimErrorOf, nextResetAt, dayOf,
 } from '../lib/daily.js'

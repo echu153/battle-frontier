@@ -8,10 +8,10 @@
 //     数で効くもの（与ダメ+%・受けるダメ−% など）は、その項目だけを抜いた装備と比べる
 //   ・テスト（unique.test.js）と、ゲームの開発用の欄（V2capUniqueCheck.jsx）の両方がこれを使う＝画面でも同じ確かめが走る
 // ============================================================
-import { runBattle, createSide, takeAction, liveStats, mpCostOf } from '../../v2/lib/battle.js'
-import { setDealMult, setTakenMult, setResistMult, regenPctOf } from '../../v2/lib/battleSet.js'
-import { AIL_LABEL, POISON_TURNS, inflict } from '../../v2/lib/ailments.js'
-import { STAT_DEFS } from '../../v2/lib/stats.js'
+import { runBattle, createSide, takeAction, liveStats, mpCostOf } from '../core/battle.js'
+import { setDealMult, setTakenMult, setResistMult, regenPctOf } from '../core/battleSet.js'
+import { AIL_LABEL, POISON_TURNS, inflict } from '../core/ailments.js'
+import { STAT_DEFS } from '../core/stats.js'
 import { SKILL_BY_NAME } from './skills.js'
 import { UNIQUE_ITEMS } from './equipment.js'
 import { combinedFxOf } from './fxMerge.js'

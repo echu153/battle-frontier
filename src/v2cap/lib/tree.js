@@ -6,14 +6,14 @@
 //   ・基準＝【確定】2026-10-12「デイリーミッションと同じにする」を選んだ：**祈った時点のLVの推奨の場所で10回出撃したくらい**
 //     （areas.js の tenSortieExpOf）。前は「必要EXP × 2%（LV〜30）・1%（31〜50）・0.5%（51〜80）・0.1%（81〜）」で、序盤は吉でEXP+1だった
 //   ・そこに運勢の倍率（大吉で3倍＝ユーザー「MAX3倍の振れ幅」）。端数は切り上げ
-//   ・運勢の種類・出やすさ・倍率・色・ひとことは**今のⅡと同じ**（src/v2/lib/tree.js の FORTUNES をそのまま使う）
+//   ・運勢の種類・出やすさ・倍率・色・ひとことは**今のⅡと同じ**（src/v2cap/core/tree.js の FORTUNES をそのまま使う）
 //       大吉5%×3／中吉10%×2／小吉15%×1.5／吉25%×1／末吉20%×0.7／凶15%×0.4／大凶10%×0.2（数はユーザー承認の表）
 //   ・1日1回・日付が変わるのは日本時間の5時（今のⅡと同じ）。この版は管理者しか入れないので、
 //     今のⅡの「管理者は何回でも祈れる」は入れない（入れると全員が何回でも祈れてしまう）
 // ★抽選と経験値はサーバー（v2cap_pray）。ここは表示とテストの写し（v2capsql.test.js が表を突き合わせる）
 // ============================================================
 import { tenSortieExpOf } from './areas.js'
-import { FORTUNES, FORTUNE_BY_NAME, canPray, remainUntilPray, prayDayOf, DAY_RESET_HOUR } from '../../v2/lib/tree.js'
+import { FORTUNES, FORTUNE_BY_NAME, canPray, remainUntilPray, prayDayOf, DAY_RESET_HOUR } from '../core/tree.js'
 
 export { FORTUNES, FORTUNE_BY_NAME, canPray, remainUntilPray, prayDayOf, DAY_RESET_HOUR }
 

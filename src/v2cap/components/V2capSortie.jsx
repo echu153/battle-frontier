@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import V2capLogLine from './V2capLogLine.jsx'
-import { runBattle } from '../../v2/lib/battle.js'
-import { loadPref, savePref } from '../../v2/lib/prefs.js'
+import { runBattle } from '../core/battle.js'
+import { loadPref, savePref } from '../core/prefs.js'
 import { SPOTS, spotOf, spotLabel, recLvText, toFighter as enemyFighter } from '../lib/areas.js'
 import {
   pickEncounter, rollEquipDrop, nextBossRate, isSpotUnlocked, isSpotCleared, openUntilOf, SORTIE_CD, chestText,

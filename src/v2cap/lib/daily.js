@@ -12,7 +12,7 @@
 //               前は「必要EXP × %（LV1〜10は10%・11〜30は5%・31〜50は3%・51〜は1%）」で、序盤はEXP+3など1戦ぶんしかなかった。
 //               EXPは戦闘と同じ扱い（いまの職業のClassEXPにも同じ量が入る）
 //       Gold … そのLV × 100
-//   ・日付が変わるのは日本時間の5時（今のⅡと同じ＝ src/v2/lib/daily.js の dayOf をそのまま使う）
+//   ・日付が変わるのは日本時間の5時（今のⅡと同じ＝ src/v2cap/core/daily.js の dayOf をそのまま使う）
 //   ・ミッションの内容は、はじめは仮の「出撃に10回勝つ」1つ（ユーザー決定）。
 //     【確定】2026-10-15 ユーザー指示で3つ足した（下の DAILY_TASKS）
 // ★数える権威はサーバー（各RPCが v2cap_daily_bump を呼ぶ）。受注・受け取りもサーバー（v2cap_daily_accept／_claim）。
@@ -20,7 +20,7 @@
 // ============================================================
 import { tenSortieExpOf } from './areas.js'
 import { TOWER_NAME } from './tower.js'
-import { dayOf, isToday, nextResetAt, DAY_RESET_HOUR } from '../../v2/lib/daily.js'
+import { dayOf, isToday, nextResetAt, DAY_RESET_HOUR } from '../core/daily.js'
 
 export { dayOf, isToday, nextResetAt, DAY_RESET_HOUR }
 

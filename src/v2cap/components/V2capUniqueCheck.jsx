@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { box, miniBtn, TEXT } from '../../v2/components/v2ui.js'
-import { runBattle } from '../../v2/lib/battle.js'
+import { box, miniBtn, TEXT } from './v2ui.js'
+import { runBattle } from '../core/battle.js'
 import { RARITY_COLOR, kindLabel, UNIQUE_ITEMS } from '../lib/equipment.js'
 import { toFighter, wornUniquesOf } from '../lib/loadout.js'
 import { checkUnique, FOE } from '../lib/uniqueCheck.js'

@@ -15,7 +15,7 @@
 //   ★今のⅡと同じ名前の技がある（マッドラッシュ・天墜竜閃 など）。中身はこの版のもの
 //     （この版は名前を自分の名簿＝skills.js の SKILL_BY_NAME で引くので、今のⅡの技とは混ざらない）
 //
-// 戦闘で使う項目（今のⅡの戦闘エンジン src/v2/lib/battle.js・battleIchiji.js が読む）
+// 戦闘で使う項目（今のⅡの戦闘エンジン src/v2cap/core/battle.js・battleIchiji.js が読む）
 //   今からあるもの … kind・mult・add・hits・noCrit・sureHit・sureCrit・defPen・buff（self/enemy）・buffTurns・ail・ailPerHit・
 //     drain・heal・dispel・vsAil・priority・stance・whileStance
 //   上位職で足したもの …

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../../supabase'
-import V2Modal from '../../v2/components/V2Modal.jsx'
-import { STAT_DEFS, STAT_KEYS } from '../../v2/lib/stats.js'
+import V2Modal from './V2Modal.jsx'
+import { STAT_DEFS, STAT_KEYS } from '../core/stats.js'
 import { POINT_UNIT, validateAllocation } from '../lib/level.js'
 
 // ============================================================

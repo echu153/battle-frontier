@@ -17,7 +17,7 @@
 //
 // ★ルーン・合成・進化は作らない（決まったら足す）。
 // ============================================================
-import { STAT_KEYS } from '../../v2/lib/stats.js'
+import { STAT_KEYS } from '../core/stats.js'
 import { RARITY_BASE, PART_MULT, ARMOR_EFFECT, needLvOf, UNIQUE_LV, isUnique } from './equipment.js'
 import { bodyPowerAt } from './level.js'
 import { plusMultOf, PLUS_MAX } from './smith.js'

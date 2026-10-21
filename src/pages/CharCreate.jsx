@@ -141,7 +141,7 @@ export default function CharCreate() {
 
   // ★Ⅱしか作れないなら、この画面には用が無いので送り出す
   useEffect(() => {
-    if (versions && versions.length === 1 && versions[0] === 'v2') window.location.href = '/v2'
+    if (versions && versions.length === 1 && versions[0] === 'v2') window.location.href = '/v2cap'
   }, [versions])
 
   // 作れる版が分かるまでは何も出さない（一瞬だけ無印の画面が見えるのを防ぐ）
@@ -149,7 +149,7 @@ export default function CharCreate() {
   // Ⅱへ送り出している最中
   if (versions.length === 1 && versions[0] === 'v2') return null
 
-  // 選ぶ画面。Ⅱを選んだら v2 のキャラ作成（名前だけ・職業はノーブル固定）へ渡す
+  // 選ぶ画面。Ⅱを選んだら /v2cap（Ⅱのキャラ作成はそちらの中にある・2026-10-22 に V2 初期構成から移した）
   if (versions.length > 1 && game === null) {
     return (
       <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#000820', padding:'20px' }}>
@@ -169,14 +169,14 @@ export default function CharCreate() {
             </div>
           </button>
 
-          <button onClick={() => { window.location.href = '/v2' }} style={pickStyle('#44ddff')}>
+          <button onClick={() => { window.location.href = '/v2cap' }} style={pickStyle('#44ddff')}>
             <div style={{ color:'#44ddff', fontSize:'15px', letterSpacing:'2px' }}>
               BATTLE FRONTIER <span style={{ fontSize:'13px' }}>Ⅱ</span>
               {!V2_PUBLIC && <span style={{ color:'#c69a5c', fontSize:'10px', letterSpacing:0 }}> ［開発中］</span>}
             </div>
             <div style={{ color:'#88ccff', fontSize:'11px', marginTop:'4px' }}>バトルフロンティアⅡ</div>
             <div style={{ color:'#7fa6d0', fontSize:'10px', marginTop:'6px', lineHeight:1.7 }}>
-              作り直し中の新しいほう。職業はノーブルから始まり、名前を決めるだけで始まります。
+              作り直し中の新しいほう。
             </div>
           </button>
         </div>

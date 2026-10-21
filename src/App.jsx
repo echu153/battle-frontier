@@ -63,7 +63,6 @@ const Othello = lazyReload(() => import('./pages/Othello')) // オセロ(開発�
 const Mahjong = lazyReload(() => import('./pages/Mahjong')) // 麻雀(開発限定・ミニゲーム)
 const Cards = lazyReload(() => import('./pages/Cards')) // トランプ広場(開発限定・大富豪/スピード/7ならべ/ババ抜き)
 const BeginnerBingo = lazyReload(() => import('./pages/BeginnerBingo')) // 初心者ビンゴ(開発限定・ミッション)
-const V2Home = lazyReload(() => import('./v2/pages/V2Home')) // リメイク版(開発限定・src/v2以下で旧版と完全分離)
 const V2capHome = lazyReload(() => import('./v2cap/pages/V2capHome')) // Ⅱレベルキャップあり版(開発限定・src/v2cap・docs/v2cap-design.md)
 
 // ページ遷移時の「読み込み中」(Suspense fallback)。チャンク取得がハング/失敗して一定時間
@@ -302,7 +301,8 @@ function App() {
         <Route path="/mahjong" element={session ? <Mahjong /> : <Navigate to="/login" />} />
         <Route path="/cards" element={session ? <Cards /> : <Navigate to="/login" />} />
         <Route path="/bingo" element={session ? <BeginnerBingo /> : <Navigate to="/login" />} />
-        <Route path="/v2" element={session ? <V2Home /> : <Navigate to="/login" />} />
+        {/* /v2（V2 初期構成）は 2026-10-22 に v2cap へまとめた。古いブックマーク用に /v2cap へ送る */}
+        <Route path="/v2" element={<Navigate to="/v2cap" replace />} />
         <Route path="/v2cap" element={session ? <V2capHome /> : <Navigate to="/login" />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>

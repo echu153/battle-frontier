@@ -10,11 +10,11 @@
 // 返すもの（上から順）：
 //   { kind:'turn', turn, final, me:{ hp, max }, foe:{ hp, max } }  … ターンの頭（final＝決着のとき）の表
 //   { kind:'act', who:'me'|'foe', lines:[ログの行…] }               … 行動のまとまり
-// 行の文面は今のⅡと同じ（src/v2/lib/battleLog.js の buildBattleLog を1件ずつ通す）。今のⅡの画面は変えない
+// 行の文面は今のⅡと同じ（src/v2cap/core/battleLog.js の buildBattleLog を1件ずつ通す）。今のⅡの画面は変えない
 // ★runBattle の HP の記録（type:'hp'）は「ターンの終わり」に出る。ここでは「次のターンの頭」として使う
 //   （1ターン目の頭は満タン。ただし塔の階層守護者は前の防衛で減ったHPから始まる＝start で始まりのHPを渡す・2026-10-14）
 // ============================================================
-import { buildBattleLog } from '../../v2/lib/battleLog.js'
+import { buildBattleLog } from '../core/battleLog.js'
 
 // 相手の行動を受けた側の行（side＝受けた側）。動いた側のまとまりに入れて、アイコンは切り替えない
 //   例：「スライムの攻撃！ 盗賊に50ダメージ」→「盗賊は毒になった！」は、どちらもスライムの行動

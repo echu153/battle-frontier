@@ -19,7 +19,7 @@ import { scrapNameOf } from './smith.js'
 import {
   rollBoss, nextBossRate, bandAt, rollDropPart, rollRare,
   SORTIE_CD, BOSS_RATE_STEP, RARE_RATE,
-} from '../../v2/lib/sortie.js'
+} from '../core/sortie.js'
 
 export { nextBossRate, bandAt, SORTIE_CD, BOSS_RATE_STEP, RARE_RATE }
 

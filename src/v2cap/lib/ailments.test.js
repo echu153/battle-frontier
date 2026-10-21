@@ -1,11 +1,11 @@
 // 「レベルキャップあり」版（v2cap）の状態異常 — 火傷・封印・恐怖の敵への割り当てと、この版だけの決まり（node --test）
-// ★2026-10-10 ユーザー決定。仕組みそのものの確かめは src/v2/lib/burnSealFear.test.js
+// ★2026-10-10 ユーザー決定。仕組みそのものの確かめは src/v2/lib/burnSealFear.test.js（V2 初期構成・2026-10-22 に消した）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { INITIAL_STATS } from '../../v2/lib/stats.js'
-import { createSide } from '../../v2/lib/battle.js'
-import { AIL_KEYS } from '../../v2/lib/ailments.js'
-import { ENEMY_SKILLS as V2_SKILLS, AREAS_SORTED } from '../../v2/lib/enemies.js'
+import { INITIAL_STATS } from '../core/stats.js'
+import { createSide } from '../core/battle.js'
+import { AIL_KEYS } from '../core/ailments.js'
+import { ENEMY_SKILLS as V2_SKILLS, AREAS_SORTED } from '../core/enemies.js'
 import { ENEMY_SKILLS, AREA_ROSTERS } from './monsters.js'
 import { SPOTS, toFighter as enemyFighter } from './areas.js'
 import { toFighter } from './loadout.js'

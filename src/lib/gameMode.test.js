@@ -65,15 +65,13 @@ test('★版の判定は gameMode.js だけに書く', () => {
   const create = src('../pages/CharCreate.jsx')
   assert.match(create, /creatableVersions\(/, 'キャラ作成が判定を使っていない')
   assert.ok(!/const V2_PUBLIC = /.test(create), 'キャラ作成に古いフラグが残っている')
-  const home = src('../v2/pages/V2Home.jsx')
-  assert.match(home, /canPlayV2\(p\?\.is_admin, !!tester\)/, '/v2 のゲートが判定を使っていない')
-  assert.ok(!/if \(!p\?\.is_admin\) \{ reportDevAccess/.test(home), '/v2 に古いゲートが残っている')
+  // /v2（V2 初期構成）のホームは 2026-10-22 に消した。いまの /v2cap は is_admin だけを通す（canPlayV2 はまだ使っていない）
 })
 
-// ★Ⅱだけで始めた人は旧版の profiles に行が無い（v2_create_character は v2_profiles にしか書かない）。
+// ★Ⅱだけで始めた人は旧版の profiles に行が無い（v2cap_create_character は v2cap_profiles にしか書かない）。
 //   ここを p.username と書くと、Ⅱ単独リリース後の新規が真っ白になる
 test('★旧版のデータが無くてもⅡのホームが落ちない', () => {
-  const home = src('../v2/pages/V2Home.jsx')
+  const home = src('../v2cap/pages/V2capHome.jsx')   // 2026-10-22 から Ⅱ＝v2cap
   assert.match(home, /setName\(p\?\.username \|\| ''\)/, 'profiles が無いと落ちる書き方になっている')
   assert.match(home, /setIsAdmin\(!!p\?\.is_admin\)/, 'profiles が無いと落ちる書き方になっている')
   // コメント行は動かないので見ない

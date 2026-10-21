@@ -11,11 +11,11 @@
 //     4部位 … 表のとおり。「付与確率+10%」などは**確率を1割増やす**（×1.1・ユーザー選択）。「回避+8%」「クリティカル率+8%」「相手の命中-8%」は%ポイント
 //     ★蒼海の入り江の軽装「海賊の嗅覚」は「ドロップ率+10%」をやめて**レア以上が落ちる確率1.2倍**（ユーザー指示・1.2倍はユーザー選択）
 //   ・違うエリア（または違う系統）の2部位ずつなら、2つのセットが同時に発動する
-// 戦闘で使う形（fighter.setFx）は setFxOf が作り、今のⅡの戦闘エンジンの src/v2/lib/battleSet.js が読む（項目の意味はそちらの冒頭）。
+// 戦闘で使う形（fighter.setFx）は setFxOf が作り、今のⅡの戦闘エンジンの src/v2cap/core/battleSet.js が読む（項目の意味はそちらの冒頭）。
 // 3部位の能力値+%は戦闘の前にステへ足す（loadout.js の statBreakdown の set）。海賊の嗅覚は出撃のドロップ（sortie.js）
 // ============================================================
-import { STAT_DEFS } from '../../v2/lib/stats.js'
-import { AIL_LABEL } from '../../v2/lib/ailments.js'
+import { STAT_DEFS } from '../core/stats.js'
+import { AIL_LABEL } from '../core/ailments.js'
 import { AREA_LIST } from './areas.js'
 
 // セットに数える部位とレア度
@@ -130,7 +130,7 @@ export const setStatPctOf = (sets) => {
   return out
 }
 
-// 戦闘で使う形（src/v2/lib/battleSet.js が読む）。何も発動していなければ null
+// 戦闘で使う形（src/v2cap/core/battleSet.js が読む）。何も発動していなければ null
 // ★確率の項目は倍率にする（2部位：かかる確率×0.7・深淵の海溝×0.8／付与確率+10%：×1.1）。2つのセットが同じ状態異常を持てば掛け合わせる
 export const setFxOf = (sets) => {
   const fx = {}

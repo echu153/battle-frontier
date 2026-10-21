@@ -1,4 +1,4 @@
-import V2LogLine from '../../v2/components/V2LogLine.jsx'
+import V2LogLine from './V2LogLine.jsx'
 import V2capIcon from './V2capIcon.jsx'
 import { richSegments, RICH } from '../../lib/battleLogRich'
 

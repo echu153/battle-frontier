@@ -1,6 +1,6 @@
 import { Fragment } from 'react'
-import { STAT_DEFS, STAT_KEYS, calcPower } from '../../v2/lib/stats.js'
-import { box, TEXT } from '../../v2/components/v2ui.js'
+import { STAT_DEFS, STAT_KEYS, calcPower } from '../core/stats.js'
+import { box, TEXT } from './v2ui.js'
 import { SLOTS, SLOT_LABEL, ARMOR_EFFECT } from '../lib/equipment.js'
 import { jobOf } from '../lib/jobs.js'
 import { equippedItems, statBreakdown } from '../lib/loadout.js'

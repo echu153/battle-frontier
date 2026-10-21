@@ -8,7 +8,7 @@
 // ============================================================
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../../supabase'
-import { useStored } from '../../v2/lib/prefs.js'
+import { useStored } from '../core/prefs.js'
 import { GOLD_PER_MEDAL, maxExchangeOf } from '../lib/casino.js'
 import { setSoundOn, sfx, fx } from './casinoFx.js'
 import { CASINO, panel, pill, bigBtn, fmt, signed } from './casinoStyle.js'

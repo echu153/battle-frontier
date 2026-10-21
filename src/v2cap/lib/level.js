@@ -1,7 +1,7 @@
 // ============================================================
 // バトルフロンティアⅡ「レベルキャップあり」版（v2cap）— LVとEXP
 // ------------------------------------------------------------
-// 設計は docs/v2cap-design.md。ステータスの種類（8種）と初期値・戦闘力の数え方は今のⅡと同じ（src/v2/lib/stats.js）。違うのは：
+// 設計は docs/v2cap-design.md。ステータスの種類（8種）と初期値・戦闘力の数え方は今のⅡと同じ（src/v2cap/core/stats.js）。違うのは：
 //   ・**LVアップでステは上がらない**。かわりに**ステータスポイント**が入り、自分で振る（下の pointsForLv）
 //   ・**転職しても下がらない**。LV100で止まり、周回（LV1に戻る）は無い
 //   ・必要EXPはMMORPGのように、上がるほど重くなる（下の needExp）
@@ -11,7 +11,7 @@
 //   （supabase_v2cap_core.sql の v2cap_need / v2cap_sortie_settle / v2cap_apply_exp）。
 //   式を変えるときは必ず両方を直すこと（v2capsql.test.js が突き合わせる）。
 // ============================================================
-import { STAT_KEYS, STAT_DEFS, INITIAL_STATS, calcPower } from '../../v2/lib/stats.js'
+import { STAT_KEYS, STAT_DEFS, INITIAL_STATS, calcPower } from '../core/stats.js'
 
 export { STAT_KEYS, INITIAL_STATS, calcPower }
 

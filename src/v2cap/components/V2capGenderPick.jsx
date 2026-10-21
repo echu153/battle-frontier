@@ -1,4 +1,4 @@
-import { TEXT } from '../../v2/components/v2ui.js'
+import { TEXT } from './v2ui.js'
 import { GENDERS } from '../lib/gender.js'
 
 // ============================================================

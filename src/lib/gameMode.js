@@ -16,7 +16,7 @@
 //   Ⅱを作らせたのに /v2 へ入れない、という行き止まりになる。テストで縛ってある。
 // ============================================================
 
-// バトルフロンティアⅡを一般公開したか。false のあいだは is_admin だけが /v2 に入れる
+// バトルフロンティアⅡを一般公開したか。false のあいだは is_admin だけが /v2cap に入れる（2026-10-22 から Ⅱ＝v2cap。V2 初期構成は消した）
 export const V2_PUBLIC = false
 
 // 新しくキャラクターを作れる版。'v1only' | 'v2only' | 'both'
@@ -36,7 +36,7 @@ export const canCreate = (version, isAdmin = false) => {
 export const creatableVersions = (isAdmin = false) =>
   ['v1', 'v2'].filter(v => canCreate(v, isAdmin))
 
-// バトルフロンティアⅡに入れるか（/v2 のゲート）
+// バトルフロンティアⅡに入れるか（前は /v2 のゲート。⚠いまの /v2cap は画面とサーバー（v2cap_is_dev）で is_admin だけを通していて、これはまだ使っていない）
 // ★テスター … 公開前に「is_admin ではないがⅡには入れる」捨てアカウント。
 //   取引所のように**2人いないと確かめられない**ものを試すために作る。
 //   名簿はサーバー（v2_testers）が持っていて、足せるのは is_admin だけ。

@@ -8,7 +8,7 @@
 // ============================================================
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
-import { useStored } from '../../v2/lib/prefs.js'
+import { useStored } from '../core/prefs.js'
 import { WHEEL_ORDER, colorOfNumber, ROULETTE_CHIPS, ROULETTE_MAX_TOTAL, ROULETTE_MAX_BETS, ROULETTE_STRAIGHT, betKeyOf, betLabelOf, rouletteTotalOf, winTierOf } from '../lib/casino.js'
 import { sfx, fx, celebrate, vibrate } from './casinoFx.js'
 import { CASINO, panel, bigBtn, pill, fmt } from './casinoStyle.js'

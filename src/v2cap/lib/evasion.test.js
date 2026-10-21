@@ -3,8 +3,8 @@
 //   「命中しやすい」みたいな感じでまとめて、10%くらい命中補正はいってるみたいな」／付ける技は「外しやすい職に1〜2個」
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { evasionRate, capEvaOf, CAP_EVA, EVA_COEF, EVA_CURVE, evasionScoreOf } from '../../v2/lib/combat.js'
-import { createSide, takeAction } from '../../v2/lib/battle.js'
+import { evasionRate, capEvaOf, CAP_EVA, EVA_COEF, EVA_CURVE, evasionScoreOf } from '../core/combat.js'
+import { createSide, takeAction } from '../core/battle.js'
 import { CAP_RULES } from './rules.js'
 import { ICHIJI_SKILLS, EASY_HIT } from './skillsIchiji.js'
 import { SKILLS } from './skills.js'
@@ -113,7 +113,7 @@ test('【確定】2026-10-16 納刀のアセンション（ユーザーがシー
 })
 
 test('【確定】2026-10-17 ユーザー「回避力が直接上がるやつ、最高でも15％にして、40％とかだと強すぎる」：直接の回避は1つでも重ねても15%まで', async () => {
-  const { CAP_EVA_BONUS_MAX } = await import('../../v2/lib/combat.js')
+  const { CAP_EVA_BONUS_MAX } = await import('../core/combat.js')
   const { ASC_CUSTOM } = await import('./ascension.js')
   const { ARMOR_SETS } = await import('./armorSets.js')
   assert.equal(CAP_EVA_BONUS_MAX, 15)

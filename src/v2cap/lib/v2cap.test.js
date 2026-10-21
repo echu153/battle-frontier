@@ -2,9 +2,9 @@
 // 設計は docs/v2cap-design.md。ユーザーが決めたことは【確定】と書いてある
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { STAT_KEYS, STAT_DEFS, calcPower, INITIAL_STATS } from '../../v2/lib/stats.js'
-import { skillValue, VALUE_TABLE, MP_TABLE, BUFF_PER_MP, HEAL_PER_MP, MPREGEN_PER_MP, SKILLS as V2_SKILLS, offClassMult } from '../../v2/lib/skills.js'
-import { createSide, mpCostOf, runBattle } from '../../v2/lib/battle.js'
+import { STAT_KEYS, STAT_DEFS, calcPower, INITIAL_STATS } from '../core/stats.js'
+import { skillValue, VALUE_TABLE, MP_TABLE, BUFF_PER_MP, HEAL_PER_MP, MPREGEN_PER_MP, SKILLS as V2_SKILLS, offClassMult } from '../core/skills.js'
+import { createSide, mpCostOf, runBattle } from '../core/battle.js'
 import {
   MAX_LV, needExp, totalExpTo, applyExp, bodyPowerAt, staminaMaxOf, NEED_BASE, NEED_PERMIL, STAMINA_RECOVER_MS, rollStamina, msToNextStamina,
   pointsForLv, totalPointsTo, POINT_UNIT, validateAllocation, applyAllocation,

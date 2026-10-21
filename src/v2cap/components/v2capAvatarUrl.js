@@ -1,5 +1,5 @@
 import { supabase } from '../../supabase'
-import { loadPref } from '../../v2/lib/prefs.js'
+import { loadPref } from '../core/prefs.js'
 import { AVATAR_CUSTOM_ON } from '../lib/avatar.js'
 import { homeIconOf } from '../lib/classArt.js'
 import { artGenderOf } from '../lib/gender.js'

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../../supabase'
-import { useStored } from '../../v2/lib/prefs.js'
+import { useStored } from '../core/prefs.js'
 import { FOLD_DEFAULTS, foldLocalNameOf, foldOf } from '../lib/uiPrefs.js'
 
 // ============================================================

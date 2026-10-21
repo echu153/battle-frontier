@@ -4,8 +4,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { buildCapBattleView } from './battleView.js'
-import { buildBattleLog } from '../../v2/lib/battleLog.js'
-import { runBattle } from '../../v2/lib/battle.js'
+import { buildBattleLog } from '../core/battleLog.js'
+import { runBattle } from '../core/battle.js'
 import { SPOTS, toFighter } from './areas.js'
 
 const YOU = 'おれおれお'

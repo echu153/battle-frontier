@@ -1,8 +1,8 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
-import V2Modal from '../../v2/components/V2Modal.jsx'
-import { box, miniBtn, TEXT } from '../../v2/components/v2ui.js'
-import { STAT_DEFS, STAT_KEYS } from '../../v2/lib/stats.js'
+import V2Modal from './V2Modal.jsx'
+import { box, miniBtn, TEXT } from './v2ui.js'
+import { STAT_DEFS, STAT_KEYS } from '../core/stats.js'
 import { CLASSES, jobOf, jobMaxOf, stageColorOf, stageLabelOf } from '../lib/jobs.js'
 import {
   treeOf, treeSizeOf, ascStateOf, apTotalOf, apSpentOf, ascEffectsOf, ascSkillDetail, ascendError, ascResetGoldOf, routeTo, ASC_STAT_COLOR,

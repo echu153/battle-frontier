@@ -27,8 +27,8 @@
 //   ここが盤面の中身と効果の正。種は tools/v2cap-sql.mjs がここから作る（v2capsql.test.js が突き合わせる）
 // ★サーバーが数えるのは「つながっているか」「APが足りるか」と「スキル編成の最大MP」（MPのマス）だけ。ほかの効果は戦闘（この写し）で効く
 // ============================================================
-import { STAT_KEYS, STAT_DEFS } from '../../v2/lib/stats.js'
-import { AIL_LABEL } from '../../v2/lib/ailments.js'
+import { STAT_KEYS, STAT_DEFS } from '../core/stats.js'
+import { AIL_LABEL } from '../core/ailments.js'
 import { SKILL_BY_NAME, skillsOf, isPassive } from './skills.js'
 import { JOB_BONUS, CLASSES, stageOf, jobOf, jobLevelsGained, ASC_AP_PER_JLV } from './jobs.js'
 import { ASC_LAYOUT } from './ascLayout.js'
@@ -410,7 +410,7 @@ const buffEntries = (skill) => ['self', 'enemy'].flatMap(side =>
 const round3 = (v) => Math.round(v * 1000) / 1000
 
 // その技にスキルマスを当てた形を返す（元の技は書き換えない）。up は上がり幅（ascUpOf）
-//   攻撃 … ascDmg（%）＝戦闘エンジン（src/v2/lib/battle.js）がその技のダメージ全体に掛ける
+//   攻撃 … ascDmg（%）＝戦闘エンジン（src/v2cap/core/battle.js）がその技のダメージ全体に掛ける
 //   回復 … ascHeal（%）＝同じく回復量（HP・MP・毎ターンの回復）に掛ける
 //   バフ … 表の上がり幅を合計 up だけ足す／表が無ければ ASC_BUFF_PARAMS の最初の項目に up 足す
 //   回数 … ASC_COUNT_UP の数に up 足す

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../supabase'
-import { box, btn, miniBtn, TEXT } from '../../v2/components/v2ui.js'
-import { STAT_DEFS } from '../../v2/lib/stats.js'
-import { KIND_COLOR } from '../../v2/lib/skills.js'
-import { V2SkillTip } from '../../v2/components/V2ItemTip.jsx'
+import { box, btn, miniBtn, TEXT } from './v2ui.js'
+import { STAT_DEFS } from '../core/stats.js'
+import { KIND_COLOR } from '../core/skills.js'
+import { V2SkillTip } from './V2ItemTip.jsx'
 import {
   CLASSES, CLASS_BY_ID, STAGES, STAGE_ORDER, JOB_LV_HPMP, jobOf, jobMaxOf, jobNeed, missingReqOf, canBecome, reqText, weaponsOf, canEquipType,
   classDescOf, mainStatsOf, stageOf, stageLabelOf, stageColorOf, learnOrderOf, learnAtOf, jobBonusText, nextClassesOf,
@@ -11,7 +11,7 @@ import {
 import { passiveOf } from '../lib/skills.js'
 import { ITEM_BY_ID } from '../lib/equipment.js'
 import { ART_GENDERS, artSrcOf, hasArt } from '../lib/classArt.js'
-import { useStored } from '../../v2/lib/prefs.js'
+import { useStored } from '../core/prefs.js'
 import { artGenderOf } from '../lib/gender.js'
 
 // ============================================================

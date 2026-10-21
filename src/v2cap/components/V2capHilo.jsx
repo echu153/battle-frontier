@@ -8,7 +8,7 @@
 // ============================================================
 import { useState } from 'react'
 import { supabase } from '../../supabase'
-import { useStored } from '../../v2/lib/prefs.js'
+import { useStored } from '../core/prefs.js'
 import { HILO_BETS, HILO_MIN_BET, HILO_MAX_BET, HILO_MAX_STREAK, HILO_CAP_MULT, hiloMult100Of, hiloChanceOf, hiloNextPotOf, hiloPayoutOf, winTierOf } from '../lib/casino.js'
 import { sfx, fx, celebrate, vibrate } from './casinoFx.js'
 import { CASINO, panel, bigBtn, pill, fmt, DISPLAY_FONT } from './casinoStyle.js'

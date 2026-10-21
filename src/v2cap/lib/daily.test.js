@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { MAX_LV } from './level.js'
 import { SPOTS, recSpotOfLv, recLvOf, tenSortieExpOf } from './areas.js'
-import { DAY_RESET_HOUR as V2_DAY_RESET_HOUR } from '../../v2/lib/daily.js'
+import { DAY_RESET_HOUR as V2_DAY_RESET_HOUR } from '../core/daily.js'
 import { TOWER_NAME } from './tower.js'
 import {
   DAILY_TASKS, DAILY_TASK_KEYS, DAILY_SORTIES, DAILY_GOLD_PER_LV, dailyRewardOf,

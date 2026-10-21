@@ -1,8 +1,8 @@
 // 上位職の仕組みの回帰テスト（2つ目のまとまり：反動・結界・反撃・追撃・属性・連撃・召喚の強化・回復・溜め・軽減）（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createSide, takeAction, runBattle } from '../../v2/lib/battle.js'
-import { inflict, hasAilment } from '../../v2/lib/ailments.js'
+import { createSide, takeAction, runBattle } from '../core/battle.js'
+import { inflict, hasAilment } from '../core/ailments.js'
 import { SKILL_BY_NAME, passiveOf } from './skills.js'
 import { RETIRED_BY_NAME, retiredPassiveOf } from './retiredIchiji.fixture.js'
 import { attackKindOf } from './jobs.js'

@@ -12,7 +12,7 @@
 import { MAX_LV } from './level.js'
 import { jobUpHead, jobUpNote } from './jobs.js'
 import { RARITY_COLOR } from './equipment.js'
-import { LOG_PLAIN } from '../../v2/components/v2ui.js'
+import { LOG_PLAIN } from '../components/v2ui.js'
 
 // 「EXP +12」（LV上限なら「（LV上限のため入らない）」を添える）
 export const expText = (exp, lvBefore) => `EXP +${exp}${lvBefore >= MAX_LV ? '（LV上限のため入らない）' : ''}`

@@ -1,5 +1,5 @@
-import { STAT_DEFS, STAT_KEYS } from '../../v2/lib/stats.js'
-import { TEXT } from '../../v2/components/v2ui.js'
+import { STAT_DEFS, STAT_KEYS } from '../core/stats.js'
+import { TEXT } from './v2ui.js'
 import { PARTS, ALL_RARITIES, RARITY_COLOR, partLabel, rarityLabel } from '../lib/equipment.js'
 import { plusOf, plusLabel } from '../lib/smith.js'
 import { PLUS_COLOR, chip, areaOptionLabel, filterSelect, optionStyle } from './v2capGearView.js'

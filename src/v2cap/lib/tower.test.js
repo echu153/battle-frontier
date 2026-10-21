@@ -23,7 +23,7 @@ import { rollEquipDrop, DROP_CHANCE, openUntilOf } from './sortie.js'
 import { ART_SD } from './classArt.js'
 import { pvpHpMultFor } from './pvp.js'
 import { toFighter } from './loadout.js'
-import { runBattle } from '../../v2/lib/battle.js'
+import { runBattle } from '../core/battle.js'
 import { buildCapBattleView } from './battleView.js'
 
 // 決まった並びの乱数

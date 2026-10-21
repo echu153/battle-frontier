@@ -17,7 +17,7 @@
 // ★権威はサーバー（supabase_v2cap_core.sql の v2cap_classes / v2cap_job_need / v2cap_apply_exp）。
 //   ここは表示とシミュレーション用の写し。v2capsql.test.js が突き合わせる。
 // ============================================================
-import { STAT_KEYS, STAT_DEFS } from '../../v2/lib/stats.js'
+import { STAT_KEYS, STAT_DEFS } from '../core/stats.js'
 import { SKILLS, skillsOf, isPassive } from './skills.js'
 
 // 初期職のClassLVの上限。上位職は50（STAGES.ichiji.max）。職業ごとの上限は jobMaxOf を使う
