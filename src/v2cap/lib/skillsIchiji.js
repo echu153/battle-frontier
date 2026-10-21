@@ -173,18 +173,20 @@ export const ICHIJI_SKILLS = [
   { name:'グランドクロス', cls:'聖騎士', kind:P, mult:0.82, add:[{ stat:'vit', rate:0.82 }], proc:75, mp:28, sureHit:true, useHoly:{ frac:1 }, desc:'必ず当たる。聖光をすべて使い、使った量を追加ダメージにする' },
 
   // ===== 槍使い系 =====
-  // 竜騎士【跳躍】：跳んでいる間（1〜2ターン）は相手の攻撃を30%で回避し、着地で大きく攻める
+  // 竜騎士【跳躍】：跳んでいる間（1〜2ターン）は相手の攻撃を15%で回避し、着地で大きく攻める。
+  //   ★2026-10-21 ユーザー「溜め技の威力が高くなるのはいいけど、ほかの職に比べて無条件で高くないか」「出血5への攻撃をMAX火力5だとして、無条件なんだから3.5とか」：
+  //   跳躍は条件の無い技なので 3.5（3ターンのハイジャンプは4.3＝パッシブ込みで5まで）。そのぶん条件つきの「着地の次の天墜竜閃」を×1.2→×2.5（下の⑤）
   { name:'竜の血', cls:'竜騎士', kind:'passive', mp:0, passive:{ landPct:15, statPct:{ vit:10 } }, desc:'跳躍スキルの着地ダメージ+15%・自分のVIT+10%' },
   { name:'ドラゴンスラスト', cls:'竜騎士', kind:P, mult:1.57, proc:95, mp:7, defPen:0.1, desc:'相手の防御を10%無視' },
-  { name:'ジャンプ', cls:'竜騎士', kind:P, mult:4.18, proc:85, mp:14, jump:{ turns:1, mult:4.18, evade:15 }, desc:'跳躍して、次のターンに着地して攻撃。跳躍中は相手の攻撃を15%で回避' },
+  { name:'ジャンプ', cls:'竜騎士', kind:P, mult:3.5, proc:85, mp:14, jump:{ turns:1, mult:3.5, evade:15 }, desc:'跳躍して、次のターンに着地して攻撃。跳躍中は相手の攻撃を15%で回避' },
   { name:'ドラゴンファング', cls:'竜騎士', kind:P, mult:0.87, hits:2, noCrit:true, proc:88, mp:12, defPen:0.2, desc:'2連撃。相手の防御を20%無視・クリティカルなし' },
   { name:'スカイスピア', cls:'竜騎士', kind:P, mult:1.41, add:[{ stat:'dex', rate:0.33 }], proc:88, mp:11, sureHit:true, desc:'必ず当たる' },
   { name:'ドラゴンロア', cls:'竜騎士', kind:B, proc:100, mp:12, buff:{ enemy:{ str:-15, int_stat:-15 } }, ail:{ key:'fear', chance:40 }, priority:1, desc:'相手のSTR-15%・INT-15%・40%で恐怖' },
   { name:'竜鱗', cls:'竜騎士', kind:B, proc:100, mp:10, buff:{ self:{ vit:20, agi:20 } }, priority:1, desc:'自分のVIT+20%・AGI+20%' },
-  { name:'ハイジャンプ', cls:'竜騎士', kind:P, mult:6.44, proc:80, mp:18, jump:{ turns:2, mult:6.44, evade:15 }, desc:'跳躍して、2ターン後に着地して攻撃。跳躍中は相手の攻撃を15%で回避' },
+  { name:'ハイジャンプ', cls:'竜騎士', kind:P, mult:4.3, proc:80, mp:18, jump:{ turns:2, mult:4.3, evade:15 }, desc:'跳躍して、2ターン後に着地して攻撃。跳躍中は相手の攻撃を15%で回避' },
   { name:'竜翔', cls:'竜騎士', kind:B, proc:100, mp:12, soar:{ turns:3, land:20, proc:10 }, priority:1, desc:'3ターンの間、着地ダメージ+20%・跳躍の技の発動率+10%' },
-  { name:'天墜竜閃', cls:'竜騎士', kind:P, mult:1.83, proc:75, mp:24, defPen:0.3, afterLand:1.2, desc:'溜めなしで撃つ。相手の防御を30%無視。直前のターンに着地していれば×1.2' },
-  { name:'天竜落とし', cls:'竜騎士', kind:P, mult:4.21, proc:75, mp:28, jump:{ turns:1, mult:4.21, evade:15, defPen:0.3, ail:{ key:'fear', chance:30 } }, desc:'跳躍して1ターン後に着地して攻撃（跳躍中は15%で回避）。相手の防御を30%無視・30%で恐怖' },
+  { name:'天墜竜閃', cls:'竜騎士', kind:P, mult:1.83, proc:75, mp:24, defPen:0.3, afterLand:2.5, desc:'溜めなしで撃つ。相手の防御を30%無視。直前のターンに着地していれば×2.5' },
+  { name:'天竜落とし', cls:'竜騎士', kind:P, mult:3.5, proc:75, mp:28, jump:{ turns:1, mult:3.5, evade:15, defPen:0.3, ail:{ key:'fear', chance:30 } }, desc:'跳躍して1ターン後に着地して攻撃（跳躍中は15%で回避）。相手の防御を30%無視・30%で恐怖' },
   // ストームランサー【コンボ】：1ヒットごとにコンボ+1（最大20）。多段で稼ぎ、決め技に乗せる
   { name:'槍の型', cls:'ストームランサー', kind:'passive', mp:0, passive:{ combo:{ max:20, pct:2 } }, desc:'攻撃が1ヒットするごとにコンボ+1（最大20）。コンボ1につき与ダメージ+2%' },
   { name:'連突き', cls:'ストームランサー', kind:P, mult:0.54, hits:3, proc:95, mp:6, noCrit:true, desc:'3連撃。クリティカルなし' },
@@ -307,7 +309,7 @@ export const ICHIJI_SKILLS = [
   { name:'グレネード', cls:'デストロイヤー', kind:P, mult:0.92, add:[{ stat:'dex', rate:0.76 }], proc:88, mp:12, ail:{ key:'burn', chance:50 }, desc:'50%で火傷' },
   { name:'弾薬補給', cls:'デストロイヤー', kind:B, proc:100, mp:10, buff:{ self:{ str:20, dex:20 } }, gain:{ key:'load', n:1, max:5 }, priority:1, desc:'自分のSTR+20%・DEX+20%・装填+1' },
   { name:'弾帯換装', cls:'デストロイヤー', kind:B, proc:100, mp:12, gain:{ key:'load', n:2, max:5 }, priority:1, desc:'装填+2（上限の5を超えた分は増えない）' },
-  { name:'フルバースト', cls:'デストロイヤー', kind:P, mult:1.32, add:[{ stat:'dex', rate:1.32 }], proc:75, mp:24, useAll:{ key:'load', per:0.3 }, selfStun:1, desc:'装填をすべて消費し、1つにつき威力+30%。使用後1ターン行動不可' },
+  { name:'フルバースト', cls:'デストロイヤー', kind:P, mult:1.32, add:[{ stat:'dex', rate:1.32 }], proc:75, mp:24, useAll:{ key:'load', per:0.18 }, selfStun:1, desc:'装填をすべて消費し、1つにつき威力+18%。使用後1ターン行動不可' },
   { name:'カーペットボム', cls:'デストロイヤー', kind:P, mult:0.28, add:[{ stat:'dex', rate:0.23 }], hits:3, noCrit:true, proc:75, mp:28, hitsPerStackUse:{ key:'load', n:1, max:5, use:1 }, desc:'3連撃。装填を1つ使い、使う前の装填1つにつき+1連撃（最大+5）。クリティカルなし' },
 
   // ===== 魔法使い系 =====
@@ -452,6 +454,10 @@ export const ICHIJI_TUNE = {}
 //   式神使い 陰陽の理 与ダメージ+15%→+8%／聖職者 神聖加護の回復量+20%をなくす・ハイヒール 回復1.6→1.3／死霊使い 死者の盾 −4%→−2%／
 //   竜騎士 跳躍の技の威力×1.15／クロノマンサー 刻の加護 追加行動20%→35%／薬師 傷薬 回復1.2→0.8（skills.js）
 //   ボス戦の強さは倒れにくさに強く引っぱられる（倍率ではほとんど動かない）ので、HPや回復で合わせた
+// ⑤ 2026-10-21 ユーザー「条件つきの最大（暗殺者の出血5への攻撃）を5とすると、無条件の技は3.5くらい。ほかもそんな感じで」：
+//   技の威力（書いてある倍率の合計・連撃は回数ぶん・パッシブ込み）を「条件の無い技は3.5まで・条件を満たしたときの最大は5まで」にそろえた（powerRule.test.js が見張る）。
+//   外れていたのは竜騎士の跳躍（パッシブ込みで4.8〜7.4）とフルバースト（装填5つで6.6）だけ：跳躍 4.18／6.44／4.21→3.5／4.3／3.5・フルバースト 1つにつき+30%→+18%。
+//   竜騎士は下げるだけだと対人7〜8%まで落ちたので、条件つきの天墜竜閃（直前のターンに着地）を×1.2→×2.5（＝4.58）で埋め合わせた
 // ★残っていること：LV80のボスは攻撃が強く、ボスの攻撃3回ほどで決着する（敵の強さはクラスの能力が決まってから詳しく決める＝ユーザー）
 
 // 職ごとの組み方の例（各職2つ）。シミュレーターがこの組み方で戦う。

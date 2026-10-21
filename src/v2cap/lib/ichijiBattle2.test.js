@@ -99,10 +99,11 @@ test('元素共鳴：直前と違う属性の魔法を撃つたび共鳴+1（共
   assert.deepEqual(['ファイア', 'サンダー', 'アイスランス'].map(n => S(n).elem), ['fire', 'thunder', 'ice'])
 })
 
-test('天墜竜閃：直前のターンに着地していれば×1.2／影討ち：1ターン目なら威力+50%', () => {
+test('天墜竜閃：直前のターンに着地していれば×2.5（2026-10-21 に×1.2から）／影討ち：1ターン目なら威力+50%', () => {
   const land = castThen('竜騎士', [], '天墜竜閃', (m) => { m.turn = 3; m.landedTurn = 2 })
   const no = castThen('竜騎士', [], '天墜竜閃', (m) => { m.turn = 3; m.landedTurn = 0 })
-  assert.ok(Math.abs(land.dmg / no.dmg - 1.2) < 0.02)
+  assert.equal(S('天墜竜閃').afterLand, 2.5)
+  assert.ok(Math.abs(land.dmg / no.dmg - 2.5) < 0.05, `${land.dmg}／${no.dmg}`)
   const t0 = castThen('暗殺者', [], '影討ち', (m) => { m.turn = 0 })
   const t1 = castThen('暗殺者', [], '影討ち', (m) => { m.turn = 1 })
   assert.ok(Math.abs(t0.dmg / t1.dmg - 1.5) < 0.02)

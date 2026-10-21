@@ -165,7 +165,10 @@ export const ichijiSet = (cls, buildIdx, learned, maxMp) => {
     : []
   // 種類ごと（強化→攻撃→回復）に並べ、同じ種類では上位職の技を先に置く
   const rank = (sk) => (sk.kind === 'buff' ? 0 : isAtk(sk) ? 1 : 2)
-  const merged = [...orderForSet(own), ...fill].map((sk, i) => ({ sk, i })).sort((a, b) => rank(a.sk) - rank(b.sk) || a.i - b.i).map(x => x.sk)
+  // ★組み方の例は「仕組みが回る並び」で書いてある（skillsIchiji.js の ICHIJI_BUILDS）＝書いた並びのまま使う。
+  //   前は「強化→攻撃は後に覚えた順」に並べ直していて、竜騎士の「跳躍→着地の次の天墜竜閃」が回らなかった（2026-10-21）
+  const ownInOrder = build.map(n => own.find(sk => sk.name === n)).filter(Boolean)
+  const merged = [...ownInOrder, ...fill].map((sk, i) => ({ sk, i })).sort((a, b) => rank(a.sk) - rank(b.sk) || a.i - b.i).map(x => x.sk)
   return fitSet(merged, maxMp)
 }
 const fitSet = (sks, maxMp) => {
