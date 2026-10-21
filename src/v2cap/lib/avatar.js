@@ -36,3 +36,20 @@ export const uploadPathOf = (uid, fileName, now = Date.now()) => {
   const ext = (String(fileName || '').split('.').pop() || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'png'
   return `${uid}/v2cap-${now}.${ext}`
 }
+
+// ------------------------------------------------------------
+// 【確定】2026-10-21 ユーザー指示「体の大きさは画像1に統一して、モーション次第でその分上下が大きくなるようにできない？
+//   上下の幅だけ増やしてもらえばできると思う」（画像1＝暗殺者女の待機GIF 224×224）：
+//   ・アイコンの横幅は決まった大きさ（ホーム76px）のまま、画像の横幅をそこに合わせて縮める。縦長の画像は切らずに枠を縦に伸ばす
+//     → 体の大きさは画像の作り方（横幅と体の描き方の大きさ）でそろえる。こちらで体の範囲を調べて合わせることはしない
+//     （調べて合わせる仕組みは一度作ったが、ユーザーが「枠内に画像収めるように作るから前の状態に戻して」で戻した）
+//   ・横長の画像は今までどおり正方形に切り取る（真ん中）
+//   ・縦は横幅の AVATAR_MAX_TALL 倍まで（とても縦長の写真で並びが崩れないように）。越えたぶんは上を切る（足元は残す）
+// ------------------------------------------------------------
+export const AVATAR_MAX_TALL = 2
+
+// アイコンの <img> の大きさ（size＝横幅 px）
+export const avatarImgStyle = (size) => ({
+  width: `${size}px`, height: 'auto', minHeight: `${size}px`, maxHeight: `${size * AVATAR_MAX_TALL}px`,
+  objectFit: 'cover', objectPosition: 'center bottom', display: 'block', flexShrink: 0,
+})

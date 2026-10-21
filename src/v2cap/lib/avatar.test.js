@@ -1,7 +1,7 @@
 // v2cap：アイコン（2026-10-11 ユーザー指示「自分で設定できるように」）の決まりを固定するテスト（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { AVATAR_PRESETS, AVATAR_MAX_BYTES, AVATAR_FILE_RE, isAllowedAvatar, uploadPathOf } from './avatar.js'
+import { AVATAR_PRESETS, AVATAR_MAX_BYTES, AVATAR_FILE_RE, AVATAR_MAX_TALL, isAllowedAvatar, uploadPathOf, avatarImgStyle } from './avatar.js'
 
 const UID = '11111111-2222-3333-4444-555555555555'
 
@@ -36,4 +36,14 @@ test('アップロードの場所は自分のフォルダ・拡張子は英数�
   for (const name of ['a.png', 'b.JPEG', 'c.webp', 'weird.???']) {
     assert.equal(isAllowedAvatar(uploadPathOf(UID, name, 5), UID), true, name)
   }
+})
+
+test('アイコンは横幅を決めて、縦長の画像は切らずに縦に伸ばす（2026-10-21「モーション次第でその分上下が大きくなるように」）', () => {
+  const st = avatarImgStyle(76)
+  assert.equal(st.width, '76px', '横幅は決まった大きさ＝同じ横幅で作った画像は体の大きさがそろう')
+  assert.equal(st.height, 'auto', '縦は画像の縦横の比のまま（戦士男の待機 256×480 なら 76×142.5）')
+  assert.equal(st.minHeight, '76px', '横長の画像は今までどおり正方形')
+  assert.equal(st.maxHeight, `${76 * AVATAR_MAX_TALL}px`)
+  assert.equal(st.objectFit, 'cover')
+  assert.equal(st.objectPosition, 'center bottom', '縦の上限を越えたら上を切る（足元は残す）')
 })

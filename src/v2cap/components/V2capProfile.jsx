@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import { box, btn, miniBtn, TEXT } from '../../v2/components/v2ui.js'
-import { AVATAR_PRESETS, AVATAR_MAX_BYTES, uploadPathOf } from '../lib/avatar.js'
+import { AVATAR_PRESETS, AVATAR_MAX_BYTES, uploadPathOf, avatarImgStyle } from '../lib/avatar.js'
 import { stageColorOf } from '../lib/jobs.js'
 import { GENDER_BY_KEY, genderOf } from '../lib/gender.js'
 import { avatarUrlOf } from './v2capAvatarUrl.js'
@@ -81,7 +81,8 @@ export default function V2capProfile({ prof, inventory, onProfile }) {
     <div style={{ fontFamily:'monospace' }}>
       <div style={{ ...box, padding:'12px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'12px' }}>
         {current
-          ? <img src={current} alt="" style={{ width:'96px', height:'96px', objectFit:'cover', flexShrink:0 }} onError={e => { e.target.style.display = 'none' }} />
+          // 今のアイコンはホームと同じ形（縦長は縦に伸ばす・2026-10-21）。下の一覧は選ぶためのものなので正方形のまま
+          ? <img src={current} alt="" style={avatarImgStyle(96)} onError={e => { e.target.style.display = 'none' }} />
           : <div style={{ width:'96px', height:'96px', flexShrink:0, border:'1px dashed #223a5e', color: TEXT.empty, fontSize:'10px', display:'flex', alignItems:'center', justifyContent:'center' }}>画像なし</div>}
         <div style={{ minWidth:0 }}>
           <div style={{ color:'#ffcc00', fontSize:'14px' }}>{prof.username}</div>
