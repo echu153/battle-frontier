@@ -118,12 +118,13 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
           onClose={() => setResult(null)}>
           {result.ok ? (
             <>
-              {result.items.length > 1 && <div style={{ color:'#cfe2ff' }}>{result.items.length}個を寄贈しました</div>}
-              {/* 装備名だけレア度の色（2026-10-23 ユーザー指示「既存の装備と同じように色付けてほしい、装備名だけね」） */}
-              <div style={{ maxHeight:'240px', overflowY:'auto', fontSize: result.items.length > 1 ? '11px' : '12px' }}>
+              {result.items.length > 1 && <div style={{ color:'#cfe2ff', fontSize:'13px' }}>{result.items.length}個を寄贈しました</div>}
+              {/* 装備名だけレア度の色（2026-10-23 ユーザー指示「既存の装備と同じように色付けてほしい、装備名だけね」）。
+                  文字は少し大きく（同じ日「寄贈した後のフォントも少し大きくして見やすくして」）＝文は13px・装備名は確認と同じ16px */}
+              <div style={{ maxHeight:'280px', overflowY:'auto', fontSize:'13px', lineHeight:1.7 }}>
                 {result.items.map((x, i) => (
                   <div key={i} style={{ color:'#cfe2ff' }}>
-                    「<span style={{ color: RARITY_COLOR[x.rarity] }}>{x.name}</span>」{donatedTail(x.tier)}
+                    「<span style={{ color: RARITY_COLOR[x.rarity], fontSize:'16px' }}>{x.name}</span>」{donatedTail(x.tier)}
                   </div>
                 ))}
               </div>

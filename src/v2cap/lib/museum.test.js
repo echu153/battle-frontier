@@ -81,7 +81,9 @@ test('寄贈の結果の文（10-23 ユーザー指示「「ブロンズダガ�
   // 画面は装備名だけレア度の色（10-23 ユーザー指示「既存の装備と同じように色付けてほしい、装備名だけね」）
   assert.equal(donatedTail(0), 'を寄贈しました（未強化で登録）')
   const m = src('../components/V2capMuseum.jsx')
-  assert.ok(m.includes('「<span style={{ color: RARITY_COLOR[x.rarity] }}>{x.name}</span>」{donatedTail(x.tier)}'))
+  assert.ok(m.includes('「<span style={{ color: RARITY_COLOR[x.rarity], fontSize:\x2716px\x27 }}>{x.name}</span>」{donatedTail(x.tier)}'))
+  // 結果の文字も少し大きく（10-23「寄贈した後のフォントも少し大きくして見やすくして」）＝文13px・装備名16px
+  assert.ok(m.includes("<div style={{ maxHeight:'280px', overflowY:'auto', fontSize:'13px', lineHeight:1.7 }}>"))
   assert.ok(m.includes("<div key={i} style={{ color:'#cfe2ff' }}>"), '名前の外（「」と後ろの文）はふつうの色')
 })
 
