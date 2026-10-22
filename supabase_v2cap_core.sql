@@ -6720,8 +6720,13 @@ end $$;
 -- 【確定】2026-10-22 ユーザー指示「V1にあるような装備を寄贈する博物館を作成したい／
 --   登録時に能力もらえるけど詳細はあとで作成する、とりあえず土台だけ作って」。決まりは V1 の博物館と同じ形：
 --   ・寄贈した装備はなくなる・着けている装備は寄贈できない
---   ・同じ装備を 未強化（+0〜4）／+5以上／+9以上 の3段階で1回ずつ（段階＝tier 0／1／2。src/v2cap/lib/museum.js の tierOfPlus と同じ）
+--   ・同じ装備を3つの段階で1回ずつ（段階＝tier 0／1／2。src/v2cap/lib/museum.js の tierOfPlus と同じ）
 --   ・★登録でもらえる能力はまだ無い（あとで）。この表から数え直せるように、寄贈したときの強化値（plus）も持つ
+-- 【確定】2026-10-23 ユーザー指示（実機を見て）：
+--   ・「未強化、＋５、＋9、これ以外の強化値は登録できないように」＝段階は +0／+5／+9 ちょうど（前は +0〜4／+5以上／+9以上）
+--   ・「初期装備は対象外」＝初期装備（エリア0）は寄贈できない
+--   ・「一括寄贈も追加」＝ v2cap_museum_donate_many（決まりは1つずつと同じ＝中の v2cap_museum_take を通す）
+--   ★前の決まりで登録した行（初期装備・+6 など）は消さない（装備はもう無いので、消すと寄贈しただけ損になる）
 -- ★装備の表 v2cap_equipment は流し直しても行を消さない（on conflict で入れ直す）ので、外部キーでつなぐ
 create table if not exists public.v2cap_museum (
   player_id  uuid not null references auth.users(id) on delete cascade,
@@ -6737,43 +6742,107 @@ create policy v2cap_museum_own on public.v2cap_museum for select to authenticate
 revoke all on table public.v2cap_museum from anon;
 grant select on table public.v2cap_museum to authenticated;
 
+-- 中の関数：持ち物の装備1つを確かめて、通れば消して登録する（1つずつの寄贈と一括寄贈が同じ決まりを通る）。
+--   p_equipped … 着けている枠（呼ぶ側がプロフィールの行をつかんでから渡す）
+--   ⚠内部ヘルパ。公開RPC（v2cap_museum_donate・v2cap_museum_donate_many）からだけ呼ぶ。必ず REVOKE する
+create or replace function public.v2cap_museum_take(p_uid uuid, p_equipped jsonb, p_inventory_id bigint)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_inv  public.v2cap_inventory;
+  v_item public.v2cap_equipment;
+  v_plus int;
+  v_tier int;
+begin
+  select * into v_inv from public.v2cap_inventory where id = p_inventory_id and player_id = p_uid;
+  if not found then return jsonb_build_object('ok', false, 'error', 'その装備は持っていません'); end if;
+  select * into v_item from public.v2cap_equipment where id = v_inv.base_id;
+  -- ★前の形の装備（レア度を持たない行）は寄贈できない＝§2 で一覧から消す行を、登録の記録が指さないように
+  --   （指していると、全文を流し直したときに外部キーで止まる）
+  if not found or v_item.rarity is null then
+    return jsonb_build_object('ok', false, 'error', 'この装備は寄贈できません');
+  end if;
+  -- ★初期装備（エリア0）は対象外（2026-10-23 ユーザー指示）
+  if coalesce(v_item.area, 0) < 1 then
+    return jsonb_build_object('ok', false, 'error', '初期装備は寄贈できません');
+  end if;
+  if exists (select 1 from jsonb_each_text(coalesce(p_equipped, '{}'::jsonb)) q
+              where q.value ~ '^[0-9]+$' and q.value::bigint = v_inv.id) then
+    return jsonb_build_object('ok', false, 'error', '着けている装備は寄贈できません');
+  end if;
+  -- ★段階は +0／+5／+9 ちょうど（2026-10-23 ユーザー指示「これ以外の強化値は登録できないように」）
+  v_plus := coalesce(v_inv.plus, 0);
+  v_tier := case v_plus when 0 then 0 when 5 then 1 when 9 then 2 else null end;
+  if v_tier is null then
+    return jsonb_build_object('ok', false, 'error', '登録できるのは未強化・+5・+9の装備だけです');
+  end if;
+  if exists (select 1 from public.v2cap_museum m
+              where m.player_id = p_uid and m.base_id = v_inv.base_id and m.tier = v_tier) then
+    return jsonb_build_object('ok', false, 'error', 'この装備のこの段階は、もう寄贈しています');
+  end if;
+  delete from public.v2cap_inventory where id = v_inv.id;
+  insert into public.v2cap_museum (player_id, base_id, tier, plus) values (p_uid, v_inv.base_id, v_tier, v_plus);
+  return jsonb_build_object('ok', true, 'base_id', v_inv.base_id, 'tier', v_tier, 'plus', v_plus);
+end;
+$$;
+revoke all on function public.v2cap_museum_take(uuid, jsonb, bigint) from public, anon, authenticated;
+
 -- 寄贈：持ち物の装備を1つ消して、その装備のその段階を登録する
 create or replace function public.v2cap_museum_donate(p_inventory_id bigint)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
-  v_uid  uuid := auth.uid();
-  v_row  public.v2cap_profiles;
-  v_inv  public.v2cap_inventory;
-  v_plus int;
-  v_tier int;
+  v_uid uuid := auth.uid();
+  v_row public.v2cap_profiles;
+  v_res jsonb;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   -- ★行をつかんでから（分解・強化・着け替えと同時に届いても、同じ装備を2回使えないように）
   select * into v_row from public.v2cap_profiles where id = v_uid for update;
   if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
-  select * into v_inv from public.v2cap_inventory where id = p_inventory_id and player_id = v_uid;
-  if not found then return jsonb_build_object('ok', false, 'error', 'その装備は持っていません'); end if;
-  -- ★前の形の装備（レア度を持たない行）は寄贈できない＝§2 で一覧から消す行を、登録の記録が指さないように
-  --   （指していると、全文を流し直したときに外部キーで止まる）
-  if not exists (select 1 from public.v2cap_equipment e where e.id = v_inv.base_id and e.rarity is not null) then
-    return jsonb_build_object('ok', false, 'error', 'この装備は寄贈できません');
-  end if;
-  if exists (select 1 from jsonb_each_text(coalesce(v_row.equipped, '{}'::jsonb)) q
-              where q.value ~ '^[0-9]+$' and q.value::bigint = v_inv.id) then
-    return jsonb_build_object('ok', false, 'error', '着けている装備は寄贈できません');
-  end if;
-  v_plus := greatest(0, least(10, coalesce(v_inv.plus, 0)));
-  v_tier := case when v_plus >= 9 then 2 when v_plus >= 5 then 1 else 0 end;
-  if exists (select 1 from public.v2cap_museum m
-              where m.player_id = v_uid and m.base_id = v_inv.base_id and m.tier = v_tier) then
-    return jsonb_build_object('ok', false, 'error', 'この装備のこの段階は、もう寄贈しています');
-  end if;
-  delete from public.v2cap_inventory where id = v_inv.id;
-  insert into public.v2cap_museum (player_id, base_id, tier, plus) values (v_uid, v_inv.base_id, v_tier, v_plus);
-  return jsonb_build_object('ok', true, 'base_id', v_inv.base_id, 'tier', v_tier, 'plus', v_plus,
-    'count', (select count(*)::int from public.v2cap_museum where player_id = v_uid));
+  v_res := public.v2cap_museum_take(v_uid, v_row.equipped, p_inventory_id);
+  if not (v_res ->> 'ok')::boolean then return v_res; end if;
+  return v_res || jsonb_build_object('count', (select count(*)::int from public.v2cap_museum where player_id = v_uid));
 end;
 $$;
 revoke all on function public.v2cap_museum_donate(bigint) from public, anon;
 grant execute on function public.v2cap_museum_donate(bigint) to authenticated;
+
+-- 一括寄贈（2026-10-23 ユーザー指示「一括寄贈も追加」）：選んだ装備を順に寄贈する。決まりは1つずつと同じ。
+--   寄贈できないもの（着けている・強化値が違う・その段階はもう登録した・同じ装備と段階が2つ選ばれた2つ目 など）は飛ばす。
+--   1つも寄贈できなければ失敗として返す（何も変わらない）
+create or replace function public.v2cap_museum_donate_many(p_ids bigint[])
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_max  constant int := 500;
+  v_uid  uuid := auth.uid();
+  v_row  public.v2cap_profiles;
+  v_id   bigint;
+  v_res  jsonb;
+  v_done jsonb := '[]'::jsonb;
+  v_skip int := 0;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if coalesce(cardinality(p_ids), 0) = 0 then
+    return jsonb_build_object('ok', false, 'error', '寄贈する装備を選んでください');
+  end if;
+  if cardinality(p_ids) > c_max then
+    return jsonb_build_object('ok', false, 'error', '一度に寄贈できるのは' || c_max || '個までです');
+  end if;
+  select * into v_row from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  -- 選んだ順に1つずつ（同じ id が2回あれば1回目の位置で1回だけ＝同じ装備と段階が2つ選ばれたら、先に選んだほうを寄贈する）
+  for v_id in select t.x from unnest(p_ids) with ordinality as t(x, i) group by t.x order by min(t.i) loop
+    v_res := public.v2cap_museum_take(v_uid, v_row.equipped, v_id);
+    if (v_res ->> 'ok')::boolean then v_done := v_done || jsonb_build_array(v_res - 'ok');
+    else v_skip := v_skip + 1; end if;
+  end loop;
+  if jsonb_array_length(v_done) = 0 then
+    return jsonb_build_object('ok', false, 'error', '寄贈できる装備がありませんでした');
+  end if;
+  return jsonb_build_object('ok', true, 'donated', v_done, 'skipped', v_skip,
+    'count', (select count(*)::int from public.v2cap_museum where player_id = v_uid));
+end;
+$$;
+revoke all on function public.v2cap_museum_donate_many(bigint[]) from public, anon;
+grant execute on function public.v2cap_museum_donate_many(bigint[]) to authenticated;
