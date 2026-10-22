@@ -8,7 +8,7 @@ import {
   pickEncounter, rollEquipDrop, nextBossRate, isSpotUnlocked, isSpotCleared, openUntilOf, SORTIE_CD, chestText,
 } from '../lib/sortie.js'
 import { toFighter as playerFighter } from '../lib/loadout.js'
-import { staminaMaxOf, rollStamina } from '../lib/level.js'
+import { staminaMaxOf, rollStamina, staminaSpanMsOf } from '../lib/level.js'
 import { expText as expTextOf, levelUpLines, dropLineOf } from '../lib/settleLines.js'
 import { ITEM_BY_ID } from '../lib/equipment.js'
 import { guardDropBonusOf, floorLabel, TOWER_NAME } from '../lib/tower.js'
@@ -119,7 +119,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   const canAct = remaining <= 0 && !loading && !fx   // 祠の演出の間は押せない（右下のボタンも）
   const timerPct = Math.min(100, (elapsed / SORTIE_CD) * 100)
   const stamMax = staminaMaxOf(prof?.lv)
-  const stamNow = rollStamina(stam.n, stam.at, stamMax, now).n
+  const stamNow = rollStamina(stam.n, stam.at, stamMax, now, staminaSpanMsOf(prof)).n   // 博物館の報酬で回復の間隔が短くなる（2026-10-23）
 
   const doBattle = async (isAuto = false) => {
     // ★祠の演出が出ている間は出撃しない（オートも手動も・2026-10-14 ユーザー指示「演出が入ってるとき、オートでも出撃進まないようにして」）

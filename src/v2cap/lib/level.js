@@ -111,21 +111,27 @@ export const applyExp = (state, amount) => {
 export const STAMINA_BASE = 10
 export const staminaMaxOf = (lv) => STAMINA_BASE + Math.max(1, Math.floor(lv || 1)) - 1
 export const STAMINA_RECOVER_MS = 3 * 60 * 1000
+// 【確定】2026-10-23 博物館の報酬で、キャラごとに回復の間隔が短くなる（プロフィールの museum_stam_cut 秒・最大75秒）。
+//   上限は120秒（回復は60秒より短くしない）。★サーバーの v2cap_stamina_roll の c_base_sec・c_cut_max と同じ
+export const STAMINA_CUT_MAX_SEC = 120
+export const staminaSpanMsOf = (profile) =>
+  STAMINA_RECOVER_MS - Math.max(0, Math.min(STAMINA_CUT_MAX_SEC, Math.floor(Number(profile?.museum_stam_cut) || 0))) * 1000
 
 // 経過時間ぶんを足して数え直す（今のⅡの rollStamina と同じ数え方で、間隔だけこの版の3分）。at＝最後に数え直した時刻
 //   ・端数は捨てない＝消化したぶんだけ at を進める ／ 満タンになったら at は「いま」へ
-export const rollStamina = (stamina, at, max, now = Date.now()) => {
+//   ・span … 回復の間隔（ms）。博物館の報酬で短くなったキャラは staminaSpanMsOf(prof) を渡す
+export const rollStamina = (stamina, at, max, now = Date.now(), span = STAMINA_RECOVER_MS) => {
   const cap = Math.max(0, Math.floor(Number(max) || 0))
   const cur = Math.max(0, Math.min(cap, Math.floor(Number(stamina) || 0)))
   const base = at ? new Date(at).getTime() : now
   if (cur >= cap) return { n: cap, at: now }
-  const gained = Math.max(0, Math.floor((now - base) / STAMINA_RECOVER_MS))
+  const gained = Math.max(0, Math.floor((now - base) / span))
   const n = Math.min(cap, cur + gained)
-  return { n, at: n >= cap ? now : base + gained * STAMINA_RECOVER_MS }
+  return { n, at: n >= cap ? now : base + gained * span }
 }
 // 次の1が溜まるまでの残りms。満タンなら0
-export const msToNextStamina = (stamina, at, max, now = Date.now()) => {
-  const r = rollStamina(stamina, at, max, now)
+export const msToNextStamina = (stamina, at, max, now = Date.now(), span = STAMINA_RECOVER_MS) => {
+  const r = rollStamina(stamina, at, max, now, span)
   if (r.n >= Math.max(0, Math.floor(Number(max) || 0))) return 0
-  return Math.max(0, STAMINA_RECOVER_MS - (now - r.at))
+  return Math.max(0, span - (now - r.at))
 }

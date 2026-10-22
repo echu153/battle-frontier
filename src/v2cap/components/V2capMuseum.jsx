@@ -8,7 +8,10 @@ import { plusOf, plusLabel } from '../lib/smith.js'
 import {
   MUSEUM_TIERS, MUSEUM_GROUPS, raritiesOfGroup, registeredSetOf, tiersOf, uniqueHidden, museumCountOf, donatablesOf,
   bulkDonatable, donatedTail,
+  MUSEUM_SET_SP, MUSEUM_RARITY_STAM_SEC, MUSEUM_AREA_STAM_SEC, MUSEUM_REWARD_RARITIES, areaProgressOf, museumRewardTotalsOf, rewardText,
 } from '../lib/museum.js'
+import { STAMINA_RECOVER_MS, staminaSpanMsOf } from '../lib/level.js'
+import { mmss } from '../core/stamina.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — 博物館（装備の寄贈）。決まりの正は src/v2cap/lib/museum.js・サーバーは SQL §14
@@ -58,6 +61,10 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
   const total = museumCountOf(rows || [])
   const group = MUSEUM_GROUPS.find(g => g.key === groupKey) || MUSEUM_GROUPS[0]
   const groupCount = museumCountOf(rows || [], group.items)
+  // 報酬（2026-10-23）：もらった合計（ステータスポイントは登録から数える・スタミナの短縮はサーバーが入れたプロフィールの値）と、このエリアの進み
+  const totals = museumRewardTotalsOf(rows || [])
+  const stamCut = Number(prof?.museum_stam_cut) || 0
+  const progress = group.area ? areaProgressOf(registered, group.area) : null
 
   const toggle = (key) => setPicked(prev => {
     const next = new Set(prev)
@@ -79,7 +86,7 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
     const done = many ? (data.donated || []) : [{ base_id: data.base_id, tier: data.tier, plus: data.plus }]
     const itemOf = (id) => ITEM_BY_ID[id] || list.find(d => d.item.id === id)?.item || { name: id, rarity: 'N' }
     setResult({ ok: true, items: done.map(x => ({ name: itemOf(x.base_id).name, rarity: itemOf(x.base_id).rarity, tier: x.tier })),
-      skipped: many ? data.skipped || 0 : 0 })
+      skipped: many ? data.skipped || 0 : 0, rewards: data.rewards || [] })
     setRows(r => [...(r || []), ...done])
     setPicked(new Set())
     onProfile?.()   // 持ち物を読み直す（寄贈した装備はなくなる）
@@ -131,6 +138,15 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
             </>
           ) : <div style={{ color:'#ff8844' }}>{result.error}</div>}
           {result.skipped > 0 && <div style={{ color: TEXT.sub, marginTop:'4px' }}>寄贈できなかった装備：{result.skipped}個</div>}
+          {/* 新しくもらった報酬（2026-10-23） */}
+          {result.ok && result.rewards?.length > 0 && (
+            <div style={{ marginTop:'8px', paddingTop:'6px', borderTop:'1px solid #3a2e14', fontSize:'13px', lineHeight:1.7 }}>
+              {result.rewards.map(w => <div key={w.key} style={{ color:'#ffcc00' }}>🎉 {rewardText(w)}</div>)}
+              {result.rewards.some(w => w.kind === 'sp') && (
+                <div style={{ color: TEXT.sub, fontSize:'11px' }}>ステータスポイントは、ホームの「ステータスポイントが あります（振る）」から振れます</div>
+              )}
+            </div>
+          )}
         </V2Modal>
       )}
 
@@ -147,8 +163,16 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
             </span>
           ))}
         </div>
-        {/* ★能力はあとで（ユーザー「登録時に能力もらえるけど詳細はあとで作成する」） */}
-        <div style={{ color: TEXT.empty, fontSize:'10px', marginTop:'4px' }}>登録でもらえる能力：準備中</div>
+        {/* ★報酬（2026-10-23 ユーザー指示・決まりは lib/museum.js）。ユニークの報酬は今後 */}
+        <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.8, marginTop:'6px', paddingTop:'6px', borderTop:'1px solid #002244' }}>
+          報酬：エリアの1つのレア度を、段階（未強化・+5・+9）ごとに全部寄贈すると ステータスポイント
+          （{MUSEUM_REWARD_RARITIES.map((r, i) => <span key={r}>{i ? '・' : ''}<span style={{ color: RARITY_COLOR[r] }}>{rarityLabel(r)}</span>{MUSEUM_SET_SP[r]}</span>)}）。
+          そのレア度を3段階ともそろえると スタミナの回復が{MUSEUM_RARITY_STAM_SEC}秒短く、
+          エリアの全部（ユニーク以外）をそろえると さらに{MUSEUM_AREA_STAM_SEC}秒短くなります（どれもずっと続く）。ユニークの報酬は今後追加します
+        </div>
+        <div style={{ color:'#ffcc00', fontSize:'11px', marginTop:'4px' }}>
+          もらった報酬：ステータスポイント +{totals.sp}　スタミナの回復 −{stamCut}秒（{mmss(STAMINA_RECOVER_MS)} → {mmss(staminaSpanMsOf(prof))}）
+        </div>
         {error && <div style={{ color:'#ff8844', fontSize:'10px', marginTop:'4px' }}>⚠ 登録を読めませんでした（{error}）</div>}
       </div>
 
@@ -225,9 +249,34 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
             <span key={t.key}>{i ? '・' : ''}<span style={{ color: t.color }}>{t.label}</span> {groupCount.byTier[i]}/{groupCount.items}</span>
           ))}
         </div>
-        {raritiesOfGroup(group).map(r => (
+        {/* エリアコンプリート（2026-10-23）／ユニークの報酬は今後 */}
+        {progress ? (
+          <div style={{ fontSize:'10px', marginBottom:'8px', color: progress.complete ? '#ffcc00' : TEXT.label }}>
+            {progress.complete ? '✔ ' : ''}エリアコンプリート（ユニーク以外・全部のレア度を3段階）：スタミナの回復−{MUSEUM_AREA_STAM_SEC}秒
+          </div>
+        ) : <div style={{ fontSize:'10px', marginBottom:'8px', color: TEXT.empty }}>ユニークの報酬は今後追加します</div>}
+        {raritiesOfGroup(group).map(r => {
+          const rp = progress?.rarities.find(x => x.rarity === r)
+          return (
           <div key={r} style={{ marginBottom:'8px' }}>
-            <div style={{ color: RARITY_COLOR[r], fontSize:'11px', marginBottom:'4px' }}>{rarityLabel(r)}</div>
+            <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:'4px 8px', marginBottom:'4px', fontSize:'10px' }}>
+              <span style={{ color: RARITY_COLOR[r], fontSize:'11px' }}>{rarityLabel(r)}</span>
+              {/* 段階ごとの登録数とステータスポイント（そろえば ✔）・3段階そろえたスタミナ（2026-10-23） */}
+              {rp && rp.tiers.map(x => {
+                const t = MUSEUM_TIERS[x.tier]
+                return (
+                  <span key={x.tier} style={{ color: x.done ? '#ffcc00' : TEXT.label }}>
+                    {x.done ? '✔' : ''}<span style={{ color: t.color }}>{t.label}</span> {x.have}/{x.need}
+                  </span>
+                )
+              })}
+              {rp && (
+                <span style={{ color: TEXT.sub }}>
+                  各段階 ステータスポイント+{MUSEUM_SET_SP[r]}・3段階で
+                  <span style={{ color: rp.allTiers ? '#ffcc00' : TEXT.sub }}>{rp.allTiers ? '✔' : ''}スタミナ−{MUSEUM_RARITY_STAM_SEC}秒</span>
+                </span>
+              )}
+            </div>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(min(100%, 230px), 1fr))', gap:'3px' }}>
               {group.items.filter(it => it.rarity === r).map(it => {
                 const has = tiersOf(registered, it.id)
@@ -249,7 +298,8 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
               })}
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

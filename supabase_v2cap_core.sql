@@ -3098,6 +3098,9 @@ alter table public.v2cap_profiles add column if not exists shrine_total int not 
 alter table public.v2cap_profiles add column if not exists shrine_force boolean not null default false;
 -- 開発用（2026-10-21）：次にボスに勝ったとき必ずユニークを落とす（v2cap_debug_unique_next が付け、落ちたら外れる）
 alter table public.v2cap_profiles add column if not exists unique_force boolean not null default false;
+-- 【確定】2026-10-23 博物館の報酬（§14）：スタミナの回復を何秒短くするか（v2cap_museum_settle が報酬の表から数え直して入れる）。
+--   v2cap_stamina_roll が 3分 − この秒数 の間隔で数える（上限120秒＝回復は60秒より短くしない・いまの報酬の最大は75秒）
+alter table public.v2cap_profiles add column if not exists museum_stam_cut int not null default 0;
 -- 【確定】2026-10-21 ユーザー指示「キャラクター作成時に性別選択できるようにして、性別によってほんの少し性能差出るようにしたい」：
 --   性別（'m'＝男性・'f'＝女性。決めていなければ null）。性能差（男性＝与えるダメージ+2%・女性＝受けるダメージ−2%）は
 --   画面の戦闘（gender.js）。キャラ作成で決め、前からのキャラは v2cap_set_gender で1回だけ選ぶ（変えるアイテムはあとで）
@@ -3582,10 +3585,13 @@ end $$;
 -- ===== スタミナを数え直す（数え方は今のⅡの v2_stamina_roll と同じ。間隔は**3分に1**・最大値はLVで決まる）=====
 -- ⚠SECURITY DEFINER の内部ヘルパは既定で PUBLIC 実行可＝必ず REVOKE する
 -- ⚠間隔は level.js の STAMINA_RECOVER_MS と同じにすること（2026-10-09 ユーザー指示で5分→3分）
+-- ★2026-10-23 博物館の報酬で、キャラごとに museum_stam_cut 秒だけ短くなる（level.js の staminaSpanMsOf と同じ・上限 c_cut_max）
 create or replace function public.v2cap_stamina_roll(p_player uuid)
 returns int language plpgsql security definer set search_path = public as $$
 declare
-  c_span constant interval := interval '3 minutes';
+  c_base_sec constant int := 180;
+  c_cut_max  constant int := 120;
+  c_span interval;
   v_row  public.v2cap_profiles;
   v_max  int;
   v_gain int;
@@ -3595,6 +3601,7 @@ begin
   if p_player is null then return 0; end if;
   select * into v_row from public.v2cap_profiles where id = p_player for update;
   if not found then return 0; end if;
+  c_span := make_interval(secs => c_base_sec - least(c_cut_max, greatest(0, coalesce(v_row.museum_stam_cut, 0))));
   v_max := public.v2cap_stamina_max(v_row.lv);
   v_n   := greatest(least(coalesce(v_row.stamina, 0), v_max), 0);
   v_at  := coalesce(v_row.stamina_at, now());
@@ -4822,6 +4829,7 @@ begin
   delete from public.v2cap_kills where player_id = auth.uid();
   delete from public.v2cap_casino where player_id = auth.uid();
   delete from public.v2cap_museum where player_id = auth.uid();   -- 博物館の登録（2026-10-22・§14）
+  delete from public.v2cap_museum_rewards where player_id = auth.uid();   -- 博物館の報酬（2026-10-23・§14）
   delete from public.v2cap_profiles where id = auth.uid();
   return jsonb_build_object('ok', true);
 end;
@@ -6721,7 +6729,7 @@ end $$;
 --   登録時に能力もらえるけど詳細はあとで作成する、とりあえず土台だけ作って」。決まりは V1 の博物館と同じ形：
 --   ・寄贈した装備はなくなる・着けている装備は寄贈できない
 --   ・同じ装備を3つの段階で1回ずつ（段階＝tier 0／1／2。src/v2cap/lib/museum.js の tierOfPlus と同じ）
---   ・★登録でもらえる能力はまだ無い（あとで）。この表から数え直せるように、寄贈したときの強化値（plus）も持つ
+--   ・登録でもらえる報酬は 2026-10-23 に入れた（下の「博物館の報酬」）。この表から数え直せるように、寄贈したときの強化値（plus）も持つ
 -- 【確定】2026-10-23 ユーザー指示（実機を見て）：
 --   ・「未強化、＋５、＋9、これ以外の強化値は登録できないように」＝段階は +0／+5／+9 ちょうど（前は +0〜4／+5以上／+9以上）
 --   ・「初期装備は対象外」＝初期装備（エリア0）は寄贈できない
@@ -6741,6 +6749,81 @@ drop policy if exists v2cap_museum_own on public.v2cap_museum;
 create policy v2cap_museum_own on public.v2cap_museum for select to authenticated using (player_id = auth.uid());
 revoke all on table public.v2cap_museum from anon;
 grant select on table public.v2cap_museum to authenticated;
+
+-- ===== 博物館の報酬（2026-10-23）=====
+-- 【確定】2026-10-23 ユーザー指示「エリアごとに統一／レアリティごとに全部そろえたら報酬獲得／強化値に限らず、それぞれの強化値ごとに該当の報酬獲得」：
+--   ・エリア×レア度の装備（26種）を、ひとつの段階（未強化・+5・+9）で全部寄贈したら ステータスポイント
+--     ノーマル1・レア2・エピック3・レジェンダリー4（段階ごとにもらえる＝1つのレア度で最大3回）
+--   ・そのレア度を3段階ともそろえたら スタミナの回復が1秒短く（ユーザー選択「3段階そろえて1回」）
+--   ・エリアの4つのレア度×3段階をぜんぶそろえたら（エリアコンプリート・ユニークを除く）さらに1秒
+--   ・どれも恒久的。ユニークの報酬は今後足す（いまは数えない）。初期装備（エリア0）も数えない
+--   ★1つの報酬は1回だけ（下の表の key で覚える）。ステータスポイントは振る前のポイント（stat_points）に足す。
+--     スタミナの短縮は、この表の合計をプロフィールの museum_stam_cut に入れる（v2cap_stamina_roll が使う）
+--   ★数の写しは src/v2cap/lib/museum.js（MUSEUM_SET_SP・MUSEUM_RARITY_STAM_SEC・MUSEUM_AREA_STAM_SEC。museum.test.js が突き合わせる）
+create table if not exists public.v2cap_museum_rewards (
+  player_id  uuid not null references auth.users(id) on delete cascade,
+  key        text not null,            -- 'set:エリア:レア度:段階'・'rarity:エリア:レア度'・'area:エリア'
+  kind       text not null check (kind in ('sp', 'stam')),
+  amount     int  not null,
+  granted_at timestamptz not null default now(),
+  primary key (player_id, key)
+);
+alter table public.v2cap_museum_rewards enable row level security;
+drop policy if exists v2cap_museum_rewards_own on public.v2cap_museum_rewards;
+create policy v2cap_museum_rewards_own on public.v2cap_museum_rewards for select to authenticated using (player_id = auth.uid());
+revoke all on table public.v2cap_museum_rewards from anon;
+grant select on table public.v2cap_museum_rewards to authenticated;
+
+-- 中の関数：登録を数え直して、まだもらっていない報酬を入れる（何回呼んでも同じ）。新しくもらった報酬を返す
+--   ⚠内部ヘルパ。寄贈の関数と、下の「前からの寄贈を数える」からだけ呼ぶ。必ず REVOKE する
+create or replace function public.v2cap_museum_settle(p_uid uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  r     record;
+  v_new jsonb := '[]'::jsonb;
+  v_sp  int := 0;
+  v_cut int;
+begin
+  for r in
+    with need as (   -- エリア×レア度ごとの装備の数（ユニーク・初期装備は入れない）
+      select e.area, e.rarity, count(*)::int as n from public.v2cap_equipment e
+       where e.area >= 1 and e.rarity in ('N', 'R', 'E', 'L')
+       group by e.area, e.rarity
+    ), have as (     -- 登録した数（エリア×レア度×段階）
+      select e.area, e.rarity, m.tier, count(*)::int as n
+        from public.v2cap_museum m join public.v2cap_equipment e on e.id = m.base_id
+       where m.player_id = p_uid and e.area >= 1 and e.rarity in ('N', 'R', 'E', 'L')
+       group by e.area, e.rarity, m.tier
+    ), sets as (     -- そろった組
+      select h.area, h.rarity, h.tier from have h join need d on d.area = h.area and d.rarity = h.rarity where h.n >= d.n
+    ), rar as (      -- 3段階ともそろったレア度
+      select s.area, s.rarity from sets s group by s.area, s.rarity having count(distinct s.tier) = 3
+    ), ar as (       -- エリアコンプリート（そのエリアのレア度がぜんぶ3段階そろった）
+      select x.area from rar x group by x.area having count(*) = (select count(*) from need d where d.area = x.area)
+    )
+    select * from (
+      select 1 as ord, 'set:' || s.area || ':' || s.rarity || ':' || s.tier as key, 'sp' as kind,
+             case s.rarity when 'N' then 1 when 'R' then 2 when 'E' then 3 when 'L' then 4 end as amount
+        from sets s
+      union all select 2, 'rarity:' || x.area || ':' || x.rarity, 'stam', 1 from rar x
+      union all select 3, 'area:' || a.area, 'stam', 1 from ar a
+    ) q order by q.ord, q.key
+  loop
+    insert into public.v2cap_museum_rewards (player_id, key, kind, amount) values (p_uid, r.key, r.kind, r.amount)
+      on conflict (player_id, key) do nothing;
+    if found then
+      v_new := v_new || jsonb_build_array(jsonb_build_object('key', r.key, 'kind', r.kind, 'amount', r.amount));
+      if r.kind = 'sp' then v_sp := v_sp + r.amount; end if;
+    end if;
+  end loop;
+  select coalesce(sum(w.amount), 0)::int into v_cut from public.v2cap_museum_rewards w where w.player_id = p_uid and w.kind = 'stam';
+  update public.v2cap_profiles
+     set stat_points = stat_points + v_sp, museum_stam_cut = v_cut, updated_at = now()
+   where id = p_uid and (v_sp > 0 or museum_stam_cut is distinct from v_cut);
+  return v_new;
+end;
+$$;
+revoke all on function public.v2cap_museum_settle(uuid) from public, anon, authenticated;
 
 -- 中の関数：持ち物の装備1つを確かめて、通れば消して登録する（1つずつの寄贈と一括寄贈が同じ決まりを通る）。
 --   p_equipped … 着けている枠（呼ぶ側がプロフィールの行をつかんでから渡す）
@@ -6801,7 +6884,9 @@ begin
   if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
   v_res := public.v2cap_museum_take(v_uid, v_row.equipped, p_inventory_id);
   if not (v_res ->> 'ok')::boolean then return v_res; end if;
-  return v_res || jsonb_build_object('count', (select count(*)::int from public.v2cap_museum where player_id = v_uid));
+  -- 報酬（2026-10-23）：そろった組があれば、ここで入る（rewards＝新しくもらったもの）
+  return v_res || jsonb_build_object('count', (select count(*)::int from public.v2cap_museum where player_id = v_uid),
+    'rewards', public.v2cap_museum_settle(v_uid));
 end;
 $$;
 revoke all on function public.v2cap_museum_donate(bigint) from public, anon;
@@ -6841,8 +6926,18 @@ begin
     return jsonb_build_object('ok', false, 'error', '寄贈できる装備がありませんでした');
   end if;
   return jsonb_build_object('ok', true, 'donated', v_done, 'skipped', v_skip,
-    'count', (select count(*)::int from public.v2cap_museum where player_id = v_uid));
+    'count', (select count(*)::int from public.v2cap_museum where player_id = v_uid),
+    'rewards', public.v2cap_museum_settle(v_uid));
 end;
 $$;
 revoke all on function public.v2cap_museum_donate_many(bigint[]) from public, anon;
 grant execute on function public.v2cap_museum_donate_many(bigint[]) to authenticated;
+
+-- 前からの寄贈（報酬を入れる前に寄贈したぶん）も数える。何回流しても同じ（もらった報酬は表で覚えている）
+do $$
+declare r record;
+begin
+  for r in select distinct m.player_id from public.v2cap_museum m loop
+    perform public.v2cap_museum_settle(r.player_id);
+  end loop;
+end $$;

@@ -6,8 +6,8 @@
 // 土台の決まり（V1 の博物館 src/pages/Museum.jsx と同じ形）：
 //   ・寄贈した装備は**なくなる**。着けている装備は寄贈できない
 //   ・同じ装備（base_id）を3つの段階で、それぞれ1回ずつ寄贈できる（tierOfPlus）
-//   ・★**登録でもらえる能力はまだ無い**（あとでユーザーが決める）。サーバーの記録（v2cap_museum：装備・段階・寄贈したときの強化値）
-//     から数え直せる形にしてある＝能力を決めたら、記録から足すだけで前に寄贈したぶんにも付く
+//   ・登録でもらえる報酬は 2026-10-23 に入れた（下の「報酬」）。サーバーの記録（v2cap_museum：装備・段階・寄贈したときの強化値）
+//     から数え直す形＝前に寄贈したぶんにも付く
 // 【確定】2026-10-23 ユーザー指示（実機を見て）：
 //   ・「未強化、＋５、＋9、これ以外の強化値は登録できないように」＝段階は **+0／+5／+9 ちょうど**（前は V1 と同じ「+0〜4／+5以上／+9以上」）。
 //     名前も「未強化／+5／+9」
@@ -16,7 +16,7 @@
 //   ・寄贈のあとに結果のポップアップ・一括寄贈（画面 V2capMuseum.jsx・サーバー v2cap_museum_donate_many）
 // ★決めるのはサーバー（supabase_v2cap_core.sql §14 の v2cap_museum_take）。段階の決まりはここと同じ（museum.test.js が突き合わせる）
 // ============================================================
-import { ITEMS, UNIQUE_ITEMS, ITEM_BY_ID, RARITIES, UNIQUE_RARITY, isUnique } from './equipment.js'
+import { ITEMS, UNIQUE_ITEMS, ITEM_BY_ID, RARITIES, UNIQUE_RARITY, RARITY_LABEL, isUnique } from './equipment.js'
 import { AREA_LIST } from './areas.js'
 import { plusOf } from './smith.js'
 
@@ -31,7 +31,7 @@ export const tierOfPlus = (plus) => MUSEUM_TIERS.find(t => t.plus === plus)?.key
 
 // まとまり：エリア1〜15・ユニーク（中はレア度の順＝一覧の並びのまま）。初期装備は入れない
 export const MUSEUM_GROUPS = [
-  ...AREA_LIST.map((a, i) => ({ key: `area${i + 1}`, label: a.name, items: ITEMS.filter(it => it.area === i + 1) })),
+  ...AREA_LIST.map((a, i) => ({ key: `area${i + 1}`, area: i + 1, label: a.name, items: ITEMS.filter(it => it.area === i + 1) })),
   { key: 'unique', label: 'ユニーク', items: UNIQUE_ITEMS },
 ]
 export const MUSEUM_ITEMS = MUSEUM_GROUPS.flatMap(g => g.items)
@@ -85,3 +85,56 @@ export const bulkDonatable = (d) => !isUnique(d.item)
 //   （「」の中＝RARITY_COLOR）で出し、後ろの文は donatedTail
 export const donatedTail = (tier) => `を寄贈しました（${MUSEUM_TIERS[tier]?.label ?? ''}で登録）`
 export const donatedText = (name, tier) => `「${name}」${donatedTail(tier)}`
+
+// ===== 報酬（2026-10-23）=====
+// 【確定】2026-10-23 ユーザー指示「エリアごとに統一／レアリティごとに全部そろえたら報酬獲得／強化値に限らず、それぞれの強化値ごとに該当の報酬獲得」
+//   ＋「エリア全体でレアリティ全部寄贈してると…スタミナ回復時間1秒短縮／エリアコンプリート※ユニークを除く 1秒短縮」「どれも恒久的」：
+//   ・エリア×レア度の装備（26種）を、ひとつの段階で全部寄贈 → ステータスポイント（MUSEUM_SET_SP・段階ごとにもらえる）
+//   ・そのレア度を3段階ともそろえる → スタミナの回復 −1秒（ユーザー選択「3段階そろえて1回」）
+//   ・エリアの4つのレア度×3段階をぜんぶ（エリアコンプリート・ユニークを除く）→ さらに −1秒
+//   ・ユニークの報酬は今後足す。全部そろえると ステータスポイント +450・スタミナの回復 −75秒（3分→1分45秒）
+// ★決めて入れるのはサーバー（v2cap_museum_settle・報酬の表 v2cap_museum_rewards）。ここは表示の写し
+export const MUSEUM_SET_SP = { N: 1, R: 2, E: 3, L: 4 }
+export const MUSEUM_RARITY_STAM_SEC = 1
+export const MUSEUM_AREA_STAM_SEC = 1
+export const MUSEUM_REWARD_RARITIES = RARITIES   // ユニークは今後
+// エリア×レア度の装備（報酬の分母）
+export const setItemsOf = (area, rarity) => ITEMS.filter(i => i.area === area && i.rarity === rarity)
+// そのエリアの報酬の進み：レア度ごとに 段階ごとの登録数・そろったか・3段階そろったか、とエリアコンプリート
+export const areaProgressOf = (registered, area) => {
+  const rarities = MUSEUM_REWARD_RARITIES.map(rarity => {
+    const items = setItemsOf(area, rarity)
+    const tiers = MUSEUM_TIERS.map(t => {
+      const have = items.filter(i => registered.has(museumKey(i.id, t.key))).length
+      return { tier: t.key, have, need: items.length, done: items.length > 0 && have >= items.length }
+    })
+    return { rarity, tiers, allTiers: tiers.every(t => t.done) }
+  })
+  return { area, rarities, complete: rarities.every(r => r.allTiers) }
+}
+// もらった報酬の合計（登録から数える＝サーバーの報酬の表と同じになる）
+export const museumRewardTotalsOf = (rows) => {
+  const reg = registeredSetOf(rows)
+  let sp = 0, stamSec = 0
+  AREA_LIST.forEach((_, i) => {
+    const p = areaProgressOf(reg, i + 1)
+    for (const r of p.rarities) {
+      sp += r.tiers.filter(t => t.done).length * MUSEUM_SET_SP[r.rarity]
+      if (r.allTiers) stamSec += MUSEUM_RARITY_STAM_SEC
+    }
+    if (p.complete) stamSec += MUSEUM_AREA_STAM_SEC
+  })
+  return { sp, stamSec }
+}
+// サーバーが返す新しい報酬（{ key, kind, amount }）の1行：
+//   set:1:N:0 → 「始まりの森 ノーマル（未強化）をそろえた！ステータスポイント+1」
+//   rarity:1:N → 「始まりの森 ノーマルを3段階そろえた！スタミナの回復−1秒」／ area:1 → 「始まりの森をコンプリート！スタミナの回復−1秒」
+export const rewardText = (w) => {
+  const [type, a, r, t] = String(w?.key || '').split(':')
+  const area = AREA_LIST[Number(a) - 1]?.name || ''
+  const gain = w?.kind === 'sp' ? `ステータスポイント+${w.amount}` : `スタミナの回復−${w?.amount}秒`
+  if (type === 'set') return `${area} ${RARITY_LABEL[r] || r}（${MUSEUM_TIERS[Number(t)]?.label ?? ''}）をそろえた！${gain}`
+  if (type === 'rarity') return `${area} ${RARITY_LABEL[r] || r}を3段階そろえた！${gain}`
+  if (type === 'area') return `${area}をコンプリート！${gain}`
+  return gain
+}

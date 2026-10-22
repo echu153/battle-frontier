@@ -131,8 +131,83 @@ test('画面：メニューに博物館・寄贈は確認→結果のポップ�
   assert.ok(m.includes('<button onClick={e => { e.stopPropagation(); setConfirm([d]) }}'))
   assert.ok(m.includes('<span style={{ color: RARITY_COLOR[d.item.rarity], ...(size ? { fontSize: size } : null) }}>{d.item.name}</span>'), '大きくするのは名前の span だけ')
   assert.ok(m.includes("title={result.ok ? '🏺 寄贈しました'"), '結果のポップアップ')
-  assert.ok(m.includes('登録でもらえる能力：準備中'), '能力はあとで（ユーザー）')
+  assert.ok(m.includes('ユニークの報酬は今後追加します'), 'ユニークの報酬はあとで（ユーザー）')
+  assert.ok(m.includes('{result.rewards.map(w => <div key={w.key} style={{ color:\x27#ffcc00\x27 }}>🎉 {rewardText(w)}</div>)}'), '寄贈のあとに新しい報酬')
   // 段階の印に「以上」を出さない
   assert.ok(!MUSEUM_TIERS.some(t => t.label.includes('以上')))
   assert.ok(Object.keys(ITEM_BY_ID).length > MUSEUM_ITEMS.length, '初期装備のぶん少ない')
+})
+
+// ===== 報酬（2026-10-23 ユーザー指示）=====
+import { MUSEUM_SET_SP, MUSEUM_RARITY_STAM_SEC, MUSEUM_AREA_STAM_SEC, setItemsOf, areaProgressOf, museumRewardTotalsOf, rewardText } from './museum.js'
+import { STAMINA_RECOVER_MS, STAMINA_CUT_MAX_SEC, staminaSpanMsOf, rollStamina, msToNextStamina } from './level.js'
+
+const rowsOf = (items, tiers = [0, 1, 2]) => items.flatMap(i => tiers.map(t => ({ base_id: i.id, tier: t })))
+
+test('【確定】報酬の数：ステータスポイント ノーマル1・レア2・エピック3・レジェンダリー4（段階ごと）・3段階で−1秒・エリアコンプで−1秒', () => {
+  assert.deepEqual(MUSEUM_SET_SP, { N: 1, R: 2, E: 3, L: 4 })
+  assert.equal(MUSEUM_RARITY_STAM_SEC, 1)
+  assert.equal(MUSEUM_AREA_STAM_SEC, 1)
+  for (let a = 1; a <= AREA_LIST.length; a++) for (const r of ['N', 'R', 'E', 'L']) assert.equal(setItemsOf(a, r).length, 26, `エリア${a} ${r}`)
+  // 全部そろえると +450・−75秒（3分→1分45秒）
+  const all = museumRewardTotalsOf(rowsOf(ITEMS))
+  assert.deepEqual(all, { sp: 450, stamSec: 75 })
+  assert.equal(staminaSpanMsOf({ museum_stam_cut: all.stamSec }), 105 * 1000)
+  // ユニーク・初期装備は数えない
+  assert.deepEqual(museumRewardTotalsOf(rowsOf([...UNIQUE_ITEMS, ...STARTER_ITEMS])), { sp: 0, stamSec: 0 })
+})
+
+test('報酬の進み：1つの段階だけそろえる→ステータスポイントだけ・3段階→スタミナ・全部のレア度→エリアコンプリート', () => {
+  const N1 = setItemsOf(1, 'N')
+  // 未強化だけ 26/26 → +1
+  assert.deepEqual(museumRewardTotalsOf(rowsOf(N1, [0])), { sp: 1, stamSec: 0 })
+  // 1つ足りない → なし
+  assert.deepEqual(museumRewardTotalsOf(rowsOf(N1.slice(1), [0])), { sp: 0, stamSec: 0 })
+  // 3段階 → +3・−1秒
+  assert.deepEqual(museumRewardTotalsOf(rowsOf(N1)), { sp: 3, stamSec: 1 })
+  // エリア1のレア度ぜんぶ×3段階 → +30・−5秒（4つのレア度＋コンプリート）
+  const area1 = ITEMS.filter(i => i.area === 1)
+  assert.deepEqual(museumRewardTotalsOf(rowsOf(area1)), { sp: 30, stamSec: 5 })
+  const p = areaProgressOf(registeredSetOf(rowsOf(N1, [0, 2])), 1)
+  assert.deepEqual(p.rarities[0].tiers.map(t => [t.have, t.done]), [[26, true], [0, false], [26, true]])
+  assert.equal(p.rarities[0].allTiers, false)
+  assert.equal(p.complete, false)
+})
+
+test('寄贈のあとの報酬の文（サーバーの key から）', () => {
+  assert.equal(rewardText({ key: 'set:1:N:0', kind: 'sp', amount: 1 }), '始まりの森 ノーマル（未強化）をそろえた！ステータスポイント+1')
+  assert.equal(rewardText({ key: 'set:3:L:2', kind: 'sp', amount: 4 }), `${AREA_LIST[2].name} レジェンダリー（+9）をそろえた！ステータスポイント+4`)
+  assert.equal(rewardText({ key: 'rarity:1:R', kind: 'stam', amount: 1 }), '始まりの森 レアを3段階そろえた！スタミナの回復−1秒')
+  assert.equal(rewardText({ key: 'area:1', kind: 'stam', amount: 1 }), '始まりの森をコンプリート！スタミナの回復−1秒')
+})
+
+test('スタミナの回復の間隔：3分 − 博物館の短縮（上限120秒）。数え方は間隔だけ変わる', () => {
+  assert.equal(staminaSpanMsOf({}), STAMINA_RECOVER_MS)
+  assert.equal(staminaSpanMsOf({ museum_stam_cut: 5 }), STAMINA_RECOVER_MS - 5000)
+  assert.equal(staminaSpanMsOf({ museum_stam_cut: 999 }), STAMINA_RECOVER_MS - STAMINA_CUT_MAX_SEC * 1000, '上限')
+  assert.equal(staminaSpanMsOf({ museum_stam_cut: -3 }), STAMINA_RECOVER_MS)
+  const at = new Date('2026-10-23T00:00:00Z').getTime()
+  const span = staminaSpanMsOf({ museum_stam_cut: 30 })   // 150秒
+  assert.deepEqual(rollStamina(0, at, 10, at + 300 * 1000, span), { n: 2, at: at + 300 * 1000 })
+  assert.equal(rollStamina(0, at, 10, at + 300 * 1000).n, 1, '間隔を渡さなければ今までどおり3分')
+  assert.equal(msToNextStamina(0, at, 10, at + 100 * 1000, span), 50 * 1000)
+})
+
+test('SQL：報酬の表・数え直し（数は JS と同じ）・寄贈で数え直す・前からの寄贈も数える・スタミナの列', () => {
+  assert.ok(SQL.includes('create table if not exists public.v2cap_museum_rewards ('))
+  assert.ok(SQL.includes('primary key (player_id, key)'), '1つの報酬は1回だけ')
+  assert.ok(SQL.includes('create policy v2cap_museum_rewards_own on public.v2cap_museum_rewards for select to authenticated using (player_id = auth.uid());'))
+  assert.ok(SQL.includes('alter table public.v2cap_profiles add column if not exists museum_stam_cut int not null default 0;'))
+  const settle = fnBody('v2cap_museum_settle')
+  assert.ok(settle.includes(`case s.rarity when 'N' then ${MUSEUM_SET_SP.N} when 'R' then ${MUSEUM_SET_SP.R} when 'E' then ${MUSEUM_SET_SP.E} when 'L' then ${MUSEUM_SET_SP.L} end as amount`), 'ステータスポイントが JS と同じ')
+  assert.ok(settle.includes(`'rarity:' || x.area || ':' || x.rarity, 'stam', ${MUSEUM_RARITY_STAM_SEC} from rar x`))
+  assert.ok(settle.includes(`'area:' || a.area, 'stam', ${MUSEUM_AREA_STAM_SEC} from ar a`))
+  assert.ok(settle.includes("e.area >= 1 and e.rarity in ('N', 'R', 'E', 'L')"), 'ユニーク・初期装備は数えない')
+  assert.ok(settle.includes('having count(distinct s.tier) = 3'), '3段階そろえて1回（ユーザー選択）')
+  assert.ok(settle.includes('on conflict (player_id, key) do nothing;'))
+  assert.ok(settle.includes('set stat_points = stat_points + v_sp, museum_stam_cut = v_cut'))
+  assert.ok(SQL.includes('revoke all on function public.v2cap_museum_settle(uuid) from public, anon, authenticated;'), '中の関数は閉じる')
+  for (const name of ['v2cap_museum_donate', 'v2cap_museum_donate_many']) assert.ok(fnBody(name).includes("'rewards', public.v2cap_museum_settle(v_uid)"), name)
+  assert.ok(SQL.includes('for r in select distinct m.player_id from public.v2cap_museum m loop\n    perform public.v2cap_museum_settle(r.player_id);'), '前からの寄贈も数える')
+  assert.ok(fnBody('v2cap_dev_reset').includes('delete from public.v2cap_museum_rewards where player_id = auth.uid();'))
 })

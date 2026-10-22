@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs'
 import { STAT_KEYS } from '../core/stats.js'
 import { SKILL_SET_SLOTS, SKILL_USE_MAX } from '../core/skills.js'
 import { DEFAULT_USES_MAX } from './skills.js'
-import { NEED_BASE, NEED_PERMIL, MAX_LV, STAMINA_BASE, STAMINA_RECOVER_MS, POINTS_PER_LV, POINTS_STEP, POINTS_ON_STEP, POINT_UNIT } from './level.js'
+import { NEED_BASE, NEED_PERMIL, MAX_LV, STAMINA_BASE, STAMINA_RECOVER_MS, STAMINA_CUT_MAX_SEC, POINTS_PER_LV, POINTS_STEP, POINTS_ON_STEP, POINT_UNIT } from './level.js'
 import { JOB_NEED_PCT, JOB_NEED_BASE_PERMIL, JOB_MAX } from './jobs.js'
 import { ROLE_TENTHS, SPOTS as SPOTS_ALL, recLvOf } from './areas.js'
 import { SLOTS, RARITIES, ALL_RARITIES, STARTER_AREA, UNIQUE_ITEMS, UNIQUE_DROP_PCT, UNIQUE_LV } from './equipment.js'
@@ -65,7 +65,11 @@ test('必要EXP・必要ClassEXP・スタミナの式と係数がJSと同じ', (
   assert.ok(SQL.includes('alter table public.v2cap_stages add column if not exists need_base int not null default 0;'), '前からある表にも列を足す')
   // スタミナ：最大値は 10＋(LV−1)・回復は3分に1（2026-10-09 ユーザー指示）
   assert.match(fnBody('v2cap_stamina_max'), new RegExp(`select ${STAMINA_BASE} \\+ greatest\\(1, coalesce\\(p_lv, 1\\)\\) - 1`))
-  assert.ok(fnBody('v2cap_stamina_roll').includes(`c_span constant interval := interval '${STAMINA_RECOVER_MS / 60000} minutes';`), '回復の間隔がJSと同じ')
+  // 回復の間隔は 3分 − 博物館の報酬の短縮（museum_stam_cut 秒・上限 STAMINA_CUT_MAX_SEC＝2026-10-23）
+  const roll = fnBody('v2cap_stamina_roll')
+  assert.ok(roll.includes(`c_base_sec constant int := ${STAMINA_RECOVER_MS / 1000};`), '回復の間隔がJSと同じ')
+  assert.ok(roll.includes(`c_cut_max  constant int := ${STAMINA_CUT_MAX_SEC};`), '短縮の上限がJSと同じ')
+  assert.ok(roll.includes('c_span := make_interval(secs => c_base_sec - least(c_cut_max, greatest(0, coalesce(v_row.museum_stam_cut, 0))));'))
 })
 
 test('【確定】1勝のEXPとGoldは場所の表 × 役割の倍率（朝昼晩1.5倍・レア3倍・ボス5倍）。サーバーが決める', () => {
