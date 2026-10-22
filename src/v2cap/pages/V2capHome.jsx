@@ -13,6 +13,7 @@ import V2capEquip from '../components/V2capEquip.jsx'
 import V2capSmith from '../components/V2capSmith.jsx'
 import V2capSkills from '../components/V2capSkills.jsx'
 import V2capTemple from '../components/V2capTemple.jsx'
+import V2capMuseum from '../components/V2capMuseum.jsx'
 import V2capDaily from '../components/V2capDaily.jsx'
 import V2capProfile from '../components/V2capProfile.jsx'
 import V2capTree from '../components/V2capTree.jsx'
@@ -54,6 +55,10 @@ const MENU = [
     { key:'smith',  label:'鍛冶屋', icon:'🔨', color:'#ffcc00', action:'強化・分解・作成' },
     { key:'temple', label:'神殿',   icon:'🏛', color:'#ff88cc', action:'転職する' },
   ],
+  // 【確定】2026-10-22 博物館（装備の寄贈・V1と同じ形の土台。登録でもらえる能力はあとで）
+  [
+    { key:'museum', label:'博物館', icon:'🏺', color:'#d8b070', action:'装備を寄贈する' },
+  ],
   // 【確定】2026-10-13 アセンション（スキルツリー）。説明は残りのAPで変わる（menuOf）
   [
     { key:'asc', label:'アセンション', icon:'✨', color:'#ffaa44', action:'APを振る' },
@@ -71,7 +76,7 @@ const MENU = [
     { key:'casino', label:'賭博場', icon:'🎰', color:'#ff4fa3', action:'スロット・ハイ&ロー・ルーレット' },
   ],
 ]
-const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場', tower:`🗼 ${TOWER_NAME}`,
+const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', museum:'🏺 博物館', asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場', tower:`🗼 ${TOWER_NAME}`,
   uniqueCheck:'💎 ユニークの能力の確かめ［開発］' }
 // メニューの説明に、いまの職業で残っているAPを出す（振り忘れに気づけるように）。塔はいまの層（守っていればその層）
 const towerActionOf = (prof) => (prof?.tower_guard
@@ -421,6 +426,7 @@ export default function V2capHome() {
             {screen === 'smith' && <V2capSmith prof={prof} inventory={inventory} onProfile={refresh} onGo={setScreen} />}
             {screen === 'skills' && <V2capSkills prof={prof} inventory={inventory} onProfile={refresh} />}
             {screen === 'temple' && <V2capTemple prof={prof} inventory={inventory} onProfile={refresh} />}
+            {screen === 'museum' && <V2capMuseum prof={prof} inventory={inventory} onProfile={refresh} />}
             {screen === 'asc' && <V2capAscension prof={prof} onProfile={refresh} />}
             {screen === 'tree' && <V2capTree prof={prof} onProfile={refresh} unlimited={isAdmin} />}
             {screen === 'dex' && <V2capDex prof={prof} />}

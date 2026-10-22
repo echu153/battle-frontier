@@ -4821,6 +4821,7 @@ begin
   delete from public.v2cap_inventory where player_id = auth.uid();
   delete from public.v2cap_kills where player_id = auth.uid();
   delete from public.v2cap_casino where player_id = auth.uid();
+  delete from public.v2cap_museum where player_id = auth.uid();   -- 博物館の登録（2026-10-22・§14）
   delete from public.v2cap_profiles where id = auth.uid();
   return jsonb_build_object('ok', true);
 end;
@@ -6712,3 +6713,67 @@ begin
     insert into public.v2cap_migrations (key) values ('meteor_rename_20261018');
   end if;
 end $$;
+
+-- ============================================================
+-- ===== 14. 博物館（装備の寄贈・2026-10-22）=====
+-- ============================================================
+-- 【確定】2026-10-22 ユーザー指示「V1にあるような装備を寄贈する博物館を作成したい／
+--   登録時に能力もらえるけど詳細はあとで作成する、とりあえず土台だけ作って」。決まりは V1 の博物館と同じ形：
+--   ・寄贈した装備はなくなる・着けている装備は寄贈できない
+--   ・同じ装備を 未強化（+0〜4）／+5以上／+9以上 の3段階で1回ずつ（段階＝tier 0／1／2。src/v2cap/lib/museum.js の tierOfPlus と同じ）
+--   ・★登録でもらえる能力はまだ無い（あとで）。この表から数え直せるように、寄贈したときの強化値（plus）も持つ
+-- ★装備の表 v2cap_equipment は流し直しても行を消さない（on conflict で入れ直す）ので、外部キーでつなぐ
+create table if not exists public.v2cap_museum (
+  player_id  uuid not null references auth.users(id) on delete cascade,
+  base_id    text not null references public.v2cap_equipment(id),
+  tier       int  not null check (tier between 0 and 2),
+  plus       int  not null default 0,
+  donated_at timestamptz not null default now(),
+  primary key (player_id, base_id, tier)
+);
+alter table public.v2cap_museum enable row level security;
+drop policy if exists v2cap_museum_own on public.v2cap_museum;
+create policy v2cap_museum_own on public.v2cap_museum for select to authenticated using (player_id = auth.uid());
+revoke all on table public.v2cap_museum from anon;
+grant select on table public.v2cap_museum to authenticated;
+
+-- 寄贈：持ち物の装備を1つ消して、その装備のその段階を登録する
+create or replace function public.v2cap_museum_donate(p_inventory_id bigint)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid  uuid := auth.uid();
+  v_row  public.v2cap_profiles;
+  v_inv  public.v2cap_inventory;
+  v_plus int;
+  v_tier int;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  -- ★行をつかんでから（分解・強化・着け替えと同時に届いても、同じ装備を2回使えないように）
+  select * into v_row from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  select * into v_inv from public.v2cap_inventory where id = p_inventory_id and player_id = v_uid;
+  if not found then return jsonb_build_object('ok', false, 'error', 'その装備は持っていません'); end if;
+  -- ★前の形の装備（レア度を持たない行）は寄贈できない＝§2 で一覧から消す行を、登録の記録が指さないように
+  --   （指していると、全文を流し直したときに外部キーで止まる）
+  if not exists (select 1 from public.v2cap_equipment e where e.id = v_inv.base_id and e.rarity is not null) then
+    return jsonb_build_object('ok', false, 'error', 'この装備は寄贈できません');
+  end if;
+  if exists (select 1 from jsonb_each_text(coalesce(v_row.equipped, '{}'::jsonb)) q
+              where q.value ~ '^[0-9]+$' and q.value::bigint = v_inv.id) then
+    return jsonb_build_object('ok', false, 'error', '着けている装備は寄贈できません');
+  end if;
+  v_plus := greatest(0, least(10, coalesce(v_inv.plus, 0)));
+  v_tier := case when v_plus >= 9 then 2 when v_plus >= 5 then 1 else 0 end;
+  if exists (select 1 from public.v2cap_museum m
+              where m.player_id = v_uid and m.base_id = v_inv.base_id and m.tier = v_tier) then
+    return jsonb_build_object('ok', false, 'error', 'この装備のこの段階は、もう寄贈しています');
+  end if;
+  delete from public.v2cap_inventory where id = v_inv.id;
+  insert into public.v2cap_museum (player_id, base_id, tier, plus) values (v_uid, v_inv.base_id, v_tier, v_plus);
+  return jsonb_build_object('ok', true, 'base_id', v_inv.base_id, 'tier', v_tier, 'plus', v_plus,
+    'count', (select count(*)::int from public.v2cap_museum where player_id = v_uid));
+end;
+$$;
+revoke all on function public.v2cap_museum_donate(bigint) from public, anon;
+grant execute on function public.v2cap_museum_donate(bigint) to authenticated;
