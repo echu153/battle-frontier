@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
   MUSEUM_TIERS, tierOfPlus, MUSEUM_GROUPS, MUSEUM_ITEMS, isMuseumItem, raritiesOfGroup, museumKey, registeredSetOf, tiersOf,
-  uniqueHidden, museumCountOf, wornInvIdsOf, donatablesOf, bulkDonatable, donatedText,
+  uniqueHidden, museumCountOf, wornInvIdsOf, donatablesOf, bulkDonatable, donatedText, donatedTail,
 } from './museum.js'
 import { ITEMS, STARTER_ITEMS, UNIQUE_ITEMS, ITEM_BY_ID } from './equipment.js'
 import { AREA_LIST } from './areas.js'
@@ -78,6 +78,11 @@ test('寄贈の結果の文（10-23 ユーザー指示「「ブロンズダガ�
   assert.equal(donatedText('ブロンズダガー', 0), '「ブロンズダガー」を寄贈しました（未強化で登録）')
   assert.equal(donatedText('ブロンズダガー', 1), '「ブロンズダガー」を寄贈しました（+5で登録）')
   assert.equal(donatedText('ブロンズダガー', 2), '「ブロンズダガー」を寄贈しました（+9で登録）')
+  // 画面は装備名だけレア度の色（10-23 ユーザー指示「既存の装備と同じように色付けてほしい、装備名だけね」）
+  assert.equal(donatedTail(0), 'を寄贈しました（未強化で登録）')
+  const m = src('../components/V2capMuseum.jsx')
+  assert.ok(m.includes('「<span style={{ color: RARITY_COLOR[x.rarity] }}>{x.name}</span>」{donatedTail(x.tier)}'))
+  assert.ok(m.includes("<div key={i} style={{ color:'#cfe2ff' }}>"), '名前の外（「」と後ろの文）はふつうの色')
 })
 
 test('SQL §14：登録の表・決まりは中の関数1つ（1つずつも一括も同じ）・段階は JS と同じ・初期装備は弾く', () => {

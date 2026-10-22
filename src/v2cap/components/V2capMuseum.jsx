@@ -3,11 +3,11 @@ import { supabase } from '../../supabase'
 import { box, miniBtn, TEXT } from './v2ui.js'
 import V2Modal from './V2Modal.jsx'
 import { chip } from './v2capGearView.js'
-import { RARITIES, RARITY_COLOR, rarityLabel, kindLabel } from '../lib/equipment.js'
+import { RARITIES, RARITY_COLOR, ITEM_BY_ID, rarityLabel, kindLabel } from '../lib/equipment.js'
 import { plusOf, plusLabel } from '../lib/smith.js'
 import {
   MUSEUM_TIERS, MUSEUM_GROUPS, raritiesOfGroup, registeredSetOf, tiersOf, uniqueHidden, museumCountOf, donatablesOf,
-  bulkDonatable, donatedText,
+  bulkDonatable, donatedTail,
 } from '../lib/museum.js'
 
 // ============================================================
@@ -39,7 +39,7 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [confirm, setConfirm] = useState(null)    // 寄贈の確認 [{ inv, item, tier, copies }]（1つでも一括でも配列）
-  const [result, setResult] = useState(null)      // 寄贈の結果 { ok, lines: [文], skipped }
+  const [result, setResult] = useState(null)      // 寄贈の結果 { ok, items: [{ name, rarity, tier }], skipped } ／ 失敗は { ok:false, error }
   const [picked, setPicked] = useState(() => new Set())   // 一括寄贈に選んだ行（rowKey）
   const [groupKey, setGroupKey] = useState(MUSEUM_GROUPS[0].key)
 
@@ -74,10 +74,11 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
       ? await supabase.rpc('v2cap_museum_donate_many', { p_ids: list.map(d => d.inv.id) })
       : await supabase.rpc('v2cap_museum_donate', { p_inventory_id: list[0].inv.id })
     setBusy(false); setConfirm(null)
-    if (e || !data?.ok) { setResult({ ok: false, lines: [e?.message || data?.error || '寄贈できませんでした'] }); return }
+    if (e || !data?.ok) { setResult({ ok: false, error: e?.message || data?.error || '寄贈できませんでした' }); return }
     const done = many ? (data.donated || []) : [{ base_id: data.base_id, tier: data.tier, plus: data.plus }]
-    const nameOf = (id) => list.find(d => d.item.id === id)?.item.name || id
-    setResult({ ok: true, lines: done.map(x => donatedText(nameOf(x.base_id), x.tier)), skipped: many ? data.skipped || 0 : 0 })
+    const itemOf = (id) => ITEM_BY_ID[id] || list.find(d => d.item.id === id)?.item || { name: id, rarity: 'N' }
+    setResult({ ok: true, items: done.map(x => ({ name: itemOf(x.base_id).name, rarity: itemOf(x.base_id).rarity, tier: x.tier })),
+      skipped: many ? data.skipped || 0 : 0 })
     setRows(r => [...(r || []), ...done])
     setPicked(new Set())
     onProfile?.()   // 持ち物を読み直す（寄贈した装備はなくなる）
@@ -112,10 +113,19 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
       {result && (
         <V2Modal title={result.ok ? '🏺 寄贈しました' : '⚠ 寄贈できませんでした'} color={result.ok ? '#d8b070' : '#ff8844'}
           onClose={() => setResult(null)}>
-          {result.ok && result.lines.length > 1 && <div style={{ color:'#cfe2ff' }}>{result.lines.length}個を寄贈しました</div>}
-          <div style={{ maxHeight:'240px', overflowY:'auto', fontSize: result.lines.length > 1 ? '11px' : '12px' }}>
-            {result.lines.map((l, i) => <div key={i} style={{ color: result.ok ? '#cfe2ff' : '#ff8844' }}>{l}</div>)}
-          </div>
+          {result.ok ? (
+            <>
+              {result.items.length > 1 && <div style={{ color:'#cfe2ff' }}>{result.items.length}個を寄贈しました</div>}
+              {/* 装備名だけレア度の色（2026-10-23 ユーザー指示「既存の装備と同じように色付けてほしい、装備名だけね」） */}
+              <div style={{ maxHeight:'240px', overflowY:'auto', fontSize: result.items.length > 1 ? '11px' : '12px' }}>
+                {result.items.map((x, i) => (
+                  <div key={i} style={{ color:'#cfe2ff' }}>
+                    「<span style={{ color: RARITY_COLOR[x.rarity] }}>{x.name}</span>」{donatedTail(x.tier)}
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : <div style={{ color:'#ff8844' }}>{result.error}</div>}
           {result.skipped > 0 && <div style={{ color: TEXT.sub, marginTop:'4px' }}>寄贈できなかった装備：{result.skipped}個</div>}
         </V2Modal>
       )}

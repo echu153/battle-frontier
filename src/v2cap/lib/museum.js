@@ -81,4 +81,7 @@ export const donatablesOf = (profile, inventory, rows) => {
 // まとめて選ぶときに入れるか：ユニークは入れない（1つずつなら選べる＝鍛冶屋のまとめての分解と同じ）
 export const bulkDonatable = (d) => !isUnique(d.item)
 // 寄贈の結果の1行：「ブロンズダガー」を寄贈しました（未強化で登録）
-export const donatedText = (name, tier) => `「${name}」を寄贈しました（${MUSEUM_TIERS[tier]?.label ?? ''}で登録）`
+// 【確定】2026-10-23 ユーザー指示「既存の装備と同じように色付けてほしい、装備名だけね」＝画面は装備名だけレア度の色
+//   （「」の中＝RARITY_COLOR）で出し、後ろの文は donatedTail
+export const donatedTail = (tier) => `を寄贈しました（${MUSEUM_TIERS[tier]?.label ?? ''}で登録）`
+export const donatedText = (name, tier) => `「${name}」${donatedTail(tier)}`
