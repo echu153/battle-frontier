@@ -98,10 +98,12 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
           ) : (
             <>
               <div>{confirm.length}個を寄贈します</div>
-              <div style={{ maxHeight:'200px', overflowY:'auto', margin:'4px 0', fontSize:'11px' }}>
+              {/* 一括のときも装備名だけ大きく（2026-10-23 ユーザー指示「複数選択したときの装備名が大きくなってない」） */}
+              <div style={{ maxHeight:'260px', overflowY:'auto', margin:'4px 0', fontSize:'11px' }}>
                 {confirm.map(d => (
-                  <div key={rowKey(d)}>
-                    <span style={tierBadge(MUSEUM_TIERS[d.tier])}>{MUSEUM_TIERS[d.tier].label}</span> <NameLine d={d} />
+                  <div key={rowKey(d)} style={{ display:'flex', alignItems:'center', gap:'6px', padding:'1px 0' }}>
+                    <span style={tierBadge(MUSEUM_TIERS[d.tier])}>{MUSEUM_TIERS[d.tier].label}</span>
+                    <span><NameLine d={d} size="16px" /></span>
                   </div>
                 ))}
               </div>
@@ -187,17 +189,20 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
                 {donatables.map(d => {
                   const t = MUSEUM_TIERS[d.tier]
                   const on = picked.has(rowKey(d))
+                  // ★行のどこを押してもチェックが入る・外れる（2026-10-23 ユーザー指示「チェックを押さなくても装備の欄を押せば」）。
+                  //   チェックそのものと「寄贈」ボタンは、行の押下に伝えない（2回切り替わる・寄贈で選びが変わるのを防ぐ）
                   return (
-                    <div key={rowKey(d)} style={{ background: on ? '#14100a' : '#000818', border:`1px solid ${on ? '#8a6a30' : '#002244'}`, padding:'5px 8px',
-                      display:'flex', alignItems:'center', gap:'8px', fontSize:'11px' }}>
-                      <input type="checkbox" checked={on} disabled={busy} onChange={() => toggle(rowKey(d))} title="一括寄贈に選ぶ"
-                        style={{ accentColor:'#d8b070', margin:0, flexShrink:0 }} />
+                    <div key={rowKey(d)} onClick={() => { if (!busy) toggle(rowKey(d)) }}
+                      style={{ background: on ? '#14100a' : '#000818', border:`1px solid ${on ? '#8a6a30' : '#002244'}`, padding:'5px 8px',
+                        display:'flex', alignItems:'center', gap:'8px', fontSize:'11px', cursor: busy ? 'wait' : 'pointer', userSelect:'none' }}>
+                      <input type="checkbox" checked={on} disabled={busy} onChange={() => toggle(rowKey(d))} onClick={e => e.stopPropagation()}
+                        title="一括寄贈に選ぶ" style={{ accentColor:'#d8b070', margin:0, flexShrink:0 }} />
                       <span style={tierBadge(t)}>{t.label}</span>
                       <span style={{ flex:1, minWidth:0 }}>
                         <NameLine d={d} />
                         <span style={{ color: TEXT.label, fontSize:'10px' }}>　{kindLabel(d.item)}{d.copies > 1 ? `・${d.copies}個` : ''}</span>
                       </span>
-                      <button onClick={() => setConfirm([d])} disabled={busy} style={miniBtn('#d8b070')}>寄贈</button>
+                      <button onClick={e => { e.stopPropagation(); setConfirm([d]) }} disabled={busy} style={miniBtn('#d8b070')}>寄贈</button>
                     </div>
                   )
                 })}
