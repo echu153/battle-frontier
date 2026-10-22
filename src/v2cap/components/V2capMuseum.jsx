@@ -27,9 +27,10 @@ const tierBadge = (t, on = true) => ({
   fontSize:'9px', padding:'0 4px', border:`1px solid ${on ? t.color : '#223a5e'}`, color: on ? t.color : TEXT.empty, flexShrink:0,
 })
 const rowKey = (d) => `${d.item.id}|${d.tier}`
-const NameLine = ({ d }) => (
+// size … 装備名だけの文字の大きさ（1つずつの寄贈の確認＝2026-10-23 ユーザー指示「装備の名前見やすくするようにフォントの大きさ大きく」「装備名だけね」）
+const NameLine = ({ d, size }) => (
   <>
-    <span style={{ color: RARITY_COLOR[d.item.rarity] }}>{d.item.name}</span>
+    <span style={{ color: RARITY_COLOR[d.item.rarity], ...(size ? { fontSize: size } : null) }}>{d.item.name}</span>
     {plusOf(d.inv) > 0 && <span style={{ color:'#ffcc00' }}> {plusLabel(plusOf(d.inv))}</span>}
   </>
 )
@@ -91,7 +92,7 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
           onConfirm={donate} onClose={() => setConfirm(null)}>
           {confirm.length === 1 ? (
             <>
-              <div><NameLine d={confirm[0]} /><span style={{ color: TEXT.sub }}>（{kindLabel(confirm[0].item)}）</span></div>
+              <div><NameLine d={confirm[0]} size="16px" /><span style={{ color: TEXT.sub }}>（{kindLabel(confirm[0].item)}）</span></div>
               <div>登録する段階：<span style={{ color: MUSEUM_TIERS[confirm[0].tier].color }}>{MUSEUM_TIERS[confirm[0].tier].label}</span></div>
             </>
           ) : (

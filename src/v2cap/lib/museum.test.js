@@ -120,6 +120,9 @@ test('画面：メニューに博物館・寄贈は確認→結果のポップ�
   assert.ok(m.includes("supabase.rpc('v2cap_museum_donate', { p_inventory_id: list[0].inv.id })"))
   assert.ok(m.includes("supabase.rpc('v2cap_museum_donate_many', { p_ids: list.map(d => d.inv.id) })"))
   assert.ok(m.includes('<V2Modal title="🏺 装備を寄贈する"'), '確認のポップアップ')
+  // 1つずつの確認は装備名だけ大きく（10-23 ユーザー指示「装備の名前見やすくするようにフォントの大きさ大きく」「装備名だけね」）
+  assert.ok(m.includes('<NameLine d={confirm[0]} size="16px" />'))
+  assert.ok(m.includes('<span style={{ color: RARITY_COLOR[d.item.rarity], ...(size ? { fontSize: size } : null) }}>{d.item.name}</span>'), '大きくするのは名前の span だけ')
   assert.ok(m.includes("title={result.ok ? '🏺 寄贈しました'"), '結果のポップアップ')
   assert.ok(m.includes('登録でもらえる能力：準備中'), '能力はあとで（ユーザー）')
   // 段階の印に「以上」を出さない
