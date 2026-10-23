@@ -9,7 +9,7 @@
 //   ・状態異常 … 右下に残りターン（出血はスタック数）
 //   ・そのほかの効果 … HP継続回復・MP継続回復・バリア（残りの量）・被ダメージ軽減（%）・状態異常無効・能力低下無効・吸収（%）
 //   ・絵はユーザーが ChatGPT で作る（透明な背景の紋章だけ・文字なし）。枠と下地の色は画面で描く＝絵ごとのばらつきが目立たない
-//     元の絵：public/状態アイコン/<file>.png（file は下の一覧）→ `node tools/v2cap-fx-art.mjs` で public/fx-art/<id>.webp
+//     元の絵：public/V2状態異常/<file>.png（file は下の一覧・2026-10-24 ユーザーが置いた場所に合わせた）→ `node tools/v2cap-fx-art.mjs` で public/fx-art/<id>.webp
 //     作れた絵の一覧は fxArtList.js（ツールが書く・手で直さない）。**絵が無いものは文字の枠で代わりに出す**
 //   中身（どの効果がかかっているか）は戦闘エンジンの fxOf（src/v2cap/core/battle.js）
 // ============================================================
@@ -18,7 +18,7 @@ import { AIL_LABEL } from '../core/ailments.js'
 import { FX_STAT_KEYS } from '../core/battle.js'
 import { FX_ART_IDS } from './fxArtList.js'
 
-export const FX_ART_SRC_DIR = '状態アイコン'   // public の下・元の絵（ユーザーが置く）
+export const FX_ART_SRC_DIR = 'V2状態異常'   // public の下・元の絵（ユーザーが置く）
 export const FX_ART_DIR = '/fx-art'           // public の下・画面で使う版
 export const FX_ART_SIZE = 96                 // 画面では34px。スマホの高精細でもぼやけないように大きめに持つ
 

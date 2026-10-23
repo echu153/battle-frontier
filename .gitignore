@@ -40,5 +40,5 @@ tools/v2-skills.html
 /public/アセンション/
 # v2cap のホームの自分のアイコン（待機の動く絵）の元の絵（ユーザーが置く）。画面で使う版は public/V2newjob/gif（tools/v2cap-art.mjs）
 /public/V2newjob/ギフ/
-# v2cap 戦闘ログのアイコン（バフ・デバフ・状態異常）の元の絵（ユーザーが ChatGPT で作って置く）。画面で使う版は public/fx-art（tools/v2cap-fx-art.mjs）
-/public/状態アイコン/
+# v2cap 戦闘ログのアイコン（バフ・デバフ・状態異常）の元の絵（ユーザーが ChatGPT で作って置く・1枚約2MB）。画面で使う版は public/fx-art（tools/v2cap-fx-art.mjs）
+/public/V2状態異常/
