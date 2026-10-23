@@ -139,6 +139,9 @@ test('画面：メニューに博物館・寄贈は確認→結果のポップ�
   assert.ok(m.includes("title={result.ok ? '🏺 寄贈しました'"), '結果のポップアップ')
   assert.ok(m.includes('エリアコンプリート：スタミナ回復−{MUSEUM_AREA_STAM_SEC}秒'), 'コンプリートの説明に（…）を付けない（10-23）')
   assert.ok(m.includes('3段階すべて寄贈で スタミナ回復−{MUSEUM_RARITY_STAM_SEC}秒'), '3段階の報酬の書き方（10-23）')
+  // 報酬は2行に分ける・レア度ごとに枠（10-23「これを改行」「ノーマルとかレアの区分で枠分けてほしい」）
+  assert.ok(m.includes('<div>1段階そろうごとに ステータスポイント+{MUSEUM_SET_SP[r]}</div>'))
+  assert.ok(m.includes('<div key={r} style={{ border:`1px solid ${RARITY_COLOR[r]}55`'))
   assert.ok(m.includes('const tierTag = (t) => `【${t.label}】`'), '段階を【】で囲む（10-23）')
   assert.ok(m.includes('{result.rewards.map(w => <div key={w.key} style={{ color:\x27#ffcc00\x27 }}>🎉 {rewardText(w)}</div>)}'), '寄贈のあとに新しい報酬')
   // 段階の印に「以上」を出さない

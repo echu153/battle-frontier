@@ -242,10 +242,11 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
             <button key={g.key} onClick={() => setGroupKey(g.key)} style={chip(g.key === group.key)}>{g.label}</button>
           ))}
         </div>
-        <div style={{ display:'flex', flexWrap:'wrap', gap:'4px 12px', color: TEXT.label, fontSize:'11px', marginBottom:'4px' }}>
-          <span style={{ color:'#cfe2ff' }}>{group.label}</span>
+        {/* エリアの名前と段階ごとの登録数は別の行（スマホの幅で段階が途中で折り返さないように） */}
+        <div style={{ color:'#cfe2ff', fontSize:'12px', marginBottom:'2px' }}>{group.label}</div>
+        <div style={{ display:'flex', flexWrap:'wrap', gap:'2px 10px', color: TEXT.label, fontSize:'11px', marginBottom:'4px' }}>
           {MUSEUM_TIERS.map((t, i) => (
-            <span key={t.key}><span style={{ color: t.color }}>{tierTag(t)}</span>{groupCount.byTier[i]}/{groupCount.items}</span>
+            <span key={t.key} style={{ whiteSpace:'nowrap' }}><span style={{ color: t.color }}>{tierTag(t)}</span>{groupCount.byTier[i]}/{groupCount.items}</span>
           ))}
         </div>
         {/* エリアコンプリート（2026-10-23） */}
@@ -255,22 +256,26 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
         {raritiesOfGroup(group).map(r => {
           const rp = progress.rarities.find(x => x.rarity === r)
           return (
-          <div key={r} style={{ marginBottom:'8px' }}>
+          // ★レア度ごとに枠で分ける・レア度の名前は色つきの札（2026-10-23 ユーザー指示「ノーマルとかレアの区分で枠分けてほしい」
+          //   「レアリティの文字は（…）わかりやすくして」）。報酬は2行（同じ日「これを改行」）
+          <div key={r} style={{ border:`1px solid ${RARITY_COLOR[r]}55`, background:'#000a1c', padding:'8px', marginBottom:'10px' }}>
             {/* 段階ごとの登録数（そろえば ✔）と、そのレア度の報酬（2026-10-23） */}
-            <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:'4px 12px', fontSize:'11px' }}>
-              <span style={{ color: RARITY_COLOR[r] }}>{rarityLabel(r)}</span>
+            {/* レア度の札と、段階ごとの登録数は別の行（スマホの幅で段階が途中で折り返さないように） */}
+            <span style={{ display:'inline-block', color: RARITY_COLOR[r], border:`1px solid ${RARITY_COLOR[r]}`, background:`${RARITY_COLOR[r]}22`,
+              padding:'1px 10px', fontSize:'12px', fontWeight:'bold', marginBottom:'6px' }}>{rarityLabel(r)}</span>
+            <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:'2px 10px', fontSize:'11px' }}>
               {rp.tiers.map(x => {
                 const t = MUSEUM_TIERS[x.tier]
                 return (
-                  <span key={x.tier} style={{ color: x.done ? '#ffcc00' : TEXT.label }}>
+                  <span key={x.tier} style={{ color: x.done ? '#ffcc00' : TEXT.label, whiteSpace:'nowrap' }}>
                     <span style={{ color: t.color }}>{tierTag(t)}</span>{x.have}/{x.need}{x.done ? ' ✔' : ''}
                   </span>
                 )
               })}
             </div>
-            <div style={{ fontSize:'10px', color: TEXT.sub, margin:'2px 0 4px' }}>
-              1段階そろうごとに ステータスポイント+{MUSEUM_SET_SP[r]}　／
-              <span style={{ color: rp.allTiers ? '#ffcc00' : TEXT.sub }}>3段階すべて寄贈で スタミナ回復−{MUSEUM_RARITY_STAM_SEC}秒{rp.allTiers ? ' ✔' : ''}</span>
+            <div style={{ fontSize:'10px', color: TEXT.sub, margin:'6px 0 6px', lineHeight:1.7 }}>
+              <div>1段階そろうごとに ステータスポイント+{MUSEUM_SET_SP[r]}</div>
+              <div style={{ color: rp.allTiers ? '#ffcc00' : TEXT.sub }}>3段階すべて寄贈で スタミナ回復−{MUSEUM_RARITY_STAM_SEC}秒{rp.allTiers ? ' ✔' : ''}</div>
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(min(100%, 230px), 1fr))', gap:'3px' }}>
               {group.items.filter(it => it.rarity === r).map(it => {
