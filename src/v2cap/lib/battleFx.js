@@ -7,6 +7,8 @@
 //   ・HP の表（◯ターン・決着）の HP バーの下に、そのときかかっている効果を並べる
 //   ・ステ … 上がる・下がるで同じ絵。色（上がる＝だいだい・下がる＝青）と「STR」「↑25%」の文字は画面で重ねる
 //   ・状態異常 … 右下に残りターン（出血はスタック数）
+//   ★2026-10-24 ユーザー指示「状態異常とかのアイコン、何のアイコンか全然わかんないからSTRとかと一緒で上に名前いれて」：
+//     状態異常・そのほかの効果も、上に名前（下の short）を重ねる。枠に入らない長さは画面で横に縮める（V2capLogLine）
 //   ・そのほかの効果 … HP継続回復・MP継続回復・バリア（残りの量）・被ダメージ軽減（%）・状態異常無効・能力低下無効・吸収（%）
 //   ・絵はユーザーが ChatGPT で作る（透明な背景の紋章だけ・文字なし）。枠と下地の色は画面で描く＝絵ごとのばらつきが目立たない
 //     元の絵：public/V2状態異常/<file>.png（file は下の一覧・2026-10-24 ユーザーが置いた場所に合わせた）→ `node tools/v2cap-fx-art.mjs` で public/fx-art/<id>.webp
@@ -26,7 +28,7 @@ export const FX_ART_SIZE = 96                 // 画面では34px。スマホの
 export const FX_UP = { ring: '#ffaa44', text: '#ffd28a', bg: '#7a3010' }
 export const FX_DOWN = { ring: '#5aa8ff', text: '#a8d2ff', bg: '#17407a' }
 
-// 状態異常（並び＝ailments.js の AIL_KEYS）。short は絵が無いときの文字
+// 状態異常（並び＝ailments.js の AIL_KEYS）。short はアイコンの上に出す名前
 const AIL_DEFS = {
   bleed:    { color: '#d83a3a', short: '出血' },
   poison:   { color: '#a6e22e', short: '毒' },   // 黄緑（2026-10-24 ユーザー「毒は黄緑がいいと思う」。呪いの紫とも分かれる）
@@ -79,7 +81,7 @@ export const fxArtSrc = (id) => (FX_ART_IDS.includes(id) ? `${FX_ART_DIR}/${id}.
 export const shortNum = (n) => (n >= 100000 ? `${Math.floor(n / 10000)}万` : n >= 10000 ? `${(Math.floor(n / 1000) / 10).toFixed(1)}万` : n.toLocaleString())
 
 // fxOf の中身 → 画面に並べるアイコン（上から：上がったステ・そのほかの効果・下がったステ・状態異常）
-//   { id, kind:'up'|'down'|'ail'|'buff', art, top（上の文字）, bottom（下の文字）, corner（右下の数）, short（絵が無いときの文字）, color, title }
+//   { id, kind:'up'|'down'|'ail'|'buff', art, top（上の名前）, bottom（下の文字）, corner（右下の数）, color, title }
 export const fxIconsOf = (fx) => {
   if (!fx) return []
   const ups = [], downs = [], buffs = [], ails = []
@@ -97,14 +99,14 @@ export const fxIconsOf = (fx) => {
     const bottom = k === 'shield' ? shortNum(b.v || 0) : k === 'cut' ? `↓${b.v}%` : k === 'drain' ? `${b.v}%` : null
     const rest = b.t > 0 ? `（あと${b.t}ターン）` : ''
     const amount = k === 'shield' ? ` ${(b.v || 0).toLocaleString()}` : k === 'cut' ? ` −${b.v}%` : k === 'drain' ? ` ${b.v}%` : ''
-    buffs.push({ id: k, kind: 'buff', art: fxArtSrc(k), short: d.short, color: d.color, bottom,
+    buffs.push({ id: k, kind: 'buff', art: fxArtSrc(k), top: d.short, color: d.color, bottom,
       corner: bottom ? null : (b.t > 0 ? String(b.t) : null), title: `${d.label}${amount}${rest}` })
   }
   for (const [k, n] of Object.entries(fx.ail || {})) {
     const d = DEF_BY_ID.get(k)
     if (!d) continue
     const bleed = k === 'bleed'
-    ails.push({ id: k, kind: 'ail', art: fxArtSrc(k), short: d.short, color: d.color,
+    ails.push({ id: k, kind: 'ail', art: fxArtSrc(k), top: d.short, color: d.color,
       corner: bleed ? `×${n}` : String(n), title: bleed ? `${d.label}（${n}スタック）` : `${d.label}（あと${n}ターン）` })
   }
   return [...ups, ...buffs, ...downs, ...ails]

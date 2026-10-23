@@ -51,6 +51,12 @@ test('アイコン：ステは「STR」「↑25%」を重ねる。並びは 上�
   assert.equal(icons.find(x => x.id === 'cut').bottom, '↓20%')
   assert.equal(icons.find(x => x.id === 'regen').corner, '3')
   assert.equal(icons.find(x => x.id === 'poison').corner, '3')
+  // 2026-10-24 ユーザー「何のアイコンか全然わかんないからSTRとかと一緒で上に名前いれて」：状態異常・そのほかの効果も上に名前
+  assert.equal(icons.find(x => x.id === 'poison').top, '毒')
+  assert.equal(icons.find(x => x.id === 'bleed').top, '出血')
+  assert.equal(icons.find(x => x.id === 'shield').top, 'バリア')
+  assert.equal(icons.find(x => x.id === 'regen').top, 'HP回復')
+  assert.ok(icons.every(x => x.top), 'どのアイコンにも名前がある')
   assert.equal(icons.find(x => x.id === 'bleed').corner, '×2')
   assert.equal(icons.find(x => x.id === 'int_stat'), undefined)
   assert.deepEqual(fxIconsOf(null), [])

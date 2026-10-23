@@ -29,29 +29,36 @@ const SIDE_COLOR = { me: '#33dd66', foe: '#ff6655' }
 const Icon = ({ side, ...rest }) => <V2capIcon ring={SIDE_COLOR[side] || '#7fa6d0'} {...rest} />
 
 // バフ・デバフ・状態異常のアイコン1つ（x は battleFx.js の fxIconsOf の1件）
-//   ステ … 上の「STR」・下の「↑25%」を絵に重ねる／状態異常 … 右下に残りターン（出血は ×スタック）
-//   絵が無い（まだ作っていない・読めない）ときは、下地の色と short の文字で代わりに出す
+//   上に名前（「STR」「毒」「サイレンス」など）・下に「↑25%」やバリアの量・右下に残りターン（出血は ×スタック）を絵に重ねる
+//   絵が無い（読めない）ときは、下地の色と名前だけで出す
 const FX_SIZE = 34
 const OUTLINE = '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 0 0 3px #000'
+// 枠の内側（30px）に入らない文字は横に縮める（高さはそのまま＝小さくしすぎない）。半角は0.6文字ぶんで数える
+//   例：サイレンス（8px×5文字＝40px）→ 横0.75倍
+const FX_TEXT_W = 30
+const squeezeOf = (s, px) => Math.min(1, FX_TEXT_W / ([...s].reduce((w, c) => w + (c <= '\x7e' ? 0.6 : 1), 0) * px))
+// 横に縮めたとき両はしが同じだけはみ出すように、flex で真ん中に置いてから縮める
+const FxText = ({ s, px, color, pos }) => (
+  <div style={{ position: 'absolute', left: 0, right: 0, ...pos, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+    <span style={{ display: 'inline-block', flexShrink: 0, fontSize: `${px}px`, lineHeight: 1, fontWeight: 'bold', color, textShadow: OUTLINE,
+      whiteSpace: 'nowrap', letterSpacing: '-0.3px', transform: `scaleX(${squeezeOf(s, px)})` }}>{s}</span>
+  </div>
+)
 function FxIcon({ x }) {
   const [broken, setBroken] = useState(false)
   const art = x.art && !broken
   const tone = x.kind === 'up' ? FX_UP : x.kind === 'down' ? FX_DOWN : null
   const ring = tone ? tone.ring : x.color
-  const top = x.top || (!art && x.bottom ? x.short : null)
-  const center = !art && !x.top && !x.bottom ? x.short : null
-  const text = (size, color, pos) => ({ position: 'absolute', left: 0, right: 0, ...pos, textAlign: 'center', fontSize: size, lineHeight: 1,
-    fontWeight: 'bold', color, textShadow: OUTLINE, whiteSpace: 'nowrap', letterSpacing: '-0.3px', pointerEvents: 'none' })
   return (
     <div title={x.title} style={{ position: 'relative', width: FX_SIZE, height: FX_SIZE, flexShrink: 0, borderRadius: '5px',
       border: `1px solid ${ring}`, overflow: 'hidden', boxShadow: `0 0 4px ${ring}55`,
       background: `radial-gradient(circle at 50% 40%, ${tone ? tone.bg : `${x.color}55`} 0%, #0a1424 85%)` }}>
       {art && <img src={x.art} alt="" width={FX_SIZE} height={FX_SIZE} draggable={false} onError={() => setBroken(true)}
         style={{ position: 'absolute', inset: '2px', width: 'calc(100% - 4px)', height: 'calc(100% - 4px)', objectFit: 'contain' }} />}
-      {top && <div style={text('8px', '#fff', { top: '2px' })}>{top}</div>}
-      {x.bottom && <div style={text('9px', tone ? tone.text : '#fff', { bottom: '2px' })}>{x.bottom}</div>}
-      {center && <div style={text(center.length <= 2 ? '11px' : center.length <= 4 ? '8px' : '6.5px', x.color, { top: '50%', transform: 'translateY(-50%)' })}>{center}</div>}
-      {x.corner && <div style={{ ...text('9px', '#fff', { bottom: '1px' }), left: 'auto', right: '2px', textAlign: 'right' }}>{x.corner}</div>}
+      {x.top && <FxText s={x.top} px={8} color="#fff" pos={{ top: '2px' }} />}
+      {x.bottom && <FxText s={x.bottom} px={9} color={tone ? tone.text : '#fff'} pos={{ bottom: '2px' }} />}
+      {x.corner && <div style={{ position: 'absolute', right: '2px', bottom: '1px', fontSize: '9px', lineHeight: 1, fontWeight: 'bold', color: '#fff',
+        textShadow: OUTLINE, whiteSpace: 'nowrap', pointerEvents: 'none' }}>{x.corner}</div>}
     </div>
   )
 }
