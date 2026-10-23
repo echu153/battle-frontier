@@ -53,8 +53,8 @@
 //     … 職業ごとに「どのステを足すと③のボスに効くか」を測る（装備を選ぶ重み STAT_WEIGHT・同じステでの職業の強さ）
 // ============================================================
 const B = new URL('../src/', import.meta.url).href
-const { runBattle } = await import(B + 'v2/lib/battle.js')
-const { STAT_KEYS, INITIAL_STATS, calcPower } = await import(B + 'v2/lib/stats.js')
+const { runBattle } = await import(B + 'v2cap/core/battle.js')
+const { STAT_KEYS, INITIAL_STATS, calcPower } = await import(B + 'v2cap/core/stats.js')
 const { setMpCost } = await import(B + 'v2cap/lib/skills.js')
 const { ITEMS, ITEM_BY_ID, starterIdsOf } = await import(B + 'v2cap/lib/equipment.js')
 const areas = await import(B + 'v2cap/lib/areas.js')
