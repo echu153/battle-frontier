@@ -28,6 +28,15 @@ export const enhanceChargeMsOf = (plusTo) => {
   const n = Math.max(1, Math.min(PLUS_MAX, Math.floor(Number(plusTo) || 1)))
   return ENHANCE_CHARGE_SLOW[n] ?? 1500 + (100 - ENHANCE_RATE[n - 1]) * 10
 }
+// ゲージがたまったあと、結果を出す前に満タンのまま待つ時間（ms）。
+// 【確定】2026-10-24 ユーザー指示「ゲージが貯まってもすぐに結果を出すんじゃなくて、ランダムで1秒～6秒ぐらい貯まった状態で維持するようにして
+//   ランダムなだけで6秒で失敗することもあれば1秒で成功することもある」：+6 にする回から（ためる時間を延ばしたのと同じ回）・1〜6秒の一様な乱数。
+//   ★成否とは関係なく、押した時点（結果が届く前）に決める＝長さで成否は分からない。+5 にする回までは待たない（0）
+export const ENHANCE_HOLD_FROM = 6
+export const ENHANCE_HOLD_MS = [1000, 6000]
+export const enhanceHoldMsOf = (plusTo, rng = Math.random) => (Number(plusTo) >= ENHANCE_HOLD_FROM
+  ? Math.round(ENHANCE_HOLD_MS[0] + rng() * (ENHANCE_HOLD_MS[1] - ENHANCE_HOLD_MS[0]))
+  : 0)
 // 結果のポップアップの1行目（ユーザーの書き方「○○の強化に成功！ 失敗…」）
 export const enhanceTitleOf = (name, success) => (success ? `${name}の強化に成功！` : `${name}の強化に失敗…`)
 

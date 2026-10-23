@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { WIN_TIERS } from './casino.js'
-import { enhanceTierOf, enhanceChargeMsOf, enhanceTitleOf, CRAFT_TIERS, craftTierOf, craftTitleOf, CRAFT_STRIKES, REVELATION_STYLE, FORTUNE_NAMES, revelationStyleOf, TREE_ART } from './fxStyle.js'
+import { enhanceTierOf, enhanceChargeMsOf, enhanceHoldMsOf, enhanceTitleOf, CRAFT_TIERS, craftTierOf, craftTitleOf, CRAFT_STRIKES, REVELATION_STYLE, FORTUNE_NAMES, revelationStyleOf, TREE_ART } from './fxStyle.js'
 import { CRAFT_RARITIES } from './smith.js'
 import { RARITY_COLOR } from './equipment.js'
 import { PLUS_MAX } from './smith.js'
@@ -33,6 +33,22 @@ test('【確定】強化のためる時間：+5 にする回までは前のま�
   // 演出は強化値（plusTo）で決める（前は成功率 job.rate を渡していた）
   const fx = readFileSync(new URL('../components/V2capEnhanceFx.jsx', import.meta.url), 'utf8')
   assert.ok(fx.includes('enhanceChargeMsOf(job.plusTo)'), '演出は強化したあとの強化値でためる時間を決める')
+})
+
+test('【確定】+6 にする回からは、ゲージがたまったあと満タンのまま1〜6秒待ってから結果（長さは成否と関係ない）', () => {
+  // 2026-10-24 ユーザー指示「ランダムで1秒～6秒ぐらい貯まった状態で維持するようにして ランダムなだけで6秒で失敗することもあれば1秒で成功することもある」
+  for (let n = 1; n < 6; n++) assert.equal(enhanceHoldMsOf(n, () => 0.5), 0, `+${n} にする回は待たない`)
+  for (let n = 6; n <= PLUS_MAX; n++) {
+    assert.equal(enhanceHoldMsOf(n, () => 0), 1000, `+${n} いちばん短くて1秒`)
+    assert.equal(enhanceHoldMsOf(n, () => 0.9999999), 6000, `+${n} いちばん長くて6秒`)
+    assert.equal(enhanceHoldMsOf(n, () => 0.5), 3500)
+  }
+  for (let i = 0; i < 2000; i++) { const h = enhanceHoldMsOf(8); assert.ok(h >= 1000 && h <= 6000, String(h)) }
+  // 演出：押した時点（結果が届く前）に強化値だけで決めて、ためる時間＋待つ時間が過ぎたら結果
+  const fx = readFileSync(new URL('../components/V2capEnhanceFx.jsx', import.meta.url), 'utf8')
+  assert.ok(fx.includes('const holdMs = enhanceHoldMsOf(job.plusTo)'), '待つ時間は強化値だけで決める（結果は見ない）')
+  assert.ok(fx.includes('now - t0.current >= chargeMs + holdMs'), 'たまったあと待ってから結果')
+  assert.equal(enhanceHoldMsOf.length, 1, '引数は強化値と乱数だけ（成否を受け取らない）')
 })
 
 test('【確定】強化で上がるステを出す（戦闘力だけでなく「STR 12 → 13（+1）」）：強化の画面・結果のポップアップ・強化券', () => {

@@ -5,6 +5,7 @@
 //   強化の成否もポップアップ出るようにしてほしい ○○の強化に成功！ 失敗… みたいな」（音はなし）
 //   ・ため：暗転・魔法陣が回り、光の粒が装備へ集まる・まわりのゲージがたまる（強化値が高いほど長い＝+6 にする回から大きく延ばす
 //     ＝2026-10-24 ユーザー指示「緊張感を持たせるため」・fxStyle.js の enhanceChargeMsOf。結果はその間に届く）
+//     ＋ +6 にする回からは、たまったあと満タンのまま1〜6秒待ってから結果（同じ日・enhanceHoldMsOf。長さは成否と関係ない）
 //   ・成功：白く光る → 衝撃の輪・光の柱・金の粒が弾ける・「強化成功」。強化値が高いほど色と派手さが上がる（+10は虹）
 //   ・失敗：赤く光る → 魔法陣が割れて落ちる・破片・装備が揺れて暗くなる・「強化失敗」
 //   ・最後にポップアップ「○○の強化に成功！／失敗…」。「続けて +N にする」（Enter）・「閉じる」（Esc）
@@ -14,7 +15,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createParticles } from './fxParticles.js'
 import { GearGlyph } from './v2capFxParts.jsx'
 import { StatChange } from './v2capGear.jsx'
-import { enhanceTierOf, enhanceChargeMsOf, enhanceTitleOf } from '../lib/fxStyle.js'
+import { enhanceTierOf, enhanceChargeMsOf, enhanceHoldMsOf, enhanceTitleOf } from '../lib/fxStyle.js'
 import { DISPLAY_FONT, JP_BOLD, RAINBOW_BASE } from './casinoStyle.js'
 
 const KF = `
@@ -104,6 +105,8 @@ export default function V2capEnhanceFx({ job, nextLabel, nextReason, onAgain, on
     fast.current = false
     climaxed.current = false
     t0.current = performance.now()
+    // 満タンで待つ時間は押した時点で決める（結果はまだ届いていない＝成否と関係ない）
+    const holdMs = enhanceHoldMsOf(job.plusTo)
     let raf = 0
     let lastSpawn = 0
     let ang = 0
@@ -112,7 +115,7 @@ export default function V2capEnhanceFx({ job, nextLabel, nextReason, onAgain, on
       if (climaxed.current) return
       const dt = (now - lastT) / 1000; lastT = now
       const p = Math.min(1, (now - t0.current) / chargeMs)
-      const done = (p >= 1 || fast.current) && resultRef.current
+      const done = (now - t0.current >= chargeMs + holdMs || fast.current) && resultRef.current
       ang += dt * (40 + p * 520)
       setAngle(ang)
       setProgress(fast.current && resultRef.current ? 1 : p)
