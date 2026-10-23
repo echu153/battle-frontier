@@ -211,3 +211,17 @@ test('SQL：報酬の表・数え直し（数は JS と同じ）・寄贈で数�
   assert.ok(SQL.includes('for r in select distinct m.player_id from public.v2cap_museum m loop\n    perform public.v2cap_museum_settle(r.player_id);'), '前からの寄贈も数える')
   assert.ok(fnBody('v2cap_dev_reset').includes('delete from public.v2cap_museum_rewards where player_id = auth.uid();'))
 })
+
+test('寄贈のあとの報酬の並び：エリア→段階ごとのステータスポイント（ノーマル→レア→エピック→レジェンダリー・未強化→+5→+9）→3段階のスタミナ→コンプリート（10-23 ユーザー指示）', async () => {
+  const { sortRewards } = await import('./museum.js')
+  // サーバーが返す順（key の文字の順）＝実機で出た順
+  const server = ['set:1:E:0', 'set:1:E:1', 'set:1:E:2', 'set:1:L:0', 'set:1:L:1', 'set:1:L:2', 'set:1:N:0', 'set:1:N:1', 'set:1:N:2',
+    'set:1:R:0', 'set:1:R:1', 'set:1:R:2', 'rarity:1:E', 'rarity:1:L', 'rarity:1:N', 'rarity:1:R', 'area:1']
+  const got = sortRewards(server.map(key => ({ key }))).map(w => w.key)
+  assert.deepEqual(got, ['set:1:N:0', 'set:1:N:1', 'set:1:N:2', 'set:1:R:0', 'set:1:R:1', 'set:1:R:2', 'set:1:E:0', 'set:1:E:1', 'set:1:E:2',
+    'set:1:L:0', 'set:1:L:1', 'set:1:L:2', 'rarity:1:N', 'rarity:1:R', 'rarity:1:E', 'rarity:1:L', 'area:1'])
+  // 2つのエリアにまたがるときはエリアの順（10 は 2 のあと）
+  assert.deepEqual(sortRewards([{ key: 'set:10:N:0' }, { key: 'area:2' }, { key: 'set:2:L:2' }]).map(w => w.key), ['set:2:L:2', 'area:2', 'set:10:N:0'])
+  assert.deepEqual(sortRewards(undefined), [])
+  assert.ok(src('../components/V2capMuseum.jsx').includes('rewards: sortRewards(data.rewards)'), '画面は並べ直した順で出す')
+})

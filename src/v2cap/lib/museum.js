@@ -138,3 +138,19 @@ export const rewardText = (w) => {
   if (type === 'area') return `${area}をコンプリート！${gain}`
   return gain
 }
+// 新しくもらった報酬の並び（画面に出す順）。サーバーは key の文字の順（エピック→レジェンダリー→ノーマル→レア）で返すので並べ直す。
+// 【確定】2026-10-23 ユーザー指示「報酬の行をノーマル→レア→エピック→レジェンダリーの順に直して」：
+//   エリアの順 → そのエリアの中は「段階ごとのステータスポイント（レア度の順→未強化・+5・+9）」→「3段階のスタミナ（レア度の順）」→「エリアコンプリート」
+const REWARD_TYPE_ORDER = { set: 0, rarity: 1, area: 2 }
+const rarityIndex = (r) => { const i = RARITIES.indexOf(r); return i < 0 ? RARITIES.length : i }
+export const sortRewards = (list) => {
+  const keyOf = (w) => {
+    const [type, a, r, t] = String(w?.key || '').split(':')
+    return [Number(a) || 0, REWARD_TYPE_ORDER[type] ?? 9, rarityIndex(r), Number(t) || 0]
+  }
+  return [...(list || [])].sort((x, y) => {
+    const a = keyOf(x), b = keyOf(y)
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] - b[i]
+    return 0
+  })
+}

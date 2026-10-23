@@ -8,7 +8,7 @@ import { plusOf, plusLabel } from '../lib/smith.js'
 import {
   MUSEUM_TIERS, MUSEUM_GROUPS, raritiesOfGroup, registeredSetOf, tiersOf, uniqueHidden, museumCountOf, donatablesOf,
   bulkDonatable, donatedTail,
-  MUSEUM_SET_SP, MUSEUM_RARITY_STAM_SEC, MUSEUM_AREA_STAM_SEC, MUSEUM_REWARD_RARITIES, areaProgressOf, museumRewardTotalsOf, rewardText,
+  MUSEUM_SET_SP, MUSEUM_RARITY_STAM_SEC, MUSEUM_AREA_STAM_SEC, MUSEUM_REWARD_RARITIES, areaProgressOf, museumRewardTotalsOf, rewardText, sortRewards,
 } from '../lib/museum.js'
 import { STAMINA_RECOVER_MS, staminaSpanMsOf } from '../lib/level.js'
 import { mmss } from '../core/stamina.js'
@@ -86,7 +86,7 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
     const done = many ? (data.donated || []) : [{ base_id: data.base_id, tier: data.tier, plus: data.plus }]
     const itemOf = (id) => ITEM_BY_ID[id] || list.find(d => d.item.id === id)?.item || { name: id, rarity: 'N' }
     setResult({ ok: true, items: done.map(x => ({ name: itemOf(x.base_id).name, rarity: itemOf(x.base_id).rarity, tier: x.tier })),
-      skipped: many ? data.skipped || 0 : 0, rewards: data.rewards || [] })
+      skipped: many ? data.skipped || 0 : 0, rewards: sortRewards(data.rewards) })
     setRows(r => [...(r || []), ...done])
     setPicked(new Set())
     onProfile?.()   // 持ち物を読み直す（寄贈した装備はなくなる）
