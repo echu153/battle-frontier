@@ -7,6 +7,8 @@ import { enhanceTierOf, enhanceChargeMsOf, enhanceTitleOf, CRAFT_TIERS, craftTie
 import { CRAFT_RARITIES } from './smith.js'
 import { RARITY_COLOR } from './equipment.js'
 import { PLUS_MAX } from './smith.js'
+import { ITEM_BY_ID } from './equipment.js'
+import { powerAt, statsAt, statChangeOf } from './gear.js'
 
 test('【確定】強化の演出：+1〜+10 のどれにも段階がある・高いほど派手（+10は虹）', () => {
   const order = ['blue', 'purple', 'gold', 'max']
@@ -22,10 +24,35 @@ test('【確定】強化の演出：+1〜+10 のどれにも段階がある・�
   assert.equal(enhanceTierOf(1).key, 'blue')
 })
 
-test('【確定】強化のためる時間は成功率が低いほど長い（90%で1.6秒・10%で2.4秒）', () => {
-  assert.equal(enhanceChargeMsOf(90), 1600)
-  assert.equal(enhanceChargeMsOf(10), 2400)
-  assert.ok(enhanceChargeMsOf(100) <= enhanceChargeMsOf(50))
+test('【確定】強化のためる時間：+5 にする回までは前のまま（1.5〜1.9秒）・+6 にする回から強化値ごとに長く（+10 で5秒）', () => {
+  // 2026-10-24 ユーザー指示「強化値が＋6の強化以降、強化値によって成否の演出（光が貯まるまでの時間）が遅くなるようにして ※緊張感を持たせるため」
+  assert.deepEqual([1, 2, 3, 4, 5].map(enhanceChargeMsOf), [1500, 1600, 1700, 1800, 1900], '+5 までは前（成功率で決めていた値）と同じ')
+  assert.deepEqual([6, 7, 8, 9, 10].map(enhanceChargeMsOf), [2500, 3000, 3500, 4000, 5000])
+  for (let n = 2; n <= PLUS_MAX; n++) assert.ok(enhanceChargeMsOf(n) > enhanceChargeMsOf(n - 1), `+${n} は +${n - 1} より長い`)
+  assert.ok(enhanceChargeMsOf(6) - enhanceChargeMsOf(5) >= 500, '+6 から目に見えて長くなる')
+  // 演出は強化値（plusTo）で決める（前は成功率 job.rate を渡していた）
+  const fx = readFileSync(new URL('../components/V2capEnhanceFx.jsx', import.meta.url), 'utf8')
+  assert.ok(fx.includes('enhanceChargeMsOf(job.plusTo)'), '演出は強化したあとの強化値でためる時間を決める')
+})
+
+test('【確定】強化で上がるステを出す（戦闘力だけでなく「STR 12 → 13（+1）」）：強化の画面・結果のポップアップ・強化券', () => {
+  // 2026-10-24 ユーザー指示「強化値で戦闘値しかないけど、ちゃんと武器のステータスどのくらい上昇してるのかも記載するようにして」
+  const sword = ITEM_BY_ID['3N:両手剣']
+  for (let plus = 0; plus < PLUS_MAX; plus++) {
+    const from = statsAt(sword, sword.lv, null, plus), to = statsAt(sword, sword.lv, null, plus + 1)
+    const rows = statChangeOf(from, to)
+    assert.ok(rows.length > 0, `+${plus}→+${plus + 1} に行がある`)
+    assert.equal(rows.reduce((t, r) => t + r.diff, 0), powerAt(sword, sword.lv, plus + 1) - powerAt(sword, sword.lv, plus), '上がったステの合計＝戦闘力の上がり幅')
+    for (const r of rows) assert.equal(r.diff, r.to - r.from)
+  }
+  assert.deepEqual(statChangeOf({ str: 5, dex: 0 }, { str: 6, dex: 1 }).map(r => [r.key, r.from, r.to, r.diff]), [['str', 5, 6, 1], ['dex', 0, 1, 1]], '0から上がったステも出す')
+  assert.deepEqual(statChangeOf({}, {}), [], '上がるステが無ければ行なし')
+  const fx = readFileSync(new URL('../components/V2capEnhanceFx.jsx', import.meta.url), 'utf8')
+  assert.ok(fx.includes('<StatChange from={job.statsFrom} to={job.statsTo} />'), '結果のポップアップ（成功）に上がったステ')
+  const smith = readFileSync(new URL('../components/V2capSmith.jsx', import.meta.url), 'utf8')
+  assert.ok(smith.includes('statsFrom: statsAt(item, inv.ilv, null, plus), statsTo: statsAt(item, inv.ilv, null, cost.next),'), '押したときの前後のステを演出へ渡す')
+  assert.ok(smith.includes('<StatChange from={statsAt(item, inv.ilv, null, plus)} to={statsAt(item, inv.ilv, null, cost.next)} />'), '強化の画面に上がるステ')
+  assert.ok(smith.includes('<StatChange from={statsAt(ticketRow.item, ticketRow.inv.ilv, null, plusOf(ticketRow.inv))} to={statsAt(ticketRow.item, ticketRow.inv.ilv, null, ticket)} />'), '強化券の確認にも上がるステ')
 })
 
 test('【確定】強化の結果のポップアップは「○○の強化に成功！／失敗…」（ユーザーの書き方）', () => {

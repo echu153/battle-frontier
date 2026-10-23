@@ -8,6 +8,7 @@
 // ============================================================
 import { FORTUNES } from './tree.js'
 import { RARITY_COLOR } from './equipment.js'
+import { PLUS_MAX, ENHANCE_RATE } from './smith.js'
 
 // ===== 強化 =====
 // 強化値（上がったあと）で色と派手さを変える。+10 は虹
@@ -18,8 +19,15 @@ export const ENHANCE_TIERS = [
   { min: 1,  key: 'blue',   color: '#33c5ff', colors: ['#9fe3ff', '#33c5ff', '#ffffff'] },
 ]
 export const enhanceTierOf = (plusTo) => ENHANCE_TIERS.find(t => plusTo >= t.min) || ENHANCE_TIERS.at(-1)
-// ためる時間（ms）。成功率が低いほど長く（90%で1.6秒・10%で2.4秒）
-export const enhanceChargeMsOf = (rate) => 1500 + Math.max(0, Math.min(100, 100 - (Number(rate) || 0))) * 10
+// ためる時間（ms）。plusTo＝強化したあとの強化値（+n にする回の n）
+//   +5 にする回までは前のまま（成功率が低いほど少し長い＝+1 1.5秒 … +5 1.9秒）。
+// 【確定】2026-10-24 ユーザー指示「強化値が＋6の強化以降、強化値によって成否の演出（光が貯まるまでの時間）が遅くなるようにして
+//   ※緊張感を持たせるため」：+6 にする回からは強化値ごとに長く（下の表・+10 で5秒）。押すと飛ばせるのはそのまま
+export const ENHANCE_CHARGE_SLOW = { 6: 2500, 7: 3000, 8: 3500, 9: 4000, 10: 5000 }
+export const enhanceChargeMsOf = (plusTo) => {
+  const n = Math.max(1, Math.min(PLUS_MAX, Math.floor(Number(plusTo) || 1)))
+  return ENHANCE_CHARGE_SLOW[n] ?? 1500 + (100 - ENHANCE_RATE[n - 1]) * 10
+}
 // 結果のポップアップの1行目（ユーザーの書き方「○○の強化に成功！ 失敗…」）
 export const enhanceTitleOf = (name, success) => (success ? `${name}の強化に成功！` : `${name}の強化に失敗…`)
 

@@ -3,7 +3,8 @@
 // ------------------------------------------------------------
 // 【確定】2026-10-13 ユーザー指示「強化…成功！みたいな1分しか出ないけど、黒い砂漠の強化みたいな演出が欲しい、
 //   強化の成否もポップアップ出るようにしてほしい ○○の強化に成功！ 失敗… みたいな」（音はなし）
-//   ・ため：暗転・魔法陣が回り、光の粒が装備へ集まる・まわりのゲージがたまる（成功率が低いほど長い・結果はその間に届く）
+//   ・ため：暗転・魔法陣が回り、光の粒が装備へ集まる・まわりのゲージがたまる（強化値が高いほど長い＝+6 にする回から大きく延ばす
+//     ＝2026-10-24 ユーザー指示「緊張感を持たせるため」・fxStyle.js の enhanceChargeMsOf。結果はその間に届く）
 //   ・成功：白く光る → 衝撃の輪・光の柱・金の粒が弾ける・「強化成功」。強化値が高いほど色と派手さが上がる（+10は虹）
 //   ・失敗：赤く光る → 魔法陣が割れて落ちる・破片・装備が揺れて暗くなる・「強化失敗」
 //   ・最後にポップアップ「○○の強化に成功！／失敗…」。「続けて +N にする」（Enter）・「閉じる」（Esc）
@@ -12,6 +13,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createParticles } from './fxParticles.js'
 import { GearGlyph } from './v2capFxParts.jsx'
+import { StatChange } from './v2capGear.jsx'
 import { enhanceTierOf, enhanceChargeMsOf, enhanceTitleOf } from '../lib/fxStyle.js'
 import { DISPLAY_FONT, JP_BOLD, RAINBOW_BASE } from './casinoStyle.js'
 
@@ -70,7 +72,7 @@ function MagicCircle({ angle, color, broken }) {
 
 export default function V2capEnhanceFx({ job, nextLabel, nextReason, onAgain, onClose }) {
   const tier = enhanceTierOf(job.plusTo)
-  const chargeMs = enhanceChargeMsOf(job.rate)
+  const chargeMs = enhanceChargeMsOf(job.plusTo)
   const [phase, setPhase] = useState('charge')    // charge | climax | result
   const [progress, setProgress] = useState(0)
   const [angle, setAngle] = useState(0)
@@ -266,6 +268,8 @@ export default function V2capEnhanceFx({ job, nextLabel, nextReason, onAgain, on
                 <>
                   <div>強化値 +{job.plusFrom} → <span style={{ color: tier.color, fontWeight:'bold' }}>+{r.plus}</span>{r.plus >= 10 && <span style={{ color:'#ff66ff', marginLeft:6 }}>（上限）</span>}</div>
                   <div>戦闘力 {job.powerFrom} → <span style={{ color:'#44ff88' }}>{job.powerTo}</span></div>
+                  {/* 上がったステ（2026-10-24 ユーザー指示「戦闘値しかないけど、ちゃんと武器のステータスどのくらい上昇してるのかも記載するようにして」） */}
+                  <StatChange from={job.statsFrom} to={job.statsTo} />
                 </>
               ) : (
                 <>

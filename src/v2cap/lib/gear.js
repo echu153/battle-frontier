@@ -104,6 +104,12 @@ export const spreadStats = (p, dist) => {
 // 装備のステ。lv＝いまのLV（必要LVに足りなければLV相当＝effectivePowerAt。null なら足りている扱い）・plus＝強化値
 export const statsAt = (item, ilv, lv = null, plus = 0) =>
   spreadStats(item ? effectivePowerAt(item, ilv, lv, plus) : 0, item?.dist)
+// 強化の前と後でステがいくつ変わるか（鍛冶屋の「STR 12 → 13（+1）」）。from・to = statsAt の { ステ: 数 }。
+//   どちらかが1以上のステだけ・STAT_KEYS の順。【確定】2026-10-24 ユーザー指示「強化値で戦闘値しかないけど、
+//   ちゃんと武器のステータスどのくらい上昇してるのかも記載するようにして」
+export const statChangeOf = (from, to) => STAT_KEYS
+  .filter(k => (from?.[k] || 0) > 0 || (to?.[k] || 0) > 0)
+  .map(k => ({ key: k, from: from?.[k] || 0, to: to?.[k] || 0, diff: (to?.[k] || 0) - (from?.[k] || 0) }))
 
 // ===== 防具のメリット =====
 // worn = [{ item }]（着けている防具）。必要LVに足りなくても弱めない（2026-10-18〜）。

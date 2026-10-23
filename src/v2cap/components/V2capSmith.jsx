@@ -14,7 +14,7 @@ import {
   SCRAP_NAMES, SCRAP_YIELD, CRAFT_RARITIES, craftCostOf, craftErrorOf,
 } from '../lib/smith.js'
 import { statLine, nameColor, PLUS_COLOR, gainText, areaOptionLabel, filterSelect, optionStyle, useGearRows } from './v2capGearView.js'
-import { PlusTag, GearFilterBar } from './v2capGear.jsx'
+import { PlusTag, GearFilterBar, StatChange } from './v2capGear.jsx'
 import V2capEnhanceFx from './V2capEnhanceFx.jsx'
 import V2capCraftFx from './V2capCraftFx.jsx'
 import { ticketOf, canUseTicket } from '../lib/v1carry.js'
@@ -133,6 +133,8 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call }) {
     const job = {
       id: Date.now(), name: item.name, color: nameColor(item), part: item.part, plusFrom: plus, plusTo: cost.next, rate: cost.rate,
       powerFrom: powerAt(item, inv.ilv, plus), powerTo: powerAt(item, inv.ilv, cost.next), scrapName: scrapNameOf(cost.area), result: null,
+      // 上がるステ（戦闘力と同じく必要LVに足りないときの弱まりは入れない＝装備そのものの強さ）
+      statsFrom: statsAt(item, inv.ilv, null, plus), statsTo: statsAt(item, inv.ilv, null, cost.next),
     }
     setMsg(null); setFxJob(job)
     const { data, error } = await call('v2cap_enhance', { p_inventory_id: inv.id })
@@ -172,6 +174,7 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call }) {
           <div><span style={{ color: nameColor(ticketRow.item) }}>{ticketRow.item.name}</span><PlusTag inv={ticketRow.inv} /></div>
           <div>強化値 +{plusOf(ticketRow.inv)} → <span style={{ color: PLUS_COLOR }}>+{ticket}</span></div>
           <div>戦闘力 {powerAt(ticketRow.item, ticketRow.inv.ilv, plusOf(ticketRow.inv))} → <span style={{ color:'#44ff88' }}>{powerAt(ticketRow.item, ticketRow.inv.ilv, ticket)}</span></div>
+          <StatChange from={statsAt(ticketRow.item, ticketRow.inv.ilv, null, plusOf(ticketRow.inv))} to={statsAt(ticketRow.item, ticketRow.inv.ilv, null, ticket)} />
           <div style={{ color: TEXT.sub, fontSize:'11px' }}>必ず成功します（Goldと残骸は使いません）。強化券は1枚だけで、使うとなくなります。</div>
         </V2Modal>
       )}
@@ -459,9 +462,9 @@ function SmithModal({ row, prof, busy, msg, onEnhance, onClose }) {
           <div>戦闘力 {now} → <span style={{ color:'#44ff88' }}>{powerAt(item, inv.ilv, cost.next)}</span>
             {sync && <span style={{ color: SHORT, fontSize:'11px' }}>（{sync}）</span>}
           </div>
-          <div style={{ color: TEXT.sub, fontSize:'11px' }}>
-            {statLine(statsAt(item, inv.ilv, prof.lv, plus))}<br />→ {statLine(statsAt(item, inv.ilv, prof.lv, cost.next))}
-          </div>
+          {/* 上がるステ（2026-10-24 ユーザー指示「ちゃんと武器のステータスどのくらい上昇してるのかも記載するようにして」）。
+              前は灰色の小さい字で「STR+5 DEX+3 → STR+6 DEX+4」。戦闘力と同じく装備そのものの強さ（必要LV不足の弱まりは入れない） */}
+          <StatChange from={statsAt(item, inv.ilv, null, plus)} to={statsAt(item, inv.ilv, null, cost.next)} />
           <div style={{ marginTop:'4px' }}>
             使うもの：
             {cost.scrap > 0 && <>

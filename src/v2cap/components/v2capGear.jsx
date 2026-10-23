@@ -2,6 +2,7 @@ import { STAT_DEFS, STAT_KEYS } from '../core/stats.js'
 import { TEXT } from './v2ui.js'
 import { PARTS, ALL_RARITIES, RARITY_COLOR, partLabel, rarityLabel } from '../lib/equipment.js'
 import { plusOf, plusLabel } from '../lib/smith.js'
+import { statChangeOf } from '../lib/gear.js'
 import { PLUS_COLOR, chip, areaOptionLabel, filterSelect, optionStyle } from './v2capGearView.js'
 
 // ============================================================
@@ -18,6 +19,21 @@ export const StatGain = ({ s }) => {
   return keys.map(k => (
     <span key={k} style={{ color: STAT_DEFS[k].color, marginRight:'6px', whiteSpace:'nowrap' }}>{STAT_DEFS[k].label}+{s[k].toLocaleString()}</span>
   ))
+}
+// 強化の前と後のステ（「STR 12 → 13（+1）」をステの色で・鍛冶屋の強化と結果のポップアップ・強化券）。from・to = statsAt の { ステ: 数 }
+export const StatChange = ({ from, to }) => {
+  const rows = statChangeOf(from, to)
+  if (!rows.length) return null
+  return (
+    <div style={{ display:'flex', flexWrap:'wrap', columnGap:'12px' }}>
+      {rows.map(r => (
+        <span key={r.key} style={{ whiteSpace:'nowrap' }}>
+          <span style={{ color: STAT_DEFS[r.key].color }}>{STAT_DEFS[r.key].label}</span> {r.from.toLocaleString()} → <span style={{ color:'#44ff88' }}>{r.to.toLocaleString()}</span>
+          {r.diff > 0 && <span style={{ color:'#44ff88' }}>（+{r.diff.toLocaleString()}）</span>}
+        </span>
+      ))}
+    </div>
+  )
 }
 
 // 絞り込み（部位・レア度・エリア）と並べ替えの帯。g = useGearRows の返り値
