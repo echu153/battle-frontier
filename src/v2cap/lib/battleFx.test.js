@@ -73,6 +73,9 @@ test('元の絵のファイル名 → アイコン（全角半角・大文字小
   assert.equal(fxIdOfFile('サイレンス'), 'silence')
   assert.equal(fxIdOfFile('バリア'), 'shield')
   assert.equal(fxIdOfFile('なにか'), null)
+  // ユーザーが付けた別の名前（2026-10-24）
+  assert.equal(fxIdOfFile('ダメージ軽減'), 'cut')
+  assert.equal(fxIdOfFile('吸血'), 'drain')
   // ファイル名がかぶっていない
   assert.equal(new Set(FX_DEFS.map(d => d.file)).size, FX_DEFS.length)
 })

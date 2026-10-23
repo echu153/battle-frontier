@@ -65,7 +65,12 @@ const DEF_BY_ID = new Map(FX_DEFS.map(d => [d.id, d]))
 
 // 元の絵のファイル名（拡張子なし）→ id。全角半角・大文字小文字・記号の違いは見ない（「ｓｔｒ.png」「毒 .png」も読む）
 const normFile = (s) => String(s ?? '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
-const ID_BY_FILE = new Map(FX_DEFS.map(d => [normFile(d.file), d.id]))
+// ★FX_FILE_ALIAS … ユーザーが付けた別の名前（2026-10-24 置き場で見つけたもの）。ツールが「当てはまらない絵」を知らせたらここへ足す
+export const FX_FILE_ALIAS = { 'ダメージ軽減': 'cut', '吸血': 'drain' }
+const ID_BY_FILE = new Map([
+  ...FX_DEFS.map(d => [normFile(d.file), d.id]),
+  ...Object.entries(FX_FILE_ALIAS).map(([f, id]) => [normFile(f), id]),
+])
 export const fxIdOfFile = (name) => ID_BY_FILE.get(normFile(name)) || null
 
 export const fxArtSrc = (id) => (FX_ART_IDS.includes(id) ? `${FX_ART_DIR}/${id}.webp` : null)
