@@ -8,7 +8,8 @@
 //     決着したら最後に「決着」の表（倒れた側のHPが0）
 //   ・行動は「動いた側のアイコン」を左に置いて、その行動の行をまとめる
 // 返すもの（上から順）：
-//   { kind:'turn', turn, final, me:{ hp, max }, foe:{ hp, max } }  … ターンの頭（final＝決着のとき）の表
+//   { kind:'turn', turn, final, me:{ hp, max, fx }, foe:{ hp, max, fx } }  … ターンの頭（final＝決着のとき）の表
+//     fx … かかっているバフ・デバフ・状態異常（runBattle の fxOf。HPの下にアイコンで出す・2026-10-24）。1ターン目は r.fx0
 //   { kind:'act', who:'me'|'foe', lines:[ログの行…] }               … 行動のまとまり
 // 行の文面は今のⅡと同じ（src/v2cap/core/battleLog.js の buildBattleLog を1件ずつ通す）。今のⅡの画面は変えない
 // ★runBattle の HP の記録（type:'hp'）は「ターンの終わり」に出る。ここでは「次のターンの頭」として使う
@@ -35,9 +36,9 @@ export const buildCapBattleView = (r, you, foe, start = {}) => {
   const out = []
   const firstHp = log.find(l => l.type === 'hp')
   const table = (turn, l, final = false) => ({
-    kind:'turn', turn, final, me:{ hp: l.a, max: l.aMax }, foe:{ hp: l.b, max: l.bMax },
+    kind:'turn', turn, final, me:{ hp: l.a, max: l.aMax, fx: l.aFx || null }, foe:{ hp: l.b, max: l.bMax, fx: l.bFx || null },
   })
-  if (firstHp) out.push(table(1, { a: start.a ?? firstHp.aMax, aMax: firstHp.aMax, b: start.b ?? firstHp.bMax, bMax: firstHp.bMax }))
+  if (firstHp) out.push(table(1, { a: start.a ?? firstHp.aMax, aMax: firstHp.aMax, b: start.b ?? firstHp.bMax, bMax: firstHp.bMax, aFx: r.fx0?.aFx, bFx: r.fx0?.bFx }))
   let group = null   // いま行を足しているまとまり（表をはさんだら切る）
   log.forEach((l, i) => {
     if (l.type === 'hp') {

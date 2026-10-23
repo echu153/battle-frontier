@@ -143,7 +143,9 @@ export const BEAST_BONUS = 25
 export const beastMultOf = (skill, prevForm) =>
   (skill?.form && prevForm === skill.form ? 1 + BEAST_BONUS / 100 : 1)
 
-export const liveStats = (side, acting = false) => {
+// いまのステの補正（ステ名→合計%）。liveStats はこれを素の値に掛けてから、変換・固定の値を足す。
+// ★戦闘ログのアイコン（fxOf）もこれを見る＝画面に出す%と戦闘で効いている%がずれない
+const livePct = (side, acting = false) => {
   const b = { ...side.buffs }
   const add = (k, pct) => { b[k] = Math.max(BUFF_MIN_PCT, (b[k] || 0) + pct) }
   // 状態異常「鈍足」＝AGI-20%
@@ -211,7 +213,11 @@ export const liveStats = (side, acting = false) => {
     if (side.ramp.atk) { add('str', side.ramp.atk * n); add('int_stat', side.ramp.atk * n) }
     if (side.ramp.def) add('vit', side.ramp.def * n)
   }
-  const eff = effectiveStats(side.base, b)
+  return b
+}
+
+export const liveStats = (side, acting = false) => {
+  const eff = effectiveStats(side.base, livePct(side, acting))
   // ★ユニーク：影縫いのブーツで奪ったAGI（固定の値。変換・加算より先に足す）
   if (side.uq) addSetFlat(side, eff)
   // 魔導剣術：INTの20%をSTRへ「変換」する。移した元は減る
@@ -228,6 +234,39 @@ export const liveStats = (side, acting = false) => {
   const imb = side.pa.ex?.imbue
   if (imb?.intToStr && side.imbue?.turns > 0) eff.str = (eff.str || 0) + Math.round((eff.int_stat || 0) * imb.intToStr / 100)
   return eff
+}
+
+// ★戦闘ログの HP の表に出す「いまかかっている効果」（2026-10-24 ユーザー指示
+//   「戦闘時、バフデバフ、状態異常のアイコンをこのログに見えるようにしたい」「STR↑〇％みたいなのをアイコン内に表示させてほしい」）
+//   st   … ステの増減（%）。**戦闘の始めからの差**（start＝始めの livePct）。パッシブ・装備のいつもの補正は始めから入っているので出さない。
+//          鈍足のAGI−20%は状態異常のアイコン（鈍足）で出すので、ここでは数えない
+//   ail  … 状態異常 → 残りターン（出血だけはスタック数）
+//   buff … HP継続回復・MP継続回復・バリア・被ダメージ軽減・状態異常無効・能力低下無効・吸収 → { v（量・%）, t（残りターン） }
+//   見た目・名前は src/v2cap/lib/battleFx.js。戦闘の結果には影響しない
+export const FX_STAT_KEYS = ['str', 'dex', 'agi', 'int_stat', 'vit', 'luk']
+export const fxOf = (side, start = {}) => {
+  const pct = livePct(side)
+  const ap = ailStatPct(side.ail) || {}
+  const st = {}
+  for (const k of FX_STAT_KEYS) {
+    const d = Math.round((pct[k] || 0) - (start[k] || 0) - (ap[k] || 0))
+    if (d) st[k] = d
+  }
+  const ail = {}
+  for (const k of AIL_KEYS) {
+    if (hasAilment(side.ail, k)) ail[k] = k === 'bleed' ? side.ail.bleed.stacks : side.ail[k].turns
+  }
+  const buff = {}
+  const regenT = Math.max(side.regen?.turns || 0, side.regenMax?.turns || 0)
+  if (regenT > 0) buff.regen = { t: regenT }
+  if (side.mpRegen?.turns > 0) buff.mpRegen = { t: side.mpRegen.turns }
+  if (side.shield > 0) buff.shield = { v: Math.floor(side.shield) }
+  const cut = incomingCut(side)
+  if (cut > 0) buff.cut = { v: Math.round(cut), t: Math.max(0, ...(side.guardsT || []).map(g => g.turns)) }
+  if (side.ailImmune > 0) buff.ailImmune = { t: side.ailImmune }
+  if (side.debuffImmune > 0) buff.debuffImmune = { t: side.debuffImmune }
+  if (side.lifeSteal?.turns > 0) buff.drain = { v: Math.round(side.lifeSteal.pct || 0), t: side.lifeSteal.turns }
+  return { st, ail, buff }
 }
 
 // 戦闘用の1サイドを作る。slots = [{ skill, uses }]（順番が発動順）
@@ -1953,9 +1992,15 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
   const b = createSide(fighterB, band)
   const log = []
   let turn = 1
+  // 戦闘ログのアイコン（fxOf）で「始めからの差」を出すための、始めのステの補正
+  const startA = livePct(a)
+  const startB = livePct(b)
+  const fxNow = () => ({ aFx: fxOf(a, startA), bFx: fxOf(b, startB) })
   // ★ユニーク：戦闘の始めの能力（影縫いのブーツ・亡将の鉄兜）。setFx が無ければ何もしない
   uniqueBattleStart(a, b, log)
   uniqueBattleStart(b, a, log)
+  // 1ターン目の頭の表に出す効果（影縫いのブーツで下がったAGIなど）
+  const fx0 = fxNow()
 
   for (; turn <= maxTurns; turn++) {
     // 「経過したターン数」で効くもの（1ターン目は素の値）
@@ -2024,12 +2069,12 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
     if (a.hp > 0 && b.hp > 0) uniqueTurnEnd(a, b, turn, log)
     if (a.hp > 0 && b.hp > 0) uniqueTurnEnd(b, a, turn, log)
     if (a.hp <= 0 || b.hp <= 0) break
-    // 画面でHPバーを出すための、ターン終わりのスナップショット（戦闘の結果には影響しない）
-    log.push({ type:'hp', turn, a: Math.max(0, a.hp), aMax: a.base.hp, b: Math.max(0, b.hp), bMax: b.base.hp })
+    // 画面でHPバーを出すための、ターン終わりのスナップショット（戦闘の結果には影響しない）。aFx・bFx はかかっている効果（fxOf）
+    log.push({ type:'hp', turn, a: Math.max(0, a.hp), aMax: a.base.hp, b: Math.max(0, b.hp), bMax: b.base.hp, ...fxNow() })
   }
 
   // 決着した時点のHPも1件出す（倒したときに 0 のバーが出るように。旧版と同じ）
-  log.push({ type:'hp', turn: Math.min(turn, maxTurns), a: Math.max(0, a.hp), aMax: a.base.hp, b: Math.max(0, b.hp), bMax: b.base.hp })
+  log.push({ type:'hp', turn: Math.min(turn, maxTurns), a: Math.max(0, a.hp), aMax: a.base.hp, b: Math.max(0, b.hp), bMax: b.base.hp, ...fxNow() })
   const winner = a.hp <= 0 && b.hp <= 0 ? 'draw' : a.hp <= 0 ? 'b' : b.hp <= 0 ? 'a' : 'draw'
-  return { winner, turns: Math.min(turn, maxTurns), log, a, b }
+  return { winner, turns: Math.min(turn, maxTurns), log, a, b, fx0 }
 }
