@@ -165,13 +165,13 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
 
       {/* 説明は HELP から（2026-10-23 ユーザー指示「画像②の説明はHELPから確認できるようにして」） */}
       {help && (
-        <V2Modal title="❓ 博物館のHELP" color="#d8b070" onClose={() => setHelp(false)}>
+        <V2Modal title="❓ HELP" color="#d8b070" onClose={() => setHelp(false)}>
           <div style={HELP_HEAD}>寄贈のしかた</div>
           <div>装備を寄贈すると、博物館に登録されます（寄贈した装備はなくなります）。</div>
           <div>同じ装備を「未強化」「+5」「+9」のときにそれぞれ1回ずつ寄贈できます。</div>
           <div>ほかの強化値の装備・初期装備・着けている装備は寄贈できません。</div>
           {/* 報酬のまとめ（2026-10-23 ユーザー指示「HELPに報酬内容を分かりやすくまとめておいて」・数は lib/museum.js） */}
-          <div style={{ ...HELP_HEAD, marginTop:'10px' }}>報酬（どれもずっと続きます）</div>
+          <div style={{ ...HELP_HEAD, marginTop:'10px' }}>報酬（恒久的に反映されます）</div>
           <div>エリアごとに、レア度ごとの装備（各26種）をそろえると報酬がもらえます。</div>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'11px', margin:'6px 0' }}>
             <thead>
@@ -193,7 +193,6 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
           </table>
           <div>・「1段階」＝ 同じ強化値（未強化・+5・+9 のどれか1つ）で、そのレア度を全部寄贈すること。段階ごとにもらえます（1つのレア度で3回まで）</div>
           <div>・エリアのレア度をすべて3段階そろえる（エリアコンプリート）と、さらにスタミナ回復−{MUSEUM_AREA_STAM_SEC}秒</div>
-          <div>・ステータスポイントは、ホームの「ステータスポイントが あります（振る）」から振れます</div>
         </V2Modal>
       )}
       {/* 2026-10-23 ユーザー指示：上の欄は「収蔵数」（ユーザーの案「寄贈進捗」→ほかに良い言葉があれば＝博物館の言葉）と「獲得済み報酬」だけ。
