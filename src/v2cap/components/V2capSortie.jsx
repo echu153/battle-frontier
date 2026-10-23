@@ -33,6 +33,7 @@ import V2capShrineFx from './V2capShrineFx.jsx'
 //     （エピックはレアとボスから・レジェンダリーはボスからだけ）。武器はいまの職業が装備できる種類（3種）から（sortie.js）
 //   ・落ちた装備の**アイテムLV**＝その装備の必要LV（エリア×レア度・ユーザーの表）
 //   ・【確定】2026-10-10 ユーザー指示：戦闘ログは**自動で一番下へ**送る。チェックでオン・オフできる（最初はオン・この端末で覚えておく）。
+//     チェックは街の「出撃オプション」（オート出撃の下）に右下の出撃ボタンのチェックとまとめた（2026-10-24 ユーザー指示）。
 //     動かすのはログの枠の中だけ（scrollIntoView はページごと動いてしまうので使わない）。
 //     オフのときは、新しい戦闘のたびに一番上から出す
 //   ・【確定】2026-10-12 ユーザー指示：戦闘ログは**あるけみすと風**（ターンの頭に両方のアイコン＋HPの表・
@@ -69,6 +70,8 @@ const FAB_PREF = 'capSortieFab'
 const LOG_FOLLOW_KEY = 'v2capLogFollow'
 const readFollow = () => { try { return localStorage.getItem(LOG_FOLLOW_KEY) !== '0' } catch { return true } }
 const saveFollow = (on) => { try { localStorage.setItem(LOG_FOLLOW_KEY, on ? '1' : '0') } catch { /* 覚えられなくても切り替えは効く */ } }
+// 出撃オプションの1行（チェック＋文）
+const OPT_ROW = { display:'flex', alignItems:'center', gap:'6px', color:'#93a9be', fontSize:'11px', cursor:'pointer' }
 
 export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   const [scene, setScene] = useState('town')
@@ -294,14 +297,8 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
           {shrineBattle
             ? <span style={{ color:'#9fe8ff', fontSize:'13px' }}>⛲ {SHRINE_NAME}</span>
             : <span style={{ color:'#ff6644', fontSize:'13px' }}>⚔ バトル！</span>}
-          <span style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap' }}>
-            {auto && <span style={{ color:'#44ff88', fontSize:'11px' }}>▶ オート出撃中（⚡{stamNow}）</span>}
-            <label style={{ display:'flex', alignItems:'center', gap:'4px', color:'#93a9be', fontSize:'10px', cursor:'pointer' }}>
-              <input type="checkbox" checked={follow} onChange={e => toggleFollow(e.target.checked)}
-                style={{ accentColor:'#44ff88', margin:0, cursor:'pointer' }} />
-              ログを自動で一番下へ
-            </label>
-          </span>
+          {/* 「ログを自動で一番下へ」のチェックは街の「出撃オプション」へ移した（2026-10-24） */}
+          {auto && <span style={{ color:'#44ff88', fontSize:'11px' }}>▶ オート出撃中（⚡{stamNow}）</span>}
         </div>
         <div ref={logBox} style={{ marginBottom:'12px', maxHeight:'300px', overflowY:'auto' }}>
           {logs.map((l, i) => <V2capLogLine key={i} l={l} art={art} />)}
@@ -383,11 +380,23 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       {stamNow < 1 && (
         <div style={{ color:'#4d6f92', fontSize:'10px', marginTop:'5px', textAlign:'center' }}>自分でクリックする出撃はスタミナを使いません</div>
       )}
-      <label style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'4px', color:'#93a9be', fontSize:'10px', cursor:'pointer', marginTop:'6px' }}>
-        <input type="checkbox" checked={fabOn} onChange={e => toggleFab(e.target.checked)}
-          style={{ accentColor:'#ffcc00', margin:0, cursor:'pointer' }} />
-        右下に出撃ボタンを出す
-      </label>
+      {/* ★出撃オプション（2026-10-24 ユーザー指示「出撃オプションをオート出撃の下の方に追加・既存のチェックボタンはそこに集約」）：
+           ログを自動で一番下へ送るか・右下の出撃ボタンを出すか。どちらもこの端末で覚えておく */}
+      <div style={{ marginTop:'10px', border:'1px solid #003366', background:'#000c22', padding:'6px 8px' }}>
+        <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'4px' }}>⚙ 出撃オプション</div>
+        <div style={{ display:'grid', gap:'4px' }}>
+          <label style={OPT_ROW}>
+            <input type="checkbox" checked={follow} onChange={e => toggleFollow(e.target.checked)}
+              style={{ accentColor:'#44ff88', margin:0, cursor:'pointer' }} />
+            戦闘ログを自動で一番下まで送る
+          </label>
+          <label style={OPT_ROW}>
+            <input type="checkbox" checked={fabOn} onChange={e => toggleFab(e.target.checked)}
+              style={{ accentColor:'#ffcc00', margin:0, cursor:'pointer' }} />
+            右下に出撃ボタンを出す
+          </label>
+        </div>
+      </div>
     </div>
   )
 }
