@@ -68,7 +68,7 @@ export const NEW_SKILLS = [
   { name:'気付け薬',   cls:'薬師', kind:'heal', proc:85, mp:8, mpRegen:{ rate:0.2, turns:4 }, desc:'しばらく毎ターンMPが戻る' },
 ]
 
-// ===== 初期職11職の CLASS LV25・30 の技（各職2つ・覚える順に上から）=====
+// ===== 初期職11職の6・7つ目の技（各職2つ・覚える順に上から・前は CLASS LV25・30 → 2026-10-23 から CLASS LV16・19）=====
 // 【確定】2026-10-14 ユーザー承認（案「初期職に技を足す」）。前は技5つ＝枠5つで、初期職のうちは「どの技を入れるか」を選べなかった
 //   （CLASS LV21〜30は何も覚えなかった）。7つから5枠を選ぶ。どれも初期職の帯（価値・消費MP）どおり＝強さは同じで中身が違う。
 //   中身は職業の弱点を埋めるもの（DEXが低い職業に必中・AGIを下げる、回復の無い職業に吸収、など）。
@@ -151,7 +151,7 @@ const copyOfV2 = (s) => {
 }
 
 // この版のスキル全部。今のⅡの5職ぶんは、今のⅡの並び（＝覚える順）のまま。上位職20職は skillsIchiji.js（2026-10-10）
-// ★職業ごとの並び＝覚える順（CLASS LV1・5・10・15・20 の5つ → CLASS LV25・30 の LATE_SKILLS）
+// ★職業ごとの並び＝覚える順（前からの5つ → LATE_SKILLS の2つ）。覚える CLASS LV は jobs.js の STAGES.learnAt（2026-10-23 から 1／4／7…19）
 export const SKILLS = [
   ...V2_SKILLS.filter(s => KEEP_FROM_V2.includes(s.cls)).map(copyOfV2),
   ...NEW_SKILLS,

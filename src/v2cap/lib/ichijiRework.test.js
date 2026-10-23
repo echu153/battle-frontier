@@ -31,9 +31,9 @@ const hit = (cls, name, setup = () => {}, rng = mid, foe = dummy()) => {
 }
 const near = (a, b, tol = 0.02) => Math.abs(a - b) <= tol * Math.max(1, Math.abs(b))
 
-test('技は CLASS LV 1／5／10／15／20／25／30／35／40／45 で10個（22職とも・35と45は新しい技）', async () => {
+test('技は10個（22職とも）。覚える CLASS LV は 2026-10-23 から 1／4／7…28（前は 1／5…45・35と45は 10-15 に足した技）', async () => {
   const { STAGES, ICHIJI_CLASSES, learnOrderOf } = await import('./jobs.js')
-  assert.deepEqual(STAGES.ichiji.learnAt, [1, 5, 10, 15, 20, 25, 30, 35, 40, 45])
+  assert.deepEqual(STAGES.ichiji.learnAt, [1, 4, 7, 10, 13, 16, 19, 22, 25, 28])
   for (const c of ICHIJI_CLASSES) assert.equal(learnOrderOf(c).length, 10, `${c}は10個`)
 })
 

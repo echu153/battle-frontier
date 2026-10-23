@@ -37,9 +37,13 @@ export const JOB_MAX = 30
 // 【確定】2026-10-14 ユーザー承認：初期職も CLASS LV25・30 で1つずつ覚える（技7つ・skills.js の LATE_SKILLS）
 // 【確定】2026-10-15 ユーザー指示「一次クラス→上位クラスに文言全修正して」：画面の名前は「上位クラス」（label '上位'）。
 //   前の名前は「一次」。コードの中の名前（ichiji・ICHIJI_INFO・skillsIchiji.js など）はそのまま
+// 【確定】2026-10-23 ユーザー指示「スキルはレベル3ごとに覚えるようにして」＋「1・4・7・10…」を選んだ：技を覚える ClassLV は
+//   1 から 3 ずつ（初期職 1〜19 で7つ・上位職 1〜28 で10個）。前は 5 ずつ（初期職 1・5…30・上位職 1・5…45）。今いるキャラは SQL で一度だけ覚え直す
+export const LEARN_STEP = 3
+const learnAtFor = (n) => Array.from({ length: n }, (_, i) => 1 + i * LEARN_STEP)
 export const STAGES = {
-  shoki:  { label:'初期', color:'#44aaff', mult:1, perLv:8, max:JOB_MAX, learnAt:[1, 5, 10, 15, 20, 25, 30], needBase:15 },
-  ichiji: { label:'上位', color:'#cc66ff', mult:3, perLv:10, max:50, learnAt:[1, 5, 10, 15, 20, 25, 30, 35, 40, 45], needBase:30 },
+  shoki:  { label:'初期', color:'#44aaff', mult:1, perLv:8, max:JOB_MAX, learnAt:learnAtFor(7), needBase:15 },
+  ichiji: { label:'上位', color:'#cc66ff', mult:3, perLv:10, max:50, learnAt:learnAtFor(10), needBase:30 },
 }
 export const STAGE_ORDER = ['shoki', 'ichiji']
 export const jobMaxOfStage = (stage) => STAGES[stage]?.max || JOB_MAX

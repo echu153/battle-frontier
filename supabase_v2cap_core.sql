@@ -81,8 +81,8 @@ grant select on table public.v2cap_stages to authenticated;
 
 -- @@seed:stages
 insert into public.v2cap_stages (stage, mult, per_lv, learn_at, max_jlv, need_base) values
-  ('shoki', 1, 8, '{1,5,10,15,20,25,30}'::int[], 30, 15),
-  ('ichiji', 3, 10, '{1,5,10,15,20,25,30,35,40,45}'::int[], 50, 30)
+  ('shoki', 1, 8, '{1,4,7,10,13,16,19}'::int[], 30, 15),
+  ('ichiji', 3, 10, '{1,4,7,10,13,16,19,22,25,28}'::int[], 50, 30)
 on conflict (stage) do update set mult = excluded.mult, per_lv = excluded.per_lv, learn_at = excluded.learn_at, max_jlv = excluded.max_jlv, need_base = excluded.need_base;
 -- @@end:stages
 
@@ -6940,4 +6940,47 @@ begin
   for r in select distinct m.player_id from public.v2cap_museum m loop
     perform public.v2cap_museum_settle(r.player_id);
   end loop;
+end $$;
+
+-- ===== 一度だけ：技を覚える CLASS LV を 1 から 3 ずつにした（2026-10-23 ユーザー指示「スキルはレベル3ごとに覚えるようにして」・「1・4・7・10…」を選んだ）=====
+-- v2cap_stages.learn_at が 初期職 {1,4,7,10,13,16,19}・上位職 {1,4,7,10,13,16,19,22,25,28}（前は 5 ずつ＝初期職 1〜30・上位職 1〜45）。上の種で入れ替わる。
+-- 今いるキャラは一度だけ：
+--   ①就いたことのある職業ぜんぶ、その CLASS LV までの技を覚える（v2cap_learn。前より早く覚える技が入る）
+--   ②編成のある職業ぜんぶ：新しく覚えた技を空き枠へ入れる（v2cap_fill_set・最大MPに収まるだけ）。前から入っている技にはさわらない
+-- ★印 learn_every3_20261023 を付けるので、2回目以降に全文を流し直しても何もしない
+do $$
+declare
+  r         record;
+  j         record;
+  v_old     jsonb;
+  v_learned jsonb;
+  v_added   jsonb;
+  v_sets    jsonb;
+  v_asc     jsonb;
+  v_max     int;
+begin
+  if not exists (select 1 from public.v2cap_migrations where key = 'learn_every3_20261023') then
+    for r in select p.id, p.mp, p.jobs, p.learned, p.skill_sets, p.ascension from public.v2cap_profiles p loop
+      v_old := case when jsonb_typeof(r.learned) = 'array' then r.learned else '[]'::jsonb end;
+      v_learned := v_old;
+      for j in select e.key as cls, e.value as v from jsonb_each(case when jsonb_typeof(r.jobs) = 'object' then r.jobs else '{}'::jsonb end) e loop
+        continue when not exists (select 1 from public.v2cap_classes c where c.id = j.cls);
+        v_learned := public.v2cap_learn(v_learned, j.cls, coalesce((j.v ->> 'lv')::int, 1));
+      end loop;
+      select coalesce(jsonb_agg(t.name order by t.i), '[]'::jsonb) into v_added
+        from jsonb_array_elements_text(v_learned) with ordinality as t(name, i) where not (v_old ? t.name);
+      continue when jsonb_array_length(v_added) = 0;
+      v_asc := case when jsonb_typeof(r.ascension) = 'object' then r.ascension else '{}'::jsonb end;
+      v_sets := case when jsonb_typeof(r.skill_sets) = 'object' then r.skill_sets else '{}'::jsonb end;
+      for j in select e.key as cls, e.value as v from jsonb_each(v_sets) e where jsonb_typeof(e.value) = 'array' loop
+        continue when not exists (select 1 from public.v2cap_classes c where c.id = j.cls);
+        v_max := public.v2cap_max_mp(r.mp, v_asc, j.cls, coalesce((r.jobs -> j.cls ->> 'lv')::int, 1));
+        v_sets := jsonb_set(v_sets, array[j.cls], public.v2cap_fill_set(j.v, v_added, j.cls, v_max));
+      end loop;
+      update public.v2cap_profiles
+         set learned = v_learned, skill_sets = v_sets, updated_at = now()
+       where id = r.id;
+    end loop;
+    insert into public.v2cap_migrations (key) values ('learn_every3_20261023');
+  end if;
 end $$;
