@@ -888,6 +888,9 @@ test('【確定】2026-10-18 必要LVに足りないと、いまのLV相当（�
   const cellName = status.slice(status.indexOf("<span style={{ ...valueCell, display:'block' }}>"), status.indexOf('</V2Tip>', status.indexOf("<span style={{ ...valueCell, display:'block' }}>")))
   assert.ok(!cellName.includes('{sync'), 'ホームの欄の名前の横に要求LV不足を出さない')
   assert.ok(status.includes("{sync && <div style={{ color:'#ff8844' }}>{sync}（あと{needLvOf(w.item, w.inv.ilv) - prof.lv}LV）</div>}"), 'タップしたときの小窓には書く')
+  // 小窓は必要LVだけ（2026-10-23 ユーザー指示「ここ、必要Lvだけでいい」。前は「アイテムLV 80（必要LV 80）」）
+  assert.ok(!status.includes('<div>アイテムLV'), 'ホームの小窓にアイテムLVを出さない')
+  assert.ok(status.includes('<div>必要LV {needLvOf(w.item, w.inv.ilv)}'), 'ホームの小窓は必要LVだけ')
   // どの装備も：いまのLVで着けられる同じレア度・同じ種類の装備があれば、それと同じ強さ（強化値も）
   const kindOf = (i) => i.id.split(':')[1]   // 種類（防具は「重鎧頭」のように系統＋部位）
   for (const item of ITEMS) {

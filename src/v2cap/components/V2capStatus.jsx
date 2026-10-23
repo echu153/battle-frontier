@@ -106,7 +106,7 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
     )
   }
 
-  // 装備の升目。カーソルを合わせる（スマホはタップ）と、上がるステ・防具の効果・レア度・強化値・アイテムLV・戦闘力が出る
+  // 装備の升目。カーソルを合わせる（スマホはタップ）と、上がるステ・防具の効果・レア度・強化値・必要LV・戦闘力が出る
   // ★上がるステは強化値と、必要LVに足りない装備のLV相当を入れたあとの数（2026-10-12 ユーザー指示「どの能力が上がってるのかわかるように」）
   const eqCell = (slot, i) => {
     const w = worn[slot]
@@ -126,7 +126,8 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
               </div>
               <div style={{ fontSize:'11px' }}><StatGain s={gain} /></div>
               {w.item.line && <div style={{ color:'#88ddaa' }}>{w.item.line}：{armorEffectText(w.item)}</div>}
-              <div>アイテムLV {w.inv.ilv}（必要LV {needLvOf(w.item, w.inv.ilv)}）{plus > 0 && <>・強化 {plusLabel(plus)}</>}</div>
+              {/* アイテムLVは出さず必要LVだけ（2026-10-23 ユーザー指示「ここ、必要Lvだけでいい」） */}
+              <div>必要LV {needLvOf(w.item, w.inv.ilv)}{plus > 0 && <>・強化 {plusLabel(plus)}</>}</div>
               <div>戦闘力 {power}{sync && <span style={{ color:'#ff8844' }}> → {effectivePowerAt(w.item, w.inv.ilv, prof.lv, plus)}</span>}</div>
               {/* 要求LVに足りないことは、タップしたときの小窓でだけ書く（2026-10-23 ユーザー指示「ホーム画面では○○相当いらない
                   ※タップしたときの情報で必要レベル不足であること記載できてればいい」） */}
