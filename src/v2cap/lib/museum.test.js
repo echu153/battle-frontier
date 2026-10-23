@@ -252,3 +252,17 @@ test('エリアはプルダウン・行ったことのあるエリアだけ・�
   assert.ok(!head.includes('TEXT.sub'), '報酬の2行に灰色を使わない')
   assert.equal(head.split('rp.allTiers ? REWARD_ON : REWARD_OFF').length - 1, 2, '2行ともそろえば金色・まだは水色')
 })
+
+test('上の欄：説明は HELP の小窓・収蔵数・獲得済み報酬（かっこ書きなし）・報酬の決まりの段落なし／コンプリートは ★COMPLETE★（10-23 ユーザー指示）', () => {
+  const m = src('../components/V2capMuseum.jsx')
+  assert.ok(m.includes("<button onClick={() => setHelp(true)} style={miniBtn('#88aaff')}>❓ HELP</button>"), 'HELP のボタン')
+  assert.ok(m.includes('<V2Modal title="❓ 博物館のHELP"'), '説明は小窓')
+  const help = m.slice(m.indexOf('<V2Modal title="❓ 博物館のHELP"'), m.indexOf('</V2Modal>', m.indexOf('<V2Modal title="❓ 博物館のHELP"')))
+  assert.ok(help.includes('装備を寄贈すると、博物館に登録されます') && help.includes('着けている装備は寄贈できません'), '前の説明の文は HELP の中')
+  assert.equal(m.split('装備を寄贈すると、博物館に登録されます').length - 1, 1, '説明の文は HELP にだけ')
+  assert.ok(m.includes("<span style={{ color:'#d8b070', fontSize:'12px' }}>収蔵数</span>"))
+  assert.ok(m.includes('獲得済み報酬：ステータスポイント +{totals.sp}　スタミナの回復 −{stamCut}秒'), '獲得済み報酬')
+  assert.ok(!m.includes('mmss('), '（3:00 → 2:55）のかっこ書きは出さない')
+  assert.ok(!m.includes('もらった報酬：') && !m.includes('報酬（どれもずっと続く）'), '前の文と報酬の決まりの段落は出さない')
+  assert.ok(m.includes("{areaProgressOf(registered, g.area).complete ? '　★COMPLETE★' : ''}"), 'プルダウンのコンプリートは英語')
+})

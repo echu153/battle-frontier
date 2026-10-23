@@ -8,16 +8,14 @@ import { RARITIES, RARITY_COLOR, ITEM_BY_ID, rarityLabel, kindLabel } from '../l
 import { plusOf, plusLabel } from '../lib/smith.js'
 import {
   MUSEUM_TIERS, MUSEUM_GROUPS, raritiesOfGroup, registeredSetOf, tiersOf, museumCountOf, donatablesOf, donatedTail,
-  MUSEUM_SET_SP, MUSEUM_RARITY_STAM_SEC, MUSEUM_AREA_STAM_SEC, MUSEUM_REWARD_RARITIES, areaProgressOf, museumRewardTotalsOf, rewardText, sortRewards,
+  MUSEUM_SET_SP, MUSEUM_RARITY_STAM_SEC, MUSEUM_AREA_STAM_SEC, areaProgressOf, museumRewardTotalsOf, rewardText, sortRewards,
 } from '../lib/museum.js'
-import { STAMINA_RECOVER_MS, staminaSpanMsOf } from '../lib/level.js'
-import { mmss } from '../core/stamina.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — 博物館（装備の寄贈）。決まりの正は src/v2cap/lib/museum.js・サーバーは SQL §14
 //   【確定】2026-10-22 ユーザー指示「V1にあるような装備を寄贈する博物館を作成したい／
 //     登録時に能力もらえるけど詳細はあとで作成する、とりあえず土台だけ作って」
-//   ・上：説明と登録数（段階ごと）・報酬の決まりともらった合計
+//   ・上：収蔵数（段階ごとの登録数）・獲得済み報酬・HELP（説明の小窓）
 //   ・寄贈できる装備（持ち物のうち、着けていない・+0／+5／+9・まだ登録していない段階のもの）→「寄贈」→確認のポップアップ（装備はなくなる）
 //   ・登録の一覧：エリア1〜15 のタブ。装備ごとに 未強化／+5／+9 の印（登録した段階は色つき）
 //   【確定】2026-10-23 ユーザー指示（実機を見て）：
@@ -50,6 +48,7 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [confirm, setConfirm] = useState(null)    // 寄贈の確認 [{ inv, item, tier, copies }]（1つでも一括でも配列）
+  const [help, setHelp] = useState(false)          // HELP の小窓
   const [result, setResult] = useState(null)      // 寄贈の結果 { ok, items: [{ name, rarity, tier }], skipped } ／ 失敗は { ok:false, error }
   const [picked, setPicked] = useState(() => new Set())   // 一括寄贈に選んだ行（rowKey）
   const [groupKey, setGroupKey] = useState(null)   // 選んだエリア（null＝行ったことのある一番先のエリア）
@@ -160,27 +159,30 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
         </V2Modal>
       )}
 
+      {/* 説明は HELP から（2026-10-23 ユーザー指示「画像②の説明はHELPから確認できるようにして」） */}
+      {help && (
+        <V2Modal title="❓ 博物館のHELP" color="#d8b070" onClose={() => setHelp(false)}>
+          <div>装備を寄贈すると、博物館に登録されます（寄贈した装備はなくなります）。</div>
+          <div>同じ装備を「未強化」「+5」「+9」のときにそれぞれ1回ずつ寄贈できます。</div>
+          <div>ほかの強化値の装備・初期装備・着けている装備は寄贈できません。</div>
+        </V2Modal>
+      )}
+      {/* 2026-10-23 ユーザー指示：上の欄は「収蔵数」（ユーザーの案「寄贈進捗」→ほかに良い言葉があれば＝博物館の言葉）と「獲得済み報酬」だけ。
+          報酬の決まりの段落はやめた（「これいらない」）・獲得済み報酬の（3:00 → 2:55）も出さない（「（）内いらない」） */}
       <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
-        <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.8 }}>
-          装備を寄贈すると、博物館に登録されます（寄贈した装備はなくなります）。
-          同じ装備を「未強化」「+5」「+9」のときにそれぞれ1回ずつ寄贈できます。
-          ほかの強化値の装備・初期装備・着けている装備は寄贈できません。
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px', marginBottom:'4px' }}>
+          <span style={{ color:'#d8b070', fontSize:'12px' }}>収蔵数</span>
+          <button onClick={() => setHelp(true)} style={miniBtn('#88aaff')}>❓ HELP</button>
         </div>
-        <div style={{ display:'flex', flexWrap:'wrap', gap:'10px', alignItems:'center', fontSize:'11px', marginTop:'6px' }}>
+        <div style={{ display:'flex', flexWrap:'wrap', gap:'2px 10px', alignItems:'center', fontSize:'11px' }}>
           {MUSEUM_TIERS.map((t, i) => (
-            <span key={t.key} style={{ color: TEXT.label }}>
+            <span key={t.key} style={{ color: TEXT.label, whiteSpace:'nowrap' }}>
               <span style={{ color: t.color }}>{tierTag(t)}</span><span style={{ color:'#ffcc00' }}>{total.byTier[i]}</span> / {total.items}
             </span>
           ))}
         </div>
-        {/* ★報酬（2026-10-23 ユーザー指示・決まりは lib/museum.js） */}
-        <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.8, marginTop:'6px', paddingTop:'6px', borderTop:'1px solid #002244' }}>
-          報酬（どれもずっと続く）：エリアのレア度ごとに、1つの段階の装備を全部寄贈すると ステータスポイント
-          （{MUSEUM_REWARD_RARITIES.map((r, i) => <span key={r}>{i ? '・' : ''}<span style={{ color: RARITY_COLOR[r] }}>{rarityLabel(r)}</span>+{MUSEUM_SET_SP[r]}</span>)}）。
-          3段階すべて寄贈すると スタミナ回復−{MUSEUM_RARITY_STAM_SEC}秒。エリアをコンプリートすると さらにスタミナ回復−{MUSEUM_AREA_STAM_SEC}秒
-        </div>
-        <div style={{ color:'#ffcc00', fontSize:'11px', marginTop:'4px' }}>
-          もらった報酬：ステータスポイント +{totals.sp}　スタミナの回復 −{stamCut}秒（{mmss(STAMINA_RECOVER_MS)} → {mmss(staminaSpanMsOf(prof))}）
+        <div style={{ color:'#ffcc00', fontSize:'11px', marginTop:'6px' }}>
+          獲得済み報酬：ステータスポイント +{totals.sp}　スタミナの回復 −{stamCut}秒
         </div>
         {error && <div style={{ color:'#ff8844', fontSize:'10px', marginTop:'4px' }}>⚠ 登録を読めませんでした（{error}）</div>}
       </div>
@@ -245,11 +247,11 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
       {/* ===== 登録の一覧 ===== */}
       <div style={{ ...box, padding:'12px' }}>
         {/* エリアはプルダウン・行ったことのあるエリアだけ（2026-10-23 ユーザー指示「行ったことのあるエリアしか表示されないのと、プルダウンから選択できるように」）。
-            コンプリートしたエリアには ✔（出撃の場所の選び方と同じ見た目） */}
+            コンプリートしたエリアには ★COMPLETE★（同じ日「コンプリートしたら英語で★コンプリート★にして」・前は ✔） */}
         <select value={group.key} onChange={e => setGroupKey(e.target.value)}
           style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>
           {groups.map(g => (
-            <option key={g.key} value={g.key}>{g.label}{areaProgressOf(registered, g.area).complete ? '　✔' : ''}</option>
+            <option key={g.key} value={g.key}>{g.label}{areaProgressOf(registered, g.area).complete ? '　★COMPLETE★' : ''}</option>
           ))}
         </select>
         {/* エリアの名前と段階ごとの登録数は別の行（スマホの幅で段階が途中で折り返さないように） */}
