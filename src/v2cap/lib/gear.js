@@ -65,8 +65,9 @@ export const effectivePowerAt = (item, ilv, lv, plus = 0) => {
   if (!isUnderLv(item, ilv, lv)) return full
   return Math.max(0, Math.min(powerAt(item, syncIlvOf(item, ilv, lv), plus), full - 1))
 }
-// 画面の書き添え（足りないときだけ「LV20相当」。足りていれば ''）
-export const syncLabelOf = (item, ilv, lv) => (isUnderLv(item, ilv, lv) ? `LV${lv}相当` : '')
+// 画面の書き添え（足りないときだけ「要求LV不足」。足りていれば ''）
+// 【確定】2026-10-23 ユーザー指示「装備の○○相当ってところ、要求Lv不足にして」（前は「LV20相当」）。強さはいまのLV相当のまま（上の effectivePowerAt）
+export const syncLabelOf = (item, ilv, lv) => (isUnderLv(item, ilv, lv) ? '要求LV不足' : '')
 
 // ===== 戦闘力をステへ散らす =====
 // 【2026-10-13】端数は最大剰余：ステごとに切り捨ててから、残りの点を端数の大きいステから1点ずつ配る（合計はいつも戦闘力と同じ）。

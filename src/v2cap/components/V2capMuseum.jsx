@@ -8,7 +8,7 @@ import { RARITIES, RARITY_COLOR, ITEM_BY_ID, rarityLabel, kindLabel } from '../l
 import { plusOf, plusLabel } from '../lib/smith.js'
 import {
   MUSEUM_TIERS, MUSEUM_GROUPS, raritiesOfGroup, registeredSetOf, tiersOf, museumCountOf, donatablesOf, donatedTail,
-  MUSEUM_SET_SP, MUSEUM_RARITY_STAM_SEC, MUSEUM_AREA_STAM_SEC, areaProgressOf, museumRewardTotalsOf, rewardText, sortRewards,
+  MUSEUM_SET_SP, MUSEUM_RARITY_STAM_SEC, MUSEUM_AREA_STAM_SEC, MUSEUM_REWARD_RARITIES, areaProgressOf, museumRewardTotalsOf, rewardText, sortRewards,
 } from '../lib/museum.js'
 
 // ============================================================
@@ -35,6 +35,10 @@ const tierTag = (t) => `【${t.label}】`
 const NOWRAP = { whiteSpace:'nowrap' }   // 句の途中で改行しない（折り返すのは句と句のあいだだけ）
 const REWARD_ON = '#ffcc00'    // そろった報酬の文（金色）
 const REWARD_OFF = '#88ccff'   // まだの報酬の文（明るい水色・灰色にしない）
+// HELP の小窓の見出しと表
+const HELP_HEAD = { color:'#d8b070', fontSize:'12px', marginBottom:'2px' }
+const HELP_TH = { textAlign:'left', fontWeight:'normal', fontSize:'10px', padding:'2px 4px', borderBottom:'1px solid #224466' }
+const HELP_TD = { padding:'3px 4px', borderBottom:'1px solid #0b2244', color:'#cfe2ff' }
 // size … 装備名だけの文字の大きさ（1つずつの寄贈の確認＝2026-10-23 ユーザー指示「装備の名前見やすくするようにフォントの大きさ大きく」「装備名だけね」）
 const NameLine = ({ d, size }) => (
   <>
@@ -162,9 +166,34 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
       {/* 説明は HELP から（2026-10-23 ユーザー指示「画像②の説明はHELPから確認できるようにして」） */}
       {help && (
         <V2Modal title="❓ 博物館のHELP" color="#d8b070" onClose={() => setHelp(false)}>
+          <div style={HELP_HEAD}>寄贈のしかた</div>
           <div>装備を寄贈すると、博物館に登録されます（寄贈した装備はなくなります）。</div>
           <div>同じ装備を「未強化」「+5」「+9」のときにそれぞれ1回ずつ寄贈できます。</div>
           <div>ほかの強化値の装備・初期装備・着けている装備は寄贈できません。</div>
+          {/* 報酬のまとめ（2026-10-23 ユーザー指示「HELPに報酬内容を分かりやすくまとめておいて」・数は lib/museum.js） */}
+          <div style={{ ...HELP_HEAD, marginTop:'10px' }}>報酬（どれもずっと続きます）</div>
+          <div>エリアごとに、レア度ごとの装備（各26種）をそろえると報酬がもらえます。</div>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'11px', margin:'6px 0' }}>
+            <thead>
+              <tr style={{ color: TEXT.label }}>
+                <th style={HELP_TH}>レア度</th>
+                <th style={HELP_TH}>1段階そろうごとに</th>
+                <th style={HELP_TH}>3段階すべて寄贈</th>
+              </tr>
+            </thead>
+            <tbody>
+              {MUSEUM_REWARD_RARITIES.map(r => (
+                <tr key={r}>
+                  <td style={{ ...HELP_TD, color: RARITY_COLOR[r] }}>{rarityLabel(r)}</td>
+                  <td style={HELP_TD}>ステータスポイント+{MUSEUM_SET_SP[r]}</td>
+                  <td style={HELP_TD}>スタミナ回復−{MUSEUM_RARITY_STAM_SEC}秒</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div>・「1段階」＝ 同じ強化値（未強化・+5・+9 のどれか1つ）で、そのレア度を全部寄贈すること。段階ごとにもらえます（1つのレア度で3回まで）</div>
+          <div>・エリアのレア度をすべて3段階そろえる（エリアコンプリート）と、さらにスタミナ回復−{MUSEUM_AREA_STAM_SEC}秒</div>
+          <div>・ステータスポイントは、ホームの「ステータスポイントが あります（振る）」から振れます</div>
         </V2Modal>
       )}
       {/* 2026-10-23 ユーザー指示：上の欄は「収蔵数」（ユーザーの案「寄贈進捗」→ほかに良い言葉があれば＝博物館の言葉）と「獲得済み報酬」だけ。

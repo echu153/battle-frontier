@@ -260,6 +260,9 @@ test('上の欄：説明は HELP の小窓・収蔵数・獲得済み報酬（�
   const help = m.slice(m.indexOf('<V2Modal title="❓ 博物館のHELP"'), m.indexOf('</V2Modal>', m.indexOf('<V2Modal title="❓ 博物館のHELP"')))
   assert.ok(help.includes('装備を寄贈すると、博物館に登録されます') && help.includes('着けている装備は寄贈できません'), '前の説明の文は HELP の中')
   assert.equal(m.split('装備を寄贈すると、博物館に登録されます').length - 1, 1, '説明の文は HELP にだけ')
+  // HELP に報酬のまとめ（10-23「HELPに報酬内容を分かりやすくまとめておいて」）
+  assert.ok(help.includes('報酬（どれもずっと続きます）') && help.includes('<table'), '報酬の表')
+  assert.ok(help.includes('ステータスポイント+{MUSEUM_SET_SP[r]}') && help.includes('スタミナ回復−{MUSEUM_RARITY_STAM_SEC}秒') && help.includes('さらにスタミナ回復−{MUSEUM_AREA_STAM_SEC}秒'), '数は museum.js から')
   assert.ok(m.includes("<span style={{ color:'#d8b070', fontSize:'12px' }}>収蔵数</span>"))
   assert.ok(m.includes('獲得済み報酬：ステータスポイント +{totals.sp}　スタミナの回復 −{stamCut}秒'), '獲得済み報酬')
   assert.ok(!m.includes('mmss('), '（3:00 → 2:55）のかっこ書きは出さない')

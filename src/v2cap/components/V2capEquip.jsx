@@ -69,7 +69,7 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
                           </V2Tip>
                         : <span style={{ color: nameColor(w.item) }}>{w.item.name}</span>}
                       <PlusTag inv={w.inv} />
-                      {/* 装備中の行にLVは出さない（2026-10-14 ユーザー指示）。必要LVに足りないときの「LV〇相当」だけ出す（2026-10-18〜） */}
+                      {/* 装備中の行にLVは出さない（2026-10-14 ユーザー指示）。必要LVに足りないときの「要求LV不足」だけ出す（2026-10-18〜・10-23 に「LV〇相当」から） */}
                       {sync && <span style={{ color:'#ff8844' }}> {sync}</span>}
                     </span>
                     <span style={{ color: TEXT.sub, fontSize:'10px' }}>{statLine(statsAt(w.item, w.inv.ilv, prof.lv, plusOf(w.inv)))}</span>
@@ -131,7 +131,7 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
                 </div>
                 <div style={{ fontSize:'10px', color: TEXT.sub, margin:'3px 0', display:'flex', gap:'8px', flexWrap:'wrap' }}>
                   {/* 右上の「要求レベル〇LV」と同じ言い方・同じ値（アイテムLVではなく needLvOf）で出す */}
-                  <span>戦闘力 {power}{sync && <span style={{ color:'#ff8844' }}> → {effectivePowerAt(item, inv.ilv, prof.lv, plus)}（{sync}・要求レベルまであと{needLvOf(item, inv.ilv) - prof.lv}LV）</span>}</span>
+                  <span>戦闘力 {power}{sync && <span style={{ color:'#ff8844' }}> → {effectivePowerAt(item, inv.ilv, prof.lv, plus)}（{sync}・あと{needLvOf(item, inv.ilv) - prof.lv}LV）</span>}</span>
                   <span>{statLine(statsAt(item, inv.ilv, prof.lv, plus))}</span>
                 </div>
                 {/* ユニーク（2026-10-21）：固有の能力と落とすボス。LV80より低くても能力は全部効く */}

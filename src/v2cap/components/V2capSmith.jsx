@@ -426,7 +426,7 @@ function SmithModal({ row, prof, busy, msg, onEnhance, onClose }) {
           {/* ★「強さ110%」のような%は出さない（弱い装備は最低+1のほうが大きく、%と合わない）。上がり幅は下の戦闘力で見せる */}
           <div>強化値 +{plus} → <span style={{ color: PLUS_COLOR }}>+{cost.next}</span></div>
           <div>戦闘力 {now} → <span style={{ color:'#44ff88' }}>{powerAt(item, inv.ilv, cost.next)}</span>
-            {sync && <span style={{ color: SHORT, fontSize:'11px' }}>（いまは{sync}）</span>}
+            {sync && <span style={{ color: SHORT, fontSize:'11px' }}>（{sync}）</span>}
           </div>
           <div style={{ color: TEXT.sub, fontSize:'11px' }}>
             {statLine(statsAt(item, inv.ilv, prof.lv, plus))}<br />→ {statLine(statsAt(item, inv.ilv, prof.lv, cost.next))}

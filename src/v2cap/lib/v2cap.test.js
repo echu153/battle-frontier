@@ -2,6 +2,7 @@
 // 設計は docs/v2cap-design.md。ユーザーが決めたことは【確定】と書いてある
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { STAT_KEYS, STAT_DEFS, calcPower, INITIAL_STATS } from '../core/stats.js'
 import { skillValue, VALUE_TABLE, MP_TABLE, BUFF_PER_MP, HEAL_PER_MP, MPREGEN_PER_MP, SKILLS as V2_SKILLS, offClassMult } from '../core/skills.js'
 import { createSide, mpCostOf, runBattle } from '../core/battle.js'
@@ -879,8 +880,14 @@ test('【確定】2026-10-18 必要LVに足りないと、いまのLV相当（�
   assert.equal(effectivePowerAt(top, top.lv, 20, 10), powerAt(forest, forest.lv, 10), '強化値はそのまま掛ける')
   assert.deepEqual(statsAt(top, top.lv, 20), statsAt(forest, forest.lv, 20), 'ステも同じ')
   assert.equal(syncIlvOf(top, top.lv, 20), 20)
-  assert.equal(syncLabelOf(top, top.lv, 20), 'LV20相当')
+  // 画面の書き添えは「要求LV不足」（2026-10-23 ユーザー指示「装備の○○相当ってところ、要求Lv不足にして」。前は「LV20相当」）
+  assert.equal(syncLabelOf(top, top.lv, 20), '要求LV不足')
   assert.equal(syncLabelOf(top, top.lv, 90), '', '足りていれば書かない')
+  // ホームの装備の欄では名前の横に出さない（タップしたときの小窓にだけ）
+  const status = readFileSync(new URL('../components/V2capStatus.jsx', import.meta.url), 'utf8')
+  const cellName = status.slice(status.indexOf("<span style={{ ...valueCell, display:'block' }}>"), status.indexOf('</V2Tip>', status.indexOf("<span style={{ ...valueCell, display:'block' }}>")))
+  assert.ok(!cellName.includes('{sync'), 'ホームの欄の名前の横に要求LV不足を出さない')
+  assert.ok(status.includes("{sync && <div style={{ color:'#ff8844' }}>{sync}（あと{needLvOf(w.item, w.inv.ilv) - prof.lv}LV）</div>}"), 'タップしたときの小窓には書く')
   // どの装備も：いまのLVで着けられる同じレア度・同じ種類の装備があれば、それと同じ強さ（強化値も）
   const kindOf = (i) => i.id.split(':')[1]   // 種類（防具は「重鎧頭」のように系統＋部位）
   for (const item of ITEMS) {

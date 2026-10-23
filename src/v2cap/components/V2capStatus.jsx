@@ -29,7 +29,8 @@ import { isUnique } from '../lib/equipment.js'
 //     （2026-10-12 ユーザー指示「この書き方にして」「クラス：盗賊　Lv3/30　にして」＝表記ルールどおり LV。前は「[初期] 盗賊 LV2／100」「ClassLV: 2／30」）
 //   ・ステの升目は合計だけ（2026-10-12 ユーザー指示「ホーム画面の数値は最終値だけ」）。内訳（本体＋クラス＋装備＋軽装のAGI）は
 //     カーソルで出す＋プロフィールに表で出す（V2capProfile）・まだ振っていないステータスポイントの「振る」
-//   ・装備は7枠（武器1・頭・鎧・腕・足・装飾品2）。名前はレア度の色・強化値・必要LVに足りないときの「LV〇相当」（2026-10-18〜。前は効果%）。
+//   ・装備は7枠（武器1・頭・鎧・腕・足・装飾品2）。名前はレア度の色・強化値。必要LVに足りないときの「要求LV不足」はタップしたときの小窓にだけ
+//     （2026-10-23 ユーザー指示「ホーム画面では○○相当いらない」。前は名前の横に「LV〇相当」＝2026-10-18〜・その前は効果%）。
 //     カーソルで上がるステ・防具の効果も出す（2026-10-12 ユーザー指示「どの能力が上がってるのかわかるように」）
 //   ・スキルは**いまの職業の編成**（スキルセットは職業ごと）。職業パッシブは上位職だけ
 // ============================================================
@@ -126,12 +127,14 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
               <div style={{ fontSize:'11px' }}><StatGain s={gain} /></div>
               {w.item.line && <div style={{ color:'#88ddaa' }}>{w.item.line}：{armorEffectText(w.item)}</div>}
               <div>アイテムLV {w.inv.ilv}（必要LV {needLvOf(w.item, w.inv.ilv)}）{plus > 0 && <>・強化 {plusLabel(plus)}</>}</div>
-              <div>戦闘力 {power}{sync && <span style={{ color:'#ff8844' }}> → {effectivePowerAt(w.item, w.inv.ilv, prof.lv, plus)}（{sync}）</span>}</div>
+              <div>戦闘力 {power}{sync && <span style={{ color:'#ff8844' }}> → {effectivePowerAt(w.item, w.inv.ilv, prof.lv, plus)}</span>}</div>
+              {/* 要求LVに足りないことは、タップしたときの小窓でだけ書く（2026-10-23 ユーザー指示「ホーム画面では○○相当いらない
+                  ※タップしたときの情報で必要レベル不足であること記載できてればいい」） */}
+              {sync && <div style={{ color:'#ff8844' }}>{sync}（あと{needLvOf(w.item, w.inv.ilv) - prof.lv}LV）</div>}
             </>}>
             <span style={{ ...valueCell, display:'block' }}>
               <span style={{ color: RARITY_COLOR[w.item.rarity] }}>{w.item.name}</span>
               {plus > 0 && <span style={{ color:'#ffcc00' }}>{plusLabel(plus)}</span>}
-              {sync && <span style={{ color:'#ff8844' }}> {sync}</span>}
             </span>
           </V2Tip>
         ) : <span style={{ ...valueCell, color:'#62789a' }}>—</span>}
