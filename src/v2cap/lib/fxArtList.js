@@ -13,10 +13,12 @@ export const FX_ART_IDS = [
   'healCut',   // 回復阻害
   'silence',   // サイレンス
   'blind',   // 暗闇
+  'curse',   // 呪い
   'frenzy',   // 狂乱
   'weaken',   // 衰弱
   'burn',   // 火傷
   'seal',   // 封印
+  'fear',   // 恐怖
   'regen',   // HP継続回復
   'mpRegen',   // MP継続回復
   'shield',   // バリア
