@@ -75,7 +75,7 @@ test('★旧版のデータが無くてもⅡのホームが落ちない', () =>
   assert.match(home, /setName\(p\?\.username \|\| ''\)/, 'profiles が無いと落ちる書き方になっている')
   assert.match(home, /setIsAdmin\(!!p\?\.is_admin\)/, 'profiles が無いと落ちる書き方になっている')
   // コメント行は動かないので見ない
-  const code = home.split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n')
+  const code = home.split(/\r?\n/).filter(l => !/^\s*\/\//.test(l)).join('\n')
   assert.ok(!/\bp\.username\b/.test(code), 'p.username を直に読んでいる')
   assert.ok(!/\bp\.is_admin\b/.test(code), 'p.is_admin を直に読んでいる')
 })

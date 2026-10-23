@@ -270,7 +270,7 @@ test('【確定】2026-10-15 画面の名前は「上位クラス」（前の名
   const left = walk(root).filter(p => /\.(js|jsx|mjs)$/.test(p)).flatMap(p => {
     let s = readFileSync(p, 'utf8')
     for (const k of KEEP) s = s.split(k).join('')
-    return s.split('\n').map((l, i) => l.includes(OLD) ? `${p.slice(root.length)}:${i + 1}` : null).filter(Boolean)
+    return s.split(/\r?\n/).map((l, i) => l.includes(OLD) ? `${p.slice(root.length)}:${i + 1}` : null).filter(Boolean)
   })
   assert.deepEqual(left, [], '「一次」は「上位」に（2026-10-15 ユーザー指示）')
 })

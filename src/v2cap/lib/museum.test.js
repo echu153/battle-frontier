@@ -68,7 +68,7 @@ test('寄贈できる持ち物：初期装備でない・着けていない・+0
 test('★ユニークは寄贈できない・博物館の画面のどこにも出さない（10-23 ユーザー指示「あることすら悟られないようにしたい」）', () => {
   // 画面の文字（コードの中の説明 // と {/* */} を除く）に「ユニーク」が無い
   const m = src('../components/V2capMuseum.jsx')
-    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '').split('\n').map(l => l.replace(/\/\/.*$/, '')).join('\n')
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '').split(/\r?\n/).map(l => l.replace(/\/\/.*$/, '')).join('\n')
   assert.ok(!m.includes('ユニーク'), '画面にユニークの文字が無い')
   assert.ok(!/UNIQUE|isUnique|uniqueHidden|bulkDonatable/.test(m), 'ユニークを扱うコードも無い')
   // 持っていても寄贈できる装備に出ない

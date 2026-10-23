@@ -508,7 +508,7 @@ test('長期戦の回復阻害（20ターン超から1ターンごとに5%・40�
   assert.ok(/return m \* longFightHealMult\(turn\)/.test(battle),
     'healOutMult に長期戦の回復阻害が入っていない')
   // playerHp を増やしている箇所は、戦闘後の「戦闘ごとにHP回復」以外すべて healOutMult を通る
-  const heals = battle.split('\n').filter(l => /playerHp = Math\.min\(eff\.hp_max, playerHp \+/.test(l))
+  const heals = battle.split(/\r?\n/).filter(l => /playerHp = Math\.min\(eff\.hp_max, playerHp \+/.test(l))
   assert.ok(heals.length >= 10, `回復箇所が少なすぎる（${heals.length}件）。検出漏れの疑い`)
   for (const l of heals) {
     if (/tr\.killHeal|playerHp \+ heal\)/.test(l)) continue   // 戦闘を終えたあとの回復は対象外

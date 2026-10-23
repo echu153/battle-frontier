@@ -13,7 +13,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 
 const SRC = new URL('../', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
 
@@ -51,4 +51,23 @@ test('相対importに拡張子が付いている', () => {
     }
   }
   assert.deepEqual(bad, [], '拡張子なしの相対importは node --test で落ちる')
+})
+
+// ★2026-10-24 に見つけた穴。src/v2cap/lib/museum.test.js が画面のファイルを split('\n') で行に分けてから
+//   行ごとに // の説明を消していたが、Windows の作業場所（git の autocrlf で CRLF）では行末に \r が残る。
+//   //.*$ の . は \r に合わないので説明が消えずに残り、LF のファイルなら通るテストが CRLF では必ず落ちていた。
+//   作業場所の改行で結果が変わらないように、行に分けるのは split(/\r?\n/) にそろえる（test/ のテストも見る）
+const ROOT = new URL('../../', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
+const ALL_FILES = [...FILES, ...testFiles(join(ROOT, 'test'))]
+// '\n'・"\n"・`\n`・/\n/ と、その \r\n の形で分けている所
+const SPLIT_NL = /\.split\(\s*(?:(['"`])(?:\\r)?\\n\1|\/(?:\\r)?\\n\/)\s*\)/
+test('行に分けるのは split(/\\r?\\n/)（作業場所の改行が LF でも CRLF でも同じ行になる）', () => {
+  assert.ok(ALL_FILES.length > FILES.length, 'test/ のテストも見ている')
+  const bad = []
+  for (const f of ALL_FILES) {
+    readFileSync(f, 'utf8').split(/\r?\n/).forEach((line, i) => {
+      if (SPLIT_NL.test(line)) bad.push(`${relative(ROOT, f).split('\\').join('/')}:${i + 1}`)
+    })
+  }
+  assert.deepEqual(bad, [], "split('\\n') や split('\\r\\n') は CRLF か LF の片方で行がずれる。split(/\\r?\\n/) にすること")
 })

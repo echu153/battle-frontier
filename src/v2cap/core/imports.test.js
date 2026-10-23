@@ -24,7 +24,7 @@ const CANDIDATES = ['', '.js', '.jsx', '.ts', '.tsx', '/index.js', '/index.jsx']
 const ASSET = /\.(css|png|jpe?g|gif|svg|webp|mp3|wav|json)$/i
 
 test('★コミットしたコードが、gitに入っていないファイルを読んでいない', () => {
-  const tracked = new Set(git('ls-files').split('\n').map(s => s.trim()).filter(Boolean))
+  const tracked = new Set(git('ls-files').split(/\r?\n/).map(s => s.trim()).filter(Boolean))
   const code = [...tracked].filter(f => /^src\/.*\.(jsx?|tsx?)$/.test(f) && !/\.test\.jsx?$/.test(f))
   assert.ok(code.length > 50, `対象のファイルを拾えている（${code.length}件）`)
 
