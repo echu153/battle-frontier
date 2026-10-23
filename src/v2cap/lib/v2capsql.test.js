@@ -1006,6 +1006,20 @@ test('【確定】2026-10-15 上位クラスの作り直しの移し替え（一
   assert.ok(SQL.indexOf(m[0]) > SQL.indexOf('create or replace function public.v2cap_fill_set('))
 })
 
+test('【確定】2026-10-23 上位クラスのアセンションをペンタゴンに作り直した移し替え（一度だけ）：上位の盤面だけ空に・編成を収め直す', () => {
+  const m = SQL.match(/if not exists \(select 1 from public\.v2cap_migrations where key = 'asc_pent_20261024'\) then([\s\S]*?)insert into public\.v2cap_migrations \(key\) values \('asc_pent_20261024'\);/)
+  assert.ok(m, '印つきで一度だけ')
+  const b = m[1]
+  assert.ok(SQL.includes("v_cls  text[] := array(select c.id from public.v2cap_classes c where c.stage = 'ichiji');"), '上位クラスの名簿は職業の表から')
+  assert.ok(b.includes("where jsonb_typeof(p.ascension) = 'object' and p.ascension ?| v_cls loop"), '上位クラスの盤面がある人だけ')
+  assert.ok(b.includes('v_asc := r.ascension - v_cls;'), '上位クラスの盤面だけ空に（APは CLASS LV から数え直す・初期職の盤面はそのまま）')
+  assert.ok(b.includes("public.v2cap_fit_set(j.v, j.cls, coalesce(r.learned, '[]'::jsonb), v_max)"), '最大MPが減ったぶん編成を収める')
+  // 新しい盤面の種（§12）と、使う関数より後ろ・前の移し替えより後ろに置く
+  assert.ok(SQL.indexOf(m[0]) > SQL.indexOf('-- @@end:asc_mp'))
+  assert.ok(SQL.indexOf(m[0]) > SQL.indexOf('create or replace function public.v2cap_fit_set('))
+  assert.ok(SQL.indexOf(m[0]) > SQL.indexOf("values ('learn_every3_20261023');"))
+})
+
 test('【確定】2026-10-15 盗賊の配分（LUK29→19・STR+10）の移し替え（一度だけ）：盗賊の盤面だけ空に・編成を収め直す', () => {
   const m = SQL.match(/if not exists \(select 1 from public\.v2cap_migrations where key = 'touzoku_luk_20261015'\) then([\s\S]*?)insert into public\.v2cap_migrations \(key\) values \('touzoku_luk_20261015'\);/)
   assert.ok(m, '印つきで一度だけ')

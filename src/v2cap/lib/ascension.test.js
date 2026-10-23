@@ -10,9 +10,10 @@ import { SKILLS, SKILL_BY_NAME, skillsOf, isPassive } from './skills.js'
 import { CLASSES, JOB_BONUS, stageOf, jobMaxOf, attackKindOf, jobUpNote, jobGainText } from './jobs.js'
 import { statBreakdown, toFighter } from './loadout.js'
 import { ASC_LAYOUT } from './ascLayout.js'
+import { minApAll, reachOf } from './ascReach.js'
 import { ASC_ART } from './ascArtList.js'
 import {
-  ASC_DIRS, ASC_SHAPE, ASC_UP_DEFAULT, ASC_SKILL_UP, ASC_COUNT_UP, ASC_CLASSES, ASC_RESET_GOLD_PER_LV,
+  ascDirsOf, ASC_SHAPE, ASC_UP_DEFAULT, ASC_SKILL_UP, ASC_COUNT_UP, ASC_CLASSES, ASC_RESET_GOLD_PER_LV,
   treeOf, treeSizeOf, areaStatsOf, statCountsOf, ascKindOf, ascUpOf, ascendSkill, splitUp, ascStateOf, apTotalOf, apSpentOf, apLeftOf,
   ascEffectsOf, ascPctGain, ascendError, ascResetGoldOf, nodeLines, ascSkillDetail, routeTo, mpNodesOf, ASC_STAT_COLOR,
 } from './ascension.js'
@@ -21,47 +22,75 @@ const prof = (cls, jlv, asc = {}, over = {}) => ({
   username: 'x', class: cls, lv: 30, hp: 400, mp: 60, str: 50, dex: 30, agi: 30, int_stat: 30, vit: 30, luk: 10,
   jobs: { [cls]: { lv: jlv, exp: 0 } }, skill_sets: {}, equipped: {}, ascension: asc, gold: 0, ...over,
 })
-// 90度回す（盤の形は1方向ぶんを回して4つ置いてある）
+// 90度回す（初期職の盤の形は1方向ぶんを回して4つ置いてある）
 const rot = ([x, y]) => [0 - y, x]   // 0 - y（-y だと 0 が -0 になって比べられない）
+// 上位職（ペンタゴン）は72度ずつ回す（座標は小数3桁に丸めてあるので近さで比べる）
+const rot72 = ([x, y]) => { const a = (2 * Math.PI) / 5; return [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)] }
 
-test('【確定】盤面の形（段階ごとに1つ）：起点から4方向に枝分かれした木・つながりは両向き・全部つながっている・4方向とも同じ形', () => {
+test('【確定】盤面の形（段階ごとに1つ）：起点から枝分かれ・つながりは両向き・全部つながっている・どの方向も同じ形', () => {
+  assert.deepEqual(Object.fromEntries(Object.entries(ASC_LAYOUT).map(([k, L]) => [k, L.dirs])), { shoki: 4, ichiji: 5 }, '初期職4方向・上位職5方向（ペンタゴン）')
   for (const [stage, L] of Object.entries(ASC_LAYOUT)) {
     const byId = new Map(L.nodes.map(n => [n.id, n]))
-    assert.equal(L.nodes.length, 1 + ASC_DIRS * L.perQuad, stage)
+    const D = ascDirsOf(stage)
+    assert.equal(D, L.dirs)
+    assert.equal(L.nodes.length, 1 + D * L.perQuad, stage)
     assert.deepEqual(byId.get(0), { ...byId.get(0), q: -1, x: 0, y: 0, role: 'start' })
     for (const n of L.nodes) {
       for (const l of n.links) assert.ok(byId.get(l).links.includes(n.id), `${stage} ${n.id}-${l} は両向き`)
-      for (const l of n.links) assert.equal(Math.abs(byId.get(l).x - n.x) + Math.abs(byId.get(l).y - n.y), 1, '隣り合うマスだけつなぐ')
+      for (const l of n.links) {
+        const m = byId.get(l)
+        if (stage === 'shoki') assert.equal(Math.abs(m.x - n.x) + Math.abs(m.y - n.y), 1, '隣り合うマスだけつなぐ')
+        else { const len = Math.hypot(m.x - n.x, m.y - n.y); assert.ok(len >= 0.99 && len <= 1.31, `${stage} ${n.id}-${l} の線は長さ1〜1.3（${len}）`) }
+      }
     }
+    // マスどうしが重ならない（絵の大きさ0.84より離れている）
+    for (const a of L.nodes) for (const b of L.nodes) if (a.id < b.id) assert.ok(Math.hypot(a.x - b.x, a.y - b.y) >= 0.95, `${stage} ${a.id} と ${b.id} が近すぎる`)
     // 起点から全部たどれる・d はつながりの数
     const seen = new Map([[0, 0]])
     const queue = [0]
     while (queue.length) { const id = queue.shift(); for (const l of byId.get(id).links) if (!seen.has(l)) { seen.set(l, seen.get(id) + 1); queue.push(l) } }
     assert.equal(seen.size, L.nodes.length, `${stage} は全部つながっている`)
     for (const n of L.nodes) assert.equal(n.d, seen.get(n.id))
-    // 4方向とも同じ形（方向 q の i 番目を90度回すと方向 q+1 の i 番目）・役も同じ
-    for (const n of L.nodes.filter(m => m.q >= 0 && m.q < 3)) {
+    // どの方向も同じ形（方向 q の i 番目を 90度（初期職）／72度（上位職）回すと方向 q+1 の i 番目）・役も同じ
+    for (const n of L.nodes.filter(m => m.q >= 0 && m.q < D - 1)) {
       const m = byId.get(n.id + L.perQuad)
-      assert.deepEqual([m.x, m.y], rot([n.x, n.y]))
+      if (stage === 'shoki') assert.deepEqual([m.x, m.y], rot([n.x, n.y]))
+      else { const [x, y] = rot72([n.x, n.y]); assert.ok(Math.hypot(m.x - x, m.y - y) < 0.01, `${stage} ${n.id}→${m.id} は72度回した所`) }
       assert.equal(m.role, n.role)
     }
-    // 方向ごとに 大マス1・スキルの置き場2。となりの方向へ渡るつながりがある（決まった道にしない）
-    for (let q = 0; q < ASC_DIRS; q++) {
+    // 方向ごとに 大マス（初期職1・上位職2）・スキルの置き場2。となりの方向へ渡るつながりがある（決まった道にしない）
+    for (let q = 0; q < D; q++) {
       const ns = L.nodes.filter(n => n.q === q)
-      assert.equal(ns.filter(n => n.role === 'big').length, 1)
+      assert.equal(ns.filter(n => n.role === 'big').length, stage === 'shoki' ? 1 : 2)
       assert.equal(ns.filter(n => n.role.startsWith('skill')).length, 2)
       assert.ok(ns.some(n => n.links.some(l => byId.get(l).q >= 0 && byId.get(l).q !== q)), `${stage} 方向${q} はとなりの方向へ渡れる`)
     }
-    // 大マス・スキルマスは「行き着く先」（枝の先・ほかの特別なマスと隣り合わない）
     const special = L.nodes.filter(n => n.role === 'big' || n.role.startsWith('skill'))
-    for (const n of special) {
-      assert.equal(n.links.length, 1, `${stage} ${n.id}（${n.role}）は枝の先`)
-      for (const m of special) if (m !== n) assert.ok(Math.abs(m.x - n.x) + Math.abs(m.y - n.y) > 1)
+    if (stage === 'shoki') {
+      // 初期職：大マス・スキルマスは「行き着く先」（枝の先・ほかの特別なマスと隣り合わない）
+      for (const n of special) {
+        assert.equal(n.links.length, 1, `${stage} ${n.id}（${n.role}）は枝の先`)
+        for (const m of special) if (m !== n) assert.ok(Math.abs(m.x - n.x) + Math.abs(m.y - n.y) > 1)
+      }
+    } else {
+      // 上位職（2026-10-23）：技のマスは**道の途中**（前と先の2つにつながる）・その先へ4マス進むと大マス（道の先＝枝の先）
+      for (const n of special.filter(m => m.role === 'big')) assert.equal(n.links.length, 1, `${stage} ${n.id} の大マスは道の先`)
+      for (const n of special.filter(m => m.role.startsWith('skill'))) {
+        assert.equal(n.links.length, 2, `${stage} ${n.id} の技のマスは道の途中`)
+        let cur = n
+        for (let k = 0; k < 4; k++) {
+          const next = cur.links.map(l => byId.get(l)).filter(m => m.d === cur.d + 1)
+          assert.equal(next.length, 1, `${stage} ${n.id} の先は1本道`)
+          cur = next[0]
+          if (k < 3) assert.equal(cur.role, 'stat')
+        }
+        assert.equal(cur.role, 'big', `${stage} ${n.id} の4マス先は大マス`)
+      }
     }
     // 大マスはその方向でいちばん遠い
-    for (let q = 0; q < ASC_DIRS; q++) {
+    for (let q = 0; q < D; q++) {
       const ns = L.nodes.filter(n => n.q === q)
-      assert.equal(ns.find(n => n.role === 'big').d, Math.max(...ns.map(n => n.d)))
+      assert.equal(Math.max(...ns.filter(n => n.role === 'big').map(n => n.d)), Math.max(...ns.map(n => n.d)))
     }
     // 小マスの段は起点から遠いほど上（近いマスより下の段にならない）
     const st = L.nodes.filter(n => n.role !== 'start')
@@ -69,23 +98,58 @@ test('【確定】盤面の形（段階ごとに1つ）：起点から4方向に
   }
 })
 
-test('【確定】どの職業にも盤面がある。初期職56マス・上位職96マス＝全部は埋まらず半分くらい', () => {
+test('【確定】どの職業にも盤面がある。初期職56マス（全部は埋まらず半分くらい）・上位職はペンタゴン165マス（2026-10-23）', () => {
   assert.equal(ASC_CLASSES.length, CLASSES.length, '31職すべて')
   for (const cls of ASC_CLASSES) {
     const size = treeSizeOf(cls)
-    assert.equal(size, stageOf(cls) === 'shoki' ? 56 : 96, cls)
+    assert.equal(size, stageOf(cls) === 'shoki' ? 56 : 165, cls)
     const ap = apTotalOf(cls, jobMaxOf(cls))
-    assert.ok(ap / size > 0.45 && ap / size < 0.55, `${cls}：${ap}/${size}`)
+    if (stageOf(cls) === 'shoki') assert.ok(ap / size > 0.45 && ap / size < 0.55, `${cls}：${ap}/${size}`)
+    else assert.ok(ap / size > 0.25 && ap / size < 0.35, `${cls}：${ap}/${size}（上位職は技のマスを遠くした＝3割くらい）`)
   }
   assert.equal(apTotalOf('剣士', 30), 29)
   assert.equal(apTotalOf('狂戦士', 50), 49)
 })
 
-test('【確定】大マス（4方向の枝の先）は伸びるステの上位4つの+5%・スキルマスは技1つにつき1マス（パッシブには無い）', () => {
+test('【確定】2026-10-23 上位クラス（ペンタゴン）：AP49 で技のマスだけなら最大5つ・技の先の大マスまで取る道なら最大3本・いちばん近い技のマスは11AP', () => {
+  // ユーザー「スキルの強化にすぐ達することができるからもっと遠くに」「複数スキル強化を物理的に取れないように」→
+  // 「多くて5つぐらい、ただ技のマスの先にステータス上昇大き目のマスがあって、それも取るなら3つになる感じ」。決まりで止めず、盤面の遠さで決める
+  const ap = apTotalOf('侍', jobMaxOf('侍'))
+  assert.equal(ap, 49)
+  for (const cls of ASC_CLASSES.filter(c => stageOf(c) === 'ichiji')) {
+    const t = treeOf(cls)
+    const adj = t.nodes.map(n => n.links)
+    const skills = t.nodes.filter(n => n.type === 'skill')
+    assert.equal(skills.length, 10, `${cls} は技10個すべてにマス`)
+    for (const n of skills) assert.equal(n.d, 11, `${cls} ${n.skill} は起点から11マス目`)
+    const rS = reachOf(minApAll(adj, 0, skills.map(n => n.id)), skills.length, ap)
+    assert.equal(rS.kmax, 5, `${cls}：技のマスだけ（k個に要るAP ${rS.minFor.slice(1).join('/')}）`)
+    assert.equal(rS.minFor[1], 11)
+    // 技の先の大マス（その技の道の先）
+    const bigs = skills.map(n => { let cur = n; for (let k = 0; k < 4; k++) cur = t.byId[cur.links.find(l => t.byId[l].d === cur.d + 1)]; return cur })
+    for (const b of bigs) assert.equal(b.type, 'big')
+    const rB = reachOf(minApAll(adj, 0, bigs.map(n => n.id)), bigs.length, ap)
+    assert.equal(rB.kmax, 3, `${cls}：大マスまでの道（k本に要るAP ${rB.minFor.slice(1).join('/')}）`)
+    assert.equal(rB.within[3], rB.total[3], `${cls}：どの3本でも取れる`)
+  }
+  // 数え方そのもの：起点から一列の3マス（0-1-2-3）と枝1つ（2-4）。3と4を取るのは 1・2・3・4 の4AP
+  const line = [[1], [0, 2], [1, 3, 4], [2], [2]]
+  const c = minApAll(line, 0, [3, 4])
+  assert.deepEqual([c[1], c[2], c[3]], [3, 3, 4])
+  assert.deepEqual(reachOf(c, 2, 3).kmax, 1)
+})
+
+test('【確定】大マスは伸びるステの上位（初期職4つ・上位職5つ＝方向の数）の+5%・方向ごとに同じステ・スキルマスは技1つにつき1マス（パッシブには無い）', () => {
   for (const cls of ASC_CLASSES) {
     const t = treeOf(cls)
-    const bigs = t.nodes.filter(n => n.type === 'big').sort((a, b) => a.q - b.q)
-    assert.deepEqual(bigs.map(n => n.stat), areaStatsOf(cls), cls)
+    const D = ascDirsOf(stageOf(cls))
+    const stats = areaStatsOf(cls)
+    assert.equal(stats.length, D, cls)
+    const bigs = t.nodes.filter(n => n.type === 'big')
+    // 2026-10-23 ユーザー「3つとも同じステ」（ペンタゴンでは1方向に2つ）＝方向のステ
+    for (const b of bigs) assert.equal(b.stat, stats[b.q], `${cls} ${b.id}`)
+    assert.deepEqual([...new Set(bigs.map(n => n.q))].sort(), Array.from({ length: D }, (_, q) => q))
+    assert.equal(bigs.length, stageOf(cls) === 'shoki' ? 4 : 10, cls)
     for (const b of bigs) assert.equal(b.pct, 5)
     const onBoard = t.nodes.filter(n => n.type === 'skill').map(n => n.skill)
     assert.deepEqual([...onBoard].sort(), skillsOf(cls).map(s => s.name).sort(), cls)
@@ -93,6 +157,7 @@ test('【確定】大マス（4方向の枝の先）は伸びるステの上位4
   }
   assert.deepEqual(areaStatsOf('剣士'), ['str', 'dex', 'agi', 'vit'])
   assert.deepEqual(areaStatsOf('魔法使い'), ['int_stat', 'mp', 'agi', 'hp'])
+  assert.deepEqual(areaStatsOf('侍'), ['str', 'dex', 'agi', 'hp', 'vit'], '上位職は5つ（ペンタゴン）')
 })
 
 test('【確定】小マスのステは盤面全体に混ぜる（数はクラスのステの配分の割合・どの方向にもいろいろなステ）', () => {
@@ -107,7 +172,7 @@ test('【確定】小マスのステは盤面全体に混ぜる（数はクラ�
     const top = areaStatsOf(cls)[0]
     assert.equal(Math.max(...Object.values(got)), got[top], `${cls} は ${top} がいちばん多い`)
     // どの方向にも3種以上のステ（方向ごとにまとめない）
-    for (let q = 0; q < ASC_DIRS; q++) {
+    for (let q = 0; q < ascDirsOf(stageOf(cls)); q++) {
       const kinds = new Set(smalls.filter(n => n.q === q).map(n => n.stat))
       assert.ok(kinds.size >= 3, `${cls} 方向${q}：${[...kinds].join(',')}`)
     }
