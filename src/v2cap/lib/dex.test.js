@@ -66,6 +66,12 @@ test('【確定】2026-10-24 図鑑にユニークの情報は載せない（ボ
   // 倒した敵の絵をタップすると大きく出す（大きい版・読めなければ小さい版）
   assert.ok(code.includes('const canZoom = found && !!art'), '倒していない敵（影）は大きくしない')
   assert.ok(code.includes('enemyArtBigSrc(e.name) || enemyArtSrc(e.name)'))
+  // 大きく出す小窓の上の帯：名前を大きく、その右に役割の札とLV（2026-10-24 ユーザー指示「モンスター名を大きく、通常LV1はモンスターの右に」）
+  const zoom = code.slice(code.indexOf('function ZoomModal'))
+  const head = zoom.slice(zoom.indexOf('const title = ('), zoom.indexOf('return ('))
+  assert.ok(head.indexOf("fontSize:'20px'") > -1 && head.indexOf('{e.name}') < head.indexOf('{role.label}') && head.indexOf('{role.label}') < head.indexOf('LV{lvText(e)}'), '名前（大）→ 役割 → LV の順で1行')
+  assert.ok(zoom.includes('<V2Modal title={title}'))
+  assert.equal(zoom.split('LV{lvText(e)}').length, 2, '絵の下にはLVの行を出さない')
 })
 
 test('倒すまでは見つけていない（???）。見つけた数と割合', () => {

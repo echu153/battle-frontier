@@ -9,6 +9,7 @@ import { DEX_ROLES, DEX_ROLE, DEX_ALL, dexAreaOf, dropInfoOf, killsOf, isFound, 
 import { enemyArtSrc, enemyArtBigSrc } from '../lib/enemyArt.js'
 import { chip } from './v2capGearView.js'
 import V2capIcon from './V2capIcon.jsx'
+import { JP_BOLD } from './casinoStyle.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — モンスター図鑑
@@ -150,19 +151,24 @@ export default function V2capDex({ prof }) {
 const lvText = (e) => (e.lvMax > e.lv ? `${e.lv}〜${e.lvMax}` : e.lv)
 
 // 絵を大きく出す小窓。大きい版（512×512）が読めないときは小さい版（192×192）を広げて出す。絵を押しても閉じる
+// 【確定】2026-10-24 ユーザー指示「モンスター名を大きく、通常LV1はモンスターの右に記載するようにして」：
+//   上の帯に名前を大きく（日本語の太字は JP_BOLD）、その右に役割の札とLV。絵の下の行はやめた
 function ZoomModal({ e, onClose }) {
   const role = DEX_ROLE[e.role]
   const [src, setSrc] = useState(() => enemyArtBigSrc(e.name) || enemyArtSrc(e.name))
+  const title = (
+    <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
+      <span style={{ fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'20px', color:'#ffffff', textShadow:`0 0 8px ${role.color}88` }}>{e.name}</span>
+      <span style={{ color: role.color, border:`1px solid ${role.color}`, padding:'0 5px', fontSize:'11px' }}>{role.label}{e.band ? `・${e.band}` : ''}</span>
+      <span style={{ color:'#cfe2ff', fontSize:'13px' }}>LV{lvText(e)}</span>
+    </div>
+  )
   return (
-    <V2Modal title={e.name} color={role.color} onClose={onClose}>
+    <V2Modal title={title} color={role.color} onClose={onClose}>
       <img src={src} alt={e.name} draggable={false} onClick={onClose}
         onError={() => { const small = enemyArtSrc(e.name); if (small && src !== small) setSrc(small) }}
         style={{ display:'block', width:'100%', maxWidth:'360px', aspectRatio:'1 / 1', objectFit:'contain', margin:'0 auto', cursor:'zoom-out',
           borderRadius:'8px', border:`1px solid ${role.color}55`, background:'radial-gradient(circle at 50% 40%, #1d3554 0%, #0b1a2e 75%)' }} />
-      <div style={{ textAlign:'center', marginTop:'6px', fontSize:'11px' }}>
-        <span style={{ color: role.color, border:`1px solid ${role.color}`, padding:'0 4px', fontSize:'9px' }}>{role.label}{e.band ? `・${e.band}` : ''}</span>
-        <span style={{ color:'#cfe2ff', marginLeft:'6px' }}>LV{lvText(e)}</span>
-      </div>
     </V2Modal>
   )
 }
