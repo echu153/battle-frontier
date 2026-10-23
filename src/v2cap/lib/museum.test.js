@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
   MUSEUM_TIERS, tierOfPlus, MUSEUM_GROUPS, MUSEUM_ITEMS, isMuseumItem, raritiesOfGroup, museumKey, registeredSetOf, tiersOf,
-  uniqueHidden, museumCountOf, wornInvIdsOf, donatablesOf, bulkDonatable, donatedText, donatedTail,
+  museumCountOf, wornInvIdsOf, donatablesOf, donatedText, donatedTail,
 } from './museum.js'
 import { ITEMS, STARTER_ITEMS, UNIQUE_ITEMS, ITEM_BY_ID } from './equipment.js'
 import { AREA_LIST } from './areas.js'
@@ -23,16 +23,17 @@ test('【確定】段階は +0／+5／+9 ちょうど（10-23 ユーザー指示
   for (let p = 0; p <= PLUS_MAX; p++) assert.equal(tierOfPlus(p), p === 0 ? 0 : p === 5 ? 1 : p === 9 ? 2 : null, `+${p}`)
 })
 
-test('並びは エリア1〜15・ユニーク の16のまとまり。初期装備は入らない（10-23 ユーザー指示「初期装備は対象外」）', () => {
-  assert.equal(MUSEUM_GROUPS.length, AREA_LIST.length + 1)
+test('並びは エリア1〜15 の15のまとまり。初期装備・ユニークは入らない（10-23 ユーザー指示「初期装備は対象外」「ユニーク装備は…あることすら悟られないように」）', () => {
+  assert.equal(MUSEUM_GROUPS.length, AREA_LIST.length)
   AREA_LIST.forEach((a, i) => assert.equal(MUSEUM_GROUPS[i].label, a.name))
-  assert.equal(MUSEUM_GROUPS.at(-1).label, 'ユニーク')
+  assert.ok(!MUSEUM_GROUPS.some(g => g.label === 'ユニーク'))
   const ids = MUSEUM_ITEMS.map(i => i.id)
   assert.equal(new Set(ids).size, ids.length, '重なりなし')
-  assert.equal(ids.length, ITEMS.length + UNIQUE_ITEMS.length)
+  assert.equal(ids.length, ITEMS.length)
+  for (const u of UNIQUE_ITEMS) assert.equal(isMuseumItem(u), false, u.name)
   for (const s of STARTER_ITEMS) assert.equal(isMuseumItem(s), false, s.name)
   assert.deepEqual(raritiesOfGroup(MUSEUM_GROUPS[0]), ['N', 'R', 'E', 'L'])
-  assert.deepEqual(raritiesOfGroup(MUSEUM_GROUPS.at(-1)), ['U'])
+  for (const g of MUSEUM_GROUPS) assert.deepEqual(raritiesOfGroup(g), ['N', 'R', 'E', 'L'], g.label)
 })
 
 test('寄贈できる持ち物：初期装備でない・着けていない・+0／+5／+9・その段階がまだ。同じ装備と段階は1つ（個数も出す）', () => {
@@ -53,10 +54,8 @@ test('寄贈できる持ち物：初期装備でない・着けていない・+0
   const prof = { equipped: { weapon: 1, head: null } }
   const rows = [{ base_id: a, tier: 1, plus: 5 }]
   const d = donatablesOf(prof, inventory, rows)
-  assert.deepEqual(d.map(x => [x.inv.id, x.tier, x.copies]), [[2, 0, 2], [5, 2, 1], [10, 0, 1]])
+  assert.deepEqual(d.map(x => [x.inv.id, x.tier, x.copies]), [[2, 0, 2], [5, 2, 1]], 'ユニークは出さない')
   assert.deepEqual([...wornInvIdsOf(prof)], ['1'], '着けている枠の値そのもの（空の枠は数えない）')
-  // まとめて選ぶときはユニークを入れない
-  assert.deepEqual(d.filter(bulkDonatable).map(x => x.inv.id), [2, 5])
   // 登録の印・数
   const reg = registeredSetOf(rows)
   assert.ok(reg.has(museumKey(a, 1)))
@@ -66,12 +65,19 @@ test('寄贈できる持ち物：初期装備でない・着けていない・+0
   assert.equal(c.items, MUSEUM_ITEMS.length)
 })
 
-test('ユニークは、どの段階も寄贈していないものは名前を出さない（10-23 ユーザー指示「？？？で」）', () => {
-  const u = UNIQUE_ITEMS[0]
-  assert.equal(uniqueHidden(registeredSetOf([]), u), true)
-  assert.equal(uniqueHidden(registeredSetOf([{ base_id: u.id, tier: 2 }]), u), false, 'どれか1つの段階でも寄贈すれば出す')
-  assert.equal(uniqueHidden(registeredSetOf([]), ITEMS[0]), false, 'ユニーク以外は隠さない')
-  assert.ok(src('../components/V2capMuseum.jsx').includes("{hidden ? '？？？' : it.name}"))
+test('★ユニークは寄贈できない・博物館の画面のどこにも出さない（10-23 ユーザー指示「あることすら悟られないようにしたい」）', () => {
+  // 画面の文字（コードの中の説明 // と {/* */} を除く）に「ユニーク」が無い
+  const m = src('../components/V2capMuseum.jsx')
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '').split('\n').map(l => l.replace(/\/\/.*$/, '')).join('\n')
+  assert.ok(!m.includes('ユニーク'), '画面にユニークの文字が無い')
+  assert.ok(!/UNIQUE|isUnique|uniqueHidden|bulkDonatable/.test(m), 'ユニークを扱うコードも無い')
+  // 持っていても寄贈できる装備に出ない
+  const inv = UNIQUE_ITEMS.slice(0, 3).map((u, i) => ({ id: 100 + i, base_id: u.id, plus: 0 }))
+  assert.deepEqual(donatablesOf({ equipped: {} }, inv, []), [])
+  // サーバーも弾く（断りの文にユニークと書かない）
+  const take = fnBody('v2cap_museum_take')
+  assert.match(take, /if v_item\.rarity = 'U' then\s+return jsonb_build_object\('ok', false, 'error', 'この装備は寄贈できません'\);/)
+  assert.ok(!/'error', '[^']*ユニーク/.test(take), '断りの文にユニークと書かない')
 })
 
 test('寄贈の結果の文（10-23 ユーザー指示「「ブロンズダガー」を寄贈しました（未強化で登録）って出るように」）', () => {
@@ -131,7 +137,9 @@ test('画面：メニューに博物館・寄贈は確認→結果のポップ�
   assert.ok(m.includes('<button onClick={e => { e.stopPropagation(); setConfirm([d]) }}'))
   assert.ok(m.includes('<span style={{ color: RARITY_COLOR[d.item.rarity], ...(size ? { fontSize: size } : null) }}>{d.item.name}</span>'), '大きくするのは名前の span だけ')
   assert.ok(m.includes("title={result.ok ? '🏺 寄贈しました'"), '結果のポップアップ')
-  assert.ok(m.includes('ユニークの報酬は今後追加します'), 'ユニークの報酬はあとで（ユーザー）')
+  assert.ok(m.includes('エリアコンプリート：スタミナ回復−{MUSEUM_AREA_STAM_SEC}秒'), 'コンプリートの説明に（…）を付けない（10-23）')
+  assert.ok(m.includes('3段階すべて寄贈で スタミナ回復−{MUSEUM_RARITY_STAM_SEC}秒'), '3段階の報酬の書き方（10-23）')
+  assert.ok(m.includes('const tierTag = (t) => `【${t.label}】`'), '段階を【】で囲む（10-23）')
   assert.ok(m.includes('{result.rewards.map(w => <div key={w.key} style={{ color:\x27#ffcc00\x27 }}>🎉 {rewardText(w)}</div>)}'), '寄贈のあとに新しい報酬')
   // 段階の印に「以上」を出さない
   assert.ok(!MUSEUM_TIERS.some(t => t.label.includes('以上')))

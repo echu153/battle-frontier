@@ -6,8 +6,7 @@ import { chip } from './v2capGearView.js'
 import { RARITIES, RARITY_COLOR, ITEM_BY_ID, rarityLabel, kindLabel } from '../lib/equipment.js'
 import { plusOf, plusLabel } from '../lib/smith.js'
 import {
-  MUSEUM_TIERS, MUSEUM_GROUPS, raritiesOfGroup, registeredSetOf, tiersOf, uniqueHidden, museumCountOf, donatablesOf,
-  bulkDonatable, donatedTail,
+  MUSEUM_TIERS, MUSEUM_GROUPS, raritiesOfGroup, registeredSetOf, tiersOf, museumCountOf, donatablesOf, donatedTail,
   MUSEUM_SET_SP, MUSEUM_RARITY_STAM_SEC, MUSEUM_AREA_STAM_SEC, MUSEUM_REWARD_RARITIES, areaProgressOf, museumRewardTotalsOf, rewardText, sortRewards,
 } from '../lib/museum.js'
 import { STAMINA_RECOVER_MS, staminaSpanMsOf } from '../lib/level.js'
@@ -17,19 +16,23 @@ import { mmss } from '../core/stamina.js'
 // 「レベルキャップあり」版 — 博物館（装備の寄贈）。決まりの正は src/v2cap/lib/museum.js・サーバーは SQL §14
 //   【確定】2026-10-22 ユーザー指示「V1にあるような装備を寄贈する博物館を作成したい／
 //     登録時に能力もらえるけど詳細はあとで作成する、とりあえず土台だけ作って」
-//   ・上：説明と登録数（段階ごと）。登録でもらえる能力は「準備中」
+//   ・上：説明と登録数（段階ごと）・報酬の決まりともらった合計
 //   ・寄贈できる装備（持ち物のうち、着けていない・+0／+5／+9・まだ登録していない段階のもの）→「寄贈」→確認のポップアップ（装備はなくなる）
-//   ・登録の一覧：エリア1〜15・ユニーク のタブ。装備ごとに 未強化／+5／+9 の印（登録した段階は色つき）
+//   ・登録の一覧：エリア1〜15 のタブ。装備ごとに 未強化／+5／+9 の印（登録した段階は色つき）
 //   【確定】2026-10-23 ユーザー指示（実機を見て）：
 //   ・寄贈したあとに、もう1つポップアップ「「ブロンズダガー」を寄贈しました（未強化で登録）」（一括寄贈は寄贈した数と1行ずつ）
-//   ・一括寄贈：チェックで選ぶ・レア度ごとに「全部」・選んだぶんを寄贈（鍛冶屋のまとめての分解と同じ形。
-//     まとめて選ぶときはユニークを入れない＝チェックで1つずつなら選べる）
-//   ・ユニークは、どの段階も寄贈していないものは名前を「？？？」に
+//   ・一括寄贈：チェックで選ぶ・レア度ごとに「全部」・選んだぶんを寄贈（鍛冶屋のまとめての分解と同じ形）
+//   【確定】同じ日 ユーザー指示「ユニーク装備は寄贈できないようにあることすら悟られないようにしたい」：
+//     ユニークは一覧にも寄贈できる装備にも出さない・説明にもユニークの文字を書かない（決まりは lib/museum.js）
+//   【確定】同じ日 ユーザー指示「コンプリート説明の（…）いらない」「3段階すべて寄贈でスタミナ−1秒 みたいに」「強化値を【】とかで囲って」：
+//     段階は【未強化】【+5】【+9】・報酬は「1段階そろうごとに ステータスポイント+n ／ 3段階すべて寄贈で スタミナ回復−1秒」
 // ============================================================
 const tierBadge = (t, on = true) => ({
   fontSize:'9px', padding:'0 4px', border:`1px solid ${on ? t.color : '#223a5e'}`, color: on ? t.color : TEXT.empty, flexShrink:0,
 })
 const rowKey = (d) => `${d.item.id}|${d.tier}`
+// 段階の見出し【未強化】【+5】【+9】（2026-10-23 ユーザー指示「強化値を【】とかで囲って、見やすいように」）
+const tierTag = (t) => `【${t.label}】`
 // size … 装備名だけの文字の大きさ（1つずつの寄贈の確認＝2026-10-23 ユーザー指示「装備の名前見やすくするようにフォントの大きさ大きく」「装備名だけね」）
 const NameLine = ({ d, size }) => (
   <>
@@ -71,7 +74,7 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
     if (next.has(key)) next.delete(key); else next.add(key)
     return next
   })
-  const pickAll = (list) => setPicked(prev => new Set([...prev, ...list.filter(bulkDonatable).map(rowKey)]))
+  const pickAll = (list) => setPicked(prev => new Set([...prev, ...list.map(rowKey)]))
 
   const donate = async () => {
     const list = confirm || []
@@ -159,16 +162,15 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
         <div style={{ display:'flex', flexWrap:'wrap', gap:'10px', alignItems:'center', fontSize:'11px', marginTop:'6px' }}>
           {MUSEUM_TIERS.map((t, i) => (
             <span key={t.key} style={{ color: TEXT.label }}>
-              <span style={{ color: t.color }}>{t.label}</span> <span style={{ color:'#ffcc00' }}>{total.byTier[i]}</span> / {total.items}
+              <span style={{ color: t.color }}>{tierTag(t)}</span><span style={{ color:'#ffcc00' }}>{total.byTier[i]}</span> / {total.items}
             </span>
           ))}
         </div>
-        {/* ★報酬（2026-10-23 ユーザー指示・決まりは lib/museum.js）。ユニークの報酬は今後 */}
+        {/* ★報酬（2026-10-23 ユーザー指示・決まりは lib/museum.js） */}
         <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.8, marginTop:'6px', paddingTop:'6px', borderTop:'1px solid #002244' }}>
-          報酬：エリアの1つのレア度を、段階（未強化・+5・+9）ごとに全部寄贈すると ステータスポイント
-          （{MUSEUM_REWARD_RARITIES.map((r, i) => <span key={r}>{i ? '・' : ''}<span style={{ color: RARITY_COLOR[r] }}>{rarityLabel(r)}</span>{MUSEUM_SET_SP[r]}</span>)}）。
-          そのレア度を3段階ともそろえると スタミナの回復が{MUSEUM_RARITY_STAM_SEC}秒短く、
-          エリアの全部（ユニーク以外）をそろえると さらに{MUSEUM_AREA_STAM_SEC}秒短くなります（どれもずっと続く）。ユニークの報酬は今後追加します
+          報酬（どれもずっと続く）：エリアのレア度ごとに、1つの段階の装備を全部寄贈すると ステータスポイント
+          （{MUSEUM_REWARD_RARITIES.map((r, i) => <span key={r}>{i ? '・' : ''}<span style={{ color: RARITY_COLOR[r] }}>{rarityLabel(r)}</span>+{MUSEUM_SET_SP[r]}</span>)}）。
+          3段階すべて寄贈すると スタミナ回復−{MUSEUM_RARITY_STAM_SEC}秒。エリアをコンプリートすると さらにスタミナ回復−{MUSEUM_AREA_STAM_SEC}秒
         </div>
         <div style={{ color:'#ffcc00', fontSize:'11px', marginTop:'4px' }}>
           もらった報酬：ステータスポイント +{totals.sp}　スタミナの回復 −{stamCut}秒（{mmss(STAMINA_RECOVER_MS)} → {mmss(staminaSpanMsOf(prof))}）
@@ -197,9 +199,7 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
                       </button>
                     )
                   })}
-                  <button onClick={() => pickAll(donatables)} disabled={busy || !donatables.some(bulkDonatable)} style={miniBtn('#88ccff')}>
-                    ユニーク以外をすべて（{donatables.filter(bulkDonatable).length}）
-                  </button>
+                  <button onClick={() => pickAll(donatables)} disabled={busy} style={miniBtn('#88ccff')}>すべて（{donatables.length}）</button>
                   <button onClick={() => setPicked(new Set())} disabled={busy || picked.size === 0} style={miniBtn('#62789a')}>選択を外す</button>
                 </div>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:'6px', alignItems:'center' }}>
@@ -208,7 +208,6 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
                     選んだ{pickedRows.length}個を寄贈
                   </button>
                 </div>
-                <div style={{ color: TEXT.sub, marginTop:'4px' }}>まとめて選ぶときは、ユニークは選びません（チェックで1つずつなら選べます）</div>
               </div>
               <div style={{ display:'grid', gap:'3px', maxHeight:'360px', overflowY:'auto' }}>
                 {donatables.map(d => {
@@ -243,50 +242,45 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
             <button key={g.key} onClick={() => setGroupKey(g.key)} style={chip(g.key === group.key)}>{g.label}</button>
           ))}
         </div>
-        <div style={{ color: TEXT.label, fontSize:'10px', marginBottom:'8px' }}>
-          {group.label}：
+        <div style={{ display:'flex', flexWrap:'wrap', gap:'4px 12px', color: TEXT.label, fontSize:'11px', marginBottom:'4px' }}>
+          <span style={{ color:'#cfe2ff' }}>{group.label}</span>
           {MUSEUM_TIERS.map((t, i) => (
-            <span key={t.key}>{i ? '・' : ''}<span style={{ color: t.color }}>{t.label}</span> {groupCount.byTier[i]}/{groupCount.items}</span>
+            <span key={t.key}><span style={{ color: t.color }}>{tierTag(t)}</span>{groupCount.byTier[i]}/{groupCount.items}</span>
           ))}
         </div>
-        {/* エリアコンプリート（2026-10-23）／ユニークの報酬は今後 */}
-        {progress ? (
-          <div style={{ fontSize:'10px', marginBottom:'8px', color: progress.complete ? '#ffcc00' : TEXT.label }}>
-            {progress.complete ? '✔ ' : ''}エリアコンプリート（ユニーク以外・全部のレア度を3段階）：スタミナの回復−{MUSEUM_AREA_STAM_SEC}秒
-          </div>
-        ) : <div style={{ fontSize:'10px', marginBottom:'8px', color: TEXT.empty }}>ユニークの報酬は今後追加します</div>}
+        {/* エリアコンプリート（2026-10-23） */}
+        <div style={{ fontSize:'10px', marginBottom:'8px', color: progress.complete ? '#ffcc00' : TEXT.label }}>
+          {progress.complete ? '✔ ' : ''}エリアコンプリート：スタミナ回復−{MUSEUM_AREA_STAM_SEC}秒
+        </div>
         {raritiesOfGroup(group).map(r => {
-          const rp = progress?.rarities.find(x => x.rarity === r)
+          const rp = progress.rarities.find(x => x.rarity === r)
           return (
           <div key={r} style={{ marginBottom:'8px' }}>
-            <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:'4px 8px', marginBottom:'4px', fontSize:'10px' }}>
-              <span style={{ color: RARITY_COLOR[r], fontSize:'11px' }}>{rarityLabel(r)}</span>
-              {/* 段階ごとの登録数とステータスポイント（そろえば ✔）・3段階そろえたスタミナ（2026-10-23） */}
-              {rp && rp.tiers.map(x => {
+            {/* 段階ごとの登録数（そろえば ✔）と、そのレア度の報酬（2026-10-23） */}
+            <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:'4px 12px', fontSize:'11px' }}>
+              <span style={{ color: RARITY_COLOR[r] }}>{rarityLabel(r)}</span>
+              {rp.tiers.map(x => {
                 const t = MUSEUM_TIERS[x.tier]
                 return (
                   <span key={x.tier} style={{ color: x.done ? '#ffcc00' : TEXT.label }}>
-                    {x.done ? '✔' : ''}<span style={{ color: t.color }}>{t.label}</span> {x.have}/{x.need}
+                    <span style={{ color: t.color }}>{tierTag(t)}</span>{x.have}/{x.need}{x.done ? ' ✔' : ''}
                   </span>
                 )
               })}
-              {rp && (
-                <span style={{ color: TEXT.sub }}>
-                  各段階 ステータスポイント+{MUSEUM_SET_SP[r]}・3段階で
-                  <span style={{ color: rp.allTiers ? '#ffcc00' : TEXT.sub }}>{rp.allTiers ? '✔' : ''}スタミナ−{MUSEUM_RARITY_STAM_SEC}秒</span>
-                </span>
-              )}
+            </div>
+            <div style={{ fontSize:'10px', color: TEXT.sub, margin:'2px 0 4px' }}>
+              1段階そろうごとに ステータスポイント+{MUSEUM_SET_SP[r]}　／
+              <span style={{ color: rp.allTiers ? '#ffcc00' : TEXT.sub }}>3段階すべて寄贈で スタミナ回復−{MUSEUM_RARITY_STAM_SEC}秒{rp.allTiers ? ' ✔' : ''}</span>
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(min(100%, 230px), 1fr))', gap:'3px' }}>
               {group.items.filter(it => it.rarity === r).map(it => {
                 const has = tiersOf(registered, it.id)
-                const hidden = uniqueHidden(registered, it)   // まだ寄贈していないユニークは「？？？」
                 return (
                   <div key={it.id} style={{ background:'#000818', border:`1px solid ${has.length ? '#224466' : '#001428'}`, padding:'4px 6px',
                     display:'flex', alignItems:'center', gap:'6px', fontSize:'11px' }}>
                     <span style={{ flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
-                      color: has.length ? RARITY_COLOR[it.rarity] : TEXT.empty }} title={hidden ? undefined : `${it.name}（${kindLabel(it)}）`}>
-                      {hidden ? '？？？' : it.name}
+                      color: has.length ? RARITY_COLOR[it.rarity] : TEXT.empty }} title={`${it.name}（${kindLabel(it)}）`}>
+                      {it.name}
                     </span>
                     {MUSEUM_TIERS.map(t => (
                       <span key={t.key} title={t.label} style={{ ...tierBadge(t, has.includes(t.key)), padding:'0 3px' }}>

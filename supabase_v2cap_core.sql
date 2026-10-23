@@ -6796,8 +6796,8 @@ grant select on table public.v2cap_museum to authenticated;
 --   ・エリア×レア度の装備（26種）を、ひとつの段階（未強化・+5・+9）で全部寄贈したら ステータスポイント
 --     ノーマル1・レア2・エピック3・レジェンダリー4（段階ごとにもらえる＝1つのレア度で最大3回）
 --   ・そのレア度を3段階ともそろえたら スタミナの回復が1秒短く（ユーザー選択「3段階そろえて1回」）
---   ・エリアの4つのレア度×3段階をぜんぶそろえたら（エリアコンプリート・ユニークを除く）さらに1秒
---   ・どれも恒久的。ユニークの報酬は今後足す（いまは数えない）。初期装備（エリア0）も数えない
+--   ・エリアの4つのレア度×3段階をぜんぶそろえたら（エリアコンプリート）さらに1秒
+--   ・どれも恒久的。ユニークと初期装備（エリア0）は数えない（どちらも寄贈できない＝2026-10-23 ユーザー指示）
 --   ★1つの報酬は1回だけ（下の表の key で覚える）。ステータスポイントは振る前のポイント（stat_points）に足す。
 --     スタミナの短縮は、この表の合計をプロフィールの museum_stam_cut に入れる（v2cap_stamina_roll が使う）
 --   ★数の写しは src/v2cap/lib/museum.js（MUSEUM_SET_SP・MUSEUM_RARITY_STAM_SEC・MUSEUM_AREA_STAM_SEC。museum.test.js が突き合わせる）
@@ -6888,6 +6888,11 @@ begin
   -- ★初期装備（エリア0）は対象外（2026-10-23 ユーザー指示）
   if coalesce(v_item.area, 0) < 1 then
     return jsonb_build_object('ok', false, 'error', '初期装備は寄贈できません');
+  end if;
+  -- ★ユニークは寄贈できない（2026-10-23 ユーザー指示「ユニーク装備は寄贈できないようにあることすら悟られないようにしたい」）。
+  --   断りの文にもユニークと書かない（前の形の装備と同じ「この装備は寄贈できません」）
+  if v_item.rarity = 'U' then
+    return jsonb_build_object('ok', false, 'error', 'この装備は寄贈できません');
   end if;
   if exists (select 1 from jsonb_each_text(coalesce(p_equipped, '{}'::jsonb)) q
               where q.value ~ '^[0-9]+$' and q.value::bigint = v_inv.id) then

@@ -11,12 +11,15 @@
 // 【確定】2026-10-23 ユーザー指示（実機を見て）：
 //   ・「未強化、＋５、＋9、これ以外の強化値は登録できないように」＝段階は **+0／+5／+9 ちょうど**（前は V1 と同じ「+0〜4／+5以上／+9以上」）。
 //     名前も「未強化／+5／+9」
-//   ・「初期装備は対象外」＝並びは エリア1〜15・ユニーク の16のまとまり（初期装備は寄贈もできない）
-//   ・「ユニークは寄贈していないものは？？？で」＝登録の一覧で、どの段階も登録していないユニークは名前を出さない（uniqueHidden）
+//   ・「初期装備は対象外」＝初期装備は寄贈もできない
+//   ・（「ユニークは寄贈していないものは？？？で」は、下の「ユニークは寄贈できない」で取りやめ）
 //   ・寄贈のあとに結果のポップアップ・一括寄贈（画面 V2capMuseum.jsx・サーバー v2cap_museum_donate_many）
+// 【確定】2026-10-23 ユーザー指示「ユニーク装備は寄贈できないようにあることすら悟られないようにしたい」：
+//   ユニークは寄贈できない（一覧・寄贈できる装備・タブ・説明のどこにも出さない＝ユニークの文字も書かない）。
+//   並びは エリア1〜15 の15のまとまり（1560種×3段階）。サーバーもユニークを弾く（v2cap_museum_take）
 // ★決めるのはサーバー（supabase_v2cap_core.sql §14 の v2cap_museum_take）。段階の決まりはここと同じ（museum.test.js が突き合わせる）
 // ============================================================
-import { ITEMS, UNIQUE_ITEMS, ITEM_BY_ID, RARITIES, UNIQUE_RARITY, RARITY_LABEL, isUnique } from './equipment.js'
+import { ITEMS, ITEM_BY_ID, RARITIES, RARITY_LABEL } from './equipment.js'
 import { AREA_LIST } from './areas.js'
 import { plusOf } from './smith.js'
 
@@ -29,23 +32,18 @@ export const MUSEUM_TIERS = [
 // その強化値で登録できる段階（+0・+5・+9 以外は null＝寄贈できない）
 export const tierOfPlus = (plus) => MUSEUM_TIERS.find(t => t.plus === plus)?.key ?? null
 
-// まとまり：エリア1〜15・ユニーク（中はレア度の順＝一覧の並びのまま）。初期装備は入れない
-export const MUSEUM_GROUPS = [
-  ...AREA_LIST.map((a, i) => ({ key: `area${i + 1}`, area: i + 1, label: a.name, items: ITEMS.filter(it => it.area === i + 1) })),
-  { key: 'unique', label: 'ユニーク', items: UNIQUE_ITEMS },
-]
+// まとまり：エリア1〜15（中はレア度の順＝一覧の並びのまま）。初期装備・ユニークは入れない
+export const MUSEUM_GROUPS = AREA_LIST.map((a, i) => ({ key: `area${i + 1}`, area: i + 1, label: a.name, items: ITEMS.filter(it => it.area === i + 1) }))
 export const MUSEUM_ITEMS = MUSEUM_GROUPS.flatMap(g => g.items)
 const MUSEUM_IDS = new Set(MUSEUM_ITEMS.map(i => i.id))
 export const isMuseumItem = (item) => !!item && MUSEUM_IDS.has(item.id)
-// まとまりの中のレア度の並び（ユニークのまとまりは1つ）
-export const raritiesOfGroup = (group) => [...RARITIES, UNIQUE_RARITY].filter(r => group.items.some(it => it.rarity === r))
+// まとまりの中のレア度の並び
+export const raritiesOfGroup = (group) => RARITIES.filter(r => group.items.some(it => it.rarity === r))
 
 // 登録の記録（v2cap_museum の行 { base_id, tier, plus }）→「装備|段階」の集まり
 export const museumKey = (baseId, tier) => `${baseId}|${tier}`
 export const registeredSetOf = (rows) => new Set((rows || []).map(r => museumKey(r.base_id, Number(r.tier))))
 export const tiersOf = (registered, baseId) => MUSEUM_TIERS.filter(t => registered.has(museumKey(baseId, t.key))).map(t => t.key)
-// 登録の一覧で名前を隠すか：どの段階も登録していないユニーク
-export const uniqueHidden = (registered, item) => isUnique(item) && tiersOf(registered, item.id).length === 0
 
 // 登録数（段階ごと・全体）。分母は装備の数（どの段階も同じ）
 export const museumCountOf = (rows, items = MUSEUM_ITEMS) => {
@@ -78,8 +76,6 @@ export const donatablesOf = (profile, inventory, rows) => {
   const order = new Map(MUSEUM_ITEMS.map((it, i) => [it.id, i]))
   return [...best.values()].sort((a, b) => (order.get(a.item.id) - order.get(b.item.id)) || (a.tier - b.tier))
 }
-// まとめて選ぶときに入れるか：ユニークは入れない（1つずつなら選べる＝鍛冶屋のまとめての分解と同じ）
-export const bulkDonatable = (d) => !isUnique(d.item)
 // 寄贈の結果の1行：「ブロンズダガー」を寄贈しました（未強化で登録）
 // 【確定】2026-10-23 ユーザー指示「既存の装備と同じように色付けてほしい、装備名だけね」＝画面は装備名だけレア度の色
 //   （「」の中＝RARITY_COLOR）で出し、後ろの文は donatedTail
@@ -91,13 +87,13 @@ export const donatedText = (name, tier) => `「${name}」${donatedTail(tier)}`
 //   ＋「エリア全体でレアリティ全部寄贈してると…スタミナ回復時間1秒短縮／エリアコンプリート※ユニークを除く 1秒短縮」「どれも恒久的」：
 //   ・エリア×レア度の装備（26種）を、ひとつの段階で全部寄贈 → ステータスポイント（MUSEUM_SET_SP・段階ごとにもらえる）
 //   ・そのレア度を3段階ともそろえる → スタミナの回復 −1秒（ユーザー選択「3段階そろえて1回」）
-//   ・エリアの4つのレア度×3段階をぜんぶ（エリアコンプリート・ユニークを除く）→ さらに −1秒
-//   ・ユニークの報酬は今後足す。全部そろえると ステータスポイント +450・スタミナの回復 −75秒（3分→1分45秒）
+//   ・エリアの4つのレア度×3段階をぜんぶ（エリアコンプリート）→ さらに −1秒
+//   ・全部そろえると ステータスポイント +450・スタミナの回復 −75秒（3分→1分45秒）。ユニークは寄贈できない（上）
 // ★決めて入れるのはサーバー（v2cap_museum_settle・報酬の表 v2cap_museum_rewards）。ここは表示の写し
 export const MUSEUM_SET_SP = { N: 1, R: 2, E: 3, L: 4 }
 export const MUSEUM_RARITY_STAM_SEC = 1
 export const MUSEUM_AREA_STAM_SEC = 1
-export const MUSEUM_REWARD_RARITIES = RARITIES   // ユニークは今後
+export const MUSEUM_REWARD_RARITIES = RARITIES
 // エリア×レア度の装備（報酬の分母）
 export const setItemsOf = (area, rarity) => ITEMS.filter(i => i.area === area && i.rarity === rarity)
 // そのエリアの報酬の進み：レア度ごとに 段階ごとの登録数・そろったか・3段階そろったか、とエリアコンプリート
