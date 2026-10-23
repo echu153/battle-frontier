@@ -3101,6 +3101,9 @@ alter table public.v2cap_profiles add column if not exists unique_force boolean 
 -- 【確定】2026-10-23 博物館の報酬（§14）：スタミナの回復を何秒短くするか（v2cap_museum_settle が報酬の表から数え直して入れる）。
 --   v2cap_stamina_roll が 3分 − この秒数 の間隔で数える（上限120秒＝回復は60秒より短くしない・いまの報酬の最大は75秒）
 alter table public.v2cap_profiles add column if not exists museum_stam_cut int not null default 0;
+-- 【確定】2026-10-24 モンスター図鑑の報酬（§15）：スタミナの最大値に足す数（エリアの敵を全員見つけるごとに+1）。
+--   v2cap_dex_settle が討伐数から数え直して入れる。v2cap_stamina_max(LV, この数) が使う
+alter table public.v2cap_profiles add column if not exists dex_stam_bonus int not null default 0;
 -- 【確定】2026-10-21 ユーザー指示「キャラクター作成時に性別選択できるようにして、性別によってほんの少し性能差出るようにしたい」：
 --   性別（'m'＝男性・'f'＝女性。決めていなければ null）。性能差（男性＝与えるダメージ+2%・女性＝受けるダメージ−2%）は
 --   画面の戦闘（gender.js）。キャラ作成で決め、前からのキャラは v2cap_set_gender で1回だけ選ぶ（変えるアイテムはあとで）
@@ -3279,9 +3282,13 @@ returns int language sql stable set search_path = public as $$
 $$;
 
 -- スタミナの最大値 ＝ 10＋(LV−1)＝LVが1上がるごとに+1（level.js の staminaMaxOf・2026-10-09 ユーザー指示）
-create or replace function public.v2cap_stamina_max(p_lv int)
+--   ＋ p_bonus＝モンスター図鑑のボーナス（プロフィールの dex_stam_bonus・2026-10-24 ユーザー指示
+--     「モンスター図鑑、そのエリアのキャラ全員登録したらスタミナ最大値＋1するようにして」・§15）
+-- ★前は引数が LV だけ（v2cap_stamina_max(int)）。同じ名前の1つ引数が残ると呼び分けられないので消してから作る
+drop function if exists public.v2cap_stamina_max(int);
+create or replace function public.v2cap_stamina_max(p_lv int, p_bonus int default 0)
 returns int language sql immutable set search_path = public as $$
-  select 10 + greatest(1, coalesce(p_lv, 1)) - 1
+  select 10 + greatest(1, coalesce(p_lv, 1)) - 1 + greatest(0, coalesce(p_bonus, 0))
 $$;
 
 -- そのClassLVまでに覚えるスキルを足した learned を返す（jobs.js の skillsLearnedBy）。
@@ -3487,7 +3494,7 @@ $$;
 revoke all on function public.v2cap_need(int) from public, anon;
 revoke all on function public.v2cap_job_need(text, int) from public, anon;
 revoke all on function public.v2cap_ten_sortie_exp(int) from public, anon, authenticated;
-revoke all on function public.v2cap_stamina_max(int) from public, anon;
+revoke all on function public.v2cap_stamina_max(int, int) from public, anon;
 revoke all on function public.v2cap_learn(jsonb, text, int) from public, anon, authenticated;
 revoke all on function public.v2cap_job_bonus_mp(text, int) from public, anon, authenticated;
 revoke all on function public.v2cap_lineage(text) from public, anon, authenticated;
@@ -3614,7 +3621,7 @@ begin
   select * into v_row from public.v2cap_profiles where id = p_player for update;
   if not found then return 0; end if;
   c_span := make_interval(secs => c_base_sec - least(c_cut_max, greatest(0, coalesce(v_row.museum_stam_cut, 0))));
-  v_max := public.v2cap_stamina_max(v_row.lv);
+  v_max := public.v2cap_stamina_max(v_row.lv, v_row.dex_stam_bonus);   -- 図鑑のボーナス込み（2026-10-24・§15）
   v_n   := greatest(least(coalesce(v_row.stamina, 0), v_max), 0);
   v_at  := coalesce(v_row.stamina_at, now());
   if v_n >= v_max then
@@ -4172,6 +4179,9 @@ declare
   v_stam_at timestamptz;
   v_res    jsonb;
   v_out    jsonb;
+  v_kn     int;              -- この敵の討伐数（足したあと。1なら初めて倒した＝図鑑に載った）
+  v_dex0   int;              -- 図鑑のボーナス（この戦闘の前）
+  v_dex    int;              -- 図鑑のボーナス（この戦闘のあと・§15）
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
@@ -4301,14 +4311,20 @@ begin
     perform public.v2cap_daily_bump(v_uid, 'win', 1);
     -- モンスター図鑑：勝った敵の討伐数を1つ足す（敵の名前はこの場所にいることを上で確かめてある。祠ではハピネスフェアリー）
     insert into public.v2cap_kills (player_id, enemy, n) values (v_uid, case when v_shrine then c_shrine_fairy else v_en.name end, 1)
-    on conflict (player_id, enemy) do update set n = public.v2cap_kills.n + 1;
+    on conflict (player_id, enemy) do update set n = public.v2cap_kills.n + 1
+    returning n into v_kn;
+    -- 初めて倒した敵なら、図鑑のボーナス（エリアの敵を全員見つけた数）を数え直す（§15・2026-10-24）
+    if v_kn = 1 then
+      select dex_stam_bonus into v_dex0 from public.v2cap_profiles where id = v_uid;
+      v_dex := public.v2cap_dex_settle(v_uid);
+    end if;
   end if;
 
   v_res := public.v2cap_apply_exp(v_uid, v_exp);
   -- 最深部：泉の力でスタミナを全回復（この戦闘のEXPが入ったあとのLVの最大値まで。最大より多ければそのまま）
   if v_deep then
     update public.v2cap_profiles
-       set stamina = greatest(stamina, public.v2cap_stamina_max(lv)), stamina_at = now(), updated_at = now()
+       set stamina = greatest(stamina, public.v2cap_stamina_max(lv, dex_stam_bonus)), stamina_at = now(), updated_at = now()
      where id = v_uid
      returning stamina, stamina_at into v_stam, v_stam_at;
   end if;
@@ -4319,7 +4335,10 @@ begin
     'cleared', to_jsonb(v_cleared), 'open_until', public.v2cap_open_until(v_cleared), 'boss_rate', v_rate,
     'level', v_res,
     'stamina', v_stam, 'stamina_at', v_stam_at,
-    'stamina_max', public.v2cap_stamina_max(coalesce((v_res -> 'profile' ->> 'lv')::int, v_row.lv)),
+    'stamina_max', public.v2cap_stamina_max(coalesce((v_res -> 'profile' ->> 'lv')::int, v_row.lv),
+      (select p.dex_stam_bonus from public.v2cap_profiles p where p.id = v_uid)),
+    -- 図鑑でエリアの敵を全員見つけた（ボーナスが増えた）ら、そのエリアと増えたあとのボーナス（§15）
+    'dex', case when v_dex > coalesce(v_dex0, 0) then jsonb_build_object('area', v_spot.area, 'bonus', v_dex) end,
     'shrine', jsonb_build_object('found', v_found, 'deepest', v_deep, 'spot', v_sh_spot,
       'left', greatest(0, v_sh_left), 'total', v_sh_total));
   -- 同じ印でもう一度届いたときに返す返事（この行の中に入れるので、LVの返事からプロフィールまるごとを外す）
@@ -7432,6 +7451,43 @@ declare r record;
 begin
   for r in select distinct m.player_id from public.v2cap_museum m loop
     perform public.v2cap_museum_settle(r.player_id);
+  end loop;
+end $$;
+
+-- ===== 15. モンスター図鑑の報酬（2026-10-24）=====
+-- 【確定】2026-10-24 ユーザー指示「モンスター図鑑、そのエリアのキャラ全員登録したらスタミナ最大値＋1するようにして」：
+--   ・エリアの敵（20体＝通常・時間帯・レア・ボス）を全員1回以上倒す（＝図鑑に載る）と、スタミナの最大値+1（恒久的・15エリアで最大+15）
+--   ・プロフィールの dex_stam_bonus に入れる（v2cap_stamina_max(LV, この数)・v2cap_stamina_roll が使う）
+--   ・エリアの敵は v2cap_enemies（場所ごとの顔ぶれ）を v2cap_spots でエリアにまとめたもの。祠のハピネスフェアリーはどのエリアにも入らない
+--   ★数の写しは src/v2cap/lib/dex.js（DEX_AREA_STAM・dexStamBonusOf。dex.test.js が突き合わせる）
+-- 中の関数：討伐数から「全員見つけたエリアの数」を数え直して dex_stam_bonus に入れる（何回呼んでも同じ）。新しい値を返す
+--   ⚠内部ヘルパ。出撃の精算（初めて倒した敵がいたとき）と、下の「前からの討伐を数える」からだけ呼ぶ。必ず REVOKE する
+create or replace function public.v2cap_dex_settle(p_uid uuid)
+returns int language plpgsql security definer set search_path = public as $$
+declare
+  c_per constant int := 1;   -- 1エリアごとに足す数（dex.js の DEX_AREA_STAM）
+  v_n   int;
+begin
+  select count(*)::int * c_per into v_n from (
+    select r.area
+      from (select distinct e.name, s.area from public.v2cap_enemies e join public.v2cap_spots s on s.id = e.spot) r
+      left join public.v2cap_kills k on k.player_id = p_uid and k.enemy = r.name and k.n > 0
+     group by r.area
+    having count(*) = count(k.enemy)
+  ) done;
+  update public.v2cap_profiles set dex_stam_bonus = v_n, updated_at = now()
+   where id = p_uid and dex_stam_bonus is distinct from v_n;
+  return v_n;
+end;
+$$;
+revoke all on function public.v2cap_dex_settle(uuid) from public, anon, authenticated;
+
+-- 前から倒していた敵のぶんも、ここで数えて入れる（何回流しても同じ）
+do $$
+declare r record;
+begin
+  for r in select p.id from public.v2cap_profiles p where exists (select 1 from public.v2cap_kills k where k.player_id = p.id) loop
+    perform public.v2cap_dex_settle(r.id);
   end loop;
 end $$;
 

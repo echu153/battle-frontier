@@ -26,6 +26,7 @@ import {
   ROULETTE_MAX_TOTAL, ROULETTE_MAX_BETS, ROULETTE_STRAIGHT, RED_NUMBERS, LUCKY_COUNT_W, LUCKY_MULTS, BET_KINDS,
 } from './casino.js'
 import { FLOORS as TOWER_FLOORS, LOSE_DROP as TOWER_LOSE } from './tower.js'
+import { DEX_AREA_STAM } from './dex.js'
 import { rewrite } from '../../../tools/v2cap-sql.mjs'
 
 // ★改行はLFにそろえてから見る（Windowsで core.autocrlf=true のまま取り出すとCRLFになり、改行を含む正規表現が合わなくなる。
@@ -65,11 +66,17 @@ test('必要EXP・必要ClassEXP・スタミナの式と係数がJSと同じ', (
   assert.ok(SQL.includes("('ichiji', 3, 10, '{1,4,7,10,13,16,19,22,25,28}'::int[], 50, 30)"), '上位は30')
   assert.ok(SQL.includes('alter table public.v2cap_stages add column if not exists need_base int not null default 0;'), '前からある表にも列を足す')
   // スタミナ：最大値は 10＋(LV−1)・回復は3分に1（2026-10-09 ユーザー指示）
-  assert.match(fnBody('v2cap_stamina_max'), new RegExp(`select ${STAMINA_BASE} \\+ greatest\\(1, coalesce\\(p_lv, 1\\)\\) - 1`))
+  assert.match(fnBody('v2cap_stamina_max'), new RegExp(`select ${STAMINA_BASE} \\+ greatest\\(1, coalesce\\(p_lv, 1\\)\\) - 1 \\+ greatest\\(0, coalesce\\(p_bonus, 0\\)\\)`))
+  // 図鑑のボーナス（2026-10-24・§15）：前の1つ引数の形は消してから作る（同じ名前が2つあると呼び分けられない）
+  assert.ok(SQL.includes('drop function if exists public.v2cap_stamina_max(int);'))
+  assert.ok(SQL.includes('create or replace function public.v2cap_stamina_max(p_lv int, p_bonus int default 0)'))
+  assert.ok(SQL.includes('revoke all on function public.v2cap_stamina_max(int, int) from public, anon;'))
+  assert.ok(!/v2cap_stamina_max\((v_row\.)?lv\)/.test(SQL), 'LVだけで最大値を出している所が残っていない')
   // 回復の間隔は 3分 − 博物館の報酬の短縮（museum_stam_cut 秒・上限 STAMINA_CUT_MAX_SEC＝2026-10-23）
   const roll = fnBody('v2cap_stamina_roll')
   assert.ok(roll.includes(`c_base_sec constant int := ${STAMINA_RECOVER_MS / 1000};`), '回復の間隔がJSと同じ')
   assert.ok(roll.includes(`c_cut_max  constant int := ${STAMINA_CUT_MAX_SEC};`), '短縮の上限がJSと同じ')
+  assert.ok(roll.includes('v_max := public.v2cap_stamina_max(v_row.lv, v_row.dex_stam_bonus);'), '最大値は図鑑のボーナス込み')
   assert.ok(roll.includes('c_span := make_interval(secs => c_base_sec - least(c_cut_max, greatest(0, coalesce(v_row.museum_stam_cut, 0))));'))
 })
 
@@ -559,7 +566,8 @@ test('【確定】モンスター図鑑：討伐数は勝ったときだけサ�
   const win = settle.match(/if v_win then\s+perform public\.v2cap_daily_bump\(v_uid, 'win', 1\);([\s\S]*?)end if;/)
   assert.ok(win, '勝ったときの枝')
   assert.ok(win[1].includes('insert into public.v2cap_kills (player_id, enemy, n) values (v_uid, case when v_shrine then c_shrine_fairy else v_en.name end, 1)'))
-  assert.ok(win[1].includes('on conflict (player_id, enemy) do update set n = public.v2cap_kills.n + 1;'))
+  // ★2026-10-24 から足したあとの数を受け取る（初めて倒した敵なら図鑑の報酬を数え直す・§15）
+  assert.ok(win[1].includes('on conflict (player_id, enemy) do update set n = public.v2cap_kills.n + 1\n    returning n into v_kn;'))
   assert.equal((SQL.match(/insert into public\.v2cap_kills/g) || []).length, 1, '数えるのは出撃の精算だけ')
   // 作り直すと図鑑も空になる
   assert.ok(fnBody('v2cap_dev_reset').includes('delete from public.v2cap_kills where player_id = auth.uid();'))
@@ -589,7 +597,7 @@ test('【確定】安息の祠（2026-10-13）：見つかる確率・戦闘の�
   assert.ok(settle.includes('v_rate := case when v_shrine then v_row.boss_rate when v_boss then 0 else least(100, v_row.boss_rate + 0.3) end;'))
   // 最深部：EXPが入ったあと（LVが上がったあとの最大値）でスタミナを戻す
   const exp = settle.indexOf('v_res := public.v2cap_apply_exp(v_uid, v_exp);')
-  const deep = settle.indexOf('set stamina = greatest(stamina, public.v2cap_stamina_max(lv)), stamina_at = now()')
+  const deep = settle.indexOf('set stamina = greatest(stamina, public.v2cap_stamina_max(lv, dex_stam_bonus)), stamina_at = now()')
   assert.ok(exp > 0 && deep > exp, '最深部のスタミナはEXPのあと')
   for (const col of ['shrine_spot int', 'shrine_left int not null default 0', 'shrine_total int not null default 0']) {
     assert.ok(SQL.includes(`alter table public.v2cap_profiles add column if not exists ${col};`), col)
@@ -1030,4 +1038,22 @@ test('【確定】2026-10-15 盗賊の配分（LUK29→19・STR+10）の移し�
   // 種（v2cap_classes.bonus_seq）より後ろ・前の移し替えより後ろに置く
   assert.ok(SQL.indexOf(m[0]) > SQL.indexOf('insert into public.v2cap_classes'))
   assert.ok(SQL.indexOf(m[0]) > SQL.indexOf("values ('ichiji_rework_20261015');"))
+})
+
+test('【確定】2026-10-24 図鑑の報酬（§15）：エリアの敵を全員見つけるとスタミナの最大値+1（サーバーが数えてプロフィールに入れる）', () => {
+  // ユーザー指示「モンスター図鑑、そのエリアのキャラ全員登録したらスタミナ最大値＋1するようにして」
+  assert.ok(SQL.includes('alter table public.v2cap_profiles add column if not exists dex_stam_bonus int not null default 0;'))
+  const fn = fnBody('v2cap_dex_settle')
+  assert.ok(fn.includes(`c_per constant int := ${DEX_AREA_STAM};`), '1エリアごとに足す数が dex.js と同じ')
+  assert.ok(fn.includes('from (select distinct e.name, s.area from public.v2cap_enemies e join public.v2cap_spots s on s.id = e.spot) r'), 'エリアの敵は場所の顔ぶれをエリアでまとめたもの')
+  assert.ok(fn.includes('having count(*) = count(k.enemy)'), '全員を1回以上倒したエリアだけ')
+  assert.ok(SQL.includes('revoke all on function public.v2cap_dex_settle(uuid) from public, anon, authenticated;'), '中の関数は呼べない')
+  // 出撃の精算：初めて倒した敵のときだけ数え直す。返事に dex（エリアと増えたあとのボーナス）
+  const settle = fnBody('v2cap_sortie_settle')
+  assert.ok(settle.includes('returning n into v_kn;') && settle.includes('if v_kn = 1 then'), '初めて倒したとき')
+  assert.ok(settle.includes('v_dex := public.v2cap_dex_settle(v_uid);'))
+  assert.ok(settle.includes("'dex', case when v_dex > coalesce(v_dex0, 0) then jsonb_build_object('area', v_spot.area, 'bonus', v_dex) end,"))
+  // 前から倒していた敵のぶんも、流したときに数える（何回流しても同じ）＝敵の種と関数のあと
+  const mig = SQL.indexOf('for r in select p.id from public.v2cap_profiles p where exists (select 1 from public.v2cap_kills k where k.player_id = p.id) loop')
+  assert.ok(mig > SQL.indexOf('create or replace function public.v2cap_dex_settle(') && mig > SQL.indexOf('insert into public.v2cap_enemies'))
 })

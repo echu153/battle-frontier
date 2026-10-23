@@ -10,7 +10,7 @@ import {
   pickEncounter, rollEquipDrop, nextBossRate, isSpotUnlocked, isSpotCleared, openUntilOf, SORTIE_CD, chestText,
 } from '../lib/sortie.js'
 import { toFighter as playerFighter } from '../lib/loadout.js'
-import { staminaMaxOf, rollStamina, staminaSpanMsOf } from '../lib/level.js'
+import { staminaMaxOfProfile, rollStamina, staminaSpanMsOf } from '../lib/level.js'
 import { expText as expTextOf, gainedExpOf, levelUpLines, dropLineOf } from '../lib/settleLines.js'
 import { ITEM_BY_ID } from '../lib/equipment.js'
 import { guardDropBonusOf, floorLabel, TOWER_NAME } from '../lib/tower.js'
@@ -22,6 +22,7 @@ import { artGenderOf } from '../lib/gender.js'
 import { shrineOf, shrineEncounterOf, SHRINE_NAME } from '../lib/shrine.js'
 import { SHRINE_ART, SHRINE_TEXT, MINCHO } from '../lib/fxStyle.js'
 import V2capShrineFx from './V2capShrineFx.jsx'
+import { dexCompleteText } from '../lib/dex.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — 出撃（ホームの右）
@@ -125,7 +126,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   const remaining = leftMs / 1000
   const canAct = remaining <= 0 && !loading && !fx   // 祠の演出の間は押せない（右下のボタンも）
   const timerPct = Math.max(0, Math.min(100, 100 - (leftMs / (SORTIE_CD * 1000)) * 100))
-  const stamMax = staminaMaxOf(prof?.lv)
+  const stamMax = staminaMaxOfProfile(prof)   // LV＋図鑑のボーナス（2026-10-24）
   const stamNow = rollStamina(stam.n, stam.at, stamMax, now, staminaSpanMsOf(prof)).n   // 博物館の報酬で回復の間隔が短くなる（2026-10-23）
 
   const doBattle = async (isAuto = false) => {
@@ -210,6 +211,8 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
         if (data.chest?.n > 0) {
           after.push({ text: chestText(data.chest.area, data.chest.n), color:'#ffcc66' })
         }
+        // 図鑑の報酬（2026-10-24）：そのエリアの敵を全員見つけたら、サーバーが dex＝{ area, bonus } を返す（スタミナの最大値+1）
+        if (data.dex?.area) after.push({ text: dexCompleteText(data.dex.area), color:'#c0b0ff' })
         // ボスを倒すと次の場所が開く（1本道）。開いたかどうかはサーバーの返事で見る
         if (enc.isBoss && Number(data.open_until) > openUntilOf(cleared)) {
           after.push({ text:`🔓 ${spotLabel(data.open_until)}が解放された！`, color:'#44ff88' })

@@ -5,7 +5,7 @@ import V2Modal from './V2Modal.jsx'
 import { AREA_LIST, SUB_MARK, spotOf } from '../lib/areas.js'
 import { openUntilOf } from '../lib/sortie.js'
 import { RARITY_COLOR, rarityLabel } from '../lib/equipment.js'
-import { DEX_ROLES, DEX_ROLE, DEX_ALL, dexAreaOf, dropInfoOf, killsOf, isFound, dexProgressOf } from '../lib/dex.js'
+import { DEX_ROLES, DEX_ROLE, DEX_ALL, DEX_AREA_STAM, dexAreaOf, dropInfoOf, killsOf, isFound, dexProgressOf, isAreaComplete, dexStamBonusOf } from '../lib/dex.js'
 import { enemyArtSrc, enemyArtBigSrc } from '../lib/enemyArt.js'
 import { chip } from './v2capGearView.js'
 import V2capIcon from './V2capIcon.jsx'
@@ -25,6 +25,8 @@ import { JP_BOLD } from './casinoStyle.js'
 //     ・「ユニーク装備の情報はすべて削除」＝ボスの行のユニーク（名前・能力）を出さない（dex.js の dropInfoOf も持たない）
 //     ・「モンスターのイラストタップしたらアップされるようにして」＝倒した敵の絵をタップすると大きく出す（大きい版 enemy-art-big）
 //     ・説明の文は HELP の小窓へ。「残り◯エリアは、行くと載ります」はやめた
+//     ・「そのエリアのキャラ全員登録したらスタミナ最大値＋1」＝エリアの20体を全員見つけると報酬（権威はサーバーの §15）。
+//       上の欄に獲得済み報酬・エリアの行に ★COMPLETE★（博物館と同じ書き方）・HELP に報酬の説明
 // ============================================================
 const kindText = (k) => (k === 'mag' ? '魔法' : '物理')
 
@@ -52,6 +54,8 @@ export default function V2capDex({ prof }) {
   const rows = areaRows.filter(e => roles.has(e.role))
   const prog = dexProgressOf(areaRows, kills || {})
   const total = dexProgressOf(DEX_ALL, kills || {})
+  const complete = kills !== null && isAreaComplete(area, kills)
+  const stamBonus = dexStamBonusOf(kills || {})
   const toggleRole = (key) => setRoles(prev => {
     const next = new Set(prev)
     if (next.has(key)) next.delete(key); else next.add(key)
@@ -65,6 +69,8 @@ export default function V2capDex({ prof }) {
           <div>出撃で倒した敵が載ります（倒すまでは名前もLVも ???）。</div>
           <div>討伐数は出撃で勝ったときに数えます。</div>
           <div>落とす装備はそのエリアの装備です。</div>
+          <div style={{ color:'#d8b070', fontSize:'12px', marginTop:'10px' }}>報酬（恒久的に反映されます）</div>
+          <div>エリアの敵（20体）をすべて見つけると、スタミナの最大値+{DEX_AREA_STAM}（エリアごと）。</div>
         </V2Modal>
       )}
       {zoom && <ZoomModal e={zoom} onClose={() => setZoom(null)} />}
@@ -76,6 +82,9 @@ export default function V2capDex({ prof }) {
             見つけた敵 全体 <span style={{ color:'#ffcc00' }}>{total.done}</span> / {total.total}体
           </div>
           <button onClick={() => setHelp(true)} style={miniBtn('#88aaff')}>❓ HELP</button>
+        </div>
+        <div style={{ color:'#cfe2ff', fontSize:'11px', marginTop:'4px' }}>
+          獲得済み報酬：<span style={{ color: stamBonus > 0 ? '#ffcc00' : '#88ccff' }}>スタミナの最大値 +{stamBonus}</span>
         </div>
         {error && <div style={{ color:'#ff8844', fontSize:'10px', marginTop:'4px' }}>⚠ 討伐数を読めませんでした（{error}）</div>}
       </div>
@@ -94,6 +103,7 @@ export default function V2capDex({ prof }) {
           ))}
           <span style={{ color: TEXT.label, fontSize:'10px', marginLeft:'auto' }}>
             {AREA_LIST[area - 1]?.name}：見つけた敵 <span style={{ color:'#ffcc00' }}>{prog.done}</span> / {prog.total}（{prog.pct}%）
+            {complete && <span style={{ color:'#ffcc00', marginLeft:'6px' }}>★COMPLETE★</span>}
           </span>
         </div>
 

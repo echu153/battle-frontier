@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { AREA_LIST } from './areas.js'
-import { DEX_ROLES, DEX_ALL, DEX_TOTAL, DEX_AREA_COUNT, dexAreaOf, dropInfoOf, killsOf, isFound, dexProgressOf } from './dex.js'
+import { DEX_ROLES, DEX_ALL, DEX_TOTAL, DEX_AREA_COUNT, dexAreaOf, dropInfoOf, killsOf, isFound, dexProgressOf, DEX_AREA_STAM, isAreaComplete, dexCompleteAreasOf, dexStamBonusOf, dexCompleteText } from './dex.js'
 
 test('図鑑は15エリア×20体＝300体。どの敵も1回ずつ（名前がかぶらない）', () => {
   assert.equal(DEX_AREA_COUNT, AREA_LIST.length)
@@ -83,4 +83,29 @@ test('倒すまでは見つけていない（???）。見つけた数と割合',
   assert.equal(killsOf(null, 'スライム'), 0)
   assert.deepEqual(dexProgressOf(dexAreaOf(1), kills), { done: 2, total: 20, pct: 10 })
   assert.deepEqual(dexProgressOf([], kills), { done: 0, total: 0, pct: 0 })
+})
+
+test('【確定】2026-10-24 図鑑の報酬：エリアの20体を全員見つけるとスタミナの最大値+1（エリアごと・最大+15）', () => {
+  // ユーザー指示「モンスター図鑑、そのエリアのキャラ全員登録したらスタミナ最大値＋1するようにして」
+  assert.equal(DEX_AREA_STAM, 1)
+  const all1 = Object.fromEntries(dexAreaOf(1).map(e => [e.name, 1]))
+  assert.equal(isAreaComplete(1, all1), true)
+  assert.deepEqual(dexCompleteAreasOf(all1), [1])
+  assert.equal(dexStamBonusOf(all1), 1)
+  // 1体でも足りなければ数えない（0回は見つけていない）
+  const lack = { ...all1, [dexAreaOf(1)[19].name]: 0 }
+  assert.equal(isAreaComplete(1, lack), false)
+  assert.equal(dexStamBonusOf(lack), 0)
+  // 全部見つけたら15
+  const every = Object.fromEntries(DEX_ALL.map(e => [e.name, 3]))
+  assert.equal(dexStamBonusOf(every), DEX_AREA_COUNT * DEX_AREA_STAM)
+  assert.equal(dexStamBonusOf({}), 0)
+  assert.equal(dexCompleteText(4), '📖 蒼海の入り江の敵をすべて図鑑に登録した！ スタミナの最大値+1')
+  // 図鑑の画面：上の欄に獲得済み報酬・エリアの行に ★COMPLETE★・HELP に報酬の説明。出撃の記録に1行
+  const ui = readFileSync(new URL('../components/V2capDex.jsx', import.meta.url), 'utf8')
+  assert.ok(ui.includes('獲得済み報酬：') && ui.includes('スタミナの最大値 +{stamBonus}'))
+  assert.ok(ui.includes("{complete && <span style={{ color:'#ffcc00', marginLeft:'6px' }}>★COMPLETE★</span>}"))
+  assert.ok(ui.includes('エリアの敵（20体）をすべて見つけると、スタミナの最大値+{DEX_AREA_STAM}（エリアごと）。'))
+  const sortie = readFileSync(new URL('../components/V2capSortie.jsx', import.meta.url), 'utf8')
+  assert.ok(sortie.includes('if (data.dex?.area) after.push({ text: dexCompleteText(data.dex.area)'))
 })

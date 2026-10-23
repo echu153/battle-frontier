@@ -9,7 +9,7 @@
 // ★並びは monsters.js の AREA_ROSTERS（通常→時間帯→レア→ボス。ボスは①②③の順）。出る場所とLVは areas.js の enemyLevels
 // ============================================================
 import { AREA_ROSTERS, ENEMY_LV } from './monsters.js'
-import { enemyLevels } from './areas.js'
+import { enemyLevels, AREA_LIST } from './areas.js'
 import { RARITIES } from './equipment.js'
 import { DROP_CHANCE, canDropRarity } from './sortie.js'
 
@@ -69,3 +69,19 @@ export const dexProgressOf = (rows, kills) => {
   const done = rows.filter(e => isFound(kills, e.name)).length
   return { done, total: rows.length, pct: rows.length ? Math.floor(done * 100 / rows.length) : 0 }
 }
+
+// ===== 図鑑の報酬（2026-10-24）=====
+// 【確定】ユーザー指示「モンスター図鑑、そのエリアのキャラ全員登録したらスタミナ最大値＋1するようにして」：
+//   エリアの20体を全員見つける（1回以上倒す）と、スタミナの最大値+DEX_AREA_STAM（恒久的・15エリアで最大+15）。
+//   ★権威はサーバー（v2cap_dex_settle がプロフィールの dex_stam_bonus に入れる・§15）。ここは図鑑の画面の表示用の写し
+export const DEX_AREA_STAM = 1
+export const isAreaComplete = (area, kills) => {
+  const rows = dexAreaOf(area)
+  return rows.length > 0 && rows.every(e => isFound(kills, e.name))
+}
+export const dexCompleteAreasOf = (kills) =>
+  Array.from({ length: DEX_AREA_COUNT }, (_, i) => i + 1).filter(a => isAreaComplete(a, kills))
+export const dexStamBonusOf = (kills) => dexCompleteAreasOf(kills).length * DEX_AREA_STAM
+// 出撃の記録の1行（そのエリアの最後の1体を初めて倒したとき・サーバーの返事 dex＝{ area, bonus }）
+export const dexCompleteText = (area) =>
+  `📖 ${AREA_LIST[area - 1]?.name || ''}の敵をすべて図鑑に登録した！ スタミナの最大値+${DEX_AREA_STAM}`

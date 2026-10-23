@@ -7,7 +7,7 @@ import { STAT_KEYS, STAT_DEFS, calcPower, INITIAL_STATS } from '../core/stats.js
 import { skillValue, VALUE_TABLE, MP_TABLE, BUFF_PER_MP, HEAL_PER_MP, MPREGEN_PER_MP, SKILLS as V2_SKILLS, offClassMult } from '../core/skills.js'
 import { createSide, mpCostOf, runBattle } from '../core/battle.js'
 import {
-  MAX_LV, needExp, totalExpTo, applyExp, bodyPowerAt, staminaMaxOf, NEED_BASE, NEED_PERMIL, STAMINA_RECOVER_MS, rollStamina, msToNextStamina,
+  MAX_LV, needExp, totalExpTo, applyExp, bodyPowerAt, staminaMaxOf, staminaMaxOfProfile, NEED_BASE, NEED_PERMIL, STAMINA_RECOVER_MS, rollStamina, msToNextStamina,
   pointsForLv, totalPointsTo, POINT_UNIT, validateAllocation, applyAllocation,
 } from './level.js'
 import {
@@ -215,6 +215,15 @@ test('【確定】スタミナは3分に1回復・最大値はLVが1上がるご
   assert.equal(staminaMaxOf(5), 14)
   assert.equal(staminaMaxOf(100), 109)
   for (let l = 1; l < 100; l++) assert.equal(staminaMaxOf(l + 1) - staminaMaxOf(l), 1)
+  // 図鑑のボーナス（2026-10-24 ユーザー指示「そのエリアのキャラ全員登録したらスタミナ最大値＋1」）：プロフィールの dex_stam_bonus を足す
+  assert.equal(staminaMaxOf(5, 3), 17)
+  assert.equal(staminaMaxOfProfile({ lv: 5, dex_stam_bonus: 3 }), 17)
+  assert.equal(staminaMaxOfProfile({ lv: 5 }), 14, 'SQLを流す前（列が無い）は0として扱う')
+  for (const f of ['V2capStatus.jsx', 'V2capSortie.jsx']) {
+    const src = readFileSync(new URL(`../components/${f}`, import.meta.url), 'utf8')
+    assert.ok(src.includes('const stamMax = staminaMaxOfProfile(prof'), `${f} の最大値は図鑑のボーナス込み`)
+    assert.ok(!src.includes('staminaMaxOf('), `${f} で LV だけの最大値を使っていない`)
+  }
   assert.equal(STAMINA_RECOVER_MS, 3 * 60 * 1000)
   const t0 = Date.UTC(2026, 0, 1)
   assert.equal(rollStamina(0, t0, 10, t0 + 2 * 60 * 1000 + 59 * 1000).n, 0, '2分59秒ではまだ')

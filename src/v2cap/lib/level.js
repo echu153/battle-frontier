@@ -109,7 +109,11 @@ export const applyExp = (state, amount) => {
 //   LV1で10＝「10＋(LV−1)」＝LV100で109。今のⅡ（5分に1・転職回数で伸びる）とは別に、この版で持つ。
 // ★数える権威はサーバー（v2cap_stamina_max / v2cap_stamina_roll）。ここはその写し（v2capsql.test.js が突き合わせる）
 export const STAMINA_BASE = 10
-export const staminaMaxOf = (lv) => STAMINA_BASE + Math.max(1, Math.floor(lv || 1)) - 1
+// bonus＝モンスター図鑑のボーナス（2026-10-24 ユーザー指示「そのエリアのキャラ全員登録したらスタミナ最大値＋1」・プロフィールの dex_stam_bonus）
+export const staminaMaxOf = (lv, bonus = 0) =>
+  STAMINA_BASE + Math.max(1, Math.floor(lv || 1)) - 1 + Math.max(0, Math.floor(Number(bonus) || 0))
+// キャラの最大値（LV＋図鑑のボーナス）。画面はこちらを使う（サーバーの v2cap_stamina_max(lv, dex_stam_bonus) と同じ）
+export const staminaMaxOfProfile = (profile) => staminaMaxOf(profile?.lv, profile?.dex_stam_bonus)
 export const STAMINA_RECOVER_MS = 3 * 60 * 1000
 // 【確定】2026-10-23 博物館の報酬で、キャラごとに回復の間隔が短くなる（プロフィールの museum_stam_cut 秒・最大75秒）。
 //   上限は120秒（回復は60秒より短くしない）。★サーバーの v2cap_stamina_roll の c_base_sec・c_cut_max と同じ

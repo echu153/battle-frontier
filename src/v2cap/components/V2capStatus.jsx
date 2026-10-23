@@ -3,7 +3,7 @@ import { STAT_DEFS, calcPower } from '../core/stats.js'
 import { mmss } from '../core/stamina.js'
 import { KIND_COLOR, SKILL_SET_SLOTS } from '../core/skills.js'
 import { V2Tip, V2SkillTip } from './V2ItemTip.jsx'
-import { MAX_LV, needExp, staminaMaxOf, rollStamina, msToNextStamina, staminaSpanMsOf, POINTS_PER_LV, POINTS_ON_STEP, POINTS_STEP } from '../lib/level.js'
+import { MAX_LV, needExp, staminaMaxOfProfile, rollStamina, msToNextStamina, staminaSpanMsOf, POINTS_PER_LV, POINTS_ON_STEP, POINTS_STEP } from '../lib/level.js'
 import { jobMaxOf, jobNeed, jobOf, stageOf, stageColorOf, weaponsOf, JOB_LV_HPMP } from '../lib/jobs.js'
 import { passiveOf, SKILL_BY_NAME } from '../lib/skills.js'
 import { SLOTS, SLOT_LABEL, ARMOR_LINES, ARMOR_EFFECT, kindLabel, RARITY_COLOR } from '../lib/equipment.js'
@@ -70,7 +70,7 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
   const lvNeed = needExp(prof.lv)
   const jMax = job.lv >= jobMaxOf(prof.class)
   const jNeed = jobNeed(stage, job.lv)
-  const stamMax = staminaMaxOf(prof.lv)
+  const stamMax = staminaMaxOfProfile(prof)   // LV＋図鑑のボーナス（2026-10-24）
   // 回復の間隔は博物館の報酬で短くなる（2026-10-23・プロフィールの museum_stam_cut 秒）
   const stamSpan = staminaSpanMsOf(prof)
   const stamNow = rollStamina(prof.stamina, prof.stamina_at, stamMax, now, stamSpan).n
