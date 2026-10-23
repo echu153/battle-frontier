@@ -33,6 +33,7 @@ const tierBadge = (t, on = true) => ({
 const rowKey = (d) => `${d.item.id}|${d.tier}`
 // 段階の見出し【未強化】【+5】【+9】（2026-10-23 ユーザー指示「強化値を【】とかで囲って、見やすいように」）
 const tierTag = (t) => `【${t.label}】`
+const NOWRAP = { whiteSpace:'nowrap' }   // 句の途中で改行しない（折り返すのは句と句のあいだだけ）
 // size … 装備名だけの文字の大きさ（1つずつの寄贈の確認＝2026-10-23 ユーザー指示「装備の名前見やすくするようにフォントの大きさ大きく」「装備名だけね」）
 const NameLine = ({ d, size }) => (
   <>
@@ -260,10 +261,21 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
           //   「レアリティの文字は（…）わかりやすくして」）。報酬は2行（同じ日「これを改行」）
           <div key={r} style={{ border:`1px solid ${RARITY_COLOR[r]}55`, background:'#000a1c', padding:'8px', marginBottom:'10px' }}>
             {/* 段階ごとの登録数（そろえば ✔）と、そのレア度の報酬（2026-10-23） */}
-            {/* レア度の札と、段階ごとの登録数は別の行（スマホの幅で段階が途中で折り返さないように） */}
-            <span style={{ display:'inline-block', color: RARITY_COLOR[r], border:`1px solid ${RARITY_COLOR[r]}`, background:`${RARITY_COLOR[r]}22`,
-              padding:'1px 10px', fontSize:'12px', fontWeight:'bold', marginBottom:'6px' }}>{rarityLabel(r)}</span>
-            <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:'2px 10px', fontSize:'11px' }}>
+            {/* レア度の札の右に、そのレア度の報酬の2行（2026-10-23 ユーザー指示「レアリティの右に持ってこれない？」）。
+                幅が足りないときは句の切れ目（「〜ごとに」「〜寄贈で」のあと）で折り返す＝言葉の途中で改行しない */}
+            {/*   ★余白は スマホ（375px）でいちばん長い「レジェンダリー」の札の右に「1段階そろうごとに ステータスポイント+4」が1行で入る幅（測って決めた） */}
+            <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'6px' }}>
+              <span style={{ flexShrink:0, color: RARITY_COLOR[r], border:`1px solid ${RARITY_COLOR[r]}`, background:`${RARITY_COLOR[r]}22`,
+                padding:'1px 7px', fontSize:'12px', fontWeight:'bold' }}>{rarityLabel(r)}</span>
+              <div style={{ flex:1, minWidth:0, fontSize:'10px', color: TEXT.sub, lineHeight:1.6 }}>
+                <div><span style={NOWRAP}>1段階そろうごとに</span> <span style={NOWRAP}>ステータスポイント+{MUSEUM_SET_SP[r]}</span></div>
+                <div style={{ color: rp.allTiers ? '#ffcc00' : TEXT.sub }}>
+                  <span style={NOWRAP}>3段階すべて寄贈で</span> <span style={NOWRAP}>スタミナ回復−{MUSEUM_RARITY_STAM_SEC}秒{rp.allTiers ? ' ✔' : ''}</span>
+                </div>
+              </div>
+            </div>
+            {/* 段階ごとの登録数（札と別の行＝スマホの幅で段階が途中で折り返さないように） */}
+            <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:'2px 10px', fontSize:'11px', marginBottom:'6px' }}>
               {rp.tiers.map(x => {
                 const t = MUSEUM_TIERS[x.tier]
                 return (
@@ -272,10 +284,6 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
                   </span>
                 )
               })}
-            </div>
-            <div style={{ fontSize:'10px', color: TEXT.sub, margin:'6px 0 6px', lineHeight:1.7 }}>
-              <div>1段階そろうごとに ステータスポイント+{MUSEUM_SET_SP[r]}</div>
-              <div style={{ color: rp.allTiers ? '#ffcc00' : TEXT.sub }}>3段階すべて寄贈で スタミナ回復−{MUSEUM_RARITY_STAM_SEC}秒{rp.allTiers ? ' ✔' : ''}</div>
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(min(100%, 230px), 1fr))', gap:'3px' }}>
               {group.items.filter(it => it.rarity === r).map(it => {
