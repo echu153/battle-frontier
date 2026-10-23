@@ -3112,6 +3112,13 @@ alter table public.v2cap_profiles add constraint v2cap_profiles_gender_check che
 --   ブラウザが送り直した・画面が待ってから送り直した）、何もしないで前の返事を返す＝2回入れない。返事にプロフィールまるごとは入れない
 alter table public.v2cap_profiles add column if not exists last_sortie_key text;
 alter table public.v2cap_profiles add column if not exists last_sortie_res jsonb;
+-- 【確定】2026-10-23 V1からの引き継ぎ（§4 の v2cap_v1_carry・キャラ作成のときに1回だけ入れる）：
+--   v1_exp_mult＝EXPの倍率（10分率・15＝×1.5・0＝なし）／v1_exp_until＝このLVに着くまで掛ける（v2cap_apply_exp）／
+--   v1_ticket＝ユニークをこの強化値にする券（0＝持っていない・使ったら0）／v1_carry＝引き継いだものの控え（画面の表示用・無ければ null）
+alter table public.v2cap_profiles add column if not exists v1_exp_mult  int not null default 0;
+alter table public.v2cap_profiles add column if not exists v1_exp_until int not null default 0;
+alter table public.v2cap_profiles add column if not exists v1_ticket    int not null default 0;
+alter table public.v2cap_profiles add column if not exists v1_carry     jsonb;
 create unique index if not exists v2cap_profiles_username_lower_idx
   on public.v2cap_profiles (lower(username));
 -- 参照は認証済み全員（今のⅡと同じ）。書き込みはRPC経由だけ
@@ -3648,15 +3655,24 @@ declare
   v_set   jsonb;
   v_fill  jsonb;
   v_setadd jsonb;
+  v_gain  int;   -- 入れるEXP（V1からの引き継ぎの倍率を掛けたあと）
 begin
   select * into v_row from public.v2cap_profiles where id = p_player for update;
   if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがありません'); end if;
 
+  -- ★V1からの引き継ぎ（2026-10-23・§4 の v2cap_v1_carry）：v1_exp_until のLVに着くまで EXP×v1_exp_mult÷10（四捨五入）。
+  --   出撃・塔・宝樹・デイリーのEXPはどれもここを通る。ClassEXPにも同じ量（「入るのはEXPと同じ量」のまま）。
+  --   画面は返り値の gained（掛けたあとのEXP）を出す（v1carry.js の v1BoostedExp と同じ式）
+  v_gain := greatest(coalesce(p_amount, 0), 0);
+  if v_gain > 0 and coalesce(v_row.v1_exp_mult, 0) > 10 and v_row.lv < coalesce(v_row.v1_exp_until, 0) then
+    v_gain := least(2000000000::bigint, (v_gain::bigint * v_row.v1_exp_mult + 5) / 10)::int;
+  end if;
+
   -- LV（転職しても下がらない。LV100で止まり、あふれたぶんは捨てる）
   v_lv  := v_row.lv;
   v_exp := v_row.exp;
-  if coalesce(p_amount, 0) > 0 and v_lv < c_max_lv then
-    v_exp := v_exp + p_amount;
+  if v_gain > 0 and v_lv < c_max_lv then
+    v_exp := v_exp + v_gain;
     while v_lv < c_max_lv and v_exp >= public.v2cap_need(v_lv) loop
       v_exp := v_exp - public.v2cap_need(v_lv);
       v_lv  := v_lv + 1;
@@ -3675,8 +3691,8 @@ begin
   v_job_max := coalesce(v_job_max, 30);
   v_jlv  := coalesce((v_row.jobs -> v_cls ->> 'lv')::int, 1);
   v_jexp := coalesce((v_row.jobs -> v_cls ->> 'exp')::int, 0);
-  if v_stage is not null and coalesce(p_amount, 0) > 0 and v_jlv < v_job_max then
-    v_jexp := v_jexp + p_amount;
+  if v_stage is not null and v_gain > 0 and v_jlv < v_job_max then
+    v_jexp := v_jexp + v_gain;
     while v_jlv < v_job_max and v_jexp >= public.v2cap_job_need(v_stage, v_jlv) loop
       v_jexp := v_jexp - public.v2cap_job_need(v_stage, v_jlv);
       v_jlv  := v_jlv + 1;
@@ -3703,7 +3719,7 @@ begin
 
   update public.v2cap_profiles set
     lv = v_lv, exp = v_exp,
-    total_exp = total_exp + greatest(coalesce(p_amount, 0), 0),
+    total_exp = total_exp + v_gain,
     stat_points = stat_points + v_pts,
     jobs = jsonb_set(coalesce(jobs, '{}'::jsonb), array[v_cls], jsonb_build_object('lv', v_jlv, 'exp', v_jexp)),
     learned = v_new,
@@ -3714,6 +3730,7 @@ begin
 
   return jsonb_build_object(
     'ok', true,
+    'gained', v_gain, 'v1_bonus', v_gain - greatest(coalesce(p_amount, 0), 0),
     'level_ups', v_ups, 'lv', v_lv,
     'job_ups', v_jups, 'jlv', v_jlv,
     'learned', v_added,
@@ -3776,6 +3793,198 @@ grant execute on function public.v2cap_allocate_points(jsonb) to authenticated;
 -- ============================================================
 -- ===== 4. キャラクター作成 =====
 -- ============================================================
+-- ---- V1からの引き継ぎ（2026-10-23）----
+-- 【確定】2026-10-23 ユーザーが決めたこと（設計 docs/v2cap-design.md §6-11・写しは src/v2cap/lib/v1carry.js＝v1carry.test.js が突き合わせる）：
+--   ・引き継ぐのは **v2cap のキャラクターを作成したとき**（下の v2cap_create_character の中・その時点の V1 の値で1回だけ）。
+--     作成はいまは管理者だけ（v2cap_is_dev）＝一般の人には V2 を公開するまで入らない
+--     （ユーザー指示「作ってもV2サービス開始するまでは一般の人たちには適用されないように」）
+--   ・V1 の表（profiles.char_lv・player_equipment＋weapons・player_items＋items）は**読むだけ**。書き換えない・消さない
+--     （V1 は10月いっぱいで止める予定＝止めたあとは V1 の最後の値を読む）
+--   ①EXP：V1 のキャラLV÷10（切り捨て・最大LV50）のLVに着くまで EXP×1.5。V1 のLV500から200ごとに +0.1（LV700で×1.6・上限なし）
+--     （V1 のLV100→LV10まで・300→LV30まで・500以上→LV50まで）。掛けるのは v2cap_apply_exp（EXPが入る所は全部そこを通る）
+--   ②装備：V1 でいちばん強化値の高い装備（同じならレア度の高いほう）を見る。V1 のボス装備（src/constants/bossEvolution.js）なら
+--     v2cap の同じボスのユニーク、v2cap に同じものが無い装備（レイド装備・ふつうの装備・インフェルノバスティオン・覇龍の聖鎧）は
+--     **同じ種類のユニークからランダム**（武器は武器種・防具は防具・装飾品は装飾品）。持ち物に入れるだけ（着けない）。
+--     ＋「ユニークをその強化値にする券」1枚（v1_ticket・+1以上のときだけ・最大+16＝V1の強化の上限。ユーザー「+10以降も反映させていい」）
+--   ③箱（V1 の items.effect='mystery_box_v2'）：不思議な箱1つ＝残骸1〜3個・奇妙な箱1つ＝残骸5〜10個。
+--     エリアは**15エリアからランダム**（1つずつ引く・行ったことのないエリアも出る）。数の上限なし。全部開けて残骸にする
+-- ⚠内部ヘルパ（作成からだけ呼ぶ）。必ず REVOKE する
+create or replace function public.v2cap_v1_carry(p_uid uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_rank     constant text[] := array['f', 'e', 'd', 'c', 'b', 'a', 's', 'ss', 'sss'];   -- V1 のレア度（低い順）
+  c_plus_cap constant int := 16;    -- 強化券の上限（smith.js の PLUS_CAP）
+  c_areas    constant int := 15;
+  c_exp_base constant int := 15;    -- ×1.5（10分率）
+  c_exp_lv   constant int := 500;   -- V1 のこのLVから
+  c_exp_step constant int := 200;   -- 200ごとに +0.1
+  c_exp_max  constant int := 50;    -- v2cap のLV50まで
+  -- V1 のボス装備 → v2cap の同じボスのユニーク（同じ並び・v1carry.js の V1_BOSS_UNIQUE と同じ）
+  c_v1 constant text[] := array['スライムの指輪', '蒼粘剣', '略奪者の短剣', '影踏みのブーツ', '古代魔導コア', '虚無の杖',
+    '海竜の鱗', 'アクアクラウン', '雷鷲の爪牙', '嵐の重装甲', '絶零の魔導砲', 'フロストバーンの聖鎧',
+    '深紅の牙輪', '深紅の魔眼石', 'ウラノスの天砲', '蒼天龍の指輪'];
+  c_v2 constant text[] := array['ビッグスライムの指輪', '蒼蝕の魔剣', '簒奪の刃', '影縫いのブーツ', '番人の心核', '虚葬の錫杖',
+    '海竜の蒼鱗', 'タイダルクラウン', '嵐鷲の爪牙', '嵐纏の重鎧', '絶零の魔導砲', 'フロストバーンの聖鎧',
+    '深紅の牙輪', '深紅の魔眼石', 'ウラノスの天砲', '蒼天龍の指輪'];
+  v_clv    int := 0;
+  v_until  int := 0;
+  v_mult   int := 0;
+  v_w      record;
+  v_cat    text;
+  v_kinds  text[];
+  v_ueq    public.v2cap_equipment;
+  v_inv    bigint;
+  v_ticket int := 0;
+  v_same   boolean := false;   -- V1 のボス装備と同じボスのユニークを渡したか（false＝同じ種類からランダム）
+  v_item   jsonb := null;
+  v_uniq   jsonb := null;
+  v_myst   bigint := 0;
+  v_odd    bigint := 0;
+  v_scr    int[] := array_fill(0, array[15]);
+  v_a      int;
+  v_i      int;
+  v_mat    jsonb;
+  v_scraps jsonb := '{}'::jsonb;
+  v_out    jsonb;
+begin
+  -- ① V1 のキャラLV（V1 のキャラがいなければ0）
+  select coalesce(p.char_lv, 0) into v_clv from public.profiles p where p.id = p_uid;
+  v_clv := greatest(0, coalesce(v_clv, 0));
+  v_until := least(c_exp_max, v_clv / 10);
+  if v_until >= 2 then   -- LV1に着くまで＝掛からないので、LV2から（V1 のLV20から）
+    v_mult := c_exp_base + case when v_clv >= c_exp_lv then (v_clv - c_exp_lv) / c_exp_step else 0 end;
+  else
+    v_until := 0;
+  end if;
+
+  -- ② V1 でいちばん強化値の高い装備（同じならレア度の高いほう・それも同じなら先に手に入れたほう）
+  select w.name, lower(coalesce(w.rarity, '')) as rarity, lower(coalesce(w.slot, '')) as slot,
+         lower(coalesce(w.weapon_type, '')) as wtype, greatest(0, coalesce(pe.enhance_plus, 0)) as plus
+    into v_w
+    from public.player_equipment pe join public.weapons w on w.id = pe.weapon_id
+   where pe.player_id = p_uid
+   order by coalesce(pe.enhance_plus, 0) desc, coalesce(array_position(c_rank, lower(w.rarity)), 0) desc, pe.id
+   limit 1;
+  if found then
+    v_item := jsonb_build_object('name', v_w.name, 'plus', v_w.plus, 'rarity', v_w.rarity);
+    -- V1 のボス装備なら、同じボスのユニーク
+    if array_position(c_v1, v_w.name) is not null then
+      select * into v_ueq from public.v2cap_equipment e
+       where e.rarity = 'U' and e.name = c_v2[array_position(c_v1, v_w.name)];
+      v_same := v_ueq.id is not null;
+    end if;
+    -- 同じものが無ければ、同じ種類のユニークからランダム（武器は武器種・防具は防具・装飾品は装飾品）
+    if v_ueq.id is null then
+      v_cat := case when v_w.slot = 'armor' or v_w.wtype = 'armor' then 'armor'
+                    when v_w.slot = 'accessory' or v_w.wtype = 'accessory' then 'acc'
+                    else 'weapon' end;
+      v_kinds := case v_w.wtype
+        when 'sword'   then array['片手剣', '両手剣']
+        when 'katana'  then array['刀']
+        when 'axe'     then array['斧']
+        when 'spear'   then array['槍']
+        when 'bow'     then array['弓']
+        when 'dagger'  then array['短剣']
+        when 'knuckle' then array['拳']
+        when 'gun'     then array['銃']
+        when 'staff'   then array['杖']
+        when 'wand'    then array['杖']
+        when 'rod'     then array['杖']
+        when 'tome'    then array['書']
+        when 'book'    then array['書']
+        when 'orb'     then array['宝珠']
+        else null end;
+      select * into v_ueq from public.v2cap_equipment e
+       where e.rarity = 'U'
+         and case v_cat when 'armor' then e.part in ('頭', '鎧', '腕', '足')
+                        when 'acc'   then e.part = 'アクセ'
+                        else e.part = '武器' and (v_kinds is null or e.type = any(v_kinds)) end
+       order by random() limit 1;
+      -- 武器種に当たるユニークが無いときは、武器のユニークから
+      if v_ueq.id is null and v_cat = 'weapon' then
+        select * into v_ueq from public.v2cap_equipment e where e.rarity = 'U' and e.part = '武器' order by random() limit 1;
+      end if;
+    end if;
+    if v_ueq.id is not null then
+      insert into public.v2cap_inventory (player_id, base_id, ilv)
+      values (p_uid, v_ueq.id, coalesce(v_ueq.lv, 80)) returning id into v_inv;
+      v_uniq := jsonb_build_object('id', v_ueq.id, 'name', v_ueq.name, 'inv', v_inv, 'same', v_same);
+      v_ticket := least(c_plus_cap, v_w.plus);
+    end if;
+  end if;
+
+  -- ③ 箱：全部開けて残骸にする（1つずつエリアを引く）
+  select coalesce(sum(greatest(0, pi.quantity)) filter (where i.name = '不思議な箱'), 0),
+         coalesce(sum(greatest(0, pi.quantity)) filter (where i.name = '奇妙な箱'), 0)
+    into v_myst, v_odd
+    from public.player_items pi join public.items i on i.id = pi.item_id
+   where pi.player_id = p_uid and i.effect = 'mystery_box_v2';
+  for v_i in 1 .. v_myst::int loop
+    v_a := 1 + floor(random() * c_areas)::int;
+    v_scr[v_a] := v_scr[v_a] + 1 + floor(random() * 3)::int;   -- 1〜3
+  end loop;
+  for v_i in 1 .. v_odd::int loop
+    v_a := 1 + floor(random() * c_areas)::int;
+    v_scr[v_a] := v_scr[v_a] + 5 + floor(random() * 6)::int;   -- 5〜10
+  end loop;
+  select coalesce(materials, '{}'::jsonb) into v_mat from public.v2cap_profiles where id = p_uid;
+  for v_a in 1 .. c_areas loop
+    if v_scr[v_a] > 0 then
+      v_mat := jsonb_set(v_mat, array[v_a::text], to_jsonb(coalesce((v_mat ->> v_a::text)::int, 0) + v_scr[v_a]));
+      v_scraps := v_scraps || jsonb_build_object(v_a::text, v_scr[v_a]);
+    end if;
+  end loop;
+
+  -- V1 から何も来なければ控えは残さない（画面に引き継ぎの知らせを出さない）
+  if v_until = 0 and v_uniq is null and v_myst + v_odd = 0 then return null; end if;
+  v_out := jsonb_build_object('char_lv', v_clv, 'exp_mult', v_mult, 'exp_until', v_until,
+    'item', v_item, 'unique', v_uniq, 'ticket', v_ticket,
+    'boxes', jsonb_build_object('mystery', v_myst, 'strange', v_odd), 'scraps', v_scraps, 'at', now());
+  update public.v2cap_profiles
+     set v1_exp_mult = v_mult, v1_exp_until = v_until, v1_ticket = v_ticket, materials = v_mat,
+         v1_carry = v_out, updated_at = now()
+   where id = p_uid;
+  return v_out;
+end;
+$$;
+revoke all on function public.v2cap_v1_carry(uuid) from public, anon, authenticated;
+
+-- 強化券を使う：ユニークの装備1つを、券の強化値（V1 でいちばん強化した装備の強化値・最大+16）にする。1回だけ（使ったら券はなくなる）。
+--   必ずできる（失敗なし・Goldも残骸も使わない）。いまの強化値が券の値と同じか上なら使えない（券は残る）。
+--   ★ふつうの強化（v2cap_enhance）は+10まで。券で+11より上になった装備は、ふつうの強化ではそれより上がらない
+create or replace function public.v2cap_v1_ticket_use(p_inv bigint)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_plus_cap constant int := 16;
+  v_uid uuid := auth.uid();
+  v_row public.v2cap_profiles;
+  v_inv public.v2cap_inventory;
+  v_eq  public.v2cap_equipment;
+  v_to  int;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select * into v_row from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  v_to := least(c_plus_cap, coalesce(v_row.v1_ticket, 0));
+  if v_to <= 0 then return jsonb_build_object('ok', false, 'error', '強化券を持っていません'); end if;
+  select * into v_inv from public.v2cap_inventory where id = p_inv and player_id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'その装備を持っていません'); end if;
+  select * into v_eq from public.v2cap_equipment where id = v_inv.base_id;
+  if v_eq.rarity is distinct from 'U' then
+    return jsonb_build_object('ok', false, 'error', '強化券はユニークの装備にだけ使えます');
+  end if;
+  if coalesce(v_inv.plus, 0) >= v_to then
+    return jsonb_build_object('ok', false, 'error', format('この装備はもう+%s以上です', v_to));
+  end if;
+  update public.v2cap_inventory set plus = v_to where id = v_inv.id returning * into v_inv;
+  update public.v2cap_profiles set v1_ticket = 0, updated_at = now() where id = v_uid returning * into v_row;
+  return jsonb_build_object('ok', true, 'plus', v_to, 'inv', to_jsonb(v_inv), 'profile', to_jsonb(v_row));
+end;
+$$;
+revoke all on function public.v2cap_v1_ticket_use(bigint) from public, anon;
+grant execute on function public.v2cap_v1_ticket_use(bigint) to authenticated;
+
 -- 名前と、最初の職業（初期職10から）。ClassLV1で覚えるスキルを1つ持って始め、その職業の編成にも入れておく
 -- （回数は最大MPに収まるだけ・最大5回＝ v2cap_default_set）
 -- ★性別（2026-10-21）：p_gender は 'm'／'f'。前の画面（p_gender を送らない）から作ったときは null＝ホームで1回だけ選ぶ（v2cap_set_gender）
@@ -3795,6 +4004,7 @@ declare
   v_equip jsonb := '{}'::jsonb;
   v_inv   bigint;
   v_i     int;
+  v_carry jsonb;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
@@ -3836,7 +4046,10 @@ begin
          equipped = v_equip
    where id = v_uid
    returning * into v_row;
-  return jsonb_build_object('ok', true, 'profile', to_jsonb(v_row));
+  -- ★V1からの引き継ぎ（2026-10-23・上の v2cap_v1_carry）：作成したこのときに1回だけ。V1 から何も来なければ carry は null
+  v_carry := public.v2cap_v1_carry(v_uid);
+  select * into v_row from public.v2cap_profiles where id = v_uid;
+  return jsonb_build_object('ok', true, 'profile', to_jsonb(v_row), 'carry', v_carry);
 exception when unique_violation then
   return jsonb_build_object('ok', false, 'error', 'その名前はすでに使われています');
 end;

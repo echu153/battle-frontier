@@ -30,6 +30,7 @@ import { spotLabel } from '../lib/areas.js'
 import { RARITY_COLOR } from '../lib/equipment.js'
 import { GENDER_BY_KEY, genderOf } from '../lib/gender.js'
 import V2capGenderPick from '../components/V2capGenderPick.jsx'
+import { CarryLines } from '../components/V2capV1Carry.jsx'
 
 // ============================================================
 // バトルフロンティアⅡ「レベルキャップあり」版 — ホーム（開発限定）
@@ -113,6 +114,7 @@ export default function V2capHome() {
   const [error, setError] = useState('')
   const [devMsg, setDevMsg] = useState('')
   const [confirmReset, setConfirmReset] = useState(false)
+  const [carry, setCarry] = useState(null)   // 作成したときに V1 から引き継いだもの（作成の直後に1回だけ知らせる・2026-10-23）
   // ★開け閉めは覚えておく。今のⅡ（v2:openStatus・v2:openMenu）とは別のキー。
   //   【確定】2026-10-15 ユーザー指示「閉じたら閉じる、開いたら開くを継続させて」：端末だけでなくキャラのデータにも覚える（useCapFold）。
   //   今日のミッションの開け閉めも同じに覚える（前は毎回畳んで始めていた）
@@ -176,6 +178,9 @@ export default function V2capHome() {
     if (rpcErr || !data?.ok) { setError(rpcErr?.message || data?.error || '作成に失敗しました'); return }
     setProf(data.profile)
     setInventory([])
+    // ★V1からの引き継ぎ（サーバーの v2cap_v1_carry が作成のときに入れる）：受け取ったものを知らせ、ユニークが入った持ち物を読み直す
+    if (data.carry) setCarry(data.carry)
+    refresh()
   }
   // 性別を持たない前からのキャラが、ホームで1回だけ選ぶ（サーバーは性別が空のときだけ通す）
   const saveGender = async () => {
@@ -347,6 +352,13 @@ export default function V2capHome() {
         <V2Modal title="キャラクターを作り直す［開発］" color="#ff8844" danger busy={busy}
           confirmLabel="消して作り直す" onConfirm={resetChar} onClose={() => setConfirmReset(false)}>
           この版のキャラクターと装備を消します（今のⅡ・旧版のデータには触りません）。元には戻せません。
+        </V2Modal>
+      )}
+      {carry && (
+        <V2Modal title="🔁 V1からの引き継ぎ" color="#88aaff" onClose={() => setCarry(null)}>
+          <div style={{ color: TEXT.sub, fontSize:'11px', marginBottom:'6px' }}>バトルフロンティアで遊んだ記録から、次のものを引き継ぎました。</div>
+          <CarryLines carry={carry} />
+          <div style={{ color: TEXT.label, fontSize:'10px', marginTop:'6px' }}>あとからプロフィールでも見られます。</div>
         </V2Modal>
       )}
       {header}

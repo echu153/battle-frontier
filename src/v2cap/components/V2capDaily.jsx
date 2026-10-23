@@ -6,6 +6,8 @@ import {
   DAILY_TASKS, DAILY_SORTIES, dailyOf, dailyRewardOf, taskProgressOf, doneCountOf, isDailyComplete, claimErrorOf, nextResetAt, dayOf,
 } from '../lib/daily.js'
 import { jobUpHead, jobUpNote } from '../lib/jobs.js'
+import { gainedExpOf } from '../lib/settleLines.js'
+import { v1BoostOn, v1BoostedExp, multLabel } from '../lib/v1carry.js'
 import { recSpotOfLv, spotLabel } from '../lib/areas.js'
 import { TOWER_NAME } from '../lib/tower.js'
 
@@ -34,6 +36,9 @@ export default function V2capDaily({ prof, onProfile, open = false, onToggle }) 
   const claimErr = claimErrorOf(d)
   const rewardLv = d.accepted ? d.lv : prof.lv
   const reward = dailyRewardOf(rewardLv)
+  // V1からの引き継ぎの倍率が掛かっているあいだは、入る量で見せる（サーバーの v2cap_apply_exp と同じ式）
+  const boost = v1BoostOn(prof)
+  const rewardExp = v1BoostedExp(reward.exp, prof)
 
   const call = async (fn) => {
     setBusy(true); setMsg('')
@@ -103,7 +108,8 @@ export default function V2capDaily({ prof, onProfile, open = false, onToggle }) 
         </div>
         <div style={{ color: TEXT.label, fontSize:'10px', margin:'6px 0', lineHeight:1.7 }}>
           {d.accepted ? `報酬（受注したLV${d.lv}）` : `いま受注すると（LV${rewardLv}）`}
-          <span style={{ color:'#ffcc00', marginLeft:'6px' }}>EXP +{reward.exp.toLocaleString()}・Gold +{reward.gold.toLocaleString()}</span>
+          <span style={{ color:'#ffcc00', marginLeft:'6px' }}>EXP +{rewardExp.toLocaleString()}・Gold +{reward.gold.toLocaleString()}</span>
+          {boost && <span style={{ color:'#44ff88', marginLeft:'4px' }}>（V1の引き継ぎでEXP{multLabel(prof.v1_exp_mult)}）</span>}
           <span style={{ color: TEXT.sub }}>（EXPはLV{rewardLv}の推奨の場所「{spotLabel(recSpotOfLv(rewardLv))}」で{DAILY_SORTIES}回出撃したくらい・GoldはLV×100）</span>
         </div>
         {!d.accepted ? (
@@ -129,7 +135,7 @@ export default function V2capDaily({ prof, onProfile, open = false, onToggle }) 
       {got && (
         <V2Modal title="🎁 ミッション達成！" color="#ffcc00" onClose={() => setGot(null)}>
           <div style={{ color:'#ffcc00', fontSize:'14px' }}>
-            EXP +{Number(got.exp).toLocaleString()}　Gold +{Number(got.gold).toLocaleString()} を受け取った！
+            EXP +{gainedExpOf(got).toLocaleString()}　Gold +{Number(got.gold).toLocaleString()} を受け取った！
           </div>
           {got.level?.level_ups > 0 && (
             <div style={{ color:'#44ff88', marginTop:'4px' }}>

@@ -8,7 +8,7 @@ import { AREA_LIST } from './areas.js'
 import { powerAt, statsAt, spreadStats, effectivePowerAt } from './gear.js'
 import { statBreakdown } from './loadout.js'
 import {
-  PLUS_MAX, plusOf, plusMultOf, plusLabel, SCRAP_NAMES, scrapNameOf, scrapOf, SCRAP_YIELD, scrapYieldOf,
+  PLUS_MAX, PLUS_CAP, plusOf, plusMultOf, plusLabel, SCRAP_NAMES, scrapNameOf, scrapOf, SCRAP_YIELD, scrapYieldOf,
   dismantleGainOf, bulkPickable, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, enhanceGoldOf,
   enhanceScrapOf, enhanceCostOf, enhanceErrorOf, rollEnhance, expectedEnhanceCost,
   CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV, canCraft, craftCostOf, craftErrorOf,
@@ -55,7 +55,12 @@ test('【確定】強化値は+10まで。+1ごとに元の強さの0.1倍ずつ
   assert.equal(plusMultOf(1), 1.1)
   assert.equal(plusMultOf(5), 1.5)
   assert.equal(plusMultOf(10), 2)
-  assert.equal(plusOf({ plus: 12 }), 10, '上限より上は上限')
+  // 【確定】2026-10-23 V1からの引き継ぎの強化券で +16 まで入る（PLUS_CAP）。ふつうの強化は +10 まで（PLUS_MAX）
+  assert.equal(PLUS_CAP, 16)
+  assert.equal(plusOf({ plus: 12 }), 12, '強化券で入った+11より上はそのまま')
+  assert.equal(plusOf({ plus: 20 }), 16, 'PLUS_CAP より上は PLUS_CAP')
+  assert.equal(plusMultOf(16), 2.6)
+  assert.equal(enhanceCostOf(ITEMS[0], { plus: 12 }), null, '+10より上はふつうの強化では上がらない')
   assert.equal(plusOf({}), 0)
   assert.equal(plusLabel(0), '')
   assert.equal(plusLabel(3), '+3')
@@ -70,7 +75,7 @@ test('【確定】2026-10-12 強化は1回ごとに戦闘力が最低でも+1（
   // ユーザー「装備強化するとき、1.1倍だから数値が上がらない場合がある、初期の装備とかは上り幅わかりづらい」→「最低でも+1にする」を選んだ
   for (const item of [...ITEMS, ...STARTER_ITEMS]) {
     for (const ilv of [item.lv, item.lv + 7]) {
-      for (let p = 0; p < PLUS_MAX; p++) {
+      for (let p = 0; p < PLUS_CAP; p++) {   // 強化券で入る +16 まで（2026-10-23）
         assert.ok(powerAt(item, ilv, p + 1) >= powerAt(item, ilv, p) + 1, `${item.id} LV${ilv} +${p}→+${p + 1}`)
       }
     }
@@ -82,8 +87,9 @@ test('【確定】2026-10-12 強化は1回ごとに戦闘力が最低でも+1（
   const big = itemOf(15, 'L', '両手剣')
   assert.equal(powerAt(big, big.lv, 10), 2 * powerAt(big, big.lv) - 1, '丸めの差は1まで')
   assert.equal(powerAt(big, big.lv, 1), Math.round(powerAt(big, big.lv) * 1.1))
-  // 上限より上は+10と同じ
-  assert.equal(powerAt(ear, 1, 12), powerAt(ear, 1, 10))
+  // +11からも同じ足し方（強化券・2026-10-23）。PLUS_CAP（+16）より上は+16と同じ
+  assert.equal(powerAt(ear, 1, 12), 16)
+  assert.equal(powerAt(ear, 1, 20), powerAt(ear, 1, PLUS_CAP))
 })
 
 test('強化値は必要LVに足りないときも掛ける（2026-10-18〜 LV相当の強さに強化値を掛ける＝ステの合計はその戦闘力）', () => {

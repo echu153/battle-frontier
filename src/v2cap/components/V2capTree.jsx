@@ -3,6 +3,7 @@ import { supabase } from '../../supabase'
 import { TEXT } from './v2ui.js'
 import { FORTUNE_BY_NAME, canPray, remainUntilPray, prayDayOf } from '../lib/tree.js'
 import { jobUpHead, jobUpNote } from '../lib/jobs.js'
+import { gainedExpOf } from '../lib/settleLines.js'
 import V2capRevelationFx from './V2capRevelationFx.jsx'
 import { JP_BOLD } from './casinoStyle.js'
 import { TREE_ART, MINCHO, revelationStyleOf, stageArtOf, artFilterOf } from '../lib/fxStyle.js'
@@ -190,7 +191,7 @@ export default function V2capTree({ prof, onProfile, unlimited = false }) {
               {result && (
                 <div style={{ position:'relative', marginTop:'1.6cqw', padding:'0.3em 1.1em', border:'1px solid #ffcc0077', background:'rgba(0,0,0,0.45)',
                   color:'#ffcc00', fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'clamp(12px, 3.2cqw, 16px)', textShadow:'0 0 8px #ffb30066' }}>
-                  EXP +{Number(result.exp).toLocaleString()}
+                  EXP +{gainedExpOf(result).toLocaleString()}
                 </div>
               )}
             </div>

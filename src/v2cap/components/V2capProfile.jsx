@@ -6,6 +6,7 @@ import { stageColorOf } from '../lib/jobs.js'
 import { GENDER_BY_KEY, genderOf } from '../lib/gender.js'
 import { avatarUrlOf, myIconOf } from './v2capAvatarUrl.js'
 import V2capBreakdown from './V2capBreakdown.jsx'
+import V2capV1Carry from './V2capV1Carry.jsx'
 
 // ============================================================
 // 「レベルキャップあり」版 — プロフィール（アイコンを設定する・ステータスの内訳）
@@ -104,6 +105,9 @@ export default function V2capProfile({ prof, inventory, onProfile }) {
       </div>
 
       <V2capBreakdown prof={prof} inventory={inventory} />
+
+      {/* V1からの引き継ぎ（2026-10-23・引き継ぎが無いキャラには出さない） */}
+      <V2capV1Carry prof={prof} />
 
       {/* 用意されたアイコン・自分の画像は 2026-10-22 から一旦止めている（lib/avatar.js の AVATAR_CUSTOM_ON） */}
       {AVATAR_CUSTOM_ON && <>

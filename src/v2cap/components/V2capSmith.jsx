@@ -17,6 +17,7 @@ import { statLine, nameColor, PLUS_COLOR, gainText, areaOptionLabel, filterSelec
 import { PlusTag, GearFilterBar } from './v2capGear.jsx'
 import V2capEnhanceFx from './V2capEnhanceFx.jsx'
 import V2capCraftFx from './V2capCraftFx.jsx'
+import { ticketOf, canUseTicket } from '../lib/v1carry.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — 鍛冶屋（強化・分解・作成）
@@ -109,6 +110,8 @@ export default function V2capSmith({ prof, inventory, onProfile, onGo }) {
 function EnhanceTab({ prof, all, wornIds, list, busy, call }) {
   const [smithId, setSmithId] = useState(null)   // 強化の画面を開いている持ち物のID
   const [msg, setMsg] = useState(null)           // 直前の強化の結果 { ok, text }
+  const [ticketId, setTicketId] = useState(null) // 強化券を使う確認を開いている持ち物のID
+  const [ticketMsg, setTicketMsg] = useState(null)
   // 【確定】2026-10-13 ユーザー指示「黒い砂漠の強化みたいな演出」「強化の成否もポップアップ」＝強化の演出（V2capEnhanceFx.jsx）
   //   押した時点の装備の様子を job に写して演出を始め、サーバーの結果が届いたら job.result に入れる
   const [fxJob, setFxJob] = useState(null)
@@ -139,6 +142,15 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call }) {
       ? { ok: true, text: `✨ 成功！ +${data.plus} になりました` }
       : { ok: false, text: `💥 失敗… +${data.plus} のまま（${data.scrap > 0 ? `${scrapNameOf(data.area)} ${data.scrap}個と ` : ''}Gold ${Number(data.gold).toLocaleString()} はなくなりました）` })
   }
+  // 【確定】2026-10-23 V1からの引き継ぎの強化券（v1carry.js）：ユニークの装備1つを、すぐ券の強化値にする（1回だけ・失敗なし・Goldも残骸も使わない）
+  const ticket = ticketOf(prof)
+  const ticketRow = ticketId === null ? null : all.find(r => String(r.inv.id) === ticketId) || null
+  const applyTicket = async () => {
+    if (!ticketRow || busy) return
+    const { data, error } = await call('v2cap_v1_ticket_use', { p_inv: ticketRow.inv.id })
+    setTicketId(null)
+    setTicketMsg(error ? { ok: false, text: `⚠ ${error}` } : { ok: true, text: `🎫 「${ticketRow.item.name}」が +${data.plus} になりました` })
+  }
   // 結果のポップアップの「続けて +N にする」（次も強化できるときだけ）
   const nextCost = row ? enhanceCostOf(row.item, row.inv) : null
   const nextErr = row && nextCost ? enhanceErrorOf(row.item, row.inv, prof) : null
@@ -154,6 +166,22 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call }) {
           nextReason={!nextCost ? `強化値は+${PLUS_MAX}（上限）です` : nextErr ? `次の強化：${nextErr}` : ''}
           onAgain={enhance} onClose={() => setFxJob(null)} />
       )}
+      {ticketRow && (
+        <V2Modal title="🎫 強化券を使う" color="#ffcc00" busy={busy}
+          confirmLabel={`+${ticket}にする`} cancelLabel="やめる" onConfirm={applyTicket} onClose={() => { if (!busy) setTicketId(null) }}>
+          <div><span style={{ color: nameColor(ticketRow.item) }}>{ticketRow.item.name}</span><PlusTag inv={ticketRow.inv} /></div>
+          <div>強化値 +{plusOf(ticketRow.inv)} → <span style={{ color: PLUS_COLOR }}>+{ticket}</span></div>
+          <div>戦闘力 {powerAt(ticketRow.item, ticketRow.inv.ilv, plusOf(ticketRow.inv))} → <span style={{ color:'#44ff88' }}>{powerAt(ticketRow.item, ticketRow.inv.ilv, ticket)}</span></div>
+          <div style={{ color: TEXT.sub, fontSize:'11px' }}>必ず成功します（Goldと残骸は使いません）。強化券は1枚だけで、使うとなくなります。</div>
+        </V2Modal>
+      )}
+      {ticket > 0 && (
+        <div style={{ ...rowBox('#aa8800', '#141000'), marginBottom:'6px', fontSize:'11px', color:'#ffcc00', lineHeight:1.7 }}>
+          🎫 V1からの強化券（+{ticket}）を持っています。ユニークの装備1つを、すぐ+{ticket}にできます（1回だけ・失敗なし）。
+          <span style={{ color: TEXT.sub }}>ふつうの強化は+{PLUS_MAX}までです。</span>
+        </div>
+      )}
+      {ticketMsg && <div style={{ color: ticketMsg.ok ? '#44ff88' : SHORT, fontSize:'11px', marginBottom:'6px' }}>{ticketMsg.text}</div>}
       <GearFilterBar g={list} />
       <div style={{ display:'grid', gap:'4px', maxHeight:'560px', overflowY:'auto' }}>
         {rows.length === 0 && <Empty all={all} />}
@@ -173,7 +201,10 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call }) {
                     {cost.scrap > 0 && <><span style={{ color: scrapShort ? SHORT : '#cfe2ff' }}>{scrapNameOf(cost.area)} {cost.scrap}個</span>・</>}
                     <span style={{ color: goldShort ? SHORT : '#ffcc00' }}>Gold {cost.gold.toLocaleString()}</span>・成功率 {cost.rate}%
                   </span>
-                ) : <span style={{ color: PLUS_COLOR, flex:1 }}>+{PLUS_MAX}（上限）</span>}
+                ) : <span style={{ color: PLUS_COLOR, flex:1 }}>+{Math.max(PLUS_MAX, plusOf(inv))}（上限）</span>}
+                {canUseTicket(item, plusOf(inv), prof) && (
+                  <button onClick={() => { setTicketId(String(inv.id)); setTicketMsg(null) }} disabled={busy} style={miniBtn('#ffcc00')}>🎫 +{ticket}にする</button>
+                )}
                 <button onClick={() => { setSmithId(String(inv.id)); setMsg(null) }} disabled={busy || !cost} style={miniBtn('#ffcc00')}>強化</button>
               </div>
             </div>
@@ -446,7 +477,7 @@ function SmithModal({ row, prof, busy, msg, onEnhance, onClose }) {
           </div>
           {err && <div style={short}>⚠ {err}</div>}
         </>
-      ) : <div style={{ color: PLUS_COLOR }}>強化値は+{PLUS_MAX}（上限）です</div>}
+      ) : <div style={{ color: PLUS_COLOR }}>強化値は+{Math.max(PLUS_MAX, plus)}（上限）です</div>}
       {msg && <div style={{ color: msg.ok ? '#44ff88' : SHORT, marginTop:'6px' }}>{msg.text}</div>}
     </V2Modal>
   )

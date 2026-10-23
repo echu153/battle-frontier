@@ -9,7 +9,7 @@ import {
 } from '../lib/sortie.js'
 import { toFighter as playerFighter } from '../lib/loadout.js'
 import { staminaMaxOf, rollStamina, staminaSpanMsOf } from '../lib/level.js'
-import { expText as expTextOf, levelUpLines, dropLineOf } from '../lib/settleLines.js'
+import { expText as expTextOf, gainedExpOf, levelUpLines, dropLineOf } from '../lib/settleLines.js'
 import { ITEM_BY_ID } from '../lib/equipment.js'
 import { guardDropBonusOf, floorLabel, TOWER_NAME } from '../lib/tower.js'
 import { sortieClock, sendWithCooldownRetry, newSettleKey, settleKeyArgOf } from '../lib/cooldown.js'
@@ -179,10 +179,12 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       const after = []
       // ★LV100のぶんは入らないので、そう出す。ClassEXPは書かない（同じ量がいまの職業にも入る＝ユーザー指示で表記を外した）
       //   文面は settleLines.js（塔と同じものを使う）
-      const expText = expTextOf(data.exp, prof.lv)
+      //   EXPは実際に入った量（V1からの引き継ぎの倍率込み・gainedExpOf）
+      const gained = gainedExpOf(data)
+      const expText = expTextOf(gained, prof.lv)
       if (win) {
         after.push({ text:`${expText}　Gold +${data.gold}`, color:'#ffcc00' })
-      } else if (data.exp > 0) {
+      } else if (gained > 0) {
         // 【確定】負けても経験値はその場所の最低値が入る（倍率なし・Goldは入らない・2026-10-09 ユーザー指示）。
         //   文言は「EXP +2」だけ（「負けても最低値は入る」「（ClassEXP +2）」の添え書きはユーザー指示で外した）
         after.push({ text: expText, color:'#c8a050' })

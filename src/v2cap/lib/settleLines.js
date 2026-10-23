@@ -16,6 +16,13 @@ import { LOG_PLAIN } from '../components/v2ui.js'
 
 // 「EXP +12」（LV上限なら「（LV上限のため入らない）」を添える）
 export const expText = (exp, lvBefore) => `EXP +${exp}${lvBefore >= MAX_LV ? '（LV上限のため入らない）' : ''}`
+// 実際に入ったEXP。【確定】2026-10-23 V1からの引き継ぎの倍率（v1carry.js）はサーバーの v2cap_apply_exp が掛けて、
+//   返り値（精算の level）の gained に入れる。サーバーが前の版（gained を返さない）のあいだは精算の exp のまま
+//   ★出撃・塔・宝樹・デイリーの「EXP +◯」はどれもこれを出す（v1carry.test.js が見張る）
+export const gainedExpOf = (data) => {
+  const g = data?.level?.gained
+  return typeof g === 'number' ? g : (Number(data?.exp) || 0)
+}
 
 // LVアップ・CLASS LVアップ・覚えた技の行。cls＝精算した時点の職業／level＝サーバーの v2cap_apply_exp の返り値
 // LVアップではステは上がらず、ステータスポイントが入る。サーバーが前の版（points を返さない）のあいだは数を出さない

@@ -23,12 +23,17 @@
 // ============================================================
 
 // ===== 強化値 =====
+// PLUS_MAX＝鍛冶屋のふつうの強化で上げられる上限
 export const PLUS_MAX = 10
+// PLUS_CAP＝持ち物の強化値の上限。【確定】2026-10-23 V1からの引き継ぎの強化券（v1carry.js）は V1 の強化値（最大+16）まで上げられる
+//   （ユーザー「+10以降も反映させていい（通常プレイでも後日追加させるからいい）」）。+11からも +1ごとに元の強さの0.1倍を足す（+16で2.6倍）。
+//   ★ふつうの強化（+11から先の成功率など）はユーザーがあとで足す。それまで +11 より上になるのは強化券だけ
+export const PLUS_CAP = 16
 // 持ち物の行の強化値（SQLを流す前の行には plus が無いので0として扱う）
-export const plusOf = (inv) => Math.max(0, Math.min(PLUS_MAX, Math.floor(Number(inv?.plus) || 0)))
+export const plusOf = (inv) => Math.max(0, Math.min(PLUS_CAP, Math.floor(Number(inv?.plus) || 0)))
 // 強さの倍率（足し算）。+0 はちょうど1（強化していない装備の強さは前と変わらない）。
 // ★戦闘力は「元の強さ×この倍率」と「元の強さ＋強化値」の大きいほう（gear.js の powerAt＝最低でも+1ずつ）
-export const plusMultOf = (plus) => (plus > 0 ? 1 + Math.min(PLUS_MAX, plus) / 10 : 1)
+export const plusMultOf = (plus) => (plus > 0 ? 1 + Math.min(PLUS_CAP, plus) / 10 : 1)
 export const plusLabel = (plus) => (plus > 0 ? `+${plus}` : '')
 
 // ===== 残骸（エリアごとに1種）=====

@@ -22,6 +22,7 @@ import { createParticles } from './fxParticles.js'
 import { CountUp } from './casinoParts.jsx'
 import { JP_BOLD } from './casinoStyle.js'
 import { FORTUNE_BY_NAME } from '../lib/tree.js'
+import { gainedExpOf } from '../lib/settleLines.js'
 import { revelationStyleOf, TREE_ART, ART_PRAY, ART_DESCEND, ART_BY_FORTUNE, artFilterOf, MINCHO,
   STORM_ART, STORM_STRIKES, STORM_AMBIENT_MS, STORM_DESCEND_MS, STORM_CLOUD_MS } from '../lib/fxStyle.js'
 
@@ -397,7 +398,7 @@ export default function V2capRevelationFx({ result, onClose }) {
         <div onClick={e => e.stopPropagation()} style={{ pointerEvents:'auto', minWidth:240, textAlign:'center',
           background:'#020a08cc', border:`1px solid ${bad ? '#5a4a6a' : '#2f8f55'}`, padding:'12px 18px', animation:'rvUp 0.4s ease-out both' }}>
           <div style={{ color:'#ffcc00', fontSize:22, fontWeight:'bold', fontFamily: JP_BOLD, textShadow:'0 0 10px #ffb30088' }}>
-            EXP +<CountUp value={Number(result.exp) || 0} start={0} ms={900} />
+            EXP +<CountUp value={gainedExpOf(result)} start={0} ms={900} />
           </div>
           {result.level?.level_ups > 0 && <div style={{ color:'#44ff88', fontSize:13, marginTop:4 }}>🆙 LEVEL UP！ LV{result.level.lv}</div>}
           {result.level?.job_ups > 0 && <div style={{ color:'#ffcc00', fontSize:12, marginTop:2 }}>⭐ CLASS LEVEL UP！</div>}

@@ -12,7 +12,7 @@ import { ascEffectsOf } from '../lib/ascension.js'
 import { sortieClock, sendWithCooldownRetry, newSettleKey, settleKeyArgOf } from '../lib/cooldown.js'
 import { attackKindOf } from '../lib/jobs.js'
 import { buildCapBattleView } from '../lib/battleView.js'
-import { expText, levelUpLines, dropLineOf } from '../lib/settleLines.js'
+import { expText, gainedExpOf, levelUpLines, dropLineOf } from '../lib/settleLines.js'
 import {
   TOWER_NAME, FLOORS, LOSE_DROP, STREAK_PCT, GUARD_DROP_BONUS,
   floorLabel, clampFloor, floorAfterDefended, canChallenge, champOf, floorInfoOf,
@@ -146,7 +146,7 @@ export default function V2capTower({ prof, inventory, onProfile }) {
       after.push(win
         ? { text:`👑 ${floorLabel(floor)}の階層守護者になった！`, color:'#ffcc00' }
         : { text:`次は${floorLabel(data.next_floor)}から挑戦（負けると${LOSE_DROP}つ下）`, color:'#7fa6d0' })
-      after.push({ text:`${expText(data.exp, prof.lv)}　Gold +${data.gold}`, color:'#ffcc00' })
+      after.push({ text:`${expText(gainedExpOf(data), prof.lv)}　Gold +${data.gold}`, color:'#ffcc00' })
       after.push(...levelUpLines(prof.class, data.level))
       if (data.drop && drop) after.push(dropLineOf(drop.item))
       setLogs(l => [...l, ...after])

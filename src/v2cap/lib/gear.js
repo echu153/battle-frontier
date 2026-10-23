@@ -20,7 +20,7 @@
 import { STAT_KEYS } from '../core/stats.js'
 import { RARITY_BASE, PART_MULT, ARMOR_EFFECT, needLvOf, UNIQUE_LV, isUnique } from './equipment.js'
 import { bodyPowerAt } from './level.js'
-import { plusMultOf, PLUS_MAX } from './smith.js'
+import { plusMultOf, PLUS_CAP } from './smith.js'
 
 // 「同じLVのノーマルを全部の枠にそろえたとき、本体の何倍か」（2026-10-09 ユーザー決定＝1倍。前のCランクと同じ）
 export const GEAR_RATIO = 1
@@ -41,7 +41,7 @@ const basePowerOf = (item, ilv) => (isUnique(item)
   : (RARITY_BASE[item?.rarity] || 0) * (PART_MULT[item?.part] || 1) * bodyPowerAt(ilv) * GEAR_RATIO / N_SET_BASE)
 export const powerAt = (item, ilv, plus = 0) => {
   const base = basePowerOf(item, ilv)
-  const n = plus > 0 ? Math.min(PLUS_MAX, plus) : 0
+  const n = plus > 0 ? Math.min(PLUS_CAP, plus) : 0
   return Math.max(1, Math.round(base * plusMultOf(n)), Math.round(base) + n)
 }
 
