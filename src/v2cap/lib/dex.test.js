@@ -2,6 +2,7 @@
 // 【確定】2026-10-11 ユーザー指示「モンスター図鑑…を加えて」（まずは見るだけ）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { AREA_LIST } from './areas.js'
 import { DEX_ROLES, DEX_ALL, DEX_TOTAL, DEX_AREA_COUNT, dexAreaOf, dropInfoOf, killsOf, isFound, dexProgressOf } from './dex.js'
 
@@ -39,23 +40,32 @@ test('1エリアの並びは 通常6 → 時間帯6 → レア5 → ボス3（�
 test('落とす装備は役割で決まる：ふつう・時間帯は8%でノーマル・レア／レアは30%でエピックまで／ボスは60%でレジェンダリーまで', () => {
   // ふつう・時間帯は 2026-10-12 ユーザー指示「装備のドロップ率渋すぎるから8％にして」で 3→8
   // レア・ボスは 2026-10-22 ユーザー指示「レアのモンスターから装備ドロップする確率3倍にして、ボスは６倍」で 10→30・10→60（落ちるレア度は同じ）
-  assert.deepEqual(dropInfoOf('normal'), { chance: 8, rarities: ['N', 'R'], uniques: [] })
-  assert.deepEqual(dropInfoOf('timed'), { chance: 8, rarities: ['N', 'R'], uniques: [] })
-  assert.deepEqual(dropInfoOf('rare'), { chance: 30, rarities: ['N', 'R', 'E'], uniques: [] })
-  assert.deepEqual(dropInfoOf('boss'), { chance: 60, rarities: ['N', 'R', 'E', 'L'], uniques: [] })
+  assert.deepEqual(dropInfoOf('normal'), { chance: 8, rarities: ['N', 'R'] })
+  assert.deepEqual(dropInfoOf('timed'), { chance: 8, rarities: ['N', 'R'] })
+  assert.deepEqual(dropInfoOf('rare'), { chance: 30, rarities: ['N', 'R', 'E'] })
+  assert.deepEqual(dropInfoOf('boss'), { chance: 60, rarities: ['N', 'R', 'E', 'L'] })
 })
 
-test('【2026-10-21】ボスの行には、そのボスが落とすユニーク（①②は1つ・大ボスは2つ）も載る。ボス以外には無い', () => {
-  for (let a = 1; a <= DEX_AREA_COUNT; a++) {
-    const rows = dexAreaOf(a)
-    for (const e of rows) {
-      const u = dropInfoOf(e.role, e).uniques
-      if (e.role !== 'boss') { assert.equal(u.length, 0, e.name); continue }
-      assert.equal(u.length, e.subs[0] === 3 ? 2 : 1, `${e.name}のユニーク`)
-      for (const x of u) assert.equal(x.boss, e.name)
-    }
+test('【確定】2026-10-24 図鑑にユニークの情報は載せない（ボスの行にも）。説明は HELP・「残り◯エリアは、行くと載ります」は出さない', () => {
+  // ユーザー指示「モンスター図鑑、ユニーク装備の情報はすべて削除」（2026-10-21 からボスの行に名前と能力を出していた）
+  for (const e of DEX_ALL) {
+    const d = dropInfoOf(e.role, e)
+    assert.ok(!('uniques' in d), `${e.name}：ユニークを持たない`)
+    assert.ok(!d.rarities.includes('U'), `${e.name}：出るレア度にユニークは無い`)
   }
-  assert.deepEqual(dropInfoOf('boss', dexAreaOf(1)[19]).uniques.map(u => u.name), ['蒼蝕の魔剣', 'ビッグスライムの指輪'])
+  const ui = readFileSync(new URL('../components/V2capDex.jsx', import.meta.url), 'utf8')
+  const code = ui.split(/\r?\n/).filter(l => !/^\s*(\/\/|\{\/\*)/.test(l)).join('\n')   // 注の行は見ない
+  for (const w of ['ユニーク', 'UniqueText', 'uniques', "RARITY_COLOR.U"]) assert.ok(!code.includes(w), `図鑑の画面に「${w}」が無い`)
+  // 説明の3文は HELP の小窓へ（ユーザー「←これはHELPに」）。「残り◯エリアは、行くと載ります」はやめた（ユーザー「←これいらない」）
+  const help = code.slice(code.indexOf('<V2Modal title="❓ HELP"'), code.indexOf('</V2Modal>'))
+  for (const t of ['出撃で倒した敵が載ります（倒すまでは名前もLVも ???）。', '討伐数は出撃で勝ったときに数えます。', '落とす装備はそのエリアの装備です。']) {
+    assert.ok(help.includes(t), `HELP に「${t}」`)
+    assert.equal(code.split(t).length, 2, `「${t}」は HELP の中だけ`)
+  }
+  assert.ok(!code.includes('行くと載ります'))
+  // 倒した敵の絵をタップすると大きく出す（大きい版・読めなければ小さい版）
+  assert.ok(code.includes('const canZoom = found && !!art'), '倒していない敵（影）は大きくしない')
+  assert.ok(code.includes('enemyArtBigSrc(e.name) || enemyArtSrc(e.name)'))
 })
 
 test('倒すまでは見つけていない（???）。見つけた数と割合', () => {

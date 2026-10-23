@@ -20,6 +20,11 @@ import { ENEMY_ART_IDS } from './enemyArtList.js'
 export const ENEMY_ART_SRC_DIR = 'エネミー'     // public の下・元の絵
 export const ENEMY_ART_DIR = '/enemy-art'      // public の下・画面で使う版
 export const ENEMY_ART_SIZE = 192
+// 図鑑で絵をタップしたときの大きい版：public/enemy-art-big/<id>.webp（512×512・作り方は小さい版と同じ・同じツールが一緒に作る）
+// 【確定】2026-10-24 ユーザー指示「モンスターのイラストタップしたらアップされるようにして」。192 を広げるとスマホでぼやけるので別に持つ。
+//   タップしたときだけ読む（ふだんの画面の重さは変わらない）
+export const ENEMY_ART_BIG_DIR = '/enemy-art-big'
+export const ENEMY_ART_BIG_SIZE = 512
 
 // ファイル名（拡張子なし・ユーザーが付けたまま）→ モンスターの名前
 // 【確定】2026-10-12 エリア①の20枚（絵を見て確かめた）
@@ -70,4 +75,9 @@ export const hasEnemyArt = (name) => !!ENEMY_ART_IDS[name]
 export const enemyArtSrc = (name) => {
   const id = ENEMY_ART_IDS[name]
   return id ? `${ENEMY_ART_DIR}/${id}.webp` : null
+}
+// 大きい版の場所（無ければ null）。大きい版が読めなかったときは、画面は小さい版で代わりに出す
+export const enemyArtBigSrc = (name) => {
+  const id = ENEMY_ART_IDS[name]
+  return id ? `${ENEMY_ART_BIG_DIR}/${id}.webp` : null
 }

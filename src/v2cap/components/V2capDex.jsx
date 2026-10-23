@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../supabase'
 import { box, miniBtn, TEXT } from './v2ui.js'
+import V2Modal from './V2Modal.jsx'
 import { AREA_LIST, SUB_MARK, spotOf } from '../lib/areas.js'
 import { openUntilOf } from '../lib/sortie.js'
-import { RARITY_COLOR, rarityLabel, kindLabel } from '../lib/equipment.js'
-import { V2Tip } from './V2ItemTip.jsx'
-import { UniqueText } from './V2capUniqueFx.jsx'
-import { DEX_ROLES, DEX_ROLE, DEX_ALL, DEX_AREA_COUNT, dexAreaOf, dropInfoOf, killsOf, isFound, dexProgressOf } from '../lib/dex.js'
-import { enemyArtSrc } from '../lib/enemyArt.js'
+import { RARITY_COLOR, rarityLabel } from '../lib/equipment.js'
+import { DEX_ROLES, DEX_ROLE, DEX_ALL, dexAreaOf, dropInfoOf, killsOf, isFound, dexProgressOf } from '../lib/dex.js'
+import { enemyArtSrc, enemyArtBigSrc } from '../lib/enemyArt.js'
 import { chip } from './v2capGearView.js'
 import V2capIcon from './V2capIcon.jsx'
 
@@ -21,6 +20,10 @@ import V2capIcon from './V2capIcon.jsx'
 //     左にアイコン（戦闘ログと同じ絵＝enemyArt.js・同じ枠＝V2capIcon）。絵の無いモンスターは名前の1文字目の枠。
 //     まだ倒していない敵は名前と同じく隠す（絵は黒い影・絵が無ければ「？」）
 //   【確定】同じ日にユーザー指示「装備8%とかはいらない」：落とす確率（%）は出さない（落とすレア度だけ）
+//   【確定】2026-10-24 ユーザー指示：
+//     ・「ユニーク装備の情報はすべて削除」＝ボスの行のユニーク（名前・能力）を出さない（dex.js の dropInfoOf も持たない）
+//     ・「モンスターのイラストタップしたらアップされるようにして」＝倒した敵の絵をタップすると大きく出す（大きい版 enemy-art-big）
+//     ・説明の文は HELP の小窓へ。「残り◯エリアは、行くと載ります」はやめた
 // ============================================================
 const kindText = (k) => (k === 'mag' ? '魔法' : '物理')
 
@@ -30,6 +33,8 @@ export default function V2capDex({ prof }) {
   const maxArea = Math.max(1, spotOf(openUntilOf(prof.cleared_spots))?.area || 1)
   const [area, setArea] = useState(maxArea)
   const [roles, setRoles] = useState(() => new Set(DEX_ROLES.map(r => r.key)))
+  const [help, setHelp] = useState(false)    // HELP の小窓
+  const [zoom, setZoom] = useState(null)     // 大きく出している敵（図鑑の1行）
 
   useEffect(() => {
     let alive = true
@@ -54,13 +59,22 @@ export default function V2capDex({ prof }) {
 
   return (
     <div style={{ fontFamily:'monospace' }}>
+      {help && (
+        <V2Modal title="❓ HELP" color="#c0b0ff" onClose={() => setHelp(false)}>
+          <div>出撃で倒した敵が載ります（倒すまでは名前もLVも ???）。</div>
+          <div>討伐数は出撃で勝ったときに数えます。</div>
+          <div>落とす装備はそのエリアの装備です。</div>
+        </V2Modal>
+      )}
+      {zoom && <ZoomModal e={zoom} onClose={() => setZoom(null)} />}
+
       <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
-        <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.8 }}>
-          出撃で倒した敵が載ります（倒すまでは名前もLVも ???）。討伐数は出撃で勝ったときに数えます。
-          落とす装備はそのエリアの装備です。
-        </div>
-        <div style={{ color:'#c0b0ff', fontSize:'12px', marginTop:'6px' }}>
-          見つけた敵 全体 <span style={{ color:'#ffcc00' }}>{total.done}</span> / {total.total}体
+        {/* 説明は HELP から（2026-10-24 ユーザー指示「←これはHELPに」） */}
+        <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+          <div style={{ color:'#c0b0ff', fontSize:'12px', flex:1 }}>
+            見つけた敵 全体 <span style={{ color:'#ffcc00' }}>{total.done}</span> / {total.total}体
+          </div>
+          <button onClick={() => setHelp(true)} style={miniBtn('#88aaff')}>❓ HELP</button>
         </div>
         {error && <div style={{ color:'#ff8844', fontSize:'10px', marginTop:'4px' }}>⚠ 討伐数を読めませんでした（{error}）</div>}
       </div>
@@ -72,9 +86,6 @@ export default function V2capDex({ prof }) {
             <button key={a} onClick={() => setArea(a)} style={chip(area === a)}>{a} {AREA_LIST[a - 1]?.name}</button>
           ))}
         </div>
-        {maxArea < DEX_AREA_COUNT && (
-          <div style={{ color: TEXT.empty, fontSize:'9px', marginBottom:'6px' }}>残り{DEX_AREA_COUNT - maxArea}エリアは、行くと載ります</div>
-        )}
         <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', alignItems:'center', marginBottom:'8px' }}>
           {DEX_ROLES.map(r => (
             <button key={r.key} onClick={() => toggleRole(r.key)}
@@ -90,19 +101,24 @@ export default function V2capDex({ prof }) {
             {rows.map(e => {
               const found = isFound(kills, e.name)
               const role = DEX_ROLE[e.role]
-              const drop = dropInfoOf(e.role, e)
+              const drop = dropInfoOf(e.role)
               const art = enemyArtSrc(e.name)
+              // 絵をタップすると大きく出す（倒した敵で、絵があるものだけ）
+              const canZoom = found && !!art
               return (
                 <div key={e.name} style={{ background:'#000818', border:`1px solid ${found ? '#002244' : '#001428'}`, padding:'6px 8px',
                   display:'flex', gap:'8px', alignItems:'center' }}>
-                  <V2capIcon key={`${art || 'none'}:${found}`} src={art} name={e.name} ring={role.color} size={44} hidden={!found} />
+                  <div onClick={canZoom ? () => setZoom(e) : undefined} title={canZoom ? 'タップで大きく見る' : undefined}
+                    style={{ cursor: canZoom ? 'zoom-in' : 'default', flexShrink:0 }}>
+                    <V2capIcon key={`${art || 'none'}:${found}`} src={art} name={e.name} ring={role.color} size={44} hidden={!found} />
+                  </div>
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12px', flexWrap:'wrap' }}>
                       <span style={{ color: role.color, fontSize:'9px', border:`1px solid ${role.color}`, padding:'0 4px', flexShrink:0 }}>
                         {role.label}{e.band ? `・${e.band}` : ''}
                       </span>
                       <span style={{ color: found ? '#cfe2ff' : TEXT.empty, flex:1, minWidth:0 }}>{found ? e.name : '???'}</span>
-                      <span style={{ color: found ? '#cfe2ff' : TEXT.empty, fontSize:'11px' }}>LV{found ? (e.lvMax > e.lv ? `${e.lv}〜${e.lvMax}` : e.lv) : '??'}</span>
+                      <span style={{ color: found ? '#cfe2ff' : TEXT.empty, fontSize:'11px' }}>LV{found ? lvText(e) : '??'}</span>
                       <span style={{ color: TEXT.label, fontSize:'10px' }}>{e.subs.map(s => SUB_MARK[s - 1]).join('')}</span>
                     </div>
                     <div style={{ display:'flex', gap:'10px', flexWrap:'wrap', fontSize:'10px', marginTop:'3px', color: TEXT.sub }}>
@@ -117,20 +133,6 @@ export default function V2capDex({ prof }) {
                               <span key={r}>{i ? '・' : ''}<span style={{ color: RARITY_COLOR[r] }}>{rarityLabel(r)}</span></span>
                             ))}
                           </span>
-                          {/* ボスのユニーク（2026-10-21）：名前を赤で・カーソルで固有の能力 */}
-                          {drop.uniques.length > 0 && (
-                            <span>
-                              ユニーク：
-                              {drop.uniques.map((u, i) => (
-                                <span key={u.id}>{i ? '・' : ''}
-                                  <V2Tip width="250px" color={RARITY_COLOR.U} style={{ color: RARITY_COLOR.U, borderBottom:`1px dotted ${RARITY_COLOR.U}` }}
-                                    body={<><div style={{ color: RARITY_COLOR.U }}>{u.name}（{kindLabel(u)}・必要LV{u.lv}）</div><UniqueText item={u} /></>}>
-                                    {u.name}
-                                  </V2Tip>
-                                </span>
-                              ))}
-                            </span>
-                          )}
                         </>
                       ) : <span style={{ color: TEXT.empty }}>倒すと載ります</span>}
                     </div>
@@ -142,5 +144,25 @@ export default function V2capDex({ prof }) {
         )}
       </div>
     </div>
+  )
+}
+
+const lvText = (e) => (e.lvMax > e.lv ? `${e.lv}〜${e.lvMax}` : e.lv)
+
+// 絵を大きく出す小窓。大きい版（512×512）が読めないときは小さい版（192×192）を広げて出す。絵を押しても閉じる
+function ZoomModal({ e, onClose }) {
+  const role = DEX_ROLE[e.role]
+  const [src, setSrc] = useState(() => enemyArtBigSrc(e.name) || enemyArtSrc(e.name))
+  return (
+    <V2Modal title={e.name} color={role.color} onClose={onClose}>
+      <img src={src} alt={e.name} draggable={false} onClick={onClose}
+        onError={() => { const small = enemyArtSrc(e.name); if (small && src !== small) setSrc(small) }}
+        style={{ display:'block', width:'100%', maxWidth:'360px', aspectRatio:'1 / 1', objectFit:'contain', margin:'0 auto', cursor:'zoom-out',
+          borderRadius:'8px', border:`1px solid ${role.color}55`, background:'radial-gradient(circle at 50% 40%, #1d3554 0%, #0b1a2e 75%)' }} />
+      <div style={{ textAlign:'center', marginTop:'6px', fontSize:'11px' }}>
+        <span style={{ color: role.color, border:`1px solid ${role.color}`, padding:'0 4px', fontSize:'9px' }}>{role.label}{e.band ? `・${e.band}` : ''}</span>
+        <span style={{ color:'#cfe2ff', marginLeft:'6px' }}>LV{lvText(e)}</span>
+      </div>
+    </V2Modal>
   )
 }

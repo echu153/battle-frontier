@@ -5,6 +5,7 @@
 //   場所の顔ぶれにいない特別なモンスター（安息の祠のハピネスフェアリー）は public/エネミー/特別/<名前>.png（2026-10-13）
 // 作るもの：
 //   public/enemy-art/<id>.webp     … 192×192。背景を透明にして（下の「背景の扱い」）、体がちょうど収まるように切り取る
+//   public/enemy-art-big/<id>.webp … 512×512（同じ切り取り）。図鑑で絵をタップしたときの大きい版（2026-10-24）
 //   src/v2cap/lib/enemyArtList.js  … 絵があるモンスターの一覧（画面はこれを見て、無いものは代わりの枠を出す）
 // 名前の読み方・別名・<id> の決め方は src/v2cap/lib/enemyArt.js
 //   node tools/v2cap-enemy-art.mjs          … 元の絵が新しくなったものだけ作る
@@ -29,13 +30,15 @@ import { probe, decode, bleed, alphaBox, encodeSquare, keyBackground, transparen
 
 const ROOT = path.resolve(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))
 const lib = (f) => import(new URL(`../src/v2cap/lib/${f}`, import.meta.url).href)
-const { ENEMY_ART_SRC_DIR, ENEMY_ART_DIR, ENEMY_ART_SIZE, ENEMY_NAMES_BY_AREA, SPECIAL_ENEMY_NAMES, SPECIAL_ART_DIR, ART_NAMES, enemyNameOfFile, enemyArtId } = await lib('enemyArt.js')
+const { ENEMY_ART_SRC_DIR, ENEMY_ART_DIR, ENEMY_ART_SIZE, ENEMY_ART_BIG_DIR, ENEMY_ART_BIG_SIZE, ENEMY_NAMES_BY_AREA, SPECIAL_ENEMY_NAMES, SPECIAL_ART_DIR, ART_NAMES, enemyNameOfFile, enemyArtId } = await lib('enemyArt.js')
 const { AREA_LIST } = await lib('areas.js')
 const SRC = path.join(ROOT, 'public', ENEMY_ART_SRC_DIR)
 const OUT = path.join(ROOT, 'public', ENEMY_ART_DIR.replace(/^\//, ''))
 const LIST = path.join(ROOT, 'src', 'v2cap', 'lib', 'enemyArtList.js')
 const FORCE = process.argv.includes('--force')
+const OUT_BIG = path.join(ROOT, 'public', ENEMY_ART_BIG_DIR.slice(1))
 mkdirSync(OUT, { recursive: true })
+mkdirSync(OUT_BIG, { recursive: true })
 
 // ===== 作り方の決まり =====
 const WORK = 627          // 背景を抜く作業は長いほうの辺627px（元の半分）で行う
@@ -45,7 +48,8 @@ const QUALITY = 82
 const EDGE_LEFT_MAX = 0.3 // 抜いたあと縁に残った体の割合がこれを超えたら「背景が抜けていない」
 const MODE_LABEL = { alpha:'透明つき', flat:'灰色の背景', checker:'チェック模様の背景' }
 
-const makeOne = (src, out) => {
+// outs = [{ out, size }]（小さい版・大きい版のうち作るもの）
+const makeOne = (src, outs) => {
   const info = probe(src)
   let r = null
   if (info.alpha) {
@@ -64,7 +68,7 @@ const makeOne = (src, out) => {
   bleed(r.img)
   const box = alphaBox(r.img)
   if (!box) throw new Error('体が見つからない（全部が背景の色）')
-  encodeSquare(r.img, box, out, { size: ENEMY_ART_SIZE, margin: MARGIN, quality: QUALITY })
+  for (const { out, size } of outs) encodeSquare(r.img, box, out, { size, margin: MARGIN, quality: QUALITY })
   return r
 }
 
@@ -101,9 +105,12 @@ for (const f of files) {
 let made = 0
 for (const [name, src] of pick) {
   const out = path.join(OUT, `${enemyArtId(name)}.webp`)
-  if (!FORCE && existsSync(out) && statSync(out).mtimeMs >= statSync(src).mtimeMs) continue
+  const outBig = path.join(OUT_BIG, `${enemyArtId(name)}.webp`)
+  const fresh = (f) => !FORCE && existsSync(f) && statSync(f).mtimeMs >= statSync(src).mtimeMs
+  const outs = [!fresh(out) && { out, size: ENEMY_ART_SIZE }, !fresh(outBig) && { out: outBig, size: ENEMY_ART_BIG_SIZE }].filter(Boolean)
+  if (!outs.length) continue
   try {
-    const { clear, mode, edgeLeft } = makeOne(src, out)
+    const { clear, mode, edgeLeft } = makeOne(src, outs)
     made++
     // 背景がほとんど抜けなかった絵（背景の色が違う・体が縁いっぱい）は知らせる
     if (clear < 0.15) light.push(`${name}（${path.relative(SRC, src)}）：透明にできたのは${Math.round(clear * 100)}%だけ`)
@@ -127,7 +134,9 @@ ${body ? `${body}\n` : ''}}
 
 // ===== 知らせ =====
 const known = new Set(ART_NAMES.map(n => `${enemyArtId(n)}.webp`))
-const orphans = readdirSync(OUT).filter(f => f.endsWith('.webp') && !known.has(f))
+const orphans = [...readdirSync(OUT), ...readdirSync(OUT_BIG)].filter(f => f.endsWith('.webp') && !known.has(f))
+// 小さい版はあるのに大きい版が無い（元の絵がこのPCに無い）＝図鑑のタップは小さい版を広げて出す
+const noBig = [...have].filter(n => !existsSync(path.join(OUT_BIG, `${enemyArtId(n)}.webp`)))
 console.log(`作った：${made}枚／絵があるモンスター：${have.size} / ${ART_NAMES.length}体`)
 ENEMY_NAMES_BY_AREA.forEach((names, k) => {
   const lack = names.filter(n => !have.has(n))
@@ -146,4 +155,5 @@ warnList('⚠ 背景があまり抜けなかった絵（目で確かめる）：
 warnList('⚠ 背景が抜けていない絵（縁に背景が残っている。目で確かめて、抜き方を直すか絵を差し替えてもらう）：', notKeyed)
 warnList('⚠ 作れなかった絵：', failed)
 warnList('⚠ どのモンスターのものでもない WebP（名前を変えた？）：', orphans)
+warnList('⚠ 大きい版（enemy-art-big）が無い（元の絵を置いて作り直す）：', noBig)
 if (unmatched.length || failed.length || notKeyed.length) process.exitCode = 1

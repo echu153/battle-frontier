@@ -6,7 +6,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { Buffer } from 'node:buffer'
 import { fileURLToPath } from 'node:url'
 import {
-  ENEMY_ART_ALIAS, ENEMY_ART_DIR, ENEMY_ART_SIZE, ENEMY_NAMES, ENEMY_NAMES_BY_AREA, SPECIAL_ENEMY_NAMES, ART_NAMES, normalizeArtName, enemyNameOfFile, enemyArtId, enemyArtSrc, hasEnemyArt,
+  ENEMY_ART_ALIAS, ENEMY_ART_DIR, ENEMY_ART_SIZE, ENEMY_ART_BIG_DIR, ENEMY_ART_BIG_SIZE, enemyArtBigSrc, ENEMY_NAMES, ENEMY_NAMES_BY_AREA, SPECIAL_ENEMY_NAMES, ART_NAMES, normalizeArtName, enemyNameOfFile, enemyArtId, enemyArtSrc, hasEnemyArt,
 } from './enemyArt.js'
 import { ENEMY_ART_IDS } from './enemyArtList.js'
 import { AREA_LIST } from './areas.js'
@@ -66,6 +66,22 @@ test('一覧（enemyArtList.js）のモンスターは本当にいて、id は�
 test('public/enemy-art の WebP はどれも一覧に載っている（載せ忘れ・名前を変えて残った絵がない）', () => {
   const listed = new Set(Object.values(ENEMY_ART_IDS).map(id => `${id}.webp`))
   for (const f of readdirSync(`${PUBLIC}${ENEMY_ART_DIR}`)) assert.ok(listed.has(f), `${f} が一覧に無い`)
+  for (const f of readdirSync(`${PUBLIC}${ENEMY_ART_BIG_DIR}`)) assert.ok(listed.has(f), `大きい版 ${f} が一覧に無い`)
+})
+
+test('【確定】2026-10-24 図鑑でタップしたときの大きい版：一覧のどのモンスターにも 512×512 の透明つき WebP がある', () => {
+  // ユーザー指示「モンスターのイラストタップしたらアップされるようにして」。192 を広げるとぼやけるので、同じツールが一緒に作る
+  assert.equal(ENEMY_ART_BIG_SIZE, 512)
+  for (const [name, id] of Object.entries(ENEMY_ART_IDS)) {
+    assert.equal(enemyArtBigSrc(name), `${ENEMY_ART_BIG_DIR}/${id}.webp`)
+    const file = `${PUBLIC}${ENEMY_ART_BIG_DIR}/${id}.webp`
+    assert.ok(existsSync(file), `${name} の大きい版（${file}）が無い＝ node tools/v2cap-enemy-art.mjs`)
+    const info = webpInfo(file)
+    assert.ok(info.alpha, `${name} の大きい版に透明が無い`)
+    assert.deepEqual([info.w, info.h], [ENEMY_ART_BIG_SIZE, ENEMY_ART_BIG_SIZE], name)
+  }
+  const without = ENEMY_NAMES.find(n => !ENEMY_ART_IDS[n])
+  if (without) assert.equal(enemyArtBigSrc(without), null)
 })
 
 test('【確定】2026-10-13 安息の祠のハピネスフェアリー：エリアの一覧（15×20体）には入れず、絵は特別なモンスターとして持つ', () => {

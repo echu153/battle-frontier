@@ -10,7 +10,7 @@
 // ============================================================
 import { AREA_ROSTERS, ENEMY_LV } from './monsters.js'
 import { enemyLevels } from './areas.js'
-import { RARITIES, uniquesOfSpot } from './equipment.js'
+import { RARITIES } from './equipment.js'
 import { DROP_CHANCE, canDropRarity } from './sortie.js'
 
 export const DEX_ROLES = [
@@ -55,11 +55,11 @@ export const DEX_ALL = Array.from({ length: DEX_AREA_COUNT }, (_, i) => dexAreaO
 export const DEX_TOTAL = DEX_ALL.length
 
 // 落とす装備（その敵の役割で決まる：勝ったときの確率と、出るレア度）。装備はそのエリアのもの
-// e … 図鑑の1行（dexAreaOf の返り値）。ボスならそのボスのユニーク（2026-10-21・大ボスは2つ）も入れる
-export const dropInfoOf = (role, e = null) => ({
+// 【確定】2026-10-24 ユーザー指示「モンスター図鑑、ユニーク装備の情報はすべて削除」：
+//   図鑑にはユニークを載せない（2026-10-21 からボスの行に名前と能力を出していた）。出るレア度にもユニークは入らない（RARITIES は N・R・E・L）
+export const dropInfoOf = (role) => ({
   chance: DROP_CHANCE[role] ?? DROP_CHANCE.normal,
   rarities: RARITIES.filter(r => canDropRarity(role, r)),
-  uniques: role === 'boss' && e ? (e.spots || []).flatMap(s => uniquesOfSpot(s)).filter(u => u.boss === e.name) : [],
 })
 
 // 討伐数の表 { 敵の名前: 数 } から、見つけた数を数える
