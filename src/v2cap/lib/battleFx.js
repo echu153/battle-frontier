@@ -29,7 +29,7 @@ export const FX_DOWN = { ring: '#5aa8ff', text: '#a8d2ff', bg: '#17407a' }
 // 状態異常（並び＝ailments.js の AIL_KEYS）。short は絵が無いときの文字
 const AIL_DEFS = {
   bleed:    { color: '#d83a3a', short: '出血' },
-  poison:   { color: '#a35ad8', short: '毒' },
+  poison:   { color: '#a6e22e', short: '毒' },   // 黄緑（2026-10-24 ユーザー「毒は黄緑がいいと思う」。呪いの紫とも分かれる）
   slow:     { color: '#3fb8a8', short: '鈍足' },
   paralyze: { color: '#e8c832', short: '麻痺' },
   healCut:  { color: '#7da04a', short: '回復阻害' },
