@@ -6,6 +6,7 @@
 //   ・ため：暗転・魔法陣が回り、光の粒が装備へ集まる・まわりのゲージがたまる（強化値が高いほど長い＝+6 にする回から大きく延ばす
 //     ＝2026-10-24 ユーザー指示「緊張感を持たせるため」・fxStyle.js の enhanceChargeMsOf。結果はその間に届く）
 //     ＋ +6 にする回からは、たまったあと満タンのまま1〜6秒待ってから結果（同じ日・enhanceHoldMsOf。長さは成否と関係ない）
+//     ＋ ためている間は発光（同じ日・enhanceGlowOf）：ゲージが進むほど少しずつ光り、満タンで点灯 → 結果まで強く明滅
 //   ・成功：白く光る → 衝撃の輪・光の柱・金の粒が弾ける・「強化成功」。強化値が高いほど色と派手さが上がる（+10は虹）
 //   ・失敗：赤く光る → 魔法陣が割れて落ちる・破片・装備が揺れて暗くなる・「強化失敗」
 //   ・最後にポップアップ「○○の強化に成功！／失敗…」。「続けて +N にする」（Enter）・「閉じる」（Esc）
@@ -15,7 +16,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createParticles } from './fxParticles.js'
 import { GearGlyph } from './v2capFxParts.jsx'
 import { StatChange } from './v2capGear.jsx'
-import { enhanceTierOf, enhanceChargeMsOf, enhanceHoldMsOf, enhanceTitleOf } from '../lib/fxStyle.js'
+import { enhanceTierOf, enhanceChargeMsOf, enhanceHoldMsOf, enhanceGlowOf, enhanceTitleOf } from '../lib/fxStyle.js'
 import { DISPLAY_FONT, JP_BOLD, RAINBOW_BASE } from './casinoStyle.js'
 
 const KF = `
@@ -76,6 +77,7 @@ export default function V2capEnhanceFx({ job, nextLabel, nextReason, onAgain, on
   const chargeMs = enhanceChargeMsOf(job.plusTo)
   const [phase, setPhase] = useState('charge')    // charge | climax | result
   const [progress, setProgress] = useState(0)
+  const [lit, setLit] = useState(0)               // ためている間の発光 0〜1（enhanceGlowOf）
   const [angle, setAngle] = useState(0)
   const [flash, setFlash] = useState(null)
   const canvasRef = useRef(null)
@@ -101,7 +103,7 @@ export default function V2capEnhanceFx({ job, nextLabel, nextReason, onAgain, on
 
   // ため（job が変わるたびに最初から）
   useEffect(() => {
-    setPhase('charge'); setProgress(0); setFlash(null)
+    setPhase('charge'); setProgress(0); setLit(0); setFlash(null)
     fast.current = false
     climaxed.current = false
     t0.current = performance.now()
@@ -119,6 +121,7 @@ export default function V2capEnhanceFx({ job, nextLabel, nextReason, onAgain, on
       ang += dt * (40 + p * 520)
       setAngle(ang)
       setProgress(fast.current && resultRef.current ? 1 : p)
+      setLit(enhanceGlowOf(now - t0.current, chargeMs))
       if (now - lastSpawn > 70) {
         lastSpawn = now
         const c = center()
@@ -186,14 +189,16 @@ export default function V2capEnhanceFx({ job, nextLabel, nextReason, onAgain, on
   const circleColor = ended && !success ? '#ff5a6a' : tier.color
   const glow = phase === 'charge' ? tier.color : success ? tier.color : '#ff3355'
   const titleGlow = tier.key === 'max' ? RAINBOW_BASE : tier.color
+  const g = phase === 'charge' ? lit : 0   // 発光（ためている間だけ）
   const itemStyle = {
     position:'absolute', left:'50%', top:'50%', width:96, height:96, marginLeft:-48, marginTop:-48, borderRadius:14,
     background:'radial-gradient(circle at 50% 40%, #1d2a4a 0%, #0a1024 75%)', border:`2px solid ${job.color}`,
     display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-    boxShadow:`0 0 ${10 + progress * 30}px ${glow}, inset 0 0 ${8 + progress * 16}px ${glow}88`,
+    boxShadow:`0 0 ${10 + progress * 30 + g * 34}px ${glow}, inset 0 0 ${8 + progress * 16 + g * 16}px ${glow}88`,
     animation: phase === 'climax' ? (success ? 'efPop 0.7s ease-out' : 'efTremble 0.12s linear 5') : undefined,
-    filter: phase === 'climax' && !success ? 'grayscale(0.7) brightness(0.75)' : undefined,
-    transition:'filter 0.4s',
+    // 発光：ためている間は装備そのものも明るく（満タンで点灯して明滅）
+    filter: phase === 'climax' && !success ? 'grayscale(0.7) brightness(0.75)' : g > 0 ? `brightness(${1 + g * 0.45})` : undefined,
+    transition: phase === 'charge' ? undefined : 'filter 0.4s',   // ためている間の明滅は毎こま変えるので、なめらかにしない
   }
   return (
     <div onClick={phase === 'result' ? undefined : skip}
@@ -237,8 +242,17 @@ export default function V2capEnhanceFx({ job, nextLabel, nextReason, onAgain, on
           <svg width={RING} height={RING} viewBox="-130 -130 260 260" style={{ position:'absolute', inset:0, transform:'rotate(-90deg)', opacity: phase === 'charge' ? 1 : 0, transition:'opacity 0.3s' }} aria-hidden="true">
             <circle r="70" fill="none" stroke="#ffffff1a" strokeWidth="6" />
             <circle r="70" fill="none" stroke={tier.color} strokeWidth="6" strokeLinecap="round"
-              strokeDasharray={`${2 * Math.PI * 70}`} strokeDashoffset={`${2 * Math.PI * 70 * (1 - progress)}`} style={{ filter:`drop-shadow(0 0 6px ${tier.color})` }} />
+              strokeDasharray={`${2 * Math.PI * 70}`} strokeDashoffset={`${2 * Math.PI * 70 * (1 - progress)}`} style={{ filter:`drop-shadow(0 0 ${6 + g * 14}px ${tier.color})` }} />
+            {/* 発光：ゲージの芯が白く光る（満タンで点灯して明滅） */}
+            <circle r="70" fill="none" stroke="#ffffff" strokeWidth={2 + g * 2} strokeLinecap="round" opacity={g}
+              strokeDasharray={`${2 * Math.PI * 70}`} strokeDashoffset={`${2 * Math.PI * 70 * (1 - progress)}`} />
           </svg>
+          {/* 発光：装備のまわりの光の輪（ためている間だけ・満タンで点灯して明滅） */}
+          {phase === 'charge' && (
+            <div style={{ position:'absolute', left:'50%', top:'50%', width:300, height:300, marginLeft:-150, marginTop:-150, borderRadius:'50%', pointerEvents:'none',
+              background:`radial-gradient(circle, ${tier.color} 0%, ${tier.color}dd 30%, ${tier.color}66 48%, transparent 70%)`,
+              opacity: g, transform:`scale(${0.8 + g * 0.3})`, mixBlendMode:'screen' }} />
+          )}
           {phase === 'climax' && success && (
             <div style={{ position:'absolute', left:'50%', top:'50%', width:180, height:180, borderRadius:'50%', border:`4px solid ${tier.color}`, pointerEvents:'none',
               boxShadow:`0 0 20px ${tier.color}, inset 0 0 20px ${tier.color}`, animation:'efShock 0.7s ease-out forwards' }} />

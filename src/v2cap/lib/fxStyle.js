@@ -37,6 +37,17 @@ export const ENHANCE_HOLD_MS = [1000, 6000]
 export const enhanceHoldMsOf = (plusTo, rng = Math.random) => (Number(plusTo) >= ENHANCE_HOLD_FROM
   ? Math.round(ENHANCE_HOLD_MS[0] + rng() * (ENHANCE_HOLD_MS[1] - ENHANCE_HOLD_MS[0]))
   : 0)
+// ためている間の発光（0〜1）。ms＝ため始めてからの時間・chargeMs＝ゲージがたまるまで（enhanceChargeMsOf）
+// 【確定】2026-10-24 ユーザー指示「溜めてる間は点灯するようにして、発光ていうのかな」：
+//   ・たまっている途中：ゲージが進むほど少しずつ光る（ゆっくり息をするように0.4まで）
+//   ・ゲージが満タンになった瞬間に**点灯**（1＝いちばん明るい）→ 結果が出るまで強く明滅（ENHANCE_GLOW_HZ 回/秒・0.2〜1）
+//   ★+5 にする回まではすぐ結果なので、満タンの点灯は一瞬だけ。明滅が見えるのは満タンで待つ +6 からの回
+export const ENHANCE_GLOW_HZ = 1.5
+export const enhanceGlowOf = (ms, chargeMs) => {
+  if (ms >= chargeMs) return 0.6 + 0.4 * Math.cos((ms - chargeMs) / 1000 * Math.PI * 2 * ENHANCE_GLOW_HZ)
+  const p = Math.max(0, ms / chargeMs)
+  return p * (0.3 + 0.1 * Math.sin(ms / 1000 * Math.PI * 2 * 1.2))
+}
 // 結果のポップアップの1行目（ユーザーの書き方「○○の強化に成功！ 失敗…」）
 export const enhanceTitleOf = (name, success) => (success ? `${name}の強化に成功！` : `${name}の強化に失敗…`)
 

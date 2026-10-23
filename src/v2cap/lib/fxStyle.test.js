@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { WIN_TIERS } from './casino.js'
-import { enhanceTierOf, enhanceChargeMsOf, enhanceHoldMsOf, enhanceTitleOf, CRAFT_TIERS, craftTierOf, craftTitleOf, CRAFT_STRIKES, REVELATION_STYLE, FORTUNE_NAMES, revelationStyleOf, TREE_ART } from './fxStyle.js'
+import { enhanceTierOf, enhanceChargeMsOf, enhanceHoldMsOf, enhanceGlowOf, enhanceTitleOf, CRAFT_TIERS, craftTierOf, craftTitleOf, CRAFT_STRIKES, REVELATION_STYLE, FORTUNE_NAMES, revelationStyleOf, TREE_ART } from './fxStyle.js'
 import { CRAFT_RARITIES } from './smith.js'
 import { RARITY_COLOR } from './equipment.js'
 import { PLUS_MAX } from './smith.js'
@@ -49,6 +49,21 @@ test('【確定】+6 にする回からは、ゲージがたまったあと満�
   assert.ok(fx.includes('const holdMs = enhanceHoldMsOf(job.plusTo)'), '待つ時間は強化値だけで決める（結果は見ない）')
   assert.ok(fx.includes('now - t0.current >= chargeMs + holdMs'), 'たまったあと待ってから結果')
   assert.equal(enhanceHoldMsOf.length, 1, '引数は強化値と乱数だけ（成否を受け取らない）')
+})
+
+test('【確定】ためている間は発光：ゲージが進むほど少しずつ光り、満タンで点灯（いちばん明るい）→ 結果まで明滅', () => {
+  // 2026-10-24 ユーザー指示「溜めてる間は点灯するようにして、発光ていうのかな」
+  const charge = enhanceChargeMsOf(8)
+  assert.equal(enhanceGlowOf(0, charge), 0, 'ため始めは光っていない')
+  for (let ms = 0; ms < charge; ms += 50) assert.ok(enhanceGlowOf(ms, charge) <= 0.4, `たまっている途中は控えめ（${ms}ms）`)
+  assert.ok(enhanceGlowOf(charge * 0.9, charge) > enhanceGlowOf(charge * 0.2, charge), 'ゲージが進むほど明るい')
+  assert.equal(enhanceGlowOf(charge, charge), 1, '満タンになった瞬間に点灯（いちばん明るい）')
+  const hold = Array.from({ length: 120 }, (_, i) => enhanceGlowOf(charge + i * 50, charge))
+  assert.ok(Math.min(...hold) < 0.25 && Math.max(...hold) === 1, '満タンで待つ間は強く明滅（0.2〜1）')
+  for (const v of hold) assert.ok(v >= 0.2 - 1e-9 && v <= 1, String(v))
+  const fx = readFileSync(new URL('../components/V2capEnhanceFx.jsx', import.meta.url), 'utf8')
+  assert.ok(fx.includes('setLit(enhanceGlowOf(now - t0.current, chargeMs))'), '演出は毎こま発光を出し直す')
+  assert.ok(fx.includes("const g = phase === 'charge' ? lit : 0"), '発光はためている間だけ')
 })
 
 test('【確定】強化で上がるステを出す（戦闘力だけでなく「STR 12 → 13（+1）」）：強化の画面・結果のポップアップ・強化券', () => {
