@@ -12,6 +12,7 @@ import { staminaMaxOf, rollStamina, staminaSpanMsOf } from '../lib/level.js'
 import { expText as expTextOf, levelUpLines, dropLineOf } from '../lib/settleLines.js'
 import { ITEM_BY_ID } from '../lib/equipment.js'
 import { guardDropBonusOf, floorLabel, TOWER_NAME } from '../lib/tower.js'
+import { sortieClock, sendWithCooldownRetry, newSettleKey, settleKeyArgOf } from '../lib/cooldown.js'
 import { buildCapBattleView } from '../lib/battleView.js'
 import { enemyArtSrc } from '../lib/enemyArt.js'
 import { battleIconOf } from '../lib/classArt.js'
@@ -46,6 +47,9 @@ import V2capShrineFx from './V2capShrineFx.jsx'
 //   ・【確定】2026-10-14 塔（lib/tower.js・画面 V2capTower.jsx）：出撃と**待ち時間を共有**（サーバーの last_sortie_at から数える）・
 //     塔の**階層守護者でいるあいだは装備のドロップ率+1%**（ユーザー指示「階層守護者になっている間はドロップ率1%増加」）。
 //     精算のあとのログの行（EXP・LEVEL UP・CLASS LEVEL UP・覚えた技・落ちた装備）は塔と同じ lib/settleLines.js
+//   ・【確定】2026-10-23 ユーザー報告「⚠ 反映に失敗しました（出撃の間隔が短すぎます）」の直し（決まりは lib/cooldown.js）：
+//     待ち時間は塔と1つの時計（sortieClock）で数える。サーバーに早すぎると言われたら、サーバーが数えた残りを待って
+//     同じ精算を送り直す（戦闘の結果を捨てない）。精算には戦闘ごとの印を付ける（2回は入らない）
 // ============================================================
 // ★ログに注記は付けない（2026-10-10 ユーザー指示「（朝だけ）とか（時間帯限定で1.5倍）とか倒した時の（1ターン）の部分いらない」）：
 //   時間帯の敵の「（朝だけ）」・報酬の「（ボスで5倍）（レアで3倍）（時間帯限定で1.5倍）」・勝ち負けの「（◯ターン）」は出さない
@@ -82,7 +86,6 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   const [shrine, setShrine] = useState(() => shrineOf(prof))   // 安息の祠（いなければ null）。精算の返事とプロフィールから
   const [shrineBattle, setShrineBattle] = useState(false)   // 表示中の戦闘が祠の中か（何戦目かは出さない）
   const [fx, setFx] = useState(null)                  // 祠の演出（{ kind:'found'|'deepest', … }）
-  const lastAt = useRef(0)
   const busy = useRef(false)
   const logBox = useRef(null)
 
@@ -102,31 +105,29 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   useEffect(() => { onScene?.(scene) }, [scene, onScene])
   useEffect(() => { setStam({ n: prof?.stamina ?? 0, at: prof?.stamina_at || null }) }, [prof?.stamina, prof?.stamina_at])
   useEffect(() => { setBossRate(prof?.boss_rate || 0) }, [prof?.boss_rate])
-  // ★塔と待ち時間を共有する（2026-10-14・あるけみすとの「探索」と「闘技場」と同じ）：
-  //   サーバーの最後の精算の時刻（last_sortie_at＝塔の挑戦も書く）が新しければ、そこから10秒を数える
-  useEffect(() => {
-    const t = prof?.last_sortie_at ? new Date(prof.last_sortie_at).getTime() : 0
-    if (t > lastAt.current) lastAt.current = t
-  }, [prof?.last_sortie_at])
+  // ★塔と待ち時間を共有する（2026-10-14・あるけみすとの「探索」と「闘技場」と同じ）：塔と1つの時計（lib/cooldown.js の sortieClock）。
+  //   施設の画面へ行って戻っても残る。サーバーの最後の精算の時刻（last_sortie_at＝塔の挑戦も書く）は、ページを開いて最初の1回だけ読む
+  //   （PCの時計とずれているので、そのまま比べると早すぎる出撃になる・2026-10-23）
+  useEffect(() => { sortieClock.fromServer(prof?.last_sortie_at) }, [prof?.last_sortie_at])
   useEffect(() => { setShrine(shrineOf(prof)) }, [prof?.shrine_spot, prof?.shrine_left, prof?.shrine_total])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const cleared = prof?.cleared_spots || []
   const availableSpots = SPOTS.filter(s => isSpotUnlocked(cleared, s.id))
   // 選んでいた場所がまだ開いていなければ、開いている一番先の場所
   const spot = availableSpots.find(s => s.id === selectedSpot) || spotOf(openUntilOf(cleared))
-  const elapsed = (now - lastAt.current) / 1000
-  const remaining = Math.max(0, SORTIE_CD - elapsed)
+  const leftMs = sortieClock.leftMs(now)
+  const remaining = leftMs / 1000
   const canAct = remaining <= 0 && !loading && !fx   // 祠の演出の間は押せない（右下のボタンも）
-  const timerPct = Math.min(100, (elapsed / SORTIE_CD) * 100)
+  const timerPct = Math.max(0, Math.min(100, 100 - (leftMs / (SORTIE_CD * 1000)) * 100))
   const stamMax = staminaMaxOf(prof?.lv)
   const stamNow = rollStamina(stam.n, stam.at, stamMax, now, staminaSpanMsOf(prof)).n   // 博物館の報酬で回復の間隔が短くなる（2026-10-23）
 
   const doBattle = async (isAuto = false) => {
     // ★祠の演出が出ている間は出撃しない（オートも手動も・2026-10-14 ユーザー指示「演出が入ってるとき、オートでも出撃進まないようにして」）
     if (busy.current || !spot || fx) return
-    if (Date.now() - lastAt.current < SORTIE_CD * 1000) return
+    if (sortieClock.leftMs() > 0) return
     busy.current = true
-    lastAt.current = Date.now()
+    sortieClock.start()
     setLoading(true); setScene('battle'); setLogs([]); setBattleNo(n => n + 1)
     try {
       const me = playerFighter(prof, inventory)
@@ -160,9 +161,14 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       setLogs(out)
 
       // ★1戦ごとにその場で反映する。EXP・Gold・アイテムLVはサーバーが場所の表から決める
-      const { data, error } = await supabase.rpc('v2cap_sortie_settle', {
+      // ★サーバーに早すぎると言われたら、サーバーが数えた残りを待って同じ精算を送り直す（戦闘の結果を捨てない・2026-10-23）。
+      //   戦闘ごとの印（p_key）を付けるので、送り直しても・通信が切れてブラウザが送り直しても2回は入らない
+      const args = {
         p_spot: sh ? sh.spot : spot.id, p_enemy: foe, p_win: win, p_drop: drop ? drop.item.id : null, p_auto: !!isAuto,
-      })
+        ...settleKeyArgOf(prof, newSettleKey()),
+      }
+      const { data, error } = await sendWithCooldownRetry(() => supabase.rpc('v2cap_sortie_settle', args),
+        { onWait: (ms) => sortieClock.wait(ms) })
       if (data && data.stamina != null) setStam({ n: data.stamina, at: data.stamina_at || new Date().toISOString() })
       if (error || !data?.ok) {
         setAuto(false)
@@ -223,7 +229,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
     } finally {
       // ★10秒は「精算が返ってきた時点」から数え直す。サーバーも前回の精算から8秒空いているかを見るので、
       //   出撃を押した時点から数えると、通信が遅かった回の次で弾かれることがある
-      lastAt.current = Date.now()
+      sortieClock.start()
       busy.current = false
       setLoading(false)
     }

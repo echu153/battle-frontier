@@ -9,7 +9,7 @@ import { box, btn, miniBtn, TEXT } from './v2ui.js'
 import { toFighter as playerFighter } from '../lib/loadout.js'
 import { calcPower } from '../lib/level.js'
 import { ascEffectsOf } from '../lib/ascension.js'
-import { SORTIE_CD } from '../lib/sortie.js'
+import { sortieClock, sendWithCooldownRetry, newSettleKey, settleKeyArgOf } from '../lib/cooldown.js'
 import { attackKindOf } from '../lib/jobs.js'
 import { buildCapBattleView } from '../lib/battleView.js'
 import { expText, levelUpLines, dropLineOf } from '../lib/settleLines.js'
@@ -27,7 +27,8 @@ import {
 //     一覧は 層・職業のアイコン（デフォルメの絵・丸い枠）・LV・名前（ユーザーが見せた画像の形）。自分の行は黄色。
 //     枠の色は通常攻撃が物理なら赤・魔法なら青。上位職はデフォルメの絵がまだ無いので系統の初期職の絵（tower.js の iconClassOf）
 //   ・戦闘ログは出撃と同じ あるけみすと風（battleView.js・V2capLogLine.jsx）。精算のあとの行も出撃と同じ（settleLines.js）
-//   ・待ち時間は出撃と共有（サーバーの last_sortie_at から10秒）
+//   ・待ち時間は出撃と共有（サーバーの last_sortie_at から10秒）。画面では出撃と1つの時計（lib/cooldown.js の sortieClock）で数え、
+//     サーバーに早すぎると言われたら残りを待って送り直す・挑戦ごとの印を付ける（2026-10-23・出撃と同じ）
 // ============================================================
 const KIND_RING = { phys: '#ff6655', mag: '#55aaff' }
 const ringOf = (cls) => KIND_RING[attackKindOf(cls)] || '#7fa6d0'
@@ -55,7 +56,6 @@ export default function V2capTower({ prof, inventory, onProfile }) {
   const [msg, setMsg] = useState('')
   const [now, setNow] = useState(Date.now())
   const [showRules, setShowRules] = useState(false)
-  const lastAt = useRef(0)
   const listBox = useRef(null)
   const scrolled = useRef(false)
 
@@ -81,9 +81,9 @@ export default function V2capTower({ prof, inventory, onProfile }) {
   const preview = useMemo(() => towerBattleOf({ me, myLv: prof?.lv, champ, floor }), [me, prof?.lv, champ, floor])
   const foePower = calcPower(champ.stats)
 
-  // 待ち時間は出撃と共有（サーバーの last_sortie_at と、ここで挑戦した時刻の新しいほうから10秒）
-  const server = prof?.last_sortie_at ? new Date(prof.last_sortie_at).getTime() : 0
-  const remain = Math.max(0, SORTIE_CD - (now - Math.max(lastAt.current, server)) / 1000)
+  // 待ち時間は出撃と共有（出撃と1つの時計。サーバーの last_sortie_at はページを開いて最初の1回だけ読む＝lib/cooldown.js）
+  useEffect(() => { sortieClock.fromServer(prof?.last_sortie_at) }, [prof?.last_sortie_at])
+  const remain = sortieClock.leftMs(now) / 1000
   const blocked = canChallenge({ guarding })
   const canAct = !blocked && remain <= 0 && !busy && !loadErr
 
@@ -99,9 +99,10 @@ export default function V2capTower({ prof, inventory, onProfile }) {
   }, [rows, floor, guardFloor, scene])
 
   const fight = async () => {
-    if (!canAct) return
+    // 時計はいまの値でも見る（2回続けて押されたとき、2回目は1回目の start で止まる）
+    if (!canAct || sortieClock.leftMs() > 0) return
     setBusy(true); setMsg(''); setScene('battle'); setLogs([])
-    lastAt.current = Date.now()
+    sortieClock.start()
     let freeCd = false   // 守護者が入れ替わっていた（待ち時間を使っていない）
     try {
       // 自分のアイコンの男女はキャラの性別（2026-10-21・gender.js。まだ決めていないキャラだけ神殿の切り替え）。守護者になったときの姿にも入れる
@@ -125,12 +126,16 @@ export default function V2capTower({ prof, inventory, onProfile }) {
         : { text:'敗北…', color:'#ff4444', big: true })
       setLogs(out)
 
-      const { data, error } = await supabase.rpc('v2cap_tower_fight', {
+      // 早すぎると言われたら残りを待って送り直す・挑戦ごとの印を付ける（出撃と同じ＝lib/cooldown.js）
+      const args = {
         p_floor: floor, p_foe: champ.playerId || null, p_win: win,
         p_my_hp_pm: hpPmOf(r.a), p_my_mp: Math.max(0, Math.round(r.a.mp)),
         p_foe_hp_pm: hpPmOf(r.b), p_foe_mp: Math.max(0, Math.round(r.b.mp)),
         p_snapshot: snapshotOf(me, { lv: prof.lv, gender, ups: ascEffectsOf(prof).ups }), p_drop: drop ? drop.item.id : null,
-      })
+        ...settleKeyArgOf(prof, newSettleKey()),
+      }
+      const { data, error } = await sendWithCooldownRetry(() => supabase.rpc('v2cap_tower_fight', args),
+        { onWait: (ms) => sortieClock.wait(ms) })
       if (error || !data?.ok) {
         setLogs(l => [...l, { text:`⚠ 反映に失敗しました（${error?.message || data?.error}）`, color:'#ff8844' }])
         // 守護者が入れ替わっていた（画面が古かった）ときは、待ち時間を使っていないので読み直してすぐ挑戦できる
@@ -148,7 +153,8 @@ export default function V2capTower({ prof, inventory, onProfile }) {
       await load()
       onProfile(null)
     } finally {
-      lastAt.current = freeCd ? 0 : Date.now()
+      if (freeCd) sortieClock.clear()
+      else sortieClock.start()
       setBusy(false)
     }
   }

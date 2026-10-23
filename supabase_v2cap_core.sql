@@ -3107,6 +3107,11 @@ alter table public.v2cap_profiles add column if not exists museum_stam_cut int n
 alter table public.v2cap_profiles add column if not exists gender text;
 alter table public.v2cap_profiles drop constraint if exists v2cap_profiles_gender_check;
 alter table public.v2cap_profiles add constraint v2cap_profiles_gender_check check (gender is null or gender in ('m', 'f'));
+-- 【確定】2026-10-23 ユーザー報告「⚠ 反映に失敗しました（出撃の間隔が短すぎます）」の直し（§5・§13）：
+--   前に通した精算（出撃・塔の挑戦）に画面が付けた印と、そのときの返事。同じ印の精算がもう一度届いたら（通信が切れて
+--   ブラウザが送り直した・画面が待ってから送り直した）、何もしないで前の返事を返す＝2回入れない。返事にプロフィールまるごとは入れない
+alter table public.v2cap_profiles add column if not exists last_sortie_key text;
+alter table public.v2cap_profiles add column if not exists last_sortie_res jsonb;
 create unique index if not exists v2cap_profiles_username_lower_idx
   on public.v2cap_profiles (lower(username));
 -- 参照は認証済み全員（今のⅡと同じ）。書き込みはRPC経由だけ
@@ -3878,7 +3883,14 @@ grant execute on function public.v2cap_set_gender(text) to authenticated;
 -- ★アイテムLVも**その場所のエリアのアイテムLV**をサーバーが付ける。装備は「その場所で落ちるランクか」
 --   「武器ならいまの職業が装備できる種類か」を見る。
 -- ★場所は1本道：ボスを倒した一番先の場所の次まで開いている（v2cap_open_until）。
--- ★出撃の間隔（10秒）はサーバーでも見る。通信の揺れぶん2秒の余裕を持たせて8秒
+-- ★出撃の間隔（10秒）はサーバーでも見る。通信の揺れぶん2秒の余裕を持たせて8秒（sortie.js の SORTIE_CD − SORTIE_CD_SLACK）
+-- ★【確定】2026-10-23 ユーザー報告「⚠ 反映に失敗しました（出撃の間隔が短すぎます）」の直し：
+--   画面の10秒は画面の時計で数えるので、同じキャラを別のタブ・端末で動かしたとき／画面がサーバーの時刻（last_sortie_at）を
+--   PCの時計と比べたとき／通信が切れてブラウザが送り直したときに、8秒より早く届くことがある。そのとき戦闘の結果を捨てないように：
+--   ・早すぎたら、あと何msで通せるか（wait_ms＝サーバーの時計で数えた残り）を返す。画面はそのぶん待って同じ精算を送り直す
+--     （断るときは何も書いていないので、送り直しても2回は入らない）
+--   ・p_key＝画面がこの戦闘に付けた印。前に通した精算と同じ印なら、何もしないで前の返事を返す（replay つき・last_sortie_key／last_sortie_res）。
+--     ほかの見る所（祠・場所・間隔）より前に見る＝1回目で祠を出た・間隔が空いていない、でも同じ返事を返せる。印は塔の挑戦と同じ列（待ち時間と同じく1つ）
 -- ⚠勝ち負けと、出会った敵（ボス・レア・時間帯の敵か）は画面の申告のまま
 --   （戦闘と敵の抽選をサーバーで回すまでは、今のⅡと同じ限界）
 -- ★落ちた装備（p_drop）は「その場所のエリアの装備か」「その役割の敵から落ちるレア度か」
@@ -3893,11 +3905,13 @@ grant execute on function public.v2cap_set_gender(text) to authenticated;
 -- ★宝箱（2026-10-14 ユーザー指示・src/v2cap/lib/sortie.js の CHEST_PCT・CHEST_SCRAP と同じ数）：
 --   祠の外で勝って、装備が持ち物に入らなかったとき（落ちなかった・条件に合わなかった）だけ 5% で見つけて、その場で開ける。
 --   中身はその場所のエリアの残骸 1〜10 個（均等に1つ）＝ materials（{"エリアの番号": 個数}）に足す。返事の chest＝{ area, n }（無ければ null）
--- ⚠引数を変えた（p_area → p_spot・ランクの p_rank をなくした）ので、前の形を落としてから作る
+-- ⚠引数を変えた（p_area → p_spot・ランクの p_rank をなくした・2026-10-23 印の p_key を足した）ので、前の形を落としてから作る
+--   （p_key の無い5つの形を残すと、5つで呼んだときにどちらか決められなくなる）
 drop function if exists public.v2cap_sortie_settle(int, text, boolean, text, boolean);
 drop function if exists public.v2cap_sortie_settle(int, text, boolean, text, text, boolean);
+drop function if exists public.v2cap_sortie_settle(int, text, boolean, text, boolean, text);
 create or replace function public.v2cap_sortie_settle(
-  p_spot int, p_enemy text, p_win boolean, p_drop text default null, p_auto boolean default false
+  p_spot int, p_enemy text, p_win boolean, p_drop text default null, p_auto boolean default false, p_key text default null
 ) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
@@ -3944,12 +3958,17 @@ declare
   v_stam   int;
   v_stam_at timestamptz;
   v_res    jsonb;
+  v_out    jsonb;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   -- ★行をつかんでから見る（同時に2回届いても、間隔の判定をすり抜けないように）
   select * into v_row from public.v2cap_profiles where id = v_uid for update;
   if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  -- 同じ戦闘の精算がもう一度届いた：前に通したときの返事をそのまま返す（何も書かない）
+  if p_key is not null and v_row.last_sortie_key = p_key and v_row.last_sortie_res is not null then
+    return v_row.last_sortie_res || jsonb_build_object('replay', true);
+  end if;
   select * into v_cls from public.v2cap_classes where id = v_row.class;
   select * into v_spot from public.v2cap_spots where id = p_spot;
   if not found then return jsonb_build_object('ok', false, 'error', 'その場所はありません'); end if;
@@ -3967,7 +3986,8 @@ begin
     if not found then return jsonb_build_object('ok', false, 'error', 'その敵はこの場所にいません'); end if;
   end if;
   if v_row.last_sortie_at is not null and v_row.last_sortie_at > now() - c_cd then
-    return jsonb_build_object('ok', false, 'error', '出撃の間隔が短すぎます');
+    return jsonb_build_object('ok', false, 'error', '出撃の間隔が短すぎます',
+      'wait_ms', ceil(extract(epoch from (v_row.last_sortie_at + c_cd - now())) * 1000)::int);
   end if;
   v_boss := not v_shrine and v_en.role = 'boss';
 
@@ -4079,7 +4099,7 @@ begin
      where id = v_uid
      returning stamina, stamina_at into v_stam, v_stam_at;
   end if;
-  return jsonb_build_object('ok', true, 'win', v_win, 'boss', v_boss,
+  v_out := jsonb_build_object('ok', true, 'win', v_win, 'boss', v_boss,
     'role', case when v_shrine then 'shrine' else v_en.role end, 'enemy_lv', v_en.lv,
     'exp', v_exp, 'gold', v_gold, 'drop', v_drop, 'unique', v_unique,
     'chest', case when v_chest > 0 then jsonb_build_object('area', v_spot.area, 'n', v_chest) end,
@@ -4089,10 +4109,16 @@ begin
     'stamina_max', public.v2cap_stamina_max(coalesce((v_res -> 'profile' ->> 'lv')::int, v_row.lv)),
     'shrine', jsonb_build_object('found', v_found, 'deepest', v_deep, 'spot', v_sh_spot,
       'left', greatest(0, v_sh_left), 'total', v_sh_total));
+  -- 同じ印でもう一度届いたときに返す返事（この行の中に入れるので、LVの返事からプロフィールまるごとを外す）
+  update public.v2cap_profiles
+     set last_sortie_key = p_key,
+         last_sortie_res = case when p_key is not null then jsonb_set(v_out, '{level}', coalesce(v_res, '{}'::jsonb) - 'profile') end
+   where id = v_uid;
+  return v_out;
 end;
 $$;
-revoke all on function public.v2cap_sortie_settle(int, text, boolean, text, boolean) from public, anon;
-grant execute on function public.v2cap_sortie_settle(int, text, boolean, text, boolean) to authenticated;
+revoke all on function public.v2cap_sortie_settle(int, text, boolean, text, boolean, text) from public, anon;
+grant execute on function public.v2cap_sortie_settle(int, text, boolean, text, boolean, text) to authenticated;
 
 -- ============================================================
 -- ===== 6. 転職（神殿）=====
@@ -6270,7 +6296,8 @@ end $$;
 --     挑戦する側は毎回満タン。守護者が守り切るたびに連勝数 streak が1つ増える（挑戦する側のステ +5n% の元）
 --   ・**勝ち負けによらず**、出撃と同じ旨み：開いている一番先の場所の「ふつうの敵1体ぶん」のEXP・Gold（倍率なし）＋
 --     装備（その場所のエリアの装備・ノーマルかレア・武器はいまの職業の種類＝出撃のふつうの敵と同じ条件）
---   ・出撃と**待ち時間を共有**する（last_sortie_at を出撃と同じに見て、同じに書く。8秒）
+--   ・出撃と**待ち時間を共有**する（last_sortie_at を出撃と同じに見て、同じに書く。8秒）。
+--     早すぎたら出撃と同じく wait_ms を返し、画面が待って送り直す。印（p_key）も出撃と同じ列で見る（2026-10-23・§5 の精算の説明）
 --   ・守護者でいるあいだ、出撃の装備のドロップ率+1%（画面の確率＝サーバーは何が落ちたかの条件だけを見る。tower_guard で分かる）
 -- ★戦闘は画面で回し、ここへ結果を申告する（出撃と同じ形）。**対人なので申告を信じる穴が残る**（勝ち負け・残りHP・守護者の姿）。
 --   公開の前に、出撃と一緒にサーバーで戦闘を回すか決める（設計書 §10）
@@ -6304,11 +6331,13 @@ create policy v2cap_tower_read on public.v2cap_tower_floors for select to authen
 -- p_foe_hp_pm・p_foe_mp … 戦い終わったときの守護者の残りHP（千分率）・MP（負けたとき、守護者がその値で座り直す）
 -- p_snapshot   … 自分の姿（勝って守護者になるとき用）
 -- p_drop       … 画面が引いた装備（出撃と同じ形。条件に合わなければ入れない）
+-- p_key        … 画面がこの挑戦に付けた印（出撃の精算と同じ。同じ印がもう一度届いたら前の返事を返す）
 drop function if exists public.v2cap_tower_fight(int, uuid, boolean, int, int, int, int, jsonb, text);
+drop function if exists public.v2cap_tower_fight(int, uuid, boolean, int, int, int, int, jsonb, text, text);
 create or replace function public.v2cap_tower_fight(
   p_floor int, p_foe uuid, p_win boolean,
   p_my_hp_pm int, p_my_mp int, p_foe_hp_pm int, p_foe_mp int,
-  p_snapshot jsonb, p_drop text default null
+  p_snapshot jsonb, p_drop text default null, p_key text default null
 ) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
@@ -6330,18 +6359,24 @@ declare
   v_inv   bigint;
   v_drop  jsonb := null;
   v_res   jsonb;
+  v_out   jsonb;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   -- ★行をつかんでから見る（同時に2回届いても、待ち時間の判定をすり抜けないように）
   select * into v_row from public.v2cap_profiles where id = v_uid for update;
   if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  -- 同じ挑戦の結果がもう一度届いた：前に通したときの返事をそのまま返す（1回目で守護者になっていても、何もしない）
+  if p_key is not null and v_row.last_sortie_key = p_key and v_row.last_sortie_res is not null then
+    return v_row.last_sortie_res || jsonb_build_object('replay', true);
+  end if;
   -- 守っているあいだは挑戦できない（あるけみと同じ）
   if v_row.tower_guard is not null or exists (select 1 from public.v2cap_tower_floors where player_id = v_uid) then
     return jsonb_build_object('ok', false, 'error', '守っているあいだは挑戦できません');
   end if;
   if v_row.last_sortie_at is not null and v_row.last_sortie_at > now() - c_cd then
-    return jsonb_build_object('ok', false, 'error', '待ち時間が終わっていません');
+    return jsonb_build_object('ok', false, 'error', '待ち時間が終わっていません',
+      'wait_ms', ceil(extract(epoch from (v_row.last_sortie_at + c_cd - now())) * 1000)::int);
   end if;
   v_floor := least(greatest(coalesce(v_row.tower_floor, 1), 1), c_floors);
   if p_floor is distinct from v_floor then
@@ -6414,12 +6449,18 @@ begin
   -- 待ち時間は出撃と共有（出撃の精算と同じ列）
   update public.v2cap_profiles set gold = gold + v_gold, last_sortie_at = now(), updated_at = now() where id = v_uid;
   v_res := public.v2cap_apply_exp(v_uid, v_exp);
-  return jsonb_build_object('ok', true, 'win', v_win, 'floor', v_floor, 'next_floor', v_next,
+  v_out := jsonb_build_object('ok', true, 'win', v_win, 'floor', v_floor, 'next_floor', v_next,
     'guard', case when v_win then v_floor end, 'exp', v_exp, 'gold', v_gold, 'drop', v_drop, 'level', v_res);
+  -- 同じ印でもう一度届いたときに返す返事（出撃の精算と同じ列・プロフィールまるごとは外す）
+  update public.v2cap_profiles
+     set last_sortie_key = p_key,
+         last_sortie_res = case when p_key is not null then jsonb_set(v_out, '{level}', coalesce(v_res, '{}'::jsonb) - 'profile') end
+   where id = v_uid;
+  return v_out;
 end;
 $$;
-revoke all on function public.v2cap_tower_fight(int, uuid, boolean, int, int, int, int, jsonb, text) from public, anon;
-grant execute on function public.v2cap_tower_fight(int, uuid, boolean, int, int, int, int, jsonb, text) to authenticated;
+revoke all on function public.v2cap_tower_fight(int, uuid, boolean, int, int, int, int, jsonb, text, text) from public, anon;
+grant execute on function public.v2cap_tower_fight(int, uuid, boolean, int, int, int, int, jsonb, text, text) to authenticated;
 
 -- ===== 席を降りる（守るのをやめる）=====
 -- ★あるけみすとに「降りる」は無い（破られるまで上へ行けない）。人が少ないと詰むので足した（今のⅡと同じ・ユーザーが選んだ）。

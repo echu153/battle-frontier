@@ -12,6 +12,7 @@ import { JOB_NEED_PCT, JOB_NEED_BASE_PERMIL, JOB_MAX } from './jobs.js'
 import { ROLE_TENTHS, SPOTS as SPOTS_ALL, recLvOf } from './areas.js'
 import { SLOTS, RARITIES, ALL_RARITIES, STARTER_AREA, UNIQUE_ITEMS, UNIQUE_DROP_PCT, UNIQUE_LV } from './equipment.js'
 import { SORTIE_CD, DROP_RARITY, CHEST_PCT, CHEST_SCRAP } from './sortie.js'
+import { SORTIE_CD_SLACK } from './cooldown.js'
 import { SHRINE_FAIRY_NAME, SHRINE_PCT, SHRINE_FIGHTS, SHRINE_EXP_TENTHS, SHRINE_GOLD_TENTHS } from './shrine.js'
 import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV, scrapAreaOf, enhanceScrapOf, ENHANCE_GOLD_ONLY_RARITY } from './smith.js'
 import { DAILY_SORTIES, DAILY_GOLD_PER_LV, DAY_RESET_HOUR, DAILY_TASK_KEYS, GUARD_DONE_KEY } from './daily.js'
@@ -623,7 +624,57 @@ test('【確定】宝箱（2026-10-14）：祠の外で勝って装備が入ら�
 
 test('出撃の間隔はサーバーでも見る（10秒・通信の揺れぶん2秒の余裕）', () => {
   assert.equal(SORTIE_CD, 10)
-  assert.match(fnBody('v2cap_sortie_settle'), /c_cd constant interval := interval '8 seconds';/)
+  assert.equal(SORTIE_CD_SLACK, 2)
+  assert.ok(fnBody('v2cap_sortie_settle').includes(`c_cd constant interval := interval '${SORTIE_CD - SORTIE_CD_SLACK} seconds';`), 'cooldown.js と同じ8秒')
+})
+
+// 【確定】2026-10-23 ユーザー報告「⚠ 反映に失敗しました（出撃の間隔が短すぎます）」の直し（cooldown.js）。出撃の精算と塔の挑戦で同じ形
+const CD_FNS = [
+  { fn: 'v2cap_sortie_settle', sig: 'int, text, boolean, text, boolean, text', old: 'int, text, boolean, text, boolean', msg: '出撃の間隔が短すぎます' },
+  { fn: 'v2cap_tower_fight', sig: 'int, uuid, boolean, int, int, int, int, jsonb, text, text', old: 'int, uuid, boolean, int, int, int, int, jsonb, text', msg: '待ち時間が終わっていません' },
+]
+
+test('【確定】早すぎたら残り（wait_ms・サーバーの時計で数えた ms）を返す＝画面が待って送り直す。断るときは何も書かない', () => {
+  for (const { fn, msg } of CD_FNS) {
+    const body = fnBody(fn)
+    assert.ok(body.includes(`interval '${SORTIE_CD - SORTIE_CD_SLACK} seconds';`), `${fn}：cooldown.js と同じ8秒`)
+    const reject = `if v_row.last_sortie_at is not null and v_row.last_sortie_at > now() - c_cd then\n    return jsonb_build_object('ok', false, 'error', '${msg}',\n      'wait_ms', ceil(extract(epoch from (v_row.last_sortie_at + c_cd - now())) * 1000)::int);\n  end if;`
+    assert.ok(body.includes(reject), `${fn}：断りに wait_ms を付ける`)
+    // 断るのは書き込む前（送り直しても2回は入らない）
+    const at = body.indexOf(reject)
+    for (const w of ['update public.v2cap_profiles', 'insert into public.v2cap_inventory', 'v2cap_daily_bump', 'v2cap_apply_exp', 'v2cap_stamina_roll']) {
+      const i = body.indexOf(w)
+      assert.ok(i < 0 || i > at, `${fn}：${w} は断りのあと`)
+    }
+  }
+})
+
+test('【確定】精算ごとの印（p_key）：同じ印がもう一度届いたら、何もしないで前の返事を返す（2回入れない）', () => {
+  assert.ok(SQL.includes('alter table public.v2cap_profiles add column if not exists last_sortie_key text;'))
+  assert.ok(SQL.includes('alter table public.v2cap_profiles add column if not exists last_sortie_res jsonb;'))
+  const replay = "if p_key is not null and v_row.last_sortie_key = p_key and v_row.last_sortie_res is not null then\n    return v_row.last_sortie_res || jsonb_build_object('replay', true);\n  end if;"
+  const store = "update public.v2cap_profiles\n     set last_sortie_key = p_key,\n         last_sortie_res = case when p_key is not null then jsonb_set(v_out, '{level}', coalesce(v_res, '{}'::jsonb) - 'profile') end\n   where id = v_uid;\n  return v_out;\nend;"
+  for (const { fn, sig, old } of CD_FNS) {
+    const body = fnBody(fn)
+    assert.ok(body.includes('p_key text default null'), `${fn}：印は最後の引数（無くても呼べる）`)
+    // 印は行をつかんだすぐあと・ほかのどの見る所より前（1回目で祠を出た・守護者になった・間隔が空いていない、でも同じ返事を返す）
+    const lock = body.indexOf('for update;\n  if not found then return')
+    const r = body.indexOf(replay)
+    assert.ok(lock > 0 && r > lock, `${fn}：行をつかんでから見る`)
+    for (const w of ['last_sortie_at > now() - c_cd', 'shrine_left', 'tower_guard is not null', 'v2cap_open_until', 'update public.v2cap_profiles']) {
+      const i = body.indexOf(w)
+      assert.ok(i < 0 || i > r, `${fn}：${w} より前に見る`)
+    }
+    // 通したら最後に印と返事を覚える（返事にプロフィールまるごとは入れない＝この行の中に入るので）
+    assert.ok(body.endsWith(store + '\n$$;'), `${fn}：最後に印と返事を覚えてから返す`)
+    assert.equal(body.split('return v_out;').length - 1, 1, `${fn}：通したときの返事は1か所だけ`)
+    assert.ok(!/return jsonb_build_object\('ok', true/.test(body), `${fn}：覚えずに通す返事が無い`)
+    // 前の形（印の無い形）は落とす（残すと、印なしで呼んだときにどちらか決められない）。新しい形にだけ権限
+    assert.ok(SQL.includes(`drop function if exists public.${fn}(${old});`), `${fn}：前の形を落とす`)
+    assert.ok(SQL.includes(`drop function if exists public.${fn}(${sig});`), `${fn}：流し直せる`)
+    assert.ok(SQL.includes(`grant execute on function public.${fn}(${sig}) to authenticated;`), `${fn}：新しい形に権限`)
+    assert.ok(!SQL.includes(`grant execute on function public.${fn}(${old}) to authenticated;`), `${fn}：前の形に権限を付けない`)
+  }
 })
 
 test('★公開RPCは全部 v2cap_is_dev()（is_admin だけ）を通している', () => {
@@ -891,7 +942,7 @@ test('【確定】塔（2026-10-14）：100層・負けたら2つ下・待ち時
   assert.ok(SQL.includes(`floor     int primary key check (floor between 1 and ${TOWER_FLOORS}),`), '層の番号の範囲')
   // 待ち時間は出撃と同じ列（last_sortie_at）・同じ長さ（10秒・通信の揺れぶん2秒の余裕で8秒）
   assert.equal(SORTIE_CD, 10)
-  assert.ok(fight.includes("c_cd     constant interval := interval '8 seconds';"), '8秒（出撃と同じ）')
+  assert.ok(fight.includes(`c_cd     constant interval := interval '${SORTIE_CD - SORTIE_CD_SLACK} seconds';`), '8秒（出撃と同じ）')
   assert.ok(fight.includes('v_row.last_sortie_at > now() - c_cd'), '出撃の時刻から数える')
   assert.ok(fight.includes('last_sortie_at = now()'), '挑戦したら出撃と同じ列に書く')
   // 負けたら2つ下（1層より下には行かない）・勝てば守護者・破られた人と降りた人は1つ上
