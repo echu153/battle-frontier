@@ -22,7 +22,7 @@ import { FX_ART_IDS } from './fxArtList.js'
 
 export const FX_ART_SRC_DIR = 'V2状態異常'   // public の下・元の絵（ユーザーが置く）
 export const FX_ART_DIR = '/fx-art'           // public の下・画面で使う版
-export const FX_ART_SIZE = 96                 // 画面では34px。スマホの高精細でもぼやけないように大きめに持つ
+export const FX_ART_SIZE = 96                 // 画面では28px（V2capLogLine の FX_SIZE）。スマホの高精細でもぼやけないように大きめに持つ
 
 // 上がる・下がるの色（枠・文字・下地）
 export const FX_UP = { ring: '#ffaa44', text: '#ffd28a', bg: '#7a3010' }

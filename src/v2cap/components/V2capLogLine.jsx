@@ -31,11 +31,13 @@ const Icon = ({ side, ...rest }) => <V2capIcon ring={SIDE_COLOR[side] || '#7fa6d
 // バフ・デバフ・状態異常のアイコン1つ（x は battleFx.js の fxIconsOf の1件）
 //   上に名前（「STR」「毒」「サイレンス」など）・下に「↑25%」やバリアの量・右下に残りターン（出血は ×スタック）を絵に重ねる
 //   絵が無い（読めない）ときは、下地の色と名前だけで出す
-const FX_SIZE = 34
+// ★大きさ：2026-10-24 ユーザー「アイコンちょっと大きいかも、サイズ小さくできる？」で 34px → 28px（文字は 上7px・下と右下8px）
+const FX_SIZE = 28
+const FX_PX = { top: 7, bottom: 8, corner: 8 }
 const OUTLINE = '1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 0 0 3px #000'
-// 枠の内側（30px）に入らない文字は横に縮める（高さはそのまま＝小さくしすぎない）。半角は0.6文字ぶんで数える
-//   例：サイレンス（8px×5文字＝40px）→ 横0.75倍
-const FX_TEXT_W = 30
+// 枠線こみで28px（boxSizing）。内側の24pxに入らない文字は横に縮める（高さはそのまま＝小さくしすぎない）。半角は0.6文字ぶんで数える
+//   例：サイレンス（7px×5文字＝35px）→ 横0.69倍
+const FX_TEXT_W = FX_SIZE - 4
 const squeezeOf = (s, px) => Math.min(1, FX_TEXT_W / ([...s].reduce((w, c) => w + (c <= '\x7e' ? 0.6 : 1), 0) * px))
 // 横に縮めたとき両はしが同じだけはみ出すように、flex で真ん中に置いてから縮める
 const FxText = ({ s, px, color, pos }) => (
@@ -50,14 +52,14 @@ function FxIcon({ x }) {
   const tone = x.kind === 'up' ? FX_UP : x.kind === 'down' ? FX_DOWN : null
   const ring = tone ? tone.ring : x.color
   return (
-    <div title={x.title} style={{ position: 'relative', width: FX_SIZE, height: FX_SIZE, flexShrink: 0, borderRadius: '5px',
+    <div title={x.title} style={{ position: 'relative', boxSizing: 'border-box', width: FX_SIZE, height: FX_SIZE, flexShrink: 0, borderRadius: '4px',
       border: `1px solid ${ring}`, overflow: 'hidden', boxShadow: `0 0 4px ${ring}55`,
       background: `radial-gradient(circle at 50% 40%, ${tone ? tone.bg : `${x.color}55`} 0%, #0a1424 85%)` }}>
       {art && <img src={x.art} alt="" width={FX_SIZE} height={FX_SIZE} draggable={false} onError={() => setBroken(true)}
-        style={{ position: 'absolute', inset: '2px', width: 'calc(100% - 4px)', height: 'calc(100% - 4px)', objectFit: 'contain' }} />}
-      {x.top && <FxText s={x.top} px={8} color="#fff" pos={{ top: '2px' }} />}
-      {x.bottom && <FxText s={x.bottom} px={9} color={tone ? tone.text : '#fff'} pos={{ bottom: '2px' }} />}
-      {x.corner && <div style={{ position: 'absolute', right: '2px', bottom: '1px', fontSize: '9px', lineHeight: 1, fontWeight: 'bold', color: '#fff',
+        style={{ position: 'absolute', inset: '1px', width: 'calc(100% - 2px)', height: 'calc(100% - 2px)', objectFit: 'contain' }} />}
+      {x.top && <FxText s={x.top} px={FX_PX.top} color="#fff" pos={{ top: '1px' }} />}
+      {x.bottom && <FxText s={x.bottom} px={FX_PX.bottom} color={tone ? tone.text : '#fff'} pos={{ bottom: '1px' }} />}
+      {x.corner && <div style={{ position: 'absolute', right: '1px', bottom: '0px', fontSize: `${FX_PX.corner}px`, lineHeight: 1, fontWeight: 'bold', color: '#fff',
         textShadow: OUTLINE, whiteSpace: 'nowrap', pointerEvents: 'none' }}>{x.corner}</div>}
     </div>
   )
