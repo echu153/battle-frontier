@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../supabase'
 import { box, miniBtn, TEXT } from './v2ui.js'
 import V2Modal from './V2Modal.jsx'
-import { chip } from './v2capGearView.js'
+import { spotOf } from '../lib/areas.js'
+import { openUntilOf } from '../lib/sortie.js'
 import { RARITIES, RARITY_COLOR, ITEM_BY_ID, rarityLabel, kindLabel } from '../lib/equipment.js'
 import { plusOf, plusLabel } from '../lib/smith.js'
 import {
@@ -34,6 +35,8 @@ const rowKey = (d) => `${d.item.id}|${d.tier}`
 // 段階の見出し【未強化】【+5】【+9】（2026-10-23 ユーザー指示「強化値を【】とかで囲って、見やすいように」）
 const tierTag = (t) => `【${t.label}】`
 const NOWRAP = { whiteSpace:'nowrap' }   // 句の途中で改行しない（折り返すのは句と句のあいだだけ）
+const REWARD_ON = '#ffcc00'    // そろった報酬の文（金色）
+const REWARD_OFF = '#88ccff'   // まだの報酬の文（明るい水色・灰色にしない）
 // size … 装備名だけの文字の大きさ（1つずつの寄贈の確認＝2026-10-23 ユーザー指示「装備の名前見やすくするようにフォントの大きさ大きく」「装備名だけね」）
 const NameLine = ({ d, size }) => (
   <>
@@ -49,7 +52,7 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
   const [confirm, setConfirm] = useState(null)    // 寄贈の確認 [{ inv, item, tier, copies }]（1つでも一括でも配列）
   const [result, setResult] = useState(null)      // 寄贈の結果 { ok, items: [{ name, rarity, tier }], skipped } ／ 失敗は { ok:false, error }
   const [picked, setPicked] = useState(() => new Set())   // 一括寄贈に選んだ行（rowKey）
-  const [groupKey, setGroupKey] = useState(MUSEUM_GROUPS[0].key)
+  const [groupKey, setGroupKey] = useState(null)   // 選んだエリア（null＝行ったことのある一番先のエリア）
 
   const load = useCallback(async () => {
     const { data, error: e } = await supabase.from('v2cap_museum').select('base_id, tier, plus')
@@ -63,7 +66,10 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
   const donatables = useMemo(() => (rows ? donatablesOf(prof, inventory, rows) : []), [prof, inventory, rows])
   const pickedRows = donatables.filter(d => picked.has(rowKey(d)))
   const total = museumCountOf(rows || [])
-  const group = MUSEUM_GROUPS.find(g => g.key === groupKey) || MUSEUM_GROUPS[0]
+  // 行ったことのあるエリアだけ（図鑑と同じ：開いている一番先の場所のエリアまで）
+  const maxArea = Math.max(1, spotOf(openUntilOf(prof?.cleared_spots))?.area || 1)
+  const groups = MUSEUM_GROUPS.filter(g => g.area <= maxArea)
+  const group = groups.find(g => g.key === groupKey) || groups[groups.length - 1]
   const groupCount = museumCountOf(rows || [], group.items)
   // 報酬（2026-10-23）：もらった合計（ステータスポイントは登録から数える・スタミナの短縮はサーバーが入れたプロフィールの値）と、このエリアの進み
   const totals = museumRewardTotalsOf(rows || [])
@@ -238,11 +244,14 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
 
       {/* ===== 登録の一覧 ===== */}
       <div style={{ ...box, padding:'12px' }}>
-        <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginBottom:'8px' }}>
-          {MUSEUM_GROUPS.map(g => (
-            <button key={g.key} onClick={() => setGroupKey(g.key)} style={chip(g.key === group.key)}>{g.label}</button>
+        {/* エリアはプルダウン・行ったことのあるエリアだけ（2026-10-23 ユーザー指示「行ったことのあるエリアしか表示されないのと、プルダウンから選択できるように」）。
+            コンプリートしたエリアには ✔（出撃の場所の選び方と同じ見た目） */}
+        <select value={group.key} onChange={e => setGroupKey(e.target.value)}
+          style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>
+          {groups.map(g => (
+            <option key={g.key} value={g.key}>{g.label}{areaProgressOf(registered, g.area).complete ? '　✔' : ''}</option>
           ))}
-        </div>
+        </select>
         {/* エリアの名前と段階ごとの登録数は別の行（スマホの幅で段階が途中で折り返さないように） */}
         <div style={{ color:'#cfe2ff', fontSize:'12px', marginBottom:'2px' }}>{group.label}</div>
         <div style={{ display:'flex', flexWrap:'wrap', gap:'2px 10px', color: TEXT.label, fontSize:'11px', marginBottom:'4px' }}>
@@ -267,9 +276,10 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
             <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'6px' }}>
               <span style={{ flexShrink:0, color: RARITY_COLOR[r], border:`1px solid ${RARITY_COLOR[r]}`, background:`${RARITY_COLOR[r]}22`,
                 padding:'1px 7px', fontSize:'12px', fontWeight:'bold' }}>{rarityLabel(r)}</span>
-              <div style={{ flex:1, minWidth:0, fontSize:'10px', color: TEXT.sub, lineHeight:1.6 }}>
-                <div><span style={NOWRAP}>1段階そろうごとに</span> <span style={NOWRAP}>ステータスポイント+{MUSEUM_SET_SP[r]}</span></div>
-                <div style={{ color: rp.allTiers ? '#ffcc00' : TEXT.sub }}>
+              {/* ★灰色はやめる（2026-10-23 ユーザー指示「ここも色つけて、灰色だとわかりづらい」）：そろったら金色・まだは明るい水色 */}
+              <div style={{ flex:1, minWidth:0, fontSize:'10px', lineHeight:1.6 }}>
+                <div style={{ color: rp.allTiers ? REWARD_ON : REWARD_OFF }}><span style={NOWRAP}>1段階そろうごとに</span> <span style={NOWRAP}>ステータスポイント+{MUSEUM_SET_SP[r]}</span></div>
+                <div style={{ color: rp.allTiers ? REWARD_ON : REWARD_OFF }}>
                   <span style={NOWRAP}>3段階すべて寄贈で</span> <span style={NOWRAP}>スタミナ回復−{MUSEUM_RARITY_STAM_SEC}秒{rp.allTiers ? ' ✔' : ''}</span>
                 </div>
               </div>

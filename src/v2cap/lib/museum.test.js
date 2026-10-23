@@ -140,9 +140,9 @@ test('画面：メニューに博物館・寄贈は確認→結果のポップ�
   assert.ok(m.includes('エリアコンプリート：スタミナ回復−{MUSEUM_AREA_STAM_SEC}秒'), 'コンプリートの説明に（…）を付けない（10-23）')
   assert.ok(m.includes('<span style={NOWRAP}>3段階すべて寄贈で</span> <span style={NOWRAP}>スタミナ回復−{MUSEUM_RARITY_STAM_SEC}秒'), '3段階の報酬の書き方（10-23）・句の途中で改行しない')
   // 報酬は2行に分ける・レア度ごとに枠（10-23「これを改行」「ノーマルとかレアの区分で枠分けてほしい」）
-  assert.ok(m.includes('<div><span style={NOWRAP}>1段階そろうごとに</span> <span style={NOWRAP}>ステータスポイント+{MUSEUM_SET_SP[r]}</span></div>'))
+  assert.ok(m.includes('<span style={NOWRAP}>1段階そろうごとに</span> <span style={NOWRAP}>ステータスポイント+{MUSEUM_SET_SP[r]}</span></div>'))
   // 報酬の2行はレア度の札の右（10-23「レアリティの右に持ってこれない？」）＝札と同じ横並びの中
-  const head = m.slice(m.indexOf('{rarityLabel(r)}</span>'), m.indexOf('{/* 段階ごとの登録数（札と別の行'))
+  const head = m.slice(m.indexOf("fontWeight:'bold' }}>{rarityLabel(r)}</span>"), m.indexOf('{/* 段階ごとの登録数（札と別の行'))
   assert.ok(head.includes('1段階そろうごとに') && head.includes('3段階すべて寄贈で'), '札のすぐ右に2行')
   assert.ok(m.includes('<div key={r} style={{ border:`1px solid ${RARITY_COLOR[r]}55`'))
   assert.ok(m.includes('const tierTag = (t) => `【${t.label}】`'), '段階を【】で囲む（10-23）')
@@ -238,4 +238,17 @@ test('寄贈のあとの報酬の並び：エリア→段階ごとのステー�
   assert.deepEqual(sortRewards([{ key: 'set:10:N:0' }, { key: 'area:2' }, { key: 'set:2:L:2' }]).map(w => w.key), ['set:2:L:2', 'area:2', 'set:10:N:0'])
   assert.deepEqual(sortRewards(undefined), [])
   assert.ok(src('../components/V2capMuseum.jsx').includes('rewards: sortRewards(data.rewards)'), '画面は並べ直した順で出す')
+})
+
+test('エリアはプルダウン・行ったことのあるエリアだけ・報酬の文は灰色にしない（10-23 ユーザー指示）', () => {
+  const m = src('../components/V2capMuseum.jsx')
+  assert.ok(m.includes('const maxArea = Math.max(1, spotOf(openUntilOf(prof?.cleared_spots))?.area || 1)'), '図鑑と同じ「行ったことのある一番先のエリア」')
+  assert.ok(m.includes('const groups = MUSEUM_GROUPS.filter(g => g.area <= maxArea)'))
+  assert.ok(m.includes('<select value={group.key} onChange={e => setGroupKey(e.target.value)}'), 'プルダウン')
+  assert.ok(m.includes('{groups.map(g => ('), '選べるのは行ったエリアだけ')
+  assert.ok(!m.includes('MUSEUM_GROUPS.map(g => ('), '全エリアのタブは出さない')
+  assert.ok(m.includes("const REWARD_OFF = '#88ccff'"), 'まだの報酬は明るい水色')
+  const head = m.slice(m.indexOf("fontWeight:'bold' }}>{rarityLabel(r)}</span>"), m.indexOf('{/* 段階ごとの登録数（札と別の行'))
+  assert.ok(!head.includes('TEXT.sub'), '報酬の2行に灰色を使わない')
+  assert.equal(head.split('rp.allTiers ? REWARD_ON : REWARD_OFF').length - 1, 2, '2行ともそろえば金色・まだは水色')
 })
