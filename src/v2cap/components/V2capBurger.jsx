@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import V2Modal from './V2Modal.jsx'
 import V2capClerk, { V2capClerkWelcome, CLERK_CSS } from './V2capClerk.jsx'
-import { box, btn, TEXT } from './v2ui.js'
+import { box, btn, miniBtn, TEXT } from './v2ui.js'
 import { STAT_DEFS } from '../core/stats.js'
 import { AIL_LABEL } from '../core/ailments.js'
 import { loadPref, savePref } from '../core/prefs.js'
@@ -47,7 +47,8 @@ function GroupList({ group }) {
   )
 }
 
-export default function V2capBurger({ prof, onProfile }) {
+// dev … 開発用（管理者だけ）。「いらっしゃいませー」を何回でも見られるボタンを出す（2026-10-25 ユーザー指示「開発用で、演出は何回もみれるようにして」）
+export default function V2capBurger({ prof, onProfile, dev = false }) {
   const [now, setNow] = useState(Date.now())
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 15000); return () => clearInterval(t) }, [])
   const [pick, setPick] = useState(BURGERS[0].stat)
@@ -139,6 +140,11 @@ export default function V2capBurger({ prof, onProfile }) {
         {/* 看板娘（広い画面は右・狭い画面は上） */}
         <div className="nk-side">
           <V2capClerk face={clerk.face} line={clerk.text} tick={clerk.tick} onTap={tapClerk} />
+          {dev && (
+            <div style={{ textAlign:'center', marginTop:'8px' }}>
+              <button type="button" onClick={() => setWelcome(true)} style={miniBtn('#ff88cc')}>🧪 いらっしゃいませーを見る［開発］</button>
+            </div>
+          )}
         </div>
 
         <div className="nk-menu">

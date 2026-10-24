@@ -121,7 +121,7 @@ export default function V2capDaily({ prof, onProfile, open = false, onToggle }) 
       </>)}
 
       {help && (
-        <V2Modal title="❓ HELP" color="#ffcc00" onClose={() => setHelp(false)}>
+        <V2Modal title="❓ HELP" color="#ffcc00" keepScroll onClose={() => setHelp(false)}>
           <div>ミッションはログインすると自動で受注します（報酬はそのときのLVで決まります）。</div>
           <div>{TOWER_NAME}は、受注したときに守護者なら達成済みです。</div>
           <div>日付が変わるのは日本時間の5時です（次は {resetText(nextResetAt(now))}）。</div>

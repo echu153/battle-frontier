@@ -165,7 +165,7 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
 
       {/* 説明は HELP から（2026-10-23 ユーザー指示「画像②の説明はHELPから確認できるようにして」） */}
       {help && (
-        <V2Modal title="❓ HELP" color="#d8b070" onClose={() => setHelp(false)}>
+        <V2Modal title="❓ HELP" color="#d8b070" keepScroll onClose={() => setHelp(false)}>
           <div style={HELP_HEAD}>寄贈のしかた</div>
           <div>装備を寄贈すると、博物館に登録されます（寄贈した装備はなくなります）。</div>
           <div>同じ装備を「未強化」「+5」「+9」のときにそれぞれ1回ずつ寄贈できます。</div>

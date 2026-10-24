@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 // バトルフロンティアⅡ（リメイク版）— 画面の真ん中に出すポップアップ
 // ------------------------------------------------------------
@@ -8,11 +8,24 @@ import { useEffect } from 'react'
 //   ・結果 … onConfirm を渡さなければ「閉じる」だけ
 // ⚠**背景をクリックしても閉じない**（結果を読む前に消えると何が起きたか分からなくなる）。
 //   Escでは閉じる。
+// 【確定】2026-10-25 ユーザー指示「ポップアップ後の操作が全部この仕様（その場のまま）になってるから、基本的に画面遷移したら画面上部に移動するようにして」：
+//   **ポップアップが閉じたら画面のいちばん上へ戻す**。確認は「実行」を押したあとに閉じたときだけ（「やめる」はその場のまま）。
+//   ★見るだけのポップアップ（HELP・図鑑の詳しい情報・出撃オプション）は keepScroll を渡して今の場所のまま（src/v2cap/lib/popupTop.test.js が見張る）
 export default function V2Modal({
   title, color = '#88ccff', children,
   confirmLabel = '実行する', cancelLabel = 'やめる', closeLabel = '閉じる',
-  danger = false, busy = false, onConfirm, onClose, noClose = false,
+  danger = false, busy = false, onConfirm, onClose, noClose = false, keepScroll = false,
 }) {
+  // 閉じたとき（このポップアップが消えたとき）に上へ戻すか。いまの値はそのつど控える（消えるときに見る）
+  const acted = useRef(false)   // 確認で「実行」を押した
+  const keep = useRef(keepScroll)
+  const isConfirm = useRef(!!onConfirm)
+  keep.current = keepScroll
+  isConfirm.current = !!onConfirm
+  useEffect(() => () => {
+    if (!keep.current && (!isConfirm.current || acted.current)) window.scrollTo(0, 0)
+  }, [])
+  const confirm = () => { acted.current = true; onConfirm?.() }
   // ★noClose … **閉じられないポップアップ**。閉じるボタンを出さず、Escも効かない。
   //   中で操作を1つ選ばせるまで通さない用（デイリーミッションの難易度選択）。
   //   背景は元々クリックしても閉じないので、これで抜け道が無くなる。
@@ -45,7 +58,7 @@ export default function V2Modal({
           {onConfirm ? (
             <>
               <button onClick={onClose} disabled={busy} style={modalBtn('#88aaff', busy)}>{cancelLabel}</button>
-              <button onClick={onConfirm} disabled={busy} style={modalBtn(danger ? '#ff8844' : '#ffcc00', busy)}>
+              <button onClick={confirm} disabled={busy} style={modalBtn(danger ? '#ff8844' : '#ffcc00', busy)}>
                 {busy ? '処理中...' : confirmLabel}
               </button>
             </>

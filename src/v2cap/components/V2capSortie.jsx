@@ -393,7 +393,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
         <button onClick={() => setOptOpen(true)} style={miniBtn('#7fa6d0')}>⚙ 出撃オプション</button>
       </div>
       {optOpen && (
-        <V2Modal title="⚙ 出撃オプション" color="#7fa6d0" onClose={() => setOptOpen(false)}>
+        <V2Modal title="⚙ 出撃オプション" color="#7fa6d0" keepScroll onClose={() => setOptOpen(false)}>
           <div style={{ display:'grid', gap:'8px' }}>
             <label style={OPT_ROW}>
               <input type="checkbox" checked={follow} onChange={e => toggleFollow(e.target.checked)}

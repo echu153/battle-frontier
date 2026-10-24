@@ -159,7 +159,8 @@ export default function V2capTree({ prof, onProfile, unlimited = false }) {
     <div style={{ maxWidth:'760px', margin:'0 auto 8px', border:'1px solid #1f5a44', background:'linear-gradient(180deg, #020a10 0%, #03120e 100%)',
       fontFamily:'monospace', overflow:'hidden', boxShadow:'0 0 24px #0a3a2a55' }}>
       <style>{KF}</style>
-      {fx && <V2capRevelationFx key={fx.key} result={fx.result} onClose={() => setFx(null)} />}
+      {/* 閉じたら画面のいちばん上へ（2026-10-25 ユーザー指示「ポップアップ後の操作は画面上部に移動」・V2Modal と同じ決まり） */}
+      {fx && <V2capRevelationFx key={fx.key} result={fx.result} onClose={() => { setFx(null); window.scrollTo(0, 0) }} />}
 
       <TreeStage fortune={shown?.name || null} />
 

@@ -73,7 +73,7 @@ export default function V2capDex({ prof }) {
   return (
     <div style={{ fontFamily:'monospace' }}>
       {help && (
-        <V2Modal title="❓ HELP" color="#c0b0ff" onClose={() => setHelp(false)}>
+        <V2Modal title="❓ HELP" color="#c0b0ff" keepScroll onClose={() => setHelp(false)}>
           <div>出撃で倒した敵が載ります（倒すまでは名前もLVも ???）。</div>
           <div>討伐数は出撃で勝ったときに数えます。</div>
           <div>落とす装備はそのエリアの装備です。</div>
@@ -190,7 +190,7 @@ function ZoomModal({ e, onClose }) {
     </div>
   )
   return (
-    <V2Modal title={title} color={role.color} onClose={onClose}>
+    <V2Modal title={title} color={role.color} keepScroll onClose={onClose}>
       <img src={src} alt={e.name} draggable={false} onClick={onClose}
         onError={() => { const small = enemyArtSrc(e.name); if (small && src !== small) setSrc(small) }}
         style={{ display:'block', width:'100%', maxWidth:'360px', aspectRatio:'1 / 1', objectFit:'contain', margin:'0 auto', cursor:'zoom-out',
