@@ -96,9 +96,12 @@ export const leftText = (ms) => {
   const m = Math.max(0, Math.ceil(ms / 60000))
   return m >= 60 ? `残り${Math.floor(m / 60)}時間${m % 60 ? `${m % 60}分` : ''}` : `残り${m}分`
 }
-// 効いている食事の1行（ホームのステータス・出撃のログに出す）
-export const mealLineOf = (meal) => {
-  if (!meal) return ''
+// 効いている食事の名前を切れ目ごとに（バーガー・「＋トッピング」・「・トッピング」）。
+// ★ホームのステータスは細いので、この切れ目でだけ折り返す（「ガー｜リック」のように名前の途中で折れないように・2026-10-25）
+export const mealPartsOf = (meal) => {
+  if (!meal) return []
   const tops = [meal.major, meal.minor].filter(Boolean).map(k => TOPPING_BY_AIL[k].name)
-  return `${meal.burger.name}${tops.length ? `＋${tops.join('・')}` : ''}`
+  return [meal.burger.name, ...tops.map((t, i) => `${i ? '・' : '＋'}${t}`)]
 }
+// 効いている食事の1行（ホームのステータスに出す）
+export const mealLineOf = (meal) => mealPartsOf(meal).join('')

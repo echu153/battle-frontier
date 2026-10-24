@@ -99,8 +99,9 @@ export default function V2capBurger({ prof, onProfile }) {
         <div style={{ color: TEXT.label, fontSize:'11px', marginBottom:'4px' }}>いま効いている食事</div>
         {meal ? (
           <div style={{ fontSize:'12px', lineHeight:1.8 }}>
-            <span style={{ color: MEAL_COLOR }}>{meal.burger.name}</span>：{burgerEffectText(meal.stat)}
-            <span style={{ color: TEXT.label, marginLeft:'8px' }}>{leftText(meal.leftMs)}</span>
+            {/* 狭い画面でも名前の途中で折り返さない（名前と効き目・残り時間の切れ目でだけ折れる） */}
+            <span style={{ display:'inline-block' }}><span style={{ color: MEAL_COLOR }}>{meal.burger.name}</span>：{burgerEffectText(meal.stat)}</span>
+            <span style={{ color: TEXT.label, marginLeft:'8px', display:'inline-block' }}>{leftText(meal.leftMs)}</span>
             {[meal.major, meal.minor].filter(Boolean).map(a => <div key={a} style={{ fontSize:'11px' }}>＋ {toppingText(a)}</div>)}
           </div>
         ) : <div style={{ color: TEXT.empty, fontSize:'12px' }}>なし</div>}

@@ -18,7 +18,7 @@ import V2capPoints from './V2capPoints.jsx'
 import V2capArmorSets from './V2capArmorSets.jsx'
 import V2capUniqueFx from './V2capUniqueFx.jsx'
 import { isUnique } from '../lib/equipment.js'
-import { SHOP_NAME, MEAL_COLOR, mealLineOf, leftText, burgerEffectText, toppingText } from '../lib/burger.js'
+import { SHOP_NAME, MEAL_COLOR, mealPartsOf, leftText, burgerEffectText, toppingText } from '../lib/burger.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — ステータス欄（ホームの左）
@@ -232,9 +232,10 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
                   <div>{bd.meal.burger.name}：{burgerEffectText(bd.meal.stat)}</div>
                   {[bd.meal.major, bd.meal.minor].filter(Boolean).map(a => <div key={a}>{toppingText(a)}</div>)}
                 </>}>
-                🍔 <span style={{ color: MEAL_COLOR }}>{mealLineOf(bd.meal)}</span>
+                {/* 名前の途中で折り返さない（バーガー・トッピング・残り時間の切れ目でだけ折れる＝burger.js の mealPartsOf） */}
+                🍔 {mealPartsOf(bd.meal).map((p, i) => <span key={i} style={{ color: MEAL_COLOR, display:'inline-block' }}>{p}</span>)}
               </V2Tip>
-              <span style={{ color:'#7fa6d0' }}>{'　'}{leftText(bd.meal.leftMs)}</span>
+              <span style={{ color:'#7fa6d0', display:'inline-block', marginLeft:'1em' }}>{leftText(bd.meal.leftMs)}</span>
             </div>
           )}
         </div>
