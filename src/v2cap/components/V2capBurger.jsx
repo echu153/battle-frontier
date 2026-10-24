@@ -27,6 +27,7 @@ const card = (on) => ({
   color: TEXT.body, padding:'8px', cursor:'pointer', fontFamily:'monospace', minWidth:0,
 })
 const gold = (n) => `${Number(n || 0).toLocaleString()}G`
+const HELP_HEAD = { color: MEAL_COLOR, fontSize:'12px', marginBottom:'2px' }
 // 「残り42分」→「42分」（セリフの {left}）
 const leftShort = (ms) => leftText(ms).replace(/^残り/, '')
 // SQLを流す前（サーバーの関数が無いとき）に、その日の「いらっしゃいませー」を出したかを端末に覚える名前
@@ -58,6 +59,7 @@ export default function V2capBurger({ prof, onProfile, dev = false }) {
   const [served, setServed] = useState(null)
   const [error, setError] = useState('')
   const [welcome, setWelcome] = useState(false)
+  const [help, setHelp] = useState(false)
 
   const meal = activeMealOf(prof, now)
   const cost = mealCostOf(tops)
@@ -126,6 +128,16 @@ export default function V2capBurger({ prof, onProfile, dev = false }) {
     <div>
       <style>{CLERK_CSS}</style>
       {welcome && <V2capClerkWelcome line={pickLine('welcome').text} onClose={() => setWelcome(false)} />}
+      {/* 決まりの説明（2026-10-25 ユーザー指示「ここら辺はHELPに載せて」＝前はトッピングと注文の下に出していた文） */}
+      {help && (
+        <V2Modal title="❓ HELP" color={MEAL_COLOR} keepScroll onClose={() => setHelp(false)}>
+          <div style={HELP_HEAD}>トッピング</div>
+          <div>頼んだ組の中から1つが乗ります（何が乗るかはお楽しみ）。乗ったものの状態異常にかかる確率−{TOPPING_RESIST_PCT}%</div>
+          <div style={{ ...HELP_HEAD, marginTop:'10px' }}>食事の効き目</div>
+          <div>・効くのは{MEAL_MINUTES}分（ログインしていない間も減ります）。出撃・ボス・覇天塔への挑戦で効きます</div>
+          <div>・食べ直すと前の食事は消えます</div>
+        </V2Modal>
+      )}
       {confirm && meal && (
         <V2Modal title="🍔 食べ直しますか？" color={MEAL_COLOR} busy={busy} confirmLabel={`${gold(cost)}で注文する`}
           onConfirm={order} onClose={cancelConfirm}>
@@ -141,7 +153,8 @@ export default function V2capBurger({ prof, onProfile, dev = false }) {
           {[served.meal_major, served.meal_minor].filter(Boolean).map(a => (
             <div key={a}>＋ <span style={{ color: TEXT.bright }}>{TOPPING_BY_AIL[a]?.name}</span>：{AIL_LABEL[a]}にかかる確率−{TOPPING_RESIST_PCT}%</div>
           ))}
-          <div style={{ color: TEXT.sub, fontSize:'11px', marginTop:'6px' }}>{MEAL_MINUTES}分効きます（{gold(served.spent)}）</div>
+          {/* 2026-10-25 ユーザー指示「60分効きます（2,000G）⇒効果時間：〇分にして」 */}
+          <div style={{ color: TEXT.sub, fontSize:'11px', marginTop:'6px' }}>効果時間：{MEAL_MINUTES}分</div>
         </V2Modal>
       )}
 
@@ -159,7 +172,10 @@ export default function V2capBurger({ prof, onProfile, dev = false }) {
         <div className="nk-menu">
           {/* いま食べているもの */}
           <div style={{ ...box, padding:'10px 12px', marginBottom:'8px' }}>
-            <div style={{ color: TEXT.label, fontSize:'11px', marginBottom:'4px' }}>いま効いている食事</div>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
+              <span style={{ color: TEXT.label, fontSize:'11px' }}>いま効いている食事</span>
+              <button type="button" onClick={() => setHelp(true)} style={miniBtn('#88aaff')}>❓ HELP</button>
+            </div>
             {meal ? (
               <div style={{ fontSize:'12px', lineHeight:1.8 }}>
                 {/* 狭い画面でも名前の途中で折り返さない（名前と効き目・残り時間の切れ目でだけ折れる） */}
@@ -190,10 +206,8 @@ export default function V2capBurger({ prof, onProfile, dev = false }) {
 
           {/* ② トッピング */}
           <div style={{ ...box, padding:'10px 12px', marginBottom:'8px' }}>
-            <div style={{ color: MEAL_COLOR, fontSize:'12px', marginBottom:'2px' }}>② トッピング<span style={{ color: TEXT.sub, fontSize:'10px', marginLeft:'6px' }}>各{gold(TOPPING_GOLD)}・頼まなくてもよい</span></div>
-            <div style={{ color: TEXT.sub, fontSize:'10px', marginBottom:'6px' }}>
-              頼んだ組の中から1つが乗ります（何が乗るかはお楽しみ）。乗ったものの状態異常にかかる確率−{TOPPING_RESIST_PCT}%
-            </div>
+            {/* 決まりの説明は HELP へ（2026-10-25 ユーザー指示「ここら辺はHELPに載せて」） */}
+            <div style={{ color: MEAL_COLOR, fontSize:'12px', marginBottom:'6px' }}>② トッピング<span style={{ color: TEXT.sub, fontSize:'10px', marginLeft:'6px' }}>各{gold(TOPPING_GOLD)}・頼まなくてもよい</span></div>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(240px, 1fr))', gap:'6px' }}>
               {TOPPING_GROUPS.map(g => {
                 const on = tops[g.key]
@@ -221,10 +235,6 @@ export default function V2capBurger({ prof, onProfile, dev = false }) {
             <button onClick={tryOrder} disabled={busy || short} style={{ ...btn(MEAL_COLOR), width:'100%', padding:'10px', opacity: busy || short ? 0.5 : 1 }}>
               {busy ? '焼いています…' : short ? 'Goldが足りません' : `${BURGER_BY_STAT[pick].name}を注文する`}
             </button>
-            <div style={{ color: TEXT.sub, fontSize:'10px', marginTop:'8px', lineHeight:1.7 }}>
-              <div>・効くのは{MEAL_MINUTES}分（ログインしていない間も減ります）。出撃・ボス・覇天塔への挑戦で効きます</div>
-              <div>・食べ直すと前の食事は消えます</div>
-            </div>
           </div>
         </div>
       </div>
