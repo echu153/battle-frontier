@@ -52,11 +52,20 @@ export const CLERK_CSS = `
 .nk-welcome-bubble::after { bottom: -10px; left: calc(22% + 3px); border-width: 11px 9px 0 0; border-top-color: ${BUBBLE_BG}; }
 .nk-welcome-hint { position: fixed; left: 0; right: 0; bottom: max(16px, env(safe-area-inset-bottom, 0px)); text-align: center;
   color: #ffd9a8; font-family: monospace; font-size: 12px; opacity: .85; }
+.nk-say { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; }
+.nk-say-img { flex: 0 0 auto; width: 92px; height: 124px; overflow: hidden; }
+.nk-say-img img { display: block; width: 92px; height: auto; animation: nkHop .28s ease-out; }
+.nk-say-bubble { position: relative; flex: 1; min-width: 0; background: ${BUBBLE_BG}; color: ${BUBBLE_FG}; border: 2px solid ${MEAL_COLOR};
+  border-radius: 12px; padding: 8px 10px; font-family: monospace; font-size: 12px; line-height: 1.6; }
+.nk-say-bubble span { display: inline-block; animation: nkSay .22s ease-out; }
+.nk-say-bubble::before, .nk-say-bubble::after { content: ''; position: absolute; top: 50%; transform: translateY(-50%); border: solid transparent; }
+.nk-say-bubble::before { left: -12px; border-width: 9px 12px 9px 0; border-right-color: ${MEAL_COLOR}; }
+.nk-say-bubble::after { left: -8px; border-width: 7px 9px 7px 0; border-right-color: ${BUBBLE_BG}; }
 @keyframes nkSay { from { opacity: 0; transform: translateY(3px) } to { opacity: 1; transform: none } }
 @keyframes nkHop { 0% { transform: translateY(0) } 40% { transform: translateY(-6px) } 100% { transform: translateY(0) } }
 @keyframes nkFade { from { opacity: 0 } to { opacity: 1 } }
 @keyframes nkPop { 0% { opacity: 0; transform: translateY(60px) scale(.7) } 60% { opacity: 1; transform: translateY(-8px) scale(1.03) } 100% { transform: none } }
-@media (prefers-reduced-motion: reduce) { .nk-bubble span, .nk-clerk-btn img, .nk-welcome, .nk-welcome-in { animation: none !important } }
+@media (prefers-reduced-motion: reduce) { .nk-bubble span, .nk-clerk-btn img, .nk-welcome, .nk-welcome-in, .nk-say-img img, .nk-say-bubble span { animation: none !important } }
 `
 
 // 表情を切り替えたときに待たないように、全部の絵を先に読んでおく
@@ -73,6 +82,18 @@ export default function V2capClerk({ face = 'normal', line = '', tick = 0, onTap
       <button type="button" className="nk-clerk-btn" onClick={onTap} aria-label="店員さんに話しかける">
         <img key={tick} src={clerkSrc(face)} alt="" width={CLERK_FACE_SIZE.w} height={CLERK_FACE_SIZE.h} />
       </button>
+    </div>
+  )
+}
+
+// ポップアップの中の看板娘（頭から胸までの絵＋吹き出し）。
+// 【確定】2026-10-25 ユーザー指示「スマホ画面で注文画面のポップアップ出るとこまで行くと店員のイラスト見えないからポップアップに画像を追加」
+//   「ポップアップの裏でセリフ出てるから、ポップアップ上でもイラスト出るようにしたい」＝食べ直しの確かめと、出したときのポップアップに出す
+export function ClerkSays({ face = 'normal', line = '' }) {
+  return (
+    <div className="nk-say">
+      <div className="nk-say-img"><img src={clerkSrc(face)} alt="" width={92} height={Math.round(92 * CLERK_FACE_SIZE.h / CLERK_FACE_SIZE.w)} /></div>
+      <div className="nk-say-bubble"><span key={line}>{line}</span></div>
     </div>
   )
 }

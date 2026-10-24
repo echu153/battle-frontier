@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { AIL_KEYS } from '../core/ailments.js'
 import {
   SHOP_NAME, MEAL_MINUTES, MEAL_MS, BURGER_GOLD, TOPPING_GOLD, MEAL_STAT_PCT, TOPPING_RESIST_PCT,
-  BURGERS, MEAL_STATS, TOPPINGS, TOPPING_GROUPS, toppingsOf, mealCostOf, activeMealOf, mealStatPctOf, mealFxOf, leftText, mealLineOf, mealPartsOf,
+  BURGERS, MEAL_STATS, TOPPINGS, TOPPING_GROUPS, toppingsOf, mealCostOf, activeMealOf, mealStatPctOf, mealFxOf, leftText,
 } from './burger.js'
 import { statBreakdown, toFighter } from './loadout.js'
 
@@ -65,13 +65,6 @@ test('効いている食事：期限の前だけ。組の違うトッピング�
   const swapped = activeMealOf({ ...p, meal_major: 'curse', meal_minor: 'poison' }, NOW)
   assert.equal(swapped.major, null)
   assert.equal(swapped.minor, null)
-  assert.equal(mealLineOf(m), 'スパイシーニャッパー＋ピクルス・ガーリック')
-  assert.equal(mealLineOf(activeMealOf({ meal_burger: 'luk', meal_until: until(5) }, NOW)), 'チーズニャッパー')
-  // ホームは切れ目でだけ折り返す（名前の途中で折れない）
-  assert.deepEqual(mealPartsOf(m), ['スパイシーニャッパー', '＋ピクルス', '・ガーリック'])
-  assert.deepEqual(mealPartsOf(activeMealOf({ meal_burger: 'luk', meal_minor: 'fear', meal_until: until(5) }, NOW)), ['チーズニャッパー', '＋ベーコン'])
-  assert.deepEqual(mealPartsOf(null), [])
-  assert.equal(mealLineOf(null), '')
 })
 
 test('効き目：ステは1つだけ+10%・トッピングはその状態異常の確率に0.8を掛ける', () => {
@@ -84,7 +77,7 @@ test('効き目：ステは1つだけ+10%・トッピングはその状態異常
 })
 
 test('残り時間の文', () => {
-  assert.equal(leftText(60 * 60000), '残り1時間')
+  assert.equal(leftText(60 * 60000), '残り60分')   // いつも分で（ユーザー指示「残り〇分」）
   assert.equal(leftText(42 * 60000), '残り42分')
   assert.equal(leftText(30 * 1000), '残り1分')
   assert.equal(leftText(0), '残り0分')

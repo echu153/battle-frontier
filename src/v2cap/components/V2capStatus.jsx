@@ -18,7 +18,7 @@ import V2capPoints from './V2capPoints.jsx'
 import V2capArmorSets from './V2capArmorSets.jsx'
 import V2capUniqueFx from './V2capUniqueFx.jsx'
 import { isUnique } from '../lib/equipment.js'
-import { SHOP_NAME, MEAL_COLOR, mealPartsOf, leftText, burgerEffectText, toppingText } from '../lib/burger.js'
+import { SHOP_NAME, MEAL_COLOR, leftText, burgerEffectText, toppingText } from '../lib/burger.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — ステータス欄（ホームの左）
@@ -215,7 +215,9 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
               {stamNow < stamMax && stamNext > 0 && <span style={{ color:'#4d6f92', fontSize:'10px' }}>{'　'}次まで {mmss(stamNext)}</span>}
             </span>
           </div>
-          {/* ニャーガーキングで食べたもの（効いている間だけ・2026-10-25）。カーソルで効き目 */}
+          {/* ニャーガーキングで食べたもの（効いている間だけ・2026-10-25）。
+               【確定】2026-10-25 ユーザー指示「ここは食事適用中残り〇分にして、タップしたら今と同じ感じで詳細出るように」：
+               行は「🍔 食事適用中　残り◯分」だけ。食べたもの（バーガー・トッピング）と効き目は、カーソル／タップの小窓に出す */}
           {bd.meal && (
             <div style={{ fontSize:'10px', color:'#9ec2e6' }}>
               <V2Tip color={MEAL_COLOR} width="250px" style={{ borderBottom:`1px dotted ${MEAL_COLOR}` }}
@@ -224,10 +226,9 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
                   <div>{bd.meal.burger.name}：{burgerEffectText(bd.meal.stat)}</div>
                   {[bd.meal.major, bd.meal.minor].filter(Boolean).map(a => <div key={a}>{toppingText(a)}</div>)}
                 </>}>
-                {/* 名前の途中で折り返さない（バーガー・トッピング・残り時間の切れ目でだけ折れる＝burger.js の mealPartsOf） */}
-                🍔 {mealPartsOf(bd.meal).map((p, i) => <span key={i} style={{ color: MEAL_COLOR, display:'inline-block' }}>{p}</span>)}
+                🍔 <span style={{ color: MEAL_COLOR }}>食事適用中</span>
               </V2Tip>
-              <span style={{ color:'#7fa6d0', display:'inline-block', marginLeft:'1em' }}>{leftText(bd.meal.leftMs)}</span>
+              <span style={{ color:'#7fa6d0', marginLeft:'1em' }}>{leftText(bd.meal.leftMs)}</span>
             </div>
           )}
         </div>

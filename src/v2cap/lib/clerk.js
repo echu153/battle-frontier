@@ -76,7 +76,7 @@ export const CLERK_LINES = {
   confirm: [{ face: 'surprised', text: 'まだ効いてるよ？ 食べ直すと前のは消えちゃうけど…' }],
   // 出したとき（トッピングなし／あり）
   served: [{ face: 'smile', text: 'お待たせしましたー！ {burger}です！ 熱いうちにどうぞ！' }],
-  servedTopping: [{ face: 'wink', text: 'お待たせしました！ 今日のトッピングは{toppings}だよ！' }],
+  servedTopping: [{ face: 'wink', text: 'お待たせしました！ 今回のトッピングは{toppings}だよ！' }],
   // 注文がうまく通らなかった
   error: [{ face: 'sad', text: 'ごめんね、うまく注文できなかったみたい…' }],
 }

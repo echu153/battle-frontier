@@ -49,6 +49,7 @@ test('セリフの表情はどれも9つのどれか・9つとも使っている
   assert.ok(CLERK_LINES.enterFed.every(l => l.text.includes('{burger}') && l.text.includes('{left}')))
   assert.ok(CLERK_LINES.served.every(l => l.text.includes('{burger}')))
   assert.ok(CLERK_LINES.servedTopping.every(l => l.text.includes('{toppings}')))
+  assert.ok(CLERK_LINES.servedTopping.every(l => l.text.includes('今回のトッピング')), '「今日の」ではなく「今回の」（ユーザー指示）')
   assert.equal(fillLine('あと{left}！{x}', { left: '42分' }), 'あと42分！{x}')
 })
 

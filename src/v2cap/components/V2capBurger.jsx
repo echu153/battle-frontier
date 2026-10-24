@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import V2Modal from './V2Modal.jsx'
-import V2capClerk, { V2capClerkWelcome, CLERK_CSS } from './V2capClerk.jsx'
+import V2capClerk, { V2capClerkWelcome, ClerkSays, CLERK_CSS } from './V2capClerk.jsx'
 import { box, btn, miniBtn, TEXT } from './v2ui.js'
 import { STAT_DEFS } from '../core/stats.js'
 import { AIL_LABEL } from '../core/ailments.js'
@@ -105,8 +105,15 @@ export default function V2capBurger({ prof, onProfile, dev = false }) {
       setConfirm(false)
     }
   }
+  // 食べ直しの確かめ。開く前の表情とセリフを控えて、「やめる」で戻す（確かめのセリフが残らないように・2026-10-25）
+  const beforeConfirm = useRef(null)
   const tryOrder = () => {
-    if (meal) { setConfirm(true); say('confirm') } else order()
+    if (meal) { beforeConfirm.current = clerk; setConfirm(true); say('confirm') } else order()
+  }
+  const cancelConfirm = () => {
+    setConfirm(false)
+    const b = beforeConfirm.current
+    if (b) setClerk(c => ({ face: b.face, text: b.text, tick: c.tick + 1 }))
   }
   // トッピングを足して合計が持っているGoldを超えたら、しょんぼり（超えた瞬間だけ）
   const toggleTop = (key) => {
@@ -121,12 +128,14 @@ export default function V2capBurger({ prof, onProfile, dev = false }) {
       {welcome && <V2capClerkWelcome line={pickLine('welcome').text} onClose={() => setWelcome(false)} />}
       {confirm && meal && (
         <V2Modal title="🍔 食べ直しますか？" color={MEAL_COLOR} busy={busy} confirmLabel={`${gold(cost)}で注文する`}
-          onConfirm={order} onClose={() => setConfirm(false)}>
+          onConfirm={order} onClose={cancelConfirm}>
+          <ClerkSays face={clerk.face} line={clerk.text} />
           いま効いている「{meal.burger.name}」（{leftText(meal.leftMs)}）は消えて、新しく食べたものが{MEAL_MINUTES}分効きます。
         </V2Modal>
       )}
       {served && (
         <V2Modal title="🍔 お待たせしました！" color={MEAL_COLOR} onClose={() => setServed(null)}>
+          <ClerkSays face={clerk.face} line={clerk.text} />
           <div style={{ color: MEAL_COLOR, fontSize:'14px', marginBottom:'4px' }}>{BURGER_BY_STAT[served.meal_burger]?.name}</div>
           <div>{burgerEffectText(served.meal_burger)}</div>
           {[served.meal_major, served.meal_minor].filter(Boolean).map(a => (
@@ -171,8 +180,8 @@ export default function V2capBurger({ prof, onProfile, dev = false }) {
                 return (
                   <button key={b.stat} type="button" onClick={() => setPick(b.stat)} style={card(on)}>
                     <div style={{ color: on ? MEAL_COLOR : TEXT.bright, fontSize:'12px', marginBottom:'3px' }}>{b.name}</div>
-                    <div style={{ fontSize:'11px' }}><span style={{ color: d.color }}>{burgerEffectText(b.stat)}</span>
-                      <span style={{ color: TEXT.sub, fontSize:'10px', marginLeft:'4px' }}>{d.desc}</span></div>
+                    {/* 上がるステだけ（説明の「物理の威力」などは出さない・2026-10-25 ユーザー指示「白文字いらない」） */}
+                    <div style={{ fontSize:'11px', color: d.color }}>{burgerEffectText(b.stat)}</div>
                   </button>
                 )
               })}

@@ -92,16 +92,5 @@ export const mealFxOf = (meal) => {
 // 画面の文
 export const toppingText = (ail) => `${TOPPING_BY_AIL[ail]?.name || '？'}（${AIL_LABEL[ail] || ail}にかかる確率−${TOPPING_RESIST_PCT}%）`
 export const burgerEffectText = (stat) => `${STAT_DEFS[stat]?.label || stat}+${MEAL_STAT_PCT}%`
-export const leftText = (ms) => {
-  const m = Math.max(0, Math.ceil(ms / 60000))
-  return m >= 60 ? `残り${Math.floor(m / 60)}時間${m % 60 ? `${m % 60}分` : ''}` : `残り${m}分`
-}
-// 効いている食事の名前を切れ目ごとに（バーガー・「＋トッピング」・「・トッピング」）。
-// ★ホームのステータスは細いので、この切れ目でだけ折り返す（「ガー｜リック」のように名前の途中で折れないように・2026-10-25）
-export const mealPartsOf = (meal) => {
-  if (!meal) return []
-  const tops = [meal.major, meal.minor].filter(Boolean).map(k => TOPPING_BY_AIL[k].name)
-  return [meal.burger.name, ...tops.map((t, i) => `${i ? '・' : '＋'}${t}`)]
-}
-// 効いている食事の1行（ホームのステータスに出す）
-export const mealLineOf = (meal) => mealPartsOf(meal).join('')
+// 残り時間はいつも分で（「残り1時間」とは書かない＝食べた直後は「残り60分」・2026-10-25 ユーザー指示「食事適用中 残り〇分」）
+export const leftText = (ms) => `残り${Math.max(0, Math.ceil(ms / 60000))}分`
