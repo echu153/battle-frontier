@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { STAT_DEFS, calcPower } from '../core/stats.js'
+import { STAT_DEFS } from '../core/stats.js'
 import { mmss } from '../core/stamina.js'
 import { KIND_COLOR, SKILL_SET_SLOTS } from '../core/skills.js'
 import { V2Tip, V2SkillTip } from './V2ItemTip.jsx'
@@ -201,11 +201,10 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
             </V2Tip>
             {jMax && <span style={{ color:'#ff8844' }}> MAX</span>}
           </div>
+          {/* 【確定】2026-10-25 ユーザー指示「戦闘力の小窓の内訳も外して」：数字だけ（前はカーソルで「本体・クラス・装備」の内訳＝アセンションなどが入らず合計と合わなかった）。
+               内訳はプロフィールの表（V2capBreakdown の戦闘力の行） */}
           <div style={{ fontSize:'11px', color:'#9ec2e6' }}>
-            <V2Tip color="#44ff88" width="230px" style={{ borderBottom:'1px dotted #44ff88' }}
-              body={`本体${calcPower(bd.body)}・クラス${calcPower(bd.job)}・装備${calcPower(bd.gear)}`}>
-              戦闘力: <span style={{ color:'#44ff88' }}>{bd.power.toLocaleString()}</span>
-            </V2Tip>
+            戦闘力: <span style={{ color:'#44ff88' }}>{bd.power.toLocaleString()}</span>
           </div>
           {/* Goldの右にスタミナ（入りきらない幅では下へ折り返す） */}
           <div style={{ fontSize:'11px', color:'#9ec2e6', display:'flex', flexWrap:'wrap', gap:'2px 14px' }}>
