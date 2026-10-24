@@ -233,6 +233,7 @@ export const liveStats = (side, acting = false) => {
   // ★上位クラス（2026-10-15）：魔法剣士のエンチャント＝宿りがある間、INTの◯%をSTRに上乗せ（INTは減らない）
   const imb = side.pa.ex?.imbue
   if (imb?.intToStr && side.imbue?.turns > 0) eff.str = (eff.str || 0) + Math.round((eff.int_stat || 0) * imb.intToStr / 100)
+  if (side.strDef) eff.strDef = side.strDef   // 物理防御に STR も足す（physDefOf が見る）
   return eff
 }
 
@@ -314,6 +315,7 @@ export const createSide = (fighter, band = null) => {
     passives,
     pa,
     healMult: bonus?.healMult ?? 1,   // 異端審問官は自身の回復量0.8倍
+    strDef: fighter.strDef || 0,      // STR を物理防御にも足す割合（v2cap のプレイヤーだけ・combat.js の physDefOf）
     offClassCut: bonus?.offClassCut ?? 0, // 賢者は他職スキルのペナルティが半分
     ptr: 0,
     // 経過したターン数（runBattle がターンの頭で入れる）。1ターン目は0。

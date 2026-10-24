@@ -33,7 +33,7 @@ import {
 } from './jobs.js'
 import { defaultSetOf, fillSetOf, passiveOf, SKILL_BY_NAME, SKILL_RENAMED } from './skills.js'
 import { slotsOf } from './loadout.js'
-import { CAP_RULES } from './rules.js'
+import { CAP_RULES, CAP_STR_PHYS_DEF } from './rules.js'
 import { stdPowerAt, spotOf } from './areas.js'
 import { openUntilOf, rollEquipDrop } from './sortie.js'
 import { ART_SD, battleIconOf } from './classArt.js'
@@ -172,6 +172,7 @@ export const npcFighterAt = (floor, power) => {
   const passive = passiveOf(cls)
   return {
     ...CAP_RULES,
+    strDef: CAP_STR_PHYS_DEF,   // プレイヤーと同じ（STR を物理防御にも足す割合・rules.js）
     npc: true,
     name: npcNameOf(f),
     cls,
@@ -236,6 +237,7 @@ export const fromSnapshot = (snap) => {
     ? Object.fromEntries(Object.entries(snap.ups).map(([k, v]) => [SKILL_RENAMED[k] || k, v])) : {}
   return {
     ...CAP_RULES,
+    strDef: CAP_STR_PHYS_DEF,   // プレイヤーと同じ（STR を物理防御にも足す割合・rules.js）
     npc: false,
     name: snap?.name || '？',
     cls,

@@ -31,7 +31,7 @@ export const STAT_DEFS = {
     detail:'スキルを使うと減る。残りが足りないスキルは不発になる。' },
   str: { label:'STR', jp:'腕力', unit:1, color:'#ffcc00',
     desc:'物理の威力',
-    detail:'通常攻撃と物理スキルのダメージ。' },
+    detail:'通常攻撃と物理スキルのダメージ。物理ダメージの軽減にも少しなる（VITの4分の1）。' },
   dex: { label:'DEX', jp:'器用', unit:1, color:'#88ddaa',
     desc:'命中と安定',
     detail:'相手の回避率を押し下げて攻撃を当てる。さらにダメージの下振れを減らす。' },

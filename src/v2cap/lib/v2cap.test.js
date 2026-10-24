@@ -451,10 +451,10 @@ test('【確定】ClassLVが上がるたびに、どの職業でも必ずHPとMP
     assert.equal(jobLevelsGained(c.id, 1), 0)
     assert.equal(jobLevelsGained(c.id, 99), jobMaxOf(c.id) - 1, '上限より上は増えない')
   }
-  // ユーザーに見せた例（上限のClassLVでの合計）
-  assert.deepEqual([jobBonusStats('戦士', 30).hp, jobBonusStats('戦士', 30).mp], [737, 106])
-  assert.deepEqual([jobBonusStats('魔法使い', 30).hp, jobBonusStats('魔法使い', 30).mp], [482, 289])
-  assert.deepEqual([jobBonusStats('聖職者', 50).hp, jobBonusStats('聖職者', 50).mp], [1720, 519], '司祭から改名（2026-10-14）')
+  // ユーザーに見せた例（上限のClassLVでの合計）。2026-10-25 に INT・STR を少し入れたぶん、ほかのステ（HP・MP も）が少し減った
+  assert.deepEqual([jobBonusStats('戦士', 30).hp, jobBonusStats('戦士', 30).mp], [713, 103])
+  assert.deepEqual([jobBonusStats('魔法使い', 30).hp, jobBonusStats('魔法使い', 30).mp], [466, 289])
+  assert.deepEqual([jobBonusStats('聖職者', 50).hp, jobBonusStats('聖職者', 50).mp], [1720, 492], '司祭から改名（2026-10-14）')
 })
 
 test('神殿の「上がりやすいステータス」は配分の高い2〜3種（多い順）。例：戦士＝STR・VIT', () => {
@@ -824,7 +824,8 @@ test('【確定】剣士（2026-10-09 ユーザー承認・2026-10-14 直し）�
   assert.deepEqual(weaponsOf('剣士'), ['刀', '片手剣', '両手剣'])
   // 承認は STR40 DEX32 AGI30 VIT15 HP13 MP10 LUK5（合計145）。2026-10-12 ClassLVごとの点数を5→8にしたので同じ割合で232点へ
   // 2026-10-14 ユーザー承認：HPが低くボス戦で平均の約9割だった＝DEX・AGIからVIT・HPへ（案の DEX45・AGI42 は「高い2〜3種」を守るため DEX48・AGI39）
-  assert.deepEqual(JOB_BONUS.剣士, { str:64, dex:48, agi:39, vit:30, hp:27, mp:16, luk:8 })
+  // 2026-10-25 INT を8点入れて、高い2種（STR・DEX）以外を割合で減らした（ユーザー指示「INT使わないキャラ…も多少上がるように」）
+  assert.deepEqual(JOB_BONUS.剣士, { str:64, dex:48, agi:36, vit:28, hp:25, mp:15, luk:8, int_stat:8 })
   assert.deepEqual(mainStatsOf('剣士'), ['str', 'dex'])
   // 説明文は 2026-10-11 ユーザー指示「具体的なスキル名やステータス名を記載しないで」で書き直した（前は承認済みの「STR・DEX・AGIがそろって…燕返しと兜割りで斬り崩す」）
   assert.equal(classDescOf('剣士'), '鋭い剣さばきで、攻めと身のこなしを両立する')
@@ -1275,7 +1276,8 @@ test('【確定】2026-10-12 推奨LV：上限はボスを倒せる目安のLV�
 })
 
 test('【確定】2026-10-15「クラス間の格差が出すぎないように」：盗賊の配分 LUK19・STR61（合計232）', () => {
-  assert.deepEqual(JOB_BONUS.盗賊, { agi: 67, str: 61, dex: 40, luk: 19, hp: 19, vit: 13, mp: 13 })
+  // 2026-10-25 INT を8点入れて、高い2種（AGI・STR）以外を割合で減らした
+  assert.deepEqual(JOB_BONUS.盗賊, { agi: 67, str: 61, dex: 37, luk: 18, hp: 17, vit: 12, mp: 12, int_stat: 8 })
   assert.equal(Object.values(JOB_BONUS.盗賊).reduce((a, b) => a + b, 0), 232)
 })
 
@@ -1285,15 +1287,15 @@ test('【確定】2026-10-16 ユーザー「17の案とりあえず入れてほ�
   // 弓使いの狙撃は今のⅡの技そのもの（初期職の倍率もやめた）・槍使いの技はこの版の名簿の値のまま
   { const { desc: _a, ...mine } = SKILL_BY_NAME['狙撃']; const { desc: _b, ...v2 } = V2_SKILLS.find(s => s.name === '狙撃'); assert.deepEqual(mine, v2) }  // 説明だけ写し（2026-10-16）
   assert.equal(SKILL_BY_NAME['突き'], NEW_SKILLS.find(s => s.name === '突き'))
-  // 配分（9職）
-  assert.deepEqual(JOB_BONUS.弓使い, { agi: 64, str: 48, dex: 41, hp: 34, luk: 19, vit: 13, mp: 13 })
-  assert.deepEqual(JOB_BONUS.槍使い, { str: 79, dex: 50, agi: 30, hp: 26, vit: 23, mp: 16, luk: 8 })
-  assert.deepEqual(JOB_BONUS.狂戦士, { str: 168, hp: 102, agi: 83, dex: 50, vit: 45, mp: 25, luk: 17 })
+  // 配分（9職）。2026-10-25 に INT・STR の無い職業へ少し入れて、高い2〜3種以外を割合で減らした（魔銃士・魔法剣士はもとから両方ある）
+  assert.deepEqual(JOB_BONUS.弓使い, { agi: 64, str: 48, dex: 38, hp: 32, luk: 18, vit: 12, mp: 12, int_stat: 8 })
+  assert.deepEqual(JOB_BONUS.槍使い, { str: 79, dex: 50, agi: 28, hp: 24, vit: 21, mp: 15, luk: 7, int_stat: 8 })
+  assert.deepEqual(JOB_BONUS.狂戦士, { str: 168, hp: 102, agi: 77, dex: 46, vit: 41, mp: 23, luk: 16, int_stat: 17 })
   assert.deepEqual(JOB_BONUS.魔銃士, { str: 108, int_stat: 108, dex: 75, agi: 58, hp: 46, mp: 45, luk: 33, vit: 17 })
-  assert.deepEqual(JOB_BONUS.アークアーチャー, { dex: 142, luk: 103, agi: 92, hp: 55, str: 52, vit: 23, mp: 23 })
-  assert.deepEqual(JOB_BONUS.元素使い, { int_stat: 158, mp: 102, hp: 75, agi: 67, dex: 40, vit: 32, luk: 16 })
-  assert.deepEqual(JOB_BONUS.ストームランサー, { str: 125, dex: 103, agi: 85, hp: 75, vit: 57, mp: 28, luk: 17 })
-  assert.deepEqual(JOB_BONUS.異端審問官, { int_stat: 142, mp: 102, hp: 78, vit: 67, agi: 56, dex: 28, luk: 17 })
+  assert.deepEqual(JOB_BONUS.アークアーチャー, { dex: 142, luk: 103, agi: 86, hp: 51, str: 48, vit: 22, mp: 21, int_stat: 17 })
+  assert.deepEqual(JOB_BONUS.元素使い, { int_stat: 158, mp: 102, hp: 69, agi: 62, dex: 37, vit: 30, luk: 15, str: 17 })
+  assert.deepEqual(JOB_BONUS.ストームランサー, { str: 125, dex: 103, agi: 80, hp: 70, vit: 53, mp: 26, luk: 16, int_stat: 17 })
+  assert.deepEqual(JOB_BONUS.異端審問官, { int_stat: 142, mp: 102, hp: 73, vit: 62, agi: 52, dex: 26, luk: 16, str: 17 })
   assert.deepEqual(JOB_BONUS.魔法剣士, { str: 133, int_stat: 125, hp: 70, agi: 67, vit: 40, mp: 38, luk: 17 })
   // 技とパッシブ
   const p = (c) => passiveOf(c).passive

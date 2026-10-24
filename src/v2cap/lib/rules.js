@@ -6,7 +6,13 @@
 // （出撃・シミュレーターの組み立てが別々にあるので、1か所に置いて付け忘れを防ぐ）。
 //   ・noClassBonus … 職業補正を一旦なし（2026-10-09 ユーザー決定）
 //   ・ailDiminish  … 麻痺・封印は受けるたび次の確率×0.8（2026-10-10 ユーザー決定）
-//   ・defRule      … 防御の式。'cap'＝魔法防御を INT×0.5＋VIT×0.5（物理防御はVITのまま）
+//   ・defRule      … 防御の式。'cap'＝魔法防御を INT×0.5＋VIT×0.5（物理防御はVIT。味方だけ STR×0.25 も足す＝下の CAP_STR_PHYS_DEF）
 //                    （2026-10-09 ユーザー決定・10-10 入れた。combat.js の magDefCapOf）
 // ============================================================
 export const CAP_RULES = Object.freeze({ noClassBonus: true, ailDiminish: true, defRule: 'cap' })
+// 【確定】2026-10-25 ユーザー「STRにも役目をつける」＋「物理防御にSTR×0.25」を選んだ：味方の物理防御＝VIT×1.0＋STR×0.25
+//   （魔法を使う職業の STR もこれで効く）。プレイヤーだけ＝loadout.js の toFighter・tower.js の守護者の姿と空き層のNPC。敵には付けない（敵の強さは変わらない）。
+//   測った案：物理防御＋STR×0.5（強さの動きは同じくらい）・最大HP＋STR×0.5〜1（力の強い物理の職業が硬くなりすぎた）
+//   ★let なのは測る道具が試しに差し替えるため（ゲームの中では変えない）
+export let CAP_STR_PHYS_DEF = 0.25
+export const setCapStrPhysDefForTuning = (v) => { CAP_STR_PHYS_DEF = v }

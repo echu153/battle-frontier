@@ -27,10 +27,11 @@
 export const PHYS_DEF_VIT = 1.0  // 物理防御に乗る VIT の係数
 export const MAG_DEF_INT  = 1.0  // 魔法防御に乗る INT の係数
 export const MAG_DEF_VIT  = 0.15 // 魔法防御に乗る VIT の係数（こちらはレンジなし）
-export const physDefOf = (s) => (s?.vit || 0) * PHYS_DEF_VIT
+// strDef … STR を物理防御にも足す割合（v2cap の味方だけ＝0.25・rules.js の CAP_STR_PHYS_DEF。敵は持たない＝VIT だけ）
+export const physDefOf = (s) => (s?.vit || 0) * PHYS_DEF_VIT + (s?.str || 0) * (s?.strDef || 0)
 export const magDefOf  = (s) => (s?.int_stat || 0) * MAG_DEF_INT + (s?.vit || 0) * MAG_DEF_VIT
 // ★「レベルキャップあり」版（src/v2cap）だけの魔法防御：INT×0.5＋VIT×0.5（2026-10-09 ユーザー決定・10-10 入れた）。
-//   物理防御は今のまま（VIT）。受ける側が defRule:'cap' を持つときだけ使う＝今のⅡは magDefOf のまま変わらない。
+//   物理防御は VIT（味方だけ STR×0.25 も足す＝physDefOf の strDef・2026-10-25）。受ける側が defRule:'cap' を持つときだけ使う＝今のⅡは magDefOf のまま変わらない。
 //   ねらい：物理職が使わないINTを上げなくても、VITで魔法も少し受けられる（相性は残す）
 export const CAP_MAG_DEF_INT = 0.5
 export const CAP_MAG_DEF_VIT = 0.5

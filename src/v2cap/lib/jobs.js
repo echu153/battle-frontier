@@ -172,58 +172,62 @@ export const jobOf = (jobs, cls) => ({ lv: jobs?.[cls]?.lv || 1, exp: jobs?.[cls
 //   【確定】2026-10-12 ClassLVごとの点数を 初期職 5→8・上位職 6→10 にした（ユーザー指示・上の STAGES）。
 //   配分の割合は承認ずみのまま、合計を 初期職 145→232・上位職 294→490 に伸ばした（端数は最大剰余で合わせた）
 // 職業ごとの配分（合計232＝ClassLV30までの点数）。説明文（CLASS_INFO.desc）の「◯◯が伸びる」と合わせてある
+// 【確定】2026-10-25 ユーザー指示「INT使わないキャラ、STR使わないキャラも多少上がるようにしてほしい、バランス的に　その分他の数値下げるようにして」
+//   ＋「初期職8・上位職17」を選んだ：INT の無い職業に INT・STR の無い職業に STR を、初期職8点・上位職17点（LUKくらい＝1回あたり0.3）。
+//   そのぶん「高い2〜3種」（初期職48点以上・上位職102点以上）以外のステを割合で減らした（合計 232／490 と高い2〜3種はそのまま）。
+//   あわせて「STRにも役目をつける」＋「物理防御にSTR×0.25」を選んだ＝味方の物理防御は VIT＋STR×0.25（rules.js の CAP_STR_PHYS_DEF）
 export const JOB_BONUS = {
-  戦士:     { str:64, vit:51, hp:45, dex:24, agi:24, mp:16, luk:8 },         // STR・VIT・HP
+  戦士:     { str:64, vit:51, hp:42, dex:22, agi:22, mp:15, luk:8, int_stat:8 },         // STR・VIT・HP
   // 【確定】2026-10-14 ユーザー承認：槍使い・剣士はHPが低く、ボス戦で平均の約9割・対人で2〜3割だった＝DEX・AGIからVIT・HPへ（合計232のまま）
   // 2026-10-16 能力表で直した（ユーザー「17の案とりあえず入れて」）：槍使い STR64→79（VITから）＝火力が低く対人30%だった
-  槍使い:   { str:79, dex:50, agi:30, hp:26, vit:23, mp:16, luk:8 },         // STR・DEX
-  格闘家:   { str:64, agi:61, hp:35, vit:29, dex:19, mp:16, luk:8 },         // STR・AGI（＋HP）
+  槍使い:   { str:79, dex:50, agi:28, hp:24, vit:21, mp:15, luk:7, int_stat:8 },         // STR・DEX
+  格闘家:   { str:64, agi:61, hp:32, vit:27, dex:18, mp:15, luk:7, int_stat:8 },         // STR・AGI（＋HP）
   // 【確定】2026-10-15 ユーザー選択：盗賊は LUK29→19・STR51→61（合計232のまま）。対人の勝率が74〜75%で初期職で飛び抜けていた。
   //   元はLUKの多さ＝クリティカルの出やすさ（技の倍率を−5%しても72%まで）。SQL の bonus_seq と盗賊のアセンションの盤面も変わる（印 touzoku_luk_20261015）
-  盗賊:     { agi:67, str:61, dex:40, luk:19, hp:19, vit:13, mp:13 },        // AGI・STR（＋DEX）
+  盗賊:     { agi:67, str:61, dex:37, luk:18, hp:17, vit:12, mp:12, int_stat:8 },        // AGI・STR（＋DEX）
   // 2026-10-16 能力表で直した（ユーザー「17の案とりあえず入れて」）：弓使い HP19→34（DEXから）＝倒れやすく対人28%だった（LUKから回すと相手のクリティカルが増えて対人8%と逆効果）
-  弓使い:   { agi:64, str:48, dex:41, hp:34, luk:19, vit:13, mp:13 },        // AGI・STR（＋DEX）
-  銃士:     { dex:72, agi:48, str:40, luk:24, hp:19, mp:16, vit:13 },        // DEX・AGI（＋STR）
+  弓使い:   { agi:64, str:48, dex:38, hp:32, luk:18, vit:12, mp:12, int_stat:8 },        // AGI・STR（＋DEX）
+  銃士:     { dex:72, agi:48, str:37, luk:22, hp:18, mp:15, vit:12, int_stat:8 },        // DEX・AGI（＋STR）
   //   剣士は案の DEX45・AGI42 だと「高い2〜3種」（48点以上）が STR だけになるので DEX48・AGI39 にした
-  剣士:     { str:64, dex:48, agi:39, vit:30, hp:27, mp:16, luk:8 },         // STR・DEX（＋AGI）
-  魔法使い: { int_stat:72, mp:48, agi:40, dex:24, hp:24, vit:16, luk:8 },    // INT・MP（＋AGI）
-  呪術師:   { int_stat:67, mp:48, dex:32, luk:29, agi:24, hp:19, vit:13 },   // INT・MP（＋DEX・LUK）
-  僧侶:     { int_stat:61, vit:48, hp:45, mp:40, agi:19, dex:11, luk:8 },    // INT・VIT・HP
-  薬師:     { int_stat:61, dex:48, mp:40, hp:35, agi:24, vit:16, luk:8 },    // INT・DEX（＋MP）
+  剣士:     { str:64, dex:48, agi:36, vit:28, hp:25, mp:15, luk:8, int_stat:8 },         // STR・DEX（＋AGI）
+  魔法使い: { int_stat:72, mp:48, agi:37, dex:22, hp:22, vit:15, luk:8, str:8 },    // INT・MP（＋AGI）
+  呪術師:   { int_stat:67, mp:48, dex:30, luk:27, agi:22, hp:18, vit:12, str:8 },   // INT・MP（＋DEX・LUK）
+  僧侶:     { int_stat:61, vit:48, hp:42, mp:37, agi:18, dex:10, luk:8, str:8 },    // INT・VIT・HP
+  薬師:     { int_stat:61, dex:48, mp:37, hp:33, agi:22, vit:15, luk:8, str:8 },    // INT・DEX（＋MP）
   // 上位職（合計490＝ClassLV50までの点数・ClassLVごとに10点）。2026-10-10 ユーザー承認の配分（の割合）。
   //   高い2〜3種（102点以上）はその職の技で使うステ
   //   2026-10-14 ユーザー承認の並び替え：新しく入った4職の配分はこちらの案（高い2〜3種が102点以上・LUKも少し入れる＝LUKが0だと相手のクリティカルが上限になる）
-  侍:             { str:142, dex:125, agi:75, hp:50, vit:40, mp:33, luk:25 },
+  侍:             { str:142, dex:125, agi:69, hp:46, vit:37, mp:31, luk:23, int_stat:17 },
   // 2026-10-16 能力表で直した（ユーザー「17の案とりあえず入れて」）：魔法剣士 HP50→70（MPから）＝対人26%だった
   魔法剣士:       { str:133, int_stat:125, hp:70, agi:67, vit:40, mp:38, luk:17 },
   // 2026-10-16 能力表で直した（ユーザー「17の案とりあえず入れて」）：狂戦士 HP117→102・VIT57→45（STRへ+27）＝狂鬼化はそのまま、ボス戦114だった
-  狂戦士:         { str:168, hp:102, agi:83, dex:50, vit:45, mp:25, luk:17 },
+  狂戦士:         { str:168, hp:102, agi:77, dex:46, vit:41, mp:23, luk:16, int_stat:17 },
   聖騎士:         { vit:140, str:120, hp:100, int_stat:50, mp:33, luk:25, dex:22 },
-  竜騎士:         { str:134, vit:103, dex:83, agi:70, hp:58, mp:25, luk:17 },
+  竜騎士:         { str:134, vit:103, dex:78, agi:65, hp:54, mp:23, luk:16, int_stat:17 },
   // 2026-10-16 能力表で直した（ユーザー「17の案とりあえず入れて」）：ストームランサー HP50→75（AGIから）＝倒れやすく対人30%だった
-  ストームランサー: { str:125, dex:103, agi:85, hp:75, vit:57, mp:28, luk:17 },
-  体術師:         { agi:141, str:117, dex:75, hp:57, vit:50, mp:25, luk:25 },
+  ストームランサー: { str:125, dex:103, agi:80, hp:70, vit:53, mp:26, luk:16, int_stat:17 },
+  体術師:         { agi:141, str:117, dex:70, hp:53, vit:46, mp:23, luk:23, int_stat:17 },
   サイキッカー:   { str:120, int_stat:120, agi:75, dex:45, hp:50, mp:33, vit:25, luk:22 },
-  暗殺者:         { agi:142, str:108, luk:75, dex:67, hp:50, vit:25, mp:23 },
-  忍者:           { agi:141, dex:107, str:92, hp:50, luk:50, vit:25, mp:25 },
-  狩人:           { dex:125, agi:110, str:92, luk:56, hp:50, vit:30, mp:27 },
+  暗殺者:         { agi:142, str:108, luk:70, dex:62, hp:47, vit:23, mp:21, int_stat:17 },
+  忍者:           { agi:141, dex:107, str:86, hp:47, luk:46, vit:23, mp:23, int_stat:17 },
+  狩人:           { dex:125, agi:110, str:86, luk:52, hp:47, vit:28, mp:25, int_stat:17 },
   // 2026-10-16 能力表で直した（ユーザー「17の案とりあえず入れて」）：アークアーチャー HP40→55（STRから）＝倒れにくさがいちばん低くボス戦91だった
-  アークアーチャー: { dex:142, luk:103, agi:92, hp:55, str:52, vit:23, mp:23 },
+  アークアーチャー: { dex:142, luk:103, agi:86, hp:51, str:48, vit:22, mp:21, int_stat:17 },
   //   魔銃士は 2026-10-14 にHPとLUKを足した（前はHP40・LUK0＝上位職でHPが一番低く、LUK5で相手のクリティカルが上限＝対人の勝率1%だった）。
   //   技は物理と魔法の両方（STRとINTが半分ずつ・ユーザー指示「魔銃士はSTRやINTを半分ずつ参照」）なので、STRとINTは同じ
   // 2026-10-16 能力表で直した（ユーザー「17の案とりあえず入れて」）：魔銃士 HP66→46（MPへ）＝火力も倒れにくさも平均より上だった
   魔銃士:         { str:108, int_stat:108, dex:75, agi:58, hp:46, mp:45, luk:33, vit:17 },
-  デストロイヤー: { dex:142, str:108, vit:75, hp:57, agi:50, mp:33, luk:25 },
+  デストロイヤー: { dex:142, str:108, vit:70, hp:53, agi:46, mp:31, luk:23, int_stat:17 },
   // 2026-10-16 能力表で直した（ユーザー「17の案とりあえず入れて」）：元素使い HP50→75（MP・DEXから）＝倒れやすくボス戦93・対人30%だった
-  元素使い:       { int_stat:158, mp:102, hp:75, agi:67, dex:40, vit:32, luk:16 },
-  クロノマンサー: { int_stat:141, agi:125, mp:83, hp:50, dex:42, vit:32, luk:17 },
-  死霊使い:       { int_stat:146, mp:108, vit:67, hp:67, dex:42, agi:35, luk:25 },
-  式神使い:       { int_stat:142, mp:103, dex:83, agi:59, hp:50, vit:28, luk:25 },
-  聖職者:         { int_stat:125, hp:117, vit:108, mp:75, agi:33, dex:17, luk:15 },
+  元素使い:       { int_stat:158, mp:102, hp:69, agi:62, dex:37, vit:30, luk:15, str:17 },
+  クロノマンサー: { int_stat:141, agi:125, mp:77, hp:46, dex:39, vit:29, luk:16, str:17 },
+  死霊使い:       { int_stat:146, mp:108, vit:62, hp:62, dex:39, agi:33, luk:23, str:17 },
+  式神使い:       { int_stat:142, mp:103, dex:77, agi:55, hp:47, vit:26, luk:23, str:17 },
+  聖職者:         { int_stat:125, hp:117, vit:108, mp:66, agi:29, dex:15, luk:13, str:17 },
   // 2026-10-16 能力表で直した（ユーザー「17の案とりあえず入れて」）：異端審問官 HP58→78（AGI・MPから）＝ボス戦94・対人33%だった
-  異端審問官:     { int_stat:142, mp:102, hp:78, vit:67, agi:56, dex:28, luk:17 },
-  アルケミスト:   { int_stat:142, dex:108, mp:83, hp:57, agi:50, vit:33, luk:17 },
-  霊薬師:         { int_stat:133, mp:103, vit:83, hp:75, dex:42, agi:37, luk:17 },
+  異端審問官:     { int_stat:142, mp:102, hp:73, vit:62, agi:52, dex:26, luk:16, str:17 },
+  アルケミスト:   { int_stat:142, dex:108, mp:77, hp:53, agi:46, vit:31, luk:16, str:17 },
+  霊薬師:         { int_stat:133, mp:103, vit:77, hp:70, dex:39, agi:35, luk:16, str:17 },
 }
 
 // 【確定】2026-10-10 ユーザー指示「レベルアップするとき、HPとMPは絶対あげるようにしてほしい、クラスによって差があってもいいから」＋案を承認：

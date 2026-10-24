@@ -19,7 +19,7 @@ import { SKILL_BY_NAME, isPassive, passiveOf } from './skills.js'
 import { statsAt, effectivePowerAt, armorEffects } from './gear.js'
 import { plusOf } from './smith.js'
 import { jobBonusStats, jobOf, canEquipType, attackKindOf, lineageOf } from './jobs.js'
-import { CAP_RULES } from './rules.js'
+import { CAP_RULES, CAP_STR_PHYS_DEF } from './rules.js'
 import { ascEffectsOf, ascPctGain, ascendSkill } from './ascension.js'
 import { armorSetsOf, setStatPctOf, setFxOf } from './armorSets.js'
 import { combinedFxOf, mergeFx } from './fxMerge.js'
@@ -142,6 +142,7 @@ export const toFighter = (profile, inventory, opts = {}) => {
     cls: profile?.class,
     kind: attackKindOf(profile?.class),   // 通常攻撃が物理か魔法か（今のⅡの名簿に無い職業があるので明示する）
     ...CAP_RULES,                         // ★この版だけの決まり（職業補正なし・麻痺/封印の0.8倍）。battle.js の createSide が見る
+    strDef: CAP_STR_PHYS_DEF,             // 物理防御に STR×0.25 も足す（プレイヤーだけ・rules.js・2026-10-25 ユーザー選択）
     stats: bd.total,
     taken: bd.armor.takenMult !== 1 ? { phys: bd.armor.takenMult, mag: bd.armor.takenMult } : null,
     enchants: [],
