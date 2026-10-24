@@ -10,6 +10,7 @@ import { enemyArtSrc, enemyArtBigSrc } from '../lib/enemyArt.js'
 import { chip } from './v2capGearView.js'
 import V2capIcon from './V2capIcon.jsx'
 import { JP_BOLD } from './casinoStyle.js'
+import { RACES, raceDefOf } from '../lib/monsterRace.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — モンスター図鑑
@@ -27,8 +28,15 @@ import { JP_BOLD } from './casinoStyle.js'
 //     ・説明の文は HELP の小窓へ。「残り◯エリアは、行くと載ります」はやめた
 //     ・「そのエリアのキャラ全員登録したらスタミナ最大値＋1」＝エリアの20体を全員見つけると報酬（権威はサーバーの §15）。
 //       上の欄に獲得済み報酬・エリアの行に ★COMPLETE★（博物館と同じ書き方）・HELP に報酬の説明
+//   【確定】2026-10-25 ユーザー指示「モンスターに種族を追加したい、モンスター図鑑ではそれを分かるように」：
+//     倒した敵の行と大きく出す小窓に、種族の札（種族の色・枠なしの塗り＝役割の札と見分ける）。倒すまでは名前と同じく出さない。名簿は monsterRace.js
 // ============================================================
 const kindText = (k) => (k === 'mag' ? '魔法' : '物理')
+// 種族の札（役割の札は枠・種族は塗り）
+const RaceTag = ({ name, size = 10 }) => {
+  const r = raceDefOf(name)
+  return r ? <span style={{ color: r.color, background:`${r.color}33`, fontSize:`${size}px`, padding:'0 5px', borderRadius:'3px', flexShrink:0 }}>{r.label}</span> : null
+}
 
 export default function V2capDex({ prof }) {
   const [kills, setKills] = useState(null)   // { 敵の名前: 数 }。読み込み中は null
@@ -69,6 +77,7 @@ export default function V2capDex({ prof }) {
           <div>出撃で倒した敵が載ります（倒すまでは名前もLVも ???）。</div>
           <div>討伐数は出撃で勝ったときに数えます。</div>
           <div>落とす装備はそのエリアの装備です。</div>
+          <div>モンスターには種族があります（{RACES.map(r => r.label).join('・')}）。上位クラスの技には、種族で効き目が変わるものがあります。</div>
           <div style={{ color:'#d8b070', fontSize:'12px', marginTop:'10px' }}>報酬（恒久的に反映されます）</div>
           <div>エリアの敵（20体）をすべて見つけると、スタミナの最大値+{DEX_AREA_STAM}（エリアごと）。</div>
         </V2Modal>
@@ -128,6 +137,7 @@ export default function V2capDex({ prof }) {
                       <span style={{ color: role.color, fontSize:'9px', border:`1px solid ${role.color}`, padding:'0 4px', flexShrink:0 }}>
                         {role.label}{e.band ? `・${e.band}` : ''}
                       </span>
+                      {found && <RaceTag name={e.name} />}
                       <span style={{ color: found ? '#cfe2ff' : TEXT.empty, flex:1, minWidth:0 }}>{found ? e.name : '???'}</span>
                       <span style={{ color: found ? '#cfe2ff' : TEXT.empty, fontSize:'11px' }}>LV{found ? lvText(e) : '??'}</span>
                       <span style={{ color: TEXT.label, fontSize:'10px' }}>{e.subs.map(s => SUB_MARK[s - 1]).join('')}</span>
@@ -170,6 +180,7 @@ function ZoomModal({ e, onClose }) {
     <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
       <span style={{ fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'20px', color:'#ffffff', textShadow:`0 0 8px ${role.color}88` }}>{e.name}</span>
       <span style={{ color: role.color, border:`1px solid ${role.color}`, padding:'0 5px', fontSize:'11px' }}>{role.label}{e.band ? `・${e.band}` : ''}</span>
+      <RaceTag name={e.name} size={11} />
       <span style={{ color:'#cfe2ff', fontSize:'13px' }}>LV{lvText(e)}</span>
     </div>
   )

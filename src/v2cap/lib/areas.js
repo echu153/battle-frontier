@@ -21,6 +21,7 @@ import { statsOf } from '../core/enemies.js'
 import { bodyPowerAt } from './level.js'
 import { ROSTERS, ENEMY_LV } from './monsters.js'
 import { CAP_RULES } from './rules.js'
+import { raceOf } from './monsterRace.js'
 
 // ===== エリアと場所の名前（【確定】2026-10-09 ユーザーの表）=====
 export const AREA_LIST = [
@@ -337,10 +338,12 @@ export const enemyBasePowerOf = (enemy) => {
 // 戦闘用。uses＝1回の戦闘でそれぞれの技を何回使えるか
 // ★今のⅡの「エリアの相性（物理／魔法が通りやすい）」は付けない（1本道なので）
 // ★敵にもこの版の決まり（CAP_RULES）を混ぜる＝プレイヤーの麻痺・封印も受けるたび下がる
+// ★race＝モンスターの種族（monsterRace.js・2026-10-25）。上位職の技（異端審問官のアンデッドと悪魔への＋20%・1.3倍など）が見る
 export const toFighter = (enemy, uses = 8, power = enemyPowerOf(enemy)) => ({
   ...CAP_RULES,
   name: enemy.name,
   kind: enemy.kind,
+  race: raceOf(enemy.name),
   stats: statsOf({ ...enemy, power }),
   slots: (enemy.skills || []).map(s => ({ skill: s, uses })),
   taken: null,
