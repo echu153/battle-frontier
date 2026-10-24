@@ -31,6 +31,12 @@ import { spotLabel } from '../lib/areas.js'
 import { RARITY_COLOR } from '../lib/equipment.js'
 import { GENDER_BY_KEY, genderOf } from '../lib/gender.js'
 import { SHOP_NAME, MEAL_COLOR, activeMealOf, leftText } from '../lib/burger.js'
+import { MARK_SRC } from '../lib/clerk.js'
+
+// ニャーガーキングのマーク（メニューと店の題で🍔の代わり。文字と同じ高さに並べる）
+function ShopMark({ size = 16 }) {
+  return <img src={MARK_SRC} alt="" width={size} height={size} style={{ verticalAlign:'-3px' }} />
+}
 import V2capGenderPick from '../components/V2capGenderPick.jsx'
 import { CarryLines } from '../components/V2capV1Carry.jsx'
 
@@ -60,9 +66,10 @@ const MENU = [
   ],
   // 【確定】2026-10-22 博物館（装備の寄贈・V1と同じ形の土台。登録でもらえる能力はあとで）
   // 【確定】2026-10-25 ハンバーガー屋「ニャーガーキング」（食べると60分ステ+10%・トッピングで状態異常にかかりにくく）。説明は食事中なら残り時間（menuOf）
+  //   アイコンは店のマーク（ワッペン＝猫耳としっぽのついたハンバーガー・lib/clerk.js の MARK_SRC）。ユーザー選択「メニューの🍔の代わりに使う」
   [
     { key:'museum', label:'博物館', icon:'🏺', color:'#d8b070', action:'装備を寄贈する' },
-    { key:'burger', label: SHOP_NAME, icon:'🍔', color: MEAL_COLOR, action:'バーガーを食べる' },
+    { key:'burger', label: SHOP_NAME, icon: <ShopMark />, color: MEAL_COLOR, action:'バーガーを食べる' },
   ],
   // 【確定】2026-10-13 アセンション（スキルツリー）。説明は残りのAPで変わる（menuOf）
   [
@@ -81,7 +88,7 @@ const MENU = [
     { key:'casino', label:'賭博場', icon:'🎰', color:'#ff4fa3', action:'スロット・ハイ&ロー・ルーレット' },
   ],
 ]
-const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', museum:'🏺 博物館', burger:`🍔 ${SHOP_NAME}`, asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場', tower:`🗼 ${TOWER_NAME}`,
+const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', museum:'🏺 博物館', burger: <><ShopMark size={18} /> {SHOP_NAME}</>, asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場', tower:`🗼 ${TOWER_NAME}`,
   uniqueCheck:'💎 ユニークの能力の確かめ［開発］' }
 // メニューの説明に、いまの職業で残っているAPを出す（振り忘れに気づけるように）。塔はいまの層（守っていればその層）
 const towerActionOf = (prof) => (prof?.tower_guard

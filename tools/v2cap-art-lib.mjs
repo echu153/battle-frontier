@@ -212,6 +212,20 @@ export const keyBackground = (img, k = KEY) => {
   return { img: out, clear: core.length / N, mode: model.mode, edgeLeft: border.filter(p => rgba[p * 4 + 3] > 128).length / border.length }
 }
 
+// box（まわりに余白 margin＝長いほうの辺に対する割合）を長方形のまま切り取り、高さ height の WebP（透明つき・縦横比はそのまま）で書く。
+// はみ出すぶんは透明で足す。幅は偶数にそろえる（yuva420p は奇数の幅にできない）。書いた大きさ { w, h } を返す（看板娘の絵・tools/v2cap-burger-art.mjs）
+export const encodeRect = ({ data: rgba, W, H }, box, out, { height = 640, margin = 0, quality = 82 } = {}) => {
+  const bw = box.x1 - box.x0 + 1, bh = box.y1 - box.y0 + 1
+  const m = Math.round(Math.max(bw, bh) * margin)
+  const CW = bw + 2 * m, CH = bh + 2 * m
+  const w = Math.max(2, Math.round(CW * height / CH / 2) * 2)
+  const P = m
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${W}x${H}`, '-i', '-',
+    '-vf', `pad=iw+${2 * P}:ih+${2 * P}:${P}:${P}:color=0x00000000,crop=${CW}:${CH}:${box.x0 - m + P}:${box.y0 - m + P},scale=${w}:${height}:flags=lanczos`,
+    '-c:v', 'libwebp', '-pix_fmt', 'yuva420p', '-quality', String(quality), '-frames:v', '1', out], { input: rgba })
+  return { w, h: height }
+}
+
 // box を真ん中にした正方形（余白 margin）に切り取り、size×size の WebP（透明つき）で書く。はみ出すぶんは透明で足す
 export const encodeSquare = ({ data: rgba, W, H }, box, out, { size = 192, margin = 0.04, quality = 82 } = {}) => {
   const side = Math.max(box.x1 - box.x0 + 1, box.y1 - box.y0 + 1)

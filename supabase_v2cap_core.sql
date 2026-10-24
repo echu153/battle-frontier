@@ -7613,6 +7613,31 @@ $$;
 revoke all on function public.v2cap_burger_buy(text, boolean, boolean) from public, anon;
 grant execute on function public.v2cap_burger_buy(text, boolean, boolean) to authenticated;
 
+-- ---- 16-2. 看板娘の「いらっしゃいませー」（2026-10-25）----
+-- 【確定】2026-10-25 ユーザー指示「一日1回店に入るといらっしゃいませーの演出入れたい」＋「画面いっぱいに出てタップで閉じる」を選んだ：
+--   その日はじめてニャーガーキングを開いたときだけ、全身の看板娘を画面いっぱいに出す（画面は src/v2cap/components/V2capClerk.jsx）。
+--   日付は日本時間の5時で切り替える（デイリーミッション・宝樹と同じ）。覚えるのはプロフィールの burger_welcome_day（最後に出した日）。
+--   店を開くたびに呼ぶ：今日まだなら今日の日付を入れて first=true、もう出していれば first=false
+alter table public.v2cap_profiles add column if not exists burger_welcome_day date;
+
+create or replace function public.v2cap_burger_welcome()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid   uuid := auth.uid();
+  v_today date := ((now() at time zone 'Asia/Tokyo') - interval '5 hours')::date;
+  v_n     int;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  update public.v2cap_profiles set burger_welcome_day = v_today
+   where id = v_uid and burger_welcome_day is distinct from v_today;
+  get diagnostics v_n = row_count;
+  return jsonb_build_object('ok', true, 'first', v_n > 0, 'day', v_today);
+end;
+$$;
+revoke all on function public.v2cap_burger_welcome() from public, anon;
+grant execute on function public.v2cap_burger_welcome() to authenticated;
+
 -- ===== 一度だけ：INT の無い職業に INT・STR の無い職業に STR を少し入れた（2026-10-25 ユーザー指示「INT使わないキャラ、STR使わないキャラも多少上がるようにしてほしい、バランス的に」）=====
 -- 初期職8点・上位職17点（ユーザー選択）・そのぶん「高い2〜3種」以外のステを割合で減らした＝29職の配分（jobs.js の JOB_BONUS）が変わった
 -- （v2cap_classes.bonus_seq と v2cap_asc_mp は上の種で入れ替わる）。アセンションの盤面は配分から中身を作るので、この29職の盤面の中身が入れ替わる。

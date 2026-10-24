@@ -1080,3 +1080,15 @@ test('【確定】2026-10-25 ニャーガーキング（§16）：値段・時�
   assert.ok(SQL.includes('revoke all on function public.v2cap_burger_buy(text, boolean, boolean) from public, anon;'))
   assert.ok(SQL.includes('grant execute on function public.v2cap_burger_buy(text, boolean, boolean) to authenticated;'))
 })
+
+test('【確定】2026-10-25 看板娘の「いらっしゃいませー」（§16-2）：その日はじめて店を開いたかをサーバーが覚える（日本時間の5時で切り替え）', () => {
+  // ユーザー指示「一日1回店に入るといらっしゃいませーの演出入れたい」
+  assert.ok(SQL.includes('alter table public.v2cap_profiles add column if not exists burger_welcome_day date;'))
+  const fn = fnBody('v2cap_burger_welcome')
+  assert.ok(fn.includes(`v_today date := ((now() at time zone 'Asia/Tokyo') - interval '${DAY_RESET_HOUR} hours')::date;`), '日付の区切りはデイリーと同じ')
+  assert.ok(fn.includes('if not public.v2cap_is_dev() then'), '開発限定')
+  assert.ok(fn.includes('where id = v_uid and burger_welcome_day is distinct from v_today;'), '今日まだのときだけ入れる')
+  assert.ok(fn.includes("return jsonb_build_object('ok', true, 'first', v_n > 0, 'day', v_today);"), '入れたら first=true')
+  assert.ok(SQL.includes('revoke all on function public.v2cap_burger_welcome() from public, anon;'))
+  assert.ok(SQL.includes('grant execute on function public.v2cap_burger_welcome() to authenticated;'))
+})
