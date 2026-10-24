@@ -12,6 +12,7 @@ import { PlusTag, StatGain } from './v2capGear.jsx'
 import V2capArmorSets from './V2capArmorSets.jsx'
 import V2capUniqueFx from './V2capUniqueFx.jsx'
 import { isUnique } from '../lib/equipment.js'
+import { SHOP_NAME, MEAL_COLOR, burgerEffectText, toppingText, leftText } from '../lib/burger.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — ステータスの内訳（プロフィールの中）
@@ -24,7 +25,7 @@ import { isUnique } from '../lib/equipment.js'
 const NUM = { textAlign:'right', whiteSpace:'nowrap' }
 // 「アセンション」は長いので、狭い画面では「アセン／ション」で折り返す（変な所で折れないように2つに分けて置く）
 const ASC_LABEL = <><span style={{ display:'inline-block' }}>アセン</span><span style={{ display:'inline-block' }}>ション</span></>
-const COLOR = { body:'#cfe2ff', job:'#ffcc00', gear:'#44ff88', asc:'#ffaa44', armor:'#88ddaa', set:'#66ccff' }
+const COLOR = { body:'#cfe2ff', job:'#ffcc00', gear:'#44ff88', asc:'#ffaa44', armor:'#88ddaa', set:'#66ccff', food: MEAL_COLOR }
 
 export default function V2capBreakdown({ prof, inventory }) {
   const bd = statBreakdown(prof, inventory)
@@ -33,8 +34,9 @@ export default function V2capBreakdown({ prof, inventory }) {
   const showArmor = bd.armorAgi > 0   // 軽装の列は、軽装でAGIが上がっているときだけ
   const showAsc = STAT_KEYS.some(k => bd.asc[k] > 0)   // アセンションの列は、開いたマスがあるときだけ
   const showSet = STAT_KEYS.some(k => bd.set[k] > 0)   // セットの列は、3部位の能力値+%が乗っているときだけ（2026-10-14）
+  const showFood = STAT_KEYS.some(k => bd.food[k] > 0)   // ごはんの列は、ニャーガーキングのバーガーが効いているときだけ（2026-10-25）
   const cols = [['body', '本体'], ['job', 'クラス'], ['gear', '装備'], ...(showAsc ? [['asc', ASC_LABEL]] : []), ...(showArmor ? [['armor', '軽装']] : []),
-    ...(showSet ? [['set', 'セット']] : []), ['total', '合計']]
+    ...(showSet ? [['set', 'セット']] : []), ...(showFood ? [['food', 'ごはん']] : []), ['total', '合計']]
   // 広い画面で横に伸びすぎると行を目で追いにくいので、表は幅を決めておく
   const grid = { display:'grid', gridTemplateColumns:`48px repeat(${cols.length}, minmax(0, 1fr))`, gap:'3px 6px', alignItems:'baseline', maxWidth:'480px' }
   const num = (key, v, color) => <span key={key} style={{ ...NUM, color: v ? color : TEXT.empty }}>{v ? v.toLocaleString() : '—'}</span>
@@ -43,9 +45,10 @@ export default function V2capBreakdown({ prof, inventory }) {
   // 戦闘力の行。軽装のぶん＝「本体＋クラス＋装備＋アセンション＋軽装」から「本体＋クラス＋装備＋アセンション」を引いたもの。
   // セットのぶん＝合計からそれ（セットの前）を引いたもの
   const base = Object.fromEntries(STAT_KEYS.map(k => [k, bd.body[k] + bd.job[k] + bd.gear[k] + bd.asc[k]]))
-  const beforeSet = Object.fromEntries(STAT_KEYS.map(k => [k, bd.total[k] - bd.set[k]]))
+  const beforeFood = Object.fromEntries(STAT_KEYS.map(k => [k, bd.total[k] - bd.food[k]]))
+  const beforeSet = Object.fromEntries(STAT_KEYS.map(k => [k, beforeFood[k] - bd.set[k]]))
   const power = { body: calcPower(bd.body), job: calcPower(bd.job), gear: calcPower(bd.gear), asc: calcPower(bd.asc),
-    armor: calcPower(beforeSet) - calcPower(base), set: bd.power - calcPower(beforeSet), total: bd.power }
+    armor: calcPower(beforeSet) - calcPower(base), set: calcPower(beforeFood) - calcPower(beforeSet), food: bd.power - calcPower(beforeFood), total: bd.power }
   const armorParts = []
   if (bd.armor.takenPct) armorParts.push(`受けるダメージ${bd.armor.takenPct}%`)
   if (bd.armor.agiPct) armorParts.push(`AGI+${bd.armor.agiPct}%`)
@@ -81,6 +84,10 @@ export default function V2capBreakdown({ prof, inventory }) {
         {showAsc && <div><span style={{ color: COLOR.asc }}>アセンション</span>＝いまの職業の盤面で開いたマス（道の終わりの「+%」は本体＋クラス＋装備＋アセンションに掛ける）</div>}
         {showArmor && <div><span style={{ color: COLOR.armor }}>軽装</span>＝軽装1部位ごとに{ARMOR_EFFECT.軽装.label}（本体＋クラス＋装備のAGIに掛ける）</div>}
         {showSet && <div><span style={{ color: COLOR.set }}>セット</span>＝防具のセット能力の3部位（能力値+%。ここまでの合計に掛ける）</div>}
+        {showFood && <div><span style={{ color: COLOR.food }}>ごはん</span>＝{SHOP_NAME}の{bd.meal.burger.name}（{burgerEffectText(bd.meal.stat)}。ここまでの合計に掛ける・{leftText(bd.meal.leftMs)}）</div>}
+        {bd.meal && [bd.meal.major, bd.meal.minor].filter(Boolean).map(a => (
+          <div key={a}><span style={{ color: COLOR.food }}>トッピング</span>＝{toppingText(a)}</div>
+        ))}
       </div>
 
       {bd.sets.length > 0 && (<>

@@ -14,6 +14,7 @@ import V2capSmith from '../components/V2capSmith.jsx'
 import V2capSkills from '../components/V2capSkills.jsx'
 import V2capTemple from '../components/V2capTemple.jsx'
 import V2capMuseum from '../components/V2capMuseum.jsx'
+import V2capBurger from '../components/V2capBurger.jsx'
 import V2capDaily from '../components/V2capDaily.jsx'
 import V2capProfile from '../components/V2capProfile.jsx'
 import V2capTree from '../components/V2capTree.jsx'
@@ -29,6 +30,7 @@ import { openUntilOf } from '../lib/sortie.js'
 import { spotLabel } from '../lib/areas.js'
 import { RARITY_COLOR } from '../lib/equipment.js'
 import { GENDER_BY_KEY, genderOf } from '../lib/gender.js'
+import { SHOP_NAME, MEAL_COLOR, activeMealOf, leftText } from '../lib/burger.js'
 import V2capGenderPick from '../components/V2capGenderPick.jsx'
 import { CarryLines } from '../components/V2capV1Carry.jsx'
 
@@ -57,8 +59,10 @@ const MENU = [
     { key:'temple', label:'神殿',   icon:'🏛', color:'#ff88cc', action:'転職する' },
   ],
   // 【確定】2026-10-22 博物館（装備の寄贈・V1と同じ形の土台。登録でもらえる能力はあとで）
+  // 【確定】2026-10-25 ハンバーガー屋「ニャーガーキング」（食べると60分ステ+10%・トッピングで状態異常にかかりにくく）。説明は食事中なら残り時間（menuOf）
   [
     { key:'museum', label:'博物館', icon:'🏺', color:'#d8b070', action:'装備を寄贈する' },
+    { key:'burger', label: SHOP_NAME, icon:'🍔', color: MEAL_COLOR, action:'バーガーを食べる' },
   ],
   // 【確定】2026-10-13 アセンション（スキルツリー）。説明は残りのAPで変わる（menuOf）
   [
@@ -77,7 +81,7 @@ const MENU = [
     { key:'casino', label:'賭博場', icon:'🎰', color:'#ff4fa3', action:'スロット・ハイ&ロー・ルーレット' },
   ],
 ]
-const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', museum:'🏺 博物館', asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場', tower:`🗼 ${TOWER_NAME}`,
+const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', museum:'🏺 博物館', burger:`🍔 ${SHOP_NAME}`, asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場', tower:`🗼 ${TOWER_NAME}`,
   uniqueCheck:'💎 ユニークの能力の確かめ［開発］' }
 // メニューの説明に、いまの職業で残っているAPを出す（振り忘れに気づけるように）。塔はいまの層（守っていればその層）
 const towerActionOf = (prof) => (prof?.tower_guard
@@ -85,9 +89,11 @@ const towerActionOf = (prof) => (prof?.tower_guard
   : `${floorLabel(clampFloor(prof?.tower_floor || 1))}の階層守護者に挑む`)
 const menuOf = (prof) => {
   const left = Math.max(0, apLeftOf(prof))
+  const meal = activeMealOf(prof)
   return MENU.map(g => g.map(m => {
     if (m.key === 'asc' && left > 0) return { ...m, action:`APを振る（残り${left}）` }
     if (m.key === 'tower') return { ...m, action: towerActionOf(prof) }
+    if (m.key === 'burger' && meal) return { ...m, action:`食事中（${leftText(meal.leftMs)}）` }
     return m
   }))
 }
@@ -439,6 +445,7 @@ export default function V2capHome() {
             {screen === 'skills' && <V2capSkills prof={prof} inventory={inventory} onProfile={refresh} />}
             {screen === 'temple' && <V2capTemple prof={prof} inventory={inventory} onProfile={refresh} />}
             {screen === 'museum' && <V2capMuseum prof={prof} inventory={inventory} onProfile={refresh} />}
+            {screen === 'burger' && <V2capBurger prof={prof} onProfile={refresh} />}
             {screen === 'asc' && <V2capAscension prof={prof} onProfile={refresh} />}
             {screen === 'tree' && <V2capTree prof={prof} onProfile={refresh} unlimited={isAdmin} />}
             {screen === 'dex' && <V2capDex prof={prof} />}

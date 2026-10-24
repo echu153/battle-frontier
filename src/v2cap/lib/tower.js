@@ -293,9 +293,9 @@ export const floorInfoOf = (floor, row) => {
 
 // ===== 戦う =====
 // me … 自分の戦闘用キャラ（loadout.js の toFighter）／myLv … 自分のLV／champ … champOf の守護者
+// myPower … 連勝補正で比べる自分の戦闘力（省くと me から数える。ニャーガーキングの食事は入れない＝画面が食事なしの値を渡す）
 // 返すもの：a（自分）・b（守護者）＝ runBattle にそのまま渡せる形、bonus（連勝補正の%）、mult（対人のHP倍率）
-export const towerBattleOf = ({ me, myLv, champ, floor }) => {
-  const myPower = calcPower(me.stats)
+export const towerBattleOf = ({ me, myLv, champ, floor, myPower = calcPower(me.stats) }) => {
   const foePower = calcPower(champ.stats)
   const bonus = streakBonusPct(champ.streak, floor, myPower, foePower)
   const mult = pvpHpMultFor(myLv, champ.lv)

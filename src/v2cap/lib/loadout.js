@@ -6,6 +6,7 @@
 //   ＋ 装備（アイテムLVで強さが決まり、強化値ぶん強くなり、必要LVに足りないぶん効果が下がる）
 //   ＋ アセンション（いまの職業の木で開いたマス。2026-10-13・ascension.js）
 // さらに防具のメリット（重鎧＝受けるダメージ−1%／軽装＝AGI+1%・1部位ごと）と、アセンションの大マス（道のステ+5%）が乗る。
+// いちばん最後に、ニャーガーキングで食べたバーガー（ステ1つ+10%・60分・burger.js）が乗る。
 // アセンションのスキルマスは、その技を戦闘に渡すときに強くする（slotsOf）。
 // ★職業補正は**一旦なし**（2026-10-09 ユーザー決定）＝ runBattle に noClassBonus を渡す（rules.js の CAP_RULES）。
 // ★武器は職業ごとに装備できる種類が決まっている。いまの職業で装備できない武器は
@@ -23,6 +24,7 @@ import { ascEffectsOf, ascPctGain, ascendSkill } from './ascension.js'
 import { armorSetsOf, setStatPctOf, setFxOf } from './armorSets.js'
 import { combinedFxOf, mergeFx } from './fxMerge.js'
 import { GENDER_BY_KEY, genderOf, genderFxOf } from './gender.js'
+import { SHOP_NAME, activeMealOf, mealStatPctOf, mealFxOf } from './burger.js'
 
 const zero = () => Object.fromEntries(STAT_KEYS.map(k => [k, 0]))
 
@@ -89,7 +91,8 @@ export const jobStats = (profile) => jobBonusStats(profile?.class, jobOf(profile
 // 合計。内訳も返す（ステータス画面で「本体＋クラス＋装備＋アセンション」を出すため）。
 // ★軽装のAGI+%とアセンションの大マス（道のステ+%）は、どちらも「本体＋クラス＋装備＋アセンションの小マス」に掛ける
 //   （上がったぶんは armorAgi・asc に出す）。MPの大マスはサーバーのスキル編成の最大MP（v2cap_asc_mp）と同じ数え方
-export const statBreakdown = (profile, inventory) => {
+// meal … ニャーガーキングの食事（burger.js の activeMealOf）。渡さなければ、いま効いているもの。null＝食事なしで数える
+export const statBreakdown = (profile, inventory, { meal = activeMealOf(profile) } = {}) => {
   const body = bodyStats(profile)
   const job = jobStats(profile)
   const gear = gearStats(profile, inventory)
@@ -106,7 +109,11 @@ export const statBreakdown = (profile, inventory) => {
   const sp = setStatPctOf(sets)
   const set = Object.fromEntries(STAT_KEYS.map(k => [k, Math.round(total[k] * (sp[k] || 0) / 100)]))
   for (const k of STAT_KEYS) total[k] += set[k]
-  return { body, job, gear, asc, armor, armorAgi, set, sets, total, power: calcPower(total) }
+  // ★ニャーガーキングのバーガー（ステ1つ+10%・2026-10-25）は、セットまで入れた合計に掛ける（上がったぶんは food に出す）
+  const mp = mealStatPctOf(meal)
+  const food = Object.fromEntries(STAT_KEYS.map(k => [k, Math.round(total[k] * (mp[k] || 0) / 100)]))
+  for (const k of STAT_KEYS) total[k] += food[k]
+  return { body, job, gear, asc, armor, armorAgi, set, sets, food, meal: meal || null, total, power: calcPower(total) }
 }
 export const totalStats = (profile, inventory) => statBreakdown(profile, inventory).total
 
@@ -127,8 +134,9 @@ export const slotsOf = (set, cls, lineage = lineageOf(cls), ups = {}) => (set ||
   .map(e => (ups[e.skill.name] ? { ...e, skill: ascendSkill(e.skill, ups[e.skill.name]) } : e))
 
 // runBattle に渡す形。重鎧の「受けるダメージ−%」は taken（物理・魔法とも）で渡す
-export const toFighter = (profile, inventory) => {
-  const bd = statBreakdown(profile, inventory)
+// opts.meal … statBreakdown と同じ（塔の守護者の姿・強さの比べ合いは meal:null＝食事なしで作る）
+export const toFighter = (profile, inventory, opts = {}) => {
+  const bd = statBreakdown(profile, inventory, opts)
   return {
     name: profile?.username || 'あなた',
     cls: profile?.class,
@@ -145,7 +153,9 @@ export const toFighter = (profile, inventory) => {
     // ★防具のセット能力（2部位・4部位の戦闘の効果。3部位の能力値は stats に入っている）と、
     //   着けているユニークの固有の能力（2026-10-21）を1つにまとめたもの（fxMerge.js）。どれも無ければ null
     // ★性別（2026-10-21・gender.js）：男性＝与えるダメージ+2%（sexDeal）・女性＝受けるダメージ−2%（sexCut）も同じ入れ物に重ねる
-    setFx: mergeFx(combinedFxOf(setFxOf(bd.sets), wornUniquesOf(profile, inventory)),
+    // ★ニャーガーキングのトッピング（その状態異常にかかる確率×0.8・2026-10-25）も同じ入れ物に重ねる
+    setFx: mergeFx(mergeFx(combinedFxOf(setFxOf(bd.sets), wornUniquesOf(profile, inventory)),
       genderFxOf(genderOf(profile)), GENDER_BY_KEY[genderOf(profile)]?.label),
+      mealFxOf(bd.meal), SHOP_NAME),
   }
 }

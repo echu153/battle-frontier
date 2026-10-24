@@ -7569,3 +7569,62 @@ begin
     insert into public.v2cap_migrations (key) values ('asc_pent_20261024');
   end if;
 end $$;
+
+-- ============================================================
+-- ===== 16. ハンバーガー屋「ニャーガーキング」（2026-10-25）=====
+-- ============================================================
+-- 【確定】2026-10-25 ユーザー指示「食べ物を食べたら一定時間ステータスや特殊効果つく機能」「バーガーキングモチーフのハンバーガーショップ」：
+--   ・Goldで買って食べる。効くのは60分（本当の時間）。食べ直したら上書き（前の食事は消える・残り時間も戻らない）
+--   ・バーガー 1,000G … STR・DEX・AGI・INT・VIT・LUK のどれか1つが+10%（どれにするかは選ぶ）
+--   ・トッピング（バーガーに足す）… メジャー500G・マイナー500G。頼んだ組の中から1つをここでランダムに決める
+--       メジャー＝出血・毒・鈍足・麻痺・火傷／マイナー＝封印・恐怖・暗闇・呪い・狂乱・衰弱
+--     乗ったトッピングの状態異常にかかる確率−20%
+--   ・効き目は画面の戦闘（出撃・ボス・塔への挑戦）が足す（src/v2cap/lib/burger.js・loadout.js）。ここは買う・抽選・Goldを減らす・期限だけ
+--   ★値段・時間・組の中身の写しは src/v2cap/lib/burger.js（v2capsql.test.js が突き合わせる）
+-- プロフィールに持つもの（どれも null＝食べていない）：
+--   meal_burger＝上がるステのキー（str・dex・agi・int_stat・vit・luk）／meal_major・meal_minor＝乗ったトッピングの状態異常のキー（頼まなければ null）／
+--   meal_until＝切れる時刻（過ぎたら画面は数えない。消さずに残しておく）
+alter table public.v2cap_profiles add column if not exists meal_burger text;
+alter table public.v2cap_profiles add column if not exists meal_major  text;
+alter table public.v2cap_profiles add column if not exists meal_minor  text;
+alter table public.v2cap_profiles add column if not exists meal_until  timestamptz;
+
+create or replace function public.v2cap_burger_buy(p_burger text, p_major boolean default false, p_minor boolean default false)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_burger_gold  constant int := 1000;   -- burger.js の BURGER_GOLD
+  c_topping_gold constant int := 500;    -- burger.js の TOPPING_GOLD
+  c_minutes      constant int := 60;     -- burger.js の MEAL_MINUTES
+  c_stats constant text[] := array['str', 'dex', 'agi', 'int_stat', 'vit', 'luk'];
+  c_major constant text[] := array['bleed', 'poison', 'slow', 'paralyze', 'burn'];
+  c_minor constant text[] := array['seal', 'fear', 'blind', 'curse', 'frenzy', 'weaken'];
+  v_uid   uuid := auth.uid();
+  v_row   public.v2cap_profiles;
+  v_cost  bigint;
+  v_major text;
+  v_minor text;
+  v_until timestamptz;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if p_burger is null or not (p_burger = any(c_stats)) then
+    return jsonb_build_object('ok', false, 'error', 'バーガーが正しくありません');
+  end if;
+  select * into v_row from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  v_cost := c_burger_gold
+    + case when coalesce(p_major, false) then c_topping_gold else 0 end
+    + case when coalesce(p_minor, false) then c_topping_gold else 0 end;
+  if v_row.gold < v_cost then return jsonb_build_object('ok', false, 'error', 'Goldが足りません'); end if;
+  if coalesce(p_major, false) then v_major := c_major[1 + floor(random() * array_length(c_major, 1))::int]; end if;
+  if coalesce(p_minor, false) then v_minor := c_minor[1 + floor(random() * array_length(c_minor, 1))::int]; end if;
+  v_until := now() + make_interval(mins => c_minutes);
+  update public.v2cap_profiles
+     set gold = gold - v_cost, meal_burger = p_burger, meal_major = v_major, meal_minor = v_minor, meal_until = v_until, updated_at = now()
+   where id = v_uid;
+  return jsonb_build_object('ok', true, 'spent', v_cost, 'gold', v_row.gold - v_cost,
+    'meal_burger', p_burger, 'meal_major', v_major, 'meal_minor', v_minor, 'meal_until', v_until);
+end;
+$$;
+revoke all on function public.v2cap_burger_buy(text, boolean, boolean) from public, anon;
+grant execute on function public.v2cap_burger_buy(text, boolean, boolean) to authenticated;

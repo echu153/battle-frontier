@@ -75,7 +75,9 @@ export default function V2capTower({ prof, inventory, onProfile }) {
   const guardFloor = guardRow?.floor || prof?.tower_guard || null
   const floor = clampFloor(prof?.tower_floor || 1)
   // 自分の戦闘力を先に出す（空いている層のNPCはこれに合わせて底上げされる＝tower.js の npcPowerFor）
-  const me = useMemo(() => playerFighter(prof, inventory), [prof, inventory])
+  // ★ニャーガーキングの食事（2026-10-25）は戦うときだけ足す。NPCの底上げ・連勝補正の比べ合い・守護者として残す姿は
+  //   食事なし（meal:null）＝食べたぶんが相手の底上げで打ち消されない・食事が切れたあとも守護者に残らない
+  const me = useMemo(() => playerFighter(prof, inventory, { meal: null }), [prof, inventory])
   const myPower = calcPower(me.stats)
   const champ = useMemo(() => champOf(floor, byFloor[floor], myPower), [floor, byFloor, myPower])
   const preview = useMemo(() => towerBattleOf({ me, myLv: prof?.lv, champ, floor }), [me, prof?.lv, champ, floor])
@@ -107,7 +109,9 @@ export default function V2capTower({ prof, inventory, onProfile }) {
     try {
       // 自分のアイコンの男女はキャラの性別（2026-10-21・gender.js。まだ決めていないキャラだけ神殿の切り替え）。守護者になったときの姿にも入れる
       const gender = artGenderOf(prof, loadPref('capArtGender', 'm'))
-      const { a, b, bonus } = towerBattleOf({ me, myLv: prof.lv, champ, floor })
+      // 戦うのは、いま効いている食事を足した姿（押した時点で数える）。連勝補正は食事なしの戦闘力で比べる
+      const fed = playerFighter(prof, inventory)
+      const { a, b, bonus } = towerBattleOf({ me: fed, myLv: prof.lv, champ, floor, myPower })
       const r = runBattle(a, b)
       const win = r.winner === 'a'
       // 装備は出撃のふつうの敵と同じ（開いている一番先の場所・勝ち負けによらず）

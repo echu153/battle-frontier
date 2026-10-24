@@ -27,6 +27,7 @@ import {
 } from './casino.js'
 import { FLOORS as TOWER_FLOORS, LOSE_DROP as TOWER_LOSE } from './tower.js'
 import { DEX_AREA_STAM } from './dex.js'
+import { BURGER_GOLD, TOPPING_GOLD, MEAL_MINUTES, MEAL_STATS, toppingsOf } from './burger.js'
 import { rewrite } from '../../../tools/v2cap-sql.mjs'
 
 // ★改行はLFにそろえてから見る（Windowsで core.autocrlf=true のまま取り出すとCRLFになり、改行を含む正規表現が合わなくなる。
@@ -1056,4 +1057,26 @@ test('【確定】2026-10-24 図鑑の報酬（§15）：エリアの敵を全�
   // 前から倒していた敵のぶんも、流したときに数える（何回流しても同じ）＝敵の種と関数のあと
   const mig = SQL.indexOf('for r in select p.id from public.v2cap_profiles p where exists (select 1 from public.v2cap_kills k where k.player_id = p.id) loop')
   assert.ok(mig > SQL.indexOf('create or replace function public.v2cap_dex_settle(') && mig > SQL.indexOf('insert into public.v2cap_enemies'))
+})
+
+test('【確定】2026-10-25 ニャーガーキング（§16）：値段・時間・組の中身が burger.js と同じ・抽選とGoldはサーバー', () => {
+  // ユーザー指示「バーガーだけだと1000Gで…トッピングはどっちも500G」「60分」「メジャーとマイナーの語群から1つずつ抽選」
+  for (const c of ['meal_burger text', 'meal_major  text', 'meal_minor  text', 'meal_until  timestamptz']) {
+    assert.ok(SQL.includes(`alter table public.v2cap_profiles add column if not exists ${c};`), c)
+  }
+  const fn = fnBody('v2cap_burger_buy')
+  const arr = (xs) => `array[${xs.map(x => `'${x}'`).join(', ')}]`
+  assert.ok(fn.includes(`c_burger_gold  constant int := ${BURGER_GOLD};`))
+  assert.ok(fn.includes(`c_topping_gold constant int := ${TOPPING_GOLD};`))
+  assert.ok(fn.includes(`c_minutes      constant int := ${MEAL_MINUTES};`))
+  assert.ok(fn.includes(`c_stats constant text[] := ${arr(MEAL_STATS)};`), 'バーガーのステ')
+  assert.ok(fn.includes(`c_major constant text[] := ${arr(toppingsOf('major').map(t => t.ail))};`), 'メジャーの組')
+  assert.ok(fn.includes(`c_minor constant text[] := ${arr(toppingsOf('minor').map(t => t.ail))};`), 'マイナーの組')
+  assert.ok(fn.includes('if not public.v2cap_is_dev() then'), '開発限定')
+  assert.ok(fn.includes('for update;') && fn.includes("if v_row.gold < v_cost then return jsonb_build_object('ok', false, 'error', 'Goldが足りません'); end if;"))
+  assert.ok(fn.includes('v_major := c_major[1 + floor(random() * array_length(c_major, 1))::int]'), 'メジャーは組の中から1つ')
+  assert.ok(fn.includes('v_minor := c_minor[1 + floor(random() * array_length(c_minor, 1))::int]'), 'マイナーは組の中から1つ')
+  assert.ok(fn.includes('set gold = gold - v_cost, meal_burger = p_burger, meal_major = v_major, meal_minor = v_minor, meal_until = v_until'), '食べ直しは上書き')
+  assert.ok(SQL.includes('revoke all on function public.v2cap_burger_buy(text, boolean, boolean) from public, anon;'))
+  assert.ok(SQL.includes('grant execute on function public.v2cap_burger_buy(text, boolean, boolean) to authenticated;'))
 })

@@ -18,6 +18,7 @@ import V2capPoints from './V2capPoints.jsx'
 import V2capArmorSets from './V2capArmorSets.jsx'
 import V2capUniqueFx from './V2capUniqueFx.jsx'
 import { isUnique } from '../lib/equipment.js'
+import { SHOP_NAME, MEAL_COLOR, mealLineOf, leftText, burgerEffectText, toppingText } from '../lib/burger.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — ステータス欄（ホームの左）
@@ -97,6 +98,7 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
             {bd.gear[k] > 0 && <> ＋ 装備 <span style={{ color:'#44ff88' }}>{bd.gear[k]}</span></>}
             {extra > 0 && <> ＋ 軽装 <span style={{ color:'#88ddaa' }}>{extra}</span></>}
             {bd.set[k] > 0 && <> ＋ セット <span style={{ color:'#88ddaa' }}>{bd.set[k]}</span></>}
+            {bd.food[k] > 0 && <> ＋ ごはん <span style={{ color: MEAL_COLOR }}>{bd.food[k]}</span></>}
           </div>
         </>}>
         <span style={{ color: d.color, fontSize:'9px', flexShrink:0 }}>{d.label}</span>
@@ -221,6 +223,20 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
               {stamNow < stamMax && stamNext > 0 && <span style={{ color:'#4d6f92', fontSize:'10px' }}>{'　'}次まで {mmss(stamNext)}</span>}
             </span>
           </div>
+          {/* ニャーガーキングで食べたもの（効いている間だけ・2026-10-25）。カーソルで効き目 */}
+          {bd.meal && (
+            <div style={{ fontSize:'10px', color:'#9ec2e6' }}>
+              <V2Tip color={MEAL_COLOR} width="250px" style={{ borderBottom:`1px dotted ${MEAL_COLOR}` }}
+                body={<>
+                  <div style={{ color: MEAL_COLOR }}>{SHOP_NAME}</div>
+                  <div>{bd.meal.burger.name}：{burgerEffectText(bd.meal.stat)}</div>
+                  {[bd.meal.major, bd.meal.minor].filter(Boolean).map(a => <div key={a}>{toppingText(a)}</div>)}
+                </>}>
+                🍔 <span style={{ color: MEAL_COLOR }}>{mealLineOf(bd.meal)}</span>
+              </V2Tip>
+              <span style={{ color:'#7fa6d0' }}>{'　'}{leftText(bd.meal.leftMs)}</span>
+            </div>
+          )}
         </div>
       </div>
 
