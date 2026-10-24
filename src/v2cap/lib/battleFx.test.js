@@ -57,6 +57,8 @@ test('アイコン：ステは「STR」「↑25%」を重ねる。並びは 上�
   assert.equal(icons.find(x => x.id === 'shield').top, 'バリア')
   assert.equal(icons.find(x => x.id === 'regen').top, 'HP回復')
   assert.ok(icons.every(x => x.top), 'どのアイコンにも名前がある')
+  // 2026-10-24 ユーザー「背景あると見ずらいから一旦初期の感じでイラストなし、文字だけにしよう」：絵は出さない
+  assert.ok(icons.every(x => x.art === null), '絵は出さない（FX_ART_ON=false）')
   assert.equal(icons.find(x => x.id === 'bleed').corner, '×2')
   assert.equal(icons.find(x => x.id === 'int_stat'), undefined)
   assert.deepEqual(fxIconsOf(null), [])

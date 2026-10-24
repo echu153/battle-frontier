@@ -30,7 +30,8 @@ const Icon = ({ side, ...rest }) => <V2capIcon ring={SIDE_COLOR[side] || '#7fa6d
 
 // バフ・デバフ・状態異常のアイコン1つ（x は battleFx.js の fxIconsOf の1件）
 //   上に名前（「STR」「毒」「サイレンス」など）・下に「↑25%」やバリアの量・右下に残りターン（出血は ×スタック）を絵に重ねる
-//   絵が無い（読めない）ときは、下地の色と名前だけで出す
+//   絵が無いとき（いまは絵を出していない＝battleFx.js の FX_ART_ON）は、下地の色と文字だけ。
+//   下の文字が無いもの（状態異常・HP回復など）は、名前を真ん中に大きめに出す（初期の形・2026-10-24 ユーザー「一旦初期の感じでイラストなし、文字だけに」）
 // ★大きさ：2026-10-24 ユーザー「アイコンちょっと大きいかも、サイズ小さくできる？」で 34px → 28px（文字は 上7px・下と右下8px）
 const FX_SIZE = 28
 const FX_PX = { top: 7, bottom: 8, corner: 8 }
@@ -51,13 +52,18 @@ function FxIcon({ x }) {
   const art = x.art && !broken
   const tone = x.kind === 'up' ? FX_UP : x.kind === 'down' ? FX_DOWN : null
   const ring = tone ? tone.ring : x.color
+  // 絵が無くて下の文字も無い → 名前を真ん中に（2文字までは10px・長いものは8pxで横に縮める）。
+  //   色はその効果の色に白を4割まぜる（暗闇の灰色・MP回復の青などが下地に沈まないように）
+  const mid = !art && !x.bottom ? x.top : null
+  const midPx = mid && [...mid].reduce((w, c) => w + (c <= '\x7e' ? 0.6 : 1), 0) <= 2 ? 10 : 8
   return (
     <div title={x.title} style={{ position: 'relative', boxSizing: 'border-box', width: FX_SIZE, height: FX_SIZE, flexShrink: 0, borderRadius: '4px',
       border: `1px solid ${ring}`, overflow: 'hidden', boxShadow: `0 0 4px ${ring}55`,
       background: `radial-gradient(circle at 50% 40%, ${tone ? tone.bg : `${x.color}55`} 0%, #0a1424 85%)` }}>
       {art && <img src={x.art} alt="" width={FX_SIZE} height={FX_SIZE} draggable={false} onError={() => setBroken(true)}
         style={{ position: 'absolute', inset: '1px', width: 'calc(100% - 2px)', height: 'calc(100% - 2px)', objectFit: 'contain' }} />}
-      {x.top && <FxText s={x.top} px={FX_PX.top} color="#fff" pos={{ top: '1px' }} />}
+      {mid && <FxText s={mid} px={midPx} color={`color-mix(in srgb, ${x.color} 60%, #fff)`} pos={{ top: '50%', transform: 'translateY(-60%)' }} />}
+      {x.top && !mid && <FxText s={x.top} px={FX_PX.top} color="#fff" pos={{ top: '1px' }} />}
       {x.bottom && <FxText s={x.bottom} px={FX_PX.bottom} color={tone ? tone.text : '#fff'} pos={{ bottom: '1px' }} />}
       {x.corner && <div style={{ position: 'absolute', right: '1px', bottom: '0px', fontSize: `${FX_PX.corner}px`, lineHeight: 1, fontWeight: 'bold', color: '#fff',
         textShadow: OUTLINE, whiteSpace: 'nowrap', pointerEvents: 'none' }}>{x.corner}</div>}

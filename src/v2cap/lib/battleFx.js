@@ -75,7 +75,10 @@ const ID_BY_FILE = new Map([
 ])
 export const fxIdOfFile = (name) => ID_BY_FILE.get(normFile(name)) || null
 
-export const fxArtSrc = (id) => (FX_ART_IDS.includes(id) ? `${FX_ART_DIR}/${id}.webp` : null)
+// ★絵を出すか。2026-10-24 ユーザー「なんか背景あると見ずらいから一旦初期の感じでイラストなし、文字だけにしよう。大きさは今のまま」で false
+//   （絵の上に文字を重ねると読みにくい）。作った絵（public/fx-art）・一覧・ツールは残してあるので、true にすれば戻る
+export const FX_ART_ON = false
+export const fxArtSrc = (id) => (FX_ART_ON && FX_ART_IDS.includes(id) ? `${FX_ART_DIR}/${id}.webp` : null)
 
 // バリアの量を短く（アイコンの中に入るように）
 export const shortNum = (n) => (n >= 100000 ? `${Math.floor(n / 10000)}万` : n >= 10000 ? `${(Math.floor(n / 1000) / 10).toFixed(1)}万` : n.toLocaleString())
