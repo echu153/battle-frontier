@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import {
   CLERK_ART_DIR, CLERK_FACES, CLERK_FACE_KEYS, CLERK_WELCOME, CLERK_MARK, CLERK_FACE_SIZE, CLERK_WELCOME_H, CLERK_MARK_SIZE,
-  CLERK_LINES, fillLine, pickLine, isNight, nextStreak, tapKindOf, enterKindOf, welcomeDueLocal, STREAK_MS,
+  CLERK_LINES, fillLine, pickLine, isNight, nextStreak, tapKindOf, enterKindOf, welcomeDueLocal, STREAK_MS, makeWelcomeAsker,
 } from './clerk.js'
 
 const PUB = new URL('../../../public/', import.meta.url)
@@ -103,6 +103,23 @@ test('店を開いたときのひとこと：夜おそく→眠そう・食事�
   assert.equal(enterKindOf(null, day), 'enter')
   assert.equal(enterKindOf({ burger: {} }, day), 'enterFed')
   assert.equal(enterKindOf({ burger: {} }, night), 'enterNight')
+})
+
+test('【2026-10-25 直した】サーバーには同じ日は1回だけ聞いて答えを使い回す（画面を2回作り直しても first=true が届く）', async () => {
+  let asked = 0
+  let day = '2026-10-24'
+  const w = makeWelcomeAsker(async () => ({ data: { ok: true, first: ++asked === 1 } }), () => day)
+  const a = await w.get()
+  const b = await w.get()   // 開発モードの2回目の作り直し＝同じ答え
+  assert.equal(asked, 1)
+  assert.equal(a.data.first, true)
+  assert.equal(b.data.first, true)
+  w.done()                  // 出したら、同じ日に開き直しても出さない（サーバーにも聞かない）
+  assert.equal((await w.get()).data.first, false)
+  assert.equal(asked, 1)
+  day = '2026-10-25'        // 日付が変わったら聞き直す
+  await w.get()
+  assert.equal(asked, 2)
 })
 
 test('「いらっしゃいませー」はその日はじめてだけ（日本時間の5時で切り替え・SQLを流す前の端末の控え）', () => {

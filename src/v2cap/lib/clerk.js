@@ -116,4 +116,20 @@ export const enterKindOf = (meal, at = new Date()) => (isNight(at) ? 'enterNight
 
 // その日はじめてか（サーバーの関数が無いとき＝SQLを流す前の端末の控え）。lastDay＝前に出した日（'2026-10-25'）
 export const welcomeDueLocal = (lastDay, at = new Date()) => String(lastDay || '') !== dayOf(at)
+
+// その日の「いらっしゃいませー」を出すかをサーバー（v2cap_burger_welcome）に聞く窓口。ask＝聞く関数（{ data, error } を返す）
+// ★同じ日は1回だけ聞いて、答えを使い回す。【2026-10-25 直した】聞くとサーバーは今日の印を付けるので、2回目に聞くと first=false になる。
+//   React の開発モード（StrictMode）は画面を2回作り直す＝1回目の答え（first=true）が捨てられ、2回目は false で全画面が出なかった
+//   （店を開いてすぐ閉じたときも同じことが起きうる）。出したら done で「もう出した」にする（同じ日に店を開き直しても出さない）
+export const makeWelcomeAsker = (ask, dayFn = () => dayOf()) => {
+  let cur = null
+  return {
+    get: () => {
+      const day = dayFn()
+      if (!cur || cur.day !== day) cur = { day, p: Promise.resolve().then(ask) }
+      return cur.p
+    },
+    done: () => { cur = { day: dayFn(), p: Promise.resolve({ data: { ok: true, first: false } }) } },
+  }
+}
 export { dayOf }

@@ -10,7 +10,7 @@ import {
   MEAL_COLOR, MEAL_MINUTES, BURGERS, BURGER_BY_STAT, TOPPING_GROUPS, TOPPING_BY_AIL, BURGER_GOLD, TOPPING_GOLD,
   TOPPING_RESIST_PCT, toppingsOf, mealCostOf, activeMealOf, leftText, burgerEffectText, toppingText,
 } from '../lib/burger.js'
-import { pickLine, enterKindOf, tapKindOf, nextStreak, isNight, welcomeDueLocal, dayOf } from '../lib/clerk.js'
+import { pickLine, enterKindOf, tapKindOf, nextStreak, isNight, welcomeDueLocal, dayOf, makeWelcomeAsker } from '../lib/clerk.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — ハンバーガー屋「ニャーガーキング」（2026-10-25）
@@ -31,6 +31,8 @@ const gold = (n) => `${Number(n || 0).toLocaleString()}G`
 const leftShort = (ms) => leftText(ms).replace(/^残り/, '')
 // SQLを流す前（サーバーの関数が無いとき）に、その日の「いらっしゃいませー」を出したかを端末に覚える名前
 const WELCOME_PREF = 'capBurgerWelcome'
+// その日の「いらっしゃいませー」をサーバーに聞く窓口（同じ日は1回だけ聞いて答えを使い回す＝lib/clerk.js の makeWelcomeAsker）
+const welcomeAsker = makeWelcomeAsker(() => supabase.rpc('v2cap_burger_welcome'))
 
 // 組の中身（トマト＝出血 など）
 function GroupList({ group }) {
@@ -79,9 +81,9 @@ export default function V2capBurger({ prof, onProfile }) {
   useEffect(() => {
     let alive = true
     ;(async () => {
-      const { data, error: e } = await supabase.rpc('v2cap_burger_welcome')
+      const { data, error: e } = await welcomeAsker.get()
       if (!alive) return
-      if (!e && data?.ok) { if (data.first) setWelcome(true); return }
+      if (!e && data?.ok) { if (data.first) { welcomeAsker.done(); setWelcome(true) } return }
       if (welcomeDueLocal(loadPref(WELCOME_PREF, ''))) { savePref(WELCOME_PREF, dayOf()); setWelcome(true) }
     })()
     return () => { alive = false }
