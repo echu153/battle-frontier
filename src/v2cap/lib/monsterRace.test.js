@@ -93,5 +93,12 @@ test('図鑑：倒した敵の行と大きく出す小窓に種族の札。倒�
   const ui = readFileSync(new URL('../components/V2capDex.jsx', import.meta.url), 'utf8')
   assert.ok(ui.includes('{found && <RaceTag name={e.name} />}'), '行は倒してから')
   assert.ok(ui.includes('<RaceTag name={e.name} size={11} />'), '大きく出す小窓の上の帯')
+  // 札はモンスター名のすぐ後ろ（2026-10-25 ユーザー指示「モンスター名の後に種族が来るようにして」）。行も大きく出す小窓も
+  const row = ui.indexOf("{found ? e.name : '???'}</span>")
+  assert.ok(row > 0 && ui.indexOf('{found && <RaceTag name={e.name} />}') > row, '行：名前 → 種族')
+  assert.ok(ui.indexOf('{found && <RaceTag name={e.name} />}') - row < 80, '行：名前のすぐ後ろ（間にほかの札を挟まない）')
+  const zoom = ui.slice(ui.indexOf('function ZoomModal'))
+  const zName = zoom.indexOf('}}>{e.name}</span>'), zRace = zoom.indexOf('<RaceTag name={e.name} size={11} />'), zRole = zoom.indexOf('{role.label}')
+  assert.ok(zName > 0 && zName < zRace && zRace < zRole, '大きく出す小窓：名前 → 種族 → 役割の札')
   assert.ok(ui.includes("モンスターには種族があります（{RACES.map(r => r.label).join('・')}）。"))
 })

@@ -137,8 +137,12 @@ export default function V2capDex({ prof }) {
                       <span style={{ color: role.color, fontSize:'9px', border:`1px solid ${role.color}`, padding:'0 4px', flexShrink:0 }}>
                         {role.label}{e.band ? `・${e.band}` : ''}
                       </span>
-                      {found && <RaceTag name={e.name} />}
-                      <span style={{ color: found ? '#cfe2ff' : TEXT.empty, flex:1, minWidth:0 }}>{found ? e.name : '???'}</span>
+                      {/* 種族の札はモンスター名のすぐ後ろ（2026-10-25 ユーザー指示「モンスター名の後に種族が来るようにして」）。
+                          名前と札をひとまとまりにして、残りの幅はこのまとまりが取る（LVは右端のまま） */}
+                      <span style={{ flex:1, minWidth:0, display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap' }}>
+                        <span style={{ color: found ? '#cfe2ff' : TEXT.empty, minWidth:0 }}>{found ? e.name : '???'}</span>
+                        {found && <RaceTag name={e.name} />}
+                      </span>
                       <span style={{ color: found ? '#cfe2ff' : TEXT.empty, fontSize:'11px' }}>LV{found ? lvText(e) : '??'}</span>
                       <span style={{ color: TEXT.label, fontSize:'10px' }}>{e.subs.map(s => SUB_MARK[s - 1]).join('')}</span>
                     </div>
@@ -179,8 +183,9 @@ function ZoomModal({ e, onClose }) {
   const title = (
     <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
       <span style={{ fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'20px', color:'#ffffff', textShadow:`0 0 8px ${role.color}88` }}>{e.name}</span>
-      <span style={{ color: role.color, border:`1px solid ${role.color}`, padding:'0 5px', fontSize:'11px' }}>{role.label}{e.band ? `・${e.band}` : ''}</span>
+      {/* 種族は名前のすぐ後ろ（一覧の行と同じ・2026-10-25 ユーザー指示「モンスター名の後に種族が来るようにして」） */}
       <RaceTag name={e.name} size={11} />
+      <span style={{ color: role.color, border:`1px solid ${role.color}`, padding:'0 5px', fontSize:'11px' }}>{role.label}{e.band ? `・${e.band}` : ''}</span>
       <span style={{ color:'#cfe2ff', fontSize:'13px' }}>LV{lvText(e)}</span>
     </div>
   )
