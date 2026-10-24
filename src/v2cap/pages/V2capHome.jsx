@@ -101,6 +101,17 @@ const menuOf = (prof) => {
 // 今のⅡと同じ2列（grid の auto-fit は列を同じ幅にしかできないので flex で組む）
 //   左 … flex:'1 1 340px'／右 … flex:'999 1 340px'＝余った幅はほぼ右へ。688px より狭いと折り返して1列
 const TWO_COLUMN = { display:'flex', flexWrap:'wrap', gap:'8px', alignItems:'flex-start', maxWidth:'980px', margin:'0 auto' }
+
+// ★開いたときの待ちを減らす（2026-10-25 ユーザー指示「V2のホームが表示前に待つ問い合わせを減らして（約5回→2〜3回）」）：
+//   ・だれがログインしているかは端末に残っているセッションで見る（getSession＝サーバーへ行かない）。前の getUser は毎回サーバーへ聞きに行き、
+//     このPCからは1回およそ0.3秒かかっていた。権限はサーバー（表の RLS・各RPCの v2cap_is_dev）が確かめるので、画面の確かめは端末のもので足りる
+//   ・管理者かどうか（profiles）と、この版のキャラ・持ち物を同時に聞く。前は「確かめ→管理者→確かめ→キャラと持ち物」の4回を順番に待っていた
+//   → 開くときに待つのは、入口（App.jsx の checkChar）の1回と、ここの1回の合わせて2回（homeLoad.test.js が見張る）。子の画面から取り直すとき（refresh）も1回
+const sessionUserId = async () => (await supabase.auth.getSession()).data.session?.user?.id || null
+const fetchCap = (uid) => Promise.all([
+  supabase.from('v2cap_profiles').select('*').eq('id', uid).maybeSingle(),
+  supabase.from('v2cap_inventory').select('*').order('id', { ascending:false }),
+])
 const COL_LEFT  = { flex:'1 1 340px', minWidth:0 }
 const COL_RIGHT = { flex:'999 1 340px', minWidth:0 }
 
@@ -128,39 +139,43 @@ export default function V2capHome() {
   const [openMenu, toggleMenu] = useCapFold(prof, 'openMenu')
   const [openDaily, toggleDaily] = useCapFold(prof, 'openDaily')
 
-  const load = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return null
-    const [{ data: p, error: e1 }, { data: inv, error: e2 }] = await Promise.all([
-      supabase.from('v2cap_profiles').select('*').eq('id', user.id).maybeSingle(),
-      supabase.from('v2cap_inventory').select('*').order('id', { ascending:false }),
-    ])
+  // この版のキャラと持ち物を入れる（fetchCap の返り値）。読めなければ投げる（SQLがまだ流されていない など）
+  const applyCap = useCallback(([{ data: p, error: e1 }, { data: inv, error: e2 }]) => {
     if (e1 || e2) throw new Error((e1 || e2).message || String(e1 || e2))
     setProf(p || null)
     setInventory(inv || [])
     return p
   }, [])
+  const load = useCallback(async () => {
+    const uid = await sessionUserId()
+    if (!uid) return null
+    return applyCap(await fetchCap(uid))
+  }, [applyCap])
 
   useEffect(() => {
     let alive = true
     ;(async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) { nav('/login'); return }
-        const { data: p } = await supabase.from('profiles').select('username, is_admin').eq('id', user.id).maybeSingle()
+        const uid = await sessionUserId()
+        if (!uid) { nav('/login'); return }
+        // 管理者かどうかと、この版のキャラ・持ち物を同時に聞く（下の fetchCap の注）
+        const [{ data: p }, cap] = await Promise.all([
+          supabase.from('profiles').select('username, is_admin').eq('id', uid).maybeSingle(),
+          fetchCap(uid),
+        ])
         // ★開発限定。管理者以外は旧版へ戻す（アクセスは管理者へ通知）
         if (!p?.is_admin) { reportDevAccess('v2cap', 'V2レベルキャップあり[開発]'); nav('/game'); return }
         if (!alive) return
         setName(p?.username || '')
         setIsAdmin(!!p?.is_admin)
-        await load()
+        applyCap(cap)
       } catch (err) {
         if (alive) setSqlError(err.message || String(err))
       }
       if (alive) setLoading(false)
     })()
     return () => { alive = false }
-  }, [nav, load])
+  }, [nav, applyCap])
 
   // 子の画面から呼ぶ。サーバーから取り直す
   const refresh = useCallback(async () => {
