@@ -28,8 +28,8 @@ import { SHOP_NAME, MEAL_COLOR, mealPartsOf, leftText, burgerEffectText, topping
 //   ・左上のアイコンは自分で設定する（プロフィール。無いときは点線の枠＝押すとプロフィールへ）
 //   ・名前の下に「LV2/100」、その下に「クラス：盗賊　LV3/30」（ClassLV＝初期職30・上位職50で止まる）・EXPとClassEXPの2本のバー
 //     （2026-10-12 ユーザー指示「この書き方にして」「クラス：盗賊　Lv3/30　にして」＝表記ルールどおり LV。前は「[初期] 盗賊 LV2／100」「ClassLV: 2／30」）
-//   ・ステの升目は合計だけ（2026-10-12 ユーザー指示「ホーム画面の数値は最終値だけ」）。内訳（本体＋クラス＋装備＋軽装のAGI）は
-//     カーソルで出す＋プロフィールに表で出す（V2capProfile）・まだ振っていないステータスポイントの「振る」
+//   ・ステの升目は合計だけ（2026-10-12 ユーザー指示「ホーム画面の数値は最終値だけ」）。内訳（本体＋クラス＋装備＋アセンション…）は
+//     プロフィールの表だけで出す（V2capProfile・2026-10-25 ユーザー指示でカーソルの小窓からは外した）・まだ振っていないステータスポイントの「振る」
 //   ・装備は7枠（武器1・頭・鎧・腕・足・装飾品2）。名前はレア度の色・強化値。必要LVに足りないときの「要求LV不足」はタップしたときの小窓にだけ
 //     （2026-10-23 ユーザー指示「ホーム画面では○○相当いらない」。前は名前の横に「LV〇相当」＝2026-10-18〜・その前は効果%）。
 //     カーソルで上がるステ・防具の効果も出す（2026-10-12 ユーザー指示「どの能力が上がってるのかわかるように」）
@@ -81,10 +81,11 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
   const classColor = stageColorOf(prof.class)
 
   // map の (値, 添字)。添字が奇数＝右の列（右端をそろえて左へ伸ばす）
-  // ★升目の数は合計だけ（2026-10-12 ユーザー指示「ホーム画面の数値は最終値だけ」）。内訳はカーソルとプロフィールで見る
+  // ★升目の数は合計だけ（2026-10-12 ユーザー指示「ホーム画面の数値は最終値だけ」）。
+  //   【確定】2026-10-25 ユーザー指示「ホーム画面のこれいらないかも、プロフィールのところで確認できればいい」：
+  //   カーソルの小窓はステの名前と説明だけ（前は「本体 408 ＋ クラス 324 …」の内訳の行も出していた）。内訳はプロフィールの表（V2capBreakdown）で見る
   const statCell = (k, i) => {
     const d = STAT_DEFS[k]
-    const extra = k === 'agi' ? bd.armorAgi : 0
     return (
       <V2Tip key={k} alignRight={i % 2 === 1} color={d.color} width="max(100%, 230px)"
         style={{ ...cell, justifyContent:'flex-start' }}
@@ -92,14 +93,6 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
           <span style={{ color: d.color }}>{d.label}</span>
           <span style={{ color:'#7fa6d0' }}>（{d.jp}）</span>
           <div style={{ marginTop:'2px' }}>{d.detail}</div>
-          <div style={{ marginTop:'4px', color:'#cfe2ff' }}>
-            本体 {bd.body[k]}
-            {bd.job[k] > 0 && <> ＋ クラス <span style={{ color:'#ffcc00' }}>{bd.job[k]}</span></>}
-            {bd.gear[k] > 0 && <> ＋ 装備 <span style={{ color:'#44ff88' }}>{bd.gear[k]}</span></>}
-            {extra > 0 && <> ＋ 軽装 <span style={{ color:'#88ddaa' }}>{extra}</span></>}
-            {bd.set[k] > 0 && <> ＋ セット <span style={{ color:'#88ddaa' }}>{bd.set[k]}</span></>}
-            {bd.food[k] > 0 && <> ＋ ごはん <span style={{ color: MEAL_COLOR }}>{bd.food[k]}</span></>}
-          </div>
         </>}>
         <span style={{ color: d.color, fontSize:'9px', flexShrink:0 }}>{d.label}</span>
         <span style={{ color:'#82a2c2', fontSize:'9px', flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{d.desc}</span>
