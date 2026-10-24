@@ -142,7 +142,9 @@ export default function V2capBurger({ prof, onProfile, dev = false }) {
         <V2Modal title="🍔 食べ直しますか？" color={MEAL_COLOR} busy={busy} confirmLabel={`${gold(cost)}で注文する`}
           onConfirm={order} onClose={cancelConfirm}>
           <ClerkSays face={clerk.face} line={clerk.text} />
-          いま効いている「{meal.burger.name}」（{leftText(meal.leftMs)}）は消えて、新しく食べたものが{MEAL_MINUTES}分効きます。
+          {/* 2026-10-25 ユーザー指示の文（前は「いま効いている「〇〇」（残り◯分）は消えて、新しく食べたものが60分効きます。」） */}
+          <div>適用中の「{meal.burger.name}」の効果は消えて、新しく食べたものが適用されます。</div>
+          <div style={{ color: TEXT.sub, fontSize:'11px' }}>（適用中の「{meal.burger.name}」は{leftText(meal.leftMs)}適用）</div>
         </V2Modal>
       )}
       {served && (
@@ -173,7 +175,7 @@ export default function V2capBurger({ prof, onProfile, dev = false }) {
           {/* いま食べているもの */}
           <div style={{ ...box, padding:'10px 12px', marginBottom:'8px' }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
-              <span style={{ color: TEXT.label, fontSize:'11px' }}>いま効いている食事</span>
+              <span style={{ color: TEXT.label, fontSize:'11px' }}>適用中のバーガー</span>
               <button type="button" onClick={() => setHelp(true)} style={miniBtn('#88aaff')}>❓ HELP</button>
             </div>
             {meal ? (
@@ -207,7 +209,7 @@ export default function V2capBurger({ prof, onProfile, dev = false }) {
           {/* ② トッピング */}
           <div style={{ ...box, padding:'10px 12px', marginBottom:'8px' }}>
             {/* 決まりの説明は HELP へ（2026-10-25 ユーザー指示「ここら辺はHELPに載せて」） */}
-            <div style={{ color: MEAL_COLOR, fontSize:'12px', marginBottom:'6px' }}>② トッピング<span style={{ color: TEXT.sub, fontSize:'10px', marginLeft:'6px' }}>各{gold(TOPPING_GOLD)}・頼まなくてもよい</span></div>
+            <div style={{ color: MEAL_COLOR, fontSize:'12px', marginBottom:'6px' }}>② トッピング<span style={{ color: TEXT.sub, fontSize:'10px', marginLeft:'6px' }}>各{gold(TOPPING_GOLD)} ※任意</span></div>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(240px, 1fr))', gap:'6px' }}>
               {TOPPING_GROUPS.map(g => {
                 const on = tops[g.key]
