@@ -28,6 +28,10 @@ export const CLERK_CSS = `
 .nk-clerk-btn { background: none; border: 0; padding: 0; cursor: pointer; line-height: 0; -webkit-tap-highlight-color: transparent;
   box-shadow: none; border-radius: 0; }
 .nk-clerk-btn:focus-visible { outline: 2px solid ${MEAL_COLOR}; outline-offset: 4px; border-radius: 8px; }
+/* 光り方は控えめに（2026-10-25 ユーザー指示「タップするとき発光しすぎ…枠の白枠はそのままでいい」）。
+   ボタン全体の決まり（src/dev-ui.css の hover＝brightness(1.3)・active＝0.85）を、看板娘の絵だけ弱める。枠（影の光）はそのまま */
+.nk-clerk-btn:not(:disabled):hover { filter: brightness(1.05); }
+.nk-clerk-btn:not(:disabled):active { filter: brightness(0.95); }
 .nk-clerk-btn img { display: block; height: min(470px, 62vh); width: auto; max-width: 100%; animation: nkHop .28s ease-out; }
 @media (max-width: 720px) {
   .nk-cols { grid-template-columns: minmax(0, 1fr); }
