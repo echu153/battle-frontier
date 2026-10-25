@@ -7,7 +7,8 @@
 //   ・店の画面の右に、腰から上の絵を大きく立たせる（スマホは上）。タップでセリフと表情が変わる（ユーザー選択）
 //   ・その日はじめて店を開いたときだけ、全身の「いらっしゃいませー！」を画面いっぱいに出す。タップで閉じる（ユーザー選択）
 //     日付は日本時間の5時で切り替える（サーバーの v2cap_burger_welcome が覚える。SQLを流す前は端末に覚える）
-//   ★裏設定：中身はふつうの人間で、猫耳は付け耳（ユーザー「イラスト上じゃわからない、小ネタ」）。セリフでもばらさない
+//   ★裏設定：中身はふつうの人間で、猫耳は付け耳（ユーザー「イラスト上じゃわからない、小ネタ」）。絵ではばらさない。
+//     セリフでは仲良くなってからだけ（2026-10-25 ユーザー指示「小ネタや伏線をもう少し詰めたい（仲良くなってから）」：23日目から前ふり・30日目から打ち明け）
 // ============================================================
 import { dayOf } from '../core/daily.js'
 
@@ -61,7 +62,8 @@ export const callNameOf = (profile) =>
 // ===== セリフ（【確定】2026-10-25 ユーザーが案を見て「語尾の『ニャ』を全部外す」を選んだ＝ふつうの話し方）=====
 // ★店の名前（ニャーガーキング）とバーガーの名前（〜ニャッパー）のほかに「ニャ」を使わない（clerk.test.js が見張る）
 // face＝出す表情。{burger}＝バーガーの名前・{left}＝残り時間（「42分」）・{toppings}＝乗ったトッピング（「ピクルスとガーリック」）・
-// {name}＝呼び方（「〇〇くん」）・{username}＝キャラクター名。min／max＝出す好感度の段階（書いていなければ0から・上限なし）
+// {name}＝呼び方（「〇〇くん」）・{username}＝キャラクター名。min／max＝出す好感度の段階（書いていなければ0から・上限なし）・
+// dayMin／dayMax＝出す好感度（話しかけた日の数）・rare＝出にくい（ほかの CLERK_RARE_WEIGHT 倍＝伏線のセリフ）
 export const CLERK_LINES = {
   // 全身の「いらっしゃいませー」（その日はじめて）
   welcome: [{ face: 'smile', text: 'いらっしゃいませー！' }],
@@ -109,10 +111,24 @@ export const CLERK_LINES = {
     { min: 1, face: 'normal', text: '出撃、気をつけてね。ちゃんと食べてから行くんだよ？' },
     { min: 2, face: 'wink', text: '実は新しいバーガーを考えてるんだ。…まだ秘密！' },
     { min: 2, face: 'smug', text: 'パティを焼くのはね、火加減が命なの。強すぎても弱すぎてもダメ！' },
-    { min: 2, face: 'smug', text: 'お店が終わったら、こっそり体を動かしてるんだ。けっこう鍛えてるんだよ？' },
+    { min: 2, rare: true, face: 'smug', text: 'お店が終わったら、こっそり体を動かしてるんだ。けっこう鍛えてるんだよ？' },
     { min: 3, face: 'shy', text: '{name}が来てくれると、なんだか元気が出るんだ' },
     { min: 3, face: 'wink', text: '{name}のぶん、いつもちょっとだけ多めに焼いてるの。…内緒だよ？' },
     { min: 3, face: 'normal', text: '{name}、無理しちゃだめだよ。ちゃんと休んでね' },
+    // 【確定】2026-10-25 ユーザー指示「小ネタや伏線をもう少し詰めたい（仲良くなってから）」＋選んだこと：タップに混ぜるだけ・伏線は出にくく（rare）
+    // 付け耳の小ネタ：23〜29日目は前ふり（耳がずれて慌てる）・30日目から打ち明け（ユーザー選択）・35日目からその後の話
+    { dayMin: 23, dayMax: 29, face: 'surprised', text: 'あっ…！ い、今の見てないよね？ 耳がちょっと…な、なんでもない！' },
+    { dayMin: 30, face: 'shy', text: '{name}にだけ教えるね。…この猫耳、実は付け耳なんだ。みんなには内緒だよ？' },
+    { dayMin: 35, face: 'normal', text: '耳のこと、ほかの人には言ってないよね？ …信じてるからね' },
+    { dayMin: 35, face: 'wink', text: '今日は耳、新しいのにしてみたんだ。…気づいた？' },
+    { dayMin: 35, face: 'smug', text: '本物の猫耳だと思ってた？ ふふ、よく言われるんだ' },
+    // 体術の伏線（出にくい）：強さは20日目から・昔の話を少しは26日目から（ユーザー選択「強さ＋昔の話を少し」）
+    { dayMin: 20, rare: true, face: 'smug', text: 'この前、お店に変な人が来たんだけど…ちょっと「お話し」したら帰ってくれたよ' },
+    { dayMin: 20, rare: true, face: 'normal', text: '重いお肉の箱？ 片手でひょいっと運べるよ。…え、普通じゃないの？' },
+    { dayMin: 20, rare: true, face: 'shy', text: 'パティをこねてたら、まな板が割れちゃった…力加減ってむずかしいね' },
+    { dayMin: 26, rare: true, face: 'wink', text: 'わたしね、ここで働く前は…ううん、やっぱりまだ内緒！' },
+    { dayMin: 26, rare: true, face: 'smug', text: '{name}の構え、ちょっと見せて。…うん、悪くないね。なんで分かるのかって？ ふふ、ひみつ' },
+    { dayMin: 33, rare: true, face: 'normal', text: '昔ね、すっごく厳しい師匠がいたんだ。…今ごろ何してるかな' },
   ],
   tapNight: [
     { face: 'sleepy', text: 'むにゃ…あっ、起きてます！ ちゃんと起きてます！' },
@@ -167,14 +183,20 @@ export const stageEventOf = (stage, seen = 0) => {
 // {名前} を埋める
 export const fillLine = (text, vars = {}) => text.replace(/\{(\w+)\}/g, (m, k) => (vars[k] ?? m))
 
-// 場面 kind のセリフを1つ選ぶ。stage＝好感度の段階（その段階で出せるものだけ）・last＝直前のセリフの文（同じものが続かないように・2つ以上あるときだけ）
-export const linesOf = (kind, stage = 0) =>
-  (CLERK_LINES[kind] || CLERK_LINES.tap).filter(l => (l.min ?? 0) <= stage && stage <= (l.max ?? Infinity))
-export const pickLine = (kind, { rng = Math.random, last = null, vars = {}, stage = 0 } = {}) => {
-  const list = linesOf(kind, stage)
+// 場面 kind のセリフを1つ選ぶ。stage＝好感度の段階・aff＝好感度（話しかけた日の数・省くとその段階のいちばん下）＝その好感度で出せるものだけ。
+// last＝直前のセリフの文（同じものが続かないように・2つ以上あるときだけ）。rare のセリフは CLERK_RARE_WEIGHT 倍しか出ない
+export const CLERK_RARE_WEIGHT = 0.25
+const minAffOf = (stage) => CLERK_STAGES.find(s => s.stage === stage)?.min ?? 0
+export const linesOf = (kind, stage = 0, aff = minAffOf(stage)) =>
+  (CLERK_LINES[kind] || CLERK_LINES.tap).filter(l =>
+    (l.min ?? 0) <= stage && stage <= (l.max ?? Infinity) && (l.dayMin ?? 0) <= aff && aff <= (l.dayMax ?? Infinity))
+const weightOf = (l) => (l.rare ? CLERK_RARE_WEIGHT : 1)
+export const pickLine = (kind, { rng = Math.random, last = null, vars = {}, stage = 0, aff = minAffOf(stage) } = {}) => {
+  const list = linesOf(kind, stage, aff)
   const pool = list.length > 1 && last ? list.filter(l => fillLine(l.text, vars) !== last) : list
   const from = pool.length ? pool : list
-  const l = from[Math.min(from.length - 1, Math.floor(rng() * from.length))]
+  let r = rng() * from.reduce((t, l) => t + weightOf(l), 0)
+  const l = from.find(x => (r -= weightOf(x)) < 0) || from[from.length - 1]
   return { face: l.face, text: fillLine(l.text, vars) }
 }
 

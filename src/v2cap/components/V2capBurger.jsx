@@ -78,11 +78,13 @@ export default function V2capBurger({ prof, onProfile, dev = false }) {
   const [aff, setAff] = useState(() => Number(prof?.clerk_affinity) || 0)
   const [seen, setSeen] = useState(() => Number(prof?.clerk_stage_seen) || 0)
   const [devAff, setDevAff] = useState(null)
-  const stage = stageOf(devAff ?? aff)
+  const affNow = devAff ?? aff
+  const stage = stageOf(affNow)
   const baseVars = { name: callNameOf(prof), username: prof?.username || '' }
   // say がいまの段階と呼び方を見られるように控える（say は作り直さない）
-  const ctx = useRef({ stage, vars: baseVars })
-  ctx.current = { stage, vars: baseVars }
+  // （日にちで出すセリフ＝付け耳の小ネタ・体術の伏線があるので、段階だけでなく好感度そのものも渡す）
+  const ctx = useRef({ stage, aff: affNow, vars: baseVars })
+  ctx.current = { stage, aff: affNow, vars: baseVars }
 
   // ===== 看板娘：いまの表情とセリフ（tick は話すたびに増やす＝同じ表情でも跳ねる）=====
   const [clerk, setClerk] = useState(() => {
@@ -90,11 +92,11 @@ export default function V2capBurger({ prof, onProfile, dev = false }) {
     const st = stageOf(prof?.clerk_affinity)
     const kind = enterKindOf(m, new Date(), { stage: st, lastVisit: prof?.burger_welcome_day })
     const vars = { ...baseVars, ...(m ? { burger: m.burger.name, left: leftShort(m.leftMs) } : {}) }
-    return { ...pickLine(kind, { vars, stage: st }), tick: 0 }
+    return { ...pickLine(kind, { vars, stage: st, aff: Number(prof?.clerk_affinity) || 0 }), tick: 0 }
   })
   const say = useCallback((kind, vars) => {
-    const { stage: st, vars: base } = ctx.current
-    setClerk(c => ({ ...pickLine(kind, { last: c.text, vars: { ...base, ...vars }, stage: st }), tick: c.tick + 1 }))
+    const { stage: st, aff: a, vars: base } = ctx.current
+    setClerk(c => ({ ...pickLine(kind, { last: c.text, vars: { ...base, ...vars }, stage: st, aff: a }), tick: c.tick + 1 }))
   }, [])
   const sayEvent = (ev) => setClerk(c => ({ face: ev.face, text: fillLine(ev.text, ctx.current.vars), tick: c.tick + 1 }))
   const streak = useRef(null)
@@ -110,7 +112,7 @@ export default function V2capBurger({ prof, onProfile, dev = false }) {
       if (e || !data?.ok) return
       const nextAff = Number(data.affinity) || 0
       setAff(nextAff)
-      ctx.current = { ...ctx.current, stage: stageOf(nextAff) }
+      ctx.current = { ...ctx.current, stage: stageOf(nextAff), aff: nextAff }
       const ev = stageEventOf(stageOf(nextAff), Math.max(Number(seen) || 0, Number(data.seen) || 0))
       if (!ev) return
       sayEvent(ev)

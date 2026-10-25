@@ -54,9 +54,29 @@ test('セリフの表情はどれも9つのどれか・9つとも使っている
   assert.equal(fillLine('あと{left}！{x}', { left: '42分' }), 'あと42分！{x}')
 })
 
-test('★裏設定（中身は人間・猫耳は付け耳）をセリフでばらさない', () => {
-  const all = Object.values(CLERK_LINES).flat().map(l => l.text).join('\n')
-  for (const w of ['付け耳', 'つけ耳', 'カチューシャ', '人間', '本物の耳']) assert.ok(!all.includes(w), w)
+// そのセリフが出はじめる好感度（段階の下限と dayMin の大きいほう）
+const startAffOf = (l) => Math.max(CLERK_STAGES.find(s => s.stage === (l.min ?? 0)).min, l.dayMin ?? 0)
+
+test('★付け耳の裏設定は仲良くなってからだけ（23日目から前ふり・30日目から打ち明け）。それより前のセリフは耳に触れない', () => {
+  // ユーザー指示（2026-10-25）「小ネタや伏線をもう少し詰めたい（仲良くなってから）」＋「30日目」を選んだ。前は「セリフでもばらさない」だった
+  for (const [kind, list] of Object.entries(CLERK_LINES)) for (const l of list) {
+    if (/付け耳|つけ耳|カチューシャ/.test(l.text)) assert.ok(startAffOf(l) >= 30, `${kind}：${l.text}`)
+    if (/耳/.test(l.text)) assert.ok(startAffOf(l) >= 23, `${kind}：${l.text}`)
+  }
+  const slip = CLERK_LINES.tap.find(l => l.text.includes('耳がちょっと'))
+  assert.deepEqual([slip.dayMin, slip.dayMax], [23, 29], '前ふり（耳がずれて慌てる）は打ち明ける前だけ')
+  assert.ok(!Object.values(CLERK_STAGE_EVENTS).some(e => /耳/.test(e.text)), '段階の場面では触れない')
+})
+
+test('体術の伏線は出にくい（ほかのセリフの4分の1）・仲良くなってから（強さ20日目・昔の話26日目〜）', () => {
+  const rare = CLERK_LINES.tap.filter(l => l.rare)
+  assert.equal(rare.length, 7)
+  assert.ok(rare.every(l => !/耳/.test(l.text)), '付け耳の小ネタはふつうの出やすさ')
+  assert.ok(rare.filter(l => l.dayMin).every(l => l.dayMin >= 20))
+  // 20日目の候補（ふつう15・出にくい4）で1000回まんべんなく引くと、出にくいほうは 4×0.25÷(15＋1)＝6.25%
+  let hit = 0
+  for (let i = 0; i < 1000; i++) if (rare.some(l => l.text === pickLine('tap', { stage: 3, aff: 20, rng: () => i / 1000 }).text)) hit++
+  assert.ok(hit >= 55 && hit <= 70, `出にくいセリフ ${hit}/1000`)
 })
 
 test('【確定】語尾の「ニャ」は使わない（ユーザー選択・店の名前とバーガーの名前だけ）', () => {
@@ -148,7 +168,7 @@ test('呼び方：男性は〇〇くん・女性は〇〇ちゃん・決めて�
 
 test('名前で呼ぶのは仲良し（20日目）から。それより前のセリフに {name} は出てこない', () => {
   for (const [kind, list] of Object.entries(CLERK_LINES)) {
-    for (const l of list) if (l.text.includes('{name}')) assert.ok((l.min ?? 0) >= 3, `${kind}：${l.text}`)
+    for (const l of list) if (l.text.includes('{name}')) assert.ok(startAffOf(l) >= 20, `${kind}：${l.text}`)
   }
   // 名前つきとそうでないものは同じ段階で混ざらない（20日目からは名前つきだけ）
   for (const kind of ['enterDaily', 'enterLong', 'enterAgain', 'enterFed', 'enterNight', 'streak3', 'streak5', 'streak8', 'short', 'served', 'servedTopping']) {
@@ -158,8 +178,10 @@ test('名前で呼ぶのは仲良し（20日目）から。それより前のセ
   assert.equal(pickLine('enterDaily', { stage: 3, rng: () => 0, vars: { name: 'おれおれおくん' } }).text, 'おれおれおくん、今日も来てくれたんだね！')
 })
 
-test('段階が上がるとタップのセリフが増える（はじめて8 → 顔なじみ10 → 常連13 → 仲良し16）', () => {
-  assert.deepEqual([0, 1, 2, 3, 4].map(s => linesOf('tap', s).length), [8, 10, 13, 16, 16])
+test('仲良くなるとタップのセリフが増える（はじめて8 → 顔なじみ10 → 常連13 → 仲良し19 → 小ネタと伏線で最大26）', () => {
+  const at = [[0, 0], [2, 1], [10, 2], [20, 3], [23, 3], [26, 3], [30, 3], [33, 3], [35, 3], [40, 4]]
+  assert.deepEqual(at.map(([aff, s]) => linesOf('tap', s, aff).length), [8, 10, 13, 19, 20, 22, 22, 23, 26, 26])
+  assert.equal(linesOf('tap', 3).length, 19, '好感度を省くとその段階のいちばん下（20日目）')
   // 顔なじみからのあいさつ（今日も・久しぶり・また）は、はじめての日には出ない
   for (const kind of ['enterDaily', 'enterLong', 'enterAgain']) assert.equal(linesOf(kind, 0).length, 0, kind)
 })
