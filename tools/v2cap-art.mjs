@@ -10,6 +10,7 @@
 //                                                  （デフォルメの絵・体がちょうど収まる正方形に切り取る。作れたら classArt.js の ART_SD に足す）
 //   public/V2newjob/gif/<名前>-m.gif・-f.gif    … ホームの自分のアイコン（待機の動く絵・2026-10-22）。元は public/V2newjob/ギフ/<クラス名><男|女>待機.gif
 //                                                  （元のまま写す。作れたら classArt.js の ART_GIF に足す）
+//                                                  上位クラスは public/V2newjob/上位職/上位ギフ/<クラス名><男|女>.gif（2026-10-26）
 // 対応表は src/v2cap/lib/classArt.js の ART_BASE・ART_FACE。絵を足したらそこに足してから回す：
 //   node tools/v2cap-art.mjs           … 全身は元の絵が新しくなったものだけ・顔のアップは毎回作り直す（切り取りを直しても効くように）
 //   node tools/v2cap-art.mjs --force   … 全部作り直す（作り方を変えたとき）
@@ -22,12 +23,12 @@ import path from 'node:path'
 import { decode, bleed, alphaBox, encodeSquare, keyBackground, KEY } from './v2cap-art-lib.mjs'
 
 const ROOT = path.resolve(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))
-const { ART_BASE, ART_FACE, ART_GENDERS, faceCropOf, artSrcFilesOf, ART_KEYED, ART_SD, SD_DIR, SD_OUT, sdTargetOf, ART_GIF, GIF_DIR, GIF_OUT, gifTargetOf } = await import(new URL('../src/v2cap/lib/classArt.js', import.meta.url).href)
+const { ART_BASE, ART_FACE, ART_GENDERS, faceCropOf, artSrcFilesOf, ART_KEYED, ART_SD, SD_DIR, SD_OUT, sdTargetOf, ART_GIF, GIF_DIR, GIF_UPPER_DIR, GIF_OUT, gifTargetOf } = await import(new URL('../src/v2cap/lib/classArt.js', import.meta.url).href)
 const SRC = path.join(ROOT, 'public', 'V2newjob')
 const WEB = { dir: path.join(SRC, 'web'), width: 720, quality: 82 }
 const FACE = { dir: path.join(SRC, 'face'), size: 192, quality: 82 }
 const ICON = { src: path.join(SRC, SD_DIR), dir: path.join(SRC, SD_OUT), size: 192, quality: 82, margin: 0.03 }
-const GIF = { src: path.join(SRC, GIF_DIR), dir: path.join(SRC, GIF_OUT) }
+const GIF = { srcs: [path.join(SRC, GIF_DIR), path.join(SRC, GIF_UPPER_DIR)], dir: path.join(SRC, GIF_OUT) }
 const FORCE = process.argv.includes('--force')
 for (const o of [WEB, FACE, ICON, GIF]) mkdirSync(o.dir, { recursive: true })
 
@@ -114,10 +115,12 @@ const sdNoFile = [...sdListed].filter(k => { const [cls, g] = k.split(':'); retu
 // ===== 待機の動く絵（GIF）→ ホームの自分のアイコン =====
 // 元のまま写す（コマ・透明・大きさはユーザーが作ったまま。体の大きさは画像の作り方でそろえる＝classArt.js の ART_GIF の説明）
 const gifMade = new Set(), gifSkip = []
-for (const name of existsSync(GIF.src) ? readdirSync(GIF.src) : []) {
+const gifSrcs = GIF.srcs.flatMap(dir => (existsSync(dir) ? readdirSync(dir).map(name => ({ dir, name })) : []))
+for (const { dir, name } of gifSrcs) {
   if (!/.gif$/i.test(name)) continue
-  const src = path.join(GIF.src, name)
+  const src = path.join(dir, name)
   const t = gifTargetOf(path.basename(name, path.extname(name)))
+  if (t?.hold) continue   // 使わないと決めたもの（classArt.js の GIF_ALIAS が null）
   if (!t) { gifSkip.push(`${name}：どのクラスか読めない（<クラス名><男|女>待機.gif にするか、classArt.js の GIF_CLASS_ALIAS・GIF_ALIAS に足す）`); continue }
   if (!t.g) { gifSkip.push(`${name}：男女が書いていない（${t.cls}・${t.cls}男待機.gif のようにするか、classArt.js の GIF_ALIAS に足す）`); continue }
   const key = `${t.cls}:${t.g}`

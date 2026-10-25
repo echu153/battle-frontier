@@ -198,35 +198,33 @@ export const artSrcOf = (cls, gender = 'm', size = 'web') => {
 //     体の大きさはユーザーが画像の作り方でそろえる（2026-10-21「体の大きさは画像1に統一」。画面は横幅を決めて縦長なら縦に伸ばすだけ＝avatarImgStyle）
 //   ・画面で使う版：public/V2newjob/gif/<ローマ字>-<m|f>.gif（元のまま写す＝コマも透明もそのまま。作るのは tools/v2cap-art.mjs）
 //   ・作れたものを ART_GIF に足す（ツールが「足りない」と知らせる。classArt.test.js が突き合わせる）
-//   ・GIF が無いクラス（上位クラスの大半）は系統の初期クラスの GIF（塔のアイコンの iconClassOf と同じ考え方）。それも無ければ戦闘ログのアイコン
+//   ・GIF が無いクラスは系統の初期クラスの GIF（塔のアイコンの iconClassOf と同じ考え方）。それも無ければ戦闘ログのアイコン（2026-10-26 から全クラスにある）
 // 2026-10-22 初期11職の男女22枚＋暗殺者の女性1枚（1コマ目を並べて、ファイル名どおりの職業・男女か見た）
-export const ART_GIF = {
-  剣士: ['m', 'f'],
-  戦士: ['m', 'f'],
-  槍使い: ['m', 'f'],
-  格闘家: ['m', 'f'],
-  盗賊: ['m', 'f'],
-  弓使い: ['m', 'f'],
-  銃士: ['m', 'f'],
-  魔法使い: ['m', 'f'],
-  呪術師: ['m', 'f'],
-  僧侶: ['m', 'f'],
-  薬師: ['m', 'f'],
-  暗殺者: ['f'],
-}
-export const GIF_DIR = 'ギフ'       // public/V2newjob の下・元の絵
+// 【確定】2026-10-26 ユーザー指示「上位職の待機ギフもすべて作った置き換えて、おれおれおの暗殺者だけ今のままでいいかも」
+//   → 上位クラス22職×男女（元の絵は public/V2newjob/上位職/上位ギフ/<クラス名><男|女>.gif）。暗殺者の女性だけは前の絵のまま
+//   （新しい「暗殺女.gif」は使わない＝GIF_ALIAS で null。前の「暗殺者女待機.gif」も同じフォルダに移っている）
+export const ART_GIF = Object.fromEntries(Object.keys(ART_BASE).map(cls => [cls, ['m', 'f']]))
+export const GIF_DIR = 'ギフ'       // public/V2newjob の下・元の絵（初期クラス）
+export const GIF_UPPER_DIR = `${ART_UPPER_DIR}/上位ギフ`  // public/V2newjob の下・元の絵（上位クラス・2026-10-26）
 export const GIF_OUT = 'gif'        // public/V2newjob の下・画面で使う版
 // ユーザーのファイル名での職業の呼び方 → ゲームの職業名
-export const GIF_CLASS_ALIAS = { 銃使い: '銃士' }
-// 男女の字が無いファイル名（拡張子なし）→ [クラス, 'm'|'f']（絵を見て確かめたものだけ）
+export const GIF_CLASS_ALIAS = {
+  銃使い: '銃士',
+  あるけみすと: 'アルケミスト',
+  クロノマスター: 'クロノマンサー',  // 「クロノマスター男.gif」（女性は「クロノマンサー女.gif」）
+  暗殺: '暗殺者',
+  死霊術師: '死霊使い',
+}
+// 名前どおりに読まないファイル名（拡張子なし）→ [クラス, 'm'|'f']（絵を見て確かめたものだけ）。null は使わない
 export const GIF_ALIAS = {
   '戦士待機': ['戦士', 'm'],     // 斧の男性（女性は「戦士女待機」）
   '槍使い待機': ['槍使い', 'm'], // 槍の男性（女性は「槍使い女待機」）
+  '暗殺女': null,               // 暗殺者の女性は前の「暗殺者女待機.gif」のまま（2026-10-26 ユーザー「おれおれおの暗殺者だけ今のままでいい」）
 }
-// GIF のファイル名（拡張子なし）→ { cls, g }。g は男女が書いていなければ null。クラスが読めなければ null
+// GIF のファイル名（拡張子なし）→ { cls, g }。g は男女が書いていなければ null。クラスが読めなければ null。使わないものは { hold: true }
 //   「待機」は付いていてもいなくてもよい（ユーザーのファイル名に両方ある：呪術師男.gif・魔法使い女.gif）
 export const gifTargetOf = (stem) => {
-  if (stem in GIF_ALIAS) return { cls: GIF_ALIAS[stem][0], g: GIF_ALIAS[stem][1] }
+  if (stem in GIF_ALIAS) return GIF_ALIAS[stem] ? { cls: GIF_ALIAS[stem][0], g: GIF_ALIAS[stem][1] } : { hold: true }
   const m = String(stem ?? '').normalize('NFKC').replace(/待機$/, '').match(/^(.+?)(男|女)?$/)
   const cls = m && (GIF_CLASS_ALIAS[m[1]] || m[1])
   if (!cls || !ART_BASE[cls]) return null

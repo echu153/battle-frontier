@@ -211,10 +211,14 @@ test('SDの元の絵（public/V2newjob/SD）は git に入れない（1枚約2.5
 })
 
 // 2026-10-22 ユーザー指示「初期クラスのギフ画像全員分作った、ホーム画面の画像はすべて対応するgif画像になるようにして、自分の画像は一旦廃止」
-test('ホームの待機の GIF：初期11職は男女とも・載せたものは全部ファイルがある（tools/v2cap-art.mjs が写す）', () => {
-  for (const cls of Object.values(CLASS_BY_ID).filter(c => !c.req).map(c => c.id)) {
+// 2026-10-26 ユーザー指示「上位職の待機ギフもすべて作った置き換えて、おれおれおの暗殺者だけ今のままでいいかも」
+test('ホームの待機の GIF：全クラス（初期11職＋上位22職）男女とも・載せたものは全部ファイルがある（tools/v2cap-art.mjs が写す）', () => {
+  for (const cls of Object.keys(CLASS_BY_ID)) {
     assert.deepEqual(ART_GIF[cls], ['m', 'f'], `${cls} の GIF`)
   }
+  assert.equal(Object.keys(ART_GIF).length, 33)
+  // 暗殺者の女性は前の絵のまま（新しい「暗殺女.gif」は使わない）。前の絵＝2026-10-21 に作ってもらった待機GIF（259,263バイト）
+  assert.equal(readFileSync(PUBLIC + gifSrcOf('暗殺者', 'f')).length, 259263, '暗殺者の女性は前の GIF のまま')
   for (const [cls, gs] of Object.entries(ART_GIF)) {
     assert.ok(ART_BASE[cls], `${cls} のローマ字`)
     for (const g of gs) {
@@ -233,16 +237,25 @@ test('GIF のファイル名の読み方（ユーザーのファイル名その�
   assert.deepEqual(gifTargetOf('槍使い待機'), { cls: '槍使い', g: 'm' })
   assert.deepEqual(gifTargetOf('剣士待機'), { cls: '剣士', g: null }, '男女が分からないものは使わない（ツールが知らせる）')
   assert.equal(gifTargetOf('謎の男'), null)
-  for (const [stem, [cls]] of Object.entries(GIF_ALIAS)) assert.ok(ART_BASE[cls], stem)
+  // 上位クラス（2026-10-26・上位職/上位ギフ/）のファイル名
+  assert.deepEqual(gifTargetOf('侍男'), { cls: '侍', g: 'm' })
+  assert.deepEqual(gifTargetOf('あるけみすと女'), { cls: 'アルケミスト', g: 'f' }, 'ひらがな')
+  assert.deepEqual(gifTargetOf('クロノマスター男'), { cls: 'クロノマンサー', g: 'm' })
+  assert.deepEqual(gifTargetOf('クロノマンサー女'), { cls: 'クロノマンサー', g: 'f' })
+  assert.deepEqual(gifTargetOf('死霊術師女'), { cls: '死霊使い', g: 'f' })
+  assert.deepEqual(gifTargetOf('暗殺男'), { cls: '暗殺者', g: 'm' })
+  assert.deepEqual(gifTargetOf('暗殺女'), { hold: true }, '暗殺者の女性は前の「暗殺者女待機」のまま＝新しいほうは使わない')
+  for (const [stem, v] of Object.entries(GIF_ALIAS)) if (v) assert.ok(ART_BASE[v[0]], stem)
 })
 
 test('ホームのアイコン：そのクラスの GIF → 系統の初期クラスの GIF → 戦闘ログのアイコン', () => {
   assert.equal(homeIconOf('戦士', 'f'), '/V2newjob/gif/sensi-f.gif')
   const base = CLASS_BY_ID['暗殺者'].req.cls
   assert.equal(homeIconOf('暗殺者', 'f', base), '/V2newjob/gif/ansatusya-f.gif', '暗殺者の女性は自分の GIF')
-  assert.equal(homeIconOf('暗殺者', 'm', base), gifSrcOf(base, 'm'), '暗殺者の男性は系統の初期クラスの GIF')
+  assert.equal(homeIconOf('暗殺者', 'm', base), '/V2newjob/gif/ansatusya-m.gif', '暗殺者の男性も自分の GIF（2026-10-26〜）')
+  assert.equal(homeIconOf('まだ無い職業', 'm', '戦士'), '/V2newjob/gif/sensi-m.gif', 'GIF が無いクラスは系統の初期クラスの GIF')
   for (const c of Object.values(CLASS_BY_ID)) {
-    for (const g of ['m', 'f']) assert.match(homeIconOf(c.id, g, c.req?.cls) || '', /.gif$/, `${c.id}（${g}）も GIF になる`)
+    for (const g of ['m', 'f']) assert.equal(homeIconOf(c.id, g, c.req?.cls), `/V2newjob/gif/${ART_BASE[c.id]}-${g}.gif`, `${c.id}（${g}）は自分の GIF`)
   }
   assert.equal(homeIconOf('戦士', 'x'), '/V2newjob/gif/sensi-m.gif', '性別が読めなければ男性')
 })
