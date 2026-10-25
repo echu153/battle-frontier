@@ -18,7 +18,7 @@ import { jemitaStatusText } from '../src/v2cap/lib/jemita.js'
 import { ITEMS } from '../src/v2cap/lib/equipment.js'
 
 const MODEL = process.env.JEMITA_MODEL || 'claude-haiku-5-5'
-const EFFORT = process.env.JEMITA_EFFORT || 'medium'
+const EFFORT = process.env.JEMITA_EFFORT || 'low'
 const keyFile = join(homedir(), '.bf-jemita-key')
 const apiKey = process.env.ANTHROPIC_API_KEY || (existsSync(keyFile) ? readFileSync(keyFile, 'utf8').split(/\r?\n/)[0].trim() : '')
 if (!apiKey) {
@@ -79,7 +79,7 @@ console.log(`モデル ${MODEL}・effort ${EFFORT}・資料 ${KB.length.toLocale
 for (const q of QUESTIONS) {
   const t0 = Date.now()
   const res = await client.messages.create({
-    model: MODEL, max_tokens: 2000, output_config: { effort: EFFORT }, system,
+    model: MODEL, max_tokens: 8000, output_config: { effort: EFFORT }, system,
     messages: [{ role: 'user', content: `${JEMITA_STATUS_HEAD}\n${STATUS}\n\n${JEMITA_QUESTION_HEAD}\n${q}` }],
   })
   const text = res.content.filter(b => b.type === 'text').map(b => b.text).join('').trim()

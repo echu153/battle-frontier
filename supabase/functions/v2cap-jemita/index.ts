@@ -33,7 +33,11 @@ const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const API_KEY = Deno.env.get('ANTHROPIC_API_KEY') || ''
 const MODEL = Deno.env.get('JEMITA_MODEL') || 'claude-haiku-5-5'
-const EFFORT = (['low', 'medium', 'high'].includes(Deno.env.get('JEMITA_EFFORT') || '') ? Deno.env.get('JEMITA_EFFORT') : 'medium') as 'low' | 'medium' | 'high'
+// 考える深さ。既定は low（2026-10-26 本番で試したら、medium では「どうすれば強くなれる？」で考えている途中に
+// 字数の上限 2000 に届き、答えの文が空になった＝14秒待って失敗。low は会話向けで速い）
+const EFFORT = (['low', 'medium', 'high'].includes(Deno.env.get('JEMITA_EFFORT') || '') ? Deno.env.get('JEMITA_EFFORT') : 'low') as 'low' | 'medium' | 'high'
+// 1回の出力の上限（考えるぶんも入る）。払うのは実際に出たぶんだけなので、余裕を持たせる
+const MAX_TOKENS = 8000
 const ADMIN_ONLY = (Deno.env.get('JEMITA_ADMIN_ONLY') || 'true') !== 'false'
 
 // 画面（src/v2cap/lib/jemita.js・jemitaPrompt.js）と同じ数と見出し
@@ -130,12 +134,12 @@ Deno.serve(async (req) => {
   ])
   const userText = (status ? `${STATUS_HEAD}\n${status}\n\n` : '') + `${QUESTION_HEAD}\n${question}`
 
-  const client = new Anthropic({ apiKey: API_KEY, timeout: 30_000, maxRetries: 1 })
+  const client = new Anthropic({ apiKey: API_KEY, timeout: 60_000, maxRetries: 1 })
   let res: Anthropic.Message
   try {
     res = await client.messages.create({
       model: MODEL,
-      max_tokens: 2000,
+      max_tokens: MAX_TOKENS,
       output_config: { effort: EFFORT },
       // 決まり＋資料は毎回同じ＝キャッシュ（1時間）。ここまでが同じなら2回目からは安い
       system: [
@@ -169,8 +173,8 @@ Deno.serve(async (req) => {
   const text = res.content.filter((b) => b.type === 'text').map((b) => (b as Anthropic.TextBlock).text).join('').trim()
   if (!text) {
     await refund()
-    console.error('[v2cap-jemita] empty answer', res.stop_reason)
-    return json({ allowed: false, reason: 'llm_error' }, 502)
+    console.error('[v2cap-jemita] empty answer', res.stop_reason, res.usage?.output_tokens)
+    return json({ allowed: false, reason: res.stop_reason === 'max_tokens' ? 'too_long_answer' : 'llm_error' }, 502)
   }
   // 答えに不適切な言葉が出たら出さない（Claude の失敗なので回数を戻す）
   if (isNG(text)) {
