@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../supabase'
 import { box, btn, miniBtn, TEXT } from './v2ui.js'
-import { STAT_DEFS } from '../core/stats.js'
+import V2Modal from './V2Modal.jsx'
+import { STAT_DEFS, STAT_KEYS } from '../core/stats.js'
 import { KIND_COLOR } from '../core/skills.js'
 import { V2SkillTip } from './V2ItemTip.jsx'
 import {
-  CLASSES, CLASS_BY_ID, STAGES, STAGE_ORDER, JOB_LV_HPMP, jobOf, jobMaxOf, jobNeed, missingReqOf, canBecome, reqText, weaponsOf, canEquipType,
-  classDescOf, mainStatsOf, stageOf, stageLabelOf, stageColorOf, learnOrderOf, learnAtOf, jobBonusText, nextClassesOf,
+  CLASSES, CLASS_BY_ID, STAGES, STAGE_ORDER, jobOf, jobMaxOf, jobNeed, missingReqOf, canBecome, reqText, weaponsOf, canEquipType,
+  classDescOf, mainStatsOf, stageOf, stageLabelOf, stageColorOf, learnOrderOf, learnAtOf, nextClassesOf,
 } from '../lib/jobs.js'
 import { passiveOf } from '../lib/skills.js'
 import { ITEM_BY_ID } from '../lib/equipment.js'
+import { statBreakdown, statBreakdownAs } from '../lib/loadout.js'
 import { ART_GENDERS, artSrcOf, hasArt } from '../lib/classArt.js'
 import { useStored } from '../core/prefs.js'
 import { artGenderOf } from '../lib/gender.js'
@@ -22,8 +24,14 @@ import { artGenderOf } from '../lib/gender.js'
 //     （ユーザー「クラス選択するとき、上がりやすいステータスとクラスの詳細は乗せなくていいや、クラス詳細で説明するから」）
 //   ・「そのクラス名を押してそのクラスの詳細が開かれてる画面で転職確定させるようにしたい。グラブルみたいなイメージ」：
 //     カードを押すとそのクラスの詳細（イラスト・特徴の一言（スキル名・ステータス名を書かない＝jobs.js の desc）・武器種・
-//     上がりやすいステータス（mainStatsOf）・ClassEXP・覚えるスキル・パッシブ・クラスのステ・この先のクラスや条件）。
-//     一番下の「このクラスに転職する」で転職する（詳細の画面が確認の役＝確認のポップアップは出さない）
+//     上がりやすいステータス（mainStatsOf）・ClassEXP・パッシブ・覚えるスキル・この先のクラスや転職条件）。
+//     一番下の「このクラスに転職する」で転職する
+//   【確定】2026-10-26 ユーザー指示「転職したとき分かりづらいから、このクラスに転職するを押したら確認のポップアップで確認出るようにして」：
+//   ・「このクラスに転職する」→ **確認のポップアップ**（ChangeConfirm）。転職の前後のステ（戦闘力と8つのステ）と増減（＋／−／±0）を出す
+//     （数え方は loadout.js の statBreakdownAs＝クラスのステ・アセンション・外れる武器まで入れた、ステータス画面と同じ合計）
+//   ・転職し終わったら画面のいちばん上へ（V2Modal が「実行」のあと閉じたときに戻す）。「〇〇になった！」は詳細の画面のいちばん上に出す
+//   ・クラスのステ（CLASS LVごとに入る量）はここに書かない（ユーザー「ステータスの情報はここに書かなくていい」）
+//   ・「就く条件」→「転職条件」。パッシブはスキルの欄の先頭に、目立つ枠で（ユーザー「パッシブスキルはスキルの初めに、もっとわかりやすく」）
 //   ・イラストは男女それぞれ（ユーザー「男女それぞれのイラストを用意してるから、良い感じに見えるようにして」）。
 //     対応表と軽い版の場所は src/v2cap/lib/classArt.js（作るのは tools/v2cap-art.mjs）。
 //     詳細は全身をクラスの色の淡い光の背景＋足元の影に大きく。一覧はカードの左に顔のまわりだけのアップ
@@ -110,16 +118,21 @@ export default function V2capTemple({ prof, inventory, onProfile }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [msg, setMsg] = useState('')
+  const [ask, setAsk] = useState(false)     // 転職の確認のポップアップを出している
   // イラストを男女どちらで見せるか（端末で覚えておく・見るだけの切り替え）。はじめはキャラの性別（2026-10-21・gender.js）
   const [gender, setGender] = useStored('capArtGender', artGenderOf(prof))
 
-  const open = (cls) => { setView(cls); setMsg(''); setError('') }
+  // 一覧⇔詳細は画面の切り替え＝いちばん上へ（2026-10-25 ユーザー指示「画面遷移したら画面上部に移動」）
+  const open = (cls) => { setView(cls); setMsg(''); setError(''); setAsk(false); window.scrollTo(0, 0) }
+  // 確認のポップアップで「転職する」を押したとき。終わったらポップアップを閉じる＝画面のいちばん上へ戻り（V2Modal）、
+  // 詳細の画面のいちばん上に結果を出す。★プロフィールを読み直す前に閉じる（読み直したあとは前後が同じ職業になり、増減が全部±0に見える）
   const change = async (cls) => {
     setBusy(true); setError(''); setMsg('')
     const { data, error: e } = await supabase.rpc('v2cap_change_class', { p_class: cls })
-    if (e || !data?.ok) { setBusy(false); setError(e?.message || data?.error || '転職に失敗しました'); return }
+    if (e || !data?.ok) { setAsk(false); setBusy(false); setError(e?.message || data?.error || '転職に失敗しました'); return }
     const got = data.learned || []
     setMsg(`${cls}になった！${got.length ? `　スキル「${got.join('」「')}」を覚えた` : ''}${data.unequipped ? '　装備できない武器を外した' : ''}`)
+    setAsk(false)
     await onProfile(null)
     setBusy(false)
   }
@@ -127,6 +140,7 @@ export default function V2capTemple({ prof, inventory, onProfile }) {
   if (view && CLASS_BY_ID[view]) {
     return (
       <ClassDetail cls={view} prof={prof} inventory={inventory} busy={busy} msg={msg} error={error} gender={gender} onGender={setGender}
+        asking={ask} onAsk={() => { setMsg(''); setError(''); setAsk(true) }} onCancel={() => setAsk(false)}
         onChange={() => change(view)} onOpen={open} onBack={() => open(null)} />
     )
   }
@@ -165,7 +179,7 @@ export default function V2capTemple({ prof, inventory, onProfile }) {
                       </div>
                       <div style={{ fontSize:'11px', lineHeight:1.7 }}>
                         <div><span style={label}>装備できる武器種：</span><span style={{ color:'#cfe2ff' }}>{weaponsOf(c.id).join('・')}</span></div>
-                        {miss && <div style={{ color:'#ff8844' }}>条件：{reqText(c.id)}（いま{jobOf(prof.jobs, c.req.cls).lv}）</div>}
+                        {miss && <div style={{ color:'#ff8844' }}>転職条件：{reqText(c.id)}（いま{jobOf(prof.jobs, c.req.cls).lv}）</div>}
                       </div>
                     </div>
                   </button>
@@ -179,8 +193,8 @@ export default function V2capTemple({ prof, inventory, onProfile }) {
   )
 }
 
-// そのクラスの詳細。一番下の「このクラスに転職する」で転職する
-function ClassDetail({ cls, prof, inventory, busy, msg, error, gender, onGender, onChange, onOpen, onBack }) {
+// そのクラスの詳細。一番下の「このクラスに転職する」→ 確認のポップアップで転職する
+function ClassDetail({ cls, prof, inventory, busy, msg, error, gender, onGender, asking, onAsk, onCancel, onChange, onOpen, onBack }) {
   const c = CLASS_BY_ID[cls]
   const stage = stageOf(cls)
   const job = jobOf(prof.jobs, cls)
@@ -194,7 +208,6 @@ function ClassDetail({ cls, prof, inventory, busy, msg, error, gender, onGender,
   const order = learnOrderOf(cls)
   const at = learnAtOf(cls)
   const passive = passiveOf(cls)
-  const hpmp = JOB_LV_HPMP[cls] || { hp: 0, mp: 0 }
   const nexts = nextClassesOf(cls)
   const color = stageColorOf(cls)
   // 転職すると外れる武器（いま着けている武器を、このクラスが装備できないとき）
@@ -209,6 +222,10 @@ function ClassDetail({ cls, prof, inventory, busy, msg, error, gender, onGender,
   return (
     <div style={{ fontFamily:'monospace' }}>
       <button onClick={onBack} style={{ ...miniBtn('#88aaff'), marginBottom:'10px' }}>← クラス一覧へ</button>
+
+      {/* 転職の結果（転職し終わると画面のいちばん上へ戻るので、ここに出す） */}
+      {msg && <div style={{ ...section, borderColor:'#44ff88', color:'#44ff88', fontSize:'13px', lineHeight:1.7 }}>✨ {msg}</div>}
+      {error && <div style={{ ...section, borderColor:'#ff4444', color:'#ff4444', fontSize:'12px' }}>⚠ {error}</div>}
 
       {/* イラスト（左）＋ 名前・ClassLV・特徴（右）。狭い画面では縦に並ぶ */}
       <div style={{ ...section, borderColor: isNow ? '#ff88cc' : '#0044aa', display:'flex', gap:'14px', flexWrap:'wrap', alignItems:'flex-start' }}>
@@ -242,9 +259,20 @@ function ClassDetail({ cls, prof, inventory, busy, msg, error, gender, onGender,
         </div>
       </div>
 
-      {/* 覚えるスキル（押す／カーソルを合わせると効果） */}
+      {/* パッシブ（先頭・目立つ枠）＋ 覚えるスキル（押す／カーソルを合わせると効果） */}
       <div style={section}>
         <div style={head}>📖 スキル</div>
+        {passive && (
+          <div style={{ border:'1px solid #ffcc66', background:'linear-gradient(90deg, #2a2000 0%, #000818 85%)', padding:'8px 10px', marginBottom:'10px' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
+              <span style={{ background:'#ffcc66', color:'#1a1000', fontSize:'10px', padding:'1px 6px', letterSpacing:'1px' }}>パッシブ</span>
+              <span style={{ color:'#ffcc66', fontSize:'14px', letterSpacing:'1px' }}>{passive.name}</span>
+            </div>
+            <div style={{ color:'#cfe2ff', fontSize:'11px', lineHeight:1.7 }}>{passive.desc}</div>
+            <div style={{ color: TEXT.sub, fontSize:'10px', marginTop:'4px' }}>※ 編成しなくても、{cls}でいる間ずっと効く</div>
+          </div>
+        )}
+        {passive && <div style={{ ...label, fontSize:'11px', marginBottom:'4px' }}>覚える技</div>}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(200px, 1fr))', gap:'3px' }}>
           {order.map((s, i) => {
             const has = learned.has(s.name)
@@ -259,32 +287,16 @@ function ClassDetail({ cls, prof, inventory, busy, msg, error, gender, onGender,
             )
           })}
         </div>
-        {passive && (
-          <div style={{ marginTop:'6px', fontSize:'11px', lineHeight:1.7 }}>
-            <span style={label}>パッシブ：</span><span style={{ color:'#ffcc66' }}>{passive.name}</span>
-            <span style={{ color: TEXT.sub }}>（{passive.desc}・就いている間ずっと効く）</span>
-          </div>
-        )}
       </div>
 
-      {/* クラスのステ（就いている間だけ効く） */}
-      <div style={section}>
-        <div style={head}>📈 クラスのステ（このクラスに就いている間だけ）</div>
-        <div style={{ fontSize:'11px', lineHeight:1.8 }}>
-          <div><span style={label}>CLASS LVが上がるたびに：</span><span style={{ color:'#cfe2ff' }}>必ず HP+{hpmp.hp}・MP+{hpmp.mp}、ほかに{STAGES[stage]?.perLv || 0}点</span></div>
-          <div><span style={label}>いま（CLASS LV{job.lv}）：</span><span style={{ color:'#44ff88' }}>{jobBonusText(cls, job.lv) || 'まだなし'}</span></div>
-          {!isMax && <div><span style={label}>CLASS LV{max}で：</span><span style={{ color:'#cfe2ff' }}>{jobBonusText(cls, max)}</span></div>}
-        </div>
-      </div>
-
-      {/* 系統（この先のクラス・就く条件） */}
+      {/* 系統（この先のクラス・転職条件） */}
       {(nexts.length > 0 || c.req) && (
         <div style={section}>
           <div style={head}>🔀 系統</div>
           <div style={{ fontSize:'11px', lineHeight:1.8 }}>
             {c.req && (
               <div>
-                <span style={label}>就く条件：</span>
+                <span style={label}>転職条件：</span>
                 <span style={{ color: miss ? '#ff8844' : '#88ddaa' }}>{reqText(cls)}{miss ? `（いま${jobOf(prof.jobs, c.req.cls).lv}）` : '（達成）'}</span>
               </div>
             )}
@@ -298,22 +310,75 @@ function ClassDetail({ cls, prof, inventory, busy, msg, error, gender, onGender,
         </div>
       )}
 
-      {/* 転職を決める（詳細の画面が確認の役＝確認のポップアップは出さない） */}
+      {/* 転職を決める（押すと確認のポップアップ） */}
       <div style={{ ...section, borderColor: isNow ? '#0044aa' : '#ff88cc' }}>
-        {!isNow && !miss && (
-          <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.8, marginBottom:'8px' }}>
-            LVはそのまま、CLASS LVは{job.lv}から続きます。スキルセットは{cls}のものに切り替わります（{prof.class}の編成は残ります）。
-            {dropWeapon && <span style={{ color:'#ff8844' }}> いま着けている{wornWeapon.name}（{wornWeapon.type}）は外れます。</span>}
-          </div>
-        )}
-        {msg && <div style={{ color:'#44ff88', fontSize:'11px', marginBottom:'8px' }}>{msg}</div>}
-        {error && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'8px' }}>⚠ {error}</div>}
-        <button onClick={onChange} disabled={busy || isNow || !canBecome(cls, prof.jobs)}
+        <button onClick={onAsk} disabled={busy || isNow || !canBecome(cls, prof.jobs)}
           style={{ ...btn(isNow || miss ? '#62789a' : '#ff88cc'), width:'100%', padding:'12px', fontSize:'14px', letterSpacing:'2px',
             cursor: busy || isNow || miss ? 'not-allowed' : 'pointer' }}>
-          {busy ? '転職しています...' : isNow ? 'いまのクラスです' : miss ? `条件：${reqText(cls)}` : 'このクラスに転職する'}
+          {busy ? '転職しています...' : isNow ? 'いまのクラスです' : miss ? `転職条件：${reqText(cls)}` : 'このクラスに転職する'}
         </button>
       </div>
+
+      {asking && !isNow && !miss && (
+        <ChangeConfirm cls={cls} prof={prof} inventory={inventory} busy={busy}
+          dropWeapon={dropWeapon ? wornWeapon : null} onConfirm={onChange} onClose={onCancel} />
+      )}
     </div>
+  )
+}
+
+// 転職の確認のポップアップ。転職の前後のステ（戦闘力＋8つのステ）と増減を並べる（2026-10-26 ユーザー指示
+// 「確認画面では転職前後でステータスがどう変わるのか、±とかも表示されるように」）。
+// 前後とも、ステータス画面と同じ合計（本体＋クラスのステ＋装備＋アセンション＋防具・セット・食事）。外れる武器のぶんも入る
+const signed = (n) => (n > 0 ? `+${n.toLocaleString()}` : n < 0 ? `−${Math.abs(n).toLocaleString()}` : '±0')
+const signColor = (n) => (n > 0 ? '#44ff88' : n < 0 ? '#ff6b6b' : TEXT.empty)
+function ChangeConfirm({ cls, prof, inventory, busy, dropWeapon, onConfirm, onClose }) {
+  const before = statBreakdown(prof, inventory)
+  const after = statBreakdownAs(prof, inventory, cls)
+  const rows = [
+    { key:'power', label:'戦闘力', color:'#ffcc00', a: before.power, b: after.power },
+    ...STAT_KEYS.map(k => ({ key:k, label: STAT_DEFS[k].label, color: STAT_DEFS[k].color, a: before.total[k], b: after.total[k] })),
+  ]
+  const fromLv = jobOf(prof.jobs, prof.class).lv
+  const toLv = jobOf(prof.jobs, cls).lv
+  const pFrom = passiveOf(prof.class)
+  const pTo = passiveOf(cls)
+  const grid = { display:'grid', gridTemplateColumns:'52px 1fr 1fr 64px', gap:'0 8px', alignItems:'baseline' }
+  const num = { textAlign:'right', fontVariantNumeric:'tabular-nums' }
+  return (
+    <V2Modal title="⛪ 転職の確認" color="#ff88cc" confirmLabel="転職する" busy={busy} onConfirm={onConfirm} onClose={onClose}>
+      <div style={{ textAlign:'center', marginBottom:'10px', lineHeight:1.6 }}>
+        <span style={{ color:'#cfe2ff' }}>{prof.class}</span>
+        <span style={{ color: TEXT.sub, fontSize:'10px' }}>（CLASS LV{fromLv}）</span>
+        <span style={{ color: TEXT.label, margin:'0 6px' }}>→</span>
+        <span style={{ color:'#ff88cc', fontSize:'14px' }}>{cls}</span>
+        <span style={{ color: TEXT.sub, fontSize:'10px' }}>（CLASS LV{toLv}）</span>
+      </div>
+      <div style={{ ...grid, fontSize:'10px', color: TEXT.label, borderBottom:'1px solid #002a55', paddingBottom:'3px', marginBottom:'3px' }}>
+        <span>ステ</span>
+        <span style={{ ...num, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>いま</span>
+        <span style={{ ...num, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>転職後</span>
+        <span style={num}>増減</span>
+      </div>
+      {rows.map(r => {
+        const d = r.b - r.a
+        return (
+          <div key={r.key} style={{ ...grid, fontSize: r.key === 'power' ? '13px' : '12px', lineHeight:1.9,
+            ...(r.key === 'power' ? { borderBottom:'1px solid #002a55', marginBottom:'2px' } : null) }}>
+            <span style={{ color: r.color }}>{r.label}</span>
+            <span style={{ ...num, color: TEXT.sub }}>{r.a.toLocaleString()}</span>
+            <span style={{ ...num, color:'#cfe2ff' }}>{r.b.toLocaleString()}</span>
+            <span style={{ ...num, color: signColor(d) }}>{signed(d)}</span>
+          </div>
+        )
+      })}
+      <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.8, marginTop:'10px' }}>
+        {(pFrom || pTo) && (
+          <div>パッシブ：<span style={{ color: pFrom ? '#ffcc66' : TEXT.empty }}>{pFrom?.name || 'なし'}</span> → <span style={{ color: pTo ? '#ffcc66' : TEXT.empty }}>{pTo?.name || 'なし'}</span></div>
+        )}
+        <div>LVはそのまま、CLASS LVは{toLv}から続きます。スキルセットは{cls}のものに切り替わります（{prof.class}の編成は残ります）。</div>
+        {dropWeapon && <div style={{ color:'#ff8844' }}>いま着けている{dropWeapon.name}（{dropWeapon.type}）は外れます（上の数字はこの武器を外した形）。</div>}
+      </div>
+    </V2Modal>
   )
 }

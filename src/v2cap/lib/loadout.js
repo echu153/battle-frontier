@@ -116,6 +116,9 @@ export const statBreakdown = (profile, inventory, { meal = activeMealOf(profile)
   return { body, job, gear, asc, armor, armorAgi, set, sets, food, meal: meal || null, total, power: calcPower(total) }
 }
 export const totalStats = (profile, inventory) => statBreakdown(profile, inventory).total
+// cls に転職したときのステ（神殿の転職の確認・2026-10-26）。クラスのステ・アセンションはその職業のもの、
+// その職業で装備できない武器は外した形（サーバーの v2cap_change_class が外すのと同じ）で数える
+export const statBreakdownAs = (profile, inventory, cls) => statBreakdown({ ...profile, class: cls }, inventory)
 
 // ===== スキルセット =====
 // いまの職業の編成。【確定】スキルセットは職業ごとに持つ（転職して戻ると前の編成に戻る）
