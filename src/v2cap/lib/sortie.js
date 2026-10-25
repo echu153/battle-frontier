@@ -4,8 +4,7 @@
 // 進み方（2026-10-09 エリアの作り替え・docs/v2cap-design.md §3）：
 //   ・場所（15エリア×①②③＝45か所）を1本道で進む。**その場所のボスを倒すと次の場所が開く**
 //   ・10秒に1回。ボスは1戦ごとに+0.3%ずつ出やすくなり、出会うと0へ戻る（今のⅡと同じ）
-//   ・レアは0.5%（今のⅡと同じ。その時間帯に出るレアから1体）
-//   ・ふつうの敵には、その時間帯（朝・昼・晩）の限定の敵も混ざる
+//   ・ボスでなければ 通常70%・時間限定（その時間帯の敵）25%・レア5%（2026-10-25・下の ENCOUNTER_PCT）
 //   ・経験値とGoldは場所の表の値 × 役割の倍率（朝昼晩1.5倍・レア3倍・ボス5倍）。決めるのはサーバー
 //   ・装備はそのエリアのものが落ちる。レア度（ノーマル・レア・エピック・レジェンダリー）は敵の役割と①②③で決まる
 //     （下の「落ちる装備」）。部位は1時間ごとに「落ちやすい部位」が入れ替わる（今のⅡと同じ）。アイテムLV＝装備の必要LV
@@ -17,29 +16,43 @@ import { itemOf, RARITIES, ARMOR_LINES, ACCESSORY_TYPES } from './equipment.js'
 import { weaponsOf } from './jobs.js'
 import { scrapNameOf } from './smith.js'
 import {
-  rollBoss, nextBossRate, bandAt, rollDropPart, rollRare,
-  SORTIE_CD, BOSS_RATE_STEP, RARE_RATE,
+  rollBoss, nextBossRate, bandAt, rollDropPart,
+  SORTIE_CD, BOSS_RATE_STEP,
 } from '../core/sortie.js'
 
-export { nextBossRate, bandAt, SORTIE_CD, BOSS_RATE_STEP, RARE_RATE }
+export { nextBossRate, bandAt, SORTIE_CD, BOSS_RATE_STEP }
 
 const pick = (list, rng) => list[Math.floor(rng() * list.length)]
 
 // ===== 次に出会う敵 =====
-// レアの抽選が先（今のⅡと同じ）→ ボス → ふつうの敵（その時間帯の限定の敵を含む）から均等に1体
+// 【確定】2026-10-25 ユーザー指示「遭遇率見直す　通常　70　時間限定　25　レア　５％　遭遇率はこれにして」：
+//   ・ボスの抽選が先（1戦ごとに+0.3%ずつ出やすくなり、出会うと0へ戻る＝前のまま）
+//   ・ボスでなければ、通常70%・時間限定25%・レア5%（ENCOUNTER_PCT）。それぞれの中は均等に1体
+//     通常＝その場所のふつうの敵（①は2体・②③は4体）／時間限定＝いまの時間帯（朝・昼・晩）の2体／
+//     レア＝いまの時間帯に出る3体（一日中の2体＋その時間帯の1体）
+//   ⚠前（2026-10-09〜10-25）は「レア0.5%を先に引く（今のⅡと同じ）→ ボス → ふつうの敵と時間帯の敵を合わせて均等」
+//     ＝時間帯の敵は①で半分・②③で3分の1、レアは200戦に1回だった
+//   ★出会う敵は画面が決める（サーバーは敵がその場所にいるかと役割だけ見る）＝SQLは変わらない
 // role … normal／timed／rare／boss（経験値とGoldの倍率に使う）
+export const ENCOUNTER_PCT = { normal: 70, timed: 25, rare: 5 }
 export const pickEncounter = (spotId, bossRate, at = new Date(), rng = Math.random) => {
   const spot = spotOf(spotId)
   if (!spot) return null
   const band = bandAt(at)
   const r = spot.roster
-  const rares = r.rares.filter(e => !e.band || e.band === band)
   const make = (enemy, role) => ({ spot, enemy, role, isBoss: role === 'boss', lv: enemyLvOf(enemy.name, spot.id), band })
-  if (rares.length && rollRare(rng)) return make(pick(rares, rng), 'rare')
   if (rollBoss(bossRate, rng)) return make(r.boss, 'boss')
-  const timed = r.timed.filter(e => e.band === band)
-  const enemy = pick([...r.enemies, ...timed], rng)
-  return make(enemy, timed.includes(enemy) ? 'timed' : 'normal')
+  const pools = {
+    normal: r.enemies,
+    timed: r.timed.filter(e => e.band === band),
+    rare: r.rares.filter(e => !e.band || e.band === band),
+  }
+  // 敵のいない組は飛ばして、残りの割合で分ける（いまはどの場所にも3つとも必ずいる）
+  const roles = Object.keys(ENCOUNTER_PCT).filter(k => pools[k].length > 0)
+  const total = roles.reduce((t, k) => t + ENCOUNTER_PCT[k], 0)
+  let x = rng() * total
+  const role = roles.find(k => (x -= ENCOUNTER_PCT[k]) < 0) || roles[roles.length - 1]
+  return make(pick(pools[role], rng), role)
 }
 
 // ===== 経験値とGold =====

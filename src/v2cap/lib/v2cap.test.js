@@ -35,7 +35,7 @@ import {
 import { AREA_ROSTERS, AREA_LEVELS, ENEMY_LV } from './monsters.js'
 import { toFighter, statBreakdown, equippedItems, slotsOf, currentSetOf, armorOf } from './loadout.js'
 import {
-  rollDropKind, rollEquipDrop, pickEncounter, rollRewards, rewardRangeOf,
+  rollDropKind, rollEquipDrop, pickEncounter, ENCOUNTER_PCT, rollRewards, rewardRangeOf,
   openUntilOf, isSpotUnlocked, unlockedSpotsOf, clearSpot,
   DROP_CHANCE, DROP_RARITY, SUB_RARE_MULT, dropRarityOf, rollDropRarity, canDropRarity,
 } from './sortie.js'
@@ -1169,14 +1169,14 @@ test('【確定】2026-10-12 序盤の敵：①-①（LV1〜2）は前のまま�
   assert.ok(stdRatioAt(10) / 1.69 >= 1.6 - 0.01)
 })
 
-test('敵の出方：レアが先（0.5%）→ボス（遭遇率）→ふつう。朝昼晩の敵はその時間帯だけ', () => {
+test('敵の出方：ボス（遭遇率）が先→ボスでなければ 通常・時間限定・レア。朝昼晩の敵はその時間帯だけ', () => {
   const rng = rngOf(9)
   const spot = spotOf(3)
   const at = (h) => new Date(Date.UTC(2026, 0, 1, (h + 24 - 9) % 24))   // JSTの h 時
-  // 遭遇率100%ならボス（レアに当たらなければ）
+  // 遭遇率100%なら必ずボス（2026-10-25 からボスの抽選が先。前はレア0.5%が先だった）
   let boss = 0
   for (let i = 0; i < 500; i++) if (pickEncounter(3, 100, at(10), rng).role === 'boss') boss++
-  assert.ok(boss > 480, `ボス ${boss}/500`)
+  assert.equal(boss, 500, `ボス ${boss}/500`)
   // 遭遇率0ならボスは出ない。時間帯の敵はその時間帯の分だけ
   const seen = new Map()
   for (let i = 0; i < 5000; i++) {
@@ -1191,6 +1191,49 @@ test('敵の出方：レアが先（0.5%）→ボス（遭遇率）→ふつう�
     const want = { 朝: 8, 昼: 15, 晩: 23 }[band]
     assert.deepEqual([...hours], [want], `${name}は${band}だけ`)
   }
+})
+
+test('【確定】2026-10-25 遭遇率：ボスでなければ 通常70%・時間限定25%・レア5%（どの場所・どの時間帯も）。それぞれの中は均等', () => {
+  // ユーザー指示「遭遇率見直す　通常　70　時間限定　25　レア　５％　遭遇率はこれにして」
+  assert.deepEqual(ENCOUNTER_PCT, { normal: 70, timed: 25, rare: 5 })
+  const at = (h) => new Date(Date.UTC(2026, 0, 1, (h + 24 - 9) % 24))   // JSTの h 時
+  const N = 60000
+  for (const [spotId, h] of [[1, 8], [3, 15], [5, 23], [45, 10]]) {
+    const rng = rngOf(spotId * 31 + h)
+    const spot = spotOf(spotId)
+    const n = { normal: 0, timed: 0, rare: 0, boss: 0 }
+    const each = new Map()
+    for (let i = 0; i < N; i++) {
+      const e = pickEncounter(spotId, 0, at(h), rng)
+      n[e.role]++
+      each.set(e.enemy.name, (each.get(e.enemy.name) || 0) + 1)
+    }
+    assert.equal(n.boss, 0, '遭遇率0ならボスは出ない')
+    for (const k of ['normal', 'timed', 'rare']) {
+      const pct = n[k] * 100 / N
+      assert.ok(Math.abs(pct - ENCOUNTER_PCT[k]) < 0.8, `${spot.id} ${k} ${pct.toFixed(2)}%`)
+    }
+    // 組の中は均等：通常は場所のふつうの敵・時間限定は2体・レアは3体
+    const band = { 8: '朝', 15: '昼', 23: '晩', 10: '朝' }[h]
+    const pools = {
+      normal: spot.roster.enemies,
+      timed: spot.roster.timed.filter(e => e.band === band),
+      rare: spot.roster.rares.filter(e => !e.band || e.band === band),
+    }
+    assert.equal(pools.timed.length, 2)
+    assert.equal(pools.rare.length, 3)
+    for (const [k, list] of Object.entries(pools)) {
+      for (const e of list) {
+        const pct = (each.get(e.name) || 0) * 100 / N
+        assert.ok(Math.abs(pct - ENCOUNTER_PCT[k] / list.length) < 0.6, `${e.name} ${pct.toFixed(2)}%（${k}）`)
+      }
+    }
+  }
+  // 遭遇率が少しあるときは、ボスの抽選が先＝ボスはちょうど遭遇率どおり
+  const rng = rngOf(77)
+  let boss = 0
+  for (let i = 0; i < N; i++) if (pickEncounter(3, 10, new Date(), rng).role === 'boss') boss++
+  assert.ok(Math.abs(boss * 100 / N - 10) < 0.6, `遭遇率10%でボス ${(boss * 100 / N).toFixed(2)}%`)
 })
 
 test('敵の強さ：標準の戦闘力は右肩上がり・ボスの倍率はエリアごと（15）×①②③・ふつうの敵は0.6倍', () => {
