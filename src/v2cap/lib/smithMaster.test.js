@@ -1,11 +1,12 @@
 // v2cap：鍛冶屋の親方トルステンの決まりを固定するテスト（node --test）
-// 【確定】2026-10-26 ユーザー指示（人物・絵・置き場所・動き・好感度は smithMaster.js の冒頭）
+// 【確定】2026-10-26 ユーザー指示（人物・絵・置き場所・動きは smithMaster.js の冒頭）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import * as M from './smithMaster.js'
 import {
-  MASTER_ART_DIR, MASTER_FACES, MASTER_FACE_KEYS, MASTER_FACE_SIZE, MASTER_LINES, MASTER_STAGES, MASTER_STAGE_EVENTS,
-  stageOf, callOf, varsOf, linesOf, pickLine, stageEventOf, enterKindOf, enhanceKindOf, GREAT_PLUS, shortWhatOf,
+  MASTER_ART_DIR, MASTER_FACES, MASTER_FACE_KEYS, MASTER_FACE_SIZE, MASTER_LINES,
+  callOf, varsOf, linesOf, pickLine, enterKindOf, enhanceKindOf, GREAT_PLUS, shortWhatOf,
 } from './smithMaster.js'
 import { PLUS_MAX, ENHANCE_RATE, enhanceErrorOf } from './smith.js'
 
@@ -70,7 +71,7 @@ test('セリフの表情はどれも2つのどちらか・2つとも使ってい
   assert.ok(MASTER_LINES.dismantle.every(l => l.text.includes('{n}')))
   assert.ok(MASTER_LINES.short.every(l => l.text.includes('{what}')))
   // 埋める名前は決まったものだけ（書きまちがいで {nmae} のまま出ない）
-  for (const l of [...allLines(), ...Object.values(MASTER_STAGE_EVENTS)]) {
+  for (const l of allLines()) {
     for (const m of l.text.matchAll(/\{(\w+)\}/g)) assert.ok(['call', 'plus', 'item', 'n', 'what'].includes(m[1]), `${l.text}`)
   }
 })
@@ -80,39 +81,29 @@ test('【確定】プレイヤーの名前は呼ばない（ユーザー指示�
   assert.equal(callOf({ gender: 'f' }), '嬢ちゃん')
   assert.equal(callOf({ gender: null }), 'お前さん')
   assert.deepEqual(varsOf({ username: 'おれおれお', gender: 'm' }), { call: '兄ちゃん' }, 'キャラクター名はセリフに渡さない')
-  for (const l of [...allLines(), ...Object.values(MASTER_STAGE_EVENTS)]) assert.ok(!/\{(name|username)\}/.test(l.text), l.text)
-  assert.equal(pickLine('enter', { stage: 1, rng: () => 0.99, vars: varsOf({ gender: 'f' }) }).text, 'おう、嬢ちゃん！ 炉はもう温まってるぜ')
+  for (const l of allLines()) assert.ok(!/\{(name|username)\}/.test(l.text), l.text)
+  assert.equal(pickLine('enter', { rng: () => 0.99, vars: varsOf({ gender: 'f' }) }).text, 'おう、嬢ちゃん！ 炉はもう温まってるぜ')
 })
 
 test('【確定】レア度の名前（ノーマル・レジェンダリーなど）はセリフで言わない（ユーザー指示「レアリティを直接言わないで」）', () => {
-  for (const l of [...allLines(), ...Object.values(MASTER_STAGE_EVENTS)]) {
-    assert.ok(!/ノーマル|レア|エピック|レジェンダリー|ユニーク/.test(l.text), l.text)
-  }
+  for (const l of allLines()) assert.ok(!/ノーマル|レア|エピック|レジェンダリー|ユニーク/.test(l.text), l.text)
 })
 
-test('【確定】親方は名乗らない（ユーザー指示「親方は名乗らなくていい。常連の場面から名前を外して」）', () => {
-  // 名前（トルステン）は設計書とコードの中の呼び名だけ。セリフにも場面にも出さない
-  for (const l of [...allLines(), ...Object.values(MASTER_STAGE_EVENTS)]) assert.ok(!/トルステン|名乗/.test(l.text), l.text)
-  assert.equal(MASTER_STAGE_EVENTS[2].text, 'すっかり常連だな！ {call}の装備は、これからも俺に任せときな！')
+test('【確定】親方は名乗らない（ユーザー指示「親方は名乗らなくていい」）', () => {
+  // 名前（トルステン）は設計書とコードの中の呼び名だけ。セリフに出さない
+  for (const l of allLines()) assert.ok(!/トルステン|名乗/.test(l.text), l.text)
 })
 
-test('好感度の段階：2日目〜顔なじみ・10日目〜常連まで（名前で呼ぶほどは仲良くならない）', () => {
-  assert.deepEqual(MASTER_STAGES.map(s => s.min), [0, 2, 10])
-  assert.deepEqual([0, 1, 2, 9, 10, 19, 20, 39, 40, 999].map(stageOf), [0, 0, 1, 1, 2, 2, 2, 2, 2, 2])
-  assert.equal(stageOf(undefined), 0)
-  // タップのセリフは仲良くなると増える
-  assert.deepEqual([0, 1, 2].map(s => linesOf('tap', s).length), [6, 8, 12])
-  // 顔なじみからのあいさつは、はじめての日には出ない
-  assert.ok(linesOf('enter', 0).every(l => !l.text.includes('また来たな')))
-})
-
-test('段階の場面は1回だけ・いちばん上のまだ見せていないもの', () => {
-  assert.equal(stageEventOf(0, 0), null)
-  assert.equal(stageEventOf(1, 0).stage, 1)
-  assert.equal(stageEventOf(1, 1), null)
-  assert.equal(stageEventOf(2, 0).stage, 2)          // 段階を飛ばしたら上のほうだけ
-  assert.equal(stageEventOf(2, 1).stage, 2)
-  assert.equal(stageEventOf(2, 2), null)
+test('【確定】好感度は無い（ユーザー指示「鍛冶屋のおっちゃんは好感度システムいらないや」）：はじめて来た人にも言えるセリフだけ・サーバーに聞かない', () => {
+  // 段階で出し分けない（どのセリフも min／max／dayMin を持たない）・段階や場面の決まりも無い
+  for (const l of allLines()) assert.ok(!('min' in l || 'max' in l || 'dayMin' in l || 'dayMax' in l), `${l.kind}：${l.text}`)
+  for (const name of ['MASTER_STAGES', 'MASTER_STAGE_EVENTS', 'stageOf', 'stageEventOf']) assert.equal(M[name], undefined, name)
+  // 顔なじみ・常連を前提にしたセリフは入れない
+  for (const l of allLines()) assert.ok(!/また来たな|よく来るな|常連|こないだ|久しぶり/.test(l.text), `${l.kind}：${l.text}`)
+  assert.deepEqual([linesOf('enter').length, linesOf('tap').length], [3, 11])
+  // 画面もサーバーに好感度を聞かない・好感度の列を読まない
+  const smith = read('components/V2capSmith.jsx')
+  for (const s of ['v2cap_smith_talk', 'v2cap_smith_seen', 'smith_affinity', 'smith_stage_seen', '好感度 {']) assert.ok(!smith.includes(s), s)
 })
 
 test('強化の結果：失敗→なぐさめる・+1〜6→喜ぶ・+7〜9（成功率40%以下）→すげえぞ・+10（上限）→最高傑作。成功はどれも笑顔', () => {
@@ -141,7 +132,7 @@ test('同じセリフが2回続かない（2つ以上あるとき）・夜おそ
   const rng = () => [0, 0.99, 0.5][n++ % 3]
   let last = null
   for (let i = 0; i < 30; i++) {
-    const l = pickLine('tap', { rng, last, stage: 2, vars: { call: '兄ちゃん' } })
+    const l = pickLine('tap', { rng, last, vars: { call: '兄ちゃん' } })
     assert.notEqual(l.text, last)
     last = l.text
   }
@@ -151,13 +142,10 @@ test('同じセリフが2回続かない（2つ以上あるとき）・夜おそ
   assert.equal(enterKindOf(jst(12)), 'enter')
 })
 
-test('画面：鍛冶屋の右に親方（狭い画面は上）・強化と作成の結果のポップアップにも親方・開発用は管理者だけ', () => {
-  assert.ok(read('pages/V2capHome.jsx').includes("{screen === 'smith' && <V2capSmith prof={prof} inventory={inventory} onProfile={refresh} onGo={setScreen} dev={isAdmin} />}"))
+test('画面：鍛冶屋の右に親方（狭い画面は上）・強化と作成の結果のポップアップにも親方', () => {
+  assert.ok(read('pages/V2capHome.jsx').includes("{screen === 'smith' && <V2capSmith prof={prof} inventory={inventory} onProfile={refresh} onGo={setScreen} />}"))
   const smith = read('components/V2capSmith.jsx')
   assert.ok(smith.includes('<V2capSmithMaster face={master.face} line={master.text} tick={master.tick} onTap={tapMaster} />'))
-  assert.ok(smith.includes('{dev && ('), '開発用は dev のときだけ')
-  assert.ok(smith.includes("makeDailyAsker(() => supabase.rpc('v2cap_smith_talk'))"), '好感度はその日1回だけサーバーに聞く')
-  assert.ok(smith.includes("supabase.rpc('v2cap_smith_seen', { p_stage: ev.stage }).then(() => {})"), '見せた場面を覚える（then を付けないと送られない）')
   assert.equal((smith.match(/say=\{fxJob\.say && <MasterSays face=\{fxJob\.say\.face\} line=\{fxJob\.say\.text\} \/>\}/g) || []).length, 2, '強化と作成の演出に親方を渡す')
   for (const f of ['components/V2capEnhanceFx.jsx', 'components/V2capCraftFx.jsx']) {
     const fx = read(f)

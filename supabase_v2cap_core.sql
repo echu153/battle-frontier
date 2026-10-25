@@ -7723,51 +7723,14 @@ begin
 end $$;
 
 -- ============================================================
--- ===== 17. 鍛冶屋の親方トルステン（2026-10-26）=====
+-- ===== 17. 鍛冶屋の親方の好感度を外した（2026-10-26）=====
 -- ============================================================
--- 【確定】2026-10-26 ユーザー指示「鍛冶屋の画面に、ニャーガーキングの看板娘と同じ形で、鍛冶屋のキャラのイラストを入れたい」＋選んだこと
---   （タップでセリフ・強化と作成の結果で反応・好感度）：
---   ・好感度は看板娘（§16-3）と同じ決まり：その日はじめて親方に話しかけたら（タップ）+1。1日1回・日本時間の5時で切り替え・下がらない。画面には出さない
---   ・段階とセリフは画面（src/v2cap/lib/smithMaster.js）。ここは数えるだけ
---   ・smith_stage_seen＝段階の場面をどこまで見せたか（画面が見せたら v2cap_smith_seen で入れる。場面のまだ無い段階は入れない＝あとで足せば出る）
-alter table public.v2cap_profiles add column if not exists smith_affinity   int not null default 0;
-alter table public.v2cap_profiles add column if not exists smith_talk_day   date;
-alter table public.v2cap_profiles add column if not exists smith_stage_seen int not null default 0;
-
--- 話しかけた：今日まだなら好感度+1（up=true）。返すのは好感度と見せた段階
-create or replace function public.v2cap_smith_talk()
-returns jsonb language plpgsql security definer set search_path = public as $$
-declare
-  v_uid   uuid := auth.uid();
-  v_today date := ((now() at time zone 'Asia/Tokyo') - interval '5 hours')::date;
-  v_row   public.v2cap_profiles;
-begin
-  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
-  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
-  select * into v_row from public.v2cap_profiles where id = v_uid for update;
-  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
-  if v_row.smith_talk_day is distinct from v_today then
-    update public.v2cap_profiles set smith_affinity = smith_affinity + 1, smith_talk_day = v_today where id = v_uid;
-    return jsonb_build_object('ok', true, 'up', true, 'affinity', v_row.smith_affinity + 1, 'seen', v_row.smith_stage_seen);
-  end if;
-  return jsonb_build_object('ok', true, 'up', false, 'affinity', v_row.smith_affinity, 'seen', v_row.smith_stage_seen);
-end;
-$$;
-revoke all on function public.v2cap_smith_talk() from public, anon;
-grant execute on function public.v2cap_smith_talk() to authenticated;
-
--- 段階の場面を見せた（下がらない・0〜9）
-create or replace function public.v2cap_smith_seen(p_stage int)
-returns jsonb language plpgsql security definer set search_path = public as $$
-declare
-  v_uid uuid := auth.uid();
-begin
-  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
-  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
-  if p_stage is null or p_stage < 0 or p_stage > 9 then return jsonb_build_object('ok', false, 'error', '段階が正しくありません'); end if;
-  update public.v2cap_profiles set smith_stage_seen = greatest(smith_stage_seen, p_stage) where id = v_uid;
-  return jsonb_build_object('ok', true);
-end;
-$$;
-revoke all on function public.v2cap_smith_seen(int) from public, anon;
-grant execute on function public.v2cap_smith_seen(int) to authenticated;
+-- 【確定】2026-10-26 ユーザー指示「鍛冶屋のおっちゃんは好感度システムいらないや」：
+--   同じ日に入れた親方の好感度（その日はじめて話しかけたら+1・2日目〜顔なじみ・10日目〜常連＝v2cap_smith_talk／v2cap_smith_seen）をやめた。
+--   親方の絵とセリフ（src/v2cap/lib/smithMaster.js）は画面だけで動く＝SQL は要らない。
+--   入れたときの関数と列を消す（前の版を流していなければ何もしない）
+drop function if exists public.v2cap_smith_talk();
+drop function if exists public.v2cap_smith_seen(int);
+alter table public.v2cap_profiles drop column if exists smith_affinity;
+alter table public.v2cap_profiles drop column if exists smith_talk_day;
+alter table public.v2cap_profiles drop column if exists smith_stage_seen;

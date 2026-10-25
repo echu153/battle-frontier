@@ -19,10 +19,7 @@ import { PlusTag, GearFilterBar, StatChange } from './v2capGear.jsx'
 import V2capEnhanceFx from './V2capEnhanceFx.jsx'
 import V2capCraftFx from './V2capCraftFx.jsx'
 import { ticketOf, canUseTicket } from '../lib/v1carry.js'
-import {
-  pickLine, enterKindOf, enhanceKindOf, shortWhatOf, stageOf, stageLabelOf, stageEventOf, varsOf, fillLine,
-  isNight, nextStreak, tapKindOf, makeDailyAsker,
-} from '../lib/smithMaster.js'
+import { pickLine, enterKindOf, enhanceKindOf, shortWhatOf, varsOf, isNight, nextStreak, tapKindOf } from '../lib/smithMaster.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — 鍛冶屋（強化・分解・作成）
@@ -37,7 +34,7 @@ import {
 //   ・強化と分解は鍛冶屋だけ（装備画面は着ける・外すだけ・ユーザー決定）
 // 【確定】2026-10-26 親方トルステン（ユーザー指示「ニャーガーキングの看板娘と同じ形で、鍛冶屋のキャラのイラストを入れたい」・lib/smithMaster.js）：
 //   右に親方を立たせる（スマホは上）。タップ・強化と作成の結果・分解・足りなくて強化できないときにセリフと表情が変わる（ユーザー選択）。
-//   強化と作成の結果のポップアップ・足りないときの強化の画面にも親方を出す。好感度は看板娘と同じ（その日はじめて話しかけたら+1・画面に出さない）
+//   強化と作成の結果のポップアップ・足りないときの強化の画面にも親方を出す。好感度は無し（ユーザー指示「鍛冶屋のおっちゃんは好感度システムいらないや」）
 // ============================================================
 const TABS = [
   { key:'enhance',   label:'強化', desc:`Goldとその装備のエリアの残骸で強化値を+1（+${PLUS_MAX}まで・+1ごとに強さ+10%・最低でも戦闘力+1）。ノーマルの装備はGoldだけで強化できます。失敗すると残骸とGoldはなくなり、強化値はそのままです。着けている装備も強化できます。` },
@@ -46,12 +43,8 @@ const TABS = [
 ]
 const rowBox = (border, bg = '#000818') => ({ background: bg, border:`1px solid ${border}`, padding:'6px 8px' })
 const SHORT = '#ff8844'
-const DEV = '#ff88cc'
-// その日はじめて親方に話しかけた（好感度+1）をサーバーに聞く窓口（同じ日は1回だけ聞いて答えを使い回す＝lib/clerk.js の makeDailyAsker）
-const talkAsker = makeDailyAsker(() => supabase.rpc('v2cap_smith_talk'))
 
-// dev … 開発用（管理者だけ）。親方の好感度を仮に置く・段階の場面とあいさつを見るボタンを出す（看板娘と同じ）
-export default function V2capSmith({ prof, inventory, onProfile, onGo, dev = false }) {
+export default function V2capSmith({ prof, inventory, onProfile, onGo }) {
   const [tab, setTab] = useState('enhance')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -74,57 +67,23 @@ export default function V2capSmith({ prof, inventory, onProfile, onGo, dev = fal
   }
   const switchTab = (key) => { setTab(key); setError(''); setNotice('') }
 
-  // ===== 親方トルステン（lib/smithMaster.js）。好感度は画面に出さない =====
-  // aff＝サーバーの好感度（話しかけた日の数）・seen＝見せた段階の場面・devAff＝開発用に仮に置いた好感度（null＝本物）
-  const [aff, setAff] = useState(() => Number(prof?.smith_affinity) || 0)
-  const [seen, setSeen] = useState(() => Number(prof?.smith_stage_seen) || 0)
-  const [devAff, setDevAff] = useState(null)
-  const stage = stageOf(devAff ?? aff)
-  // say がいまの段階と呼び方を見られるように控える（say は作り直さない）
-  const ctx = useRef({ stage, vars: varsOf(prof) })
-  ctx.current = { stage, vars: varsOf(prof) }
-  const [master, setMaster] = useState(() => ({ ...pickLine(enterKindOf(), { stage: stageOf(prof?.smith_affinity), vars: varsOf(prof) }), tick: 0 }))
+  // ===== 親方トルステン（lib/smithMaster.js）=====
+  // 呼び方（兄ちゃん／嬢ちゃん／お前さん）を say が見られるように控える（say は作り直さない）
+  const vars = useRef(varsOf(prof))
+  vars.current = varsOf(prof)
+  const [master, setMaster] = useState(() => ({ ...pickLine(enterKindOf(), { vars: varsOf(prof) }), tick: 0 }))
   const lastText = useRef(master.text)
   // 場面 kind のセリフを選んで吹き出しに出し、選んだもの { face, text } を返す（強化・作成の結果のポップアップにも同じものを出す）
-  const say = useCallback((kind, vars) => {
-    const line = pickLine(kind, { last: lastText.current, vars: { ...ctx.current.vars, ...vars }, stage: ctx.current.stage })
+  const say = useCallback((kind, more) => {
+    const line = pickLine(kind, { last: lastText.current, vars: { ...vars.current, ...more } })
     lastText.current = line.text
     setMaster(c => ({ ...line, tick: c.tick + 1 }))
     return line
   }, [])
-  const sayEvent = (ev) => {
-    const text = fillLine(ev.text, ctx.current.vars)
-    lastText.current = text
-    setMaster(c => ({ face: ev.face, text, tick: c.tick + 1 }))
-  }
   const streak = useRef(null)
-  const talked = useRef(false)
   const tapMaster = () => {
     streak.current = nextStreak(streak.current, Date.now())
-    say(tapKindOf(streak.current.n, isNight()))   // 待たせないように、まずすぐ答える
-    // その日はじめて話しかけたら、サーバーが好感度を+1（1日1回）。段階が上がっていれば、返事が来たところで
-    // その段階の場面のセリフに切り替える（1回だけ）。開発用に好感度を仮に置いているあいだは、サーバーには聞かない（本物を増やさない）
-    if (talked.current || devAff !== null) return
-    talked.current = true
-    talkAsker.get().then(({ data, error: e }) => {
-      if (e || !data?.ok) return
-      const nextAff = Number(data.affinity) || 0
-      setAff(nextAff)
-      ctx.current = { ...ctx.current, stage: stageOf(nextAff) }
-      const ev = stageEventOf(stageOf(nextAff), Math.max(Number(seen) || 0, Number(data.seen) || 0))
-      if (!ev) return
-      sayEvent(ev)
-      setSeen(ev.stage)
-      talkAsker.set({ data: { ...data, seen: ev.stage } })   // 同じ日に鍛冶屋を開き直しても、もう出さない
-      // ★supabase の呼び出しは then を付けないと送られない（結果は待たない＝失敗しても次の日にもう一度出るだけ）
-      supabase.rpc('v2cap_smith_seen', { p_stage: ev.stage }).then(() => {})
-    })
-  }
-  // 開発用：その段階の場面とあいさつを見る
-  const devStageEvent = () => {
-    const ev = stageEventOf(stage, 0)
-    if (ev && ev.stage === stage) sayEvent(ev)
-    else setMaster(c => ({ face: 'normal', text: `（${stageLabelOf(stage)}の場面はまだありません）`, tick: c.tick + 1 }))
+    say(tapKindOf(streak.current.n, isNight()))
   }
   const shared = { prof, all, wornIds, list, busy, call, setError, setNotice, say }
 
@@ -135,22 +94,6 @@ export default function V2capSmith({ prof, inventory, onProfile, onGo, dev = fal
         {/* 親方（広い画面は右・狭い画面は上） */}
         <div className="smm-side">
           <V2capSmithMaster face={master.face} line={master.text} tick={master.tick} onTap={tapMaster} />
-          {dev && (
-            <div style={{ textAlign:'center', marginTop:'8px' }}>
-              {/* 好感度（ふつうは画面に出さない）。仮に置いた値はサーバーに書かない＝セリフを確かめる用 */}
-              <div style={{ color: DEV, fontSize:'10px' }}>
-                ［開発］好感度 {devAff ?? aff}（{stageLabelOf(stage)}）{devAff !== null && <span style={{ color: TEXT.sub }}> 仮・本物は{aff}</span>}
-              </div>
-              <div style={{ display:'flex', gap:'4px', justifyContent:'center', flexWrap:'wrap', marginTop:'4px' }}>
-                {[-10, -1, 1, 10].map(d => (
-                  <button key={d} type="button" onClick={() => setDevAff(Math.max(0, (devAff ?? aff) + d))} style={miniBtn(DEV)}>{d > 0 ? `+${d}` : d}</button>
-                ))}
-                <button type="button" onClick={devStageEvent} style={miniBtn(DEV)}>段階の場面</button>
-                <button type="button" onClick={() => say(enterKindOf())} style={miniBtn(DEV)}>あいさつ</button>
-                {devAff !== null && <button type="button" onClick={() => setDevAff(null)} style={miniBtn(DEV)}>本物に戻す</button>}
-              </div>
-            </div>
-          )}
         </div>
 
         <div className="smm-main">

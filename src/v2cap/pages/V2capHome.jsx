@@ -463,7 +463,7 @@ export default function V2capHome() {
             </div>
             {screen === 'profile' && <V2capProfile prof={prof} inventory={inventory} onProfile={refresh} />}
             {screen === 'equip' && <V2capEquip prof={prof} inventory={inventory} onProfile={refresh} onGo={setScreen} />}
-            {screen === 'smith' && <V2capSmith prof={prof} inventory={inventory} onProfile={refresh} onGo={setScreen} dev={isAdmin} />}
+            {screen === 'smith' && <V2capSmith prof={prof} inventory={inventory} onProfile={refresh} onGo={setScreen} />}
             {screen === 'skills' && <V2capSkills prof={prof} inventory={inventory} onProfile={refresh} />}
             {screen === 'temple' && <V2capTemple prof={prof} inventory={inventory} onProfile={refresh} />}
             {screen === 'museum' && <V2capMuseum prof={prof} inventory={inventory} onProfile={refresh} />}
