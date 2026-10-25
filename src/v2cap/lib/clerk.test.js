@@ -5,7 +5,8 @@ import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import {
   CLERK_ART_DIR, CLERK_FACES, CLERK_FACE_KEYS, CLERK_WELCOME, CLERK_MARK, CLERK_FACE_SIZE, CLERK_WELCOME_H, CLERK_MARK_SIZE,
-  CLERK_LINES, fillLine, pickLine, isNight, nextStreak, tapKindOf, enterKindOf, welcomeDueLocal, STREAK_MS, makeWelcomeAsker,
+  CLERK_LINES, fillLine, pickLine, isNight, nextStreak, tapKindOf, enterKindOf, welcomeDueLocal, STREAK_MS, makeDailyAsker,
+  CLERK_STAGES, CLERK_STAGE_EVENTS, stageOf, callNameOf, stageEventOf, linesOf, dayOf,
 } from './clerk.js'
 
 const PUB = new URL('../../../public/', import.meta.url)
@@ -109,13 +110,13 @@ test('店を開いたときのひとこと：夜おそく→眠そう・食事�
 test('【2026-10-25 直した】サーバーには同じ日は1回だけ聞いて答えを使い回す（画面を2回作り直しても first=true が届く）', async () => {
   let asked = 0
   let day = '2026-10-24'
-  const w = makeWelcomeAsker(async () => ({ data: { ok: true, first: ++asked === 1 } }), () => day)
+  const w = makeDailyAsker(async () => ({ data: { ok: true, first: ++asked === 1 } }), () => day)
   const a = await w.get()
   const b = await w.get()   // 開発モードの2回目の作り直し＝同じ答え
   assert.equal(asked, 1)
   assert.equal(a.data.first, true)
   assert.equal(b.data.first, true)
-  w.done()                  // 出したら、同じ日に開き直しても出さない（サーバーにも聞かない）
+  w.set({ data: { ok: true, first: false } })   // 出したら、同じ日に開き直しても出さない（サーバーにも聞かない）
   assert.equal((await w.get()).data.first, false)
   assert.equal(asked, 1)
   day = '2026-10-25'        // 日付が変わったら聞き直す
@@ -129,4 +130,59 @@ test('「いらっしゃいませー」はその日はじめてだけ（日本�
   assert.equal(welcomeDueLocal('2026-10-25', at(12)), false)
   assert.equal(welcomeDueLocal('2026-10-25', at(4)), true)    // 朝4時はまだ前の日（10-24）
   assert.equal(welcomeDueLocal('2026-10-24', at(4)), false)
+})
+
+// ===== 好感度（2026-10-25 ユーザー指示「毎日会話重ねていくことで仲良くなってほしい」）=====
+test('好感度の段階：2日目〜顔なじみ・10日目〜常連・20日目〜名前で呼ぶ・40日目〜自己紹介（ユーザー選択のペース）', () => {
+  assert.deepEqual(CLERK_STAGES.map(s => s.min), [0, 2, 10, 20, 40])
+  const at = (n) => stageOf(n)
+  assert.deepEqual([0, 1, 2, 9, 10, 19, 20, 39, 40, 999].map(at), [0, 0, 1, 1, 2, 2, 3, 3, 4, 4])
+  assert.equal(stageOf(undefined), 0)
+})
+
+test('呼び方：男性は〇〇くん・女性は〇〇ちゃん・決めていなければ〇〇さん（ユーザー選択）', () => {
+  assert.equal(callNameOf({ username: 'おれおれお', gender: 'm' }), 'おれおれおくん')
+  assert.equal(callNameOf({ username: 'ミナ', gender: 'f' }), 'ミナちゃん')
+  assert.equal(callNameOf({ username: 'ノア', gender: null }), 'ノアさん')
+})
+
+test('名前で呼ぶのは仲良し（20日目）から。それより前のセリフに {name} は出てこない', () => {
+  for (const [kind, list] of Object.entries(CLERK_LINES)) {
+    for (const l of list) if (l.text.includes('{name}')) assert.ok((l.min ?? 0) >= 3, `${kind}：${l.text}`)
+  }
+  // 名前つきとそうでないものは同じ段階で混ざらない（20日目からは名前つきだけ）
+  for (const kind of ['enterDaily', 'enterLong', 'enterAgain', 'enterFed', 'enterNight', 'streak3', 'streak5', 'streak8', 'short', 'served', 'servedTopping']) {
+    assert.ok(linesOf(kind, 3).every(l => l.text.includes('{name}')), `${kind} の20日目から`)
+    assert.ok(linesOf(kind, 2).every(l => !l.text.includes('{name}')), `${kind} の20日目より前`)
+  }
+  assert.equal(pickLine('enterDaily', { stage: 3, rng: () => 0, vars: { name: 'おれおれおくん' } }).text, 'おれおれおくん、今日も来てくれたんだね！')
+})
+
+test('段階が上がるとタップのセリフが増える（はじめて8 → 顔なじみ10 → 常連13 → 仲良し16）', () => {
+  assert.deepEqual([0, 1, 2, 3, 4].map(s => linesOf('tap', s).length), [8, 10, 13, 16, 16])
+  // 顔なじみからのあいさつ（今日も・久しぶり・また）は、はじめての日には出ない
+  for (const kind of ['enterDaily', 'enterLong', 'enterAgain']) assert.equal(linesOf(kind, 0).length, 0, kind)
+})
+
+test('段階の場面は1回だけ・いちばん上のまだ見せていないもの。40日目（自己紹介）は名前が決まるまで無い', () => {
+  assert.equal(stageEventOf(0, 0), null)
+  assert.equal(stageEventOf(1, 0).stage, 1)
+  assert.equal(stageEventOf(1, 1), null)
+  assert.equal(stageEventOf(3, 1).stage, 3)          // 段階を飛ばしたら上のほうだけ
+  assert.equal(stageEventOf(4, 3), null)             // 40日目の場面はまだ無い＝見せた印も付かない（あとで足せば出る）
+  assert.equal(stageEventOf(4, 0).stage, 3)
+  assert.equal(CLERK_STAGE_EVENTS[4], undefined, '看板娘の名前（あだ名）は決まってから入れる')
+  assert.ok(CLERK_STAGE_EVENTS[3].text.includes('{username}') && CLERK_STAGE_EVENTS[3].text.includes('{name}'), '20日目に名前を聞いて呼び始める')
+})
+
+test('顔なじみからのあいさつ：前の日に来ていた→今日も・2日以上あいた→久しぶり・今日もう来ていた→また（食事中は残り時間）', () => {
+  const noon = new Date(Date.UTC(2026, 9, 25, 3))   // 日本時間12時（日付は10-25）
+  const today = dayOf(noon), yesterday = dayOf(new Date(noon.getTime() - 864e5))
+  assert.equal(enterKindOf(null, noon, { stage: 1, lastVisit: yesterday }), 'enterDaily')
+  assert.equal(enterKindOf(null, noon, { stage: 1, lastVisit: '2026-10-20' }), 'enterLong')
+  assert.equal(enterKindOf(null, noon, { stage: 1, lastVisit: null }), 'enterLong')
+  assert.equal(enterKindOf(null, noon, { stage: 1, lastVisit: today }), 'enterAgain')
+  assert.equal(enterKindOf({ burger: {} }, noon, { stage: 1, lastVisit: today }), 'enterFed')
+  assert.equal(enterKindOf({ burger: {} }, noon, { stage: 1, lastVisit: yesterday }), 'enterDaily')   // その日はじめては「今日も」が先
+  assert.equal(enterKindOf(null, noon, { stage: 0, lastVisit: yesterday }), 'enter')                // はじめてのうちは前と同じ
 })

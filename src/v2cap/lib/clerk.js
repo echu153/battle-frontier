@@ -36,22 +36,66 @@ export const CLERK_FACE_SIZE = { w: 342, h: 640 }
 export const CLERK_WELCOME_H = 1024
 export const CLERK_MARK_SIZE = 96
 
+// ===== 好感度（【確定】2026-10-25 ユーザー指示「毎日会話重ねていくことで仲良くなってほしい」「プレイヤー視点では見えないように」）=====
+//   ・どうぶつの森のきぬよのように、毎日話しかけるうちに打ち解けていく。好感度は画面に出さない（ゲージも数字もなし）
+//   ・その日はじめて話しかけたら（タップ）+1。1日1回・朝5時区切り・下がらない（ユーザー選択「話しかけたら」）。数えるのはサーバー（v2cap_clerk_talk）
+//   ・段階（ユーザー選択「20日で名前・40日で自己紹介」）：2日目〜顔なじみ（今日も来てくれたんだね）・10日目〜常連（くだけた話）・
+//     20日目〜仲良し（プレイヤーの名前で呼ぶ）・40日目〜親友（自己紹介）。段階が上がるとセリフが増える
+//   ・段階が上がって最初に話しかけたときは、その段階の場面のセリフ（1回だけ。どこまで見せたかはサーバーの clerk_stage_seen）
+//   ・呼び方（ユーザー選択）：男性のキャラは「〇〇くん」・女性は「〇〇ちゃん」（性別を決めていなければ「〇〇さん」）
+//   ★40日目の自己紹介は、看板娘の名前（あだ名）が決まってから入れる（ユーザー「最終的にはエンドコンテンツの強めのNPC・体術の上位クラス。
+//     ここで出す名前はあだ名みたいな感じ。名前は決まってないから一旦入れないで」）。場面が無い段階は見せた印を付けない＝あとで足せば次の会話で出る
+export const CLERK_STAGES = [
+  { stage: 0, min: 0,  label: 'はじめて' },
+  { stage: 1, min: 2,  label: '顔なじみ' },
+  { stage: 2, min: 10, label: '常連' },
+  { stage: 3, min: 20, label: '仲良し' },
+  { stage: 4, min: 40, label: '親友' },
+]
+export const stageOf = (affinity) => [...CLERK_STAGES].reverse().find(s => (Number(affinity) || 0) >= s.min).stage
+export const stageLabelOf = (stage) => CLERK_STAGES.find(s => s.stage === stage)?.label || ''
+// 名前で呼ぶとき（{name}）。username＝キャラクター名
+export const callNameOf = (profile) =>
+  `${profile?.username || ''}${profile?.gender === 'm' ? 'くん' : profile?.gender === 'f' ? 'ちゃん' : 'さん'}`
+
 // ===== セリフ（【確定】2026-10-25 ユーザーが案を見て「語尾の『ニャ』を全部外す」を選んだ＝ふつうの話し方）=====
 // ★店の名前（ニャーガーキング）とバーガーの名前（〜ニャッパー）のほかに「ニャ」を使わない（clerk.test.js が見張る）
-// face＝出す表情。{burger}＝バーガーの名前・{left}＝残り時間（「42分」）・{toppings}＝乗ったトッピング（「ピクルスとガーリック」）
+// face＝出す表情。{burger}＝バーガーの名前・{left}＝残り時間（「42分」）・{toppings}＝乗ったトッピング（「ピクルスとガーリック」）・
+// {name}＝呼び方（「〇〇くん」）・{username}＝キャラクター名。min／max＝出す好感度の段階（書いていなければ0から・上限なし）
 export const CLERK_LINES = {
   // 全身の「いらっしゃいませー」（その日はじめて）
   welcome: [{ face: 'smile', text: 'いらっしゃいませー！' }],
-  // 店を開いたときのひとこと
+  // 店を開いたときのひとこと（はじめて）
   enter: [
     { face: 'normal', text: 'いらっしゃいませ！ ご注文はお決まりですか？' },
     { face: 'smile', text: 'ニャーガーキングへようこそ！ 今日はどれにする？' },
   ],
+  // 顔なじみから：前の日にも来ていた（今日も）／しばらく来ていなかった（久しぶり）／今日もう来ていた（また）
+  enterDaily: [
+    { min: 1, max: 2, face: 'smile', text: '今日も来てくれたんだね！' },
+    { min: 1, max: 2, face: 'smile', text: 'あっ、いらっしゃい！ 今日も来てくれてうれしいな' },
+    { min: 3, face: 'smile', text: '{name}、今日も来てくれたんだね！' },
+    { min: 3, face: 'wink', text: '{name}！ 待ってたよ！' },
+  ],
+  enterLong: [
+    { min: 1, max: 2, face: 'surprised', text: '久しぶり！ 元気にしてた？' },
+    { min: 3, face: 'shy', text: '{name}、久しぶり！ ちょっと心配してたんだよ？' },
+  ],
+  enterAgain: [
+    { min: 1, max: 2, face: 'smile', text: 'また来てくれたの？ うれしいな' },
+    { min: 3, face: 'smile', text: '{name}、また来てくれたんだ！' },
+  ],
   // 食事が効いているときに店を開いた
-  enterFed: [{ face: 'smile', text: 'さっきの{burger}、まだ効いてるよ！ あと{left}！' }],
+  enterFed: [
+    { max: 2, face: 'smile', text: 'さっきの{burger}、まだ効いてるよ！ あと{left}！' },
+    { min: 3, face: 'smile', text: '{name}、さっきの{burger}まだ効いてるよ！ あと{left}！' },
+  ],
   // 夜おそく（日本時間の0〜5時）
-  enterNight: [{ face: 'sleepy', text: 'ふぁ…いらっしゃいませぇ…。こんな時間までおつかれさま…' }],
-  // ふつうにタップしたとき（同じセリフが2回続かないように選ぶ）
+  enterNight: [
+    { max: 2, face: 'sleepy', text: 'ふぁ…いらっしゃいませぇ…。こんな時間までおつかれさま…' },
+    { min: 3, face: 'sleepy', text: 'ふぁ…{name}、こんな時間までがんばってるんだね…' },
+  ],
+  // ふつうにタップしたとき（同じセリフが2回続かないように選ぶ）。段階が上がると増える
   tap: [
     { face: 'normal', text: 'バーガーは60分効くよ。出撃の前にどうぞ！' },
     { face: 'smile', text: '焼きたてだよ！ 直火で焼いてるから香ばしいんだ！' },
@@ -61,32 +105,73 @@ export const CLERK_LINES = {
     { face: 'smug', text: 'スパイシーニャッパーは自信作なんだから！' },
     { face: 'normal', text: '上げたいステータスのバーガーを選んでね' },
     { face: 'smile', text: 'メジャーのトッピングは、敵がよく使う状態異常に効くよ！' },
+    { min: 1, face: 'smile', text: '最近よく来てくれるね。うちのバーガー、気に入ってくれた？' },
+    { min: 1, face: 'normal', text: '出撃、気をつけてね。ちゃんと食べてから行くんだよ？' },
+    { min: 2, face: 'wink', text: '実は新しいバーガーを考えてるんだ。…まだ秘密！' },
+    { min: 2, face: 'smug', text: 'パティを焼くのはね、火加減が命なの。強すぎても弱すぎてもダメ！' },
+    { min: 2, face: 'smug', text: 'お店が終わったら、こっそり体を動かしてるんだ。けっこう鍛えてるんだよ？' },
+    { min: 3, face: 'shy', text: '{name}が来てくれると、なんだか元気が出るんだ' },
+    { min: 3, face: 'wink', text: '{name}のぶん、いつもちょっとだけ多めに焼いてるの。…内緒だよ？' },
+    { min: 3, face: 'normal', text: '{name}、無理しちゃだめだよ。ちゃんと休んでね' },
   ],
   tapNight: [
     { face: 'sleepy', text: 'むにゃ…あっ、起きてます！ ちゃんと起きてます！' },
     { face: 'sleepy', text: 'ふぁぁ…夜ふかしはほどほどにね…' },
+    { min: 3, face: 'sleepy', text: '{name}も夜ふかし？ …実はわたしもなんだ' },
   ],
   // 続けてタップしたとき（3回目・5回目・8回目から）
-  streak3: [{ face: 'surprised', text: 'わっ！ どうしたの？' }],
-  streak5: [{ face: 'shy', text: 'そ、そんなに見つめられると…照れるよ…' }],
-  streak8: [{ face: 'pout', text: 'もー！ 注文しないならつつかないで！' }],
+  streak3: [
+    { max: 2, face: 'surprised', text: 'わっ！ どうしたの？' },
+    { min: 3, face: 'surprised', text: 'わっ！ {name}、どうしたの？' },
+  ],
+  streak5: [
+    { max: 2, face: 'shy', text: 'そ、そんなに見つめられると…照れるよ…' },
+    { min: 3, face: 'shy', text: '{name}、そんなに見つめられると照れるよ…' },
+  ],
+  streak8: [
+    { max: 2, face: 'pout', text: 'もー！ 注文しないならつつかないで！' },
+    { min: 3, face: 'pout', text: 'もー！ {name}ってば、つつきすぎ！' },
+  ],
   // 選んだものの合計が持っているGoldより多くなった
-  short: [{ face: 'sad', text: 'あぅ…Goldが足りないみたい。出撃してまた来てね' }],
+  short: [
+    { max: 2, face: 'sad', text: 'あぅ…Goldが足りないみたい。出撃してまた来てね' },
+    { min: 3, face: 'sad', text: '{name}、Goldが足りないみたい…。出撃してまた来てね' },
+  ],
   // 食事が効いている間に注文しようとした（食べ直しの確かめ）
   confirm: [{ face: 'surprised', text: 'まだ効いてるよ？ 食べ直すと前のは消えちゃうけど…' }],
   // 出したとき（トッピングなし／あり）
-  served: [{ face: 'smile', text: 'お待たせしましたー！ {burger}です！ 熱いうちにどうぞ！' }],
-  servedTopping: [{ face: 'wink', text: 'お待たせしました！ 今回のトッピングは{toppings}だよ！' }],
+  served: [
+    { max: 2, face: 'smile', text: 'お待たせしましたー！ {burger}です！ 熱いうちにどうぞ！' },
+    { min: 3, face: 'smile', text: 'お待たせ、{name}！ {burger}だよ！ 熱いうちにどうぞ！' },
+  ],
+  servedTopping: [
+    { max: 2, face: 'wink', text: 'お待たせしました！ 今回のトッピングは{toppings}だよ！' },
+    { min: 3, face: 'wink', text: 'お待たせ、{name}！ 今回のトッピングは{toppings}だよ！' },
+  ],
   // 注文がうまく通らなかった
   error: [{ face: 'sad', text: 'ごめんね、うまく注文できなかったみたい…' }],
+}
+
+// 段階が上がって最初に話しかけたときの場面（1回だけ）。4（40日目の自己紹介）は名前が決まってから入れる
+export const CLERK_STAGE_EVENTS = {
+  1: { face: 'smile', text: 'あっ、この前も来てくれた人だよね？ ちゃんと覚えてるよ！' },
+  2: { face: 'smile', text: '最近ほんとによく来てくれるね。もうすっかり常連さんだね！' },
+  3: { face: 'shy', text: 'ねえ、いつも来てくれるのに名前を聞いてなかったね。……{username}っていうんだ！ じゃあ、これからは{name}って呼ぶね！' },
+}
+// まだ見せていない場面（いまの段階から下へ探して、いちばん上のもの）。seen＝見せた段階（サーバーの clerk_stage_seen）。無ければ null
+export const stageEventOf = (stage, seen = 0) => {
+  for (let s = stage; s > (Number(seen) || 0); s--) if (CLERK_STAGE_EVENTS[s]) return { stage: s, ...CLERK_STAGE_EVENTS[s] }
+  return null
 }
 
 // {名前} を埋める
 export const fillLine = (text, vars = {}) => text.replace(/\{(\w+)\}/g, (m, k) => (vars[k] ?? m))
 
-// 場面 kind のセリフを1つ選ぶ。last＝直前のセリフの文（同じものが続かないように・2つ以上あるときだけ）
-export const pickLine = (kind, { rng = Math.random, last = null, vars = {} } = {}) => {
-  const list = CLERK_LINES[kind] || CLERK_LINES.tap
+// 場面 kind のセリフを1つ選ぶ。stage＝好感度の段階（その段階で出せるものだけ）・last＝直前のセリフの文（同じものが続かないように・2つ以上あるときだけ）
+export const linesOf = (kind, stage = 0) =>
+  (CLERK_LINES[kind] || CLERK_LINES.tap).filter(l => (l.min ?? 0) <= stage && stage <= (l.max ?? Infinity))
+export const pickLine = (kind, { rng = Math.random, last = null, vars = {}, stage = 0 } = {}) => {
+  const list = linesOf(kind, stage)
   const pool = list.length > 1 && last ? list.filter(l => fillLine(l.text, vars) !== last) : list
   const from = pool.length ? pool : list
   const l = from[Math.min(from.length - 1, Math.floor(rng() * from.length))]
@@ -111,17 +196,28 @@ export const tapKindOf = (n, night = false) => {
   return night ? 'tapNight' : 'tap'
 }
 
-// 店を開いたときのひとこと。meal＝burger.js の activeMealOf（効いていなければ null）
-export const enterKindOf = (meal, at = new Date()) => (isNight(at) ? 'enterNight' : meal ? 'enterFed' : 'enter')
+// 店を開いたときのひとこと。meal＝burger.js の activeMealOf（効いていなければ null）。
+// 顔なじみから（stage≥1）は、前に店を開いた日（lastVisit＝プロフィールの burger_welcome_day・開く前の値）で
+// 「今日も（前の日）」「久しぶり（2日以上あいた）」「また（今日もう来ていた・食事中なら残り時間）」を選ぶ
+export const enterKindOf = (meal, at = new Date(), { stage = 0, lastVisit = null } = {}) => {
+  if (isNight(at)) return 'enterNight'
+  if (stage >= 1) {
+    const d = at instanceof Date ? at : new Date(at)
+    const last = lastVisit ? String(lastVisit).slice(0, 10) : ''
+    if (last !== dayOf(d)) return last === dayOf(new Date(d.getTime() - 864e5)) ? 'enterDaily' : 'enterLong'
+    return meal ? 'enterFed' : 'enterAgain'
+  }
+  return meal ? 'enterFed' : 'enter'
+}
 
 // その日はじめてか（サーバーの関数が無いとき＝SQLを流す前の端末の控え）。lastDay＝前に出した日（'2026-10-25'）
 export const welcomeDueLocal = (lastDay, at = new Date()) => String(lastDay || '') !== dayOf(at)
 
-// その日の「いらっしゃいませー」を出すかをサーバー（v2cap_burger_welcome）に聞く窓口。ask＝聞く関数（{ data, error } を返す）
-// ★同じ日は1回だけ聞いて、答えを使い回す。【2026-10-25 直した】聞くとサーバーは今日の印を付けるので、2回目に聞くと first=false になる。
-//   React の開発モード（StrictMode）は画面を2回作り直す＝1回目の答え（first=true）が捨てられ、2回目は false で全画面が出なかった
-//   （店を開いてすぐ閉じたときも同じことが起きうる）。出したら done で「もう出した」にする（同じ日に店を開き直しても出さない）
-export const makeWelcomeAsker = (ask, dayFn = () => dayOf()) => {
+// 1日1回だけサーバーに聞く窓口（いらっしゃいませー＝v2cap_burger_welcome・話しかけた＝v2cap_clerk_talk）。ask＝聞く関数（{ data, error } を返す）
+// ★同じ日は1回だけ聞いて、答えを使い回す。【2026-10-25 直した】聞くとサーバーは今日の印を付けるので、2回目に聞くと答えが変わる。
+//   React の開発モード（StrictMode）は画面を2回作り直す＝1回目の答えが捨てられ、2回目は「もう済んだ」になっていた
+//   （店を開いてすぐ閉じたときも同じことが起きうる）。使ったあとの答えは set で入れ替える（いらっしゃいませーを出したら first=false など）
+export const makeDailyAsker = (ask, dayFn = () => dayOf()) => {
   let cur = null
   return {
     get: () => {
@@ -129,7 +225,7 @@ export const makeWelcomeAsker = (ask, dayFn = () => dayOf()) => {
       if (!cur || cur.day !== day) cur = { day, p: Promise.resolve().then(ask) }
       return cur.p
     },
-    done: () => { cur = { day: dayFn(), p: Promise.resolve({ data: { ok: true, first: false } }) } },
+    set: (value) => { cur = { day: dayFn(), p: Promise.resolve(value) } },
   }
 }
 export { dayOf }

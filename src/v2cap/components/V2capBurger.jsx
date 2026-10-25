@@ -10,7 +10,10 @@ import {
   MEAL_COLOR, MEAL_MINUTES, BURGERS, BURGER_BY_STAT, TOPPING_GROUPS, TOPPING_BY_AIL, BURGER_GOLD, TOPPING_GOLD,
   TOPPING_RESIST_PCT, toppingsOf, mealCostOf, activeMealOf, leftText, burgerEffectText, toppingText,
 } from '../lib/burger.js'
-import { pickLine, enterKindOf, tapKindOf, nextStreak, isNight, welcomeDueLocal, dayOf, makeWelcomeAsker } from '../lib/clerk.js'
+import {
+  pickLine, enterKindOf, tapKindOf, nextStreak, isNight, welcomeDueLocal, dayOf, makeDailyAsker,
+  stageOf, stageLabelOf, callNameOf, stageEventOf, fillLine,
+} from '../lib/clerk.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — ハンバーガー屋「ニャーガーキング」（2026-10-25）
@@ -32,8 +35,12 @@ const HELP_HEAD = { color: MEAL_COLOR, fontSize:'12px', marginBottom:'2px' }
 const leftShort = (ms) => leftText(ms).replace(/^残り/, '')
 // SQLを流す前（サーバーの関数が無いとき）に、その日の「いらっしゃいませー」を出したかを端末に覚える名前
 const WELCOME_PREF = 'capBurgerWelcome'
-// その日の「いらっしゃいませー」をサーバーに聞く窓口（同じ日は1回だけ聞いて答えを使い回す＝lib/clerk.js の makeWelcomeAsker）
-const welcomeAsker = makeWelcomeAsker(() => supabase.rpc('v2cap_burger_welcome'))
+// その日の「いらっしゃいませー」・その日はじめて話しかけた（好感度+1）をサーバーに聞く窓口
+// （同じ日は1回だけ聞いて答えを使い回す＝lib/clerk.js の makeDailyAsker）
+const welcomeAsker = makeDailyAsker(() => supabase.rpc('v2cap_burger_welcome'))
+const talkAsker = makeDailyAsker(() => supabase.rpc('v2cap_clerk_talk'))
+// 開発用の「あいさつ」ボタンで順に見せるひとこと（顔なじみからの3つ）
+const DEV_GREETS = ['enterDaily', 'enterLong', 'enterAgain']
 
 // 組の中身（トマト＝出血 など）
 function GroupList({ group }) {
@@ -66,18 +73,63 @@ export default function V2capBurger({ prof, onProfile, dev = false }) {
   const have = Number(prof?.gold || 0)
   const short = have < cost
 
+  // ===== 好感度（画面には出さない・lib/clerk.js の冒頭）=====
+  // aff＝サーバーの好感度（話しかけた日の数）・seen＝見せた段階の場面・devAff＝開発用に仮に置いた好感度（null＝本物）
+  const [aff, setAff] = useState(() => Number(prof?.clerk_affinity) || 0)
+  const [seen, setSeen] = useState(() => Number(prof?.clerk_stage_seen) || 0)
+  const [devAff, setDevAff] = useState(null)
+  const stage = stageOf(devAff ?? aff)
+  const baseVars = { name: callNameOf(prof), username: prof?.username || '' }
+  // say がいまの段階と呼び方を見られるように控える（say は作り直さない）
+  const ctx = useRef({ stage, vars: baseVars })
+  ctx.current = { stage, vars: baseVars }
+
   // ===== 看板娘：いまの表情とセリフ（tick は話すたびに増やす＝同じ表情でも跳ねる）=====
   const [clerk, setClerk] = useState(() => {
     const m = activeMealOf(prof)
-    return { ...pickLine(enterKindOf(m), { vars: m ? { burger: m.burger.name, left: leftShort(m.leftMs) } : {} }), tick: 0 }
+    const st = stageOf(prof?.clerk_affinity)
+    const kind = enterKindOf(m, new Date(), { stage: st, lastVisit: prof?.burger_welcome_day })
+    const vars = { ...baseVars, ...(m ? { burger: m.burger.name, left: leftShort(m.leftMs) } : {}) }
+    return { ...pickLine(kind, { vars, stage: st }), tick: 0 }
   })
   const say = useCallback((kind, vars) => {
-    setClerk(c => ({ ...pickLine(kind, { last: c.text, vars }), tick: c.tick + 1 }))
+    const { stage: st, vars: base } = ctx.current
+    setClerk(c => ({ ...pickLine(kind, { last: c.text, vars: { ...base, ...vars }, stage: st }), tick: c.tick + 1 }))
   }, [])
+  const sayEvent = (ev) => setClerk(c => ({ face: ev.face, text: fillLine(ev.text, ctx.current.vars), tick: c.tick + 1 }))
   const streak = useRef(null)
+  const talked = useRef(false)
   const tapClerk = () => {
     streak.current = nextStreak(streak.current, Date.now())
-    say(tapKindOf(streak.current.n, isNight()))
+    say(tapKindOf(streak.current.n, isNight()))   // 待たせないように、まずすぐ答える
+    // その日はじめて話しかけたら、サーバーが好感度を+1（1日1回）。段階が上がっていれば、返事が来たところで
+    // その段階の場面のセリフに切り替える（1回だけ）。開発用に好感度を仮に置いているあいだは、サーバーには聞かない（本物を増やさない）
+    if (talked.current || devAff !== null) return
+    talked.current = true
+    talkAsker.get().then(({ data, error: e }) => {
+      if (e || !data?.ok) return
+      const nextAff = Number(data.affinity) || 0
+      setAff(nextAff)
+      ctx.current = { ...ctx.current, stage: stageOf(nextAff) }
+      const ev = stageEventOf(stageOf(nextAff), Math.max(Number(seen) || 0, Number(data.seen) || 0))
+      if (!ev) return
+      sayEvent(ev)
+      setSeen(ev.stage)
+      talkAsker.set({ data: { ...data, seen: ev.stage } })   // 同じ日に店を開き直しても、もう出さない
+      // ★supabase の呼び出しは then を付けないと送られない（結果は待たない＝失敗しても次の日にもう一度出るだけ）
+      supabase.rpc('v2cap_clerk_seen', { p_stage: ev.stage }).then(() => {})
+    })
+  }
+  // 開発用：好感度を仮に置く・その段階の場面とあいさつを見る
+  const devGreet = useRef(0)
+  const devStageEvent = () => {
+    const ev = stageEventOf(stage, 0)
+    if (ev && ev.stage === stage) sayEvent(ev)
+    else setClerk(c => ({ face: 'normal', text: `（${stageLabelOf(stage)}の場面はまだありません）`, tick: c.tick + 1 }))
+  }
+  const devGreeting = () => {
+    const kind = stage >= 1 ? DEV_GREETS[devGreet.current++ % DEV_GREETS.length] : 'enter'
+    say(kind, meal ? { burger: meal.burger.name, left: leftShort(meal.leftMs) } : {})
   }
 
   // その日はじめて店を開いたら「いらっしゃいませー！」。日付はサーバーが覚える（SQLを流す前は端末に覚える）
@@ -86,7 +138,7 @@ export default function V2capBurger({ prof, onProfile, dev = false }) {
     ;(async () => {
       const { data, error: e } = await welcomeAsker.get()
       if (!alive) return
-      if (!e && data?.ok) { if (data.first) { welcomeAsker.done(); setWelcome(true) } return }
+      if (!e && data?.ok) { if (data.first) { welcomeAsker.set({ data: { ok: true, first: false } }); setWelcome(true) } return }
       if (welcomeDueLocal(loadPref(WELCOME_PREF, ''))) { savePref(WELCOME_PREF, dayOf()); setWelcome(true) }
     })()
     return () => { alive = false }
@@ -167,6 +219,18 @@ export default function V2capBurger({ prof, onProfile, dev = false }) {
           {dev && (
             <div style={{ textAlign:'center', marginTop:'8px' }}>
               <button type="button" onClick={() => setWelcome(true)} style={miniBtn('#ff88cc')}>🧪 いらっしゃいませーを見る［開発］</button>
+              {/* 好感度（ふつうは画面に出さない）。仮に置いた値はサーバーに書かない＝セリフを確かめる用 */}
+              <div style={{ color:'#ff88cc', fontSize:'10px', marginTop:'6px' }}>
+                ［開発］好感度 {devAff ?? aff}（{stageLabelOf(stage)}）{devAff !== null && <span style={{ color: TEXT.sub }}> 仮・本物は{aff}</span>}
+              </div>
+              <div style={{ display:'flex', gap:'4px', justifyContent:'center', flexWrap:'wrap', marginTop:'4px' }}>
+                {[-10, -1, 1, 10].map(d => (
+                  <button key={d} type="button" onClick={() => setDevAff(Math.max(0, (devAff ?? aff) + d))} style={miniBtn('#ff88cc')}>{d > 0 ? `+${d}` : d}</button>
+                ))}
+                <button type="button" onClick={devStageEvent} style={miniBtn('#ff88cc')}>段階の場面</button>
+                <button type="button" onClick={devGreeting} style={miniBtn('#ff88cc')}>あいさつ</button>
+                {devAff !== null && <button type="button" onClick={() => setDevAff(null)} style={miniBtn('#ff88cc')}>本物に戻す</button>}
+              </div>
             </div>
           )}
         </div>

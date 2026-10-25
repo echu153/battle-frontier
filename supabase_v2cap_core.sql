@@ -7638,6 +7638,54 @@ $$;
 revoke all on function public.v2cap_burger_welcome() from public, anon;
 grant execute on function public.v2cap_burger_welcome() to authenticated;
 
+-- ---- 16-3. 看板娘の好感度（2026-10-25）----
+-- 【確定】2026-10-25 ユーザー指示「毎日会話重ねていくことで仲良くなってほしい」「どうぶつの森のきぬよみたいに毎日ちょっとずつ好感度上がってく感じ、
+--   プレイヤー視点では見えないように」＋選んだこと（話しかけたら・20日で名前・40日で自己紹介・〇〇くん／〇〇ちゃん）：
+--   ・その日はじめて看板娘に話しかけたら（タップ）好感度+1。1日1回・日本時間の5時で切り替え・下がらない
+--   ・段階とセリフは画面（src/v2cap/lib/clerk.js）。ここは数えるだけ。好感度は画面に出さない
+--   ・clerk_stage_seen＝段階の場面をどこまで見せたか（画面が見せたら v2cap_clerk_seen で入れる。場面のまだ無い段階は入れない＝あとで足せば出る）
+alter table public.v2cap_profiles add column if not exists clerk_affinity   int not null default 0;
+alter table public.v2cap_profiles add column if not exists clerk_talk_day   date;
+alter table public.v2cap_profiles add column if not exists clerk_stage_seen int not null default 0;
+
+-- 話しかけた：今日まだなら好感度+1（up=true）。返すのは好感度と見せた段階
+create or replace function public.v2cap_clerk_talk()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid   uuid := auth.uid();
+  v_today date := ((now() at time zone 'Asia/Tokyo') - interval '5 hours')::date;
+  v_row   public.v2cap_profiles;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select * into v_row from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  if v_row.clerk_talk_day is distinct from v_today then
+    update public.v2cap_profiles set clerk_affinity = clerk_affinity + 1, clerk_talk_day = v_today where id = v_uid;
+    return jsonb_build_object('ok', true, 'up', true, 'affinity', v_row.clerk_affinity + 1, 'seen', v_row.clerk_stage_seen);
+  end if;
+  return jsonb_build_object('ok', true, 'up', false, 'affinity', v_row.clerk_affinity, 'seen', v_row.clerk_stage_seen);
+end;
+$$;
+revoke all on function public.v2cap_clerk_talk() from public, anon;
+grant execute on function public.v2cap_clerk_talk() to authenticated;
+
+-- 段階の場面を見せた（下がらない・0〜9）
+create or replace function public.v2cap_clerk_seen(p_stage int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if p_stage is null or p_stage < 0 or p_stage > 9 then return jsonb_build_object('ok', false, 'error', '段階が正しくありません'); end if;
+  update public.v2cap_profiles set clerk_stage_seen = greatest(clerk_stage_seen, p_stage) where id = v_uid;
+  return jsonb_build_object('ok', true);
+end;
+$$;
+revoke all on function public.v2cap_clerk_seen(int) from public, anon;
+grant execute on function public.v2cap_clerk_seen(int) to authenticated;
+
 -- ===== 一度だけ：INT の無い職業に INT・STR の無い職業に STR を少し入れた（2026-10-25 ユーザー指示「INT使わないキャラ、STR使わないキャラも多少上がるようにしてほしい、バランス的に」）=====
 -- 初期職8点・上位職17点（ユーザー選択）・そのぶん「高い2〜3種」以外のステを割合で減らした＝29職の配分（jobs.js の JOB_BONUS）が変わった
 -- （v2cap_classes.bonus_seq と v2cap_asc_mp は上の種で入れ替わる）。アセンションの盤面は配分から中身を作るので、この29職の盤面の中身が入れ替わる。

@@ -1092,3 +1092,21 @@ test('【確定】2026-10-25 看板娘の「いらっしゃいませー」（§1
   assert.ok(SQL.includes('revoke all on function public.v2cap_burger_welcome() from public, anon;'))
   assert.ok(SQL.includes('grant execute on function public.v2cap_burger_welcome() to authenticated;'))
 })
+
+test('【確定】2026-10-25 看板娘の好感度（§16-3）：その日はじめて話しかけたら+1（日本時間の5時で切り替え・下がらない）・見せた段階の場面', () => {
+  // ユーザー指示「毎日会話重ねていくことで仲良くなってほしい」「プレイヤー視点では見えないように」・選んだのは「話しかけたら」
+  for (const c of ['clerk_affinity   int not null default 0', 'clerk_talk_day   date', 'clerk_stage_seen int not null default 0']) {
+    assert.ok(SQL.includes(`alter table public.v2cap_profiles add column if not exists ${c};`), c)
+  }
+  const talk = fnBody('v2cap_clerk_talk')
+  assert.ok(talk.includes(`v_today date := ((now() at time zone 'Asia/Tokyo') - interval '${DAY_RESET_HOUR} hours')::date;`), '日付の区切りはデイリーと同じ')
+  assert.ok(talk.includes('if not public.v2cap_is_dev() then'), '開発限定')
+  assert.ok(talk.includes('if v_row.clerk_talk_day is distinct from v_today then'), '1日1回')
+  assert.ok(talk.includes('set clerk_affinity = clerk_affinity + 1, clerk_talk_day = v_today'), '+1')
+  const seen = fnBody('v2cap_clerk_seen')
+  assert.ok(seen.includes('set clerk_stage_seen = greatest(clerk_stage_seen, p_stage)'), '下がらない')
+  for (const f of ['v2cap_clerk_talk()', 'v2cap_clerk_seen(int)']) {
+    assert.ok(SQL.includes(`revoke all on function public.${f} from public, anon;`), f)
+    assert.ok(SQL.includes(`grant execute on function public.${f} to authenticated;`), f)
+  }
+})
