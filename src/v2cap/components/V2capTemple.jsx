@@ -31,7 +31,9 @@ import { artGenderOf } from '../lib/gender.js'
 //     （数え方は loadout.js の statBreakdownAs＝クラスのステ・アセンション・外れる武器まで入れた、ステータス画面と同じ合計）
 //   ・転職し終わったら画面のいちばん上へ（V2Modal が「実行」のあと閉じたときに戻す）。「〇〇になった！」は詳細の画面のいちばん上に出す
 //   ・クラスのステ（CLASS LVごとに入る量）はここに書かない（ユーザー「ステータスの情報はここに書かなくていい」）
-//   ・「就く条件」→「転職条件」。パッシブはスキルの欄の先頭に、目立つ枠で（ユーザー「パッシブスキルはスキルの初めに、もっとわかりやすく」）
+//   ・「就く条件」→「転職条件」。パッシブはスキルの欄の先頭に、目立つ枠で（ユーザー「パッシブスキルはスキルの初めに、もっとわかりやすく」）。
+//     枠はグラデーションなし・「編成しなくても〜ずっと効く」の一言も書かない（ユーザー「グラデーションいらない」「この説明いらない」）
+//   ・確認の文は「〇〇のCLASS LV、ステータスが適用されます。」だけ（LVはそのまま・スキルセットの切り替えの説明は書かない＝ユーザー指示）
 //   ・イラストは男女それぞれ（ユーザー「男女それぞれのイラストを用意してるから、良い感じに見えるようにして」）。
 //     対応表と軽い版の場所は src/v2cap/lib/classArt.js（作るのは tools/v2cap-art.mjs）。
 //     詳細は全身をクラスの色の淡い光の背景＋足元の影に大きく。一覧はカードの左に顔のまわりだけのアップ
@@ -263,13 +265,12 @@ function ClassDetail({ cls, prof, inventory, busy, msg, error, gender, onGender,
       <div style={section}>
         <div style={head}>📖 スキル</div>
         {passive && (
-          <div style={{ border:'1px solid #ffcc66', background:'linear-gradient(90deg, #2a2000 0%, #000818 85%)', padding:'8px 10px', marginBottom:'10px' }}>
+          <div style={{ border:'1px solid #ffcc66', background:'#000818', padding:'8px 10px', marginBottom:'10px' }}>
             <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
               <span style={{ background:'#ffcc66', color:'#1a1000', fontSize:'10px', padding:'1px 6px', letterSpacing:'1px' }}>パッシブ</span>
               <span style={{ color:'#ffcc66', fontSize:'14px', letterSpacing:'1px' }}>{passive.name}</span>
             </div>
             <div style={{ color:'#cfe2ff', fontSize:'11px', lineHeight:1.7 }}>{passive.desc}</div>
-            <div style={{ color: TEXT.sub, fontSize:'10px', marginTop:'4px' }}>※ 編成しなくても、{cls}でいる間ずっと効く</div>
           </div>
         )}
         {passive && <div style={{ ...label, fontSize:'11px', marginBottom:'4px' }}>覚える技</div>}
@@ -376,7 +377,7 @@ function ChangeConfirm({ cls, prof, inventory, busy, dropWeapon, onConfirm, onCl
         {(pFrom || pTo) && (
           <div>パッシブ：<span style={{ color: pFrom ? '#ffcc66' : TEXT.empty }}>{pFrom?.name || 'なし'}</span> → <span style={{ color: pTo ? '#ffcc66' : TEXT.empty }}>{pTo?.name || 'なし'}</span></div>
         )}
-        <div>LVはそのまま、CLASS LVは{toLv}から続きます。スキルセットは{cls}のものに切り替わります（{prof.class}の編成は残ります）。</div>
+        <div>{cls}のCLASS LV、ステータスが適用されます。</div>
         {dropWeapon && <div style={{ color:'#ff8844' }}>いま着けている{dropWeapon.name}（{dropWeapon.type}）は外れます（上の数字はこの武器を外した形）。</div>}
       </div>
     </V2Modal>

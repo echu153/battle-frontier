@@ -36,6 +36,8 @@ test('「このクラスに転職する」は確認のポップアップを開�
   assert.ok(!confirm.includes('keepScroll'), '転職し終わったら画面のいちばん上へ（keepScroll にしない）')
   assert.ok(TEMPLE.includes('statBreakdownAs(prof, inventory, cls)'), '転職後のステは statBreakdownAs で数える')
   assert.ok(TEMPLE.includes("'±0'") && TEMPLE.includes('`+${') && TEMPLE.includes('`−${'), '増減は＋／−／±0')
+  assert.ok(TEMPLE.includes('<div>{cls}のCLASS LV、ステータスが適用されます。</div>'), '確認の文（ユーザー指示の言い方）')
+  assert.ok(!TEMPLE.includes('LVはそのまま、CLASS LVは'), '前の長い説明は出さない')
   // 結果は詳細の画面のいちばん上（戻った先で見える場所）に出す
   assert.ok(TEMPLE.indexOf('{msg && ') < TEMPLE.indexOf('<ArtPanel'), '「〇〇になった！」はイラストより上')
 })
@@ -48,4 +50,6 @@ test('クラスのステは神殿に書かない・「転職条件」・パッ�
   const skills = TEMPLE.indexOf('📖 スキル')
   assert.ok(skills > 0 && skills < TEMPLE.indexOf('>パッシブ</span>') && TEMPLE.indexOf('>パッシブ</span>') < TEMPLE.indexOf('{order.map('),
     'パッシブはスキルの見出しのすぐ下・覚える技より前')
+  assert.ok(TEMPLE.includes("border:'1px solid #ffcc66', background:'#000818',"), 'パッシブの枠はグラデーションなし（ふつうの地の色）')
+  assert.ok(!TEMPLE.includes('※ 編成しなくても'), 'パッシブに「編成しなくても〜」の一言を書かない')
 })
