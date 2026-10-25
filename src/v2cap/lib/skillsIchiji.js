@@ -221,17 +221,17 @@ export const ICHIJI_SKILLS = [
   { name:'流転掌', cls:'体術師', kind:P, mult:1.83, proc:78, mp:28, dodgeCountPower:{ per:5, max:50 }, desc:'この戦闘で回避した回数1回につき威力+5%（最大+50%）。地上でも空中でも同じ（空中で撃つと着地）' },
   // サイキッカー【動揺】：念で心を乱し（動揺＝相手のスキル発動率−3%・最大−15%）、相手の技を空振りさせる。
   //   STRとINTが半分ずつ威力になる（念の技は相手の魔法防御で受ける）
-  { name:'精神感応', cls:'サイキッカー', kind:'passive', mp:0, passive:{ misfireChase:{ mult:0.3 } }, desc:'相手のスキルが不発するたび、STR×0.3＋INT×0.3で念動の追撃（相手の魔法防御で受ける）。動揺は相手のスキル発動率を−3%する（重ねがけ可・最大−15%）' },
+  { name:'精神感応', cls:'サイキッカー', kind:'passive', mp:0, passive:{ misfireChase:{ mult:0.3 } }, desc:'相手のスキルが不発するたび、STR×0.3＋INT×0.3で念動の追撃（相手の魔法防御で受ける）。動揺は1スタックにつき相手のスキル発動率を−3%する（最大−15%）' },
   { name:'サイコショット', cls:'サイキッカー', kind:M, src:'str', mult:1.31, add:[{ stat:'int_stat', rate:1.31 }], proc:90, mp:10, hitBonus:EASY_HIT, desc:'念で撃つ。命中しやすい' },
   { name:'精神集中', cls:'サイキッカー', kind:B, proc:100, mp:16, buff:{ self:{ str:20, int_stat:20 } }, priority:1, desc:'STR+20%・INT+20%（重ねがけ可）' },
-  { name:'テレキネシス', cls:'サイキッカー', kind:M, src:'str', mult:1.3, add:[{ stat:'int_stat', rate:1.3 }], proc:90, mp:10, agitate:{ n:1, chance:50 }, desc:'念力で叩きつける。50%で動揺+1' },
-  { name:'マインドブレイク', cls:'サイキッカー', kind:M, src:'str', mult:1.25, add:[{ stat:'int_stat', rate:1.25 }], proc:85, mp:14, buff:{ enemy:{ str:-15, int_stat:-20 } }, ail:{ key:'frenzy', chance:20 }, agitate:{ n:1 }, desc:'精神を砕く。相手のSTR-15%・INT-20%（重ねがけ可）。20%で狂乱。動揺+1' },
+  { name:'テレキネシス', cls:'サイキッカー', kind:M, src:'str', mult:1.3, add:[{ stat:'int_stat', rate:1.3 }], proc:90, mp:10, agitate:{ n:1, chance:50 }, desc:'念力で叩きつける。50%で動揺スタック+1' },
+  { name:'マインドブレイク', cls:'サイキッカー', kind:M, src:'str', mult:1.25, add:[{ stat:'int_stat', rate:1.25 }], proc:85, mp:14, buff:{ enemy:{ str:-15, int_stat:-20 } }, ail:{ key:'frenzy', chance:20 }, agitate:{ n:1 }, desc:'精神を砕く。相手のSTR-15%・INT-20%（重ねがけ可）。20%で狂乱。動揺スタック+1' },
   { name:'マインドスパイク', cls:'サイキッカー', kind:M, src:'str', mult:1.46, add:[{ stat:'int_stat', rate:1.46 }], proc:85, mp:14, hitBonus:EASY_HIT, desc:'精神を直接刺す。命中しやすい' },
   { name:'マインドアクセル', cls:'サイキッカー', kind:B, proc:100, mp:15, buff:{ self:{ agi:20, int_stat:20 } }, priority:1, desc:'AGI+20%・INT+20%（重ねがけ可）' },
   { name:'サイキックチェイン', cls:'サイキッカー', kind:P, src:'str', mult:0.45, add:[{ stat:'int_stat', rate:0.45 }], hits:3, proc:80, mp:20, noCrit:true, desc:'3連撃。クリティカルしない' },
-  { name:'マインドジャック', cls:'サイキッカー', kind:M, src:'str', mult:1.33, add:[{ stat:'int_stat', rate:1.33 }], proc:85, mp:14, ail:{ key:'frenzy', chance:20 }, agitate:{ n:2 }, desc:'動揺+2・20%で狂乱' },
+  { name:'マインドジャック', cls:'サイキッカー', kind:M, src:'str', mult:1.33, add:[{ stat:'int_stat', rate:1.33 }], proc:85, mp:14, ail:{ key:'frenzy', chance:20 }, agitate:{ n:2 }, desc:'動揺スタック+2・20%で狂乱' },
   { name:'サイコブラスト', cls:'サイキッカー', kind:M, src:'str', mult:1.56, add:[{ stat:'int_stat', rate:1.56 }], proc:80, mp:20, desc:'念を一気に放つ' },
-  { name:'メンタルクラッシュ', cls:'サイキッカー', kind:M, src:'str', mult:1.46, add:[{ stat:'int_stat', rate:1.46 }], proc:75, mp:28, agitPower:{ per:6, max:30 }, desc:'相手の動揺1つにつき威力+6%（最大+30%）。動揺は残る' },
+  { name:'メンタルクラッシュ', cls:'サイキッカー', kind:M, src:'str', mult:1.46, add:[{ stat:'int_stat', rate:1.46 }], proc:75, mp:28, agitPower:{ per:6, max:30 }, desc:'相手の動揺1スタックにつき威力+6%（最大+30%）。動揺スタックは残る' },
 
   // ===== 盗賊系 =====
   // 暗殺者【出血ととどめ】：出血を重ねるほど与ダメージが上がる。とどめの技は相手のHPが低ければ威力が上がる
