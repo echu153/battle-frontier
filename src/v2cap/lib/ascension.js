@@ -268,7 +268,7 @@ export const ASC_CUSTOM = {
   サイコブラスト: grant('動揺1つで威力+6%', '相手の動揺1つにつき威力+6%（最大+30%）', () => ({ agitPower: { per: 6, max: 30 } })),
   マインドスパイク: grant('動揺1つで威力+5%', '相手の動揺1つにつき威力+5%（最大+25%）', () => ({ agitPower: { per: 5, max: 25 } })),
   // 暗殺者
-  裂傷: bump(['ail', 'stacks'], 1, '出血+1', (a, b) => `出血 +${a}→+${b}`),
+  裂傷: bump(['ail', 'stacks'], 1, '出血スタック+1', (a, b) => `出血スタック +${a}→+${b}`),
   ヴァイパーストライク: grant('30%で出血も', '毒と同時に30%で出血も付く', (s) => ({ ails: [...(s.ails || []), { key: 'bleed', chance: 30, stacks: 1 }] })),
   絶命: {
     short: '威力4倍',
@@ -277,7 +277,7 @@ export const ASC_CUSTOM = {
   },
   影討ち: grant('2ターン目まで', '1ターン目だけ→2ターン目まで効く', (s) => ({ firstTurn: { ...s.firstTurn, turns: 2 } })),
   死の刻印: bump(['ailUp', 'turns'], 2, '+2ターン', turnsText),   // 2026-10-21 ユーザーがシートで採用
-  急所突き: bump(['burstAil', 'perStack'], 0.1, '出血1つの威力+10%', (a, b) => `出血1つにつき威力 +${Math.round(a * 100)}%→+${Math.round(b * 100)}%`),
+  急所突き: bump(['burstAil', 'perStack'], 0.1, '1スタックの威力+10%', (a, b) => `出血1スタックにつき威力 +${Math.round(a * 100)}%→+${Math.round(b * 100)}%`),
   首狩り: bump(['foeLowHp', 'mult'], 0.3, 'HP50%以下の威力+30%', (a, b) => `相手のHPが50%以下なら威力 +${pctOf(a)}%→+${pctOf(b)}%`),
   隠形: grant('次の攻撃が必ずクリ', '次に撃つ攻撃の技が必ずクリティカル', () => ({ nextCrit: true })),
   // 忍者

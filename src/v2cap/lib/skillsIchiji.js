@@ -235,17 +235,17 @@ export const ICHIJI_SKILLS = [
 
   // ===== 盗賊系 =====
   // 暗殺者【出血ととどめ】：出血を重ねるほど与ダメージが上がる。とどめの技は相手のHPが低ければ威力が上がる
-  { name:'血の匂い', cls:'暗殺者', kind:'passive', mp:0, passive:{ perFoeBleed:5 }, desc:'出血している相手への与ダメージ+（出血の重なり数×5%）' },
+  { name:'血の匂い', cls:'暗殺者', kind:'passive', mp:0, passive:{ perFoeBleed:5 }, desc:'出血している相手への与ダメージ+（出血スタック×5%）' },
   { name:'刻み斬り', cls:'暗殺者', kind:P, mult:0.94, add:[{ stat:'agi', rate:0.35 }], proc:95, mp:6, ail:{ key:'bleed', chance:50 }, desc:'50%で出血' },
   { name:'鬼影閃', cls:'暗殺者', kind:P, mult:0.48, add:[{ stat:'agi', rate:0.21 }], hits:2, noCrit:true, proc:88, mp:12, ail:{ key:'bleed', chance:40 }, ailPerHit:true, desc:'2連撃。それぞれ40%で出血・クリティカルなし' },
   { name:'ヴァイパーストライク', cls:'暗殺者', kind:P, mult:1.12, add:[{ stat:'agi', rate:0.35 }], proc:88, mp:11, ail:{ key:'poison', chance:50 }, desc:'50%で毒' },
   { name:'隠形', cls:'暗殺者', kind:B, proc:100, mp:10, buff:{ self:{ agi:30 } }, priority:1, desc:'自分のAGI+30%' },
-  { name:'裂傷', cls:'暗殺者', kind:P, mult:0.94, add:[{ stat:'agi', rate:0.34 }], proc:90, mp:10, ail:{ key:'bleed', chance:100, stacks:2 }, desc:'相手の出血を+2' },
+  { name:'裂傷', cls:'暗殺者', kind:P, mult:0.94, add:[{ stat:'agi', rate:0.34 }], proc:90, mp:10, ail:{ key:'bleed', chance:100, stacks:2 }, desc:'相手の出血スタック+2' },
   { name:'影討ち', cls:'暗殺者', kind:P, mult:1.25, add:[{ stat:'agi', rate:0.35 }], proc:85, mp:14, firstTurn:{ mult:1.5, crit:20 }, desc:'戦闘1ターン目なら威力+50%・クリティカル率+20%' },
   { name:'首狩り', cls:'暗殺者', kind:P, mult:1.2, add:[{ stat:'agi', rate:0.34 }], proc:85, mp:16, foeLowHp:{ at:50, mult:1.4 }, desc:'相手のHPが50%以下なら威力+40%' },
   { name:'死の刻印', cls:'暗殺者', kind:B, proc:100, mp:12, ailUp:{ key:'bleed', pct:25, turns:3 }, priority:1, desc:'3ターンの間、出血を付ける確率+25%' },
-  { name:'急所突き', cls:'暗殺者', kind:P, mult:0.97, add:[{ stat:'agi', rate:0.33 }], proc:80, mp:20, burstAil:{ key:'bleed', perStack:0.25 }, desc:'相手の出血をすべて消費し、1つにつき威力+25%' },
-  { name:'絶命', cls:'暗殺者', kind:P, mult:0.98, add:[{ stat:'agi', rate:0.27 }], proc:75, mp:28, foeLowHp:{ at:20, mult:3 }, desc:'相手のHPが20%以下なら威力3倍。出血は使わない（急所突きと違い、出血を残したまま撃てる）' },
+  { name:'急所突き', cls:'暗殺者', kind:P, mult:0.97, add:[{ stat:'agi', rate:0.33 }], proc:80, mp:20, burstAil:{ key:'bleed', perStack:0.25 }, desc:'相手の出血スタックをすべて消費し、1スタックにつき威力+25%' },
+  { name:'絶命', cls:'暗殺者', kind:P, mult:0.98, add:[{ stat:'agi', rate:0.27 }], proc:75, mp:28, foeLowHp:{ at:20, mult:3 }, desc:'相手のHPが20%以下なら威力3倍。出血スタックは使わない（急所突きと違い、出血スタックを残したまま撃てる）' },
   // 忍者【分身】：分身は最大3体。攻撃を受けたとき30%で身代わりになって1体消える。分身がいる間は攻撃のたびに追撃する
   { name:'影の連携', cls:'忍者', kind:'passive', mp:0, passive:{ cloneFollow:0.1, noCloneAgi:10, cloneGuard:10 }, desc:'自分が攻撃するたび、分身1体につき物理 ×0.1で追撃。分身がいない間はAGI+10%。分身は攻撃を受けたとき10%で身代わりになって消える' },
   { name:'手裏剣', cls:'忍者', kind:P, mult:0.3, add:[{ stat:'agi', rate:0.19 }], hits:3, noCrit:true, proc:95, mp:6, sureHit:true, desc:'3連撃。必ず当たる・クリティカルなし' },

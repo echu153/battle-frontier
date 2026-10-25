@@ -52,4 +52,20 @@ test('クラスのステは神殿に書かない・「転職条件」・パッ�
     'パッシブはスキルの見出しのすぐ下・覚える技より前')
   assert.ok(TEMPLE.includes("border:'1px solid #ffcc66', background:'#000818',"), 'パッシブの枠はグラデーションなし（ふつうの地の色）')
   assert.ok(!TEMPLE.includes('※ 編成しなくても'), 'パッシブに「編成しなくても〜」の一言を書かない')
+  // 覚える技の行は「LV1　手裏剣　習得済み／未習得」
+  assert.ok(TEMPLE.includes('>LV{at[i]}</span>') && !TEMPLE.includes('>CLASS LV{at[i]}</span>'), '覚えるLVは「LV1」')
+  assert.ok(TEMPLE.includes("{has ? '習得済み' : '未習得'}"), '「習得済み／未習得」')
+})
+
+test('出血の重なりは「出血スタック」と書く（「重なり数」と書かない）', async () => {
+  const { SKILL_BY_NAME } = await import('./skills.js')
+  const { ascSkillDetail } = await import('./ascension.js')
+  assert.equal(SKILL_BY_NAME['血の匂い'].desc, '出血している相手への与ダメージ+（出血スタック×5%）')
+  for (const n of ['血の匂い', '裂傷', '急所突き', '絶命']) {
+    assert.ok(SKILL_BY_NAME[n].desc.includes('出血スタック'), `${n}：${SKILL_BY_NAME[n].desc}`)
+  }
+  const all = Object.values(SKILL_BY_NAME).filter(s => s.cls && s.desc).map(s => `${s.name}：${s.desc}`)
+  assert.deepEqual(all.filter(t => t.includes('重なり数')), [], '技の説明に「重なり数」を書かない')
+  assert.ok(ascSkillDetail('裂傷').includes('出血スタック'), ascSkillDetail('裂傷'))
+  assert.ok(ascSkillDetail('急所突き').includes('出血1スタックにつき'), ascSkillDetail('急所突き'))
 })

@@ -34,6 +34,7 @@ import { artGenderOf } from '../lib/gender.js'
 //   ・「就く条件」→「転職条件」。パッシブはスキルの欄の先頭に、目立つ枠で（ユーザー「パッシブスキルはスキルの初めに、もっとわかりやすく」）。
 //     枠はグラデーションなし・「編成しなくても〜ずっと効く」の一言も書かない（ユーザー「グラデーションいらない」「この説明いらない」）
 //   ・確認の文は「〇〇のCLASS LV、ステータスが適用されます。」だけ（LVはそのまま・スキルセットの切り替えの説明は書かない＝ユーザー指示）
+//   ・覚える技の行は「LV1　手裏剣　習得済み／未習得」（ユーザー指示。前は「CLASS LV1　手裏剣　覚えた／まだ」）
 //   ・イラストは男女それぞれ（ユーザー「男女それぞれのイラストを用意してるから、良い感じに見えるようにして」）。
 //     対応表と軽い版の場所は src/v2cap/lib/classArt.js（作るのは tools/v2cap-art.mjs）。
 //     詳細は全身をクラスの色の淡い光の背景＋足元の影に大きく。一覧はカードの左に顔のまわりだけのアップ
@@ -279,11 +280,11 @@ function ClassDetail({ cls, prof, inventory, busy, msg, error, gender, onGender,
             const has = learned.has(s.name)
             return (
               <div key={s.name} style={{ background:'#000818', border:'1px solid #002244', padding:'4px 7px', fontSize:'11px', display:'flex', gap:'6px', alignItems:'center' }}>
-                <span style={{ color: has ? '#44ff88' : TEXT.label, fontSize:'10px', flexShrink:0, width:'72px' }}>CLASS LV{at[i]}</span>
+                <span style={{ color: has ? '#44ff88' : TEXT.label, fontSize:'10px', flexShrink:0, width:'34px' }}>LV{at[i]}</span>
                 <V2SkillTip skill={s} alignRight={i % 2 === 1} style={{ display:'block', flex:1, minWidth:0 }}>
                   <span style={{ color: has ? KIND_COLOR[s.kind] : TEXT.sub }}>{s.name}</span>
                 </V2SkillTip>
-                <span style={{ color: has ? '#44ff88' : TEXT.empty, fontSize:'9px', flexShrink:0 }}>{has ? '覚えた' : 'まだ'}</span>
+                <span style={{ color: has ? '#44ff88' : TEXT.empty, fontSize:'9px', flexShrink:0 }}>{has ? '習得済み' : '未習得'}</span>
               </div>
             )
           })}
