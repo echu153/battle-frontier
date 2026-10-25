@@ -42,3 +42,5 @@ tools/v2-skills.html
 /public/V2newjob/ギフ/
 # v2cap 戦闘ログのアイコン（バフ・デバフ・状態異常）の元の絵（ユーザーが ChatGPT で作って置く・1枚約2MB）。画面で使う版は public/fx-art（tools/v2cap-fx-art.mjs）
 /public/V2状態異常/
+# v2cap 鍛冶屋の親方トルステンの元の絵（ユーザーが ChatGPT で作って置く）。画面で使う版は public/v2cap-art/smith（tools/v2cap-smith-art.mjs）
+/public/V2鍛冶屋/

@@ -1111,3 +1111,22 @@ test('【確定】2026-10-25 看板娘の好感度（§16-3）：その日はじ
     assert.ok(SQL.includes(`grant execute on function public.${f} to authenticated;`), f)
   }
 })
+
+test('【確定】2026-10-26 鍛冶屋の親方トルステンの好感度（§17）：看板娘と同じ決まり（その日はじめて話しかけたら+1・日本時間の5時で切り替え・下がらない）', () => {
+  // ユーザー選択「好感度（毎日話すと仲良く）」。数えるのはサーバー、段階とセリフは画面（smithMaster.js）
+  for (const c of ['smith_affinity   int not null default 0', 'smith_talk_day   date', 'smith_stage_seen int not null default 0']) {
+    assert.ok(SQL.includes(`alter table public.v2cap_profiles add column if not exists ${c};`), c)
+  }
+  const talk = fnBody('v2cap_smith_talk')
+  assert.ok(talk.includes(`v_today date := ((now() at time zone 'Asia/Tokyo') - interval '${DAY_RESET_HOUR} hours')::date;`), '日付の区切りはデイリーと同じ')
+  assert.ok(talk.includes('if not public.v2cap_is_dev() then'), '開発限定')
+  assert.ok(talk.includes('if v_row.smith_talk_day is distinct from v_today then'), '1日1回')
+  assert.ok(talk.includes('set smith_affinity = smith_affinity + 1, smith_talk_day = v_today'), '+1')
+  assert.ok(!/clerk_/.test(talk), '看板娘の好感度には触らない')
+  const seen = fnBody('v2cap_smith_seen')
+  assert.ok(seen.includes('set smith_stage_seen = greatest(smith_stage_seen, p_stage)'), '下がらない')
+  for (const f of ['v2cap_smith_talk()', 'v2cap_smith_seen(int)']) {
+    assert.ok(SQL.includes(`revoke all on function public.${f} from public, anon;`), f)
+    assert.ok(SQL.includes(`grant execute on function public.${f} to authenticated;`), f)
+  }
+})

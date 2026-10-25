@@ -212,8 +212,13 @@ export const keyBackground = (img, k = KEY) => {
   return { img: out, clear: core.length / N, mode: model.mode, edgeLeft: border.filter(p => rgba[p * 4 + 3] > 128).length / border.length }
 }
 
+// ★縮めるのは rgba のまま行い（SCALE_KEEP_ALPHA の format=rgba）、そのあとで WebP の yuva420p に変える。
+//   【2026-10-26 直した】lanczos の縮小と yuva420p への変換を ffmpeg が1回でまとめてやると、透明（0）が 1 になり、
+//   透明なところ全体にうっすら暗い膜がかかっていた（鍛冶屋の親方の絵で、まわりが暗い四角に見えて分かった。看板娘の絵も同じだった）
+const SCALE_KEEP_ALPHA = 'format=rgba'
+
 // box（まわりに余白 margin＝長いほうの辺に対する割合）を長方形のまま切り取り、高さ height の WebP（透明つき・縦横比はそのまま）で書く。
-// はみ出すぶんは透明で足す。幅は偶数にそろえる（yuva420p は奇数の幅にできない）。書いた大きさ { w, h } を返す（看板娘の絵・tools/v2cap-burger-art.mjs）
+// はみ出すぶんは透明で足す。幅は偶数にそろえる（yuva420p は奇数の幅にできない）。書いた大きさ { w, h } を返す（看板娘・鍛冶屋の親方の絵）
 export const encodeRect = ({ data: rgba, W, H }, box, out, { height = 640, margin = 0, quality = 82 } = {}) => {
   const bw = box.x1 - box.x0 + 1, bh = box.y1 - box.y0 + 1
   const m = Math.round(Math.max(bw, bh) * margin)
@@ -221,7 +226,7 @@ export const encodeRect = ({ data: rgba, W, H }, box, out, { height = 640, margi
   const w = Math.max(2, Math.round(CW * height / CH / 2) * 2)
   const P = m
   execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${W}x${H}`, '-i', '-',
-    '-vf', `pad=iw+${2 * P}:ih+${2 * P}:${P}:${P}:color=0x00000000,crop=${CW}:${CH}:${box.x0 - m + P}:${box.y0 - m + P},scale=${w}:${height}:flags=lanczos`,
+    '-vf', `pad=iw+${2 * P}:ih+${2 * P}:${P}:${P}:color=0x00000000,crop=${CW}:${CH}:${box.x0 - m + P}:${box.y0 - m + P},scale=${w}:${height}:flags=lanczos,${SCALE_KEEP_ALPHA}`,
     '-c:v', 'libwebp', '-pix_fmt', 'yuva420p', '-quality', String(quality), '-frames:v', '1', out], { input: rgba })
   return { w, h: height }
 }
@@ -233,6 +238,6 @@ export const encodeSquare = ({ data: rgba, W, H }, box, out, { size = 192, margi
   const X = Math.round((box.x0 + box.x1 + 1) / 2 - S / 2), Y = Math.round((box.y0 + box.y1 + 1) / 2 - S / 2)
   const P = S
   execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${W}x${H}`, '-i', '-',
-    '-vf', `pad=iw+${2 * P}:ih+${2 * P}:${P}:${P}:color=0x00000000,crop=${S}:${S}:${X + P}:${Y + P},scale=${size}:${size}:flags=lanczos`,
+    '-vf', `pad=iw+${2 * P}:ih+${2 * P}:${P}:${P}:color=0x00000000,crop=${S}:${S}:${X + P}:${Y + P},scale=${size}:${size}:flags=lanczos,${SCALE_KEEP_ALPHA}`,
     '-c:v', 'libwebp', '-pix_fmt', 'yuva420p', '-quality', String(quality), '-frames:v', '1', out], { input: rgba })
 }

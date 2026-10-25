@@ -39,7 +39,8 @@ const mix = (a, b, t) => {
   return `#${x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join('')}`
 }
 
-export default function V2capCraftFx({ job, nextLabel, nextReason, onAgain, onClose }) {
+// say … 結果のポップアップの上に出すもの（鍛冶屋の親方のひとこと・2026-10-26。V2capSmithMaster.jsx の MasterSays）
+export default function V2capCraftFx({ job, say, nextLabel, nextReason, onAgain, onClose }) {
   const tier = craftTierOf(job.rarity)
   const [phase, setPhase] = useState('gather')   // gather | forge | reveal | result
   const [strikes, setStrikes] = useState(0)
@@ -216,6 +217,7 @@ export default function V2capCraftFx({ job, nextLabel, nextReason, onAgain, onCl
               🔨 {craftTitleOf(job.name)}
             </div>
             <div style={{ padding:'10px 12px', fontSize:12, color:'#88ccff', lineHeight:1.8 }}>
+              {say}
               <div>戦闘力 <span style={{ color:'#44ff88' }}>{job.power}</span>{job.sync && <span style={{ color:'#ff8844', fontSize:11 }}>（いまは{job.sync}）</span>}</div>
               <div style={{ color:'#93a9be', fontSize:11 }}>{job.statText}</div>
               <div>使ったもの：<span style={{ color:'#cfe2ff' }}>{job.scrapName} {job.scrap}個</span>・<span style={{ color:'#ffcc00' }}>Gold {Number(job.gold).toLocaleString()}</span></div>

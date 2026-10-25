@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import V2Modal from './V2Modal.jsx'
+import V2capSmithMaster, { MasterSays, MASTER_CSS } from './V2capSmithMaster.jsx'
 import { useStored } from '../core/prefs.js'
 import { box, btn, miniBtn, TEXT } from './v2ui.js'
 import { ITEMS, ITEM_BY_ID, PARTS, SLOTS, RARITIES, ALL_RARITIES, RARITY_COLOR, ARMOR_EFFECT, kindLabel, partLabel, rarityLabel, needLvOf } from '../lib/equipment.js'
@@ -18,6 +19,10 @@ import { PlusTag, GearFilterBar, StatChange } from './v2capGear.jsx'
 import V2capEnhanceFx from './V2capEnhanceFx.jsx'
 import V2capCraftFx from './V2capCraftFx.jsx'
 import { ticketOf, canUseTicket } from '../lib/v1carry.js'
+import {
+  pickLine, enterKindOf, enhanceKindOf, shortWhatOf, stageOf, stageLabelOf, stageEventOf, varsOf, fillLine,
+  isNight, nextStreak, tapKindOf, makeDailyAsker,
+} from '../lib/smithMaster.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — 鍛冶屋（強化・分解・作成）
@@ -30,6 +35,9 @@ import { ticketOf, canUseTicket } from '../lib/v1carry.js'
 //   ・作成 … レア・エピック・レジェンダリーを、Goldとそのエリアの残骸で作る（残骸30／100／300・Gold 必要LV×50／100／200）。
 //            必ずできる・+0で持ち物に入る。武器は14種どれでも作れる（ユーザー決定）。作れるのは行ったことのあるエリアまで
 //   ・強化と分解は鍛冶屋だけ（装備画面は着ける・外すだけ・ユーザー決定）
+// 【確定】2026-10-26 親方トルステン（ユーザー指示「ニャーガーキングの看板娘と同じ形で、鍛冶屋のキャラのイラストを入れたい」・lib/smithMaster.js）：
+//   右に親方を立たせる（スマホは上）。タップ・強化と作成の結果・分解・足りなくて強化できないときにセリフと表情が変わる（ユーザー選択）。
+//   強化と作成の結果のポップアップ・足りないときの強化の画面にも親方を出す。好感度は看板娘と同じ（その日はじめて話しかけたら+1・画面に出さない）
 // ============================================================
 const TABS = [
   { key:'enhance',   label:'強化', desc:`Goldとその装備のエリアの残骸で強化値を+1（+${PLUS_MAX}まで・+1ごとに強さ+10%・最低でも戦闘力+1）。ノーマルの装備はGoldだけで強化できます。失敗すると残骸とGoldはなくなり、強化値はそのままです。着けている装備も強化できます。` },
@@ -38,8 +46,12 @@ const TABS = [
 ]
 const rowBox = (border, bg = '#000818') => ({ background: bg, border:`1px solid ${border}`, padding:'6px 8px' })
 const SHORT = '#ff8844'
+const DEV = '#ff88cc'
+// その日はじめて親方に話しかけた（好感度+1）をサーバーに聞く窓口（同じ日は1回だけ聞いて答えを使い回す＝lib/clerk.js の makeDailyAsker）
+const talkAsker = makeDailyAsker(() => supabase.rpc('v2cap_smith_talk'))
 
-export default function V2capSmith({ prof, inventory, onProfile, onGo }) {
+// dev … 開発用（管理者だけ）。親方の好感度を仮に置く・段階の場面とあいさつを見るボタンを出す（看板娘と同じ）
+export default function V2capSmith({ prof, inventory, onProfile, onGo, dev = false }) {
   const [tab, setTab] = useState('enhance')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -61,55 +73,135 @@ export default function V2capSmith({ prof, inventory, onProfile, onGo }) {
     return { data }
   }
   const switchTab = (key) => { setTab(key); setError(''); setNotice('') }
-  const shared = { prof, all, wornIds, list, busy, call, setError, setNotice }
+
+  // ===== 親方トルステン（lib/smithMaster.js）。好感度は画面に出さない =====
+  // aff＝サーバーの好感度（話しかけた日の数）・seen＝見せた段階の場面・devAff＝開発用に仮に置いた好感度（null＝本物）
+  const [aff, setAff] = useState(() => Number(prof?.smith_affinity) || 0)
+  const [seen, setSeen] = useState(() => Number(prof?.smith_stage_seen) || 0)
+  const [devAff, setDevAff] = useState(null)
+  const stage = stageOf(devAff ?? aff)
+  // say がいまの段階と呼び方を見られるように控える（say は作り直さない）
+  const ctx = useRef({ stage, vars: varsOf(prof) })
+  ctx.current = { stage, vars: varsOf(prof) }
+  const [master, setMaster] = useState(() => ({ ...pickLine(enterKindOf(), { stage: stageOf(prof?.smith_affinity), vars: varsOf(prof) }), tick: 0 }))
+  const lastText = useRef(master.text)
+  // 場面 kind のセリフを選んで吹き出しに出し、選んだもの { face, text } を返す（強化・作成の結果のポップアップにも同じものを出す）
+  const say = useCallback((kind, vars) => {
+    const line = pickLine(kind, { last: lastText.current, vars: { ...ctx.current.vars, ...vars }, stage: ctx.current.stage })
+    lastText.current = line.text
+    setMaster(c => ({ ...line, tick: c.tick + 1 }))
+    return line
+  }, [])
+  const sayEvent = (ev) => {
+    const text = fillLine(ev.text, ctx.current.vars)
+    lastText.current = text
+    setMaster(c => ({ face: ev.face, text, tick: c.tick + 1 }))
+  }
+  const streak = useRef(null)
+  const talked = useRef(false)
+  const tapMaster = () => {
+    streak.current = nextStreak(streak.current, Date.now())
+    say(tapKindOf(streak.current.n, isNight()))   // 待たせないように、まずすぐ答える
+    // その日はじめて話しかけたら、サーバーが好感度を+1（1日1回）。段階が上がっていれば、返事が来たところで
+    // その段階の場面のセリフに切り替える（1回だけ）。開発用に好感度を仮に置いているあいだは、サーバーには聞かない（本物を増やさない）
+    if (talked.current || devAff !== null) return
+    talked.current = true
+    talkAsker.get().then(({ data, error: e }) => {
+      if (e || !data?.ok) return
+      const nextAff = Number(data.affinity) || 0
+      setAff(nextAff)
+      ctx.current = { ...ctx.current, stage: stageOf(nextAff) }
+      const ev = stageEventOf(stageOf(nextAff), Math.max(Number(seen) || 0, Number(data.seen) || 0))
+      if (!ev) return
+      sayEvent(ev)
+      setSeen(ev.stage)
+      talkAsker.set({ data: { ...data, seen: ev.stage } })   // 同じ日に鍛冶屋を開き直しても、もう出さない
+      // ★supabase の呼び出しは then を付けないと送られない（結果は待たない＝失敗しても次の日にもう一度出るだけ）
+      supabase.rpc('v2cap_smith_seen', { p_stage: ev.stage }).then(() => {})
+    })
+  }
+  // 開発用：その段階の場面とあいさつを見る
+  const devStageEvent = () => {
+    const ev = stageEventOf(stage, 0)
+    if (ev && ev.stage === stage) sayEvent(ev)
+    else setMaster(c => ({ face: 'normal', text: `（${stageLabelOf(stage)}の場面はまだありません）`, tick: c.tick + 1 }))
+  }
+  const shared = { prof, all, wornIds, list, busy, call, setError, setNotice, say }
 
   return (
     <div style={{ fontFamily:'monospace' }}>
-      {/* 持っている残骸とGold */}
-      <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'8px', marginBottom:'6px', flexWrap:'wrap' }}>
-          <span style={{ color:'#88ccff', fontSize:'12px' }}>🧱 持っている残骸</span>
-          <span style={{ fontSize:'11px', color: TEXT.label }}>💰 Gold <span style={{ color:'#ffcc00' }}>{Number(prof.gold || 0).toLocaleString()}</span></span>
-        </div>
-        {owned.length === 0
-          ? <div style={{ color: TEXT.label, fontSize:'10px' }}>まだありません。装備を分解すると、その装備のエリアの残骸が手に入ります</div>
-          : (
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(150px, 1fr))', gap:'3px' }}>
-              {owned.map(m => (
-                <div key={m.area} style={{ background:'#000818', border:'1px solid #002244', padding:'4px 7px', fontSize:'11px', display:'flex', justifyContent:'space-between', gap:'6px' }}>
-                  <span style={{ color:'#cfe2ff' }}>{m.name}</span>
-                  <span style={{ color:'#ffcc00' }}>{m.n.toLocaleString()}</span>
-                </div>
-              ))}
+      <style>{MASTER_CSS}</style>
+      <div className="smm-cols">
+        {/* 親方（広い画面は右・狭い画面は上） */}
+        <div className="smm-side">
+          <V2capSmithMaster face={master.face} line={master.text} tick={master.tick} onTap={tapMaster} />
+          {dev && (
+            <div style={{ textAlign:'center', marginTop:'8px' }}>
+              {/* 好感度（ふつうは画面に出さない）。仮に置いた値はサーバーに書かない＝セリフを確かめる用 */}
+              <div style={{ color: DEV, fontSize:'10px' }}>
+                ［開発］好感度 {devAff ?? aff}（{stageLabelOf(stage)}）{devAff !== null && <span style={{ color: TEXT.sub }}> 仮・本物は{aff}</span>}
+              </div>
+              <div style={{ display:'flex', gap:'4px', justifyContent:'center', flexWrap:'wrap', marginTop:'4px' }}>
+                {[-10, -1, 1, 10].map(d => (
+                  <button key={d} type="button" onClick={() => setDevAff(Math.max(0, (devAff ?? aff) + d))} style={miniBtn(DEV)}>{d > 0 ? `+${d}` : d}</button>
+                ))}
+                <button type="button" onClick={devStageEvent} style={miniBtn(DEV)}>段階の場面</button>
+                <button type="button" onClick={() => say(enterKindOf())} style={miniBtn(DEV)}>あいさつ</button>
+                {devAff !== null && <button type="button" onClick={() => setDevAff(null)} style={miniBtn(DEV)}>本物に戻す</button>}
+              </div>
             </div>
           )}
-      </div>
-
-      <div style={{ ...box, padding:'12px' }}>
-        <div style={{ display:'flex', gap:'4px', marginBottom:'6px', flexWrap:'wrap', alignItems:'center' }}>
-          {TABS.map(t => (
-            <button key={t.key} onClick={() => switchTab(t.key)} disabled={busy}
-              style={{ ...btn(tab === t.key ? '#ffaa44' : '#62789a'), padding:'6px 14px', color: tab === t.key ? '#ffcc66' : '#93a9be' }}>
-              {t.label}
-            </button>
-          ))}
-          {onGo && <button onClick={() => onGo('equip')} style={{ ...miniBtn('#88ccff'), marginLeft:'auto' }}>🛡 装備へ</button>}
         </div>
-        <div style={{ color: TEXT.sub, fontSize:'10px', marginBottom:'8px', lineHeight:1.7 }}>{TABS.find(t => t.key === tab).desc}</div>
-        {error && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'6px' }}>⚠ {error}</div>}
-        {notice && <div style={{ color:'#44ff88', fontSize:'11px', marginBottom:'6px' }}>{notice}</div>}
-        {tab === 'enhance' && <EnhanceTab {...shared} />}
-        {tab === 'dismantle' && <DismantleTab {...shared} />}
-        {tab === 'craft' && <CraftTab {...shared} />}
+
+        <div className="smm-main">
+          {/* 持っている残骸とGold */}
+          <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'8px', marginBottom:'6px', flexWrap:'wrap' }}>
+              <span style={{ color:'#88ccff', fontSize:'12px' }}>🧱 持っている残骸</span>
+              <span style={{ fontSize:'11px', color: TEXT.label }}>💰 Gold <span style={{ color:'#ffcc00' }}>{Number(prof.gold || 0).toLocaleString()}</span></span>
+            </div>
+            {owned.length === 0
+              ? <div style={{ color: TEXT.label, fontSize:'10px' }}>まだありません。装備を分解すると、その装備のエリアの残骸が手に入ります</div>
+              : (
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(150px, 1fr))', gap:'3px' }}>
+                  {owned.map(m => (
+                    <div key={m.area} style={{ background:'#000818', border:'1px solid #002244', padding:'4px 7px', fontSize:'11px', display:'flex', justifyContent:'space-between', gap:'6px' }}>
+                      <span style={{ color:'#cfe2ff' }}>{m.name}</span>
+                      <span style={{ color:'#ffcc00' }}>{m.n.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+          </div>
+
+          <div style={{ ...box, padding:'12px' }}>
+            <div style={{ display:'flex', gap:'4px', marginBottom:'6px', flexWrap:'wrap', alignItems:'center' }}>
+              {TABS.map(t => (
+                <button key={t.key} onClick={() => switchTab(t.key)} disabled={busy}
+                  style={{ ...btn(tab === t.key ? '#ffaa44' : '#62789a'), padding:'6px 14px', color: tab === t.key ? '#ffcc66' : '#93a9be' }}>
+                  {t.label}
+                </button>
+              ))}
+              {onGo && <button onClick={() => onGo('equip')} style={{ ...miniBtn('#88ccff'), marginLeft:'auto' }}>🛡 装備へ</button>}
+            </div>
+            <div style={{ color: TEXT.sub, fontSize:'10px', marginBottom:'8px', lineHeight:1.7 }}>{TABS.find(t => t.key === tab).desc}</div>
+            {error && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'6px' }}>⚠ {error}</div>}
+            {notice && <div style={{ color:'#44ff88', fontSize:'11px', marginBottom:'6px' }}>{notice}</div>}
+            {tab === 'enhance' && <EnhanceTab {...shared} />}
+            {tab === 'dismantle' && <DismantleTab {...shared} />}
+            {tab === 'craft' && <CraftTab {...shared} />}
+          </div>
+        </div>
       </div>
     </div>
   )
 }
 
 // ===== 強化 =====
-function EnhanceTab({ prof, all, wornIds, list, busy, call }) {
+function EnhanceTab({ prof, all, wornIds, list, busy, call, say }) {
   const [smithId, setSmithId] = useState(null)   // 強化の画面を開いている持ち物のID
   const [msg, setMsg] = useState(null)           // 直前の強化の結果 { ok, text }
+  const [shortLine, setShortLine] = useState(null) // 足りなくて強化できない装備を開いたときの親方のひとこと（強化の画面にも出す）
   const [ticketId, setTicketId] = useState(null) // 強化券を使う確認を開いている持ち物のID
   const [ticketMsg, setTicketMsg] = useState(null)
   // 【確定】2026-10-13 ユーザー指示「黒い砂漠の強化みたいな演出」「強化の成否もポップアップ」＝強化の演出（V2capEnhanceFx.jsx）
@@ -138,8 +230,10 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call }) {
     }
     setMsg(null); setFxJob(job)
     const { data, error } = await call('v2cap_enhance', { p_inventory_id: inv.id })
-    if (error) { setFxJob(null); setMsg({ ok: false, text: `⚠ ${error}` }); return }
-    setFxJob(j => (j && j.id === job.id ? { ...j, result: data } : j))
+    if (error) { setFxJob(null); setMsg({ ok: false, text: `⚠ ${error}` }); say('error'); return }
+    // 親方のひとこと（吹き出しと、結果のポップアップの両方に出す）
+    const line = say(enhanceKindOf(data.success, data.plus), { plus: data.plus })
+    setFxJob(j => (j && j.id === job.id ? { ...j, result: data, say: line } : j))
     setMsg(data.success
       ? { ok: true, text: `✨ 成功！ +${data.plus} になりました` }
       : { ok: false, text: `💥 失敗… +${data.plus} のまま（${data.scrap > 0 ? `${scrapNameOf(data.area)} ${data.scrap}個と ` : ''}Gold ${Number(data.gold).toLocaleString()} はなくなりました）` })
@@ -156,14 +250,20 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call }) {
   // 結果のポップアップの「続けて +N にする」（次も強化できるときだけ）
   const nextCost = row ? enhanceCostOf(row.item, row.inv) : null
   const nextErr = row && nextCost ? enhanceErrorOf(row.item, row.inv, prof) : null
+  // 強化の画面を開く。残骸かGoldが足りなければ親方がひとこと
+  const open = (item, inv) => {
+    setSmithId(String(inv.id)); setMsg(null)
+    const what = shortWhatOf(enhanceErrorOf(item, inv, prof))
+    setShortLine(what ? say('short', { what }) : null)
+  }
   return (
     <>
       {row && (
-        <SmithModal row={row} prof={prof} busy={busy} msg={msg}
+        <SmithModal row={row} prof={prof} busy={busy} msg={msg} say={shortLine}
           onEnhance={enhance} onClose={() => { if (!busy) { setSmithId(null); setMsg(null) } }} />
       )}
       {fxJob && (
-        <V2capEnhanceFx job={fxJob}
+        <V2capEnhanceFx job={fxJob} say={fxJob.say && <MasterSays face={fxJob.say.face} line={fxJob.say.text} />}
           nextLabel={nextCost && !nextErr ? `+${nextCost.next}に強化する` : null}
           nextReason={!nextCost ? `強化値は+${PLUS_MAX}（上限）です` : nextErr ? `次の強化：${nextErr}` : ''}
           onAgain={enhance} onClose={() => setFxJob(null)} />
@@ -208,7 +308,7 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call }) {
                 {canUseTicket(item, plusOf(inv), prof) && (
                   <button onClick={() => { setTicketId(String(inv.id)); setTicketMsg(null) }} disabled={busy} style={miniBtn('#ffcc00')}>🎫 +{ticket}にする</button>
                 )}
-                <button onClick={() => { setSmithId(String(inv.id)); setMsg(null) }} disabled={busy || !cost} style={miniBtn('#ffcc00')}>強化</button>
+                <button onClick={() => open(item, inv)} disabled={busy || !cost} style={miniBtn('#ffcc00')}>強化</button>
               </div>
             </div>
           )
@@ -219,7 +319,7 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call }) {
 }
 
 // ===== 分解 =====
-function DismantleTab({ all, wornIds, list, busy, call, setError, setNotice }) {
+function DismantleTab({ all, wornIds, list, busy, call, setError, setNotice, say }) {
   const [picked, setPicked] = useState(() => new Set())   // 分解に選んだ持ち物のID（文字列）
   const [confirm, setConfirm] = useState(null)             // 分解の確認 [{ inv, item }]
   const pickedRows = all.filter(r => picked.has(String(r.inv.id)) && !wornIds.has(String(r.inv.id)))
@@ -233,8 +333,9 @@ function DismantleTab({ all, wornIds, list, busy, call, setError, setNotice }) {
     const target = confirm || []
     const { data, error } = await call('v2cap_dismantle', { p_ids: target.map(r => r.inv.id) })
     setConfirm(null)
-    if (error) { setError(error); return }
+    if (error) { setError(error); say('error'); return }
     setNotice(`🔨 ${data.dismantled}個を分解しました${Object.keys(data.gained || {}).length ? `：${gainText(data.gained)}` : ''}`)
+    say('dismantle', { n: data.dismantled })
     setPicked(prev => new Set([...prev].filter(id => !target.some(r => String(r.inv.id) === id))))
   }
   return (
@@ -292,7 +393,7 @@ function DismantleTab({ all, wornIds, list, busy, call, setError, setNotice }) {
 }
 
 // ===== 作成 =====
-function CraftTab({ prof, all, busy, call, setError, setNotice }) {
+function CraftTab({ prof, all, busy, call, setError, setNotice, say }) {
   // 作れるのは行ったことのあるエリアまで（残骸もそのエリアの装備からしか出ない）
   const maxArea = Math.max(1, spotOf(openUntilOf(prof.cleared_spots))?.area || 1)
   const [area, setArea] = useState(maxArea)
@@ -326,8 +427,9 @@ function CraftTab({ prof, all, busy, call, setError, setNotice }) {
     }
     setConfirm(null); setFxJob(job)
     const { data, error } = await call('v2cap_craft', { p_equip_id: item.id })
-    if (error) { setFxJob(null); setError(error); return }
-    setFxJob(j => (j && j.id === job.id ? { ...j, result: data } : j))
+    if (error) { setFxJob(null); setError(error); say('error'); return }
+    const line = say('craft', { item: item.name })   // 親方のひとこと（吹き出しと、結果のポップアップの両方）
+    setFxJob(j => (j && j.id === job.id ? { ...j, result: data, say: line } : j))
     setNotice(`🔨 ${item.name}（LV${needLvOf(item, data.ilv)}）を作りました`)
   }
   const craft = () => startCraft(confirm)
@@ -339,7 +441,7 @@ function CraftTab({ prof, all, busy, call, setError, setNotice }) {
     <>
       {confirm && <CraftModal item={confirm} prof={prof} busy={busy} onConfirm={craft} onClose={() => setConfirm(null)} />}
       {fxJob && (
-        <V2capCraftFx job={fxJob}
+        <V2capCraftFx job={fxJob} say={fxJob.say && <MasterSays face={fxJob.say.face} line={fxJob.say.text} />}
           nextLabel={!again && againTimes > 0 ? `続けて作る（あと${againTimes}個）` : null}
           nextReason={again ? `続けて作るには：${again}` : ''}
           onAgain={() => startCraft(fxJob.item)} onClose={() => setFxJob(null)} />
@@ -436,8 +538,9 @@ function Empty({ all }) {
   )
 }
 
-// 強化の画面。結果を出したまま続けて強化できる（閉じるまで開いたまま）
-function SmithModal({ row, prof, busy, msg, onEnhance, onClose }) {
+// 強化の画面。結果を出したまま続けて強化できる（閉じるまで開いたまま）。
+// say＝開いたときに足りなかったら親方のひとこと { face, text }（足りないあいだだけ出す）
+function SmithModal({ row, prof, busy, msg, say, onEnhance, onClose }) {
   const { inv, item } = row
   const plus = plusOf(inv)
   const cost = enhanceCostOf(item, inv)
@@ -451,6 +554,7 @@ function SmithModal({ row, prof, busy, msg, onEnhance, onClose }) {
     <V2Modal title="🔨 装備の強化" color="#ffcc00" busy={busy}
       confirmLabel={cost ? `+${cost.next}に強化する` : '強化する'} cancelLabel="閉じる"
       onConfirm={err ? undefined : onEnhance} onClose={onClose}>
+      {say && err && <MasterSays face={say.face} line={say.text} />}
       <div>
         <span style={{ color: nameColor(item) }}>{item.name}</span><PlusTag inv={inv} />
         <span style={{ color: TEXT.sub, fontSize:'11px' }}>（{kindLabel(item)}・LV{needLvOf(item, inv.ilv)}）</span>

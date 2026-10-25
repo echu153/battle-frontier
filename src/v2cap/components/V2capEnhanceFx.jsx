@@ -72,7 +72,8 @@ function MagicCircle({ angle, color, broken }) {
   )
 }
 
-export default function V2capEnhanceFx({ job, nextLabel, nextReason, onAgain, onClose }) {
+// say … 結果のポップアップの上に出すもの（鍛冶屋の親方のひとこと・2026-10-26。V2capSmithMaster.jsx の MasterSays）
+export default function V2capEnhanceFx({ job, say, nextLabel, nextReason, onAgain, onClose }) {
   const tier = enhanceTierOf(job.plusTo)
   const chargeMs = enhanceChargeMsOf(job.plusTo)
   const [phase, setPhase] = useState('charge')    // charge | climax | result
@@ -281,6 +282,7 @@ export default function V2capEnhanceFx({ job, nextLabel, nextReason, onAgain, on
               {success ? '✨ ' : '💥 '}{enhanceTitleOf(job.name, success)}
             </div>
             <div style={{ padding:'10px 12px', fontSize:12, color:'#88ccff', lineHeight:1.8 }}>
+              {say}
               {success ? (
                 <>
                   <div>強化値 +{job.plusFrom} → <span style={{ color: tier.color, fontWeight:'bold' }}>+{r.plus}</span>{r.plus >= 10 && <span style={{ color:'#ff66ff', marginLeft:6 }}>（上限）</span>}</div>
