@@ -391,10 +391,11 @@ function CraftTab({ prof, all, busy, call, setError, setNotice, say }) {
         <input type="checkbox" checked={usableOnly} onChange={e => setUsableOnly(e.target.checked)} style={{ accentColor:'#ffaa44', margin:0 }} />
         いまの職業（{prof.class}）で装備できるものだけ
       </label>
+      {/* 2026-10-26 ユーザー指示「作成の画面も…「持っている」を「所持数：」にそろえて」 */}
       {cost && (
         <div style={{ background:'#000818', border:'1px solid #553322', padding:'6px 8px', marginBottom:'8px', fontSize:'10px', color: TEXT.sub, lineHeight:1.7 }}>
-          1つ作るのに：<span style={{ color: have < cost.scrap ? SHORT : '#cfe2ff' }}>{scrapNameOf(area)} {cost.scrap}個</span>（持っている {have.toLocaleString()}）・
-          <span style={{ color: gold < cost.gold ? SHORT : '#ffcc00' }}>Gold {cost.gold.toLocaleString()}</span>（持っている {gold.toLocaleString()}）
+          1つ作るのに：<span style={{ color: have < cost.scrap ? SHORT : '#cfe2ff' }}>{scrapNameOf(area)} {cost.scrap}個</span>（所持数：{have.toLocaleString()}）・
+          <span style={{ color: gold < cost.gold ? SHORT : '#ffcc00' }}>Gold {cost.gold.toLocaleString()}</span>（所持数：{gold.toLocaleString()}）
           <span style={{ color: times > 0 ? '#44ff88' : TEXT.empty }}>　いま作れるのは {times}個</span>
         </div>
       )}
@@ -550,10 +551,11 @@ function CraftModal({ item, prof, busy, onConfirm, onClose }) {
         <span style={{ color: TEXT.sub, fontSize:'11px' }}>（{kindLabel(item)}・LV{needLvOf(item)}）</span>を作ります。
       </div>
       <ItemStats inv={{ ilv: item.lv, plus: 0 }} item={item} lv={prof.lv} />
-      <div>使うもの：<span style={{ color:'#cfe2ff' }}>{scrapNameOf(item.area)} {cost.scrap}個</span>
-        <span style={{ color: TEXT.sub, fontSize:'11px' }}>（持っている {scrapOf(prof.materials, item.area).toLocaleString()}）</span>
+      {/* 2026-10-26 ユーザー指示「作成の画面も「使うもの」を「作成素材」、「持っている」を「所持数：」にそろえて」 */}
+      <div>作成素材：<span style={{ color:'#cfe2ff' }}>{scrapNameOf(item.area)} {cost.scrap}個</span>
+        <span style={{ color: TEXT.sub, fontSize:'11px' }}>（所持数：{scrapOf(prof.materials, item.area).toLocaleString()}）</span>
         ・<span style={{ color:'#ffcc00' }}>Gold {cost.gold.toLocaleString()}</span>
-        <span style={{ color: TEXT.sub, fontSize:'11px' }}>（持っている {(Number(prof.gold) || 0).toLocaleString()}）</span>
+        <span style={{ color: TEXT.sub, fontSize:'11px' }}>（所持数：{(Number(prof.gold) || 0).toLocaleString()}）</span>
       </div>
       <div style={{ color: TEXT.sub, fontSize:'11px' }}>必ずできます。+0で持ち物に入ります。</div>
     </V2Modal>
