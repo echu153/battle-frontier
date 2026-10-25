@@ -220,7 +220,8 @@ export default function V2capCraftFx({ job, say, nextLabel, nextReason, onAgain,
               {say}
               <div>戦闘力 <span style={{ color:'#44ff88' }}>{job.power}</span>{job.sync && <span style={{ color:'#ff8844', fontSize:11 }}>（いまは{job.sync}）</span>}</div>
               <div style={{ color:'#93a9be', fontSize:11 }}>{job.statText}</div>
-              <div>使ったもの：<span style={{ color:'#cfe2ff' }}>{job.scrapName} {job.scrap}個</span>・<span style={{ color:'#ffcc00' }}>Gold {Number(job.gold).toLocaleString()}</span></div>
+              {/* 2026-10-26 ユーザー指示「作成の結果のポップアップの「使ったもの：」も「作成素材：」にして」 */}
+              <div>作成素材：<span style={{ color:'#cfe2ff' }}>{job.scrapName} {job.scrap}個</span>・<span style={{ color:'#ffcc00' }}>Gold {Number(job.gold).toLocaleString()}</span></div>
               <div style={{ color:'#93a9be', fontSize:11 }}>+0で持ち物に入りました</div>
               {!nextLabel && nextReason && <div style={{ color:'#7fa6d0', fontSize:11 }}>{nextReason}</div>}
             </div>
