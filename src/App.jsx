@@ -64,6 +64,8 @@ const Mahjong = lazyReload(() => import('./pages/Mahjong')) // 麻雀(開発限�
 const Cards = lazyReload(() => import('./pages/Cards')) // トランプ広場(開発限定・大富豪/スピード/7ならべ/ババ抜き)
 const BeginnerBingo = lazyReload(() => import('./pages/BeginnerBingo')) // 初心者ビンゴ(開発限定・ミッション)
 const V2capHome = lazyReload(() => import('./v2cap/pages/V2capHome')) // Ⅱレベルキャップあり版(開発限定・src/v2cap・docs/v2cap-design.md)
+// Ⅱの AI案内役ジェミータ（右下のボタンと会話の窓・2026-10-26）。ホームとは別に読み、読み終わるまでホームを待たせない
+const V2capJemita = lazyReload(() => import('./v2cap/components/V2capJemita'))
 
 // ページ遷移時の「読み込み中」(Suspense fallback)。チャンク取得がハング/失敗して一定時間
 // 解決しない＝固まった場合の保険として、1回だけ最新版を取り直す(強制リロード)。
@@ -303,7 +305,7 @@ function App() {
         <Route path="/bingo" element={session ? <BeginnerBingo /> : <Navigate to="/login" />} />
         {/* /v2（V2 初期構成）は 2026-10-22 に v2cap へまとめた。古いブックマーク用に /v2cap へ送る */}
         <Route path="/v2" element={<Navigate to="/v2cap" replace />} />
-        <Route path="/v2cap" element={session ? <V2capHome /> : <Navigate to="/login" />} />
+        <Route path="/v2cap" element={session ? <><V2capHome /><Suspense fallback={null}><V2capJemita /></Suspense></> : <Navigate to="/login" />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
       </Suspense>

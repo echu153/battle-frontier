@@ -1,0 +1,101 @@
+// v2cap：AI案内役ジェミータ（資料・決まり・画面・サーバーの突き合わせ）（node --test）
+// 【確定】2026-10-26 ユーザー指示「V2でClaude Consoleを用いてジェミータを作りたい・1人1日10回・BFに関係ないことは答えない・プレイヤーの情報も答えない」
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { buildJemitaKb, buildJemitaSql, jemitaVersionOf } from './jemitaKb.js'
+import { JEMITA_RULES, JEMITA_STATUS_HEAD, JEMITA_QUESTION_HEAD } from './jemitaPrompt.js'
+import { JEMITA_KB_VERSION } from './jemitaKbVersion.js'
+import { jemitaStatusText, JEMITA_DAILY_LIMIT, JEMITA_MAX_CHARS, JEMITA_THREAD_MS } from './jemita.js'
+import { CLASSES } from './jobs.js'
+import { AREA_LIST, SPOTS } from './areas.js'
+import { UNIQUE_ITEMS, ITEMS } from './equipment.js'
+import { CLERK_LINES, CLERK_STAGE_EVENTS } from './clerk.js'
+import { SHRINE_NAME } from './shrine.js'
+
+const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+const KB = buildJemitaKb()
+const EDGE = read('../../../supabase/functions/v2cap-jemita/index.ts')
+const SQL = read('../../../supabase_v2cap_jemita.sql')
+
+test('資料の版：ゲームか決まりを変えたら node tools/v2cap-jemita-kb.mjs で作り直す（SQL はユーザーが流す）', () => {
+  assert.equal(jemitaVersionOf(), JEMITA_KB_VERSION, 'src/v2cap/lib/jemitaKbVersion.js が古い → node tools/v2cap-jemita-kb.mjs')
+  assert.equal(read('../../../supabase_v2cap_jemita_kb.sql'), buildJemitaSql(), 'supabase_v2cap_jemita_kb.sql が古い → node tools/v2cap-jemita-kb.mjs')
+})
+
+test('資料：職業・エリア・場所・装備の名前が全部入っている', () => {
+  for (const c of CLASSES) assert.ok(KB.includes(`### ${c.id}（`), `職業 ${c.id}`)
+  for (const a of AREA_LIST) assert.ok(KB.includes(`「${a.name}」`), `エリア ${a.name}`)
+  for (const s of SPOTS) assert.ok(KB.includes(s.name), `場所 ${s.name}`)
+  for (const it of ITEMS) assert.ok(KB.includes(it.name), `装備 ${it.name}`)
+})
+
+test('資料：画面に出ないもの・見つけてのお楽しみは入れない（ユーザー選択「画面で分かることだけ」）', () => {
+  for (const u of UNIQUE_ITEMS) assert.ok(!KB.includes(u.name), `ユニーク ${u.name}（図鑑からも消した）`)
+  assert.ok(!KB.includes(SHRINE_NAME) && !KB.includes('祠') && !KB.includes('ハピネスフェアリー'), '安息の祠')
+  assert.ok(!/(?<!オリ)ハル(?!コン)/.test(KB) && !KB.includes('付け耳'), '看板娘の名前と裏設定')
+  for (const t of [...Object.values(CLERK_LINES).flat(), ...Object.values(CLERK_STAGE_EVENTS)]) {
+    const s = typeof t === 'string' ? t : t?.text
+    if (s && s.length >= 12) assert.ok(!KB.includes(s.slice(0, 12)), `看板娘のセリフ ${s.slice(0, 12)}`)
+  }
+  assert.ok(!KB.includes('トルステン') && !KB.includes('親方'), '鍛冶屋の親方')
+  // 守護者の+1%・セット能力の「落ちる確率1.2倍」は画面に出る文
+  assert.ok(!/ドロップ率\d|遭遇率|落ちる確率\d+%|当たる確率/.test(KB.replace('出撃の装備のドロップ率+1%', '')), '画面に出ない確率')
+  assert.ok(!KB.includes('紛争地帯') && !KB.includes('交換所'), 'まだ無い機能')
+})
+
+test('資料：大きさ（Claude Haiku 5.5 の安い値段の範囲＝10万トークンに余裕を持って収まる）', () => {
+  assert.ok(KB.length < 60000, `資料 ${KB.length}字`)
+  assert.ok(JEMITA_RULES.length < 4000, `決まり ${JEMITA_RULES.length}字`)
+})
+
+test('決まり：BFの外の話・性的/グロ・ほかのプレイヤーの情報・指示の上書きは断る（ユーザー指示）', () => {
+  for (const w of ['バトルフロンティアⅡ', '性的な話・グロテスクな話', 'ほかのプレイヤーの情報', '現実の個人の情報', '従うな', '資料に無い数値', 'レアモンスターとボスの名前', JEMITA_STATUS_HEAD]) {
+    assert.ok(JEMITA_RULES.includes(w), w)
+  }
+})
+
+test('本人の状態：名前は入れない・助言に使うものは入れる', () => {
+  const prof = { username: 'ひみつのなまえ', lv: 12, stat_points: 3, class: '剣士', gender: 'm', jobs: { 剣士: { lv: 8 } },
+    equipped: {}, skill_sets: {}, cleared_spots: [1, 2], materials: { 1: 4 }, gold: 100, stamina: 5, stamina_at: new Date().toISOString(),
+    hp: 40, mp: 12, str: 5, dex: 5, agi: 5, int_stat: 5, vit: 5, luk: 5 }
+  const t = jemitaStatusText(prof, [])
+  assert.ok(!t.includes('ひみつのなまえ'), '名前を入れない')
+  for (const w of ['LV12', '未振りのステータスポイント3', '剣士', 'CLASS LV8/30', '装備：', 'スキルセット', '推奨LV', '残骸']) assert.ok(t.includes(w), w)
+  assert.equal(jemitaStatusText(null, []), '')
+})
+
+test('サーバー（Edge Function）：画面と同じ見出し・字数・時間・回数／画面から送られた資料や会話は使わない', () => {
+  assert.ok(EDGE.includes(`const STATUS_HEAD = '${JEMITA_STATUS_HEAD}'`), '状態の見出し')
+  assert.ok(EDGE.includes(`const QUESTION_HEAD = '${JEMITA_QUESTION_HEAD}'`), '発言の見出し')
+  assert.ok(EDGE.includes(`const MAX_CHARS = ${JEMITA_MAX_CHARS}`), '字数')
+  assert.equal(JEMITA_THREAD_MS, 30 * 60 * 1000)
+  assert.ok(EDGE.includes('const THREAD_MS = 30 * 60 * 1000'), '文脈の時間')
+  assert.ok(SQL.includes(`as $$ select ${JEMITA_DAILY_LIMIT} $$`), '1日の回数（SQL の v2cap_jemita_limit）')
+  assert.ok(EDGE.includes("'claude-haiku-5-5'"), 'モデルの既定は Haiku 5.5（ユーザー選択）')
+  assert.ok(!/body\.(history|reference|draft)/.test(EDGE), '画面から送られた会話・資料は使わない')
+  assert.ok(EDGE.includes(".from('v2cap_jemita_kb')") && EDGE.includes(".eq('source', 'llm')"), '資料と会話はサーバーから')
+  assert.ok(EDGE.includes("(Deno.env.get('JEMITA_ADMIN_ONLY') || 'true') !== 'false'"), 'v2cap が開発中のあいだは管理者だけ（既定）')
+})
+
+test('鍵は画面のコードに置かない（Claude を呼ぶのはサーバーだけ）', () => {
+  const walk = (dir) => readdirSync(dir).flatMap(f => {
+    const p = new URL(f, dir)
+    return statSync(p).isDirectory() ? walk(new URL(`${f}/`, dir)) : [p]
+  })
+  for (const p of walk(new URL('../../', import.meta.url))) {
+    if (!/\.(js|jsx|ts|tsx)$/.test(p.pathname) || /\.test\.js$/.test(p.pathname)) continue
+    const s = readFileSync(p, 'utf8')
+    assert.ok(!s.includes('@anthropic-ai/sdk') && !/sk-ant-/.test(s) && !s.includes('api.anthropic.com'), p.pathname)
+  }
+})
+
+test('画面：/v2cap に右下のボタンを置く（ホームとは別に読む）', () => {
+  const app = read('../../App.jsx')
+  assert.ok(app.includes("const V2capJemita = lazyReload(() => import('./v2cap/components/V2capJemita'))"))
+  assert.ok(app.includes('<Route path="/v2cap" element={session ? <><V2capHome /><Suspense fallback={null}><V2capJemita /></Suspense></> : <Navigate to="/login" />} />'))
+  const ui = read('../components/V2capJemita.jsx')
+  assert.ok(ui.includes("supabase.functions.invoke('v2cap-jemita'"), 'Edge Function の名前')
+  assert.ok(ui.includes("supabase.rpc('v2cap_jemita_left')"), '残りの回数はサーバーから')
+  assert.ok(!ui.includes('username'), '名前を送らない')
+})
