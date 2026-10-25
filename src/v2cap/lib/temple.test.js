@@ -57,27 +57,28 @@ test('クラスのステは神殿に書かない・「転職条件」・パッ�
   assert.ok(TEMPLE.includes("{has ? '習得済み' : '未習得'}"), '「習得済み／未習得」')
 })
 
-test('出血の重なりは「出血スタック」と書く（「重なり数」と書かない）', async () => {
+// 【確定】2026-10-26 ユーザー指示：「スタック」と書くのは**相手のスタックの数を数えるときだけ**（「出血スタック×5%」「動揺1スタックにつき」）。
+//   付けるときは「動揺+1」「出血+2」のまま（ユーザー「ここら辺は普通に＋１でいい、対象者のスタック数を数えるときだけでいい」）。「重なり数」とは書かない
+test('「スタック」は相手のスタックの数を数えるときだけ（付けるときは「+1」・「重なり数」と書かない）', async () => {
   const { SKILL_BY_NAME } = await import('./skills.js')
   const { ascSkillDetail } = await import('./ascension.js')
-  assert.equal(SKILL_BY_NAME['血の匂い'].desc, '出血している相手への与ダメージ+（出血スタック×5%）')
-  for (const n of ['血の匂い', '裂傷', '急所突き', '絶命']) {
-    assert.ok(SKILL_BY_NAME[n].desc.includes('出血スタック'), `${n}：${SKILL_BY_NAME[n].desc}`)
-  }
+  const desc = (n) => SKILL_BY_NAME[n].desc
+  // 数えるとき
+  assert.equal(desc('血の匂い'), '出血している相手への与ダメージ+（出血スタック×5%）')
+  assert.equal(desc('急所突き'), '相手の出血スタックをすべて消費し、1スタックにつき威力+25%')
+  assert.ok(desc('精神感応').includes('動揺は1スタックにつき'), desc('精神感応'))
+  assert.equal(desc('メンタルクラッシュ'), '相手の動揺1スタックにつき威力+6%（最大+30%）。動揺は残る')
+  for (const n of ['メンタルクラッシュ', 'サイコブラスト', 'マインドスパイク']) assert.ok(ascSkillDetail(n).includes('動揺1スタックにつき'), `${n}：${ascSkillDetail(n)}`)
+  assert.ok(ascSkillDetail('急所突き').includes('出血1スタックにつき'), ascSkillDetail('急所突き'))
+  // 付けるとき・数えないとき
+  assert.equal(desc('裂傷'), '相手の出血+2')
+  assert.equal(desc('テレキネシス'), '念力で叩きつける。50%で動揺+1')
+  assert.equal(desc('マインドジャック'), '動揺+2・20%で狂乱')
+  assert.ok(desc('マインドブレイク').endsWith('動揺+1'), desc('マインドブレイク'))
+  assert.ok(!desc('絶命').includes('スタック'), desc('絶命'))
+  for (const n of ['裂傷', 'テレキネシス', 'サイコショット']) assert.ok(!ascSkillDetail(n).includes('スタック'), `${n}：${ascSkillDetail(n)}`)
+  assert.ok(Object.values(SKILL_BY_NAME).every(s => !s.desc?.includes('スタック+')), '付けるときに「スタック+」と書かない')
+  // 「重なり数」とは書かない
   const all = Object.values(SKILL_BY_NAME).filter(s => s.cls && s.desc).map(s => `${s.name}：${s.desc}`)
   assert.deepEqual(all.filter(t => t.includes('重なり数')), [], '技の説明に「重なり数」を書かない')
-  assert.ok(ascSkillDetail('裂傷').includes('出血スタック'), ascSkillDetail('裂傷'))
-  assert.ok(ascSkillDetail('急所突き').includes('出血1スタックにつき'), ascSkillDetail('急所突き'))
-})
-
-test('動揺の重なりも「動揺スタック」と書く（「動揺+1」「動揺1つ」と書かない）', async () => {
-  const { SKILL_BY_NAME } = await import('./skills.js')
-  const { ascSkillDetail } = await import('./ascension.js')
-  const psy = Object.values(SKILL_BY_NAME).filter(s => s.cls === 'サイキッカー' && s.desc?.includes('動揺'))
-  assert.ok(psy.length >= 5, '精神感応・テレキネシス・マインドブレイク・マインドジャック・メンタルクラッシュ')
-  for (const s of psy) assert.ok(s.desc.includes('スタック') && !/動揺\+|動揺1つ/.test(s.desc), `${s.name}：${s.desc}`)
-  for (const n of ['メンタルクラッシュ', 'テレキネシス', 'サイコショット', 'サイコブラスト', 'マインドスパイク']) {
-    const d = ascSkillDetail(n)
-    assert.ok(d.includes('動揺') && d.includes('スタック') && !/動揺\+|動揺1つ/.test(d), `${n}：${d}`)
-  }
 })

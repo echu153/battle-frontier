@@ -224,14 +224,14 @@ export const ICHIJI_SKILLS = [
   { name:'精神感応', cls:'サイキッカー', kind:'passive', mp:0, passive:{ misfireChase:{ mult:0.3 } }, desc:'相手のスキルが不発するたび、STR×0.3＋INT×0.3で念動の追撃（相手の魔法防御で受ける）。動揺は1スタックにつき相手のスキル発動率を−3%する（最大−15%）' },
   { name:'サイコショット', cls:'サイキッカー', kind:M, src:'str', mult:1.31, add:[{ stat:'int_stat', rate:1.31 }], proc:90, mp:10, hitBonus:EASY_HIT, desc:'念で撃つ。命中しやすい' },
   { name:'精神集中', cls:'サイキッカー', kind:B, proc:100, mp:16, buff:{ self:{ str:20, int_stat:20 } }, priority:1, desc:'STR+20%・INT+20%（重ねがけ可）' },
-  { name:'テレキネシス', cls:'サイキッカー', kind:M, src:'str', mult:1.3, add:[{ stat:'int_stat', rate:1.3 }], proc:90, mp:10, agitate:{ n:1, chance:50 }, desc:'念力で叩きつける。50%で動揺スタック+1' },
-  { name:'マインドブレイク', cls:'サイキッカー', kind:M, src:'str', mult:1.25, add:[{ stat:'int_stat', rate:1.25 }], proc:85, mp:14, buff:{ enemy:{ str:-15, int_stat:-20 } }, ail:{ key:'frenzy', chance:20 }, agitate:{ n:1 }, desc:'精神を砕く。相手のSTR-15%・INT-20%（重ねがけ可）。20%で狂乱。動揺スタック+1' },
+  { name:'テレキネシス', cls:'サイキッカー', kind:M, src:'str', mult:1.3, add:[{ stat:'int_stat', rate:1.3 }], proc:90, mp:10, agitate:{ n:1, chance:50 }, desc:'念力で叩きつける。50%で動揺+1' },
+  { name:'マインドブレイク', cls:'サイキッカー', kind:M, src:'str', mult:1.25, add:[{ stat:'int_stat', rate:1.25 }], proc:85, mp:14, buff:{ enemy:{ str:-15, int_stat:-20 } }, ail:{ key:'frenzy', chance:20 }, agitate:{ n:1 }, desc:'精神を砕く。相手のSTR-15%・INT-20%（重ねがけ可）。20%で狂乱。動揺+1' },
   { name:'マインドスパイク', cls:'サイキッカー', kind:M, src:'str', mult:1.46, add:[{ stat:'int_stat', rate:1.46 }], proc:85, mp:14, hitBonus:EASY_HIT, desc:'精神を直接刺す。命中しやすい' },
   { name:'マインドアクセル', cls:'サイキッカー', kind:B, proc:100, mp:15, buff:{ self:{ agi:20, int_stat:20 } }, priority:1, desc:'AGI+20%・INT+20%（重ねがけ可）' },
   { name:'サイキックチェイン', cls:'サイキッカー', kind:P, src:'str', mult:0.45, add:[{ stat:'int_stat', rate:0.45 }], hits:3, proc:80, mp:20, noCrit:true, desc:'3連撃。クリティカルしない' },
-  { name:'マインドジャック', cls:'サイキッカー', kind:M, src:'str', mult:1.33, add:[{ stat:'int_stat', rate:1.33 }], proc:85, mp:14, ail:{ key:'frenzy', chance:20 }, agitate:{ n:2 }, desc:'動揺スタック+2・20%で狂乱' },
+  { name:'マインドジャック', cls:'サイキッカー', kind:M, src:'str', mult:1.33, add:[{ stat:'int_stat', rate:1.33 }], proc:85, mp:14, ail:{ key:'frenzy', chance:20 }, agitate:{ n:2 }, desc:'動揺+2・20%で狂乱' },
   { name:'サイコブラスト', cls:'サイキッカー', kind:M, src:'str', mult:1.56, add:[{ stat:'int_stat', rate:1.56 }], proc:80, mp:20, desc:'念を一気に放つ' },
-  { name:'メンタルクラッシュ', cls:'サイキッカー', kind:M, src:'str', mult:1.46, add:[{ stat:'int_stat', rate:1.46 }], proc:75, mp:28, agitPower:{ per:6, max:30 }, desc:'相手の動揺1スタックにつき威力+6%（最大+30%）。動揺スタックは残る' },
+  { name:'メンタルクラッシュ', cls:'サイキッカー', kind:M, src:'str', mult:1.46, add:[{ stat:'int_stat', rate:1.46 }], proc:75, mp:28, agitPower:{ per:6, max:30 }, desc:'相手の動揺1スタックにつき威力+6%（最大+30%）。動揺は残る' },
 
   // ===== 盗賊系 =====
   // 暗殺者【出血ととどめ】：出血を重ねるほど与ダメージが上がる。とどめの技は相手のHPが低ければ威力が上がる
@@ -240,12 +240,12 @@ export const ICHIJI_SKILLS = [
   { name:'鬼影閃', cls:'暗殺者', kind:P, mult:0.48, add:[{ stat:'agi', rate:0.21 }], hits:2, noCrit:true, proc:88, mp:12, ail:{ key:'bleed', chance:40 }, ailPerHit:true, desc:'2連撃。それぞれ40%で出血・クリティカルなし' },
   { name:'ヴァイパーストライク', cls:'暗殺者', kind:P, mult:1.12, add:[{ stat:'agi', rate:0.35 }], proc:88, mp:11, ail:{ key:'poison', chance:50 }, desc:'50%で毒' },
   { name:'隠形', cls:'暗殺者', kind:B, proc:100, mp:10, buff:{ self:{ agi:30 } }, priority:1, desc:'自分のAGI+30%' },
-  { name:'裂傷', cls:'暗殺者', kind:P, mult:0.94, add:[{ stat:'agi', rate:0.34 }], proc:90, mp:10, ail:{ key:'bleed', chance:100, stacks:2 }, desc:'相手の出血スタック+2' },
+  { name:'裂傷', cls:'暗殺者', kind:P, mult:0.94, add:[{ stat:'agi', rate:0.34 }], proc:90, mp:10, ail:{ key:'bleed', chance:100, stacks:2 }, desc:'相手の出血+2' },
   { name:'影討ち', cls:'暗殺者', kind:P, mult:1.25, add:[{ stat:'agi', rate:0.35 }], proc:85, mp:14, firstTurn:{ mult:1.5, crit:20 }, desc:'戦闘1ターン目なら威力+50%・クリティカル率+20%' },
   { name:'首狩り', cls:'暗殺者', kind:P, mult:1.2, add:[{ stat:'agi', rate:0.34 }], proc:85, mp:16, foeLowHp:{ at:50, mult:1.4 }, desc:'相手のHPが50%以下なら威力+40%' },
   { name:'死の刻印', cls:'暗殺者', kind:B, proc:100, mp:12, ailUp:{ key:'bleed', pct:25, turns:3 }, priority:1, desc:'3ターンの間、出血を付ける確率+25%' },
   { name:'急所突き', cls:'暗殺者', kind:P, mult:0.97, add:[{ stat:'agi', rate:0.33 }], proc:80, mp:20, burstAil:{ key:'bleed', perStack:0.25 }, desc:'相手の出血スタックをすべて消費し、1スタックにつき威力+25%' },
-  { name:'絶命', cls:'暗殺者', kind:P, mult:0.98, add:[{ stat:'agi', rate:0.27 }], proc:75, mp:28, foeLowHp:{ at:20, mult:3 }, desc:'相手のHPが20%以下なら威力3倍。出血スタックは使わない（急所突きと違い、出血スタックを残したまま撃てる）' },
+  { name:'絶命', cls:'暗殺者', kind:P, mult:0.98, add:[{ stat:'agi', rate:0.27 }], proc:75, mp:28, foeLowHp:{ at:20, mult:3 }, desc:'相手のHPが20%以下なら威力3倍。出血は使わない（急所突きと違い、出血を残したまま撃てる）' },
   // 忍者【分身】：分身は最大3体。攻撃を受けたとき30%で身代わりになって1体消える。分身がいる間は攻撃のたびに追撃する
   { name:'影の連携', cls:'忍者', kind:'passive', mp:0, passive:{ cloneFollow:0.1, noCloneAgi:10, cloneGuard:10 }, desc:'自分が攻撃するたび、分身1体につき物理 ×0.1で追撃。分身がいない間はAGI+10%。分身は攻撃を受けたとき10%で身代わりになって消える' },
   { name:'手裏剣', cls:'忍者', kind:P, mult:0.3, add:[{ stat:'agi', rate:0.19 }], hits:3, noCrit:true, proc:95, mp:6, sureHit:true, desc:'3連撃。必ず当たる・クリティカルなし' },
