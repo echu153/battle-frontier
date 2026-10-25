@@ -40,10 +40,11 @@ test('1エリアの並びは 通常6 → 時間帯6 → レア5 → ボス3（�
 test('落とす装備は役割で決まる：ふつう・時間帯は8%でノーマル・レア／レアは30%でエピックまで／ボスは60%でレジェンダリーまで', () => {
   // ふつう・時間帯は 2026-10-12 ユーザー指示「装備のドロップ率渋すぎるから8％にして」で 3→8
   // レア・ボスは 2026-10-22 ユーザー指示「レアのモンスターから装備ドロップする確率3倍にして、ボスは６倍」で 10→30・10→60（落ちるレア度は同じ）
-  assert.deepEqual(dropInfoOf('normal'), { chance: 8, rarities: ['N', 'R'] })
-  assert.deepEqual(dropInfoOf('timed'), { chance: 8, rarities: ['N', 'R'] })
-  assert.deepEqual(dropInfoOf('rare'), { chance: 30, rarities: ['N', 'R', 'E'] })
-  assert.deepEqual(dropInfoOf('boss'), { chance: 60, rarities: ['N', 'R', 'E', 'L'] })
+  // 2026-10-25 ユーザー指示：ふつうの敵もエピックまで・レアモンスターとボスはレア以上だけ
+  assert.deepEqual(dropInfoOf('normal'), { chance: 8, rarities: ['N', 'R', 'E'] })
+  assert.deepEqual(dropInfoOf('timed'), { chance: 8, rarities: ['N', 'R', 'E'] })
+  assert.deepEqual(dropInfoOf('rare'), { chance: 30, rarities: ['R', 'E', 'L'] })
+  assert.deepEqual(dropInfoOf('boss'), { chance: 60, rarities: ['R', 'E', 'L'] })
 })
 
 test('【確定】2026-10-24 図鑑にユニークの情報は載せない（ボスの行にも）。説明は HELP・「残り◯エリアは、行くと載ります」は出さない', () => {

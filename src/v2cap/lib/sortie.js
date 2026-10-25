@@ -91,28 +91,39 @@ export const clearSpot = (cleared, id) =>
 //       変わらないようにして　あくまで装備がドロップしやすいようにする」で レア10→30・ボス10→60（今の値の3倍・6倍。DROP_RARITY は変えない）
 //   ・落ちたときのレア度（%）… DROP_RARITY。①②③で「レア以上」の割合を ①×1.0 ②×1.2 ③×1.4 にする
 //     （増えたぶんはノーマルから減らす）
+//   【確定】2026-10-25 ユーザー指示「通常でもエピックまでは落ちるようにして、確率は少し低めで／レアモンスターからはレア、エピック、レジェンドのみ
+//     落ちるように／ボスもレア以上だけ落ちるように※ユニークの落ちる確率は上げないで」：
+//     ・ふつう・朝昼晩の敵 … ノーマル82・レア15・エピック3（前は ノーマル85・レア15）
+//     ・レアモンスター … レア82・エピック15・レジェンダリー3（前は ノーマル50・レア35・エピック15＝ノーマルのぶんをレアへ・レジェンダリーを少し）
+//     ・ボス … レア75・エピック20・レジェンダリー5（前は ノーマル40・レア35・エピック20・レジェンダリー5＝ノーマルのぶんをレアへ。エピックとレジェンダリーは同じ）
+//     ・①②③の倍率と「海賊の嗅覚」などの倍率は、**その役割のいちばん下のレア度より上**に掛ける
+//       （ふつうの敵＝レア以上・レアモンスターとボス＝エピック以上）。ボスのエピック・レジェンダリーはどの場所でも前と同じになる
+//     ・ユニーク（ボスに勝ったとき0.5%）はサーバーが別に引く＝ここでは変わらない
 //   ・落ちるのは**そのエリアの装備**（種類ごと・レア度ごとに1つずつ）。アイテムLV＝その装備の必要LV（エリア×レア度）
 // ★サーバー（v2cap_sortie_settle）は「そのエリアの装備か」「その役割の敵から落ちるレア度か」「いまの職業の武器か」を見る
 //   （落ちたかどうか・何が落ちたかは画面の申告。戦闘をサーバーで回すまでは今のⅡと同じ限界）
 export const DROP_CHANCE = { normal: 8, timed: 8, rare: 30, boss: 60 }
 export const DROP_RARITY = {
-  normal: { N:85, R:15 },
-  timed:  { N:85, R:15 },
-  rare:   { N:50, R:35, E:15 },
-  boss:   { N:40, R:35, E:20, L:5 },
+  normal: { N:82, R:15, E:3 },
+  timed:  { N:82, R:15, E:3 },
+  rare:   { R:82, E:15, L:3 },
+  boss:   { R:75, E:20, L:5 },
 }
 export const SUB_RARE_MULT = [1.0, 1.2, 1.4]
 const r1 = (v) => Math.round(v * 10) / 10
+// その役割の敵から落ちるいちばん下のレア度（ふつう・朝昼晩の敵＝ノーマル・レアモンスターとボス＝レア）
+export const lowestDropRarityOf = (role) => RARITIES.find(r => ((DROP_RARITY[role] || DROP_RARITY.normal)[r] || 0) > 0)
 // その場所（①②③）でその役割の敵を倒したときのレア度の内訳（%・合計100）
-// rareMult … レア以上の割合にさらに掛ける倍率（防具のセット能力「海賊の嗅覚」＝1.2・armorSets.js）。
-//   掛けて100%を超えたら（ボスの③×1.2）、ノーマルを0にしてレア以上を合計100へ割り戻す
+// rareMult … いちばん下より上のレア度の割合にさらに掛ける倍率（防具のセット能力「海賊の嗅覚」＝1.2・ユニークの黒潮のカトラス＝1.4）。
+//   ①②③の倍率も同じ所に掛け、増えたぶんはいちばん下のレア度から減らす。掛けて100%を超えたら、いちばん下を0にして合計100へ割り戻す
 export const dropRarityOf = (role, sub = 1, rareMult = 1) => {
   const base = DROP_RARITY[role] || DROP_RARITY.normal
   const m = (SUB_RARE_MULT[(sub || 1) - 1] ?? 1) * (rareMult || 1)
-  let up = Object.fromEntries(RARITIES.filter(r => r !== 'N' && base[r]).map(r => [r, r1(base[r] * m)]))
+  const low = lowestDropRarityOf(role)
+  let up = Object.fromEntries(RARITIES.filter(r => r !== low && base[r]).map(r => [r, r1(base[r] * m)]))
   const sum = Object.values(up).reduce((a, b) => a + b, 0)
   if (sum > 100) up = Object.fromEntries(Object.entries(up).map(([r, v]) => [r, r1(v * 100 / sum)]))
-  return { N: Math.max(0, r1(100 - Object.values(up).reduce((a, b) => a + b, 0))), ...up }
+  return { [low]: Math.max(0, r1(100 - Object.values(up).reduce((a, b) => a + b, 0))), ...up }
 }
 // その役割の敵から落ちるレア度か（サーバーの判定と同じ）
 export const canDropRarity = (role, rarity) => ((DROP_RARITY[role] || DROP_RARITY.normal)[rarity] || 0) > 0

@@ -117,17 +117,18 @@ test('【確定】ステの合計に3部位の能力値+%が乗り、戦闘に�
   assert.equal(statBreakdown(off, inv).set.agi, 0)
 })
 
-test('海賊の嗅覚：レア以上の割合だけ1.2倍（落ちる確率そのものは変えない）。100%を超えたらノーマルを0にして割り戻す', () => {
-  // 掛けないときは前のまま
-  assert.deepEqual(dropRarityOf('boss', 1), { N: 40, R: 35, E: 20, L: 5 })
-  assert.deepEqual(dropRarityOf('boss', 3), { N: 16, R: 49, E: 28, L: 7 })
-  assert.deepEqual(dropRarityOf('normal', 1, 1.2), { N: 82, R: 18 })
-  assert.deepEqual(dropRarityOf('boss', 1, 1.2), { N: 28, R: 42, E: 24, L: 6 })
-  const top = dropRarityOf('boss', 3, 1.2)
+test('海賊の嗅覚：いちばん下のレア度より上の割合だけ1.2倍（落ちる確率そのものは変えない）。100%を超えたらいちばん下を0にして割り戻す', () => {
+  // 2026-10-25 からレアモンスターとボスはレア以上だけ落とす＝倍率はエピック以上に掛かる（ふつうの敵はレア以上のまま）
+  assert.deepEqual(dropRarityOf('boss', 1), { R: 75, E: 20, L: 5 })
+  assert.deepEqual(dropRarityOf('boss', 3), { R: 65, E: 28, L: 7 })
+  assert.deepEqual(dropRarityOf('normal', 1, 1.2), { N: 78.4, R: 18, E: 3.6 })
+  assert.deepEqual(dropRarityOf('boss', 1, 1.2), { R: 70, E: 24, L: 6 }, 'ボスのエピック・レジェンダリーは前と同じ（前は N28・R42・E24・L6）')
+  assert.ok(dropRarityOf('boss', 3, 1.2).L > DROP_RARITY.boss.L * 1.4)
+  // 100%を超えるほど大きい倍率なら、いちばん下を0にして割り戻す
+  const top = dropRarityOf('boss', 3, 5)
   const sum = Object.values(top).reduce((a, b) => a + b, 0)
   assert.ok(Math.abs(sum - 100) < 0.21, `${sum}`)
-  assert.ok(top.N >= 0 && top.N < 0.5)
-  assert.ok(top.L > DROP_RARITY.boss.L * 1.4)
+  assert.ok(top.R >= 0 && top.R < 0.5)
   for (const role of Object.keys(DROP_RARITY)) for (const sub of [1, 2, 3]) {
     const d = dropRarityOf(role, sub, 1.2)
     assert.ok(Object.values(d).every(v => v >= 0), `${role}${sub}`)

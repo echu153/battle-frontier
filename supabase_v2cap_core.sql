@@ -4234,10 +4234,12 @@ begin
     v_gold := ((v_spot.gold_min + floor(random() * (v_spot.gold_max - v_spot.gold_min + 1))::int) * v_tenths + 5) / 10;
     if p_drop is not null then
       select * into v_eq from public.v2cap_equipment e where e.id = p_drop;
+      -- 【確定】2026-10-25 落ちるレア度（sortie.js の DROP_RARITY）：ふつう・朝昼晩の敵＝ノーマル・レア・エピック／
+      --   レアモンスター＝レア・エピック・レジェンダリー／ボス＝レア・エピック・レジェンダリー（前はエピックがレアとボス・レジェンダリーがボスだけ）
       if found and v_eq.area = v_spot.area
-         and (v_eq.rarity in ('N', 'R')
-              or (v_eq.rarity = 'E' and v_en.role in ('rare', 'boss'))
-              or (v_eq.rarity = 'L' and v_en.role = 'boss'))
+         and (v_eq.rarity in ('R', 'E')
+              or (v_eq.rarity = 'N' and v_en.role in ('normal', 'timed'))
+              or (v_eq.rarity = 'L' and v_en.role in ('rare', 'boss')))
          and (v_eq.part <> '武器' or v_eq.type = any(coalesce(v_cls.weapons, '{}'))) then
         insert into public.v2cap_inventory (player_id, base_id, ilv)
         values (v_uid, v_eq.id, v_eq.lv) returning id into v_inv;
@@ -6885,11 +6887,11 @@ begin
   select * into v_spot from public.v2cap_spots where id = public.v2cap_open_until(v_row.cleared_spots);
   v_exp  := v_spot.exp_min  + floor(random() * (v_spot.exp_max  - v_spot.exp_min  + 1))::int;
   v_gold := v_spot.gold_min + floor(random() * (v_spot.gold_max - v_spot.gold_min + 1))::int;
-  -- 装備：その場所のエリアの装備で、ふつうの敵から落ちるレア度（ノーマル・レア）、武器ならいまの職業の種類のときだけ入れる
+  -- 装備：その場所のエリアの装備で、ふつうの敵から落ちるレア度（ノーマル・レア・エピック＝2026-10-25 からエピックも）、武器ならいまの職業の種類のときだけ入れる
   if p_drop is not null then
     select * into v_cls from public.v2cap_classes where id = v_row.class;
     select * into v_eq from public.v2cap_equipment e where e.id = p_drop;
-    if found and v_eq.area = v_spot.area and v_eq.rarity in ('N', 'R')
+    if found and v_eq.area = v_spot.area and v_eq.rarity in ('N', 'R', 'E')
        and (v_eq.part <> '武器' or v_eq.type = any(coalesce(v_cls.weapons, '{}'))) then
       insert into public.v2cap_inventory (player_id, base_id, ilv)
       values (v_uid, v_eq.id, v_eq.lv) returning id into v_inv;

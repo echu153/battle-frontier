@@ -189,7 +189,7 @@ test('戦う形：挑戦する側は満タン・守護者は残りHP（千分率
   assert.equal(hpPmOf({ hp: -5, base: { hp: 200 } }), 1)
 })
 
-test('【確定】報酬は出撃と同じ：開いている一番先の場所の「ふつうの敵」と同じ装備（エリア・ノーマルかレア・武器はいまの職業の種類）', () => {
+test('【確定】報酬は出撃と同じ：開いている一番先の場所の「ふつうの敵」と同じ装備（エリア・ノーマル〜エピック・武器はいまの職業の種類）', () => {
   const cleared = [1, 2, 3, 4]
   assert.equal(rewardSpotOf(cleared).id, openUntilOf(cleared))
   assert.equal(rewardSpotOf([]).id, 1)
@@ -199,7 +199,8 @@ test('【確定】報酬は出撃と同じ：開いている一番先の場所�
     if (!d) continue
     n++
     assert.equal(d.item.area, rewardSpotOf(cleared).area)
-    assert.ok(['N', 'R'].includes(d.item.rarity), d.item.rarity)
+    // 2026-10-25 からふつうの敵はエピックまで落ちる（ユーザー指示「通常でもエピックまでは落ちるようにして」）＝塔も同じ
+    assert.ok(['N', 'R', 'E'].includes(d.item.rarity), d.item.rarity)
     if (d.item.part === '武器') assert.ok(weaponsOf('弓使い').includes(d.item.type), d.item.type)
   }
   assert.ok(n > 4000 * 0.05 && n < 4000 * 0.11, `落ちる割合は出撃のふつうの敵と同じ8%前後（${n}）`)

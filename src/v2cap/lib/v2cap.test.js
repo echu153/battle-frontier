@@ -37,7 +37,7 @@ import { toFighter, statBreakdown, equippedItems, slotsOf, currentSetOf, armorOf
 import {
   rollDropKind, rollEquipDrop, pickEncounter, ENCOUNTER_PCT, rollRewards, rewardRangeOf,
   openUntilOf, isSpotUnlocked, unlockedSpotsOf, clearSpot,
-  DROP_CHANCE, DROP_RARITY, SUB_RARE_MULT, dropRarityOf, rollDropRarity, canDropRarity,
+  DROP_CHANCE, DROP_RARITY, SUB_RARE_MULT, dropRarityOf, rollDropRarity, canDropRarity, lowestDropRarityOf,
 } from './sortie.js'
 
 const rngOf = (seed) => { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }
@@ -159,37 +159,53 @@ test('【確定】負けても経験値はその場所の最低値（朝昼晩�
   assert.deepEqual(rollRewards({ spot: spotOf(1), role: 'boss' }, Math.random, false), { exp: 3, gold: 0 }, '始まりの森①はボスに負けても3')
 })
 
-test('【確定】落ちる装備のレア度：エピックはレアとボスから・レジェンダリーはボスからだけ。①②③でレア以上が出やすくなる', () => {
+test('【確定】落ちる装備のレア度：ふつうの敵もエピックまで・レアモンスターとボスはレア以上だけ（レジェンダリーも）。①②③で上のレア度が出やすくなる', () => {
   // 勝ったときに落ちる確率（%）と、落ちたときのレア度の内訳（2026-10-09 ユーザー承認の案）。
   // ふつう・朝昼晩は 2026-10-12 ユーザー指示「装備のドロップ率渋すぎるから8％にして」で 3→8
   // レアとボスは 2026-10-22 ユーザー指示「レアのモンスターから装備ドロップする確率3倍にして、ボスは６倍」で 10→30・10→60（内訳はそのまま）
   assert.deepEqual(DROP_CHANCE, { normal: 8, timed: 8, rare: 30, boss: 60 })
-  assert.deepEqual(DROP_RARITY.normal, { N:85, R:15 })
-  assert.deepEqual(DROP_RARITY.timed, { N:85, R:15 })
-  assert.deepEqual(DROP_RARITY.rare, { N:50, R:35, E:15 })
-  assert.deepEqual(DROP_RARITY.boss, { N:40, R:35, E:20, L:5 })
+  // 【確定】2026-10-25 ユーザー指示「通常でもエピックまでは落ちるようにして、確率は少し低めで／レアモンスターからはレア、エピック、レジェンドのみ
+  //   落ちるように／ボスもレア以上だけ落ちるように※ユニークの落ちる確率は上げないで」
+  //   （前は ふつう・朝昼晩 N85・R15／レア N50・R35・E15／ボス N40・R35・E20・L5）
+  assert.deepEqual(DROP_RARITY.normal, { N:82, R:15, E:3 })
+  assert.deepEqual(DROP_RARITY.timed, { N:82, R:15, E:3 })
+  assert.deepEqual(DROP_RARITY.rare, { R:82, E:15, L:3 })
+  assert.deepEqual(DROP_RARITY.boss, { R:75, E:20, L:5 })
   assert.deepEqual(SUB_RARE_MULT, [1.0, 1.2, 1.4])
+  const LOW = { normal: 'N', timed: 'N', rare: 'R', boss: 'R' }   // その役割のいちばん下のレア度（①②③の倍率で減るのはここ）
   for (const role of ['normal', 'timed', 'rare', 'boss']) {
+    assert.equal(lowestDropRarityOf(role), LOW[role])
     for (const sub of [1, 2, 3]) {
       const d = dropRarityOf(role, sub)
       assert.ok(Math.abs(Object.values(d).reduce((a, b) => a + b, 0) - 100) < 1e-6, `${role}の${sub}：合計100`)
-      assert.ok(d.N > 0, `${role}の${sub}：ノーマルも落ちる`)
-      assert.equal(!!d.E, role === 'rare' || role === 'boss', `${role}からエピック`)
-      assert.equal(!!d.L, role === 'boss', `${role}からレジェンダリー`)
-      if (sub > 1) assert.ok(d.N < dropRarityOf(role, sub - 1).N, `${role}：${sub}は前の場所よりノーマルが減る`)
+      assert.ok(d[LOW[role]] > 0, `${role}の${sub}：いちばん下も落ちる`)
+      assert.equal(!!d.N, role === 'normal' || role === 'timed', `${role}の${sub}：ノーマルはふつうの敵だけ`)
+      assert.ok(d.E > 0, `${role}の${sub}：エピックはどの敵からも`)
+      assert.equal(!!d.L, role === 'rare' || role === 'boss', `${role}の${sub}：レジェンダリーはレアモンスターとボス`)
+      if (sub > 1) assert.ok(d[LOW[role]] < dropRarityOf(role, sub - 1)[LOW[role]], `${role}：${sub}は前の場所よりいちばん下が減る`)
     }
-    assert.equal(canDropRarity(role, 'E'), role === 'rare' || role === 'boss')
-    assert.equal(canDropRarity(role, 'L'), role === 'boss')
-    assert.ok(canDropRarity(role, 'N') && canDropRarity(role, 'R'))
+    assert.equal(canDropRarity(role, 'N'), role === 'normal' || role === 'timed')
+    assert.ok(canDropRarity(role, 'R') && canDropRarity(role, 'E'))
+    assert.equal(canDropRarity(role, 'L'), role === 'rare' || role === 'boss')
   }
-  assert.deepEqual(dropRarityOf('boss', 3), { N: 16, R: 49, E: 28, L: 7 }, '③のボスはレア以上が1.4倍')
-  assert.deepEqual(dropRarityOf('normal', 2), { N: 82, R: 18 })
-  // 実際に引いても、ふつうの敵からエピック・レジェンダリーは出ない
+  // ボスはノーマルのぶんがレアへ移っただけ＝エピック・レジェンダリーはどの場所でも前と同じ（③は前も E28・L7）
+  assert.deepEqual(dropRarityOf('boss', 1), { R: 75, E: 20, L: 5 })
+  assert.deepEqual(dropRarityOf('boss', 3), { R: 65, E: 28, L: 7 }, '③のボスはエピック以上が1.4倍')
+  assert.deepEqual(dropRarityOf('rare', 3), { R: 74.8, E: 21, L: 4.2 })
+  assert.deepEqual(dropRarityOf('normal', 2), { N: 78.4, R: 18, E: 3.6 })
+  // 実際に引いても：ふつうの敵はノーマル〜エピック・ボスはレア〜レジェンダリー（どちらも全部出る）
   const rng = rngOf(7)
-  for (let i = 0; i < 3000; i++) {
-    assert.ok(['N', 'R'].includes(rollDropRarity('timed', 3, rng)))
-    assert.notEqual(rollDropRarity('rare', 3, rng), 'L')
+  const seen = { timed: new Set(), boss: new Set() }
+  for (let i = 0; i < 6000; i++) {
+    const t = rollDropRarity('timed', 3, rng)
+    assert.ok(['N', 'R', 'E'].includes(t))
+    seen.timed.add(t)
+    const b = rollDropRarity('boss', 1, rng)
+    assert.ok(['R', 'E', 'L'].includes(b))
+    seen.boss.add(b)
   }
+  assert.deepEqual([...seen.timed].sort(), ['E', 'N', 'R'])
+  assert.deepEqual([...seen.boss].sort(), ['E', 'L', 'R'])
 })
 
 test('【確定】装備の必要LV（アイテムLV）はエリアとレア度の表。必要LVが高いほど強く、同じLVならレア度が高いほど強い', () => {
@@ -1059,7 +1075,9 @@ test('【確定】落ちるのはそのエリアの装備。武器はいまの�
   }
   assert.ok(got >= 400, 'ドロップを拾えている')
   assert.ok(seen.boss.has('E') && seen.boss.has('L'), 'ボスからエピックとレジェンダリーも落ちる')
-  assert.ok(!seen.normal.has('E') && !seen.timed.has('E'), 'ふつうの敵からエピックは落ちない')
+  // 2026-10-25 から：ふつうの敵はエピックまで（レジェンダリーは落ちない）・ボスとレアモンスターからノーマルは落ちない
+  assert.ok(!seen.normal.has('L') && !seen.timed.has('L'), 'ふつうの敵からレジェンダリーは落ちない')
+  assert.ok(!seen.boss.has('N') && !seen.rare.has('N'), 'ボスとレアモンスターからノーマルは落ちない')
 })
 
 // ===== 敵 =====

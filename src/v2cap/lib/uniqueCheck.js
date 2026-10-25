@@ -16,7 +16,7 @@ import { SKILL_BY_NAME } from './skills.js'
 import { UNIQUE_ITEMS } from './equipment.js'
 import { combinedFxOf } from './fxMerge.js'
 import { CAP_RULES } from './rules.js'
-import { dropRarityOf } from './sortie.js'
+import { dropRarityOf, lowestDropRarityOf } from './sortie.js'
 
 export const ME = 'ためし'
 export const FOE = '木人'
@@ -393,7 +393,9 @@ export const CHECK = {
     const fx = fxOf(item)
     const base = dropRarityOf('boss', 1, 1)
     const up = dropRarityOf('boss', 1, fx.rareDropMult)
-    return res(fx.rareDropMult === v && up.L > base.L && up.N < base.N, `ボスのレジェンダリー ${base.L}%→${up.L}%（レア以上×${v}）`)
+    // 2026-10-25 からボスはレア以上だけ落とす＝倍率はいちばん下（レア）より上に掛かり、増えたぶんはレアから減る
+    const low = lowestDropRarityOf('boss')
+    return res(fx.rareDropMult === v && up.L > base.L && up[low] < base[low], `ボスのレジェンダリー ${base.L}%→${up.L}%（${low === 'N' ? 'レア' : 'エピック'}以上×${v}）`)
   },
 }
 // 画面に出す項目の名前

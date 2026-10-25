@@ -102,13 +102,14 @@ test('【確定】落ちた装備は「その場所のエリアの装備」で�
   // JS（sortie.js の DROP_RARITY）から「そのレア度を落とす役割」を作って、SQLの条件と突き合わせる
   const all = Object.keys(DROP_RARITY)
   const roles = (r) => all.filter(role => (DROP_RARITY[role][r] || 0) > 0)
-  assert.deepEqual(roles('N'), all)
+  // 2026-10-25 ユーザー指示：ふつうの敵もエピックまで・レアモンスターとボスはレア以上だけ（レジェンダリーも）
+  assert.deepEqual(roles('N'), ['normal', 'timed'], 'ノーマルはふつう・朝昼晩の敵だけ')
   assert.deepEqual(roles('R'), all)
-  assert.deepEqual(roles('E'), ['rare', 'boss'], 'エピックはレアとボスから（ユーザー決定）')
-  assert.deepEqual(roles('L'), ['boss'], 'レジェンダリーはボスからだけ（ユーザー決定）')
-  assert.ok(settle.includes("v_eq.rarity in ('N', 'R')"), 'ノーマル・レアはどの敵からも')
-  assert.ok(settle.includes("(v_eq.rarity = 'E' and v_en.role in ('rare', 'boss'))"), 'エピックはレアとボス')
-  assert.ok(settle.includes("(v_eq.rarity = 'L' and v_en.role = 'boss')"), 'レジェンダリーはボスだけ')
+  assert.deepEqual(roles('E'), all, 'エピックはどの敵からも')
+  assert.deepEqual(roles('L'), ['rare', 'boss'], 'レジェンダリーはレアモンスターとボス')
+  assert.ok(settle.includes("(v_eq.rarity in ('R', 'E')"), 'レア・エピックはどの敵からも')
+  assert.ok(settle.includes("(v_eq.rarity = 'N' and v_en.role in ('normal', 'timed'))"), 'ノーマルはふつう・朝昼晩の敵')
+  assert.ok(settle.includes("(v_eq.rarity = 'L' and v_en.role in ('rare', 'boss'))"), 'レジェンダリーはレアモンスターとボス')
   assert.ok(!/p_rank|drop_ranks/.test(settle), 'ランクの引数・列はもう使わない')
   assert.ok(SQL.includes('drop function if exists public.v2cap_sortie_settle(int, text, boolean, text, text, boolean);'), 'ランクのある前の形を落とす')
 })
@@ -973,9 +974,9 @@ test('【確定】塔の報酬は出撃と同じ：開いている一番先の�
   assert.ok(fight.includes('where id = public.v2cap_open_until(v_row.cleared_spots);'), '開いている一番先の場所')
   assert.ok(fight.includes('v_exp  := v_spot.exp_min  + floor(random() * (v_spot.exp_max  - v_spot.exp_min  + 1))::int;'), 'EXPは場所の表の値（倍率なし）')
   assert.ok(fight.includes('v_gold := v_spot.gold_min + floor(random() * (v_spot.gold_max - v_spot.gold_min + 1))::int;'), 'Goldも')
-  // ふつうの敵から落ちるレア度（sortie.js の DROP_RARITY.normal）＝ノーマル・レア
-  assert.deepEqual(Object.keys(DROP_RARITY.normal).sort(), ['N', 'R'])
-  assert.ok(fight.includes("v_eq.area = v_spot.area and v_eq.rarity in ('N', 'R')"))
+  // ふつうの敵から落ちるレア度（sortie.js の DROP_RARITY.normal）＝ノーマル・レア・エピック（2026-10-25 からエピックも）
+  assert.deepEqual(Object.keys(DROP_RARITY.normal).sort(), ['E', 'N', 'R'])
+  assert.ok(fight.includes("v_eq.area = v_spot.area and v_eq.rarity in ('N', 'R', 'E')"))
   assert.ok(fight.includes("(v_eq.part <> '武器' or v_eq.type = any(coalesce(v_cls.weapons, '{}')))"), '武器はいまの職業の種類')
   assert.ok(fight.includes('public.v2cap_apply_exp(v_uid, v_exp)'), 'EXPは出撃と同じ入れ方（ClassEXP・技を覚える）')
 })
