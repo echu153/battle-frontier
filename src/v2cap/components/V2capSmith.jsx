@@ -12,7 +12,7 @@ import { wornIdsOf } from '../lib/loadout.js'
 import { powerAt, statsAt, effectivePowerAt, syncLabelOf } from '../lib/gear.js'
 import {
   PLUS_MAX, plusOf, scrapNameOf, scrapOf, scrapAreaOf, dismantleGainOf, bulkPickable, enhanceCostOf, enhanceErrorOf,
-  SCRAP_NAMES, SCRAP_YIELD, CRAFT_RARITIES, craftCostOf, craftErrorOf,
+  SCRAP_YIELD, CRAFT_RARITIES, craftCostOf, craftErrorOf,
 } from '../lib/smith.js'
 import { statLine, nameColor, PLUS_COLOR, gainText, areaOptionLabel, filterSelect, optionStyle, useGearRows } from './v2capGearView.js'
 import { PlusTag, GearFilterBar, StatChange } from './v2capGear.jsx'
@@ -54,7 +54,6 @@ export default function V2capSmith({ prof, inventory, onProfile, onGo }) {
     .map(inv => ({ inv, item: ITEM_BY_ID[inv.base_id] }))
     .filter(r => r.item), [inventory])
   const list = useGearRows(all, prof.lv)   // 強化と分解で同じ絞り込み・並べ替えを使う
-  const owned = SCRAP_NAMES.map((name, i) => ({ area: i + 1, name, n: scrapOf(prof.materials, i + 1) })).filter(m => m.n > 0)
 
   // RPCを呼び、うまくいったらサーバーから取り直す。返すのは { data } か { error }
   const call = async (fn, args) => {
@@ -97,24 +96,9 @@ export default function V2capSmith({ prof, inventory, onProfile, onGo }) {
         </div>
 
         <div className="smm-main">
-          {/* 持っている残骸とGold */}
-          <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'8px', marginBottom:'6px', flexWrap:'wrap' }}>
-              <span style={{ color:'#88ccff', fontSize:'12px' }}>🧱 持っている残骸</span>
-              <span style={{ fontSize:'11px', color: TEXT.label }}>💰 Gold <span style={{ color:'#ffcc00' }}>{Number(prof.gold || 0).toLocaleString()}</span></span>
-            </div>
-            {owned.length === 0
-              ? <div style={{ color: TEXT.label, fontSize:'10px' }}>まだありません。装備を分解すると、その装備のエリアの残骸が手に入ります</div>
-              : (
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(150px, 1fr))', gap:'3px' }}>
-                  {owned.map(m => (
-                    <div key={m.area} style={{ background:'#000818', border:'1px solid #002244', padding:'4px 7px', fontSize:'11px', display:'flex', justifyContent:'space-between', gap:'6px' }}>
-                      <span style={{ color:'#cfe2ff' }}>{m.name}</span>
-                      <span style={{ color:'#ffcc00' }}>{m.n.toLocaleString()}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+          {/* 持っているGold（2026-10-26 ユーザー指示「この部分（持っている残骸の一覧）は丸ごといらない、所持してるGoldだけでいい」） */}
+          <div style={{ ...box, padding:'8px 12px', marginBottom:'10px', fontSize:'12px', color: TEXT.label }}>
+            💰 Gold <span style={{ color:'#ffcc00' }}>{Number(prof.gold || 0).toLocaleString()}</span>
           </div>
 
           <div style={{ ...box, padding:'12px' }}>
@@ -498,8 +482,9 @@ function SmithModal({ row, prof, busy, msg, say, onEnhance, onClose }) {
       confirmLabel={cost ? `+${cost.next}に強化する` : '強化する'} cancelLabel="閉じる"
       onConfirm={err ? undefined : onEnhance} onClose={onClose}>
       {say && err && <MasterSays face={say.face} line={say.text} />}
+      {/* 装備の名前は大きく（2026-10-26 ユーザー指示「強化選択時の装備名の文字大きく」） */}
       <div>
-        <span style={{ color: nameColor(item) }}>{item.name}</span><PlusTag inv={inv} />
+        <span style={{ fontSize:'16px' }}><span style={{ color: nameColor(item) }}>{item.name}</span><PlusTag inv={inv} /></span>
         <span style={{ color: TEXT.sub, fontSize:'11px' }}>（{kindLabel(item)}・LV{needLvOf(item, inv.ilv)}）</span>
       </div>
       {cost ? (
@@ -512,14 +497,15 @@ function SmithModal({ row, prof, busy, msg, say, onEnhance, onClose }) {
           {/* 上がるステ（2026-10-24 ユーザー指示「ちゃんと武器のステータスどのくらい上昇してるのかも記載するようにして」）。
               前は灰色の小さい字で「STR+5 DEX+3 → STR+6 DEX+4」。戦闘力と同じく装備そのものの強さ（必要LV不足の弱まりは入れない） */}
           <StatChange from={statsAt(item, inv.ilv, null, plus)} to={statsAt(item, inv.ilv, null, cost.next)} />
+          {/* 2026-10-26 ユーザー指示「使うもの⇒強化素材・持っている⇒所持数：」 */}
           <div style={{ marginTop:'4px' }}>
-            使うもの：
+            強化素材：
             {cost.scrap > 0 && <>
               <span style={have < cost.scrap ? short : { color:'#cfe2ff' }}>{scrapNameOf(cost.area)} {cost.scrap}個</span>
-              <span style={{ color: TEXT.sub, fontSize:'11px' }}>（持っている {have.toLocaleString()}）</span>・
+              <span style={{ color: TEXT.sub, fontSize:'11px' }}>（所持数：{have.toLocaleString()}）</span>・
             </>}
             <span style={gold < cost.gold ? short : { color:'#ffcc00' }}>Gold {cost.gold.toLocaleString()}</span>
-            <span style={{ color: TEXT.sub, fontSize:'11px' }}>（持っている {gold.toLocaleString()}）</span>
+            <span style={{ color: TEXT.sub, fontSize:'11px' }}>（所持数：{gold.toLocaleString()}）</span>
           </div>
           <div>成功率 <span style={{ color: cost.rate >= 50 ? '#44ff88' : SHORT }}>{cost.rate}%</span></div>
           <div style={{ color: TEXT.sub, fontSize:'11px' }}>
