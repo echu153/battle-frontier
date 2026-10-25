@@ -195,9 +195,9 @@ test('段階の場面は1回だけ・いちばん上のまだ見せていない�
   assert.equal(stageEventOf(4, 0).stage, 4)
   assert.equal(stageEventOf(4, 4), null)
   assert.ok(CLERK_STAGE_EVENTS[3].text.includes('{username}') && CLERK_STAGE_EVENTS[3].text.includes('{name}'), '20日目に名前を聞いて呼び始める')
-  // 【確定】2026-10-25 ユーザー指示「40日目の自己紹介をＡ案（ほんとの名前はもうちょっと長い）で入れて」
+  // 【確定】2026-10-25 ユーザー指示「40日目の自己紹介をＡ案（ほんとの名前はもうちょっと長い）で入れて」→「わたしはハルって呼んでほしいな！ ↑これにして」
   const intro = CLERK_STAGE_EVENTS[4]
-  assert.ok(intro.text.includes('わたしはハル') && intro.text.includes('{name}'), '親友になった日に、あだ名のハルを名乗る')
+  assert.ok(intro.text.includes('わたしはハルって呼んでほしいな！') && intro.text.includes('{name}'), '親友になった日に、あだ名のハルを名乗る')
   assert.ok(intro.text.includes('ほんとの名前はもうちょっと長い'), '本名があることだけ匂わせる')
   assert.ok(!/春/.test(intro.text), '本名（春・○○）はまだ言わない')
   // 本名はほかのセリフでもまだ出さない（エンドコンテンツの体術のNPCで出す予定）
