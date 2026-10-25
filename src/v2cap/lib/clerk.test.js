@@ -186,15 +186,23 @@ test('仲良くなるとタップのセリフが増える（はじめて8 → �
   for (const kind of ['enterDaily', 'enterLong', 'enterAgain']) assert.equal(linesOf(kind, 0).length, 0, kind)
 })
 
-test('段階の場面は1回だけ・いちばん上のまだ見せていないもの。40日目（自己紹介）は名前が決まるまで無い', () => {
+test('段階の場面は1回だけ・いちばん上のまだ見せていないもの。40日目は自己紹介（あだ名の「ハル」だけ・本名はまだ言わない）', () => {
   assert.equal(stageEventOf(0, 0), null)
   assert.equal(stageEventOf(1, 0).stage, 1)
   assert.equal(stageEventOf(1, 1), null)
   assert.equal(stageEventOf(3, 1).stage, 3)          // 段階を飛ばしたら上のほうだけ
-  assert.equal(stageEventOf(4, 3), null)             // 40日目の場面はまだ無い＝見せた印も付かない（あとで足せば出る）
-  assert.equal(stageEventOf(4, 0).stage, 3)
-  assert.equal(CLERK_STAGE_EVENTS[4], undefined, '看板娘の名前（あだ名）は決まってから入れる')
+  assert.equal(stageEventOf(4, 3).stage, 4)          // 40日目の自己紹介
+  assert.equal(stageEventOf(4, 0).stage, 4)
+  assert.equal(stageEventOf(4, 4), null)
   assert.ok(CLERK_STAGE_EVENTS[3].text.includes('{username}') && CLERK_STAGE_EVENTS[3].text.includes('{name}'), '20日目に名前を聞いて呼び始める')
+  // 【確定】2026-10-25 ユーザー指示「40日目の自己紹介をＡ案（ほんとの名前はもうちょっと長い）で入れて」
+  const intro = CLERK_STAGE_EVENTS[4]
+  assert.ok(intro.text.includes('わたしはハル') && intro.text.includes('{name}'), '親友になった日に、あだ名のハルを名乗る')
+  assert.ok(intro.text.includes('ほんとの名前はもうちょっと長い'), '本名があることだけ匂わせる')
+  assert.ok(!/春/.test(intro.text), '本名（春・○○）はまだ言わない')
+  // 本名はほかのセリフでもまだ出さない（エンドコンテンツの体術のNPCで出す予定）
+  const all = [...Object.values(CLERK_LINES).flat(), ...Object.values(CLERK_STAGE_EVENTS)]
+  assert.ok(!all.some(l => /春・/.test(l.text)), '本名はまだどこにも出さない')
 })
 
 test('顔なじみからのあいさつ：前の日に来ていた→今日も・2日以上あいた→久しぶり・今日もう来ていた→また（食事中は残り時間）', () => {
