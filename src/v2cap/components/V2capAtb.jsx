@@ -2,19 +2,24 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import V2LogLine from './V2LogLine.jsx'
 import V2capAtbMacros from './V2capAtbMacros.jsx'
+import V2capAtbStage from './V2capAtbStage.jsx'
 import { box, miniBtn, TEXT } from './v2ui.js'
 import { buildBattleLog } from '../core/battleLog.js'
 import { mpCostOf } from '../core/battle.js'
 import {
   createAtb, advance, reserve, unreserveAt, clearQueue, startMacro, stopMacro, toggleGuard,
-  canUse, cdLeft, cdFor, guardReady, guardCdLeft, needNow, chosenOf, buffChips, ailChips, stateChips,
+  canUse, cdLeft, cdFor, guardReady, guardCdLeft, chosenOf,
   GUARD_CUT, GUARD_CD, CAST_SEC, MAX_SEC, QUEUE_MAX, TURN_SEC,
 } from '../core/atb.js'
 import { MACRO_MARK, macrosOf, validateMacros, macroEntriesOf } from '../lib/atbMacro.js'
-import { STAT_DEFS } from '../core/stats.js'
+import { loadPref } from '../core/prefs.js'
+import { fxEventsOf, POP_SEC } from '../lib/atbFx.js'
+import { homeIconOf } from '../lib/classArt.js'
+import { artGenderOf } from '../lib/gender.js'
+import { enemyArtSrc } from '../lib/enemyArt.js'
 import { AREA_LIST, SPOTS, SUB_MARK, toFighter as enemyFighter } from '../lib/areas.js'
 import { toFighter as playerFighter, slotsOf } from '../lib/loadout.js'
-import { usableSkillNames, lineageOf } from '../lib/jobs.js'
+import { usableSkillNames, lineageOf, CLASS_BY_ID } from '../lib/jobs.js'
 import { ascEffectsOf } from '../lib/ascension.js'
 
 // ============================================================
@@ -24,6 +29,7 @@ import { ascEffectsOf } from '../lib/ascension.js'
 //   ・レイドボス・IDダンジョンに載せる前の、手触りと数字を見るための場所。**報酬なし・サーバーへ何も送らない**
 //   ・相手はエリアの敵（ボス・ふつう・朝昼晩・レア）。HPの倍率で長い戦い（レイドのボスの代わり）も見られる
 //   ・自分は持っている技を全部使える（ATBの決まり）。技を押すと割り込みの列の後ろに入り、ゲージが満タンになると先頭から出る
+//   ・自分が左・モンスターが右（2026-10-26 ユーザー指示・舞台は V2capAtbStage.jsx・動きは lib/atbFx.js）
 //   ・マクロ①〜③（2026-10-26 ユーザー指示）：準備の画面で登録・保存（サーバーに職業ごと）、戦闘中に押すとその順に出る。
 //     いま画面に出ている形（保存前でも）で戦う＝試しながら組み替えられる
 // 中身（進み方）は src/v2cap/core/atb.js。つまみ（秒・倍率）もそちらの冒頭。マクロの決まりは src/v2cap/lib/atbMacro.js
@@ -31,34 +37,7 @@ import { ascEffectsOf } from '../lib/ascension.js'
 
 const HP_MULTS = [1, 10, 50]
 const sel = { background:'#000818', color: TEXT.body, border:'1px solid #0044aa', fontFamily:'monospace', fontSize:'12px', padding:'6px' }
-
-const Bar = ({ pct, color, h = 10 }) => (
-  <div style={{ height:`${h}px`, background:'#000818', border:'1px solid #13405f' }}>
-    <div style={{ width:`${Math.max(0, Math.min(100, pct))}%`, height:'100%', background: color }} />
-  </div>
-)
 const chip = (color, bg = '#000818') => ({ fontSize:'10px', padding:'1px 5px', border:`1px solid ${color}`, color, background: bg })
-const buffText = (table) => Object.entries(table)
-  .map(([k, v]) => `${STAT_DEFS[k]?.label || k}${v >= 0 ? '+' : ''}${Math.round(v)}%`).join('・')
-
-// かかっているもの（時間で切れるバフ・デバフ／状態異常／職の状態）
-const Chips = ({ st, side }) => {
-  const buffs = buffChips(side, st.t)
-  const ails = ailChips(st, side)
-  const states = stateChips(side)
-  if (!buffs.length && !ails.length && !states.length) return null
-  return (
-    <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginTop:'4px' }}>
-      {buffs.map((c, i) => (
-        <span key={`b${i}`} style={chip(c.debuff ? '#ff88bb' : '#66bbff')}>{buffText(c.table)} {c.sec}秒</span>
-      ))}
-      {ails.map(c => (
-        <span key={c.key} style={chip('#cc99ff')}>{c.label}{c.stacks ? `×${c.stacks}` : ''}{c.sec ? ` ${c.sec}秒` : ''}</span>
-      ))}
-      {states.map(c => <span key={c.key} style={chip('#ffdd88', '#181000')}>{c.label}</span>)}
-    </div>
-  )
-}
 
 export default function V2capAtb({ prof, inventory, onProfile }) {
   const [macros, setMacros] = useState(() => macrosOf(prof))
@@ -77,6 +56,7 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
   const seen = useRef(0)
   const last = useRef(0)
   const logBox = useRef(null)
+  const fxRef = useRef([])        // 画面の動き（lib/atbFx.js の fxEventsOf に、起きた時刻 t0（秒）を足したもの）
 
   const spot = SPOTS.find(s => s.area === area && s.sub === sub) || SPOTS[0]
   const foes = useMemo(() => [
@@ -95,6 +75,9 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
     return { ...playerFighter(prof, inventory), slots: slotsOf(names.map(name => ({ name, uses: 1 })), cls, lineage, ascEffectsOf(prof).ups) }
   }, [prof, inventory])
 
+  // 絵：自分はクラスの待機GIF（ホームのアイコンと同じ・男女はキャラの性別）／相手は図鑑と同じ絵（ドット絵が届いたら差し替える）
+  const playerSrc = homeIconOf(prof?.class, artGenderOf(prof, loadPref('capArtGender', 'm')), CLASS_BY_ID[prof?.class]?.req?.cls)
+
   // ===== 時間を進める =====
   // ★実時間の差分を advance に渡す（中では決まった刻みで進む＝同じ入力なら同じ結果）。
   //   setInterval なのは、裏のタブで requestAnimationFrame が止まると戦闘が固まって見えるため
@@ -111,6 +94,8 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
           seen.current = s.log.length
           const lines = buildBattleLog({ log: fresh }, s.a.name, s.b.name).filter(l => l.type !== 'hp')
           if (lines.length) setLogs(v => [...v, ...lines].slice(-80))
+          const t0 = now / 1000
+          fxRef.current = [...fxRef.current.filter(f => t0 - f.t0 < POP_SEC + 0.2), ...fxEventsOf(fresh, s.a.name, s.b.name).map(e => ({ ...e, t0 }))]
         }
       }
       last.current = now
@@ -126,6 +111,7 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
     const enemy = hpMult === 1 ? base : { ...base, stats: { ...base.stats, hp: base.stats.hp * hpMult } }
     st.current = createAtb(myFighter, enemy, { maxSec: MAX_SEC })
     seen.current = 0
+    fxRef.current = []
     setLogs([{ text:`${foe.name}が現れた！`, color:'#88ccff' }])
     setPaused(false)
     setPhase('fight')
@@ -200,8 +186,6 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
   const me = s.a
   const en = s.b
   const now = s.t
-  const myNeed = needNow(me, now)
-  const enNeed = needNow(en, now)
   const ch = chosenOf(me, now)
   const dealt = en.base.hp - Math.max(0, en.hp)
   const dealtPct = (dealt / en.base.hp) * 100
@@ -214,49 +198,17 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
 
   return (
     <div style={{ ...box, padding:'12px' }}>
-      {/* 相手 */}
-      <div style={{ marginBottom:'10px' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', color:'#ff8888' }}>
-          <span>{en.name}</span>
-          <span>{Math.max(0, en.hp).toLocaleString()} / {en.base.hp.toLocaleString()}</span>
-        </div>
-        <Bar pct={(Math.max(0, en.hp) / en.base.hp) * 100} color="#cc3344" h={12} />
-        <div style={{ marginTop:'3px' }}>
-          {en.cast
-            ? <Bar pct={((now - en.cast.start) / CAST_SEC) * 100} color="#ff5522" h={8} />
-            : <Bar pct={(Math.min(en.gauge, enNeed) / enNeed) * 100} color="#ff9944" h={6} />}
-        </div>
-        {en.cast && (
-          <div style={{ color:'#ff9944', fontSize:'11px', marginTop:'2px' }}>
-            ⚠ 「{en.cast.name}」の構え　あと{Math.max(0, en.cast.until - now).toFixed(1)}秒
-          </div>
-        )}
-        <div style={{ fontSize:'10px', color: TEXT.label, marginTop:'3px' }}>
-          削り {dealtPct.toFixed(1)}%　／　{Math.round(dps).toLocaleString()}ダメージ/秒
-        </div>
-        <Chips st={s} side={en} />
+      {/* 自分（左）とモンスター（右） */}
+      <V2capAtbStage st={s} fx={fxRef.current} now={performance.now() / 1000} playerSrc={playerSrc} foeSrc={enemyArtSrc(en.name)} />
+      <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color: TEXT.label, margin:'6px 0', gap:'8px', flexWrap:'wrap' }}>
+        <span>次：{nextLabel}</span>
+        <span>削り {dealtPct.toFixed(1)}%・{Math.round(dps).toLocaleString()}ダメージ/秒</span>
+        <span>{now.toFixed(1)}秒 / {s.maxSec}秒</span>
       </div>
 
       {/* ログ */}
-      <div ref={logBox} style={{ height:'170px', overflowY:'auto', marginBottom:'10px', borderTop:'1px solid #001428', borderBottom:'1px solid #001428' }}>
+      <div ref={logBox} style={{ height:'130px', overflowY:'auto', marginBottom:'10px', borderTop:'1px solid #001428', borderBottom:'1px solid #001428' }}>
         {logs.map((l, i) => <V2LogLine key={i} l={l} />)}
-      </div>
-
-      {/* 自分 */}
-      <div style={{ marginBottom:'8px' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', color:'#88ccff', gap:'8px', flexWrap:'wrap' }}>
-          <span>{me.name}</span>
-          <span>HP {Math.max(0, me.hp).toLocaleString()} / {me.base.hp.toLocaleString()}　MP {Math.max(0, me.mp).toLocaleString()} / {me.base.mp.toLocaleString()}</span>
-        </div>
-        <Bar pct={(Math.max(0, me.hp) / me.base.hp) * 100} color="#44cc66" h={12} />
-        <div style={{ marginTop:'3px' }}>
-          <Bar pct={(Math.min(me.gauge, myNeed) / myNeed) * 100} color={me.ail.paralyze ? '#888888' : '#44aaff'} h={8} />
-        </div>
-        <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color: TEXT.label, marginTop:'2px', gap:'8px', flexWrap:'wrap' }}>
-          <span>次：{nextLabel}</span>
-          <span>{now.toFixed(1)}秒 / {s.maxSec}秒</span>
-        </div>
-        <Chips st={s} side={me} />
       </div>
 
       {/* マクロ①〜③ */}
