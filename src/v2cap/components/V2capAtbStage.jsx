@@ -8,7 +8,7 @@ import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC } from '../lib/atbFx.js'
 // ------------------------------------------------------------
 // 【確定】2026-10-26 ユーザー指示「普通のバトルと同じでプレイヤーが左、モンスターが右に出るようにして、
 //   プレイヤー側はクラスのドット絵が出るようにしたい」「モンスター側のドット絵も用意する」
-//   ＋選んだこと：自分の絵（クラスの待機GIF＝ホームと同じ）は**左右反転して右を向かせる**
+//   自分の絵＝クラスの待機GIF（ホームと同じ）を**そのままの向き**で出す（反転すると逆を向く＝ユーザー「プレイヤー向き逆」で反転をやめた）
 //   ・モンスターの絵はドット絵が届くまで、図鑑と同じ絵（enemyArt.js）。無ければ名前の1文字目
 //   ・動き（lib/atbFx.js）：殴った側が前へ踏み込む／補助技・回復・防御は光る／受けた側は揺れて赤く光り、数字が浮かぶ
 //     攻撃モーションのGIF（ユーザーが作る）が届いたら、踏み込みの代わりにその絵を1回流す
@@ -46,7 +46,7 @@ const POP_COLOR = { hit: '#ffffff', miss: '#9fb3c8', heal: '#44ff88', tick: '#cc
 const popText = (f) => (f.kind === 'miss' ? 'MISS' : f.kind === 'heal' ? `+${f.amount.toLocaleString()}` : f.amount.toLocaleString())
 
 // 1人ぶん。right＝右（モンスター）。fx は [{ kind, side, amount, crit, t0 }]・now は fx の t0 と同じ時計（秒）
-function Fighter({ st, side, me, right, src, flip, fx, now, name }) {
+function Fighter({ st, side, me, right, src, fx, now, name }) {
   const mine = fx.filter(f => f.side === side)
   const lastOf = (kind) => mine.reduce((t, f) => (f.kind === kind && f.t0 > t ? f.t0 : t), -1e9)
   const dir = right ? -1 : 1   // 前＝相手の方
@@ -76,7 +76,7 @@ function Fighter({ st, side, me, right, src, flip, fx, now, name }) {
           {src ? (
             <img src={src} alt="" draggable={false}
               style={{ height:'100%', width:'auto', maxWidth:'100%', objectFit:'contain', filter: filters.join(' ') || 'none',
-                transform: flip ? 'scaleX(-1)' : 'none', userSelect:'none' }} />
+                userSelect:'none' }} />
           ) : (
             <div style={{ width:'clamp(80px, 22vw, 120px)', height:'clamp(80px, 22vw, 120px)', border:`2px solid ${hpColor}`, borderRadius:'8px',
               display:'flex', alignItems:'center', justifyContent:'center', fontSize:'40px', color: hpColor, filter: filters.join(' ') || 'none' }}>
@@ -124,7 +124,7 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, foeSrc }) {
   return (
     <div style={{ display:'flex', gap:'12px', alignItems:'flex-start', padding:'8px',
       background:'linear-gradient(180deg, #000a26 0%, #001338 70%, #00204a 100%)', border:'1px solid #0a2a55' }}>
-      <Fighter st={st} side="a" me={st.a} src={playerSrc} flip fx={fx} now={now} name={st.a.name} />
+      <Fighter st={st} side="a" me={st.a} src={playerSrc} fx={fx} now={now} name={st.a.name} />
       <Fighter st={st} side="b" me={st.b} right src={foeSrc} fx={fx} now={now} name={st.b.name} />
     </div>
   )
