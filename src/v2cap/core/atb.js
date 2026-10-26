@@ -85,9 +85,9 @@ export const GUARD_CUT = 50
 export const GUARD_CD  = 45
 
 // ボスの大技の詠唱（秒）。倍率が CAST_MULT 以上の敵の技は、撃つ前に詠唱のバーが出る
-//   ★はじめは同じ速さの1行動ぶん（そのときの TURN_SEC＝4秒）。試し撃ちのあとユーザー選択「そのまま」で4秒
-//   ⚠TURN_SEC を5秒にしたので、同じ速さでは動いた直後に構えが来ると、構えのあいだに次の行動が間に合わないことがある
-export const CAST_SEC  = 4
+//   【確定】2026-10-26 ユーザー指示「ボスの大技の構え（詠唱）も5秒にして。同じ速さなら1回は備えられるように」
+//   ＝1ターン（同じ速さの1行動）と同じ長さ。TURN_SEC を変えてもこの関係が崩れないよう、TURN_SEC から決める（前は4秒）
+export const CAST_SEC  = TURN_SEC
 export const CAST_MULT = 2.5
 
 // バフ・デバフの長さ（秒）＝BUFF_SEC_CONST ÷ 効果の合計%。強いほど短い
@@ -441,18 +441,6 @@ const stepOnce = (st) => {
     me.gauge = Math.min(GAUGE_FULL * 2, me.gauge + fillPerSecOf(me, eMe, eFoe) * STEP_SEC)
   }
 
-  // 詠唱が終わった大技を撃つ
-  for (const [me, foe] of [[b, a], [a, b]]) {
-    if (!me.cast || me.cast.until > st.t + EPS) continue
-    const c = me.cast
-    me.cast = null
-    const skill = me.slots[c.idx]?.skill
-    // ★詠唱のあいだに封印・MP不足になったら通常攻撃に落ちる（takeAction が封印を見る・MPはここで見る）
-    const ok = skill && (skill.mpPct ? me.mp > 0 : mpCostOf(me, skill) <= me.mp)
-    act(st, me, foe, ok ? { idx: c.idx, skill, cd: c.cd } : { idx: null, skill: null })
-    if (finish(st)) return
-  }
-
   // 満タンの側から動く（余りが大きいほうが先・同じなら乱数）
   for (let guard = 0; guard < 6; guard++) {
     const ea = excessOf(a, st.t)
@@ -461,6 +449,19 @@ const stepOnce = (st) => {
     const aFirst = ea !== eb ? ea > eb : st.rng() < 0.5
     if (aFirst) startAct(st, a, b)
     else startAct(st, b, a)
+    if (finish(st)) return
+  }
+
+  // 詠唱が終わった大技を撃つ。★同じ刻みで動ける側は先に動く（上の段）＝構えの終わりと次の行動が同じ瞬間でも防御が間に合う
+  //   （2026-10-26 ユーザー指示「同じ速さなら1回は備えられるように」）
+  for (const [me, foe] of [[b, a], [a, b]]) {
+    if (!me.cast || me.cast.until > st.t + EPS) continue
+    const c = me.cast
+    me.cast = null
+    const skill = me.slots[c.idx]?.skill
+    // ★詠唱のあいだに封印・MP不足になったら通常攻撃に落ちる（takeAction が封印を見る・MPはここで見る）
+    const ok = skill && (skill.mpPct ? me.mp > 0 : mpCostOf(me, skill) <= me.mp)
+    act(st, me, foe, ok ? { idx: c.idx, skill, cd: c.cd } : { idx: null, skill: null })
     if (finish(st)) return
   }
 

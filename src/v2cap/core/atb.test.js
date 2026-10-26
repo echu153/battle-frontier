@@ -251,7 +251,7 @@ test('ボスの大技は詠唱のバーを出してから撃つ（そのあい�
   assert.equal(st.b.cast, null)
   assert.ok(st.b.gauge < 5, '撃ったらゲージは空から')
   const lines = buildBattleLog({ log: st.log }, '自分', 'ボス').map(l => l.text).join('\n')
-  assert.match(lines, /ボスは「大技」の構えに入った！（4秒後）/)
+  assert.match(lines, new RegExp(`ボスは「大技」の構えに入った！（${CAST_SEC}秒後）`))
 })
 
 test('敵は枠の順に、使える技を出す（クールダウン中は飛ばして通常攻撃）', () => {
@@ -361,4 +361,19 @@ test('【確定】マクロは選んだらループ（ユーザー指示「マ�
   assert.equal(st.a.macro.loop, true)
   runFor(st, 30)
   assert.ok(st.a.macro, '最後まで出ても止まらない')
+})
+
+test('【確定】ボスの大技の構えは1ターンと同じ長さ（ユーザー指示「同じ速さなら1回は備えられるように」）＝動いた直後に構えが来ても防御が間に合う', () => {
+  assert.equal(CAST_SEC, TURN_SEC)
+  assert.equal(CAST_SEC, 5)
+  // 自分が動いた瞬間にボスが構える：ボスを少しだけ遅らせて、自分の行動のすぐあとに構えが来るようにする
+  const big = sk('大技', { mult: 3, proc: 60 })
+  const st = createAtb(fighter('自分'), fighter('ボス', [big], { stats: { agi: 99 } }), { rng: makeRng(51), maxSec: 30 })
+  runFor(st, TURN_SEC + 0.2)
+  assert.equal(acts(st, '自分', 'normal').length, 1, '自分は動いた直後')
+  assert.ok(st.b.cast, 'ボスが構えた')
+  toggleGuard(st)   // 構えを見てから防御を押す
+  runFor(st, CAST_SEC)
+  const order = st.log.filter(l => (l.side === '自分' && l.type === 'guard') || (l.side === 'ボス' && l.type === 'skill')).map(l => l.type)
+  assert.deepEqual(order, ['guard', 'skill'], '大技より先に防御が出る')
 })
