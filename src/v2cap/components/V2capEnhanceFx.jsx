@@ -292,7 +292,7 @@ export default function V2capEnhanceFx({ job, say, nextLabel, nextReason, onAgai
                 </>
               ) : (
                 <>
-                  <div>強化値はそのまま（+{r.plus}）</div>
+                  {/* 「強化値はそのまま（+N）」は出さない（2026-10-26 ユーザー指示「ここいらない」＝そのことは HELP に書いてある） */}
                   <div style={{ color:'#ff8844' }}>{r.scrap > 0 ? `${job.scrapName} ${r.scrap}個と ` : ''}Gold {Number(r.gold).toLocaleString()} を失いました</div>
                 </>
               )}

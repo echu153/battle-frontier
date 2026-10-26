@@ -155,7 +155,6 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call, say, toggleFav }) {
   //   押した時点の装備の様子を job に写して演出を始め、サーバーの結果が届いたら job.result に入れる
   const [fxJob, setFxJob] = useState(null)
   const row = smithId === null ? null : all.find(r => String(r.inv.id) === smithId) || null
-  const gold = Number(prof.gold) || 0
   // 【確定】2026-10-13 ユーザー指示「強化は装備している装備を上に優先して表示させて」：
   //   着けている装備を上に（武器→頭→鎧→腕→足→装飾品①②の順）。そのほかは絞り込み・並べ替えのとおり
   const wornRank = Object.fromEntries(SLOTS.map((slot, i) => [String(prof.equipped?.[slot]), i]))
@@ -179,7 +178,7 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call, say, toggleFav }) {
     const { data, error } = await call('v2cap_enhance', { p_inventory_id: inv.id })
     if (error) { setFxJob(null); setMsg({ ok: false, text: `⚠ ${error}` }); say('error'); return }
     // 親方のひとこと（吹き出しと、結果のポップアップの両方に出す）
-    const line = say(enhanceKindOf(data.success, data.plus), { plus: data.plus })
+    const line = say(enhanceKindOf(data.success, data.plus))
     setFxJob(j => (j && j.id === job.id ? { ...j, result: data, say: line } : j))
     setMsg(data.success
       ? { ok: true, text: `✨ 成功！ +${data.plus} になりました` }
@@ -238,24 +237,19 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call, say, toggleFav }) {
         {rows.map(({ inv, item }) => {
           const cost = enhanceCostOf(item, inv)
           const isWorn = wornIds.has(String(inv.id))
-          const scrapShort = cost && scrapOf(prof.materials, cost.area) < cost.scrap
-          const goldShort = cost && gold < cost.gold
           return (
             <div key={inv.id} style={rowBox(isWorn ? '#0055aa' : '#002244')}>
               <ItemHead inv={inv} item={item} lv={prof.lv} isWorn={isWorn} star={<FavStar inv={inv} busy={busy} onToggle={toggleFav} />} />
-              <ItemStats inv={inv} item={item} lv={prof.lv} />
-              <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center', fontSize:'10px' }}>
-                {cost ? (
-                  <span style={{ color: TEXT.sub, flex:1, minWidth:0 }}>
-                    次は <span style={{ color: PLUS_COLOR }}>+{cost.next}</span>：
-                    {cost.scrap > 0 && <><span style={{ color: scrapShort ? SHORT : '#cfe2ff' }}>{scrapNameOf(cost.area)} {cost.scrap}個</span>・</>}
-                    <span style={{ color: goldShort ? SHORT : '#ffcc00' }}>Gold {cost.gold.toLocaleString()}</span>・成功率 {cost.rate}%
-                  </span>
-                ) : <span style={{ color: PLUS_COLOR, flex:1 }}>+{Math.max(PLUS_MAX, plusOf(inv))}（上限）</span>}
+              {/* 「次は +9：残骸・Gold・成功率」の行は出さない（2026-10-26 ユーザー指示「この行いらない、強化ボタン押したら成功率とか必要素材が表示されればいい」）。
+                  強化のボタンはステの行の右。上限のときはボタンの代わりに「上限」 */}
+              <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
+                <ItemStats inv={inv} item={item} lv={prof.lv} />
                 {canUseTicket(item, plusOf(inv), prof) && (
-                  <button onClick={() => { setTicketId(String(inv.id)); setTicketMsg(null) }} disabled={busy} style={miniBtn('#ffcc00')}>🎫 +{ticket}にする</button>
+                  <button onClick={() => { setTicketId(String(inv.id)); setTicketMsg(null) }} disabled={busy} style={{ ...miniBtn('#ffcc00'), flexShrink:0 }}>🎫 +{ticket}にする</button>
                 )}
-                <button onClick={() => open(item, inv)} disabled={busy || !cost} style={miniBtn('#ffcc00')}>強化</button>
+                {cost
+                  ? <button onClick={() => open(item, inv)} disabled={busy} style={{ ...miniBtn('#ffcc00'), flexShrink:0 }}>強化</button>
+                  : <span style={{ color: PLUS_COLOR, fontSize:'10px', flexShrink:0 }}>上限</span>}
               </div>
             </div>
           )
@@ -460,7 +454,6 @@ function ItemHead({ inv, item, lv, isWorn, check, star }) {
   return (
     <div style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12px' }}>
       {check}
-      {star}
       <span style={{ color: nameColor(item), flex:1, minWidth:0 }}>
         {item.name}<PlusTag inv={inv} />
         <span style={{ color: TEXT.sub, fontSize:'10px', marginLeft:'5px' }}>{kindLabel(item)}</span>
@@ -468,16 +461,20 @@ function ItemHead({ inv, item, lv, isWorn, check, star }) {
         {isWorn && <span style={{ color:'#44aaff', fontSize:'10px', marginLeft:'5px' }}>装備中</span>}
       </span>
       <span style={{ color: lv && needLvOf(item, inv.ilv) > lv ? '#ff8844' : '#cfe2ff', fontSize:'11px', whiteSpace:'nowrap' }}>要求レベル{needLvOf(item, inv.ilv)}LV</span>
+      {/* お気に入りの★は右上（2026-10-26 ユーザー指示「お気に入りのボタンは右上にして」） */}
+      {star}
     </div>
   )
 }
-// 戦闘力とステ（強化値と、必要LVに足りない装備のLV相当込み）
+// 戦闘力とステ（強化値と、必要LVに足りない装備のLV相当込み）。
+// 要求LVが足りないときは、いまの（LV相当の）戦闘力だけを出し、ステも同じ色にする
+//   （2026-10-26 ユーザー指示「要求レベル不足してるときはその時の戦闘力だけ書いて、STRとかのステータスも同じ色で表示」。前は「288 → 119（要求LV不足）」）
 function ItemStats({ inv, item, lv }) {
-  const power = powerAt(item, inv.ilv, plusOf(inv))
   const sync = syncLabelOf(item, inv.ilv, lv)
+  const power = sync ? effectivePowerAt(item, inv.ilv, lv, plusOf(inv)) : powerAt(item, inv.ilv, plusOf(inv))
   return (
-    <div style={{ fontSize:'10px', color: TEXT.sub, margin:'3px 0', display:'flex', gap:'8px', flexWrap:'wrap' }}>
-      <span>戦闘力 {power}{sync && <span style={{ color:'#ff8844' }}> → {effectivePowerAt(item, inv.ilv, lv, plusOf(inv))}（{sync}）</span>}</span>
+    <div style={{ fontSize:'10px', color: sync ? SHORT : TEXT.sub, margin:'3px 0', display:'flex', gap:'8px', flexWrap:'wrap', flex:1, minWidth:0 }}>
+      <span>戦闘力 {power}{sync && `（${sync}）`}</span>
       <span>{statLine(statsAt(item, inv.ilv, lv, plusOf(inv)))}</span>
     </div>
   )
@@ -522,25 +519,34 @@ function SmithModal({ row, prof, busy, msg, say, onEnhance, onClose }) {
           {/* 上がるステ（2026-10-24 ユーザー指示「ちゃんと武器のステータスどのくらい上昇してるのかも記載するようにして」）。
               前は灰色の小さい字で「STR+5 DEX+3 → STR+6 DEX+4」。戦闘力と同じく装備そのものの強さ（必要LV不足の弱まりは入れない） */}
           <StatChange from={statsAt(item, inv.ilv, null, plus)} to={statsAt(item, inv.ilv, null, cost.next)} />
-          {/* 2026-10-26 ユーザー指示「使うもの⇒強化素材・持っている⇒所持数：」 */}
-          <div style={{ marginTop:'4px' }}>
-            強化素材：
-            {cost.scrap > 0 && <>
-              <span style={have < cost.scrap ? short : { color:'#cfe2ff' }}>{scrapNameOf(cost.area)} {cost.scrap}個</span>
-              <span style={{ color: TEXT.sub, fontSize:'11px' }}>（所持数：{have.toLocaleString()}）</span>・
-            </>}
-            <span style={gold < cost.gold ? short : { color:'#ffcc00' }}>Gold {cost.gold.toLocaleString()}</span>
-            <span style={{ color: TEXT.sub, fontSize:'11px' }}>（所持数：{gold.toLocaleString()}）</span>
-          </div>
+          {/* 2026-10-26 ユーザー指示「使うもの⇒強化素材・持っている⇒所持数：」「強化素材は1行ずつ書いて、Goldが一番上になるように」 */}
+          <Materials label="強化素材" list={[
+            { name:'Gold', n: cost.gold, unit:'', have: gold, color:'#ffcc00' },
+            ...(cost.scrap > 0 ? [{ name: scrapNameOf(cost.area), n: cost.scrap, unit:'個', have, color:'#cfe2ff' }] : []),
+          ]} />
           <div>成功率 <span style={{ color: cost.rate >= 50 ? '#44ff88' : SHORT }}>{cost.rate}%</span></div>
-          <div style={{ color: TEXT.sub, fontSize:'11px' }}>
-            {cost.scrap > 0 ? '失敗すると残骸とGoldはなくなり、強化値はそのままです。' : 'ノーマルの装備は残骸を使いません（Goldだけ）。失敗するとGoldはなくなり、強化値はそのままです。'}
-          </div>
+          {/* 「失敗すると残骸とGoldはなくなり、強化値はそのままです。」は出さない＝HELP の強化の説明にある（同じ日 ユーザー指示「この文言はいらない、Helpにいれて」） */}
           {err && <div style={short}>⚠ {err}</div>}
         </>
       ) : <div style={{ color: PLUS_COLOR }}>強化値は+{Math.max(PLUS_MAX, plus)}（上限）です</div>}
       {msg && <div style={{ color: msg.ok ? '#44ff88' : SHORT, marginTop:'6px' }}>{msg.text}</div>}
     </V2Modal>
+  )
+}
+
+// 素材の行：1行に1つ・Gold がいちばん上（2026-10-26 ユーザー指示「強化素材は1行ずつ書いて、Goldが一番上になるように」・作成もそろえた）。
+// list＝[{ name, n, unit, have, color }]。足りないものは橙
+function Materials({ label, list }) {
+  return (
+    <div style={{ marginTop:'4px' }}>
+      <div>{label}：</div>
+      {list.map(m => (
+        <div key={m.name} style={{ paddingLeft:'1em' }}>
+          <span style={{ color: m.have < m.n ? SHORT : m.color }}>{m.name} {m.n.toLocaleString()}{m.unit}</span>
+          <span style={{ color: TEXT.sub, fontSize:'11px' }}>（所持数：{m.have.toLocaleString()}）</span>
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -575,12 +581,12 @@ function CraftModal({ item, prof, busy, onConfirm, onClose }) {
         <span style={{ color: TEXT.sub, fontSize:'11px' }}>（{kindLabel(item)}・LV{needLvOf(item)}）</span>を作ります。
       </div>
       <ItemStats inv={{ ilv: item.lv, plus: 0 }} item={item} lv={prof.lv} />
-      {/* 2026-10-26 ユーザー指示「作成の画面も「使うもの」を「作成素材」、「持っている」を「所持数：」にそろえて」 */}
-      <div>作成素材：<span style={{ color:'#cfe2ff' }}>{scrapNameOf(item.area)} {cost.scrap}個</span>
-        <span style={{ color: TEXT.sub, fontSize:'11px' }}>（所持数：{scrapOf(prof.materials, item.area).toLocaleString()}）</span>
-        ・<span style={{ color:'#ffcc00' }}>Gold {cost.gold.toLocaleString()}</span>
-        <span style={{ color: TEXT.sub, fontSize:'11px' }}>（所持数：{(Number(prof.gold) || 0).toLocaleString()}）</span>
-      </div>
+      {/* 2026-10-26 ユーザー指示「作成の画面も「使うもの」を「作成素材」、「持っている」を「所持数：」にそろえて」・
+          強化と同じく1行ずつ・Gold がいちばん上（同じ日 ユーザー選択「そろえる」） */}
+      <Materials label="作成素材" list={[
+        { name:'Gold', n: cost.gold, unit:'', have: Number(prof.gold) || 0, color:'#ffcc00' },
+        { name: scrapNameOf(item.area), n: cost.scrap, unit:'個', have: scrapOf(prof.materials, item.area), color:'#cfe2ff' },
+      ]} />
       {/* 「+0で持ち物に入ります。」は出さない（2026-10-26 ユーザー指示。作成の結果のポップアップの「+0で持ち物に入りました」と同じ） */}
       <div style={{ color: TEXT.sub, fontSize:'11px' }}>必ずできます。</div>
     </V2Modal>

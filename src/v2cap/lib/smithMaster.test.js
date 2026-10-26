@@ -65,14 +65,12 @@ test('セリフの表情はどれも2つのどちらか・2つとも使ってい
     for (const l of list) { assert.ok(MASTER_FACE_KEYS.includes(l.face), `${kind}：${l.face}`); used.add(l.face) }
   }
   assert.deepEqual([...used].sort(), [...MASTER_FACE_KEYS].sort())
-  assert.ok(MASTER_LINES.enhanceOk.some(l => l.text.includes('{plus}')))
-  assert.ok(MASTER_LINES.enhanceGreat.every(l => l.text.includes('{plus}')))
   assert.ok(MASTER_LINES.craft.every(l => l.text.includes('{item}')))
   assert.ok(MASTER_LINES.dismantle.every(l => l.text.includes('{n}')))
   assert.ok(MASTER_LINES.short.every(l => l.text.includes('{what}')))
   // 埋める名前は決まったものだけ（書きまちがいで {nmae} のまま出ない）
   for (const l of allLines()) {
-    for (const m of l.text.matchAll(/\{(\w+)\}/g)) assert.ok(['call', 'plus', 'item', 'n', 'what'].includes(m[1]), `${l.text}`)
+    for (const m of l.text.matchAll(/\{(\w+)\}/g)) assert.ok(['call', 'item', 'n', 'what'].includes(m[1]), `${l.text}`)
   }
 })
 
@@ -113,8 +111,15 @@ test('強化の結果：失敗→なぐさめる・+1〜6→喜ぶ・+7〜9（�
   assert.deepEqual([1, 6, 7, 9, 10].map(p => enhanceKindOf(true, p)), ['enhanceOk', 'enhanceOk', 'enhanceGreat', 'enhanceGreat', 'enhanceMax'])
   assert.equal(enhanceKindOf(false, 9), 'enhanceFail')
   assert.ok([...MASTER_LINES.enhanceOk, ...MASTER_LINES.enhanceGreat, ...MASTER_LINES.enhanceMax].every(l => l.face === 'smile'))
-  assert.ok(MASTER_LINES.enhanceFail.some(l => l.text.includes('強化値は下がってねえ')), '失敗はなぐさめる')
-  assert.equal(pickLine('enhanceGreat', { vars: { plus: 8 } }).text, 'おおっ…！ +8だと！？ こいつはすげえぞ！')
+  assert.ok(MASTER_LINES.enhanceFail.some(l => l.text.includes('次いこうぜ')), '失敗はなぐさめる')
+  assert.equal(pickLine('enhanceGreat').text, 'おおっ…！ ここまで鍛え上がるとはな！ こいつはすげえぞ！')
+})
+
+test('【確定】2026-10-26 親方は強化値の数・成功率・ゲームの仕組みの言葉を言わない（ユーザー指示「＋9 とかメタい発言しないでほしい、世界観守って」）', () => {
+  for (const l of allLines()) {
+    assert.ok(!/[+＋]\s*\d|\{plus\}|強化値|成功率|成功は|確率|[%％]/.test(l.text), `${l.kind}：${l.text}`)
+  }
+  assert.ok(!read('components/V2capSmith.jsx').includes('{ plus: data.plus }'), 'セリフに強化値を渡さない')
 })
 
 test('足りないもの：強化できないわけ（smith.js の enhanceErrorOf）から「◯◯の残骸」「Gold」を取り出す', () => {

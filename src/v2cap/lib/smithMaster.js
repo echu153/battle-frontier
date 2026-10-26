@@ -35,8 +35,10 @@ export const callOf = (profile) => (profile?.gender === 'm' ? '兄ちゃん' : p
 export const varsOf = (profile) => ({ call: callOf(profile) })
 
 // ===== セリフ =====
-// face＝出す表情。{call}＝呼び方・{plus}＝強化値・{item}＝作った装備の名前・{n}＝分解した数・{what}＝足りないもの（「新緑の残骸」「Gold」）
+// face＝出す表情。{call}＝呼び方・{item}＝作った装備の名前・{n}＝分解した数・{what}＝足りないもの（「新緑の残骸」「Gold」）
 // ★レア度の名前（ノーマル・レジェンダリーなど）は言わない（2026-10-26 ユーザー指示「レアリティを直接言わないで」・smithMaster.test.js が見張る）
+// ★「+9」のような強化値の数・成功率・「強化値」のようなゲームの仕組みの言葉は言わない
+//   （2026-10-26 ユーザー指示「＋9 とかメタい発言しないでほしい、世界観守って」・smithMaster.test.js が見張る）
 // ★好感度が無いので、はじめて来た人にも言えるセリフだけ（「また来たな」「最近よく来るな」のような顔なじみのセリフは外した）
 export const MASTER_LINES = {
   // 鍛冶屋を開いたとき
@@ -49,10 +51,10 @@ export const MASTER_LINES = {
   enterNight: [{ face: 'normal', text: 'こんな夜ふけまで精が出るな。炉の火はまだ落としてねえぞ' }],
   // ふつうにタップしたとき（同じセリフが2回続かないように選ぶ）
   tap: [
-    { face: 'normal', text: '強化は失敗しても強化値は下がらねえ。安心して叩きな' },
+    { face: 'normal', text: 'しくじっても、装備が傷むことはねえ。安心して任せな' },
     { face: 'smile', text: 'いらねえ装備は分解しな。残骸がありゃ、強化も作成もできるぜ' },
-    { face: 'normal', text: '+6で成功は半々、そこから先はもっと厳しいぜ。残骸とGoldは多めに用意しときな' },
-    { face: 'normal', text: '強化は+10まで上げられる。てっぺんを目指してみな' },
+    { face: 'normal', text: '鍛えるほど、うまくいかねえことも増える。残骸とGoldは多めに用意しときな' },
+    { face: 'normal', text: 'どこまで鍛え上げられるか、てっぺんを目指してみな' },
     { face: 'smile', text: 'いい装備を作るには、残骸がたんまりいる。コツコツ集めな' },
     { face: 'smile', text: 'ガハハ！ 今日もいい音で鉄が鳴ってらあ' },
     { face: 'normal', text: '刃こぼれした剣じゃ、勝てる戦も勝てねえ。手入れを忘れんなよ' },
@@ -71,13 +73,13 @@ export const MASTER_LINES = {
   streak8: [{ face: 'normal', text: 'おいおい、それじゃ仕事にならねえだろ！' }],
   // 強化の結果（enhanceKindOf）：+1〜6に成功・+7〜9に成功（成功率40%以下）・+10（上限）に成功・失敗
   enhanceOk: [
-    { face: 'smile', text: 'よっしゃあ！ +{plus}だ！ いい仕上がりだぜ' },
+    { face: 'smile', text: 'よっしゃあ！ いい仕上がりだぜ' },
     { face: 'smile', text: 'ガハハ！ どうだ、見事なもんだろう！' },
   ],
-  enhanceGreat: [{ face: 'smile', text: 'おおっ…！ +{plus}だと！？ こいつはすげえぞ！' }],
-  enhanceMax: [{ face: 'smile', text: '+10…！ 長いこと鍛冶屋をやってるが、こいつは最高傑作だ！' }],
+  enhanceGreat: [{ face: 'smile', text: 'おおっ…！ ここまで鍛え上がるとはな！ こいつはすげえぞ！' }],
+  enhanceMax: [{ face: 'smile', text: 'こいつは…！ 長いこと鍛冶屋をやってるが、最高傑作だ！' }],
   enhanceFail: [
-    { face: 'normal', text: 'すまねえ、今回はダメだった。だが強化値は下がってねえ、次いこうぜ！' },
+    { face: 'normal', text: 'すまねえ、今回はダメだった。だが鉄は折れちゃいねえ、次いこうぜ！' },
     { face: 'smile', text: 'ガハハ、鉄の機嫌が悪かったな！ 気にすんな、次は決めるぜ' },
   ],
   // 作成した

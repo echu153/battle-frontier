@@ -114,7 +114,6 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
             return (
               <div key={inv.id} style={{ background:'#000818', border:`1px solid ${isWorn ? '#0055aa' : '#002244'}`, padding:'6px 8px', opacity: usable ? 1 : 0.6 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12px' }}>
-                  <FavStar inv={inv} busy={busy} onToggle={toggleFav} />
                   <span style={{ color: nameColor(item), flex:1, minWidth:0 }}>
                     {item.name}<PlusTag inv={inv} />
                     <span style={{ color: TEXT.sub, fontSize:'10px', marginLeft:'5px' }}>{kindLabel(item)}</span>
@@ -134,10 +133,12 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
                   </span>
                   {/* 2026-10-14 ユーザー指示「LV〇は『要求レベル〇LV』にして」 */}
                   <span style={{ color: needLvOf(item, inv.ilv) > prof.lv ? '#ff8844' : '#cfe2ff', fontSize:'11px', whiteSpace:'nowrap' }}>要求レベル{needLvOf(item, inv.ilv)}LV</span>
+                  {/* お気に入りの★は右上（2026-10-26 ユーザー指示「お気に入りのボタンは右上にして」・鍛冶屋と同じ） */}
+                  <FavStar inv={inv} busy={busy} onToggle={toggleFav} />
                 </div>
-                <div style={{ fontSize:'10px', color: TEXT.sub, margin:'3px 0', display:'flex', gap:'8px', flexWrap:'wrap' }}>
-                  {/* 右上の「要求レベル〇LV」と同じ言い方・同じ値（アイテムLVではなく needLvOf）で出す */}
-                  <span>戦闘力 {power}{sync && <span style={{ color:'#ff8844' }}> → {effectivePowerAt(item, inv.ilv, prof.lv, plus)}（{sync}・あと{needLvOf(item, inv.ilv) - prof.lv}LV）</span>}</span>
+                {/* 要求LVが足りないときは、いまの（LV相当の）戦闘力だけを出し、ステも同じ色（2026-10-26 ユーザー指示・鍛冶屋と同じ。前は「288 → 119（要求LV不足・あと◯LV）」） */}
+                <div style={{ fontSize:'10px', color: sync ? '#ff8844' : TEXT.sub, margin:'3px 0', display:'flex', gap:'8px', flexWrap:'wrap' }}>
+                  <span>戦闘力 {sync ? effectivePowerAt(item, inv.ilv, prof.lv, plus) : power}{sync && `（${sync}）`}</span>
                   <span>{statLine(statsAt(item, inv.ilv, prof.lv, plus))}</span>
                 </div>
                 {/* ユニーク（2026-10-21）：固有の能力と落とすボス。LV80より低くても能力は全部効く */}

@@ -49,7 +49,8 @@ export const enhanceGlowOf = (ms, chargeMs) => {
   return p * (0.3 + 0.1 * Math.sin(ms / 1000 * Math.PI * 2 * 1.2))
 }
 // 結果のポップアップの1行目（ユーザーの書き方「○○の強化に成功！ 失敗…」）
-export const enhanceTitleOf = (name, success) => (success ? `${name}の強化に成功！` : `${name}の強化に失敗…`)
+// 失敗は「○○の強化に失敗しました…」（2026-10-26 ユーザー指示「失敗…←失敗しました…にして」）
+export const enhanceTitleOf = (name, success) => (success ? `${name}の強化に成功！` : `${name}の強化に失敗しました…`)
 
 // ===== 作成（鍛冶）=====
 // 作れるのはレア・エピック・レジェンダリー。色は装備の一覧と同じレア度の色。level が大きいほど派手

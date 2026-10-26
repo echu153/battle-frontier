@@ -137,3 +137,23 @@ test('【確定】2026-10-26 プルダウン：レア度のユニークは持っ
   assert.ok(SMITH.includes('useGearRows(all, prof.lv, openAreaOf(prof.cleared_spots))'))
   assert.ok(SMITH.includes('const maxArea = openAreaOf(prof.cleared_spots)'), '作成のエリアのプルダウン')
 })
+
+test('【確定】2026-10-26 鍛冶屋と装備画面の一覧：★は右上・要求LV不足はいまの戦闘力だけ（ステも同じ色）・強化の一覧に「次は」の行なし・素材は1行ずつで Gold が上・失敗の文なし', () => {
+  // ユーザー指示「お気に入りのボタンは右上にして」「要求レベル不足してるときはその時の戦闘力だけ書いて、STRとかのステータスも同じ色で表示」
+  //   「次は←この行いらない、強化ボタン押したら成功率とか必要素材が表示されればいい」「強化素材は1行ずつ書いて、Goldが一番上になるように」
+  //   「失敗すると残骸とGoldはなくなり、強化値はそのままです。←この文言はいらない、Helpにいれて」「強化値はそのまま（+8）←ここいらない」（同じ日 装備画面と作成もそろえる＝ユーザー選択）
+  // （codeOf はコメントを外すので、JSX のコメントのあとに {} が残る）
+  assert.ok(/要求レベル\{needLvOf\(item, inv\.ilv\)\}LV<\/span>\s*(\{\}\s*)?\{star\}/.test(SMITH), '鍛冶屋：★は要求レベルの右（右上）')
+  assert.ok(/要求レベル\{needLvOf\(item, inv\.ilv\)\}LV<\/span>\s*(\{\}\s*)?<FavStar inv=\{inv\} busy=\{busy\} onToggle=\{toggleFav\} \/>/.test(EQUIP), '装備画面：★は右上')
+  for (const code of [SMITH, EQUIP]) {
+    assert.ok(!/→ \{effectivePowerAt/.test(code), '「288 → 119」の形にしない')
+    assert.ok(code.includes("color: sync ? SHORT : TEXT.sub") || code.includes("color: sync ? '#ff8844' : TEXT.sub"), 'ステも同じ色')
+  }
+  assert.ok(!SMITH.includes('次は <span'), '強化の一覧に「次は」の行を出さない')
+  assert.ok(/<Materials label="強化素材" list=\{\[\s*\{ name:'Gold'/.test(SMITH), '強化素材：Gold がいちばん上')
+  assert.ok(/<Materials label="作成素材" list=\{\[\s*\{ name:'Gold'/.test(SMITH), '作成素材も Gold がいちばん上')
+  assert.equal((SMITH.match(/失敗すると残骸とGoldはなくなり/g) || []).length, 1, '失敗の文は HELP の説明だけ（強化の画面には出さない）')
+  assert.ok(!/\}\s*:\s*'ノーマルの装備は残骸を使いません/.test(SMITH))
+  const fx = codeOf('../components/V2capEnhanceFx.jsx')
+  assert.ok(!fx.includes('強化値はそのまま'), '失敗の結果に「強化値はそのまま（+N）」を出さない')
+})
