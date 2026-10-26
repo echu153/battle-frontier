@@ -1,11 +1,12 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { MEAL_COLOR } from '../lib/burger.js'
 import { clerkSrc, CLERK_FACE_KEYS, CLERK_FACE_SIZE, CLERK_WELCOME } from '../lib/clerk.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — ニャーガーキングの看板娘（2026-10-25）
 //   ・V2capClerk … 吹き出し＋腰から上の絵。絵を押すと onTap（セリフと表情は呼ぶ側＝V2capBurger が lib/clerk.js で決める）
-//   ・V2capClerkWelcome … その日はじめて店を開いたときの全身の「いらっしゃいませー！」。画面いっぱい・どこを押しても閉じる（Escでも）
+//   ・V2capClerkWelcome … その日はじめて店に入るときの全身の「いらっしゃいませー！」。画面いっぱい・どこを押しても閉じる（Escでも）。
+//     【2026-10-26】店の画面を出す前に、ホームの上で出す（V2capHome）＝閉じたら店の画面へ
 //   ・並べ方（CLERK_CSS）：広い画面は左にメニュー・右に看板娘（スクロールしても右に残る）。狭い画面（720px以下）は看板娘が上・メニューが下で、
 //     絵は頭から胸までを小さく、吹き出しは右
 //   ・動きは prefers-reduced-motion なら止める
@@ -44,18 +45,6 @@ export const CLERK_CSS = `
   .nk-bubble::before { left: -12px; top: 50%; bottom: auto; transform: translateY(-50%); border-width: 9px 12px 9px 0; border-color: transparent ${MEAL_COLOR} transparent transparent; }
   .nk-bubble::after { left: -8px; top: 50%; bottom: auto; transform: translateY(-50%); border-width: 7px 9px 7px 0; border-color: transparent ${BUBBLE_BG} transparent transparent; }
 }
-.nk-welcome { position: fixed; inset: 0; z-index: 1100; display: flex; align-items: center; justify-content: center; cursor: pointer;
-  background: radial-gradient(circle at 50% 45%, rgba(120, 52, 10, 0.55) 0%, rgba(8, 4, 2, 0.9) 70%); animation: nkFade .25s ease-out; }
-.nk-welcome-in { position: relative; display: flex; flex-direction: column; align-items: center; animation: nkPop .55s cubic-bezier(.2, 1.4, .4, 1); }
-.nk-welcome-img { display: block; height: min(76vh, 860px); width: auto; max-width: 94vw; object-fit: contain; }
-.nk-welcome-bubble { position: relative; z-index: 1; align-self: flex-end; margin: 0 6% -3% 0; white-space: nowrap;
-  background: ${BUBBLE_BG}; color: ${BUBBLE_FG}; border: 3px solid ${MEAL_COLOR}; border-radius: 16px; padding: 8px 18px;
-  font-family: monospace; font-weight: bold; font-size: clamp(16px, 3.8vmin, 28px); line-height: 1.4; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45); }
-.nk-welcome-bubble::before, .nk-welcome-bubble::after { content: ''; position: absolute; left: 22%; border: solid transparent; }
-.nk-welcome-bubble::before { bottom: -16px; border-width: 16px 14px 0 0; border-top-color: ${MEAL_COLOR}; }
-.nk-welcome-bubble::after { bottom: -10px; left: calc(22% + 3px); border-width: 11px 9px 0 0; border-top-color: ${BUBBLE_BG}; }
-.nk-welcome-hint { position: fixed; left: 0; right: 0; bottom: max(16px, env(safe-area-inset-bottom, 0px)); text-align: center;
-  color: #ffd9a8; font-family: monospace; font-size: 12px; opacity: .85; }
 .nk-say { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; }
 .nk-say-img { flex: 0 0 auto; width: 92px; height: 124px; overflow: hidden; }
 .nk-say-img img { display: block; width: 92px; height: auto; animation: nkHop .28s ease-out; }
@@ -67,9 +56,28 @@ export const CLERK_CSS = `
 .nk-say-bubble::after { left: -8px; border-width: 7px 9px 7px 0; border-right-color: ${BUBBLE_BG}; }
 @keyframes nkSay { from { opacity: 0; transform: translateY(3px) } to { opacity: 1; transform: none } }
 @keyframes nkHop { 0% { transform: translateY(0) } 40% { transform: translateY(-6px) } 100% { transform: translateY(0) } }
+@media (prefers-reduced-motion: reduce) { .nk-bubble span, .nk-clerk-btn img, .nk-say-img img, .nk-say-bubble span { animation: none !important } }
+`
+
+// 全身の「いらっしゃいませー！」の見た目。店の画面を出す前（ホームの上）にも出すので、CLERK_CSS とは分けて自分で持つ。
+// 絵が届くまでは隠しておき（nk-welcome-wait）、届いたら跳ねて出す（吹き出しだけ先に出ないように）
+const WELCOME_CSS = `
+.nk-welcome { position: fixed; inset: 0; z-index: 1100; display: flex; align-items: center; justify-content: center; cursor: pointer;
+  background: radial-gradient(circle at 50% 45%, rgba(120, 52, 10, 0.55) 0%, rgba(8, 4, 2, 0.9) 70%); animation: nkFade .25s ease-out; }
+.nk-welcome-in { position: relative; display: flex; flex-direction: column; align-items: center; animation: nkPop .55s cubic-bezier(.2, 1.4, .4, 1); }
+.nk-welcome-wait { visibility: hidden; animation: none; }
+.nk-welcome-img { display: block; height: min(76vh, 860px); width: auto; max-width: 94vw; object-fit: contain; }
+.nk-welcome-bubble { position: relative; z-index: 1; align-self: flex-end; margin: 0 6% -3% 0; white-space: nowrap;
+  background: ${BUBBLE_BG}; color: ${BUBBLE_FG}; border: 3px solid ${MEAL_COLOR}; border-radius: 16px; padding: 8px 18px;
+  font-family: monospace; font-weight: bold; font-size: clamp(16px, 3.8vmin, 28px); line-height: 1.4; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45); }
+.nk-welcome-bubble::before, .nk-welcome-bubble::after { content: ''; position: absolute; left: 22%; border: solid transparent; }
+.nk-welcome-bubble::before { bottom: -16px; border-width: 16px 14px 0 0; border-top-color: ${MEAL_COLOR}; }
+.nk-welcome-bubble::after { bottom: -10px; left: calc(22% + 3px); border-width: 11px 9px 0 0; border-top-color: ${BUBBLE_BG}; }
+.nk-welcome-hint { position: fixed; left: 0; right: 0; bottom: max(16px, env(safe-area-inset-bottom, 0px)); text-align: center;
+  color: #ffd9a8; font-family: monospace; font-size: 12px; opacity: .85; }
 @keyframes nkFade { from { opacity: 0 } to { opacity: 1 } }
 @keyframes nkPop { 0% { opacity: 0; transform: translateY(60px) scale(.7) } 60% { opacity: 1; transform: translateY(-8px) scale(1.03) } 100% { transform: none } }
-@media (prefers-reduced-motion: reduce) { .nk-bubble span, .nk-clerk-btn img, .nk-welcome, .nk-welcome-in, .nk-say-img img, .nk-say-bubble span { animation: none !important } }
+@media (prefers-reduced-motion: reduce) { .nk-welcome, .nk-welcome-in { animation: none !important } }
 `
 
 // 表情を切り替えたときに待たないように、全部の絵を先に読んでおく
@@ -102,7 +110,11 @@ export function ClerkSays({ face = 'normal', line = '' }) {
   )
 }
 
+// 全身の絵を先に読んでおく（ホームで、その日の「いらっしゃいませー！」がまだのときに呼ぶ）
+export const preloadClerkWelcome = () => { const img = new Image(); img.src = clerkSrc(CLERK_WELCOME.key) }
+
 export function V2capClerkWelcome({ line, onClose }) {
+  const [ready, setReady] = useState(false)
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') onClose?.() }
     document.addEventListener('keydown', onKey)
@@ -110,9 +122,11 @@ export function V2capClerkWelcome({ line, onClose }) {
   }, [onClose])
   return (
     <div className="nk-welcome" role="dialog" aria-modal="true" aria-label={line} onClick={onClose}>
-      <div className="nk-welcome-in">
+      <style>{WELCOME_CSS}</style>
+      <div className={ready ? 'nk-welcome-in' : 'nk-welcome-in nk-welcome-wait'}>
         <div className="nk-welcome-bubble">{line}</div>
-        <img className="nk-welcome-img" src={clerkSrc(CLERK_WELCOME.key)} alt="" />
+        <img className="nk-welcome-img" src={clerkSrc(CLERK_WELCOME.key)} alt=""
+          onLoad={() => setReady(true)} onError={() => setReady(true)} />
       </div>
       <div className="nk-welcome-hint">タップで閉じる</div>
     </div>

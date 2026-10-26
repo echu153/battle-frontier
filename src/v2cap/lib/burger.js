@@ -40,10 +40,11 @@ export const BURGERS = [
 export const BURGER_BY_STAT = Object.fromEntries(BURGERS.map(b => [b.stat, b]))
 export const MEAL_STATS = BURGERS.map(b => b.stat)
 
-// トッピング。group＝メジャー／マイナー（どちらを頼むかで抽選する組が決まる）。note＝由来（画面に出す）
+// トッピング。group＝メジャー／マイナー（どちらを頼むかで抽選する組が決まる）。
+// 由来（敵がよく使う／めったに出ない）は上の説明だけ。画面の札からは 2026-10-26 ユーザー指示「敵がよく使うーとかめったに出ないーとかの部分省いていい」で外した
 export const TOPPING_GROUPS = [
-  { key: 'major', label: 'メジャー', note: '敵がよく使う状態異常' },
-  { key: 'minor', label: 'マイナー', note: 'めったに出ない状態異常（塔で効くものも）' },
+  { key: 'major', label: 'メジャー' },
+  { key: 'minor', label: 'マイナー' },
 ]
 export const TOPPINGS = [
   { ail: 'bleed',    group: 'major', name: 'トマト',           note: '赤い実で血がめぐる' },

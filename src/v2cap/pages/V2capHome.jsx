@@ -14,7 +14,9 @@ import V2capSmith from '../components/V2capSmith.jsx'
 import V2capSkills from '../components/V2capSkills.jsx'
 import V2capTemple from '../components/V2capTemple.jsx'
 import V2capMuseum from '../components/V2capMuseum.jsx'
-import V2capBurger from '../components/V2capBurger.jsx'
+import V2capBurger, { burgerWelcomeDue, markBurgerWelcome } from '../components/V2capBurger.jsx'
+import { V2capClerkWelcome, preloadClerkWelcome } from '../components/V2capClerk.jsx'
+import { pickLine } from '../lib/clerk.js'
 import V2capDaily from '../components/V2capDaily.jsx'
 import V2capProfile from '../components/V2capProfile.jsx'
 import V2capTree from '../components/V2capTree.jsx'
@@ -129,6 +131,7 @@ export default function V2capHome() {
   const [prof, setProf] = useState(null)
   const [inventory, setInventory] = useState([])
   const [screen, setScreen] = useState('home')
+  const [burgerWelcome, setBurgerWelcome] = useState(null)   // 出している「いらっしゃいませー！」のセリフ（null＝出していない）
   const [inBattle, setInBattle] = useState(false)
   const [name, setName] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)   // 宝樹を何回でも祈れる（2026-10-13・開発中）
@@ -195,6 +198,18 @@ export default function V2capHome() {
   //   ＝ページ全体（window）のスクロールが前の画面の位置のまま残っていた（ホームの下のメニューから開くと途中から見える）。
   //   描く前（useLayoutEffect）に戻すので、途中の位置は一瞬も見えない
   useLayoutEffect(() => { window.scrollTo(0, 0) }, [screen])
+
+  // メニューから画面を選ぶ。ニャーガーキングは、その日はじめてなら先に「いらっしゃいませー！」をホームの上に出し、閉じたら店の画面へ
+  // （【確定】2026-10-26 ユーザー指示「先に通常の画面開いてから演出入るから少し違和感、しっかり演出入ってからページ遷移するようにしてほしい」。
+  //   出すかの決まりは V2capBurger.jsx の burgerWelcomeDue）
+  const pickScreen = (key) => {
+    if (key === 'burger' && burgerWelcomeDue(prof)) { markBurgerWelcome(); setBurgerWelcome(pickLine('welcome').text); return }
+    setScreen(key)
+  }
+  const closeBurgerWelcome = () => { setBurgerWelcome(null); setScreen('burger') }
+  // まだなら全身の絵を先に読んでおく（押してすぐ出せるように）
+  const burgerWelcomeNow = !!prof && burgerWelcomeDue(prof)
+  useEffect(() => { if (burgerWelcomeNow) preloadClerkWelcome() }, [burgerWelcomeNow])
 
   const create = async (e) => {
     e.preventDefault()
@@ -421,7 +436,7 @@ export default function V2capHome() {
               </div>
               {!inBattle && (
                 <>
-                  <V2Menu groups={menuOf(prof)} open={openMenu} onToggle={toggleMenu} onPick={setScreen} />
+                  <V2Menu groups={menuOf(prof)} open={openMenu} onToggle={toggleMenu} onPick={pickScreen} />
                   <div style={{ ...box, padding:'10px', borderColor:'#553366' }}>
                     <div style={{ color:'#ff88cc', fontSize:'11px', marginBottom:'6px' }}>🧪 開発用</div>
                     <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
@@ -477,6 +492,7 @@ export default function V2capHome() {
           </div>
         )}
       </div>
+      {burgerWelcome && <V2capClerkWelcome line={burgerWelcome} onClose={closeBurgerWelcome} />}
     </div>
   )
 }

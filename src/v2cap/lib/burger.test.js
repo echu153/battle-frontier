@@ -2,6 +2,7 @@
 // 【確定】2026-10-25 ユーザー指示（値段・時間・効き目・組の中身・名前は burger.js の冒頭）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { AIL_KEYS } from '../core/ailments.js'
 import {
   SHOP_NAME, MEAL_MINUTES, MEAL_MS, BURGER_GOLD, TOPPING_GOLD, MEAL_STAT_PCT, TOPPING_RESIST_PCT,
@@ -41,6 +42,13 @@ test('トッピングはメジャー5種・マイナー6種。回復阻害とサ
   assert.equal(new Set(TOPPINGS.map(t => t.ail)).size, TOPPINGS.length)
   for (const t of TOPPINGS) assert.ok(AIL_KEYS.includes(t.ail), t.ail)
   assert.ok(!TOPPINGS.some(t => t.ail === 'healCut' || t.ail === 'silence'))
+})
+
+test('トッピングの札に由来の文（敵がよく使う／めったに出ない）は出さない', () => {
+  // 【確定】2026-10-26 ユーザー指示「敵がよく使うーとかめったに出ないーとかの部分省いていい」
+  for (const g of TOPPING_GROUPS) assert.equal(g.note, undefined, `${g.label} に由来の文`)
+  const shop = readFileSync(new URL('../components/V2capBurger.jsx', import.meta.url), 'utf8')
+  assert.ok(!/敵がよく使う|めったに出ない/.test(shop), '店の画面に直書きしない')
 })
 
 test('トッピングの名前はバーガーの名前とかぶらない（チーズ・アボカドはバーガーのほう）', () => {

@@ -5,7 +5,6 @@ import V2capClerk, { V2capClerkWelcome, ClerkSays, CLERK_CSS } from './V2capCler
 import { box, btn, miniBtn, TEXT } from './v2ui.js'
 import { STAT_DEFS } from '../core/stats.js'
 import { AIL_LABEL } from '../core/ailments.js'
-import { loadPref, savePref } from '../core/prefs.js'
 import {
   MEAL_COLOR, MEAL_MINUTES, BURGERS, BURGER_BY_STAT, TOPPING_GROUPS, TOPPING_BY_AIL, BURGER_GOLD, TOPPING_GOLD,
   TOPPING_RESIST_PCT, toppingsOf, mealCostOf, activeMealOf, leftText, burgerEffectText, toppingText,
@@ -23,7 +22,8 @@ import {
 //   ★決まりの正は src/v2cap/lib/burger.js。買う・抽選・Goldはサーバー（v2cap_burger_buy）
 // 【確定】2026-10-25 看板娘（ユーザー指示・lib/clerk.js）：前の看板（店の名前・猫の王様のひとこと）はユーザー指示「この部分はいらないかも」で外し、
 //   右に看板娘を大きく立たせた（スマホは上）。タップ・注文・Gold不足・食べ直しの確かめでセリフと表情が変わる。
-//   その日はじめて店を開いたときは、全身の「いらっしゃいませー！」を画面いっぱいに出す（サーバーの v2cap_burger_welcome が日付を覚える）
+//   その日はじめて店に入るときは、全身の「いらっしゃいませー！」を画面いっぱいに出す（サーバーの v2cap_burger_welcome が日付を覚える）。
+//   【2026-10-26】出すのは店の画面より先（ホームの上・下の burgerWelcomeDue）。閉じたら店の画面へ
 // ============================================================
 const card = (on) => ({
   textAlign:'left', background: on ? '#2a1606' : '#000818', border:`1px solid ${on ? MEAL_COLOR : '#002244'}`,
@@ -33,12 +33,24 @@ const gold = (n) => `${Number(n || 0).toLocaleString()}G`
 const HELP_HEAD = { color: MEAL_COLOR, fontSize:'12px', marginBottom:'2px' }
 // 「残り42分」→「42分」（セリフの {left}）
 const leftShort = (ms) => leftText(ms).replace(/^残り/, '')
-// SQLを流す前（サーバーの関数が無いとき）に、その日の「いらっしゃいませー」を出したかを端末に覚える名前
-const WELCOME_PREF = 'capBurgerWelcome'
-// その日の「いらっしゃいませー」・その日はじめて話しかけた（好感度+1）をサーバーに聞く窓口
+// その日はじめて話しかけた（好感度+1）をサーバーに聞く窓口
 // （同じ日は1回だけ聞いて答えを使い回す＝lib/clerk.js の makeDailyAsker）
-const welcomeAsker = makeDailyAsker(() => supabase.rpc('v2cap_burger_welcome'))
 const talkAsker = makeDailyAsker(() => supabase.rpc('v2cap_clerk_talk'))
+
+// ===== その日の「いらっしゃいませー！」 =====
+// 【確定】2026-10-26 ユーザー指示「先に通常の画面開いてから演出入るから少し違和感、しっかり演出入ってからページ遷移するようにしてほしい」
+//   前は店の画面を出してからサーバーに聞き、返事が来てから重ねていた＝店の画面が先に見えていた。
+//   いまはメニューで押したその場で決めて、ホームの上に出す（V2capHome）。閉じたら店の画面へ。
+//   決めるのは手元のプロフィールの日付（burger_welcome_day＝前に出した日）＝サーバーの返事を待たない。
+//   出したら今日の印をサーバーに付け、ページを開き直すまで手元でも覚える（同じ日に2回出さない）
+let welcomeShownDay = null
+export const burgerWelcomeDue = (prof, at = new Date()) =>
+  welcomeShownDay !== dayOf(at) && welcomeDueLocal(prof?.burger_welcome_day, at)
+export const markBurgerWelcome = () => {
+  welcomeShownDay = dayOf()
+  // ★supabase の呼び出しは then を付けないと送られない（返事は待たない）
+  supabase.rpc('v2cap_burger_welcome').then(() => {})
+}
 // 開発用の「あいさつ」ボタンで順に見せるひとこと（顔なじみからの3つ）
 const DEV_GREETS = ['enterDaily', 'enterLong', 'enterAgain']
 
@@ -65,7 +77,7 @@ export default function V2capBurger({ prof, onProfile, dev = false }) {
   const [busy, setBusy] = useState(false)
   const [served, setServed] = useState(null)
   const [error, setError] = useState('')
-  const [welcome, setWelcome] = useState(false)
+  const [welcome, setWelcome] = useState(null)   // 開発用に出している「いらっしゃいませー」のセリフ（null＝出していない）
   const [help, setHelp] = useState(false)
 
   const meal = activeMealOf(prof, now)
@@ -134,18 +146,6 @@ export default function V2capBurger({ prof, onProfile, dev = false }) {
     say(kind, meal ? { burger: meal.burger.name, left: leftShort(meal.leftMs) } : {})
   }
 
-  // その日はじめて店を開いたら「いらっしゃいませー！」。日付はサーバーが覚える（SQLを流す前は端末に覚える）
-  useEffect(() => {
-    let alive = true
-    ;(async () => {
-      const { data, error: e } = await welcomeAsker.get()
-      if (!alive) return
-      if (!e && data?.ok) { if (data.first) { welcomeAsker.set({ data: { ok: true, first: false } }); setWelcome(true) } return }
-      if (welcomeDueLocal(loadPref(WELCOME_PREF, ''))) { savePref(WELCOME_PREF, dayOf()); setWelcome(true) }
-    })()
-    return () => { alive = false }
-  }, [])
-
   const order = async () => {
     setBusy(true); setError('')
     try {
@@ -181,7 +181,7 @@ export default function V2capBurger({ prof, onProfile, dev = false }) {
   return (
     <div>
       <style>{CLERK_CSS}</style>
-      {welcome && <V2capClerkWelcome line={pickLine('welcome').text} onClose={() => setWelcome(false)} />}
+      {welcome && <V2capClerkWelcome line={welcome} onClose={() => setWelcome(null)} />}
       {/* 決まりの説明（2026-10-25 ユーザー指示「ここら辺はHELPに載せて」＝前はトッピングと注文の下に出していた文） */}
       {help && (
         <V2Modal title="❓ HELP" color={MEAL_COLOR} keepScroll onClose={() => setHelp(false)}>
@@ -220,7 +220,7 @@ export default function V2capBurger({ prof, onProfile, dev = false }) {
           <V2capClerk face={clerk.face} line={clerk.text} tick={clerk.tick} onTap={tapClerk} />
           {dev && (
             <div style={{ textAlign:'center', marginTop:'8px' }}>
-              <button type="button" onClick={() => setWelcome(true)} style={miniBtn('#ff88cc')}>🧪 いらっしゃいませーを見る［開発］</button>
+              <button type="button" onClick={() => setWelcome(pickLine('welcome').text)} style={miniBtn('#ff88cc')}>🧪 いらっしゃいませーを見る［開発］</button>
               {/* 好感度（ふつうは画面に出さない）。仮に置いた値はサーバーに書かない＝セリフを確かめる用 */}
               <div style={{ color:'#ff88cc', fontSize:'10px', marginTop:'6px' }}>
                 ［開発］好感度 {devAff ?? aff}（{stageLabelOf(stage)}）{devAff !== null && <span style={{ color: TEXT.sub }}> 仮・本物は{aff}</span>}
@@ -285,7 +285,6 @@ export default function V2capBurger({ prof, onProfile, dev = false }) {
                       <span style={{ color: on ? MEAL_COLOR : TEXT.bright, fontSize:'12px' }}>{on ? '☑' : '☐'} {g.label}</span>
                       <span style={{ color:'#ffcc00', fontSize:'11px' }}>+{gold(TOPPING_GOLD)}</span>
                     </div>
-                    <div style={{ color: TEXT.label, fontSize:'10px', marginBottom:'2px' }}>{g.note}</div>
                     <GroupList group={g.key} />
                   </button>
                 )

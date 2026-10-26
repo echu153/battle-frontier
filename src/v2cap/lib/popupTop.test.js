@@ -40,5 +40,22 @@ test('開発用の「いらっしゃいませーを見る」は管理者だけ�
   assert.ok(read('pages/V2capHome.jsx').includes("{screen === 'burger' && <V2capBurger prof={prof} onProfile={refresh} dev={isAdmin} />}"))
   const burger = read('components/V2capBurger.jsx')
   assert.ok(burger.includes('{dev && ('), 'dev のときだけ出す')
-  assert.ok(burger.includes("onClick={() => setWelcome(true)}"), '押すと全画面を出す（サーバーには聞かない）')
+  assert.ok(burger.includes("onClick={() => setWelcome(pickLine('welcome').text)}"), '押すと全画面を出す（サーバーには聞かない）')
+})
+
+test('その日の「いらっしゃいませー！」は店の画面より先（ホームの上）に出し、閉じたら店の画面へ', () => {
+  // 【確定】2026-10-26 ユーザー指示「先に通常の画面開いてから演出入るから少し違和感、しっかり演出入ってからページ遷移するようにしてほしい」
+  const home = read('pages/V2capHome.jsx')
+  assert.ok(home.includes('onPick={pickScreen}'), 'メニューは pickScreen を通す')
+  assert.ok(home.includes("if (key === 'burger' && burgerWelcomeDue(prof)) { markBurgerWelcome(); setBurgerWelcome(pickLine('welcome').text); return }"),
+    'その日はじめてなら店の画面へ行かずに先に出す（返事は待たない）')
+  assert.ok(home.includes("const closeBurgerWelcome = () => { setBurgerWelcome(null); setScreen('burger') }"), '閉じたら店の画面へ')
+  assert.ok(home.includes('{burgerWelcome && <V2capClerkWelcome line={burgerWelcome} onClose={closeBurgerWelcome} />}'), 'ホームの上に出す')
+  const burger = read('components/V2capBurger.jsx')
+  assert.equal(burger.match(/rpc\('v2cap_burger_welcome'\)/g).length, 1, '印を付けるのは markBurgerWelcome だけ（店を開いてから聞き直さない）')
+  assert.ok(!/welcomeAsker|setWelcome\(true\)/.test(burger), '店の画面が開いてから重ねない')
+  // ホームの上でも見た目が崩れないように、全身の絵の CSS は V2capClerkWelcome が自分で持つ
+  const clerk = read('components/V2capClerk.jsx')
+  assert.ok(clerk.includes('<style>{WELCOME_CSS}</style>'))
+  assert.ok(!clerk.slice(0, clerk.indexOf('const WELCOME_CSS')).includes('.nk-welcome {'), 'CLERK_CSS には入れない')
 })
