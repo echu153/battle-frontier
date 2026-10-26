@@ -90,6 +90,12 @@ export const KEY = {
   BAND: 3,           // 半透明にする幅（px）
   POCKET_MIN: 25,    // 体に囲まれたすき間を抜く大きさ（px）
   POCKET_MEAN: 6,    // flat：すき間の背景の色との差の平均がこれ以下なら抜く
+  // flat の「ゆるいすき間」（loosePockets を付けた絵だけ）：大きくて（px）・なめらかで（明るさのばらつき）・差の平均がこれ以下なら抜く。
+  //   【確定】2026-10-26 煙や砂の渦に囲まれた背景（トオボエウルフなど）は、背景のうっすらしたむらで差の平均が6.7〜9.7になり抜けなかった。
+  //   ⚠全部の絵には使わない：海賊砲手の灰色のズボン（差の平均6.8・ばらつき3.6）まで抜けて穴が開く。目で確かめた絵だけ（tools/v2cap-enemy-art.mjs）
+  POCKET_LOOSE_MIN: 300,
+  POCKET_LOOSE_STD: 4,
+  POCKET_LOOSE_MEAN: 10,
   POCKET_TONE: 0.15, // checker：すき間に2色の両方がこの割合以上あれば抜く（1色だけのかたまりは体の白・灰色として残す）
   CHECKER_GAP: 24,   // checker と見る2色の明るさの差（これ以上）
   CHECKER_MASS: 0.25,// checker と見る、縁に占める2色それぞれの割合（これ以上）
@@ -124,7 +130,8 @@ export const bgModelOf = ({ data: rgb, W, H }, k = KEY) => {
 }
 
 // 背景を抜いた rgba を返す：{ img, clear（透明にできた割合）, mode, edgeLeft（抜いたあとも縁に残った体の割合） }
-export const keyBackground = (img, k = KEY) => {
+// opts.loosePockets … flat の絵で「ゆるいすき間」も抜く（KEY.POCKET_LOOSE_*・目で確かめた絵だけに付ける）
+export const keyBackground = (img, k = KEY, opts = {}) => {
   const { data: rgb, W, H } = img
   const N = W * H
   const model = bgModelOf(img, k)
@@ -164,17 +171,20 @@ export const keyBackground = (img, k = KEY) => {
   const seen = new Uint8Array(N)
   for (let s = 0; s < N; s++) {
     if (seen[s] || lay[s] >= 0 || dist[s] > k.T_IN) continue
-    const blob = [s]; seen[s] = 1; let sum = 0, dark = 0, light = 0
+    const blob = [s]; seen[s] = 1; let sum = 0, dark = 0, light = 0, ls = 0, ls2 = 0
     for (let h = 0; h < blob.length; h++) {
       const p = blob[h]
       sum += dist[p]
+      const l = lumOf(rgb, p); ls += l; ls2 += l * l
       if (tone[p] < 0.35) dark++
       else if (tone[p] > 0.65) light++
       each(p, r => { if (!seen[r] && lay[r] < 0 && dist[r] <= k.T_IN) { seen[r] = 1; blob.push(r) } })
     }
     const n = blob.length
+    const loose = () => opts.loosePockets && n >= k.POCKET_LOOSE_MIN && sum / n <= k.POCKET_LOOSE_MEAN
+      && Math.sqrt(Math.max(0, ls2 / n - (ls / n) ** 2)) <= k.POCKET_LOOSE_STD
     const isBg = n >= k.POCKET_MIN && (model.mode === 'flat'
-      ? sum / n <= k.POCKET_MEAN
+      ? sum / n <= k.POCKET_MEAN || loose()
       : dark / n >= k.POCKET_TONE && light / n >= k.POCKET_TONE)
     if (isBg) for (const p of blob) { lay[p] = 0; core.push(p) }
   }

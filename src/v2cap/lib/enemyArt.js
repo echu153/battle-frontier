@@ -12,6 +12,8 @@
 //   ・ひらがな／カタカナ・全角／半角・記号の違いは見ない（「つるへび.png」→ つるヘビ、「ヒナタトカゲ.png」→ ひなたトカゲ）
 //   ・それでも名前にならないもの（ローマ字・当て字・打ち間違い）は下の ENEMY_ART_ALIAS で結びつける。
 //     ツールが「どのモンスターにも当てはまらない絵」を知らせるので、そのときにここへ足す
+//   ・頭の番号「05-01_」（エリア-一覧の何体目）は外して読む（artFileNoOf）。【確定】2026-10-26 エリア⑤⑥から付いた。
+//     番号と名前が合わないときはツールが知らせる。別名（ENEMY_ART_ALIAS）は番号を外した名前で書く
 // ★絵の無いモンスターは、画面では名前の1文字目を入れた枠で代わりに出す（V2capLogLine）
 // ============================================================
 import { AREA_ROSTERS, SPECIAL_ENEMIES } from './monsters.js'
@@ -57,10 +59,22 @@ export const normalizeArtName = (s) => String(s ?? '')
 
 const BY_NORM = new Map(ART_NAMES.map(n => [normalizeArtName(n), n]))
 const ALIAS_BY_NORM = new Map(Object.entries(ENEMY_ART_ALIAS).map(([k, v]) => [normalizeArtName(k), v]))
+// ファイル名の頭の番号「05-01_砂喰いワーム」→ { area: 5, index: 1, rest: '砂喰いワーム' }（番号が無ければ null）。全角の数字・記号も読む
+export const artFileNoOf = (stem) => {
+  const s = String(stem ?? '').normalize('NFKC')
+  const m = s.match(/^([0-9]{1,2})[-_ ]+([0-9]{1,2})[-_ ]+/)
+  return m ? { area: Number(m[1]), index: Number(m[2]), rest: s.slice(m[0].length) } : null
+}
 // ファイル名（拡張子なし）→ モンスターの名前（当てはまらなければ null）
 export const enemyNameOfFile = (stem) => {
-  const k = normalizeArtName(stem)
+  const no = artFileNoOf(stem)
+  const k = normalizeArtName(no ? no.rest : stem)
   return ALIAS_BY_NORM.get(k) || BY_NORM.get(k) || null
+}
+// 番号が指すモンスター（エリアの一覧の並び）。番号が無い・一覧の外なら null
+export const enemyNameOfFileNo = (stem) => {
+  const no = artFileNoOf(stem)
+  return no ? ENEMY_NAMES_BY_AREA[no.area - 1]?.[no.index - 1] || null : null
 }
 
 // 名前 → 画面で使うファイルの名前（名前の UTF-8 の FNV-1a 32bit を16進8桁）。同じ名前なら必ず同じ

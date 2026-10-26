@@ -7,6 +7,7 @@ import { Buffer } from 'node:buffer'
 import { fileURLToPath } from 'node:url'
 import {
   ENEMY_ART_ALIAS, ENEMY_ART_DIR, ENEMY_ART_SIZE, ENEMY_ART_BIG_DIR, ENEMY_ART_BIG_SIZE, enemyArtBigSrc, ENEMY_NAMES, ENEMY_NAMES_BY_AREA, SPECIAL_ENEMY_NAMES, ART_NAMES, normalizeArtName, enemyNameOfFile, enemyArtId, enemyArtSrc, hasEnemyArt,
+  artFileNoOf, enemyNameOfFileNo,
 } from './enemyArt.js'
 import { ENEMY_ART_IDS } from './enemyArtList.js'
 import { AREA_LIST } from './areas.js'
@@ -45,6 +46,23 @@ test('ファイル名の読み方：ひらがな／カタカナ・記号の違�
     // 別名は、ふつうに読むと名前にならないものだけ
     assert.notEqual(normalizeArtName(file), normalizeArtName(name), `${file} は別名にしなくても読める`)
   }
+})
+
+test('【確定】2026-10-26 頭の番号つきのファイル名「05-01_砂喰いワーム」：番号を外して名前で読む。番号はエリアの一覧の並びを指す', () => {
+  assert.equal(enemyNameOfFile('05-01_砂喰いワーム'), '砂喰いワーム')
+  assert.equal(enemyNameOfFile('06-20_雷鷲サンダーロック'), '雷鷲サンダーロック')
+  assert.equal(enemyNameOfFile('０５－０１＿砂喰いワーム'), '砂喰いワーム', '全角の番号も読む')
+  assert.deepEqual(artFileNoOf('06-20_雷鷲サンダーロック'), { area: 6, index: 20, rest: '雷鷲サンダーロック' })
+  assert.equal(artFileNoOf('砂喰いワーム'), null, '番号が無ければ null')
+  assert.equal(enemyNameOfFile('砂喰いワーム'), '砂喰いワーム', '番号が無くても今までどおり読む')
+  // 番号が指すモンスター（名前と違えばツールが知らせる。名前が読めないときの手がかりにもする）
+  assert.equal(enemyNameOfFileNo('05-01_砂喰いワーム'), ENEMY_NAMES_BY_AREA[4][0])
+  assert.equal(enemyNameOfFileNo('05-03_だれでもない'), ENEMY_NAMES_BY_AREA[4][2])
+  assert.equal(enemyNameOfFile('05-03_だれでもない'), null)
+  assert.equal(enemyNameOfFileNo('16-01_砂喰いワーム'), null, '一覧の外')
+  // ユーザーの番号はエリアの一覧の並び（ENEMY_NAMES_BY_AREA）と同じ＝並びを変えると番号がずれる
+  assert.equal(ENEMY_NAMES_BY_AREA[4][0], '砂喰いワーム')
+  assert.equal(ENEMY_NAMES_BY_AREA[5][19], '雷鷲サンダーロック')
 })
 
 test('一覧（enemyArtList.js）のモンスターは本当にいて、id は名前どおり。絵は 192×192 の透明つき WebP', () => {
@@ -94,8 +112,8 @@ test('【確定】2026-10-13 安息の祠のハピネスフェアリー：エリ
   assert.ok(hasEnemyArt('ハピネスフェアリー'), 'ユーザーの絵（public/エネミー/特別）から作った WebP がある')
 })
 
-test('★エリア①②③の60体は全部絵がある（①② 2026-10-12・③ 2026-10-14 ユーザーが置いた分）', () => {
-  for (const name of ENEMY_NAMES_BY_AREA.slice(0, 3).flat()) assert.ok(hasEnemyArt(name), `${name} の絵が無い`)
+test('★エリア①〜⑥の120体は全部絵がある（①② 2026-10-12・③ 10-14・④ 10-24・⑤⑥ 10-26 ユーザーが置いた分）', () => {
+  for (const name of ENEMY_NAMES_BY_AREA.slice(0, 6).flat()) assert.ok(hasEnemyArt(name), `${name} の絵が無い`)
 })
 
 // ===== 背景の抜き方（tools/v2cap-art-lib.mjs）=====
@@ -158,6 +176,25 @@ test('灰色1色の背景の抜き方は前のまま（エリア①②の絵が�
   assert.equal(alphaAt(r, 0, 0), 0)
   assert.equal(alphaAt(r, 62, 62), 0, '体に囲まれたすき間')
   assert.equal(alphaAt(r, 30, 30), 255)
+})
+
+test('【確定】2026-10-26 ゆるいすき間（目で確かめた絵だけ）：背景よりわずかに明るいなめらかなすき間も抜く。布の模様のようなばらつきのある灰色は残す', () => {
+  // 茶色の体の中に、すき間A（背景+8・なめらか＝煙の渦に囲まれた背景）と、すき間B（背景±8が1画素ごと＝ズボンの布のような灰色）
+  const img = synth(96, (x, y) => {
+    const inBody = x >= 16 && x < 80 && y >= 16 && y < 80
+    if (!inBody) return [120, 120, 119]
+    if (x >= 22 && x < 46 && y >= 22 && y < 46) return [128, 128, 127]
+    if (x >= 52 && x < 76 && y >= 52 && y < 76) return (x + y) % 2 ? [128, 128, 127] : [112, 112, 111]
+    return [120, 70, 40]
+  })
+  const strict = keyBackground(img)
+  assert.equal(alphaAt(strict, 34, 34), 255, 'ふだんの条件では、背景+8のすき間は残す（エリア①〜④の絵が変わらない）')
+  assert.equal(alphaAt(strict, 64, 64), 255)
+  const loose = keyBackground(img, undefined, { loosePockets: true })
+  assert.equal(alphaAt(loose, 34, 34), 0, 'ゆるい条件なら、なめらかなすき間は抜く')
+  assert.equal(alphaAt(loose, 64, 64), 255, 'ばらつきのある灰色（海賊砲手のズボンのようなもの）は抜かない')
+  assert.equal(alphaAt(loose, 0, 0), 0)
+  assert.equal(alphaAt(loose, 18, 18), 255, '体')
 })
 
 test('透明つきの見分け：縁がほとんど透明なら透明つき（抜かずにその透明を使う）・縁が不透明なら背景を抜く', () => {

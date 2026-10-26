@@ -2,6 +2,8 @@
 // v2cap のモンスターのイラストを、画面で使う軽い版（背景を抜いた正方形の WebP）にする
 // ------------------------------------------------------------
 // 元の絵（ユーザーが置く）：public/エネミー/エリア<番号>/<モンスターの名前>.png（1254×1254。灰色の背景つき／透明な背景）
+//   エリア⑤から先は頭に番号つき「05-01_砂喰いワーム.png」（エリア-一覧の何体目・2026-10-26）。番号は外して名前で読み、
+//   番号が指すモンスターと名前が違えば知らせる（終わりのコード1）
 //   場所の顔ぶれにいない特別なモンスター（安息の祠のハピネスフェアリー）は public/エネミー/特別/<名前>.png（2026-10-13）
 // 作るもの：
 //   public/enemy-art/<id>.webp     … 192×192。背景を透明にして（下の「背景の扱い」）、体がちょうど収まるように切り取る
@@ -30,7 +32,7 @@ import { probe, decode, bleed, alphaBox, encodeSquare, keyBackground, transparen
 
 const ROOT = path.resolve(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))
 const lib = (f) => import(new URL(`../src/v2cap/lib/${f}`, import.meta.url).href)
-const { ENEMY_ART_SRC_DIR, ENEMY_ART_DIR, ENEMY_ART_SIZE, ENEMY_ART_BIG_DIR, ENEMY_ART_BIG_SIZE, ENEMY_NAMES_BY_AREA, SPECIAL_ENEMY_NAMES, SPECIAL_ART_DIR, ART_NAMES, enemyNameOfFile, enemyArtId } = await lib('enemyArt.js')
+const { ENEMY_ART_SRC_DIR, ENEMY_ART_DIR, ENEMY_ART_SIZE, ENEMY_ART_BIG_DIR, ENEMY_ART_BIG_SIZE, ENEMY_NAMES_BY_AREA, SPECIAL_ENEMY_NAMES, SPECIAL_ART_DIR, ART_NAMES, enemyNameOfFile, enemyNameOfFileNo, enemyArtId } = await lib('enemyArt.js')
 const { AREA_LIST } = await lib('areas.js')
 const SRC = path.join(ROOT, 'public', ENEMY_ART_SRC_DIR)
 const OUT = path.join(ROOT, 'public', ENEMY_ART_DIR.replace(/^\//, ''))
@@ -47,9 +49,19 @@ const MARGIN = 0.04       // 切り取りの余白（体の大きいほうの辺
 const QUALITY = 82
 const EDGE_LEFT_MAX = 0.3 // 抜いたあと縁に残った体の割合がこれを超えたら「背景が抜けていない」
 const MODE_LABEL = { alpha:'透明つき', flat:'灰色の背景', checker:'チェック模様の背景' }
+// 体に囲まれた背景を「ゆるい条件」でも抜く絵（tools/v2cap-art-lib.mjs の KEY.POCKET_LOOSE_*）
+// 【確定】2026-10-26 煙・砂・炎の渦や半透明の残像に囲まれた背景の灰色が残っていた絵。新しく抜ける場所を赤く塗って、
+//   どれも背景だけ（体は削らない）と目で確かめたものだけ。⚠確かめずに足さない（海賊砲手は灰色のズボンまで抜けるので入れない）。
+//   足したら、その絵の WebP を消して作り直す（元の絵より新しい WebP は作り直されない）
+const LOOSE_POCKETS = new Set([
+  'カゲロウトカゲ', 'ミラージュリザード', 'フレイムアヌビス', 'ルナジャッカル', '砂地獄アントリオン', '砂皇スカラベウス',   // エリア⑤
+  '払暁のワイバーン', 'ハヤテハヤブサ', '宵闇ヤマネコ', 'トオボエウルフ', 'ストームグリフォン', 'ドーンワイバーン',       // エリア⑥
+  'ブレイズゴリラ', '岩砕きグリズリー',
+])
+for (const n of LOOSE_POCKETS) if (!ART_NAMES.includes(n)) throw new Error(`LOOSE_POCKETS の ${n} はモンスターの一覧にいない`)
 
 // outs = [{ out, size }]（小さい版・大きい版のうち作るもの）
-const makeOne = (src, outs) => {
+const makeOne = (src, outs, name) => {
   const info = probe(src)
   let r = null
   if (info.alpha) {
@@ -63,7 +75,7 @@ const makeOne = (src, outs) => {
       r = { img, mode: 'alpha', clear: clear / N, edgeLeft: border.filter(p => img.data[p * 4 + 3] > 128).length / border.length }
     }
   }
-  if (!r) r = keyBackground(decode(src, WORK, 'rgb24'))
+  if (!r) r = keyBackground(decode(src, WORK, 'rgb24'), undefined, { loosePockets: LOOSE_POCKETS.has(name) })
   // 透明なところの色を近くの体の色で埋める（縮めるときに背景の色が縁へ混ざらないように）
   bleed(r.img)
   const box = alphaBox(r.img)
@@ -89,12 +101,16 @@ const areaNoOfDir = (file) => {
 }
 const areaNoOfName = new Map(ENEMY_NAMES_BY_AREA.flatMap((names, k) => names.map(n => [n, k + 1])))
 
-const unmatched = [], wrongArea = [], dup = [], failed = [], light = [], notKeyed = []
+const unmatched = [], wrongArea = [], wrongNo = [], dup = [], failed = [], light = [], notKeyed = []
 const pick = new Map()   // 名前 → 元の絵（同じ名前に2枚あれば新しいほう）
 for (const f of files) {
-  const name = enemyNameOfFile(path.basename(f, path.extname(f)))
+  const stem = path.basename(f, path.extname(f))
+  const name = enemyNameOfFile(stem)
+  const byNo = enemyNameOfFileNo(stem)   // 頭の番号「05-01_」が指すモンスター（2026-10-26〜）
   const rel = path.relative(SRC, f)
-  if (!name) { unmatched.push(rel); continue }
+  // 名前が読めないときは、番号が指すモンスターを手がかりに出す（別名にする前に絵を見て確かめる）
+  if (!name) { unmatched.push(byNo ? `${rel}（番号どおりなら ${byNo}）` : rel); continue }
+  if (byNo && byNo !== name) wrongNo.push(`${rel} → 名前は ${name}・番号は ${byNo}`)
   const dirNo = areaNoOfDir(f)
   if (dirNo && dirNo !== areaNoOfName.get(name)) wrongArea.push(`${rel} → ${name}（エリア${areaNoOfName.get(name)}のモンスター）`)
   const prev = pick.get(name)
@@ -110,12 +126,12 @@ for (const [name, src] of pick) {
   const outs = [!fresh(out) && { out, size: ENEMY_ART_SIZE }, !fresh(outBig) && { out: outBig, size: ENEMY_ART_BIG_SIZE }].filter(Boolean)
   if (!outs.length) continue
   try {
-    const { clear, mode, edgeLeft } = makeOne(src, outs)
+    const { clear, mode, edgeLeft } = makeOne(src, outs, name)
     made++
     // 背景がほとんど抜けなかった絵（背景の色が違う・体が縁いっぱい）は知らせる
     if (clear < 0.15) light.push(`${name}（${path.relative(SRC, src)}）：透明にできたのは${Math.round(clear * 100)}%だけ`)
     if (edgeLeft > EDGE_LEFT_MAX) notKeyed.push(`${name}（${path.relative(SRC, src)}・${MODE_LABEL[mode]}）：縁の${Math.round(edgeLeft * 100)}%が透明になっていない`)
-    console.log(`${name} ← ${path.relative(SRC, src)}（${MODE_LABEL[mode]}）`)
+    console.log(`${name} ← ${path.relative(SRC, src)}（${MODE_LABEL[mode]}${mode === 'flat' && LOOSE_POCKETS.has(name) ? '・ゆるいすき間' : ''}）`)
   } catch (e) {
     failed.push(`${name}（${path.relative(SRC, src)}）：${e.message}`)
   }
@@ -150,10 +166,11 @@ ENEMY_NAMES_BY_AREA.forEach((names, k) => {
 const warnList = (title, list) => { if (list.length) { console.log(title); for (const m of list) console.log(`  ${m}`) } }
 warnList('⚠ どのモンスターにも当てはまらない絵（enemyArt.js の ENEMY_ART_ALIAS に足す）：', unmatched)
 warnList('⚠ 置いたフォルダと違うエリアのモンスターに当てはまった絵：', wrongArea)
+warnList('⚠ 頭の番号と名前が別のモンスターを指している絵（名前のほうで作った。絵を見てどちらか確かめる）：', wrongNo)
 warnList('⚠ 同じモンスターに2枚ある（新しいほうを使った）：', dup)
 warnList('⚠ 背景があまり抜けなかった絵（目で確かめる）：', light)
 warnList('⚠ 背景が抜けていない絵（縁に背景が残っている。目で確かめて、抜き方を直すか絵を差し替えてもらう）：', notKeyed)
 warnList('⚠ 作れなかった絵：', failed)
 warnList('⚠ どのモンスターのものでもない WebP（名前を変えた？）：', orphans)
 warnList('⚠ 大きい版（enemy-art-big）が無い（元の絵を置いて作り直す）：', noBig)
-if (unmatched.length || failed.length || notKeyed.length) process.exitCode = 1
+if (unmatched.length || failed.length || notKeyed.length || wrongNo.length) process.exitCode = 1
