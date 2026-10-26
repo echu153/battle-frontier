@@ -2,10 +2,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, statSync } from 'node:fs'
+import { Buffer } from 'node:buffer'
 import { MOTION_ART } from './motionArtList.js'
 import { motionOf, motionFrameAt, motionFileOf, motionMsOf, motionHitOf, MOTION_OUT, IDLE_SIZE } from './motionArt.js'
 import { ART_BASE, ART_GIF } from './classArt.js'
-import { motionTargetOf, keyGreen, splitFrames, bodyOf } from '../../../tools/v2cap-motion.mjs'
+import { motionTargetOf, keyGreen, splitFrames, bodyOf, framesByComponents } from '../../../tools/v2cap-motion.mjs'
 
 const PUB = new URL('../../../public/V2newjob/', import.meta.url)
 
@@ -23,6 +24,14 @@ test('一覧の絵はぜんぶ public/V2newjob/motion にあり、待機GIFの�
         assert.ok(m.w >= IDLE_SIZE && m.h >= IDLE_SIZE, '1コマは待機GIF（224）以上')
       }
     }
+  }
+})
+
+test('【確定】2026-10-27 初期クラス11職×男女の攻撃（剣士女はまだ）＋暗殺者女', () => {
+  const inits = ['剣士', '戦士', '槍使い', '格闘家', '盗賊', '弓使い', '銃士', '魔法使い', '呪術師', '僧侶', '薬師']
+  for (const cls of inits) for (const g of ['m', 'f']) {
+    if (cls === '剣士' && g === 'f') continue
+    assert.ok(motionOf(cls, g, 'attack'), `${cls}${g} の攻撃がある`)
   }
 })
 
@@ -81,4 +90,22 @@ test('真緑を抜いて、空いた列でコマに分け、つながってい�
   assert.equal(j.cuts.length, 6)
   const b = bodyOf({ W: 20, H, data: a.data.subarray(0, 20 * H * 4) })
   assert.ok(b === null || b.bot >= 0)
+})
+
+test('まとまりで分ける：隣のコマの上まで伸びた武器は切らずに持ち主へ・体とつながらず浮いている矢や玉は撃った側（足もとが左の体）へ', () => {
+  // 300×40 の真緑に、幅10の体を6つ（50px ごと・足もとは下）。②の槍（体とつながる）が左へ③の上まで、
+  // ④が放った玉（浮いている）が⑤の体のすぐ左に。どちらも列で切ると隣へ入ってしまう形
+  const W = 300, H = 40
+  const data = Buffer.alloc(W * H * 4)
+  for (let p = 0; p < W * H; p++) { data[p * 4 + 1] = 255; data[p * 4 + 3] = 255 }
+  const paint = (x0, x1, y0, y1) => { for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { const p = (y * W + x) * 4; data[p] = 200; data[p + 1] = 40; data[p + 2] = 40 } }
+  for (let i = 0; i < 6; i++) paint(i * 50 + 20, i * 50 + 30, 10, 38)
+  paint(55, 70, 12, 14)       // ②（x70〜80）の体から左へ伸びる槍＝①と②のあいだを越えて x55 まで
+  paint(186, 218, 20, 23)     // ④（x170〜180）が放った玉＝⑤（x220〜230）の体のすぐ左まで
+  const frames = framesByComponents(keyGreen({ W, H, data }))
+  assert.equal(frames.length, 6)
+  assert.equal(frames[1].x0, 55, '②は槍の先（x55）から')
+  assert.equal(frames[0].x0 + frames[0].W - 1, 29, '①に②の槍は入らない')
+  assert.equal(frames[3].x0 + frames[3].W - 1, 217, '④に放った玉が入る')
+  assert.equal(frames[4].x0, 220, '⑤には入らない')
 })

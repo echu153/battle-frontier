@@ -8,8 +8,9 @@
 //   src/v2cap/lib/motionArtList.js                       … 一覧（コマの数・1コマの大きさ・ずらし・速さ）
 // 手順：
 //   ① 真緑を抜く（緑が赤・青より大きく上回る色）。縁に映り込んだ緑も消す
-//   ② 何も無い列でコマに分ける。剣や斬撃で隣とつながっていたら、6等分の境目のまわりでいちばん空いた列で切り、
-//      端に引っかかった隣のかけら（小さくて左右の端に触れるまとまり）を消す
+//   ② コマに分ける：ひとつながりの絵（まとまり）を拾い、大きい6つを体として、ほかのまとまり（武器の先・効果の光）は
+//      いちばん近い体のコマへまるごと入れる＝列で切らないので、隣のコマの上まで伸びた槍の先も切れない（2026-10-27）。
+//      体が6つに分かれていない（武器が隣の体に触れている）ときだけ、前のやり方＝何も無い列・6等分の境目のまわりで切る
 //   ③ ①のコマ（立ちポーズ）の高さを、待機GIF（public/V2newjob/gif/<ローマ字>-<m|f>.gif の1コマ目）の体の高さに合わせる。
 //      差が8%以内なら縮めない（ドット絵をぼかさない）
 //   ④ 各コマの足（いちばん下の8%の重心）を、待機GIFの足と同じ点に置く。はみ出すぶん（斬撃など）は1コマを広げる（ox・oy）
@@ -63,7 +64,74 @@ export const keyGreen = (img) => {
   return img
 }
 
-// ② コマに分ける → [[x0, x1], …]
+// ② まとまり（8方向でつながった、見えている画素）に分ける → { labels, comps:[{ n, x0, x1, y0, y1 }] }
+export const componentsOf = ({ W, H, data }) => {
+  const labels = new Int32Array(W * H).fill(-1)
+  const comps = []
+  const st = []
+  for (let p = 0; p < W * H; p++) {
+    if (!data[p * 4 + 3] || labels[p] >= 0) continue
+    const id = comps.length
+    const c = { n: 0, x0: W, x1: -1, y0: H, y1: -1 }
+    labels[p] = id; st.push(p)
+    while (st.length) {
+      const q = st.pop()
+      const x = q % W, y = (q / W) | 0
+      c.n++
+      if (x < c.x0) c.x0 = x; if (x > c.x1) c.x1 = x; if (y < c.y0) c.y0 = y; if (y > c.y1) c.y1 = y
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const xx = x + dx, yy = y + dy
+        if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue
+        const r = yy * W + xx
+        if (data[r * 4 + 3] && labels[r] < 0) { labels[r] = id; st.push(r) }
+      }
+    }
+    comps.push(c)
+  }
+  return { labels, comps }
+}
+
+// ② コマに分ける（まとまりで）。体（大きい n 個）が見つからなければ null（＝列で切るやり方へ）
+//   ほかのまとまり（体とつながっていない矢・玉・瓶・光）は、**足もとがそれより左にある、いちばん近い体**のもの
+//     ＝攻撃はいつも右へ飛ぶので、浮いているものは撃った側（左）の体から出たもの
+//     （2026-10-27 弓使い・呪術師・薬師で、④で放った矢・玉・瓶が⑤の体のすぐそばまで飛んでいて、距離で決めると⑤に入っていた）
+//     どの体の足もとより左にあるものは、いちばん左の体のもの
+export const framesByComponents = (img, n = SHEET_FRAMES) => {
+  const { W, H, data } = img
+  const { labels, comps } = componentsOf(img)
+  const total = comps.reduce((s, c) => s + c.n, 0)
+  const big = comps.map((c, id) => ({ ...c, id })).filter(c => c.n >= total * 0.02).sort((a, b) => b.n - a.n)
+  if (big.length < n) return null
+  const bodies = big.slice(0, n).map(b => {
+    let sx = 0, cnt = 0
+    for (let y = Math.round(b.y1 - (b.y1 - b.y0) * 0.08); y <= b.y1; y++) for (let x = b.x0; x <= b.x1; x++) {
+      if (labels[y * W + x] === b.id) { sx += x; cnt++ }
+    }
+    return { ...b, footX: cnt ? sx / cnt : (b.x0 + b.x1) / 2 }
+  }).sort((a, b) => a.footX - b.footX)
+  const owner = comps.map((c, id) => {
+    const self = bodies.findIndex(b => b.id === id)
+    if (self >= 0) return self
+    const cx = (c.x0 + c.x1) / 2
+    let best = 0
+    bodies.forEach((b, k) => { if (b.footX <= cx) best = k })
+    return best
+  })
+  return bodies.map((b, k) => {
+    const mine = comps.filter((_, id) => owner[id] === k)
+    const x0 = Math.min(...mine.map(c => c.x0)), x1 = Math.max(...mine.map(c => c.x1))
+    const cw = x1 - x0 + 1
+    const crop = Buffer.alloc(cw * H * 4)
+    for (let y = 0; y < H; y++) for (let x = x0; x <= x1; x++) {
+      const p = y * W + x
+      if (labels[p] < 0 || owner[labels[p]] !== k) continue
+      data.copy(crop, ((y * cw) + (x - x0)) * 4, p * 4, p * 4 + 4)
+    }
+    return { W: cw, H, data: crop, x0 }
+  })
+}
+
+// ② コマに分ける（列で・まとまりで分けられないとき）→ [[x0, x1], …]
 export const splitFrames = (img, n = SHEET_FRAMES) => {
   const { W, H, data } = img
   const col = new Array(W).fill(0)
@@ -153,8 +221,13 @@ const build = (file, { cls, g, key }) => {
   if (!existsSync(idleFile)) throw new Error(`待機GIFが無い：${path.relative(ROOT, idleFile)}`)
   const idle = bodyOf(readRgba(idleFile))
   let sheet = keyGreen(readRgba(file))
-  let { cuts, joined } = splitFrames(sheet)
-  let frames = cuts.map(c => cropFrame(sheet, c))
+  const splitOf = (img) => {
+    const byComp = framesByComponents(img)
+    if (byComp) return { frames: byComp, how: 'まとまり' }
+    const { cuts, joined } = splitFrames(img)
+    return { frames: cuts.map(c => cropFrame(img, c)), how: joined ? '境目で切った' : '列' }
+  }
+  let { frames, how } = splitOf(sheet)
   const first = bodyOf(frames[0])
   // ③ 大きさ：①（立ちポーズ）の高さを待機の体の高さへ。8%以内なら縮めない
   let k = (idle.bot - idle.top + 1) / (first.bot - first.top + 1)
@@ -162,8 +235,7 @@ const build = (file, { cls, g, key }) => {
   else {
     bleed(sheet)
     sheet = scaleRgba(sheet, k)
-    ;({ cuts, joined } = splitFrames(sheet))
-    frames = cuts.map(c => cropFrame(sheet, c))
+    ;({ frames, how } = splitOf(sheet))
   }
   const used = frames.length >= 3 ? frames.slice(1, -1) : frames
   // ④ 足をそろえる。はみ出すぶんは1コマを広げる
@@ -192,7 +264,7 @@ const build = (file, { cls, g, key }) => {
   const out = path.join(OUT, motionFileOf(cls, g, key))
   execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${w * n}x${h}`, '-i', '-',
     '-c:v', 'libwebp', '-lossless', '1', '-compression_level', '6', out], { input: strip })
-  return { out, entry: { frames: n, w, h, ox, oy, ms: motionMsOf(n), hit: motionHitOf(n) }, k, joined }
+  return { out, entry: { frames: n, w, h, ox, oy, ms: motionMsOf(n), hit: motionHitOf(n) }, k, how }
 }
 
 const writeList = (art) => {
@@ -229,7 +301,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
       const r = build(file, t)
       ;((art[t.cls] ||= {})[t.g] ||= {})[t.key] = r.entry
       made++
-      console.log(`  ✓ ${name} → ${path.relative(ROOT, r.out)}（${r.entry.frames}コマ・1コマ${r.entry.w}×${r.entry.h}・倍率${r.k.toFixed(2)}${r.joined ? '・コマがつながっていたので境目で切った' : ''}）`)
+      console.log(`  ✓ ${name} → ${path.relative(ROOT, r.out)}（${r.entry.frames}コマ・1コマ${r.entry.w}×${r.entry.h}・倍率${r.k.toFixed(2)}${r.how === '境目で切った' ? '・⚠体どうしがつながっていたので境目で切った（隣の絵が入っていないか見る）' : ''}）`)
     } catch (e) {
       console.log(`  ✗ ${name}：${e.message}`)
     }
