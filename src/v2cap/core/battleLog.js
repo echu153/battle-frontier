@@ -90,8 +90,11 @@ export const buildBattleLog = (r, you, foe) => {
     } else if (l.type === 'consumeAil') {
       out.push({ text:`🩸 ${actor}の${l.ail}が弾けた！（${l.stacks}スタック消費・威力${l.mult.toFixed(1)}倍）`, color: LOG_COLOR.ail })
     } else if (l.type === 'guard') {
-      // ATB専用（オート戦闘は出さない）
-      out.push({ text:`🛡 ${actor}は身を守っている！（${l.sec}秒・被ダメージ-${l.cut}%）`, color: LOG_COLOR.guard })
+      // ATB専用（オート戦闘は出さない）。次の自分の行動まで続く
+      out.push({ text:`🛡 ${actor}は身を守っている！（次の行動まで被ダメージ-${l.cut}%）`, color: LOG_COLOR.guard })
+    } else if (l.type === 'cast') {
+      // ATB専用：ボスの大技の詠唱（このあと sec 秒で撃つ）
+      out.push({ text:`⚠ ${actor}は「${l.skill}」の構えに入った！（${l.sec}秒後）`, color:'#ff9944' })
     } else if (l.type === 'air') {
       out.push({ text:`🕊 ${actor}は跳び上がった！`, color: LOG_COLOR.extra })
     } else if (l.type === 'land') {

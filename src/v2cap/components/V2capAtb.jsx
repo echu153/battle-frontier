@@ -1,0 +1,302 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import V2LogLine from './V2LogLine.jsx'
+import { box, miniBtn, TEXT } from './v2ui.js'
+import { buildBattleLog } from '../core/battleLog.js'
+import { mpCostOf } from '../core/battle.js'
+import {
+  createAtb, advance, reserve, unreserveAt, clearQueue, setLoop, toggleGuard,
+  canUse, cdLeft, cdFor, guardReady, guardCdLeft, needNow, chosenOf, buffChips, ailChips, stateChips,
+  GUARD_CUT, GUARD_CD, CAST_SEC, MAX_SEC, QUEUE_MAX, TURN_SEC,
+} from '../core/atb.js'
+import { STAT_DEFS } from '../core/stats.js'
+import { AREA_LIST, SPOTS, SUB_MARK, toFighter as enemyFighter } from '../lib/areas.js'
+import { toFighter as playerFighter, slotsOf } from '../lib/loadout.js'
+import { usableSkillNames, lineageOf } from '../lib/jobs.js'
+import { ascEffectsOf } from '../lib/ascension.js'
+
+// ============================================================
+// 「レベルキャップあり」版（v2cap）— ATB戦闘の試し撃ち［開発］
+// ------------------------------------------------------------
+// 【確定】2026-10-26 ユーザー指示「ATBのエンジンと試し撃ち画面（開発専用・報酬なし）を作って。細かい数字は試しながら決める」
+//   ・レイドボス・IDダンジョンに載せる前の、手触りと数字を見るための場所。**報酬なし・サーバーへ何も送らない**
+//   ・相手はエリアの敵（ボス・ふつう・朝昼晩・レア）。HPの倍率で長い戦い（レイドのボスの代わり）も見られる
+//   ・自分は持っている技を全部使える（ATBの決まり）。技を押すと予約の列の後ろに入り、ゲージが満タンになると先頭から出る
+// 中身（進み方）は src/v2cap/core/atb.js。つまみ（秒・倍率）もそちらの冒頭
+// ============================================================
+
+const HP_MULTS = [1, 10, 50]
+const sel = { background:'#000818', color: TEXT.body, border:'1px solid #0044aa', fontFamily:'monospace', fontSize:'12px', padding:'6px' }
+
+const Bar = ({ pct, color, h = 10 }) => (
+  <div style={{ height:`${h}px`, background:'#000818', border:'1px solid #13405f' }}>
+    <div style={{ width:`${Math.max(0, Math.min(100, pct))}%`, height:'100%', background: color }} />
+  </div>
+)
+const chip = (color, bg = '#000818') => ({ fontSize:'10px', padding:'1px 5px', border:`1px solid ${color}`, color, background: bg })
+const buffText = (table) => Object.entries(table)
+  .map(([k, v]) => `${STAT_DEFS[k]?.label || k}${v >= 0 ? '+' : ''}${Math.round(v)}%`).join('・')
+
+// かかっているもの（時間で切れるバフ・デバフ／状態異常／職の状態）
+const Chips = ({ st, side }) => {
+  const buffs = buffChips(side, st.t)
+  const ails = ailChips(st, side)
+  const states = stateChips(side)
+  if (!buffs.length && !ails.length && !states.length) return null
+  return (
+    <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginTop:'4px' }}>
+      {buffs.map((c, i) => (
+        <span key={`b${i}`} style={chip(c.debuff ? '#ff88bb' : '#66bbff')}>{buffText(c.table)} {c.sec}秒</span>
+      ))}
+      {ails.map(c => (
+        <span key={c.key} style={chip('#cc99ff')}>{c.label}{c.stacks ? `×${c.stacks}` : ''}{c.sec ? ` ${c.sec}秒` : ''}</span>
+      ))}
+      {states.map(c => <span key={c.key} style={chip('#ffdd88', '#181000')}>{c.label}</span>)}
+    </div>
+  )
+}
+
+export default function V2capAtb({ prof, inventory }) {
+  const [area, setArea] = useState(1)
+  const [sub, setSub] = useState(1)
+  const [foeName, setFoeName] = useState('')
+  const [hpMult, setHpMult] = useState(1)
+  const [phase, setPhase] = useState('setup')   // setup | fight
+  const [paused, setPaused] = useState(false)
+  const [, setFrame] = useState(0)
+  const [logs, setLogs] = useState([])
+  const st = useRef(null)
+  const seen = useRef(0)
+  const last = useRef(0)
+  const logBox = useRef(null)
+
+  const spot = SPOTS.find(s => s.area === area && s.sub === sub) || SPOTS[0]
+  const foes = useMemo(() => [
+    { ...spot.roster.boss, role:'ボス' },
+    ...spot.roster.enemies.map(e => ({ ...e, role:'ふつう' })),
+    ...spot.roster.timed.map(e => ({ ...e, role:'朝昼晩' })),
+    ...spot.roster.rares.map(e => ({ ...e, role:'レア' })),
+  ], [spot])
+  const foe = foes.find(e => e.name === foeName) || foes[0]
+
+  // 自分：いまの装備・ステのまま、持っている技（下位職のぶんも）を全部持たせる＝ATBの決まり
+  const myFighter = useMemo(() => {
+    const cls = prof?.class
+    const lineage = lineageOf(cls)
+    const names = usableSkillNames(cls, prof?.learned || [], lineage)
+    return { ...playerFighter(prof, inventory), slots: slotsOf(names.map(name => ({ name, uses: 1 })), cls, lineage, ascEffectsOf(prof).ups) }
+  }, [prof, inventory])
+
+  // ===== 時間を進める =====
+  // ★実時間の差分を advance に渡す（中では決まった刻みで進む＝同じ入力なら同じ結果）。
+  //   setInterval なのは、裏のタブで requestAnimationFrame が止まると戦闘が固まって見えるため
+  useEffect(() => {
+    if (phase !== 'fight' || paused) return
+    last.current = performance.now()
+    const id = setInterval(() => {
+      const now = performance.now()
+      const s = st.current
+      if (s && !s.over) {
+        advance(s, (now - last.current) / 1000)
+        if (s.log.length > seen.current) {
+          const fresh = s.log.slice(seen.current)
+          seen.current = s.log.length
+          const lines = buildBattleLog({ log: fresh }, s.a.name, s.b.name).filter(l => l.type !== 'hp')
+          if (lines.length) setLogs(v => [...v, ...lines].slice(-80))
+        }
+      }
+      last.current = now
+      setFrame(f => f + 1)
+    }, 33)
+    return () => clearInterval(id)
+  }, [phase, paused])
+  // ログは新しい行が下に来る＝いちばん下まで送る
+  useEffect(() => { if (logBox.current) logBox.current.scrollTop = logBox.current.scrollHeight }, [logs])
+
+  const start = () => {
+    const base = { ...enemyFighter(foe, 8), boss: foe.role === 'ボス' }
+    const enemy = hpMult === 1 ? base : { ...base, stats: { ...base.stats, hp: base.stats.hp * hpMult } }
+    st.current = createAtb(myFighter, enemy, { maxSec: MAX_SEC })
+    seen.current = 0
+    setLogs([{ text:`${foe.name}が現れた！`, color:'#88ccff' }])
+    setPaused(false)
+    setPhase('fight')
+  }
+
+  // ===== 準備 =====
+  if (phase !== 'fight' || !st.current) {
+    return (
+      <div style={{ ...box, padding:'12px' }}>
+        <div style={{ color: TEXT.sub, fontSize:'11px', lineHeight:1.7, marginBottom:'10px' }}>
+          レイドボス・IDダンジョンで使うATB戦闘の試し撃ちです。<b style={{ color: TEXT.bright }}>報酬なし・サーバーへは何も送りません。</b><br />
+          ゲージは自分と相手のAGIの比で溜まる速さが変わります。技は全部使えて、使うとクールダウンに入ります（MPは回復しません）。
+        </div>
+        <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', marginBottom:'8px' }}>
+          <select value={area} onChange={e => { setArea(Number(e.target.value)); setFoeName('') }} style={sel}>
+            {AREA_LIST.map((a, i) => <option key={a.name} value={i + 1}>{i + 1}. {a.name}</option>)}
+          </select>
+          <select value={sub} onChange={e => { setSub(Number(e.target.value)); setFoeName('') }} style={sel}>
+            {[1, 2, 3].map(n => <option key={n} value={n}>{SUB_MARK[n - 1]} {SPOTS.find(s => s.area === area && s.sub === n)?.name}</option>)}
+          </select>
+          <select value={foe?.name || ''} onChange={e => setFoeName(e.target.value)} style={sel}>
+            {foes.map(e => <option key={`${e.role}${e.name}`} value={e.name}>［{e.role}］{e.name}</option>)}
+          </select>
+        </div>
+        <div style={{ display:'flex', gap:'4px', alignItems:'center', marginBottom:'10px', flexWrap:'wrap' }}>
+          <span style={{ color: TEXT.label, fontSize:'11px' }}>相手のHP</span>
+          {HP_MULTS.map(m => (
+            <button key={m} onClick={() => setHpMult(m)}
+              style={{ ...miniBtn(hpMult === m ? '#44ddff' : TEXT.label), padding:'5px 9px', fontSize:'11px', background: hpMult === m ? '#002850' : '#000818' }}>
+              ×{m}
+            </button>
+          ))}
+          <span style={{ color: TEXT.sub, fontSize:'10px' }}>（大きくするとレイドのボスのような長い戦いになります）</span>
+        </div>
+        <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.7, marginBottom:'10px' }}>
+          自分は今の装備・ステータスのまま、覚えている技を{myFighter.slots.length}個すべて持って戦います。制限時間{MAX_SEC}秒。
+        </div>
+        <button onClick={start} style={{ ...miniBtn('#44ddff'), width:'100%', padding:'10px', fontSize:'13px' }}>⏱ ATBで戦う</button>
+      </div>
+    )
+  }
+
+  // ===== 戦闘 =====
+  const s = st.current
+  const me = s.a
+  const en = s.b
+  const now = s.t
+  const myNeed = needNow(me, now)
+  const enNeed = needNow(en, now)
+  const ch = chosenOf(me, now)
+  const dealt = en.base.hp - Math.max(0, en.hp)
+  const dealtPct = (dealt / en.base.hp) * 100
+  const dps = dealt / Math.max(0.1, now)
+  const nextLabel = ch.guard ? '🛡 防御' : ch.skill ? ch.skill.name : ch.waiting != null ? `通常攻撃（${me.slots[ch.waiting]?.skill?.name}を待っている）` : '通常攻撃'
+  const gReady = guardReady(me, now)
+
+  return (
+    <div style={{ ...box, padding:'12px' }}>
+      {/* 相手 */}
+      <div style={{ marginBottom:'10px' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', color:'#ff8888' }}>
+          <span>{en.name}</span>
+          <span>{Math.max(0, en.hp).toLocaleString()} / {en.base.hp.toLocaleString()}</span>
+        </div>
+        <Bar pct={(Math.max(0, en.hp) / en.base.hp) * 100} color="#cc3344" h={12} />
+        <div style={{ marginTop:'3px' }}>
+          {en.cast
+            ? <Bar pct={((now - en.cast.start) / CAST_SEC) * 100} color="#ff5522" h={8} />
+            : <Bar pct={(Math.min(en.gauge, enNeed) / enNeed) * 100} color="#ff9944" h={6} />}
+        </div>
+        {en.cast && (
+          <div style={{ color:'#ff9944', fontSize:'11px', marginTop:'2px' }}>
+            ⚠ 「{en.cast.name}」の構え　あと{Math.max(0, en.cast.until - now).toFixed(1)}秒
+          </div>
+        )}
+        <div style={{ fontSize:'10px', color: TEXT.label, marginTop:'3px' }}>
+          削り {dealtPct.toFixed(1)}%　／　{Math.round(dps).toLocaleString()}ダメージ/秒
+        </div>
+        <Chips st={s} side={en} />
+      </div>
+
+      {/* ログ */}
+      <div ref={logBox} style={{ height:'170px', overflowY:'auto', marginBottom:'10px', borderTop:'1px solid #001428', borderBottom:'1px solid #001428' }}>
+        {logs.map((l, i) => <V2LogLine key={i} l={l} />)}
+      </div>
+
+      {/* 自分 */}
+      <div style={{ marginBottom:'8px' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', color:'#88ccff', gap:'8px', flexWrap:'wrap' }}>
+          <span>{me.name}</span>
+          <span>HP {Math.max(0, me.hp).toLocaleString()} / {me.base.hp.toLocaleString()}　MP {Math.max(0, me.mp).toLocaleString()} / {me.base.mp.toLocaleString()}</span>
+        </div>
+        <Bar pct={(Math.max(0, me.hp) / me.base.hp) * 100} color="#44cc66" h={12} />
+        <div style={{ marginTop:'3px' }}>
+          <Bar pct={(Math.min(me.gauge, myNeed) / myNeed) * 100} color={me.ail.paralyze ? '#888888' : '#44aaff'} h={8} />
+        </div>
+        <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color: TEXT.label, marginTop:'2px', gap:'8px', flexWrap:'wrap' }}>
+          <span>次：{nextLabel}</span>
+          <span>{now.toFixed(1)}秒 / {s.maxSec}秒</span>
+        </div>
+        <Chips st={s} side={me} />
+      </div>
+
+      {/* 予約の列 */}
+      <div style={{ border:'1px solid #13405f', padding:'6px', marginBottom:'8px' }}>
+        <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap', marginBottom:'4px' }}>
+          <span style={{ color: TEXT.label, fontSize:'11px' }}>予約（{me.queue.length}/{QUEUE_MAX}）</span>
+          <button onClick={() => setLoop(s, !me.loop)}
+            style={{ ...miniBtn(me.loop ? '#44ff88' : TEXT.label), padding:'4px 8px', background: me.loop ? '#003018' : '#000818' }}>
+            🔁 くり返す {me.loop ? 'ON' : 'OFF'}
+          </button>
+          <button onClick={() => clearQueue(s)} disabled={!me.queue.length} style={{ ...miniBtn('#ff8888'), padding:'4px 8px' }}>空にする</button>
+        </div>
+        {me.queue.length ? (
+          <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
+            {me.queue.map((q, i) => {
+              const name = q.idx === null ? '通常攻撃' : me.slots[q.idx]?.skill?.name
+              const wait = i === 0 && q.idx !== null && !canUse(me, q.idx, now)
+              return (
+                <button key={i} onClick={() => unreserveAt(s, i)} title="押すと予約から外す"
+                  style={{ ...miniBtn(i === 0 ? '#ffee44' : '#88ccff'), padding:'4px 7px', fontSize:'11px' }}>
+                  {i + 1}. {name}{wait ? `（あと${cdLeft(me, q.idx, now).toFixed(1)}秒）` : ''} ✕
+                </button>
+              )
+            })}
+          </div>
+        ) : (
+          <div style={{ color: TEXT.empty, fontSize:'10px' }}>予約が無いときは通常攻撃が出ます。技を押すと後ろに入ります</div>
+        )}
+      </div>
+
+      {/* コマンド */}
+      <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginBottom:'8px' }}>
+        {me.slots.map((sl, i) => {
+          const left = cdLeft(me, i, now)
+          const ok = canUse(me, i, now)
+          const mp = mpCostOf(me, sl.skill)
+          return (
+            <button key={i} onClick={() => reserve(s, i)} disabled={s.over}
+              style={{ ...miniBtn(ok ? '#44aaff' : '#2a4a66'), padding:'6px 8px', fontSize:'11px', textAlign:'left',
+                color: ok ? '#88ccff' : TEXT.empty, position:'relative', minWidth:'92px' }}>
+              <div>{sl.skill.name}</div>
+              <div style={{ fontSize:'9px', color: TEXT.label, marginTop:'2px' }}>
+                {left > 0 ? `あと${left.toFixed(1)}秒` : `CD${cdFor(me, sl.skill)}秒`}・MP{mp}
+              </div>
+            </button>
+          )
+        })}
+        <button onClick={() => reserve(s, null)} disabled={s.over}
+          style={{ ...miniBtn('#88ccff'), padding:'6px 8px', fontSize:'11px' }}>通常攻撃</button>
+        <button onClick={() => toggleGuard(s)} disabled={s.over}
+          style={{ ...miniBtn(me.guardNext ? '#ffee44' : gReady ? '#66ccff' : '#2a4a66'), padding:'6px 8px', fontSize:'11px',
+            background: me.guardNext ? '#003060' : '#000818', textAlign:'left' }}>
+          <div>🛡 防御{me.guardNext ? '（次に出る）' : ''}</div>
+          <div style={{ fontSize:'9px', color: TEXT.label, marginTop:'2px' }}>
+            {gReady ? `被ダメージ-${GUARD_CUT}%・CD${GUARD_CD}秒` : `あと${guardCdLeft(me, now).toFixed(1)}秒`}
+          </div>
+        </button>
+      </div>
+
+      {/* 決着 */}
+      {s.over && (
+        <div style={{ marginBottom:'8px', fontSize:'13px', color: s.winner === 'a' ? '#ffcc00' : s.winner === 'b' ? '#ff4444' : TEXT.label }}>
+          {s.winner === 'a' ? `⚔ ${en.name}を倒した！（${now.toFixed(1)}秒）`
+            : s.winner === 'b' ? `敗北…（${now.toFixed(1)}秒・${dealtPct.toFixed(1)}%削った）`
+            : `⏱ 時間切れ（${s.maxSec}秒で${dealtPct.toFixed(1)}%削った・${Math.round(dps).toLocaleString()}ダメージ/秒）`}
+        </div>
+      )}
+      <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+        {!s.over && (
+          <button onClick={() => setPaused(p => !p)} style={{ ...miniBtn('#ffcc44'), flex:1, padding:'8px' }}>
+            {paused ? '▶ 再開' : '⏸ 一時停止［開発］'}
+          </button>
+        )}
+        <button onClick={start} style={{ ...miniBtn('#44ddff'), flex:1, padding:'8px' }}>↻ もう一度</button>
+        <button onClick={() => { setPhase('setup'); st.current = null }} style={{ ...miniBtn('#88aaff'), flex:1, padding:'8px' }}>← 相手を選び直す</button>
+      </div>
+      <div style={{ color: TEXT.empty, fontSize:'9px', marginTop:'6px' }}>
+        1ターン＝{TURN_SEC}秒（ターンで数える効果はこの長さで切れます）・ボスの大技は{CAST_SEC}秒の構えのあとに出ます
+      </div>
+    </div>
+  )
+}

@@ -664,7 +664,9 @@ function uniqueSkillUsed(me, idx, log) {
   const uq = me.uq
   if (!fx?.allSkillsBuff || !uq || uq.allOn) return
   uq.used.add(idx)
-  if (me.slots.length >= ALL_SKILLS_SLOTS && uq.used.size >= me.slots.length) {
+  // ★ATB（me.atb）は持っている技を全部使える＝枠が無いので「違う技を枠の数（5つ）使ったら」に読み替える
+  if (me.atb ? uq.used.size >= ALL_SKILLS_SLOTS
+    : me.slots.length >= ALL_SKILLS_SLOTS && uq.used.size >= me.slots.length) {
     uq.allOn = true
     log.push(uniLog(me, 'allSkillsBuff', `セットしたスキルを全部使った！ ${Object.entries(fx.allSkillsBuff).map(([k, v]) => `${STAT_LABEL[k] || k}+${v}%`).join('・')}`))
   }
@@ -1116,7 +1118,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   //   ★不発はバーサク・執行本能のスタックをリセットする
   // ★納刀（侍）：次に撃つスキルの発動率+・威力×。不発では消えない（撃てるまで構えたまま）
   const stance = skill ? me.stance : null
-  // ★サイレンス・恐怖：スキルの発動率-20%（ATBでは atb.js が必要ゲージへ読み替える）
+  // ★サイレンス・恐怖：スキルの発動率-20%（ATBでは atb.js がクールダウンの長さへ読み替える）
   const silenced = procCutOf(me.ail)
   // ★上位クラス（2026-10-15）：動揺（サイキッカーにかけられた数×3%）・竜翔（跳躍の技の発動率+）
   const procUp = (skill?.jump && me.soar?.turns > 0 ? (me.soar.proc || 0) : 0) - agitCutOf(me)
@@ -1627,7 +1629,9 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     me.quickUsed = (me.quickUsed || 0) + 1
     me.extraActs = (me.extraActs || 0) + 1   // ★上位クラス：パラドックスが見る
     log.push({ side: me.name, type: 'quick', skill: skill.name })
-    takeAction(me, foe, rng, log, opt)
+    // ★ATB（opt.onQuick）は続けて殴らず、ゲージを満タンにする＝次の行動がすぐ来る（何を出すかは予約で選べる）
+    if (opt.onQuick) opt.onQuick()
+    else takeAction(me, foe, rng, log, opt)
   }
 }
 
@@ -1992,6 +1996,62 @@ export const tickRegen = (side, log, foe = null) => {
   tickSet(side, log, healMaxAmount, gainHp, healMultOf(side.ail))
 }
 
+// ===== ターンの頭と終わり（オート戦闘とATB戦闘で同じものを使う）=====
+// ★ATB（atb.js）は「1ターン＝決まった秒数」の時計でこれを呼ぶ＝ターンで数える効果（◯ターン続く・毎ターン回復・
+//   ターンの頭のユニークなど）が、書き直さずにそのまま秒へ読み替わる。オート戦闘の流れは前と同じ
+
+// 戦闘の始め。★ユニーク：戦闘の始めの能力（影縫いのブーツ・亡将の鉄兜）。setFx が無ければ何もしない
+export const battleStart = (a, b, log) => {
+  uniqueBattleStart(a, b, log)
+  uniqueBattleStart(b, a, log)
+}
+
+// ターンの頭（turn＝1から数える）
+export const startOfTurn = (a, b, turn, log) => {
+  // 「経過したターン数」で効くもの（1ターン目は素の値）
+  a.turn = turn - 1
+  b.turn = turn - 1
+  if (a.ramp) a.ramp.turn = a.turn
+  if (b.ramp) b.ramp.turn = b.turn
+  // ★ユニーク：ターンの頭の能力（禁書アポクリファ・亡将の鉄兜・クロックワークベルト）
+  uniqueTurnStart(a, b, turn, log)
+  uniqueTurnStart(b, a, turn, log)
+}
+
+// ターンの終わり（両方の行動のあと）。どちらかが倒れたら true（そこで止める）
+// resetBigGuard … 大防御を1ターンで切る。ATBは大防御を「使ってから1ターンぶんの秒」で切るので false で呼ぶ
+export const endOfTurn = (a, b, turn, rng, log, { resetBigGuard = true } = {}) => {
+  // ★上位職：召喚（死霊・式神）の攻撃。両方の行動のあと
+  summonAttacks(a, b, rng, log)
+  summonAttacks(b, a, rng, log)
+  if (a.hp <= 0 || b.hp <= 0) return true
+  if (resetBigGuard) {
+    a.bigGuard = 0   // 大防御は1ターンで切れる
+    b.bigGuard = 0
+  }
+  tickAil(a, log, b)
+  tickAil(b, log, a)
+  if (a.hp <= 0 || b.hp <= 0) return true
+  tickRegen(a, log, b)
+  tickRegen(b, log, a)
+  tickForesight(a)
+  tickForesight(b)
+  // ★上位職：期限つきの効果を減らす。忍耐が終わったら、溜めたダメージを相手へ
+  for (const [me, foe] of [[a, b], [b, a]]) {
+    const rel = tickIchiji(me)
+    if (rel > 0 && foe.hp > 0 && me.hp > 0) {
+      const after = []
+      const dmg = applyIncoming(me, foe, rel, 'phys', rng, after)
+      log.push({ side: me.name, type: 'endureRelease', damage: dmg })
+      for (const l of after) log.push(l)
+    }
+  }
+  // ★ユニーク：ターンの終わりの能力（刻弓レトログラード・フューネラルクラウン）
+  if (a.hp > 0 && b.hp > 0) uniqueTurnEnd(a, b, turn, log)
+  if (a.hp > 0 && b.hp > 0) uniqueTurnEnd(b, a, turn, log)
+  return a.hp <= 0 || b.hp <= 0
+}
+
 // 戦闘を最後まで回す。fighters は createSide に渡せる形
 // band は '朝' | '昼' | '晩'。時間帯条件つきのエンチャントがここで有効／無効になる
 export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MAX_TURNS, band = null } = {}) => {
@@ -2003,21 +2063,12 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
   const startA = livePct(a)
   const startB = livePct(b)
   const fxNow = () => ({ aFx: fxOf(a, startA), bFx: fxOf(b, startB) })
-  // ★ユニーク：戦闘の始めの能力（影縫いのブーツ・亡将の鉄兜）。setFx が無ければ何もしない
-  uniqueBattleStart(a, b, log)
-  uniqueBattleStart(b, a, log)
+  battleStart(a, b, log)
   // 1ターン目の頭の表に出す効果（影縫いのブーツで下がったAGIなど）
   const fx0 = fxNow()
 
   for (; turn <= maxTurns; turn++) {
-    // 「経過したターン数」で効くもの（1ターン目は素の値）
-    a.turn = turn - 1
-    b.turn = turn - 1
-    if (a.ramp) a.ramp.turn = a.turn
-    if (b.ramp) b.ramp.turn = b.turn
-    // ★ユニーク：ターンの頭の能力（禁書アポクリファ・亡将の鉄兜・クロックワークベルト）
-    uniqueTurnStart(a, b, turn, log)
-    uniqueTurnStart(b, a, turn, log)
+    startOfTurn(a, b, turn, log)
     // 行動順：このターン撃つ予定のスキルの優先度 → AGI → ランダム
     const eA = liveStats(a)
     const eB = liveStats(b)
@@ -2049,33 +2100,7 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
     }
 
     if (a.hp <= 0 || b.hp <= 0) break
-    // ★上位職：召喚（死霊・式神）の攻撃。両方の行動のあと
-    summonAttacks(a, b, rng, log)
-    summonAttacks(b, a, rng, log)
-    if (a.hp <= 0 || b.hp <= 0) break
-    a.bigGuard = 0   // 大防御は1ターンで切れる
-    b.bigGuard = 0
-    tickAil(a, log, b)
-    tickAil(b, log, a)
-    if (a.hp <= 0 || b.hp <= 0) break
-    tickRegen(a, log, b)
-    tickRegen(b, log, a)
-    tickForesight(a)
-    tickForesight(b)
-    // ★上位職：期限つきの効果を減らす。忍耐が終わったら、溜めたダメージを相手へ
-    for (const [me, foe] of [[a, b], [b, a]]) {
-      const rel = tickIchiji(me)
-      if (rel > 0 && foe.hp > 0 && me.hp > 0) {
-        const after = []
-        const dmg = applyIncoming(me, foe, rel, 'phys', rng, after)
-        log.push({ side: me.name, type: 'endureRelease', damage: dmg })
-        for (const l of after) log.push(l)
-      }
-    }
-    // ★ユニーク：ターンの終わりの能力（刻弓レトログラード・フューネラルクラウン）
-    if (a.hp > 0 && b.hp > 0) uniqueTurnEnd(a, b, turn, log)
-    if (a.hp > 0 && b.hp > 0) uniqueTurnEnd(b, a, turn, log)
-    if (a.hp <= 0 || b.hp <= 0) break
+    if (endOfTurn(a, b, turn, rng, log)) break
     // 画面でHPバーを出すための、ターン終わりのスナップショット（戦闘の結果には影響しない）。aFx・bFx はかかっている効果（fxOf）
     log.push({ type:'hp', turn, a: Math.max(0, a.hp), aMax: a.base.hp, b: Math.max(0, b.hp), bMax: b.base.hp, ...fxNow() })
   }

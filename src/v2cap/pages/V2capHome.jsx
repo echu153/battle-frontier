@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../supabase'
 import { validateName } from '../../lib/nameFilter'
@@ -91,7 +91,9 @@ const MENU = [
   ],
 ]
 const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', museum:'🏺 博物館', burger: <><ShopMark size={18} /> {SHOP_NAME}</>, asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場', tower:`🗼 ${TOWER_NAME}`,
-  uniqueCheck:'💎 ユニークの能力の確かめ［開発］' }
+  uniqueCheck:'💎 ユニークの能力の確かめ［開発］', atb:'⏱ ATB戦闘の試し撃ち［開発］' }
+// ATBの試し撃ち（2026-10-26・開発用）。開いたときだけ読み込む（ホームの重さを増やさない）
+const V2capAtb = lazy(() => import('../components/V2capAtb.jsx'))
 // メニューの説明に、いまの職業で残っているAPを出す（振り忘れに気づけるように）。塔はいまの層（守っていればその層）
 const towerActionOf = (prof) => (prof?.tower_guard
   ? `👑 ${floorLabel(prof.tower_guard)}を守っている`
@@ -469,6 +471,7 @@ export default function V2capHome() {
                         {prof?.unique_force ? '💎 次のボスでユニーク（待機中）' : '💎 次のボスでユニークを落とす'}
                       </button>
                       <button onClick={() => setScreen('uniqueCheck')} style={miniBtn(RARITY_COLOR.U)}>💎 ユニークの能力を確かめる</button>
+                      <button onClick={() => setScreen('atb')} style={miniBtn('#44ddff')}>⏱ ATB戦闘の試し撃ち</button>
                       <button onClick={shinkaReady} disabled={busy} style={miniBtn('#ffaa44')}>🗡 着けている武器の熟練度をMAX（真化を外す）</button>
                       <button onClick={() => setConfirmReset(true)} disabled={busy} style={miniBtn('#ff8844')}>キャラを作り直す</button>
                     </div>
@@ -499,6 +502,11 @@ export default function V2capHome() {
             {screen === 'casino' && <V2capCasino prof={prof} onProfile={refresh} />}
             {screen === 'tower' && <V2capTower prof={prof} inventory={inventory} onProfile={refresh} />}
             {screen === 'uniqueCheck' && <V2capUniqueCheck prof={prof} inventory={inventory} />}
+            {screen === 'atb' && (
+              <Suspense fallback={<div style={{ color: TEXT.label, fontSize:'11px' }}>読み込み中...</div>}>
+                <V2capAtb prof={prof} inventory={inventory} />
+              </Suspense>
+            )}
           </div>
         )}
       </div>
