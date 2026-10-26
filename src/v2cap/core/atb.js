@@ -46,7 +46,8 @@ const EPS = 1e-6
 // ★調整するつまみはこの節に全部ある（試し撃ちの画面で触りながら決める）
 // ============================================================
 export const STEP_SEC     = 0.05  // 1刻みの秒（20刻みで1秒）。結果を再現できるよう、刻みは固定
-export const TURN_SEC     = 4     // 1ターン＝何秒か（同じ速さどうしの1行動の長さ）
+// 1ターン＝何秒か（同じ速さどうしの1行動の長さ）。【確定】2026-10-26 試し撃ちのあとユーザー「ゲージ上がるの気持ち速いかも」→選んだ「5秒に1回」（前は4秒）
+export const TURN_SEC     = 5
 export const GAUGE_FULL   = 100   // 1行動ぶんのゲージ
 export const FILL_PER_SEC = GAUGE_FULL / TURN_SEC   // 同じ速さなら TURN_SEC 秒で満タン
 export const MAX_DT       = 0.25  // 裏のタブから戻ったときに一気に進めない（1回に進める上限の秒）
@@ -84,7 +85,8 @@ export const GUARD_CUT = 50
 export const GUARD_CD  = 45
 
 // ボスの大技の詠唱（秒）。倍率が CAST_MULT 以上の敵の技は、撃つ前に詠唱のバーが出る
-//   ★同じ速さの1行動ぶん（TURN_SEC）＝こちらが必ず1回は備えられる長さ
+//   ★はじめは同じ速さの1行動ぶん（そのときの TURN_SEC＝4秒）。試し撃ちのあとユーザー選択「そのまま」で4秒
+//   ⚠TURN_SEC を5秒にしたので、同じ速さでは動いた直後に構えが来ると、構えのあいだに次の行動が間に合わないことがある
 export const CAST_SEC  = 4
 export const CAST_MULT = 2.5
 

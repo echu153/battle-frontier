@@ -170,7 +170,7 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
       <div style={{ ...box, padding:'12px' }}>
         <div style={{ color: TEXT.sub, fontSize:'11px', lineHeight:1.7, marginBottom:'10px' }}>
           レイドボス・IDダンジョンで使うATB戦闘の試し撃ちです。<b style={{ color: TEXT.bright }}>報酬なし・戦闘の結果はサーバーへ送りません</b>（送るのはマクロの保存だけ）。<br />
-          ゲージはふだん4秒で満タン。AGIが相手を上回るほど速くなります（相手の4倍で2倍速まで）。技は全部使えて、使うとクールダウンに入ります（MPは回復しません）。
+          ゲージはふだん5秒で満タン。AGIが相手を上回るほど速くなります（相手の4倍で2倍速まで）。技は全部使えて、使うとクールダウンに入ります（MPは回復しません）。
         </div>
         <V2capAtbMacros macros={macros} onChange={editMacros} usable={usable} dirty={dirty} saving={saving} msg={macroMsg} onSave={saveMacros} />
         <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', marginBottom:'8px' }}>
@@ -226,11 +226,6 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
         <span>次：{nextLabel}</span>
         <span>削り {dealtPct.toFixed(1)}%・{Math.round(dps).toLocaleString()}ダメージ/秒</span>
         <span>{now.toFixed(1)}秒 / {s.maxSec}秒</span>
-      </div>
-
-      {/* ログ */}
-      <div ref={logBox} style={{ height:'130px', overflowY:'auto', marginBottom:'10px', borderTop:'1px solid #001428', borderBottom:'1px solid #001428' }}>
-        {logs.map((l, i) => <V2LogLine key={i} l={l} />)}
       </div>
 
       {/* マクロ①〜③ */}
@@ -314,6 +309,11 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
           </div>
           <CdShade ratio={guardCdRatio(me, now)} />
         </button>
+      </div>
+
+      {/* ログ（2026-10-26 ユーザー指示「ログスキルの下に持ってきて」＝技のボタンの下） */}
+      <div ref={logBox} style={{ height:'130px', overflowY:'auto', marginBottom:'10px', borderTop:'1px solid #001428', borderBottom:'1px solid #001428' }}>
+        {logs.map((l, i) => <V2LogLine key={i} l={l} />)}
       </div>
 
       {/* 決着 */}
