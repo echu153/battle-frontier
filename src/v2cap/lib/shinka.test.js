@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
-  SHINKA_MAX, SHINKA_COST_PCT, SHINKA_MIN_DEN, MONSTER_KILLER_MULT, SREC_FIELDS, SREC_KEYS, FLAGS, FLAG_BY_KEY, ABILITIES, BANDS,
+  SHINKA_ON, SHINKA_MAX, SHINKA_COST_PCT, SHINKA_MIN_DEN, MONSTER_KILLER_MULT, SREC_FIELDS, SREC_KEYS, FLAGS, FLAG_BY_KEY, ABILITIES, BANDS,
   KILLER_WEIGHT, flagWeightOf, pickFlag,
   emptySrec, srecOfBattle, addSrec, killerRaceOf, flagsOf, flagValueOf, flagLabelOf, rollShinka,
   shinkaEffectOf, shinkaNameOf, shinkaLines, shinkaEvolutionOf, masteryOf, canShinka,
@@ -245,19 +245,44 @@ test('熟練度：MAX で真化できる・真化したらできない', () => {
   assert.equal(canShinka({ mastery: SHINKA_MAX, shinka: { key: 'crit' } }), false)
 })
 
-test('toFighter：着けている武器の真化だけ戦闘に渡す。塔の守護者の姿も真化を持つ', () => {
+test('toFighter：着けている武器の真化だけ戦闘に渡す（お蔵入りのあいだは渡さない）。塔の守護者の姿も同じ', () => {
   const prof = { username: 'me', class: '戦士', lv: 10, str: 10, agi: 10, vit: 10, dex: 10, int_stat: 10, luk: 10, hp: 100, mp: 30,
     jobs: { 戦士: { lv: 1, exp: 0 } }, learned: [], skill_sets: {}, equipped: { weapon: 1 } }
   const sword = ITEMS.find(i => i.part === '武器' && i.type === '両手剣' && i.area === 1)
   const inv = [{ id: 1, base_id: sword.id, ilv: sword.lv, plus: 0, shinka: { key: 'crit', cost: false, param: null } },
     { id: 2, base_id: sword.id, ilv: sword.lv, plus: 0, shinka: { key: 'multi', cost: false, param: null } }]
   const f = toFighter(prof, inv)
-  assert.equal(f.evolutions.length, 1)
-  assert.deepEqual(f.evolutions[0].gain, ABILITIES.crit.gain)
   assert.deepEqual(toFighter({ ...prof, equipped: {} }, inv).evolutions, [])
   const back = fromSnapshot(snapshotOf(f))
-  assert.deepEqual(back.shinka, inv[0].shinka)
-  assert.deepEqual(back.evolutions[0].gain, ABILITIES.crit.gain)
+  if (SHINKA_ON) {
+    assert.equal(f.evolutions.length, 1)
+    assert.deepEqual(f.evolutions[0].gain, ABILITIES.crit.gain)
+    assert.deepEqual(back.shinka, inv[0].shinka)
+    assert.deepEqual(back.evolutions[0].gain, ABILITIES.crit.gain)
+  } else {
+    // お蔵入り：持ち物に真化が残っていても戦闘に効かせない・守護者の姿にも持たせない
+    assert.deepEqual(f.evolutions, [])
+    assert.equal(f.shinka, null)
+    assert.deepEqual(back.evolutions, [])
+    assert.deepEqual(fromSnapshot({ ...snapshotOf(f), shinka: inv[0].shinka }).evolutions, [])
+  }
+})
+
+test('【確定】2026-10-26 ユーザー指示「このシステム難しそうだから一旦お蔵入り」：SHINKA_ON=false＝画面・記録・戦闘・資料から外す（コードと SQL は残す）', () => {
+  assert.equal(SHINKA_ON, false)
+  const smith = read('components/V2capSmith.jsx')
+  assert.ok(smith.includes("].filter(t => SHINKA_ON || t.key !== 'shinka')"), '鍛冶屋のタブと HELP')
+  assert.ok(smith.includes("{SHINKA_ON && tab === 'shinka' && <ShinkaTab"))
+  assert.ok(smith.includes('{SHINKA_ON && isShinka(inv.shinka) &&'))
+  assert.ok(smith.includes(": 'まとめて選ぶときは、装備中・お気に入り（★）・強化した装備は選びません（強化した装備はチェックで1つずつなら選べます）'}"))
+  const equip = read('components/V2capEquip.jsx')
+  assert.equal((equip.match(/\{SHINKA_ON && (w\.)?item\.part === '武器' && /g) || []).length, 2, '装備画面の熟練度と能力')
+  assert.ok(read('pages/V2capHome.jsx').includes('{SHINKA_ON && <button onClick={shinkaReady}'), 'ホームの開発用ボタン')
+  assert.ok(read('components/V2capSortie.jsx').includes('...(SHINKA_ON ? { p_rec: srecOfBattle(r, you) } : {}),'), '精算に記録を送らない')
+  assert.ok(read('lib/jemitaKb.js').includes('...(SHINKA_ON ? ['), 'ジェミータの資料に書かない')
+  assert.ok(!readFileSync(new URL('../../../supabase_v2cap_jemita_kb.sql', import.meta.url), 'utf8').includes('真化'), '資料の SQL にも無い')
+  // 精算は §18 を流していないデータベースでも通る（数える関数があって、記録が来たときだけ数える）
+  assert.ok(SQL.includes("if p_rec is not null and to_regprocedure('public.v2cap_shinka_count(uuid, bigint, jsonb, boolean, text)') is not null then"))
 })
 
 test('サーバー：精算は戦い方の記録（p_rec）を受け取り、着けている武器を数える。真化の抽選はサーバー', () => {
@@ -268,7 +293,7 @@ test('サーバー：精算は戦い方の記録（p_rec）を受け取り、着
   assert.ok(/create or replace function public\.v2cap_shinka\(p_inv bigint\)[\s\S]*?random\(\)[\s\S]*?\$\$;/.test(SQL), '抽選はサーバー')
   // 画面は記録を送る（サーバーが前の版なら外して送り直す）
   const sortie = read('components/V2capSortie.jsx')
-  assert.ok(sortie.includes('p_rec: srecOfBattle(r, you),'))
+  assert.ok(sortie.includes('p_rec: srecOfBattle(r, you)'))
   assert.ok(sortie.includes('delete args.p_rec'))
 })
 

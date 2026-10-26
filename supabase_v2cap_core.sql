@@ -4315,9 +4315,13 @@ begin
    where id = v_uid
    returning stamina, stamina_at into v_stam, v_stam_at;
 
-  -- 武器の真化（§18）：着けている武器の熟練度と戦い方の記録（祠の戦闘も数える）
-  perform public.v2cap_shinka_count(v_uid, nullif(v_row.equipped ->> 'weapon', '')::bigint, p_rec, v_win,
-    case when v_shrine then c_shrine_fairy else v_en.name end);
+  -- 武器の真化（§18）：着けている武器の熟練度と戦い方の記録（祠の戦闘も数える）。
+  -- ★2026-10-26 お蔵入り（画面は p_rec を送らない）。§18 を流していないデータベースでもこの精算が通るように、
+  --   数える関数があって、画面が記録を送ってきたときだけ数える（この節だけ流し直しても出撃が止まらない）
+  if p_rec is not null and to_regprocedure('public.v2cap_shinka_count(uuid, bigint, jsonb, boolean, text)') is not null then
+    perform public.v2cap_shinka_count(v_uid, nullif(v_row.equipped ->> 'weapon', '')::bigint, p_rec, v_win,
+      case when v_shrine then c_shrine_fairy else v_en.name end);
+  end if;
 
   -- デイリーミッション（§10）：勝ったら「出撃に勝つ」を1つ数える（受注していない日は数えない）
   if v_win then

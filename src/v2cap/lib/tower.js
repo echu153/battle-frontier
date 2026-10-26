@@ -36,7 +36,7 @@ import { slotsOf } from './loadout.js'
 import { CAP_RULES, CAP_STR_PHYS_DEF } from './rules.js'
 import { stdPowerAt, spotOf } from './areas.js'
 import { openUntilOf, rollEquipDrop, bandAt } from './sortie.js'
-import { isShinka, shinkaEvolutionOf } from './shinka.js'
+import { SHINKA_ON, isShinka, shinkaEvolutionOf } from './shinka.js'
 import { ART_SD, battleIconOf } from './classArt.js'
 import { pvpHpMultFor, withPvpHp } from './pvp.js'
 
@@ -249,7 +249,7 @@ export const fromSnapshot = (snap) => {
     taken: snap?.taken || null,
     enchants: [],
     // 武器の真化：時間帯の能力は**戦ういま**の時間帯で効くかを決める
-    evolutions: [shinkaEvolutionOf(snap?.shinka, bandAt(new Date()))].filter(Boolean),
+    evolutions: SHINKA_ON ? [shinkaEvolutionOf(snap?.shinka, bandAt(new Date()))].filter(Boolean) : [],   // お蔵入りなら効かせない
     shinka: isShinka(snap?.shinka) ? snap.shinka : null,
     slots: slotsOf(set, cls, lineage, ups),
     passives: passive ? [passive] : [],

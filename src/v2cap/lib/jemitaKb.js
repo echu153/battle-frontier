@@ -38,7 +38,7 @@ import { GENDERS } from './gender.js'
 import { ASC_RESET_GOLD_PER_LV } from './ascension.js'
 import { V1_BOX_NAMES } from './v1carry.js'
 import { JEMITA_RULES } from './jemitaPrompt.js'
-import { SHINKA_MAX, FLAGS, flagLabelOf, shinkaNameOf, shinkaLines } from './shinka.js'
+import { SHINKA_ON, SHINKA_MAX, FLAGS, flagLabelOf, shinkaNameOf, shinkaLines } from './shinka.js'
 
 // 真化の能力の例（フラグの戦い方 → 能力）。キラーは海洋・時間帯は晩で書く
 const shinkaExamples = () => ['killer', 'crit', 'dodge', 'heal'].map(k => {
@@ -214,8 +214,11 @@ const facilities = () => {
     `- 分解：装備を残骸にする（${RARITIES.map(r => `${RARITY_LABEL[r]}${SCRAP_YIELD[r]}個`).join('・')}）。残骸はエリアごと（${SCRAP_NAMES.slice(0, 3).join('・')}…）。`,
     `- 作成：残骸とGoldで、${CRAFT_RARITIES.map(r => `${RARITY_LABEL[r]}（残骸${CRAFT_SCRAP[r]}個）`).join('・')}の装備を作れる（そのエリアの装備）。`,
     `- V1からの引き継ぎでもらえる券を使うと、ユニークをその券の強化値（最大+${PLUS_CAP}）にできる。`,
-    `- 真化：着けている武器で戦うと1戦ごとに熟練度が1上がる（勝ち負けとも）。熟練度が${SHINKA_MAX.toLocaleString()}になった武器は鍛冶屋で真化でき、その武器での戦い方から能力が1つ付く（どれが付くかは戦い方の中から抽選）。`
-      + `能力の例：${shinkaExamples()}。代償（デメリット）が付く能力もある。1本につき1回だけ・やり直せない。真化した武器を分解すると能力も消える。`,
+    // 武器の真化はお蔵入りのあいだ書かない（SHINKA_ON・2026-10-26 ユーザー指示「一旦お蔵入り」＝ゲームに無い機能を案内しない）
+    ...(SHINKA_ON ? [
+      `- 真化：着けている武器で戦うと1戦ごとに熟練度が1上がる（勝ち負けとも）。熟練度が${SHINKA_MAX.toLocaleString()}になった武器は鍛冶屋で真化でき、その武器での戦い方から能力が1つ付く（どれが付くかは戦い方の中から抽選）。`
+        + `能力の例：${shinkaExamples()}。代償（デメリット）が付く能力もある。1本につき1回だけ・やり直せない。真化した武器を分解すると能力も消える。`,
+    ] : []),
     '### 神殿',
     '- 転職する。初期職どうしはいつでも、上位職は条件（元の初期職のCLASS LV）を満たすと就ける。',
     `### ${SHOP_NAME}（ハンバーガー屋）`,

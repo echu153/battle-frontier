@@ -31,6 +31,12 @@ import { RACES, RACE_BY_KEY, raceOf } from './monsterRace.js'
 import { recordOfBattle } from '../core/evolve.js'
 import { atomText } from '../core/evolveAtoms.js'
 
+// 【確定】2026-10-26 ユーザー指示「このシステム難しそうだから一旦お蔵入り」：**false＝お蔵入り**。
+//   画面に出さない（鍛冶屋の「真化」タブ・HELP・装備の熟練度・ホームの開発用ボタン）／精算に戦い方の記録を送らない／
+//   戦闘に効かせない（持ち物に真化が残っていても）／ジェミータの資料に書かない。コードと SQL（§18）は残す＝true に戻せば元どおり
+//   ⚠戻すときは SQL v2cap_shinka（§18＋§5 の精算）を流してから
+export const SHINKA_ON = false
+
 export const SHINKA_MAX = 1800        // 熟練度MAX（1戦で1・10秒に1戦で約5時間）
 export const SHINKA_COST_PCT = 30     // 代償つきのあるフラグで、代償つきが出る確率（%）
 export const MONSTER_RACE = 'monster' // 魔物（残り全部の受け皿）

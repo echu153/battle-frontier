@@ -31,6 +31,7 @@ import { TOWER_NAME, floorLabel, clampFloor } from '../lib/tower.js'
 import { openUntilOf } from '../lib/sortie.js'
 import { spotLabel } from '../lib/areas.js'
 import { RARITY_COLOR } from '../lib/equipment.js'
+import { SHINKA_ON } from '../lib/shinka.js'
 import { GENDER_BY_KEY, genderOf } from '../lib/gender.js'
 import { SHOP_NAME, MEAL_COLOR, activeMealOf, leftText } from '../lib/burger.js'
 import { MARK_SRC } from '../lib/clerk.js'
@@ -472,7 +473,8 @@ export default function V2capHome() {
                       </button>
                       <button onClick={() => setScreen('uniqueCheck')} style={miniBtn(RARITY_COLOR.U)}>💎 ユニークの能力を確かめる</button>
                       <button onClick={() => setScreen('atb')} style={miniBtn('#44ddff')}>⏱ ATB戦闘の試し撃ち</button>
-                      <button onClick={shinkaReady} disabled={busy} style={miniBtn('#ffaa44')}>🗡 着けている武器の熟練度をMAX（真化を外す）</button>
+                      {/* 武器の真化はお蔵入りのあいだ出さない（SHINKA_ON・2026-10-26 ユーザー指示「一旦お蔵入り」） */}
+                      {SHINKA_ON && <button onClick={shinkaReady} disabled={busy} style={miniBtn('#ffaa44')}>🗡 着けている武器の熟練度をMAX（真化を外す）</button>}
                       <button onClick={() => setConfirmReset(true)} disabled={busy} style={miniBtn('#ff8844')}>キャラを作り直す</button>
                     </div>
                     {/* ★「EXPは戦闘と同じ扱い（いまの職業のClassEXPにも同じ量が入る）」の説明は出さない（2026-10-12 ユーザー指示＝出撃の「（ClassEXP +◯）」と一緒に外した） */}

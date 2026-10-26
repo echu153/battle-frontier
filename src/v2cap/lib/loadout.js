@@ -25,7 +25,7 @@ import { armorSetsOf, setStatPctOf, setFxOf } from './armorSets.js'
 import { combinedFxOf, mergeFx } from './fxMerge.js'
 import { GENDER_BY_KEY, genderOf, genderFxOf } from './gender.js'
 import { SHOP_NAME, activeMealOf, mealStatPctOf, mealFxOf } from './burger.js'
-import { shinkaEvolutionOf } from './shinka.js'
+import { SHINKA_ON, shinkaEvolutionOf } from './shinka.js'
 import { bandAt } from '../core/sortie.js'
 
 const zero = () => Object.fromEntries(STAT_KEYS.map(k => [k, 0]))
@@ -143,8 +143,8 @@ export const slotsOf = (set, cls, lineage = lineageOf(cls), ups = {}) => (set ||
 // opts.at … 時間帯を決める時刻（武器の真化の「◯の刻」が見る。既定はいま・シミュレーションは戦いの時刻を渡す）
 export const toFighter = (profile, inventory, opts = {}) => {
   const bd = statBreakdown(profile, inventory, opts)
-  // 武器の真化（2026-10-26・shinka.js）。着けている武器（いまの職業で装備できるもの）の能力だけ
-  const shinka = equippedItems(profile, inventory).weapon?.inv?.shinka || null
+  // 武器の真化（2026-10-26・shinka.js）。着けている武器（いまの職業で装備できるもの）の能力だけ。お蔵入り（SHINKA_ON=false）なら効かせない
+  const shinka = SHINKA_ON ? equippedItems(profile, inventory).weapon?.inv?.shinka || null : null
   const evo = shinkaEvolutionOf(shinka, bandAt(opts.at || new Date()))
   return {
     name: profile?.username || 'あなた',

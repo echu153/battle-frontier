@@ -23,7 +23,7 @@ import { shrineOf, shrineEncounterOf, SHRINE_NAME } from '../lib/shrine.js'
 import { SHRINE_ART, SHRINE_TEXT, MINCHO } from '../lib/fxStyle.js'
 import V2capShrineFx from './V2capShrineFx.jsx'
 import { dexCompleteText } from '../lib/dex.js'
-import { srecOfBattle } from '../lib/shinka.js'
+import { SHINKA_ON, srecOfBattle } from '../lib/shinka.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — 出撃（ホームの右）
@@ -173,8 +173,9 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       //   戦闘ごとの印（p_key）を付けるので、送り直しても・通信が切れてブラウザが送り直しても2回は入らない
       const args = {
         p_spot: sh ? sh.spot : spot.id, p_enemy: foe, p_win: win, p_drop: drop ? drop.item.id : null, p_auto: !!isAuto,
-        // 武器の真化（2026-10-26・shinka.js）：この戦闘の戦い方の記録。熟練度・勝ち・種族・時間帯はサーバーが数える
-        p_rec: srecOfBattle(r, you),
+        // 武器の真化（2026-10-26・shinka.js）：この戦闘の戦い方の記録。熟練度・勝ち・種族・時間帯はサーバーが数える。
+        //   お蔵入り（SHINKA_ON=false）のあいだは送らない（サーバーが前の形のままでも1回で通る）
+        ...(SHINKA_ON ? { p_rec: srecOfBattle(r, you) } : {}),
         ...settleKeyArgOf(prof, newSettleKey()),
       }
       // ★サーバーが真化の前の版（p_rec を受け取らない）なら、記録を外してもう1回だけ送る（SQL を流す前に画面が出ても出撃は止めない）
