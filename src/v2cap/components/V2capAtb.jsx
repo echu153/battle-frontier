@@ -8,7 +8,7 @@ import { buildBattleLog } from '../core/battleLog.js'
 import { mpCostOf } from '../core/battle.js'
 import {
   createAtb, advance, reserve, unreserveAt, clearQueue, startMacro, stopMacro, toggleGuard,
-  canUse, cdLeft, cdFor, guardReady, guardCdLeft, chosenOf,
+  canUse, cdLeft, cdFor, cdRatio, guardReady, guardCdLeft, guardCdRatio, chosenOf,
   GUARD_CUT, GUARD_CD, CAST_SEC, MAX_SEC, QUEUE_MAX, TURN_SEC,
 } from '../core/atb.js'
 import { MACRO_MARK, macrosOf, validateMacros, macroEntriesOf } from '../lib/atbMacro.js'
@@ -39,6 +39,13 @@ import { ascEffectsOf } from '../lib/ascension.js'
 const HP_MULTS = [1, 10, 50]
 const sel = { background:'#000818', color: TEXT.body, border:'1px solid #0044aa', fontFamily:'monospace', fontSize:'12px', padding:'6px' }
 const chip = (color, bg = '#000818') => ({ fontSize:'10px', padding:'1px 5px', border:`1px solid ${color}`, color, background: bg })
+// クールダウンの残り（ratio＝1で使った直後）。上からグレーをかけ、時間がたつと下から色が戻る
+//   【確定】2026-10-26 ユーザー指示「スキルがクールタイムの時、グレーアウトして時間の経過ごとに下から色が戻っていく仕様にして。マクロも一緒」
+//   ＝技のボタン・防御のボタン・動いているマクロの手・割り込みの手。置く側は position:relative と overflow:hidden にする
+const CdShade = ({ ratio }) => (ratio > 0 ? (
+  <span aria-hidden style={{ position:'absolute', left:0, right:0, top:0, height:`${(ratio * 100).toFixed(1)}%`, pointerEvents:'none',
+    background:'rgba(8, 12, 22, 0.62)', backdropFilter:'grayscale(1)', WebkitBackdropFilter:'grayscale(1)' }} />
+) : null)
 
 export default function V2capAtb({ prof, inventory, onProfile }) {
   const [macros, setMacros] = useState(() => macrosOf(prof))
@@ -144,10 +151,11 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
     onProfile?.()
   }
   // ①〜③を押す：いま画面に出ている形で、そのマクロの頭から動かす（もう一度押しても頭から）
+  //   【確定】2026-10-26 ユーザー指示「マクロは選択したらループするようにして」＝いつも最後まで出たら頭に戻る
   const runMacro = (i) => {
     const s = st.current
     if (!s) return
-    startMacro(s, i + 1, macroEntriesOf(macros[i], s.a.slots), macros[i].loop)
+    startMacro(s, i + 1, macroEntriesOf(macros[i], s.a.slots), true)
   }
 
   // ===== 準備 =====
@@ -202,6 +210,7 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
   const gReady = guardReady(me, now)
   const run = me.macro   // 動いているマクロ（core/atb.js の startMacro）
   const entryText = (e) => (e.guard ? '🛡 防御' : e.idx === null ? '通常攻撃' : me.slots[e.idx]?.skill?.name)
+  const entryCd = (e) => (e.guard ? guardCdRatio(me, now) : e.idx !== null && e.idx !== undefined ? cdRatio(me, e.idx, now) : 0)
 
   return (
     <div style={{ ...box, padding:'12px' }}>
@@ -228,7 +237,7 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
               <button key={i} onClick={() => runMacro(i)} disabled={s.over || !m.steps.length}
                 style={{ ...miniBtn(on ? '#ffee44' : m.steps.length ? '#44ddff' : '#2a4a66'), padding:'6px 12px', fontSize:'13px',
                   background: on ? '#003060' : '#000818' }}>
-                {MACRO_MARK[i]}{m.loop ? '🔁' : ''}
+                {MACRO_MARK[i]}
               </button>
             )
           })}
@@ -237,11 +246,13 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
         {run ? (
           <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
             {run.steps.map((e, k) => (
-              <span key={k} style={chip(k === run.pos ? '#ffee44' : '#88ccff', k === run.pos ? '#003060' : '#000818')}>
+              <span key={k} style={{ ...chip(k === run.pos ? '#ffee44' : '#88ccff', k === run.pos ? '#003060' : '#000818'),
+                position:'relative', overflow:'hidden' }}>
                 {k + 1}. {entryText(e)}
+                <CdShade ratio={entryCd(e)} />
               </span>
             ))}
-            <span style={{ color: TEXT.label, fontSize:'10px' }}>{run.loop ? '（くり返す）' : '（最後まで出たら止まる）'}</span>
+            <span style={{ color: TEXT.label, fontSize:'10px' }}>（最後まで出たら頭に戻る）</span>
           </div>
         ) : (
           <div style={{ color: TEXT.empty, fontSize:'10px' }}>
@@ -256,8 +267,9 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
               const wait = i === 0 && q.idx !== null && !canUse(me, q.idx, now)
               return (
                 <button key={i} onClick={() => unreserveAt(s, i)} title="押すと外す"
-                  style={{ ...miniBtn(i === 0 ? '#ffee44' : '#88ccff'), padding:'4px 7px', fontSize:'11px' }}>
+                  style={{ ...miniBtn(i === 0 ? '#ffee44' : '#88ccff'), padding:'4px 7px', fontSize:'11px', position:'relative', overflow:'hidden' }}>
                   {i + 1}. {entryText(q)}{wait ? `（あと${cdLeft(me, q.idx, now).toFixed(1)}秒）` : ''} ✕
+                  <CdShade ratio={entryCd(q)} />
                 </button>
               )
             })}
@@ -270,28 +282,31 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
       <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginBottom:'8px' }}>
         {me.slots.map((sl, i) => {
           const left = cdLeft(me, i, now)
-          const ok = canUse(me, i, now)
+          // クールダウン中はふだんの色のままグレーをかける（下から色が戻る）。MP不足・封印などで使えないときは暗い色
+          const lit = canUse(me, i, now) || left > 0
           const mp = mpCostOf(me, sl.skill)
           return (
             <button key={i} onClick={() => reserve(s, i)} disabled={s.over}
-              style={{ ...miniBtn(ok ? '#44aaff' : '#2a4a66'), padding:'6px 8px', fontSize:'11px', textAlign:'left',
-                color: ok ? '#88ccff' : TEXT.empty, position:'relative', minWidth:'92px' }}>
+              style={{ ...miniBtn(lit ? '#44aaff' : '#2a4a66'), padding:'6px 8px', fontSize:'11px', textAlign:'left',
+                color: lit ? '#88ccff' : TEXT.empty, position:'relative', overflow:'hidden', minWidth:'92px' }}>
               <div>{sl.skill.name}</div>
               <div style={{ fontSize:'9px', color: TEXT.label, marginTop:'2px' }}>
                 {left > 0 ? `あと${left.toFixed(1)}秒` : `CD${cdFor(me, sl.skill)}秒`}・MP{mp}
               </div>
+              <CdShade ratio={cdRatio(me, i, now)} />
             </button>
           )
         })}
         <button onClick={() => reserve(s, null)} disabled={s.over}
           style={{ ...miniBtn('#88ccff'), padding:'6px 8px', fontSize:'11px' }}>通常攻撃</button>
         <button onClick={() => toggleGuard(s)} disabled={s.over}
-          style={{ ...miniBtn(me.guardNext ? '#ffee44' : gReady ? '#66ccff' : '#2a4a66'), padding:'6px 8px', fontSize:'11px',
-            background: me.guardNext ? '#003060' : '#000818', textAlign:'left' }}>
+          style={{ ...miniBtn(me.guardNext ? '#ffee44' : '#66ccff'), padding:'6px 8px', fontSize:'11px',
+            background: me.guardNext ? '#003060' : '#000818', textAlign:'left', position:'relative', overflow:'hidden' }}>
           <div>🛡 防御{me.guardNext ? '（次に出る）' : ''}</div>
           <div style={{ fontSize:'9px', color: TEXT.label, marginTop:'2px' }}>
             {gReady ? `被ダメージ-${GUARD_CUT}%・CD${GUARD_CD}秒` : `あと${guardCdLeft(me, now).toFixed(1)}秒`}
           </div>
+          <CdShade ratio={guardCdRatio(me, now)} />
         </button>
       </div>
 

@@ -133,6 +133,7 @@ const createAtbSide = (fighter, band, { ai = false, cast = false } = {}) => {
   // 武器の進化「◯%で先手を取る」は開始のゲージに読み替える
   side.gauge = Math.min(GAUGE_FULL, GAUGE_FULL * (side.evo?.first || 0) / 100)
   side.cd = {}                 // 技の枠 → 使えるようになる時刻（秒）
+  side.cdLen = {}              // 技の枠 → そのクールダウンの長さ（秒）＝画面の「下から色が戻る」の割合に使う
   side.timed = []              // [{ table, sec, until, debuff }] 時間で切れるバフ・デバフ
   side.queue = []              // 割り込み：[{ idx }]（idx＝null は通常攻撃）。手で押した技・先頭から1回ずつ。マクロより先に出る
   side.macro = null            // 動いているマクロ：{ no, steps, pos, loop }（startMacro）
@@ -256,8 +257,14 @@ export const canUse = (side, idx, now) => {
   return mpCostOf(side, s.skill) <= side.mp
 }
 export const cdLeft = (side, idx, now) => Math.max(0, (side.cd[idx] || 0) - now)
+// クールダウンの残りの割合（1＝使った直後・0＝使える）。画面のグレーの高さ（2026-10-26 ユーザー指示「グレーアウトして時間の経過ごとに下から色が戻っていく」）
+export const cdRatio = (side, idx, now) => {
+  const len = side.cdLen?.[idx] || 0
+  return len > 0 ? Math.min(1, cdLeft(side, idx, now) / len) : 0
+}
 export const guardReady = (side, now) => side.guardReadyAt <= now + EPS
 export const guardCdLeft = (side, now) => Math.max(0, side.guardReadyAt - now)
+export const guardCdRatio = (side, now) => Math.min(1, guardCdLeft(side, now) / GUARD_CD)
 
 // 敵：rot から枠を回って、撃てる技を出す（無ければ通常攻撃）
 const aiPick = (side, now) => {
@@ -312,8 +319,9 @@ export const unreserveAt = (st, pos) => {
 }
 export const clearQueue = (st) => { st.a.queue = []; input(st, { k: 'clr' }) }
 // マクロを動かす（no＝①〜③の番号・steps＝[{ idx }｜{ idx:null }｜{ guard:true }]・loop＝最後まで出たら頭に戻る）。
+//   【確定】2026-10-26 ユーザー指示「マクロは選択したらループするようにして」＝画面からはいつも loop（前は「マクロごとに選べる」）。
 //   別のマクロを押すと、そのマクロの頭から出し直す。手順が空なら止める
-export const startMacro = (st, no, steps, loop = false) => {
+export const startMacro = (st, no, steps, loop = true) => {
   if (st.over) return
   const list = (steps || []).map(e => (e.guard ? { guard: true } : { idx: e.idx ?? null }))
   st.a.macro = list.length ? { no, steps: list, pos: 0, loop: !!loop } : null
@@ -376,7 +384,8 @@ const act = (st, me, foe, ch) => {
   me.ptr = 0
   if (used !== null) {
     // ★撃つ前の状態（納刀など）で決める。狂乱でほかの技が出たときはその技の長さ
-    me.cd[used] = now + (used === ch.idx ? ch.cd : cdFor(me, me.slots[used].skill))
+    me.cdLen[used] = used === ch.idx ? ch.cd : cdFor(me, me.slots[used].skill)
+    me.cd[used] = now + me.cdLen[used]
     if (me.ai) me.rot = (used + 1) % n
   }
   tickBleedAfterAct(me, st.log, foe)     // ★出血は行動した直後に刻む

@@ -4,7 +4,8 @@ import { MACRO_STEPS, MACRO_MARK, STEP_NORMAL, STEP_GUARD, stepLabel } from '../
 // ============================================================
 // 「レベルキャップあり」版（v2cap）— ATB戦闘のマクロ①〜③の登録
 // ------------------------------------------------------------
-// 決まりと保存の形は src/v2cap/lib/atbMacro.js（1つ8個まで・くり返すかはマクロごと・サーバーに職業ごと）。
+// 決まりと保存の形は src/v2cap/lib/atbMacro.js（1つ8個まで・サーバーに職業ごと）。
+// 【確定】2026-10-26 ユーザー指示「マクロは選択したらループするようにして」＝くり返しの切り替えは出さない（いつも最後まで出たら頭に戻る）
 // 手を押すと外れる。「＋ 足す」から技・通常攻撃・防御を後ろに足す。保存は親（V2capAtb.jsx）が v2cap_set_atb_macros を呼ぶ
 // ============================================================
 const sel = { background:'#000818', color: TEXT.body, border:'1px solid #0044aa', fontFamily:'monospace', fontSize:'11px', padding:'4px' }
@@ -15,7 +16,7 @@ export default function V2capAtbMacros({ macros, onChange, usable, dirty, saving
     <div style={{ border:'1px solid #13405f', padding:'8px', marginBottom:'10px' }}>
       <div style={{ color: TEXT.bright, fontSize:'12px', marginBottom:'4px' }}>マクロ（①〜③）</div>
       <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.7, marginBottom:'6px' }}>
-        戦闘中に①〜③を押すと、登録した順にゲージが溜まりしだい出ます（1つ{MACRO_STEPS}個まで）。
+        戦闘中に①〜③を押すと、登録した順にゲージが溜まりしだい出て、最後まで出たら頭に戻ってくり返します（1つ{MACRO_STEPS}個まで）。
         技が使えないあいだ（クールダウン中・MP不足）は、通常攻撃でつないで待ちます。戦闘中に技を押すと、次の1回だけ割り込みます。
       </div>
       {macros.map((m, i) => (
@@ -23,10 +24,6 @@ export default function V2capAtbMacros({ macros, onChange, usable, dirty, saving
           <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
             <span style={{ color:'#ffee44', fontSize:'13px' }}>{MACRO_MARK[i]}</span>
             <span style={{ color: TEXT.label, fontSize:'10px' }}>{m.steps.length}/{MACRO_STEPS}</span>
-            <label style={{ color: m.loop ? '#44ff88' : TEXT.label, fontSize:'11px', display:'flex', alignItems:'center', gap:'3px', cursor:'pointer' }}>
-              <input type="checkbox" checked={m.loop} onChange={e => edit(i, { loop: e.target.checked })} />
-              最後まで出たら頭に戻ってくり返す
-            </label>
           </div>
           <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', alignItems:'center' }}>
             {m.steps.map((s, k) => (

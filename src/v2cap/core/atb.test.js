@@ -3,7 +3,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  createAtb, runFor, advance, reserve, clearQueue, startMacro, stopMacro, toggleGuard, canUse, cdLeft, chosenOf, needFor,
+  createAtb, runFor, advance, reserve, clearQueue, startMacro, stopMacro, toggleGuard, canUse, cdLeft, cdRatio, guardCdRatio, chosenOf, needFor,
   fillRatio, cdOfProc, buffSecOf, buffChips,
   STEP_SEC, TURN_SEC, GAUGE_FULL, GUARD_CUT, GUARD_CD, CAST_SEC, MAX_DT,
 } from './atb.js'
@@ -335,4 +335,27 @@ test('オート戦闘はターンの処理を切り出しても前と同じ流�
   assert.ok(['a', 'b', 'draw'].includes(r.winner))
   assert.equal(r.log.at(-1).type, 'hp')
   assert.ok(r.log.filter(l => l.type === 'hp').length >= r.turns)
+})
+
+test('【確定】クールダウンの残りの割合（画面のグレー：使った直後1→時間で0へ＝下から色が戻る）・防御も同じ', () => {
+  const st = createAtb(fighter('自分', [sk('重い技', { proc: 80 })]), fighter('敵'), { rng: makeRng(41), maxSec: 80 })
+  assert.equal(cdRatio(st.a, 0, st.t), 0, 'まだ使っていない')
+  startMacro(st, 1, [{ idx: 0 }])
+  runFor(st, 4.05)
+  assert.ok(cdRatio(st.a, 0, st.t) > 0.98, '使った直後はほぼ1')
+  runFor(st, 7.5)
+  assert.ok(Math.abs(cdRatio(st.a, 0, st.t) - 0.5) < 0.02, '15秒のうち7.5秒で半分')
+  runFor(st, 8)
+  assert.equal(cdRatio(st.a, 0, st.t), 0)
+  toggleGuard(st)
+  runFor(st, 4.05)
+  assert.ok(guardCdRatio(st.a, st.t) > 0.9)
+})
+
+test('【確定】マクロは選んだらループ（ユーザー指示「マクロは選択したらループするようにして」）＝startMacro の既定は loop', () => {
+  const st = createAtb(fighter('自分', [sk('技A')]), fighter('敵'), { rng: makeRng(42), maxSec: 40 })
+  startMacro(st, 1, [{ idx: 0 }])
+  assert.equal(st.a.macro.loop, true)
+  runFor(st, 30)
+  assert.ok(st.a.macro, '最後まで出ても止まらない')
 })
