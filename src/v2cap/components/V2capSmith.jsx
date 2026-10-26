@@ -5,8 +5,7 @@ import V2capSmithMaster, { MasterSays, MASTER_CSS } from './V2capSmithMaster.jsx
 import { useStored } from '../core/prefs.js'
 import { box, btn, miniBtn, TEXT } from './v2ui.js'
 import { ITEMS, ITEM_BY_ID, PARTS, SLOTS, RARITIES, ALL_RARITIES, RARITY_COLOR, ARMOR_EFFECT, kindLabel, partLabel, rarityLabel, needLvOf } from '../lib/equipment.js'
-import { spotOf } from '../lib/areas.js'
-import { openUntilOf } from '../lib/sortie.js'
+import { openAreaOf } from '../lib/sortie.js'
 import { canEquipType } from '../lib/jobs.js'
 import { wornIdsOf } from '../lib/loadout.js'
 import { powerAt, statsAt, effectivePowerAt, syncLabelOf } from '../lib/gear.js'
@@ -14,8 +13,9 @@ import {
   PLUS_MAX, plusOf, scrapNameOf, scrapOf, scrapAreaOf, dismantleGainOf, bulkPickable, enhanceCostOf, enhanceErrorOf,
   SCRAP_YIELD, CRAFT_RARITIES, craftCostOf, craftErrorOf,
 } from '../lib/smith.js'
-import { statLine, nameColor, PLUS_COLOR, gainText, areaOptionLabel, filterSelect, optionStyle, useGearRows } from './v2capGearView.js'
+import { statLine, nameColor, PLUS_COLOR, gainText, areaOptionLabel, filterSelect, optionStyle, useGearRows, useFavToggle, withFavs } from './v2capGearView.js'
 import { PlusTag, GearFilterBar, StatChange, FavStar } from './v2capGear.jsx'
+import { saveGearFav } from './v2capGearFav.js'
 import V2capEnhanceFx from './V2capEnhanceFx.jsx'
 import V2capCraftFx from './V2capCraftFx.jsx'
 import { ticketOf, canUseTicket } from '../lib/v1carry.js'
@@ -55,10 +55,12 @@ export default function V2capSmith({ prof, inventory, onProfile, onGo }) {
   const [notice, setNotice] = useState('')
   const [help, setHelp] = useState(false)
   const wornIds = wornIdsOf(prof, inventory)
-  const all = useMemo(() => (inventory || [])
+  // お気に入りの★は押した瞬間に変え、サーバー（v2cap_gear_fav）には後ろで送る（2026-10-26 ユーザー指示「登録されるまでラグがある」・useFavToggle）
+  const fav = useFavToggle({ save: saveGearFav, refresh: () => onProfile(null), onError: setError })
+  const all = useMemo(() => withFavs(inventory, fav.over)
     .map(inv => ({ inv, item: ITEM_BY_ID[inv.base_id] }))
-    .filter(r => r.item), [inventory])
-  const list = useGearRows(all, prof.lv)   // 強化と分解で同じ絞り込み・並べ替えを使う
+    .filter(r => r.item), [inventory, fav.over])
+  const list = useGearRows(all, prof.lv, openAreaOf(prof.cleared_spots))   // 強化と分解で同じ絞り込み・並べ替えを使う（エリアは行ったことのあるところまで）
 
   // RPCを呼び、うまくいったらサーバーから取り直す。返すのは { data } か { error }
   const call = async (fn, args) => {
@@ -70,11 +72,7 @@ export default function V2capSmith({ prof, inventory, onProfile, onGo }) {
     return { data }
   }
   const switchTab = (key) => { setTab(key); setError(''); setNotice('') }
-  // お気に入りの★（2026-10-26 ユーザー指示「装備にお気に入りできるようにして」）。覚えるのはサーバー（v2cap_gear_fav）
-  const toggleFav = async (inv) => {
-    const { error: e } = await call('v2cap_gear_fav', { p_inv: inv.id, p_fav: !inv.fav })
-    if (e) setError(e)
-  }
+  const toggleFav = fav.toggle
 
   // ===== 親方トルステン（lib/smithMaster.js）=====
   // 呼び方（兄ちゃん／嬢ちゃん／お前さん）を say が見られるように控える（say は作り直さない）
@@ -347,7 +345,7 @@ function DismantleTab({ all, wornIds, list, busy, call, setError, setNotice, say
 // ===== 作成 =====
 function CraftTab({ prof, all, busy, call, setError, setNotice, say }) {
   // 作れるのは行ったことのあるエリアまで（残骸もそのエリアの装備からしか出ない）
-  const maxArea = Math.max(1, spotOf(openUntilOf(prof.cleared_spots))?.area || 1)
+  const maxArea = openAreaOf(prof.cleared_spots)
   const [area, setArea] = useState(maxArea)
   const [rarity, setRarity] = useState('R')
   const [part, setPart] = useState('all')

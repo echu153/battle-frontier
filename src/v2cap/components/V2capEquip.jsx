@@ -7,9 +7,10 @@ import { canEquipType } from '../lib/jobs.js'
 import { equippedItems, wornIdsOf } from '../lib/loadout.js'
 import { powerAt, statsAt, effectivePowerAt, syncLabelOf } from '../lib/gear.js'
 import { plusOf } from '../lib/smith.js'
-import { DROP_CHANCE } from '../lib/sortie.js'
-import { statLine, nameColor, useGearRows } from './v2capGearView.js'
+import { DROP_CHANCE, openAreaOf } from '../lib/sortie.js'
+import { statLine, nameColor, useGearRows, useFavToggle, withFavs } from './v2capGearView.js'
 import { PlusTag, GearFilterBar, FavStar } from './v2capGear.jsx'
+import { saveGearFav } from './v2capGearFav.js'
 import { V2Tip } from './V2ItemTip.jsx'
 import { isSetPiece, setLabel, setTierText, armorSetOf, SET_TIERS } from '../lib/armorSets.js'
 
@@ -29,10 +30,12 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
 
   const worn = equippedItems(prof, inventory)
   const wornIds = wornIdsOf(prof, inventory)
-  const all = useMemo(() => (inventory || [])
+  // お気に入りの★は押した瞬間に変え、サーバー（v2cap_gear_fav）には後ろで送る（2026-10-26 ユーザー指示「登録されるまでラグがある」・useFavToggle）
+  const fav = useFavToggle({ save: saveGearFav, refresh: () => onProfile(null), onError: setError })
+  const all = useMemo(() => withFavs(inventory, fav.over)
     .map(inv => ({ inv, item: ITEM_BY_ID[inv.base_id] }))
-    .filter(r => r.item), [inventory])
-  const g = useGearRows(all, prof.lv)
+    .filter(r => r.item), [inventory, fav.over])
+  const g = useGearRows(all, prof.lv, openAreaOf(prof.cleared_spots))   // エリアは行ったことのあるところまで（2026-10-26 ユーザー指示）
   const rows = g.rows
 
   const call = async (fn, args) => {
@@ -45,7 +48,7 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
   const equip = (slot, inv) => call('v2cap_equip', { p_slot: slot, p_inventory_id: inv.id })
   const unequip = (slot) => call('v2cap_unequip', { p_slot: slot })
   // お気に入りの★（2026-10-26 ユーザー指示「装備にお気に入りできるようにして」・分解と寄贈から守る）
-  const toggleFav = (inv) => call('v2cap_gear_fav', { p_inv: inv.id, p_fav: !inv.fav })
+  const toggleFav = fav.toggle
 
   return (
     <div style={{ fontFamily:'monospace' }}>

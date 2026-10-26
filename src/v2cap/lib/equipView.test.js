@@ -62,7 +62,13 @@ test('【確定】2026-10-26 装備のお気に入り：★で付け外し（装
   assert.ok(GEAR.includes("style={{ ...miniBtn(inv?.fav ? '#ffcc00' : '#62789a'), color: inv?.fav ? '#ffcc00' : '#445566', padding:'2px 5px', flexShrink:0 }}>★</button>"), 'スキルのお気に入りと同じ★')
   assert.ok(EQUIP.includes('<FavStar inv={inv} busy={busy} onToggle={toggleFav} />'), '装備画面の持ち物')
   assert.equal((SMITH.match(/star=\{<FavStar inv=\{inv\} busy=\{busy\} onToggle=\{toggleFav\} \/>\}/g) || []).length, 2, '鍛冶屋の強化と分解の一覧')
-  for (const code of [EQUIP, SMITH]) assert.ok(code.includes("call('v2cap_gear_fav', { p_inv: inv.id, p_fav: !inv.fav })"), 'サーバーで覚える')
+  // 押した瞬間に変えて、サーバーには後ろで送る（同じ日 ユーザー指示「お気に入り押しても登録されるまでラグがある」）
+  for (const code of [EQUIP, SMITH]) {
+    assert.ok(code.includes('useFavToggle({ save: saveGearFav, refresh: () => onProfile(null), onError: setError })'), 'サーバーで覚える（待たない）')
+    assert.ok(code.includes('withFavs(inventory, fav.over)'), '押したあとの値で一覧を作る')
+    assert.ok(!code.includes("call('v2cap_gear_fav'"), '前の形（返事と読み直しを待つ）に戻さない')
+  }
+  assert.ok(codeOf('../components/v2capGearFav.js').includes("supabase.rpc('v2cap_gear_fav', { p_inv: id, p_fav: on })"))
   // 分解：お気に入りはチェックも分解のボタンも出さない・選んだ行からも外す
   assert.ok(SMITH.includes('disabled={isWorn || isFav || busy}'))
   assert.ok(SMITH.includes('お気に入りは分解できない'))
@@ -82,4 +88,52 @@ test('【確定】2026-10-26 鍛冶屋の説明はタブの下に出さず ❓ H
   // 作成の確認の画面も「+0で持ち物に入ります。」は出さない（同じ日 ユーザー指示）。HELP の説明には残す
   assert.ok(SMITH.includes(">必ずできます。</div>") && !SMITH.includes('必ずできます。+0で持ち物に入ります。'))
   assert.ok(SMITH.includes('`続けて作成（あと${againTimes}個）`') && !SMITH.includes('続けて作る'))
+})
+
+test('【確定】2026-10-26 お気に入りの★は押した瞬間に変わる・サーバーには順番に送る・全部送ったら1回だけ読み直す・失敗したら戻す', async () => {
+  // ユーザー指示「お気に入り押しても登録されるまでラグがある、この遅さはさすがに看過できん」
+  const { makeFavSender, withFavs } = await import('../components/v2capGearView.js')
+  const log = []
+  let over = {}
+  const fails = new Set()
+  const sent = []
+  const send = makeFavSender({
+    apply: (id, v) => { over = { ...over, [id]: v }; log.push(`画面 ${id}=${v}`) },
+    save: async (id, on) => { sent.push(`${id}=${on}`); await new Promise(r => setTimeout(r, 5)); return fails.has(`${id}=${on}`) ? 'だめ' : null },
+    refresh: () => log.push('読み直し'),
+    onError: (e) => log.push(`失敗 ${e}`),
+  })
+  const inv = (id) => ({ id, fav: over[id] ?? false })
+  const p1 = send(inv(1))                 // ★を付ける
+  assert.equal(over[1], true, '押した瞬間に画面が変わる（返事を待たない）')
+  const p2 = send(inv(1))                 // すぐ外す（連打）
+  const p3 = send(inv(2))
+  assert.deepEqual([over[1], over[2]], [false, true])
+  await Promise.all([p1, p2, p3])
+  assert.deepEqual(sent.filter(s => s.startsWith('1=')), ['1=true', '1=false'], '同じ装備は押した順に送る（最後の値が残る）')
+  assert.equal(log.filter(s => s === '読み直し').length, 1, '全部送ったら1回だけ読み直す')
+  fails.add('3=true')
+  await send(inv(3))
+  assert.equal(over[3], false, '送れなかったら元に戻す')
+  assert.ok(log.includes('失敗 だめ'))
+  assert.deepEqual(withFavs([{ id: 1, fav: false }, { id: 9, fav: true }], { 1: true }), [{ id: 1, fav: true }, { id: 9, fav: true }])
+})
+
+test('【確定】2026-10-26 プルダウン：レア度のユニークは持っているときだけ・エリアは行ったことのあるところまで（装備画面と鍛冶屋の全部）', async () => {
+  // ユーザー指示「レア度のところ、ユニーク武器1つも手に入れたことないときは表示されないようにして、これは鍛冶屋じゃなくて全部ね、
+  //   あとすべてのエリアも行ったことのないエリアは表示されないようにして、これも鍛冶屋にかかわらず全部のプルダウンに適用して」
+  const { areaChoicesOf, rarityChoicesOf } = await import('../components/v2capGearView.js')
+  const { openAreaOf } = await import('./sortie.js')
+  const rows = (...list) => list.map(([area, rarity]) => ({ item: { area, rarity } }))
+  assert.deepEqual(rarityChoicesOf(rows([1, 'N'], [2, 'R'])), ['N', 'R', 'E', 'L'], 'ユニークを持っていなければ出さない')
+  assert.deepEqual(rarityChoicesOf(rows([1, 'N'], [9, 'U'])), ['N', 'R', 'E', 'L', 'U'], '持っていれば出す')
+  assert.deepEqual(rarityChoicesOf(rows([1, 'N']), 'U'), ['N', 'R', 'E', 'L', 'U'], '選んでいるあいだは残す')
+  assert.deepEqual(areaChoicesOf(rows([0, 'N'], [1, 'N'], [3, 'R'], [9, 'U']), 3), [0, 1, 3], '行ったことのないエリア（9）は出さない・初期装備（0）は出す')
+  assert.deepEqual(areaChoicesOf(rows([1, 'N']), 3, 9), [1, 9], '選んでいるあいだは残す')
+  assert.equal(openAreaOf([]), 1)
+  // 帯は選択肢を使う・装備画面と鍛冶屋は行ったことのあるエリアを渡す（作成のエリアも同じ数え方）
+  assert.ok(GEAR.includes('{g.rarities.map(r =>') && GEAR.includes('{g.areas.map(a =>'))
+  assert.ok(EQUIP.includes('useGearRows(all, prof.lv, openAreaOf(prof.cleared_spots))'))
+  assert.ok(SMITH.includes('useGearRows(all, prof.lv, openAreaOf(prof.cleared_spots))'))
+  assert.ok(SMITH.includes('const maxArea = openAreaOf(prof.cleared_spots)'), '作成のエリアのプルダウン')
 })

@@ -75,6 +75,8 @@ export const rewardRangeOf = (spot, role = 'normal') => ({
 // 倒したボスの場所（cleared）の一番先の次までが開いている。最初は①（id 1）だけ
 export const lastClearedOf = (cleared) => Math.max(0, ...(cleared || []).filter(Number.isInteger))
 export const openUntilOf = (cleared) => Math.min(LAST_SPOT, lastClearedOf(cleared) + 1)
+// 行ったことのあるエリアの一番先（開いている一番先の場所のエリア・最低1）。図鑑・博物館・作成・装備の絞り込みのエリアの範囲
+export const openAreaOf = (cleared) => Math.max(1, spotOf(openUntilOf(cleared))?.area || 1)
 export const isSpotUnlocked = (cleared, id) => Number.isInteger(id) && id >= 1 && id <= openUntilOf(cleared)
 export const unlockedSpotsOf = (cleared) => Array.from({ length: openUntilOf(cleared) }, (_, i) => i + 1)
 export const isSpotCleared = (cleared, id) => (cleared || []).includes(id)
