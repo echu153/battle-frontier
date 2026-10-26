@@ -76,9 +76,13 @@ export const jemitaStatusText = (prof, inventory, at = new Date()) => {
   //   【確定】2026-10-26 ユーザー指示「スキルの枠と覚えた技を状態に足して」：本番で試したら、5枠とも埋まっているのに
   //   「影討ちを枠に入れろ」と答えた（枠の数と覚えた技を渡していなかった）
   const set = currentSetOf(prof).filter(e => e?.name)
-  const setText = set.length ? set.map(e => `${e.name}×${e.uses || 1}/${usesCapOf(e.name)}`).join(' → ') : 'なし'
-  lines.push(`スキルセット（${SKILL_SET_SLOTS}枠中${set.length}枠を使用・上から順・「×回数/回数の上限」）：${setText}`
-    + `・消費MP（MP×回数の合計）${setMpCost(set)}/最大MP${n(bd.total.mp)}`)
+  // 技ごとのMPと、余裕MP（最大MP−消費MP）も先に計算して渡す。
+  //   【確定】2026-10-26 ユーザー指示「MPの計算違いをもう一押し直して」：本番で「回数2にすれば消費MPは88/111」（正しくは67）と答えた
+  const setText = set.length ? set.map(e => `${e.name}（MP${SKILL_BY_NAME[e.name]?.mp ?? '?'}）×${e.uses || 1}/${usesCapOf(e.name)}`).join(' → ') : 'なし'
+  const mpUse = setMpCost(set)
+  const mpMax = Math.max(0, Math.floor(Number(bd.total.mp) || 0))
+  lines.push(`スキルセット（${SKILL_SET_SLOTS}枠中${set.length}枠を使用・上から順・「技（1回のMP）×回数/回数の上限」）：${setText}`
+    + `・消費MP（MP×回数の合計）${mpUse}/最大MP${n(mpMax)}・余裕MP${n(mpMax - mpUse)}（回数を1増やすと、その技の1回のMPだけ消費MPが増える）`)
   const usable = usableSkillNames(cls, prof.learned || [])
   const inSet = new Set(set.map(e => e.name))
   const spare = usable.filter(name => !inSet.has(name))
