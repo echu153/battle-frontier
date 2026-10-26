@@ -10,7 +10,8 @@
 import { STAT_KEYS, STAT_DEFS } from '../core/stats.js'
 import { SLOTS, SLOT_LABEL, RARITY_LABEL, needLvOf } from './equipment.js'
 import { equippedItems, statBreakdown, currentSetOf, setsOf } from './loadout.js'
-import { jobOf, jobMaxOf, stageLabelOf, nextSkillOf, CLASS_BY_ID } from './jobs.js'
+import { jobOf, jobMaxOf, stageLabelOf, nextSkillOf, usableSkillNames, CLASS_BY_ID } from './jobs.js'
+import { SKILL_BY_NAME, SKILL_SET_SLOTS, setMpCost, usesCapOf } from './skills.js'
 import { apLeftOf } from './ascension.js'
 import { openUntilOf } from './sortie.js'
 import { spotLabel, recLvText, LAST_SPOT } from './areas.js'
@@ -71,8 +72,18 @@ export const jemitaStatusText = (prof, inventory, at = new Date()) => {
   const sets = setsOf(prof, inventory)
   if (sets.length) lines.push(`発動中の防具のセット能力：${sets.map(s => `${setLabel(s.area, s.line)} ${s.count}部位`).join('・')}`)
 
+  // スキルセット：枠の数・回数とその上限・消費MPの合計、と、いまの職業で使える（覚えた）技。
+  //   【確定】2026-10-26 ユーザー指示「スキルの枠と覚えた技を状態に足して」：本番で試したら、5枠とも埋まっているのに
+  //   「影討ちを枠に入れろ」と答えた（枠の数と覚えた技を渡していなかった）
   const set = currentSetOf(prof).filter(e => e?.name)
-  lines.push(`スキルセット（上から順）：${set.length ? set.map(e => `${e.name}×${e.uses || 1}`).join(' → ') : 'なし'}`)
+  const setText = set.length ? set.map(e => `${e.name}×${e.uses || 1}/${usesCapOf(e.name)}`).join(' → ') : 'なし'
+  lines.push(`スキルセット（${SKILL_SET_SLOTS}枠中${set.length}枠を使用・上から順・「×回数/回数の上限」）：${setText}`
+    + `・消費MP（MP×回数の合計）${setMpCost(set)}/最大MP${n(bd.total.mp)}`)
+  const usable = usableSkillNames(cls, prof.learned || [])
+  const inSet = new Set(set.map(e => e.name))
+  const spare = usable.filter(name => !inSet.has(name))
+  lines.push(`いまの職業で使える技（覚えた技）：${usable.length ? usable.map(name => `${name}（MP${SKILL_BY_NAME[name]?.mp ?? '?'}）`).join('・') : 'なし'}`
+    + (spare.length ? `／セットに入っていない技：${spare.join('・')}` : '／使える技は全部セットに入っている'))
 
   const open = openUntilOf(prof.cleared_spots)
   const cleared = (prof.cleared_spots || []).filter(Number.isInteger).length

@@ -19,7 +19,7 @@ import { AREA_LIST, SPOTS, LAST_SPOT, spotLabel, recLvText, recLvOf } from './ar
 import { dexAreaOf, dropInfoOf, DEX_ROLES, DEX_AREA_STAM } from './dex.js'
 import { raceDefOf } from './monsterRace.js'
 import { CLASSES, STAGES, JOB_MAX, ICHIJI_REQ_JLV, mainStatsOf, learnAtOf, nextClassesOf, jobMaxOf, ASC_AP_PER_JLV } from './jobs.js'
-import { skillsOf, passiveOf, capPowerText, SKILL_SET_SLOTS } from './skills.js'
+import { skillsOf, passiveOf, capPowerText, SKILL_SET_SLOTS, DEFAULT_USES_MAX } from './skills.js'
 import {
   ITEMS, KINDS, RARITIES, RARITY_LABEL, REQ_LV_STEP, SLOT_LABEL, SLOTS, ARMOR_EFFECT, WEAPON_DIST, ARMOR_DIST, ACCESSORY_DIST,
   partLabel, UNIQUE_LV,
@@ -88,7 +88,7 @@ const basics = () => {
     `- CLASS LVの上限は初期職${JOB_MAX}・上位職${STAGES.ichiji.max}。CLASS EXPは今の職業にだけ入る（戦闘で入ったEXPと同じ量）。`,
     `- 初期職のCLASS LV${ICHIJI_REQ_JLV}で、その系統の上位職（2つ）に転職できる。上位職は元の初期職の技もそのまま使える。`,
     '- CLASS LVが上がると、その職業で伸びるステが増える（その職業でいるあいだだけ）。技はCLASS LV1から3ずつ上がるたびに上から順に覚える。',
-    `- スキルセット：職業ごとに技を${SKILL_SET_SLOTS}枠まで並べ、枠ごとに使う回数を決める。戦闘では上の枠から順に1回ずつ撃ち、一巡したらまた上から（回数を使い切った枠・MPが足りない枠は飛ばす）。`,
+    `- スキルセット：職業ごとに技を${SKILL_SET_SLOTS}枠まで並べ、枠ごとに使う回数を決める（回数の上限は技ごと・多くは${DEFAULT_USES_MAX}回）。戦闘では上の枠から順に1回ずつ撃ち、一巡したらまた上から（回数を使い切った枠・MPが足りない枠は飛ばす）。`,
     '- 技には発動率がある。不発のときはMPも回数も減らず、次のターンに同じ枠を撃ち直す（発動率の低い技を上に置くとそこで詰まる）。不発のターンと撃てる枠が無いときは通常攻撃。',
     '- 編成の「消費MP×回数」の合計は最大MPまで。',
     `- アセンション：CLASS LVが1上がるごとにAP${ASC_AP_PER_JLV}。盤面のマスを開くとステや技が強くなる（つながったマスだけ開ける）。振り直しはGold（LV×${ASC_RESET_GOLD_PER_LV}G）。`,

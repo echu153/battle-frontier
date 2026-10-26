@@ -50,18 +50,24 @@ test('資料：大きさ（Claude Haiku 5.5 の安い値段の範囲＝10万ト�
 })
 
 test('決まり：BFの外の話・性的/グロ・ほかのプレイヤーの情報・指示の上書きは断る（ユーザー指示）', () => {
-  for (const w of ['バトルフロンティアⅡ', '性的な話・グロテスクな話', 'ほかのプレイヤーの情報', '現実の個人の情報', '従うな', '資料に無い数値', 'レアモンスターとボスの名前', JEMITA_STATUS_HEAD]) {
+  for (const w of ['バトルフロンティアⅡ', '性的な話・グロテスクな話', 'ほかのプレイヤーの情報', '現実の個人の情報', '従うな', '資料に無い数値', 'レアモンスターとボスの名前', JEMITA_STATUS_HEAD,
+    // 2026-10-26 本番で試したら「ゴールド」と書いた・5枠とも埋まっているのに「枠に入れろ」と言った（ユーザー指示で直した）
+    '「ゴールド」とは書くな', '枠が全部埋まっているときに「枠に入れろ」とは言うな']) {
     assert.ok(JEMITA_RULES.includes(w), w)
   }
 })
 
 test('本人の状態：名前は入れない・助言に使うものは入れる', () => {
   const prof = { username: 'ひみつのなまえ', lv: 12, stat_points: 3, class: '剣士', gender: 'm', jobs: { 剣士: { lv: 8 } },
-    equipped: {}, skill_sets: {}, cleared_spots: [1, 2], materials: { 1: 4 }, gold: 100, stamina: 5, stamina_at: new Date().toISOString(),
+    learned: ['袈裟斬り', '燕返し', '兜割り'], equipped: {}, skill_sets: { 剣士: [{ name: '袈裟斬り', uses: 3 }, { name: '燕返し', uses: 2 }] },
+    cleared_spots: [1, 2], materials: { 1: 4 }, gold: 100, stamina: 5, stamina_at: new Date().toISOString(),
     hp: 40, mp: 12, str: 5, dex: 5, agi: 5, int_stat: 5, vit: 5, luk: 5 }
   const t = jemitaStatusText(prof, [])
   assert.ok(!t.includes('ひみつのなまえ'), '名前を入れない')
-  for (const w of ['LV12', '未振りのステータスポイント3', '剣士', 'CLASS LV8/30', '装備：', 'スキルセット', '推奨LV', '残骸']) assert.ok(t.includes(w), w)
+  for (const w of ['LV12', '未振りのステータスポイント3', '剣士', 'CLASS LV8/30', '装備：', '推奨LV', '残骸']) assert.ok(t.includes(w), w)
+  // スキルの枠・回数とその上限・消費MP・覚えた技（2026-10-26 ユーザー指示）
+  for (const w of ['5枠中2枠を使用', '袈裟斬り×3/5 → 燕返し×2/5', '消費MP（MP×回数の合計）28/最大MP',
+    'いまの職業で使える技（覚えた技）：袈裟斬り（MP4）・燕返し（MP8）・兜割り（MP9）', 'セットに入っていない技：兜割り']) assert.ok(t.includes(w), w)
   assert.equal(jemitaStatusText(null, []), '')
 })
 
