@@ -2,7 +2,7 @@
 // 「レベルキャップあり」版（v2cap）— クラスのモーションのドット絵（ATB戦闘の攻撃など）
 // ------------------------------------------------------------
 // 【確定】2026-10-26 ユーザー指示「攻撃モーションもドット絵で作ろうと思ってる」→ ChatGPT で作る（ユーザー）。
-//   元の絵（ユーザーが置く）：public/V2newjob/モーション/<クラス名><男|女><動き>.png（.webp も可）
+//   元の絵（ユーザーが置く）：public/V2newjob/攻撃モーション/<クラス名><男|女><動き>.png（.webp も可）（2026-10-26 ユーザー指示「ここに保管する」）
 //     ＝横一列に6コマ（①待機 → ②構え → ③振りかぶり → ④攻撃 → ⑤振り抜き → ⑥待機）・背景は真緑（#00FF00）
 //   画面で使う版（tools/v2cap-motion.mjs が作る）：public/V2newjob/motion/<ローマ字>-<m|f>-<動きのキー>.webp
 //     ＝②〜⑤のコマを横に並べた1枚（透明つき）。どのコマも待機GIFと同じ大きさ・同じ足の位置にそろえてある
@@ -13,7 +13,7 @@
 import { MOTION_ART } from './motionArtList.js'
 import { ART_BASE, ART_DIR, gifSrcOf } from './classArt.js'
 
-export const MOTION_SRC_DIR = 'モーション'   // public/V2newjob の下・元の絵（git に入れない）
+export const MOTION_SRC_DIR = '攻撃モーション'   // public/V2newjob の下・元の絵（git に入れない・ユーザーが決めた場所）
 export const MOTION_OUT = 'motion'           // public/V2newjob の下・画面で使う版
 // ファイル名の動き → キー。いまは「攻撃」だけ使う（技・被弾・倒れるは置ければ作れるが、画面ではまだ流さない）
 export const MOTION_KEYS = { 攻撃: 'attack', 技: 'skill', 被弾: 'hurt', 倒れる: 'down' }
