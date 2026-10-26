@@ -163,7 +163,7 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
       <div style={{ ...box, padding:'12px' }}>
         <div style={{ color: TEXT.sub, fontSize:'11px', lineHeight:1.7, marginBottom:'10px' }}>
           レイドボス・IDダンジョンで使うATB戦闘の試し撃ちです。<b style={{ color: TEXT.bright }}>報酬なし・戦闘の結果はサーバーへ送りません</b>（送るのはマクロの保存だけ）。<br />
-          ゲージは自分と相手のAGIの比で溜まる速さが変わります。技は全部使えて、使うとクールダウンに入ります（MPは回復しません）。
+          ゲージはふだん4秒で満タン。AGIが相手を上回るほど速くなります（相手の4倍で2倍速まで）。技は全部使えて、使うとクールダウンに入ります（MPは回復しません）。
         </div>
         <V2capAtbMacros macros={macros} onChange={editMacros} usable={usable} dirty={dirty} saving={saving} msg={macroMsg} onSave={saveMacros} />
         <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', marginBottom:'8px' }}>

@@ -34,26 +34,27 @@ const skillTimes = (st, name, skill) => {
   return out
 }
 
-test('ゲージの速さはAGIの比の平方根・0.5〜2倍（ユーザー選択）', () => {
+test('【確定】ゲージはふだん1倍・AGIが相手を上回ったぶん速く・4倍で2倍速が上限（試し撃ちのあとユーザー指示）', () => {
   const r = (a, b) => Number(fillRatio(a, b).toFixed(3))
   assert.equal(r(100, 100), 1)
-  assert.equal(r(200, 100), 1.414)
-  assert.equal(r(300, 100), 1.732)
-  assert.equal(r(400, 100), 2)
+  assert.equal(r(150, 100), 1.167)
+  assert.equal(r(200, 100), 1.333)
+  assert.equal(r(300, 100), 1.667)
+  assert.equal(r(400, 100), 2, '相手の4倍で2倍速')
   assert.equal(r(100000, 100), 2, 'どれだけ離れても2倍まで')
-  assert.equal(r(50, 100), 0.707)
-  assert.equal(r(1, 100), 0.5, '遅い側も0.5倍で止まる')
+  assert.equal(r(50, 100), 1, '相手よりAGIが低くても遅くはならない')
+  assert.equal(r(0, 100), 1)
   assert.equal(r(200, 100), r(200000, 100000), '比で見るのでインフレしても同じ')
 })
 
-test('クールダウンは発動率から（100%→4秒・90%→8秒・80%→12秒・70%→16秒）・発動率+%で短くなる', () => {
-  assert.equal(cdOfProc(100), 4)
-  assert.equal(cdOfProc(90), 8)
-  assert.equal(cdOfProc(80), 12)
-  assert.equal(cdOfProc(70), 16)
-  assert.equal(cdOfProc(80, 5), 10, '発動率+5%で2秒短い')
-  assert.equal(cdOfProc(100, 20), 4, '4秒より短くはならない')
-  assert.equal(cdOfProc(80, -20), 20, 'サイレンス（発動率−20%）で長くなる')
+test('【確定】クールダウンは発動率から（試し撃ちのあとユーザー選択「差を大きく」：100%→3秒・90%→9秒・80%→15秒・70%→21秒）・発動率+%で短くなる', () => {
+  assert.equal(cdOfProc(100), 3)
+  assert.equal(cdOfProc(90), 9)
+  assert.equal(cdOfProc(80), 15)
+  assert.equal(cdOfProc(70), 21)
+  assert.equal(cdOfProc(80, 5), 12, '発動率+5%で3秒短い')
+  assert.equal(cdOfProc(100, 20), 3, '3秒より短くはならない')
+  assert.equal(cdOfProc(80, -20), 27, 'サイレンス（発動率−20%）で長くなる')
 })
 
 test('バフの長さは強さで決まる（+30%→100秒・+20%→150秒）・デバフは60秒まで', () => {
@@ -76,35 +77,43 @@ test('同じ速さなら4秒に1回ずつ行動する', () => {
   assert.equal(acts(st, '自分', 'normal').length, 11)
 })
 
-test('AGIが4倍以上なら2倍速・相手は0.5倍速＝行動の回数は4倍で頭打ち', () => {
+test('AGIが4倍以上なら2倍速・遅い相手は1倍のまま＝行動の回数は2倍で頭打ち', () => {
   const st = createAtb(fighter('速い', [], { stats: { agi: 100000 } }), fighter('敵'), { rng: makeRng(2) })
   runFor(st, 80)
   const ratio = acts(st, '速い', 'normal').length / acts(st, '敵', 'normal').length
-  assert.ok(ratio > 3.8 && ratio < 4.2, `約4倍（実測 ${ratio.toFixed(2)}）`)
+  assert.ok(ratio > 1.9 && ratio < 2.1, `約2倍（実測 ${ratio.toFixed(2)}）`)
+})
+
+test('追加行動率+%の上乗せは2倍速の上限を超えてよい（ユーザー選択）', () => {
+  const st = createAtb(fighter('速い', [], { stats: { agi: 100000 } }), fighter('敵'), { rng: makeRng(31), maxSec: 200 })
+  st.a.evo.extra = 50
+  runFor(st, 119)
+  const ratio = acts(st, '速い', 'normal').length / acts(st, '敵', 'normal').length
+  assert.ok(ratio > 2.9 && ratio < 3.1, `2倍×1.5＝約3倍（実測 ${ratio.toFixed(2)}）`)
 })
 
 test('マクロの技はゲージが満タンの瞬間に出て、クールダウン中は使えるまで待つ', () => {
-  const st = createAtb(fighter('自分', [sk('重い技', { proc: 80 })]), fighter('敵'), { rng: makeRng(3), maxSec: 30 })
+  const st = createAtb(fighter('自分', [sk('重い技', { proc: 80 })]), fighter('敵'), { rng: makeRng(3), maxSec: 40 })
   startMacro(st, 1, [{ idx: 0 }], true)
   const times = skillTimes(st, '自分', '重い技')
-  // 4秒で1回目 → 12秒のクールダウン → 16秒・28秒（そのあいだは通常攻撃でつなぐ＝使えるまで待つ）
-  assert.deepEqual(times, [4, 16, 28])
+  // 4秒で1回目 → 15秒のクールダウン（19秒まで）→ 次の行動の20秒・36秒（そのあいだは通常攻撃でつなぐ＝使えるまで待つ）
+  assert.deepEqual(times, [4, 20, 36])
   assert.ok(acts(st, '自分', 'normal').length >= 4, 'クールダウンのあいだは通常攻撃')
 })
 
 test('予約は順番に出る・くり返さないなら最後は通常攻撃・先頭が使えないときは待つ', () => {
-  const A = sk('技A', { proc: 80 })   // 12秒
-  const B = sk('技B', { proc: 100 })  // 4秒
+  const A = sk('技A', { proc: 80 })   // 15秒
+  const B = sk('技B', { proc: 100 })  // 3秒
   const st = createAtb(fighter('自分', [A, B]), fighter('敵'), { rng: makeRng(4), maxSec: 30 })
   reserve(st, 0); reserve(st, 1); reserve(st, 0)
   runFor(st, 4.05)
   assert.equal(acts(st, '自分', 'skill').at(-1)?.skill, '技A')
   runFor(st, 4)
   assert.equal(acts(st, '自分', 'skill').at(-1)?.skill, '技B')
-  // 3つ目の技Aは16秒まで使えない → 12秒は通常攻撃でつなぎ、先頭（技A）は残る
-  runFor(st, 4)
+  // 3つ目の技Aは19秒まで使えない → 12秒・16秒は通常攻撃でつなぎ、先頭（技A）は残る
+  runFor(st, 8)
   assert.equal(st.a.queue.length, 1)
-  assert.equal(acts(st, '自分', 'normal').length, 1)
+  assert.equal(acts(st, '自分', 'normal').length, 2)
   runFor(st, 4)
   assert.equal(acts(st, '自分', 'skill').at(-1)?.skill, '技A')
   assert.equal(st.a.queue.length, 0)
@@ -146,12 +155,12 @@ test('マクロ：防御も入れられる（クールダウン中は使える�
   startMacro(st, 1, [{ guard: true }, { idx: 0 }], true)
   runFor(st, 8.05)
   assert.deepEqual(acts(st, '自分').filter(l => l.type === 'guard' || l.type === 'skill').map(l => l.type), ['guard', 'skill'])
-  // 2回目の防御は30秒のクールダウン（34秒まで）＝それまでは通常攻撃でつなぐ
-  runFor(st, 20)
+  // 2回目の防御は45秒のクールダウン（49秒まで）＝それまでは通常攻撃でつなぐ
+  runFor(st, 36)
   assert.equal(acts(st, '自分', 'guard').length, 1)
   assert.equal(chosenOf(st.a, st.t).waiting, 'guard')
   runFor(st, 8)
-  assert.equal(acts(st, '自分', 'guard').length, 2)
+  assert.equal(acts(st, '自分', 'guard').length, 2, '49秒のあとの行動（52秒）で2回目')
   startMacro(st, 3, [{ idx: 0 }], false)
   assert.equal(st.a.macro.no, 3)
   assert.equal(st.a.macro.pos, 0)
@@ -248,7 +257,7 @@ test('敵は枠の順に、使える技を出す（クールダウン中は飛�
   const st = createAtb(fighter('自分'), fighter('敵', [sk('牙', { proc: 80 }), sk('爪', { proc: 80 })]), { rng: makeRng(11), maxSec: 30 })
   runFor(st, 30)
   const seq = acts(st, '敵').filter(l => l.type === 'skill' || l.type === 'normal').map(l => l.skill || '通常')
-  assert.deepEqual(seq.slice(0, 5), ['牙', '爪', '通常', '牙', '爪'])
+  assert.deepEqual(seq.slice(0, 6), ['牙', '爪', '通常', '通常', '牙', '爪'])
 })
 
 test('麻痺：ターン数×4秒、ゲージが止まる', () => {
@@ -286,11 +295,11 @@ test('オート前提の効果の読み替え：追加行動→速さ／発動�
   runFor(fast, 119)
   const r = acts(fast, '自分', 'normal').length / acts(fast, '敵', 'normal').length
   assert.ok(r > 1.4 && r < 1.6, `追加行動率+50%で約1.5倍（${r.toFixed(2)}）`)
-  // 発動率+10% → クールダウン 12→8秒
+  // 発動率+10% → クールダウン 15→9秒
   st.a.pa.procBonus = 10
   reserve(st, 0)
   runFor(st, 4.05)
-  assert.ok(Math.abs(cdLeft(st.a, 0, st.t) - 8) < 0.1)
+  assert.ok(Math.abs(cdLeft(st.a, 0, st.t) - 9) < 0.1)
   // 先制（優先度1）→ 要るゲージ80
   assert.equal(needFor(st.a, sk('先制技', { priority: 1 })), 80)
   assert.equal(needFor(st.a, null), GAUGE_FULL)

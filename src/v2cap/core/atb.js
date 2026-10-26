@@ -2,7 +2,7 @@
 // バトルフロンティアⅡ（v2cap）— ATB戦闘（レイドボス・IDダンジョン用）
 // ------------------------------------------------------------
 // 【確定】2026-10-26 ユーザー指示：レイドボスとIDダンジョンだけATB（出撃のエリア・覇天塔はオートのまま）。
-//   ・ゲージは自分のAGI÷相手のAGIの**平方根**で溜まる速さが変わる（0.5〜2倍）
+//   ・ゲージはふだん1倍。AGIが相手を大きく上回ると速くなる（相手の4倍で2倍速・そこで上限）＝fillRatio
 //   ・技は**クールダウン制・秒で数える**（AGIでは縮まない）。長さはオートの発動率から
 //   ・ATBでは**持っている技を全部使える**（枠なし）
 //   ・**MPはオートと同じ**＝満タンで始まり回復なし（尽きたら通常攻撃）
@@ -52,19 +52,25 @@ export const FILL_PER_SEC = GAUGE_FULL / TURN_SEC   // 同じ速さなら TURN_S
 export const MAX_DT       = 0.25  // 裏のタブから戻ったときに一気に進めない（1回に進める上限の秒）
 export const MAX_SEC      = 180   // これを超えたら時間切れ
 
-// ゲージの溜まる速さ＝AGIの比の AGI_EFFECT 乗（0.5＝平方根）を RATIO_MIN〜RATIO_MAX に収める
-//   【確定】2026-10-26 ユーザー選択「平方根・0.5〜2倍」：AGI2倍→1.41倍速・3倍→1.73倍速・半分→0.71倍速
+// ゲージの溜まる速さ（同じ速さ＝1倍）
+//   【確定】2026-10-26 試し撃ちのあとユーザー指示「基本を1倍として、そこから敵のAGIを大幅に超えてる場合より早くなるようにして。
+//     4倍でゲージの速さ2倍になるくらい」＋「プレイヤー側の最高速度は基本上限ある」（前は平方根・0.5〜2倍）：
+//     AGIが相手以下なら1倍（遅くはならない）→ 上回ったぶん比に比例して速くなり、AGI_FULL_RATIO 倍で RATIO_MAX 倍速で止まる
+//     ＝相手の2倍で1.33倍速・3倍で1.67倍速・4倍で2倍速。敵も同じ式（AGIでこちらを大きく上回るボスは速くなる）
+//   ★追加行動率+%などの上乗せは、この上限のあとに掛ける＝上限を超えてよい（ユーザー選択「上乗せは超えてよい」）
 //   ★比で見るので、AGIがインフレしても効き方は変わらない（変わるのは相手との差だけ）
-export const AGI_EFFECT = 0.5
-export const RATIO_MIN  = 0.5
-export const RATIO_MAX  = 2
-export const fillRatio = (myAgi, foeAgi) =>
-  clamp(Math.pow(Math.max(0, myAgi) / Math.max(1, foeAgi), AGI_EFFECT), RATIO_MIN, RATIO_MAX)
+export const AGI_FULL_RATIO = 4
+export const RATIO_MAX      = 2
+export const fillRatio = (myAgi, foeAgi) => {
+  const r = Math.max(0, myAgi) / Math.max(1, foeAgi)
+  return r <= 1 ? 1 : Math.min(RATIO_MAX, 1 + (r - 1) * (RATIO_MAX - 1) / (AGI_FULL_RATIO - 1))
+}
 
 // クールダウン（秒）＝CD_BASE＋（100−発動率）×CD_PER_PROC
-//   【確定】2026-10-26 ユーザー選択「秒で数える」。目安：100%→4秒・90%→8秒・80%→12秒・70%→16秒（数字は試しながら決める）
-export const CD_BASE     = 4
-export const CD_PER_PROC = 0.4
+//   【確定】2026-10-26 ユーザー選択「秒で数える」。
+//   【確定】2026-10-26 試し撃ちのあとユーザー選択「差を大きく」：100%→3秒・90%→9秒・80%→15秒・70%→21秒（前は4・8・12・16秒）
+export const CD_BASE     = 3
+export const CD_PER_PROC = 0.6
 export const cdOfProc = (proc, bonus = 0) =>
   Math.round((CD_BASE + Math.max(0, 100 - (proc ?? 100) - bonus) * CD_PER_PROC) * 10) / 10
 
@@ -72,9 +78,10 @@ export const cdOfProc = (proc, bonus = 0) =>
 export const PRIORITY_CUT = 20
 
 // 防御（全職共通）。次の自分の行動まで受けるダメージ−GUARD_CUT%・使ったら GUARD_CD 秒は使えない
-//   ★クールダウンは技のいちばん長いもの（発動率70%で16秒）より長く（ユーザー「長め」）
+//   ★クールダウンは技のいちばん長いもの（発動率70%で21秒）より長く（ユーザー「長め」）
+//   【確定】2026-10-26 試し撃ちのあとユーザー選択「CDを長く」：−50%のまま・45秒（前は30秒）
 export const GUARD_CUT = 50
-export const GUARD_CD  = 30
+export const GUARD_CD  = 45
 
 // ボスの大技の詠唱（秒）。倍率が CAST_MULT 以上の敵の技は、撃つ前に詠唱のバーが出る
 //   ★同じ速さの1行動ぶん（TURN_SEC）＝こちらが必ず1回は備えられる長さ
