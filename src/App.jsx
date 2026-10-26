@@ -4,6 +4,7 @@ import { supabase } from './supabase'
 import Login from './pages/Login' // 最初に出る画面は即時読み込み（チラつき防止）
 import ErrorBoundary from './components/ErrorBoundary'
 import { InviteListener } from './components/InviteListener'
+import { JEMITA_ON } from './v2cap/lib/jemitaFlag'
 // 動的import(コード分割)の失敗を自動リカバリ。多くは新デプロイで旧タブのチャンクハッシュが変わり、
 // ページ遷移の import が404して「クリックしても何も起きない(空白)」になるケース。
 // 直近10秒以内に未リロードなら1回だけ強制リロードして最新版を取り直す（リロードループ防止）。
@@ -65,6 +66,7 @@ const Cards = lazyReload(() => import('./pages/Cards')) // トランプ広場(�
 const BeginnerBingo = lazyReload(() => import('./pages/BeginnerBingo')) // 初心者ビンゴ(開発限定・ミッション)
 const V2capHome = lazyReload(() => import('./v2cap/pages/V2capHome')) // Ⅱレベルキャップあり版(開発限定・src/v2cap・docs/v2cap-design.md)
 // Ⅱの AI案内役ジェミータ（右下のボタンと会話の窓・2026-10-26）。ホームとは別に読み、読み終わるまでホームを待たせない
+// 2026-10-26 ユーザー指示「右下ちょっとじゃまだから一旦消して」＝JEMITA_ON が false のあいだは読み込みもしない
 const V2capJemita = lazyReload(() => import('./v2cap/components/V2capJemita'))
 
 // ページ遷移時の「読み込み中」(Suspense fallback)。チャンク取得がハング/失敗して一定時間
@@ -305,7 +307,7 @@ function App() {
         <Route path="/bingo" element={session ? <BeginnerBingo /> : <Navigate to="/login" />} />
         {/* /v2（V2 初期構成）は 2026-10-22 に v2cap へまとめた。古いブックマーク用に /v2cap へ送る */}
         <Route path="/v2" element={<Navigate to="/v2cap" replace />} />
-        <Route path="/v2cap" element={session ? <><V2capHome /><Suspense fallback={null}><V2capJemita /></Suspense></> : <Navigate to="/login" />} />
+        <Route path="/v2cap" element={session ? <><V2capHome />{JEMITA_ON && <Suspense fallback={null}><V2capJemita /></Suspense>}</> : <Navigate to="/login" />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
       </Suspense>

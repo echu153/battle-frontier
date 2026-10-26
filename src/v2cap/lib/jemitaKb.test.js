@@ -13,6 +13,7 @@ import { UNIQUE_ITEMS, ITEMS } from './equipment.js'
 import { CLERK_LINES, CLERK_STAGE_EVENTS } from './clerk.js'
 import { SHRINE_NAME } from './shrine.js'
 import { NG_JA, NG_EN, isJemitaNG } from './jemitaNg.js'
+import { JEMITA_ON } from './jemitaFlag.js'
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 const KB = buildJemitaKb()
@@ -108,7 +109,11 @@ test('鍵は画面のコードに置かない（Claude を呼ぶのはサーバ�
 test('画面：/v2cap に右下のボタンを置く（ホームとは別に読む）', () => {
   const app = read('../../App.jsx')
   assert.ok(app.includes("const V2capJemita = lazyReload(() => import('./v2cap/components/V2capJemita'))"))
-  assert.ok(app.includes('<Route path="/v2cap" element={session ? <><V2capHome /><Suspense fallback={null}><V2capJemita /></Suspense></> : <Navigate to="/login" />} />'))
+  assert.ok(app.includes('<Route path="/v2cap" element={session ? <><V2capHome />{JEMITA_ON && <Suspense fallback={null}><V2capJemita /></Suspense>}</> : <Navigate to="/login" />} />'))
+  // 2026-10-26 ユーザー指示「右下ちょっとじゃまだから一旦消して」＝スイッチで読み込みごと止めている（戻すときは true にしてここも直す）
+  assert.equal(JEMITA_ON, false, 'ジェミータのボタンは一旦消している')
+  assert.match(app, /JEMITA_ON \} from '\.\/v2cap\/lib\/jemitaFlag'/)
+  assert.ok(!/^import /m.test(read('./jemitaFlag.js')), 'スイッチのファイルはほかを読まない（入口を重くしない）')
   const ui = read('../components/V2capJemita.jsx')
   assert.ok(ui.includes("supabase.functions.invoke('v2cap-jemita'"), 'Edge Function の名前')
   assert.ok(ui.includes("supabase.rpc('v2cap_jemita_left')"), '残りの回数はサーバーから')
