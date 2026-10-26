@@ -79,5 +79,7 @@ test('【確定】2026-10-26 鍛冶屋の説明はタブの下に出さず ❓ H
   const fx = codeOf('../components/V2capCraftFx.jsx')
   assert.ok(fx.includes('（{job.sync}）') && !fx.includes('いまは'))
   assert.ok(!fx.includes('+0で持ち物に入りました'))
+  // 作成の確認の画面も「+0で持ち物に入ります。」は出さない（同じ日 ユーザー指示）。HELP の説明には残す
+  assert.ok(SMITH.includes(">必ずできます。</div>") && !SMITH.includes('必ずできます。+0で持ち物に入ります。'))
   assert.ok(SMITH.includes('`続けて作成（あと${againTimes}個）`') && !SMITH.includes('続けて作る'))
 })

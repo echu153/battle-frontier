@@ -583,7 +583,8 @@ function CraftModal({ item, prof, busy, onConfirm, onClose }) {
         ・<span style={{ color:'#ffcc00' }}>Gold {cost.gold.toLocaleString()}</span>
         <span style={{ color: TEXT.sub, fontSize:'11px' }}>（所持数：{(Number(prof.gold) || 0).toLocaleString()}）</span>
       </div>
-      <div style={{ color: TEXT.sub, fontSize:'11px' }}>必ずできます。+0で持ち物に入ります。</div>
+      {/* 「+0で持ち物に入ります。」は出さない（2026-10-26 ユーザー指示。作成の結果のポップアップの「+0で持ち物に入りました」と同じ） */}
+      <div style={{ color: TEXT.sub, fontSize:'11px' }}>必ずできます。</div>
     </V2Modal>
   )
 }
