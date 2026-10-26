@@ -7,6 +7,9 @@
 //   ・記録は**武器ごと**。熟練度が **MAX（SHINKA_MAX＝1,800戦＝約5時間）** になったら、鍛冶屋で**真化**できる（1本につき1回）
 //     （「記憶の抽出」のアイテム・効果のアイテム化はあとで作る予定＝能力は持ち物の行に別に持つ）
 //   ・付く能力は**立っているフラグの中から抽選で1つ**（均等）。キラーはフラグの1つ
+//     【確定】2026-10-26 ユーザー選択「キラーを出にくくする」：**キラーだけくじを半分**（KILLER_WEIGHT）。
+//     真化のあとキラーの種族の敵に当たるのは中央値13%（真化は約8時間目＝蒼海の入り江あたりで、そのあと先のエリアへ進む）。
+//     ユーザー指示「キラー対象は変えちゃダメ」＝真化したときの種族のまま（最近の種族についていく案・いまの場所に合わせる案はやめた）
 //   ・キラー＝倒した敵の**種族の割合1位**（魔物も入れる・**魔物キラーは倍率半分**）＝いつも1つ立つ
 //   ・代償つきの能力も**一部に入れる**（同じフラグに「得だけ」と「代償つきで得が大きい」があり、どちらが出るかも抽選）。
 //     真化でデメリットが付くこともあるのは HELP に書く
@@ -33,6 +36,7 @@ export const SHINKA_COST_PCT = 30     // 代償つきのあるフラグで、代
 export const MONSTER_RACE = 'monster' // 魔物（残り全部の受け皿）
 export const MONSTER_KILLER_MULT = 0.5 // 魔物キラーは倍率半分（ユーザー指示）
 export const SHINKA_MIN_DEN = 30      // 割合の分母（当てた数・勝った数など）がこれ未満のフラグは立たない
+export const KILLER_WEIGHT = 0.5      // 抽選のキラーのくじ（ほかのフラグは1・2026-10-26 ユーザー選択「キラーを出にくくする」）
 export const BANDS = ['朝', '昼', '晩']
 
 // ===== 戦い方の記録（1本の武器ぶん） =====
@@ -114,7 +118,7 @@ export const addSrec = (rec, add, { win = false, enemy = null, band = null } = {
 // th はシミュレーション（tools/v2cap-shinka-sim.mjs）で決めた値。
 // ★killer（種族）といつも立つ。band（時間帯）は「いちばん多い時間帯の割合」
 export const FLAGS = [
-  { key:'killer', special:'race', label:(p) => `${raceLabelOf(p)}をいちばん多く倒した` },
+  { key:'killer', special:'race', weight: KILLER_WEIGHT, label:(p) => `${raceLabelOf(p)}をいちばん多く倒した` },
   { key:'crit',   num:'crit',   den:'hit',   dir:'ge', th:0.35, label:() => 'クリティカルがよく出た' },
   { key:'multi',  num:'multi',  den:'hit',   dir:'ge', th:0.2, label:() => '多段技でよく当てた' },
   { key:'normal', num:'normal', den:'hit',   dir:'ge', th:0.16, label:() => '通常攻撃でよく当てた' },
@@ -276,11 +280,19 @@ export const shinkaEvolutionOf = (sh, band = null) => {
 }
 
 // ===== 抽選（サーバーの v2cap_shinka と同じ決まり。シミュレーションとテストのための写し） =====
-// 立っているフラグから均等に1つ → 代償つきのあるフラグなら SHINKA_COST_PCT% で代償つき
+// 立っているフラグから1つ（くじはどれも1・キラーだけ KILLER_WEIGHT）→ 代償つきのあるフラグなら SHINKA_COST_PCT% で代償つき
+// くじの重み（フラグの weight・無ければ1）。キラーだけ KILLER_WEIGHT
+export const flagWeightOf = (key) => FLAG_BY_KEY[key]?.weight ?? 1
+// 立っているフラグから重みどおりに1つ（サーバーの v2cap_shinka_pick と同じ）
+export const pickFlag = (pool, rng = Math.random) => {
+  const total = pool.reduce((t, p) => t + flagWeightOf(p.key), 0)
+  let x = rng() * total
+  return pool.find(p => (x -= flagWeightOf(p.key)) < 0) || pool[pool.length - 1]
+}
 export const rollShinka = (rec, rng = Math.random) => {
   const pool = flagsOf(rec)
   if (!pool.length) return null
-  const pick = pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))]
+  const pick = pickFlag(pool, rng)
   const cost = !!ABILITIES[pick.key]?.alt && rng() * 100 < SHINKA_COST_PCT
   return { key: pick.key, cost, param: pick.param ?? null }
 }

@@ -27,7 +27,7 @@ const { SPOTS, spotLvOf, enemyLevels, recLvOf } = await import(B + 'v2cap/lib/ar
 const { DAILY_TASKS } = await import(B + 'v2cap/lib/daily.js')
 const { mpNodesOf, ASC_CLASSES } = await import(B + 'v2cap/lib/ascension.js')
 const { ASC_LAYOUT } = await import(B + 'v2cap/lib/ascLayout.js')
-const { SHINKA_MAX, SHINKA_COST_PCT, SHINKA_MIN_DEN, SREC_FIELDS, FLAGS, ABILITIES } = await import(B + 'v2cap/lib/shinka.js')
+const { SHINKA_MAX, SHINKA_COST_PCT, SHINKA_MIN_DEN, SREC_FIELDS, FLAGS, ABILITIES, flagWeightOf } = await import(B + 'v2cap/lib/shinka.js')
 const { RACES, RACE_NAMES } = await import(B + 'v2cap/lib/monsterRace.js')
 
 const q = (s) => `'${String(s).replace(/'/g, "''")}'`
@@ -123,11 +123,11 @@ export const seeds = () => ({
     'insert into public.v2cap_shinka_fields (key, cap, le, win_only, sort) values',
     SREC_FIELDS.map((f, i) => `  (${q(f.key)}, ${f.cap}, ${f.le ? q(f.le) : 'null'}, ${f.winOnly ? 'true' : 'false'}, ${i + 1})`).join(',\n') + ';',
   ].join('\n'),
-  // フラグ（num ÷ den を境目 th と比べる・special＝race／band）。has_cost＝代償つきの能力があるか
+  // フラグ（num ÷ den を境目 th と比べる・special＝race／band）。has_cost＝代償つきの能力があるか・weight＝抽選のくじ
   shinka_flags: [
     'delete from public.v2cap_shinka_flags;',
-    'insert into public.v2cap_shinka_flags (key, num, den, dir, th, special, has_cost, sort) values',
-    FLAGS.map((f, i) => `  (${q(f.key)}, ${f.num ? q(f.num) : 'null'}, ${f.den ? q(f.den) : 'null'}, ${f.dir ? q(f.dir) : 'null'}, ${f.th ?? 'null'}, ${f.special ? q(f.special) : 'null'}, ${ABILITIES[f.key]?.alt ? 'true' : 'false'}, ${i + 1})`).join(',\n') + ';',
+    'insert into public.v2cap_shinka_flags (key, num, den, dir, th, special, has_cost, weight, sort) values',
+    FLAGS.map((f, i) => `  (${q(f.key)}, ${f.num ? q(f.num) : 'null'}, ${f.den ? q(f.den) : 'null'}, ${f.dir ? q(f.dir) : 'null'}, ${f.th ?? 'null'}, ${f.special ? q(f.special) : 'null'}, ${ABILITIES[f.key]?.alt ? 'true' : 'false'}, ${flagWeightOf(f.key)}, ${i + 1})`).join(',\n') + ';',
   ].join('\n'),
   // 種族（並び＝キラーの同じ数のときの順）
   races: [

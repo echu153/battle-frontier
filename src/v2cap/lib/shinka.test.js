@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
   SHINKA_MAX, SHINKA_COST_PCT, SHINKA_MIN_DEN, MONSTER_KILLER_MULT, SREC_FIELDS, SREC_KEYS, FLAGS, FLAG_BY_KEY, ABILITIES, BANDS,
+  KILLER_WEIGHT, flagWeightOf, pickFlag,
   emptySrec, srecOfBattle, addSrec, killerRaceOf, flagsOf, flagValueOf, flagLabelOf, rollShinka,
   shinkaEffectOf, shinkaNameOf, shinkaLines, shinkaEvolutionOf, masteryOf, canShinka,
 } from './shinka.js'
@@ -43,12 +44,33 @@ test('【確定】付く能力は立っているフラグから抽選。キラ�
   const pool = flagsOf(rec)
   assert.deepEqual(pool.find(p => p.key === 'killer'), { key: 'killer', param: 'beast' })
   assert.ok(pool.some(p => p.key === 'crit'), 'クリティカル率50%ならクリティカルのフラグ')
-  // 均等に引く（6000回で各フラグ ±3割の中）
+  // くじはどれも1・キラーだけ半分（6000回で見込みの ±3割の中）
   const rng = rngOf(3)
   const n = {}
   for (let i = 0; i < 6000; i++) { const r = rollShinka(rec, rng); n[r.key] = (n[r.key] || 0) + 1 }
-  for (const p of pool) assert.ok(Math.abs(n[p.key] - 6000 / pool.length) < 6000 / pool.length * 0.3, `${p.key} ${n[p.key]}`)
+  const total = pool.reduce((t, p) => t + flagWeightOf(p.key), 0)
+  for (const p of pool) {
+    const want = 6000 * flagWeightOf(p.key) / total
+    assert.ok(Math.abs(n[p.key] - want) < want * 0.3, `${p.key} ${n[p.key]}（見込み ${Math.round(want)}）`)
+  }
   assert.deepEqual(Object.keys(n).sort(), pool.map(p => p.key).sort(), '立っていないフラグは出ない')
+})
+
+test('【確定】2026-10-26 ユーザー選択「キラーを出にくくする」：キラーのくじだけ半分・種族は真化したときのまま（「キラー対象は変えちゃダメ」）', () => {
+  assert.equal(KILLER_WEIGHT, 0.5)
+  assert.equal(flagWeightOf('killer'), KILLER_WEIGHT)
+  for (const f of FLAGS) if (f.key !== 'killer') assert.equal(flagWeightOf(f.key), 1, f.key)
+  // 重みどおりに引く：キラーと1つのフラグだけなら、キラーは3回に1回
+  const rng = rngOf(11)
+  let k = 0
+  for (let i = 0; i < 6000; i++) if (pickFlag([{ key: 'killer' }, { key: 'crit' }], rng).key === 'killer') k++
+  assert.ok(Math.abs(k / 6000 - 1 / 3) < 0.03, `${k / 60}%`)
+  // サーバーも同じ重みで引く（くじは種の weight・抽選は v2cap_shinka_pick）
+  assert.ok(SQL.includes("  ('killer', null, null, null, null, 'race', true, 0.5, 1)"))
+  assert.ok(SQL.includes('v_pick := public.v2cap_shinka_pick(v_pool);'))
+  assert.ok(SQL.includes('revoke all on function public.v2cap_shinka_pick(jsonb) from public, anon, authenticated;'))
+  // 真化した能力の種族は戦闘の形でもそのまま（真化したあとに数え直さない）
+  assert.equal(shinkaEvolutionOf({ key: 'killer', cost: false, param: 'aquatic' }).race, 'aquatic')
 })
 
 test('代償つきは、代償つきのあるフラグでだけ・だいたい SHINKA_COST_PCT% で出る', () => {

@@ -39,6 +39,18 @@ const pctl = (a, p) => { const s = [...a].sort((x, y) => x - y); return s.length
 const r2 = (v) => (Number.isFinite(v) ? Math.round(v * 100) / 100 : '-')
 const pad = (s, n) => String(s).padEnd(n)
 
+// ===== キラーの対策の案（2026-10-26 ユーザー「キラーが真化のあと活きにくい件、対策の案を出して」）=====
+// recentN … 直近ほど重く数えた（1戦ごとに 1−1/N 倍）種族の1位に、真化したあとも毎戦ついていく
+// top2 … 真化したときの上位2種族／spot … いまいる場所でいちばん多い種族（出会う割合で重みづけ）
+const DECAYS = [600, 1800]
+const topOf = (d) => { let best = null; for (const [k, v] of Object.entries(d || {})) if (v > 0 && (!best || v > best[1])) best = [k, v]; return best?.[0] || null }
+const SPOT_TOP = Object.fromEntries(areas.SPOTS.map(s => {
+  const w = {}
+  const add = (list, p) => { for (const e of list) { const r = raceOf(e.name); if (r) w[r] = (w[r] || 0) + p / list.length } }
+  add(s.roster.enemies, 70); add(s.roster.timed, 25); add(s.roster.rares, 5)
+  return [s.id, topOf(w)]
+}))
+
 // ===== 1本の進行を回して、武器ごとに数える =====
 const runOne = (start, seed) => {
   const weapons = new Map()   // base_id → { srec, mastery, shinka, from, to, afterBattles, shinkaHour }
@@ -54,15 +66,34 @@ const runOne = (start, seed) => {
       lastHour = hour
       if (!weaponId) return false
       let w = weapons.get(weaponId)
-      if (!w) { w = { srec: S.emptySrec(), mastery: 0, shinka: null, from: hour, to: hour, afterBattles: 0, shinkaHour: null, killer: null, band: null, killerHit: 0, bandHit: 0 }; weapons.set(weaponId, w) }
+      if (!w) {
+        w = { srec: S.emptySrec(), mastery: 0, shinka: null, from: hour, to: hour, afterBattles: 0, shinkaHour: null, killer: null, band: null, killerHit: 0, bandHit: 0,
+          decay: Object.fromEntries(DECAYS.map(n => [n, {}])), alt: {}, top2: [], prevRecent: null, switches: 0 }
+        weapons.set(weaponId, w)
+      }
       w.to = hour
+      const race = raceOf(enc.enemy.name)
       if (w.shinka) {
         // 真化したあと：キラーの種族の敵に当たった数・いちばん多かった時間帯に戦った数（能力がどれだけ活きるか）
         w.afterBattles++
-        if (raceOf(enc.enemy.name) === w.killer) w.killerHit++
+        if (race === w.killer) w.killerHit++
         if (bandAt(at) === w.band) w.bandHit++
-        return false
+        // キラーの対策の案ごとに「その戦闘でキラーが効いたか」（--killer-alt の報告）
+        const hit = (k, ok) => { if (ok) w.alt[k] = (w.alt[k] || 0) + 1 }
+        for (const n of DECAYS) hit(`recent${n}`, race === topOf(w.decay[n]))   // 直近ほど重く数えた1位に、毎戦ついていく
+        hit('top2', w.top2.includes(race))                                      // 真化したときの上位2種族
+        hit('spot', race === SPOT_TOP[enc.spot.id])                              // いまいる場所でいちばん多い種族
+        const now1800 = topOf(w.decay[1800])
+        if (w.prevRecent && now1800 !== w.prevRecent) w.switches++
+        w.prevRecent = now1800
       }
+      // 直近ほど重く数えた種族の数（1戦ごとに (1−1/n) 倍して、勝った敵の種族に1足す）
+      for (const n of DECAYS) {
+        const d = w.decay[n]
+        for (const k of Object.keys(d)) d[k] *= 1 - 1 / n
+        if (win && race) d[race] = (d[race] || 0) + 1
+      }
+      if (w.shinka) return false
       w.mastery++
       w.srec = S.addSrec(w.srec, S.srecOfBattle(r, prof.username), { win, enemy: enc.enemy.name, band: bandAt(at) })
       if (w.mastery < S.SHINKA_MAX) return false
@@ -71,6 +102,8 @@ const runOne = (start, seed) => {
       w.shinkaHour = hour
       w.killer = S.killerRaceOf(w.srec)
       w.band = S.topBandOf(w.srec)?.band || null
+      w.top2 = Object.entries(w.srec.race).sort((x, y) => y[1] - x[1]).slice(0, 2).map(([k]) => k)
+      w.prevRecent = topOf(w.decay[1800])
       const kills = Object.values(w.srec.race).reduce((a, b) => a + b, 0)
       events.push({
         start, seed, cls, hour, spot: enc.spot.id, area: enc.spot.area, weaponId,
@@ -115,6 +148,16 @@ const flagsReport = (runs) => {
   const done = runs.flatMap(r => [...r.weapons.values()]).filter(w => w.shinka && w.afterBattles >= 360)
   const kh = done.map(w => w.killerHit / w.afterBattles)
   console.log(`真化したあと（1時間以上使った武器 ${done.length}本）：キラーの種族の敵に当たった割合 10% ${r2(pctl(kh, 0.1))}・中央値 ${r2(pctl(kh, 0.5))}・90% ${r2(pctl(kh, 0.9))}　同じ時間帯に戦った割合 中央値 ${r2(pctl(done.map(w => w.bandHit / w.afterBattles), 0.5))}`)
+  // キラーの対策の案ごとの当たる割合（どれも同じ武器・同じ戦闘で数える）
+  const altOf = (k) => done.map(w => (w.alt[k] || 0) / w.afterBattles)
+  const line = (label, xs) => `${label}：10% ${r2(pctl(xs, 0.1))}・中央値 ${r2(pctl(xs, 0.5))}・90% ${r2(pctl(xs, 0.9))}・平均 ${r2(xs.reduce((a, b) => a + b, 0) / xs.length)}`
+  console.log('--- キラーの対策の案：真化したあとにキラーが効いた戦闘の割合 ---')
+  console.log(line('いまの形（真化したときの1位に固定）', kh))
+  for (const n of DECAYS) console.log(line(`直近ほど重く数えた1位についていく（${n}戦）`, altOf(`recent${n}`)))
+  console.log(line('真化したときの上位2種族（固定）', altOf('top2')))
+  console.log(line('いまいる場所でいちばん多い種族', altOf('spot')))
+  const sw = done.map(w => w.switches / (w.afterBattles / 360))
+  console.log(`直近（1800戦）についていくとき、種族が入れ替わった回数：1時間あたり 中央値 ${r2(pctl(sw, 0.5))}・90% ${r2(pctl(sw, 0.9))}`)
   // キラーの種族
   const kr = {}
   for (const e of ev) kr[e.killer] = (kr[e.killer] || 0) + 1

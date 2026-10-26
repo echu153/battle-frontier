@@ -7791,6 +7791,8 @@ create table if not exists public.v2cap_shinka_fields (
 create table if not exists public.v2cap_shinka_flags (
   key text primary key, num text, den text, dir text, th numeric, special text, has_cost boolean not null default false, sort int not null
 );
+-- 抽選のくじ（2026-10-26 ユーザー選択「キラーを出にくくする」＝キラーだけ0.5・ほかは1）
+alter table public.v2cap_shinka_flags add column if not exists weight numeric not null default 1;
 create table if not exists public.v2cap_races (key text primary key, label text not null, sort int not null);
 -- モンスターの種族（画面の monsterRace.js と同じ。敵の表 v2cap_enemies は流し直すたびに入れ直すので外部キーでつながない）
 create table if not exists public.v2cap_monster_race (name text primary key, race text not null);
@@ -7836,27 +7838,27 @@ insert into public.v2cap_shinka_fields (key, cap, le, win_only, sort) values
 -- @@end:shinka_fields
 -- @@seed:shinka_flags
 delete from public.v2cap_shinka_flags;
-insert into public.v2cap_shinka_flags (key, num, den, dir, th, special, has_cost, sort) values
-  ('killer', null, null, null, null, 'race', true, 1),
-  ('crit', 'crit', 'hit', 'ge', 0.35, null, true, 2),
-  ('multi', 'multi', 'hit', 'ge', 0.2, null, false, 3),
-  ('normal', 'normal', 'hit', 'ge', 0.16, null, false, 4),
-  ('drain', 'drain', 'hit', 'ge', 0.03, null, false, 5),
-  ('ail', 'ail', 'hit', 'ge', 0.24, null, false, 6),
-  ('dot', 'dot', 'n', 'ge', 0.3, null, false, 7),
-  ('ailed', 'ailed', 'n', 'ge', 0.2, null, false, 8),
-  ('dodge', 'dodge', 'taken', 'ge', 0.3, null, true, 9),
-  ('hurt', 'hurt', 'n', 'ge', 29, null, false, 10),
-  ('fin', 'fin', 'n', 'le', 0.42, null, false, 11),
-  ('heal', 'heal', 'n', 'ge', 0.1, null, false, 12),
-  ('buff', 'buff', 'n', 'ge', 2, null, false, 13),
-  ('low', 'low', 'w', 'ge', 0.03, null, true, 14),
-  ('back', 'back', 'w', 'ge', 0.02, null, false, 15),
-  ('clean', 'clean', 'w', 'ge', 0.25, null, false, 16),
-  ('fast', 'fast', 'w', 'ge', 0.28, null, false, 17),
-  ('long', 'long', 'w', 'ge', 0.13, null, false, 18),
-  ('big', 'l', 'n', 'ge', 0.053, null, false, 19),
-  ('band', null, null, 'ge', 0.75, 'band', false, 20);
+insert into public.v2cap_shinka_flags (key, num, den, dir, th, special, has_cost, weight, sort) values
+  ('killer', null, null, null, null, 'race', true, 0.5, 1),
+  ('crit', 'crit', 'hit', 'ge', 0.35, null, true, 1, 2),
+  ('multi', 'multi', 'hit', 'ge', 0.2, null, false, 1, 3),
+  ('normal', 'normal', 'hit', 'ge', 0.16, null, false, 1, 4),
+  ('drain', 'drain', 'hit', 'ge', 0.03, null, false, 1, 5),
+  ('ail', 'ail', 'hit', 'ge', 0.24, null, false, 1, 6),
+  ('dot', 'dot', 'n', 'ge', 0.3, null, false, 1, 7),
+  ('ailed', 'ailed', 'n', 'ge', 0.2, null, false, 1, 8),
+  ('dodge', 'dodge', 'taken', 'ge', 0.3, null, true, 1, 9),
+  ('hurt', 'hurt', 'n', 'ge', 29, null, false, 1, 10),
+  ('fin', 'fin', 'n', 'le', 0.42, null, false, 1, 11),
+  ('heal', 'heal', 'n', 'ge', 0.1, null, false, 1, 12),
+  ('buff', 'buff', 'n', 'ge', 2, null, false, 1, 13),
+  ('low', 'low', 'w', 'ge', 0.03, null, true, 1, 14),
+  ('back', 'back', 'w', 'ge', 0.02, null, false, 1, 15),
+  ('clean', 'clean', 'w', 'ge', 0.25, null, false, 1, 16),
+  ('fast', 'fast', 'w', 'ge', 0.28, null, false, 1, 17),
+  ('long', 'long', 'w', 'ge', 0.13, null, false, 1, 18),
+  ('big', 'l', 'n', 'ge', 0.053, null, false, 1, 19),
+  ('band', null, null, 'ge', 0.75, 'band', false, 1, 20);
 -- @@end:shinka_flags
 -- @@seed:races
 delete from public.v2cap_races;
@@ -8291,6 +8293,29 @@ end;
 $$;
 revoke all on function public.v2cap_shinka_pool(jsonb) from public, anon, authenticated;
 
+-- 立っているフラグから重み（v2cap_shinka_flags の weight）どおりに1つ引く（shinka.js の pickFlag と同じ）。
+-- 【確定】2026-10-26 ユーザー選択「キラーを出にくくする」＝キラーのくじだけ半分
+create or replace function public.v2cap_shinka_pick(p_pool jsonb)
+returns jsonb language plpgsql volatile security definer set search_path = public as $$
+declare
+  v_total numeric := 0;
+  v_x     numeric;
+  v_e     jsonb;
+begin
+  for v_e in select value from jsonb_array_elements(coalesce(p_pool, '[]'::jsonb)) loop
+    v_total := v_total + coalesce((select weight from public.v2cap_shinka_flags where key = v_e ->> 'key'), 1);
+  end loop;
+  if v_total <= 0 then return null; end if;
+  v_x := random() * v_total;
+  for v_e in select value from jsonb_array_elements(p_pool) loop
+    v_x := v_x - coalesce((select weight from public.v2cap_shinka_flags where key = v_e ->> 'key'), 1);
+    if v_x < 0 then return v_e; end if;
+  end loop;
+  return p_pool -> (jsonb_array_length(p_pool) - 1);
+end;
+$$;
+revoke all on function public.v2cap_shinka_pick(jsonb) from public, anon, authenticated;
+
 -- 真化（鍛冶屋）。熟練度が MAX の自分の武器だけ。抽選はここ（画面は能力を選べない）
 create or replace function public.v2cap_shinka(p_inv bigint)
 returns jsonb language plpgsql security definer set search_path = public as $$
@@ -8317,7 +8342,7 @@ begin
   if jsonb_array_length(v_pool) = 0 then
     return jsonb_build_object('ok', false, 'error', 'この武器で勝った戦いがまだありません');
   end if;
-  v_pick := v_pool -> floor(random() * jsonb_array_length(v_pool))::int;
+  v_pick := public.v2cap_shinka_pick(v_pool);
   v_cost := coalesce((select has_cost from public.v2cap_shinka_flags where key = v_pick ->> 'key'), false)
             and random() * 100 < v_pct;
   v_sh := jsonb_build_object('key', v_pick ->> 'key', 'cost', v_cost, 'param', v_pick -> 'param', 'at', now());
