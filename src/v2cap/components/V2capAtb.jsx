@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { supabase } from '../../supabase'
 import V2LogLine from './V2LogLine.jsx'
+import V2capAtbMacros from './V2capAtbMacros.jsx'
 import { box, miniBtn, TEXT } from './v2ui.js'
 import { buildBattleLog } from '../core/battleLog.js'
 import { mpCostOf } from '../core/battle.js'
 import {
-  createAtb, advance, reserve, unreserveAt, clearQueue, setLoop, toggleGuard,
+  createAtb, advance, reserve, unreserveAt, clearQueue, startMacro, stopMacro, toggleGuard,
   canUse, cdLeft, cdFor, guardReady, guardCdLeft, needNow, chosenOf, buffChips, ailChips, stateChips,
   GUARD_CUT, GUARD_CD, CAST_SEC, MAX_SEC, QUEUE_MAX, TURN_SEC,
 } from '../core/atb.js'
+import { MACRO_MARK, macrosOf, validateMacros, macroEntriesOf } from '../lib/atbMacro.js'
 import { STAT_DEFS } from '../core/stats.js'
 import { AREA_LIST, SPOTS, SUB_MARK, toFighter as enemyFighter } from '../lib/areas.js'
 import { toFighter as playerFighter, slotsOf } from '../lib/loadout.js'
@@ -20,8 +23,10 @@ import { ascEffectsOf } from '../lib/ascension.js'
 // 【確定】2026-10-26 ユーザー指示「ATBのエンジンと試し撃ち画面（開発専用・報酬なし）を作って。細かい数字は試しながら決める」
 //   ・レイドボス・IDダンジョンに載せる前の、手触りと数字を見るための場所。**報酬なし・サーバーへ何も送らない**
 //   ・相手はエリアの敵（ボス・ふつう・朝昼晩・レア）。HPの倍率で長い戦い（レイドのボスの代わり）も見られる
-//   ・自分は持っている技を全部使える（ATBの決まり）。技を押すと予約の列の後ろに入り、ゲージが満タンになると先頭から出る
-// 中身（進み方）は src/v2cap/core/atb.js。つまみ（秒・倍率）もそちらの冒頭
+//   ・自分は持っている技を全部使える（ATBの決まり）。技を押すと割り込みの列の後ろに入り、ゲージが満タンになると先頭から出る
+//   ・マクロ①〜③（2026-10-26 ユーザー指示）：準備の画面で登録・保存（サーバーに職業ごと）、戦闘中に押すとその順に出る。
+//     いま画面に出ている形（保存前でも）で戦う＝試しながら組み替えられる
+// 中身（進み方）は src/v2cap/core/atb.js。つまみ（秒・倍率）もそちらの冒頭。マクロの決まりは src/v2cap/lib/atbMacro.js
 // ============================================================
 
 const HP_MULTS = [1, 10, 50]
@@ -55,7 +60,11 @@ const Chips = ({ st, side }) => {
   )
 }
 
-export default function V2capAtb({ prof, inventory }) {
+export default function V2capAtb({ prof, inventory, onProfile }) {
+  const [macros, setMacros] = useState(() => macrosOf(prof))
+  const [dirty, setDirty] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [macroMsg, setMacroMsg] = useState(null)
   const [area, setArea] = useState(1)
   const [sub, setSub] = useState(1)
   const [foeName, setFoeName] = useState('')
@@ -122,14 +131,41 @@ export default function V2capAtb({ prof, inventory }) {
     setPhase('fight')
   }
 
+  // ===== マクロ =====
+  const usable = useMemo(() => myFighter.slots.map(s => s.skill.name), [myFighter])
+  const editMacros = (next) => { setMacros(next); setDirty(true); setMacroMsg(null) }
+  const saveMacros = async () => {
+    const err = validateMacros(macros, usable)
+    if (err) { setMacroMsg({ ok: false, text: err }); return }
+    setSaving(true)
+    const { data, error } = await supabase.rpc('v2cap_set_atb_macros', { p_macros: macros })
+    setSaving(false)
+    if (error || !data?.ok) {
+      // サーバーに保存の関数がまだ無い（SQL §19 を流す前）ときは、英語のまま出さずに案内する
+      const missing = /could not find the function/i.test(error?.message || '')
+      setMacroMsg({ ok: false, text: missing ? 'サーバーにまだ保存の仕組みがありません（SQLを流すと保存できます）' : (error?.message || data?.error || '保存できませんでした') })
+      return
+    }
+    setDirty(false)
+    setMacroMsg({ ok: true, text: `${prof?.class}のマクロを保存しました` })
+    onProfile?.()
+  }
+  // ①〜③を押す：いま画面に出ている形で、そのマクロの頭から動かす（もう一度押しても頭から）
+  const runMacro = (i) => {
+    const s = st.current
+    if (!s) return
+    startMacro(s, i + 1, macroEntriesOf(macros[i], s.a.slots), macros[i].loop)
+  }
+
   // ===== 準備 =====
   if (phase !== 'fight' || !st.current) {
     return (
       <div style={{ ...box, padding:'12px' }}>
         <div style={{ color: TEXT.sub, fontSize:'11px', lineHeight:1.7, marginBottom:'10px' }}>
-          レイドボス・IDダンジョンで使うATB戦闘の試し撃ちです。<b style={{ color: TEXT.bright }}>報酬なし・サーバーへは何も送りません。</b><br />
+          レイドボス・IDダンジョンで使うATB戦闘の試し撃ちです。<b style={{ color: TEXT.bright }}>報酬なし・戦闘の結果はサーバーへ送りません</b>（送るのはマクロの保存だけ）。<br />
           ゲージは自分と相手のAGIの比で溜まる速さが変わります。技は全部使えて、使うとクールダウンに入ります（MPは回復しません）。
         </div>
+        <V2capAtbMacros macros={macros} onChange={editMacros} usable={usable} dirty={dirty} saving={saving} msg={macroMsg} onSave={saveMacros} />
         <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', marginBottom:'8px' }}>
           <select value={area} onChange={e => { setArea(Number(e.target.value)); setFoeName('') }} style={sel}>
             {AREA_LIST.map((a, i) => <option key={a.name} value={i + 1}>{i + 1}. {a.name}</option>)}
@@ -170,8 +206,11 @@ export default function V2capAtb({ prof, inventory }) {
   const dealt = en.base.hp - Math.max(0, en.hp)
   const dealtPct = (dealt / en.base.hp) * 100
   const dps = dealt / Math.max(0.1, now)
-  const nextLabel = ch.guard ? '🛡 防御' : ch.skill ? ch.skill.name : ch.waiting != null ? `通常攻撃（${me.slots[ch.waiting]?.skill?.name}を待っている）` : '通常攻撃'
+  const waitName = ch.waiting === 'guard' ? '防御' : me.slots[ch.waiting]?.skill?.name
+  const nextLabel = ch.guard ? '🛡 防御' : ch.skill ? ch.skill.name : ch.waiting != null ? `通常攻撃（${waitName}を待っている）` : '通常攻撃'
   const gReady = guardReady(me, now)
+  const run = me.macro   // 動いているマクロ（core/atb.js の startMacro）
+  const entryText = (e) => (e.guard ? '🛡 防御' : e.idx === null ? '通常攻撃' : me.slots[e.idx]?.skill?.name)
 
   return (
     <div style={{ ...box, padding:'12px' }}>
@@ -220,31 +259,51 @@ export default function V2capAtb({ prof, inventory }) {
         <Chips st={s} side={me} />
       </div>
 
-      {/* 予約の列 */}
+      {/* マクロ①〜③ */}
       <div style={{ border:'1px solid #13405f', padding:'6px', marginBottom:'8px' }}>
         <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap', marginBottom:'4px' }}>
-          <span style={{ color: TEXT.label, fontSize:'11px' }}>予約（{me.queue.length}/{QUEUE_MAX}）</span>
-          <button onClick={() => setLoop(s, !me.loop)}
-            style={{ ...miniBtn(me.loop ? '#44ff88' : TEXT.label), padding:'4px 8px', background: me.loop ? '#003018' : '#000818' }}>
-            🔁 くり返す {me.loop ? 'ON' : 'OFF'}
-          </button>
-          <button onClick={() => clearQueue(s)} disabled={!me.queue.length} style={{ ...miniBtn('#ff8888'), padding:'4px 8px' }}>空にする</button>
+          <span style={{ color: TEXT.label, fontSize:'11px' }}>マクロ</span>
+          {macros.map((m, i) => {
+            const on = run?.no === i + 1
+            return (
+              <button key={i} onClick={() => runMacro(i)} disabled={s.over || !m.steps.length}
+                style={{ ...miniBtn(on ? '#ffee44' : m.steps.length ? '#44ddff' : '#2a4a66'), padding:'6px 12px', fontSize:'13px',
+                  background: on ? '#003060' : '#000818' }}>
+                {MACRO_MARK[i]}{m.loop ? '🔁' : ''}
+              </button>
+            )
+          })}
+          <button onClick={() => stopMacro(s)} disabled={s.over || !run} style={{ ...miniBtn('#ff8888'), padding:'6px 10px', fontSize:'11px' }}>⏹ 止める</button>
         </div>
-        {me.queue.length ? (
+        {run ? (
           <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
+            {run.steps.map((e, k) => (
+              <span key={k} style={chip(k === run.pos ? '#ffee44' : '#88ccff', k === run.pos ? '#003060' : '#000818')}>
+                {k + 1}. {entryText(e)}
+              </span>
+            ))}
+            <span style={{ color: TEXT.label, fontSize:'10px' }}>{run.loop ? '（くり返す）' : '（最後まで出たら止まる）'}</span>
+          </div>
+        ) : (
+          <div style={{ color: TEXT.empty, fontSize:'10px' }}>
+            {macros.some(m => m.steps.length) ? '①〜③を押すと、そのマクロの頭から出ます' : 'マクロは「相手を選び直す」の画面で登録できます'}
+          </div>
+        )}
+        {/* 割り込み（手で押した技）。マクロより先に、1回ずつ出る */}
+        {me.queue.length > 0 && (
+          <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', alignItems:'center', marginTop:'6px' }}>
+            <span style={{ color: TEXT.label, fontSize:'10px' }}>割り込み（{me.queue.length}/{QUEUE_MAX}）</span>
             {me.queue.map((q, i) => {
-              const name = q.idx === null ? '通常攻撃' : me.slots[q.idx]?.skill?.name
               const wait = i === 0 && q.idx !== null && !canUse(me, q.idx, now)
               return (
-                <button key={i} onClick={() => unreserveAt(s, i)} title="押すと予約から外す"
+                <button key={i} onClick={() => unreserveAt(s, i)} title="押すと外す"
                   style={{ ...miniBtn(i === 0 ? '#ffee44' : '#88ccff'), padding:'4px 7px', fontSize:'11px' }}>
-                  {i + 1}. {name}{wait ? `（あと${cdLeft(me, q.idx, now).toFixed(1)}秒）` : ''} ✕
+                  {i + 1}. {entryText(q)}{wait ? `（あと${cdLeft(me, q.idx, now).toFixed(1)}秒）` : ''} ✕
                 </button>
               )
             })}
+            <button onClick={() => clearQueue(s)} style={{ ...miniBtn('#ff8888'), padding:'4px 8px' }}>空にする</button>
           </div>
-        ) : (
-          <div style={{ color: TEXT.empty, fontSize:'10px' }}>予約が無いときは通常攻撃が出ます。技を押すと後ろに入ります</div>
         )}
       </div>
 

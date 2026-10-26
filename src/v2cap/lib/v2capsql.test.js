@@ -29,6 +29,7 @@ import { FLOORS as TOWER_FLOORS, LOSE_DROP as TOWER_LOSE } from './tower.js'
 import { DEX_AREA_STAM } from './dex.js'
 import { BURGER_GOLD, TOPPING_GOLD, MEAL_MINUTES, MEAL_STATS, toppingsOf } from './burger.js'
 import { rewrite } from '../../../tools/v2cap-sql.mjs'
+import { MACRO_COUNT, MACRO_STEPS, STEP_NORMAL, STEP_GUARD } from './atbMacro.js'
 
 // ★改行はLFにそろえてから見る（Windowsで core.autocrlf=true のまま取り出すとCRLFになり、改行を含む正規表現が合わなくなる。
 //   2026-10-12 別セッションの作業ツリーで「ClassLVの数え直し」のテストが落ちたので直した）。CRLFの書き直しは下の種のテストで別に見る
@@ -1136,4 +1137,23 @@ test('【確定】2026-10-26 装備のお気に入り（§8）：列 fav・付�
   assert.ok(SQL.includes('grant execute on function public.v2cap_gear_fav(bigint, boolean) to authenticated;'))
   assert.match(fnBody('v2cap_dismantle'), /and not coalesce\(i\.fav, false\)/, '分解はお気に入りを飛ばす')
   assert.match(fnBody('v2cap_museum_take'), /if coalesce\(v_inv\.fav, false\) then/, '寄贈はお気に入りを断る')
+})
+
+test('【確定】2026-10-26 ATBのマクロ（§19）：列 atb_macros・職業ごと・3つ・8個まで・使える覚えた技と通常攻撃・防御だけ', () => {
+  // ユーザー指示「マクロ（①〜③に技の順番を登録して…）」＋選んだこと「8個まで」「くり返すかはマクロごと」「サーバーに保存」
+  assert.ok(SQL.includes("alter table public.v2cap_profiles add column if not exists atb_macros jsonb not null default '{}'::jsonb;"))
+  const f = fnBody('v2cap_set_atb_macros')
+  assert.ok(f.includes('if not public.v2cap_is_dev() then'), '開発限定')
+  assert.ok(f.includes(`c_count constant int := ${MACRO_COUNT};`), 'マクロの数は atbMacro.js と同じ')
+  assert.ok(f.includes(`c_steps constant int := ${MACRO_STEPS};`), '1つの手の数は atbMacro.js と同じ')
+  assert.ok(f.includes(`continue when s in ('${STEP_NORMAL}', '${STEP_GUARD}');`), '通常攻撃・防御の印は atbMacro.js と同じ')
+  assert.ok(f.includes("or not (coalesce(v_row.learned, '[]'::jsonb) ? s)"), '覚えた技だけ')
+  assert.ok(f.includes('not (v_sk.cls = any(v_lin))'), 'その職業と下位職の技だけ')
+  assert.ok(f.includes('array[class], v_out)'), '職業ごとに置き換える')
+  // 文言は画面の確かめ（validateMacros）と同じ
+  assert.ok(f.includes("format('マクロは%sつです', c_count)"))
+  assert.ok(f.includes("format('マクロ%sは%s個までです', substr('①②③', i, 1), c_steps)"))
+  assert.ok(f.includes("format('%sはいまのクラスで使える覚えた技ではありません', s)"))
+  assert.ok(SQL.includes('revoke all on function public.v2cap_set_atb_macros(jsonb) from public, anon;'))
+  assert.ok(SQL.includes('grant execute on function public.v2cap_set_atb_macros(jsonb) to authenticated;'))
 })

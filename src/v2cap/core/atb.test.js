@@ -3,7 +3,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  createAtb, runFor, advance, reserve, clearQueue, setLoop, toggleGuard, canUse, cdLeft, chosenOf, needFor,
+  createAtb, runFor, advance, reserve, clearQueue, startMacro, stopMacro, toggleGuard, canUse, cdLeft, chosenOf, needFor,
   fillRatio, cdOfProc, buffSecOf, buffChips,
   STEP_SEC, TURN_SEC, GAUGE_FULL, GUARD_CUT, GUARD_CD, CAST_SEC, MAX_DT,
 } from './atb.js'
@@ -83,10 +83,9 @@ test('AGIが4倍以上なら2倍速・相手は0.5倍速＝行動の回数は4�
   assert.ok(ratio > 3.8 && ratio < 4.2, `約4倍（実測 ${ratio.toFixed(2)}）`)
 })
 
-test('予約した技はゲージが満タンの瞬間に出て、クールダウン中は使えない', () => {
+test('マクロの技はゲージが満タンの瞬間に出て、クールダウン中は使えるまで待つ', () => {
   const st = createAtb(fighter('自分', [sk('重い技', { proc: 80 })]), fighter('敵'), { rng: makeRng(3), maxSec: 30 })
-  reserve(st, 0)
-  setLoop(st, true)
+  startMacro(st, 1, [{ idx: 0 }], true)
   const times = skillTimes(st, '自分', '重い技')
   // 4秒で1回目 → 12秒のクールダウン → 16秒・28秒（そのあいだは通常攻撃でつなぐ＝使えるまで待つ）
   assert.deepEqual(times, [4, 16, 28])
@@ -113,10 +112,58 @@ test('予約は順番に出る・くり返さないなら最後は通常攻撃�
   assert.equal(chosenOf(st.a, st.t).idx, null, '予約が無ければ通常攻撃')
 })
 
-test('MPは回復しない：足りなくなった技は使えないまま（予約は待ち続け、通常攻撃でつなぐ）', () => {
+test('マクロ：くり返さないマクロは最後まで出たら止まる（あとは通常攻撃）', () => {
+  const A = sk('技A')
+  const B = sk('技B')
+  const st = createAtb(fighter('自分', [A, B]), fighter('敵'), { rng: makeRng(21), maxSec: 30 })
+  startMacro(st, 2, [{ idx: 0 }, { idx: 1 }], false)
+  runFor(st, 8.05)
+  assert.deepEqual(acts(st, '自分', 'skill').map(l => l.skill), ['技A', '技B'])
+  assert.equal(st.a.macro, null)
+  runFor(st, 8)
+  assert.equal(acts(st, '自分', 'skill').length, 2)
+  assert.equal(acts(st, '自分', 'normal').length, 2)
+})
+
+test('マクロ：手で押した技は次の1回だけ割り込み、そのあとマクロの続きに戻る（ユーザー選択）', () => {
+  const A = sk('技A')
+  const B = sk('技B')
+  const X = sk('割り込み技')
+  const st = createAtb(fighter('自分', [A, B, X]), fighter('敵'), { rng: makeRng(22), maxSec: 40 })
+  startMacro(st, 1, [{ idx: 0 }, { idx: 1 }], true)
+  runFor(st, 4.05)              // 技A
+  reserve(st, 2)                // 割り込み
+  runFor(st, 4)                 // 割り込み技
+  runFor(st, 4)                 // マクロの続き＝技B（頭からではない）
+  runFor(st, 4)                 // 技A
+  assert.deepEqual(acts(st, '自分', 'skill').map(l => l.skill), ['技A', '割り込み技', '技B', '技A'])
+  assert.equal(st.a.queue.length, 0)
+})
+
+test('マクロ：防御も入れられる（クールダウン中は使えるまで待つ）・別のマクロを押すと頭から・止められる', () => {
+  const A = sk('技A')
+  const st = createAtb(fighter('自分', [A]), fighter('敵'), { rng: makeRng(23), maxSec: 80 })
+  startMacro(st, 1, [{ guard: true }, { idx: 0 }], true)
+  runFor(st, 8.05)
+  assert.deepEqual(acts(st, '自分').filter(l => l.type === 'guard' || l.type === 'skill').map(l => l.type), ['guard', 'skill'])
+  // 2回目の防御は30秒のクールダウン（34秒まで）＝それまでは通常攻撃でつなぐ
+  runFor(st, 20)
+  assert.equal(acts(st, '自分', 'guard').length, 1)
+  assert.equal(chosenOf(st.a, st.t).waiting, 'guard')
+  runFor(st, 8)
+  assert.equal(acts(st, '自分', 'guard').length, 2)
+  startMacro(st, 3, [{ idx: 0 }], false)
+  assert.equal(st.a.macro.no, 3)
+  assert.equal(st.a.macro.pos, 0)
+  stopMacro(st)
+  assert.equal(st.a.macro, null)
+  assert.equal(chosenOf(st.a, st.t).idx, null, 'マクロも割り込みも無ければ通常攻撃')
+  assert.ok(st.inputs.some(i => i.k === 'macro' && i.no === 3), '押した記録に残る')
+})
+
+test('MPは回復しない：足りなくなった技は使えないまま（マクロは待ち続け、通常攻撃でつなぐ）', () => {
   const st = createAtb(fighter('自分', [sk('MP技', { mp: 10 })], { stats: { mp: 25 } }), fighter('敵'), { rng: makeRng(5), maxSec: 60 })
-  reserve(st, 0)
-  setLoop(st, true)
+  startMacro(st, 1, [{ idx: 0 }], true)
   runFor(st, 60)
   assert.equal(acts(st, '自分', 'skill').length, 2, 'MP25で10の技は2回まで')
   assert.equal(st.a.mp, 5)
@@ -263,8 +310,7 @@ test('同じ乱数と同じ入力なら同じ結果（あとでサーバーで�
   const play = () => {
     const st = createAtb(fighter('自分', [sk('技', { proc: 85, mult: 1.6, sureHit: false })], { stats: { hp: 30000 } }),
       fighter('敵', [sk('牙', { proc: 80, mult: 1.5 })], { stats: { hp: 30000, str: 140 } }), { rng: makeRng(17), maxSec: 120 })
-    reserve(st, 0)
-    setLoop(st, true)
+    startMacro(st, 1, [{ idx: 0 }], true)
     // 実時間はばらばら（裏のタブ・遅い端末）でも、刻みが固定なので結果は同じ
     const dts = [0.016, 0.033, 0.2, 0.9, 0.05, 0.001]
     for (let i = 0; !st.over && i < 100000; i++) advance(st, dts[i % dts.length])

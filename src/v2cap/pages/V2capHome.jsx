@@ -504,7 +504,7 @@ export default function V2capHome() {
             {screen === 'uniqueCheck' && <V2capUniqueCheck prof={prof} inventory={inventory} />}
             {screen === 'atb' && (
               <Suspense fallback={<div style={{ color: TEXT.label, fontSize:'11px' }}>読み込み中...</div>}>
-                <V2capAtb prof={prof} inventory={inventory} />
+                <V2capAtb prof={prof} inventory={inventory} onProfile={refresh} />
               </Suspense>
             )}
           </div>

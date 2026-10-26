@@ -8371,3 +8371,72 @@ end;
 $$;
 revoke all on function public.v2cap_debug_shinka_ready() from public, anon;
 grant execute on function public.v2cap_debug_shinka_ready() to authenticated;
+
+-- ============================================================
+-- ===== 19. ATB戦闘のマクロ（2026-10-26）=====
+-- ============================================================
+-- 【確定】2026-10-26 ユーザー指示「マクロ（①〜③に技の順番を登録して、押したらゲージが溜まりしだい順に出る）」＋選んだこと：
+--   ・1つのマクロに8個まで（同じ技を何回入れてもよい・通常攻撃 @normal と防御 @guard も入れられる）
+--   ・くり返すかはマクロごとに選べる（loop）・サーバーに保存（職業ごと）
+--   形と決まりの正は src/v2cap/lib/atbMacro.js（validateMacros と同じ文言）。戦闘（ATB）は画面で動く＝ここは保存だけ
+--   atb_macros ＝ { 職業: [{ "steps": [技の名前｜"@normal"｜"@guard"], "loop": true/false } ×3] }
+alter table public.v2cap_profiles add column if not exists atb_macros jsonb not null default '{}'::jsonb;
+
+-- いまの職業のマクロ①〜③をまとめて置き換える。技はその職業（と下位職）の覚えた技だけ（パッシブは置けない）
+create or replace function public.v2cap_set_atb_macros(p_macros jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_count constant int := 3;
+  c_steps constant int := 8;
+  v_uid   uuid := auth.uid();
+  v_row   public.v2cap_profiles;
+  v_in    jsonb := coalesce(p_macros, '[]'::jsonb);
+  v_lin   text[];
+  v_sk    public.v2cap_skills;
+  v_out   jsonb := '[]'::jsonb;
+  v_steps jsonb;
+  e       jsonb;
+  x       jsonb;
+  s       text;
+  i       int := 0;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select * into v_row from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  if jsonb_typeof(v_in) <> 'array' or jsonb_array_length(v_in) <> c_count then
+    return jsonb_build_object('ok', false, 'error', format('マクロは%sつです', c_count));
+  end if;
+  v_lin := public.v2cap_lineage(v_row.class);
+  for e in select value from jsonb_array_elements(v_in) loop
+    i := i + 1;
+    v_steps := case when jsonb_typeof(e) = 'object' then e -> 'steps' else null end;
+    if v_steps is null or jsonb_typeof(v_steps) <> 'array' then
+      return jsonb_build_object('ok', false, 'error', 'マクロの形式が不正です');
+    end if;
+    if jsonb_array_length(v_steps) > c_steps then
+      return jsonb_build_object('ok', false, 'error', format('マクロ%sは%s個までです', substr('①②③', i, 1), c_steps));
+    end if;
+    for x in select value from jsonb_array_elements(v_steps) loop
+      if jsonb_typeof(x) <> 'string' then return jsonb_build_object('ok', false, 'error', 'マクロの形式が不正です'); end if;
+      s := x #>> '{}';
+      continue when s in ('@normal', '@guard');
+      select * into v_sk from public.v2cap_skills k where k.name = s;
+      if not found or v_sk.passive or not (v_sk.cls = any(v_lin)) or not (coalesce(v_row.learned, '[]'::jsonb) ? s) then
+        return jsonb_build_object('ok', false, 'error', format('%sはいまのクラスで使える覚えた技ではありません', s));
+      end if;
+    end loop;
+    -- 保存するのは手順とくり返しだけ（ほかのキーは落とす）
+    v_out := v_out || jsonb_build_array(jsonb_build_object('steps', v_steps, 'loop', coalesce(e -> 'loop' = 'true'::jsonb, false)));
+  end loop;
+  update public.v2cap_profiles
+     set atb_macros = jsonb_set(case when jsonb_typeof(atb_macros) = 'object' then atb_macros else '{}'::jsonb end,
+                                array[class], v_out),
+         updated_at = now()
+   where id = v_uid
+   returning * into v_row;
+  return jsonb_build_object('ok', true, 'profile', to_jsonb(v_row));
+end;
+$$;
+revoke all on function public.v2cap_set_atb_macros(jsonb) from public, anon;
+grant execute on function public.v2cap_set_atb_macros(jsonb) to authenticated;

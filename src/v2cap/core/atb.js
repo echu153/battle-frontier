@@ -127,9 +127,9 @@ const createAtbSide = (fighter, band, { ai = false, cast = false } = {}) => {
   side.gauge = Math.min(GAUGE_FULL, GAUGE_FULL * (side.evo?.first || 0) / 100)
   side.cd = {}                 // 技の枠 → 使えるようになる時刻（秒）
   side.timed = []              // [{ table, sec, until, debuff }] 時間で切れるバフ・デバフ
-  side.queue = []              // 予約：[{ idx }]（idx＝null は通常攻撃）。先頭から出る
-  side.loop = false            // 予約をくり返す（出した技を後ろへ回す）＝マクロの土台
-  side.guardNext = false       // 次の行動は防御（予約より先に出る）
+  side.queue = []              // 割り込み：[{ idx }]（idx＝null は通常攻撃）。手で押した技・先頭から1回ずつ。マクロより先に出る
+  side.macro = null            // 動いているマクロ：{ no, steps, pos, loop }（startMacro）
+  side.guardNext = false       // 次の行動は防御（ボタン。割り込み・マクロより先に出る）
   side.guardCut = 0            // 防御中の軽減率（battle.js の applyIncoming が見る）
   side.guardReadyAt = 0        // 防御が使えるようになる時刻
   side.cast = null             // 詠唱中：{ idx, name, start, until }
@@ -262,16 +262,25 @@ const aiPick = (side, now) => {
   return { idx: null, skill: null }
 }
 
-// いま出る行動。防御 → 予約の先頭（使えなければ通常攻撃でつなぎ、先頭は残す）→ 通常攻撃
+// 予約・マクロの1手（{ idx }＝技・idx:null＝通常攻撃・{ guard:true }＝防御）を、いま出せる行動にする。
+//   使えないとき（クールダウン中・MP不足・防御のクールダウン中）は**使えるまで待つ**＝通常攻撃でつなぎ、その手は残す（ユーザー選択）
+const resolveEntry = (side, e, now, from) => {
+  if (e.guard) return guardReady(side, now) ? { guard: true, skill: null, from } : { idx: null, skill: null, waiting: 'guard' }
+  if (e.idx === null) return { idx: null, skill: null, from }
+  if (canUse(side, e.idx, now)) return { idx: e.idx, skill: side.slots[e.idx].skill, from }
+  return { idx: null, skill: null, waiting: e.idx }
+}
+// いまのマクロの手（無ければ null）
+export const macroEntryOf = (side) => (side.macro ? side.macro.steps[side.macro.pos] || null : null)
+
+// いま出る行動。防御のボタン → 割り込み（手で押した技・先頭から1回ずつ）→ マクロ → 通常攻撃
+//   【確定】2026-10-26 ユーザー選択「マクロが動いているときに技を押したら、次の1回だけ割り込む」
 export const chosenOf = (side, now) => {
   if (side.ai) return aiPick(side, now)
-  if (side.guardNext && guardReady(side, now)) return { guard: true, skill: null }
-  const head = side.queue[0]
-  if (head) {
-    if (head.idx === null) return { idx: null, skill: null, fromQueue: true }
-    if (canUse(side, head.idx, now)) return { idx: head.idx, skill: side.slots[head.idx].skill, fromQueue: true }
-    return { idx: null, skill: null, waiting: head.idx }
-  }
+  if (side.guardNext && guardReady(side, now)) return { guard: true, skill: null, from: 'button' }
+  if (side.queue[0]) return resolveEntry(side, side.queue[0], now, 'queue')
+  const m = macroEntryOf(side)
+  if (m) return resolveEntry(side, m, now, 'macro')
   return { idx: null, skill: null }
 }
 // いまの行動に要るゲージ
@@ -282,19 +291,28 @@ export const needNow = (side, now) => {
 
 // ===== 入力（画面のボタン）。押した記録を st.inputs に残す（あとでサーバーで回し直すため）=====
 const input = (st, rec) => st.inputs.push({ step: st.steps, ...rec })
+// 割り込み（手で押した技）。idx＝null は通常攻撃
+export const QUEUE_MAX = 8
 export const reserve = (st, idx) => {
   if (st.over || st.a.queue.length >= QUEUE_MAX) return
   st.a.queue.push({ idx })
   input(st, { k: 'q', idx })
 }
-export const QUEUE_MAX = 12
 export const unreserveAt = (st, pos) => {
   if (st.over || !st.a.queue[pos]) return
   st.a.queue.splice(pos, 1)
   input(st, { k: 'unq', pos })
 }
 export const clearQueue = (st) => { st.a.queue = []; input(st, { k: 'clr' }) }
-export const setLoop = (st, on) => { st.a.loop = !!on; input(st, { k: 'loop', on: !!on }) }
+// マクロを動かす（no＝①〜③の番号・steps＝[{ idx }｜{ idx:null }｜{ guard:true }]・loop＝最後まで出たら頭に戻る）。
+//   別のマクロを押すと、そのマクロの頭から出し直す。手順が空なら止める
+export const startMacro = (st, no, steps, loop = false) => {
+  if (st.over) return
+  const list = (steps || []).map(e => (e.guard ? { guard: true } : { idx: e.idx ?? null }))
+  st.a.macro = list.length ? { no, steps: list, pos: 0, loop: !!loop } : null
+  input(st, { k: 'macro', no, steps: list, loop: !!loop })
+}
+export const stopMacro = (st) => { st.a.macro = null; input(st, { k: 'stop' }) }
 export const toggleGuard = (st) => {
   if (st.over) return
   st.a.guardNext = !st.a.guardNext
@@ -308,6 +326,21 @@ const finish = (st) => {
   return true
 }
 
+// 出した手のぶん、割り込みの列・マクロを進める。fired＝その手が本当に出たか
+//   （反動・跳躍中で動けなかった・狂乱でほかの技が出たときは進めない＝次にもう一度その手）
+const advanceSource = (me, ch, fired) => {
+  if (!fired) return
+  if (ch.from === 'queue') me.queue.shift()
+  else if (ch.from === 'macro' && me.macro) {
+    me.macro.pos += 1
+    if (me.macro.pos >= me.macro.steps.length) {
+      // 【確定】2026-10-26 ユーザー選択「くり返すかはマクロごとに選べる」。くり返さないマクロは最後まで出たら止まる（あとは通常攻撃）
+      if (me.macro.loop) me.macro.pos = 0
+      else me.macro = null
+    }
+  } else if (ch.from === 'button') me.guardNext = false
+}
+
 // 1回の行動を解決する（ch は chosenOf の結果）
 const act = (st, me, foe, ch) => {
   const now = st.t
@@ -316,10 +349,10 @@ const act = (st, me, foe, ch) => {
   if (ch.guard) {
     me.guardCut = GUARD_CUT
     me.guardReadyAt = now + GUARD_CD
-    me.guardNext = false
     me.gauge = Math.max(0, me.gauge - GAUGE_FULL)
     st.log.push({ side: me.name, type: 'guard', cut: GUARD_CUT })
     tickBleedAfterAct(me, st.log, foe)   // ★防御も行動なので、そのあと出血が刻む
+    advanceSource(me, ch, true)
     return
   }
   const need = needFor(me, ch.skill)
@@ -343,11 +376,7 @@ const act = (st, me, foe, ch) => {
   afterEngine(st, me, beforeMe)
   afterEngine(st, foe, beforeFoe)
   me.gauge = quick ? GAUGE_FULL : Math.max(0, me.gauge - need)
-  // 予約の先頭を進めるのは、その技が本当に出たときだけ（反動・跳躍中・狂乱でほかの技が出たときは残す）
-  if (ch.fromQueue && (ch.idx === null || used === ch.idx)) {
-    const head = me.queue.shift()
-    if (me.loop && head) me.queue.push(head)
-  }
+  advanceSource(me, ch, ch.idx === null || used === ch.idx)
 }
 
 // ゲージが満タンになった側の行動。ボスの大技はここで詠唱に入る

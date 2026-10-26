@@ -1,8 +1,8 @@
-// v2cap の ATB戦闘：全職業の全部の技を予約でくり返し撃って、止まらないか・数がおかしくならないかを見る（node --test）
+// v2cap の ATB戦闘：全職業の全部の技をマクロでくり返し撃って、止まらないか・数がおかしくならないかを見る（node --test）
 // ★技に新しい仕組みを足したとき、ATB（ターンの無い戦闘）で落ちたら気づけるように
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createAtb, reserve, setLoop, runFor } from '../core/atb.js'
+import { createAtb, startMacro, runFor } from '../core/atb.js'
 import { SKILLS, passiveOf } from './skills.js'
 import { usableSkillNames } from './jobs.js'
 import { slotsOf } from './loadout.js'
@@ -23,14 +23,14 @@ const player = (cls) => ({
   passives: passiveOf(cls) ? [passiveOf(cls)] : [],
 })
 
-test('全職業：持っている技を全部くり返し撃っても止まらない・HPとMPが数のまま', () => {
+test('全職業：持っている技を全部マクロでくり返し撃っても止まらない・HPとMPが数のまま', () => {
   // 120秒もつように、HPだけ大きくしたボス（エリア10の③）
   const base = enemyFighter(SPOTS[29].roster.boss, 8)
   const boss = { ...base, boss: true, stats: { ...base.stats, hp: base.stats.hp * 1000 } }
   for (const cls of CLASSES) {
     const st = createAtb(player(cls), boss, { rng: makeRng(cls.length * 7 + 1), maxSec: 120 })
-    st.a.slots.forEach((_, i) => reserve(st, i))
-    setLoop(st, true)
+    // マクロは画面とサーバーでは8個までだが、エンジンは長さを問わない＝全部の技を1つのマクロでくり返す
+    startMacro(st, 1, st.a.slots.map((_, i) => ({ idx: i })), true)
     runFor(st, 120)
     for (const s of [st.a, st.b]) {
       assert.ok(Number.isFinite(s.hp) && Number.isFinite(s.mp), `${cls}：HP・MPが数でなくなった`)
