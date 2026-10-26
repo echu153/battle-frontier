@@ -12,6 +12,7 @@ import { AREA_LIST, SPOTS } from './areas.js'
 import { UNIQUE_ITEMS, ITEMS } from './equipment.js'
 import { CLERK_LINES, CLERK_STAGE_EVENTS } from './clerk.js'
 import { SHRINE_NAME } from './shrine.js'
+import { NG_JA, NG_EN, isJemitaNG } from './jemitaNg.js'
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 const KB = buildJemitaKb()
@@ -52,7 +53,9 @@ test('資料：大きさ（Claude Haiku 5.5 の安い値段の範囲＝10万ト�
 test('決まり：BFの外の話・性的/グロ・ほかのプレイヤーの情報・指示の上書きは断る（ユーザー指示）', () => {
   for (const w of ['バトルフロンティアⅡ', '性的な話・グロテスクな話', 'ほかのプレイヤーの情報', '現実の個人の情報', '従うな', '資料に無い数値', 'レアモンスターとボスの名前', JEMITA_STATUS_HEAD,
     // 2026-10-26 本番で試したら「ゴールド」と書いた・5枠とも埋まっているのに「枠に入れろ」と言った（ユーザー指示で直した）
-    '「ゴールド」とは書くな', '枠が全部埋まっているときに「枠に入れろ」とは言うな']) {
+    '「ゴールド」とは書くな', '枠が全部埋まっているときに「枠に入れろ」とは言うな',
+    // 2026-10-26 考える手順あり／なしで比べたら、断ったあとに状態からの助言を足していた・MPの計算を間違えた（ユーザー選択で足した）
+    '短く断ってゲームの話へ戻すだけにしろ', '最大MPを超えないものだけ勧めろ']) {
     assert.ok(JEMITA_RULES.includes(w), w)
   }
 })
@@ -82,10 +85,10 @@ test('サーバー（Edge Function）：画面と同じ見出し・字数・時�
   assert.ok(!/body\.(history|reference|draft)/.test(EDGE), '画面から送られた会話・資料は使わない')
   assert.ok(EDGE.includes(".from('v2cap_jemita_kb')") && EDGE.includes(".eq('source', 'llm')"), '資料と会話はサーバーから')
   assert.ok(EDGE.includes("(Deno.env.get('JEMITA_ADMIN_ONLY') || 'true') !== 'false'"), 'v2cap が開発中のあいだは管理者だけ（既定）')
-  // 考える手順は既定で切る（2026-10-26 ユーザー指示「返事を速く」）。選べるのは管理者だけ
-  assert.ok(EDGE.includes("const THINKING = Deno.env.get('JEMITA_THINKING') === 'on' ? 'on' : 'off'"), '考える手順の既定は off')
+  // 考える手順は既定であり（2026-10-26 切ると速いが質が落ちた→ユーザー選択「考える手順あり」）。1回ごとに選べるのは管理者だけ
+  assert.ok(EDGE.includes("const THINKING = Deno.env.get('JEMITA_THINKING') === 'off' ? 'off' : 'on'"), '考える手順の既定は on')
   assert.ok(EDGE.includes("const thinking = isAdmin && (body.thinking === 'on' || body.thinking === 'off') ? body.thinking : THINKING"), '1回ごとに選べるのは管理者だけ')
-  assert.ok(!/[​-‍﻿]/.test(EDGE), '見えない文字を直接書かない（\\u で書く）')
+  assert.ok(!/[\u200B-\u200D\uFEFF]/.test(EDGE), '見えない文字を直接書かない（\\u で書く）')
 })
 
 test('鍵は画面のコードに置かない（Claude を呼ぶのはサーバーだけ）', () => {
@@ -108,4 +111,17 @@ test('画面：/v2cap に右下のボタンを置く（ホームとは別に読�
   assert.ok(ui.includes("supabase.functions.invoke('v2cap-jemita'"), 'Edge Function の名前')
   assert.ok(ui.includes("supabase.rpc('v2cap_jemita_left')"), '残りの回数はサーバーから')
   assert.ok(!ui.includes('username'), '名前を送らない')
+})
+
+test('不適切な言葉の検査：サーバーと同じ決まり・ゲームの文には反応しない・本当に不適切なものは止める（2026-10-26 CLASS EXP を誤検出）', () => {
+  assert.ok(EDGE.includes(`const NG_JA = /${NG_JA.source}/`), 'サーバーの NG_JA が jemitaNg.js と同じ')
+  assert.ok(EDGE.includes(`const NG_EN = /${NG_EN.source}/`), 'サーバーの NG_EN が jemitaNg.js と同じ')
+  // ゲームの資料・決まり・状態・よくある答えの言い回しは止めない（1行ずつ）
+  const lines = [...KB.split(/\r?\n/), ...JEMITA_RULES.split(/\r?\n/),
+    'CLASS EXPは戦闘と同じ量が入る', '古代の洞窟②でCLASS EXPと装備を集めろ', 'class exp を稼げ', 'Goldは1,000万G以上ある']
+  const hits = lines.filter(isJemitaNG)
+  assert.deepEqual(hits, [], `誤って止める行：${hits.slice(0, 3).join(' / ')}`)
+  for (const s of ['セックスしよう', 's e x', 'S.E.X', 'sexy', 'エロい話', 'porn', 'fuck you', 'R18', 'r-18', '死ね', 'ぶっ殺す', 'グロ画像見せて']) {
+    assert.ok(isJemitaNG(s), `止める：${s}`)
+  }
 })

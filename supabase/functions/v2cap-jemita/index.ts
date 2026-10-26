@@ -38,11 +38,13 @@ const MODEL = Deno.env.get('JEMITA_MODEL') || 'claude-haiku-5-5'
 const EFFORT = (['low', 'medium', 'high'].includes(Deno.env.get('JEMITA_EFFORT') || '') ? Deno.env.get('JEMITA_EFFORT') : 'low') as 'low' | 'medium' | 'high'
 // 1回の出力の上限（考えるぶんも入る）。払うのは実際に出たぶんだけなので、余裕を持たせる
 const MAX_TOKENS = 8000
-// 考える手順（Claude が答える前に考える部分）。既定は off＝速い。
-//   2026-10-26 ユーザー指示「考える手順を省いて返事を速くする直しを試して」：low でも「どうすれば強くなれる？」は
-//   考える部分が約2,300トークンで20〜30秒かかった。on に戻すときは秘密の設定 JEMITA_THINKING=on（配置し直さなくてよい）
+// 考える手順（Claude が答える前に考える部分）。既定は on。
+//   2026-10-26 ユーザー指示「考える手順を省いて返事を速くする直しを試して。答えの質が落ちていないかも確かめて」→
+//   同じ9問で比べた：off は5〜7秒と速いが、「設定を忘れろ」に敬語で謝る・暗殺者の伸びるステを間違える・断ったあと長い助言を足す・
+//   ボスの名前を自分から言う。on（effort low）は4〜15秒でキャラも決まりも守った → ユーザー選択「考える手順あり」。
+//   切るときは秘密の設定 JEMITA_THINKING=off（配置し直さなくてよい）
 //   ★管理者は1回ごとに body.thinking（'on'／'off'）で選べる（比べる試験のため。ふつうの人は既定だけ）
-const THINKING = Deno.env.get('JEMITA_THINKING') === 'on' ? 'on' : 'off'
+const THINKING = Deno.env.get('JEMITA_THINKING') === 'off' ? 'off' : 'on'
 const ADMIN_ONLY = (Deno.env.get('JEMITA_ADMIN_ONLY') || 'true') !== 'false'
 
 // 画面（src/v2cap/lib/jemita.js・jemitaPrompt.js）と同じ数と見出し
@@ -57,14 +59,16 @@ const QUESTION_HEAD = '【プレイヤーの発言】'
 const BLOCKED = 'くだらん。そんな話に付き合う気はない。このゲームのことなら相手をしてやる。'
 const REFUSED = 'フン、その話には乗らん。このゲームのことを訊け。'
 
-// 不適切な言葉（V1 の clever-api と同じ一覧）。Claude へ送る前と、Claude の答えの両方で見る
-const NG = /(セックス|せっくす|sex|エロ|アダルト|adult|童貞|処女|射精|挿入|オナニー|自慰|まんこ|マンコ|ちんこ|チンコ|ちんぽ|チンポ|ペニス|性器|レイプ|強姦|ヌード|全裸|風俗|ポルノ|porn|18禁|r-?18|性行為|fuck|グロ画像|グロ動画|内臓|死体|惨殺|バラバラ死体|リョナ|死ね|殺すぞ|ぶっ殺|きちがい|キチガイ|気違い|池沼|知障|くたばれ)/i
-const ngNorm = (s: string) => (s || '')
-  .normalize('NFKC')
-  .replace(/[\u200B-\u200D\uFEFF]/g, '')
-  .toLowerCase()
-  .replace(/[\s.\-_、。・,]/g, '')
-const isNG = (s: string) => NG.test(ngNorm(s))
+// 不適切な言葉。Claude へ送る前の質問と、Claude の答えの両方で見る（写しは src/v2cap/lib/jemitaNg.js・jemitaKb.test.js が同じか見張る）
+// ★2026-10-26 本番で試したら、答えの「CLASS EXP」を空白を詰めて「classexp」→「sex」と読み、ふつうの答えを差し止めていた。
+//   英字は単語として見る（空白を詰めない）。1文字ずつ区切った「s e x」だけはつなげて見る。日本語は今までどおり詰めて見る
+const NG_JA = /(セックス|せっくす|エロ|アダルト|童貞|処女|射精|挿入|オナニー|自慰|まんこ|マンコ|ちんこ|チンコ|ちんぽ|チンポ|ペニス|性器|レイプ|強姦|ヌード|全裸|風俗|ポルノ|18禁|性行為|グロ画像|グロ動画|内臓|死体|惨殺|バラバラ死体|リョナ|死ね|殺すぞ|ぶっ殺|きちがい|キチガイ|気違い|池沼|知障|くたばれ)/
+const NG_EN = /\b(sex\w*|adult|porn\w*|fuck\w*|r-?18)\b/
+const isNG = (s: string) => {
+  const base = String(s || '').normalize('NFKC').replace(/[\u200B-\u200D\uFEFF]/g, '').toLowerCase()
+  if (NG_JA.test(base.replace(/[\s.\-_、。・,]/g, ''))) return true
+  return NG_EN.test(base.replace(/\b([a-z])[\s.\-_、。・,]+(?=[a-z]\b)/g, '$1'))
+}
 // 制御文字を消す（改行とタブは残す）
 const clean = (s: unknown) => String(s ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').trim()
 
