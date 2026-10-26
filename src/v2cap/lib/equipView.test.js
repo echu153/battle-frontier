@@ -157,3 +157,18 @@ test('【確定】2026-10-26 鍛冶屋と装備画面の一覧：★は右上・
   const fx = codeOf('../components/V2capEnhanceFx.jsx')
   assert.ok(!fx.includes('強化値はそのまま'), '失敗の結果に「強化値はそのまま（+N）」を出さない')
 })
+
+test('【確定】2026-10-26 要求LV不足は装備中の右に（要求LV不足）・戦闘力の行には書かない・着けていない装備はふつうの戦闘力とステ', () => {
+  // ユーザー指示「戦闘力 125　STR+31 DEX+23 AGI+55 LUK+16 こんな感じにして、装備中の右に（要求LV不足）って表示されるようにして
+  //   そして装備していない装備は普通のステータスが表示されるようにして」
+  for (const code of [SMITH, EQUIP]) {
+    assert.ok(!/<span>戦闘力 \{[^}]*\}\{sync && /.test(code), '戦闘力の行に（要求LV不足）を書かない')
+    assert.ok(/>装備中<\/span>\}\s*(\{\}\s*)?\{sync && <span style=\{\{ color: ?(SHORT|'#ff8844'), fontSize:'10px', marginLeft:'3px' \}\}>（\{sync\}）<\/span>\}/.test(code), '装備中の右に（要求LV不足）')
+  }
+  // 要求LV不足（いまのLV相当）は着けている装備だけ
+  assert.ok(SMITH.includes("const sync = isWorn ? syncLabelOf(item, inv.ilv, lv) : ''") && SMITH.includes('statsAt(item, inv.ilv, isWorn ? lv : null, plusOf(inv))'))
+  assert.ok(SMITH.includes('<ItemStats inv={inv} item={item} lv={prof.lv} isWorn={isWorn} />'))
+  assert.ok(EQUIP.includes("const sync = isWorn ? syncLabelOf(item, inv.ilv, prof.lv) : ''") && EQUIP.includes('statsAt(item, inv.ilv, isWorn ? prof.lv : null, plus)'))
+  // 作成の結果のポップアップ：作ったばかりの装備は着けていない＝戦闘力もステもふつう（前はステだけ LV 相当に下げていた）
+  assert.ok(SMITH.includes('power: powerAt(item, item.lv, 0)') && SMITH.includes('statText: statLine(statsAt(item, item.lv, null, 0))'), '作成の結果もふつうのステ')
+})

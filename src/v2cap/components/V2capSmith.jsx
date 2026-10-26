@@ -243,7 +243,7 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call, say, toggleFav }) {
               {/* 「次は +9：残骸・Gold・成功率」の行は出さない（2026-10-26 ユーザー指示「この行いらない、強化ボタン押したら成功率とか必要素材が表示されればいい」）。
                   強化のボタンはステの行の右。上限のときはボタンの代わりに「上限」 */}
               <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
-                <ItemStats inv={inv} item={item} lv={prof.lv} />
+                <ItemStats inv={inv} item={item} lv={prof.lv} isWorn={isWorn} />
                 {canUseTicket(item, plusOf(inv), prof) && (
                   <button onClick={() => { setTicketId(String(inv.id)); setTicketMsg(null) }} disabled={busy} style={{ ...miniBtn('#ffcc00'), flexShrink:0 }}>🎫 +{ticket}にする</button>
                 )}
@@ -365,9 +365,11 @@ function CraftTab({ prof, all, busy, call, setError, setNotice, say }) {
     if (!item || busy) return
     const c = craftCostOf(item)
     if (!c || craftErrorOf(item, prof)) return
+    // 作ったばかりの装備は着けていない＝ふつうの（装備そのものの）戦闘力とステ（2026-10-26 ユーザー指示「装備していない装備は普通のステータスが表示されるようにして」。
+    // 前はステだけいまのLV相当に下げていた）。「（要求LV不足）」は前のユーザー指示どおり出す
     const job = {
       id: Date.now(), item, name: item.name, rarity: item.rarity, part: item.part, kind: kindLabel(item), lv: needLvOf(item),
-      power: powerAt(item, item.lv, 0), sync: syncLabelOf(item, item.lv, prof.lv), statText: statLine(statsAt(item, item.lv, prof.lv, 0)), scrapName: scrapNameOf(c.area), scrap: c.scrap, gold: c.gold, result: null,
+      power: powerAt(item, item.lv, 0), sync: syncLabelOf(item, item.lv, prof.lv), statText: statLine(statsAt(item, item.lv, null, 0)), scrapName: scrapNameOf(c.area), scrap: c.scrap, gold: c.gold, result: null,
     }
     setConfirm(null); setFxJob(job)
     const { data, error } = await call('v2cap_craft', { p_equip_id: item.id })
@@ -451,6 +453,8 @@ function CraftTab({ prof, all, busy, call, setError, setNotice, say }) {
 // ★一覧の右は「要求レベル〇LV」（2026-10-14 ユーザーが装備画面にそろえるを選んだ）。確認の画面の「（LV〇）」はそのまま
 function ItemHead({ inv, item, lv, isWorn, check, star }) {
   const effect = item.line ? ARMOR_EFFECT[item.line]?.label : null
+  // 着けていて要求LVが足りないときは、装備中の右に（要求LV不足）（2026-10-26 ユーザー指示「装備中の右に（要求LV不足）って表示されるようにして」）
+  const sync = isWorn && lv ? syncLabelOf(item, inv.ilv, lv) : ''
   return (
     <div style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12px' }}>
       {check}
@@ -459,6 +463,7 @@ function ItemHead({ inv, item, lv, isWorn, check, star }) {
         <span style={{ color: TEXT.sub, fontSize:'10px', marginLeft:'5px' }}>{kindLabel(item)}</span>
         {effect && <span style={{ color:'#88ddaa', fontSize:'10px', marginLeft:'5px' }}>{effect}</span>}
         {isWorn && <span style={{ color:'#44aaff', fontSize:'10px', marginLeft:'5px' }}>装備中</span>}
+        {sync && <span style={{ color: SHORT, fontSize:'10px', marginLeft:'3px' }}>（{sync}）</span>}
       </span>
       <span style={{ color: lv && needLvOf(item, inv.ilv) > lv ? '#ff8844' : '#cfe2ff', fontSize:'11px', whiteSpace:'nowrap' }}>要求レベル{needLvOf(item, inv.ilv)}LV</span>
       {/* お気に入りの★は右上（2026-10-26 ユーザー指示「お気に入りのボタンは右上にして」） */}
@@ -466,16 +471,17 @@ function ItemHead({ inv, item, lv, isWorn, check, star }) {
     </div>
   )
 }
-// 戦闘力とステ（強化値と、必要LVに足りない装備のLV相当込み）。
-// 要求LVが足りないときは、いまの（LV相当の）戦闘力だけを出し、ステも同じ色にする
-//   （2026-10-26 ユーザー指示「要求レベル不足してるときはその時の戦闘力だけ書いて、STRとかのステータスも同じ色で表示」。前は「288 → 119（要求LV不足）」）
-function ItemStats({ inv, item, lv }) {
-  const sync = syncLabelOf(item, inv.ilv, lv)
+// 戦闘力とステ（強化値込み）。【確定】2026-10-26 ユーザー指示：
+//   ・着けていて要求LVが足りない装備は、いまの（LV相当の）戦闘力とステを同じ橙で出す（「要求レベル不足してるときはその時の戦闘力だけ書いて、STRとかのステータスも同じ色で表示」）。
+//     「（要求LV不足）」はこの行に書かず、名前の行の装備中の右（ItemHead）に出す（「戦闘力 125　STR+31…こんな感じにして、装備中の右に（要求LV不足）」）
+//   ・着けていない装備は、ふつうの（装備そのものの）戦闘力とステ（「装備していない装備は普通のステータスが表示されるようにして」）
+function ItemStats({ inv, item, lv, isWorn = false }) {
+  const sync = isWorn ? syncLabelOf(item, inv.ilv, lv) : ''
   const power = sync ? effectivePowerAt(item, inv.ilv, lv, plusOf(inv)) : powerAt(item, inv.ilv, plusOf(inv))
   return (
     <div style={{ fontSize:'10px', color: sync ? SHORT : TEXT.sub, margin:'3px 0', display:'flex', gap:'8px', flexWrap:'wrap', flex:1, minWidth:0 }}>
-      <span>戦闘力 {power}{sync && `（${sync}）`}</span>
-      <span>{statLine(statsAt(item, inv.ilv, lv, plusOf(inv)))}</span>
+      <span>戦闘力 {power}</span>
+      <span>{statLine(statsAt(item, inv.ilv, isWorn ? lv : null, plusOf(inv)))}</span>
     </div>
   )
 }

@@ -105,9 +105,10 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
             </div>
           )}
           {rows.map(({ inv, item }) => {
-            const sync = syncLabelOf(item, inv.ilv, prof.lv)
             const plus = plusOf(inv)
             const isWorn = wornIds.has(String(inv.id))
+            // 要求LV不足は着けている装備だけ（2026-10-26 ユーザー指示「装備していない装備は普通のステータスが表示されるようにして」）
+            const sync = isWorn ? syncLabelOf(item, inv.ilv, prof.lv) : ''
             const usable = item.part !== '武器' || canEquipType(prof.class, item.type)
             const effect = item.line ? ARMOR_EFFECT[item.line]?.label : null
             const power = powerAt(item, inv.ilv, plus)
@@ -130,16 +131,19 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
                       </V2Tip>
                     )}
                     {isWorn && <span style={{ color:'#44aaff', fontSize:'10px', marginLeft:'5px' }}>装備中</span>}
+                    {/* 着けていて要求LVが足りないときは、装備中の右に（要求LV不足）（2026-10-26 ユーザー指示・鍛冶屋と同じ） */}
+                    {sync && <span style={{ color:'#ff8844', fontSize:'10px', marginLeft:'3px' }}>（{sync}）</span>}
                   </span>
                   {/* 2026-10-14 ユーザー指示「LV〇は『要求レベル〇LV』にして」 */}
                   <span style={{ color: needLvOf(item, inv.ilv) > prof.lv ? '#ff8844' : '#cfe2ff', fontSize:'11px', whiteSpace:'nowrap' }}>要求レベル{needLvOf(item, inv.ilv)}LV</span>
                   {/* お気に入りの★は右上（2026-10-26 ユーザー指示「お気に入りのボタンは右上にして」・鍛冶屋と同じ） */}
                   <FavStar inv={inv} busy={busy} onToggle={toggleFav} />
                 </div>
-                {/* 要求LVが足りないときは、いまの（LV相当の）戦闘力だけを出し、ステも同じ色（2026-10-26 ユーザー指示・鍛冶屋と同じ。前は「288 → 119（要求LV不足・あと◯LV）」） */}
+                {/* 着けていて要求LVが足りないときは、いまの（LV相当の）戦闘力とステを同じ橙で（「（要求LV不足）」は名前の行）。
+                    着けていない装備は、ふつうの（装備そのものの）戦闘力とステ（2026-10-26 ユーザー指示・鍛冶屋と同じ。前は「288 → 119（要求LV不足・あと◯LV）」） */}
                 <div style={{ fontSize:'10px', color: sync ? '#ff8844' : TEXT.sub, margin:'3px 0', display:'flex', gap:'8px', flexWrap:'wrap' }}>
-                  <span>戦闘力 {sync ? effectivePowerAt(item, inv.ilv, prof.lv, plus) : power}{sync && `（${sync}）`}</span>
-                  <span>{statLine(statsAt(item, inv.ilv, prof.lv, plus))}</span>
+                  <span>戦闘力 {sync ? effectivePowerAt(item, inv.ilv, prof.lv, plus) : power}</span>
+                  <span>{statLine(statsAt(item, inv.ilv, isWorn ? prof.lv : null, plus))}</span>
                 </div>
                 {/* ユニーク（2026-10-21）：固有の能力と落とすボス。LV80より低くても能力は全部効く */}
                 {isUnique(item) && (
