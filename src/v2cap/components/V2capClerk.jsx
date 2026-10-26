@@ -60,10 +60,11 @@ export const CLERK_CSS = `
 `
 
 // 全身の「いらっしゃいませー！」の見た目。店の画面を出す前（ホームの上）にも出すので、CLERK_CSS とは分けて自分で持つ。
-// 絵が届くまでは隠しておき（nk-welcome-wait）、届いたら跳ねて出す（吹き出しだけ先に出ないように）
+// 絵が届くまでは隠しておき（nk-welcome-wait）、届いたら跳ねて出す（吹き出しだけ先に出ないように）。
+// 後ろのゲーム画面は暗くする（2026-10-26 ユーザー指示「演出入るとき、後ろのゲーム画面は暗くしておこう」＝前は真ん中が半分すけてメニューが読めた）
 const WELCOME_CSS = `
 .nk-welcome { position: fixed; inset: 0; z-index: 1100; display: flex; align-items: center; justify-content: center; cursor: pointer;
-  background: radial-gradient(circle at 50% 45%, rgba(120, 52, 10, 0.55) 0%, rgba(8, 4, 2, 0.9) 70%); animation: nkFade .25s ease-out; }
+  background: radial-gradient(circle at 50% 45%, rgba(120, 52, 10, 0.35) 0%, rgba(120, 52, 10, 0) 60%), rgba(4, 2, 1, 0.92); animation: nkFade .25s ease-out; }
 .nk-welcome-in { position: relative; display: flex; flex-direction: column; align-items: center; animation: nkPop .55s cubic-bezier(.2, 1.4, .4, 1); }
 .nk-welcome-wait { visibility: hidden; animation: none; }
 .nk-welcome-img { display: block; height: min(76vh, 860px); width: auto; max-width: 94vw; object-fit: contain; }
