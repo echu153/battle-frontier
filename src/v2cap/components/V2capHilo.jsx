@@ -10,13 +10,15 @@ import { useState } from 'react'
 import { supabase } from '../../supabase'
 import { useStored } from '../core/prefs.js'
 import { HILO_BETS, HILO_MIN_BET, HILO_MAX_BET, HILO_MAX_STREAK, HILO_CAP_MULT, hiloMult100Of, hiloChanceOf, hiloNextPotOf, hiloPayoutOf, winTierOf } from '../lib/casino.js'
+import { winTalkOf, HILO_LOSE_STREAK } from '../lib/alea.js'
 import { sfx, fx, celebrate, vibrate } from './casinoFx.js'
 import { CASINO, panel, bigBtn, pill, fmt, DISPLAY_FONT } from './casinoStyle.js'
 import { CountUp, PlayingCard } from './casinoParts.jsx'
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
-export default function V2capHilo({ init, medals, onMoney }) {
+// onTalk … 受付嬢アレアに結果を伝える（V2capCasino・lib/alea.js）。返すのは当たりの演出の上に出すアレア
+export default function V2capHilo({ init, medals, onMoney, onTalk }) {
   const [betSel, setBetSel] = useStored('capHiloBet', 50)
   const [g, setG] = useState(() => (init?.active
     ? { active: true, bet: init.bet, pot: Number(init.pot), card: init.card, streak: init.streak, cards: init.cards || [init.card] }
@@ -64,6 +66,7 @@ export default function V2capHilo({ init, medals, onMoney }) {
       sfx.lose(); vibrate(120); setShakeCard(true); setTimeout(() => setShakeCard(false), 450)
       fx('flash', { color: '#ff0033', ms: 300 })
       setLast({ type: 'lose', payout: 0, lost: hiloPayoutOf(g.pot) })
+      if (g.streak >= HILO_LOSE_STREAK) onTalk?.('lose')   // 連勝が途切れた（アレアは1分に1回まで）
       setG(x => ({ ...x, active: false, cards: [...x.cards, data.card] }))
       await sleep(700)
       setNext(null); setBusy(false)
@@ -78,7 +81,7 @@ export default function V2capHilo({ init, medals, onMoney }) {
     setNext(null)
     if (data.done) {
       const tier = winTierOf(data.payout, g.bet) || winTierOf(1, 1)
-      celebrate(tier, data.payout, { title: data.streak >= HILO_MAX_STREAK ? `${HILO_MAX_STREAK}連勝！` : `${HILO_CAP_MULT}倍に到達！`, sub: '自動で受け取りました' })
+      celebrate(tier, data.payout, { title: data.streak >= HILO_MAX_STREAK ? `${HILO_MAX_STREAK}連勝！` : `${HILO_CAP_MULT}倍に到達！`, sub: '自動で受け取りました', say: onTalk?.(winTalkOf(tier.key)) })
       setLast({ type: 'auto', payout: data.payout })
     }
     setBusy(false)
@@ -93,7 +96,7 @@ export default function V2capHilo({ init, medals, onMoney }) {
     onMoney(data)
     const tier = winTierOf(data.payout, g.bet)
     if (tier?.key === 'win') { sfx.win(1); fx('coins', { n: 16 + g.streak * 4, from: 'bottom' }); fx('popup', { text: `+${fmt(data.payout)}枚`, color: CASINO.green, size: 34 }) }
-    else celebrate(tier, data.payout, { title: `${g.streak}連勝`, sub: `${fmt(g.bet)}枚 → ${fmt(data.payout)}枚` })
+    else celebrate(tier, data.payout, { title: `${g.streak}連勝`, sub: `${fmt(g.bet)}枚 → ${fmt(data.payout)}枚`, say: onTalk?.(winTalkOf(tier?.key)) })
     setLast({ type: 'take', payout: data.payout })
     setG(x => ({ ...x, active: false }))
   }

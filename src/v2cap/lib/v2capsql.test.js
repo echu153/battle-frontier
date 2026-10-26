@@ -1157,3 +1157,28 @@ test('【確定】2026-10-26 ATBのマクロ（§19）：列 atb_macros・職業
   assert.ok(SQL.includes('revoke all on function public.v2cap_set_atb_macros(jsonb) from public, anon;'))
   assert.ok(SQL.includes('grant execute on function public.v2cap_set_atb_macros(jsonb) to authenticated;'))
 })
+
+test('【確定】2026-10-27 賭博場の受付嬢アレア（§20）：その日の「いらっしゃい」の日付・好感度（1日1回+1・下がらない）・見せた段階の場面', () => {
+  // ユーザー指示「賭博場の画面に、看板娘や親方と同じ形で受付嬢のイラストを入れたい」＋選んだこと「全身のあいさつを出す」「好感度をいま入れる」。形は看板娘の §16-2・§16-3 と同じ
+  for (const c of ['casino_welcome_day date', 'alea_affinity   int not null default 0', 'alea_talk_day   date', 'alea_stage_seen int not null default 0']) {
+    assert.ok(SQL.includes(`alter table public.v2cap_profiles add column if not exists ${c};`), c)
+  }
+  const day = `v_today date := ((now() at time zone 'Asia/Tokyo') - interval '${DAY_RESET_HOUR} hours')::date;`
+  const welcome = fnBody('v2cap_casino_welcome')
+  assert.ok(welcome.includes(day), '日付の区切りはデイリーと同じ')
+  assert.ok(welcome.includes('if not public.v2cap_is_dev() then'), '開発限定')
+  assert.ok(welcome.includes('where id = v_uid and casino_welcome_day is distinct from v_today;'), '今日まだのときだけ入れる')
+  assert.ok(welcome.includes("return jsonb_build_object('ok', true, 'first', v_n > 0, 'day', v_today);"))
+  const talk = fnBody('v2cap_alea_talk')
+  assert.ok(talk.includes(day), '日付の区切りはデイリーと同じ')
+  assert.ok(talk.includes('if not public.v2cap_is_dev() then'), '開発限定')
+  assert.ok(talk.includes('if v_row.alea_talk_day is distinct from v_today then'), '1日1回')
+  assert.ok(talk.includes('set alea_affinity = alea_affinity + 1, alea_talk_day = v_today'), '+1')
+  const seen = fnBody('v2cap_alea_seen')
+  assert.ok(seen.includes('if not public.v2cap_is_dev() then'), '開発限定')
+  assert.ok(seen.includes('set alea_stage_seen = greatest(alea_stage_seen, p_stage)'), '下がらない')
+  for (const f of ['v2cap_casino_welcome()', 'v2cap_alea_talk()', 'v2cap_alea_seen(int)']) {
+    assert.ok(SQL.includes(`revoke all on function public.${f} from public, anon;`), f)
+    assert.ok(SQL.includes(`grant execute on function public.${f} to authenticated;`), f)
+  }
+})

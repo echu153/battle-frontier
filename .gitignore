@@ -46,3 +46,5 @@ tools/v2-skills.html
 /public/V2状態異常/
 # v2cap 鍛冶屋の親方トルステンの元の絵（ユーザーが ChatGPT で作って置く）。画面で使う版は public/v2cap-art/smith（tools/v2cap-smith-art.mjs）
 /public/V2鍛冶屋/
+# v2cap 賭博場の受付嬢アレアの元の絵（ユーザーが ChatGPT で作って置く・1枚約2MB）。画面で使う版は public/v2cap-art/casino（tools/v2cap-casino-art.mjs）
+/public/V2賭博場/

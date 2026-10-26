@@ -175,6 +175,8 @@ export default function CasinoFxLayer({ children }) {
               +<CountUp value={banner.amount} start={0} ms={900 + bannerLv * 700} onTick={sfx.tick} />枚
             </div>
             {banner.sub && <div style={{ marginTop:8, color:'#cfe2ff', fontSize:12 }}>{banner.sub}</div>}
+            {/* 受付嬢アレアのひとこと（celebrate の say・2026-10-27）。後ろの吹き出しは演出で隠れるので、ここにも出す */}
+            {banner.say}
             <div style={{ marginTop:14, color:'#ffffff88', fontSize:10 }}>タップで閉じる</div>
           </div>
         </div>

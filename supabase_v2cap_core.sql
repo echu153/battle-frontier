@@ -8444,3 +8444,73 @@ end;
 $$;
 revoke all on function public.v2cap_set_atb_macros(jsonb) from public, anon;
 grant execute on function public.v2cap_set_atb_macros(jsonb) to authenticated;
+
+-- ============================================================
+-- ===== 20. 賭博場の受付嬢アレア（2026-10-27）=====
+-- ============================================================
+-- 【確定】2026-10-27 ユーザー指示「賭博場の画面に、ニャーガーキングの看板娘や鍛冶屋の親方と同じ形で、受付嬢のイラストを入れたい」＋選んだこと
+--   （その日はじめての全身のあいさつを出す・好感度をいま入れる）。人物・セリフ・段階は画面（src/v2cap/lib/alea.js）。ここは日付と数を覚えるだけ
+--   ・casino_welcome_day ＝ 全身の「いらっしゃい」を最後に出した日（看板娘の §16-2 の burger_welcome_day と同じ）。日本時間の5時で切り替え
+--   ・alea_affinity ＝ 好感度（その日はじめて話しかけたら+1・1日1回・下がらない・画面には出さない＝看板娘の §16-3 と同じ）
+--   ・alea_stage_seen ＝ 段階の場面をどこまで見せたか（画面が見せたら v2cap_alea_seen で入れる。場面のまだ無い段階は入れない）
+alter table public.v2cap_profiles add column if not exists casino_welcome_day date;
+alter table public.v2cap_profiles add column if not exists alea_affinity   int not null default 0;
+alter table public.v2cap_profiles add column if not exists alea_talk_day   date;
+alter table public.v2cap_profiles add column if not exists alea_stage_seen int not null default 0;
+
+-- その日はじめて賭博場を開いた：今日まだなら今日の日付を入れて first=true、もう出していれば first=false
+create or replace function public.v2cap_casino_welcome()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid   uuid := auth.uid();
+  v_today date := ((now() at time zone 'Asia/Tokyo') - interval '5 hours')::date;
+  v_n     int;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  update public.v2cap_profiles set casino_welcome_day = v_today
+   where id = v_uid and casino_welcome_day is distinct from v_today;
+  get diagnostics v_n = row_count;
+  return jsonb_build_object('ok', true, 'first', v_n > 0, 'day', v_today);
+end;
+$$;
+revoke all on function public.v2cap_casino_welcome() from public, anon;
+grant execute on function public.v2cap_casino_welcome() to authenticated;
+
+-- 話しかけた：今日まだなら好感度+1（up=true）。返すのは好感度と見せた段階
+create or replace function public.v2cap_alea_talk()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid   uuid := auth.uid();
+  v_today date := ((now() at time zone 'Asia/Tokyo') - interval '5 hours')::date;
+  v_row   public.v2cap_profiles;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select * into v_row from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  if v_row.alea_talk_day is distinct from v_today then
+    update public.v2cap_profiles set alea_affinity = alea_affinity + 1, alea_talk_day = v_today where id = v_uid;
+    return jsonb_build_object('ok', true, 'up', true, 'affinity', v_row.alea_affinity + 1, 'seen', v_row.alea_stage_seen);
+  end if;
+  return jsonb_build_object('ok', true, 'up', false, 'affinity', v_row.alea_affinity, 'seen', v_row.alea_stage_seen);
+end;
+$$;
+revoke all on function public.v2cap_alea_talk() from public, anon;
+grant execute on function public.v2cap_alea_talk() to authenticated;
+
+-- 段階の場面を見せた（下がらない・0〜9）
+create or replace function public.v2cap_alea_seen(p_stage int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if p_stage is null or p_stage < 0 or p_stage > 9 then return jsonb_build_object('ok', false, 'error', '段階が正しくありません'); end if;
+  update public.v2cap_profiles set alea_stage_seen = greatest(alea_stage_seen, p_stage) where id = v_uid;
+  return jsonb_build_object('ok', true);
+end;
+$$;
+revoke all on function public.v2cap_alea_seen(int) from public, anon;
+grant execute on function public.v2cap_alea_seen(int) to authenticated;

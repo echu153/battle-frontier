@@ -15,6 +15,7 @@ import { supabase } from '../../supabase'
 import { useStored } from '../core/prefs.js'
 import { SLOT_BET, SLOT_RATES, SLOT_ROLES, SLOT_ORDERS, SLOT_AT_GAMES, SLOT_CZ_GAMES, SLOT_PREMIUM_GAMES, SLOT_TOKU_GAMES, SLOT_MISS_PAY, orderIndexOf, winTierOf } from '../lib/casino.js'
 import { REEL_LEN, REELS, displayTable, classOf, winLinesOf, noticeLevelOf, NOTICE_LEVELS, DISPLAY_OF_ROLE } from '../lib/slotReels.js'
+import { atTalkOf, winTalkOf } from '../lib/alea.js'
 import { sfx, fx, celebrate, vibrate } from './casinoFx.js'
 import { CASINO, panel, bigBtn, pill, fmt, signed, DISPLAY_FONT, JP_BOLD, RAINBOW_BASE } from './casinoStyle.js'
 import { CountUp, SlotDefs, SlotSymbol } from './casinoParts.jsx'
@@ -39,7 +40,8 @@ const listOf = (d) => { const t = displayTable(); return d === 'bell' ? t.bellTe
 const finalOf = (p, q) => { const base = Math.floor(p - 0.6); return base - mod(base - q) }
 const svOf = (s) => ({ mode: s?.mode || 'normal', rate: s?.rate || 1, cz: s?.cz || 0, at: s?.at || 0, toku: s?.toku || 0, atNet: Number(s?.at_net) || 0, atGames: 0 })
 
-export default function V2capSlot({ init, medals, onMoney, active = true }) {
+// onTalk … 受付嬢アレアに結果を伝える（V2capCasino・lib/alea.js）。返すのは当たりの演出の上に出すアレア
+export default function V2capSlot({ init, medals, onMoney, onTalk, active = true }) {
   const [rateSel, setRateSel] = useStored('capSlotRate', 1)
   const [help, setHelp] = useStored('capSlotHelp', false)
   const [sv, setSv] = useState(() => svOf(init))
@@ -238,6 +240,7 @@ export default function V2capSlot({ init, medals, onMoney, active = true }) {
     fx('popup', { text: 'AT確定!!', color: 'rainbow', size: 52, ms: 2200, sub: from === 'premium' ? `中段チェリー・${SLOT_PREMIUM_GAMES}G` : undefined })
     sfx.fanfare('at'); fx('rays', { color: CASINO.pink, ms: 3000 }); fx('confetti', { n: 140 }); fx('flash', { color: '#ffffff', ms: 500 })
     fx('shake', { ms: 500, power: 6 }); vibrate([80, 50, 80, 50, 200])
+    onTalk?.(atTalkOf(from))   // 当たりの流れに入った（中段チェリーはびっくり）
   }
   const startIntro = () => {
     resetView()
@@ -259,6 +262,7 @@ export default function V2capSlot({ init, medals, onMoney, active = true }) {
         setIntro({ games: p.games, from: p.from }); setPhase('intro')
       } else {
         fx('popup', { text: '残念…', color: '#8899bb', size: 32 }); sfx.lose(); addLog('CZ失敗', CASINO.dim)
+        onTalk?.('lose')   // チャンスが実らなかった（アレアは1分に1回まで）
         setPhase('idle')
       }
     }, 750)
@@ -341,7 +345,7 @@ export default function V2capSlot({ init, medals, onMoney, active = true }) {
       if (r.at_end) {
         const tier = winTierOf(atNet, SLOT_BET * r.rate)
         setTimeout(() => {
-          if (tier && atNet > 0) celebrate(tier, atNet, { title: 'AT終了', sub: `${atGames}G・純増 ${fmt(atNet)}枚` })
+          if (tier && atNet > 0) celebrate(tier, atNet, { title: 'AT終了', sub: `${atGames}G・純増 ${fmt(atNet)}枚`, say: onTalk?.(winTalkOf(tier.key)) })
           else { fx('popup', { text: 'AT終了', color: CASINO.pink, size: 32, sub: `純増 ${signed(atNet)}枚` }); sfx.small() }
         }, 400)
         addLog(`AT終了 ${atGames}G 純増 ${signed(atNet)}枚`, CASINO.pink)

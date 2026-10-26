@@ -131,13 +131,14 @@ export const sfx = {
 }
 
 // 当たりの段階の演出をまとめて（banner＋コイン＋紙吹雪＋光＋揺れ＋音＋振動）
-//   tier … casino.js の winTierOf の結果。amount … 払い出し
-export const celebrate = (tier, amount, { title, sub } = {}) => {
+//   tier … casino.js の winTierOf の結果。amount … 払い出し。
+//   say … banner の上に出す受付嬢アレア（V2capAlea.jsx の AleaSays・2026-10-27）。無ければ出さない
+export const celebrate = (tier, amount, { title, sub, say } = {}) => {
   if (!tier) return
   const level = { win: 1, big: 2, mega: 3, jackpot: 4 }[tier.key] || 1
   sfx.win(level)
   if (level === 1) { fx('coins', { n: 14, from: 'bottom' }); return }
-  fx('banner', { tier, amount, title, sub })
+  fx('banner', { tier, amount, title, sub, say })
   fx('coins', { n: [0, 0, 60, 120, 220][level], from: level >= 4 ? 'top' : 'bottom' })
   if (level >= 3) fx('confetti', { n: level === 4 ? 220 : 120 })
   fx('flash', { color: tier.color, ms: level >= 3 ? 700 : 400 })

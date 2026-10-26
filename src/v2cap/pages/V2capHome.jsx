@@ -21,7 +21,9 @@ import V2capDaily from '../components/V2capDaily.jsx'
 import V2capProfile from '../components/V2capProfile.jsx'
 import V2capTree from '../components/V2capTree.jsx'
 import V2capDex from '../components/V2capDex.jsx'
-import V2capCasino from '../components/V2capCasino.jsx'
+import V2capCasino, { casinoWelcomeDue, markCasinoWelcome } from '../components/V2capCasino.jsx'
+import { V2capAleaWelcome, preloadAleaWelcome } from '../components/V2capAlea.jsx'
+import { welcomeLineOf } from '../lib/alea.js'
 import V2capAscension from '../components/V2capAscension.jsx'
 import V2capTower from '../components/V2capTower.jsx'
 import V2capUniqueCheck from '../components/V2capUniqueCheck.jsx'
@@ -135,6 +137,7 @@ export default function V2capHome() {
   const [inventory, setInventory] = useState([])
   const [screen, setScreen] = useState('home')
   const [burgerWelcome, setBurgerWelcome] = useState(null)   // 出している「いらっしゃいませー！」のセリフ（null＝出していない）
+  const [casinoWelcome, setCasinoWelcome] = useState(null)   // 出している賭博場の受付嬢の「いらっしゃい」のセリフ（null＝出していない）
   const [inBattle, setInBattle] = useState(false)
   const [name, setName] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)   // 宝樹を何回でも祈れる（2026-10-13・開発中）
@@ -205,14 +208,19 @@ export default function V2capHome() {
   // メニューから画面を選ぶ。ニャーガーキングは、その日はじめてなら先に「いらっしゃいませー！」をホームの上に出し、閉じたら店の画面へ
   // （【確定】2026-10-26 ユーザー指示「先に通常の画面開いてから演出入るから少し違和感、しっかり演出入ってからページ遷移するようにしてほしい」。
   //   出すかの決まりは V2capBurger.jsx の burgerWelcomeDue）
+  // 賭博場も同じ（2026-10-27・受付嬢アレアの「いらっしゃい」・出すかの決まりは V2capCasino.jsx の casinoWelcomeDue）
   const pickScreen = (key) => {
     if (key === 'burger' && burgerWelcomeDue(prof)) { markBurgerWelcome(); setBurgerWelcome(pickLine('welcome').text); return }
+    if (key === 'casino' && casinoWelcomeDue(prof)) { markCasinoWelcome(); setCasinoWelcome(welcomeLineOf(prof)); return }
     setScreen(key)
   }
   const closeBurgerWelcome = () => { setBurgerWelcome(null); setScreen('burger') }
+  const closeCasinoWelcome = () => { setCasinoWelcome(null); setScreen('casino') }
   // まだなら全身の絵を先に読んでおく（押してすぐ出せるように）
   const burgerWelcomeNow = !!prof && burgerWelcomeDue(prof)
   useEffect(() => { if (burgerWelcomeNow) preloadClerkWelcome() }, [burgerWelcomeNow])
+  const casinoWelcomeNow = !!prof && casinoWelcomeDue(prof)
+  useEffect(() => { if (casinoWelcomeNow) preloadAleaWelcome() }, [casinoWelcomeNow])
 
   const create = async (e) => {
     e.preventDefault()
@@ -501,7 +509,7 @@ export default function V2capHome() {
             {screen === 'asc' && <V2capAscension prof={prof} onProfile={refresh} />}
             {screen === 'tree' && <V2capTree prof={prof} onProfile={refresh} unlimited={isAdmin} />}
             {screen === 'dex' && <V2capDex prof={prof} />}
-            {screen === 'casino' && <V2capCasino prof={prof} onProfile={refresh} />}
+            {screen === 'casino' && <V2capCasino prof={prof} onProfile={refresh} dev={isAdmin} />}
             {screen === 'tower' && <V2capTower prof={prof} inventory={inventory} onProfile={refresh} />}
             {screen === 'uniqueCheck' && <V2capUniqueCheck prof={prof} inventory={inventory} />}
             {screen === 'atb' && (
@@ -513,6 +521,7 @@ export default function V2capHome() {
         )}
       </div>
       {burgerWelcome && <V2capClerkWelcome line={burgerWelcome} onClose={closeBurgerWelcome} />}
+      {casinoWelcome && <V2capAleaWelcome line={casinoWelcome} onClose={closeCasinoWelcome} />}
     </div>
   )
 }
