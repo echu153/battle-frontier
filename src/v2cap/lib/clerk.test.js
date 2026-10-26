@@ -6,7 +6,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import {
   CLERK_ART_DIR, CLERK_FACES, CLERK_FACE_KEYS, CLERK_WELCOME, CLERK_MARK, CLERK_FACE_SIZE, CLERK_WELCOME_H, CLERK_MARK_SIZE,
   CLERK_LINES, fillLine, pickLine, isNight, nextStreak, tapKindOf, enterKindOf, welcomeDueLocal, STREAK_MS, makeDailyAsker,
-  CLERK_STAGES, CLERK_STAGE_EVENTS, stageOf, callNameOf, stageEventOf, linesOf, dayOf,
+  CLERK_STAGES, CLERK_STAGE_EVENTS, stageOf, callNameOf, stageEventOf, linesOf, dayOf, FED_LOW_MS,
 } from './clerk.js'
 
 const PUB = new URL('../../../public/', import.meta.url)
@@ -47,11 +47,21 @@ test('セリフの表情はどれも9つのどれか・9つとも使っている
     for (const l of list) { assert.ok(CLERK_FACE_KEYS.includes(l.face), `${kind}：${l.face}`); used.add(l.face) }
   }
   assert.deepEqual([...used].sort(), [...CLERK_FACE_KEYS].sort())
-  assert.ok(CLERK_LINES.enterFed.every(l => l.text.includes('{burger}') && l.text.includes('{left}')))
+  assert.ok([...CLERK_LINES.enterFed, ...CLERK_LINES.enterFedLow].every(l => l.text.includes('{burger}')))
   assert.ok(CLERK_LINES.served.every(l => l.text.includes('{burger}')))
   assert.ok(CLERK_LINES.servedTopping.every(l => l.text.includes('{toppings}')))
   assert.ok(CLERK_LINES.servedTopping.every(l => l.text.includes('今回のトッピング')), '「今日の」ではなく「今回の」（ユーザー指示）')
-  assert.equal(fillLine('あと{left}！{x}', { left: '42分' }), 'あと42分！{x}')
+  assert.equal(fillLine('さっきの{burger}！{x}', { burger: 'チキンニャッパー' }), 'さっきのチキンニャッパー！{x}')
+})
+
+test('【確定】2026-10-26 看板娘は数字やゲームの仕組みの言葉を言わない（世界観を守る）', () => {
+  // ユーザーが案を見て「看板娘のセリフをこの案で直して（⑤は残り時間で言い方を変える）」。前は「60分効く」「ステータス」「状態異常」「Gold」「あと42分」を言っていた
+  const all = [
+    ...Object.entries(CLERK_LINES).flatMap(([kind, list]) => list.map(l => ({ kind, text: l.text }))),
+    ...Object.entries(CLERK_STAGE_EVENTS).map(([s, e]) => ({ kind: `段階${s}`, text: e.text })),
+  ]
+  const META = /[0-9０-９]|\{left\}|ステータス|状態異常|Gold|ゴールド|メジャー|マイナー|[%％]|確率|STR|DEX|AGI|INT|VIT|LUK|EXP|経験値|戦闘力|レア|ノーマル|エピック|レジェンダリー|ユニーク|好感度/
+  for (const l of all) assert.ok(!META.test(l.text), `${l.kind}：${l.text}`)
 })
 
 // そのセリフが出はじめる好感度（段階の下限と dayMin の大きいほう）
@@ -96,7 +106,8 @@ test('同じセリフが2回続かない（2つ以上あるとき）', () => {
   }
   // 1つしか無い場面はそのまま
   assert.equal(pickLine('streak3', { last: 'わっ！ どうしたの？' }).text, 'わっ！ どうしたの？')
-  assert.equal(pickLine('enterFed', { vars: { burger: 'チキンニャッパー', left: '42分' } }).text, 'さっきのチキンニャッパー、まだ効いてるよ！ あと42分！')
+  assert.equal(pickLine('enterFed', { vars: { burger: 'チキンニャッパー' } }).text, 'さっきのチキンニャッパー、まだまだ効いてるよ！')
+  assert.equal(pickLine('enterFedLow', { vars: { burger: 'チキンニャッパー' } }).text, 'さっきのチキンニャッパー、そろそろ切れそうだね。おかわりする？')
 })
 
 test('夜おそくは日本時間の0〜5時', () => {
@@ -119,12 +130,17 @@ test('続けてタップ：3回目にびっくり・5回目に照れ・8回目�
   assert.equal(tapKindOf(3, true), 'streak3')
 })
 
-test('店を開いたときのひとこと：夜おそく→眠そう・食事中→残り時間・ほかはふつう', () => {
+test('店を開いたときのひとこと：夜おそく→眠そう・食事中→残りで言い方を変える（数字は言わない）・ほかはふつう', () => {
   const day = new Date(Date.UTC(2026, 9, 25, 3))     // 日本時間12時
   const night = new Date(Date.UTC(2026, 9, 24, 17))  // 日本時間2時
   assert.equal(enterKindOf(null, day), 'enter')
   assert.equal(enterKindOf({ burger: {} }, day), 'enterFed')
   assert.equal(enterKindOf({ burger: {} }, night), 'enterNight')
+  // 【確定】2026-10-26 ユーザー選択「⑤は残り時間で言い方を変える」：残り10分以下は「そろそろ切れそうだね。おかわりする？」
+  assert.equal(FED_LOW_MS, 10 * 60000)
+  assert.equal(enterKindOf({ burger: {}, leftMs: FED_LOW_MS + 1 }, day), 'enterFed')
+  assert.equal(enterKindOf({ burger: {}, leftMs: FED_LOW_MS }, day), 'enterFedLow')
+  assert.equal(enterKindOf({ burger: {}, leftMs: 60000 }, day, { stage: 1, lastVisit: dayOf(day) }), 'enterFedLow', '顔なじみの「また」のときも')
 })
 
 test('【2026-10-25 直した】サーバーには同じ日は1回だけ聞いて答えを使い回す（画面を2回作り直しても first=true が届く）', async () => {
@@ -171,7 +187,7 @@ test('名前で呼ぶのは仲良し（20日目）から。それより前のセ
     for (const l of list) if (l.text.includes('{name}')) assert.ok(startAffOf(l) >= 20, `${kind}：${l.text}`)
   }
   // 名前つきとそうでないものは同じ段階で混ざらない（20日目からは名前つきだけ）
-  for (const kind of ['enterDaily', 'enterLong', 'enterAgain', 'enterFed', 'enterNight', 'streak3', 'streak5', 'streak8', 'short', 'served', 'servedTopping']) {
+  for (const kind of ['enterDaily', 'enterLong', 'enterAgain', 'enterFed', 'enterFedLow', 'enterNight', 'streak3', 'streak5', 'streak8', 'short', 'served', 'servedTopping']) {
     assert.ok(linesOf(kind, 3).every(l => l.text.includes('{name}')), `${kind} の20日目から`)
     assert.ok(linesOf(kind, 2).every(l => !l.text.includes('{name}')), `${kind} の20日目より前`)
   }

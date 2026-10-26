@@ -64,7 +64,9 @@ export const callNameOf = (profile) =>
 
 // ===== セリフ（【確定】2026-10-25 ユーザーが案を見て「語尾の『ニャ』を全部外す」を選んだ＝ふつうの話し方）=====
 // ★店の名前（ニャーガーキング）とバーガーの名前（〜ニャッパー）のほかに「ニャ」を使わない（clerk.test.js が見張る）
-// face＝出す表情。{burger}＝バーガーの名前・{left}＝残り時間（「42分」）・{toppings}＝乗ったトッピング（「ピクルスとガーリック」）・
+// ★【確定】2026-10-26 数字やゲームの仕組みの言葉（60分・ステータス・状態異常・Gold など）を言わせない＝世界観を守る（clerk.test.js が見張る）。
+//   ユーザーが案を見て「この案で直して（⑤は残り時間で言い方を変える）」。仕組みの説明は店の ❓ HELP に置く
+// face＝出す表情。{burger}＝バーガーの名前・{toppings}＝乗ったトッピング（「ピクルスとガーリック」）・
 // {name}＝呼び方（「〇〇くん」）・{username}＝キャラクター名。min／max＝出す好感度の段階（書いていなければ0から・上限なし）・
 // dayMin／dayMax＝出す好感度（話しかけた日の数）・rare＝出にくい（ほかの CLERK_RARE_WEIGHT 倍＝伏線のセリフ）
 export const CLERK_LINES = {
@@ -90,10 +92,14 @@ export const CLERK_LINES = {
     { min: 1, max: 2, face: 'smile', text: 'また来てくれたの？ うれしいな' },
     { min: 3, face: 'smile', text: '{name}、また来てくれたんだ！' },
   ],
-  // 食事が効いているときに店を開いた
+  // 食事が効いているときに店を開いた。残りの分は言わない（2026-10-26）＝たっぷりあるときと、残り FED_LOW_MS 以下（そろそろ切れる）で言い方を変える
   enterFed: [
-    { max: 2, face: 'smile', text: 'さっきの{burger}、まだ効いてるよ！ あと{left}！' },
-    { min: 3, face: 'smile', text: '{name}、さっきの{burger}まだ効いてるよ！ あと{left}！' },
+    { max: 2, face: 'smile', text: 'さっきの{burger}、まだまだ効いてるよ！' },
+    { min: 3, face: 'smile', text: '{name}、さっきの{burger}まだまだ効いてるよ！' },
+  ],
+  enterFedLow: [
+    { max: 2, face: 'wink', text: 'さっきの{burger}、そろそろ切れそうだね。おかわりする？' },
+    { min: 3, face: 'wink', text: '{name}、さっきの{burger}そろそろ切れそうだね。おかわりする？' },
   ],
   // 夜おそく（日本時間の0〜5時）
   enterNight: [
@@ -102,14 +108,14 @@ export const CLERK_LINES = {
   ],
   // ふつうにタップしたとき（同じセリフが2回続かないように選ぶ）。段階が上がると増える
   tap: [
-    { face: 'normal', text: 'バーガーは60分効くよ。出撃の前にどうぞ！' },
+    { face: 'normal', text: 'うちのバーガーを食べると、しばらく力がわいてくるんだ。出かける前にどうぞ！' },
     { face: 'smile', text: '焼きたてだよ！ 直火で焼いてるから香ばしいんだ！' },
     { face: 'wink', text: 'トッピングは何がのるかお楽しみ！' },
     { face: 'wink', text: '迷ったら、トッピングは両方のせちゃおう！' },
     { face: 'smug', text: 'うちのバーガーは世界一だよ！' },
     { face: 'smug', text: 'スパイシーニャッパーは自信作なんだから！' },
-    { face: 'normal', text: '上げたいステータスのバーガーを選んでね' },
-    { face: 'smile', text: 'メジャーのトッピングは、敵がよく使う状態異常に効くよ！' },
+    { face: 'normal', text: '力をつけたいならスパイシー、身軽になりたいならチキン！ 今日の気分で選んでね' },
+    { face: 'smile', text: 'ピクルスのすっぱさは毒消しに、トマトは血のめぐりにいいんだって！' },
     { min: 1, face: 'smile', text: '最近よく来てくれるね。うちのバーガー、気に入ってくれた？' },
     { min: 1, face: 'normal', text: '出撃、気をつけてね。ちゃんと食べてから行くんだよ？' },
     { min: 2, face: 'wink', text: '実は新しいバーガーを考えてるんだ。…まだ秘密！' },
@@ -153,8 +159,8 @@ export const CLERK_LINES = {
   ],
   // 選んだものの合計が持っているGoldより多くなった
   short: [
-    { max: 2, face: 'sad', text: 'あぅ…Goldが足りないみたい。出撃してまた来てね' },
-    { min: 3, face: 'sad', text: '{name}、Goldが足りないみたい…。出撃してまた来てね' },
+    { max: 2, face: 'sad', text: 'あぅ…お財布がちょっとさみしいみたい。ひと稼ぎしてからまた来てね' },
+    { min: 3, face: 'sad', text: '{name}、お財布がちょっとさみしいみたい…。ひと稼ぎしてからまた来てね' },
   ],
   // 食事が効いている間に注文しようとした（食べ直しの確かめ）
   confirm: [{ face: 'surprised', text: 'まだ効いてるよ？ 食べ直すと前のは消えちゃうけど…' }],
@@ -222,18 +228,21 @@ export const tapKindOf = (n, night = false) => {
   return night ? 'tapNight' : 'tap'
 }
 
+// 食事の残りがこれ以下なら「そろそろ切れそうだね。おかわりする？」（【確定】2026-10-26 ユーザー選択「⑤は残り時間で言い方を変える」）
+export const FED_LOW_MS = 10 * 60000
 // 店を開いたときのひとこと。meal＝burger.js の activeMealOf（効いていなければ null）。
 // 顔なじみから（stage≥1）は、前に店を開いた日（lastVisit＝プロフィールの burger_welcome_day・開く前の値）で
-// 「今日も（前の日）」「久しぶり（2日以上あいた）」「また（今日もう来ていた・食事中なら残り時間）」を選ぶ
+// 「今日も（前の日）」「久しぶり（2日以上あいた）」「また（今日もう来ていた・食事中なら効いている話）」を選ぶ
 export const enterKindOf = (meal, at = new Date(), { stage = 0, lastVisit = null } = {}) => {
   if (isNight(at)) return 'enterNight'
+  const fed = () => (Number(meal.leftMs) <= FED_LOW_MS ? 'enterFedLow' : 'enterFed')
   if (stage >= 1) {
     const d = at instanceof Date ? at : new Date(at)
     const last = lastVisit ? String(lastVisit).slice(0, 10) : ''
     if (last !== dayOf(d)) return last === dayOf(new Date(d.getTime() - 864e5)) ? 'enterDaily' : 'enterLong'
-    return meal ? 'enterFed' : 'enterAgain'
+    return meal ? fed() : 'enterAgain'
   }
-  return meal ? 'enterFed' : 'enter'
+  return meal ? fed() : 'enter'
 }
 
 // その日はじめてか（サーバーの関数が無いとき＝SQLを流す前の端末の控え）。lastDay＝前に出した日（'2026-10-25'）

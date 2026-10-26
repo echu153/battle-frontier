@@ -31,8 +31,6 @@ const card = (on) => ({
 })
 const gold = (n) => `${Number(n || 0).toLocaleString()}G`
 const HELP_HEAD = { color: MEAL_COLOR, fontSize:'12px', marginBottom:'2px' }
-// 「残り42分」→「42分」（セリフの {left}）
-const leftShort = (ms) => leftText(ms).replace(/^残り/, '')
 // その日はじめて話しかけた（好感度+1）をサーバーに聞く窓口
 // （同じ日は1回だけ聞いて答えを使い回す＝lib/clerk.js の makeDailyAsker）
 const talkAsker = makeDailyAsker(() => supabase.rpc('v2cap_clerk_talk'))
@@ -103,7 +101,7 @@ export default function V2capBurger({ prof, onProfile, dev = false }) {
     const m = activeMealOf(prof)
     const st = stageOf(prof?.clerk_affinity)
     const kind = enterKindOf(m, new Date(), { stage: st, lastVisit: prof?.burger_welcome_day })
-    const vars = { ...baseVars, ...(m ? { burger: m.burger.name, left: leftShort(m.leftMs) } : {}) }
+    const vars = { ...baseVars, ...(m ? { burger: m.burger.name } : {}) }
     return { ...pickLine(kind, { vars, stage: st, aff: Number(prof?.clerk_affinity) || 0 }), tick: 0 }
   })
   const say = useCallback((kind, vars) => {
@@ -142,8 +140,10 @@ export default function V2capBurger({ prof, onProfile, dev = false }) {
     else setClerk(c => ({ face: 'normal', text: `（${stageLabelOf(stage)}の場面はまだありません）`, tick: c.tick + 1 }))
   }
   const devGreeting = () => {
-    const kind = stage >= 1 ? DEV_GREETS[devGreet.current++ % DEV_GREETS.length] : 'enter'
-    say(kind, meal ? { burger: meal.burger.name, left: leftShort(meal.leftMs) } : {})
+    // 食事中は「まだまだ効いてるよ」「そろそろ切れそう」も順に見せる（残りで言い方を変える・2026-10-26）
+    const greets = meal ? [...DEV_GREETS, 'enterFed', 'enterFedLow'] : DEV_GREETS
+    const kind = stage >= 1 ? greets[devGreet.current++ % greets.length] : 'enter'
+    say(kind, meal ? { burger: meal.burger.name } : {})
   }
 
   const order = async () => {
