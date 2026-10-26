@@ -188,7 +188,11 @@ const fitSet = (sks, maxMp) => {
 }
 
 // probe … 1時間ごとに呼ぶ（{ hour, spot＝いまの場所, lv＝いまのLV, fighter＝いまの自分の戦闘用キャラを作る関数 }）。本筋の進み方は変えない（--shrine・--tower が使う）
-export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEAR_MODE, plus = PLUS_ON, smith = SMITH_ON, probe = null } = {}) => {
+// onBattle … 1戦ごとに呼ぶ（武器の真化のシミュ tools/v2cap-shinka-sim.mjs が武器ごとに数える）。
+//   { r, enc, win, at, hour, weaponId, cls, prof, inv } を渡す。true を返すと着け直す（真化した武器を持ち物の行へ写す）
+// rowExtra … 持ち物の行に足す中身（base_id → { shinka } など）。着け直すたびに引く
+export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEAR_MODE, plus = PLUS_ON, smith = SMITH_ON, probe = null,
+  onBattle = null, rowExtra = null } = {}) => {
   const rng = rngOf(seed)
   // 鍛冶屋を実際に使うとき（--smith）は、見込みの強化値は使わない（実際に強化した値で戦う）
   const smithOn = smith && gear === 'drops'
@@ -270,7 +274,7 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
       : picks.acc1
     for (const [slot, item] of Object.entries(picks)) {
       if (!item) continue
-      inventory.push({ id: inventory.length + 1, base_id: item.id, ilv: item.lv, plus: plusById.get(item.id) || 0 })
+      inventory.push({ id: inventory.length + 1, base_id: item.id, ilv: item.lv, plus: plusById.get(item.id) || 0, ...(rowExtra?.(item.id) || {}) })
       equipped[slot] = inventory.length
     }
     if (smithOn) dismantle(picks)
@@ -371,8 +375,10 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
       const at = new Date(t)
       const spot = openUntilOf(cleared)
       const enc = pickEncounter(spot, bossRate, at, rng)
-      const r = runBattle(toFighter(prof(), invAt(spot)), { ...enemyFighter(enc.enemy), boss: enc.isBoss }, { rng })
+      const r = runBattle(toFighter(prof(), invAt(spot), { at }), { ...enemyFighter(enc.enemy), boss: enc.isBoss }, { rng })
       const win = r.winner === 'a'
+      const forceRegear = onBattle?.({ r, enc, win, at, hour, cls, prof: prof(), inv: invAt(spot),
+        weaponId: inventory[(equipped.weapon || 0) - 1]?.base_id || null }) === true
       fights++
       hoursInSpot[spot] = (hoursInSpot[spot] || 0) + 1 / PER_HOUR
       bossRate = nextBossRate(bossRate, enc.isBoss)
@@ -391,7 +397,7 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
       if (res.points) spendPoints(res.points)
       const j = applyJobExp(jobs, cls, exp, learned)
       jobs = j.jobs
-      let dirty = res.lv !== lvBefore || j.ups.length > 0
+      let dirty = res.lv !== lvBefore || j.ups.length > 0 || forceRegear
       if (j.learned.length) { learned = [...learned, ...j.learned]; dirty = true }
       // gear＝drops：勝ったときに画面と同じ決まり（rollEquipDrop）で装備が落ちる。新しく拾ったら着け直す
       if (win && gear === 'drops') {

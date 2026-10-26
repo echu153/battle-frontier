@@ -640,7 +640,8 @@ test('出撃の間隔はサーバーでも見る（10秒・通信の揺れぶん
 
 // 【確定】2026-10-23 ユーザー報告「⚠ 反映に失敗しました（出撃の間隔が短すぎます）」の直し（cooldown.js）。出撃の精算と塔の挑戦で同じ形
 const CD_FNS = [
-  { fn: 'v2cap_sortie_settle', sig: 'int, text, boolean, text, boolean, text', old: 'int, text, boolean, text, boolean', msg: '出撃の間隔が短すぎます' },
+  // ★2026-10-26 出撃の精算に真化の記録（p_rec jsonb）を足した＝前の形は印つきの6つ
+  { fn: 'v2cap_sortie_settle', sig: 'int, text, boolean, text, boolean, text, jsonb', old: 'int, text, boolean, text, boolean, text', msg: '出撃の間隔が短すぎます' },
   { fn: 'v2cap_tower_fight', sig: 'int, uuid, boolean, int, int, int, int, jsonb, text, text', old: 'int, uuid, boolean, int, int, int, int, jsonb, text', msg: '待ち時間が終わっていません' },
 ]
 
@@ -666,7 +667,7 @@ test('【確定】精算ごとの印（p_key）：同じ印がもう一度届い
   const store = "update public.v2cap_profiles\n     set last_sortie_key = p_key,\n         last_sortie_res = case when p_key is not null then jsonb_set(v_out, '{level}', coalesce(v_res, '{}'::jsonb) - 'profile') end\n   where id = v_uid;\n  return v_out;\nend;"
   for (const { fn, sig, old } of CD_FNS) {
     const body = fnBody(fn)
-    assert.ok(body.includes('p_key text default null'), `${fn}：印は最後の引数（無くても呼べる）`)
+    assert.ok(body.includes('p_key text default null'), `${fn}：印は後ろの引数（無くても呼べる・出撃はそのあとに真化の記録 p_rec）`)
     // 印は行をつかんだすぐあと・ほかのどの見る所より前（1回目で祠を出た・守護者になった・間隔が空いていない、でも同じ返事を返す）
     const lock = body.indexOf('for update;\n  if not found then return')
     const r = body.indexOf(replay)

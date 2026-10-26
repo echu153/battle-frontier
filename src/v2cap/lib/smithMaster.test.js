@@ -68,6 +68,7 @@ test('セリフの表情はどれも2つのどちらか・2つとも使ってい
   assert.ok(MASTER_LINES.craft.every(l => l.text.includes('{item}')))
   assert.ok(MASTER_LINES.dismantle.every(l => l.text.includes('{n}')))
   assert.ok(MASTER_LINES.short.every(l => l.text.includes('{what}')))
+  assert.ok(MASTER_LINES.shinka.every(l => l.text.includes('{item}')))
   // 埋める名前は決まったものだけ（書きまちがいで {nmae} のまま出ない）
   for (const l of allLines()) {
     for (const m of l.text.matchAll(/\{(\w+)\}/g)) assert.ok(['call', 'item', 'n', 'what'].includes(m[1]), `${l.text}`)

@@ -20,6 +20,8 @@ import V2capEnhanceFx from './V2capEnhanceFx.jsx'
 import V2capCraftFx from './V2capCraftFx.jsx'
 import { ticketOf, canUseTicket } from '../lib/v1carry.js'
 import { pickLine, enterKindOf, enhanceKindOf, shortWhatOf, varsOf, isNight, nextStreak, tapKindOf } from '../lib/smithMaster.js'
+import { SHINKA_MAX, isShinka, shinkaNameOf } from '../lib/shinka.js'
+import { ShinkaTab, ShinkaNote } from './V2capShinka.jsx'
 
 // ============================================================
 // 「レベルキャップあり」版 — 鍛冶屋（強化・分解・作成）
@@ -36,12 +38,16 @@ import { pickLine, enterKindOf, enhanceKindOf, shortWhatOf, varsOf, isNight, nex
 // 【確定】2026-10-26 親方トルステン（ユーザー指示「ニャーガーキングの看板娘と同じ形で、鍛冶屋のキャラのイラストを入れたい」・lib/smithMaster.js）：
 //   右に親方を立たせる（スマホは上）。タップ・強化と作成の結果・分解・足りなくて強化できないときにセリフと表情が変わる（ユーザー選択）。
 //   強化と作成の結果のポップアップ・足りないときの強化の画面にも親方を出す。好感度は無し（ユーザー指示「鍛冶屋のおっちゃんは好感度システムいらないや」）
+// 【確定】2026-10-26 武器の真化（ユーザー指示「戦闘スタイルによって武器に特殊能力がつくシステム」・lib/shinka.js・タブは V2capShinka.jsx）：
+//   熟練度が MAX の武器をここで真化する。抽選はサーバー（v2cap_shinka）
 // ============================================================
 // help＝決まりの説明。タブの下には出さず、❓ HELP にまとめる（2026-10-26 ユーザー指示「ここの説明はHELPにまとめて、強化分解作成すべてここの部分いらない」）
 const TABS = [
   { key:'enhance',   label:'強化', help:`Goldとその装備のエリアの残骸で強化値を+1（+${PLUS_MAX}まで・+1ごとに強さ+10%・最低でも戦闘力+1）。ノーマルの装備はGoldだけで強化できます。失敗すると残骸とGoldはなくなり、強化値はそのままです。着けている装備も強化できます。` },
   { key:'dismantle', label:'分解', help:`装備を、その装備のエリアの残骸にします（${ALL_RARITIES.map(r => `${rarityLabel(r)}${SCRAP_YIELD[r]}`).join('・')}個）。着けている装備とお気に入り（★）の装備は分解できません。ユニークはまとめての分解に入りません（1つずつなら分解できます）。` },
   { key:'craft',     label:'作成', help:'レア・エピック・レジェンダリーの装備を、Goldとそのエリアの残骸で作ります（必ずできます・+0で持ち物に入ります）。武器はどの職業のものでも作れます。' },
+  // 武器の真化（2026-10-26・lib/shinka.js）。代償が付くこともあるのは HELP に書く（ユーザー指示「真化するときにデメリットがつくこともあることを伝える」）
+  { key:'shinka',    label:'真化', help:`着けている武器で戦うと、1戦ごとに熟練度が1上がります（勝ち負けとも）。熟練度が${SHINKA_MAX.toLocaleString()}になった武器は、ここで真化できます。真化すると、その武器での戦い方（クリティカルがよく出た・ある種族の敵を多く倒した・よくかわした など）から能力が1つ付きます。どれが付くかは、その武器の戦い方の中から選ばれます。代償（デメリット）が付く能力もあります。真化は1本につき1回だけで、やり直せません。真化した武器を分解すると能力も消えます（まとめての分解と博物館への寄贈には入りません）。` },
 ]
 const FAV_HELP = '装備の★を押すとお気に入りになります（もう一度押すと外れます）。お気に入りの装備は分解も博物館への寄贈もできません。並べ替えの「お気に入り」で上に集まります。'
 const HELP_HEAD = { color:'#ffaa44', fontSize:'12px', marginBottom:'2px' }
@@ -137,6 +143,7 @@ export default function V2capSmith({ prof, inventory, onProfile, onGo }) {
             {tab === 'enhance' && <EnhanceTab {...shared} />}
             {tab === 'dismantle' && <DismantleTab {...shared} />}
             {tab === 'craft' && <CraftTab {...shared} />}
+            {tab === 'shinka' && <ShinkaTab {...shared} Head={ItemHead} Stats={ItemStats} />}
           </div>
         </div>
       </div>
@@ -305,7 +312,7 @@ function DismantleTab({ all, wornIds, list, busy, call, setError, setNotice, say
             選んだ{pickedRows.length}個を分解
           </button>
         </div>
-        <div style={{ color: TEXT.sub, marginTop:'4px' }}>まとめて選ぶときは、装備中・お気に入り（★）・強化した装備は選びません（強化した装備はチェックで1つずつなら選べます）</div>
+        <div style={{ color: TEXT.sub, marginTop:'4px' }}>まとめて選ぶときは、装備中・お気に入り（★）・強化した装備・真化した武器は選びません（強化した装備と真化した武器はチェックで1つずつなら選べます）</div>
       </div>
       <div style={{ display:'grid', gap:'4px', maxHeight:'560px', overflowY:'auto' }}>
         {list.rows.length === 0 && <Empty all={all} />}
@@ -464,6 +471,8 @@ function ItemHead({ inv, item, lv, isWorn, check, star }) {
         {effect && <span style={{ color:'#88ddaa', fontSize:'10px', marginLeft:'5px' }}>{effect}</span>}
         {isWorn && <span style={{ color:'#44aaff', fontSize:'10px', marginLeft:'5px' }}>装備中</span>}
         {sync && <span style={{ color: SHORT, fontSize:'10px', marginLeft:'3px' }}>（{sync}）</span>}
+        {/* 武器の真化（2026-10-26）：真化した武器は能力の名前（カーソルで中身） */}
+        {isShinka(inv.shinka) && <span style={{ marginLeft:'5px' }}><ShinkaNote inv={inv} item={item} /></span>}
       </span>
       <span style={{ color: lv && needLvOf(item, inv.ilv) > lv ? '#ff8844' : '#cfe2ff', fontSize:'11px', whiteSpace:'nowrap' }}>要求レベル{needLvOf(item, inv.ilv)}LV</span>
       {/* お気に入りの★は右上（2026-10-26 ユーザー指示「お気に入りのボタンは右上にして」） */}
@@ -572,6 +581,10 @@ function DismantleModal({ list, busy, onConfirm, onClose }) {
       </div>
       <div>手に入る残骸：<span style={{ color:'#ffcc00' }}>{gainText(dismantleGainOf(list))}</span></div>
       {enhanced > 0 && <div style={{ color: SHORT }}>⚠ 強化した装備が{enhanced}個入っています（強化に使った残骸とGoldは戻りません）</div>}
+      {/* 武器の真化（2026-10-26）：真化した武器は能力も消える */}
+      {list.filter(x => isShinka(x.inv.shinka)).map(x => (
+        <div key={x.inv.id} style={{ color: SHORT }}>⚠ {x.item.name}は真化しています（{shinkaNameOf(x.inv.shinka)}）。分解すると能力も消えます</div>
+      ))}
       <div style={{ color: TEXT.sub }}>元には戻せません。</div>
     </V2Modal>
   )

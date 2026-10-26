@@ -4132,9 +4132,13 @@ grant execute on function public.v2cap_set_gender(text) to authenticated;
 --   （p_key の無い5つの形を残すと、5つで呼んだときにどちらか決められなくなる）
 drop function if exists public.v2cap_sortie_settle(int, text, boolean, text, boolean);
 drop function if exists public.v2cap_sortie_settle(int, text, boolean, text, text, boolean);
+-- ★2026-10-26 武器の真化（§18）：p_rec＝この戦闘の戦い方の記録（shinka.js の srecOfBattle）を足した。
+--   着けている武器の熟練度と記録を v2cap_shinka_count で数える。p_rec を送らない前の画面でも通る（熟練度・勝ち・種族・時間帯は数える）
 drop function if exists public.v2cap_sortie_settle(int, text, boolean, text, boolean, text);
+drop function if exists public.v2cap_sortie_settle(int, text, boolean, text, boolean, text, jsonb);
 create or replace function public.v2cap_sortie_settle(
-  p_spot int, p_enemy text, p_win boolean, p_drop text default null, p_auto boolean default false, p_key text default null
+  p_spot int, p_enemy text, p_win boolean, p_drop text default null, p_auto boolean default false, p_key text default null,
+  p_rec jsonb default null
 ) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
@@ -4311,6 +4315,10 @@ begin
    where id = v_uid
    returning stamina, stamina_at into v_stam, v_stam_at;
 
+  -- 武器の真化（§18）：着けている武器の熟練度と戦い方の記録（祠の戦闘も数える）
+  perform public.v2cap_shinka_count(v_uid, nullif(v_row.equipped ->> 'weapon', '')::bigint, p_rec, v_win,
+    case when v_shrine then c_shrine_fairy else v_en.name end);
+
   -- デイリーミッション（§10）：勝ったら「出撃に勝つ」を1つ数える（受注していない日は数えない）
   if v_win then
     perform public.v2cap_daily_bump(v_uid, 'win', 1);
@@ -4354,8 +4362,8 @@ begin
   return v_out;
 end;
 $$;
-revoke all on function public.v2cap_sortie_settle(int, text, boolean, text, boolean, text) from public, anon;
-grant execute on function public.v2cap_sortie_settle(int, text, boolean, text, boolean, text) to authenticated;
+revoke all on function public.v2cap_sortie_settle(int, text, boolean, text, boolean, text, jsonb) from public, anon;
+grant execute on function public.v2cap_sortie_settle(int, text, boolean, text, boolean, text, jsonb) to authenticated;
 
 -- ============================================================
 -- ===== 6. 転職（神殿）=====
@@ -7760,3 +7768,581 @@ drop function if exists public.v2cap_smith_seen(int);
 alter table public.v2cap_profiles drop column if exists smith_affinity;
 alter table public.v2cap_profiles drop column if exists smith_talk_day;
 alter table public.v2cap_profiles drop column if exists smith_stage_seen;
+
+-- ============================================================
+-- ===== 18. 武器の真化（2026-10-26）=====
+-- ============================================================
+-- 【確定】2026-10-26 ユーザー指示「戦闘スタイルによって武器に特殊能力がつくシステムを導入したい」（決まりは src/v2cap/lib/shinka.js）：
+--   ・装備している武器で出撃すると、1戦ごとに熟練度が1（勝ち負けとも・祠の戦闘も）。MAX（v2cap_shinka_conf の max）で真化できる
+--   ・同じ戦闘で戦い方の記録（srec）も積む。画面が戦闘ログから作った分（p_rec）は、1戦ぶんの上限（v2cap_shinka_fields）を掛けて足す。
+--     戦った数（n）・勝ち（w）・倒した敵の種族（race）・時間帯（band）は**ここで数える**（画面の申告を使わない）
+--   ・真化（v2cap_shinka）は**サーバーが抽選する**：立っているフラグ（v2cap_shinka_flags）から均等に1つ → 代償つきのあるフラグなら
+--     cost_pct% で代償つき。持ち物の行の shinka に { key, cost, param, at } を書く（値は持たない＝画面が名簿から引く）
+--   ・真化した武器は熟練度も記録も止まる（1本につき1回）
+-- ★種（-- @@seed:）は tools/v2cap-sql.mjs が shinka.js・monsterRace.js から作る＝手で書き写さない
+alter table public.v2cap_inventory add column if not exists mastery int not null default 0;   -- 熟練度（0〜max）
+alter table public.v2cap_inventory add column if not exists srec jsonb;                       -- 戦い方の記録（shinka.js の emptySrec の形）
+alter table public.v2cap_inventory add column if not exists shinka jsonb;                     -- 真化した能力（無ければ null）
+
+create table if not exists public.v2cap_shinka_conf (k text primary key, v numeric not null);
+create table if not exists public.v2cap_shinka_fields (
+  key text primary key, cap int not null, le text, win_only boolean not null default false, sort int not null
+);
+create table if not exists public.v2cap_shinka_flags (
+  key text primary key, num text, den text, dir text, th numeric, special text, has_cost boolean not null default false, sort int not null
+);
+create table if not exists public.v2cap_races (key text primary key, label text not null, sort int not null);
+-- モンスターの種族（画面の monsterRace.js と同じ。敵の表 v2cap_enemies は流し直すたびに入れ直すので外部キーでつながない）
+create table if not exists public.v2cap_monster_race (name text primary key, race text not null);
+alter table public.v2cap_shinka_conf enable row level security;
+alter table public.v2cap_shinka_fields enable row level security;
+alter table public.v2cap_shinka_flags enable row level security;
+alter table public.v2cap_races enable row level security;
+alter table public.v2cap_monster_race enable row level security;
+revoke all on table public.v2cap_shinka_conf, public.v2cap_shinka_fields, public.v2cap_shinka_flags,
+  public.v2cap_races, public.v2cap_monster_race from anon, authenticated;
+
+-- @@seed:shinka_conf
+delete from public.v2cap_shinka_conf;
+insert into public.v2cap_shinka_conf (k, v) values
+  ('max', 1800),
+  ('cost_pct', 30),
+  ('min_den', 30);
+-- @@end:shinka_conf
+-- @@seed:shinka_fields
+delete from public.v2cap_shinka_fields;
+insert into public.v2cap_shinka_fields (key, cap, le, win_only, sort) values
+  ('hit', 300, null, false, 1),
+  ('crit', 300, 'hit', false, 2),
+  ('multi', 300, 'hit', false, 3),
+  ('normal', 300, 'hit', false, 4),
+  ('drain', 300, 'hit', false, 5),
+  ('ail', 150, null, false, 6),
+  ('dot', 300, null, false, 7),
+  ('ailed', 150, null, false, 8),
+  ('taken', 300, null, false, 9),
+  ('dodge', 300, 'taken', false, 10),
+  ('hurt', 100, null, false, 11),
+  ('fin', 100, null, false, 12),
+  ('heal', 100, null, false, 13),
+  ('buff', 100, null, false, 14),
+  ('mpe', 1, null, false, 15),
+  ('low', 1, null, true, 16),
+  ('back', 1, null, true, 17),
+  ('clean', 1, null, true, 18),
+  ('fast', 1, null, true, 19),
+  ('long', 1, null, true, 20),
+  ('big', 1, null, true, 21);
+-- @@end:shinka_fields
+-- @@seed:shinka_flags
+delete from public.v2cap_shinka_flags;
+insert into public.v2cap_shinka_flags (key, num, den, dir, th, special, has_cost, sort) values
+  ('killer', null, null, null, null, 'race', true, 1),
+  ('crit', 'crit', 'hit', 'ge', 0.35, null, true, 2),
+  ('multi', 'multi', 'hit', 'ge', 0.2, null, false, 3),
+  ('normal', 'normal', 'hit', 'ge', 0.16, null, false, 4),
+  ('drain', 'drain', 'hit', 'ge', 0.03, null, false, 5),
+  ('ail', 'ail', 'hit', 'ge', 0.24, null, false, 6),
+  ('dot', 'dot', 'n', 'ge', 0.3, null, false, 7),
+  ('ailed', 'ailed', 'n', 'ge', 0.2, null, false, 8),
+  ('dodge', 'dodge', 'taken', 'ge', 0.3, null, true, 9),
+  ('hurt', 'hurt', 'n', 'ge', 29, null, false, 10),
+  ('fin', 'fin', 'n', 'le', 0.42, null, false, 11),
+  ('heal', 'heal', 'n', 'ge', 0.1, null, false, 12),
+  ('buff', 'buff', 'n', 'ge', 2, null, false, 13),
+  ('low', 'low', 'w', 'ge', 0.03, null, true, 14),
+  ('back', 'back', 'w', 'ge', 0.02, null, false, 15),
+  ('clean', 'clean', 'w', 'ge', 0.25, null, false, 16),
+  ('fast', 'fast', 'w', 'ge', 0.28, null, false, 17),
+  ('long', 'long', 'w', 'ge', 0.13, null, false, 18),
+  ('big', 'l', 'n', 'ge', 0.053, null, false, 19),
+  ('band', null, null, 'ge', 0.75, 'band', false, 20);
+-- @@end:shinka_flags
+-- @@seed:races
+delete from public.v2cap_races;
+insert into public.v2cap_races (key, label, sort) values
+  ('human', '人間', 1),
+  ('demihuman', '亜人', 2),
+  ('dragon', 'ドラゴン', 3),
+  ('fairy', '妖精', 4),
+  ('undead', 'アンデッド', 5),
+  ('demon', '悪魔', 6),
+  ('angel', '天使', 7),
+  ('beast', '獣', 8),
+  ('aquatic', '海洋', 9),
+  ('insect', '昆虫', 10),
+  ('monster', '魔物', 11);
+-- @@end:races
+-- @@seed:monster_race
+delete from public.v2cap_monster_race;
+insert into public.v2cap_monster_race (name, race) values
+  ('盗賊', 'human'),
+  ('夜盗スカウト', 'human'),
+  ('シャドウシーフ', 'human'),
+  ('盗賊団のリーダー', 'human'),
+  ('海賊', 'human'),
+  ('海賊砲手', 'human'),
+  ('海賊船長ガルシオ', 'human'),
+  ('盗掘者', 'human'),
+  ('霧魔女ミルヴァ', 'human'),
+  ('天空騎士グリフィオン', 'human'),
+  ('天弓兵', 'human'),
+  ('天騎士長セレスト', 'human'),
+  ('シーウィッチ', 'human'),
+  ('深海魔女キルケ', 'human'),
+  ('ゴブリン', 'demihuman'),
+  ('ゴブリン射手', 'demihuman'),
+  ('ホブゴブリン', 'demihuman'),
+  ('ゴブリンチーフ', 'demihuman'),
+  ('コボルト', 'demihuman'),
+  ('コボルト投石手', 'demihuman'),
+  ('オブシディアンコボルト', 'demihuman'),
+  ('コボルト族長ドグラ', 'demihuman'),
+  ('サハギン', 'demihuman'),
+  ('コーラルナイト', 'demihuman'),
+  ('アヌビス兵', 'demihuman'),
+  ('フレイムアヌビス', 'demihuman'),
+  ('山岳ゴブリン', 'demihuman'),
+  ('山岳トロール', 'demihuman'),
+  ('峠守ギガトロール', 'demihuman'),
+  ('雪男', 'demihuman'),
+  ('スノーハーピー', 'demihuman'),
+  ('イエティロード', 'demihuman'),
+  ('崖巨人', 'demihuman'),
+  ('ストームハーピー', 'demihuman'),
+  ('雷槌ギガース', 'demihuman'),
+  ('リザードマン', 'demihuman'),
+  ('沼呪師ザルグ', 'demihuman'),
+  ('狂乱ドワーフ', 'demihuman'),
+  ('エルダードワーフ', 'demihuman'),
+  ('スカイハーピー', 'demihuman'),
+  ('ハーピークイーン', 'demihuman'),
+  ('ケンタウロス', 'demihuman'),
+  ('アビスマーマン', 'demihuman'),
+  ('ひなたトカゲ', 'dragon'),
+  ('サンリザード', 'dragon'),
+  ('陽炎リザード', 'dragon'),
+  ('フレアバジリスク', 'dragon'),
+  ('石化トカゲ', 'dragon'),
+  ('ロックバジリスク', 'dragon'),
+  ('シーサーペント', 'dragon'),
+  ('カゲロウトカゲ', 'dragon'),
+  ('ミラージュリザード', 'dragon'),
+  ('払暁のワイバーン', 'dragon'),
+  ('ドーンワイバーン', 'dragon'),
+  ('氷河ドレイク', 'dragon'),
+  ('グレイシアドラゴン', 'dragon'),
+  ('スパークリザード', 'dragon'),
+  ('迅雷ドレイク', 'dragon'),
+  ('雷雲ワイバーン', 'dragon'),
+  ('ボルトワイバーン', 'dragon'),
+  ('ファイアドレイク', 'dragon'),
+  ('火吹きトカゲ', 'dragon'),
+  ('溶岩竜ラヴァウルム', 'dragon'),
+  ('深紅のサラマンダー', 'dragon'),
+  ('ヤングヒュドラ', 'dragon'),
+  ('毒龍ヴェノムヒュドラ', 'dragon'),
+  ('天空覇龍ウラノス', 'dragon'),
+  ('時星龍アイオーン', 'dragon'),
+  ('リヴァイアサン幼体', 'dragon'),
+  ('海竜', 'dragon'),
+  ('アビスドラゴン', 'dragon'),
+  ('アビスサーペント', 'dragon'),
+  ('深海覇王リヴァイアサン', 'dragon'),
+  ('ツユフェアリー', 'fairy'),
+  ('オーロラフェアリー', 'fairy'),
+  ('朝凪のセイレーン', 'fairy'),
+  ('サンライズセイレーン', 'fairy'),
+  ('コモレビピクシー', 'fairy'),
+  ('サンライトピクシー', 'fairy'),
+  ('霜精', 'fairy'),
+  ('樹氷精', 'fairy'),
+  ('アイスドライアド', 'fairy'),
+  ('氷霊フロストバーン', 'fairy'),
+  ('雷精', 'fairy'),
+  ('サンダーエレメンタル', 'fairy'),
+  ('雷帝ケラウノス', 'fairy'),
+  ('炎精', 'fairy'),
+  ('ウィルオウィスプ', 'fairy'),
+  ('グレーターウィスプ', 'fairy'),
+  ('シルフ', 'fairy'),
+  ('シルフィード', 'fairy'),
+  ('ローレライ', 'fairy'),
+  ('ローレライクイーン', 'fairy'),
+  ('ハピネスフェアリー', 'fairy'),
+  ('スケルトン', 'undead'),
+  ('スケルトンドッグ', 'undead'),
+  ('サマヨイレイス', 'undead'),
+  ('亡霊コボルト', 'undead'),
+  ('スケルトンナイト', 'undead'),
+  ('ダークレイス', 'undead'),
+  ('ボーンジェネラル', 'undead'),
+  ('墓守ミイラ', 'undead'),
+  ('ゴールデンマミー', 'undead'),
+  ('ミイラ大神官', 'undead'),
+  ('ナゲキバンシー', 'undead'),
+  ('グリーフバンシー', 'undead'),
+  ('凍骸兵', 'undead'),
+  ('極夜ワイト', 'undead'),
+  ('フロストリッチ', 'undead'),
+  ('ワイトキング', 'undead'),
+  ('鬼火', 'undead'),
+  ('ドロゾンビ', 'undead'),
+  ('ゾンビジャイアント', 'undead'),
+  ('グール', 'undead'),
+  ('坑夫スケルトン', 'undead'),
+  ('ドワーフレイス', 'undead'),
+  ('グールキング', 'undead'),
+  ('暁ガーゴイル', 'demon'),
+  ('ドーンガーゴイル', 'demon'),
+  ('雷刃ガーゴイル', 'demon'),
+  ('サンダーガーゴイル', 'demon'),
+  ('ヘルハウンド', 'demon'),
+  ('ファイアインプ', 'demon'),
+  ('イフリート', 'demon'),
+  ('熾火デーモン', 'demon'),
+  ('ケルベロス', 'demon'),
+  ('イフリートロード', 'demon'),
+  ('アークデーモン', 'demon'),
+  ('うごめく影', 'demon'),
+  ('シャドウストーカー', 'demon'),
+  ('ナイトメア', 'demon'),
+  ('セラフ', 'angel'),
+  ('ケルビム', 'angel'),
+  ('星降りのヴァルキリー', 'angel'),
+  ('アークセラフ', 'angel'),
+  ('戦乙女長ブリュンヒルデ', 'angel'),
+  ('アストラルナイト', 'angel'),
+  ('セレスティアルナイト', 'angel'),
+  ('コウモリ', 'beast'),
+  ('森ネズミ', 'beast'),
+  ('ツキミミズク', 'beast'),
+  ('ナイトオウル', 'beast'),
+  ('オヤブンネズミ', 'beast'),
+  ('野良犬', 'beast'),
+  ('草原オオカミ', 'beast'),
+  ('キバイノシシ', 'beast'),
+  ('炎天ハゲタカ', 'beast'),
+  ('夜盗ハウンド', 'beast'),
+  ('シルバーフェンリル', 'beast'),
+  ('群れ長グレイファング', 'beast'),
+  ('月影ジャッカル', 'beast'),
+  ('ワライハイエナ', 'beast'),
+  ('ルナジャッカル', 'beast'),
+  ('グリフォン', 'beast'),
+  ('ミネオオワシ', 'beast'),
+  ('イワグマ', 'beast'),
+  ('ハヤテハヤブサ', 'beast'),
+  ('剛猿', 'beast'),
+  ('鉄針ヤマアラシ', 'beast'),
+  ('宵闇ヤマネコ', 'beast'),
+  ('トオボエウルフ', 'beast'),
+  ('ストームグリフォン', 'beast'),
+  ('ブレイズゴリラ', 'beast'),
+  ('シャドウキャット', 'beast'),
+  ('岩砕きグリズリー', 'beast'),
+  ('雷鷲サンダーロック', 'beast'),
+  ('シャドウウルフ', 'beast'),
+  ('チスイオオコウモリ', 'beast'),
+  ('ユキオオグマ', 'beast'),
+  ('銀嶺ウルフ', 'beast'),
+  ('アイスエルク', 'beast'),
+  ('ブリザードウルフ', 'beast'),
+  ('氷牙マンモス', 'beast'),
+  ('ストームバード', 'beast'),
+  ('雷獣', 'beast'),
+  ('サンダーホーク', 'beast'),
+  ('ヒポグリフ', 'beast'),
+  ('ストームイーグル', 'beast'),
+  ('テンペストホーク', 'beast'),
+  ('フレイムバット', 'beast'),
+  ('雛フェニックス', 'beast'),
+  ('ブレイズバット', 'beast'),
+  ('闇喰いコウモリ', 'beast'),
+  ('カナクイネズミ', 'beast'),
+  ('巌喰いガイアモール', 'beast'),
+  ('ロック鳥', 'beast'),
+  ('ペガサス', 'beast'),
+  ('ユニコーン', 'beast'),
+  ('アリコーン', 'beast'),
+  ('ルナウルフ', 'beast'),
+  ('月喰いハティ', 'beast'),
+  ('毒クラゲ', 'aquatic'),
+  ('イリエザメ', 'aquatic'),
+  ('大ウミヘビ', 'aquatic'),
+  ('ギンバネトビウオ', 'aquatic'),
+  ('シオマネキ', 'aquatic'),
+  ('オオウミガメ', 'aquatic'),
+  ('夜光アンコウ', 'aquatic'),
+  ('ホタルダコ', 'aquatic'),
+  ('ベビークラーケン', 'aquatic'),
+  ('ジャイアントクラブ', 'aquatic'),
+  ('ランタンアンコウ', 'aquatic'),
+  ('鉄鋏ヨロイガニ', 'aquatic'),
+  ('空鯨ネブラ', 'aquatic'),
+  ('クラーケン', 'aquatic'),
+  ('メガロドン', 'aquatic'),
+  ('ダイオウイカ', 'aquatic'),
+  ('サカマタ', 'aquatic'),
+  ('巨鯨', 'aquatic'),
+  ('グランマンタ', 'aquatic'),
+  ('ダイオウグソクムシ', 'aquatic'),
+  ('クラーケンキング', 'aquatic'),
+  ('グレートホエール', 'aquatic'),
+  ('大海月ルミナ', 'aquatic'),
+  ('オオアリ', 'insect'),
+  ('ひなたアゲハ', 'insect'),
+  ('ヨナキコオロギ', 'insect'),
+  ('クイーンアント', 'insect'),
+  ('オオトビバッタ', 'insect'),
+  ('ホラアナグモ', 'insect'),
+  ('ヨロイムカデ', 'insect'),
+  ('イワサソリ', 'insect'),
+  ('サンドスコーピオン', 'insect'),
+  ('聖スカラベ', 'insect'),
+  ('砂地獄アントリオン', 'insect'),
+  ('砂皇スカラベウス', 'insect'),
+  ('オオドクガ', 'insect'),
+  ('ヨロイカブト', 'insect'),
+  ('妖蛾ポイズンモス', 'insect'),
+  ('腐肉バエ', 'insect'),
+  ('クリスタルビートル', 'insect'),
+  ('奈落グモ', 'insect'),
+  ('奈落蜘蛛アラクネ', 'insect'),
+  ('トキカゲロウ', 'insect'),
+  ('月蛾', 'insect'),
+  ('スライム', 'monster'),
+  ('毒キノコ', 'monster'),
+  ('つるヘビ', 'monster'),
+  ('モヤガエル', 'monster'),
+  ('ジェイドスライム', 'monster'),
+  ('エンシェントトレント', 'monster'),
+  ('ビッグスライム', 'monster'),
+  ('霧這いワーム', 'monster'),
+  ('ミストワーム', 'monster'),
+  ('ストーンゴーレム', 'monster'),
+  ('古代の番人', 'monster'),
+  ('砂喰いワーム', 'monster'),
+  ('ツボミミック', 'monster'),
+  ('サンドゴーレム', 'monster'),
+  ('熱砂コブラ', 'monster'),
+  ('サンドワーム', 'monster'),
+  ('岩石ゴーレム', 'monster'),
+  ('マウンテンゴーレム', 'monster'),
+  ('食人樹', 'monster'),
+  ('マンドラゴラ', 'monster'),
+  ('モスゴーレム', 'monster'),
+  ('シメコロシカズラ', 'monster'),
+  ('霧纏いトレント', 'monster'),
+  ('胞子マイコニド', 'monster'),
+  ('キラープラント', 'monster'),
+  ('クイーンマンドラゴラ', 'monster'),
+  ('ミストトレント', 'monster'),
+  ('森王エルダートレント', 'monster'),
+  ('アイスゴーレム', 'monster'),
+  ('晶獣グラキエス', 'monster'),
+  ('帯電ゴーレム', 'monster'),
+  ('妖獣ヌエ', 'monster'),
+  ('溶岩ゴーレム', 'monster'),
+  ('マグマスライム', 'monster'),
+  ('マグマゴーレム', 'monster'),
+  ('岩甲亀ヴォルカン', 'monster'),
+  ('双頭ヌマヘビ', 'monster'),
+  ('ヘドロスライム', 'monster'),
+  ('ヌマワニ', 'monster'),
+  ('マッドゴーレム', 'monster'),
+  ('オオヒル', 'monster'),
+  ('オオヒキガエル', 'monster'),
+  ('カミツキガメ', 'monster'),
+  ('コカトリス', 'monster'),
+  ('アシッドスライム', 'monster'),
+  ('ポイズンフロッグ', 'monster'),
+  ('沼主ガヴィアル', 'monster'),
+  ('鉱石ゴーレム', 'monster'),
+  ('錆びた自動人形', 'monster'),
+  ('クリスタルワーム', 'monster'),
+  ('ミスリルゴーレム', 'monster'),
+  ('プリズムワーム', 'monster'),
+  ('掘削機兵ドリラー', 'monster'),
+  ('浮遊砲台', 'monster'),
+  ('星見像', 'monster'),
+  ('守護機兵', 'monster'),
+  ('クロノワーム', 'monster'),
+  ('グリモワール', 'monster'),
+  ('魔導兵', 'monster'),
+  ('スフィンクス', 'monster'),
+  ('マンティコア', 'monster'),
+  ('スターゴーレム', 'monster'),
+  ('オメガガーディアン', 'monster'),
+  ('アンドロスフィンクス', 'monster'),
+  ('古代機兵ゼクス', 'monster'),
+  ('大司書ノクトゥア', 'monster');
+-- @@end:monster_race
+
+-- いまの時間帯（sortie.js の bandAt と同じ：日本時間 5〜13時＝朝・13〜21時＝昼・ほか＝晩）
+create or replace function public.v2cap_band_now()
+returns text language sql stable set search_path = public as $$
+  select case when h >= 5 and h < 13 then '朝' when h >= 13 and h < 21 then '昼' else '晩' end
+    from (select extract(hour from (now() at time zone 'Asia/Tokyo'))::int as h) t
+$$;
+revoke all on function public.v2cap_band_now() from public, anon;
+
+-- 1戦ぶんを足す（v2cap_sortie_settle から呼ぶ・shinka.js の addSrec と同じ決まり）。
+-- p_inv＝着けている武器の持ち物の id。武器でない・自分のものでない・もう真化した行には何もしない
+create or replace function public.v2cap_shinka_count(p_uid uuid, p_inv bigint, p_rec jsonb, p_win boolean, p_enemy text)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_max  int := coalesce((select v from public.v2cap_shinka_conf where k = 'max'), 1800)::int;
+  v_win  boolean := coalesce(p_win, false);
+  v_row  public.v2cap_inventory;
+  v_rec  jsonb;
+  v_got  jsonb := '{}'::jsonb;
+  f      record;
+  v_v    int;
+  v_race text;
+  v_band text := public.v2cap_band_now();
+begin
+  if p_uid is null or p_inv is null then return; end if;
+  -- ★行をつかんでから読む（同じ武器へ同時に届いても、片方の増分が消えないように）
+  select i.* into v_row from public.v2cap_inventory i
+    join public.v2cap_equipment e on e.id = i.base_id
+   where i.id = p_inv and i.player_id = p_uid and e.part = '武器'
+   for update of i;
+  if not found or v_row.shinka is not null then return; end if;
+  v_rec := coalesce(v_row.srec, '{}'::jsonb);
+  v_rec := jsonb_set(v_rec, '{n}', to_jsonb(coalesce((v_rec ->> 'n')::int, 0) + 1));
+  -- 勝ち（w）・負け（l）
+  if v_win then v_rec := jsonb_set(v_rec, '{w}', to_jsonb(coalesce((v_rec ->> 'w')::int, 0) + 1));
+  else v_rec := jsonb_set(v_rec, '{l}', to_jsonb(coalesce((v_rec ->> 'l')::int, 0) + 1)); end if;
+  for f in select * from public.v2cap_shinka_fields order by sort loop
+    v_v := case when jsonb_typeof(p_rec -> f.key) = 'number'
+                then greatest(0, least(f.cap, floor((p_rec ->> f.key)::numeric)::int)) else 0 end;
+    if f.win_only and not v_win then v_v := 0; end if;
+    if f.le is not null then v_v := least(v_v, coalesce((v_got ->> f.le)::int, 0)); end if;
+    v_got := v_got || jsonb_build_object(f.key, v_v);
+    if v_v > 0 then
+      v_rec := jsonb_set(v_rec, array[f.key], to_jsonb(coalesce((v_rec ->> f.key)::int, 0) + v_v));
+    end if;
+  end loop;
+  -- 倒した敵の種族（勝ったときだけ）・時間帯（毎回）
+  if v_win then
+    select race into v_race from public.v2cap_monster_race where name = p_enemy;
+    if v_race is not null then
+      v_rec := jsonb_set(v_rec, '{race}', coalesce(v_rec -> 'race', '{}'::jsonb)
+        || jsonb_build_object(v_race, coalesce((v_rec -> 'race' ->> v_race)::int, 0) + 1));
+    end if;
+  end if;
+  v_rec := jsonb_set(v_rec, '{band}', coalesce(v_rec -> 'band', '{}'::jsonb)
+    || jsonb_build_object(v_band, coalesce((v_rec -> 'band' ->> v_band)::int, 0) + 1));
+  update public.v2cap_inventory set mastery = least(v_max, mastery + 1), srec = v_rec where id = v_row.id;
+end;
+$$;
+revoke all on function public.v2cap_shinka_count(uuid, bigint, jsonb, boolean, text) from public, anon, authenticated;
+
+-- 立っているフラグ [{ key, param }]（shinka.js の flagsOf と同じ）。キラー＝いちばん多く倒した種族（同じなら種族の並び順）
+create or replace function public.v2cap_shinka_pool(p_rec jsonb)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  v_min  numeric := coalesce((select v from public.v2cap_shinka_conf where k = 'min_den'), 30);
+  v_rec  jsonb := coalesce(p_rec, '{}'::jsonb);
+  v_n    numeric := coalesce((v_rec ->> 'n')::numeric, 0);
+  v_out  jsonb := '[]'::jsonb;
+  f      record;
+  v_den  numeric;
+  v_val  numeric;
+  v_race text;
+  v_band text;
+  v_bn   numeric;
+begin
+  for f in select * from public.v2cap_shinka_flags order by sort loop
+    if f.special = 'race' then
+      v_race := null;
+      select e.key into v_race
+        from jsonb_each_text(coalesce(v_rec -> 'race', '{}'::jsonb)) e
+        join public.v2cap_races r on r.key = e.key
+       where e.value::int > 0
+       order by e.value::int desc, r.sort limit 1;
+      if v_race is not null then
+        v_out := v_out || jsonb_build_array(jsonb_build_object('key', f.key, 'param', v_race));
+      end if;
+    elsif f.special = 'band' then
+      v_band := null;
+      if v_n >= v_min then
+        select e.key, e.value::numeric into v_band, v_bn
+          from jsonb_each_text(coalesce(v_rec -> 'band', '{}'::jsonb)) e
+         where e.value::int > 0
+         order by e.value::int desc, array_position(array['朝', '昼', '晩'], e.key) limit 1;
+        if v_band is not null and v_bn / v_n >= f.th then
+          v_out := v_out || jsonb_build_array(jsonb_build_object('key', f.key, 'param', v_band));
+        end if;
+      end if;
+    else
+      v_den := coalesce((v_rec ->> f.den)::numeric, 0);
+      if v_den >= v_min then
+        v_val := coalesce((v_rec ->> f.num)::numeric, 0) / v_den;
+        if (f.dir = 'le' and v_val <= f.th) or (f.dir <> 'le' and v_val >= f.th) then
+          v_out := v_out || jsonb_build_array(jsonb_build_object('key', f.key, 'param', null));
+        end if;
+      end if;
+    end if;
+  end loop;
+  return v_out;
+end;
+$$;
+revoke all on function public.v2cap_shinka_pool(jsonb) from public, anon, authenticated;
+
+-- 真化（鍛冶屋）。熟練度が MAX の自分の武器だけ。抽選はここ（画面は能力を選べない）
+create or replace function public.v2cap_shinka(p_inv bigint)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid  uuid := auth.uid();
+  v_max  int := coalesce((select v from public.v2cap_shinka_conf where k = 'max'), 1800)::int;
+  v_pct  numeric := coalesce((select v from public.v2cap_shinka_conf where k = 'cost_pct'), 30);
+  v_row  public.v2cap_inventory;
+  v_part text;
+  v_pool jsonb;
+  v_pick jsonb;
+  v_cost boolean;
+  v_sh   jsonb;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select * into v_row from public.v2cap_inventory where id = p_inv and player_id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'その装備は持っていません'); end if;
+  select part into v_part from public.v2cap_equipment where id = v_row.base_id;
+  if v_part is distinct from '武器' then return jsonb_build_object('ok', false, 'error', '真化できるのは武器だけです'); end if;
+  if v_row.shinka is not null then return jsonb_build_object('ok', false, 'error', 'この武器はもう真化しています'); end if;
+  if v_row.mastery < v_max then return jsonb_build_object('ok', false, 'error', '熟練度がまだ足りません'); end if;
+  v_pool := public.v2cap_shinka_pool(v_row.srec);
+  if jsonb_array_length(v_pool) = 0 then
+    return jsonb_build_object('ok', false, 'error', 'この武器で勝った戦いがまだありません');
+  end if;
+  v_pick := v_pool -> floor(random() * jsonb_array_length(v_pool))::int;
+  v_cost := coalesce((select has_cost from public.v2cap_shinka_flags where key = v_pick ->> 'key'), false)
+            and random() * 100 < v_pct;
+  v_sh := jsonb_build_object('key', v_pick ->> 'key', 'cost', v_cost, 'param', v_pick -> 'param', 'at', now());
+  update public.v2cap_inventory set shinka = v_sh where id = v_row.id;
+  return jsonb_build_object('ok', true, 'id', v_row.id, 'shinka', v_sh, 'pool', v_pool);
+end;
+$$;
+revoke all on function public.v2cap_shinka(bigint) from public, anon;
+grant execute on function public.v2cap_shinka(bigint) to authenticated;
+
+-- 開発用：着けている武器の熟練度を MAX にして、真化を外す（戦い方の記録はそのまま＝勝った戦いが無ければ真化できない）
+create or replace function public.v2cap_debug_shinka_ready()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_inv bigint;
+  v_max int := coalesce((select v from public.v2cap_shinka_conf where k = 'max'), 1800)::int;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select nullif(equipped ->> 'weapon', '')::bigint into v_inv from public.v2cap_profiles where id = v_uid;
+  if v_inv is null then return jsonb_build_object('ok', false, 'error', '武器を着けていません'); end if;
+  update public.v2cap_inventory set mastery = v_max, shinka = null where id = v_inv and player_id = v_uid;
+  return jsonb_build_object('ok', true, 'id', v_inv);
+end;
+$$;
+revoke all on function public.v2cap_debug_shinka_ready() from public, anon;
+grant execute on function public.v2cap_debug_shinka_ready() to authenticated;

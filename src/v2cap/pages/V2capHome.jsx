@@ -295,6 +295,15 @@ export default function V2capHome() {
     setProf(data.profile)
     setDevMsg('次にボスに勝ったとき、必ずユニークを落とします')
   }
+  // 武器の真化（2026-10-26・試す用）：着けている武器の熟練度を MAX にして、真化を外す（戦い方の記録はそのまま）
+  const shinkaReady = async () => {
+    setBusy(true); setDevMsg('')
+    const { data, error: rpcErr } = await supabase.rpc('v2cap_debug_shinka_ready')
+    setBusy(false)
+    if (rpcErr || !data?.ok) { setDevMsg(`⚠ ${rpcErr?.message || data?.error || '失敗しました'}`); return }
+    setDevMsg('着けている武器の熟練度をMAXにしました（鍛冶屋の「真化」で真化できます）')
+    await refresh()
+  }
   const resetChar = async () => {
     setBusy(true)
     const { data, error: rpcErr } = await supabase.rpc('v2cap_dev_reset')
@@ -460,6 +469,7 @@ export default function V2capHome() {
                         {prof?.unique_force ? '💎 次のボスでユニーク（待機中）' : '💎 次のボスでユニークを落とす'}
                       </button>
                       <button onClick={() => setScreen('uniqueCheck')} style={miniBtn(RARITY_COLOR.U)}>💎 ユニークの能力を確かめる</button>
+                      <button onClick={shinkaReady} disabled={busy} style={miniBtn('#ffaa44')}>🗡 着けている武器の熟練度をMAX（真化を外す）</button>
                       <button onClick={() => setConfirmReset(true)} disabled={busy} style={miniBtn('#ff8844')}>キャラを作り直す</button>
                     </div>
                     {/* ★「EXPは戦闘と同じ扱い（いまの職業のClassEXPにも同じ量が入る）」の説明は出さない（2026-10-12 ユーザー指示＝出撃の「（ClassEXP +◯）」と一緒に外した） */}

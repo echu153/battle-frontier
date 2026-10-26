@@ -372,6 +372,8 @@ export const createSide = (fighter, band = null) => {
   }
   initIchiji(side, fighter)              // ★上位職の状態（溜め・期限つきの軽減・跳躍・召喚など）
   initSet(side, fighter)                 // ★防具のセット能力（v2cap。setFx が無ければ何もしない）
+  // ★v2cap の武器の真化「無傷で勝つ」の能力：戦闘のはじめに最大HPの%のバリア（initIchiji が 0 にしたあとで張る）
+  if (evo.shieldStart > 0) side.shield = Math.max(side.shield || 0, Math.floor(stats.hp * evo.shieldStart / 100))
   return side
 }
 
@@ -916,6 +918,7 @@ const evoMult = (me, foe, { kind = 'phys', skill = false, multi = false } = {}) 
     foeBigger:  (foe.power || 0) > (me.power || 0),
     foeSmaller: (foe.power || 0) < (me.power || 0),
     foeBoss: !!foe.boss,
+    foeRace: foe.race || null,            // ★v2cap の真化の◯◯キラー（敵の種族は battleIchiji.js の initIchiji が入れる）
     foeAiled: Object.keys(foe.ail || {}).length > 0,
     moves: me.moves,
     combo: Math.max(0, me.moves - 1),
@@ -1594,15 +1597,17 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   // ★ビーストレンジャー：いま呼んでいる獣に合わせて中身が変わるバフ
   const formBuff = skill.formBuff ? { self: skill.formBuff[me.form || 'none'] } : null
   const spec = formBuff || skill.buff
+  // ★v2cap の武器の真化「強化技をよく使う」の能力：自分にかける強化の効き目+%（相手へのデバフには掛けない）
+  const selfMult = off * (1 + (me.evo?.buffPow || 0) / 100)
   if (spec && skill.buffTurns) {
-    if (spec.self) me.timedBuffs.push({ table: scaleTable(spec.self, off), turns: skill.buffTurns + setTurnsUp(me) })
+    if (spec.self) me.timedBuffs.push({ table: scaleTable(spec.self, selfMult), turns: skill.buffTurns + setTurnsUp(me) })
     if (spec.enemy) {
       if (foe.debuffImmune > 0 && Object.values(spec.enemy).some(v => v < 0)) log.push({ side: foe.name, type: 'debuffImmune' })
       else foe.timedBuffs.push({ table: scaleTable(spec.enemy, off), turns: skill.buffTurns })
     }
     log.push({ side: me.name, type: 'buff', skill: skill.name })
   } else if (spec) {
-    if (spec.self)  applyBuff(me.buffs, scaleTable(spec.self, off))
+    if (spec.self)  applyBuff(me.buffs, scaleTable(spec.self, selfMult))
     if (spec.enemy) applyDebuff(foe, scaleTable(spec.enemy, off), log)
     log.push({ side: me.name, type: 'buff', skill: skill.name })
   }

@@ -348,6 +348,11 @@ export const emptyEffects = () => ({
   ail: { rate:0, dmg:0, resist:0, weak:0, drain:0 },
   heal: 0, drain: 0, regen: 0, mpCost: 0, mpRegen: 0,
   proc: 0, extra: 0, first: 0, misfireDmg: 0,
+  // ★v2cap の武器の真化（2026-10-26・src/v2cap/lib/shinka.js）で足した枠
+  race: {},          // 種族ごとの与ダメージ+%（◯◯キラー）{ aquatic: 10 }
+  raceOther: {},     // その種族**以外**への与ダメージ−%（キラーの代償）{ aquatic: 5 }
+  buffPow: 0,        // 自分にかける強化技の効き目+%
+  shieldStart: 0,    // 戦闘のはじめに張るバリア（最大HPの%）
 })
 
 const addAt = (out, slot, v) => {
@@ -356,31 +361,46 @@ const addAt = (out, slot, v) => {
   else out[a][b] += v
 }
 
+// 代償として付いたとき、同じ枠へ**マイナス**で入れる部品（得の向きの枠を共有しているもの）。
+// ここに無い代償の部品（taken・critHpCost など）は、枠そのものが「悪い向き」なのでそのまま足す
+const MINUS_WHEN_COST = new Set(['dmg', 'dmgPhys', 'dmgMag', 'dmgSkill', 'eva', 'hit', 'heal', 'mpCost', 'proc', 'critRate'])
+
+// 部品1つぶんを畳む。race … 種族の部品（dmgRace・dmgOtherRace）が向く種族
+const foldAtom = (out, atom, raw, cost, race = null) => {
+  const def = ATOMS[atom]
+  if (!def) return
+  const v = Number(raw) || 0
+  if (!v) return
+  if (def.slot === 'stat') {
+    out.stat[def.stat] = (out.stat[def.stat] || 0) + v * (cost ? -1 : 1)
+  } else if (def.slot === 'race' || def.slot === 'raceOther') {
+    if (!race) return
+    out[def.slot][race] = (out[def.slot][race] || 0) + v
+  } else if (cost && MINUS_WHEN_COST.has(atom)) {
+    addAt(out, def.slot, -v)
+  } else {
+    addAt(out, def.slot, v)
+  }
+}
+
 // 装備している武器に付いている進化を、戦闘が読める1つのまとめに畳む。
 // ★複数の武器（右手・左手）に付いていれば**足し算**になる
+// ★2つの形を読む：
+//   ・前の形（V2 初期構成）… { key: 能力の名簿のキー, eff: { 部品: 値 } }。どれが代償かは名簿（evolveTraits.js）で見る
+//   ・v2cap の真化（2026-10-26・src/v2cap/lib/shinka.js の shinkaEvolutionOf）… { gain: { 部品: 値 }, cost: { 部品: 値 }, race }
+//     ＝名簿を引かずに、得と代償を分けて渡す。race は種族の部品が向く種族
 export const collectEvolutions = (list) => {
   const out = emptyEffects()
   for (const ev of list || []) {
+    if (ev?.gain || ev?.cost) {
+      for (const [atom, v] of Object.entries(ev.gain || {})) foldAtom(out, atom, v, false, ev.race)
+      for (const [atom, v] of Object.entries(ev.cost || {})) foldAtom(out, atom, v, true, ev.race)
+      continue
+    }
     const t = TRAIT_BY_KEY[ev?.key]
     if (!t) continue
     const costs = new Set((t.cost || []).map(([a]) => a))
-    for (const [atom, raw] of Object.entries(ev.eff || {})) {
-      const def = ATOMS[atom]
-      if (!def) continue
-      const v = Number(raw) || 0
-      if (!v) continue
-      if (def.slot === 'stat') {
-        const sign = costs.has(atom) ? -1 : 1
-        out.stat[def.stat] = (out.stat[def.stat] || 0) + v * sign
-      } else if (costs.has(atom) && (atom === 'dmg' || atom === 'dmgPhys' || atom === 'dmgMag'
-                 || atom === 'dmgSkill' || atom === 'eva' || atom === 'hit'
-                 || atom === 'heal' || atom === 'mpCost' || atom === 'proc' || atom === 'critRate')) {
-        // 代償として付いた「−側」の部品。同じ枠へマイナスで入れる
-        addAt(out, def.slot, -v)
-      } else {
-        addAt(out, def.slot, v)
-      }
-    }
+    for (const [atom, raw] of Object.entries(ev.eff || {})) foldAtom(out, atom, raw, costs.has(atom))
   }
   return out
 }
@@ -399,10 +419,14 @@ export const evoDmgPct = (evo, ctx = {}) => {
   const {
     hpPct = 100, foeBigger = false, foeSmaller = false, foeBoss = false, moves = 999,
     foeHpPct = 100, kind = 'phys', skill = false, multi = false, foeAiled = false,
-    justDodged = false, justHurt = false, combo = 0,
+    justDodged = false, justHurt = false, combo = 0, foeRace = null,
   } = ctx
   const d = evo.dmg
   let pct = d.always
+  // 種族（v2cap の真化の◯◯キラー）。代償は「その種族**以外**のモンスターへの与ダメージ−%」
+  // ★種族の無い相手（塔のプレイヤーの写し・NPC）には得も代償も乗らない（対人でキラーの代償だけ効かないように）
+  if (foeRace && evo.race?.[foeRace]) pct += evo.race[foeRace]
+  if (foeRace) for (const [k, v] of Object.entries(evo.raceOther || {})) if (k !== foeRace) pct -= v
   if (hpPct <= LOW_HP_PCT) pct += d.low
   if (hpPct >= EVO_HIGH_HP_PCT) pct += d.high
   if (hpPct >= 100) pct += d.full

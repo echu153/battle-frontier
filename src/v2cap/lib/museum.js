@@ -66,7 +66,8 @@ export const donatablesOf = (profile, inventory, rows) => {
   const best = new Map()
   for (const inv of inventory || []) {
     const item = ITEM_BY_ID[inv?.base_id]
-    if (!isMuseumItem(item) || worn.has(String(inv.id)) || inv.fav) continue
+    // ★真化した武器（2026-10-26・shinka.js）も出さない（同じ装備の真化していない持ち物があればそちらを寄贈する）
+    if (!isMuseumItem(item) || worn.has(String(inv.id)) || inv.fav || inv.shinka) continue
     const tier = tierOfPlus(plusOf(inv))
     if (tier === null) continue
     const key = museumKey(item.id, tier)

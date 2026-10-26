@@ -27,6 +27,8 @@ const { SPOTS, spotLvOf, enemyLevels, recLvOf } = await import(B + 'v2cap/lib/ar
 const { DAILY_TASKS } = await import(B + 'v2cap/lib/daily.js')
 const { mpNodesOf, ASC_CLASSES } = await import(B + 'v2cap/lib/ascension.js')
 const { ASC_LAYOUT } = await import(B + 'v2cap/lib/ascLayout.js')
+const { SHINKA_MAX, SHINKA_COST_PCT, SHINKA_MIN_DEN, SREC_FIELDS, FLAGS, ABILITIES } = await import(B + 'v2cap/lib/shinka.js')
+const { RACES, RACE_NAMES } = await import(B + 'v2cap/lib/monsterRace.js')
 
 const q = (s) => `'${String(s).replace(/'/g, "''")}'`
 const arr = (list, cast = '') => `'{${list.join(',')}}'${cast}`
@@ -108,6 +110,37 @@ export const seeds = () => ({
     const rows = ASC_CLASSES.flatMap(cls => mpNodesOf(cls).map(m => `  (${q(cls)}, ${m.id}, ${m.mp}, ${m.pct})`))
     return ['delete from public.v2cap_asc_mp;', ...(rows.length ? ['insert into public.v2cap_asc_mp (cls, id, mp, pct) values', rows.join(',\n') + ';'] : [])].join('\n')
   })(),
+  // ===== 武器の真化（§18・2026-10-26・shinka.js）=====
+  // 熟練度MAX・代償つきが出る確率・フラグの分母の最低
+  shinka_conf: [
+    'delete from public.v2cap_shinka_conf;',
+    'insert into public.v2cap_shinka_conf (k, v) values',
+    `  ('max', ${SHINKA_MAX}),\n  ('cost_pct', ${SHINKA_COST_PCT}),\n  ('min_den', ${SHINKA_MIN_DEN});`,
+  ].join('\n'),
+  // 画面が送る記録の項目（1戦ぶんの上限 cap・同じ戦闘のその項目を超えない le・勝ったときだけ win_only）
+  shinka_fields: [
+    'delete from public.v2cap_shinka_fields;',
+    'insert into public.v2cap_shinka_fields (key, cap, le, win_only, sort) values',
+    SREC_FIELDS.map((f, i) => `  (${q(f.key)}, ${f.cap}, ${f.le ? q(f.le) : 'null'}, ${f.winOnly ? 'true' : 'false'}, ${i + 1})`).join(',\n') + ';',
+  ].join('\n'),
+  // フラグ（num ÷ den を境目 th と比べる・special＝race／band）。has_cost＝代償つきの能力があるか
+  shinka_flags: [
+    'delete from public.v2cap_shinka_flags;',
+    'insert into public.v2cap_shinka_flags (key, num, den, dir, th, special, has_cost, sort) values',
+    FLAGS.map((f, i) => `  (${q(f.key)}, ${f.num ? q(f.num) : 'null'}, ${f.den ? q(f.den) : 'null'}, ${f.dir ? q(f.dir) : 'null'}, ${f.th ?? 'null'}, ${f.special ? q(f.special) : 'null'}, ${ABILITIES[f.key]?.alt ? 'true' : 'false'}, ${i + 1})`).join(',\n') + ';',
+  ].join('\n'),
+  // 種族（並び＝キラーの同じ数のときの順）
+  races: [
+    'delete from public.v2cap_races;',
+    'insert into public.v2cap_races (key, label, sort) values',
+    RACES.map((r, i) => `  (${q(r.key)}, ${q(r.label)}, ${i + 1})`).join(',\n') + ';',
+  ].join('\n'),
+  // モンスターの種族（安息の祠のハピネスフェアリーも）
+  monster_race: [
+    'delete from public.v2cap_monster_race;',
+    'insert into public.v2cap_monster_race (name, race) values',
+    Object.entries(RACE_NAMES).flatMap(([race, names]) => names.map(n => `  (${q(n)}, ${q(race)})`)).join(',\n') + ';',
+  ].join('\n'),
 })
 
 export const SQL_PATH = new URL('../supabase_v2cap_core.sql', import.meta.url)

@@ -119,6 +119,13 @@ export const ATOMS = {
   extra:     { slot:'extra',      up:(v) => `追加行動率+${pct(v)}` },
   first:     { slot:'first',      up:(v) => `${pct(v)}で先手を取る` },
   misfireDmg:{ slot:'misfireDmg', up:(v) => `不発のときの通常攻撃の威力+${pct(v)}` },
+
+  // ===== v2cap の武器の真化（2026-10-26・src/v2cap/lib/shinka.js）で足した部品 =====
+  // ★種族の部品は**どの種族か**を能力の側（{ race }）が持つ。文は shinka.js が種族の名前を入れて作る
+  dmgRace:     { slot:'race',        up:(v) => `その種族への与ダメージ+${pct(v)}` },
+  dmgOtherRace:{ slot:'raceOther',   up:undefined, down:(v) => `ほかの種族への与ダメージ-${pct(v)}` },
+  buffPow:     { slot:'buffPow',     up:(v) => `自分にかける強化技の効き目+${pct(v)}` },
+  shieldStart: { slot:'shieldStart', up:(v) => `戦闘のはじめに最大HPの${pct(v)}のバリアを張る` },
 }
 
 for (const [k, a] of Object.entries(ATOMS)) a.unit = UNIT[k] ?? 1

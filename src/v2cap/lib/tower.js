@@ -35,7 +35,8 @@ import { defaultSetOf, fillSetOf, passiveOf, SKILL_BY_NAME, SKILL_RENAMED } from
 import { slotsOf } from './loadout.js'
 import { CAP_RULES, CAP_STR_PHYS_DEF } from './rules.js'
 import { stdPowerAt, spotOf } from './areas.js'
-import { openUntilOf, rollEquipDrop } from './sortie.js'
+import { openUntilOf, rollEquipDrop, bandAt } from './sortie.js'
+import { isShinka, shinkaEvolutionOf } from './shinka.js'
 import { ART_SD, battleIconOf } from './classArt.js'
 import { pvpHpMultFor, withPvpHp } from './pvp.js'
 
@@ -211,6 +212,7 @@ export const snapshotOf = (fighter, { lv = 1, gender = 'm', ups = {} } = {}) => 
     stats: Object.fromEntries(STAT_KEYS.map(k => [k, fighter?.stats?.[k] || 0])),
     taken: fighter?.taken || null,
     setFx: fighter?.setFx || null,
+    shinka: isShinka(fighter?.shinka) ? fighter.shinka : null,   // 武器の真化（2026-10-26・shinka.js）。値は持たず名簿から引き直す
     set,
     ups: Object.fromEntries(set.filter(e => Number(ups?.[e.name]) > 0).map(e => [e.name, Number(ups[e.name])])),
     icon: { cls: iconClassOf(fighter?.cls), g: gender === 'f' ? 'f' : 'm' },
@@ -246,7 +248,9 @@ export const fromSnapshot = (snap) => {
     stats,
     taken: snap?.taken || null,
     enchants: [],
-    evolutions: [],
+    // 武器の真化：時間帯の能力は**戦ういま**の時間帯で効くかを決める
+    evolutions: [shinkaEvolutionOf(snap?.shinka, bandAt(new Date()))].filter(Boolean),
+    shinka: isShinka(snap?.shinka) ? snap.shinka : null,
     slots: slotsOf(set, cls, lineage, ups),
     passives: passive ? [passive] : [],
     setFx: snap?.setFx || null,

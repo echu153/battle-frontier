@@ -68,9 +68,12 @@ test('★代償つきの能力は、そのぶん得が大きい（背負う意�
   }
 })
 
+// v2cap の武器の真化（src/v2cap/lib/shinka.js）だけが使う部品。前の名簿には入らない（shinka.test.js が見張る）
+const SHINKA_ONLY_ATOMS = ['dmgRace', 'dmgOtherRace', 'buffPow', 'shieldStart']
+
 test('全部の部品が、どこかの能力で使われている（死に部品を作らない）', () => {
   const used = new Set(TRAITS.flatMap(t => [...t.gain, ...t.cost].map(([a]) => a)))
-  const dead = ATOM_KEYS.filter(k => !used.has(k))
+  const dead = ATOM_KEYS.filter(k => !used.has(k) && !SHINKA_ONLY_ATOMS.includes(k))
   assert.deepEqual(dead, [], `どの能力にも入っていない部品: ${dead.join(', ')}`)
 })
 
@@ -491,8 +494,9 @@ const kitchenSlots = () => [
 const me = (evolutions, over = {}) => ({
   name:'私', cls:'戦士', kind:'phys', stats: stats(534), slots: kitchenSlots(), evolutions, ...over,
 })
+// ★相手は獣（v2cap の真化の◯◯キラーが見る種族。敵の race は battleIchiji.js の initIchiji が side へ写す）
 const foeOf = (over = {}) => ({
-  name:'盗賊', cls:'戦士', kind:'phys', stats: stats(534), boss: true,
+  name:'盗賊', cls:'戦士', kind:'phys', stats: stats(534), boss: true, race: 'beast',
   slots: kitchenSlots(), ...over,
 })
 
@@ -527,6 +531,19 @@ test('★全部の部品が戦闘に効いている（配線の忘れを総当�
   const base = runScenes(undefined)
   const dead = []
   for (const atom of ATOM_KEYS) {
+    // v2cap の真化の部品は、真化の形（{ gain, cost, race }）で渡す。代償にしかならない部品は cost に入れる。
+    //   ほかの種族への−（dmgOtherRace）は相手（獣）と別の種族に向ける
+    if (SHINKA_ONLY_ATOMS.includes(atom)) {
+      const asCost = !ATOMS[atom].up
+      const ev = [{ [asCost ? 'cost' : 'gain']: { [atom]: 60 }, race: atom === 'dmgOtherRace' ? 'aquatic' : 'beast' }]
+      // 強化技の効き目は、強化技を持つ編成で比べる（何でも起きる編成に強化技は無い）
+      const slots = atom === 'buffPow'
+        ? [{ skill: sk('鼓舞', { kind:'buff', mp:0, buff:{ self:{ str:30 } } }), uses: 2 }, ...kitchenSlots()] : null
+      const scenes = (e) => SCENES.map(sc => [1, 2, 3, 4, 5, 6].map(seed => fingerprint(runBattle(
+        me(e, { ...sc.mine, ...(slots ? { slots } : {}) }), foeOf(sc.foe), { rng: makeRng(seed), maxTurns: 40 }))).join('#'))
+      if (scenes(ev).join('@') === scenes(undefined).join('@')) dead.push(atom)
+      continue
+    }
     // その部品を含む能力を1つ借りて、値を大きめに入れる
     const t = TRAITS.find(tr => [...tr.gain, ...tr.cost].some(([a]) => a === atom))
     assert.ok(t, `${atom} を含む能力が無い`)

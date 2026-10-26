@@ -13,6 +13,7 @@ import { PlusTag, GearFilterBar, FavStar } from './v2capGear.jsx'
 import { saveGearFav } from './v2capGearFav.js'
 import { V2Tip } from './V2ItemTip.jsx'
 import { isSetPiece, setLabel, setTierText, armorSetOf, SET_TIERS } from '../lib/armorSets.js'
+import { ShinkaNote } from './V2capShinka.jsx'
 
 // ============================================================
 // 「レベルキャップあり」版 — 装備（着ける・外すと持ち物）
@@ -76,6 +77,8 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
                       <PlusTag inv={w.inv} />
                       {/* 装備中の行にLVは出さない（2026-10-14 ユーザー指示）。必要LVに足りないときの「要求LV不足」だけ出す（2026-10-18〜・10-23 に「LV〇相当」から） */}
                       {sync && <span style={{ color:'#ff8844' }}> {sync}</span>}
+                      {/* 武器の真化（2026-10-26）：真化した能力の名前（カーソルで中身）／熟練度 */}
+                      {w.item.part === '武器' && <span style={{ marginLeft:'6px' }}><ShinkaNote inv={w.inv} item={w.item} /></span>}
                     </span>
                     <span style={{ color: TEXT.sub, fontSize:'10px' }}>{statLine(statsAt(w.item, w.inv.ilv, prof.lv, plusOf(w.inv)))}</span>
                     <button onClick={() => unequip(slot)} disabled={busy} style={miniBtn('#aa5566')}>外す</button>
@@ -145,6 +148,8 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
                   <span>戦闘力 {sync ? effectivePowerAt(item, inv.ilv, prof.lv, plus) : power}</span>
                   <span>{statLine(statsAt(item, inv.ilv, isWorn ? prof.lv : null, plus))}</span>
                 </div>
+                {/* 武器の真化（2026-10-26）：真化した能力／熟練度 */}
+                {item.part === '武器' && <div style={{ margin:'0 0 3px' }}><ShinkaNote inv={inv} item={item} /></div>}
                 {/* ユニーク（2026-10-21）：固有の能力と落とすボス。LV80より低くても能力は全部効く */}
                 {isUnique(item) && (
                   <div style={{ fontSize:'10px', margin:'2px 0 4px', padding:'3px 6px', border:'1px solid #3a1c23', background:'#12060a' }}>
