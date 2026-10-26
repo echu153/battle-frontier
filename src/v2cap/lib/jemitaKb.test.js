@@ -82,6 +82,10 @@ test('サーバー（Edge Function）：画面と同じ見出し・字数・時�
   assert.ok(!/body\.(history|reference|draft)/.test(EDGE), '画面から送られた会話・資料は使わない')
   assert.ok(EDGE.includes(".from('v2cap_jemita_kb')") && EDGE.includes(".eq('source', 'llm')"), '資料と会話はサーバーから')
   assert.ok(EDGE.includes("(Deno.env.get('JEMITA_ADMIN_ONLY') || 'true') !== 'false'"), 'v2cap が開発中のあいだは管理者だけ（既定）')
+  // 考える手順は既定で切る（2026-10-26 ユーザー指示「返事を速く」）。選べるのは管理者だけ
+  assert.ok(EDGE.includes("const THINKING = Deno.env.get('JEMITA_THINKING') === 'on' ? 'on' : 'off'"), '考える手順の既定は off')
+  assert.ok(EDGE.includes("const thinking = isAdmin && (body.thinking === 'on' || body.thinking === 'off') ? body.thinking : THINKING"), '1回ごとに選べるのは管理者だけ')
+  assert.ok(!/[​-‍﻿]/.test(EDGE), '見えない文字を直接書かない（\\u で書く）')
 })
 
 test('鍵は画面のコードに置かない（Claude を呼ぶのはサーバーだけ）', () => {

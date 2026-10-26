@@ -38,6 +38,11 @@ const MODEL = Deno.env.get('JEMITA_MODEL') || 'claude-haiku-5-5'
 const EFFORT = (['low', 'medium', 'high'].includes(Deno.env.get('JEMITA_EFFORT') || '') ? Deno.env.get('JEMITA_EFFORT') : 'low') as 'low' | 'medium' | 'high'
 // 1回の出力の上限（考えるぶんも入る）。払うのは実際に出たぶんだけなので、余裕を持たせる
 const MAX_TOKENS = 8000
+// 考える手順（Claude が答える前に考える部分）。既定は off＝速い。
+//   2026-10-26 ユーザー指示「考える手順を省いて返事を速くする直しを試して」：low でも「どうすれば強くなれる？」は
+//   考える部分が約2,300トークンで20〜30秒かかった。on に戻すときは秘密の設定 JEMITA_THINKING=on（配置し直さなくてよい）
+//   ★管理者は1回ごとに body.thinking（'on'／'off'）で選べる（比べる試験のため。ふつうの人は既定だけ）
+const THINKING = Deno.env.get('JEMITA_THINKING') === 'on' ? 'on' : 'off'
 const ADMIN_ONLY = (Deno.env.get('JEMITA_ADMIN_ONLY') || 'true') !== 'false'
 
 // 画面（src/v2cap/lib/jemita.js・jemitaPrompt.js）と同じ数と見出し
@@ -56,7 +61,7 @@ const REFUSED = 'フン、その話には乗らん。このゲームのことを
 const NG = /(セックス|せっくす|sex|エロ|アダルト|adult|童貞|処女|射精|挿入|オナニー|自慰|まんこ|マンコ|ちんこ|チンコ|ちんぽ|チンポ|ペニス|性器|レイプ|強姦|ヌード|全裸|風俗|ポルノ|porn|18禁|r-?18|性行為|fuck|グロ画像|グロ動画|内臓|死体|惨殺|バラバラ死体|リョナ|死ね|殺すぞ|ぶっ殺|きちがい|キチガイ|気違い|池沼|知障|くたばれ)/i
 const ngNorm = (s: string) => (s || '')
   .normalize('NFKC')
-  .replace(/[​-‍﻿]/g, '')
+  .replace(/[\u200B-\u200D\uFEFF]/g, '')
   .toLowerCase()
   .replace(/[\s.\-_、。・,]/g, '')
 const isNG = (s: string) => NG.test(ngNorm(s))
@@ -84,7 +89,7 @@ Deno.serve(async (req) => {
   const isAdmin = !!prof?.is_admin
   if (ADMIN_ONLY && !isAdmin) return json({ allowed: false, reason: 'admin_only' }, 403)
 
-  let body: { question?: string; status?: string; since?: string }
+  let body: { question?: string; status?: string; since?: string; thinking?: string }
   try { body = await req.json() } catch { return json({ allowed: false, reason: 'bad_json' }, 400) }
   const question = clean(body.question)
   const status = clean(body.status).slice(0, STATUS_MAX)
@@ -134,6 +139,7 @@ Deno.serve(async (req) => {
   ])
   const userText = (status ? `${STATUS_HEAD}\n${status}\n\n` : '') + `${QUESTION_HEAD}\n${question}`
 
+  const thinking = isAdmin && (body.thinking === 'on' || body.thinking === 'off') ? body.thinking : THINKING
   const client = new Anthropic({ apiKey: API_KEY, timeout: 60_000, maxRetries: 1 })
   let res: Anthropic.Message
   try {
@@ -141,6 +147,8 @@ Deno.serve(async (req) => {
       model: MODEL,
       max_tokens: MAX_TOKENS,
       output_config: { effort: EFFORT },
+      // off は Haiku 5.5 で effort が high 以下なら使える（xhigh・max では使えない）
+      ...(thinking === 'off' ? { thinking: { type: 'disabled' as const } } : {}),
       // 決まり＋資料は毎回同じ＝キャッシュ（1時間）。ここまでが同じなら2回目からは安い
       system: [
         { type: 'text', text: kb.rules },
@@ -155,14 +163,16 @@ Deno.serve(async (req) => {
     return json({ allowed: false, reason: st === 429 || st === 529 ? 'busy_server' : 'llm_error' }, 502)
   }
 
+  // 記録のモデルの欄に、考える手順を切ったかも残す（あとで答えの質を見比べられるように）
   const usage = {
+    model: thinking === 'off' ? `${MODEL}:think-off` : MODEL,
     input_tokens: res.usage?.input_tokens ?? null,
     output_tokens: res.usage?.output_tokens ?? null,
     cache_read_tokens: res.usage?.cache_read_input_tokens ?? null,
     cache_write_tokens: res.usage?.cache_creation_input_tokens ?? null,
   }
   const reply = (extra: Record<string, unknown>) => json({
-    allowed: true, left: unlimited ? null : left, unlimited, kb_version: kb.version, ...extra,
+    allowed: true, left: unlimited ? null : left, unlimited, kb_version: kb.version, thinking, ...extra,
   })
 
   // Claude が断った（安全のための判断）。回数はそのまま使う
@@ -170,7 +180,11 @@ Deno.serve(async (req) => {
     await log({ answer: REFUSED, source: 'refusal', ...usage })
     return reply({ text: REFUSED })
   }
-  const text = res.content.filter((b) => b.type === 'text').map((b) => (b as Anthropic.TextBlock).text).join('').trim()
+  // 考える手順を切ると、まれに考えた中身を <thinking> のような札つきで文に書くことがある＝札ごと消す（ゲームの文に < > の札は無い）
+  const text = res.content.filter((b) => b.type === 'text').map((b) => (b as Anthropic.TextBlock).text).join('')
+    .replace(/<(thinking|reasoning|reflection|scratchpad)>[\s\S]*?<\/\1>/gi, '')
+    .replace(/<\/?[A-Za-z_][\w-]*>/g, '')
+    .trim()
   if (!text) {
     await refund()
     console.error('[v2cap-jemita] empty answer', res.stop_reason, res.usage?.output_tokens)
