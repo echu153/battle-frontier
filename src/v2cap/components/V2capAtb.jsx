@@ -13,7 +13,8 @@ import {
 } from '../core/atb.js'
 import { MACRO_MARK, macrosOf, validateMacros, macroEntriesOf } from '../lib/atbMacro.js'
 import { loadPref } from '../core/prefs.js'
-import { fxEventsOf, POP_SEC } from '../lib/atbFx.js'
+import { fxEventsOf, scheduleFx, POP_SEC } from '../lib/atbFx.js'
+import { motionOf } from '../lib/motionArt.js'
 import { homeIconOf } from '../lib/classArt.js'
 import { artGenderOf } from '../lib/gender.js'
 import { enemyArtSrc } from '../lib/enemyArt.js'
@@ -76,7 +77,12 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
   }, [prof, inventory])
 
   // 絵：自分はクラスの待機GIF（ホームのアイコンと同じ・男女はキャラの性別）／相手は図鑑と同じ絵（ドット絵が届いたら差し替える）
-  const playerSrc = homeIconOf(prof?.class, artGenderOf(prof, loadPref('capArtGender', 'm')), CLASS_BY_ID[prof?.class]?.req?.cls)
+  const myGender = artGenderOf(prof, loadPref('capArtGender', 'm'))
+  const playerSrc = homeIconOf(prof?.class, myGender, CLASS_BY_ID[prof?.class]?.req?.cls)
+  // 攻撃の絵（あるクラスだけ・lib/motionArt.js）。無ければ踏み込み
+  const playerMotion = useMemo(() => motionOf(prof?.class, myGender, 'attack', CLASS_BY_ID[prof?.class]?.req?.cls), [prof?.class, myGender])
+  // 攻撃の絵は先に読んでおく（はじめて殴った瞬間に絵が間に合わないと、1回目だけ消えて見える）
+  useEffect(() => { if (playerMotion) { const im = new Image(); im.src = playerMotion.src } }, [playerMotion])
 
   // ===== 時間を進める =====
   // ★実時間の差分を advance に渡す（中では決まった刻みで進む＝同じ入力なら同じ結果）。
@@ -95,14 +101,15 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
           const lines = buildBattleLog({ log: fresh }, s.a.name, s.b.name).filter(l => l.type !== 'hp')
           if (lines.length) setLogs(v => [...v, ...lines].slice(-80))
           const t0 = now / 1000
-          fxRef.current = [...fxRef.current.filter(f => t0 - f.t0 < POP_SEC + 0.2), ...fxEventsOf(fresh, s.a.name, s.b.name).map(e => ({ ...e, t0 }))]
+          fxRef.current = [...fxRef.current.filter(f => t0 - f.t0 < POP_SEC + 0.5),
+            ...scheduleFx(fxEventsOf(fresh, s.a.name, s.b.name), t0, { a: playerMotion ? playerMotion.hitMs / 1000 : 0 })]
         }
       }
       last.current = now
       setFrame(f => f + 1)
     }, 33)
     return () => clearInterval(id)
-  }, [phase, paused])
+  }, [phase, paused, playerMotion])
   // ログは新しい行が下に来る＝いちばん下まで送る
   useEffect(() => { if (logBox.current) logBox.current.scrollTop = logBox.current.scrollHeight }, [logs])
 
@@ -199,7 +206,7 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
   return (
     <div style={{ ...box, padding:'12px' }}>
       {/* 自分（左）とモンスター（右） */}
-      <V2capAtbStage st={s} fx={fxRef.current} now={performance.now() / 1000} playerSrc={playerSrc} foeSrc={enemyArtSrc(en.name)} />
+      <V2capAtbStage st={s} fx={fxRef.current} now={performance.now() / 1000} playerSrc={playerSrc} playerMotion={playerMotion} foeSrc={enemyArtSrc(en.name)} />
       <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color: TEXT.label, margin:'6px 0', gap:'8px', flexWrap:'wrap' }}>
         <span>次：{nextLabel}</span>
         <span>削り {dealtPct.toFixed(1)}%・{Math.round(dps).toLocaleString()}ダメージ/秒</span>

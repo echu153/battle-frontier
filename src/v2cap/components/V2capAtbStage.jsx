@@ -2,6 +2,7 @@ import { TEXT } from './v2ui.js'
 import { buffChips, ailChips, stateChips, needNow, CAST_SEC } from '../core/atb.js'
 import { STAT_DEFS } from '../core/stats.js'
 import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC } from '../lib/atbFx.js'
+import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
 
 // ============================================================
 // 「レベルキャップあり」版（v2cap）— ATB戦闘の舞台（自分が左・モンスターが右）
@@ -11,7 +12,8 @@ import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC } from '../lib/atbFx.js'
 //   自分の絵＝クラスの待機GIF（ホームと同じ）を**そのままの向き**で出す（反転すると逆を向く＝ユーザー「プレイヤー向き逆」で反転をやめた）
 //   ・モンスターの絵はドット絵が届くまで、図鑑と同じ絵（enemyArt.js）。無ければ名前の1文字目
 //   ・動き（lib/atbFx.js）：殴った側が前へ踏み込む／補助技・回復・防御は光る／受けた側は揺れて赤く光り、数字が浮かぶ
-//     攻撃モーションのGIF（ユーザーが作る）が届いたら、踏み込みの代わりにその絵を1回流す
+//   ・攻撃の絵（lib/motionArt.js・ユーザーが ChatGPT で作る）があるクラスは、踏み込みの代わりにその絵を1回流す（2026-10-26）。
+//     待機GIFと同じ大きさ・足の位置にそろえてあるので、待機の枠（正方形）に重ねて、はみ出すぶん（斬撃）は枠の外へ出す
 // ============================================================
 
 const Bar = ({ pct, color, h = 10 }) => (
@@ -46,11 +48,13 @@ const POP_COLOR = { hit: '#ffffff', miss: '#9fb3c8', heal: '#44ff88', tick: '#cc
 const popText = (f) => (f.kind === 'miss' ? 'MISS' : f.kind === 'heal' ? `+${f.amount.toLocaleString()}` : f.amount.toLocaleString())
 
 // 1人ぶん。right＝右（モンスター）。fx は [{ kind, side, amount, crit, t0 }]・now は fx の t0 と同じ時計（秒）
-function Fighter({ st, side, me, right, src, fx, now, name }) {
+function Fighter({ st, side, me, right, src, motion, fx, now, name }) {
   const mine = fx.filter(f => f.side === side)
-  const lastOf = (kind) => mine.reduce((t, f) => (f.kind === kind && f.t0 > t ? f.t0 : t), -1e9)
+  const lastOf = (kind) => mine.reduce((t, f) => (f.kind === kind && f.t0 <= now && f.t0 > t ? f.t0 : t), -1e9)
   const dir = right ? -1 : 1   // 前＝相手の方
-  const dx = lungeOf(now - lastOf('act')) * dir + shakeOf(now - lastOf('hit'))
+  // 攻撃の絵があれば流す（流しているあいだは踏み込まない）
+  const frame = motion ? motionFrameAt(motion, (now - lastOf('act')) * 1000) : -1
+  const dx = (frame >= 0 ? 0 : lungeOf(now - lastOf('act')) * dir) + shakeOf(now - lastOf('hit'))
   const hitAgo = now - lastOf('hit')
   const glowAgo = now - lastOf('use')
   const filters = []
@@ -58,7 +62,7 @@ function Fighter({ st, side, me, right, src, fx, now, name }) {
   if (glowAgo >= 0 && glowAgo < GLOW_SEC) filters.push('drop-shadow(0 0 10px #ffee88) brightness(1.3)')
   if (me.ail.paralyze) filters.push('grayscale(0.6)')
   const down = me.hp <= 0
-  const pops = mine.filter(f => f.kind !== 'act' && f.kind !== 'use' && now - f.t0 < POP_SEC)
+  const pops = mine.filter(f => f.kind !== 'act' && f.kind !== 'use' && now >= f.t0 && now - f.t0 < POP_SEC)
   const need = needNow(me, st.t)
   const align = right ? 'flex-end' : 'flex-start'
   const hpColor = right ? '#cc3344' : '#44cc66'
@@ -74,9 +78,19 @@ function Fighter({ st, side, me, right, src, fx, now, name }) {
         <div style={{ height:'100%', display:'flex', alignItems:'flex-end', transform:`translateX(${dx.toFixed(1)}px)`,
           opacity: down ? 0.25 : 1, transition:'opacity 0.4s' }}>
           {src ? (
-            <img src={src} alt="" draggable={false}
-              style={{ height:'100%', width:'auto', maxWidth:'100%', objectFit:'contain', filter: filters.join(' ') || 'none',
-                userSelect:'none' }} />
+            // 待機の絵の枠（正方形）。攻撃の絵はこの枠に重ねる（ox・oy・w・h は待機の 224px を100%として割合で置く）
+            <div style={{ position:'relative', height:'100%', aspectRatio:'1 / 1', maxWidth:'100%', filter: filters.join(' ') || 'none' }}>
+              <img src={src} alt="" draggable={false}
+                style={{ width:'100%', height:'100%', objectFit:'contain', userSelect:'none', visibility: frame >= 0 ? 'hidden' : 'visible' }} />
+              {frame >= 0 && (
+                <div style={{ position:'absolute', pointerEvents:'none',
+                  left:`${-motion.ox / IDLE_SIZE * 100}%`, top:`${-motion.oy / IDLE_SIZE * 100}%`,
+                  width:`${motion.w / IDLE_SIZE * 100}%`, height:`${motion.h / IDLE_SIZE * 100}%`,
+                  backgroundImage:`url("${motion.src}")`, backgroundRepeat:'no-repeat',
+                  backgroundSize:`${motion.frames * 100}% 100%`,
+                  backgroundPosition: motion.frames > 1 ? `${frame / (motion.frames - 1) * 100}% 0` : '0 0' }} />
+              )}
+            </div>
           ) : (
             <div style={{ width:'clamp(80px, 22vw, 120px)', height:'clamp(80px, 22vw, 120px)', border:`2px solid ${hpColor}`, borderRadius:'8px',
               display:'flex', alignItems:'center', justifyContent:'center', fontSize:'40px', color: hpColor, filter: filters.join(' ') || 'none' }}>
@@ -120,11 +134,11 @@ function Fighter({ st, side, me, right, src, fx, now, name }) {
   )
 }
 
-export default function V2capAtbStage({ st, fx, now, playerSrc, foeSrc }) {
+export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, foeSrc }) {
   return (
     <div style={{ display:'flex', gap:'12px', alignItems:'flex-start', padding:'8px',
       background:'linear-gradient(180deg, #000a26 0%, #001338 70%, #00204a 100%)', border:'1px solid #0a2a55' }}>
-      <Fighter st={st} side="a" me={st.a} src={playerSrc} fx={fx} now={now} name={st.a.name} />
+      <Fighter st={st} side="a" me={st.a} src={playerSrc} motion={playerMotion} fx={fx} now={now} name={st.a.name} />
       <Fighter st={st} side="b" me={st.b} right src={foeSrc} fx={fx} now={now} name={st.b.name} />
     </div>
   )

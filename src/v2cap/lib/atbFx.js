@@ -40,6 +40,17 @@ export const fxEventsOf = (entries, aName, bName) => {
   return out
 }
 
+// 起きた時刻を付ける。delay＝{ a: 秒, b: 秒 }：その側にモーション（攻撃の絵）があるとき、
+//   殴ったあとの数字・揺れを、絵の「当たる」コマまで遅らせる（lib/motionArt.js の hitMs）
+export const scheduleFx = (events, t0, delay = {}) => {
+  let d = 0
+  return events.map(e => {
+    if (e.kind === 'act') { d = delay[e.side] || 0; return { ...e, t0 } }
+    if (e.kind === 'use') { d = 0; return { ...e, t0 } }
+    return { ...e, t0: t0 + d }
+  })
+}
+
 // 動きの長さ（秒）
 export const LUNGE_SEC = 0.32
 export const HIT_SEC = 0.3

@@ -1,7 +1,7 @@
 // v2cap の ATB戦闘の見た目の動き（記録 → 踏み込み・被弾・数字）のテスト（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { fxEventsOf, lungeOf, shakeOf, LUNGE_SEC, HIT_SEC } from './atbFx.js'
+import { fxEventsOf, scheduleFx, lungeOf, shakeOf, LUNGE_SEC, HIT_SEC } from './atbFx.js'
 
 test('殴った側が踏み込み、受けた側に数字（外れは MISS・クリティカルの印）', () => {
   const ev = fxEventsOf([
@@ -47,4 +47,13 @@ test('踏み込みと揺れは時間がたつと0に戻る', () => {
   assert.equal(lungeOf(LUNGE_SEC), 0)
   assert.equal(shakeOf(HIT_SEC), 0)
   assert.equal(shakeOf(-1), 0)
+})
+
+test('攻撃の絵がある側は、数字と揺れを当たるコマまで遅らせる（補助技・相手の攻撃は遅らせない）', () => {
+  const ev = scheduleFx([
+    { kind: 'act', side: 'a' }, { kind: 'hit', side: 'b', amount: 10 }, { kind: 'heal', side: 'a', amount: 2 },
+    { kind: 'act', side: 'b' }, { kind: 'miss', side: 'a' },
+    { kind: 'use', side: 'a' }, { kind: 'heal', side: 'a', amount: 5 },
+  ], 10, { a: 0.2 })
+  assert.deepEqual(ev.map(e => e.t0), [10, 10.2, 10.2, 10, 10, 10, 10])
 })

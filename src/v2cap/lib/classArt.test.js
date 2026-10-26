@@ -15,6 +15,7 @@ import {
   ART_SD, SD_DIR, SD_OUT, SD_ALIAS, sdTargetOf, sdSrcOf, battleIconOf,
   ART_GIF, GIF_DIR, GIF_OUT, GIF_ALIAS, gifTargetOf, gifSrcOf, homeIconOf,
 } from './classArt.js'
+import { MOTION_SRC_DIR, MOTION_OUT } from './motionArt.js'
 
 const PUBLIC = fileURLToPath(new URL('../../../public', import.meta.url))
 
@@ -106,9 +107,10 @@ test('絵のあるクラスは、男女とも 全身と顔のアップの軽い�
 
 test('使っていない大きさのフォルダが残っていない（一覧の全身の小さい絵 thumb/ はやめた）', () => {
   // SD/ はユーザーが置くSDの元の絵・上位職/ は上位クラスの元の絵（どちらも git に入れない）・icon/ はSDから作る戦闘ログのアイコン
+  // ★2026-10-26 ATBの攻撃などのモーション：モーション/ は元の絵（git に入れない）・motion/ は画面で使う版（lib/motionArt.js）
   const dirs = readdirSync(PUBLIC + ART_DIR, { withFileTypes: true })
-    .filter(d => d.isDirectory() && d.name !== SD_DIR && d.name !== ART_UPPER_DIR && d.name !== GIF_DIR).map(d => d.name).sort()
-  assert.deepEqual(dirs, [...ART_SIZES, SD_OUT, GIF_OUT].sort())
+    .filter(d => d.isDirectory() && d.name !== SD_DIR && d.name !== ART_UPPER_DIR && d.name !== GIF_DIR && d.name !== MOTION_SRC_DIR).map(d => d.name).sort()
+  assert.deepEqual(dirs, [...ART_SIZES, SD_OUT, GIF_OUT, MOTION_OUT].sort())
 })
 
 test('全クラス（初期・上位）に絵がある（2026-10-17 上位クラスの44枚を足した）', () => {
