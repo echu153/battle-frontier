@@ -5,7 +5,7 @@
 //   ・装備ごとの絵は無いので、形は 武器・防具・装飾品 の3種だけ（GearGlyph）。主役はレア度の色（レア青・エピック紫・レジェンダリー金）と名前
 //   ・集める：暗転・金床へ光の粒（溶けた残骸とGold）が集まる → 打つ：金槌が3回下りて火花、打つたびに地金の色がレア度の色へ変わる
 //   ・完成：白い光 → レア度の色の粒が弾ける（エピックは光の筋・レジェンダリーは光の柱と光の筋）→ ポップアップ「○○を作成しました！」
-//   ・作成は必ずできるので、成否の待ちはない（サーバーの返事は打っている間に届く）。押すと飛ばせる。Enter＝続けて作る・Esc＝閉じる
+//   ・作成は必ずできるので、成否の待ちはない（サーバーの返事は打っている間に届く）。押すと飛ばせる。Enter＝続けて作成・Esc＝閉じる
 // ============================================================
 import { useEffect, useRef, useState } from 'react'
 import { createParticles } from './fxParticles.js'
@@ -121,7 +121,7 @@ export default function V2capCraftFx({ job, say, nextLabel, nextReason, onAgain,
     if (phase === 'gather' || phase === 'forge') { skipRef.current = true; doReveal() }
     else if (phase === 'reveal') { timers.current.forEach(clearTimeout); timers.current = []; setPhase('result') }
   }
-  // キーボード：演出中は Enter／スペース／Esc で飛ばす。結果のあとは Enter＝続けて作る・Esc＝閉じる（下の画面へは渡さない）
+  // キーボード：演出中は Enter／スペース／Esc で飛ばす。結果のあとは Enter＝続けて作成・Esc＝閉じる（下の画面へは渡さない）
   const keyRef = useRef(null)
   useEffect(() => { keyRef.current = { phase, skip, onClose, onAgain, nextLabel } })
   useEffect(() => {
@@ -218,11 +218,12 @@ export default function V2capCraftFx({ job, say, nextLabel, nextReason, onAgain,
             </div>
             <div style={{ padding:'10px 12px', fontSize:12, color:'#88ccff', lineHeight:1.8 }}>
               {say}
-              <div>戦闘力 <span style={{ color:'#44ff88' }}>{job.power}</span>{job.sync && <span style={{ color:'#ff8844', fontSize:11 }}>（いまは{job.sync}）</span>}</div>
+              {/* 2026-10-26 ユーザー指示「今は要求レベル不足⇒要求Lv不足」＝「いまは」を外す（LV は表記ルールどおり大文字） */}
+              <div>戦闘力 <span style={{ color:'#44ff88' }}>{job.power}</span>{job.sync && <span style={{ color:'#ff8844', fontSize:11 }}>（{job.sync}）</span>}</div>
               <div style={{ color:'#93a9be', fontSize:11 }}>{job.statText}</div>
               {/* 2026-10-26 ユーザー指示「作成の結果のポップアップの「使ったもの：」も「作成素材：」にして」 */}
               <div>作成素材：<span style={{ color:'#cfe2ff' }}>{job.scrapName} {job.scrap}個</span>・<span style={{ color:'#ffcc00' }}>Gold {Number(job.gold).toLocaleString()}</span></div>
-              <div style={{ color:'#93a9be', fontSize:11 }}>+0で持ち物に入りました</div>
+              {/* 「+0で持ち物に入りました」は出さない（2026-10-26 ユーザー指示「この部分いらない」） */}
               {!nextLabel && nextReason && <div style={{ color:'#7fa6d0', fontSize:11 }}>{nextReason}</div>}
             </div>
             <div style={{ padding:'10px 12px', borderTop:'1px solid #002a55', display:'flex', gap:8 }}>

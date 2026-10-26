@@ -48,3 +48,36 @@ test('【確定】画面を切り替えたら一番上から見せる（2026-10-
   assert.ok(/useLayoutEffect\(\(\) => \{ window\.scrollTo\(0, 0\) \}, \[screen\]\)/.test(HOME),
     'V2capHome：screen が変わったら描く前に window を一番上へ戻す')
 })
+
+test('【確定】2026-10-26 装備のお気に入り：★で付け外し（装備画面と鍛冶屋）・並べ替えの「お気に入り」で上に・分解できない', async () => {
+  // ユーザー指示「装備にお気に入りできるようにして、お気に入りのソートもできるように。お気に入りされた武器は分解できないように」
+  const { gearSorter } = await import('../components/v2capGearView.js')
+  const { ITEMS } = await import('./equipment.js')
+  const weak = ITEMS.find(i => i.area === 1 && i.rarity === 'N'), strong = ITEMS.find(i => i.area === 5 && i.rarity === 'E')
+  const row = (id, item, fav) => ({ inv: { id, ilv: item.lv, plus: 0, fav }, item })
+  const rows = [row(1, strong, false), row(2, weak, true), row(3, strong, true), row(4, weak, false)]
+  assert.deepEqual([...rows].sort(gearSorter('fav', 99)).map(r => r.inv.id), [3, 2, 1, 4], 'お気に入りを上に・その中は強い順')
+  assert.deepEqual([...rows].sort(gearSorter('power', 99)).map(r => r.inv.id), [1, 3, 2, 4], '強い順はお気に入りと関係なし')
+  assert.ok(GEAR.includes("['fav', 'お気に入り']"), '並べ替えの帯に「お気に入り」')
+  assert.ok(GEAR.includes("style={{ ...miniBtn(inv?.fav ? '#ffcc00' : '#62789a'), color: inv?.fav ? '#ffcc00' : '#445566', padding:'2px 5px', flexShrink:0 }}>★</button>"), 'スキルのお気に入りと同じ★')
+  assert.ok(EQUIP.includes('<FavStar inv={inv} busy={busy} onToggle={toggleFav} />'), '装備画面の持ち物')
+  assert.equal((SMITH.match(/star=\{<FavStar inv=\{inv\} busy=\{busy\} onToggle=\{toggleFav\} \/>\}/g) || []).length, 2, '鍛冶屋の強化と分解の一覧')
+  for (const code of [EQUIP, SMITH]) assert.ok(code.includes("call('v2cap_gear_fav', { p_inv: inv.id, p_fav: !inv.fav })"), 'サーバーで覚える')
+  // 分解：お気に入りはチェックも分解のボタンも出さない・選んだ行からも外す
+  assert.ok(SMITH.includes('disabled={isWorn || isFav || busy}'))
+  assert.ok(SMITH.includes('お気に入りは分解できない'))
+  assert.ok(SMITH.includes('&& !r.inv.fav)'))
+})
+
+test('【確定】2026-10-26 鍛冶屋の説明はタブの下に出さず ❓ HELP にまとめる・作成の結果の言葉', () => {
+  // ユーザー指示「ここの説明はHELPにまとめて、強化分解作成すべてここの部分いらない」
+  assert.ok(!SMITH.includes('TABS.find(t => t.key === tab)'), 'タブの下の説明は出さない')
+  assert.ok(/<V2Modal title="❓ HELP" color="#ffaa44" keepScroll onClose=\{\(\) => setHelp\(false\)\}>/.test(SMITH), 'HELP は見るだけのポップアップ（keepScroll）')
+  assert.ok(SMITH.includes('{TABS.map((t, i) => (') && SMITH.includes('<div>{t.help}</div>'), '強化・分解・作成の説明を全部')
+  assert.ok(SMITH.includes('<div>{FAV_HELP}</div>'), 'お気に入りの説明も')
+  // 作成の結果（ユーザー指示「今は要求レベル不足⇒要求Lv不足・+0で持ち物に入りました←この部分いらない・続けて作る⇒続けて作成」。LV は表記ルールどおり大文字）
+  const fx = codeOf('../components/V2capCraftFx.jsx')
+  assert.ok(fx.includes('（{job.sync}）') && !fx.includes('いまは'))
+  assert.ok(!fx.includes('+0で持ち物に入りました'))
+  assert.ok(SMITH.includes('`続けて作成（あと${againTimes}個）`') && !SMITH.includes('続けて作る'))
+})

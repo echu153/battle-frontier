@@ -3196,6 +3196,9 @@ alter table public.v2cap_inventory alter column base_id set not null;
 alter table public.v2cap_inventory drop column if exists rank;
 -- ★2026-10-10 強化値（0〜10）。+1ごとに元の強さの0.1倍ずつ足す（強さの計算は src/v2cap/lib/gear.js。サーバーは数だけ持つ）
 alter table public.v2cap_inventory add column if not exists plus int not null default 0;
+-- ★2026-10-26 お気に入り（ユーザー指示「装備にお気に入りできるようにして…お気に入りされた武器は分解できないように」）。
+--   v2cap_gear_fav で付け外し。お気に入りは分解（v2cap_dismantle）も寄贈（v2cap_museum_take＝ユーザー選択）もできない
+alter table public.v2cap_inventory add column if not exists fav boolean not null default false;
 -- 前の基本装備（ランクの形＝レア度を持たない行）を一覧から消す。持ち物から指されているものは残す
 --   （上の作り直しで持ち物は空になっているので、ふつうは全部消える）
 delete from public.v2cap_equipment e
@@ -4646,6 +4649,7 @@ begin
      where i.player_id = v_uid and i.id = any(p_ids)
        and not exists (select 1 from jsonb_each_text(coalesce(v_row.equipped, '{}'::jsonb)) q
                         where q.value ~ '^[0-9]+$' and q.value::bigint = i.id)
+       and not coalesce(i.fav, false)   -- お気に入りは飛ばす（2026-10-26 ユーザー指示「お気に入りされた武器は分解できないように」）
     returning i.base_id
   ), got as (
     -- ★初期装備（エリア0）は始まりの森（1）の残骸になる（smith.js の scrapAreaOf と同じ）
@@ -4671,6 +4675,24 @@ end;
 $$;
 revoke all on function public.v2cap_dismantle(bigint[]) from public, anon;
 grant execute on function public.v2cap_dismantle(bigint[]) to authenticated;
+
+-- お気に入りの付け外し（2026-10-26 ユーザー指示「装備にお気に入りできるようにして」）。自分の装備だけ
+create or replace function public.v2cap_gear_fav(p_inv bigint, p_fav boolean)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_n   int;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  update public.v2cap_inventory set fav = coalesce(p_fav, false) where id = p_inv and player_id = v_uid;
+  get diagnostics v_n = row_count;
+  if v_n = 0 then return jsonb_build_object('ok', false, 'error', 'その装備は持っていません'); end if;
+  return jsonb_build_object('ok', true, 'id', p_inv, 'fav', coalesce(p_fav, false));
+end;
+$$;
+revoke all on function public.v2cap_gear_fav(bigint, boolean) from public, anon;
+grant execute on function public.v2cap_gear_fav(bigint, boolean) to authenticated;
 
 -- 強化：その装備の強化値を1つ上げる（失敗もある）。着けている装備も強化できる
 -- 【確定】2026-10-10 ユーザー決定：
@@ -7349,6 +7371,10 @@ begin
   if exists (select 1 from jsonb_each_text(coalesce(p_equipped, '{}'::jsonb)) q
               where q.value ~ '^[0-9]+$' and q.value::bigint = v_inv.id) then
     return jsonb_build_object('ok', false, 'error', '着けている装備は寄贈できません');
+  end if;
+  -- ★お気に入りは寄贈できない（2026-10-26 ユーザー選択「寄贈もできないようにする」＝分解と同じく守る）
+  if coalesce(v_inv.fav, false) then
+    return jsonb_build_object('ok', false, 'error', 'お気に入りの装備は寄贈できません');
   end if;
   -- ★段階は +0／+5／+9 ちょうど（2026-10-23 ユーザー指示「これ以外の強化値は登録できないように」）
   v_plus := coalesce(v_inv.plus, 0);

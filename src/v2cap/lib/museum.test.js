@@ -271,3 +271,12 @@ test('上の欄：説明は HELP の小窓・収蔵数・獲得済み報酬（�
   assert.ok(!m.includes('もらった報酬：') && !m.includes('報酬（どれもずっと続く）'), '前の文と報酬の決まりの段落は出さない')
   assert.ok(m.includes("{areaProgressOf(registered, g.area).complete ? '　★COMPLETE★' : ''}"), 'プルダウンのコンプリートは英語')
 })
+
+test('【確定】2026-10-26 お気に入り（★）の装備は寄贈できない（ユーザー選択「寄贈もできないようにする」＝分解と同じく守る）', () => {
+  const item = ITEMS.find(i => i.area === 1 && i.rarity === 'N')
+  const inv = [{ id: 1, base_id: item.id, plus: 0, fav: true }, { id: 2, base_id: item.id, plus: 5, fav: false }]
+  assert.deepEqual(donatablesOf({ equipped: {} }, inv, []).map(d => d.inv.id), [2], '一覧に出さない（まとめて選ぶときも）')
+  const take = fnBody('v2cap_museum_take')
+  assert.match(take, /if coalesce\(v_inv\.fav, false\) then\s+return jsonb_build_object\('ok', false, 'error', 'お気に入りの装備は寄贈できません'\);/, 'サーバーも断る')
+  assert.ok(src('../components/V2capMuseum.jsx').includes('お気に入り（★）の装備も寄贈できません'), 'HELP に書く')
+})

@@ -1,5 +1,5 @@
 import { STAT_DEFS, STAT_KEYS } from '../core/stats.js'
-import { TEXT } from './v2ui.js'
+import { TEXT, miniBtn } from './v2ui.js'
 import { PARTS, ALL_RARITIES, RARITY_COLOR, partLabel, rarityLabel } from '../lib/equipment.js'
 import { plusOf, plusLabel } from '../lib/smith.js'
 import { statChangeOf } from '../lib/gear.js'
@@ -12,6 +12,12 @@ import { PLUS_COLOR, chip, areaOptionLabel, filterSelect, optionStyle } from './
 // ============================================================
 // 強化値の印（+0は付けない）
 export const PlusTag = ({ inv }) => (plusOf(inv) > 0 ? <span style={{ color: PLUS_COLOR }}> {plusLabel(plusOf(inv))}</span> : null)
+// お気に入りの★（2026-10-26 ユーザー指示「装備にお気に入りできるようにして」）。押すと onToggle(inv)。見た目はスキルのお気に入り（V2capSkills.jsx）と同じ
+//   お気に入りの装備は分解も博物館への寄贈もできない（smith.js の bulkPickable・museum.js の donatablesOf・サーバー）
+export const FavStar = ({ inv, busy, onToggle }) => (
+  <button type="button" onClick={() => onToggle(inv)} disabled={busy} title={inv?.fav ? 'お気に入りを外す' : 'お気に入りにする'} aria-pressed={!!inv?.fav}
+    style={{ ...miniBtn(inv?.fav ? '#ffcc00' : '#62789a'), color: inv?.fav ? '#ffcc00' : '#445566', padding:'2px 5px', flexShrink:0 }}>★</button>
+)
 // 上がるステ（「STR+3 DEX+2」をステの色で）。s = statsAt などの { ステ: 数 }
 export const StatGain = ({ s }) => {
   const keys = STAT_KEYS.filter(k => s?.[k] > 0)
@@ -58,7 +64,8 @@ export function GearFilterBar({ g }) {
       </div>
       <div style={{ display:'flex', alignItems:'center', gap:'4px', marginBottom:'8px', fontSize:'10px', color: TEXT.label, flexWrap:'wrap' }}>
         <span>並べ替え</span>
-        {[['power', '強い順'], ['ilv', 'LVの高い順'], ['new', '新しい順']].map(([k, label]) => (
+        {/* 「お気に入り」＝お気に入り（★）を上に・そのあとは強い順（2026-10-26 ユーザー指示「お気に入りのソートもできるように」） */}
+        {[['power', '強い順'], ['ilv', 'LVの高い順'], ['new', '新しい順'], ['fav', 'お気に入り']].map(([k, label]) => (
           <button key={k} onClick={() => g.setSort(k)} style={chip(g.sort === k)}>{label}</button>
         ))}
       </div>

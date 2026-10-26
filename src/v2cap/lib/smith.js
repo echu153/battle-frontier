@@ -67,7 +67,8 @@ export const dismantleGainOf = (rows) => {
 }
 // まとめて選ぶときの対象：着けているものと、強化したもの（+1以上）と、ユニークは選ばない（1つずつなら選べる）
 //   ★ユニークは0.5%のボス固有なので、まとめての分解でうっかり消さないようにした（2026-10-21）
-export const bulkPickable = ({ inv, item }, wornIds) => !wornIds.has(String(inv.id)) && plusOf(inv) === 0 && item?.rarity !== 'U'
+//   ★お気に入り（inv.fav）は1つずつでも分解できない（2026-10-26 ユーザー指示・サーバーの v2cap_dismantle も飛ばす）
+export const bulkPickable = ({ inv, item }, wornIds) => !wornIds.has(String(inv.id)) && plusOf(inv) === 0 && item?.rarity !== 'U' && !inv?.fav
 
 // ===== 強化 =====
 // +n にする回（n＝1〜10）の 残骸の数・成功率(%)。【確定】2026-10-10 ユーザーの表

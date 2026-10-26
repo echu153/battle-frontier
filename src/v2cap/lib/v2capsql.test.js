@@ -1124,3 +1124,15 @@ test('【確定】2026-10-26 鍛冶屋の親方の好感度は外した（§17�
   }
   assert.ok(SQL.includes('alter table public.v2cap_profiles add column if not exists clerk_affinity'), '看板娘の好感度はそのまま')
 })
+
+test('【確定】2026-10-26 装備のお気に入り（§8）：列 fav・付け外しは自分の装備だけ・分解は飛ばす・寄贈は断る', () => {
+  // ユーザー指示「装備にお気に入りできるようにして…お気に入りされた武器は分解できないように」＋選んだこと「寄贈もできないようにする」
+  assert.ok(SQL.includes('alter table public.v2cap_inventory add column if not exists fav boolean not null default false;'))
+  const fav = fnBody('v2cap_gear_fav')
+  assert.ok(fav.includes('if not public.v2cap_is_dev() then'), '開発限定')
+  assert.ok(fav.includes('update public.v2cap_inventory set fav = coalesce(p_fav, false) where id = p_inv and player_id = v_uid;'), '自分の装備だけ')
+  assert.ok(SQL.includes('revoke all on function public.v2cap_gear_fav(bigint, boolean) from public, anon;'))
+  assert.ok(SQL.includes('grant execute on function public.v2cap_gear_fav(bigint, boolean) to authenticated;'))
+  assert.match(fnBody('v2cap_dismantle'), /and not coalesce\(i\.fav, false\)/, '分解はお気に入りを飛ばす')
+  assert.match(fnBody('v2cap_museum_take'), /if coalesce\(v_inv\.fav, false\) then/, '寄贈はお気に入りを断る')
+})

@@ -32,24 +32,30 @@ export const gainText = (gain) => Object.entries(gain).sort((a, b) => a[0] - b[0
 // ★エリア0＝初期装備（キャラ作成で配る・2026-10-12）
 export const areaOptionLabel = (a) => (a === 0 ? '初期装備' : `${a} ${AREA_LIST[a - 1]?.name || ''}`)
 
-// 持ち物の絞り込み（部位・レア度・エリア）と並べ替え（強い順・LVの高い順・新しい順）。
-// all = [{ inv, item }]・lv = いまのLV（強い順は強化値と、必要LVに足りない装備のLV相当込み）。
+// 並べ替えの比べ方：power＝強い順・ilv＝LVの高い順・new＝新しい順・fav＝お気に入り（★）を上に、そのあとは強い順
+//   （fav は 2026-10-26 ユーザー指示「お気に入りのソートもできるように」）。lv＝いまのLV（強い順は強化値と、必要LVに足りない装備のLV相当込み）
+export const gearSorter = (sort, lv) => {
+  const pw = (r) => effectivePowerAt(r.item, r.inv.ilv, lv, plusOf(r.inv))
+  const need = (r) => needLvOf(r.item, r.inv.ilv)   // 「LVの高い順」は画面に出す必要LVで並べる
+  const strong = (a, b) => pw(b) - pw(a) || need(b) - need(a)
+  if (sort === 'power') return strong
+  if (sort === 'ilv') return (a, b) => need(b) - need(a) || pw(b) - pw(a)
+  if (sort === 'fav') return (a, b) => (b.inv.fav ? 1 : 0) - (a.inv.fav ? 1 : 0) || strong(a, b)
+  return (a, b) => b.inv.id - a.inv.id
+}
+
+// 持ち物の絞り込み（部位・レア度・エリア）と並べ替え（gearSorter）。all = [{ inv, item }]・lv = いまのLV。
 // 返すのは 並べたあとの行（rows）・エリアの選択肢（areas）・選んでいる条件と変える関数（帯は v2capGear.jsx の GearFilterBar）
 export const useGearRows = (all, lv) => {
   const [part, setPart] = useState('all')
   const [rarity, setRarity] = useState('all')
   const [area, setArea] = useState('all')
-  const [sort, setSort] = useState('power')   // power / ilv / new
+  const [sort, setSort] = useState('power')   // power / ilv / new / fav
   const rows = useMemo(() => {
     const list = all.filter(r => (part === 'all' || r.item.part === part)
       && (rarity === 'all' || r.item.rarity === rarity)
       && (area === 'all' || r.item.area === area))
-    const pw = (r) => effectivePowerAt(r.item, r.inv.ilv, lv, plusOf(r.inv))
-    const need = (r) => needLvOf(r.item, r.inv.ilv)   // 「LVの高い順」は画面に出す必要LVで並べる
-    if (sort === 'power') list.sort((a, b) => pw(b) - pw(a) || need(b) - need(a))
-    else if (sort === 'ilv') list.sort((a, b) => need(b) - need(a) || pw(b) - pw(a))
-    else list.sort((a, b) => b.inv.id - a.inv.id)
-    return list
+    return list.sort(gearSorter(sort, lv))
   }, [all, part, rarity, area, sort, lv])
   // 持っている装備のエリア（選んでいるエリアは、持ち物から消えても選択肢に残す）
   const areas = useMemo(() => [...new Set([...all.map(r => r.item.area), ...(area === 'all' ? [] : [area])])].sort((a, b) => a - b), [all, area])

@@ -9,7 +9,7 @@ import { powerAt, statsAt, effectivePowerAt, syncLabelOf } from '../lib/gear.js'
 import { plusOf } from '../lib/smith.js'
 import { DROP_CHANCE } from '../lib/sortie.js'
 import { statLine, nameColor, useGearRows } from './v2capGearView.js'
-import { PlusTag, GearFilterBar } from './v2capGear.jsx'
+import { PlusTag, GearFilterBar, FavStar } from './v2capGear.jsx'
 import { V2Tip } from './V2ItemTip.jsx'
 import { isSetPiece, setLabel, setTierText, armorSetOf, SET_TIERS } from '../lib/armorSets.js'
 
@@ -44,6 +44,8 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
   }
   const equip = (slot, inv) => call('v2cap_equip', { p_slot: slot, p_inventory_id: inv.id })
   const unequip = (slot) => call('v2cap_unequip', { p_slot: slot })
+  // お気に入りの★（2026-10-26 ユーザー指示「装備にお気に入りできるようにして」・分解と寄贈から守る）
+  const toggleFav = (inv) => call('v2cap_gear_fav', { p_inv: inv.id, p_fav: !inv.fav })
 
   return (
     <div style={{ fontFamily:'monospace' }}>
@@ -109,6 +111,7 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
             return (
               <div key={inv.id} style={{ background:'#000818', border:`1px solid ${isWorn ? '#0055aa' : '#002244'}`, padding:'6px 8px', opacity: usable ? 1 : 0.6 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12px' }}>
+                  <FavStar inv={inv} busy={busy} onToggle={toggleFav} />
                   <span style={{ color: nameColor(item), flex:1, minWidth:0 }}>
                     {item.name}<PlusTag inv={inv} />
                     <span style={{ color: TEXT.sub, fontSize:'10px', marginLeft:'5px' }}>{kindLabel(item)}</span>

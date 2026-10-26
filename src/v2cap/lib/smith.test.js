@@ -47,6 +47,9 @@ test('【確定】まとめて選ぶときは、着けているものと強化�
   assert.equal(bulkPickable({ inv: { id: 2, plus: 3 } }, worn), false, '強化したもの')
   assert.equal(bulkPickable({ inv: { id: 3, plus: 0 } }, worn), true)
   assert.equal(bulkPickable({ inv: { id: 4 } }, worn), true, 'SQLを流す前の行（plus が無い）は+0')
+  // 【確定】2026-10-26 ユーザー指示「お気に入りされた武器は分解できないように」
+  assert.equal(bulkPickable({ inv: { id: 5, plus: 0, fav: true } }, worn), false, 'お気に入り')
+  assert.equal(bulkPickable({ inv: { id: 6, plus: 0, fav: false } }, worn), true)
 })
 
 test('【確定】強化値は+10まで。+1ごとに元の強さの0.1倍ずつ足す（足し算：+5で1.5倍・+10で2倍）', () => {

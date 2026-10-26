@@ -56,7 +56,8 @@ export const museumCountOf = (rows, items = MUSEUM_ITEMS) => {
 export const wornInvIdsOf = (profile) =>
   new Set(Object.values(profile?.equipped || {}).filter(v => v !== null && v !== undefined).map(String))
 
-// 寄贈できる持ち物：博物館の装備（初期装備でない）・着けていない・強化値が +0／+5／+9・その段階がまだ登録されていない。
+// 寄贈できる持ち物：博物館の装備（初期装備でない）・着けていない・お気に入り（★）でない・強化値が +0／+5／+9・その段階がまだ登録されていない。
+//   お気に入りは 2026-10-26 ユーザー選択「寄贈もできないようにする」（分解と同じく守る・サーバーの v2cap_museum_take も断る）
 // 同じ装備・同じ段階（＝同じ強化値）の持ち物が2つ以上あれば1つだけ出して、個数を添える。
 // 返り値 [{ inv, item, tier, copies }]（まとまり→レア度→一覧の並び→段階）
 export const donatablesOf = (profile, inventory, rows) => {
@@ -65,7 +66,7 @@ export const donatablesOf = (profile, inventory, rows) => {
   const best = new Map()
   for (const inv of inventory || []) {
     const item = ITEM_BY_ID[inv?.base_id]
-    if (!isMuseumItem(item) || worn.has(String(inv.id))) continue
+    if (!isMuseumItem(item) || worn.has(String(inv.id)) || inv.fav) continue
     const tier = tierOfPlus(plusOf(inv))
     if (tier === null) continue
     const key = museumKey(item.id, tier)

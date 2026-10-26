@@ -15,7 +15,7 @@ import {
   SCRAP_YIELD, CRAFT_RARITIES, craftCostOf, craftErrorOf,
 } from '../lib/smith.js'
 import { statLine, nameColor, PLUS_COLOR, gainText, areaOptionLabel, filterSelect, optionStyle, useGearRows } from './v2capGearView.js'
-import { PlusTag, GearFilterBar, StatChange } from './v2capGear.jsx'
+import { PlusTag, GearFilterBar, StatChange, FavStar } from './v2capGear.jsx'
 import V2capEnhanceFx from './V2capEnhanceFx.jsx'
 import V2capCraftFx from './V2capCraftFx.jsx'
 import { ticketOf, canUseTicket } from '../lib/v1carry.js'
@@ -28,7 +28,8 @@ import { pickLine, enterKindOf, enhanceKindOf, shortWhatOf, varsOf, isNight, nex
 //   ・強化 … Goldとその装備のエリアの残骸で+1（+10まで・+1ごとに強さ+10%・最低でも戦闘力+1）。失敗すると残骸とGoldはなくなり、強化値はそのまま。
 //            ノーマル（初期装備も）はGoldだけ（残骸なし・2026-10-12 ユーザー指示）
 //   ・分解 … 装備をその装備のエリアの残骸にする（ノーマル1・レア5・エピック10・レジェンダリー25）。
-//            まとめて選べる（レア度で・チェックで・表示中を全部。まとめて選ぶときは装備中と強化したものは選ばない）
+//            まとめて選べる（レア度で・チェックで・表示中を全部。まとめて選ぶときは装備中と強化したものは選ばない）。
+//            お気に入り（★）の装備は分解できない（2026-10-26 ユーザー指示「お気に入りされた武器は分解できないように」・サーバーの v2cap_dismantle も飛ばす）
 //   ・作成 … レア・エピック・レジェンダリーを、Goldとそのエリアの残骸で作る（残骸30／100／300・Gold 必要LV×50／100／200）。
 //            必ずできる・+0で持ち物に入る。武器は14種どれでも作れる（ユーザー決定）。作れるのは行ったことのあるエリアまで
 //   ・強化と分解は鍛冶屋だけ（装備画面は着ける・外すだけ・ユーザー決定）
@@ -36,11 +37,14 @@ import { pickLine, enterKindOf, enhanceKindOf, shortWhatOf, varsOf, isNight, nex
 //   右に親方を立たせる（スマホは上）。タップ・強化と作成の結果・分解・足りなくて強化できないときにセリフと表情が変わる（ユーザー選択）。
 //   強化と作成の結果のポップアップ・足りないときの強化の画面にも親方を出す。好感度は無し（ユーザー指示「鍛冶屋のおっちゃんは好感度システムいらないや」）
 // ============================================================
+// help＝決まりの説明。タブの下には出さず、❓ HELP にまとめる（2026-10-26 ユーザー指示「ここの説明はHELPにまとめて、強化分解作成すべてここの部分いらない」）
 const TABS = [
-  { key:'enhance',   label:'強化', desc:`Goldとその装備のエリアの残骸で強化値を+1（+${PLUS_MAX}まで・+1ごとに強さ+10%・最低でも戦闘力+1）。ノーマルの装備はGoldだけで強化できます。失敗すると残骸とGoldはなくなり、強化値はそのままです。着けている装備も強化できます。` },
-  { key:'dismantle', label:'分解', desc:`装備を、その装備のエリアの残骸にします（${ALL_RARITIES.map(r => `${rarityLabel(r)}${SCRAP_YIELD[r]}`).join('・')}個）。着けている装備は分解できません。ユニークはまとめての分解に入りません（1つずつなら分解できます）。` },
-  { key:'craft',     label:'作成', desc:'レア・エピック・レジェンダリーの装備を、Goldとそのエリアの残骸で作ります（必ずできます・+0で持ち物に入ります）。武器はどの職業のものでも作れます。' },
+  { key:'enhance',   label:'強化', help:`Goldとその装備のエリアの残骸で強化値を+1（+${PLUS_MAX}まで・+1ごとに強さ+10%・最低でも戦闘力+1）。ノーマルの装備はGoldだけで強化できます。失敗すると残骸とGoldはなくなり、強化値はそのままです。着けている装備も強化できます。` },
+  { key:'dismantle', label:'分解', help:`装備を、その装備のエリアの残骸にします（${ALL_RARITIES.map(r => `${rarityLabel(r)}${SCRAP_YIELD[r]}`).join('・')}個）。着けている装備とお気に入り（★）の装備は分解できません。ユニークはまとめての分解に入りません（1つずつなら分解できます）。` },
+  { key:'craft',     label:'作成', help:'レア・エピック・レジェンダリーの装備を、Goldとそのエリアの残骸で作ります（必ずできます・+0で持ち物に入ります）。武器はどの職業のものでも作れます。' },
 ]
+const FAV_HELP = '装備の★を押すとお気に入りになります（もう一度押すと外れます）。お気に入りの装備は分解も博物館への寄贈もできません。並べ替えの「お気に入り」で上に集まります。'
+const HELP_HEAD = { color:'#ffaa44', fontSize:'12px', marginBottom:'2px' }
 const rowBox = (border, bg = '#000818') => ({ background: bg, border:`1px solid ${border}`, padding:'6px 8px' })
 const SHORT = '#ff8844'
 
@@ -49,6 +53,7 @@ export default function V2capSmith({ prof, inventory, onProfile, onGo }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [help, setHelp] = useState(false)
   const wornIds = wornIdsOf(prof, inventory)
   const all = useMemo(() => (inventory || [])
     .map(inv => ({ inv, item: ITEM_BY_ID[inv.base_id] }))
@@ -65,6 +70,11 @@ export default function V2capSmith({ prof, inventory, onProfile, onGo }) {
     return { data }
   }
   const switchTab = (key) => { setTab(key); setError(''); setNotice('') }
+  // お気に入りの★（2026-10-26 ユーザー指示「装備にお気に入りできるようにして」）。覚えるのはサーバー（v2cap_gear_fav）
+  const toggleFav = async (inv) => {
+    const { error: e } = await call('v2cap_gear_fav', { p_inv: inv.id, p_fav: !inv.fav })
+    if (e) setError(e)
+  }
 
   // ===== 親方トルステン（lib/smithMaster.js）=====
   // 呼び方（兄ちゃん／嬢ちゃん／お前さん）を say が見られるように控える（say は作り直さない）
@@ -84,11 +94,23 @@ export default function V2capSmith({ prof, inventory, onProfile, onGo }) {
     streak.current = nextStreak(streak.current, Date.now())
     say(tapKindOf(streak.current.n, isNight()))
   }
-  const shared = { prof, all, wornIds, list, busy, call, setError, setNotice, say }
+  const shared = { prof, all, wornIds, list, busy, call, setError, setNotice, say, toggleFav }
 
   return (
     <div style={{ fontFamily:'monospace' }}>
       <style>{MASTER_CSS}</style>
+      {help && (
+        <V2Modal title="❓ HELP" color="#ffaa44" keepScroll onClose={() => setHelp(false)}>
+          {TABS.map((t, i) => (
+            <div key={t.key} style={{ marginTop: i ? '10px' : 0 }}>
+              <div style={HELP_HEAD}>{t.label}</div>
+              <div>{t.help}</div>
+            </div>
+          ))}
+          <div style={{ ...HELP_HEAD, marginTop:'10px' }}>お気に入り</div>
+          <div>{FAV_HELP}</div>
+        </V2Modal>
+      )}
       <div className="smm-cols">
         {/* 親方（広い画面は右・狭い画面は上） */}
         <div className="smm-side">
@@ -102,16 +124,16 @@ export default function V2capSmith({ prof, inventory, onProfile, onGo }) {
           </div>
 
           <div style={{ ...box, padding:'12px' }}>
-            <div style={{ display:'flex', gap:'4px', marginBottom:'6px', flexWrap:'wrap', alignItems:'center' }}>
+            <div style={{ display:'flex', gap:'4px', marginBottom:'8px', flexWrap:'wrap', alignItems:'center' }}>
               {TABS.map(t => (
                 <button key={t.key} onClick={() => switchTab(t.key)} disabled={busy}
                   style={{ ...btn(tab === t.key ? '#ffaa44' : '#62789a'), padding:'6px 14px', color: tab === t.key ? '#ffcc66' : '#93a9be' }}>
                   {t.label}
                 </button>
               ))}
-              {onGo && <button onClick={() => onGo('equip')} style={{ ...miniBtn('#88ccff'), marginLeft:'auto' }}>🛡 装備へ</button>}
+              <button type="button" onClick={() => setHelp(true)} style={{ ...miniBtn('#88aaff'), marginLeft:'auto' }}>❓ HELP</button>
+              {onGo && <button onClick={() => onGo('equip')} style={miniBtn('#88ccff')}>🛡 装備へ</button>}
             </div>
-            <div style={{ color: TEXT.sub, fontSize:'10px', marginBottom:'8px', lineHeight:1.7 }}>{TABS.find(t => t.key === tab).desc}</div>
             {error && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'6px' }}>⚠ {error}</div>}
             {notice && <div style={{ color:'#44ff88', fontSize:'11px', marginBottom:'6px' }}>{notice}</div>}
             {tab === 'enhance' && <EnhanceTab {...shared} />}
@@ -125,7 +147,7 @@ export default function V2capSmith({ prof, inventory, onProfile, onGo }) {
 }
 
 // ===== 強化 =====
-function EnhanceTab({ prof, all, wornIds, list, busy, call, say }) {
+function EnhanceTab({ prof, all, wornIds, list, busy, call, say, toggleFav }) {
   const [smithId, setSmithId] = useState(null)   // 強化の画面を開いている持ち物のID
   const [msg, setMsg] = useState(null)           // 直前の強化の結果 { ok, text }
   const [shortLine, setShortLine] = useState(null) // 足りなくて強化できない装備を開いたときの親方のひとこと（強化の画面にも出す）
@@ -222,7 +244,7 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call, say }) {
           const goldShort = cost && gold < cost.gold
           return (
             <div key={inv.id} style={rowBox(isWorn ? '#0055aa' : '#002244')}>
-              <ItemHead inv={inv} item={item} lv={prof.lv} isWorn={isWorn} />
+              <ItemHead inv={inv} item={item} lv={prof.lv} isWorn={isWorn} star={<FavStar inv={inv} busy={busy} onToggle={toggleFav} />} />
               <ItemStats inv={inv} item={item} lv={prof.lv} />
               <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center', fontSize:'10px' }}>
                 {cost ? (
@@ -246,10 +268,10 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call, say }) {
 }
 
 // ===== 分解 =====
-function DismantleTab({ all, wornIds, list, busy, call, setError, setNotice, say }) {
+function DismantleTab({ all, wornIds, list, busy, call, setError, setNotice, say, toggleFav }) {
   const [picked, setPicked] = useState(() => new Set())   // 分解に選んだ持ち物のID（文字列）
   const [confirm, setConfirm] = useState(null)             // 分解の確認 [{ inv, item }]
-  const pickedRows = all.filter(r => picked.has(String(r.inv.id)) && !wornIds.has(String(r.inv.id)))
+  const pickedRows = all.filter(r => picked.has(String(r.inv.id)) && !wornIds.has(String(r.inv.id)) && !r.inv.fav)
   const toggle = (id) => setPicked(prev => {
     const next = new Set(prev)
     if (next.has(id)) next.delete(id); else next.add(id)
@@ -291,25 +313,28 @@ function DismantleTab({ all, wornIds, list, busy, call, setError, setNotice, say
             選んだ{pickedRows.length}個を分解
           </button>
         </div>
-        <div style={{ color: TEXT.sub, marginTop:'4px' }}>まとめて選ぶときは、装備中と強化した装備は選びません（チェックで1つずつなら選べます）</div>
+        <div style={{ color: TEXT.sub, marginTop:'4px' }}>まとめて選ぶときは、装備中・お気に入り（★）・強化した装備は選びません（強化した装備はチェックで1つずつなら選べます）</div>
       </div>
       <div style={{ display:'grid', gap:'4px', maxHeight:'560px', overflowY:'auto' }}>
         {list.rows.length === 0 && <Empty all={all} />}
         {list.rows.map(({ inv, item }) => {
           const isWorn = wornIds.has(String(inv.id))
-          const isPicked = !isWorn && picked.has(String(inv.id))
+          const isFav = !!inv.fav   // お気に入りは分解できない（2026-10-26 ユーザー指示）
+          const isPicked = !isWorn && !isFav && picked.has(String(inv.id))
           return (
             <div key={inv.id} style={rowBox(isPicked ? '#aa5533' : isWorn ? '#0055aa' : '#002244', isPicked ? '#1a0c08' : '#000818')}>
-              <ItemHead inv={inv} item={item} isWorn={isWorn}
-                check={<input type="checkbox" checked={isPicked} disabled={isWorn || busy} onChange={() => toggle(String(inv.id))}
-                  title={isWorn ? '着けている装備は分解できません' : '分解に選ぶ'} style={{ accentColor:'#ff8844', margin:0, flexShrink:0 }} />} />
+              <ItemHead inv={inv} item={item} isWorn={isWorn} star={<FavStar inv={inv} busy={busy} onToggle={toggleFav} />}
+                check={<input type="checkbox" checked={isPicked} disabled={isWorn || isFav || busy} onChange={() => toggle(String(inv.id))}
+                  title={isWorn ? '着けている装備は分解できません' : isFav ? 'お気に入りの装備は分解できません' : '分解に選ぶ'} style={{ accentColor:'#ff8844', margin:0, flexShrink:0 }} />} />
               <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center', fontSize:'10px' }}>
                 <span style={{ color: TEXT.sub, flex:1, minWidth:0 }}>
                   分解すると <span style={{ color:'#cfe2ff' }}>{scrapNameOf(scrapAreaOf(item))} +{SCRAP_YIELD[item.rarity]}</span>
                 </span>
                 {isWorn
                   ? <span style={{ color: TEXT.empty }}>装備中は分解できない</span>
-                  : <button onClick={() => setConfirm([{ inv, item }])} disabled={busy} style={miniBtn('#aa5566')}>分解</button>}
+                  : isFav
+                    ? <span style={{ color: TEXT.empty }}>お気に入りは分解できない</span>
+                    : <button onClick={() => setConfirm([{ inv, item }])} disabled={busy} style={miniBtn('#aa5566')}>分解</button>}
               </div>
             </div>
           )
@@ -360,7 +385,7 @@ function CraftTab({ prof, all, busy, call, setError, setNotice, say }) {
     setNotice(`🔨 ${item.name}（LV${needLvOf(item, data.ilv)}）を作りました`)
   }
   const craft = () => startCraft(confirm)
-  // 演出の最後の「続けて作る」（同じ装備をもう1つ。作れる数も出す）
+  // 演出の最後の「続けて作成」（同じ装備をもう1つ。作れる数も出す・2026-10-26 ユーザー指示で「続けて作る」から）
   const again = fxJob ? craftErrorOf(fxJob.item, prof) : null
   const againCost = fxJob ? craftCostOf(fxJob.item) : null
   const againTimes = againCost ? Math.min(Math.floor(scrapOf(prof.materials, againCost.area) / againCost.scrap), Math.floor((Number(prof.gold) || 0) / againCost.gold)) : 0
@@ -369,8 +394,8 @@ function CraftTab({ prof, all, busy, call, setError, setNotice, say }) {
       {confirm && <CraftModal item={confirm} prof={prof} busy={busy} onConfirm={craft} onClose={() => setConfirm(null)} />}
       {fxJob && (
         <V2capCraftFx job={fxJob} say={fxJob.say && <MasterSays face={fxJob.say.face} line={fxJob.say.text} />}
-          nextLabel={!again && againTimes > 0 ? `続けて作る（あと${againTimes}個）` : null}
-          nextReason={again ? `続けて作るには：${again}` : ''}
+          nextLabel={!again && againTimes > 0 ? `続けて作成（あと${againTimes}個）` : null}
+          nextReason={again ? `続けて作成するには：${again}` : ''}
           onAgain={() => startCraft(fxJob.item)} onClose={() => setFxJob(null)} />
       )}
       {/* 【確定】2026-10-14 ユーザー指示「作成もプルダウンの横並びで」＝持ち物の絞り込み（GearFilterBar）と同じ 部位・レア度・エリア の順。
@@ -430,13 +455,14 @@ function CraftTab({ prof, all, busy, call, setError, setNotice, say }) {
 }
 
 // ===== 部品 =====
-// 名前の行（レア度・名前・強化値・種類・防具の効果・装備中・要求レベル）
+// 名前の行（分解のチェック・お気に入りの★・レア度・名前・強化値・種類・防具の効果・装備中・要求レベル）
 // ★一覧の右は「要求レベル〇LV」（2026-10-14 ユーザーが装備画面にそろえるを選んだ）。確認の画面の「（LV〇）」はそのまま
-function ItemHead({ inv, item, lv, isWorn, check }) {
+function ItemHead({ inv, item, lv, isWorn, check, star }) {
   const effect = item.line ? ARMOR_EFFECT[item.line]?.label : null
   return (
     <div style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12px' }}>
       {check}
+      {star}
       <span style={{ color: nameColor(item), flex:1, minWidth:0 }}>
         {item.name}<PlusTag inv={inv} />
         <span style={{ color: TEXT.sub, fontSize:'10px', marginLeft:'5px' }}>{kindLabel(item)}</span>
