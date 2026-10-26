@@ -39,12 +39,18 @@ import { ascEffectsOf } from '../lib/ascension.js'
 const HP_MULTS = [1, 10, 50]
 const sel = { background:'#000818', color: TEXT.body, border:'1px solid #0044aa', fontFamily:'monospace', fontSize:'12px', padding:'6px' }
 const chip = (color, bg = '#000818') => ({ fontSize:'10px', padding:'1px 5px', border:`1px solid ${color}`, color, background: bg })
-// クールダウンの残り（ratio＝1で使った直後）。上からグレーをかけ、時間がたつと下から色が戻る
+// クールダウンの残り（ratio＝1で使った直後）。ボタン全体をグレーにし、時間がたつと下から青い色が満ちていく（満ちきったら使える）
 //   【確定】2026-10-26 ユーザー指示「スキルがクールタイムの時、グレーアウトして時間の経過ごとに下から色が戻っていく仕様にして。マクロも一緒」
 //   ＝技のボタン・防御のボタン・動いているマクロの手・割り込みの手。置く側は position:relative と overflow:hidden にする
+//   ⚠前は上からかぶせる膜だけで、膜の色がボタンの地（濃い紺）とほぼ同じだったため、縮んでも見た目が変わらなかった
+//   （ユーザー「下から戻らずCD解消されるまでグレーアウトのまま」）＝グレーの膜（全体）＋下から満ちる色、の2枚にした
 const CdShade = ({ ratio }) => (ratio > 0 ? (
-  <span aria-hidden style={{ position:'absolute', left:0, right:0, top:0, height:`${(ratio * 100).toFixed(1)}%`, pointerEvents:'none',
-    background:'rgba(8, 12, 22, 0.62)', backdropFilter:'grayscale(1)', WebkitBackdropFilter:'grayscale(1)' }} />
+  <>
+    <span aria-hidden style={{ position:'absolute', inset:0, pointerEvents:'none',
+      background:'rgba(70, 76, 88, 0.55)', backdropFilter:'grayscale(1)', WebkitBackdropFilter:'grayscale(1)' }} />
+    <span aria-hidden style={{ position:'absolute', left:0, right:0, bottom:0, height:`${((1 - ratio) * 100).toFixed(1)}%`, pointerEvents:'none',
+      background:'rgba(60, 150, 255, 0.38)', borderTop:'1px solid rgba(140, 210, 255, 0.9)' }} />
+  </>
 ) : null)
 
 export default function V2capAtb({ prof, inventory, onProfile }) {
