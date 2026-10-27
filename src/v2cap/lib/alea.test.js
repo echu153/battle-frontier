@@ -1,4 +1,4 @@
-// v2cap：賭博場の受付嬢アレアの決まりを固定するテスト（node --test）
+// v2cap：賭博場のアレア（カクテルウェイトレス）の決まりを固定するテスト（node --test）
 // 【確定】2026-10-27 ユーザー指示（人物・絵・置き場所・動き・好感度・セリフは alea.js の冒頭）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -7,6 +7,7 @@ import {
   ALEA_OUTFITS, ALEA_OUTFIT, ALEA_ART_DIR, aleaSrc, ALEA_FACES, ALEA_FACE_KEYS, ALEA_WELCOME, ALEA_FACE_SIZE, ALEA_WELCOME_H, ALEA_FOCUS,
   ALEA_STAGES, CASUAL_STAGE, NAME_STAGE, stageOf, varsOf, ALEA_LINES, ALEA_STAGE_EVENTS, stageEventOf, linesOf, pickLine, ALEA_RARE_WEIGHT,
   enterKindOf, welcomeLineOf, winTalkOf, atTalkOf, LOSE_GAP_MS, HILO_LOSE_STREAK, ROULETTE_MISS_RUN, loseDue, nextMissRun, dayOf,
+  ALEA_THUMB, ALEA_SIDE_MIN_W,
 } from './alea.js'
 import { CLERK_RARE_WEIGHT } from './clerk.js'
 import { WIN_TIERS } from './casino.js'
@@ -60,9 +61,9 @@ test('【2026-10-27 直した】小さく出すとき（スマホの上・演出
   for (let y = Math.round(0.10 * img.H); y < Math.round(0.30 * img.H); y++) {
     for (let x = 0; x < img.W; x++) if (img.data[(y * img.W + x) * 4 + 3] > 128) { if (x < l) l = x; if (x > r) r = x }
   }
-  // スマホの上の枠（112×150）に見えるところ（元の絵の px）
-  const k = 150 / (img.H * ALEA_FOCUS.top)
-  const half = 112 / k / 2, mid = ALEA_FOCUS.x * img.W
+  // 上の帯の枠（ALEA_THUMB）に見えるところ（元の絵の px）
+  const k = ALEA_THUMB.h / (img.H * ALEA_FOCUS.top)
+  const half = ALEA_THUMB.w / k / 2, mid = ALEA_FOCUS.x * img.W
   const cutL = Math.max(0, (mid - half) - l), cutR = Math.max(0, r - (mid + half))
   assert.ok(Math.abs((l + r) / 2 / img.W - ALEA_FOCUS.x) < 0.02, `頭の高さの髪のまん中（${((l + r) / 2 / img.W).toFixed(3)}）に合わせる`)
   assert.ok(cutL <= 20 && cutR <= 20, `頭の高さで切れる髪は左右とも少し（左${Math.round(cutL)}px・右${Math.round(cutR)}px）`)
@@ -244,8 +245,40 @@ test('画面：賭博場の右にアレア（狭い画面は上）・タップ�
   const css = read('components/V2capAlea.jsx')
   assert.ok(css.includes('.al-btn:not(:disabled):hover { filter: brightness(1.05); }'), '押すときの光り方は看板娘・親方と同じく控えめ')
   assert.ok(css.includes('.al-btn::after { content: none; }'), 'ボタンの光沢（dev-ui.css の button::after）を絵に重ねない')
-  assert.ok(css.includes('const SAY = cropOf(92, 124)') && css.includes('const THUMB = cropOf(112, 150)'), '小さく出すときは頭から胸まで（ALEA_FOCUS）')
-  assert.ok(css.includes('@media (max-width: 720px)'), '狭い画面はアレアが上')
+  assert.ok(css.includes('const SAY = cropOf(92, 124)') && css.includes('const THUMB = cropOf(ALEA_THUMB.w, ALEA_THUMB.h)'), '小さく出すときは頭から胸まで（ALEA_FOCUS）')
+  assert.ok(css.includes('@media (max-width: ${ALEA_SIDE_MIN_W - 1}px)'), '幅が足りないときはアレアが上の帯')
+})
+
+test('【2026-10-27 直した】スクロールしないとゲームができなくなった（ユーザー指示「画像の部分調整したい」）：右に立たせるのは広い画面だけ・上の帯は小さく・メダルの欄は1行・好感度の開発用ボタンなし', () => {
+  // 右の列（300px）を置くとゲームの幅が狭くなり、ルーレットはホイールと盤が縦に積まれて SPIN が画面の下に落ちていた（ホイール300＋盤360＋すき間12＋枠）
+  assert.equal(ALEA_SIDE_MIN_W, 1081)
+  assert.ok(ALEA_SIDE_MIN_W - 16 * 2 - 300 - 8 >= 300 + 12 + 360 + 22, '右に立たせても、ルーレットのホイールと盤が横に並ぶ幅が残る')
+  assert.deepEqual(ALEA_THUMB, { w: 84, h: 112 }, '上の帯の絵（前は 112×150）')
+  const css = read('components/V2capAlea.jsx')
+  assert.ok(css.includes('.al-dev { display: none; }'), '上の帯のときは開発用のボタンも出さない')
+  const casino = read('components/V2capCasino.jsx')
+  // 好感度の開発用のボタンは外した（ユーザー「好感度は確認したからいらない」）。「いらっしゃいを見る」は広い画面だけに残す
+  for (const s of ['setDevAff', '>段階の場面<', '>本物に戻す<', '［開発］好感度']) assert.ok(!casino.includes(s), s)
+  assert.ok(casino.includes('<div className="al-dev"'))
+  // メダルの欄は1行で細く（ユーザー「メダルももっとスリムにして」）
+  assert.ok(casino.includes("padding:'5px 10px'") && casino.includes("fontSize:'16px'") && !casino.includes("fontSize:'22px'"))
+})
+
+test('【2026-10-27 直した】効果音の切り替えは題の行の右端（ユーザー指示「音ありなし右上に設置するようにして」）', () => {
+  const casino = read('components/V2capCasino.jsx')
+  assert.ok(casino.includes('export function CasinoSoundToggle() {'))
+  assert.equal((casino.match(/aria-label="効果音"/g) || []).length, 1, '賭博場の画面の中には置かない')
+  assert.ok(read('pages/V2capHome.jsx').includes("{screen === 'casino' && <span style={{ marginLeft:'auto' }}><CasinoSoundToggle /></span>}"))
+})
+
+test('【確定】2026-10-27 役はカクテルウェイトレス（ユーザー「受付っていうか、カジノでそこらへん歩いてる店員」＋選んだ呼び方）・セリフに「受付」は出てこない', () => {
+  for (const l of allTexts()) assert.ok(!/受付/.test(l.text), `${l.kind}：${l.text}`)
+  // 役に合わせて直した3か所（ユーザー選択「直す」）
+  const texts = allTexts().map(l => l.text)
+  assert.ok(texts.includes('勝っているときほど、引き際が大事ですよ。…なんて、店員が言うことじゃないですね'))
+  assert.ok(texts.includes('ここの仕事？ 飲みものを配って歩くだけ。…わりと気に入ってる'))
+  assert.ok(texts.includes('アレアって呼ばれるの、{name}だけなんだよ。…ほかの人は、店員さんって呼ぶから'))
+  assert.ok(read('components/V2capAlea.jsx').includes('aria-label="店員さんに話しかける"'))
 })
 
 test('その日の「いらっしゃい」は賭博場の画面より先（ホームの上）に出し、閉じたら賭博場の画面へ（看板娘と同じ）', () => {

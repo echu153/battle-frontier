@@ -21,7 +21,7 @@ import V2capDaily from '../components/V2capDaily.jsx'
 import V2capProfile from '../components/V2capProfile.jsx'
 import V2capTree from '../components/V2capTree.jsx'
 import V2capDex from '../components/V2capDex.jsx'
-import V2capCasino, { casinoWelcomeDue, markCasinoWelcome } from '../components/V2capCasino.jsx'
+import V2capCasino, { casinoWelcomeDue, markCasinoWelcome, CasinoSoundToggle } from '../components/V2capCasino.jsx'
 import { V2capAleaWelcome, preloadAleaWelcome } from '../components/V2capAlea.jsx'
 import { welcomeLineOf } from '../lib/alea.js'
 import V2capAscension from '../components/V2capAscension.jsx'
@@ -137,7 +137,7 @@ export default function V2capHome() {
   const [inventory, setInventory] = useState([])
   const [screen, setScreen] = useState('home')
   const [burgerWelcome, setBurgerWelcome] = useState(null)   // 出している「いらっしゃいませー！」のセリフ（null＝出していない）
-  const [casinoWelcome, setCasinoWelcome] = useState(null)   // 出している賭博場の受付嬢の「いらっしゃい」のセリフ（null＝出していない）
+  const [casinoWelcome, setCasinoWelcome] = useState(null)   // 出している賭博場のアレアの「いらっしゃい」のセリフ（null＝出していない）
   const [inBattle, setInBattle] = useState(false)
   const [name, setName] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)   // 宝樹を何回でも祈れる（2026-10-13・開発中）
@@ -208,7 +208,7 @@ export default function V2capHome() {
   // メニューから画面を選ぶ。ニャーガーキングは、その日はじめてなら先に「いらっしゃいませー！」をホームの上に出し、閉じたら店の画面へ
   // （【確定】2026-10-26 ユーザー指示「先に通常の画面開いてから演出入るから少し違和感、しっかり演出入ってからページ遷移するようにしてほしい」。
   //   出すかの決まりは V2capBurger.jsx の burgerWelcomeDue）
-  // 賭博場も同じ（2026-10-27・受付嬢アレアの「いらっしゃい」・出すかの決まりは V2capCasino.jsx の casinoWelcomeDue）
+  // 賭博場も同じ（2026-10-27・アレアの「いらっしゃい」・出すかの決まりは V2capCasino.jsx の casinoWelcomeDue）
   const pickScreen = (key) => {
     if (key === 'burger' && burgerWelcomeDue(prof)) { markBurgerWelcome(); setBurgerWelcome(pickLine('welcome').text); return }
     if (key === 'casino' && casinoWelcomeDue(prof)) { markCasinoWelcome(); setCasinoWelcome(welcomeLineOf(prof)); return }
@@ -498,6 +498,8 @@ export default function V2capHome() {
             <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px' }}>
               <button onClick={goHome} style={miniBtn('#88aaff')}>← ホームへ</button>
               <span style={{ color:'#88ccff', fontSize:'13px' }}>{SCREEN_TITLE[screen]}</span>
+              {/* 賭博場の効果音の切り替えは題の行の右端（2026-10-27 ユーザー指示「音ありなし右上に設置するようにして」） */}
+              {screen === 'casino' && <span style={{ marginLeft:'auto' }}><CasinoSoundToggle /></span>}
             </div>
             {screen === 'profile' && <V2capProfile prof={prof} inventory={inventory} onProfile={refresh} />}
             {screen === 'equip' && <V2capEquip prof={prof} inventory={inventory} onProfile={refresh} onGo={setScreen} />}

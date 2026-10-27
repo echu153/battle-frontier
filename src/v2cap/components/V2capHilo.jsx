@@ -17,7 +17,7 @@ import { CountUp, PlayingCard } from './casinoParts.jsx'
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
-// onTalk … 受付嬢アレアに結果を伝える（V2capCasino・lib/alea.js）。返すのは当たりの演出の上に出すアレア
+// onTalk … アレアに結果を伝える（V2capCasino・lib/alea.js）。返すのは当たりの演出の上に出すアレア
 export default function V2capHilo({ init, medals, onMoney, onTalk }) {
   const [betSel, setBetSel] = useStored('capHiloBet', 50)
   const [g, setG] = useState(() => (init?.active

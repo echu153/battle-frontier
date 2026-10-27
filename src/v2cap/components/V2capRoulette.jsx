@@ -78,7 +78,7 @@ function Wheel({ wheelDeg, ballDeg, ballR, result, lucky, size }) {
   )
 }
 
-// onTalk … 受付嬢アレアに結果を伝える（V2capCasino・lib/alea.js）。返すのは当たりの演出の上に出すアレア
+// onTalk … アレアに結果を伝える（V2capCasino・lib/alea.js）。返すのは当たりの演出の上に出すアレア
 export default function V2capRoulette({ init, medals, onMoney, onTalk }) {
   const narrow = useNarrow()
   const missRun = useRef(0)   // 続けて外れた回数（ROULETTE_MISS_RUN 回でアレアがなぐさめる）

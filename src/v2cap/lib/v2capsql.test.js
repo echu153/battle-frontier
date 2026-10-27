@@ -1158,7 +1158,7 @@ test('【確定】2026-10-26 ATBのマクロ（§19）：列 atb_macros・職業
   assert.ok(SQL.includes('grant execute on function public.v2cap_set_atb_macros(jsonb) to authenticated;'))
 })
 
-test('【確定】2026-10-27 賭博場の受付嬢アレア（§20）：その日の「いらっしゃい」の日付・好感度（1日1回+1・下がらない）・見せた段階の場面', () => {
+test('【確定】2026-10-27 賭博場のアレア（§20）：その日の「いらっしゃい」の日付・好感度（1日1回+1・下がらない）・見せた段階の場面', () => {
   // ユーザー指示「賭博場の画面に、看板娘や親方と同じ形で受付嬢のイラストを入れたい」＋選んだこと「全身のあいさつを出す」「好感度をいま入れる」。形は看板娘の §16-2・§16-3 と同じ
   for (const c of ['casino_welcome_day date', 'alea_affinity   int not null default 0', 'alea_talk_day   date', 'alea_stage_seen int not null default 0']) {
     assert.ok(SQL.includes(`alter table public.v2cap_profiles add column if not exists ${c};`), c)

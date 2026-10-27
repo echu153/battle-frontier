@@ -5,10 +5,14 @@
 //   交換所はあと設置するからまずは土台を」。決めたことは src/v2cap/lib/casino.js の頭に書いた
 // ★抽選と払い出しはサーバー（SQL §11）。どのRPCも残高（medals）と当日の収支（day_net）を返すので、
 //   遊ぶたびにプロフィールを読み直さない（前作は1回ごとに4〜5回読み込んでいて重かった）
-// 【確定】2026-10-27 受付嬢アレア（ユーザー指示「賭博場の画面に、看板娘や親方と同じ形で受付嬢のイラストを入れたい」・lib/alea.js）：
-//   右にアレアを立たせる（スマホは上）。タップ・大当たり・負けたとき（毎回は言わない）・両替でセリフと表情が変わる（ユーザー選択）。
+// 【確定】2026-10-27 カクテルウェイトレスのアレア（ユーザー指示「賭博場の画面に、看板娘や親方と同じ形で受付嬢のイラストを入れたい」
+//   →「受付っていうか、カジノでそこらへん歩いてる店員」・lib/alea.js）：
+//   右にアレアを立たせる（幅が足りないときは上の細い帯）。タップ・大当たり・負けたとき（毎回は言わない）・両替でセリフと表情が変わる（ユーザー選択）。
 //   大当たりの演出（BIG WIN など）の上にもアレアを出す。好感度は看板娘と同じ形（画面には出さない・サーバーの v2cap_alea_talk）。
 //   その日はじめて賭博場に入るときは、全身の「いらっしゃい」をホームの上で先に出す（下の casinoWelcomeDue・閉じたら賭博場の画面へ）
+// 【2026-10-27 直した】ユーザー指示「スクロールしないとルーレットとかできなくなったから画像の部分調整したい・好感度は確認したからいらない・
+//   メダルももっとスリムにして・音ありなし右上に（題の行の右端）」：好感度の開発用ボタンを外し、メダルの欄を1行に、
+//   音の切り替えは題の行の右端（CasinoSoundToggle を V2capHome が置く）へ移した
 // ============================================================
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
@@ -16,7 +20,7 @@ import { useStored } from '../core/prefs.js'
 import { GOLD_PER_MEDAL, maxExchangeOf } from '../lib/casino.js'
 import {
   pickLine, enterKindOf, tapKindOf, nextStreak, isNight, welcomeDueLocal, dayOf, makeDailyAsker,
-  stageOf, stageLabelOf, varsOf, stageEventOf, fillLine, loseDue, welcomeLineOf,
+  stageOf, varsOf, stageEventOf, fillLine, loseDue, welcomeLineOf,
 } from '../lib/alea.js'
 import { setSoundOn, sfx, fx } from './casinoFx.js'
 import { CASINO, panel, pill, bigBtn, fmt, signed } from './casinoStyle.js'
@@ -53,16 +57,24 @@ export const markCasinoWelcome = () => {
   // ★supabase の呼び出しは then を付けないと送られない（返事は待たない）
   supabase.rpc('v2cap_casino_welcome').then(() => {})
 }
-// 開発用のボタンで順に見せるひとこと（顔なじみからのあいさつ・ゲームの結果と両替）
-const DEV_GREETS = ['enterDaily', 'enterLong', 'enterAgain']
-const DEV_TALKS = ['atStart', 'bigWin', 'hugeWin', 'lose', 'exchange', 'short']
-const DEV = '#ff88cc'
-const devBtn = { ...pill(DEV, false), padding:'3px 8px', fontSize:'10px' }
+const devBtn = { ...pill('#ff88cc', false), padding:'3px 8px', fontSize:'10px' }
 
-// dev … 開発用（管理者だけ）。「いらっしゃい」を何回でも見られるボタン・好感度を仮に置くボタン（看板娘と同じ）
+// 効果音の切り替え（端末で覚える）。題の行の右端に置く（V2capHome・2026-10-27 ユーザー指示「音ありなし右上に設置するようにして」）。
+// 賭博場の画面と一緒に出るので、出たときに覚えている設定を効果音に入れる
+export function CasinoSoundToggle() {
+  const [sound, setSound] = useStored('capCasinoSound', true)
+  useEffect(() => { setSoundOn(sound) }, [sound])
+  return (
+    <button onClick={() => setSound(v => !v)} style={pill(sound ? CASINO.cyan : CASINO.dim, false)} aria-label="効果音">
+      {sound ? '🔊 音あり' : '🔇 音なし'}
+    </button>
+  )
+}
+
+// dev … 開発用（管理者だけ）。「いらっしゃい」を何回でも見られるボタン（右に立たせる広い画面だけ）。
+//   好感度を仮に置くボタンは外した（2026-10-27 ユーザー「好感度は確認したからいらない」）
 export default function V2capCasino({ prof, onProfile, dev = false }) {
   const [tab, setTab] = useStored('capCasinoTab', 'slot')
-  const [sound, setSound] = useStored('capCasinoSound', true)
   const [state, setState] = useState(null)       // v2cap_casino_state の返事（開いたときだけ）
   const [money, setMoney] = useState({ medals: Number(prof?.medals) || 0, gold: Number(prof?.gold) || 0, day_net: 0 })
   const [error, setError] = useState('')
@@ -71,14 +83,11 @@ export default function V2capCasino({ prof, onProfile, dev = false }) {
   const [exMsg, setExMsg] = useState('')
   const [welcome, setWelcome] = useState(null)   // 開発用に出している「いらっしゃい」のセリフ（null＝出していない）
 
-  useEffect(() => { setSoundOn(sound) }, [sound])
-
-  // ===== 受付嬢アレア（lib/alea.js）=====
-  // 好感度（画面には出さない）：aff＝サーバーの好感度（話しかけた日の数）・seen＝見せた段階の場面・devAff＝開発用に仮に置いた好感度（null＝本物）
+  // ===== アレア（lib/alea.js）=====
+  // 好感度（画面には出さない）：aff＝サーバーの好感度（話しかけた日の数）・seen＝見せた段階の場面
   const [aff, setAff] = useState(() => Number(prof?.alea_affinity) || 0)
   const [seen, setSeen] = useState(() => Number(prof?.alea_stage_seen) || 0)
-  const [devAff, setDevAff] = useState(null)
-  const stage = stageOf(devAff ?? aff)
+  const stage = stageOf(aff)
   // say がいまの段階と呼び方を見られるように控える（say は作り直さない）
   const ctx = useRef({ stage, vars: varsOf(prof) })
   ctx.current = { stage, vars: varsOf(prof) }
@@ -108,8 +117,8 @@ export default function V2capCasino({ prof, onProfile, dev = false }) {
     streak.current = nextStreak(streak.current, Date.now())
     say(tapKindOf(streak.current.n, isNight()))   // 待たせないように、まずすぐ答える
     // その日はじめて話しかけたら、サーバーが好感度を+1（1日1回）。段階が上がっていれば、返事が来たところで
-    // その段階の場面のセリフに切り替える（1回だけ）。開発用に好感度を仮に置いているあいだは、サーバーには聞かない（本物を増やさない）
-    if (talked.current || devAff !== null) return
+    // その段階の場面のセリフに切り替える（1回だけ）
+    if (talked.current) return
     talked.current = true
     talkAsker.get().then(({ data, error: e }) => {
       if (e || !data?.ok) return
@@ -137,15 +146,6 @@ export default function V2capCasino({ prof, onProfile, dev = false }) {
     const line = say(kind)
     return <AleaSays face={line.face} line={line.text} />
   }, [say])
-  // 開発用：好感度を仮に置く・その段階の場面とあいさつ・ゲームの結果のセリフを見る
-  const devStep = useRef({ greet: 0, talk: 0 })
-  const devStageEvent = () => {
-    const ev = stageEventOf(stage, 0)
-    if (ev && ev.stage === stage) sayEvent(ev)
-    else setAlea(c => ({ face: 'normal', text: `（${stageLabelOf(stage)}の場面はまだありません）`, tick: c.tick + 1 }))
-  }
-  const devGreeting = () => say(stage >= 1 ? DEV_GREETS[devStep.current.greet++ % DEV_GREETS.length] : 'enter')
-  const devTalk = () => say(DEV_TALKS[devStep.current.talk++ % DEV_TALKS.length])
 
   // どのRPCの返事からでも残高を受け取る
   const onMoney = useCallback((d) => {
@@ -203,51 +203,33 @@ export default function V2capCasino({ prof, onProfile, dev = false }) {
       <style>{ALEA_CSS}</style>
       {welcome && <V2capAleaWelcome line={welcome} onClose={() => setWelcome(null)} />}
       <div className="al-cols">
-        {/* 受付嬢アレア（広い画面は右・狭い画面は上） */}
+        {/* アレア（広い画面は右・幅が足りないときは上の細い帯） */}
         <div className="al-side">
           <V2capAlea face={alea.face} line={alea.text} tick={alea.tick} onTap={tapAlea} />
           {dev && (
-            <div style={{ textAlign:'center', marginTop:'8px', fontFamily:'monospace' }}>
-              <button type="button" onClick={() => setWelcome(welcomeLineOf({ alea_affinity: devAff ?? aff }))} style={devBtn}>🧪 いらっしゃいを見る［開発］</button>
-              {/* 好感度（ふつうは画面に出さない）。仮に置いた値はサーバーに書かない＝セリフを確かめる用 */}
-              <div style={{ color: DEV, fontSize:'10px', marginTop:'6px' }}>
-                ［開発］好感度 {devAff ?? aff}（{stageLabelOf(stage)}）{devAff !== null && <span style={{ color: CASINO.label }}> 仮・本物は{aff}</span>}
-              </div>
-              <div style={{ display:'flex', gap:'4px', justifyContent:'center', flexWrap:'wrap', marginTop:'4px' }}>
-                {[-10, -1, 1, 10].map(d => (
-                  <button key={d} type="button" onClick={() => setDevAff(Math.max(0, (devAff ?? aff) + d))} style={devBtn}>{d > 0 ? `+${d}` : d}</button>
-                ))}
-                <button type="button" onClick={devStageEvent} style={devBtn}>段階の場面</button>
-                <button type="button" onClick={devGreeting} style={devBtn}>あいさつ</button>
-                <button type="button" onClick={devTalk} style={devBtn}>結果と両替</button>
-                {devAff !== null && <button type="button" onClick={() => setDevAff(null)} style={devBtn}>本物に戻す</button>}
-              </div>
+            <div className="al-dev" style={{ textAlign:'center', marginTop:'8px', fontFamily:'monospace' }}>
+              <button type="button" onClick={() => setWelcome(welcomeLineOf({ alea_affinity: aff }))} style={devBtn}>🧪 いらっしゃいを見る［開発］</button>
             </div>
           )}
         </div>
 
         <div className="al-main">
-          {/* ===== 上：残高・当日の収支・音 ===== */}
-          <div style={{ ...panel(), display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px', flexWrap:'wrap', marginBottom:'8px' }}>
-            <div style={{ display:'flex', alignItems:'baseline', gap:'14px', flexWrap:'wrap' }}>
-              <div>
-                <span style={{ color:CASINO.label, fontSize:'11px' }}>メダル </span>
-                <span style={{ color:CASINO.gold, fontSize:'22px', fontWeight:'bold', textShadow:'0 0 8px #ffcc0066' }}>🪙 <CountUp value={money.medals} ms={700} /></span>
-              </div>
-              <div style={{ fontSize:'11px', color:CASINO.label }}>
-                今日の収支 <span style={{ color: netColor, fontWeight:'bold' }}>{signed(money.day_net)}</span>
-              </div>
-              <div style={{ fontSize:'11px', color:CASINO.label }}>Gold <span style={{ color:'#ffcc00' }}>{fmt(money.gold)}</span></div>
-            </div>
-            <button onClick={() => setSound(v => !v)} style={pill(sound ? CASINO.cyan : CASINO.dim, false)} aria-label="効果音">
-              {sound ? '🔊 音あり' : '🔇 音なし'}
-            </button>
+          {/* ===== 上：残高・当日の収支（1行・2026-10-27 ユーザー指示「メダルももっとスリムにして」。音の切り替えは題の行の右端） ===== */}
+          <div style={{ ...panel(), padding:'5px 10px', display:'flex', alignItems:'baseline', gap:'2px 14px', flexWrap:'wrap', marginBottom:'6px' }}>
+            <span style={{ color:CASINO.label, fontSize:'11px' }}>
+              メダル <span style={{ color:CASINO.gold, fontSize:'16px', fontWeight:'bold', textShadow:'0 0 6px #ffcc0055' }}>🪙 <CountUp value={money.medals} ms={700} /></span>
+            </span>
+            <span style={{ fontSize:'11px', color:CASINO.label }}>
+              今日の収支 <span style={{ color: netColor, fontWeight:'bold' }}>{signed(money.day_net)}</span>
+            </span>
+            <span style={{ fontSize:'11px', color:CASINO.label }}>Gold <span style={{ color:'#ffcc00' }}>{fmt(money.gold)}</span></span>
           </div>
 
           {/* ===== タブ ===== */}
-          <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', marginBottom:'8px' }}>
+          {/* スマホでも1段に収まるように、すき間を少し詰める（2026-10-27・ゲームが下へ押されないように） */}
+          <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginBottom:'6px' }}>
             {TABS.map(t => (
-              <button key={t.key} onClick={() => setTab(t.key)} style={pill(t.key === 'exchange' ? CASINO.gold : CASINO.pink, tab === t.key)}>{t.label}</button>
+              <button key={t.key} onClick={() => setTab(t.key)} style={{ ...pill(t.key === 'exchange' ? CASINO.gold : CASINO.pink, tab === t.key), padding:'5px 7px', whiteSpace:'nowrap' }}>{t.label}</button>
             ))}
           </div>
 

@@ -40,7 +40,7 @@ const listOf = (d) => { const t = displayTable(); return d === 'bell' ? t.bellTe
 const finalOf = (p, q) => { const base = Math.floor(p - 0.6); return base - mod(base - q) }
 const svOf = (s) => ({ mode: s?.mode || 'normal', rate: s?.rate || 1, cz: s?.cz || 0, at: s?.at || 0, toku: s?.toku || 0, atNet: Number(s?.at_net) || 0, atGames: 0 })
 
-// onTalk … 受付嬢アレアに結果を伝える（V2capCasino・lib/alea.js）。返すのは当たりの演出の上に出すアレア
+// onTalk … アレアに結果を伝える（V2capCasino・lib/alea.js）。返すのは当たりの演出の上に出すアレア
 export default function V2capSlot({ init, medals, onMoney, onTalk, active = true }) {
   const [rateSel, setRateSel] = useStored('capSlotRate', 1)
   const [help, setHelp] = useStored('capSlotHelp', false)

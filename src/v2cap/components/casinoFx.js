@@ -132,7 +132,7 @@ export const sfx = {
 
 // 当たりの段階の演出をまとめて（banner＋コイン＋紙吹雪＋光＋揺れ＋音＋振動）
 //   tier … casino.js の winTierOf の結果。amount … 払い出し。
-//   say … banner の上に出す受付嬢アレア（V2capAlea.jsx の AleaSays・2026-10-27）。無ければ出さない
+//   say … banner の上に出すアレア（V2capAlea.jsx の AleaSays・2026-10-27）。無ければ出さない
 export const celebrate = (tier, amount, { title, sub, say } = {}) => {
   if (!tier) return
   const level = { win: 1, big: 2, mega: 3, jackpot: 4 }[tier.key] || 1

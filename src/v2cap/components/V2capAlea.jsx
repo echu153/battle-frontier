@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react'
-import { aleaSrc, ALEA_FACE_KEYS, ALEA_FACE_SIZE, ALEA_FOCUS, ALEA_WELCOME } from '../lib/alea.js'
+import { aleaSrc, ALEA_FACE_KEYS, ALEA_FACE_SIZE, ALEA_FOCUS, ALEA_WELCOME, ALEA_THUMB, ALEA_SIDE_MIN_W } from '../lib/alea.js'
 
 // ============================================================
-// 「レベルキャップあり」版 — 賭博場の受付嬢アレア（2026-10-27）
+// 「レベルキャップあり」版 — 賭博場のカクテルウェイトレス、アレア（2026-10-27）
 //   ・V2capAlea … 吹き出し＋腰から上の絵。絵を押すと onTap（セリフと表情は呼ぶ側＝V2capCasino が lib/alea.js で決める）
 //   ・AleaSays … 当たりの演出（BIG WIN など・画面いっぱいに暗くして出る）の上のアレア（頭から胸までの絵＋吹き出し）。
 //     看板娘のとき（2026-10-25）のユーザー指示「ポップアップの裏でセリフ出てるから、ポップアップ上でもイラスト出るようにしたい」と同じ考え
 //   ・V2capAleaWelcome … その日はじめて賭博場に入るときの全身の「いらっしゃい」。画面いっぱい・どこを押しても閉じる（Escでも）。
 //     賭博場の画面を出す前に、ホームの上で出す（V2capHome）＝閉じたら賭博場の画面へ（看板娘と同じ）
-//   ・並べ方（ALEA_CSS）は看板娘・親方と同じ：広い画面は左に賭博場・右にアレア（スクロールしても右に残る）。
-//     狭い画面（720px以下）はアレア（頭から胸）が上・吹き出しが右・賭博場が下
+//   ・並べ方（ALEA_CSS）：広い画面は左に賭博場・右にアレア（スクロールしても右に残る＝看板娘・親方と同じ）。
+//     【2026-10-27 直した】ユーザー指示「イラスト作ったせいでスクロールしないとルーレットとかできなくなったから画像の部分調整したい」：
+//     右に立たせるのは ALEA_SIDE_MIN_W（1081px）以上だけ（ゲームが横いっぱいを使えるように）。それより狭いときは
+//     アレア（頭から胸・ALEA_THUMB）を上の細い帯にして、吹き出しは右（前は 720px で切り替え・絵は 112×150）。開発用のボタンも帯のときは出さない
 //   ・ボタン全体の決まり（src/dev-ui.css の hover の明るさ1.3倍・button::after の光沢）は、親方と同じく絵にかけない
 //   ・動きは prefers-reduced-motion なら止める
 // ============================================================
@@ -22,7 +24,7 @@ const cropOf = (w, h) => {
   return { w, h, imgW: Math.round(ALEA_FACE_SIZE.w * k), left: Math.round(w / 2 - ALEA_FOCUS.x * ALEA_FACE_SIZE.w * k) }
 }
 const SAY = cropOf(92, 124)     // 当たりの演出の上
-const THUMB = cropOf(112, 150)  // 狭い画面の上
+const THUMB = cropOf(ALEA_THUMB.w, ALEA_THUMB.h)  // 幅が足りないときの上の帯
 
 export const ALEA_CSS = `
 .al-cols { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 8px; align-items: start; }
@@ -45,14 +47,15 @@ export const ALEA_CSS = `
 /* ボタン全体の光沢（src/dev-ui.css の button::after）は絵の上に重ねない（親方のとき、透明なところまで四角く色がついて箱の中に立って見えた） */
 .al-btn::after { content: none; }
 .al-btn img { display: block; width: 100%; height: auto; max-height: min(470px, 62vh); object-fit: contain; animation: alHop .28s ease-out; }
-@media (max-width: 720px) {
-  .al-cols { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: ${ALEA_SIDE_MIN_W - 1}px) {
+  .al-cols { grid-template-columns: minmax(0, 1fr); gap: 6px; }
   .al-side { grid-column: 1; grid-row: 1; position: static; }
   .al-main { grid-row: 2; }
-  .al { flex-direction: row-reverse; align-items: center; gap: 14px; }
+  .al-dev { display: none; }
+  .al { flex-direction: row-reverse; align-items: center; gap: 12px; }
   .al-btn { flex: 0 0 auto; width: ${THUMB.w}px; height: ${THUMB.h}px; overflow: hidden; }
   .al-btn img { width: ${THUMB.imgW}px; max-width: none; max-height: none; margin-left: ${THUMB.left}px; }
-  .al-bubble { flex: 1; min-width: 0; }
+  .al-bubble { flex: 1; min-width: 0; min-height: 0; padding: 7px 10px; font-size: 12px; line-height: 1.5; }
   .al-bubble::before { left: -12px; top: 50%; bottom: auto; transform: translateY(-50%); border-width: 9px 12px 9px 0; border-color: transparent ${ACCENT} transparent transparent; }
   .al-bubble::after { left: -8px; top: 50%; bottom: auto; transform: translateY(-50%); border-width: 7px 9px 7px 0; border-color: transparent ${BUBBLE_BG} transparent transparent; }
 }
@@ -102,7 +105,7 @@ export default function V2capAlea({ face = 'normal', line = '', tick = 0, onTap 
   return (
     <div className="al">
       <div className="al-bubble" aria-live="polite"><span key={`${tick}-${line}`}>{line}</span></div>
-      <button type="button" className="al-btn" onClick={onTap} aria-label="受付嬢に話しかける">
+      <button type="button" className="al-btn" onClick={onTap} aria-label="店員さんに話しかける">
         <img key={tick} src={aleaSrc(face)} alt="" width={ALEA_FACE_SIZE.w} height={ALEA_FACE_SIZE.h} />
       </button>
     </div>
