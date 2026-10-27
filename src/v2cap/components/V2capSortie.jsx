@@ -5,7 +5,7 @@ import V2Modal from './V2Modal.jsx'
 import { miniBtn } from './v2ui.js'
 import { runBattle } from '../core/battle.js'
 import { loadPref, savePref } from '../core/prefs.js'
-import { SPOTS, spotOf, spotLabel, recLvText, toFighter as enemyFighter } from '../lib/areas.js'
+import { AREA_LIST, SPOTS, SUB_NAMES, spotOf, spotLabel, recLvText, toFighter as enemyFighter } from '../lib/areas.js'
 import {
   pickEncounter, rollEquipDrop, nextBossRate, isSpotUnlocked, isSpotCleared, openUntilOf, SORTIE_CD, chestText,
 } from '../lib/sortie.js'
@@ -76,6 +76,8 @@ const readFollow = () => { try { return localStorage.getItem(LOG_FOLLOW_KEY) !==
 const saveFollow = (on) => { try { localStorage.setItem(LOG_FOLLOW_KEY, on ? '1' : '0') } catch { /* 覚えられなくても切り替えは効く */ } }
 // 出撃オプションの小窓の1行（チェック＋文）
 const OPT_ROW = { display:'flex', alignItems:'center', gap:'8px', color:'#cfe2ff', fontSize:'12px', cursor:'pointer' }
+// 場所を選ぶ2つのプルダウン（エリア・入口／奥地／最奥）
+const SPOT_SELECT = { background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px' }
 
 export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   const [scene, setScene] = useState('town')
@@ -123,6 +125,12 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   const availableSpots = SPOTS.filter(s => isSpotUnlocked(cleared, s.id))
   // 選んでいた場所がまだ開いていなければ、開いている一番先の場所
   const spot = availableSpots.find(s => s.id === selectedSpot) || spotOf(openUntilOf(cleared))
+  // ★場所はエリアと入口・奥地・最奥の2つで選ぶ（2026-10-27 ユーザー指示「これだと多すぎる」「エリア ○○ △△ □□ 推奨LV○○」）。
+  //   エリアを替えたら、そのエリアの開いているいちばん奥の場所にする
+  const openAreas = AREA_LIST.map((a, k) => ({ no: k + 1, name: a.name })).filter(a => availableSpots.some(s => s.area === a.no))
+  const areaSpots = availableSpots.filter(s => s.area === spot?.area)
+  const pickSpot = (v) => { setSelectedSpot(v); localStorage.setItem('v2capSelectedSpot', v) }
+  const pickArea = (no) => { const last = availableSpots.filter(s => s.area === no).pop(); if (last) pickSpot(last.id) }
   const leftMs = sortieClock.leftMs(now)
   const remaining = leftMs / 1000
   const canAct = remaining <= 0 && !loading && !fx   // 祠の演出の間は押せない（右下のボタンも）
@@ -362,16 +370,25 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
           <div style={{ color:'#9fb8d0', fontSize:'10px', marginTop:'4px' }}>{spotLabel(shrine.spot)}</div>
         </div>
       ) : (
-        <select value={spot?.id || 1}
-          onChange={e => { const v = Number(e.target.value); setSelectedSpot(v); localStorage.setItem('v2capSelectedSpot', v) }}
-          style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>
-          {/* ★開いている場所だけ（1本道）。推奨LV（上限＝ボスを倒せる目安・2026-10-12 ユーザー指示）も出す */}
-          {availableSpots.map(s => (
-            <option key={s.id} value={s.id}>
-              {spotLabel(s)}　{recLvText(s.id)}{isSpotCleared(cleared, s.id) ? '　✔' : ''}
-            </option>
-          ))}
-        </select>
+        // ★開いている場所だけ（1本道）。✔＝ボスを倒した（エリアは最奥のボス）。
+        //   推奨LV（上限＝ボスを倒せる目安・2026-10-12 ユーザー指示）は場所の名前のうしろ。狭い画面では名前と推奨LVが次の行へ回る
+        <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:'6px 8px', marginBottom:'8px' }}>
+          <span style={{ color:'#7fa6d0', fontSize:'11px' }}>エリア</span>
+          <select value={spot?.area || 1} onChange={e => pickArea(Number(e.target.value))} style={SPOT_SELECT}>
+            {openAreas.map(a => (
+              <option key={a.no} value={a.no}>{a.name}{isSpotCleared(cleared, a.no * 3) ? '　✔' : ''}</option>
+            ))}
+          </select>
+          <select value={spot?.id || 1} onChange={e => pickSpot(Number(e.target.value))} style={SPOT_SELECT}>
+            {areaSpots.map(s => (
+              <option key={s.id} value={s.id}>{SUB_NAMES[s.sub - 1]}{isSpotCleared(cleared, s.id) ? '　✔' : ''}</option>
+            ))}
+          </select>
+          <span style={{ whiteSpace:'nowrap' }}>
+            <span style={{ color:'#cfe2ff', fontSize:'12px' }}>{spot?.name}</span>
+            <span style={{ color:'#9fb8d0', fontSize:'11px', marginLeft:'8px' }}>{spot && recLvText(spot.id)}</span>
+          </span>
+        </div>
       )}
       {/* 塔の階層守護者でいるあいだは、装備のドロップ率が上がっていることだけ出す（2026-10-14 ユーザー指示「ドロップ率1%増加」） */}
       {guardDropBonusOf(prof) > 0 && !shrine && (

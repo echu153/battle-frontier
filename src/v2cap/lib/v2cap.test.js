@@ -27,7 +27,7 @@ import {
 import { GEAR_NAMES } from './gearNames.js'
 import { powerAt, effectivePowerAt, syncIlvOf, syncLabelOf, statsAt, spreadStats, armorEffects, armorEffectText, GEAR_RATIO, SET_PART_SUM } from './gear.js'
 import {
-  AREA_LIST, SPOTS, SPOT_COUNT, spotOf, spotLvOf, spotLabel, expRangeOf, goldRangeOf,
+  AREA_LIST, SPOTS, SPOT_COUNT, SUB_NAMES, spotOf, spotLvOf, spotLabel, expRangeOf, goldRangeOf,
   ROLE_TENTHS, scaleByRole, enemyLevels, enemyLvOf, enemyRoleOf,
   stdPowerAt, stdRatioAt, AREA_BOSS, SUB_BOSS, bossRatioOf, STD_RATIO, NORMAL_RATIO, enemyPowerOf, enemyBasePowerOf, toFighter as enemyFighter,
   BOSS_SPOT_POWER, SPOT_REC_LV, recLvOf, recRangeOf, recLvText, recSpotOfLv,
@@ -105,7 +105,7 @@ test('【確定】15エリア×①②③の名前はユーザーの表のとお�
   assert.deepEqual(AREA_LIST.map(a => a.name), ['始まりの森', '荒廃した草原', '古代の洞窟', '蒼海の入り江', '灼砂の遺丘',
     '巨峰山脈', '常闇の樹海', '白銀の霊峰', '雷鳴の断崖', '煉獄火山', '腐海の沼獄', '奈落の坑道', '蒼天の浮遊城', '星霜の遺跡', '深淵の海溝'])
   assert.equal(new Set(SPOTS.map(s => s.name)).size, 45, '場所の名前は重ならない')
-  assert.equal(spotLabel(2), '始まりの森② 苔むした獣道')
+  assert.equal(spotLabel(2), '始まりの森 奥地 苔むした獣道')
   // 1本道：最初は①だけ。ボスを倒した一番先の場所の次まで開く
   assert.deepEqual(unlockedSpotsOf([]), [1])
   assert.equal(isSpotUnlocked([], 2), false)
@@ -114,6 +114,24 @@ test('【確定】15エリア×①②③の名前はユーザーの表のとお�
   assert.equal(spotOf(4).areaName, '荒廃した草原')
   assert.equal(openUntilOf(Array.from({ length: 45 }, (_, i) => i + 1)), 45, '最後の場所より先は無い')
   assert.deepEqual(clearSpot([1, 2], 2), [1, 2], '2回倒しても増えない')
+})
+
+test('【確定】2026-10-27 画面では①②③を「入口・奥地・最奥」と出す。出撃の場所はエリアと入口・奥地・最奥の2つで選ぶ', () => {
+  // ユーザー指示「これだと多すぎる」「エリア ○○ △△ □□ 推奨LV○○」「①②③ってやってるけど、もっといい言い換えあったらそれにしたい」
+  //   →案から「入口・奥地・最奥」「ほかの画面にもそろえる」
+  assert.deepEqual(SUB_NAMES, ['入口', '奥地', '最奥'])
+  assert.equal(spotLabel(1), '始まりの森 入口 木漏れ日の小径')
+  assert.equal(spotLabel(SPOT_COUNT), '深淵の海溝 最奥 原初の深淵')
+  for (const s of SPOTS) assert.ok(!/[①②③]/.test(spotLabel(s)), `${s.name}：場所の名前に①②③を出さない`)
+  // 出撃の画面：45か所を1つの一覧に並べない（エリアのプルダウン＋そのエリアの場所だけのプルダウン）
+  const sortie = readFileSync(new URL('../components/V2capSortie.jsx', import.meta.url), 'utf8')
+  assert.ok(sortie.includes('openAreas.map('), 'エリアのプルダウン')
+  assert.ok(sortie.includes('areaSpots.map('), 'そのエリアの場所だけのプルダウン')
+  assert.ok(!sortie.includes('availableSpots.map('), '開いている場所を全部1つの一覧に並べない')
+  // 図鑑の「出る場所」・開発用の試し撃ちも同じ名前（①②③の印は残っていない）
+  for (const f of ['V2capDex.jsx', 'V2capAtb.jsx']) {
+    assert.ok(!readFileSync(new URL(`../components/${f}`, import.meta.url), 'utf8').includes('SUB_MARK'), `${f}：①②③の印を使わない`)
+  }
 })
 
 test('【確定】経験値とGoldは場所の表の値（始まりの森・荒廃した草原はユーザーの表・先は同じ伸び方）', () => {

@@ -41,7 +41,10 @@ export const AREA_LIST = [
   { name:'星霜の遺跡',   spots:['風化した列柱廊', '時止まりの大書庫', '星墜ちる観測台'] },
   { name:'深淵の海溝',   spots:['燐光の海棚', '沈みし古都', '原初の深淵'] },
 ]
-export const SUB_MARK = '①②③'
+// 【確定】2026-10-27 ユーザー指示「①②③ってやってるけど、もっといい言い換えあったらそれにしたい」→案から「入口・奥地・最奥」、
+//   「ほかの画面にもそろえる」：画面に出すときは ①②③ ではなくこの名前（場所の選択肢・祠・解放のログ・図鑑の出る場所）。
+//   コードとコメントの「〇-①」はそのまま
+export const SUB_NAMES = ['入口', '奥地', '最奥']
 export const SPOT_COUNT = AREA_LIST.length * 3
 export const LAST_SPOT = SPOT_COUNT
 
@@ -81,7 +84,7 @@ export const SPOTS = AREA_LIST.flatMap((a, k) => a.spots.map((name, j) => {
 export const spotOf = (id) => SPOTS[id - 1] || null
 export const spotLabel = (spotOrId) => {
   const s = typeof spotOrId === 'object' ? spotOrId : spotOf(spotOrId)
-  return s ? `${s.areaName}${SUB_MARK[s.sub - 1]} ${s.name}` : ''
+  return s ? `${s.areaName} ${SUB_NAMES[s.sub - 1]} ${s.name}` : ''
 }
 
 // ===== 敵のLV =====

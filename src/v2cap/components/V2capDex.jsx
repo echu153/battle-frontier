@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../supabase'
 import { box, miniBtn, TEXT } from './v2ui.js'
 import V2Modal from './V2Modal.jsx'
-import { AREA_LIST, SUB_MARK, spotOf } from '../lib/areas.js'
+import { AREA_LIST, SUB_NAMES, spotOf } from '../lib/areas.js'
 import { openUntilOf } from '../lib/sortie.js'
 import { RARITY_COLOR, rarityLabel } from '../lib/equipment.js'
 import { DEX_ROLES, DEX_ROLE, DEX_ALL, DEX_AREA_STAM, dexAreaOf, dropInfoOf, killsOf, isFound, dexProgressOf, isAreaComplete, dexStamBonusOf } from '../lib/dex.js'
@@ -144,7 +144,7 @@ export default function V2capDex({ prof }) {
                         {found && <RaceTag name={e.name} />}
                       </span>
                       <span style={{ color: found ? '#cfe2ff' : TEXT.empty, fontSize:'11px' }}>LV{found ? lvText(e) : '??'}</span>
-                      <span style={{ color: TEXT.label, fontSize:'10px' }}>{e.subs.map(s => SUB_MARK[s - 1]).join('')}</span>
+                      <span style={{ color: TEXT.label, fontSize:'10px' }}>{e.subs.map(s => SUB_NAMES[s - 1]).join('・')}</span>
                     </div>
                     <div style={{ display:'flex', gap:'10px', flexWrap:'wrap', fontSize:'10px', marginTop:'3px', color: TEXT.sub }}>
                       <span>⚔ 討伐 <span style={{ color: found ? '#ffcc00' : TEXT.empty }}>{killsOf(kills, e.name).toLocaleString()}</span></span>

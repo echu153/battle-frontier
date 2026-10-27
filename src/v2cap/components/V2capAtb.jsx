@@ -18,7 +18,7 @@ import { motionOf } from '../lib/motionArt.js'
 import { homeIconOf } from '../lib/classArt.js'
 import { artGenderOf } from '../lib/gender.js'
 import { enemyArtSrc } from '../lib/enemyArt.js'
-import { AREA_LIST, SPOTS, SUB_MARK, toFighter as enemyFighter } from '../lib/areas.js'
+import { AREA_LIST, SPOTS, SUB_NAMES, toFighter as enemyFighter } from '../lib/areas.js'
 import { toFighter as playerFighter, slotsOf } from '../lib/loadout.js'
 import { usableSkillNames, lineageOf, CLASS_BY_ID } from '../lib/jobs.js'
 import { ascEffectsOf } from '../lib/ascension.js'
@@ -178,7 +178,7 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
             {AREA_LIST.map((a, i) => <option key={a.name} value={i + 1}>{i + 1}. {a.name}</option>)}
           </select>
           <select value={sub} onChange={e => { setSub(Number(e.target.value)); setFoeName('') }} style={sel}>
-            {[1, 2, 3].map(n => <option key={n} value={n}>{SUB_MARK[n - 1]} {SPOTS.find(s => s.area === area && s.sub === n)?.name}</option>)}
+            {[1, 2, 3].map(n => <option key={n} value={n}>{SUB_NAMES[n - 1]} {SPOTS.find(s => s.area === area && s.sub === n)?.name}</option>)}
           </select>
           <select value={foe?.name || ''} onChange={e => setFoeName(e.target.value)} style={sel}>
             {foes.map(e => <option key={`${e.role}${e.name}`} value={e.name}>［{e.role}］{e.name}</option>)}
