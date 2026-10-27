@@ -384,9 +384,10 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
               <option key={s.id} value={s.id}>{SUB_NAMES[s.sub - 1]}{isSpotCleared(cleared, s.id) ? '　✔' : ''}</option>
             ))}
           </select>
+          {/* 名前は白の太字・推奨LVは黄色（2026-10-27 ユーザー指示「この色だと見づらいから見やすいように」） */}
           <span style={{ whiteSpace:'nowrap' }}>
-            <span style={{ color:'#cfe2ff', fontSize:'12px' }}>{spot?.name}</span>
-            <span style={{ color:'#9fb8d0', fontSize:'11px', marginLeft:'8px' }}>{spot && recLvText(spot.id)}</span>
+            <span style={{ color:'#ffffff', fontSize:'13px', fontWeight:'bold' }}>{spot?.name}</span>
+            <span style={{ color:'#ffdd55', fontSize:'12px', fontWeight:'bold', marginLeft:'10px' }}>{spot && recLvText(spot.id)}</span>
           </span>
         </div>
       )}
