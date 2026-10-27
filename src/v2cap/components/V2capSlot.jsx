@@ -19,6 +19,10 @@ import { atTalkOf, winTalkOf } from '../lib/alea.js'
 import { sfx, fx, celebrate, vibrate } from './casinoFx.js'
 import { CASINO, panel, bigBtn, pill, fmt, signed, DISPLAY_FONT, JP_BOLD, RAINBOW_BASE } from './casinoStyle.js'
 import { CountUp, SlotDefs, SlotSymbol } from './casinoParts.jsx'
+import V2Modal from './V2Modal.jsx'
+import { miniBtn } from './v2ui.js'
+
+const HELP_HEAD = { color: CASINO.gold, fontSize:'12px', marginBottom:'2px' }
 
 const CELL = 54        // 1コマの高さ
 const SYM = 50         // 絵柄の幅
@@ -43,7 +47,7 @@ const svOf = (s) => ({ mode: s?.mode || 'normal', rate: s?.rate || 1, cz: s?.cz 
 // onTalk … アレアに結果を伝える（V2capCasino・lib/alea.js）。返すのは当たりの演出の上に出すアレア
 export default function V2capSlot({ init, medals, onMoney, onTalk, active = true }) {
   const [rateSel, setRateSel] = useStored('capSlotRate', 1)
-  const [help, setHelp] = useStored('capSlotHelp', false)
+  const [help, setHelp] = useState(false)   // 遊び方は ❓ HELP のポップアップ（2026-10-27 ユーザー指示「スロットの『▼ 遊び方』も HELP にして」）
   const [sv, setSv] = useState(() => svOf(init))
   const [phase, setPhaseState] = useState('idle')   // idle | wait | spin | freeze | push | reveal | intro
   const [stopped, setStopped] = useState([false, false, false])
@@ -364,7 +368,7 @@ export default function V2capSlot({ init, medals, onMoney, onTalk, active = true
   }, [])
 
   // キーボード
-  useEffect(() => { handlers.current = { lever, stop: stopReel, active } })
+  useEffect(() => { handlers.current = { lever, stop: stopReel, active: active && !help } })   // HELP を開いている間はキーで回さない
   useEffect(() => {
     const onKey = (e) => {
       if (e.target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return
@@ -408,6 +412,8 @@ export default function V2capSlot({ init, medals, onMoney, onTalk, active = true
               <span>純増 <b style={{ color: sv.atNet >= 0 ? CASINO.green : CASINO.red }}><CountUp value={sv.atNet} ms={500} /></b>枚</span>
             </>
           )}
+          {/* 遊び方は ❓ HELP（前は下の「▼ 遊び方」で開け閉めしていた） */}
+          <button type="button" onClick={() => setHelp(true)} style={miniBtn('#88aaff')}>❓ HELP</button>
         </div>
       </div>
 
@@ -532,25 +538,26 @@ export default function V2capSlot({ init, medals, onMoney, onTalk, active = true
         </div>
       )}
 
-      {/* ===== 遊び方 ===== */}
-      <div style={{ marginTop:'10px' }}>
-        <button onClick={() => setHelp(v => !v)} style={pill(CASINO.label, false)}>{help ? '▲ 遊び方を閉じる' : '▼ 遊び方'}</button>
-        {help && (
-          <div style={{ marginTop:'8px', fontSize:'11px', color:CASINO.body, lineHeight:1.8 }}>
-            <div>1ゲーム 3枚 × レート。払い出し（×1のとき）：</div>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))', gap:'2px 10px', margin:'4px 0 6px' }}>
-              {SLOT_ROLES.filter(r => r.key !== 'miss').map(r => (
-                <div key={r.key}>{r.name}：{r.key === 'obell' ? `${r.pay}枚（押し順を外すと${SLOT_MISS_PAY}枚）` : r.key === 'replay' ? `${r.pay}枚（もう1回）` : `${r.pay}枚`}</div>
-              ))}
-            </div>
-            <div>・レア役（チェリー・スイカ・チャンス目）で <b style={{ color:CASINO.cyan }}>CZ（{SLOT_CZ_GAMES}G）</b> か <b style={{ color:CASINO.pink }}>AT</b> に入る</div>
-            <div>・<b style={{ color:CASINO.pink }}>AT（{SLOT_AT_GAMES}G〜）</b>はナビ（①②③）どおりに止めると押し順ベルが全部9枚。レア役で上乗せ、強チェリー・チャンス目で<b style={{ color:'#ffd700' }}>上乗せ特化ゾーン（{SLOT_TOKU_GAMES}G・毎G上乗せ）</b></div>
-            <div>・<b>中段チェリー</b>はフリーズ＝AT確定（{SLOT_PREMIUM_GAMES}G）</div>
-            <div>・予告は 青→緑→赤→金→<span style={{ display:'inline-block', color: RAINBOW_BASE, fontWeight:'bold', animation:'csHue 1.2s linear infinite' }}>虹（AT確定）</span></div>
-            <div style={{ color:CASINO.dim }}>キーボード：スペース＝レバー　← ↓ →＝止める</div>
+      {/* ===== 遊び方（❓ HELP・2026-10-27 ユーザー指示「スロットの『▼ 遊び方』も HELP にして」＝中身は前の「▼ 遊び方」と同じ） ===== */}
+      {help && (
+        <V2Modal title="❓ HELP" color={CASINO.gold} keepScroll onClose={() => setHelp(false)}>
+          <div style={HELP_HEAD}>払い出し（×1のとき）</div>
+          <div>1ゲーム 3枚 × レート。</div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))', gap:'2px 10px', marginTop:'4px' }}>
+            {SLOT_ROLES.filter(r => r.key !== 'miss').map(r => (
+              <div key={r.key}>{r.name}：{r.key === 'obell' ? `${r.pay}枚（押し順を外すと${SLOT_MISS_PAY}枚）` : r.key === 'replay' ? `${r.pay}枚（もう1回）` : `${r.pay}枚`}</div>
+            ))}
           </div>
-        )}
-      </div>
+          <div style={{ ...HELP_HEAD, marginTop:'10px' }}>CZ・AT</div>
+          <div>・レア役（チェリー・スイカ・チャンス目）で <b style={{ color:CASINO.cyan }}>CZ（{SLOT_CZ_GAMES}G）</b> か <b style={{ color:CASINO.pink }}>AT</b> に入る</div>
+          <div>・<b style={{ color:CASINO.pink }}>AT（{SLOT_AT_GAMES}G〜）</b>はナビ（①②③）どおりに止めると押し順ベルが全部9枚。レア役で上乗せ、強チェリー・チャンス目で<b style={{ color:'#ffd700' }}>上乗せ特化ゾーン（{SLOT_TOKU_GAMES}G・毎G上乗せ）</b></div>
+          <div>・<b>中段チェリー</b>はフリーズ＝AT確定（{SLOT_PREMIUM_GAMES}G）</div>
+          <div style={{ ...HELP_HEAD, marginTop:'10px' }}>予告</div>
+          <div>青→緑→赤→金→<span style={{ display:'inline-block', color: RAINBOW_BASE, fontWeight:'bold', animation:'csHue 1.2s linear infinite' }}>虹（AT確定）</span></div>
+          <div style={{ ...HELP_HEAD, marginTop:'10px' }}>キーボード</div>
+          <div>スペース＝レバー　← ↓ →＝止める</div>
+        </V2Modal>
+      )}
     </div>
   )
 }

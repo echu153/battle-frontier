@@ -37,6 +37,16 @@ test('【2026-10-27】ルーレットの決まりの説明は ❓ HELP（ユー�
   assert.ok(ROULETTE.includes("<span style={{ marginLeft:'auto' }}>{helpBtn}</span>"))
 })
 
+test('【2026-10-27】スロットの遊び方も ❓ HELP（ユーザー指示「スロットの『▼ 遊び方』も HELP にして」）：上の段の右端・開いている間はキーで回さない', () => {
+  const slot = read('components/V2capSlot.jsx')
+  assert.ok(slot.includes('<V2Modal title="❓ HELP" color={CASINO.gold} keepScroll onClose={() => setHelp(false)}>'))
+  assert.ok(!slot.includes("{help ? '▲ 遊び方を閉じる' : '▼ 遊び方'}") && !slot.includes("useStored('capSlotHelp'"), '前の開け閉めの説明は外した')
+  assert.ok(slot.includes("<button type=\"button\" onClick={() => setHelp(true)} style={miniBtn('#88aaff')}>❓ HELP</button>"))
+  assert.ok(slot.includes('handlers.current = { lever, stop: stopReel, active: active && !help }'), 'HELP を開いている間はスペースキーでレバーを引かない')
+  // 中身は前の「▼ 遊び方」と同じ（払い出しの表・CZ・AT・中段チェリー・予告・キーボード）
+  for (const s of ['払い出し（×1のとき）', 'SLOT_ROLES.filter(r => r.key !== \'miss\')', '上乗せ特化ゾーン', 'フリーズ＝AT確定', '虹（AT確定）', 'スペース＝レバー']) assert.ok(slot.includes(s), s)
+})
+
 test('広い画面のルーレットは前のまま（ホイール300pxと盤を横に並べる・チップ38px・SPIN は横いっぱい）', () => {
   const wide = ROULETTE.slice(ROULETTE.indexOf('const wheelSize = 300'))
   assert.ok(wide.includes('size={wheelSize} />') && wide.includes('{histDots(15, 20)}'))
