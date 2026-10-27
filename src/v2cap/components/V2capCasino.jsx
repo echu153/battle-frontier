@@ -17,6 +17,9 @@
 //   →「解禁の仕組みとアレアのブラックジャックから作って」＋選んだこと「累計の払い出し1万枚」）：
 //   まだ遊べないゲームのタブは 🔒 で、開くとあと何枚かを出す（数え方は lib/casino.js の CASINO_UNLOCKS・確かめるのはサーバー）。
 //   遊んでいる途中で線を越えたら、解禁の演出（当たりの演出のあと）とアレアのひとこと。ブラックジャックは V2capBlackjack.jsx
+// 【2026-10-28】ポーカー（カリビアンスタッド・V2capPoker.jsx・ユーザー指示「じゃあポーカーも作っておいて、対ディーラー用の」）を足した。
+//   ディーラーと勝負するゲーム（ブラックジャック・ポーカー）は「テーブル」タブにまとめ、中で切り替える（TABLES）。
+//   タブを6つにするとスマホ（375px）で1段に収まらず、ルーレットが画面の下へ押される（2026-10-27 ユーザー指示「スクロールなしで回せるように」）
 // ============================================================
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
@@ -24,7 +27,7 @@ import { useStored } from '../core/prefs.js'
 import { GOLD_PER_MEDAL, maxExchangeOf, casinoWonOf, unlockOf, isUnlocked, newlyUnlockedOf } from '../lib/casino.js'
 import {
   pickLine, enterKindOf, tapKindOf, nextStreak, isNight, welcomeDueLocal, dayOf, makeDailyAsker,
-  stageOf, varsOf, stageEventOf, fillLine, loseDue, welcomeLineOf, BJ_QUIET_KINDS, bjTalkDue, dealerNameOf,
+  stageOf, varsOf, stageEventOf, fillLine, loseDue, welcomeLineOf, TABLE_QUIET_KINDS, tableTalkDue, dealerNameOf,
 } from '../lib/alea.js'
 import { setSoundOn, sfx, fx, unlockFx } from './casinoFx.js'
 import { CASINO, panel, pill, bigBtn, fmt, signed } from './casinoStyle.js'
@@ -35,21 +38,27 @@ import V2capSlot from './V2capSlot.jsx'
 import V2capHilo from './V2capHilo.jsx'
 import V2capRoulette from './V2capRoulette.jsx'
 import V2capBlackjack from './V2capBlackjack.jsx'
+import V2capPoker from './V2capPoker.jsx'
 
-// タブはスマホでも1段に収める（2026-10-28 ブラックジャックを足して5つ）：ブラックジャックは短く「BJ」・
-//   480px 以下は頭の絵文字を外す（375px の幅では絵文字つきだと約383pxで2段になり、ルーレットが画面の下へ押された）。🔒 は外さない
+// タブはスマホでも1段に収める：480px 以下は頭の絵文字を外す（🔒 は外さない）。
+//   ディーラーと勝負するゲームは「テーブル」にまとめる（2026-10-28 ポーカーを足して6つになり、375px で2段になるので）
 const TABS = [
   { key:'slot',     icon:'🎰', label:'スロット' },
   { key:'hilo',     icon:'🃏', label:'ハイ&ロー' },
   { key:'roulette', icon:'🎡', label:'ルーレット' },
-  { key:'bj',       icon:'♠',  label:'BJ' },
+  { key:'table',    icon:'♠',  label:'テーブル' },
   { key:'exchange', icon:'💱', label:'両替所' },
+]
+// テーブルの中の卓（解禁の順・lib/casino.js の CASINO_UNLOCKS）
+const TABLES = [
+  { key:'bj',    icon:'♠', label:'ブラックジャック' },
+  { key:'poker', icon:'♦', label:'ポーカー' },
 ]
 const TAB_CSS = '@media (max-width: 480px) { .cs-tab-ico { display: none } }'
 const EXCHANGE_PRESETS = [1, 10, 100, 1000]
 
 // SQL がまだ流されていないときの見え方
-const sqlMissing = (msg) => /v2cap_casino_state|v2cap_slot|v2cap_hilo|v2cap_roulette|v2cap_bj|Could not find the function/i.test(msg || '')
+const sqlMissing = (msg) => /v2cap_casino_state|v2cap_slot|v2cap_hilo|v2cap_roulette|v2cap_bj|v2cap_poker|Could not find the function/i.test(msg || '')
 
 // その日はじめて話しかけた（好感度+1）をサーバーに聞く窓口（同じ日は1回だけ聞いて答えを使い回す＝lib/clerk.js の makeDailyAsker）
 const talkAsker = makeDailyAsker(() => supabase.rpc('v2cap_alea_talk'))
@@ -83,7 +92,11 @@ export function CasinoSoundToggle() {
 // dev … 開発用（管理者だけ）。「いらっしゃい」を何回でも見られるボタン（右に立たせる広い画面だけ）。
 //   好感度を仮に置くボタンは外した（2026-10-27 ユーザー「好感度は確認したからいらない」）
 export default function V2capCasino({ prof, onProfile, dev = false }) {
-  const [tab, setTab] = useStored('capCasinoTab', 'slot')
+  const [tabStored, setTab] = useStored('capCasinoTab', 'slot')
+  // 前に「BJ」タブを開いていた端末は「テーブル」のブラックジャックへ（2026-10-28 まとめる前の値）
+  const tab = tabStored === 'bj' ? 'table' : tabStored
+  const [tableStored, setTable] = useStored('capCasinoTable', 'bj')   // テーブルの中で開いている卓
+  const table = TABLES.some(t => t.key === tableStored) ? tableStored : TABLES[0].key
   const [state, setState] = useState(null)       // v2cap_casino_state の返事（開いたときだけ）
   // won＝これまでの払い出し（解禁の数え方・サーバーの won_total）
   const [money, setMoney] = useState({ medals: Number(prof?.medals) || 0, gold: Number(prof?.gold) || 0, day_net: 0, won: 0 })
@@ -144,20 +157,20 @@ export default function V2capCasino({ prof, onProfile, dev = false }) {
       supabase.rpc('v2cap_alea_seen', { p_stage: ev.stage }).then(() => {})
     })
   }
-  // ゲームの結果（lib/alea.js の winTalkOf・atTalkOf・負けたとき・bjTalkOf）。負けたときは LOSE_GAP_MS に1回まで・
-  // ブラックジャックのふつうの勝ち負けなど（BJ_QUIET_KINDS）は BJ_TALK_GAP_MS に1回まで。
+  // ゲームの結果（lib/alea.js の winTalkOf・atTalkOf・負けたとき・bjTalkOf・pokerTalkOf）。負けたときは LOSE_GAP_MS に1回まで・
+  // テーブルのゲーム（ブラックジャック・ポーカー）のふつうの勝ち負けなど（TABLE_QUIET_KINDS）は TABLE_TALK_GAP_MS に1回まで。
   // 返すのは当たりの演出の上に出すアレア（言わないときは null）
   const lastLose = useRef(0)
-  const lastBj = useRef(0)
+  const lastTable = useRef(0)
   const onTalk = useCallback((kind) => {
     if (!kind) return null
     if (kind === 'lose') {
       if (!loseDue(lastLose.current)) return null
       lastLose.current = Date.now()
     }
-    if (BJ_QUIET_KINDS.includes(kind)) {
-      if (!bjTalkDue(lastBj.current)) return null
-      lastBj.current = Date.now()
+    if (TABLE_QUIET_KINDS.includes(kind)) {
+      if (!tableTalkDue(lastTable.current)) return null
+      lastTable.current = Date.now()
     }
     const line = say(kind)
     return <AleaSays face={line.face} line={line.text} />
@@ -165,7 +178,7 @@ export default function V2capCasino({ prof, onProfile, dev = false }) {
 
   // ===== 解禁（lib/casino.js の CASINO_UNLOCKS）=====
   // wonRef＝前に受け取った「これまでの払い出し」。返事で線を越えたら、解禁の演出（当たりの演出のあと）とアレアのひとこと。
-  // fresh＝この画面で解禁したばかりのタブ（開くまで光らせる）
+  // fresh＝この画面で解禁したばかりの卓と「テーブル」のタブ（開くまで光らせる）
   const wonRef = useRef(null)
   const [fresh, setFresh] = useState([])
   const descOf = (u) => fillLine(u.desc || '', { dealer: dealerNameOf(seen) })
@@ -186,7 +199,7 @@ export default function V2capCasino({ prof, onProfile, dev = false }) {
     for (const u of newlyUnlockedOf(prev, wonRef.current)) {
       const line = say(`${u.key}Unlock`)
       unlockFx({ title: `🔓 ${u.label}`, sub: `${u.label}で遊べるようになりました`, say: <AleaSays face={line.face} line={line.text} /> })
-      setFresh(f => (f.includes(u.key) ? f : [...f, u.key]))
+      setFresh(f => [...new Set([...f, u.key, 'table'])])
     }
   }, [say])
 
@@ -206,7 +219,8 @@ export default function V2capCasino({ prof, onProfile, dev = false }) {
       onMoney({ ...data, won_total: wonRef.current })
       // 途中の勝負があれば、そのゲームを開く
       if (data.hilo?.active) setTab('hilo')
-      else if (data.bj?.active) setTab('bj')
+      else if (data.bj?.active) { setTab('table'); setTable('bj') }
+      else if (data.poker?.active) { setTab('table'); setTable('poker') }
       else if (data.slot?.mode && data.slot.mode !== 'normal') setTab('slot')
     })()
     return () => { alive = false }
@@ -227,16 +241,28 @@ export default function V2capCasino({ prof, onProfile, dev = false }) {
     await onProfile?.(null)
   }
 
-  // タブを開く。ブラックジャックを開いたら、アレアが卓についたひとこと（この画面で1回）／まだ遊べなければ「もう少し遊んでから」
-  const sat = useRef(false)
+  // タブを開く。テーブルの卓を開いたら、アレアが卓についたひとこと（卓ごとにこの画面で1回）／まだ遊べなければ「もう少し遊んでから」
+  //   （ブラックジャック＝bjSit／bjLocked・ポーカー＝pokerSit／pokerLocked）
+  const sat = useRef(new Set())
+  const sitAt = (key) => {
+    if (!state) return
+    if (!isUnlocked(key, money.won)) say(`${key}Locked`)
+    else if (!sat.current.has(key)) { sat.current.add(key); say(`${key}Sit`) }
+  }
   const pickTab = (key) => {
-    setFresh(f => f.filter(k => k !== key))
+    setFresh(f => f.filter(k => k !== key && !(key === 'table' && k === table)))
     if (key === tab) return
     setTab(key)
-    if (key !== 'bj' || !state) return
-    if (!isUnlocked('bj', money.won)) say('bjLocked')
-    else if (!sat.current) { sat.current = true; say('bjSit') }
+    if (key === 'table') sitAt(table)
   }
+  const pickTable = (key) => {
+    setFresh(f => f.filter(k => k !== key))
+    if (key === table) return
+    setTable(key)
+    sitAt(key)
+  }
+  // テーブルのタブ：どれか1つでも遊べれば ♠・どれも遊べなければ 🔒
+  const tableLocked = TABLES.every(t => !isUnlocked(t.key, money.won))
   // まだ遊べないゲーム：何か・あと何枚か（これまでの払い出し）
   const lockedPanel = (u) => (
     <div style={panel(CASINO.purple)}>
@@ -293,9 +319,9 @@ export default function V2capCasino({ prof, onProfile, dev = false }) {
           <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginBottom:'6px' }}>
             {TABS.map(t => {
               // まだ遊べないゲームは 🔒（読み込むまでは分からないのでふつうに出す）。解禁したばかりのタブは開くまで光らせる
-              const locked = !!state && !isUnlocked(t.key, money.won)
+              const locked = !!state && t.key === 'table' && tableLocked
               const glow = fresh.includes(t.key)
-              const color = t.key === 'exchange' ? CASINO.gold : locked ? CASINO.dim : t.key === 'bj' ? CASINO.purple : CASINO.pink
+              const color = t.key === 'exchange' ? CASINO.gold : locked ? CASINO.dim : t.key === 'table' ? CASINO.purple : CASINO.pink
               return (
                 <button key={t.key} onClick={() => pickTab(t.key)} style={{ ...pill(color, tab === t.key), padding:'5px 7px', whiteSpace:'nowrap',
                   animation: glow ? 'csPulse 0.9s ease-in-out infinite' : undefined, boxShadow: glow ? `0 0 10px ${color}` : undefined }}>
@@ -315,13 +341,34 @@ export default function V2capCasino({ prof, onProfile, dev = false }) {
               <div style={{ display: tab === 'slot' ? 'block' : 'none' }}><V2capSlot init={state.slot} medals={money.medals} onMoney={onMoney} onTalk={onTalk} active={tab === 'slot'} /></div>
               <div style={{ display: tab === 'hilo' ? 'block' : 'none' }}><V2capHilo init={state.hilo} medals={money.medals} onMoney={onMoney} onTalk={onTalk} /></div>
               <div style={{ display: tab === 'roulette' ? 'block' : 'none' }}><V2capRoulette init={state.roulette} medals={money.medals} onMoney={onMoney} onTalk={onTalk} /></div>
-              {/* ブラックジャックは解禁してから置く（途中で解禁したら、そこから開いたままにする） */}
+              {/* ===== テーブル：卓を切り替える（まだ遊べない卓は 🔒・解禁したばかりの卓は開くまで光る） ===== */}
+              {tab === 'table' && (
+                <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginBottom:'6px' }}>
+                  {TABLES.map(t => {
+                    const locked = !isUnlocked(t.key, money.won)
+                    const glow = fresh.includes(t.key)
+                    const color = locked ? CASINO.dim : CASINO.purple
+                    return (
+                      <button key={t.key} onClick={() => pickTable(t.key)} style={{ ...pill(color, table === t.key), padding:'3px 9px', whiteSpace:'nowrap',
+                        animation: glow ? 'csPulse 0.9s ease-in-out infinite' : undefined, boxShadow: glow ? `0 0 10px ${color}` : undefined }}>
+                        {locked ? '🔒' : t.icon} {t.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+              {/* 卓は解禁してから置く（途中で解禁したら、そこから開いたままにする） */}
               {isUnlocked('bj', money.won) && (
-                <div style={{ display: tab === 'bj' ? 'block' : 'none' }}>
+                <div style={{ display: tab === 'table' && table === 'bj' ? 'block' : 'none' }}>
                   <V2capBlackjack init={state.bj} medals={money.medals} onMoney={onMoney} onTalk={onTalk} dealerName={dealerNameOf(seen)} />
                 </div>
               )}
-              {tab === 'bj' && !isUnlocked('bj', money.won) && lockedPanel(unlockOf('bj'))}
+              {isUnlocked('poker', money.won) && (
+                <div style={{ display: tab === 'table' && table === 'poker' ? 'block' : 'none' }}>
+                  <V2capPoker init={state.poker} medals={money.medals} onMoney={onMoney} onTalk={onTalk} dealerName={dealerNameOf(seen)} />
+                </div>
+              )}
+              {tab === 'table' && !isUnlocked(table, money.won) && lockedPanel(unlockOf(table))}
             </>
           )}
           {state && tab === 'exchange' && (

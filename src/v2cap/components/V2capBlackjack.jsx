@@ -24,7 +24,7 @@ const CARD_W = 64
 const CARD_H = Math.round(CARD_W * 1.4)
 const DEAL_MS = 240
 const HELP_HEAD = { color: CASINO.gold, fontSize:'12px', marginBottom:'2px' }
-// 配ったカードは右上（カードの山）からすべりこむ
+// 配ったカードは右上（カードの山）からすべりこむ（卓の枠＝overflow:hidden の外へは出さない・2026-10-28 ポーカーで5枚目が画面の右へはみ出したので合わせた）
 const BJ_CSS = '@keyframes bjIn { from { transform: translate(48px,-36px) rotate(10deg); opacity: 0 } to { transform: none; opacity: 1 } }'
 
 // うまくいかなかったときの文（SQL §21 をまだ流していなければ、そう出す）
@@ -184,7 +184,7 @@ export default function V2capBlackjack({ init, medals, onMoney, onTalk, dealerNa
   )
 
   return (
-    <div style={{ ...panel('#1f7a4a'), background:'radial-gradient(ellipse at 50% 40%, #145c38 0%, #0b2a1a 70%), #04140c' }}>
+    <div style={{ ...panel('#1f7a4a'), background:'radial-gradient(ellipse at 50% 40%, #145c38 0%, #0b2a1a 70%), #04140c', overflow:'hidden' }}>
       <style>{BJ_CSS}</style>
       {helpModal}
       <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>

@@ -245,8 +245,10 @@ export const rouletteRtp = () => {
 // ★サーバー（SQL §11 の v2cap_casino_won）が同じ数え方で確かめる。どのRPCも返事に won_total（これまでの払い出し）を付ける
 // ============================================================
 // desc の {dealer} は卓の名札（アレアが名乗るまでは「ディーラー」＝lib/alea.js の dealerNameOf）
+// 【確定】2026-10-28 ポーカー（カリビアンスタッド）は **3万枚**（ユーザー選択「3万枚（推奨）」＝ブラックジャックの次の段）
 export const CASINO_UNLOCKS = [
   { key: 'bj', label: 'ブラックジャック', need: 10000, desc: '{dealer}と1対1で、カードの合計を21に近づけて勝負する卓' },
+  { key: 'poker', label: 'ポーカー', need: 30000, desc: '{dealer}と1対1で、5枚の役の強さで勝負する卓' },
 ]
 export const casinoWonOf = (stats) => Object.values(stats || {}).reduce((s, g) => s + (Number(g?.won) || 0), 0)
 export const unlockOf = (key) => CASINO_UNLOCKS.find(u => u.key === key) || null
@@ -384,4 +386,90 @@ export const bjRtp = () => {
     }
   }
   return { rtp: ret / stake, stake }
+}
+
+// ============================================================
+// ポーカー（カリビアンスタッド・アレアがディーラー）
+// ------------------------------------------------------------
+// 【確定】2026-10-28 ユーザー指示「じゃあポーカーも作っておいて、対ディーラー用の」＋選んだこと：
+//   **カリビアンスタッド**（ユーザー選択「カリビアンスタッド（推奨）」＝標準の配当のままで還元率がほかのゲームと同じくらい）・
+//   アンティ **10〜1000枚**（ユーザー選択「10〜1000枚（推奨）」＝ブラックジャックと同じチップ）・これまでの払い出し **3万枚** で解禁
+//   ・52枚のトランプを毎回まぜて、5枚ずつ配る（同じカードは出ない）。ディーラーは1枚目だけ表
+//   ・降りる（アンティは没収）か、勝負する（アンティの2倍を上乗せ）。配るときにアンティの3倍のメダルが要る
+//   ・ディーラーは **AとKがそろった役なし以上** で勝負する。勝負しないとき：アンティは1:1・上乗せは戻る
+//   ・勝負したら役で比べる。勝ち＝アンティ1:1＋上乗せは役の配当（POKER_HANDS の pay）・引き分けは戻る・負けは両方没収
+//   ・還元率（払い出し÷賭けたメダル）97.4%（ワンペア以上と「A K J 8 3」以上の役なしで勝負する打ち方・pkShouldRaise）
+// ★抽選と払い出しはサーバー（SQL §22）。ここは表示・テストのための写し（v2capsql.test.js が定数を突き合わせる）
+// ============================================================
+export const POKER_MIN_ANTE = 10
+export const POKER_MAX_ANTE = 1000
+export const POKER_ANTES = [10, 50, 100, 500, 1000]
+export const POKER_RAISE_MULT = 2   // 勝負するときの上乗せ（アンティの何倍か）
+// 役（弱い順）。pay＝勝ったときの上乗せの配当（○:1）。役なしの勝ち（ディーラーもAとKの役なし）は1:1
+export const POKER_HANDS = [
+  { key: 'high',     name: '役なし',                     pay: 1 },
+  { key: 'pair',     name: 'ワンペア',                   pay: 1 },
+  { key: 'twopair',  name: 'ツーペア',                   pay: 2 },
+  { key: 'trips',    name: 'スリーカード',               pay: 3 },
+  { key: 'straight', name: 'ストレート',                 pay: 4 },
+  { key: 'flush',    name: 'フラッシュ',                 pay: 5 },
+  { key: 'full',     name: 'フルハウス',                 pay: 7 },
+  { key: 'quads',    name: 'フォーカード',               pay: 20 },
+  { key: 'sflush',   name: 'ストレートフラッシュ',       pay: 50 },
+  { key: 'royal',    name: 'ロイヤルストレートフラッシュ', pay: 100 },
+]
+// 5枚の強さ（大きいほど強い）＝ 役 × 13^5 ＋ 比べる数字（強い順に5つ・2＝0 … A＝12）。サーバーの v2cap_poker_score と同じ数え方
+//   ・A2345 のストレートは5が上（ほかのストレートより弱い）・マークは関係なし
+const POKER_BASE = 13 ** 5
+export const pkScoreOf = (cards) => {
+  const r = cards.map(rankOf).sort((a, b) => b - a)
+  const flush = cards.every(c => suitOf(c) === suitOf(cards[0]))
+  const cnt = new Map()
+  for (const x of r) cnt.set(x, (cnt.get(x) || 0) + 1)
+  const g = [...cnt].map(([x, n]) => [n, x]).sort((a, b) => b[0] - a[0] || b[1] - a[1])   // 枚数の多い順・同じなら強い順
+  let high = -1   // ストレートのいちばん上
+  if (g.length === 5) { if (r[0] - r[4] === 4) high = r[0]; else if (r[0] === 12 && r[1] === 3) high = 3 }
+  let cat, k
+  if (high >= 0 && flush) { cat = high === 12 ? 9 : 8; k = [high] }
+  else if (g[0][0] === 4) { cat = 7; k = [g[0][1], g[1][1]] }
+  else if (g[0][0] === 3 && g[1][0] === 2) { cat = 6; k = [g[0][1], g[1][1]] }
+  else if (flush) { cat = 5; k = r }
+  else if (high >= 0) { cat = 4; k = [high] }
+  else if (g[0][0] === 3) { cat = 3; k = g.map(x => x[1]) }
+  else if (g[0][0] === 2 && g[1][0] === 2) { cat = 2; k = g.map(x => x[1]) }
+  else if (g[0][0] === 2) { cat = 1; k = g.map(x => x[1]) }
+  else { cat = 0; k = r }
+  let s = cat
+  for (let i = 0; i < 5; i++) s = s * 13 + (k[i] ?? 0)
+  return s
+}
+export const pkCatOf = (score) => Math.floor(score / POKER_BASE)
+export const pkHandOf = (cards) => POKER_HANDS[pkCatOf(pkScoreOf(cards))]
+// ディーラーが勝負するか：ワンペア以上か、AとKがそろった役なし
+export const pkQualifies = (cards) => {
+  if (pkCatOf(pkScoreOf(cards)) >= 1) return true
+  const r = cards.map(rankOf)
+  return r.includes(12) && r.includes(11)
+}
+// 勝ち負け（勝負したとき）：'noqual'＝ディーラーが勝負しない・'win'・'push'・'lose'
+export const pkResultOf = (player, dealer) => {
+  if (!pkQualifies(dealer)) return 'noqual'
+  const p = pkScoreOf(player), d = pkScoreOf(dealer)
+  return p > d ? 'win' : p === d ? 'push' : 'lose'
+}
+// 払い出し（賭けたぶんこみ）。降りたときは0。勝負したときの賭けは ante × (1 + POKER_RAISE_MULT)
+export const pkPayoutOf = (result, ante, player) => {
+  const raise = ante * POKER_RAISE_MULT
+  if (result === 'noqual') return ante * 2 + raise
+  if (result === 'win') return ante * 2 + raise * (1 + pkHandOf(player).pay)
+  if (result === 'push') return ante + raise
+  return 0
+}
+// 勝負する打ち方（テストとシミュ用・よく知られた近い打ち方）：ワンペア以上か、役なしなら「A K J 8 3」以上
+export const pkShouldRaise = (cards) => {
+  if (pkCatOf(pkScoreOf(cards)) >= 1) return true
+  const r = cards.map(rankOf).sort((a, b) => b - a)
+  const floor = [12, 11, 9, 6, 1]   // A K J 8 3
+  for (let i = 0; i < 5; i++) if (r[i] !== floor[i]) return r[i] > floor[i]
+  return true
 }

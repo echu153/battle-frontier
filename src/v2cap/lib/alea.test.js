@@ -7,7 +7,8 @@ import {
   ALEA_OUTFITS, ALEA_OUTFIT, ALEA_ART_DIR, aleaSrc, ALEA_FACES, ALEA_FACE_KEYS, ALEA_WELCOME, ALEA_FACE_SIZE, ALEA_WELCOME_H, ALEA_FOCUS,
   ALEA_STAGES, CASUAL_STAGE, NAME_STAGE, stageOf, varsOf, ALEA_LINES, ALEA_STAGE_EVENTS, stageEventOf, linesOf, pickLine, ALEA_RARE_WEIGHT,
   enterKindOf, welcomeLineOf, winTalkOf, atTalkOf, LOSE_GAP_MS, HILO_LOSE_STREAK, ROULETTE_MISS_RUN, loseDue, nextMissRun, dayOf,
-  ALEA_THUMB, ALEA_SIDE_MIN_W, bjTalkOf, BJ_TALK_GAP_MS, BJ_QUIET_KINDS, bjTalkDue, SELF_NAME_STAGE, dealerNameOf,
+  ALEA_THUMB, ALEA_SIDE_MIN_W, bjTalkOf, BJ_QUIET_KINDS, SELF_NAME_STAGE, dealerNameOf,
+  pokerTalkOf, PK_QUIET_KINDS, TABLE_QUIET_KINDS, TABLE_TALK_GAP_MS, tableTalkDue,
 } from './alea.js'
 import { CLERK_RARE_WEIGHT } from './clerk.js'
 import { WIN_TIERS } from './casino.js'
@@ -226,7 +227,7 @@ test('画面：賭博場の右にアレア（狭い画面は上）・タップ�
   assert.ok(casino.includes('<V2capAlea face={alea.face} line={alea.text} tick={alea.tick} onTap={tapAlea} />'))
   assert.ok(casino.includes("const talkAsker = makeDailyAsker(() => supabase.rpc('v2cap_alea_talk'))"), '好感度は1日1回だけ聞く（看板娘と同じ）')
   assert.ok(casino.includes("supabase.rpc('v2cap_alea_seen', { p_stage: ev.stage }).then(() => {})"))
-  assert.equal((casino.match(/onTalk=\{onTalk\}/g) || []).length, 4, '4つのゲームに渡す（2026-10-28 ブラックジャックを足した）')
+  assert.equal((casino.match(/onTalk=\{onTalk\}/g) || []).length, 5, '5つのゲームに渡す（2026-10-28 ブラックジャックとポーカーを足した）')
   assert.ok(casino.includes("say('exchange')") && casino.includes("say('short')"), '両替した・お財布を超えた')
   assert.ok(casino.includes('if (!loseDue(lastLose.current)) return null'), '負けたときは1分に1回まで')
   assert.ok(casino.includes('{dev && ('), '開発用のボタンは管理者だけ')
@@ -317,12 +318,12 @@ test('ブラックジャックのひとことの出し方：終わり方ごと�
     ['bjNatural', 'bjDealerNatural', 'bjBust', 'bjDealerBust', 'bjWin', 'bjLose', 'bjPush'])
   assert.equal(bjTalkOf('?'), null)
   assert.deepEqual(BJ_QUIET_KINDS, ['bjBust', 'bjDealerBust', 'bjWin', 'bjLose', 'bjPush'])
-  assert.equal(BJ_TALK_GAP_MS, 30000)
-  assert.equal(bjTalkDue(0), true)
-  assert.equal(bjTalkDue(1000, 1000 + BJ_TALK_GAP_MS - 1), false)
-  assert.equal(bjTalkDue(1000, 1000 + BJ_TALK_GAP_MS), true)
+  assert.equal(TABLE_TALK_GAP_MS, 30000)
+  assert.equal(tableTalkDue(0), true)
+  assert.equal(tableTalkDue(1000, 1000 + TABLE_TALK_GAP_MS - 1), false)
+  assert.equal(tableTalkDue(1000, 1000 + TABLE_TALK_GAP_MS), true)
   const casino = read('components/V2capCasino.jsx')
-  assert.ok(casino.includes('if (BJ_QUIET_KINDS.includes(kind)) {\n      if (!bjTalkDue(lastBj.current)) return null'))
+  assert.ok(casino.includes('if (TABLE_QUIET_KINDS.includes(kind)) {\n      if (!tableTalkDue(lastTable.current)) return null'), 'ブラックジャックとポーカーで同じ時計')
   const bj = read('components/V2capBlackjack.jsx')
   assert.ok(bj.includes("if (action === 'double') onTalk?.('bjDouble')") && bj.includes('onTalk?.(bjTalkOf(outcome))'))
 })
@@ -332,4 +333,29 @@ test('卓の名札は、アレアが名乗る（40日目の場面を見せる）
   assert.ok(ALEA_STAGE_EVENTS[SELF_NAME_STAGE].text.includes('アレア'), '名乗る場面')
   assert.deepEqual([0, 3, 4].map(dealerNameOf), ['ディーラー', 'ディーラー', 'アレア'])
   assert.ok(read('components/V2capCasino.jsx').includes('dealerName={dealerNameOf(seen)}'), '段階ではなく、名乗る場面を見せたかで決める')
+})
+
+// ===== ポーカー（2026-10-28・カリビアンスタッド）=====
+const PK_KINDS = ['pokerSit', 'pokerUnlock', 'pokerLocked', 'pokerFold', 'pokerNoQual', 'pokerWin', 'pokerLose', 'pokerPush']
+
+test('【確定】2026-10-28 ポーカーのひとこと（ユーザーが案を見て「この案で入れて」）：どの場面も段階ごとにある・ゲームの言葉（ポーカー・役の名前・ディーラーなど）も言わない', () => {
+  for (const k of PK_KINDS) {
+    for (let st = 0; st <= 4; st++) assert.ok(linesOf(k, st).length > 0, `${k}（段階${st}）`)
+    assert.ok(linesOf(k, NAME_STAGE).every(l => l.text.includes('{name}')), `${k} の20日目から名前で呼ぶ`)
+    assert.ok(linesOf(k, NAME_STAGE - 1).every(l => !l.text.includes('{name}')), `${k} の20日目より前`)
+    for (const l of ALEA_LINES[k]) {
+      assert.ok(!/ポーカー|フラッシュ|ストレート|ペア|スリーカード|フルハウス|フォーカード|ロイヤル|レイズ|フォールド|コール|アンティ|ディーラー|役/.test(l.text), `${k}：${l.text}`)
+    }
+  }
+  assert.ok(linesOf('pokerWin', 0).length >= 2 && linesOf('pokerLose', 0).length >= 2, 'よく出る勝ち負けは2つずつ')
+})
+
+test('ポーカーのひとことの出し方：結果ごとの場面・降りた／勝ち負けなどはブラックジャックと同じ時計で30秒に1回まで', () => {
+  assert.deepEqual(['fold', 'noqual', 'win', 'lose', 'push'].map(pokerTalkOf), ['pokerFold', 'pokerNoQual', 'pokerWin', 'pokerLose', 'pokerPush'])
+  assert.equal(pokerTalkOf('?'), null)
+  assert.deepEqual(PK_QUIET_KINDS, ['pokerFold', 'pokerNoQual', 'pokerWin', 'pokerLose', 'pokerPush'])
+  assert.deepEqual(TABLE_QUIET_KINDS, [...BJ_QUIET_KINDS, ...PK_QUIET_KINDS])
+  const poker = read('components/V2capPoker.jsx')
+  assert.ok(poker.includes('onTalk?.(pokerTalkOf(data.result))'), '大きな役の勝ちでなければ、結果のひとこと')
+  assert.ok(poker.includes('say: onTalk?.(winTalkOf(tier.key))'), '大きな役の勝ち（BIG WIN 以上）は演出の上に')
 })

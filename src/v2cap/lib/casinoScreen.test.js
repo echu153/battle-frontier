@@ -54,13 +54,27 @@ test('広い画面のルーレットは前のまま（ホイール300pxと盤を
   assert.ok(wide.includes("<div style={{ flex:'1 1 360px', minWidth:0 }}>"), '盤のほうは 360px から（ホイールと横に並ぶのは約680px から）')
 })
 
-test('【2026-10-28】ブラックジャックのタブ：5つでもスマホで1段（480px 以下は頭の絵文字を外す・🔒 は残す）・まだ遊べないときは鍵の表示', () => {
+test('【2026-10-28】タブはスマホでも1段（480px 以下は頭の絵文字を外す・🔒 は残す）・ディーラーと勝負するゲームは「テーブル」の中で切り替える', () => {
   const casino = read('components/V2capCasino.jsx')
-  assert.ok(casino.includes("{ key:'bj',       icon:'♠',  label:'BJ' },"), 'ブラックジャックは短く')
+  // ポーカーを足して6つにすると 375px で2段になり、ルーレットが画面の下へ押される＝ブラックジャックとポーカーは「テーブル」にまとめた
+  const tabs = casino.slice(casino.indexOf('const TABS = ['), casino.indexOf('// テーブルの中の卓'))
+  assert.equal((tabs.match(/\{ key:'/g) || []).length, 5, 'タブは5つ')
+  assert.ok(tabs.includes("{ key:'table',    icon:'♠',  label:'テーブル' },"))
+  assert.ok(casino.includes("{ key:'bj',    icon:'♠', label:'ブラックジャック' },") && casino.includes("{ key:'poker', icon:'♦', label:'ポーカー' },"))
   assert.ok(casino.includes("const TAB_CSS = '@media (max-width: 480px) { .cs-tab-ico { display: none } }'"))
   assert.ok(casino.includes(`{locked ? '🔒 ' : <span className="cs-tab-ico">{t.icon} </span>}{t.label}`), '🔒 は狭い画面でも外さない')
-  assert.ok(casino.includes("{tab === 'bj' && !isUnlocked('bj', money.won) && lockedPanel(unlockOf('bj'))}"), 'まだ遊べないときは何枚であそべるか')
+  assert.ok(casino.includes("const tab = tabStored === 'bj' ? 'table' : tabStored"), '前に「BJ」タブを開いていた端末はテーブルへ')
+  assert.ok(casino.includes("{tab === 'table' && !isUnlocked(table, money.won) && lockedPanel(unlockOf(table))}"), 'まだ遊べない卓は何枚で遊べるか')
   assert.ok(casino.includes("{isUnlocked('bj', money.won) && (") && casino.includes('<V2capBlackjack init={state.bj}'), '解禁してから卓を置く')
+  assert.ok(casino.includes("{isUnlocked('poker', money.won) && (") && casino.includes('<V2capPoker init={state.poker}'))
+})
+
+test('【2026-10-28】ポーカー：決まりの説明は ❓ HELP・ディーラーの2〜5枚目は伏せて置く・勝負したら1枚ずつめくる', () => {
+  const poker = read('components/V2capPoker.jsx')
+  assert.ok(poker.includes('<V2Modal title="❓ HELP" color={CASINO.gold} keepScroll onClose={() => setHelp(false)}>'))
+  assert.ok(poker.includes('await place(setDealer, k === 0 ? data.dealer[0] : null, k > 0)'), 'ディーラーは1枚目だけ表（サーバーも1枚目しか返さない）')
+  assert.ok(poker.includes("await reveal(data.dealer, action === 'raise')"))
+  assert.ok(poker.includes('if (medals < ante * (1 + POKER_RAISE_MULT))'), '配るときにアンティの3倍が要る（サーバーと同じ）')
 })
 
 test('【2026-10-28】ブラックジャック：決まりの説明は ❓ HELP・アレアの2枚目は伏せて置く・解禁の演出は当たりの演出を閉じてから', () => {

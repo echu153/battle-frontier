@@ -9,6 +9,7 @@ import {
   WHEEL_ORDER, RED_NUMBERS, colorOfNumber, betWins, betPayoutOf, validBet, rouletteRtp, LUCKY_COUNT_W, LUCKY_MULTS, ROULETTE_STRAIGHT,
   CASINO_UNLOCKS, casinoWonOf, isUnlocked, newlyUnlockedOf, unlockOf,
   BJ_MIN_BET, BJ_MAX_BET, BJ_BETS, BJ_PAY_NUM, BJ_PAY_DEN, bjPointOf, bjValueOf, bjIsNatural, bjDealerPeeks, bjDealerHits, bjResultOf, bjPayoutOf, bjOutcomeOf, bjBestActionOf, bjRtp,
+  POKER_MIN_ANTE, POKER_MAX_ANTE, POKER_ANTES, POKER_RAISE_MULT, POKER_HANDS, pkScoreOf, pkCatOf, pkHandOf, pkQualifies, pkResultOf, pkPayoutOf, pkShouldRaise,
 } from './casino.js'
 import { displayTable, pickStops, classOf, missStopsOf, DISPLAY_OF_ROLE, REELS, REEL_LEN, winLinesOf, noticeKindOf, noticeLevelOf, NOTICE_TABLE_FOR_TEST } from './slotReels.js'
 
@@ -209,7 +210,8 @@ const C = { 2: 0, 3: 1, 4: 2, 5: 3, 6: 4, 7: 5, 8: 6, 9: 7, 10: 8, J: 9, Q: 10, 
 const hand = (...xs) => xs.map(x => C[x])
 
 test('【確定】解禁：これまでの払い出し（どのゲームも・両替は数えない）が1万枚でブラックジャック・一度解禁したらそのまま', () => {
-  assert.deepEqual(CASINO_UNLOCKS.map(u => [u.key, u.need]), [['bj', 10000]])
+  assert.equal(CASINO_UNLOCKS[0].key, 'bj', 'ブラックジャックがいちばん先')
+  assert.equal(unlockOf('bj').need, 10000)
   const stats = { slot: { n: 5, bet: 15, won: 6000 }, hilo: { won: 2500 }, roulette: { won: 1499 } }
   assert.equal(casinoWonOf(stats), 9999)
   assert.equal(casinoWonOf(null), 0)
@@ -312,4 +314,91 @@ test('ブラックジャック：式の還元率と、決まりの関数で実�
   }
   const sim = back / paid, rtp = bjRtp().rtp
   assert.ok(Math.abs(sim - rtp) < 0.006, `シミュ ${(sim * 100).toFixed(2)}%・式 ${(rtp * 100).toFixed(2)}%`)
+})
+
+// ===== ポーカー（カリビアンスタッド・2026-10-28）=====
+// マークつきのカード：'As'＝スペードのA・'Th'＝ハートの10（s♠ h♥ d♦ c♣）
+const PK_R = { 2: 0, 3: 1, 4: 2, 5: 3, 6: 4, 7: 5, 8: 6, 9: 7, T: 8, J: 9, Q: 10, K: 11, A: 12 }
+const PK_S = { s: 0, h: 1, d: 2, c: 3 }
+const pk = (str) => str.split(' ').map(x => PK_S[x[1]] * 13 + PK_R[x[0]])
+
+test('【確定】解禁：ポーカーはこれまでの払い出し3万枚（ブラックジャックの次の段）', () => {
+  assert.deepEqual(CASINO_UNLOCKS.map(u => [u.key, u.need]), [['bj', 10000], ['poker', 30000]])
+  assert.equal(isUnlocked('poker', 29999), false)
+  assert.equal(isUnlocked('poker', 30000), true)
+  assert.deepEqual(newlyUnlockedOf(9999, 30000).map(u => u.key), ['bj', 'poker'], '一度に2つ越えたら両方')
+})
+
+test('ポーカーの役：10種類の判定と強さの順（A2345 のストレートは5が上・マークは関係なし）', () => {
+  const cat = (str) => pkHandOf(pk(str)).key
+  assert.equal(cat('As Ks Qs Js Ts'), 'royal')
+  assert.equal(cat('9h 8h 7h 6h 5h'), 'sflush')
+  assert.equal(cat('5d 4d 3d 2d Ad'), 'sflush', 'A2345 のストレートフラッシュ')
+  assert.equal(cat('7s 7h 7d 7c 2s'), 'quads')
+  assert.equal(cat('Ks Kh Kd 4c 4s'), 'full')
+  assert.equal(cat('As 9s 7s 4s 2s'), 'flush')
+  assert.equal(cat('Ts 9h 8d 7c 6s'), 'straight')
+  assert.equal(cat('5s 4h 3d 2c Ah'), 'straight')
+  assert.equal(cat('Qs Qh Qd 9c 2s'), 'trips')
+  assert.equal(cat('Js Jh 4d 4c As'), 'twopair')
+  assert.equal(cat('9s 9h Ad 7c 2s'), 'pair')
+  assert.equal(cat('As Kh 9d 7c 2s'), 'high')
+  const order = ['high', 'pair', 'twopair', 'trips', 'straight', 'flush', 'full', 'quads', 'sflush', 'royal']
+  assert.deepEqual(POKER_HANDS.map(h => h.key), order)
+  const S = (str) => pkScoreOf(pk(str))
+  assert.ok(S('6s 5h 4d 3c 2s') > S('5s 4h 3d 2c Ah'), 'A2345 は6ハイのストレートより下')
+  assert.ok(S('As Ah 3d 4c 6s') > S('Ks Kh Qd Jc 9s'), 'ペアはペアの数字で比べる')
+  assert.ok(S('Ks Kh 7d 7c 2s') > S('Ks Kh 6d 6c As'), 'ツーペアは2つめのペアまで比べる')
+  assert.ok(S('Ks Kh Qd 9c 3s') > S('Ks Kh Qd 9c 2s'), '最後の1枚まで比べる')
+  assert.equal(S('As Kh 9d 7c 2s'), S('Ah Ks 9c 7d 2h'), 'マークがちがうだけなら引き分け')
+  assert.equal(pkCatOf(S('As Ks Qs Js Ts')), 9)
+})
+
+test('【確定】ディーラーはAとKがそろった役なし以上で勝負・勝負しないとアンティ1:1で上乗せは戻る', () => {
+  assert.equal(pkQualifies(pk('As Kh 9d 7c 2s')), true)
+  assert.equal(pkQualifies(pk('As Qh 9d 7c 2s')), false)
+  assert.equal(pkQualifies(pk('2s 2h 9d 7c 4s')), true, 'ワンペアなら数字によらず勝負')
+  assert.deepEqual([POKER_MIN_ANTE, POKER_MAX_ANTE, POKER_RAISE_MULT], [10, 1000, 2])
+  assert.ok(POKER_ANTES.every(a => a >= POKER_MIN_ANTE && a <= POKER_MAX_ANTE))
+  const player = pk('Qs Qh 9d 7c 2s')
+  assert.equal(pkResultOf(player, pk('As Jh 9c 7d 3h')), 'noqual')
+  assert.equal(pkPayoutOf('noqual', 100, player), 400, 'アンティ100が200・上乗せ200が戻る')
+  assert.equal(pkResultOf(player, pk('Js Jh 9c 7d 3h')), 'win')
+  assert.equal(pkPayoutOf('win', 100, player), 200 + 200 * 2, 'ワンペアの上乗せは1:1')
+  assert.equal(pkPayoutOf('win', 100, pk('As 9s 7s 4s 2s')), 200 + 200 * 6, 'フラッシュは5:1')
+  assert.equal(pkPayoutOf('win', 1000, pk('As Ks Qs Js Ts')), 2000 + 2000 * 101, 'ロイヤルは100:1')
+  assert.equal(pkResultOf(player, pk('Qc Qd 9h 7s 2h')), 'push')
+  assert.equal(pkPayoutOf('push', 100, player), 300)
+  assert.equal(pkResultOf(player, pk('Ks Kh 9c 7d 3h')), 'lose')
+  assert.equal(pkPayoutOf('lose', 100, player), 0)
+  assert.deepEqual(POKER_HANDS.map(h => h.pay), [1, 1, 2, 3, 4, 5, 7, 20, 50, 100], '上乗せの配当（標準）')
+})
+
+test('勝負する打ち方（還元率の前提）：ワンペア以上か、役なしなら A K J 8 3 以上', () => {
+  assert.equal(pkShouldRaise(pk('2s 2h 9d 7c 4s')), true)
+  assert.equal(pkShouldRaise(pk('As Kh Jd 8c 3s')), true)
+  assert.equal(pkShouldRaise(pk('As Kh Jd 8c 2s')), false)
+  assert.equal(pkShouldRaise(pk('As Kh Qd 3c 2s')), true)
+  assert.equal(pkShouldRaise(pk('As Qh Jd 9c 8s')), false, 'Kがない役なしは降りる')
+})
+
+test('【確定】ポーカーの還元率は約97.4%（52枚をまぜて30万回配ったとき・ワンペア以上と A K J 8 3 以上で勝負）', () => {
+  const rng = rngOf(20261028)
+  const deck = Array.from({ length: 52 }, (_, i) => i)
+  let paid = 0, back = 0, raised = 0, noqual = 0
+  for (let i = 0; i < 300000; i++) {
+    for (let j = 0; j < 10; j++) { const k = j + Math.floor(rng() * (52 - j)); const t = deck[j]; deck[j] = deck[k]; deck[k] = t }
+    const p = deck.slice(0, 5), d = deck.slice(5, 10)
+    paid += 10
+    if (!pkShouldRaise(p)) continue
+    raised++
+    paid += 10 * POKER_RAISE_MULT
+    const r = pkResultOf(p, d)
+    if (r === 'noqual') noqual++
+    back += pkPayoutOf(r, 10, p)
+  }
+  const rtp = back / paid
+  assert.ok(rtp > 0.968 && rtp < 0.98, `${(rtp * 100).toFixed(2)}%`)
+  assert.ok(raised / 300000 > 0.5 && raised / 300000 < 0.55, '勝負するのは半分ちょっと')
+  assert.ok(noqual / raised > 0.42 && noqual / raised < 0.45, 'ディーラーが勝負しないのは勝負したときの4割強')
 })

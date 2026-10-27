@@ -283,6 +283,62 @@ export const ALEA_LINES = {
     { min: 2, max: 2, face: 'normal', text: '…引き分け。気が合うね' },
     { min: 3, face: 'smile', text: '…引き分け。{name}とは、気が合うね' },
   ],
+  // ===== ポーカー（カリビアンスタッド・アレアがディーラー・【確定】2026-10-28 ユーザーが案を見て「ポーカーのセリフはこの案で入れて」）=====
+  // ゲームの言葉（ポーカー・役の名前・ディーラーなど）も言わない（alea.test.js）。大きな役で勝ったときは BIG WIN などの演出の上の bigWin／hugeWin
+  // 卓についた（ポーカーを開いたとき）
+  pokerSit: [
+    { max: 1, face: 'smile', text: '…今度はこちらの卓ですか。手札、配りますね' },
+    { min: 2, max: 2, face: 'smile', text: '…今度はこっちね。手札、配るよ' },
+    { min: 3, face: 'smile', text: '…{name}、今度はこっちの勝負？ いいよ、配ってあげる' },
+  ],
+  // 遊べるようになった瞬間
+  pokerUnlock: [
+    { max: 1, face: 'smile', text: '…ずいぶん勝ってきましたね。…奥の卓も、空けておきました' },
+    { min: 2, max: 2, face: 'smile', text: '…ずいぶん勝ってきたね。奥の卓も、空けといたよ' },
+    { min: 3, face: 'smile', text: '…{name}、奥の卓も空けといたよ。今度は、手札で勝負しよ' },
+  ],
+  // まだ遊べないときに開いた
+  pokerLocked: [
+    { max: 1, face: 'normal', text: '…奥の卓は、もう少しここで勝ってからにしましょう' },
+    { min: 2, max: 2, face: 'normal', text: '…奥の卓は、もう少し勝ってからね' },
+    { min: 3, face: 'normal', text: '…{name}、奥の卓はもう少し勝ってから。待ってるから' },
+  ],
+  // 降りた
+  pokerFold: [
+    { max: 1, face: 'normal', text: '…降りるんですね。慎重なのも、嫌いじゃないです' },
+    { min: 2, max: 2, face: 'normal', text: '…降りちゃうの？ ま、慎重なのも悪くないけど' },
+    { min: 3, face: 'smile', text: '…{name}、降りるの？ …ふふ、賢いのかもね' },
+  ],
+  // アレアの手が勝負にならなかった（AとKがそろわない）
+  pokerNoQual: [
+    { max: 1, face: 'normal', text: '…あら、わたしの手、勝負にならないみたいです' },
+    { min: 2, max: 2, face: 'normal', text: '…あ、わたしの手じゃ勝負にならないや' },
+    { min: 3, face: 'smile', text: '…あ、わたしの手じゃ勝負にならない。{name}、運がいいね' },
+  ],
+  // ふつうの勝ち（大きな役は演出の上の bigWin／hugeWin）
+  pokerWin: [
+    { max: 1, face: 'normal', text: '…負けちゃいました。いい手でしたね' },
+    { max: 1, face: 'smile', text: '…今日は、そちらに流れがあるみたいです' },
+    { min: 2, max: 2, face: 'normal', text: '…わたしの負け。いい手だったね' },
+    { min: 2, max: 2, face: 'smile', text: '…今日は、そっちに流れがあるみたい' },
+    { min: 3, face: 'smile', text: '…{name}の勝ち。いい手だった' },
+    { min: 3, face: 'smile', text: '…{name}、手札に好かれてるね' },
+  ],
+  // 負け（アレアの手が上）
+  pokerLose: [
+    { max: 1, face: 'smile', text: '…ふふ、今回はわたしの勝ちですね' },
+    { max: 1, face: 'smile', text: '…強気でしたね。でも、こちらが上でした' },
+    { min: 2, max: 2, face: 'smile', text: '…ふふ、今回はわたしの勝ち' },
+    { min: 2, max: 2, face: 'smile', text: '…強気だったね。でも、こっちが上' },
+    { min: 3, face: 'smile', text: '…ふふ、わたしの勝ち。{name}、次はどうする？' },
+    { min: 3, face: 'jito', text: '…{name}、惜しかったね。…でも、手加減はしないよ' },
+  ],
+  // まったく同じ強さ
+  pokerPush: [
+    { max: 1, face: 'surprised', text: '…まったく同じ強さ。…こんなこと、あるんですね' },
+    { min: 2, max: 2, face: 'surprised', text: '…まったく同じ強さ。…こんなこと、あるんだ' },
+    { min: 3, face: 'smile', text: '…{name}とまったく同じ強さ。…気が合うね' },
+  ],
 }
 
 // 段階が上がって最初に話しかけたときの場面（1回だけ）。2＝くだけた話し方に変わる・3＝名前を聞いて呼び始める・4＝名乗る
@@ -342,18 +398,23 @@ export const loseDue = (lastAt, now = Date.now()) => !(lastAt > 0) || now - last
 // ルーレットの外れの続き：外れたら+1・当たったら0。ROULETTE_MISS_RUN に届いたら言って、0から数え直す
 export const nextMissRun = (run, pay) => (pay > 0 ? 0 : (Number(run) || 0) + 1)
 
-// ===== ブラックジャック（アレアがディーラー・2026-10-28）=====
-// 終わり方（casino.js の bjOutcomeOf）→ ひとこと。ブラックジャック（どちらも）は毎回言う。
-// ふつうの勝ち負け・引き分け・引きすぎ（どちらも）は BJ_TALK_GAP_MS に1回まで（毎回は言わない＝負けたときの LOSE_GAP_MS と同じ考え）。
-// ダブルを押したとき（bjDouble）・卓についたとき（bjSit）・遊べるようになったとき（bjUnlock）は画面がそのまま言わせる
+// ===== テーブルのゲーム（ブラックジャック・ポーカー＝アレアがディーラー・2026-10-28）=====
+// ふつうの勝ち負けなど（TABLE_QUIET_KINDS）は TABLE_TALK_GAP_MS に1回まで（毎回は言わない＝負けたときの LOSE_GAP_MS と同じ考え・2つのゲームで共通）。
+// ブラックジャック（どちらも）・ダブル（bjDouble）・卓についた（〜Sit）・遊べるようになった（〜Unlock）は毎回言う
+// ブラックジャック：終わり方（casino.js の bjOutcomeOf）→ ひとこと
 const BJ_TALK = {
   natural: 'bjNatural', dealerNatural: 'bjDealerNatural', bust: 'bjBust', dealerBust: 'bjDealerBust',
   win: 'bjWin', lose: 'bjLose', push: 'bjPush',
 }
 export const bjTalkOf = (outcome) => BJ_TALK[outcome] || null
-export const BJ_TALK_GAP_MS = 30000
 export const BJ_QUIET_KINDS = ['bjBust', 'bjDealerBust', 'bjWin', 'bjLose', 'bjPush']
-export const bjTalkDue = (lastAt, now = Date.now()) => !(lastAt > 0) || now - lastAt >= BJ_TALK_GAP_MS
+// ポーカー：結果（サーバーの result＝fold／noqual／win／push／lose）→ ひとこと。大きな役の勝ちは演出の上の bigWin／hugeWin（winTalkOf）
+const PK_TALK = { fold: 'pokerFold', noqual: 'pokerNoQual', win: 'pokerWin', lose: 'pokerLose', push: 'pokerPush' }
+export const pokerTalkOf = (result) => PK_TALK[result] || null
+export const PK_QUIET_KINDS = ['pokerFold', 'pokerNoQual', 'pokerWin', 'pokerLose', 'pokerPush']
+export const TABLE_QUIET_KINDS = [...BJ_QUIET_KINDS, ...PK_QUIET_KINDS]
+export const TABLE_TALK_GAP_MS = 30000
+export const tableTalkDue = (lastAt, now = Date.now()) => !(lastAt > 0) || now - lastAt >= TABLE_TALK_GAP_MS
 // 卓の名札：名乗る場面（40日目・ALEA_STAGE_EVENTS[4]）を見せるまでは「ディーラー」。名乗ったあとは「アレア」
 //   （seen＝見せた段階の場面＝サーバーの alea_stage_seen。名前はセリフでも40日目まで出さない）
 export const SELF_NAME_STAGE = 4
