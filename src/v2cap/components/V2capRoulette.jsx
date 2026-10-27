@@ -18,6 +18,7 @@ import { sfx, fx, celebrate, vibrate } from './casinoFx.js'
 import { CASINO, panel, bigBtn, pill, fmt } from './casinoStyle.js'
 import V2Modal from './V2Modal.jsx'
 import { miniBtn } from './v2ui.js'
+import { useNarrow } from './casinoParts.jsx'
 
 const HELP_HEAD = { color: CASINO.gold, fontSize:'12px', marginBottom:'2px' }
 
@@ -27,19 +28,7 @@ const SEG = 360 / N
 const COLOR_HEX = { red: '#c8102e', black: '#151515', green: '#0a8a3a' }
 const CHIP_COLOR = { 1: '#e0e0e0', 5: '#e53935', 10: '#1e88e5', 50: '#43a047', 100: '#212121' }
 const chipColorOf = (a) => CHIP_COLOR[[100, 50, 10, 5, 1].find(v => a >= v) || 1]
-
-// 狭い画面かどうか
-const useNarrow = () => {
-  const q = '(max-width: 620px)'
-  const [narrow, setNarrow] = useState(() => (typeof window !== 'undefined' ? window.matchMedia(q).matches : false))
-  useEffect(() => {
-    const mq = window.matchMedia(q)
-    const on = () => setNarrow(mq.matches)
-    mq.addEventListener('change', on)
-    return () => mq.removeEventListener('change', on)
-  }, [])
-  return narrow
-}
+// 狭い画面かどうかは casinoParts.jsx の useNarrow（620px 以下・2026-10-28 ポーカーでも使うので移した）
 
 // ===== ホイール =====
 function Wheel({ wheelDeg, ballDeg, ballR, result, lucky, size }) {

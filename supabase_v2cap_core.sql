@@ -5387,9 +5387,9 @@ begin
             then jsonb_build_object('active', true, 'bet', v_c.bj_bet, 'doubled', v_c.bj_doubled,
                                     'player', to_jsonb(v_c.bj_player), 'dealer', to_jsonb(v_c.bj_dealer[1:1]))
             else jsonb_build_object('active', false) end,
-    -- ポーカー（§22）：勝負の途中だけ手を返す。★ディーラーの手は表の1枚目だけ
+    -- ポーカー（§22）：勝負の途中だけ手を返す。★ディーラーの手は表の1枚目だけ（交換で引くカードも返さない）
     'poker', case when v_c.pk_active
-               then jsonb_build_object('active', true, 'ante', v_c.pk_ante,
+               then jsonb_build_object('active', true, 'ante', v_c.pk_ante, 'swapped', v_c.pk_swapped,
                                        'player', to_jsonb(v_c.pk_player), 'dealer', to_jsonb(v_c.pk_dealer[1:1]))
                else jsonb_build_object('active', false) end
   ) || public.v2cap_casino_money(v_uid);
@@ -8727,17 +8727,24 @@ grant execute on function public.v2cap_bj_action(text) to authenticated;
 -- ============================================================
 -- 【確定】2026-10-28 ユーザー指示「じゃあポーカーも作っておいて、対ディーラー用の」＋選んだこと（決まりの写しは src/v2cap/lib/casino.js）：
 --   ・**カリビアンスタッド**・アンティ **10〜1000枚**・これまでの払い出し（§11 の v2cap_casino_won）**3万枚** で解禁
---   ・52枚を毎回まぜて5枚ずつ配る。ディーラーは1枚目だけ表。降りる（アンティ没収）か、勝負する（アンティの2倍を上乗せ）。
+--   ・52枚を毎回まぜて配る（こちら5枚・ディーラー7枚＝下の 2026-10-28 の直し）。ディーラーは1枚目だけ表。降りる（アンティ没収）か、勝負する（アンティの2倍を上乗せ）。
 --     配るときにアンティの3倍のメダルが要る（勝負に出られないまま配らない）
 --   ・ディーラーはAとKがそろった役なし以上で勝負。しないとき：アンティ1:1・上乗せは戻る。
 --     勝負したら役で比べる：勝ち＝アンティ1:1＋上乗せは役の配当・引き分けは戻る・負けは両方没収
---   ・還元率 約97.4%（ワンペア以上と A K J 8 3 以上の役なしで勝負する打ち方）
--- ★ディーラーの手は勝負がつくまで1枚目しか返さない（v2cap_casino_state も同じ）
+-- 【確定】2026-10-28 1枚の交換とディーラーの7枚（ユーザー指示「カード1枚交換する仕様追加して、ディーラーもその分強くなる仕様にしたい」
+--   ＋選んだこと「7枚から5枚（推奨）」「参加料（推奨）」）：
+--   ・こちらは配られた5枚から1枚だけ交換できる（v2cap_poker_swap・しなくてもいい・タダ）。そのあとで降りるか勝負するかを決める
+--   ・ディーラーは7枚配られ、いちばん強い5枚で勝負する（21通りを比べる）
+--   ・上乗せの配当はツーペア1倍・フルハウス8倍・フォーカード25倍（ほかは標準）＝還元率 約97%（交換と勝負を上手に選んだとき）
+--   ・画面ではアンティを「参加料」と呼ぶ（返事の文も合わせる）
+-- ★ディーラーの手は勝負がつくまで1枚目しか返さない（v2cap_casino_state も同じ）。交換で引くカード（pk_spare）も返さない
 -- ★記録（stats.poker）は賭けたとき（アンティ・上乗せ）と払い出しで v2cap_casino_book（n は賭けた回数＝上乗せも1回）
-alter table public.v2cap_casino add column if not exists pk_active boolean    not null default false;
-alter table public.v2cap_casino add column if not exists pk_ante   int        not null default 0;
-alter table public.v2cap_casino add column if not exists pk_player smallint[] not null default '{}';
-alter table public.v2cap_casino add column if not exists pk_dealer smallint[] not null default '{}';   -- 1枚目が表
+alter table public.v2cap_casino add column if not exists pk_active  boolean    not null default false;
+alter table public.v2cap_casino add column if not exists pk_ante    int        not null default 0;
+alter table public.v2cap_casino add column if not exists pk_player  smallint[] not null default '{}';
+alter table public.v2cap_casino add column if not exists pk_dealer  smallint[] not null default '{}';   -- 7枚・1枚目が表
+alter table public.v2cap_casino add column if not exists pk_spare   smallint;                            -- 交換で引くカード（配るときに決めておく）
+alter table public.v2cap_casino add column if not exists pk_swapped boolean    not null default false;   -- もう交換した
 
 -- 5枚の強さ（内部ヘルパ）：役 × 13^5 ＋ 比べる数字（強い順に5つ・2＝0 … A＝12）。casino.js の pkScoreOf と同じ数え方
 --   役：0役なし 1ワンペア 2ツーペア 3スリーカード 4ストレート 5フラッシュ 6フルハウス 7フォーカード 8ストレートフラッシュ 9ロイヤル。A2345 のストレートは5が上
@@ -8788,7 +8795,7 @@ end;
 $$;
 revoke all on function public.v2cap_poker_score(smallint[]) from public, anon, authenticated;
 
--- 配る：アンティを賭けて、52枚をまぜて5枚ずつ（こちら・ディーラー）
+-- 配る：アンティ（画面では参加料）を賭けて、52枚をまぜて13枚＝こちら5枚・ディーラー7枚・交換で引く1枚
 create or replace function public.v2cap_poker_start(p_ante int)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
@@ -8811,30 +8818,56 @@ begin
     return jsonb_build_object('ok', false, 'error', format('これまでの払い出しが%s枚になると遊べます', c_unlock));
   end if;
   if p_ante is null or p_ante < c_min or p_ante > c_max then
-    return jsonb_build_object('ok', false, 'error', format('アンティは%s〜%s枚です', c_min, c_max));
+    return jsonb_build_object('ok', false, 'error', format('参加料は%s〜%s枚です', c_min, c_max));
   end if;
   if v_p.medals < p_ante::bigint * (1 + c_raise) then
-    return jsonb_build_object('ok', false, 'error', format('メダルが足りません（勝負に出るとアンティの%s倍を足すので、%s枚要ります）', c_raise, p_ante * (1 + c_raise)));
+    return jsonb_build_object('ok', false, 'error', format('メダルが足りません（勝負に出ると参加料の%s倍を足すので、%s枚要ります）', c_raise, p_ante * (1 + c_raise)));
   end if;
-  select array_agg(c::smallint) into v_deck from (select c from generate_series(0, 51) c order by random() limit 10) t;
+  select array_agg(c::smallint) into v_deck from (select c from generate_series(0, 51) c order by random() limit 13) t;
   update public.v2cap_profiles set medals = medals - p_ante, updated_at = now() where id = v_uid;
   update public.v2cap_casino
-     set pk_active = true, pk_ante = p_ante, pk_player = v_deck[1:5], pk_dealer = v_deck[6:10], updated_at = now()
+     set pk_active = true, pk_ante = p_ante, pk_player = v_deck[1:5], pk_dealer = v_deck[6:12], pk_spare = v_deck[13],
+         pk_swapped = false, updated_at = now()
    where player_id = v_uid;
   perform public.v2cap_casino_book(v_uid, 'poker', p_ante, 0, 0);
-  return jsonb_build_object('ok', true, 'done', false, 'ante', p_ante,
+  return jsonb_build_object('ok', true, 'done', false, 'ante', p_ante, 'swapped', false,
                             'player', to_jsonb(v_deck[1:5]), 'dealer', to_jsonb(v_deck[6:6])) || public.v2cap_casino_money(v_uid);
 end;
 $$;
 revoke all on function public.v2cap_poker_start(int) from public, anon;
 grant execute on function public.v2cap_poker_start(int) to authenticated;
 
--- 降りる（fold）か勝負する（raise＝アンティの2倍を上乗せ）。勝負したらディーラーの手を開けて決着
+-- 1枚交換する（勝負の前に1回だけ）：p_index＝こちらの何枚目か（0〜4）。配るときに決めておいた1枚と入れかえる
+create or replace function public.v2cap_poker_swap(p_index int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid    uuid := auth.uid();
+  v_c      public.v2cap_casino;
+  v_player smallint[];
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  perform 1 from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  v_c := public.v2cap_casino_lock(v_uid);
+  if not v_c.pk_active then return jsonb_build_object('ok', false, 'error', '勝負していません'); end if;
+  if v_c.pk_swapped then return jsonb_build_object('ok', false, 'error', '交換できるのは1回だけです'); end if;
+  if p_index is null or p_index < 0 or p_index > 4 then return jsonb_build_object('ok', false, 'error', 'カードが正しくありません'); end if;
+  v_player := v_c.pk_player;
+  v_player[p_index + 1] := v_c.pk_spare;
+  update public.v2cap_casino set pk_player = v_player, pk_swapped = true, updated_at = now() where player_id = v_uid;
+  return jsonb_build_object('ok', true, 'swapped', true, 'index', p_index, 'card', v_c.pk_spare, 'player', to_jsonb(v_player));
+end;
+$$;
+revoke all on function public.v2cap_poker_swap(int) from public, anon;
+grant execute on function public.v2cap_poker_swap(int) to authenticated;
+
+-- 降りる（fold）か勝負する（raise＝アンティの2倍を上乗せ）。勝負したらディーラーの7枚を開け、いちばん強い5枚で決着
 create or replace function public.v2cap_poker_action(p_action text)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   c_raise  constant int := 2;
-  c_pay    constant int[] := array[1, 1, 2, 3, 4, 5, 7, 20, 50, 100];   -- 上乗せの配当（役なし〜ロイヤル）
+  c_pay    constant int[] := array[1, 1, 1, 3, 4, 5, 8, 25, 50, 100];   -- 上乗せの配当（役なし〜ロイヤル）
   c_base   constant bigint := 371293;                                  -- 13^5
   v_uid    uuid := auth.uid();
   v_p      public.v2cap_profiles;
@@ -8843,9 +8876,13 @@ declare
   v_raise  bigint;
   v_ps     bigint;
   v_ds     bigint;
+  v_sc     bigint;
+  v_hand   smallint[];
+  v_best   smallint[];
   v_dq     boolean;
   v_result text;
   v_payout bigint;
+  a int; b int; i int;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
@@ -8867,7 +8904,18 @@ begin
   update public.v2cap_profiles set medals = medals - v_raise, updated_at = now() where id = v_uid;
   perform public.v2cap_casino_book(v_uid, 'poker', v_raise, 0, 0);
   v_ps := public.v2cap_poker_score(v_c.pk_player);
-  v_ds := public.v2cap_poker_score(v_c.pk_dealer);
+  -- ディーラーの7枚から2枚を外す21通りのうち、いちばん強い5枚（同じ強さなら先に見つけたほう＝casino.js の pkBestOf と同じ）
+  v_ds := -1;
+  for a in 1..6 loop
+    for b in (a + 1)..7 loop
+      v_hand := '{}';
+      for i in 1..7 loop
+        if i <> a and i <> b then v_hand := v_hand || v_c.pk_dealer[i]; end if;
+      end loop;
+      v_sc := public.v2cap_poker_score(v_hand);
+      if v_sc > v_ds then v_ds := v_sc; v_best := v_hand; end if;
+    end loop;
+  end loop;
   -- ディーラーが勝負するか：ワンペア以上か、AとKがそろった役なし（強い順の1つめがA・2つめがK）
   v_dq := v_ds >= c_base or ((v_ds / 28561) % 13 = 12 and (v_ds / 2197) % 13 = 11);
   if not v_dq then
@@ -8885,7 +8933,8 @@ begin
   update public.v2cap_casino set pk_active = false, updated_at = now() where player_id = v_uid;
   perform public.v2cap_casino_book(v_uid, 'poker', 0, v_payout, v_payout);
   return jsonb_build_object('ok', true, 'done', true, 'result', v_result, 'payout', v_payout, 'ante', v_ante,
-                            'player', to_jsonb(v_c.pk_player), 'dealer', to_jsonb(v_c.pk_dealer)) || public.v2cap_casino_money(v_uid);
+                            'player', to_jsonb(v_c.pk_player), 'dealer', to_jsonb(v_c.pk_dealer), 'best', to_jsonb(v_best))
+         || public.v2cap_casino_money(v_uid);
 end;
 $$;
 revoke all on function public.v2cap_poker_action(text) from public, anon;

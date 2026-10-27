@@ -9,7 +9,7 @@ const read = (rel) => readFileSync(new URL(`../${rel}`, import.meta.url), 'utf8'
 const ROULETTE = read('components/V2capRoulette.jsx')
 
 test('スマホのルーレット：ホイールは回している間だけ画面の真ん中に大きく出す（前は盤の上に 260px で置いていた）', () => {
-  assert.ok(ROULETTE.includes("const q = '(max-width: 620px)'"), 'スマホの並びに切り替える幅')
+  assert.ok(read('components/casinoParts.jsx').includes("export const NARROW_QUERY = '(max-width: 620px)'") && ROULETTE.includes('const narrow = useNarrow()'), 'スマホの並びに切り替える幅（2026-10-28 ポーカーと共通の useNarrow へ移した）')
   assert.ok(ROULETTE.includes('if (narrow) setWheelOpen(true)\n    await spinWheel(data.result, 5200)'), '雷のあと、回し始めるときに出す')
   assert.ok(ROULETTE.includes('if (narrow) setTimeout(() => setWheelOpen(false), 1400)'), '出た数字を少し見せてから閉じる')
   assert.ok(ROULETTE.includes("onClick={() => { if (!busy) setWheelOpen(false) }}"), '止まったあとは押しても閉じる')
@@ -75,6 +75,22 @@ test('【2026-10-28】ポーカー：決まりの説明は ❓ HELP・ディー�
   assert.ok(poker.includes('await place(setDealer, k === 0 ? data.dealer[0] : null, k > 0)'), 'ディーラーは1枚目だけ表（サーバーも1枚目しか返さない）')
   assert.ok(poker.includes("await reveal(data.dealer, action === 'raise')"))
   assert.ok(poker.includes('if (medals < ante * (1 + POKER_RAISE_MULT))'), '配るときにアンティの3倍が要る（サーバーと同じ）')
+})
+
+test('【2026-10-28】ポーカーの1枚交換とディーラーの7枚（ユーザー選択「7枚から5枚」「参加料」）：タップでえらんで交換・使わない2枚は暗く・画面ではアンティを「参加料」', () => {
+  const poker = read('components/V2capPoker.jsx')
+  assert.ok(poker.includes("onClick={canPick ? () => setSel(s => (s === k ? null : k)) : undefined}"), '自分のカードをタップでえらぶ（もう一度で外す）')
+  assert.ok(poker.includes("const canPick = round.active && !round.swapped && !busy"), '交換は1回だけ')
+  assert.ok(poker.includes("supabase.rpc('v2cap_poker_swap', { p_index: sel })"))
+  assert.ok(poker.includes('dim={best ? !best.includes(x.c) : false}'), 'いちばん強い5枚に入らない2枚は暗く')
+  assert.ok(poker.includes("const DEALER_W = { narrow: 42, wide: 52 }") && poker.includes('const narrow = useNarrow()'), 'スマホはディーラーの7枚を小さく')
+  // 画面の文字に「アンティ」を出さない（HELP の「アンティともいう」だけ）
+  const shown = poker.replace(/\/\/[^\n]*/g, '').replace('参加料（アンティともいう）', '')
+  assert.ok(!/アンティ/.test(shown.replace(/ante|Ante|ANTE/g, '')), '画面の言い方は参加料')
+  assert.ok(poker.includes('🃏 参加料 {fmt(anteSel)}枚 賭けて配る'))
+  // 配っている途中（2〜4枚）で役を数えない（ペアの途中で pkScoreOf が止まって画面が落ちた）
+  assert.ok(poker.includes('const openCards = (cards, n) => (cards.length === n &&'))
+  assert.ok(poker.includes('openCards(dealer, POKER_DEALER_CARDS)') && poker.includes('openCards(player, 5)'))
 })
 
 test('【2026-10-28】ブラックジャック：決まりの説明は ❓ HELP・アレアの2枚目は伏せて置く・解禁の演出は当たりの演出を閉じてから', () => {

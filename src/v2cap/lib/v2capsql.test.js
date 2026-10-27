@@ -25,7 +25,7 @@ import {
   HILO_MIN_BET, HILO_MAX_BET, HILO_FIRST_X13, HILO_NEXT_X13, HILO_MAX_STREAK, HILO_CAP_MULT,
   ROULETTE_MAX_TOTAL, ROULETTE_MAX_BETS, ROULETTE_STRAIGHT, RED_NUMBERS, LUCKY_COUNT_W, LUCKY_MULTS, BET_KINDS,
   unlockOf, BJ_MIN_BET, BJ_MAX_BET, BJ_PAY_NUM, BJ_PAY_DEN, BJ_DEALER_STAND, BJ_HIT_SOFT17,
-  POKER_MIN_ANTE, POKER_MAX_ANTE, POKER_RAISE_MULT, POKER_HANDS,
+  POKER_MIN_ANTE, POKER_MAX_ANTE, POKER_RAISE_MULT, POKER_HANDS, POKER_DEALER_CARDS,
 } from './casino.js'
 import { FLOORS as TOWER_FLOORS, LOSE_DROP as TOWER_LOSE } from './tower.js'
 import { DEX_AREA_STAM } from './dex.js'
@@ -1241,8 +1241,8 @@ test('【確定】2026-10-28 ブラックジャック（§21）：1万枚で解�
 
 test('【確定】2026-10-28 ポーカー（§22・カリビアンスタッド）：3万枚で解禁・アンティ10〜1000枚・上乗せ2倍・AとKで勝負・配当の表・ディーラーの手は1枚だけ返す', () => {
   // ユーザー指示「じゃあポーカーも作っておいて、対ディーラー用の」＋選んだこと（カリビアンスタッド・3万枚・10〜1000枚）。決まりの写しは casino.js
-  for (const c of ['pk_active boolean    not null default false', 'pk_ante   int        not null default 0',
-    "pk_player smallint[] not null default '{}'", "pk_dealer smallint[] not null default '{}'"]) {
+  for (const c of ['pk_active  boolean    not null default false', 'pk_ante    int        not null default 0',
+    "pk_player  smallint[] not null default '{}'", "pk_dealer  smallint[] not null default '{}'", 'pk_spare   smallint', 'pk_swapped boolean    not null default false']) {
     assert.ok(SQL.includes(`alter table public.v2cap_casino add column if not exists ${c};`), c)
   }
   // 役の強さ（casino.js の pkScoreOf と同じ数え方。PGlite で3万手を突き合わせた）
@@ -1258,19 +1258,30 @@ test('【確定】2026-10-28 ポーカー（§22・カリビアンスタッド�
   assert.equal(constOf(start, 'c_unlock'), String(unlockOf('poker').need))
   assert.ok(start.includes('if public.v2cap_casino_won(v_c.stats) < c_unlock then'), '解禁はサーバーで確かめる')
   assert.ok(start.includes('if v_p.medals < p_ante::bigint * (1 + c_raise) then'), '配るときにアンティの3倍が要る')
-  assert.ok(start.includes('select array_agg(c::smallint) into v_deck from (select c from generate_series(0, 51) c order by random() limit 10) t;'), '52枚をまぜて10枚（同じカードは出ない）')
-  assert.ok(start.includes("'dealer', to_jsonb(v_deck[6:6])"), 'ディーラーは1枚目だけ返す')
+  // 2026-10-28 1枚交換・ディーラー7枚（ユーザー選択「7枚から5枚（推奨）」）：13枚＝こちら5・ディーラー7・交換で引く1
+  assert.equal(POKER_DEALER_CARDS, 7)
+  assert.ok(start.includes('select array_agg(c::smallint) into v_deck from (select c from generate_series(0, 51) c order by random() limit 13) t;'), '52枚をまぜて13枚（同じカードは出ない）')
+  assert.ok(start.includes('pk_player = v_deck[1:5], pk_dealer = v_deck[6:12], pk_spare = v_deck[13],'))
+  assert.ok(start.includes("'dealer', to_jsonb(v_deck[6:6])") && !start.includes("'spare'"), 'ディーラーは1枚目だけ返す・交換で引くカードも返さない')
+  assert.ok(start.includes("format('参加料は%s〜%s枚です', c_min, c_max)"), '画面の言い方（参加料）に合わせる')
+  const swap = fnBody('v2cap_poker_swap')
+  assert.ok(swap.includes("if v_c.pk_swapped then return jsonb_build_object('ok', false, 'error', '交換できるのは1回だけです'); end if;"))
+  assert.ok(swap.includes('if p_index is null or p_index < 0 or p_index > 4 then'))
+  assert.ok(swap.includes('v_player[p_index + 1] := v_c.pk_spare;'), '配るときに決めておいた1枚と入れかえる')
   const act = fnBody('v2cap_poker_action')
   assert.equal(constOf(act, 'c_raise'), String(POKER_RAISE_MULT))
   assert.equal(constOf(act, 'c_pay'), arr(POKER_HANDS.map(h => h.pay)))
   assert.ok(act.includes("if p_action is null or p_action not in ('fold', 'raise') then"))
+  assert.ok(act.includes('for a in 1..6 loop') && act.includes('for b in (a + 1)..7 loop') && act.includes('if v_sc > v_ds then v_ds := v_sc; v_best := v_hand; end if;'),
+    'ディーラーは7枚から2枚を外す21通りのいちばん強い5枚（casino.js の pkBestOf と同じ）')
   assert.ok(act.includes('v_dq := v_ds >= c_base or ((v_ds / 28561) % 13 = 12 and (v_ds / 2197) % 13 = 11);'), 'AとKがそろった役なし以上で勝負')
   assert.ok(act.includes("v_result := 'noqual'; v_payout := v_ante * 2 + v_raise;"), '勝負しない：アンティ1:1・上乗せは戻る')
   assert.ok(act.includes("v_result := 'win';    v_payout := v_ante * 2 + v_raise * (1 + c_pay[(v_ps / c_base)::int + 1]);"))
   assert.ok(act.includes("v_result := 'push';   v_payout := v_ante + v_raise;"))
   assert.ok(act.includes("perform public.v2cap_casino_book(v_uid, 'poker', v_raise, 0, 0);"), '上乗せも記録')
   assert.ok(fnBody('v2cap_casino_state').includes("'player', to_jsonb(v_c.pk_player), 'dealer', to_jsonb(v_c.pk_dealer[1:1]))"), '開き直してもディーラーの手は1枚だけ')
-  for (const f of ['v2cap_poker_start(int)', 'v2cap_poker_action(text)']) {
+  assert.ok(fnBody('v2cap_casino_state').includes("'ante', v_c.pk_ante, 'swapped', v_c.pk_swapped,"), '開き直しても交換したかがわかる')
+  for (const f of ['v2cap_poker_start(int)', 'v2cap_poker_swap(int)', 'v2cap_poker_action(text)']) {
     assert.ok(SQL.includes(`revoke all on function public.${f} from public, anon;`), f)
     assert.ok(SQL.includes(`grant execute on function public.${f} to authenticated;`), f)
     assert.ok(fnBody(f.split('(')[0]).includes('if not public.v2cap_is_dev() then'), `${f} は開発限定`)

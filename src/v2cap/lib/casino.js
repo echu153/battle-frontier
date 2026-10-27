@@ -394,36 +394,45 @@ export const bjRtp = () => {
 // 【確定】2026-10-28 ユーザー指示「じゃあポーカーも作っておいて、対ディーラー用の」＋選んだこと：
 //   **カリビアンスタッド**（ユーザー選択「カリビアンスタッド（推奨）」＝標準の配当のままで還元率がほかのゲームと同じくらい）・
 //   アンティ **10〜1000枚**（ユーザー選択「10〜1000枚（推奨）」＝ブラックジャックと同じチップ）・これまでの払い出し **3万枚** で解禁
-//   ・52枚のトランプを毎回まぜて、5枚ずつ配る（同じカードは出ない）。ディーラーは1枚目だけ表
+//   ・52枚のトランプを毎回まぜて配る（同じカードは出ない）。ディーラーは1枚目だけ表
 //   ・降りる（アンティは没収）か、勝負する（アンティの2倍を上乗せ）。配るときにアンティの3倍のメダルが要る
 //   ・ディーラーは **AとKがそろった役なし以上** で勝負する。勝負しないとき：アンティは1:1・上乗せは戻る
 //   ・勝負したら役で比べる。勝ち＝アンティ1:1＋上乗せは役の配当（POKER_HANDS の pay）・引き分けは戻る・負けは両方没収
-//   ・還元率（払い出し÷賭けたメダル）97.4%（ワンペア以上と「A K J 8 3」以上の役なしで勝負する打ち方・pkShouldRaise）
+// 【確定】2026-10-28 1枚の交換とディーラーの7枚（ユーザー指示「カード1枚交換する仕様追加して、ディーラーもその分強くなる仕様にしたい」
+//   ＋選んだこと「7枚から5枚（推奨）」「参加料（推奨）」）：
+//   ・こちらは配られた5枚から **1枚だけ交換できる**（しなくてもいい・タダ）。交換してから、降りるか勝負するかを決める
+//   ・ディーラーは **7枚** 配られ、**いちばん強い5枚** で勝負する（POKER_DEALER_CARDS・pkBestOf）
+//   ・上乗せの配当を **ツーペア2→1倍・フルハウス7→8倍・フォーカード20→25倍** に（そのままだと上手な打ち方で約102%＝プレイヤーが得をする）
+//   ・還元率（払い出し÷賭けたメダル）約97%（交換する1枚と勝負するかを上手に選んだとき・シミュ。交換だけ足すと121%・おたがい1枚交換でも118%だった）
+//   ・画面ではアンティを **参加料** と呼ぶ（HELP で「アンティともいう」）
 // ★抽選と払い出しはサーバー（SQL §22）。ここは表示・テストのための写し（v2capsql.test.js が定数を突き合わせる）
 // ============================================================
 export const POKER_MIN_ANTE = 10
 export const POKER_MAX_ANTE = 1000
 export const POKER_ANTES = [10, 50, 100, 500, 1000]
 export const POKER_RAISE_MULT = 2   // 勝負するときの上乗せ（アンティの何倍か）
+export const POKER_DEALER_CARDS = 7 // ディーラーに配る枚数（いちばん強い5枚で勝負）
 // 役（弱い順）。pay＝勝ったときの上乗せの配当（○:1）。役なしの勝ち（ディーラーもAとKの役なし）は1:1
 export const POKER_HANDS = [
   { key: 'high',     name: '役なし',                     pay: 1 },
   { key: 'pair',     name: 'ワンペア',                   pay: 1 },
-  { key: 'twopair',  name: 'ツーペア',                   pay: 2 },
+  { key: 'twopair',  name: 'ツーペア',                   pay: 1 },
   { key: 'trips',    name: 'スリーカード',               pay: 3 },
   { key: 'straight', name: 'ストレート',                 pay: 4 },
   { key: 'flush',    name: 'フラッシュ',                 pay: 5 },
-  { key: 'full',     name: 'フルハウス',                 pay: 7 },
-  { key: 'quads',    name: 'フォーカード',               pay: 20 },
+  { key: 'full',     name: 'フルハウス',                 pay: 8 },
+  { key: 'quads',    name: 'フォーカード',               pay: 25 },
   { key: 'sflush',   name: 'ストレートフラッシュ',       pay: 50 },
   { key: 'royal',    name: 'ロイヤルストレートフラッシュ', pay: 100 },
 ]
 // 5枚の強さ（大きいほど強い）＝ 役 × 13^5 ＋ 比べる数字（強い順に5つ・2＝0 … A＝12）。サーバーの v2cap_poker_score と同じ数え方
 //   ・A2345 のストレートは5が上（ほかのストレートより弱い）・マークは関係なし
+//   ★5枚より少なくても止まらない（ペアなどだけ数える・フラッシュとストレートは5枚のときだけ）。
+//     2026-10-28 配っている途中の2枚（ペア）で g[1] が無くて画面が落ちたので直した（画面も5枚そろってから数える）
 const POKER_BASE = 13 ** 5
 export const pkScoreOf = (cards) => {
   const r = cards.map(rankOf).sort((a, b) => b - a)
-  const flush = cards.every(c => suitOf(c) === suitOf(cards[0]))
+  const flush = cards.length === 5 && cards.every(c => suitOf(c) === suitOf(cards[0]))
   const cnt = new Map()
   for (const x of r) cnt.set(x, (cnt.get(x) || 0) + 1)
   const g = [...cnt].map(([x, n]) => [n, x]).sort((a, b) => b[0] - a[0] || b[1] - a[1])   // 枚数の多い順・同じなら強い順
@@ -431,12 +440,12 @@ export const pkScoreOf = (cards) => {
   if (g.length === 5) { if (r[0] - r[4] === 4) high = r[0]; else if (r[0] === 12 && r[1] === 3) high = 3 }
   let cat, k
   if (high >= 0 && flush) { cat = high === 12 ? 9 : 8; k = [high] }
-  else if (g[0][0] === 4) { cat = 7; k = [g[0][1], g[1][1]] }
-  else if (g[0][0] === 3 && g[1][0] === 2) { cat = 6; k = [g[0][1], g[1][1]] }
+  else if (g[0][0] === 4) { cat = 7; k = [g[0][1], g[1]?.[1]] }
+  else if (g[0][0] === 3 && g[1]?.[0] === 2) { cat = 6; k = [g[0][1], g[1][1]] }
   else if (flush) { cat = 5; k = r }
   else if (high >= 0) { cat = 4; k = [high] }
   else if (g[0][0] === 3) { cat = 3; k = g.map(x => x[1]) }
-  else if (g[0][0] === 2 && g[1][0] === 2) { cat = 2; k = g.map(x => x[1]) }
+  else if (g[0][0] === 2 && g[1]?.[0] === 2) { cat = 2; k = g.map(x => x[1]) }
   else if (g[0][0] === 2) { cat = 1; k = g.map(x => x[1]) }
   else { cat = 0; k = r }
   let s = cat
@@ -445,16 +454,28 @@ export const pkScoreOf = (cards) => {
 }
 export const pkCatOf = (score) => Math.floor(score / POKER_BASE)
 export const pkHandOf = (cards) => POKER_HANDS[pkCatOf(pkScoreOf(cards))]
-// ディーラーが勝負するか：ワンペア以上か、AとKがそろった役なし
+// いちばん強い5枚（ディーラーの7枚から2枚を外す21通り）。同じ強さなら先に見つけたほう。5枚ならそのまま
+export const pkBestOf = (cards) => {
+  if (cards.length <= 5) return { hand: cards, score: pkScoreOf(cards) }
+  let best = null
+  for (let a = 0; a < cards.length; a++) for (let b = a + 1; b < cards.length; b++) {
+    const hand = cards.filter((_, i) => i !== a && i !== b)
+    const score = pkScoreOf(hand)
+    if (!best || score > best.score) best = { hand, score }
+  }
+  return best
+}
+// ディーラーが勝負するか（いちばん強い5枚で）：ワンペア以上か、AとKがそろった役なし
 export const pkQualifies = (cards) => {
-  if (pkCatOf(pkScoreOf(cards)) >= 1) return true
-  const r = cards.map(rankOf)
+  const { hand, score } = pkBestOf(cards)
+  if (pkCatOf(score) >= 1) return true
+  const r = hand.map(rankOf)
   return r.includes(12) && r.includes(11)
 }
-// 勝ち負け（勝負したとき）：'noqual'＝ディーラーが勝負しない・'win'・'push'・'lose'
+// 勝ち負け（勝負したとき）：'noqual'＝ディーラーが勝負しない・'win'・'push'・'lose'。dealer は7枚（いちばん強い5枚で比べる）
 export const pkResultOf = (player, dealer) => {
   if (!pkQualifies(dealer)) return 'noqual'
-  const p = pkScoreOf(player), d = pkScoreOf(dealer)
+  const p = pkScoreOf(player), d = pkBestOf(dealer).score
   return p > d ? 'win' : p === d ? 'push' : 'lose'
 }
 // 払い出し（賭けたぶんこみ）。降りたときは0。勝負したときの賭けは ante × (1 + POKER_RAISE_MULT)
@@ -465,11 +486,23 @@ export const pkPayoutOf = (result, ante, player) => {
   if (result === 'push') return ante + raise
   return 0
 }
-// 勝負する打ち方（テストとシミュ用・よく知られた近い打ち方）：ワンペア以上か、役なしなら「A K J 8 3」以上
-export const pkShouldRaise = (cards) => {
-  if (pkCatOf(pkScoreOf(cards)) >= 1) return true
-  const r = cards.map(rankOf).sort((a, b) => b - a)
-  const floor = [12, 11, 9, 6, 1]   // A K J 8 3
-  for (let i = 0; i < 5; i++) if (r[i] !== floor[i]) return r[i] > floor[i]
-  return true
+// 交換する1枚（テストとシミュ用のかんたんな選び方・-1＝交換しない）：ストレート以上は交換しない・ペアやスリーカードは残して
+//   いちばん弱い1枚・4枚そろったフラッシュとつながった4枚は外れの1枚・役なしはいちばん弱い1枚
+export const pkDiscardOf = (cards) => {
+  if (pkCatOf(pkScoreOf(cards)) >= 4) return -1
+  const r = cards.map(rankOf)
+  const cnt = new Map()
+  for (const x of r) cnt.set(x, (cnt.get(x) || 0) + 1)
+  let lowest = -1
+  r.forEach((x, i) => { if (cnt.get(x) === 1 && (lowest < 0 || x < r[lowest])) lowest = i })
+  if (pkCatOf(pkScoreOf(cards)) >= 1) return lowest
+  for (let s = 0; s < 4; s++) {
+    const same = cards.map((c, i) => (suitOf(c) === s ? i : -1)).filter(i => i >= 0)
+    if (same.length === 4) return [0, 1, 2, 3, 4].find(i => !same.includes(i))
+  }
+  for (let i = 0; i < 5; i++) {
+    const rest = r.filter((_, k) => k !== i).sort((a, b) => a - b)
+    if (rest[3] - rest[0] === 3 && rest[3] !== 12) return i
+  }
+  return lowest
 }

@@ -2,6 +2,22 @@
 import { useEffect, useRef, useState } from 'react'
 import { SUITS, RANK_LABELS, rankOf, suitOf, isRedCard } from '../lib/casino.js'
 
+// 狭い画面（スマホ・620px 以下）かどうか。ルーレットの並びとポーカーのディーラーの7枚の大きさで使う
+//   ★幅が変わったとき（resize）も見る（2026-10-28 アプリ内ブラウザの「スマホの大きさ」に切り替えたとき、change が届かず大きいままだった）
+export const NARROW_QUERY = '(max-width: 620px)'
+export function useNarrow() {
+  const [narrow, setNarrow] = useState(() => (typeof window !== 'undefined' ? window.matchMedia(NARROW_QUERY).matches : false))
+  useEffect(() => {
+    const mq = window.matchMedia(NARROW_QUERY)
+    const on = () => setNarrow(mq.matches)
+    on()
+    mq.addEventListener('change', on)
+    window.addEventListener('resize', on)
+    return () => { mq.removeEventListener('change', on); window.removeEventListener('resize', on) }
+  }, [])
+  return narrow
+}
+
 // 数字を前の値から新しい値へ数え上げる（当たりの気持ちよさの本体）
 //   start を渡すと、出たときにその値から数え始める（当たりの表示は0から）
 export function CountUp({ value, start, ms = 600, style, prefix = '', suffix = '', onTick }) {

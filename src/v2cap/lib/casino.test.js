@@ -9,7 +9,7 @@ import {
   WHEEL_ORDER, RED_NUMBERS, colorOfNumber, betWins, betPayoutOf, validBet, rouletteRtp, LUCKY_COUNT_W, LUCKY_MULTS, ROULETTE_STRAIGHT,
   CASINO_UNLOCKS, casinoWonOf, isUnlocked, newlyUnlockedOf, unlockOf,
   BJ_MIN_BET, BJ_MAX_BET, BJ_BETS, BJ_PAY_NUM, BJ_PAY_DEN, bjPointOf, bjValueOf, bjIsNatural, bjDealerPeeks, bjDealerHits, bjResultOf, bjPayoutOf, bjOutcomeOf, bjBestActionOf, bjRtp,
-  POKER_MIN_ANTE, POKER_MAX_ANTE, POKER_ANTES, POKER_RAISE_MULT, POKER_HANDS, pkScoreOf, pkCatOf, pkHandOf, pkQualifies, pkResultOf, pkPayoutOf, pkShouldRaise,
+  POKER_MIN_ANTE, POKER_MAX_ANTE, POKER_ANTES, POKER_RAISE_MULT, POKER_DEALER_CARDS, POKER_HANDS, pkScoreOf, pkCatOf, pkHandOf, pkBestOf, pkQualifies, pkResultOf, pkPayoutOf, pkDiscardOf,
 } from './casino.js'
 import { displayTable, pickStops, classOf, missStopsOf, DISPLAY_OF_ROLE, REELS, REEL_LEN, winLinesOf, noticeKindOf, noticeLevelOf, NOTICE_TABLE_FOR_TEST } from './slotReels.js'
 
@@ -352,53 +352,75 @@ test('ポーカーの役：10種類の判定と強さの順（A2345 のストレ
   assert.ok(S('Ks Kh Qd 9c 3s') > S('Ks Kh Qd 9c 2s'), '最後の1枚まで比べる')
   assert.equal(S('As Kh 9d 7c 2s'), S('Ah Ks 9c 7d 2h'), 'マークがちがうだけなら引き分け')
   assert.equal(pkCatOf(S('As Ks Qs Js Ts')), 9)
+  // 5枚より少なくても止まらない（2026-10-28 配っている途中の2枚のペアで画面が落ちた）
+  assert.equal(pkHandOf(pk('9s 9h')).key, 'pair')
+  assert.equal(pkHandOf(pk('9s 9h 9d 9c')).key, 'quads')
+  assert.equal(pkHandOf(pk('As 9s 7s')).key, 'high', '3枚ではフラッシュにしない')
 })
 
-test('【確定】ディーラーはAとKがそろった役なし以上で勝負・勝負しないとアンティ1:1で上乗せは戻る', () => {
+test('【確定】ディーラーは7枚のうちいちばん強い5枚で、AとKがそろった役なし以上なら勝負・勝負しないとアンティ1:1で上乗せは戻る', () => {
+  // 2026-10-28 ユーザー選択「7枚から5枚（推奨）」（こちらの1枚交換のかわりにディーラーを強く）
+  assert.equal(POKER_DEALER_CARDS, 7)
   assert.equal(pkQualifies(pk('As Kh 9d 7c 2s')), true)
   assert.equal(pkQualifies(pk('As Qh 9d 7c 2s')), false)
   assert.equal(pkQualifies(pk('2s 2h 9d 7c 4s')), true, 'ワンペアなら数字によらず勝負')
+  assert.equal(pkQualifies(pk('As Qh 9d 7c 2s 4h 3d')), false, '7枚でもAとKがそろわない役なしは勝負しない')
+  assert.equal(pkQualifies(pk('As Qh 9d 7c 2s 4h Kd')), true, '7枚のどこかにAとK')
+  assert.deepEqual(pkBestOf(pk('2s 2h 9d 7c 4s Ah 2d')).hand.map(c => c % 13).sort((a, b) => a - b), [0, 0, 0, 7, 12], 'いちばん強い5枚（スリーカード＋強い2枚）')
+  assert.equal(pkHandOf(pkBestOf(pk('3s 4h 5d 6c Ks 7h Qd')).hand).key, 'straight', '7枚のうち5枚でストレート')
   assert.deepEqual([POKER_MIN_ANTE, POKER_MAX_ANTE, POKER_RAISE_MULT], [10, 1000, 2])
   assert.ok(POKER_ANTES.every(a => a >= POKER_MIN_ANTE && a <= POKER_MAX_ANTE))
   const player = pk('Qs Qh 9d 7c 2s')
-  assert.equal(pkResultOf(player, pk('As Jh 9c 7d 3h')), 'noqual')
+  assert.equal(pkResultOf(player, pk('As Jh 9c 7d 3h 4s 5c')), 'noqual')
   assert.equal(pkPayoutOf('noqual', 100, player), 400, 'アンティ100が200・上乗せ200が戻る')
-  assert.equal(pkResultOf(player, pk('Js Jh 9c 7d 3h')), 'win')
+  assert.equal(pkResultOf(player, pk('Js Jh 9c 7d 3h 4s 5c')), 'win')
   assert.equal(pkPayoutOf('win', 100, player), 200 + 200 * 2, 'ワンペアの上乗せは1:1')
+  assert.equal(pkPayoutOf('win', 100, pk('Js Jh 4d 4c 2s')), 200 + 200 * 2, 'ツーペアも1:1（2026-10-28 2→1）')
   assert.equal(pkPayoutOf('win', 100, pk('As 9s 7s 4s 2s')), 200 + 200 * 6, 'フラッシュは5:1')
+  assert.equal(pkPayoutOf('win', 100, pk('Ks Kh Kd 4c 4s')), 200 + 200 * 9, 'フルハウスは8:1（7→8）')
   assert.equal(pkPayoutOf('win', 1000, pk('As Ks Qs Js Ts')), 2000 + 2000 * 101, 'ロイヤルは100:1')
-  assert.equal(pkResultOf(player, pk('Qc Qd 9h 7s 2h')), 'push')
+  assert.equal(pkResultOf(pk('Qs Qh 9d 7c 5s'), pk('Qc Qd 9h 7s 5h 3c 2d')), 'push', 'いちばん強い5枚が同じ強さなら引き分け')
   assert.equal(pkPayoutOf('push', 100, player), 300)
-  assert.equal(pkResultOf(player, pk('Ks Kh 9c 7d 3h')), 'lose')
+  assert.equal(pkResultOf(player, pk('Ks Kh 9c 7d 3h 4s 5c')), 'lose')
+  assert.equal(pkResultOf(player, pk('2c 2d 9h 7s 3h Qc Qd')), 'lose', '7枚ならツーペアができる')
   assert.equal(pkPayoutOf('lose', 100, player), 0)
-  assert.deepEqual(POKER_HANDS.map(h => h.pay), [1, 1, 2, 3, 4, 5, 7, 20, 50, 100], '上乗せの配当（標準）')
+  assert.deepEqual(POKER_HANDS.map(h => h.pay), [1, 1, 1, 3, 4, 5, 8, 25, 50, 100], '上乗せの配当（2026-10-28 ツーペア2→1・フルハウス7→8・フォーカード20→25）')
 })
 
-test('勝負する打ち方（還元率の前提）：ワンペア以上か、役なしなら A K J 8 3 以上', () => {
-  assert.equal(pkShouldRaise(pk('2s 2h 9d 7c 4s')), true)
-  assert.equal(pkShouldRaise(pk('As Kh Jd 8c 3s')), true)
-  assert.equal(pkShouldRaise(pk('As Kh Jd 8c 2s')), false)
-  assert.equal(pkShouldRaise(pk('As Kh Qd 3c 2s')), true)
-  assert.equal(pkShouldRaise(pk('As Qh Jd 9c 8s')), false, 'Kがない役なしは降りる')
+test('交換する1枚のかんたんな選び方（テストとシミュ用）：ストレート以上はしない・ペアは残す・フラッシュやストレートのあと1枚を狙う', () => {
+  const at = (str) => pkDiscardOf(pk(str))
+  assert.equal(at('Ts 9h 8d 7c 6s'), -1, 'ストレートは交換しない')
+  assert.equal(at('9s 9h Ad 7c 2s'), 4, 'ペアは残して、いちばん弱い2')
+  assert.equal(at('As 9s 7s 4s 2h'), 4, '4枚フラッシュは外れの1枚')
+  assert.equal(at('Ts 9h 8d 7c 2s'), 4, 'つながった4枚は外れの1枚')
+  assert.equal(at('As Kh 9d 7c 3s'), 4, '役なしはいちばん弱い1枚')
 })
 
-test('【確定】ポーカーの還元率は約97.4%（52枚をまぜて30万回配ったとき・ワンペア以上と A K J 8 3 以上で勝負）', () => {
-  const rng = rngOf(20261028)
-  const deck = Array.from({ length: 52 }, (_, i) => i)
-  let paid = 0, back = 0, raised = 0, noqual = 0
-  for (let i = 0; i < 300000; i++) {
-    for (let j = 0; j < 10; j++) { const k = j + Math.floor(rng() * (52 - j)); const t = deck[j]; deck[j] = deck[k]; deck[k] = t }
-    const p = deck.slice(0, 5), d = deck.slice(5, 10)
-    paid += 10
-    if (!pkShouldRaise(p)) continue
-    raised++
-    paid += 10 * POKER_RAISE_MULT
-    const r = pkResultOf(p, d)
-    if (r === 'noqual') noqual++
-    back += pkPayoutOf(r, 10, p)
+test('【確定】2026-10-28 ポーカー（1枚交換・ディーラー7枚）の還元率は約97%（交換する1枚と勝負するかを上手に選んだとき）', () => {
+  // 勝負するかは「役と強い数字2つ」の形ごとに、勝負したときの平均の損得が降りる（−1）より良いかで決める（前の回で決めて、別の回で測る）
+  const play = (seed, n, policy, learn) => {
+    const rng = rngOf(seed)
+    const deck = Array.from({ length: 52 }, (_, i) => i)
+    let paid = 0, back = 0
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < 13; j++) { const k = j + Math.floor(rng() * (52 - j)); const t = deck[j]; deck[j] = deck[k]; deck[k] = t }
+      const p = deck.slice(0, 5), d = deck.slice(5, 5 + POKER_DEALER_CARDS)
+      const x = pkDiscardOf(p)
+      if (x >= 0) p[x] = deck[12]
+      const key = Math.floor(pkScoreOf(p) / 2197)
+      const r = pkResultOf(p, d)
+      const net = pkPayoutOf(r, 1, p) - 3
+      if (learn) { const g = learn.get(key) || { n: 0, s: 0 }; g.n++; g.s += net; learn.set(key, g); continue }
+      paid += 1
+      const g = policy.get(key)
+      if (!g || g.s / g.n <= -1) continue
+      paid += POKER_RAISE_MULT
+      back += 3 + net
+    }
+    return back / paid
   }
-  const rtp = back / paid
-  assert.ok(rtp > 0.968 && rtp < 0.98, `${(rtp * 100).toFixed(2)}%`)
-  assert.ok(raised / 300000 > 0.5 && raised / 300000 < 0.55, '勝負するのは半分ちょっと')
-  assert.ok(noqual / raised > 0.42 && noqual / raised < 0.45, 'ディーラーが勝負しないのは勝負したときの4割強')
+  const policy = new Map()
+  play(111, 150000, null, policy)
+  const rtp = play(222, 150000, policy)
+  assert.ok(rtp > 0.955 && rtp < 0.985, `${(rtp * 100).toFixed(2)}%`)
 })
