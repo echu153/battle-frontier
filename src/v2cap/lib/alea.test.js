@@ -50,6 +50,25 @@ test('絵がそろっている。表情5枚は同じ大きさ（切り替えて�
   assert.ok(ALEA_FOCUS.x > 0 && ALEA_FOCUS.x < 1 && ALEA_FOCUS.top > 0 && ALEA_FOCUS.top < 1)
 })
 
+test('【2026-10-27 直した】小さく出すとき（スマホの上・演出の上）は、頭の高さの髪の左右の端のまん中に合わせる（左の髪が切れない）', async (t) => {
+  // ユーザー指示「ひだりの髪が少し見切れちゃってるから、もう少しバランスよく見えるように」。前は顔のまん中（0.54）に合わせていた
+  let decode
+  try { ({ decode } = await import('../../../tools/v2cap-art-lib.mjs')); decode(pathOf(fileOf(ALEA_FACE_KEYS[0])), 64, 'rgba') } catch { t.skip('ffmpeg が無い'); return }
+  const img = decode(pathOf(fileOf('normal')), 4096, 'rgba')
+  // 頭の高さ（上から10〜30%）で、髪と体がある左右の端
+  let l = img.W, r = -1
+  for (let y = Math.round(0.10 * img.H); y < Math.round(0.30 * img.H); y++) {
+    for (let x = 0; x < img.W; x++) if (img.data[(y * img.W + x) * 4 + 3] > 128) { if (x < l) l = x; if (x > r) r = x }
+  }
+  // スマホの上の枠（112×150）に見えるところ（元の絵の px）
+  const k = 150 / (img.H * ALEA_FOCUS.top)
+  const half = 112 / k / 2, mid = ALEA_FOCUS.x * img.W
+  const cutL = Math.max(0, (mid - half) - l), cutR = Math.max(0, r - (mid + half))
+  assert.ok(Math.abs((l + r) / 2 / img.W - ALEA_FOCUS.x) < 0.02, `頭の高さの髪のまん中（${((l + r) / 2 / img.W).toFixed(3)}）に合わせる`)
+  assert.ok(cutL <= 20 && cutR <= 20, `頭の高さで切れる髪は左右とも少し（左${Math.round(cutL)}px・右${Math.round(cutR)}px）`)
+  assert.ok(Math.abs(cutL - cutR) <= 10, `左右の切れ方がほぼ同じ（左${Math.round(cutL)}px・右${Math.round(cutR)}px）`)
+})
+
 test('public/v2cap-art/casino の絵はどれも一覧に載っている（名前を変えて残った絵がない）', () => {
   const outfits = new Set(ALEA_OUTFITS.map(o => o.key))
   for (const d of readdirSync(new URL(`.${ALEA_ART_DIR}/`, PUB))) assert.ok(outfits.has(d), `${d} は衣装の一覧に無い`)
