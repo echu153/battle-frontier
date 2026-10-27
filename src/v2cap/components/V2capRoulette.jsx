@@ -16,6 +16,10 @@ import { WHEEL_ORDER, colorOfNumber, ROULETTE_CHIPS, ROULETTE_MAX_TOTAL, ROULETT
 import { winTalkOf, nextMissRun, ROULETTE_MISS_RUN } from '../lib/alea.js'
 import { sfx, fx, celebrate, vibrate } from './casinoFx.js'
 import { CASINO, panel, bigBtn, pill, fmt } from './casinoStyle.js'
+import V2Modal from './V2Modal.jsx'
+import { miniBtn } from './v2ui.js'
+
+const HELP_HEAD = { color: CASINO.gold, fontSize:'12px', marginBottom:'2px' }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 const N = WHEEL_ORDER.length
@@ -97,6 +101,7 @@ export default function V2capRoulette({ init, medals, onMoney, onTalk }) {
   const [strike, setStrike] = useState(null)        // 雷が落ちている数字
   const [wheel, setWheel] = useState({ w: 0, b: 0, r: 141 })
   const [wheelOpen, setWheelOpen] = useState(false)   // スマホ：回している間だけホイールを大きく出す
+  const [help, setHelp] = useState(false)
   const raf = useRef(0)
   useEffect(() => () => cancelAnimationFrame(raf.current), [])
 
@@ -316,11 +321,19 @@ export default function V2capRoulette({ init, medals, onMoney, onTalk }) {
           {Object.values(stacks).map(b => `${betLabelOf(b)}:${b.a}`).join('　')}
         </div>
       )}
-      <div style={{ marginTop:'10px', fontSize:'10px', color:CASINO.dim, lineHeight:1.7 }}>
-        1点 {ROULETTE_STRAIGHT}倍・赤黒／奇数偶数／1-18・19-36 2倍・ダズン／列 3倍（賭けたぶんこみ）。0 は1点賭けだけ当たる。<br />
-        ⚡ 毎回1〜5個の数字に雷（ラッキーナンバー）。そこへの1点賭けは 50〜500倍。右クリックでチップを1枚戻す。
-      </div>
     </>
+  )
+  // 決まりの説明は ❓ HELP に（2026-10-27 ユーザー指示「ここはHELPで」＝前は盤の下に2行で出していた文）。ボタンは合計の横
+  const helpBtn = <button type="button" onClick={() => setHelp(true)} style={miniBtn('#88aaff')}>❓ HELP</button>
+  const helpModal = help && (
+    <V2Modal title="❓ HELP" color={CASINO.gold} keepScroll onClose={() => setHelp(false)}>
+      <div style={HELP_HEAD}>配当</div>
+      <div>1点 {ROULETTE_STRAIGHT}倍・赤黒／奇数偶数／1-18・19-36 2倍・ダズン／列 3倍（賭けたぶんこみ）。0 は1点賭けだけ当たる。</div>
+      <div style={{ ...HELP_HEAD, marginTop:'10px' }}>⚡ 雷（ラッキーナンバー）</div>
+      <div>毎回1〜5個の数字に雷。そこへの1点賭けは 50〜500倍。</div>
+      <div style={{ ...HELP_HEAD, marginTop:'10px' }}>チップ</div>
+      <div>盤を押すとチップを置く。右クリック（スマホは「1つ戻す」）でチップを1枚戻す。</div>
+    </V2Modal>
   )
 
   // スマホ：ホイールは回している間だけ画面の真ん中に大きく出す。上の1行＝出た数字と合計・盤・チップと SPIN の1行・ほかのボタンの1行
@@ -328,6 +341,7 @@ export default function V2capRoulette({ init, medals, onMoney, onTalk }) {
     const big = Math.min(300, (typeof window !== 'undefined' ? window.innerWidth : 375) - 40)
     return (
       <div style={panel('#8a6d1f')}>
+        {helpModal}
         {wheelOpen && (
           <div role="presentation" onClick={() => { if (!busy) setWheelOpen(false) }}
             style={{ position:'fixed', inset:0, zIndex:380, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(4, 2, 10, 0.62)' }}>
@@ -337,6 +351,7 @@ export default function V2capRoulette({ init, medals, onMoney, onTalk }) {
         <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'6px' }}>
           <div style={{ display:'flex', gap:'2px', overflow:'hidden', flex:'1 1 auto', minWidth:0 }}>{histDots(10, 17)}</div>
           {totalText}
+          {helpBtn}
         </div>
         {board}
         <div style={{ display:'flex', alignItems:'center', gap:'5px', marginTop:'8px' }}>
@@ -352,6 +367,7 @@ export default function V2capRoulette({ init, medals, onMoney, onTalk }) {
   const wheelSize = 300
   return (
     <div style={panel('#8a6d1f')}>
+      {helpModal}
       <div style={{ display:'flex', flexWrap:'wrap', gap:'12px', alignItems:'flex-start', justifyContent:'center' }}>
         <div style={{ flex:'0 0 auto', position:'relative' }}>
           <Wheel wheelDeg={wheel.w} ballDeg={wheel.b} ballR={wheel.r} result={busy ? null : result} lucky={lucky} size={wheelSize} />
@@ -363,6 +379,7 @@ export default function V2capRoulette({ init, medals, onMoney, onTalk }) {
           <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap', marginTop:'10px' }}>
             {chipBtns(38)}
             <span style={{ marginLeft:'4px' }}>{totalText}</span>
+            <span style={{ marginLeft:'auto' }}>{helpBtn}</span>
           </div>
           <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', marginTop:'8px' }}>{actionBtns}</div>
           {spinBtn({ width:'100%', marginTop:'10px' })}

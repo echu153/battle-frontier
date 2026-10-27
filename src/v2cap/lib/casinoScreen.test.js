@@ -27,6 +27,16 @@ test('スマホのルーレット：盤の行は枠ごと26px・出た数字と�
   assert.ok(!phone.includes('<Wheel wheelDeg={wheel.w} ballDeg={wheel.b} ballR={wheel.r} result={busy ? null : result} lucky={lucky} size={wheelSize} />'), 'ふだんの並びにホイールを置かない')
 })
 
+test('【2026-10-27】ルーレットの決まりの説明は ❓ HELP（ユーザー指示「ここはHELPで」）：盤の下には出さない・見るだけのポップアップ', () => {
+  assert.ok(ROULETTE.includes('<V2Modal title="❓ HELP" color={CASINO.gold} keepScroll onClose={() => setHelp(false)}>'))
+  assert.equal(ROULETTE.split('1点 {ROULETTE_STRAIGHT}倍').length - 1, 1, '説明の文は HELP の中の1か所だけ')
+  const notes = ROULETTE.slice(ROULETTE.indexOf('const notes = ('), ROULETTE.indexOf('const helpBtn'))
+  assert.ok(!/倍|雷|右クリック/.test(notes), '盤の下（notes）に決まりの説明を出さない')
+  // ボタンは合計の横（スマホは盤の上の1行・広い画面はチップの行の右端）
+  assert.ok(ROULETTE.includes('{totalText}\n          {helpBtn}'))
+  assert.ok(ROULETTE.includes("<span style={{ marginLeft:'auto' }}>{helpBtn}</span>"))
+})
+
 test('広い画面のルーレットは前のまま（ホイール300pxと盤を横に並べる・チップ38px・SPIN は横いっぱい）', () => {
   const wide = ROULETTE.slice(ROULETTE.indexOf('const wheelSize = 300'))
   assert.ok(wide.includes('size={wheelSize} />') && wide.includes('{histDots(15, 20)}'))
