@@ -91,6 +91,13 @@ test('【確定】数字やゲームの仕組みの言葉（強化値の数・�
   }
 })
 
+test('【2026-10-27】片眼鏡は「モノクル」と呼ぶ（ユーザー指示「この眼鏡ってちゃんとした名前なかったっけ？調べて修正して」）', () => {
+  for (const l of allLines()) assert.ok(!/片眼鏡/.test(l.text), `${l.kind}：${l.text}`)
+  const texts = allLines().map(l => l.text)
+  assert.ok(texts.includes('このモノクルですかな。若いころから使っておりましてな、もう手放せません'))
+  assert.ok(texts.includes('そんなに見つめられては、モノクルがくもってしまいますな'))
+})
+
 test('【確定】有名なゲームの博物館のフクロウに似せない：「ホー」「ほっほっ」と笑わない・眠がらない・長い解説をしない', () => {
   for (const l of allLines()) {
     assert.ok(!/ホー|ほー|ほっほ|ホッホ|ホウホウ|眠|ねむ|昼/.test(l.text), `${l.kind}：${l.text}`)
