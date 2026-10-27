@@ -16,6 +16,8 @@ import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
 //     待機GIFと同じ大きさ・足の位置にそろえてあるので、待機の枠（正方形）に重ねて、はみ出すぶん（斬撃）は枠の外へ出す
 //   ・ダンジョンのボス（lib/bossArt.js・2026-10-28 黒龍ヴァルゼノク）：待機はずっと羽ばたく動くWebP、技ごとに違う攻撃の絵。
 //     どの絵を流すかは act に付けた motion（試し撃ちの画面が決める）。絵が大きいので枠も大きくする（big）
+//     【確定】2026-10-28 ユーザー「画像がずれてる、HPバー合わせて」「プレイヤー側の画像はもう少し小さくていい」：
+//     ボスのときは両方の絵の枠を同じ高さにして（HPバーが同じ高さに並ぶ）、自分の絵は枠の PLAYER_VS_BOSS 倍に縮めて下にそろえる
 // ============================================================
 
 const Bar = ({ pct, color, h = 10 }) => (
@@ -46,11 +48,15 @@ const Chips = ({ st, side, right }) => {
   )
 }
 
+const ART_H = 'clamp(110px, 30vw, 170px)'
+const ART_H_BIG = 'clamp(140px, 40vw, 230px)'
+export const PLAYER_VS_BOSS = 0.62
+
 const POP_COLOR = { hit: '#ffffff', miss: '#9fb3c8', heal: '#44ff88', tick: '#cc99ff' }
 const popText = (f) => (f.kind === 'miss' ? 'MISS' : f.kind === 'heal' ? `+${f.amount.toLocaleString()}` : f.amount.toLocaleString())
 
 // 1人ぶん。right＝右（モンスター）。fx は [{ kind, side, amount, crit, t0 }]・now は fx の t0 と同じ時計（秒）
-function Fighter({ st, side, me, right, src, motion, fx, now, name, big }) {
+function Fighter({ st, side, me, right, src, motion, fx, now, name, big, artH = ART_H, scale = 1 }) {
   const mine = fx.filter(f => f.side === side)
   const lastOf = (kind) => mine.reduce((t, f) => (f.kind === kind && f.t0 <= now && f.t0 > t ? f.t0 : t), -1e9)
   const dir = right ? -1 : 1   // 前＝相手の方
@@ -79,8 +85,8 @@ function Fighter({ st, side, me, right, src, motion, fx, now, name, big }) {
         <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{name}</span>
       </div>
       {/* 絵 */}
-      <div style={{ position:'relative', height: big ? 'clamp(140px, 40vw, 230px)' : 'clamp(110px, 30vw, 170px)', display:'flex', justifyContent:'center', alignItems:'flex-end', margin:'4px 0' }}>
-        <div style={{ height:'100%', display:'flex', alignItems:'flex-end', transform:`translateX(${dx.toFixed(1)}px)`,
+      <div style={{ position:'relative', height: artH, display:'flex', justifyContent:'center', alignItems:'flex-end', margin:'4px 0' }}>
+        <div style={{ height:`${scale * 100}%`, display:'flex', alignItems:'flex-end', transform:`translateX(${dx.toFixed(1)}px)`,
           opacity: down ? 0.25 : 1, transition:'opacity 0.4s' }}>
           {src ? (
             // 待機の絵の枠（正方形）。攻撃の絵はこの枠に重ねる（ox・oy・w・h は待機の枠（クラスは 224px・ボスは base）を100%として割合で置く）
@@ -143,8 +149,9 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
   return (
     <div style={{ display:'flex', gap:'12px', alignItems:'flex-start', padding:'8px',
       background:'linear-gradient(180deg, #000a26 0%, #001338 70%, #00204a 100%)', border:'1px solid #0a2a55' }}>
-      <Fighter st={st} side="a" me={st.a} src={playerSrc} motion={playerMotion} fx={fx} now={now} name={st.a.name} />
-      <Fighter st={st} side="b" me={st.b} right src={foeSrc} fx={fx} now={now} name={st.b.name} big={foeBig} />
+      <Fighter st={st} side="a" me={st.a} src={playerSrc} motion={playerMotion} fx={fx} now={now} name={st.a.name}
+        artH={foeBig ? ART_H_BIG : ART_H} scale={foeBig ? PLAYER_VS_BOSS : 1} />
+      <Fighter st={st} side="b" me={st.b} right src={foeSrc} fx={fx} now={now} name={st.b.name} big={foeBig} artH={foeBig ? ART_H_BIG : ART_H} />
     </div>
   )
 }

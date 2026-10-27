@@ -1,20 +1,22 @@
 // ============================================================
-// v2cap のダンジョンのボスの絵（ChatGPT で作った「3列×2段に6コマ・真緑の背景」と遭遇のイラスト）を、画面で使う形にする
+// v2cap のダンジョンのボスの絵（ChatGPT で作った「2段に並べたコマ・真緑の背景」と遭遇のイラスト）を、画面で使う形にする
 // ------------------------------------------------------------
 // 元の絵（ユーザーが置く・git に入れない）：public/エネミー/IDダンジョン/<フォルダ>/（決まりは src/v2cap/lib/bossArt.js の BOSS_DEFS）
-//   待機.png・<技の名前>.png・イラスト.png
+//   待機.png・<技の名前>.png・イラスト.png。コマは3列×2段（6コマ）か4列×2段（8コマ・2026-10-28 ユーザー選択）＝列の数は絵から数える
 // 作るもの：
-//   public/v2cap-art/boss/<key>-idle.webp   … 待機の6コマをくり返す動くWebP（base×base）
-//   public/v2cap-art/boss/<key>-<技>.webp    … ②〜⑤のコマを横に並べた1枚（透明つき）
+//   public/v2cap-art/boss/<key>-idle.webp   … 待機のコマをくり返す動くWebP（base×base・コマごとの長さ idleMs）
+//   public/v2cap-art/boss/<key>-<技>.webp    … 最初と最後を除いたコマを横に並べた1枚（透明つき）
 //   public/v2cap-art/boss/<key>-illust.webp … 遭遇のイラスト（768×768）
 //   src/v2cap/lib/bossArtList.js           … 一覧（コマの数・1コマの大きさ・ずらし・速さ）
 // 手順：
 //   ① 真緑を抜く（tools/v2cap-motion.mjs の keyGreen）
-//   ② ひとつながりの絵（まとまり）を拾い、まとまりの真ん中があるマス（512×512）のコマに入れる
-//      ＝隣のマスまで伸びた体や炎も切れない。マスの左上からの位置のまま使う（羽ばたきの上下の揺れも残る）
-//   ③ 待機の6コマがぜんぶ収まる正方形を「待機の枠」にする。技のコマは、待機の枠とそのコマがぜんぶ収まる大きさにして、
+//   ② ひとつながりの絵（まとまり）を拾い、まとまりの真ん中があるマスのコマに入れる＝隣のマスまで伸びた体や炎も切れない
+//   ②' 待機は、体の動かない場所（anchor＝竜なら脚と尾）が①と重なるように、2コマ目からをずらしてそろえる
+//      【確定】2026-10-28 ユーザー「羽動かすときに体も揺れすぎ、ゴムみたいになってる」：ChatGPT の6コマは体が上下に最大22px（元の絵）浮き沈みしていた
+//   ②'' 技の絵は1枚ずつ別に作るので、①の竜の大きさ（高さ）を待機の①に合わせて縮め、体の動かない場所で待機の①に重ねる
+//   ③ 待機のコマがぜんぶ収まる正方形を「待機の枠」にする。技のコマは、待機の枠とそのコマがぜんぶ収まる大きさにして、
 //      待機の枠がどこにあるか（ox・oy）を一覧に書く
-//   ④ 半分に縮める（K）。クラスの攻撃の絵とドットの細かさがそろう
+//   ④ 縮める（SCALE_OF：3列は半分・4列は3/4＝どちらも竜が約250px）。クラスの攻撃の絵とドットの細かさがそろう
 // 使い方：
 //   node tools/v2cap-boss-art.mjs          … 元の絵が新しくなったボスだけ作り直す
 //   node tools/v2cap-boss-art.mjs --force  … 全部作り直す
@@ -27,7 +29,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { decode, bleed, alphaBox, encodeSquare } from './v2cap-art-lib.mjs'
 import { keyGreen, componentsOf, readRgba, scaleRgba } from './v2cap-motion.mjs'
-import { BOSS_DEFS, BOSS_ART_SRC_DIR, BOSS_ART_DIR, BOSS_SHEET_COLS, BOSS_SHEET_ROWS, BOSS_ILLUST_SIZE, BOSS_HIT_FRAME, bossFileOf } from '../src/v2cap/lib/bossArt.js'
+import { BOSS_DEFS, BOSS_ART_SRC_DIR, BOSS_ART_DIR, BOSS_SHEET_COLS, BOSS_SHEET_ROWS, BOSS_ILLUST_SIZE, BOSS_HIT_OF, bossFileOf } from '../src/v2cap/lib/bossArt.js'
 import { ENEMY_ART_SRC_DIR } from '../src/v2cap/lib/enemyArt.js'
 import { BOSS_ART } from '../src/v2cap/lib/bossArtList.js'
 
@@ -37,39 +39,61 @@ const SRC = path.join(ROOT, 'public', ENEMY_ART_SRC_DIR, BOSS_ART_SRC_DIR)
 const OUT = path.join(ROOT, 'public', BOSS_ART_DIR.slice(1))
 const LIST = path.join(ROOT, 'src', 'v2cap', 'lib', 'bossArtList.js')
 const FORCE = process.argv.includes('--force')
-const K = 0.5              // 縮める倍率（元の絵の1マス512px → 256px）
+// 縮める倍率（列の数ごと）。3列＝マス512px→256px／4列＝マス384px→288px。q＝範囲をそろえる刻み（縮めたとき位置がちょうど整数になる）
+export const SCALE_OF = { 3: { k: 1 / 2, q: 2 }, 4: { k: 3 / 4, q: 4 } }
 const PAD = 4              // 待機の枠のまわりの余白（元の絵のpx）
 const QUALITY = 90         // 劣化ありで書き出す。ChatGPT のドット絵は色がざらついていて、劣化なしだと1枚250〜320KBと重い（劣化ありは約3分の1・2026-10-28 見比べて差が見えなかった）
+const TICK = 10            // 動くWebPの刻み（ミリ秒）。長いコマは同じ絵を続けて渡す（libwebp が1コマにまとめて長さを足す）
+const SAME_SIZE = 0.03     // 技の絵の竜の高さが待機とこれ以内の違いなら縮めない（ドット絵をぼかさない）
 
-// ② マスごとのコマ → [{ comps:[ids], box:{x0,y0,x1,y1}（マスの左上から） }]（6つ・左上から右へ、下の段へ）
-export const cellsOf = (img, cols = BOSS_SHEET_COLS, rows = BOSS_SHEET_ROWS) => {
-  const { labels, comps } = componentsOf(img)
+// 列の数：上の段の大きいまとまり（いちばん大きいものの3割以上）の数。3か4でなければ null
+export const colsOf = (img, comps) => {
+  const top = comps.filter(c => (c.y0 + c.y1) / 2 < img.H / BOSS_SHEET_ROWS)
+  const max = Math.max(0, ...top.map(c => c.n))
+  const n = top.filter(c => c.n >= max * 0.3).length
+  return BOSS_SHEET_COLS.includes(n) ? n : null
+}
+
+// ② マスごとのコマ → { labels, comps, cw, ch, cells:[{ ox, oy（読む位置）, ids（まとまり）, box（マスの左上からの範囲） }] }（左上から右へ、下の段へ）
+export const cellsOf = (img, cols = BOSS_SHEET_COLS[0], rows = BOSS_SHEET_ROWS, cc = componentsOf(img)) => {
+  const { labels, comps } = cc
   const cw = img.W / cols, ch = img.H / rows
-  const cells = Array.from({ length: cols * rows }, (_, k) => ({ k, ox: (k % cols) * cw, oy: Math.floor(k / cols) * ch, ids: new Set(), box: null }))
+  const cells = Array.from({ length: cols * rows }, (_, k) => ({ k, ox: Math.round((k % cols) * cw), oy: Math.round(Math.floor(k / cols) * ch), ids: new Set(), box: null }))
   comps.forEach((c, id) => {
     const col = Math.min(cols - 1, Math.floor((c.x0 + c.x1) / 2 / cw)), row = Math.min(rows - 1, Math.floor((c.y0 + c.y1) / 2 / ch))
     const cell = cells[row * cols + col]
     cell.ids.add(id)
     const b = { x0: c.x0 - cell.ox, y0: c.y0 - cell.oy, x1: c.x1 - cell.ox, y1: c.y1 - cell.oy }
-    cell.box = cell.box ? { x0: Math.min(cell.box.x0, b.x0), y0: Math.min(cell.box.y0, b.y0), x1: Math.max(cell.box.x1, b.x1), y1: Math.max(cell.box.y1, b.y1) } : b
+    cell.box = cell.box ? union(cell.box, b) : b
   })
-  return { labels, cells }
+  return { labels, comps, cells, cw, ch }
 }
 
-// 範囲を広げる・偶数にそろえる（半分に縮めたとき、待機の枠の位置がちょうど整数になる）
 const union = (a, b) => ({ x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) })
-const even = (b) => {
-  const x0 = Math.floor(b.x0 / 2) * 2, y0 = Math.floor(b.y0 / 2) * 2
-  const x1 = x0 + Math.ceil((b.x1 - x0 + 1) / 2) * 2 - 1, y1 = y0 + Math.ceil((b.y1 - y0 + 1) / 2) * 2 - 1
+// 範囲を q の倍数にそろえる（縮めたとき、待機の枠の位置がちょうど整数になる）
+const snap = (b, q) => {
+  const x0 = Math.floor(b.x0 / q) * q, y0 = Math.floor(b.y0 / q) * q
+  const x1 = x0 + Math.ceil((b.x1 - x0 + 1) / q) * q - 1, y1 = y0 + Math.ceil((b.y1 - y0 + 1) / q) * q - 1
   return { x0, y0, x1, y1 }
 }
+const shiftCell = (c, dx, dy) => {
+  c.ox += dx; c.oy += dy
+  if (c.box) c.box = { x0: c.box.x0 - dx, y0: c.box.y0 - dy, x1: c.box.x1 - dx, y1: c.box.y1 - dy }
+}
+// コマのいちばん大きいまとまり（竜の体）の範囲（マスの左上から）
+const bodyBoxOf = (sh, cell) => {
+  let best = null
+  for (const id of cell.ids) if (!best || sh.comps[id].n > best.n) best = sh.comps[id]
+  return best && { x0: best.x0 - cell.ox, y0: best.y0 - cell.oy, x1: best.x1 - cell.ox, y1: best.y1 - cell.oy }
+}
 
-// 1コマを、マスの左上からの範囲 box で切り出す（そのコマのまとまりだけ）
-const frameOf = (img, labels, cell, box) => {
+// 1コマを、マスの左上からの範囲 box で切り出して k 倍に縮める（そのコマのまとまりだけ）
+const frameOf = (sh, cell, box, k) => {
+  const { img, labels } = sh
   const w = box.x1 - box.x0 + 1, h = box.y1 - box.y0 + 1
   const data = Buffer.alloc(w * h * 4)
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    const X = Math.round(cell.ox) + box.x0 + x, Y = Math.round(cell.oy) + box.y0 + y
+    const X = cell.ox + box.x0 + x, Y = cell.oy + box.y0 + y
     if (X < 0 || Y < 0 || X >= img.W || Y >= img.H) continue
     const p = Y * img.W + X
     if (labels[p] < 0 || !cell.ids.has(labels[p])) continue
@@ -77,7 +101,7 @@ const frameOf = (img, labels, cell, box) => {
   }
   const f = { W: w, H: h, data }
   bleed(f)
-  return scaleRgba(f, K)
+  return scaleRgba(f, k)
 }
 
 // noGreen … 緑を使わないボス（黒龍）。真緑の背景が映り込んで緑がかった煙・風（黒翼烈風・終焉の黒焔）を、緑の無い色にする
@@ -99,14 +123,66 @@ export const dropGreen = (img) => {
   }
   return img
 }
-const sheetOf = (file, { noGreen = false } = {}) => {
-  const img = keyGreen(readRgba(file))
-  if (noGreen) dropGreen(img)
-  return { img, ...cellsOf(img) }
+
+// ②'・②'' 2つのコマの形（見えているか・半分の細かさ）を比べて、b のコマを a のコマに重ねるずれ（元の絵px）を探す
+//   anchor＝a のマスの中の割合で、比べる場所（竜なら脚と尾）。start＝探しはじめのずれ（体の外枠で先に合わせたもの）
+const ALIGN_RANGE = 40
+export const shiftToMatch = (A, a, B, b, anchor, start = { dx: 0, dy: 0 }) => {
+  const K2 = 2, S = Math.ceil(Math.max(A.cw, B.cw) / K2), SH = Math.ceil(Math.max(A.ch, B.ch) / K2)
+  const maskOf = (sh, c, ox, oy) => {
+    const m = new Uint8Array(S * SH)
+    for (let y = 0; y < SH; y++) for (let x = 0; x < S; x++) {
+      const X = c.ox + ox + x * K2, Y = c.oy + oy + y * K2
+      if (X < 0 || Y < 0 || X >= sh.img.W || Y >= sh.img.H) continue
+      const l = sh.labels[Y * sh.img.W + X]
+      if (l >= 0 && c.ids.has(l)) m[y * S + x] = 1
+    }
+    return m
+  }
+  const ma = maskOf(A, a, 0, 0), mb = maskOf(B, b, start.dx, start.dy)
+  const aw = A.cw / K2, ah = A.ch / K2
+  const R = { x0: Math.round(aw * anchor.x0), x1: Math.round(aw * anchor.x1) - 1, y0: Math.round(ah * anchor.y0), y1: Math.round(ah * anchor.y1) - 1 }
+  const diff = (dx, dy) => {
+    let d = 0
+    for (let y = R.y0; y <= R.y1; y++) for (let x = R.x0; x <= R.x1; x++) {
+      const xx = x + dx, yy = y + dy
+      d += ma[y * S + x] ^ (xx >= 0 && yy >= 0 && xx < S && yy < SH ? mb[yy * S + xx] : 0)
+    }
+    return d
+  }
+  const r = ALIGN_RANGE / K2
+  let best = { d: Infinity, dx: 0, dy: 0 }
+  for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) { const d = diff(dx, dy); if (d < best.d) best = { d, dx, dy } }
+  return { dx: start.dx + best.dx * K2, dy: start.dy + best.dy * K2 }
+}
+// 待機：2コマ目からを①にそろえる
+export const alignCells = (sh, anchor) => sh.cells.map((c, k) => {
+  if (k === 0) return { dx: 0, dy: 0 }
+  const t = shiftToMatch(sh, sh.cells[0], sh, c, anchor)
+  shiftCell(c, t.dx, t.dy)
+  return t
+})
+
+// 元の絵を読む（緑を抜く・列を数える・マスに分ける）。scale を渡すとその倍率に縮めてから分ける
+const loadSheet = (file, def, scale = 1, cols0 = null) => {
+  let img = keyGreen(readRgba(file))
+  if (def.noGreen) dropGreen(img)
+  if (scale !== 1) { bleed(img); img = scaleRgba(img, scale) }
+  const cc = componentsOf(img)
+  const cols = cols0 || colsOf(img, cc.comps)
+  if (!cols) throw new Error(`${path.basename(file)}：コマが3列か4列の2段になっていない（上の段の竜の数が数えられない）`)
+  return { img, cols, ...cellsOf(img, cols, BOSS_SHEET_ROWS, cc) }
 }
 
+// 動くWebP：コマごとの長さ（ミリ秒）。同じ絵を TICK ごとに続けて渡す
+const writeAnim = (frames, ms, out) => {
+  const { W, H } = frames[0]
+  const input = Buffer.concat(frames.flatMap((f, i) => Array.from({ length: Math.max(1, Math.round(ms[i] / TICK)) }, () => f.data)))
+  return writeWebp(['-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${W}x${H}`, '-framerate', String(1000 / TICK), '-i', '-',
+    '-c:v', 'libwebp_anim', '-loop', '0'], out, input)
+}
 const writeWebp = (args, out, input) => {
-  execFileSync('ffmpeg', ['-v', 'error', '-y', ...args, '-pix_fmt', 'yuva420p', '-quality', String(QUALITY), '-compression_level', '6', out], { input })
+  execFileSync('ffmpeg', ['-v', 'error', '-y', ...args, '-pix_fmt', 'yuva420p', '-quality', String(QUALITY), '-compression_level', '6', out], { input, maxBuffer: 1 << 28 })
   return statSync(out).size
 }
 
@@ -117,33 +193,47 @@ const build = (key, def, dir) => {
     return f
   }
   mkdirSync(OUT, { recursive: true })
-  const sizes = []
+  const sizes = [], notes = []
   // 待機
-  const idle = sheetOf(need('待機'), def)
-  if (idle.cells.some(c => !c.box)) throw new Error('待機の6コマのどれかが空（3列×2段になっていない）')
+  const idle = loadSheet(need('待機'), def)
+  const n = idle.cells.length
+  if (idle.cells.some(c => !c.box)) throw new Error(`待機の${n}コマのどれかが空`)
+  const shifts = def.idleAnchor ? alignCells(idle, def.idleAnchor) : []
+  const { k, q } = SCALE_OF[idle.cols]
   const ib = idle.cells.reduce((b, c) => union(b, c.box), idle.cells[0].box)
   const side = Math.max(ib.x1 - ib.x0, ib.y1 - ib.y0) + 1 + PAD * 2
   const cx = (ib.x0 + ib.x1 + 1) / 2
-  const base = even({ x0: Math.round(cx - side / 2), y0: ib.y1 + PAD + 1 - side, x1: Math.round(cx - side / 2) + side - 1, y1: ib.y1 + PAD })
-  const frames = idle.cells.map(c => frameOf(idle.img, idle.labels, c, base))
-  const B = frames[0].W
-  const idleOut = path.join(OUT, bossFileOf(key, 'idle'))
-  sizes.push(['idle', writeWebp(['-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${B}x${frames[0].H}`, '-framerate', `1000/${def.idleMs}`, '-i', '-',
-    '-c:v', 'libwebp_anim', '-loop', '0'], idleOut, Buffer.concat(frames.map(f => f.data)))])
-  const entry = { base: B, idle: { frames: frames.length, ms: def.idleMs }, illust: false, motions: {} }
+  const base = snap({ x0: Math.round(cx - side / 2), y0: ib.y1 + PAD + 1 - side, x1: Math.round(cx - side / 2) + side - 1, y1: ib.y1 + PAD }, q)
+  const frames = idle.cells.map(c => frameOf(idle, c, base, k))
+  const idleMs = def.idleMs?.[n] || Array(n).fill(150)
+  sizes.push(['idle', writeAnim(frames, idleMs, path.join(OUT, bossFileOf(key, 'idle')))])
+  notes.push(`待機 ${n}コマ${shifts.length ? `（そろえたずれ ${shifts.map(t => `${t.dx},${t.dy}`).join(' ')}）` : ''}`)
+  const entry = { base: frames[0].W, idle: { frames: n, ms: idleMs }, illust: false, motions: {} }
+  const idleBody = bodyBoxOf(idle, idle.cells[0])
   // 技
   for (const m of def.motions) {
-    const sh = sheetOf(need(m.file), def)
+    const file = need(m.file)
+    // ②'' ①の竜の高さを待機の①に合わせて縮め、待機の①に重ねる
+    let sh = loadSheet(file, def)
+    const b0 = bodyBoxOf(sh, sh.cells[0])
+    let s = (idleBody.y1 - idleBody.y0 + 1) / (b0.y1 - b0.y0 + 1)
+    if (Math.abs(s - 1) <= SAME_SIZE) s = 1
+    else sh = loadSheet(file, def, s, sh.cols)
+    const b1 = bodyBoxOf(sh, sh.cells[0])
+    const t = shiftToMatch(idle, idle.cells[0], sh, sh.cells[0], def.idleAnchor || { x0: 0, x1: 1, y0: 0, y1: 1 },
+      { dx: Math.round(b1.x0 - idleBody.x0), dy: Math.round(b1.y1 - idleBody.y1) })
+    for (const c of sh.cells) shiftCell(c, t.dx, t.dy)
     const used = sh.cells.slice(1, -1)
-    if (used.some(c => !c.box)) throw new Error(`${m.file}：②〜⑤のどれかが空`)
-    const box = even(used.reduce((b, c) => union(b, c.box), base))
-    const fs = used.map(c => frameOf(sh.img, sh.labels, c, box))
-    const w = fs[0].W, h = fs[0].H, n = fs.length
-    const strip = Buffer.alloc(w * n * h * 4)
-    fs.forEach((f, i) => { for (let y = 0; y < h; y++) f.data.copy(strip, (y * w * n + i * w) * 4, y * w * 4, (y + 1) * w * 4) })
-    const out = path.join(OUT, bossFileOf(key, m.key))
-    sizes.push([m.key, writeWebp(['-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${w * n}x${h}`, '-i', '-', '-c:v', 'libwebp'], out, strip)])
-    entry.motions[m.key] = { frames: n, w, h, ox: (base.x0 - box.x0) * K, oy: (base.y0 - box.y0) * K, ms: m.ms, hit: BOSS_HIT_FRAME }
+    if (used.some(c => !c.box)) throw new Error(`${m.file}：コマのどれかが空`)
+    const box = snap(used.reduce((b, c) => union(b, c.box), base), q)
+    const fs = used.map(c => frameOf(sh, c, box, k))
+    const w = fs[0].W, h = fs[0].H, u = fs.length
+    const strip = Buffer.alloc(w * u * h * 4)
+    fs.forEach((f, i) => { for (let y = 0; y < h; y++) f.data.copy(strip, (y * w * u + i * w) * 4, y * w * 4, (y + 1) * w * 4) })
+    sizes.push([m.key, writeWebp(['-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${w * u}x${h}`, '-i', '-', '-c:v', 'libwebp'], path.join(OUT, bossFileOf(key, m.key)), strip)])
+    notes.push(`${m.file} ${sh.cells.length}コマ（倍率${s.toFixed(2)}・ずれ ${t.dx},${t.dy}）`)
+    entry.motions[m.key] = { frames: u, w, h, ox: (base.x0 - box.x0) * k, oy: (base.y0 - box.y0) * k,
+      ms: m.ms[u] || Array(u).fill(150), hit: BOSS_HIT_OF[u] ?? Math.floor(u / 2) }
   }
   // 遭遇のイラスト（透明な背景のまま・体がちょうど収まる正方形）
   const illustFile = path.join(dir, 'イラスト.png')
@@ -158,18 +248,18 @@ const build = (key, def, dir) => {
       sizes.push(['illust', statSync(out).size])
     }
   }
-  return { entry, sizes }
+  return { entry, sizes, notes }
 }
 
 const writeList = (art) => {
   const lines = ['// tools/v2cap-boss-art.mjs が書くファイル（手で直さない）。ボス → 待機の枠・待機・技ごとのコマ',
-    '//   base … 待機の枠の大きさ（正方形・px）／idle … 待機のコマの数と1コマの長さ（ミリ秒）／illust … 遭遇のイラストがあるか',
+    '//   base … 待機の枠の大きさ（正方形・px）／idle … 待機のコマの数と1コマずつの長さ（ミリ秒）／illust … 遭遇のイラストがあるか',
     '//   motions … 技のキー → コマの数・1コマの大きさ（w・h）・待機の枠の左上が1コマの中のどこにあるか（ox・oy）・1コマの長さ・当たるコマ（0から）',
     'export const BOSS_ART = {']
   for (const [key, e] of Object.entries(art)) {
-    lines.push(`  ${key}: {`, `    base: ${e.base}, illust: ${e.illust},`, `    idle: { frames: ${e.idle.frames}, ms: ${e.idle.ms} },`, '    motions: {')
-    for (const [k, m] of Object.entries(e.motions)) {
-      lines.push(`      ${k}: { frames: ${m.frames}, w: ${m.w}, h: ${m.h}, ox: ${m.ox}, oy: ${m.oy}, ms: [${m.ms.join(', ')}], hit: ${m.hit} },`)
+    lines.push(`  ${key}: {`, `    base: ${e.base}, illust: ${e.illust},`, `    idle: { frames: ${e.idle.frames}, ms: [${[].concat(e.idle.ms).join(', ')}] },`, '    motions: {')
+    for (const [mk, m] of Object.entries(e.motions)) {
+      lines.push(`      ${mk}: { frames: ${m.frames}, w: ${m.w}, h: ${m.h}, ox: ${m.ox}, oy: ${m.oy}, ms: [${m.ms.join(', ')}], hit: ${m.hit} },`)
     }
     lines.push('    },', '  },')
   }
@@ -183,9 +273,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
   for (const [key, def] of Object.entries(BOSS_DEFS)) {
     const dir = path.join(SRC, def.dir)
     if (!existsSync(dir)) { console.log(`  - ${def.name}：元の絵のフォルダが無い（${path.relative(ROOT, dir)}）`); continue }
-    const known = new Set(['待機', 'イラスト', ...def.motions.map(m => m.file)])
-    for (const f of readdirSync(dir)) if (!known.has(path.basename(f, path.extname(f)))) console.log(`  ? ${def.name}：使わない絵（名前が決まりと違う）：${f}`)
-    const srcs = readdirSync(dir).map(f => statSync(path.join(dir, f)).mtimeMs)
+    // 見本_〜.png はプロンプトに添付する見本（道具は読まない）。エフェクトは名前だけ知っている（画面に入れるのは絵が届いてから）
+    const known = new Set(['待機', 'イラスト', ...def.motions.map(m => m.file), ...(def.effects || []).map(e => e.file)])
+    const isSample = (f) => f.startsWith('見本')
+    for (const f of readdirSync(dir)) if (!isSample(f) && !known.has(path.basename(f, path.extname(f)))) console.log(`  ? ${def.name}：使わない絵（名前が決まりと違う）：${f}`)
+    const srcs = readdirSync(dir).filter(f => !isSample(f)).map(f => statSync(path.join(dir, f)).mtimeMs)
     const outs = ['idle', ...def.motions.map(m => m.key)].map(k => path.join(OUT, bossFileOf(key, k)))
     const fresh = !FORCE && art[key] && outs.every(o => existsSync(o) && statSync(o).mtimeMs >= Math.max(...srcs))
     if (fresh) continue
@@ -194,6 +286,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
       art[key] = r.entry
       made++
       console.log(`  ✓ ${def.name}：待機の枠 ${r.entry.base}px・${r.sizes.map(([k, s]) => `${k} ${Math.round(s / 1024)}KB`).join('・')}`)
+      for (const t of r.notes) console.log(`    ${t}`)
     } catch (e) {
       console.log(`  ✗ ${def.name}：${e.message}`)
       process.exitCode = 1

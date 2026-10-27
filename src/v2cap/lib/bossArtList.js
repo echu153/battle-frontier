@@ -1,15 +1,15 @@
 // tools/v2cap-boss-art.mjs が書くファイル（手で直さない）。ボス → 待機の枠・待機・技ごとのコマ
-//   base … 待機の枠の大きさ（正方形・px）／idle … 待機のコマの数と1コマの長さ（ミリ秒）／illust … 遭遇のイラストがあるか
+//   base … 待機の枠の大きさ（正方形・px）／idle … 待機のコマの数と1コマずつの長さ（ミリ秒）／illust … 遭遇のイラストがあるか
 //   motions … 技のキー → コマの数・1コマの大きさ（w・h）・待機の枠の左上が1コマの中のどこにあるか（ox・oy）・1コマの長さ・当たるコマ（0から）
 export const BOSS_ART = {
   varuzenoku: {
     base: 253, illust: true,
-    idle: { frames: 6, ms: 130 },
+    idle: { frames: 6, ms: [200, 90, 90, 170, 130, 130] },
     motions: {
-      claw: { frames: 4, w: 261, h: 253, ox: 3, oy: 0, ms: [110, 110, 200, 140], hit: 2 },
-      breath: { frames: 4, w: 301, h: 253, ox: 7, oy: 0, ms: [160, 200, 320, 220], hit: 2 },
-      gale: { frames: 4, w: 267, h: 253, ox: 6, oy: 0, ms: [150, 180, 300, 220], hit: 2 },
-      doom: { frames: 4, w: 279, h: 257, ox: 7, oy: 0, ms: [220, 320, 420, 320], hit: 2 },
+      claw: { frames: 4, w: 261, h: 253, ox: 2, oy: 0, ms: [110, 110, 200, 140], hit: 2 },
+      breath: { frames: 4, w: 301, h: 253, ox: 6, oy: 0, ms: [160, 200, 320, 220], hit: 2 },
+      gale: { frames: 4, w: 268, h: 253, ox: 6, oy: 0, ms: [150, 180, 300, 220], hit: 2 },
+      doom: { frames: 4, w: 279, h: 258, ox: 6, oy: 0, ms: [220, 320, 420, 320], hit: 2 },
     },
   },
 }
