@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
   MUSEUM_TIERS, tierOfPlus, MUSEUM_GROUPS, MUSEUM_ITEMS, isMuseumItem, raritiesOfGroup, museumKey, registeredSetOf, tiersOf,
-  museumCountOf, wornInvIdsOf, donatablesOf, donatedText, donatedTail,
+  museumCountOf, wornInvIdsOf, donatablesOf, donatedText, DONATED_TAIL, donatedPlusLabel,
 } from './museum.js'
 import { ITEMS, STARTER_ITEMS, UNIQUE_ITEMS, ITEM_BY_ID } from './equipment.js'
 import { AREA_LIST } from './areas.js'
@@ -80,14 +80,16 @@ test('★ユニークは寄贈できない・博物館の画面のどこにも�
   assert.ok(!/'error', '[^']*ユニーク/.test(take), '断りの文にユニークと書かない')
 })
 
-test('寄贈の結果の文（10-23 ユーザー指示「「ブロンズダガー」を寄贈しました（未強化で登録）って出るように」）', () => {
-  assert.equal(donatedText('ブロンズダガー', 0), '「ブロンズダガー」を寄贈しました（未強化で登録）')
-  assert.equal(donatedText('ブロンズダガー', 1), '「ブロンズダガー」を寄贈しました（+5で登録）')
-  assert.equal(donatedText('ブロンズダガー', 2), '「ブロンズダガー」を寄贈しました（+9で登録）')
-  // 画面は装備名だけレア度の色（10-23 ユーザー指示「既存の装備と同じように色付けてほしい、装備名だけね」）
-  assert.equal(donatedTail(0), 'を寄贈しました（未強化で登録）')
+test('寄贈の結果の文：（○○で登録）は付けず、強化値を装備名のうしろに（10-23 ユーザー指示「「ブロンズダガー」を寄贈しました（未強化で登録）って出るように」→ 10-27 ユーザー指示「寄贈した後の（○○で登録）の部分は省こう、＋かどうかで分かるし」）', () => {
+  assert.equal(donatedText('ブロンズダガー', 0), '「ブロンズダガー」を寄贈しました', '未強化は強化値を付けない')
+  assert.equal(donatedText('ブロンズダガー', 1), '「ブロンズダガー +5」を寄贈しました')
+  assert.equal(donatedText('ブロンズダガー', 2), '「ブロンズダガー +9」を寄贈しました')
+  assert.deepEqual(MUSEUM_TIERS.map(t => donatedPlusLabel(t.key)), ['', '+5', '+9'])
+  assert.equal(DONATED_TAIL, 'を寄贈しました')
+  // 画面は装備名だけレア度の色（10-23 ユーザー指示「既存の装備と同じように色付けてほしい、装備名だけね」）・強化値は寄贈の確認と同じ黄色
   const m = src('../components/V2capMuseum.jsx')
-  assert.ok(m.includes('「<span style={{ color: RARITY_COLOR[x.rarity], fontSize:\x2716px\x27 }}>{x.name}</span>」{donatedTail(x.tier)}'))
+  assert.ok(m.includes("「<span style={{ color: RARITY_COLOR[x.rarity], fontSize:'16px' }}>{x.name}</span>{donatedPlusLabel(x.tier) && <span style={{ color:'#ffcc00' }}> {donatedPlusLabel(x.tier)}</span>}」{DONATED_TAIL}"))
+  assert.ok(!m.includes('で登録）}') && !m.includes('donatedTail'), '（○○で登録）は出さない')
   // 結果の文字も少し大きく（10-23「寄贈した後のフォントも少し大きくして見やすくして」）＝文13px・装備名16px
   assert.ok(m.includes("<div style={{ maxHeight:'280px', overflowY:'auto', fontSize:'13px', lineHeight:1.7 }}>"))
   assert.ok(m.includes("<div key={i} style={{ color:'#cfe2ff' }}>"), '名前の外（「」と後ろの文）はふつうの色')

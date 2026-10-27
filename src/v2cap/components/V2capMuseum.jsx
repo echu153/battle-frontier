@@ -8,7 +8,7 @@ import { openUntilOf } from '../lib/sortie.js'
 import { RARITIES, RARITY_COLOR, ITEM_BY_ID, rarityLabel, kindLabel } from '../lib/equipment.js'
 import { plusOf, plusLabel } from '../lib/smith.js'
 import {
-  MUSEUM_TIERS, MUSEUM_GROUPS, raritiesOfGroup, registeredSetOf, tiersOf, museumCountOf, donatablesOf, donatedTail,
+  MUSEUM_TIERS, MUSEUM_GROUPS, raritiesOfGroup, registeredSetOf, tiersOf, museumCountOf, donatablesOf, DONATED_TAIL, donatedPlusLabel,
   MUSEUM_SET_SP, MUSEUM_RARITY_STAM_SEC, MUSEUM_AREA_STAM_SEC, MUSEUM_REWARD_RARITIES, areaProgressOf, museumRewardTotalsOf, rewardText, sortRewards,
 } from '../lib/museum.js'
 import { pickLine, enterKindOf, donateKindOf, tapKindOf, nextStreak, isNight } from '../lib/appraiser.js'
@@ -21,7 +21,8 @@ import { pickLine, enterKindOf, donateKindOf, tapKindOf, nextStreak, isNight } f
 //   ・寄贈できる装備（持ち物のうち、着けていない・+0／+5／+9・まだ登録していない段階のもの）→「寄贈」→確認のポップアップ（装備はなくなる）
 //   ・登録の一覧：エリア1〜15 のタブ。装備ごとに 未強化／+5／+9 の印（登録した段階は色つき）
 //   【確定】2026-10-23 ユーザー指示（実機を見て）：
-//   ・寄贈したあとに、もう1つポップアップ「「ブロンズダガー」を寄贈しました（未強化で登録）」（一括寄贈は寄贈した数と1行ずつ）
+//   ・寄贈したあとに、もう1つポップアップ「「ブロンズダガー」を寄贈しました」（一括寄贈は寄贈した数と1行ずつ）。
+//     2026-10-27 ユーザー指示「（○○で登録）の部分は省こう、＋かどうかで分かるし」＝段階は装備名のうしろの強化値（+5・+9）で見せる
 //   ・一括寄贈：チェックで選ぶ・レア度ごとに「全部」・選んだぶんを寄贈（鍛冶屋のまとめての分解と同じ形）
 //   【確定】同じ日 ユーザー指示「ユニーク装備は寄贈できないようにあることすら悟られないようにしたい」：
 //     ユニークは一覧にも寄贈できる装備にも出さない・説明にもユニークの文字を書かない（決まりは lib/museum.js）
@@ -191,7 +192,7 @@ export default function V2capMuseum({ prof, inventory, onProfile, dev = false })
               <div style={{ maxHeight:'280px', overflowY:'auto', fontSize:'13px', lineHeight:1.7 }}>
                 {result.items.map((x, i) => (
                   <div key={i} style={{ color:'#cfe2ff' }}>
-                    「<span style={{ color: RARITY_COLOR[x.rarity], fontSize:'16px' }}>{x.name}</span>」{donatedTail(x.tier)}
+                    「<span style={{ color: RARITY_COLOR[x.rarity], fontSize:'16px' }}>{x.name}</span>{donatedPlusLabel(x.tier) && <span style={{ color:'#ffcc00' }}> {donatedPlusLabel(x.tier)}</span>}」{DONATED_TAIL}
                   </div>
                 ))}
               </div>

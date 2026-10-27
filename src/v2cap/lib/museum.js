@@ -21,7 +21,7 @@
 // ============================================================
 import { ITEMS, ITEM_BY_ID, RARITIES, RARITY_LABEL } from './equipment.js'
 import { AREA_LIST } from './areas.js'
-import { plusOf } from './smith.js'
+import { plusOf, plusLabel } from './smith.js'
 
 // 段階（色は V1 と同じ）。plus＝登録できる強化値（ちょうど）
 export const MUSEUM_TIERS = [
@@ -78,11 +78,14 @@ export const donatablesOf = (profile, inventory, rows) => {
   const order = new Map(MUSEUM_ITEMS.map((it, i) => [it.id, i]))
   return [...best.values()].sort((a, b) => (order.get(a.item.id) - order.get(b.item.id)) || (a.tier - b.tier))
 }
-// 寄贈の結果の1行：「ブロンズダガー」を寄贈しました（未強化で登録）
+// 寄贈の結果の1行：「ブロンズダガー +5」を寄贈しました（未強化は強化値を付けない＝「ブロンズダガー」を寄贈しました）
 // 【確定】2026-10-23 ユーザー指示「既存の装備と同じように色付けてほしい、装備名だけね」＝画面は装備名だけレア度の色
-//   （「」の中＝RARITY_COLOR）で出し、後ろの文は donatedTail
-export const donatedTail = (tier) => `を寄贈しました（${MUSEUM_TIERS[tier]?.label ?? ''}で登録）`
-export const donatedText = (name, tier) => `「${name}」${donatedTail(tier)}`
+//   （「」の中＝RARITY_COLOR）で出し、後ろの文は DONATED_TAIL
+// 【確定】2026-10-27 ユーザー指示「寄贈した後の（○○で登録）の部分は省こう、＋かどうかで分かるし」＝（未強化で登録）を外し、
+//   段階は装備名のうしろの強化値（+5・+9）で見せる。画面の強化値は寄贈の確認と同じ黄色
+export const DONATED_TAIL = 'を寄贈しました'
+export const donatedPlusLabel = (tier) => plusLabel(MUSEUM_TIERS[tier]?.plus ?? 0)
+export const donatedText = (name, tier) => `「${name}${donatedPlusLabel(tier) ? ` ${donatedPlusLabel(tier)}` : ''}」${DONATED_TAIL}`
 
 // ===== 報酬（2026-10-23）=====
 // 【確定】2026-10-23 ユーザー指示「エリアごとに統一／レアリティごとに全部そろえたら報酬獲得／強化値に限らず、それぞれの強化値ごとに該当の報酬獲得」
