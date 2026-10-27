@@ -57,3 +57,12 @@ test('攻撃の絵がある側は、数字と揺れを当たるコマまで遅�
   ], 10, { a: 0.2 })
   assert.deepEqual(ev.map(e => e.t0), [10, 10.2, 10.2, 10, 10, 10, 10])
 })
+
+test('技ごとに絵が違う側（ボス）は、動きごとに当たるコマまで遅らせる（act の motion を見る）', () => {
+  const ev = scheduleFx([
+    { kind: 'act', side: 'b', motion: { hitMs: 220 } }, { kind: 'hit', side: 'a', amount: 10 },
+    { kind: 'act', side: 'b', motion: { hitMs: 540 } }, { kind: 'hit', side: 'a', amount: 30 },
+    { kind: 'act', side: 'b' }, { kind: 'miss', side: 'a' },
+  ], 10, { b: (e) => (e.motion ? e.motion.hitMs / 1000 : 0) })
+  assert.deepEqual(ev.map(e => +e.t0.toFixed(3)), [10, 10.22, 10, 10.54, 10, 10])
+})

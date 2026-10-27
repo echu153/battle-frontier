@@ -38,12 +38,12 @@ const LIST = path.join(ROOT, 'src', 'v2cap', 'lib', 'motionArtList.js')
 const FORCE = process.argv.includes('--force')
 
 // 1コマ目だけ・透明つきで読む
-const readRgba = (file) => {
+export const readRgba = (file) => {
   const { w, h } = probe(file)
   const data = execFileSync('ffmpeg', ['-v', 'error', '-i', file, '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-'], { maxBuffer: 1 << 28 })
   return { W: w, H: h, data: Buffer.from(data.subarray(0, w * h * 4)) }
 }
-const scaleRgba = (img, k) => {
+export const scaleRgba = (img, k) => {
   const W = Math.max(1, Math.round(img.W * k)), H = Math.max(1, Math.round(img.H * k))
   const data = execFileSync('ffmpeg', ['-v', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${img.W}x${img.H}`, '-i', '-',
     '-vf', `scale=${W}:${H}:flags=area`, '-f', 'rawvideo', '-pix_fmt', 'rgba', '-'], { input: img.data, maxBuffer: 1 << 28 })

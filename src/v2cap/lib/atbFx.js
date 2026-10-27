@@ -42,10 +42,11 @@ export const fxEventsOf = (entries, aName, bName) => {
 
 // 起きた時刻を付ける。delay＝{ a: 秒, b: 秒 }：その側にモーション（攻撃の絵）があるとき、
 //   殴ったあとの数字・揺れを、絵の「当たる」コマまで遅らせる（lib/motionArt.js の hitMs）
+//   秒の代わりに (act) => 秒 も渡せる＝技ごとに絵が違うボス（lib/bossArt.js・act に motion を付けてある・2026-10-28）
 export const scheduleFx = (events, t0, delay = {}) => {
   let d = 0
   return events.map(e => {
-    if (e.kind === 'act') { d = delay[e.side] || 0; return { ...e, t0 } }
+    if (e.kind === 'act') { const dl = delay[e.side]; d = (typeof dl === 'function' ? dl(e) : dl) || 0; return { ...e, t0 } }
     if (e.kind === 'use') { d = 0; return { ...e, t0 } }
     return { ...e, t0: t0 + d }
   })

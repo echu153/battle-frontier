@@ -5,6 +5,7 @@
 //   エリア⑤から先は頭に番号つき「05-01_砂喰いワーム.png」（エリア-一覧の何体目・2026-10-26）。番号は外して名前で読み、
 //   番号が指すモンスターと名前が違えば知らせる（終わりのコード1）
 //   場所の顔ぶれにいない特別なモンスター（安息の祠のハピネスフェアリー）は public/エネミー/特別/<名前>.png（2026-10-13）
+//   ★public/エネミー/IDダンジョン/ はダンジョンのボスのドット絵とイラスト＝tools/v2cap-boss-art.mjs が読む（ここでは読まない・2026-10-28）
 // 作るもの：
 //   public/enemy-art/<id>.webp     … 192×192。背景を透明にして（下の「背景の扱い」）、体がちょうど収まるように切り取る
 //   public/enemy-art-big/<id>.webp … 512×512（同じ切り取り）。図鑑で絵をタップしたときの大きい版（2026-10-24）
@@ -34,6 +35,7 @@ const ROOT = path.resolve(new URL('..', import.meta.url).pathname.replace(/^\/([
 const lib = (f) => import(new URL(`../src/v2cap/lib/${f}`, import.meta.url).href)
 const { ENEMY_ART_SRC_DIR, ENEMY_ART_DIR, ENEMY_ART_SIZE, ENEMY_ART_BIG_DIR, ENEMY_ART_BIG_SIZE, ENEMY_NAMES_BY_AREA, SPECIAL_ENEMY_NAMES, SPECIAL_ART_DIR, ART_NAMES, enemyNameOfFile, enemyNameOfFileNo, enemyArtId } = await lib('enemyArt.js')
 const { AREA_LIST } = await lib('areas.js')
+const { BOSS_ART_SRC_DIR } = await lib('bossArt.js')
 const SRC = path.join(ROOT, 'public', ENEMY_ART_SRC_DIR)
 const OUT = path.join(ROOT, 'public', ENEMY_ART_DIR.replace(/^\//, ''))
 const LIST = path.join(ROOT, 'src', 'v2cap', 'lib', 'enemyArtList.js')
@@ -90,7 +92,7 @@ const walk = (dir) => {
   if (!existsSync(dir)) return
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name)
-    if (e.isDirectory()) walk(p)
+    if (e.isDirectory()) { if (dir !== SRC || e.name !== BOSS_ART_SRC_DIR) walk(p) }
     else if (/\.(png|jpe?g|webp)$/i.test(e.name)) files.push(p)
   }
 }

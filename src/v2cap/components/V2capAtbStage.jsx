@@ -14,6 +14,8 @@ import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
 //   ・動き（lib/atbFx.js）：殴った側が前へ踏み込む／補助技・回復・防御は光る／受けた側は揺れて赤く光り、数字が浮かぶ
 //   ・攻撃の絵（lib/motionArt.js・ユーザーが ChatGPT で作る）があるクラスは、踏み込みの代わりにその絵を1回流す（2026-10-26）。
 //     待機GIFと同じ大きさ・足の位置にそろえてあるので、待機の枠（正方形）に重ねて、はみ出すぶん（斬撃）は枠の外へ出す
+//   ・ダンジョンのボス（lib/bossArt.js・2026-10-28 黒龍ヴァルゼノク）：待機はずっと羽ばたく動くWebP、技ごとに違う攻撃の絵。
+//     どの絵を流すかは act に付けた motion（試し撃ちの画面が決める）。絵が大きいので枠も大きくする（big）
 // ============================================================
 
 const Bar = ({ pct, color, h = 10 }) => (
@@ -48,12 +50,15 @@ const POP_COLOR = { hit: '#ffffff', miss: '#9fb3c8', heal: '#44ff88', tick: '#cc
 const popText = (f) => (f.kind === 'miss' ? 'MISS' : f.kind === 'heal' ? `+${f.amount.toLocaleString()}` : f.amount.toLocaleString())
 
 // 1人ぶん。right＝右（モンスター）。fx は [{ kind, side, amount, crit, t0 }]・now は fx の t0 と同じ時計（秒）
-function Fighter({ st, side, me, right, src, motion, fx, now, name }) {
+function Fighter({ st, side, me, right, src, motion, fx, now, name, big }) {
   const mine = fx.filter(f => f.side === side)
   const lastOf = (kind) => mine.reduce((t, f) => (f.kind === kind && f.t0 <= now && f.t0 > t ? f.t0 : t), -1e9)
   const dir = right ? -1 : 1   // 前＝相手の方
-  // 攻撃の絵があれば流す（流しているあいだは踏み込まない）
-  const frame = motion ? motionFrameAt(motion, (now - lastOf('act')) * 1000) : -1
+  // 攻撃の絵があれば流す（流しているあいだは踏み込まない）。act に motion が付いていればそちら（ボスの技ごとの絵）
+  const lastAct = mine.reduce((p, f) => (f.kind === 'act' && f.t0 <= now && (!p || f.t0 > p.t0) ? f : p), null)
+  const mo = lastAct?.motion || motion
+  const frame = mo && lastAct ? motionFrameAt(mo, (now - lastAct.t0) * 1000) : -1
+  const base = mo?.base || IDLE_SIZE
   const dx = (frame >= 0 ? 0 : lungeOf(now - lastOf('act')) * dir) + shakeOf(now - lastOf('hit'))
   const hitAgo = now - lastOf('hit')
   const glowAgo = now - lastOf('use')
@@ -68,27 +73,27 @@ function Fighter({ st, side, me, right, src, motion, fx, now, name }) {
   const hpColor = right ? '#cc3344' : '#44cc66'
 
   return (
-    <div style={{ flex:'1 1 0', minWidth:0, display:'flex', flexDirection:'column', alignItems:'stretch' }}>
+    <div style={{ flex: big ? '1.35 1 0' : '1 1 0', minWidth:0, display:'flex', flexDirection:'column', alignItems:'stretch' }}>
       <div style={{ display:'flex', justifyContent:'space-between', gap:'6px', fontSize:'12px', color: right ? '#ff8888' : '#88ccff',
         flexDirection: right ? 'row-reverse' : 'row' }}>
         <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{name}</span>
       </div>
       {/* 絵 */}
-      <div style={{ position:'relative', height:'clamp(110px, 30vw, 170px)', display:'flex', justifyContent:'center', alignItems:'flex-end', margin:'4px 0' }}>
+      <div style={{ position:'relative', height: big ? 'clamp(140px, 40vw, 230px)' : 'clamp(110px, 30vw, 170px)', display:'flex', justifyContent:'center', alignItems:'flex-end', margin:'4px 0' }}>
         <div style={{ height:'100%', display:'flex', alignItems:'flex-end', transform:`translateX(${dx.toFixed(1)}px)`,
           opacity: down ? 0.25 : 1, transition:'opacity 0.4s' }}>
           {src ? (
-            // 待機の絵の枠（正方形）。攻撃の絵はこの枠に重ねる（ox・oy・w・h は待機の 224px を100%として割合で置く）
+            // 待機の絵の枠（正方形）。攻撃の絵はこの枠に重ねる（ox・oy・w・h は待機の枠（クラスは 224px・ボスは base）を100%として割合で置く）
             <div style={{ position:'relative', height:'100%', aspectRatio:'1 / 1', maxWidth:'100%', filter: filters.join(' ') || 'none' }}>
               <img src={src} alt="" draggable={false}
                 style={{ width:'100%', height:'100%', objectFit:'contain', userSelect:'none', visibility: frame >= 0 ? 'hidden' : 'visible' }} />
               {frame >= 0 && (
                 <div style={{ position:'absolute', pointerEvents:'none',
-                  left:`${-motion.ox / IDLE_SIZE * 100}%`, top:`${-motion.oy / IDLE_SIZE * 100}%`,
-                  width:`${motion.w / IDLE_SIZE * 100}%`, height:`${motion.h / IDLE_SIZE * 100}%`,
-                  backgroundImage:`url("${motion.src}")`, backgroundRepeat:'no-repeat',
-                  backgroundSize:`${motion.frames * 100}% 100%`,
-                  backgroundPosition: motion.frames > 1 ? `${frame / (motion.frames - 1) * 100}% 0` : '0 0' }} />
+                  left:`${-mo.ox / base * 100}%`, top:`${-mo.oy / base * 100}%`,
+                  width:`${mo.w / base * 100}%`, height:`${mo.h / base * 100}%`,
+                  backgroundImage:`url("${mo.src}")`, backgroundRepeat:'no-repeat',
+                  backgroundSize:`${mo.frames * 100}% 100%`,
+                  backgroundPosition: mo.frames > 1 ? `${frame / (mo.frames - 1) * 100}% 0` : '0 0' }} />
               )}
             </div>
           ) : (
@@ -134,12 +139,12 @@ function Fighter({ st, side, me, right, src, motion, fx, now, name }) {
   )
 }
 
-export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, foeSrc }) {
+export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, foeSrc, foeBig = false }) {
   return (
     <div style={{ display:'flex', gap:'12px', alignItems:'flex-start', padding:'8px',
       background:'linear-gradient(180deg, #000a26 0%, #001338 70%, #00204a 100%)', border:'1px solid #0a2a55' }}>
       <Fighter st={st} side="a" me={st.a} src={playerSrc} motion={playerMotion} fx={fx} now={now} name={st.a.name} />
-      <Fighter st={st} side="b" me={st.b} right src={foeSrc} fx={fx} now={now} name={st.b.name} />
+      <Fighter st={st} side="b" me={st.b} right src={foeSrc} fx={fx} now={now} name={st.b.name} big={foeBig} />
     </div>
   )
 }
