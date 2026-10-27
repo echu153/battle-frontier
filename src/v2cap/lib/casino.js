@@ -234,3 +234,154 @@ export const rouletteRtp = () => {
     luckyAvg: ek, luckyMultAvg: em,
   }
 }
+
+// ============================================================
+// 解禁（これまでの払い出しで遊べるゲームが増える）
+// ------------------------------------------------------------
+// 【確定】2026-10-28 ユーザー指示「金稼いだ総量で解禁されるコンテンツとかあって、アレアとBJとかポーカーで勝負できるようにもしたい」
+//   →「解禁の仕組みとアレアのブラックジャックから作って」＋選んだこと：
+//   ・数えるのは**これまでの払い出しの合計**（どのゲームも・ゲームで戻ってきたメダル。両替は数えない）＝ v2cap_casino.stats の won の合計
+//   ・ブラックジャックは **1万枚** で解禁。払い出しは減らないので、一度解禁したらそのまま
+// ★サーバー（SQL §11 の v2cap_casino_won）が同じ数え方で確かめる。どのRPCも返事に won_total（これまでの払い出し）を付ける
+// ============================================================
+// desc の {dealer} は卓の名札（アレアが名乗るまでは「ディーラー」＝lib/alea.js の dealerNameOf）
+export const CASINO_UNLOCKS = [
+  { key: 'bj', label: 'ブラックジャック', need: 10000, desc: '{dealer}と1対1で、カードの合計を21に近づけて勝負する卓' },
+]
+export const casinoWonOf = (stats) => Object.values(stats || {}).reduce((s, g) => s + (Number(g?.won) || 0), 0)
+export const unlockOf = (key) => CASINO_UNLOCKS.find(u => u.key === key) || null
+export const isUnlocked = (key, won) => !unlockOf(key) || (Number(won) || 0) >= unlockOf(key).need
+// before → after で解禁の線をまたいだもの（解禁の演出を出す）
+export const newlyUnlockedOf = (before, after) =>
+  CASINO_UNLOCKS.filter(u => (Number(before) || 0) < u.need && (Number(after) || 0) >= u.need)
+
+// ============================================================
+// ブラックジャック（アレアがディーラー）
+// ------------------------------------------------------------
+// 【確定】2026-10-28 ユーザー選択「約97.6%にそろえる（推奨）」（ほかのゲームの約97%に合わせる）・賭けは「10〜1000枚（推奨）」：
+//   ・カードは52枚から毎回1枚（引いたカードは戻す＝ハイ&ローと同じ）。2〜10はその数・J/Q/Kは10・Aは1か11（21を超えないほう）
+//   ・最初に2枚ずつ。アレアの2枚目は伏せる。アレアの表のカードがAか10点のときは、伏せたカードをのぞいてブラックジャックならすぐ終わる
+//     （こちらもブラックジャックなら引き分け・そうでなければ最初の賭けだけ負け）
+//   ・ブラックジャック（最初の2枚で21）は **6:5**（賭けたぶんこみで2.2倍・5枚きざみでない賭けの端数は切り捨て）
+//   ・ヒット（もう1枚）・スタンド（やめる）・ダブル（最初の2枚のときだけ・賭けをもう1回ぶん足して1枚だけ引く）。
+//     **スプリットなし**・保険なし・降参なし。21を超えたら負け（アレアは引かない）。21になったら自動でスタンド
+//   ・アレアは17以上になるまで引く。**Aを11と数えた17（ソフト17）でも引く**
+//   ・勝ち＝賭けたぶんこみで2倍（ダブルは足したぶんも）・引き分け＝賭けたぶんが戻る・負け＝没収
+//   ・還元率（払い出し÷賭けたメダル・いちばん良い打ち方）97.58%（bjRtp）。比べた案：3:2・スプリットなし 99.0%／6:5・ソフト17で止まる 97.8%
+// ★抽選と払い出しはサーバー（SQL §21）。ここは表示・テストのための写し（v2capsql.test.js が定数を突き合わせる）
+// ============================================================
+export const BJ_MIN_BET = 10
+export const BJ_MAX_BET = 1000
+export const BJ_BETS = [10, 50, 100, 500, 1000]
+export const BJ_PAY_NUM = 6        // ブラックジャックの配当 6:5（賭けたぶんに bet × 6 ÷ 5 を足す）
+export const BJ_PAY_DEN = 5
+export const BJ_DEALER_STAND = 17
+export const BJ_HIT_SOFT17 = true
+// カードの点：2〜10はその数・J/Q/Kは10・Aは11（合計が21を超えるときは1に下げる）
+export const bjPointOf = (card) => { const r = rankOf(card); return r === 12 ? 11 : Math.min(10, r + 2) }
+// 手の合計。soft＝Aを11と数えている（7/17 のように2通りに見える手）
+export const bjValueOf = (cards) => {
+  let total = 0, aces = 0
+  for (const c of cards || []) { const p = bjPointOf(c); total += p; if (p === 11) aces++ }
+  while (total > 21 && aces > 0) { total -= 10; aces-- }
+  return { total, soft: aces > 0 }
+}
+export const bjIsNatural = (cards) => (cards || []).length === 2 && bjValueOf(cards).total === 21
+// 表のカードがAか10点なら、伏せたカードをのぞく
+export const bjDealerPeeks = (up) => bjPointOf(up) >= 10
+// アレアがもう1枚引くか（17未満・ソフト17）
+export const bjDealerHits = (cards) => {
+  const v = bjValueOf(cards)
+  return v.total < BJ_DEALER_STAND || (BJ_HIT_SOFT17 && v.total === BJ_DEALER_STAND && v.soft)
+}
+// 勝ち負け（勝負が終わった手で）：'bj'＝こちらのブラックジャック・'win'・'push'・'lose'
+export const bjResultOf = (player, dealer) => {
+  const pn = bjIsNatural(player), dn = bjIsNatural(dealer)
+  if (pn || dn) return pn && dn ? 'push' : pn ? 'bj' : 'lose'
+  const p = bjValueOf(player).total, d = bjValueOf(dealer).total
+  if (p > 21) return 'lose'
+  if (d > 21 || p > d) return 'win'
+  return p === d ? 'push' : 'lose'
+}
+// 払い出し（賭けたぶんこみ）。bet＝最初の賭け・doubled＝ダブルした
+export const bjPayoutOf = (result, bet, doubled = false) => {
+  const stake = bet * (doubled ? 2 : 1)
+  if (result === 'bj') return bet + Math.floor(bet * BJ_PAY_NUM / BJ_PAY_DEN)
+  if (result === 'win') return stake * 2
+  return result === 'push' ? stake : 0
+}
+// 終わり方（アレアのひとことと結果の表示）：natural／dealerNatural／bust（こちらが21超え）／dealerBust／win／lose／push
+export const bjOutcomeOf = (player, dealer, result = bjResultOf(player, dealer)) => {
+  if (result === 'bj') return 'natural'
+  if (result === 'push') return 'push'
+  if (result === 'lose') return bjIsNatural(dealer) ? 'dealerNatural' : bjValueOf(player).total > 21 ? 'bust' : 'lose'
+  return bjValueOf(dealer).total > 21 ? 'dealerBust' : 'win'
+}
+
+// ===== 還元率（式で出す）=====
+// 無限の山（点10が16/52・A と 2〜9 は 4/52 ずつ）で、いちばん良い打ち方（引く・やめる・ダブルのうち、戻りの平均が多いほう）。
+// 表のカードごとに、アレアの最後の合計の分布と、こちらの手ごとの損得（最初の賭け1枚あたり）を作る
+const BJ_P = [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 4].map(n => n / 13)   // 点（1＝A・2〜10）の出やすさ
+const bjAdd = ([t, a], pt) => {   // [合計, 11と数えているAの数] に1枚足す
+  let total = t + (pt === 1 ? 11 : pt), aces = a + (pt === 1 ? 1 : 0)
+  while (total > 21 && aces > 0) { total -= 10; aces-- }
+  return [total, aces]
+}
+const bjTables = new Map()
+const bjTableOf = (up) => {   // up＝表のカードの点（1＝A・2〜10）
+  if (bjTables.has(up)) return bjTables.get(up)
+  const peek = up === 1 || up === 10
+  const dist = {}   // アレアの最後の合計（22＝21を超えた）。のぞいたときは、ブラックジャックでなかった場合だけ
+  const draw = (h, p, first) => {
+    if (h[0] > 21) { dist[22] = (dist[22] || 0) + p; return }
+    if (!(h[0] < BJ_DEALER_STAND || (BJ_HIT_SOFT17 && h[0] === BJ_DEALER_STAND && h[1] > 0))) { dist[h[0]] = (dist[h[0]] || 0) + p; return }
+    const ban = first && peek ? (up === 1 ? 10 : 1) : 0   // のぞいて分かった2枚目（ブラックジャックにならないカード）
+    const norm = ban ? 1 - BJ_P[ban] : 1
+    for (let c = 1; c <= 10; c++) if (c !== ban) draw(bjAdd(h, c), p * BJ_P[c] / norm, false)
+  }
+  draw(bjAdd([0, 0], up), 1, true)
+  // やめたときの損得（勝ち+1・引き分け0・負け−1）
+  const stand = (t) => (t > 21 ? -1 : Object.entries(dist).reduce((s, [d, p]) => s + p * (Number(d) > 21 || Number(d) < t ? 1 : Number(d) > t ? -1 : 0), 0))
+  const memo = new Map()
+  const best = (h) => {   // 2枚目より後：引くかやめるか
+    if (h[0] > 21) return -1
+    const key = h[0] * 10 + h[1]
+    if (!memo.has(key)) memo.set(key, Math.max(stand(h[0]), hit(h)))
+    return memo.get(key)
+  }
+  const hit = (h) => { let s = 0; for (let c = 1; c <= 10; c++) s += BJ_P[c] * best(bjAdd(h, c)); return s }
+  const dbl = (h) => { let s = 0; for (let c = 1; c <= 10; c++) s += BJ_P[c] * 2 * stand(bjAdd(h, c)[0]); return s }
+  const t = { dist, stand, hit, dbl, dealerNatural: peek ? BJ_P[up === 1 ? 10 : 1] : 0 }
+  bjTables.set(up, t)
+  return t
+}
+const bjUpPointOf = (card) => { const p = bjPointOf(card); return p === 11 ? 1 : p }
+// いちばん良い打ち方（テストとシミュ用）：'stand'｜'hit'｜'double'。canDouble＝最初の2枚のまま
+export const bjBestActionOf = (cards, up, canDouble = false) => {
+  const v = bjValueOf(cards)
+  if (v.total >= 21) return 'stand'
+  const T = bjTableOf(bjUpPointOf(up))
+  const h = [v.total, v.soft ? 1 : 0]
+  const opts = [['stand', T.stand(h[0])], ['hit', T.hit(h)]]
+  if (canDouble) opts.push(['double', T.dbl(h)])
+  return opts.reduce((a, b) => (b[1] > a[1] ? b : a))[0]
+}
+// 還元率：払い出し÷賭けたメダル（ダブルで足したぶんも賭けたメダルに数える）。stake＝1回に賭ける平均（最初の賭け＝1）
+export const bjRtp = () => {
+  const extra = BJ_PAY_NUM / BJ_PAY_DEN
+  let ret = 0, stake = 0
+  for (let up = 1; up <= 10; up++) {
+    const T = bjTableOf(up)
+    for (let a = 1; a <= 10; a++) for (let b = 1; b <= 10; b++) {
+      const p = BJ_P[up] * BJ_P[a] * BJ_P[b]
+      const h = bjAdd(bjAdd([0, 0], a), b)
+      if (h[0] === 21) { ret += p * (T.dealerNatural + (1 - T.dealerNatural) * (1 + extra)); stake += p; continue }
+      // アレアのブラックジャック（のぞいて分かる）は最初の賭けだけ負け
+      stake += p * T.dealerNatural
+      const q = p * (1 - T.dealerNatural)
+      const plain = Math.max(T.stand(h[0]), T.hit(h)), doubled = T.dbl(h)
+      if (doubled > plain) { ret += q * (2 + doubled); stake += q * 2 } else { ret += q * (1 + plain); stake += q }
+    }
+  }
+  return { rtp: ret / stake, stake }
+}

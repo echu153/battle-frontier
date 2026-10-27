@@ -130,6 +130,22 @@ export const sfx = {
   ballDrop: () => play(c => { tone(c, { f: 1800, f2: 900, d: 0.08, type: 'triangle', v: 0.12 }); tone(c, { f: 1400, f2: 700, t: 0.1, d: 0.08, type: 'triangle', v: 0.08 }) }),
 }
 
+// 解禁の演出（2026-10-28・これまでの払い出しで遊べるゲームが増えた・casino.js の CASINO_UNLOCKS）。
+//   当たりの演出（BIG WIN など）が出ているときは、それを閉じてから出す（wait）。音と紙吹雪も出たときに鳴らす（onShow）
+export const UNLOCK_TIER = { key: 'unlock', label: 'UNLOCK', color: '#a77bff' }
+export const unlockFx = ({ title, sub, say } = {}) => {
+  fx('banner', {
+    tier: UNLOCK_TIER, amount: null, title, sub, say, wait: true,
+    onShow: () => {
+      sfx.fanfare('at')
+      fx('confetti', { n: 140 })
+      fx('flash', { color: UNLOCK_TIER.color, ms: 500 })
+      fx('rays', { color: UNLOCK_TIER.color, ms: 3000 })
+      vibrate([60, 40, 120])
+    },
+  })
+}
+
 // 当たりの段階の演出をまとめて（banner＋コイン＋紙吹雪＋光＋揺れ＋音＋振動）
 //   tier … casino.js の winTierOf の結果。amount … 払い出し。
 //   say … banner の上に出すアレア（V2capAlea.jsx の AleaSays・2026-10-27）。無ければ出さない

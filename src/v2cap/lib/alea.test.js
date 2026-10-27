@@ -7,7 +7,7 @@ import {
   ALEA_OUTFITS, ALEA_OUTFIT, ALEA_ART_DIR, aleaSrc, ALEA_FACES, ALEA_FACE_KEYS, ALEA_WELCOME, ALEA_FACE_SIZE, ALEA_WELCOME_H, ALEA_FOCUS,
   ALEA_STAGES, CASUAL_STAGE, NAME_STAGE, stageOf, varsOf, ALEA_LINES, ALEA_STAGE_EVENTS, stageEventOf, linesOf, pickLine, ALEA_RARE_WEIGHT,
   enterKindOf, welcomeLineOf, winTalkOf, atTalkOf, LOSE_GAP_MS, HILO_LOSE_STREAK, ROULETTE_MISS_RUN, loseDue, nextMissRun, dayOf,
-  ALEA_THUMB, ALEA_SIDE_MIN_W,
+  ALEA_THUMB, ALEA_SIDE_MIN_W, bjTalkOf, BJ_TALK_GAP_MS, BJ_QUIET_KINDS, bjTalkDue, SELF_NAME_STAGE, dealerNameOf,
 } from './alea.js'
 import { CLERK_RARE_WEIGHT } from './clerk.js'
 import { WIN_TIERS } from './casino.js'
@@ -226,7 +226,7 @@ test('画面：賭博場の右にアレア（狭い画面は上）・タップ�
   assert.ok(casino.includes('<V2capAlea face={alea.face} line={alea.text} tick={alea.tick} onTap={tapAlea} />'))
   assert.ok(casino.includes("const talkAsker = makeDailyAsker(() => supabase.rpc('v2cap_alea_talk'))"), '好感度は1日1回だけ聞く（看板娘と同じ）')
   assert.ok(casino.includes("supabase.rpc('v2cap_alea_seen', { p_stage: ev.stage }).then(() => {})"))
-  assert.equal((casino.match(/onTalk=\{onTalk\}/g) || []).length, 3, '3つのゲームに渡す')
+  assert.equal((casino.match(/onTalk=\{onTalk\}/g) || []).length, 4, '4つのゲームに渡す（2026-10-28 ブラックジャックを足した）')
   assert.ok(casino.includes("say('exchange')") && casino.includes("say('short')"), '両替した・お財布を超えた')
   assert.ok(casino.includes('if (!loseDue(lastLose.current)) return null'), '負けたときは1分に1回まで')
   assert.ok(casino.includes('{dev && ('), '開発用のボタンは管理者だけ')
@@ -295,4 +295,41 @@ test('その日の「いらっしゃい」は賭博場の画面より先（ホ�
   const alea = read('components/V2capAlea.jsx')
   assert.ok(alea.includes('<style>{WELCOME_CSS}</style>'))
   assert.ok(!alea.slice(0, alea.indexOf('const WELCOME_CSS')).includes('.al-welcome {'), 'ALEA_CSS には入れない')
+})
+
+// ===== ブラックジャック（2026-10-28・アレアがディーラー）=====
+const BJ_KINDS = ['bjSit', 'bjUnlock', 'bjLocked', 'bjDouble', 'bjNatural', 'bjDealerNatural', 'bjBust', 'bjDealerBust', 'bjWin', 'bjLose', 'bjPush']
+
+test('【確定】2026-10-28 ブラックジャックのひとこと（ユーザーが案を見て「この案で入れて」）：どの場面も段階ごとにある（ていねい語→常連からくだけた話し方→仲良しから名前）・ゲームの言葉（ヒット・ダブルなど）も言わない', () => {
+  for (const k of BJ_KINDS) {
+    for (let st = 0; st <= 4; st++) assert.ok(linesOf(k, st).length > 0, `${k}（段階${st}）`)
+    assert.ok(linesOf(k, NAME_STAGE).every(l => l.text.includes('{name}')), `${k} の20日目から名前で呼ぶ`)
+    assert.ok(linesOf(k, NAME_STAGE - 1).every(l => !l.text.includes('{name}')), `${k} の20日目より前`)
+    for (const l of ALEA_LINES[k]) assert.ok(!/ブラックジャック|ヒット|スタンド|ダブル|バスト|スプリット|ディーラー|ソフト/.test(l.text), `${k}：${l.text}`)
+  }
+  assert.ok(ALEA_LINES.bjNatural.every(l => l.face === 'surprised'), 'こちらのブラックジャックはびっくり')
+  assert.ok(ALEA_LINES.bjBust.every(l => l.face === 'jito'), 'こちらの引きすぎはジト目')
+  assert.ok(linesOf('bjWin', 0).length >= 2 && linesOf('bjLose', 0).length >= 2, 'よく出る勝ち負けは2つずつ（同じセリフが続かない）')
+})
+
+test('ブラックジャックのひとことの出し方：終わり方ごとの場面・ブラックジャックとダブルは毎回・ふつうの勝ち負けなどは30秒に1回まで', () => {
+  assert.deepEqual(['natural', 'dealerNatural', 'bust', 'dealerBust', 'win', 'lose', 'push'].map(bjTalkOf),
+    ['bjNatural', 'bjDealerNatural', 'bjBust', 'bjDealerBust', 'bjWin', 'bjLose', 'bjPush'])
+  assert.equal(bjTalkOf('?'), null)
+  assert.deepEqual(BJ_QUIET_KINDS, ['bjBust', 'bjDealerBust', 'bjWin', 'bjLose', 'bjPush'])
+  assert.equal(BJ_TALK_GAP_MS, 30000)
+  assert.equal(bjTalkDue(0), true)
+  assert.equal(bjTalkDue(1000, 1000 + BJ_TALK_GAP_MS - 1), false)
+  assert.equal(bjTalkDue(1000, 1000 + BJ_TALK_GAP_MS), true)
+  const casino = read('components/V2capCasino.jsx')
+  assert.ok(casino.includes('if (BJ_QUIET_KINDS.includes(kind)) {\n      if (!bjTalkDue(lastBj.current)) return null'))
+  const bj = read('components/V2capBlackjack.jsx')
+  assert.ok(bj.includes("if (action === 'double') onTalk?.('bjDouble')") && bj.includes('onTalk?.(bjTalkOf(outcome))'))
+})
+
+test('卓の名札は、アレアが名乗る（40日目の場面を見せる）まで「ディーラー」', () => {
+  assert.equal(SELF_NAME_STAGE, 4)
+  assert.ok(ALEA_STAGE_EVENTS[SELF_NAME_STAGE].text.includes('アレア'), '名乗る場面')
+  assert.deepEqual([0, 3, 4].map(dealerNameOf), ['ディーラー', 'ディーラー', 'アレア'])
+  assert.ok(read('components/V2capCasino.jsx').includes('dealerName={dealerNameOf(seen)}'), '段階ではなく、名乗る場面を見せたかで決める')
 })

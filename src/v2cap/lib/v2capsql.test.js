@@ -24,6 +24,7 @@ import {
   SLOT_CZ_GAMES, SLOT_CZ_WIN, SLOT_AT_GAMES, SLOT_PREMIUM_GAMES, SLOT_AT_ADD, SLOT_AT_TOKU, SLOT_TOKU_GAMES, SLOT_TOKU_ADDS, SLOT_ORDERS, slotArrayOf,
   HILO_MIN_BET, HILO_MAX_BET, HILO_FIRST_X13, HILO_NEXT_X13, HILO_MAX_STREAK, HILO_CAP_MULT,
   ROULETTE_MAX_TOTAL, ROULETTE_MAX_BETS, ROULETTE_STRAIGHT, RED_NUMBERS, LUCKY_COUNT_W, LUCKY_MULTS, BET_KINDS,
+  unlockOf, BJ_MIN_BET, BJ_MAX_BET, BJ_PAY_NUM, BJ_PAY_DEN, BJ_DEALER_STAND, BJ_HIT_SOFT17,
 } from './casino.js'
 import { FLOORS as TOWER_FLOORS, LOSE_DROP as TOWER_LOSE } from './tower.js'
 import { DEX_AREA_STAM } from './dex.js'
@@ -1180,5 +1181,59 @@ test('【確定】2026-10-27 賭博場のアレア（§20）：その日の「�
   for (const f of ['v2cap_casino_welcome()', 'v2cap_alea_talk()', 'v2cap_alea_seen(int)']) {
     assert.ok(SQL.includes(`revoke all on function public.${f} from public, anon;`), f)
     assert.ok(SQL.includes(`grant execute on function public.${f} to authenticated;`), f)
+  }
+})
+
+test('【確定】2026-10-28 解禁（§11）：これまでの払い出しの合計（stats の won を全部足す）・どのRPCも won_total を返す', () => {
+  // ユーザー指示「金稼いだ総量で解禁されるコンテンツ」＋選んだこと「累計の払い出し」（JS は casino.js の casinoWonOf）
+  const won = fnBody('v2cap_casino_won')
+  assert.ok(won.includes("select coalesce(sum((e.value ->> 'won')::bigint), 0)::bigint from jsonb_each(coalesce(p_stats, '{}'::jsonb)) as e"))
+  assert.ok(fnBody('v2cap_casino_money').includes("'won_total', coalesce((select public.v2cap_casino_won(c.stats) from public.v2cap_casino c where c.player_id = p_uid), 0))"))
+  assert.ok(SQL.indexOf('create or replace function public.v2cap_casino_won(') < SQL.indexOf('create or replace function public.v2cap_casino_money('),
+    'money より前に作る（language sql は作るときに中で呼ぶ関数を確かめる）')
+  assert.ok(SQL.includes('revoke all on function public.v2cap_casino_won(jsonb) from public, anon, authenticated;'))
+})
+
+test('【確定】2026-10-28 ブラックジャック（§21）：1万枚で解禁・10〜1000枚・6:5・ソフト17でも引く・表がAか10点ならのぞく・伏せたカードは返さない', () => {
+  // ユーザー選択「約97.6%にそろえる（推奨）」「10〜1000枚（推奨）」「1万枚（推奨）」。決まりの写しは casino.js
+  for (const c of ['bj_active  boolean    not null default false', 'bj_bet     int        not null default 0', 'bj_doubled boolean    not null default false',
+    "bj_player  smallint[] not null default '{}'", "bj_dealer  smallint[] not null default '{}'"]) {
+    assert.ok(SQL.includes(`alter table public.v2cap_casino add column if not exists ${c};`), c)
+  }
+  // 手の合計（casino.js の bjPointOf・bjValueOf と同じ）
+  const hand = fnBody('v2cap_bj_hand')
+  assert.ok(hand.includes('if v_card % 13 = 12 then total := total + 11; v_aces := v_aces + 1;'), 'Aは11')
+  assert.ok(hand.includes('else total := total + least(10, v_card % 13 + 2); end if;'), '2〜10はその数・J/Q/Kは10')
+  assert.ok(hand.includes('while total > 21 and v_aces > 0 loop total := total - 10; v_aces := v_aces - 1; end loop;'), '21を超えるときはAを1に')
+  const start = fnBody('v2cap_bj_start')
+  assert.equal(constOf(start, 'c_min'), String(BJ_MIN_BET))
+  assert.equal(constOf(start, 'c_max'), String(BJ_MAX_BET))
+  assert.equal(constOf(start, 'c_unlock'), String(unlockOf('bj').need))
+  assert.ok(start.includes('if public.v2cap_casino_won(v_c.stats) < c_unlock then'), '解禁はサーバーで確かめる')
+  assert.equal(start.split('floor(random() * 52)::smallint').length - 1, 4, '2枚ずつ（52枚から毎回1枚）')
+  assert.ok(start.includes('if v_pt = 21 or (v_dealer[1] % 13 >= 8 and v_dt = 21) then'), 'のぞくのは表がAか10点（8〜12）のとき')
+  assert.ok(start.includes("'dealer', to_jsonb(v_dealer[1:1])"), '途中は伏せたカードを返さない')
+  const settle = fnBody('v2cap_bj_settle')
+  assert.equal(constOf(settle, 'c_bj_num'), String(BJ_PAY_NUM))
+  assert.equal(constOf(settle, 'c_bj_den'), String(BJ_PAY_DEN))
+  assert.equal(constOf(settle, 'c_stand'), String(BJ_DEALER_STAND))
+  assert.ok(BJ_HIT_SOFT17 && settle.includes('exit when v_dt > c_stand or (v_dt = c_stand and not v_ds);'), 'ソフト17でも引く')
+  assert.ok(settle.includes('if not p_natural and v_pt <= 21 then'), '21を超えた・ブラックジャックのときアレアは引かない')
+  assert.ok(settle.includes("when 'bj'   then p_bet + p_bet * c_bj_num / c_bj_den"), 'ブラックジャックは最初の賭けの 6:5（切り捨て）')
+  assert.ok(settle.includes("when 'win'  then v_stake * 2") && settle.includes("when 'push' then v_stake"))
+  assert.ok(settle.includes("perform public.v2cap_casino_book(p_uid, 'bj', 0, v_payout, v_payout);"))
+  const act = fnBody('v2cap_bj_action')
+  assert.ok(act.includes("if p_action is null or p_action not in ('hit', 'stand', 'double') then"), 'スプリット・保険・降参はない')
+  assert.ok(act.includes('if array_length(v_player, 1) <> 2 or v_doubled then'), 'ダブルは最初の2枚のときだけ')
+  assert.ok(act.includes("perform public.v2cap_casino_book(v_uid, 'bj', v_c.bj_bet, 0, 0);"), 'ダブルの賭け足しも記録')
+  assert.ok(act.includes("if p_action = 'hit' and v_pt < 21 then"), '21になったら自動でスタンド・超えたら決着')
+  assert.ok(fnBody('v2cap_casino_state').includes("'player', to_jsonb(v_c.bj_player), 'dealer', to_jsonb(v_c.bj_dealer[1:1]))"), '開き直しても伏せたカードは返さない')
+  // 決着は画面から呼ばせない（渡したカードのまま払い出すので）
+  assert.ok(SQL.includes('revoke all on function public.v2cap_bj_settle(uuid, int, boolean, smallint[], smallint[], boolean) from public, anon, authenticated;'))
+  assert.ok(SQL.includes('revoke all on function public.v2cap_bj_hand(smallint[]) from public, anon, authenticated;'))
+  for (const f of ['v2cap_bj_start(int)', 'v2cap_bj_action(text)']) {
+    assert.ok(SQL.includes(`revoke all on function public.${f} from public, anon;`), f)
+    assert.ok(SQL.includes(`grant execute on function public.${f} to authenticated;`), f)
+    assert.ok(fnBody(f.split('(')[0]).includes('if not public.v2cap_is_dev() then'), `${f} は開発限定`)
   }
 })

@@ -209,6 +209,80 @@ export const ALEA_LINES = {
     { min: 2, max: 2, face: 'jito', text: '…お財布、さみしいみたい。出直しておいで' },
     { min: 3, face: 'jito', text: '{name}、お財布からっぽでしょ。…無理しないの' },
   ],
+  // ===== ブラックジャック（アレアがディーラー・【確定】2026-10-28 ユーザーが案を見て「ブラックジャックのセリフはこの案で入れて」）=====
+  // ゲームの言葉（ブラックジャック・ヒット・ダブル・ディーラーなど）も言わない（alea.test.js）
+  // 卓についた（ブラックジャックを開いたとき）
+  bjSit: [
+    { max: 1, face: 'smile', text: '…わたしの卓へようこそ。カード、配りますね' },
+    { min: 2, max: 2, face: 'smile', text: '…座って。カード、配るよ' },
+    { min: 3, face: 'smile', text: '…{name}、座って。今日も相手してあげる' },
+  ],
+  // 遊べるようになった瞬間
+  bjUnlock: [
+    { max: 1, face: 'smile', text: '…ずいぶん遊び慣れてきましたね。…わたしの卓、空いてますよ' },
+    { min: 2, max: 2, face: 'smile', text: '…もうすっかり遊び慣れたね。わたしの卓、空いてるよ' },
+    { min: 3, face: 'smile', text: '…{name}、わたしの卓、空いてるよ。そろそろ、勝負しよっか' },
+  ],
+  // まだ遊べないときに開いた
+  bjLocked: [
+    { max: 1, face: 'normal', text: '…わたしと勝負するのは、もう少しここで遊んでからにしましょう' },
+    { min: 2, max: 2, face: 'normal', text: '…わたしと勝負するのは、もう少し遊び慣れてからね' },
+    { min: 3, face: 'normal', text: '…{name}とはいつか勝負したいけど、もう少し遊んでからね' },
+  ],
+  // ダブルを押した
+  bjDouble: [
+    { max: 1, face: 'smile', text: '…強気ですね。嫌いじゃないです' },
+    { min: 2, max: 2, face: 'smile', text: '…強気だね。嫌いじゃないよ' },
+    { min: 3, face: 'smile', text: '…{name}、強気だね。そういうところ、嫌いじゃない' },
+  ],
+  // こちらのブラックジャック（最初の2枚で揃った）
+  bjNatural: [
+    { max: 1, face: 'surprised', text: '……あら、いきなり揃えてきましたね。…お見事です' },
+    { min: 2, max: 2, face: 'surprised', text: '……え、いきなり？ …お見事' },
+    { min: 3, face: 'surprised', text: '……{name}、いきなり揃えてくるなんて。…お見事' },
+  ],
+  // アレアのブラックジャック
+  bjDealerNatural: [
+    { max: 1, face: 'smile', text: '…ごめんなさい。今日は、カードがわたしの味方みたいです' },
+    { min: 2, max: 2, face: 'smile', text: '…ごめんね。カードが、わたしの味方したみたい' },
+    { min: 3, face: 'smile', text: '…ごめんね、{name}。カードが、わたしの味方したみたい' },
+  ],
+  // こちらが引きすぎた（21を超えた）
+  bjBust: [
+    { max: 1, face: 'jito', text: '…欲張りすぎ、ですね' },
+    { min: 2, max: 2, face: 'jito', text: '…欲張りすぎ。引き際も、大事だよ' },
+    { min: 3, face: 'jito', text: '…{name}、欲張りすぎ。…ふふ' },
+  ],
+  // アレアが引きすぎた
+  bjDealerBust: [
+    { max: 1, face: 'surprised', text: '…あ。引きすぎちゃいました' },
+    { min: 2, max: 2, face: 'surprised', text: '…あ、引きすぎちゃった' },
+    { min: 3, face: 'surprised', text: '…あ、引きすぎちゃった。{name}の勝ちだね' },
+  ],
+  // ふつうの勝ち（こちらの合計が大きい）
+  bjWin: [
+    { max: 1, face: 'normal', text: '…負けちゃいました。やりますね' },
+    { max: 1, face: 'smile', text: '…今のは、あなたの勝ちです。…次は、どうでしょう' },
+    { min: 2, max: 2, face: 'normal', text: '…わたしの負け。やるね' },
+    { min: 2, max: 2, face: 'smile', text: '…今のは、そっちの勝ち。…次は、どうかな' },
+    { min: 3, face: 'jito', text: '…{name}の勝ち。ちょっと悔しい' },
+    { min: 3, face: 'smile', text: '…{name}、やるね。…次は負けないよ' },
+  ],
+  // ふつうの負け（アレアの合計が大きい）
+  bjLose: [
+    { max: 1, face: 'smile', text: '…ふふ、わたしの勝ちですね' },
+    { max: 1, face: 'normal', text: '…残念でした。カードは、正直ですから' },
+    { min: 2, max: 2, face: 'smile', text: '…ふふ、わたしの勝ち' },
+    { min: 2, max: 2, face: 'normal', text: '…残念。カードは、正直だから' },
+    { min: 3, face: 'smile', text: '…ふふ、わたしの勝ち。{name}、もう一回やる？' },
+    { min: 3, face: 'smile', text: '…残念。{name}、顔に出てたよ' },
+  ],
+  // 引き分け
+  bjPush: [
+    { max: 1, face: 'normal', text: '…引き分けですね。気が合うみたいです' },
+    { min: 2, max: 2, face: 'normal', text: '…引き分け。気が合うね' },
+    { min: 3, face: 'smile', text: '…引き分け。{name}とは、気が合うね' },
+  ],
 }
 
 // 段階が上がって最初に話しかけたときの場面（1回だけ）。2＝くだけた話し方に変わる・3＝名前を聞いて呼び始める・4＝名乗る
@@ -267,5 +341,22 @@ export const ROULETTE_MISS_RUN = 3
 export const loseDue = (lastAt, now = Date.now()) => !(lastAt > 0) || now - lastAt >= LOSE_GAP_MS
 // ルーレットの外れの続き：外れたら+1・当たったら0。ROULETTE_MISS_RUN に届いたら言って、0から数え直す
 export const nextMissRun = (run, pay) => (pay > 0 ? 0 : (Number(run) || 0) + 1)
+
+// ===== ブラックジャック（アレアがディーラー・2026-10-28）=====
+// 終わり方（casino.js の bjOutcomeOf）→ ひとこと。ブラックジャック（どちらも）は毎回言う。
+// ふつうの勝ち負け・引き分け・引きすぎ（どちらも）は BJ_TALK_GAP_MS に1回まで（毎回は言わない＝負けたときの LOSE_GAP_MS と同じ考え）。
+// ダブルを押したとき（bjDouble）・卓についたとき（bjSit）・遊べるようになったとき（bjUnlock）は画面がそのまま言わせる
+const BJ_TALK = {
+  natural: 'bjNatural', dealerNatural: 'bjDealerNatural', bust: 'bjBust', dealerBust: 'bjDealerBust',
+  win: 'bjWin', lose: 'bjLose', push: 'bjPush',
+}
+export const bjTalkOf = (outcome) => BJ_TALK[outcome] || null
+export const BJ_TALK_GAP_MS = 30000
+export const BJ_QUIET_KINDS = ['bjBust', 'bjDealerBust', 'bjWin', 'bjLose', 'bjPush']
+export const bjTalkDue = (lastAt, now = Date.now()) => !(lastAt > 0) || now - lastAt >= BJ_TALK_GAP_MS
+// 卓の名札：名乗る場面（40日目・ALEA_STAGE_EVENTS[4]）を見せるまでは「ディーラー」。名乗ったあとは「アレア」
+//   （seen＝見せた段階の場面＝サーバーの alea_stage_seen。名前はセリフでも40日目まで出さない）
+export const SELF_NAME_STAGE = 4
+export const dealerNameOf = (seen) => ((Number(seen) || 0) >= SELF_NAME_STAGE ? 'アレア' : 'ディーラー')
 
 export { fillLine, isNight, nextStreak, tapKindOf, welcomeDueLocal, makeDailyAsker, callNameOf, dayOf }

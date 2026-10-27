@@ -7,6 +7,8 @@ import {
   SLOT_AT_GAMES, SLOT_PREMIUM_GAMES, SLOT_CZ_GAMES, SLOT_AT_ADD, SLOT_AT_TOKU, SLOT_TOKU_GAMES, SLOT_MISS_PAY, slotRtp,
   RANK_LABELS, hiloCountOf, hiloMult100Of, hiloChanceOf, hiloNextPotOf, hiloPayoutOf, HILO_MAX_STREAK,
   WHEEL_ORDER, RED_NUMBERS, colorOfNumber, betWins, betPayoutOf, validBet, rouletteRtp, LUCKY_COUNT_W, LUCKY_MULTS, ROULETTE_STRAIGHT,
+  CASINO_UNLOCKS, casinoWonOf, isUnlocked, newlyUnlockedOf, unlockOf,
+  BJ_MIN_BET, BJ_MAX_BET, BJ_BETS, BJ_PAY_NUM, BJ_PAY_DEN, bjPointOf, bjValueOf, bjIsNatural, bjDealerPeeks, bjDealerHits, bjResultOf, bjPayoutOf, bjOutcomeOf, bjBestActionOf, bjRtp,
 } from './casino.js'
 import { displayTable, pickStops, classOf, missStopsOf, DISPLAY_OF_ROLE, REELS, REEL_LEN, winLinesOf, noticeKindOf, noticeLevelOf, NOTICE_TABLE_FOR_TEST } from './slotReels.js'
 
@@ -199,4 +201,115 @@ test('【確定】ルーレットの還元率：1点賭け約97.2%（ラッキ�
   assert.equal(betPayoutOf({ k:'n', v:17, a:10 }, 17, [{ n:17, m:300 }]), 3000, '雷の数字は倍率で払う')
   assert.equal(betPayoutOf({ k:'n', v:17, a:10 }, 17, [{ n:3, m:300 }]), 10 * ROULETTE_STRAIGHT)
   assert.equal(betPayoutOf({ k:'red', a:10 }, 0, []), 0)
+})
+
+// ===== 解禁・ブラックジャック（2026-10-28）=====
+// カード（0〜51・強さは card % 13：0＝2 … 8＝10・9〜11＝J/Q/K・12＝A）
+const C = { 2: 0, 3: 1, 4: 2, 5: 3, 6: 4, 7: 5, 8: 6, 9: 7, 10: 8, J: 9, Q: 10, K: 11, A: 12 }
+const hand = (...xs) => xs.map(x => C[x])
+
+test('【確定】解禁：これまでの払い出し（どのゲームも・両替は数えない）が1万枚でブラックジャック・一度解禁したらそのまま', () => {
+  assert.deepEqual(CASINO_UNLOCKS.map(u => [u.key, u.need]), [['bj', 10000]])
+  const stats = { slot: { n: 5, bet: 15, won: 6000 }, hilo: { won: 2500 }, roulette: { won: 1499 } }
+  assert.equal(casinoWonOf(stats), 9999)
+  assert.equal(casinoWonOf(null), 0)
+  assert.equal(isUnlocked('bj', 9999), false)
+  assert.equal(isUnlocked('bj', 10000), true)
+  assert.equal(isUnlocked('slot', 0), true, '解禁の表に無いゲームは最初から遊べる')
+  assert.deepEqual(newlyUnlockedOf(9999, 10000).map(u => u.key), ['bj'], '線をまたいだときだけ演出を出す')
+  assert.deepEqual(newlyUnlockedOf(10000, 20000), [])
+  assert.equal(unlockOf('bj').label, 'ブラックジャック')
+})
+
+test('ブラックジャック：カードの点（2〜10はその数・J/Q/Kは10・Aは11か1）と手の合計', () => {
+  assert.deepEqual(['2', '9', '10', 'J', 'Q', 'K', 'A'].map(x => bjPointOf(C[x])), [2, 9, 10, 10, 10, 10, 11])
+  assert.equal(bjPointOf(C.A + 13 * 3), 11, 'マークは関係なし')
+  assert.deepEqual(bjValueOf(hand('A', 6)), { total: 17, soft: true })
+  assert.deepEqual(bjValueOf(hand('A', 6, 10)), { total: 17, soft: false }, '21を超えるときはAを1に')
+  assert.deepEqual(bjValueOf(hand('A', 'A')), { total: 12, soft: true })
+  assert.deepEqual(bjValueOf(hand('A', 'A', 9)), { total: 21, soft: true })
+  assert.deepEqual(bjValueOf(hand(10, 6, 'K')), { total: 26, soft: false })
+  assert.equal(bjIsNatural(hand('A', 'Q')), true)
+  assert.equal(bjIsNatural(hand(7, 7, 7)), false, '3枚の21はブラックジャックではない')
+})
+
+test('【確定】アレアは17以上になるまで引く・Aを11と数えた17（ソフト17）でも引く・表がAか10点ならのぞく', () => {
+  assert.equal(bjDealerHits(hand(10, 6)), true)
+  assert.equal(bjDealerHits(hand(10, 7)), false)
+  assert.equal(bjDealerHits(hand('A', 6)), true, 'ソフト17は引く')
+  assert.equal(bjDealerHits(hand('A', 6, 10)), false, 'ハード17は止まる')
+  assert.equal(bjDealerHits(hand('A', 7)), false)
+  assert.deepEqual(['A', 10, 'J', 'Q', 'K', 9, 2].map(x => bjDealerPeeks(C[x])), [true, true, true, true, true, false, false])
+})
+
+test('【確定】ブラックジャックの配当は6:5（賭けたぶんこみ2.2倍）・勝ち2倍・引き分けは戻る・ダブルは賭けを倍に', () => {
+  assert.deepEqual([BJ_MIN_BET, BJ_MAX_BET, BJ_PAY_NUM, BJ_PAY_DEN], [10, 1000, 6, 5])
+  assert.ok(BJ_BETS.every(b => b >= BJ_MIN_BET && b <= BJ_MAX_BET && b % BJ_PAY_DEN === 0), '画面の賭けは5枚きざみ（6:5に端数が出ない）')
+  assert.equal(bjPayoutOf('bj', 100), 220)
+  assert.equal(bjPayoutOf('bj', 10), 22)
+  assert.equal(bjPayoutOf('bj', 11), 24, '端数は切り捨て（13.2→13）')
+  assert.equal(bjPayoutOf('win', 100), 200)
+  assert.equal(bjPayoutOf('win', 100, true), 400)
+  assert.equal(bjPayoutOf('push', 100, true), 200)
+  assert.equal(bjPayoutOf('lose', 100, true), 0)
+  // 勝ち負け
+  assert.equal(bjResultOf(hand('A', 'K'), hand(10, 7)), 'bj')
+  assert.equal(bjResultOf(hand('A', 'K'), hand('A', 'Q')), 'push', 'どちらもブラックジャックは引き分け')
+  assert.equal(bjResultOf(hand(10, 9), hand('A', 'Q')), 'lose')
+  assert.equal(bjResultOf(hand(7, 7, 7), hand('A', 'Q')), 'lose', 'アレアのブラックジャックは3枚の21にも勝つ')
+  assert.equal(bjResultOf(hand(10, 6, 9), hand(10, 6, 10)), 'lose', 'こちらが先に21を超えたら負け（アレアが超えても）')
+  assert.equal(bjResultOf(hand(10, 8), hand(10, 6, 10)), 'win')
+  assert.equal(bjResultOf(hand(10, 8), hand(10, 7)), 'win')
+  assert.equal(bjResultOf(hand(10, 7), hand(10, 7)), 'push')
+  assert.equal(bjResultOf(hand(10, 6), hand(10, 7)), 'lose')
+  // 終わり方（アレアのひとことと結果の表示）
+  assert.equal(bjOutcomeOf(hand('A', 'K'), hand(10, 7)), 'natural')
+  assert.equal(bjOutcomeOf(hand(10, 9), hand('A', 'Q')), 'dealerNatural')
+  assert.equal(bjOutcomeOf(hand(10, 6, 9), hand(10, 6)), 'bust')
+  assert.equal(bjOutcomeOf(hand(10, 8), hand(10, 6, 10)), 'dealerBust')
+  assert.equal(bjOutcomeOf(hand(10, 8), hand(10, 7)), 'win')
+  assert.equal(bjOutcomeOf(hand(10, 6), hand(10, 7)), 'lose')
+  assert.equal(bjOutcomeOf(hand(10, 7), hand(10, 7)), 'push')
+})
+
+test('いちばん良い打ち方（式の還元率の前提）：ハード17はやめる・11はダブル・A/6はアレアの表が5ならダブル', () => {
+  assert.equal(bjBestActionOf(hand(10, 7), C[10], true), 'stand')
+  assert.equal(bjBestActionOf(hand(10, 2), C[2], true), 'hit')
+  assert.equal(bjBestActionOf(hand(10, 2), C[5], true), 'stand')
+  assert.equal(bjBestActionOf(hand(6, 5), C[6], true), 'double')
+  assert.equal(bjBestActionOf(hand(6, 5), C[6], false), 'hit', '3枚目からはダブルできない')
+  assert.equal(bjBestActionOf(hand('A', 6), C[5], true), 'double')
+  assert.equal(bjBestActionOf(hand(9, 'A', 'A'), C[10]), 'stand', '21はやめる')
+})
+
+test('【確定】ブラックジャックの還元率は約97.6%（6:5・スプリットなし・ソフト17でも引く・いちばん良い打ち方）', () => {
+  const r = bjRtp()
+  assert.ok(r.rtp > 0.975 && r.rtp < 0.977, `${(r.rtp * 100).toFixed(2)}%`)
+  assert.ok(r.stake > 1.05 && r.stake < 1.15, 'ダブルのぶん、1回に賭ける平均は少し多い')
+})
+
+test('ブラックジャック：式の還元率と、決まりの関数で実際に30万回配ったときがほぼ同じ', () => {
+  const rng = rngOf(20261028)
+  const draw = () => Math.floor(rng() * 52)
+  const unit = 10
+  let paid = 0, back = 0
+  for (let i = 0; i < 300000; i++) {
+    const player = [draw()], dealer = [draw()]
+    player.push(draw()); dealer.push(draw())
+    paid += unit
+    let doubled = false
+    if (!bjIsNatural(player) && !(bjDealerPeeks(dealer[0]) && bjIsNatural(dealer))) {
+      for (;;) {
+        const a = bjBestActionOf(player, dealer[0], player.length === 2)
+        if (a === 'stand') break
+        player.push(draw())
+        if (a === 'double') { doubled = true; paid += unit; break }
+        if (bjValueOf(player).total >= 21) break
+      }
+      if (bjValueOf(player).total <= 21) while (bjDealerHits(dealer)) dealer.push(draw())
+    }
+    back += bjPayoutOf(bjResultOf(player, dealer), unit, doubled)
+  }
+  const sim = back / paid, rtp = bjRtp().rtp
+  assert.ok(Math.abs(sim - rtp) < 0.006, `シミュ ${(sim * 100).toFixed(2)}%・式 ${(rtp * 100).toFixed(2)}%`)
 })

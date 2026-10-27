@@ -53,3 +53,22 @@ test('広い画面のルーレットは前のまま（ホイール300pxと盤を
   assert.ok(wide.includes('{chipBtns(38)}') && wide.includes("{spinBtn({ width:'100%', marginTop:'10px' })}"))
   assert.ok(wide.includes("<div style={{ flex:'1 1 360px', minWidth:0 }}>"), '盤のほうは 360px から（ホイールと横に並ぶのは約680px から）')
 })
+
+test('【2026-10-28】ブラックジャックのタブ：5つでもスマホで1段（480px 以下は頭の絵文字を外す・🔒 は残す）・まだ遊べないときは鍵の表示', () => {
+  const casino = read('components/V2capCasino.jsx')
+  assert.ok(casino.includes("{ key:'bj',       icon:'♠',  label:'BJ' },"), 'ブラックジャックは短く')
+  assert.ok(casino.includes("const TAB_CSS = '@media (max-width: 480px) { .cs-tab-ico { display: none } }'"))
+  assert.ok(casino.includes(`{locked ? '🔒 ' : <span className="cs-tab-ico">{t.icon} </span>}{t.label}`), '🔒 は狭い画面でも外さない')
+  assert.ok(casino.includes("{tab === 'bj' && !isUnlocked('bj', money.won) && lockedPanel(unlockOf('bj'))}"), 'まだ遊べないときは何枚であそべるか')
+  assert.ok(casino.includes("{isUnlocked('bj', money.won) && (") && casino.includes('<V2capBlackjack init={state.bj}'), '解禁してから卓を置く')
+})
+
+test('【2026-10-28】ブラックジャック：決まりの説明は ❓ HELP・アレアの2枚目は伏せて置く・解禁の演出は当たりの演出を閉じてから', () => {
+  const bj = read('components/V2capBlackjack.jsx')
+  assert.ok(bj.includes('<V2Modal title="❓ HELP" color={CASINO.gold} keepScroll onClose={() => setHelp(false)}>'))
+  assert.ok(bj.includes('await place(setDealer, data.dealer[1] ?? null, true)'), '伏せたカード（決着したときだけ中身が来る）')
+  const layer = read('components/CasinoFxLayer.jsx')
+  assert.ok(layer.includes('if (d.wait && bannerOn.current) waiting.current.push({ ...d, key })'))
+  assert.ok(layer.includes('{banner.amount != null && ('), '解禁の演出には枚数を出さない')
+  assert.ok(read('components/casinoFx.js').includes("tier: UNLOCK_TIER, amount: null, title, sub, say, wait: true,"))
+})

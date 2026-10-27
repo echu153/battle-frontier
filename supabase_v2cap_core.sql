@@ -5341,17 +5341,26 @@ end;
 $$;
 revoke all on function public.v2cap_casino_book(uuid, text, bigint, bigint, bigint) from public, anon, authenticated;
 
--- 残高と当日の収支（内部ヘルパ・どのRPCも返事に足す）
+-- これまでの払い出しの合計（どのゲームも・両替は数えない）＝解禁の数え方（内部ヘルパ・2026-10-28・src/v2cap/lib/casino.js の casinoWonOf と同じ）
+--   【確定】2026-10-28 ユーザー指示「金稼いだ総量で解禁されるコンテンツ」＋選んだこと「累計の払い出し」。払い出しは減らないので、一度解禁したらそのまま
+create or replace function public.v2cap_casino_won(p_stats jsonb)
+returns bigint language sql immutable set search_path = public as $$
+  select coalesce(sum((e.value ->> 'won')::bigint), 0)::bigint from jsonb_each(coalesce(p_stats, '{}'::jsonb)) as e
+$$;
+revoke all on function public.v2cap_casino_won(jsonb) from public, anon, authenticated;
+
+-- 残高と当日の収支（内部ヘルパ・どのRPCも返事に足す）。won_total＝これまでの払い出し（画面が解禁を出す・2026-10-28）
 create or replace function public.v2cap_casino_money(p_uid uuid)
 returns jsonb language sql stable security definer set search_path = public as $$
   select jsonb_build_object(
     'medals',  (select p.medals from public.v2cap_profiles p where p.id = p_uid),
     'gold',    (select p.gold from public.v2cap_profiles p where p.id = p_uid),
-    'day_net', coalesce((select c.day_net from public.v2cap_casino c where c.player_id = p_uid and c.day = public.v2cap_casino_today()), 0))
+    'day_net', coalesce((select c.day_net from public.v2cap_casino c where c.player_id = p_uid and c.day = public.v2cap_casino_today()), 0),
+    'won_total', coalesce((select public.v2cap_casino_won(c.stats) from public.v2cap_casino c where c.player_id = p_uid), 0))
 $$;
 revoke all on function public.v2cap_casino_money(uuid) from public, anon, authenticated;
 
--- 開いたとき：残高・当日の収支・記録・途中の勝負（ATの残り・ハイ&ローの持ち分など）
+-- 開いたとき：残高・当日の収支・記録・途中の勝負（ATの残り・ハイ&ローの持ち分・ブラックジャックの手など）
 create or replace function public.v2cap_casino_state()
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
@@ -5372,7 +5381,12 @@ begin
                                'nav', case when v_c.slot_pending_at then v_c.slot_pending end, 'at_net', v_c.slot_at_net),
     'hilo', jsonb_build_object('active', v_c.hilo_active, 'bet', v_c.hilo_bet, 'pot', v_c.hilo_pot, 'card', v_c.hilo_card,
                                'streak', v_c.hilo_streak, 'cards', to_jsonb(v_c.hilo_cards)),
-    'roulette', jsonb_build_object('hist', to_jsonb(v_c.roul_hist))
+    'roulette', jsonb_build_object('hist', to_jsonb(v_c.roul_hist)),
+    -- ブラックジャック（§21）：勝負の途中だけ手を返す。★アレアの伏せたカード（2枚目）は返さない
+    'bj', case when v_c.bj_active
+            then jsonb_build_object('active', true, 'bet', v_c.bj_bet, 'doubled', v_c.bj_doubled,
+                                    'player', to_jsonb(v_c.bj_player), 'dealer', to_jsonb(v_c.bj_dealer[1:1]))
+            else jsonb_build_object('active', false) end
   ) || public.v2cap_casino_money(v_uid);
 end;
 $$;
@@ -8514,3 +8528,191 @@ end;
 $$;
 revoke all on function public.v2cap_alea_seen(int) from public, anon;
 grant execute on function public.v2cap_alea_seen(int) to authenticated;
+
+-- ============================================================
+-- ===== 21. 賭博場のブラックジャック（アレアがディーラー・2026-10-28）=====
+-- ============================================================
+-- 【確定】2026-10-28 ユーザー指示「金稼いだ総量で解禁されるコンテンツとかあって、アレアとBJとかポーカーで勝負できるようにもしたい」
+--   →「解禁の仕組みとアレアのブラックジャックから作って」＋選んだこと（決まりの写しと還元率の式は src/v2cap/lib/casino.js）：
+--   ・解禁：これまでの払い出しの合計（§11 の v2cap_casino_won）が **1万枚** で遊べる
+--   ・賭けは **10〜1000枚**。還元率 **約97.6%**＝ブラックジャックの配当 **6:5**・**スプリットなし**・アレアは**ソフト17でも引く**・ダブルは最初の2枚ならいつでも
+--   ・カードは52枚から毎回1枚（ハイ&ローと同じ）。アレアの表がAか10点なら伏せたカードをのぞく（ブラックジャックならすぐ決着）
+--   ・21を超えたら負け（アレアは引かない）。21になったら自動でスタンド
+-- ★アレアの伏せたカード（bj_dealer の2枚目）は、勝負が終わるまで画面に返さない（v2cap_casino_state も dealer は1枚目だけ）
+-- ★記録（stats.bj）は賭けたとき（始める・ダブル）と払い出しで v2cap_casino_book。n は賭けた回数（ダブルの賭け足しも1回と数える）
+alter table public.v2cap_casino add column if not exists bj_active  boolean    not null default false;
+alter table public.v2cap_casino add column if not exists bj_bet     int        not null default 0;
+alter table public.v2cap_casino add column if not exists bj_doubled boolean    not null default false;
+alter table public.v2cap_casino add column if not exists bj_player  smallint[] not null default '{}';
+alter table public.v2cap_casino add column if not exists bj_dealer  smallint[] not null default '{}';   -- 2枚目が伏せたカード
+
+-- 手の合計（内部ヘルパ）：2〜10はその数・J/Q/Kは10・Aは11（21を超えるときは1に下げる）。soft＝Aを11と数えている
+create or replace function public.v2cap_bj_hand(p_cards smallint[], out total int, out soft boolean)
+language plpgsql immutable set search_path = public as $$
+declare
+  v_card smallint;
+  v_aces int := 0;
+begin
+  total := 0;
+  foreach v_card in array coalesce(p_cards, '{}'::smallint[]) loop
+    if v_card % 13 = 12 then total := total + 11; v_aces := v_aces + 1;
+    else total := total + least(10, v_card % 13 + 2); end if;
+  end loop;
+  while total > 21 and v_aces > 0 loop total := total - 10; v_aces := v_aces - 1; end loop;
+  soft := v_aces > 0;
+end;
+$$;
+revoke all on function public.v2cap_bj_hand(smallint[]) from public, anon, authenticated;
+
+-- 決着（内部ヘルパ・★画面からは呼ばせない＝渡したカードのまま払い出すので）：
+--   こちらが21を超えていなければアレアが引き（17以上まで・ソフト17も引く）、勝ち負けと払い出しを決めて記録する。
+--   p_natural … 最初の2枚で決まった（どちらかのブラックジャック）＝アレアは引かない
+create or replace function public.v2cap_bj_settle(p_uid uuid, p_bet int, p_doubled boolean, p_player smallint[], p_dealer smallint[], p_natural boolean)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_bj_num constant int := 6;
+  c_bj_den constant int := 5;
+  c_stand  constant int := 17;
+  v_dealer smallint[] := p_dealer;
+  v_pt     int;
+  v_dt     int;
+  v_ds     boolean;
+  v_pn     boolean;
+  v_dn     boolean;
+  v_stake  bigint := p_bet::bigint * (case when p_doubled then 2 else 1 end);
+  v_result text;
+  v_payout bigint;
+begin
+  select h.total into v_pt from public.v2cap_bj_hand(p_player) h;
+  if not p_natural and v_pt <= 21 then
+    loop
+      select h.total, h.soft into v_dt, v_ds from public.v2cap_bj_hand(v_dealer) h;
+      exit when v_dt > c_stand or (v_dt = c_stand and not v_ds);
+      v_dealer := v_dealer || floor(random() * 52)::smallint;
+    end loop;
+  end if;
+  select h.total into v_dt from public.v2cap_bj_hand(v_dealer) h;
+  v_pn := array_length(p_player, 1) = 2 and v_pt = 21;
+  v_dn := array_length(v_dealer, 1) = 2 and v_dt = 21;
+  v_result := case
+    when v_pn and v_dn then 'push'
+    when v_pn then 'bj'
+    when v_dn then 'lose'
+    when v_pt > 21 then 'lose'
+    when v_dt > 21 or v_pt > v_dt then 'win'
+    when v_pt = v_dt then 'push'
+    else 'lose' end;
+  v_payout := case v_result
+    when 'bj'   then p_bet + p_bet * c_bj_num / c_bj_den
+    when 'win'  then v_stake * 2
+    when 'push' then v_stake
+    else 0 end;
+  if v_payout > 0 then
+    update public.v2cap_profiles set medals = medals + v_payout, updated_at = now() where id = p_uid;
+  end if;
+  update public.v2cap_casino
+     set bj_active = false, bj_bet = p_bet, bj_doubled = p_doubled, bj_player = p_player, bj_dealer = v_dealer, updated_at = now()
+   where player_id = p_uid;
+  perform public.v2cap_casino_book(p_uid, 'bj', 0, v_payout, v_payout);
+  return jsonb_build_object('ok', true, 'done', true, 'result', v_result, 'payout', v_payout, 'bet', p_bet, 'doubled', p_doubled,
+                            'player', to_jsonb(p_player), 'dealer', to_jsonb(v_dealer)) || public.v2cap_casino_money(p_uid);
+end;
+$$;
+revoke all on function public.v2cap_bj_settle(uuid, int, boolean, smallint[], smallint[], boolean) from public, anon, authenticated;
+
+-- 始める：賭けて2枚ずつ配る（こちら・アレアの表・こちら・アレアの伏せたカードの順）。
+--   こちらのブラックジャックか、アレアの表がAか10点（card % 13 が 8〜12）でのぞいたらブラックジャックなら、すぐ決着
+create or replace function public.v2cap_bj_start(p_bet int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_min    constant int := 10;
+  c_max    constant int := 1000;
+  c_unlock constant bigint := 10000;
+  v_uid    uuid := auth.uid();
+  v_p      public.v2cap_profiles;
+  v_c      public.v2cap_casino;
+  v_player smallint[];
+  v_dealer smallint[];
+  v_pt     int;
+  v_dt     int;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select * into v_p from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  v_c := public.v2cap_casino_lock(v_uid);
+  if v_c.bj_active then return jsonb_build_object('ok', false, 'error', 'ブラックジャックの勝負の途中です'); end if;
+  if public.v2cap_casino_won(v_c.stats) < c_unlock then
+    return jsonb_build_object('ok', false, 'error', format('これまでの払い出しが%s枚になると遊べます', c_unlock));
+  end if;
+  if p_bet is null or p_bet < c_min or p_bet > c_max then
+    return jsonb_build_object('ok', false, 'error', format('賭けるのは%s〜%s枚です', c_min, c_max));
+  end if;
+  if v_p.medals < p_bet then return jsonb_build_object('ok', false, 'error', 'メダルが足りません'); end if;
+  v_player := array[floor(random() * 52)::smallint];
+  v_dealer := array[floor(random() * 52)::smallint];
+  v_player := v_player || floor(random() * 52)::smallint;
+  v_dealer := v_dealer || floor(random() * 52)::smallint;
+  update public.v2cap_profiles set medals = medals - p_bet, updated_at = now() where id = v_uid;
+  perform public.v2cap_casino_book(v_uid, 'bj', p_bet, 0, 0);
+  select h.total into v_pt from public.v2cap_bj_hand(v_player) h;
+  select h.total into v_dt from public.v2cap_bj_hand(v_dealer) h;
+  if v_pt = 21 or (v_dealer[1] % 13 >= 8 and v_dt = 21) then
+    return public.v2cap_bj_settle(v_uid, p_bet, false, v_player, v_dealer, true);
+  end if;
+  update public.v2cap_casino
+     set bj_active = true, bj_bet = p_bet, bj_doubled = false, bj_player = v_player, bj_dealer = v_dealer, updated_at = now()
+   where player_id = v_uid;
+  return jsonb_build_object('ok', true, 'done', false, 'bet', p_bet, 'doubled', false,
+                            'player', to_jsonb(v_player), 'dealer', to_jsonb(v_dealer[1:1])) || public.v2cap_casino_money(v_uid);
+end;
+$$;
+revoke all on function public.v2cap_bj_start(int) from public, anon;
+grant execute on function public.v2cap_bj_start(int) to authenticated;
+
+-- ヒット（もう1枚）・スタンド（やめる）・ダブル（最初の2枚のときだけ・賭けをもう1回ぶん足して1枚だけ引いてやめる）。
+--   21を超えた・21になった（自動でスタンド）ときは、そのまま決着
+create or replace function public.v2cap_bj_action(p_action text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid     uuid := auth.uid();
+  v_p       public.v2cap_profiles;
+  v_c       public.v2cap_casino;
+  v_player  smallint[];
+  v_doubled boolean;
+  v_pt      int;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select * into v_p from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  v_c := public.v2cap_casino_lock(v_uid);
+  if not v_c.bj_active then return jsonb_build_object('ok', false, 'error', '勝負していません'); end if;
+  if p_action is null or p_action not in ('hit', 'stand', 'double') then
+    return jsonb_build_object('ok', false, 'error', '動きが正しくありません');
+  end if;
+  v_player := v_c.bj_player;
+  v_doubled := v_c.bj_doubled;
+  if p_action = 'double' then
+    if array_length(v_player, 1) <> 2 or v_doubled then
+      return jsonb_build_object('ok', false, 'error', 'ダブルは最初の2枚のときだけです');
+    end if;
+    if v_p.medals < v_c.bj_bet then return jsonb_build_object('ok', false, 'error', 'メダルが足りません'); end if;
+    update public.v2cap_profiles set medals = medals - v_c.bj_bet, updated_at = now() where id = v_uid;
+    perform public.v2cap_casino_book(v_uid, 'bj', v_c.bj_bet, 0, 0);
+    v_doubled := true;
+  end if;
+  if p_action in ('hit', 'double') then
+    v_player := v_player || floor(random() * 52)::smallint;
+  end if;
+  select h.total into v_pt from public.v2cap_bj_hand(v_player) h;
+  if p_action = 'hit' and v_pt < 21 then
+    update public.v2cap_casino set bj_player = v_player, updated_at = now() where player_id = v_uid;
+    return jsonb_build_object('ok', true, 'done', false, 'bet', v_c.bj_bet, 'doubled', v_doubled,
+                              'player', to_jsonb(v_player), 'dealer', to_jsonb(v_c.bj_dealer[1:1])) || public.v2cap_casino_money(v_uid);
+  end if;
+  return public.v2cap_bj_settle(v_uid, v_c.bj_bet, v_doubled, v_player, v_c.bj_dealer, false);
+end;
+$$;
+revoke all on function public.v2cap_bj_action(text) from public, anon;
+grant execute on function public.v2cap_bj_action(text) to authenticated;

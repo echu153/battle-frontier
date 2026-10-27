@@ -33,6 +33,11 @@ export default function CasinoFxLayer({ children }) {
   const [banner, setBanner] = useState(null)
   const [shake, setShake] = useState(null)
   const seq = useRef(0)
+  // 当たりの段階の表示：新しいものは今のものと入れ替える。wait のもの（解禁）だけは、今のものを閉じてから出す
+  const bannerOn = useRef(null)
+  const waiting = useRef([])
+  const showBanner = (b) => { bannerOn.current = b; setBanner(b); b?.onShow?.() }
+  const closeBanner = () => showBanner(waiting.current.shift() || null)
 
   useEffect(() => {
     const cv = canvas.current
@@ -108,7 +113,8 @@ export default function CasinoFxLayer({ children }) {
         setPopups(list => [...list.slice(-2), { ...d, key }])
         setTimeout(() => setPopups(list => list.filter(x => x.key !== key)), d.ms || 1500)
       } else if (type === 'banner') {
-        setBanner({ ...d, key })
+        if (d.wait && bannerOn.current) waiting.current.push({ ...d, key })
+        else showBanner({ ...d, key })
       } else if (type === 'shake') {
         if (!reduced) setShake({ ms: d.ms || 400, power: d.power || 4, key })
       }
@@ -123,8 +129,9 @@ export default function CasinoFxLayer({ children }) {
   useEffect(() => {
     if (!banner) return undefined
     const lv = { win: 1, big: 2, mega: 3, jackpot: 4 }[banner.tier?.key] || 2
-    const t = setTimeout(() => setBanner(null), 2600 + lv * 1100)
+    const t = setTimeout(closeBanner, 2600 + lv * 1100)
     return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- closeBanner は ref と setBanner だけを使う
   }, [banner])
 
   const bannerLv = banner ? ({ win: 1, big: 2, mega: 3, jackpot: 4 }[banner.tier?.key] || 2) : 0
@@ -159,7 +166,7 @@ export default function CasinoFxLayer({ children }) {
         )
       })}
       {banner && (
-        <div key={banner.key} onClick={() => setBanner(null)} style={{ position:'fixed', inset:0, zIndex:420, display:'flex', alignItems:'center', justifyContent:'center',
+        <div key={banner.key} onClick={closeBanner} style={{ position:'fixed', inset:0, zIndex:420, display:'flex', alignItems:'center', justifyContent:'center',
           background:'radial-gradient(circle, #000a 0%, #000d 70%)', cursor:'pointer' }}>
           <div style={{ textAlign:'center', animation:'csBanner 0.9s cubic-bezier(.2,1.6,.4,1) both', padding:'0 16px' }}>
             {banner.title && <div style={{ color:'#fff', fontSize:16, fontWeight:'bold', fontFamily: DISPLAY_FONT, letterSpacing:'3px', marginBottom:6, textShadow:'0 0 8px #000' }}>{banner.title}</div>}
@@ -170,10 +177,13 @@ export default function CasinoFxLayer({ children }) {
               filter:`drop-shadow(0 0 12px ${banner.tier.color}) drop-shadow(0 0 2px #000)` }}>
               {banner.tier.label}
             </div>
-            <div style={{ marginTop:10, fontSize: 30 + bannerLv * 4, fontWeight:'bold', color:'#ffe680', fontFamily: DISPLAY_FONT,
-              textShadow:'0 0 10px #ffb300, 2px 2px 0 #000', animation:'csPulse 0.6s ease-in-out infinite' }}>
-              +<CountUp value={banner.amount} start={0} ms={900 + bannerLv * 700} onTick={sfx.tick} />枚
-            </div>
+            {/* 枚数（解禁の演出には無い＝amount が null） */}
+            {banner.amount != null && (
+              <div style={{ marginTop:10, fontSize: 30 + bannerLv * 4, fontWeight:'bold', color:'#ffe680', fontFamily: DISPLAY_FONT,
+                textShadow:'0 0 10px #ffb300, 2px 2px 0 #000', animation:'csPulse 0.6s ease-in-out infinite' }}>
+                +<CountUp value={banner.amount} start={0} ms={900 + bannerLv * 700} onTick={sfx.tick} />枚
+              </div>
+            )}
             {banner.sub && <div style={{ marginTop:8, color:'#cfe2ff', fontSize:12 }}>{banner.sub}</div>}
             {/* アレアのひとこと（celebrate の say・2026-10-27）。後ろの吹き出しは演出で隠れるので、ここにも出す */}
             {banner.say}
