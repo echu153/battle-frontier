@@ -122,7 +122,7 @@ test('SQL §14：登録の表・決まりは中の関数1つ（1つずつも一�
 test('画面：メニューに博物館・寄贈は確認→結果のポップアップ・一括寄贈は選んだぶん', () => {
   const home = src('../pages/V2capHome.jsx')
   assert.ok(home.includes("{ key:'museum', label:'博物館', icon:'🏺'"))
-  assert.ok(home.includes("{screen === 'museum' && <V2capMuseum prof={prof} inventory={inventory} onProfile={refresh} />}"))
+  assert.ok(home.includes("{screen === 'museum' && <V2capMuseum prof={prof} inventory={inventory} onProfile={refresh} dev={isAdmin} />}"), 'dev＝鑑定士のセリフを確かめる開発用のボタン（管理者だけ）')
   const m = src('../components/V2capMuseum.jsx')
   assert.ok(m.includes("supabase.from('v2cap_museum').select('base_id, tier, plus')"))
   assert.ok(m.includes("supabase.rpc('v2cap_museum_donate', { p_inventory_id: list[0].inv.id })"))

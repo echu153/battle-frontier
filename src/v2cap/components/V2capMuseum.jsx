@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import { box, miniBtn, TEXT } from './v2ui.js'
 import V2Modal from './V2Modal.jsx'
+import V2capAppraiser, { AppraiserSays, OWL_CSS } from './V2capAppraiser.jsx'
 import { spotOf } from '../lib/areas.js'
 import { openUntilOf } from '../lib/sortie.js'
 import { RARITIES, RARITY_COLOR, ITEM_BY_ID, rarityLabel, kindLabel } from '../lib/equipment.js'
@@ -10,6 +11,7 @@ import {
   MUSEUM_TIERS, MUSEUM_GROUPS, raritiesOfGroup, registeredSetOf, tiersOf, museumCountOf, donatablesOf, donatedTail,
   MUSEUM_SET_SP, MUSEUM_RARITY_STAM_SEC, MUSEUM_AREA_STAM_SEC, MUSEUM_REWARD_RARITIES, areaProgressOf, museumRewardTotalsOf, rewardText, sortRewards,
 } from '../lib/museum.js'
+import { pickLine, enterKindOf, donateKindOf, tapKindOf, nextStreak, isNight } from '../lib/appraiser.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — 博物館（装備の寄贈）。決まりの正は src/v2cap/lib/museum.js・サーバーは SQL §14
@@ -25,6 +27,9 @@ import {
 //     ユニークは一覧にも寄贈できる装備にも出さない・説明にもユニークの文字を書かない（決まりは lib/museum.js）
 //   【確定】同じ日 ユーザー指示「コンプリート説明の（…）いらない」「3段階すべて寄贈でスタミナ−1秒 みたいに」「強化値を【】とかで囲って」：
 //     段階は【未強化】【+5】【+9】・報酬は「1段階そろうごとに ステータスポイント+n ／ 3段階すべて寄贈で スタミナ回復−1秒」
+//   【確定】2026-10-27 鑑定士テオドール（ユーザー指示「コレクターのフクロウ、片目のめがねしてる、鑑定士っぽいやつ」・lib/appraiser.js）：
+//     右に鑑定士を立たせる（スマホは上）。タップでセリフ・寄贈の結果のポップアップにも鑑定士（ユーザー選択）。好感度は無し＝サーバーには聞かない。
+//     開いたときは、まだ1つも寄贈していなければ名乗る・寄贈できる装備がなければそのひとこと（登録の記録が読めてから言い直す）
 // ============================================================
 const tierBadge = (t, on = true) => ({
   fontSize:'9px', padding:'0 4px', border:`1px solid ${on ? t.color : '#223a5e'}`, color: on ? t.color : TEXT.empty, flexShrink:0,
@@ -39,6 +44,9 @@ const REWARD_OFF = '#88ccff'   // まだの報酬の文（明るい水色・灰�
 const HELP_HEAD = { color:'#d8b070', fontSize:'12px', marginBottom:'2px' }
 const HELP_TH = { textAlign:'left', fontWeight:'normal', fontSize:'10px', padding:'2px 4px', borderBottom:'1px solid #224466' }
 const HELP_TD = { padding:'3px 4px', borderBottom:'1px solid #0b2244', color:'#cfe2ff' }
+// 開発用（管理者だけ）：鑑定士のはじめてのあいさつ・寄贈の反応を見るボタン（寄贈の反応は結果のポップアップの鑑定士だけを出す＝本当には寄贈しない）
+const DEV = '#ff88cc'
+const DEV_DONATES = ['donate', 'donateGood', 'donateGreat', 'donateMany', 'donateSet', 'donateComplete', 'error']
 // size … 装備名だけの文字の大きさ（1つずつの寄贈の確認＝2026-10-23 ユーザー指示「装備の名前見やすくするようにフォントの大きさ大きく」「装備名だけね」）
 const NameLine = ({ d, size }) => (
   <>
@@ -47,15 +55,17 @@ const NameLine = ({ d, size }) => (
   </>
 )
 
-export default function V2capMuseum({ prof, inventory, onProfile }) {
+// dev … 開発用（管理者だけ）。鑑定士のセリフを確かめるボタンを出す
+export default function V2capMuseum({ prof, inventory, onProfile, dev = false }) {
   const [rows, setRows] = useState(null)          // 登録の記録 [{ base_id, tier, plus }]。読み込み中は null
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [confirm, setConfirm] = useState(null)    // 寄贈の確認 [{ inv, item, tier, copies }]（1つでも一括でも配列）
   const [help, setHelp] = useState(false)          // HELP の小窓
-  const [result, setResult] = useState(null)      // 寄贈の結果 { ok, items: [{ name, rarity, tier }], skipped } ／ 失敗は { ok:false, error }
+  const [result, setResult] = useState(null)      // 寄贈の結果 { ok, items: [{ name, rarity, tier }], skipped, say } ／ 失敗は { ok:false, error, say }
   const [picked, setPicked] = useState(() => new Set())   // 一括寄贈に選んだ行（rowKey）
   const [groupKey, setGroupKey] = useState(null)   // 選んだエリア（null＝行ったことのある一番先のエリア）
+  const [devSay, setDevSay] = useState(null)      // 開発用に出している寄贈の反応 { kind, face, text }
 
   const load = useCallback(async () => {
     const { data, error: e } = await supabase.from('v2cap_museum').select('base_id, tier, plus')
@@ -79,6 +89,39 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
   const stamCut = Number(prof?.museum_stam_cut) || 0
   const progress = group.area ? areaProgressOf(registered, group.area) : null
 
+  // ===== 鑑定士テオドール（lib/appraiser.js）=====
+  // いまの表情とセリフ（tick は話すたびに増やす＝同じ絵でも跳ねる）
+  const [owl, setOwl] = useState(() => ({ ...pickLine(enterKindOf()), tick: 0 }))
+  const lastText = useRef(owl.text)
+  // 場面 kind のセリフを選んで吹き出しに出し、選んだもの { face, text } を返す（寄贈の結果のポップアップにも同じものを出す）
+  const say = useCallback((kind) => {
+    const line = pickLine(kind, { last: lastText.current })
+    lastText.current = line.text
+    setOwl(c => ({ ...line, tick: c.tick + 1 }))
+    return line
+  }, [])
+  const streak = useRef(null)
+  const tapOwl = () => {
+    streak.current = nextStreak(streak.current, Date.now())
+    say(tapKindOf(streak.current.n, isNight()))
+  }
+  // 登録の記録が読めたら1回だけ：まだ1つも寄贈していなければ名乗る・寄贈できる装備がなければそのひとことに言い直す。
+  // 読めなかったとき（はじめてかどうか分からない）と、もうタップして話しているときは言い直さない
+  const greeted = useRef(false)
+  useEffect(() => {
+    if (rows === null || greeted.current) return
+    greeted.current = true
+    if (streak.current) return
+    const kind = enterKindOf({ donated: error ? null : rows.length, donatable: donatables.length })
+    if (kind === 'intro' || kind === 'enterEmpty') say(kind)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 登録の記録が届いたときに1回だけ
+  }, [rows])
+  const devStep = useRef(0)
+  const devDonate = () => {
+    const kind = DEV_DONATES[devStep.current++ % DEV_DONATES.length]
+    setDevSay({ kind, ...say(kind) })
+  }
+
   const toggle = (key) => setPicked(prev => {
     const next = new Set(prev)
     if (next.has(key)) next.delete(key); else next.add(key)
@@ -95,11 +138,13 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
       ? await supabase.rpc('v2cap_museum_donate_many', { p_ids: list.map(d => d.inv.id) })
       : await supabase.rpc('v2cap_museum_donate', { p_inventory_id: list[0].inv.id })
     setBusy(false); setConfirm(null)
-    if (e || !data?.ok) { setResult({ ok: false, error: e?.message || data?.error || '寄贈できませんでした' }); return }
+    if (e || !data?.ok) { setResult({ ok: false, error: e?.message || data?.error || '寄贈できませんでした', say: say('error') }); return }
     const done = many ? (data.donated || []) : [{ base_id: data.base_id, tier: data.tier, plus: data.plus }]
     const itemOf = (id) => ITEM_BY_ID[id] || list.find(d => d.item.id === id)?.item || { name: id, rarity: 'N' }
-    setResult({ ok: true, items: done.map(x => ({ name: itemOf(x.base_id).name, rarity: itemOf(x.base_id).rarity, tier: x.tier })),
-      skipped: many ? data.skipped || 0 : 0, rewards: sortRewards(data.rewards) })
+    const next = { ok: true, items: done.map(x => ({ name: itemOf(x.base_id).name, rarity: itemOf(x.base_id).rarity, tier: x.tier })),
+      skipped: many ? data.skipped || 0 : 0, rewards: sortRewards(data.rewards) }
+    // 鑑定士のひとこと（エリアがそろった・報酬・よく鍛えた品・まとめて・ふつう＝lib/appraiser.js の donateKindOf）。吹き出しと結果のポップアップの両方に出す
+    setResult({ ...next, say: say(donateKindOf(next.items, next.rewards)) })
     setRows(r => [...(r || []), ...done])
     setPicked(new Set())
     onProfile?.()   // 持ち物を読み直す（寄贈した装備はなくなる）
@@ -107,6 +152,7 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
 
   return (
     <div style={{ fontFamily:'monospace' }}>
+      <style>{OWL_CSS}</style>
       {confirm && (
         <V2Modal title="🏺 装備を寄贈する" color="#d8b070" busy={busy} confirmLabel={confirm.length > 1 ? `${confirm.length}個を寄贈する` : '寄贈する'}
           onConfirm={donate} onClose={() => setConfirm(null)}>
@@ -132,10 +178,11 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
           <div style={{ color:'#ff8844', marginTop:'6px' }}>寄贈した装備はなくなります（元に戻せません）</div>
         </V2Modal>
       )}
-      {/* 寄贈の結果（2026-10-23 ユーザー指示「この画面の後に、さらにポップアップ出て」） */}
+      {/* 寄贈の結果（2026-10-23 ユーザー指示「この画面の後に、さらにポップアップ出て」）。いちばん上に鑑定士のひとこと（2026-10-27） */}
       {result && (
         <V2Modal title={result.ok ? '🏺 寄贈しました' : '⚠ 寄贈できませんでした'} color={result.ok ? '#d8b070' : '#ff8844'}
           onClose={() => setResult(null)}>
+          {result.say && <AppraiserSays face={result.say.face} line={result.say.text} />}
           {result.ok ? (
             <>
               {result.items.length > 1 && <div style={{ color:'#cfe2ff', fontSize:'13px' }}>{result.items.length}個を寄贈しました</div>}
@@ -160,6 +207,13 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
               )}
             </div>
           )}
+        </V2Modal>
+      )}
+      {/* 開発用：寄贈の反応（結果のポップアップの鑑定士だけ・本当には寄贈しない） */}
+      {devSay && (
+        <V2Modal title="🧪 寄贈の反応［開発］" color={DEV} keepScroll onClose={() => setDevSay(null)}>
+          <AppraiserSays face={devSay.face} line={devSay.text} />
+          <div style={{ color: DEV, fontSize:'10px' }}>場面：{devSay.kind}</div>
         </V2Modal>
       )}
 
@@ -195,158 +249,174 @@ export default function V2capMuseum({ prof, inventory, onProfile }) {
           <div>・エリアのレア度をすべて3段階そろえる（エリアコンプリート）と、さらにスタミナ回復−{MUSEUM_AREA_STAM_SEC}秒</div>
         </V2Modal>
       )}
-      {/* 2026-10-23 ユーザー指示：上の欄は「収蔵数」（ユーザーの案「寄贈進捗」→ほかに良い言葉があれば＝博物館の言葉）と「獲得済み報酬」だけ。
-          報酬の決まりの段落はやめた（「これいらない」）・獲得済み報酬の（3:00 → 2:55）も出さない（「（）内いらない」） */}
-      <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px', marginBottom:'4px' }}>
-          <span style={{ color:'#d8b070', fontSize:'12px' }}>収蔵数</span>
-          <button onClick={() => setHelp(true)} style={miniBtn('#88aaff')}>❓ HELP</button>
+      <div className="owl-cols">
+        {/* 鑑定士テオドール（広い画面は右・狭い画面は上） */}
+        <div className="owl-side">
+          <V2capAppraiser face={owl.face} line={owl.text} tick={owl.tick} onTap={tapOwl} />
+          {dev && (
+            <div style={{ display:'flex', gap:'4px', justifyContent:'center', flexWrap:'wrap', marginTop:'8px' }}>
+              <button type="button" onClick={() => say('intro')} style={miniBtn(DEV)}>🧪 はじめてのあいさつ［開発］</button>
+              <button type="button" onClick={() => say('enterEmpty')} style={miniBtn(DEV)}>寄贈できる品がない</button>
+              <button type="button" onClick={devDonate} style={miniBtn(DEV)}>寄贈の反応</button>
+            </div>
+          )}
         </div>
-        <div style={{ display:'flex', flexWrap:'wrap', gap:'2px 10px', alignItems:'center', fontSize:'11px' }}>
-          {MUSEUM_TIERS.map((t, i) => (
-            <span key={t.key} style={{ color: TEXT.label, whiteSpace:'nowrap' }}>
-              <span style={{ color: t.color }}>{tierTag(t)}</span><span style={{ color:'#ffcc00' }}>{total.byTier[i]}</span> / {total.items}
-            </span>
-          ))}
-        </div>
-        <div style={{ color:'#ffcc00', fontSize:'11px', marginTop:'6px' }}>
-          獲得済み報酬：ステータスポイント +{totals.sp}　スタミナの回復 −{stamCut}秒
-        </div>
-        {error && <div style={{ color:'#ff8844', fontSize:'10px', marginTop:'4px' }}>⚠ 登録を読めませんでした（{error}）</div>}
-      </div>
 
-      {/* ===== 寄贈できる装備 ===== */}
-      <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
-        <div style={{ color:'#d8b070', fontSize:'12px', marginBottom:'6px' }}>寄贈できる装備（{donatables.length}）</div>
-        {rows === null ? <div style={{ color: TEXT.label, fontSize:'11px' }}>読み込み中...</div>
-          : donatables.length === 0 ? (
-            <div style={{ color: TEXT.empty, fontSize:'11px' }}>寄贈できる装備はありません（着けていない装備で、未強化・+5・+9のうちまだ登録していない段階のもの）</div>
-          ) : (
-            <>
-              {/* 一括寄贈（鍛冶屋のまとめての分解と同じ形） */}
-              <div style={{ background:'#000818', border:'1px solid #554422', padding:'7px 8px', marginBottom:'8px', fontSize:'10px' }}>
-                <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', alignItems:'center', marginBottom:'5px' }}>
-                  <span style={{ color: TEXT.label }}>まとめて選ぶ</span>
-                  {RARITIES.map(r => {
-                    const list = donatables.filter(d => d.item.rarity === r)
-                    return (
-                      <button key={r} onClick={() => pickAll(list)} disabled={busy || list.length === 0}
-                        style={{ ...miniBtn(list.length ? RARITY_COLOR[r] : '#62789a'), color: list.length ? RARITY_COLOR[r] : TEXT.empty }}>
-                        {rarityLabel(r)}を全部（{list.length}）
+        <div className="owl-main">
+          {/* 2026-10-23 ユーザー指示：上の欄は「収蔵数」（ユーザーの案「寄贈進捗」→ほかに良い言葉があれば＝博物館の言葉）と「獲得済み報酬」だけ。
+              報酬の決まりの段落はやめた（「これいらない」）・獲得済み報酬の（3:00 → 2:55）も出さない（「（）内いらない」） */}
+          <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px', marginBottom:'4px' }}>
+              <span style={{ color:'#d8b070', fontSize:'12px' }}>収蔵数</span>
+              <button onClick={() => setHelp(true)} style={miniBtn('#88aaff')}>❓ HELP</button>
+            </div>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:'2px 10px', alignItems:'center', fontSize:'11px' }}>
+              {MUSEUM_TIERS.map((t, i) => (
+                <span key={t.key} style={{ color: TEXT.label, whiteSpace:'nowrap' }}>
+                  <span style={{ color: t.color }}>{tierTag(t)}</span><span style={{ color:'#ffcc00' }}>{total.byTier[i]}</span> / {total.items}
+                </span>
+              ))}
+            </div>
+            <div style={{ color:'#ffcc00', fontSize:'11px', marginTop:'6px' }}>
+              獲得済み報酬：ステータスポイント +{totals.sp}　スタミナの回復 −{stamCut}秒
+            </div>
+            {error && <div style={{ color:'#ff8844', fontSize:'10px', marginTop:'4px' }}>⚠ 登録を読めませんでした（{error}）</div>}
+          </div>
+
+          {/* ===== 寄贈できる装備 ===== */}
+          <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
+            <div style={{ color:'#d8b070', fontSize:'12px', marginBottom:'6px' }}>寄贈できる装備（{donatables.length}）</div>
+            {rows === null ? <div style={{ color: TEXT.label, fontSize:'11px' }}>読み込み中...</div>
+              : donatables.length === 0 ? (
+                <div style={{ color: TEXT.empty, fontSize:'11px' }}>寄贈できる装備はありません（着けていない装備で、未強化・+5・+9のうちまだ登録していない段階のもの）</div>
+              ) : (
+                <>
+                  {/* 一括寄贈（鍛冶屋のまとめての分解と同じ形） */}
+                  <div style={{ background:'#000818', border:'1px solid #554422', padding:'7px 8px', marginBottom:'8px', fontSize:'10px' }}>
+                    <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', alignItems:'center', marginBottom:'5px' }}>
+                      <span style={{ color: TEXT.label }}>まとめて選ぶ</span>
+                      {RARITIES.map(r => {
+                        const list = donatables.filter(d => d.item.rarity === r)
+                        return (
+                          <button key={r} onClick={() => pickAll(list)} disabled={busy || list.length === 0}
+                            style={{ ...miniBtn(list.length ? RARITY_COLOR[r] : '#62789a'), color: list.length ? RARITY_COLOR[r] : TEXT.empty }}>
+                            {rarityLabel(r)}を全部（{list.length}）
+                          </button>
+                        )
+                      })}
+                      <button onClick={() => pickAll(donatables)} disabled={busy} style={miniBtn('#88ccff')}>すべて（{donatables.length}）</button>
+                      <button onClick={() => setPicked(new Set())} disabled={busy || picked.size === 0} style={miniBtn('#62789a')}>選択を外す</button>
+                    </div>
+                    <div style={{ display:'flex', flexWrap:'wrap', gap:'6px', alignItems:'center' }}>
+                      <span style={{ color:'#cfe2ff' }}>選んだ {pickedRows.length}個</span>
+                      <button onClick={() => setConfirm(pickedRows)} disabled={busy || pickedRows.length === 0} style={miniBtn('#d8b070')}>
+                        選んだ{pickedRows.length}個を寄贈
                       </button>
+                    </div>
+                  </div>
+                  <div style={{ display:'grid', gap:'3px', maxHeight:'360px', overflowY:'auto' }}>
+                    {donatables.map(d => {
+                      const t = MUSEUM_TIERS[d.tier]
+                      const on = picked.has(rowKey(d))
+                      // ★行のどこを押してもチェックが入る・外れる（2026-10-23 ユーザー指示「チェックを押さなくても装備の欄を押せば」）。
+                      //   チェックそのものと「寄贈」ボタンは、行の押下に伝えない（2回切り替わる・寄贈で選びが変わるのを防ぐ）
+                      return (
+                        <div key={rowKey(d)} onClick={() => { if (!busy) toggle(rowKey(d)) }}
+                          style={{ background: on ? '#14100a' : '#000818', border:`1px solid ${on ? '#8a6a30' : '#002244'}`, padding:'5px 8px',
+                            display:'flex', alignItems:'center', gap:'8px', fontSize:'11px', cursor: busy ? 'wait' : 'pointer', userSelect:'none' }}>
+                          <input type="checkbox" checked={on} disabled={busy} onChange={() => toggle(rowKey(d))} onClick={e => e.stopPropagation()}
+                            title="一括寄贈に選ぶ" style={{ accentColor:'#d8b070', margin:0, flexShrink:0 }} />
+                          <span style={tierBadge(t)}>{t.label}</span>
+                          <span style={{ flex:1, minWidth:0 }}>
+                            <NameLine d={d} />
+                            <span style={{ color: TEXT.label, fontSize:'10px' }}>　{kindLabel(d.item)}{d.copies > 1 ? `・${d.copies}個` : ''}</span>
+                          </span>
+                          <button onClick={e => { e.stopPropagation(); setConfirm([d]) }} disabled={busy} style={miniBtn('#d8b070')}>寄贈</button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+          </div>
+
+          {/* ===== 登録の一覧 ===== */}
+          <div style={{ ...box, padding:'12px' }}>
+            {/* エリアはプルダウン・行ったことのあるエリアだけ（2026-10-23 ユーザー指示「行ったことのあるエリアしか表示されないのと、プルダウンから選択できるように」）。
+                コンプリートしたエリアには ★COMPLETE★（同じ日「コンプリートしたら英語で★コンプリート★にして」・前は ✔） */}
+            <select value={group.key} onChange={e => setGroupKey(e.target.value)}
+              style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>
+              {groups.map(g => (
+                <option key={g.key} value={g.key}>{g.label}{areaProgressOf(registered, g.area).complete ? '　★COMPLETE★' : ''}</option>
+              ))}
+            </select>
+            {/* エリアの名前と段階ごとの登録数は別の行（スマホの幅で段階が途中で折り返さないように） */}
+            <div style={{ color:'#cfe2ff', fontSize:'12px', marginBottom:'2px' }}>{group.label}</div>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:'2px 10px', color: TEXT.label, fontSize:'11px', marginBottom:'4px' }}>
+              {MUSEUM_TIERS.map((t, i) => (
+                <span key={t.key} style={{ whiteSpace:'nowrap' }}><span style={{ color: t.color }}>{tierTag(t)}</span>{groupCount.byTier[i]}/{groupCount.items}</span>
+              ))}
+            </div>
+            {/* エリアコンプリート（2026-10-23） */}
+            <div style={{ fontSize:'10px', marginBottom:'8px', color: progress.complete ? '#ffcc00' : TEXT.label }}>
+              {progress.complete ? '✔ ' : ''}エリアコンプリート：スタミナ回復−{MUSEUM_AREA_STAM_SEC}秒
+            </div>
+            {raritiesOfGroup(group).map(r => {
+              const rp = progress.rarities.find(x => x.rarity === r)
+              return (
+              // ★レア度ごとに枠で分ける・レア度の名前は色つきの札（2026-10-23 ユーザー指示「ノーマルとかレアの区分で枠分けてほしい」
+              //   「レアリティの文字は（…）わかりやすくして」）。報酬は2行（同じ日「これを改行」）
+              <div key={r} style={{ border:`1px solid ${RARITY_COLOR[r]}55`, background:'#000a1c', padding:'8px', marginBottom:'10px' }}>
+                {/* 段階ごとの登録数（そろえば ✔）と、そのレア度の報酬（2026-10-23） */}
+                {/* レア度の札の右に、そのレア度の報酬の2行（2026-10-23 ユーザー指示「レアリティの右に持ってこれない？」）。
+                    幅が足りないときは句の切れ目（「〜ごとに」「〜寄贈で」のあと）で折り返す＝言葉の途中で改行しない */}
+                {/*   ★余白は スマホ（375px）でいちばん長い「レジェンダリー」の札の右に「1段階そろうごとに ステータスポイント+4」が1行で入る幅（測って決めた） */}
+                <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'6px' }}>
+                  <span style={{ flexShrink:0, color: RARITY_COLOR[r], border:`1px solid ${RARITY_COLOR[r]}`, background:`${RARITY_COLOR[r]}22`,
+                    padding:'1px 7px', fontSize:'12px', fontWeight:'bold' }}>{rarityLabel(r)}</span>
+                  {/* ★灰色はやめる（2026-10-23 ユーザー指示「ここも色つけて、灰色だとわかりづらい」）：そろったら金色・まだは明るい水色 */}
+                  <div style={{ flex:1, minWidth:0, fontSize:'10px', lineHeight:1.6 }}>
+                    <div style={{ color: rp.allTiers ? REWARD_ON : REWARD_OFF }}><span style={NOWRAP}>1段階そろうごとに</span> <span style={NOWRAP}>ステータスポイント+{MUSEUM_SET_SP[r]}</span></div>
+                    <div style={{ color: rp.allTiers ? REWARD_ON : REWARD_OFF }}>
+                      <span style={NOWRAP}>3段階すべて寄贈で</span> <span style={NOWRAP}>スタミナ回復−{MUSEUM_RARITY_STAM_SEC}秒{rp.allTiers ? ' ✔' : ''}</span>
+                    </div>
+                  </div>
+                </div>
+                {/* 段階ごとの登録数（札と別の行＝スマホの幅で段階が途中で折り返さないように） */}
+                <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:'2px 10px', fontSize:'11px', marginBottom:'6px' }}>
+                  {rp.tiers.map(x => {
+                    const t = MUSEUM_TIERS[x.tier]
+                    return (
+                      <span key={x.tier} style={{ color: x.done ? '#ffcc00' : TEXT.label, whiteSpace:'nowrap' }}>
+                        <span style={{ color: t.color }}>{tierTag(t)}</span>{x.have}/{x.need}{x.done ? ' ✔' : ''}
+                      </span>
                     )
                   })}
-                  <button onClick={() => pickAll(donatables)} disabled={busy} style={miniBtn('#88ccff')}>すべて（{donatables.length}）</button>
-                  <button onClick={() => setPicked(new Set())} disabled={busy || picked.size === 0} style={miniBtn('#62789a')}>選択を外す</button>
                 </div>
-                <div style={{ display:'flex', flexWrap:'wrap', gap:'6px', alignItems:'center' }}>
-                  <span style={{ color:'#cfe2ff' }}>選んだ {pickedRows.length}個</span>
-                  <button onClick={() => setConfirm(pickedRows)} disabled={busy || pickedRows.length === 0} style={miniBtn('#d8b070')}>
-                    選んだ{pickedRows.length}個を寄贈
-                  </button>
-                </div>
-              </div>
-              <div style={{ display:'grid', gap:'3px', maxHeight:'360px', overflowY:'auto' }}>
-                {donatables.map(d => {
-                  const t = MUSEUM_TIERS[d.tier]
-                  const on = picked.has(rowKey(d))
-                  // ★行のどこを押してもチェックが入る・外れる（2026-10-23 ユーザー指示「チェックを押さなくても装備の欄を押せば」）。
-                  //   チェックそのものと「寄贈」ボタンは、行の押下に伝えない（2回切り替わる・寄贈で選びが変わるのを防ぐ）
-                  return (
-                    <div key={rowKey(d)} onClick={() => { if (!busy) toggle(rowKey(d)) }}
-                      style={{ background: on ? '#14100a' : '#000818', border:`1px solid ${on ? '#8a6a30' : '#002244'}`, padding:'5px 8px',
-                        display:'flex', alignItems:'center', gap:'8px', fontSize:'11px', cursor: busy ? 'wait' : 'pointer', userSelect:'none' }}>
-                      <input type="checkbox" checked={on} disabled={busy} onChange={() => toggle(rowKey(d))} onClick={e => e.stopPropagation()}
-                        title="一括寄贈に選ぶ" style={{ accentColor:'#d8b070', margin:0, flexShrink:0 }} />
-                      <span style={tierBadge(t)}>{t.label}</span>
-                      <span style={{ flex:1, minWidth:0 }}>
-                        <NameLine d={d} />
-                        <span style={{ color: TEXT.label, fontSize:'10px' }}>　{kindLabel(d.item)}{d.copies > 1 ? `・${d.copies}個` : ''}</span>
-                      </span>
-                      <button onClick={e => { e.stopPropagation(); setConfirm([d]) }} disabled={busy} style={miniBtn('#d8b070')}>寄贈</button>
-                    </div>
-                  )
-                })}
-              </div>
-            </>
-          )}
-      </div>
-
-      {/* ===== 登録の一覧 ===== */}
-      <div style={{ ...box, padding:'12px' }}>
-        {/* エリアはプルダウン・行ったことのあるエリアだけ（2026-10-23 ユーザー指示「行ったことのあるエリアしか表示されないのと、プルダウンから選択できるように」）。
-            コンプリートしたエリアには ★COMPLETE★（同じ日「コンプリートしたら英語で★コンプリート★にして」・前は ✔） */}
-        <select value={group.key} onChange={e => setGroupKey(e.target.value)}
-          style={{ width:'100%', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px', marginBottom:'8px' }}>
-          {groups.map(g => (
-            <option key={g.key} value={g.key}>{g.label}{areaProgressOf(registered, g.area).complete ? '　★COMPLETE★' : ''}</option>
-          ))}
-        </select>
-        {/* エリアの名前と段階ごとの登録数は別の行（スマホの幅で段階が途中で折り返さないように） */}
-        <div style={{ color:'#cfe2ff', fontSize:'12px', marginBottom:'2px' }}>{group.label}</div>
-        <div style={{ display:'flex', flexWrap:'wrap', gap:'2px 10px', color: TEXT.label, fontSize:'11px', marginBottom:'4px' }}>
-          {MUSEUM_TIERS.map((t, i) => (
-            <span key={t.key} style={{ whiteSpace:'nowrap' }}><span style={{ color: t.color }}>{tierTag(t)}</span>{groupCount.byTier[i]}/{groupCount.items}</span>
-          ))}
-        </div>
-        {/* エリアコンプリート（2026-10-23） */}
-        <div style={{ fontSize:'10px', marginBottom:'8px', color: progress.complete ? '#ffcc00' : TEXT.label }}>
-          {progress.complete ? '✔ ' : ''}エリアコンプリート：スタミナ回復−{MUSEUM_AREA_STAM_SEC}秒
-        </div>
-        {raritiesOfGroup(group).map(r => {
-          const rp = progress.rarities.find(x => x.rarity === r)
-          return (
-          // ★レア度ごとに枠で分ける・レア度の名前は色つきの札（2026-10-23 ユーザー指示「ノーマルとかレアの区分で枠分けてほしい」
-          //   「レアリティの文字は（…）わかりやすくして」）。報酬は2行（同じ日「これを改行」）
-          <div key={r} style={{ border:`1px solid ${RARITY_COLOR[r]}55`, background:'#000a1c', padding:'8px', marginBottom:'10px' }}>
-            {/* 段階ごとの登録数（そろえば ✔）と、そのレア度の報酬（2026-10-23） */}
-            {/* レア度の札の右に、そのレア度の報酬の2行（2026-10-23 ユーザー指示「レアリティの右に持ってこれない？」）。
-                幅が足りないときは句の切れ目（「〜ごとに」「〜寄贈で」のあと）で折り返す＝言葉の途中で改行しない */}
-            {/*   ★余白は スマホ（375px）でいちばん長い「レジェンダリー」の札の右に「1段階そろうごとに ステータスポイント+4」が1行で入る幅（測って決めた） */}
-            <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'6px' }}>
-              <span style={{ flexShrink:0, color: RARITY_COLOR[r], border:`1px solid ${RARITY_COLOR[r]}`, background:`${RARITY_COLOR[r]}22`,
-                padding:'1px 7px', fontSize:'12px', fontWeight:'bold' }}>{rarityLabel(r)}</span>
-              {/* ★灰色はやめる（2026-10-23 ユーザー指示「ここも色つけて、灰色だとわかりづらい」）：そろったら金色・まだは明るい水色 */}
-              <div style={{ flex:1, minWidth:0, fontSize:'10px', lineHeight:1.6 }}>
-                <div style={{ color: rp.allTiers ? REWARD_ON : REWARD_OFF }}><span style={NOWRAP}>1段階そろうごとに</span> <span style={NOWRAP}>ステータスポイント+{MUSEUM_SET_SP[r]}</span></div>
-                <div style={{ color: rp.allTiers ? REWARD_ON : REWARD_OFF }}>
-                  <span style={NOWRAP}>3段階すべて寄贈で</span> <span style={NOWRAP}>スタミナ回復−{MUSEUM_RARITY_STAM_SEC}秒{rp.allTiers ? ' ✔' : ''}</span>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(min(100%, 230px), 1fr))', gap:'3px' }}>
+                  {group.items.filter(it => it.rarity === r).map(it => {
+                    const has = tiersOf(registered, it.id)
+                    return (
+                      <div key={it.id} style={{ background:'#000818', border:`1px solid ${has.length ? '#224466' : '#001428'}`, padding:'4px 6px',
+                        display:'flex', alignItems:'center', gap:'6px', fontSize:'11px' }}>
+                        <span style={{ flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                          color: has.length ? RARITY_COLOR[it.rarity] : TEXT.empty }} title={`${it.name}（${kindLabel(it)}）`}>
+                          {it.name}
+                        </span>
+                        {MUSEUM_TIERS.map(t => (
+                          <span key={t.key} title={t.label} style={{ ...tierBadge(t, has.includes(t.key)), padding:'0 3px' }}>
+                            {t.key === 0 ? '未' : t.label}
+                          </span>
+                        ))}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
-            </div>
-            {/* 段階ごとの登録数（札と別の行＝スマホの幅で段階が途中で折り返さないように） */}
-            <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:'2px 10px', fontSize:'11px', marginBottom:'6px' }}>
-              {rp.tiers.map(x => {
-                const t = MUSEUM_TIERS[x.tier]
-                return (
-                  <span key={x.tier} style={{ color: x.done ? '#ffcc00' : TEXT.label, whiteSpace:'nowrap' }}>
-                    <span style={{ color: t.color }}>{tierTag(t)}</span>{x.have}/{x.need}{x.done ? ' ✔' : ''}
-                  </span>
-                )
-              })}
-            </div>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(min(100%, 230px), 1fr))', gap:'3px' }}>
-              {group.items.filter(it => it.rarity === r).map(it => {
-                const has = tiersOf(registered, it.id)
-                return (
-                  <div key={it.id} style={{ background:'#000818', border:`1px solid ${has.length ? '#224466' : '#001428'}`, padding:'4px 6px',
-                    display:'flex', alignItems:'center', gap:'6px', fontSize:'11px' }}>
-                    <span style={{ flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
-                      color: has.length ? RARITY_COLOR[it.rarity] : TEXT.empty }} title={`${it.name}（${kindLabel(it)}）`}>
-                      {it.name}
-                    </span>
-                    {MUSEUM_TIERS.map(t => (
-                      <span key={t.key} title={t.label} style={{ ...tierBadge(t, has.includes(t.key)), padding:'0 3px' }}>
-                        {t.key === 0 ? '未' : t.label}
-                      </span>
-                    ))}
-                  </div>
-                )
-              })}
-            </div>
+              )
+            })}
           </div>
-          )
-        })}
+        </div>
       </div>
     </div>
   )
