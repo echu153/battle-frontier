@@ -5,6 +5,9 @@
 //   ・チップを置いて SPIN → 雷が1〜5個の数字に落ちる（1点賭けは50〜500倍）→ ホイールが回って玉が落ちる
 //   ・盤は広い画面では横、狭い画面（スマホ）では縦
 //   ・チップは左クリック（タップ）で置く・右クリックで1枚戻す。「1つ戻す」「クリア」「前回と同じ」「×2」
+//   【2026-10-27 直した】ユーザー指示「スマホのルーレットも、スクロールなしで回せるように詰めて」：スマホ（620px以下）は
+//     ホイールを回すときだけ画面の真ん中に大きく出す（玉が落ちて数字が出たら閉じる・押しても閉じる）。盤の行を低く（30→26px）し、
+//     出た数字と賭けの合計は盤の上の1行・チップと SPIN は1行・ほかのボタンはその下の1行にまとめた（前は全部を縦に積んで約940px）
 // ============================================================
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
@@ -93,6 +96,7 @@ export default function V2capRoulette({ init, medals, onMoney, onTalk }) {
   const [msg, setMsg] = useState('')
   const [strike, setStrike] = useState(null)        // 雷が落ちている数字
   const [wheel, setWheel] = useState({ w: 0, b: 0, r: 141 })
+  const [wheelOpen, setWheelOpen] = useState(false)   // スマホ：回している間だけホイールを大きく出す
   const raf = useRef(0)
   useEffect(() => () => cancelAnimationFrame(raf.current), [])
 
@@ -190,6 +194,7 @@ export default function V2capRoulette({ init, medals, onMoney, onTalk }) {
     }
     setStrike(null)
     sfx.reach()
+    if (narrow) setWheelOpen(true)
     await spinWheel(data.result, 5200)
     setResult(data.result)
     const winMap = {}
@@ -210,6 +215,8 @@ export default function V2capRoulette({ init, medals, onMoney, onTalk }) {
       if (missRun.current >= ROULETTE_MISS_RUN) { missRun.current = 0; onTalk?.('lose') }
     }
     setBusy(false)
+    // スマホ：出た数字を少し見せてからホイールを閉じる（盤の上で、出た数字と当たった賭けが光る）
+    if (narrow) setTimeout(() => setWheelOpen(false), 1400)
   }
 
   // ===== 盤 =====
@@ -222,16 +229,17 @@ export default function V2capRoulette({ init, medals, onMoney, onTalk }) {
     return (
       <div key={k} onClick={() => place(b)} onContextMenu={(e) => { e.preventDefault(); removeOne(b) }}
         style={{ position:'relative', display:'flex', alignItems:'center', justifyContent:'center', cursor: busy ? 'default' : 'pointer', userSelect:'none',
-          border:'1px solid #d8c27a88', color:'#fff', fontWeight:'bold', fontSize: narrow ? '12px' : '13px', minHeight: narrow ? 30 : 38,
+          border:'1px solid #d8c27a88', color:'#fff', fontWeight:'bold', fontSize: narrow ? '12px' : '13px', minHeight: narrow ? 26 : 38,
+          boxSizing: narrow ? 'border-box' : undefined,   // スマホは枠の線も入れて26px（盤が縦に長いので1行でも低く）
           boxShadow: isRes ? 'inset 0 0 0 3px #ffe14d, 0 0 14px #ffe14d' : lk ? 'inset 0 0 0 2px #ffe14d' : undefined,
           animation: strike === b.v && b.k === 'n' ? 'csBlink 0.12s linear 4' : isRes ? 'csPulse 0.6s ease-in-out infinite' : undefined,
           ...style }}>
         {text}
         {lk && <span style={{ position:'absolute', top:1, right:2, fontSize:'9px', color:'#ffe14d', fontWeight:900, textShadow:'0 0 4px #000' }}>×{lk.m}</span>}
         {st && (
-          <span style={{ position:'absolute', bottom:1, left:'50%', transform:'translateX(-50%)', minWidth:20, height:20, padding:'0 3px', borderRadius:10,
+          <span style={{ position:'absolute', bottom:1, left:'50%', transform:'translateX(-50%)', minWidth: narrow ? 17 : 20, height: narrow ? 17 : 20, padding:'0 3px', borderRadius:10,
             background: chipColorOf(st.a), border:'2px dashed #fff', color: chipColorOf(st.a) === CHIP_COLOR[1] ? '#111' : '#fff',
-            fontSize:'9px', lineHeight:'16px', textAlign:'center', boxShadow:'0 2px 3px #000a', boxSizing:'border-box' }}>{st.a}</span>
+            fontSize:'9px', lineHeight: narrow ? '13px' : '16px', textAlign:'center', boxShadow:'0 2px 3px #000a', boxSizing:'border-box' }}>{st.a}</span>
         )}
         {won > 0 && <span style={{ position:'absolute', top:-8, left:'50%', transform:'translateX(-50%)', color:'#ffe14d', fontSize:'10px', fontWeight:900, textShadow:'0 0 4px #000, 0 0 6px #ffb300', whiteSpace:'nowrap', zIndex:2 }}>+{fmt(won)}</span>}
       </div>
@@ -243,7 +251,7 @@ export default function V2capRoulette({ init, medals, onMoney, onTalk }) {
   // 縦：0｜12行×3列（1,2,3 が1行目）｜下に列（2to1）。左にダズン・右に2倍の賭け
   const board = narrow ? (
     <div style={{ display:'grid', gridTemplateColumns:'34px repeat(3, 1fr) 34px', gap:0, ...felt, padding:'4px', borderRadius:'6px' }}>
-      <div style={{ gridColumn:'2 / 5', gridRow:'1' }}>{cell({ k:'n', v:0 }, '0', { ...numBg(0), minHeight:34 })}</div>
+      <div style={{ gridColumn:'2 / 5', gridRow:'1' }}>{cell({ k:'n', v:0 }, '0', { ...numBg(0), minHeight:28 })}</div>
       {Array.from({ length: 12 }, (_, row) => [1, 2, 3].map(c => {
         const n = row * 3 + c
         return <div key={n} style={{ gridColumn: 1 + c, gridRow: 2 + row }}>{cell({ k:'n', v:n }, n, numBg(n))}</div>
@@ -273,52 +281,92 @@ export default function V2capRoulette({ init, medals, onMoney, onTalk }) {
     </div>
   )
 
-  const wheelSize = narrow ? 260 : 300
+  // ===== 出た数字・チップ・ボタン・SPIN・説明（広い画面とスマホで並べ方だけ変える）=====
+  // 出た数字（新しい順）
+  const histDots = (count, size) => hist.slice(0, count).map((n, k) => (
+    <span key={k} style={{ width:size, height:size, borderRadius:'50%', background: COLOR_HEX[colorOfNumber(n)], color:'#fff', fontSize: size >= 20 ? '10px' : '9px', flex:'0 0 auto',
+      display:'inline-flex', alignItems:'center', justifyContent:'center', border: k === 0 ? '2px solid #ffe14d' : '1px solid #555', opacity: k === 0 ? 1 : 0.8 }}>{n}</span>
+  ))
+  const chipBtns = (size) => ROULETTE_CHIPS.map(c => (
+    <button key={c} onClick={() => setChip(c)} aria-label={`チップ${c}`}
+      style={{ width:size, height:size, flex:'0 0 auto', padding:0, borderRadius:'50%', cursor:'pointer', fontWeight:900, fontSize: size >= 38 ? '12px' : '11px', fontFamily:'monospace',
+        background: CHIP_COLOR[c], color: c === 1 ? '#111' : '#fff', border:`3px dashed ${chip === c ? '#ffe14d' : '#ffffffaa'}`,
+        boxShadow: chip === c ? '0 0 12px #ffe14d' : '0 2px 4px #000a', transform: chip === c ? 'translateY(-3px)' : 'none', transition:'all 0.15s' }}>{c}</button>
+  ))
+  const totalText = <span style={{ fontSize:'12px', color:CASINO.body, whiteSpace:'nowrap' }}>合計 <b style={{ color:CASINO.gold }}>{fmt(total)}</b>／{ROULETTE_MAX_TOTAL}枚</span>
+  const actionBtns = (
+    <>
+      <button onClick={undo} disabled={busy || !bets.length} style={pill(CASINO.label, false)}>1つ戻す</button>
+      <button onClick={clear} disabled={busy || !bets.length} style={pill(CASINO.label, false)}>クリア</button>
+      <button onClick={rebet} disabled={busy || !lastBets.length} style={pill(CASINO.label, false)}>前回と同じ</button>
+      <button onClick={double} disabled={busy || !bets.length} style={pill(CASINO.label, false)}>×2</button>
+    </>
+  )
+  const spinBtn = (style) => (
+    <button onClick={spin} disabled={busy || !bets.length || total > medals}
+      style={{ ...bigBtn(CASINO.gold, !busy && bets.length > 0 && total <= medals), ...style }}>
+      {busy ? '…' : `🎡 SPIN（${fmt(total)}枚）`}
+    </button>
+  )
+  const notes = (
+    <>
+      {msg && <div style={{ color:'#ff6666', fontSize:'12px', marginTop:'6px' }}>⚠ {msg}</div>}
+      {Object.keys(stacks).length > 0 && !busy && result == null && (
+        <div style={{ fontSize:'10px', color:CASINO.label, marginTop:'6px' }}>
+          {Object.values(stacks).map(b => `${betLabelOf(b)}:${b.a}`).join('　')}
+        </div>
+      )}
+      <div style={{ marginTop:'10px', fontSize:'10px', color:CASINO.dim, lineHeight:1.7 }}>
+        1点 {ROULETTE_STRAIGHT}倍・赤黒／奇数偶数／1-18・19-36 2倍・ダズン／列 3倍（賭けたぶんこみ）。0 は1点賭けだけ当たる。<br />
+        ⚡ 毎回1〜5個の数字に雷（ラッキーナンバー）。そこへの1点賭けは 50〜500倍。右クリックでチップを1枚戻す。
+      </div>
+    </>
+  )
+
+  // スマホ：ホイールは回している間だけ画面の真ん中に大きく出す。上の1行＝出た数字と合計・盤・チップと SPIN の1行・ほかのボタンの1行
+  if (narrow) {
+    const big = Math.min(300, (typeof window !== 'undefined' ? window.innerWidth : 375) - 40)
+    return (
+      <div style={panel('#8a6d1f')}>
+        {wheelOpen && (
+          <div role="presentation" onClick={() => { if (!busy) setWheelOpen(false) }}
+            style={{ position:'fixed', inset:0, zIndex:380, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(4, 2, 10, 0.62)' }}>
+            <Wheel wheelDeg={wheel.w} ballDeg={wheel.b} ballR={wheel.r} result={busy ? null : result} lucky={lucky} size={big} />
+          </div>
+        )}
+        <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'6px' }}>
+          <div style={{ display:'flex', gap:'2px', overflow:'hidden', flex:'1 1 auto', minWidth:0 }}>{histDots(10, 17)}</div>
+          {totalText}
+        </div>
+        {board}
+        <div style={{ display:'flex', alignItems:'center', gap:'5px', marginTop:'8px' }}>
+          {chipBtns(32)}
+          {spinBtn({ flex:'1 1 auto', minWidth:0, padding:'9px 6px', fontSize:'13px', letterSpacing:0, whiteSpace:'nowrap' })}
+        </div>
+        <div style={{ display:'flex', gap:'5px', flexWrap:'wrap', marginTop:'6px' }}>{actionBtns}</div>
+        {notes}
+      </div>
+    )
+  }
+
+  const wheelSize = 300
   return (
     <div style={panel('#8a6d1f')}>
       <div style={{ display:'flex', flexWrap:'wrap', gap:'12px', alignItems:'flex-start', justifyContent:'center' }}>
         <div style={{ flex:'0 0 auto', position:'relative' }}>
           <Wheel wheelDeg={wheel.w} ballDeg={wheel.b} ballR={wheel.r} result={busy ? null : result} lucky={lucky} size={wheelSize} />
-          {/* 出た数字（新しい順） */}
-          <div style={{ display:'flex', gap:'3px', flexWrap:'wrap', justifyContent:'center', maxWidth: wheelSize, marginTop:'6px' }}>
-            {hist.slice(0, 15).map((n, k) => (
-              <span key={k} style={{ width:20, height:20, borderRadius:'50%', background: COLOR_HEX[colorOfNumber(n)], color:'#fff', fontSize:'10px',
-                display:'inline-flex', alignItems:'center', justifyContent:'center', border: k === 0 ? '2px solid #ffe14d' : '1px solid #555', opacity: k === 0 ? 1 : 0.8 }}>{n}</span>
-            ))}
-          </div>
+          <div style={{ display:'flex', gap:'3px', flexWrap:'wrap', justifyContent:'center', maxWidth: wheelSize, marginTop:'6px' }}>{histDots(15, 20)}</div>
         </div>
         <div style={{ flex:'1 1 360px', minWidth:0 }}>
           {board}
           {/* チップ */}
           <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap', marginTop:'10px' }}>
-            {ROULETTE_CHIPS.map(c => (
-              <button key={c} onClick={() => setChip(c)} aria-label={`チップ${c}`}
-                style={{ width:38, height:38, borderRadius:'50%', cursor:'pointer', fontWeight:900, fontSize:'12px', fontFamily:'monospace',
-                  background: CHIP_COLOR[c], color: c === 1 ? '#111' : '#fff', border:`3px dashed ${chip === c ? '#ffe14d' : '#ffffffaa'}`,
-                  boxShadow: chip === c ? '0 0 12px #ffe14d' : '0 2px 4px #000a', transform: chip === c ? 'translateY(-3px)' : 'none', transition:'all 0.15s' }}>{c}</button>
-            ))}
-            <span style={{ fontSize:'12px', color:CASINO.body, marginLeft:'4px' }}>合計 <b style={{ color:CASINO.gold }}>{fmt(total)}</b>／{ROULETTE_MAX_TOTAL}枚</span>
+            {chipBtns(38)}
+            <span style={{ marginLeft:'4px' }}>{totalText}</span>
           </div>
-          <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', marginTop:'8px' }}>
-            <button onClick={undo} disabled={busy || !bets.length} style={pill(CASINO.label, false)}>1つ戻す</button>
-            <button onClick={clear} disabled={busy || !bets.length} style={pill(CASINO.label, false)}>クリア</button>
-            <button onClick={rebet} disabled={busy || !lastBets.length} style={pill(CASINO.label, false)}>前回と同じ</button>
-            <button onClick={double} disabled={busy || !bets.length} style={pill(CASINO.label, false)}>×2</button>
-          </div>
-          <button onClick={spin} disabled={busy || !bets.length || total > medals}
-            style={{ ...bigBtn(CASINO.gold, !busy && bets.length > 0 && total <= medals), width:'100%', marginTop:'10px' }}>
-            {busy ? '…' : `🎡 SPIN（${fmt(total)}枚）`}
-          </button>
-          {msg && <div style={{ color:'#ff6666', fontSize:'12px', marginTop:'6px' }}>⚠ {msg}</div>}
-          {Object.keys(stacks).length > 0 && !busy && result == null && (
-            <div style={{ fontSize:'10px', color:CASINO.label, marginTop:'6px' }}>
-              {Object.values(stacks).map(b => `${betLabelOf(b)}:${b.a}`).join('　')}
-            </div>
-          )}
-          <div style={{ marginTop:'10px', fontSize:'10px', color:CASINO.dim, lineHeight:1.7 }}>
-            1点 {ROULETTE_STRAIGHT}倍・赤黒／奇数偶数／1-18・19-36 2倍・ダズン／列 3倍（賭けたぶんこみ）。0 は1点賭けだけ当たる。<br />
-            ⚡ 毎回1〜5個の数字に雷（ラッキーナンバー）。そこへの1点賭けは 50〜500倍。右クリックでチップを1枚戻す。
-          </div>
+          <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', marginTop:'8px' }}>{actionBtns}</div>
+          {spinBtn({ width:'100%', marginTop:'10px' })}
+          {notes}
         </div>
       </div>
     </div>
