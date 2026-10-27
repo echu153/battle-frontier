@@ -2,7 +2,7 @@
 // v2cap のダンジョンのボスの絵（ChatGPT で作った「2段に並べたコマ・真緑の背景」と遭遇のイラスト）を、画面で使う形にする
 // ------------------------------------------------------------
 // 元の絵（ユーザーが置く・git に入れない）：public/エネミー/IDダンジョン/<フォルダ>/（決まりは src/v2cap/lib/bossArt.js の BOSS_DEFS）
-//   待機.png・<技の名前>.png・イラスト.png。コマは3列×2段（6コマ）か4列×2段（8コマ・2026-10-28 ユーザー選択）＝列の数は絵から数える
+//   待機.png・<技の名前>.png・イラスト.png（ドット絵版。フォルダの中のフォルダ＝イラスト版は読まない）。コマは3列×2段（6コマ）か4列×2段（8コマ・2026-10-28 ユーザー選択）＝列の数は絵から数える
 // 作るもの：
 //   public/v2cap-art/boss/<key>-idle.webp   … 待機のコマをくり返す動くWebP（base×base・コマごとの長さ idleMs）
 //   public/v2cap-art/boss/<key>-<技>.webp    … 最初と最後を除いたコマを横に並べた1枚（透明つき）
@@ -39,8 +39,10 @@ const SRC = path.join(ROOT, 'public', ENEMY_ART_SRC_DIR, BOSS_ART_SRC_DIR)
 const OUT = path.join(ROOT, 'public', BOSS_ART_DIR.slice(1))
 const LIST = path.join(ROOT, 'src', 'v2cap', 'lib', 'bossArtList.js')
 const FORCE = process.argv.includes('--force')
-// 縮める倍率（列の数ごと）。3列＝マス512px→256px／4列＝マス384px→288px。q＝範囲をそろえる刻み（縮めたとき位置がちょうど整数になる）
-export const SCALE_OF = { 3: { k: 1 / 2, q: 2 }, 4: { k: 3 / 4, q: 4 } }
+// 縮める倍率（列の数ごと）。q＝範囲をそろえる刻み（縮めたとき位置がちょうど整数になる）
+//   【確定】2026-10-28 8コマ（4列）の絵も、ChatGPT は竜を6コマのときとほぼ同じ高さ（約450px・マスの横からはみ出しぎみ）で描いた
+//   ＝どちらも半分にする（はじめ4列は3/4にしたら待機の枠が345pxと大きすぎた）
+export const SCALE_OF = { 3: { k: 1 / 2, q: 2 }, 4: { k: 1 / 2, q: 2 } }
 const PAD = 4              // 待機の枠のまわりの余白（元の絵のpx）
 const QUALITY = 90         // 劣化ありで書き出す。ChatGPT のドット絵は色がざらついていて、劣化なしだと1枚250〜320KBと重い（劣化ありは約3分の1・2026-10-28 見比べて差が見えなかった）
 const TICK = 10            // 動くWebPの刻み（ミリ秒）。長いコマは同じ絵を続けて渡す（libwebp が1コマにまとめて長さを足す）
@@ -276,8 +278,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
     // 見本_〜.png はプロンプトに添付する見本（道具は読まない）。エフェクトは名前だけ知っている（画面に入れるのは絵が届いてから）
     const known = new Set(['待機', 'イラスト', ...def.motions.map(m => m.file), ...(def.effects || []).map(e => e.file)])
     const isSample = (f) => f.startsWith('見本')
-    for (const f of readdirSync(dir)) if (!isSample(f) && !known.has(path.basename(f, path.extname(f)))) console.log(`  ? ${def.name}：使わない絵（名前が決まりと違う）：${f}`)
-    const srcs = readdirSync(dir).filter(f => !isSample(f)).map(f => statSync(path.join(dir, f)).mtimeMs)
+    // フォルダの中のフォルダ（イラスト版の絵）は読まない（2026-10-28 ユーザー「今のドット絵VERも試したいから、それぞれ分けて作れるようにして」）
+    const files = readdirSync(dir, { withFileTypes: true }).filter(e => e.isFile()).map(e => e.name)
+    for (const f of files) if (!isSample(f) && !known.has(path.basename(f, path.extname(f)))) console.log(`  ? ${def.name}：使わない絵（名前が決まりと違う）：${f}`)
+    const srcs = files.filter(f => !isSample(f)).map(f => statSync(path.join(dir, f)).mtimeMs)
     const outs = ['idle', ...def.motions.map(m => m.key)].map(k => path.join(OUT, bossFileOf(key, k)))
     const fresh = !FORCE && art[key] && outs.every(o => existsSync(o) && statSync(o).mtimeMs >= Math.max(...srcs))
     if (fresh) continue
