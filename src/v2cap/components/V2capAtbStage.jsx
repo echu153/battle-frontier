@@ -1,10 +1,10 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useId, useLayoutEffect, useRef, useState } from 'react'
 import { TEXT } from './v2ui.js'
 import { buffChips, ailChips, stateChips, needNow, CAST_SEC } from '../core/atb.js'
 import { STAT_DEFS } from '../core/stats.js'
 import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC } from '../lib/atbFx.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
-import { illustPoseAt } from '../lib/bossIllust.js'
+import { illustPoseAt, illustTrailsAt, rotPoint } from '../lib/bossIllust.js'
 
 // ============================================================
 // 「レベルキャップあり」版（v2cap）— ATB戦闘の舞台（自分が左・モンスターが右）
@@ -26,6 +26,8 @@ import { illustPoseAt } from '../lib/bossIllust.js'
 //   ・ボスのイラスト版（IllustRig・lib/bossIllust.js・2026-10-28 ユーザー「イラスト版も作ったからドット絵版は別バージョンで作っておいて」）：
 //     パーツ（奥の翼・手前の翼・体・頭）を重ね、姿勢（翼・首・全体の角度とずれ・口の火）で動かす。ドット絵版より大きく出す
 //     （STAGE_OF.illust＝枠を高く・自分はそのぶん小さく。グラブルのように「どんと大きく」）。エフェクトは1枚の塗りを動きで見せる
+//     2026-10-28 ユーザー「もっとひっかく」「口をしっかり開けて吐く」「翼の風をもっと翼から」：前脚（体の子・頭より手前）と
+//     下あご（頭の中）も回す・開いた口の中（MouthInside）・爪と翼の残像の筋（RigTrails）・飛ぶ絵は出どころ（shots）ごとに1枚・爪の跡は引いて出す（wipe）
 // ============================================================
 
 const Bar = ({ pct, color, h = 10 }) => (
@@ -76,29 +78,87 @@ const FrameStrip = ({ a, frame, style }) => (
   </div>
 )
 
-// イラスト版のボス：枠（正方形）を立ち絵（art.base px）として、パーツを割合で置く。全体→パーツの順に回す（中心は一覧の px・py）
-//   口の火（glow）は頭といっしょに動く
-const IllustRig = ({ art, pose }) => {
-  const S = art.base, pct = (v) => `${(v / S) * 100}%`
+// イラスト版のボス：枠（正方形）を立ち絵（art.base px）として、パーツを割合で置く。全体→パーツ→子のパーツの順に回す（中心は一覧の px・py）
+//   子のパーツ（前脚＝体の子・下あご＝頭の子）は親の中に重ねる＝親といっしょに動く。口の火（glow）と口の中は頭といっしょに動く
+const IllustRig = ({ art, pose }) => (
+  <div style={{ position:'absolute', inset:0, pointerEvents:'none',
+    transform:`translate(${(pose.x * 100).toFixed(2)}%, ${(pose.y * 100).toFixed(2)}%) rotate(${pose.r.toFixed(2)}deg)`,
+    transformOrigin:`${(art.pivot[0] / art.base) * 100}% ${(art.pivot[1] / art.base) * 100}%` }}>
+    {art.parts.filter(p => !p.nest).map(p => <RigPart key={p.key} art={art} p={p} box={{ x: 0, y: 0, w: art.base, h: art.base }} pose={pose} />)}
+  </div>
+)
+const RigPart = ({ art, p, box, pose }) => {
+  const S = art.base, deg = pose[p.key]
+  const mouth = art.jaw ? rotPoint(art.jaw.mouth, art.jaw.pivot, (pose.jaw || 0) / 2) : [art.mouth[0] + S * 0.03, art.mouth[1]]
   return (
-    <div style={{ position:'absolute', inset:0, pointerEvents:'none',
-      transform:`translate(${(pose.x * 100).toFixed(2)}%, ${(pose.y * 100).toFixed(2)}%) rotate(${pose.r.toFixed(2)}deg)`,
-      transformOrigin:`${pct(art.pivot[0])} ${pct(art.pivot[1])}` }}>
-      {art.parts.map(p => (
-        <div key={p.key} style={{ position:'absolute', left: pct(p.x), top: pct(p.y), width: pct(p.w), height: pct(p.h),
-          transform: p.key === 'body' ? undefined : `rotate(${(pose[p.key] || 0).toFixed(2)}deg)`,
-          transformOrigin:`${((p.px - p.x) / p.w) * 100}% ${((p.py - p.y) / p.h) * 100}%` }}>
-          <img src={p.src} alt="" draggable={false} decoding="sync" style={{ width:'100%', height:'100%', display:'block', maxWidth:'none', userSelect:'none' }} />
-          {p.key === 'head' && pose.glow > 0.01 && (
-            <div style={{ position:'absolute', left:`${((art.mouth[0] + S * 0.03 - p.x) / p.w) * 100}%`, top:`${((art.mouth[1] - p.y) / p.h) * 100}%`,
-              width:`${(S * 0.16 / p.w) * 100}%`, aspectRatio:'1 / 1', transform:'translate(-50%, -50%)', borderRadius:'50%', opacity: pose.glow,
-              background:'radial-gradient(circle, rgba(255,245,200,0.95) 0%, rgba(255,150,40,0.75) 30%, rgba(255,60,0,0.25) 55%, rgba(255,40,0,0) 72%)' }} />
-          )}
-        </div>
-      ))}
+    <div style={{ position:'absolute', left:`${((p.x - box.x) / box.w) * 100}%`, top:`${((p.y - box.y) / box.h) * 100}%`,
+      width:`${(p.w / box.w) * 100}%`, height:`${(p.h / box.h) * 100}%`,
+      transform: typeof deg === 'number' ? `rotate(${deg.toFixed(2)}deg)` : undefined,
+      transformOrigin:`${((p.px - p.x) / p.w) * 100}% ${((p.py - p.y) / p.h) * 100}%` }}>
+      {p.key === 'head' && <MouthInside art={art} p={p} pose={pose} />}
+      <img src={p.src} alt="" draggable={false} decoding="sync" style={{ position:'relative', width:'100%', height:'100%', display:'block', maxWidth:'none', userSelect:'none' }} />
+      {art.parts.filter(c => c.nest && c.parent === p.key).map(c => <RigPart key={c.key} art={art} p={c} box={p} pose={pose} />)}
+      {/* 口の外の光：口を大きく開けているあいだは小さく薄く（開いた口の中が見えるように・火は口の中で光る） */}
+      {p.key === 'head' && pose.glow > 0.01 && (
+        <div style={{ position:'absolute', left:`${((mouth[0] - p.x) / p.w) * 100}%`, top:`${((mouth[1] - p.y) / p.h) * 100}%`,
+          width:`${(S * (art.jaw ? 0.12 : 0.16) / p.w) * 100}%`, aspectRatio:'1 / 1', transform:'translate(-50%, -50%)', borderRadius:'50%',
+          opacity: pose.glow * (art.jaw ? 1 - 0.75 * Math.min(1, -(pose.jaw || 0) / 24) : 1), mixBlendMode:'screen',
+          background:'radial-gradient(circle, rgba(255,245,200,0.95) 0%, rgba(255,150,40,0.75) 30%, rgba(255,60,0,0.25) 55%, rgba(255,40,0,0) 72%)' }} />
+      )}
     </div>
   )
 }
+// 開いた口の中（頭の後ろに描く＝上あご・下あごの絵がふちを覆う）：口の線と、下あごの角度だけ回した線のあいだ。牙を少し・口の火で明るく
+const MouthInside = ({ art, p, pose }) => {
+  const id = useId()
+  const j = art.jaw
+  if (!j || (pose.jaw || 0) > -0.5) return null
+  const lower = j.line.map(pt => rotPoint(pt, j.pivot, pose.jaw))
+  const pts = (a) => a.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ')
+  const mouth = rotPoint(j.mouth, j.pivot, pose.jaw / 2)
+  // 牙：口の線の点から、向かいの線のほうへ（長さは口のすき間の 35%・7px まで）
+  const fang = (a, b, i) => {
+    const [ax, ay] = a, dx = b[0] - ax, dy = b[1] - ay, d = Math.hypot(dx, dy) || 1, len = Math.min(7, d * 0.35)
+    const ux = -dy / d * 2.2, uy = dx / d * 2.2
+    return <polygon key={i} points={pts([[ax - ux, ay - uy], [ax + ux, ay + uy], [ax + dx / d * len, ay + dy / d * len]])} fill="#e6d6bc" />
+  }
+  return (
+    <svg viewBox={`${p.x} ${p.y} ${p.w} ${p.h}`} style={{ position:'absolute', inset:0, width:'100%', height:'100%', overflow:'visible' }}>
+      <defs>
+        <radialGradient id={id} gradientUnits="userSpaceOnUse" cx={mouth[0]} cy={mouth[1]} r="46">
+          <stop offset="0%" stopColor="#fff3b0" />
+          <stop offset="35%" stopColor="#ff8a1e" />
+          <stop offset="100%" stopColor="#5a0800" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+      <polygon points={pts([...j.line, ...lower.slice().reverse()])} fill="#2a0306" />
+      {pose.glow > 0.01 && <polygon points={pts([...j.line, ...lower.slice().reverse()])} fill={`url(#${id})`} opacity={pose.glow} />}
+      {[1, 2, 3].map(i => fang(j.line[i], lower[i], `u${i}`))}
+      {[1, 2].map(i => {
+        const m = (a) => [(a[i][0] + a[i + 1][0]) / 2, (a[i][1] + a[i + 1][1]) / 2]
+        return fang(m(lower), m(j.line), `l${i}`)
+      })}
+    </svg>
+  )
+}
+// 残像の筋（爪・風）：立ち絵の px の線を、新しいほど太く濃く。外に広くぼかした色＋細い明るい芯
+const TRAIL_STYLE = {
+  claw: { glow: '#ff4a14', core: '#fff0c0', gw: 11, cw: 3.2 },
+  wind: { glow: 'rgba(255,110,80,0.5)', core: 'rgba(255,238,228,0.9)', gw: 18, cw: 3 },
+}
+const RigTrails = ({ art, trails }) => (
+  <svg viewBox={`0 0 ${art.base} ${art.base}`} style={{ position:'absolute', inset:0, width:'100%', height:'100%', overflow:'visible', pointerEvents:'none', zIndex: 1 }}>
+    {['glow', 'core'].map(layer => (
+      <g key={layer} strokeLinecap="round" style={layer === 'glow' ? { filter:'blur(3px)' } : undefined}>
+        {trails.flatMap((tr, i) => tr.line.slice(1).map((b, k) => {
+          const a = tr.line[k], f = (k + 1) / (tr.line.length - 1), st = TRAIL_STYLE[tr.kind]
+          return <line key={`${i}-${k}`} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke={st[layer]}
+            strokeWidth={(layer === 'glow' ? st.gw : st.cw) * (0.25 + 0.75 * f)} opacity={tr.alpha * (0.15 + 0.85 * f)} />
+        }))}
+      </g>
+    ))}
+  </svg>
+)
 
 const POP_COLOR ={ hit: '#ffffff', miss: '#9fb3c8', heal: '#44ff88', tick: '#cc99ff' }
 const popText = (f) => (f.kind === 'miss' ? 'MISS' : f.kind === 'heal' ? `+${f.amount.toLocaleString()}` : f.amount.toLocaleString())
@@ -115,7 +175,9 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   const mo = lastAct?.motion || motion
   const frame = mo?.ms && lastAct ? motionFrameAt(mo, (now - lastAct.t0) * 1000) : -1
   // イラスト版は姿勢で動かす（技の動きも姿勢の中＝踏み込まない）
-  const pose = rig ? illustPoseAt(rig.key, lastAct?.motion?.keys ? lastAct.motion : null, (now - (lastAct?.t0 ?? now)) * 1000, now * 1000) : null
+  const rigMotion = rig && lastAct?.motion?.keys ? lastAct.motion : null, rigMs = (now - (lastAct?.t0 ?? now)) * 1000
+  const pose = rig ? illustPoseAt(rig.key, rigMotion, rigMs, now * 1000) : null
+  const trails = rigMotion ? illustTrailsAt(rig.key, rigMotion, rigMs, now * 1000) : []
   const dx = (frame >= 0 || rig ? 0 : lungeOf(now - lastOf('act')) * dir) + shakeOf(now - lastOf('hit'))
   const hitAgo = now - lastOf('hit')
   const glowAgo = now - lastOf('use')
@@ -142,6 +204,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
           {src || rig ? (
             // 待機の絵の枠（正方形）。攻撃の絵はこの枠に重ねる（ox・oy・w・h は待機の枠（クラスは 224px・ボスは base）を100%として割合で置く）
             <div style={{ position:'relative', height:'100%', aspectRatio:'1 / 1', maxWidth:'100%', filter: filters.join(' ') || 'none' }}>
+              {rig && trails.length > 0 && <RigTrails art={rig} trails={trails} />}
               {rig ? <IllustRig art={rig} pose={pose} /> : (
                 <img src={src} alt="" draggable={false}
                   style={{ width:'100%', height:'100%', objectFit:'contain', userSelect:'none', visibility: frame >= 0 ? 'hidden' : 'visible' }} />
@@ -211,8 +274,8 @@ const boxOf = (stage, area, scale) => {
 }
 
 // 横に並べたコマの1つを、合わせる点（ax・ay）が (x, y) に来るように置く。s＝絵の1pxが画面の何pxか・rot＝回す角度（ラジアン）・op＝濃さ
-const Sprite = ({ a, frame, x = 0, y = 0, s = 1, rot = 0, op = 1 }) => (
-  <FrameStrip a={a} frame={frame} style={{ zIndex: 2, left: x - a.ax * s, top: y - a.ay * s, width: a.w * s, height: a.h * s, opacity: op,
+const Sprite = ({ a, frame, x = 0, y = 0, s = 1, rot = 0, op = 1, clip }) => (
+  <FrameStrip a={a} frame={frame} style={{ zIndex: 2, left: x - a.ax * s, top: y - a.ay * s, width: a.w * s, height: a.h * s, opacity: op, clipPath: clip,
     transform: rot ? `rotate(${rot}rad)` : undefined, transformOrigin: `${a.ax * s}px ${a.ay * s}px` }} />
 )
 const easeOut = (k) => 1 - (1 - k) * (1 - k)
@@ -225,34 +288,46 @@ function BossFx({ fx, now, geo, art }) {
   const s = geo ? geo.b.w / art.base : 1
   const to = geo && { x: geo.p.x + geo.p.w / 2, y: geo.p.y + geo.p.h * FX_TARGET_Y }
   const acts = geo ? fx.filter(f => f.kind === 'act' && f.side === 'b' && f.motion?.fx) : []
-  return Object.values(art.motions).flatMap(m => Object.entries(m.fx || {}).map(([kind, a]) => {
+  return Object.values(art.motions).flatMap(m => Object.entries(m.fx || {}).flatMap(([kind, a]) => {
     const sc = a.size ? (a.size * (geo?.b.w || 0)) / a.w : s   // イラスト版は枠の幅に対する大きさ
-    let on = null
-    for (const f of acts) {
-      if (f.motion !== m) continue
-      const tFly = f.t0 + m.hitMs / 1000, tHit = f.t0 + m.impactMs / 1000
-      if (kind === 'fly' && m.front && now >= tFly && now < tHit) {
-        const e = now - tFly
-        const from = { x: geo.b.x + m.front[0] * s, y: geo.b.y + m.front[1] * s }
-        const q = flyPosOf(e / (tHit - tFly))
-        const grow = Math.min(1, 0.5 + 0.5 * e / FX_GROW_SEC) * (a.frames > 1 ? 1 : 1 + 0.06 * Math.sin(e * 30))
-        on = { frame: a.frames > 1 ? Math.floor(e * 1000 / a.ms) % a.frames : 0, x: from.x + (to.x - from.x) * q, y: from.y + (to.y - from.y) * q,
-          s: sc * grow, rot: Math.atan2(to.y - from.y, to.x - from.x) - Math.PI }   // 飛ぶ絵は左向き
-      }
-      if (kind === 'hit' && f.landed !== false && now >= tHit) {
-        const ms = (now - tHit) * 1000
-        if (a.frames > 1) {
-          const frame = motionFrameAt(a, ms)
-          if (frame >= 0) on = { frame, x: to.x, y: to.y, s: sc }
-        } else if (ms < a.durMs) {
-          const k = ms / a.durMs
-          on = { frame: 0, x: to.x, y: to.y, s: sc * (0.55 + 0.6 * easeOut(k)), rot: ((a.spin || 0) * k * Math.PI) / 180,
-            op: Math.min(1, k / 0.08) * (k > 0.55 ? 1 - (k - 0.55) / 0.45 : 1) }
+    // 飛ぶ絵は出どころ（shots）ごとに1枚（イラスト版の黒翼烈風は両方の翼から）。届く時刻は1つめ＝ダメージの時刻
+    const shots = kind === 'fly' ? (m.shots || (m.front ? [{ front: m.front, delayMs: 0, size: 1 }] : [])) : [null]
+    return shots.map((sh, i) => {
+      let on = null
+      for (const f of acts) {
+        if (f.motion !== m) continue
+        const lag = (sh?.delayMs || 0) / 1000
+        const tFly = f.t0 + m.hitMs / 1000 + lag, tHit = f.t0 + m.impactMs / 1000 + lag
+        if (kind === 'fly' && now >= tFly && now < tHit) {
+          const e = now - tFly
+          const from = { x: geo.b.x + sh.front[0] * s, y: geo.b.y + sh.front[1] * s }
+          const q = flyPosOf(e / (tHit - tFly))
+          const grow = Math.min(1, 0.5 + 0.5 * e / FX_GROW_SEC) * (a.frames > 1 ? 1 : 1 + 0.06 * Math.sin(e * 30))
+          on = { frame: a.frames > 1 ? Math.floor(e * 1000 / a.ms) % a.frames : 0, x: from.x + (to.x - from.x) * q, y: from.y + (to.y - from.y) * q,
+            s: sc * sh.size * grow, rot: Math.atan2(to.y - from.y, to.x - from.x) - Math.PI }   // 飛ぶ絵は左向き
+        }
+        if (kind === 'hit' && f.landed !== false && now >= tHit) {
+          const ms = (now - tHit) * 1000
+          if (a.frames > 1) {
+            const frame = motionFrameAt(a, ms)
+            if (frame >= 0) on = { frame, x: to.x, y: to.y, s: sc }
+          } else if (ms < a.durMs) {
+            const k = ms / a.durMs, fade = k > 0.55 ? 1 - (k - 0.55) / 0.45 : 1
+            on = a.wipe
+              // 爪の跡：大きくせず、右上から左下へ引いたように出す（はじめの22%で引ききる）
+              ? { frame: 0, x: to.x, y: to.y, s: sc * (0.96 + 0.08 * easeOut(k)), op: fade, clip: wipeClipOf(Math.min(1, k / 0.22)) }
+              : { frame: 0, x: to.x, y: to.y, s: sc * (0.55 + 0.6 * easeOut(k)), rot: ((a.spin || 0) * k * Math.PI) / 180, op: Math.min(1, k / 0.08) * fade }
+          }
         }
       }
-    }
-    return <Sprite key={a.src} a={a} {...(on || { frame: -1 })} />
+      return <Sprite key={`${a.src}#${i}`} a={a} {...(on || { frame: -1 })} />
+    })
   }))
+}
+// 右上から左下へ引いて見せる切り抜き（r＝0 何も見えない〜1 全部）：x − y ≥ u の側（絵の枠の %）
+const wipeClipOf = (r) => {
+  const u = 100 - 200 * r
+  return `polygon(${u - 100}% -100%, 400% -100%, 400% 200%, ${u + 200}% 200%)`
 }
 
 // foeArt … ダンジョンのボスの絵（lib/bossArt.js の bossArtOf＝ドット絵版／lib/bossIllust.js の bossIllustOf＝イラスト版）。

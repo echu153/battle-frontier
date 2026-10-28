@@ -15,6 +15,8 @@
 //      頭の後ろに隠れていた穴（翼の形を閉じた所と頭の重なり）はまわりの色で埋める（頭を動かしても黒い穴が見えない）
 //   ③ 回す中心：翼・頭＝体（頭は体、奥の翼は頭と体）と重なった所の真ん中／全体＝体の真ん中。口＝頭のいちばん左
 //   ④ 640px の立ち絵の大きさで、パーツを重ねた位置に描いて切り抜く（WebP・透明つき）
+//   ⑤ 決まりの cuts（前脚・下あご）を親のパーツから多角形で切り分ける（2026-10-28 ユーザー「もっとひっかく」「口をしっかり開けて吐く」）。
+//      回す中心・口・奥の翼は切り分ける前の形で出す（切り分けで変わらない）
 // 使い方：node tools/v2cap-boss-illust.mjs [--force]
 // ★元の絵が無くても（別のPCなど）、作ってある絵と一覧は消さない
 // ============================================================
@@ -67,6 +69,15 @@ export const dilate = (m, W, H, r) => {
   return a
 }
 export const erode = (m, W, H, r) => dilate(m.map(v => 1 - v), W, H, r).map(v => 1 - v)
+// 点 (x, y) が多角形 poly（[[x, y], …]）の中か
+export const inPoly = (poly, x, y) => {
+  let c = false
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j]
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c
+  }
+  return c
+}
 const centroidOf = (m, W) => {
   let sx = 0, sy = 0, n = 0
   for (let p = 0; p < m.length; p++) if (m[p]) { sx += p % W; sy += (p / W) | 0; n++ }
@@ -179,7 +190,7 @@ const build = (key, def, dir) => {
   const k = BOSS_ILLUST_SIZE / T0.W, S = BOSS_ILLUST_SIZE
   const layers = {}, fits = {}
   // ① 体・頭・翼_手前（・翼_奥）
-  for (const part of ILLUST_PARTS) {
+  for (const part of ILLUST_PARTS.filter(p => ILLUST_PART_FILES[p])) {
     const f = path.join(dir, `${ILLUST_PART_FILES[part]}.png`)
     if (!existsSync(f)) { if (part === 'wingF') continue; throw new Error(`元の絵が無い：${path.relative(ROOT, f)}`) }
     const P = readRgba(f)
@@ -228,15 +239,35 @@ const build = (key, def, dir) => {
     wingF: ov(dilate(wfm, S, S, 6), head.map((v, p) => v | body[p])) || bodyC,
     body: bodyC,
   }
+  const tip = leftTipOf(layers.head)
+  // ⑤ 切り分け（def.cuts）：前脚・下あごを親のパーツから多角形で切り出す（回す中心は決まりの pivot）
+  for (const [part, c] of Object.entries(def.cuts || {})) {
+    const from = layers[c.from]
+    if (!from) throw new Error(`${part}：親のパーツ ${c.from} が無い`)
+    const img = { W: S, H: S, data: Buffer.alloc(S * S * 4) }
+    const over = c.over && layers[c.over]
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      if (!inPoly(c.take, x + 0.5, y + 0.5)) continue
+      const i = (y * S + x) * 4
+      from.data.copy(img.data, i, i, i + 4)
+      // 手前に出すパーツ（over）に覆われていた所は切り出さない（止まっているときは立ち絵と同じに見える）
+      if (over) img.data[i + 3] = Math.round(img.data[i + 3] * (1 - over.data[i + 3] / 255))
+    }
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) if (inPoly(c.drop || c.take, x + 0.5, y + 0.5)) from.data[(y * S + x) * 4 + 3] = 0
+    layers[part] = img
+    pivotOf[part] = c.pivot
+    notes.push(`${part}：${ILLUST_PART_FILES[c.from] || c.from}から切り分けた`)
+  }
+  const parent = Object.fromEntries(Object.entries(def.cuts || {}).map(([p, c]) => [p, c.from]))
   const parts = {}
   for (const part of ILLUST_PARTS) {
+    if (!layers[part]) continue
     const t = trim(layers[part])
     if (!t) throw new Error(`${part}：何も描かれていない`)
     sizes.push([part, writeWebp(t.img, path.join(OUT, bossFileOf(key, illustKindOf(part))))])
     const [px, py] = pivotOf[part]
-    parts[part] = { x: t.x, y: t.y, w: t.img.W, h: t.img.H, px: Math.round(px), py: Math.round(py) }
+    parts[part] = { x: t.x, y: t.y, w: t.img.W, h: t.img.H, px: Math.round(px), py: Math.round(py), ...(parent[part] ? { parent: parent[part] } : {}) }
   }
-  const tip = leftTipOf(layers.head)
   // ④ エフェクト
   const fx = {}
   for (const e of def.effects) {
@@ -266,7 +297,10 @@ const writeList = (all) => {
       ...Object.entries(e.fx || {}).flatMap(([mk, f]) => Object.keys(f).map(kind => illustFxKindOf(mk, kind)))]
     const v = kinds.map(kd => [kd, path.join(OUT, bossFileOf(key, kd))]).filter(([, f]) => existsSync(f)).map(([kd, f]) => `'${kd}': '${versionOf(f)}'`)
     lines.push(`  ${key}: {`, '    parts: {')
-    for (const p of ILLUST_PARTS) if (e.parts[p]) { const a = e.parts[p]; lines.push(`      ${p}: { x: ${a.x}, y: ${a.y}, w: ${a.w}, h: ${a.h}, px: ${a.px}, py: ${a.py} },`) }
+    for (const p of ILLUST_PARTS) if (e.parts[p]) {
+      const a = e.parts[p]
+      lines.push(`      ${p}: { x: ${a.x}, y: ${a.y}, w: ${a.w}, h: ${a.h}, px: ${a.px}, py: ${a.py}${a.parent ? `, parent: '${a.parent}'` : ''} },`)
+    }
     lines.push('    },', `    pivot: [${e.pivot.join(', ')}], mouth: [${e.mouth.join(', ')}],`, '    fx: {')
     for (const [mk, f] of Object.entries(e.fx || {})) {
       lines.push(`      ${mk}: { ${Object.entries(f).map(([kind, a]) => `${kind}: { w: ${a.w}, h: ${a.h}, ax: ${a.ax}, ay: ${a.ay} }`).join(', ')} },`)
