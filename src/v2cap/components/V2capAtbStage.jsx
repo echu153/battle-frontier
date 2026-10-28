@@ -4,7 +4,7 @@ import { buffChips, ailChips, stateChips, needNow, CAST_SEC } from '../core/atb.
 import { STAT_DEFS } from '../core/stats.js'
 import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC } from '../lib/atbFx.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
-import { illustPoseAt, illustTrailsAt, rotPoint } from '../lib/bossIllust.js'
+import { illustPoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint } from '../lib/bossIllust.js'
 
 // ============================================================
 // 「レベルキャップあり」版（v2cap）— ATB戦闘の舞台（自分が左・モンスターが右）
@@ -87,13 +87,19 @@ const IllustRig = ({ art, pose }) => (
     {art.parts.filter(p => !p.nest).map(p => <RigPart key={p.key} art={art} p={p} box={{ x: 0, y: 0, w: art.base, h: art.base }} pose={pose} />)}
   </div>
 )
+// パーツ1つぶんの CSS（lib/bossIllust.js の partMove と同じ：長さの向きに縮めてから回す）
+const partTransform = (p, pose) => {
+  const deg = pose[p.key], sq = pose[`${p.key}Sq`] || 0
+  if (typeof deg !== 'number') return undefined
+  return `rotate(${deg.toFixed(2)}deg)${sq ? ` rotate(${p.ax || 0}deg) scaleX(${(1 - sq).toFixed(3)}) rotate(${-(p.ax || 0)}deg)` : ''}`
+}
 const RigPart = ({ art, p, box, pose }) => {
-  const S = art.base, deg = pose[p.key]
+  const S = art.base
   const mouth = art.jaw ? rotPoint(art.jaw.mouth, art.jaw.pivot, (pose.jaw || 0) / 2) : [art.mouth[0] + S * 0.03, art.mouth[1]]
   return (
     <div style={{ position:'absolute', left:`${((p.x - box.x) / box.w) * 100}%`, top:`${((p.y - box.y) / box.h) * 100}%`,
       width:`${(p.w / box.w) * 100}%`, height:`${(p.h / box.h) * 100}%`,
-      transform: typeof deg === 'number' ? `rotate(${deg.toFixed(2)}deg)` : undefined,
+      transform: partTransform(p, pose),
       transformOrigin:`${((p.px - p.x) / p.w) * 100}% ${((p.py - p.y) / p.h) * 100}%` }}>
       {p.key === 'head' && <MouthInside art={art} p={p} pose={pose} />}
       <img src={p.src} alt="" draggable={false} decoding="sync" style={{ position:'relative', width:'100%', height:'100%', display:'block', maxWidth:'none', userSelect:'none' }} />
@@ -321,8 +327,24 @@ function BossFx({ fx, now, geo, art }) {
         }
       }
       return <Sprite key={`${a.src}#${i}`} a={a} {...(on || { frame: -1 })} />
-    })
+    }).concat(m.charge?.kind === kind ? [<ChargeOrb key={`${a.src}#charge`} m={m} a={a} acts={acts} now={now} geo={geo} art={art} s={s} />] : [])
   }))
+}
+// 撃つ前に口でためる火の玉（イラスト版の charge）：口（首と頭の動きについていく）で、小さく出てだんだん大きく・回りながら脈打つ
+function ChargeOrb({ m, a, acts, now, geo, art, s }) {
+  const c = m.charge
+  let on = null
+  for (const f of acts) {
+    if (f.motion !== m) continue
+    const ms = (now - f.t0) * 1000
+    if (ms < c.fromMs || ms >= c.toMs) continue
+    const pose = illustPoseAt(art.key, m, ms, now * 1000)
+    const [mx, my] = illustPointAt(art.key, pose, mouthPointOf(art.key, pose), 'head')
+    const k = (ms - c.fromMs) / (c.toMs - c.fromMs)
+    on = { frame: 0, x: geo.b.x + mx * s, y: geo.b.y + my * s, s: (c.size * geo.b.w / a.w) * (0.15 + 0.85 * easeOut(k)) * (1 + 0.07 * Math.sin(ms / 28)),
+      rot: ms * 0.004, op: Math.min(1, k / 0.12) }
+  }
+  return <Sprite a={a} {...(on || { frame: -1 })} />
 }
 // 右上から左下へ引いて見せる切り抜き（r＝0 何も見えない〜1 全部）：x − y ≥ u の側（絵の枠の %）
 const wipeClipOf = (r) => {

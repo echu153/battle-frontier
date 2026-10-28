@@ -218,16 +218,40 @@ const build = (key, def, dir) => {
     if (pick < 0) throw new Error('立ち絵から奥の翼が見つからない（左上に残りが無い）')
     const wf = new Uint8Array(S * S)
     for (let p = 0; p < S * S; p++) if (labels[p] === pick) wf[p] = 1
-    // 頭の後ろの穴：翼の形を閉じた所（太らせて細らせる）と頭（少し太らせる）の重なり
-    const closed = erode(dilate(wf, S, S, 14), S, S, 14)
-    const headD = dilate(head, S, S, 2)
+    // 背中のとげ（決まりの wingFToBody の中）は体に入れる（翼といっしょに動くと外れて見えた・2026-10-28）
+    let toBody = 0
+    if (def.wingFToBody) for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const p = y * S + x
+      if (!wf[p] || !inPoly(def.wingFToBody, x + 0.5, y + 0.5)) continue
+      wf[p] = 0; toBody++
+      if (layers.body.data[p * 4 + 3] < T.data[p * 4 + 3]) T.data.copy(layers.body.data, p * 4, p * 4, p * 4 + 4)
+    }
+    // 隠れていた所（頭・体・手前の翼の後ろ）は、翼のふちから 32px まで埋める
+    //   ＝翼や首を回して付け根のまわりが見えても、ちぎれたふちや空が見えない（2026-10-28 ユーザー「付け根が外れて見えてる」）
+    //   しっかり覆われている所＝翼の色をぼかした色／覆いのふちやとげのすき間（止まっているときも見える）＝立ち絵の色（止まっているときは立ち絵と同じ）
+    const cover = erode(['body', 'head', 'wingN'].map(k => maskOf(layers[k], 230)).reduce((a, m) => a.map((v, p) => v | m[p])), S, S, 1)
+    const reach = dilate(wf, S, S, 32), closed = erode(dilate(wf, S, S, 14), S, S, 14)
     const img = { W: S, H: S, data: Buffer.alloc(S * S * 4) }
-    for (let p = 0; p < S * S; p++) if (wf[p]) T.data.copy(img.data, p * 4, p * 4, p * 4 + 4)
+    const pm = { W: S, H: S, data: Buffer.alloc(S * S * 4) }   // 色×透明度（ぼかしてから透明度で割る＝翼の色だけの平均）
+    for (let p = 0; p < S * S; p++) if (wf[p]) {
+      T.data.copy(img.data, p * 4, p * 4, p * 4 + 4)
+      const a = T.data[p * 4 + 3] / 255
+      for (let ch = 0; ch < 3; ch++) pm.data[p * 4 + ch] = Math.round(T.data[p * 4 + ch] * a)
+      pm.data[p * 4 + 3] = T.data[p * 4 + 3]
+    }
     bleed(img, 40)
+    const blur = resizeRgba(pm, S, S, 12)
     let holes = 0
-    for (let p = 0; p < S * S; p++) if (!wf[p] && closed[p] && headD[p]) { img.data[p * 4 + 3] = 255; holes++ }
+    for (let p = 0; p < S * S; p++) {
+      if (wf[p] || !reach[p] || !used[p]) continue
+      // 見える所は、翼に囲まれたすき間（翼の形を閉じた中）だけ。頭の外のふちは入れない（翼を回すと頭のふちの影が浮いて見えた）
+      if (!cover[p]) { if (tm[p] && closed[p]) { T.data.copy(img.data, p * 4, p * 4, p * 4 + 3); img.data[p * 4 + 3] = 255; holes++ } continue }
+      const a = blur.data[p * 4 + 3]
+      for (let ch = 0; ch < 3; ch++) img.data[p * 4 + ch] = a > 6 ? Math.min(255, Math.round(blur.data[p * 4 + ch] * 255 / a * 0.85)) : [46, 12, 10][ch]
+      img.data[p * 4 + 3] = 255; holes++
+    }
     layers.wingF = img
-    notes.push(`翼_奥：立ち絵から切り出した（${comps[pick].n}px・頭の後ろの穴 ${holes}px を埋めた）`)
+    notes.push(`翼_奥：立ち絵から切り出した（${comps[pick].n}px・背中のとげ ${toBody}px は体へ・隠れていた所 ${holes}px を埋めた）`)
   }
   // ③ 回す中心・口
   const wfm = mk('wingF')
@@ -258,7 +282,12 @@ const build = (key, def, dir) => {
     pivotOf[part] = c.pivot
     notes.push(`${part}：${ILLUST_PART_FILES[c.from] || c.from}から切り分けた`)
   }
-  const parent = Object.fromEntries(Object.entries(def.cuts || {}).map(([p, c]) => [p, c.from]))
+  // 親：切り分けたパーツは元のパーツの子。adopt なら逆（首が頭の親）
+  const parent = {}
+  for (const [p, c] of Object.entries(def.cuts || {})) {
+    if (c.adopt) { if (parent[c.from]) parent[p] = parent[c.from]; parent[c.from] = p } else parent[p] = c.from
+  }
+  Object.assign(pivotOf, def.pivots || {})
   const parts = {}
   for (const part of ILLUST_PARTS) {
     if (!layers[part]) continue
@@ -266,7 +295,10 @@ const build = (key, def, dir) => {
     if (!t) throw new Error(`${part}：何も描かれていない`)
     sizes.push([part, writeWebp(t.img, path.join(OUT, bossFileOf(key, illustKindOf(part))))])
     const [px, py] = pivotOf[part]
-    parts[part] = { x: t.x, y: t.y, w: t.img.W, h: t.img.H, px: Math.round(px), py: Math.round(py), ...(parent[part] ? { parent: parent[part] } : {}) }
+    // 長さの向き（回す中心からパーツの真ん中へ・°）：翼を縮める向き
+    const c = centroidOf(maskOf(layers[part]), S)
+    const ax = Math.round(Math.atan2(c[1] - py, c[0] - px) * 180 / Math.PI)
+    parts[part] = { x: t.x, y: t.y, w: t.img.W, h: t.img.H, px: Math.round(px), py: Math.round(py), ax, ...(parent[part] ? { parent: parent[part] } : {}) }
   }
   // ④ エフェクト
   const fx = {}
@@ -287,7 +319,7 @@ const build = (key, def, dir) => {
 
 const writeList = (all) => {
   const lines = ['// tools/v2cap-boss-illust.mjs が書くファイル（手で直さない）。ボス → イラスト版のパーツ・エフェクト',
-    `//   parts … 立ち絵（${BOSS_ILLUST_SIZE}px）の上の位置（x・y・w・h）と回す中心（px・py）。重ねる順は奥の翼・手前の翼・体・頭`,
+    `//   parts … 立ち絵（${BOSS_ILLUST_SIZE}px）の上の位置（x・y・w・h）・回す中心（px・py）・長さの向き（ax°）・親（parent）。並びは ILLUST_PARTS`,
     '//   pivot … 全体を回す中心（体の真ん中）／mouth … 頭のいちばん左（飛ぶエフェクトが出る口）',
     '//   fx … 技のキー → fly（飛ぶ）・hit（当たる）のエフェクトの大きさ（px）と合わせる点（ax・ay＝飛ぶは先・当たるは真ん中）',
     '//   fit … パーツを立ち絵に重ねた倍率・角度・位置（元の絵の px・確かめ用）／v … 絵ごとの中身の印（画面のアドレスの ?v=）',
@@ -299,7 +331,7 @@ const writeList = (all) => {
     lines.push(`  ${key}: {`, '    parts: {')
     for (const p of ILLUST_PARTS) if (e.parts[p]) {
       const a = e.parts[p]
-      lines.push(`      ${p}: { x: ${a.x}, y: ${a.y}, w: ${a.w}, h: ${a.h}, px: ${a.px}, py: ${a.py}${a.parent ? `, parent: '${a.parent}'` : ''} },`)
+      lines.push(`      ${p}: { x: ${a.x}, y: ${a.y}, w: ${a.w}, h: ${a.h}, px: ${a.px}, py: ${a.py}, ax: ${a.ax ?? 0}${a.parent ? `, parent: '${a.parent}'` : ''} },`)
     }
     lines.push('    },', `    pivot: [${e.pivot.join(', ')}], mouth: [${e.mouth.join(', ')}],`, '    fx: {')
     for (const [mk, f] of Object.entries(e.fx || {})) {
