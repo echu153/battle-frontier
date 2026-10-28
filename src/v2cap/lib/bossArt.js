@@ -19,6 +19,7 @@
 //     <技>  … 最初と最後を除いたコマ（6コマなら②〜⑤・8コマなら②〜⑦）を横に並べた1枚（クラスの攻撃の絵と同じ形・lib/motionArt.js）。
 //              ox・oy は待機の枠の左上が1コマの中のどこにあるか（はみ出す炎や爆発のぶん）
 //     illust … 遭遇のイラスト（正方形）
+//     fx-<技>-fly / fx-<技>-hit … エフェクトの6コマを横に並べた1枚（元の絵は <技の名前>_飛ぶ.png・<技の名前>_当たる.png）
 //   一覧（コマの数・大きさ・速さ）は bossArtList.js（道具が書く・手で直さない）
 // ★コマの位置は元の絵のマスの中の位置で使う。待機は体の動かない場所（idleAnchor）で①にそろえる
 //   （2026-10-28 ユーザー「羽動かすときに体も揺れすぎ、ゴムみたいになってる」）。技の絵は①の竜の大きさと位置を待機の①に合わせる
@@ -54,15 +55,18 @@ export const BOSS_DEFS = {
     ],
     // エフェクト（2026-10-28 ユーザー「エフェクトは別に作って、しっかり敵（プレイヤー）に当たってるように見せたい」→選んだ
     //   「ChatGPT のドット絵」「飛ぶ絵＋当たる絵」）。3列×2段の6コマ。飛ぶ＝同じ場所でゆらめくくり返し（画面で相手まで動かす）・
-    //   当たる＝相手の上で1回。★画面に入れるのは絵が届いてから（いまは名前だけ＝道具が「使わない絵」と言わないため）
+    //   当たる＝相手の上で1回。2026-10-28 7枚そろった（ユーザー「一旦ドット絵は作った、モーション作って」）
+    //   size  … 竜の絵（ドットの細かさ）に比べた大きさ（道具がこの大きさに縮める）
+    //   ms    … 飛ぶ＝くり返す1コマの長さ／当たる＝1コマずつの長さ
+    //   flyMs … 飛ぶ絵が竜のいちばん前から自分に届くまで。ダメージの数字と揺れは届いたとき（当たる絵の出はじめ）
     effects: [
-      { file: '黒爪_当たる', motion: 'claw', kind: 'hit' },
-      { file: '焦熱の吐息_飛ぶ', motion: 'breath', kind: 'fly' },
-      { file: '焦熱の吐息_当たる', motion: 'breath', kind: 'hit' },
-      { file: '黒翼烈風_飛ぶ', motion: 'gale', kind: 'fly' },
-      { file: '黒翼烈風_当たる', motion: 'gale', kind: 'hit' },
-      { file: '終焉の黒焔_飛ぶ', motion: 'doom', kind: 'fly' },
-      { file: '終焉の黒焔_当たる', motion: 'doom', kind: 'hit' },
+      { file: '黒爪_当たる', motion: 'claw', kind: 'hit', size: 0.62, ms: [50, 50, 60, 80, 90, 100] },
+      { file: '焦熱の吐息_飛ぶ', motion: 'breath', kind: 'fly', size: 0.5, ms: 70, flyMs: 300 },
+      { file: '焦熱の吐息_当たる', motion: 'breath', kind: 'hit', size: 0.7, ms: [60, 60, 80, 100, 110, 120] },
+      { file: '黒翼烈風_飛ぶ', motion: 'gale', kind: 'fly', size: 0.5, ms: 70, flyMs: 360 },
+      { file: '黒翼烈風_当たる', motion: 'gale', kind: 'hit', size: 0.72, ms: [60, 70, 80, 100, 110, 120] },
+      { file: '終焉の黒焔_飛ぶ', motion: 'doom', kind: 'fly', size: 0.62, ms: 80, flyMs: 420 },
+      { file: '終焉の黒焔_当たる', motion: 'doom', kind: 'hit', size: 0.85, ms: [70, 80, 100, 120, 140, 160] },
     ],
   },
 }
@@ -70,11 +74,16 @@ export const BOSS_DEFS = {
 export const BOSS_HIT_OF = { 4: 2, 6: 3 }
 export const bossKeyOfName = (name) => Object.keys(BOSS_DEFS).find(k => BOSS_DEFS[k].name === name) || null
 
+export const BOSS_FX_COLS = 3   // エフェクトは3列×2段
 export const bossFileOf = (key, kind) => `${key}-${kind}.webp`
 export const bossSrcOf = (key, kind) => `${BOSS_ART_DIR}/${bossFileOf(key, kind)}`
+export const bossFxKindOf = (motion, kind) => `fx-${motion}-${kind}`
 
 // 画面で使う形（無ければ null）
-//   { name, base, idle:{ src, frames, ms:[…] }, illust, motions:{ <key>: lib/motionArt.js の motionOf と同じ形＋label } }
+//   { name, base, idle:{ src, frames, ms:[…] }, illust, motions:{ <key>: lib/motionArt.js の motionOf と同じ形＋label＋エフェクト } }
+//   エフェクト：fx … { fly?, hit? }（どちらも { src, frames, w, h, ax, ay（飛ぶ＝先・当たる＝真ん中）, ms }・大きさは待機の枠と同じ px）
+//     front … 当たるコマの竜のいちばん前（待機の枠の左上から・飛ぶ絵が出るところ）
+//     impactMs … 流しはじめから自分に届くまで（飛ぶ絵があれば hitMs＋flyMs・無ければ hitMs）
 export const bossArtOf = (key) => {
   const def = BOSS_DEFS[key], art = BOSS_ART[key]
   if (!def || !art?.idle) return null
@@ -84,7 +93,16 @@ export const bossArtOf = (key) => {
     if (!e) continue
     const totalMs = e.ms.reduce((s, v) => s + v, 0)
     const hitMs = e.ms.slice(0, e.hit).reduce((s, v) => s + v, 0)
-    motions[m.key] = { ...e, base: art.base, src: bossSrcOf(key, m.key), totalMs, hitMs, label: m.file }
+    const fx = {}
+    let flyMs = 0
+    for (const d of (def.effects || []).filter(d => d.motion === m.key)) {
+      const a = art.fx?.[m.key]?.[d.kind]
+      if (!a) continue
+      fx[d.kind] = { ...a, src: bossSrcOf(key, bossFxKindOf(m.key, d.kind)), ms: d.ms }
+      if (d.kind === 'fly') flyMs = d.flyMs
+    }
+    motions[m.key] = { ...e, base: art.base, src: bossSrcOf(key, m.key), totalMs, hitMs, label: m.file,
+      fx: fx.fly || fx.hit ? fx : null, flyMs, impactMs: hitMs + flyMs }
   }
   return {
     key, name: def.name, base: art.base,

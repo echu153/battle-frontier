@@ -4,18 +4,20 @@ import assert from 'node:assert/strict'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { Buffer } from 'node:buffer'
 import { BOSS_ART } from './bossArtList.js'
-import { BOSS_DEFS, BOSS_ART_DIR, BOSS_HIT_OF, bossArtOf, bossFileOf, bossKeyOfName, bossMotionKeyOf, newBossMotionMemo } from './bossArt.js'
-import { cellsOf, colsOf, dropGreen, alignCells } from '../../../tools/v2cap-boss-art.mjs'
+import { BOSS_DEFS, BOSS_ART_DIR, BOSS_HIT_OF, bossArtOf, bossFileOf, bossFxKindOf, bossKeyOfName, bossMotionKeyOf, newBossMotionMemo } from './bossArt.js'
+import { cellsOf, colsOf, dropGreen, alignCells, tipOf } from '../../../tools/v2cap-boss-art.mjs'
 import { componentsOf } from '../../../tools/v2cap-motion.mjs'
 
 const OUT = new URL(`../../../public${BOSS_ART_DIR}/`, import.meta.url)
+// 一覧に載っている絵（待機・技・エフェクト・イラスト）
+const kindsOf = (e) => ['idle', ...Object.keys(e.motions), ...(e.illust ? ['illust'] : []),
+  ...Object.entries(e.fx || {}).flatMap(([mk, f]) => Object.keys(f).map(kind => bossFxKindOf(mk, kind)))]
 
 test('一覧の絵はぜんぶ public/v2cap-art/boss にあって軽い（待機・技は 200KB まで・イラストは 400KB まで）', () => {
   for (const [key, e] of Object.entries(BOSS_ART)) {
     const def = BOSS_DEFS[key]
     assert.ok(def, `${key} は BOSS_DEFS にある`)
-    const kinds = ['idle', ...Object.keys(e.motions), ...(e.illust ? ['illust'] : [])]
-    for (const k of kinds) {
+    for (const k of kindsOf(e)) {
       const file = new URL(bossFileOf(key, k), OUT)
       assert.ok(existsSync(file), `${def.name} ${k} の絵がある`)
       assert.ok(statSync(file).size < (k === 'illust' ? 400 : 200) * 1024, `${def.name} ${k} は軽い`)
@@ -24,8 +26,7 @@ test('一覧の絵はぜんぶ public/v2cap-art/boss にあって軽い（待機
 })
 
 test('public/v2cap-art/boss の絵はどれも一覧に載っている（名前を変えて残った絵がない）', () => {
-  const known = new Set(Object.entries(BOSS_ART).flatMap(([key, e]) =>
-    ['idle', ...Object.keys(e.motions), ...(e.illust ? ['illust'] : [])].map(k => bossFileOf(key, k))))
+  const known = new Set(Object.entries(BOSS_ART).flatMap(([key, e]) => kindsOf(e).map(k => bossFileOf(key, k))))
   for (const f of readdirSync(OUT)) assert.ok(known.has(f), `${f} は一覧に無い`)
 })
 
@@ -41,7 +42,42 @@ test('待機は6か8コマ・技は最初と最後を除いた4か6コマ・待�
       assert.deepEqual(a.ms, m.ms[a.frames])
       assert.equal(a.hit, BOSS_HIT_OF[a.frames])
       assert.ok(a.ox >= 0 && a.oy >= 0 && a.ox + e.base <= a.w && a.oy + e.base <= a.h, `${m.file}：待機の枠が1コマに収まる`)
+      // 竜のいちばん前（飛ぶエフェクトが出るところ）は、待機の枠の左半分
+      assert.ok(a.front && a.front[0] >= -a.ox && a.front[0] < e.base / 2 && a.front[1] >= -a.oy && a.front[1] < a.h - a.oy, `${m.file}：竜のいちばん前 ${a.front}`)
     }
+  }
+})
+
+test('【確定】2026-10-28 エフェクト（7枚）：3列×2段の6コマ・長さは決まりのまま・飛ぶは先がいちばん左・当たるは真ん中', () => {
+  for (const [key, e] of Object.entries(BOSS_ART)) {
+    for (const d of BOSS_DEFS[key].effects) {
+      const a = e.fx?.[d.motion]?.[d.kind]
+      assert.ok(a, `${d.file} の絵がある`)
+      assert.equal(a.frames, 6)
+      if (d.kind === 'fly') {
+        assert.ok(typeof d.ms === 'number' && d.flyMs >= 200 && d.flyMs <= 600, `${d.file}：くり返す1コマの長さと飛ぶ時間`)
+        assert.ok(a.ax <= 4 && a.ay > a.h * 0.25 && a.ay < a.h * 0.75, `${d.file}：先は左はしの真ん中あたり（${a.ax},${a.ay}）`)
+      } else {
+        assert.equal(d.ms.length, a.frames)
+        assert.equal(a.ax, Math.round(a.w / 2))
+        assert.equal(a.ay, Math.round(a.h / 2))
+      }
+      assert.ok(a.w <= e.base * 1.2 && a.h <= e.base * 1.2, `${d.file}：竜より大きすぎない`)
+    }
+  }
+})
+
+test('エフェクトの時刻：飛ぶ絵は当たるコマで出て flyMs で届く（届いたときがダメージ）・飛ぶ絵の無い黒爪は当たるコマで当たる', () => {
+  const a = bossArtOf('varuzenoku')
+  assert.equal(a.motions.claw.fx.fly, undefined)
+  assert.ok(a.motions.claw.fx.hit)
+  assert.equal(a.motions.claw.impactMs, a.motions.claw.hitMs)
+  for (const k of ['breath', 'gale', 'doom']) {
+    const m = a.motions[k], d = BOSS_DEFS.varuzenoku.effects.find(e => e.motion === k && e.kind === 'fly')
+    assert.equal(m.flyMs, d.flyMs)
+    assert.equal(m.impactMs, m.hitMs + d.flyMs)
+    assert.equal(m.fx.fly.src, `${BOSS_ART_DIR}/varuzenoku-fx-${k}-fly.webp`)
+    assert.deepEqual(m.fx.hit.ms, BOSS_DEFS.varuzenoku.effects.find(e => e.motion === k && e.kind === 'hit').ms)
   }
 })
 
@@ -132,6 +168,27 @@ test('【確定】2026-10-28 8コマ（4列×2段）も読める：列の数は�
     assert.equal(colsOf(img, componentsOf(img).comps), cols)
     assert.equal(cellsOf(img, cols).cells.length, cols * 2)
   }
+})
+
+test('【確定】2026-10-28 隣のコマの竜がくっついていても（黒翼烈風の②③）、列は多い段で数え、くっついた所のいちばん細い列で切り分ける', () => {
+  const W = 48, H = 24, data = Buffer.alloc(W * H * 4)
+  const dot = (x0, y0, x1, y1) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) data[(y * W + x) * 4 + 3] = 255 }
+  for (let k = 0; k < 8; k++) dot((k % 4) * 12 + 2, Math.floor(k / 4) * 12 + 2, (k % 4) * 12 + 9, Math.floor(k / 4) * 12 + 9)
+  dot(22, 3, 25, 3)   // ②の翼の先が③につながる（細い1px）
+  const img = { W, H, data }
+  const cc = componentsOf(img)
+  assert.equal(colsOf(img, cc.comps), 4, '上の段は3つに見えるが、下の段の4つで数える')
+  const { cells } = cellsOf(img, 4, 2, cc)
+  assert.ok(cells.every(c => c.box), 'どのコマも空でない')
+  assert.ok(cells[1].box.x1 - cells[1].box.x0 <= 12 && cells[2].box.x1 - cells[2].box.x0 <= 12, `②③は1つずつ（${JSON.stringify([cells[1].box, cells[2].box])}）`)
+})
+
+test('先（いちばん左）：小さな火の粉は数えず、縦に4px以上ある列から', () => {
+  const W = 20, H = 10, data = Buffer.alloc(W * H * 4)
+  const dot = (x0, y0, x1, y1) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) data[(y * W + x) * 4 + 3] = 255 }
+  dot(1, 1, 1, 1)      // 火の粉
+  dot(5, 3, 15, 7)     // 炎
+  assert.deepEqual(tipOf([{ W, H, data }]), { x: 5, y: 5 })
 })
 
 test('待機のコマそろえ：①と同じ形が下にずれていたら、ずれを見つけて戻す', () => {

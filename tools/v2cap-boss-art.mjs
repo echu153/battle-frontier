@@ -7,6 +7,7 @@
 //   public/v2cap-art/boss/<key>-idle.webp   … 待機のコマをくり返す動くWebP（base×base・コマごとの長さ idleMs）
 //   public/v2cap-art/boss/<key>-<技>.webp    … 最初と最後を除いたコマを横に並べた1枚（透明つき）
 //   public/v2cap-art/boss/<key>-illust.webp … 遭遇のイラスト（768×768）
+//   public/v2cap-art/boss/<key>-fx-<技>-<fly|hit>.webp … エフェクト（<技の名前>_飛ぶ.png・_当たる.png・3列×2段）の6コマを横に並べた1枚
 //   src/v2cap/lib/bossArtList.js           … 一覧（コマの数・1コマの大きさ・ずらし・速さ）
 // 手順：
 //   ① 真緑を抜く（tools/v2cap-motion.mjs の keyGreen）
@@ -29,7 +30,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { decode, bleed, alphaBox, encodeSquare } from './v2cap-art-lib.mjs'
 import { keyGreen, componentsOf, readRgba, scaleRgba } from './v2cap-motion.mjs'
-import { BOSS_DEFS, BOSS_ART_SRC_DIR, BOSS_ART_DIR, BOSS_SHEET_COLS, BOSS_SHEET_ROWS, BOSS_ILLUST_SIZE, BOSS_HIT_OF, bossFileOf } from '../src/v2cap/lib/bossArt.js'
+import { BOSS_DEFS, BOSS_ART_SRC_DIR, BOSS_ART_DIR, BOSS_SHEET_COLS, BOSS_SHEET_ROWS, BOSS_ILLUST_SIZE, BOSS_HIT_OF, BOSS_FX_COLS, bossFileOf, bossFxKindOf } from '../src/v2cap/lib/bossArt.js'
 import { ENEMY_ART_SRC_DIR } from '../src/v2cap/lib/enemyArt.js'
 import { BOSS_ART } from '../src/v2cap/lib/bossArtList.js'
 
@@ -48,18 +49,49 @@ const QUALITY = 90         // 劣化ありで書き出す。ChatGPT のドット
 const TICK = 10            // 動くWebPの刻み（ミリ秒）。長いコマは同じ絵を続けて渡す（libwebp が1コマにまとめて長さを足す）
 const SAME_SIZE = 0.03     // 技の絵の竜の高さが待機とこれ以内の違いなら縮めない（ドット絵をぼかさない）
 
-// 列の数：上の段の大きいまとまり（いちばん大きいものの3割以上）の数。3か4でなければ null
+// 列の数：段ごとの大きいまとまり（その段でいちばん大きいものの3割以上）の数の多いほう。3か4でなければ null
+//   （2026-10-28 黒翼烈風の上の段は②と③の翼の先がつながって3つに見えた＝つながると少なく数えるので、多い段を使う）
 export const colsOf = (img, comps) => {
-  const top = comps.filter(c => (c.y0 + c.y1) / 2 < img.H / BOSS_SHEET_ROWS)
-  const max = Math.max(0, ...top.map(c => c.n))
-  const n = top.filter(c => c.n >= max * 0.3).length
-  return BOSS_SHEET_COLS.includes(n) ? n : null
+  const counts = Array.from({ length: BOSS_SHEET_ROWS }, (_, r) => {
+    const row = comps.filter(c => Math.floor((c.y0 + c.y1) / 2 / (img.H / BOSS_SHEET_ROWS)) === r)
+    const max = Math.max(0, ...row.map(c => c.n))
+    return row.filter(c => c.n >= max * 0.3).length
+  }).filter(n => BOSS_SHEET_COLS.includes(n))
+  return counts.length ? Math.max(...counts) : null
+}
+
+// 隣のコマの竜どうしがくっついた1つのまとまり（マスの幅の SPLIT_W 倍より広い）は、真ん中に近いマスの境目のまわり
+//   （マスの幅の4分の1まで）で、いちばん細い列から右を別のまとまりにする。1つの竜がはみ出したぶん（炎など）は切らない
+const SPLIT_W = 1.25
+const splitWide = (W, H, labels, comps, cw) => {
+  for (let id = 0; id < comps.length; id++) {
+    const c = comps[id]
+    if (c.x1 - c.x0 + 1 <= cw * SPLIT_W) continue
+    const cnt = new Int32Array(c.x1 - c.x0 + 1)
+    for (let y = c.y0; y <= c.y1; y++) for (let x = c.x0; x <= c.x1; x++) if (labels[y * W + x] === id) cnt[x - c.x0]++
+    const bx = Math.round((c.x0 + c.x1) / 2 / cw) * cw
+    let cut = -1
+    for (let x = Math.max(c.x0 + 1, Math.round(bx - cw / 4)); x <= Math.min(c.x1, Math.round(bx + cw / 4)); x++) if (cut < 0 || cnt[x - c.x0] < cnt[cut - c.x0]) cut = x
+    if (cut < 0) continue
+    const nid = comps.length, L = { n: 0, x0: W, x1: -1, y0: H, y1: -1 }, R = { n: 0, x0: W, x1: -1, y0: H, y1: -1 }
+    for (let y = c.y0; y <= c.y1; y++) for (let x = c.x0; x <= c.x1; x++) {
+      const p = y * W + x
+      if (labels[p] !== id) continue
+      const t = x >= cut ? R : L
+      if (x >= cut) labels[p] = nid
+      t.n++; t.x0 = Math.min(t.x0, x); t.x1 = Math.max(t.x1, x); t.y0 = Math.min(t.y0, y); t.y1 = Math.max(t.y1, y)
+    }
+    comps[id] = L
+    comps.push(R)
+    id--   // 左のぶんがまだ広ければ、もう一度切る
+  }
 }
 
 // ② マスごとのコマ → { labels, comps, cw, ch, cells:[{ ox, oy（読む位置）, ids（まとまり）, box（マスの左上からの範囲） }] }（左上から右へ、下の段へ）
 export const cellsOf = (img, cols = BOSS_SHEET_COLS[0], rows = BOSS_SHEET_ROWS, cc = componentsOf(img)) => {
   const { labels, comps } = cc
   const cw = img.W / cols, ch = img.H / rows
+  splitWide(img.W, img.H, labels, comps, cw)
   const cells = Array.from({ length: cols * rows }, (_, k) => ({ k, ox: Math.round((k % cols) * cw), oy: Math.round(Math.floor(k / cols) * ch), ids: new Set(), box: null }))
   comps.forEach((c, id) => {
     const col = Math.min(cols - 1, Math.floor((c.x0 + c.x1) / 2 / cw)), row = Math.min(rows - 1, Math.floor((c.y0 + c.y1) / 2 / ch))
@@ -104,6 +136,19 @@ const frameOf = (sh, cell, box, k) => {
   const f = { W: w, H: h, data }
   bleed(f)
   return scaleRgba(f, k)
+}
+
+// いちばん左（相手の方）の先 → { x, y }（コマの左上から）。小さな火の粉は数えない（どれかのコマで縦に MIN_COL px 以上ある列から）。
+//   y はその列から右へ5列の見えている画素の高さの平均。飛ぶエフェクトの先と、当たるコマの竜のいちばん前（飛ぶ絵が出るところ）に使う
+const MIN_COL = 4
+export const tipOf = (fs) => {
+  const { W, H } = fs[0]
+  const colN = (f, x) => { let n = 0; for (let y = 0; y < H; y++) if (f.data[(y * W + x) * 4 + 3]) n++; return n }
+  let x0 = 0
+  while (x0 < W - 1 && !fs.some(f => colN(f, x0) >= MIN_COL)) x0++
+  let sy = 0, n = 0
+  for (const f of fs) for (let x = x0; x < Math.min(W, x0 + 5); x++) for (let y = 0; y < H; y++) if (f.data[(y * W + x) * 4 + 3]) { sy += y; n++ }
+  return { x: x0, y: n ? Math.round(sy / n) : Math.round(H / 2) }
 }
 
 // noGreen … 緑を使わないボス（黒龍）。真緑の背景が映り込んで緑がかった煙・風（黒翼烈風・終焉の黒焔）を、緑の無い色にする
@@ -183,6 +228,13 @@ const writeAnim = (frames, ms, out) => {
   return writeWebp(['-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${W}x${H}`, '-framerate', String(1000 / TICK), '-i', '-',
     '-c:v', 'libwebp_anim', '-loop', '0'], out, input)
 }
+// 同じ大きさのコマを横に並べた1枚
+const writeStrip = (fs, out) => {
+  const w = fs[0].W, h = fs[0].H, u = fs.length
+  const strip = Buffer.alloc(w * u * h * 4)
+  fs.forEach((f, i) => { for (let y = 0; y < h; y++) f.data.copy(strip, (y * w * u + i * w) * 4, y * w * 4, (y + 1) * w * 4) })
+  return writeWebp(['-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${w * u}x${h}`, '-i', '-', '-c:v', 'libwebp'], out, strip)
+}
 const writeWebp = (args, out, input) => {
   execFileSync('ffmpeg', ['-v', 'error', '-y', ...args, '-pix_fmt', 'yuva420p', '-quality', String(QUALITY), '-compression_level', '6', out], { input, maxBuffer: 1 << 28 })
   return statSync(out).size
@@ -230,12 +282,26 @@ const build = (key, def, dir) => {
     const box = snap(used.reduce((b, c) => union(b, c.box), base), q)
     const fs = used.map(c => frameOf(sh, c, box, k))
     const w = fs[0].W, h = fs[0].H, u = fs.length
-    const strip = Buffer.alloc(w * u * h * 4)
-    fs.forEach((f, i) => { for (let y = 0; y < h; y++) f.data.copy(strip, (y * w * u + i * w) * 4, y * w * 4, (y + 1) * w * 4) })
-    sizes.push([m.key, writeWebp(['-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${w * u}x${h}`, '-i', '-', '-c:v', 'libwebp'], path.join(OUT, bossFileOf(key, m.key)), strip)])
+    sizes.push([m.key, writeStrip(fs, path.join(OUT, bossFileOf(key, m.key)))])
     notes.push(`${m.file} ${sh.cells.length}コマ（倍率${s.toFixed(2)}・ずれ ${t.dx},${t.dy}）`)
-    entry.motions[m.key] = { frames: u, w, h, ox: (base.x0 - box.x0) * k, oy: (base.y0 - box.y0) * k,
-      ms: m.ms[u] || Array(u).fill(150), hit: BOSS_HIT_OF[u] ?? Math.floor(u / 2) }
+    const ox = (base.x0 - box.x0) * k, oy = (base.y0 - box.y0) * k, hit = BOSS_HIT_OF[u] ?? Math.floor(u / 2)
+    const tip = tipOf([fs[hit]])
+    entry.motions[m.key] = { frames: u, w, h, ox, oy, ms: m.ms[u] || Array(u).fill(150), hit, front: [tip.x - ox, tip.y - oy] }
+  }
+  // エフェクト（あるものだけ）。竜と同じ細かさに縮めてから size 倍。コマの位置はマスの中の位置のまま（ChatGPT はどのマスも同じところに描く）
+  //   飛ぶ＝先（いちばん左）・当たる＝真ん中を、画面で相手の真ん中に合わせる
+  entry.fx = {}
+  for (const e of def.effects || []) {
+    const file = path.join(dir, `${e.file}.png`)
+    if (!existsSync(file)) { notes.push(`${e.file}：まだ無い`); continue }
+    const sh = loadSheet(file, def, 1, BOSS_FX_COLS)
+    if (sh.cells.some(c => !c.box)) throw new Error(`${e.file}：コマのどれかが空`)
+    const box = snap(sh.cells.reduce((b, c) => union(b, c.box), sh.cells[0].box), q)
+    const fs = sh.cells.map(c => frameOf(sh, c, box, k * (e.size || 1)))
+    const w = fs[0].W, h = fs[0].H
+    const a = e.kind === 'fly' ? tipOf(fs) : { x: Math.round(w / 2), y: Math.round(h / 2) }
+    sizes.push([e.file, writeStrip(fs, path.join(OUT, bossFileOf(key, bossFxKindOf(e.motion, e.kind))))])
+    entry.fx[e.motion] = { ...entry.fx[e.motion], [e.kind]: { frames: fs.length, w, h, ax: a.x, ay: a.y } }
   }
   // 遭遇のイラスト（透明な背景のまま・体がちょうど収まる正方形）
   const illustFile = path.join(dir, 'イラスト.png')
@@ -257,11 +323,17 @@ const writeList = (art) => {
   const lines = ['// tools/v2cap-boss-art.mjs が書くファイル（手で直さない）。ボス → 待機の枠・待機・技ごとのコマ',
     '//   base … 待機の枠の大きさ（正方形・px）／idle … 待機のコマの数と1コマずつの長さ（ミリ秒）／illust … 遭遇のイラストがあるか',
     '//   motions … 技のキー → コマの数・1コマの大きさ（w・h）・待機の枠の左上が1コマの中のどこにあるか（ox・oy）・1コマの長さ・当たるコマ（0から）',
+    '//             front … 当たるコマの竜のいちばん前（待機の枠の左上から・飛ぶエフェクトが出るところ）',
+    '//   fx … 技のキー → fly（飛ぶ）・hit（当たる）のエフェクト：コマの数・1コマの大きさ（待機の枠と同じpx）・合わせる点（ax・ay＝飛ぶは先・当たるは真ん中）',
     'export const BOSS_ART = {']
   for (const [key, e] of Object.entries(art)) {
     lines.push(`  ${key}: {`, `    base: ${e.base}, illust: ${e.illust},`, `    idle: { frames: ${e.idle.frames}, ms: [${[].concat(e.idle.ms).join(', ')}] },`, '    motions: {')
     for (const [mk, m] of Object.entries(e.motions)) {
-      lines.push(`      ${mk}: { frames: ${m.frames}, w: ${m.w}, h: ${m.h}, ox: ${m.ox}, oy: ${m.oy}, ms: [${m.ms.join(', ')}], hit: ${m.hit} },`)
+      lines.push(`      ${mk}: { frames: ${m.frames}, w: ${m.w}, h: ${m.h}, ox: ${m.ox}, oy: ${m.oy}, ms: [${m.ms.join(', ')}], hit: ${m.hit}${m.front ? `, front: [${m.front.join(', ')}]` : ''} },`)
+    }
+    lines.push('    },', '    fx: {')
+    for (const [mk, f] of Object.entries(e.fx || {})) {
+      lines.push(`      ${mk}: { ${Object.entries(f).map(([kind, a]) => `${kind}: { frames: ${a.frames}, w: ${a.w}, h: ${a.h}, ax: ${a.ax}, ay: ${a.ay} }`).join(', ')} },`)
     }
     lines.push('    },', '  },')
   }
@@ -282,7 +354,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
     const files = readdirSync(dir, { withFileTypes: true }).filter(e => e.isFile()).map(e => e.name)
     for (const f of files) if (!isSample(f) && !known.has(path.basename(f, path.extname(f)))) console.log(`  ? ${def.name}：使わない絵（名前が決まりと違う）：${f}`)
     const srcs = files.filter(f => !isSample(f)).map(f => statSync(path.join(dir, f)).mtimeMs)
-    const outs = ['idle', ...def.motions.map(m => m.key)].map(k => path.join(OUT, bossFileOf(key, k)))
+    const fxs = (def.effects || []).filter(e => files.includes(`${e.file}.png`)).map(e => bossFxKindOf(e.motion, e.kind))
+    const outs = ['idle', ...def.motions.map(m => m.key), ...fxs].map(k => path.join(OUT, bossFileOf(key, k)))
     const fresh = !FORCE && art[key] && outs.every(o => existsSync(o) && statSync(o).mtimeMs >= Math.max(...srcs))
     if (fresh) continue
     try {

@@ -108,7 +108,8 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
   const bossArt = useMemo(() => (bossKey ? bossArtOf(bossKey) : null), [bossKey])
   useEffect(() => {
     if (!bossArt) return
-    for (const src of [bossArt.idle.src, ...Object.values(bossArt.motions).map(m => m.src)]) { const im = new Image(); im.src = src }
+    const fxSrcs = Object.values(bossArt.motions).flatMap(m => Object.values(m.fx || {}).map(a => a.src))
+    for (const src of [bossArt.idle.src, ...Object.values(bossArt.motions).map(m => m.src), ...fxSrcs]) { const im = new Image(); im.src = src }
   }, [bossArt])
   const bossMemo = useRef(newBossMotionMemo())
 
@@ -130,13 +131,15 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
           if (lines.length) setLogs(v => [...v, ...lines].slice(-80))
           const t0 = now / 1000
           let evs = fxEventsOf(fresh, s.a.name, s.b.name)
-          // ボスは技ごとに絵が違う：構えた技を覚えておき、動いた（act）ごとに流す絵を付ける
+          // ボスは技ごとに絵が違う：構えた技を覚えておき、動いた（act）ごとに流す絵を付ける（landed＝当たったか。外れたら当たるエフェクトを出さない）
+          //   ダメージの数字と揺れは、エフェクトが自分に届いたとき（impactMs）
           if (bossArt) {
             for (const l of fresh) if (l.type === 'cast' && l.side === s.b.name) bossMemo.current.casts.add(l.skill)
-            evs = evs.map(e => (e.kind === 'act' && e.side === 'b' ? { ...e, motion: bossArt.motions[bossMotionKeyOf(bossArt.key, e, bossMemo.current)] || null } : e))
+            evs = evs.map((e, i) => (e.kind === 'act' && e.side === 'b'
+              ? { ...e, motion: bossArt.motions[bossMotionKeyOf(bossArt.key, e, bossMemo.current)] || null, landed: evs[i + 1]?.kind !== 'miss' } : e))
           }
-          fxRef.current = [...fxRef.current.filter(f => t0 - f.t0 < POP_SEC + 0.5),
-            ...scheduleFx(evs, t0, { a: playerMotion ? playerMotion.hitMs / 1000 : 0, b: (e) => (e.motion ? e.motion.hitMs / 1000 : 0) })]
+          fxRef.current = [...fxRef.current.filter(f => t0 - f.t0 < POP_SEC + 1.5),
+            ...scheduleFx(evs, t0, { a: playerMotion ? playerMotion.hitMs / 1000 : 0, b: (e) => (e.motion ? e.motion.impactMs / 1000 : 0) })]
         }
       }
       last.current = now
@@ -257,7 +260,7 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
     <div style={{ ...box, padding:'12px' }}>
       {/* 自分（左）とモンスター（右） */}
       <V2capAtbStage st={s} fx={fxRef.current} now={performance.now() / 1000} playerSrc={playerSrc} playerMotion={playerMotion}
-        foeSrc={bossArt ? bossArt.idle.src : enemyArtSrc(en.name)} foeBig={!!bossArt} />
+        foeSrc={bossArt ? bossArt.idle.src : enemyArtSrc(en.name)} foeBig={!!bossArt} foeArt={bossArt} />
       <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color: TEXT.label, margin:'6px 0', gap:'8px', flexWrap:'wrap' }}>
         <span>次：{nextLabel}</span>
         <span>削り {dealtPct.toFixed(1)}%・{Math.round(dps).toLocaleString()}ダメージ/秒</span>
@@ -269,7 +272,7 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
           <span style={{ color: TEXT.label, fontSize:'10px' }}>動きを見る［開発］</span>
           {Object.entries(bossArt.motions).map(([k, m]) => (
             <button key={k} disabled={paused}
-              onClick={() => { fxRef.current = [...fxRef.current, { kind:'act', side:'b', motion: m, t0: performance.now() / 1000 }] }}
+              onClick={() => { fxRef.current = [...fxRef.current, { kind:'act', side:'b', motion: m, landed: true, t0: performance.now() / 1000 }] }}
               style={{ ...miniBtn('#ff8866'), padding:'4px 8px', fontSize:'11px' }}>{m.label}</button>
           ))}
         </div>
