@@ -71,14 +71,16 @@ test('待機：振り下ろし（はじめの35%）は速く、振り上げは�
   assert.ok(Math.abs(down.wingF) < Math.abs(down.wingN), '奥の翼は小さく動かす')
 })
 
-test('技の姿勢：黒爪は前（左）へ踏み込む・焦熱の吐息は首を引いてから突き出す・黒翼烈風は翼を後ろへ引いてから前へ2回あおぐ・終焉の黒焔は首を上げてため、口の火が最大', () => {
+test('技の姿勢：黒爪は前（左）へ踏み込む・焦熱の吐息は首を引いてから突き出す・黒翼烈風は翼を大きく広げてから打ち下ろす・終焉の黒焔は首を上げてため、口の火が最大', () => {
   const M = BOSS_ILLUST_DEFS.varuzenoku.motions
   const at = (k, ms) => motionPoseAt(M[k].keys, ms)
   assert.ok(at('claw', M.claw.hitMs).x < -0.05)
   assert.ok(at('breath', 420).head > 0 && at('breath', M.breath.hitMs).head < 0)
-  // 手前の翼は＋で後ろ（右）へ倒れ、−で前（相手の方）へ倒れる
-  assert.ok(at('gale', 320).wingN > 20 && at('gale', 440).wingN < -30 && at('gale', 580).wingN > 10 && at('gale', M.gale.hitMs).wingN < -35)
-  assert.ok(at('gale', M.gale.hitMs).wingNSq > 0.15, 'あおぐと手前の翼が縮む')
+  // 【確定】2026-10-29 ユーザー「もっと羽を大きく広げて敵に向かってバフって」：広げる＝翼を上げて長さの向きに伸ばす（Sq が−）・打ち下ろす＝翼を下げて縮める（手前へ来る）
+  assert.ok(at('gale', 520).wingN < -15 && at('gale', 520).wingNSq < -0.2 && at('gale', 520).wingF > 20 && at('gale', 520).wingFSq < -0.15, '両方の翼を大きく広げる')
+  assert.ok(at('gale', M.gale.hitMs).wingN > 30 && at('gale', M.gale.hitMs).wingNSq > 0.25 && at('gale', M.gale.hitMs).wingF < -20, '一気に打ち下ろす')
+  assert.ok(M.gale.hitMs - 520 <= 150, '打ち下ろしは速い')
+  assert.ok(at('gale', M.gale.hitMs).x < -0.05 && at('gale', 520).x > 0, 'のけぞってから相手の方へ踏み込む')
   assert.ok(at('doom', 640).r > 0 && at('doom', 640).neck > 25 && at('doom', 640).head > 35 && at('doom', M.doom.hitMs).glow === 1)
   for (const k of Object.keys(M)) {
     assert.deepEqual(Object.values(at(k, 0)).every(v => v === 0), true, `${k} は待機から始まる`)
@@ -195,17 +197,19 @@ test('【確定】2026-10-28 焦熱の吐息・終焉の黒焔：下あごを大
   }
 })
 
-test('【確定】2026-10-28 黒翼烈風：両方の翼のふちに風の筋・飛ぶ風は翼から（1回めのあおぎで先に小さく・2回めで2つ・1つめの届く時刻がダメージ）', () => {
+test('【確定】2026-10-29 黒翼烈風：打ち下ろすとき両方の翼のふちに風の筋・風は胸の前（いちばん大きい＝ダメージ）と両方の翼の先から相手へ', () => {
   const m = bossIllustOf('varuzenoku').motions.gale
   assert.equal(m.shots.length, 3)
-  assert.ok(m.shots.some(sh => sh.delayMs < -200 && sh.size < 1), '1回めのあおぎの小さな風')
+  const defs = BOSS_ILLUST_DEFS.varuzenoku.motions.gale.shots
+  assert.equal(defs[0].part, 'body')
+  assert.ok(defs[0].size > Math.max(...defs.slice(1).map(sh => sh.size)), '胸の前の風がいちばん大きい')
+  assert.deepEqual(new Set(defs.slice(1).map(sh => sh.part)), new Set(['wingF', 'wingN']))
+  assert.ok(defs.every(sh => Math.abs(sh.delayMs) <= 60), '打ち下ろした時刻にまとめて出る')
   assert.equal(m.shots[0].delayMs, 0)
   assert.deepEqual(m.front, m.shots[0].front)
-  for (const sh of BOSS_ILLUST_DEFS.varuzenoku.motions.gale.shots) assert.match(sh.part, /^wing/)
-  for (const ms of [420, 690]) {
-    const tr = illustTrailsAt('varuzenoku', m, ms, 0)
-    assert.ok(tr.length >= 6 && tr.every(t => t.kind === 'wind'), `${ms}ms：あおぐたびに両方の翼に筋`)
-  }
+  assert.deepEqual(illustTrailsAt('varuzenoku', m, 500, 0), [], '広げているあいだは筋なし')
+  const tr = illustTrailsAt('varuzenoku', m, 600, 0)
+  assert.ok(tr.length >= 8 && tr.every(t => t.kind === 'wind'), '打ち下ろすあいだ両方の翼に筋')
   assert.deepEqual(new Set(BOSS_ILLUST_DEFS.varuzenoku.motions.gale.trails.map(t => t.part)), new Set(['wingF', 'wingN']))
   // 口から出る技は出どころが1つ
   assert.equal(bossIllustOf('varuzenoku').motions.breath.shots.length, 1)

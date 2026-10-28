@@ -21,7 +21,7 @@
 //     ・前脚（arm）と下あご（jaw）を体・頭から切り分けて別に回す（cuts＝道具が 640px の立ち絵の上の多角形で切る）
 //       黒爪＝前脚を振り上げて振り下ろす（爪の先に残像の筋）・当たる絵は右上から左下へ引いて出す（wipe）
 //       焦熱の吐息・終焉の黒焔＝下あごを大きく開けて吐く（開いた口の中は画面で描く・火は口の中から出る）
-//     ・黒翼烈風＝両方の翼のふちに風の筋（残像）・飛ぶ絵は口でなく翼から（shots＝相手に近い奥の翼の先とふちから2つ）
+//     ・黒翼烈風＝（2026-10-29 作り直し）翼を大きく広げてから一気に打ち下ろす・翼のふちに風の筋・風は胸の前と両方の翼の先から（shots）
 // ============================================================
 import { BOSS_ILLUST } from './bossIllustList.js'
 import { BOSS_DEFS, BOSS_ART_DIR, bossFileOf, bossArtOf } from './bossArt.js'
@@ -98,25 +98,25 @@ export const BOSS_ILLUST_DEFS = {
         [920, { x: -0.045, r: -2, neck: -6, head: -7, glow: 0.5, jaw: -32, arm: -22 }],
         [1250, {}],
       ] },
-      // 【確定】2026-10-28 ユーザー「羽根の攻撃は敵の方に風を激しく送るモーションがいいな」：
-      //   翼を後ろへ引いてから、相手の方へ2回あおぐ（手前の翼は前へ倒して縮める）。1回めで小さな風・2回めで大きな風（ダメージ）
-      gale: { totalMs: 1300, hitMs: 700, keys: [
+      // 【確定】2026-10-29 ユーザー「羽根の攻撃がおかしい、もっと羽を大きく広げて敵に向かってバフってやってもらいたい」
+      //   （10-28 の「後ろへ引いて前へ2回あおぐ」は翼がワイパーのように倒れて見えた）：
+      //   大きくのけぞって両方の翼を高く広げ（長さの向きに伸ばす＝Sq を−）、一瞬ためて、体ごと相手の方へ踏み込みながら一気に打ち下ろす（縮める＝手前へ来る）。
+      //   打ち下ろした時刻に、翼の先と胸の前から風が相手へ飛ぶ（胸の前のがいちばん大きい＝1つめ・ダメージ）
+      gale: { totalMs: 1350, hitMs: 640, keys: [
         [0, {}],
-        [320, { x: 0.04, y: -0.02, r: 6, neck: 6, head: 6, wingN: 24, wingF: 16, arm: 10, jaw: -6 }],
-        [440, { x: -0.04, y: 0.01, r: -5, neck: -6, head: -6, wingN: -34, wingF: -20, wingNSq: 0.2, wingFSq: 0.14, arm: -10, jaw: -12 }],
-        [580, { x: 0.01, y: -0.01, r: 2, wingN: 16, wingF: 10, arm: 4 }],
-        [700, { x: -0.07, y: 0.02, r: -8, neck: -8, head: -8, wingN: -40, wingF: -24, wingNSq: 0.24, wingFSq: 0.18, arm: -14, jaw: -16 }],
-        [900, { x: -0.06, y: 0.02, r: -6, neck: -6, head: -6, wingN: -28, wingF: -16, wingNSq: 0.12, wingFSq: 0.08, jaw: -10 }],
-        [1300, {}],
+        [380, { x: 0.04, y: -0.05, r: 9, neck: 10, head: 8, wingN: -20, wingNSq: -0.28, wingF: 30, wingFSq: -0.22, arm: 12, jaw: -10 }],
+        [520, { x: 0.045, y: -0.055, r: 10, neck: 11, head: 9, wingN: -22, wingNSq: -0.3, wingF: 32, wingFSq: -0.24, arm: 13, jaw: -12 }],
+        [640, { x: -0.09, y: 0.035, r: -10, neck: -8, head: -10, wingN: 38, wingNSq: 0.32, wingF: -26, wingFSq: 0.26, arm: -14, jaw: -20 }],
+        [780, { x: -0.085, y: 0.03, r: -9, neck: -7, head: -9, wingN: 34, wingNSq: 0.28, wingF: -24, wingFSq: 0.22, arm: -12, jaw: -16 }],
+        [1020, { x: -0.04, y: 0.01, r: -4, wingN: 10, wingNSq: 0.08, wingF: -8, wingFSq: 0.05 }],
+        [1350, {}],
       ], trails: [
-        { kind: 'wind', part: 'wingN', pts: [[530, 8], [600, 92], [630, 230]], fromMs: 320, toMs: 440, lagMs: 90, fadeMs: 160 },
-        { kind: 'wind', part: 'wingF', pts: [[18, 192], [62, 118], [130, 62]], fromMs: 320, toMs: 440, lagMs: 90, fadeMs: 160 },
-        { kind: 'wind', part: 'wingN', pts: [[530, 8], [600, 92], [630, 230]], fromMs: 580, toMs: 700, lagMs: 90, fadeMs: 200 },
-        { kind: 'wind', part: 'wingF', pts: [[18, 192], [62, 118], [130, 62]], fromMs: 580, toMs: 700, lagMs: 90, fadeMs: 200 },
+        { kind: 'wind', part: 'wingN', pts: [[530, 8], [600, 92], [630, 230], [616, 330]], fromMs: 520, toMs: 640, lagMs: 100, fadeMs: 220 },
+        { kind: 'wind', part: 'wingF', pts: [[18, 192], [62, 118], [130, 62], [268, 30]], fromMs: 520, toMs: 640, lagMs: 100, fadeMs: 220 },
       ], shots: [
-        { part: 'wingN', pt: [500, 60], delayMs: 0, size: 1.1 },
-        { part: 'wingF', pt: [18, 192], delayMs: 40, size: 0.9 },
-        { part: 'wingN', pt: [500, 60], delayMs: -260, size: 0.75 },
+        { part: 'body', pt: [150, 250], delayMs: 0, size: 1.45 },
+        { part: 'wingF', pt: [18, 192], delayMs: -30, size: 0.9 },
+        { part: 'wingN', pt: [560, 120], delayMs: 30, size: 0.9 },
       ] },
       // 首を真上に上げ、口に黒い火の玉をためて（震える）、突き出して撃つ
       doom: { totalMs: 1800, hitMs: 1080, keys: [
