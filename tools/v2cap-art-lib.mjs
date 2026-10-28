@@ -8,8 +8,16 @@
 // 画素の並びは { data, W, H }（data は1画素 3バイト（rgb24）か4バイト（rgba））
 // ============================================================
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 
 const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+
+// 絵の中身から作る印（8文字）。画面ではアドレスの後ろに ?v=印 を付ける（lib/bossArt.js・lib/motionArt.js）
+//   【確定】2026-10-28 ユーザー「攻撃モーションのとき、枠に収まりきってないよ」（PCの本番）：サービスワーカー（public/sw.js）は
+//   絵をまずキャッシュから出して裏で入れ替えるので、同じ名前で絵を描き直すと、次に開いたときだけ古い絵（コマの数・大きさが違う）が
+//   新しい一覧の割り方で出て、竜がずれて切れた。中身が変わればアドレスも変わるようにする
+export const versionOf = (file) => createHash('md5').update(readFileSync(file)).digest('hex').slice(0, 8)
 export const each4 = (W, H, p, fn) => {
   const x = p % W, y = (p / W) | 0
   for (const [dx, dy] of N4) { const xx = x + dx, yy = y + dy; if (xx >= 0 && yy >= 0 && xx < W && yy < H) fn(yy * W + xx) }

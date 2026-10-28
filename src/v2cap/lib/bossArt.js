@@ -76,7 +76,12 @@ export const bossKeyOfName = (name) => Object.keys(BOSS_DEFS).find(k => BOSS_DEF
 
 export const BOSS_FX_COLS = 3   // エフェクトは3列×2段
 export const bossFileOf = (key, kind) => `${key}-${kind}.webp`
-export const bossSrcOf = (key, kind) => `${BOSS_ART_DIR}/${bossFileOf(key, kind)}`
+// 画面で使うアドレス。後ろに絵の中身の印（?v=・一覧の v）を付ける＝描き直したらアドレスが変わる
+//   【確定】2026-10-28 サービスワーカーが古い絵をキャッシュから出し、新しい一覧の割り方で竜がずれて切れた（tools/v2cap-art-lib.mjs の versionOf）
+export const bossSrcOf = (key, kind) => {
+  const v = BOSS_ART[key]?.v?.[kind]
+  return `${BOSS_ART_DIR}/${bossFileOf(key, kind)}${v ? `?v=${v}` : ''}`
+}
 export const bossFxKindOf = (motion, kind) => `fx-${motion}-${kind}`
 
 // 画面で使う形（無ければ null）

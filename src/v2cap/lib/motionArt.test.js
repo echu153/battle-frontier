@@ -7,6 +7,7 @@ import { MOTION_ART } from './motionArtList.js'
 import { motionOf, motionFrameAt, motionFileOf, motionMsOf, motionHitOf, MOTION_OUT, IDLE_SIZE } from './motionArt.js'
 import { ART_BASE, ART_GIF } from './classArt.js'
 import { motionTargetOf, keyGreen, splitFrames, bodyOf, framesByComponents } from '../../../tools/v2cap-motion.mjs'
+import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 
 const PUB = new URL('../../../public/V2newjob/', import.meta.url)
 
@@ -22,6 +23,8 @@ test('一覧の絵はぜんぶ public/V2newjob/motion にあり、待機GIFの�
         assert.equal(m.ms.length, m.frames, 'コマの数と長さの数が同じ')
         assert.ok(m.hit >= 0 && m.hit < m.frames)
         assert.ok(m.w >= IDLE_SIZE && m.h >= IDLE_SIZE, '1コマは待機GIF（224）以上')
+        // 【確定】2026-10-28 アドレスの ?v= は絵の中身の印（描き直して道具をやり直さないと落ちる＝古い絵がキャッシュから出てコマがずれない）
+        assert.equal(m.v, versionOf(file), `${cls}${g} ${key} の印（node tools/v2cap-motion.mjs をやり直す）`)
       }
     }
   }
@@ -39,7 +42,7 @@ test('【確定】2026-10-26 暗殺者の女性の攻撃（ユーザーが ChatG
   const m = motionOf('暗殺者', 'f', 'attack')
   assert.ok(m)
   assert.equal(m.frames, 4, '②〜⑤の4コマ')
-  assert.equal(m.src, '/V2newjob/motion/ansatusya-f-attack.webp')
+  assert.equal(m.src, `/V2newjob/motion/ansatusya-f-attack.webp?v=${MOTION_ART['暗殺者'].f.attack.v}`)
   assert.equal(m.totalMs, 500)
   assert.equal(m.hitMs, 200, '④（斬る）で当たる')
   assert.equal(motionOf('暗殺者', 'm', 'attack'), null, '男性はまだ無い＝踏み込み')

@@ -6,6 +6,7 @@ import { Buffer } from 'node:buffer'
 import { BOSS_ART } from './bossArtList.js'
 import { BOSS_DEFS, BOSS_ART_DIR, BOSS_HIT_OF, bossArtOf, bossFileOf, bossFxKindOf, bossKeyOfName, bossMotionKeyOf, newBossMotionMemo } from './bossArt.js'
 import { cellsOf, colsOf, dropGreen, alignCells, tipOf } from '../../../tools/v2cap-boss-art.mjs'
+import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { componentsOf } from '../../../tools/v2cap-motion.mjs'
 
 const OUT = new URL(`../../../public${BOSS_ART_DIR}/`, import.meta.url)
@@ -28,6 +29,19 @@ test('一覧の絵はぜんぶ public/v2cap-art/boss にあって軽い（待機
 test('public/v2cap-art/boss の絵はどれも一覧に載っている（名前を変えて残った絵がない）', () => {
   const known = new Set(Object.entries(BOSS_ART).flatMap(([key, e]) => kindsOf(e).map(k => bossFileOf(key, k))))
   for (const f of readdirSync(OUT)) assert.ok(known.has(f), `${f} は一覧に無い`)
+})
+
+test('【確定】2026-10-28 絵のアドレスに中身の印（?v=）：一覧の印は public の絵の中身と同じ（描き直したら道具をやり直す＝古い絵がキャッシュから出てコマがずれない）', () => {
+  for (const [key, e] of Object.entries(BOSS_ART)) {
+    for (const k of kindsOf(e)) {
+      assert.equal(e.v?.[k], versionOf(new URL(bossFileOf(key, k), OUT)), `${key} ${k} の印（node tools/v2cap-boss-art.mjs をやり直す）`)
+    }
+    assert.deepEqual(Object.keys(e.v).sort(), kindsOf(e).sort(), '印は一覧の絵の分だけ')
+  }
+  const a = bossArtOf('varuzenoku')
+  for (const src of [a.idle.src, a.illust, ...Object.values(a.motions).flatMap(m => [m.src, ...Object.values(m.fx || {}).map(f => f.src)])]) {
+    assert.match(src, /\.webp\?v=[0-9a-f]{8}$/, src)
+  }
 })
 
 test('待機は6か8コマ・技は最初と最後を除いた4か6コマ・待機の枠がまるごと入る・長さは決まりのまま', () => {
@@ -76,7 +90,7 @@ test('エフェクトの時刻：飛ぶ絵は当たるコマで出て flyMs で�
     const m = a.motions[k], d = BOSS_DEFS.varuzenoku.effects.find(e => e.motion === k && e.kind === 'fly')
     assert.equal(m.flyMs, d.flyMs)
     assert.equal(m.impactMs, m.hitMs + d.flyMs)
-    assert.equal(m.fx.fly.src, `${BOSS_ART_DIR}/varuzenoku-fx-${k}-fly.webp`)
+    assert.equal(m.fx.fly.src, `${BOSS_ART_DIR}/varuzenoku-fx-${k}-fly.webp?v=${BOSS_ART.varuzenoku.v[`fx-${k}-fly`]}`)
     assert.deepEqual(m.fx.hit.ms, BOSS_DEFS.varuzenoku.effects.find(e => e.motion === k && e.kind === 'hit').ms)
   }
 })
@@ -108,7 +122,7 @@ test('【確定】2026-10-28 黒龍ヴァルゼノクの絵（ユーザーが Ch
   assert.equal(bossKeyOfName('黒龍ヴァルゼノク'), 'varuzenoku')
   assert.deepEqual(Object.values(a.motions).map(m => m.label), ['黒爪', '焦熱の吐息', '黒翼烈風', '終焉の黒焔'])
   assert.ok(a.illust)
-  assert.equal(a.idle.src, `${BOSS_ART_DIR}/varuzenoku-idle.webp`)
+  assert.equal(a.idle.src, `${BOSS_ART_DIR}/varuzenoku-idle.webp?v=${BOSS_ART.varuzenoku.v.idle}`)
   // 当たる時刻＝当たるコマの頭
   const c = a.motions.claw
   assert.equal(c.hitMs, c.ms.slice(0, c.hit).reduce((s, v) => s + v, 0))

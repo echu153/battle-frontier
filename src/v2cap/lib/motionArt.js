@@ -33,7 +33,8 @@ export const motionOf = (cls, gender = 'm', key = 'attack', baseCls = null) => {
   if (!m) return null
   const totalMs = m.ms.reduce((s, v) => s + v, 0)
   const hitMs = m.ms.slice(0, m.hit).reduce((s, v) => s + v, 0)
-  return { ...m, src: `${ART_DIR}/${MOTION_OUT}/${motionFileOf(owner, gender, key)}`, totalMs, hitMs }
+  // 後ろに絵の中身の印（?v=）を付ける＝描き直したらアドレスが変わる（2026-10-28 サービスワーカーが古い絵を出してコマがずれた・lib/bossArt.js の bossSrcOf）
+  return { ...m, src: `${ART_DIR}/${MOTION_OUT}/${motionFileOf(owner, gender, key)}${m.v ? `?v=${m.v}` : ''}`, totalMs, hitMs }
 }
 
 // 流しはじめてから elapsedMs のときのコマ（0から）。流し終わったら -1

@@ -24,7 +24,7 @@ import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'nod
 import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { probe, bleed } from './v2cap-art-lib.mjs'
+import { probe, bleed, versionOf } from './v2cap-art-lib.mjs'
 import { ART_BASE, ART_GENDERS, GIF_CLASS_ALIAS, GIF_OUT } from '../src/v2cap/lib/classArt.js'
 import { MOTION_SRC_DIR, MOTION_OUT, MOTION_KEYS, SHEET_FRAMES, IDLE_SIZE, motionMsOf, motionHitOf, motionFileOf } from '../src/v2cap/lib/motionArt.js'
 import { MOTION_ART } from '../src/v2cap/lib/motionArtList.js'
@@ -271,14 +271,17 @@ const writeList = (art) => {
   const lines = ['// tools/v2cap-motion.mjs が書くファイル（手で直さない）。クラス → 男女 → 動き → コマの数・1コマの大きさ・ずらし・速さ',
     '//   frames … コマの数／w・h … 1コマの大きさ（px）／ox・oy … 待機GIF（224×224）の左上が1コマの中のどこにあるか',
     '//   ms … 1コマの長さ（ミリ秒）／hit … ダメージが入るコマ（0から）',
+    '//   v … 絵の中身の印（画面のアドレスの ?v=・描き直したら変わる＝古い絵がキャッシュから出ない）',
     'export const MOTION_ART = {']
   for (const cls of Object.keys(ART_BASE)) {
     if (!art[cls]) continue
     lines.push(`  '${cls}': {`)
     for (const g of ['m', 'f']) {
       if (!art[cls][g]) continue
-      const ks = Object.entries(art[cls][g]).map(([k, e]) =>
-        `${k}: { frames: ${e.frames}, w: ${e.w}, h: ${e.h}, ox: ${e.ox}, oy: ${e.oy}, ms: [${e.ms.join(', ')}], hit: ${e.hit} }`)
+      const ks = Object.entries(art[cls][g]).map(([k, e]) => {
+        const f = path.join(OUT, motionFileOf(cls, g, k))
+        return `${k}: { frames: ${e.frames}, w: ${e.w}, h: ${e.h}, ox: ${e.ox}, oy: ${e.oy}, ms: [${e.ms.join(', ')}], hit: ${e.hit}${existsSync(f) ? `, v: '${versionOf(f)}'` : ''} }`
+      })
       lines.push(`    ${g}: { ${ks.join(', ')} },`)
     }
     lines.push('  },')

@@ -28,7 +28,7 @@ import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'nod
 import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { decode, bleed, alphaBox, encodeSquare } from './v2cap-art-lib.mjs'
+import { decode, bleed, alphaBox, encodeSquare, versionOf } from './v2cap-art-lib.mjs'
 import { keyGreen, componentsOf, readRgba, scaleRgba } from './v2cap-motion.mjs'
 import { BOSS_DEFS, BOSS_ART_SRC_DIR, BOSS_ART_DIR, BOSS_SHEET_COLS, BOSS_SHEET_ROWS, BOSS_ILLUST_SIZE, BOSS_HIT_OF, BOSS_FX_COLS, bossFileOf, bossFxKindOf } from '../src/v2cap/lib/bossArt.js'
 import { ENEMY_ART_SRC_DIR } from '../src/v2cap/lib/enemyArt.js'
@@ -325,8 +325,12 @@ const writeList = (art) => {
     '//   motions … 技のキー → コマの数・1コマの大きさ（w・h）・待機の枠の左上が1コマの中のどこにあるか（ox・oy）・1コマの長さ・当たるコマ（0から）',
     '//             front … 当たるコマの竜のいちばん前（待機の枠の左上から・飛ぶエフェクトが出るところ）',
     '//   fx … 技のキー → fly（飛ぶ）・hit（当たる）のエフェクト：コマの数・1コマの大きさ（待機の枠と同じpx）・合わせる点（ax・ay＝飛ぶは先・当たるは真ん中）',
+    '//   v … 絵ごとの中身の印（画面のアドレスの ?v=・描き直したら変わる＝古い絵がキャッシュから出ない）',
     'export const BOSS_ART = {']
   for (const [key, e] of Object.entries(art)) {
+    const kinds = ['idle', ...Object.keys(e.motions), ...Object.entries(e.fx || {}).flatMap(([mk, f]) => Object.keys(f).map(kind => bossFxKindOf(mk, kind))),
+      ...(e.illust ? ['illust'] : [])]
+    const v = kinds.map(k => [k, path.join(OUT, bossFileOf(key, k))]).filter(([, f]) => existsSync(f)).map(([k, f]) => `'${k}': '${versionOf(f)}'`)
     lines.push(`  ${key}: {`, `    base: ${e.base}, illust: ${e.illust},`, `    idle: { frames: ${e.idle.frames}, ms: [${[].concat(e.idle.ms).join(', ')}] },`, '    motions: {')
     for (const [mk, m] of Object.entries(e.motions)) {
       lines.push(`      ${mk}: { frames: ${m.frames}, w: ${m.w}, h: ${m.h}, ox: ${m.ox}, oy: ${m.oy}, ms: [${m.ms.join(', ')}], hit: ${m.hit}${m.front ? `, front: [${m.front.join(', ')}]` : ''} },`)
@@ -335,7 +339,7 @@ const writeList = (art) => {
     for (const [mk, f] of Object.entries(e.fx || {})) {
       lines.push(`      ${mk}: { ${Object.entries(f).map(([kind, a]) => `${kind}: { frames: ${a.frames}, w: ${a.w}, h: ${a.h}, ax: ${a.ax}, ay: ${a.ay} }`).join(', ')} },`)
     }
-    lines.push('    },', '  },')
+    lines.push('    },', `    v: { ${v.join(', ')} },`, '  },')
   }
   lines.push('}', '')
   writeFileSync(LIST, lines.join('\n'))
