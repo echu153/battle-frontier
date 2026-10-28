@@ -4,6 +4,7 @@ import { buffChips, ailChips, stateChips, needNow, CAST_SEC } from '../core/atb.
 import { STAT_DEFS } from '../core/stats.js'
 import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC } from '../lib/atbFx.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
+import { illustPoseAt } from '../lib/bossIllust.js'
 
 // ============================================================
 // 「レベルキャップあり」版（v2cap）— ATB戦闘の舞台（自分が左・モンスターが右）
@@ -22,6 +23,9 @@ import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
 //   ・ボスの技のエフェクト（BossFx・2026-10-28 ユーザー「エフェクトは別に作って、しっかり敵（プレイヤー）に当たってるように見せたい」）：
 //     飛ぶ絵＝当たるコマで竜のいちばん前から出て、自分の真ん中まで飛ぶ（向きも合わせる）／当たる絵＝届いたとき自分の上で1回。
 //     ダメージの数字と揺れは届いたとき（V2capAtb.jsx が impactMs まで遅らせる）。外れたら当たる絵は出さない
+//   ・ボスのイラスト版（IllustRig・lib/bossIllust.js・2026-10-28 ユーザー「イラスト版も作ったからドット絵版は別バージョンで作っておいて」）：
+//     パーツ（奥の翼・手前の翼・体・頭）を重ね、姿勢（翼・首・全体の角度とずれ・口の火）で動かす。ドット絵版より大きく出す
+//     （STAGE_OF.illust＝枠を高く・自分はそのぶん小さく。グラブルのように「どんと大きく」）。エフェクトは1枚の塗りを動きで見せる
 // ============================================================
 
 const Bar = ({ pct, color, h = 10 }) => (
@@ -55,6 +59,12 @@ const Chips = ({ st, side, right }) => {
 const ART_H = 'clamp(110px, 30vw, 170px)'
 const ART_H_BIG = 'clamp(140px, 40vw, 230px)'
 export const PLAYER_VS_BOSS = 0.62
+// ボスの絵ごとの舞台の大きさ：枠の高さ（両方そろえる＝HPバーが並ぶ）・自分の絵の倍率・ボスの側の幅（flex）
+//   イラスト版は枠を 300px まで（自分の絵はドット絵版のときとほぼ同じ大きさ＝0.48倍）
+const STAGE_OF = {
+  pixel: { artH: ART_H_BIG, player: PLAYER_VS_BOSS, flex: '1.35 1 0' },
+  illust: { artH: 'clamp(170px, 46vw, 300px)', player: 0.48, flex: '1.6 1 0' },
+}
 
 // 横に並べたコマの1枚から frame のコマだけを見せる（-1 なら隠す）。
 //   【確定】2026-10-28 背景の絵（background-image）にして出すたびに置くと、そのたびに絵を読み直して一瞬なにも出ない
@@ -66,21 +76,47 @@ const FrameStrip = ({ a, frame, style }) => (
   </div>
 )
 
+// イラスト版のボス：枠（正方形）を立ち絵（art.base px）として、パーツを割合で置く。全体→パーツの順に回す（中心は一覧の px・py）
+//   口の火（glow）は頭といっしょに動く
+const IllustRig = ({ art, pose }) => {
+  const S = art.base, pct = (v) => `${(v / S) * 100}%`
+  return (
+    <div style={{ position:'absolute', inset:0, pointerEvents:'none',
+      transform:`translate(${(pose.x * 100).toFixed(2)}%, ${(pose.y * 100).toFixed(2)}%) rotate(${pose.r.toFixed(2)}deg)`,
+      transformOrigin:`${pct(art.pivot[0])} ${pct(art.pivot[1])}` }}>
+      {art.parts.map(p => (
+        <div key={p.key} style={{ position:'absolute', left: pct(p.x), top: pct(p.y), width: pct(p.w), height: pct(p.h),
+          transform: p.key === 'body' ? undefined : `rotate(${(pose[p.key] || 0).toFixed(2)}deg)`,
+          transformOrigin:`${((p.px - p.x) / p.w) * 100}% ${((p.py - p.y) / p.h) * 100}%` }}>
+          <img src={p.src} alt="" draggable={false} decoding="sync" style={{ width:'100%', height:'100%', display:'block', maxWidth:'none', userSelect:'none' }} />
+          {p.key === 'head' && pose.glow > 0.01 && (
+            <div style={{ position:'absolute', left:`${((art.mouth[0] + S * 0.03 - p.x) / p.w) * 100}%`, top:`${((art.mouth[1] - p.y) / p.h) * 100}%`,
+              width:`${(S * 0.16 / p.w) * 100}%`, aspectRatio:'1 / 1', transform:'translate(-50%, -50%)', borderRadius:'50%', opacity: pose.glow,
+              background:'radial-gradient(circle, rgba(255,245,200,0.95) 0%, rgba(255,150,40,0.75) 30%, rgba(255,60,0,0.25) 55%, rgba(255,40,0,0) 72%)' }} />
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 const POP_COLOR ={ hit: '#ffffff', miss: '#9fb3c8', heal: '#44ff88', tick: '#cc99ff' }
 const popText = (f) => (f.kind === 'miss' ? 'MISS' : f.kind === 'heal' ? `+${f.amount.toLocaleString()}` : f.amount.toLocaleString())
 
 // 1人ぶん。right＝右（モンスター）。fx は [{ kind, side, amount, crit, t0 }]・now は fx の t0 と同じ時計（秒）
 //   areaRef … 絵の場所（動かない枠）。ボスのエフェクトの位置を測る
-//   strips … 置いておく攻撃の絵（自分＝motion・ボス＝技ごとの絵ぜんぶ）
-function Fighter({ st, side, me, right, src, motion, strips = [], fx, now, name, big, artH = ART_H, scale = 1, areaRef }) {
+//   strips … 置いておく攻撃の絵（自分＝motion・ボス＝技ごとの絵ぜんぶ）／rig … イラスト版のボス（lib/bossIllust.js の bossIllustOf）
+function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx, now, name, flex = '1 1 0', artH = ART_H, scale = 1, areaRef }) {
   const mine = fx.filter(f => f.side === side)
   const lastOf = (kind) => mine.reduce((t, f) => (f.kind === kind && f.t0 <= now && f.t0 > t ? f.t0 : t), -1e9)
   const dir = right ? -1 : 1   // 前＝相手の方
   // 攻撃の絵があれば流す（流しているあいだは踏み込まない）。act に motion が付いていればそちら（ボスの技ごとの絵）
   const lastAct = mine.reduce((p, f) => (f.kind === 'act' && f.t0 <= now && (!p || f.t0 > p.t0) ? f : p), null)
   const mo = lastAct?.motion || motion
-  const frame = mo && lastAct ? motionFrameAt(mo, (now - lastAct.t0) * 1000) : -1
-  const dx = (frame >= 0 ? 0 : lungeOf(now - lastOf('act')) * dir) + shakeOf(now - lastOf('hit'))
+  const frame = mo?.ms && lastAct ? motionFrameAt(mo, (now - lastAct.t0) * 1000) : -1
+  // イラスト版は姿勢で動かす（技の動きも姿勢の中＝踏み込まない）
+  const pose = rig ? illustPoseAt(rig.key, lastAct?.motion?.keys ? lastAct.motion : null, (now - (lastAct?.t0 ?? now)) * 1000, now * 1000) : null
+  const dx = (frame >= 0 || rig ? 0 : lungeOf(now - lastOf('act')) * dir) + shakeOf(now - lastOf('hit'))
   const hitAgo = now - lastOf('hit')
   const glowAgo = now - lastOf('use')
   const filters = []
@@ -94,7 +130,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], fx, now, name,
   const hpColor = right ? '#cc3344' : '#44cc66'
 
   return (
-    <div style={{ flex: big ? '1.35 1 0' : '1 1 0', minWidth:0, display:'flex', flexDirection:'column', alignItems:'stretch' }}>
+    <div style={{ flex, minWidth:0, display:'flex', flexDirection:'column', alignItems:'stretch' }}>
       <div style={{ display:'flex', justifyContent:'space-between', gap:'6px', fontSize:'12px', color: right ? '#ff8888' : '#88ccff',
         flexDirection: right ? 'row-reverse' : 'row' }}>
         <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{name}</span>
@@ -103,11 +139,13 @@ function Fighter({ st, side, me, right, src, motion, strips = [], fx, now, name,
       <div ref={areaRef} style={{ position:'relative', height: artH, display:'flex', justifyContent:'center', alignItems:'flex-end', margin:'4px 0' }}>
         <div style={{ height:`${scale * 100}%`, display:'flex', alignItems:'flex-end', transform:`translateX(${dx.toFixed(1)}px)`,
           opacity: down ? 0.25 : 1, transition:'opacity 0.4s' }}>
-          {src ? (
+          {src || rig ? (
             // 待機の絵の枠（正方形）。攻撃の絵はこの枠に重ねる（ox・oy・w・h は待機の枠（クラスは 224px・ボスは base）を100%として割合で置く）
             <div style={{ position:'relative', height:'100%', aspectRatio:'1 / 1', maxWidth:'100%', filter: filters.join(' ') || 'none' }}>
-              <img src={src} alt="" draggable={false}
-                style={{ width:'100%', height:'100%', objectFit:'contain', userSelect:'none', visibility: frame >= 0 ? 'hidden' : 'visible' }} />
+              {rig ? <IllustRig art={rig} pose={pose} /> : (
+                <img src={src} alt="" draggable={false}
+                  style={{ width:'100%', height:'100%', objectFit:'contain', userSelect:'none', visibility: frame >= 0 ? 'hidden' : 'visible' }} />
+              )}
               {/* 攻撃の絵は、流していないときも隠して置いておく（FrameStrip） */}
               {strips.map(m => {
                 const b = m.base || IDLE_SIZE
@@ -172,62 +210,79 @@ const boxOf = (stage, area, scale) => {
   return { x: area.left - stage.left + (area.width - w) / 2, y: area.top - stage.top + area.height - h, w, h }
 }
 
-// 横に並べたコマの1つを、合わせる点（ax・ay）が (x, y) に来るように置く。s＝待機の枠の1pxが画面の何pxか・rot＝回す角度（ラジアン）
-const Sprite = ({ a, frame, x = 0, y = 0, s = 1, rot = 0 }) => (
-  <FrameStrip a={a} frame={frame} style={{ zIndex: 2, left: x - a.ax * s, top: y - a.ay * s, width: a.w * s, height: a.h * s,
+// 横に並べたコマの1つを、合わせる点（ax・ay）が (x, y) に来るように置く。s＝絵の1pxが画面の何pxか・rot＝回す角度（ラジアン）・op＝濃さ
+const Sprite = ({ a, frame, x = 0, y = 0, s = 1, rot = 0, op = 1 }) => (
+  <FrameStrip a={a} frame={frame} style={{ zIndex: 2, left: x - a.ax * s, top: y - a.ay * s, width: a.w * s, height: a.h * s, opacity: op,
     transform: rot ? `rotate(${rot}rad)` : undefined, transformOrigin: `${a.ax * s}px ${a.ay * s}px` }} />
 )
+const easeOut = (k) => 1 - (1 - k) * (1 - k)
 
-// ボスの技のエフェクト。geo＝{ p: 自分の絵の枠, b: ボスの絵の枠 }（舞台の左上から）・art＝lib/bossArt.js の bossArtOf
+// ボスの技のエフェクト。geo＝{ p: 自分の絵の枠, b: ボスの絵の枠 }（舞台の左上から）・art＝lib/bossArt.js の bossArtOf か lib/bossIllust.js の bossIllustOf
 //   エフェクトの絵は1枚ずつ置いたまま（出ていないときは隠す・FrameStrip）。同じ絵が重なったら新しいほう
+//   ドット絵版＝コマを流す（大きさは竜と同じ px）／イラスト版＝1枚の塗りを動きで見せる（大きさは枠の幅 × size）：
+//     飛ぶ＝少しゆらぐ・当たる＝durMs のあいだ大きくなりながら消える（spin° 回る）
 function BossFx({ fx, now, geo, art }) {
   const s = geo ? geo.b.w / art.base : 1
   const to = geo && { x: geo.p.x + geo.p.w / 2, y: geo.p.y + geo.p.h * FX_TARGET_Y }
   const acts = geo ? fx.filter(f => f.kind === 'act' && f.side === 'b' && f.motion?.fx) : []
   return Object.values(art.motions).flatMap(m => Object.entries(m.fx || {}).map(([kind, a]) => {
+    const sc = a.size ? (a.size * (geo?.b.w || 0)) / a.w : s   // イラスト版は枠の幅に対する大きさ
     let on = null
     for (const f of acts) {
-      if (f.motion.src !== m.src) continue
+      if (f.motion !== m) continue
       const tFly = f.t0 + m.hitMs / 1000, tHit = f.t0 + m.impactMs / 1000
       if (kind === 'fly' && m.front && now >= tFly && now < tHit) {
         const e = now - tFly
         const from = { x: geo.b.x + m.front[0] * s, y: geo.b.y + m.front[1] * s }
         const q = flyPosOf(e / (tHit - tFly))
-        on = { frame: Math.floor(e * 1000 / a.ms) % a.frames, x: from.x + (to.x - from.x) * q, y: from.y + (to.y - from.y) * q,
-          s: s * Math.min(1, 0.5 + 0.5 * e / FX_GROW_SEC), rot: Math.atan2(to.y - from.y, to.x - from.x) - Math.PI }   // 飛ぶ絵は左向き
+        const grow = Math.min(1, 0.5 + 0.5 * e / FX_GROW_SEC) * (a.frames > 1 ? 1 : 1 + 0.06 * Math.sin(e * 30))
+        on = { frame: a.frames > 1 ? Math.floor(e * 1000 / a.ms) % a.frames : 0, x: from.x + (to.x - from.x) * q, y: from.y + (to.y - from.y) * q,
+          s: sc * grow, rot: Math.atan2(to.y - from.y, to.x - from.x) - Math.PI }   // 飛ぶ絵は左向き
       }
       if (kind === 'hit' && f.landed !== false && now >= tHit) {
-        const frame = motionFrameAt(a, (now - tHit) * 1000)
-        if (frame >= 0) on = { frame, x: to.x, y: to.y, s }
+        const ms = (now - tHit) * 1000
+        if (a.frames > 1) {
+          const frame = motionFrameAt(a, ms)
+          if (frame >= 0) on = { frame, x: to.x, y: to.y, s: sc }
+        } else if (ms < a.durMs) {
+          const k = ms / a.durMs
+          on = { frame: 0, x: to.x, y: to.y, s: sc * (0.55 + 0.6 * easeOut(k)), rot: ((a.spin || 0) * k * Math.PI) / 180,
+            op: Math.min(1, k / 0.08) * (k > 0.55 ? 1 - (k - 0.55) / 0.45 : 1) }
+        }
       }
     }
     return <Sprite key={a.src} a={a} {...(on || { frame: -1 })} />
   }))
 }
 
-// foeArt … ダンジョンのボスの絵（lib/bossArt.js の bossArtOf）。あれば技ごとの絵とエフェクトを流す
+// foeArt … ダンジョンのボスの絵（lib/bossArt.js の bossArtOf＝ドット絵版／lib/bossIllust.js の bossIllustOf＝イラスト版）。
+//   あれば技ごとの絵とエフェクトを流す
 export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, foeSrc, foeBig = false, foeArt = null }) {
+  const size = foeBig ? STAGE_OF[foeArt?.kind === 'illust' ? 'illust' : 'pixel'] : null
   // ボスのエフェクトの位置：絵の場所（動かない枠）を測る。大きさが変わったら測り直す
   const stageRef = useRef(null), pArea = useRef(null), bArea = useRef(null)
   const [geo, setGeo] = useState(null)
+  const playerScale = size?.player || 1
   useLayoutEffect(() => {
     const el = stageRef.current
     if (!el || !foeBig) return
-    const ro = new ResizeObserver(() => {
+    const measure = () => {
       if (!pArea.current || !bArea.current) return
       const r = el.getBoundingClientRect()
-      setGeo({ p: boxOf(r, pArea.current.getBoundingClientRect(), PLAYER_VS_BOSS), b: boxOf(r, bArea.current.getBoundingClientRect(), 1) })
-    })
+      setGeo({ p: boxOf(r, pArea.current.getBoundingClientRect(), playerScale), b: boxOf(r, bArea.current.getBoundingClientRect(), 1) })
+    }
+    const ro = new ResizeObserver(measure)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [foeBig])
+  }, [foeBig, playerScale])
   return (
     <div ref={stageRef} style={{ position:'relative', overflow:'hidden', display:'flex', gap:'12px', alignItems:'flex-start', padding:'8px',
       background:'linear-gradient(180deg, #000a26 0%, #001338 70%, #00204a 100%)', border:'1px solid #0a2a55' }}>
       <Fighter st={st} side="a" me={st.a} src={playerSrc} motion={playerMotion} strips={playerMotion ? [playerMotion] : []} fx={fx} now={now} name={st.a.name}
-        artH={foeBig ? ART_H_BIG : ART_H} scale={foeBig ? PLAYER_VS_BOSS : 1} areaRef={pArea} />
-      <Fighter st={st} side="b" me={st.b} right src={foeSrc} strips={foeArt ? Object.values(foeArt.motions) : []} fx={fx} now={now} name={st.b.name} big={foeBig} artH={foeBig ? ART_H_BIG : ART_H}
-        areaRef={bArea} />
+        artH={size?.artH || ART_H} scale={playerScale} areaRef={pArea} />
+      <Fighter st={st} side="b" me={st.b} right src={foeSrc} fx={fx} now={now} name={st.b.name}
+        strips={foeArt?.kind === 'pixel' ? Object.values(foeArt.motions) : []} rig={foeArt?.kind === 'illust' ? foeArt : null}
+        flex={size?.flex} artH={size?.artH || ART_H} areaRef={bArea} />
       {foeArt && <BossFx fx={fx} now={now} geo={geo} art={foeArt} />}
     </div>
   )

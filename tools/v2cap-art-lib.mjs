@@ -57,8 +57,10 @@ export const bleed = ({ data: rgba, W, H }, steps = 12) => {
       next.push(p)
     }
     for (const p of next) filled[p] = 1
+    // 次の輪は同じ画素を1回だけ（2026-10-28 40px 広げたら同じ画素が何重にも入って配列があふれた。色の結果は前と同じ）
     ring = []
-    for (const p of next) each4(W, H, p, r => { if (!filled[r]) ring.push(r) })
+    const queued = new Uint8Array(N)
+    for (const p of next) each4(W, H, p, r => { if (!filled[r] && !queued[r]) { queued[r] = 1; ring.push(r) } })
   }
 }
 

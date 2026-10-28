@@ -109,11 +109,13 @@ export const bossArtOf = (key) => {
     motions[m.key] = { ...e, base: art.base, src: bossSrcOf(key, m.key), totalMs, hitMs, label: m.file,
       fx: fx.fly || fx.hit ? fx : null, flyMs, impactMs: hitMs + flyMs }
   }
+  const idle = { ...art.idle, src: bossSrcOf(key, 'idle') }
   return {
-    key, name: def.name, base: art.base,
-    idle: { ...art.idle, src: bossSrcOf(key, 'idle') },
+    kind: 'pixel', key, name: def.name, base: art.base, idle,
     illust: art.illust ? bossSrcOf(key, 'illust') : null,
     motions,
+    // 先に読んでおく絵（待機・技・エフェクト）
+    srcs: [idle.src, ...Object.values(motions).flatMap(m => [m.src, ...Object.values(m.fx || {}).map(f => f.src)])],
   }
 }
 

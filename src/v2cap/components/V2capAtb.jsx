@@ -12,13 +12,14 @@ import {
   GUARD_CUT, GUARD_CD, CAST_SEC, MAX_SEC, QUEUE_MAX, TURN_SEC,
 } from '../core/atb.js'
 import { MACRO_MARK, macrosOf, validateMacros, macroEntriesOf } from '../lib/atbMacro.js'
-import { loadPref } from '../core/prefs.js'
+import { loadPref, savePref } from '../core/prefs.js'
 import { fxEventsOf, scheduleFx, POP_SEC } from '../lib/atbFx.js'
 import { motionOf } from '../lib/motionArt.js'
 import { homeIconOf } from '../lib/classArt.js'
 import { artGenderOf } from '../lib/gender.js'
 import { enemyArtSrc } from '../lib/enemyArt.js'
 import { BOSS_DEFS, bossArtOf, newBossMotionMemo, bossMotionKeyOf } from '../lib/bossArt.js'
+import { bossIllustOf } from '../lib/bossIllust.js'
 import { AREA_LIST, SPOTS, SUB_NAMES, toFighter as enemyFighter, enemyPowerOf } from '../lib/areas.js'
 import { toFighter as playerFighter, slotsOf } from '../lib/loadout.js'
 import { usableSkillNames, lineageOf, CLASS_BY_ID } from '../lib/jobs.js'
@@ -38,6 +39,8 @@ import { ascEffectsOf } from '../lib/ascension.js'
 //     ★強さと技は仮＝いま選んでいる場所のボスのもの（ノーマルの中身は絵のあとで作る）。
 //     流す絵も仮：通常攻撃＝黒爪／構えてから撃つ大技＝終焉の黒焔／ほかの技＝焦熱の吐息と黒翼烈風を交互（bossMotionKeyOf）。
 //     戦闘中は「動きを見る」のボタンで、どの技の絵も流せる
+//     ★絵は「イラスト版（lib/bossIllust.js・パーツを動かす）」と「ドット絵版（lib/bossArt.js）」を選べる（はじめはイラスト版・選んだ方を覚える）
+//     （2026-10-28 ユーザー「イラスト版も作ったからドット絵版は別バージョンで作っておいて」）
 // 中身（進み方）は src/v2cap/core/atb.js。つまみ（秒・倍率）もそちらの冒頭。マクロの決まりは src/v2cap/lib/atbMacro.js
 // ============================================================
 
@@ -103,14 +106,28 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
   const playerMotion = useMemo(() => motionOf(prof?.class, myGender, 'attack', CLASS_BY_ID[prof?.class]?.req?.cls), [prof?.class, myGender])
   // 攻撃の絵は先に読んでおく（はじめて殴った瞬間に絵が間に合わないと、1回目だけ消えて見える）
   useEffect(() => { if (playerMotion) { const im = new Image(); im.src = playerMotion.src } }, [playerMotion])
-  // ダンジョンのボスの絵（待機・技ごと）。技の絵も先に読んでおく
+  // ダンジョンのボスの絵（イラスト版かドット絵版・技ごとの絵とエフェクト）。絵は先に読んでおく
   const bossKey = foe?.bossArt || null
-  const bossArt = useMemo(() => (bossKey ? bossArtOf(bossKey) : null), [bossKey])
+  const [artVer, setArtVer] = useState(() => loadPref('capBossArtVer', 'illust'))
+  const pickArtVer = (v) => { setArtVer(v); savePref('capBossArtVer', v) }
+  const hasIllust = useMemo(() => !!(bossKey && bossIllustOf(bossKey)), [bossKey])
+  const bossArt = useMemo(() => (bossKey ? (artVer === 'illust' && bossIllustOf(bossKey)) || bossArtOf(bossKey) : null), [bossKey, artVer])
   useEffect(() => {
     if (!bossArt) return
-    const fxSrcs = Object.values(bossArt.motions).flatMap(m => Object.values(m.fx || {}).map(a => a.src))
-    for (const src of [bossArt.idle.src, ...Object.values(bossArt.motions).map(m => m.src), ...fxSrcs]) { const im = new Image(); im.src = src }
+    for (const src of bossArt.srcs) { const im = new Image(); im.src = src }
   }, [bossArt])
+  // 絵の版を選ぶボタン（イラスト版があるボスだけ）
+  const verPicker = hasIllust && (
+    <span style={{ display:'inline-flex', gap:'4px', alignItems:'center' }}>
+      <span style={{ color: TEXT.label, fontSize:'10px' }}>絵</span>
+      {[['illust', 'イラスト版'], ['pixel', 'ドット絵版']].map(([v, label]) => (
+        <button key={v} onClick={() => pickArtVer(v)}
+          style={{ ...miniBtn(bossArt?.kind === v ? '#44ddff' : TEXT.label), padding:'4px 8px', fontSize:'11px', background: bossArt?.kind === v ? '#002850' : '#000818' }}>
+          {label}
+        </button>
+      ))}
+    </span>
+  )
   const bossMemo = useRef(newBossMotionMemo())
 
   // ===== 時間を進める =====
@@ -217,7 +234,8 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
               {bossArt.illust && <img src={bossArt.illust} alt="" draggable={false} style={{ width:'96px', height:'96px', objectFit:'contain', flexShrink:0 }} />}
               <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.7, minWidth:0 }}>
                 <b style={{ color:'#ff8866' }}>{bossArt.name}</b>（ダンジョンのボス・絵の確かめ用）<br />
-                強さと技は仮で、いま選んでいる場所のボスと同じです。流す絵は、通常攻撃＝{ms[0]}・構えてから撃つ大技＝{ms.at(-1)}・ほかの技＝{ms.slice(1, -1).join('と')}を交互。戦闘中の「動きを見る」でどれでも流せます
+                強さと技は仮で、いま選んでいる場所のボスと同じです。流す動きは、通常攻撃＝{ms[0]}・構えてから撃つ大技＝{ms.at(-1)}・ほかの技＝{ms.slice(1, -1).join('と')}を交互。戦闘中の「動きを見る」でどれでも流せます
+                {verPicker && <div style={{ marginTop:'4px' }}>{verPicker}</div>}
               </div>
             </div>
           )
@@ -260,7 +278,7 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
     <div style={{ ...box, padding:'12px' }}>
       {/* 自分（左）とモンスター（右） */}
       <V2capAtbStage st={s} fx={fxRef.current} now={performance.now() / 1000} playerSrc={playerSrc} playerMotion={playerMotion}
-        foeSrc={bossArt ? bossArt.idle.src : enemyArtSrc(en.name)} foeBig={!!bossArt} foeArt={bossArt} />
+        foeSrc={bossArt ? bossArt.idle?.src || null : enemyArtSrc(en.name)} foeBig={!!bossArt} foeArt={bossArt} />
       <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color: TEXT.label, margin:'6px 0', gap:'8px', flexWrap:'wrap' }}>
         <span>次：{nextLabel}</span>
         <span>削り {dealtPct.toFixed(1)}%・{Math.round(dps).toLocaleString()}ダメージ/秒</span>
@@ -269,6 +287,7 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
       {/* ボスの技の絵を流してみる（戦闘には関係しない） */}
       {bossArt && (
         <div style={{ display:'flex', gap:'4px', alignItems:'center', flexWrap:'wrap', marginBottom:'8px' }}>
+          {verPicker}
           <span style={{ color: TEXT.label, fontSize:'10px' }}>動きを見る［開発］</span>
           {Object.entries(bossArt.motions).map(([k, m]) => (
             <button key={k} disabled={paused}
