@@ -6,11 +6,11 @@
 export const BOSS_ILLUST = {
   varuzenoku: {
     parts: {
-      wingF: { x: 46, y: 57, w: 284, h: 304, px: 300, py: 262, ax: -152 },
+      wingF: { x: 46, y: 57, w: 284, h: 313, px: 300, py: 262, ax: -156 },
       wingN: { x: 380, y: 64, w: 227, h: 417, px: 418, py: 280, ax: -13 },
       tail: { x: 58, y: 474, w: 185, h: 111, px: 214, py: 568, ax: -147 },
       tailT: { x: 44, y: 349, w: 181, h: 152, px: 75, py: 478, ax: -53, parent: 'tail' },
-      body: { x: 196, y: 261, w: 379, h: 345, px: 358, py: 392, ax: 70 },
+      body: { x: 196, y: 240, w: 379, h: 366, px: 358, py: 392, ax: 69 },
       neck: { x: 260, y: 181, w: 161, h: 131, px: 350, py: 300, ax: -93, parent: 'body' },
       head: { x: 238, y: 88, w: 172, h: 144, px: 320, py: 196, ax: -80, parent: 'neck' },
       arm: { x: 130, y: 277, w: 162, h: 97, px: 268, py: 318, ax: 177, parent: 'body' },
@@ -26,8 +26,9 @@ export const BOSS_ILLUST = {
     },
     fit: {
       body: { s: 0.765, deg: 0, tx: 160, ty: 154, score: 0.263 },
+      back: { s: 0.975, deg: 0, tx: 14, ty: 22, score: 0.435 },
     },
-    v: { 'il-wingF': '3ecc46db', 'il-wingN': 'c653e832', 'il-tail': 'b394f8e4', 'il-tailT': 'd8b44bdc', 'il-body': '75b64f85', 'il-neck': '853ae806', 'il-head': '7ba27c99', 'il-arm': 'a17fb046', 'il-jaw': 'c05e0043', 'il-fx-claw-hit': '9e27da08', 'il-fx-breath-fly': 'c7e563ee', 'il-fx-breath-hit': '7bcfb438', 'il-fx-gale-fly': '5dc69c3e', 'il-fx-gale-hit': '709c7f83', 'il-fx-doom-fly': '34511ca5', 'il-fx-doom-hit': '4255edc9', 'il-fx-idle-orb': '46a23fc6' },
+    v: { 'il-wingF': '4363765e', 'il-wingN': 'c653e832', 'il-tail': 'b394f8e4', 'il-tailT': 'd8b44bdc', 'il-body': 'ac4bfbc9', 'il-neck': '5964abdc', 'il-head': '55344c91', 'il-arm': '181f74b9', 'il-jaw': 'c05e0043', 'il-fx-claw-hit': '9e27da08', 'il-fx-breath-fly': 'c7e563ee', 'il-fx-breath-hit': '7bcfb438', 'il-fx-gale-fly': '5dc69c3e', 'il-fx-gale-hit': '709c7f83', 'il-fx-doom-fly': '34511ca5', 'il-fx-doom-hit': '4255edc9', 'il-fx-idle-orb': '46a23fc6' },
   },
   amaza: {
     parts: {

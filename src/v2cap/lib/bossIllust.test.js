@@ -8,7 +8,7 @@ import { BOSS_ART_DIR, BOSS_DEFS, bossFileOf } from './bossArt.js'
 import {
   BOSS_ILLUST_DEFS, BOSS_ILLUST_SIZE, illustPartsOf, illustKindOf, illustFxKindOf,
   bossIllustOf, illustPoseAt, idlePoseAt, motionPoseAt, illustPointAt, illustTrailsAt, mouthPointOf, rotPoint, partMove,
-  illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt, dustEllipsesOf,
+  illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt, dustEllipsesOf, EASES, joltAt,
 } from './bossIllust.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { dilate, erode, leftTipOf, fitPart, inPoly } from '../../../tools/v2cap-boss-illust.mjs'
@@ -80,12 +80,13 @@ test('技の姿勢：黒爪は前（左）へ踏み込む・焦熱の吐息は�
   assert.ok(at('claw', M.claw.hitMs).x < -0.05)
   assert.ok(at('breath', 420).head > 0 && at('breath', M.breath.hitMs).head < 0)
   // 【確定】2026-10-29 ユーザー「もっと羽を大きく広げて敵に向かってバフって」：広げる＝翼を上げて長さの向きに伸ばす（Sq が−）・打ち下ろす＝翼を下げて縮める（手前へ来る）
-  assert.ok(at('gale', 520).wingN < -15 && at('gale', 520).wingNSq < -0.2 && at('gale', 520).wingF > 20 && at('gale', 520).wingFSq < -0.15, '両方の翼を大きく広げる')
+  assert.ok(at('gale', 600).wingN < -20 && at('gale', 600).wingNSq < -0.25 && at('gale', 600).wingF > 10 && at('gale', 600).wingFSq < -0.15, '両方の翼を大きく広げる')
   assert.ok(at('gale', M.gale.hitMs).wingN > 30 && at('gale', M.gale.hitMs).wingNSq > 0.25 && at('gale', M.gale.hitMs).wingF < -20, '一気に打ち下ろす')
-  assert.ok(M.gale.hitMs - 520 <= 150, '打ち下ろしは速い')
-  assert.ok(at('gale', M.gale.hitMs).x < -0.05 && at('gale', 520).x > 0, 'のけぞってから相手の方へ踏み込む')
-  // 2026-10-29 描き直した絵は首が短い＝首・頭の角度は前の半分ほど（技はこのあと見直す）
-  assert.ok(at('doom', 640).r > 0 && at('doom', 640).neck > 10 && at('doom', 640).head > 15 && at('doom', M.doom.hitMs).glow === 1)
+  assert.ok(M.gale.hitMs - 600 <= 120, '打ち下ろしは速い')
+  assert.ok(at('gale', M.gale.hitMs).x < -0.05 && at('gale', 600).x > 0, 'のけぞってから相手の方へ踏み込む')
+  // 首を真上へ上げてため（後ろの絵で頭の後ろを埋めたので大きく上げられる）、相手へ振り下ろす
+  const up = at('doom', 1180)
+  assert.ok(up.r > 8 && up.neck > 14 && up.r + up.neck + up.head > 35 && at('doom', M.doom.hitMs).neck < -5 && at('doom', M.doom.hitMs).glow === 1)
   for (const k of Object.keys(M)) {
     assert.deepEqual(Object.values(at(k, 0)).every(v => v === 0), true, `${k} は待機から始まる`)
     assert.equal(at(k, M[k].totalMs), null, `${k} は流し終わったら待機へ`)
@@ -166,14 +167,15 @@ test('【確定】2026-10-28 黒爪：大きくのけぞって前脚を振り上
   const d = BOSS_ILLUST_DEFS.varuzenoku.motions.claw
   const at = (ms) => motionPoseAt(d.keys, ms)
   // 【確定】2026-10-28 ユーザー「ひっかきモーションもうちょっと激しく」
-  assert.ok(at(310).arm > 60 && at(310).r > 8, '大きくのけぞって振り上げ')
+  // 2026-10-29 振りかぶった前脚は顔の左横まで（顔に重ねると頭が隠れた）
+  assert.ok(at(350).arm > 40 && at(350).arm < 55 && at(350).r > 8, '大きくのけぞって振り上げ')
   assert.ok(at(d.hitMs).arm < -45, '振り下ろし')
-  assert.ok(d.hitMs - 310 <= 80, '振り下ろしは速い')
+  assert.ok(d.hitMs - 350 <= 80, '振り下ろしは速い')
   assert.ok(at(d.hitMs).x < -0.15, '深く踏み込む')
   const m = bossIllustOf('varuzenoku').motions.claw
   assert.equal(m.fx.hit.wipe, true)
   assert.deepEqual(illustTrailsAt('varuzenoku', m, 300, 0), [], '振り下ろす前は筋なし')
-  const tr = illustTrailsAt('varuzenoku', m, 350, 0)
+  const tr = illustTrailsAt('varuzenoku', m, 400, 0)
   assert.equal(tr.length, 3, '爪3本')
   for (const t of tr) {
     assert.equal(t.kind, 'claw')
@@ -191,7 +193,8 @@ test('【確定】2026-10-28 焦熱の吐息・終焉の黒焔：下あごを大
   const M = BOSS_ILLUST_DEFS.varuzenoku.motions
   for (const k of ['breath', 'doom']) {
     const p = { ...motionPoseAt(M[k].keys, M[k].hitMs) }
-    assert.ok(p.jaw <= -15, `${k}：吐くときは口を大きく開ける（${p.jaw}°）`)
+    // 2026-10-29 描き直した絵は口が初めから開いている＝少し開くだけ（開きすぎるとあごの下に口の中がはみ出した）
+    assert.ok(p.jaw <= -8 && p.jaw >= -14, `${k}：吐くときは口をもう少し開ける（${p.jaw}°）`)
     assert.ok(p.arm <= -20, `${k}：前脚は下げる（${p.arm}°）`)
     assert.ok(p.glow === 1)
     const mo = mouthPointOf('varuzenoku', p), j = BOSS_ILLUST_DEFS.varuzenoku.cuts.jaw
@@ -213,7 +216,7 @@ test('【確定】2026-10-29 黒翼烈風：打ち下ろすとき両方の翼の
   assert.equal(m.shots[0].delayMs, 0)
   assert.deepEqual(m.front, m.shots[0].front)
   assert.deepEqual(illustTrailsAt('varuzenoku', m, 500, 0), [], '広げているあいだは筋なし')
-  const tr = illustTrailsAt('varuzenoku', m, 600, 0)
+  const tr = illustTrailsAt('varuzenoku', m, 660, 0)
   assert.ok(tr.length >= 8 && tr.every(t => t.kind === 'wind'), '打ち下ろすあいだ両方の翼に筋')
   assert.deepEqual(new Set(BOSS_ILLUST_DEFS.varuzenoku.motions.gale.trails.map(t => t.part)), new Set(['wingF', 'wingN']))
   // 口から出る技は出どころが1つ
@@ -503,4 +506,63 @@ test('【確定】2026-10-29 雨摩座の水の帯は体の動きから切り離
   const amp = (from, to) => { let mx = 0; for (let t = from; t < to; t += 3) mx = Math.max(mx, Math.abs(illustPoseAt('amaza', m, t, 0).armF - motionPoseAt(D.keys, t).armF - idlePoseAt(d.idle, 0).armF)); return mx }
   assert.ok(amp(0, 2500) < 1e-9, '溜めのあいだも震えない（決まった動きのまま）')
   for (let t = CAST_IN_MS; t < 5000; t += 37) assert.deepEqual(illustCastPoseAt('amaza', t, 0), illustCastPoseAt('amaza', CAST_IN_MS, 0), `構え ${t}ms も震えない`)
+})
+
+test('【確定】2026-10-29 黒龍の技のめりはり（ユーザー「攻撃するときちゃんとその部位が攻撃するように見えるようにして、グラブルみたいにしっかりとした動きを付けたい」）：ため→一気に振り抜く→当たった形で止める→ゆっくり戻る・当たった瞬間に揺れる', () => {
+  const M = BOSS_ILLUST_DEFS.varuzenoku.motions
+  const m = bossIllustOf('varuzenoku').motions
+  for (const [k, d] of Object.entries(M)) {
+    const i = d.keys.findIndex(([t]) => t === d.hitMs)
+    assert.ok(i > 1, `${k}：当たる時刻にキーがある`)
+    assert.equal(d.keys[i][2], 'out', `${k}：振り抜く区間は出だしがいちばん速い`)
+    assert.ok(d.hitMs - d.keys[i - 1][0] <= 120, `${k}：振り抜きは 120ms まで`)
+    assert.ok(d.keys[i + 1][0] - d.hitMs >= 100, `${k}：当たった形でいったん止める`)
+    assert.equal(d.jolt?.atMs, d.hitMs, `${k}：当たった瞬間に揺れる`)
+    assert.deepEqual(m[k].jolt, d.jolt)
+    // 揺れは当たったあとだけ（溜めのあいだは揺れない）で、収まる
+    assert.deepEqual(joltAt(d.jolt, d.hitMs - 1), { x: 0, y: 0 })
+    assert.ok(Math.abs(joltAt(d.jolt, d.hitMs + 20).x) > 0)
+    assert.deepEqual(joltAt(d.jolt, d.hitMs + d.jolt.ms), { x: 0, y: 0 })
+    const a = illustPoseAt('varuzenoku', m[k], d.hitMs + 20, 0), b = illustPoseAt('varuzenoku', { ...m[k], jolt: null }, d.hitMs + 20, 0)
+    assert.ok(Math.abs(a.x - b.x - joltAt(d.jolt, d.hitMs + 20).x) < 1e-12, '揺れは全体のずれに足す')
+  }
+  // 区間の速さ：out は出だしが速い・in はだんだん速い・back は少し行き過ぎて戻る
+  assert.ok(EASES.out(0.3) > 0.6 && EASES.in(0.3) < 0.05 && EASES.out(1) === 1 && EASES.in(1) === 1)
+  assert.ok(Math.max(...[0.6, 0.7, 0.8].map(EASES.back)) > 1 && Math.abs(EASES.back(1) - 1) < 1e-12)
+  const keys = [[0, { x: 0 }], [100, { x: 1 }, 'out']]
+  assert.ok(motionPoseAt(keys, 30).x > 0.6, '振り抜く区間は 3 割の時刻で 6 割より先')
+  // 攻める所がいちばん大きく動く：爪＝前脚・吐息と黒焔＝首と頭・烈風＝翼
+  const swing = (k, f) => Math.max(...M[k].keys.map(([, p]) => p[f] ?? 0)) - Math.min(...M[k].keys.map(([, p]) => p[f] ?? 0))
+  assert.ok(swing('claw', 'arm') > 90)
+  assert.ok(swing('breath', 'neck') + swing('breath', 'head') > 20)
+  assert.ok(swing('doom', 'neck') + swing('doom', 'head') > 35)
+  assert.ok(swing('gale', 'wingN') > 55 && swing('gale', 'wingF') > 35)
+})
+
+test('【確定】2026-10-29 黒龍の後ろの絵（後ろ.png）：頭・首・前脚が止まっているとき覆っている所の後ろに、翼や胸が描いてある（技で大きく動かしても切れ端や四角い模様にならない）', async (t) => {
+  // ユーザー選択「後ろの絵を1枚描く」。前（模様を折り返して埋めた）は前脚の後ろの 36%・頭と首の後ろの 28% だけで、技で動かすと切れ端や四角いかたまりが見えた
+  let decode
+  try { ({ decode } = await import('../../../tools/v2cap-art-lib.mjs')); decode(new URL('varuzenoku-il-arm.webp', OUT).pathname.replace(/^\/([A-Za-z]:)/, '$1'), 64, 'rgba') } catch { t.skip('ffmpeg が無い'); return }
+  const P = BOSS_ILLUST.varuzenoku.parts, S = BOSS_ILLUST_SIZE
+  const alpha = (k) => {
+    const im = decode(decodeURIComponent(new URL(`varuzenoku-il-${k}.webp`, OUT).pathname).replace(/^\/([A-Za-z]:)/, '$1'), 4096, 'rgba'), a = new Uint8Array(S * S), p = P[k]
+    for (let y = 0; y < im.H; y++) for (let x = 0; x < im.W; x++) { const X = p.x + x, Y = p.y + y; if (X >= 0 && Y >= 0 && X < S && Y < S) a[Y * S + X] = im.data[(y * im.W + x) * 4 + 3] }
+    return a
+  }
+  const A = Object.fromEntries(['wingF', 'wingN', 'body', 'neck', 'head', 'arm'].map(k => [k, alpha(k)]))
+  const behind = (front) => {
+    let n = 0, hit = 0
+    for (let p = 0; p < S * S; p++) {
+      if (!front.some(k => A[k][p] >= 230)) continue
+      n++
+      if (A.wingF[p] >= 128 || A.wingN[p] >= 128 || A.body[p] >= 128) hit++
+    }
+    return hit / n
+  }
+  // 頭のまわりは空（後ろに何も無い）が多いので、頭と首は 3 割ほどで十分
+  assert.ok(behind(['arm']) > 0.6, `前脚の後ろ ${behind(['arm']).toFixed(2)}`)
+  assert.ok(behind(['neck', 'head']) > 0.3, `頭と首の後ろ ${behind(['neck', 'head']).toFixed(2)}`)
+  const sp = BOSS_ILLUST_DEFS.varuzenoku.split
+  assert.deepEqual(sp.back.zones, ['neck', 'arm'])
+  assert.ok(sp.parts.wingF.back && sp.parts.wingN.back, '後ろの絵の翼の所は翼といっしょに動く')
 })

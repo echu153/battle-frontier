@@ -22,6 +22,8 @@
 //      fixed ＝立ち絵に無いもの（水の帯）は重ねる場所を探さず、描いた場所のまま置く
 //   ★2026-10-29 黒龍の描き直し（split）：ChatGPT の翼・しっぽは立ち絵と形が違ったので、ChatGPT の体（翼としっぽの無い体）の形の外を
 //      多角形で翼・しっぽに分ける（体の形の中は体のまま）。体の後ろに隠れていた付け根は近いパーツの模様を折り返して埋める
+//   ★2026-10-29 後ろの絵（split.back）：立ち絵から頭・首・前脚を消して後ろの翼と胸を描き足した絵（後ろ.png）を重ね、頭・首・前脚が
+//      止まっているとき覆っている所だけを埋める（翼の所は翼へ・ほかは体へ）。技で大きく動かすと、模様を折り返して埋めた所が切れ端や四角いかたまりに見えた
 //   ★2026-10-29 腕の構え（swaps）：右腕だけを描き変えた立ち絵（立ち絵_胸元.png・立ち絵_掲げる.png）を重ね、腕のまわり（armZone）だけを切り取って
 //      切り替えるパーツにする（体からはその所を抜く）。構えの絵のふちはぼかす・枠の上へはみ出す絵は top px だけ上へ広げて描く
 // 使い方：node tools/v2cap-boss-illust.mjs [--force]
@@ -216,7 +218,7 @@ const build = (key, def, dir) => {
     notes.push(`${FILES[part]}：倍率${fit.s.toFixed(3)}・角度${fit.deg}°・位置 ${fit.tx},${fit.ty}${fixed ? '（描いた場所のまま）' : `（よさ ${fit.score}）`}`)
   }
   // 立ち絵が体（base: 'stand'）。ChatGPT の体は、切り分けで空いた所を埋める絵（fill）にだけ使う
-  let fill = null
+  let fill = null, back = null
   if (def.base === 'stand') {
     layers.body = resizeRgba(T0, S, S)
     if (def.fill) {
@@ -239,6 +241,23 @@ const build = (key, def, dir) => {
     fits.body = fit
     const shape = dilate(maskOf(warpPart(P, fit, S, S, k), 100), S, S, def.split.grow ?? 1)
     const stand = resizeRgba(T0, S, S)
+    // 後ろの絵（split.back・2026-10-29 技の見直し）：立ち絵から頭・首・前脚を消して、後ろに隠れていた翼と胸を描き足した絵。
+    //   zones（切り分けるパーツ）の drop の中で、立ち絵ではそのパーツが覆っていた所だけに使う＝止まっているときは見えない。
+    //   翼の多角形（parts の back）の中は、その翼の隠れていた所（翼といっしょに動く）・ほかは体（切り分けたあとに埋める）
+    //   ＝模様を折り返して埋めた所が、頭を上げる技・前脚を振る技で四角いかたまりや切れ端に見えた
+    const bk = def.split.back
+    const backFile = bk && path.join(dir, `${bk.file}.png`)
+    if (bk && existsSync(backFile)) {
+      const B = readRgba(backFile)
+      bleed(B)
+      const bf = fitPart(T0, B)
+      fits.back = bf
+      back = { img: warpPart(B, bf, S, S, k), zone: new Uint8Array(S * S), wing: new Uint8Array(S * S) }
+      for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+        if (stand.data[(y * S + x) * 4 + 3] >= 230 && bk.zones.some(c => inPoly(def.cuts[c].drop || def.cuts[c].take, x + 0.5, y + 0.5))) back.zone[y * S + x] = 1
+      }
+      notes.push(`後ろの絵：${bk.file}を倍率${bf.s.toFixed(3)}・角度${bf.deg}°・位置 ${bf.tx},${bf.ty}で重ねた（よさ ${bf.score}）`)
+    } else if (bk) notes.push(`後ろの絵：${bk.file}.png がまだ無い（頭・首・前脚の後ろは模様を折り返して埋める）`)
     for (const [part, sp] of Object.entries(def.split.parts)) {
       const img = { W: S, H: S, data: Buffer.alloc(S * S * 4) }
       const own = new Uint8Array(S * S)
@@ -250,11 +269,11 @@ const build = (key, def, dir) => {
       // 小さいまとまり（体のふちの細い線・とげの先＝体の形から少しはみ出した所）は体に残す
       //   ＝翼といっしょに動くと、頭の後ろのとげのふちが浮いて見えた（2026-10-29）
       const { labels, comps } = componentsOf(img)
-      let n = 0, back = 0
+      let n = 0, returned = 0
       for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
         const p = y * S + x
         if (labels[p] < 0) continue
-        if (comps[labels[p]].n < (def.split.minPx ?? 300)) { img.data[p * 4 + 3] = 0; back++; continue }
+        if (comps[labels[p]].n < (def.split.minPx ?? 300)) { img.data[p * 4 + 3] = 0; returned++; continue }
         if (img.data[p * 4 + 3] >= SEEN) { own[p] = 1; n++ }
         if (inPoly(sp.drop || sp.take, x + 0.5, y + 0.5)) layers.body.data[p * 4 + 3] = 0
       }
@@ -312,8 +331,67 @@ const build = (key, def, dir) => {
           hidden++
         }
       }
+      // 離れ小島を消す（2026-10-29 技の見直し）：見えている画素（SEEN 以上）でつながりを数え直し、いちばん大きいまとまりと island px 以上だけ残す
+      //   ＝埋めた筋が、翼を大きく上げる技で前脚の爪のまわりに浮いて見えた。
+      //   消すのは埋めた画素だけ（体の形の中＝体がもともと覆っている）。立ち絵から取った画素は小さくても翼のまま（体へ戻すと、翼が動いても止まって見えた）
+      let isl = 0
+      const inZone = (p) => bk && bk.zones.some(c => inPoly(def.cuts[c].drop || def.cuts[c].take, p % S + 0.5, Math.floor(p / S) + 0.5))
+      if (sp.island) {
+        const solid = { W: S, H: S, data: Buffer.alloc(S * S * 4) }
+        for (let p = 0; p < S * S; p++) if (img.data[p * 4 + 3] >= SEEN) solid.data[p * 4 + 3] = 255
+        const cc = componentsOf(solid)
+        const big = cc.comps.reduce((b, c, i) => c.n > cc.comps[b].n ? i : b, 0)
+        const keep = new Uint8Array(S * S)
+        for (let p = 0; p < S * S; p++) { const l = cc.labels[p]; if (l >= 0 && (l === big || cc.comps[l].n >= sp.island)) keep[p] = 1 }
+        const near = dilate(keep, S, S, 2)
+        // 頭・前脚の切り分ける所（後ろの絵の zones）にある立ち絵のごく小さいかけら（tiny px まで）は体へ戻す＝頭や前脚といっしょに動く
+        //   （頭の左上のとげの先が体の形から少しはみ出して翼に入り、頭を上げても翼といっしょに残った・2026-10-29）
+        const tiny = (p) => { const l = cc.labels[p]; return l >= 0 && cc.comps[l].n < (sp.tiny || 0) }
+        for (let p = 0; p < S * S; p++) {
+          if (!img.data[p * 4 + 3] || keep[p] || (near[p] && img.data[p * 4 + 3] < SEEN)) continue
+          if (!shape[p]) {
+            if (!tiny(p) || !inZone(p)) continue
+            stand.data.copy(layers.body.data, p * 4, p * 4, p * 4 + 4)
+          }
+          img.data[p * 4 + 3] = 0
+          isl++
+        }
+      }
+      // 後ろの絵の翼の所（zones の中・翼の多角形 back の中）は後ろの絵で塗り直す（何も描かれていなければ空ける＝翼が届いていない）
+      let fromBack = 0
+      if (back && sp.back) {
+        for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+          const p = y * S + x
+          if (!back.zone[p] || !inPoly(sp.back, x + 0.5, y + 0.5)) continue
+          back.wing[p] = 1   // 体には埋めない（立ち絵で見えていた翼の所も＝体に後ろの絵を埋めると、止まっているときの見た目が変わった）
+          if (own[p]) continue
+          if (back.img.data[p * 4 + 3] < SEEN) { img.data[p * 4 + 3] = 0; continue }
+          back.img.data.copy(img.data, p * 4, p * 4, p * 4 + 4)
+          fromBack++
+        }
+      }
+      // 後ろの絵で塗ったあと、いちばん大きいまとまりにつながらない小さいまとまりを片付ける（後ろの絵で何も無い所を空けると、つながりが切れて残る）：
+      //   後ろの絵の画素だけのまとまり（island px まで）は消す（後ろの絵の翼の先が少しずれて宙に浮いた）／
+      //   頭・前脚の切り分ける所のごく小さいまとまり（tiny px まで）は体へ戻す（頭の左上のとげの先が、頭を突き出しても宙に残った）
+      if (fromBack && sp.island) {
+        const solid = { W: S, H: S, data: Buffer.alloc(S * S * 4) }
+        for (let p = 0; p < S * S; p++) if (img.data[p * 4 + 3] >= SEEN) solid.data[p * 4 + 3] = 255
+        const cc = componentsOf(solid), tied = new Uint8Array(cc.comps.length)
+        const big = cc.comps.reduce((m, c, i) => c.n > cc.comps[m].n ? i : m, 0)
+        for (let p = 0; p < S * S; p++) if (cc.labels[p] >= 0 && !back.wing[p]) tied[cc.labels[p]] = 1
+        for (let p = 0; p < S * S; p++) {
+          const l = cc.labels[p]
+          if (l < 0 || l === big) continue
+          if (!tied[l] && cc.comps[l].n < sp.island) { img.data[p * 4 + 3] = 0; isl++; continue }
+          if (cc.comps[l].n < (sp.tiny || 0) && inZone(p)) {
+            if (!shape[p] && stand.data[p * 4 + 3]) stand.data.copy(layers.body.data, p * 4, p * 4, p * 4 + 4)
+            img.data[p * 4 + 3] = 0
+            isl++
+          }
+        }
+      }
       layers[part] = img
-      notes.push(`${part}：立ち絵の体の外から ${n}px（小さいまとまり ${back}px は体に残した・隠れていた所 ${hidden}px を埋めた）`)
+      notes.push(`${part}：立ち絵の体の外から ${n}px（小さいまとまり ${returned}px は体に残した・隠れていた所 ${hidden}px を埋めた${fromBack ? `・後ろの絵から ${fromBack}px` : ''}${isl ? `・離れ小島 ${isl}px を消した` : ''}）`)
     }
     notes.push(`体の形：${def.split.by}を倍率${fit.s.toFixed(3)}・角度${fit.deg}°・位置 ${fit.tx},${fit.ty}で重ねた（よさ ${fit.score}）`)
   }
@@ -475,6 +553,16 @@ const build = (key, def, dir) => {
     }
     notes.push(`体：切り分けで空いた所 ${n}px を${def.fill}で埋めた`)
   }
+  // 後ろの絵（split.back）：切り分けで空いた所のうち、翼に入れなかった所（胸・肩・首の付け根）を体に埋める（体のまま動かない）
+  if (back) {
+    let n = 0
+    for (let p = 0; p < S * S; p++) {
+      if (!back.zone[p] || back.wing[p] || layers.body.data[p * 4 + 3] >= T.data[p * 4 + 3] || back.img.data[p * 4 + 3] < SEEN) continue
+      back.img.data.copy(layers.body.data, p * 4, p * 4, p * 4 + 4)
+      n++
+    }
+    notes.push(`体：切り分けで空いた所 ${n}px を${def.split.back.file}で埋めた`)
+  }
   // 親：切り分けたパーツは元のパーツの子。adopt なら逆（首が頭の親）
   const parent = {}
   for (const [p, c] of Object.entries(def.cuts || {})) {
@@ -549,7 +637,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
     const name = BOSS_DEFS[key]?.name || key
     const dir = path.join(SRC, BOSS_DEFS[key].dir, BOSS_ILLUST_SRC)
     if (!existsSync(dir)) { console.log(`  - ${name}：イラスト版のフォルダが無い（${path.relative(ROOT, dir)}）`); continue }
-    const known = new Set(['立ち絵', ...Object.values(illustFilesOf(key)), ...(def.fill ? [def.fill] : []), ...(def.split ? [def.split.by] : []), ...(def.spare || []), ...def.effects.map(e => e.file),
+    const known = new Set(['立ち絵', ...Object.values(illustFilesOf(key)), ...(def.fill ? [def.fill] : []), ...(def.split ? [def.split.by, ...(def.split.back ? [def.split.back.file] : [])] : []), ...(def.spare || []), ...def.effects.map(e => e.file),
       ...Object.values(def.swaps || {}).map(s => s.file).filter(Boolean)])
     const files = readdirSync(dir, { withFileTypes: true }).filter(e => e.isFile()).map(e => e.name)
     for (const f of files) if (!f.startsWith('見本') && !known.has(path.basename(f, path.extname(f)))) console.log(`  ? ${name}：使わない絵（名前が決まりと違う）：${f}`)
