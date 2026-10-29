@@ -59,7 +59,9 @@ const srcOf = (key, kind) => {
 //   arm＝前脚の角度（＋で爪が上がる）／jaw＝下あごの角度（−で開く）／glow＝口の火（0〜1）
 //   ＋の角度は時計回り：右へ伸びる手前の翼は＋で下がる・左へ伸びる奥の翼と首は＋で上がる
 //   人の形（雨摩座）：armN・armF＝手前・奥の手の角度（左へ伸びる手は＋で上がる）／water＝水の帯の角度
-const ZERO = { x: 0, y: 0, r: 0, neck: 0, head: 0, wingN: 0, wingF: 0, wingNSq: 0, wingFSq: 0, arm: 0, jaw: 0, glow: 0, armN: 0, armF: 0, water: 0 }
+//     armCOn・armUOn＝右腕の構えの絵（胸元・真上）に切り替える割合（0〜1・swapOpacityOf）／armD・armC・armU＝その腕の角度（ふだんは 0）
+const ZERO = { x: 0, y: 0, r: 0, neck: 0, head: 0, wingN: 0, wingF: 0, wingNSq: 0, wingFSq: 0, arm: 0, jaw: 0, glow: 0, armN: 0, armF: 0, water: 0,
+  armD: 0, armC: 0, armU: 0, armCOn: 0, armUOn: 0 }
 // 技ごとの動き：keys＝[時刻ミリ秒, 姿勢（待機に足す）]・hitMs＝当たる（撃ち出す）時刻
 //   trails＝残像の筋（part のパーツの点 pts を、lagMs 前からいまの時刻までたどる。fromMs〜toMs のあいだだけ・kind＝claw 爪／wind 風）
 //   shots＝飛ぶ絵の出どころ（無ければ口から1つ）。{ part, pt（パーツの点）, delayMs（hitMs からの遅れ・−で先に出る）, size（飛ぶ絵の大きさの倍率） }
@@ -67,6 +69,9 @@ const ZERO = { x: 0, y: 0, r: 0, neck: 0, head: 0, wingN: 0, wingF: 0, wingNSq: 
 //   charge＝撃つ前に口でためる火の玉（kind のエフェクトの絵を fromMs〜toMs のあいだ口で大きくする・size＝枠の幅に対する大きさ）
 //     エフェクトに on があれば口ではなく相手の頭上（雨摩座の水天葬の渦の雲）：toMs のあと holdMs で薄れる・構えのあいだも出す
 // ボスごとの idleKeep＝技のあいだも残す待機のぶん（無ければ IDLE_KEEP）・cast＝構え（大技の詠唱）のあいだの姿勢 pose と震え shake
+// 雨摩座の手の通り道（立ち絵 640px の上の点・水の筋 arcs）：SWEEP＝胸元の手（構えの絵）→差しのべた指先／THROW＝真上に掲げた手→差しのべた指先
+const SWEEP = [[285, 168], [230, 182], [160, 205], [100, 228], [54, 251]]
+const THROW = [[110, -8], [62, 40], [34, 110], [36, 180], [54, 251]]
 export const BOSS_ILLUST_DEFS = {
   varuzenoku: {
     // 待機：1回の羽ばたき（ミリ秒）・翼の振れ幅（°・上げきり→下ろしきり）・下ろしきりで縮める割合・奥の翼の振れ幅（手前の何倍）・体の浮き沈み（枠の割合）
@@ -165,9 +170,27 @@ export const BOSS_ILLUST_DEFS = {
     // 立ち絵そのものが体。ChatGPT の体（fill）は、切り分けで空いた所（頭や手が動くと見える）を埋めるだけに使う
     base: 'stand', fill: '体',
     // 奥から手前へ。水の帯は立ち絵に無いので、描いた場所のまま置く（fixed・s＝立ち絵の大きさに合わせたうえでの倍率）
-    layers: ['water', 'body', 'armF', 'head', 'armN'],
+    //   右腕（手前の腕）は3つの絵を切り替える（swaps）：armD＝立ち絵の差しのべた腕（手前の手 armN はこの中）・armC＝胸元に構えた腕・armU＝真上に掲げた腕。
+    //   ふだんの腕と手は頭の後ろ、構えの腕は頭より手前（掲げた腕は冠の前を通る）
+    layers: ['water', 'body', 'armF', 'armD', 'armN', 'head', 'armC', 'armU'],
     files: { water: '水の帯' },
     fixed: { water: { s: 1.06 } },
+    // 【確定】2026-10-29 手振り（ユーザー「技を撃つとき、もっと手振りとかのモーション増やしてほしい、一回水平に右手を胸元まで持ってきて手前にさっと
+    //   持っていくやつ（いけー！）」「大技は右手を真上に掲げて相手に向かって放つ感じ」→選んだ「腕の絵を2枚描き足す」）：
+    //   右腕だけを描き変えた立ち絵2枚を立ち絵に重ね（fitPart・掲げる絵は人物が少し小さく描き変わったので胴のまわり fitOn で合わせ直す）、
+    //   腕のまわり（armZone＝3つの腕と袖が入る所・頭は除く）だけを切り取る。体からはその所を抜き、3つの絵のどれか1つで埋める（穴が出ない）。
+    //   構えの絵のふちは feather px でぼかして立ち絵になじませる。掲げた腕は冠の横を通る（extra・頭の所も描く）・指先が枠の上へ出る（top px）
+    swaps: {
+      armD: { base: true },
+      armC: { file: '立ち絵_胸元', on: 'armCOn' },
+      armU: { file: '立ち絵_掲げる', on: 'armUOn', top: 64, fitOn: [[180, 140], [340, 140], [350, 330], [180, 330]],
+        extra: [[[55, -50], [165, -50], [170, 35], [215, 100], [240, 140], [165, 150], [120, 90], [85, 40]]] },
+    },
+    armZone: [[[30, 215], [120, 205], [165, 150], [200, 138], [245, 148], [312, 148], [318, 200], [262, 212], [250, 300], [262, 420], [262, 525],
+      [150, 545], [60, 525], [40, 420], [28, 300]]],
+    swapFeather: 10,
+    // 腕を回すとき（ふだんは回さない）の中心＝肩
+    pivots: { armD: [200, 185], armC: [200, 185], armU: [200, 140] },
     // 軽くする（パーツは 120KB まで）：体は立ち絵まるごとなので少し粗く・水の帯は柔らかいので細かさを6割に
     quality: 80, shrink: { water: 0.6 },
     // 届いたが今は使わない絵（髪・奥の腕は立ち絵と形が違って重ならなかった・頭と手前の腕は立ち絵から切るほうが同じ見た目）
@@ -179,59 +202,66 @@ export const BOSS_ILLUST_DEFS = {
     } },
     // 技のあいだも揺れはそのまま（止めると技の頭と終わりで手や水の帯がぴくっと跳ねる）
     idleKeep: { y: 1, r: 1, head: 1, armN: 1, armF: 1, water: 1 },
-    // 構え（水天葬の5秒）：天を仰いで両手を掲げ、小さく震える
-    cast: { pose: { x: 0.015, y: -0.035, r: 4.5, head: 6, armN: 26, armF: -12, water: 12 }, shake: { r: 0.35, armN: 1.4, armF: 1.4 } },
-    // 切り分け（立ち絵 640px の上の点）。頭＝冠と顔（首の付け根で傾ける）・手前の手と奥の手＝袖口から先（袖口で回す）
+    // 構え（水天葬の5秒）：天を仰いで右腕を真上に掲げ（armU）、小さく震える。水天葬のためのいちばん上と同じ形
+    cast: { pose: { x: 0.02, y: -0.038, r: 4.8, head: 6.5, armF: -13, water: 13, armUOn: 1 }, shake: { r: 0.35, armF: 1.4 } },
+    // 切り分け（立ち絵 640px の上の点）。頭＝冠と顔（首の付け根で傾ける）・手前の手＝袖口から先（ふだんの腕 armD から切る）・奥の手＝袖口から先（袖口で回す）
     cuts: {
       head: { from: 'body', pivot: [230, 145],
         take: [[140, 0], [320, 0], [320, 128], [255, 128], [245, 145], [215, 150], [200, 145], [185, 115], [178, 163], [155, 163], [155, 75], [140, 60]] },
-      armN: { from: 'body', pivot: [124, 231],
+      armN: { from: 'armD', pivot: [124, 231],
         take: [[40, 222], [95, 214], [120, 215], [126, 220], [127, 242], [100, 256], [80, 285], [40, 290]] },
       armF: { from: 'body', pivot: [396, 154],
         take: [[355, 95], [410, 95], [410, 155], [382, 155], [367, 135], [355, 130]] },
     },
-    // 技。[54, 251]＝手前の手の指先（立ち絵 640px の上・雨礫と水縛の帯が出る所）
+    // 技。どれも「右手を胸元に引き寄せて（armC）ため、相手の方へさっと払う（ふだんの差しのべた腕へ戻る＝いけー！）」・大技は「真上に掲げて（armU）振り下ろす」。
+    //   払う・振り下ろすときは、手の通り道に水の筋（arcs＝立ち絵の点をなめらかにつないだ線を fromMs〜toMs で描き、fadeMs で薄れる）。
+    //   構えの絵のあいだは手前の手（armN）が見えないので、払う直前に上げておき（＋）、払った瞬間に下へ振る（－）
+    //   [54, 251]＝手前の手の指先（雨礫と水縛の帯が出る所）
     motions: {
-      // 雨礫：手前の手を振り上げてから払い、指先から水の礫を撃つ（指先に水の筋）
-      shot: { totalMs: 900, hitMs: 380, keys: [
+      // 雨礫：胸元に引き寄せて一瞬ため、さっと払って指先から水の礫
+      shot: { totalMs: 1000, hitMs: 420, keys: [
         [0, {}],
-        [240, { x: 0.02, y: -0.01, r: 2.5, head: 2, armN: 24, armF: 6, water: 4 }],
-        [300, { x: 0.022, y: -0.012, r: 2.8, head: 2.2, armN: 26, armF: 6, water: 4 }],
-        [380, { x: -0.045, y: 0.008, r: -3, head: -2, armN: -14, armF: -4, water: -5 }],
-        [560, { x: -0.04, y: 0.006, r: -2.5, head: -1.5, armN: -12, armF: -3, water: -4 }],
-        [900, {}],
-      ], trails: [
-        { kind: 'water', part: 'armN', pts: [[54, 251]], fromMs: 300, toMs: 380, lagMs: 70, fadeMs: 180 },
-      ], shots: [{ part: 'armN', pt: [54, 251], delayMs: 0, size: 1 }] },
-      // 氷雨：天を仰いで奥の手を差し上げ、手前の手を相手へ振り下ろす＝相手の頭上に雨雲（飛ぶ絵は無い）
-      sleet: { totalMs: 1300, hitMs: 520, keys: [
+        [150, { x: 0.012, y: -0.006, r: 1.5, head: 1.5, armF: 3, water: 3 }],
+        [230, { x: 0.026, y: -0.012, r: 3, head: 2.5, armF: 6, water: 5, armCOn: 1, armN: 18 }],
+        [340, { x: 0.03, y: -0.014, r: 3.4, head: 2.8, armF: 6, water: 6, armCOn: 1, armN: 18 }],
+        [420, { x: -0.05, y: 0.008, r: -3.5, head: -2, armN: -10, armF: -4, water: -6 }],
+        [600, { x: -0.045, y: 0.006, r: -3, head: -1.5, armN: -8, armF: -3, water: -5 }],
+        [1000, {}],
+      ], arcs: [{ kind: 'water', pts: SWEEP, fromMs: 345, toMs: 420, fadeMs: 200 }],
+      shots: [{ part: 'armN', pt: [54, 251], delayMs: 0, size: 1 }] },
+      // 氷雨：天を仰いで奥の手を差し上げ、右手を胸元に引き寄せてため、さっと払う＝相手の頭上に雨雲（飛ぶ絵は無い）
+      sleet: { totalMs: 1350, hitMs: 560, keys: [
         [0, {}],
-        [360, { x: 0.015, y: -0.03, r: 3.5, head: 6, armN: 10, armF: -10, water: 6 }],
-        [440, { x: 0.017, y: -0.032, r: 3.8, head: 6.5, armN: 11, armF: -12, water: 7 }],
-        [520, { x: -0.03, y: 0.006, r: -2, head: -2, armN: -16, armF: 6, water: -6 }],
-        [800, { x: -0.028, y: 0.005, r: -1.8, head: -1.5, armN: -14, armF: 5, water: -5 }],
-        [1300, {}],
-      ] },
-      // 水縛の帯：身を引いて（水の帯も大きく振れる）から手前の手を突き出す＝帯が指先から相手へ
-      bind: { totalMs: 1150, hitMs: 460, keys: [
+        [200, { x: 0.015, y: -0.02, r: 3, head: 5, armF: -8, water: 5 }],
+        [300, { x: 0.02, y: -0.03, r: 3.6, head: 6.5, armF: -12, water: 7, armCOn: 1, armN: 18 }],
+        [480, { x: 0.022, y: -0.033, r: 3.9, head: 7, armF: -13, water: 8, armCOn: 1, armN: 18 }],
+        [560, { x: -0.04, y: 0.006, r: -2.5, head: -2, armN: -12, armF: 6, water: -6 }],
+        [840, { x: -0.035, y: 0.005, r: -2, head: -1.5, armN: -10, armF: 5, water: -5 }],
+        [1350, {}],
+      ], arcs: [{ kind: 'water', pts: SWEEP, fromMs: 485, toMs: 560, fadeMs: 220 }] },
+      // 水縛の帯：身を引いて（水の帯も大きく振れる）右手を胸元へ、長めにためてから突き出すように払う＝帯が指先から相手へ
+      bind: { totalMs: 1250, hitMs: 520, keys: [
         [0, {}],
-        [300, { x: 0.03, y: -0.015, r: 4, head: 3, armN: 22, armF: 8, water: 10 }],
-        [380, { x: 0.032, y: -0.016, r: 4.3, head: 3.2, armN: 24, armF: 9, water: 11 }],
-        [460, { x: -0.06, y: 0.01, r: -4.5, head: -3, armN: -18, armF: -6, water: -10 }],
-        [700, { x: -0.055, y: 0.008, r: -4, head: -2.5, armN: -16, armF: -5, water: -9 }],
-        [1150, {}],
-      ], trails: [
-        { kind: 'water', part: 'armN', pts: [[54, 251]], fromMs: 380, toMs: 460, lagMs: 70, fadeMs: 200 },
-      ], shots: [{ part: 'armN', pt: [54, 251], delayMs: 0, size: 1 }] },
-      // 水天葬：両手を掲げて（構えの姿勢と同じ形）ため、振り下ろすと相手の頭上の渦の雲から滝が落ちる
-      deluge: { totalMs: 1700, hitMs: 900, keys: [
+        [130, { x: 0.012, y: -0.006, r: 1.8, head: 1.2, armF: 4, water: 5 }],
+        [220, { x: 0.026, y: -0.013, r: 3.6, head: 2.6, armF: 7, water: 10, armCOn: 1, armN: 18 }],
+        [440, { x: 0.034, y: -0.017, r: 4.4, head: 3.3, armF: 9, water: 12, armCOn: 1, armN: 18 }],
+        [520, { x: -0.065, y: 0.01, r: -4.8, head: -3, armN: -14, armF: -6, water: -11 }],
+        [760, { x: -0.058, y: 0.008, r: -4.2, head: -2.5, armN: -12, armF: -5, water: -9 }],
+        [1250, {}],
+      ], arcs: [{ kind: 'water', pts: SWEEP, fromMs: 445, toMs: 520, fadeMs: 220 }],
+      shots: [{ part: 'armN', pt: [54, 251], delayMs: 0, size: 1 }] },
+      // 水天葬：右腕を真上に掲げて（構えの姿勢と同じ形）ため、相手の方へ振り下ろす＝相手の頭上の渦の雲から滝が落ちる
+      deluge: { totalMs: 1800, hitMs: 1000, keys: [
         [0, {}],
-        [380, { x: 0.02, y: -0.035, r: 4.5, head: 6, armN: 26, armF: -12, water: 12 }],
-        [760, { x: 0.024, y: -0.04, r: 5, head: 7, armN: 28, armF: -13, water: 13 }],
-        [900, { x: -0.06, y: 0.015, r: -5, head: -3, armN: -20, armF: 6, water: -12 }],
-        [1200, { x: -0.055, y: 0.012, r: -4.5, head: -2.5, armN: -18, armF: 5, water: -10 }],
-        [1700, {}],
-      ], charge: { kind: 'charge', fromMs: 0, toMs: 900, holdMs: 700 } },
+        [120, { x: 0.006, y: -0.012, r: 1.8, head: 2.2, armF: -4, water: 4, armUOn: 1 }],
+        [300, { x: 0.016, y: -0.033, r: 4.3, head: 5.6, armF: -11, water: 11, armUOn: 1 }],
+        [860, { x: 0.02, y: -0.038, r: 4.8, head: 6.5, armF: -13, water: 13, armUOn: 1 }],
+        [920, { x: 0.024, y: -0.042, r: 5.2, head: 7, armF: -14, water: 14, armUOn: 1, armN: 22 }],
+        [1000, { x: -0.065, y: 0.016, r: -5.5, head: -3, armN: -14, armF: 6, water: -13 }],
+        [1300, { x: -0.058, y: 0.013, r: -4.8, head: -2.5, armN: -12, armF: 5, water: -11 }],
+        [1800, {}],
+      ], arcs: [{ kind: 'water', pts: THROW, fromMs: 925, toMs: 1000, fadeMs: 260 }],
+      charge: { kind: 'charge', fromMs: 0, toMs: 1000, holdMs: 700 } },
     },
     // on＝相手のどこに出すか（大きさは自分の絵の枠の幅に対して）・anim＝見せ方（drop＝上から下へ降りる・bind＝外から締まる）・
     //   lead＝絵が出はじめてから当たるまで（降りきった時刻がダメージ）・fadeTop＝絵の上のはしをぼかす割合（滝の上を雲になじませる）
@@ -324,10 +354,41 @@ export const mouthPointOf = (key, pose) => {
   return j ? rotPoint(j.mouth, j.pivot, (pose.jaw || 0) / 2) : BOSS_ILLUST[key].mouth
 }
 
+// 腕の構えの絵の濃さ（0〜1）：切り替える割合 w の前半で新しい絵が出きり、後半で前の絵（ふだんの腕）が消える
+//   （途中で両方が透けて、抜いた体の穴が見えないように）。swap＝{ on: 'armCOn' }（構えの絵）か { others: [...] }（ふだんの腕）
+export const swapOpacityOf = (swap, pose) => {
+  const w = (f) => Math.min(1, Math.max(0, pose[f] || 0))
+  if (swap.on) return smooth(Math.min(1, 2 * w(swap.on)))
+  return 1 - smooth(Math.max(0, 2 * Math.max(0, ...swap.others.map(w)) - 1))
+}
+// 点の列をなめらかにつなぐ（Catmull-Rom・1区間 n 点）
+const smoothPath = (pts, n = 6) => {
+  const out = []
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)]
+    for (let j = 0; j < n; j++) {
+      const t = j / n, t2 = t * t, t3 = t2 * t
+      out.push([0, 1].map(c => 0.5 * (2 * p1[c] + (p2[c] - p0[c]) * t + (2 * p0[c] - 5 * p1[c] + 4 * p2[c] - p3[c]) * t2 + (3 * p1[c] - p0[c] - 3 * p2[c] + p3[c]) * t3)))
+    }
+  }
+  out.push(pts.at(-1))
+  return out
+}
+
 // 残像の筋（引っかく爪・翼の風）：motion.trails の点を、少し前からいまの時刻までたどった線（立ち絵の px）
 //   → [{ kind, line: [[x, y], …（古い→新しい）], alpha }]。toMs を過ぎたら fadeMs で薄れながら縮む
+//   motion.arcs（雨摩座の払う手の水の筋）：決まった通り道を fromMs〜toMs で先へ描き足し、toMs のあと fadeMs で根もとから消える（体の傾き・ずれに合わせる）
 export const illustTrailsAt = (key, motion, ms, tMs) => {
   const out = []
+  for (const a of motion?.arcs || []) {
+    if (ms < a.fromMs || ms >= a.toMs + a.fadeMs) continue
+    const path = smoothPath(a.pts), last = path.length - 1
+    const head = Math.max(1, Math.round(Math.min(1, (ms - a.fromMs) / (a.toMs - a.fromMs)) * last))
+    const fade = ms <= a.toMs ? 0 : (ms - a.toMs) / a.fadeMs
+    const tail = Math.min(head - 1, Math.floor(fade * last))
+    const pose = illustPoseAt(key, motion, ms, tMs)
+    out.push({ kind: a.kind, alpha: 1 - fade, line: path.slice(tail, head + 1).map(p => illustPointAt(key, pose, p, 'body')) })
+  }
   for (const tr of motion?.trails || []) {
     if (ms < tr.fromMs || ms >= tr.toMs + tr.fadeMs) continue
     const t1 = Math.min(ms, tr.toMs), t0 = Math.max(tr.fromMs, ms - tr.lagMs)
@@ -349,8 +410,11 @@ export const bossIllustOf = (key) => {
   const def = BOSS_ILLUST_DEFS[key], art = BOSS_ILLUST[key], base = BOSS_DEFS[key]
   if (!def || !art?.parts || !base) return null
   // nest＝親の中に重ねる（親が回るパーツのとき＝頭は首・下あごは頭の中）。前脚の親（体）は回らないので、ほかのパーツと同じ並びで重ねる
+  //   swap＝腕の構えの絵（swapOpacityOf に渡す・雨摩座）
+  const ons = Object.values(def.swaps || {}).map(s => s.on).filter(Boolean)
   const parts = illustPartsOf(key).filter(p => art.parts[p]).map(p => ({ key: p, src: srcOf(key, illustKindOf(p)), ...art.parts[p],
-    nest: !!art.parts[p].parent && art.parts[p].parent in ZERO }))
+    nest: !!art.parts[p].parent && art.parts[p].parent in ZERO,
+    swap: def.swaps?.[p] ? (def.swaps[p].on ? { on: def.swaps[p].on } : { others: ons }) : null }))
   const motions = {}
   for (const m of base.motions) {
     const md = def.motions[m.key]
@@ -371,7 +435,7 @@ export const bossIllustOf = (key) => {
       return { front: front.map(Math.round), delayMs: sh.delayMs, size: sh.size ?? 1 }
     })
     // 当たる時刻＝撃ち出す時刻＋飛ぶ時間＋当たる絵が降りきるまで（lead・氷雨と水天葬）
-    motions[m.key] = { label: m.file, keys: md.keys, trails: md.trails || [], totalMs: md.totalMs, hitMs: md.hitMs, flyMs, impactMs: md.hitMs + flyMs + (fx.hit?.lead || 0),
+    motions[m.key] = { label: m.file, keys: md.keys, trails: md.trails || [], arcs: md.arcs || [], totalMs: md.totalMs, hitMs: md.hitMs, flyMs, impactMs: md.hitMs + flyMs + (fx.hit?.lead || 0),
       front: shots[0].front, shots, fx: Object.keys(fx).length ? fx : null, charge: md.charge && fx[md.charge.kind] ? md.charge : null }
   }
   const jaw = def.cuts?.jaw && art.parts.jaw ? { line: def.cuts.jaw.line, pivot: def.cuts.jaw.pivot, mouth: def.cuts.jaw.mouth } : null

@@ -4,7 +4,7 @@ import { buffChips, ailChips, stateChips, needNow, CAST_SEC } from '../core/atb.
 import { STAT_DEFS } from '../core/stats.js'
 import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC } from '../lib/atbFx.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
-import { illustPoseAt, illustCastPoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint } from '../lib/bossIllust.js'
+import { illustPoseAt, illustCastPoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf } from '../lib/bossIllust.js'
 
 // ============================================================
 // 「レベルキャップあり」版（v2cap）— ATB戦闘の舞台（自分が左・モンスターが右）
@@ -31,6 +31,8 @@ import { illustPoseAt, illustCastPoseAt, illustTrailsAt, illustPointAt, mouthPoi
 //   ・2026-10-29 雨摩座の技：構え（大技の詠唱）のあいだは構えの姿勢（両手を掲げて震える）・構えのすぐあとの技は構えの姿勢からつなぐ。
 //     エフェクトを相手の頭上・足元に出す（on）：氷雨の雨・水天葬の滝は上から下へ降りる（drop）・水縛の帯は外から締まる（bind）・
 //     水天葬の渦の雲（ためる）は構えのあいだから相手の頭上に出て、滝が落ちたら薄れる
+//   ・2026-10-29 雨摩座の手振り（ユーザー「右手を胸元まで持ってきて手前にさっと（いけー！）」「大技は右手を真上に掲げて相手に向かって放つ」）：
+//     右腕は3つの絵（ふだん・胸元・真上）を切り替える（RigPart の濃さ）。払う・振り下ろす手の通り道に水の筋（RigTrails の water）
 // ============================================================
 
 const Bar = ({ pct, color, h = 10 }) => (
@@ -96,12 +98,15 @@ const partTransform = (p, pose) => {
   if (typeof deg !== 'number') return undefined
   return `rotate(${deg.toFixed(2)}deg)${sq ? ` rotate(${p.ax || 0}deg) scaleX(${(1 - sq).toFixed(3)}) rotate(${-(p.ax || 0)}deg)` : ''}`
 }
+//   腕の構えの絵（p.swap・雨摩座）は切り替える割合で濃さを変え、見えないときは隠す（子のパーツもいっしょ）
 const RigPart = ({ art, p, box, pose }) => {
   const S = art.base
   const mouth = art.jaw ? rotPoint(art.jaw.mouth, art.jaw.pivot, (pose.jaw || 0) / 2) : [art.mouth[0] + S * 0.03, art.mouth[1]]
+  const op = p.swap ? swapOpacityOf(p.swap, pose) : 1
   return (
     <div style={{ position:'absolute', left:`${((p.x - box.x) / box.w) * 100}%`, top:`${((p.y - box.y) / box.h) * 100}%`,
       width:`${(p.w / box.w) * 100}%`, height:`${(p.h / box.h) * 100}%`,
+      opacity: op < 1 ? op : undefined, visibility: op <= 0 ? 'hidden' : undefined,
       transform: partTransform(p, pose),
       transformOrigin:`${((p.px - p.x) / p.w) * 100}% ${((p.py - p.y) / p.h) * 100}%` }}>
       {p.key === 'head' && <MouthInside art={art} p={p} pose={pose} />}
@@ -154,7 +159,8 @@ const MouthInside = ({ art, p, pose }) => {
 const TRAIL_STYLE = {
   claw: { glow: '#ff4a14', core: '#fff0c0', gw: 11, cw: 3.2 },
   wind: { glow: 'rgba(255,110,80,0.5)', core: 'rgba(255,238,228,0.9)', gw: 18, cw: 3 },
-  water: { glow: 'rgba(70,160,255,0.6)', core: 'rgba(225,245,255,0.95)', gw: 12, cw: 3 },
+  // 水（雨摩座の払う手）：白い袖の上を通るので、濃い青で太く
+  water: { glow: 'rgba(40,130,255,0.9)', core: 'rgba(225,248,255,1)', gw: 30, cw: 8 },
 }
 const RigTrails = ({ art, trails }) => (
   <svg viewBox={`0 0 ${art.base} ${art.base}`} style={{ position:'absolute', inset:0, width:'100%', height:'100%', overflow:'visible', pointerEvents:'none', zIndex: 1 }}>

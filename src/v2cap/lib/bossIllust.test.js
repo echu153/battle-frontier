@@ -8,7 +8,7 @@ import { BOSS_ART_DIR, BOSS_DEFS, bossFileOf } from './bossArt.js'
 import {
   BOSS_ILLUST_DEFS, BOSS_ILLUST_SIZE, illustPartsOf, illustKindOf, illustFxKindOf,
   bossIllustOf, illustPoseAt, idlePoseAt, motionPoseAt, illustPointAt, illustTrailsAt, mouthPointOf, rotPoint, partMove,
-  illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS,
+  illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf,
 } from './bossIllust.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { dilate, erode, leftTipOf, fitPart, inPoly } from '../../../tools/v2cap-boss-illust.mjs'
@@ -271,14 +271,22 @@ test('【確定】2026-10-28 奥の翼は付け根で回す（決まりの pivot
   assert.ok(inPoly(d.wingFToBody, px + 20, py + 15), '付け根のすぐ下のとげは体に入れる')
 })
 
-test('【確定】2026-10-29 雨摩座のイラスト版：立ち絵が体・頭と両手は立ち絵から切り分けて体の手前（水の帯がいちばん奥）・回す中心は首と袖口', () => {
+test('【確定】2026-10-29 雨摩座のイラスト版：立ち絵が体・頭と両手は立ち絵から切り分ける（水の帯がいちばん奥）・右腕は3つの絵を切り替える（手前の手はふだんの腕の中）・回す中心は首と袖口', () => {
   const a = bossIllustOf('amaza'), d = BOSS_ILLUST_DEFS.amaza
   assert.ok(a)
-  assert.deepEqual(a.parts.map(p => p.key), ['water', 'body', 'armF', 'head', 'armN'])
+  assert.deepEqual(a.parts.map(p => p.key), ['water', 'body', 'armF', 'armD', 'armN', 'head', 'armC', 'armU'])
+  const by = Object.fromEntries(a.parts.map(p => [p.key, p]))
+  assert.equal(by.armN.parent, 'armD')
+  assert.equal(by.armN.nest, true, '手前の手はふだんの腕の中（いっしょに消える）')
+  assert.deepEqual(by.armD.swap, { others: ['armCOn', 'armUOn'] })
+  assert.deepEqual(by.armC.swap, { on: 'armCOn' })
+  assert.deepEqual(by.armU.swap, { on: 'armUOn' })
+  assert.ok(by.armU.y < 0, `掲げた指先は枠の上へ出る（${by.armU.y}）`)
+  assert.ok(by.armC.x + by.armC.w > 280, '胸元の手は胸の前まで')
   for (const k of ['head', 'armN', 'armF']) {
-    const p = a.parts.find(q => q.key === k)
+    const p = by[k]
     assert.deepEqual([p.px, p.py], d.cuts[k].pivot)
-    assert.equal(p.nest, false, `${k} は体の中に重ねない（体は回さない）`)
+    if (k !== 'armN') assert.equal(p.nest, false, `${k} は体の中に重ねない（体は回さない）`)
     assert.ok(p.px >= p.x - 10 && p.px <= p.x + p.w + 10 && p.py >= p.y - 10 && p.py <= p.y + p.h + 10, `${k} の回す中心はパーツのそば`)
   }
   assert.equal(a.jaw, null, '口は開けない（人の形）')
@@ -296,16 +304,21 @@ test('【確定】2026-10-29 雨摩座の待機：揺れの足し算（浮き沈
   assert.equal(poses[0].wingN, 0, '翼は無い')
 })
 
-test('【確定】2026-10-29 雨摩座の技4つ：手を上げて（ためて）から相手の方（左）へ振り下ろす・待機から始まって待機へ戻る・エフェクト7枚', () => {
+test('【確定】2026-10-29 雨摩座の技4つ：右手を胸元に引き寄せて（大技は真上に掲げて）ため、撃つ時刻に相手の方へさっと払う（ふだんの腕に戻る・前へ出る）・待機から始まって待機へ戻る・エフェクト7枚', () => {
   const a = bossIllustOf('amaza'), D = BOSS_ILLUST_DEFS.amaza.motions
   assert.deepEqual(Object.values(a.motions).map(m => m.label), BOSS_DEFS.amaza.motions.map(m => m.file))
   assert.equal(Object.values(a.motions).reduce((n, m) => n + Object.keys(m.fx || {}).length, 0), 7)
-  assert.equal(a.srcs.length, 5 + 7)
+  assert.equal(a.srcs.length, 8 + 7)
+  const armD = a.parts.find(p => p.key === 'armD').swap
   for (const [k, M] of Object.entries(D)) {
     const at = (ms) => motionPoseAt(M.keys, ms)
-    const up = M.keys.at(-4)[1]   // 振り下ろす前のいちばん上
-    assert.ok(up.armN > 8 && up.y < 0, `${k}：手を上げる（${JSON.stringify(up)}）`)
-    assert.ok(at(M.hitMs).armN < -10 && at(M.hitMs).x < -0.02, `${k}：撃つときは手を相手の方へ振り下ろして前へ出る`)
+    const [tUp, up] = M.keys.at(-4), on = k === 'deluge' ? 'armUOn' : 'armCOn'   // 払う前のため
+    assert.equal(up[on], 1, `${k}：払う前は構えの腕（${on}）`)
+    assert.ok(up.y < 0 && up.armN > 8, `${k}：ためるときは浮いて、隠れた手前の手を上げておく`)
+    assert.equal(swapOpacityOf(armD, at(tUp)), 0, `${k}：ためているあいだ、ふだんの腕は見えない`)
+    assert.ok(!at(M.hitMs).armCOn && !at(M.hitMs).armUOn, `${k}：撃つ時刻はふだんの差しのべた腕`)
+    assert.ok(M.hitMs - tUp <= 80, `${k}：払うのは速い（さっと）`)
+    assert.ok(at(M.hitMs).armN < -8 && at(M.hitMs).x < -0.02, `${k}：撃つときは手を相手の方へ振り下ろして前へ出る`)
     assert.ok(Object.values(at(0)).every(v => v === 0), `${k}：待機から始まる`)
     assert.equal(at(M.totalMs), null)
     assert.ok(M.hitMs < M.totalMs)
@@ -344,28 +357,58 @@ test('【確定】2026-10-29 雨摩座のエフェクト：雨礫・水縛の帯
   assert.ok(Object.values(a.motions).every(m => m === d || !m.charge), '雲を出すのは水天葬だけ')
 })
 
-test('【確定】2026-10-29 構え（水天葬の5秒）：両手を掲げて震える・構えのすぐあとの技は構えの姿勢からつなぐ（黒龍は構えても待機のまま）', () => {
+test('【確定】2026-10-29 構え（水天葬の5秒）：右腕を真上に掲げて震える・構えのすぐあとの技は構えの姿勢からつなぐ（ふだんの腕が一瞬も出ない）・黒龍は構えても待機のまま', () => {
   const C = BOSS_ILLUST_DEFS.amaza.cast, idle = BOSS_ILLUST_DEFS.amaza.idle
   const p0 = illustCastPoseAt('amaza', 0, 1000)
   assert.deepEqual(p0, idlePoseAt(idle, 1000), '構えはじめは待機と同じ（急に跳ねない）')
   const held = illustCastPoseAt('amaza', CAST_IN_MS + 2000, 1000), base = idlePoseAt(idle, 1000)
-  for (const f of ['armN', 'armF', 'y', 'head']) {
+  for (const f of ['armUOn', 'armF', 'y', 'head']) {
     assert.ok(Math.abs(held[f] - base[f] - C.pose[f]) <= (C.shake[f] || 0) + 1e-9, `${f}：構えの姿勢（震えのぶんだけずれる）`)
   }
-  assert.ok(C.pose.armN > 20 && C.pose.armF < -8 && C.pose.y < 0, '両手を掲げて浮く')
+  assert.ok(C.pose.armUOn === 1 && C.pose.armF < -8 && C.pose.y < 0, '右腕を真上に掲げ（構えの絵）、奥の手も上げて浮く')
   // 構えのすぐあとの技：はじめは構えの姿勢・CAST_OUT_MS たてば技の動きだけ
   const m = bossIllustOf('amaza').motions.deluge
   const t = 1000
   const s0 = illustPoseAt('amaza', m, 0, t, true), s1 = illustPoseAt('amaza', m, CAST_OUT_MS, t, true), n1 = illustPoseAt('amaza', m, CAST_OUT_MS, t)
-  assert.ok(Math.abs(s0.armN - base.armN - C.pose.armN) < 1e-9, '構えの姿勢から始まる')
+  assert.ok(Math.abs(s0.armF - base.armF - C.pose.armF) < 1e-9 && s0.armUOn === 1, '構えの姿勢から始まる')
   assert.deepEqual(s1, n1)
-  // 構えの姿勢と、ためる動きのいちばん上はほぼ同じ形（つないでも手が跳ねない）
-  const top = BOSS_ILLUST_DEFS.amaza.motions.deluge.keys[1][1]
-  for (const f of ['armN', 'armF', 'head', 'r']) assert.ok(Math.abs(top[f] - C.pose[f]) <= 1, `${f}：構えと技のためが同じ形`)
+  // 構えの姿勢と、ためる動き（掲げきった所）は同じ形（つないでも跳ねない）
+  const top = BOSS_ILLUST_DEFS.amaza.motions.deluge.keys.find(([ms]) => ms === 860)[1]
+  for (const f of ['armUOn', 'armF', 'head', 'r', 'y']) assert.ok(Math.abs(top[f] - C.pose[f]) < 1e-9, `${f}：構えと技のためが同じ形`)
+  // 構えのすぐあとも、構えずに流しても、掲げた腕から振り下ろすまで ふだんの腕は出ない（技のはじめ120ms で掲げきる）
+  const armD = bossIllustOf('amaza').parts.find(p => p.key === 'armD').swap
+  for (let ms = 0; ms <= 920; ms += 20) assert.equal(swapOpacityOf(armD, illustPoseAt('amaza', m, ms, t, true)), 0, `構えのあと ${ms}ms`)
+  for (let ms = 120; ms <= 920; ms += 20) assert.equal(swapOpacityOf(armD, illustPoseAt('amaza', m, ms, t)), 0, `構えなし ${ms}ms`)
   // 技のあいだも待機の揺れはそのまま（技の頭と終わりで跳ねない）
   assert.deepEqual(illustPoseAt('amaza', m, 0, t), idlePoseAt(idle, t))
   // 黒龍は構えの決まりが無い＝待機のまま・構えのあとも今までどおり
   assert.deepEqual(illustCastPoseAt('varuzenoku', 3000, 500), idlePoseAt(BOSS_ILLUST_DEFS.varuzenoku.idle, 500))
   const doom = bossIllustOf('varuzenoku').motions.doom
   assert.deepEqual(illustPoseAt('varuzenoku', doom, 100, 500, true), illustPoseAt('varuzenoku', doom, 100, 500))
+})
+
+test('【確定】2026-10-29 雨摩座の手振り：構えの絵の切り替え（前半で新しい絵が出きり、後半でふだんの腕が消える＝途中で透けない）・払う手の水の筋は胸元から差しのべた指先まで', () => {
+  const D = { others: ['armCOn', 'armUOn'] }, C = { on: 'armCOn' }
+  for (const w of [0, 0.25, 0.5, 0.75, 1]) {
+    const pose = { armCOn: w }
+    assert.equal(Math.max(swapOpacityOf(D, pose), swapOpacityOf(C, pose)), 1, `${w}：どちらかは必ず出ている`)
+  }
+  assert.equal(swapOpacityOf(D, { armCOn: 0 }), 1)
+  assert.equal(swapOpacityOf(C, { armCOn: 0 }), 0)
+  assert.equal(swapOpacityOf(D, { armCOn: 1 }), 0)
+  assert.equal(swapOpacityOf(C, { armCOn: 1 }), 1)
+  assert.equal(swapOpacityOf(D, { armUOn: 1.6 }), 0, '1を超えても1')
+  // 水の筋：fromMs〜toMs で先へ描き足し、toMs のあと薄れながら根もとから消える
+  const m = bossIllustOf('amaza').motions.shot, arc = BOSS_ILLUST_DEFS.amaza.motions.shot.arcs[0]
+  assert.deepEqual(illustTrailsAt('amaza', m, arc.fromMs - 1, 0), [])
+  const mid = illustTrailsAt('amaza', m, (arc.fromMs + arc.toMs) / 2, 0)[0]
+  const end = illustTrailsAt('amaza', m, arc.toMs, 0)[0]
+  assert.equal(end.kind, 'water')
+  assert.equal(end.alpha, 1)
+  assert.ok(end.line.length > mid.line.length, '先へ描き足す')
+  const tip = illustPointAt('amaza', illustPoseAt('amaza', m, arc.toMs, 0), [54, 251], 'body')
+  assert.ok(Math.hypot(end.line.at(-1)[0] - tip[0], end.line.at(-1)[1] - tip[1]) < 1, '水の筋は差しのべた指先まで')
+  const fading = illustTrailsAt('amaza', m, arc.toMs + arc.fadeMs / 2, 0)[0]
+  assert.ok(fading.alpha < 1 && fading.line.length < end.line.length, '薄れながら根もとから消える')
+  assert.deepEqual(illustTrailsAt('amaza', m, arc.toMs + arc.fadeMs, 0), [])
 })

@@ -20,6 +20,8 @@
 //   ★2026-10-29 人の形（雨摩座）：パーツの並びと元の絵の名前はボスごと（layers・files）。
 //      base: 'stand' ＝立ち絵そのものを体にする（ChatGPT の体は形が違った）。切り分けで空いた所は ChatGPT の体（fill）を重ねて埋める。
 //      fixed ＝立ち絵に無いもの（水の帯）は重ねる場所を探さず、描いた場所のまま置く
+//   ★2026-10-29 腕の構え（swaps）：右腕だけを描き変えた立ち絵（立ち絵_胸元.png・立ち絵_掲げる.png）を重ね、腕のまわり（armZone）だけを切り取って
+//      切り替えるパーツにする（体からはその所を抜く）。構えの絵のふちはぼかす・枠の上へはみ出す絵は top px だけ上へ広げて描く
 // 使い方：node tools/v2cap-boss-illust.mjs [--force]
 // ★元の絵が無くても（別のPCなど）、作ってある絵と一覧は消さない
 // ============================================================
@@ -224,6 +226,66 @@ const build = (key, def, dir) => {
       notes.push(`体：立ち絵そのもの。${def.fill}（すき間を埋める）は倍率${fit.s.toFixed(3)}・角度${fit.deg}°・位置 ${fit.tx},${fit.ty}（よさ ${fit.score}）`)
     }
   }
+  // ⑥ 腕の構えの絵（swaps・2026-10-29 雨摩座の手振り）：右腕だけを描き変えた立ち絵を立ち絵に重ね、腕のまわり（armZone・頭は除く）だけを切り取る。
+  //   体からその所を抜き、3つの絵（ふだん＝立ち絵・胸元・真上）のどれか1つで埋める。構えの絵のふちは swapFeather px でぼかす（下の体になじむ）。
+  //   extra＝その絵だけが描く所（掲げた腕が冠の横を通る）・top＝枠の上へはみ出すぶん（掲げた指先）。fitOn＝そこだけで重ね直す（人物が描き変わった絵）
+  const tops = {}
+  let zone = null, bodyFull = null   // bodyFull＝腕のまわりを抜く前の体（全体を回す中心はこちらで決める＝抜いても動きが変わらない）
+  if (def.swaps) {
+    const headPoly = def.cuts?.head?.take
+    const inZone = (x, y) => def.armZone.some(z => inPoly(z, x, y)) && !(headPoly && inPoly(headPoly, x, y))
+    const stand = resizeRgba(T0, S, S)
+    for (const [part, sw] of Object.entries(def.swaps)) {
+      const top = sw.top || 0, H = S + top
+      const core = new Uint8Array(S * H)
+      for (let y = 0; y < H; y++) for (let x = 0; x < S; x++) {
+        const fx = x + 0.5, fy = y - top + 0.5
+        if (inZone(fx, fy) || (sw.extra || []).some(z => inPoly(z, fx, fy))) core[y * S + x] = 1
+      }
+      const img = { W: S, H, data: Buffer.alloc(S * H * 4) }
+      if (sw.base) {
+        for (let p = 0; p < S * S; p++) if (core[p + top * S]) stand.data.copy(img.data, (p + top * S) * 4, p * 4, p * 4 + 4)
+      } else {
+        const P = readRgba(need(sw.file))
+        bleed(P)
+        let fit = fitPart(T0, P)
+        if (sw.fitOn) {
+          // 重ねた位置で fitOn の外を消して、もう一度重ねる
+          const th = fit.deg * Math.PI / 180, c = Math.cos(th), sn = Math.sin(th)
+          const Q = { W: P.W, H: P.H, data: Buffer.from(P.data) }
+          for (let y = 0; y < P.H; y++) for (let x = 0; x < P.W; x++) {
+            const X = k * (fit.s * (c * x - sn * y) + fit.tx), Y = k * (fit.s * (sn * x + c * y) + fit.ty)
+            if (!inPoly(sw.fitOn, X, Y)) Q.data[(y * P.W + x) * 4 + 3] = 0
+          }
+          fit = fitPart(T0, Q)
+        }
+        fits[part] = fit
+        const V = warpPart(P, { ...fit, ty: fit.ty + top / k }, S, H, k)
+        // ぼかし：core の外へ swapFeather px で 1→0（頭の所は extra の中だけ）
+        const F = def.swapFeather || 0, soft = new Float32Array(S * H)
+        let cur = core
+        for (let p = 0; p < S * H; p++) if (core[p]) soft[p] = 1
+        for (let i = 1; i <= F; i++) {
+          const nx = dilate(cur, S, H, 1)
+          for (let p = 0; p < S * H; p++) if (nx[p] && !cur[p]) soft[p] = 1 - i / (F + 1)
+          cur = nx
+        }
+        for (let y = 0; y < H; y++) for (let x = 0; x < S; x++) {
+          const p = y * S + x
+          if (!core[p] && soft[p] && headPoly && inPoly(headPoly, x + 0.5, y - top + 0.5)) soft[p] = 0
+          V.data.copy(img.data, p * 4, p * 4, p * 4 + 3)
+          img.data[p * 4 + 3] = Math.round(V.data[p * 4 + 3] * soft[p])
+        }
+        notes.push(`${sw.file}：倍率${fit.s.toFixed(3)}・角度${fit.deg}°・位置 ${fit.tx},${fit.ty}（よさ ${fit.score}${sw.fitOn ? '・胴のまわりで重ね直した' : ''}）`)
+      }
+      layers[part] = img
+      tops[part] = top
+    }
+    bodyFull = maskOf(layers.body)
+    zone = new Uint8Array(S * S)
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) if (inZone(x + 0.5, y + 0.5)) { zone[y * S + x] = 1; layers.body.data[(y * S + x) * 4 + 3] = 0 }
+    notes.push(`右腕：腕のまわり ${zone.reduce((a, v) => a + v, 0)}px を体から抜いて、3つの絵で切り替える`)
+  }
   // ② 奥の翼を立ち絵から切り出す
   const T = resizeRgba(T0, S, S)
   const mk = (part) => maskOf(layers[part])
@@ -280,7 +342,7 @@ const build = (key, def, dir) => {
   }
   // ③ 回す中心・口：翼・頭＝体（奥の翼は頭と体）と重なった所の真ん中／描いた場所のまま置くもの＝自分の真ん中
   const ov = (a, b) => centroidOf(a.map((v, p) => v & b[p]), S)
-  const bodyC = centroidOf(body, S)
+  const bodyC = centroidOf(bodyFull || body, S)
   const pivotOf = { body: bodyC }
   for (const part of PARTS) {
     if (part === 'body' || !layers[part]) continue
@@ -315,7 +377,8 @@ const build = (key, def, dir) => {
   if (fill) {
     let n = 0
     for (let p = 0; p < S * S; p++) {
-      if (layers.body.data[p * 4 + 3] >= T.data[p * 4 + 3] || fill.data[p * 4 + 3] < SEEN) continue
+      // 腕の構えで切り替える所（zone）は3つの絵が埋めるので、埋めない
+      if (zone?.[p] || layers.body.data[p * 4 + 3] >= T.data[p * 4 + 3] || fill.data[p * 4 + 3] < SEEN) continue
       fill.data.copy(layers.body.data, p * 4, p * 4, p * 4 + 4)
       n++
     }
@@ -337,10 +400,11 @@ const build = (key, def, dir) => {
     const img = f ? resizeRgba(t.img, Math.round(t.img.W * f), Math.round(t.img.H * f)) : t.img
     sizes.push([part, writeWebp(img, path.join(OUT, bossFileOf(key, illustKindOf(part))), def.quality || QUALITY)])
     const [px, py] = pivotOf[part]
-    // 長さの向き（回す中心からパーツの真ん中へ・°）：翼を縮める向き
+    // 長さの向き（回す中心からパーツの真ん中へ・°）：翼を縮める向き。枠の上へはみ出す絵（tops）は上のぶんを引く
+    const top = tops[part] || 0
     const c = centroidOf(maskOf(layers[part]), S)
-    const ax = Math.round(Math.atan2(c[1] - py, c[0] - px) * 180 / Math.PI)
-    parts[part] = { x: t.x, y: t.y, w: t.img.W, h: t.img.H, px: Math.round(px), py: Math.round(py), ax, ...(parent[part] ? { parent: parent[part] } : {}) }
+    const ax = Math.round(Math.atan2(c[1] - top - py, c[0] - px) * 180 / Math.PI)
+    parts[part] = { x: t.x, y: t.y - top, w: t.img.W, h: t.img.H, px: Math.round(px), py: Math.round(py), ax, ...(parent[part] ? { parent: parent[part] } : {}) }
   }
   // ④ エフェクト
   const fx = {}
@@ -394,7 +458,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
     const name = BOSS_DEFS[key]?.name || key
     const dir = path.join(SRC, BOSS_DEFS[key].dir, BOSS_ILLUST_SRC)
     if (!existsSync(dir)) { console.log(`  - ${name}：イラスト版のフォルダが無い（${path.relative(ROOT, dir)}）`); continue }
-    const known = new Set(['立ち絵', ...Object.values(illustFilesOf(key)), ...(def.fill ? [def.fill] : []), ...(def.spare || []), ...def.effects.map(e => e.file)])
+    const known = new Set(['立ち絵', ...Object.values(illustFilesOf(key)), ...(def.fill ? [def.fill] : []), ...(def.spare || []), ...def.effects.map(e => e.file),
+      ...Object.values(def.swaps || {}).map(s => s.file).filter(Boolean)])
     const files = readdirSync(dir, { withFileTypes: true }).filter(e => e.isFile()).map(e => e.name)
     for (const f of files) if (!f.startsWith('見本') && !known.has(path.basename(f, path.extname(f)))) console.log(`  ? ${name}：使わない絵（名前が決まりと違う）：${f}`)
     const srcs = files.filter(f => !f.startsWith('見本')).map(f => statSync(path.join(dir, f)).mtimeMs)

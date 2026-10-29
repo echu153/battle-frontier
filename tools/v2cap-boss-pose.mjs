@@ -3,14 +3,15 @@
 // ------------------------------------------------------------
 // 2026-10-28 ユーザー「羽の付け根が外れて見えてる」：画面の枠は 300px までで細部が見えないので、立ち絵の大きさ（640px）で描いて確かめる
 //   重ねる順・子のパーツ（下あご）・回す順は V2capAtbStage.jsx の IllustRig と同じ。口の中は暗い赤で塗るだけ（牙・光・残像は描かない）
-// 使い方：node tools/v2cap-boss-pose.mjs <技のキー|idle> <時刻ミリ秒,…> [出す PNG] [--key varuzenoku] [--scale 0.5]
+// 使い方：node tools/v2cap-boss-pose.mjs <技のキー|idle|cast> <時刻ミリ秒,…> [出す PNG] [--key varuzenoku] [--scale 0.5]
+//   cast＝構え（大技の詠唱）のあいだ（時刻は構えはじめてから）
 //   例）node tools/v2cap-boss-pose.mjs gale 0,400,480,560 out.png   … 横に並べる（左から時刻の順）。idle の時刻は待機の時計
 // ============================================================
 import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readRgba } from './v2cap-motion.mjs'
-import { bossIllustOf, illustPoseAt, rotPoint } from '../src/v2cap/lib/bossIllust.js'
+import { bossIllustOf, illustPoseAt, illustCastPoseAt, rotPoint, swapOpacityOf } from '../src/v2cap/lib/bossIllust.js'
 
 const SELF = fileURLToPath(import.meta.url)
 const ROOT = path.resolve(path.dirname(SELF), '..')
@@ -41,8 +42,11 @@ export const renderPose = (art, imgs, pose) => {
     out[i] = out[i] * (1 - k) + r * k; out[i + 1] = out[i + 1] * (1 - k) + g * k; out[i + 2] = out[i + 2] * (1 - k) + b * k
   }
   const sample = (img, x, y, ch) => (x < 0 || y < 0 || x >= img.W || y >= img.H) ? 0 : img.data[(y * img.W + x) * 4 + ch]
-  const drawPart = (key) => {
+  // op＝親から受けた濃さ。腕の構えの絵（p.swap）は切り替える割合で濃さを変える（画面の RigPart と同じ）
+  const drawPart = (key, op = 1) => {
     const { p, img } = byKey[key], chain = chainOf(key)
+    const o = op * (p.swap ? swapOpacityOf(p.swap, pose) : 1)
+    if (o <= 0) return
     const inside = key === 'head' && art.jaw && (pose.jaw || 0) < -0.5
       ? [...art.jaw.line, ...art.jaw.line.map(q => rotPoint(q, art.jaw.pivot, pose.jaw)).reverse()] : null
     for (let Y = 0; Y < H; Y++) for (let X = 0; X < W; X++) {
@@ -55,9 +59,9 @@ export const renderPose = (art, imgs, pose) => {
       const x0 = Math.floor(sx), y0 = Math.floor(sy), fx = sx - x0, fy = sy - y0
       const px = [0, 1, 2, 3].map(ch => (sample(img, x0, y0, ch) * (1 - fx) + sample(img, x0 + 1, y0, ch) * fx) * (1 - fy)
         + (sample(img, x0, y0 + 1, ch) * (1 - fx) + sample(img, x0 + 1, y0 + 1, ch) * fx) * fy)
-      over(i, px[0], px[1], px[2], px[3])
+      over(i, px[0], px[1], px[2], px[3] * o)
     }
-    for (const c of art.parts) if (c.nest && c.parent === key) drawPart(c.key)
+    for (const c of art.parts) if (c.nest && c.parent === key) drawPart(c.key, o)
   }
   for (const p of art.parts) if (!p.nest) drawPart(p.key)
   return { W, H, data: out }
@@ -78,10 +82,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
   const [mk, times = '0', out = path.join(ROOT, `pose-${args[0] || 'idle'}.png`)] = args
   const art = bossIllustOf(key)
   if (!art) throw new Error(`イラスト版が無い：${key}`)
-  const motion = mk === 'idle' ? null : art.motions[mk]
-  if (mk !== 'idle' && !motion) throw new Error(`技が無い：${mk}（${Object.keys(art.motions).join('・')}・idle）`)
+  const motion = mk === 'idle' || mk === 'cast' ? null : art.motions[mk]
+  if (mk !== 'idle' && mk !== 'cast' && !motion) throw new Error(`技が無い：${mk}（${Object.keys(art.motions).join('・')}・idle）`)
   const imgs = art.parts.map(p => readRgba(path.join(ROOT, 'public', decodeURI(p.src.split('?')[0]))))
-  const frames = times.split(',').map(Number).map(ms => renderPose(art, imgs, illustPoseAt(key, motion, motion ? ms : 0, motion ? 0 : ms)))
+  const frames = times.split(',').map(Number).map(ms => renderPose(art, imgs, mk === 'cast' ? illustCastPoseAt(key, ms, 0) : illustPoseAt(key, motion, motion ? ms : 0, motion ? 0 : ms)))
   const W = frames[0].W, H = frames[0].H
   const all = Buffer.alloc(W * frames.length * H * 4)
   frames.forEach((f, n) => { for (let y = 0; y < H; y++) f.data.copy(all, (y * W * frames.length + n * W) * 4, y * W * 4, (y + 1) * W * 4) })
