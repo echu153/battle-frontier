@@ -13,7 +13,7 @@ import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readRgba } from './v2cap-motion.mjs'
-import { bossIllustOf, illustPoseAt, illustCastPoseAt, illustFreePoseAt, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf } from '../src/v2cap/lib/bossIllust.js'
+import { bossIllustOf, illustPoseAt, illustCastPoseAt, illustFreePoseAt, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt } from '../src/v2cap/lib/bossIllust.js'
 
 const SELF = fileURLToPath(import.meta.url)
 const ROOT = path.resolve(path.dirname(SELF), '..')
@@ -23,7 +23,8 @@ const PAD = { l: 160, t: 160, r: 60, b: 60 }   // 踏み込み・のけぞりで
 //   freePose＝体の動きから切り離したパーツ（p.free・雨摩座の水の帯）の姿勢（画面と同じ＝待機のまま）
 //   orbImg＝口の火の玉の絵（黒龍の待機・あれば描く）。砂ぼこり（pose.dust）は画面の RigDust と同じ楕円を、ぼかした色で重ねる
 //   bendImgs＝曲げるパーツ（p.bend）の、曲げた絵を並べた1枚（パーツのキー → 絵）。画面の BendFrames と同じく、角度に近い2枚を重ねる
-export const renderPose = (art, imgs, pose, freePose = pose, orbImg = null, bendImgs = {}) => {
+//   arts＝技のポーズの絵（2026-10-30）：{ show（illustShowAt）, ghosts:[{ name, pose, op }], poses（技の poses）, imgs（名前 → 絵） }。画面の IllustRig と同じ重ね方
+export const renderPose = (art, imgs, pose, freePose = pose, orbImg = null, bendImgs = {}, arts = null) => {
   const S = art.base, W = S + PAD.l + PAD.r, H = S + PAD.t + PAD.b
   const out = Buffer.alloc(W * H * 4)
   for (let i = 0; i < W * H; i++) { out[i * 4] = 8; out[i * 4 + 1] = 22; out[i * 4 + 2] = 50; out[i * 4 + 3] = 255 }
@@ -94,7 +95,23 @@ export const renderPose = (art, imgs, pose, freePose = pose, orbImg = null, bend
       }
     }
   }
-  for (const p of art.parts) if (!p.nest) drawPart(p.key)
+  // ポーズの絵（全体の姿勢 pz で動かす・立ち絵の px で置く）
+  const drawPoseArt = (name, pz, op) => {
+    const p = arts.poses[name], img = arts.imgs[name]
+    if (!p || !img || op <= 0.001) return
+    for (let Y = 0; Y < H; Y++) for (let X = 0; X < W; X++) {
+      const [u, v] = rotPoint([X - PAD.l - pz.x * S, Y - PAD.t - pz.y * S], art.pivot, -pz.r)
+      const sx = (u - p.x) / p.w * img.W - 0.5, sy = (v - p.y) / p.h * img.H - 0.5
+      if (sx < -1 || sy < -1 || sx > img.W || sy > img.H) continue
+      const xx = Math.min(img.W - 1, Math.max(0, Math.round(sx))), yy = Math.min(img.H - 1, Math.max(0, Math.round(sy)))
+      over((Y * W + X) * 4, sample(img, xx, yy, 0), sample(img, xx, yy, 1), sample(img, xx, yy, 2), sample(img, xx, yy, 3) * op)
+    }
+  }
+  const rigOp = arts?.show ? arts.show.rig : 1
+  for (const p of art.parts) if (!p.nest && p.free) drawPart(p.key)
+  for (const g of arts?.ghosts || []) drawPoseArt(g.name, g.pose, g.op)
+  if (rigOp > 0.001) for (const p of art.parts) if (!p.nest && !p.free) drawPart(p.key, rigOp)
+  for (const sp of arts?.show?.poses || []) drawPoseArt(sp.name, pose, sp.op)
   // 砂ぼこり（画面の RigDust と同じ楕円・真ん中ほど濃い）
   if (art.dust && pose.dust > 0) {
     for (const { cx, cy, rx, ry, op } of dustEllipsesOf(art.dust, pose.dust)) {
@@ -133,17 +150,20 @@ if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
   const bendImgs = Object.fromEntries(art.parts.filter(p => p.bend).map(p => [p.key, load(p.bend.src)]))
   const poseAt = (ms) => mk === 'cast' ? illustCastPoseAt(key, ms, 0) : illustPoseAt(key, motion, motion ? ms : 0, motion ? 0 : ms)
   const freeAt = (ms) => illustFreePoseAt(key, motion || mk === 'cast' ? 0 : ms)
+  // 技のポーズの絵（できているものだけ）
+  const poseImgs = Object.fromEntries(Object.entries(motion?.poses || {}).map(([n, p]) => [n, load(p.src)]))
+  const artsAt = (ms) => motion?.poses ? { show: illustShowAt(motion, ms), ghosts: illustGhostsAt(motion, ms).map(g => ({ ...g, pose: poseAt(g.ms) })), poses: motion.poses, imgs: poseImgs } : null
   // --anim <ミリ秒>：時刻を「はじめ-おわり」で渡すと、その間隔のコマを動く WebP にする（例：idle 0-10000 out.webp --anim 50）
   if (anim) {
     const [t0, t1] = times.split('-').map(Number), list = []
-    for (let t = t0; t < t1; t += anim) list.push(renderPose(art, imgs, poseAt(t), freeAt(t), orbImg, bendImgs))
+    for (let t = t0; t < t1; t += anim) list.push(renderPose(art, imgs, poseAt(t), freeAt(t), orbImg, bendImgs, artsAt(t)))
     const W = list[0].W, H = list[0].H
     execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${W}x${H}`, '-r', String(1000 / anim), '-i', '-',
       '-vf', `scale=${Math.round(W * scale)}:-1:flags=area`, '-c:v', 'libwebp', '-loop', '0', '-quality', '70', out], { input: Buffer.concat(list.map(f => f.data)), maxBuffer: 1 << 30 })
     console.log(`→ ${path.relative(ROOT, out) || out}（${list.length}コマ・動く）`)
     process.exit(0)
   }
-  const frames = times.split(',').map(Number).map(ms => renderPose(art, imgs, poseAt(ms), freeAt(ms), orbImg, bendImgs))
+  const frames = times.split(',').map(Number).map(ms => renderPose(art, imgs, poseAt(ms), freeAt(ms), orbImg, bendImgs, artsAt(ms)))
   const W = frames[0].W, H = frames[0].H
   const all = Buffer.alloc(W * frames.length * H * 4)
   frames.forEach((f, n) => { for (let y = 0; y < H; y++) f.data.copy(all, (y * W * frames.length + n * W) * 4, y * W * 4, (y + 1) * W * 4) })

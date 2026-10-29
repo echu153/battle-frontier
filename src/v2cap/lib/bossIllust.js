@@ -56,6 +56,8 @@ export const illustFilesOf = (key) => BOSS_ILLUST_DEFS[key]?.files || ILLUST_PAR
 
 export const illustKindOf = (part) => `il-${part}`
 export const illustFxKindOf = (motion, kind) => `il-fx-${motion}-${kind}`
+// 技のポーズの絵（def.poses）：技 motion の name（windup＝ため・strike＝振り抜き）の全身の絵
+export const illustPoseKindOf = (motion, name) => `il-pose-${motion}-${name}`
 // 曲げるパーツ（def.bend）の、角度ごとに曲げた絵を横に並べた1枚
 export const illustBendKindOf = (part) => `il-${part}-bend`
 // 曲げるパーツの角度 deg に使う2枚とその重ね方：i＝下の絵（並びの番号）・j＝上に重ねる絵・k＝上の絵の濃さ（0〜1）。範囲の外は端の絵
@@ -143,6 +145,16 @@ export const BOSS_ILLUST_DEFS = {
     idleKeep: { wingN: 0.35, wingF: 0.35, wingNSq: 0.35, wingFSq: 0.35, tailT: 1, dust: 1 },
     // 回す中心：奥の翼＝首の後ろの付け根・手前の翼＝右の肩の後ろの付け根・しっぽ＝左の足のすぐ左（地面のしっぽは回さない）
     pivots: { wingF: [300, 262], wingN: [418, 280], tail: [214, 568] },
+    // 【確定】2026-10-30 技のポーズの絵（ユーザー「グラブルのベルゼバブぐらいしっかりと攻撃モーション動いてほしい（ATBの敵すべて）」
+    //   「ただ動かすんじゃなくて、必要であれば動かした後用のイラストも用意したい」→選んだ「技ごとに2枚」）：
+    //   技ごとに ため（windup）と振り抜き（strike）の全身の絵を描いてもらい（イラスト版/ の 元の絵の名前.png）、技の art で切り替える。
+    //   絵が無い技・絵が無いうちは、いままでの部品の動きのまま（art の名前が無ければ部品の立ち絵）
+    poses: {
+      claw: { windup: '黒爪_ため', strike: '黒爪_振り抜き' },
+      breath: { windup: '焦熱の吐息_ため', strike: '焦熱の吐息_吐く' },
+      gale: { windup: '黒翼烈風_ため', strike: '黒翼烈風_打ち下ろし' },
+      doom: { windup: '終焉の黒焔_ため', strike: '終焉の黒焔_吐きつけ' },
+    },
     // 曲げるパーツ（回さずに、角度ごとに曲げた絵を切り替える）：base＝付け根（ここからの距離 r0 までは曲げず、r1 で角度いっぱい・あいだはなめらかに）・
     //   from〜to°を step°ごとに作る（範囲の外は端の絵）・scale＝並べる絵の縮め（画面の枠は 300px まで）
     bend: { tailT: { base: [90, 492], r0: 20, r1: 150, from: -16, to: 48, step: 2, scale: 0.6 } },
@@ -173,6 +185,8 @@ export const BOSS_ILLUST_DEFS = {
     //   どの技も、ため（攻める所を大きく引く）→一気に振り抜く（70〜120ms・out）→当たった形で止める→ゆっくり戻る、のめりはり。当たった瞬間は全体が小さく揺れる（jolt）。
     //   爪＝前脚・吐息と黒焔＝首と頭・烈風＝両方の翼が、いちばん大きく動く。頭や前脚の後ろは後ろの絵（後ろ.png）で埋めたので、大きく動かしても切れ端が出ない。
     //   描き直した絵は口が初めから開いている＝下あごは開きすぎない（−12° まで・開きすぎるとあごの下に口の中がはみ出した）
+    //   【確定】2026-10-30 art＝ポーズの絵に切り替える時刻（[ミリ秒, 'windup'|'strike'|null]・def.poses の絵ができた技だけ）・ghosts＝振り抜きの残像。
+    //     ためは部品で少し引いてから ため の絵へ・振り抜く直前に 振り抜き の絵へ（残像を残して飛び込む）・当たった形で止めてから部品の立ち絵へ戻る
     motions: {
       // 黒爪：体を後ろへ引いて伸び上がり、前脚を顔の左横まで振りかぶる（顔に重ねると頭が隠れた）→体ごと相手へ踏み込み、70ms で前脚を振り下ろす。爪3本の残像
       claw: { totalMs: 1150, hitMs: 420, keys: [
@@ -183,7 +197,8 @@ export const BOSS_ILLUST_DEFS = {
         [520, { x: -0.17, y: 0.04, r: -13, neck: -4.5, head: -3.5, arm: -54, wingN: 13, wingNSq: 0.12, wingF: -11, jaw: -7 }, 'out'],
         [660, { x: -0.155, y: 0.035, r: -11.5, neck: -4, head: -3, arm: -50, wingN: 11, wingNSq: 0.08, wingF: -9, jaw: -6 }],
         [1150, {}],
-      ], jolt: { atMs: 420, ms: 220, x: 0.006, y: 0.004 }, trails: [
+      ], jolt: { atMs: 420, ms: 220, x: 0.006, y: 0.004 },
+      art: [[0, null], [150, 'windup'], [370, 'strike'], [760, null]], ghosts: { fromMs: 370, toMs: 520, lagMs: 28, n: 3 }, trails: [
         { kind: 'claw', part: 'arm', pts: [[138, 339], [168, 351], [196, 324]], fromMs: 350, toMs: 420, lagMs: 70, fadeMs: 160 },
       ] },
       // 焦熱の吐息：首を後ろへ引いて胸をそらし、口の奥を光らせる→80ms で首を相手へ突き出して口を開け、吐き続ける（反動で少し押し戻される）
@@ -195,7 +210,8 @@ export const BOSS_ILLUST_DEFS = {
         [760, { x: -0.06, y: 0.012, r: -4, neck: -6, head: -4.5, jaw: -11, wingN: 6, wingF: -5, arm: -18, glow: 1 }],
         [1000, { x: -0.05, y: 0.01, r: -3, neck: -5, head: -4, jaw: -9, arm: -15, glow: 0.6 }],
         [1450, {}],
-      ], jolt: { atMs: 640, ms: 180, x: 0.004, y: 0.003 } },
+      ], jolt: { atMs: 640, ms: 180, x: 0.004, y: 0.003 },
+      art: [[0, null], [200, 'windup'], [600, 'strike'], [1100, null]], ghosts: { fromMs: 600, toMs: 700, lagMs: 28, n: 2 } },
       // 【確定】2026-10-29 ユーザー「羽根の攻撃がおかしい、もっと羽を大きく広げて敵に向かってバフってやってもらいたい」
       //   （10-28 の「後ろへ引いて前へ2回あおぐ」は翼がワイパーのように倒れて見えた）：
       //   伸び上がって両方の翼を高く広げ（長さの向きに伸ばす＝Sq を−）、一瞬ためて、体ごと相手の方へ踏み込みながら 100ms で打ち下ろす（縮める＝手前へ来る）。
@@ -208,7 +224,8 @@ export const BOSS_ILLUST_DEFS = {
         [820, { x: -0.105, y: 0.04, r: -10.5, neck: -3.5, head: -3, wingN: 36, wingNSq: 0.32, wingF: -26, wingFSq: 0.26, arm: -13, jaw: -7 }],
         [1080, { x: -0.05, y: 0.015, r: -5, wingN: 12, wingNSq: 0.1, wingF: -9, wingFSq: 0.08, arm: -5, jaw: -3 }],
         [1500, {}],
-      ], jolt: { atMs: 700, ms: 260, x: 0.007, y: 0.005 }, trails: [
+      ], jolt: { atMs: 700, ms: 260, x: 0.007, y: 0.005 },
+      art: [[0, null], [220, 'windup'], [640, 'strike'], [1150, null]], ghosts: { fromMs: 640, toMs: 760, lagMs: 30, n: 3 }, trails: [
         { kind: 'wind', part: 'wingN', pts: [[440, 72], [560, 148], [600, 280], [600, 420]], fromMs: 600, toMs: 700, lagMs: 100, fadeMs: 220 },
         { kind: 'wind', part: 'wingF', pts: [[262, 84], [200, 66], [120, 120], [70, 200], [60, 260]], fromMs: 600, toMs: 700, lagMs: 100, fadeMs: 220 },
       ], shots: [
@@ -226,7 +243,8 @@ export const BOSS_ILLUST_DEFS = {
         [1460, { x: -0.11, y: 0.035, r: -10, neck: -10, head: -6.5, wingN: 26, wingNSq: 0.26, wingF: -19, wingFSq: 0.2, arm: -30, jaw: -12, glow: 1 }],
         [1700, { x: -0.08, y: 0.025, r: -7, neck: -7, head: -5, wingN: 14, wingNSq: 0.12, wingF: -10, wingFSq: 0.1, arm: -22, jaw: -10, glow: 0.4 }],
         [2200, {}],
-      ], jolt: { atMs: 1300, ms: 320, x: 0.01, y: 0.008 }, charge: { kind: 'hit', fromMs: 300, toMs: 1300, size: 0.3 } },
+      ], jolt: { atMs: 1300, ms: 320, x: 0.01, y: 0.008 }, charge: { kind: 'hit', fromMs: 300, toMs: 1300, size: 0.3 },
+      art: [[0, null], [300, 'windup'], [1240, 'strike'], [1800, null]], ghosts: { fromMs: 1240, toMs: 1400, lagMs: 30, n: 3 } },
     },
     // 塗りのエフェクト（元の絵の名前はドット絵版と同じ・フォルダが違う）。size＝枠の幅に対する横幅
     //   飛ぶ＝flyMs で口（か shots）から自分の体の真ん中へ／当たる＝durMs のあいだ大きくなりながら消える（spin＝回る角度°）
@@ -462,6 +480,37 @@ export const illustPoseAt = (key, motion, ms, tMs, fromCast = false) => {
   const j = joltAt(motion.jolt, ms)
   return Object.fromEntries(Object.keys(ZERO).map(f => [f, idle[f] * (keep[f] || 0) + add[f] + (cp?.[f] || 0) * w + (j[f] || 0)]))
 }
+// 技のあいだに出す絵（2026-10-30 ポーズの絵）：{ rig＝部品の立ち絵の濃さ, poses:[{ name, op }]（下から順） }
+//   motion.art＝[[ミリ秒, 'windup'|'strike'|null], …]（その時刻から出す絵・null は部品）・fadeMs（無ければ ART_FADE_MS）で切り替える。
+//   新しい絵は前半で出きり、前の絵は後半で消える（途中で両方が透けて後ろが見えない）。できていない絵の名前は部品の立ち絵として扱う
+export const ART_FADE_MS = 70
+export const illustShowAt = (motion, ms) => {
+  const has = (n) => !!(n && motion?.poses?.[n])
+  const tl = motion?.art
+  if (!tl || !motion.poses || ms < 0 || ms >= motion.totalMs) return { rig: 1, poses: [] }
+  let i = -1
+  while (i + 1 < tl.length && ms >= tl[i + 1][0]) i++
+  const cur = i >= 0 && has(tl[i][1]) ? tl[i][1] : null, prev = i >= 1 && has(tl[i - 1][1]) ? tl[i - 1][1] : null
+  const fade = motion.fadeMs ?? ART_FADE_MS, w = i >= 0 ? Math.min(1, (ms - tl[i][0]) / fade) : 1
+  const inOp = i >= 1 && prev !== cur ? smooth(Math.min(1, 2 * w)) : 1, outOp = 1 - smooth(Math.max(0, 2 * w - 1))
+  const shown = [[prev, i >= 1 && prev !== cur && w < 1 ? outOp : 0], [cur, inOp]]
+  const rig = shown.filter(([n]) => !n).reduce((m, [, o]) => Math.max(m, o), 0)
+  return { rig, poses: shown.filter(([n, o]) => n && o > 0.001).map(([name, op]) => ({ name, op })) }
+}
+// 残像（motion.ghosts＝{ fromMs, toMs, lagMs, n, op }）：fromMs〜toMs のあいだ、lagMs ずつ前の姿勢でポーズの絵を薄く重ねる（振り抜いて飛び込む勢い）
+//   { name, ms（その残像の時刻）, op }。そのときに出ていたポーズの絵だけ（部品の立ち絵には残像を出さない）
+export const illustGhostsAt = (motion, ms) => {
+  const g = motion?.ghosts
+  if (!g || ms < g.fromMs || ms >= g.toMs) return []
+  const out = []
+  for (let k = 1; k <= g.n; k++) {
+    const t = ms - g.lagMs * k
+    if (t < g.fromMs - g.lagMs) break
+    const top = illustShowAt(motion, t).poses.at(-1)
+    if (top) out.push({ name: top.name, ms: t, op: (g.op ?? 0.45) * (1 - k / (g.n + 1)) })
+  }
+  return out
+}
 // 体の動きから切り離したパーツ（def.free・雨摩座の水の帯）の姿勢：技・構えのあいだも待機のまま
 export const illustFreePoseAt = (key, tMs) => idlePoseAt(BOSS_ILLUST_DEFS[key].idle, tMs)
 // 構え（大技の詠唱）のあいだの姿勢：castMs＝構えはじめてからのミリ秒。構えの決まり（cast）が無いボスは待機のまま
@@ -575,6 +624,12 @@ export const bossIllustOf = (key) => {
     nest: !!art.parts[p].parent && art.parts[p].parent in ZERO,
     swap: def.swaps?.[p] ? (def.swaps[p].on ? { on: def.swaps[p].on } : { others: ons }) : null,
     free: !!def.free?.includes(p) }))
+  // 技のポーズの絵（できているものだけ）：{ windup: { src, x, y, w, h }, strike: … }（x・y・w・h は立ち絵の px）
+  const posesOf = (mk) => {
+    const out = {}
+    for (const [name, a] of Object.entries(art.poses?.[mk] || {})) out[name] = { ...a, src: srcOf(key, illustPoseKindOf(mk, name)) }
+    return Object.keys(out).length ? out : null
+  }
   const motions = {}
   for (const m of base.motions) {
     const md = def.motions[m.key]
@@ -596,7 +651,8 @@ export const bossIllustOf = (key) => {
     })
     // 当たる時刻＝撃ち出す時刻＋飛ぶ時間＋当たる絵が降りきるまで（lead・氷雨と水天葬）
     motions[m.key] = { label: m.file, keys: md.keys, trails: md.trails || [], arcs: md.arcs || [], jolt: md.jolt || null, totalMs: md.totalMs, hitMs: md.hitMs, flyMs, impactMs: md.hitMs + flyMs + (fx.hit?.lead || 0),
-      front: shots[0].front, shots, fx: Object.keys(fx).length ? fx : null, charge: md.charge && fx[md.charge.kind] ? md.charge : null, scene: md.scene || null }
+      front: shots[0].front, shots, fx: Object.keys(fx).length ? fx : null, charge: md.charge && fx[md.charge.kind] ? md.charge : null, scene: md.scene || null,
+      poses: posesOf(m.key), art: md.art || null, ghosts: md.ghosts || null }
   }
   const jaw = def.cuts?.jaw && art.parts.jaw ? { line: def.cuts.jaw.line, pivot: def.cuts.jaw.pivot, mouth: def.cuts.jaw.mouth } : null
   // 待機のときどきの動き（黒龍）：口の火の玉（頭の中に描く）・しっぽを叩きつけた砂ぼこりの場所
@@ -607,6 +663,7 @@ export const bossIllustOf = (key) => {
   const illust = bossArtOf(key)?.illust || null
   return {
     kind: 'illust', key, name: base.name, base: BOSS_ILLUST_SIZE, illust, parts, pivot: art.pivot, mouth: art.mouth, jaw, motions, orb, dust,
-    srcs: [...parts.map(p => p.src), ...parts.filter(p => p.bend).map(p => p.bend.src), ...Object.values(motions).flatMap(m => Object.values(m.fx || {}).map(f => f.src)), ...(orb ? [orb.src] : [])],
+    srcs: [...parts.map(p => p.src), ...parts.filter(p => p.bend).map(p => p.bend.src), ...Object.values(motions).flatMap(m => Object.values(m.fx || {}).map(f => f.src)),
+      ...Object.values(motions).flatMap(m => Object.values(m.poses || {}).map(p => p.src)), ...(orb ? [orb.src] : [])],
   }
 }

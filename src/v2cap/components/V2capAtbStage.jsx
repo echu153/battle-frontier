@@ -4,7 +4,7 @@ import { buffChips, ailChips, stateChips, needNow, CAST_SEC } from '../core/atb.
 import { STAT_DEFS } from '../core/stats.js'
 import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC } from '../lib/atbFx.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
-import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf } from '../lib/bossIllust.js'
+import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt } from '../lib/bossIllust.js'
 import { FX_HEAD_Y, FX_FEET_Y, FX_TARGET_Y, SCENE_TOP, fallAt, coilAt, pourTimesOf, sceneEndMsOf, stageSceneOf } from '../lib/bossScene.js'
 
 // ============================================================
@@ -102,9 +102,12 @@ const FrameStrip = ({ a, frame, style }) => (
 const rigWrap = (art, pose) => ({ position:'absolute', inset:0, pointerEvents:'none',
   transform:`translate(${(pose.x * 100).toFixed(2)}%, ${(pose.y * 100).toFixed(2)}%) rotate(${pose.r.toFixed(2)}deg)`,
   transformOrigin:`${(art.pivot[0] / art.base) * 100}% ${(art.pivot[1] / art.base) * 100}%` })
-const IllustRig = ({ art, pose, freePose }) => {
+//   技のポーズの絵（2026-10-30・ユーザー「グラブルのベルゼバブぐらいしっかりと攻撃モーション動いてほしい」）：show（illustShowAt）のとおりに
+//   部品の立ち絵とポーズの絵を切り替える（ポーズの絵も全体の姿勢 x・y・r で動く）。ghosts＝飛び込む勢いの残像（前の姿勢でポーズの絵を薄く）
+const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [] }) => {
   const box = { x: 0, y: 0, w: art.base, h: art.base }
   const free = art.parts.filter(p => p.free && !p.nest)
+  const rigOp = show ? show.rig : 1
   return (
     <>
       {free.length > 0 && (
@@ -112,13 +115,25 @@ const IllustRig = ({ art, pose, freePose }) => {
           {free.map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={freePose} />)}
         </div>
       )}
+      {ghosts.map((g, i) => (
+        <div key={`g${i}`} style={{ ...rigWrap(art, g.pose), opacity: g.op }}><PoseArt art={art} p={motion.poses[g.name]} /></div>
+      ))}
       <div style={rigWrap(art, pose)}>
-        {art.parts.filter(p => !p.nest && !p.free).map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={pose} />)}
+        <div style={{ position:'absolute', inset:0, opacity: rigOp < 1 ? rigOp : undefined, visibility: rigOp <= 0.001 ? 'hidden' : undefined }}>
+          {art.parts.filter(p => !p.nest && !p.free).map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={pose} />)}
+        </div>
+        {show?.poses.map(sp => <PoseArt key={sp.name} art={art} p={motion.poses[sp.name]} op={sp.op} />)}
         {art.dust && pose.dust > 0 && <RigDust art={art} k={pose.dust} />}
       </div>
     </>
   )
 }
+// 技のポーズの絵1枚（立ち絵の px で置く）
+const PoseArt = ({ art, p, op = 1 }) => (
+  <img src={p.src} alt="" draggable={false} decoding="sync"
+    style={{ position:'absolute', left:`${(p.x / art.base) * 100}%`, top:`${(p.y / art.base) * 100}%`, width:`${(p.w / art.base) * 100}%`, height:`${(p.h / art.base) * 100}%`,
+      maxWidth:'none', userSelect:'none', pointerEvents:'none', opacity: op < 1 ? op : undefined }} />
+)
 // 砂ぼこり（k＝出てからの割合 0〜1）：打った所（しっぽの下のふち）から左右へ広がり、少し上がりながら薄れる。はじめの 12% で濃くなる
 //   （小さく出すと粒が並んで見えた・2026-10-29）。色はくすんだ茶色（白いと雲に見えた）。lib の dustEllipsesOf と同じ形
 const RigDust = ({ art, k }) => {
@@ -269,6 +284,9 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   const pose = !rig ? null : casting ? illustCastPoseAt(rig.key, (st.t - me.cast.start) * 1000, now * 1000)
     : illustPoseAt(rig.key, rigMotion, rigMs, now * 1000, !!lastAct && afterCast(lastAct.t0, castEnd))
   const trails = rigMotion ? illustTrailsAt(rig.key, rigMotion, rigMs, now * 1000) : []
+  // 技のポーズの絵と残像（構えのあいだは部品の立ち絵）
+  const show = rigMotion && !casting ? illustShowAt(rigMotion, rigMs) : null
+  const ghosts = rigMotion && !casting ? illustGhostsAt(rigMotion, rigMs).map(g => ({ ...g, pose: illustPoseAt(rig.key, rigMotion, g.ms, now * 1000 - (rigMs - g.ms)) })) : []
   const dx = (frame >= 0 || rig ? 0 : lungeOf(now - lastOf('act')) * dir) + shakeOf(now - lastOf('hit'))
   const hitAgo = now - lastOf('hit')
   const glowAgo = now - lastOf('use')
@@ -297,7 +315,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
             // 待機の絵の枠（正方形）。攻撃の絵はこの枠に重ねる（ox・oy・w・h は待機の枠（クラスは 224px・ボスは base）を100%として割合で置く）
             <div style={{ position:'relative', height:'100%', aspectRatio:'1 / 1', maxWidth:'100%', filter: filters.join(' ') || 'none' }}>
               {rig && trails.length > 0 && <RigTrails art={rig} trails={trails} />}
-              {rig ? <IllustRig art={rig} pose={pose} freePose={illustFreePoseAt(rig.key, now * 1000)} /> : (
+              {rig ? <IllustRig art={rig} pose={pose} freePose={illustFreePoseAt(rig.key, now * 1000)} motion={rigMotion} show={show} ghosts={ghosts} /> : (
                 <img src={src} alt="" draggable={false}
                   style={{ width:'100%', height:'100%', objectFit:'contain', userSelect:'none', visibility: frame >= 0 ? 'hidden' : 'visible' }} />
               )}
