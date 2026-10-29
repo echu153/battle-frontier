@@ -62,20 +62,21 @@ test('エフェクトの時刻：飛ぶ絵は撃ち出す時刻に口（黒翼�
   }
 })
 
-test('【確定】2026-10-30 待機の羽ばたきは前後（ユーザー「翼は上下じゃなくて前後に羽ばたかせて」）：前へ寄せる（はじめの35%）は速く、後ろへ引くのはゆっくり・前へ寄せきりで体が浮く', () => {
-  const idle = BOSS_ILLUST_DEFS.varuzenoku.idle
-  const P = idle.periodMs
-  const back = idlePoseAt(idle, 0), fwd = idlePoseAt(idle, P * 0.35), again = idlePoseAt(idle, P * 0.999)
-  // 回すのはわずか（上下に振らない）
-  for (let t = 0; t < P; t += 25) assert.ok(Math.abs(idlePoseAt(idle, t).wingN) <= 3 && Math.abs(idlePoseAt(idle, t).wingF) <= 3, '翼はほとんど回さない')
-  // 前へ寄せる＝手前の翼は手前へ来て細く・奥の翼は前（左）へ出て長く／後ろへ引く＝その逆（縮め方が逆向き）
-  assert.ok(fwd.wingNSq > 0.25 && back.wingNSq < 0, '手前の翼：前へ寄せると細く、後ろへ引くと広がる')
-  assert.ok(fwd.wingFSq < -0.1 && back.wingFSq > 0.05, '奥の翼：前へ寄せると長く、後ろへ引くと細く')
-  assert.ok(Math.abs(again.wingNSq - back.wingNSq) < 0.01 && Math.abs(again.wingFSq - back.wingFSq) < 0.01, 'くり返しの切れ目でつながる')
-  assert.ok(fwd.y < back.y, '前へ寄せきりで体が上がる（y は上がマイナス）')
-  // 速さ：前へ寄せるのは 35% のあいだ・後ろへ引くのは残り
-  const q = (t) => idlePoseAt(idle, t).wingNSq
-  assert.ok(q(P * 0.175) - back.wingNSq > (fwd.wingNSq - back.wingNSq) * 0.4 && fwd.wingNSq - q(P * 0.675) < (fwd.wingNSq - back.wingNSq) * 0.6)
+test('【確定】2026-10-30 黒龍の待機（ユーザー「体は上下に動かさなくていい」「前後ちょっと違和感あるなー、待機のモーションはたまに羽広げるとかでいいかも」）：ずっと羽ばたかない・体は上下に動かない・ときどき翼を広げてたたむ', () => {
+  const idle = BOSS_ILLUST_DEFS.varuzenoku.idle, sp = idle.spread
+  assert.equal(idle.periodMs, undefined, 'ずっと羽ばたく形はやめた（10-28 の上下・10-30 の前後）')
+  for (let t = 0; t < 20000; t += 37) assert.equal(idlePoseAt(idle, t).y, 0, '体は上下に動かない')
+  // ふだんは翼を止める
+  const rest = idlePoseAt(idle, sp.atMs - 10)
+  assert.ok(rest.wingN === 0 && rest.wingF === 0 && rest.wingNSq === 0 && rest.wingFSq === 0)
+  // 広げる：両方の翼を少し上げて（手前は−・奥は＋）長さの向きにのばす（Sq が−）→しばらく広げたまま→たたむ
+  const open = idlePoseAt(idle, sp.atMs + 900)
+  assert.ok(open.wingN < -5 && open.wingF > 4 && open.wingNSq < -0.15 && open.wingFSq < -0.1, '広げる')
+  assert.ok(sp.keys.at(-1)[0] - sp.keys.at(-2)[0] >= 800, 'ゆっくりたたむ')
+  const done = idlePoseAt(idle, sp.atMs + sp.keys.at(-1)[0] + 10)
+  assert.ok(done.wingN === 0 && done.wingNSq === 0, 'たたんだら止まる')
+  assert.ok(Math.abs(idlePoseAt(idle, sp.atMs + sp.everyMs + 900).wingN - open.wingN) < 1e-9, 'くり返す')
+  assert.ok(sp.everyMs >= 6000, 'ときどき')
 })
 
 test('技の姿勢：黒爪は前（左）へ踏み込む・焦熱の吐息は首を引いてから突き出す・黒翼烈風は翼を大きく広げてから打ち下ろす・終焉の黒焔は首を上げてため、口の火が最大', () => {
@@ -95,9 +96,9 @@ test('技の姿勢：黒爪は前（左）へ踏み込む・焦熱の吐息は�
     assert.deepEqual(Object.values(at(k, 0)).every(v => v === 0), true, `${k} は待機から始まる`)
     assert.equal(at(k, M[k].totalMs), null, `${k} は流し終わったら待機へ`)
   }
-  // 技のあいだは羽ばたきを弱める
-  const m = { keys: M.claw.keys }
-  const p = illustPoseAt('varuzenoku', m, 1, 0), idle = idlePoseAt(BOSS_ILLUST_DEFS.varuzenoku.idle, 0)
+  // 技のあいだは広げた翼を弱める
+  const m = { keys: M.claw.keys }, sp = BOSS_ILLUST_DEFS.varuzenoku.idle.spread
+  const p = illustPoseAt('varuzenoku', m, 1, sp.atMs + 900), idle = idlePoseAt(BOSS_ILLUST_DEFS.varuzenoku.idle, sp.atMs + 900)
   assert.ok(Math.abs(p.wingN) < Math.abs(idle.wingN))
 })
 

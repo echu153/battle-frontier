@@ -116,11 +116,12 @@ export const BOSS_ILLUST_DEFS = {
         take: [[0, 372], [60, 366], [100, 352], [130, 346], [160, 342], [240, 345], [250, 470], [228, 520], [228, 640], [0, 640]],
         drop: [[0, 372], [60, 366], [100, 352], [130, 346], [160, 342], [240, 345], [245, 470], [200, 520], [200, 640], [0, 640]] },
     } },
-    // 待機：1回の羽ばたき（ミリ秒）・翼の振れ幅（°・上げきり→下ろしきり）・下ろしきりで縮める割合・奥の翼の振れ幅（手前の何倍）・体の浮き沈み（枠の割合）
-    //   【確定】2026-10-28 ユーザー「羽ノーモーション、付け根が外れて見えてる」：羽ばたきを大きく（回す＋縮める）・奥の翼は付け根で回す（pivots）
-    //   sway＝首・頭のゆっくりした揺れ（羽ばたきと周期をずらす）・しっぽの巻いた先は付け根から先へ少しずつ遅れて揺れる（しなって見える）
+    // 待機：【確定】2026-10-30 ユーザー「体は上下に動かさなくていい」「前後ちょっと違和感あるなー、待機のモーションはたまに羽広げるとかでいいかも」：
+    //   ずっと羽ばたく形（10-28 は回して上下に・10-30 は縮める・のばすで前後に）をやめた。翼はふだん止めて、体も上下に動かさない（periodMs なし）。
+    //   spread＝ときどき翼を広げる（everyMs ごと・atMs から・keys＝[ミリ秒, 姿勢, 区間の速さ]）：両方の翼を少し上げて長さの向きにのばし（Sq を−）、しばらく広げてからたたむ
+    //   sway＝首・頭・前脚のゆっくりした揺れ・しっぽの巻いた先のゆっくりした揺れ
     //   slam＝しっぽの先で地面を打つ（everyMs ごと・atMs から）：keys＝[ミリ秒, 姿勢, 区間の速さ]・hitMs＝地面を打つ時刻（そこから dustMs のあいだ砂ぼこり・
-    //     shakeMs のあいだ全体が小さく揺れる＝shake は枠の割合）・dust＝砂ぼこりが立つ所（立ち絵の点）
+    //     shakeMs のあいだ全体が小さく揺れる＝shake は枠の割合・shakeY＝縦の揺れの割合（黒龍は 0＝体を上下に動かさない））・dust＝砂ぼこりが立つ所（立ち絵の点）
     //   【確定】2026-10-29 ユーザー「しっぽ動かすの不自然って思わない？」→選んだ「左の巻いた先だけしならせる」：前は左の足より左の一本を
     //     10° 持ち上げて落とすだけ＝足の下との境目がまっすぐ切れて蝶つがいのように折れ、残りのしっぽは止まったまま、ぴくっとけいれんして見えた。
     //     地面のしっぽは動かさず、巻いた先を付け根から遠いほど大きく曲げる（bend・道具が角度ごとに曲げた絵を並べて作り、画面はとなりの2枚を重ねて切り替える）。
@@ -128,18 +129,18 @@ export const BOSS_ILLUST_DEFS = {
     //     ふだんはゆっくり揺れ、ため（先を持ち上げて後ろへ引く）→一気に振り下ろす→先が左の足の前の地面を打つ（砂ぼこり）→小さく跳ね返って戻る
     //   orb＝口に火の玉（everyMs ごと・atMs から）：growMs でふくらみ・holdMs ゆらめき・fadeMs で消える。at＝火の玉の真ん中（頭の上の点）・
     //     size＝枠の幅に対する絵の横幅・出ているあいだ口を jaw° 開けて光らせる（glow）
-    //   【確定】2026-10-30 ユーザー「翼は上下じゃなくて前後に羽ばたかせて」：回すのはわずか（±2°）にして、翼を長さの向きに縮める・のばすで前後に動かす。
-    //     前へ寄せる（羽ばたきの速いほう）＝手前の翼は手前へ来て細く（nearSq＋）・奥の翼は前（左）へ出て長く（farSq−）／後ろへ引く＝その逆
-    //     （手前の翼は右の肩から右へ・奥の翼は首の後ろから左へのびているので、同じ向きに動かすと縮め方が逆になる）
-    idle: { periodMs: 1500, wingUp: -2, wingDown: 2, nearSq: [-0.1, 0.35], farSq: [0.12, -0.15], farK: 0.4, bob: 0.012, headSway: 0, armSway: 1.5,
-      sway: { neck: [1.2, 3700, 0], head: [1.6, 2900, 0.3], tailT: [3, 2600, 0] },
-      slam: { everyMs: 6400, atMs: 2600, hitMs: 800, dustMs: 750, shakeMs: 300, shake: 0.006,
+    idle: {
+      sway: { neck: [1.2, 3700, 0], head: [1.6, 2900, 0.3], arm: [1.2, 3100, 0], tailT: [3, 2600, 0] },
+      // 広げる：手前の翼は少し上げて右へのばし・奥の翼は少し上げて左上へのばす（0.6秒）→広げたまま 0.7秒→1秒かけてたたむ
+      spread: { everyMs: 8600, atMs: 700,
+        keys: [[0, {}], [600, { wingN: -8, wingNSq: -0.24, wingF: 6, wingFSq: -0.18 }, 'out'], [1300, { wingN: -8.5, wingNSq: -0.25, wingF: 6.3, wingFSq: -0.19 }], [2300, {}]] },
+      slam: { everyMs: 6400, atMs: 2600, hitMs: 800, dustMs: 750, shakeMs: 300, shake: 0.006, shakeY: 0,
         keys: [[0, {}], [600, { tailT: -11 }], [700, { tailT: -12.5 }], [800, { tailT: 42 }, 'out'], [900, { tailT: 31 }], [1040, { tailT: 37 }], [1700, {}]],
         dust: [[176, 508], [214, 514]] },
       // 火の玉は遭遇のイラストと同じ所（開いた口のすぐ前）・同じくらいの大きさ（火の玉.png は火の粉のぶん絵が大きい）
       orb: { everyMs: 9800, atMs: 5200, growMs: 700, holdMs: 1100, fadeMs: 350, at: [246, 180], size: 0.095, jaw: -6, glow: 0.6 } },
-    // 技のあいだも残す待機のぶん（羽ばたきは弱めて・浮き沈みは半分・しっぽと砂ぼこりはそのまま＝技の頭で跳ねない）
-    idleKeep: { wingN: 0.35, wingF: 0.35, wingNSq: 0.35, wingFSq: 0.35, y: 0.5, tailT: 1, dust: 1 },
+    // 技のあいだも残す待機のぶん（広げた翼は弱めて・しっぽと砂ぼこりはそのまま＝技の頭で跳ねない）
+    idleKeep: { wingN: 0.35, wingF: 0.35, wingNSq: 0.35, wingFSq: 0.35, tailT: 1, dust: 1 },
     // 回す中心：奥の翼＝首の後ろの付け根・手前の翼＝右の肩の後ろの付け根・しっぽ＝左の足のすぐ左（地面のしっぽは回さない）
     pivots: { wingF: [300, 262], wingN: [418, 280], tail: [214, 568] },
     // 曲げるパーツ（回さずに、角度ごとに曲げた絵を切り替える）：base＝付け根（ここからの距離 r0 までは曲げず、r1 で角度いっぱい・あいだはなめらかに）・
@@ -393,19 +394,16 @@ export const joltAt = (jolt, ms) => {
   const d = (1 - h / jolt.ms) ** 2
   return { x: jolt.x * Math.sin(h / 11) * d, y: jolt.y * Math.sin(h / 8 + 1.2) * d }
 }
-// 待機の姿勢（時刻 tMs）。羽ばたき（periodMs）：振り下ろし（はじめの35%）は速く、振り上げはゆっくり
-//   ＋sway＝揺れの足し算（雨摩座は揺れだけ）＋slam・orb＝ときどきの動き（黒龍のしっぽの叩きつけ・口の火の玉）
+// 待機の姿勢（時刻 tMs）。羽ばたき（periodMs）：振り下ろし（はじめの35%）は速く、振り上げはゆっくり（いまはどのボスも使っていない）
+//   ＋sway＝揺れの足し算（雨摩座は揺れだけ）＋slam・spread・orb＝ときどきの動き（黒龍のしっぽで地面を打つ・翼を広げる・口の火の玉）
 export const idlePoseAt = (idle, tMs) => {
   const pose = { ...ZERO }
   if (idle.periodMs) {
     const ph = ((tMs % idle.periodMs) + idle.periodMs) % idle.periodMs / idle.periodMs
     const down = ph < 0.35 ? smooth(ph / 0.35) : 1 - smooth((ph - 0.35) / 0.65)
     const w = idle.wingUp + (idle.wingDown - idle.wingUp) * down, far = idle.farK ?? 0.8
-    // 前後の羽ばたき（nearSq・farSq＝[後ろへ引いたとき, 前へ寄せたとき] の縮め）：手前の翼と奥の翼を逆向きに縮める・のばす（下の黒龍の idle を見る）
-    const nq = idle.nearSq ? idle.nearSq[0] + (idle.nearSq[1] - idle.nearSq[0]) * down : (idle.squash || 0) * down
-    const fq = idle.farSq ? idle.farSq[0] + (idle.farSq[1] - idle.farSq[0]) * down : (idle.squash || 0) * 0.7 * down
     Object.assign(pose, { y: -idle.bob * down, head: (idle.headSway || 0) * Math.sin(2 * Math.PI * (ph - 0.15)), wingN: w, wingF: -w * far,
-      wingNSq: nq, wingFSq: fq,
+      wingNSq: (idle.squash || 0) * down, wingFSq: (idle.squash || 0) * 0.7 * down,
       arm: (idle.armSway || 0) * Math.sin(2 * Math.PI * (ph - 0.3)) })
   }
   for (const [k, [amp, per, ph]] of Object.entries(idle.sway || {})) pose[k] += amp * Math.sin(2 * Math.PI * (tMs / per + ph))
@@ -420,8 +418,12 @@ export const idlePoseAt = (idle, tMs) => {
     if (h >= 0 && h < s.shakeMs) {
       const d = 1 - h / s.shakeMs
       pose.x += s.shake * Math.sin(h / 9) * d
-      pose.y += s.shake * 0.6 * Math.sin(h / 7 + 1) * d
+      pose.y += s.shake * (s.shakeY ?? 0.6) * Math.sin(h / 7 + 1) * d
     }
+  }
+  if (idle.spread) {
+    const add = motionPoseAt(idle.spread.keys, since(idle.spread.everyMs, idle.spread.atMs))
+    if (add) for (const f of ['wingN', 'wingF', 'wingNSq', 'wingFSq']) pose[f] += add[f]
   }
   if (idle.orb) {
     const o = idle.orb, ms = since(o.everyMs, o.atMs)
