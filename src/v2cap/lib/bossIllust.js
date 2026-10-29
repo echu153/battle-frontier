@@ -128,7 +128,10 @@ export const BOSS_ILLUST_DEFS = {
     //     ふだんはゆっくり揺れ、ため（先を持ち上げて後ろへ引く）→一気に振り下ろす→先が左の足の前の地面を打つ（砂ぼこり）→小さく跳ね返って戻る
     //   orb＝口に火の玉（everyMs ごと・atMs から）：growMs でふくらみ・holdMs ゆらめき・fadeMs で消える。at＝火の玉の真ん中（頭の上の点）・
     //     size＝枠の幅に対する絵の横幅・出ているあいだ口を jaw° 開けて光らせる（glow）
-    idle: { periodMs: 1500, wingUp: -10, wingDown: 12, squash: 0.12, farK: 0.4, bob: 0.012, headSway: 0, armSway: 1.5,
+    //   【確定】2026-10-30 ユーザー「翼は上下じゃなくて前後に羽ばたかせて」：回すのはわずか（±2°）にして、翼を長さの向きに縮める・のばすで前後に動かす。
+    //     前へ寄せる（羽ばたきの速いほう）＝手前の翼は手前へ来て細く（nearSq＋）・奥の翼は前（左）へ出て長く（farSq−）／後ろへ引く＝その逆
+    //     （手前の翼は右の肩から右へ・奥の翼は首の後ろから左へのびているので、同じ向きに動かすと縮め方が逆になる）
+    idle: { periodMs: 1500, wingUp: -2, wingDown: 2, nearSq: [-0.1, 0.35], farSq: [0.12, -0.15], farK: 0.4, bob: 0.012, headSway: 0, armSway: 1.5,
       sway: { neck: [1.2, 3700, 0], head: [1.6, 2900, 0.3], tailT: [3, 2600, 0] },
       slam: { everyMs: 6400, atMs: 2600, hitMs: 800, dustMs: 750, shakeMs: 300, shake: 0.006,
         keys: [[0, {}], [600, { tailT: -11 }], [700, { tailT: -12.5 }], [800, { tailT: 42 }, 'out'], [900, { tailT: 31 }], [1040, { tailT: 37 }], [1700, {}]],
@@ -398,8 +401,11 @@ export const idlePoseAt = (idle, tMs) => {
     const ph = ((tMs % idle.periodMs) + idle.periodMs) % idle.periodMs / idle.periodMs
     const down = ph < 0.35 ? smooth(ph / 0.35) : 1 - smooth((ph - 0.35) / 0.65)
     const w = idle.wingUp + (idle.wingDown - idle.wingUp) * down, far = idle.farK ?? 0.8
+    // 前後の羽ばたき（nearSq・farSq＝[後ろへ引いたとき, 前へ寄せたとき] の縮め）：手前の翼と奥の翼を逆向きに縮める・のばす（下の黒龍の idle を見る）
+    const nq = idle.nearSq ? idle.nearSq[0] + (idle.nearSq[1] - idle.nearSq[0]) * down : (idle.squash || 0) * down
+    const fq = idle.farSq ? idle.farSq[0] + (idle.farSq[1] - idle.farSq[0]) * down : (idle.squash || 0) * 0.7 * down
     Object.assign(pose, { y: -idle.bob * down, head: (idle.headSway || 0) * Math.sin(2 * Math.PI * (ph - 0.15)), wingN: w, wingF: -w * far,
-      wingNSq: (idle.squash || 0) * down, wingFSq: (idle.squash || 0) * 0.7 * down,
+      wingNSq: nq, wingFSq: fq,
       arm: (idle.armSway || 0) * Math.sin(2 * Math.PI * (ph - 0.3)) })
   }
   for (const [k, [amp, per, ph]] of Object.entries(idle.sway || {})) pose[k] += amp * Math.sin(2 * Math.PI * (tMs / per + ph))
