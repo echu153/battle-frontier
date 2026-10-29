@@ -8,6 +8,7 @@ import { BOSS_ART_DIR, BOSS_DEFS, bossFileOf } from './bossArt.js'
 import {
   BOSS_ILLUST_DEFS, BOSS_ILLUST_SIZE, illustPartsOf, illustKindOf, illustFxKindOf,
   bossIllustOf, illustPoseAt, idlePoseAt, motionPoseAt, illustPointAt, illustTrailsAt, mouthPointOf, rotPoint, partMove,
+  illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS,
 } from './bossIllust.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { dilate, erode, leftTipOf, fitPart, inPoly } from '../../../tools/v2cap-boss-illust.mjs'
@@ -295,14 +296,76 @@ test('【確定】2026-10-29 雨摩座の待機：揺れの足し算（浮き沈
   assert.equal(poses[0].wingN, 0, '翼は無い')
 })
 
-test('雨摩座の仮の攻撃：手を上げてから相手の方（左）へ差し向ける・待機から始まって待機へ戻る・エフェクトはまだ無い', () => {
-  const M = BOSS_ILLUST_DEFS.amaza.motions.cast
-  const at = (ms) => motionPoseAt(M.keys, ms)
-  assert.ok(at(380).armN > 10 && at(380).x > 0, 'のけぞって手を上げる')
-  assert.ok(at(M.hitMs).armN < -5 && at(M.hitMs).x < -0.03, '相手の方へ差し向ける')
-  assert.ok(Object.values(at(0)).every(v => v === 0))
-  assert.equal(at(M.totalMs), null)
-  const a = bossIllustOf('amaza')
-  assert.deepEqual(Object.keys(a.motions), ['cast'])
-  assert.equal(a.motions.cast.fx, null)
+test('【確定】2026-10-29 雨摩座の技4つ：手を上げて（ためて）から相手の方（左）へ振り下ろす・待機から始まって待機へ戻る・エフェクト7枚', () => {
+  const a = bossIllustOf('amaza'), D = BOSS_ILLUST_DEFS.amaza.motions
+  assert.deepEqual(Object.values(a.motions).map(m => m.label), BOSS_DEFS.amaza.motions.map(m => m.file))
+  assert.equal(Object.values(a.motions).reduce((n, m) => n + Object.keys(m.fx || {}).length, 0), 7)
+  assert.equal(a.srcs.length, 5 + 7)
+  for (const [k, M] of Object.entries(D)) {
+    const at = (ms) => motionPoseAt(M.keys, ms)
+    const up = M.keys.at(-4)[1]   // 振り下ろす前のいちばん上
+    assert.ok(up.armN > 8 && up.y < 0, `${k}：手を上げる（${JSON.stringify(up)}）`)
+    assert.ok(at(M.hitMs).armN < -10 && at(M.hitMs).x < -0.02, `${k}：撃つときは手を相手の方へ振り下ろして前へ出る`)
+    assert.ok(Object.values(at(0)).every(v => v === 0), `${k}：待機から始まる`)
+    assert.equal(at(M.totalMs), null)
+    assert.ok(M.hitMs < M.totalMs)
+  }
+  assert.ok(D.sleet.keys[2][1].armF < -8 && D.sleet.keys[2][1].head > 4, '氷雨：天を仰いで奥の手を差し上げる')
+})
+
+test('【確定】2026-10-29 雨摩座のエフェクト：雨礫・水縛の帯は手前の手の指先から飛ぶ／氷雨・水天葬は飛ばずに相手の頭上から降りる（降りきったときがダメージ）／水縛の帯は相手の体で締まる', () => {
+  const a = bossIllustOf('amaza'), E = BOSS_ILLUST_DEFS.amaza.effects
+  for (const k of ['shot', 'bind']) {
+    const m = a.motions[k], fly = E.find(e => e.motion === k && e.kind === 'fly')
+    assert.equal(m.impactMs, m.hitMs + fly.flyMs)
+    assert.ok(m.front[0] < 60 && m.front[1] > 200 && m.front[1] < 320, `${k}：出どころは手前の手の指先（${m.front}）`)
+    // 指先は手前の手のパーツの中（切り分けた所）
+    const p = a.parts.find(q => q.key === 'armN')
+    assert.ok(54 >= p.x && 54 <= p.x + p.w && 251 >= p.y && 251 <= p.y + p.h)
+  }
+  for (const k of ['sleet', 'deluge']) {
+    const m = a.motions[k]
+    assert.equal(m.fx.fly, undefined, `${k} は飛ばない`)
+    assert.equal(m.fx.hit.on, 'feet')
+    assert.equal(m.fx.hit.anim, 'drop')
+    assert.ok(m.fx.hit.lead > 0)
+    assert.equal(m.impactMs, m.hitMs + m.fx.hit.lead, `${k}：降りきったときがダメージ`)
+  }
+  assert.equal(a.motions.bind.fx.hit.on, 'body')
+  assert.equal(a.motions.bind.fx.hit.anim, 'bind')
+  assert.equal(a.motions.shot.fx.hit.on, null, '雨礫の当たる絵は体の真ん中（黒龍と同じ）')
+  // 水天葬の渦の雲：相手の頭上・撃つ時刻まで出て、滝が落ちたら薄れる。重ねる順は滝が先（雲が手前）
+  const d = a.motions.deluge
+  assert.equal(d.charge.kind, 'charge')
+  assert.equal(d.fx.charge.on, 'head')
+  assert.equal(d.charge.toMs, d.hitMs)
+  assert.ok(d.charge.holdMs > 0)
+  assert.deepEqual(Object.keys(d.fx), ['hit', 'charge'])
+  assert.ok(Object.values(a.motions).every(m => m === d || !m.charge), '雲を出すのは水天葬だけ')
+})
+
+test('【確定】2026-10-29 構え（水天葬の5秒）：両手を掲げて震える・構えのすぐあとの技は構えの姿勢からつなぐ（黒龍は構えても待機のまま）', () => {
+  const C = BOSS_ILLUST_DEFS.amaza.cast, idle = BOSS_ILLUST_DEFS.amaza.idle
+  const p0 = illustCastPoseAt('amaza', 0, 1000)
+  assert.deepEqual(p0, idlePoseAt(idle, 1000), '構えはじめは待機と同じ（急に跳ねない）')
+  const held = illustCastPoseAt('amaza', CAST_IN_MS + 2000, 1000), base = idlePoseAt(idle, 1000)
+  for (const f of ['armN', 'armF', 'y', 'head']) {
+    assert.ok(Math.abs(held[f] - base[f] - C.pose[f]) <= (C.shake[f] || 0) + 1e-9, `${f}：構えの姿勢（震えのぶんだけずれる）`)
+  }
+  assert.ok(C.pose.armN > 20 && C.pose.armF < -8 && C.pose.y < 0, '両手を掲げて浮く')
+  // 構えのすぐあとの技：はじめは構えの姿勢・CAST_OUT_MS たてば技の動きだけ
+  const m = bossIllustOf('amaza').motions.deluge
+  const t = 1000
+  const s0 = illustPoseAt('amaza', m, 0, t, true), s1 = illustPoseAt('amaza', m, CAST_OUT_MS, t, true), n1 = illustPoseAt('amaza', m, CAST_OUT_MS, t)
+  assert.ok(Math.abs(s0.armN - base.armN - C.pose.armN) < 1e-9, '構えの姿勢から始まる')
+  assert.deepEqual(s1, n1)
+  // 構えの姿勢と、ためる動きのいちばん上はほぼ同じ形（つないでも手が跳ねない）
+  const top = BOSS_ILLUST_DEFS.amaza.motions.deluge.keys[1][1]
+  for (const f of ['armN', 'armF', 'head', 'r']) assert.ok(Math.abs(top[f] - C.pose[f]) <= 1, `${f}：構えと技のためが同じ形`)
+  // 技のあいだも待機の揺れはそのまま（技の頭と終わりで跳ねない）
+  assert.deepEqual(illustPoseAt('amaza', m, 0, t), idlePoseAt(idle, t))
+  // 黒龍は構えの決まりが無い＝待機のまま・構えのあとも今までどおり
+  assert.deepEqual(illustCastPoseAt('varuzenoku', 3000, 500), idlePoseAt(BOSS_ILLUST_DEFS.varuzenoku.idle, 500))
+  const doom = bossIllustOf('varuzenoku').motions.doom
+  assert.deepEqual(illustPoseAt('varuzenoku', doom, 100, 500, true), illustPoseAt('varuzenoku', doom, 100, 500))
 })

@@ -4,7 +4,7 @@ import { buffChips, ailChips, stateChips, needNow, CAST_SEC } from '../core/atb.
 import { STAT_DEFS } from '../core/stats.js'
 import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC } from '../lib/atbFx.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
-import { illustPoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint } from '../lib/bossIllust.js'
+import { illustPoseAt, illustCastPoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint } from '../lib/bossIllust.js'
 
 // ============================================================
 // 「レベルキャップあり」版（v2cap）— ATB戦闘の舞台（自分が左・モンスターが右）
@@ -28,6 +28,9 @@ import { illustPoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint } f
 //     （STAGE_OF.illust＝枠を高く・自分はそのぶん小さく。グラブルのように「どんと大きく」）。エフェクトは1枚の塗りを動きで見せる
 //     2026-10-28 ユーザー「もっとひっかく」「口をしっかり開けて吐く」「翼の風をもっと翼から」：前脚（体の子・頭より手前）と
 //     下あご（頭の中）も回す・開いた口の中（MouthInside）・爪と翼の残像の筋（RigTrails）・飛ぶ絵は出どころ（shots）ごとに1枚・爪の跡は引いて出す（wipe）
+//   ・2026-10-29 雨摩座の技：構え（大技の詠唱）のあいだは構えの姿勢（両手を掲げて震える）・構えのすぐあとの技は構えの姿勢からつなぐ。
+//     エフェクトを相手の頭上・足元に出す（on）：氷雨の雨・水天葬の滝は上から下へ降りる（drop）・水縛の帯は外から締まる（bind）・
+//     水天葬の渦の雲（ためる）は構えのあいだから相手の頭上に出て、滝が落ちたら薄れる
 // ============================================================
 
 const Bar = ({ pct, color, h = 10 }) => (
@@ -151,6 +154,7 @@ const MouthInside = ({ art, p, pose }) => {
 const TRAIL_STYLE = {
   claw: { glow: '#ff4a14', core: '#fff0c0', gw: 11, cw: 3.2 },
   wind: { glow: 'rgba(255,110,80,0.5)', core: 'rgba(255,238,228,0.9)', gw: 18, cw: 3 },
+  water: { glow: 'rgba(70,160,255,0.6)', core: 'rgba(225,245,255,0.95)', gw: 12, cw: 3 },
 }
 const RigTrails = ({ art, trails }) => (
   <svg viewBox={`0 0 ${art.base} ${art.base}`} style={{ position:'absolute', inset:0, width:'100%', height:'100%', overflow:'visible', pointerEvents:'none', zIndex: 1 }}>
@@ -168,11 +172,15 @@ const RigTrails = ({ art, trails }) => (
 
 const POP_COLOR ={ hit: '#ffffff', miss: '#9fb3c8', heal: '#44ff88', tick: '#cc99ff' }
 const popText = (f) => (f.kind === 'miss' ? 'MISS' : f.kind === 'heal' ? `+${f.amount.toLocaleString()}` : f.amount.toLocaleString())
+// 構えのすぐあとに撃った技か：構えを最後に見た時刻（castEnd）から CAST_GAP_SEC 以内に動いた（構えが終わった刻みで撃つ＝ふつうは 0.03秒ほど）
+const CAST_GAP_SEC = 0.5
+const afterCast = (t0, castEnd) => t0 - castEnd > -0.05 && t0 - castEnd < CAST_GAP_SEC
 
 // 1人ぶん。right＝右（モンスター）。fx は [{ kind, side, amount, crit, t0 }]・now は fx の t0 と同じ時計（秒）
 //   areaRef … 絵の場所（動かない枠）。ボスのエフェクトの位置を測る
 //   strips … 置いておく攻撃の絵（自分＝motion・ボス＝技ごとの絵ぜんぶ）／rig … イラスト版のボス（lib/bossIllust.js の bossIllustOf）
-function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx, now, name, flex = '1 1 0', artH = ART_H, scale = 1, areaRef }) {
+//   castEnd … 構えを最後に見た時刻（now と同じ時計）。構えのすぐあとの技は構えの姿勢からつなぐ
+function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx, now, name, flex = '1 1 0', artH = ART_H, scale = 1, areaRef, castEnd = -1e9 }) {
   const mine = fx.filter(f => f.side === side)
   const lastOf = (kind) => mine.reduce((t, f) => (f.kind === kind && f.t0 <= now && f.t0 > t ? f.t0 : t), -1e9)
   const dir = right ? -1 : 1   // 前＝相手の方
@@ -182,7 +190,10 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   const frame = mo?.ms && lastAct ? motionFrameAt(mo, (now - lastAct.t0) * 1000) : -1
   // イラスト版は姿勢で動かす（技の動きも姿勢の中＝踏み込まない）
   const rigMotion = rig && lastAct?.motion?.keys ? lastAct.motion : null, rigMs = (now - (lastAct?.t0 ?? now)) * 1000
-  const pose = rig ? illustPoseAt(rig.key, rigMotion, rigMs, now * 1000) : null
+  // 構えのあいだは構えの姿勢（技を流しているあいだは技が先）
+  const casting = rig && me.cast && !(rigMotion && rigMs < rigMotion.totalMs)
+  const pose = !rig ? null : casting ? illustCastPoseAt(rig.key, (st.t - me.cast.start) * 1000, now * 1000)
+    : illustPoseAt(rig.key, rigMotion, rigMs, now * 1000, !!lastAct && afterCast(lastAct.t0, castEnd))
   const trails = rigMotion ? illustTrailsAt(rig.key, rigMotion, rigMs, now * 1000) : []
   const dx = (frame >= 0 || rig ? 0 : lungeOf(now - lastOf('act')) * dir) + shakeOf(now - lastOf('hit'))
   const hitAgo = now - lastOf('hit')
@@ -269,6 +280,9 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
 
 // ボスの技のエフェクトが当たる場所（自分の絵の枠の上からの割合＝体の真ん中あたり）
 export const FX_TARGET_Y = 0.58
+// 相手の頭上・足元に出すエフェクト（on）の場所（同じく枠の上からの割合）：頭上＝枠の少し上（頭にかからない）・足元＝枠の下のはし
+const FX_HEAD_Y = -0.12
+const FX_FEET_Y = 0.97
 // 飛ぶ絵：出はじめは小さく（FX_GROW_SEC で元の大きさ）・だんだん速く
 const FX_GROW_SEC = 0.12
 const flyPosOf = (p) => p * (0.7 + 0.3 * p)
@@ -280,9 +294,11 @@ const boxOf = (stage, area, scale) => {
 }
 
 // 横に並べたコマの1つを、合わせる点（ax・ay）が (x, y) に来るように置く。s＝絵の1pxが画面の何pxか・rot＝回す角度（ラジアン）・op＝濃さ
-const Sprite = ({ a, frame, x = 0, y = 0, s = 1, rot = 0, op = 1, clip }) => (
-  <FrameStrip a={a} frame={frame} style={{ zIndex: 2, left: x - a.ax * s, top: y - a.ay * s, width: a.w * s, height: a.h * s, opacity: op, clipPath: clip,
-    transform: rot ? `rotate(${rot}rad)` : undefined, transformOrigin: `${a.ax * s}px ${a.ay * s}px` }} />
+//   ay を渡すと縦の合わせる点だけ変える（足元にそろえる絵＝絵の下のはし）・mask＝ぼかした切り抜き（CSS の mask-image）
+const Sprite = ({ a, frame, x = 0, y = 0, s = 1, rot = 0, op = 1, clip, mask, ay = a.ay }) => (
+  <FrameStrip a={a} frame={frame} style={{ zIndex: 2, left: x - a.ax * s, top: y - ay * s, width: a.w * s, height: a.h * s, opacity: op, clipPath: clip,
+    maskImage: mask, WebkitMaskImage: mask,
+    transform: rot ? `rotate(${rot}rad)` : undefined, transformOrigin: `${a.ax * s}px ${ay * s}px` }} />
 )
 const easeOut = (k) => 1 - (1 - k) * (1 - k)
 
@@ -290,14 +306,21 @@ const easeOut = (k) => 1 - (1 - k) * (1 - k)
 //   エフェクトの絵は1枚ずつ置いたまま（出ていないときは隠す・FrameStrip）。同じ絵が重なったら新しいほう
 //   ドット絵版＝コマを流す（大きさは竜と同じ px）／イラスト版＝1枚の塗りを動きで見せる（大きさは枠の幅 × size）：
 //     飛ぶ＝少しゆらぐ・当たる＝durMs のあいだ大きくなりながら消える（spin° 回る）
-function BossFx({ fx, now, geo, art }) {
+//   on のあるエフェクト（雨摩座）は相手の頭上・足元に出す（大きさは自分の絵の枠の幅に対して）：
+//     drop＝lead のあいだに上から下へ見えてくる（降りきったときがダメージ）／bind＝大きく出て締まる
+//   cast＝構えている大技（{ name, ms＝構えはじめてから }）・castEnd＝構えを最後に見た時刻（相手の頭上の雲を構えから技へつなぐ）
+function BossFx({ fx, now, geo, art, cast = null, castEnd = -1e9 }) {
   const s = geo ? geo.b.w / art.base : 1
   const to = geo && { x: geo.p.x + geo.p.w / 2, y: geo.p.y + geo.p.h * FX_TARGET_Y }
   const acts = geo ? fx.filter(f => f.kind === 'act' && f.side === 'b' && f.motion?.fx) : []
-  return Object.values(art.motions).flatMap(m => Object.entries(m.fx || {}).flatMap(([kind, a]) => {
-    const sc = a.size ? (a.size * (geo?.b.w || 0)) / a.w : s   // イラスト版は枠の幅に対する大きさ
-    // 飛ぶ絵は出どころ（shots）ごとに1枚（イラスト版の黒翼烈風は両方の翼から）。届く時刻は1つめ＝ダメージの時刻
-    const shots = kind === 'fly' ? (m.shots || (m.front ? [{ front: m.front, delayMs: 0, size: 1 }] : [])) : [null]
+  // 構えている技の絵：名前が同じ技・無ければ最後の技（lib/bossArt.js の bossMotionKeyOf と同じ＝構えた技は最後の技を流す）
+  const motions = Object.values(art.motions)
+  const castM = cast && geo ? motions.find(m => m.label === cast.name) || motions.at(-1) : null
+  return motions.flatMap(m => Object.entries(m.fx || {}).flatMap(([kind, a]) => {
+    const sc = a.size ? (a.size * ((a.on ? geo?.p.w : geo?.b.w) || 0)) / a.w : s   // イラスト版は枠の幅に対する大きさ
+    const lead = a.lead || 0
+    // 飛ぶ絵は出どころ（shots）ごとに1枚（イラスト版の黒翼烈風は両方の翼から）。届く時刻は1つめ＝ダメージの時刻。ためる絵は ChargeOrb だけ
+    const shots = kind === 'fly' ? (m.shots || (m.front ? [{ front: m.front, delayMs: 0, size: 1 }] : [])) : kind === 'hit' ? [null] : []
     return shots.map((sh, i) => {
       let on = null
       for (const f of acts) {
@@ -312,28 +335,61 @@ function BossFx({ fx, now, geo, art }) {
           on = { frame: a.frames > 1 ? Math.floor(e * 1000 / a.ms) % a.frames : 0, x: from.x + (to.x - from.x) * q, y: from.y + (to.y - from.y) * q,
             s: sc * sh.size * grow, rot: Math.atan2(to.y - from.y, to.x - from.x) - Math.PI }   // 飛ぶ絵は左向き
         }
-        if (kind === 'hit' && f.landed !== false && now >= tHit) {
-          const ms = (now - tHit) * 1000
+        if (kind === 'hit' && f.landed !== false && now >= tHit - lead / 1000) {
+          const ms = (now - tHit) * 1000 + lead   // 当たる絵が出はじめてから
           if (a.frames > 1) {
             const frame = motionFrameAt(a, ms)
             if (frame >= 0) on = { frame, x: to.x, y: to.y, s: sc }
           } else if (ms < a.durMs) {
             const k = ms / a.durMs, fade = k > 0.55 ? 1 - (k - 0.55) / 0.45 : 1
-            on = a.wipe
-              // 爪の跡：大きくせず、右上から左下へ引いたように出す（はじめの22%で引ききる）
-              ? { frame: 0, x: to.x, y: to.y, s: sc * (0.96 + 0.08 * easeOut(k)), op: fade, clip: wipeClipOf(Math.min(1, k / 0.22)) }
-              : { frame: 0, x: to.x, y: to.y, s: sc * (0.55 + 0.6 * easeOut(k)), rot: ((a.spin || 0) * k * Math.PI) / 180, op: Math.min(1, k / 0.08) * fade }
+            // 出す場所：足元（絵の下のはしを枠の下へ）・頭上・ほかは体の真ん中
+            const sp = a.on === 'feet' ? { x: to.x, y: geo.p.y + geo.p.h * FX_FEET_Y, ay: a.h }
+              : a.on === 'head' ? { x: to.x, y: geo.p.y + geo.p.h * FX_HEAD_Y } : to
+            if (a.anim === 'drop') {
+              // 上から下へ降りる（雨・滝）：lead のあいだに上から見えてくる（降りる先のふちはぼかす）。fadeTop＝絵の上のはしをぼかす割合（滝の上を雲になじませる）
+              const p = (lead ? easeOut(Math.min(1, ms / lead)) : 1) * 112, top = (a.fadeTop || 0) * 100
+              on = { frame: 0, ...sp, s: sc, op: Math.min(1, ms / 90) * fade,
+                mask: `linear-gradient(to bottom, transparent 0%, #000 ${top.toFixed(1)}%, #000 ${Math.max(top, p - 12).toFixed(1)}%, transparent ${p.toFixed(1)}%)` }
+            } else if (a.anim === 'bind') {
+              // 外から締まる（水の帯）：大きく出て、はじめの30%で元の大きさへ（小さく揺れて止まる）
+              const t = Math.min(1, k / 0.3)
+              on = { frame: 0, ...sp, s: sc * (1.35 - 0.35 * easeOut(t)), rot: Math.sin(ms / 60) * 0.04 * (1 - t), op: Math.min(1, k / 0.1) * fade }
+            } else {
+              on = a.wipe
+                // 爪の跡：大きくせず、右上から左下へ引いたように出す（はじめの22%で引ききる）
+                ? { frame: 0, ...sp, s: sc * (0.96 + 0.08 * easeOut(k)), op: fade, clip: wipeClipOf(Math.min(1, k / 0.22)) }
+                : { frame: 0, ...sp, s: sc * (0.55 + 0.6 * easeOut(k)), rot: ((a.spin || 0) * k * Math.PI) / 180, op: Math.min(1, k / 0.08) * fade }
+            }
           }
         }
       }
       return <Sprite key={`${a.src}#${i}`} a={a} {...(on || { frame: -1 })} />
-    }).concat(m.charge?.kind === kind ? [<ChargeOrb key={`${a.src}#charge`} m={m} a={a} acts={acts} now={now} geo={geo} art={art} s={s} />] : [])
+    }).concat(m.charge?.kind === kind ? [<ChargeOrb key={`${a.src}#charge`} m={m} a={a} acts={acts} now={now} geo={geo} art={art} s={s}
+      cast={castM === m ? cast : null} castEnd={castEnd} />] : [])
   }))
 }
 // 撃つ前に口でためる火の玉（イラスト版の charge）：口（首と頭の動きについていく）で、小さく出てだんだん大きく・回りながら脈打つ
-function ChargeOrb({ m, a, acts, now, geo, art, s }) {
+//   エフェクトに on があれば相手の頭上の雲（雨摩座の水天葬）：構えのあいだに大きくなり、技のあいだは出したまま、
+//   toMs（滝が落ちる）のあと holdMs で薄れる。ゆっくり脈打って小さく揺れる（渦は斜めから見た形なので回さない）
+function ChargeOrb({ m, a, acts, now, geo, art, s, cast, castEnd }) {
   const c = m.charge
   let on = null
+  if (a.on) {
+    if (!geo) return <Sprite a={a} frame={-1} />
+    const at = { x: geo.p.x + geo.p.w / 2, y: geo.p.y + geo.p.h * FX_HEAD_Y }
+    const cloud = (k, op) => ({ frame: 0, x: at.x, y: at.y, op, rot: Math.sin(now * 2.2) * 0.035,
+      s: (a.size * geo.p.w / a.w) * (0.35 + 0.65 * easeOut(k)) * (1 + 0.035 * Math.sin(now * 6)) })
+    if (cast) on = cloud(Math.min(1, cast.ms / 1200), Math.min(1, cast.ms / 400))
+    for (const f of acts) {
+      if (f.motion !== m) continue
+      const ms = (now - f.t0) * 1000
+      if (ms < c.fromMs || ms >= c.toMs + (c.holdMs || 0)) continue
+      // 構えのすぐあと＝雲はもう大きい。構えずに流したとき（動きを見る）は toMs までの6割で大きくなる
+      const k = afterCast(f.t0, castEnd) ? 1 : Math.min(1, (ms - c.fromMs) / ((c.toMs - c.fromMs) * 0.6))
+      on = cloud(k, Math.min(1, k / 0.25) * (ms > c.toMs ? 1 - (ms - c.toMs) / c.holdMs : 1))
+    }
+    return <Sprite a={a} {...(on || { frame: -1 })} />
+  }
   for (const f of acts) {
     if (f.motion !== m) continue
     const ms = (now - f.t0) * 1000
@@ -360,6 +416,10 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
   const stageRef = useRef(null), pArea = useRef(null), bArea = useRef(null)
   const [geo, setGeo] = useState(null)
   const playerScale = size?.player || 1
+  // 構えを最後に見た時刻（構えのすぐあとの技を、構えの姿勢・相手の頭上の雲からつなぐ）
+  const castSeen = useRef(-1e9)
+  if (st.b.cast) castSeen.current = now
+  const cast = st.b.cast ? { name: st.b.cast.name, ms: (st.t - st.b.cast.start) * 1000 } : null
   useLayoutEffect(() => {
     const el = stageRef.current
     if (!el || !foeBig) return
@@ -379,8 +439,8 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
         artH={size?.artH || ART_H} scale={playerScale} areaRef={pArea} />
       <Fighter st={st} side="b" me={st.b} right src={foeSrc} fx={fx} now={now} name={st.b.name}
         strips={foeArt?.kind === 'pixel' ? Object.values(foeArt.motions) : []} rig={foeArt?.kind === 'illust' ? foeArt : null}
-        flex={size?.flex} artH={size?.artH || ART_H} areaRef={bArea} />
-      {foeArt && <BossFx fx={fx} now={now} geo={geo} art={foeArt} />}
+        flex={size?.flex} artH={size?.artH || ART_H} areaRef={bArea} castEnd={castSeen.current} />
+      {foeArt && <BossFx fx={fx} now={now} geo={geo} art={foeArt} cast={cast} castEnd={castSeen.current} />}
     </div>
   )
 }

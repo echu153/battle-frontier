@@ -156,7 +156,7 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
                 <b style={{ color:'#ff8866' }}>{bossArt.name}</b>（IDダンジョンのボス）<br />
                 {diffs.length > 0
                   ? '強さと技はIDダンジョンと同じです（HPは持ち越さず、1回で全部）。'
-                  : '技はまだ決めていません。強さと技は仮で、この場所のボスのものです。'}
+                  : '技の動きはできましたが、数字はまだです。強さと技は仮で、この場所のボスのものです（構えた大技は最後の技の動き）。'}
                 戦闘中の「動きを見る」で技の動きをどれでも流せます
                 {diffs.length > 0 && (
                   <div style={{ display:'flex', gap:'4px', alignItems:'center', marginTop:'4px', flexWrap:'wrap' }}>

@@ -38,11 +38,15 @@ export const BOSS_ILLUST = {
     },
     pivot: [342, 353], mouth: [155, 87],
     fx: {
+      shot: { fly: { w: 384, h: 318, ax: 3, ay: 273 }, hit: { w: 384, h: 381, ax: 192, ay: 191 } },
+      sleet: { hit: { w: 384, h: 366, ax: 192, ay: 183 } },
+      bind: { fly: { w: 384, h: 240, ax: 3, ay: 17 }, hit: { w: 384, h: 379, ax: 192, ay: 190 } },
+      deluge: { hit: { w: 384, h: 384, ax: 192, ay: 192 }, charge: { w: 384, h: 283, ax: 192, ay: 142 } },
     },
     fit: {
       water: { s: 1.06, deg: 0, tx: -38, ty: -38, score: 0 },
       body: { s: 0.87, deg: -3, tx: 54, ty: 180, score: -0.292 },
     },
-    v: { 'il-water': '56a7ccb4', 'il-body': 'e8b47381', 'il-armF': '3263d5b5', 'il-head': 'b65aea3c', 'il-armN': '7eaed282' },
+    v: { 'il-water': '56a7ccb4', 'il-body': 'e8b47381', 'il-armF': '3263d5b5', 'il-head': 'b65aea3c', 'il-armN': '7eaed282', 'il-fx-shot-fly': '89f4d4f3', 'il-fx-shot-hit': 'b458f544', 'il-fx-sleet-hit': '846c1942', 'il-fx-bind-fly': 'ee7ff9a4', 'il-fx-bind-hit': '6d7032af', 'il-fx-deluge-hit': 'd828eed6', 'il-fx-deluge-charge': 'fdaabfa2' },
   },
 }

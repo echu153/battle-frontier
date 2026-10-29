@@ -27,6 +27,12 @@
 //   ChatGPT の体・髪・奥の腕は立ち絵と形が違って重ならなかった＝立ち絵そのものを体にして（base: 'stand'）、
 //   頭・手前の手・奥の手は立ち絵から多角形で切り分ける（立ち止まっているときは立ち絵と同じ）。動いて見える体のすき間は ChatGPT の体で埋める（fill）
 //   待機＝ゆっくりした揺れの足し算（idle.sway）：浮き沈み・頭・両手・水の帯
+// 【確定】2026-10-29 雨摩座の技（ユーザー「つぎはスキルとそのエフェクトを決めたい、黒龍と同じ感じの条件で」→選んだ4つ・
+//   エフェクト7枚はユーザーが描いた「技も作り終えた」）：
+//   雨礫＝手前の手を振り上げて払い、水の礫を手から撃つ／氷雨＝天を仰いで奥の手を差し上げ、手前の手を振り下ろす＝相手の頭上の雨雲から雨（飛ばない）／
+//   水縛の帯＝身を引いて手前の手を突き出す＝水の帯が手から飛んで相手に巻きつく／
+//   水天葬＝構え（5秒）のあいだ両手を掲げて震え、相手の頭上に渦の雲（ためる）→手を振り下ろすと雲から滝のような水が落ちる
+//   相手の頭上・足元に出すエフェクトは on（'head' 頭上・'feet' 下を足元にそろえる・'body' 体の真ん中）で、大きさは自分の絵の枠の幅に対して
 // ============================================================
 import { BOSS_ILLUST } from './bossIllustList.js'
 import { BOSS_DEFS, BOSS_ART_DIR, bossFileOf, bossArtOf } from './bossArt.js'
@@ -59,6 +65,8 @@ const ZERO = { x: 0, y: 0, r: 0, neck: 0, head: 0, wingN: 0, wingF: 0, wingNSq: 
 //   shots＝飛ぶ絵の出どころ（無ければ口から1つ）。{ part, pt（パーツの点）, delayMs（hitMs からの遅れ・−で先に出る）, size（飛ぶ絵の大きさの倍率） }
 //     1つめ（delayMs 0）が届いた時刻がダメージ（impactMs）
 //   charge＝撃つ前に口でためる火の玉（kind のエフェクトの絵を fromMs〜toMs のあいだ口で大きくする・size＝枠の幅に対する大きさ）
+//     エフェクトに on があれば口ではなく相手の頭上（雨摩座の水天葬の渦の雲）：toMs のあと holdMs で薄れる・構えのあいだも出す
+// ボスごとの idleKeep＝技のあいだも残す待機のぶん（無ければ IDLE_KEEP）・cast＝構え（大技の詠唱）のあいだの姿勢 pose と震え shake
 export const BOSS_ILLUST_DEFS = {
   varuzenoku: {
     // 待機：1回の羽ばたき（ミリ秒）・翼の振れ幅（°・上げきり→下ろしきり）・下ろしきりで縮める割合・奥の翼の振れ幅（手前の何倍）・体の浮き沈み（枠の割合）
@@ -152,7 +160,7 @@ export const BOSS_ILLUST_DEFS = {
       { file: '終焉の黒焔_当たる', motion: 'doom', kind: 'hit', size: 0.72, durMs: 760, spin: 0 },
     ],
   },
-  // 【確定】2026-10-29 雨摩座（ユーザー「とりあえず動かしてみて」）。技はまだ（黒龍のあと）なので、動きは待機と仮の攻撃だけ
+  // 【確定】2026-10-29 雨摩座（ユーザー「とりあえず動かしてみて」→技4つ・エフェクト7枚）
   amaza: {
     // 立ち絵そのものが体。ChatGPT の体（fill）は、切り分けで空いた所（頭や手が動くと見える）を埋めるだけに使う
     base: 'stand', fill: '体',
@@ -169,6 +177,10 @@ export const BOSS_ILLUST_DEFS = {
       y: [0.012, 4200, 0], r: [0.7, 6100, 0.2], head: [1.6, 5300, 0.35],
       armN: [4, 3700, 0.1], armF: [6, 4300, 0.6], water: [6, 7000, 0],
     } },
+    // 技のあいだも揺れはそのまま（止めると技の頭と終わりで手や水の帯がぴくっと跳ねる）
+    idleKeep: { y: 1, r: 1, head: 1, armN: 1, armF: 1, water: 1 },
+    // 構え（水天葬の5秒）：天を仰いで両手を掲げ、小さく震える
+    cast: { pose: { x: 0.015, y: -0.035, r: 4.5, head: 6, armN: 26, armF: -12, water: 12 }, shake: { r: 0.35, armN: 1.4, armF: 1.4 } },
     // 切り分け（立ち絵 640px の上の点）。頭＝冠と顔（首の付け根で傾ける）・手前の手と奥の手＝袖口から先（袖口で回す）
     cuts: {
       head: { from: 'body', pivot: [230, 145],
@@ -178,18 +190,61 @@ export const BOSS_ILLUST_DEFS = {
       armF: { from: 'body', pivot: [396, 154],
         take: [[355, 95], [410, 95], [410, 155], [382, 155], [367, 135], [355, 130]] },
     },
+    // 技。[54, 251]＝手前の手の指先（立ち絵 640px の上・雨礫と水縛の帯が出る所）
     motions: {
-      // 仮（技を決めるまで）：のけぞって手を上げ、相手の方へ差し向ける
-      cast: { totalMs: 1000, hitMs: 460, keys: [
+      // 雨礫：手前の手を振り上げてから払い、指先から水の礫を撃つ（指先に水の筋）
+      shot: { totalMs: 900, hitMs: 380, keys: [
         [0, {}],
-        [300, { x: 0.025, y: -0.02, r: 3, head: 3, armN: 16, armF: 10 }],
-        [380, { x: 0.028, y: -0.022, r: 3.4, head: 3.4, armN: 18, armF: 11 }],
-        [460, { x: -0.06, y: 0.012, r: -4, head: -3, armN: -12, armF: -8 }],
-        [650, { x: -0.055, y: 0.01, r: -3.5, head: -2.5, armN: -10, armF: -6 }],
-        [1000, {}],
+        [240, { x: 0.02, y: -0.01, r: 2.5, head: 2, armN: 24, armF: 6, water: 4 }],
+        [300, { x: 0.022, y: -0.012, r: 2.8, head: 2.2, armN: 26, armF: 6, water: 4 }],
+        [380, { x: -0.045, y: 0.008, r: -3, head: -2, armN: -14, armF: -4, water: -5 }],
+        [560, { x: -0.04, y: 0.006, r: -2.5, head: -1.5, armN: -12, armF: -3, water: -4 }],
+        [900, {}],
+      ], trails: [
+        { kind: 'water', part: 'armN', pts: [[54, 251]], fromMs: 300, toMs: 380, lagMs: 70, fadeMs: 180 },
+      ], shots: [{ part: 'armN', pt: [54, 251], delayMs: 0, size: 1 }] },
+      // 氷雨：天を仰いで奥の手を差し上げ、手前の手を相手へ振り下ろす＝相手の頭上に雨雲（飛ぶ絵は無い）
+      sleet: { totalMs: 1300, hitMs: 520, keys: [
+        [0, {}],
+        [360, { x: 0.015, y: -0.03, r: 3.5, head: 6, armN: 10, armF: -10, water: 6 }],
+        [440, { x: 0.017, y: -0.032, r: 3.8, head: 6.5, armN: 11, armF: -12, water: 7 }],
+        [520, { x: -0.03, y: 0.006, r: -2, head: -2, armN: -16, armF: 6, water: -6 }],
+        [800, { x: -0.028, y: 0.005, r: -1.8, head: -1.5, armN: -14, armF: 5, water: -5 }],
+        [1300, {}],
       ] },
+      // 水縛の帯：身を引いて（水の帯も大きく振れる）から手前の手を突き出す＝帯が指先から相手へ
+      bind: { totalMs: 1150, hitMs: 460, keys: [
+        [0, {}],
+        [300, { x: 0.03, y: -0.015, r: 4, head: 3, armN: 22, armF: 8, water: 10 }],
+        [380, { x: 0.032, y: -0.016, r: 4.3, head: 3.2, armN: 24, armF: 9, water: 11 }],
+        [460, { x: -0.06, y: 0.01, r: -4.5, head: -3, armN: -18, armF: -6, water: -10 }],
+        [700, { x: -0.055, y: 0.008, r: -4, head: -2.5, armN: -16, armF: -5, water: -9 }],
+        [1150, {}],
+      ], trails: [
+        { kind: 'water', part: 'armN', pts: [[54, 251]], fromMs: 380, toMs: 460, lagMs: 70, fadeMs: 200 },
+      ], shots: [{ part: 'armN', pt: [54, 251], delayMs: 0, size: 1 }] },
+      // 水天葬：両手を掲げて（構えの姿勢と同じ形）ため、振り下ろすと相手の頭上の渦の雲から滝が落ちる
+      deluge: { totalMs: 1700, hitMs: 900, keys: [
+        [0, {}],
+        [380, { x: 0.02, y: -0.035, r: 4.5, head: 6, armN: 26, armF: -12, water: 12 }],
+        [760, { x: 0.024, y: -0.04, r: 5, head: 7, armN: 28, armF: -13, water: 13 }],
+        [900, { x: -0.06, y: 0.015, r: -5, head: -3, armN: -20, armF: 6, water: -12 }],
+        [1200, { x: -0.055, y: 0.012, r: -4.5, head: -2.5, armN: -18, armF: 5, water: -10 }],
+        [1700, {}],
+      ], charge: { kind: 'charge', fromMs: 0, toMs: 900, holdMs: 700 } },
     },
-    effects: [],
+    // on＝相手のどこに出すか（大きさは自分の絵の枠の幅に対して）・anim＝見せ方（drop＝上から下へ降りる・bind＝外から締まる）・
+    //   lead＝絵が出はじめてから当たるまで（降りきった時刻がダメージ）・fadeTop＝絵の上のはしをぼかす割合（滝の上を雲になじませる）
+    effects: [
+      { file: '雨礫_飛ぶ', motion: 'shot', kind: 'fly', size: 0.34, flyMs: 300 },
+      { file: '雨礫_当たる', motion: 'shot', kind: 'hit', size: 0.46, durMs: 560, spin: 0 },
+      { file: '氷雨_当たる', motion: 'sleet', kind: 'hit', on: 'feet', size: 1.4, anim: 'drop', lead: 260, durMs: 1150 },
+      { file: '水縛の帯_飛ぶ', motion: 'bind', kind: 'fly', size: 0.46, flyMs: 380 },
+      { file: '水縛の帯_当たる', motion: 'bind', kind: 'hit', on: 'body', size: 0.95, anim: 'bind', durMs: 950 },
+      // 渦の雲は滝より手前に重ねる（滝が雲から落ちて見える）＝並びは滝が先
+      { file: '水天葬_当たる', motion: 'deluge', kind: 'hit', on: 'feet', size: 1.3, anim: 'drop', lead: 240, durMs: 1300, fadeTop: 0.16 },
+      { file: '水天葬_ためる', motion: 'deluge', kind: 'charge', on: 'head', size: 1.3 },
+    ],
   },
 }
 
@@ -214,15 +269,30 @@ export const idlePoseAt = (idle, tMs) => {
     wingNSq: (idle.squash || 0) * down, wingFSq: (idle.squash || 0) * 0.7 * down,
     arm: (idle.armSway || 0) * Math.sin(2 * Math.PI * (ph - 0.3)) }
 }
-// 技のあいだも残す待機のぶん（羽ばたきは弱めて残す・浮き沈みは半分）
+// 技のあいだも残す待機のぶん（羽ばたきは弱めて残す・浮き沈みは半分）。ボスごとに idleKeep があればそちら
 const IDLE_KEEP = { wingN: 0.35, wingF: 0.35, wingNSq: 0.35, wingFSq: 0.35, y: 0.5 }
+// 構え：はじめの CAST_IN_MS で構えの姿勢へ移る／構えのすぐあとの技は、はじめの CAST_OUT_MS で構えの姿勢から技の動きへつなぐ
+export const CAST_IN_MS = 500
+export const CAST_OUT_MS = 320
 // いまの姿勢：motion（bossIllustOf の motions の1つ）を流しはじめて ms たったとき。技のあいだは羽ばたきを弱める
-export const illustPoseAt = (key, motion, ms, tMs) => {
+//   fromCast＝構えのすぐあとに撃った技（構えの姿勢からつなぐ＝手を掲げたままの形から急に待機に戻らない）
+export const illustPoseAt = (key, motion, ms, tMs, fromCast = false) => {
   const def = BOSS_ILLUST_DEFS[key]
   const idle = idlePoseAt(def.idle, tMs)
   const add = motion ? motionPoseAt(motion.keys, ms) : null
   if (!add) return idle
-  return Object.fromEntries(Object.keys(ZERO).map(f => [f, idle[f] * (IDLE_KEEP[f] || 0) + add[f]]))
+  const keep = def.idleKeep || IDLE_KEEP, cp = fromCast && def.cast ? def.cast.pose : null
+  const w = cp ? 1 - smooth(Math.min(1, Math.max(0, ms) / CAST_OUT_MS)) : 0
+  return Object.fromEntries(Object.keys(ZERO).map(f => [f, idle[f] * (keep[f] || 0) + add[f] + (cp?.[f] || 0) * w]))
+}
+// 構え（大技の詠唱）のあいだの姿勢：castMs＝構えはじめてからのミリ秒。構えの決まり（cast）が無いボスは待機のまま
+export const illustCastPoseAt = (key, castMs, tMs) => {
+  const def = BOSS_ILLUST_DEFS[key]
+  const idle = idlePoseAt(def.idle, tMs)
+  if (!def.cast) return idle
+  const keep = def.idleKeep || IDLE_KEEP
+  const k = smooth(Math.min(1, Math.max(0, castMs) / CAST_IN_MS)), q = Math.sin(castMs / 18) * k   // 震え（約9回/秒）
+  return Object.fromEntries(Object.keys(ZERO).map(f => [f, idle[f] * (keep[f] || 0) + (def.cast.pose[f] || 0) * k + (def.cast.shake?.[f] || 0) * q]))
 }
 
 // 点（立ち絵の px）を姿勢で動かした先（同じ px）。パーツ→親のパーツ→全体の順に回す（画面の rotate と同じ時計回り）
@@ -274,7 +344,7 @@ export const illustTrailsAt = (key, motion, ms, tMs) => {
 //   { kind:'illust', key, name, base（＝640）, illust（遭遇のイラスト）, parts:[{ key, src, x, y, w, h, px, py, ax（長さの向き°）, parent?, nest }], pivot, mouth,
 //     jaw:{ line, pivot, mouth }（口の中を描く）,
 //     motions:{ <key>: { label, keys, trails, totalMs, hitMs, flyMs, impactMs, front（当たる時刻の口・px）,
-//       shots:[{ front, delayMs, size }]（飛ぶ絵の出どころ・1つめが front）, fx:{ fly?, hit? }, charge? } }, srcs }
+//       shots:[{ front, delayMs, size }]（飛ぶ絵の出どころ・1つめが front）, fx:{ fly?, hit?, charge?（どれも on・anim・lead つき） }, charge? } }, srcs }
 export const bossIllustOf = (key) => {
   const def = BOSS_ILLUST_DEFS[key], art = BOSS_ILLUST[key], base = BOSS_DEFS[key]
   if (!def || !art?.parts || !base) return null
@@ -290,7 +360,8 @@ export const bossIllustOf = (key) => {
     for (const d of def.effects.filter(d => d.motion === m.key)) {
       const a = art.fx?.[m.key]?.[d.kind]
       if (!a) continue
-      fx[d.kind] = { ...a, frames: 1, src: srcOf(key, illustFxKindOf(m.key, d.kind)), size: d.size, durMs: d.durMs, spin: d.spin || 0, wipe: !!d.wipe }
+      fx[d.kind] = { ...a, frames: 1, src: srcOf(key, illustFxKindOf(m.key, d.kind)), size: d.size, durMs: d.durMs, spin: d.spin || 0, wipe: !!d.wipe,
+        on: d.on || null, anim: d.anim || null, lead: d.lead || 0, fadeTop: d.fadeTop || 0 }
       if (d.kind === 'fly') flyMs = d.flyMs
     }
     const poseAt = (ms) => ({ ...ZERO, ...motionPoseAt(md.keys, ms) })
@@ -299,8 +370,9 @@ export const bossIllustOf = (key) => {
       const front = sh.part ? illustPointAt(key, p, sh.pt, sh.part) : illustPointAt(key, p, mouthPointOf(key, p), 'head')
       return { front: front.map(Math.round), delayMs: sh.delayMs, size: sh.size ?? 1 }
     })
-    motions[m.key] = { label: m.file, keys: md.keys, trails: md.trails || [], totalMs: md.totalMs, hitMs: md.hitMs, flyMs, impactMs: md.hitMs + flyMs,
-      front: shots[0].front, shots, fx: fx.fly || fx.hit ? fx : null, charge: md.charge && fx[md.charge.kind] ? md.charge : null }
+    // 当たる時刻＝撃ち出す時刻＋飛ぶ時間＋当たる絵が降りきるまで（lead・氷雨と水天葬）
+    motions[m.key] = { label: m.file, keys: md.keys, trails: md.trails || [], totalMs: md.totalMs, hitMs: md.hitMs, flyMs, impactMs: md.hitMs + flyMs + (fx.hit?.lead || 0),
+      front: shots[0].front, shots, fx: Object.keys(fx).length ? fx : null, charge: md.charge && fx[md.charge.kind] ? md.charge : null }
   }
   const jaw = def.cuts?.jaw && art.parts.jaw ? { line: def.cuts.jaw.line, pivot: def.cuts.jaw.pivot, mouth: def.cuts.jaw.mouth } : null
   // 遭遇のイラストはドット絵版と同じ

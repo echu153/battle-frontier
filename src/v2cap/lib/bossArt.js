@@ -70,11 +70,16 @@ export const BOSS_DEFS = {
     ],
   },
   // 【確定】2026-10-29 2体目（ユーザー「あまざイラスト作った、とりあえず動かしてみて」）。イラスト版だけ（pixel: false＝ドット絵版は作らない）。
-  //   技はまだ（ユーザー「技とかはイラスト（化した）黒龍が完成したら」）＝流す動きは仮の1つだけ（lib/bossIllust.js の cast）。
-  //   プロンプトは制作帳 https://claude.ai/artifact/T1LEcopo6jwt8MxfBiU1FX
+  //   技（2026-10-29 ユーザーが選んだ・黒龍と同じ出し方）：通常攻撃 雨礫／75% 氷雨／50% 水縛の帯／25% 大技 水天葬（構え）。
+  //   動きとエフェクトは lib/bossIllust.js。数字（倍率・確率・強さ）はまだ。プロンプトは制作帳 https://claude.ai/artifact/T1LEcopo6jwt8MxfBiU1FX
   amaza: {
     name: '雨摩座', dir: '雨摩座', pixel: false,
-    motions: [{ file: '仮の攻撃', key: 'cast' }],
+    motions: [
+      { file: '雨礫', key: 'shot' },
+      { file: '氷雨', key: 'sleet' },
+      { file: '水縛の帯', key: 'bind' },
+      { file: '水天葬', key: 'deluge' },
+    ],
     effects: [],
   },
 }

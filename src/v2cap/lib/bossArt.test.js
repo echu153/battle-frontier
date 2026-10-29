@@ -221,11 +221,17 @@ test('待機のコマそろえ：①と同じ形が下にずれていたら、�
   assert.deepEqual(t.map(v => v.dy), [0, 6, -4])
 })
 
-test('【確定】2026-10-29 雨摩座はイラスト版だけ（ドット絵版は作らない）・技はまだなので何をしても仮の攻撃を流す', () => {
+test('【確定】2026-10-29 雨摩座はイラスト版だけ（ドット絵版は作らない）・技4つ（通常攻撃＝雨礫・構えた大技＝水天葬・技の名前が同じならその動き）', () => {
   assert.equal(BOSS_DEFS.amaza.pixel, false)
   assert.equal(bossArtOf('amaza'), null)
+  assert.deepEqual(BOSS_DEFS.amaza.motions.map(m => m.file), ['雨礫', '氷雨', '水縛の帯', '水天葬'])
   const memo = newBossMotionMemo()
-  assert.equal(bossMotionKeyOf('amaza', { skill: null }, memo), 'cast')
-  assert.equal(bossMotionKeyOf('amaza', { skill: 'まりょくため' }, memo), 'cast')
+  assert.equal(bossMotionKeyOf('amaza', { skill: null }, memo), 'shot')
+  assert.equal(bossMotionKeyOf('amaza', { skill: '氷雨' }, memo), 'sleet')
+  assert.equal(bossMotionKeyOf('amaza', { skill: '水天葬' }, memo), 'deluge')
+  // 技がまだ仮（この場所のボスの技）のあいだ：構えた技＝水天葬・ほかの技＝氷雨と水縛の帯を交互
+  assert.deepEqual([bossMotionKeyOf('amaza', { skill: 'まりょくため' }, memo), bossMotionKeyOf('amaza', { skill: 'まりょくため' }, memo)], ['sleet', 'bind'])
+  memo.casts.add('おおわざ')
+  assert.equal(bossMotionKeyOf('amaza', { skill: 'おおわざ' }, memo), 'deluge')
   assert.equal(bossMotionKeyOf('nobody', { skill: null }, memo), null)
 })
