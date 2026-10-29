@@ -315,7 +315,11 @@ export const BOSS_ILLUST_DEFS = {
         [1950, { x: -0.062, y: 0.014, r: -5.2, head: -2.8, armN: -12, armF: 5 }],
         [2500, {}],
       ], arcs: [{ kind: 'water', pts: THROW, fromMs: 1525, toMs: 1600, fadeMs: 260 }],
-      charge: { kind: 'charge', fromMs: 0, toMs: 1600, holdMs: 700 } },
+      charge: { kind: 'charge', fromMs: 0, toMs: 1600, holdMs: 700 },
+      // 【確定】2026-10-29 ユーザー「水天葬だったらほんとに滝が叩きつけてるようなエフェクトにしてほしい、派手に」：
+      //   画面が暗くなり、雲の渦が回って手に光が集まり、振り下ろすと滝が落ちて叩きつける（光る・揺れる・しぶき・波紋・もや）＝lib/bossScene.js
+      //   hand＝掲げた手の指先（光が集まる所・立ち絵の px＝THROW のはじめ）
+      scene: { kind: 'pour', hand: THROW[0] } },
     },
     // on＝相手のどこに出すか（大きさは自分の絵の枠の幅に対して）・anim＝見せ方（drop＝上から下へ降りる・bind＝外から締まる）・
     //   lead＝絵が出はじめてから当たるまで（降りきった時刻がダメージ）・fadeTop＝絵の上のはしをぼかす割合（滝の上を雲になじませる）
@@ -499,7 +503,8 @@ export const illustTrailsAt = (key, motion, ms, tMs) => {
 //   { kind:'illust', key, name, base（＝640）, illust（遭遇のイラスト）, parts:[{ key, src, x, y, w, h, px, py, ax（長さの向き°）, parent?, nest }], pivot, mouth,
 //     jaw:{ line, pivot, mouth }（口の中を描く）,
 //     motions:{ <key>: { label, keys, trails, totalMs, hitMs, flyMs, impactMs, front（当たる時刻の口・px）,
-//       shots:[{ front, delayMs, size }]（飛ぶ絵の出どころ・1つめが front）, fx:{ fly?, hit?, charge?（どれも on・anim・lead つき） }, charge? } },
+//       shots:[{ front, delayMs, size }]（飛ぶ絵の出どころ・1つめが front）, fx:{ fly?, hit?, charge?（どれも on・anim・lead つき） }, charge?,
+//       scene?（派手な演出・lib/bossScene.js） } },
 //     orb:{ src, at, size, h（縦÷横） }（待機の口の火の玉）, dust:[[x, y], …]（しっぽを叩きつけた砂ぼこり）, srcs }
 export const bossIllustOf = (key) => {
   const def = BOSS_ILLUST_DEFS[key], art = BOSS_ILLUST[key], base = BOSS_DEFS[key]
@@ -532,7 +537,7 @@ export const bossIllustOf = (key) => {
     })
     // 当たる時刻＝撃ち出す時刻＋飛ぶ時間＋当たる絵が降りきるまで（lead・氷雨と水天葬）
     motions[m.key] = { label: m.file, keys: md.keys, trails: md.trails || [], arcs: md.arcs || [], totalMs: md.totalMs, hitMs: md.hitMs, flyMs, impactMs: md.hitMs + flyMs + (fx.hit?.lead || 0),
-      front: shots[0].front, shots, fx: Object.keys(fx).length ? fx : null, charge: md.charge && fx[md.charge.kind] ? md.charge : null }
+      front: shots[0].front, shots, fx: Object.keys(fx).length ? fx : null, charge: md.charge && fx[md.charge.kind] ? md.charge : null, scene: md.scene || null }
   }
   const jaw = def.cuts?.jaw && art.parts.jaw ? { line: def.cuts.jaw.line, pivot: def.cuts.jaw.pivot, mouth: def.cuts.jaw.mouth } : null
   // 待機のときどきの動き（黒龍）：口の火の玉（頭の中に描く）・しっぽを叩きつけた砂ぼこりの場所
