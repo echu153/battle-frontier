@@ -13,7 +13,7 @@ import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readRgba } from './v2cap-motion.mjs'
-import { bossIllustOf, illustPoseAt, illustCastPoseAt, illustFreePoseAt, rotPoint, swapOpacityOf, dustEllipsesOf } from '../src/v2cap/lib/bossIllust.js'
+import { bossIllustOf, illustPoseAt, illustCastPoseAt, illustFreePoseAt, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf } from '../src/v2cap/lib/bossIllust.js'
 
 const SELF = fileURLToPath(import.meta.url)
 const ROOT = path.resolve(path.dirname(SELF), '..')
@@ -22,7 +22,8 @@ const PAD = { l: 160, t: 160, r: 60, b: 60 }   // 踏み込み・のけぞりで
 // 1コマ：{ W, H, data }（RGBA）。art＝bossIllustOf・imgs＝パーツの絵（art.parts と同じ並び）
 //   freePose＝体の動きから切り離したパーツ（p.free・雨摩座の水の帯）の姿勢（画面と同じ＝待機のまま）
 //   orbImg＝口の火の玉の絵（黒龍の待機・あれば描く）。砂ぼこり（pose.dust）は画面の RigDust と同じ楕円を、ぼかした色で重ねる
-export const renderPose = (art, imgs, pose, freePose = pose, orbImg = null) => {
+//   bendImgs＝曲げるパーツ（p.bend）の、曲げた絵を並べた1枚（パーツのキー → 絵）。画面の BendFrames と同じく、角度に近い2枚を重ねる
+export const renderPose = (art, imgs, pose, freePose = pose, orbImg = null, bendImgs = {}) => {
   const S = art.base, W = S + PAD.l + PAD.r, H = S + PAD.t + PAD.b
   const out = Buffer.alloc(W * H * 4)
   for (let i = 0; i < W * H; i++) { out[i * 4] = 8; out[i * 4 + 1] = 22; out[i * 4 + 2] = 50; out[i * 4 + 3] = 255 }
@@ -34,6 +35,7 @@ export const renderPose = (art, imgs, pose, freePose = pose, orbImg = null) => {
     pt = rotPoint(pt, art.pivot, -pose.r)
     for (const p of chain) {
       // partMove（縮めてから回す）の逆：戻してから伸ばす
+      if (p.bend) continue   // 曲げるパーツは回さない
       const c = [p.px, p.py], sq = pose[`${p.key}Sq`] || 0
       pt = rotPoint(pt, c, -(pose[p.key] || 0))
       if (sq) { pt = rotPoint(pt, c, -(p.ax || 0)); pt = rotPoint([c[0] + (pt[0] - c[0]) / (1 - sq), pt[1]], c, p.ax || 0) }
@@ -58,6 +60,17 @@ export const renderPose = (art, imgs, pose, freePose = pose, orbImg = null) => {
       const [u, v] = toLocal(X, Y, chain, ps)
       const i = (Y * W + X) * 4
       if (inside && inPolygon(inside, u, v)) over(i, 42 + 200 * (pose.glow || 0), 3 + 90 * (pose.glow || 0), 6, 255)
+      if (p.bend && bendImgs[key]) {
+        const b = p.bend, sh = bendImgs[key], fw = sh.W / b.n, { i: f0, j: f1, k } = bendFramesOf(b, ps[key] || 0)
+        const bx = (u - b.x) / b.w * fw - 0.5, by = (v - b.y) / b.h * sh.H - 0.5
+        if (bx < -1 || by < -1 || bx > fw || by > sh.H) continue
+        for (const [n, w] of [[f0, 1], [f1, f1 === f0 ? 0 : k]]) {
+          if (w <= 0.01) continue
+          const xx = Math.min(fw - 1, Math.max(0, Math.round(bx))) + n * fw, yy = Math.min(sh.H - 1, Math.max(0, Math.round(by)))
+          over(i, sample(sh, xx, yy, 0), sample(sh, xx, yy, 1), sample(sh, xx, yy, 2), sample(sh, xx, yy, 3) * o * w)
+        }
+        continue
+      }
       const x = u - p.x - 0.5, y = v - p.y - 0.5
       if (x < -1 || y < -1 || x > p.w || y > p.h) continue
       const sx = x * img.W / p.w, sy = y * img.H / p.h
@@ -117,19 +130,20 @@ if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
   if (mk !== 'idle' && mk !== 'cast' && !motion) throw new Error(`技が無い：${mk}（${Object.keys(art.motions).join('・')}・idle）`)
   const load = (src) => readRgba(path.join(ROOT, 'public', decodeURI(src.split('?')[0])))
   const imgs = art.parts.map(p => load(p.src)), orbImg = art.orb ? load(art.orb.src) : null
+  const bendImgs = Object.fromEntries(art.parts.filter(p => p.bend).map(p => [p.key, load(p.bend.src)]))
   const poseAt = (ms) => mk === 'cast' ? illustCastPoseAt(key, ms, 0) : illustPoseAt(key, motion, motion ? ms : 0, motion ? 0 : ms)
   const freeAt = (ms) => illustFreePoseAt(key, motion || mk === 'cast' ? 0 : ms)
   // --anim <ミリ秒>：時刻を「はじめ-おわり」で渡すと、その間隔のコマを動く WebP にする（例：idle 0-10000 out.webp --anim 50）
   if (anim) {
     const [t0, t1] = times.split('-').map(Number), list = []
-    for (let t = t0; t < t1; t += anim) list.push(renderPose(art, imgs, poseAt(t), freeAt(t), orbImg))
+    for (let t = t0; t < t1; t += anim) list.push(renderPose(art, imgs, poseAt(t), freeAt(t), orbImg, bendImgs))
     const W = list[0].W, H = list[0].H
     execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${W}x${H}`, '-r', String(1000 / anim), '-i', '-',
       '-vf', `scale=${Math.round(W * scale)}:-1:flags=area`, '-c:v', 'libwebp', '-loop', '0', '-quality', '70', out], { input: Buffer.concat(list.map(f => f.data)), maxBuffer: 1 << 30 })
     console.log(`→ ${path.relative(ROOT, out) || out}（${list.length}コマ・動く）`)
     process.exit(0)
   }
-  const frames = times.split(',').map(Number).map(ms => renderPose(art, imgs, poseAt(ms), freeAt(ms), orbImg))
+  const frames = times.split(',').map(Number).map(ms => renderPose(art, imgs, poseAt(ms), freeAt(ms), orbImg, bendImgs))
   const W = frames[0].W, H = frames[0].H
   const all = Buffer.alloc(W * frames.length * H * 4)
   frames.forEach((f, n) => { for (let y = 0; y < H; y++) f.data.copy(all, (y * W * frames.length + n * W) * 4, y * W * 4, (y + 1) * W * 4) })

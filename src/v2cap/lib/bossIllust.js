@@ -56,6 +56,13 @@ export const illustFilesOf = (key) => BOSS_ILLUST_DEFS[key]?.files || ILLUST_PAR
 
 export const illustKindOf = (part) => `il-${part}`
 export const illustFxKindOf = (motion, kind) => `il-fx-${motion}-${kind}`
+// 曲げるパーツ（def.bend）の、角度ごとに曲げた絵を横に並べた1枚
+export const illustBendKindOf = (part) => `il-${part}-bend`
+// 曲げるパーツの角度 deg に使う2枚とその重ね方：i＝下の絵（並びの番号）・j＝上に重ねる絵・k＝上の絵の濃さ（0〜1）。範囲の外は端の絵
+export const bendFramesOf = (bend, deg) => {
+  const f = Math.min(bend.n - 1, Math.max(0, (deg - bend.from) / bend.step)), i = Math.floor(f)
+  return { i, j: Math.min(bend.n - 1, i + 1), k: f - i }
+}
 const srcOf = (key, kind) => {
   const v = BOSS_ILLUST[key]?.v?.[kind]
   return `${BOSS_ART_DIR}/${bossFileOf(key, kind)}${v ? `?v=${v}` : ''}`
@@ -67,7 +74,7 @@ const srcOf = (key, kind) => {
 //   ＋の角度は時計回り：右へ伸びる手前の翼は＋で下がる・左へ伸びる奥の翼と首は＋で上がる
 //   人の形（雨摩座）：armN・armF＝手前・奥の手の角度（左へ伸びる手は＋で上がる）／water＝水の帯の角度
 //     armCOn・armUOn＝右腕の構えの絵（胸元・真上）に切り替える割合（0〜1・swapOpacityOf）／armD・armC・armU＝その腕の角度（ふだんは 0）
-//   黒龍の待機：tail・tailT＝しっぽ（付け根の側・先）の角度（＋で左のはしが上がる）／dust＝叩きつけた砂ぼこり（0＝無し・0〜1＝出てからの割合）／
+//   黒龍の待機：tail＝地面のしっぽ（動かさない）・tailT＝左の巻いた先の曲げ（°・付け根から遠いほど大きく曲げる＝bend・＋で時計回り＝先が下がる）／dust＝叩きつけた砂ぼこり（0＝無し・0〜1＝出てからの割合）／
 //     orb・orbOp・orbT＝口の火の玉の大きさ（0〜1）・濃さ・出てからのミリ秒
 const ZERO = { x: 0, y: 0, r: 0, neck: 0, head: 0, wingN: 0, wingF: 0, wingNSq: 0, wingFSq: 0, arm: 0, jaw: 0, glow: 0, armN: 0, armF: 0, water: 0,
   armD: 0, armC: 0, armU: 0, armCOn: 0, armUOn: 0, tail: 0, tailT: 0, dust: 0, orb: 0, orbOp: 0, orbT: 0 }
@@ -86,8 +93,8 @@ export const BOSS_ILLUST_DEFS = {
     // 【確定】2026-10-29 描き直し：立ち絵そのものが体。ChatGPT の体（翼としっぽの無い体）は、体の形を知るためだけに使う（split.by）。
     //   ChatGPT の翼2枚・しっぽは立ち絵と形が違って重ならなかった（spare）。ChatGPT の体ですき間を埋めると頭や腕が二重に見えるので埋めない
     base: 'stand', files: {}, spare: ['翼_手前', '翼_奥', 'しっぽ'],
-    // 奥から手前へ。しっぽ（tail＝持ち上げる所・tailT＝先の巻いた所）は翼より手前で体より後ろ（足がしっぽに乗っている）。
-    //   しっぽの足の下から付け根まで（左の足より右）は動かさないので体のまま。首の中に頭、頭の中に下あご、しっぽの中に先を重ねる
+    // 奥から手前へ。しっぽ（tail＝左の足より左の地面の所・tailT＝左の巻いた先）は翼より手前で体より後ろ（足がしっぽに乗っている）。
+    //   しっぽの足の下から付け根まで（左の足より右）は動かさないので体のまま。首の中に頭、頭の中に下あご、しっぽの中に巻いた先を重ねる
     layers: ['wingF', 'wingN', 'tail', 'tailT', 'body', 'neck', 'head', 'arm', 'jaw'],
     // 体の形の外を分ける（立ち絵 640px の上の多角形）：take＝パーツにする所・drop＝体から消す所（無ければ take）・hide＝体の後ろに隠れていた所を埋める px
     //   埋めるのは付け根のまわり（回す中心から root px）・パーツの形を close px で閉じた中（細く隠れていた所）・回す向きに sweep° までの所
@@ -111,26 +118,35 @@ export const BOSS_ILLUST_DEFS = {
     } },
     // 待機：1回の羽ばたき（ミリ秒）・翼の振れ幅（°・上げきり→下ろしきり）・下ろしきりで縮める割合・奥の翼の振れ幅（手前の何倍）・体の浮き沈み（枠の割合）
     //   【確定】2026-10-28 ユーザー「羽ノーモーション、付け根が外れて見えてる」：羽ばたきを大きく（回す＋縮める）・奥の翼は付け根で回す（pivots）
-    //   sway＝首・頭のゆっくりした揺れ（羽ばたきと周期をずらす）
-    //   slam＝しっぽを叩きつける（everyMs ごと・atMs から）：keys＝[ミリ秒, 姿勢]・hitMs＝地面を打つ時刻（そこから dustMs のあいだ砂ぼこり・
+    //   sway＝首・頭のゆっくりした揺れ（羽ばたきと周期をずらす）・しっぽの巻いた先は付け根から先へ少しずつ遅れて揺れる（しなって見える）
+    //   slam＝しっぽの先で地面を打つ（everyMs ごと・atMs から）：keys＝[ミリ秒, 姿勢, 区間の速さ]・hitMs＝地面を打つ時刻（そこから dustMs のあいだ砂ぼこり・
     //     shakeMs のあいだ全体が小さく揺れる＝shake は枠の割合）・dust＝砂ぼこりが立つ所（立ち絵の点）
+    //   【確定】2026-10-29 ユーザー「しっぽ動かすの不自然って思わない？」→選んだ「左の巻いた先だけしならせる」：前は左の足より左の一本を
+    //     10° 持ち上げて落とすだけ＝足の下との境目がまっすぐ切れて蝶つがいのように折れ、残りのしっぽは止まったまま、ぴくっとけいれんして見えた。
+    //     地面のしっぽは動かさず、巻いた先を付け根から遠いほど大きく曲げる（bend・道具が角度ごとに曲げた絵を並べて作り、画面はとなりの2枚を重ねて切り替える）。
+    //     硬い部品を3つつないで回す形も試したが、大きく振ると巻いた輪のつなぎ目が割れ、先も地面に届かなかった。
+    //     ふだんはゆっくり揺れ、ため（先を持ち上げて後ろへ引く）→一気に振り下ろす→先が左の足の前の地面を打つ（砂ぼこり）→小さく跳ね返って戻る
     //   orb＝口に火の玉（everyMs ごと・atMs から）：growMs でふくらみ・holdMs ゆらめき・fadeMs で消える。at＝火の玉の真ん中（頭の上の点）・
     //     size＝枠の幅に対する絵の横幅・出ているあいだ口を jaw° 開けて光らせる（glow）
     idle: { periodMs: 1500, wingUp: -10, wingDown: 12, squash: 0.12, farK: 0.4, bob: 0.012, headSway: 0, armSway: 1.5,
-      sway: { neck: [1.2, 3700, 0], head: [1.6, 2900, 0.3] },
-      slam: { everyMs: 6400, atMs: 2600, hitMs: 900, dustMs: 750, shakeMs: 320, shake: 0.007,
-        keys: [[0, {}], [620, { tail: 10, tailT: -8 }], [800, { tail: 10.5, tailT: -9 }], [900, { tail: -2.5, tailT: 7 }], [1020, { tail: 0.8, tailT: -2 }], [1250, {}]],
-        dust: [[95, 580], [155, 586], [212, 584]] },
+      sway: { neck: [1.2, 3700, 0], head: [1.6, 2900, 0.3], tailT: [3, 2600, 0] },
+      slam: { everyMs: 6400, atMs: 2600, hitMs: 800, dustMs: 750, shakeMs: 300, shake: 0.006,
+        keys: [[0, {}], [600, { tailT: -11 }], [700, { tailT: -12.5 }], [800, { tailT: 42 }, 'out'], [900, { tailT: 31 }], [1040, { tailT: 37 }], [1700, {}]],
+        dust: [[176, 508], [214, 514]] },
       // 火の玉は遭遇のイラストと同じ所（開いた口のすぐ前）・同じくらいの大きさ（火の玉.png は火の粉のぶん絵が大きい）
       orb: { everyMs: 9800, atMs: 5200, growMs: 700, holdMs: 1100, fadeMs: 350, at: [246, 180], size: 0.095, jaw: -6, glow: 0.6 } },
     // 技のあいだも残す待機のぶん（羽ばたきは弱めて・浮き沈みは半分・しっぽと砂ぼこりはそのまま＝技の頭で跳ねない）
-    idleKeep: { wingN: 0.35, wingF: 0.35, wingNSq: 0.35, wingFSq: 0.35, y: 0.5, tail: 1, tailT: 1, dust: 1 },
-    // 回す中心：奥の翼＝首の後ろの付け根・手前の翼＝右の肩の後ろの付け根・しっぽ＝左の足のすぐ左（そこから左を持ち上げる）
+    idleKeep: { wingN: 0.35, wingF: 0.35, wingNSq: 0.35, wingFSq: 0.35, y: 0.5, tailT: 1, dust: 1 },
+    // 回す中心：奥の翼＝首の後ろの付け根・手前の翼＝右の肩の後ろの付け根・しっぽ＝左の足のすぐ左（地面のしっぽは回さない）
     pivots: { wingF: [300, 262], wingN: [418, 280], tail: [214, 568] },
+    // 曲げるパーツ（回さずに、角度ごとに曲げた絵を切り替える）：base＝付け根（ここからの距離 r0 までは曲げず、r1 で角度いっぱい・あいだはなめらかに）・
+    //   from〜to°を step°ごとに作る（範囲の外は端の絵）・scale＝並べる絵の縮め（画面の枠は 300px まで）
+    bend: { tailT: { base: [90, 492], r0: 20, r1: 150, from: -16, to: 48, step: 2, scale: 0.6 } },
     // 切り分け（立ち絵 640px の上の点）：take＝切り出す所・drop＝親から消す所（無ければ take と同じ）・pivot＝回す中心（付け根）
     //   take を drop より付け根の側へ広く取る＝付け根は親にも残り、回してもすき間が見えない
     //   下あご：line＝口の線（下あごの take の上のふちと同じ・先から付け根へ＝ずらすと口を開けたとき上あごとのあいだに背景のすき間が見えた）。開くと line と回した line のあいだに口の中を描く・mouth＝火が出る所（開いた口の前）
-    //   首＝頭と胸の上（肩の付け根で回す）・頭＝首の上（あごの後ろで回す）・前脚＝左の前脚（ひじで回す）・しっぽの先＝左で巻き上がった所
+    //   首＝頭と胸の上（肩の付け根で回す）・頭＝首の上（あごの後ろで回す）・前脚＝左の前脚（ひじで回す）・
+    //   しっぽの巻いた先＝tailT（地面から巻き上がる所から先・曲げるパーツ＝bend）
     cuts: {
       neck: { from: 'body', pivot: [350, 300],
         take: [[232, 70], [440, 70], [440, 250], [420, 285], [380, 305], [330, 312], [295, 300], [270, 262], [232, 225]],
@@ -464,7 +480,7 @@ export const partMove = (pt, p, pose) => {
 export const illustPointAt = (key, pose, pt, part = 'head') => {
   const a = BOSS_ILLUST[key]
   let p = pt
-  for (let q = part, pp = a.parts[q]; pp; q = pp.parent, pp = a.parts[q]) p = partMove(p, { ...pp, key: q }, pose)
+  for (let q = part, pp = a.parts[q]; pp; q = pp.parent, pp = a.parts[q]) if (!pp.bend) p = partMove(p, { ...pp, key: q }, pose)   // 曲げるパーツは回さない
   p = rotPoint(p, a.pivot, pose.r)
   return [p[0] + pose.x * BOSS_ILLUST_SIZE, p[1] + pose.y * BOSS_ILLUST_SIZE]
 }
@@ -529,7 +545,7 @@ export const illustTrailsAt = (key, motion, ms, tMs) => {
 }
 
 // 画面で使う形（無ければ null）。lib/bossArt.js の bossArtOf と同じ並び（kind で見分ける）
-//   { kind:'illust', key, name, base（＝640）, illust（遭遇のイラスト）, parts:[{ key, src, x, y, w, h, px, py, ax（長さの向き°）, parent?, nest }], pivot, mouth,
+//   { kind:'illust', key, name, base（＝640）, illust（遭遇のイラスト）, parts:[{ key, src, x, y, w, h, px, py, ax（長さの向き°）, parent?, nest, bend?（曲げた絵を並べた1枚：src・n・from・step・x・y・w・h） }], pivot, mouth,
 //     jaw:{ line, pivot, mouth }（口の中を描く）,
 //     motions:{ <key>: { label, keys, trails, totalMs, hitMs, flyMs, impactMs, front（当たる時刻の口・px）,
 //       shots:[{ front, delayMs, size }]（飛ぶ絵の出どころ・1つめが front）, fx:{ fly?, hit?, charge?（どれも on・anim・lead つき） }, charge?,
@@ -542,6 +558,7 @@ export const bossIllustOf = (key) => {
   //   swap＝腕の構えの絵（swapOpacityOf に渡す・雨摩座）
   const ons = Object.values(def.swaps || {}).map(s => s.on).filter(Boolean)
   const parts = illustPartsOf(key).filter(p => art.parts[p]).map(p => ({ key: p, src: srcOf(key, illustKindOf(p)), ...art.parts[p],
+    bend: art.parts[p].bend ? { ...art.parts[p].bend, src: srcOf(key, illustBendKindOf(p)) } : null,
     nest: !!art.parts[p].parent && art.parts[p].parent in ZERO,
     swap: def.swaps?.[p] ? (def.swaps[p].on ? { on: def.swaps[p].on } : { others: ons }) : null,
     free: !!def.free?.includes(p) }))
@@ -577,6 +594,6 @@ export const bossIllustOf = (key) => {
   const illust = bossArtOf(key)?.illust || null
   return {
     kind: 'illust', key, name: base.name, base: BOSS_ILLUST_SIZE, illust, parts, pivot: art.pivot, mouth: art.mouth, jaw, motions, orb, dust,
-    srcs: [...parts.map(p => p.src), ...Object.values(motions).flatMap(m => Object.values(m.fx || {}).map(f => f.src)), ...(orb ? [orb.src] : [])],
+    srcs: [...parts.map(p => p.src), ...parts.filter(p => p.bend).map(p => p.bend.src), ...Object.values(motions).flatMap(m => Object.values(m.fx || {}).map(f => f.src)), ...(orb ? [orb.src] : [])],
   }
 }

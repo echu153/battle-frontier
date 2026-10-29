@@ -8,13 +8,13 @@ import { BOSS_ART_DIR, BOSS_DEFS, bossFileOf } from './bossArt.js'
 import {
   BOSS_ILLUST_DEFS, BOSS_ILLUST_SIZE, illustPartsOf, illustKindOf, illustFxKindOf,
   bossIllustOf, illustPoseAt, idlePoseAt, motionPoseAt, illustPointAt, illustTrailsAt, mouthPointOf, rotPoint, partMove,
-  illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt, dustEllipsesOf, EASES, joltAt,
+  illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt, dustEllipsesOf, EASES, joltAt, illustBendKindOf, bendFramesOf,
 } from './bossIllust.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { dilate, erode, leftTipOf, fitPart, inPoly } from '../../../tools/v2cap-boss-illust.mjs'
 
 const OUT = new URL(`../../../public${BOSS_ART_DIR}/`, import.meta.url)
-const kindsOf = (key, e) => [...illustPartsOf(key).filter(p => e.parts[p]).map(illustKindOf),
+const kindsOf = (key, e) => [...illustPartsOf(key).filter(p => e.parts[p]).map(illustKindOf), ...illustPartsOf(key).filter(p => e.parts[p]?.bend).map(illustBendKindOf),
   ...Object.entries(e.fx || {}).flatMap(([mk, f]) => Object.keys(f).map(kind => illustFxKindOf(mk, kind)))]
 
 test('【確定】2026-10-28 イラスト版の絵はぜんぶあって軽い（パーツ 120KB・エフェクト 120KB まで）・中身の印は絵と同じ', () => {
@@ -23,7 +23,8 @@ test('【確定】2026-10-28 イラスト版の絵はぜんぶあって軽い（
     for (const kd of kindsOf(key, e)) {
       const file = new URL(bossFileOf(key, kd), OUT)
       assert.ok(existsSync(file), `${key} ${kd} の絵がある`)
-      assert.ok(statSync(file).size < 120 * 1024, `${key} ${kd} は軽い`)
+      // 曲げた絵を並べた1枚（-bend）は枚数が多いので 200KB まで
+      assert.ok(statSync(file).size < (kd.endsWith('-bend') ? 200 : 120) * 1024, `${key} ${kd} は軽い`)
       assert.equal(e.v?.[kd], versionOf(file), `${key} ${kd} の印（node tools/v2cap-boss-illust.mjs をやり直す）`)
     }
   }
@@ -44,7 +45,8 @@ test('黒龍ヴァルゼノクのイラスト版：パーツ9つ（奥の翼・�
   assert.equal(Object.values(a.motions).reduce((n, m) => n + Object.keys(m.fx || {}).length, 0), 7)
   assert.ok(a.mouth[0] < BOSS_ILLUST_SIZE * 0.42, '口は頭の左のはし（相手の方）')
   assert.ok(a.orb && a.srcs.includes(a.orb.src), '待機の火の玉の絵も先に読む')
-  assert.ok(a.srcs.length === 9 + 7 + 1)
+  assert.ok(a.srcs.length === 9 + 1 + 7 + 1, 'パーツ9つ・曲げた絵・エフェクト7枚・火の玉')
+  assert.ok(a.srcs.includes(a.parts.find(p => p.key === 'tailT').bend.src))
 })
 
 test('エフェクトの時刻：飛ぶ絵は撃ち出す時刻に口（黒翼烈風は翼）から出て flyMs で届く（届いたときがダメージ）・黒爪は当たる絵だけ', () => {
@@ -292,15 +294,30 @@ test('【確定】2026-10-29 黒龍の描き直し：立ち絵が体・体の形
   assert.equal(a.parts.tailT.parent, 'tail')
 })
 
-test('【確定】2026-10-29 黒龍の待機：羽ばたき・首と頭の揺れ・ときどきしっぽを持ち上げて叩きつける（砂ぼこりと小さな揺れ）・ときどき口に火の玉', () => {
+test('【確定】2026-10-29 黒龍の待機：羽ばたき・首と頭の揺れ・ときどきしっぽの巻いた先で地面を打つ（砂ぼこりと小さな揺れ）・ときどき口に火の玉', () => {
   const idle = BOSS_ILLUST_DEFS.varuzenoku.idle, s = idle.slam, o = idle.orb
-  // しっぽ：持ち上げる（左のはしが上がる＝＋）→ 地面を打つ時刻に少し下まで振り下ろす → 待機へ戻る
-  const lift = idlePoseAt(idle, s.atMs + 800), hit = idlePoseAt(idle, s.atMs + s.hitMs), after = idlePoseAt(idle, s.atMs + 1400)
-  assert.ok(lift.tail > 8, `持ち上げる（${lift.tail}°）`)
-  assert.ok(hit.tail < 0, '打ち下ろす')
-  assert.ok(hit.tail - lift.tail < -10 && s.hitMs - 800 <= 120, '打ち下ろしは速い')
-  assert.equal(after.tail, 0)
-  assert.equal(idlePoseAt(idle, s.atMs + s.everyMs + 800).tail, lift.tail, 'くり返す')
+  // 【確定】2026-10-29 ユーザー「しっぽ動かすの不自然って思わない？」→選んだ「左の巻いた先だけしならせる」：地面のしっぽ（tail）は動かさない。
+  //   巻いた先（tailT＝曲げる°）を後ろへ引いて（−）ため、一気に振り下ろして（＋）先で地面を打ち、小さく跳ね返って戻る
+  const slamAt = (ms) => motionPoseAt(s.keys, ms)
+  const back = Math.min(...s.keys.map(([, k]) => k.tailT ?? 0)), down = slamAt(s.hitMs).tailT
+  assert.ok(back < -8, `ためで後ろへ引く（${back}°）`)
+  assert.ok(down > 35, `先で地面を打つ（${down}°）`)
+  const before = s.keys.filter(([t]) => t < s.hitMs).at(-1)
+  assert.ok(s.hitMs - before[0] <= 120 && s.keys.find(([t]) => t === s.hitMs)[2] === 'out', '振り下ろしは速い')
+  assert.ok(slamAt(s.hitMs + 100).tailT < down && slamAt(s.hitMs + 240).tailT > slamAt(s.hitMs + 100).tailT, '小さく跳ね返る')
+  for (const [, k] of s.keys) assert.equal(k.tail ?? 0, 0, '地面のしっぽは動かさない（足の下との境目で折れて見えた）')
+  for (let t = 0; t < 12000; t += 37) assert.equal(idlePoseAt(idle, t).tail, 0)
+  // 曲げる範囲に収まる（範囲の外は端の絵で止まって見える）：ため・打つ・ふだんの揺れを足しても
+  const b = BOSS_ILLUST_DEFS.varuzenoku.bend.tailT
+  const swing = idle.sway.tailT[0]
+  assert.ok(back - swing >= b.from && down + swing <= b.to, `曲げる範囲 ${b.from}〜${b.to}°`)
+  const lift = idlePoseAt(idle, s.atMs + 700), after = idlePoseAt(idle, s.atMs + s.keys.at(-1)[0] + 10)
+  assert.ok(Math.abs(after.tailT) <= swing + 1e-9, '打ったあとは揺れだけに戻る')
+  const [amp, per, ph] = idle.sway.tailT, swayAt = (ms) => amp * Math.sin(2 * Math.PI * (ms / per + ph))
+  assert.ok(Math.abs((idlePoseAt(idle, s.atMs + s.everyMs + 700).tailT - swayAt(s.atMs + s.everyMs + 700)) - (lift.tailT - swayAt(s.atMs + 700))) < 1e-9, 'くり返す')
+  // ふだんはゆっくり揺れる
+  const sw = Array.from({ length: 30 }, (_, i) => idlePoseAt(idle, i * 80).tailT)
+  assert.ok(Math.max(...sw) - Math.min(...sw) > 2)
   // 打った時刻から砂ぼこりと揺れ
   assert.equal(idlePoseAt(idle, s.atMs + s.hitMs - 10).dust, 0)
   const d1 = idlePoseAt(idle, s.atMs + s.hitMs + 100)
@@ -319,7 +336,7 @@ test('【確定】2026-10-29 黒龍の待機：羽ばたき・首と頭の揺れ
   assert.ok(full.jaw < 0 && full.glow > 0)
   // 技のあいだもしっぽはそのまま（技の頭で跳ねない）・火の玉は出さない
   const m = { keys: BOSS_ILLUST_DEFS.varuzenoku.motions.claw.keys }
-  assert.equal(illustPoseAt('varuzenoku', m, 100, s.atMs + 800).tail, lift.tail)
+  assert.equal(illustPoseAt('varuzenoku', m, 100, s.atMs + 700).tailT, lift.tailT)
   assert.equal(illustPoseAt('varuzenoku', m, 100, o.atMs + o.growMs + 100).orb, 0)
   // 首と頭はゆっくり小さく揺れる
   const necks = Array.from({ length: 80 }, (_, i) => idlePoseAt(idle, i * 100).neck)
@@ -565,4 +582,32 @@ test('【確定】2026-10-29 黒龍の後ろの絵（後ろ.png）：頭・首�
   const sp = BOSS_ILLUST_DEFS.varuzenoku.split
   assert.deepEqual(sp.back.zones, ['neck', 'arm'])
   assert.ok(sp.parts.wingF.back && sp.parts.wingN.back, '後ろの絵の翼の所は翼といっしょに動く')
+})
+
+test('【確定】2026-10-29 黒龍のしっぽの巻いた先は曲げた絵を切り替える（回すだけだと付け根で折れ、硬い部品をつなぐと大きく振ったときつなぎ目が割れた）', async (t) => {
+  const a = bossIllustOf('varuzenoku'), p = a.parts.find(q => q.key === 'tailT'), b = BOSS_ILLUST_DEFS.varuzenoku.bend.tailT
+  assert.ok(p.bend, 'しっぽの巻いた先は曲げるパーツ')
+  assert.equal(p.bend.n, Math.round((b.to - b.from) / b.step) + 1)
+  assert.equal(p.bend.from, b.from)
+  assert.match(p.bend.src, /varuzenoku-il-tailT-bend\.webp\?v=[0-9a-f]{8}$/)
+  // 角度に近い2枚・上の絵の濃さ（範囲の外は端の絵）
+  assert.deepEqual(bendFramesOf(p.bend, b.from), { i: 0, j: 1, k: 0 })
+  const mid = bendFramesOf(p.bend, b.from + b.step * 2.25)
+  assert.ok(mid.i === 2 && mid.j === 3 && Math.abs(mid.k - 0.25) < 1e-9)
+  assert.deepEqual(bendFramesOf(p.bend, b.from - 30), { i: 0, j: 1, k: 0 })
+  const end = bendFramesOf(p.bend, b.to + 30)
+  assert.ok(end.i === p.bend.n - 1 && end.j === p.bend.n - 1)
+  // 曲げるパーツは回さない（点を動かす計算でも）
+  const pt = [150, 400], zero = { x: 0, y: 0, r: 0 }
+  assert.deepEqual(illustPointAt('varuzenoku', { ...zero, tailT: 30 }, pt, 'tailT'), illustPointAt('varuzenoku', { ...zero, tailT: 0 }, pt, 'tailT'))
+  // 曲げ方：付け根のそばは動かず、遠いほど大きく回る（回しても付け根からの距離は変わらない＝つなぎ目ができない）
+  const { bendWarp } = await import('../../../tools/v2cap-boss-illust.mjs')
+  const S = 64, img = { W: S, H: S, data: Buffer.alloc(S * S * 4) }
+  const put = (x, y) => { const i = (y * S + x) * 4; img.data[i] = 200; img.data[i + 3] = 255 }
+  put(12, 10); put(50, 10)   // 付け根 (10,10) のすぐそばと遠く
+  const w = bendWarp(img, S, { base: [10.5, 10.5], r0: 4, r1: 40 }, 90)
+  const alphaAt = (x, y) => w.data[(y * S + x) * 4 + 3]
+  assert.ok(alphaAt(12, 10) > 200, '付け根のそばはそのまま')
+  assert.ok(alphaAt(50, 10) < 50 && alphaAt(10, 50) > 100, '遠くは 90° 回って下へ（時計回り）')
+  void t
 })

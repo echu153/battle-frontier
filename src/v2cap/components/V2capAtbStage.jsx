@@ -4,7 +4,7 @@ import { buffChips, ailChips, stateChips, needNow, CAST_SEC } from '../core/atb.
 import { STAT_DEFS } from '../core/stats.js'
 import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC } from '../lib/atbFx.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
-import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf } from '../lib/bossIllust.js'
+import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf } from '../lib/bossIllust.js'
 import { FX_HEAD_Y, FX_FEET_Y, SCENE_TOP, fallAt, pourTimesOf, sceneEndMsOf, stageSceneOf } from '../lib/bossScene.js'
 
 // ============================================================
@@ -134,6 +134,7 @@ const RigDust = ({ art, k }) => {
 }
 // パーツ1つぶんの CSS（lib/bossIllust.js の partMove と同じ：長さの向きに縮めてから回す）
 const partTransform = (p, pose) => {
+  if (p.bend) return undefined   // 曲げるパーツは回さない（角度は曲げた絵の選び方に使う＝BendFrames）
   const deg = pose[p.key], sq = pose[`${p.key}Sq`] || 0
   if (typeof deg !== 'number') return undefined
   return `rotate(${deg.toFixed(2)}deg)${sq ? ` rotate(${p.ax || 0}deg) scaleX(${(1 - sq).toFixed(3)}) rotate(${-(p.ax || 0)}deg)` : ''}`
@@ -150,7 +151,9 @@ const RigPart = ({ art, p, box, pose }) => {
       transform: partTransform(p, pose),
       transformOrigin:`${((p.px - p.x) / p.w) * 100}% ${((p.py - p.y) / p.h) * 100}%` }}>
       {p.key === 'head' && <MouthInside art={art} p={p} pose={pose} />}
-      <img src={p.src} alt="" draggable={false} decoding="sync" style={{ position:'relative', width:'100%', height:'100%', display:'block', maxWidth:'none', userSelect:'none' }} />
+      {p.bend
+        ? <BendFrames p={p} deg={pose[p.key] || 0} />
+        : <img src={p.src} alt="" draggable={false} decoding="sync" style={{ position:'relative', width:'100%', height:'100%', display:'block', maxWidth:'none', userSelect:'none' }} />}
       {art.parts.filter(c => c.nest && c.parent === p.key).map(c => <RigPart key={c.key} art={art} p={c} box={p} pose={pose} />)}
       {/* 待機のときどき口に出る火の玉（黒龍・pose.orb＝大きさ）：頭といっしょに動く。ゆっくり回ってゆらめく */}
       {p.key === 'head' && art.orb && pose.orb > 0.001 && (
@@ -168,6 +171,19 @@ const RigPart = ({ art, p, box, pose }) => {
       )}
     </div>
   )
+}
+// 曲げるパーツ（黒龍のしっぽの巻いた先・p.bend）：角度ごとに曲げた絵を横に並べた1枚から、角度に近い2枚を重ねて出す（上の絵の濃さで間をつなぐ＝2°ごとの絵でもなめらか）
+//   【確定】2026-10-29 ユーザー「しっぽ動かすの不自然って思わない？」：回すだけだと付け根で折れて見えた
+const BendFrames = ({ p, deg }) => {
+  const b = p.bend, { i, j, k } = bendFramesOf(b, deg)
+  const frame = (n, op, key) => (
+    <div key={key} style={{ position:'absolute', left:`${((b.x - p.x) / p.w) * 100}%`, top:`${((b.y - p.y) / p.h) * 100}%`,
+      width:`${(b.w / p.w) * 100}%`, height:`${(b.h / p.h) * 100}%`, overflow:'hidden', opacity: op }}>
+      <img src={b.src} alt="" draggable={false} decoding="sync"
+        style={{ position:'absolute', left:`${-n * 100}%`, top:0, width:`${b.n * 100}%`, height:'100%', maxWidth:'none', userSelect:'none' }} />
+    </div>
+  )
+  return <>{frame(i, 1, 'a')}{k > 0.01 && j !== i && frame(j, k, 'b')}</>
 }
 // 開いた口の中（頭の後ろに描く＝上あご・下あごの絵がふちを覆う）：口の線と、下あごの角度だけ回した線のあいだ。牙を少し・口の火で明るく
 const MouthInside = ({ art, p, pose }) => {

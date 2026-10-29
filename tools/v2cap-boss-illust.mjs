@@ -22,6 +22,8 @@
 //      fixed ＝立ち絵に無いもの（水の帯）は重ねる場所を探さず、描いた場所のまま置く
 //   ★2026-10-29 黒龍の描き直し（split）：ChatGPT の翼・しっぽは立ち絵と形が違ったので、ChatGPT の体（翼としっぽの無い体）の形の外を
 //      多角形で翼・しっぽに分ける（体の形の中は体のまま）。体の後ろに隠れていた付け根は近いパーツの模様を折り返して埋める
+//   ★2026-10-29 曲げるパーツ（bend・黒龍のしっぽの巻いた先）：付け根からの距離に応じて回す（ひねり）で角度ごとに曲げた絵を作り、横に並べた1枚にする。
+//      回すだけだと付け根で折れて見え、硬い部品をつなぐと大きく振ったときつなぎ目が割れた（ユーザー「しっぽ動かすの不自然って思わない？」）
 //   ★2026-10-29 後ろの絵（split.back）：立ち絵から頭・首・前脚を消して後ろの翼と胸を描き足した絵（後ろ.png）を重ね、頭・首・前脚が
 //      止まっているとき覆っている所だけを埋める（翼の所は翼へ・ほかは体へ）。技で大きく動かすと、模様を折り返して埋めた所が切れ端や四角いかたまりに見えた
 //   ★2026-10-29 腕の構え（swaps）：右腕だけを描き変えた立ち絵（立ち絵_胸元.png・立ち絵_掲げる.png）を重ね、腕のまわり（armZone）だけを切り取って
@@ -36,7 +38,7 @@ import { fileURLToPath } from 'node:url'
 import { bleed, versionOf } from './v2cap-art-lib.mjs'
 import { readRgba, componentsOf } from './v2cap-motion.mjs'
 import { BOSS_DEFS, BOSS_ART_SRC_DIR, BOSS_ART_DIR, bossFileOf } from '../src/v2cap/lib/bossArt.js'
-import { BOSS_ILLUST_DEFS, BOSS_ILLUST_SRC, BOSS_ILLUST_SIZE, illustPartsOf, illustFilesOf, illustKindOf, illustFxKindOf, rotPoint } from '../src/v2cap/lib/bossIllust.js'
+import { BOSS_ILLUST_DEFS, BOSS_ILLUST_SRC, BOSS_ILLUST_SIZE, illustPartsOf, illustFilesOf, illustKindOf, illustFxKindOf, illustBendKindOf, rotPoint } from '../src/v2cap/lib/bossIllust.js'
 import { ENEMY_ART_SRC_DIR } from '../src/v2cap/lib/enemyArt.js'
 import { BOSS_ILLUST } from '../src/v2cap/lib/bossIllustList.js'
 
@@ -164,6 +166,28 @@ export const warpPart = (P, fit, W, H, k) => {
     }
   }
   return { W, H, data: out }
+}
+
+// 曲げる（def.bend の1つ・b）：付け根 base からの距離 r に応じて deg° 回す（r0 までは 0・r1 で deg・あいだはなめらか・＋で時計回り）。
+//   回しても base からの距離は変わらない＝出す点を逆に回せば元の点（つなぎ目ができない）。色は透明度を掛けてから混ぜる（ふちが黒くにごらない）
+export const bendWarp = (img, S, b, deg) => {
+  const out = Buffer.alloc(S * S * 4), [cx, cy] = b.base, src = img.data
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const dx = x + 0.5 - cx, dy = y + 0.5 - cy, r = Math.hypot(dx, dy)
+    const k = Math.min(1, Math.max(0, (r - b.r0) / (b.r1 - b.r0))), th = -deg * k * k * (3 - 2 * k) * Math.PI / 180
+    const sx = cx + dx * Math.cos(th) - dy * Math.sin(th) - 0.5, sy = cy + dx * Math.sin(th) + dy * Math.cos(th) - 0.5
+    const x0 = Math.floor(sx), y0 = Math.floor(sy), fx = sx - x0, fy = sy - y0
+    let a = 0, rr = 0, gg = 0, bb = 0
+    for (const [xx, yy, w] of [[x0, y0, (1 - fx) * (1 - fy)], [x0 + 1, y0, fx * (1 - fy)], [x0, y0 + 1, (1 - fx) * fy], [x0 + 1, y0 + 1, fx * fy]]) {
+      if (xx < 0 || yy < 0 || xx >= S || yy >= S || !w) continue
+      const i = (yy * S + xx) * 4, aw = src[i + 3] * w
+      a += aw; rr += src[i] * aw; gg += src[i + 1] * aw; bb += src[i + 2] * aw
+    }
+    if (a < 0.5) continue
+    const o = (y * S + x) * 4
+    out[o] = Math.round(rr / a); out[o + 1] = Math.round(gg / a); out[o + 2] = Math.round(bb / a); out[o + 3] = Math.round(a)
+  }
+  return { W: S, H: S, data: out }
 }
 
 // 透明でない範囲で切り抜く → { img, x, y }
@@ -585,6 +609,28 @@ const build = (key, def, dir) => {
     const ax = Math.round(Math.atan2(c[1] - top - py, c[0] - px) * 180 / Math.PI)
     parts[part] = { x: t.x, y: t.y - top, w: t.img.W, h: t.img.H, px: Math.round(px), py: Math.round(py), ax, ...(parent[part] ? { parent: parent[part] } : {}) }
   }
+  // ⑧ 曲げるパーツ（def.bend）：from〜to° を step° ごとに曲げた絵を、ぜんぶが入る同じ枠で切り抜いて scale 倍にし、横に並べた1枚にする
+  for (const [part, b] of Object.entries(def.bend || {})) {
+    if (!layers[part] || !parts[part]) continue
+    const degs = []
+    for (let a = b.from; a <= b.to + 1e-9; a += b.step) degs.push(+a.toFixed(3))
+    const frames = degs.map(a => bendWarp(layers[part], S, b, a))
+    let x0 = S, y0 = S, x1 = -1, y1 = -1
+    for (const fr of frames) for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) if (fr.data[(y * S + x) * 4 + 3] > 2) {
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y
+    }
+    const w = x1 - x0 + 1, h = y1 - y0 + 1, fw = Math.round(w * b.scale), fh = Math.round(h * b.scale)
+    const sheet = { W: fw * frames.length, H: fh, data: Buffer.alloc(fw * frames.length * fh * 4) }
+    frames.forEach((fr, n) => {
+      const crop = { W: w, H: h, data: Buffer.alloc(w * h * 4) }
+      for (let y = 0; y < h; y++) fr.data.copy(crop.data, y * w * 4, ((y0 + y) * S + x0) * 4, ((y0 + y) * S + x1 + 1) * 4)
+      const sm = resizeRgba(crop, fw, fh)
+      for (let y = 0; y < fh; y++) sm.data.copy(sheet.data, (y * sheet.W + n * fw) * 4, y * fw * 4, (y + 1) * fw * 4)
+    })
+    sizes.push([`${part}-bend`, writeWebp(sheet, path.join(OUT, bossFileOf(key, illustBendKindOf(part))), def.quality || QUALITY)])
+    parts[part].bend = { n: frames.length, from: b.from, step: b.step, x: x0, y: y0, w, h }
+    notes.push(`${part}：${b.from}〜${b.to}° を ${b.step}° ごとに曲げた絵 ${frames.length} 枚（${fw}×${fh}px）`)
+  }
   // ④ エフェクト
   const fx = {}
   for (const e of def.effects) {
@@ -604,19 +650,20 @@ const build = (key, def, dir) => {
 
 const writeList = (all) => {
   const lines = ['// tools/v2cap-boss-illust.mjs が書くファイル（手で直さない）。ボス → イラスト版のパーツ・エフェクト',
-    `//   parts … 立ち絵（${BOSS_ILLUST_SIZE}px）の上の位置（x・y・w・h）・回す中心（px・py）・長さの向き（ax°）・親（parent）。並びはボスごとの layers（無ければ ILLUST_PARTS）`,
+    `//   parts … 立ち絵（${BOSS_ILLUST_SIZE}px）の上の位置（x・y・w・h）・回す中心（px・py）・長さの向き（ax°）・親（parent）・曲げた絵（bend＝枚数 n・from°・step°・枠 x・y・w・h）。並びはボスごとの layers（無ければ ILLUST_PARTS）`,
     '//   pivot … 全体を回す中心（体の真ん中）／mouth … 頭のいちばん左（飛ぶエフェクトが出る口）',
     '//   fx … 技のキー → fly（飛ぶ）・hit（当たる）のエフェクトの大きさ（px）と合わせる点（ax・ay＝飛ぶは先・当たるは真ん中）',
     '//   fit … パーツを立ち絵に重ねた倍率・角度・位置（元の絵の px・確かめ用）／v … 絵ごとの中身の印（画面のアドレスの ?v=）',
     'export const BOSS_ILLUST = {']
   for (const [key, e] of Object.entries(all)) {
-    const kinds = [...illustPartsOf(key).filter(p => e.parts[p]).map(illustKindOf),
+    const kinds = [...illustPartsOf(key).filter(p => e.parts[p]).map(illustKindOf), ...illustPartsOf(key).filter(p => e.parts[p]?.bend).map(illustBendKindOf),
       ...Object.entries(e.fx || {}).flatMap(([mk, f]) => Object.keys(f).map(kind => illustFxKindOf(mk, kind)))]
     const v = kinds.map(kd => [kd, path.join(OUT, bossFileOf(key, kd))]).filter(([, f]) => existsSync(f)).map(([kd, f]) => `'${kd}': '${versionOf(f)}'`)
     lines.push(`  ${key}: {`, '    parts: {')
     for (const p of illustPartsOf(key)) if (e.parts[p]) {
       const a = e.parts[p]
-      lines.push(`      ${p}: { x: ${a.x}, y: ${a.y}, w: ${a.w}, h: ${a.h}, px: ${a.px}, py: ${a.py}, ax: ${a.ax ?? 0}${a.parent ? `, parent: '${a.parent}'` : ''} },`)
+      const bd = a.bend ? `, bend: { n: ${a.bend.n}, from: ${a.bend.from}, step: ${a.bend.step}, x: ${a.bend.x}, y: ${a.bend.y}, w: ${a.bend.w}, h: ${a.bend.h} }` : ''
+      lines.push(`      ${p}: { x: ${a.x}, y: ${a.y}, w: ${a.w}, h: ${a.h}, px: ${a.px}, py: ${a.py}, ax: ${a.ax ?? 0}${a.parent ? `, parent: '${a.parent}'` : ''}${bd} },`)
     }
     lines.push('    },', `    pivot: [${e.pivot.join(', ')}], mouth: [${e.mouth.join(', ')}],`, '    fx: {')
     for (const [mk, f] of Object.entries(e.fx || {})) {
@@ -642,7 +689,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
     const files = readdirSync(dir, { withFileTypes: true }).filter(e => e.isFile()).map(e => e.name)
     for (const f of files) if (!f.startsWith('見本') && !known.has(path.basename(f, path.extname(f)))) console.log(`  ? ${name}：使わない絵（名前が決まりと違う）：${f}`)
     const srcs = files.filter(f => !f.startsWith('見本')).map(f => statSync(path.join(dir, f)).mtimeMs)
-    const outs = illustPartsOf(key).map(p => path.join(OUT, bossFileOf(key, illustKindOf(p))))
+    const outs = [...illustPartsOf(key).map(p => path.join(OUT, bossFileOf(key, illustKindOf(p)))), ...Object.keys(def.bend || {}).map(p => path.join(OUT, bossFileOf(key, illustBendKindOf(p))))]
     const fresh = !FORCE && all[key] && outs.every(o => existsSync(o) && statSync(o).mtimeMs >= Math.max(...srcs))
     if (fresh) continue
     try {
