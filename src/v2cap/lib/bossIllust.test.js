@@ -8,7 +8,7 @@ import { BOSS_ART_DIR, BOSS_DEFS, bossFileOf } from './bossArt.js'
 import {
   BOSS_ILLUST_DEFS, BOSS_ILLUST_SIZE, illustPartsOf, illustKindOf, illustFxKindOf,
   bossIllustOf, illustPoseAt, idlePoseAt, motionPoseAt, illustPointAt, illustTrailsAt, mouthPointOf, rotPoint, partMove,
-  illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt,
+  illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt, dustEllipsesOf,
 } from './bossIllust.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { dilate, erode, leftTipOf, fitPart, inPoly } from '../../../tools/v2cap-boss-illust.mjs'
@@ -29,20 +29,22 @@ test('【確定】2026-10-28 イラスト版の絵はぜんぶあって軽い（
   }
 })
 
-test('黒龍ヴァルゼノクのイラスト版：パーツ7つ（奥の翼・手前の翼・体・首・頭・前脚・下あごの順）・回す中心は絵の中・技4つにエフェクト7枚', () => {
+test('黒龍ヴァルゼノクのイラスト版：パーツ9つ（奥の翼・手前の翼・しっぽ・しっぽの先・体・首・頭・前脚・下あごの順）・回す中心は絵の中・技4つにエフェクト7枚＋待機の火の玉', () => {
   const a = bossIllustOf('varuzenoku')
   assert.ok(a)
   assert.equal(a.kind, 'illust')
   assert.equal(a.base, BOSS_ILLUST_SIZE)
-  assert.deepEqual(a.parts.map(p => p.key), ['wingF', 'wingN', 'body', 'neck', 'head', 'arm', 'jaw'])
+  // 【確定】2026-10-29 描き直し：しっぽは翼より手前で体より後ろ（立ち絵で足がしっぽに乗っている）
+  assert.deepEqual(a.parts.map(p => p.key), ['wingF', 'wingN', 'tail', 'tailT', 'body', 'neck', 'head', 'arm', 'jaw'])
   for (const p of a.parts) {
     assert.ok(p.px >= p.x - 40 && p.px <= p.x + p.w + 40 && p.py >= p.y - 40 && p.py <= p.y + p.h + 40, `${p.key} の回す中心はパーツのそば`)
     assert.match(p.src, /\.webp\?v=[0-9a-f]{8}$/)
   }
   assert.deepEqual(Object.values(a.motions).map(m => m.label), BOSS_DEFS.varuzenoku.motions.map(m => m.file))
   assert.equal(Object.values(a.motions).reduce((n, m) => n + Object.keys(m.fx || {}).length, 0), 7)
-  assert.ok(a.mouth[0] < BOSS_ILLUST_SIZE * 0.2, '口は左のはし（相手の方）')
-  assert.ok(a.srcs.length === 7 + 7)
+  assert.ok(a.mouth[0] < BOSS_ILLUST_SIZE * 0.42, '口は頭の左のはし（相手の方）')
+  assert.ok(a.orb && a.srcs.includes(a.orb.src), '待機の火の玉の絵も先に読む')
+  assert.ok(a.srcs.length === 9 + 7 + 1)
 })
 
 test('エフェクトの時刻：飛ぶ絵は撃ち出す時刻に口（黒翼烈風は翼）から出て flyMs で届く（届いたときがダメージ）・黒爪は当たる絵だけ', () => {
@@ -53,7 +55,7 @@ test('エフェクトの時刻：飛ぶ絵は撃ち出す時刻に口（黒翼�
     const m = a.motions[k], d = BOSS_ILLUST_DEFS.varuzenoku.effects.find(e => e.motion === k && e.kind === 'fly')
     assert.equal(m.impactMs, m.hitMs + d.flyMs)
     assert.ok(m.hitMs < m.totalMs)
-    if (k !== 'gale') assert.ok(m.front[0] < BOSS_ILLUST_SIZE * 0.25, `${k}：撃ち出すときの口は左（${m.front}）`)
+    if (k !== 'gale') assert.ok(m.front[0] < BOSS_ILLUST_SIZE * 0.4, `${k}：撃ち出すときの口は左（${m.front}）`)
     assert.ok(m.front[0] < BOSS_ILLUST_SIZE * 0.6, `${k}：出どころは竜の前のほう（${m.front}）`)
   }
 })
@@ -82,7 +84,8 @@ test('技の姿勢：黒爪は前（左）へ踏み込む・焦熱の吐息は�
   assert.ok(at('gale', M.gale.hitMs).wingN > 30 && at('gale', M.gale.hitMs).wingNSq > 0.25 && at('gale', M.gale.hitMs).wingF < -20, '一気に打ち下ろす')
   assert.ok(M.gale.hitMs - 520 <= 150, '打ち下ろしは速い')
   assert.ok(at('gale', M.gale.hitMs).x < -0.05 && at('gale', 520).x > 0, 'のけぞってから相手の方へ踏み込む')
-  assert.ok(at('doom', 640).r > 0 && at('doom', 640).neck > 25 && at('doom', 640).head > 35 && at('doom', M.doom.hitMs).glow === 1)
+  // 2026-10-29 描き直した絵は首が短い＝首・頭の角度は前の半分ほど（技はこのあと見直す）
+  assert.ok(at('doom', 640).r > 0 && at('doom', 640).neck > 10 && at('doom', 640).head > 15 && at('doom', M.doom.hitMs).glow === 1)
   for (const k of Object.keys(M)) {
     assert.deepEqual(Object.values(at(k, 0)).every(v => v === 0), true, `${k} は待機から始まる`)
     assert.equal(at(k, M[k].totalMs), null, `${k} は流し終わったら待機へ`)
@@ -145,12 +148,13 @@ test('【確定】2026-10-28 前脚と下あごは切り分けたパーツ：前
   assert.ok(a.parts.indexOf(by.arm) > a.parts.indexOf(by.head))
   assert.equal(by.jaw.parent, 'head')
   assert.equal(by.jaw.nest, true)
-  assert.ok(by.arm.w > 100 && by.arm.x < 80, '前脚は左へ伸びる爪まで')
-  assert.ok(by.jaw.x < 60 && by.jaw.w < 120, '下あごは口の先から付け根まで')
+  assert.ok(by.arm.w > 100 && by.arm.x < 140, '前脚は左へ伸びる爪まで')
+  const jt = BOSS_ILLUST_DEFS.varuzenoku.cuts.jaw.take
+  assert.ok(by.jaw.x <= Math.min(...jt.map(q => q[0])) + 6 && by.jaw.w < 80, '下あごは口の先から付け根まで')
   assert.deepEqual(a.jaw.pivot, BOSS_ILLUST_DEFS.varuzenoku.cuts.jaw.pivot)
   // 下あごの点は下あご→頭→全体の順に回る
   const zero = { x: 0, y: 0, r: 0, head: 0, wingN: 0, wingF: 0, arm: 0, jaw: 0, glow: 0 }
-  const pt = [60, 300]
+  const pt = [260, 208]   // あごの先
   const [x0, y0] = illustPointAt('varuzenoku', { ...zero, jaw: -30 }, pt, 'jaw')
   assert.ok(y0 > pt[1] + 5, '下あごを開くと先が下がる')
   const both = illustPointAt('varuzenoku', { ...zero, jaw: -30, head: 20 }, pt, 'jaw')
@@ -187,7 +191,7 @@ test('【確定】2026-10-28 焦熱の吐息・終焉の黒焔：下あごを大
   const M = BOSS_ILLUST_DEFS.varuzenoku.motions
   for (const k of ['breath', 'doom']) {
     const p = { ...motionPoseAt(M[k].keys, M[k].hitMs) }
-    assert.ok(p.jaw <= -30, `${k}：吐くときは口を大きく開ける（${p.jaw}°）`)
+    assert.ok(p.jaw <= -15, `${k}：吐くときは口を大きく開ける（${p.jaw}°）`)
     assert.ok(p.arm <= -20, `${k}：前脚は下げる（${p.arm}°）`)
     assert.ok(p.glow === 1)
     const mo = mouthPointOf('varuzenoku', p), j = BOSS_ILLUST_DEFS.varuzenoku.cuts.jaw
@@ -225,22 +229,24 @@ test('道具：多角形の中か（切り分け）', () => {
   assert.equal(inPoly(tri, 8, 8), false)
 })
 
-test('【確定】2026-10-28 首は頭から切り分けて2か所で曲げる（付け根＝首・中ほど＝頭）・終焉の黒焔は首を上げて口に火の玉をためる', () => {
+test('【確定】2026-10-28 首を2か所で曲げる（付け根＝首・あごの後ろ＝頭）・終焉の黒焔は首を上げて口に火の玉をためる', () => {
   const a = bossIllustOf('varuzenoku')
   const by = Object.fromEntries(a.parts.map(p => [p.key, p]))
-  assert.equal(by.neck.parent, undefined, '首は体の上に重ねる（体は回らない）')
+  // 2026-10-29 描き直し：首は立ち絵の体から、頭は首から切り分ける（体は回らないので首はほかのパーツと同じ並び）
+  assert.equal(by.neck.parent, 'body')
+  assert.equal(by.neck.nest, false, '首は体の上に重ねる（体は回らない）')
   assert.equal(by.head.parent, 'neck')
   assert.equal(by.head.nest, true, '頭は首の中（首を上げると頭もついてくる）')
-  assert.deepEqual([by.head.px, by.head.py], BOSS_ILLUST_DEFS.varuzenoku.pivots.head)
+  assert.deepEqual([by.head.px, by.head.py], BOSS_ILLUST_DEFS.varuzenoku.cuts.head.pivot)
   assert.deepEqual([by.neck.px, by.neck.py], BOSS_ILLUST_DEFS.varuzenoku.cuts.neck.pivot)
   assert.ok(by.neck.py > by.head.py + 40, '首の付け根は頭の回す中心より下')
-  // 首を上げると、口は立ち絵の口より 100px 以上高い所へ
+  // 首を上げると、口は立ち絵の口より 60px 以上高い所へ（2026-10-29 描き直した絵は首が短い）
   const M = BOSS_ILLUST_DEFS.varuzenoku.motions.doom
   const zero = { x: 0, y: 0, r: 0, neck: 0, head: 0, wingN: 0, wingF: 0, wingNSq: 0, wingFSq: 0, arm: 0, jaw: 0, glow: 0 }
   const rest = illustPointAt('varuzenoku', zero, mouthPointOf('varuzenoku', zero), 'head')
   const p = { ...zero, ...motionPoseAt(M.keys, 900) }
   const up = illustPointAt('varuzenoku', p, mouthPointOf('varuzenoku', p), 'head')
-  assert.ok(up[1] < rest[1] - 100, `口が上がる（${rest.map(Math.round)} → ${up.map(Math.round)}）`)
+  assert.ok(up[1] < rest[1] - 60, `口が上がる（${rest.map(Math.round)} → ${up.map(Math.round)}）`)
   // 火の玉は撃つまで口でためる（当たる絵を使う）
   const m = a.motions.doom
   assert.deepEqual(m.charge, M.charge)
@@ -260,15 +266,61 @@ test('翼を縮める（partMove）：長さの向き（ax）に縮めてから�
   const a = BOSS_ILLUST.varuzenoku
   const pt = [80, 260]
   const want = partMove(partMove(pt, { ...a.parts.head, key: 'head' }, { ...zero, head: 10, neck: 20 }), { ...a.parts.neck, key: 'neck' }, { ...zero, head: 10, neck: 20 })
-  assert.deepEqual(illustPointAt('varuzenoku', { ...zero, head: 10, neck: 20 }, pt, 'head'), want)
+  const got = illustPointAt('varuzenoku', { ...zero, head: 10, neck: 20 }, pt, 'head')
+  assert.ok(Math.abs(got[0] - want[0]) < 1e-9 && Math.abs(got[1] - want[1]) < 1e-9, '頭→首→体（回らない）の順にたどる')
 })
 
-test('【確定】2026-10-28 奥の翼は付け根で回す（決まりの pivots）・背中のとげは体へ（翼といっしょに動かない）', () => {
+test('【確定】2026-10-29 黒龍の描き直し：立ち絵が体・体の形の外を翼2枚としっぽに分ける・翼としっぽは付け根で回す（決まりの pivots）', () => {
   const a = BOSS_ILLUST.varuzenoku, d = BOSS_ILLUST_DEFS.varuzenoku
-  assert.deepEqual([a.parts.wingF.px, a.parts.wingF.py], d.pivots.wingF)
-  assert.ok(d.wingFToBody.length >= 3)
-  const [px, py] = d.pivots.wingF
-  assert.ok(inPoly(d.wingFToBody, px + 20, py + 15), '付け根のすぐ下のとげは体に入れる')
+  assert.equal(d.base, 'stand')
+  assert.equal(d.split.by, '体', 'ChatGPT の体（翼としっぽの無い体）は体の形を知るためだけ')
+  assert.equal(d.fill, undefined, 'ChatGPT の体ですき間を埋めない（頭や腕が二重に見える）')
+  assert.deepEqual(Object.keys(d.split.parts), ['wingF', 'wingN', 'tail'])
+  for (const k of ['wingF', 'wingN', 'tail']) {
+    assert.deepEqual([a.parts[k].px, a.parts[k].py], d.pivots[k], `${k} は付け根で回す`)
+    assert.ok(inPoly(d.split.parts[k].take, ...d.pivots[k]), `${k} の回す中心は分ける所の中`)
+  }
+  // しっぽを持ち上げるのは左の足より左だけ（足の下まで持ち上げると、足に隠れていた所が足の横にはみ出した）・付け根は体にも残す（take が drop より広い）
+  const t = d.split.parts.tail
+  assert.ok(Math.max(...t.take.map(q => q[0])) > Math.max(...t.drop.map(q => q[0])), 'しっぽの付け根は体にも残る')
+  assert.ok(d.pivots.tail[0] < 240)
+  // 手前の翼は頭の後ろの角の先より右（角の先が翼といっしょに動いた）
+  assert.equal(inPoly(d.split.parts.wingN.take, 400, 95), false)
+  assert.equal(a.parts.tailT.parent, 'tail')
+})
+
+test('【確定】2026-10-29 黒龍の待機：羽ばたき・首と頭の揺れ・ときどきしっぽを持ち上げて叩きつける（砂ぼこりと小さな揺れ）・ときどき口に火の玉', () => {
+  const idle = BOSS_ILLUST_DEFS.varuzenoku.idle, s = idle.slam, o = idle.orb
+  // しっぽ：持ち上げる（左のはしが上がる＝＋）→ 地面を打つ時刻に少し下まで振り下ろす → 待機へ戻る
+  const lift = idlePoseAt(idle, s.atMs + 800), hit = idlePoseAt(idle, s.atMs + s.hitMs), after = idlePoseAt(idle, s.atMs + 1400)
+  assert.ok(lift.tail > 8, `持ち上げる（${lift.tail}°）`)
+  assert.ok(hit.tail < 0, '打ち下ろす')
+  assert.ok(hit.tail - lift.tail < -10 && s.hitMs - 800 <= 120, '打ち下ろしは速い')
+  assert.equal(after.tail, 0)
+  assert.equal(idlePoseAt(idle, s.atMs + s.everyMs + 800).tail, lift.tail, 'くり返す')
+  // 打った時刻から砂ぼこりと揺れ
+  assert.equal(idlePoseAt(idle, s.atMs + s.hitMs - 10).dust, 0)
+  const d1 = idlePoseAt(idle, s.atMs + s.hitMs + 100)
+  assert.ok(d1.dust > 0 && d1.dust < 1)
+  assert.ok(Math.abs(d1.x) > 0, '小さく揺れる')
+  assert.equal(idlePoseAt(idle, s.atMs + s.hitMs + s.dustMs + 10).dust, 0)
+  // 砂ぼこり：はじめは薄く（すぐ濃くなる）、広がりながら薄れる
+  const [e0] = dustEllipsesOf([[100, 580]], 0.01), [e1] = dustEllipsesOf([[100, 580]], 0.3), [e2] = dustEllipsesOf([[100, 580]], 0.95)
+  assert.ok(e0.op < e1.op && e2.op < e1.op && e1.rx > e0.rx && e1.cx < e0.cx)
+  // 火の玉：ふくらむ→ゆらめく→縮みながら消える。出ているあいだは口を少し開けて光る
+  const g = idlePoseAt(idle, o.atMs + o.growMs / 2), full = idlePoseAt(idle, o.atMs + o.growMs + o.holdMs / 2)
+  const fade = idlePoseAt(idle, o.atMs + o.growMs + o.holdMs + o.fadeMs * 0.7), gone = idlePoseAt(idle, o.atMs + o.growMs + o.holdMs + o.fadeMs + 10)
+  assert.ok(g.orb > 0 && g.orb < full.orb && Math.abs(full.orb - 1) < 1e-9)
+  assert.ok(fade.orb < full.orb && fade.orbOp < 1, '消えるときは縮む（ふくらみながら薄れると茶色くにごった）')
+  assert.equal(gone.orb, 0)
+  assert.ok(full.jaw < 0 && full.glow > 0)
+  // 技のあいだもしっぽはそのまま（技の頭で跳ねない）・火の玉は出さない
+  const m = { keys: BOSS_ILLUST_DEFS.varuzenoku.motions.claw.keys }
+  assert.equal(illustPoseAt('varuzenoku', m, 100, s.atMs + 800).tail, lift.tail)
+  assert.equal(illustPoseAt('varuzenoku', m, 100, o.atMs + o.growMs + 100).orb, 0)
+  // 首と頭はゆっくり小さく揺れる
+  const necks = Array.from({ length: 80 }, (_, i) => idlePoseAt(idle, i * 100).neck)
+  assert.ok(Math.max(...necks) > 0.5 && Math.max(...necks.map(Math.abs)) <= 2)
 })
 
 test('【確定】2026-10-29 雨摩座のイラスト版：立ち絵が体・頭と両手は立ち絵から切り分ける（水の帯がいちばん奥）・右腕は3つの絵を切り替える（手前の手はふだんの腕の中）・回す中心は首と袖口', () => {

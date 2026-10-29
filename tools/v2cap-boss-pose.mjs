@@ -6,12 +6,14 @@
 // 使い方：node tools/v2cap-boss-pose.mjs <技のキー|idle|cast> <時刻ミリ秒,…> [出す PNG] [--key varuzenoku] [--scale 0.5]
 //   cast＝構え（大技の詠唱）のあいだ（時刻は構えはじめてから）
 //   例）node tools/v2cap-boss-pose.mjs gale 0,400,480,560 out.png   … 横に並べる（左から時刻の順）。idle の時刻は待機の時計
+//   例）node tools/v2cap-boss-pose.mjs idle 0-10000 idle.webp --anim 50 --scale 0.5   … 動く WebP（2026-10-29 黒龍の待機の確かめ）
+//   黒龍の待機の口の火の玉・しっぽの砂ぼこりも描く（画面の RigPart・RigDust と同じ）
 // ============================================================
 import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readRgba } from './v2cap-motion.mjs'
-import { bossIllustOf, illustPoseAt, illustCastPoseAt, illustFreePoseAt, rotPoint, swapOpacityOf } from '../src/v2cap/lib/bossIllust.js'
+import { bossIllustOf, illustPoseAt, illustCastPoseAt, illustFreePoseAt, rotPoint, swapOpacityOf, dustEllipsesOf } from '../src/v2cap/lib/bossIllust.js'
 
 const SELF = fileURLToPath(import.meta.url)
 const ROOT = path.resolve(path.dirname(SELF), '..')
@@ -19,7 +21,8 @@ const PAD = { l: 160, t: 160, r: 60, b: 60 }   // 踏み込み・のけぞりで
 
 // 1コマ：{ W, H, data }（RGBA）。art＝bossIllustOf・imgs＝パーツの絵（art.parts と同じ並び）
 //   freePose＝体の動きから切り離したパーツ（p.free・雨摩座の水の帯）の姿勢（画面と同じ＝待機のまま）
-export const renderPose = (art, imgs, pose, freePose = pose) => {
+//   orbImg＝口の火の玉の絵（黒龍の待機・あれば描く）。砂ぼこり（pose.dust）は画面の RigDust と同じ楕円を、ぼかした色で重ねる
+export const renderPose = (art, imgs, pose, freePose = pose, orbImg = null) => {
   const S = art.base, W = S + PAD.l + PAD.r, H = S + PAD.t + PAD.b
   const out = Buffer.alloc(W * H * 4)
   for (let i = 0; i < W * H; i++) { out[i * 4] = 8; out[i * 4 + 1] = 22; out[i * 4 + 2] = 50; out[i * 4 + 3] = 255 }
@@ -64,8 +67,34 @@ export const renderPose = (art, imgs, pose, freePose = pose) => {
       over(i, px[0], px[1], px[2], px[3] * o)
     }
     for (const c of art.parts) if (c.nest && c.parent === key) drawPart(c.key, o)
+    // 口の火の玉（画面の RigPart と同じ：頭の中・回ってゆらめく）
+    if (key === 'head' && orbImg && art.orb && pose.orb > 0.001) {
+      const s = art.orb.size * S * pose.orb * (1 + 0.05 * Math.sin(pose.orbT / 45)) / orbImg.W, rot = pose.orbT * 0.12
+      for (let Y = 0; Y < H; Y++) for (let X = 0; X < W; X++) {
+        const [u, v] = toLocal(X, Y, chain, ps)
+        const [ru, rv] = rotPoint([u, v], art.orb.at, -rot)
+        const sx = (ru - art.orb.at[0]) / s + orbImg.W / 2, sy = (rv - art.orb.at[1]) / s + orbImg.H / 2
+        if (sx < 0 || sy < 0 || sx >= orbImg.W - 1 || sy >= orbImg.H - 1) continue
+        const x0 = Math.floor(sx), y0 = Math.floor(sy)
+        const i = (Y * W + X) * 4
+        over(i, sample(orbImg, x0, y0, 0), sample(orbImg, x0, y0, 1), sample(orbImg, x0, y0, 2), sample(orbImg, x0, y0, 3) * o * pose.orbOp)
+      }
+    }
   }
   for (const p of art.parts) if (!p.nest) drawPart(p.key)
+  // 砂ぼこり（画面の RigDust と同じ楕円・真ん中ほど濃い）
+  if (art.dust && pose.dust > 0) {
+    for (const { cx, cy, rx, ry, op } of dustEllipsesOf(art.dust, pose.dust)) {
+      for (let Y = 0; Y < H; Y++) for (let X = 0; X < W; X++) {
+        let [u, v] = [X - PAD.l - pose.x * S, Y - PAD.t - pose.y * S]
+        ;[u, v] = rotPoint([u, v], art.pivot, -pose.r)
+        const q = Math.hypot((u - cx) / rx, (v - cy) / ry)
+        if (q >= 1) continue
+        const a = q < 0.6 ? 0.85 - (0.85 - 0.45) * q / 0.6 : 0.45 * (1 - (q - 0.6) / 0.4)
+        over((Y * W + X) * 4, 112, 98, 88, 255 * a * op)
+      }
+    }
+  }
   return { W, H, data: out }
 }
 const inPolygon = (poly, x, y) => {
@@ -80,15 +109,27 @@ const inPolygon = (poly, x, y) => {
 if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
   const args = process.argv.slice(2)
   const opt = (name, def) => { const i = args.indexOf(name); if (i < 0) return def; const v = args[i + 1]; args.splice(i, 2); return v }
-  const key = opt('--key', 'varuzenoku'), scale = +opt('--scale', '0.5')
+  const key = opt('--key', 'varuzenoku'), scale = +opt('--scale', '0.5'), anim = +opt('--anim', '0')
   const [mk, times = '0', out = path.join(ROOT, `pose-${args[0] || 'idle'}.png`)] = args
   const art = bossIllustOf(key)
   if (!art) throw new Error(`イラスト版が無い：${key}`)
   const motion = mk === 'idle' || mk === 'cast' ? null : art.motions[mk]
   if (mk !== 'idle' && mk !== 'cast' && !motion) throw new Error(`技が無い：${mk}（${Object.keys(art.motions).join('・')}・idle）`)
-  const imgs = art.parts.map(p => readRgba(path.join(ROOT, 'public', decodeURI(p.src.split('?')[0]))))
-  const frames = times.split(',').map(Number).map(ms => renderPose(art, imgs, mk === 'cast' ? illustCastPoseAt(key, ms, 0) : illustPoseAt(key, motion, motion ? ms : 0, motion ? 0 : ms),
-    illustFreePoseAt(key, motion || mk === 'cast' ? 0 : ms)))
+  const load = (src) => readRgba(path.join(ROOT, 'public', decodeURI(src.split('?')[0])))
+  const imgs = art.parts.map(p => load(p.src)), orbImg = art.orb ? load(art.orb.src) : null
+  const poseAt = (ms) => mk === 'cast' ? illustCastPoseAt(key, ms, 0) : illustPoseAt(key, motion, motion ? ms : 0, motion ? 0 : ms)
+  const freeAt = (ms) => illustFreePoseAt(key, motion || mk === 'cast' ? 0 : ms)
+  // --anim <ミリ秒>：時刻を「はじめ-おわり」で渡すと、その間隔のコマを動く WebP にする（例：idle 0-10000 out.webp --anim 50）
+  if (anim) {
+    const [t0, t1] = times.split('-').map(Number), list = []
+    for (let t = t0; t < t1; t += anim) list.push(renderPose(art, imgs, poseAt(t), freeAt(t), orbImg))
+    const W = list[0].W, H = list[0].H
+    execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${W}x${H}`, '-r', String(1000 / anim), '-i', '-',
+      '-vf', `scale=${Math.round(W * scale)}:-1:flags=area`, '-c:v', 'libwebp', '-loop', '0', '-quality', '70', out], { input: Buffer.concat(list.map(f => f.data)), maxBuffer: 1 << 30 })
+    console.log(`→ ${path.relative(ROOT, out) || out}（${list.length}コマ・動く）`)
+    process.exit(0)
+  }
+  const frames = times.split(',').map(Number).map(ms => renderPose(art, imgs, poseAt(ms), freeAt(ms), orbImg))
   const W = frames[0].W, H = frames[0].H
   const all = Buffer.alloc(W * frames.length * H * 4)
   frames.forEach((f, n) => { for (let y = 0; y < H; y++) f.data.copy(all, (y * W * frames.length + n * W) * 4, y * W * 4, (y + 1) * W * 4) })
