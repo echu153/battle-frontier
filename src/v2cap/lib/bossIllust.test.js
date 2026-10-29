@@ -379,12 +379,12 @@ test('【確定】2026-10-29 雨摩座の待機：揺れの足し算（浮き沈
   assert.equal(poses[0].wingN, 0, '翼は無い')
 })
 
-test('【確定】2026-10-29 雨摩座の技4つ：右手を胸元に引き寄せて（大技は真上に掲げて）ため、撃つ時刻に相手の方へさっと払う（ふだんの腕に戻る・前へ出る）・待機から始まって待機へ戻る・エフェクト7枚（＋水天葬の流れる水の絵）', () => {
+test('【確定】2026-10-29 雨摩座の技4つ：右手を胸元に引き寄せて（大技は真上に掲げて）ため、撃つ時刻に相手の方へさっと払う（ふだんの腕に戻る・前へ出る）・待機から始まって待機へ戻る・エフェクト7枚（＋水天葬と氷雨の流れる水の絵）', () => {
   const a = bossIllustOf('amaza'), D = BOSS_ILLUST_DEFS.amaza.motions
   assert.deepEqual(Object.values(a.motions).map(m => m.label), BOSS_DEFS.amaza.motions.map(m => m.file))
-  assert.equal(Object.values(a.motions).reduce((n, m) => n + Object.keys(m.fx || {}).length, 0), 8)
-  assert.equal(a.srcs.length, 8 + 8)
-  assert.ok(a.motions.deluge.fx.flow, '水天葬の流れる水の絵（描いた滝の柱の所から作る）')
+  assert.equal(Object.values(a.motions).reduce((n, m) => n + Object.keys(m.fx || {}).length, 0), 9)
+  assert.equal(a.srcs.length, 8 + 9)
+  assert.ok(a.motions.deluge.fx.flow && a.motions.sleet.fx.flow, '水天葬と氷雨の流れる水の絵（描いた滝の柱・雨の所から作る）')
   const armD = a.parts.find(p => p.key === 'armD').swap
   for (const [k, M] of Object.entries(D)) {
     const at = (ms) => motionPoseAt(M.keys, ms)
@@ -446,7 +446,7 @@ test('【確定】2026-10-29 雨摩座のエフェクト：雨礫・水縛の帯
   // 水天葬の渦の雲：相手の頭上・撃つ時刻まで出て、滝が落ちたら薄れる。重ねる順は滝が先（雲が手前）
   const d = a.motions.deluge
   assert.equal(d.charge.kind, 'charge')
-  assert.equal(d.fx.charge.on, 'head')
+  assert.equal(d.fx.charge.on, 'sky', '雲は空の上のほう（ユーザー「もっと上から降らせて」）')
   assert.equal(d.charge.toMs, d.hitMs)
   assert.ok(d.charge.holdMs > 0)
   assert.deepEqual(Object.keys(d.fx), ['hit', 'flow', 'charge'])

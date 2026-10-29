@@ -2,7 +2,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { bossIllustOf } from './bossIllust.js'
-import { POUR, COIL, SCENE_TOP, FX_TARGET_Y, FX_FEET_Y, pourTimesOf, sceneEndMsOf, sceneAt, castSceneAt, fallAt, coilAt, stageSceneOf } from './bossScene.js'
+import { POUR, COIL, SCENE_TOP, FX_TARGET_Y, FX_FEET_Y, FX_HEAD_Y, FX_SKY_Y, pourTimesOf, sceneEndMsOf, sceneAt, castSceneAt, fallAt, coilAt, stageSceneOf } from './bossScene.js'
+import { BOSS_ILLUST_DEFS, flutterBandsAt } from './bossIllust.js'
 import { BOSS_ILLUST } from './bossIllustList.js'
 
 const m = bossIllustOf('amaza').motions.deluge
@@ -115,16 +116,19 @@ test('【確定】2026-10-30 滝は水の絵そのものを流す（ユーザー
 })
 
 const b = bossIllustOf('amaza').motions.bind
-test('【確定】2026-10-30 水縛の帯（ユーザー「水縛りの帯もしょぼい、もっと豪華にして」）：手から相手へ水の綱が伸び、届いたら3重の水の輪が巻きついて3回締め上げ、はじけて解ける', () => {
+test('【確定】2026-10-30 水縛の帯（ユーザー「水縛りの帯もしょぼい、もっと豪華にして」「紐いらない」）：帯が飛んで届いたら3重の水の輪が巻きついて3回締め上げ、はじけて解ける（手からの水の綱は無い）', () => {
   assert.equal(b.scene.kind, 'coil')
   assert.deepEqual(b.scene.hand, { pt: [54, 251], part: 'armN' }, '綱は手前の手の指先から（飛ぶ絵と同じ）')
   const I = b.impactMs, H = b.hitMs, B = I + COIL.burstMs
   assert.equal(sceneEndMsOf(b), B + 900)
-  // 水の綱：払った瞬間から伸び、届いたとき伸びきる・はじけたら薄れる
-  assert.equal(sceneAt(b, H - 1).tether, null)
-  assert.ok(sceneAt(b, (H + I) / 2).tether.head > 0.2 && sceneAt(b, (H + I) / 2).tether.head < 1)
-  assert.equal(sceneAt(b, I + 10).tether.head, 1)
-  assert.ok(sceneAt(b, B + 150).tether.op < 1 && sceneAt(b, B + 310).tether === null)
+  // 手からの水の綱（紐）は無い（ユーザー「紐いらない」）・帯は飛ぶ絵で相手へ
+  for (let ms = 0; ms < sceneEndMsOf(b); ms += 23) {
+    const s = sceneAt(b, ms)
+    assert.equal(s.tether, undefined, `${ms}ms`)
+    assert.ok(s.items.every(it => it.t !== 'tglow'))
+  }
+  assert.ok(b.fx.fly, '帯の飛ぶ絵')
+  assert.ok(sceneAt(b, H + 60).hand, '払った手の光ははじける')
   // 水の輪：体の真ん中のまわりに3つ・巻きついてすぐ細る・締め上げるたび細る・はじけたら広がる
   const rings = (ms) => sceneAt(b, ms).items.filter(it => it.t === 'coil')
   assert.equal(rings(I - 1).length, 0)
@@ -144,7 +148,6 @@ test('【確定】2026-10-30 水縛の帯（ユーザー「水縛りの帯もし
   }
   assert.equal(sceneAt(b, B + 10).squeeze, null)
   assert.ok(sceneAt(b, I + 400).items.some(it => it.t === 'bubble'), '泡が立ちのぼる')
-  assert.ok(sceneAt(b, I + 400).items.some(it => it.t === 'tglow'), '光が綱を伝う')
   assert.ok(sceneAt(b, B + 200).items.filter(it => it.t === 'drop').length > 20, 'はじけて大きなしぶき')
   // 巻きつく絵：大きく出て一気に締まる・はじけたら広がって消える
   assert.equal(coilAt(b, I - 1), null)
@@ -152,9 +155,53 @@ test('【確定】2026-10-30 水縛の帯（ユーザー「水縛りの帯もし
   assert.ok(coilAt(b, B + 200).s > 1.2 && coilAt(b, B + 200).op < 0.4)
   assert.equal(coilAt(b, B + 280), null)
   assert.equal(coilAt(m, I + 100), null, '水天葬は巻きつかない')
-  // 外れたとき：綱は伸びるが、巻きつかない
+  // 外れたとき：巻きつかない
   for (let ms = I; ms < B + 300; ms += 37) {
     const s = sceneAt(b, ms, { landed: false })
     assert.ok(s.items.length === 0 && !s.squeeze && s.flash === 0, `${ms}ms`)
   }
+})
+
+test('【確定】2026-10-30 氷雨・水天葬はもっと上から降る（ユーザー「氷雨、水天葬、これもっと上から降らせて」）：雲は空の上のほう・滝は雲から足元まで・氷雨の絵は大きく縦にも伸ばす', () => {
+  assert.ok(FX_SKY_Y < FX_HEAD_Y - 0.5, '雲は前（頭のすぐ上）より枠の半分以上高い')
+  assert.equal(SCENE_TOP, FX_SKY_Y - FX_FEET_Y)
+  // 水の筋・小雨は雲から（前の高さより上）
+  const top = Math.min(...sceneAt(m, T.I + 300).items.filter(it => it.t === 'streak').map(it => it.y1))
+  assert.ok(top < FX_HEAD_Y - FX_FEET_Y - 0.3, `水の筋は高い所から（${top.toFixed(2)}）`)
+  const sleet = bossIllustOf('amaza').motions.sleet, hit = sleet.fx.hit
+  assert.ok(hit.sy > 1.2 && hit.size >= 1.6, '氷雨の絵は大きく縦にも伸ばす')
+  // 雲の上のはし（足元から）：前（1.4倍・縦そのまま）より高い
+  const H0 = (1.4 * hit.h) / hit.w, H1 = (hit.size * hit.sy * hit.h) / hit.w
+  assert.ok(H1 > H0 * 1.4, `雲の高さ ${H0.toFixed(2)} → ${H1.toFixed(2)}`)
+})
+
+test('【確定】2026-10-30 氷雨は雨そのものを流す（ユーザー「氷雨も絵1枚になってる、もっと雨が降ってる感じにして」）：流れる雨の絵は描いた絵の雲の下の所', () => {
+  const sleet = bossIllustOf('amaza').motions.sleet, { flow, hit } = sleet.fx
+  assert.ok(flow.src.includes('il-fx-sleet-flow'))
+  const [x, y, w, h] = flow.at
+  assert.ok(y > hit.h * 0.25 && y + h < hit.h * 0.95, `雨の所は雲の下・足元のしぶきの上（${flow.at}）`)
+  assert.ok(x >= 0 && x + w <= hit.w && w > hit.w * 0.7, '横はほぼいっぱい')
+  assert.equal(sleet.scene, null, '氷雨は演出（暗く・揺れる）はまだ')
+})
+
+test('【確定】2026-10-30 着物のひらひら（ユーザー「待機モーションで軽く着物ひらひらしててほしい」）：帯から下を横の帯に分けて、上から下へ伝わる波で左右にずらす・境目でつながる', () => {
+  const f = BOSS_ILLUST_DEFS.amaza.idle.flutter
+  assert.deepEqual(flutterBandsAt('varuzenoku', 1000), [], '黒龍は変えていない')
+  for (const t of [0, 700, 1900, 4321]) {
+    const bands = flutterBandsAt('amaza', t)
+    assert.equal(bands.length, f.bands + 1)
+    assert.ok(bands[0].dx === 0 && bands[0].tan === 0 && bands[0].y1 === f.from, '帯から上（体の上半分）は動かない')
+    assert.ok(Math.abs(bands[1].dx) < 1e-9, '帯の下の境目はずれない（上とつながる）')
+    for (let i = 1; i < bands.length - 1; i++) {
+      const b = bands[i], n = bands[i + 1]
+      assert.ok(Math.abs(b.dx + b.tan * (b.y1 - b.y0) - n.dx) < 1e-9, `${t}ms：帯${i}と帯${i + 1}は境目でつながる`)
+    }
+    const last = bands.at(-1), bottom = last.dx + last.tan * (last.y1 - last.y0)
+    assert.ok(Math.abs(bottom) <= f.amp + 1e-9, '裾でも amp px まで（軽く）')
+  }
+  // 時刻で動く・裾ほど大きく揺れる
+  const at = (t, i) => flutterBandsAt('amaza', t)[i].dx
+  let mid = 0, low = 0
+  for (let t = 0; t < f.periodMs * 2; t += 50) { mid = Math.max(mid, Math.abs(at(t, 2))); low = Math.max(low, Math.abs(at(t, f.bands))) }
+  assert.ok(low > mid && low > f.amp * 0.5, `裾ほど大きい（${mid.toFixed(1)} → ${low.toFixed(1)}px）`)
 })

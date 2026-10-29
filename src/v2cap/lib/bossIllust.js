@@ -280,7 +280,10 @@ export const BOSS_ILLUST_DEFS = {
     idle: { sway: {
       y: [0.012, 4200, 0], r: [0.7, 6100, 0.2], head: [1.6, 5300, 0.35],
       armN: [4, 3700, 0.1], armF: [6, 4300, 0.6], water: [6, 7000, 0],
-    } },
+    },
+    // 着物のひらひら（【確定】2026-10-30 ユーザー「待機モーションで軽く着物ひらひらしててほしい」）：帯の下（from）から裾（to）を bands 本の横の帯に分け、
+    //   上から下へ伝わる波で左右にずらす（裾ほど大きく・いちばん下で amp px・periodMs で1回・waves＝帯の下から裾までに入る波の数）。flutterBandsAt
+    flutter: { from: 215, to: 640, bands: 5, amp: 8, periodMs: 2600, waves: 0.85 } },
     // 技のあいだも揺れはそのまま（止めると技の頭と終わりで手や水の帯がぴくっと跳ねる）
     //   （水の帯の角度も数字としては残す。画面では水の帯は切り離して待機の姿勢で動かす＝free）
     idleKeep: { y: 1, r: 1, head: 1, armN: 1, armF: 1, water: 1 },
@@ -358,7 +361,10 @@ export const BOSS_ILLUST_DEFS = {
     effects: [
       { file: '雨礫_飛ぶ', motion: 'shot', kind: 'fly', size: 0.34, flyMs: 300 },
       { file: '雨礫_当たる', motion: 'shot', kind: 'hit', size: 0.46, durMs: 560, spin: 0 },
-      { file: '氷雨_当たる', motion: 'sleet', kind: 'hit', on: 'feet', size: 1.4, anim: 'drop', lead: 260, durMs: 1150 },
+      // 【確定】2026-10-30 ユーザー「氷雨、水天葬、これもっと上から降らせて」：大きく（1.4→1.6）、縦にも伸ばして（sy）雲が空の上のほうに来る
+      { file: '氷雨_当たる', motion: 'sleet', kind: 'hit', on: 'feet', size: 1.6, sy: 1.3, anim: 'drop', lead: 260, durMs: 1150 },
+      //   【確定】2026-10-30 ユーザー「氷雨も絵1枚になってる、もっと雨が降ってる感じにして」：雲の下の雨の所を流れる雨の絵にして流す（描いた絵は雲と足元のしぶきだけ）
+      { file: '氷雨_当たる', motion: 'sleet', kind: 'flow', crop: [100, 470, 1150, 1010], band: 0.3, blurY: 6 },
       { file: '水縛の帯_飛ぶ', motion: 'bind', kind: 'fly', size: 0.46, flyMs: 380 },
       { file: '水縛の帯_当たる', motion: 'bind', kind: 'hit', on: 'body', size: 0.95, anim: 'bind', durMs: 950 },
       // 渦の雲は滝より手前に重ねる（滝が雲から落ちて見える）＝並びは滝が先
@@ -366,7 +372,8 @@ export const BOSS_ILLUST_DEFS = {
       // 流れる水の絵（kind 'flow'）：滝の柱の所（crop＝元の絵の px の x0・y0・x1・y1）を上と下がつながる絵にして、縦に並べて流す（lib/bossScene.js）
       //   【確定】2026-10-30 ユーザー「滝流すモーションが止まってるから躍動感がない、しっかり水が流れるようにしてほしい」
       { file: '水天葬_当たる', motion: 'deluge', kind: 'flow', crop: [300, 0, 960, 660], band: 0.3, blurY: 14 },
-      { file: '水天葬_ためる', motion: 'deluge', kind: 'charge', on: 'head', size: 1.3 },
+      //   雲は空の上のほう（sky・ユーザー「もっと上から降らせて」）
+      { file: '水天葬_ためる', motion: 'deluge', kind: 'charge', on: 'sky', size: 1.45 },
     ],
   },
 }
@@ -461,6 +468,20 @@ export const illustPoseAt = (key, motion, ms, tMs, fromCast = false) => {
   const w = cp ? 1 - smooth(Math.min(1, Math.max(0, ms) / CAST_OUT_MS)) : 0
   const j = joltAt(motion.jolt, ms)
   return Object.fromEntries(Object.keys(ZERO).map(f => [f, idle[f] * (keep[f] || 0) + add[f] + (cp?.[f] || 0) * w + (j[f] || 0)]))
+}
+// 着物のひらひら（def.idle.flutter）：横の帯ごとの { y0, y1（立ち絵の px）, dx（上の境目のずれ px）, tan（下へ1px行くごとのずれ） }。
+//   帯の上の境目のずれから下の境目のずれまで斜めに傾ける（隣の帯と境目でつながる＝絵が途切れない）。いちばん上の帯（体の上半分）は動かない。
+//   tMs＝いまの時刻（技や構えのあいだも止めない）。決まりが無いボスは []
+export const flutterBandsAt = (key, tMs) => {
+  const f = BOSS_ILLUST_DEFS[key]?.idle?.flutter
+  if (!f) return []
+  const shift = (y) => {
+    const k = Math.min(1, Math.max(0, (y - f.from) / (f.to - f.from))), a = f.amp * Math.pow(k, 1.3)
+    return a * (Math.sin(2 * Math.PI * (tMs / f.periodMs - f.waves * k)) + 0.35 * Math.sin(2 * Math.PI * (tMs / (f.periodMs * 0.63) - 1.7 * k) + 1.3)) / 1.35
+  }
+  const ys = Array.from({ length: f.bands + 1 }, (_, i) => f.from + ((f.to - f.from) * i) / f.bands)
+  return [{ y0: -Infinity, y1: f.from, dx: 0, tan: 0 },
+    ...ys.slice(0, -1).map((y0, i) => ({ y0, y1: ys[i + 1], dx: shift(y0), tan: (shift(ys[i + 1]) - shift(y0)) / (ys[i + 1] - y0) }))]
 }
 // 体の動きから切り離したパーツ（def.free・雨摩座の水の帯）の姿勢：技・構えのあいだも待機のまま
 export const illustFreePoseAt = (key, tMs) => idlePoseAt(BOSS_ILLUST_DEFS[key].idle, tMs)
@@ -585,7 +606,7 @@ export const bossIllustOf = (key) => {
       const a = art.fx?.[m.key]?.[d.kind]
       if (!a) continue
       fx[d.kind] = { ...a, frames: 1, src: srcOf(key, illustFxKindOf(m.key, d.kind)), size: d.size, durMs: d.durMs, spin: d.spin || 0, wipe: !!d.wipe,
-        on: d.on || null, anim: d.anim || null, lead: d.lead || 0, fadeTop: d.fadeTop || 0 }
+        on: d.on || null, anim: d.anim || null, lead: d.lead || 0, fadeTop: d.fadeTop || 0, sy: d.sy || 1 }
       if (d.kind === 'fly') flyMs = d.flyMs
     }
     const poseAt = (ms) => ({ ...ZERO, ...motionPoseAt(md.keys, ms) })
@@ -606,7 +627,7 @@ export const bossIllustOf = (key) => {
   // 遭遇のイラストはドット絵版と同じ
   const illust = bossArtOf(key)?.illust || null
   return {
-    kind: 'illust', key, name: base.name, base: BOSS_ILLUST_SIZE, illust, parts, pivot: art.pivot, mouth: art.mouth, jaw, motions, orb, dust,
+    kind: 'illust', key, name: base.name, base: BOSS_ILLUST_SIZE, illust, parts, pivot: art.pivot, mouth: art.mouth, jaw, motions, orb, dust, flutter: !!def.idle.flutter,
     srcs: [...parts.map(p => p.src), ...parts.filter(p => p.bend).map(p => p.bend.src), ...Object.values(motions).flatMap(m => Object.values(m.fx || {}).map(f => f.src)), ...(orb ? [orb.src] : [])],
   }
 }

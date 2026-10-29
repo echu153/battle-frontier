@@ -4,8 +4,8 @@ import { buffChips, ailChips, stateChips, needNow, CAST_SEC } from '../core/atb.
 import { STAT_DEFS } from '../core/stats.js'
 import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC } from '../lib/atbFx.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
-import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf } from '../lib/bossIllust.js'
-import { FX_HEAD_Y, FX_FEET_Y, FX_TARGET_Y, SCENE_TOP, fallAt, coilAt, pourTimesOf, sceneEndMsOf, stageSceneOf } from '../lib/bossScene.js'
+import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, flutterBandsAt } from '../lib/bossIllust.js'
+import { FX_HEAD_Y, FX_FEET_Y, FX_SKY_Y, FX_TARGET_Y, SCENE_TOP, fallAt, coilAt, pourTimesOf, sceneEndMsOf, stageSceneOf } from '../lib/bossScene.js'
 
 // ============================================================
 // 「レベルキャップあり」版（v2cap）— ATB戦闘の舞台（自分が左・モンスターが右）
@@ -43,8 +43,14 @@ import { FX_HEAD_Y, FX_FEET_Y, FX_TARGET_Y, SCENE_TOP, fallAt, coilAt, pourTimes
 //     戦闘の画面は2.5秒より古い印を片付けるので、演出が終わるまでボスの技の印を覚えておく（keptActs）
 //   ・2026-10-30 ユーザー「滝流すモーションが止まってるから躍動感がない、しっかり水が流れるようにしてほしい」「水縛りの帯もしょぼい、もっと豪華にして」：
 //     滝は水の絵そのものを流す（PourFlow＝流れる水の絵を縦に並べて流す2枚・描いた絵は下の波だけにして、裏返した絵と交互に揺らして泡立たせる）。
-//     水縛の帯＝手から波打つ水の綱（SceneLayer の tether・光が綱を伝う）・体に巻きつく3重の水の輪（回りながら締め上げる・奥の半分は暗く）・
+//     水縛の帯＝（手から波打つ水の綱は同じ日にやめた＝ユーザー「紐いらない」）体に巻きつく3重の水の輪（回りながら締め上げる・奥の半分は暗く）・
 //     泡・しぶき・締め上げるたび相手が縮む（Fighter の squeeze）・最後にはじけて解ける
+//   ・2026-10-30 ユーザー「氷雨、水天葬、これもっと上から降らせて」「水縛の帯 紐いらない」：水天葬の雲は空の上のほう（FX_SKY_Y）・
+//     滝は雲から足元まで流れる柱（PourFlow は雲から下の波まで・描いた絵は下の波だけ）・氷雨の絵は大きく縦にも伸ばす（sy）・水の綱はやめた
+//   ・2026-10-30 ユーザー「氷雨も絵1枚になってる、もっと雨が降ってる感じにして」：氷雨も雲の下の雨の所を流れる雨の絵で流す（FlowColumn）。
+//     描いた絵は雲と足元のしぶきだけを見せる（alphaMask）
+//   ・2026-10-30 ユーザー「待機モーションで軽く着物ひらひらしててほしい」：雨摩座の帯から下を横の帯に分けて、上から下へ伝わる波で左右にずらす
+//     （IllustRig が体の動きの箱の中で帯ごとに同じパーツを切り抜いて描く・lib/bossIllust.js の flutterBandsAt）
 // ============================================================
 
 const Bar = ({ pct, color, h = 10 }) => (
@@ -102,9 +108,19 @@ const FrameStrip = ({ a, frame, style }) => (
 const rigWrap = (art, pose) => ({ position:'absolute', inset:0, pointerEvents:'none',
   transform:`translate(${(pose.x * 100).toFixed(2)}%, ${(pose.y * 100).toFixed(2)}%) rotate(${pose.r.toFixed(2)}deg)`,
   transformOrigin:`${(art.pivot[0] / art.base) * 100}% ${(art.pivot[1] / art.base) * 100}%` })
-const IllustRig = ({ art, pose, freePose }) => {
+//   着物のひらひら（art.flutter）：体の動きの箱の中で、横の帯ごとに同じパーツを切り抜いて描き、帯ごとに左右へずらして傾ける
+//   （帯の上の境目で dx・下へ行くほど tan ずつずれる＝隣の帯と境目でつながる）。帯は少し重ねて切る（境目に細いすき間が出ない）
+const IllustRig = ({ art, pose, freePose, tMs = 0 }) => {
   const box = { x: 0, y: 0, w: art.base, h: art.base }
   const free = art.parts.filter(p => p.free && !p.nest)
+  const body = (
+    <>
+      {art.parts.filter(p => !p.nest && !p.free).map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={pose} />)}
+      {art.dust && pose.dust > 0 && <RigDust art={art} k={pose.dust} />}
+    </>
+  )
+  const bands = art.flutter ? flutterBandsAt(art.key, tMs) : []
+  const pct = (y) => (y / art.base) * 100
   return (
     <>
       {free.length > 0 && (
@@ -113,8 +129,14 @@ const IllustRig = ({ art, pose, freePose }) => {
         </div>
       )}
       <div style={rigWrap(art, pose)}>
-        {art.parts.filter(p => !p.nest && !p.free).map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={pose} />)}
-        {art.dust && pose.dust > 0 && <RigDust art={art} k={pose.dust} />}
+        {bands.length === 0 ? body : bands.map((b, i) => (
+          <div key={i} style={{ position:'absolute', inset:0,
+            clipPath:`inset(${i === 0 ? '-40%' : `${(pct(b.y0) - 0.15).toFixed(2)}%`} -40% ${i === bands.length - 1 ? '-40%' : `${(100 - pct(b.y1) - 0.15).toFixed(2)}%`} -40%)`,
+            transform: b.dx || b.tan ? `translateX(${pct(b.dx).toFixed(3)}%) skewX(${(Math.atan(b.tan) * 180 / Math.PI).toFixed(3)}deg)` : undefined,
+            transformOrigin: `0 ${pct(Number.isFinite(b.y0) ? b.y0 : 0).toFixed(2)}%` }}>
+            {body}
+          </div>
+        ))}
       </div>
     </>
   )
@@ -297,7 +319,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
             // 待機の絵の枠（正方形）。攻撃の絵はこの枠に重ねる（ox・oy・w・h は待機の枠（クラスは 224px・ボスは base）を100%として割合で置く）
             <div style={{ position:'relative', height:'100%', aspectRatio:'1 / 1', maxWidth:'100%', filter: filters.join(' ') || 'none' }}>
               {rig && trails.length > 0 && <RigTrails art={rig} trails={trails} />}
-              {rig ? <IllustRig art={rig} pose={pose} freePose={illustFreePoseAt(rig.key, now * 1000)} /> : (
+              {rig ? <IllustRig art={rig} pose={pose} freePose={illustFreePoseAt(rig.key, now * 1000)} tMs={now * 1000} /> : (
                 <img src={src} alt="" draggable={false}
                   style={{ width:'100%', height:'100%', objectFit:'contain', userSelect:'none', visibility: frame >= 0 ? 'hidden' : 'visible' }} />
               )}
@@ -420,16 +442,23 @@ function BossFx({ fx, now, geo, art, cast = null, castEnd = -1e9, scene = null }
             // 派手な演出のある滝（水天葬）：落ち続けるあいだ出したまま・叩きつけた所で横へふくらむ・光ったときは明るく・
             //   落ち終わると上から切れる（cut）。上から見えてくるのは drop と同じ。
             //   流れる水の絵（m.fx.flow）があれば、描いた絵は下の波だけにして（柱の所は PourFlow が流す）、裏返した絵と交互に揺らして泡立たせる
-            const p = (lead ? easeOut(Math.min(1, ms / lead)) : 1) * 112, top = (a.fadeTop || 0) * 100, c = top + (100 - top) * fall.cut
-            const flow = m.fx.flow, waveTop = flow ? 40 : 0, waveIn = flow ? 56 : 0
-            const mask = `linear-gradient(to bottom, transparent 0%, transparent ${Math.max(c, waveTop).toFixed(1)}%, #000 ${Math.max(top, c + 20, waveIn).toFixed(1)}%, #000 ${Math.max(top, c + 20, waveIn, p - 12).toFixed(1)}%, transparent ${p.toFixed(1)}%)`
-            const bob = flow ? Math.sin(actMs / 55) * 0.012 * geo.p.w : 0
-            on = { frame: 0, x: to.x, y: geo.p.y + geo.p.h * FX_FEET_Y + bob, ay: a.h, s: sc, sx: fall.sx, sy: fall.sy, op: Math.min(1, ms / 90),
-              filter: `brightness(${fall.bright.toFixed(3)})`, mask }
+            const flow = m.fx.flow
             if (flow) {
+              // 流れる水の絵があるとき：滝は雲（空の上のほう）から足元まで。先（front）と落ち終わりの切れ目（cut）は画面の px で、柱と下の波で同じ所
+              const feet = geo.p.y + geo.p.h * FX_FEET_Y, sky = geo.p.y + geo.p.h * FX_SKY_Y
+              const front = sky + (feet - sky) * (lead ? easeOut(Math.min(1, ms / lead)) : 1) + 0.06 * (feet - sky), cut = sky + (feet - sky) * fall.cut
+              const bob = Math.sin(actMs / 55) * 0.012 * geo.p.w
+              const sTop = feet - a.h * sc * fall.sy, sH = a.h * sc * fall.sy, pc = (y) => ((y - sTop) / sH) * 100
+              const mask = `linear-gradient(to bottom, transparent 0%, transparent ${Math.max(40, pc(cut)).toFixed(1)}%, #000 ${Math.max(56, pc(cut) + 12).toFixed(1)}%, #000 ${Math.max(56, pc(cut) + 12, pc(front) - 8).toFixed(1)}%, transparent ${pc(front).toFixed(1)}%)`
+              on = { frame: 0, x: to.x, y: feet + bob, ay: a.h, s: sc, sx: fall.sx, sy: fall.sy, op: Math.min(1, ms / 90), filter: `brightness(${fall.bright.toFixed(3)})`, mask }
               extras.push(<Sprite key={`${a.src}#flip`} a={a} {...on} y={on.y - bob * 2} flip op={on.op * (0.35 + 0.3 * Math.sin(actMs / 75))} />)
-              extras.push(<PourFlow key={`${a.src}#flow`} a={a} flow={flow} x={to.x} feet={geo.p.y + geo.p.h * FX_FEET_Y} s={sc} fall={fall}
-                ms={actMs - m.hitMs} p={p} c={c} top={top} op={on.op} />)
+              extras.push(<PourFlow key={`${a.src}#flow`} a={a} flow={flow} x={to.x} sky={sky} bottom={sTop + sH * 0.62} s={sc} fall={fall}
+                ms={actMs - m.hitMs} front={front} cut={cut} op={on.op} />)
+            } else {
+              const p = (lead ? easeOut(Math.min(1, ms / lead)) : 1) * 112, top = (a.fadeTop || 0) * 100, c = top + (100 - top) * fall.cut
+              on = { frame: 0, x: to.x, y: geo.p.y + geo.p.h * FX_FEET_Y, ay: a.h, s: sc, sx: fall.sx, sy: fall.sy, op: Math.min(1, ms / 90),
+                filter: `brightness(${fall.bright.toFixed(3)})`,
+                mask: `linear-gradient(to bottom, transparent 0%, transparent ${c.toFixed(1)}%, #000 ${Math.max(top, c + 20).toFixed(1)}%, #000 ${Math.max(top, c + 20, p - 12).toFixed(1)}%, transparent ${p.toFixed(1)}%)` }
             }
           } else if (coil) {
             // 水縛の帯（派手な演出）：大きく出て一気に締まり・締め上げるたび縮み・はじけたら広がって消える（lib/bossScene.js の coilAt）
@@ -441,11 +470,26 @@ function BossFx({ fx, now, geo, art, cast = null, castEnd = -1e9, scene = null }
             const k = ms / a.durMs, fade = k > 0.55 ? 1 - (k - 0.55) / 0.45 : 1
             // 出す場所：足元（絵の下のはしを枠の下へ）・頭上・ほかは体の真ん中
             const sp = a.on === 'feet' ? { x: to.x, y: geo.p.y + geo.p.h * FX_FEET_Y, ay: a.h }
-              : a.on === 'head' ? { x: to.x, y: geo.p.y + geo.p.h * FX_HEAD_Y } : to
-            if (a.anim === 'drop') {
+              : a.on === 'head' || a.on === 'sky' ? { x: to.x, y: geo.p.y + geo.p.h * (a.on === 'sky' ? FX_SKY_Y : FX_HEAD_Y) } : to
+            if (a.anim === 'drop' && m.fx.flow) {
+              // 流れる雨の絵があるとき（氷雨）：描いた絵は雲と足元のしぶきだけ（雨の所＝flow.at は抜く）・雨の所は流れる雨の絵を流す。
+              //   どちらも lead のあいだに上から見えてくる（降りる先のふちはぼかす）
+              const p = (lead ? easeOut(Math.min(1, ms / lead)) : 1) * 112, fl = m.fx.flow, sy = a.sy || 1
+              const cTop = (fl.at[1] / a.h) * 100, cBot = ((fl.at[1] + fl.at[3]) / a.h) * 100
+              const reveal = (y) => Math.min(1, Math.max(0, (p - y) / 12))
+              const op = Math.min(1, ms / 90) * fade
+              on = { frame: 0, ...sp, s: sc, sy, op,
+                mask: alphaMask([0, cTop + 3, cTop + 12, cBot - 12, cBot - 3, 100, p - 12, p], (y) => (y <= cTop + 3 || y >= cBot - 3 ? 1 : y >= cTop + 12 && y <= cBot - 12 ? 0
+                  : y < cTop + 12 ? (cTop + 12 - y) / 9 : (y - (cBot - 12)) / 9) * reveal(y)) }
+              const sTop = sp.y - a.h * sc * sy, sLeft = sp.x - a.ax * sc
+              const top = sTop + fl.at[1] * sc * sy, H = fl.at[3] * sc * sy, colPct = (y) => ((y / 100) * a.h - fl.at[1]) / fl.at[3] * 100
+              const f = colPct(p)
+              extras.push(<FlowColumn key={`${a.src}#rain`} flow={fl} left={sLeft + fl.at[0] * sc} top={top} W={fl.at[2] * sc} H={H} ms={ms} speed={RAIN_PX_PER_SEC} op={op}
+                mask={alphaMask([0, 10, 88, 100, f - 10, f], (y) => Math.min(1, y / 10, (100 - y) / 12) * Math.min(1, Math.max(0, (f - y) / 10)))} />)
+            } else if (a.anim === 'drop') {
               // 上から下へ降りる（雨・滝）：lead のあいだに上から見えてくる（降りる先のふちはぼかす）。fadeTop＝絵の上のはしをぼかす割合（滝の上を雲になじませる）
               const p = (lead ? easeOut(Math.min(1, ms / lead)) : 1) * 112, top = (a.fadeTop || 0) * 100
-              on = { frame: 0, ...sp, s: sc, op: Math.min(1, ms / 90) * fade,
+              on = { frame: 0, ...sp, s: sc, sy: a.sy || 1, op: Math.min(1, ms / 90) * fade,
                 mask: `linear-gradient(to bottom, transparent 0%, #000 ${top.toFixed(1)}%, #000 ${Math.max(top, p - 12).toFixed(1)}%, transparent ${p.toFixed(1)}%)` }
             } else if (a.anim === 'bind') {
               // 外から締まる（水の帯）：大きく出て、はじめの30%で元の大きさへ（小さく揺れて止まる）
@@ -465,21 +509,28 @@ function BossFx({ fx, now, geo, art, cast = null, castEnd = -1e9, scene = null }
       cast={castM === m ? cast : null} castEnd={castEnd} sky={scene?.cloud} />] : [])
   })).concat(extras)
 }
-// 滝の流れる水（水天葬）：上と下がつながる水の絵（flow）を、滝の柱の所（flow.at＝当たる絵の px）に縦に並べて流す。
+// 滝の流れる水（水天葬）：上と下がつながる水の絵（flow）を、雲（sky）から下の波の中ほど（bottom）まで、縦に並べて流す（幅は滝の柱の所＝flow.at）。
 //   2枚重ね（奥＝柱の幅で速く・手前＝少し広く、もっと速く、明るく重ねる）。外の箱は縦のぼかし（雲になじむ上・滝の先・落ち終わりの切れ目・下の波へ消える）、
-//   中の箱は横のぼかし（柱のふち）。ms＝撃ってから・p・c・top＝描いた絵と同じ見えてくる先・切れ目・上のぼかし（当たる絵の %）
-const FLOW_PX_PER_SEC = 3.4   // 1秒に柱の高さの何倍落ちるか
+//   中の箱は横のぼかし（柱のふち）。ms＝撃ってから・front・cut＝滝の先と落ち終わりの切れ目（画面の px）
+const FLOW_PX_PER_SEC = 3.4   // 滝：1秒に「当たる絵の柱の高さ」の何倍落ちるか
+const RAIN_PX_PER_SEC = 4.2   // 氷雨：1秒に雨の所の高さの何倍落ちるか
 const FLOW_WIDE = 1.35        // 柱を描いた所より何倍広く流すか（ふちはぼかす）
-function PourFlow({ a, flow, x, feet, s, fall, ms, p, c, top, op }) {
-  const [fx0, fy0, fw] = flow.at, fh = a.h * 0.62 - fy0   // 柱は下の波の中ほどまで
-  const W0 = fw * s * fall.sx, W = W0 * FLOW_WIDE, H = fh * s * fall.sy
-  const left = x - a.ax * s * fall.sx + fx0 * s * fall.sx - (W - W0) / 2, topPx = feet - a.h * s * fall.sy + fy0 * s * fall.sy
-  const pct = (v) => Math.max(0, Math.min(100, ((v / 100) * a.h - fy0) / fh * 100))   // 当たる絵の % → 柱の %
-  const mask = `linear-gradient(to bottom, transparent 0%, transparent ${pct(c).toFixed(1)}%, #000 ${Math.max(pct(top + 6), pct(c + 20)).toFixed(1)}%, #000 ${Math.min(80, Math.max(pct(top + 6), pct(p - 12))).toFixed(1)}%, transparent ${Math.min(100, pct(p)).toFixed(1)}%)`
-  // 流れた量はふくらむ前の大きさで数える（叩きつけてふくらんでも流れが跳ねない）
-  const layer = (k, speed, extra) => {
-    const w = W * k, tile = w * (flow.h / flow.w), tile0 = fw * s * FLOW_WIDE * k * (flow.h / flow.w)
-    const off = (((Math.max(0, ms) / 1000) * FLOW_PX_PER_SEC * fh * s * speed) / tile0 % 1) * tile
+function PourFlow({ a, flow, x, sky, bottom, s, fall, ms, front, cut, op }) {
+  const fw = flow.at[2], W = fw * s * fall.sx * FLOW_WIDE, top = sky - 0.04 * (bottom - sky), H = bottom - top
+  const pc = (y) => ((y - top) / H) * 100   // 画面の px → 柱の %
+  const c = Math.max(0, pc(cut)), f = pc(front)
+  const mask = `linear-gradient(to bottom, transparent 0%, transparent ${c.toFixed(1)}%, #000 ${Math.max(10, c + 10).toFixed(1)}%, #000 ${Math.min(84, Math.max(10, c + 10, f - 6)).toFixed(1)}%, transparent ${Math.min(100, Math.max(f, Math.max(10, c + 10) + 0.1)).toFixed(1)}%)`
+  // 流れた量はふくらむ前の幅で数える（叩きつけてふくらんでも流れが跳ねない）・流れる速さは当たる絵の柱の高さで決める
+  return <FlowColumn flow={flow} left={x - W / 2} top={top} W={W} W0={fw * s * FLOW_WIDE} H={H} ms={ms} speed={FLOW_PX_PER_SEC} unit={0.62 * a.h * s}
+    op={op} mask={mask} filter={`brightness(${fall.bright.toFixed(3)})`} />
+}
+// 流れる水の絵（flow）を縦に並べて流す箱（滝の柱・氷雨の雨）。2枚重ね（奥＝箱の幅・手前＝1.3倍広く1.45倍速く明るく重ねる）。
+//   外の箱は縦の切り抜き（mask）、中の箱は横のぼかし（ふち）。ms＝流しはじめてから・speed＝1秒に unit（無ければ箱の高さ）の何倍落ちるか・
+//   W0＝流れた量を数える幅（ふくらんでも流れが跳ねない）
+function FlowColumn({ flow, left, top, W, W0 = W, H, ms, speed, unit = H, op, mask, filter }) {
+  const layer = (k, sp, extra) => {
+    const w = W * k, tile = w * (flow.h / flow.w), tile0 = W0 * k * (flow.h / flow.w)
+    const off = (((Math.max(0, ms) / 1000) * speed * unit * sp) / tile0 % 1) * tile
     return (
       <div style={{ position:'absolute', left: (W - w) / 2, top: 0, width: w, height: H, backgroundImage:`url(${flow.src})`, backgroundRepeat:'repeat-y',
         backgroundSize:`${w}px ${tile}px`, backgroundPositionY:`${off.toFixed(1)}px`,
@@ -487,13 +538,15 @@ function PourFlow({ a, flow, x, feet, s, fall, ms, p, c, top, op }) {
     )
   }
   return (
-    <div style={{ position:'absolute', zIndex: 2, left, top: topPx, width: W, height: H, pointerEvents:'none', opacity: op,
-      maskImage: mask, WebkitMaskImage: mask, filter:`brightness(${fall.bright.toFixed(3)})` }}>
+    <div style={{ position:'absolute', zIndex: 2, left, top, width: W, height: H, pointerEvents:'none', opacity: op, maskImage: mask, WebkitMaskImage: mask, filter }}>
       {layer(1, 1, {})}
       {layer(1.3, 1.45, { opacity: 0.5, mixBlendMode:'screen', filter:'brightness(1.25)' })}
     </div>
   )
 }
+// 縦の切り抜き（mask-image）：at の % ごとに alpha(y)（0〜1）を並べる（0〜100 の外は捨てる・並べ替える）
+const alphaMask = (at, alpha) => `linear-gradient(to bottom, ${[...new Set(at.filter(y => y >= 0 && y <= 100).map(y => +y.toFixed(2)))].sort((p, q) => p - q)
+  .map(y => `rgba(0,0,0,${Math.min(1, Math.max(0, alpha(y))).toFixed(3)}) ${y}%`).join(', ')})`
 // 撃つ前に口でためる火の玉（イラスト版の charge）：口（首と頭の動きについていく）で、小さく出てだんだん大きく・回りながら脈打つ
 //   エフェクトに on があれば相手の頭上の雲（雨摩座の水天葬）：構えのあいだに大きくなり、技のあいだは出したまま、
 //   toMs（滝が落ちる）のあと holdMs で薄れる。ゆっくり脈打って小さく揺れる（渦は斜めから見た形なので回さない）
@@ -503,7 +556,7 @@ function ChargeOrb({ m, a, acts, now, geo, art, s, cast, castEnd, sky = null }) 
   let on = null
   if (a.on) {
     if (!geo) return <Sprite a={a} frame={-1} />
-    const at = { x: geo.p.x + geo.p.w / 2, y: geo.p.y + geo.p.h * FX_HEAD_Y }
+    const at = { x: geo.p.x + geo.p.w / 2, y: geo.p.y + geo.p.h * (a.on === 'sky' ? FX_SKY_Y : FX_HEAD_Y) }
     const P = m.scene ? pourTimesOf(m) : null
     const filter = sky ? `brightness(${(1 + 0.2 * sky.glow + 0.7 * sky.flicker).toFixed(3)})` : undefined
     const cloud = (k, op) => ({ frame: 0, x: at.x, y: at.y, op, rot: Math.sin(now * 2.2) * 0.035, filter,
@@ -537,22 +590,12 @@ function ChargeOrb({ m, a, acts, now, geo, art, s, cast, castEnd, sky = null }) 
 //   場所は相手の足元の真ん中が原点・相手の絵の枠の幅が1。手に集まる光（space: 'hand'）は掲げた手の指先から（立ち絵の px × s）
 //   雲の渦の光＝相手の頭上で、斜めから見た形（縦に縮めた）の渦巻きが回る・まん中が光る
 const SPIRAL = Array.from({ length: 25 }, (_, j) => j / 24)
-//   水の綱（tether）＝掲げた手（hand）から相手の体の真ん中へ、波打ちながら伸びる（head＝伸びた割合）・綱を伝う光（tglow・u＝綱の上の割合）
 //   水の輪（coil）＝体のまわりの楕円。奥の半分（上）は暗く細く、手前の半分（下）は明るく、点線が回る
-const tetherPts = (A, Bp, t, U) => {
-  const dx = Bp[0] - A[0], dy = Bp[1] - A[1], len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len
-  return Array.from({ length: 29 }, (_, j) => {
-    const u = (j / 28) * t.head, env = Math.sin(Math.PI * Math.min(1, u / Math.max(0.001, t.head))), w = Math.sin(u * 2.4 * Math.PI * 2 - t.phase) * t.amp * U * env
-    return [A[0] + dx * u + nx * w, A[1] + dy * u + ny * w]
-  })
-}
 function SceneLayer({ geo, sc, hand, s }) {
   const id = useId().replace(/:/g, '')
   const U = geo.p.w, ox = geo.p.x + U / 2, oy = geo.p.y + geo.p.h * FX_FEET_Y
   const X = (x) => ox + x * U, Y = (y) => oy + y * U
   const c = sc.cloud, cy = Y(SCENE_TOP)
-  const tp = sc.tether && hand ? tetherPts(hand, [ox, geo.p.y + geo.p.h * FX_TARGET_Y], sc.tether, U) : null
-  const tAt = (u) => { if (!tp) return null; const q = Math.min(27.999, u * 28), j = Math.floor(q), k = q - j; return [tp[j][0] + (tp[j + 1][0] - tp[j][0]) * k, tp[j][1] + (tp[j + 1][1] - tp[j][1]) * k] }
   return (
     <svg style={{ position:'absolute', inset:0, width:'100%', height:'100%', zIndex: 2, pointerEvents:'none', overflow:'visible' }}>
       <defs>
@@ -574,13 +617,6 @@ function SceneLayer({ geo, sc, hand, s }) {
               </g>
             )
           })}
-        </g>
-      )}
-      {tp && sc.tether.op > 0 && (
-        <g opacity={sc.tether.op.toFixed(3)} fill="none" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points={tp.map(p => p.map(v => v.toFixed(1)).join(',')).join(' ')} stroke="#3c8cff" strokeWidth={U * 0.12} opacity="0.3" />
-          <polyline points={tp.map(p => p.map(v => v.toFixed(1)).join(',')).join(' ')} stroke="#7cc4ff" strokeWidth={U * 0.065} opacity="0.85" />
-          <polyline points={tp.map(p => p.map(v => v.toFixed(1)).join(',')).join(' ')} stroke="#f2fbff" strokeWidth={U * 0.022} />
         </g>
       )}
       {sc.items.map((it, i) => {
@@ -609,7 +645,6 @@ function SceneLayer({ geo, sc, hand, s }) {
             <circle cx={X(it.x) - it.r * U * 0.35} cy={Y(it.y) - it.r * U * 0.35} r={it.r * U * 0.25} fill="#ffffff" />
           </g>
         )
-        if (it.t === 'tglow' && tp) { const q = tAt(it.u); return <circle key={i} cx={q[0]} cy={q[1]} r={it.r * U} fill={`url(#${id}g)`} opacity={it.op} /> }
         if (it.t === 'mote' && hand) return <circle key={i} cx={hand[0] + it.x * s} cy={hand[1] + it.y * s} r={it.r * s * 2} fill={`url(#${id}g)`} opacity={it.op} />
         return null
       })}
@@ -643,12 +678,11 @@ const sceneOfStage = (art, acts, now, cast, castEnd) => {
   const list = acts.map(f => ({ m: f.motion, ms: (now - f.t0) * 1000, after: afterCast(f.t0, castEnd), landed: f.landed !== false })).filter(a => a.ms >= 0)
   const running = list.filter(a => a.ms < a.m.totalMs).at(-1)
   const sc = stageSceneOf(list, castM?.scene && !running ? { m: castM, ms: cast.ms } : null)
-  // 手（scene.hand＝{ pt, part }・立ち絵の px とパーツ）：光と水の綱の出どころ。演出が続いている技（体の動きが終わっても水の綱は手から出たまま）、
-  //   構えているあいだ（技を流していない）は構えた技
+  // 手（scene.hand＝{ pt, part }・立ち絵の px とパーツ）：光の出どころ。構えているあいだ（技を流していない）は構えた技、ほかは演出が続いている技
   const live = list.filter(a => a.ms < sceneEndMsOf(a.m)).at(-1)
-  const fromCast = !sc.tether && !running && !!castM?.scene
+  const fromCast = !running && !!castM?.scene
   const handPt = fromCast ? castM.scene.hand : live ? live.m.scene.hand : null
-  if (handPt && (sc.hand || sc.tether || sc.items.some(it => it.space === 'hand'))) {
+  if (handPt && (sc.hand || sc.items.some(it => it.space === 'hand'))) {
     const pose = !fromCast ? illustPoseAt(art.key, live.m, live.ms, now * 1000, live.after) : illustCastPoseAt(art.key, cast.ms, now * 1000)
     sc.handAt = illustPointAt(art.key, pose, handPt.pt, handPt.part)
   }

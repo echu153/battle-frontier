@@ -12,15 +12,19 @@ import { CAST_SEC } from '../core/atb.js'
 //   手に集まる光（space: 'hand'）は掲げた手の指先からのずれ（立ち絵の px）
 // 【確定】2026-10-30 ユーザー「滝流すモーションが止まってるから躍動感がない、しっかり水が流れるようにしてほしい」
 //   「水縛りの帯もしょぼい、もっと豪華にして」：滝は水の絵そのものを流す（画面の PourFlow・流れる水の絵＝lib/bossIllust.js の flow）。
-//   水縛の帯（kind 'coil'）＝手から相手へ波打つ水の綱（tether）が伸び、相手の体に3重の水の輪が巻きついて3回締め上げ（しぶき・相手が縮む）、
-//   最後にはじけて解ける（泡が立ちのぼる・光が綱を伝って流れ込む）
+//   水縛の帯（kind 'coil'）＝相手の体に3重の水の輪が巻きついて3回締め上げ（しぶき・相手が縮む）、最後にはじけて解ける（泡が立ちのぼる）
+// 【確定】2026-10-30 ユーザー「氷雨、水天葬、これもっと上から降らせて」「水縛の帯 紐いらない」：
+//   水天葬の雲は相手の頭のすぐ上（FX_HEAD_Y）から空の上のほう（FX_SKY_Y）へ上げ、滝はその雲から足元まで流れる（SCENE_TOP）。
+//   水縛の帯の水の綱（tether）と綱を伝う光はやめた（帯は飛ぶ絵だけで相手へ）
 // ============================================================
 
 // 相手の頭上・足元に出すエフェクト（on）の場所（相手の絵の枠の上からの割合）：頭上＝枠の少し上（頭にかからない）・足元＝枠の下のはし
 export const FX_HEAD_Y = -0.12
 export const FX_FEET_Y = 0.97
-// 頭上の雲の高さ（足元から・枠の幅が1）
-export const SCENE_TOP = FX_HEAD_Y - FX_FEET_Y
+// 空の上のほう（水天葬の雲・氷雨の雲のあたり）：相手の絵の枠の上からの割合。自分の絵は枠の 0.48 倍なので、頭の上には枠2つぶんほど空がある
+export const FX_SKY_Y = -0.75
+// 雲の高さ（足元から・枠の幅が1）＝滝が落ちはじめる所
+export const SCENE_TOP = FX_SKY_Y - FX_FEET_Y
 
 // 水天葬（kind 'pour'）：雲から滝が落ちて叩きつけ、pourMs のあいだ落ち続けて、tailMs で上から切れる
 //   dim＝背景の暗さ（構えのあいだは castDim まで）・width＝水の筋が落ちる幅・spin＝雲の渦の回る速さ（rad/秒）
@@ -31,7 +35,7 @@ export const POUR = {
 }
 const G = 5.5   // しぶきの落ちる速さ（枠の幅/秒²）
 // 水縛の帯（kind 'coil'）：叩きつけて（I）から squeezes の時刻に締め上げ、burstMs ではじける。輪は体の真ん中（BODY_Y）のまわりに3つ
-export const COIL = { dim: 0.42, squeezes: [300, 600, 900], burstMs: 1100, rings: [-0.2, 0, 0.2], bubbles: 12, glows: 5 }
+export const COIL = { dim: 0.42, squeezes: [300, 600, 900], burstMs: 1100, rings: [-0.2, 0, 0.2], bubbles: 12 }
 export const FX_TARGET_Y = 0.58
 const BODY_Y = FX_TARGET_Y - FX_FEET_Y   // 体の真ん中（足元から）
 
@@ -209,9 +213,9 @@ const bump = (e, len) => (e >= 0 && e < len ? Math.sin((Math.PI * e) / len) : 0)
 const pulse = (e, len) => (e >= 0 && e < len ? Math.pow(1 - e / len, 1.5) : 0)
 
 // 水縛の帯（kind 'coil'）のあいだ（ms＝技を出しはじめてから）
-//   → sceneAt と同じ形＋ tether（手から相手の体の真ん中へ伸びる水の綱：head＝伸びた割合・op・amp＝波の大きさ・phase）・squeeze（相手の縮み [横, 縦]）
+//   → sceneAt と同じ形＋ squeeze（相手の縮み [横, 縦]）
 export const coilSceneAt = (m, ms, landed = true, C = COIL) => {
-  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tether: null, squeeze: null }
+  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, squeeze: null }
   const H = m.hitMs, I = m.impactMs, B = I + C.burstMs, end = sceneEndMsOf(m)
   if (ms < 0 || ms >= end) return out
   const e = ms - I
@@ -219,17 +223,6 @@ export const coilSceneAt = (m, ms, landed = true, C = COIL) => {
   out.dim = ms < H ? C.dim * smooth((ms - 120) / (H - 120)) : ms < B + 150 ? C.dim : C.dim * (1 - smooth((ms - B - 150) / 400))
   // 払った手の光（はじける）
   if (ms >= H && ms < H + 180) out.hand = { r: 16 + 30 * easeOut((ms - H) / 180), op: 1 - (ms - H) / 180 }
-  // 水の綱：払った瞬間に手から伸び、届いたら張ったまま震え、はじけたら薄れる
-  if (ms >= H && ms < B + 300) {
-    const head = ms < I ? (ms - H) / (I - H) : 1
-    const k = head * (0.7 + 0.3 * head)
-    out.tether = { head: k, op: ms < B ? 1 : 1 - (ms - B) / 300, amp: ms < I ? 0.09 : 0.035 + 0.02 * bump(e, 200), phase: ms / (ms < I ? 70 : 45) }
-    // 綱を伝って相手へ流れ込む光（届いてから）
-    if (landed && ms >= I && ms < B) for (let i = 0; i < C.glows; i++) {
-      const u = ((ms - I) / 420 + i / C.glows) % 1
-      out.items.push({ t: 'tglow', u, r: 0.05 + 0.03 * Math.sin(ms / 60 + i), op: 0.9 * Math.sin(Math.PI * u) })
-    }
-  }
   if (!landed || e < 0) return out
   // 光と揺れ：巻きついた瞬間・締め上げるたび・はじけた瞬間
   const sq = C.squeezes.map(t => e - t)
@@ -275,9 +268,9 @@ export const coilAt = (m, ms, C = COIL) => {
 
 // 画面ぜんたい：いま流れている技（acts＝[{ m, ms, after }]）と構え（cast＝{ m, ms }）を合わせる
 //   暗さと光はいちばん強いもの・揺れは足す・描くものは並べる・雲と手は新しいほう（acts の after・landed は sceneAt と同じ）
-//   相手の縮みはかけ合わせる・水の綱は新しいほう
+//   相手の縮みはかけ合わせる
 export const stageSceneOf = (acts, cast) => {
-  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tether: null, squeeze: null }
+  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, squeeze: null }
   const add = (s) => {
     out.dim = Math.max(out.dim, s.dim)
     out.flash = Math.max(out.flash, s.flash)
@@ -285,7 +278,6 @@ export const stageSceneOf = (acts, cast) => {
     out.items.push(...s.items)
     if (s.cloud) out.cloud = s.cloud
     if (s.hand) out.hand = s.hand
-    if (s.tether) out.tether = s.tether
     if (s.squeeze) out.squeeze = out.squeeze ? [out.squeeze[0] * s.squeeze[0], out.squeeze[1] * s.squeeze[1]] : s.squeeze
   }
   if (cast?.m) add(castSceneAt(cast.m, cast.ms))
