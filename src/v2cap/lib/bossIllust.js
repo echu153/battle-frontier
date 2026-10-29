@@ -22,6 +22,11 @@
 //       黒爪＝前脚を振り上げて振り下ろす（爪の先に残像の筋）・当たる絵は右上から左下へ引いて出す（wipe）
 //       焦熱の吐息・終焉の黒焔＝下あごを大きく開けて吐く（開いた口の中は画面で描く・火は口の中から出る）
 //     ・黒翼烈風＝（2026-10-29 作り直し）翼を大きく広げてから一気に打ち下ろす・翼のふちに風の筋・風は胸の前と両方の翼の先から（shots）
+// 【確定】2026-10-29 2体目 雨摩座（ユーザー「あまざイラスト作った、とりあえず動かしてみて」・技はまだ＝黒龍のあと）：
+//   人の形なので、パーツの並びと元の絵の名前はボスごと（layers・files・無ければ竜の並び）。
+//   ChatGPT の体・髪・奥の腕は立ち絵と形が違って重ならなかった＝立ち絵そのものを体にして（base: 'stand'）、
+//   頭・手前の手・奥の手は立ち絵から多角形で切り分ける（立ち止まっているときは立ち絵と同じ）。動いて見える体のすき間は ChatGPT の体で埋める（fill）
+//   待機＝ゆっくりした揺れの足し算（idle.sway）：浮き沈み・頭・両手・水の帯
 // ============================================================
 import { BOSS_ILLUST } from './bossIllustList.js'
 import { BOSS_DEFS, BOSS_ART_DIR, bossFileOf, bossArtOf } from './bossArt.js'
@@ -32,6 +37,9 @@ export const BOSS_ILLUST_SIZE = 640          // 立ち絵の大きさ（画面�
 //   首の中に頭、頭の中に下あごを重ねる（親といっしょに回る）。前脚は頭より手前（振り上げた爪が頭に隠れない・頭に覆われていた付け根は道具が除く＝over）
 export const ILLUST_PARTS = ['wingF', 'wingN', 'body', 'neck', 'head', 'arm', 'jaw']
 export const ILLUST_PART_FILES = { wingF: '翼_奥', wingN: '翼_手前', body: '体', head: '頭' }
+// ボスごとの並びと元の絵の名前（BOSS_ILLUST_DEFS の layers・files。無ければ竜の並び）
+export const illustPartsOf = (key) => BOSS_ILLUST_DEFS[key]?.layers || ILLUST_PARTS
+export const illustFilesOf = (key) => BOSS_ILLUST_DEFS[key]?.files || ILLUST_PART_FILES
 
 export const illustKindOf = (part) => `il-${part}`
 export const illustFxKindOf = (motion, kind) => `il-fx-${motion}-${kind}`
@@ -44,7 +52,8 @@ const srcOf = (key, kind) => {
 //   wingN・wingF＝翼の角度／wingNSq・wingFSq＝翼を長さの向きに縮める割合（振り下ろしで翼が手前へ来て短く見える）／
 //   arm＝前脚の角度（＋で爪が上がる）／jaw＝下あごの角度（−で開く）／glow＝口の火（0〜1）
 //   ＋の角度は時計回り：右へ伸びる手前の翼は＋で下がる・左へ伸びる奥の翼と首は＋で上がる
-const ZERO = { x: 0, y: 0, r: 0, neck: 0, head: 0, wingN: 0, wingF: 0, wingNSq: 0, wingFSq: 0, arm: 0, jaw: 0, glow: 0 }
+//   人の形（雨摩座）：armN・armF＝手前・奥の手の角度（左へ伸びる手は＋で上がる）／water＝水の帯の角度
+const ZERO = { x: 0, y: 0, r: 0, neck: 0, head: 0, wingN: 0, wingF: 0, wingNSq: 0, wingFSq: 0, arm: 0, jaw: 0, glow: 0, armN: 0, armF: 0, water: 0 }
 // 技ごとの動き：keys＝[時刻ミリ秒, 姿勢（待機に足す）]・hitMs＝当たる（撃ち出す）時刻
 //   trails＝残像の筋（part のパーツの点 pts を、lagMs 前からいまの時刻までたどる。fromMs〜toMs のあいだだけ・kind＝claw 爪／wind 風）
 //   shots＝飛ぶ絵の出どころ（無ければ口から1つ）。{ part, pt（パーツの点）, delayMs（hitMs からの遅れ・−で先に出る）, size（飛ぶ絵の大きさの倍率） }
@@ -143,6 +152,45 @@ export const BOSS_ILLUST_DEFS = {
       { file: '終焉の黒焔_当たる', motion: 'doom', kind: 'hit', size: 0.72, durMs: 760, spin: 0 },
     ],
   },
+  // 【確定】2026-10-29 雨摩座（ユーザー「とりあえず動かしてみて」）。技はまだ（黒龍のあと）なので、動きは待機と仮の攻撃だけ
+  amaza: {
+    // 立ち絵そのものが体。ChatGPT の体（fill）は、切り分けで空いた所（頭や手が動くと見える）を埋めるだけに使う
+    base: 'stand', fill: '体',
+    // 奥から手前へ。水の帯は立ち絵に無いので、描いた場所のまま置く（fixed・s＝立ち絵の大きさに合わせたうえでの倍率）
+    layers: ['water', 'body', 'armF', 'head', 'armN'],
+    files: { water: '水の帯' },
+    fixed: { water: { s: 1.06 } },
+    // 軽くする（パーツは 120KB まで）：体は立ち絵まるごとなので少し粗く・水の帯は柔らかいので細かさを6割に
+    quality: 80, shrink: { water: 0.6 },
+    // 届いたが今は使わない絵（髪・奥の腕は立ち絵と形が違って重ならなかった・頭と手前の腕は立ち絵から切るほうが同じ見た目）
+    spare: ['頭', '髪', '腕_手前', '腕_奥'],
+    // 待機：[振れ幅（y は枠の割合・ほかは°）, 1回のミリ秒, ずらし（0〜1）] の揺れの足し算。周期をずらして、水の中で漂うように
+    idle: { sway: {
+      y: [0.012, 4200, 0], r: [0.7, 6100, 0.2], head: [1.6, 5300, 0.35],
+      armN: [4, 3700, 0.1], armF: [6, 4300, 0.6], water: [6, 7000, 0],
+    } },
+    // 切り分け（立ち絵 640px の上の点）。頭＝冠と顔（首の付け根で傾ける）・手前の手と奥の手＝袖口から先（袖口で回す）
+    cuts: {
+      head: { from: 'body', pivot: [230, 145],
+        take: [[140, 0], [320, 0], [320, 128], [255, 128], [245, 145], [215, 150], [200, 145], [185, 115], [178, 163], [155, 163], [155, 75], [140, 60]] },
+      armN: { from: 'body', pivot: [124, 231],
+        take: [[40, 222], [95, 214], [120, 215], [126, 220], [127, 242], [100, 256], [80, 285], [40, 290]] },
+      armF: { from: 'body', pivot: [396, 154],
+        take: [[355, 95], [410, 95], [410, 155], [382, 155], [367, 135], [355, 130]] },
+    },
+    motions: {
+      // 仮（技を決めるまで）：のけぞって手を上げ、相手の方へ差し向ける
+      cast: { totalMs: 1000, hitMs: 460, keys: [
+        [0, {}],
+        [300, { x: 0.025, y: -0.02, r: 3, head: 3, armN: 16, armF: 10 }],
+        [380, { x: 0.028, y: -0.022, r: 3.4, head: 3.4, armN: 18, armF: 11 }],
+        [460, { x: -0.06, y: 0.012, r: -4, head: -3, armN: -12, armF: -8 }],
+        [650, { x: -0.055, y: 0.01, r: -3.5, head: -2.5, armN: -10, armF: -6 }],
+        [1000, {}],
+      ] },
+    },
+    effects: [],
+  },
 }
 
 const smooth = (k) => k * k * (3 - 2 * k)
@@ -156,7 +204,9 @@ export const motionPoseAt = (keys, ms) => {
   return lerpPose(p0, p1, smooth((ms - t0) / (t1 - t0)))
 }
 // 待機の姿勢（時刻 tMs）。振り下ろし（はじめの35%）は速く、振り上げはゆっくり
+//   sway があれば（人の形）、揺れの足し算だけ
 export const idlePoseAt = (idle, tMs) => {
+  if (idle.sway) return { ...ZERO, ...Object.fromEntries(Object.entries(idle.sway).map(([k, [amp, per, ph]]) => [k, amp * Math.sin(2 * Math.PI * (tMs / per + ph))])) }
   const ph = ((tMs % idle.periodMs) + idle.periodMs) % idle.periodMs / idle.periodMs
   const down = ph < 0.35 ? smooth(ph / 0.35) : 1 - smooth((ph - 0.35) / 0.65)
   const w = idle.wingUp + (idle.wingDown - idle.wingUp) * down, far = idle.farK ?? 0.8
@@ -229,7 +279,7 @@ export const bossIllustOf = (key) => {
   const def = BOSS_ILLUST_DEFS[key], art = BOSS_ILLUST[key], base = BOSS_DEFS[key]
   if (!def || !art?.parts || !base) return null
   // nest＝親の中に重ねる（親が回るパーツのとき＝頭は首・下あごは頭の中）。前脚の親（体）は回らないので、ほかのパーツと同じ並びで重ねる
-  const parts = ILLUST_PARTS.filter(p => art.parts[p]).map(p => ({ key: p, src: srcOf(key, illustKindOf(p)), ...art.parts[p],
+  const parts = illustPartsOf(key).filter(p => art.parts[p]).map(p => ({ key: p, src: srcOf(key, illustKindOf(p)), ...art.parts[p],
     nest: !!art.parts[p].parent && art.parts[p].parent in ZERO }))
   const motions = {}
   for (const m of base.motions) {

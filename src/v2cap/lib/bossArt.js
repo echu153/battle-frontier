@@ -69,6 +69,14 @@ export const BOSS_DEFS = {
       { file: '終焉の黒焔_当たる', motion: 'doom', kind: 'hit', size: 0.85, ms: [70, 80, 100, 120, 140, 160] },
     ],
   },
+  // 【確定】2026-10-29 2体目（ユーザー「あまざイラスト作った、とりあえず動かしてみて」）。イラスト版だけ（pixel: false＝ドット絵版は作らない）。
+  //   技はまだ（ユーザー「技とかはイラスト（化した）黒龍が完成したら」）＝流す動きは仮の1つだけ（lib/bossIllust.js の cast）。
+  //   プロンプトは制作帳 https://claude.ai/artifact/T1LEcopo6jwt8MxfBiU1FX
+  amaza: {
+    name: '雨摩座', dir: '雨摩座', pixel: false,
+    motions: [{ file: '仮の攻撃', key: 'cast' }],
+    effects: [],
+  },
 }
 // 当たる（撃ち出す）コマ（流すコマの中で0から）。6コマの絵は④＝2・8コマの絵は⑤＝3
 export const BOSS_HIT_OF = { 4: 2, 6: 3 }
@@ -127,7 +135,7 @@ export const bossArtOf = (key) => {
 export const newBossMotionMemo = () => ({ casts: new Set(), n: 0 })
 export const bossMotionKeyOf = (key, ev, memo) => {
   const def = BOSS_DEFS[key]
-  if (!def) return null
+  if (!def?.motions.length) return null
   const byName = def.motions.find(m => m.file === ev.skill)
   if (byName) return byName.key
   if (!ev.skill) return def.motions[0].key

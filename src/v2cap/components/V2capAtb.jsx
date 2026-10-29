@@ -54,8 +54,8 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
 
   const spot = SPOTS.find(s => s.area === area && s.sub === sub) || SPOTS[0]
   const foes = useMemo(() => [
-    // ダンジョンのボス（絵があるものだけ）。強さと技は仮＝この場所のボスのもの
-    ...Object.entries(BOSS_DEFS).filter(([key]) => bossArtOf(key)).map(([key, d]) => ({ ...spot.roster.boss, name: d.name, role:'ダンジョン', bossArt: key })),
+    // ダンジョンのボス（絵があるものだけ・イラスト版だけのボスも＝雨摩座）。強さと技はダンジョンの決まり（無ければ仮＝この場所のボスのもの）
+    ...Object.entries(BOSS_DEFS).filter(([key]) => bossArtOf(key) || bossIllustOf(key)).map(([key, d]) => ({ ...spot.roster.boss, name: d.name, role:'ダンジョン', bossArt: key })),
     { ...spot.roster.boss, role:'ボス' },
     ...spot.roster.enemies.map(e => ({ ...e, role:'ふつう' })),
     ...spot.roster.timed.map(e => ({ ...e, role:'朝昼晩' })),
@@ -77,14 +77,15 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
   const bossKey = foe?.bossArt || null
   const [artVer, setArtVer] = useState(() => loadPref('capBossArtVer', 'illust'))
   const pickArtVer = (v) => { setArtVer(v); savePref('capBossArtVer', v) }
-  const hasIllust = useMemo(() => !!(bossKey && bossIllustOf(bossKey)), [bossKey])
-  const bossArt = useMemo(() => (bossKey ? (artVer === 'illust' && bossIllustOf(bossKey)) || bossArtOf(bossKey) : null), [bossKey, artVer])
+  // 両方の版があるボスだけ選べる（雨摩座はイラスト版だけ）
+  const hasBoth = useMemo(() => !!(bossKey && bossIllustOf(bossKey) && bossArtOf(bossKey)), [bossKey])
+  const bossArt = useMemo(() => (bossKey ? (artVer === 'illust' && bossIllustOf(bossKey)) || bossArtOf(bossKey) || bossIllustOf(bossKey) : null), [bossKey, artVer])
   useEffect(() => {
     if (!bossArt) return
     for (const src of bossArt.srcs) { const im = new Image(); im.src = src }
   }, [bossArt])
-  // 絵の版を選ぶボタン（イラスト版があるボスだけ）
-  const verPicker = hasIllust && (
+  // 絵の版を選ぶボタン（イラスト版とドット絵版の両方があるボスだけ）
+  const verPicker = hasBoth && (
     <span style={{ display:'inline-flex', gap:'4px', alignItems:'center' }}>
       <span style={{ color: TEXT.label, fontSize:'10px' }}>絵</span>
       {[['illust', 'イラスト版'], ['pixel', 'ドット絵版']].map(([v, label]) => (
@@ -153,7 +154,10 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
               {bossArt.illust && <img src={bossArt.illust} alt="" draggable={false} style={{ width:'96px', height:'96px', objectFit:'contain', flexShrink:0 }} />}
               <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.7, minWidth:0 }}>
                 <b style={{ color:'#ff8866' }}>{bossArt.name}</b>（IDダンジョンのボス）<br />
-                強さと技はIDダンジョンと同じです（HPは持ち越さず、1回で全部）。戦闘中の「動きを見る」で技の動きをどれでも流せます
+                {diffs.length > 0
+                  ? '強さと技はIDダンジョンと同じです（HPは持ち越さず、1回で全部）。'
+                  : '技はまだ決めていません。強さと技は仮で、この場所のボスのものです。'}
+                戦闘中の「動きを見る」で技の動きをどれでも流せます
                 {diffs.length > 0 && (
                   <div style={{ display:'flex', gap:'4px', alignItems:'center', marginTop:'4px', flexWrap:'wrap' }}>
                     <span style={{ color: TEXT.label }}>難易度</span>

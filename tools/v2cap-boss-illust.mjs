@@ -17,6 +17,9 @@
 //   ④ 640px の立ち絵の大きさで、パーツを重ねた位置に描いて切り抜く（WebP・透明つき）
 //   ⑤ 決まりの cuts（前脚・下あご）を親のパーツから多角形で切り分ける（2026-10-28 ユーザー「もっとひっかく」「口をしっかり開けて吐く」）。
 //      回す中心・口・奥の翼は切り分ける前の形で出す（切り分けで変わらない）
+//   ★2026-10-29 人の形（雨摩座）：パーツの並びと元の絵の名前はボスごと（layers・files）。
+//      base: 'stand' ＝立ち絵そのものを体にする（ChatGPT の体は形が違った）。切り分けで空いた所は ChatGPT の体（fill）を重ねて埋める。
+//      fixed ＝立ち絵に無いもの（水の帯）は重ねる場所を探さず、描いた場所のまま置く
 // 使い方：node tools/v2cap-boss-illust.mjs [--force]
 // ★元の絵が無くても（別のPCなど）、作ってある絵と一覧は消さない
 // ============================================================
@@ -27,7 +30,7 @@ import { fileURLToPath } from 'node:url'
 import { bleed, versionOf } from './v2cap-art-lib.mjs'
 import { readRgba, componentsOf } from './v2cap-motion.mjs'
 import { BOSS_DEFS, BOSS_ART_SRC_DIR, BOSS_ART_DIR, bossFileOf } from '../src/v2cap/lib/bossArt.js'
-import { BOSS_ILLUST_DEFS, BOSS_ILLUST_SRC, BOSS_ILLUST_SIZE, ILLUST_PARTS, ILLUST_PART_FILES, illustKindOf, illustFxKindOf } from '../src/v2cap/lib/bossIllust.js'
+import { BOSS_ILLUST_DEFS, BOSS_ILLUST_SRC, BOSS_ILLUST_SIZE, illustPartsOf, illustFilesOf, illustKindOf, illustFxKindOf } from '../src/v2cap/lib/bossIllust.js'
 import { ENEMY_ART_SRC_DIR } from '../src/v2cap/lib/enemyArt.js'
 import { BOSS_ILLUST } from '../src/v2cap/lib/bossIllustList.js'
 
@@ -132,6 +135,12 @@ export const fitPart = (T0, P0) => {
   return { s: b.s, deg: b.deg, tx: b.tx * 2, ty: b.ty * 2, score: +b.score.toFixed(3) }
 }
 
+// 立ち絵に無いもの（雨摩座の水の帯）：重ねる場所を探さず、描いた場所のまま。立ち絵の大きさに合わせてから s 倍（真ん中を中心に）・dx・dy ずらす
+export const fixedFitOf = (T0, P, { s = 1, dx = 0, dy = 0 } = {}) => {
+  const ss = (T0.W / P.W) * s
+  return { s: +ss.toFixed(4), deg: 0, tx: Math.round((T0.W - P.W * ss) / 2 + dx), ty: Math.round((T0.H - P.H * ss) / 2 + dy), score: 0 }
+}
+
 // パーツを立ち絵の大きさ（W×H・倍率 k＝出す大きさ/立ち絵）に、重ねた位置で描く（なめらかに読む）
 export const warpPart = (P, fit, W, H, k) => {
   const th = fit.deg * Math.PI / 180, c = Math.cos(th), sn = Math.sin(th)
@@ -188,23 +197,39 @@ const build = (key, def, dir) => {
   const notes = [], sizes = []
   const T0 = readRgba(need('立ち絵'))
   const k = BOSS_ILLUST_SIZE / T0.W, S = BOSS_ILLUST_SIZE
+  const PARTS = illustPartsOf(key), FILES = illustFilesOf(key)
   const layers = {}, fits = {}
-  // ① 体・頭・翼_手前（・翼_奥）
-  for (const part of ILLUST_PARTS.filter(p => ILLUST_PART_FILES[p])) {
-    const f = path.join(dir, `${ILLUST_PART_FILES[part]}.png`)
+  // ① 体・頭・翼_手前（・翼_奥）。fixed（水の帯）は描いた場所のまま
+  for (const part of PARTS.filter(p => FILES[p])) {
+    const f = path.join(dir, `${FILES[part]}.png`)
     if (!existsSync(f)) { if (part === 'wingF') continue; throw new Error(`元の絵が無い：${path.relative(ROOT, f)}`) }
     const P = readRgba(f)
     bleed(P)
-    const fit = fitPart(T0, P)
+    const fixed = def.fixed?.[part]
+    const fit = fixed ? fixedFitOf(T0, P, fixed) : fitPart(T0, P)
     fits[part] = fit
     layers[part] = warpPart(P, fit, S, S, k)
-    notes.push(`${ILLUST_PART_FILES[part]}：倍率${fit.s.toFixed(3)}・角度${fit.deg}°・位置 ${fit.tx},${fit.ty}（よさ ${fit.score}）`)
+    notes.push(`${FILES[part]}：倍率${fit.s.toFixed(3)}・角度${fit.deg}°・位置 ${fit.tx},${fit.ty}${fixed ? '（描いた場所のまま）' : `（よさ ${fit.score}）`}`)
+  }
+  // 立ち絵が体（base: 'stand'）。ChatGPT の体は、切り分けで空いた所を埋める絵（fill）にだけ使う
+  let fill = null
+  if (def.base === 'stand') {
+    layers.body = resizeRgba(T0, S, S)
+    if (def.fill) {
+      const P = readRgba(need(def.fill))
+      bleed(P)
+      const fit = fitPart(T0, P)
+      fits.body = fit
+      fill = warpPart(P, fit, S, S, k)
+      notes.push(`体：立ち絵そのもの。${def.fill}（すき間を埋める）は倍率${fit.s.toFixed(3)}・角度${fit.deg}°・位置 ${fit.tx},${fit.ty}（よさ ${fit.score}）`)
+    }
   }
   // ② 奥の翼を立ち絵から切り出す
   const T = resizeRgba(T0, S, S)
   const mk = (part) => maskOf(layers[part])
-  const body = mk('body'), head = mk('head'), wingN = mk('wingN')
-  if (!layers.wingF) {
+  const body = mk('body')
+  if (PARTS.includes('wingF') && !layers.wingF) {
+    const head = mk('head'), wingN = mk('wingN')
     const used = dilate(body.map((v, p) => v | head[p] | wingN[p]), S, S, 2)
     const rest = { W: S, H: S, data: Buffer.from(T.data) }
     const tm = maskOf(T)
@@ -253,17 +278,20 @@ const build = (key, def, dir) => {
     layers.wingF = img
     notes.push(`翼_奥：立ち絵から切り出した（${comps[pick].n}px・背中のとげ ${toBody}px は体へ・隠れていた所 ${holes}px を埋めた）`)
   }
-  // ③ 回す中心・口
-  const wfm = mk('wingF')
+  // ③ 回す中心・口：翼・頭＝体（奥の翼は頭と体）と重なった所の真ん中／描いた場所のまま置くもの＝自分の真ん中
   const ov = (a, b) => centroidOf(a.map((v, p) => v & b[p]), S)
   const bodyC = centroidOf(body, S)
-  const pivotOf = {
-    wingN: ov(dilate(wingN, S, S, 1), body) || bodyC,
-    head: ov(head, body) || bodyC,
-    wingF: ov(dilate(wfm, S, S, 6), head.map((v, p) => v | body[p])) || bodyC,
-    body: bodyC,
+  const pivotOf = { body: bodyC }
+  for (const part of PARTS) {
+    if (part === 'body' || !layers[part]) continue
+    const m = mk(part)
+    pivotOf[part] = def.fixed?.[part] ? centroidOf(m, S)
+      : part === 'wingN' ? ov(dilate(m, S, S, 1), body) || bodyC
+      : part === 'wingF' ? ov(dilate(m, S, S, 6), mk('head').map((v, p) => v | body[p])) || bodyC
+      : ov(m, body) || bodyC
   }
-  const tip = leftTipOf(layers.head)
+  // 口＝頭のいちばん左（切り分ける前の形）。頭も切り分けて作るボス（雨摩座）は切り分けたあと
+  let tip = layers.head ? leftTipOf(layers.head) : null
   // ⑤ 切り分け（def.cuts）：前脚・下あごを親のパーツから多角形で切り出す（回す中心は決まりの pivot）
   for (const [part, c] of Object.entries(def.cuts || {})) {
     const from = layers[c.from]
@@ -280,7 +308,18 @@ const build = (key, def, dir) => {
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) if (inPoly(c.drop || c.take, x + 0.5, y + 0.5)) from.data[(y * S + x) * 4 + 3] = 0
     layers[part] = img
     pivotOf[part] = c.pivot
-    notes.push(`${part}：${ILLUST_PART_FILES[c.from] || c.from}から切り分けた`)
+    notes.push(`${part}：${def.base === 'stand' && c.from === 'body' ? '立ち絵' : FILES[c.from] || c.from}から切り分けた`)
+  }
+  tip ||= leftTipOf(layers.head || layers.body)
+  // 立ち絵が体のとき：切り分けで空いた所を ChatGPT の体で埋める（止まっているときは切り分けたパーツが覆う・動くと見える）
+  if (fill) {
+    let n = 0
+    for (let p = 0; p < S * S; p++) {
+      if (layers.body.data[p * 4 + 3] >= T.data[p * 4 + 3] || fill.data[p * 4 + 3] < SEEN) continue
+      fill.data.copy(layers.body.data, p * 4, p * 4, p * 4 + 4)
+      n++
+    }
+    notes.push(`体：切り分けで空いた所 ${n}px を${def.fill}で埋めた`)
   }
   // 親：切り分けたパーツは元のパーツの子。adopt なら逆（首が頭の親）
   const parent = {}
@@ -289,11 +328,14 @@ const build = (key, def, dir) => {
   }
   Object.assign(pivotOf, def.pivots || {})
   const parts = {}
-  for (const part of ILLUST_PARTS) {
+  for (const part of PARTS) {
     if (!layers[part]) continue
     const t = trim(layers[part])
     if (!t) throw new Error(`${part}：何も描かれていない`)
-    sizes.push([part, writeWebp(t.img, path.join(OUT, bossFileOf(key, illustKindOf(part))))])
+    // 大きくて柔らかい絵（雨摩座の水の帯）は細かさを落として軽くする（shrink・画面では同じ大きさに引きのばす）
+    const f = def.shrink?.[part]
+    const img = f ? resizeRgba(t.img, Math.round(t.img.W * f), Math.round(t.img.H * f)) : t.img
+    sizes.push([part, writeWebp(img, path.join(OUT, bossFileOf(key, illustKindOf(part))), def.quality || QUALITY)])
     const [px, py] = pivotOf[part]
     // 長さの向き（回す中心からパーツの真ん中へ・°）：翼を縮める向き
     const c = centroidOf(maskOf(layers[part]), S)
@@ -319,17 +361,17 @@ const build = (key, def, dir) => {
 
 const writeList = (all) => {
   const lines = ['// tools/v2cap-boss-illust.mjs が書くファイル（手で直さない）。ボス → イラスト版のパーツ・エフェクト',
-    `//   parts … 立ち絵（${BOSS_ILLUST_SIZE}px）の上の位置（x・y・w・h）・回す中心（px・py）・長さの向き（ax°）・親（parent）。並びは ILLUST_PARTS`,
+    `//   parts … 立ち絵（${BOSS_ILLUST_SIZE}px）の上の位置（x・y・w・h）・回す中心（px・py）・長さの向き（ax°）・親（parent）。並びはボスごとの layers（無ければ ILLUST_PARTS）`,
     '//   pivot … 全体を回す中心（体の真ん中）／mouth … 頭のいちばん左（飛ぶエフェクトが出る口）',
     '//   fx … 技のキー → fly（飛ぶ）・hit（当たる）のエフェクトの大きさ（px）と合わせる点（ax・ay＝飛ぶは先・当たるは真ん中）',
     '//   fit … パーツを立ち絵に重ねた倍率・角度・位置（元の絵の px・確かめ用）／v … 絵ごとの中身の印（画面のアドレスの ?v=）',
     'export const BOSS_ILLUST = {']
   for (const [key, e] of Object.entries(all)) {
-    const kinds = [...ILLUST_PARTS.filter(p => e.parts[p]).map(illustKindOf),
+    const kinds = [...illustPartsOf(key).filter(p => e.parts[p]).map(illustKindOf),
       ...Object.entries(e.fx || {}).flatMap(([mk, f]) => Object.keys(f).map(kind => illustFxKindOf(mk, kind)))]
     const v = kinds.map(kd => [kd, path.join(OUT, bossFileOf(key, kd))]).filter(([, f]) => existsSync(f)).map(([kd, f]) => `'${kd}': '${versionOf(f)}'`)
     lines.push(`  ${key}: {`, '    parts: {')
-    for (const p of ILLUST_PARTS) if (e.parts[p]) {
+    for (const p of illustPartsOf(key)) if (e.parts[p]) {
       const a = e.parts[p]
       lines.push(`      ${p}: { x: ${a.x}, y: ${a.y}, w: ${a.w}, h: ${a.h}, px: ${a.px}, py: ${a.py}, ax: ${a.ax ?? 0}${a.parent ? `, parent: '${a.parent}'` : ''} },`)
     }
@@ -352,11 +394,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
     const name = BOSS_DEFS[key]?.name || key
     const dir = path.join(SRC, BOSS_DEFS[key].dir, BOSS_ILLUST_SRC)
     if (!existsSync(dir)) { console.log(`  - ${name}：イラスト版のフォルダが無い（${path.relative(ROOT, dir)}）`); continue }
-    const known = new Set(['立ち絵', ...Object.values(ILLUST_PART_FILES), ...def.effects.map(e => e.file)])
+    const known = new Set(['立ち絵', ...Object.values(illustFilesOf(key)), ...(def.fill ? [def.fill] : []), ...(def.spare || []), ...def.effects.map(e => e.file)])
     const files = readdirSync(dir, { withFileTypes: true }).filter(e => e.isFile()).map(e => e.name)
     for (const f of files) if (!f.startsWith('見本') && !known.has(path.basename(f, path.extname(f)))) console.log(`  ? ${name}：使わない絵（名前が決まりと違う）：${f}`)
     const srcs = files.filter(f => !f.startsWith('見本')).map(f => statSync(path.join(dir, f)).mtimeMs)
-    const outs = ILLUST_PARTS.map(p => path.join(OUT, bossFileOf(key, illustKindOf(p))))
+    const outs = illustPartsOf(key).map(p => path.join(OUT, bossFileOf(key, illustKindOf(p))))
     const fresh = !FORCE && all[key] && outs.every(o => existsSync(o) && statSync(o).mtimeMs >= Math.max(...srcs))
     if (fresh) continue
     try {

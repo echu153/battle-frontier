@@ -349,6 +349,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
   const art = JSON.parse(JSON.stringify(BOSS_ART))
   let made = 0
   for (const [key, def] of Object.entries(BOSS_DEFS)) {
+    if (def.pixel === false) continue   // イラスト版だけのボス（雨摩座）
     const dir = path.join(SRC, def.dir)
     if (!existsSync(dir)) { console.log(`  - ${def.name}：元の絵のフォルダが無い（${path.relative(ROOT, dir)}）`); continue }
     // 見本_〜.png はプロンプトに添付する見本（道具は読まない）。エフェクトは名前だけ知っている（画面に入れるのは絵が届いてから）

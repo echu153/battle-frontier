@@ -1,5 +1,5 @@
 // tools/v2cap-boss-illust.mjs が書くファイル（手で直さない）。ボス → イラスト版のパーツ・エフェクト
-//   parts … 立ち絵（640px）の上の位置（x・y・w・h）・回す中心（px・py）・長さの向き（ax°）・親（parent）。並びは ILLUST_PARTS
+//   parts … 立ち絵（640px）の上の位置（x・y・w・h）・回す中心（px・py）・長さの向き（ax°）・親（parent）。並びはボスごとの layers（無ければ ILLUST_PARTS）
 //   pivot … 全体を回す中心（体の真ん中）／mouth … 頭のいちばん左（飛ぶエフェクトが出る口）
 //   fx … 技のキー → fly（飛ぶ）・hit（当たる）のエフェクトの大きさ（px）と合わせる点（ax・ay＝飛ぶは先・当たるは真ん中）
 //   fit … パーツを立ち絵に重ねた倍率・角度・位置（元の絵の px・確かめ用）／v … 絵ごとの中身の印（画面のアドレスの ?v=）
@@ -27,5 +27,22 @@ export const BOSS_ILLUST = {
       head: { s: 0.53, deg: -4, tx: -32, ty: 228, score: 0.043 },
     },
     v: { 'il-wingF': '35734617', 'il-wingN': 'bb79a513', 'il-body': '92a93b62', 'il-neck': '400e9020', 'il-head': 'f5a5c6fb', 'il-arm': 'd5374a58', 'il-jaw': '0b450b58', 'il-fx-claw-hit': '9e27da08', 'il-fx-breath-fly': 'c7e563ee', 'il-fx-breath-hit': '7bcfb438', 'il-fx-gale-fly': '5dc69c3e', 'il-fx-gale-hit': '709c7f83', 'il-fx-doom-fly': '34511ca5', 'il-fx-doom-hit': '4255edc9' },
+  },
+  amaza: {
+    parts: {
+      water: { x: 0, y: 0, w: 640, h: 640, px: 337, py: 356, ax: 0 },
+      body: { x: 0, y: 92, w: 640, h: 548, px: 342, py: 353, ax: 65 },
+      armF: { x: 361, y: 100, w: 47, h: 55, px: 396, py: 154, ax: -112, parent: 'body' },
+      head: { x: 148, y: 0, w: 171, h: 163, px: 230, py: 145, ax: -89, parent: 'body' },
+      armN: { x: 50, y: 215, w: 77, h: 68, px: 124, py: 231, ax: 154, parent: 'body' },
+    },
+    pivot: [342, 353], mouth: [155, 87],
+    fx: {
+    },
+    fit: {
+      water: { s: 1.06, deg: 0, tx: -38, ty: -38, score: 0 },
+      body: { s: 0.87, deg: -3, tx: 54, ty: 180, score: -0.292 },
+    },
+    v: { 'il-water': '56a7ccb4', 'il-body': 'e8b47381', 'il-armF': '3263d5b5', 'il-head': 'b65aea3c', 'il-armN': '7eaed282' },
   },
 }

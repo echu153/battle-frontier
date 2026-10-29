@@ -6,20 +6,20 @@ import { Buffer } from 'node:buffer'
 import { BOSS_ILLUST } from './bossIllustList.js'
 import { BOSS_ART_DIR, BOSS_DEFS, bossFileOf } from './bossArt.js'
 import {
-  BOSS_ILLUST_DEFS, BOSS_ILLUST_SIZE, ILLUST_PARTS, illustKindOf, illustFxKindOf,
+  BOSS_ILLUST_DEFS, BOSS_ILLUST_SIZE, illustPartsOf, illustKindOf, illustFxKindOf,
   bossIllustOf, illustPoseAt, idlePoseAt, motionPoseAt, illustPointAt, illustTrailsAt, mouthPointOf, rotPoint, partMove,
 } from './bossIllust.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { dilate, erode, leftTipOf, fitPart, inPoly } from '../../../tools/v2cap-boss-illust.mjs'
 
 const OUT = new URL(`../../../public${BOSS_ART_DIR}/`, import.meta.url)
-const kindsOf = (e) => [...ILLUST_PARTS.filter(p => e.parts[p]).map(illustKindOf),
+const kindsOf = (key, e) => [...illustPartsOf(key).filter(p => e.parts[p]).map(illustKindOf),
   ...Object.entries(e.fx || {}).flatMap(([mk, f]) => Object.keys(f).map(kind => illustFxKindOf(mk, kind)))]
 
 test('【確定】2026-10-28 イラスト版の絵はぜんぶあって軽い（パーツ 120KB・エフェクト 120KB まで）・中身の印は絵と同じ', () => {
   for (const [key, e] of Object.entries(BOSS_ILLUST)) {
     assert.ok(BOSS_ILLUST_DEFS[key] && BOSS_DEFS[key], `${key} の決まりがある`)
-    for (const kd of kindsOf(e)) {
+    for (const kd of kindsOf(key, e)) {
       const file = new URL(bossFileOf(key, kd), OUT)
       assert.ok(existsSync(file), `${key} ${kd} の絵がある`)
       assert.ok(statSync(file).size < 120 * 1024, `${key} ${kd} は軽い`)
@@ -268,4 +268,41 @@ test('【確定】2026-10-28 奥の翼は付け根で回す（決まりの pivot
   assert.ok(d.wingFToBody.length >= 3)
   const [px, py] = d.pivots.wingF
   assert.ok(inPoly(d.wingFToBody, px + 20, py + 15), '付け根のすぐ下のとげは体に入れる')
+})
+
+test('【確定】2026-10-29 雨摩座のイラスト版：立ち絵が体・頭と両手は立ち絵から切り分けて体の手前（水の帯がいちばん奥）・回す中心は首と袖口', () => {
+  const a = bossIllustOf('amaza'), d = BOSS_ILLUST_DEFS.amaza
+  assert.ok(a)
+  assert.deepEqual(a.parts.map(p => p.key), ['water', 'body', 'armF', 'head', 'armN'])
+  for (const k of ['head', 'armN', 'armF']) {
+    const p = a.parts.find(q => q.key === k)
+    assert.deepEqual([p.px, p.py], d.cuts[k].pivot)
+    assert.equal(p.nest, false, `${k} は体の中に重ねない（体は回さない）`)
+    assert.ok(p.px >= p.x - 10 && p.px <= p.x + p.w + 10 && p.py >= p.y - 10 && p.py <= p.y + p.h + 10, `${k} の回す中心はパーツのそば`)
+  }
+  assert.equal(a.jaw, null, '口は開けない（人の形）')
+})
+
+test('【確定】2026-10-29 雨摩座の待機：揺れの足し算（浮き沈み・頭・両手・水の帯）・ゆっくりで小さい', () => {
+  const idle = BOSS_ILLUST_DEFS.amaza.idle
+  const poses = Array.from({ length: 200 }, (_, i) => idlePoseAt(idle, i * 97))
+  for (const [k, [amp, per]] of Object.entries(idle.sway)) {
+    const vs = poses.map(p => p[k])
+    assert.ok(Math.max(...vs) > amp * 0.8 && Math.min(...vs) < -amp * 0.8, `${k} は ±${amp} で揺れる`)
+    assert.ok(per >= 3000, `${k} はゆっくり（${per}ms）`)
+  }
+  assert.ok(idle.sway.y[0] <= 0.02 && idle.sway.head[0] <= 3, '小さく揺れる')
+  assert.equal(poses[0].wingN, 0, '翼は無い')
+})
+
+test('雨摩座の仮の攻撃：手を上げてから相手の方（左）へ差し向ける・待機から始まって待機へ戻る・エフェクトはまだ無い', () => {
+  const M = BOSS_ILLUST_DEFS.amaza.motions.cast
+  const at = (ms) => motionPoseAt(M.keys, ms)
+  assert.ok(at(380).armN > 10 && at(380).x > 0, 'のけぞって手を上げる')
+  assert.ok(at(M.hitMs).armN < -5 && at(M.hitMs).x < -0.03, '相手の方へ差し向ける')
+  assert.ok(Object.values(at(0)).every(v => v === 0))
+  assert.equal(at(M.totalMs), null)
+  const a = bossIllustOf('amaza')
+  assert.deepEqual(Object.keys(a.motions), ['cast'])
+  assert.equal(a.motions.cast.fx, null)
 })

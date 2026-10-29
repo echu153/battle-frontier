@@ -8,7 +8,7 @@ import { BOSS_DEFS, BOSS_ART_DIR, BOSS_HIT_OF, bossArtOf, bossFileOf, bossFxKind
 import { cellsOf, colsOf, dropGreen, alignCells, tipOf } from '../../../tools/v2cap-boss-art.mjs'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { BOSS_ILLUST } from './bossIllustList.js'
-import { ILLUST_PARTS, illustKindOf, illustFxKindOf } from './bossIllust.js'
+import { illustPartsOf, illustKindOf, illustFxKindOf } from './bossIllust.js'
 import { componentsOf } from '../../../tools/v2cap-motion.mjs'
 
 const OUT = new URL(`../../../public${BOSS_ART_DIR}/`, import.meta.url)
@@ -31,7 +31,7 @@ test('一覧の絵はぜんぶ public/v2cap-art/boss にあって軽い（待機
 test('public/v2cap-art/boss の絵はどれも一覧に載っている（名前を変えて残った絵がない・イラスト版の一覧も見る）', () => {
   const known = new Set(Object.entries(BOSS_ART).flatMap(([key, e]) => kindsOf(e).map(k => bossFileOf(key, k))))
   for (const [key, e] of Object.entries(BOSS_ILLUST)) {
-    for (const p of ILLUST_PARTS) if (e.parts[p]) known.add(bossFileOf(key, illustKindOf(p)))
+    for (const p of illustPartsOf(key)) if (e.parts[p]) known.add(bossFileOf(key, illustKindOf(p)))
     for (const [mk, fx] of Object.entries(e.fx || {})) for (const kind of Object.keys(fx)) known.add(bossFileOf(key, illustFxKindOf(mk, kind)))
   }
   for (const f of readdirSync(OUT)) assert.ok(known.has(f), `${f} は一覧に無い`)
@@ -219,4 +219,13 @@ test('待機のコマそろえ：①と同じ形が下にずれていたら、�
   const sh = { img: { W, H, data }, ...cellsOf({ W, H, data }, 3, 1) }
   const t = alignCells(sh, { x0: 0, x1: 1, y0: 0, y1: 1 })
   assert.deepEqual(t.map(v => v.dy), [0, 6, -4])
+})
+
+test('【確定】2026-10-29 雨摩座はイラスト版だけ（ドット絵版は作らない）・技はまだなので何をしても仮の攻撃を流す', () => {
+  assert.equal(BOSS_DEFS.amaza.pixel, false)
+  assert.equal(bossArtOf('amaza'), null)
+  const memo = newBossMotionMemo()
+  assert.equal(bossMotionKeyOf('amaza', { skill: null }, memo), 'cast')
+  assert.equal(bossMotionKeyOf('amaza', { skill: 'まりょくため' }, memo), 'cast')
+  assert.equal(bossMotionKeyOf('nobody', { skill: null }, memo), null)
 })
