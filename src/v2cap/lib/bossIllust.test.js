@@ -364,7 +364,7 @@ test('【確定】2026-10-29 雨摩座の技4つ：右手を胸元に引き寄�
   const armD = a.parts.find(p => p.key === 'armD').swap
   for (const [k, M] of Object.entries(D)) {
     const at = (ms) => motionPoseAt(M.keys, ms)
-    const [tUp, up] = M.keys.at(-4), on = k === 'deluge' ? 'armUOn' : 'armCOn'   // 払う前のため
+    const [tUp, up] = M.keys.at(-4), on = k === 'deluge' || k === 'sleet' ? 'armUOn' : 'armCOn'   // 払う前のため（氷雨と大技は真上に掲げる）
     assert.equal(up[on], 1, `${k}：払う前は構えの腕（${on}）`)
     assert.ok(up.y < 0 && up.armN > 8, `${k}：ためるときは浮いて、隠れた手前の手を上げておく`)
     assert.equal(swapOpacityOf(armD, at(tUp)), 0, `${k}：ためているあいだ、ふだんの腕は見えない`)
@@ -376,6 +376,26 @@ test('【確定】2026-10-29 雨摩座の技4つ：右手を胸元に引き寄�
     assert.ok(M.hitMs < M.totalMs)
   }
   assert.ok(D.sleet.keys[2][1].armF < -8 && D.sleet.keys[2][1].head > 4, '氷雨：天を仰いで奥の手を差し上げる')
+})
+
+test('【確定】2026-10-29 氷雨は右腕を真上に掲げて、ためずにすぐ振り下ろす（ユーザー「氷雨も手上げるモーションで出すようにして、ためは不要」）', () => {
+  const S = BOSS_ILLUST_DEFS.amaza.motions.sleet, m = bossIllustOf('amaza').motions.sleet
+  const up = S.keys.filter(([, k]) => k.armUOn === 1).map(([t]) => t)
+  assert.ok(up.length > 0, '真上に掲げる（水天葬と同じ構えの絵）')
+  assert.ok(S.keys.every(([, k]) => !k.armCOn), '胸元に引き寄せない')
+  assert.ok(S.hitMs - up[0] <= 250, `掲げてから振り下ろすまで ${S.hitMs - up[0]}ms（ためない）`)
+  // 掲げているあいだも止まらない（同じ姿勢のまま待つ所が無い＝のけぞり続ける）
+  for (let i = 1; i < up.length; i++) {
+    const a = S.keys.find(([t]) => t === up[i - 1])[1], b = S.keys.find(([t]) => t === up[i])[1]
+    assert.ok(b.y < a.y && b.head > a.head, '掲げながら浮いてのけぞり続ける')
+  }
+  assert.equal(m.charge, null, '雲をためない（水天葬だけ）')
+  // 水の筋は掲げた手から差しのべた指先まで（水天葬と同じ通り道）
+  assert.deepEqual(S.arcs[0].pts, BOSS_ILLUST_DEFS.amaza.motions.deluge.arcs[0].pts)
+  assert.equal(S.arcs[0].toMs, S.hitMs)
+  // 水天葬は今までどおり1.5秒溜める
+  const Dl = BOSS_ILLUST_DEFS.amaza.motions.deluge
+  assert.ok(Dl.hitMs - Dl.keys.find(([, k]) => k.armUOn === 1)[0] >= 1400)
 })
 
 test('【確定】2026-10-29 雨摩座のエフェクト：雨礫・水縛の帯は手前の手の指先から飛ぶ／氷雨・水天葬は飛ばずに相手の頭上から降りる（降りきったときがダメージ）／水縛の帯は相手の体で締まる', () => {
