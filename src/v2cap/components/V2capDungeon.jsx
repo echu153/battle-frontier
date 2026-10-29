@@ -244,8 +244,9 @@ export default function V2capDungeon({ prof, inventory, onProfile }) {
                 {ready && <>・推奨戦闘力 <span style={{ color: enough ? '#88ffaa' : '#ff8888' }}>{d.recPower.toLocaleString()}</span></>}
                 {!ready ? '・準備中' : !open ? `・エリア${CIRCLED[d.area - 1]}に着くと呼べます` : ''}
               </span>
+              {/* 呼べないとき（呼んだ日・呼んでいるボスがいる・まだのエリア）はボタンを暗くする（押せないのが分かるように） */}
               <button onClick={() => summon(k)} disabled={busy || !open || !canSummon}
-                style={{ ...miniBtn(DIFF_COLOR[k]), padding:'6px 12px' }}>呼ぶ</button>
+                style={{ ...miniBtn(DIFF_COLOR[k]), padding:'6px 12px', opacity: open && canSummon ? 1 : 0.35 }}>呼ぶ</button>
             </div>
           )
         })}
