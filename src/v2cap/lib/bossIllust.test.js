@@ -357,13 +357,13 @@ test('【確定】2026-10-29 雨摩座のエフェクト：雨礫・水縛の帯
   assert.ok(Object.values(a.motions).every(m => m === d || !m.charge), '雲を出すのは水天葬だけ')
 })
 
-test('【確定】2026-10-29 構え（水天葬の5秒）：右腕を真上に掲げて震える・構えのすぐあとの技は構えの姿勢からつなぐ（ふだんの腕が一瞬も出ない）・黒龍は構えても待機のまま', () => {
+test('【確定】2026-10-29 構え（水天葬の5秒）：右腕を真上に掲げる（震えない）・構えのすぐあとの技は構えの姿勢からつなぐ（ふだんの腕が一瞬も出ない）・黒龍は構えても待機のまま', () => {
   const C = BOSS_ILLUST_DEFS.amaza.cast, idle = BOSS_ILLUST_DEFS.amaza.idle
   const p0 = illustCastPoseAt('amaza', 0, 1000)
   assert.deepEqual(p0, idlePoseAt(idle, 1000), '構えはじめは待機と同じ（急に跳ねない）')
   const held = illustCastPoseAt('amaza', CAST_IN_MS + 2000, 1000), base = idlePoseAt(idle, 1000)
   for (const f of ['armUOn', 'armF', 'y', 'head']) {
-    assert.ok(Math.abs(held[f] - base[f] - C.pose[f]) <= (C.shake[f] || 0) + 1e-9, `${f}：構えの姿勢（震えのぶんだけずれる）`)
+    assert.ok(Math.abs(held[f] - base[f] - C.pose[f]) < 1e-9, `${f}：構えの姿勢のまま（震えない）`)
   }
   assert.ok(C.pose.armUOn === 1 && C.pose.armF < -8 && C.pose.y < 0, '右腕を真上に掲げ（構えの絵）、奥の手も上げて浮く')
   // 構えのすぐあとの技：はじめは構えの姿勢・CAST_OUT_MS たてば技の動きだけ
@@ -413,7 +413,7 @@ test('【確定】2026-10-29 雨摩座の手振り：構えの絵の切り替え
   assert.deepEqual(illustTrailsAt('amaza', m, arc.toMs + arc.fadeMs, 0), [])
 })
 
-test('【確定】2026-10-29 雨摩座の水の帯は体の動きから切り離す（ユーザー「攻撃するとき、水の帯は干渉せずに動いてほしい」）・大技は1.5秒溜めて、だんだん高く浮いて震えも大きくなる（ユーザー「大技はもうちょっと溜めていい」）', () => {
+test('【確定】2026-10-29 雨摩座の水の帯は体の動きから切り離す（ユーザー「攻撃するとき、水の帯は干渉せずに動いてほしい」）・大技は1.5秒溜めて、だんだん高く浮く（ユーザー「大技はもうちょっと溜めていい」「溜めるとき、別に震えなくていい」）', () => {
   const a = bossIllustOf('amaza'), d = BOSS_ILLUST_DEFS.amaza
   assert.deepEqual(a.parts.filter(p => p.free).map(p => p.key), ['water'])
   assert.equal(bossIllustOf('varuzenoku').parts.some(p => p.free), false, '黒龍は今までどおり')
@@ -421,7 +421,7 @@ test('【確定】2026-10-29 雨摩座の水の帯は体の動きから切り離
   for (const t of [0, 1234, 5000]) assert.deepEqual(illustFreePoseAt('amaza', t), idlePoseAt(d.idle, t))
   for (const M of Object.values(d.motions)) for (const [, k] of M.keys) assert.equal(k.water, undefined)
   assert.equal(d.cast.pose.water, undefined)
-  // 溜め：掲げきってから振り下ろすまで1秒以上・いちばん上へだんだん浮く・震えは溜めの終わりほど大きい
+  // 溜め：掲げきってから振り下ろすまで1秒以上・いちばん上へだんだん浮く・震えない
   const D = d.motions.deluge, m = a.motions.deluge
   const raised = D.keys.find(([, k]) => k.armUOn === 1)[0]
   assert.ok(D.hitMs - raised >= 1400, `溜め ${D.hitMs - raised}ms`)
@@ -429,6 +429,6 @@ test('【確定】2026-10-29 雨摩座の水の帯は体の動きから切り離
   assert.ok(ys.every((y, i) => i === 0 || y < ys[i - 1]), 'だんだん高く浮く')
   assert.equal(m.charge.toMs, m.hitMs)
   const amp = (from, to) => { let mx = 0; for (let t = from; t < to; t += 3) mx = Math.max(mx, Math.abs(illustPoseAt('amaza', m, t, 0).armF - motionPoseAt(D.keys, t).armF - idlePoseAt(d.idle, 0).armF)); return mx }
-  assert.ok(amp(1400, 1520) > amp(320, 440) * 1.5, '溜めの終わりほど震える')
-  assert.equal(amp(1600, 1900), 0, '振り下ろしたあとは震えない')
+  assert.ok(amp(0, 2500) < 1e-9, '溜めのあいだも震えない（決まった動きのまま）')
+  for (let t = CAST_IN_MS; t < 5000; t += 37) assert.deepEqual(illustCastPoseAt('amaza', t, 0), illustCastPoseAt('amaza', CAST_IN_MS, 0), `構え ${t}ms も震えない`)
 })
