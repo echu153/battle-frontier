@@ -175,6 +175,9 @@ export const BOSS_ILLUST_DEFS = {
     layers: ['water', 'body', 'armF', 'armD', 'armN', 'head', 'armC', 'armU'],
     files: { water: '水の帯' },
     fixed: { water: { s: 1.06 } },
+    // 【確定】2026-10-29 ユーザー「攻撃するとき、水の帯は干渉せずに動いてほしい（水の帯まで動いてると違和感ある）」：
+    //   水の帯は体の動き（技・構えの傾き・ずれ）から切り離し、いつも待機の揺れのまま（free・illustFreePoseAt）
+    free: ['water'],
     // 【確定】2026-10-29 手振り（ユーザー「技を撃つとき、もっと手振りとかのモーション増やしてほしい、一回水平に右手を胸元まで持ってきて手前にさっと
     //   持っていくやつ（いけー！）」「大技は右手を真上に掲げて相手に向かって放つ感じ」→選んだ「腕の絵を2枚描き足す」）：
     //   右腕だけを描き変えた立ち絵2枚を立ち絵に重ね（fitPart・掲げる絵は人物が少し小さく描き変わったので胴のまわり fitOn で合わせ直す）、
@@ -201,9 +204,10 @@ export const BOSS_ILLUST_DEFS = {
       armN: [4, 3700, 0.1], armF: [6, 4300, 0.6], water: [6, 7000, 0],
     } },
     // 技のあいだも揺れはそのまま（止めると技の頭と終わりで手や水の帯がぴくっと跳ねる）
+    //   （水の帯の角度も数字としては残す。画面では水の帯は切り離して待機の姿勢で動かす＝free）
     idleKeep: { y: 1, r: 1, head: 1, armN: 1, armF: 1, water: 1 },
     // 構え（水天葬の5秒）：天を仰いで右腕を真上に掲げ（armU）、小さく震える。水天葬のためのいちばん上と同じ形
-    cast: { pose: { x: 0.02, y: -0.038, r: 4.8, head: 6.5, armF: -13, water: 13, armUOn: 1 }, shake: { r: 0.35, armF: 1.4 } },
+    cast: { pose: { x: 0.02, y: -0.038, r: 4.8, head: 6.5, armF: -13, armUOn: 1 }, shake: { r: 0.35, armF: 1.4 } },
     // 切り分け（立ち絵 640px の上の点）。頭＝冠と顔（首の付け根で傾ける）・手前の手＝袖口から先（ふだんの腕 armD から切る）・奥の手＝袖口から先（袖口で回す）
     cuts: {
       head: { from: 'body', pivot: [230, 145],
@@ -221,47 +225,50 @@ export const BOSS_ILLUST_DEFS = {
       // 雨礫：胸元に引き寄せて一瞬ため、さっと払って指先から水の礫
       shot: { totalMs: 1000, hitMs: 420, keys: [
         [0, {}],
-        [150, { x: 0.012, y: -0.006, r: 1.5, head: 1.5, armF: 3, water: 3 }],
-        [230, { x: 0.026, y: -0.012, r: 3, head: 2.5, armF: 6, water: 5, armCOn: 1, armN: 18 }],
-        [340, { x: 0.03, y: -0.014, r: 3.4, head: 2.8, armF: 6, water: 6, armCOn: 1, armN: 18 }],
-        [420, { x: -0.05, y: 0.008, r: -3.5, head: -2, armN: -10, armF: -4, water: -6 }],
-        [600, { x: -0.045, y: 0.006, r: -3, head: -1.5, armN: -8, armF: -3, water: -5 }],
+        [150, { x: 0.012, y: -0.006, r: 1.5, head: 1.5, armF: 3 }],
+        [230, { x: 0.026, y: -0.012, r: 3, head: 2.5, armF: 6, armCOn: 1, armN: 18 }],
+        [340, { x: 0.03, y: -0.014, r: 3.4, head: 2.8, armF: 6, armCOn: 1, armN: 18 }],
+        [420, { x: -0.05, y: 0.008, r: -3.5, head: -2, armN: -10, armF: -4 }],
+        [600, { x: -0.045, y: 0.006, r: -3, head: -1.5, armN: -8, armF: -3 }],
         [1000, {}],
       ], arcs: [{ kind: 'water', pts: SWEEP, fromMs: 345, toMs: 420, fadeMs: 200 }],
       shots: [{ part: 'armN', pt: [54, 251], delayMs: 0, size: 1 }] },
       // 氷雨：天を仰いで奥の手を差し上げ、右手を胸元に引き寄せてため、さっと払う＝相手の頭上に雨雲（飛ぶ絵は無い）
       sleet: { totalMs: 1350, hitMs: 560, keys: [
         [0, {}],
-        [200, { x: 0.015, y: -0.02, r: 3, head: 5, armF: -8, water: 5 }],
-        [300, { x: 0.02, y: -0.03, r: 3.6, head: 6.5, armF: -12, water: 7, armCOn: 1, armN: 18 }],
-        [480, { x: 0.022, y: -0.033, r: 3.9, head: 7, armF: -13, water: 8, armCOn: 1, armN: 18 }],
-        [560, { x: -0.04, y: 0.006, r: -2.5, head: -2, armN: -12, armF: 6, water: -6 }],
-        [840, { x: -0.035, y: 0.005, r: -2, head: -1.5, armN: -10, armF: 5, water: -5 }],
+        [200, { x: 0.015, y: -0.02, r: 3, head: 5, armF: -8 }],
+        [300, { x: 0.02, y: -0.03, r: 3.6, head: 6.5, armF: -12, armCOn: 1, armN: 18 }],
+        [480, { x: 0.022, y: -0.033, r: 3.9, head: 7, armF: -13, armCOn: 1, armN: 18 }],
+        [560, { x: -0.04, y: 0.006, r: -2.5, head: -2, armN: -12, armF: 6 }],
+        [840, { x: -0.035, y: 0.005, r: -2, head: -1.5, armN: -10, armF: 5 }],
         [1350, {}],
       ], arcs: [{ kind: 'water', pts: SWEEP, fromMs: 485, toMs: 560, fadeMs: 220 }] },
       // 水縛の帯：身を引いて（水の帯も大きく振れる）右手を胸元へ、長めにためてから突き出すように払う＝帯が指先から相手へ
       bind: { totalMs: 1250, hitMs: 520, keys: [
         [0, {}],
-        [130, { x: 0.012, y: -0.006, r: 1.8, head: 1.2, armF: 4, water: 5 }],
-        [220, { x: 0.026, y: -0.013, r: 3.6, head: 2.6, armF: 7, water: 10, armCOn: 1, armN: 18 }],
-        [440, { x: 0.034, y: -0.017, r: 4.4, head: 3.3, armF: 9, water: 12, armCOn: 1, armN: 18 }],
-        [520, { x: -0.065, y: 0.01, r: -4.8, head: -3, armN: -14, armF: -6, water: -11 }],
-        [760, { x: -0.058, y: 0.008, r: -4.2, head: -2.5, armN: -12, armF: -5, water: -9 }],
+        [130, { x: 0.012, y: -0.006, r: 1.8, head: 1.2, armF: 4 }],
+        [220, { x: 0.026, y: -0.013, r: 3.6, head: 2.6, armF: 7, armCOn: 1, armN: 18 }],
+        [440, { x: 0.034, y: -0.017, r: 4.4, head: 3.3, armF: 9, armCOn: 1, armN: 18 }],
+        [520, { x: -0.065, y: 0.01, r: -4.8, head: -3, armN: -14, armF: -6 }],
+        [760, { x: -0.058, y: 0.008, r: -4.2, head: -2.5, armN: -12, armF: -5 }],
         [1250, {}],
       ], arcs: [{ kind: 'water', pts: SWEEP, fromMs: 445, toMs: 520, fadeMs: 220 }],
       shots: [{ part: 'armN', pt: [54, 251], delayMs: 0, size: 1 }] },
       // 水天葬：右腕を真上に掲げて（構えの姿勢と同じ形）ため、相手の方へ振り下ろす＝相手の頭上の渦の雲から滝が落ちる
-      deluge: { totalMs: 1800, hitMs: 1000, keys: [
+      //   【確定】2026-10-29 ユーザー「大技はもうちょっと溜めていい」：掲げてから振り下ろすまで 0.9秒→1.5秒。だんだん高く浮いてのけぞり、震えも大きくなる（shake）
+      deluge: { totalMs: 2500, hitMs: 1600, keys: [
         [0, {}],
-        [120, { x: 0.006, y: -0.012, r: 1.8, head: 2.2, armF: -4, water: 4, armUOn: 1 }],
-        [300, { x: 0.016, y: -0.033, r: 4.3, head: 5.6, armF: -11, water: 11, armUOn: 1 }],
-        [860, { x: 0.02, y: -0.038, r: 4.8, head: 6.5, armF: -13, water: 13, armUOn: 1 }],
-        [920, { x: 0.024, y: -0.042, r: 5.2, head: 7, armF: -14, water: 14, armUOn: 1, armN: 22 }],
-        [1000, { x: -0.065, y: 0.016, r: -5.5, head: -3, armN: -14, armF: 6, water: -13 }],
-        [1300, { x: -0.058, y: 0.013, r: -4.8, head: -2.5, armN: -12, armF: 5, water: -11 }],
-        [1800, {}],
-      ], arcs: [{ kind: 'water', pts: THROW, fromMs: 925, toMs: 1000, fadeMs: 260 }],
-      charge: { kind: 'charge', fromMs: 0, toMs: 1000, holdMs: 700 } },
+        [120, { x: 0.006, y: -0.012, r: 1.8, head: 2.2, armF: -4, armUOn: 1 }],
+        [300, { x: 0.016, y: -0.033, r: 4.3, head: 5.6, armF: -11, armUOn: 1 }],
+        [860, { x: 0.02, y: -0.038, r: 4.8, head: 6.5, armF: -13, armUOn: 1 }],
+        [1200, { x: 0.026, y: -0.047, r: 5.6, head: 7.6, armF: -15, armUOn: 1 }],
+        [1520, { x: 0.031, y: -0.055, r: 6.4, head: 8.4, armF: -17, armUOn: 1, armN: 22 }],
+        [1600, { x: -0.07, y: 0.018, r: -6, head: -3.5, armN: -14, armF: 6 }],
+        [1950, { x: -0.062, y: 0.014, r: -5.2, head: -2.8, armN: -12, armF: 5 }],
+        [2500, {}],
+      ], shake: { fromMs: 300, toMs: 1520, amp: { r: 0.7, armF: 2.2, head: 0.6 } },
+      arcs: [{ kind: 'water', pts: THROW, fromMs: 1525, toMs: 1600, fadeMs: 260 }],
+      charge: { kind: 'charge', fromMs: 0, toMs: 1600, holdMs: 700 } },
     },
     // on＝相手のどこに出すか（大きさは自分の絵の枠の幅に対して）・anim＝見せ方（drop＝上から下へ降りる・bind＝外から締まる）・
     //   lead＝絵が出はじめてから当たるまで（降りきった時刻がダメージ）・fadeTop＝絵の上のはしをぼかす割合（滝の上を雲になじませる）
@@ -313,8 +320,12 @@ export const illustPoseAt = (key, motion, ms, tMs, fromCast = false) => {
   if (!add) return idle
   const keep = def.idleKeep || IDLE_KEEP, cp = fromCast && def.cast ? def.cast.pose : null
   const w = cp ? 1 - smooth(Math.min(1, Math.max(0, ms) / CAST_OUT_MS)) : 0
-  return Object.fromEntries(Object.keys(ZERO).map(f => [f, idle[f] * (keep[f] || 0) + add[f] + (cp?.[f] || 0) * w]))
+  // 溜めの震え（motion.shake）：fromMs〜toMs のあいだ、だんだん大きく（約9回/秒）
+  const sh = motion.shake, q = sh && ms >= sh.fromMs && ms < sh.toMs ? Math.sin(ms / 18) * (0.3 + 0.7 * (ms - sh.fromMs) / (sh.toMs - sh.fromMs)) : 0
+  return Object.fromEntries(Object.keys(ZERO).map(f => [f, idle[f] * (keep[f] || 0) + add[f] + (cp?.[f] || 0) * w + (q ? (sh.amp[f] || 0) * q : 0)]))
 }
+// 体の動きから切り離したパーツ（def.free・雨摩座の水の帯）の姿勢：技・構えのあいだも待機のまま
+export const illustFreePoseAt = (key, tMs) => idlePoseAt(BOSS_ILLUST_DEFS[key].idle, tMs)
 // 構え（大技の詠唱）のあいだの姿勢：castMs＝構えはじめてからのミリ秒。構えの決まり（cast）が無いボスは待機のまま
 export const illustCastPoseAt = (key, castMs, tMs) => {
   const def = BOSS_ILLUST_DEFS[key]
@@ -414,7 +425,8 @@ export const bossIllustOf = (key) => {
   const ons = Object.values(def.swaps || {}).map(s => s.on).filter(Boolean)
   const parts = illustPartsOf(key).filter(p => art.parts[p]).map(p => ({ key: p, src: srcOf(key, illustKindOf(p)), ...art.parts[p],
     nest: !!art.parts[p].parent && art.parts[p].parent in ZERO,
-    swap: def.swaps?.[p] ? (def.swaps[p].on ? { on: def.swaps[p].on } : { others: ons }) : null }))
+    swap: def.swaps?.[p] ? (def.swaps[p].on ? { on: def.swaps[p].on } : { others: ons }) : null,
+    free: !!def.free?.includes(p) }))
   const motions = {}
   for (const m of base.motions) {
     const md = def.motions[m.key]
@@ -435,7 +447,7 @@ export const bossIllustOf = (key) => {
       return { front: front.map(Math.round), delayMs: sh.delayMs, size: sh.size ?? 1 }
     })
     // 当たる時刻＝撃ち出す時刻＋飛ぶ時間＋当たる絵が降りきるまで（lead・氷雨と水天葬）
-    motions[m.key] = { label: m.file, keys: md.keys, trails: md.trails || [], arcs: md.arcs || [], totalMs: md.totalMs, hitMs: md.hitMs, flyMs, impactMs: md.hitMs + flyMs + (fx.hit?.lead || 0),
+    motions[m.key] = { label: m.file, keys: md.keys, trails: md.trails || [], arcs: md.arcs || [], shake: md.shake || null, totalMs: md.totalMs, hitMs: md.hitMs, flyMs, impactMs: md.hitMs + flyMs + (fx.hit?.lead || 0),
       front: shots[0].front, shots, fx: Object.keys(fx).length ? fx : null, charge: md.charge && fx[md.charge.kind] ? md.charge : null }
   }
   const jaw = def.cuts?.jaw && art.parts.jaw ? { line: def.cuts.jaw.line, pivot: def.cuts.jaw.pivot, mouth: def.cuts.jaw.mouth } : null

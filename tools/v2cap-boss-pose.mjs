@@ -11,21 +11,22 @@ import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readRgba } from './v2cap-motion.mjs'
-import { bossIllustOf, illustPoseAt, illustCastPoseAt, rotPoint, swapOpacityOf } from '../src/v2cap/lib/bossIllust.js'
+import { bossIllustOf, illustPoseAt, illustCastPoseAt, illustFreePoseAt, rotPoint, swapOpacityOf } from '../src/v2cap/lib/bossIllust.js'
 
 const SELF = fileURLToPath(import.meta.url)
 const ROOT = path.resolve(path.dirname(SELF), '..')
 const PAD = { l: 160, t: 160, r: 60, b: 60 }   // 踏み込み・のけぞりで枠の外へ出るぶん
 
 // 1コマ：{ W, H, data }（RGBA）。art＝bossIllustOf・imgs＝パーツの絵（art.parts と同じ並び）
-export const renderPose = (art, imgs, pose) => {
+//   freePose＝体の動きから切り離したパーツ（p.free・雨摩座の水の帯）の姿勢（画面と同じ＝待機のまま）
+export const renderPose = (art, imgs, pose, freePose = pose) => {
   const S = art.base, W = S + PAD.l + PAD.r, H = S + PAD.t + PAD.b
   const out = Buffer.alloc(W * H * 4)
   for (let i = 0; i < W * H; i++) { out[i * 4] = 8; out[i * 4 + 1] = 22; out[i * 4 + 2] = 50; out[i * 4 + 3] = 255 }
   const byKey = Object.fromEntries(art.parts.map((p, i) => [p.key, { p, img: imgs[i] }]))
   // 画面の点 → パーツの絵の上の点（全体→親→パーツの順に戻す）
   const chainOf = (key) => { const c = []; for (let q = key; q && byKey[q]; q = byKey[q].p.parent) c.unshift(byKey[q].p); return c }
-  const toLocal = (X, Y, chain) => {
+  const toLocal = (X, Y, chain, pose) => {
     let pt = [X - PAD.l - pose.x * S, Y - PAD.t - pose.y * S]
     pt = rotPoint(pt, art.pivot, -pose.r)
     for (const p of chain) {
@@ -45,12 +46,13 @@ export const renderPose = (art, imgs, pose) => {
   // op＝親から受けた濃さ。腕の構えの絵（p.swap）は切り替える割合で濃さを変える（画面の RigPart と同じ）
   const drawPart = (key, op = 1) => {
     const { p, img } = byKey[key], chain = chainOf(key)
-    const o = op * (p.swap ? swapOpacityOf(p.swap, pose) : 1)
+    const ps = p.free ? freePose : pose
+    const o = op * (p.swap ? swapOpacityOf(p.swap, ps) : 1)
     if (o <= 0) return
     const inside = key === 'head' && art.jaw && (pose.jaw || 0) < -0.5
       ? [...art.jaw.line, ...art.jaw.line.map(q => rotPoint(q, art.jaw.pivot, pose.jaw)).reverse()] : null
     for (let Y = 0; Y < H; Y++) for (let X = 0; X < W; X++) {
-      const [u, v] = toLocal(X, Y, chain)
+      const [u, v] = toLocal(X, Y, chain, ps)
       const i = (Y * W + X) * 4
       if (inside && inPolygon(inside, u, v)) over(i, 42 + 200 * (pose.glow || 0), 3 + 90 * (pose.glow || 0), 6, 255)
       const x = u - p.x - 0.5, y = v - p.y - 0.5
@@ -85,7 +87,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
   const motion = mk === 'idle' || mk === 'cast' ? null : art.motions[mk]
   if (mk !== 'idle' && mk !== 'cast' && !motion) throw new Error(`技が無い：${mk}（${Object.keys(art.motions).join('・')}・idle）`)
   const imgs = art.parts.map(p => readRgba(path.join(ROOT, 'public', decodeURI(p.src.split('?')[0]))))
-  const frames = times.split(',').map(Number).map(ms => renderPose(art, imgs, mk === 'cast' ? illustCastPoseAt(key, ms, 0) : illustPoseAt(key, motion, motion ? ms : 0, motion ? 0 : ms)))
+  const frames = times.split(',').map(Number).map(ms => renderPose(art, imgs, mk === 'cast' ? illustCastPoseAt(key, ms, 0) : illustPoseAt(key, motion, motion ? ms : 0, motion ? 0 : ms),
+    illustFreePoseAt(key, motion || mk === 'cast' ? 0 : ms)))
   const W = frames[0].W, H = frames[0].H
   const all = Buffer.alloc(W * frames.length * H * 4)
   frames.forEach((f, n) => { for (let y = 0; y < H; y++) f.data.copy(all, (y * W * frames.length + n * W) * 4, y * W * 4, (y + 1) * W * 4) })

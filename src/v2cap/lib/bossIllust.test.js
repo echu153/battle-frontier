@@ -8,7 +8,7 @@ import { BOSS_ART_DIR, BOSS_DEFS, bossFileOf } from './bossArt.js'
 import {
   BOSS_ILLUST_DEFS, BOSS_ILLUST_SIZE, illustPartsOf, illustKindOf, illustFxKindOf,
   bossIllustOf, illustPoseAt, idlePoseAt, motionPoseAt, illustPointAt, illustTrailsAt, mouthPointOf, rotPoint, partMove,
-  illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf,
+  illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt,
 } from './bossIllust.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { dilate, erode, leftTipOf, fitPart, inPoly } from '../../../tools/v2cap-boss-illust.mjs'
@@ -375,10 +375,10 @@ test('【確定】2026-10-29 構え（水天葬の5秒）：右腕を真上に�
   // 構えの姿勢と、ためる動き（掲げきった所）は同じ形（つないでも跳ねない）
   const top = BOSS_ILLUST_DEFS.amaza.motions.deluge.keys.find(([ms]) => ms === 860)[1]
   for (const f of ['armUOn', 'armF', 'head', 'r', 'y']) assert.ok(Math.abs(top[f] - C.pose[f]) < 1e-9, `${f}：構えと技のためが同じ形`)
-  // 構えのすぐあとも、構えずに流しても、掲げた腕から振り下ろすまで ふだんの腕は出ない（技のはじめ120ms で掲げきる）
+  // 構えのすぐあとも、構えずに流しても、掲げた腕から振り下ろすまで ふだんの腕は出ない（技のはじめ120ms で掲げきる・溜めは1520ms まで）
   const armD = bossIllustOf('amaza').parts.find(p => p.key === 'armD').swap
-  for (let ms = 0; ms <= 920; ms += 20) assert.equal(swapOpacityOf(armD, illustPoseAt('amaza', m, ms, t, true)), 0, `構えのあと ${ms}ms`)
-  for (let ms = 120; ms <= 920; ms += 20) assert.equal(swapOpacityOf(armD, illustPoseAt('amaza', m, ms, t)), 0, `構えなし ${ms}ms`)
+  for (let ms = 0; ms <= 1520; ms += 20) assert.equal(swapOpacityOf(armD, illustPoseAt('amaza', m, ms, t, true)), 0, `構えのあと ${ms}ms`)
+  for (let ms = 120; ms <= 1520; ms += 20) assert.equal(swapOpacityOf(armD, illustPoseAt('amaza', m, ms, t)), 0, `構えなし ${ms}ms`)
   // 技のあいだも待機の揺れはそのまま（技の頭と終わりで跳ねない）
   assert.deepEqual(illustPoseAt('amaza', m, 0, t), idlePoseAt(idle, t))
   // 黒龍は構えの決まりが無い＝待機のまま・構えのあとも今までどおり
@@ -411,4 +411,24 @@ test('【確定】2026-10-29 雨摩座の手振り：構えの絵の切り替え
   const fading = illustTrailsAt('amaza', m, arc.toMs + arc.fadeMs / 2, 0)[0]
   assert.ok(fading.alpha < 1 && fading.line.length < end.line.length, '薄れながら根もとから消える')
   assert.deepEqual(illustTrailsAt('amaza', m, arc.toMs + arc.fadeMs, 0), [])
+})
+
+test('【確定】2026-10-29 雨摩座の水の帯は体の動きから切り離す（ユーザー「攻撃するとき、水の帯は干渉せずに動いてほしい」）・大技は1.5秒溜めて、だんだん高く浮いて震えも大きくなる（ユーザー「大技はもうちょっと溜めていい」）', () => {
+  const a = bossIllustOf('amaza'), d = BOSS_ILLUST_DEFS.amaza
+  assert.deepEqual(a.parts.filter(p => p.free).map(p => p.key), ['water'])
+  assert.equal(bossIllustOf('varuzenoku').parts.some(p => p.free), false, '黒龍は今までどおり')
+  // 水の帯の姿勢は待機のまま（技や構えの姿勢は使わない）。技と構えの決まりにも水の帯の角度を書かない
+  for (const t of [0, 1234, 5000]) assert.deepEqual(illustFreePoseAt('amaza', t), idlePoseAt(d.idle, t))
+  for (const M of Object.values(d.motions)) for (const [, k] of M.keys) assert.equal(k.water, undefined)
+  assert.equal(d.cast.pose.water, undefined)
+  // 溜め：掲げきってから振り下ろすまで1秒以上・いちばん上へだんだん浮く・震えは溜めの終わりほど大きい
+  const D = d.motions.deluge, m = a.motions.deluge
+  const raised = D.keys.find(([, k]) => k.armUOn === 1)[0]
+  assert.ok(D.hitMs - raised >= 1400, `溜め ${D.hitMs - raised}ms`)
+  const ys = D.keys.filter(([t, k]) => t >= 300 && k.armUOn === 1).map(([, k]) => k.y)
+  assert.ok(ys.every((y, i) => i === 0 || y < ys[i - 1]), 'だんだん高く浮く')
+  assert.equal(m.charge.toMs, m.hitMs)
+  const amp = (from, to) => { let mx = 0; for (let t = from; t < to; t += 3) mx = Math.max(mx, Math.abs(illustPoseAt('amaza', m, t, 0).armF - motionPoseAt(D.keys, t).armF - idlePoseAt(d.idle, 0).armF)); return mx }
+  assert.ok(amp(1400, 1520) > amp(320, 440) * 1.5, '溜めの終わりほど震える')
+  assert.equal(amp(1600, 1900), 0, '振り下ろしたあとは震えない')
 })

@@ -4,7 +4,7 @@ import { buffChips, ailChips, stateChips, needNow, CAST_SEC } from '../core/atb.
 import { STAT_DEFS } from '../core/stats.js'
 import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC } from '../lib/atbFx.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
-import { illustPoseAt, illustCastPoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf } from '../lib/bossIllust.js'
+import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf } from '../lib/bossIllust.js'
 
 // ============================================================
 // 「レベルキャップあり」版（v2cap）— ATB戦闘の舞台（自分が左・モンスターが右）
@@ -33,6 +33,7 @@ import { illustPoseAt, illustCastPoseAt, illustTrailsAt, illustPointAt, mouthPoi
 //     水天葬の渦の雲（ためる）は構えのあいだから相手の頭上に出て、滝が落ちたら薄れる
 //   ・2026-10-29 雨摩座の手振り（ユーザー「右手を胸元まで持ってきて手前にさっと（いけー！）」「大技は右手を真上に掲げて相手に向かって放つ」）：
 //     右腕は3つの絵（ふだん・胸元・真上）を切り替える（RigPart の濃さ）。払う・振り下ろす手の通り道に水の筋（RigTrails の water）
+//     水の帯は体の動きから切り離し、技・構えのあいだも待機のまま漂う（ユーザー「水の帯まで動いてると違和感ある」・IllustRig の freePose）
 // ============================================================
 
 const Bar = ({ pct, color, h = 10 }) => (
@@ -85,13 +86,26 @@ const FrameStrip = ({ a, frame, style }) => (
 
 // イラスト版のボス：枠（正方形）を立ち絵（art.base px）として、パーツを割合で置く。全体→パーツ→子のパーツの順に回す（中心は一覧の px・py）
 //   子のパーツ（前脚＝体の子・下あご＝頭の子）は親の中に重ねる＝親といっしょに動く。口の火（glow）と口の中は頭といっしょに動く
-const IllustRig = ({ art, pose }) => (
-  <div style={{ position:'absolute', inset:0, pointerEvents:'none',
-    transform:`translate(${(pose.x * 100).toFixed(2)}%, ${(pose.y * 100).toFixed(2)}%) rotate(${pose.r.toFixed(2)}deg)`,
-    transformOrigin:`${(art.pivot[0] / art.base) * 100}% ${(art.pivot[1] / art.base) * 100}%` }}>
-    {art.parts.filter(p => !p.nest).map(p => <RigPart key={p.key} art={art} p={p} box={{ x: 0, y: 0, w: art.base, h: art.base }} pose={pose} />)}
-  </div>
-)
+//   体の動きから切り離したパーツ（p.free・雨摩座の水の帯）は、いちばん奥に別の枠で、待機の姿勢（freePose）のまま動かす
+const rigWrap = (art, pose) => ({ position:'absolute', inset:0, pointerEvents:'none',
+  transform:`translate(${(pose.x * 100).toFixed(2)}%, ${(pose.y * 100).toFixed(2)}%) rotate(${pose.r.toFixed(2)}deg)`,
+  transformOrigin:`${(art.pivot[0] / art.base) * 100}% ${(art.pivot[1] / art.base) * 100}%` })
+const IllustRig = ({ art, pose, freePose }) => {
+  const box = { x: 0, y: 0, w: art.base, h: art.base }
+  const free = art.parts.filter(p => p.free && !p.nest)
+  return (
+    <>
+      {free.length > 0 && (
+        <div style={rigWrap(art, freePose)}>
+          {free.map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={freePose} />)}
+        </div>
+      )}
+      <div style={rigWrap(art, pose)}>
+        {art.parts.filter(p => !p.nest && !p.free).map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={pose} />)}
+      </div>
+    </>
+  )
+}
 // パーツ1つぶんの CSS（lib/bossIllust.js の partMove と同じ：長さの向きに縮めてから回す）
 const partTransform = (p, pose) => {
   const deg = pose[p.key], sq = pose[`${p.key}Sq`] || 0
@@ -228,7 +242,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
             // 待機の絵の枠（正方形）。攻撃の絵はこの枠に重ねる（ox・oy・w・h は待機の枠（クラスは 224px・ボスは base）を100%として割合で置く）
             <div style={{ position:'relative', height:'100%', aspectRatio:'1 / 1', maxWidth:'100%', filter: filters.join(' ') || 'none' }}>
               {rig && trails.length > 0 && <RigTrails art={rig} trails={trails} />}
-              {rig ? <IllustRig art={rig} pose={pose} /> : (
+              {rig ? <IllustRig art={rig} pose={pose} freePose={illustFreePoseAt(rig.key, now * 1000)} /> : (
                 <img src={src} alt="" draggable={false}
                   style={{ width:'100%', height:'100%', objectFit:'contain', userSelect:'none', visibility: frame >= 0 ? 'hidden' : 'visible' }} />
               )}
