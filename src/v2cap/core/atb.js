@@ -116,10 +116,15 @@ export const needFor = (side, skill) => {
   const cut = Math.min(60, PRIORITY_CUT * Math.max(0, priorityOf(side, skill)))
   return Math.round(GAUGE_FULL * (1 - cut / 100))
 }
+// 鈍足はATBでは**ゲージが20%遅くなる**（AGIは下げない＝battle.js の livePct が side.atb を見る）
+//   【確定】2026-10-29 ユーザー選択「ゲージが20%遅くなる」：AGI−20%のままだと、ボスより速い人にしか効かなかった
+//   （ゲージはふだん1倍で、AGIが相手を上回ったぶんだけ速くなるため）。出撃の戦闘の鈍足（AGI−20%）はそのまま
+export const ATB_SLOW_CUT = 20
 // ゲージの溜まる速さ（1秒あたり）。追加行動率は「速さ」へ読み替える
 export const fillPerSecOf = (me, eMe, eFoe) => {
   const extra = (me.evo?.extra || 0) + (me.pa?.ex?.extraIfFaster && eMe.agi > eFoe.agi ? me.pa.ex.extraIfFaster : 0)
-  return FILL_PER_SEC * fillRatio(eMe.agi, eFoe.agi) * (1 + extra / 100)
+  const slow = hasAilment(me.ail || {}, 'slow') ? 1 - ATB_SLOW_CUT / 100 : 1
+  return FILL_PER_SEC * fillRatio(eMe.agi, eFoe.agi) * (1 + extra / 100) * slow
 }
 
 // ===== 1サイド =====
@@ -148,6 +153,10 @@ const createAtbSide = (fighter, band, { ai = false, cast = false } = {}) => {
   side.parUntil = 0
   side.bigGuardUntil = 0       // 大防御（聖騎士）が切れる時刻
   side.acted = 0               // ATBで行動した回数（テスト・画面用）
+  // ボスの技の出し方（パターン）と、持ち越しのHP（IDダンジョン：最大HPは全体・いまのHPは前の挑戦の残り）
+  side.pattern = fighter.pattern || null
+  if (fighter.hpNow != null) side.hp = Math.max(1, Math.min(side.base.hp, Math.floor(fighter.hpNow)))
+  side.startHp = side.hp       // この戦闘を始めたときのHP（削った量＝startHp − いまのHP）
   return side
 }
 
@@ -159,6 +168,8 @@ export const createAtb = (fighterA, fighterB, { rng = Math.random, band = null, 
     b: createAtbSide(fighterB, band, { ai: true, cast: castB }),
   }
   battleStart(st.a, st.b, st.log)
+  initPattern(st.a, rng)
+  initPattern(st.b, rng)
   // ★職業補正・パッシブ・エンチャント・戦闘の始めの能力のぶんは**消えない**（時間で切れるのは技で入ったものだけ）
   st.a.baseBuffs = { ...st.a.buffs }
   st.b.baseBuffs = { ...st.b.buffs }
@@ -268,8 +279,44 @@ export const guardReady = (side, now) => side.guardReadyAt <= now + EPS
 export const guardCdLeft = (side, now) => Math.max(0, side.guardReadyAt - now)
 export const guardCdRatio = (side, now) => Math.min(1, guardCdLeft(side, now) / GUARD_CD)
 
+// ===== ボスの技の出し方（パターン・IDダンジョンのボス＝lib/dungeon.js が fighter.pattern を付ける）=====
+// 【確定】2026-10-29 ユーザー選択「節目ごとに1回使う、以降も確率で使う。HP５０％以下はスキル使用確定」：
+//   pattern ＝ { steps: [{ at, skill }]（at の大きい順）, bands: [{ min, weights: { 技の名前: % } }]（min の大きい順） }
+//   ・HPの割合（いまのHP÷最大HP＝持ち越しの全体）が at 以下になったら、次の行動でその技を1回必ず撃つ
+//     （行動を決めたあとに切っても、その手より先に出す）。挑戦の始めにもう切っている節目は撃たない（前の挑戦で撃った）
+//   ・それ以外は、HPの割合が min より上の帯の weights で1行動ごとに引く。残りは通常攻撃（足して100なら毎回技）
+//   ・クールダウンは見ない（パターンが決める）。引くのは行動を決めるときに1回だけ（st.rng＝同じ種なら同じ結果）
+const hpFracOf = (side) => side.hp / Math.max(1, side.base.hp)
+const slotByName = (side, name) => {
+  const idx = side.slots.findIndex(s => s.skill?.name === name)
+  return idx < 0 ? { idx: null, skill: null } : { idx, skill: side.slots[idx].skill }
+}
+const patternPick = (side) => {
+  const p = side.pattern, frac = hpFracOf(side)
+  const step = p.steps.find(s => frac <= s.at && !side.patFired.includes(s.at))
+  if (step) {
+    side.patFired.push(step.at)
+    side.patNext = slotByName(side, step.skill)
+  }
+  if (!side.patNext) {
+    const band = p.bands.find(b => frac > b.min) || p.bands[p.bands.length - 1]
+    let r = side.patRng() * 100
+    let name = null
+    for (const [k, w] of Object.entries(band?.weights || {})) { if (r < w) { name = k; break } r -= w }
+    side.patNext = name ? slotByName(side, name) : { idx: null, skill: null }
+  }
+  return side.patNext
+}
+// 挑戦の始め：もう切っている節目は撃ったことにする
+const initPattern = (side, rng) => {
+  side.patRng = rng
+  side.patFired = side.pattern ? side.pattern.steps.filter(s => hpFracOf(side) <= s.at).map(s => s.at) : []
+  side.patNext = null
+}
+
 // 敵：rot から枠を回って、撃てる技を出す（無ければ通常攻撃）
 const aiPick = (side, now) => {
+  if (side.pattern) return patternPick(side)
   const n = side.slots.length
   for (let i = 0; i < n; i++) {
     const idx = (side.rot + i) % n
@@ -400,6 +447,7 @@ const act = (st, me, foe, ch) => {
 // ゲージが満タンになった側の行動。ボスの大技はここで詠唱に入る
 const startAct = (st, me, foe) => {
   const ch = chosenOf(me, st.t)
+  me.patNext = null   // パターンのボス：次の行動はまた引く
   if (ch.skill) ch.cd = cdFor(me, ch.skill)
   if (me.castBig && ch.skill && (ch.skill.mult || 0) >= CAST_MULT) {
     me.cast = { idx: ch.idx, name: ch.skill.name, start: st.t, until: st.t + CAST_SEC, cd: ch.cd }

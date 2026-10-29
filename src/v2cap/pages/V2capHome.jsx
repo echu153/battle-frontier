@@ -84,6 +84,10 @@ const MENU = [
   [
     { key:'tower', label: TOWER_NAME, icon:'🗼', color:'#b48cff', action:'階層守護者に挑む' },
   ],
+  // 【確定】2026-10-29 IDダンジョン（ボスを呼び、HPを持ち越して倒す・ATB戦闘・救援）。いまは黒龍ヴァルゼノクのノーマル・ハード
+  [
+    { key:'dungeon', label:'IDダンジョン', icon:'🐉', color:'#ff6655', action:'黒龍ヴァルゼノクを呼ぶ・救援' },
+  ],
   // 宝樹は1つだけのまとまり＝横いっぱい（今のⅡと同じ並び方）
   [
     { key:'tree', label:'ユグレシアの宝樹', icon:'🌳', color:'#44dd99', action:'祈る' },
@@ -93,10 +97,12 @@ const MENU = [
     { key:'casino', label:'賭博場', icon:'🎰', color:'#ff4fa3', action:'スロット・ハイ&ロー・ルーレット' },
   ],
 ]
-const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', museum:'🏺 博物館', burger: <><ShopMark size={18} /> {SHOP_NAME}</>, asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場', tower:`🗼 ${TOWER_NAME}`,
+const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', museum:'🏺 博物館', burger: <><ShopMark size={18} /> {SHOP_NAME}</>, asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場', tower:`🗼 ${TOWER_NAME}`, dungeon:'🐉 IDダンジョン',
   uniqueCheck:'💎 ユニークの能力の確かめ［開発］', atb:'⏱ ATB戦闘の試し撃ち［開発］' }
 // ATBの試し撃ち（2026-10-26・開発用）。開いたときだけ読み込む（ホームの重さを増やさない）
 const V2capAtb = lazy(() => import('../components/V2capAtb.jsx'))
+// IDダンジョン（2026-10-29）。戦闘の画面（ATB）ごと、開いたときだけ読み込む
+const V2capDungeon = lazy(() => import('../components/V2capDungeon.jsx'))
 // メニューの説明に、いまの職業で残っているAPを出す（振り忘れに気づけるように）。塔はいまの層（守っていればその層）
 const towerActionOf = (prof) => (prof?.tower_guard
   ? `👑 ${floorLabel(prof.tower_guard)}を守っている`
@@ -514,6 +520,11 @@ export default function V2capHome() {
             {screen === 'casino' && <V2capCasino prof={prof} onProfile={refresh} dev={isAdmin} />}
             {screen === 'tower' && <V2capTower prof={prof} inventory={inventory} onProfile={refresh} />}
             {screen === 'uniqueCheck' && <V2capUniqueCheck prof={prof} inventory={inventory} />}
+            {screen === 'dungeon' && (
+              <Suspense fallback={<div style={{ color: TEXT.label, fontSize:'11px' }}>読み込み中...</div>}>
+                <V2capDungeon prof={prof} inventory={inventory} onProfile={refresh} />
+              </Suspense>
+            )}
             {screen === 'atb' && (
               <Suspense fallback={<div style={{ color: TEXT.label, fontSize:'11px' }}>読み込み中...</div>}>
                 <V2capAtb prof={prof} inventory={inventory} onProfile={refresh} />

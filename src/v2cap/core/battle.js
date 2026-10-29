@@ -148,8 +148,8 @@ export const beastMultOf = (skill, prevForm) =>
 const livePct = (side, acting = false) => {
   const b = { ...side.buffs }
   const add = (k, pct) => { b[k] = Math.max(BUFF_MIN_PCT, (b[k] || 0) + pct) }
-  // 状態異常「鈍足」＝AGI-20%
-  const ap = ailStatPct(side.ail)
+  // 状態異常「鈍足」＝AGI-20%（ATBでは AGI は下げず、ゲージが遅くなる＝atb.js の fillPerSecOf・2026-10-29）
+  const ap = side.atb ? null : ailStatPct(side.ail)
   if (ap) for (const [k, pct] of Object.entries(ap)) add(k, pct)
   // エンチャント：当てるたびに積むスタック（極夜のワイト・熾火のデーモン）
   for (const [k, pct] of Object.entries(side.enStacks || {})) add(k, pct)
@@ -247,7 +247,7 @@ export const liveStats = (side, acting = false) => {
 export const FX_STAT_KEYS = ['str', 'dex', 'agi', 'int_stat', 'vit', 'luk']
 export const fxOf = (side, start = {}) => {
   const pct = livePct(side)
-  const ap = ailStatPct(side.ail) || {}
+  const ap = (side.atb ? null : ailStatPct(side.ail)) || {}
   const st = {}
   for (const k of FX_STAT_KEYS) {
     const d = Math.round((pct[k] || 0) - (start[k] || 0) - (ap[k] || 0))

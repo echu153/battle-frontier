@@ -8939,3 +8939,283 @@ end;
 $$;
 revoke all on function public.v2cap_poker_action(text) from public, anon;
 grant execute on function public.v2cap_poker_action(text) to authenticated;
+
+-- ============================================================
+-- ===== 23. IDダンジョン（ボスを呼び、HPを持ち越して倒す・ATB戦闘・2026-10-29）=====
+-- ============================================================
+-- 【確定】2026-10-29 ユーザー選択（決まりの正は src/v2cap/lib/dungeon.js・経緯は docs/v2cap-design.md §6-14 の「IDダンジョン」）：
+--   ・自分で呼ぶ（入口で難易度を選ぶ）。呼べるのは**全部の難易度を合わせて1日1回**（日本時間の朝5時で切り替え）
+--   ・呼んだときから**90分**。**HPは持ち越し**（負けても残ったHPから）。挑戦1回は ATB の180秒（戦闘は画面で回し、削った量を送る）
+--   ・スタミナ：**呼んだ人は最初の1回0・そのあと3**／**救援で入った人は挑むたびに5**
+--   ・救援信号：だれでも（救援の一覧）・**先着5人**（呼んだ人と合わせて6人）
+--   ・難易度は**そのエリアに着いたら**呼べる（行ったことのある一番先の場所のエリア）。**いまはノーマル・ハードだけ**
+--   ・報酬は黒龍の専用の装備（あとで作る）。いまは無し＝**削った量だけ数える**（あとで削った量で差を付ける）
+-- ★削った量は画面が送る（申告）。1回の挑戦で、挑戦を始めたときのボスのHPより多くは入らない。
+--   ⚠報酬を付けるときは、乱数の種と押した記録（atb.js の st.inputs）をサーバーで回し直して確かめること
+-- ★数字（HP・解禁のエリア・時間・スタミナ・人数・回数）は dungeon.js と同じ。dungeon.test.js が突き合わせる（片方だけ直すと落ちる）
+-- ★表は関数からだけ読み書きする（RLS で直接は読めない）
+
+create table if not exists public.v2cap_dungeon_runs (
+  id          bigserial primary key,
+  owner_id    uuid not null references auth.users(id) on delete cascade,
+  owner_name  text not null,
+  boss        text not null,                          -- dungeon.js の DUNGEON_BOSSES のキー
+  diff        text not null,                          -- normal | hard（| expert | master）
+  hp_max      int  not null,
+  hp          int  not null,                          -- いまのHP（持ち越し）
+  day         date not null,                          -- 呼んだ日（日本時間の5時で切り替え）
+  started_at  timestamptz not null default now(),
+  ends_at     timestamptz not null,                   -- 呼んだときから90分
+  cleared_at  timestamptz,                            -- 倒した時刻
+  rescue_open boolean not null default false          -- 救援信号を出したか
+);
+create index if not exists v2cap_dungeon_runs_owner_day_idx on public.v2cap_dungeon_runs (owner_id, day);
+create index if not exists v2cap_dungeon_runs_rescue_idx on public.v2cap_dungeon_runs (rescue_open, ends_at);
+alter table public.v2cap_dungeon_runs enable row level security;
+
+create table if not exists public.v2cap_dungeon_members (
+  run_id       bigint not null references public.v2cap_dungeon_runs(id) on delete cascade,
+  player_id    uuid not null references auth.users(id) on delete cascade,
+  name         text not null,
+  is_owner     boolean not null default false,
+  tries        int not null default 0,                -- 挑んだ回数
+  damage       bigint not null default 0,             -- 削った量の合計（あとで報酬の差に使う）
+  joined_at    timestamptz not null default now(),
+  try_open_at  timestamptz,                           -- 挑戦中なら始めた時刻（終わったら null）
+  try_hp       int,                                   -- 挑戦を始めたときのボスのHP
+  primary key (run_id, player_id)
+);
+create index if not exists v2cap_dungeon_members_player_idx on public.v2cap_dungeon_members (player_id, joined_at);
+alter table public.v2cap_dungeon_members enable row level security;
+
+-- 難易度ごとの全体のHPと、呼べるようになるエリア（dungeon.js の diffs と同じ）
+create or replace function public.v2cap_dungeon_conf(p_boss text, p_diff text)
+returns table(hp int, area int) language sql immutable set search_path = public as $$
+  select v.hp, v.area from (values
+    ('varuzenoku', 'normal', 6500, 2),
+    ('varuzenoku', 'hard', 15000, 5)
+  ) as v(boss, diff, hp, area)
+  where v.boss = p_boss and v.diff = p_diff
+$$;
+revoke all on function public.v2cap_dungeon_conf(text, text) from public, anon, authenticated;
+
+-- 日本時間の朝5時で切り替わる「きょう」
+create or replace function public.v2cap_dungeon_today()
+returns date language sql stable set search_path = public as $$
+  select ((now() at time zone 'Asia/Tokyo') - interval '5 hours')::date
+$$;
+revoke all on function public.v2cap_dungeon_today() from public, anon, authenticated;
+
+-- 1体ぶんの様子（呼んだ人・HP・残り時間・入っている人）。p_me＝見ている人
+create or replace function public.v2cap_dungeon_run_json(p_run bigint, p_me uuid)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'id', r.id, 'boss', r.boss, 'diff', r.diff, 'owner', r.owner_name, 'mine', r.owner_id = p_me,
+    'hp', r.hp, 'hp_max', r.hp_max, 'started_at', r.started_at, 'ends_at', r.ends_at,
+    'cleared', r.cleared_at is not null, 'cleared_at', r.cleared_at, 'rescue_open', r.rescue_open,
+    'members', coalesce((select jsonb_agg(jsonb_build_object('name', m.name, 'owner', m.is_owner, 'tries', m.tries,
+                                                             'damage', m.damage, 'me', m.player_id = p_me)
+                                          order by m.is_owner desc, m.damage desc, m.joined_at)
+                         from public.v2cap_dungeon_members m where m.run_id = r.id), '[]'::jsonb),
+    'my_tries', coalesce((select m.tries from public.v2cap_dungeon_members m where m.run_id = r.id and m.player_id = p_me), 0))
+  from public.v2cap_dungeon_runs r where r.id = p_run
+$$;
+revoke all on function public.v2cap_dungeon_run_json(bigint, uuid) from public, anon, authenticated;
+
+-- ===== 入口の様子：自分が入っているボス（呼んだ・救援）・きょう呼んだか・救援の一覧・スタミナ =====
+create or replace function public.v2cap_dungeon_state()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_helpers_max constant int := 5;
+  v_uid  uuid := auth.uid();
+  v_stam int;
+  v_row  public.v2cap_profiles;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  v_stam := public.v2cap_stamina_roll(v_uid);
+  select * into v_row from public.v2cap_profiles where id = v_uid;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  return jsonb_build_object('ok', true,
+    'summoned_today', exists (select 1 from public.v2cap_dungeon_runs r where r.owner_id = v_uid and r.day = public.v2cap_dungeon_today()),
+    -- 入っているボス：まだ倒せる（時間内で倒していない）ものと、倒した・時間切れから30分以内のもの
+    'runs', coalesce((select jsonb_agg(public.v2cap_dungeon_run_json(r.id, v_uid) order by r.started_at desc)
+                      from public.v2cap_dungeon_runs r
+                      join public.v2cap_dungeon_members m on m.run_id = r.id and m.player_id = v_uid
+                      where least(r.ends_at, coalesce(r.cleared_at, r.ends_at)) > now() - interval '30 minutes'), '[]'::jsonb),
+    -- 救援の一覧：ほかの人が信号を出していて、まだ倒せて、空きがあり、自分が入っていないもの
+    'rescues', coalesce((select jsonb_agg(public.v2cap_dungeon_run_json(r.id, v_uid) order by r.ends_at)
+                         from (select r.* from public.v2cap_dungeon_runs r
+                               where r.rescue_open and r.cleared_at is null and r.ends_at > now() and r.owner_id <> v_uid
+                                 and not exists (select 1 from public.v2cap_dungeon_members m where m.run_id = r.id and m.player_id = v_uid)
+                                 and (select count(*) from public.v2cap_dungeon_members m where m.run_id = r.id and not m.is_owner) < c_helpers_max
+                               order by r.ends_at limit 20) r), '[]'::jsonb),
+    'stamina', v_stam, 'stamina_at', v_row.stamina_at, 'cleared_spots', to_jsonb(v_row.cleared_spots));
+end;
+$$;
+revoke all on function public.v2cap_dungeon_state() from public, anon;
+grant execute on function public.v2cap_dungeon_state() to authenticated;
+
+-- ===== 呼ぶ =====
+create or replace function public.v2cap_dungeon_summon(p_boss text, p_diff text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_min  constant int := 90;
+  v_uid  uuid := auth.uid();
+  v_row  public.v2cap_profiles;
+  v_hp   int;
+  v_area int;
+  v_here int;
+  v_id   bigint;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  -- ★行をつかんでから見る（同時に2回届いても、1日1回をすり抜けないように）
+  select * into v_row from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  select c.hp, c.area into v_hp, v_area from public.v2cap_dungeon_conf(p_boss, p_diff) c;
+  if v_hp is null then return jsonb_build_object('ok', false, 'error', 'その難易度はまだ呼べません'); end if;
+  -- 行ったことのある一番先の場所のエリア（1エリア＝3か所）
+  v_here := (public.v2cap_open_until(v_row.cleared_spots) - 1) / 3 + 1;
+  if v_here < v_area then
+    return jsonb_build_object('ok', false, 'error', format('エリア%sに着くと呼べます', v_area));
+  end if;
+  if exists (select 1 from public.v2cap_dungeon_runs r where r.owner_id = v_uid and r.day = public.v2cap_dungeon_today()) then
+    return jsonb_build_object('ok', false, 'error', 'きょうはもう呼びました（朝5時に戻ります）');
+  end if;
+  if exists (select 1 from public.v2cap_dungeon_runs r where r.owner_id = v_uid and r.cleared_at is null and r.ends_at > now()) then
+    return jsonb_build_object('ok', false, 'error', 'いま呼んでいるボスがいます');
+  end if;
+  insert into public.v2cap_dungeon_runs (owner_id, owner_name, boss, diff, hp_max, hp, day, ends_at)
+  values (v_uid, v_row.username, p_boss, p_diff, v_hp, v_hp, public.v2cap_dungeon_today(), now() + make_interval(mins => c_min))
+  returning id into v_id;
+  insert into public.v2cap_dungeon_members (run_id, player_id, name, is_owner) values (v_id, v_uid, v_row.username, true);
+  return jsonb_build_object('ok', true, 'run', public.v2cap_dungeon_run_json(v_id, v_uid));
+end;
+$$;
+revoke all on function public.v2cap_dungeon_summon(text, text) from public, anon;
+grant execute on function public.v2cap_dungeon_summon(text, text) to authenticated;
+
+-- ===== 挑戦を始める（スタミナを使う・いまのHPを返す）=====
+create or replace function public.v2cap_dungeon_try_start(p_run bigint)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_owner_first constant int := 0;
+  c_owner       constant int := 3;
+  c_helper      constant int := 5;
+  c_try_sec     constant int := 180;
+  v_uid  uuid := auth.uid();
+  v_run  public.v2cap_dungeon_runs;
+  v_mem  public.v2cap_dungeon_members;
+  v_cost int;
+  v_stam int;
+  v_at   timestamptz;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select * into v_run from public.v2cap_dungeon_runs where id = p_run for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'そのボスはいません'); end if;
+  select * into v_mem from public.v2cap_dungeon_members where run_id = p_run and player_id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'このボスには入っていません'); end if;
+  if v_run.cleared_at is not null or v_run.hp <= 0 then return jsonb_build_object('ok', false, 'error', 'もう倒されています'); end if;
+  if v_run.ends_at <= now() then return jsonb_build_object('ok', false, 'error', '時間切れです'); end if;
+  -- 挑戦中（前の挑戦の終わりがまだ届いていない）なら始めない。180秒＋余裕を過ぎたものは捨てる（スタミナは戻さない）
+  if v_mem.try_open_at is not null and v_mem.try_open_at > now() - make_interval(secs => c_try_sec + 60) then
+    return jsonb_build_object('ok', false, 'error', '挑戦中です');
+  end if;
+  v_cost := case when v_mem.is_owner then (case when v_mem.tries > 0 then c_owner else c_owner_first end) else c_helper end;
+  v_stam := public.v2cap_stamina_roll(v_uid);
+  if v_stam < v_cost then return jsonb_build_object('ok', false, 'error', 'スタミナが足りません', 'stamina', v_stam, 'cost', v_cost); end if;
+  update public.v2cap_profiles set stamina = greatest(0, stamina - v_cost), updated_at = now()
+   where id = v_uid returning stamina, stamina_at into v_stam, v_at;
+  update public.v2cap_dungeon_members set tries = tries + 1, try_open_at = now(), try_hp = v_run.hp
+   where run_id = p_run and player_id = v_uid;
+  return jsonb_build_object('ok', true, 'hp', v_run.hp, 'hp_max', v_run.hp_max, 'boss', v_run.boss, 'diff', v_run.diff,
+                            'ends_at', v_run.ends_at, 'cost', v_cost, 'stamina', v_stam, 'stamina_at', v_at);
+end;
+$$;
+revoke all on function public.v2cap_dungeon_try_start(bigint) from public, anon;
+grant execute on function public.v2cap_dungeon_try_start(bigint) to authenticated;
+
+-- ===== 挑戦の終わり（削った量を入れる）=====
+-- ★挑戦を始めたあとに時間切れ（90分）になっても、その挑戦のぶんは入れる。ほかの人が同じときに削っていても、いまのHPより多くは入らない
+create or replace function public.v2cap_dungeon_try_end(p_run bigint, p_damage int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_late_min constant int := 15;   -- 挑戦を始めてから、終わりを受け付ける長さ（分）
+  v_uid uuid := auth.uid();
+  v_run public.v2cap_dungeon_runs;
+  v_mem public.v2cap_dungeon_members;
+  v_d   int;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select * into v_run from public.v2cap_dungeon_runs where id = p_run for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'そのボスはいません'); end if;
+  select * into v_mem from public.v2cap_dungeon_members where run_id = p_run and player_id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'このボスには入っていません'); end if;
+  if v_mem.try_open_at is null then return jsonb_build_object('ok', false, 'error', '挑戦していません'); end if;
+  if v_mem.try_open_at < now() - make_interval(mins => c_late_min) then
+    update public.v2cap_dungeon_members set try_open_at = null where run_id = p_run and player_id = v_uid;
+    return jsonb_build_object('ok', false, 'error', '挑戦の終わりが遅すぎます');
+  end if;
+  v_d := greatest(0, least(coalesce(p_damage, 0), coalesce(v_mem.try_hp, 0), v_run.hp));
+  update public.v2cap_dungeon_runs
+     set hp = hp - v_d, cleared_at = case when hp - v_d <= 0 and cleared_at is null then now() else cleared_at end
+   where id = p_run returning * into v_run;
+  update public.v2cap_dungeon_members set damage = damage + v_d, try_open_at = null, try_hp = null
+   where run_id = p_run and player_id = v_uid;
+  return jsonb_build_object('ok', true, 'damage', v_d, 'run', public.v2cap_dungeon_run_json(p_run, v_uid));
+end;
+$$;
+revoke all on function public.v2cap_dungeon_try_end(bigint, int) from public, anon;
+grant execute on function public.v2cap_dungeon_try_end(bigint, int) to authenticated;
+
+-- ===== 救援信号を出す（呼んだ人だけ）=====
+create or replace function public.v2cap_dungeon_rescue(p_run bigint)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_run public.v2cap_dungeon_runs;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select * into v_run from public.v2cap_dungeon_runs where id = p_run for update;
+  if not found or v_run.owner_id <> v_uid then return jsonb_build_object('ok', false, 'error', '自分が呼んだボスだけ出せます'); end if;
+  if v_run.cleared_at is not null or v_run.ends_at <= now() then return jsonb_build_object('ok', false, 'error', 'もう終わっています'); end if;
+  update public.v2cap_dungeon_runs set rescue_open = true where id = p_run;
+  return jsonb_build_object('ok', true, 'run', public.v2cap_dungeon_run_json(p_run, v_uid));
+end;
+$$;
+revoke all on function public.v2cap_dungeon_rescue(bigint) from public, anon;
+grant execute on function public.v2cap_dungeon_rescue(bigint) to authenticated;
+
+-- ===== 救援に入る（先着5人）=====
+create or replace function public.v2cap_dungeon_join(p_run bigint)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_helpers_max constant int := 5;
+  v_uid  uuid := auth.uid();
+  v_run  public.v2cap_dungeon_runs;
+  v_name text;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select username into v_name from public.v2cap_profiles where id = v_uid;
+  if v_name is null then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  -- ★行をつかんでから数える（同時に入っても5人を超えないように）
+  select * into v_run from public.v2cap_dungeon_runs where id = p_run for update;
+  if not found or not v_run.rescue_open then return jsonb_build_object('ok', false, 'error', 'その救援はありません'); end if;
+  if v_run.cleared_at is not null or v_run.ends_at <= now() then return jsonb_build_object('ok', false, 'error', 'もう終わっています'); end if;
+  if exists (select 1 from public.v2cap_dungeon_members m where m.run_id = p_run and m.player_id = v_uid) then
+    return jsonb_build_object('ok', true, 'run', public.v2cap_dungeon_run_json(p_run, v_uid));
+  end if;
+  if (select count(*) from public.v2cap_dungeon_members m where m.run_id = p_run and not m.is_owner) >= c_helpers_max then
+    return jsonb_build_object('ok', false, 'error', '救援はいっぱいです');
+  end if;
+  insert into public.v2cap_dungeon_members (run_id, player_id, name) values (p_run, v_uid, v_name);
+  return jsonb_build_object('ok', true, 'run', public.v2cap_dungeon_run_json(p_run, v_uid));
+end;
+$$;
+revoke all on function public.v2cap_dungeon_join(bigint) from public, anon;
+grant execute on function public.v2cap_dungeon_join(bigint) to authenticated;
