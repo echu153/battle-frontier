@@ -33,6 +33,13 @@
 //   水縛の帯＝身を引いて手前の手を突き出す＝水の帯が手から飛んで相手に巻きつく／
 //   水天葬＝構え（5秒）のあいだ両手を掲げて震え、相手の頭上に渦の雲（ためる）→手を振り下ろすと雲から滝のような水が落ちる
 //   相手の頭上・足元に出すエフェクトは on（'head' 頭上・'feet' 下を足元にそろえる・'body' 体の真ん中）で、大きさは自分の絵の枠の幅に対して
+// 【確定】2026-10-29 黒龍の描き直し（ユーザー「今の黒龍迫力がない」「翼とか見切れてるからここから作り直したい」「戦闘時の立ち絵もこれでいい」
+//   「待機時のモーションは翼を前後に羽ばたかせたりしっぽを時折叩きつける」「まずは待機時のイラストを完璧にしてから技のエフェクト再確認する」）：
+//   遭遇のイラストから火の玉を消した立ち絵そのものを体にする（base: 'stand'）。ChatGPT の翼・しっぽは立ち絵と形が違った＝
+//   ChatGPT の体（翼としっぽの無い体）の形の外を、多角形で奥の翼・手前の翼・しっぽに分ける（split）。首・頭・下あご・前脚・しっぽの先は多角形で切り分ける。
+//   重ね順は 翼 → しっぽ → 体（しっぽの付け根も）→ 首と頭 → 前脚（立ち絵で足がしっぽに乗り、しっぽは右の翼の手前）。
+//   待機＝羽ばたき（前の動きのまま）・首と頭のゆっくりした揺れ・ときどきしっぽを持ち上げて叩きつける（砂ぼこりと小さな揺れ）・
+//   ときどき口に火の玉（遭遇のイラストの火の玉・火の玉.png）がふくらんで消える（ユーザー選択「たまに火の玉が出る感じ」）
 // ============================================================
 import { BOSS_ILLUST } from './bossIllustList.js'
 import { BOSS_DEFS, BOSS_ART_DIR, bossFileOf, bossArtOf } from './bossArt.js'
@@ -60,8 +67,10 @@ const srcOf = (key, kind) => {
 //   ＋の角度は時計回り：右へ伸びる手前の翼は＋で下がる・左へ伸びる奥の翼と首は＋で上がる
 //   人の形（雨摩座）：armN・armF＝手前・奥の手の角度（左へ伸びる手は＋で上がる）／water＝水の帯の角度
 //     armCOn・armUOn＝右腕の構えの絵（胸元・真上）に切り替える割合（0〜1・swapOpacityOf）／armD・armC・armU＝その腕の角度（ふだんは 0）
+//   黒龍の待機：tail・tailT＝しっぽ（付け根の側・先）の角度（＋で左のはしが上がる）／dust＝叩きつけた砂ぼこり（0＝無し・0〜1＝出てからの割合）／
+//     orb・orbOp・orbT＝口の火の玉の大きさ（0〜1）・濃さ・出てからのミリ秒
 const ZERO = { x: 0, y: 0, r: 0, neck: 0, head: 0, wingN: 0, wingF: 0, wingNSq: 0, wingFSq: 0, arm: 0, jaw: 0, glow: 0, armN: 0, armF: 0, water: 0,
-  armD: 0, armC: 0, armU: 0, armCOn: 0, armUOn: 0 }
+  armD: 0, armC: 0, armU: 0, armCOn: 0, armUOn: 0, tail: 0, tailT: 0, dust: 0, orb: 0, orbOp: 0, orbT: 0 }
 // 技ごとの動き：keys＝[時刻ミリ秒, 姿勢（待機に足す）]・hitMs＝当たる（撃ち出す）時刻
 //   trails＝残像の筋（part のパーツの点 pts を、lagMs 前からいまの時刻までたどる。fromMs〜toMs のあいだだけ・kind＝claw 爪／wind 風）
 //   shots＝飛ぶ絵の出どころ（無ければ口から1つ）。{ part, pt（パーツの点）, delayMs（hitMs からの遅れ・−で先に出る）, size（飛ぶ絵の大きさの倍率） }
@@ -74,50 +83,87 @@ const SWEEP = [[285, 168], [230, 182], [160, 205], [100, 228], [54, 251]]
 const THROW = [[110, -8], [62, 40], [34, 110], [36, 180], [54, 251]]
 export const BOSS_ILLUST_DEFS = {
   varuzenoku: {
+    // 【確定】2026-10-29 描き直し：立ち絵そのものが体。ChatGPT の体（翼としっぽの無い体）は、体の形を知るためだけに使う（split.by）。
+    //   ChatGPT の翼2枚・しっぽは立ち絵と形が違って重ならなかった（spare）。ChatGPT の体ですき間を埋めると頭や腕が二重に見えるので埋めない
+    base: 'stand', files: {}, spare: ['翼_手前', '翼_奥', 'しっぽ'],
+    // 奥から手前へ。しっぽ（tail＝持ち上げる所・tailT＝先の巻いた所）は翼より手前で体より後ろ（足がしっぽに乗っている）。
+    //   しっぽの足の下から付け根まで（左の足より右）は動かさないので体のまま。首の中に頭、頭の中に下あご、しっぽの中に先を重ねる
+    layers: ['wingF', 'wingN', 'tail', 'tailT', 'body', 'neck', 'head', 'arm', 'jaw'],
+    // 体の形の外を分ける（立ち絵 640px の上の多角形）：take＝パーツにする所・drop＝体から消す所（無ければ take）・hide＝体の後ろに隠れていた所を埋める px
+    //   埋めるのは付け根のまわり（回す中心から root px）・パーツの形を close px で閉じた中（細く隠れていた所）・回す向きに sweep° までの所
+    //   ＝広く埋めると、翼を回したとき前脚の横に模様のかたまりが浮いて見えた。sweep は待機で回すいちばん大きい角度より少し大きく
+    //   体の形から少しはみ出した小さいまとまり（minPx まで）は体に残す。手前の翼は頭の後ろの角の先より右だけ（角の先が翼といっしょに動いた）
+    //   持ち上げるしっぽは左の足より左（巻いた先のほう）だけ。足の下まで持ち上げると、足に隠れていた所が足の横にはみ出して見えた
+    //   take を付け根の側（右）へ広く取る＝付け根の 200〜228px は体にも残り、持ち上げてもすき間が見えない
+    split: { by: '体', grow: 1, minPx: 300, parts: {
+      wingF: { hide: 40, root: 70, sweep: 5, take: [[0, 0], [330, 0], [330, 300], [300, 345], [230, 345], [160, 342], [130, 346], [100, 352], [60, 366], [0, 372]] },
+      wingN: { hide: 40, root: 70, sweep: 12, take: [[395, 0], [640, 0], [640, 640], [585, 640], [578, 500], [574, 470], [548, 432], [510, 400],
+        [440, 395], [400, 330], [380, 300], [428, 255], [430, 140], [425, 100], [412, 89], [400, 84], [395, 60]] },
+      tail: { hide: 16, root: 34,
+        take: [[0, 372], [60, 366], [100, 352], [130, 346], [160, 342], [240, 345], [250, 470], [228, 520], [228, 640], [0, 640]],
+        drop: [[0, 372], [60, 366], [100, 352], [130, 346], [160, 342], [240, 345], [245, 470], [200, 520], [200, 640], [0, 640]] },
+    } },
     // 待機：1回の羽ばたき（ミリ秒）・翼の振れ幅（°・上げきり→下ろしきり）・下ろしきりで縮める割合・奥の翼の振れ幅（手前の何倍）・体の浮き沈み（枠の割合）
     //   【確定】2026-10-28 ユーザー「羽ノーモーション、付け根が外れて見えてる」：羽ばたきを大きく（回す＋縮める）・奥の翼は付け根で回す（pivots）
-    idle: { periodMs: 1100, wingUp: -14, wingDown: 16, squash: 0.16, farK: 0.6, bob: 0.014, headSway: 1.5, armSway: 2 },
-    // 回す中心を決める（道具が出す「体との重なりの真ん中」の代わり）：奥の翼＝付け根（首と手前の翼の後ろに隠れる所）・頭＝首を切った所の真ん中
-    pivots: { wingF: [292, 240], head: [232, 316] },
-    // 奥の翼（立ち絵から切り出す）のうち、背中のとげ（翼といっしょに動くと外れて見える）は体に入れる
-    wingFToBody: [[270, 240], [362, 188], [362, 272], [270, 272]],
+    //   sway＝首・頭のゆっくりした揺れ（羽ばたきと周期をずらす）
+    //   slam＝しっぽを叩きつける（everyMs ごと・atMs から）：keys＝[ミリ秒, 姿勢]・hitMs＝地面を打つ時刻（そこから dustMs のあいだ砂ぼこり・
+    //     shakeMs のあいだ全体が小さく揺れる＝shake は枠の割合）・dust＝砂ぼこりが立つ所（立ち絵の点）
+    //   orb＝口に火の玉（everyMs ごと・atMs から）：growMs でふくらみ・holdMs ゆらめき・fadeMs で消える。at＝火の玉の真ん中（頭の上の点）・
+    //     size＝枠の幅に対する絵の横幅・出ているあいだ口を jaw° 開けて光らせる（glow）
+    idle: { periodMs: 1500, wingUp: -10, wingDown: 12, squash: 0.12, farK: 0.4, bob: 0.012, headSway: 0, armSway: 1.5,
+      sway: { neck: [1.2, 3700, 0], head: [1.6, 2900, 0.3] },
+      slam: { everyMs: 6400, atMs: 2600, hitMs: 900, dustMs: 750, shakeMs: 320, shake: 0.007,
+        keys: [[0, {}], [620, { tail: 10, tailT: -8 }], [800, { tail: 10.5, tailT: -9 }], [900, { tail: -2.5, tailT: 7 }], [1020, { tail: 0.8, tailT: -2 }], [1250, {}]],
+        dust: [[95, 580], [155, 586], [212, 584]] },
+      // 火の玉は遭遇のイラストと同じ所（開いた口のすぐ前）・同じくらいの大きさ（火の玉.png は火の粉のぶん絵が大きい）
+      orb: { everyMs: 9800, atMs: 5200, growMs: 700, holdMs: 1100, fadeMs: 350, at: [246, 180], size: 0.095, jaw: -6, glow: 0.6 } },
+    // 技のあいだも残す待機のぶん（羽ばたきは弱めて・浮き沈みは半分・しっぽと砂ぼこりはそのまま＝技の頭で跳ねない）
+    idleKeep: { wingN: 0.35, wingF: 0.35, wingNSq: 0.35, wingFSq: 0.35, y: 0.5, tail: 1, tailT: 1, dust: 1 },
+    // 回す中心：奥の翼＝首の後ろの付け根・手前の翼＝右の肩の後ろの付け根・しっぽ＝左の足のすぐ左（そこから左を持ち上げる）
+    pivots: { wingF: [300, 262], wingN: [418, 280], tail: [214, 568] },
     // 切り分け（立ち絵 640px の上の点）：take＝切り出す所・drop＝親から消す所（無ければ take と同じ）・pivot＝回す中心（付け根）
     //   take を drop より付け根の側へ広く取る＝付け根は親にも残り、回してもすき間が見えない
-    //   over＝そのパーツより手前に出す（そのパーツに覆われていた所は切り出さない＝止まっているときは立ち絵と同じ）
-    //   adopt＝切り出した方が親になる（首：頭から首を切り、頭は首の子＝首を上げると頭もついてくる）
-    //   下あご：line＝口の線（先から付け根へ）。開くと line と回した line のあいだに口の中を描く・mouth＝火が出る所（line の上の点）
+    //   下あご：line＝口の線（下の歯の並び・先から付け根へ）。開くと line と回した line のあいだに口の中を描く・mouth＝火が出る所（開いた口の前）
+    //   首＝頭と胸の上（肩の付け根で回す）・頭＝首の上（あごの後ろで回す）・前脚＝左の前脚（ひじで回す）・しっぽの先＝左で巻き上がった所
     cuts: {
-      arm: { from: 'body', over: 'head', pivot: [182, 343],
-        take: [[44, 304], [150, 300], [172, 300], [186, 312], [194, 340], [198, 372], [196, 396], [44, 402]],
-        drop: [[44, 304], [158, 300], [166, 318], [171, 345], [176, 372], [182, 396], [44, 402]] },
-      jaw: { from: 'head', pivot: [114, 272],
-        line: [[40, 291], [52, 286], [70, 280], [90, 274], [114, 270]],
-        take: [[40, 291], [52, 286], [70, 280], [90, 274], [114, 270], [124, 282], [124, 302], [100, 307], [62, 314], [40, 314]],
-        mouth: [50, 290] },
-      // 【確定】2026-10-28 ユーザー「大技は首真上に上げて溜めるモーションから」：首を中ほどで切り、付け根と中ほどの2か所で曲げる
-      neck: { from: 'head', adopt: true, pivot: [255, 385],
-        take: [[140, 280], [330, 314], [330, 470], [140, 470]],
-        drop: [[140, 298], [330, 332], [330, 470], [140, 470]] },
+      neck: { from: 'body', pivot: [350, 300],
+        take: [[232, 70], [440, 70], [440, 250], [420, 285], [380, 305], [330, 312], [295, 300], [270, 262], [232, 225]],
+        drop: [[232, 70], [440, 70], [440, 240], [410, 272], [372, 292], [332, 298], [300, 288], [276, 256], [232, 222]] },
+      head: { from: 'neck', pivot: [320, 196],
+        take: [[232, 70], [440, 70], [440, 175], [400, 195], [355, 215], [318, 232], [290, 232], [262, 226], [240, 210], [232, 185]],
+        drop: [[232, 70], [440, 70], [440, 160], [400, 180], [352, 200], [318, 214], [292, 214], [262, 216], [240, 205], [232, 185]] },
+      jaw: { from: 'head', pivot: [292, 172],
+        line: [[258, 205], [265, 197], [272, 189], [279, 181], [286, 173]],
+        take: [[255, 202], [262, 194], [270, 186], [278, 179], [286, 171], [295, 172], [302, 182], [300, 194], [290, 204], [272, 214], [256, 215], [250, 208]],
+        mouth: [256, 180] },
+      arm: { from: 'body', pivot: [268, 318],
+        take: [[120, 268], [205, 266], [250, 274], [285, 290], [292, 330], [278, 362], [250, 374], [200, 368], [120, 368]],
+        drop: [[120, 268], [205, 266], [245, 276], [262, 300], [262, 340], [250, 370], [200, 368], [120, 368]] },
+      tailT: { from: 'tail', pivot: [75, 478],
+        take: [[0, 330], [262, 330], [262, 482], [120, 488], [60, 502], [0, 502]],
+        drop: [[0, 330], [262, 330], [262, 470], [120, 474], [60, 488], [0, 488]] },
     },
+    // 2026-10-29 描き直した絵は首が短く頭が首の真上にあり、口も初めから開いている＝前の絵の角度のままだと頭が後ろへ倒れ、口の中が大きく出た。
+    //   首・頭の角度は前の 0.45 倍、下あごは 0.5 倍にした（仮・技の動きとエフェクトはこのあと見直す＝ユーザー「待機時のイラストを完璧にしてから技のエフェクト再確認する」）
     motions: {
       // 【確定】2026-10-28 ユーザー「ひっかきモーションもうちょっと激しく」：大きくのけぞって振りかぶり、60ms で振り下ろして深く踏み込む
       claw: { totalMs: 950, hitMs: 370, keys: [
         [0, {}],
-        [230, { x: 0.05, y: -0.02, r: 9, neck: 6, head: 10, arm: 62, wingN: -16, wingF: 12, jaw: -10 }],
-        [310, { x: 0.055, y: -0.02, r: 10, neck: 7, head: 11, arm: 68, wingN: -18, wingF: 13, jaw: -12 }],
-        [370, { x: -0.17, y: 0.035, r: -13, neck: -8, head: -10, arm: -52, wingN: 16, wingF: -10, jaw: -24 }],
-        [430, { x: -0.155, y: 0.03, r: -11, neck: -7, head: -8, arm: -46, wingN: 12, wingF: -8, jaw: -20 }],
-        [560, { x: -0.15, y: 0.03, r: -10, neck: -6, head: -7, arm: -44, wingN: 10, wingF: -6, jaw: -14 }],
+        [230, { x: 0.05, y: -0.02, r: 9, neck: 2.7, head: 4.5, arm: 62, wingN: -16, wingF: 12, jaw: -5 }],
+        [310, { x: 0.055, y: -0.02, r: 10, neck: 3.1, head: 5, arm: 68, wingN: -18, wingF: 13, jaw: -6 }],
+        [370, { x: -0.17, y: 0.035, r: -13, neck: -3.6, head: -4.5, arm: -52, wingN: 16, wingF: -10, jaw: -12 }],
+        [430, { x: -0.155, y: 0.03, r: -11, neck: -3.1, head: -3.6, arm: -46, wingN: 12, wingF: -8, jaw: -10 }],
+        [560, { x: -0.15, y: 0.03, r: -10, neck: -2.7, head: -3.1, arm: -44, wingN: 10, wingF: -6, jaw: -7 }],
         [950, {}],
       ], trails: [
-        { kind: 'claw', part: 'arm', pts: [[58, 336], [55, 369], [96, 392]], fromMs: 310, toMs: 370, lagMs: 60, fadeMs: 150 },
+        { kind: 'claw', part: 'arm', pts: [[147, 346], [180, 334], [160, 288]], fromMs: 310, toMs: 370, lagMs: 60, fadeMs: 150 },
       ] },
       breath: { totalMs: 1250, hitMs: 620, keys: [
         [0, {}],
-        [450, { x: 0.03, r: 4, neck: 8, head: 14, glow: 0.8, jaw: -12, arm: -8 }],
-        [540, { x: 0.03, r: 4, neck: 9, head: 15, glow: 0.9, jaw: -14, arm: -10 }],
-        [620, { x: -0.05, r: -3, neck: -8, head: -8, glow: 1, jaw: -36, arm: -26 }],
-        [920, { x: -0.045, r: -2, neck: -6, head: -7, glow: 0.5, jaw: -32, arm: -22 }],
+        [450, { x: 0.03, r: 4, neck: 3.6, head: 6.3, glow: 0.8, jaw: -6, arm: -8 }],
+        [540, { x: 0.03, r: 4, neck: 4, head: 6.8, glow: 0.9, jaw: -7, arm: -10 }],
+        [620, { x: -0.05, r: -3, neck: -3.6, head: -3.6, glow: 1, jaw: -18, arm: -26 }],
+        [920, { x: -0.045, r: -2, neck: -2.7, head: -3.1, glow: 0.5, jaw: -16, arm: -22 }],
         [1250, {}],
       ] },
       // 【確定】2026-10-29 ユーザー「羽根の攻撃がおかしい、もっと羽を大きく広げて敵に向かってバフってやってもらいたい」
@@ -126,29 +172,29 @@ export const BOSS_ILLUST_DEFS = {
       //   打ち下ろした時刻に、翼の先と胸の前から風が相手へ飛ぶ（胸の前のがいちばん大きい＝1つめ・ダメージ）
       gale: { totalMs: 1350, hitMs: 640, keys: [
         [0, {}],
-        [380, { x: 0.04, y: -0.05, r: 9, neck: 10, head: 8, wingN: -20, wingNSq: -0.28, wingF: 30, wingFSq: -0.22, arm: 12, jaw: -10 }],
-        [520, { x: 0.045, y: -0.055, r: 10, neck: 11, head: 9, wingN: -22, wingNSq: -0.3, wingF: 32, wingFSq: -0.24, arm: 13, jaw: -12 }],
-        [640, { x: -0.09, y: 0.035, r: -10, neck: -8, head: -10, wingN: 38, wingNSq: 0.32, wingF: -26, wingFSq: 0.26, arm: -14, jaw: -20 }],
-        [780, { x: -0.085, y: 0.03, r: -9, neck: -7, head: -9, wingN: 34, wingNSq: 0.28, wingF: -24, wingFSq: 0.22, arm: -12, jaw: -16 }],
+        [380, { x: 0.04, y: -0.05, r: 9, neck: 4.5, head: 3.6, wingN: -20, wingNSq: -0.28, wingF: 30, wingFSq: -0.22, arm: 12, jaw: -5 }],
+        [520, { x: 0.045, y: -0.055, r: 10, neck: 5, head: 4, wingN: -22, wingNSq: -0.3, wingF: 32, wingFSq: -0.24, arm: 13, jaw: -6 }],
+        [640, { x: -0.09, y: 0.035, r: -10, neck: -3.6, head: -4.5, wingN: 38, wingNSq: 0.32, wingF: -26, wingFSq: 0.26, arm: -14, jaw: -10 }],
+        [780, { x: -0.085, y: 0.03, r: -9, neck: -3.1, head: -4, wingN: 34, wingNSq: 0.28, wingF: -24, wingFSq: 0.22, arm: -12, jaw: -8 }],
         [1020, { x: -0.04, y: 0.01, r: -4, wingN: 10, wingNSq: 0.08, wingF: -8, wingFSq: 0.05 }],
         [1350, {}],
       ], trails: [
-        { kind: 'wind', part: 'wingN', pts: [[530, 8], [600, 92], [630, 230], [616, 330]], fromMs: 520, toMs: 640, lagMs: 100, fadeMs: 220 },
-        { kind: 'wind', part: 'wingF', pts: [[18, 192], [62, 118], [130, 62], [268, 30]], fromMs: 520, toMs: 640, lagMs: 100, fadeMs: 220 },
+        { kind: 'wind', part: 'wingN', pts: [[440, 72], [560, 148], [600, 280], [600, 420]], fromMs: 520, toMs: 640, lagMs: 100, fadeMs: 220 },
+        { kind: 'wind', part: 'wingF', pts: [[60, 300], [55, 200], [130, 85], [270, 80]], fromMs: 520, toMs: 640, lagMs: 100, fadeMs: 220 },
       ], shots: [
-        { part: 'body', pt: [150, 250], delayMs: 0, size: 1.45 },
-        { part: 'wingF', pt: [18, 192], delayMs: -30, size: 0.9 },
-        { part: 'wingN', pt: [560, 120], delayMs: 30, size: 0.9 },
+        { part: 'body', pt: [285, 260], delayMs: 0, size: 1.45 },
+        { part: 'wingF', pt: [55, 200], delayMs: -30, size: 0.9 },
+        { part: 'wingN', pt: [560, 148], delayMs: 30, size: 0.9 },
       ] },
       // 首を真上に上げ、口に黒い火の玉をためて（震える）、突き出して撃つ
       doom: { totalMs: 1800, hitMs: 1080, keys: [
         [0, {}],
-        [480, { x: 0.03, y: -0.05, r: 10, neck: 28, head: 40, wingN: 12, wingF: -14, jaw: -22, glow: 0.8, arm: 10 }],
-        [640, { x: 0.035, y: -0.055, r: 11, neck: 30, head: 44, wingN: 15, wingF: -16, jaw: -26, glow: 1, arm: 12 }],
-        [800, { x: 0.03, y: -0.05, r: 10.5, neck: 29, head: 42, wingN: 13, wingF: -15, jaw: -24, glow: 1, arm: 11 }],
-        [960, { x: 0.035, y: -0.056, r: 11.5, neck: 31, head: 46, wingN: 16, wingF: -17, jaw: -28, glow: 1, arm: 12 }],
-        [1080, { x: -0.08, y: 0.02, r: -8, neck: -14, head: -16, wingN: -12, wingF: 10, jaw: -40, glow: 1, arm: -26 }],
-        [1400, { x: -0.07, y: 0.02, r: -6, neck: -10, head: -12, jaw: -34, glow: 0.4, arm: -22 }],
+        [480, { x: 0.03, y: -0.05, r: 10, neck: 12.6, head: 18, wingN: 12, wingF: -14, jaw: -11, glow: 0.8, arm: 10 }],
+        [640, { x: 0.035, y: -0.055, r: 11, neck: 13.5, head: 19.8, wingN: 15, wingF: -16, jaw: -13, glow: 1, arm: 12 }],
+        [800, { x: 0.03, y: -0.05, r: 10.5, neck: 13.1, head: 18.9, wingN: 13, wingF: -15, jaw: -12, glow: 1, arm: 11 }],
+        [960, { x: 0.035, y: -0.056, r: 11.5, neck: 14, head: 20.7, wingN: 16, wingF: -17, jaw: -14, glow: 1, arm: 12 }],
+        [1080, { x: -0.08, y: 0.02, r: -8, neck: -6.3, head: -7.2, wingN: -12, wingF: 10, jaw: -20, glow: 1, arm: -26 }],
+        [1400, { x: -0.07, y: 0.02, r: -6, neck: -4.5, head: -5.4, jaw: -17, glow: 0.4, arm: -22 }],
         [1800, {}],
       ], charge: { kind: 'hit', fromMs: 380, toMs: 1080, size: 0.3 } },
     },
@@ -163,6 +209,8 @@ export const BOSS_ILLUST_DEFS = {
       { file: '黒翼烈風_当たる', motion: 'gale', kind: 'hit', size: 0.56, durMs: 620, spin: 70 },
       { file: '終焉の黒焔_飛ぶ', motion: 'doom', kind: 'fly', size: 0.48, flyMs: 420 },
       { file: '終焉の黒焔_当たる', motion: 'doom', kind: 'hit', size: 0.72, durMs: 760, spin: 0 },
+      // 待機のときどき口に出る火の玉（遭遇のイラストの火の玉・大きさと場所は idle.orb）
+      { file: '火の玉', motion: 'idle', kind: 'orb' },
     ],
   },
   // 【確定】2026-10-29 雨摩座（ユーザー「とりあえず動かしてみて」→技4つ・エフェクト7枚）
@@ -295,16 +343,47 @@ export const motionPoseAt = (keys, ms) => {
   const [t0, p0] = keys[i], [t1, p1] = keys[i + 1]
   return lerpPose(p0, p1, smooth((ms - t0) / (t1 - t0)))
 }
-// 待機の姿勢（時刻 tMs）。振り下ろし（はじめの35%）は速く、振り上げはゆっくり
-//   sway があれば（人の形）、揺れの足し算だけ
+// 待機の姿勢（時刻 tMs）。羽ばたき（periodMs）：振り下ろし（はじめの35%）は速く、振り上げはゆっくり
+//   ＋sway＝揺れの足し算（雨摩座は揺れだけ）＋slam・orb＝ときどきの動き（黒龍のしっぽの叩きつけ・口の火の玉）
 export const idlePoseAt = (idle, tMs) => {
-  if (idle.sway) return { ...ZERO, ...Object.fromEntries(Object.entries(idle.sway).map(([k, [amp, per, ph]]) => [k, amp * Math.sin(2 * Math.PI * (tMs / per + ph))])) }
-  const ph = ((tMs % idle.periodMs) + idle.periodMs) % idle.periodMs / idle.periodMs
-  const down = ph < 0.35 ? smooth(ph / 0.35) : 1 - smooth((ph - 0.35) / 0.65)
-  const w = idle.wingUp + (idle.wingDown - idle.wingUp) * down, far = idle.farK ?? 0.8
-  return { ...ZERO, y: -idle.bob * down, head: idle.headSway * Math.sin(2 * Math.PI * (ph - 0.15)), wingN: w, wingF: -w * far,
-    wingNSq: (idle.squash || 0) * down, wingFSq: (idle.squash || 0) * 0.7 * down,
-    arm: (idle.armSway || 0) * Math.sin(2 * Math.PI * (ph - 0.3)) }
+  const pose = { ...ZERO }
+  if (idle.periodMs) {
+    const ph = ((tMs % idle.periodMs) + idle.periodMs) % idle.periodMs / idle.periodMs
+    const down = ph < 0.35 ? smooth(ph / 0.35) : 1 - smooth((ph - 0.35) / 0.65)
+    const w = idle.wingUp + (idle.wingDown - idle.wingUp) * down, far = idle.farK ?? 0.8
+    Object.assign(pose, { y: -idle.bob * down, head: (idle.headSway || 0) * Math.sin(2 * Math.PI * (ph - 0.15)), wingN: w, wingF: -w * far,
+      wingNSq: (idle.squash || 0) * down, wingFSq: (idle.squash || 0) * 0.7 * down,
+      arm: (idle.armSway || 0) * Math.sin(2 * Math.PI * (ph - 0.3)) })
+  }
+  for (const [k, [amp, per, ph]] of Object.entries(idle.sway || {})) pose[k] += amp * Math.sin(2 * Math.PI * (tMs / per + ph))
+  // いまの回の始めからのミリ秒（every ごと・at から）
+  const since = (every, at) => (((tMs - at) % every) + every) % every
+  if (idle.slam) {
+    const s = idle.slam, ms = since(s.everyMs, s.atMs)
+    const add = motionPoseAt(s.keys, ms)
+    if (add) { pose.tail += add.tail; pose.tailT += add.tailT }
+    const h = ms - s.hitMs
+    if (h >= 0 && h < s.dustMs) pose.dust = Math.max(0.001, h / s.dustMs)
+    if (h >= 0 && h < s.shakeMs) {
+      const d = 1 - h / s.shakeMs
+      pose.x += s.shake * Math.sin(h / 9) * d
+      pose.y += s.shake * 0.6 * Math.sin(h / 7 + 1) * d
+    }
+  }
+  if (idle.orb) {
+    const o = idle.orb, ms = since(o.everyMs, o.atMs)
+    if (ms < o.growMs + o.holdMs + o.fadeMs) {
+      const g = smooth(Math.min(1, ms / o.growMs)), f = Math.max(0, (ms - o.growMs - o.holdMs) / o.fadeMs)
+      // 消えるときは縮みながら薄れる（ふくらみながら薄れると、竜の色と混ざって茶色くにごって見えた）。口は火の玉といっしょに開いて、消えたら閉じる
+      pose.orb = g * (1 - 0.85 * f)
+      pose.orbOp = Math.min(1, ms / 120) * (1 - f * f)
+      pose.orbT = ms
+      const open = g * (1 - smooth(f))
+      pose.jaw += (o.jaw || 0) * open
+      pose.glow = Math.max(pose.glow, (o.glow || 0) * open)
+    }
+  }
+  return pose
 }
 // 技のあいだも残す待機のぶん（羽ばたきは弱めて残す・浮き沈みは半分）。ボスごとに idleKeep があればそちら
 const IDLE_KEEP = { wingN: 0.35, wingF: 0.35, wingNSq: 0.35, wingFSq: 0.35, y: 0.5 }
@@ -365,6 +444,13 @@ export const mouthPointOf = (key, pose) => {
   return j ? rotPoint(j.mouth, j.pivot, (pose.jaw || 0) / 2) : BOSS_ILLUST[key].mouth
 }
 
+// しっぽを叩きつけた砂ぼこりの楕円（立ち絵の px・k＝出てからの割合 0〜1）：打った所ごとに3つ（左右へ広がる・真ん中は高く上がる）。
+//   はじめの 12% で濃くなり、あとは薄れる。画面の RigDust と確かめ用の道具（tools/v2cap-boss-pose.mjs）が同じ形で描く
+export const dustEllipsesOf = (pts, k) => {
+  const e = 1 - (1 - k) * (1 - k), op = Math.min(1, k / 0.12) * (1 - k) * 0.95
+  return pts.flatMap(([x, y]) => [-1, 0, 1].map(d => ({
+    cx: x + d * 36 * e, cy: y - (d ? 8 : 18) * e, rx: 20 + (d ? 34 : 26) * e, ry: 9 + (d ? 12 : 16) * e, op })))
+}
 // 腕の構えの絵の濃さ（0〜1）：切り替える割合 w の前半で新しい絵が出きり、後半で前の絵（ふだんの腕）が消える
 //   （途中で両方が透けて、抜いた体の穴が見えないように）。swap＝{ on: 'armCOn' }（構えの絵）か { others: [...] }（ふだんの腕）
 export const swapOpacityOf = (swap, pose) => {
@@ -416,7 +502,8 @@ export const illustTrailsAt = (key, motion, ms, tMs) => {
 //   { kind:'illust', key, name, base（＝640）, illust（遭遇のイラスト）, parts:[{ key, src, x, y, w, h, px, py, ax（長さの向き°）, parent?, nest }], pivot, mouth,
 //     jaw:{ line, pivot, mouth }（口の中を描く）,
 //     motions:{ <key>: { label, keys, trails, totalMs, hitMs, flyMs, impactMs, front（当たる時刻の口・px）,
-//       shots:[{ front, delayMs, size }]（飛ぶ絵の出どころ・1つめが front）, fx:{ fly?, hit?, charge?（どれも on・anim・lead つき） }, charge? } }, srcs }
+//       shots:[{ front, delayMs, size }]（飛ぶ絵の出どころ・1つめが front）, fx:{ fly?, hit?, charge?（どれも on・anim・lead つき） }, charge? } },
+//     orb:{ src, at, size, h（縦÷横） }（待機の口の火の玉）, dust:[[x, y], …]（しっぽを叩きつけた砂ぼこり）, srcs }
 export const bossIllustOf = (key) => {
   const def = BOSS_ILLUST_DEFS[key], art = BOSS_ILLUST[key], base = BOSS_DEFS[key]
   if (!def || !art?.parts || !base) return null
@@ -451,10 +538,14 @@ export const bossIllustOf = (key) => {
       front: shots[0].front, shots, fx: Object.keys(fx).length ? fx : null, charge: md.charge && fx[md.charge.kind] ? md.charge : null }
   }
   const jaw = def.cuts?.jaw && art.parts.jaw ? { line: def.cuts.jaw.line, pivot: def.cuts.jaw.pivot, mouth: def.cuts.jaw.mouth } : null
+  // 待機のときどきの動き（黒龍）：口の火の玉（頭の中に描く）・しっぽを叩きつけた砂ぼこりの場所
+  const o = def.idle.orb, oa = art.fx?.idle?.orb
+  const orb = o && oa ? { src: srcOf(key, illustFxKindOf('idle', 'orb')), at: o.at, size: o.size, h: oa.h / oa.w } : null
+  const dust = def.idle.slam?.dust || null
   // 遭遇のイラストはドット絵版と同じ
   const illust = bossArtOf(key)?.illust || null
   return {
-    kind: 'illust', key, name: base.name, base: BOSS_ILLUST_SIZE, illust, parts, pivot: art.pivot, mouth: art.mouth, jaw, motions,
-    srcs: [...parts.map(p => p.src), ...Object.values(motions).flatMap(m => Object.values(m.fx || {}).map(f => f.src))],
+    kind: 'illust', key, name: base.name, base: BOSS_ILLUST_SIZE, illust, parts, pivot: art.pivot, mouth: art.mouth, jaw, motions, orb, dust,
+    srcs: [...parts.map(p => p.src), ...Object.values(motions).flatMap(m => Object.values(m.fx || {}).map(f => f.src)), ...(orb ? [orb.src] : [])],
   }
 }

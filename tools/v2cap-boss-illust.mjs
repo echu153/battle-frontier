@@ -20,6 +20,8 @@
 //   ★2026-10-29 人の形（雨摩座）：パーツの並びと元の絵の名前はボスごと（layers・files）。
 //      base: 'stand' ＝立ち絵そのものを体にする（ChatGPT の体は形が違った）。切り分けで空いた所は ChatGPT の体（fill）を重ねて埋める。
 //      fixed ＝立ち絵に無いもの（水の帯）は重ねる場所を探さず、描いた場所のまま置く
+//   ★2026-10-29 黒龍の描き直し（split）：ChatGPT の翼・しっぽは立ち絵と形が違ったので、ChatGPT の体（翼としっぽの無い体）の形の外を
+//      多角形で翼・しっぽに分ける（体の形の中は体のまま）。体の後ろに隠れていた付け根は近いパーツの模様を折り返して埋める
 //   ★2026-10-29 腕の構え（swaps）：右腕だけを描き変えた立ち絵（立ち絵_胸元.png・立ち絵_掲げる.png）を重ね、腕のまわり（armZone）だけを切り取って
 //      切り替えるパーツにする（体からはその所を抜く）。構えの絵のふちはぼかす・枠の上へはみ出す絵は top px だけ上へ広げて描く
 // 使い方：node tools/v2cap-boss-illust.mjs [--force]
@@ -32,7 +34,7 @@ import { fileURLToPath } from 'node:url'
 import { bleed, versionOf } from './v2cap-art-lib.mjs'
 import { readRgba, componentsOf } from './v2cap-motion.mjs'
 import { BOSS_DEFS, BOSS_ART_SRC_DIR, BOSS_ART_DIR, bossFileOf } from '../src/v2cap/lib/bossArt.js'
-import { BOSS_ILLUST_DEFS, BOSS_ILLUST_SRC, BOSS_ILLUST_SIZE, illustPartsOf, illustFilesOf, illustKindOf, illustFxKindOf } from '../src/v2cap/lib/bossIllust.js'
+import { BOSS_ILLUST_DEFS, BOSS_ILLUST_SRC, BOSS_ILLUST_SIZE, illustPartsOf, illustFilesOf, illustKindOf, illustFxKindOf, rotPoint } from '../src/v2cap/lib/bossIllust.js'
 import { ENEMY_ART_SRC_DIR } from '../src/v2cap/lib/enemyArt.js'
 import { BOSS_ILLUST } from '../src/v2cap/lib/bossIllustList.js'
 
@@ -226,6 +228,95 @@ const build = (key, def, dir) => {
       notes.push(`体：立ち絵そのもの。${def.fill}（すき間を埋める）は倍率${fit.s.toFixed(3)}・角度${fit.deg}°・位置 ${fit.tx},${fit.ty}（よさ ${fit.score}）`)
     }
   }
+  // ⑦ 体の外を分ける（split・2026-10-29 黒龍の描き直し）：ChatGPT の体（split.by＝翼としっぽの無い体）を立ち絵に重ね、その形の外にある立ち絵の画素を
+  //   多角形（take）で翼・しっぽに分ける（体の形の中は体のまま＝しっぽに乗った足の爪も体に残る）。体から消すのは drop（無ければ take）の中だけ
+  //   ＝take を付け根の側へ広く取ると、付け根は体にも残り、回してもすき間が見えない。
+  //   hide px：体の後ろに隠れていた所（体の形の中・パーツから hide px まで）を、近いパーツの模様を折り返して埋める（翼やしっぽを動かすと付け根が見える）
+  if (def.split) {
+    const P = readRgba(need(def.split.by))
+    bleed(P)
+    const fit = fitPart(T0, P)
+    fits.body = fit
+    const shape = dilate(maskOf(warpPart(P, fit, S, S, k), 100), S, S, def.split.grow ?? 1)
+    const stand = resizeRgba(T0, S, S)
+    for (const [part, sp] of Object.entries(def.split.parts)) {
+      const img = { W: S, H: S, data: Buffer.alloc(S * S * 4) }
+      const own = new Uint8Array(S * S)
+      for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+        const p = y * S + x
+        if (shape[p] || !stand.data[p * 4 + 3] || !inPoly(sp.take, x + 0.5, y + 0.5)) continue
+        stand.data.copy(img.data, p * 4, p * 4, p * 4 + 4)
+      }
+      // 小さいまとまり（体のふちの細い線・とげの先＝体の形から少しはみ出した所）は体に残す
+      //   ＝翼といっしょに動くと、頭の後ろのとげのふちが浮いて見えた（2026-10-29）
+      const { labels, comps } = componentsOf(img)
+      let n = 0, back = 0
+      for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+        const p = y * S + x
+        if (labels[p] < 0) continue
+        if (comps[labels[p]].n < (def.split.minPx ?? 300)) { img.data[p * 4 + 3] = 0; back++; continue }
+        if (img.data[p * 4 + 3] >= SEEN) { own[p] = 1; n++ }
+        if (inPoly(sp.drop || sp.take, x + 0.5, y + 0.5)) layers.body.data[p * 4 + 3] = 0
+      }
+      let hidden = 0
+      if (sp.hide) {
+        // 隠れていた所＝立ち絵で体がしっかり覆っている所（止まっているときは見えない）。いちばん近いパーツの画素で折り返した色で埋める
+        //   ＝模様がつながる（ぼかした色で埋めたら、翼を回したとき前脚や肩のまわりに赤いもやが見えた・2026-10-29）
+        const solid = (p) => img.data[p * 4 + 3] >= 200
+        const near = new Int32Array(S * S).fill(-1)
+        let front = []
+        for (let p = 0; p < S * S; p++) if (solid(p)) { near[p] = p; front.push(p) }
+        for (let d = 0; d < sp.hide && front.length; d++) {
+          const next = []
+          for (const q of front) {
+            const qx = q % S, qy = (q - qx) / S
+            for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+              const x = qx + dx, y = qy + dy, p = y * S + x
+              if (x < 0 || y < 0 || x >= S || y >= S || near[p] >= 0) continue
+              near[p] = near[q]
+              next.push(p)
+            }
+          }
+          front = next
+        }
+        // 埋めるのは次の所だけ（パーツの外まで広く埋めると、回したとき前脚の横に模様のかたまりが浮いて見えた・2026-10-29）：
+        //   付け根のまわり（回す中心から root px）・パーツの形を close px で閉じた中（細く隠れていた所）＝折り返した色／
+        //   回す向きにたどって、体（立ち絵で体の形の中がしっかり塗られた所）を出たすぐ先がパーツ（sweep° まで）の所＝パーツが体の後ろへ続いていた所
+        //     （前脚に隠れていた翼のふち＝翼を上げると前脚の上にすき間が見えた）。体を出た先が空なら埋めない（翼が届いていない所＝前脚の左上に模様が浮いた）
+        //     色は、たどって着いたパーツの画素（模様が回る向きにのびる）
+        const closed = sp.close ? erode(dilate(own, S, S, sp.close), S, S, sp.close) : own
+        const piv = def.pivots?.[part], rr = sp.root || 0
+        const src = Buffer.from(img.data), mine = (p) => own[p] && src[p * 4 + 3] >= 200
+        const alongArc = (x, y) => {
+          if (!piv || !sp.sweep) return -1
+          for (const sg of [1, -1]) for (let a = 0.25; a <= sp.sweep; a += 0.25) {
+            const [qx, qy] = rotPoint([x + 0.5, y + 0.5], piv, a * sg).map(Math.floor)
+            if (qx < 0 || qy < 0 || qx >= S || qy >= S) break
+            const q = qy * S + qx
+            if (mine(q)) return q
+            if (!shape[q] || stand.data[q * 4 + 3] < 230) break
+          }
+          return -1
+        }
+        for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+          const p = y * S + x
+          if (own[p] || near[p] < 0 || !shape[p] || stand.data[p * 4 + 3] < 230 || !inPoly(sp.take, x + 0.5, y + 0.5)) continue
+          let from = -1
+          if (closed[p] || (piv && Math.hypot(x + 0.5 - piv[0], y + 0.5 - piv[1]) < rr)) {
+            const q = near[p], qx = q % S, qy = (q - qx) / S, rx = 2 * qx - x, ry = 2 * qy - y, r = ry * S + rx
+            from = rx >= 0 && ry >= 0 && rx < S && ry < S && mine(r) ? r : q
+          } else from = alongArc(x, y)
+          if (from < 0) continue
+          src.copy(img.data, p * 4, from * 4, from * 4 + 3)
+          img.data[p * 4 + 3] = 255
+          hidden++
+        }
+      }
+      layers[part] = img
+      notes.push(`${part}：立ち絵の体の外から ${n}px（小さいまとまり ${back}px は体に残した・隠れていた所 ${hidden}px を埋めた）`)
+    }
+    notes.push(`体の形：${def.split.by}を倍率${fit.s.toFixed(3)}・角度${fit.deg}°・位置 ${fit.tx},${fit.ty}で重ねた（よさ ${fit.score}）`)
+  }
   // ⑥ 腕の構えの絵（swaps・2026-10-29 雨摩座の手振り）：右腕だけを描き変えた立ち絵を立ち絵に重ね、腕のまわり（armZone・頭は除く）だけを切り取る。
   //   体からその所を抜き、3つの絵（ふだん＝立ち絵・胸元・真上）のどれか1つで埋める。構えの絵のふちは swapFeather px でぼかす（下の体になじむ）。
   //   extra＝その絵だけが描く所（掲げた腕が冠の横を通る）・top＝枠の上へはみ出すぶん（掲げた指先）。fitOn＝そこだけで重ね直す（人物が描き変わった絵）
@@ -349,7 +440,7 @@ const build = (key, def, dir) => {
     const m = mk(part)
     pivotOf[part] = def.fixed?.[part] ? centroidOf(m, S)
       : part === 'wingN' ? ov(dilate(m, S, S, 1), body) || bodyC
-      : part === 'wingF' ? ov(dilate(m, S, S, 6), mk('head').map((v, p) => v | body[p])) || bodyC
+      : part === 'wingF' ? ov(dilate(m, S, S, 6), layers.head ? mk('head').map((v, p) => v | body[p]) : body) || bodyC
       : ov(m, body) || bodyC
   }
   // 口＝頭のいちばん左（切り分ける前の形）。頭も切り分けて作るボス（雨摩座）は切り分けたあと
@@ -458,7 +549,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
     const name = BOSS_DEFS[key]?.name || key
     const dir = path.join(SRC, BOSS_DEFS[key].dir, BOSS_ILLUST_SRC)
     if (!existsSync(dir)) { console.log(`  - ${name}：イラスト版のフォルダが無い（${path.relative(ROOT, dir)}）`); continue }
-    const known = new Set(['立ち絵', ...Object.values(illustFilesOf(key)), ...(def.fill ? [def.fill] : []), ...(def.spare || []), ...def.effects.map(e => e.file),
+    const known = new Set(['立ち絵', ...Object.values(illustFilesOf(key)), ...(def.fill ? [def.fill] : []), ...(def.split ? [def.split.by] : []), ...(def.spare || []), ...def.effects.map(e => e.file),
       ...Object.values(def.swaps || {}).map(s => s.file).filter(Boolean)])
     const files = readdirSync(dir, { withFileTypes: true }).filter(e => e.isFile()).map(e => e.name)
     for (const f of files) if (!f.startsWith('見本') && !known.has(path.basename(f, path.extname(f)))) console.log(`  ? ${name}：使わない絵（名前が決まりと違う）：${f}`)

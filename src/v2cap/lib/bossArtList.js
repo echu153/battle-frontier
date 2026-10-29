@@ -20,6 +20,6 @@ export const BOSS_ART = {
       gale: { fly: { frames: 6, w: 118, h: 113, ax: 0, ay: 57 }, hit: { frames: 6, w: 181, h: 178, ax: 91, ay: 89 } },
       doom: { fly: { frames: 6, w: 151, h: 132, ax: 0, ay: 69 }, hit: { frames: 6, w: 224, h: 231, ax: 112, ay: 116 } },
     },
-    v: { 'idle': 'c54f4e8e', 'claw': 'fa553465', 'breath': '5cc103de', 'gale': '7b444930', 'doom': '7b444930', 'fx-claw-hit': 'e2f08cc4', 'fx-breath-fly': 'e4b291a5', 'fx-breath-hit': '5748b8c1', 'fx-gale-fly': '5d0ef6f9', 'fx-gale-hit': '99f9ce93', 'fx-doom-fly': '224f2f83', 'fx-doom-hit': '129597b2', 'illust': '325304f0' },
+    v: { 'idle': 'c54f4e8e', 'claw': 'fa553465', 'breath': '5cc103de', 'gale': '7b444930', 'doom': '7b444930', 'fx-claw-hit': 'e2f08cc4', 'fx-breath-fly': 'e4b291a5', 'fx-breath-hit': '5748b8c1', 'fx-gale-fly': '5d0ef6f9', 'fx-gale-hit': '99f9ce93', 'fx-doom-fly': '224f2f83', 'fx-doom-hit': '129597b2', 'illust': 'd058ad1b' },
   },
 }

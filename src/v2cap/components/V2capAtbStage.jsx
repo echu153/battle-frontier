@@ -4,7 +4,7 @@ import { buffChips, ailChips, stateChips, needNow, CAST_SEC } from '../core/atb.
 import { STAT_DEFS } from '../core/stats.js'
 import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC } from '../lib/atbFx.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
-import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf } from '../lib/bossIllust.js'
+import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf } from '../lib/bossIllust.js'
 
 // ============================================================
 // 「レベルキャップあり」版（v2cap）— ATB戦闘の舞台（自分が左・モンスターが右）
@@ -34,6 +34,8 @@ import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illus
 //   ・2026-10-29 雨摩座の手振り（ユーザー「右手を胸元まで持ってきて手前にさっと（いけー！）」「大技は右手を真上に掲げて相手に向かって放つ」）：
 //     右腕は3つの絵（ふだん・胸元・真上）を切り替える（RigPart の濃さ）。払う・振り下ろす手の通り道に水の筋（RigTrails の water）
 //     水の帯は体の動きから切り離し、技・構えのあいだも待機のまま漂う（ユーザー「水の帯まで動いてると違和感ある」・IllustRig の freePose）
+//   ・2026-10-29 黒龍の描き直し（ユーザー「待機時のモーションは翼を前後に羽ばたかせたりしっぽを時折叩きつける」・選んだ「たまに火の玉が出る感じ」）：
+//     ときどき口に火の玉（RigPart の頭の中・pose.orb）・しっぽを叩きつけた砂ぼこり（RigDust・pose.dust）
 // ============================================================
 
 const Bar = ({ pct, color, h = 10 }) => (
@@ -87,6 +89,7 @@ const FrameStrip = ({ a, frame, style }) => (
 // イラスト版のボス：枠（正方形）を立ち絵（art.base px）として、パーツを割合で置く。全体→パーツ→子のパーツの順に回す（中心は一覧の px・py）
 //   子のパーツ（前脚＝体の子・下あご＝頭の子）は親の中に重ねる＝親といっしょに動く。口の火（glow）と口の中は頭といっしょに動く
 //   体の動きから切り離したパーツ（p.free・雨摩座の水の帯）は、いちばん奥に別の枠で、待機の姿勢（freePose）のまま動かす
+//   黒龍の待機：しっぽを叩きつけた砂ぼこり（RigDust・いちばん手前）
 const rigWrap = (art, pose) => ({ position:'absolute', inset:0, pointerEvents:'none',
   transform:`translate(${(pose.x * 100).toFixed(2)}%, ${(pose.y * 100).toFixed(2)}%) rotate(${pose.r.toFixed(2)}deg)`,
   transformOrigin:`${(art.pivot[0] / art.base) * 100}% ${(art.pivot[1] / art.base) * 100}%` })
@@ -102,8 +105,26 @@ const IllustRig = ({ art, pose, freePose }) => {
       )}
       <div style={rigWrap(art, pose)}>
         {art.parts.filter(p => !p.nest && !p.free).map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={pose} />)}
+        {art.dust && pose.dust > 0 && <RigDust art={art} k={pose.dust} />}
       </div>
     </>
+  )
+}
+// 砂ぼこり（k＝出てからの割合 0〜1）：打った所（しっぽの下のふち）から左右へ広がり、少し上がりながら薄れる。はじめの 12% で濃くなる
+//   （小さく出すと粒が並んで見えた・2026-10-29）。色はくすんだ茶色（白いと雲に見えた）。lib の dustEllipsesOf と同じ形
+const RigDust = ({ art, k }) => {
+  const id = useId()
+  return (
+    <svg viewBox={`0 0 ${art.base} ${art.base}`} style={{ position:'absolute', inset:0, width:'100%', height:'100%', overflow:'visible', pointerEvents:'none' }}>
+      <defs>
+        <radialGradient id={id}>
+          <stop offset="0%" stopColor="#7d6d62" stopOpacity="0.85" />
+          <stop offset="60%" stopColor="#5e5048" stopOpacity="0.45" />
+          <stop offset="100%" stopColor="#3e3430" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+      {dustEllipsesOf(art.dust, k).map((c, i) => <ellipse key={i} cx={c.cx} cy={c.cy} rx={c.rx} ry={c.ry} fill={`url(#${id})`} opacity={c.op} />)}
+    </svg>
   )
 }
 // パーツ1つぶんの CSS（lib/bossIllust.js の partMove と同じ：長さの向きに縮めてから回す）
@@ -126,6 +147,13 @@ const RigPart = ({ art, p, box, pose }) => {
       {p.key === 'head' && <MouthInside art={art} p={p} pose={pose} />}
       <img src={p.src} alt="" draggable={false} decoding="sync" style={{ position:'relative', width:'100%', height:'100%', display:'block', maxWidth:'none', userSelect:'none' }} />
       {art.parts.filter(c => c.nest && c.parent === p.key).map(c => <RigPart key={c.key} art={art} p={c} box={p} pose={pose} />)}
+      {/* 待機のときどき口に出る火の玉（黒龍・pose.orb＝大きさ）：頭といっしょに動く。ゆっくり回ってゆらめく */}
+      {p.key === 'head' && art.orb && pose.orb > 0.001 && (
+        <img src={art.orb.src} alt="" draggable={false} decoding="sync"
+          style={{ position:'absolute', left:`${((art.orb.at[0] - p.x) / p.w) * 100}%`, top:`${((art.orb.at[1] - p.y) / p.h) * 100}%`,
+            width:`${(art.orb.size * S / p.w) * 100}%`, maxWidth:'none', pointerEvents:'none', userSelect:'none', opacity: pose.orbOp,
+            transform:`translate(-50%, -50%) rotate(${(pose.orbT * 0.12).toFixed(1)}deg) scale(${(pose.orb * (1 + 0.05 * Math.sin(pose.orbT / 45))).toFixed(3)})` }} />
+      )}
       {/* 口の外の光：口を大きく開けているあいだは小さく薄く（開いた口の中が見えるように・火は口の中で光る） */}
       {p.key === 'head' && pose.glow > 0.01 && (
         <div style={{ position:'absolute', left:`${((mouth[0] - p.x) / p.w) * 100}%`, top:`${((mouth[1] - p.y) / p.h) * 100}%`,
