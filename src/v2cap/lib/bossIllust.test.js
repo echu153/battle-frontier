@@ -8,13 +8,14 @@ import { BOSS_ART_DIR, BOSS_DEFS, bossFileOf } from './bossArt.js'
 import {
   BOSS_ILLUST_DEFS, BOSS_ILLUST_SIZE, illustPartsOf, illustKindOf, illustFxKindOf,
   bossIllustOf, illustPoseAt, idlePoseAt, motionPoseAt, illustPointAt, illustTrailsAt, mouthPointOf, rotPoint, partMove,
-  illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt, dustEllipsesOf, EASES, joltAt, illustBendKindOf, bendFramesOf,
+  illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt, dustEllipsesOf, EASES, joltAt, illustBendKindOf, bendFramesOf, illustPoseKindOf, illustShowAt, illustGhostsAt, ART_FADE_MS,
 } from './bossIllust.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { dilate, erode, leftTipOf, fitPart, inPoly } from '../../../tools/v2cap-boss-illust.mjs'
 
 const OUT = new URL(`../../../public${BOSS_ART_DIR}/`, import.meta.url)
 const kindsOf = (key, e) => [...illustPartsOf(key).filter(p => e.parts[p]).map(illustKindOf), ...illustPartsOf(key).filter(p => e.parts[p]?.bend).map(illustBendKindOf),
+  ...Object.entries(e.poses || {}).flatMap(([mk, ps]) => Object.keys(ps).map(n => illustPoseKindOf(mk, n))),
   ...Object.entries(e.fx || {}).flatMap(([mk, f]) => Object.keys(f).map(kind => illustFxKindOf(mk, kind)))]
 
 test('【確定】2026-10-28 イラスト版の絵はぜんぶあって軽い（パーツ 120KB・エフェクト 120KB まで）・中身の印は絵と同じ', () => {
@@ -614,4 +615,52 @@ test('【確定】2026-10-29 黒龍のしっぽの巻いた先は曲げた絵を
   assert.ok(alphaAt(12, 10) > 200, '付け根のそばはそのまま')
   assert.ok(alphaAt(50, 10) < 50 && alphaAt(10, 50) > 100, '遠くは 90° 回って下へ（時計回り）')
   void t
+})
+
+test('【確定】2026-10-30 技のポーズの絵（ユーザー「グラブルのベルゼバブぐらいしっかりと攻撃モーション動いてほしい」→選んだ「技ごとに2枚」）：ため→振り抜き→部品の立ち絵と切り替える・振り抜きは残像・絵が無いうちは部品の動きのまま', () => {
+  const d = BOSS_ILLUST_DEFS.varuzenoku
+  // どの技にも ため・振り抜き の絵の名前と切り替える時刻がある
+  for (const [k, m] of Object.entries(d.motions)) {
+    assert.deepEqual(Object.keys(d.poses[k]).sort(), ['strike', 'windup'], `${k}：ためと振り抜き`)
+    const names = m.art.map(([, n]) => n)
+    assert.deepEqual(names, [null, 'windup', 'strike', null], `${k}：部品→ため→振り抜き→部品`)
+    for (let i = 1; i < m.art.length; i++) assert.ok(m.art[i][0] > m.art[i - 1][0], `${k}：時刻の順`)
+    const tStrike = m.art.find(([, n]) => n === 'strike')[0], tBack = m.art.at(-1)[0]
+    assert.ok(tStrike < m.hitMs && m.hitMs - tStrike <= 80, `${k}：当たる直前に振り抜きの絵`)
+    assert.ok(tBack - m.hitMs >= 250 && tBack < m.totalMs, `${k}：当たった形で止めてから立ち絵へ戻る`)
+    assert.ok(m.ghosts.fromMs === tStrike && m.ghosts.toMs > m.hitMs, `${k}：振り抜きから残像`)
+  }
+  // 出し方（作った絵がある技のつもりの見本）：切り替えは新しい絵が前半で出きり、前の絵が後半で消える
+  const mo = { totalMs: 1000, poses: { windup: {}, strike: {} }, art: [[0, null], [100, 'windup'], [400, 'strike'], [700, null]], ghosts: { fromMs: 400, toMs: 600, lagMs: 30, n: 3 } }
+  assert.deepEqual(illustShowAt(mo, 50), { rig: 1, poses: [] })
+  const mid = illustShowAt(mo, 100 + ART_FADE_MS / 2)
+  assert.ok(Math.abs(mid.rig - 1) < 1e-9 && mid.poses.at(-1).name === 'windup' && Math.abs(mid.poses.at(-1).op - 1) < 1e-9, '半分の時刻で新しい絵が出きって、前の絵はまだ残る')
+  assert.deepEqual(illustShowAt(mo, 100 + ART_FADE_MS + 1), { rig: 0, poses: [{ name: 'windup', op: 1 }] })
+  const sw = illustShowAt(mo, 400 + ART_FADE_MS * 0.75)
+  assert.deepEqual(sw.poses.map(p => p.name), ['windup', 'strike'], '新しい絵が上')
+  assert.ok(sw.poses[0].op > 0 && sw.poses[0].op < 1 && sw.poses[1].op === 1)
+  assert.deepEqual(illustShowAt(mo, 800), { rig: 1, poses: [] }, '立ち絵へ戻る')
+  assert.deepEqual(illustShowAt(mo, 1000), { rig: 1, poses: [] }, '流し終わったら立ち絵')
+  // 残像：振り抜きのあいだだけ・前の時刻ほど薄く・そのとき出ていた絵
+  assert.deepEqual(illustGhostsAt(mo, 390), [])
+  const gs = illustGhostsAt(mo, 500)
+  assert.equal(gs.length, 3)
+  assert.ok(gs.every(g => g.name === 'strike') && gs[0].op > gs[1].op && gs[1].op > gs[2].op && gs[0].ms === 470)
+  const early = illustGhostsAt(mo, 420)
+  assert.ok(early.length >= 1 && early.some(g => g.name === 'windup'), '振り抜きのはじめの残像はためのポーズ')
+  assert.deepEqual(illustGhostsAt(mo, 600), [])
+  // 絵がまだ無い技（poses が null）は、部品の立ち絵のまま・残像なし
+  const none = { ...mo, poses: null }
+  assert.deepEqual(illustShowAt(none, 500), { rig: 1, poses: [] })
+  assert.deepEqual(illustGhostsAt(none, 500), [])
+  const half = { ...mo, poses: { strike: {} } }
+  assert.deepEqual(illustShowAt(half, 200), { rig: 1, poses: [] }, 'できていない絵（ため）の所は部品の立ち絵')
+  // 画面に渡す形：できている絵だけ（一覧の poses）・先に読む絵に入る
+  const a = bossIllustOf('varuzenoku')
+  for (const [k, m] of Object.entries(a.motions)) {
+    const made = BOSS_ILLUST.varuzenoku.poses?.[k] || {}
+    assert.deepEqual(Object.keys(m.poses || {}).sort(), Object.keys(made).sort())
+    for (const p of Object.values(m.poses || {})) assert.ok(a.srcs.includes(p.src))
+    assert.deepEqual(m.art, d.motions[k].art)
+  }
 })
