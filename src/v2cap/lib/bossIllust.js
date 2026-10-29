@@ -188,63 +188,76 @@ export const BOSS_ILLUST_DEFS = {
     //   【確定】2026-10-30 art＝ポーズの絵に切り替える時刻（[ミリ秒, 'windup'|'strike'|null]・def.poses の絵ができた技だけ）・ghosts＝振り抜きの残像。
     //     ためは部品で少し引いてから ため の絵へ・振り抜く直前に 振り抜き の絵へ（残像を残して飛び込む）・当たった形で止めてから部品の立ち絵へ戻る
     motions: {
-      // 黒爪：体を後ろへ引いて伸び上がり、前脚を顔の左横まで振りかぶる（顔に重ねると頭が隠れた）→体ごと相手へ踏み込み、70ms で前脚を振り下ろす。爪3本の残像
-      claw: { totalMs: 1150, hitMs: 420, keys: [
+      // 【確定】2026-10-30 ポーズの絵で動かす（ユーザー「グラブルのベルゼバブぐらいしっかりと攻撃モーション動いてほしい」）：
+      //   部品で少し引く→ため の絵で後ろへ引いて間を取る→振り抜き の絵で相手のほうへ大きく飛び込む（残像）→当たった形で止まる→
+      //   部品の立ち絵（振り抜いたあとの形）に戻って元の場所へ戻る。ポーズの絵のあいだは全体の傾き（r）を小さくする（絵がもう傾いている）。
+      //   anchors＝ポーズの絵の上の点（立ち絵の px）：mouth＝炎の出る口・ためる火の玉／chest・wingA・wingB＝風の出る胸と翼。shots の at で使う
+      // 黒爪：ため＝右の前脚を頭の後ろまで振りかぶる・振り抜き＝体を低くして左の前脚を左下へ振り抜く。爪あとは振りかぶった爪から振り抜いた爪までの弧（arcs）
+      claw: { totalMs: 1250, hitMs: 430, keys: [
         [0, {}],
-        [260, { x: 0.045, y: -0.025, r: 7, neck: 2, head: -2, arm: 40, wingN: -12, wingNSq: -0.1, wingF: 8, jaw: -2 }, 'out'],
-        [350, { x: 0.055, y: -0.03, r: 8.5, neck: 2.5, head: -2.5, arm: 47, wingN: -14, wingNSq: -0.12, wingF: 10, jaw: -3 }],
-        [420, { x: -0.16, y: 0.035, r: -12, neck: -4, head: -3, arm: -48, wingN: 12, wingNSq: 0.1, wingF: -10, jaw: -6 }, 'out'],
-        [520, { x: -0.17, y: 0.04, r: -13, neck: -4.5, head: -3.5, arm: -54, wingN: 13, wingNSq: 0.12, wingF: -11, jaw: -7 }, 'out'],
-        [660, { x: -0.155, y: 0.035, r: -11.5, neck: -4, head: -3, arm: -50, wingN: 11, wingNSq: 0.08, wingF: -9, jaw: -6 }],
-        [1150, {}],
-      ], jolt: { atMs: 420, ms: 220, x: 0.006, y: 0.004 },
-      art: [[0, null], [150, 'windup'], [370, 'strike'], [760, null]], ghosts: { fromMs: 370, toMs: 520, lagMs: 28, n: 3 }, trails: [
-        { kind: 'claw', part: 'arm', pts: [[138, 339], [168, 351], [196, 324]], fromMs: 350, toMs: 420, lagMs: 70, fadeMs: 160 },
+        [150, { x: 0.02, y: -0.01, r: 3, neck: 1, arm: 15, wingN: -4 }],
+        [360, { x: 0.065, y: -0.02, r: 2 }, 'out'],
+        [380, { x: 0.065, y: -0.02, r: 2 }],
+        [430, { x: -0.42, y: 0.03, r: -2 }, 'out'],
+        [600, { x: -0.44, y: 0.035, r: -2.5 }],
+        [820, { x: -0.36, y: 0.03, r: -3, neck: -3, head: -2, arm: -40, wingN: 8, wingF: -6, jaw: -5 }],
+        [1250, {}],
+      ], jolt: { atMs: 430, ms: 240, x: 0.008, y: 0.005 },
+      art: [[0, null], [150, 'windup'], [380, 'strike'], [820, null]], ghosts: { fromMs: 380, toMs: 540, lagMs: 26, n: 3 },
+      arcs: [
+        { kind: 'claw', pts: [[440, 95], [340, 150], [215, 265], [105, 385], [35, 485]], fromMs: 380, toMs: 430, fadeMs: 200 },
+        { kind: 'claw', pts: [[455, 110], [360, 170], [240, 280], [130, 400], [60, 500]], fromMs: 380, toMs: 430, fadeMs: 200 },
+        { kind: 'claw', pts: [[470, 125], [380, 190], [265, 300], [155, 415], [85, 515]], fromMs: 380, toMs: 430, fadeMs: 200 },
       ] },
-      // 焦熱の吐息：首を後ろへ引いて胸をそらし、口の奥を光らせる→80ms で首を相手へ突き出して口を開け、吐き続ける（反動で少し押し戻される）
-      breath: { totalMs: 1450, hitMs: 640, keys: [
+      // 焦熱の吐息：ため＝首を引いてのけぞり胸を光らせる・吐く＝首を前へ突き出して口を開ける（炎は開いた口から）
+      breath: { totalMs: 1500, hitMs: 640, keys: [
         [0, {}],
-        [380, { x: 0.035, y: -0.02, r: 5, neck: 6, head: 5, wingN: -8, wingF: 5, arm: 8, glow: 0.6 }],
-        [560, { x: 0.045, y: -0.025, r: 6, neck: 7.5, head: 6.5, wingN: -10, wingF: 6, arm: 10, glow: 0.95 }],
-        [640, { x: -0.07, y: 0.015, r: -5, neck: -7, head: -5, jaw: -10, wingN: 8, wingF: -6, arm: -20, glow: 1 }, 'out'],
-        [760, { x: -0.06, y: 0.012, r: -4, neck: -6, head: -4.5, jaw: -11, wingN: 6, wingF: -5, arm: -18, glow: 1 }],
-        [1000, { x: -0.05, y: 0.01, r: -3, neck: -5, head: -4, jaw: -9, arm: -15, glow: 0.6 }],
-        [1450, {}],
-      ], jolt: { atMs: 640, ms: 180, x: 0.004, y: 0.003 },
-      art: [[0, null], [200, 'windup'], [600, 'strike'], [1100, null]], ghosts: { fromMs: 600, toMs: 700, lagMs: 28, n: 2 } },
-      // 【確定】2026-10-29 ユーザー「羽根の攻撃がおかしい、もっと羽を大きく広げて敵に向かってバフってやってもらいたい」
-      //   （10-28 の「後ろへ引いて前へ2回あおぐ」は翼がワイパーのように倒れて見えた）：
-      //   伸び上がって両方の翼を高く広げ（長さの向きに伸ばす＝Sq を−）、一瞬ためて、体ごと相手の方へ踏み込みながら 100ms で打ち下ろす（縮める＝手前へ来る）。
-      //   打ち下ろした時刻に、翼の先と胸の前から風が相手へ飛ぶ（胸の前のがいちばん大きい＝1つめ・ダメージ）
-      gale: { totalMs: 1500, hitMs: 700, keys: [
-        [0, {}],
-        [420, { x: 0.04, y: -0.055, r: 8, neck: 4, head: 2, wingN: -22, wingNSq: -0.28, wingF: 12, wingFSq: -0.18, arm: 14, jaw: -3 }, 'out'],
-        [600, { x: 0.05, y: -0.065, r: 9.5, neck: 4.5, head: 2.5, wingN: -25, wingNSq: -0.32, wingF: 14, wingFSq: -0.2, arm: 16, jaw: -3 }],
-        [700, { x: -0.1, y: 0.035, r: -10, neck: -3.5, head: -3, wingN: 34, wingNSq: 0.3, wingF: -24, wingFSq: 0.24, arm: -12, jaw: -7 }, 'out'],
-        [820, { x: -0.105, y: 0.04, r: -10.5, neck: -3.5, head: -3, wingN: 36, wingNSq: 0.32, wingF: -26, wingFSq: 0.26, arm: -13, jaw: -7 }],
-        [1080, { x: -0.05, y: 0.015, r: -5, wingN: 12, wingNSq: 0.1, wingF: -9, wingFSq: 0.08, arm: -5, jaw: -3 }],
+        [200, { x: 0.02, r: 2, neck: 3, head: 3, glow: 0.4 }],
+        [580, { x: 0.055, y: -0.012, r: 1.5 }, 'out'],
+        [600, { x: 0.055, y: -0.012, r: 1.5 }],
+        [640, { x: -0.12, y: 0.01, r: -1.5 }, 'out'],
+        [1040, { x: -0.1, y: 0.008, r: -1 }],
+        [1140, { x: -0.09, y: 0.006, r: -3, neck: -5, head: -4, jaw: -9, arm: -15, glow: 0.6 }],
         [1500, {}],
-      ], jolt: { atMs: 700, ms: 260, x: 0.007, y: 0.005 },
-      art: [[0, null], [220, 'windup'], [640, 'strike'], [1150, null]], ghosts: { fromMs: 640, toMs: 760, lagMs: 30, n: 3 }, trails: [
-        { kind: 'wind', part: 'wingN', pts: [[440, 72], [560, 148], [600, 280], [600, 420]], fromMs: 600, toMs: 700, lagMs: 100, fadeMs: 220 },
-        { kind: 'wind', part: 'wingF', pts: [[262, 84], [200, 66], [120, 120], [70, 200], [60, 260]], fromMs: 600, toMs: 700, lagMs: 100, fadeMs: 220 },
-      ], shots: [
-        { part: 'body', pt: [285, 260], delayMs: 0, size: 1.45 },
-        { part: 'wingF', pt: [55, 200], delayMs: -30, size: 0.9 },
-        { part: 'wingN', pt: [560, 148], delayMs: 30, size: 0.9 },
-      ] },
-      // 終焉の黒焔：首を真上へ上げて伸び上がり、翼を広げて口に黒い炎をためる（震えない・ゆっくりさらに伸び上がる）
-      //   →120ms で首を相手へ振り下ろし、体ごと前へ出て翼も打ち下ろし、黒炎を吐きつける。いちばん大きく揺れる
-      doom: { totalMs: 2200, hitMs: 1300, keys: [
+      ], jolt: { atMs: 640, ms: 180, x: 0.004, y: 0.003 },
+      art: [[0, null], [200, 'windup'], [600, 'strike'], [1140, null]], ghosts: { fromMs: 600, toMs: 700, lagMs: 26, n: 2 },
+      anchors: { strike: { mouth: [55, 305] } } },
+      // 【確定】2026-10-29 ユーザー「もっと羽を大きく広げて敵に向かってバフってやってもらいたい」：ため＝伸び上がって翼を大きく広げる・
+      //   打ち下ろし＝両方の翼を前へ打ち下ろして体を包む。打ち下ろした時刻に胸の前と翼の先から風が相手へ飛ぶ（胸の前がいちばん大きい＝1つめ・ダメージ）。
+      //   翼のふちに風の筋（打ち下ろしの絵の翼のふち）
+      gale: { totalMs: 1550, hitMs: 700, keys: [
         [0, {}],
-        [520, { x: 0.03, y: -0.06, r: 9, neck: 15, head: 9, wingN: -16, wingNSq: -0.2, wingF: 10, wingFSq: -0.12, arm: 14, jaw: -6, glow: 0.7 }, 'out'],
-        [1180, { x: 0.04, y: -0.075, r: 11, neck: 17, head: 10.5, wingN: -19, wingNSq: -0.24, wingF: 12, wingFSq: -0.14, arm: 16, jaw: -8, glow: 1 }],
-        [1300, { x: -0.1, y: 0.03, r: -9, neck: -9, head: -6, wingN: 24, wingNSq: 0.24, wingF: -18, wingFSq: 0.18, arm: -28, jaw: -12, glow: 1 }, 'out'],
-        [1460, { x: -0.11, y: 0.035, r: -10, neck: -10, head: -6.5, wingN: 26, wingNSq: 0.26, wingF: -19, wingFSq: 0.2, arm: -30, jaw: -12, glow: 1 }],
-        [1700, { x: -0.08, y: 0.025, r: -7, neck: -7, head: -5, wingN: 14, wingNSq: 0.12, wingF: -10, wingFSq: 0.1, arm: -22, jaw: -10, glow: 0.4 }],
-        [2200, {}],
+        [220, { x: 0.02, y: -0.02, r: 2, wingN: -8, wingNSq: -0.1, wingF: 4 }],
+        [620, { x: 0.045, y: -0.055, r: 1.5 }, 'out'],
+        [640, { x: 0.045, y: -0.055, r: 1.5 }],
+        [700, { x: -0.16, y: 0.02, r: -2 }, 'out'],
+        [1040, { x: -0.13, y: 0.015, r: -1.5 }],
+        [1150, { x: -0.11, y: 0.01, r: -5, neck: -3, head: -3, wingN: 20, wingNSq: 0.2, wingF: -14, wingFSq: 0.15 }],
+        [1550, {}],
+      ], jolt: { atMs: 700, ms: 260, x: 0.007, y: 0.005 },
+      art: [[0, null], [220, 'windup'], [640, 'strike'], [1150, null]], ghosts: { fromMs: 640, toMs: 760, lagMs: 28, n: 3 },
+      anchors: { strike: { chest: [190, 320], wingA: [60, 165], wingB: [50, 375] } },
+      arcs: [
+        { kind: 'wind', pts: [[420, 60], [250, 40], [110, 90], [40, 200], [45, 370]], fromMs: 640, toMs: 700, fadeMs: 240 },
+        { kind: 'wind', pts: [[380, 110], [230, 95], [120, 140], [75, 230], [80, 360]], fromMs: 640, toMs: 700, fadeMs: 240 },
+      ], shots: [
+        { at: 'chest', part: 'body', pt: [285, 260], delayMs: 0, size: 1.45 },
+        { at: 'wingA', part: 'wingF', pt: [55, 200], delayMs: -30, size: 0.9 },
+        { at: 'wingB', part: 'wingN', pt: [560, 148], delayMs: 30, size: 0.9 },
+      ] },
+      // 終焉の黒焔：ため＝首を真上へ伸ばして天を仰ぎ口に黒い炎をためる（震えない・ゆっくり伸び上がる）・吐きつけ＝首を前へ叩きつけて吐く。いちばん大きく揺れる
+      doom: { totalMs: 2250, hitMs: 1300, keys: [
+        [0, {}],
+        [300, { x: 0.02, y: -0.02, r: 3, neck: 6, head: 4, glow: 0.5 }],
+        [1200, { x: 0.045, y: -0.065, r: 2 }, 'out'],
+        [1240, { x: 0.045, y: -0.065, r: 2 }],
+        [1300, { x: -0.18, y: 0.03, r: -2 }, 'out'],
+        [1720, { x: -0.16, y: 0.025, r: -1.5 }],
+        [1820, { x: -0.14, y: 0.02, r: -6, neck: -7, head: -5, jaw: -10, arm: -22, wingN: 14, wingF: -10, glow: 0.4 }],
+        [2250, {}],
       ], jolt: { atMs: 1300, ms: 320, x: 0.01, y: 0.008 }, charge: { kind: 'hit', fromMs: 300, toMs: 1300, size: 0.3 },
-      art: [[0, null], [300, 'windup'], [1240, 'strike'], [1800, null]], ghosts: { fromMs: 1240, toMs: 1400, lagMs: 30, n: 3 } },
+      art: [[0, null], [300, 'windup'], [1240, 'strike'], [1820, null]], ghosts: { fromMs: 1240, toMs: 1400, lagMs: 28, n: 3 },
+      anchors: { windup: { mouth: [302, 70] }, strike: { mouth: [45, 432] } } },
     },
     // 塗りのエフェクト（元の絵の名前はドット絵版と同じ・フォルダが違う）。size＝枠の幅に対する横幅
     //   飛ぶ＝flyMs で口（か shots）から自分の体の真ん中へ／当たる＝durMs のあいだ大きくなりながら消える（spin＝回る角度°）
@@ -518,6 +531,13 @@ export const illustShowAt = (motion, ms) => {
   const rig = shown.filter(([n]) => !n).reduce((m, [, o]) => Math.max(m, o), 0)
   return { rig, poses: shown.filter(([n, o]) => n && o > 0.001).map(([name, op]) => ({ name, op })) }
 }
+// いま出ているポーズの絵の上の点 name（motion.anchors＝{ windup: { mouth: [x, y] }, … }）を、全体の姿勢 pose で動かした先（立ち絵の px）。
+//   その絵が出ていない・点が無ければ null（部品の立ち絵の点を使う）。大技のためる火の玉は、ため の絵の上を向いた口に置く
+export const artAnchorAt = (key, motion, ms, pose, name) => {
+  const top = illustShowAt(motion, ms).poses.at(-1)
+  const pt = top && motion.anchors?.[top.name]?.[name]
+  return pt ? illustPointAt(key, pose, pt, 'body') : null
+}
 // 残像（motion.ghosts＝{ fromMs, toMs, lagMs, n, op }）：fromMs〜toMs のあいだ、lagMs ずつ前の姿勢でポーズの絵を薄く重ねる（振り抜いて飛び込む勢い）
 //   { name, ms（その残像の時刻）, op }。そのときに出ていたポーズの絵だけ（部品の立ち絵には残像を出さない）
 export const illustGhostsAt = (motion, ms) => {
@@ -665,15 +685,17 @@ export const bossIllustOf = (key) => {
       if (d.kind === 'fly') flyMs = d.flyMs
     }
     const poseAt = (ms) => ({ ...ZERO, ...motionPoseAt(md.keys, ms) })
+    // 振り抜きのポーズの絵があれば、絵の上の点（anchors.strike の at・無ければ mouth）から出す（全体の姿勢だけで動かす）
+    const sa = art.poses?.[m.key]?.strike && md.anchors?.strike
     const shots = (md.shots || [{ delayMs: 0, size: 1 }]).map(sh => {
-      const p = poseAt(md.hitMs + sh.delayMs)
-      const front = sh.part ? illustPointAt(key, p, sh.pt, sh.part) : illustPointAt(key, p, mouthPointOf(key, p), 'head')
+      const p = poseAt(md.hitMs + sh.delayMs), apt = sa?.[sh.at || 'mouth']
+      const front = apt ? illustPointAt(key, p, apt, 'body') : sh.part ? illustPointAt(key, p, sh.pt, sh.part) : illustPointAt(key, p, mouthPointOf(key, p), 'head')
       return { front: front.map(Math.round), delayMs: sh.delayMs, size: sh.size ?? 1 }
     })
     // 当たる時刻＝撃ち出す時刻＋飛ぶ時間＋当たる絵が降りきるまで（lead・氷雨と水天葬）
     motions[m.key] = { label: m.file, keys: md.keys, trails: md.trails || [], arcs: md.arcs || [], jolt: md.jolt || null, totalMs: md.totalMs, hitMs: md.hitMs, flyMs, impactMs: md.hitMs + flyMs + (fx.hit?.lead || 0),
       front: shots[0].front, shots, fx: Object.keys(fx).length ? fx : null, charge: md.charge && fx[md.charge.kind] ? md.charge : null, scene: md.scene || null,
-      poses: posesOf(m.key), art: md.art || null, ghosts: md.ghosts || null }
+      poses: posesOf(m.key), art: md.art || null, ghosts: md.ghosts || null, anchors: md.anchors || null }
   }
   const jaw = def.cuts?.jaw && art.parts.jaw ? { line: def.cuts.jaw.line, pivot: def.cuts.jaw.pivot, mouth: def.cuts.jaw.mouth } : null
   // 待機のときどきの動き（黒龍）：口の火の玉（頭の中に描く）・しっぽを叩きつけた砂ぼこりの場所

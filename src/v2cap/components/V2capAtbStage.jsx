@@ -4,7 +4,7 @@ import { buffChips, ailChips, stateChips, needNow, CAST_SEC } from '../core/atb.
 import { STAT_DEFS } from '../core/stats.js'
 import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC } from '../lib/atbFx.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
-import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt } from '../lib/bossIllust.js'
+import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, artAnchorAt } from '../lib/bossIllust.js'
 import { FX_HEAD_Y, FX_FEET_Y, FX_SKY_Y, FX_TARGET_Y, SCENE_TOP, fallAt, coilAt, pourTimesOf, sceneEndMsOf, stageSceneOf } from '../lib/bossScene.js'
 
 // ============================================================
@@ -597,7 +597,8 @@ function ChargeOrb({ m, a, acts, now, geo, art, s, cast, castEnd, sky = null }) 
     const ms = (now - f.t0) * 1000
     if (ms < c.fromMs || ms >= c.toMs) continue
     const pose = illustPoseAt(art.key, m, ms, now * 1000)
-    const [mx, my] = illustPointAt(art.key, pose, mouthPointOf(art.key, pose), 'head')
+    // ポーズの絵が出ていれば、その絵の口（ため の絵は上を向いた口）に置く
+    const [mx, my] = artAnchorAt(art.key, m, ms, pose, 'mouth') || illustPointAt(art.key, pose, mouthPointOf(art.key, pose), 'head')
     const k = (ms - c.fromMs) / (c.toMs - c.fromMs)
     on = { frame: 0, x: geo.b.x + mx * s, y: geo.b.y + my * s, s: (c.size * geo.b.w / a.w) * (0.15 + 0.85 * easeOut(k)) * (1 + 0.07 * Math.sin(ms / 28)),
       rot: ms * 0.004, op: Math.min(1, k / 0.12) }

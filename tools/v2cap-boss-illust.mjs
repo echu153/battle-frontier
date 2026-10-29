@@ -670,7 +670,9 @@ const build = (key, def, dir) => {
     const fit = fixedFitOf(T0, P, def.poseFit?.[file] || {})
     const t = trim(warpPart(P, fit, S, S, k))
     if (!t) throw new Error(`${file}：何も描かれていない`)
-    sizes.push([file, writeWebp(t.img, path.join(OUT, bossFileOf(key, illustPoseKindOf(mk, name))), def.quality || QUALITY)])
+    // 全身の絵は大きいので縮めて軽くする（poseScale・画面の枠は 300px まで＝立ち絵の 640px の半分ほど）
+    const ps = def.poseScale ?? 0.7, small = resizeRgba(t.img, Math.round(t.img.W * ps), Math.round(t.img.H * ps))
+    sizes.push([file, writeWebp(small, path.join(OUT, bossFileOf(key, illustPoseKindOf(mk, name))), def.quality || QUALITY)])
     poses[mk] = { ...poses[mk], [name]: { x: t.x, y: t.y, w: t.img.W, h: t.img.H } }
   }
   // ④ エフェクト
