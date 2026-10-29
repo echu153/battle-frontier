@@ -2,7 +2,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { bossIllustOf } from './bossIllust.js'
-import { POUR, SCENE_TOP, pourTimesOf, sceneEndMsOf, sceneAt, castSceneAt, fallAt, stageSceneOf } from './bossScene.js'
+import { POUR, COIL, SCENE_TOP, FX_TARGET_Y, FX_FEET_Y, pourTimesOf, sceneEndMsOf, sceneAt, castSceneAt, fallAt, coilAt, stageSceneOf } from './bossScene.js'
+import { BOSS_ILLUST } from './bossIllustList.js'
 
 const m = bossIllustOf('amaza').motions.deluge
 const T = pourTimesOf(m)
@@ -16,7 +17,7 @@ test('【確定】2026-10-29 水天葬の演出（ユーザー「水天葬だっ
   assert.ok(T.end >= T.E + T.T, '演出が終わる時刻は滝が切れたあと')
   for (const ms of [300, T.I + 50, T.E + 100]) assert.deepEqual(sceneAt(m, ms), sceneAt(m, ms))
   // 演出の無い技・始まる前・終わったあとは何も出さない
-  for (const k of ['shot', 'sleet', 'bind']) {
+  for (const k of ['shot', 'sleet']) {
     const o = bossIllustOf('amaza').motions[k]
     assert.equal(o.scene, null, `${k} はまだ演出なし`)
     assert.equal(sceneEndMsOf(o), 0)
@@ -101,4 +102,59 @@ test('【確定】2026-10-29 水天葬：構えのあいだから雲の渦が回
   const one = sceneAt(m, T.I + 50)
   assert.equal(both.dim, Math.max(one.dim, castSceneAt(m, 1000).dim))
   assert.ok(Math.abs(both.shake[0] - 2 * one.shake[0]) < 1e-9)
+})
+
+test('【確定】2026-10-30 滝は水の絵そのものを流す（ユーザー「滝流すモーションが止まってるから躍動感がない、しっかり水が流れるようにしてほしい」）：流れる水の絵は描いた滝の柱の所・上と下がつながる', () => {
+  const flow = m.fx.flow, hit = m.fx.hit
+  assert.ok(flow.src.includes('il-fx-deluge-flow'))
+  const [x, y, w, h] = flow.at
+  assert.ok(x > 0 && x + w < hit.w && y >= 0 && h <= hit.h * 0.62, `柱の所は当たる絵の中・上のほう（${flow.at}）`)
+  assert.ok(Math.abs(x + w / 2 - hit.w / 2) < hit.w * 0.08, '柱は真ん中')
+  assert.ok(flow.h < flow.w * (h / w), '上と下をつなげたぶん短い')
+  assert.deepEqual(BOSS_ILLUST.amaza.fx.deluge.flow.at, flow.at)
+})
+
+const b = bossIllustOf('amaza').motions.bind
+test('【確定】2026-10-30 水縛の帯（ユーザー「水縛りの帯もしょぼい、もっと豪華にして」）：手から相手へ水の綱が伸び、届いたら3重の水の輪が巻きついて3回締め上げ、はじけて解ける', () => {
+  assert.equal(b.scene.kind, 'coil')
+  assert.deepEqual(b.scene.hand, { pt: [54, 251], part: 'armN' }, '綱は手前の手の指先から（飛ぶ絵と同じ）')
+  const I = b.impactMs, H = b.hitMs, B = I + COIL.burstMs
+  assert.equal(sceneEndMsOf(b), B + 900)
+  // 水の綱：払った瞬間から伸び、届いたとき伸びきる・はじけたら薄れる
+  assert.equal(sceneAt(b, H - 1).tether, null)
+  assert.ok(sceneAt(b, (H + I) / 2).tether.head > 0.2 && sceneAt(b, (H + I) / 2).tether.head < 1)
+  assert.equal(sceneAt(b, I + 10).tether.head, 1)
+  assert.ok(sceneAt(b, B + 150).tether.op < 1 && sceneAt(b, B + 310).tether === null)
+  // 水の輪：体の真ん中のまわりに3つ・巻きついてすぐ細る・締め上げるたび細る・はじけたら広がる
+  const rings = (ms) => sceneAt(b, ms).items.filter(it => it.t === 'coil')
+  assert.equal(rings(I - 1).length, 0)
+  assert.equal(rings(I + 250).length, 3)
+  assert.ok(rings(I + 250).every(r => Math.abs(r.y - (FX_TARGET_Y - FX_FEET_Y)) <= 0.21))
+  assert.ok(rings(I + 10)[1].rx > rings(I + 250)[1].rx, '巻きついて細る')
+  for (const t of COIL.squeezes) assert.ok(rings(I + t + 100)[1].rx < rings(I + t - 60)[1].rx, `${t}ms に締め上げる`)
+  assert.ok(rings(B + 150)[1].rx > rings(B - 10)[1].rx, 'はじけて広がる')
+  // 締め上げるたび相手が縮み・光って揺れる・しぶき
+  for (const t of COIL.squeezes) {
+    const s = sceneAt(b, I + t + 100)
+    assert.ok(s.squeeze[0] < 0.94 && s.squeeze[1] > 1.02, `${t}ms：横に縮んで縦に伸びる`)
+    let amp = 0
+    for (let ms = I + t; ms < I + t + 120; ms += 3) amp = Math.max(amp, Math.hypot(...sceneAt(b, ms).shake))
+    assert.ok(amp > 2.5 && sceneAt(b, I + t + 20).flash > 0.1, `${t}ms：光って揺れる（${amp.toFixed(1)}px）`)
+    assert.ok(sceneAt(b, I + t + 150).items.some(it => it.t === 'drop'))
+  }
+  assert.equal(sceneAt(b, B + 10).squeeze, null)
+  assert.ok(sceneAt(b, I + 400).items.some(it => it.t === 'bubble'), '泡が立ちのぼる')
+  assert.ok(sceneAt(b, I + 400).items.some(it => it.t === 'tglow'), '光が綱を伝う')
+  assert.ok(sceneAt(b, B + 200).items.filter(it => it.t === 'drop').length > 20, 'はじけて大きなしぶき')
+  // 巻きつく絵：大きく出て一気に締まる・はじけたら広がって消える
+  assert.equal(coilAt(b, I - 1), null)
+  assert.ok(coilAt(b, I + 5).s > 1.4 && Math.abs(coilAt(b, I + 400).s - 1) < 0.1)
+  assert.ok(coilAt(b, B + 200).s > 1.2 && coilAt(b, B + 200).op < 0.4)
+  assert.equal(coilAt(b, B + 280), null)
+  assert.equal(coilAt(m, I + 100), null, '水天葬は巻きつかない')
+  // 外れたとき：綱は伸びるが、巻きつかない
+  for (let ms = I; ms < B + 300; ms += 37) {
+    const s = sceneAt(b, ms, { landed: false })
+    assert.ok(s.items.length === 0 && !s.squeeze && s.flash === 0, `${ms}ms`)
+  }
 })

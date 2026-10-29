@@ -311,7 +311,9 @@ export const BOSS_ILLUST_DEFS = {
         [760, { x: -0.058, y: 0.008, r: -4.2, head: -2.5, armN: -12, armF: -5 }],
         [1250, {}],
       ], arcs: [{ kind: 'water', pts: SWEEP, fromMs: 445, toMs: 520, fadeMs: 220 }],
-      shots: [{ part: 'armN', pt: [54, 251], delayMs: 0, size: 1 }] },
+      shots: [{ part: 'armN', pt: [54, 251], delayMs: 0, size: 1 }],
+      // 【確定】2026-10-30 ユーザー「水縛りの帯もしょぼい、もっと豪華にして」：手前の手の指先から相手へ波打つ水の綱・体に3重の水の輪が巻きついて締め上げ、はじける＝lib/bossScene.js
+      scene: { kind: 'coil', hand: { pt: [54, 251], part: 'armN' } } },
       // 水天葬：右腕を真上に掲げて（構えの姿勢と同じ形）ため、相手の方へ振り下ろす＝相手の頭上の渦の雲から滝が落ちる
       //   【確定】2026-10-29 ユーザー「大技はもうちょっと溜めていい」：掲げてから振り下ろすまで 0.9秒→1.5秒。だんだん高く浮いてのけぞる（震えはなし＝ユーザー「溜めるとき、別に震えなくていい」）
       deluge: { totalMs: 2500, hitMs: 1600, keys: [
@@ -328,8 +330,8 @@ export const BOSS_ILLUST_DEFS = {
       charge: { kind: 'charge', fromMs: 0, toMs: 1600, holdMs: 700 },
       // 【確定】2026-10-29 ユーザー「水天葬だったらほんとに滝が叩きつけてるようなエフェクトにしてほしい、派手に」：
       //   画面が暗くなり、雲の渦が回って手に光が集まり、振り下ろすと滝が落ちて叩きつける（光る・揺れる・しぶき・波紋・もや）＝lib/bossScene.js
-      //   hand＝掲げた手の指先（光が集まる所・立ち絵の px＝THROW のはじめ）
-      scene: { kind: 'pour', hand: THROW[0] } },
+      //   hand＝掲げた手の指先（光が集まる所・立ち絵の px＝THROW のはじめ・body の上の点）
+      scene: { kind: 'pour', hand: { pt: THROW[0], part: 'body' } } },
     },
     // on＝相手のどこに出すか（大きさは自分の絵の枠の幅に対して）・anim＝見せ方（drop＝上から下へ降りる・bind＝外から締まる）・
     //   lead＝絵が出はじめてから当たるまで（降りきった時刻がダメージ）・fadeTop＝絵の上のはしをぼかす割合（滝の上を雲になじませる）
@@ -341,6 +343,9 @@ export const BOSS_ILLUST_DEFS = {
       { file: '水縛の帯_当たる', motion: 'bind', kind: 'hit', on: 'body', size: 0.95, anim: 'bind', durMs: 950 },
       // 渦の雲は滝より手前に重ねる（滝が雲から落ちて見える）＝並びは滝が先
       { file: '水天葬_当たる', motion: 'deluge', kind: 'hit', on: 'feet', size: 1.3, anim: 'drop', lead: 240, durMs: 1300, fadeTop: 0.16 },
+      // 流れる水の絵（kind 'flow'）：滝の柱の所（crop＝元の絵の px の x0・y0・x1・y1）を上と下がつながる絵にして、縦に並べて流す（lib/bossScene.js）
+      //   【確定】2026-10-30 ユーザー「滝流すモーションが止まってるから躍動感がない、しっかり水が流れるようにしてほしい」
+      { file: '水天葬_当たる', motion: 'deluge', kind: 'flow', crop: [300, 0, 960, 660], band: 0.3, blurY: 14 },
       { file: '水天葬_ためる', motion: 'deluge', kind: 'charge', on: 'head', size: 1.3 },
     ],
   },

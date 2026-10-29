@@ -6,6 +6,7 @@
 // 作るもの：
 //   public/v2cap-art/boss/<key>-il-<wingF|wingN|body|head>.webp … 立ち絵（640px）に重ねた位置で切り抜いたパーツ
 //   public/v2cap-art/boss/<key>-il-fx-<技>-<fly|hit>.webp       … エフェクト（長いほうの辺 FX_SIDE まで縮める）
+//   public/v2cap-art/boss/<key>-il-fx-<技>-flow.webp            … 流れる水の絵（エフェクトの絵の crop の所を、上と下がつながるように混ぜた絵・縦に並べて流す）
 //   src/v2cap/lib/bossIllustList.js                             … 一覧（パーツの位置・回す中心・口・エフェクトの大きさ・中身の印）
 // 手順：
 //   ① パーツを立ち絵に重ねる：ChatGPT はパーツを立ち絵と同じ大きさ・場所に描かない（2026-10-28 頭は約半分・体は0.92倍・翼は0.77倍だった）
@@ -164,6 +165,33 @@ export const warpPart = (P, fit, W, H, k) => {
     }
   }
   return { W, H, data: out }
+}
+
+// 四角く切り抜く（x・y・w・h は元の絵の px）
+const cropRgba = (img, x, y, w, h) => {
+  const data = Buffer.alloc(w * h * 4)
+  for (let r = 0; r < h; r++) img.data.copy(data, r * w * 4, ((y + r) * img.W + x) * 4, ((y + r) * img.W + x + w) * 4)
+  return { W: w, H: h, data }
+}
+// 縦だけぼかす（sigma＝px）
+const blurYRgba = (img, sigma) => {
+  const data = execFileSync('ffmpeg', ['-v', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${img.W}x${img.H}`, '-i', '-',
+    '-vf', `gblur=sigma=0.01:sigmaV=${sigma}`, '-f', 'rawvideo', '-pix_fmt', 'rgba', '-'], { input: img.data, maxBuffer: 1 << 28 })
+  return { W: img.W, H: img.H, data: Buffer.from(data) }
+}
+// 上と下がつながる絵にする（縦に並べてもつなぎ目が見えない）：下のはしの band 行を、上のはしの band 行にだんだん混ぜて、その band 行を切り落とす
+//   T[y] = 元[y]（y ≥ band）／ 元[y + H − band] と 元[y] を y / band の割合で混ぜる（y < band）→ 高さ H − band
+export const seamlessY = (img, band) => {
+  const H = img.H - band, W = img.W, data = Buffer.alloc(W * H * 4)
+  img.data.copy(data, 0, 0, W * H * 4)
+  for (let y = 0; y < band; y++) {
+    const k = y / band
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, j = ((y + H) * W + x) * 4
+      for (let ch = 0; ch < 4; ch++) data[i + ch] = Math.round(img.data[j + ch] * (1 - k) + img.data[i + ch] * k)
+    }
+  }
+  return { W, H, data }
 }
 
 // 透明でない範囲で切り抜く → { img, x, y }
@@ -586,15 +614,31 @@ const build = (key, def, dir) => {
     parts[part] = { x: t.x, y: t.y - top, w: t.img.W, h: t.img.H, px: Math.round(px), py: Math.round(py), ax, ...(parent[part] ? { parent: parent[part] } : {}) }
   }
   // ④ エフェクト
-  const fx = {}
+  const fx = {}, trims = {}
   for (const e of def.effects) {
     const f = path.join(dir, `${e.file}.png`)
     if (!existsSync(f)) { notes.push(`${e.file}：まだ無い`); continue }
     const img = readRgba(f)
     bleed(img)
+    if (e.crop) {
+      // 流れる水の絵（kind 'flow'）：同じ絵の当たる絵（先に作る）の上の、crop の所の場所（at＝当たる絵の px の x・y・w・h）も書く
+      const hit = trims[e.file]
+      if (!hit) throw new Error(`${e.file}：流れる水の絵は、同じ絵の当たる絵のあとに並べる`)
+      const [x0, y0, x1, y1] = e.crop
+      // blurY＝縦だけぼかす強さ（落ちる水のぶれ＝輪の形が筋になり、くり返しが目立たない）
+      const src = e.blurY ? blurYRgba(img, e.blurY) : img
+      const tex = seamlessY(cropRgba(src, x0, y0, x1 - x0, y1 - y0), Math.round((y1 - y0) * (e.band ?? 0.3)))
+      const k2 = Math.min(1, (e.side || 320) / tex.W)
+      const small = k2 < 1 ? resizeRgba(tex, Math.round(tex.W * k2), Math.round(tex.H * k2)) : tex
+      sizes.push([`${e.file}（流れ）`, writeWebp(small, path.join(OUT, bossFileOf(key, illustFxKindOf(e.motion, e.kind))), FX_QUALITY)])
+      const at = [(x0 - hit.x) * hit.k, (y0 - hit.y) * hit.k, (x1 - x0) * hit.k, (y1 - y0) * hit.k].map(v => Math.round(v))
+      fx[e.motion] = { ...fx[e.motion], [e.kind]: { w: small.W, h: small.H, ax: 0, ay: 0, at } }
+      continue
+    }
     const t = trim(img)
     const kk = Math.min(1, FX_SIDE / Math.max(t.img.W, t.img.H))
     const small = kk < 1 ? resizeRgba(t.img, Math.round(t.img.W * kk), Math.round(t.img.H * kk)) : t.img
+    trims[e.file] = { x: t.x, y: t.y, k: small.W / t.img.W }
     sizes.push([e.file, writeWebp(small, path.join(OUT, bossFileOf(key, illustFxKindOf(e.motion, e.kind))), FX_QUALITY)])
     const a = e.kind === 'fly' ? leftTipOf(small) : { x: Math.round(small.W / 2), y: Math.round(small.H / 2) }
     fx[e.motion] = { ...fx[e.motion], [e.kind]: { w: small.W, h: small.H, ax: a.x, ay: a.y } }
@@ -606,7 +650,7 @@ const writeList = (all) => {
   const lines = ['// tools/v2cap-boss-illust.mjs が書くファイル（手で直さない）。ボス → イラスト版のパーツ・エフェクト',
     `//   parts … 立ち絵（${BOSS_ILLUST_SIZE}px）の上の位置（x・y・w・h）・回す中心（px・py）・長さの向き（ax°）・親（parent）。並びはボスごとの layers（無ければ ILLUST_PARTS）`,
     '//   pivot … 全体を回す中心（体の真ん中）／mouth … 頭のいちばん左（飛ぶエフェクトが出る口）',
-    '//   fx … 技のキー → fly（飛ぶ）・hit（当たる）のエフェクトの大きさ（px）と合わせる点（ax・ay＝飛ぶは先・当たるは真ん中）',
+    '//   fx … 技のキー → fly（飛ぶ）・hit（当たる）のエフェクトの大きさ（px）と合わせる点（ax・ay＝飛ぶは先・当たるは真ん中）・flow（流れる水の絵・at＝当たる絵の上の場所）',
     '//   fit … パーツを立ち絵に重ねた倍率・角度・位置（元の絵の px・確かめ用）／v … 絵ごとの中身の印（画面のアドレスの ?v=）',
     'export const BOSS_ILLUST = {']
   for (const [key, e] of Object.entries(all)) {
@@ -620,7 +664,7 @@ const writeList = (all) => {
     }
     lines.push('    },', `    pivot: [${e.pivot.join(', ')}], mouth: [${e.mouth.join(', ')}],`, '    fx: {')
     for (const [mk, f] of Object.entries(e.fx || {})) {
-      lines.push(`      ${mk}: { ${Object.entries(f).map(([kind, a]) => `${kind}: { w: ${a.w}, h: ${a.h}, ax: ${a.ax}, ay: ${a.ay} }`).join(', ')} },`)
+      lines.push(`      ${mk}: { ${Object.entries(f).map(([kind, a]) => `${kind}: { w: ${a.w}, h: ${a.h}, ax: ${a.ax}, ay: ${a.ay}${a.at ? `, at: [${a.at.join(', ')}]` : ''} }`).join(', ')} },`)
     }
     lines.push('    },', '    fit: {')
     for (const [p, f] of Object.entries(e.fit || {})) lines.push(`      ${p}: { s: ${f.s}, deg: ${f.deg}, tx: ${f.tx}, ty: ${f.ty}, score: ${f.score} },`)

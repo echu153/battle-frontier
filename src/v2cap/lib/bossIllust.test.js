@@ -359,11 +359,12 @@ test('【確定】2026-10-29 雨摩座の待機：揺れの足し算（浮き沈
   assert.equal(poses[0].wingN, 0, '翼は無い')
 })
 
-test('【確定】2026-10-29 雨摩座の技4つ：右手を胸元に引き寄せて（大技は真上に掲げて）ため、撃つ時刻に相手の方へさっと払う（ふだんの腕に戻る・前へ出る）・待機から始まって待機へ戻る・エフェクト7枚', () => {
+test('【確定】2026-10-29 雨摩座の技4つ：右手を胸元に引き寄せて（大技は真上に掲げて）ため、撃つ時刻に相手の方へさっと払う（ふだんの腕に戻る・前へ出る）・待機から始まって待機へ戻る・エフェクト7枚（＋水天葬の流れる水の絵）', () => {
   const a = bossIllustOf('amaza'), D = BOSS_ILLUST_DEFS.amaza.motions
   assert.deepEqual(Object.values(a.motions).map(m => m.label), BOSS_DEFS.amaza.motions.map(m => m.file))
-  assert.equal(Object.values(a.motions).reduce((n, m) => n + Object.keys(m.fx || {}).length, 0), 7)
-  assert.equal(a.srcs.length, 8 + 7)
+  assert.equal(Object.values(a.motions).reduce((n, m) => n + Object.keys(m.fx || {}).length, 0), 8)
+  assert.equal(a.srcs.length, 8 + 8)
+  assert.ok(a.motions.deluge.fx.flow, '水天葬の流れる水の絵（描いた滝の柱の所から作る）')
   const armD = a.parts.find(p => p.key === 'armD').swap
   for (const [k, M] of Object.entries(D)) {
     const at = (ms) => motionPoseAt(M.keys, ms)
@@ -428,7 +429,7 @@ test('【確定】2026-10-29 雨摩座のエフェクト：雨礫・水縛の帯
   assert.equal(d.fx.charge.on, 'head')
   assert.equal(d.charge.toMs, d.hitMs)
   assert.ok(d.charge.holdMs > 0)
-  assert.deepEqual(Object.keys(d.fx), ['hit', 'charge'])
+  assert.deepEqual(Object.keys(d.fx), ['hit', 'flow', 'charge'])
   assert.ok(Object.values(a.motions).every(m => m === d || !m.charge), '雲を出すのは水天葬だけ')
 })
 

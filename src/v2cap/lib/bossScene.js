@@ -10,6 +10,10 @@ import { CAST_SEC } from '../core/atb.js'
 //   どれも「技を出しはじめてからの ms」だけで決まる（乱数は決まった種＝同じ時刻なら同じ絵・止めて確かめられる）。
 //   場所の単位は相手の絵の枠の幅（1＝枠の幅）・原点は相手の足元の真ん中（上が −）。揺れだけは画面の px、
 //   手に集まる光（space: 'hand'）は掲げた手の指先からのずれ（立ち絵の px）
+// 【確定】2026-10-30 ユーザー「滝流すモーションが止まってるから躍動感がない、しっかり水が流れるようにしてほしい」
+//   「水縛りの帯もしょぼい、もっと豪華にして」：滝は水の絵そのものを流す（画面の PourFlow・流れる水の絵＝lib/bossIllust.js の flow）。
+//   水縛の帯（kind 'coil'）＝手から相手へ波打つ水の綱（tether）が伸び、相手の体に3重の水の輪が巻きついて3回締め上げ（しぶき・相手が縮む）、
+//   最後にはじけて解ける（泡が立ちのぼる・光が綱を伝って流れ込む）
 // ============================================================
 
 // 相手の頭上・足元に出すエフェクト（on）の場所（相手の絵の枠の上からの割合）：頭上＝枠の少し上（頭にかからない）・足元＝枠の下のはし
@@ -26,6 +30,10 @@ export const POUR = {
   rings: [[0, 1], [150, 0.85], [330, 0.7], [560, 0.6], [800, 0.5]],   // [叩きつけてからの ms, 大きさ]
 }
 const G = 5.5   // しぶきの落ちる速さ（枠の幅/秒²）
+// 水縛の帯（kind 'coil'）：叩きつけて（I）から squeezes の時刻に締め上げ、burstMs ではじける。輪は体の真ん中（BODY_Y）のまわりに3つ
+export const COIL = { dim: 0.42, squeezes: [300, 600, 900], burstMs: 1100, rings: [-0.2, 0, 0.2], bubbles: 12, glows: 5 }
+export const FX_TARGET_Y = 0.58
+const BODY_Y = FX_TARGET_Y - FX_FEET_Y   // 体の真ん中（足元から）
 
 const hash = (n) => {
   let t = (n * 0x9E3779B1 + 0x6D2B79F5) | 0
@@ -44,17 +52,17 @@ export const pourTimesOf = (m, P = POUR) => {
   return { H, I, L: Math.max(1, I - H), E: I + P.pourMs, T: P.tailMs, end: I + P.pourMs + 2000 }
 }
 // 演出が終わる時刻（技を出しはじめてから ms）。画面はこの時刻まで技の印を覚えておく（戦闘の画面が古い印を片付けても切れない）
-export const sceneEndMsOf = (m) => (m?.scene?.kind === 'pour' ? pourTimesOf(m).end : 0)
+export const sceneEndMsOf = (m) => (m?.scene?.kind === 'pour' ? pourTimesOf(m).end : m?.scene?.kind === 'coil' ? m.impactMs + COIL.burstMs + 900 : 0)
 
-// しぶき（n 粒・上へはね上がって落ちる）。e＝はねてからの ms・spread＝はねる所の広さ
-const drops = (items, n, seed, e, v, life, size, spread) => {
+// しぶき（n 粒・上へはね上がって落ちる）。e＝はねてからの ms・spread＝はねる所の広さ・oy＝はねる高さ（足元から）・around＝まわりじゅうへ
+const drops = (items, n, seed, e, v, life, size, spread, { oy = 0, around = false } = {}) => {
   const t = e / 1000
   for (let i = 0; i < n; i++) {
     const li = life[0] + (life[1] - life[0]) * rnd(seed + i, 1)
     if (e < 0 || e >= li) continue
-    const ang = Math.PI * (0.12 + 0.76 * rnd(seed + i, 2)), sp = v[0] + (v[1] - v[0]) * rnd(seed + i, 3)
-    const vx = Math.cos(ang) * sp, vy = -Math.sin(ang) * sp * 1.5
-    const x = (rnd(seed + i, 4) - 0.5) * spread + vx * t, y = vy * t + 0.5 * G * t * t
+    const ang = around ? Math.PI * 2 * rnd(seed + i, 2) : Math.PI * (0.12 + 0.76 * rnd(seed + i, 2)), sp = v[0] + (v[1] - v[0]) * rnd(seed + i, 3)
+    const vx = Math.cos(ang) * sp, vy = -Math.sin(ang) * sp * (around ? 1 : 1.5)
+    const x = (rnd(seed + i, 4) - 0.5) * spread + vx * t, y = oy + vy * t + 0.5 * G * t * t
     if (y > 0.02) continue   // 地面より下は描かない
     const r = size[0] + (size[1] - size[0]) * rnd(seed + i, 5), k = e / li
     items.push({ t: 'drop', x, y, rx: r * 2.4, ry: r, rot: (Math.atan2(vy + G * t, vx) * 180) / Math.PI, op: k < 0.6 ? 1 : 1 - (k - 0.6) / 0.4 })
@@ -107,6 +115,7 @@ export const castSceneAt = (m, castMs, P = POUR) => {
 // 技のあいだ（ms＝技を出しはじめてから・after＝構えのすぐあと・landed＝当たったか＝外れたら滝は落ちない（暗さ・雲・手の光だけ））
 //   → { dim, flash（0〜1）, shake: [x, y]（px）, items, cloud: { spin, glow, flicker }, hand: { r, op } }
 export const sceneAt = (m, ms, { after = false, landed = true } = {}, P = POUR) => {
+  if (m?.scene?.kind === 'coil') return coilSceneAt(m, ms, landed)
   const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null }
   if (m?.scene?.kind !== 'pour') return out
   const { H, I, L, E, T, end } = pourTimesOf(m, P)
@@ -194,10 +203,81 @@ export const fallAt = (m, ms, P = POUR) => {
     cut: ms < E ? 0 : smooth((ms - E) / T) }
 }
 
+// 0 → 1 → 0 の山（at から len ms）
+const bump = (e, len) => (e >= 0 && e < len ? Math.sin((Math.PI * e) / len) : 0)
+// 光・揺れの1回ぶん（at で一気に、len でおさまる）
+const pulse = (e, len) => (e >= 0 && e < len ? Math.pow(1 - e / len, 1.5) : 0)
+
+// 水縛の帯（kind 'coil'）のあいだ（ms＝技を出しはじめてから）
+//   → sceneAt と同じ形＋ tether（手から相手の体の真ん中へ伸びる水の綱：head＝伸びた割合・op・amp＝波の大きさ・phase）・squeeze（相手の縮み [横, 縦]）
+export const coilSceneAt = (m, ms, landed = true, C = COIL) => {
+  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tether: null, squeeze: null }
+  const H = m.hitMs, I = m.impactMs, B = I + C.burstMs, end = sceneEndMsOf(m)
+  if (ms < 0 || ms >= end) return out
+  const e = ms - I
+  // 暗さ：胸元でためるあいだに少し暗く・はじけたら戻る
+  out.dim = ms < H ? C.dim * smooth((ms - 120) / (H - 120)) : ms < B + 150 ? C.dim : C.dim * (1 - smooth((ms - B - 150) / 400))
+  // 払った手の光（はじける）
+  if (ms >= H && ms < H + 180) out.hand = { r: 16 + 30 * easeOut((ms - H) / 180), op: 1 - (ms - H) / 180 }
+  // 水の綱：払った瞬間に手から伸び、届いたら張ったまま震え、はじけたら薄れる
+  if (ms >= H && ms < B + 300) {
+    const head = ms < I ? (ms - H) / (I - H) : 1
+    const k = head * (0.7 + 0.3 * head)
+    out.tether = { head: k, op: ms < B ? 1 : 1 - (ms - B) / 300, amp: ms < I ? 0.09 : 0.035 + 0.02 * bump(e, 200), phase: ms / (ms < I ? 70 : 45) }
+    // 綱を伝って相手へ流れ込む光（届いてから）
+    if (landed && ms >= I && ms < B) for (let i = 0; i < C.glows; i++) {
+      const u = ((ms - I) / 420 + i / C.glows) % 1
+      out.items.push({ t: 'tglow', u, r: 0.05 + 0.03 * Math.sin(ms / 60 + i), op: 0.9 * Math.sin(Math.PI * u) })
+    }
+  }
+  if (!landed || e < 0) return out
+  // 光と揺れ：巻きついた瞬間・締め上げるたび・はじけた瞬間
+  const sq = C.squeezes.map(t => e - t)
+  out.flash = Math.max(0.5 * pulse(e, 260), ...sq.map(d => 0.2 * pulse(d, 160)), 0.45 * pulse(ms - B, 280))
+  const amp = 6 * pulse(e, 400) + sq.reduce((a, d) => a + 3.5 * pulse(d, 220), 0) + 5 * pulse(ms - B, 320)
+  out.shake = [amp * Math.sin(e * 0.13), amp * 0.6 * Math.cos(e * 0.17)]
+  // 相手が縮む（締め上げるたび横に縮んで縦に伸びる）
+  const b = Math.max(0.7 * bump(e, 180), ...sq.map(d => bump(d, 200)))
+  if (ms < B) out.squeeze = [1 - 0.09 * b, 1 + 0.04 * b]
+  // 水の輪：はじめは大きく、すぐ巻きついて細る・締め上げるたび細る・回り続ける・はじけたら外へ広がって消える
+  const snap = easeOut(e / 180), tight = Math.max(...sq.map(d => bump(d, 200)))
+  const burst = clamp01((ms - B) / 260)
+  if (ms < B + 260) C.rings.forEach((dy, i) => {
+    const rx = (0.82 - 0.4 * snap) * (1 - 0.14 * tight) * (1 + 1.4 * easeOut(burst)) * (1 - 0.06 * Math.abs(dy) / 0.2)
+    out.items.push({ t: 'coil', x: 0, y: BODY_Y + dy * (1 + 0.5 * burst), rx, ry: rx * 0.28, w: 0.035 * (1 - 0.6 * burst), dash: ms * 0.6 + i * 47,
+      op: Math.min(1, e / 60) * (1 - burst) })
+  })
+  // しぶき：締め上げるたび体のまわりへ・はじけたら大きく
+  C.squeezes.forEach((t, j) => drops(out.items, 12, 9000 + j * 40, e - t, [0.5, 1.2], [350, 550], [0.006, 0.014], 0.5, { oy: BODY_Y, around: true }))
+  drops(out.items, 46, 9500, ms - B, [0.8, 2.0], [500, 850], [0.008, 0.02], 0.4, { oy: BODY_Y, around: true })
+  // はじけたとき足元に波紋
+  if (ms >= B && ms < B + 650) { const k = (ms - B) / 650, rx = 0.15 + 0.9 * easeOut(k); out.items.push({ t: 'ring', x: 0, y: -0.01, rx, ry: rx * 0.24, w: 0.02 * (1 - k) + 0.004, op: 0.8 * (1 - k) }) }
+  // 泡：足元から体のまわりを立ちのぼる（水の中に閉じこめられる）
+  for (let i = 0; i < C.bubbles; i++) {
+    const per = 900 + 500 * rnd(i, 51), k = ((e + rnd(i, 52) * per) % per) / per
+    if (ms >= B + 200) break
+    const r = 0.012 + 0.02 * rnd(i, 53)
+    out.items.push({ t: 'bubble', x: (rnd(i, 54) - 0.5) * 0.7 + 0.03 * Math.sin(ms / 140 + i), y: -0.04 - k * 0.95, r, op: 0.8 * Math.sin(Math.PI * k) * Math.min(1, e / 200) })
+  }
+  return out
+}
+
+// 水縛の帯の当たる絵（相手の体に巻きつく絵）の動き：大きく出て一気に締まり・締め上げるたび縮み・小さく揺れ・はじけたら広がって消える
+//   ms＝技を出しはじめてから。出ていないときは null
+export const coilAt = (m, ms, C = COIL) => {
+  if (m?.scene?.kind !== 'coil') return null
+  const I = m.impactMs, B = I + C.burstMs, e = ms - I
+  if (e < 0 || ms >= B + 280) return null
+  const tight = Math.max(...C.squeezes.map(t => bump(e - t, 200))), burst = clamp01((ms - B) / 280)
+  return { s: (1.55 - 0.55 * easeOut(e / 160)) * (1 - 0.08 * tight) * (1 + 0.35 * easeOut(burst)), rot: Math.sin(ms / 85) * 0.03,
+    op: Math.min(1, e / 50) * (1 - burst), bright: 1 + 0.5 * pulse(e, 260) + 0.25 * tight }
+}
+
 // 画面ぜんたい：いま流れている技（acts＝[{ m, ms, after }]）と構え（cast＝{ m, ms }）を合わせる
 //   暗さと光はいちばん強いもの・揺れは足す・描くものは並べる・雲と手は新しいほう（acts の after・landed は sceneAt と同じ）
+//   相手の縮みはかけ合わせる・水の綱は新しいほう
 export const stageSceneOf = (acts, cast) => {
-  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null }
+  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tether: null, squeeze: null }
   const add = (s) => {
     out.dim = Math.max(out.dim, s.dim)
     out.flash = Math.max(out.flash, s.flash)
@@ -205,6 +285,8 @@ export const stageSceneOf = (acts, cast) => {
     out.items.push(...s.items)
     if (s.cloud) out.cloud = s.cloud
     if (s.hand) out.hand = s.hand
+    if (s.tether) out.tether = s.tether
+    if (s.squeeze) out.squeeze = out.squeeze ? [out.squeeze[0] * s.squeeze[0], out.squeeze[1] * s.squeeze[1]] : s.squeeze
   }
   if (cast?.m) add(castSceneAt(cast.m, cast.ms))
   for (const a of acts) add(sceneAt(a.m, a.ms, a))
