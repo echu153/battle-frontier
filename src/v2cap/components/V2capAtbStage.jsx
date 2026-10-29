@@ -105,9 +105,14 @@ const FrameStrip = ({ a, frame, style }) => (
 //   子のパーツ（前脚＝体の子・下あご＝頭の子）は親の中に重ねる＝親といっしょに動く。口の火（glow）と口の中は頭といっしょに動く
 //   体の動きから切り離したパーツ（p.free・雨摩座の水の帯）は、いちばん奥に別の枠で、待機の姿勢（freePose）のまま動かす
 //   黒龍の待機：しっぽを叩きつけた砂ぼこり（RigDust・いちばん手前）
-const rigWrap = (art, pose) => ({ position:'absolute', inset:0, pointerEvents:'none',
-  transform:`translate(${(pose.x * 100).toFixed(2)}%, ${(pose.y * 100).toFixed(2)}%) rotate(${pose.r.toFixed(2)}deg)`,
-  transformOrigin:`${(art.pivot[0] / art.base) * 100}% ${(art.pivot[1] / art.base) * 100}%` })
+//   lean＝地面（art.ground）を支点に前へ傾ける（skewX・2026-10-30 黒龍の技でしっぽが地面に残る）。lib の leanPoint と同じ
+const rigWrap = (art, pose) => {
+  const lean = pose.lean && art.ground != null
+    ? (() => { const d = ((art.ground - art.pivot[1]) / art.base * 100).toFixed(2); return ` translate(0, ${d}%) skewX(${Math.atan(pose.lean).toFixed(4)}rad) translate(0, ${-d}%)` })() : ''
+  return { position:'absolute', inset:0, pointerEvents:'none',
+    transform:`translate(${(pose.x * 100).toFixed(2)}%, ${(pose.y * 100).toFixed(2)}%) rotate(${pose.r.toFixed(2)}deg)${lean}`,
+    transformOrigin:`${(art.pivot[0] / art.base) * 100}% ${(art.pivot[1] / art.base) * 100}%` }
+}
 //   技のポーズの絵（2026-10-30・ユーザー「グラブルのベルゼバブぐらいしっかりと攻撃モーション動いてほしい」）：show（illustShowAt）のとおりに
 //   部品の立ち絵とポーズの絵を切り替える（ポーズの絵も全体の姿勢 x・y・r で動く）。ghosts＝飛び込む勢いの残像（前の姿勢でポーズの絵を薄く）
 //   着物のひらひら（art.flutter）：体の動きの箱の中で、横の帯ごとに同じ中身（部品・ポーズの絵・砂ぼこり）を切り抜いて描き、帯ごとに左右へずらして傾ける

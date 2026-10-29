@@ -8,7 +8,7 @@ import { BOSS_ART_DIR, BOSS_DEFS, bossFileOf } from './bossArt.js'
 import {
   BOSS_ILLUST_DEFS, BOSS_ILLUST_SIZE, illustPartsOf, illustKindOf, illustFxKindOf,
   bossIllustOf, illustPoseAt, idlePoseAt, motionPoseAt, illustPointAt, illustTrailsAt, mouthPointOf, rotPoint, partMove,
-  illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt, dustEllipsesOf, EASES, joltAt, illustBendKindOf, bendFramesOf, illustPoseKindOf, illustShowAt, illustGhostsAt, ART_FADE_MS, artAnchorAt,
+  illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt, dustEllipsesOf, EASES, joltAt, illustBendKindOf, bendFramesOf, illustPoseKindOf, illustShowAt, illustGhostsAt, ART_FADE_MS, artAnchorAt, leanPoint,
 } from './bossIllust.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { dilate, erode, leftTipOf, fitPart, inPoly } from '../../../tools/v2cap-boss-illust.mjs'
@@ -80,23 +80,35 @@ test('【確定】2026-10-30 黒龍の待機（ユーザー「体は上下に動
   assert.ok(sp.everyMs >= 6000, 'ときどき')
 })
 
-test('【確定】2026-10-30 技の姿勢（ポーズの絵で動かす）：ため の絵で後ろへ引き、振り抜き の絵で相手のほうへ飛び込む（黒爪がいちばん深い）・待機から始まって待機へ戻る', () => {
-  const M = BOSS_ILLUST_DEFS.varuzenoku.motions
+test('【確定】2026-10-30 技の姿勢（ポーズの絵で動かす）：ため の絵で後ろへのけぞり、振り抜き の絵で上の体を相手のほうへ押し出す・竜を横へずらさない（ユーザー「しっぽが不自然、一緒に動いちゃってる」＝しっぽと足は地面に残る）', () => {
+  const M = BOSS_ILLUST_DEFS.varuzenoku.motions, g = BOSS_ILLUST_DEFS.varuzenoku.ground
   const at = (k, ms) => motionPoseAt(M[k].keys, ms)
   for (const [k, d] of Object.entries(M)) {
-    const tW = d.art.find(([, n]) => n === 'windup')[0], tS = d.art.find(([, n]) => n === 'strike')[0]
-    assert.ok(at(k, tS).x > 0.03, `${k}：ため の絵で後ろへ引く`)
-    assert.ok(at(k, d.hitMs).x < -0.1, `${k}：振り抜き の絵で相手のほうへ飛び込む`)
-    // ポーズの絵のあいだは全体の傾きを小さく（絵がもう傾いている）
-    for (let t = tW + 80; t < d.art.at(-1)[0] - 80; t += 20) assert.ok(Math.abs(at(k, t).r) <= 3.5, `${k}：${t}ms の傾き`)
+    const tS = d.art.find(([, n]) => n === 'strike')[0]
+    for (const [, p] of d.keys) assert.ok(!p.x && !p.y && !p.r, `${k}：竜を横へずらさない・浮かせない・回さない（地面を支点に傾けるだけ）`)
+    assert.ok(!d.jolt.x && !d.jolt.y && d.jolt.lean > 0, `${k}：当たった瞬間の揺れも地面を支点に`)
+    assert.ok(at(k, tS).lean < -0.05, `${k}：ため の絵で後ろへのけぞる`)
+    assert.ok(at(k, d.hitMs).lean > 0.15, `${k}：振り抜き の絵で前へ押し出す`)
     assert.deepEqual(Object.values(at(k, 0)).every(v => v === 0), true, `${k} は待機から始まる`)
     assert.equal(at(k, d.totalMs), null, `${k} は流し終わったら待機へ`)
+    // 地面の点（しっぽと足）は技のあいだずっと動かない・上の点ほど前へ出る
+    const m = bossIllustOf('varuzenoku').motions[k]
+    for (let t = 0; t < d.totalMs; t += 20) {
+      const pose = illustPoseAt('varuzenoku', m, t, 0)
+      const q = illustPointAt('varuzenoku', { ...pose, tailT: 0 }, [150, g], 'body')
+      assert.ok(Math.abs(q[0] - 150) < 1e-9 && Math.abs(q[1] - g) < 1e-9, `${k}：${t}ms の地面の点`)
+    }
+    const hit = illustPoseAt('varuzenoku', m, d.hitMs, 0)
+    assert.ok(illustPointAt('varuzenoku', hit, [300, 150], 'body')[0] < 300 - 50, `${k}：上の体は前（左）へ出る`)
   }
-  assert.ok(at('claw', M.claw.hitMs).x < -0.35, '黒爪は相手のすぐ前まで飛び込む')
-  assert.ok(at('gale', 640).y < -0.04 && at('doom', 1240).y < -0.05, '烈風と黒焔はためで伸び上がる')
+  assert.ok(at('claw', M.claw.hitMs).lean >= 0.25, '黒爪がいちばん深く押し出す')
+  // 傾ける：画面の skewX と同じ（地面の高さは動かない・上ほど左）
+  assert.deepEqual(leanPoint([100, 590], 590, 0.3), [100, 590])
+  assert.deepEqual(leanPoint([100, 90], 590, 0.2), [0, 90])
+  assert.deepEqual(leanPoint([100, 90], null, 0.2), [100, 90])
   // 技のあいだは広げた翼を弱める
-  const m = { keys: M.claw.keys }, sp = BOSS_ILLUST_DEFS.varuzenoku.idle.spread
-  const p = illustPoseAt('varuzenoku', m, 1, sp.atMs + 900), idle = idlePoseAt(BOSS_ILLUST_DEFS.varuzenoku.idle, sp.atMs + 900)
+  const mm = { keys: M.claw.keys }, sp = BOSS_ILLUST_DEFS.varuzenoku.idle.spread
+  const p = illustPoseAt('varuzenoku', mm, 1, sp.atMs + 900), idle = idlePoseAt(BOSS_ILLUST_DEFS.varuzenoku.idle, sp.atMs + 900)
   assert.ok(Math.abs(p.wingN) < Math.abs(idle.wingN))
 })
 
@@ -538,22 +550,22 @@ test('【確定】2026-10-29 黒龍の技のめりはり（ユーザー「攻撃
     assert.ok(d.keys[i + 1][0] - d.hitMs >= 100, `${k}：当たった形でいったん止める`)
     assert.equal(d.jolt?.atMs, d.hitMs, `${k}：当たった瞬間に揺れる`)
     assert.deepEqual(m[k].jolt, d.jolt)
-    // 揺れは当たったあとだけ（溜めのあいだは揺れない）で、収まる
-    assert.deepEqual(joltAt(d.jolt, d.hitMs - 1), { x: 0, y: 0 })
-    assert.ok(Math.abs(joltAt(d.jolt, d.hitMs + 20).x) > 0)
-    assert.deepEqual(joltAt(d.jolt, d.hitMs + d.jolt.ms), { x: 0, y: 0 })
+    // 揺れは当たったあとだけ（溜めのあいだは揺れない）で、収まる。黒龍は地面を支点に揺らす（lean・しっぽと足は地面に残る）
+    assert.deepEqual(joltAt(d.jolt, d.hitMs - 1), { x: 0, y: 0, lean: 0 })
+    assert.ok(Math.abs(joltAt(d.jolt, d.hitMs + 20).lean) > 0)
+    assert.deepEqual(joltAt(d.jolt, d.hitMs + d.jolt.ms), { x: 0, y: 0, lean: 0 })
     const a = illustPoseAt('varuzenoku', m[k], d.hitMs + 20, 0), b = illustPoseAt('varuzenoku', { ...m[k], jolt: null }, d.hitMs + 20, 0)
-    assert.ok(Math.abs(a.x - b.x - joltAt(d.jolt, d.hitMs + 20).x) < 1e-12, '揺れは全体のずれに足す')
+    assert.ok(Math.abs(a.lean - b.lean - joltAt(d.jolt, d.hitMs + 20).lean) < 1e-12, '揺れは傾きに足す')
   }
   // 区間の速さ：out は出だしが速い・in はだんだん速い・back は少し行き過ぎて戻る
   assert.ok(EASES.out(0.3) > 0.6 && EASES.in(0.3) < 0.05 && EASES.out(1) === 1 && EASES.in(1) === 1)
   assert.ok(Math.max(...[0.6, 0.7, 0.8].map(EASES.back)) > 1 && Math.abs(EASES.back(1) - 1) < 1e-12)
   const keys = [[0, { x: 0 }], [100, { x: 1 }, 'out']]
   assert.ok(motionPoseAt(keys, 30).x > 0.6, '振り抜く区間は 3 割の時刻で 6 割より先')
-  // 攻める所は ポーズの絵（2026-10-30）：振り抜き の絵に変わってから当たるまでに、引いた所から相手のほうへ大きく飛び込む
+  // 攻める所は ポーズの絵（2026-10-30）：振り抜き の絵に変わってから当たるまでに、のけぞった形から相手のほうへ大きく押し出す
   for (const [k, d] of Object.entries(M)) {
     const tS = d.art.find(([, n]) => n === 'strike')[0]
-    assert.ok(motionPoseAt(d.keys, tS).x - motionPoseAt(d.keys, d.hitMs).x > 0.15, `${k}：飛び込む`)
+    assert.ok(motionPoseAt(d.keys, d.hitMs).lean - motionPoseAt(d.keys, tS).lean > 0.2, `${k}：押し出す`)
   }
 })
 

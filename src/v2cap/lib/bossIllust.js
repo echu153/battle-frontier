@@ -78,8 +78,11 @@ const srcOf = (key, kind) => {
 //     armCOn・armUOn＝右腕の構えの絵（胸元・真上）に切り替える割合（0〜1・swapOpacityOf）／armD・armC・armU＝その腕の角度（ふだんは 0）
 //   黒龍の待機：tail＝地面のしっぽ（動かさない）・tailT＝左の巻いた先の曲げ（°・付け根から遠いほど大きく曲げる＝bend・＋で時計回り＝先が下がる）／dust＝叩きつけた砂ぼこり（0＝無し・0〜1＝出てからの割合）／
 //     orb・orbOp・orbT＝口の火の玉の大きさ（0〜1）・濃さ・出てからのミリ秒
+//   lean＝地面（def.ground＝立ち絵の y px）を支点に前へ傾ける割合（＋で上ほど左＝相手の方へ出る・地面の高さはずれない）。
+//     【確定】2026-10-30 ユーザー「しっぽが不自然、一緒に動いちゃってる」（技で飛び込むとき）：竜を丸ごと横へずらすと、地面のしっぽまですべった。
+//     技は x・y・r で竜を動かさず、lean で上の体だけを押し出す（しっぽと足は地面に残る）
 const ZERO = { x: 0, y: 0, r: 0, neck: 0, head: 0, wingN: 0, wingF: 0, wingNSq: 0, wingFSq: 0, arm: 0, jaw: 0, glow: 0, armN: 0, armF: 0, water: 0,
-  armD: 0, armC: 0, armU: 0, armCOn: 0, armUOn: 0, tail: 0, tailT: 0, dust: 0, orb: 0, orbOp: 0, orbT: 0 }
+  armD: 0, armC: 0, armU: 0, armCOn: 0, armUOn: 0, tail: 0, tailT: 0, dust: 0, orb: 0, orbOp: 0, orbT: 0, lean: 0 }
 // 技ごとの動き：keys＝[時刻ミリ秒, 姿勢（待機に足す）, 区間の速さ（EASES・無ければ smooth）]・hitMs＝当たる（撃ち出す）時刻・jolt＝当たった瞬間の揺れ（joltAt）
 //   trails＝残像の筋（part のパーツの点 pts を、lagMs 前からいまの時刻までたどる。fromMs〜toMs のあいだだけ・kind＝claw 爪／wind 風）
 //   shots＝飛ぶ絵の出どころ（無ければ口から1つ）。{ part, pt（パーツの点）, delayMs（hitMs からの遅れ・−で先に出る）, size（飛ぶ絵の大きさの倍率） }
@@ -149,6 +152,8 @@ export const BOSS_ILLUST_DEFS = {
     //   「ただ動かすんじゃなくて、必要であれば動かした後用のイラストも用意したい」→選んだ「技ごとに2枚」）：
     //   技ごとに ため（windup）と振り抜き（strike）の全身の絵を描いてもらい（イラスト版/ の 元の絵の名前.png）、技の art で切り替える。
     //   絵が無い技・絵が無いうちは、いままでの部品の動きのまま（art の名前が無ければ部品の立ち絵）
+    // 地面の高さ（立ち絵の y px・足としっぽの下）：技で傾ける（lean）ときの支点
+    ground: 590,
     poses: {
       claw: { windup: '黒爪_ため', strike: '黒爪_振り抜き' },
       breath: { windup: '焦熱の吐息_ため', strike: '焦熱の吐息_吐く' },
@@ -189,20 +194,22 @@ export const BOSS_ILLUST_DEFS = {
     //     ためは部品で少し引いてから ため の絵へ・振り抜く直前に 振り抜き の絵へ（残像を残して飛び込む）・当たった形で止めてから部品の立ち絵へ戻る
     motions: {
       // 【確定】2026-10-30 ポーズの絵で動かす（ユーザー「グラブルのベルゼバブぐらいしっかりと攻撃モーション動いてほしい」）：
-      //   部品で少し引く→ため の絵で後ろへ引いて間を取る→振り抜き の絵で相手のほうへ大きく飛び込む（残像）→当たった形で止まる→
-      //   部品の立ち絵（振り抜いたあとの形）に戻って元の場所へ戻る。ポーズの絵のあいだは全体の傾き（r）を小さくする（絵がもう傾いている）。
+      //   部品で少し引く→ため の絵で後ろへのけぞって間を取る→振り抜き の絵で上の体を相手のほうへ大きく押し出す（残像）→当たった形で止まる→
+      //   部品の立ち絵（振り抜いたあとの形）に戻ってから起き上がる。
+      //   【確定】2026-10-30 ユーザー「しっぽが不自然、一緒に動いちゃってる」：竜を丸ごと横へずらす（x）と地面のしっぽまですべったので、
+      //   x・y・r は使わず、地面（ground）を支点に傾ける（lean・＋で前へ）だけにした＝しっぽと足は地面に残る。当たった瞬間の揺れも lean
       //   anchors＝ポーズの絵の上の点（立ち絵の px）：mouth＝炎の出る口・ためる火の玉／chest・wingA・wingB＝風の出る胸と翼。shots の at で使う
       // 黒爪：ため＝右の前脚を頭の後ろまで振りかぶる・振り抜き＝体を低くして左の前脚を左下へ振り抜く。爪あとは振りかぶった爪から振り抜いた爪までの弧（arcs）
       claw: { totalMs: 1250, hitMs: 430, keys: [
         [0, {}],
-        [150, { x: 0.02, y: -0.01, r: 3, neck: 1, arm: 15, wingN: -4 }],
-        [360, { x: 0.065, y: -0.02, r: 2 }, 'out'],
-        [380, { x: 0.065, y: -0.02, r: 2 }],
-        [430, { x: -0.42, y: 0.03, r: -2 }, 'out'],
-        [600, { x: -0.44, y: 0.035, r: -2.5 }],
-        [820, { x: -0.36, y: 0.03, r: -3, neck: -3, head: -2, arm: -40, wingN: 8, wingF: -6, jaw: -5 }],
+        [150, { lean: -0.03, neck: 1, arm: 15, wingN: -4 }],
+        [360, { lean: -0.1 }, 'out'],
+        [380, { lean: -0.1 }],
+        [430, { lean: 0.26 }, 'out'],
+        [600, { lean: 0.28 }],
+        [820, { lean: 0.2, neck: -3, head: -2, arm: -40, wingN: 8, wingF: -6, jaw: -5 }],
         [1250, {}],
-      ], jolt: { atMs: 430, ms: 240, x: 0.008, y: 0.005 },
+      ], jolt: { atMs: 430, ms: 240, lean: 0.035 },
       art: [[0, null], [150, 'windup'], [380, 'strike'], [820, null]], ghosts: { fromMs: 380, toMs: 540, lagMs: 26, n: 3 },
       arcs: [
         { kind: 'claw', pts: [[440, 95], [340, 150], [215, 265], [105, 385], [35, 485]], fromMs: 380, toMs: 430, fadeMs: 200 },
@@ -212,14 +219,14 @@ export const BOSS_ILLUST_DEFS = {
       // 焦熱の吐息：ため＝首を引いてのけぞり胸を光らせる・吐く＝首を前へ突き出して口を開ける（炎は開いた口から）
       breath: { totalMs: 1500, hitMs: 640, keys: [
         [0, {}],
-        [200, { x: 0.02, r: 2, neck: 3, head: 3, glow: 0.4 }],
-        [580, { x: 0.055, y: -0.012, r: 1.5 }, 'out'],
-        [600, { x: 0.055, y: -0.012, r: 1.5 }],
-        [640, { x: -0.12, y: 0.01, r: -1.5 }, 'out'],
-        [1040, { x: -0.1, y: 0.008, r: -1 }],
-        [1140, { x: -0.09, y: 0.006, r: -3, neck: -5, head: -4, jaw: -9, arm: -15, glow: 0.6 }],
+        [200, { lean: -0.03, neck: 3, head: 3, glow: 0.4 }],
+        [580, { lean: -0.08 }, 'out'],
+        [600, { lean: -0.08 }],
+        [640, { lean: 0.16 }, 'out'],
+        [1040, { lean: 0.14 }],
+        [1140, { lean: 0.1, neck: -5, head: -4, jaw: -9, arm: -15, glow: 0.6 }],
         [1500, {}],
-      ], jolt: { atMs: 640, ms: 180, x: 0.004, y: 0.003 },
+      ], jolt: { atMs: 640, ms: 180, lean: 0.02 },
       art: [[0, null], [200, 'windup'], [600, 'strike'], [1140, null]], ghosts: { fromMs: 600, toMs: 700, lagMs: 26, n: 2 },
       anchors: { strike: { mouth: [55, 305] } } },
       // 【確定】2026-10-29 ユーザー「もっと羽を大きく広げて敵に向かってバフってやってもらいたい」：ため＝伸び上がって翼を大きく広げる・
@@ -227,14 +234,14 @@ export const BOSS_ILLUST_DEFS = {
       //   翼のふちに風の筋（打ち下ろしの絵の翼のふち）
       gale: { totalMs: 1550, hitMs: 700, keys: [
         [0, {}],
-        [220, { x: 0.02, y: -0.02, r: 2, wingN: -8, wingNSq: -0.1, wingF: 4 }],
-        [620, { x: 0.045, y: -0.055, r: 1.5 }, 'out'],
-        [640, { x: 0.045, y: -0.055, r: 1.5 }],
-        [700, { x: -0.16, y: 0.02, r: -2 }, 'out'],
-        [1040, { x: -0.13, y: 0.015, r: -1.5 }],
-        [1150, { x: -0.11, y: 0.01, r: -5, neck: -3, head: -3, wingN: 20, wingNSq: 0.2, wingF: -14, wingFSq: 0.15 }],
+        [220, { lean: -0.03, wingN: -8, wingNSq: -0.1, wingF: 4 }],
+        [620, { lean: -0.12 }, 'out'],
+        [640, { lean: -0.12 }],
+        [700, { lean: 0.2 }, 'out'],
+        [1040, { lean: 0.18 }],
+        [1150, { lean: 0.12, neck: -3, head: -3, wingN: 20, wingNSq: 0.2, wingF: -14, wingFSq: 0.15 }],
         [1550, {}],
-      ], jolt: { atMs: 700, ms: 260, x: 0.007, y: 0.005 },
+      ], jolt: { atMs: 700, ms: 260, lean: 0.035 },
       art: [[0, null], [220, 'windup'], [640, 'strike'], [1150, null]], ghosts: { fromMs: 640, toMs: 760, lagMs: 28, n: 3 },
       anchors: { strike: { chest: [190, 320], wingA: [60, 165], wingB: [50, 375] } },
       arcs: [
@@ -245,17 +252,17 @@ export const BOSS_ILLUST_DEFS = {
         { at: 'wingA', part: 'wingF', pt: [55, 200], delayMs: -30, size: 0.9 },
         { at: 'wingB', part: 'wingN', pt: [560, 148], delayMs: 30, size: 0.9 },
       ] },
-      // 終焉の黒焔：ため＝首を真上へ伸ばして天を仰ぎ口に黒い炎をためる（震えない・ゆっくり伸び上がる）・吐きつけ＝首を前へ叩きつけて吐く。いちばん大きく揺れる
+      // 終焉の黒焔：ため＝首を真上へ伸ばして天を仰ぎ口に黒い炎をためる（震えない・ゆっくりのけぞる）・吐きつけ＝首を前へ叩きつけて吐く。いちばん大きく揺れる
       doom: { totalMs: 2250, hitMs: 1300, keys: [
         [0, {}],
-        [300, { x: 0.02, y: -0.02, r: 3, neck: 6, head: 4, glow: 0.5 }],
-        [1200, { x: 0.045, y: -0.065, r: 2 }, 'out'],
-        [1240, { x: 0.045, y: -0.065, r: 2 }],
-        [1300, { x: -0.18, y: 0.03, r: -2 }, 'out'],
-        [1720, { x: -0.16, y: 0.025, r: -1.5 }],
-        [1820, { x: -0.14, y: 0.02, r: -6, neck: -7, head: -5, jaw: -10, arm: -22, wingN: 14, wingF: -10, glow: 0.4 }],
+        [300, { lean: -0.03, neck: 6, head: 4, glow: 0.5 }],
+        [1200, { lean: -0.12 }, 'out'],
+        [1240, { lean: -0.12 }],
+        [1300, { lean: 0.24 }, 'out'],
+        [1720, { lean: 0.21 }],
+        [1820, { lean: 0.15, neck: -7, head: -5, jaw: -10, arm: -22, wingN: 14, wingF: -10, glow: 0.4 }],
         [2250, {}],
-      ], jolt: { atMs: 1300, ms: 320, x: 0.01, y: 0.008 }, charge: { kind: 'hit', fromMs: 300, toMs: 1300, size: 0.3 },
+      ], jolt: { atMs: 1300, ms: 320, lean: 0.05 }, charge: { kind: 'hit', fromMs: 300, toMs: 1300, size: 0.3 },
       art: [[0, null], [300, 'windup'], [1240, 'strike'], [1820, null]], ghosts: { fromMs: 1240, toMs: 1400, lagMs: 28, n: 3 },
       anchors: { windup: { mouth: [302, 70] }, strike: { mouth: [45, 432] } } },
     },
@@ -431,11 +438,12 @@ export const motionPoseAt = (keys, ms) => {
 }
 // 当たった瞬間の揺れ（技の jolt＝{ atMs, ms, x, y }：atMs から ms のあいだ全体が小さく揺れて収まる・x・y は枠の割合）
 //   重い一撃の手ごたえ（しっぽの叩きつけの揺れと同じ形）。溜めのあいだは震えない（雨摩座でユーザー「溜めるとき、別に震えなくていい」）
+//   jolt.lean＝地面を支点に揺らす（黒龍：しっぽと足は地面に残る）
 export const joltAt = (jolt, ms) => {
   const h = ms - (jolt?.atMs ?? 0)
-  if (!jolt || h < 0 || h >= jolt.ms) return { x: 0, y: 0 }
+  if (!jolt || h < 0 || h >= jolt.ms) return { x: 0, y: 0, lean: 0 }
   const d = (1 - h / jolt.ms) ** 2
-  return { x: jolt.x * Math.sin(h / 11) * d, y: jolt.y * Math.sin(h / 8 + 1.2) * d }
+  return { x: (jolt.x || 0) * Math.sin(h / 11) * d, y: (jolt.y || 0) * Math.sin(h / 8 + 1.2) * d, lean: (jolt.lean || 0) * Math.sin(h / 11) * d }
 }
 // 待機の姿勢（時刻 tMs）。羽ばたき（periodMs）：振り下ろし（はじめの35%）は速く、振り上げはゆっくり（いまはどのボスも使っていない）
 //   ＋sway＝揺れの足し算（雨摩座は揺れだけ）＋slam・spread・orb＝ときどきの動き（黒龍のしっぽで地面を打つ・翼を広げる・口の火の玉）
@@ -580,10 +588,14 @@ export const partMove = (pt, p, pose) => {
   }
   return rotPoint(q, c, pose[p.key] || 0)
 }
+// 地面を支点に傾ける（lean・画面の skewX と同じ）：上ほど左へ（＋のとき）。地面の高さ gy の点は動かない
+export const leanPoint = ([x, y], gy, lean) => (lean && gy != null ? [x + (y - gy) * lean, y] : [x, y])
+export const groundOf = (key) => BOSS_ILLUST_DEFS[key]?.ground ?? null
 export const illustPointAt = (key, pose, pt, part = 'head') => {
   const a = BOSS_ILLUST[key]
   let p = pt
   for (let q = part, pp = a.parts[q]; pp; q = pp.parent, pp = a.parts[q]) if (!pp.bend) p = partMove(p, { ...pp, key: q }, pose)   // 曲げるパーツは回さない
+  p = leanPoint(p, groundOf(key), pose.lean)
   p = rotPoint(p, a.pivot, pose.r)
   return [p[0] + pose.x * BOSS_ILLUST_SIZE, p[1] + pose.y * BOSS_ILLUST_SIZE]
 }
@@ -705,7 +717,7 @@ export const bossIllustOf = (key) => {
   // 遭遇のイラストはドット絵版と同じ
   const illust = bossArtOf(key)?.illust || null
   return {
-    kind: 'illust', key, name: base.name, base: BOSS_ILLUST_SIZE, illust, parts, pivot: art.pivot, mouth: art.mouth, jaw, motions, orb, dust, flutter: !!def.idle.flutter,
+    kind: 'illust', key, name: base.name, base: BOSS_ILLUST_SIZE, illust, parts, pivot: art.pivot, mouth: art.mouth, jaw, motions, orb, dust, ground: def.ground ?? null, flutter: !!def.idle.flutter,
     srcs: [...parts.map(p => p.src), ...parts.filter(p => p.bend).map(p => p.bend.src), ...Object.values(motions).flatMap(m => Object.values(m.fx || {}).map(f => f.src)),
       ...Object.values(motions).flatMap(m => Object.values(m.poses || {}).map(p => p.src)), ...(orb ? [orb.src] : [])],
   }

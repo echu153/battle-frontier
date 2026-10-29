@@ -13,7 +13,7 @@ import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readRgba } from './v2cap-motion.mjs'
-import { bossIllustOf, illustPoseAt, illustCastPoseAt, illustFreePoseAt, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt } from '../src/v2cap/lib/bossIllust.js'
+import { bossIllustOf, illustPoseAt, illustCastPoseAt, illustFreePoseAt, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, leanPoint } from '../src/v2cap/lib/bossIllust.js'
 
 const SELF = fileURLToPath(import.meta.url)
 const ROOT = path.resolve(path.dirname(SELF), '..')
@@ -31,9 +31,10 @@ export const renderPose = (art, imgs, pose, freePose = pose, orbImg = null, bend
   const byKey = Object.fromEntries(art.parts.map((p, i) => [p.key, { p, img: imgs[i] }]))
   // 画面の点 → パーツの絵の上の点（全体→親→パーツの順に戻す）
   const chainOf = (key) => { const c = []; for (let q = key; q && byKey[q]; q = byKey[q].p.parent) c.unshift(byKey[q].p); return c }
+  // 画面の点 → 立ち絵の点（全体のずれ・回す・傾ける（lean）の逆）
+  const unWhole = (X, Y, pz) => leanPoint(rotPoint([X - PAD.l - pz.x * S, Y - PAD.t - pz.y * S], art.pivot, -pz.r), art.ground, -(pz.lean || 0))
   const toLocal = (X, Y, chain, pose) => {
-    let pt = [X - PAD.l - pose.x * S, Y - PAD.t - pose.y * S]
-    pt = rotPoint(pt, art.pivot, -pose.r)
+    let pt = unWhole(X, Y, pose)
     for (const p of chain) {
       // partMove（縮めてから回す）の逆：戻してから伸ばす
       if (p.bend) continue   // 曲げるパーツは回さない
@@ -100,7 +101,7 @@ export const renderPose = (art, imgs, pose, freePose = pose, orbImg = null, bend
     const p = arts.poses[name], img = arts.imgs[name]
     if (!p || !img || op <= 0.001) return
     for (let Y = 0; Y < H; Y++) for (let X = 0; X < W; X++) {
-      const [u, v] = rotPoint([X - PAD.l - pz.x * S, Y - PAD.t - pz.y * S], art.pivot, -pz.r)
+      const [u, v] = unWhole(X, Y, pz)
       const sx = (u - p.x) / p.w * img.W - 0.5, sy = (v - p.y) / p.h * img.H - 0.5
       if (sx < -1 || sy < -1 || sx > img.W || sy > img.H) continue
       const xx = Math.min(img.W - 1, Math.max(0, Math.round(sx))), yy = Math.min(img.H - 1, Math.max(0, Math.round(sy)))
@@ -116,8 +117,7 @@ export const renderPose = (art, imgs, pose, freePose = pose, orbImg = null, bend
   if (art.dust && pose.dust > 0) {
     for (const { cx, cy, rx, ry, op } of dustEllipsesOf(art.dust, pose.dust)) {
       for (let Y = 0; Y < H; Y++) for (let X = 0; X < W; X++) {
-        let [u, v] = [X - PAD.l - pose.x * S, Y - PAD.t - pose.y * S]
-        ;[u, v] = rotPoint([u, v], art.pivot, -pose.r)
+        const [u, v] = unWhole(X, Y, pose)
         const q = Math.hypot((u - cx) / rx, (v - cy) / ry)
         if (q >= 1) continue
         const a = q < 0.6 ? 0.85 - (0.85 - 0.45) * q / 0.6 : 0.45 * (1 - (q - 0.6) / 0.4)
