@@ -2,7 +2,8 @@ import { useId, useLayoutEffect, useRef, useState } from 'react'
 import { TEXT } from './v2ui.js'
 import { buffChips, ailChips, stateChips, needNow, CAST_SEC } from '../core/atb.js'
 import { STAT_DEFS } from '../core/stats.js'
-import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC } from '../lib/atbFx.js'
+import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC, skillBannerAt } from '../lib/atbFx.js'
+import { JP_BOLD } from './casinoStyle.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
 import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, artAnchorAt } from '../lib/bossIllust.js'
 import { FX_HEAD_Y, FX_FEET_Y, FX_SKY_Y, FX_TARGET_Y, SCENE_TOP, fallAt, coilAt, pourTimesOf, sceneEndMsOf, stageSceneOf } from '../lib/bossScene.js'
@@ -757,6 +758,24 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
       {foeArt && <BossFx fx={fxAll} now={now} geo={geo} art={foeArt} cast={cast} castEnd={castSeen.current} scene={sc} />}
       {sc && geo && <SceneLayer geo={geo} sc={sc} hand={sc.handAt ? [geo.b.x + sc.handAt[0] * (geo.b.w / foeArt.base), geo.b.y + sc.handAt[1] * (geo.b.w / foeArt.base)] : null} s={geo.b.w / foeArt.base} />}
       {sc && geo && sc.flash > 0 && <Flash geo={geo} op={sc.flash} />}
+      <SkillBanner b={skillBannerAt(fxAll, now, 'b')} />
+    </div>
+  )
+}
+
+// 敵の技の名前の帯（FF のように舞台の上のまん中・lib/atbFx.js の skillBannerAt）：黒い半透明の帯に白い字。上から少しすべり込む
+//   【確定】2026-10-30 ユーザー「敵のスキル発動時はスキル名を上に表示させてほしい、FFみたいに」
+const SkillBanner = ({ b }) => {
+  if (!b) return null
+  return (
+    <div style={{ position:'absolute', top:'8px', left:'50%', zIndex: 5, pointerEvents:'none', opacity: b.op,
+      transform:`translate(-50%, ${((1 - b.k) * -10).toFixed(1)}px)`, maxWidth:'calc(100% - 24px)',
+      padding:'6px 22px', borderRadius:'4px', border:'1px solid rgba(220,232,255,0.55)',
+      background:'linear-gradient(180deg, rgba(10,18,44,0.88) 0%, rgba(2,6,20,0.88) 100%)',
+      boxShadow:'0 2px 10px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(0,0,0,0.6)',
+      color:'#ffffff', fontFamily: JP_BOLD, fontWeight: 700, fontSize:'15px', letterSpacing:'0.12em', whiteSpace:'nowrap',
+      overflow:'hidden', textOverflow:'ellipsis', textShadow:'0 1px 2px #000, 0 0 6px rgba(120,160,255,0.45)' }}>
+      {b.name}
     </div>
   )
 }
