@@ -10,7 +10,7 @@ import {
   bossIllustOf, illustPoseAt, idlePoseAt, motionPoseAt, illustPointAt, illustTrailsAt, mouthPointOf, rotPoint, partMove,
   illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt, dustEllipsesOf,
   illustCastShowAt, EASES, joltAt, illustBendKindOf, bendFramesOf, illustPoseKindOf, illustShowAt, illustGhostsAt, ART_FADE_MS, artAnchorAt, leanPoint,
-  illustBuffShowAt, illustBuffKindOf, buffSceneAt, buffAfterAt, buffHoldOf, buffArtMsOf, BUFF_IN_MS, BUFF_HOLD_MS, BUFF_OUT_MS, BUFF_AURA_IN_MS, BUFF_AURA_OUT_MS, BUFF_ART_MS, BUFF_FLASH_MS,
+  illustBuffShowAt, illustBuffKindOf, buffSceneAt, buffAfterAt, buffRainAt, buffHoldOf, buffArtMsOf, BUFF_IN_MS, BUFF_HOLD_MS, BUFF_OUT_MS, BUFF_AURA_IN_MS, BUFF_AURA_OUT_MS, BUFF_ART_MS, BUFF_FLASH_MS,
 } from './bossIllust.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { DUNGEON_BOSSES } from './dungeon.js'
@@ -825,4 +825,58 @@ test('【確定】2026-10-30 逆鱗の強い見せ方とそのあとの待機（
   assert.ok(Math.max(...beats) > 0.8 && Math.min(...beats) < 0.05, '体が赤く脈打つ（強く光ったり消えたり）')
   const late = buffAfterAt([{ b: w, since: Infinity }, { b: m, since: Infinity }], 5000)
   assert.ok(late.sparks.length === w.after.embers.n && late.sparks.some(p => p.op > 0.1), '火の粉が絶えず立ちのぼる')
+})
+
+test('【確定】2026-10-30 篠突く雨（ユーザー「篠突く雨のモーションももっと強化感出してほしい、雨で強化されている感じの、篠突く雨後は常に雨降るモーション追加していいかも」）：付いた瞬間は土砂降りと稲妻と水の輪・付いたあとは雨が降り続ける・黒龍の逆鱗は今までどおり', () => {
+  const a = bossIllustOf('amaza'), b = a.buffs['篠突く雨'], w = bossIllustOf('varuzenoku').buffs['逆鱗'], hold = buffHoldOf(b)
+  assert.equal(hold, 2000)
+  // 付いた瞬間：舞台を藍に暗く・土砂降り・稲妻が落ちると舞台が光る・水の輪
+  const e = buffSceneAt(b, 500)
+  assert.ok(e.dim > 0.5 && e.dimColor === '0,10,36', '舞台を濃い藍に')
+  assert.ok(e.rain && e.rain.k === 1 && e.rain.n >= 100, '土砂降り')
+  assert.ok(e.bolts.length >= 1 && e.bolts[0].pts.length === 8, '稲妻')
+  assert.deepEqual(e.bolts[0].pts.at(-1), b.show.rings.at, '稲妻は腰の玉へ落ちる（水の輪が出る所）')
+  assert.ok(buffSceneAt(b, 80).flash > 0.3, '落ちた瞬間は舞台ぜんぶが光る')
+  assert.equal(buffSceneAt(b, 400).flash, 0, '光らない時間もある')
+  assert.ok(e.ringColor === '70,160,255' && e.ringCore && e.sparkCore, '輪と粒は水の色（芯も）')
+  assert.ok(b.tint && !w.tint, '体のまわりの光は青（黒龍は赤のまま）')
+  assert.ok(buffSceneAt(b, hold + 200).rain.k < 1, '土砂降りは見せ終わると弱まる')
+  assert.equal(buffSceneAt(b, hold + BUFF_AURA_OUT_MS), null)
+  // 付いたあと：雨が降り続ける（土砂降りが弱まるのと入れ替わりに出てくる）・空が少し暗い・体が青く脈打つ・水の粒・待機が少し速い
+  assert.equal(buffAfterAt([{ b, since: hold }], 0).rain, null, '見せ終わるまでは土砂降りだけ')
+  assert.ok(buffAfterAt([{ b, since: hold + 200 }], 0).rain.k > 0)
+  const on = buffAfterAt([{ b, since: Infinity }], 12345)
+  assert.ok(on.rain && on.rain.k === 1 && on.rain.t === 12345, '印が片付いたあとも降り続ける')
+  assert.ok(on.rain.n < b.show.rain.n && on.rain.fallMs > b.show.rain.fallMs, '土砂降りより弱い')
+  assert.ok(on.dim > 0 && on.dim < 0.4, '空は少し暗いまま（戦いの邪魔をしない）')
+  assert.ok(on.sparks.length > 0 && on.sparkCore === '235,248,255', '足元から水の粒')
+  assert.equal(on.tempo, 1.2)
+  assert.equal(on.glowColor, '90,175,255')
+  // 黒龍の逆鱗は変えない（雨も稲妻も光も無い・芯は決まりの色＝画面が火の色にする）
+  const we = buffSceneAt(w, 500), wa = buffAfterAt([{ b: w, since: Infinity }], 5000)
+  assert.ok(we.rain === null && we.bolts.length === 0 && we.flash === 0 && we.ringCore === null && we.sparkCore === null)
+  assert.ok(wa.rain === null && wa.dim === 0 && wa.sparkCore === null)
+  assert.deepEqual(w.show.rings.at, [278, 122])
+  assert.equal(w.after.tempo, 1.35)
+})
+
+test('【確定】2026-10-30 舞台に降る雨（buffRainAt）：同じ時刻なら同じ・筋は上から下へ流れ続ける・手前の筋は奥より速い・足元の水の輪は1回ごとに場所が変わる', () => {
+  const r = { n: 60, fallMs: 620, len: 0.14, slant: -0.12, splash: 10 }
+  assert.deepEqual(buffRainAt(r, 5000), buffRainAt(r, 5000))
+  const now = buffRainAt(r, 5000), soon = buffRainAt(r, 5020)
+  assert.equal(now.far.length + now.near.length, 60)
+  assert.ok(now.near.length > 10 && now.far.length > 10, '手前と奥の両方')
+  const dy = (list0, list1) => list0.map((s, i) => list1[i][1] - s[1]).filter(d => d > 0)
+  const speed = (l) => l.reduce((n, d) => n + d, 0) / l.length
+  assert.ok(dy(now.far, soon.far).length > now.far.length * 0.8, '筋は下へ動く（下まで落ちたら上へ戻る）')
+  assert.ok(speed(dy(now.near, soon.near)) > speed(dy(now.far, soon.far)), '手前の筋は速い')
+  for (const [x, y, len] of [...now.far, ...now.near]) {
+    assert.ok(x >= -0.02 && x <= 1.12, '舞台の幅いっぱい（左へ流れるぶん右に余分）')
+    assert.ok(y >= -len && y <= 1, '上のはしの外から足元まで')
+  }
+  assert.equal(now.splashes.length, 10)
+  for (const p of now.splashes) assert.ok(p.t >= 0 && p.t < 1 && p.y >= 0.92 && p.y <= 0.99, '水の輪は足元')
+  const xs = new Set(Array.from({ length: 40 }, (_, i) => buffRainAt(r, 200 * i).splashes[0].x))
+  assert.ok(xs.size > 5, '水の輪は1回ごとに場所が変わる')
+  assert.equal(buffRainAt({ ...r, splash: 0 }, 5000).splashes.length, 0)
 })

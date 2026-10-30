@@ -361,7 +361,25 @@ export const BOSS_ILLUST_DEFS = {
     //   篠突く雨のポーズは髪が枠いっぱいに広がっていて、後ろに置いた闘気がほとんど隠れた＝光として手前に重ねる（glow＝明るくなる重ね方 screen・足元から広がる）
     buffs: {
       veil: { name: '霧雨の帳', pose: '霧雨の帳_ポーズ', aura: '霧雨の帳_オーラ', front: true, auraOp: 0.6 },
-      downpour: { name: '篠突く雨', pose: '篠突く雨_ポーズ', aura: '篠突く雨_オーラ', glow: true, auraOp: 0.7 },
+      // 【確定】2026-10-30 ユーザー「篠突く雨のモーションももっと強化感出してほしい、雨で強化されている感じの、篠突く雨後は常に雨降るモーション追加していいかも」：
+      //   show＝付いた瞬間（buffSceneAt）：2秒見せる・舞台を濃い藍に暗く・土砂降りが舞台ぜんぶに降る（rain）・腰の玉へ稲妻が落ちて舞台が光る（bolts・to＝玉の立ち絵の px・手は舞台の上のはしに近くて稲妻が見えなかった）・
+      //     稲妻が落ちるたびに腰の玉（rings.at）から水の輪が広がる（3つ）・足元から水の粒が噴き上がる・闘気が揺らめく・体のまわりの光は青（tint）
+      //   after＝付いているあいだ（buffAfterAt）：舞台ぜんぶに雨が降り続ける（rain・足元に水の輪）・空が少し暗いまま（dim）・体が青く脈打つ・足元から水の粒が立ちのぼる・待機が少し速くなる
+      downpour: { name: '篠突く雨', pose: '篠突く雨_ポーズ', aura: '篠突く雨_オーラ', glow: true, auraOp: 0.7, tint: '90,175,255',
+        show: { holdMs: 2000, dim: 0.62, dimColor: '0,10,36', shake: 5, punch: 0.06, flicker: 0.03,
+          rain: { n: 110, fallMs: 430, len: 0.22, slant: -0.16, w: 1.7, op: 0.8, color: '195,228,255', splash: 18 },
+          bolts: [
+            { at: 70, from: [40, -170], to: [296, 223], flash: 0.5 },
+            { at: 470, from: [590, -170], to: [296, 223], flash: 0.32 },
+            { at: 870, from: [110, -170], to: [296, 223], flash: 0.42 },
+            { at: 900, from: [540, -170], to: [296, 223], flash: 0 },
+          ], boltColor: '130,195,255',
+          rings: { at: [296, 223], n: 3, everyMs: 400, durMs: 800, maxR: 430, color: '70,160,255', core: '225,245,255' },
+          burst: { n: 34, x: [110, 540], y: 610, rise: 460, size: 1.3, color: '80,170,255', core: '235,248,255' } },
+        after: { dim: 0.22, dimColor: '0,10,36', tempo: 1.2,
+          rain: { n: 60, fallMs: 620, len: 0.14, slant: -0.12, w: 1.3, op: 0.55, color: '175,215,255', splash: 10 },
+          glow: { periodMs: 2200, color: '90,175,255' },
+          embers: { n: 16, x: [130, 520], y: 600, rise: 360, size: 1.4, color: '100,185,255', core: '235,248,255' } } },
     },
     // 届いたが今は使わない絵（髪・奥の腕は立ち絵と形が違って重ならなかった・頭と手前の腕は立ち絵から切るほうが同じ見た目）
     spare: ['頭', '髪', '腕_手前', '腕_奥'],
@@ -670,9 +688,30 @@ const sparkAt = (p, i, t) => {
   return { x: x0 + Math.sin(t * 6 + i) * 10, y: p.y - (p.rise || 380) * (1 - (1 - t) ** 2) * (0.55 + 0.45 * hash01(i, 4)),
     r: (2.5 + 3 * hash01(i, 5)) * (1 - 0.5 * t) * (p.size || 1), op: (t < 0.15 ? t / 0.15 : 1) * (1 - t) }
 }
+// 【確定】2026-10-30 舞台に降る雨（def.buffs の show.rain・after.rain・ユーザー「篠突く雨後は常に雨降るモーション追加していいかも」）：
+//   r＝{ n（本数）, fallMs（上から下まで落ちる時間）, len（筋の長さ・舞台の高さの割合）, slant（落ちるあいだに横へずれる割合・負＝左へ）, splash（足元の水の輪の数） }・tMs＝時計 →
+//   { far, near（奥の細い筋と手前の太い筋：[x（幅の割合）, y（高さの割合・筋の上のはし）, len]）, splashes: [{ x, y, t（0〜1・広がる進み） }] }。
+//   手前の筋は速く長い。水の輪は1回ごとに場所が変わる
+const BOLT_MS = 210
+export const buffRainAt = (r, tMs) => {
+  const far = [], near = []
+  for (let i = 0; i < r.n; i++) {
+    const isNear = hash01(i, 21) < 0.4
+    const t = (tMs / (r.fallMs * (isNear ? 0.8 : 1.15) * (0.9 + 0.2 * hash01(i, 22))) + hash01(i, 23)) % 1
+    const len = r.len * (isNear ? 1.25 : 0.8) * (0.75 + 0.5 * hash01(i, 24))
+    ;(isNear ? near : far).push([-0.02 + 1.14 * hash01(i, 25), -len + (1 + len) * t, len])
+  }
+  const splashes = []
+  for (let i = 0; i < (r.splash || 0); i++) {
+    const u = tMs / (420 + 380 * hash01(i, 26)) + hash01(i, 27), turn = Math.floor(u)
+    splashes.push({ x: hash01(i + turn * 13, 28), y: 0.92 + 0.07 * hash01(i + turn * 13, 29), t: u - turn })
+  }
+  return { far, near, splashes }
+}
 // 【確定】2026-10-30 付いた瞬間の強い見せ方（def.buffs の show・ユーザー「逆鱗のモーションがパッとしない、もうちょっと強化感を出してほしい」）：
 //   b＝bossIllustOf の buffs の1つ・ms＝付いてからのミリ秒 → { dim, dimColor（舞台を暗くする濃さと色）, shake: [x, y]（舞台の揺れ px）, punch（ポーズの絵のふくらみ・1＝そのまま）,
-//   rings: [{ x, y, r, op, w }]（口から広がる衝撃の輪）, sparks: [{ x, y, r, op }]（足元から噴き上がる火の粉）, ringColor, sparkColor }（立ち絵の px）か null（show が無い・終わった）
+//   rings: [{ x, y, r, op, w }]（口から広がる衝撃の輪）, sparks: [{ x, y, r, op }]（足元から噴き上がる火の粉）, ringColor, sparkColor, ringCore, sparkCore（芯の色）,
+//   bolts: [{ pts, op }]（手へ落ちる稲妻）, boltColor, flash（舞台ぜんぶが光る 0〜1）, rain（土砂降り・buffRainAt に渡す決まり＋ k（濃さ）・t（時計））}（立ち絵の px）か null（show が無い・終わった）
 //   揺れは吠えた瞬間がいちばん強く、見せているあいだに弱まる。ふくらみはすぐに punch まで→少し戻る。暗さは見せ終わると戻る
 export const buffSceneAt = (b, ms) => {
   const s = b?.show
@@ -695,17 +734,33 @@ export const buffSceneAt = (b, ms) => {
     const t = (ms - hash01(i, 1) * 500) / (900 + hash01(i, 2) * 700)
     if (t > 0 && t < 1) sparks.push(sparkAt(s.burst, i, t))
   }
-  return { dim, dimColor: s.dimColor || null, shake, punch, rings, sparks, ringColor: s.rings?.color || null, sparkColor: s.burst?.color || null }
+  // 稲妻：落ちた瞬間にいちばん明るく、すぐ消える。形は 50ms ごとに変わる（ちらつく）
+  const bolts = []
+  let flash = 0
+  for (const [i, b] of (s.bolts || []).entries()) {
+    const t = (ms - b.at) / BOLT_MS
+    if (t < 0 || t >= 1) continue
+    const seed = Math.floor(ms / 50) + i * 31
+    bolts.push({ op: (1 - t) ** 0.7, pts: Array.from({ length: 8 }, (_, j) => {
+      const u = j / 7, off = j === 7 ? 0 : (hash01(j, seed) - 0.5) * 80
+      return [b.from[0] + (b.to[0] - b.from[0]) * u + off, b.from[1] + (b.to[1] - b.from[1]) * u + off * 0.2]
+    }) })
+    if (b.flash) flash = Math.max(flash, b.flash * (1 - t) ** 2)
+  }
+  return { dim, dimColor: s.dimColor || null, shake, punch, rings, sparks, ringColor: s.rings?.color || null, sparkColor: s.burst?.color || null,
+    ringCore: s.rings?.core || null, sparkCore: s.burst?.core || null, bolts, boltColor: s.boltColor || null, flash,
+    rain: s.rain ? { ...s.rain, k: Math.min(1, ms / 140) * fadeOut, t: ms } : null }
 }
 // 【確定】2026-10-30 付いているあいだの見た目（def.buffs の after・ユーザー「逆鱗後はモーションも変更していい」）：
 //   list＝付いているバフ [{ b（bossIllustOf の buffs の1つ）, since（付いてからのミリ秒・印が片付いたあとは Infinity） }]・tMs＝いまのミリ秒 →
-//   { glow（体が赤く脈打つ強さ 0〜1）, glowColor, sparks（足元から絶えず立ちのぼる火の粉）, sparkColor, tempo（待機の速さ） } か null（after のあるバフが無い）
+//   { glow（体が赤く脈打つ強さ 0〜1）, glowColor, sparks（足元から絶えず立ちのぼる火の粉）, sparkColor, sparkCore, tempo（待機の速さ）, dim, dimColor（舞台の暗さ）,
+//   rain（降り続ける雨・buffRainAt に渡す決まり＋ k（濃さ）・t（時計）か null） } か null（after のあるバフが無い）
 //   脈と火の粉は見せ終わるころから 0.6秒で出てくる。待機の速さはポーズの絵を出して部品の立ち絵が隠れたあと（BUFF_IN_MS）に切り替える
 //   （速さを変えた瞬間に待機の動きが飛ぶのを隠す）
 export const buffAfterAt = (list, tMs) => {
   const on = list.filter(x => x.b?.after)
   if (!on.length) return null
-  const out = { glow: 0, glowColor: null, sparks: [], sparkColor: null, tempo: 1 }
+  const out = { glow: 0, glowColor: null, sparks: [], sparkColor: null, sparkCore: null, tempo: 1, dim: 0, dimColor: null, rain: null }
   for (const { b, since } of on) {
     const a = b.after, k = smooth(Math.min(1, Math.max(0, since - buffHoldOf(b)) / 600))
     if (since >= BUFF_IN_MS && a.tempo) out.tempo = Math.max(out.tempo, a.tempo)
@@ -723,7 +778,10 @@ export const buffAfterAt = (list, tMs) => {
         out.sparks.push({ ...sp, op: sp.op * k })
       }
       out.sparkColor = a.embers.color
+      out.sparkCore = a.embers.core || null
     }
+    if (a.dim && k > 0) { out.dim = Math.max(out.dim, a.dim * k); out.dimColor = a.dimColor || null }
+    if (a.rain && k > 0) out.rain = { ...a.rain, k, t: tMs }
   }
   return out
 }
@@ -870,7 +928,7 @@ export const bossIllustOf = (key) => {
     const a = art.buffs?.[id]
     if (!a?.pose && !a?.aura) continue
     const one = (what) => (a[what] ? { ...a[what], src: srcOf(key, illustBuffKindOf(id, what)) } : null)
-    buffs[d.name] = { pose: one('pose'), aura: one('aura'), front: !!d.front, glow: !!d.glow, auraOp: d.auraOp ?? 1, show: d.show || null, after: d.after || null }
+    buffs[d.name] = { pose: one('pose'), aura: one('aura'), front: !!d.front, glow: !!d.glow, auraOp: d.auraOp ?? 1, tint: d.tint || null, show: d.show || null, after: d.after || null }
   }
   const motions = {}
   for (const m of base.motions) {
