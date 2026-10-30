@@ -58,6 +58,8 @@ export const illustKindOf = (part) => `il-${part}`
 export const illustFxKindOf = (motion, kind) => `il-fx-${motion}-${kind}`
 // 技のポーズの絵（def.poses）：技 motion の name（windup＝ため・strike＝振り抜き）の全身の絵
 export const illustPoseKindOf = (motion, name) => `il-pose-${motion}-${name}`
+// HPの節目のバフの絵（def.buffs）：バフ id の what（pose＝ポーズの全身の絵・aura＝オーラ）
+export const illustBuffKindOf = (id, what) => `il-buff-${id}-${what}`
 // 曲げるパーツ（def.bend）の、角度ごとに曲げた絵を横に並べた1枚
 export const illustBendKindOf = (part) => `il-${part}-bend`
 // 曲げるパーツの角度 deg に使う2枚とその重ね方：i＝下の絵（並びの番号）・j＝上に重ねる絵・k＝上の絵の濃さ（0〜1）。範囲の外は端の絵
@@ -154,6 +156,13 @@ export const BOSS_ILLUST_DEFS = {
     //   絵が無い技・絵が無いうちは、いままでの部品の動きのまま（art の名前が無ければ部品の立ち絵）
     // 地面の高さ（立ち絵の y px・足としっぽの下）：技で傾ける（lean）ときの支点
     ground: 590,
+    // 【確定】2026-10-30 HPの節目のバフの絵（ユーザー「バフかけたときのエフェクトやイラストも用意しておきたい グラブル意識」）：
+    //   バフの名前（lib/dungeon.js の pattern.buffs の name）→ ポーズの全身の絵（pose・技のポーズの絵と同じに切り抜く）と
+    //   オーラの絵（aura・立ち絵と同じ大きさに描いた絵を、描いた場所のまま置く）。front＝オーラを竜の手前に重ねる（鎧の殻・auraOp＝いちばん濃いときの濃さ＝竜が透けて見える）・無ければ後ろ（逆鱗の闘気）
+    buffs: {
+      armor: { name: '黒鱗の鎧', pose: '黒鱗の鎧_ポーズ', aura: '黒鱗の鎧_オーラ', front: true, auraOp: 0.6 },
+      wrath: { name: '逆鱗', pose: '逆鱗_ポーズ', aura: '逆鱗_オーラ' },
+    },
     poses: {
       claw: { windup: '黒爪_ため', strike: '黒爪_振り抜き' },
       breath: { windup: '焦熱の吐息_ため', strike: '焦熱の吐息_吐く' },
@@ -593,6 +602,33 @@ export const illustCastShowAt = (art, castName, castMs) => {
   const k = Math.min(1, Math.max(0, castMs) / CAST_IN_MS)
   return { motion: m, show: { rig: 1 - smooth(Math.max(0, 2 * k - 1)), poses: [{ name: art.castArt, op: smooth(Math.min(1, 2 * k)) }] } }
 }
+// 【確定】2026-10-30 HPの節目のバフの絵（def.buffs・黒龍・ユーザー「バフかけたときのエフェクトやイラストも用意しておきたい グラブル意識」）：
+//   節目を切った瞬間に部品の立ち絵からバフのポーズの絵へ切り替え（BUFF_IN_MS）、オーラを出す（BUFF_AURA_IN_MS）：後ろの闘気は小さく出て広がり、
+//   手前の殻は大きく出て竜へ閉じる（どちらも少し行きすぎてから戻る）。
+//   BUFF_HOLD_MS 見せたら、ポーズの絵は部品の立ち絵へ戻り（BUFF_OUT_MS）、オーラは少し広がりながら消える（BUFF_AURA_OUT_MS）。
+//   はじめの BUFF_FLASH_MS は全体を明るく光らせる（グラブルのボスが特殊行動で光る見せ方）。切り替えは illustShowAt と同じ（新しい絵が前半で出きり、前の絵は後半で消える）
+//   art＝bossIllustOf の答え・name＝バフの名前・ms＝付いてからのミリ秒 → { rig, pose（ポーズの絵の濃さ）, aura: { op, scale } | null, flash（0〜1） } か null（その名前の絵が無い・時間の外）
+export const BUFF_IN_MS = 120
+export const BUFF_HOLD_MS = 1500
+export const BUFF_OUT_MS = 250
+export const BUFF_AURA_IN_MS = 380
+export const BUFF_AURA_OUT_MS = 420
+export const BUFF_FLASH_MS = 320
+export const BUFF_ART_MS = BUFF_HOLD_MS + Math.max(BUFF_OUT_MS, BUFF_AURA_OUT_MS)
+const easeOutBack = (k) => 1 + 2.70158 * (k - 1) ** 3 + 1.70158 * (k - 1) ** 2
+export const illustBuffShowAt = (art, name, ms) => {
+  const b = art?.buffs?.[name]
+  if (!b || !(ms >= 0) || ms >= BUFF_ART_MS) return null
+  const kIn = Math.min(1, ms / BUFF_IN_MS), kOut = Math.min(1, Math.max(0, ms - BUFF_HOLD_MS) / BUFF_OUT_MS)
+  const back = ms >= BUFF_HOLD_MS
+  const pose = !b.pose ? 0 : back ? 1 - smooth(Math.max(0, 2 * kOut - 1)) : smooth(Math.min(1, 2 * kIn))
+  const rig = !b.pose ? 1 : back ? smooth(Math.min(1, 2 * kOut)) : 1 - smooth(Math.max(0, 2 * kIn - 1))
+  const aIn = Math.min(1, ms / BUFF_AURA_IN_MS), aOut = Math.min(1, Math.max(0, ms - BUFF_HOLD_MS) / BUFF_AURA_OUT_MS)
+  const from = b.front ? 1.22 : 0.78
+  const aura = b.aura ? { op: smooth(aIn) * (1 - smooth(aOut)), scale: from + (1 - from) * easeOutBack(aIn) + 0.08 * aOut } : null
+  const flash = ms < BUFF_FLASH_MS ? (1 - ms / BUFF_FLASH_MS) ** 2 : 0
+  return { rig, pose, aura, flash }
+}
 // 残像（motion.ghosts＝{ fromMs, toMs, lagMs, n, op }）：fromMs〜toMs のあいだ、lagMs ずつ前の姿勢でポーズの絵を薄く重ねる（振り抜いて飛び込む勢い）
 //   { name, ms（その残像の時刻）, op }。そのときに出ていたポーズの絵だけ（部品の立ち絵には残像を出さない）
 export const illustGhostsAt = (motion, ms) => {
@@ -730,6 +766,14 @@ export const bossIllustOf = (key) => {
     for (const [name, a] of Object.entries(art.poses?.[mk] || {})) out[name] = { ...a, src: srcOf(key, illustPoseKindOf(mk, name)) }
     return Object.keys(out).length ? out : null
   }
+  // HPの節目のバフの絵（できているものだけ）：バフの名前 → { pose, aura（{ src, x, y, w, h } か null）, front（オーラを手前に）, auraOp（オーラのいちばん濃いとき） }
+  const buffs = {}
+  for (const [id, d] of Object.entries(def.buffs || {})) {
+    const a = art.buffs?.[id]
+    if (!a?.pose && !a?.aura) continue
+    const one = (what) => (a[what] ? { ...a[what], src: srcOf(key, illustBuffKindOf(id, what)) } : null)
+    buffs[d.name] = { pose: one('pose'), aura: one('aura'), front: !!d.front, auraOp: d.auraOp ?? 1 }
+  }
   const motions = {}
   for (const m of base.motions) {
     const md = def.motions[m.key]
@@ -765,8 +809,9 @@ export const bossIllustOf = (key) => {
   const illust = bossArtOf(key)?.illust || null
   return {
     kind: 'illust', key, name: base.name, base: BOSS_ILLUST_SIZE, illust, parts, pivot: art.pivot, mouth: art.mouth, jaw, motions, orb, dust, flutter: !!def.idle.flutter,
-    castArt: def.cast?.art || null,
+    castArt: def.cast?.art || null, buffs,
     srcs: [...parts.map(p => p.src), ...parts.filter(p => p.bend).map(p => p.bend.src), ...Object.values(motions).flatMap(m => Object.values(m.fx || {}).map(f => f.src)),
-      ...Object.values(motions).flatMap(m => Object.values(m.poses || {}).map(p => p.src)), ...(orb ? [orb.src] : [])],
+      ...Object.values(motions).flatMap(m => Object.values(m.poses || {}).map(p => p.src)), ...(orb ? [orb.src] : []),
+      ...Object.values(buffs).flatMap(b => [b.pose?.src, b.aura?.src].filter(Boolean))],
   }
 }

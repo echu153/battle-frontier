@@ -28,6 +28,8 @@
 //   ★2026-10-30 技のポーズの絵（poses）：技ごとのため・振り抜きの全身の絵（立ち絵と同じ大きさの正方形に描いてもらう）を、立ち絵と同じ割合で縮めて切り抜く。
 //      ずれていたら def.poseFit（元の絵の名前 → { s, dx, dy }）で直す（fixedFitOf と同じ）。無い絵は作らない（その技は部品の動きのまま）
 //      poseMargin＝枠のまわりに足す余白（立ち絵の px）：poseFit で動かして枠の外へ出た所（冠・袖の先）も切らずに残す（位置は負になってよい）
+//   ★2026-10-30 HPの節目のバフの絵（buffs）：ポーズ（pose）は技のポーズの絵と同じに切り抜く。オーラ（aura）は立ち絵と同じ大きさに描いてもらった絵を、
+//      重ねる場所を探さずに描いた場所のまま置く（poseFit に名前があればそれで直す）。どちらも poseScale で縮める
 //   ★2026-10-29 後ろの絵（split.back）：立ち絵から頭・首・前脚を消して後ろの翼と胸を描き足した絵（後ろ.png）を重ね、頭・首・前脚が
 //      止まっているとき覆っている所だけを埋める（翼の所は翼へ・ほかは体へ）。技で大きく動かすと、模様を折り返して埋めた所が切れ端や四角いかたまりに見えた
 //   ★2026-10-29 腕の構え（swaps）：右腕だけを描き変えた立ち絵（立ち絵_胸元.png・立ち絵_掲げる.png）を重ね、腕のまわり（armZone）だけを切り取って
@@ -42,7 +44,7 @@ import { fileURLToPath } from 'node:url'
 import { bleed, versionOf } from './v2cap-art-lib.mjs'
 import { readRgba, componentsOf } from './v2cap-motion.mjs'
 import { BOSS_DEFS, BOSS_ART_SRC_DIR, BOSS_ART_DIR, bossFileOf } from '../src/v2cap/lib/bossArt.js'
-import { BOSS_ILLUST_DEFS, BOSS_ILLUST_SRC, BOSS_ILLUST_SIZE, illustPartsOf, illustFilesOf, illustKindOf, illustFxKindOf, illustBendKindOf, illustPoseKindOf, rotPoint } from '../src/v2cap/lib/bossIllust.js'
+import { BOSS_ILLUST_DEFS, BOSS_ILLUST_SRC, BOSS_ILLUST_SIZE, illustPartsOf, illustFilesOf, illustKindOf, illustFxKindOf, illustBendKindOf, illustPoseKindOf, illustBuffKindOf, rotPoint } from '../src/v2cap/lib/bossIllust.js'
 import { ENEMY_ART_SRC_DIR } from '../src/v2cap/lib/enemyArt.js'
 import { BOSS_ILLUST } from '../src/v2cap/lib/bossIllustList.js'
 
@@ -676,6 +678,22 @@ const build = (key, def, dir) => {
     sizes.push([file, writeWebp(small, path.join(OUT, bossFileOf(key, illustPoseKindOf(mk, name))), def.quality || QUALITY)])
     poses[mk] = { ...poses[mk], [name]: { x: t.x - M, y: t.y - M, w: t.img.W, h: t.img.H } }
   }
+  // ⑩ HPの節目のバフの絵（def.buffs）：ポーズ＝技のポーズの絵と同じ・オーラ＝描いた場所のまま（どちらも立ち絵と同じ大きさの正方形に描いてもらう）
+  const buffs = {}
+  for (const [id, b] of Object.entries(def.buffs || {})) for (const what of ['pose', 'aura']) {
+    const file = b[what]
+    if (!file) continue
+    const f = path.join(dir, `${file}.png`)
+    if (!existsSync(f)) { notes.push(`${file}：まだ無い（${b.name} は名前の帯と赤い光だけ）`); continue }
+    const P = readRgba(f)
+    bleed(P)
+    const fit = fixedFitOf(T0, P, def.poseFit?.[file] || {}), M = def.poseMargin || 0
+    const t = trim(warpPart(P, M ? { ...fit, tx: fit.tx + M / k, ty: fit.ty + M / k } : fit, S + 2 * M, S + 2 * M, k))
+    if (!t) throw new Error(`${file}：何も描かれていない`)
+    const ps = def.poseScale ?? 0.7, small = resizeRgba(t.img, Math.round(t.img.W * ps), Math.round(t.img.H * ps))
+    sizes.push([file, writeWebp(small, path.join(OUT, bossFileOf(key, illustBuffKindOf(id, what))), def.quality || QUALITY)])
+    buffs[id] = { ...buffs[id], [what]: { x: t.x - M, y: t.y - M, w: t.img.W, h: t.img.H } }
+  }
   // ④ エフェクト
   const fx = {}, trims = {}
   for (const e of def.effects) {
@@ -706,7 +724,7 @@ const build = (key, def, dir) => {
     const a = e.kind === 'fly' ? leftTipOf(small) : { x: Math.round(small.W / 2), y: Math.round(small.H / 2) }
     fx[e.motion] = { ...fx[e.motion], [e.kind]: { w: small.W, h: small.H, ax: a.x, ay: a.y } }
   }
-  return { entry: { parts, pivot: pivotOf.body.map(Math.round), mouth: [tip.x, tip.y], fx, ...(Object.keys(poses).length ? { poses } : {}), fit: fits }, notes, sizes }
+  return { entry: { parts, pivot: pivotOf.body.map(Math.round), mouth: [tip.x, tip.y], fx, ...(Object.keys(poses).length ? { poses } : {}), ...(Object.keys(buffs).length ? { buffs } : {}), fit: fits }, notes, sizes }
 }
 
 const writeList = (all) => {
@@ -715,11 +733,13 @@ const writeList = (all) => {
     '//   pivot … 全体を回す中心（体の真ん中）／mouth … 頭のいちばん左（飛ぶエフェクトが出る口）',
     '//   fx … 技のキー → fly（飛ぶ）・hit（当たる）のエフェクトの大きさ（px）と合わせる点（ax・ay＝飛ぶは先・当たるは真ん中）・flow（流れる水の絵・at＝当たる絵の上の場所）',
     '//   poses … 技 → ため（windup）・振り抜き（strike）の全身の絵の位置（立ち絵の px）',
+    '//   buffs … HPの節目のバフ → ポーズ（pose）・オーラ（aura）の絵の位置（立ち絵の px）',
     '//   fit … パーツを立ち絵に重ねた倍率・角度・位置（元の絵の px・確かめ用）／v … 絵ごとの中身の印（画面のアドレスの ?v=）',
     'export const BOSS_ILLUST = {']
   for (const [key, e] of Object.entries(all)) {
     const kinds = [...illustPartsOf(key).filter(p => e.parts[p]).map(illustKindOf), ...illustPartsOf(key).filter(p => e.parts[p]?.bend).map(illustBendKindOf),
       ...Object.entries(e.poses || {}).flatMap(([mk, ps]) => Object.keys(ps).map(n => illustPoseKindOf(mk, n))),
+      ...Object.entries(e.buffs || {}).flatMap(([id, b]) => Object.keys(b).map(w => illustBuffKindOf(id, w))),
       ...Object.entries(e.fx || {}).flatMap(([mk, f]) => Object.keys(f).map(kind => illustFxKindOf(mk, kind)))]
     const v = kinds.map(kd => [kd, path.join(OUT, bossFileOf(key, kd))]).filter(([, f]) => existsSync(f)).map(([kd, f]) => `'${kd}': '${versionOf(f)}'`)
     lines.push(`  ${key}: {`, '    parts: {')
@@ -735,6 +755,10 @@ const writeList = (all) => {
     if (e.poses) {
       lines.push('    },', '    poses: {')
       for (const [mk, ps] of Object.entries(e.poses)) lines.push(`      ${mk}: { ${Object.entries(ps).map(([n, a]) => `${n}: { x: ${a.x}, y: ${a.y}, w: ${a.w}, h: ${a.h} }`).join(', ')} },`)
+    }
+    if (e.buffs) {
+      lines.push('    },', '    buffs: {')
+      for (const [id, b] of Object.entries(e.buffs)) lines.push(`      ${id}: { ${Object.entries(b).map(([w, a]) => `${w}: { x: ${a.x}, y: ${a.y}, w: ${a.w}, h: ${a.h} }`).join(', ')} },`)
     }
     lines.push('    },', '    fit: {')
     for (const [p, f] of Object.entries(e.fit || {})) lines.push(`      ${p}: { s: ${f.s}, deg: ${f.deg}, tx: ${f.tx}, ty: ${f.ty}, score: ${f.score} },`)
@@ -752,6 +776,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
     const dir = path.join(SRC, BOSS_DEFS[key].dir, BOSS_ILLUST_SRC)
     if (!existsSync(dir)) { console.log(`  - ${name}：イラスト版のフォルダが無い（${path.relative(ROOT, dir)}）`); continue }
     const known = new Set(['立ち絵', ...Object.values(illustFilesOf(key)), ...(def.fill ? [def.fill] : []), ...(def.split ? [def.split.by, ...(def.split.back ? [def.split.back.file] : [])] : []), ...(def.spare || []), ...def.effects.map(e => e.file), ...Object.values(def.poses || {}).flatMap(n => Object.values(n)),
+      ...Object.values(def.buffs || {}).flatMap(b => [b.pose, b.aura]).filter(Boolean),
       ...Object.values(def.swaps || {}).map(s => s.file).filter(Boolean)])
     const files = readdirSync(dir, { withFileTypes: true }).filter(e => e.isFile()).map(e => e.name)
     for (const f of files) if (!f.startsWith('見本') && !known.has(path.basename(f, path.extname(f)))) console.log(`  ? ${name}：使わない絵（名前が決まりと違う）：${f}`)

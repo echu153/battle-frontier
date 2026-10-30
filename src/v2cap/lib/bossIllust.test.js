@@ -10,13 +10,16 @@ import {
   bossIllustOf, illustPoseAt, idlePoseAt, motionPoseAt, illustPointAt, illustTrailsAt, mouthPointOf, rotPoint, partMove,
   illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt, dustEllipsesOf,
   illustCastShowAt, EASES, joltAt, illustBendKindOf, bendFramesOf, illustPoseKindOf, illustShowAt, illustGhostsAt, ART_FADE_MS, artAnchorAt, leanPoint,
+  illustBuffShowAt, illustBuffKindOf, BUFF_IN_MS, BUFF_HOLD_MS, BUFF_OUT_MS, BUFF_AURA_IN_MS, BUFF_AURA_OUT_MS, BUFF_ART_MS, BUFF_FLASH_MS,
 } from './bossIllust.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
+import { DUNGEON_BOSSES } from './dungeon.js'
 import { dilate, erode, leftTipOf, fitPart, inPoly } from '../../../tools/v2cap-boss-illust.mjs'
 
 const OUT = new URL(`../../../public${BOSS_ART_DIR}/`, import.meta.url)
 const kindsOf = (key, e) => [...illustPartsOf(key).filter(p => e.parts[p]).map(illustKindOf), ...illustPartsOf(key).filter(p => e.parts[p]?.bend).map(illustBendKindOf),
   ...Object.entries(e.poses || {}).flatMap(([mk, ps]) => Object.keys(ps).map(n => illustPoseKindOf(mk, n))),
+  ...Object.entries(e.buffs || {}).flatMap(([id, b]) => Object.keys(b).map(w => illustBuffKindOf(id, w))),
   ...Object.entries(e.fx || {}).flatMap(([mk, f]) => Object.keys(f).map(kind => illustFxKindOf(mk, kind)))]
 
 test('【確定】2026-10-28 イラスト版の絵はぜんぶあって軽い（パーツ 120KB・エフェクト 120KB まで）・中身の印は絵と同じ', () => {
@@ -47,7 +50,7 @@ test('黒龍ヴァルゼノクのイラスト版：パーツ9つ（奥の翼・�
   assert.equal(Object.values(a.motions).reduce((n, m) => n + Object.keys(m.fx || {}).length, 0), 7)
   assert.ok(a.mouth[0] < BOSS_ILLUST_SIZE * 0.42, '口は頭の左のはし（相手の方）')
   assert.ok(a.orb && a.srcs.includes(a.orb.src), '待機の火の玉の絵も先に読む')
-  assert.ok(a.srcs.length === 9 + 1 + 7 + 8 + 1, 'パーツ9つ・曲げた絵・エフェクト7枚・技のポーズの絵8枚・火の玉')
+  assert.ok(a.srcs.length === 9 + 1 + 7 + 8 + 1 + 4, 'パーツ9つ・曲げた絵・エフェクト7枚・技のポーズの絵8枚・火の玉・節目のバフのポーズとオーラ4枚')
   assert.ok(a.srcs.includes(a.parts.find(p => p.key === 'tailT').bend.src))
 })
 
@@ -713,4 +716,40 @@ test('【確定】2026-10-30 雨摩座は構えの5秒も水天葬の構えの�
   // 新しい絵は前半で出きり、部品は後半で消える（途中で透けない）
   for (const t of [100, 250, 400]) { const s = illustCastShowAt(a, '水天葬', t).show; assert.ok(Math.max(s.rig, s.poses[0].op) === 1, `${t}ms`) }
   assert.equal(illustCastShowAt(bossIllustOf('varuzenoku'), '終焉の黒焔', 3000), null, '黒龍は構えのあいだ部品のまま')
+})
+
+test('【確定】2026-10-30 HPの節目のバフの絵（ユーザー「バフかけたときのエフェクトやイラストも用意しておきたい グラブル意識」）：黒龍の2つのバフにポーズとオーラ・名前はダンジョンのバフと同じ・付いた瞬間に切り替えて1.5秒見せて戻る', () => {
+  const a = bossIllustOf('varuzenoku')
+  // 名前は lib/dungeon.js の pattern.buffs と同じ（ずれると絵が出ない）
+  const names = DUNGEON_BOSSES.varuzenoku.pattern.buffs.map(b => b.name)
+  assert.deepEqual(Object.keys(a.buffs).sort(), [...names].sort())
+  for (const [n, b] of Object.entries(a.buffs)) {
+    assert.ok(b.pose && b.aura, `${n}：ポーズとオーラの絵がある`)
+    for (const p of [b.pose, b.aura]) {
+      assert.match(p.src, /il-buff-[a-z]+-(pose|aura)\.webp\?v=[0-9a-f]{8}$/)
+      assert.ok(p.w > BOSS_ILLUST_SIZE * 0.8 && p.h > BOSS_ILLUST_SIZE * 0.8, `${n}：立ち絵の大きさに重ねる`)
+      assert.ok(a.srcs.includes(p.src), `${n}：先に読む`)
+    }
+  }
+  assert.equal(a.buffs['黒鱗の鎧'].front, true, '鎧の殻は竜の手前')
+  assert.ok(a.buffs['黒鱗の鎧'].auraOp < 1, '手前の殻は竜が透けて見える')
+  assert.equal(a.buffs['逆鱗'].front, false, '逆鱗の闘気は竜の後ろ')
+  // 見せ方
+  assert.equal(illustBuffShowAt(a, '黒鱗の鎧', -1), null)
+  assert.equal(illustBuffShowAt(a, '黒鱗の鎧', BUFF_ART_MS), null, '終わったら出さない')
+  assert.equal(illustBuffShowAt(a, '知らないバフ', 100), null, '絵の無いバフは名前の帯と赤い光だけ')
+  assert.equal(illustBuffShowAt(bossIllustOf('amaza'), '霧雨の帳', 100), null, '雨摩座は絵がまだ')
+  const s0 = illustBuffShowAt(a, '逆鱗', 0)
+  assert.ok(s0.rig === 1 && s0.pose === 0 && s0.flash === 1, '付いた瞬間は立ち絵のまま・いちばん明るい')
+  const s1 = illustBuffShowAt(a, '逆鱗', BUFF_IN_MS / 2)
+  assert.ok(Math.abs(s1.pose - 1) < 1e-9 && Math.abs(s1.rig - 1) < 1e-9, '前半でポーズの絵が出きって、立ち絵は後半で消える')
+  const s2 = illustBuffShowAt(a, '逆鱗', BUFF_HOLD_MS - 1)
+  assert.ok(s2.rig === 0 && s2.pose === 1 && Math.abs(s2.aura.op - 1) < 1e-9 && s2.flash === 0, '見せているあいだはポーズとオーラだけ')
+  assert.ok(Math.abs(illustBuffShowAt(a, '逆鱗', BUFF_AURA_IN_MS).aura.scale - 1) < 1e-9, 'オーラは広がりきると立ち絵の大きさ')
+  assert.ok(illustBuffShowAt(a, '逆鱗', BUFF_AURA_IN_MS * 0.7).aura.scale > 1, 'オーラは少し大きくなりすぎてから戻る')
+  assert.ok(illustBuffShowAt(a, '逆鱗', 0).aura.scale < 0.8, '後ろの闘気は小さく出て広がる')
+  assert.ok(illustBuffShowAt(a, '黒鱗の鎧', 0).aura.scale > 1.2 && illustBuffShowAt(a, '黒鱗の鎧', BUFF_AURA_IN_MS * 0.7).aura.scale < 1, '手前の殻は大きく出て竜へ閉じる（少し行きすぎる）')
+  const s3 = illustBuffShowAt(a, '逆鱗', BUFF_HOLD_MS + BUFF_OUT_MS)
+  assert.ok(s3.rig === 1 && s3.pose === 0 && s3.aura.op > 0 && s3.aura.op < 1 && s3.aura.scale > 1, '立ち絵へ戻り、オーラは広がりながら消えていく')
+  assert.ok(BUFF_FLASH_MS < BUFF_HOLD_MS && BUFF_ART_MS === BUFF_HOLD_MS + BUFF_AURA_OUT_MS)
 })

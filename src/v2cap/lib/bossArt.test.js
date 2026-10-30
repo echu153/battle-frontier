@@ -8,7 +8,7 @@ import { BOSS_DEFS, BOSS_ART_DIR, BOSS_HIT_OF, bossArtOf, bossFileOf, bossFxKind
 import { cellsOf, colsOf, dropGreen, alignCells, tipOf } from '../../../tools/v2cap-boss-art.mjs'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { BOSS_ILLUST } from './bossIllustList.js'
-import { illustPartsOf, illustKindOf, illustFxKindOf, illustBendKindOf, illustPoseKindOf } from './bossIllust.js'
+import { illustPartsOf, illustKindOf, illustFxKindOf, illustBendKindOf, illustPoseKindOf, illustBuffKindOf } from './bossIllust.js'
 import { componentsOf } from '../../../tools/v2cap-motion.mjs'
 
 const OUT = new URL(`../../../public${BOSS_ART_DIR}/`, import.meta.url)
@@ -34,6 +34,7 @@ test('public/v2cap-art/boss の絵はどれも一覧に載っている（名前�
     for (const p of illustPartsOf(key)) if (e.parts[p]) known.add(bossFileOf(key, illustKindOf(p)))
     for (const p of illustPartsOf(key)) if (e.parts[p]?.bend) known.add(bossFileOf(key, illustBendKindOf(p)))   // 曲げた絵を並べた1枚
     for (const [mk, ps] of Object.entries(e.poses || {})) for (const n of Object.keys(ps)) known.add(bossFileOf(key, illustPoseKindOf(mk, n)))   // 技のポーズの絵
+    for (const [id, b] of Object.entries(e.buffs || {})) for (const w of Object.keys(b)) known.add(bossFileOf(key, illustBuffKindOf(id, w)))   // HPの節目のバフの絵
     for (const [mk, fx] of Object.entries(e.fx || {})) for (const kind of Object.keys(fx)) known.add(bossFileOf(key, illustFxKindOf(mk, kind)))
   }
   for (const f of readdirSync(OUT)) assert.ok(known.has(f), `${f} は一覧に無い`)

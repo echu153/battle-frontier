@@ -3,6 +3,7 @@
 //   pivot … 全体を回す中心（体の真ん中）／mouth … 頭のいちばん左（飛ぶエフェクトが出る口）
 //   fx … 技のキー → fly（飛ぶ）・hit（当たる）のエフェクトの大きさ（px）と合わせる点（ax・ay＝飛ぶは先・当たるは真ん中）・flow（流れる水の絵・at＝当たる絵の上の場所）
 //   poses … 技 → ため（windup）・振り抜き（strike）の全身の絵の位置（立ち絵の px）
+//   buffs … HPの節目のバフ → ポーズ（pose）・オーラ（aura）の絵の位置（立ち絵の px）
 //   fit … パーツを立ち絵に重ねた倍率・角度・位置（元の絵の px・確かめ用）／v … 絵ごとの中身の印（画面のアドレスの ?v=）
 export const BOSS_ILLUST = {
   varuzenoku: {
@@ -31,11 +32,15 @@ export const BOSS_ILLUST = {
       gale: { windup: { x: 14, y: 13, w: 622, h: 617 }, strike: { x: 18, y: 47, w: 612, h: 570 } },
       doom: { windup: { x: 7, y: 14, w: 633, h: 609 }, strike: { x: 8, y: 40, w: 629, h: 575 } },
     },
+    buffs: {
+      armor: { pose: { x: 18, y: 54, w: 605, h: 552 }, aura: { x: 6, y: 15, w: 629, h: 610 } },
+      wrath: { pose: { x: 14, y: 30, w: 614, h: 595 }, aura: { x: 25, y: 26, w: 601, h: 598 } },
+    },
     fit: {
       body: { s: 0.765, deg: 0, tx: 160, ty: 154, score: 0.263 },
       back: { s: 0.975, deg: 0, tx: 14, ty: 22, score: 0.435 },
     },
-    v: { 'il-wingF': '4363765e', 'il-wingN': 'c653e832', 'il-tail': 'b394f8e4', 'il-tailT': 'd8b44bdc', 'il-body': 'ac4bfbc9', 'il-neck': '5964abdc', 'il-head': '55344c91', 'il-arm': '181f74b9', 'il-jaw': 'c05e0043', 'il-tailT-bend': 'b468ba53', 'il-pose-claw-windup': '919a0b54', 'il-pose-claw-strike': 'ce18d684', 'il-pose-breath-windup': 'a5649cc8', 'il-pose-breath-strike': '942cb4d5', 'il-pose-gale-windup': '38e2637f', 'il-pose-gale-strike': '9677e5fb', 'il-pose-doom-windup': 'f935de88', 'il-pose-doom-strike': '8ad0ea30', 'il-fx-claw-hit': '9e27da08', 'il-fx-breath-fly': 'c7e563ee', 'il-fx-breath-hit': '7bcfb438', 'il-fx-gale-fly': '5dc69c3e', 'il-fx-gale-hit': '709c7f83', 'il-fx-doom-fly': '34511ca5', 'il-fx-doom-hit': '4255edc9', 'il-fx-idle-orb': '46a23fc6' },
+    v: { 'il-wingF': '4363765e', 'il-wingN': 'c653e832', 'il-tail': 'b394f8e4', 'il-tailT': 'd8b44bdc', 'il-body': 'ac4bfbc9', 'il-neck': '5964abdc', 'il-head': '55344c91', 'il-arm': '181f74b9', 'il-jaw': 'c05e0043', 'il-tailT-bend': 'b468ba53', 'il-pose-claw-windup': '919a0b54', 'il-pose-claw-strike': 'ce18d684', 'il-pose-breath-windup': 'a5649cc8', 'il-pose-breath-strike': '942cb4d5', 'il-pose-gale-windup': '38e2637f', 'il-pose-gale-strike': '9677e5fb', 'il-pose-doom-windup': 'f935de88', 'il-pose-doom-strike': '8ad0ea30', 'il-buff-armor-pose': 'c0a80098', 'il-buff-armor-aura': '41cc0ec5', 'il-buff-wrath-pose': 'a945f209', 'il-buff-wrath-aura': 'd9bc8119', 'il-fx-claw-hit': '9e27da08', 'il-fx-breath-fly': 'c7e563ee', 'il-fx-breath-hit': '7bcfb438', 'il-fx-gale-fly': '5dc69c3e', 'il-fx-gale-hit': '709c7f83', 'il-fx-doom-fly': '34511ca5', 'il-fx-doom-hit': '4255edc9', 'il-fx-idle-orb': '46a23fc6' },
   },
   amaza: {
     parts: {
