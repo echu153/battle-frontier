@@ -14,7 +14,7 @@ import { fxEventsOf, scheduleFx, POP_SEC } from '../lib/atbFx.js'
 import { enemyArtSrc } from '../lib/enemyArt.js'
 import { newBossMotionMemo, bossMotionKeyOf } from '../lib/bossArt.js'
 import { artLoadedCount, preloadArt } from '../lib/artPreload.js'
-import { newAtbPacer } from '../lib/atbPacer.js'
+import { DRAW_MS, newAtbPacer } from '../lib/atbPacer.js'
 
 // ============================================================
 // 「レベルキャップあり」版（v2cap）— ATB戦闘の画面（舞台・マクロ・技のボタン・ログ・時間を進める）
@@ -51,6 +51,7 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
   const logBox = useRef(null)
   const fxRef = useRef([])        // 画面の動き（lib/atbFx.js の fxEventsOf に、起きた時刻 t0（秒）を足したもの）
   const bossMemo = useRef(newBossMotionMemo())
+  const drawRate = useRef({ from: 0, n: 0, rate: 0, slow: false })   // 試し撃ちに出す実際の更新の回数（本物のスマホで読める）
   const overSent = useRef(false)
   const onOverRef = useRef(onOver)
   onOverRef.current = onOver
@@ -122,6 +123,9 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
       if (!pacer.due(t)) return
       lastTick = performance.now()
       tick(lastTick)
+      const r = drawRate.current
+      r.n += 1
+      if (t - r.from >= 1000) { r.rate = Math.round((r.n * 1000) / (t - r.from)); r.from = t; r.n = 0; r.slow = pacer.ms !== DRAW_MS }
     }
     raf = requestAnimationFrame(loop)
     const id = setInterval(() => {
@@ -171,6 +175,7 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
         <span>次：{nextLabel}</span>
         <span>削り {dealtPct.toFixed(1)}%・{Math.round(dps).toLocaleString()}ダメージ/秒</span>
         <span>{now.toFixed(1)}秒 / {s.maxSec}秒</span>
+        {dev && <span>更新 {drawRate.current.rate}回/秒{drawRate.current.slow ? '（30回に落とした）' : ''} [開発]</span>}
       </div>
       {/* ボスの技の絵を流してみる（戦闘には関係しない） */}
       {dev && bossArt && (

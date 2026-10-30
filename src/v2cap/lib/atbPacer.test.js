@@ -59,4 +59,6 @@ test('【確定】2026-10-31 戦闘の画面：requestAnimationFrame で更新�
   assert.match(stage, /castMsOf\(me\.cast, st\.t \+ st\.acc\)/)
   assert.match(stage, /castMsOf\(st\.b\.cast, st\.t \+ st\.acc\)/)
   assert.match(stage, /transition:'width 50ms linear'/, 'ゲージは計算の刻み（0.05秒）のあいだをなめらかに')
+  // 実際の更新の回数は試し撃ち（開発用）にだけ出す＝本物のスマホで読める
+  assert.match(fight, /\{dev && <span>更新 \{drawRate\.current\.rate\}回\/秒/)
 })
