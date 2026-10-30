@@ -69,12 +69,9 @@ const Chips = ({ st, side, right }) => {
   const buffs = buffChips(side, st.t)
   const ails = ailChips(st, side)
   const states = stateChips(side)
-  const rages = hpBuffChips(side)
-  if (!buffs.length && !ails.length && !states.length && !rages.length) return null
+  if (!buffs.length && !ails.length && !states.length) return null
   return (
     <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginTop:'4px', justifyContent: right ? 'flex-end' : 'flex-start' }}>
-      {/* HPの節目で付いたボスのバフ（消えない・消せない＝秒は出さない） */}
-      {rages.map(c => <span key={`r${c.name}`} style={chip('#ff7a4d', '#200800')}>🔥 {c.name} {buffText(c.table)}</span>)}
       {buffs.map((c, i) => (
         <span key={`b${i}`} style={chip(c.debuff ? '#ff88bb' : '#66bbff')}>{buffText(c.table)} {c.sec}秒</span>
       ))}
@@ -82,6 +79,51 @@ const Chips = ({ st, side, right }) => {
         <span key={c.key} style={chip('#cc99ff')}>{c.label}{c.stacks ? `×${c.stacks}` : ''}{c.sec ? ` ${c.sec}秒` : ''}</span>
       ))}
       {states.map(c => <span key={c.key} style={chip('#ffdd88', '#181000')}>{c.label}</span>)}
+    </div>
+  )
+}
+
+// HPの節目で付いた固有のバフ（2026-10-30 ユーザー「固有のバフは敵の右側の方にバフボタンを作って何が付与されてるのかタップして確認できるようにして」）：
+//   絵の右上に「🔥バフ×数」のボタン（HP の下の札からは抜いた）。押すと、付いているバフの名前（読み）・効き目・付いた HP の節目を下に出す。
+//   もう一度ボタンを押すか、出した所を押すと閉じる。見るだけ（戦闘は止めない）。付いた瞬間はボタンが光ってふくらむ（ago＝付いてからの秒）
+const UNIQUE_GLOW_SEC = 1.2
+const UniqueBuffs = ({ side, right, ago }) => {
+  const [open, setOpen] = useState(false)
+  const list = hpBuffChips(side)
+  if (!list.length) return null
+  const atOf = (name) => side.pattern?.buffs?.find(b => b.name === name)?.at
+  const g = ago >= 0 && ago < UNIQUE_GLOW_SEC ? 1 - ago / UNIQUE_GLOW_SEC : 0
+  const gold = 'rgba(255,190,90,0.85)', red = 'linear-gradient(180deg, rgba(70,10,4,0.94) 0%, rgba(28,2,0,0.94) 100%)'
+  return (
+    <div style={{ position:'absolute', top:'2px', [right ? 'right' : 'left']: '2px', zIndex: 6, display:'flex', flexDirection:'column', alignItems: right ? 'flex-end' : 'flex-start' }}>
+      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+        style={{ padding:'3px 8px', fontSize:'11px', fontFamily: JP_BOLD, fontWeight: 700, color:'#ffe2a0', letterSpacing:'0.04em', cursor:'pointer',
+          border:`1px solid ${gold}`, borderRadius:'3px', background: red, lineHeight: 1.3, whiteSpace:'nowrap',
+          boxShadow:`0 2px 8px rgba(0,0,0,0.5), 0 0 ${(4 + 12 * g).toFixed(1)}px rgba(255,90,30,${(0.45 + 0.5 * g).toFixed(2)})`,
+          transform: g > 0 ? `scale(${(1 + 0.18 * g).toFixed(3)})` : undefined, transformOrigin: right ? '100% 0' : '0 0',
+          textShadow:'0 1px 2px #000' }}>
+        🔥 バフ×{list.length}
+      </button>
+      {open && (
+        <div onClick={() => setOpen(false)}
+          style={{ marginTop:'4px', width:'min(210px, 62vw)', padding:'6px 8px', border:`1px solid ${gold}`, borderRadius:'3px', background: red,
+            boxShadow:'0 4px 14px rgba(0,0,0,0.6)', color:'#ffe9c4', fontSize:'11px', lineHeight: 1.45, textAlign:'left', cursor:'pointer' }}>
+          {list.map(c => {
+            const at = atOf(c.name)
+            return (
+              <div key={c.name} style={{ marginBottom:'5px' }}>
+                <div style={{ fontFamily: JP_BOLD, fontWeight: 700, color:'#ffd27a', lineHeight: 1.6 }}>
+                  🔥 {rubySegmentsOf(c.name).map((sg, i) => (sg.ruby
+                    ? <ruby key={i}>{sg.text}<rt style={{ fontSize:'7px', color:'#ffd2a0' }}>{sg.ruby}</rt></ruby>
+                    : <span key={i}>{sg.text}</span>))}
+                </div>
+                <div>{buffText(c.table)}{at != null ? `（HP${Math.round(at * 100)}%を切って発動）` : ''}</div>
+              </div>
+            )
+          })}
+          <div style={{ color:'#d9b48a', fontSize:'10px' }}>戦いの終わりまで続き、消すことはできません</div>
+        </div>
+      )}
     </div>
   )
 }
@@ -406,6 +448,8 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
             </div>
           )}
         </div>
+        {/* 固有のバフのボタン（絵の右上） */}
+        <UniqueBuffs side={me} right={right} ago={rageAgo} />
         {/* 浮かぶ数字 */}
         {pops.map((f, i) => {
           const a = (now - f.t0) / POP_SEC
@@ -823,7 +867,7 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
 //   【確定】2026-10-30 ユーザー「これIDダンジョンは全部これね、スキルの感じルぴ振れる？」：漢字にルビ（lib/skillRuby.js）。
 //     ルビのぶん帯が高くなるので、名前の行の下にそろえて上へはみ出させる（名前の行の高さは変えない＝帯が出ても下の絵がずれない）
 //   【確定】2026-10-30 ユーザー「バフは６０％と３０％以下のタイミングで自動発動してほしい、名前も固有」：HPの節目のバフの名前も同じ帯に出す
-//     （b.rage＝赤と金の帯・技より長く）。付いた瞬間は体が赤く2回脈打つ（RAGE_SEC・絵のエフェクトが届くまでの仮）。札は「🔥 名前 効果」で秒なし
+//     （b.rage＝赤と金の帯・技より長く）。付いた瞬間は体が赤く2回脈打つ（RAGE_SEC・絵のエフェクトが届くまでの仮）。付いているバフは絵の右上の「🔥バフ×数」のボタン（UniqueBuffs）で見る
 const SkillBanner = ({ b }) => {
   if (!b) return null
   return (
