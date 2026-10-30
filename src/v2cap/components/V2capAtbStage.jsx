@@ -49,7 +49,7 @@ import { FX_HEAD_Y, FX_FEET_Y, FX_SKY_Y, FX_TARGET_Y, SCENE_TOP, fallAt, coilAt,
 //   ・2026-10-30 ユーザー「氷雨、水天葬、これもっと上から降らせて」「水縛の帯 紐いらない」：水天葬の雲は空の上のほう（FX_SKY_Y）・
 //     滝は雲から足元まで流れる柱（PourFlow は雲から下の波まで・描いた絵は下の波だけ）・氷雨の絵は大きく縦にも伸ばす（sy）・水の綱はやめた
 //   ・2026-10-30 ユーザー「氷雨も絵1枚になってる、もっと雨が降ってる感じにして」：氷雨も雲の下の雨の所を流れる雨の絵で流す（FlowColumn）。
-//     描いた絵は雲と足元のしぶきだけを見せる（alphaMask）
+//     描いた絵は雲だけを見せる（alphaMask・足元の動かないしぶきはユーザー「いらないかも」でやめ、雨を足元まで伸ばした）
 //   ・2026-10-30 ユーザー「待機モーションで軽く着物ひらひらしててほしい」：雨摩座の帯から下を横の帯に分けて、上から下へ伝わる波で左右にずらす
 //     （IllustRig が体の動きの箱の中で帯ごとに同じパーツを切り抜いて描く・lib/bossIllust.js の flutterBandsAt）
 // ============================================================
@@ -499,20 +499,21 @@ function BossFx({ fx, now, geo, art, cast = null, castEnd = -1e9, scene = null }
             const sp = a.on === 'feet' ? { x: to.x, y: geo.p.y + geo.p.h * FX_FEET_Y, ay: a.h }
               : a.on === 'head' || a.on === 'sky' ? { x: to.x, y: geo.p.y + geo.p.h * (a.on === 'sky' ? FX_SKY_Y : FX_HEAD_Y) } : to
             if (a.anim === 'drop' && m.fx.flow) {
-              // 流れる雨の絵があるとき（氷雨）：描いた絵は雲と足元のしぶきだけ（雨の所＝flow.at は抜く）・雨の所は流れる雨の絵を流す。
+              // 流れる雨の絵があるとき（氷雨）：描いた絵は雲だけ（雨の所から下は抜く）・雨は雲の下から足元まで流れる雨の絵を流す。
+              //   【確定】2026-10-30 ユーザー「氷雨の最後の動いていない下部分のイラストいらないかも」：足元の動かないしぶき（描いた絵のいちばん下）はやめ、雨を足元まで伸ばした。
               //   どちらも lead のあいだに上から見えてくる（降りる先のふちはぼかす）
               const p = (lead ? easeOut(Math.min(1, ms / lead)) : 1) * 112, fl = m.fx.flow, sy = a.sy || 1
-              const cTop = (fl.at[1] / a.h) * 100, cBot = ((fl.at[1] + fl.at[3]) / a.h) * 100
+              const cTop = (fl.at[1] / a.h) * 100
               const reveal = (y) => Math.min(1, Math.max(0, (p - y) / 12))
               const op = Math.min(1, ms / 90) * fade
               on = { frame: 0, ...sp, s: sc, sy, op,
-                mask: alphaMask([0, cTop + 3, cTop + 12, cBot - 12, cBot - 3, 100, p - 12, p], (y) => (y <= cTop + 3 || y >= cBot - 3 ? 1 : y >= cTop + 12 && y <= cBot - 12 ? 0
-                  : y < cTop + 12 ? (cTop + 12 - y) / 9 : (y - (cBot - 12)) / 9) * reveal(y)) }
-              const sTop = sp.y - a.h * sc * sy, sLeft = sp.x - a.ax * sc
-              const top = sTop + fl.at[1] * sc * sy, H = fl.at[3] * sc * sy, colPct = (y) => ((y / 100) * a.h - fl.at[1]) / fl.at[3] * 100
+                mask: alphaMask([0, cTop + 3, cTop + 12, 100, p - 12, p], (y) => (y <= cTop + 3 ? 1 : y >= cTop + 12 ? 0 : (cTop + 12 - y) / 9) * reveal(y)) }
+              const sTop = sp.y - a.h * sc * sy, sLeft = sp.x - a.ax * sc, colH = a.h - fl.at[1]   // 雨は雲の下から足元（絵のいちばん下）まで
+              const top = sTop + fl.at[1] * sc * sy, H = colH * sc * sy, colPct = (y) => ((y / 100) * a.h - fl.at[1]) / colH * 100
               const f = colPct(p)
-              extras.push(<FlowColumn key={`${a.src}#rain`} flow={fl} left={sLeft + fl.at[0] * sc} top={top} W={fl.at[2] * sc} H={H} ms={ms} speed={RAIN_PX_PER_SEC} op={op}
-                mask={alphaMask([0, 10, 88, 100, f - 10, f], (y) => Math.min(1, y / 10, (100 - y) / 12) * Math.min(1, Math.max(0, (f - y) / 10)))} />)
+              // 流れる速さは前と同じ（雨の所＝flow.at の高さで数える）
+              extras.push(<FlowColumn key={`${a.src}#rain`} flow={fl} left={sLeft + fl.at[0] * sc} top={top} W={fl.at[2] * sc} H={H} ms={ms} speed={RAIN_PX_PER_SEC} unit={fl.at[3] * sc * sy} op={op}
+                mask={alphaMask([0, 10, 90, 100, f - 10, f], (y) => Math.min(1, y / 10, (100 - y) / 10) * Math.min(1, Math.max(0, (f - y) / 10)))} />)
             } else if (a.anim === 'drop') {
               // 上から下へ降りる（雨・滝）：lead のあいだに上から見えてくる（降りる先のふちはぼかす）。fadeTop＝絵の上のはしをぼかす割合（滝の上を雲になじませる）
               const p = (lead ? easeOut(Math.min(1, ms / lead)) : 1) * 112, top = (a.fadeTop || 0) * 100
