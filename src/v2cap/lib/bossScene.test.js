@@ -33,8 +33,8 @@ test('【確定】2026-10-29 水天葬の演出（ユーザー「水天葬だっ
 
 test('【確定】2026-10-29 水天葬：振り下ろすまでに画面が暗くなり、叩きつけた瞬間にいちばん光って大きく揺れ、落ち続けるあいだも小さく揺れる', () => {
   assert.ok(sceneAt(m, 0).dim < 0.05 && Math.abs(sceneAt(m, T.H).dim - POUR.dim) < 1e-9, '暗くなる')
-  assert.ok(Math.abs(sceneAt(m, 0, { after: true }).dim - POUR.castDim) < 1e-9, '構えのすぐあとは構えの暗さから（跳ねない）')
-  assert.ok(Math.abs(castSceneAt(m, 5000).dim - POUR.castDim) < 1e-9, '構えの終わりの暗さ＝技のはじめの暗さ')
+  assert.ok(Math.abs(sceneAt(m, m.castSkipMs, { after: true }).dim - POUR.castDim) < 1e-9, '構えのすぐあと（技の途中から流す）は構えの暗さから（跳ねない）')
+  assert.ok(Math.abs(castSceneAt(m, m.castSkipMs).dim - POUR.castDim) < 1e-9, '構えの終わりの暗さ＝流しはじめの暗さ')
   assert.equal(sceneAt(m, T.E + 600).dim, 0, '落ち終わったら戻る')
   // 光：叩きつけた瞬間のまわりがいちばん強い
   let best = [0, 0]
@@ -83,11 +83,15 @@ test('【確定】2026-10-29 水天葬：構えのあいだから雲の渦が回
   const c = castSceneAt(m, 2000)
   assert.ok(c.cloud && c.hand && c.items.some(it => it.t === 'rain') && c.items.some(it => it.t === 'mote' && it.space === 'hand'))
   assert.equal(castSceneAt(bossIllustOf('amaza').motions.shot, 2000).cloud, null)
-  // 構えの終わり（5秒）の渦の角度＝構えのすぐあとの技のはじめの角度
-  assert.ok(Math.abs(castSceneAt(m, 5000).cloud.spin - sceneAt(m, 0, { after: true }).cloud.spin) < 1e-9)
-  // 渦は振り下ろすまでだんだん速く回る
-  const sp = (ms) => sceneAt(m, ms + 10).cloud.spin - sceneAt(m, ms).cloud.spin
-  assert.ok(sp(1400) > sp(200) * 1.5)
+  // 構えの終わりの渦の角度＝構えのすぐあと（技の途中から流す）の角度
+  assert.ok(Math.abs(castSceneAt(m, m.castSkipMs).cloud.spin - sceneAt(m, m.castSkipMs, { after: true }).cloud.spin) < 1e-9)
+  // 構えの終わりの手の光・雲の明るさも大きく跳ねない
+  assert.ok(Math.abs(castSceneAt(m, m.castSkipMs).hand.r - sceneAt(m, m.castSkipMs, { after: true }).hand.r) < 12)
+  assert.ok(sceneAt(m, m.castSkipMs, { after: true }).cloud.glow < 0.6)
+  // 渦は振り下ろすまでだんだん速く回る（構えのあとも）
+  const sp = (ms, o) => sceneAt(m, ms + 10, o).cloud.spin - sceneAt(m, ms, o).cloud.spin
+  assert.ok(sp(T.H - 100) > sp(T.H - 2000) * 1.5)
+  assert.ok(sp(T.H - 50, { after: true }) > sp(m.castSkipMs, { after: true }))
   // 2026-10-30 ポーズの絵：振り抜きの絵に替わる時刻（ts）まで手が光り、ts で両手がはじける（ほかの技と同じ）
   const ts = handFxOf(m).ts
   assert.ok(ts <= T.H)
@@ -96,7 +100,7 @@ test('【確定】2026-10-29 水天葬：構えのあいだから雲の渦が回
   assert.equal(sceneAt(m, ts + HAND_BURST_MS + 10).hand, null)
   // 滝の絵
   assert.equal(fallAt(m, T.H - 1), null)
-  assert.ok(fallAt(m, T.I + 130).sx > 1.06, '叩きつけた所で横へふくらむ')
+  assert.ok(fallAt(m, T.I + 130).sx > 1.05, '叩きつけた所で横へふくらむ（小さな揺れのぶんを引いても）')
   assert.equal(fallAt(m, T.E - 1).cut, 0)
   assert.ok(fallAt(m, T.E + T.T / 2).cut > 0.3, '落ち終わると上から切れる')
   assert.equal(fallAt(m, T.E + T.T), null)

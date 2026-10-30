@@ -906,7 +906,8 @@ const wipeClipOf = (r) => {
 const sceneOfStage = (art, acts, now, cast, castEnd) => {
   const motions = Object.values(art.motions)
   const castM = cast ? motions.find(m => m.label === cast.name) || motions.at(-1) : null
-  const list = acts.map(f => ({ m: f.motion, ms: (now - f.t0) * 1000, after: afterCast(f.t0, castEnd), landed: f.landed !== false })).filter(a => a.ms >= 0)
+  // after＝構えのすぐあとの技か（技の途中から流す技は t0 が前にずれているので、動いた時刻で見る）
+  const list = acts.map(f => ({ m: f.motion, ms: (now - f.t0) * 1000, after: afterCast(f.t0 + (f.castSkip || 0) / 1000, castEnd), landed: f.landed !== false })).filter(a => a.ms >= 0)
   const running = list.filter(a => a.ms < a.m.totalMs).at(-1)
   const sc = stageSceneOf(list, castM?.scene && !running ? { m: castM, ms: cast.ms } : null)
   // 手（scene.hand＝{ pt, part }・立ち絵の px とパーツ）：光の出どころ。構えているあいだ（技を流していない）は構えた技、ほかは演出が続いている技

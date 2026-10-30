@@ -90,13 +90,14 @@ export const DUNGEON_BOSSES = {
     skills: [
       { name: '氷雨', kind: 'mag', mult: 1.6, proc: 100, mp: 0, ail: { key: 'slow', chance: 70 } },
       { name: '水縛の帯', kind: 'phys', mult: 1.8, proc: 100, mp: 0, ail: { key: 'paralyze', chance: 30 } },
-      { name: '水天葬', kind: 'mag', mult: 3.0, proc: 100, mp: 0 },   // 倍率2.5以上＝撃つ前に構え（5秒・防御で半分）
+      // 倍率2.5以上＝撃つ前に構え（防御で半分）。黒龍の終焉の黒焔と同じ（ユーザー「同じにする」）：構え3.5秒＋振り下ろす直前の0.5秒＝振り下ろすまで4秒
+      { name: '水天葬', kind: 'mag', mult: 3.0, proc: 100, mp: 0, castSec: 3.5 },
     ],
     pattern: {
       steps: [
         { at: 0.75, skill: '氷雨' },
         { at: 0.5, skill: '水縛の帯' },
-        { at: 0.25, skill: '水天葬' },
+        { at: 0.25, skill: '水天葬', now: true },   // 切ったらゲージを待たずに構えに入る（黒龍と同じ）
       ],
       bands: [
         { min: 0.75, weights: {} },

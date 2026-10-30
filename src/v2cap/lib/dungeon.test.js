@@ -366,12 +366,16 @@ test('【確定】2026-10-30 大技の節目（ユーザー「大技に入ると
   assert.equal(c.b.cast, null)
 })
 
-test('【確定】2026-10-30 溜めは4秒（ユーザー「溜めモーションは4秒でいい」）：構えはじめから吐くまで4秒＝構え3.5秒＋吐く直前に引く0.5秒・「動きを見る」も同じ長さ・雨摩座はまだ変えない', () => {
-  const a = bossIllustOf('varuzenoku'), d = a.motions.doom
-  const sk = DUNGEON_BOSSES.varuzenoku.skills.find(s => s.name === '終焉の黒焔')
-  assert.equal(sk.castSec * 1000, d.castSkipMs, '構えの長さ＝技の途中から流す時刻（つなぎ目が合う）')
-  assert.equal(d.hitMs, 4000, '吐くまで4秒')
-  assert.ok(d.hitMs - d.castSkipMs <= 500, '構えのあとすぐ吐く')
+test('【確定】2026-10-30 溜めは4秒（ユーザー「溜めモーションは4秒でいい」・雨摩座も「同じにする」）：構えはじめから吐くまで4秒＝構え3.5秒＋直前の0.5秒・「動きを見る」も同じ長さ', () => {
+  for (const [key, big] of [['varuzenoku', 'doom'], ['amaza', 'deluge']]) {
+    const d = bossIllustOf(key).motions[big]
+    const sk = DUNGEON_BOSSES[key].skills.find(s => s.name === d.label)
+    assert.equal(sk.castSec * 1000, d.castSkipMs, `${key}：構えの長さ＝技の途中から流す時刻（つなぎ目が合う）`)
+    assert.equal(d.hitMs, 4000, `${key}：吐くまで4秒`)
+    assert.ok(d.hitMs - d.castSkipMs <= 500, `${key}：構えのあとすぐ`)
+    assert.ok(d.big, `${key}：大技の帯`)
+    assert.ok(DUNGEON_BOSSES[key].pattern.steps.find(s => s.at === 0.25 && s.skill === d.label).now, `${key}：25%を切ったらすぐ構える`)
+  }
   // 構えの長さはエンジンでも3.5秒
   const st = newFight(16)
   st.b.buffSeen.push('黒鱗の鎧', '逆鱗')
@@ -382,10 +386,15 @@ test('【確定】2026-10-30 溜めは4秒（ユーザー「溜めモーショ�
   const t0 = st.t
   untilTrue(st, () => !st.b.cast)
   assert.ok(Math.abs(st.t - t0 - 3.5) < 0.051, '3.5秒で撃つ')
-  // 雨摩座：節目で待たない形にはまだしていない・構えは今までどおり
-  const A = DUNGEON_BOSSES.amaza
-  assert.ok(A.pattern.steps.every(s => !s.now))
-  assert.equal(A.skills.find(s => s.name === '水天葬').castSec, undefined)
+  // 雨摩座も切ったらすぐ構える
+  const am = createAtb(dummy(), dungeonFighter('amaza', 'normal'), { rng: rngOf(17), maxSec: 999 })
+  am.b.buffSeen.push('霧雨の帳', '篠突く雨')
+  am.b.patFired.push(0.75, 0.5)
+  am.b.hp = Math.floor(am.b.base.hp * 0.24)
+  runFor(am, 0.05)
+  assert.equal(am.b.cast?.name, '水天葬')
+  assert.ok(Math.abs(am.b.cast.until - am.b.cast.start - 3.5) < 1e-9)
+  // ほかのボスの大技の構えは今までどおり（1ターンと同じ長さ）
   assert.equal(CAST_SEC, TURN_SEC)
 })
 

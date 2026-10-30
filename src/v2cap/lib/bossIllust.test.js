@@ -436,7 +436,7 @@ test('【確定】2026-10-29 氷雨は右腕を真上に掲げて、ためずに
   assert.deepEqual(S.arcs[0].pts[0], S.anchors.windup.hand)
   assert.deepEqual(S.arcs[0].pts.at(-1), S.anchors.strike.hand)
   assert.equal(S.arcs[0].toMs, S.hitMs)
-  // 水天葬は今までどおり1.5秒溜める
+  // 水天葬は溜めが長い（振り下ろすまで4秒・黒龍と同じ）
   const Dl = BOSS_ILLUST_DEFS.amaza.motions.deluge
   assert.ok(Dl.hitMs - Dl.keys.find(([, k]) => k.armUOn === 1)[0] >= 1400)
 })
@@ -491,10 +491,13 @@ test('【確定】2026-10-29 構え（水天葬の5秒）：右腕を真上に�
   // 構えの姿勢と、ためる動き（掲げきった所）は同じ形（つないでも跳ねない）
   const top = BOSS_ILLUST_DEFS.amaza.motions.deluge.keys.find(([ms]) => ms === 860)[1]
   for (const f of ['armUOn', 'armF', 'head', 'r', 'y']) assert.ok(Math.abs(top[f] - C.pose[f]) < 1e-9, `${f}：構えと技のためが同じ形`)
-  // 構えのすぐあとも、構えずに流しても、掲げた腕から振り下ろすまで ふだんの腕は出ない（技のはじめ120ms で掲げきる・溜めは1520ms まで）
+  // 構えのすぐあとも、構えずに流しても、掲げた腕から振り下ろすまで ふだんの腕は出ない（技のはじめ120ms で掲げきる・溜めは振り下ろす80ms前まで）
   const armD = bossIllustOf('amaza').parts.find(p => p.key === 'armD').swap
-  for (let ms = 0; ms <= 1520; ms += 20) assert.equal(swapOpacityOf(armD, illustPoseAt('amaza', m, ms, t, true)), 0, `構えのあと ${ms}ms`)
-  for (let ms = 120; ms <= 1520; ms += 20) assert.equal(swapOpacityOf(armD, illustPoseAt('amaza', m, ms, t)), 0, `構えなし ${ms}ms`)
+  for (let ms = 0; ms <= m.hitMs - 80; ms += 20) assert.equal(swapOpacityOf(armD, illustPoseAt('amaza', m, ms, t, true)), 0, `構えのあと ${ms}ms`)
+  for (let ms = 120; ms <= m.hitMs - 80; ms += 20) assert.equal(swapOpacityOf(armD, illustPoseAt('amaza', m, ms, t)), 0, `構えなし ${ms}ms`)
+  // 【確定】2026-10-30 構えの終わりの姿勢＝技の途中（castSkipMs）の姿勢（水天葬も黒龍と同じ＝つなぎ目で跳ねない）
+  const cEnd = illustCastPoseAt('amaza', m.castSkipMs, t), jEnd = illustPoseAt('amaza', m, m.castSkipMs, t)
+  for (const f of ['x', 'y', 'r', 'head', 'armF', 'armUOn', 'armN']) assert.ok(Math.abs(cEnd[f] - jEnd[f]) < 1e-9, `${f}`)
   // 技のあいだも待機の揺れはそのまま（技の頭と終わりで跳ねない）
   assert.deepEqual(illustPoseAt('amaza', m, 0, t), idlePoseAt(idle, t))
   // 【確定】2026-10-30 黒龍の構え（終焉の黒焔）：のけぞりは技の途中から流す時刻（castSkipMs）と同じ＝つなぎ目で跳ねない
@@ -543,7 +546,7 @@ test('【確定】2026-10-29 雨摩座の水の帯は体の動きから切り離
   const raised = D.keys.find(([, k]) => k.armUOn === 1)[0]
   assert.ok(D.hitMs - raised >= 1400, `溜め ${D.hitMs - raised}ms`)
   const ys = D.keys.filter(([t, k]) => t >= 300 && k.armUOn === 1).map(([, k]) => k.y)
-  assert.ok(ys.every((y, i) => i === 0 || y < ys[i - 1]), 'だんだん高く浮く')
+  assert.ok(ys.every((y, i) => i === 0 || y <= ys[i - 1]) && ys.at(-1) < ys[0], 'だんだん高く浮く（構えの形で止まってから、振り下ろす前にもう一段）')
   assert.equal(m.charge.toMs, m.hitMs)
   const amp = (from, to) => { let mx = 0; for (let t = from; t < to; t += 3) mx = Math.max(mx, Math.abs(illustPoseAt('amaza', m, t, 0).armF - motionPoseAt(D.keys, t).armF - idlePoseAt(d.idle, 0).armF)); return mx }
   assert.ok(amp(0, 2500) < 1e-9, '溜めのあいだも震えない（決まった動きのまま）')

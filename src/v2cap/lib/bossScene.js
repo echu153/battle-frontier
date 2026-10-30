@@ -49,6 +49,7 @@ export const DOOM = {
 }
 // 飛ぶエフェクトの進み（p＝飛んだ時間の割合 0〜1 → 口から相手までの割合）：はじめは少しゆっくり。画面の飛ぶ絵と奔流の先が同じ（火の玉が先頭）
 export const flyPosOf = (p) => p * (0.7 + 0.3 * p)
+const SPIN_UP_MS = 1600   // 水天葬の渦が振り下ろす前にだんだん速くなる長さ
 const G = 5.5   // しぶきの落ちる速さ（枠の幅/秒²）
 // 水縛の帯（kind 'coil'）：叩きつけて（I）から squeezes の時刻に締め上げ、burstMs ではじける。輪は体の真ん中（BODY_Y）のまわりに3つ
 export const COIL = { dim: 0.42, squeezes: [300, 600, 900], burstMs: 1100, rings: [-0.2, 0, 0.2], bubbles: 12 }
@@ -180,9 +181,12 @@ export const sceneAt = (m, ms, { after = false, landed = true } = {}, P = POUR) 
   const { H, I, L, E, T, end } = pourTimesOf(m, P)
   if (ms < 0 || ms >= end) return out
   const e = ms - I
+  // 構えのすぐあと（after）は技の途中（castSkipMs）から流す＝そこから振り下ろすまでで数える（構えの終わりの暗さ・手の光・渦の角度からつながる）
+  const from = after ? (m.castSkipMs || 0) : 0
+  const toHit = (x) => smooth((x - from) / Math.max(1, H - from))
   // 暗さ：振り下ろすまでに暗くなり（構えのすぐあとは構えの暗さから）、落ち終わったら戻る
   const d0 = after ? P.castDim : 0
-  out.dim = ms < H ? d0 + (P.dim - d0) * smooth(ms / H) : ms < E ? P.dim : P.dim * (1 - smooth((ms - E) / 600))
+  out.dim = ms < H ? d0 + (P.dim - d0) * toHit(ms) : ms < E ? P.dim : P.dim * (1 - smooth((ms - E) / 600))
   // 光：振り下ろした瞬間に少し・叩きつけた瞬間に大きく
   const f1 = ms >= H && ms < H + 180 ? 0.3 * (1 - (ms - H) / 180) : 0
   const f2 = landed && e >= 0 && e < 380 ? 0.85 * (e < 40 ? e / 40 : Math.pow(1 - (e - 40) / 340, 1.5)) : 0
@@ -198,14 +202,15 @@ export const sceneAt = (m, ms, { after = false, landed = true } = {}, P = POUR) 
     const a = after ? 1 : smooth(ms / 600)
     rain(out.items, P.rain, ms, 0.6 * a)
     motes(out.items, P.motes, ms, 0.8 * a, handFxOf(m)?.nw || 1)
-    out.hand = { r: 26 + 18 * smooth(ms / H) + 4 * Math.sin(ms / 110), op: after ? 1 : smooth(ms / 300) }
+    out.hand = { r: 26 + 18 * toHit(ms) + 4 * Math.sin(ms / 110), op: after ? 1 : smooth(ms / 300) }
   }
   // 振り下ろした瞬間（振り抜きの絵に替わる時刻）に両手ではじける（ほかの技と同じ・構えの手の光と粒は上の水天葬の分）
   handFxAt(m, ms, out, { gather: false })
-  // 雲：振り下ろすまで渦がだんだん速く回り、まん中が明るくなる。滝が落ちているあいだも回り続ける
-  const t = Math.min(ms, H) / 1000, base = after ? (P.spin * CAST_SEC) : 0
-  const spin = base + P.spin * (ms / 1000) + 1.6 * t * t + (ms > H ? 3.2 * t * ((ms - H) / 1000) : 0)
-  const glow = ms < H ? 0.45 + 0.55 * smooth(ms / H) : ms < E ? 0.75 + 0.25 * Math.sin(ms / 60) : Math.max(0, 1 - (ms - E) / T)
+  // 雲：振り下ろすまで渦がだんだん速く回り（最後の SPIN_UP_MS で速くなる）、まん中が明るくなる。滝が落ちているあいだも回り続ける
+  const t = Math.max(0, Math.min(ms, H) - (after ? from : Math.max(0, H - SPIN_UP_MS))) / 1000
+  const base = after ? P.spin * (m.castSkipMs ? m.castSkipMs / 1000 : CAST_SEC) : 0
+  const spin = base + P.spin * ((ms - from) / 1000) + 1.6 * t * t + (ms > H ? (3.2 * SPIN_UP_MS / 1000) * ((ms - H) / 1000) : 0)
+  const glow = ms < H ? 0.45 + 0.55 * toHit(ms) : ms < E ? 0.75 + 0.25 * Math.sin(ms / 60) : Math.max(0, 1 - (ms - E) / T)
   out.cloud = { spin, glow, flicker: ms < E ? flickerAt(ms) : 0 }
   // 流れ落ちる水の筋（雲から足元へ・いまの滝の先まで）。落ち終わると上から切れる
   if (landed && ms >= H && ms < E + T) {
