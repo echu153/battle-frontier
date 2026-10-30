@@ -705,6 +705,26 @@ test('【確定】2026-10-30 雨摩座の技のポーズの絵（黒龍と同じ
   assert.ok(Object.values(D.poses).flatMap(p => Object.values(p)).every(n => D.poseFit[n]), '8枚とも腰を立ち絵にそろえた')
 })
 
+test('【確定】2026-10-30 雨摩座のポーズの絵は腰（帯飾りのまん中のいちばん大きな青い玉）を立ち絵の同じ玉にそろえる（はじめ立ち絵の左隣の玉にそろえていて、技の絵へ切り替えると体が左へ約19pxずれた・ユーザー「直して」）', () => {
+  const D = BOSS_ILLUST_DEFS.amaza
+  // 立ち絵のまん中の玉（元の絵の px）。左隣の玉（543, 435）に戻さない
+  assert.deepEqual(D.waist, [581, 437])
+  // ポーズの絵（技の8枚・バフの2枚）はどれも玉の場所を測ってあり、poseFit はその差（手で書かない＝基準がずれない）
+  const names = [...Object.values(D.poses).flatMap(p => Object.values(p)), ...Object.values(D.buffs).map(b => b.pose)]
+  assert.equal(names.length, 10)
+  for (const n of names) {
+    const [x, y] = D.poseWaist[n] || []
+    assert.ok(Number.isFinite(x) && Number.isFinite(y), `${n}：腰の玉を測ってある`)
+    assert.deepEqual(D.poseFit[n], { dx: D.waist[0] - x, dy: D.waist[1] - y }, `${n}：腰を立ち絵の玉にそろえる`)
+  }
+  // 技の手（anchors）と水の筋（arcs）は、ずらした絵の上の手のまま（水の筋は構えの手から振り抜きの手まで）
+  for (const m of Object.values(D.motions)) for (const a of m.arcs || []) {
+    const which = a.pts[0][0] === m.anchors.windup.hand[0] ? 'hand' : 'hand2'
+    assert.deepEqual(a.pts[0], m.anchors.windup[which])
+    assert.deepEqual(a.pts.at(-1), m.anchors.strike[which])
+  }
+})
+
 test('【確定】2026-10-30 雨摩座は構えの5秒も水天葬の構えの絵（cast.art）・黒龍の構えは今までどおり', () => {
   const a = bossIllustOf('amaza')
   assert.equal(a.castArt, 'windup')
