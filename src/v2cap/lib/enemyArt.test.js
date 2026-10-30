@@ -112,6 +112,13 @@ test('【確定】2026-10-13 安息の祠のハピネスフェアリー：エリ
   assert.ok(hasEnemyArt('ハピネスフェアリー'), 'ユーザーの絵（public/エネミー/特別）から作った WebP がある')
 })
 
+test('【確定】2026-10-30 パピア3体の絵がある（ユーザーが public/エネミー/特別 に置いた。ファイル名の ちびぱぴあ・きんぐパピア も読める）', () => {
+  assert.equal(enemyNameOfFile('ちびぱぴあ'), 'ちびパピア')
+  assert.equal(enemyNameOfFile('きんぐパピア'), 'キングパピア')
+  assert.equal(enemyNameOfFile('パピア'), 'パピア')
+  for (const n of ['ちびパピア', 'パピア', 'キングパピア']) assert.ok(hasEnemyArt(n), `${n} の絵が無い`)
+})
+
 test('★エリア①〜⑥の120体は全部絵がある（①② 2026-10-12・③ 10-14・④ 10-24・⑤⑥ 10-26 ユーザーが置いた分）', () => {
   for (const name of ENEMY_NAMES_BY_AREA.slice(0, 6).flat()) assert.ok(hasEnemyArt(name), `${name} の絵が無い`)
 })
