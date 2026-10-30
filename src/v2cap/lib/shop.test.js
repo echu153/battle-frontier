@@ -107,7 +107,7 @@ test('サーバー：値段と時間が shop.js と同じ・Goldが足りるか�
 test('画面：ホームの施設に商店・買うのはサーバー・効いているあいだはステータスに出す', () => {
   const home = read('../pages/V2capHome.jsx')
   assert.ok(home.includes("{ key:'shop', label:'商店', icon:'🏪', color: SHOP_COLOR, action:'薬を買う' }"))
-  assert.ok(home.includes("{screen === 'shop' && <V2capShop prof={prof} onProfile={refresh} />}"))
+  assert.ok(home.includes("{screen === 'shop' && <V2capShop prof={prof} onProfile={refresh} dev={isAdmin} />}"))
   assert.ok(home.includes("if (m.key === 'shop' && flip > 0) return { ...m, action:`日月反転中（${leftText(flip)}）` }"))
   assert.ok(home.includes('あとから変えるには商店の性別変更薬が必要'), 'キャラ作成の注意書き')
   const shop = read('../components/V2capShop.jsx')

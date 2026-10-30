@@ -530,7 +530,7 @@ export default function V2capHome() {
             {screen === 'tree' && <V2capTree prof={prof} onProfile={refresh} unlimited={isAdmin} />}
             {screen === 'dex' && <V2capDex prof={prof} />}
             {screen === 'casino' && <V2capCasino prof={prof} onProfile={refresh} dev={isAdmin} />}
-            {screen === 'shop' && <V2capShop prof={prof} onProfile={refresh} />}
+            {screen === 'shop' && <V2capShop prof={prof} onProfile={refresh} dev={isAdmin} />}
             {screen === 'tower' && <V2capTower prof={prof} inventory={inventory} onProfile={refresh} />}
             {screen === 'uniqueCheck' && <V2capUniqueCheck prof={prof} inventory={inventory} />}
             {screen === 'dungeon' && (

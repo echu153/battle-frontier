@@ -1202,6 +1202,26 @@ test('【確定】2026-10-27 賭博場のアレア（§20）：その日の「�
   }
 })
 
+test('【確定】2026-10-31 商店の商人ソルド（§25）：好感度（1日1回+1・下がらない）・話した日・見せた段階の場面', () => {
+  // ユーザー指示「糸目の胡散臭いお兄さん、関西弁の守銭奴にする予定」＋選んだこと「好感度あり」。形はアレアの §20 と同じ（全身のあいさつは無いので、開いた日は覚えない）
+  for (const c of ['merchant_affinity   int not null default 0', 'merchant_talk_day   date', 'merchant_stage_seen int not null default 0']) {
+    assert.ok(SQL.includes(`alter table public.v2cap_profiles add column if not exists ${c};`), c)
+  }
+  assert.ok(!SQL.includes('v2cap_shop_welcome'), '1日1回の大きなあいさつは無い（ユーザー選択）')
+  const talk = fnBody('v2cap_merchant_talk')
+  assert.ok(talk.includes(`v_today date := ((now() at time zone 'Asia/Tokyo') - interval '${DAY_RESET_HOUR} hours')::date;`), '日付の区切りはデイリーと同じ')
+  assert.ok(talk.includes('if not public.v2cap_is_dev() then'), '開発限定')
+  assert.ok(talk.includes('if v_row.merchant_talk_day is distinct from v_today then'), '1日1回')
+  assert.ok(talk.includes('set merchant_affinity = merchant_affinity + 1, merchant_talk_day = v_today'), '+1')
+  const seen = fnBody('v2cap_merchant_seen')
+  assert.ok(seen.includes('if not public.v2cap_is_dev() then'), '開発限定')
+  assert.ok(seen.includes('set merchant_stage_seen = greatest(merchant_stage_seen, p_stage)'), '下がらない')
+  for (const f of ['v2cap_merchant_talk()', 'v2cap_merchant_seen(int)']) {
+    assert.ok(SQL.includes(`revoke all on function public.${f} from public, anon;`), f)
+    assert.ok(SQL.includes(`grant execute on function public.${f} to authenticated;`), f)
+  }
+})
+
 test('【確定】2026-10-28 解禁（§11）：これまでの払い出しの合計（stats の won を全部足す）・どのRPCも won_total を返す', () => {
   // ユーザー指示「金稼いだ総量で解禁されるコンテンツ」＋選んだこと「累計の払い出し」（JS は casino.js の casinoWonOf）
   const won = fnBody('v2cap_casino_won')
