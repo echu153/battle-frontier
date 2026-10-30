@@ -28,10 +28,12 @@ test('メニューのどれを押しても、題と中身のある画面へ行�
   }
 })
 
-test('まとまりの中身は2列に流れ、奇数の最後だけ横いっぱい（右を空けない）', () => {
+test('【確定】どのボタンも同じ大きさ：その行に1つしかなくても横いっぱいに伸ばさない', () => {
   const status = readFileSync(new URL('../components/V2Status.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
-  assert.ok(status.includes("gridColumn: i === group.items.length - 1 && i % 2 === 0 ? '1 / -1' : undefined"))
-  assert.ok(status.includes('{group.title}'), 'まとまりの見出しを出す')
+  const menu = status.slice(status.indexOf('export function V2Menu'))
+  assert.ok(menu.includes("gridTemplateColumns:'1fr 1fr'"), '2列に流す')
+  assert.ok(!menu.includes('gridColumn:'), '1つだけ伸ばすと大きさがそろわない')
+  assert.ok(menu.includes('{group.title}'), 'まとまりの見出しを出す')
 })
 
 test('塔の名前は「の」のあとだけで折り返す（最後の1字だけが次の行へ落ちない）', () => {
