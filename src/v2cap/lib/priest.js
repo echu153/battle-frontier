@@ -17,19 +17,19 @@
 import { fillLine, isNight, nextStreak, tapKindOf } from './clerk.js'
 import { stageOf } from './jobs.js'
 
-// ★絵が届くまで false＝神殿の画面は前のまま（2026-10-31 セリフと画面の作りを先に入れた）。絵を入れるときに外す
-export const PRIEST_ON = false
-
 export const PRIEST_ART_DIR = '/v2cap-art/temple'
 export const priestSrc = (key) => `${PRIEST_ART_DIR}/${key}.webp`
 
-// 絵（腰から上の1枚だけ）。src＝元の絵の名前（プロンプトのページの保存名か、ユーザーの呼び方）
-export const PRIEST_FACES = [{ key: 'normal', label: '普通', src: ['普通', '通常'] }]
+// 絵（腰から上の1枚だけ）。src＝元の絵の名前（プロンプトのページの保存名か、ユーザーの呼び方。ユーザーが置いた絵は「神官.png」）
+export const PRIEST_FACES = [{ key: 'normal', label: '普通', src: ['普通', '通常', '神官'] }]
 export const PRIEST_FACE_KEYS = PRIEST_FACES.map(f => f.key)
 // 画面で使う版の大きさ（tools/v2cap-temple-art.mjs が作る。priest.test.js が突き合わせる）
-export const PRIEST_FACE_SIZE = { w: 464, h: 640 }
-// 小さく出すとき（転職のひとこと・スマホの上）に見せるところ：x＝頭のまん中の横の位置（幅に対する割合）・top＝上から見せる高さ（高さに対する割合）
-export const PRIEST_FOCUS = { x: 0.5, top: 0.47 }
+export const PRIEST_FACE_SIZE = { w: 436, h: 640 }
+// 小さく出すとき（転職のひとこと・スマホの上）に見せるところ：x＝頭のまん中の横の位置（幅に対する割合）・top＝上から見せる高さ（高さに対する割合）。
+// フードのてっぺんから胸のメダルまでを切り出す。フードが横に広いので、枠は親方（112×150）より幅を広げた（縦長の枠だと、切らないように引くと頭が小さくなる・2026-10-31 15通り見比べた）
+export const PRIEST_FOCUS = { x: 0.503, top: 0.58 }
+export const PRIEST_THUMB = { w: 132, h: 150 }   // 狭い画面の上
+export const PRIEST_SAY = { w: 108, h: 122 }     // 転職の結果の中
 
 // ===== セリフ（【確定】2026-10-31 ユーザーが案を見て「この案で入れて」）=====
 // 絵は1枚なので face は書かない（pickLine が普通の絵を返す）。{cls}＝転職した先のクラスの名前だけを埋める（プレイヤーの名前は呼ばない）

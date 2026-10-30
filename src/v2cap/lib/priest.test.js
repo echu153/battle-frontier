@@ -5,12 +5,13 @@ import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import * as P from './priest.js'
 import {
-  PRIEST_ON, PRIEST_ART_DIR, PRIEST_FACES, PRIEST_FACE_KEYS, PRIEST_FACE_SIZE, PRIEST_LINES, priestSrc,
+  PRIEST_ART_DIR, PRIEST_FACES, PRIEST_FACE_KEYS, PRIEST_FACE_SIZE, PRIEST_FOCUS, PRIEST_THUMB, PRIEST_SAY, PRIEST_LINES, priestSrc,
   linesOf, pickLine, enterKindOf, changeKindOf,
 } from './priest.js'
 
 const PUB = new URL('../../../public/', import.meta.url)
 const fileOf = (key) => new URL(`.${priestSrc(key)}`, PUB)
+const pathOf = (url) => url.pathname.replace(/^\/([A-Za-z]:)/, '$1')
 const read = (rel) => readFileSync(new URL(`../${rel}`, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 // WebP の大きさ（VP8X・VP8L・VP8 のどれか）
 const webpSize = (buf) => {
@@ -20,16 +21,15 @@ const webpSize = (buf) => {
   return { w: buf.readUInt16LE(26) & 0x3fff, h: buf.readUInt16LE(28) & 0x3fff }
 }
 const allLines = () => Object.entries(PRIEST_LINES).flatMap(([kind, list]) => list.map(l => ({ kind, ...l })))
-const NO_ART = !PRIEST_ON && '絵が届くまで PRIEST_ON=false'
 
 test('絵は普通の1枚だけ（顔が見えないので表情の差分なし＝ユーザー選択）', () => {
   assert.deepEqual(PRIEST_FACES.map(f => f.label), ['普通'])
   assert.deepEqual(PRIEST_FACE_KEYS, ['normal'])
-  assert.ok(PRIEST_FACES[0].src.includes('普通') && PRIEST_FACES[0].src.includes('通常'), 'プロンプトのページの保存名「普通」・呼び方「通常」のどちらでも読む')
+  for (const n of ['普通', '通常', '神官']) assert.ok(PRIEST_FACES[0].src.includes(n), `元の絵の名前「${n}」でも読む（プロンプトのページの保存名・呼び方・ユーザーが置いた名前）`)
   assert.equal(PRIEST_ART_DIR, '/v2cap-art/temple')
 })
 
-test('絵がそろっていて、大きさは PRIEST_FACE_SIZE と同じ', { skip: NO_ART }, () => {
+test('絵がそろっていて、大きさは PRIEST_FACE_SIZE と同じ', () => {
   for (const k of PRIEST_FACE_KEYS) {
     const f = fileOf(k)
     assert.ok(existsSync(f), `${k} の絵が無い＝ node tools/v2cap-temple-art.mjs`)
@@ -37,11 +37,11 @@ test('絵がそろっていて、大きさは PRIEST_FACE_SIZE と同じ', { ski
   }
 })
 
-test('絵の透明なところは本当に透明（透明度0）＝神官が箱の中や膜の中に見えない', { skip: NO_ART }, async (t) => {
+test('絵の透明なところは本当に透明（透明度0）＝神官が箱の中や膜の中に見えない', async (t) => {
   let decode
-  try { ({ decode } = await import('../../../tools/v2cap-art-lib.mjs')); decode(fileOf(PRIEST_FACE_KEYS[0]).pathname.replace(/^\/([A-Za-z]:)/, '$1'), 64, 'rgba') } catch { t.skip('ffmpeg が無い'); return }
+  try { ({ decode } = await import('../../../tools/v2cap-art-lib.mjs')); decode(pathOf(fileOf(PRIEST_FACE_KEYS[0])), 64, 'rgba') } catch { t.skip('ffmpeg が無い'); return }
   for (const k of PRIEST_FACE_KEYS) {
-    const img = decode(fileOf(k).pathname.replace(/^\/([A-Za-z]:)/, '$1'), 4096, 'rgba')
+    const img = decode(pathOf(fileOf(k)), 4096, 'rgba')
     const at = (x, y) => img.data[(y * img.W + x) * 4 + 3]
     assert.deepEqual([at(0, 0), at(img.W - 1, 0), at(5, 5), at(img.W - 6, 5)], [0, 0, 0, 0], `${k}：上のすみは透明`)
     let low = 0
@@ -50,9 +50,29 @@ test('絵の透明なところは本当に透明（透明度0）＝神官が箱�
   }
 })
 
-test('public/v2cap-art/temple の絵はどれも一覧に載っている（名前を変えて残った絵がない）', { skip: NO_ART }, () => {
+test('public/v2cap-art/temple の絵はどれも一覧に載っている（名前を変えて残った絵がない）', () => {
   const known = new Set(PRIEST_FACE_KEYS.map(k => `${k}.webp`))
   for (const f of readdirSync(new URL(`.${PRIEST_ART_DIR}/`, PUB))) assert.ok(known.has(f), `${f} は一覧に無い`)
+})
+
+test('小さく出すとき（スマホの上・転職の結果）は、フードが左右で切れない・胸のメダルまで見える', async (t) => {
+  // アレアのときのユーザー指示「ひだりの髪が少し見切れちゃってるから、もう少しバランスよく見えるように」と同じ考え＝顔ではなくフードのまん中に合わせる
+  let decode
+  try { ({ decode } = await import('../../../tools/v2cap-art-lib.mjs')); decode(pathOf(fileOf(PRIEST_FACE_KEYS[0])), 64, 'rgba') } catch { t.skip('ffmpeg が無い'); return }
+  const img = decode(pathOf(fileOf('normal')), 4096, 'rgba')
+  // フードの高さ（肩より上＝上から36%まで）で、絵のある左右の端
+  let l = img.W, r = -1
+  for (let y = 0; y < Math.round(0.36 * img.H); y++) {
+    for (let x = 0; x < img.W; x++) if (img.data[(y * img.W + x) * 4 + 3] > 128) { if (x < l) l = x; if (x > r) r = x }
+  }
+  assert.ok(Math.abs((l + r) / 2 / img.W - PRIEST_FOCUS.x) < 0.01, `フードのまん中（${((l + r) / 2 / img.W).toFixed(3)}）に合わせる`)
+  for (const frame of [PRIEST_THUMB, PRIEST_SAY]) {
+    const k = frame.h / (img.H * PRIEST_FOCUS.top)
+    const half = frame.w / k / 2, mid = PRIEST_FOCUS.x * img.W
+    assert.ok(mid - half <= l && r <= mid + half, `${frame.w}×${frame.h}：フードが枠に入る（見える ${Math.round(mid - half)}〜${Math.round(mid + half)}・フード ${l}〜${r}）`)
+  }
+  // メダルの下のはしは、元の絵で上から860px前後（切って縮めたあとで高さの55.3%）。枠の高さはそれより少し下まで
+  assert.ok(PRIEST_FOCUS.top > 0.553 && PRIEST_FOCUS.top < 0.62, `見せる高さ ${PRIEST_FOCUS.top}`)
 })
 
 test('【確定】セリフはユーザーが案を見て「この案で入れて」（2026-10-31）：場面ごとの数と文', () => {

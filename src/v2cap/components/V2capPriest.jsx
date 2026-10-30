@@ -1,4 +1,4 @@
-import { priestSrc, PRIEST_FACE_SIZE, PRIEST_FOCUS } from '../lib/priest.js'
+import { priestSrc, PRIEST_FACE_SIZE, PRIEST_FOCUS, PRIEST_THUMB, PRIEST_SAY } from '../lib/priest.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — 神殿の神官（2026-10-31）
@@ -18,8 +18,8 @@ const cropOf = (w, h) => {
   const k = h / (PRIEST_FACE_SIZE.h * PRIEST_FOCUS.top)
   return { w, h, imgW: Math.round(PRIEST_FACE_SIZE.w * k), left: Math.round(w / 2 - PRIEST_FOCUS.x * PRIEST_FACE_SIZE.w * k) }
 }
-const SAY = cropOf(92, 124)     // 転職の結果の中
-const THUMB = cropOf(112, 150)  // 狭い画面の上
+const SAY = cropOf(PRIEST_SAY.w, PRIEST_SAY.h)        // 転職の結果の中
+const THUMB = cropOf(PRIEST_THUMB.w, PRIEST_THUMB.h)  // 狭い画面の上
 
 export const PRIEST_CSS = `
 .pst-cols { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 8px; align-items: start; }

@@ -16,7 +16,7 @@ import { statBreakdown, statBreakdownAs } from '../lib/loadout.js'
 import { ART_GENDERS, artSrcOf, hasArt } from '../lib/classArt.js'
 import { useStored } from '../core/prefs.js'
 import { artGenderOf } from '../lib/gender.js'
-import { PRIEST_ON, pickLine, enterKindOf, changeKindOf, tapKindOf, nextStreak, isNight } from '../lib/priest.js'
+import { pickLine, enterKindOf, changeKindOf, tapKindOf, nextStreak, isNight } from '../lib/priest.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — 神殿（転職）
@@ -177,7 +177,7 @@ export default function V2capTemple({ prof, inventory, onProfile, dev = false })
 
   if (view && CLASS_BY_ID[view]) {
     return (
-      <ClassDetail cls={view} prof={prof} inventory={inventory} busy={busy} msg={msg} error={error} say={PRIEST_ON ? changeSay : null} gender={gender} onGender={setGender}
+      <ClassDetail cls={view} prof={prof} inventory={inventory} busy={busy} msg={msg} error={error} say={changeSay} gender={gender} onGender={setGender}
         asking={ask} onAsk={() => { setMsg(''); setError(''); setChangeSay(null); setAsk(true) }} onCancel={() => setAsk(false)}
         onChange={() => change(view)} onOpen={open} onBack={() => open(null)} />
     )
@@ -185,7 +185,7 @@ export default function V2capTemple({ prof, inventory, onProfile, dev = false })
 
   return (
     <div style={{ fontFamily:'monospace' }}>
-      {PRIEST_ON && <style>{PRIEST_CSS}</style>}
+      <style>{PRIEST_CSS}</style>
       {/* 開発用：転職の反応（神官だけ・本当には転職しない） */}
       {devSay && (
         <V2Modal title="🧪 転職の反応［開発］" color={DEV} keepScroll onClose={() => setDevSay(null)}>
@@ -193,9 +193,8 @@ export default function V2capTemple({ prof, inventory, onProfile, dev = false })
           <div style={{ color: DEV, fontSize:'10px' }}>場面：{devSay.kind}</div>
         </V2Modal>
       )}
-      <div className={PRIEST_ON ? 'pst-cols' : undefined}>
-      {/* 神官（広い画面は右・狭い画面は上） */}
-      {PRIEST_ON && (
+      <div className="pst-cols">
+        {/* 神官（広い画面は右・狭い画面は上） */}
         <div className="pst-side">
           <V2capPriest face={priest.face} line={priest.text} tick={priest.tick} onTap={tapPriest} />
           {dev && (
@@ -204,51 +203,51 @@ export default function V2capTemple({ prof, inventory, onProfile, dev = false })
             </div>
           )}
         </div>
-      )}
-      <div className="pst-main">
-      <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', gap:'6px', marginBottom:'8px' }}>
-        <span style={{ color: TEXT.label, fontSize:'11px' }}>イラスト：</span>
-        <GenderToggle value={gender} onChange={setGender} />
-      </div>
-      {STAGE_ORDER.map(stage => {
-        const list = CLASSES.filter(c => c.stage === stage)
-        const thumbs = list.some(c => hasArt(c.id))   // 絵が1枚も無い段（いまは上位クラス）は小さい絵の枠を出さない
-        return (
-          <div key={stage} style={{ ...box, padding:'12px', marginBottom:'10px' }}>
-            <div style={{ color: STAGES[stage].color, fontSize:'13px', marginBottom:'8px' }}>{STAGE_TITLE[stage] || `${STAGES[stage].label}クラス`}</div>
-            <div style={{ display:'grid', gridTemplateColumns:`repeat(auto-fill, minmax(${thumbs ? 250 : 220}px, 1fr))`, gap:'6px' }}>
-              {list.map(c => {
-                const job = jobOf(prof.jobs, c.id)
-                const isNow = c.id === prof.class
-                const miss = missingReqOf(c.id, prof.jobs)
-                return (
-                  // ★カード全体を押すと、そのクラスの詳細が開く（転職はそこで決める）。
-                  //   一覧は 小さい絵・名前・ClassLV・装備できる武器種だけ（特徴と上がりやすいステータスは詳細で出す）
-                  <button key={c.id} onClick={() => open(c.id)}
-                    style={{ textAlign:'left', background:'#000818', border:`1px solid ${isNow ? '#ff88cc' : '#002244'}`, padding: thumbs ? '6px 10px 6px 6px' : '8px 10px',
-                      opacity: miss ? 0.55 : 1, cursor:'pointer', fontFamily:'monospace', color:'#88ccff', display:'flex', gap:'10px', alignItems:'center' }}>
-                    {thumbs && <ArtFace cls={c.id} gender={gender} />}
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ display:'flex', alignItems:'baseline', gap:'8px', marginBottom:'4px', flexWrap:'wrap' }}>
-                        <span style={{ color: isNow ? '#ff88cc' : '#cfe2ff', fontSize:'14px' }}>{c.id}</span>
-                        <span style={{ color: prof.jobs?.[c.id] ? '#ffcc00' : TEXT.sub, fontSize:'11px' }}>
-                          CLASS LV{job.lv}{job.lv >= jobMaxOf(c.id) && <span style={{ color:'#ff8844' }}> MAX</span>}
-                        </span>
-                        {isNow && <span style={{ color:'#ff88cc', fontSize:'10px', marginLeft:'auto' }}>いまのクラス</span>}
-                      </div>
-                      <div style={{ fontSize:'11px', lineHeight:1.7 }}>
-                        <div><span style={label}>装備できる武器種：</span><span style={{ color:'#cfe2ff' }}>{weaponsOf(c.id).join('・')}</span></div>
-                        {miss && <div style={{ color:'#ff8844' }}>転職条件：{reqText(c.id)}（いま{jobOf(prof.jobs, c.req.cls).lv}）</div>}
-                      </div>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
+
+        <div className="pst-main">
+          <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', gap:'6px', marginBottom:'8px' }}>
+            <span style={{ color: TEXT.label, fontSize:'11px' }}>イラスト：</span>
+            <GenderToggle value={gender} onChange={setGender} />
           </div>
-        )
-      })}
-      </div>
+          {STAGE_ORDER.map(stage => {
+            const list = CLASSES.filter(c => c.stage === stage)
+            const thumbs = list.some(c => hasArt(c.id))   // 絵が1枚も無い段（いまは上位クラス）は小さい絵の枠を出さない
+            return (
+              <div key={stage} style={{ ...box, padding:'12px', marginBottom:'10px' }}>
+                <div style={{ color: STAGES[stage].color, fontSize:'13px', marginBottom:'8px' }}>{STAGE_TITLE[stage] || `${STAGES[stage].label}クラス`}</div>
+                <div style={{ display:'grid', gridTemplateColumns:`repeat(auto-fill, minmax(${thumbs ? 250 : 220}px, 1fr))`, gap:'6px' }}>
+                  {list.map(c => {
+                    const job = jobOf(prof.jobs, c.id)
+                    const isNow = c.id === prof.class
+                    const miss = missingReqOf(c.id, prof.jobs)
+                    return (
+                      // ★カード全体を押すと、そのクラスの詳細が開く（転職はそこで決める）。
+                      //   一覧は 小さい絵・名前・ClassLV・装備できる武器種だけ（特徴と上がりやすいステータスは詳細で出す）
+                      <button key={c.id} onClick={() => open(c.id)}
+                        style={{ textAlign:'left', background:'#000818', border:`1px solid ${isNow ? '#ff88cc' : '#002244'}`, padding: thumbs ? '6px 10px 6px 6px' : '8px 10px',
+                          opacity: miss ? 0.55 : 1, cursor:'pointer', fontFamily:'monospace', color:'#88ccff', display:'flex', gap:'10px', alignItems:'center' }}>
+                        {thumbs && <ArtFace cls={c.id} gender={gender} />}
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ display:'flex', alignItems:'baseline', gap:'8px', marginBottom:'4px', flexWrap:'wrap' }}>
+                            <span style={{ color: isNow ? '#ff88cc' : '#cfe2ff', fontSize:'14px' }}>{c.id}</span>
+                            <span style={{ color: prof.jobs?.[c.id] ? '#ffcc00' : TEXT.sub, fontSize:'11px' }}>
+                              CLASS LV{job.lv}{job.lv >= jobMaxOf(c.id) && <span style={{ color:'#ff8844' }}> MAX</span>}
+                            </span>
+                            {isNow && <span style={{ color:'#ff88cc', fontSize:'10px', marginLeft:'auto' }}>いまのクラス</span>}
+                          </div>
+                          <div style={{ fontSize:'11px', lineHeight:1.7 }}>
+                            <div><span style={label}>装備できる武器種：</span><span style={{ color:'#cfe2ff' }}>{weaponsOf(c.id).join('・')}</span></div>
+                            {miss && <div style={{ color:'#ff8844' }}>転職条件：{reqText(c.id)}（いま{jobOf(prof.jobs, c.req.cls).lv}）</div>}
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </div>
       </div>
     </div>
   )
