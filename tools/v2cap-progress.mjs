@@ -53,7 +53,7 @@
 //     … 職業ごとに「どのステを足すと③のボスに効くか」を測る（装備を選ぶ重み STAT_WEIGHT・同じステでの職業の強さ）
 //   ★2026-10-30 敵の測り直し（ユーザー「モンスターはプレイヤーのレベルもそうだけど装備、アセンション、スキルなども考慮したうえで設計してほしい」）で足したもの：
 //     ・アセンションを開く（既定・--noasc で開かない）／--report に戦いのターン数（ボス戦・ふつうの敵）
-//     ・--report・--tune は職業×乱数の人を CPU の数だけ同時に回す（--workers 1 で順に）
+//     ・--report・--tune は職業×乱数の人を CPU（論理）の半分まで同時に回す・優先度を下げる（--workers 1 で順に）
 //     ・--pace … 目安どおりに進んだ人の戦闘力の伸びと③のボスの強さを並べる（ボスの並びの下限に追いつけるかを見る）
 //     ・--tune --pacetune … ボスを「目安どおりに進んだ人」でエリアごとに合わせる（このときの指定：
 //       --tune --pacetune --gear drops --classes all --seeds 1,2 --hours 366 --keepexp --stdkeepmin 20 --pct 0.7 --pctmid 0.5 --midfrom 6
@@ -61,7 +61,7 @@
 //     ・--nocut（序盤の手直しを外して測る）／--hpshare 0.77,0.6（敵のHPの割合・ふつう,ボス）／--from 値.json（前に測った値から）／--out 値.json（結果をJSONでも書く）
 // ============================================================
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads'
-import { cpus } from 'node:os'
+import { cpus, setPriority, constants as osConstants } from 'node:os'
 const B = new URL('../src/', import.meta.url).href
 const { runBattle } = await import(B + 'v2cap/core/battle.js')
 const { STAT_KEYS, STAT_DEFS, INITIAL_STATS, calcPower } = await import(B + 'v2cap/core/stats.js')
@@ -557,9 +557,12 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
 }
 
 // ===== 何人かを同時に回す（2026-10-30）=====
-// --report・--tune の「職業×乱数」の人を、CPUの数だけ同時に回す（1人450時間で約20秒・22人を順に回すと約8分かかっていた）。
+// --report・--tune の「職業×乱数」の人を、CPU（論理）の半分まで同時に回す（1人450時間で約20秒・22人を順に回すと約8分かかっていた）。
 //   1人ずつの中身は順に回すのと同じ（乱数は人ごと）。敵の表（STD_RATIO・AREA_BOSS・ENH_MULT）と必要EXPは、そのときの値を毎回わたす。
-//   --workers 1 で前と同じく順に回す
+//   --workers 1 で前と同じく順に回す・--workers 26 のように数を指定もできる
+//   ★【確定】2026-10-30 ユーザー選択「優先度を下げる＋同時に回すのを半分」：前は CPU−2本（このPCで26本）を全力で使い、
+//     測り直しのあいだPCが重かった。いまは半分（14本）まで・プロセスの優先度を「通常以下」にする＝PCを使っているときはそちらが先に動く
+const lowerPriority = () => { try { setPriority(0, osConstants.priority.PRIORITY_BELOW_NORMAL) } catch { /* 下げられなくても回す */ } }
 const tablesNow = () => ({ std: areas.STD_RATIO.map(r => [...r]), boss: [...areas.AREA_BOSS], enh: [...areas.ENH_MULT], need: level.NEED_PERMIL,
   hpShare: [areas.ENEMY_HP_SHARE.normal, areas.ENEMY_HP_SHARE.boss] })
 const applyTables = (t) => {
@@ -571,7 +574,8 @@ const applyTables = (t) => {
   areas.resetEnemyCache()
 }
 const runMany = async (jobs) => {
-  const n = Math.max(1, Math.min(jobs.length, cpus().length - 2, Number(arg('workers', 99))))
+  const n = Math.max(1, Math.min(jobs.length, Number(arg('workers', Math.floor(cpus().length / 2)))))
+  lowerPriority()
   if (n <= 1) return jobs.map(j => simulate(j))
   const tables = tablesNow()
   const out = new Array(jobs.length)
@@ -590,6 +594,7 @@ const runMany = async (jobs) => {
   return out
 }
 if (!isMainThread) {
+  lowerPriority()
   applyTables(workerData.tables)
   parentPort.on('message', ({ i, job }) => parentPort.postMessage({ i, r: simulate(job) }))
 }
