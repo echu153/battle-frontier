@@ -59,7 +59,8 @@ import { FX_HEAD_Y, FX_FEET_Y, FX_SKY_Y, FX_TARGET_Y, SCENE_TOP, fallAt, coilAt,
 
 const Bar = ({ pct, color, h = 10 }) => (
   <div style={{ height:`${h}px`, background:'#000818', border:'1px solid #13405f' }}>
-    <div style={{ width:`${Math.max(0, Math.min(100, pct))}%`, height:'100%', background: color }} />
+    {/* 計算の刻み（0.05秒）のあいだをなめらかに */}
+    <div style={{ width:`${Math.max(0, Math.min(100, pct))}%`, height:'100%', background: color, transition:'width 50ms linear' }} />
   </div>
 )
 const chip = (color, bg = '#000818') => ({ fontSize:'10px', padding:'1px 5px', border:`1px solid ${color}`, color, background: bg })
@@ -436,7 +437,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   const after = rig?.buffs ? buffAfterOf(rig, me, mine, now) : null
   const tMs = now * 1000 * (after?.tempo || 1)
   // 構えのあいだは構えの姿勢（技を流しているあいだは技が先）
-  const castMs = me.cast ? castMsOf(me.cast, st.t) : null
+  const castMs = me.cast ? castMsOf(me.cast, st.t + st.acc) : null
   const casting = rig && castMs !== null && !(rigMotion && rigMs < rigMotion.totalMs)
   const pose = !rig ? null : casting ? illustCastPoseAt(rig.key, castMs, tMs)
     : illustPoseAt(rig.key, rigMotion, rigMs, tMs, !!lastAct && afterCast(lastAct.t0, castEnd))
@@ -1011,7 +1012,7 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
   const castSeen = useRef(-1e9)
   if (st.b.cast) castSeen.current = now
   // 構えの見せ方（前の技の動きが残っているあいだはゲージだけ赤い）
-  const bCastMs = st.b.cast ? castMsOf(st.b.cast, st.t) : null
+  const bCastMs = st.b.cast ? castMsOf(st.b.cast, st.t + st.acc) : null
   const cast = bCastMs !== null ? { name: st.b.cast.name, ms: bCastMs } : null
   // 派手な演出のあるボスの技の印は、戦闘の画面が古い印を片付けても演出が終わるまで覚えておく（keptActs）
   const kept = useRef([])

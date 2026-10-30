@@ -14,6 +14,7 @@ import { fxEventsOf, scheduleFx, POP_SEC } from '../lib/atbFx.js'
 import { enemyArtSrc } from '../lib/enemyArt.js'
 import { newBossMotionMemo, bossMotionKeyOf } from '../lib/bossArt.js'
 import { artLoadedCount, preloadArt } from '../lib/artPreload.js'
+import { newAtbPacer } from '../lib/atbPacer.js'
 
 // ============================================================
 // 「レベルキャップあり」版（v2cap）— ATB戦闘の画面（舞台・マクロ・技のボタン・ログ・時間を進める）
@@ -79,12 +80,12 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
 
   // ===== 時間を進める =====
   // ★実時間の差分を advance に渡す（中では決まった刻みで進む＝同じ入力なら同じ結果）。
-  //   setInterval なのは、裏のタブで requestAnimationFrame が止まると戦闘が固まって見えるため
+  //   画面の更新は requestAnimationFrame で1秒60回まで（lib/atbPacer.js・間に合わない端末は30回）。
+  //   裏のタブでは requestAnimationFrame が止まるので、そのあいだはタイマーで進める（戦闘が固まって見えない）
   useEffect(() => {
     if (paused || !artReady) return
     last.current = performance.now()
-    const id = setInterval(() => {
-      const now = performance.now()
+    const tick = (now) => {
       if (s && !s.over) {
         advance(s, (now - last.current) / 1000)
         if (s.log.length > seen.current) {
@@ -113,8 +114,23 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
       if (s?.over && !overSent.current) { overSent.current = true; onOverRef.current?.(s) }
       last.current = now
       setFrame(f => f + 1)
+    }
+    const pacer = newAtbPacer()
+    let lastTick = last.current, raf = 0
+    const loop = (t) => {
+      raf = requestAnimationFrame(loop)
+      if (!pacer.due(t)) return
+      lastTick = performance.now()
+      tick(lastTick)
+    }
+    raf = requestAnimationFrame(loop)
+    const id = setInterval(() => {
+      const now = performance.now()
+      if (now - lastTick < 100) return   // 動いているあいだは何もしない
+      lastTick = now
+      tick(now)
     }, 33)
-    return () => clearInterval(id)
+    return () => { cancelAnimationFrame(raf); clearInterval(id) }
   }, [runKey, paused, playerMotion, bossArt, artReady]) // eslint-disable-line react-hooks/exhaustive-deps
   // ログは新しい行が下に来る＝いちばん下まで送る
   useEffect(() => { if (logBox.current) logBox.current.scrollTop = logBox.current.scrollHeight }, [logs])
