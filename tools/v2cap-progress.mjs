@@ -51,11 +51,22 @@
 //   鍛冶屋：--gear drops では既定で使う（--nosmith で使わない・--smithcap none で強化の上限を+10に）
 //   node tools/v2cap-progress.mjs --statvalue [--areas 3,6,9,12] [--n 500] [--only 剣士]
 //     … 職業ごとに「どのステを足すと③のボスに効くか」を測る（装備を選ぶ重み STAT_WEIGHT・同じステでの職業の強さ）
+//   ★2026-10-30 敵の測り直し（ユーザー「モンスターはプレイヤーのレベルもそうだけど装備、アセンション、スキルなども考慮したうえで設計してほしい」）で足したもの：
+//     ・アセンションを開く（既定・--noasc で開かない）／--report に戦いのターン数（ボス戦・ふつうの敵）
+//     ・--report・--tune は職業×乱数の人を CPU の数だけ同時に回す（--workers 1 で順に）
+//     ・--pace … 目安どおりに進んだ人の戦闘力の伸びと③のボスの強さを並べる（ボスの並びの下限に追いつけるかを見る）
+//     ・--tune --pacetune … ボスを「目安どおりに進んだ人」でエリアごとに合わせる（このときの指定：
+//       --tune --pacetune --gear drops --classes all --seeds 1,2 --hours 366 --keepexp --stdkeepmin 20 --pct 0.7 --pctmid 0.5 --midfrom 6
+//       --rounds 10 --step 0.35 --clip 0.2 --anneal 0.85 --keep 4 --stddamp 0.5 --nocut --hpshare 0.77,0.6 --from 出発点.json --out 結果.json）
+//     ・--nocut（序盤の手直しを外して測る）／--hpshare 0.77,0.6（敵のHPの割合・ふつう,ボス）／--from 値.json（前に測った値から）／--out 値.json（結果をJSONでも書く）
 // ============================================================
+import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads'
+import { cpus } from 'node:os'
 const B = new URL('../src/', import.meta.url).href
 const { runBattle } = await import(B + 'v2cap/core/battle.js')
-const { STAT_KEYS, INITIAL_STATS, calcPower } = await import(B + 'v2cap/core/stats.js')
-const { setMpCost } = await import(B + 'v2cap/lib/skills.js')
+const { STAT_KEYS, STAT_DEFS, INITIAL_STATS, calcPower } = await import(B + 'v2cap/core/stats.js')
+const { setMpCost, SKILL_BY_NAME } = await import(B + 'v2cap/lib/skills.js')
+const { treeOf, apTotalOf } = await import(B + 'v2cap/lib/ascension.js')
 const { ITEMS, ITEM_BY_ID, starterIdsOf } = await import(B + 'v2cap/lib/equipment.js')
 const areas = await import(B + 'v2cap/lib/areas.js')
 const level = await import(B + 'v2cap/lib/level.js')
@@ -95,6 +106,15 @@ const PLUS_ON = !process.argv.includes('--noplus')
 //     画面・サーバーと同じ決まりの sortie.js の rollChest）。--report に「残骸の入り方」（分解・宝箱）を出す
 const SMITH_ON = !process.argv.includes('--nosmith')
 const SMITH_CAP = arg('smithcap', 'table')
+// アセンション（2026-10-30〜・ユーザー指示「モンスターはプレイヤーのレベルもそうだけど装備、アセンション、スキルなども考慮したうえで
+//   設計してほしい」）：CLASS LVが上がってAPが入るたびに、ふつうの人の開け方（simulate の ascSpend）で開く。--noasc で開かない
+//   ⚠前（2026-10-13〜10-29）は「敵の強さの測り直しには入れない」（ユーザー決定）で、開かずに測っていた
+const ASC_ON = !process.argv.includes('--noasc')
+// 敵の配分のHPの割合（areas.js の ENEMY_HP_SHARE・2026-10-30）を試す：--hpshare 0.8,0.6（ふつうの敵,ボス）
+const HP_SHARE_ARG = arg('hpshare', null)
+if (HP_SHARE_ARG) { const [n, b] = HP_SHARE_ARG.split(',').map(Number); areas.setEnemyHpShareForTuning(n, b ?? n) }
+// --nocut：序盤の手直し（areas.js の EARLY_*）を外して測る（測り直しで手直しを打ち消さないように・手直しは測った強さの上から掛ける）
+if (process.argv.includes('--nocut')) areas.setEarlyCutForTuning(false)
 const PER_HOUR = 360   // 1時間の戦闘数（10秒に1戦）
 
 // ===== 目安 =====
@@ -192,8 +212,10 @@ const fitSet = (sks, maxMp) => {
 // onBattle … 1戦ごとに呼ぶ（武器の真化のシミュ tools/v2cap-shinka-sim.mjs が武器ごとに数える）。
 //   { r, enc, win, at, hour, weaponId, cls, prof, inv } を渡す。true を返すと着け直す（真化した武器を持ち物の行へ写す）
 // rowExtra … 持ち物の行に足す中身（base_id → { shinka } など）。着け直すたびに引く
+// pace … true なら、ボスに勝ったかどうかに関係なく**目安の時間（SPOT_HOUR）どおりに場所を進める**（2026-10-30・目安どおりに進んだ人の
+//   戦闘力の伸びを測る＝ボスの並びの決まり「1エリアごとに約6%強く」に追いつけるかを見る）
 export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEAR_MODE, plus = PLUS_ON, smith = SMITH_ON, probe = null,
-  onBattle = null, rowExtra = null } = {}) => {
+  onBattle = null, rowExtra = null, pace = false } = {}) => {
   const rng = rngOf(seed)
   // 鍛冶屋を実際に使うとき（--smith）は、見込みの強化値は使わない（実際に強化した値で戦う）
   const smithOn = smith && gear === 'drops'
@@ -224,20 +246,26 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
   const hourly = []
   const spotClearHour = {}             // 場所 → ボスを倒した時間（小数）
   const lvAtClear = {}                 // 場所 → ボスを初めて倒したときのLV
+  const firstBossWin = {}              // 場所 → そこのボスに初めて勝った時間（pace でも数える＝--pacetune が使う）
   const lvAtSpotHour = {}              // 場所 → 目安の時間のLV
   const expAtSpotHour = {}             // 場所 → 目安の時間までに稼いだEXPの合計
   const expInSpot = {}                 // 場所 → そこで稼いだEXP
   const hoursInSpot = {}               // 場所 → そこにいた時間
   const fightsInSpot = {}              // 場所 → { n, win, boss, bossWin }（どこで詰まっているかを見る）
   const powerByLv = {}                 // LV -> [戦闘力]
+  // 戦いの長さ（2026-10-30・敵のHPを上げすぎていないかを見る）：エリア → { boss: [ボス戦のターン数（勝った戦い）], n・sum: ふつうの敵（勝った戦い） }
+  const turnsByArea = {}
   let job30Hour = null
   let expAtJobHour = null
   let expAtLvHour = null
 
+  // アセンションの開いたマス（職業 → 番号の並び・画面の v2cap_profiles.ascension と同じ形）。効くのはいまの職業の盤面だけ
+  const ascByCls = {}
   const prof = () => ({
     username:'me', class: cls, lv: st.lv,
     ...Object.fromEntries(STAT_KEYS.map(k => [k, st[k]])),
     jobs, learned, skill_sets: { [cls]: skillSet }, equipped,   // スキルセットは職業ごと（画面の v2cap_profiles と同じ形）
+    ascension: ascByCls,
   })
   // 装備は「その時点で着けられるいちばん良いもの」。行ったことのあるエリア（開いている一番先の場所のエリアまで）の装備を、
   // レア度は全部（エピック・レジェンダリーも）候補にし、必要LVに足りない装備はいまのLV相当（2026-10-18〜・gear.js）で数えて職業の重みで比べる
@@ -342,6 +370,56 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
     const mp = totalStats(prof(), invAt(openUntilOf(cleared))).mp
     skillSet = CLASS_BY_ID[cls]?.stage === 'ichiji' ? ichijiSet(cls, buildPick, learned, mp) : typicalSet(cls, learned, mp)
   }
+  // アセンションのふつうの人の開け方（2026-10-30）：開いているマスから届く「まだ開いていないマス」それぞれへのいちばん近いルートのうち、
+  //   ルートのマスの値打ちの合計 ÷ ルートの長さ（AP）がいちばん高いものの、最初のマスを開く。APが残るかぎりくり返す
+  //   （遠い技のマス・大マスへ向かう道も、途中の小マスこみで比べる）。
+  //   値打ち … 小マス＝そのマスの戦闘力（pts）×重み／大マス＝いまのそのステ（戦闘力に直した値）×+%×重み／
+  //   技のマス＝いまの編成に入れている技なら「重みをかけた戦闘力の合計」の 攻撃5%・強化4%・回復2%、入れていない技は0.5%
+  //   重み … 装備を選ぶのと同じ weightOf ＋ HP 0.4・MP 0.15・LUK 0.1（この3つは測っていない仮の値）
+  const ASC_EXTRA_W = { hp: 0.4, mp: 0.15, luk: 0.1 }
+  const ascSpend = () => {
+    const t = ASC_ON ? treeOf(cls) : null
+    if (!t) return
+    const open = (ascByCls[cls] ||= [])
+    let left = apTotalOf(cls, jobOf(jobs, cls).lv) - open.length
+    if (left <= 0) return
+    const w = { ...ASC_EXTRA_W, ...weight }
+    const tot = totalStats(prof(), invAt(openUntilOf(cleared)))
+    const ptsOf = (k) => (tot[k] || 0) / (STAT_DEFS[k]?.unit || 1)
+    const P = Object.keys(w).reduce((s, k) => s + ptsOf(k) * w[k], 0)
+    const inSet = new Set(skillSet.map(e => e.name))
+    const valueOf = (n) => {
+      if (n.type === 'stat') return n.pts * (w[n.stat] || 0)
+      if (n.type === 'big') return ptsOf(n.stat) * n.pct / 100 * (w[n.stat] || 0)
+      if (n.type !== 'skill') return 0
+      if (!inSet.has(n.skill)) return P * 0.005
+      const sk = SKILL_BY_NAME[n.skill]
+      return P * (sk && isAtk(sk) ? 0.05 : sk?.kind === 'buff' ? 0.04 : 0.02)
+    }
+    const have = new Set([0, ...open])
+    while (left > 0) {
+      // 開いているマスから広げる（番号の小さいほうから＝ascension.js の routeTo と同じ順）
+      const prev = new Map(), sum = new Map(), len = new Map()
+      const queue = []
+      const reach = (nb, from) => {
+        if (have.has(nb) || prev.has(nb)) return
+        prev.set(nb, from)
+        sum.set(nb, (from < 0 ? 0 : sum.get(from)) + valueOf(t.byId[nb]))
+        len.set(nb, (from < 0 ? 0 : len.get(from)) + 1)
+        queue.push(nb)
+      }
+      for (const id of [...have].sort((a, b) => a - b)) for (const nb of t.byId[id].links) reach(nb, -1)
+      for (let i = 0; i < queue.length; i++) for (const nb of t.byId[queue[i]].links) reach(nb, queue[i])
+      let best = null, bv = -1
+      for (const id of queue) { const v = sum.get(id) / len.get(id); if (v > bv) { bv = v; best = id } }
+      if (best === null) break
+      let first = best
+      while (prev.get(first) !== -1) first = prev.get(first)
+      open.push(first)
+      have.add(first)
+      left--
+    }
+  }
   // 転職：系統の上位職へ（ClassLVは1から・クラスのステはその職のぶんだけ・武器は同じ）
   const advance = (hour) => {
     const opts = nextClassesOf(cls)
@@ -374,6 +452,15 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
       if (expAtJobHour === null && hour >= JOB30_HOUR) expAtJobHour = cumExp
       if (expAtLvHour === null && hour >= LV100_HOUR) expAtLvHour = cumExp
       const at = new Date(t)
+      if (pace) {
+        while (cleared.length < LAST_SPOT && hour >= SPOT_HOUR[cleared.length]) {
+          const id = cleared.length + 1
+          cleared = clearSpot(cleared, id)
+          spotClearHour[id] = hour
+          lvAtClear[id] = st.lv
+          if (areas.spotOf(openUntilOf(cleared)).area !== gearArea) { regear(); reset() }
+        }
+      }
       const spot = openUntilOf(cleared)
       const enc = pickEncounter(spot, bossRate, at, rng)
       const r = runBattle(toFighter(prof(), invAt(spot), { at }), { ...enemyFighter(enc.enemy), boss: enc.isBoss }, { rng })
@@ -387,6 +474,12 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
       const fs = (fightsInSpot[spot] ||= { n: 0, win: 0, boss: 0, bossWin: 0 })
       fs.n++; if (win) fs.win++
       if (enc.isBoss) { fs.boss++; if (win) fs.bossWin++ }
+      if (win && enc.isBoss && firstBossWin[spot] === undefined) firstBossWin[spot] = hour
+      if (win) {
+        const ta = (turnsByArea[enc.spot.area] ||= { boss: [], n: 0, sum: 0 })
+        if (enc.isBoss) ta.boss.push(r.turns)
+        else if (enc.role !== 'rare') { ta.n++; ta.sum += r.turns }
+      }
       // ★負けても経験値はその場所の最低値が入る（倍率なし・Goldなし）＝画面・サーバーと同じ
       const { exp, gold: g } = rollRewards(enc, rng, win)
       gold += g
@@ -421,12 +514,14 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
         if (job30Hour === null) job30Hour = hour
         if (advance(hour)) dirty = true
       }
-      if (win && enc.isBoss && !cleared.includes(spot)) {
+      if (!pace && win && enc.isBoss && !cleared.includes(spot)) {
         cleared = clearSpot(cleared, spot)
         spotClearHour[spot] = hour
         lvAtClear[spot] = st.lv   // ボスを初めて倒したときのLV（推奨LVの目安＝areas.js の SPOT_REC_LV を測る・2026-10-12）
         if (areas.spotOf(openUntilOf(cleared)).area !== gearArea) dirty = true   // 新しいエリアの装備が着けられる
       }
+      // CLASS LVが上がった（AP が入った）・転職したら、アセンションを開く（いまの編成と着けている装備で値打ちを見る）
+      if (j.ups.length > 0) ascSpend()
       if (dirty) { regear(); reset() }
       // 標準の戦闘力（STD_RATIO）を作るための「強化なし」の戦闘力。強化ぶんは敵の強化の倍率（ENH_MULT）のほうで数える
       if (res.lv !== lvBefore) (powerByLv[st.lv] ||= []).push(calcPower(totalStats(prof(), withPlus(0))))
@@ -452,12 +547,57 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
   if (expAtJobHour === null) expAtJobHour = cumExp
   if (expAtLvHour === null) expAtLvHour = cumExp
   return {
-    hourly, spotClearHour, lvAtClear, lvAtSpotHour, expAtSpotHour, expInSpot, hoursInSpot, powerByLv,
+    hourly, spotClearHour, lvAtClear, firstBossWin, lvAtSpotHour, expAtSpotHour, expInSpot, hoursInSpot, powerByLv,
     learned, cls, start, jobs, job30Hour, advancedHour, expAtJobHour, expAtLvHour, gold,
-    fightsInSpot, enhByArea,
+    fightsInSpot, enhByArea, turnsByArea,
     plusByArea, goldSpent, enhTries, enhWins, scrap, scrapGot,
+    asc: ascByCls,
     final: { profile: prof(), inventory },   // 最後のキャラ（職業ごとの強さを比べるのに使う）
   }
+}
+
+// ===== 何人かを同時に回す（2026-10-30）=====
+// --report・--tune の「職業×乱数」の人を、CPUの数だけ同時に回す（1人450時間で約20秒・22人を順に回すと約8分かかっていた）。
+//   1人ずつの中身は順に回すのと同じ（乱数は人ごと）。敵の表（STD_RATIO・AREA_BOSS・ENH_MULT）と必要EXPは、そのときの値を毎回わたす。
+//   --workers 1 で前と同じく順に回す
+const tablesNow = () => ({ std: areas.STD_RATIO.map(r => [...r]), boss: [...areas.AREA_BOSS], enh: [...areas.ENH_MULT], need: level.NEED_PERMIL,
+  hpShare: [areas.ENEMY_HP_SHARE.normal, areas.ENEMY_HP_SHARE.boss] })
+const applyTables = (t) => {
+  t.std.forEach(([l, r], i) => { areas.STD_RATIO[i][0] = l; areas.STD_RATIO[i][1] = r })
+  t.boss.forEach((v, i) => { areas.AREA_BOSS[i] = v })
+  t.enh.forEach((v, i) => { areas.ENH_MULT[i] = v })
+  level.setNeedPermilForTuning(t.need)
+  if (t.hpShare) areas.setEnemyHpShareForTuning(t.hpShare[0], t.hpShare[1])
+  areas.resetEnemyCache()
+}
+const runMany = async (jobs) => {
+  const n = Math.max(1, Math.min(jobs.length, cpus().length - 2, Number(arg('workers', 99))))
+  if (n <= 1) return jobs.map(j => simulate(j))
+  const tables = tablesNow()
+  const out = new Array(jobs.length)
+  let next = 0
+  await Promise.all(Array.from({ length: n }, () => new Promise((resolve, reject) => {
+    const w = new Worker(new URL(import.meta.url), { argv: process.argv.slice(2), workerData: { tables } })
+    const feed = () => {
+      if (next >= jobs.length) { w.terminate().then(resolve); return }
+      const i = next++
+      w.postMessage({ i, job: jobs[i] })
+    }
+    w.on('message', ({ i, r }) => { out[i] = r; feed() })
+    w.on('error', reject)
+    feed()
+  })))
+  return out
+}
+if (!isMainThread) {
+  applyTables(workerData.tables)
+  parentPort.on('message', ({ i, job }) => parentPort.postMessage({ i, r: simulate(job) }))
+}
+// --from：前に測った値（--tune --out の JSON）から始める（続きから測る・その値で --report を出す）。--hpshare を付ければそちらが勝つ
+if (isMainThread && arg('from', null)) {
+  const { readFileSync } = await import('node:fs')
+  const t = JSON.parse(readFileSync(arg('from'), 'utf8'))
+  applyTables({ ...tablesNow(), ...t, ...(HP_SHARE_ARG ? { hpShare: null } : {}) })
 }
 
 const median = (a) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : null }
@@ -511,6 +651,13 @@ const tune = async () => {
   const MID_FROM = Number(arg('midfrom', 99))
   const PCT_MID = Number(arg('pctmid', BOSS_PCT))
   const pctOf = (k) => (k + 1 >= MID_FROM ? PCT_MID : BOSS_PCT)
+  // --pacetune（2026-10-30）：ボスは「目安どおりに進んだ人」（simulate の pace）で合わせる＝③が開いてから（〇-②の目安の時間）
+  //   ③のボスに初めて勝つまでの時間が、③の持ち時間（〇-②の目安〜〇-③の目安＝エリアの時間の半分）になるように。
+  //   勝てないまま持ち時間が過ぎた人は「持ち時間の2倍」と数える。どの人も全部のエリアに目安どおりに着くので、エリアごとに別々に合わせられる
+  //   ⚠前の合わせ方（実際に進む人の「エリアに入ってから③を倒すまで」）は、1つのエリアで遅れると後ろのエリア全部が遅れ、
+  //     後ろほど来られる人が減って合わせにくかった（2026-10-30 エリア12から先は22人中0〜3人）。標準の戦闘力・強化の倍率も目安どおりの人で測る
+  const PACE = process.argv.includes('--pacetune')
+  const jobsOf = () => classes.flatMap(c => seeds.map(s => ({ hours: HOURS, seed: s, start: c, pace: PACE })))
   // 標準の戦闘力：そのLVに着いたときの戦闘力（本体に対する倍率）の平均へ、damp の割合で近づける
   //   ★LVが STD_FIXED_LV 以下の行は動かさない（始まりの森①の敵を、装備なしのLV1で勝てる強さに保つ・ユーザー指示「未装備でも倒せるように」）
   //   倍率はLVが上がって下がってもよい（ステータスポイントにしてから、実際の倍率はLV34あたりが山で少しずつ下がる）。
@@ -553,19 +700,27 @@ const tune = async () => {
   // --stdinit：仕組みを変えた直後など、出発点が遠いときは、前の係数のまま1回まわして測った値をそのまま出発点にする
   //   （少しずつ近づけている間に、古い標準のまま合わせたボスの倍率が行き過ぎて振れるのを防ぐ）
   if (process.argv.includes('--stdinit')) {
-    const first = []
-    for (const c of classes) for (const s of seeds) first.push(simulate({ hours: HOURS, seed: s, start: c }))
+    const first = await runMany(jobsOf())
     updateStd(first, 1)
     updateEnh(first, 1)
     console.log(`--- 出発点（測った標準の戦闘力）: ${areas.STD_RATIO.map(([l, r]) => `LV${l} ${r}`).join(' ')}`)
     console.log(`--- 出発点（測った強化の倍率）: ${areas.ENH_MULT.join(' ')}`)
   }
+  // ボスの倍率が「前のボスからの決まり」（〇-③は〇-①×BOSS_TOP_MIN 以上）に負けているエリアは、測り始めに
+  //   決まりどおりの強さと同じ値へそろえる（2026-10-30）。下限の0.3などのままだと、強くする向きに動かしても
+  //   しばらく決まりの強さに隠れて何も変わらない。そろえても敵の強さそのものは変わらない
+  for (let k = 1; k < AREA_LIST.length; k++) {
+    const s3 = areas.spotOf(k * 3 + 3)
+    const nat = stdPowerAt(areas.enemyLvOf(s3.roster.boss.name, s3.id)) * areas.bossRatioOf(s3.id) * (areas.ENH_MULT[k] ?? 1)
+    const now = areas.enemyBasePowerOf(s3.roster.boss)
+    if (now > nat * 1.01) areas.AREA_BOSS[k] = round2(areas.AREA_BOSS[k] * now / nat)
+    areas.resetEnemyCache()
+  }
   const hist = []
   const meanExp = (id) => { const s = areas.spotOf(id); return (s.exp[0] + s.exp[1]) / 2 }
   const spotHours = (id) => SPOT_HOUR[id - 1] - (id > 1 ? SPOT_HOUR[id - 2] : 0)
   for (let it = 1; it <= rounds; it++) {
-    const results = []
-    for (const c of classes) for (const s of seeds) results.push(simulate({ hours: HOURS, seed: s, start: c }))
+    const results = await runMany(jobsOf())
 
     // 1) 場所ごとの1時間あたりのEXP（中央値）。3人未満しか来ていない場所は、表のEXPの比で前の場所から伸ばす
     const rate = []
@@ -588,36 +743,74 @@ const tune = async () => {
     //    （1人ずつの中央値）が目安に近づくように。①②③の倍率（SUB_BOSS）は決まっていて動かさない。
     //    ★2026-10-13〜 エリア2から先の①②のボスは「前の③×1.05・①と③の間」で決まる（areas.js のエリアの境目）＝動かすのは③の強さ
     //    期間内に倒せなかった人は「期間の終わりまで＋30時間」として数える
+    //    ★ボスの並びの下限（〇-①＝前の③×BOSS_STEP_IN・③は①×BOSS_TOP_MIN 以上）に当たっているエリアは、自分の AREA_BOSS では弱くできない
+    //      （強さは前のエリアの③で決まる＝下限の「もと」）。弱くしたいエリアは、もとのエリアの③といっしょに動かす：もとのエリアと、
+    //      そこから続けて下限に当たっていて弱くしたいエリアの f の幾何平均で、もとのエリアを動かす（2026-10-30・ずれを組の中で分け合う。
+    //      エリア12〜15が下限のまま、強化+10で伸びるエリア11の大ボスにつられて強すぎた）。強くしたいエリアは、下限の強さにそろえてから f を掛ける
+    const natOf = (k) => {
+      const s3 = areas.spotOf(k * 3 + 3)
+      return stdPowerAt(areas.enemyLvOf(s3.roster.boss.name, s3.id)) * areas.bossRatioOf(s3.id) * (areas.ENH_MULT[k] ?? 1)
+    }
+    const baseOf = (k) => areas.enemyBasePowerOf(areas.spotOf(k * 3 + 3).roster.boss)
+    // 下限（前のエリアの③×BOSS_STEP_IN×BOSS_TOP_MIN）が自分の値以上なら「下限で決まっている」（ちょうど同じ＝測り始めにそろえたエリアも、自分では弱くできない）
+    const bound = AREA_LIST.map((_, k) => k > 0 && baseOf(k - 1) * areas.BOSS_STEP_IN * areas.BOSS_TOP_MIN >= natOf(k) * 0.999)
+    const fs = []
     for (let k = BOSS_MIN - 1; k < Math.min(AREA_LIST.length, BOSS_MAX); k++) {
       const durs = []
-      for (const r of results) {
-        const start = k === 0 ? 0 : r.spotClearHour[k * 3]
-        if (start === undefined) continue
-        const end = r.spotClearHour[k * 3 + 3]
-        durs.push(end === undefined ? HOURS - start + 30 : end - start)
+      let want = AREA_HOUR[k] - (k ? AREA_HOUR[k - 1] : 0)
+      if (PACE) {
+        const s3 = k * 3 + 3
+        const open = SPOT_HOUR[s3 - 2]
+        want = SPOT_HOUR[s3 - 1] - open
+        for (const r of results) { const w = r.firstBossWin[s3]; durs.push(w === undefined ? want * 2 : Math.max(0, w - open)) }
+      } else {
+        for (const r of results) {
+          const start = k === 0 ? 0 : r.spotClearHour[k * 3]
+          if (start === undefined) continue
+          const end = r.spotClearHour[k * 3 + 3]
+          durs.push(end === undefined ? HOURS - start + 30 : end - start)
+        }
       }
       if (durs.length < 3) continue
-      const want = AREA_HOUR[k] - (k ? AREA_HOUR[k - 1] : 0)
       const c = clip * Math.pow(anneal, it - 1)
       let f = Math.min(1 + c, Math.max(1 - c, Math.pow(want / Math.max(0.01, quantile(durs, pctOf(k))), step)))
       // ★そのエリアまで来られたのが半分未満なら、ボスを強くはしない（弱くする向きにだけ合わせる）。
       //   ⚠来られた人だけで合わせると、後ろのエリアは速い職業（盗賊など）だけで決まり、ほかの職業には強すぎるボスになった
       //   （2026-10-10 刀・宝珠と剣士のあとの測定で、エリア13〜15のボスが1.3〜1.5倍になった）。ユーザー承認の直し
       if (durs.length < results.length / 2) f = Math.min(1, f)
-      areas.AREA_BOSS[k] = round2(Math.max(0.3, areas.AREA_BOSS[k] * f))
+      fs[k] = f
+    }
+    for (let k = 0; k < AREA_LIST.length; k++) {
+      const f = fs[k]
+      if (f === undefined) continue
+      if (bound[k]) {
+        if (f < 1) continue   // もとのエリアでいっしょに動かす（下）
+        areas.AREA_BOSS[k] = round2(areas.AREA_BOSS[k] * baseOf(k) / natOf(k) * f)   // 下限の強さにそろえてから強くする
+        continue
+      }
+      const group = [f]
+      for (let m = k + 1; m < AREA_LIST.length && bound[m] && fs[m] !== undefined && fs[m] < 1; m++) group.push(fs[m])
+      const g = Math.exp(group.reduce((t, x) => t + Math.log(x), 0) / group.length)
+      areas.AREA_BOSS[k] = round2(Math.max(0.3, areas.AREA_BOSS[k] * g))
     }
     areas.resetEnemyCache()   // ボスの倍率を変えたので、敵の戦闘力の表を作り直す（〇-①のボスは前の③から決まる）
     hist.push({ need: KEEP_EXP ? needNow : needNext, std: areas.STD_RATIO.map(r => r[1]), boss: [...areas.AREA_BOSS], enh: [...areas.ENH_MULT] })
 
     // ---- 毎回の様子 ----
     const areaDays = AREA_LIST.map((a, k) => {
-      const got = results.map(r => areaClearHour(r, k)).filter(v => v !== undefined)
+      const got = results.map(r => (PACE ? r.firstBossWin[k * 3 + 3] : areaClearHour(r, k))).filter(v => v !== undefined)
       return got.length ? `${Math.round(median(got))}(${got.length})` : '-'
     })
     const lv365 = median(results.map(r => r.hourly[Math.min(LV100_HOUR, r.hourly.length) - 1].lv))
     const job30 = median(results.map(r => r.job30Hour ?? HOURS + 60))
     console.log(`--- ${it}回目  365時間目のLV ${lv365}・ClassLV30 ${job30?.toFixed(1)}時間目・必要EXP ${needNow}→${needNext}`)
-    console.log(`エリアの③を倒した時間（中央値・目安 ${AREA_HOUR.join('/')}）: ${areaDays.join(' ')}`)
+    console.log(`${PACE ? '目安どおりに進んだ人が' : ''}エリアの③を倒した時間（中央値・目安 ${AREA_HOUR.join('/')}）: ${areaDays.join(' ')}`)
+    console.log(`下限で決まっていたエリア: ${bound.map((b, k) => (b ? `E${k + 1}` : null)).filter(Boolean).join(' ') || 'なし'}`)
+    // --out：途中で止まっても続きから測れるように、その回の値も書く（${out}.last.json）
+    if (arg('out', null)) {
+      const { writeFileSync } = await import('node:fs')
+      writeFileSync(arg('out') + '.last.json', JSON.stringify({ round: it, ...tablesNow() }, null, 1))
+    }
   }
 
   // ---- 後半の回の平均（これを貼る）----
@@ -628,11 +821,22 @@ const tune = async () => {
   console.log('export const STD_RATIO = [\n  ' + areas.STD_RATIO.map(([l], i) => `[${l}, ${round2(avg(h => h.std[i]))}]`).join(', ') + ',\n]')
   console.log('export const AREA_BOSS = [\n  ' + areas.AREA_BOSS.map((_, i) => round2(avg(h => h.boss[i]))).join(', ') + ',\n]')
   console.log('export const ENH_MULT = [' + areas.ENH_MULT.map((_, i) => round2(avg(h => h.enh[i]))).join(', ') + ']')
+  // --out：同じ値をJSONでも書く（続きから測る・敵の強さの前後をくらべる道具が読む）
+  if (arg('out', null)) {
+    const { writeFileSync } = await import('node:fs')
+    writeFileSync(arg('out'), JSON.stringify({
+      need: Math.round(avg(h => h.need)),
+      std: areas.STD_RATIO.map(([l], i) => [l, round2(avg(h => h.std[i]))]),
+      boss: areas.AREA_BOSS.map((_, i) => round2(avg(h => h.boss[i]))),
+      enh: areas.ENH_MULT.map((_, i) => round2(avg(h => h.enh[i]))),
+      hpShare: [areas.ENEMY_HP_SHARE.normal, areas.ENEMY_HP_SHARE.boss],
+    }, null, 1))
+  }
 }
 
 // ===== --report：職業別に回して、エリアを抜けた時間と節目のLVを並べる =====
 // 初期職10 × seed 2通り
-const report = () => {
+const report = async () => {
   // ★職業の一覧は jobs.js から読む（直書きしていて、職業を足したときに漏れた）
   const classes = jobsLib.START_CLASSES
   const seeds = [11, 12]
@@ -643,11 +847,11 @@ const report = () => {
   const plusAcc = AREA_LIST.map(() => ({ sum: 0, n: 0 }))   // --smith：エリアごとの「着けている装備の強化値の平均」
   const spent = []
   const got = { dismantle: [], chest: [] }   // 残骸の入り方（人ごとの合計）
-  const allRuns = []
+  const allRuns = await runMany(classes.flatMap(c => seeds.map(s => ({ hours: HOURS, seed: s, start: c }))))
+  let ri = 0
   for (const c of classes) {
     for (const s of seeds) {
-      const r = simulate({ hours: HOURS, seed: s, start: c })
-      allRuns.push(r)
+      const r = allRuns[ri++]
       const row = AREA_LIST.map((_, k) => { const v = areaClearHour(r, k); return v === undefined ? '-' : Math.round(v) })
       AREA_LIST.forEach((_, k) => { const v = areaClearHour(r, k); if (v !== undefined) (all[k] ||= []).push(v) })
       const gold365 = r.hourly[Math.min(365, r.hourly.length) - 1].gold
@@ -667,6 +871,23 @@ const report = () => {
     return xs.length ? (xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(2) : '-'
   }
   console.log('実際の戦闘力÷基準（LV10/20/30/40/50/60/70/80/90）\t' + [10, 20, 30, 40, 50, 60, 70, 80, 90].map(ratioAt).join('\t'))
+  // 戦いの長さ（勝った戦い・全員まとめて）：ボス戦のターン数の中央値・ふつうの敵の平均（2026-10-30）
+  const bossT = AREA_LIST.map((_, k) => median(allRuns.flatMap(r => r.turnsByArea?.[k + 1]?.boss || [])))
+  const normT = AREA_LIST.map((_, k) => {
+    let n = 0, sum = 0
+    for (const r of allRuns) { const t = r.turnsByArea?.[k + 1]; if (t) { n += t.n; sum += t.sum } }
+    return n ? (sum / n).toFixed(1) : '-'
+  })
+  // 推奨LVの確かめ（areas.js の SPOT_REC_LV＝その場所の目安の時間に真ん中の人が何LVか・2026-10-13 の測り方）：③の場所だけ並べる
+  console.log('③の目安の時間のLV（中央値）\t' + AREA_LIST.map((_, k) => median(allRuns.map(r => r.lvAtSpotHour[k * 3 + 3]).filter(v => v !== undefined)) ?? '-').join('\t'))
+  console.log('いまの推奨LV（③）\t' + AREA_LIST.map((_, k) => areas.recLvOf(k * 3 + 3)).join('\t'))
+  // 最後にいた場所（止まっている場所）の人数（2026-10-30・どのボスが壁になっているかを見る）
+  const endAt = {}
+  for (const r of allRuns) { const sp = r.hourly[r.hourly.length - 1].spot; endAt[sp] = (endAt[sp] || 0) + 1 }
+  console.log(`${HOURS}時間目にいた場所（人数）\t` + Object.entries(endAt).sort((a, b) => a[0] - b[0])
+    .map(([sp, n]) => { const s = areas.spotOf(Number(sp)); return `${s.area}-${'①②③'[s.sub - 1]} ${n}人` }).join('・'))
+  console.log('ボス戦のターン数（勝った戦い・中央値）\t' + bossT.map(v => v ?? '-').join('\t'))
+  console.log('ふつうの敵のターン数（勝った戦い・平均）\t' + normT.join('\t'))
   if (SMITH_ON) {
     console.log('強化値の平均（そこにいる間）\t' + plusAcc.map(v => (v.n ? (v.sum / v.n).toFixed(1) : '-')).join('\t'))
     console.log('見込みの強化値\t' + areas.ASSUMED_PLUS.map(p => `+${p}`).join('\t'))
@@ -675,6 +896,28 @@ const report = () => {
     const perHour = (v) => (v / HOURS).toFixed(1)
     console.log(`残骸の入り方（${HOURS}時間の合計の中央値・1時間あたり）\t分解 ${median(got.dismantle)}（${perHour(median(got.dismantle))}）・宝箱 ${median(got.chest)}（${perHour(median(got.chest))}）`)
   }
+}
+
+// ===== --pace：目安どおりに進んだ人の戦闘力の伸びと、ボスの強さをくらべる（2026-10-30）=====
+// ボスの並びの決まり（〇-①＝前の③×BOSS_STEP_IN・③は①の BOSS_TOP_MIN 倍以上＝1エリアで約6%）に、目安どおりに進んだ人の伸びが追いつくかを見る。
+//   初期職×2人を、ボスに勝ったかどうかに関係なく目安の時間どおりに進め（simulate の pace）、各エリアの③の目安の時間の戦闘力（強化・アセンションこみ）を並べる
+const paceReport = async () => {
+  const classes = jobsLib.START_CLASSES
+  const seeds = String(arg('seeds', '11,12')).split(',').map(Number)
+  const runs = await runMany(classes.flatMap(c => seeds.map(s => ({ hours: Math.max(HOURS, 366), seed: s, start: c, pace: true }))))
+  console.log(`目安どおりに進んだ人（${classes.length}職×${seeds.length}人）の戦闘力（中央値）と、各エリアの③のボス`)
+  console.log(['エリア', '目安', '自分', '前のエリアから', '③のボス', '前のエリアから', 'ボス÷自分', 'LV', '勝率（その1時間）'].join('	'))
+  let prev = null, prevBoss = null
+  AREA_LIST.forEach((a, k) => {
+    const h = AREA_HOUR[k]
+    const p = median(runs.map(r => r.hourly[Math.max(0, Math.ceil(h) - 1)]?.power).filter(Boolean))
+    const boss = areas.enemyPowerOf(areas.spotOf(k * 3 + 3).roster.boss)
+    const at = (f) => median(runs.map(r => f(r.hourly[Math.max(0, Math.ceil(h) - 1)])).filter(v => v !== undefined))
+    console.log([`E${k + 1}`, `${h}h`, p, prev ? `×${(p / prev).toFixed(3)}` : '-', boss, prevBoss ? `×${(boss / prevBoss).toFixed(3)}` : '-', (boss / p).toFixed(2),
+      at(v => v?.lv), `${Math.round(at(v => v?.win) * 100)}%`].join('	'))
+    prev = p
+    prevBoss = boss
+  })
 }
 
 // ===== --statvalue：職業ごとに「どのステを足すと③のボスに効くか」を測る（STAT_WEIGHT を作る）=====
@@ -867,7 +1110,9 @@ const towerReport = () => {
   console.log(Object.entries(byCls).map(([c, v]) => `${c} ${pct(v[ri])}（${v[ri].n}戦）`).join('　'))
 }
 
-if (process.argv.includes('--tune')) {
+if (!isMainThread) {
+  // 同時に回す人（上の runMany）。下の CLI は動かさない
+} else if (process.argv.includes('--tune')) {
   await tune()
 } else if (process.argv.includes('--shrine')) {
   shrineReport()
@@ -876,7 +1121,9 @@ if (process.argv.includes('--tune')) {
 } else if (process.argv.includes('--enh')) {
   enh()
 } else if (process.argv.includes('--report')) {
-  report()
+  await report()
+} else if (process.argv.includes('--pace')) {
+  await paceReport()
 } else if (process.argv.includes('--statvalue')) {
   await statValue()
 } else if (import.meta.url === `file:///${process.argv[1].replace(/\\/g, '/')}` || process.argv[1].endsWith('v2cap-progress.mjs')) {

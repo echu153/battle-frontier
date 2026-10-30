@@ -167,8 +167,12 @@ export const enemyLevels = () => [...PLACES.values()].map(p => ({ name: p.name, 
 // 【確定】2026-10-13 全部の行を測り直した（ユーザー承認「見込みの表を上限に実際に強化」）：落ちた装備＋鍛冶屋の人（11職×2人・450時間）の
 //   **強化なしの**戦闘力で測る（強化ぶんは ENH_MULT）。前の値のままだと、上位職（約5時間目）や CLASS LV の上がりやすさで
 //   自分の戦闘力がこの線の1.3〜1.6倍あり、エリア10までが目安の2〜3倍速かった。LV1・LV2の行は固定・LV5〜20の行は上の値より下げない
+// 【確定】2026-10-30 ユーザー指示「いろいろ調整してきたからモンスターの調整もしてほしい、モンスターはプレイヤーのレベルもそうだけど装備、
+//   アセンション、スキルなども考慮したうえで設計してほしい」：シミュレーターの人がアセンションを開くようにして（tools/v2cap-progress.mjs の ascSpend）
+//   全部を測り直した。前の値のままだと、自分の戦闘力（アセンションこみ）がこの線の1.18〜1.34倍あり、どのエリアも目安の3〜5倍速かった
+//   （最後のエリアを抜けるのが121時間・目安365）。LV10 3.36→3.97・LV34 4.30→5.36・LV54 4.61→5.92・LV79 3.77→4.85・LV100 3.52→4.24
 export const STD_RATIO = [
-  [1, 0.75], [2, 0.83], [5, 2.69], [10, 3.36], [15, 3.86], [20, 4.21], [27, 3.74], [34, 4.3], [44, 4.55], [54, 4.61], [63, 4.27], [71, 4], [79, 3.77], [90, 3.63], [100, 3.52],
+  [1, 0.75], [2, 0.83], [5, 2.94], [10, 3.97], [15, 4.74], [20, 5.1], [27, 4.48], [34, 5.36], [44, 5.75], [54, 5.92], [63, 5.48], [71, 5.14], [79, 4.85], [90, 4.48], [100, 4.24],
 ]
 export const stdRatioAt = (lv) => {
   const l = Math.max(1, Math.min(100, lv || 1))
@@ -196,8 +200,11 @@ export const stdPowerAt = (lv) => Math.round(bodyPowerAt(lv) * stdRatioAt(lv))
 export const NORMAL_RATIO = 0.6
 export const RARE_RATIO = 0.8
 export const SUB_BOSS = [1.0, 1.0, 1.25]
+//   ★2026-10-30 全部を測り直した（STD_RATIO の上の【確定】）。合わせ方は前と同じ（エリア1〜5は7割の人・6からは真ん中の人・
+//     エリア1〜5は序盤の手直しを外して目安に合わせ、手直しは上から掛けたまま＝ユーザー選択「合わせ直す・手直しは残す」）。
+//     ボスの並びの下限で強さが決まるエリアは、下限のもとのエリアと組で動かした（tools/v2cap-progress.mjs の --tune）
 export const AREA_BOSS = [
-  1.14, 0.94, 1, 1.12, 0.55, 1.23, 0.3, 0.3, 0.41, 1.17, 0.97, 0.3, 1.28, 0.45, 0.99,
+  1.44, 1.11, 1.4, 1.63, 1.42, 1.69, 1.42, 1.37, 1.34, 1.47, 1.53, 1.18, 1.47, 1.38, 1.45,
 ]
 // 場所ごとのボスの戦闘力（決めた値で止める）
 // 【確定】2026-10-12 ユーザー指示「ボスをそんなすぐに倒されても困る、レベル5ぐらいで倒せるようになればいい※目安」：
@@ -227,7 +234,7 @@ export const assumedPlusAt = (spotId) => {
 // エリアの敵に掛ける倍率＝そのエリアにいる人の戦闘力が、強化で何倍になっているか（測った値。勘で書き換えないこと）。
 // 測る人：落ちた装備＋鍛冶屋でGoldと残骸を使って実際に強化する人（**見込みの強化値が上限**・2026-10-13 ユーザー「見込みの表を上限に実際に強化」）。
 // `node tools/v2cap-progress.mjs --tune` が標準の戦闘力（強化なしで測る）・ボスの倍率と一緒に作り直す（確かめは --enh）
-export const ENH_MULT = [1, 1.05, 1.07, 1.12, 1.11, 1.12, 1.11, 1.11, 1.12, 1.12, 1.18, 1.2, 1.2, 1.21, 1.25]
+export const ENH_MULT = [1, 1.06, 1.07, 1.12, 1.13, 1.12, 1.12, 1.13, 1.14, 1.15, 1.21, 1.24, 1.25, 1.25, 1.27]
 
 // ===== エリアの境目とボスの並び =====
 // 【確定】2026-10-13 ユーザー指示「〇ー１はひとつ前の〇ー3と同じくらいの強さに、ボスだけちょっと強く」
@@ -244,8 +251,16 @@ export const ENH_MULT = [1, 1.05, 1.07, 1.12, 1.11, 1.12, 1.11, 1.11, 1.12, 1.12
 //     エリア2〜7が1エリア1.13〜1.28倍・エリア8から1.04〜1.09倍（LVが100に近づく・二次職がまだ無い）なので、
 //     下限1.05倍（1エリア1.1025倍）でエリア7から先のボスが全部下限で決まり、エリア8から多くの人が止まった（測り直し tune14）。
 //     下限1.1倍なら最後のボスが前の2倍になった
-export const BOSS_STEP_IN = 1.05
-export const BOSS_TOP_MIN = 1.01
+// 【確定】2026-10-30 ユーザー選択「〇-①＝前の③×1.01・③＝①×1.005以上」（前は 1.05・1.01＝1エリアで最低6%）：
+//   アセンションを入れて敵を測り直したら、目安どおりに進んだ人の伸びは1エリアで エリア7〜10 3〜6%・エリア11〜15 1〜2%
+//   （新しい装備は強化し直すまで前の強化済みに勝てない・LV・クラス・アセンションの伸びが止まる＝tools/v2cap-progress.mjs --pace）。
+//   最低6%のままだとエリア7から先のボスが全部その下限で決まり、エリア8で204時間（目安135）・エリア12から先は22人中1〜3人だった。
+//   最低1.5%にして、それより上は目安の時間（AREA_BOSS）で決める＝中ボスが前の大ボスより少し強いのは残る
+//   ⚠〇-②のボスは「①と③のあいだ」で決まる＝測り直しでは動かせない。12-②の奈落蜘蛛アラクネ（速い型 BOSS_FAST・AGIが高い）は
+//     同じ戦闘力でもよけやすく（よけやすさは AGI の比の5乗）、測り直したあとは22人中11人が450時間まで止まる。
+//     【確定】2026-10-30 ユーザー選択「このまま」（AGI・DEXに上限を入れる案／アラクネの型を変える案は選ばなかった）
+export const BOSS_STEP_IN = 1.01
+export const BOSS_TOP_MIN = 1.005
 
 // ===== 序盤の手直し（エリア1〜5）=====
 // 【確定】2026-10-14 ユーザー指示「序盤の敵の強さとボスの強さやっぱり強すぎる」「中ボスの強さ1割下げて、大ボスも2割下げて」
@@ -262,6 +277,10 @@ export const EARLY_AREAS = 5
 export const EARLY_NORMAL_CUT = 0.9
 export const EARLY_MID_BOSS_CUT = 0.9
 export const EARLY_BIG_BOSS_CUT = 0.8
+// 測り直しのときだけ手直しを外す（tools/v2cap-progress.mjs の --nocut・2026-10-30）。手直しは「目安の時間に合わせた強さ」の
+//   上から掛けるものなので、掛けたまま測ると打ち消す向きに合わせてしまう（前は --bossmin 6 --stdmax 2 で序盤を動かさずに逃げていた）
+let EARLY_CUT_ON = true
+export const setEarlyCutForTuning = (on) => { EARLY_CUT_ON = on }
 
 // 全部の敵の戦闘力の表（「場所|名前」→ 戦闘力）。一度作ったら使い回す。
 // now＝いまの強さ／base＝序盤の手直しの前（テストと測り直しの確かめ用）
@@ -324,7 +343,7 @@ const buildPowers = () => {
     ;[b1, b2, b3].forEach((b, i) => { boss[k * 3 + i + 1] = b; out.set(placeKey(k * 3 + i + 1, [s1, s2, s3][i].roster.boss.name), b) })
   }
   const base = roundPowers(out)
-  applyEarlyCut(out)
+  if (EARLY_CUT_ON) applyEarlyCut(out)
   return { now: roundPowers(out), base }
 }
 // enemy は場所の顔ぶれ（SPOTS の roster）の敵＝いる場所（spot）を持っている
@@ -338,6 +357,30 @@ export const enemyBasePowerOf = (enemy) => {
   return POWER.base.get(placeKey(enemy.spot, enemy.name)) ?? 1
 }
 
+// ===== 敵のHPとVIT（配分の手直し）=====
+// 【確定】2026-10-30 ユーザー指示「モンスターはプレイヤーのレベルもそうだけど装備、アセンション、スキルなども考慮したうえで設計してほしい」
+//   「HPを上げすぎないで、上げるならVITとかそこら辺を上げて」：
+//   配分（monsters.js の dist）のHPの割合を ENEMY_HP_SHARE 倍にし、減らしたぶんをそのままVITへ足す（戦闘力の合計は同じ）。
+//   倍率はボスと、ほかの敵（ふつう・朝昼晩・レア）で別（ボスは戦闘力の上がり方が大きいので）。
+//   強さ（戦闘力）はこの配分のまま測り直した（tools/v2cap-progress.mjs --tune）
+//   ★VITで減らせるダメージには上限がある（物理34%・魔法50%＝combat.js の reductionRate）。VITだけでは届かないぶんは、
+//     測り直しで戦闘力そのもの（＝攻撃のステも）が上がる
+//   ★①-①（木漏れ日の小径）の敵・朝昼晩の敵・ボスと、①-①のふつうの敵（スライム・コウモリ＝①-②にも出る）は配分を変えない
+//     （前に決めた強さ＝装備なしのLV1で勝てる・ボスはLV5くらいで倒せる を守る。序盤の手直しで動かさないのと同じ）
+//   ★倍率は測り直しのあとのHPがほぼ今のままになるように選んだ：前とくらべて ふつうの敵0.9〜1.0倍・ボス0.9〜1.1倍（VITは3〜5倍）。
+//     勝ったボス戦のターン数は前と同じくらい（前 7〜10・いま 6〜9）
+export const ENEMY_HP_SHARE = { normal: 0.77, boss: 0.6 }
+export const setEnemyHpShareForTuning = (normal, boss) => { ENEMY_HP_SHARE.normal = normal; ENEMY_HP_SHARE.boss = boss }
+const FIRST_SPOT_NORMALS = new Set(spotOf(1).roster.enemies.map(e => e.name))
+export const enemyDistOf = (enemy) => {
+  const dist = enemy?.dist
+  if (!dist || enemy.spot === 1 || FIRST_SPOT_NORMALS.has(enemy.name)) return dist
+  const f = enemyRoleOf(enemy.name, enemy.spot) === 'boss' ? ENEMY_HP_SHARE.boss : ENEMY_HP_SHARE.normal
+  if (f === 1) return dist
+  const hp = (dist.hp || 0) * f
+  return { ...dist, hp, vit: (dist.vit || 0) + (dist.hp || 0) - hp }
+}
+
 // 戦闘用。uses＝1回の戦闘でそれぞれの技を何回使えるか
 // ★今のⅡの「エリアの相性（物理／魔法が通りやすい）」は付けない（1本道なので）
 // ★敵にもこの版の決まり（CAP_RULES）を混ぜる＝プレイヤーの麻痺・封印も受けるたび下がる
@@ -347,7 +390,7 @@ export const toFighter = (enemy, uses = 8, power = enemyPowerOf(enemy)) => ({
   name: enemy.name,
   kind: enemy.kind,
   race: raceOf(enemy.name),
-  stats: statsOf({ ...enemy, power }),
+  stats: statsOf({ ...enemy, power, dist: enemyDistOf(enemy) }),
   slots: (enemy.skills || []).map(s => ({ skill: s, uses })),
   taken: null,
 })

@@ -6,6 +6,7 @@ import {
   SPOTS, AREA_LIST, spotOf, spotLabel, enemyLvOf, enemyPowerOf, enemyBasePowerOf, stdPowerAt, bossRatioOf,
   ASSUMED_PLUS, assumedPlusAt, ENH_MULT, BOSS_STEP_IN, BOSS_TOP_MIN, NORMAL_RATIO, RARE_RATIO,
   EARLY_AREAS, EARLY_NORMAL_CUT, EARLY_MID_BOSS_CUT, EARLY_BIG_BOSS_CUT,
+  ENEMY_HP_SHARE, enemyDistOf, toFighter as enemyFighter,
 } from './areas.js'
 import { ENEMY_LV } from './monsters.js'
 
@@ -80,9 +81,10 @@ test('【確定】朝昼晩の敵は、その場所のいちばん強いふつ�
   assert.deepEqual([1, 2, 3].map(id => enemyLvOf(spotOf(id).roster.timed[0].name, id)), [2, 11, 13])
 })
 
-test('【確定】ボスの並び：〇-①は前の〇-③の1.05倍・〇-③は同じエリアの〇-①の1.01倍以上・〇-②はその間（始まりの森はいままでのまま）', () => {
-  assert.equal(BOSS_STEP_IN, 1.05)
-  assert.equal(BOSS_TOP_MIN, 1.01)
+test('【確定】ボスの並び：〇-①は前の〇-③の1.01倍・〇-③は同じエリアの〇-①の1.005倍以上・〇-②はその間（始まりの森はいままでのまま）', () => {
+  // 2026-10-13 は 1.05・1.01（1エリアで最低6%）。2026-10-30 ユーザー選択で 1.01・1.005（最低1.5%）＝後半のプレイヤーの伸び（1エリア1〜2%）に追いつけるように
+  assert.equal(BOSS_STEP_IN, 1.01)
+  assert.equal(BOSS_TOP_MIN, 1.005)
   const p = (id) => base(spotOf(id).roster.boss)
   // 始まりの森：①-①は戦闘力135で固定・②③は AREA_BOSS×SUB_BOSS（見込みは+0＝倍率1）。どれも序盤の手直しの前の強さ
   assert.equal(p(1), 135)
@@ -142,4 +144,29 @@ test('【確定】2026-10-14 序盤の手直し：エリア1〜5の中ボス-1�
   // ①-①：敵（スライム・コウモリ）はそのまま・ボスは中ボスとして 135→122
   for (const e of spotOf(1).roster.enemies) assert.equal(enemyPowerOf(e), base(e), `①-①の${e.name}`)
   assert.equal(enemyPowerOf(spotOf(1).roster.boss), 122)
+})
+
+test('【確定】2026-10-30 敵のHP：配分のHPの割合を ふつうの敵（朝昼晩・レアも）×0.77・ボス×0.6 にし、減らしたぶんをVITへ（①-①は変えない）', () => {
+  // ユーザー指示「モンスターはプレイヤーのレベルもそうだけど装備、アセンション、スキルなども考慮したうえで設計してほしい」
+  //   「HPを上げすぎないで、上げるならVITとかそこら辺を上げて」。測り直しで戦闘力が上がっても、HPはほぼ今のまま（ボス戦のターン数も同じくらい）
+  assert.deepEqual(ENEMY_HP_SHARE, { normal: 0.77, boss: 0.6 })
+  const firstSpot = new Set(spotOf(1).roster.enemies.map(e => e.name))
+  const sum = (d) => Object.values(d).reduce((t, v) => t + v, 0)
+  for (const s of SPOTS) {
+    for (const e of [...s.roster.enemies, ...s.roster.timed, ...s.roster.rares, s.roster.boss]) {
+      const d = enemyDistOf(e)
+      const keep = s.id === 1 || firstSpot.has(e.name)
+      const f = keep ? 1 : e === s.roster.boss ? ENEMY_HP_SHARE.boss : ENEMY_HP_SHARE.normal
+      const at = `${spotLabel(s)}の${e.name}`
+      assert.ok(Math.abs(d.hp - e.dist.hp * f) < 1e-9, `${at}：HPの割合`)
+      assert.ok(Math.abs(d.vit - (e.dist.vit + e.dist.hp * (1 - f))) < 1e-9, `${at}：減らしたぶんはVITへ`)
+      assert.ok(Math.abs(sum(d) - sum(e.dist)) < 1e-9, `${at}：割合の合計（戦闘力）は同じ`)
+      // 戦闘で使うステ＝戦闘力×割合（HPは×8）
+      const st = enemyFighter(e).stats
+      assert.equal(st.hp, Math.max(1, Math.round(enemyPowerOf(e) * d.hp / 100 * 8)), `${at}のHP`)
+      assert.equal(st.vit, Math.max(1, Math.round(enemyPowerOf(e) * d.vit / 100)), `${at}のVIT`)
+    }
+  }
+  // ①-①（装備なしのLV1で勝てる・ボスはLV5くらい＝前に決めた強さ）はもとの配分のまま
+  for (const e of [...spotOf(1).roster.enemies, ...spotOf(1).roster.timed, spotOf(1).roster.boss]) assert.equal(enemyDistOf(e), e.dist, `①-①の${e.name}`)
 })

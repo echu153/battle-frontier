@@ -338,6 +338,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
       </div>
       {/* 絵 */}
       <div ref={areaRef} style={{ position:'relative', height: artH, display:'flex', justifyContent:'center', alignItems:'flex-end', margin:'4px 0' }}>
+        {side === 'b' && <SkillBanner b={skillBannerAt(fx, now, 'b')} />}
         <div style={{ height:`${scale * 100}%`, display:'flex', alignItems:'flex-end', transformOrigin:'50% 100%',
           transform:`translateX(${dx.toFixed(1)}px)${squeeze ? ` scale(${squeeze[0].toFixed(3)}, ${squeeze[1].toFixed(3)})` : ''}`,
           opacity: down ? 0.25 : 1, transition:'opacity 0.4s' }}>
@@ -767,22 +768,22 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
       {foeArt && <BossFx fx={fxAll} now={now} geo={geo} art={foeArt} cast={cast} castEnd={castSeen.current} scene={sc} />}
       {sc && geo && <SceneLayer geo={geo} sc={sc} hands={sc.handsAt ? sc.handsAt.map(p => [geo.b.x + p[0] * (geo.b.w / foeArt.base), geo.b.y + p[1] * (geo.b.w / foeArt.base)]) : null} s={geo.b.w / foeArt.base} />}
       {sc && geo && sc.flash > 0 && <Flash geo={geo} op={sc.flash} />}
-      <SkillBanner b={skillBannerAt(fxAll, now, 'b')} />
     </div>
   )
 }
 
-// 敵の技の名前の帯（FF のように舞台の上のまん中・lib/atbFx.js の skillBannerAt）：黒い半透明の帯に白い字。上から少しすべり込む
+// 敵の技の名前の帯（FF のように・lib/atbFx.js の skillBannerAt）：黒い半透明の帯に白い字。上から少しすべり込む
 //   【確定】2026-10-30 ユーザー「敵のスキル発動時はスキル名を上に表示させてほしい、FFみたいに」
+//   【確定】2026-10-30 ユーザー「スキルはモンスターの真ん中上部にして、文字ちょっと大きいから調整して」：舞台のまん中→モンスターの絵の枠の上のまん中・字は15px→12px
 const SkillBanner = ({ b }) => {
   if (!b) return null
   return (
-    <div style={{ position:'absolute', top:'8px', left:'50%', zIndex: 5, pointerEvents:'none', opacity: b.op,
-      transform:`translate(-50%, ${((1 - b.k) * -10).toFixed(1)}px)`, maxWidth:'calc(100% - 24px)',
-      padding:'6px 22px', borderRadius:'4px', border:'1px solid rgba(220,232,255,0.55)',
+    <div style={{ position:'absolute', top:'2px', left:'50%', zIndex: 5, pointerEvents:'none', opacity: b.op,
+      transform:`translate(-50%, ${((1 - b.k) * -8).toFixed(1)}px)`, maxWidth:'calc(100% - 8px)',
+      padding:'4px 14px', borderRadius:'4px', border:'1px solid rgba(220,232,255,0.55)',
       background:'linear-gradient(180deg, rgba(10,18,44,0.88) 0%, rgba(2,6,20,0.88) 100%)',
       boxShadow:'0 2px 10px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(0,0,0,0.6)',
-      color:'#ffffff', fontFamily: JP_BOLD, fontWeight: 700, fontSize:'15px', letterSpacing:'0.12em', whiteSpace:'nowrap',
+      color:'#ffffff', fontFamily: JP_BOLD, fontWeight: 700, fontSize:'12px', letterSpacing:'0.1em', whiteSpace:'nowrap',
       overflow:'hidden', textOverflow:'ellipsis', textShadow:'0 1px 2px #000, 0 0 6px rgba(120,160,255,0.45)' }}>
       {b.name}
     </div>
