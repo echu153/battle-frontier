@@ -166,7 +166,7 @@ test('【確定】2026-10-31 雨摩座の背景は「空に浮かぶ庭」の背
   for (const g of BOSS_BG_DEFS.amaza.fx.glows) assert.ok(Math.hypot(g.x - 410, g.y - 256) > 60, `光 ${g.x},${g.y}`)
 })
 
-test('【確定】2026-10-31 黒龍が背景に溶けこまない（ユーザー「ヴァルゼノクが背景と同じ色だから少しわかりずらいかも」）：竜の後ろだけ色を抜いて煙をかける・体の縁に左からの光・見せ場の滝にはかからない・雨摩座には付けない', () => {
+test('【確定】2026-10-31 黒龍が背景に溶けこまない（ユーザー「ヴァルゼノクが背景と同じ色だから少しわかりずらいかも」）：竜の後ろだけ色を抜いて煙をかける・見せ場の滝にはかからない・雨摩座には付けない・体の縁の線は入れない（ユーザー「体の協調線いらなくない？、色が浮いてる気がする」）', () => {
   const b = BOSS_BG_DEFS.varuzenoku.behind
   assert.ok(b.sat >= 0.5 && b.sat <= 0.9, '色を抜く')
   assert.ok(b.haze > 0 && b.haze <= 0.25, '煙は薄い（濁らせない）')
@@ -178,19 +178,16 @@ test('【確定】2026-10-31 黒龍が背景に溶けこまない（ユーザー
     assert.ok(r.x < box.x && r.x + r.w > box.x + box.w && r.y < box.y && r.y + r.h > box.y + box.h, `${W}：枠を囲む`)
     assert.ok(r.x + (r.w / 2) * 0.45 > pic.x + 660 * pic.k, `${W}：滝に濃い所がかからない`)
   }
-  // 体の縁の光：左から当たる（切り抜きに見えない）。画面の Fighter まで届いている
-  const rim = BOSS_BG_DEFS.varuzenoku.rim
-  assert.match(rim, /^drop-shadow\(-1px 0 /)
-  assert.equal(bossBgOf('varuzenoku').rim, rim)
-  assert.equal(bossIllustOf('varuzenoku').bg.rim, rim, 'イラスト版')
-  assert.equal(bossArtOf('varuzenoku').bg.rim, rim, 'ドット絵版')
+  // 体の縁の線は入れない
   const stage = readFileSync(new URL('../components/V2capAtbStage.jsx', import.meta.url), 'utf8')
-  assert.match(stage, /rim=\{foeArt\?\.bg\?\.rim\}/)
-  assert.match(stage, /if \(rim\) filters\.push\(rim\)/)
+  assert.equal(BOSS_BG_DEFS.varuzenoku.rim, undefined)
+  assert.doesNotMatch(stage, /\brim\b/)
+  // イラスト版にもドット絵版にも同じ背景（色を抜く所も）
+  assert.deepEqual(bossIllustOf('varuzenoku').bg.behind, b)
+  assert.deepEqual(bossArtOf('varuzenoku').bg.behind, b)
   assert.match(stage, /bg\.behind && <BgBehind/)
   // 色を抜く層は絵と流れの上・火の粉の下（火の粉は色を抜かない）
   assert.ok(stage.indexOf('<BossFlowCanvas bg={bg}') < stage.indexOf('<BgBehind behind={bg.behind}') && stage.indexOf('<BgBehind behind={bg.behind}') < stage.indexOf('fx.embers.map'))
   // 雨摩座には要らない
   assert.equal(BOSS_BG_DEFS.amaza.behind, undefined)
-  assert.equal(BOSS_BG_DEFS.amaza.rim, undefined)
 })
