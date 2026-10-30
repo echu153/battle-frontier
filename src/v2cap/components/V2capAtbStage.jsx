@@ -615,11 +615,11 @@ function ChargeOrb({ m, a, acts, now, geo, art, s, cast, castEnd, sky = null }) 
   return <Sprite a={a} {...(on || { frame: -1 })} />
 }
 // 派手な演出の動くもの（lib/bossScene.js の stageSceneOf の items・cloud・hand）を舞台の上に描く。
-//   場所は相手の足元の真ん中が原点・相手の絵の枠の幅が1。手に集まる光（space: 'hand'）は掲げた手の指先から（立ち絵の px × s）
+//   場所は相手の足元の真ん中が原点・相手の絵の枠の幅が1。手に集まる光・手からのしぶき（space: 'hand'）は手（hands[hi]）から（立ち絵の px × s）
 //   雲の渦の光＝相手の頭上で、斜めから見た形（縦に縮めた）の渦巻きが回る・まん中が光る
 const SPIRAL = Array.from({ length: 25 }, (_, j) => j / 24)
 //   水の輪（coil）＝体のまわりの楕円。奥の半分（上）は暗く細く、手前の半分（下）は明るく、点線が回る
-function SceneLayer({ geo, sc, hand, s }) {
+function SceneLayer({ geo, sc, hands, s }) {
   const id = useId().replace(/:/g, '')
   const U = geo.p.w, ox = geo.p.x + U / 2, oy = geo.p.y + geo.p.h * FX_FEET_Y
   const X = (x) => ox + x * U, Y = (y) => oy + y * U
@@ -673,15 +673,19 @@ function SceneLayer({ geo, sc, hand, s }) {
             <circle cx={X(it.x) - it.r * U * 0.35} cy={Y(it.y) - it.r * U * 0.35} r={it.r * U * 0.25} fill="#ffffff" />
           </g>
         )
-        if (it.t === 'mote' && hand) return <circle key={i} cx={hand[0] + it.x * s} cy={hand[1] + it.y * s} r={it.r * s * 2} fill={`url(#${id}g)`} opacity={it.op} />
+        if (it.space === 'hand' && hands) {
+          const h = hands[it.hi || 0] || hands[0], x = h[0] + it.x * s, y = h[1] + it.y * s
+          if (it.t === 'mote') return <circle key={i} cx={x} cy={y} r={it.r * s * 2} fill={`url(#${id}g)`} opacity={it.op} />
+          if (it.t === 'hdrop') return <ellipse key={i} cx={x} cy={y} rx={it.rx * s} ry={it.ry * s} fill="#e6f6ff" opacity={it.op} transform={`rotate(${it.rot.toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)})`} />
+        }
         return null
       })}
-      {sc.hand && hand && sc.hand.op > 0 && (
-        <g opacity={sc.hand.op}>
-          <circle cx={hand[0]} cy={hand[1]} r={sc.hand.r * s * 2} fill={`url(#${id}g)`} />
-          <circle cx={hand[0]} cy={hand[1]} r={sc.hand.r * s * 0.5} fill="#ffffff" opacity="0.85" />
+      {sc.hand && hands && sc.hand.op > 0 && hands.map((h, i) => (
+        <g key={`h${i}`} opacity={sc.hand.op}>
+          <circle cx={h[0]} cy={h[1]} r={sc.hand.r * s * 2} fill={`url(#${id}g)`} />
+          <circle cx={h[0]} cy={h[1]} r={sc.hand.r * s * 0.5} fill="#ffffff" opacity="0.85" />
         </g>
-      )}
+      ))}
     </svg>
   )
 }
@@ -698,7 +702,7 @@ const wipeClipOf = (r) => {
   return `polygon(${u - 100}% -100%, 400% -100%, 400% 200%, ${u + 200}% 200%)`
 }
 
-// 演出（lib/bossScene.js の stageSceneOf）に、いま流れている技と構えを渡す。handAt＝掲げた手の指先（立ち絵の px・手の光を出す所）
+// 演出（lib/bossScene.js の stageSceneOf）に、いま流れている技と構えを渡す。handsAt＝手（立ち絵の px・手の光と粒としぶきを出す所・ポーズの絵の両手）
 //   構えた技＝名前が同じ技・無ければ最後の技（BossFx と同じ）。技を流しているあいだは構えの演出は出さない（技が先＝Fighter と同じ）
 const sceneOfStage = (art, acts, now, cast, castEnd) => {
   const motions = Object.values(art.motions)
@@ -712,10 +716,10 @@ const sceneOfStage = (art, acts, now, cast, castEnd) => {
   const handPt = fromCast ? castM.scene.hand : live ? live.m.scene.hand : null
   if (handPt && (sc.hand || sc.items.some(it => it.space === 'hand'))) {
     const pose = !fromCast ? illustPoseAt(art.key, live.m, live.ms, now * 1000, live.after) : illustCastPoseAt(art.key, cast.ms, now * 1000)
-    // ポーズの絵が出ていれば、その絵の上の手（anchors の hand）から
-    const castHand = fromCast && art.castArt ? castM.anchors?.[art.castArt]?.hand : null
-    sc.handAt = (!fromCast ? artAnchorAt(art.key, live.m, live.ms, pose, 'hand') : castHand ? illustPointAt(art.key, pose, castHand, 'body') : null)
-      || illustPointAt(art.key, pose, handPt.pt, handPt.part)
+    // ポーズの絵が出ていれば、その絵の上の手（anchors の hand・hand2＝両手）から。無ければ決まりの手（scene.hand）
+    const castAn = fromCast && art.castArt ? castM.anchors?.[art.castArt] : null
+    const pts = ['hand', 'hand2'].map(n => (!fromCast ? artAnchorAt(art.key, live.m, live.ms, pose, n) : castAn?.[n] ? illustPointAt(art.key, pose, castAn[n], 'body') : null)).filter(Boolean)
+    sc.handsAt = pts.length ? pts : [illustPointAt(art.key, pose, handPt.pt, handPt.part)]
   }
   return sc
 }
@@ -762,7 +766,7 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
         strips={foeArt?.kind === 'pixel' ? Object.values(foeArt.motions) : []} rig={foeArt?.kind === 'illust' ? foeArt : null}
         flex={size?.flex} artH={size?.artH || ART_H} areaRef={bArea} castEnd={castSeen.current} />
       {foeArt && <BossFx fx={fxAll} now={now} geo={geo} art={foeArt} cast={cast} castEnd={castSeen.current} scene={sc} />}
-      {sc && geo && <SceneLayer geo={geo} sc={sc} hand={sc.handAt ? [geo.b.x + sc.handAt[0] * (geo.b.w / foeArt.base), geo.b.y + sc.handAt[1] * (geo.b.w / foeArt.base)] : null} s={geo.b.w / foeArt.base} />}
+      {sc && geo && <SceneLayer geo={geo} sc={sc} hands={sc.handsAt ? sc.handsAt.map(p => [geo.b.x + p[0] * (geo.b.w / foeArt.base), geo.b.y + p[1] * (geo.b.w / foeArt.base)]) : null} s={geo.b.w / foeArt.base} />}
       {sc && geo && sc.flash > 0 && <Flash geo={geo} op={sc.flash} />}
     </div>
   )

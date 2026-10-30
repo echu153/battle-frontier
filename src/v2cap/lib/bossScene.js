@@ -16,6 +16,10 @@ import { CAST_SEC } from '../core/atb.js'
 // 【確定】2026-10-30 ユーザー「氷雨、水天葬、これもっと上から降らせて」「水縛の帯 紐いらない」：
 //   水天葬の雲は相手の頭のすぐ上（FX_HEAD_Y）から空の上のほう（FX_SKY_Y）へ上げ、滝はその雲から足元まで流れる（SCENE_TOP）。
 //   水縛の帯の水の綱（tether）と綱を伝う光はやめた（帯は飛ぶ絵だけで相手へ）
+// 【確定】2026-10-30 ユーザー「イラスト差し替えたんだからエフェクト更新して」→選んだ「今の絵のまま合わせ直す」：
+//   ポーズの絵（構え・振り抜き）に合わせて、構えの絵のあいだ絵の上の手（anchors の hand・hand2）に水の粒が渦を巻いて吸い込まれて手が光り、
+//   振り抜きの絵に替わった瞬間に振り抜きの手で光がはじけ、水しぶきが相手の方へ扇形に飛び散る（handFxAt・4つの技すべて）。
+//   雨礫・氷雨は演出の種類 'hands'（手の光と粒だけ・暗くも揺れもしない）。水天葬は両手（hand2）
 // ============================================================
 
 // 相手の頭上・足元に出すエフェクト（on）の場所（相手の絵の枠の上からの割合）：頭上＝枠の少し上（頭にかからない）・足元＝枠の下のはし
@@ -56,7 +60,8 @@ export const pourTimesOf = (m, P = POUR) => {
   return { H, I, L: Math.max(1, I - H), E: I + P.pourMs, T: P.tailMs, end: I + P.pourMs + 2000 }
 }
 // 演出が終わる時刻（技を出しはじめてから ms）。画面はこの時刻まで技の印を覚えておく（戦闘の画面が古い印を片付けても切れない）
-export const sceneEndMsOf = (m) => (m?.scene?.kind === 'pour' ? pourTimesOf(m).end : m?.scene?.kind === 'coil' ? m.impactMs + COIL.burstMs + 900 : 0)
+export const sceneEndMsOf = (m) => (m?.scene?.kind === 'pour' ? pourTimesOf(m).end : m?.scene?.kind === 'coil' ? m.impactMs + COIL.burstMs + 900
+  : m?.scene?.kind === 'hands' ? (handFxOf(m)?.ts ?? 0) + 600 : 0)
 
 // しぶき（n 粒・上へはね上がって落ちる）。e＝はねてからの ms・spread＝はねる所の広さ・oy＝はねる高さ（足元から）・around＝まわりじゅうへ
 const drops = (items, n, seed, e, v, life, size, spread, { oy = 0, around = false } = {}) => {
@@ -91,13 +96,47 @@ const rain = (items, n, ms, op) => {
     items.push({ t: 'rain', x1: x + 0.025, y1: y - 0.13, x2: x, y2: y, w: 0.006, op: op * (0.45 + 0.4 * rnd(i, 24)) * Math.min(1, p / 0.15) })
   }
 }
-// 掲げた手に集まる光の粒（指先からのずれ・立ち絵の px）：外から渦を巻いて吸い込まれる
-const motes = (items, n, ms, op) => {
+// 掲げた手に集まる光の粒（指先からのずれ・立ち絵の px）：外から渦を巻いて吸い込まれる。hands＝手の数（hi＝何番目の手に吸い込まれるか）
+const motes = (items, n, ms, op, hands = 1) => {
   if (op <= 0) return
   for (let i = 0; i < n; i++) {
     const per = 620 + 260 * rnd(i, 31), p = (ms / per + rnd(i, 32)) % 1
     const d = (70 + 70 * rnd(i, 33)) * (1 - easeOut(p)), a = rnd(i, 34) * Math.PI * 2 + p * 2.4
-    items.push({ t: 'mote', space: 'hand', x: Math.cos(a) * d, y: Math.sin(a) * d, r: 3 + 3 * rnd(i, 35), op: op * Math.sin(Math.PI * p) })
+    items.push({ t: 'mote', space: 'hand', hi: i % hands, x: Math.cos(a) * d, y: Math.sin(a) * d, r: 3 + 3 * rnd(i, 35), op: op * Math.sin(Math.PI * p) })
+  }
+}
+// 構えと振り抜きの手（ポーズの絵）：技の art（構え・振り抜きの時刻）と anchors（絵の上の手・hand と hand2）から { tw, ts, nw（構えの手の数）, ns（振り抜きの手の数） }
+const HAND_NAMES = ['hand', 'hand2']
+export const handFxOf = (m) => {
+  const art = m?.art, an = m?.anchors
+  if (!art || !an) return null
+  const tw = art.find(([, n]) => n === 'windup')?.[0], ts = art.find(([, n]) => n === 'strike')?.[0]
+  if (tw == null || ts == null) return null
+  const count = (p) => HAND_NAMES.filter(n => an[p]?.[n]).length
+  return { tw, ts, nw: count('windup'), ns: count('strike') }
+}
+export const HAND_BURST_MS = 230
+// 構えの絵のあいだ：手に水の粒が吸い込まれて手が光る（gather）／振り抜きの絵に替わった瞬間：手で光がはじけ、水しぶきが相手の方（左）へ扇形に飛ぶ
+//   （hdrop＝手からのずれ・立ち絵の px）。out.hand＝手の光（画面はいま出ている絵の手ぜんぶに描く）
+const handFxAt = (m, ms, out, { gather = true } = {}) => {
+  const h = handFxOf(m)
+  if (!h) return
+  if (gather && h.nw && ms >= h.tw && ms < h.ts) {
+    const k = smooth((ms - h.tw) / 150)
+    motes(out.items, 8 * h.nw, ms, 0.85 * k, h.nw)
+    out.hand = { r: 13 + 7 * smooth((ms - h.tw) / Math.max(1, h.ts - h.tw)) + 2 * Math.sin(ms / 90), op: k }
+  }
+  const e = ms - h.ts
+  if (h.ns && e >= 0 && e < HAND_BURST_MS) {
+    out.hand = { r: 22 + 52 * easeOut(e / 180), op: 1 - e / HAND_BURST_MS }   // 構えの光（水天葬は大きい）より大きくはじける
+    for (let hi = 0; hi < h.ns; hi++) for (let i = 0; i < 12; i++) {
+      const seed = 400 + hi * 40 + i, life = 170 + 90 * rnd(seed, 61)
+      if (e >= life) continue
+      const ang = Math.PI + (rnd(seed, 62) - 0.5) * 2.2, sp = 260 + 380 * rnd(seed, 63), t = e / 1000
+      const vx = Math.cos(ang) * sp, vy = Math.sin(ang) * sp, r = 2.5 + 3 * rnd(seed, 64)
+      out.items.push({ t: 'hdrop', space: 'hand', hi, x: vx * t, y: vy * t + 300 * t * t, rx: r * 2.4, ry: r,
+        rot: (Math.atan2(vy + 600 * t, vx) * 180) / Math.PI, op: 1 - e / life })
+    }
   }
 }
 // 雲の稲光（ときどき一瞬明るく）
@@ -110,7 +149,7 @@ export const castSceneAt = (m, castMs, P = POUR) => {
   const k = smooth(castMs / 1200)
   out.dim = P.castDim * k
   rain(out.items, P.rain, castMs, 0.6 * smooth(castMs / 1500))
-  motes(out.items, P.motes, castMs, 0.8 * k)
+  motes(out.items, P.motes, castMs, 0.8 * k, handFxOf(m)?.nw || 1)
   out.cloud = { spin: (P.spin * castMs) / 1000, glow: (0.35 + 0.1 * Math.sin(castMs / 260)) * k, flicker: flickerAt(castMs) * k }
   out.hand = { r: 24 + 4 * Math.sin(castMs / 130), op: smooth(castMs / 600) }
   return out
@@ -121,6 +160,7 @@ export const castSceneAt = (m, castMs, P = POUR) => {
 export const sceneAt = (m, ms, { after = false, landed = true } = {}, P = POUR) => {
   if (m?.scene?.kind === 'coil') return coilSceneAt(m, ms, landed)
   const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null }
+  if (m?.scene?.kind === 'hands') { if (ms >= 0 && ms < sceneEndMsOf(m)) handFxAt(m, ms, out); return out }
   if (m?.scene?.kind !== 'pour') return out
   const { H, I, L, E, T, end } = pourTimesOf(m, P)
   if (ms < 0 || ms >= end) return out
@@ -142,9 +182,11 @@ export const sceneAt = (m, ms, { after = false, landed = true } = {}, P = POUR) 
   if (ms < H) {
     const a = after ? 1 : smooth(ms / 600)
     rain(out.items, P.rain, ms, 0.6 * a)
-    motes(out.items, P.motes, ms, 0.8 * a)
+    motes(out.items, P.motes, ms, 0.8 * a, handFxOf(m)?.nw || 1)
     out.hand = { r: 26 + 18 * smooth(ms / H) + 4 * Math.sin(ms / 110), op: after ? 1 : smooth(ms / 300) }
-  } else if (ms < H + 160) out.hand = { r: 30 + 50 * easeOut((ms - H) / 160), op: 1 - (ms - H) / 160 }   // 振り下ろした瞬間にはじける
+  }
+  // 振り下ろした瞬間（振り抜きの絵に替わる時刻）に両手ではじける（ほかの技と同じ・構えの手の光と粒は上の水天葬の分）
+  handFxAt(m, ms, out, { gather: false })
   // 雲：振り下ろすまで渦がだんだん速く回り、まん中が明るくなる。滝が落ちているあいだも回り続ける
   const t = Math.min(ms, H) / 1000, base = after ? (P.spin * CAST_SEC) : 0
   const spin = base + P.spin * (ms / 1000) + 1.6 * t * t + (ms > H ? 3.2 * t * ((ms - H) / 1000) : 0)
@@ -221,8 +263,8 @@ export const coilSceneAt = (m, ms, landed = true, C = COIL) => {
   const e = ms - I
   // 暗さ：胸元でためるあいだに少し暗く・はじけたら戻る
   out.dim = ms < H ? C.dim * smooth((ms - 120) / (H - 120)) : ms < B + 150 ? C.dim : C.dim * (1 - smooth((ms - B - 150) / 400))
-  // 払った手の光（はじける）
-  if (ms >= H && ms < H + 180) out.hand = { r: 16 + 30 * easeOut((ms - H) / 180), op: 1 - (ms - H) / 180 }
+  // 構えの手に水が集まり、振り抜きの手ではじける（ほかの技と同じ）
+  handFxAt(m, ms, out)
   if (!landed || e < 0) return out
   // 光と揺れ：巻きついた瞬間・締め上げるたび・はじけた瞬間
   const sq = C.squeezes.map(t => e - t)
