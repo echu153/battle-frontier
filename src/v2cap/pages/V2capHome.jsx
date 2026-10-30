@@ -27,6 +27,7 @@ import { welcomeLineOf } from '../lib/alea.js'
 import V2capAscension from '../components/V2capAscension.jsx'
 import V2capTower from '../components/V2capTower.jsx'
 import V2capUniqueCheck from '../components/V2capUniqueCheck.jsx'
+import { updateApp } from '../lib/appUpdate.js'
 import V2capShop from '../components/V2capShop.jsx'
 import { SHOP_COLOR, flipLeftMsOf } from '../lib/shop.js'
 import { START_CLASSES, weaponsOf, attackKindOf, classDescOf } from '../lib/jobs.js'
@@ -45,6 +46,16 @@ import { MARK_SRC } from '../lib/clerk.js'
 function ShopMark({ size = 16 }) {
   return <img src={MARK_SRC} alt="" width={size} height={size} style={{ verticalAlign:'-3px' }} />
 }
+// 帯の「🔄 更新」（決まりは lib/appUpdate.js）。押したらそのまま読み直すので、確かめのポップアップは挟まない
+function UpdateButton() {
+  const [busy, setBusy] = useState(false)
+  return (
+    <button onClick={() => { setBusy(true); updateApp() }} disabled={busy}
+      style={{ background:'none', border:'1px solid #7fa6d0', color:'#7fa6d0', padding:'4px 8px', cursor: busy ? 'wait' : 'pointer', fontFamily:'monospace', fontSize:'11px', flexShrink:0 }}>
+      {busy ? '更新中…' : '🔄 更新'}
+    </button>
+  )
+}
 import V2capGenderPick from '../components/V2capGenderPick.jsx'
 import { CarryLines } from '../components/V2capV1Carry.jsx'
 
@@ -54,7 +65,7 @@ import { CarryLines } from '../components/V2capV1Carry.jsx'
 // 2026-10-09 着手。今のⅡ（/v2）は仮として残し、別のキャラ・別のデータで作る。
 // 設計は docs/v2cap-design.md。入れるのは is_admin だけ（サーバーの v2cap_is_dev も同じ）。
 // 【確定】2026-10-11 ユーザー指示「UIはV2みたいにこんな感じにしてほしい」：今のⅡのホーム（V2Home.jsx）と同じ形にした
-//   ・上に貼り付く細い帯（BATTLE FRONTIER Ⅱ・旧版へ戻る）
+//   ・上に貼り付く細い帯（BATTLE FRONTIER Ⅱ・🔄 更新＝2026-10-31 に「旧版へ戻る」から置き換えた）
 //   ・ホームは左右2列（左＝ステータス 340px／右＝今日のミッション→出撃→メニュー）。最大980px・狭いと1列に折り返す
 //   ・メニューは今のⅡと同じ部品（V2Menu：2列・まとまりごと・色つきの枠・「メニューを閉じる」）。この版にある施設だけ並べる
 //   ・施設は別の画面（ステータスは出さない・横いっぱい）。「← ホームへ」で戻る
@@ -340,10 +351,7 @@ export default function V2capHome() {
         <span style={{ color:'#ff88cc', fontSize:'10px' }}>レベルキャップあり</span>
         <span style={{ color:'#a89ccc', fontSize:'10px' }}>[開発]</span>
       </div>
-      <button onClick={() => nav('/game')}
-        style={{ background:'none', border:'1px solid #7fa6d0', color:'#7fa6d0', padding:'4px 8px', cursor:'pointer', fontFamily:'monospace', fontSize:'11px', flexShrink:0 }}>
-        ← 旧版へ戻る
-      </button>
+      <UpdateButton />
     </div>
   )
 
