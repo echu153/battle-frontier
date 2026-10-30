@@ -27,6 +27,8 @@ import { welcomeLineOf } from '../lib/alea.js'
 import V2capAscension from '../components/V2capAscension.jsx'
 import V2capTower from '../components/V2capTower.jsx'
 import V2capUniqueCheck from '../components/V2capUniqueCheck.jsx'
+import V2capShop from '../components/V2capShop.jsx'
+import { SHOP_COLOR, flipLeftMsOf } from '../lib/shop.js'
 import { START_CLASSES, weaponsOf, attackKindOf, classDescOf } from '../lib/jobs.js'
 import { apLeftOf } from '../lib/ascension.js'
 import { TOWER_NAME, floorLabel, clampFloor } from '../lib/tower.js'
@@ -93,9 +95,11 @@ const MENU = [
     //   説明は 2026-10-31 に短くした（2列だと1行に入らない・ハイ&ローとテーブルの卓はまとめて「カード」）
     { key:'casino', label:'賭博場', icon:'🎰', color:'#ff4fa3', action:'スロット・ルーレット・カード' },
     { key:'tree', label:'ユグレシアの宝樹', icon:'🌳', color:'#44dd99', action:'祈る' },
+    // 【確定】2026-10-31 商店（性別変更薬・日月反転の秘薬・lib/shop.js）。説明は秘薬が効いていれば残り時間（menuOf）
+    { key:'shop', label:'商店', icon:'🏪', color: SHOP_COLOR, action:'薬を買う' },
   ] },
 ]
-const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', museum:'🏺 博物館', burger: <><ShopMark size={18} /> {SHOP_NAME}</>, asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場', tower:`🗼 ${TOWER_NAME}`, dungeon:'🐉 IDダンジョン',
+const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', museum:'🏺 博物館', burger: <><ShopMark size={18} /> {SHOP_NAME}</>, asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場', shop:'🏪 商店', tower:`🗼 ${TOWER_NAME}`, dungeon:'🐉 IDダンジョン',
   uniqueCheck:'💎 ユニークの能力の確かめ［開発］', atb:'⏱ ATB戦闘の試し撃ち［開発］' }
 // ATBの試し撃ち（2026-10-26・開発用）。開いたときだけ読み込む（ホームの重さを増やさない）
 const V2capAtb = lazy(() => import('../components/V2capAtb.jsx'))
@@ -108,10 +112,12 @@ const towerActionOf = (prof) => (prof?.tower_guard
 const menuOf = (prof) => {
   const left = Math.max(0, apLeftOf(prof))
   const meal = activeMealOf(prof)
+  const flip = flipLeftMsOf(prof)
   return MENU.map(g => ({ ...g, items: g.items.map(m => {
     if (m.key === 'asc' && left > 0) return { ...m, action:`APを振る（残り${left}）` }
     if (m.key === 'tower') return { ...m, action: towerActionOf(prof) }
     if (m.key === 'burger' && meal) return { ...m, action:`食事中（${leftText(meal.leftMs)}）` }
+    if (m.key === 'shop' && flip > 0) return { ...m, action:`日月反転中（${leftText(flip)}）` }
     return m
   }) }))
 }
@@ -377,7 +383,7 @@ export default function V2capHome() {
             <input value={name} onChange={e => setName(e.target.value)} maxLength={16} placeholder="名前（1〜16文字）"
               style={{ width:'100%', boxSizing:'border-box', background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px', marginBottom:'14px' }} />
             <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'6px' }}>
-              性別<span style={{ color: TEXT.label, fontSize:'10px' }}>※あとから変えるにはアイテムが必要</span>
+              性別<span style={{ color: TEXT.label, fontSize:'10px' }}>※あとから変えるには商店の性別変更薬が必要</span>
             </div>
             <div style={{ marginBottom:'14px' }}><V2capGenderPick value={sex} onChange={setSex} disabled={busy} /></div>
             <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'6px' }}>
@@ -436,7 +442,7 @@ export default function V2capHome() {
           <div style={{ ...box, padding:'12px', marginBottom:'8px', border:'1px solid #ffcc00' }}>
             <div style={{ color:'#ffcc00', fontSize:'12px', marginBottom:'4px' }}>性別を選んでください</div>
             <div style={{ color: TEXT.sub, fontSize:'10px', marginBottom:'8px', lineHeight:1.6 }}>
-              キャラクターに性別ができました。ここで1回だけ選べます（あとから変えるにはアイテムが必要）
+              キャラクターに性別ができました。ここで1回だけ選べます（あとから変えるには商店の性別変更薬が必要）
             </div>
             <V2capGenderPick value={sex} onChange={setSex} disabled={busy} />
             <button onClick={saveGender} disabled={busy} style={{ ...btn('#ffcc00'), width:'100%', padding:'8px', marginTop:'8px' }}>
@@ -518,6 +524,7 @@ export default function V2capHome() {
             {screen === 'tree' && <V2capTree prof={prof} onProfile={refresh} unlimited={isAdmin} />}
             {screen === 'dex' && <V2capDex prof={prof} />}
             {screen === 'casino' && <V2capCasino prof={prof} onProfile={refresh} dev={isAdmin} />}
+            {screen === 'shop' && <V2capShop prof={prof} onProfile={refresh} />}
             {screen === 'tower' && <V2capTower prof={prof} inventory={inventory} onProfile={refresh} />}
             {screen === 'uniqueCheck' && <V2capUniqueCheck prof={prof} inventory={inventory} />}
             {screen === 'dungeon' && (

@@ -19,6 +19,7 @@ import V2capArmorSets from './V2capArmorSets.jsx'
 import V2capUniqueFx from './V2capUniqueFx.jsx'
 import { isUnique } from '../lib/equipment.js'
 import { SHOP_NAME, MEAL_COLOR, leftText, burgerEffectText, toppingText } from '../lib/burger.js'
+import { FLIP_COLOR, flipLeftMsOf, encounterBandOf } from '../lib/shop.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — ステータス欄（ホームの左）
@@ -229,6 +230,13 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
                 🍔 <span style={{ color: MEAL_COLOR }}>食事適用中</span>
               </V2Tip>
               <span style={{ color:'#7fa6d0', marginLeft:'1em' }}>{leftText(bd.meal.leftMs)}</span>
+            </div>
+          )}
+          {/* 商店の日月反転の秘薬（効いている間だけ・2026-10-31）。どの時間帯の敵に出会うかも見せる（時刻が進むと変わる） */}
+          {flipLeftMsOf(prof, now) > 0 && (
+            <div style={{ fontSize:'10px', color:'#9ec2e6' }}>
+              🌗 <span style={{ color: FLIP_COLOR }}>日月反転中</span>
+              <span style={{ color:'#7fa6d0', marginLeft:'1em' }}>{leftText(flipLeftMsOf(prof, now))}（{encounterBandOf(prof, new Date(now))}）</span>
             </div>
           )}
         </div>

@@ -20,7 +20,7 @@ test('メニューは役割ごとの3つ：キャラクター・冒険・施設�
   assert.deepEqual(groups, [
     { title:'キャラクター', head:'chara', keys:['profile', 'skills', 'equip', 'asc', 'dex'] },
     { title:'冒険', head:'adventure', keys:['dungeon', 'tower'] },
-    { title:'施設', head:'facility', keys:['temple', 'smith', 'museum', 'burger', 'casino', 'tree'] },
+    { title:'施設', head:'facility', keys:['temple', 'smith', 'museum', 'burger', 'casino', 'tree', 'shop'] },
   ])
 })
 

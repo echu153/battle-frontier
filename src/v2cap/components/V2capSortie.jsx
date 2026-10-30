@@ -14,6 +14,7 @@ import { staminaMaxOfProfile, rollStamina, staminaSpanMsOf } from '../lib/level.
 import { expText as expTextOf, gainedExpOf, levelUpLines, dropLineOf } from '../lib/settleLines.js'
 import { ITEM_BY_ID } from '../lib/equipment.js'
 import { guardDropBonusOf, floorLabel, TOWER_NAME } from '../lib/tower.js'
+import { encounterClockOf } from '../lib/shop.js'
 import { sortieClock, sendWithCooldownRetry, newSettleKey, settleKeyArgOf } from '../lib/cooldown.js'
 import { buildCapBattleView } from '../lib/battleView.js'
 import { enemyArtSrc } from '../lib/enemyArt.js'
@@ -150,7 +151,8 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       const me = playerFighter(prof, inventory)
       // 安息の祠の中なら、祠のある場所でハピネスフェアリーと戦う（装備は落ちない・ボスの出やすさは変わらない）
       const sh = shrine
-      const enc = sh ? shrineEncounterOf(sh.spot) : pickEncounter(spot.id, bossRate, new Date())
+      // ★日月反転の秘薬が効いているあいだは時間帯が12時間ずれる（lib/shop.js）。ドロップの時刻（落ちやすい部位）は本当の時刻のまま
+      const enc = sh ? shrineEncounterOf(sh.spot) : pickEncounter(spot.id, bossRate, encounterClockOf(prof))
       const r = runBattle(me, { ...(sh ? enemyFighter(enc.enemy, 8, enc.power) : enemyFighter(enc.enemy, 8)), boss: enc.isBoss })
       const win = r.winner === 'a'
       // ★防具のセット能力「海賊の嗅覚」：レア以上が落ちる確率1.2倍（me.setFx は loadout.js の toFighter が入れる）

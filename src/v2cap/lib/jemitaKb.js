@@ -35,6 +35,7 @@ import { MUSEUM_TIERS, MUSEUM_SET_SP, MUSEUM_RARITY_STAM_SEC, MUSEUM_AREA_STAM_S
 import { TOWER_NAME, FLOORS, LOSE_DROP, GUARD_DROP_BONUS } from './tower.js'
 import { GOLD_PER_MEDAL } from './casino.js'
 import { GENDERS } from './gender.js'
+import { SHOP_ITEM_BY_KEY, FLIP_NAME, FLIP_MINUTES, FLIP_HOURS } from './shop.js'
 import { ASC_RESET_GOLD_PER_LV } from './ascension.js'
 import { V1_BOX_NAMES } from './v1carry.js'
 import { JEMITA_RULES } from './jemitaPrompt.js'
@@ -85,7 +86,7 @@ const basics = () => {
     '## 基本',
     '- ソロのゲーム（パーティは無い）。キャラを作って出撃で敵と戦い、LVと装備を上げて先のエリアへ進む。',
     `- LVの上限はLV${MAX_LV}。LVが上がるとステータスポイントが${POINTS_PER_LV}点（LV${POINTS_STEP}の倍数では${POINTS_ON_STEP}点）入り、好きなステに振れる（1点で ${unit}）。`,
-    `- 性別はキャラ作成のときに選ぶ：${sexes}（戦闘の中だけ）。`,
+    `- 性別はキャラ作成のときに選ぶ：${sexes}（戦闘の中だけ）。あとから変えるには商店の${SHOP_ITEM_BY_KEY.gender.name}を使う。`,
     '- 戦闘力＝ステの合計の目安。推奨LVより低くても、戦闘力が高ければ勝てることがある。',
     '',
     '### ステータス',
@@ -225,6 +226,10 @@ const facilities = () => {
     `- バーガー${BURGER_GOLD.toLocaleString()}Gで${MEAL_MINUTES}分、ステ1つ+${MEAL_STAT_PCT}%：${burgers}。`,
     `- トッピング：メジャー・マイナーをそれぞれ${TOPPING_GOLD}Gで付けられ、付けたグループの中から抽選で1つ選ばれ、その状態異常にかかる確率−${TOPPING_RESIST_PCT}%（食事のあいだ）。${tops}。`,
     '- 店には看板娘がいる。',
+    '### 商店',
+    '- 薬を買える（買うとその場で飲む・値段はLVによらず同じ）。',
+    `- ${SHOP_ITEM_BY_KEY.gender.name}（${SHOP_ITEM_BY_KEY.gender.gold.toLocaleString()}G）：男女が入れ替わる。`,
+    `- ${FLIP_NAME}（${SHOP_ITEM_BY_KEY.flip.gold.toLocaleString()}G）：${FLIP_MINUTES}分のあいだ、出会う敵の時間帯が${FLIP_HOURS}時間ずれる（必ずいまと違う時間帯になる）。効いているあいだに飲むと${FLIP_MINUTES}分延びる。`,
     '### 今日のミッション（デイリー）',
     `- 毎朝5時に切り替わり、自動で受注。${DAILY_TASKS.map(t => `${t.label}（${t.goal}${t.unit}）`).join('・')}。全部終えるとEXPとGold（LVに応じた量）。`,
     '### ユグレシアの宝樹',

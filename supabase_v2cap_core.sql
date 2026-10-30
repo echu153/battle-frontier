@@ -3106,7 +3106,7 @@ alter table public.v2cap_profiles add column if not exists museum_stam_cut int n
 alter table public.v2cap_profiles add column if not exists dex_stam_bonus int not null default 0;
 -- 【確定】2026-10-21 ユーザー指示「キャラクター作成時に性別選択できるようにして、性別によってほんの少し性能差出るようにしたい」：
 --   性別（'m'＝男性・'f'＝女性。決めていなければ null）。性能差（男性＝与えるダメージ+2%・女性＝受けるダメージ−2%）は
---   画面の戦闘（gender.js）。キャラ作成で決め、前からのキャラは v2cap_set_gender で1回だけ選ぶ（変えるアイテムはあとで）
+--   画面の戦闘（gender.js）。キャラ作成で決め、前からのキャラは v2cap_set_gender で1回だけ選ぶ（変えるのは商店の性別変更薬＝§24）
 alter table public.v2cap_profiles add column if not exists gender text;
 alter table public.v2cap_profiles drop constraint if exists v2cap_profiles_gender_check;
 alter table public.v2cap_profiles add constraint v2cap_profiles_gender_check check (gender is null or gender in ('m', 'f'));
@@ -4068,7 +4068,7 @@ revoke all on function public.v2cap_create_character(text, text, text) from publ
 grant execute on function public.v2cap_create_character(text, text, text) to authenticated;
 
 -- 性別を持たない前からのキャラ（2026-10-21 より前に作った）が1回だけ選ぶ。
--- ★性別が空のときだけ通す（決めたあとは変えられない＝変えるアイテムはあとで足す・ユーザー「一旦作成でだけ」）
+-- ★性別が空のときだけ通す（決めたあとに変えるのは商店の性別変更薬＝§24 の v2cap_shop_buy）
 create or replace function public.v2cap_set_gender(p_gender text)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
@@ -9238,3 +9238,52 @@ end;
 $$;
 revoke all on function public.v2cap_dungeon_join(bigint) from public, anon;
 grant execute on function public.v2cap_dungeon_join(bigint) to authenticated;
+
+-- ============================================================
+-- ===== 24. 商店（性別変更薬・日月反転の秘薬・2026-10-31）=====
+-- ============================================================
+-- 【確定】2026-10-31 ユーザー指示「施設で商店を追加したい」。買ったらその場で飲む（持ち物には入らない）
+--   ・性別変更薬 30,000G … 男女が入れ替わる（性別がまだ無いキャラは先にホームで選ぶ）
+--   ・日月反転の秘薬 3,000G … flip_until まで、出会う敵の時間帯が12時間ずれる。効いているあいだに飲むと60分延びる
+--   ★効き目は画面の出撃が見る（src/v2cap/lib/shop.js の encounterClockOf）。ここは買う・Goldを減らす・印を付けるだけ
+--   ★値段と時間の写しは src/v2cap/lib/shop.js（shop.test.js が突き合わせる）
+alter table public.v2cap_profiles add column if not exists flip_until timestamptz;
+
+create or replace function public.v2cap_shop_buy(p_item text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_gender_gold  constant int := 30000;   -- shop.js の SHOP_ITEMS（gender）
+  c_flip_gold    constant int := 3000;    -- shop.js の SHOP_ITEMS（flip）
+  c_flip_minutes constant int := 60;      -- shop.js の FLIP_MINUTES
+  v_uid  uuid := auth.uid();
+  v_row  public.v2cap_profiles;
+  v_cost bigint;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if p_item is null or p_item not in ('gender', 'flip') then
+    return jsonb_build_object('ok', false, 'error', '品物が正しくありません');
+  end if;
+  select * into v_row from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  if p_item = 'gender' and v_row.gender is null then
+    return jsonb_build_object('ok', false, 'error', '先にホームで性別を選んでください');
+  end if;
+  v_cost := case p_item when 'gender' then c_gender_gold else c_flip_gold end;
+  if v_row.gold < v_cost then return jsonb_build_object('ok', false, 'error', 'Goldが足りません'); end if;
+  if p_item = 'gender' then
+    update public.v2cap_profiles
+       set gold = gold - v_cost, gender = case when gender = 'm' then 'f' else 'm' end, updated_at = now()
+     where id = v_uid
+     returning * into v_row;
+    return jsonb_build_object('ok', true, 'item', p_item, 'spent', v_cost, 'gold', v_row.gold, 'gender', v_row.gender);
+  end if;
+  update public.v2cap_profiles
+     set gold = gold - v_cost, flip_until = greatest(flip_until, now()) + make_interval(mins => c_flip_minutes), updated_at = now()
+   where id = v_uid
+   returning * into v_row;
+  return jsonb_build_object('ok', true, 'item', p_item, 'spent', v_cost, 'gold', v_row.gold, 'flip_until', v_row.flip_until);
+end;
+$$;
+revoke all on function public.v2cap_shop_buy(text) from public, anon;
+grant execute on function public.v2cap_shop_buy(text) to authenticated;
