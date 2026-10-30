@@ -415,7 +415,7 @@ const buffAfterOf = (art, me, marks, now) => {
   const sinceOf = (nm) => { const f = marks.reduce((p, f) => (f.kind === 'rage' && f.skill === nm && f.t0 <= now && (!p || f.t0 >= p.t0) ? f : p), null); return f ? (now - f.t0) * 1000 : Infinity }
   return buffAfterAt(hpBuffChips(me).map(c => ({ b: art.buffs[c.name], since: sinceOf(c.name) })), now * 1000)
 }
-function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx, now, name, flex = '1 1 0', artH = ART_H, scale = 1, areaRef, castEnd = -1e9, squeeze = null }) {
+function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx, now, name, flex = '1 1 0', artH = ART_H, scale = 1, areaRef, castEnd = -1e9, squeeze = null, bossGlow = 0 }) {
   const mine = fx.filter(f => f.side === side)
   const lastOf = (kind) => mine.reduce((t, f) => (f.kind === kind && f.t0 <= now && f.t0 > t ? f.t0 : t), -1e9)
   const dir = right ? -1 : 1   // 前＝相手の方
@@ -466,6 +466,8 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
     const k = Math.sin(Math.PI * 2 * rageAgo / RAGE_SEC * 1.0) ** 2 * (1 - rageAgo / RAGE_SEC)
     filters.push(`drop-shadow(0 0 ${(6 + 14 * k).toFixed(1)}px rgba(255,70,30,${(0.35 + 0.6 * k).toFixed(2)})) brightness(${(1 + 0.35 * k).toFixed(2)})`)
   }
+  // 大技をためるあいだ：竜の体が赤く光を増す（終焉の黒焔・lib/bossScene.js の bossGlow）
+  if (bossGlow > 0.01) filters.push(`drop-shadow(0 0 ${(4 + 14 * bossGlow).toFixed(1)}px rgba(255,60,16,${(0.25 + 0.6 * bossGlow).toFixed(2)})) brightness(${(1 + 0.22 * bossGlow).toFixed(3)})`)
   // 逆鱗のあと：体が赤く脈打つ（心臓のように2回ずつ）
   if (after?.glow > 0.01) filters.push(`drop-shadow(0 0 ${(3 + 9 * after.glow).toFixed(1)}px rgba(${after.glowColor},${(0.2 + 0.55 * after.glow).toFixed(2)}))`)
   if (me.ail.paralyze) filters.push('grayscale(0.6)')
@@ -483,7 +485,8 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
         {/* 敵の技の名前：名前と同じ行の、名前の横の空いた所のまん中（絵に重ならない・名前とも重ならない） */}
         {side === 'b' && (
           <div style={{ flex:'1 1 0', minWidth:0, position:'relative', alignSelf:'stretch' }}>
-            <SkillBanner b={skillBannerAt(fx, now, 'b')} />
+            {/* 構えのあいだは構えた技の名前を赤と金で出したまま（2026-10-30 ユーザー「大技っぽく」） */}
+            <SkillBanner b={skillBannerAt(fx, now, 'b') || (me.cast ? { name: me.cast.name, op: 1, k: 1, rage: true } : null)} />
           </div>
         )}
       </div>
@@ -759,6 +762,14 @@ function ChargeOrb({ m, a, acts, now, geo, art, s, cast, castEnd, sky = null }) 
     }
     return <Sprite a={a} {...(on || { frame: -1 })} />
   }
+  // 構えの5秒（終焉の黒焔）：ため の絵の口で、構えのあいだに育つ
+  const castPt = cast && m.anchors?.[art.castArt]?.mouth
+  if (castPt) {
+    const [mx, my] = illustPointAt(art.key, illustCastPoseAt(art.key, cast.ms, now * 1000), castPt, 'body')
+    const k = Math.min(1, cast.ms / (CAST_SEC * 1000))
+    on = { frame: 0, x: geo.b.x + mx * s, y: geo.b.y + my * s, s: (c.size * geo.b.w / a.w) * (0.15 + 0.85 * easeOut(k)) * (1 + 0.07 * Math.sin(cast.ms / 28)),
+      rot: cast.ms * 0.004, op: Math.min(1, cast.ms / 400) }
+  }
   for (const f of acts) {
     if (f.motion !== m) continue
     const ms = (now - f.t0) * 1000
@@ -782,15 +793,34 @@ function SceneLayer({ geo, sc, hands, s }) {
   const U = geo.p.w, ox = geo.p.x + U / 2, oy = geo.p.y + geo.p.h * FX_FEET_Y
   const X = (x) => ox + x * U, Y = (y) => oy + y * U
   const c = sc.cloud, cy = Y(SCENE_TOP)
+  // 色：ふつうは水・tone 'fire' は炎（終焉の黒焔・煙は黒）
+  const fire = sc.tone === 'fire'
+  const K = fire ? ['#ff4a12', '#ffa030', '#fff0c0'] : ['#c8ebff', '#d7f0ff', '#ffffff']
+  const M = fire ? ['#3a1410', '#22100c', '#140806'] : ['#dcf0ff', '#b4dcfa', '#aad7fa']
+  const Gl = fire ? ['#fff4d0', '#ffb040', '#ff3a10'] : ['#ffffff', '#bee6ff', '#78beff']
+  const dropC = fire ? '#ffb060' : '#e6f6ff', ringC = fire ? '#ff8a3c' : '#d4eeff'
+  // 黒焔の奔流（sc.beam）：口（hands の1つめ）から相手の体の真ん中へ流れる炎のかたまり（棒に見えないように・下に暗い赤のぼかしを敷く）
+  const b = sc.beam && hands ? (() => {
+    const [hx, hy] = hands[0], dx = ox - hx, dy = geo.p.y + geo.p.h * FX_TARGET_Y - hy, len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len
+    return { x1: hx, y1: hy, x2: hx + dx * sc.beam.head, y2: hy + dy * sc.beam.head, w: U * 0.2 * sc.beam.w, op: sc.beam.op,
+      blobs: sc.beam.blobs.map(q => ({ x: hx + dx * q.p + nx * q.off * U, y: hy + dy * q.p + ny * q.off * U, r: q.r * U * (0.5 + 0.5 * sc.beam.w), op: q.op, dark: q.dark })) }
+  })() : null
   return (
     <svg style={{ position:'absolute', inset:0, width:'100%', height:'100%', zIndex: 2, pointerEvents:'none', overflow:'visible' }}>
       <defs>
         <linearGradient id={`${id}k`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#c8ebff" stopOpacity="0" /><stop offset="0.6" stopColor="#d7f0ff" stopOpacity="0.7" /><stop offset="1" stopColor="#ffffff" />
+          <stop offset="0" stopColor={K[0]} stopOpacity="0" /><stop offset="0.6" stopColor={K[1]} stopOpacity="0.7" /><stop offset="1" stopColor={K[2]} />
         </linearGradient>
-        <radialGradient id={`${id}m`}><stop offset="0" stopColor="#dcf0ff" stopOpacity="0.6" /><stop offset="0.45" stopColor="#b4dcfa" stopOpacity="0.28" /><stop offset="0.75" stopColor="#aad7fa" stopOpacity="0.08" /><stop offset="1" stopColor="#aad7fa" stopOpacity="0" /></radialGradient>
-        <radialGradient id={`${id}g`}><stop offset="0" stopColor="#ffffff" /><stop offset="0.35" stopColor="#bee6ff" stopOpacity="0.9" /><stop offset="1" stopColor="#78beff" stopOpacity="0" /></radialGradient>
+        <radialGradient id={`${id}m`}><stop offset="0" stopColor={M[0]} stopOpacity={fire ? 0.9 : 0.6} /><stop offset="0.45" stopColor={M[1]} stopOpacity={fire ? 0.55 : 0.28} /><stop offset="0.75" stopColor={M[2]} stopOpacity={fire ? 0.2 : 0.08} /><stop offset="1" stopColor={M[2]} stopOpacity="0" /></radialGradient>
+        <radialGradient id={`${id}g`}><stop offset="0" stopColor={Gl[0]} /><stop offset="0.35" stopColor={Gl[1]} stopOpacity="0.9" /><stop offset="1" stopColor={Gl[2]} stopOpacity="0" /></radialGradient>
+        <filter id={`${id}b`} x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation={(U * 0.012).toFixed(2)} /></filter>
       </defs>
+      {b && (
+        <g opacity={b.op.toFixed(3)}>
+          <line x1={b.x1} y1={b.y1} x2={b.x2} y2={b.y2} stroke="#7a1200" strokeWidth={b.w} strokeLinecap="round" opacity="0.6" filter={`url(#${id}b)`} />
+          {b.blobs.map((q, i) => <circle key={i} cx={q.x} cy={q.y} r={q.r * (q.dark ? 1.25 : 1)} fill={`url(#${id}${q.dark ? 'm' : 'g'})`} opacity={q.op.toFixed(3)} />)}
+        </g>
+      )}
       {c && c.glow > 0 && (
         <g transform={`translate(${ox.toFixed(1)} ${cy.toFixed(1)}) rotate(6) scale(1 0.42)`} opacity={Math.min(1, c.glow).toFixed(3)}>
           <ellipse rx={U * 0.2} ry={U * 0.2} fill={`url(#${id}g)`} opacity={0.55 + 0.45 * c.flicker} />
@@ -808,8 +838,8 @@ function SceneLayer({ geo, sc, hands, s }) {
       {sc.items.map((it, i) => {
         if (it.t === 'streak' || it.t === 'jet') return <rect key={i} x={X(it.x - it.w / 2)} y={Y(it.y1)} width={it.w * U} height={(it.y2 - it.y1) * U} rx={(it.w * U) / 2} fill={`url(#${id}k)`} opacity={it.op} />
         if (it.t === 'rain') return <line key={i} x1={X(it.x1)} y1={Y(it.y1)} x2={X(it.x2)} y2={Y(it.y2)} stroke="#cfeaff" strokeWidth={Math.max(1, it.w * U)} strokeLinecap="round" opacity={it.op} />
-        if (it.t === 'drop') return <ellipse key={i} cx={X(it.x)} cy={Y(it.y)} rx={it.rx * U} ry={it.ry * U} fill="#e6f6ff" opacity={it.op} transform={`rotate(${it.rot.toFixed(1)} ${X(it.x).toFixed(1)} ${Y(it.y).toFixed(1)})`} />
-        if (it.t === 'ring') return <ellipse key={i} cx={X(it.x)} cy={Y(it.y)} rx={it.rx * U} ry={it.ry * U} fill="none" stroke="#d4eeff" strokeWidth={it.w * U} opacity={it.op} />
+        if (it.t === 'drop') return <ellipse key={i} cx={X(it.x)} cy={Y(it.y)} rx={it.rx * U} ry={it.ry * U} fill={dropC} opacity={it.op} transform={`rotate(${it.rot.toFixed(1)} ${X(it.x).toFixed(1)} ${Y(it.y).toFixed(1)})`} />
+        if (it.t === 'ring') return <ellipse key={i} cx={X(it.x)} cy={Y(it.y)} rx={it.rx * U} ry={it.ry * U} fill="none" stroke={ringC} strokeWidth={it.w * U} opacity={it.op} />
         if (it.t === 'mist') return <ellipse key={i} cx={X(it.x)} cy={Y(it.y)} rx={it.r * U} ry={it.r * U * 0.6} fill={`url(#${id}m)`} opacity={it.op} />
         if (it.t === 'foam') return <ellipse key={i} cx={X(it.x)} cy={Y(it.y)} rx={it.rx * U} ry={it.ry * U} fill={`url(#${id}g)`} opacity={it.op} />
         if (it.t === 'glow') return <circle key={i} cx={X(it.x)} cy={Y(it.y)} r={it.r * U} fill={`url(#${id}g)`} opacity={it.op} />
@@ -848,10 +878,12 @@ function SceneLayer({ geo, sc, hands, s }) {
   )
 }
 // 画面ぜんたいが光る（叩きつけた所を中心に）
-const Flash = ({ geo, op }) => {
+const Flash = ({ geo, op, fire = false }) => {
   const x = geo.p.x + geo.p.w / 2, y = geo.p.y + geo.p.h * (FX_FEET_Y - 0.4)
+  const stops = fire ? 'rgba(255,246,214,0.97) 0%, rgba(255,150,50,0.6) 35%, rgba(255,60,16,0.18) 70%, rgba(255,60,16,0) 100%'
+    : 'rgba(240,250,255,0.95) 0%, rgba(160,215,255,0.55) 35%, rgba(90,170,255,0.15) 70%, rgba(90,170,255,0) 100%'
   return <div style={{ position:'absolute', inset:0, zIndex: 4, pointerEvents:'none', opacity: op,
-    background:`radial-gradient(circle at ${x.toFixed(0)}px ${y.toFixed(0)}px, rgba(240,250,255,0.95) 0%, rgba(160,215,255,0.55) 35%, rgba(90,170,255,0.15) 70%, rgba(90,170,255,0) 100%)` }} />
+    background:`radial-gradient(circle at ${x.toFixed(0)}px ${y.toFixed(0)}px, ${stops})` }} />
 }
 
 // 右上から左下へ引いて見せる切り抜き（r＝0 何も見えない〜1 全部）：x − y ≥ u の側（絵の枠の %）
@@ -872,7 +904,7 @@ const sceneOfStage = (art, acts, now, cast, castEnd) => {
   const live = list.filter(a => a.ms < sceneEndMsOf(a.m)).at(-1)
   const fromCast = !running && !!castM?.scene
   const handPt = fromCast ? castM.scene.hand : live ? live.m.scene.hand : null
-  if (handPt && (sc.hand || sc.items.some(it => it.space === 'hand'))) {
+  if (handPt && (sc.hand || sc.beam || sc.items.some(it => it.space === 'hand'))) {
     const pose = !fromCast ? illustPoseAt(art.key, live.m, live.ms, now * 1000, live.after) : illustCastPoseAt(art.key, cast.ms, now * 1000)
     // ポーズの絵が出ていれば、その絵の上の手（anchors の hand・hand2＝両手）から。無ければ決まりの手（scene.hand）
     const castAn = fromCast && art.castArt ? castM.anchors?.[art.castArt] : null
@@ -910,7 +942,7 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
   else if (deadAt.current == null) deadAt.current = now
   const rainOp = deadAt.current == null ? 1 : Math.max(0, 1 - (now - deadAt.current) / 0.8)
   const rains = [bsc?.rain, rainOp > 0 ? after?.rain : null].filter(Boolean)
-  const dimOf = [bsc?.dim ? { k: bsc.dim, c: bsc.dimColor } : null, after?.dim ? { k: after.dim * rainOp, c: after.dimColor } : null, sc?.dim ? { k: sc.dim } : null]
+  const dimOf = [bsc?.dim ? { k: bsc.dim, c: bsc.dimColor } : null, after?.dim ? { k: after.dim * rainOp, c: after.dimColor } : null, sc?.dim ? { k: sc.dim, c: sc.dimColor } : null]
     .reduce((p, d) => (d && d.k > (p?.k || 0) ? { k: d.k, c: d.c || '0,3,14' } : p), null)
   const shake = [(sc?.shake[0] || 0) + (bsc?.shake[0] || 0), (sc?.shake[1] || 0) + (bsc?.shake[1] || 0)]
   useLayoutEffect(() => {
@@ -935,10 +967,10 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
         artH={size?.artH || ART_H} scale={playerScale} areaRef={pArea} squeeze={sc?.squeeze} />
       <Fighter st={st} side="b" me={st.b} right src={foeSrc} fx={fx} now={now} name={st.b.name}
         strips={foeArt?.kind === 'pixel' ? Object.values(foeArt.motions) : []} rig={foeArt?.kind === 'illust' ? foeArt : null}
-        flex={size?.flex} artH={size?.artH || ART_H} areaRef={bArea} castEnd={castSeen.current} />
+        flex={size?.flex} artH={size?.artH || ART_H} areaRef={bArea} castEnd={castSeen.current} bossGlow={sc?.bossGlow || 0} />
       {foeArt && <BossFx fx={fxAll} now={now} geo={geo} art={foeArt} cast={cast} castEnd={castSeen.current} scene={sc} />}
       {sc && geo && <SceneLayer geo={geo} sc={sc} hands={sc.handsAt ? sc.handsAt.map(p => [geo.b.x + p[0] * (geo.b.w / foeArt.base), geo.b.y + p[1] * (geo.b.w / foeArt.base)]) : null} s={geo.b.w / foeArt.base} />}
-      {sc && geo && sc.flash > 0 && <Flash geo={geo} op={sc.flash} />}
+      {sc && geo && sc.flash > 0 && <Flash geo={geo} op={sc.flash} fire={sc.tone === 'fire'} />}
       {geo && rains.length > 0 && <BuffRain geo={geo} rains={rains} op={rainOp} />}
       {/* 稲妻が落ちた瞬間に舞台ぜんぶが光る（篠突く雨） */}
       {bsc?.flash > 0.01 && <div style={{ position:'absolute', inset:0, zIndex: 4, pointerEvents:'none', background:'rgb(205,230,255)', opacity: bsc.flash.toFixed(3) }} />}

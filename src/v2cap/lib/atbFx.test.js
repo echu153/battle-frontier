@@ -99,3 +99,18 @@ test('【確定】2026-10-30 HPの節目のバフも名前の帯に出す（rage
   assert.ok(skillBannerAt(ev, 10.3 + BANNER_SEC + 0.1).op > 0, '技（1.8秒）より長く残る')
   assert.equal(skillBannerAt(ev, 10.3 + RAGE_BANNER_SEC), null)
 })
+
+test('【確定】2026-10-30 構えのあとに技の途中から流す（castSkip・終焉の黒焔）：t0 をそのぶん前へ・数字と揺れの遅れも縮める・名前の帯は動いた時刻から数える・大技の帯は赤と金', () => {
+  const m = { impactMs: 3100, big: true }
+  const ev = scheduleFx([{ kind: 'act', side: 'b', skill: '終焉の黒焔', motion: m, castSkip: 2100 }, { kind: 'hit', side: 'a', amount: 5 }], 100, { b: (e) => e.motion.impactMs / 1000 })
+  assert.ok(Math.abs(ev[0].t0 - 97.9) < 1e-9, '技の頭は2.1秒前')
+  assert.ok(Math.abs(ev[1].t0 - 101) < 1e-9, '当たるのは動いてから1秒後')
+  const b = skillBannerAt(ev, 100.5, 'b')
+  assert.ok(b && b.rage && b.op > 0.9, '動いてすぐ帯が出る（t0 が前にずれても消えない）・大技の色')
+  assert.equal(skillBannerAt(ev, 100 + BANNER_SEC + 0.01, 'b'), null, '長さは技のまま')
+  // castSkip が無ければ今までどおり
+  const ev2 = scheduleFx([{ kind: 'act', side: 'b', skill: '黒爪' }, { kind: 'hit', side: 'a', amount: 5 }], 100, { b: () => 0.5 })
+  assert.equal(ev2[0].t0, 100)
+  assert.equal(ev2[1].t0, 100.5)
+  assert.equal(skillBannerAt(ev2, 100.5, 'b').rage, false)
+})

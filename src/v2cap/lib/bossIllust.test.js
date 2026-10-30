@@ -494,10 +494,11 @@ test('【確定】2026-10-29 構え（水天葬の5秒）：右腕を真上に�
   for (let ms = 120; ms <= 1520; ms += 20) assert.equal(swapOpacityOf(armD, illustPoseAt('amaza', m, ms, t)), 0, `構えなし ${ms}ms`)
   // 技のあいだも待機の揺れはそのまま（技の頭と終わりで跳ねない）
   assert.deepEqual(illustPoseAt('amaza', m, 0, t), idlePoseAt(idle, t))
-  // 黒龍は構えの決まりが無い＝待機のまま・構えのあとも今までどおり
-  assert.deepEqual(illustCastPoseAt('varuzenoku', 3000, 500), idlePoseAt(BOSS_ILLUST_DEFS.varuzenoku.idle, 500))
+  // 【確定】2026-10-30 黒龍の構え（終焉の黒焔）：のけぞりは技の途中から流す時刻（castSkipMs）と同じ＝つなぎ目で跳ねない
   const doom = bossIllustOf('varuzenoku').motions.doom
-  assert.deepEqual(illustPoseAt('varuzenoku', doom, 100, 500, true), illustPoseAt('varuzenoku', doom, 100, 500))
+  const cp = illustCastPoseAt('varuzenoku', 3000, 500), jp = illustPoseAt('varuzenoku', doom, doom.castSkipMs, 500)
+  assert.equal(cp.lean, BOSS_ILLUST_DEFS.varuzenoku.cast.pose.lean)
+  assert.ok(Math.abs(cp.lean - jp.lean) < 1e-9, '構えのおわりと技の途中の のけぞりが同じ')
 })
 
 test('【確定】2026-10-29 雨摩座の手振り：構えの絵の切り替え（前半で新しい絵が出きり、後半でふだんの腕が消える＝途中で透けない）・払う手の水の筋は胸元から差しのべた指先まで', () => {
@@ -725,7 +726,7 @@ test('【確定】2026-10-30 雨摩座のポーズの絵は腰（帯飾りのま
   }
 })
 
-test('【確定】2026-10-30 雨摩座は構えの5秒も水天葬の構えの絵（cast.art）・黒龍の構えは今までどおり', () => {
+test('【確定】2026-10-30 雨摩座は構えの5秒も水天葬の構えの絵（cast.art）・黒龍の構えも ため の絵', () => {
   const a = bossIllustOf('amaza')
   assert.equal(a.castArt, 'windup')
   const s0 = illustCastShowAt(a, '水天葬', 0), s1 = illustCastShowAt(a, '水天葬', CAST_IN_MS), s2 = illustCastShowAt(a, '水天葬', 3000)
@@ -735,7 +736,9 @@ test('【確定】2026-10-30 雨摩座は構えの5秒も水天葬の構えの�
   assert.deepEqual(s2.show, s1.show)
   // 新しい絵は前半で出きり、部品は後半で消える（途中で透けない）
   for (const t of [100, 250, 400]) { const s = illustCastShowAt(a, '水天葬', t).show; assert.ok(Math.max(s.rig, s.poses[0].op) === 1, `${t}ms`) }
-  assert.equal(illustCastShowAt(bossIllustOf('varuzenoku'), '終焉の黒焔', 3000), null, '黒龍は構えのあいだ部品のまま')
+  // 【確定】2026-10-30 黒龍の構えも ため の絵（ユーザー「貯める動作も長く」）
+  const dc = illustCastShowAt(bossIllustOf('varuzenoku'), '終焉の黒焔', 3000)
+  assert.deepEqual(dc.show, { rig: 0, poses: [{ name: 'windup', op: 1 }] })
 })
 
 test('【確定】2026-10-30 HPの節目のバフの絵（ユーザー「バフかけたときのエフェクトやイラストも用意しておきたい グラブル意識」）：黒龍の2つのバフにポーズとオーラ・名前はダンジョンのバフと同じ・付いた瞬間に切り替えて1.5秒見せて戻る', () => {

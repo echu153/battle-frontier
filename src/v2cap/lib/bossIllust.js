@@ -169,6 +169,8 @@ export const BOSS_ILLUST_DEFS = {
     //   絵が無い技・絵が無いうちは、いままでの部品の動きのまま（art の名前が無ければ部品の立ち絵）
     // 地面の高さ（立ち絵の y px・足としっぽの下）：技で傾ける（lean）ときの支点
     ground: 590,
+    // 【確定】2026-10-30 構えの5秒（終焉の黒焔）も ため の絵（ユーザー「貯める動作も長く」）。のけぞりは技の castSkipMs の時刻と同じ（つなぎ目で跳ねない）
+    cast: { pose: { lean: -0.13 }, art: 'windup' },
     // 【確定】2026-10-30 HPの節目のバフの絵（ユーザー「バフかけたときのエフェクトやイラストも用意しておきたい グラブル意識」）：
     //   バフの名前（lib/dungeon.js の pattern.buffs の name）→ ポーズの全身の絵（pose・技のポーズの絵と同じに切り抜く）と
     //   オーラの絵（aura・立ち絵と同じ大きさに描いた絵を、描いた場所のまま置く）。front＝オーラを竜の手前に重ねる（鎧の殻・auraOp＝いちばん濃いときの濃さ＝竜が透けて見える）・無ければ後ろ（逆鱗の闘気）
@@ -284,18 +286,25 @@ export const BOSS_ILLUST_DEFS = {
         { at: 'wingB', part: 'wingN', pt: [560, 148], delayMs: 30, size: 0.9 },
       ] },
       // 終焉の黒焔：ため＝首を真上へ伸ばして天を仰ぎ口に黒い炎をためる（震えない・ゆっくりのけぞる）・吐きつけ＝首を前へ叩きつけて吐く。いちばん大きく揺れる
-      doom: { totalMs: 2250, hitMs: 1300, keys: [
+      //   【確定】2026-10-30 ユーザー「終焉の黒焔もっと大技っぽくしてほしい、貯める動作も長く」：
+      //     ため＝0.9秒→2.2秒（ゆっくりのけぞって止まり、吐く直前にもう一段引く）。戦闘では構えの5秒も ため の絵（def.cast）で火の玉が育ち、
+      //     構えのあとは技の途中（castSkipMs）から流す＝もう一度ためない（5秒のあとすぐ、もう一段引いて吐く）。
+      //     吐きつけ＝黒焔の奔流（scene の doom・lib/bossScene.js）に火の玉5つ（shots）が続けて飛ぶ・当たると大爆発。big＝技の名前の帯を赤と金に
+      doom: { totalMs: 3900, hitMs: 2600, castSkipMs: 2100, big: true, keys: [
         [0, {}],
         [300, { lean: -0.03, neck: 6, head: 4, glow: 0.5 }],
-        [1200, { lean: -0.12 }, 'out'],
-        [1240, { lean: -0.12 }],
-        [1300, { lean: 0.24 }, 'out'],
-        [1720, { lean: 0.21 }],
-        [1820, { lean: 0.15, neck: -7, head: -5, jaw: -10, arm: -22, wingN: 14, wingF: -10, glow: 0.4 }],
-        [2250, {}],
-      ], jolt: { atMs: 1300, ms: 320, lean: 0.05 }, charge: { kind: 'hit', fromMs: 300, toMs: 1300, size: 0.3 },
-      art: [[0, null], [300, 'windup'], [1240, 'strike'], [1820, null]], ghosts: { fromMs: 1240, toMs: 1400, lagMs: 28, n: 3 },
-      anchors: { windup: { mouth: [302, 70] }, strike: { mouth: [45, 432] } } },
+        [1800, { lean: -0.13 }, 'out'],
+        [2200, { lean: -0.13 }],
+        [2540, { lean: -0.165 }, 'out'],
+        [2600, { lean: 0.24 }, 'out'],
+        [3320, { lean: 0.21 }],
+        [3420, { lean: 0.15, neck: -7, head: -5, jaw: -10, arm: -22, wingN: 14, wingF: -10, glow: 0.4 }],
+        [3900, {}],
+      ], jolt: { atMs: 2600, ms: 320, lean: 0.05 }, charge: { kind: 'hit', fromMs: 300, toMs: 2600, size: 0.36 },
+      art: [[0, null], [300, 'windup'], [2540, 'strike'], [3420, null]], ghosts: { fromMs: 2540, toMs: 2700, lagMs: 28, n: 3 },
+      anchors: { windup: { mouth: [302, 70], hand: [302, 70] }, strike: { mouth: [45, 432], hand: [45, 432] } },
+      shots: [{ at: 'mouth', delayMs: 0, size: 1.25 }, { at: 'mouth', delayMs: 70, size: 1 }, { at: 'mouth', delayMs: 140, size: 0.85 }, { at: 'mouth', delayMs: 210, size: 0.7 }, { at: 'mouth', delayMs: 280, size: 0.6 }],
+      scene: { kind: 'doom', hand: { pt: [45, 432], part: 'body' } } },
     },
     // 塗りのエフェクト（元の絵の名前はドット絵版と同じ・フォルダが違う）。size＝枠の幅に対する横幅
     //   飛ぶ＝flyMs で口（か shots）から自分の体の真ん中へ／当たる＝durMs のあいだ大きくなりながら消える（spin＝回る角度°）
@@ -306,8 +315,8 @@ export const BOSS_ILLUST_DEFS = {
       { file: '焦熱の吐息_当たる', motion: 'breath', kind: 'hit', size: 0.5, durMs: 620, spin: 0 },
       { file: '黒翼烈風_飛ぶ', motion: 'gale', kind: 'fly', size: 0.42, flyMs: 360 },
       { file: '黒翼烈風_当たる', motion: 'gale', kind: 'hit', size: 0.56, durMs: 620, spin: 70 },
-      { file: '終焉の黒焔_飛ぶ', motion: 'doom', kind: 'fly', size: 0.48, flyMs: 420 },
-      { file: '終焉の黒焔_当たる', motion: 'doom', kind: 'hit', size: 0.72, durMs: 760, spin: 0 },
+      { file: '終焉の黒焔_飛ぶ', motion: 'doom', kind: 'fly', size: 0.6, flyMs: 500 },
+      { file: '終焉の黒焔_当たる', motion: 'doom', kind: 'hit', size: 0.95, durMs: 1100, spin: 0 },
       // 待機のときどき口に出る火の玉（遭遇のイラストの火の玉・大きさと場所は idle.orb）
       { file: '火の玉', motion: 'idle', kind: 'orb' },
     ],
@@ -954,7 +963,7 @@ export const bossIllustOf = (key) => {
     // 当たる時刻＝撃ち出す時刻＋飛ぶ時間＋当たる絵が降りきるまで（lead・氷雨と水天葬）
     motions[m.key] = { label: m.file, keys: md.keys, trails: md.trails || [], arcs: md.arcs || [], jolt: md.jolt || null, totalMs: md.totalMs, hitMs: md.hitMs, flyMs, impactMs: md.hitMs + flyMs + (fx.hit?.lead || 0),
       front: shots[0].front, shots, fx: Object.keys(fx).length ? fx : null, charge: md.charge && fx[md.charge.kind] ? md.charge : null, scene: md.scene || null,
-      poses: posesOf(m.key), art: md.art || null, ghosts: md.ghosts || null, anchors: md.anchors || null }
+      poses: posesOf(m.key), art: md.art || null, ghosts: md.ghosts || null, anchors: md.anchors || null, castSkipMs: md.castSkipMs || 0, big: !!md.big }
   }
   const jaw = def.cuts?.jaw && art.parts.jaw ? { line: def.cuts.jaw.line, pivot: def.cuts.jaw.pivot, mouth: def.cuts.jaw.mouth } : null
   // 待機のときどきの動き（黒龍）：口の火の玉（頭の中に描く）・しっぽを叩きつけた砂ぼこりの場所
