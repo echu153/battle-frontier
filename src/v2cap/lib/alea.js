@@ -339,6 +339,82 @@ export const ALEA_LINES = {
     { min: 2, max: 2, face: 'surprised', text: '…まったく同じ強さ。…こんなこと、あるんだ' },
     { min: 3, face: 'smile', text: '…{name}とまったく同じ強さ。…気が合うね' },
   ],
+  // ===== ハイ&ロー：当てるごと（【確定】2026-10-31 ユーザー指示「はいろーで当てるごとに何かしらセリフしてほしい、5～10ではそれぞれ別のセリフで」＋案を見て「この案で入れて」）=====
+  // 1〜4連勝は同じ箱から（hiloHit・続けて同じセリフは出ない）。常連からは名前を呼ばないセリフも混ぜる（毎回名前だとくどい）
+  hiloHit: [
+    { max: 1, face: 'normal', text: '…当たりですね' },
+    { max: 1, face: 'smile', text: '…ふふ、いい勘してますね' },
+    { max: 1, face: 'normal', text: '…よく見えてますね' },
+    { max: 1, face: 'smile', text: '…続けます？ それとも、ここまでにします？' },
+    { max: 1, face: 'smile', text: '…まだ、いけそうですか？' },
+    { min: 2, face: 'normal', text: '…当たり' },
+    { min: 2, face: 'smile', text: '…ふふ、いい勘してる' },
+    { min: 2, face: 'normal', text: '…よく見えてるね' },
+    { min: 2, face: 'smile', text: '…続ける？ それとも、ここまで？' },
+    { min: 2, face: 'smile', text: '…まだ、いけそう？' },
+    { min: 3, face: 'smile', text: '…{name}、当たり' },
+    { min: 3, face: 'smile', text: '…{name}、いい勘してる。…もう一回？' },
+  ],
+  // 5〜10連勝：だんだん眠気が飛んでいく（数字は言わない）。10連勝は自動で受け取る演出の上に出る
+  hiloStreak5: [
+    { max: 1, face: 'smile', text: '…へぇ、ここまで続くんですね。…少し、目が覚めてきました' },
+    { min: 2, max: 2, face: 'smile', text: '…へぇ、ここまで続くんだ。…少し、目が覚めてきた' },
+    { min: 3, face: 'smile', text: '…{name}、ここまで続くんだ。…少し、目が覚めてきた' },
+  ],
+  hiloStreak6: [
+    { max: 1, face: 'jito', text: '…まだ当てるんですか。…カード、透けて見えてません？' },
+    { min: 2, max: 2, face: 'jito', text: '…まだ当てるの？ …カード、透けて見えてない？' },
+    { min: 3, face: 'jito', text: '…{name}、まだ当てるの？ …カード、透けて見えてない？' },
+  ],
+  hiloStreak7: [
+    { max: 1, face: 'surprised', text: '…こんなに続くの、今日はじめて見ました' },
+    { min: 2, max: 2, face: 'surprised', text: '…こんなに続くの、今日はじめて見た' },
+    { min: 3, face: 'surprised', text: '…{name}、こんなに続くの、今日はじめて見た' },
+  ],
+  hiloStreak8: [
+    { max: 1, face: 'normal', text: '…周りのお客さんも、こちらを見てますよ。…気づいてます？' },
+    { min: 2, max: 2, face: 'normal', text: '…周りのお客さんも、こっち見てる。…気づいてる？' },
+    { min: 3, face: 'smile', text: '…{name}、周りのお客さんも、こっち見てるよ。…気づいてる？' },
+  ],
+  hiloStreak9: [
+    { max: 1, face: 'surprised', text: '……息が止まりそうです。…次、いきます？' },
+    { min: 2, max: 2, face: 'surprised', text: '……息、止まりそう。…次、いくの？' },
+    { min: 3, face: 'surprised', text: '……{name}、息、止まりそう。…次、いくの？' },
+  ],
+  hiloStreak10: [
+    { max: 1, face: 'surprised', text: '……全部、当てちゃった。…もう、眠気なんて飛んでいきました' },
+    { min: 2, max: 2, face: 'surprised', text: '……全部、当てちゃった。…もう、眠気なんて飛んでった' },
+    { min: 3, face: 'surprised', text: '……{name}、全部当てちゃった。…もう、眠気なんて飛んでった' },
+  ],
+  // ===== ルーレット：毎回（【確定】2026-10-31 ユーザー指示「ルーレットで負けた場合勝った場合もセリフ欲しい」＋案を見て「この案で入れて」）=====
+  // 賭けたぶんより増えた（大きな当たりは演出の上の bigWin／hugeWin）
+  rouletteWin: [
+    { max: 1, face: 'smile', text: '…当たりましたね。…玉は、あなたの味方みたいです' },
+    { max: 1, face: 'smile', text: '…おめでとうございます。いいところに賭けましたね' },
+    { max: 1, face: 'normal', text: '…ふふ、玉がそちらに転がりましたね' },
+    { min: 2, face: 'smile', text: '…当たったね。…玉が、味方してるみたい' },
+    { min: 2, face: 'smile', text: '…おめでと。いいところに賭けたね' },
+    { min: 2, face: 'normal', text: '…ふふ、玉がそっちに転がったね' },
+    { min: 3, face: 'smile', text: '…{name}、当たったね。…ふふ、やるじゃん' },
+    { min: 3, face: 'smile', text: '…{name}、おめでと。…もう一回、回す？' },
+  ],
+  // 当たったけれど、賭けたぶんより増えなかった
+  rouletteSmall: [
+    { max: 1, face: 'normal', text: '…当たりはしましたけど、あまり増えませんでしたね' },
+    { min: 2, max: 2, face: 'normal', text: '…当たったけど、あまり増えなかったね' },
+    { min: 3, face: 'normal', text: '…{name}、当たったけど、あまり増えなかったね' },
+  ],
+  // 外れた
+  rouletteLose: [
+    { max: 1, face: 'normal', text: '…残念。玉は、気まぐれですから' },
+    { max: 1, face: 'normal', text: '…惜しかったですね。…次は、どこに賭けます？' },
+    { max: 1, face: 'smile', text: '…今回は、お店の勝ちですね' },
+    { min: 2, face: 'normal', text: '…残念。玉は、気まぐれだから' },
+    { min: 2, face: 'normal', text: '…惜しかったね。…次は、どこに賭ける？' },
+    { min: 2, face: 'smile', text: '…今回は、お店の勝ち' },
+    { min: 3, face: 'normal', text: '…{name}、残念。…次は、どこに賭ける？' },
+    { min: 3, face: 'normal', text: '…{name}、元気出して。…玉は、逃げないから' },
+  ],
 }
 
 // 段階が上がって最初に話しかけたときの場面（1回だけ）。2＝くだけた話し方に変わる・3＝名前を聞いて呼び始める・4＝名乗る
@@ -389,14 +465,16 @@ export const winTalkOf = (tierKey, { lucky = false } = {}) =>
   (lucky || tierKey === 'mega' || tierKey === 'jackpot' ? 'hugeWin' : tierKey === 'big' ? 'bigWin' : null)
 // スロットの当たりの流れ（AT）に入った。中段チェリー（画面が止まる当たり）は hugeWin
 export const atTalkOf = (from) => (from === 'premium' ? 'hugeWin' : 'atStart')
-// 負けたとき（ユーザーに見せた案）：ハイ&ローで連勝（HILO_LOSE_STREAK 以上）が途切れた・スロットのチャンス（CZ）が実らなかった・
-// ルーレットで ROULETTE_MISS_RUN 回続けて外れた。どれも LOSE_GAP_MS に1回まで
+// 負けたとき（ユーザーに見せた案）：ハイ&ローで連勝（HILO_LOSE_STREAK 以上）が途切れた・スロットのチャンス（CZ）が実らなかった。
+// どちらも LOSE_GAP_MS に1回まで（ルーレットは下の rouletteTalkOf で毎回言うようにした）
 export const LOSE_GAP_MS = 60000
 export const HILO_LOSE_STREAK = 2
-export const ROULETTE_MISS_RUN = 3
 export const loseDue = (lastAt, now = Date.now()) => !(lastAt > 0) || now - lastAt >= LOSE_GAP_MS
-// ルーレットの外れの続き：外れたら+1・当たったら0。ROULETTE_MISS_RUN に届いたら言って、0から数え直す
-export const nextMissRun = (run, pay) => (pay > 0 ? 0 : (Number(run) || 0) + 1)
+// ハイ&ローの当たり（2026-10-31・当てるごとに毎回言う）：HILO_STREAK_LINES_FROM 連勝からは連勝の数ごとに別のセリフ（hiloStreak5〜10）・それより前は hiloHit
+export const HILO_STREAK_LINES_FROM = 5
+export const hiloTalkOf = (streak) => (ALEA_LINES[`hiloStreak${streak}`] ? `hiloStreak${streak}` : 'hiloHit')
+// ルーレットの結果（2026-10-31・毎回言う）：賭けたぶんより増えた・当たったけど増えなかった・外れた。大きな当たりは演出の上の bigWin／hugeWin（winTalkOf）
+export const rouletteTalkOf = (pay, total) => (pay > total ? 'rouletteWin' : pay > 0 ? 'rouletteSmall' : 'rouletteLose')
 
 // ===== テーブルのゲーム（ブラックジャック・ポーカー＝アレアがディーラー・2026-10-28）=====
 // ふつうの勝ち負けなど（TABLE_QUIET_KINDS）は TABLE_TALK_GAP_MS に1回まで（毎回は言わない＝負けたときの LOSE_GAP_MS と同じ考え・2つのゲームで共通）。

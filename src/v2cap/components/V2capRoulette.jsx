@@ -13,7 +13,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import { useStored } from '../core/prefs.js'
 import { WHEEL_ORDER, colorOfNumber, ROULETTE_CHIPS, ROULETTE_MAX_TOTAL, ROULETTE_MAX_BETS, ROULETTE_STRAIGHT, betKeyOf, betLabelOf, rouletteTotalOf, winTierOf } from '../lib/casino.js'
-import { winTalkOf, nextMissRun, ROULETTE_MISS_RUN } from '../lib/alea.js'
+import { winTalkOf, rouletteTalkOf } from '../lib/alea.js'
 import { sfx, fx, celebrate, vibrate } from './casinoFx.js'
 import { CASINO, panel, bigBtn, pill, fmt } from './casinoStyle.js'
 import V2Modal from './V2Modal.jsx'
@@ -77,7 +77,6 @@ function Wheel({ wheelDeg, ballDeg, ballR, result, lucky, size }) {
 // onTalk … アレアに結果を伝える（V2capCasino・lib/alea.js）。返すのは当たりの演出の上に出すアレア
 export default function V2capRoulette({ init, medals, onMoney, onTalk }) {
   const narrow = useNarrow()
-  const missRun = useRef(0)   // 続けて外れた回数（ROULETTE_MISS_RUN 回でアレアがなぐさめる）
   const [chip, setChip] = useStored('capRouletteChip', 10)
   const [bets, setBets] = useState([])              // [{k, v, a}]（置いた順の1回ずつ）
   const [lastBets, setLastBets] = useStored('capRouletteLast', [])
@@ -197,16 +196,18 @@ export default function V2capRoulette({ init, medals, onMoney, onTalk }) {
     setHist(data.hist || [data.result, ...hist].slice(0, 20))
     onMoney(data)
     const pay = Number(data.payout)
-    missRun.current = nextMissRun(missRun.current, pay)
+    // アレアのひとこと（勝っても負けても毎回・2026-10-31 ユーザー指示「ルーレットで負けた場合勝った場合もセリフ欲しい」）。大きな当たりは演出の上に出す
     if (pay > 0) {
       const luckyHit = data.lucky.some(l => l.n === data.result) && myStraight.has(data.result)
       const tier = winTierOf(pay, data.total)
-      if (tier?.key === 'win' && !luckyHit) { sfx.win(1); fx('coins', { n: 14, from: 'bottom' }); fx('popup', { text: `+${fmt(pay)}枚`, color: CASINO.green, size: 32 }) }
+      if (tier?.key === 'win' && !luckyHit) {
+        sfx.win(1); fx('coins', { n: 14, from: 'bottom' }); fx('popup', { text: `+${fmt(pay)}枚`, color: CASINO.green, size: 32 })
+        onTalk?.(rouletteTalkOf(pay, data.total))
+      }
       else celebrate(luckyHit ? (winTierOf(pay, data.total) || tier) : tier, pay, { title: luckyHit ? `⚡ ラッキーナンバー ${data.result} ⚡` : `${data.result}（${{ red:'赤', black:'黒', green:'緑' }[colorOfNumber(data.result)]}）`, sub: `${fmt(data.total)}枚 → ${fmt(pay)}枚`, say: onTalk?.(winTalkOf(tier?.key, { lucky: luckyHit })) })
     } else {
       sfx.lose()
-      // 続けて外れた（アレアは1分に1回まで）。言ったら0から数え直す
-      if (missRun.current >= ROULETTE_MISS_RUN) { missRun.current = 0; onTalk?.('lose') }
+      onTalk?.(rouletteTalkOf(pay, data.total))
     }
     setBusy(false)
     // スマホ：出た数字を少し見せてからホイールを閉じる（盤の上で、出た数字と当たった賭けが光る）

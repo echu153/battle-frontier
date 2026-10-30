@@ -6,12 +6,12 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import {
   ALEA_OUTFITS, ALEA_OUTFIT, ALEA_ART_DIR, aleaSrc, ALEA_FACES, ALEA_FACE_KEYS, ALEA_WELCOME, ALEA_FACE_SIZE, ALEA_WELCOME_H, ALEA_FOCUS,
   ALEA_STAGES, CASUAL_STAGE, NAME_STAGE, stageOf, varsOf, ALEA_LINES, ALEA_STAGE_EVENTS, stageEventOf, linesOf, pickLine, ALEA_RARE_WEIGHT,
-  enterKindOf, welcomeLineOf, winTalkOf, atTalkOf, LOSE_GAP_MS, HILO_LOSE_STREAK, ROULETTE_MISS_RUN, loseDue, nextMissRun, dayOf,
+  enterKindOf, welcomeLineOf, winTalkOf, atTalkOf, LOSE_GAP_MS, HILO_LOSE_STREAK, loseDue, dayOf, HILO_STREAK_LINES_FROM, hiloTalkOf, rouletteTalkOf,
   ALEA_THUMB, ALEA_SIDE_MIN_W, bjTalkOf, BJ_QUIET_KINDS, SELF_NAME_STAGE, dealerNameOf,
   pokerTalkOf, PK_QUIET_KINDS, TABLE_QUIET_KINDS, TABLE_TALK_GAP_MS, tableTalkDue,
 } from './alea.js'
 import { CLERK_RARE_WEIGHT } from './clerk.js'
-import { WIN_TIERS } from './casino.js'
+import { WIN_TIERS, HILO_MAX_STREAK } from './casino.js'
 
 const PUB = new URL('../../../public/', import.meta.url)
 const fileOf = (key, outfit = ALEA_OUTFIT) => new URL(`.${ALEA_ART_DIR}/${outfit}/${key}.webp`, PUB)
@@ -206,19 +206,47 @@ test('大当たり：BIG WIN→へぇ、やりますね・MEGA WIN／JACKPOT・�
   assert.equal(atTalkOf('scherry'), 'atStart')
 })
 
-test('負けたとき：ハイ&ローで連勝が途切れた・スロットのチャンスが実らなかった・ルーレットで3回続けて外れた。どれも1分に1回まで', () => {
+test('負けたとき：ハイ&ローで連勝が途切れた・スロットのチャンスが実らなかった。どちらも1分に1回まで（ルーレットは毎回＝下のテスト）', () => {
   assert.equal(LOSE_GAP_MS, 60000)
   assert.equal(HILO_LOSE_STREAK, 2)
-  assert.equal(ROULETTE_MISS_RUN, 3)
   const t0 = 1_000_000
   assert.equal(loseDue(0, t0), true)
   assert.equal(loseDue(t0, t0 + LOSE_GAP_MS - 1), false)
   assert.equal(loseDue(t0, t0 + LOSE_GAP_MS), true)
-  let run = 0
-  run = nextMissRun(run, 0); run = nextMissRun(run, 0)
-  assert.equal(run, 2)
-  assert.equal(nextMissRun(run, 5), 0, '当たったら0から')
-  assert.equal(nextMissRun(run, 0), ROULETTE_MISS_RUN)
+})
+
+test('【確定】2026-10-31 ハイ&ロー：当てるごとに毎回ひとこと・5〜10連勝はそれぞれ別のセリフ（ユーザー指示「当てるごとに何かしらセリフ」「5～10ではそれぞれ別のセリフで」＋案を見て「この案で入れて」）', () => {
+  assert.equal(HILO_STREAK_LINES_FROM, 5)
+  assert.deepEqual([1, 2, 3, 4].map(hiloTalkOf), ['hiloHit', 'hiloHit', 'hiloHit', 'hiloHit'])
+  assert.deepEqual([5, 6, 7, 8, 9, 10].map(hiloTalkOf), [5, 6, 7, 8, 9, 10].map(n => `hiloStreak${n}`))
+  assert.ok(ALEA_LINES[`hiloStreak${HILO_MAX_STREAK}`], 'いちばん長い連勝にもセリフがある')
+  // どの段階でも、5〜10連勝は全部ちがうセリフ・1回だけ選ばれる（その段階に1つ）
+  for (let st = 0; st <= 4; st++) {
+    const texts = [5, 6, 7, 8, 9, 10].map(n => { const ls = linesOf(`hiloStreak${n}`, st); assert.equal(ls.length, 1, `${n}連勝（段階${st}）`); return ls[0].text })
+    assert.equal(new Set(texts).size, 6, `段階${st}`)
+    assert.ok(linesOf('hiloHit', st).length >= 5, '1〜4連勝は箱から（続けて同じものが出ない）')
+  }
+  // 名前は仲良しから（段階を上げても名前を呼ばないセリフが混ざる＝毎回名前だとくどい）
+  assert.ok(linesOf('hiloHit', 3).some(l => l.text.includes('{name}')) && linesOf('hiloHit', 3).some(l => !l.text.includes('{name}')))
+  const hilo = read('components/V2capHilo.jsx')
+  assert.ok(hilo.includes('if (!data.done) onTalk?.(hiloTalkOf(data.streak))'), '当てるごと（毎回・間隔の決まりなし）')
+  assert.ok(hilo.includes('const talk = data.streak >= HILO_STREAK_LINES_FROM ? hiloTalkOf(data.streak) : winTalkOf(tier.key)'), '自動で受け取る演出の上')
+  assert.ok(!TABLE_QUIET_KINDS.includes('hiloHit') && !hilo.includes('Due('), '間をあけない')
+})
+
+test('【確定】2026-10-31 ルーレット：勝っても負けても毎回ひとこと（ユーザー指示「ルーレットで負けた場合勝った場合もセリフ欲しい」＋案を見て「この案で入れて」）', () => {
+  assert.equal(rouletteTalkOf(30, 10), 'rouletteWin', '賭けたぶんより増えた')
+  assert.equal(rouletteTalkOf(10, 10), 'rouletteSmall', '当たったけど増えなかった（同じ）')
+  assert.equal(rouletteTalkOf(2, 101), 'rouletteSmall', '当たったけど増えなかった（減った）')
+  assert.equal(rouletteTalkOf(0, 10), 'rouletteLose')
+  for (let st = 0; st <= 4; st++) {
+    assert.ok(linesOf('rouletteWin', st).length >= 3 && linesOf('rouletteLose', st).length >= 3, '続けて同じものが出ないように3つ以上')
+    assert.equal(linesOf('rouletteSmall', st).length, 1)
+  }
+  const roulette = read('components/V2capRoulette.jsx')
+  assert.equal((roulette.match(/onTalk\?\.\(rouletteTalkOf\(pay, data\.total\)\)/g) || []).length, 2, 'ふつうの当たりと外れ（大きな当たりは演出の上）')
+  assert.ok(!roulette.includes('missRun'), '前の「3回続けて外れたら」はやめた')
+  assert.ok(!TABLE_QUIET_KINDS.includes('rouletteLose'))
 })
 
 // ===== 画面 =====
@@ -237,9 +265,8 @@ test('画面：賭博場の右にアレア（狭い画面は上）・タップ�
   assert.ok(slot.includes('say: onTalk?.(winTalkOf(tier.key))'), 'ATが終わって大きく増えた')
   const hilo = read('components/V2capHilo.jsx')
   assert.ok(hilo.includes("if (g.streak >= HILO_LOSE_STREAK) onTalk?.('lose')"))
-  assert.equal((hilo.match(/say: onTalk\?\.\(winTalkOf\(/g) || []).length, 2, '受け取り・自動で受け取り')
+  assert.equal((hilo.match(/say: onTalk\?\.\(winTalkOf\(/g) || []).length, 1, '自分で受け取ったとき（自動で受け取るときは連勝のセリフ＝下のテスト）')
   const roulette = read('components/V2capRoulette.jsx')
-  assert.ok(roulette.includes("if (missRun.current >= ROULETTE_MISS_RUN) { missRun.current = 0; onTalk?.('lose') }"))
   assert.ok(roulette.includes('say: onTalk?.(winTalkOf(tier?.key, { lucky: luckyHit }))'))
   assert.ok(read('components/casinoFx.js').includes("fx('banner', { tier, amount, title, sub, say })"))
   assert.ok(read('components/CasinoFxLayer.jsx').includes('{banner.say}'), 'BIG WIN などの演出の上に出す')

@@ -10,7 +10,7 @@ import { useState } from 'react'
 import { supabase } from '../../supabase'
 import { useStored } from '../core/prefs.js'
 import { HILO_BETS, HILO_MIN_BET, HILO_MAX_BET, HILO_MAX_STREAK, HILO_CAP_MULT, hiloMult100Of, hiloChanceOf, hiloNextPotOf, hiloPayoutOf, winTierOf } from '../lib/casino.js'
-import { winTalkOf, HILO_LOSE_STREAK } from '../lib/alea.js'
+import { winTalkOf, hiloTalkOf, HILO_LOSE_STREAK, HILO_STREAK_LINES_FROM } from '../lib/alea.js'
 import { sfx, fx, celebrate, vibrate } from './casinoFx.js'
 import { CASINO, panel, bigBtn, pill, fmt, DISPLAY_FONT } from './casinoStyle.js'
 import { CountUp, PlayingCard } from './casinoParts.jsx'
@@ -76,12 +76,16 @@ export default function V2capHilo({ init, medals, onMoney, onTalk }) {
     sfx.coin(data.streak * 2)
     if (data.streak >= 3) fx('coins', { n: 6 + data.streak * 3, from: 'bottom' })
     if (data.streak >= 5) { fx('flash', { color: CASINO.gold, ms: 250 }); vibrate(40) }
+    // アレアのひとこと（当てるごと・2026-10-31 ユーザー指示「当てるごとに何かしらセリフ」）。自動で受け取るときは下の演出の上に出す
+    if (!data.done) onTalk?.(hiloTalkOf(data.streak))
     await sleep(350)
     setG(x => ({ ...x, pot: Number(data.pot), card: data.card, streak: data.streak, cards: [...x.cards, data.card], active: !data.done }))
     setNext(null)
     if (data.done) {
       const tier = winTierOf(data.payout, g.bet) || winTierOf(1, 1)
-      celebrate(tier, data.payout, { title: data.streak >= HILO_MAX_STREAK ? `${HILO_MAX_STREAK}連勝！` : `${HILO_CAP_MULT}倍に到達！`, sub: '自動で受け取りました', say: onTalk?.(winTalkOf(tier.key)) })
+      // 長い連勝はその連勝のセリフ。連勝が短いまま上限に届いたときは大当たりのセリフ
+      const talk = data.streak >= HILO_STREAK_LINES_FROM ? hiloTalkOf(data.streak) : winTalkOf(tier.key)
+      celebrate(tier, data.payout, { title: data.streak >= HILO_MAX_STREAK ? `${HILO_MAX_STREAK}連勝！` : `${HILO_CAP_MULT}倍に到達！`, sub: '自動で受け取りました', say: onTalk?.(talk) })
       setLast({ type: 'auto', payout: data.payout })
     }
     setBusy(false)
