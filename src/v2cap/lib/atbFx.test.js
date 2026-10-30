@@ -1,7 +1,7 @@
 // v2cap の ATB戦闘の見た目の動き（記録 → 踏み込み・被弾・数字）のテスト（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { fxEventsOf, scheduleFx, lungeOf, shakeOf, LUNGE_SEC, HIT_SEC, skillBannerAt, BANNER_SEC, BANNER_IN, BANNER_OUT } from './atbFx.js'
+import { fxEventsOf, scheduleFx, lungeOf, shakeOf, LUNGE_SEC, HIT_SEC, skillBannerAt, BANNER_SEC, RAGE_BANNER_SEC, BANNER_IN, BANNER_OUT } from './atbFx.js'
 
 test('殴った側が踏み込み、受けた側に数字（外れは MISS・クリティカルの印）', () => {
   const ev = fxEventsOf([
@@ -74,7 +74,7 @@ test('【確定】2026-10-30 敵が技を使ったら舞台の上に技の名前
   assert.equal(skillBannerAt(ev, 9.99), null, '使う前は出ない')
   const a = skillBannerAt(ev, 10 + BANNER_IN / 2)
   assert.ok(a.name === '焦熱の吐息' && a.op > 0 && a.op < 1 && a.k < 1, 'すぐ出てくる')
-  assert.deepEqual(skillBannerAt(ev, 11), { name: '焦熱の吐息', op: 1, k: 1, t0: 10 })
+  assert.deepEqual(skillBannerAt(ev, 11), { name: '焦熱の吐息', op: 1, k: 1, t0: 10, rage: false })
   const b = skillBannerAt(ev, 10 + BANNER_SEC - BANNER_OUT / 2)
   assert.ok(b.op > 0 && b.op < 1, '終わりに薄れる')
   assert.equal(skillBannerAt(ev, 10 + BANNER_SEC), null, '消える')
@@ -86,4 +86,16 @@ test('【確定】2026-10-30 敵が技を使ったら舞台の上に技の名前
   const two = [...ev, ...scheduleFx(fxEventsOf([{ side: 'ボス', type: 'skill', skill: '黒翼烈風', hits: 1, damage: 90 }], '自分', 'ボス'), 11)]
   assert.equal(skillBannerAt(two, 11.2).name, '黒翼烈風')
   assert.equal(skillBannerAt(two, 10.5).name, '焦熱の吐息')
+})
+
+test('【確定】2026-10-30 HPの節目のバフも名前の帯に出す（rage・技より長く・色は画面で変える）・数字は出さない', () => {
+  const ev = scheduleFx(fxEventsOf([
+    { side: '自分', type: 'skill', skill: '影討ち', hits: 1, damage: 50 },
+    { side: 'ボス', type: 'hpBuff', skill: '逆鱗', effect: 'STR+25%・INT+25%' },
+  ], '自分', 'ボス'), 10, { a: 0.3 })
+  assert.deepEqual(ev.map(e => [e.kind, e.side, +e.t0.toFixed(2)]), [['act', 'a', 10], ['hit', 'b', 10.3], ['rage', 'b', 10.3]], '殴られた数字と同じときに出る')
+  assert.equal(skillBannerAt(ev, 10.2), null)
+  assert.deepEqual(skillBannerAt(ev, 11), { name: '逆鱗', op: 1, k: 1, t0: 10.3, rage: true })
+  assert.ok(skillBannerAt(ev, 10.3 + BANNER_SEC + 0.1).op > 0, '技（1.8秒）より長く残る')
+  assert.equal(skillBannerAt(ev, 10.3 + RAGE_BANNER_SEC), null)
 })

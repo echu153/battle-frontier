@@ -3,10 +3,17 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { SKILL_RUBY, rubySegmentsOf } from './skillRuby.js'
 import { BOSS_DEFS } from './bossArt.js'
+import { DUNGEON_BOSSES } from './dungeon.js'
 
 test('【確定】2026-10-30 IDダンジョンのボスの技はぜんぶ読み方がある（ユーザー「これIDダンジョンは全部これね、スキルの感じルぴ振れる？」）', () => {
   for (const [key, def] of Object.entries(BOSS_DEFS)) {
     for (const m of def.motions) assert.ok(SKILL_RUBY[m.file], `${key} の「${m.file}」の読み方（lib/skillRuby.js に足す）`)
+  }
+  // 2026-10-30 IDダンジョンのボスの技とHPの節目のバフ（同じ帯に出る）
+  for (const [key, b] of Object.entries(DUNGEON_BOSSES)) {
+    for (const n of [...b.skills.map(s => s.name), ...(b.pattern?.buffs || []).map(x => x.name)]) {
+      assert.ok(SKILL_RUBY[n], `${key} の「${n}」の読み方（lib/skillRuby.js に足す）`)
+    }
   }
   // ルビを外した字は技の名前と同じ・ルビはひらがなだけ
   for (const [name, src] of Object.entries(SKILL_RUBY)) {

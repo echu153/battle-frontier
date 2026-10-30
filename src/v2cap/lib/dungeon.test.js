@@ -4,9 +4,9 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
   DUNGEON_BOSSES, DIFF_KEYS, DUNGEON_MIN, DUNGEON_TRY_SEC, SUMMONS_PER_DAY, STAMINA_OWNER_FIRST, STAMINA_OWNER, STAMINA_HELPER, HELPERS_MAX,
-  diffOf, isDiffReady, isDiffUnlocked, tryStaminaOf, dungeonFighter,
+  diffOf, isDiffReady, isDiffUnlocked, isSummonable, tryStaminaOf, dungeonFighter,
 } from './dungeon.js'
-import { createAtb, runFor, fillPerSecOf, ATB_SLOW_CUT, FILL_PER_SEC } from '../core/atb.js'
+import { createAtb, runFor, startMacro, fillPerSecOf, hpBuffChips, ATB_SLOW_CUT, FILL_PER_SEC } from '../core/atb.js'
 import { liveStats } from '../core/battle.js'
 import { statsOf } from '../core/enemies.js'
 import { CAP_RULES } from './rules.js'
@@ -27,8 +27,8 @@ const bossActs = (st) => st.log.filter(l => l.side === BOSS && (l.type === 'skil
 test('【確定】2026-10-29 数字はサーバー（SQL §23）と同じ：HP・呼べるエリア・90分・180秒・スタミナ 0/3/5・救援5人・1日1回', () => {
   const conf = fnBody('v2cap_dungeon_conf')
   const rows = [...conf.matchAll(/\('(\w+)', '(\w+)', (\d+), (\d+)\)/g)].map(m => ({ boss: m[1], diff: m[2], hp: +m[3], area: +m[4] }))
-  const ready = Object.entries(DUNGEON_BOSSES).flatMap(([boss, b]) => DIFF_KEYS.filter(k => isDiffReady(boss, k)).map(diff => ({ boss, diff, hp: b.diffs[diff].hp, area: b.diffs[diff].area })))
-  assert.deepEqual(rows, ready, 'サーバーの難易度の表＝呼べる難易度（まだ数字の無い難易度はサーバーにも無い）')
+  const ready = Object.entries(DUNGEON_BOSSES).filter(([boss]) => isSummonable(boss)).flatMap(([boss, b]) => DIFF_KEYS.filter(k => isDiffReady(boss, k)).map(diff => ({ boss, diff, hp: b.diffs[diff].hp, area: b.diffs[diff].area })))
+  assert.deepEqual(rows, ready, 'サーバーの難易度の表＝呼べる難易度（まだ数字の無い難易度・まだ呼べないボス＝雨摩座はサーバーにも無い）')
   assert.match(fnBody('v2cap_dungeon_summon'), new RegExp(`c_min\\s+constant int := ${DUNGEON_MIN};`))
   const start = fnBody('v2cap_dungeon_try_start')
   assert.match(start, new RegExp(`c_owner_first constant int := ${STAMINA_OWNER_FIRST};`))
@@ -77,8 +77,8 @@ test('【確定】2026-10-29 ボスの強さ：守りと速さは power・攻撃
     assert.equal(dungeonFighter('varuzenoku', k, d.hp * 0.4).hpNow, d.hp * 0.4)
     assert.equal(dungeonFighter('varuzenoku', k, d.hp * 9).hpNow, d.hp, 'いまのHPは全体より多くならない')
   }
-  assert.deepEqual({ ...diffOf('varuzenoku', 'normal') }, { label: 'ノーマル', area: 2, recLv: 25, recPower: 500, power: 474, atk: 0.35, hp: 6500 })
-  assert.deepEqual({ ...diffOf('varuzenoku', 'hard') }, { label: 'ハード', area: 5, recLv: 45, recPower: 1050, power: 1027, atk: 0.4, hp: 15000 })
+  assert.deepEqual({ ...diffOf('varuzenoku', 'normal') }, { label: 'ノーマル', area: 2, recLv: 25, recPower: 500, power: 474, atk: 0.33, hp: 6500 })
+  assert.deepEqual({ ...diffOf('varuzenoku', 'hard') }, { label: 'ハード', area: 5, recLv: 45, recPower: 1050, power: 1027, atk: 0.38, hp: 15000 })
 })
 
 test('【確定】2026-10-29 ボスの技：HP75%より上は黒爪だけ・75%を切ったら次の行動で焦熱の吐息を必ず・そのあとは吐息30%', () => {
@@ -144,4 +144,80 @@ test('【確定】2026-10-29 鈍足はATBではゲージが20%遅くなる（AGI
   // 出撃の戦闘（atb ではない側）はAGI−20%のまま
   const auto = { ...a, atb: false }
   assert.ok(liveStats(auto).agi < before.agi)
+})
+
+// ===== 2026-10-30 HPの節目のバフ・雨摩座 =====
+const buffLog = (st, name = BOSS) => st.log.filter(l => l.side === name && l.type === 'hpBuff').map(l => l.skill)
+const near = (a, b) => Math.abs(a - b) <= 1
+
+test('【確定】2026-10-30 HPの節目のバフ：60%で黒鱗の鎧（VIT+25%）・30%で逆鱗（STR・INT+25%）。切った瞬間に付き、時間では消えない', () => {
+  const st = createAtb(dummy(), dungeonFighter('varuzenoku', 'normal'), { rng: rngOf(5), maxSec: 999 })
+  runFor(st, 20)
+  assert.deepEqual(buffLog(st), [], '60%より上は付かない')
+  const s0 = liveStats(st.b)
+  st.b.hp = Math.floor(st.b.base.hp * 0.59)
+  runFor(st, 6)
+  assert.deepEqual(buffLog(st), ['黒鱗の鎧'])
+  assert.deepEqual(hpBuffChips(st.b), [{ name: '黒鱗の鎧', table: { vit: 25 } }])
+  assert.ok(near(liveStats(st.b).vit, s0.vit * 1.25), `VIT+25%（${s0.vit}→${liveStats(st.b).vit}）`)
+  assert.ok(near(liveStats(st.b).str, s0.str), 'STRはまだ')
+  st.b.hp = Math.floor(st.b.base.hp * 0.29)
+  runFor(st, 6)
+  assert.deepEqual(buffLog(st), ['黒鱗の鎧', '逆鱗'])
+  const s1 = liveStats(st.b)
+  assert.ok(near(s1.str, s0.str * 1.25) && near(s1.int_stat, s0.int_stat * 1.25), 'STR・INT+25%')
+  runFor(st, 400)
+  assert.ok(near(liveStats(st.b).vit, s0.vit * 1.25) && near(liveStats(st.b).str, s0.str * 1.25), '時間がたっても消えない')
+  assert.deepEqual(buffLog(st), ['黒鱗の鎧', '逆鱗'], '1回ずつ')
+  assert.equal(st.b.timed.length, 0, '時間で切れる枠には入れない')
+})
+
+test('【確定】2026-10-30 節目のバフはバフ消しでも消えない（選ばれもしない＝「強化が消えた」と出ない）', () => {
+  const me = { ...dummy(), slots: [{ skill: { name: 'ためしの消し', kind: 'phys', mult: 0.1, proc: 100, mp: 0, dispel: { chance: 100 } }, uses: 9999 }] }
+  const st = createAtb(me, dungeonFighter('varuzenoku', 'normal', 6500 * 0.2), { rng: rngOf(9), maxSec: 999 })
+  startMacro(st, 1, [{ idx: 0 }], true)
+  const s0 = liveStats(st.b)
+  runFor(st, 120)
+  assert.ok(st.log.filter(l => l.side === 'じぶん' && l.type === 'skill' && l.skill === 'ためしの消し').length >= 10, 'バフ消しを何度も撃った')
+  assert.equal(st.log.filter(l => l.type === 'dispel').length, 0, '消せるバフが無い')
+  assert.ok(near(liveStats(st.b).vit, s0.vit) && near(liveStats(st.b).str, s0.str), '残っている')
+  assert.deepEqual(hpBuffChips(st.b).map(c => c.name), ['黒鱗の鎧', '逆鱗'])
+})
+
+test('【確定】2026-10-30 持ち越しで節目をもう切っているなら、はじめから付いている（記録にも出る）', () => {
+  const st = createAtb(dummy(), dungeonFighter('varuzenoku', 'normal', 6500 * 0.5), { rng: rngOf(2), maxSec: 999 })
+  assert.deepEqual(buffLog(st), ['黒鱗の鎧'], '始めた時点で')
+  assert.equal(st.t, 0)
+  const low = createAtb(dummy(), dungeonFighter('varuzenoku', 'normal', 6500 * 0.1), { rng: rngOf(2), maxSec: 999 })
+  assert.deepEqual(buffLog(low), ['黒鱗の鎧', '逆鱗'])
+  const full = createAtb(dummy(), dungeonFighter('varuzenoku', 'normal'), { rng: rngOf(2), maxSec: 999 })
+  assert.deepEqual(buffLog(full), [])
+})
+
+test('【確定】2026-10-30 雨摩座：黒龍の裏返し（魔法が主）・節目と割合と強さは黒龍と同じ・まだ呼べない（試し撃ちだけ）', () => {
+  const A = DUNGEON_BOSSES.amaza, V = DUNGEON_BOSSES.varuzenoku
+  assert.equal(isSummonable('amaza'), false)
+  assert.equal(isSummonable('varuzenoku'), true)
+  for (const k of DIFF_KEYS) assert.equal(isDiffUnlocked('amaza', k, 15), false, 'ダンジョンの入口では呼べない')
+  assert.deepEqual(A.diffs, V.diffs, '強さは黒龍と同じ')
+  assert.equal(A.kind, 'mag')
+  assert.deepEqual(A.skills.map(s => [s.name, s.kind, s.mult, s.ail?.key ?? null, s.ail?.chance ?? null]), [
+    ['氷雨', 'mag', 1.6, 'slow', 70], ['水縛の帯', 'phys', 1.8, 'paralyze', 30], ['水天葬', 'mag', 3.0, null, null],
+  ])
+  assert.deepEqual(A.pattern.steps.map(s => s.at), V.pattern.steps.map(s => s.at))
+  const rename = { '焦熱の吐息': '氷雨', '黒翼烈風': '水縛の帯', '終焉の黒焔': '水天葬' }
+  assert.deepEqual(A.pattern.bands, V.pattern.bands.map(b => ({ min: b.min, weights: Object.fromEntries(Object.entries(b.weights).map(([k, w]) => [rename[k], w])) })))
+  assert.deepEqual(A.pattern.buffs, [
+    { at: 0.6, name: '霧雨の帳', table: { vit: 25 } }, { at: 0.3, name: '篠突く雨', table: { str: 25, int_stat: 25 } },
+  ])
+  // 試し撃ちで戦える（75%を切ったら氷雨）
+  const st = createAtb(dummy(), dungeonFighter('amaza', 'normal'), { rng: rngOf(4), maxSec: 999 })
+  runFor(st, 20)
+  const acts = () => st.log.filter(l => l.side === '雨摩座' && (l.type === 'skill' || l.type === 'normal')).map(l => l.skill || '雨礫')
+  assert.ok(acts().length >= 3 && acts().every(a => a === '雨礫'))
+  const n0 = acts().length
+  st.b.hp = Math.floor(st.b.base.hp * 0.55)
+  runFor(st, 6)
+  assert.equal(acts()[n0], '氷雨')
+  assert.deepEqual(buffLog(st, '雨摩座'), ['霧雨の帳'])
 })

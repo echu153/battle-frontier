@@ -31,6 +31,20 @@ export const DIFF_KEYS = ['normal', 'hard', 'expert', 'master']
 //   power と atk・hp は測って決めた（推奨戦闘力の人で：半分は1回の挑戦で負けずに倒し、残りは2回目で倒す）。
 //   power は推奨LVの場所のボスの戦闘力（ノーマル＝②-③の474・ハード＝⑥-①959と⑥-②1163の間を推奨LVで割った1027）
 //   ready:false の難易度はまだ呼べない（数字を決めていない）
+//   summon:false のボスはまだ呼べない（試し撃ちだけ）
+// 黒龍の強さ（雨摩座も同じ数字を使う）
+const VARUZENOKU_DIFFS = {
+  // 2026-10-29 鈍足を「ゲージ20%遅く」にしてエンジンで測り直した（前はノーマル 攻撃0.42倍・HP7000）。
+  //   ノーマル：0.42倍・7000だと1回で倒せたのが22人中6人に減った → 0.35倍・6500で12人（残りも全員2回目）
+  //   ハード：0.42倍だと3回かかる人が1人いた → 0.4倍で22人中13人が1回・全員2回まで
+  // 2026-10-30 HPの節目のバフ（60%で守り+25%・30%で攻撃+25%）を入れて測り直した（HPはそのまま＝サーバーの表は変えない）：
+  //   ノーマル：0.35倍のままだと1回で倒せたのが22人中10人 → 0.33倍で12人（全員2回まで）
+  //   ハード：0.4倍のままだと12人・3回かかる人が1人 → 0.38倍で12人（全員2回まで）
+  normal: { label: 'ノーマル', area: 2, recLv: 25, recPower: 500, power: 474, atk: 0.33, hp: 6500 },
+  hard: { label: 'ハード', area: 5, recLv: 45, recPower: 1050, power: 1027, atk: 0.38, hp: 15000 },
+  expert: { label: 'エキスパート', area: 8, recLv: 65, ready: false },
+  master: { label: 'マスター', area: 12, recLv: 80, ready: false },
+}
 export const DUNGEON_BOSSES = {
   varuzenoku: {
     name: '黒龍ヴァルゼノク', kind: 'phys', race: 'ドラゴン',
@@ -53,23 +67,54 @@ export const DUNGEON_BOSSES = {
         { min: 0.25, weights: { '焦熱の吐息': 50, '黒翼烈風': 50 } },                     // 50%以下は毎回技
         { min: -1, weights: { '焦熱の吐息': 40, '黒翼烈風': 40, '終焉の黒焔': 20 } },
       ],
+      // HPの節目で付くバフ（消えない・消せない・atb.js の checkHpBuffs）。名前は黒龍の鱗と怒りから
+      buffs: [
+        { at: 0.6, name: '黒鱗の鎧', table: { vit: 25 } },
+        { at: 0.3, name: '逆鱗', table: { str: 25, int_stat: 25 } },
+      ],
     },
-    diffs: {
-      // 2026-10-29 鈍足を「ゲージ20%遅く」にしてエンジンで測り直した（前はノーマル 攻撃0.42倍・HP7000）。
-      //   ノーマル：0.42倍・7000だと1回で倒せたのが22人中6人に減った → 0.35倍・6500で12人（残りも全員2回目）
-      //   ハード：0.42倍だと3回かかる人が1人いた → 0.4倍で22人中13人が1回・全員2回まで
-      normal: { label: 'ノーマル', area: 2, recLv: 25, recPower: 500, power: 474, atk: 0.35, hp: 6500 },
-      hard: { label: 'ハード', area: 5, recLv: 45, recPower: 1050, power: 1027, atk: 0.4, hp: 15000 },
-      expert: { label: 'エキスパート', area: 8, recLv: 65, ready: false },
-      master: { label: 'マスター', area: 12, recLv: 80, ready: false },
+    diffs: VARUZENOKU_DIFFS,
+  },
+  // 【確定】2026-10-30 ユーザー「あまざも黒龍と同じような行動パターンにして」→選択「黒龍の裏返し」：
+  //   黒龍の物理と魔法を入れ替えた形（魔法が主）。節目・技の出る割合・強さ（diffs）は黒龍と同じ。
+  //   ★まだ呼べない（summon: false＝ダンジョンの入口に出ない・サーバーの表にも無い）。いまは試し撃ちだけ
+  amaza: {
+    name: '雨摩座', kind: 'mag', race: '妖精', summon: false,   // 雨の精霊＝妖精（精霊も入れる・monsterRace.js）
+    dist: { hp: 40, mp: 6, str: 12, dex: 7, agi: 7, int_stat: 16, vit: 9, luk: 3 },
+    // 通常攻撃が雨礫（魔法1.0倍）
+    skills: [
+      { name: '氷雨', kind: 'mag', mult: 1.6, proc: 100, mp: 0, ail: { key: 'slow', chance: 70 } },
+      { name: '水縛の帯', kind: 'phys', mult: 1.8, proc: 100, mp: 0, ail: { key: 'paralyze', chance: 30 } },
+      { name: '水天葬', kind: 'mag', mult: 3.0, proc: 100, mp: 0 },   // 倍率2.5以上＝撃つ前に構え（5秒・防御で半分）
+    ],
+    pattern: {
+      steps: [
+        { at: 0.75, skill: '氷雨' },
+        { at: 0.5, skill: '水縛の帯' },
+        { at: 0.25, skill: '水天葬' },
+      ],
+      bands: [
+        { min: 0.75, weights: {} },
+        { min: 0.5, weights: { '氷雨': 30 } },
+        { min: 0.25, weights: { '氷雨': 50, '水縛の帯': 50 } },
+        { min: -1, weights: { '氷雨': 40, '水縛の帯': 40, '水天葬': 20 } },
+      ],
+      // 名前は雨から（霧雨で身を包む→篠突く雨＝激しく降る）
+      buffs: [
+        { at: 0.6, name: '霧雨の帳', table: { vit: 25 } },
+        { at: 0.3, name: '篠突く雨', table: { str: 25, int_stat: 25 } },
+      ],
     },
+    diffs: VARUZENOKU_DIFFS,
   },
 }
 
 export const diffOf = (bossKey, diffKey) => DUNGEON_BOSSES[bossKey]?.diffs?.[diffKey] || null
 export const isDiffReady = (bossKey, diffKey) => { const d = diffOf(bossKey, diffKey); return !!d && d.ready !== false }
 // 行ったことのあるエリアの一番先（sortie.js の openAreaOf）で、その難易度を呼べるか
-export const isDiffUnlocked = (bossKey, diffKey, reachedArea) => isDiffReady(bossKey, diffKey) && (reachedArea || 1) >= diffOf(bossKey, diffKey).area
+// 呼べるボスか（summon:false＝まだ呼べない・試し撃ちだけ）
+export const isSummonable = (bossKey) => !!DUNGEON_BOSSES[bossKey] && DUNGEON_BOSSES[bossKey].summon !== false
+export const isDiffUnlocked = (bossKey, diffKey, reachedArea) => isSummonable(bossKey) && isDiffReady(bossKey, diffKey) && (reachedArea || 1) >= diffOf(bossKey, diffKey).area
 
 // 挑戦1回に使うスタミナ。owner＝呼んだ人か・tries＝その人がこのボスにもう挑んだ回数
 export const tryStaminaOf = (owner, tries) => (owner ? (tries > 0 ? STAMINA_OWNER : STAMINA_OWNER_FIRST) : STAMINA_HELPER)

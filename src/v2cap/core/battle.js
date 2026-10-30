@@ -673,9 +673,12 @@ function uniqueSkillUsed(me, idx, log) {
 }
 
 // 相手の強化（プラスの補正）をすべて消す（禁書アポクリファ）。消した数を返す
+// ★ATBのボスの「HPの節目のバフ」（foe.lockBuffs・消せない）は消さない＝そのぶんしか乗っていないステは数えない
+//   （ほかのバフと重なっているステは消す。節目のぶんは atb.js が足し直す）
+const dispellable = (foe, k, v) => v > (foe.lockBuffs?.[k] || 0)
 function dispelAll(foe) {
   let n = 0
-  for (const [k, v] of Object.entries(foe.buffs)) if (v > 0) { delete foe.buffs[k]; n++ }
+  for (const [k, v] of Object.entries(foe.buffs)) if (v > 0 && dispellable(foe, k, v)) { delete foe.buffs[k]; n++ }
   for (const t of foe.timedBuffs || []) {
     for (const [k, v] of Object.entries(t.table || {})) if (v > 0) { delete t.table[k]; n++ }
   }
@@ -1517,7 +1520,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   // ★バフ消去（異端審問官）：相手に乗っているプラス補正を確率で1つ消す
   // 聖水のアセンション＝dispel.n:2 で2つまで消す
   if (skill.dispel && roll(skill.dispel.chance, rng)) for (let di = 0; di < (skill.dispel.n || 1); di++) {
-    const ups = Object.entries(foe.buffs).filter(([, v]) => v > 0)
+    const ups = Object.entries(foe.buffs).filter(([k, v]) => v > 0 && dispellable(foe, k, v))
     if (ups.length) {
       const [k] = ups[Math.floor(rng() * ups.length)]
       delete foe.buffs[k]

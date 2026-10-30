@@ -29,6 +29,9 @@ export const fxEventsOf = (entries, aName, bName) => {
       if (landed && (l.damage || 0) > 0) out.push({ kind: 'hit', side: other(s), amount: l.damage, crit: !!l.crit })
       else if (!landed) out.push({ kind: 'miss', side: other(s) })
       if (l.drain > 0) out.push({ kind: 'heal', side: s, amount: l.drain })
+    } else if (l.type === 'hpBuff') {
+      // HPの節目で付いたボスのバフ（2026-10-30）：名前の帯（強い色）＋体が赤く燃える（RAGE_SEC）
+      out.push({ kind: 'rage', side: s, skill: l.skill })
     } else if (l.type === 'buff' || l.type === 'guard') {
       out.push({ kind: 'use', side: s, skill: l.skill || null })
     } else if (l.type === 'heal' || l.type === 'regenTick') {
@@ -58,6 +61,7 @@ export const LUNGE_SEC = 0.32
 export const HIT_SEC = 0.3
 export const POP_SEC = 1.0
 export const GLOW_SEC = 0.45
+export const RAGE_SEC = 1.4   // 節目のバフが付いたとき、体が赤く燃える長さ（絵のエフェクトが届くまでの仮）
 
 // 踏み込みの量（px）。0→前へ→0 の山
 export const lungeOf = (elapsed, px = 22) =>
@@ -69,16 +73,21 @@ export const shakeOf = (elapsed, px = 6) =>
 // 【確定】2026-10-30 ユーザー「敵のスキル発動時はスキル名を上に表示させてほしい、FFみたいに」：
 //   相手（side）が名前のある技を使った（act に skill がある）とき、舞台の上に技の名前の帯を BANNER_SEC のあいだ出す。
 //   通常攻撃（skill が無い）は出さない。はじめの BANNER_IN 秒で出てきて、終わりの BANNER_OUT 秒で消える。続けて技を使ったら新しいほうに替わる
-//   → { name, op（濃さ 0〜1）, k（出てきた割合 0〜1・すべり込みに使う）, t0 } か null
+//   → { name, op（濃さ 0〜1）, k（出てきた割合 0〜1・すべり込みに使う）, t0, rage } か null
+//   【確定】2026-10-30 HPの節目のバフ（rage・ユーザー「バフは６０％と３０％以下のタイミングで自動発動してほしい、名前も固有」）も同じ帯に出す。
+//     rage＝true のときは帯の色を変える（画面）。長さは RAGE_BANNER_SEC（技より少し長く見せる）
 export const BANNER_SEC = 1.8
+export const RAGE_BANNER_SEC = 2.4
 export const BANNER_IN = 0.12
 export const BANNER_OUT = 0.3
 export const skillBannerAt = (fx, now, side = 'b') => {
   let last = null
-  for (const f of fx || []) if (f.kind === 'act' && f.side === side && f.skill && f.t0 <= now && (!last || f.t0 >= last.t0)) last = f
+  for (const f of fx || []) {
+    if ((f.kind === 'act' || f.kind === 'rage') && f.side === side && f.skill && f.t0 <= now && (!last || f.t0 >= last.t0)) last = f
+  }
   if (!last) return null
-  const e = now - last.t0
-  if (e >= BANNER_SEC) return null
-  const k = Math.min(1, e / BANNER_IN), out = Math.max(0, (e - (BANNER_SEC - BANNER_OUT)) / BANNER_OUT)
-  return { name: last.skill, op: k * (1 - out), k, t0: last.t0 }
+  const e = now - last.t0, rage = last.kind === 'rage', len = rage ? RAGE_BANNER_SEC : BANNER_SEC
+  if (e >= len) return null
+  const k = Math.min(1, e / BANNER_IN), out = Math.max(0, (e - (len - BANNER_OUT)) / BANNER_OUT)
+  return { name: last.skill, op: k * (1 - out), k, t0: last.t0, rage }
 }

@@ -1,8 +1,8 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react'
 import { TEXT } from './v2ui.js'
-import { buffChips, ailChips, stateChips, needNow, CAST_SEC } from '../core/atb.js'
+import { buffChips, hpBuffChips, ailChips, stateChips, needNow, CAST_SEC } from '../core/atb.js'
 import { STAT_DEFS } from '../core/stats.js'
-import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC, skillBannerAt } from '../lib/atbFx.js'
+import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC, RAGE_SEC, skillBannerAt } from '../lib/atbFx.js'
 import { JP_BOLD } from './casinoStyle.js'
 import { rubySegmentsOf } from '../lib/skillRuby.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
@@ -69,9 +69,12 @@ const Chips = ({ st, side, right }) => {
   const buffs = buffChips(side, st.t)
   const ails = ailChips(st, side)
   const states = stateChips(side)
-  if (!buffs.length && !ails.length && !states.length) return null
+  const rages = hpBuffChips(side)
+  if (!buffs.length && !ails.length && !states.length && !rages.length) return null
   return (
     <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginTop:'4px', justifyContent: right ? 'flex-end' : 'flex-start' }}>
+      {/* HPの節目で付いたボスのバフ（消えない・消せない＝秒は出さない） */}
+      {rages.map(c => <span key={`r${c.name}`} style={chip('#ff7a4d', '#200800')}>🔥 {c.name} {buffText(c.table)}</span>)}
       {buffs.map((c, i) => (
         <span key={`b${i}`} style={chip(c.debuff ? '#ff88bb' : '#66bbff')}>{buffText(c.table)} {c.sec}秒</span>
       ))}
@@ -321,12 +324,18 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   const dx = (frame >= 0 || rig ? 0 : lungeOf(now - lastOf('act')) * dir) + shakeOf(now - lastOf('hit'))
   const hitAgo = now - lastOf('hit')
   const glowAgo = now - lastOf('use')
+  const rageAgo = now - lastOf('rage')
   const filters = []
   if (hitAgo >= 0 && hitAgo < HIT_SEC) filters.push('drop-shadow(0 0 6px #ff3344) brightness(1.25)')
   if (glowAgo >= 0 && glowAgo < GLOW_SEC) filters.push('drop-shadow(0 0 10px #ffee88) brightness(1.3)')
+  if (rageAgo >= 0 && rageAgo < RAGE_SEC) {
+    // 2回脈打って消える赤い光（節目のバフ）
+    const k = Math.sin(Math.PI * 2 * rageAgo / RAGE_SEC * 1.0) ** 2 * (1 - rageAgo / RAGE_SEC)
+    filters.push(`drop-shadow(0 0 ${(6 + 14 * k).toFixed(1)}px rgba(255,70,30,${(0.35 + 0.6 * k).toFixed(2)})) brightness(${(1 + 0.35 * k).toFixed(2)})`)
+  }
   if (me.ail.paralyze) filters.push('grayscale(0.6)')
   const down = me.hp <= 0
-  const pops = mine.filter(f => f.kind !== 'act' && f.kind !== 'use' && now >= f.t0 && now - f.t0 < POP_SEC)
+  const pops = mine.filter(f => f.kind !== 'act' && f.kind !== 'use' && f.kind !== 'rage' && now >= f.t0 && now - f.t0 < POP_SEC)
   const need = needNow(me, st.t)
   const align = right ? 'flex-end' : 'flex-start'
   const hpColor = right ? '#cc3344' : '#44cc66'
@@ -440,7 +449,9 @@ const easeOut = (k) => 1 - (1 - k) * (1 - k)
 //   scene＝派手な演出（lib/bossScene.js の stageSceneOf）：雲の稲光と明るさに使う。滝の絵の動きは fallAt
 function BossFx({ fx, now, geo, art, cast = null, castEnd = -1e9, scene = null }) {
   const s = geo ? geo.b.w / art.base : 1
-  const extras = []   // 滝の流れる水・泡立つ波（裏返した絵）
+  const extras = []   // 滝の流れる水・泡立つ波（裏返した絵）・氷雨の流れる雨
+  // ★同じ技が続けて出て絵が重なったら新しいほうに置き換える（足すと同じ key が2つになる・2026-10-30 雨摩座の氷雨が続いたとき）
+  const putExtra = (el) => { const i = extras.findIndex(e => e.key === el.key); if (i >= 0) extras.splice(i, 1); extras.push(el) }
   const to = geo && { x: geo.p.x + geo.p.w / 2, y: geo.p.y + geo.p.h * FX_TARGET_Y }
   const acts = geo ? fx.filter(f => f.kind === 'act' && f.side === 'b' && f.motion?.fx) : []
   // 構えている技の絵：名前が同じ技・無ければ最後の技（lib/bossArt.js の bossMotionKeyOf と同じ＝構えた技は最後の技を流す）
@@ -484,8 +495,8 @@ function BossFx({ fx, now, geo, art, cast = null, castEnd = -1e9, scene = null }
               const sTop = feet - a.h * sc * fall.sy, sH = a.h * sc * fall.sy, pc = (y) => ((y - sTop) / sH) * 100
               const mask = `linear-gradient(to bottom, transparent 0%, transparent ${Math.max(40, pc(cut)).toFixed(1)}%, #000 ${Math.max(56, pc(cut) + 12).toFixed(1)}%, #000 ${Math.max(56, pc(cut) + 12, pc(front) - 8).toFixed(1)}%, transparent ${pc(front).toFixed(1)}%)`
               on = { frame: 0, x: to.x, y: feet + bob, ay: a.h, s: sc, sx: fall.sx, sy: fall.sy, op: Math.min(1, ms / 90), filter: `brightness(${fall.bright.toFixed(3)})`, mask }
-              extras.push(<Sprite key={`${a.src}#flip`} a={a} {...on} y={on.y - bob * 2} flip op={on.op * (0.35 + 0.3 * Math.sin(actMs / 75))} />)
-              extras.push(<PourFlow key={`${a.src}#flow`} a={a} flow={flow} x={to.x} sky={sky} bottom={sTop + sH * 0.62} s={sc} fall={fall}
+              putExtra(<Sprite key={`${a.src}#flip`} a={a} {...on} y={on.y - bob * 2} flip op={on.op * (0.35 + 0.3 * Math.sin(actMs / 75))} />)
+              putExtra(<PourFlow key={`${a.src}#flow`} a={a} flow={flow} x={to.x} sky={sky} bottom={sTop + sH * 0.62} s={sc} fall={fall}
                 ms={actMs - m.hitMs} front={front} cut={cut} op={on.op} />)
             } else {
               const p = (lead ? easeOut(Math.min(1, ms / lead)) : 1) * 112, top = (a.fadeTop || 0) * 100, c = top + (100 - top) * fall.cut
@@ -518,7 +529,7 @@ function BossFx({ fx, now, geo, art, cast = null, castEnd = -1e9, scene = null }
               const top = sTop + fl.at[1] * sc * sy, H = colH * sc * sy, colPct = (y) => ((y / 100) * a.h - fl.at[1]) / colH * 100
               const f = colPct(p)
               // 流れる速さは前と同じ（雨の所＝flow.at の高さで数える）
-              extras.push(<FlowColumn key={`${a.src}#rain`} flow={fl} left={sLeft + fl.at[0] * sc} top={top} W={fl.at[2] * sc} H={H} ms={ms} speed={RAIN_PX_PER_SEC} unit={fl.at[3] * sc * sy} op={op}
+              putExtra(<FlowColumn key={`${a.src}#rain`} flow={fl} left={sLeft + fl.at[0] * sc} top={top} W={fl.at[2] * sc} H={H} ms={ms} speed={RAIN_PX_PER_SEC} unit={fl.at[3] * sc * sy} op={op}
                 mask={alphaMask([0, 10, 90, 100, f - 10, f], (y) => Math.min(1, y / 10, (100 - y) / 10) * Math.min(1, Math.max(0, (f - y) / 10)))} />)
             } else if (a.anim === 'drop') {
               // 上から下へ降りる（雨・滝）：lead のあいだに上から見えてくる（降りる先のふちはぼかす）。fadeTop＝絵の上のはしをぼかす割合（滝の上を雲になじませる）
@@ -786,18 +797,20 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
 //     名前の行の、名前の横の空いた所のまん中に置く（絵の枠の外＝重ならない）・字は12px→11px・帯の高さを名前の行に収める
 //   【確定】2026-10-30 ユーザー「これIDダンジョンは全部これね、スキルの感じルぴ振れる？」：漢字にルビ（lib/skillRuby.js）。
 //     ルビのぶん帯が高くなるので、名前の行の下にそろえて上へはみ出させる（名前の行の高さは変えない＝帯が出ても下の絵がずれない）
+//   【確定】2026-10-30 ユーザー「バフは６０％と３０％以下のタイミングで自動発動してほしい、名前も固有」：HPの節目のバフの名前も同じ帯に出す
+//     （b.rage＝赤と金の帯・技より長く）。付いた瞬間は体が赤く2回脈打つ（RAGE_SEC・絵のエフェクトが届くまでの仮）。札は「🔥 名前 効果」で秒なし
 const SkillBanner = ({ b }) => {
   if (!b) return null
   return (
     <div style={{ position:'absolute', bottom:0, left:'50%', zIndex: 5, pointerEvents:'none', opacity: b.op,
       transform:`translate(-50%, ${((1 - b.k) * 3).toFixed(1)}px)`, maxWidth:'100%', lineHeight: 1.25,
-      padding:'1px 10px', borderRadius:'3px', border:'1px solid rgba(220,232,255,0.55)',
-      background:'linear-gradient(180deg, rgba(10,18,44,0.88) 0%, rgba(2,6,20,0.88) 100%)',
-      boxShadow:'0 2px 10px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(0,0,0,0.6)',
-      color:'#ffffff', fontFamily: JP_BOLD, fontWeight: 700, fontSize:'11px', letterSpacing:'0.08em', whiteSpace:'nowrap',
-      overflow:'hidden', textOverflow:'ellipsis', textShadow:'0 1px 2px #000, 0 0 6px rgba(120,160,255,0.45)' }}>
+      padding:'1px 10px', borderRadius:'3px', border: b.rage ? '1px solid rgba(255,190,90,0.85)' : '1px solid rgba(220,232,255,0.55)',
+      background: b.rage ? 'linear-gradient(180deg, rgba(70,10,4,0.92) 0%, rgba(28,2,0,0.92) 100%)' : 'linear-gradient(180deg, rgba(10,18,44,0.88) 0%, rgba(2,6,20,0.88) 100%)',
+      boxShadow: b.rage ? '0 2px 10px rgba(0,0,0,0.55), 0 0 10px rgba(255,90,30,0.55), inset 0 0 0 1px rgba(0,0,0,0.6)' : '0 2px 10px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(0,0,0,0.6)',
+      color: b.rage ? '#ffe2a0' : '#ffffff', fontFamily: JP_BOLD, fontWeight: 700, fontSize:'11px', letterSpacing:'0.08em', whiteSpace:'nowrap',
+      overflow:'hidden', textOverflow:'ellipsis', textShadow: b.rage ? '0 1px 2px #000, 0 0 6px rgba(255,120,40,0.6)' : '0 1px 2px #000, 0 0 6px rgba(120,160,255,0.45)' }}>
       {rubySegmentsOf(b.name).map((sg, i) => (sg.ruby
-        ? <ruby key={i}>{sg.text}<rt style={{ fontSize:'7px', letterSpacing:0, color:'#cfe0ff', fontWeight: 700 }}>{sg.ruby}</rt></ruby>
+        ? <ruby key={i}>{sg.text}<rt style={{ fontSize:'7px', letterSpacing:0, color: b.rage ? '#ffd2a0' : '#cfe0ff', fontWeight: 700 }}>{sg.ruby}</rt></ruby>
         : <span key={i}>{sg.text}</span>))}
     </div>
   )

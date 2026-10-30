@@ -95,6 +95,9 @@ export const buildBattleLog = (r, you, foe) => {
     } else if (l.type === 'cast') {
       // ATB専用：ボスの大技の詠唱（このあと sec 秒で撃つ）
       out.push({ text:`⚠ ${actor}は「${l.skill}」の構えに入った！（${l.sec}秒後）`, color:'#ff9944' })
+    } else if (l.type === 'hpBuff') {
+      // ATB専用：IDダンジョンのボスがHPの節目で付けるバフ（消えない・消せない・2026-10-30）
+      out.push({ text:`🔥 ${actor}の${l.skill}！ ${l.effect}（戦いの終わりまで）`, color:'#ff7a4d' })
     } else if (l.type === 'air') {
       out.push({ text:`🕊 ${actor}は跳び上がった！`, color: LOG_COLOR.extra })
     } else if (l.type === 'land') {

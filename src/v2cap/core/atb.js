@@ -34,7 +34,7 @@ import {
   createSide, liveStats, mpCostOf, priorityOf, takeAction, tickBleedAfterAct, BUFF_MIN_PCT, BEAST_FORMS,
   battleStart, startOfTurn, endOfTurn,
 } from './battle.js'
-import { STAT_KEYS } from './stats.js'
+import { STAT_KEYS, STAT_DEFS } from './stats.js'
 import { AIL_KEYS, AIL_LABEL, hasAilment, procCutOf, isSealed, usesMp } from './ailments.js'
 import { ichijiSkip, agitCutOf, STK_LABEL } from './battleIchiji.js'
 
@@ -155,6 +155,8 @@ const createAtbSide = (fighter, band, { ai = false, cast = false } = {}) => {
   side.acted = 0               // ATBで行動した回数（テスト・画面用）
   // ボスの技の出し方（パターン）と、持ち越しのHP（IDダンジョン：最大HPは全体・いまのHPは前の挑戦の残り）
   side.pattern = fighter.pattern || null
+  side.lockBuffs = {}          // HPの節目で付いたバフ（ステ → %・消えない・消せない）＝checkHpBuffs
+  side.hpBuffsOn = []          // 付いた節目のバフ [{ name, table }]（画面の札・記録）
   if (fighter.hpNow != null) side.hp = Math.max(1, Math.min(side.base.hp, Math.floor(fighter.hpNow)))
   side.startHp = side.hp       // この戦闘を始めたときのHP（削った量＝startHp − いまのHP）
   return side
@@ -176,6 +178,9 @@ export const createAtb = (fighterA, fighterB, { rng = Math.random, band = null, 
   startOfTurn(st.a, st.b, st.turn, st.log)
   afterEngine(st, st.a, { ...st.a.buffs }, true)
   afterEngine(st, st.b, { ...st.b.buffs }, true)
+  // 持ち越しで、もう切っている節目のバフは、はじめから付いている
+  checkHpBuffs(st, st.a)
+  checkHpBuffs(st, st.b)
   return st
 }
 
@@ -183,6 +188,8 @@ export const createAtb = (fighterA, fighterB, { rng = Math.random, band = null, 
 // baseBuffs（消えないぶん）＋ 生きている timed を足し直す
 const recomputeBuffs = (side) => {
   const b = { ...side.baseBuffs }
+  // HPの節目で付いたボスのバフ（消えない・消せない＝バフ消しで落ちても、ここで足し直す）
+  for (const [k, v] of Object.entries(side.lockBuffs || {})) b[k] = (b[k] || 0) + v
   for (const e of side.timed) {
     for (const [k, v] of Object.entries(e.table)) b[k] = Math.max(BUFF_MIN_PCT, (b[k] || 0) + v)
   }
@@ -307,6 +314,27 @@ const patternPick = (side) => {
   }
   return side.patNext
 }
+// ===== HPの節目で付くボスのバフ（IDダンジョン・pattern.buffs）=====
+// 【確定】2026-10-30 ユーザー「バフは６０％と３０％以下のタイミングで自動発動してほしい、名前も固有」＋選択「消えない・消せない」：
+//   pattern.buffs ＝ [{ at, name, table: { ステ: % } }]。HPの割合（持ち越しの全体）が at 以下になった**瞬間に**付く（ボスの手番は使わない）。
+//   戦いの終わりまで消えない・**バフ消しでも消えない**（side.lockBuffs＝消えない枠 baseBuffs・時間で切れる枠 timed とは別。recomputeBuffs が足し直す）。
+//   持ち越しで挑戦の始めにもう切っている節目のバフは、はじめから付いている（記録にも出す＝名前の帯が出る）。倒れた側には付かない
+const effectText = (table) => Object.entries(table).map(([k, v]) => `${STAT_DEFS[k]?.label || k}${v >= 0 ? '+' : ''}${v}%`).join('・')
+const checkHpBuffs = (st, side) => {
+  const list = side.pattern?.buffs
+  if (!list?.length || side.hp <= 0) return
+  let any = false
+  for (const b of list) {
+    if (hpFracOf(side) > b.at || side.hpBuffsOn.some(x => x.name === b.name)) continue
+    side.hpBuffsOn.push({ name: b.name, table: { ...b.table } })
+    for (const [k, v] of Object.entries(b.table)) side.lockBuffs[k] = (side.lockBuffs[k] || 0) + v
+    st.log.push({ side: side.name, type: 'hpBuff', skill: b.name, effect: effectText(b.table) })
+    any = true
+  }
+  if (any) recomputeBuffs(side)
+}
+const checkHpBuffsBoth = (st) => { checkHpBuffs(st, st.a); checkHpBuffs(st, st.b) }
+
 // 挑戦の始め：もう切っている節目は撃ったことにする
 const initPattern = (side, rng) => {
   side.patRng = rng
@@ -476,6 +504,7 @@ const stepOnce = (st) => {
     afterEngine(st, a, ba, true)
     afterEngine(st, b, bb, true)
     if (finish(st)) return
+    checkHpBuffsBoth(st)   // 毒・火傷などで節目を切った
   }
   expire(st, a)
   expire(st, b)
@@ -498,6 +527,7 @@ const stepOnce = (st) => {
     if (aFirst) startAct(st, a, b)
     else startAct(st, b, a)
     if (finish(st)) return
+    checkHpBuffsBoth(st)
   }
 
   // 詠唱が終わった大技を撃つ。★同じ刻みで動ける側は先に動く（上の段）＝構えの終わりと次の行動が同じ瞬間でも防御が間に合う
@@ -511,6 +541,7 @@ const stepOnce = (st) => {
     const ok = skill && (skill.mpPct ? me.mp > 0 : mpCostOf(me, skill) <= me.mp)
     act(st, me, foe, ok ? { idx: c.idx, skill, cd: c.cd } : { idx: null, skill: null })
     if (finish(st)) return
+    checkHpBuffsBoth(st)
   }
 
   if (st.t + EPS >= st.maxSec) { st.over = true; st.winner = 'draw' }
@@ -534,6 +565,8 @@ export const runFor = (st, sec) => {
 }
 
 // ===== 画面用のまとめ =====
+// HPの節目で付いたボスのバフ（消えない・消せない）：[{ name, table }]
+export const hpBuffChips = (side) => side.hpBuffsOn || []
 // 時間で切れるバフ・デバフ（残り秒つき）
 export const buffChips = (side, now) => side.timed
   .map(e => ({ table: e.table, debuff: e.debuff, sec: Math.max(0, Math.ceil(e.until - now)), pct: (e.until - now) / e.sec }))
