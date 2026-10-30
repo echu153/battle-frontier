@@ -122,7 +122,8 @@ const rigWrap = (art, pose) => {
 //   部品の立ち絵とポーズの絵を切り替える（ポーズの絵も全体の姿勢 x・y・r で動く）。ghosts＝飛び込む勢いの残像（前の姿勢でポーズの絵を薄く）
 //   着物のひらひら（art.flutter）：体の動きの箱の中で、横の帯ごとに同じ中身（部品・ポーズの絵・砂ぼこり）を切り抜いて描き、帯ごとに左右へずらして傾ける
 //   （帯の上の境目で dx・下へ行くほど tan ずつずれる＝隣の帯と境目でつながる）。帯は少し重ねて切る（境目に細いすき間が出ない）
-//   HPの節目のバフのオーラ（aura＝{ p, op, scale, front }・2026-10-30）：front は竜の手前（鎧の殻）・無ければいちばん奥（逆鱗の闘気）。体の動きでは動かさない
+//   HPの節目のバフのオーラ（aura＝{ p, op, scale, front, glow }・2026-10-30）：front は竜の手前（鎧の殻）・glow は光として手前に明るく重ねる（雨摩座の篠突く雨）・
+//   どちらも無ければいちばん奥（逆鱗の闘気）。体の動きでは動かさない
 const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [], tMs = 0, aura = null }) => {
   const box = { x: 0, y: 0, w: art.base, h: art.base }
   const free = art.parts.filter(p => p.free && !p.nest)
@@ -141,7 +142,7 @@ const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [
   const auraEl = aura && aura.op > 0.001 ? <AuraArt art={art} a={aura} /> : null
   return (
     <>
-      {auraEl && !aura.front && auraEl}
+      {auraEl && !aura.front && !aura.glow && auraEl}
       {free.length > 0 && (
         <div style={rigWrap(art, freePose)}>
           {free.map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={freePose} />)}
@@ -160,7 +161,7 @@ const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [
           </div>
         ))}
       </div>
-      {auraEl && aura.front && auraEl}
+      {auraEl && (aura.front || aura.glow) && auraEl}
     </>
   )
 }
@@ -170,11 +171,11 @@ const PoseArt = ({ art, p, op = 1 }) => (
     style={{ position:'absolute', left:`${(p.x / art.base) * 100}%`, top:`${(p.y / art.base) * 100}%`, width:`${(p.w / art.base) * 100}%`, height:`${(p.h / art.base) * 100}%`,
       maxWidth:'none', userSelect:'none', pointerEvents:'none', opacity: op < 1 ? op : undefined }} />
 )
-// HPの節目のバフのオーラ1枚（立ち絵の px で置く）：広げる中心は、手前の殻＝絵の真ん中・後ろの闘気＝足元（下のまん中）
+// HPの節目のバフのオーラ1枚（立ち絵の px で置く）：広げる中心は、手前の殻＝絵の真ん中・後ろの闘気と光の闘気＝足元（下のまん中）。光（glow）は下の絵を明るくする重ね方（screen）
 const AuraArt = ({ art, a }) => (
   <img src={a.p.src} alt="" draggable={false} decoding="sync"
     style={{ position:'absolute', left:`${(a.p.x / art.base) * 100}%`, top:`${(a.p.y / art.base) * 100}%`, width:`${(a.p.w / art.base) * 100}%`, height:`${(a.p.h / art.base) * 100}%`,
-      maxWidth:'none', userSelect:'none', pointerEvents:'none', opacity: a.op < 1 ? a.op : undefined,
+      maxWidth:'none', userSelect:'none', pointerEvents:'none', opacity: a.op < 1 ? a.op : undefined, mixBlendMode: a.glow ? 'screen' : undefined,
       transform:`scale(${a.scale.toFixed(3)})`, transformOrigin: a.front ? '50% 50%' : '50% 100%' }} />
 )
 // 砂ぼこり（k＝出てからの割合 0〜1）：打った所（しっぽの下のふち）から左右へ広がり、少し上がりながら薄れる。はじめの 12% で濃くなる
@@ -330,7 +331,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   // 技のポーズの絵と残像（構えのあいだは部品の立ち絵）
   // 構えのあいだのポーズの絵（雨摩座＝構えた技の構えの絵・lib/bossIllust.js の illustCastShowAt・黒龍は無し）
   const cs = casting ? illustCastShowAt(rig, me.cast.name, (st.t - me.cast.start) * 1000) : null
-  // HPの節目のバフの絵（黒龍・lib/bossIllust.js の illustBuffShowAt）：付いた瞬間にバフのポーズの絵とオーラ。技を流しているあいだ・構えのあいだは技が先（オーラは出す）
+  // HPの節目のバフの絵（黒龍・雨摩座・lib/bossIllust.js の illustBuffShowAt）：付いた瞬間にバフのポーズの絵とオーラ。技を流しているあいだ・構えのあいだは技が先（オーラは出す）
   const lastRage = mine.reduce((p, f) => (f.kind === 'rage' && f.t0 <= now && (!p || f.t0 >= p.t0) ? f : p), null)
   const buff = rig && lastRage ? illustBuffShowAt(rig, lastRage.skill, (now - lastRage.t0) * 1000) : null
   const buffArt = buff ? rig.buffs[lastRage.skill] : null
@@ -339,7 +340,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   const show = buffPose ? { rig: buff.rig, poses: buff.pose > 0.001 ? [{ name: lastRage.skill, op: buff.pose }] : [] }
     : rigMotion && !casting ? illustShowAt(rigMotion, rigMs) : cs?.show || null
   const showMotion = buffPose ? { poses: { [lastRage.skill]: buffArt.pose } } : cs ? cs.motion : rigMotion
-  const aura = buff?.aura && buffArt.aura ? { p: buffArt.aura, op: buff.aura.op * buffArt.auraOp, scale: buff.aura.scale, front: buffArt.front } : null
+  const aura = buff?.aura && buffArt.aura ? { p: buffArt.aura, op: buff.aura.op * buffArt.auraOp, scale: buff.aura.scale, front: buffArt.front, glow: buffArt.glow } : null
   const ghosts = rigMotion && !casting && !buffPose ? illustGhostsAt(rigMotion, rigMs).map(g => ({ ...g, pose: illustPoseAt(rig.key, rigMotion, g.ms, now * 1000 - (rigMs - g.ms)) })) : []
   const dx = (frame >= 0 || rig ? 0 : lungeOf(now - lastOf('act')) * dir) + shakeOf(now - lastOf('hit'))
   const hitAgo = now - lastOf('hit')

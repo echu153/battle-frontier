@@ -66,12 +66,16 @@ export const BOSS_ILLUST = {
       bind: { windup: { x: -36, y: -4, w: 640, h: 640 }, strike: { x: 7, y: -31, w: 637, h: 636 } },
       deluge: { windup: { x: 3, y: -10, w: 641, h: 632 }, strike: { x: 9, y: -65, w: 636, h: 640 } },
     },
+    buffs: {
+      veil: { pose: { x: 79, y: -57, w: 534, h: 640 }, aura: { x: 59, y: 8, w: 557, h: 626 } },
+      downpour: { pose: { x: 64, y: -14, w: 640, h: 640 }, aura: { x: 12, y: 0, w: 621, h: 640 } },
+    },
     fit: {
       water: { s: 1.06, deg: 0, tx: -38, ty: -38, score: 0 },
       body: { s: 0.87, deg: -3, tx: 54, ty: 180, score: -0.292 },
       armC: { s: 1, deg: 0, tx: 0, ty: 0, score: 1.076 },
       armU: { s: 1.085, deg: -2, tx: -122, ty: -80, score: 0.46 },
     },
-    v: { 'il-water': '56a7ccb4', 'il-body': '812a7e41', 'il-armF': '3263d5b5', 'il-armD': 'bdd766a3', 'il-armN': '7eaed282', 'il-head': 'b65aea3c', 'il-armC': 'b8484a39', 'il-armU': 'a1317398', 'il-pose-shot-windup': 'ea94a5a9', 'il-pose-shot-strike': 'd11944c3', 'il-pose-sleet-windup': '8791c6ea', 'il-pose-sleet-strike': '0a0ba8d3', 'il-pose-bind-windup': '4db95084', 'il-pose-bind-strike': '76796101', 'il-pose-deluge-windup': 'd049cf01', 'il-pose-deluge-strike': '2d98d10c', 'il-fx-shot-fly': '89f4d4f3', 'il-fx-shot-hit': 'b458f544', 'il-fx-sleet-hit': '846c1942', 'il-fx-sleet-flow': '0cc0a8c1', 'il-fx-bind-fly': 'ee7ff9a4', 'il-fx-bind-hit': '6d7032af', 'il-fx-deluge-hit': 'd828eed6', 'il-fx-deluge-flow': '604c35d7', 'il-fx-deluge-charge': 'fdaabfa2' },
+    v: { 'il-water': '56a7ccb4', 'il-body': '812a7e41', 'il-armF': '3263d5b5', 'il-armD': 'bdd766a3', 'il-armN': '7eaed282', 'il-head': 'b65aea3c', 'il-armC': 'b8484a39', 'il-armU': 'a1317398', 'il-pose-shot-windup': 'ea94a5a9', 'il-pose-shot-strike': 'd11944c3', 'il-pose-sleet-windup': '8791c6ea', 'il-pose-sleet-strike': '0a0ba8d3', 'il-pose-bind-windup': '4db95084', 'il-pose-bind-strike': '76796101', 'il-pose-deluge-windup': 'd049cf01', 'il-pose-deluge-strike': '2d98d10c', 'il-buff-veil-pose': 'c6a9c61e', 'il-buff-veil-aura': 'ff53ea44', 'il-buff-downpour-pose': '80b7c430', 'il-buff-downpour-aura': '7fc4ee35', 'il-fx-shot-fly': '89f4d4f3', 'il-fx-shot-hit': 'b458f544', 'il-fx-sleet-hit': '846c1942', 'il-fx-sleet-flow': '0cc0a8c1', 'il-fx-bind-fly': 'ee7ff9a4', 'il-fx-bind-hit': '6d7032af', 'il-fx-deluge-hit': 'd828eed6', 'il-fx-deluge-flow': '604c35d7', 'il-fx-deluge-charge': 'fdaabfa2' },
   },
 }

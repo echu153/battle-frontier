@@ -159,6 +159,7 @@ export const BOSS_ILLUST_DEFS = {
     // 【確定】2026-10-30 HPの節目のバフの絵（ユーザー「バフかけたときのエフェクトやイラストも用意しておきたい グラブル意識」）：
     //   バフの名前（lib/dungeon.js の pattern.buffs の name）→ ポーズの全身の絵（pose・技のポーズの絵と同じに切り抜く）と
     //   オーラの絵（aura・立ち絵と同じ大きさに描いた絵を、描いた場所のまま置く）。front＝オーラを竜の手前に重ねる（鎧の殻・auraOp＝いちばん濃いときの濃さ＝竜が透けて見える）・無ければ後ろ（逆鱗の闘気）
+    //   glow＝光として手前に明るく重ねる（screen・後ろの闘気と同じく足元から広がる。雨摩座の篠突く雨）
     buffs: {
       armor: { name: '黒鱗の鎧', pose: '黒鱗の鎧_ポーズ', aura: '黒鱗の鎧_オーラ', front: true, auraOp: 0.6 },
       wrath: { name: '逆鱗', pose: '逆鱗_ポーズ', aura: '逆鱗_オーラ' },
@@ -336,8 +337,18 @@ export const BOSS_ILLUST_DEFS = {
       '氷雨_構え': { dx: -54, dy: -98 }, '氷雨_振り下ろし': { dx: -49, dy: -167 },
       '水縛の帯_構え': { dx: -71, dy: -8 }, '水縛の帯_放つ': { dx: 8, dy: -69 },
       '水天葬_構え': { dx: 7, dy: -34 }, '水天葬_振り下ろし': { dx: 10, dy: -127 },
+      // バフのポーズ（2026-10-30）：帯飾りのまん中の大きな青い玉を、立ち絵の同じ玉（元の絵の px で 581, 437）にそろえる。
+      //   霧雨の帳は袖で上の玉が隠れていて、見えている大きな玉（550, 549）がまん中の玉
+      '霧雨の帳_ポーズ': { dx: 31, dy: -112 }, '篠突く雨_ポーズ': { dx: 126, dy: -27 },
     },
     poseMargin: 100,
+    // 【確定】2026-10-30 HPの節目のバフの絵（黒龍と同じ仕組み・ユーザー「あまざも作った」）：霧雨の帳＝袖で身を包むポーズと霧の帳（手前に半透明）・
+    //   篠突く雨＝両手を天へ掲げて叫ぶポーズと水の闘気。オーラは立ち絵と同じ大きさに描いてもらった絵を、描いた場所のまま置く
+    //   篠突く雨のポーズは髪が枠いっぱいに広がっていて、後ろに置いた闘気がほとんど隠れた＝光として手前に重ねる（glow＝明るくなる重ね方 screen・足元から広がる）
+    buffs: {
+      veil: { name: '霧雨の帳', pose: '霧雨の帳_ポーズ', aura: '霧雨の帳_オーラ', front: true, auraOp: 0.6 },
+      downpour: { name: '篠突く雨', pose: '篠突く雨_ポーズ', aura: '篠突く雨_オーラ', glow: true, auraOp: 0.7 },
+    },
     // 届いたが今は使わない絵（髪・奥の腕は立ち絵と形が違って重ならなかった・頭と手前の腕は立ち絵から切るほうが同じ見た目）
     spare: ['頭', '髪', '腕_手前', '腕_奥'],
     // 待機：[振れ幅（y は枠の割合・ほかは°）, 1回のミリ秒, ずらし（0〜1）] の揺れの足し算。周期をずらして、水の中で漂うように
@@ -766,13 +777,13 @@ export const bossIllustOf = (key) => {
     for (const [name, a] of Object.entries(art.poses?.[mk] || {})) out[name] = { ...a, src: srcOf(key, illustPoseKindOf(mk, name)) }
     return Object.keys(out).length ? out : null
   }
-  // HPの節目のバフの絵（できているものだけ）：バフの名前 → { pose, aura（{ src, x, y, w, h } か null）, front（オーラを手前に）, auraOp（オーラのいちばん濃いとき） }
+  // HPの節目のバフの絵（できているものだけ）：バフの名前 → { pose, aura（{ src, x, y, w, h } か null）, front（オーラを手前に）, glow（光として手前に明るく重ねる）, auraOp（オーラのいちばん濃いとき） }
   const buffs = {}
   for (const [id, d] of Object.entries(def.buffs || {})) {
     const a = art.buffs?.[id]
     if (!a?.pose && !a?.aura) continue
     const one = (what) => (a[what] ? { ...a[what], src: srcOf(key, illustBuffKindOf(id, what)) } : null)
-    buffs[d.name] = { pose: one('pose'), aura: one('aura'), front: !!d.front, auraOp: d.auraOp ?? 1 }
+    buffs[d.name] = { pose: one('pose'), aura: one('aura'), front: !!d.front, glow: !!d.glow, auraOp: d.auraOp ?? 1 }
   }
   const motions = {}
   for (const m of base.motions) {

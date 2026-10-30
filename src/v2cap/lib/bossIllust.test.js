@@ -397,7 +397,7 @@ test('【確定】2026-10-29 雨摩座の技4つ：右手を胸元に引き寄�
   const a = bossIllustOf('amaza'), D = BOSS_ILLUST_DEFS.amaza.motions
   assert.deepEqual(Object.values(a.motions).map(m => m.label), BOSS_DEFS.amaza.motions.map(m => m.file))
   assert.equal(Object.values(a.motions).reduce((n, m) => n + Object.keys(m.fx || {}).length, 0), 9)
-  assert.equal(a.srcs.length, 8 + 9 + 8, 'パーツ8・エフェクト9・ポーズの絵8')
+  assert.equal(a.srcs.length, 8 + 9 + 8 + 4, 'パーツ8・エフェクト9・ポーズの絵8・節目のバフのポーズとオーラ4枚')
   assert.ok(a.motions.deluge.fx.flow && a.motions.sleet.fx.flow, '水天葬と氷雨の流れる水の絵（描いた滝の柱・雨の所から作る）')
   const armD = a.parts.find(p => p.key === 'armD').swap
   for (const [k, M] of Object.entries(D)) {
@@ -702,7 +702,7 @@ test('【確定】2026-10-30 雨摩座の技のポーズの絵（黒龍と同じ
     }
   }
   assert.equal(D.motions.deluge.art[0][1], 'windup', '水天葬は構え（5秒）のすぐあとなので、はじめから構えの絵')
-  assert.ok(Object.values(D.poseFit).length === 8, '8枚とも腰を立ち絵にそろえた')
+  assert.ok(Object.values(D.poses).flatMap(p => Object.values(p)).every(n => D.poseFit[n]), '8枚とも腰を立ち絵にそろえた')
 })
 
 test('【確定】2026-10-30 雨摩座は構えの5秒も水天葬の構えの絵（cast.art）・黒龍の構えは今までどおり', () => {
@@ -738,7 +738,6 @@ test('【確定】2026-10-30 HPの節目のバフの絵（ユーザー「バフ�
   assert.equal(illustBuffShowAt(a, '黒鱗の鎧', -1), null)
   assert.equal(illustBuffShowAt(a, '黒鱗の鎧', BUFF_ART_MS), null, '終わったら出さない')
   assert.equal(illustBuffShowAt(a, '知らないバフ', 100), null, '絵の無いバフは名前の帯と赤い光だけ')
-  assert.equal(illustBuffShowAt(bossIllustOf('amaza'), '霧雨の帳', 100), null, '雨摩座は絵がまだ')
   const s0 = illustBuffShowAt(a, '逆鱗', 0)
   assert.ok(s0.rig === 1 && s0.pose === 0 && s0.flash === 1, '付いた瞬間は立ち絵のまま・いちばん明るい')
   const s1 = illustBuffShowAt(a, '逆鱗', BUFF_IN_MS / 2)
@@ -752,4 +751,28 @@ test('【確定】2026-10-30 HPの節目のバフの絵（ユーザー「バフ�
   const s3 = illustBuffShowAt(a, '逆鱗', BUFF_HOLD_MS + BUFF_OUT_MS)
   assert.ok(s3.rig === 1 && s3.pose === 0 && s3.aura.op > 0 && s3.aura.op < 1 && s3.aura.scale > 1, '立ち絵へ戻り、オーラは広がりながら消えていく')
   assert.ok(BUFF_FLASH_MS < BUFF_HOLD_MS && BUFF_ART_MS === BUFF_HOLD_MS + BUFF_AURA_OUT_MS)
+})
+
+test('【確定】2026-10-30 雨摩座のバフの絵（ユーザー「あまざも作った」）：霧雨の帳・篠突く雨にポーズとオーラ・名前はダンジョンのバフと同じ・霧の帳は手前に半透明・水の闘気は後ろ・ポーズは腰を立ち絵にそろえる', () => {
+  const a = bossIllustOf('amaza'), d = BOSS_ILLUST_DEFS.amaza
+  const names = DUNGEON_BOSSES.amaza.pattern.buffs.map(b => b.name)
+  assert.deepEqual(Object.keys(a.buffs).sort(), [...names].sort())
+  for (const [n, b] of Object.entries(a.buffs)) {
+    assert.ok(b.pose && b.aura, `${n}：ポーズとオーラの絵がある`)
+    for (const p of [b.pose, b.aura]) {
+      assert.match(p.src, /amaza-il-buff-[a-z]+-(pose|aura)\.webp\?v=[0-9a-f]{8}$/)
+      assert.ok(p.w > BOSS_ILLUST_SIZE * 0.8 && p.h > BOSS_ILLUST_SIZE * 0.8, `${n}：立ち絵の大きさに重ねる`)
+      assert.ok(a.srcs.includes(p.src), `${n}：先に読む`)
+    }
+  }
+  assert.ok(a.buffs['霧雨の帳'].front && a.buffs['霧雨の帳'].auraOp < 1, '霧の帳は雨摩座の手前に半透明')
+  // 篠突く雨のポーズは髪が枠いっぱいに広がり、後ろに置くと闘気がほとんど隠れた＝光として手前に明るく重ねる（足元から広がる）
+  assert.ok(!a.buffs['篠突く雨'].front && a.buffs['篠突く雨'].glow && a.buffs['篠突く雨'].auraOp < 1, '水の闘気は光として手前に重ねる')
+  assert.ok(illustBuffShowAt(a, '篠突く雨', 0).aura.scale < 0.8, '水の闘気は足元から小さく出て広がる')
+  assert.ok(Object.values(bossIllustOf('varuzenoku').buffs).every(b => !b.glow), '黒龍は今までどおり')
+  // 描いた絵は腰の位置がまちまち＝切り替えで体が跳ねないよう、ポーズはどちらも poseFit で腰を立ち絵にそろえる
+  for (const b of Object.values(d.buffs)) assert.ok(d.poseFit[b.pose], `${b.pose}：腰をそろえる`)
+  const s = illustBuffShowAt(a, '篠突く雨', BUFF_HOLD_MS - 1)
+  assert.ok(s.rig === 0 && s.pose === 1 && Math.abs(s.aura.op - 1) < 1e-9, '見せているあいだはポーズとオーラだけ')
+  assert.ok(illustBuffShowAt(a, '霧雨の帳', 0).aura.scale > 1.2, '手前の帳は大きく出て雨摩座へ閉じる')
 })
