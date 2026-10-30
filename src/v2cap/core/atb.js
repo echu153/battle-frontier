@@ -172,7 +172,8 @@ const createAtbSide = (fighter, band, { ai = false, cast = false } = {}) => {
   side.buffQueue = []          // 切ったがまだ行動していない節目のバフ（切った順）
   side.buffAct = null          // バフのゲージを貯めているあいだ：{ name, table, start, until }
   side.motionUntil = 0         // 技やバフの動きが終わる時刻（これより前はバフのゲージを貯めはじめない）
-  side.lastActAt = -Infinity   // 最後に技を出した時刻（大技の節目の待ち）
+  side.lastActAt = -Infinity   // 最後に技を出した時刻（大技の構えを見せはじめる時刻）
+  side.justBig = false         // 最後の行動が大技か（続けて大技を引かない）
   side.noActUntil = 0          // バフを見せおわる時刻（これより前は技を出さない）
   if (fighter.hpNow != null) side.hp = Math.max(1, Math.min(side.base.hp, Math.floor(fighter.hpNow)))
   side.startHp = side.hp       // この戦闘を始めたときのHP（削った量＝startHp − いまのHP）
@@ -324,9 +325,11 @@ const patternPick = (side) => {
   }
   if (!side.patNext) {
     const band = p.bands.find(b => frac > b.min) || p.bands[p.bands.length - 1]
-    let r = side.patRng() * 100
+    // 大技の直後は大技を引かない（ゲージを待たずに構えるので、続けて出ると防御のクールダウンが間に合わない）
+    const table = Object.entries(band?.weights || {}).filter(([k]) => !(side.justBig && (slotByName(side, k).skill?.mult || 0) >= CAST_MULT))
+    let r = side.patRng() * (side.justBig ? table.reduce((sum, [, w]) => sum + w, 0) : 100)
     let name = null
-    for (const [k, w] of Object.entries(band?.weights || {})) { if (r < w) { name = k; break } r -= w }
+    for (const [k, w] of table) { if (r < w) { name = k; break } r -= w }
     side.patNext = name ? slotByName(side, name) : { idx: null, skill: null }
   }
   return side.patNext
@@ -380,23 +383,30 @@ const inBuffAct = (side, now) => !!side.buffAct || now + EPS < side.noActUntil
 
 // 【確定】2026-10-30 大技の節目（ユーザー「大技に入るとき、ATBリセットしてるでしょ？そのHPを切ったらすぐモーションに移行していいよ」）：
 //   pattern.steps の now が付いた節目は、切ったらゲージを待たずに構えに入る（ゲージは空に・構えのあとも空から）。
-//   ただし技の動きと重ならないように、出した技の動きが終わるまで（NOW_WAIT_AFTER_ACT_SEC）と、バフの行動のあいだは待つ（バフが先）。麻痺のあいだも待つ。
-//   待っているあいだは、ほかの技を出さない（excessOf）
+//   バフの行動のあいだは待つ（バフが先・見せおわってから構える）。麻痺のあいだも待つ。待っているあいだは、ほかの技を出さず、ふつうのゲージも貯めない（excessOf・stepOnce）
+// 【確定】2026-10-31 ユーザー「HP25％以下になったらゲージ状況がどうなっても大技のゲージに移行して、空振りが多すぎる」「もしバフのタイミングと重なったら先にバフ重ねてから大技に移行して」：
+//   ふつうのゲージがどうなっていても、切った瞬間に大技のゲージ（赤）へ移る。25%以下のふだんの確率で大技を引いたときも同じ
+//   （前はふつうのゲージが満タンになったのに攻撃が出ず、そこから赤いゲージが始まった＝空振りに見えた）。
+//   出した技の動きが残っていれば、構えの見せ方はそのあとから（showAt・NOW_WAIT_AFTER_ACT_SEC）。赤いゲージはそのぶん長い＝構えの見せ方の長さは変わらない
 const nowStepOf = (side) => {
   if (!side.castBig || !side.pattern) return null
   const frac = hpFracOf(side)
   return side.pattern.steps.find(s => s.now && frac <= s.at && !side.patFired.includes(s.at)) || null
 }
+const isBig = (skill) => (skill?.mult || 0) >= CAST_MULT
+// 次の行動が、ゲージを待たずに構える大技か
+const nextBigOf = (side) => nowStepOf(side) || (side.castBig && side.pattern && isBig(side.patNext?.skill) ? side.patNext : null)
 const nowStep = (st, me) => {
+  if (!me.castBig || !me.pattern || me.hp <= 0 || me.cast || me.ail.paralyze || me.buffAct || me.buffQueue.length) return
+  if (st.t + EPS < me.noActUntil) return
   const s = nowStepOf(me)
-  if (!s || me.hp <= 0 || me.cast || me.ail.paralyze || me.buffAct || me.buffQueue.length) return
-  if (st.t + EPS < me.noActUntil || st.t + EPS < me.lastActAt + NOW_WAIT_AFTER_ACT_SEC) return
-  const { idx, skill } = slotByName(me, s.skill)
-  me.patFired.push(s.at)
+  const { idx, skill } = s ? slotByName(me, s.skill) : patternPick(me)
+  if (s) me.patFired.push(s.at)
+  else if (!isBig(skill)) return
   me.patNext = null
   if (!skill) return
   me.gauge = 0
-  startCast(st, me, idx, skill, cdFor(me, skill))
+  startCast(st, me, idx, skill, cdFor(me, skill), Math.max(st.t, me.lastActAt + NOW_WAIT_AFTER_ACT_SEC))
 }
 
 // 挑戦の始め：もう切っている節目は撃ったことにする
@@ -503,6 +513,7 @@ const act = (st, me, foe, ch) => {
   me.acted += 1
   me.motionUntil = now + BUFF_WAIT_AFTER_ACT_SEC
   me.lastActAt = now
+  me.justBig = !ch.guard && isBig(ch.skill)
   me.guardCut = 0   // 防御は「次の自分の行動まで」
   if (ch.guard) {
     me.guardCut = GUARD_CUT
@@ -538,12 +549,14 @@ const act = (st, me, foe, ch) => {
   advanceSource(me, ch, ch.idx === null || used === ch.idx)
 }
 
-// 詠唱に入る。長さは技ごと（skill.castSec・無ければ CAST_SEC）
-function startCast(st, me, idx, skill, cd) {
+// 詠唱に入る。長さは技ごと（skill.castSec・無ければ CAST_SEC）。showAt＝構えを見せはじめる時刻（出した技の動きが残っているときは、そのあと）
+function startCast(st, me, idx, skill, cd, showAt = st.t) {
   const sec = skill.castSec ?? CAST_SEC
-  me.cast = { idx, name: skill.name, start: st.t, until: st.t + sec, cd }
+  me.cast = { idx, name: skill.name, start: st.t, showAt, until: showAt + sec, cd }
   st.log.push({ side: me.name, type: 'cast', skill: skill.name, sec })
 }
+// 構えを見せはじめてからの時間（ms）。まだ前の技の動きのあいだなら null（ゲージだけ赤い）
+export const castMsOf = (cast, t) => (t + EPS < cast.showAt ? null : (t - cast.showAt) * 1000)
 
 // ゲージが満タンになった側の行動。ボスの大技はここで詠唱に入る
 const startAct = (st, me, foe) => {
@@ -558,8 +571,8 @@ const startAct = (st, me, foe) => {
 }
 
 // 余り（0以上なら動ける）。詠唱中・麻痺中は動かない
-//   バフの行動が待っているあいだ・バフの行動のあいだ・大技の節目で構えを待っているあいだも動かない（そちらが先）
-const excessOf = (side, now) => (side.cast || side.ail.paralyze || side.buffQueue.length || inBuffAct(side, now) || nowStepOf(side) ? -Infinity : side.gauge - needNow(side, now))
+//   バフの行動が待っているあいだ・バフの行動のあいだ・大技の構えを待っているあいだも動かない（そちらが先）
+const excessOf = (side, now) => (side.cast || side.ail.paralyze || side.buffQueue.length || inBuffAct(side, now) || nextBigOf(side) ? -Infinity : side.gauge - needNow(side, now))
 
 // ===== 1刻み進める =====
 const stepOnce = (st) => {
@@ -581,16 +594,17 @@ const stepOnce = (st) => {
   }
   expire(st, a)
   expire(st, b)
+  checkHpBuffsBoth(st)   // ★どこで節目を切っても、大技の構えより前にバフの行動に入る（ユーザー「もしバフのタイミングと重なったら先にバフ重ねてから大技に移行して」）
   buffStep(st, a)
   buffStep(st, b)
   nowStep(st, a)
   nowStep(st, b)
 
-  // ゲージを溜める（麻痺・詠唱・バフのゲージのあいだは止まる）
+  // ゲージを溜める（麻痺・詠唱・バフのゲージ・大技の構えを待っているあいだは止まる）
   const eA = liveStats(a)
   const eB = liveStats(b)
   for (const [me, eMe, eFoe] of [[a, eA, eB], [b, eB, eA]]) {
-    if (me.cast || me.ail.paralyze || me.buffAct) continue
+    if (me.cast || me.ail.paralyze || me.buffAct || nextBigOf(me)) continue
     // ★満タンを少し超えたぶんは次へ持ち越す（100で切ると、刻みの端数のぶん速い側ほど遅くなる）
     me.gauge = Math.min(GAUGE_FULL * 2, me.gauge + fillPerSecOf(me, eMe, eFoe) * STEP_SEC)
   }

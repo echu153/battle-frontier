@@ -1,6 +1,6 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react'
 import { TEXT } from './v2ui.js'
-import { buffChips, hpBuffChips, ailChips, stateChips, needNow, CAST_SEC, BUFF_GAUGE_SEC } from '../core/atb.js'
+import { buffChips, hpBuffChips, ailChips, stateChips, needNow, castMsOf, CAST_SEC, BUFF_GAUGE_SEC } from '../core/atb.js'
 import { STAT_DEFS } from '../core/stats.js'
 import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC, RAGE_SEC, skillBannerAt } from '../lib/atbFx.js'
 import { JP_BOLD } from './casinoStyle.js'
@@ -436,13 +436,14 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   const after = rig?.buffs ? buffAfterOf(rig, me, mine, now) : null
   const tMs = now * 1000 * (after?.tempo || 1)
   // 構えのあいだは構えの姿勢（技を流しているあいだは技が先）
-  const casting = rig && me.cast && !(rigMotion && rigMs < rigMotion.totalMs)
-  const pose = !rig ? null : casting ? illustCastPoseAt(rig.key, (st.t - me.cast.start) * 1000, tMs)
+  const castMs = me.cast ? castMsOf(me.cast, st.t) : null
+  const casting = rig && castMs !== null && !(rigMotion && rigMs < rigMotion.totalMs)
+  const pose = !rig ? null : casting ? illustCastPoseAt(rig.key, castMs, tMs)
     : illustPoseAt(rig.key, rigMotion, rigMs, tMs, !!lastAct && afterCast(lastAct.t0, castEnd))
   const trails = rigMotion ? illustTrailsAt(rig.key, rigMotion, rigMs, tMs) : []
   // 技のポーズの絵と残像（構えのあいだは部品の立ち絵）
   // 構えのあいだのポーズの絵（雨摩座＝構えた技の構えの絵・lib/bossIllust.js の illustCastShowAt・黒龍は無し）
-  const cs = casting ? illustCastShowAt(rig, me.cast.name, (st.t - me.cast.start) * 1000) : null
+  const cs = casting ? illustCastShowAt(rig, me.cast.name, castMs) : null
   // HPの節目のバフの絵（黒龍・雨摩座・lib/bossIllust.js の illustBuffShowAt）：付いた瞬間にバフのポーズの絵とオーラ。技を流しているあいだ・構えのあいだは技が先（オーラは出す）
   const lastRage = mine.reduce((p, f) => (f.kind === 'rage' && f.t0 <= now && (!p || f.t0 >= p.t0) ? f : p), null)
   const buff = rig && lastRage ? illustBuffShowAt(rig, lastRage.skill, (now - lastRage.t0) * 1000) : null
@@ -1009,7 +1010,9 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
   // 構えを最後に見た時刻（構えのすぐあとの技を、構えの姿勢・相手の頭上の雲からつなぐ）
   const castSeen = useRef(-1e9)
   if (st.b.cast) castSeen.current = now
-  const cast = st.b.cast ? { name: st.b.cast.name, ms: (st.t - st.b.cast.start) * 1000 } : null
+  // 構えの見せ方（前の技の動きが残っているあいだはゲージだけ赤い）
+  const bCastMs = st.b.cast ? castMsOf(st.b.cast, st.t) : null
+  const cast = bCastMs !== null ? { name: st.b.cast.name, ms: bCastMs } : null
   // 派手な演出のあるボスの技の印は、戦闘の画面が古い印を片付けても演出が終わるまで覚えておく（keptActs）
   const kept = useRef([])
   const sceneActs = foeArt?.kind === 'illust' ? fx.filter(f => f.kind === 'act' && f.side === 'b' && f.motion?.scene) : []

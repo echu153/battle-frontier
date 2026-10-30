@@ -6,7 +6,7 @@ import {
   DUNGEON_BOSSES, DIFF_KEYS, DUNGEON_MIN, DUNGEON_TRY_SEC, SUMMONS_PER_DAY, STAMINA_OWNER_FIRST, STAMINA_OWNER, STAMINA_HELPER, HELPERS_MAX,
   diffOf, isDiffReady, isDiffUnlocked, isSummonable, tryStaminaOf, dungeonFighter,
 } from './dungeon.js'
-import { createAtb, runFor, startMacro, fillPerSecOf, hpBuffChips, ATB_SLOW_CUT, FILL_PER_SEC, BUFF_GAUGE_SEC, BUFF_WAIT_AFTER_ACT_SEC, BUFF_SHOW_SEC, TURN_SEC, GAUGE_FULL, NOW_WAIT_AFTER_ACT_SEC, CAST_SEC } from '../core/atb.js'
+import { createAtb, runFor, startMacro, fillPerSecOf, hpBuffChips, castMsOf, ATB_SLOW_CUT, FILL_PER_SEC, BUFF_GAUGE_SEC, BUFF_WAIT_AFTER_ACT_SEC, BUFF_SHOW_SEC, TURN_SEC, GAUGE_FULL, NOW_WAIT_AFTER_ACT_SEC, CAST_SEC } from '../core/atb.js'
 import { inflict } from '../core/ailments.js'
 import { bossIllustOf, buffArtMsOf } from './bossIllust.js'
 import { liveStats } from '../core/battle.js'
@@ -327,18 +327,55 @@ test('【確定】2026-10-30 大技の節目（ユーザー「大技に入ると
   assert.ok(st.b.patFired.includes(0.25))
   runFor(st, 0.2)
   assert.equal(st.b.cast, null, 'もう一度すぐ構えない')
-  // 技の動きのあいだに切ったら、動きが終わるのを待つ（そのあいだほかの技は出さない）
+  // 【確定】2026-10-31 ユーザー「HP25％以下になったらゲージ状況がどうなっても大技のゲージに移行して、空振りが多すぎる」：
+  //   技の動きのあいだに切っても、ゲージはすぐ赤くなる。構えの見せ方は動きが終わってから（長さは同じ＝赤いゲージがそのぶん長い）
   const m = newFight(12)
   m.b.buffSeen.push('黒鱗の鎧', '逆鱗')
   m.b.patFired.push(0.75, 0.5)
   untilTrue(m, () => bossHits(m) >= 1)
   const tHit = m.t, n = bossHits(m)
   m.b.hp = Math.floor(m.b.base.hp * 0.24)
-  runFor(m, NOW_WAIT_AFTER_ACT_SEC - 0.1)
-  assert.equal(m.b.cast, null, '動きのあいだは待つ')
-  runFor(m, 0.2)
-  assert.ok(m.b.cast && m.b.cast.start + 1e-6 >= tHit + NOW_WAIT_AFTER_ACT_SEC, '動きが終わったら構える')
-  assert.equal(bossHits(m), n)
+  runFor(m, 0.05)
+  assert.ok(m.b.cast, 'すぐ大技のゲージへ')
+  assert.equal(m.b.gauge, 0, 'ふつうのゲージは空に')
+  assert.ok(Math.abs(m.b.cast.showAt - (tHit + NOW_WAIT_AFTER_ACT_SEC)) < 1e-6, '構えの見せ方は動きが終わってから')
+  assert.ok(Math.abs(m.b.cast.until - m.b.cast.showAt - 3.5) < 1e-6, '構えの見せ方の長さは変わらない')
+  assert.equal(castMsOf(m.b.cast, m.t), null, '動きのあいだは構えを見せない')
+  runFor(m, NOW_WAIT_AFTER_ACT_SEC)
+  assert.ok(castMsOf(m.b.cast, m.t) >= 0, '動きが終わったら構えを見せる')
+  assert.equal(bossHits(m), n, 'そのあいだほかの技は出さない')
+  // ふつうのゲージが満タンでも、攻撃せずに大技のゲージへ（ゲージの状況によらない）
+  const full = newFight(15)
+  full.b.buffSeen.push('黒鱗の鎧', '逆鱗')
+  full.b.patFired.push(0.75, 0.5)
+  untilTrue(full, () => bossHits(full) >= 1)
+  runFor(full, NOW_WAIT_AFTER_ACT_SEC + 0.2)
+  full.b.gauge = GAUGE_FULL - 0.01
+  const nFull = bossHits(full)
+  full.b.hp = Math.floor(full.b.base.hp * 0.24)
+  runFor(full, 0.05)
+  assert.ok(full.b.cast && full.b.gauge === 0)
+  assert.equal(bossHits(full), nFull, '空振り（ふつうの行動）が出ない')
+  // 25%以下のふだんの確率で大技を引いたときも、ふつうのゲージを貯めずに大技のゲージへ。大技の直後は大技を引かない
+  const later = newFight(16)
+  later.b.buffSeen.push('黒鱗の鎧', '逆鱗')
+  later.b.patFired.push(0.75, 0.5, 0.25)
+  later.b.hp = Math.floor(later.b.base.hp * 0.2)
+  later.a.hp = later.a.base.hp = 1e9
+  let bigs = 0, peak = 0, last = null, twice = 0, wasBig = false
+  while (later.t < 170 && !later.over) {
+    runFor(later, 0.05)
+    if (later.b.cast && later.b.cast !== last) {
+      if (later.b.justBig) twice += 1
+      bigs += 1; last = later.b.cast
+      assert.ok(peak < GAUGE_FULL, `大技の前にふつうのゲージが満タンにならない（${peak}）`)
+    }
+    peak = later.b.cast ? 0 : Math.max(later.b.gauge, later.b.justBig !== wasBig ? 0 : peak)
+    if (later.b.justBig !== wasBig) { wasBig = later.b.justBig; peak = 0 }
+    later.b.hp = Math.floor(later.b.base.hp * 0.2)
+  }
+  assert.ok(bigs >= 3, `大技が何度か出る（${bigs}回）`)
+  assert.equal(twice, 0, '大技の直後は大技を引かない')
   // バフの行動が先：30%と25%を一度に切ったら、バフを見せおわってから構える
   const b = newFight(13)
   b.b.buffSeen.push('黒鱗の鎧')
