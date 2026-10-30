@@ -10,7 +10,7 @@ import {
   bossIllustOf, illustPoseAt, idlePoseAt, motionPoseAt, illustPointAt, illustTrailsAt, mouthPointOf, rotPoint, partMove,
   illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt, dustEllipsesOf,
   illustCastShowAt, EASES, joltAt, illustBendKindOf, bendFramesOf, illustPoseKindOf, illustShowAt, illustGhostsAt, ART_FADE_MS, artAnchorAt, leanPoint,
-  illustBuffShowAt, illustBuffKindOf, buffSceneAt, buffAfterAt, buffRainAt, buffHoldOf, buffArtMsOf, BUFF_IN_MS, BUFF_HOLD_MS, BUFF_OUT_MS, BUFF_AURA_IN_MS, BUFF_AURA_OUT_MS, BUFF_ART_MS, BUFF_FLASH_MS,
+  illustBuffShowAt, illustBuffKindOf, buffSceneAt, buffAfterAt, buffRainAt, buffHoldOf, rigLayersOf, flutterBandsAt, buffArtMsOf, BUFF_IN_MS, BUFF_HOLD_MS, BUFF_OUT_MS, BUFF_AURA_IN_MS, BUFF_AURA_OUT_MS, BUFF_ART_MS, BUFF_FLASH_MS,
 } from './bossIllust.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { DUNGEON_BOSSES } from './dungeon.js'
@@ -366,7 +366,7 @@ test('【確定】2026-10-29 黒龍の待機：羽ばたき・首と頭の揺れ
 test('【確定】2026-10-29 雨摩座のイラスト版：立ち絵が体・頭と両手は立ち絵から切り分ける（水の帯がいちばん奥）・右腕は3つの絵を切り替える（手前の手はふだんの腕の中）・回す中心は首と袖口', () => {
   const a = bossIllustOf('amaza'), d = BOSS_ILLUST_DEFS.amaza
   assert.ok(a)
-  assert.deepEqual(a.parts.map(p => p.key), ['water', 'body', 'armF', 'armD', 'armN', 'head', 'armC', 'armU'])
+  assert.deepEqual(a.parts.map(p => p.key), ['water', 'body', 'armF', 'armD', 'armN', 'head', 'armC', 'armU', 'legs'])
   const by = Object.fromEntries(a.parts.map(p => [p.key, p]))
   assert.equal(by.armN.parent, 'armD')
   assert.equal(by.armN.nest, true, '手前の手はふだんの腕の中（いっしょに消える）')
@@ -400,7 +400,7 @@ test('【確定】2026-10-29 雨摩座の技4つ：右手を胸元に引き寄�
   const a = bossIllustOf('amaza'), D = BOSS_ILLUST_DEFS.amaza.motions
   assert.deepEqual(Object.values(a.motions).map(m => m.label), BOSS_DEFS.amaza.motions.map(m => m.file))
   assert.equal(Object.values(a.motions).reduce((n, m) => n + Object.keys(m.fx || {}).length, 0), 9)
-  assert.equal(a.srcs.length, 8 + 9 + 8 + 4, 'パーツ8・エフェクト9・ポーズの絵8・節目のバフのポーズとオーラ4枚')
+  assert.equal(a.srcs.length, 9 + 9 + 8 + 4, 'パーツ9（足の写しも）・エフェクト9・ポーズの絵8・節目のバフのポーズとオーラ4枚')
   assert.ok(a.motions.deluge.fx.flow && a.motions.sleet.fx.flow, '水天葬と氷雨の流れる水の絵（描いた滝の柱・雨の所から作る）')
   const armD = a.parts.find(p => p.key === 'armD').swap
   for (const [k, M] of Object.entries(D)) {
@@ -901,4 +901,30 @@ test('【確定】2026-10-30 舞台に降る雨（buffRainAt）：同じ時刻�
   const xs = new Set(Array.from({ length: 40 }, (_, i) => buffRainAt(r, 200 * i).splashes[0].x))
   assert.ok(xs.size > 5, '水の輪は1回ごとに場所が変わる')
   assert.equal(buffRainAt({ ...r, splash: 0 }, 5000).splashes.length, 0)
+})
+
+test('【確定】2026-10-30 雨摩座の足は着物のひらひらで動かない（ユーザー「モーションで着物ひらひらさせてると思うんだけど、体（足）、迄ゆらゆらしちゃってるから足は動かさないようにして」）：足は帯に入れず上に重ねる・体の絵から足を抜く', () => {
+  const a = bossIllustOf('amaza'), d = BOSS_ILLUST_DEFS.amaza, { moving, still } = rigLayersOf(a)
+  // 帯に入れるのは足のほかの部品。足は帯の上に重ねる
+  assert.deepEqual(still.map(p => p.key), ['legs'])
+  assert.ok(moving.some(p => p.key === 'body') && !moving.some(p => p.key === 'legs'))
+  assert.ok(!moving.some(p => p.free || p.nest), '切り離したパーツと子のパーツは入れない')
+  assert.ok(!still[0].nest && !still[0].free && a.srcs.includes(still[0].src))
+  // 足は腰より下の、体のまん中あたり（ポーズの絵のように帯の外で動かない）
+  const legs = a.parts.find(p => p.key === 'legs')
+  assert.ok(legs.y > 350 && legs.y + legs.h <= BOSS_ILLUST_SIZE && legs.x > 250 && legs.x + legs.w < 480)
+  // 体の絵から足を抜く所のふちも帯でずれる＝いちばんずれても写しがぼけていない所に収まる（足元のすき間にずれた足が出ない）
+  const c = d.cuts.legs, bottom = Math.max(...c.take.map(p => p[1]))
+  let most = 0
+  for (let t = 0; t < 20000; t += 20) {
+    const b = flutterBandsAt('amaza', t).find(x => bottom >= x.y0 && bottom < x.y1) || flutterBandsAt('amaza', t).at(-1)
+    most = Math.max(most, Math.abs(b.dx + b.tan * (bottom - b.y0)))
+  }
+  assert.ok(most > 4, 'ひらひらは続いている')
+  assert.ok(c.dropInset >= c.feather + most, `ぼかし ${c.feather} ＋ ずれ ${most.toFixed(1)} は残す`)
+  // 黒龍は今までどおり（足の写しは無い）
+  const v = bossIllustOf('varuzenoku'), lv = rigLayersOf(v)
+  assert.equal(lv.still.length, 0)
+  assert.equal(lv.moving.length, v.parts.filter(p => !p.nest && !p.free).length)
+  assert.deepEqual(flutterBandsAt('varuzenoku', 1000), [])
 })

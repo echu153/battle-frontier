@@ -45,13 +45,14 @@ export const BOSS_ILLUST = {
   amaza: {
     parts: {
       water: { x: 0, y: 0, w: 640, h: 640, px: 337, py: 356, ax: 0 },
-      body: { x: 0, y: 92, w: 640, h: 548, px: 342, py: 353, ax: 24 },
+      body: { x: 0, y: 92, w: 640, h: 548, px: 342, py: 353, ax: 19 },
       armF: { x: 361, y: 100, w: 47, h: 55, px: 396, py: 154, ax: -112, parent: 'body' },
       armD: { x: 36, y: 139, w: 282, h: 406, px: 200, py: 185, ax: 96 },
       armN: { x: 50, y: 215, w: 77, h: 68, px: 124, py: 231, ax: 154, parent: 'armD' },
       head: { x: 148, y: 0, w: 171, h: 163, px: 230, py: 145, ax: -89, parent: 'body' },
       armC: { x: 26, y: 130, w: 302, h: 425, px: 200, py: 185, ax: 95 },
       armU: { x: 26, y: -18, w: 302, h: 573, px: 200, py: 140, ax: 96 },
+      legs: { x: 296, y: 393, w: 130, h: 218, px: 370, py: 500, ax: 162, parent: 'body' },
     },
     pivot: [342, 353], mouth: [155, 87],
     fx: {
@@ -76,6 +77,6 @@ export const BOSS_ILLUST = {
       armC: { s: 1, deg: 0, tx: 0, ty: 0, score: 1.076 },
       armU: { s: 1.085, deg: -2, tx: -122, ty: -80, score: 0.46 },
     },
-    v: { 'il-water': '56a7ccb4', 'il-body': '812a7e41', 'il-armF': '3263d5b5', 'il-armD': 'bdd766a3', 'il-armN': '7eaed282', 'il-head': 'b65aea3c', 'il-armC': 'b8484a39', 'il-armU': 'a1317398', 'il-pose-shot-windup': 'e26463d9', 'il-pose-shot-strike': '84f98092', 'il-pose-sleet-windup': '9d83d96c', 'il-pose-sleet-strike': '5b01fc01', 'il-pose-bind-windup': 'f3710ed7', 'il-pose-bind-strike': '46e45994', 'il-pose-deluge-windup': 'b47d0548', 'il-pose-deluge-strike': '7ffde424', 'il-buff-veil-pose': 'c6a9c61e', 'il-buff-veil-aura': 'ff53ea44', 'il-buff-downpour-pose': '80b7c430', 'il-buff-downpour-aura': '7fc4ee35', 'il-fx-shot-fly': '89f4d4f3', 'il-fx-shot-hit': 'b458f544', 'il-fx-sleet-hit': '846c1942', 'il-fx-sleet-flow': '0cc0a8c1', 'il-fx-bind-fly': 'ee7ff9a4', 'il-fx-bind-hit': '6d7032af', 'il-fx-deluge-hit': 'd828eed6', 'il-fx-deluge-flow': '604c35d7', 'il-fx-deluge-charge': 'fdaabfa2' },
+    v: { 'il-water': '56a7ccb4', 'il-body': '366e5e3d', 'il-armF': '3263d5b5', 'il-armD': 'bdd766a3', 'il-armN': '7eaed282', 'il-head': 'b65aea3c', 'il-armC': 'b8484a39', 'il-armU': 'a1317398', 'il-legs': '73fc2634', 'il-pose-shot-windup': 'e26463d9', 'il-pose-shot-strike': '84f98092', 'il-pose-sleet-windup': '9d83d96c', 'il-pose-sleet-strike': '5b01fc01', 'il-pose-bind-windup': 'f3710ed7', 'il-pose-bind-strike': '46e45994', 'il-pose-deluge-windup': 'b47d0548', 'il-pose-deluge-strike': '7ffde424', 'il-buff-veil-pose': 'c6a9c61e', 'il-buff-veil-aura': 'ff53ea44', 'il-buff-downpour-pose': '80b7c430', 'il-buff-downpour-aura': '7fc4ee35', 'il-fx-shot-fly': '89f4d4f3', 'il-fx-shot-hit': 'b458f544', 'il-fx-sleet-hit': '846c1942', 'il-fx-sleet-flow': '0cc0a8c1', 'il-fx-bind-fly': 'ee7ff9a4', 'il-fx-bind-hit': '6d7032af', 'il-fx-deluge-hit': 'd828eed6', 'il-fx-deluge-flow': '604c35d7', 'il-fx-deluge-charge': 'fdaabfa2' },
   },
 }

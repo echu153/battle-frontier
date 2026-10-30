@@ -6,7 +6,7 @@ import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC, RAGE_SEC, skillBannerAt }
 import { JP_BOLD } from './casinoStyle.js'
 import { rubySegmentsOf } from '../lib/skillRuby.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
-import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, artAnchorAt, illustCastShowAt, illustBuffShowAt, buffSceneAt, buffAfterAt, buffRainAt } from '../lib/bossIllust.js'
+import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, rigLayersOf, artAnchorAt, illustCastShowAt, illustBuffShowAt, buffSceneAt, buffAfterAt, buffRainAt } from '../lib/bossIllust.js'
 import { FX_HEAD_Y, FX_FEET_Y, FX_SKY_Y, FX_TARGET_Y, SCENE_TOP, fallAt, coilAt, pourTimesOf, sceneEndMsOf, stageSceneOf, flyPosOf } from '../lib/bossScene.js'
 
 // ============================================================
@@ -158,7 +158,8 @@ const rigWrap = (art, pose) => {
 }
 //   技のポーズの絵（2026-10-30・ユーザー「グラブルのベルゼバブぐらいしっかりと攻撃モーション動いてほしい」）：show（illustShowAt）のとおりに
 //   部品の立ち絵とポーズの絵を切り替える（ポーズの絵も全体の姿勢 x・y・r で動く）。ghosts＝飛び込む勢いの残像（前の姿勢でポーズの絵を薄く）
-//   着物のひらひら（art.flutter）：体の動きの箱の中で、横の帯ごとに同じ中身（部品・ポーズの絵・砂ぼこり）を切り抜いて描き、帯ごとに左右へずらして傾ける
+//   着物のひらひら（art.flutter）：体の動きの箱の中で、横の帯ごとに同じ部品の立ち絵を切り抜いて描き、帯ごとに左右へずらして傾ける。
+//   足（still）・ポーズの絵・砂ぼこりは帯に入れず上に重ねる（2026-10-30 足までゆらゆらしていた）
 //   （帯の上の境目で dx・下へ行くほど tan ずつずれる＝隣の帯と境目でつながる）。帯は少し重ねて切る（境目に細いすき間が出ない）
 //   HPの節目のバフのオーラ（aura＝{ p, op, scale, front, glow }・2026-10-30）：front は竜の手前（鎧の殻）・glow は光として手前に明るく重ねる（雨摩座の篠突く雨）・
 //   どちらも無ければいちばん奥（逆鱗の闘気）。体の動きでは動かさない
@@ -166,15 +167,9 @@ const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [
   const box = { x: 0, y: 0, w: art.base, h: art.base }
   const free = art.parts.filter(p => p.free && !p.nest)
   const rigOp = show ? show.rig : 1
-  const body = (
-    <>
-      <div style={{ position:'absolute', inset:0, opacity: rigOp < 1 ? rigOp : undefined, visibility: rigOp <= 0.001 ? 'hidden' : undefined }}>
-        {art.parts.filter(p => !p.nest && !p.free).map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={pose} />)}
-      </div>
-      {show?.poses.map(sp => <PoseArt key={sp.name} art={art} p={motion.poses[sp.name]} op={sp.op} />)}
-      {art.dust && pose.dust > 0 && <RigDust art={art} k={pose.dust} />}
-    </>
-  )
+  const { moving, still } = rigLayersOf(art)
+  const rigStyle = { position:'absolute', inset:0, opacity: rigOp < 1 ? rigOp : undefined, visibility: rigOp <= 0.001 ? 'hidden' : undefined }
+  const rig = <div style={rigStyle}>{moving.map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={pose} />)}</div>
   const bands = art.flutter ? flutterBandsAt(art.key, tMs) : []
   const pct = (y) => (y / art.base) * 100
   const auraEl = aura && aura.op > 0.001 ? <AuraArt art={art} a={aura} /> : null
@@ -190,14 +185,17 @@ const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [
         <div key={`g${i}`} style={{ ...rigWrap(art, g.pose), opacity: g.op }}><PoseArt art={art} p={motion.poses[g.name]} /></div>
       ))}
       <div style={rigWrap(art, pose)}>
-        {bands.length === 0 ? body : bands.map((b, i) => (
+        {bands.length === 0 ? rig : bands.map((b, i) => (
           <div key={i} style={{ position:'absolute', inset:0,
             clipPath:`inset(${i === 0 ? '-40%' : `${(pct(b.y0) - 0.15).toFixed(2)}%`} -40% ${i === bands.length - 1 ? '-40%' : `${(100 - pct(b.y1) - 0.15).toFixed(2)}%`} -40%)`,
             transform: b.dx || b.tan ? `translateX(${pct(b.dx).toFixed(3)}%) skewX(${(Math.atan(b.tan) * 180 / Math.PI).toFixed(3)}deg)` : undefined,
             transformOrigin: `0 ${pct(Number.isFinite(b.y0) ? b.y0 : 0).toFixed(2)}%` }}>
-            {body}
+            {rig}
           </div>
         ))}
+        {still.length > 0 && <div style={rigStyle}>{still.map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={pose} />)}</div>}
+        {show?.poses.map(sp => <PoseArt key={sp.name} art={art} p={motion.poses[sp.name]} op={sp.op} />)}
+        {art.dust && pose.dust > 0 && <RigDust art={art} k={pose.dust} />}
       </div>
       {auraEl && (aura.front || aura.glow) && auraEl}
     </>

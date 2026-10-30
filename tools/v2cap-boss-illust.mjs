@@ -150,6 +150,16 @@ export const fitPart = (T0, P0) => {
 }
 
 // 立ち絵に無いもの（雨摩座の水の帯）：重ねる場所を探さず、描いた場所のまま。立ち絵の大きさに合わせてから s 倍（真ん中を中心に）・dx・dy ずらす
+// 点から多角形のふちまでの距離
+const polyEdgeDist = (poly, x, y) => {
+  let best = Infinity
+  for (let i = 0; i < poly.length; i++) {
+    const [ax, ay] = poly[i], [bx, by] = poly[(i + 1) % poly.length], dx = bx - ax, dy = by - ay
+    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)))
+    best = Math.min(best, Math.hypot(x - ax - t * dx, y - ay - t * dy))
+  }
+  return best
+}
 export const fixedFitOf = (T0, P, { s = 1, dx = 0, dy = 0 } = {}) => {
   const ss = (T0.W / P.W) * s
   return { s: +ss.toFixed(4), deg: 0, tx: Math.round((T0.W - P.W * ss) / 2 + dx), ty: Math.round((T0.H - P.H * ss) / 2 + dy), score: 0 }
@@ -592,7 +602,14 @@ const build = (key, def, dir) => {
       // 手前に出すパーツ（over）に覆われていた所は切り出さない（止まっているときは立ち絵と同じに見える）
       if (over) img.data[i + 3] = Math.round(img.data[i + 3] * (1 - over.data[i + 3] / 255))
     }
-    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) if (inPoly(c.drop || c.take, x + 0.5, y + 0.5)) from.data[(y * S + x) * 4 + 3] = 0
+    // feather＝多角形のふちから内へ px でぼかす（上に重ねたとき、まわりになじむ）
+    if (c.feather) for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      if (!inPoly(c.take, x + 0.5, y + 0.5)) continue
+      const k = Math.min(1, polyEdgeDist(c.take, x + 0.5, y + 0.5) / c.feather), i = (y * S + x) * 4 + 3
+      img.data[i] = Math.round(img.data[i] * k * k * (3 - 2 * k))
+    }
+    // dropInset＝親のパーツからはふちを残して内だけ抜く（すき間を埋めたあとに抜く＝下の⑤の2）
+    if (!c.dropInset) for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) if (inPoly(c.drop || c.take, x + 0.5, y + 0.5)) from.data[(y * S + x) * 4 + 3] = 0
     layers[part] = img
     pivotOf[part] = c.pivot
     notes.push(`${part}：${def.base === 'stand' && c.from === 'body' ? '立ち絵' : FILES[c.from] || c.from}から切り分けた`)
@@ -608,6 +625,14 @@ const build = (key, def, dir) => {
       n++
     }
     notes.push(`体：切り分けで空いた所 ${n}px を${def.fill}で埋めた`)
+  }
+  // ⑤の2 上に重ねる写し（dropInset・雨摩座の足）：親のパーツから、多角形のふちから dropInset px より内を抜く（写しのふちがぼけている所とずれのぶんは残す）。
+  //   すき間を埋める（fill）のあとに抜く＝抜いた所は埋めない（足元のすき間にずれた足の絵が残らない）
+  for (const c of Object.values(def.cuts || {})) {
+    if (!c.dropInset) continue
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      if (inPoly(c.take, x + 0.5, y + 0.5) && polyEdgeDist(c.take, x + 0.5, y + 0.5) >= c.dropInset) layers[c.from].data[(y * S + x) * 4 + 3] = 0
+    }
   }
   // 後ろの絵（split.back）：切り分けで空いた所のうち、翼に入れなかった所（胸・肩・首の付け根）を体に埋める（体のまま動かない）
   if (back) {

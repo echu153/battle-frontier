@@ -330,12 +330,15 @@ export const BOSS_ILLUST_DEFS = {
     // 奥から手前へ。水の帯は立ち絵に無いので、描いた場所のまま置く（fixed・s＝立ち絵の大きさに合わせたうえでの倍率）
     //   右腕（手前の腕）は3つの絵を切り替える（swaps）：armD＝立ち絵の差しのべた腕（手前の手 armN はこの中）・armC＝胸元に構えた腕・armU＝真上に掲げた腕。
     //   ふだんの腕と手は頭の後ろ、構えの腕は頭より手前（掲げた腕は冠の前を通る）
-    layers: ['water', 'body', 'armF', 'armD', 'armN', 'head', 'armC', 'armU'],
+    layers: ['water', 'body', 'armF', 'armD', 'armN', 'head', 'armC', 'armU', 'legs'],
     files: { water: '水の帯' },
     fixed: { water: { s: 1.06 } },
     // 【確定】2026-10-29 ユーザー「攻撃するとき、水の帯は干渉せずに動いてほしい（水の帯まで動いてると違和感ある）」：
     //   水の帯は体の動き（技・構えの傾き・ずれ）から切り離し、いつも待機の揺れのまま（free・illustFreePoseAt）
     free: ['water'],
+    // 【確定】2026-10-30 ユーザー「モーションで着物ひらひらさせてると思うんだけど、体（足）、迄ゆらゆらしちゃってるから足は動かさないようにして」：
+    //   足（cuts の legs）は着物のひらひらの帯に入れず、帯の上にそのまま重ねる（still・体ぜんたいの浮く揺れとはいっしょに動く）
+    still: ['legs'],
     // 【確定】2026-10-29 手振り（ユーザー「技を撃つとき、もっと手振りとかのモーション増やしてほしい、一回水平に右手を胸元まで持ってきて手前にさっと
     //   持っていくやつ（いけー！）」「大技は右手を真上に掲げて相手に向かって放つ感じ」→選んだ「腕の絵を2枚描き足す」）：
     //   右腕だけを描き変えた立ち絵2枚を立ち絵に重ね（fitPart・掲げる絵は人物が少し小さく描き変わったので胴のまわり fitOn で合わせ直す）、
@@ -408,8 +411,13 @@ export const BOSS_ILLUST_DEFS = {
     // 構え（水天葬の5秒）：天を仰いで右腕を真上に掲げる（armU）。水天葬のためと同じ形。【確定】2026-10-29 ユーザー「溜めるとき、別に震えなくていい」＝震えない
     //   【確定】2026-10-30 art＝構えのあいだ、構えた技（水天葬）の構え（windup）のポーズの絵を出す（構えはじめの CAST_IN_MS で切り替える・illustCastShowAt）
     cast: { pose: { x: 0.02, y: -0.038, r: 4.8, head: 6.5, armF: -13, armUOn: 1 }, art: 'windup' },
-    // 切り分け（立ち絵 640px の上の点）。頭＝冠と顔（首の付け根で傾ける）・手前の手＝袖口から先（ふだんの腕 armD から切る）・奥の手＝袖口から先（袖口で回す）
+    // 切り分け（立ち絵 640px の上の点）。頭＝冠と顔（首の付け根で傾ける）・手前の手＝袖口から先（ふだんの腕 armD から切る）・奥の手＝袖口から先（袖口で回す）・
+    //   足＝太ももからつま先（feather＝ふちを px でぼかして上に重ねる・dropInset＝体の絵からは、多角形のふちから px より内だけ抜く）。
+    //   体に足を残すと、ひらひらでずれた足が足元のすき間から透けて二重に見えた。抜く所のふちもずれる（裾のほうで最大 7px）ので、ぼかし＋ずれのぶんは残す＝
+    //   多角形は足のふちより dropInset 以上広く取る（足が残らない）。足のまわりの布は写しのぼかしでなじむ
     cuts: {
+      legs: { from: 'body', pivot: [370, 500], feather: 8, dropInset: 16,
+        take: [[296, 392], [366, 430], [379, 475], [387, 492], [400, 525], [432, 565], [438, 592], [436, 612], [385, 612], [352, 600], [326, 590], [316, 535], [312, 500], [312, 475], [296, 432]] },
       head: { from: 'body', pivot: [230, 145],
         take: [[140, 0], [320, 0], [320, 128], [255, 128], [245, 145], [215, 150], [200, 145], [185, 115], [178, 163], [155, 163], [155, 75], [140, 60]] },
       armN: { from: 'armD', pivot: [124, 231],
@@ -612,7 +620,10 @@ export const illustPoseAt = (key, motion, ms, tMs, fromCast = false) => {
 }
 // 着物のひらひら（def.idle.flutter）：横の帯ごとの { y0, y1（立ち絵の px）, dx（上の境目のずれ px）, tan（下へ1px行くごとのずれ） }。
 //   帯の上の境目のずれから下の境目のずれまで斜めに傾ける（隣の帯と境目でつながる＝絵が途切れない）。いちばん上の帯（体の上半分）は動かない。
+//   帯に入れるのは部品の立ち絵だけ（rigLayersOf の moving）。足（still）とポーズの絵は帯に入れない（ひらひらは待機の立ち絵の着物だけ）。
 //   tMs＝いまの時刻（技や構えのあいだも止めない）。決まりが無いボスは []
+// 部品の分け方：moving＝帯に入れて描く部品・still＝帯に入れず上に重ねる部品（雨摩座の足）。切り離したパーツ（free）と子のパーツ（nest）は入れない
+export const rigLayersOf = (art) => ({ moving: art.parts.filter(p => !p.nest && !p.free && !p.still), still: art.parts.filter(p => p.still) })
 export const flutterBandsAt = (key, tMs) => {
   const f = BOSS_ILLUST_DEFS[key]?.idle?.flutter
   if (!f) return []
@@ -926,7 +937,7 @@ export const bossIllustOf = (key) => {
     bend: art.parts[p].bend ? { ...art.parts[p].bend, src: srcOf(key, illustBendKindOf(p)) } : null,
     nest: !!art.parts[p].parent && art.parts[p].parent in ZERO,
     swap: def.swaps?.[p] ? (def.swaps[p].on ? { on: def.swaps[p].on } : { others: ons }) : null,
-    free: !!def.free?.includes(p) }))
+    free: !!def.free?.includes(p), still: !!def.still?.includes(p) }))
   // 技のポーズの絵（できているものだけ）：{ windup: { src, x, y, w, h }, strike: … }（x・y・w・h は立ち絵の px）
   const posesOf = (mk) => {
     const out = {}
