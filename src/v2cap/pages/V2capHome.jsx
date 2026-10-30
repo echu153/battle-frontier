@@ -31,7 +31,7 @@ import V2capShop from '../components/V2capShop.jsx'
 import { SHOP_COLOR, flipLeftMsOf } from '../lib/shop.js'
 import { START_CLASSES, weaponsOf, attackKindOf, classDescOf } from '../lib/jobs.js'
 import { apLeftOf } from '../lib/ascension.js'
-import { TOWER_NAME, floorLabel, clampFloor } from '../lib/tower.js'
+import { TOWER_NAME, TOWER_SHORT_NAME, floorLabel, clampFloor } from '../lib/tower.js'
 import { openUntilOf } from '../lib/sortie.js'
 import { forcePapiaNext } from '../lib/papia.js'
 import { spotLabel } from '../lib/areas.js'
@@ -44,11 +44,6 @@ import { MARK_SRC } from '../lib/clerk.js'
 // ニャーガーキングのマーク（メニューと店の題で🍔の代わり。文字と同じ高さに並べる）
 function ShopMark({ size = 16 }) {
   return <img src={MARK_SRC} alt="" width={size} height={size} style={{ verticalAlign:'-3px' }} />
-}
-// 塔の名前はスマホの2列だと1行に入らない。折り返すなら「の」のあとだけ（前は最後の「塔」の1字だけが次の行へ落ちた）
-function TowerLabel() {
-  const [head, tail] = TOWER_NAME.split('の')
-  return <span style={{ wordBreak:'keep-all' }}>{head}の<wbr />{tail}</span>
 }
 import V2capGenderPick from '../components/V2capGenderPick.jsx'
 import { CarryLines } from '../components/V2capV1Carry.jsx'
@@ -81,9 +76,13 @@ const MENU = [
     // 【確定】2026-10-29 IDダンジョン（ボスを呼び、HPを持ち越して倒す・ATB戦闘・救援）。いまは黒龍ヴァルゼノクのノーマル・ハード
     { key:'dungeon', label:'IDダンジョン', icon:'🐉', color:'#ff6655', action:'黒龍ヴァルゼノクを呼ぶ・救援' },
     // 【確定】2026-10-14 塔（あるけみすと型の対人・1〜100層）。説明はいまの層で変わる（menuOf）
-    { key:'tower', label: <TowerLabel />, icon:'🗼', color:'#b48cff', action:'階層守護者に挑む' },
+    // 【確定】2026-10-31 メニューの札は「覇天塔」だけ（ユーザー指示「ジークヴァルトのはてんとうは覇天塔だけにして」）。塔の画面の題などは TOWER_NAME のまま
+    { key:'tower', label: TOWER_SHORT_NAME, icon:'🗼', color:'#b48cff', action:'階層守護者に挑む' },
   ] },
   { title:'施設', head:'facility', items:[
+    // 【確定】2026-10-31 商店（性別変更薬・日月反転の秘薬・lib/shop.js）。説明は秘薬が効いていれば残り時間（menuOf）
+    //   いちばん初めに置く（ユーザー指示「商店は施設の一番初めにして、後は全部1つずつ順番ずらして※最後にユグレシア」）
+    { key:'shop', label:'商店', icon:'🏪', color: SHOP_COLOR, action:'薬を買う' },
     { key:'temple', label:'神殿',   icon:'🏛', color:'#ff88cc', action:'転職する' },
     { key:'smith',  label:'鍛冶屋', icon:'🔨', color:'#ffcc00', action:'強化・分解・作成' },
     // 【確定】2026-10-22 博物館（装備の寄贈・V1と同じ形の土台。登録でもらえる能力はあとで）
@@ -95,8 +94,6 @@ const MENU = [
     //   説明は 2026-10-31 に短くした（2列だと1行に入らない・ハイ&ローとテーブルの卓はまとめて「カード」）
     { key:'casino', label:'賭博場', icon:'🎰', color:'#ff4fa3', action:'スロット・ルーレット・カード' },
     { key:'tree', label:'ユグレシアの宝樹', icon:'🌳', color:'#44dd99', action:'祈る' },
-    // 【確定】2026-10-31 商店（性別変更薬・日月反転の秘薬・lib/shop.js）。説明は秘薬が効いていれば残り時間（menuOf）
-    { key:'shop', label:'商店', icon:'🏪', color: SHOP_COLOR, action:'薬を買う' },
   ] },
 ]
 const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', museum:'🏺 博物館', burger: <><ShopMark size={18} /> {SHOP_NAME}</>, asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場', shop:'🏪 商店', tower:`🗼 ${TOWER_NAME}`, dungeon:'🐉 IDダンジョン',

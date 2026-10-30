@@ -42,6 +42,8 @@ import { pvpHpMultFor, withPvpHp } from './pvp.js'
 
 // 【確定】2026-10-14 ユーザーが決めた名前（「○○の塔みたいな感じ」→ 仮の「天空の塔」から選び直した）。画面の名前はここだけ
 export const TOWER_NAME = 'ジークヴァルトの覇天塔'
+// 【確定】2026-10-31 ホームのメニューの札だけ短く（ユーザー指示「ジークヴァルトのはてんとうは覇天塔だけにして」）。塔の画面の題などは TOWER_NAME のまま
+export const TOWER_SHORT_NAME = '覇天塔'
 export const FLOORS = 100        // 最上層
 export const LOSE_DROP = 2       // 挑戦して負けたら何層下がるか（あるけみと同じ）
 export const STREAK_PCT = 5      // n連勝中の守護者に挑むと 5n%（HP/MPを除く）

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
-import { TOWER_NAME } from './tower.js'
+import { TOWER_NAME, TOWER_SHORT_NAME } from './tower.js'
 import { MENU_HEAD } from './menuHeadList.js'
 import { MENU_HEAD_DEFS, MENU_HEAD_DIR, menuHeadFileOf, menuHeadSrcOf } from './menuHead.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
@@ -20,7 +20,7 @@ test('メニューは役割ごとの3つ：キャラクター・冒険・施設�
   assert.deepEqual(groups, [
     { title:'キャラクター', head:'chara', keys:['profile', 'skills', 'equip', 'asc', 'dex'] },
     { title:'冒険', head:'adventure', keys:['dungeon', 'tower'] },
-    { title:'施設', head:'facility', keys:['temple', 'smith', 'museum', 'burger', 'casino', 'tree', 'shop'] },
+    { title:'施設', head:'facility', keys:['shop', 'temple', 'smith', 'museum', 'burger', 'casino', 'tree'] },
   ])
 })
 
@@ -57,8 +57,9 @@ test('【確定】どのボタンも同じ大きさ：その行に1つしかな�
   assert.ok(menu.includes('{group.title}'), 'まとまりの見出しを出す')
 })
 
-test('塔の名前は「の」のあとだけで折り返す（最後の1字だけが次の行へ落ちない）', () => {
-  assert.equal(TOWER_NAME.split('の').length, 2, '名前を変えて「の」が1つでなくなったら TowerLabel を見直す')
-  assert.ok(SRC.includes("<span style={{ wordBreak:'keep-all' }}>{head}の<wbr />{tail}</span>"))
-  assert.ok(SRC.includes("{ key:'tower', label: <TowerLabel />,"))
+test('【確定】メニューの塔の札は「覇天塔」だけ（塔の画面の題などは正式な名前のまま）', () => {
+  assert.equal(TOWER_SHORT_NAME, '覇天塔')
+  assert.ok(TOWER_NAME.endsWith(TOWER_SHORT_NAME), '正式な名前の後ろと同じ')
+  assert.ok(SRC.includes("{ key:'tower', label: TOWER_SHORT_NAME,"))
+  assert.ok(SRC.includes('tower:`🗼 ${TOWER_NAME}`'), '塔の画面の題は正式な名前')
 })
