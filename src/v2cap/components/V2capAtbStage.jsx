@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, useState } from 'react'
+import { createContext, useContext, useId, useLayoutEffect, useRef, useState } from 'react'
 import { TEXT } from './v2ui.js'
 import { buffChips, hpBuffChips, ailChips, stateChips, needNow, castMsOf, CAST_SEC, BUFF_GAUGE_SEC } from '../core/atb.js'
 import { STAT_DEFS } from '../core/stats.js'
@@ -7,7 +7,8 @@ import { JP_BOLD } from './casinoStyle.js'
 import { rubySegmentsOf } from '../lib/skillRuby.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
 import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, rigLayersOf, artAnchorAt, illustCastShowAt, illustBuffShowAt, buffSceneAt, buffAfterAt, buffRainAt } from '../lib/bossIllust.js'
-import { behindRectOf, bgRectOf, bgFxAt } from '../lib/bossBg.js'
+import { behindRectOf, bgRectOf, bgFxAt, liteFxOf } from '../lib/bossBg.js'
+import { artIsLoaded } from '../lib/artPreload.js'
 import BossFlowCanvas from './BossFlowCanvas.jsx'
 import { FX_HEAD_Y, FX_FEET_Y, FX_SKY_Y, FX_TARGET_Y, SCENE_TOP, fallAt, coilAt, pourTimesOf, sceneEndMsOf, stageSceneOf, flyPosOf } from '../lib/bossScene.js'
 
@@ -57,10 +58,18 @@ import { FX_HEAD_Y, FX_FEET_Y, FX_SKY_Y, FX_TARGET_Y, SCENE_TOP, fallAt, coilAt,
 //     （IllustRig が体の動きの箱の中で帯ごとに同じパーツを切り抜いて描く・lib/bossIllust.js の flutterBandsAt）
 // ============================================================
 
+// 軽い表示（スマホ・遅い端末＝lib/atbPacer.js の段階）。2026-10-31 ユーザー「30回に落としたって出る、大技の時はそれよりも下がる感じ」：
+//   見た目を大きく変えずに、スマホで重いものをやめる：ぼかし（drop-shadow・feGaussianBlur）・重ね方（mix-blend-mode）・背景の SVG の毎コマの塗り直し（数を減らして1秒12回）・
+//   着物の帯の重ね描き・飛び込む残像。ボスの部品はそれぞれ別の層にする（will-change＝絵を塗り直さず動かすだけ）。
+//   体の光は明るさ（brightness）と後ろの丸い光で出す。filter はいつも付けておく（付け外しのたびに層が作り直されて、絵が一瞬消えることがある）
+const LiteCtx = createContext(false)
+// 大技などの細かい粒は半分に（軽い表示）
+const LITE_THIN = new Set(['mist', 'rain', 'drop', 'mote', 'hdrop', 'bubble', 'foam'])
+
 const Bar = ({ pct, color, h = 10 }) => (
-  <div style={{ height:`${h}px`, background:'#000818', border:'1px solid #13405f' }}>
-    {/* 計算の刻み（0.05秒）のあいだをなめらかに */}
-    <div style={{ width:`${Math.max(0, Math.min(100, pct))}%`, height:'100%', background: color, transition:'width 50ms linear' }} />
+  <div style={{ height:`${h}px`, background:'#000818', border:'1px solid #13405f', overflow:'hidden' }}>
+    {/* 計算の刻み（0.05秒）のあいだをなめらかに。幅を変えず縮めるだけ＝レイアウトをやり直さない */}
+    <div style={{ width:'100%', height:'100%', background: color, transformOrigin:'0 50%', transform:`scaleX(${(Math.max(0, Math.min(100, pct)) / 100).toFixed(4)})`, transition:'transform 50ms linear', willChange:'transform' }} />
   </div>
 )
 const chip = (color, bg = '#000818') => ({ fontSize:'10px', padding:'1px 5px', border:`1px solid ${color}`, color, background: bg })
@@ -98,18 +107,18 @@ const UniqueBuffs = ({ side, right, ago }) => {
   const g = ago >= 0 && ago < UNIQUE_GLOW_SEC ? 1 - ago / UNIQUE_GLOW_SEC : 0
   const gold = 'rgba(255,190,90,0.85)', red = 'linear-gradient(180deg, rgba(70,10,4,0.94) 0%, rgba(28,2,0,0.94) 100%)'
   return (
-    <div style={{ position:'absolute', top:'2px', [right ? 'right' : 'left']: '2px', zIndex: 6, display:'flex', flexDirection:'column', alignItems: right ? 'flex-end' : 'flex-start' }}>
-      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
-        style={{ padding:'3px 8px', fontSize:'11px', fontFamily: JP_BOLD, fontWeight: 700, color:'#ffe2a0', letterSpacing:'0.04em', cursor:'pointer',
+    <div style={{ position:'relative', flex:'0 0 auto', zIndex: 6 }}>
+      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-label={`バフ${list.length}つ`}
+        style={{ padding:'1px 5px', fontSize:'10px', fontFamily: JP_BOLD, fontWeight: 700, color:'#ffe2a0', cursor:'pointer', display:'block',
           border:`1px solid ${gold}`, borderRadius:'3px', background: red, lineHeight: 1.3, whiteSpace:'nowrap',
           boxShadow:`0 2px 8px rgba(0,0,0,0.5), 0 0 ${(4 + 12 * g).toFixed(1)}px rgba(255,90,30,${(0.45 + 0.5 * g).toFixed(2)})`,
-          transform: g > 0 ? `scale(${(1 + 0.18 * g).toFixed(3)})` : undefined, transformOrigin: right ? '100% 0' : '0 0',
+          transform: g > 0 ? `scale(${(1 + 0.18 * g).toFixed(3)})` : undefined, transformOrigin: right ? '100% 100%' : '0 100%',
           textShadow:'0 1px 2px #000' }}>
-        🔥 バフ×{list.length}
+        🔥×{list.length}
       </button>
       {open && (
         <div onClick={() => setOpen(false)}
-          style={{ marginTop:'4px', width:'min(210px, 62vw)', padding:'6px 8px', border:`1px solid ${gold}`, borderRadius:'3px', background: red,
+          style={{ position:'absolute', bottom:'100%', [right ? 'right' : 'left']: 0, marginBottom:'3px', width:'min(210px, 62vw)', padding:'6px 8px', border:`1px solid ${gold}`, borderRadius:'3px', background: red,
             boxShadow:'0 4px 14px rgba(0,0,0,0.6)', color:'#ffe9c4', fontSize:'11px', lineHeight: 1.45, textAlign:'left', cursor:'pointer' }}>
           {list.map((c, n) => (
             <div key={c.name} style={{ marginBottom: n < list.length - 1 ? '5px' : 0 }}>
@@ -167,15 +176,18 @@ const rigWrap = (art, pose) => {
 //   HPの節目のバフのオーラ（aura＝{ p, op, scale, front, glow }・2026-10-30）：front は竜の手前（鎧の殻）・glow は光として手前に明るく重ねる（雨摩座の篠突く雨）・
 //   どちらも無ければいちばん奥（逆鱗の闘気）。体の動きでは動かさない
 const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [], tMs = 0, aura = null }) => {
+  const lite = useContext(LiteCtx)
   const box = { x: 0, y: 0, w: art.base, h: art.base }
   const free = art.parts.filter(p => p.free && !p.nest)
-  const rigOp = show ? show.rig : 1
+  // ポーズの絵が届いていないあいだは立ち絵のまま（絵が一瞬消えない・lib/artPreload.js）
+  const poseReady = !show || show.poses.every(sp => artIsLoaded(motion.poses[sp.name].src))
+  const rigOp = show && poseReady ? show.rig : 1
   const { moving, still } = rigLayersOf(art)
   const rigStyle = { position:'absolute', inset:0, opacity: rigOp < 1 ? rigOp : undefined, visibility: rigOp <= 0.001 ? 'hidden' : undefined }
   const rig = <div style={rigStyle}>{moving.map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={pose} />)}</div>
-  const bands = art.flutter ? flutterBandsAt(art.key, tMs) : []
+  const bands = art.flutter && !lite ? flutterBandsAt(art.key, tMs) : []
   const pct = (y) => (y / art.base) * 100
-  const auraEl = aura && aura.op > 0.001 ? <AuraArt art={art} a={aura} /> : null
+  const auraEl = aura && aura.op > 0.001 ? <AuraArt art={art} a={lite ? { ...aura, glow: false } : aura} /> : null
   return (
     <>
       {auraEl && !aura.front && !aura.glow && auraEl}
@@ -184,10 +196,10 @@ const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [
           {free.map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={freePose} />)}
         </div>
       )}
-      {ghosts.map((g, i) => (
+      {!lite && ghosts.map((g, i) => (
         <div key={`g${i}`} style={{ ...rigWrap(art, g.pose), opacity: g.op }}><PoseArt art={art} p={motion.poses[g.name]} /></div>
       ))}
-      <div style={rigWrap(art, pose)}>
+      <div style={lite ? { ...rigWrap(art, pose), willChange:'transform' } : rigWrap(art, pose)}>
         {bands.length === 0 ? rig : bands.map((b, i) => (
           <div key={i} style={{ position:'absolute', inset:0,
             clipPath:`inset(${i === 0 ? '-40%' : `${(pct(b.y0) - 0.15).toFixed(2)}%`} -40% ${i === bands.length - 1 ? '-40%' : `${(100 - pct(b.y1) - 0.15).toFixed(2)}%`} -40%)`,
@@ -197,7 +209,7 @@ const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [
           </div>
         ))}
         {still.length > 0 && <div style={rigStyle}>{still.map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={pose} />)}</div>}
-        {show?.poses.map(sp => <PoseArt key={sp.name} art={art} p={motion.poses[sp.name]} op={sp.op} />)}
+        {poseReady && show?.poses.map(sp => <PoseArt key={sp.name} art={art} p={motion.poses[sp.name]} op={sp.op} />)}
         {art.dust && pose.dust > 0 && <RigDust art={art} k={pose.dust} />}
       </div>
       {auraEl && (aura.front || aura.glow) && auraEl}
@@ -214,18 +226,20 @@ const PoseArt = ({ art, p, op = 1 }) => (
 //   輪＝ぼかした太い色の輪＋細い明るい芯・火の粉＝ぼかした光の玉＋明るい芯（芯の色は決まりに書いてあれば＝雨摩座は水の色）・稲妻＝ぼかした太い線＋細い白い線
 const BuffSparks = ({ art, sc, after }) => {
   const id = useId()
+  const lite = useContext(LiteCtx)
+  const blur = lite ? undefined : `url(#${id})`
   const dots = (list, color, pre, core) => list.map((p, i) => (
     <g key={`${pre}${i}`} opacity={p.op.toFixed(3)}>
-      <circle cx={p.x} cy={p.y} r={p.r * 2.2} fill={`rgb(${color})`} filter={`url(#${id})`} />
+      <circle cx={p.x} cy={p.y} r={p.r * 2.2} fill={`rgb(${color})`} filter={blur} opacity={lite ? 0.45 : undefined} />
       <circle cx={p.x} cy={p.y} r={p.r * 0.7} fill={`rgb(${core || '255,236,190'})`} />
     </g>
   ))
   return (
-    <svg viewBox={`0 0 ${art.base} ${art.base}`} style={{ position:'absolute', inset:0, width:'100%', height:'100%', overflow:'visible', pointerEvents:'none', mixBlendMode:'screen' }}>
+    <svg viewBox={`0 0 ${art.base} ${art.base}`} style={{ position:'absolute', inset:0, width:'100%', height:'100%', overflow:'visible', pointerEvents:'none', mixBlendMode: lite ? undefined : 'screen' }}>
       <defs><filter id={id} x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="3" /></filter></defs>
       {sc?.rings.map((r, i) => (
         <g key={`r${i}`} opacity={r.op.toFixed(3)}>
-          <circle cx={r.x} cy={r.y} r={r.r} fill="none" stroke={`rgb(${sc.ringColor})`} strokeWidth={r.w * 1.8} filter={`url(#${id})`} />
+          <circle cx={r.x} cy={r.y} r={r.r} fill="none" stroke={`rgb(${sc.ringColor})`} strokeWidth={r.w * 1.8} filter={blur} opacity={lite ? 0.45 : undefined} />
           <circle cx={r.x} cy={r.y} r={r.r} fill="none" stroke={`rgb(${sc.ringCore || '255,226,170'})`} strokeWidth={Math.max(1, r.w * 0.35)} />
         </g>
       ))}
@@ -235,7 +249,7 @@ const BuffSparks = ({ art, sc, after }) => {
         const pts = b.pts.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ')
         return (
           <g key={`b${i}`} opacity={b.op.toFixed(3)} fill="none" strokeLinejoin="round">
-            <polyline points={pts} stroke={`rgb(${sc.boltColor})`} strokeWidth={11} filter={`url(#${id})`} />
+            <polyline points={pts} stroke={`rgb(${sc.boltColor})`} strokeWidth={11} filter={blur} opacity={lite ? 0.45 : undefined} />
             <polyline points={pts} stroke="rgb(240,250,255)" strokeWidth={3} />
           </g>
         )
@@ -247,6 +261,7 @@ const BuffSparks = ({ art, sc, after }) => {
 //   rains＝濃さ（k）と時計（t）のついた決まり（付いた瞬間の土砂降りと、そのあと降り続ける雨）・op＝全体の濃さ（ボスが倒れると止む）。px は舞台の大きさ（geo）から。
 //   線の太さは変わらないので、狭い舞台では本数を減らす（スマホの幅で雨が濃すぎて雨摩座が見えにくかった）
 const BuffRain = ({ geo, rains, op = 1 }) => {
+  const lite = useContext(LiteCtx)
   const W = geo.W, H = geo.b.y + geo.b.h
   const pathOf = (list, slant) => list.map(([x, y, len]) => {
     const x1 = x * W + slant * y * H, y1 = y * H
@@ -255,7 +270,7 @@ const BuffRain = ({ geo, rains, op = 1 }) => {
   return (
     <svg width={W} height={H} style={{ position:'absolute', left: 0, top: 0, zIndex: 3, pointerEvents:'none', opacity: op < 1 ? op : undefined }}>
       {rains.map((r, i) => {
-        const fit = Math.min(1, W / 600)
+        const fit = Math.min(1, W / 600) * (lite ? 0.6 : 1)
         const { far, near, splashes } = buffRainAt({ ...r, n: Math.ceil(r.n * fit), splash: Math.ceil((r.splash || 0) * fit) }, r.t)
         return (
           <g key={i} opacity={r.k.toFixed(3)} fill="none" stroke={`rgb(${r.color})`} strokeLinecap="round">
@@ -302,6 +317,7 @@ const partTransform = (p, pose) => {
 }
 //   腕の構えの絵（p.swap・雨摩座）は切り替える割合で濃さを変え、見えないときは隠す（子のパーツもいっしょ）
 const RigPart = ({ art, p, box, pose }) => {
+  const lite = useContext(LiteCtx)
   const S = art.base
   const mouth = art.jaw ? rotPoint(art.jaw.mouth, art.jaw.pivot, (pose.jaw || 0) / 2) : [art.mouth[0] + S * 0.03, art.mouth[1]]
   const op = p.swap ? swapOpacityOf(p.swap, pose) : 1
@@ -309,7 +325,7 @@ const RigPart = ({ art, p, box, pose }) => {
     <div style={{ position:'absolute', left:`${((p.x - box.x) / box.w) * 100}%`, top:`${((p.y - box.y) / box.h) * 100}%`,
       width:`${(p.w / box.w) * 100}%`, height:`${(p.h / box.h) * 100}%`,
       opacity: op < 1 ? op : undefined, visibility: op <= 0 ? 'hidden' : undefined,
-      transform: partTransform(p, pose),
+      transform: partTransform(p, pose), willChange: lite && !p.bend ? 'transform' : undefined,
       transformOrigin:`${((p.px - p.x) / p.w) * 100}% ${((p.py - p.y) / p.h) * 100}%` }}>
       {p.key === 'head' && <MouthInside art={art} p={p} pose={pose} />}
       {p.bend
@@ -327,7 +343,7 @@ const RigPart = ({ art, p, box, pose }) => {
       {p.key === 'head' && pose.glow > 0.01 && (
         <div style={{ position:'absolute', left:`${((mouth[0] - p.x) / p.w) * 100}%`, top:`${((mouth[1] - p.y) / p.h) * 100}%`,
           width:`${(S * (art.jaw ? 0.12 : 0.16) / p.w) * 100}%`, aspectRatio:'1 / 1', transform:'translate(-50%, -50%)', borderRadius:'50%',
-          opacity: pose.glow * (art.jaw ? 1 - 0.75 * Math.min(1, -(pose.jaw || 0) / 24) : 1), mixBlendMode:'screen',
+          opacity: pose.glow * (art.jaw ? 1 - 0.75 * Math.min(1, -(pose.jaw || 0) / 24) : 1), mixBlendMode: lite ? undefined : 'screen',
           background:'radial-gradient(circle, rgba(255,245,200,0.95) 0%, rgba(255,150,40,0.75) 30%, rgba(255,60,0,0.25) 55%, rgba(255,40,0,0) 72%)' }} />
       )}
     </div>
@@ -423,6 +439,7 @@ const buffAfterOf = (art, me, marks, now) => {
 //     背景も負の z-index をやめた（BossBackground）。絵の枠は別の層にする（translate3d）＝背景の WebGL の層の上に必ず重なる
 const FIGHTER_ROWS = 5
 function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx, now, name, artH = ART_H, scale = 1, areaRef, castEnd = -1e9, squeeze = null, bossGlow = 0 }) {
+  const lite = useContext(LiteCtx)
   const mine = fx.filter(f => f.side === side)
   const lastOf = (kind) => mine.reduce((t, f) => (f.kind === kind && f.t0 <= now && f.t0 > t ? f.t0 : t), -1e9)
   const dir = right ? -1 : 1   // 前＝相手の方
@@ -479,6 +496,18 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   // 逆鱗のあと：体が赤く脈打つ（心臓のように2回ずつ）
   if (after?.glow > 0.01) filters.push(`drop-shadow(0 0 ${(3 + 9 * after.glow).toFixed(1)}px rgba(${after.glowColor},${(0.2 + 0.55 * after.glow).toFixed(2)}))`)
   if (me.ail.paralyze) filters.push('grayscale(0.6)')
+  // 軽い表示：ぼかしを使わず、明るさと後ろの丸い光だけ（LiteCtx）
+  let bright = 1, red = 0
+  if (lite) {
+    if (hitAgo >= 0 && hitAgo < HIT_SEC) bright *= 1.25
+    if (glowAgo >= 0 && glowAgo < GLOW_SEC) bright *= 1.3
+    if (buff) { bright *= 1 + 0.9 * buff.flash; red = Math.max(0, 1 - (now - lastRage.t0) / (RAGE_SEC * 1.2)) }
+    else if (rageAgo >= 0 && rageAgo < RAGE_SEC) { const k = Math.sin(Math.PI * 2 * rageAgo / RAGE_SEC) ** 2 * (1 - rageAgo / RAGE_SEC); bright *= 1 + 0.35 * k; red = k }
+    bright *= 1 + 0.22 * bossGlow
+    red = Math.max(red, bossGlow, (after?.glow || 0) * 0.8)
+  }
+  const wrapFilter = lite ? `brightness(${bright.toFixed(3)}) grayscale(${me.ail.paralyze ? 0.6 : 0})` : filters.join(' ') || 'none'
+  const redColor = buffArt?.tint || after?.glowColor || '255,60,16'
   const down = me.hp <= 0
   const pops = mine.filter(f => f.kind !== 'act' && f.kind !== 'use' && f.kind !== 'rage' && now >= f.t0 && now - f.t0 < POP_SEC)
   const need = needNow(me, st.t)
@@ -505,8 +534,10 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
           opacity: down ? 0.25 : 1, transition:'opacity 0.4s' }}>
           {src || rig ? (
             // 待機の絵の枠（正方形）。攻撃の絵はこの枠に重ねる（ox・oy・w・h は待機の枠（クラスは 224px・ボスは base）を100%として割合で置く）
-            <div style={{ position:'relative', height:'100%', width:`min(100%, calc(${artH} * ${scale}))`, filter: filters.join(' ') || 'none',
+            <div style={{ position:'relative', height:'100%', width:`min(100%, calc(${artH} * ${scale}))`, filter: wrapFilter,
               transform: bsc && bsc.punch !== 1 ? `scale(${bsc.punch.toFixed(4)})` : undefined, transformOrigin:'50% 92%' }}>
+              {lite && red > 0.01 && <div style={{ position:'absolute', inset:'-14%', borderRadius:'50%', pointerEvents:'none', opacity: Math.min(1, red).toFixed(3),
+                background:`radial-gradient(closest-side, rgba(${redColor},0.6) 45%, rgba(${redColor},0) 100%)` }} />}
               {rig && trails.length > 0 && <RigTrails art={rig} trails={trails} />}
               {rig ? <IllustRig art={rig} pose={pose} freePose={illustFreePoseAt(rig.key, tMs)} motion={showMotion} show={show} ghosts={ghosts} tMs={tMs} aura={aura} /> : (
                 <img src={src} alt="" draggable={false}
@@ -530,8 +561,6 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
             </div>
           )}
         </div>
-        {/* 固有のバフのボタン（絵の右上） */}
-        <UniqueBuffs side={me} right={right} ago={rageAgo} />
         {/* 浮かぶ数字 */}
         {pops.map((f, i) => {
           const a = (now - f.t0) / POP_SEC
@@ -549,6 +578,8 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
       <div style={{ position:'relative', minWidth:0, display:'flex', justifyContent:'space-between', fontSize:'10px', lineHeight: 1.5, color: TEXT.label, gap:'0 4px', flexWrap:'wrap-reverse', alignContent:'flex-start', alignItems:'flex-start' }}>
         <span>HP {Math.max(0, me.hp).toLocaleString()} / {me.base.hp.toLocaleString()}</span>
         {!right && <span>MP {Math.max(0, me.mp).toLocaleString()} / {me.base.mp.toLocaleString()}</span>}
+        {/* 固有のバフのボタン（2026-10-31 ユーザー「バフのところもう少し小さくして、イラストと被ってる、押せればいいから」＝絵の上から HP の文字の行へ。名前の行は技の名前の帯を押しつぶした） */}
+        <UniqueBuffs side={me} right={right} ago={rageAgo} />
       </div>
       <div style={{ position:'relative', minWidth:0 }}>
         <Bar pct={(Math.max(0, me.hp) / me.base.hp) * 100} color={hpColor} h={10} />
@@ -584,7 +615,7 @@ const boxOf = (stage, area, scale) => {
 //   sx・sy＝横・縦だけ伸ばす（合わせる点は動かない）・filter＝明るさなど・flip＝左右に裏返す（合わせる点で）
 const Sprite = ({ a, frame, x = 0, y = 0, s = 1, sx = 1, sy = 1, rot = 0, op = 1, clip, mask, filter, flip = false, ay = a.ay }) => (
   <FrameStrip a={a} frame={frame} style={{ zIndex: 2, left: x - a.ax * s * sx, top: y - ay * s * sy, width: a.w * s * sx, height: a.h * s * sy, opacity: op, clipPath: clip,
-    maskImage: mask, WebkitMaskImage: mask, filter,
+    maskImage: mask, WebkitMaskImage: mask, filter: useContext(LiteCtx) ? undefined : filter,
     transform: rot || flip ? `${rot ? `rotate(${rot}rad)` : ''}${flip ? ' scaleX(-1)' : ''}` : undefined, transformOrigin: `${a.ax * s * sx}px ${ay * s * sy}px` }} />
 )
 const easeOut = (k) => 1 - (1 - k) * (1 - k)
@@ -728,6 +759,7 @@ function PourFlow({ a, flow, x, sky, bottom, s, fall, ms, front, cut, op }) {
 //   外の箱は縦の切り抜き（mask）、中の箱は横のぼかし（ふち）。ms＝流しはじめてから・speed＝1秒に unit（無ければ箱の高さ）の何倍落ちるか・
 //   W0＝流れた量を数える幅（ふくらんでも流れが跳ねない）
 function FlowColumn({ flow, left, top, W, W0 = W, H, ms, speed, unit = H, op, mask, filter }) {
+  const lite = useContext(LiteCtx)
   const layer = (k, sp, extra) => {
     const w = W * k, tile = w * (flow.h / flow.w), tile0 = W0 * k * (flow.h / flow.w)
     const off = (((Math.max(0, ms) / 1000) * speed * unit * sp) / tile0 % 1) * tile
@@ -738,9 +770,9 @@ function FlowColumn({ flow, left, top, W, W0 = W, H, ms, speed, unit = H, op, ma
     )
   }
   return (
-    <div style={{ position:'absolute', zIndex: 2, left, top, width: W, height: H, pointerEvents:'none', opacity: op, maskImage: mask, WebkitMaskImage: mask, filter }}>
+    <div style={{ position:'absolute', zIndex: 2, left, top, width: W, height: H, pointerEvents:'none', opacity: op, maskImage: mask, WebkitMaskImage: mask, filter: lite ? undefined : filter }}>
       {layer(1, 1, {})}
-      {layer(1.3, 1.45, { opacity: 0.5, mixBlendMode:'screen', filter:'brightness(1.25)' })}
+      {!lite && layer(1.3, 1.45, { opacity: 0.5, mixBlendMode:'screen', filter:'brightness(1.25)' })}
     </div>
   )
 }
@@ -801,6 +833,8 @@ function ChargeOrb({ m, a, acts, now, geo, art, s, cast, castEnd, sky = null }) 
 const SPIRAL = Array.from({ length: 25 }, (_, j) => j / 24)
 //   水の輪（coil）＝体のまわりの楕円。奥の半分（上）は暗く細く、手前の半分（下）は明るく、点線が回る
 function SceneLayer({ geo, sc, hands, s }) {
+  const lite = useContext(LiteCtx)
+  const items = lite ? sc.items.filter((it, i) => !LITE_THIN.has(it.t) || i % 2 === 0) : sc.items
   const id = useId().replace(/:/g, '')
   const U = geo.p.w, ox = geo.p.x + U / 2, oy = geo.p.y + geo.p.h * FX_FEET_Y
   const X = (x) => ox + x * U, Y = (y) => oy + y * U
@@ -834,7 +868,7 @@ function SceneLayer({ geo, sc, hands, s }) {
           })}
         </g>
       )}
-      {sc.items.map((it, i) => {
+      {items.map((it, i) => {
         if (it.t === 'streak' || it.t === 'jet') return <rect key={i} x={X(it.x - it.w / 2)} y={Y(it.y1)} width={it.w * U} height={(it.y2 - it.y1) * U} rx={(it.w * U) / 2} fill={`url(#${id}k)`} opacity={it.op} />
         if (it.t === 'rain') return <line key={i} x1={X(it.x1)} y1={Y(it.y1)} x2={X(it.x2)} y2={Y(it.y2)} stroke="#cfeaff" strokeWidth={Math.max(1, it.w * U)} strokeLinecap="round" opacity={it.op} />
         if (it.t === 'drop') return <ellipse key={i} cx={X(it.x)} cy={Y(it.y)} rx={it.rx * U} ry={it.ry * U} fill={dropC} opacity={it.op} transform={`rotate(${it.rot.toFixed(1)} ${X(it.x).toFixed(1)} ${Y(it.y).toFixed(1)})`} />
@@ -892,7 +926,10 @@ const BgRing = ({ ring, x, y, tMs }) => {
 }
 // ボスの後ろの色を抑える（lib/bossBg.js の behind）：色を抜く層と、薄い煙の層。box＝ボスの絵の枠
 const BgBehind = ({ behind, box }) => {
+  const lite = useContext(LiteCtx)
   const r = behindRectOf(behind, box), at = { position:'absolute', left: r.x, top: r.y, width: r.w, height: r.h }
+  // 軽い表示：色を抜く重ね方をやめて、暗い灰色の煙1枚で近い見た目に
+  if (lite) return <div style={{ ...at, background:`radial-gradient(closest-side, rgba(58,52,52,${(behind.sat * 0.62).toFixed(2)}) 50%, rgba(58,52,52,0) 100%)` }} />
   return (
     <>
       <div style={{ ...at, mixBlendMode:'saturation', background:`radial-gradient(closest-side, rgba(128,128,128,${behind.sat}) 55%, rgba(128,128,128,0) 100%)` }} />
@@ -901,30 +938,33 @@ const BgBehind = ({ behind, box }) => {
   )
 }
 // ダンジョンのボス戦の背景（lib/bossBg.js）。舞台の絵の所（上のはしから足元の少し下まで）にだけ敷く。下のはしはぼかして、HPの行の色（bg.under）へつなぐ。
+//   下のはしは under の色へぼかす（重ねて塗る＝mask-image は毎コマ下の中身を合成し直すのでやめた・2026-10-31）。
 //   ★舞台の子のいちばん先に置く＝あとの行（position:relative）がこの上に重なる。負の z-index にしない（2026-10-31・端末によってキャラが背景の下に隠れるおそれ）。
 //     舞台の boxShadow（技の暗転）はこれの下になるので、暗さはここにも掛ける（dim）
 //   動くものは絵と同じ大きさの SVG（viewBox＝元の絵の px）に、明るく重ねる（screen）。上のはしは名前が読めるように少し暗く
 const BG_BELOW_FEET = 10
 const BG_FADE = 18
 function BossBackground({ bg, geo, now, dim }) {
+  const lite = useContext(LiteCtx)
   const id = useId().replace(/:/g, '')
   const W = geo.W - 2, H = geo.b.y + geo.b.h + BG_BELOW_FEET   // 2＝舞台の枠線
-  const r = bgRectOf(bg, W, H), fx = bgFxAt(bg.fx, now * 1000)
-  const mask = `linear-gradient(to bottom, #000 ${H - BG_FADE}px, transparent ${H}px)`
+  // 軽い表示：動くものは数を減らして1秒12回（同じ時刻なら SVG は変わらない＝塗り直さない）
+  const fxMs = (lite ? Math.floor(now * 12) / 12 : now) * 1000
+  const r = bgRectOf(bg, W, H), fx = bgFxAt(lite ? liteFxOf(bg.fx) : bg.fx, fxMs)
   const colors = [...new Set([...fx.glows, ...fx.mist, ...fx.embers, ...fx.spatter, ...fx.motes].map(g => g.color))]
   const grad = (c) => `${id}c${colors.indexOf(c)}`
   return (
-    <div style={{ position:'absolute', left: 0, right: 0, top: 0, height: H, zIndex: 0, overflow:'hidden', pointerEvents:'none', maskImage: mask, WebkitMaskImage: mask }}>
+    <div style={{ position:'absolute', left: 0, right: 0, top: 0, height: H, zIndex: 0, overflow:'hidden', pointerEvents:'none' }}>
       <img src={bg.src} alt="" draggable={false} decoding="sync" style={{ position:'absolute', left: r.x, top: r.y, width: r.w, height: r.h, maxWidth:'none', userSelect:'none' }} />
-      {bg.flow && bg.flowSrc && <BossFlowCanvas bg={bg} rect={r} tMs={now * 1000} />}
+      {bg.flow && bg.flowSrc && <BossFlowCanvas bg={bg} rect={r} tMs={now * 1000} lite={lite} />}
       {bg.behind && <BgBehind behind={bg.behind} box={geo.b} />}
-      <svg viewBox={`0 0 ${bg.w} ${bg.h}`} preserveAspectRatio="none" style={{ position:'absolute', left: r.x, top: r.y, width: r.w, height: r.h, overflow:'hidden', mixBlendMode:'screen' }}>
+      <svg viewBox={`0 0 ${bg.w} ${bg.h}`} preserveAspectRatio="none" style={{ position:'absolute', left: r.x, top: r.y, width: r.w, height: r.h, overflow:'hidden', mixBlendMode: lite ? undefined : 'screen' }}>
         <defs>
           {colors.map((c, i) => (
             <radialGradient key={c} id={`${id}c${i}`}><stop offset="0" stopColor={`rgb(${c})`} /><stop offset="0.55" stopColor={`rgb(${c})`} stopOpacity="0.4" /><stop offset="1" stopColor={`rgb(${c})`} stopOpacity="0" /></radialGradient>
           ))}
         </defs>
-        {bg.fx.ring && <BgRing ring={bg.fx.ring} x={(geo.b.x + geo.b.w / 2 - 1 - r.x) / r.k} y={(geo.b.y + geo.b.h - r.y) / r.k} tMs={now * 1000} />}
+        {bg.fx.ring && <BgRing ring={bg.fx.ring} x={(geo.b.x + geo.b.w / 2 - 1 - r.x) / r.k} y={(geo.b.y + geo.b.h - r.y) / r.k} tMs={fxMs} />}
         {fx.mist.map((m, i) => <ellipse key={`m${i}`} cx={m.x} cy={m.y} rx={m.rx} ry={m.ry} fill={`url(#${grad(m.color)})`} opacity={m.op.toFixed(3)} />)}
         {fx.glows.map((g, i) => <circle key={`g${i}`} cx={g.x} cy={g.y} r={g.r} fill={`url(#${grad(g.color)})`} opacity={g.op.toFixed(3)} />)}
         {fx.flows.map((f, i) => <line key={`f${i}`} x1={f.x} y1={f.y1} x2={f.x} y2={f.y2} stroke={`rgb(${f.color})`} strokeWidth={f.width} strokeLinecap="round" opacity={f.op.toFixed(3)} />)}
@@ -935,7 +975,8 @@ function BossBackground({ bg, geo, now, dim }) {
         {fx.motes.map((e, i) => <circle key={`t${i}`} cx={e.x} cy={e.y} r={e.r * 2.6} fill={`url(#${grad(e.color)})`} opacity={Math.max(0, e.op).toFixed(3)} />)}
       </svg>
       <div style={{ position:'absolute', inset: 0, background:`linear-gradient(to bottom, rgba(0,0,0,0.5) 0, rgba(0,0,0,0) 46px), rgba(0,0,0,${bg.dark})` }} />
-      {dim && <div style={{ position:'absolute', inset: 0, background:`rgba(${dim.c},${dim.k.toFixed(3)})` }} />}
+      {dim && <div style={{ position:'absolute', inset: 0, background:`rgb(${dim.c})`, opacity: dim.k.toFixed(3), willChange:'opacity' }} />}
+      <div style={{ position:'absolute', inset: 0, background:`linear-gradient(to bottom, transparent ${H - BG_FADE}px, ${bg.under} ${H}px)` }} />
     </div>
   )
 }
@@ -943,6 +984,7 @@ function BossBackground({ bg, geo, now, dim }) {
 // 黒焔の奔流（sc.beam・終焉の黒焔）：口（hand）から相手の体の真ん中へ流れる炎のかたまり（棒に見えないように・下に暗い赤のぼかしを敷く）。
 //   飛ぶ絵の後ろに描く（前に描くと、塗りの絵の上に濁って重なった）。hand＝口（舞台の px）
 function DoomBeam({ geo, beam, hand }) {
+  const lite = useContext(LiteCtx)
   const id = useId().replace(/:/g, '')
   const U = geo.p.w, [hx, hy] = hand, dx = geo.p.x + U / 2 - hx, dy = geo.p.y + geo.p.h * FX_TARGET_Y - hy, len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len
   return (
@@ -953,7 +995,7 @@ function DoomBeam({ geo, beam, hand }) {
         <filter id={`${id}b`} x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation={(U * 0.012).toFixed(2)} /></filter>
       </defs>
       <g opacity={beam.op.toFixed(3)}>
-        <line x1={hx} y1={hy} x2={hx + dx * beam.head} y2={hy + dy * beam.head} stroke="#7a1200" strokeWidth={U * 0.2 * beam.w} strokeLinecap="round" opacity="0.6" filter={`url(#${id}b)`} />
+        <line x1={hx} y1={hy} x2={hx + dx * beam.head} y2={hy + dy * beam.head} stroke="#7a1200" strokeWidth={U * 0.2 * beam.w} strokeLinecap="round" opacity={lite ? 0.35 : 0.6} filter={lite ? undefined : `url(#${id}b)`} />
         {beam.blobs.map((q, i) => (
           <circle key={i} cx={hx + dx * q.p + nx * q.off * U} cy={hy + dy * q.p + ny * q.off * U} r={q.r * U * (0.5 + 0.5 * beam.w) * (q.dark ? 1.25 : 1)}
             fill={`url(#${id}${q.dark ? 'm' : 'g'})`} opacity={q.op.toFixed(3)} />
@@ -1002,7 +1044,8 @@ const sceneOfStage = (art, acts, now, cast, castEnd) => {
 
 // foeArt … ダンジョンのボスの絵（lib/bossArt.js の bossArtOf＝ドット絵版／lib/bossIllust.js の bossIllustOf＝イラスト版）。
 //   あれば技ごとの絵とエフェクトを流す
-export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, foeSrc, foeBig = false, foeArt = null }) {
+//   lite … 軽い表示（LiteCtx）
+export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, foeSrc, foeBig = false, foeArt = null, lite = false }) {
   const size = foeBig ? STAGE_OF[foeArt?.kind === 'illust' ? 'illust' : 'pixel'] : null
   // ボスのエフェクトの位置：絵の場所（動かない枠）を測る。大きさが変わったら測り直す
   const stageRef = useRef(null), pArea = useRef(null), bArea = useRef(null)
@@ -1046,11 +1089,12 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
     return () => ro.disconnect()
   }, [foeBig, playerScale])
   return (
-    <div ref={stageRef} style={{ position:'relative', isolation:'isolate', overflow:'hidden', padding:'8px',
+    <LiteCtx.Provider value={lite}>
+    <div ref={stageRef} style={{ position:'relative', isolation:'isolate', overflow:'hidden', padding:'8px', willChange: foeBig ? 'transform' : undefined,
       display:'grid', gridAutoFlow:'column', gridTemplateRows:`repeat(${FIGHTER_ROWS}, auto)`, gridTemplateColumns:`minmax(0, 1fr) minmax(0, ${size?.fr || 1}fr)`, columnGap:'12px',
       background: foeArt?.bg ? foeArt.bg.under : 'linear-gradient(180deg, #000a26 0%, #001338 70%, #00204a 100%)', border:'1px solid #0a2a55',
-      // 演出：背景を暗く（内側の影は背景の上・中身の下）・舞台ごと揺れる
-      boxShadow: dimOf ? `inset 0 0 0 2000px rgba(${dimOf.c},${dimOf.k.toFixed(3)})` : undefined,
+      // 演出：背景を暗く（内側の影は背景の上・中身の下・変わるたびに舞台ぜんぶを塗り直すので、背景の絵があるボスは絵の層の暗さだけ）・舞台ごと揺れる
+      boxShadow: dimOf && !foeArt?.bg ? `inset 0 0 0 2000px rgba(${dimOf.c},${dimOf.k.toFixed(3)})` : undefined,
       transform: shake[0] || shake[1] ? `translate(${shake[0].toFixed(1)}px, ${shake[1].toFixed(1)}px)` : undefined }}>
       {foeArt?.bg && geo && <BossBackground bg={foeArt.bg} geo={geo} now={now} dim={dimOf} />}
       <Fighter st={st} side="a" me={st.a} src={playerSrc} motion={playerMotion} strips={playerMotion ? [playerMotion] : []} fx={fx} now={now} name={st.a.name}
@@ -1066,6 +1110,7 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
       {/* 稲妻が落ちた瞬間に舞台ぜんぶが光る（篠突く雨） */}
       {bsc?.flash > 0.01 && <div style={{ position:'absolute', inset:0, zIndex: 4, pointerEvents:'none', background:'rgb(205,230,255)', opacity: bsc.flash.toFixed(3) }} />}
     </div>
+    </LiteCtx.Provider>
   )
 }
 

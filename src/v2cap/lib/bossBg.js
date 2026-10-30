@@ -186,6 +186,14 @@ export const bgRectOf = (bg, W, H) => {
 // 決まった乱れ（0〜1・同じ i と salt なら同じ値）
 const hash01 = (i, salt) => { const x = Math.sin(i * 127.1 + salt * 311.7) * 43758.5453; return x - Math.floor(x) }
 const lerp = ([a, b], t) => a + (b - a) * t
+// 軽い表示（スマホ・遅い端末）の動くもの：数を減らす
+const liteMemo = new WeakMap()
+const thin = (o, k) => (o ? { ...o, n: Math.ceil(o.n * k) } : o)
+export const liteFxOf = (fx) => {
+  if (!fx) return fx
+  if (!liteMemo.has(fx)) liteMemo.set(fx, { ...fx, embers: thin(fx.embers, 0.5), spatter: thin(fx.spatter, 0.5), motes: thin(fx.motes, 0.5), ripples: thin(fx.ripples, 0.6), drizzle: thin(fx.drizzle, 0.5) })
+  return liteMemo.get(fx)
+}
 // 背景の動くもの（いまの時刻 tMs）→ { glows, mist, flows, embers, spatter, motes, ripples, drizzle }（どれも元の絵の px）
 export const bgFxAt = (fx, tMs) => {
   const out = { glows: [], mist: [], flows: [], embers: [], spatter: [], motes: [], ripples: [], drizzle: [] }

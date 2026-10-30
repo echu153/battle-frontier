@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { ART_WAIT_MS, artLoadedCount, preloadArt } from './artPreload.js'
+import { ART_WAIT_MS, artIsLoaded, artLoadedCount, preloadArt } from './artPreload.js'
 import { bossIllustOf } from './bossIllust.js'
 import { bossArtOf } from './bossArt.js'
 
@@ -20,6 +20,7 @@ test('【確定】2026-10-31 絵の先読み：そろったら解決・途中の
   waiting['t1/b.webp']()   // 読めなかった絵も done を呼ぶ（画面の読み方は onerror でも呼ぶ）
   await new Promise(r => setTimeout(r, 0))
   assert.equal(artLoadedCount(srcs), 2)
+  assert.ok(artIsLoaded('t1/a.webp') && !artIsLoaded('t1/c.webp'))
   assert.equal(finished, false, 'まだそろっていない')
   waiting['t1/c.webp']()
   await p

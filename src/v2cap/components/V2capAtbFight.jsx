@@ -14,7 +14,7 @@ import { fxEventsOf, scheduleFx, POP_SEC } from '../lib/atbFx.js'
 import { enemyArtSrc } from '../lib/enemyArt.js'
 import { newBossMotionMemo, bossMotionKeyOf } from '../lib/bossArt.js'
 import { artLoadedCount, preloadArt } from '../lib/artPreload.js'
-import { DRAW_MS, newAtbPacer } from '../lib/atbPacer.js'
+import { DRAW_MS, atbLevelOf, newAtbPacer } from '../lib/atbPacer.js'
 
 // ============================================================
 // 「レベルキャップあり」版（v2cap）— ATB戦闘の画面（舞台・マクロ・技のボタン・ログ・時間を進める）
@@ -33,14 +33,26 @@ const chip = (color, bg = '#000818') => ({ fontSize:'10px', padding:'1px 5px', b
 //   ＝技のボタン・防御のボタン・動いているマクロの手・割り込みの手。置く側は position:relative と overflow:hidden にする
 //   ⚠前は上からかぶせる膜だけで、膜の色がボタンの地（濃い紺）とほぼ同じだったため、縮んでも見た目が変わらなかった
 //   （ユーザー「下から戻らずCD解消されるまでグレーアウトのまま」）＝グレーの膜（全体）＋下から満ちる色、の2枚にした
-const CdShade = ({ ratio }) => (ratio > 0 ? (
+//   軽い表示（lite）：backdrop-filter はボタンごとに毎コマ合成し直すのでスマホでとても重い＝濃い膜だけ
+const CdShade = ({ ratio, lite = false }) => (ratio > 0 ? (
   <>
     <span aria-hidden style={{ position:'absolute', inset:0, pointerEvents:'none',
-      background:'rgba(70, 76, 88, 0.55)', backdropFilter:'grayscale(1)', WebkitBackdropFilter:'grayscale(1)' }} />
+      ...(lite ? { background:'rgba(70, 76, 88, 0.72)' } : { background:'rgba(70, 76, 88, 0.55)', backdropFilter:'grayscale(1)', WebkitBackdropFilter:'grayscale(1)' }) }} />
     <span aria-hidden style={{ position:'absolute', left:0, right:0, bottom:0, height:`${((1 - ratio) * 100).toFixed(1)}%`, pointerEvents:'none',
       background:'rgba(60, 150, 255, 0.38)', borderTop:'1px solid rgba(140, 210, 255, 0.9)' }} />
   </>
 ) : null)
+
+// 舞台だけを毎回更新する（技のボタンやログまで毎回作り直すと、スマホで間に合わない）。tickRef.current() で更新
+const PANEL_MS = 66   // ボタンや数字は1秒15回
+const LiveStage = ({ tickRef, st, fxRef, ...rest }) => {
+  const [, setN] = useState(0)
+  useEffect(() => {
+    tickRef.current = () => setN(n => n + 1)
+    return () => { tickRef.current = null }
+  }, [tickRef])
+  return <V2capAtbStage st={st} fx={fxRef.current} now={performance.now() / 1000} {...rest} />
+}
 
 export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, playerMotion, bossArt = null, verPicker = null, dev = false, onOver, footer }) {
   const [paused, setPaused] = useState(false)
@@ -51,7 +63,10 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
   const logBox = useRef(null)
   const fxRef = useRef([])        // 画面の動き（lib/atbFx.js の fxEventsOf に、起きた時刻 t0（秒）を足したもの）
   const bossMemo = useRef(newBossMotionMemo())
-  const drawRate = useRef({ from: 0, n: 0, rate: 0, slow: false })   // 試し撃ちに出す実際の更新の回数（本物のスマホで読める）
+  const drawRate = useRef({ from: 0, n: 0, rate: 0, low: [], slow: false })   // 試し撃ちに出す実際の更新の回数（本物のスマホで読める）・low＝この10秒の回数
+  const stageTick = useRef(null)
+  const lastPanel = useRef(0)
+  const [lite, setLite] = useState(() => atbLevelOf() >= 1)   // 軽い表示（lib/atbPacer.js）
   const overSent = useRef(false)
   const onOverRef = useRef(onOver)
   onOverRef.current = onOver
@@ -114,7 +129,8 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
       }
       if (s?.over && !overSent.current) { overSent.current = true; onOverRef.current?.(s) }
       last.current = now
-      setFrame(f => f + 1)
+      stageTick.current?.()
+      if (s?.over || now - lastPanel.current >= PANEL_MS) { lastPanel.current = now; setFrame(f => f + 1) }
     }
     const pacer = newAtbPacer()
     let lastTick = last.current, raf = 0
@@ -125,7 +141,13 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
       tick(lastTick)
       const r = drawRate.current
       r.n += 1
-      if (t - r.from >= 1000) { r.rate = Math.round((r.n * 1000) / (t - r.from)); r.from = t; r.n = 0; r.slow = pacer.ms !== DRAW_MS }
+      if (!r.from) { r.from = t; r.n = 0 }   // 始まった瞬間は数えない
+      if (t - r.from >= 1000) {
+        const gap = t - r.from > 1500   // 止まっていた（裏のタブなど）ぶんは「最低」に入れない
+        r.rate = Math.round((r.n * 1000) / (t - r.from)); r.from = t; r.n = 0; r.slow = pacer.ms !== DRAW_MS
+        if (!gap) r.low = [...r.low, r.rate].slice(-10)
+      }
+      if (pacer.level >= 1) setLite(true)   // 同じ値なら React は何もしない
     }
     raf = requestAnimationFrame(loop)
     const id = setInterval(() => {
@@ -169,13 +191,13 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
   return (
     <div>
       {/* 自分（左）とモンスター（右） */}
-      <V2capAtbStage st={s} fx={fxRef.current} now={performance.now() / 1000} playerSrc={playerSrc} playerMotion={playerMotion}
-        foeSrc={bossArt ? bossArt.idle?.src || null : enemyArtSrc(en.name)} foeBig={!!bossArt} foeArt={bossArt} />
+      <LiveStage tickRef={stageTick} st={s} fxRef={fxRef} playerSrc={playerSrc} playerMotion={playerMotion}
+        foeSrc={bossArt ? bossArt.idle?.src || null : enemyArtSrc(en.name)} foeBig={!!bossArt} foeArt={bossArt} lite={lite} />
       <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color: TEXT.label, margin:'6px 0', gap:'8px', flexWrap:'wrap' }}>
         <span>次：{nextLabel}</span>
         <span>削り {dealtPct.toFixed(1)}%・{Math.round(dps).toLocaleString()}ダメージ/秒</span>
         <span>{now.toFixed(1)}秒 / {s.maxSec}秒</span>
-        {dev && <span>更新 {drawRate.current.rate}回/秒{drawRate.current.slow ? '（30回に落とした）' : ''} [開発]</span>}
+        {dev && <span>更新 {drawRate.current.rate}回/秒（最低{drawRate.current.low.length ? Math.min(...drawRate.current.low) : '-'}）{lite ? '・軽い表示' : ''}{drawRate.current.slow ? '・30回に落とした' : ''} [開発]</span>}
       </div>
       {/* ボスの技の絵を流してみる（戦闘には関係しない） */}
       {dev && bossArt && (
@@ -219,7 +241,7 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
               <span key={k} style={{ ...chip(k === run.pos ? '#ffee44' : '#88ccff', k === run.pos ? '#003060' : '#000818'),
                 position:'relative', overflow:'hidden' }}>
                 {k + 1}. {entryText(e)}
-                <CdShade ratio={entryCd(e)} />
+                <CdShade lite={lite} ratio={entryCd(e)} />
               </span>
             ))}
             <span style={{ color: TEXT.label, fontSize:'10px' }}>（最後まで出たら頭に戻る）</span>
@@ -239,7 +261,7 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
                 <button key={i} onClick={() => unreserveAt(s, i)} title="押すと外す"
                   style={{ ...miniBtn(i === 0 ? '#ffee44' : '#88ccff'), padding:'4px 7px', fontSize:'11px', position:'relative', overflow:'hidden' }}>
                   {i + 1}. {entryText(q)}{wait ? `（あと${cdLeft(me, q.idx, now).toFixed(1)}秒）` : ''} ✕
-                  <CdShade ratio={entryCd(q)} />
+                  <CdShade lite={lite} ratio={entryCd(q)} />
                 </button>
               )
             })}
@@ -263,7 +285,7 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
               <div style={{ fontSize:'9px', color: TEXT.label, marginTop:'2px' }}>
                 {left > 0 ? `あと${left.toFixed(1)}秒` : `CD${cdFor(me, sl.skill)}秒`}・MP{mp}
               </div>
-              <CdShade ratio={cdRatio(me, i, now)} />
+              <CdShade lite={lite} ratio={cdRatio(me, i, now)} />
             </button>
           )
         })}
@@ -276,7 +298,7 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
           <div style={{ fontSize:'9px', color: TEXT.label, marginTop:'2px' }}>
             {gReady ? `被ダメージ-${GUARD_CUT}%・CD${GUARD_CD}秒` : `あと${guardCdLeft(me, now).toFixed(1)}秒`}
           </div>
-          <CdShade ratio={guardCdRatio(me, now)} />
+          <CdShade lite={lite} ratio={guardCdRatio(me, now)} />
         </button>
       </div>
 

@@ -43,3 +43,43 @@ test('【確定】2026-10-31 端末でプレイヤーとモンスターが消え
     assert.doesNotMatch(src, /zIndex: *-/, `${name}：負の重ね順`)
   }
 })
+
+test('【確定】2026-10-31 スマホの軽い表示（ユーザー「30回に落としたって出る、大技の時はそれよりも下がる感じ」）：重いものをやめる・舞台だけを毎回更新する', () => {
+  const fightSrc = readFileSync(new URL('../components/V2capAtbFight.jsx', import.meta.url), 'utf8')
+  // ぼかしと重ね方は軽い表示で使わない
+  assert.match(stage, /const blur = lite \? undefined/)
+  assert.match(stage, /filter=\{lite \? undefined : `url\(#\$\{id\}b\)`\}/)
+  assert.ok((stage.match(/mixBlendMode: lite \? undefined : 'screen'/g) || []).length >= 3, '重ね方')
+  assert.match(stage, /const wrapFilter = lite \? `brightness/, '体の光は明るさだけ')
+  assert.match(stage, /brightness\(\$\{bright\.toFixed\(3\)\}\) grayscale/, 'filter はいつも付いている')
+  // 背景：マスクをやめて重ね塗り・動くものは数を減らして1秒12回・溶岩は1秒20回
+  assert.doesNotMatch(stage.slice(stage.indexOf('function BossBackground')), /maskImage: mask/)
+  assert.match(stage, /Math\.floor\(now \* 12\) \/ 12/)
+  assert.match(stage, /liteFxOf\(bg\.fx\)/)
+  // 部品は別の層・着物の帯と残像はやめる
+  assert.match(stage, /willChange: lite && !p\.bend \? 'transform'/)
+  assert.match(stage, /art\.flutter && !lite \? flutterBandsAt/)
+  assert.match(stage, /!lite && ghosts\.map/)
+  // 暗転は背景の層の濃さだけ（舞台ぜんぶを塗り直さない）・舞台の揺れも別の層
+  assert.match(stage, /boxShadow: dimOf && !foeArt\?\.bg/)
+  assert.match(stage, /willChange: foeBig \? 'transform'/)
+  // ゲージは幅を変えない（レイアウトをやり直さない）
+  assert.match(stage, /transform:`scaleX\(/)
+  // クールダウンの膜：backdrop-filter はやめる
+  assert.match(fightSrc, /lite \? \{ background:'rgba\(70, 76, 88, 0\.72\)' \}/)
+  // 舞台だけを毎回更新し、ボタンやログは1秒15回
+  assert.match(fightSrc, /stageTick\.current\?\.\(\)/)
+  assert.match(fightSrc, /now - lastPanel\.current >= PANEL_MS/)
+})
+
+test('【確定】2026-10-31 絵が一瞬消えない（ユーザー「たまーにイラストが一瞬なくなることもあるから改善してほしい」）：ポーズの絵が届くまで立ち絵のまま・読んだ絵は手放さない。バフのボタンは絵の上に置かない（ユーザー「バフのところもう少し小さくして、イラストと被ってる、押せればいいから」）', () => {
+  assert.match(stage, /const rigOp = show && poseReady \? show\.rig : 1/)
+  assert.match(stage, /poseReady && show\?\.poses\.map/)
+  const preload = readFileSync(new URL('./artPreload.js', import.meta.url), 'utf8')
+  assert.match(preload, /held\.push\(im\)/)
+  // バフのボタンは HP の文字の行（絵の枠の外・名前の行は技の名前の帯を押しつぶすので置かない）
+  const hpRow = fighter.slice(fighter.indexOf('{/* HP・ゲージ。'), fighter.indexOf('<Bar pct={(Math.max(0, me.hp)'))
+  assert.match(hpRow, /<UniqueBuffs side=\{me\}/)
+  assert.equal((fighter.match(/<UniqueBuffs /g) || []).length, 1)
+  assert.match(stage, /🔥×\{list\.length\}/, '短い札')
+})

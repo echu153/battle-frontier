@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { BOSS_BG } from './bossBgList.js'
-import { BOSS_BG_DEFS, BOSS_BG_DIR, GRAIN_SIZE, behindRectOf, bossBgOf, bgRectOf, bgFxAt, flowAt, flowPickOf, grainOf } from './bossBg.js'
+import { BOSS_BG_DEFS, BOSS_BG_DIR, GRAIN_SIZE, behindRectOf, bossBgOf, bgRectOf, bgFxAt, flowAt, flowPickOf, grainOf, liteFxOf } from './bossBg.js'
 import { BOSS_ART_DIR, BOSS_DEFS, bossArtOf, bossFileOf } from './bossArt.js'
 import { bossIllustOf } from './bossIllust.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
@@ -136,6 +136,16 @@ test('【確定】2026-10-30 黒龍の溶岩を流す（ユーザー「黒龍の
   let same = 0
   for (let i = 0; i < N * N; i++) if (Math.abs(g[i * 4] - g[i * 4 + 1]) < 4) same += 1
   assert.ok(same < N * N * 0.3, 'R と G は別のムラ')
+})
+
+test('【確定】2026-10-31 軽い表示の動くもの：粒は半分ほど・もとの決まりは変えない・同じ決まりなら同じものを返す', () => {
+  const v = BOSS_BG_DEFS.varuzenoku.fx, a = BOSS_BG_DEFS.amaza.fx
+  assert.equal(liteFxOf(v).embers.n, Math.ceil(v.embers.n / 2))
+  assert.equal(liteFxOf(a).drizzle.n, Math.ceil(a.drizzle.n / 2))
+  assert.equal(liteFxOf(a).glows, a.glows, '灯籠の光はそのまま')
+  assert.equal(liteFxOf(v), liteFxOf(v))
+  assert.equal(bgFxAt(liteFxOf(v), 5000).embers.length, Math.ceil(v.embers.n / 2))
+  assert.equal(liteFxOf(null), null)
 })
 
 test('【確定】2026-10-31 雨摩座の背景は「空に浮かぶ庭」の背景2.png（ユーザー「あまざの背景もいれた、背景２ってやつ」）：滝の水が下へ流れる・床の映りこみがゆらぐ・岩や雲は動かさない', () => {

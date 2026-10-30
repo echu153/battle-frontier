@@ -5,17 +5,29 @@
 //   （雨摩座の背景は本番で約1.1秒＝そのあいだ真っ黒な舞台に光の粒だけが浮く。スマホの回線ならもっと長い）。
 //   V2capAtbFight.jsx は絵がそろうまで戦闘の時計を進めない。ART_WAIT_MS を過ぎたら、そろわなくても始める（回線のせいで戦えなくならない）。
 //   1枚の絵は1回だけ読む（入口の画面で読み始めたぶんも使い回す）。読めなかった絵は待たない
+// 【確定】2026-10-31 ユーザー「たまーにイラストが一瞬なくなることもあるから改善してほしい」：スマホのブラウザは、どこからも使われていない絵を捨てる
+//   ＝次にその絵を出すとき読み直すあいだ、立ち絵は隠れているのにポーズの絵が出ず、ボスが消えて見えた。読んだ絵は手放さず（held）、先に開いておく（decode）。
+//   それでも届いていない絵は artIsLoaded で分かる＝IllustRig は届くまで立ち絵のまま
 // ============================================================
 export const ART_WAIT_MS = 8000
 
 const loading = new Map()   // 絵のアドレス → 読み終わると解決する Promise
 const loaded = new Set()
-const loadByImage = (src, done) => { const im = new Image(); im.onload = done; im.onerror = done; im.src = src }
+const held = []             // 読んだ絵（手放さない）
+const loadByImage = (src, done) => {
+  const im = new Image()
+  held.push(im)
+  im.onload = () => { im.decode?.()?.catch(() => {}); done() }
+  im.onerror = done
+  im.src = src
+}
 const loadOne = (src, load) => {
   if (!loading.has(src)) loading.set(src, new Promise((res) => load(src, () => { loaded.add(src); res() })))
   return loading.get(src)
 }
 
+// 読み終わった絵か
+export const artIsLoaded = (src) => loaded.has(src)
 // いくつ読み終わったか
 export const artLoadedCount = (srcs) => srcs.filter(s => loaded.has(s)).length
 

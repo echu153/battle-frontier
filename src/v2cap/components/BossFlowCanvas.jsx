@@ -14,6 +14,7 @@ import { GRAIN_SIZE, grainOf } from '../lib/bossBg.js'
 //   色の動かし方はボスごと（flow の mask・gain・hot）：溶岩は上のとおり。水（雨摩座）は暗い所が深い青、明るい所が白くなる。
 //   動かす所だけ描いて、ほかは透明（下の <img> が見える）＝WebGL が使えないときは止まった絵のまま。
 //   描く時刻は親から（tMs・戦闘の画面の時計）＝止めて確かめられる
+//   軽い表示（lite・スマホ）：1秒20回・画面の1倍の細かさで描く（遅い流れなので見た目はほとんど変わらない）
 // ============================================================
 const VS = `
 attribute vec2 p;
@@ -123,15 +124,18 @@ const setup = (gl, src, flowSrc, onReady) => {
 }
 
 // rect＝画面の場所（x・y・w・h）・bg＝lib/bossBg.js の bossBgOf の答え（src・flowSrc・flow）
-export default function BossFlowCanvas({ bg, rect, tMs }) {
+export default function BossFlowCanvas({ bg, rect, tMs, lite = false }) {
   const ref = useRef(null)
   const st = useRef(null)   // { gl, u, ready }
+  const drawn = useRef(null)   // 最後に描いた時刻（同じ時刻は描き直さない）
+  const t = lite ? Math.floor(tMs / 50) * 50 : tMs
   const draw = () => {
     const s = st.current
-    if (!s?.ready || s.gl.isContextLost()) return
+    if (!s?.ready || s.gl.isContextLost() || drawn.current === t) return
+    drawn.current = t
     const { gl, u } = s, f = bg.flow, c = gl.canvas
     gl.viewport(0, 0, c.width, c.height)
-    const p0 = (tMs / f.periodMs) % 1
+    const p0 = (t / f.periodMs) % 1
     gl.uniform2f(u.off, (f.dist * bg.h) / bg.w, f.dist)
     gl.uniform2f(u.wob, f.wobble[0] / bg.w, f.wobble[1] / bg.h)
     gl.uniform2f(u.phase, p0, (p0 + 0.5) % 1)
@@ -165,7 +169,7 @@ export default function BossFlowCanvas({ bg, rect, tMs }) {
   }, [bg.src, bg.flowSrc])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(draw)
   // 細かくしすぎない（絵は幅1280・スマホの電池）
-  const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 1.5)
+  const dpr = lite ? 1 : Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 1.5)
   const pxW = Math.min(1280, Math.round(rect.w * dpr)), pxH = Math.round((pxW * bg.h) / bg.w)
   return <canvas ref={ref} width={pxW} height={pxH} style={{ position:'absolute', left: rect.x, top: rect.y, width: rect.w, height: rect.h }} />
 }
