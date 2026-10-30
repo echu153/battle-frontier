@@ -8,6 +8,7 @@ import { rubySegmentsOf } from '../lib/skillRuby.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
 import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, rigLayersOf, artAnchorAt, illustCastShowAt, illustBuffShowAt, buffSceneAt, buffAfterAt, buffRainAt } from '../lib/bossIllust.js'
 import { bgRectOf, bgFxAt } from '../lib/bossBg.js'
+import BossFlowCanvas from './BossFlowCanvas.jsx'
 import { FX_HEAD_Y, FX_FEET_Y, FX_SKY_Y, FX_TARGET_Y, SCENE_TOP, fallAt, coilAt, pourTimesOf, sceneEndMsOf, stageSceneOf, flyPosOf } from '../lib/bossScene.js'
 
 // ============================================================
@@ -865,6 +866,20 @@ function SceneLayer({ geo, sc, hands, s }) {
     </svg>
   )
 }
+// 足元の水の紋（雨摩座）：床に寝かせた丸い紋様が、ゆっくり回って脈打つ（x・y＝足元・元の絵の px）。点線の向きが互い違いに回る
+const BgRing = ({ ring, x, y, tMs }) => {
+  const p = (tMs / ring.periodMs) % 1, beat = 0.6 + 0.4 * Math.sin((tMs / ring.periodMs) * Math.PI * 12)
+  const c = `rgb(${ring.color})`, ell = (k, extra) => <ellipse cx={x} cy={y} rx={ring.rx * k} ry={ring.ry * k} fill="none" stroke={c} {...extra} />
+  return (
+    <g opacity={(0.42 + 0.28 * beat).toFixed(3)}>
+      {ell(1, { strokeWidth: 3 })}
+      {ell(0.93, { strokeWidth: 7, strokeDasharray: '4 22', strokeDashoffset: (p * 520).toFixed(1) })}
+      {ell(0.82, { strokeWidth: 1.6 })}
+      {ell(0.66, { strokeWidth: 5, strokeDasharray: '26 14', strokeDashoffset: (-p * 700).toFixed(1) })}
+      {ell(0.42, { strokeWidth: 1.6 })}
+    </g>
+  )
+}
 // ダンジョンのボス戦の背景（lib/bossBg.js）。舞台の絵の所（上のはしから足元の少し下まで）にだけ敷く。下のはしはぼかして、HPの行の色（bg.under）へつなぐ。
 //   ★舞台は isolation:isolate で、これは z-index:-1＝舞台の地の色より上・ほかの中身より下。舞台の boxShadow（技の暗転）はこれの下になるので、暗さはここにも掛ける（dim）
 //   動くものは絵と同じ大きさの SVG（viewBox＝元の絵の px）に、明るく重ねる（screen）。上のはしは名前が読めるように少し暗く
@@ -875,23 +890,34 @@ function BossBackground({ bg, geo, now, dim }) {
   const W = geo.W - 2, H = geo.b.y + geo.b.h + BG_BELOW_FEET   // 2＝舞台の枠線
   const r = bgRectOf(bg, W, H), fx = bgFxAt(bg.fx, now * 1000)
   const mask = `linear-gradient(to bottom, #000 ${H - BG_FADE}px, transparent ${H}px)`
-  const colors = [...new Set([...fx.glows, ...fx.mist, ...fx.embers].map(g => g.color))]
+  const colors = [...new Set([...fx.glows, ...fx.mist, ...fx.embers, ...fx.spatter, ...fx.motes].map(g => g.color))]
   const grad = (c) => `${id}c${colors.indexOf(c)}`
   return (
     <div style={{ position:'absolute', left: 0, right: 0, top: 0, height: H, zIndex: -1, overflow:'hidden', pointerEvents:'none', maskImage: mask, WebkitMaskImage: mask }}>
       <img src={bg.src} alt="" draggable={false} decoding="sync" style={{ position:'absolute', left: r.x, top: r.y, width: r.w, height: r.h, maxWidth:'none', userSelect:'none' }} />
+      {bg.flow && bg.flowSrc && <BossFlowCanvas bg={bg} rect={r} tMs={now * 1000} />}
       <svg viewBox={`0 0 ${bg.w} ${bg.h}`} preserveAspectRatio="none" style={{ position:'absolute', left: r.x, top: r.y, width: r.w, height: r.h, overflow:'hidden', mixBlendMode:'screen' }}>
         <defs>
           {colors.map((c, i) => (
             <radialGradient key={c} id={`${id}c${i}`}><stop offset="0" stopColor={`rgb(${c})`} /><stop offset="0.55" stopColor={`rgb(${c})`} stopOpacity="0.4" /><stop offset="1" stopColor={`rgb(${c})`} stopOpacity="0" /></radialGradient>
           ))}
         </defs>
+        {bg.fx.ring && <BgRing ring={bg.fx.ring} x={(geo.b.x + geo.b.w / 2 - 1 - r.x) / r.k} y={(geo.b.y + geo.b.h - r.y) / r.k} tMs={now * 1000} />}
         {fx.mist.map((m, i) => <ellipse key={`m${i}`} cx={m.x} cy={m.y} rx={m.rx} ry={m.ry} fill={`url(#${grad(m.color)})`} opacity={m.op.toFixed(3)} />)}
         {fx.glows.map((g, i) => <circle key={`g${i}`} cx={g.x} cy={g.y} r={g.r} fill={`url(#${grad(g.color)})`} opacity={g.op.toFixed(3)} />)}
         {fx.flows.map((f, i) => <line key={`f${i}`} x1={f.x} y1={f.y1} x2={f.x} y2={f.y2} stroke={`rgb(${f.color})`} strokeWidth={f.width} strokeLinecap="round" opacity={f.op.toFixed(3)} />)}
         {fx.drizzle.map((d, i) => <line key={`d${i}`} x1={d.x1} y1={d.y1} x2={d.x2} y2={d.y2} stroke={`rgb(${d.color})`} strokeWidth="1.6" opacity={d.op.toFixed(3)} />)}
         {fx.ripples.map((p, i) => <ellipse key={`r${i}`} cx={p.x} cy={p.y} rx={p.rx} ry={p.ry} fill="none" stroke={`rgb(${p.color})`} strokeWidth="2" opacity={p.op.toFixed(3)} />)}
         {fx.embers.map((e, i) => <circle key={`e${i}`} cx={e.x} cy={e.y} r={e.r * 2.4} fill={`url(#${grad(e.color)})`} opacity={e.op.toFixed(3)} />)}
+        {fx.spatter.map((e, i) => <circle key={`s${i}`} cx={e.x} cy={e.y} r={e.r * 2} fill={`url(#${grad(e.color)})`} opacity={e.op.toFixed(3)} />)}
+        {fx.motes.map((e, i) => <circle key={`t${i}`} cx={e.x} cy={e.y} r={e.r * 2.6} fill={`url(#${grad(e.color)})`} opacity={Math.max(0, e.op).toFixed(3)} />)}
+        {fx.orbs.map((o, i) => (
+          <g key={`o${i}`}>
+            <circle cx={o.x} cy={o.y} r={o.r * 1.7} fill="rgb(120,200,255)" opacity={(0.12 * o.shine).toFixed(3)} />
+            <circle cx={o.x} cy={o.y} r={o.r} fill="rgb(70,140,210)" opacity="0.26" stroke="rgb(190,235,255)" strokeWidth="2" strokeOpacity={(0.75 * o.shine).toFixed(3)} />
+            <ellipse cx={o.x - o.r * 0.32} cy={o.y - o.r * 0.38} rx={o.r * 0.26} ry={o.r * 0.16} fill="rgb(235,250,255)" opacity={(0.8 * o.shine).toFixed(3)} />
+          </g>
+        ))}
       </svg>
       <div style={{ position:'absolute', inset: 0, background:`linear-gradient(to bottom, rgba(0,0,0,0.5) 0, rgba(0,0,0,0) 46px), rgba(0,0,0,${bg.dark})` }} />
       {dim && <div style={{ position:'absolute', inset: 0, background:`rgba(${dim.c},${dim.k.toFixed(3)})` }} />}

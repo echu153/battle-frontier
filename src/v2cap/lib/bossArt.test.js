@@ -38,7 +38,10 @@ test('public/v2cap-art/boss の絵はどれも一覧に載っている（名前�
     for (const [id, b] of Object.entries(e.buffs || {})) for (const w of Object.keys(b)) known.add(bossFileOf(key, illustBuffKindOf(id, w)))   // HPの節目のバフの絵
     for (const [mk, fx] of Object.entries(e.fx || {})) for (const kind of Object.keys(fx)) known.add(bossFileOf(key, illustFxKindOf(mk, kind)))
   }
-  for (const key of Object.keys(BOSS_BG)) known.add(bossFileOf(key, 'bg'))   // ボス戦の背景
+  for (const [key, e] of Object.entries(BOSS_BG)) {
+    known.add(bossFileOf(key, 'bg'))   // ボス戦の背景
+    if (e.flow) known.add(bossFileOf(key, 'bg-flow'))   // 背景の流れ図
+  }
   for (const f of readdirSync(OUT)) assert.ok(known.has(f), `${f} は一覧に無い`)
 })
 
