@@ -43,6 +43,7 @@
 // ============================================================
 import { BOSS_ILLUST } from './bossIllustList.js'
 import { BOSS_DEFS, BOSS_ART_DIR, bossFileOf, bossArtOf } from './bossArt.js'
+import { bossBgOf } from './bossBg.js'
 
 export const BOSS_ILLUST_SRC = 'イラスト版'   // 元の絵のフォルダの中
 export const BOSS_ILLUST_SIZE = 640          // 立ち絵の大きさ（画面で使う版・正方形のpx）。パーツの位置はこの大きさで持つ
@@ -989,11 +990,12 @@ export const bossIllustOf = (key) => {
   const dust = def.idle.slam?.dust || null
   // 遭遇のイラストはドット絵版と同じ
   const illust = bossArtOf(key)?.illust || null
+  const bg = bossBgOf(key)
   return {
     kind: 'illust', key, name: base.name, base: BOSS_ILLUST_SIZE, illust, parts, pivot: art.pivot, mouth: art.mouth, jaw, motions, orb, dust, ground: def.ground ?? null, flutter: !!def.idle.flutter,
-    castArt: def.cast?.art || null, buffs,
+    castArt: def.cast?.art || null, buffs, bg,
     srcs: [...parts.map(p => p.src), ...parts.filter(p => p.bend).map(p => p.bend.src), ...Object.values(motions).flatMap(m => Object.values(m.fx || {}).map(f => f.src)),
       ...Object.values(motions).flatMap(m => Object.values(m.poses || {}).map(p => p.src)), ...(orb ? [orb.src] : []),
-      ...Object.values(buffs).flatMap(b => [b.pose?.src, b.aura?.src].filter(Boolean))],
+      ...Object.values(buffs).flatMap(b => [b.pose?.src, b.aura?.src].filter(Boolean)), ...(bg ? [bg.src] : [])],
   }
 }

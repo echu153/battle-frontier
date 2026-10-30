@@ -50,7 +50,7 @@ test('黒龍ヴァルゼノクのイラスト版：パーツ9つ（奥の翼・�
   assert.equal(Object.values(a.motions).reduce((n, m) => n + Object.keys(m.fx || {}).length, 0), 7)
   assert.ok(a.mouth[0] < BOSS_ILLUST_SIZE * 0.42, '口は頭の左のはし（相手の方）')
   assert.ok(a.orb && a.srcs.includes(a.orb.src), '待機の火の玉の絵も先に読む')
-  assert.ok(a.srcs.length === 9 + 1 + 7 + 8 + 1 + 4, 'パーツ9つ・曲げた絵・エフェクト7枚・技のポーズの絵8枚・火の玉・節目のバフのポーズとオーラ4枚')
+  assert.ok(a.srcs.length === 9 + 1 + 7 + 8 + 1 + 4 + 1, 'パーツ9つ・曲げた絵・エフェクト7枚・技のポーズの絵8枚・火の玉・節目のバフのポーズとオーラ4枚・背景')
   assert.ok(a.srcs.includes(a.parts.find(p => p.key === 'tailT').bend.src))
 })
 
@@ -400,7 +400,7 @@ test('【確定】2026-10-29 雨摩座の技4つ：右手を胸元に引き寄�
   const a = bossIllustOf('amaza'), D = BOSS_ILLUST_DEFS.amaza.motions
   assert.deepEqual(Object.values(a.motions).map(m => m.label), BOSS_DEFS.amaza.motions.map(m => m.file))
   assert.equal(Object.values(a.motions).reduce((n, m) => n + Object.keys(m.fx || {}).length, 0), 9)
-  assert.equal(a.srcs.length, 9 + 9 + 8 + 4, 'パーツ9（足の写しも）・エフェクト9・ポーズの絵8・節目のバフのポーズとオーラ4枚')
+  assert.equal(a.srcs.length, 9 + 9 + 8 + 4 + 1, 'パーツ9（足の写しも）・エフェクト9・ポーズの絵8・節目のバフのポーズとオーラ4枚・背景')
   assert.ok(a.motions.deluge.fx.flow && a.motions.sleet.fx.flow, '水天葬と氷雨の流れる水の絵（描いた滝の柱・雨の所から作る）')
   const armD = a.parts.find(p => p.key === 'armD').swap
   for (const [k, M] of Object.entries(D)) {

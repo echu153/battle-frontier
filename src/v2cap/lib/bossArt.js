@@ -26,9 +26,10 @@
 //   （1枚ずつ別に作るので、竜の大きさや位置が少しずつ違う）
 // ============================================================
 import { BOSS_ART } from './bossArtList.js'
+import { bossBgOf } from './bossBg.js'
 
 export const BOSS_ART_SRC_DIR = 'IDダンジョン'   // public/エネミー の下（ENEMY_ART_SRC_DIR）・元の絵。敵の絵の道具はここを読まない
-export const BOSS_ART_DIR = '/v2cap-art/boss'
+export const BOSS_ART_DIR = '/v2cap-art/boss'   // lib/bossBg.js の BOSS_BG_DIR と同じ
 export const BOSS_SHEET_COLS = [3, 4]   // 3列（6コマ）か4列（8コマ）
 export const BOSS_SHEET_ROWS = 2
 export const BOSS_ILLUST_SIZE = 768
@@ -123,12 +124,13 @@ export const bossArtOf = (key) => {
       fx: fx.fly || fx.hit ? fx : null, flyMs, impactMs: hitMs + flyMs }
   }
   const idle = { ...art.idle, src: bossSrcOf(key, 'idle') }
+  const bg = bossBgOf(key)
   return {
     kind: 'pixel', key, name: def.name, base: art.base, idle,
     illust: art.illust ? bossSrcOf(key, 'illust') : null,
-    motions,
-    // 先に読んでおく絵（待機・技・エフェクト）
-    srcs: [idle.src, ...Object.values(motions).flatMap(m => [m.src, ...Object.values(m.fx || {}).map(f => f.src)])],
+    motions, bg,
+    // 先に読んでおく絵（待機・技・エフェクト・背景）
+    srcs: [idle.src, ...Object.values(motions).flatMap(m => [m.src, ...Object.values(m.fx || {}).map(f => f.src)]), ...(bg ? [bg.src] : [])],
   }
 }
 

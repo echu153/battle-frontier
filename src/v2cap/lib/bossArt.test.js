@@ -9,6 +9,7 @@ import { cellsOf, colsOf, dropGreen, alignCells, tipOf } from '../../../tools/v2
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { BOSS_ILLUST } from './bossIllustList.js'
 import { illustPartsOf, illustKindOf, illustFxKindOf, illustBendKindOf, illustPoseKindOf, illustBuffKindOf } from './bossIllust.js'
+import { BOSS_BG } from './bossBgList.js'
 import { componentsOf } from '../../../tools/v2cap-motion.mjs'
 
 const OUT = new URL(`../../../public${BOSS_ART_DIR}/`, import.meta.url)
@@ -37,6 +38,7 @@ test('public/v2cap-art/boss の絵はどれも一覧に載っている（名前�
     for (const [id, b] of Object.entries(e.buffs || {})) for (const w of Object.keys(b)) known.add(bossFileOf(key, illustBuffKindOf(id, w)))   // HPの節目のバフの絵
     for (const [mk, fx] of Object.entries(e.fx || {})) for (const kind of Object.keys(fx)) known.add(bossFileOf(key, illustFxKindOf(mk, kind)))
   }
+  for (const key of Object.keys(BOSS_BG)) known.add(bossFileOf(key, 'bg'))   // ボス戦の背景
   for (const f of readdirSync(OUT)) assert.ok(known.has(f), `${f} は一覧に無い`)
 })
 
