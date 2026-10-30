@@ -84,10 +84,15 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
           //   ダメージの数字と揺れは、エフェクトが自分に届いたとき（impactMs）
           if (bossArt) {
             for (const l of fresh) if (l.type === 'cast' && l.side === s.b.name) bossMemo.current.casts.add(l.skill)
-            evs = evs.map((e, i) => (e.kind === 'act' && e.side === 'b'
-              ? { ...e, motion: bossArt.motions[bossMotionKeyOf(bossArt.key, e, bossMemo.current)] || null, landed: evs[i + 1]?.kind !== 'miss' } : e))
+            //   構えたあとの技に castSkipMs があれば、技の途中から流す（構えの5秒でためたので、もう一度ためない・終焉の黒焔）
+            evs = evs.map((e, i) => {
+              if (e.kind !== 'act' || e.side !== 'b') return e
+              const motion = bossArt.motions[bossMotionKeyOf(bossArt.key, e, bossMemo.current)] || null
+              return { ...e, motion, landed: evs[i + 1]?.kind !== 'miss', castSkip: motion?.castSkipMs && bossMemo.current.casts.has(e.skill) ? motion.castSkipMs : 0 }
+            })
           }
-          fxRef.current = [...fxRef.current.filter(f => t0 - f.t0 < POP_SEC + 1.5),
+          //   技の印は流し終わるまで残す（終焉の黒焔は2.5秒より長い）
+          fxRef.current = [...fxRef.current.filter(f => t0 - f.t0 < Math.max(POP_SEC + 1.5, f.motion?.totalMs ? f.motion.totalMs / 1000 + 0.3 : 0)),
             ...scheduleFx(evs, t0, { a: playerMotion ? playerMotion.hitMs / 1000 : 0, b: (e) => (e.motion ? e.motion.impactMs / 1000 : 0) })]
         }
       }

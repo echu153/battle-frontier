@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { bossIllustOf } from './bossIllust.js'
-import { POUR, COIL, SCENE_TOP, FX_TARGET_Y, FX_FEET_Y, FX_HEAD_Y, FX_SKY_Y, pourTimesOf, sceneEndMsOf, sceneAt, castSceneAt, fallAt, coilAt, stageSceneOf, handFxOf, HAND_BURST_MS } from './bossScene.js'
+import { DOOM, POUR, COIL, SCENE_TOP, FX_TARGET_Y, FX_FEET_Y, FX_HEAD_Y, FX_SKY_Y, pourTimesOf, sceneEndMsOf, sceneAt, castSceneAt, fallAt, coilAt, stageSceneOf, handFxOf, HAND_BURST_MS } from './bossScene.js'
 import { BOSS_ILLUST_DEFS, flutterBandsAt } from './bossIllust.js'
 import { BOSS_ILLUST } from './bossIllustList.js'
 
@@ -29,7 +29,6 @@ test('【確定】2026-10-29 水天葬の演出（ユーザー「水天葬だっ
     const s = sceneAt(m, ms)
     assert.equal(s.dim + s.flash + s.items.length, 0)
   }
-  assert.equal(bossIllustOf('varuzenoku').motions.doom.scene, null, '黒龍は変えていない')
 })
 
 test('【確定】2026-10-29 水天葬：振り下ろすまでに画面が暗くなり、叩きつけた瞬間にいちばん光って大きく揺れ、落ち続けるあいだも小さく揺れる', () => {
@@ -230,4 +229,57 @@ test('【確定】2026-10-30 エフェクトをポーズの絵に合わせ直し
   }
   // 水天葬の水の筋は両腕から
   assert.equal(ms.deluge.arcs.length, 2)
+})
+
+test('【確定】2026-10-30 終焉の黒焔の演出（ユーザー「終焉の黒焔もっと大技っぽくしてほしい、貯める動作も長く」）：ためは長く、構えのあとはもう一度ためない・吐くと黒焔の奔流・当たると大爆発', () => {
+  const d = bossIllustOf('varuzenoku').motions.doom, H = d.hitMs, I = d.impactMs
+  assert.equal(d.scene.kind, 'doom')
+  assert.ok(d.big, '技の名前の帯が大技の色')
+  // ため：動きを見る（構えなし）でも2秒以上・構えのあとの残りは短い
+  const tw = d.art.find(([, n]) => n === 'windup')[0], ts = d.art.find(([, n]) => n === 'strike')[0]
+  assert.ok(ts - tw >= 2000, 'ため の絵が2秒以上')
+  assert.ok(d.castSkipMs > tw && d.castSkipMs < ts && ts - d.castSkipMs <= 500, '構えのあとは ため の絵の途中から・すぐ吐く')
+  assert.ok(d.impactMs - d.castSkipMs <= 1100, '構えのあと、HP が減ってから当たるまで短い')
+  // ため：炎の色で暗くなり、火の粉が吸い込まれ、口の光が育ち、竜の体の光が増す・震えない
+  const a = sceneAt(d, 800), b = sceneAt(d, H - 50)
+  assert.equal(a.tone, 'fire')
+  assert.equal(a.dimColor, DOOM.color)
+  assert.ok(a.dim > 0.3 && b.dim >= a.dim)
+  assert.ok(b.hand.r > a.hand.r, '口の光が育つ')
+  assert.ok(a.items.some(it => it.t === 'mote' && it.space === 'hand'), '火の粉が口へ')
+  assert.ok(b.bossGlow > a.bossGlow - 0.2 && b.bossGlow > 0.6, '竜の体が光る')
+  for (const ms of [500, 1500, H - 10]) assert.deepEqual(sceneAt(d, ms).shake, [0, 0], 'ためるあいだは震えない')
+  // 構え：同じ形で、構えの長さで育つ
+  const c0 = castSceneAt(d, 500), c1 = castSceneAt(d, 4800)
+  assert.equal(c1.tone, 'fire')
+  assert.ok(c1.hand.r > c0.hand.r + 15 && c1.dim > 0.4 && c1.bossGlow > c0.bossGlow)
+  assert.deepEqual(c1.shake, [0, 0])
+  // 吐く：光って揺れ、奔流が口から伸びる
+  const s0 = sceneAt(d, H + 30), s1 = sceneAt(d, I - 10)
+  assert.ok(s0.flash > 0.2 && Math.hypot(...sceneAt(d, H + 20).shake) + Math.hypot(...sceneAt(d, H + 45).shake) > 0.5)
+  assert.ok(s0.beam && s0.beam.head < 0.5 && s1.beam.head > 0.95, '奔流は相手へ伸びる')
+  // 当たる：大きく光り、大きく揺れ、火の粉・柱・輪・煙・残り火
+  const h = sceneAt(d, I + 60), hm = sceneAt(d, I + 200)
+  assert.ok(h.flash > 0.8, '大きく光る')
+  assert.ok(Math.max(...Array.from({ length: 20 }, (_, i) => Math.hypot(...sceneAt(d, I + 10 + i * 9).shake))) > 8, '大きく揺れる')
+  assert.ok(h.dim > a.dim, 'もっと暗く')
+  for (const t of ['drop', 'jet', 'ring', 'mist', 'foam']) assert.ok(hm.items.some(it => it.t === t), t)
+  // 奔流は吐きつけの絵が出ているあいだに消える・外れたら爆発しない
+  assert.equal(sceneAt(d, I + DOOM.beamTail).beam, null)
+  assert.ok(I + DOOM.beamTail <= d.art.at(-1)[0], '奔流は絵が戻るまでに消える')
+  const miss = sceneAt(d, I + 200, { landed: false })
+  assert.ok(miss.flash < 0.05 && !miss.items.some(it => it.t === 'drop'), '外れたら爆発しない')
+  // 終わる・どの水の技にも tone は付かない
+  const end = sceneEndMsOf(d)
+  assert.equal(sceneAt(d, end).dim, 0)
+  assert.ok(sceneAt(d, I + DOOM.after + DOOM.fade + 1).dim < 0.01, '暗さが戻る')
+  assert.equal(stageSceneOf([{ m, ms: T.I + 100, after: false, landed: true }], null).tone, null, '水天葬は水の色のまま')
+  assert.equal(stageSceneOf([{ m: d, ms: 800, after: false, landed: true }], null).tone, 'fire')
+  assert.equal(stageSceneOf([{ m: d, ms: end + 100, after: false, landed: true }], null).tone, null, '終わったら色は戻る')
+  // 火の玉が続けて飛ぶ・奔流は炎のかたまり（3つに1つは黒い煙・head より先へ行かない）
+  assert.deepEqual(d.shots.map(s => s.delayMs), [0, 70, 140, 210, 280])
+  const bm = sceneAt(d, H + 200).beam
+  assert.equal(bm.blobs.length, DOOM.blobs)
+  assert.ok(bm.blobs.every(x => x.p >= 0 && x.p <= bm.head + 1e-9 && x.op >= 0 && x.r > 0))
+  assert.ok(bm.blobs.some(x => x.dark) && bm.blobs.some(x => !x.dark))
 })

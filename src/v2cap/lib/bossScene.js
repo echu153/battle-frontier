@@ -20,6 +20,10 @@ import { CAST_SEC } from '../core/atb.js'
 //   ポーズの絵（構え・振り抜き）に合わせて、構えの絵のあいだ絵の上の手（anchors の hand・hand2）に水の粒が渦を巻いて吸い込まれて手が光り、
 //   振り抜きの絵に替わった瞬間に振り抜きの手で光がはじけ、水しぶきが相手の方へ扇形に飛び散る（handFxAt・4つの技すべて）。
 //   雨礫・氷雨は演出の種類 'hands'（手の光と粒だけ・暗くも揺れもしない）。水天葬は両手（hand2）
+// 【確定】2026-10-30 ユーザー「終焉の黒焔もっと大技っぽくしてほしい、貯める動作も長く」（kind 'doom'）：
+//   ため＝舞台が赤黒く暗くなり、火の粉が広い所から口へ渦を巻いて吸い込まれ、口の光が育ち、竜の体が赤く光を増す（震えない＝ユーザー「溜めるとき、別に震えなくていい」）。
+//   吐きつけ＝光・揺れと一緒に、口から相手へ黒焔の奔流（beam・画面 SceneLayer）。当たると大きく光って揺れ、火の粉・炎の柱・足元の輪・黒い煙・足元の残り火。
+//   色は tone 'fire'（画面の色が水から炎へ替わる）・暗さの色は dimColor
 // ============================================================
 
 // 相手の頭上・足元に出すエフェクト（on）の場所（相手の絵の枠の上からの割合）：頭上＝枠の少し上（頭にかからない）・足元＝枠の下のはし
@@ -36,6 +40,12 @@ export const POUR = {
   dim: 0.62, castDim: 0.45, pourMs: 1000, tailMs: 380, width: 0.56,
   streaks: 30, splash: 90, jets: 14, burstEvery: 110, mist: 10, rain: 18, motes: 14, spin: 0.9,
   rings: [[0, 1], [150, 0.85], [330, 0.7], [560, 0.6], [800, 0.5]],   // [叩きつけてからの ms, 大きさ]
+}
+// 終焉の黒焔（kind 'doom'）：dim＝ためのあいだの暗さ・castDim＝構えの暗さ・hitDim＝当たったあと・after＝当たってから暗さが戻りはじめるまで（ms）・
+//   beamTail＝当たったあと奔流が残る長さ（ms・吐きつけの絵が出ているあいだ）・reach＝火の粉を吸い込む広さ（水天葬の何倍）
+export const DOOM = {
+  color: '22,0,0', dim: 0.62, castDim: 0.58, hitDim: 0.78, after: 1300, fade: 500, beamTail: 300, motes: 30, reach: 2.4,
+  splash: 90, jets: 18, mist: 14, rings: [[0, 1.1], [130, 0.85], [300, 0.65], [520, 0.5]], blobs: 42,
 }
 const G = 5.5   // しぶきの落ちる速さ（枠の幅/秒²）
 // 水縛の帯（kind 'coil'）：叩きつけて（I）から squeezes の時刻に締め上げ、burstMs ではじける。輪は体の真ん中（BODY_Y）のまわりに3つ
@@ -61,6 +71,7 @@ export const pourTimesOf = (m, P = POUR) => {
 }
 // 演出が終わる時刻（技を出しはじめてから ms）。画面はこの時刻まで技の印を覚えておく（戦闘の画面が古い印を片付けても切れない）
 export const sceneEndMsOf = (m) => (m?.scene?.kind === 'pour' ? pourTimesOf(m).end : m?.scene?.kind === 'coil' ? m.impactMs + COIL.burstMs + 900
+  : m?.scene?.kind === 'doom' ? m.impactMs + DOOM.after + DOOM.fade + 900
   : m?.scene?.kind === 'hands' ? (handFxOf(m)?.ts ?? 0) + 600 : 0)
 
 // しぶき（n 粒・上へはね上がって落ちる）。e＝はねてからの ms・spread＝はねる所の広さ・oy＝はねる高さ（足元から）・around＝まわりじゅうへ
@@ -97,11 +108,11 @@ const rain = (items, n, ms, op) => {
   }
 }
 // 掲げた手に集まる光の粒（指先からのずれ・立ち絵の px）：外から渦を巻いて吸い込まれる。hands＝手の数（hi＝何番目の手に吸い込まれるか）
-const motes = (items, n, ms, op, hands = 1) => {
+const motes = (items, n, ms, op, hands = 1, reach = 1) => {
   if (op <= 0) return
   for (let i = 0; i < n; i++) {
     const per = 620 + 260 * rnd(i, 31), p = (ms / per + rnd(i, 32)) % 1
-    const d = (70 + 70 * rnd(i, 33)) * (1 - easeOut(p)), a = rnd(i, 34) * Math.PI * 2 + p * 2.4
+    const d = (70 + 70 * rnd(i, 33)) * reach * (1 - easeOut(p)), a = rnd(i, 34) * Math.PI * 2 + p * 2.4
     items.push({ t: 'mote', space: 'hand', hi: i % hands, x: Math.cos(a) * d, y: Math.sin(a) * d, r: 3 + 3 * rnd(i, 35), op: op * Math.sin(Math.PI * p) })
   }
 }
@@ -145,6 +156,7 @@ const flickerAt = (ms) => (hash(Math.floor(ms / 70) + 99) > 0.93 ? 1 : 0)
 // 構え（5秒）のあいだ：背景がだんだん暗く・雲から小雨・雲の渦が回る・掲げた手に光が集まる
 export const castSceneAt = (m, castMs, P = POUR) => {
   const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null }
+  if (m?.scene?.kind === 'doom' && castMs >= 0) return doomCastSceneAt(castMs)
   if (m?.scene?.kind !== 'pour' || castMs < 0) return out
   const k = smooth(castMs / 1200)
   out.dim = P.castDim * k
@@ -159,6 +171,7 @@ export const castSceneAt = (m, castMs, P = POUR) => {
 //   → { dim, flash（0〜1）, shake: [x, y]（px）, items, cloud: { spin, glow, flicker }, hand: { r, op } }
 export const sceneAt = (m, ms, { after = false, landed = true } = {}, P = POUR) => {
   if (m?.scene?.kind === 'coil') return coilSceneAt(m, ms, landed)
+  if (m?.scene?.kind === 'doom') return doomSceneAt(m, ms, landed)
   const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null }
   if (m?.scene?.kind === 'hands') { if (ms >= 0 && ms < sceneEndMsOf(m)) handFxAt(m, ms, out); return out }
   if (m?.scene?.kind !== 'pour') return out
@@ -308,12 +321,96 @@ export const coilAt = (m, ms, C = COIL) => {
     op: Math.min(1, e / 50) * (1 - burst), bright: 1 + 0.5 * pulse(e, 260) + 0.25 * tight }
 }
 
+// 黒焔の奔流の炎のかたまり（棒に見えないように・絵の塗りになじむ）：口から相手へ流れ、先へ行くほど広がって大きくなる。3つに1つは黒い煙（黒焔）。
+//   p＝口から相手までの進み（head まで）・off＝流れの横へのずれ（枠の幅が1）・r＝半径（枠の幅が1）・dark＝黒い煙
+const doomBlobs = (ms, head, D = DOOM) => {
+  const out = []
+  for (let i = 0; i < D.blobs; i++) {
+    const per = 260 + 160 * rnd(i, 81), q = (ms / per + rnd(i, 82)) % 1, p = q * head
+    const spread = 0.025 + 0.09 * q
+    out.push({ p, off: spread * (rnd(i, 83) - 0.5) * 2 + 0.018 * Math.sin(ms / 60 + i * 1.7), r: (0.035 + 0.07 * q) * (0.7 + 0.6 * rnd(i, 84)),
+      op: Math.min(1, q / 0.1) * (1 - 0.45 * q), dark: i % 3 === 2 })
+  }
+  return out
+}
+// 終焉の黒焔のためるあいだ（構えの5秒・技の ため）：k＝ためた割合 0〜1・a＝出てくる割合。火の粉が広い所から口へ吸い込まれ、口の光が育ち、竜の体が赤く光を増す
+const doomGather = (out, ms, k, a, D = DOOM) => {
+  motes(out.items, D.motes, ms, 0.95 * a, 1, D.reach)
+  out.hand = { r: 12 + 34 * k + 3 * Math.sin(ms / 120), op: a }
+  out.bossGlow = a * (0.2 + 0.8 * k) * (0.82 + 0.18 * Math.sin(ms / 170))
+}
+// 構え（5秒）のあいだ：ためた割合は構えの長さで数える
+const doomCastSceneAt = (castMs, D = DOOM) => {
+  const out = { dim: D.castDim * smooth(castMs / 1200), flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: 'fire', dimColor: D.color, bossGlow: 0, beam: null }
+  doomGather(out, castMs, clamp01(castMs / (CAST_SEC * 1000)), smooth(castMs / 500))
+  return out
+}
+// 技のあいだ（ms＝技を出しはじめてから）→ sceneAt と同じ形＋ tone・dimColor・bossGlow（竜の体の光 0〜1）・beam: { head（口から相手までの進み 0〜1）, w（太さの割合）, op }
+//   ★構えのあとは技の途中（castSkipMs）から流す＝どの時刻から見ても同じ形（暗さ・口の光は構えのおわりとつながる）
+export const doomSceneAt = (m, ms, landed = true, D = DOOM) => {
+  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: 'fire', dimColor: D.color, bossGlow: 0, beam: null }
+  const H = m.hitMs, I = m.impactMs, end = sceneEndMsOf(m)
+  if (ms < 0 || ms >= end) return out
+  const e = ms - I, s = ms - H
+  // 暗さ：ためるあいだに暗くなり、当たるともっと暗く・after のあと戻る
+  const base = ms < H ? D.dim * smooth(ms / 900) : landed && e >= 0 ? D.hitDim : D.dim
+  out.dim = ms < I + D.after ? base : base * (1 - smooth((ms - I - D.after) / D.fade))
+  if (ms < H) {
+    doomGather(out, ms, clamp01(ms / H), smooth(ms / 400))
+    return out
+  }
+  // 吐いた瞬間：少し光って揺れ、口で光がはじける
+  out.flash = 0.45 * pulse(s, 220)
+  let amp = 7 * pulse(s, 320)
+  if (s < 280) out.hand = { r: 30 + 60 * easeOut(s / 220), op: 1 - s / 280 }
+  out.bossGlow = Math.max(0, 1 - s / (I - H + 420))
+  // 黒焔の奔流：口から相手へ伸び、当たったあと beamTail のあいだ細りながら残る
+  const tail = I + D.beamTail
+  if (ms < tail) {
+    const fade = ms < I ? 1 : 1 - (ms - I) / D.beamTail
+    const head = easeOut(clamp01(s / (I - H)))
+    out.beam = { head, w: (0.45 + 0.55 * easeOut(s / 140)) * fade, op: Math.min(1, s / 50) * Math.sqrt(fade), blobs: doomBlobs(ms, head, D) }
+  }
+  if (landed && e >= 0) {
+    // 当たった瞬間：大きく光り、大きく揺れる（だんだん小さく）
+    out.flash = Math.max(out.flash, 0.95 * (e < 40 ? e / 40 : pulse(e - 40, 520)))
+    const k = clamp01(e / 1000), rumble = e < 800 ? 1.6 * (1 - e / 800) : 0
+    amp += 15 * (1 - k) * (1 - k) + rumble
+    // 火の粉・炎の柱・足元の輪・黒い煙・足元の残り火
+    drops(out.items, D.splash, 12000, e, [0.8, 2.2], [600, 1100], [0.006, 0.018], 0.5)
+    drops(out.items, 40, 13000, e - 120, [0.5, 1.5], [500, 900], [0.006, 0.015], 0.5, { oy: BODY_Y, around: true })
+    jets(out.items, D.jets, 14000, e, 1.5)
+    jets(out.items, 10, 15000, e - 180, 1.1)
+    for (const [at, size] of D.rings) {
+      const q = (e - at) / 700
+      if (q < 0 || q >= 1) continue
+      const rx = (0.12 + 1.1 * easeOut(q)) * size
+      out.items.push({ t: 'ring', x: 0, y: -0.01, rx, ry: rx * 0.24, w: 0.026 * (1 - q) + 0.004, op: 0.9 * (1 - q) })
+    }
+    for (let i = 0; i < D.mist; i++) {
+      const life = 1500 + 600 * rnd(i, 71), q = (e - 50 * i) / life
+      if (q < 0 || q >= 1) continue
+      const dir = i % 2 ? 1 : -1, v = easeOut(q)
+      out.items.push({ t: 'mist', x: dir * (0.04 + (0.28 + 0.5 * rnd(i, 72)) * v), y: -0.05 - (0.12 + 0.55 * rnd(i, 73)) * v, r: 0.12 + (0.25 + 0.28 * rnd(i, 74)) * v, op: 0.8 * Math.min(1, q / 0.08) * (1 - q) })
+    }
+    if (e < D.after + D.fade) {
+      const a = e < 80 ? e / 80 : e < D.after ? 1 : 1 - (e - D.after) / D.fade
+      out.items.push({ t: 'foam', x: 0, y: -0.02, rx: 0.5 + 0.03 * Math.sin(ms / 60), ry: 0.11 + 0.012 * Math.sin(ms / 47), op: 0.85 * a })
+    }
+  }
+  out.shake = [amp * Math.sin(ms * 0.11), amp * 0.65 * Math.cos(ms * 0.153)]
+  return out
+}
+
 // 画面ぜんたい：いま流れている技（acts＝[{ m, ms, after }]）と構え（cast＝{ m, ms }）を合わせる
 //   暗さと光はいちばん強いもの・揺れは足す・描くものは並べる・雲と手は新しいほう（acts の after・landed は sceneAt と同じ）
 //   相手の縮みはかけ合わせる
 export const stageSceneOf = (acts, cast) => {
-  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, squeeze: null }
+  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, squeeze: null, tone: null, dimColor: null, bossGlow: 0, beam: null }
   const add = (s) => {
+    if (s.tone && (s.dim > 0 || s.items.length || s.hand || s.beam)) { out.tone = s.tone; out.dimColor = s.dimColor }
+    out.bossGlow = Math.max(out.bossGlow, s.bossGlow || 0)
+    if (s.beam) out.beam = s.beam
     out.dim = Math.max(out.dim, s.dim)
     out.flash = Math.max(out.flash, s.flash)
     out.shake = [out.shake[0] + s.shake[0], out.shake[1] + s.shake[1]]

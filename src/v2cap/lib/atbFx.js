@@ -47,10 +47,15 @@ export const fxEventsOf = (entries, aName, bName) => {
 // 起きた時刻を付ける。delay＝{ a: 秒, b: 秒 }：その側にモーション（攻撃の絵）があるとき、
 //   殴ったあとの数字・揺れを、絵の「当たる」コマまで遅らせる（lib/motionArt.js の hitMs）
 //   秒の代わりに (act) => 秒 も渡せる＝技ごとに絵が違うボス（lib/bossArt.js・act に motion を付けてある・2026-10-28）
+//   act の castSkip（ミリ秒・2026-10-30 終焉の黒焔）＝構えのあとは技の途中から流す：t0 をそのぶん前にして、数字と揺れの遅れもそのぶん縮める
 export const scheduleFx = (events, t0, delay = {}) => {
   let d = 0
   return events.map(e => {
-    if (e.kind === 'act') { const dl = delay[e.side]; d = (typeof dl === 'function' ? dl(e) : dl) || 0; return { ...e, t0 } }
+    if (e.kind === 'act') {
+      const dl = delay[e.side], skip = (e.castSkip || 0) / 1000
+      d = Math.max(0, ((typeof dl === 'function' ? dl(e) : dl) || 0) - skip)
+      return { ...e, t0: t0 - skip }
+    }
     if (e.kind === 'use') { d = 0; return { ...e, t0 } }
     return { ...e, t0: t0 + d }
   })
@@ -86,8 +91,9 @@ export const skillBannerAt = (fx, now, side = 'b') => {
     if ((f.kind === 'act' || f.kind === 'rage') && f.side === side && f.skill && f.t0 <= now && (!last || f.t0 >= last.t0)) last = f
   }
   if (!last) return null
-  const e = now - last.t0, rage = last.kind === 'rage', len = rage ? RAGE_BANNER_SEC : BANNER_SEC
+  // 構えのあとに技の途中から流す技（castSkip）は、t0 が前にずれている＝動いた時刻から数える。motion.big＝大技（帯の色は rage と同じ・長さは技のまま）
+  const e = now - last.t0 - (last.castSkip || 0) / 1000, rage = last.kind === 'rage', len = rage ? RAGE_BANNER_SEC : BANNER_SEC
   if (e >= len) return null
   const k = Math.min(1, e / BANNER_IN), out = Math.max(0, (e - (len - BANNER_OUT)) / BANNER_OUT)
-  return { name: last.skill, op: k * (1 - out), k, t0: last.t0, rage }
+  return { name: last.skill, op: k * (1 - out), k, t0: last.t0, rage: rage || !!last.motion?.big }
 }
