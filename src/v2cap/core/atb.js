@@ -90,6 +90,15 @@ export const GUARD_CD  = 45
 export const CAST_SEC  = TURN_SEC
 export const CAST_MULT = 2.5
 
+// HPの節目のバフの行動（pattern.buffs・buffStep）
+//   【確定】2026-10-30 ユーザー「バフの行動になるとき0.5秒のゲージ貯めるようにして、バフと攻撃モーションが被って変になるときある」「バフの行動時は出血とかの影響は受けないように」
+//   BUFF_GAUGE_SEC＝バフのゲージを貯める長さ
+//   BUFF_WAIT_AFTER_ACT_SEC＝技を出してからバフのゲージを貯めはじめるまで（技の動きが終わるまで・lib/bossIllust.js のどの技の動きより長い＝テストあり）
+//   BUFF_SHOW_SEC＝バフが付いてから次に動けるまで（バフのポーズとオーラを見せおわるまで・どのバフの見せ方より長い＝テストあり）
+export const BUFF_GAUGE_SEC = 0.5
+export const BUFF_WAIT_AFTER_ACT_SEC = 2.6
+export const BUFF_SHOW_SEC = 2.5
+
 // バフ・デバフの長さ（秒）＝BUFF_SEC_CONST ÷ 効果の合計%。強いほど短い
 //   【確定】2026-10-26 ユーザー選択「強さで長さが変わる・重ねない」：+30%→100秒・+20%→150秒
 //   デバフは攻撃技のおまけでも入るので上限を短くする
@@ -157,6 +166,11 @@ const createAtbSide = (fighter, band, { ai = false, cast = false } = {}) => {
   side.pattern = fighter.pattern || null
   side.lockBuffs = {}          // HPの節目で付いたバフ（ステ → %・消えない・消せない）＝checkHpBuffs
   side.hpBuffsOn = []          // 付いた節目のバフ [{ name, table }]（画面の札・記録）
+  side.buffSeen = []           // 切った節目のバフの名前（1回ずつ）
+  side.buffQueue = []          // 切ったがまだ行動していない節目のバフ（切った順）
+  side.buffAct = null          // バフのゲージを貯めているあいだ：{ name, table, start, until }
+  side.motionUntil = 0         // 技やバフの動きが終わる時刻（これより前はバフのゲージを貯めはじめない）
+  side.noActUntil = 0          // バフを見せおわる時刻（これより前は技を出さない）
   if (fighter.hpNow != null) side.hp = Math.max(1, Math.min(side.base.hp, Math.floor(fighter.hpNow)))
   side.startHp = side.hp       // この戦闘を始めたときのHP（削った量＝startHp − いまのHP）
   return side
@@ -178,9 +192,9 @@ export const createAtb = (fighterA, fighterB, { rng = Math.random, band = null, 
   startOfTurn(st.a, st.b, st.turn, st.log)
   afterEngine(st, st.a, { ...st.a.buffs }, true)
   afterEngine(st, st.b, { ...st.b.buffs }, true)
-  // 持ち越しで、もう切っている節目のバフは、はじめから付いている
-  checkHpBuffs(st, st.a)
-  checkHpBuffs(st, st.b)
+  // 持ち越しで、もう切っている節目のバフは、はじめから付いている（ゲージを貯めない）
+  checkHpBuffs(st, st.a, true)
+  checkHpBuffs(st, st.b, true)
   return st
 }
 
@@ -316,24 +330,50 @@ const patternPick = (side) => {
 }
 // ===== HPの節目で付くボスのバフ（IDダンジョン・pattern.buffs）=====
 // 【確定】2026-10-30 ユーザー「バフは６０％と３０％以下のタイミングで自動発動してほしい、名前も固有」＋選択「消えない・消せない」：
-//   pattern.buffs ＝ [{ at, name, table: { ステ: % } }]。HPの割合（持ち越しの全体）が at 以下になった**瞬間に**付く（ボスの手番は使わない）。
+//   pattern.buffs ＝ [{ at, name, table: { ステ: % } }]。HPの割合（持ち越しの全体）が at 以下になると、バフの行動に入る（下）。
 //   戦いの終わりまで消えない・**バフ消しでも消えない**（side.lockBuffs＝消えない枠 baseBuffs・時間で切れる枠 timed とは別。recomputeBuffs が足し直す）。
-//   持ち越しで挑戦の始めにもう切っている節目のバフは、はじめから付いている（記録にも出す＝名前の帯が出る）。倒れた側には付かない
+//   持ち越しで挑戦の始めにもう切っている節目のバフは、はじめから付いている（ゲージを貯めない・記録にも出す＝名前の帯が出る）。倒れた側には付かない
+// 【確定】2026-10-30 ユーザー「バフの行動になるとき0.5秒のゲージ貯めるようにして、バフと攻撃モーションが被って変になるときある」「バフの行動時は出血とかの影響は受けないように」：
+//   切った瞬間には付かない。技の動きが終わるのを待ち（motionUntil・構えのあいだも待つ）→ゲージを空にして BUFF_GAUGE_SEC で貯める（buffAct）→バフが付く→
+//   ゲージは空から（バフが1回の行動のぶん）・BUFF_SHOW_SEC のあいだ技を出さない（noActUntil）＝バフのポーズと技の動きが重ならない。
+//   バフの行動は技の行動（act）を通らない＝**出血が刻まない**・麻痺や鈍足でも止まらず遅れない（stepOnce の時計だけで進む）。
+//   ターンの区切りの毒なども、ゲージを貯めてから見せおわるまでは刻まない（inBuffAct・endOfTurn の noAil）。同時に2つ切ったら、見せおわってから次
 const effectText = (table) => Object.entries(table).map(([k, v]) => `${STAT_DEFS[k]?.label || k}${v >= 0 ? '+' : ''}${v}%`).join('・')
-const checkHpBuffs = (st, side) => {
+const applyHpBuff = (st, side, b) => {
+  side.hpBuffsOn.push({ name: b.name, table: { ...b.table } })
+  for (const [k, v] of Object.entries(b.table)) side.lockBuffs[k] = (side.lockBuffs[k] || 0) + v
+  st.log.push({ side: side.name, type: 'hpBuff', skill: b.name, effect: effectText(b.table) })
+  recomputeBuffs(side)
+  side.motionUntil = st.t + BUFF_SHOW_SEC
+  side.noActUntil = st.t + BUFF_SHOW_SEC
+}
+const checkHpBuffs = (st, side, instant = false) => {
   const list = side.pattern?.buffs
   if (!list?.length || side.hp <= 0) return
-  let any = false
   for (const b of list) {
-    if (hpFracOf(side) > b.at || side.hpBuffsOn.some(x => x.name === b.name)) continue
-    side.hpBuffsOn.push({ name: b.name, table: { ...b.table } })
-    for (const [k, v] of Object.entries(b.table)) side.lockBuffs[k] = (side.lockBuffs[k] || 0) + v
-    st.log.push({ side: side.name, type: 'hpBuff', skill: b.name, effect: effectText(b.table) })
-    any = true
+    if (hpFracOf(side) > b.at || side.buffSeen.includes(b.name)) continue
+    side.buffSeen.push(b.name)
+    if (instant) applyHpBuff(st, side, b)
+    else side.buffQueue.push(b)
   }
-  if (any) recomputeBuffs(side)
 }
 const checkHpBuffsBoth = (st) => { checkHpBuffs(st, st.a); checkHpBuffs(st, st.b) }
+// バフの行動を1刻み進める（ゲージを貯めおわったら付く・動きが終わっていれば次を貯めはじめる）
+const buffStep = (st, me) => {
+  if (me.buffAct) {
+    if (me.buffAct.until > st.t + EPS) return
+    applyHpBuff(st, me, me.buffAct)
+    me.buffAct = null
+    me.gauge = 0
+    return
+  }
+  if (!me.buffQueue.length || me.cast || st.t + EPS < me.motionUntil) return
+  const b = me.buffQueue.shift()
+  me.buffAct = { name: b.name, table: b.table, start: st.t, until: st.t + BUFF_GAUGE_SEC }
+  me.gauge = 0
+}
+// バフの行動のあいだ（ゲージを貯めてから見せおわるまで）か
+const inBuffAct = (side, now) => !!side.buffAct || now + EPS < side.noActUntil
 
 // 挑戦の始め：もう切っている節目は撃ったことにする
 const initPattern = (side, rng) => {
@@ -437,6 +477,7 @@ const advanceSource = (me, ch, fired) => {
 const act = (st, me, foe, ch) => {
   const now = st.t
   me.acted += 1
+  me.motionUntil = now + BUFF_WAIT_AFTER_ACT_SEC
   me.guardCut = 0   // 防御は「次の自分の行動まで」
   if (ch.guard) {
     me.guardCut = GUARD_CUT
@@ -486,7 +527,8 @@ const startAct = (st, me, foe) => {
 }
 
 // 余り（0以上なら動ける）。詠唱中・麻痺中は動かない
-const excessOf = (side, now) => (side.cast || side.ail.paralyze ? -Infinity : side.gauge - needNow(side, now))
+//   バフの行動が待っているあいだ・バフの行動のあいだも動かない（バフが先）
+const excessOf = (side, now) => (side.cast || side.ail.paralyze || side.buffQueue.length || inBuffAct(side, now) ? -Infinity : side.gauge - needNow(side, now))
 
 // ===== 1刻み進める =====
 const stepOnce = (st) => {
@@ -498,7 +540,7 @@ const stepOnce = (st) => {
   if (st.t + EPS >= st.turn * TURN_SEC) {
     const ba = { ...a.buffs }
     const bb = { ...b.buffs }
-    if (endOfTurn(a, b, st.turn, st.rng, st.log, { resetBigGuard: false })) { finish(st); return }
+    if (endOfTurn(a, b, st.turn, st.rng, st.log, { resetBigGuard: false, noAil: [a, b].filter(s => inBuffAct(s, st.t)) })) { finish(st); return }
     st.turn += 1
     startOfTurn(a, b, st.turn, st.log)
     afterEngine(st, a, ba, true)
@@ -508,12 +550,14 @@ const stepOnce = (st) => {
   }
   expire(st, a)
   expire(st, b)
+  buffStep(st, a)
+  buffStep(st, b)
 
-  // ゲージを溜める（麻痺・詠唱のあいだは止まる）
+  // ゲージを溜める（麻痺・詠唱・バフのゲージのあいだは止まる）
   const eA = liveStats(a)
   const eB = liveStats(b)
   for (const [me, eMe, eFoe] of [[a, eA, eB], [b, eB, eA]]) {
-    if (me.cast || me.ail.paralyze) continue
+    if (me.cast || me.ail.paralyze || me.buffAct) continue
     // ★満タンを少し超えたぶんは次へ持ち越す（100で切ると、刻みの端数のぶん速い側ほど遅くなる）
     me.gauge = Math.min(GAUGE_FULL * 2, me.gauge + fillPerSecOf(me, eMe, eFoe) * STEP_SEC)
   }

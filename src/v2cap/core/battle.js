@@ -2043,7 +2043,8 @@ export const startOfTurn = (a, b, turn, log) => {
 
 // ターンの終わり（両方の行動のあと）。どちらかが倒れたら true（そこで止める）
 // resetBigGuard … 大防御を1ターンで切る。ATBは大防御を「使ってから1ターンぶんの秒」で切るので false で呼ぶ
-export const endOfTurn = (a, b, turn, rng, log, { resetBigGuard = true } = {}) => {
+// noAil＝ターンの終わりの持続ダメージを刻まない側（ATB：ボスのバフの行動のあいだ）
+export const endOfTurn = (a, b, turn, rng, log, { resetBigGuard = true, noAil = [] } = {}) => {
   // ★上位職：召喚（死霊・式神）の攻撃。両方の行動のあと
   summonAttacks(a, b, rng, log)
   summonAttacks(b, a, rng, log)
@@ -2052,8 +2053,8 @@ export const endOfTurn = (a, b, turn, rng, log, { resetBigGuard = true } = {}) =
     a.bigGuard = 0   // 大防御は1ターンで切れる
     b.bigGuard = 0
   }
-  tickAil(a, log, b)
-  tickAil(b, log, a)
+  if (!noAil.includes(a)) tickAil(a, log, b)
+  if (!noAil.includes(b)) tickAil(b, log, a)
   if (a.hp <= 0 || b.hp <= 0) return true
   tickRegen(a, log, b)
   tickRegen(b, log, a)

@@ -250,8 +250,9 @@ test('ボスの大技は詠唱のバーを出してから撃つ（そのあい�
   assert.equal(acts(st, 'ボス', 'skill').length, 1)
   assert.equal(st.b.cast, null)
   assert.ok(st.b.gauge < 5, '撃ったらゲージは空から')
+  // 【確定】2026-10-30 ユーザー「○○の構えとか表示させなくていい」：記録の行にも出さない（技の名前は名前の帯・構えはゲージの色で分かる）
   const lines = buildBattleLog({ log: st.log }, '自分', 'ボス').map(l => l.text).join('\n')
-  assert.match(lines, new RegExp(`ボスは「大技」の構えに入った！（${CAST_SEC}秒後）`))
+  assert.doesNotMatch(lines, /構え/)
 })
 
 test('敵は枠の順に、使える技を出す（クールダウン中は飛ばして通常攻撃）', () => {

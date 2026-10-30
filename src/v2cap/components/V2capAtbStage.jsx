@@ -1,6 +1,6 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react'
 import { TEXT } from './v2ui.js'
-import { buffChips, hpBuffChips, ailChips, stateChips, needNow, CAST_SEC } from '../core/atb.js'
+import { buffChips, hpBuffChips, ailChips, stateChips, needNow, CAST_SEC, BUFF_GAUGE_SEC } from '../core/atb.js'
 import { STAT_DEFS } from '../core/stats.js'
 import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC, RAGE_SEC, skillBannerAt } from '../lib/atbFx.js'
 import { JP_BOLD } from './casinoStyle.js'
@@ -544,15 +544,13 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
       </div>
       <Bar pct={(Math.max(0, me.hp) / me.base.hp) * 100} color={hpColor} h={10} />
       <div style={{ marginTop:'3px' }}>
+        {/* 大技の構えのゲージ（赤・2026-10-30 ユーザー「○○の構えとか表示させなくていい」で下の文字はやめた）・バフの行動のゲージ（金・0.5秒で貯まる）・ふだんのゲージ */}
         {me.cast
           ? <Bar pct={((st.t - me.cast.start) / CAST_SEC) * 100} color="#ff5522" h={8} />
-          : <Bar pct={(Math.min(me.gauge, need) / need) * 100} color={me.ail.paralyze ? '#888888' : right ? '#ff9944' : '#44aaff'} h={6} />}
+          : me.buffAct
+            ? <Bar pct={((st.t - me.buffAct.start) / BUFF_GAUGE_SEC) * 100} color="#ffd24a" h={6} />
+            : <Bar pct={(Math.min(me.gauge, need) / need) * 100} color={me.ail.paralyze ? '#888888' : right ? '#ff9944' : '#44aaff'} h={6} />}
       </div>
-      {me.cast && (
-        <div style={{ color:'#ff9944', fontSize:'11px', marginTop:'2px', textAlign: right ? 'right' : 'left' }}>
-          ⚠ 「{me.cast.name}」の構え　あと{Math.max(0, me.cast.until - st.t).toFixed(1)}秒
-        </div>
-      )}
       <div style={{ display:'flex', flexDirection:'column', alignItems: align }}>
         <Chips st={st} side={me} right={right} />
       </div>

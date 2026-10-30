@@ -92,9 +92,6 @@ export const buildBattleLog = (r, you, foe) => {
     } else if (l.type === 'guard') {
       // ATB専用（オート戦闘は出さない）。次の自分の行動まで続く
       out.push({ text:`🛡 ${actor}は身を守っている！（次の行動まで被ダメージ-${l.cut}%）`, color: LOG_COLOR.guard })
-    } else if (l.type === 'cast') {
-      // ATB専用：ボスの大技の詠唱（このあと sec 秒で撃つ）
-      out.push({ text:`⚠ ${actor}は「${l.skill}」の構えに入った！（${l.sec}秒後）`, color:'#ff9944' })
     } else if (l.type === 'hpBuff') {
       // ATB専用：IDダンジョンのボスがHPの節目で付けるバフ（消えない・消せない・2026-10-30）
       out.push({ text:`🔥 ${actor}の${l.skill}！ ${l.effect}（戦いの終わりまで）`, color:'#ff7a4d' })
