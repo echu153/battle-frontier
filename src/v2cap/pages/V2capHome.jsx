@@ -67,7 +67,7 @@ import { CarryLines } from '../components/V2capV1Carry.jsx'
 // 【確定】2026-10-31 ユーザー指示「メニューがバラバラになってるからそれぞれの役割ごとにまとめたい」：役割ごとの3つ（見出しつき）に分けた。中の並びもユーザーの指定どおり
 //   「キャラクター」はユーザーの「プレイヤー関連（もっといい名称あるはず）」。ゲームの中の呼び方（キャラクター名・キャラを作り直す）にそろえた
 const MENU = [
-  { title:'キャラクター', items:[
+  { title:'キャラクター', head:'chara', items:[
     { key:'profile', label:'プロフィール', icon:'👤', color:'#88aaff', action:'アイコン・ステの内訳' },
     { key:'skills',  label:'スキルセット', icon:'📖', color:'#44ff88', action:'編成する' },
     { key:'equip',   label:'装備',         icon:'🛡', color:'#88ccff', action:'着ける・外す' },
@@ -75,13 +75,13 @@ const MENU = [
     { key:'asc', label:'アセンション', icon:'✨', color:'#ffaa44', action:'APを振る' },
     { key:'dex',     label:'モンスター図鑑', icon:'📕', color:'#c0b0ff', action:'敵とドロップを見る' },
   ] },
-  { title:'冒険', items:[
+  { title:'冒険', head:'adventure', items:[
     // 【確定】2026-10-29 IDダンジョン（ボスを呼び、HPを持ち越して倒す・ATB戦闘・救援）。いまは黒龍ヴァルゼノクのノーマル・ハード
     { key:'dungeon', label:'IDダンジョン', icon:'🐉', color:'#ff6655', action:'黒龍ヴァルゼノクを呼ぶ・救援' },
     // 【確定】2026-10-14 塔（あるけみすと型の対人・1〜100層）。説明はいまの層で変わる（menuOf）
     { key:'tower', label: <TowerLabel />, icon:'🗼', color:'#b48cff', action:'階層守護者に挑む' },
   ] },
-  { title:'施設', items:[
+  { title:'施設', head:'facility', items:[
     { key:'temple', label:'神殿',   icon:'🏛', color:'#ff88cc', action:'転職する' },
     { key:'smith',  label:'鍛冶屋', icon:'🔨', color:'#ffcc00', action:'強化・分解・作成' },
     // 【確定】2026-10-22 博物館（装備の寄贈・V1と同じ形の土台。登録でもらえる能力はあとで）

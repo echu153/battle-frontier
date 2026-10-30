@@ -9,6 +9,8 @@ import { equippedItems, totalStats } from '../core/loadout.js'
 import { SLOT_LABEL } from '../core/equipment.js'
 import { fusedName } from '../core/fusion.js'
 import { RANK_COLOR } from './v2ui.js'
+import { JP_BOLD } from './casinoStyle.js'
+import { MENU_HEAD_DEFS, menuHeadSrcOf } from '../lib/menuHead.js'
 import V2ItemTip, { V2SkillTip, V2Tip } from './V2ItemTip.jsx'
 
 // ★見た目は旧版（無印）の街のステータスと同じ値にそろえてある。
@@ -241,9 +243,22 @@ export default function V2Status({ prof, inventory, runes, fishDex, dex, pet, cl
   )
 }
 
+// メニューの見出しの帯。絵は高さに合わせて右へ寄せ、文字は絵の溶けた左に置く（決まりは lib/menuHead.js）
+function MenuHead({ head, title }) {
+  const { color } = MENU_HEAD_DEFS[head]
+  return (
+    <div style={{ display:'flex', alignItems:'center', width:'100%', aspectRatio:'6 / 1', minHeight:'56px', maxHeight:'80px', boxSizing:'border-box', padding:'0 10px', marginBottom:'6px',
+      borderRadius:'4px', border:'1px solid #003366',
+      background:`url(${menuHeadSrcOf(head)}) right center / auto 100% no-repeat, linear-gradient(90deg, ${color}24, ${color}00 55%), #000c30` }}>
+      <span style={{ borderLeft:`3px solid ${color}`, paddingLeft:'8px', color:'#f0f5ff', fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'15px',
+        letterSpacing:'0.08em', textShadow:'0 1px 3px #000' }}>{title}</span>
+    </div>
+  )
+}
+
 // 行動メニュー。旧版の街のボタン（padding:8px／fontSize:12px）と同じ大きさにそろえてある。
 // ★**2列 × まとまりごと**に並べる（2026-08-26 ユーザー指示）。
-//   groups は「まとまりの配列」で、title がまとまりの見出し、items が2列に流れる中身（2026-10-31 ユーザー指示で役割ごとに見出しをつけた）。
+//   groups は「まとまりの配列」で、title がまとまりの見出し、head が見出しの帯の絵（lib/menuHead.js）、items が2列に流れる中身（2026-10-31 ユーザー指示で役割ごとに見出しをつけた）。
 //   【確定】2026-10-31 ユーザー指示「その行に1つしかなくてもアイコンの大きさは同じにして」：数が奇数でも最後の1つを伸ばさない（どのボタンも同じ大きさ）。
 export function V2Menu({ groups, open, onToggle, onPick, badges = {} }) {
   return (
@@ -254,7 +269,7 @@ export function V2Menu({ groups, open, onToggle, onPick, badges = {} }) {
       </button>
       {open && groups.map((group, gi) => (
         <div key={group.title} style={{ marginBottom: gi === groups.length - 1 ? 0 : '12px' }}>
-          <div style={{ color:'#cfe2ff', fontSize:'11px', borderBottom:'1px solid #003366', paddingBottom:'3px', marginBottom:'6px' }}>{group.title}</div>
+          <MenuHead head={group.head} title={group.title} />
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
             {group.items.map(m => (
               <button key={m.key} onClick={() => onPick(m.key)}
