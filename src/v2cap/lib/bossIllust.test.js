@@ -10,7 +10,7 @@ import {
   bossIllustOf, illustPoseAt, idlePoseAt, motionPoseAt, illustPointAt, illustTrailsAt, mouthPointOf, rotPoint, partMove,
   illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt, dustEllipsesOf,
   illustCastShowAt, EASES, joltAt, illustBendKindOf, bendFramesOf, illustPoseKindOf, illustShowAt, illustGhostsAt, ART_FADE_MS, artAnchorAt, leanPoint,
-  illustBuffShowAt, illustBuffKindOf, BUFF_IN_MS, BUFF_HOLD_MS, BUFF_OUT_MS, BUFF_AURA_IN_MS, BUFF_AURA_OUT_MS, BUFF_ART_MS, BUFF_FLASH_MS,
+  illustBuffShowAt, illustBuffKindOf, buffSceneAt, buffAfterAt, buffHoldOf, buffArtMsOf, BUFF_IN_MS, BUFF_HOLD_MS, BUFF_OUT_MS, BUFF_AURA_IN_MS, BUFF_AURA_OUT_MS, BUFF_ART_MS, BUFF_FLASH_MS,
 } from './bossIllust.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { DUNGEON_BOSSES } from './dungeon.js'
@@ -758,17 +758,17 @@ test('【確定】2026-10-30 HPの節目のバフの絵（ユーザー「バフ�
   assert.equal(illustBuffShowAt(a, '黒鱗の鎧', -1), null)
   assert.equal(illustBuffShowAt(a, '黒鱗の鎧', BUFF_ART_MS), null, '終わったら出さない')
   assert.equal(illustBuffShowAt(a, '知らないバフ', 100), null, '絵の無いバフは名前の帯と赤い光だけ')
-  const s0 = illustBuffShowAt(a, '逆鱗', 0)
+  // 切り替えの形は黒鱗の鎧で見る（逆鱗は見せる時間が長く、闘気が揺らめく＝下のテスト）
+  const s0 = illustBuffShowAt(a, '黒鱗の鎧', 0)
   assert.ok(s0.rig === 1 && s0.pose === 0 && s0.flash === 1, '付いた瞬間は立ち絵のまま・いちばん明るい')
-  const s1 = illustBuffShowAt(a, '逆鱗', BUFF_IN_MS / 2)
+  const s1 = illustBuffShowAt(a, '黒鱗の鎧', BUFF_IN_MS / 2)
   assert.ok(Math.abs(s1.pose - 1) < 1e-9 && Math.abs(s1.rig - 1) < 1e-9, '前半でポーズの絵が出きって、立ち絵は後半で消える')
-  const s2 = illustBuffShowAt(a, '逆鱗', BUFF_HOLD_MS - 1)
+  const s2 = illustBuffShowAt(a, '黒鱗の鎧', BUFF_HOLD_MS - 1)
   assert.ok(s2.rig === 0 && s2.pose === 1 && Math.abs(s2.aura.op - 1) < 1e-9 && s2.flash === 0, '見せているあいだはポーズとオーラだけ')
-  assert.ok(Math.abs(illustBuffShowAt(a, '逆鱗', BUFF_AURA_IN_MS).aura.scale - 1) < 1e-9, 'オーラは広がりきると立ち絵の大きさ')
-  assert.ok(illustBuffShowAt(a, '逆鱗', BUFF_AURA_IN_MS * 0.7).aura.scale > 1, 'オーラは少し大きくなりすぎてから戻る')
+  assert.ok(Math.abs(illustBuffShowAt(a, '黒鱗の鎧', BUFF_AURA_IN_MS).aura.scale - 1) < 1e-9, 'オーラは出きると立ち絵の大きさ')
   assert.ok(illustBuffShowAt(a, '逆鱗', 0).aura.scale < 0.8, '後ろの闘気は小さく出て広がる')
   assert.ok(illustBuffShowAt(a, '黒鱗の鎧', 0).aura.scale > 1.2 && illustBuffShowAt(a, '黒鱗の鎧', BUFF_AURA_IN_MS * 0.7).aura.scale < 1, '手前の殻は大きく出て竜へ閉じる（少し行きすぎる）')
-  const s3 = illustBuffShowAt(a, '逆鱗', BUFF_HOLD_MS + BUFF_OUT_MS)
+  const s3 = illustBuffShowAt(a, '黒鱗の鎧', BUFF_HOLD_MS + BUFF_OUT_MS)
   assert.ok(s3.rig === 1 && s3.pose === 0 && s3.aura.op > 0 && s3.aura.op < 1 && s3.aura.scale > 1, '立ち絵へ戻り、オーラは広がりながら消えていく')
   assert.ok(BUFF_FLASH_MS < BUFF_HOLD_MS && BUFF_ART_MS === BUFF_HOLD_MS + BUFF_AURA_OUT_MS)
 })
@@ -795,4 +795,34 @@ test('【確定】2026-10-30 雨摩座のバフの絵（ユーザー「あまざ
   const s = illustBuffShowAt(a, '篠突く雨', BUFF_HOLD_MS - 1)
   assert.ok(s.rig === 0 && s.pose === 1 && Math.abs(s.aura.op - 1) < 1e-9, '見せているあいだはポーズとオーラだけ')
   assert.ok(illustBuffShowAt(a, '霧雨の帳', 0).aura.scale > 1.2, '手前の帳は大きく出て雨摩座へ閉じる')
+})
+
+test('【確定】2026-10-30 逆鱗の強い見せ方とそのあとの待機（ユーザー「逆鱗のモーションがパッとしない、もうちょっと強化感を出してほしい、逆鱗後はモーションも変更していい」）', () => {
+  const a = bossIllustOf('varuzenoku'), w = a.buffs['逆鱗'], m = a.buffs['黒鱗の鎧']
+  // 逆鱗は2秒見せる（黒鱗の鎧は今までどおり1.5秒・強い見せ方も、そのあとの見た目も無し）
+  assert.equal(buffHoldOf(w), 2000)
+  assert.equal(buffHoldOf(m), BUFF_HOLD_MS)
+  assert.equal(buffSceneAt(m, 100), null)
+  assert.equal(buffAfterAt([{ b: m, since: Infinity }], 0), null)
+  const mid = illustBuffShowAt(a, '逆鱗', 1900)
+  assert.ok(mid.rig === 0 && mid.pose === 1, '1.9秒でもまだポーズの絵')
+  assert.equal(illustBuffShowAt(a, '逆鱗', buffArtMsOf(w)), null)
+  // 付いた瞬間：舞台が赤黒く暗くなり、揺れ、ポーズの絵がふくらみ、口から輪が広がり、足元から火の粉が噴き上がる
+  const e = buffSceneAt(w, 120), h = buffSceneAt(w, 1000), z = buffSceneAt(w, 2000 + BUFF_AURA_OUT_MS - 1)
+  assert.ok(e.dim > 0.3 && e.dimColor && Math.hypot(...e.shake) >= 0 && e.punch > 1.03, '暗く・ふくらむ')
+  assert.ok(Math.max(...Array.from({ length: 20 }, (_, i) => Math.hypot(...buffSceneAt(w, 100 + i * 7).shake))) > 3, '吠えた瞬間は大きく揺れる')
+  assert.ok(Math.max(...Array.from({ length: 20 }, (_, i) => Math.hypot(...buffSceneAt(w, 1700 + i * 7).shake))) < 1, '揺れは弱まっていく')
+  assert.ok(e.rings.length >= 1 && e.rings[0].x === w.show.rings.at[0], '口から輪')
+  assert.ok(buffSceneAt(w, 700).rings.length >= 2, '輪は重なって広がる')
+  assert.ok(h.sparks.length > 5 && h.sparks.every(p => p.y < 590 && p.op >= 0 && p.op <= 1), '火の粉は足元から上へ')
+  assert.ok(z.dim < 0.05 && Math.abs(z.punch - 1) < 0.01, '見せ終わると戻る')
+  assert.equal(buffSceneAt(w, 2000 + BUFF_AURA_OUT_MS), null)
+  // そのあと：脈と火の粉は見せ終わってから出てくる・待機はポーズの絵に切り替わったあと速くなる
+  assert.equal(buffAfterAt([{ b: w, since: 0 }], 0).tempo, 1, '付いた瞬間はまだ速くしない（立ち絵が見えている）')
+  const early = buffAfterAt([{ b: w, since: 1000 }], 0)
+  assert.ok(early.tempo > 1.2 && early.glow === 0 && early.sparks.every(p => p.op === 0), 'ポーズの絵のあいだに速くなり、脈と火の粉はまだ')
+  const beats = Array.from({ length: 60 }, (_, i) => buffAfterAt([{ b: w, since: Infinity }], i * 25).glow)
+  assert.ok(Math.max(...beats) > 0.8 && Math.min(...beats) < 0.05, '体が赤く脈打つ（強く光ったり消えたり）')
+  const late = buffAfterAt([{ b: w, since: Infinity }, { b: m, since: Infinity }], 5000)
+  assert.ok(late.sparks.length === w.after.embers.n && late.sparks.some(p => p.op > 0.1), '火の粉が絶えず立ちのぼる')
 })

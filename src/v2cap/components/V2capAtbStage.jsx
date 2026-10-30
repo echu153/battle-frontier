@@ -6,7 +6,7 @@ import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC, RAGE_SEC, skillBannerAt }
 import { JP_BOLD } from './casinoStyle.js'
 import { rubySegmentsOf } from '../lib/skillRuby.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
-import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, artAnchorAt, illustCastShowAt, illustBuffShowAt } from '../lib/bossIllust.js'
+import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, artAnchorAt, illustCastShowAt, illustBuffShowAt, buffSceneAt, buffAfterAt } from '../lib/bossIllust.js'
 import { FX_HEAD_Y, FX_FEET_Y, FX_SKY_Y, FX_TARGET_Y, SCENE_TOP, fallAt, coilAt, pourTimesOf, sceneEndMsOf, stageSceneOf } from '../lib/bossScene.js'
 
 // ============================================================
@@ -209,6 +209,30 @@ const PoseArt = ({ art, p, op = 1 }) => (
     style={{ position:'absolute', left:`${(p.x / art.base) * 100}%`, top:`${(p.y / art.base) * 100}%`, width:`${(p.w / art.base) * 100}%`, height:`${(p.h / art.base) * 100}%`,
       maxWidth:'none', userSelect:'none', pointerEvents:'none', opacity: op < 1 ? op : undefined }} />
 )
+// HPの節目のバフの衝撃の輪と火の粉（lib/bossIllust.js の buffSceneAt・buffAfterAt・立ち絵の px）。明るく重ねる（screen）。
+//   輪＝ぼかした太い色の輪＋細い明るい芯・火の粉＝ぼかした光の玉＋明るい芯
+const BuffSparks = ({ art, sc, after }) => {
+  const id = useId()
+  const dots = (list, color, pre) => list.map((p, i) => (
+    <g key={`${pre}${i}`} opacity={p.op.toFixed(3)}>
+      <circle cx={p.x} cy={p.y} r={p.r * 2.2} fill={`rgb(${color})`} filter={`url(#${id})`} />
+      <circle cx={p.x} cy={p.y} r={p.r * 0.7} fill="rgb(255,236,190)" />
+    </g>
+  ))
+  return (
+    <svg viewBox={`0 0 ${art.base} ${art.base}`} style={{ position:'absolute', inset:0, width:'100%', height:'100%', overflow:'visible', pointerEvents:'none', mixBlendMode:'screen' }}>
+      <defs><filter id={id} x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="3" /></filter></defs>
+      {sc?.rings.map((r, i) => (
+        <g key={`r${i}`} opacity={r.op.toFixed(3)}>
+          <circle cx={r.x} cy={r.y} r={r.r} fill="none" stroke={`rgb(${sc.ringColor})`} strokeWidth={r.w * 1.8} filter={`url(#${id})`} />
+          <circle cx={r.x} cy={r.y} r={r.r} fill="none" stroke="rgb(255,226,170)" strokeWidth={Math.max(1, r.w * 0.35)} />
+        </g>
+      ))}
+      {after && dots(after.sparks, after.sparkColor, 'a')}
+      {sc && dots(sc.sparks, sc.sparkColor, 's')}
+    </svg>
+  )
+}
 // HPの節目のバフのオーラ1枚（立ち絵の px で置く）：広げる中心は、手前の殻＝絵の真ん中・後ろの闘気と光の闘気＝足元（下のまん中）。光（glow）は下の絵を明るくする重ね方（screen）
 const AuraArt = ({ art, a }) => (
   <img src={a.p.src} alt="" draggable={false} decoding="sync"
@@ -361,11 +385,16 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   const frame = mo?.ms && lastAct ? motionFrameAt(mo, (now - lastAct.t0) * 1000) : -1
   // イラスト版は姿勢で動かす（技の動きも姿勢の中＝踏み込まない）
   const rigMotion = rig && lastAct?.motion?.keys ? lastAct.motion : null, rigMs = (now - (lastAct?.t0 ?? now)) * 1000
+  // HPの節目のバフが付いているあいだの見た目（逆鱗のあと・lib/bossIllust.js の buffAfterAt）：待機の速さ・体の脈・立ちのぼる火の粉。
+  //   tMs＝部品の待機の時計（速さを掛けた時刻）。付いてからの時間は rage の印から（印が片付いたあとは十分たった）
+  const sinceOf = (nm) => { const f = mine.reduce((p, f) => (f.kind === 'rage' && f.skill === nm && f.t0 <= now && (!p || f.t0 >= p.t0) ? f : p), null); return f ? (now - f.t0) * 1000 : Infinity }
+  const after = rig?.buffs ? buffAfterAt(hpBuffChips(me).map(c => ({ b: rig.buffs[c.name], since: sinceOf(c.name) })), now * 1000) : null
+  const tMs = now * 1000 * (after?.tempo || 1)
   // 構えのあいだは構えの姿勢（技を流しているあいだは技が先）
   const casting = rig && me.cast && !(rigMotion && rigMs < rigMotion.totalMs)
-  const pose = !rig ? null : casting ? illustCastPoseAt(rig.key, (st.t - me.cast.start) * 1000, now * 1000)
-    : illustPoseAt(rig.key, rigMotion, rigMs, now * 1000, !!lastAct && afterCast(lastAct.t0, castEnd))
-  const trails = rigMotion ? illustTrailsAt(rig.key, rigMotion, rigMs, now * 1000) : []
+  const pose = !rig ? null : casting ? illustCastPoseAt(rig.key, (st.t - me.cast.start) * 1000, tMs)
+    : illustPoseAt(rig.key, rigMotion, rigMs, tMs, !!lastAct && afterCast(lastAct.t0, castEnd))
+  const trails = rigMotion ? illustTrailsAt(rig.key, rigMotion, rigMs, tMs) : []
   // 技のポーズの絵と残像（構えのあいだは部品の立ち絵）
   // 構えのあいだのポーズの絵（雨摩座＝構えた技の構えの絵・lib/bossIllust.js の illustCastShowAt・黒龍は無し）
   const cs = casting ? illustCastShowAt(rig, me.cast.name, (st.t - me.cast.start) * 1000) : null
@@ -373,13 +402,15 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   const lastRage = mine.reduce((p, f) => (f.kind === 'rage' && f.t0 <= now && (!p || f.t0 >= p.t0) ? f : p), null)
   const buff = rig && lastRage ? illustBuffShowAt(rig, lastRage.skill, (now - lastRage.t0) * 1000) : null
   const buffArt = buff ? rig.buffs[lastRage.skill] : null
+  // 付いた瞬間の強い見せ方（逆鱗・buffSceneAt）：ポーズの絵のふくらみ・衝撃の輪・噴き上がる火の粉（舞台の暗さと揺れは V2capAtbStage）
+  const bsc = rig && lastRage ? buffSceneAt(rig.buffs?.[lastRage.skill], (now - lastRage.t0) * 1000) : null
   const moving = !!rigMotion && rigMs < rigMotion.totalMs
   const buffPose = buff && buffArt.pose && !moving && !casting
   const show = buffPose ? { rig: buff.rig, poses: buff.pose > 0.001 ? [{ name: lastRage.skill, op: buff.pose }] : [] }
     : rigMotion && !casting ? illustShowAt(rigMotion, rigMs) : cs?.show || null
   const showMotion = buffPose ? { poses: { [lastRage.skill]: buffArt.pose } } : cs ? cs.motion : rigMotion
   const aura = buff?.aura && buffArt.aura ? { p: buffArt.aura, op: buff.aura.op * buffArt.auraOp, scale: buff.aura.scale, front: buffArt.front, glow: buffArt.glow } : null
-  const ghosts = rigMotion && !casting && !buffPose ? illustGhostsAt(rigMotion, rigMs).map(g => ({ ...g, pose: illustPoseAt(rig.key, rigMotion, g.ms, now * 1000 - (rigMs - g.ms)) })) : []
+  const ghosts = rigMotion && !casting && !buffPose ? illustGhostsAt(rigMotion, rigMs).map(g => ({ ...g, pose: illustPoseAt(rig.key, rigMotion, g.ms, tMs - (rigMs - g.ms)) })) : []
   const dx = (frame >= 0 || rig ? 0 : lungeOf(now - lastOf('act')) * dir) + shakeOf(now - lastOf('hit'))
   const hitAgo = now - lastOf('hit')
   const glowAgo = now - lastOf('use')
@@ -396,6 +427,8 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
     const k = Math.sin(Math.PI * 2 * rageAgo / RAGE_SEC * 1.0) ** 2 * (1 - rageAgo / RAGE_SEC)
     filters.push(`drop-shadow(0 0 ${(6 + 14 * k).toFixed(1)}px rgba(255,70,30,${(0.35 + 0.6 * k).toFixed(2)})) brightness(${(1 + 0.35 * k).toFixed(2)})`)
   }
+  // 逆鱗のあと：体が赤く脈打つ（心臓のように2回ずつ）
+  if (after?.glow > 0.01) filters.push(`drop-shadow(0 0 ${(3 + 9 * after.glow).toFixed(1)}px rgba(${after.glowColor},${(0.2 + 0.55 * after.glow).toFixed(2)}))`)
   if (me.ail.paralyze) filters.push('grayscale(0.6)')
   const down = me.hp <= 0
   const pops = mine.filter(f => f.kind !== 'act' && f.kind !== 'use' && f.kind !== 'rage' && now >= f.t0 && now - f.t0 < POP_SEC)
@@ -422,12 +455,15 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
           opacity: down ? 0.25 : 1, transition:'opacity 0.4s' }}>
           {src || rig ? (
             // 待機の絵の枠（正方形）。攻撃の絵はこの枠に重ねる（ox・oy・w・h は待機の枠（クラスは 224px・ボスは base）を100%として割合で置く）
-            <div style={{ position:'relative', height:'100%', aspectRatio:'1 / 1', maxWidth:'100%', filter: filters.join(' ') || 'none' }}>
+            <div style={{ position:'relative', height:'100%', aspectRatio:'1 / 1', maxWidth:'100%', filter: filters.join(' ') || 'none',
+              transform: bsc && bsc.punch !== 1 ? `scale(${bsc.punch.toFixed(4)})` : undefined, transformOrigin:'50% 92%' }}>
               {rig && trails.length > 0 && <RigTrails art={rig} trails={trails} />}
-              {rig ? <IllustRig art={rig} pose={pose} freePose={illustFreePoseAt(rig.key, now * 1000)} motion={showMotion} show={show} ghosts={ghosts} tMs={now * 1000} aura={aura} /> : (
+              {rig ? <IllustRig art={rig} pose={pose} freePose={illustFreePoseAt(rig.key, tMs)} motion={showMotion} show={show} ghosts={ghosts} tMs={tMs} aura={aura} /> : (
                 <img src={src} alt="" draggable={false}
                   style={{ width:'100%', height:'100%', objectFit:'contain', userSelect:'none', visibility: frame >= 0 ? 'hidden' : 'visible' }} />
               )}
+              {/* HPの節目のバフの衝撃の輪と火の粉（逆鱗） */}
+              {rig && (bsc || after?.sparks.length > 0) && <BuffSparks art={rig} sc={bsc} after={after} />}
               {/* 攻撃の絵は、流していないときも隠して置いておく（FrameStrip） */}
               {strips.map(m => {
                 const b = m.base || IDLE_SIZE
@@ -825,6 +861,11 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
   kept.current = [...kept.current.filter(f => !sceneActs.includes(f) && now - f.t0 < sceneEndMsOf(f.motion) / 1000), ...sceneActs]
   const fxAll = kept.current.some(f => !fx.includes(f)) ? [...fx, ...kept.current.filter(f => !fx.includes(f))] : fx
   const sc = foeArt?.kind === 'illust' ? sceneOfStage(foeArt, kept.current, now, cast, castSeen.current) : null
+  // HPの節目のバフの強い見せ方（逆鱗・lib/bossIllust.js の buffSceneAt）：舞台を赤黒く暗く・吠える揺れ（技の演出と重ねる）
+  const rageB = foeArt?.kind === 'illust' ? fx.reduce((p, f) => (f.kind === 'rage' && f.side === 'b' && f.t0 <= now && (!p || f.t0 >= p.t0) ? f : p), null) : null
+  const bsc = rageB ? buffSceneAt(foeArt.buffs?.[rageB.skill], (now - rageB.t0) * 1000) : null
+  const dimOf = bsc && bsc.dim > (sc?.dim || 0) ? { k: bsc.dim, c: bsc.dimColor || '0,3,14' } : sc?.dim ? { k: sc.dim, c: '0,3,14' } : null
+  const shake = [(sc?.shake[0] || 0) + (bsc?.shake[0] || 0), (sc?.shake[1] || 0) + (bsc?.shake[1] || 0)]
   useLayoutEffect(() => {
     const el = stageRef.current
     if (!el || !foeBig) return
@@ -841,8 +882,8 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
     <div ref={stageRef} style={{ position:'relative', overflow:'hidden', display:'flex', gap:'12px', alignItems:'flex-start', padding:'8px',
       background:'linear-gradient(180deg, #000a26 0%, #001338 70%, #00204a 100%)', border:'1px solid #0a2a55',
       // 演出：背景を暗く（内側の影は背景の上・中身の下）・舞台ごと揺れる
-      boxShadow: sc?.dim ? `inset 0 0 0 2000px rgba(0,3,14,${sc.dim.toFixed(3)})` : undefined,
-      transform: sc && (sc.shake[0] || sc.shake[1]) ? `translate(${sc.shake[0].toFixed(1)}px, ${sc.shake[1].toFixed(1)}px)` : undefined }}>
+      boxShadow: dimOf ? `inset 0 0 0 2000px rgba(${dimOf.c},${dimOf.k.toFixed(3)})` : undefined,
+      transform: shake[0] || shake[1] ? `translate(${shake[0].toFixed(1)}px, ${shake[1].toFixed(1)}px)` : undefined }}>
       <Fighter st={st} side="a" me={st.a} src={playerSrc} motion={playerMotion} strips={playerMotion ? [playerMotion] : []} fx={fx} now={now} name={st.a.name}
         artH={size?.artH || ART_H} scale={playerScale} areaRef={pArea} squeeze={sc?.squeeze} />
       <Fighter st={st} side="b" me={st.b} right src={foeSrc} fx={fx} now={now} name={st.b.name}

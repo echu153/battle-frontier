@@ -175,7 +175,15 @@ export const BOSS_ILLUST_DEFS = {
     //   glow＝光として手前に明るく重ねる（screen・後ろの闘気と同じく足元から広がる。雨摩座の篠突く雨）
     buffs: {
       armor: { name: '黒鱗の鎧', pose: '黒鱗の鎧_ポーズ', aura: '黒鱗の鎧_オーラ', front: true, auraOp: 0.6 },
-      wrath: { name: '逆鱗', pose: '逆鱗_ポーズ', aura: '逆鱗_オーラ' },
+      // 【確定】2026-10-30 ユーザー「逆鱗のモーションがパッとしない、もうちょっと強化感を出してほしい、逆鱗後はモーションも変更していい」：
+      //   show＝付いた瞬間の見せ方を強く（buffSceneAt）：2秒見せる・舞台を赤黒く暗く・吠える揺れ・ポーズの絵がふくらむ・口から衝撃の輪が3つ・
+      //     足元から火の粉が噴き上がる・闘気が揺らめく。口（rings.at）は逆鱗のポーズの絵の開いた口（立ち絵の px）
+      //   after＝付いているあいだの待機（buffAfterAt）：体が赤く脈打つ（心臓のように2回ずつ）・足元から火の粉が絶えず立ちのぼる・待機が速くなる（羽ばたき・しっぽ・火の玉が増える）
+      wrath: { name: '逆鱗', pose: '逆鱗_ポーズ', aura: '逆鱗_オーラ',
+        show: { holdMs: 2000, dim: 0.55, dimColor: '26,0,0', shake: 7, punch: 0.07, flicker: 0.035,
+          rings: { at: [278, 122], n: 3, everyMs: 280, durMs: 750, maxR: 430, color: '255,96,40' },
+          burst: { n: 30, x: [120, 530], y: 590, rise: 420, size: 1.4, color: '255,140,60' } },
+        after: { glow: { periodMs: 1500, color: '255,50,16' }, embers: { n: 16, x: [130, 520], y: 590, rise: 360, size: 1.3, color: '255,120,40' }, tempo: 1.35 } },
     },
     poses: {
       claw: { windup: '黒爪_ため', strike: '黒爪_振り抜き' },
@@ -635,18 +643,89 @@ export const BUFF_AURA_OUT_MS = 420
 export const BUFF_FLASH_MS = 320
 export const BUFF_ART_MS = BUFF_HOLD_MS + Math.max(BUFF_OUT_MS, BUFF_AURA_OUT_MS)
 const easeOutBack = (k) => 1 + 2.70158 * (k - 1) ** 3 + 1.70158 * (k - 1) ** 2
+// 見せる長さはバフごと（show.holdMs・無ければ BUFF_HOLD_MS）
+export const buffHoldOf = (b) => b?.show?.holdMs ?? BUFF_HOLD_MS
+export const buffArtMsOf = (b) => buffHoldOf(b) + Math.max(BUFF_OUT_MS, BUFF_AURA_OUT_MS)
 export const illustBuffShowAt = (art, name, ms) => {
   const b = art?.buffs?.[name]
-  if (!b || !(ms >= 0) || ms >= BUFF_ART_MS) return null
-  const kIn = Math.min(1, ms / BUFF_IN_MS), kOut = Math.min(1, Math.max(0, ms - BUFF_HOLD_MS) / BUFF_OUT_MS)
-  const back = ms >= BUFF_HOLD_MS
+  const hold = buffHoldOf(b)
+  if (!b || !(ms >= 0) || ms >= buffArtMsOf(b)) return null
+  const kIn = Math.min(1, ms / BUFF_IN_MS), kOut = Math.min(1, Math.max(0, ms - hold) / BUFF_OUT_MS)
+  const back = ms >= hold
   const pose = !b.pose ? 0 : back ? 1 - smooth(Math.max(0, 2 * kOut - 1)) : smooth(Math.min(1, 2 * kIn))
   const rig = !b.pose ? 1 : back ? smooth(Math.min(1, 2 * kOut)) : 1 - smooth(Math.max(0, 2 * kIn - 1))
-  const aIn = Math.min(1, ms / BUFF_AURA_IN_MS), aOut = Math.min(1, Math.max(0, ms - BUFF_HOLD_MS) / BUFF_AURA_OUT_MS)
+  const aIn = Math.min(1, ms / BUFF_AURA_IN_MS), aOut = Math.min(1, Math.max(0, ms - hold) / BUFF_AURA_OUT_MS)
   const from = b.front ? 1.22 : 0.78
-  const aura = b.aura ? { op: smooth(aIn) * (1 - smooth(aOut)), scale: from + (1 - from) * easeOutBack(aIn) + 0.08 * aOut } : null
+  // flicker＝見せているあいだオーラが揺らめく（逆鱗の闘気・大きさが速く小さく揺れる）
+  const fl = b.show?.flicker ? 1 + b.show.flicker * Math.sin(ms / 45) * (1 - aOut) * Math.min(1, ms / BUFF_AURA_IN_MS) : 1
+  const aura = b.aura ? { op: smooth(aIn) * (1 - smooth(aOut)), scale: (from + (1 - from) * easeOutBack(aIn) + 0.08 * aOut) * fl } : null
   const flash = ms < BUFF_FLASH_MS ? (1 - ms / BUFF_FLASH_MS) ** 2 : 0
   return { rig, pose, aura, flash }
+}
+// 決まった乱れ（0〜1・同じ i と salt なら同じ値）＝火の粉の場所や速さ
+const hash01 = (i, salt) => { const x = Math.sin(i * 127.1 + salt * 311.7) * 43758.5453; return x - Math.floor(x) }
+// 足元から立ちのぼる火の粉1つ（t＝0〜1 の進み・i＝何番目）：左右に少し揺れ、上で小さく薄くなる
+const sparkAt = (p, i, t) => {
+  const x0 = p.x[0] + (p.x[1] - p.x[0]) * hash01(i, 3)
+  return { x: x0 + Math.sin(t * 6 + i) * 10, y: p.y - (p.rise || 380) * (1 - (1 - t) ** 2) * (0.55 + 0.45 * hash01(i, 4)),
+    r: (2.5 + 3 * hash01(i, 5)) * (1 - 0.5 * t) * (p.size || 1), op: (t < 0.15 ? t / 0.15 : 1) * (1 - t) }
+}
+// 【確定】2026-10-30 付いた瞬間の強い見せ方（def.buffs の show・ユーザー「逆鱗のモーションがパッとしない、もうちょっと強化感を出してほしい」）：
+//   b＝bossIllustOf の buffs の1つ・ms＝付いてからのミリ秒 → { dim, dimColor（舞台を暗くする濃さと色）, shake: [x, y]（舞台の揺れ px）, punch（ポーズの絵のふくらみ・1＝そのまま）,
+//   rings: [{ x, y, r, op, w }]（口から広がる衝撃の輪）, sparks: [{ x, y, r, op }]（足元から噴き上がる火の粉）, ringColor, sparkColor }（立ち絵の px）か null（show が無い・終わった）
+//   揺れは吠えた瞬間がいちばん強く、見せているあいだに弱まる。ふくらみはすぐに punch まで→少し戻る。暗さは見せ終わると戻る
+export const buffSceneAt = (b, ms) => {
+  const s = b?.show
+  if (!s || !(ms >= 0)) return null
+  const hold = buffHoldOf(b)
+  if (ms >= hold + BUFF_AURA_OUT_MS) return null
+  const fadeOut = 1 - smooth(Math.min(1, Math.max(0, ms - hold) / BUFF_AURA_OUT_MS))
+  const dim = (s.dim || 0) * Math.min(1, ms / 180) * fadeOut
+  const amp = (s.shake || 0) * Math.max(0, 1 - ms / hold) ** 1.5
+  const shake = [amp * Math.sin(ms / 23), amp * 0.6 * Math.sin(ms / 31 + 1.3)]
+  const punch = s.punch ? 1 + s.punch * (ms < 160 ? smooth(ms / 160) : 1 - 0.45 * smooth(Math.min(1, (ms - 160) / 400))) * fadeOut : 1
+  const rings = []
+  if (s.rings) for (let i = 0; i < s.rings.n; i++) {
+    const t = (ms - 80 - i * s.rings.everyMs) / (s.rings.durMs || 700)
+    if (t <= 0 || t >= 1) continue
+    rings.push({ x: s.rings.at[0], y: s.rings.at[1], r: 30 + (s.rings.maxR || 420) * (1 - (1 - t) ** 2), op: (1 - t) ** 1.2, w: 14 * (1 - t) + 2 })
+  }
+  const sparks = []
+  if (s.burst) for (let i = 0; i < s.burst.n; i++) {
+    const t = (ms - hash01(i, 1) * 500) / (900 + hash01(i, 2) * 700)
+    if (t > 0 && t < 1) sparks.push(sparkAt(s.burst, i, t))
+  }
+  return { dim, dimColor: s.dimColor || null, shake, punch, rings, sparks, ringColor: s.rings?.color || null, sparkColor: s.burst?.color || null }
+}
+// 【確定】2026-10-30 付いているあいだの見た目（def.buffs の after・ユーザー「逆鱗後はモーションも変更していい」）：
+//   list＝付いているバフ [{ b（bossIllustOf の buffs の1つ）, since（付いてからのミリ秒・印が片付いたあとは Infinity） }]・tMs＝いまのミリ秒 →
+//   { glow（体が赤く脈打つ強さ 0〜1）, glowColor, sparks（足元から絶えず立ちのぼる火の粉）, sparkColor, tempo（待機の速さ） } か null（after のあるバフが無い）
+//   脈と火の粉は見せ終わるころから 0.6秒で出てくる。待機の速さはポーズの絵を出して部品の立ち絵が隠れたあと（BUFF_IN_MS）に切り替える
+//   （速さを変えた瞬間に待機の動きが飛ぶのを隠す）
+export const buffAfterAt = (list, tMs) => {
+  const on = list.filter(x => x.b?.after)
+  if (!on.length) return null
+  const out = { glow: 0, glowColor: null, sparks: [], sparkColor: null, tempo: 1 }
+  for (const { b, since } of on) {
+    const a = b.after, k = smooth(Math.min(1, Math.max(0, since - buffHoldOf(b)) / 600))
+    if (since >= BUFF_IN_MS && a.tempo) out.tempo = Math.max(out.tempo, a.tempo)
+    if (a.glow && k > 0) {
+      // 心臓のように2回ずつ（強く・弱く）
+      const u = (tMs % a.glow.periodMs) / a.glow.periodMs
+      const beat = Math.exp(-(((u - 0.1) / 0.06) ** 2)) + 0.65 * Math.exp(-(((u - 0.3) / 0.07) ** 2))
+      out.glow = Math.max(out.glow, k * Math.min(1, beat))
+      out.glowColor = a.glow.color
+    }
+    if (a.embers && k > 0) {
+      for (let i = 0; i < a.embers.n; i++) {
+        const life = 1600 + hash01(i, 6) * 900, t = ((tMs + hash01(i, 7) * life) % life) / life
+        const sp = sparkAt(a.embers, i + 100, t)
+        out.sparks.push({ ...sp, op: sp.op * k })
+      }
+      out.sparkColor = a.embers.color
+    }
+  }
+  return out
 }
 // 残像（motion.ghosts＝{ fromMs, toMs, lagMs, n, op }）：fromMs〜toMs のあいだ、lagMs ずつ前の姿勢でポーズの絵を薄く重ねる（振り抜いて飛び込む勢い）
 //   { name, ms（その残像の時刻）, op }。そのときに出ていたポーズの絵だけ（部品の立ち絵には残像を出さない）
@@ -791,7 +870,7 @@ export const bossIllustOf = (key) => {
     const a = art.buffs?.[id]
     if (!a?.pose && !a?.aura) continue
     const one = (what) => (a[what] ? { ...a[what], src: srcOf(key, illustBuffKindOf(id, what)) } : null)
-    buffs[d.name] = { pose: one('pose'), aura: one('aura'), front: !!d.front, glow: !!d.glow, auraOp: d.auraOp ?? 1 }
+    buffs[d.name] = { pose: one('pose'), aura: one('aura'), front: !!d.front, glow: !!d.glow, auraOp: d.auraOp ?? 1, show: d.show || null, after: d.after || null }
   }
   const motions = {}
   for (const m of base.motions) {
