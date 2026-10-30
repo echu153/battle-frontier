@@ -130,7 +130,7 @@ export const bossArtOf = (key) => {
     illust: art.illust ? bossSrcOf(key, 'illust') : null,
     motions, bg,
     // 先に読んでおく絵（待機・技・エフェクト・背景）
-    srcs: [idle.src, ...Object.values(motions).flatMap(m => [m.src, ...Object.values(m.fx || {}).map(f => f.src)]), ...(bg ? [bg.src] : [])],
+    srcs: [idle.src, ...Object.values(motions).flatMap(m => [m.src, ...Object.values(m.fx || {}).map(f => f.src)]), ...(bg ? [bg.src, bg.flowSrc].filter(Boolean) : [])],
   }
 }
 

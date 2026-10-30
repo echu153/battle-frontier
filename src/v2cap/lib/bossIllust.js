@@ -996,6 +996,6 @@ export const bossIllustOf = (key) => {
     castArt: def.cast?.art || null, buffs, bg,
     srcs: [...parts.map(p => p.src), ...parts.filter(p => p.bend).map(p => p.bend.src), ...Object.values(motions).flatMap(m => Object.values(m.fx || {}).map(f => f.src)),
       ...Object.values(motions).flatMap(m => Object.values(m.poses || {}).map(p => p.src)), ...(orb ? [orb.src] : []),
-      ...Object.values(buffs).flatMap(b => [b.pose?.src, b.aura?.src].filter(Boolean)), ...(bg ? [bg.src] : [])],
+      ...Object.values(buffs).flatMap(b => [b.pose?.src, b.aura?.src].filter(Boolean)), ...(bg ? [bg.src, bg.flowSrc].filter(Boolean) : [])],
   }
 }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import V2capAtbMacros from './V2capAtbMacros.jsx'
 import V2capAtbFight from './V2capAtbFight.jsx'
+import { preloadArt } from '../lib/artPreload.js'
 import { box, miniBtn, TEXT } from './v2ui.js'
 import { createAtb, MAX_SEC } from '../core/atb.js'
 import { macrosOf, validateMacros } from '../lib/atbMacro.js'
@@ -80,10 +81,7 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
   // 両方の版があるボスだけ選べる（雨摩座はイラスト版だけ）
   const hasBoth = useMemo(() => !!(bossKey && bossIllustOf(bossKey) && bossArtOf(bossKey)), [bossKey])
   const bossArt = useMemo(() => (bossKey ? (artVer === 'illust' && bossIllustOf(bossKey)) || bossArtOf(bossKey) || bossIllustOf(bossKey) : null), [bossKey, artVer])
-  useEffect(() => {
-    if (!bossArt) return
-    for (const src of bossArt.srcs) { const im = new Image(); im.src = src }
-  }, [bossArt])
+  useEffect(() => { if (bossArt) preloadArt(bossArt.srcs) }, [bossArt])
   // 絵の版を選ぶボタン（イラスト版とドット絵版の両方があるボスだけ）
   const verPicker = hasBoth && (
     <span style={{ display:'inline-flex', gap:'4px', alignItems:'center' }}>

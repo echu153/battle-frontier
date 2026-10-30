@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import V2capAtbFight from './V2capAtbFight.jsx'
+import { preloadArt } from '../lib/artPreload.js'
 import { box, miniBtn, TEXT } from './v2ui.js'
 import { createAtb } from '../core/atb.js'
 import { calcPower } from '../core/stats.js'
@@ -65,7 +66,7 @@ export default function V2capDungeon({ prof, inventory, onProfile }) {
   const playerMotion = useMemo(() => motionOf(prof?.class, myGender, 'attack', baseCls), [prof?.class, myGender, baseCls])
   // ボスの絵：イラスト版（無ければドット絵版）。試し撃ちで選んだ版を使う
   const bossArt = useMemo(() => (loadPref('capBossArtVer', 'illust') === 'illust' && bossIllustOf(BOSS_KEY)) || bossArtOf(BOSS_KEY), [])
-  useEffect(() => { for (const src of bossArt?.srcs || []) { const im = new Image(); im.src = src } }, [bossArt])
+  useEffect(() => { if (bossArt) preloadArt(bossArt.srcs) }, [bossArt])
 
   const load = useCallback(async () => {
     const { data, error } = await supabase.rpc('v2cap_dungeon_state')

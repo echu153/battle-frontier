@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import V2LogLine from './V2LogLine.jsx'
 import V2capAtbStage from './V2capAtbStage.jsx'
 import { miniBtn, TEXT } from './v2ui.js'
@@ -13,6 +13,7 @@ import { MACRO_MARK, macroEntriesOf } from '../lib/atbMacro.js'
 import { fxEventsOf, scheduleFx, POP_SEC } from '../lib/atbFx.js'
 import { enemyArtSrc } from '../lib/enemyArt.js'
 import { newBossMotionMemo, bossMotionKeyOf } from '../lib/bossArt.js'
+import { artLoadedCount, preloadArt } from '../lib/artPreload.js'
 
 // ============================================================
 // 「レベルキャップあり」版（v2cap）— ATB戦闘の画面（舞台・マクロ・技のボタン・ログ・時間を進める）
@@ -53,6 +54,19 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
   const onOverRef = useRef(onOver)
   onOverRef.current = onOver
 
+  // ボス戦は絵がそろうまで始めない（lib/artPreload.js・初めて開いたとき、絵が届く前に戦闘が始まっていた）
+  const artSrcs = useMemo(() => (bossArt ? [...new Set([...bossArt.srcs, playerSrc, playerMotion?.src].filter(Boolean))] : []), [bossArt, playerSrc, playerMotion])
+  const [artN, setArtN] = useState(0)
+  const [artReady, setArtReady] = useState(() => artLoadedCount(artSrcs) === artSrcs.length)
+  useEffect(() => {
+    if (artLoadedCount(artSrcs) === artSrcs.length) { setArtReady(true); return }
+    setArtReady(false)
+    setArtN(artLoadedCount(artSrcs))
+    let off = false
+    preloadArt(artSrcs, { onProgress: (n) => { if (!off) setArtN(n) } }).then(() => { if (!off) setArtReady(true) })
+    return () => { off = true }
+  }, [artSrcs])
+
   // 新しい戦闘：ログと動きを空にする
   useEffect(() => {
     seen.current = 0
@@ -67,7 +81,7 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
   // ★実時間の差分を advance に渡す（中では決まった刻みで進む＝同じ入力なら同じ結果）。
   //   setInterval なのは、裏のタブで requestAnimationFrame が止まると戦闘が固まって見えるため
   useEffect(() => {
-    if (paused) return
+    if (paused || !artReady) return
     last.current = performance.now()
     const id = setInterval(() => {
       const now = performance.now()
@@ -101,7 +115,7 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
       setFrame(f => f + 1)
     }, 33)
     return () => clearInterval(id)
-  }, [runKey, paused, playerMotion, bossArt]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [runKey, paused, playerMotion, bossArt, artReady]) // eslint-disable-line react-hooks/exhaustive-deps
   // ログは新しい行が下に来る＝いちばん下まで送る
   useEffect(() => { if (logBox.current) logBox.current.scrollTop = logBox.current.scrollHeight }, [logs])
 
@@ -122,6 +136,15 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
   const run = me.macro   // 動いているマクロ（core/atb.js の startMacro）
   const entryText = (e) => (e.guard ? '🛡 防御' : e.idx === null ? '通常攻撃' : me.slots[e.idx]?.skill?.name)
   const entryCd = (e) => (e.guard ? guardCdRatio(me, now) : e.idx !== null && e.idx !== undefined ? cdRatio(me, e.idx, now) : 0)
+
+  if (!artReady) return (
+    <div style={{ padding:'64px 12px', textAlign:'center', background:'#000a26', border:'1px solid #0a2a55', color: TEXT.label, fontSize:'12px' }}>
+      <div>読みこみ中…</div>
+      <div style={{ width:'min(240px, 70%)', height:'4px', margin:'10px auto 0', background:'#0a2a55', borderRadius:'2px', overflow:'hidden' }}>
+        <div style={{ width:`${(artN / artSrcs.length) * 100}%`, height:'100%', background:'#44ddff', transition:'width 0.15s' }} />
+      </div>
+    </div>
+  )
 
   return (
     <div>
