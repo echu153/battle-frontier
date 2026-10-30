@@ -6,7 +6,7 @@ import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC, RAGE_SEC, skillBannerAt }
 import { JP_BOLD } from './casinoStyle.js'
 import { rubySegmentsOf } from '../lib/skillRuby.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
-import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, artAnchorAt, illustCastShowAt, illustBuffShowAt, buffSceneAt, buffAfterAt } from '../lib/bossIllust.js'
+import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, artAnchorAt, illustCastShowAt, illustBuffShowAt, buffSceneAt, buffAfterAt, buffRainAt } from '../lib/bossIllust.js'
 import { FX_HEAD_Y, FX_FEET_Y, FX_SKY_Y, FX_TARGET_Y, SCENE_TOP, fallAt, coilAt, pourTimesOf, sceneEndMsOf, stageSceneOf } from '../lib/bossScene.js'
 
 // ============================================================
@@ -209,14 +209,14 @@ const PoseArt = ({ art, p, op = 1 }) => (
     style={{ position:'absolute', left:`${(p.x / art.base) * 100}%`, top:`${(p.y / art.base) * 100}%`, width:`${(p.w / art.base) * 100}%`, height:`${(p.h / art.base) * 100}%`,
       maxWidth:'none', userSelect:'none', pointerEvents:'none', opacity: op < 1 ? op : undefined }} />
 )
-// HPの節目のバフの衝撃の輪と火の粉（lib/bossIllust.js の buffSceneAt・buffAfterAt・立ち絵の px）。明るく重ねる（screen）。
-//   輪＝ぼかした太い色の輪＋細い明るい芯・火の粉＝ぼかした光の玉＋明るい芯
+// HPの節目のバフの衝撃の輪と火の粉と稲妻（lib/bossIllust.js の buffSceneAt・buffAfterAt・立ち絵の px）。明るく重ねる（screen）。
+//   輪＝ぼかした太い色の輪＋細い明るい芯・火の粉＝ぼかした光の玉＋明るい芯（芯の色は決まりに書いてあれば＝雨摩座は水の色）・稲妻＝ぼかした太い線＋細い白い線
 const BuffSparks = ({ art, sc, after }) => {
   const id = useId()
-  const dots = (list, color, pre) => list.map((p, i) => (
+  const dots = (list, color, pre, core) => list.map((p, i) => (
     <g key={`${pre}${i}`} opacity={p.op.toFixed(3)}>
       <circle cx={p.x} cy={p.y} r={p.r * 2.2} fill={`rgb(${color})`} filter={`url(#${id})`} />
-      <circle cx={p.x} cy={p.y} r={p.r * 0.7} fill="rgb(255,236,190)" />
+      <circle cx={p.x} cy={p.y} r={p.r * 0.7} fill={`rgb(${core || '255,236,190'})`} />
     </g>
   ))
   return (
@@ -225,11 +225,46 @@ const BuffSparks = ({ art, sc, after }) => {
       {sc?.rings.map((r, i) => (
         <g key={`r${i}`} opacity={r.op.toFixed(3)}>
           <circle cx={r.x} cy={r.y} r={r.r} fill="none" stroke={`rgb(${sc.ringColor})`} strokeWidth={r.w * 1.8} filter={`url(#${id})`} />
-          <circle cx={r.x} cy={r.y} r={r.r} fill="none" stroke="rgb(255,226,170)" strokeWidth={Math.max(1, r.w * 0.35)} />
+          <circle cx={r.x} cy={r.y} r={r.r} fill="none" stroke={`rgb(${sc.ringCore || '255,226,170'})`} strokeWidth={Math.max(1, r.w * 0.35)} />
         </g>
       ))}
-      {after && dots(after.sparks, after.sparkColor, 'a')}
-      {sc && dots(sc.sparks, sc.sparkColor, 's')}
+      {after && dots(after.sparks, after.sparkColor, 'a', after.sparkCore)}
+      {sc && dots(sc.sparks, sc.sparkColor, 's', sc.sparkCore)}
+      {sc?.bolts.map((b, i) => {
+        const pts = b.pts.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ')
+        return (
+          <g key={`b${i}`} opacity={b.op.toFixed(3)} fill="none" strokeLinejoin="round">
+            <polyline points={pts} stroke={`rgb(${sc.boltColor})`} strokeWidth={11} filter={`url(#${id})`} />
+            <polyline points={pts} stroke="rgb(240,250,255)" strokeWidth={3} />
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+// 舞台に降る雨（篠突く雨・lib/bossIllust.js の buffRainAt）：舞台の上から足元まで（下の HP の表にはかからない）。手前の筋は太く・奥の筋は細く薄い。足元に水の輪が広がる。
+//   rains＝濃さ（k）と時計（t）のついた決まり（付いた瞬間の土砂降りと、そのあと降り続ける雨）・op＝全体の濃さ（ボスが倒れると止む）。px は舞台の大きさ（geo）から。
+//   線の太さは変わらないので、狭い舞台では本数を減らす（スマホの幅で雨が濃すぎて雨摩座が見えにくかった）
+const BuffRain = ({ geo, rains, op = 1 }) => {
+  const W = geo.W, H = geo.b.y + geo.b.h
+  const pathOf = (list, slant) => list.map(([x, y, len]) => {
+    const x1 = x * W + slant * y * H, y1 = y * H
+    return `M${x1.toFixed(1)} ${y1.toFixed(1)}L${(x1 + slant * len * H).toFixed(1)} ${(y1 + len * H).toFixed(1)}`
+  }).join('')
+  return (
+    <svg width={W} height={H} style={{ position:'absolute', left: 0, top: 0, zIndex: 3, pointerEvents:'none', opacity: op < 1 ? op : undefined }}>
+      {rains.map((r, i) => {
+        const fit = Math.min(1, W / 600)
+        const { far, near, splashes } = buffRainAt({ ...r, n: Math.ceil(r.n * fit), splash: Math.ceil((r.splash || 0) * fit) }, r.t)
+        return (
+          <g key={i} opacity={r.k.toFixed(3)} fill="none" stroke={`rgb(${r.color})`} strokeLinecap="round">
+            <path d={pathOf(far, r.slant)} strokeWidth={r.w * 0.6} opacity={(r.op * 0.55).toFixed(3)} />
+            <path d={pathOf(near, r.slant)} strokeWidth={r.w} opacity={r.op.toFixed(3)} />
+            {splashes.map((p, j) => <ellipse key={j} cx={(p.x * W).toFixed(1)} cy={(p.y * H).toFixed(1)} rx={(2 + 13 * p.t).toFixed(1)} ry={(0.8 + 3.2 * p.t).toFixed(1)}
+              strokeWidth={r.w * 0.7} opacity={((1 - p.t) * r.op).toFixed(3)} />)}
+          </g>
+        )
+      })}
     </svg>
   )
 }
@@ -375,6 +410,11 @@ const afterCast = (t0, castEnd) => t0 - castEnd > -0.05 && t0 - castEnd < CAST_G
 //   strips … 置いておく攻撃の絵（自分＝motion・ボス＝技ごとの絵ぜんぶ）／rig … イラスト版のボス（lib/bossIllust.js の bossIllustOf）
 //   castEnd … 構えを最後に見た時刻（now と同じ時計）。構えのすぐあとの技は構えの姿勢からつなぐ
 //   squeeze … ボスの技で締め上げられて縮む [横, 縦]（水縛の帯・足元を中心に）
+// 付いているあいだの見た目（lib/bossIllust.js の buffAfterAt）：marks＝その側の印（rage の印から付いてからの時間を出す）
+const buffAfterOf = (art, me, marks, now) => {
+  const sinceOf = (nm) => { const f = marks.reduce((p, f) => (f.kind === 'rage' && f.skill === nm && f.t0 <= now && (!p || f.t0 >= p.t0) ? f : p), null); return f ? (now - f.t0) * 1000 : Infinity }
+  return buffAfterAt(hpBuffChips(me).map(c => ({ b: art.buffs[c.name], since: sinceOf(c.name) })), now * 1000)
+}
 function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx, now, name, flex = '1 1 0', artH = ART_H, scale = 1, areaRef, castEnd = -1e9, squeeze = null, bossGlow = 0 }) {
   const mine = fx.filter(f => f.side === side)
   const lastOf = (kind) => mine.reduce((t, f) => (f.kind === kind && f.t0 <= now && f.t0 > t ? f.t0 : t), -1e9)
@@ -387,8 +427,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   const rigMotion = rig && lastAct?.motion?.keys ? lastAct.motion : null, rigMs = (now - (lastAct?.t0 ?? now)) * 1000
   // HPの節目のバフが付いているあいだの見た目（逆鱗のあと・lib/bossIllust.js の buffAfterAt）：待機の速さ・体の脈・立ちのぼる火の粉。
   //   tMs＝部品の待機の時計（速さを掛けた時刻）。付いてからの時間は rage の印から（印が片付いたあとは十分たった）
-  const sinceOf = (nm) => { const f = mine.reduce((p, f) => (f.kind === 'rage' && f.skill === nm && f.t0 <= now && (!p || f.t0 >= p.t0) ? f : p), null); return f ? (now - f.t0) * 1000 : Infinity }
-  const after = rig?.buffs ? buffAfterAt(hpBuffChips(me).map(c => ({ b: rig.buffs[c.name], since: sinceOf(c.name) })), now * 1000) : null
+  const after = rig?.buffs ? buffAfterOf(rig, me, mine, now) : null
   const tMs = now * 1000 * (after?.tempo || 1)
   // 構えのあいだは構えの姿勢（技を流しているあいだは技が先）
   const casting = rig && me.cast && !(rigMotion && rigMs < rigMotion.totalMs)
@@ -421,7 +460,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   if (buff) {
     // バフの絵があるボス：付いた瞬間にぱっと明るく光り、赤い光が見せているあいだ残る
     const k = Math.max(0, 1 - (now - lastRage.t0) / (RAGE_SEC * 1.2))
-    filters.push(`brightness(${(1 + 0.9 * buff.flash).toFixed(2)}) drop-shadow(0 0 ${(4 + 12 * k).toFixed(1)}px rgba(255,70,30,${(0.25 + 0.55 * k).toFixed(2)}))`)
+    filters.push(`brightness(${(1 + 0.9 * buff.flash).toFixed(2)}) drop-shadow(0 0 ${(4 + 12 * k).toFixed(1)}px rgba(${buffArt.tint || '255,70,30'},${(0.25 + 0.55 * k).toFixed(2)}))`)
   } else if (rageAgo >= 0 && rageAgo < RAGE_SEC) {
     // 2回脈打って消える赤い光（節目のバフ・バフの絵が無いボス）
     const k = Math.sin(Math.PI * 2 * rageAgo / RAGE_SEC * 1.0) ** 2 * (1 - rageAgo / RAGE_SEC)
@@ -896,7 +935,15 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
   // HPの節目のバフの強い見せ方（逆鱗・lib/bossIllust.js の buffSceneAt）：舞台を赤黒く暗く・吠える揺れ（技の演出と重ねる）
   const rageB = foeArt?.kind === 'illust' ? fx.reduce((p, f) => (f.kind === 'rage' && f.side === 'b' && f.t0 <= now && (!p || f.t0 >= p.t0) ? f : p), null) : null
   const bsc = rageB ? buffSceneAt(foeArt.buffs?.[rageB.skill], (now - rageB.t0) * 1000) : null
-  const dimOf = bsc && bsc.dim > (sc?.dim || 0) ? { k: bsc.dim, c: bsc.dimColor || '0,3,14' } : sc?.dim ? { k: sc.dim, c: sc.dimColor || '0,3,14' } : null
+  // 付いているあいだの空の暗さと雨（篠突く雨）。ボスが倒れると雨は 0.8秒で止む
+  const after = foeArt?.kind === 'illust' && foeArt.buffs ? buffAfterOf(foeArt, st.b, fx.filter(f => f.side === 'b'), now) : null
+  const deadAt = useRef(null)
+  if (st.b.hp > 0) deadAt.current = null
+  else if (deadAt.current == null) deadAt.current = now
+  const rainOp = deadAt.current == null ? 1 : Math.max(0, 1 - (now - deadAt.current) / 0.8)
+  const rains = [bsc?.rain, rainOp > 0 ? after?.rain : null].filter(Boolean)
+  const dimOf = [bsc?.dim ? { k: bsc.dim, c: bsc.dimColor } : null, after?.dim ? { k: after.dim * rainOp, c: after.dimColor } : null, sc?.dim ? { k: sc.dim, c: sc.dimColor } : null]
+    .reduce((p, d) => (d && d.k > (p?.k || 0) ? { k: d.k, c: d.c || '0,3,14' } : p), null)
   const shake = [(sc?.shake[0] || 0) + (bsc?.shake[0] || 0), (sc?.shake[1] || 0) + (bsc?.shake[1] || 0)]
   useLayoutEffect(() => {
     const el = stageRef.current
@@ -904,7 +951,7 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
     const measure = () => {
       if (!pArea.current || !bArea.current) return
       const r = el.getBoundingClientRect()
-      setGeo({ p: boxOf(r, pArea.current.getBoundingClientRect(), playerScale), b: boxOf(r, bArea.current.getBoundingClientRect(), 1) })
+      setGeo({ W: r.width, p: boxOf(r, pArea.current.getBoundingClientRect(), playerScale), b: boxOf(r, bArea.current.getBoundingClientRect(), 1) })
     }
     const ro = new ResizeObserver(measure)
     ro.observe(el)
@@ -924,6 +971,9 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
       {foeArt && <BossFx fx={fxAll} now={now} geo={geo} art={foeArt} cast={cast} castEnd={castSeen.current} scene={sc} />}
       {sc && geo && <SceneLayer geo={geo} sc={sc} hands={sc.handsAt ? sc.handsAt.map(p => [geo.b.x + p[0] * (geo.b.w / foeArt.base), geo.b.y + p[1] * (geo.b.w / foeArt.base)]) : null} s={geo.b.w / foeArt.base} />}
       {sc && geo && sc.flash > 0 && <Flash geo={geo} op={sc.flash} fire={sc.tone === 'fire'} />}
+      {geo && rains.length > 0 && <BuffRain geo={geo} rains={rains} op={rainOp} />}
+      {/* 稲妻が落ちた瞬間に舞台ぜんぶが光る（篠突く雨） */}
+      {bsc?.flash > 0.01 && <div style={{ position:'absolute', inset:0, zIndex: 4, pointerEvents:'none', background:'rgb(205,230,255)', opacity: bsc.flash.toFixed(3) }} />}
     </div>
   )
 }
