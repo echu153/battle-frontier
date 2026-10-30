@@ -243,8 +243,8 @@ export default function V2Status({ prof, inventory, runes, fishDex, dex, pet, cl
 
 // 行動メニュー。旧版の街のボタン（padding:8px／fontSize:12px）と同じ大きさにそろえてある。
 // ★**2列 × まとまりごと**に並べる（2026-08-26 ユーザー指示）。
-//   groups は「まとまりの配列」で、まとまりの中身が2列に流れる。
-//   まとまりに1つしか無いときは横いっぱいに伸ばす（宝樹）。
+//   groups は「まとまりの配列」で、title がまとまりの見出し、items が2列に流れる中身（2026-10-31 ユーザー指示で役割ごとに見出しをつけた）。
+//   数が奇数のときは最後の1つを横いっぱいに伸ばす（右が空かないように）。
 export function V2Menu({ groups, open, onToggle, onPick, badges = {} }) {
   return (
     <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'10px', marginBottom:'8px' }}>
@@ -253,20 +253,22 @@ export function V2Menu({ groups, open, onToggle, onPick, badges = {} }) {
         {open ? '▲ メニューを閉じる' : '▼ メニューを表示'}
       </button>
       {open && groups.map((group, gi) => (
-        <div key={gi} style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px',
-          marginBottom: gi === groups.length - 1 ? 0 : '10px' }}>
-          {group.map(m => (
-            <button key={m.key} onClick={() => onPick(m.key)}
-              style={{ padding:'8px', background:'#001840', border:`1px solid ${m.color}`, color:m.color,
-                cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left',
-                gridColumn: group.length === 1 ? '1 / -1' : undefined }}>
-              {m.icon} {m.label}
-              {/* ★新着の目印。お知らせのように「来ているのに気づかない」が起きる先だけ付ける */}
-              {badges[m.badge] && <span style={{ marginLeft:'4px', background:'#ff4400', color:'#fff',
-                fontSize:'7px', padding:'1px 4px', borderRadius:'6px' }}>NEW</span>}
-              <span style={{ display:'block', color:'#7fa6d0', fontSize:'9px', marginTop:'2px' }}>{m.action}</span>
-            </button>
-          ))}
+        <div key={group.title} style={{ marginBottom: gi === groups.length - 1 ? 0 : '12px' }}>
+          <div style={{ color:'#cfe2ff', fontSize:'11px', borderBottom:'1px solid #003366', paddingBottom:'3px', marginBottom:'6px' }}>{group.title}</div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
+            {group.items.map((m, i) => (
+              <button key={m.key} onClick={() => onPick(m.key)}
+                style={{ padding:'8px', background:'#001840', border:`1px solid ${m.color}`, color:m.color,
+                  cursor:'pointer', fontFamily:'monospace', fontSize:'12px', textAlign:'left',
+                  gridColumn: i === group.items.length - 1 && i % 2 === 0 ? '1 / -1' : undefined }}>
+                {m.icon} {m.label}
+                {/* ★新着の目印。お知らせのように「来ているのに気づかない」が起きる先だけ付ける */}
+                {badges[m.badge] && <span style={{ marginLeft:'4px', background:'#ff4400', color:'#fff',
+                  fontSize:'7px', padding:'1px 4px', borderRadius:'6px' }}>NEW</span>}
+                <span style={{ display:'block', color:'#7fa6d0', fontSize:'9px', marginTop:'2px' }}>{m.action}</span>
+              </button>
+            ))}
+          </div>
         </div>
       ))}
     </div>

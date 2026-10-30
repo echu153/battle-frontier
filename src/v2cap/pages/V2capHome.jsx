@@ -43,6 +43,11 @@ import { MARK_SRC } from '../lib/clerk.js'
 function ShopMark({ size = 16 }) {
   return <img src={MARK_SRC} alt="" width={size} height={size} style={{ verticalAlign:'-3px' }} />
 }
+// 塔の名前はスマホの2列だと1行に入らない。折り返すなら「の」のあとだけ（前は最後の「塔」の1字だけが次の行へ落ちた）
+function TowerLabel() {
+  const [head, tail] = TOWER_NAME.split('の')
+  return <span style={{ wordBreak:'keep-all' }}>{head}の<wbr />{tail}</span>
+}
 import V2capGenderPick from '../components/V2capGenderPick.jsx'
 import { CarryLines } from '../components/V2capV1Carry.jsx'
 
@@ -59,44 +64,36 @@ import { CarryLines } from '../components/V2capV1Carry.jsx'
 //   ・ステータスとメニュー（と今日のミッション）の開け閉めは覚えておく（今のⅡとは別のキー・2026-10-15 からキャラのデータにも）
 //   ・出撃のタブ（アリーナ・ATB）はこの版に無いので出さない
 // ============================================================
+// 【確定】2026-10-31 ユーザー指示「メニューがバラバラになってるからそれぞれの役割ごとにまとめたい」：役割ごとの3つ（見出しつき）に分けた。中の並びもユーザーの指定どおり
+//   「キャラクター」はユーザーの「プレイヤー関連（もっといい名称あるはず）」。ゲームの中の呼び方（キャラクター名・キャラを作り直す）にそろえた
 const MENU = [
-  [
+  { title:'キャラクター', items:[
     { key:'profile', label:'プロフィール', icon:'👤', color:'#88aaff', action:'アイコン・ステの内訳' },
     { key:'skills',  label:'スキルセット', icon:'📖', color:'#44ff88', action:'編成する' },
     { key:'equip',   label:'装備',         icon:'🛡', color:'#88ccff', action:'着ける・外す' },
-    { key:'dex',     label:'モンスター図鑑', icon:'📕', color:'#c0b0ff', action:'敵とドロップを見る' },
-  ],
-  [
-    { key:'smith',  label:'鍛冶屋', icon:'🔨', color:'#ffcc00', action:'強化・分解・作成' },
-    { key:'temple', label:'神殿',   icon:'🏛', color:'#ff88cc', action:'転職する' },
-  ],
-  // 【確定】2026-10-22 博物館（装備の寄贈・V1と同じ形の土台。登録でもらえる能力はあとで）
-  // 【確定】2026-10-25 ハンバーガー屋「ニャーガーキング」（食べると60分ステ+10%・トッピングで状態異常にかかりにくく）。説明は食事中なら残り時間（menuOf）
-  //   アイコンは店のマーク（ワッペン＝猫耳としっぽのついたハンバーガー・lib/clerk.js の MARK_SRC）。ユーザー選択「メニューの🍔の代わりに使う」
-  [
-    { key:'museum', label:'博物館', icon:'🏺', color:'#d8b070', action:'装備を寄贈する' },
-    { key:'burger', label: SHOP_NAME, icon: <ShopMark />, color: MEAL_COLOR, action:'バーガーを食べる' },
-  ],
-  // 【確定】2026-10-13 アセンション（スキルツリー）。説明は残りのAPで変わる（menuOf）
-  [
+    // 【確定】2026-10-13 アセンション（スキルツリー）。説明は残りのAPで変わる（menuOf）
     { key:'asc', label:'アセンション', icon:'✨', color:'#ffaa44', action:'APを振る' },
-  ],
-  // 【確定】2026-10-14 塔（あるけみすと型の対人・1〜100層）。説明はいまの層で変わる（menuOf）
-  [
-    { key:'tower', label: TOWER_NAME, icon:'🗼', color:'#b48cff', action:'階層守護者に挑む' },
-  ],
-  // 【確定】2026-10-29 IDダンジョン（ボスを呼び、HPを持ち越して倒す・ATB戦闘・救援）。いまは黒龍ヴァルゼノクのノーマル・ハード
-  [
+    { key:'dex',     label:'モンスター図鑑', icon:'📕', color:'#c0b0ff', action:'敵とドロップを見る' },
+  ] },
+  { title:'冒険', items:[
+    // 【確定】2026-10-29 IDダンジョン（ボスを呼び、HPを持ち越して倒す・ATB戦闘・救援）。いまは黒龍ヴァルゼノクのノーマル・ハード
     { key:'dungeon', label:'IDダンジョン', icon:'🐉', color:'#ff6655', action:'黒龍ヴァルゼノクを呼ぶ・救援' },
-  ],
-  // 宝樹は1つだけのまとまり＝横いっぱい（今のⅡと同じ並び方）
-  [
+    // 【確定】2026-10-14 塔（あるけみすと型の対人・1〜100層）。説明はいまの層で変わる（menuOf）
+    { key:'tower', label: <TowerLabel />, icon:'🗼', color:'#b48cff', action:'階層守護者に挑む' },
+  ] },
+  { title:'施設', items:[
+    { key:'temple', label:'神殿',   icon:'🏛', color:'#ff88cc', action:'転職する' },
+    { key:'smith',  label:'鍛冶屋', icon:'🔨', color:'#ffcc00', action:'強化・分解・作成' },
+    // 【確定】2026-10-22 博物館（装備の寄贈・V1と同じ形の土台。登録でもらえる能力はあとで）
+    { key:'museum', label:'博物館', icon:'🏺', color:'#d8b070', action:'装備を寄贈する' },
+    // 【確定】2026-10-25 ハンバーガー屋「ニャーガーキング」（食べると60分ステ+10%・トッピングで状態異常にかかりにくく）。説明は食事中なら残り時間（menuOf）
+    //   アイコンは店のマーク（ワッペン＝猫耳としっぽのついたハンバーガー・lib/clerk.js の MARK_SRC）。ユーザー選択「メニューの🍔の代わりに使う」
+    { key:'burger', label: SHOP_NAME, icon: <ShopMark />, color: MEAL_COLOR, action:'バーガーを食べる' },
+    // 【確定】2026-10-13 賭博場（スロット・ハイ&ロー・ルーレット・両替所）。景品の交換所はあとで
+    //   説明は 2026-10-31 に短くした（2列だと1行に入らない・ハイ&ローとテーブルの卓はまとめて「カード」）
+    { key:'casino', label:'賭博場', icon:'🎰', color:'#ff4fa3', action:'スロット・ルーレット・カード' },
     { key:'tree', label:'ユグレシアの宝樹', icon:'🌳', color:'#44dd99', action:'祈る' },
-  ],
-  // 【確定】2026-10-13 賭博場（スロット・ハイ&ロー・ルーレット・両替所）。景品の交換所はあとで
-  [
-    { key:'casino', label:'賭博場', icon:'🎰', color:'#ff4fa3', action:'スロット・ハイ&ロー・ルーレット' },
-  ],
+  ] },
 ]
 const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', museum:'🏺 博物館', burger: <><ShopMark size={18} /> {SHOP_NAME}</>, asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場', tower:`🗼 ${TOWER_NAME}`, dungeon:'🐉 IDダンジョン',
   uniqueCheck:'💎 ユニークの能力の確かめ［開発］', atb:'⏱ ATB戦闘の試し撃ち［開発］' }
@@ -111,12 +108,12 @@ const towerActionOf = (prof) => (prof?.tower_guard
 const menuOf = (prof) => {
   const left = Math.max(0, apLeftOf(prof))
   const meal = activeMealOf(prof)
-  return MENU.map(g => g.map(m => {
+  return MENU.map(g => ({ ...g, items: g.items.map(m => {
     if (m.key === 'asc' && left > 0) return { ...m, action:`APを振る（残り${left}）` }
     if (m.key === 'tower') return { ...m, action: towerActionOf(prof) }
     if (m.key === 'burger' && meal) return { ...m, action:`食事中（${leftText(meal.leftMs)}）` }
     return m
-  }))
+  }) }))
 }
 
 // 今のⅡと同じ2列（grid の auto-fit は列を同じ幅にしかできないので flex で組む）
