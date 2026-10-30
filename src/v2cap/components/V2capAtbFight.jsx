@@ -139,6 +139,12 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
               onClick={() => { fxRef.current = [...fxRef.current, { kind:'act', side:'b', motion: m, landed: true, skill: i > 0 ? m.label : null, t0: performance.now() / 1000 }] }}
               style={{ ...miniBtn('#ff8866'), padding:'4px 8px', fontSize:'11px' }}>{m.label}</button>
           ))}
+          {/* HPの節目のバフ（2026-10-30 ユーザー「バフ行動のボタンも用意しといて、確認し辛い」）：名前の帯・ポーズの絵・オーラだけ流す（バフは付かない） */}
+          {(s.b.pattern?.buffs || []).map(b => (
+            <button key={`buff-${b.name}`} disabled={paused}
+              onClick={() => { fxRef.current = [...fxRef.current, { kind:'rage', side:'b', skill: b.name, t0: performance.now() / 1000 }] }}
+              style={{ ...miniBtn('#ffb060'), padding:'4px 8px', fontSize:'11px' }}>🔥 {b.name}</button>
+          ))}
         </div>
       )}
 
