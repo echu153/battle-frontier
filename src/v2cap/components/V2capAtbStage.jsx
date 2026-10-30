@@ -7,7 +7,7 @@ import { JP_BOLD } from './casinoStyle.js'
 import { rubySegmentsOf } from '../lib/skillRuby.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
 import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, artAnchorAt, illustCastShowAt, illustBuffShowAt, buffSceneAt, buffAfterAt, buffRainAt } from '../lib/bossIllust.js'
-import { FX_HEAD_Y, FX_FEET_Y, FX_SKY_Y, FX_TARGET_Y, SCENE_TOP, fallAt, coilAt, pourTimesOf, sceneEndMsOf, stageSceneOf } from '../lib/bossScene.js'
+import { FX_HEAD_Y, FX_FEET_Y, FX_SKY_Y, FX_TARGET_Y, SCENE_TOP, fallAt, coilAt, pourTimesOf, sceneEndMsOf, stageSceneOf, flyPosOf } from '../lib/bossScene.js'
 
 // ============================================================
 // 「レベルキャップあり」版（v2cap）— ATB戦闘の舞台（自分が左・モンスターが右）
@@ -564,7 +564,6 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
 // 相手の頭上・足元に出すエフェクト（on）の場所（FX_HEAD_Y・FX_FEET_Y）は lib/bossScene.js（演出と同じ場所）
 // 飛ぶ絵：出はじめは小さく（FX_GROW_SEC で元の大きさ）・だんだん速く
 const FX_GROW_SEC = 0.12
-const flyPosOf = (p) => p * (0.7 + 0.3 * p)
 
 // 絵の枠（正方形・下にそろえて横は真ん中・高さは場所の scale 倍）の、舞台の左上からの位置と大きさ
 const boxOf = (stage, area, scale) => {
@@ -619,6 +618,11 @@ function BossFx({ fx, now, geo, art, cast = null, castEnd = -1e9, scene = null }
           const grow = Math.min(1, 0.5 + 0.5 * e / FX_GROW_SEC) * (a.frames > 1 ? 1 : 1 + 0.06 * Math.sin(e * 30))
           on = { frame: a.frames > 1 ? Math.floor(e * 1000 / a.ms) % a.frames : 0, x: from.x + (to.x - from.x) * q, y: from.y + (to.y - from.y) * q,
             s: sc * sh.size * grow, rot: Math.atan2(to.y - from.y, to.x - from.x) - Math.PI }   // 飛ぶ絵は左向き
+          // 口から伸びて出てくる（a.emerge・終焉の黒焔）：絵は先（ax）が前で、うしろへ伸びる＝飛んだ距離より後ろ（口より竜の側）は見せない。絵といっしょに回る切り抜き
+          if (a.emerge) {
+            const lx = ((a.ax + (Math.hypot(on.x - from.x, on.y - from.y) + 0.03 * geo.b.w) / on.s) / a.w) * 100
+            if (lx < 100) on.mask = `linear-gradient(to right, #000 ${Math.max(0, lx - 10).toFixed(1)}%, transparent ${lx.toFixed(1)}%)`
+          }
         }
         if (kind === 'hit' && f.landed !== false && now >= tHit - lead / 1000) {
           const ms = (now - tHit) * 1000 + lead   // 当たる絵が出はじめてから
@@ -799,12 +803,6 @@ function SceneLayer({ geo, sc, hands, s }) {
   const M = fire ? ['#3a1410', '#22100c', '#140806'] : ['#dcf0ff', '#b4dcfa', '#aad7fa']
   const Gl = fire ? ['#fff4d0', '#ffb040', '#ff3a10'] : ['#ffffff', '#bee6ff', '#78beff']
   const dropC = fire ? '#ffb060' : '#e6f6ff', ringC = fire ? '#ff8a3c' : '#d4eeff'
-  // 黒焔の奔流（sc.beam）：口（hands の1つめ）から相手の体の真ん中へ流れる炎のかたまり（棒に見えないように・下に暗い赤のぼかしを敷く）
-  const b = sc.beam && hands ? (() => {
-    const [hx, hy] = hands[0], dx = ox - hx, dy = geo.p.y + geo.p.h * FX_TARGET_Y - hy, len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len
-    return { x1: hx, y1: hy, x2: hx + dx * sc.beam.head, y2: hy + dy * sc.beam.head, w: U * 0.2 * sc.beam.w, op: sc.beam.op,
-      blobs: sc.beam.blobs.map(q => ({ x: hx + dx * q.p + nx * q.off * U, y: hy + dy * q.p + ny * q.off * U, r: q.r * U * (0.5 + 0.5 * sc.beam.w), op: q.op, dark: q.dark })) }
-  })() : null
   return (
     <svg style={{ position:'absolute', inset:0, width:'100%', height:'100%', zIndex: 2, pointerEvents:'none', overflow:'visible' }}>
       <defs>
@@ -813,14 +811,7 @@ function SceneLayer({ geo, sc, hands, s }) {
         </linearGradient>
         <radialGradient id={`${id}m`}><stop offset="0" stopColor={M[0]} stopOpacity={fire ? 0.9 : 0.6} /><stop offset="0.45" stopColor={M[1]} stopOpacity={fire ? 0.55 : 0.28} /><stop offset="0.75" stopColor={M[2]} stopOpacity={fire ? 0.2 : 0.08} /><stop offset="1" stopColor={M[2]} stopOpacity="0" /></radialGradient>
         <radialGradient id={`${id}g`}><stop offset="0" stopColor={Gl[0]} /><stop offset="0.35" stopColor={Gl[1]} stopOpacity="0.9" /><stop offset="1" stopColor={Gl[2]} stopOpacity="0" /></radialGradient>
-        <filter id={`${id}b`} x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation={(U * 0.012).toFixed(2)} /></filter>
       </defs>
-      {b && (
-        <g opacity={b.op.toFixed(3)}>
-          <line x1={b.x1} y1={b.y1} x2={b.x2} y2={b.y2} stroke="#7a1200" strokeWidth={b.w} strokeLinecap="round" opacity="0.6" filter={`url(#${id}b)`} />
-          {b.blobs.map((q, i) => <circle key={i} cx={q.x} cy={q.y} r={q.r * (q.dark ? 1.25 : 1)} fill={`url(#${id}${q.dark ? 'm' : 'g'})`} opacity={q.op.toFixed(3)} />)}
-        </g>
-      )}
       {c && c.glow > 0 && (
         <g transform={`translate(${ox.toFixed(1)} ${cy.toFixed(1)}) rotate(6) scale(1 0.42)`} opacity={Math.min(1, c.glow).toFixed(3)}>
           <ellipse rx={U * 0.2} ry={U * 0.2} fill={`url(#${id}g)`} opacity={0.55 + 0.45 * c.flicker} />
@@ -871,9 +862,31 @@ function SceneLayer({ geo, sc, hands, s }) {
       {sc.hand && hands && sc.hand.op > 0 && hands.map((h, i) => (
         <g key={`h${i}`} opacity={sc.hand.op}>
           <circle cx={h[0]} cy={h[1]} r={sc.hand.r * s * 2} fill={`url(#${id}g)`} />
-          <circle cx={h[0]} cy={h[1]} r={sc.hand.r * s * 0.5} fill="#ffffff" opacity="0.85" />
+          <circle cx={h[0]} cy={h[1]} r={sc.hand.r * s * (fire ? 0.3 : 0.5)} fill={Gl[0]} opacity={fire ? 0.7 : 0.85} />
         </g>
       ))}
+    </svg>
+  )
+}
+// 黒焔の奔流（sc.beam・終焉の黒焔）：口（hand）から相手の体の真ん中へ流れる炎のかたまり（棒に見えないように・下に暗い赤のぼかしを敷く）。
+//   飛ぶ絵の後ろに描く（前に描くと、塗りの絵の上に濁って重なった）。hand＝口（舞台の px）
+function DoomBeam({ geo, beam, hand }) {
+  const id = useId().replace(/:/g, '')
+  const U = geo.p.w, [hx, hy] = hand, dx = geo.p.x + U / 2 - hx, dy = geo.p.y + geo.p.h * FX_TARGET_Y - hy, len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len
+  return (
+    <svg style={{ position:'absolute', inset:0, width:'100%', height:'100%', zIndex: 2, pointerEvents:'none', overflow:'visible' }}>
+      <defs>
+        <radialGradient id={`${id}m`}><stop offset="0" stopColor="#3a1410" stopOpacity="0.9" /><stop offset="0.45" stopColor="#22100c" stopOpacity="0.55" /><stop offset="1" stopColor="#140806" stopOpacity="0" /></radialGradient>
+        <radialGradient id={`${id}g`}><stop offset="0" stopColor="#fff4d0" /><stop offset="0.35" stopColor="#ffb040" stopOpacity="0.9" /><stop offset="1" stopColor="#ff3a10" stopOpacity="0" /></radialGradient>
+        <filter id={`${id}b`} x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation={(U * 0.012).toFixed(2)} /></filter>
+      </defs>
+      <g opacity={beam.op.toFixed(3)}>
+        <line x1={hx} y1={hy} x2={hx + dx * beam.head} y2={hy + dy * beam.head} stroke="#7a1200" strokeWidth={U * 0.2 * beam.w} strokeLinecap="round" opacity="0.6" filter={`url(#${id}b)`} />
+        {beam.blobs.map((q, i) => (
+          <circle key={i} cx={hx + dx * q.p + nx * q.off * U} cy={hy + dy * q.p + ny * q.off * U} r={q.r * U * (0.5 + 0.5 * beam.w) * (q.dark ? 1.25 : 1)}
+            fill={`url(#${id}${q.dark ? 'm' : 'g'})`} opacity={q.op.toFixed(3)} />
+        ))}
+      </g>
     </svg>
   )
 }
@@ -968,6 +981,7 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
       <Fighter st={st} side="b" me={st.b} right src={foeSrc} fx={fx} now={now} name={st.b.name}
         strips={foeArt?.kind === 'pixel' ? Object.values(foeArt.motions) : []} rig={foeArt?.kind === 'illust' ? foeArt : null}
         flex={size?.flex} artH={size?.artH || ART_H} areaRef={bArea} castEnd={castSeen.current} bossGlow={sc?.bossGlow || 0} />
+      {sc?.beam && geo && sc.handsAt && <DoomBeam geo={geo} beam={sc.beam} hand={[geo.b.x + sc.handsAt[0][0] * (geo.b.w / foeArt.base), geo.b.y + sc.handsAt[0][1] * (geo.b.w / foeArt.base)]} />}
       {foeArt && <BossFx fx={fxAll} now={now} geo={geo} art={foeArt} cast={cast} castEnd={castSeen.current} scene={sc} />}
       {sc && geo && <SceneLayer geo={geo} sc={sc} hands={sc.handsAt ? sc.handsAt.map(p => [geo.b.x + p[0] * (geo.b.w / foeArt.base), geo.b.y + p[1] * (geo.b.w / foeArt.base)]) : null} s={geo.b.w / foeArt.base} />}
       {sc && geo && sc.flash > 0 && <Flash geo={geo} op={sc.flash} fire={sc.tone === 'fire'} />}

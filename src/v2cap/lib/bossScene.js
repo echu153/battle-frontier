@@ -47,6 +47,8 @@ export const DOOM = {
   color: '22,0,0', dim: 0.62, castDim: 0.58, hitDim: 0.78, after: 1300, fade: 500, beamTail: 300, motes: 30, reach: 2.4,
   splash: 90, jets: 18, mist: 14, rings: [[0, 1.1], [130, 0.85], [300, 0.65], [520, 0.5]], blobs: 42,
 }
+// 飛ぶエフェクトの進み（p＝飛んだ時間の割合 0〜1 → 口から相手までの割合）：はじめは少しゆっくり。画面の飛ぶ絵と奔流の先が同じ（火の玉が先頭）
+export const flyPosOf = (p) => p * (0.7 + 0.3 * p)
 const G = 5.5   // しぶきの落ちる速さ（枠の幅/秒²）
 // 水縛の帯（kind 'coil'）：叩きつけて（I）から squeezes の時刻に締め上げ、burstMs ではじける。輪は体の真ん中（BODY_Y）のまわりに3つ
 export const COIL = { dim: 0.42, squeezes: [300, 600, 900], burstMs: 1100, rings: [-0.2, 0, 0.2], bubbles: 12 }
@@ -368,7 +370,7 @@ export const doomSceneAt = (m, ms, landed = true, D = DOOM) => {
   const tail = I + D.beamTail
   if (ms < tail) {
     const fade = ms < I ? 1 : 1 - (ms - I) / D.beamTail
-    const head = easeOut(clamp01(s / (I - H)))
+    const head = flyPosOf(clamp01(s / (I - H)))
     out.beam = { head, w: (0.45 + 0.55 * easeOut(s / 140)) * fade, op: Math.min(1, s / 50) * Math.sqrt(fade), blobs: doomBlobs(ms, head, D) }
   }
   if (landed && e >= 0) {

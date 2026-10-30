@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { bossIllustOf } from './bossIllust.js'
-import { DOOM, POUR, COIL, SCENE_TOP, FX_TARGET_Y, FX_FEET_Y, FX_HEAD_Y, FX_SKY_Y, pourTimesOf, sceneEndMsOf, sceneAt, castSceneAt, fallAt, coilAt, stageSceneOf, handFxOf, HAND_BURST_MS } from './bossScene.js'
+import { DOOM, flyPosOf, POUR, COIL, SCENE_TOP, FX_TARGET_Y, FX_FEET_Y, FX_HEAD_Y, FX_SKY_Y, pourTimesOf, sceneEndMsOf, sceneAt, castSceneAt, fallAt, coilAt, stageSceneOf, handFxOf, HAND_BURST_MS } from './bossScene.js'
 import { BOSS_ILLUST_DEFS, flutterBandsAt } from './bossIllust.js'
 import { BOSS_ILLUST } from './bossIllustList.js'
 
@@ -258,6 +258,8 @@ test('【確定】2026-10-30 終焉の黒焔の演出（ユーザー「終焉の
   const s0 = sceneAt(d, H + 30), s1 = sceneAt(d, I - 10)
   assert.ok(s0.flash > 0.2 && Math.hypot(...sceneAt(d, H + 20).shake) + Math.hypot(...sceneAt(d, H + 45).shake) > 0.5)
   assert.ok(s0.beam && s0.beam.head < 0.5 && s1.beam.head > 0.95, '奔流は相手へ伸びる')
+  // 【確定】2026-10-30 奔流の先は火の玉と同じ進み（火の玉より先へ走らない）
+  for (const k of [0.1, 0.3, 0.6, 0.9]) assert.ok(Math.abs(sceneAt(d, H + (I - H) * k).beam.head - flyPosOf(k)) < 1e-9, `${k}`)
   // 当たる：大きく光り、大きく揺れ、火の粉・柱・輪・煙・残り火
   const h = sceneAt(d, I + 60), hm = sceneAt(d, I + 200)
   assert.ok(h.flash > 0.8, '大きく光る')

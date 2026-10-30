@@ -300,9 +300,10 @@ export const BOSS_ILLUST_DEFS = {
         [3320, { lean: 0.21 }],
         [3420, { lean: 0.15, neck: -7, head: -5, jaw: -10, arm: -22, wingN: 14, wingF: -10, glow: 0.4 }],
         [3900, {}],
-      ], jolt: { atMs: 2600, ms: 320, lean: 0.05 }, charge: { kind: 'hit', fromMs: 300, toMs: 2600, size: 0.36 },
+      ], jolt: { atMs: 2600, ms: 320, lean: 0.05 }, charge: { kind: 'hit', fromMs: 300, toMs: 2600, size: 0.26 },
       art: [[0, null], [300, 'windup'], [2540, 'strike'], [3420, null]], ghosts: { fromMs: 2540, toMs: 2700, lagMs: 28, n: 3 },
-      anchors: { windup: { mouth: [302, 70], hand: [302, 70] }, strike: { mouth: [45, 432], hand: [45, 432] } },
+      //   【確定】2026-10-30 ユーザー「大技うつとき、口元とエフェクトがずれてる」：口（mouth・hand）は、ポーズの絵で測り直した開いた口のまん中（前は上あごの歯の上だった）
+      anchors: { windup: { mouth: [287, 102], hand: [287, 102] }, strike: { mouth: [71, 442], hand: [71, 442] } },
       shots: [{ at: 'mouth', delayMs: 0, size: 1.25 }, { at: 'mouth', delayMs: 70, size: 1 }, { at: 'mouth', delayMs: 140, size: 0.85 }, { at: 'mouth', delayMs: 210, size: 0.7 }, { at: 'mouth', delayMs: 280, size: 0.6 }],
       scene: { kind: 'doom', hand: { pt: [45, 432], part: 'body' } } },
     },
@@ -315,7 +316,8 @@ export const BOSS_ILLUST_DEFS = {
       { file: '焦熱の吐息_当たる', motion: 'breath', kind: 'hit', size: 0.5, durMs: 620, spin: 0 },
       { file: '黒翼烈風_飛ぶ', motion: 'gale', kind: 'fly', size: 0.42, flyMs: 360 },
       { file: '黒翼烈風_当たる', motion: 'gale', kind: 'hit', size: 0.56, durMs: 620, spin: 70 },
-      { file: '終焉の黒焔_飛ぶ', motion: 'doom', kind: 'fly', size: 0.6, flyMs: 500 },
+      // emerge＝口から伸びて出てくる（絵のうち口より後ろは見せない＝竜の顔に重ならない・ユーザー「大技うつとき、口元とエフェクトがずれてる」）
+      { file: '終焉の黒焔_飛ぶ', motion: 'doom', kind: 'fly', size: 0.6, flyMs: 500, emerge: true },
       { file: '終焉の黒焔_当たる', motion: 'doom', kind: 'hit', size: 0.95, durMs: 1100, spin: 0 },
       // 待機のときどき口に出る火の玉（遭遇のイラストの火の玉・大きさと場所は idle.orb）
       { file: '火の玉', motion: 'idle', kind: 'orb' },
@@ -948,7 +950,7 @@ export const bossIllustOf = (key) => {
     for (const d of def.effects.filter(d => d.motion === m.key)) {
       const a = art.fx?.[m.key]?.[d.kind]
       if (!a) continue
-      fx[d.kind] = { ...a, frames: 1, src: srcOf(key, illustFxKindOf(m.key, d.kind)), size: d.size, durMs: d.durMs, spin: d.spin || 0, wipe: !!d.wipe,
+      fx[d.kind] = { ...a, frames: 1, src: srcOf(key, illustFxKindOf(m.key, d.kind)), size: d.size, durMs: d.durMs, spin: d.spin || 0, wipe: !!d.wipe, emerge: !!d.emerge,
         on: d.on || null, anim: d.anim || null, lead: d.lead || 0, fadeTop: d.fadeTop || 0, sy: d.sy || 1 }
       if (d.kind === 'fly') flyMs = d.flyMs
     }
@@ -973,7 +975,7 @@ export const bossIllustOf = (key) => {
   // 遭遇のイラストはドット絵版と同じ
   const illust = bossArtOf(key)?.illust || null
   return {
-    kind: 'illust', key, name: base.name, base: BOSS_ILLUST_SIZE, illust, parts, pivot: art.pivot, mouth: art.mouth, jaw, motions, orb, dust, flutter: !!def.idle.flutter,
+    kind: 'illust', key, name: base.name, base: BOSS_ILLUST_SIZE, illust, parts, pivot: art.pivot, mouth: art.mouth, jaw, motions, orb, dust, ground: def.ground ?? null, flutter: !!def.idle.flutter,
     castArt: def.cast?.art || null, buffs,
     srcs: [...parts.map(p => p.src), ...parts.filter(p => p.bend).map(p => p.bend.src), ...Object.values(motions).flatMap(m => Object.values(m.fx || {}).map(f => f.src)),
       ...Object.values(motions).flatMap(m => Object.values(m.poses || {}).map(p => p.src)), ...(orb ? [orb.src] : []),

@@ -107,6 +107,9 @@ test('【確定】2026-10-30 技の姿勢（ポーズの絵で動かす）：た
   }
   assert.ok(at('claw', M.claw.hitMs).lean >= 0.25, '黒爪がいちばん深く押し出す')
   // 傾ける：画面の skewX と同じ（地面の高さは動かない・上ほど左）
+  // 【確定】2026-10-30 ユーザー「大技うつとき、口元とエフェクトがずれてる」：地面の高さが画面に届かないと、絵は傾かないのにエフェクトの場所（illustPointAt）だけ傾く。
+  //   13b44965 で bossIllustOf の答えから ground が落ちて、そうなっていた
+  for (const k of Object.keys(BOSS_ILLUST_DEFS)) assert.equal(bossIllustOf(k).ground, BOSS_ILLUST_DEFS[k].ground ?? null, `${k}：画面と同じ地面の高さ`)
   assert.deepEqual(leanPoint([100, 590], 590, 0.3), [100, 590])
   assert.deepEqual(leanPoint([100, 90], 590, 0.2), [0, 90])
   assert.deepEqual(leanPoint([100, 90], null, 0.2), [100, 90])
@@ -798,6 +801,22 @@ test('【確定】2026-10-30 雨摩座のバフの絵（ユーザー「あまざ
   const s = illustBuffShowAt(a, '篠突く雨', BUFF_HOLD_MS - 1)
   assert.ok(s.rig === 0 && s.pose === 1 && Math.abs(s.aura.op - 1) < 1e-9, '見せているあいだはポーズとオーラだけ')
   assert.ok(illustBuffShowAt(a, '霧雨の帳', 0).aura.scale > 1.2, '手前の帳は大きく出て雨摩座へ閉じる')
+})
+
+test('【確定】2026-10-30 終焉の黒焔の口元（ユーザー「大技うつとき、口元とエフェクトがずれてる」）：ため も 吐きつけ も、口の点はポーズの絵の開いた口の上・火の玉は口から伸びて出る', () => {
+  const a = bossIllustOf('varuzenoku'), d = a.motions.doom, M = BOSS_ILLUST_DEFS.varuzenoku.motions.doom
+  // ポーズの絵（1254px）で測った開いた口の範囲（立ち絵の px）：ため＝上あごの先と下あごの先のあいだ〜のどの手前・吐きつけ＝同じ
+  const inBox = ([x, y], [x0, y0, x1, y1]) => x >= x0 && x <= x1 && y >= y0 && y <= y1
+  assert.ok(inBox(M.anchors.windup.mouth, [265, 85, 305, 125]), 'ため の口')
+  assert.ok(inBox(M.anchors.strike.mouth, [50, 425, 100, 465]), '吐きつけ の口')
+  assert.deepEqual(M.anchors.windup.hand, M.anchors.windup.mouth, '光と火の玉は同じ所')
+  assert.deepEqual(M.anchors.strike.hand, M.anchors.strike.mouth)
+  // 飛ぶ絵の出どころ＝吐きつけの絵の口を、絵と同じだけ傾けた所（画面の lean と同じ計算）
+  const lean = illustPoseAt('varuzenoku', d, d.hitMs, 0).lean
+  assert.ok(lean > 0.15)
+  assert.deepEqual(d.shots[0].front, [Math.round(M.anchors.strike.mouth[0] + (M.anchors.strike.mouth[1] - BOSS_ILLUST_DEFS.varuzenoku.ground) * BOSS_ILLUST_DEFS.varuzenoku.motions.doom.keys.find(k => k[0] === d.hitMs)[1].lean), M.anchors.strike.mouth[1]])
+  assert.ok(d.fx.fly.emerge, '飛ぶ絵は口から伸びて出てくる')
+  assert.ok(!a.motions.gale.fx.fly.emerge, '翼の風はそのまま')
 })
 
 test('【確定】2026-10-30 逆鱗の強い見せ方とそのあとの待機（ユーザー「逆鱗のモーションがパッとしない、もうちょっと強化感を出してほしい、逆鱗後はモーションも変更していい」）', () => {
