@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import { box, btn, miniBtn, TEXT } from './v2ui.js'
 import V2Modal from './V2Modal.jsx'
+import V2capPriest, { PriestSays, PRIEST_CSS } from './V2capPriest.jsx'
 import { STAT_DEFS, STAT_KEYS } from '../core/stats.js'
 import { KIND_COLOR } from '../core/skills.js'
 import { V2SkillTip } from './V2ItemTip.jsx'
@@ -15,6 +16,7 @@ import { statBreakdown, statBreakdownAs } from '../lib/loadout.js'
 import { ART_GENDERS, artSrcOf, hasArt } from '../lib/classArt.js'
 import { useStored } from '../core/prefs.js'
 import { artGenderOf } from '../lib/gender.js'
+import { PRIEST_ON, pickLine, enterKindOf, changeKindOf, tapKindOf, nextStreak, isNight } from '../lib/priest.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — 神殿（転職）
@@ -40,11 +42,17 @@ import { artGenderOf } from '../lib/gender.js'
 //     詳細は全身をクラスの色の淡い光の背景＋足元の影に大きく。一覧はカードの左に顔のまわりだけのアップ
 //     （ユーザー「職業選択するときは顔の周りだけアップするだけでいい」）。「♂ 男性／♀ 女性」で切り替え・端末で覚えておく。
 //     絵が無いクラスは「イラスト準備中」。並びは剣士が先頭（ユーザー「剣士の位置は一番上にして」＝jobs.js の CLASS_INFO の順）
+//   【確定】2026-10-31 神官（ユーザー指示「イラストは神官で顔はしっかりと確認できないような感じにする予定」・lib/priest.js）：
+//     クラス一覧の右に神官を立たせる（スマホは上）。タップでセリフ・転職の結果にも神官（ユーザー選択）。好感度は無し＝サーバーには聞かない。
+//     詳細の画面にはクラスの大きな絵があるので立たせず、転職の結果のときだけ「〇〇になった！」の上に出す
 //   仕組み：いつでも無料・LVはそのまま・ClassLVは職業ごとに続きから・スキルセットは職業ごと（詳細の画面に添えて出す）
 // ============================================================
 const statText = (cls) => mainStatsOf(cls).map(k => STAT_DEFS[k]?.label || k).join('・')
 const STAGE_TITLE = { shoki:'初期クラス', ichiji:'上位クラス' }
 const label = { color: TEXT.label }
+// 開発用（管理者だけ）：神官の転職の反応を見るボタン（反応の神官だけを出す＝本当には転職しない）
+const DEV = '#ff88cc'
+const DEV_CHANGES = ['changeNew', 'changeBack', 'changeUp', 'error']
 
 // クラスの色の淡い光（絵の後ろ）
 const glowOf = (cls, strength = '38') => `radial-gradient(ellipse at 50% 40%, ${stageColorOf(cls)}${strength} 0%, #001030 55%, #000818 100%)`
@@ -116,7 +124,8 @@ function ArtFace({ cls, gender }) {
   )
 }
 
-export default function V2capTemple({ prof, inventory, onProfile }) {
+// dev … 開発用（管理者だけ）。神官の転職の反応を確かめるボタンを出す
+export default function V2capTemple({ prof, inventory, onProfile, dev = false }) {
   const [view, setView] = useState(null)    // 詳細を開いているクラス（null は一覧）
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -125,16 +134,42 @@ export default function V2capTemple({ prof, inventory, onProfile }) {
   // イラストを男女どちらで見せるか（端末で覚えておく・見るだけの切り替え）。はじめはキャラの性別（2026-10-21・gender.js）
   const [gender, setGender] = useStored('capArtGender', artGenderOf(prof))
 
+  // ===== 神官（lib/priest.js）=====
+  // いまのセリフ（tick は話すたびに増やす＝同じ絵でも跳ねる）
+  const [priest, setPriest] = useState(() => ({ ...pickLine(enterKindOf()), tick: 0 }))
+  const [changeSay, setChangeSay] = useState(null)   // 転職の結果に出すひとこと { face, text }
+  const [devSay, setDevSay] = useState(null)         // 開発用に出している転職の反応 { kind, face, text }
+  const lastText = useRef(priest.text)
+  // 場面 kind のセリフを選んで吹き出しに出し、選んだもの { face, text } を返す（転職の結果にも同じものを出す）
+  const say = useCallback((kind, vars) => {
+    const line = pickLine(kind, { last: lastText.current, vars })
+    lastText.current = line.text
+    setPriest(c => ({ ...line, tick: c.tick + 1 }))
+    return line
+  }, [])
+  const streak = useRef(null)
+  const tapPriest = () => {
+    streak.current = nextStreak(streak.current, Date.now())
+    say(tapKindOf(streak.current.n, isNight()))
+  }
+  const devStep = useRef(0)
+  const devChange = () => {
+    const kind = DEV_CHANGES[devStep.current++ % DEV_CHANGES.length]
+    setDevSay({ kind, ...say(kind, { cls: prof.class }) })
+  }
+
   // 一覧⇔詳細は画面の切り替え＝いちばん上へ（2026-10-25 ユーザー指示「画面遷移したら画面上部に移動」）
-  const open = (cls) => { setView(cls); setMsg(''); setError(''); setAsk(false); window.scrollTo(0, 0) }
+  const open = (cls) => { setView(cls); setMsg(''); setError(''); setChangeSay(null); setAsk(false); window.scrollTo(0, 0) }
   // 確認のポップアップで「転職する」を押したとき。終わったらポップアップを閉じる＝画面のいちばん上へ戻り（V2Modal）、
   // 詳細の画面のいちばん上に結果を出す。★プロフィールを読み直す前に閉じる（読み直したあとは前後が同じ職業になり、増減が全部±0に見える）
   const change = async (cls) => {
-    setBusy(true); setError(''); setMsg('')
+    setBusy(true); setError(''); setMsg(''); setChangeSay(null)
+    const kind = changeKindOf(cls, prof.jobs)
     const { data, error: e } = await supabase.rpc('v2cap_change_class', { p_class: cls })
-    if (e || !data?.ok) { setAsk(false); setBusy(false); setError(e?.message || data?.error || '転職に失敗しました'); return }
+    if (e || !data?.ok) { setAsk(false); setBusy(false); setError(e?.message || data?.error || '転職に失敗しました'); setChangeSay(say('error')); return }
     const got = data.learned || []
     setMsg(`${cls}になった！${got.length ? `　スキル「${got.join('」「')}」を覚えた` : ''}${data.unequipped ? '　装備できない武器を外した' : ''}`)
+    setChangeSay(say(kind, { cls }))
     setAsk(false)
     await onProfile(null)
     setBusy(false)
@@ -142,14 +177,35 @@ export default function V2capTemple({ prof, inventory, onProfile }) {
 
   if (view && CLASS_BY_ID[view]) {
     return (
-      <ClassDetail cls={view} prof={prof} inventory={inventory} busy={busy} msg={msg} error={error} gender={gender} onGender={setGender}
-        asking={ask} onAsk={() => { setMsg(''); setError(''); setAsk(true) }} onCancel={() => setAsk(false)}
+      <ClassDetail cls={view} prof={prof} inventory={inventory} busy={busy} msg={msg} error={error} say={PRIEST_ON ? changeSay : null} gender={gender} onGender={setGender}
+        asking={ask} onAsk={() => { setMsg(''); setError(''); setChangeSay(null); setAsk(true) }} onCancel={() => setAsk(false)}
         onChange={() => change(view)} onOpen={open} onBack={() => open(null)} />
     )
   }
 
   return (
     <div style={{ fontFamily:'monospace' }}>
+      {PRIEST_ON && <style>{PRIEST_CSS}</style>}
+      {/* 開発用：転職の反応（神官だけ・本当には転職しない） */}
+      {devSay && (
+        <V2Modal title="🧪 転職の反応［開発］" color={DEV} keepScroll onClose={() => setDevSay(null)}>
+          <PriestSays face={devSay.face} line={devSay.text} />
+          <div style={{ color: DEV, fontSize:'10px' }}>場面：{devSay.kind}</div>
+        </V2Modal>
+      )}
+      <div className={PRIEST_ON ? 'pst-cols' : undefined}>
+      {/* 神官（広い画面は右・狭い画面は上） */}
+      {PRIEST_ON && (
+        <div className="pst-side">
+          <V2capPriest face={priest.face} line={priest.text} tick={priest.tick} onTap={tapPriest} />
+          {dev && (
+            <div style={{ display:'flex', justifyContent:'center', marginTop:'8px' }}>
+              <button type="button" onClick={devChange} style={miniBtn(DEV)}>🧪 転職の反応［開発］</button>
+            </div>
+          )}
+        </div>
+      )}
+      <div className="pst-main">
       <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', gap:'6px', marginBottom:'8px' }}>
         <span style={{ color: TEXT.label, fontSize:'11px' }}>イラスト：</span>
         <GenderToggle value={gender} onChange={setGender} />
@@ -192,12 +248,14 @@ export default function V2capTemple({ prof, inventory, onProfile }) {
           </div>
         )
       })}
+      </div>
+      </div>
     </div>
   )
 }
 
-// そのクラスの詳細。一番下の「このクラスに転職する」→ 確認のポップアップで転職する
-function ClassDetail({ cls, prof, inventory, busy, msg, error, gender, onGender, asking, onAsk, onCancel, onChange, onOpen, onBack }) {
+// そのクラスの詳細。一番下の「このクラスに転職する」→ 確認のポップアップで転職する。say＝転職の結果の神官のひとこと
+function ClassDetail({ cls, prof, inventory, busy, msg, error, say, gender, onGender, asking, onAsk, onCancel, onChange, onOpen, onBack }) {
   const c = CLASS_BY_ID[cls]
   const stage = stageOf(cls)
   const job = jobOf(prof.jobs, cls)
@@ -221,14 +279,15 @@ function ClassDetail({ cls, prof, inventory, busy, msg, error, gender, onGender,
   const dropWeapon = !isNow && wornWeapon && !canEquipType(cls, wornWeapon.type)
   const section = { ...box, padding:'12px', marginBottom:'10px' }
   const head = { color:'#88ccff', fontSize:'12px', marginBottom:'6px' }
+  const priestSay = say && <><style>{PRIEST_CSS}</style><PriestSays face={say.face} line={say.text} /></>
 
   return (
     <div style={{ fontFamily:'monospace' }}>
       <button onClick={onBack} style={{ ...miniBtn('#88aaff'), marginBottom:'10px' }}>← クラス一覧へ</button>
 
-      {/* 転職の結果（転職し終わると画面のいちばん上へ戻るので、ここに出す） */}
-      {msg && <div style={{ ...section, borderColor:'#44ff88', color:'#44ff88', fontSize:'13px', lineHeight:1.7 }}>✨ {msg}</div>}
-      {error && <div style={{ ...section, borderColor:'#ff4444', color:'#ff4444', fontSize:'12px' }}>⚠ {error}</div>}
+      {/* 転職の結果（転職し終わると画面のいちばん上へ戻るので、ここに出す）。いちばん上に神官のひとこと（2026-10-31） */}
+      {msg && <div style={{ ...section, borderColor:'#44ff88', color:'#44ff88', fontSize:'13px', lineHeight:1.7 }}>{priestSay}✨ {msg}</div>}
+      {error && <div style={{ ...section, borderColor:'#ff4444', color:'#ff4444', fontSize:'12px' }}>{priestSay}⚠ {error}</div>}
 
       {/* イラスト（左）＋ 名前・ClassLV・特徴（右）。狭い画面では縦に並ぶ */}
       <div style={{ ...section, borderColor: isNow ? '#ff88cc' : '#0044aa', display:'flex', gap:'14px', flexWrap:'wrap', alignItems:'flex-start' }}>
