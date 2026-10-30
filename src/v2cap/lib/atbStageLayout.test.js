@@ -1,7 +1,7 @@
 // v2cap の ATB 戦闘の舞台（components/V2capAtbStage.jsx）の組み立てのテスト（node --test）。画面の部品はここでは動かせないので、書き方を見る
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 
 const stage = readFileSync(new URL('../components/V2capAtbStage.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 const fighter = stage.slice(stage.indexOf('function Fighter('), stage.indexOf('// ボスの技のエフェクトが当たる場所'))
@@ -35,4 +35,11 @@ test('【確定】2026-10-31 端末でプレイヤーとモンスターが消え
   assert.ok(body.indexOf('<BossBackground') < body.indexOf('<Fighter '))
   // 絵の枠は別の層（背景の WebGL の層の上に必ず重なる）
   assert.match(fighter, /transform:`translate3d\(\$\{dx\.toFixed\(1\)\}px, 0, 0\)/)
+  // v2cap のどの画面でも同じ書き方をしない（2026-10-31 ユーザーの実機で「見えた」＝この2つをやめて直った。どちらが原因かは切り分けていない）
+  const dir = new URL('../components/', import.meta.url)
+  for (const name of readdirSync(dir).filter(n => n.endsWith('.jsx'))) {
+    const src = readFileSync(new URL(name, dir), 'utf8')
+    assert.doesNotMatch(src, /height:'100%',[^\n]{0,40}aspectRatio/, `${name}：高さ100%＋縦横比（幅は明示する）`)
+    assert.doesNotMatch(src, /zIndex: *-/, `${name}：負の重ね順`)
+  }
 })
