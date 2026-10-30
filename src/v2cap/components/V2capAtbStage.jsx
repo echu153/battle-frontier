@@ -84,14 +84,14 @@ const Chips = ({ st, side, right }) => {
 }
 
 // HPの節目で付いた固有のバフ（2026-10-30 ユーザー「固有のバフは敵の右側の方にバフボタンを作って何が付与されてるのかタップして確認できるようにして」）：
-//   絵の右上に「🔥バフ×数」のボタン（HP の下の札からは抜いた）。押すと、付いているバフの名前（読み）・効き目・付いた HP の節目を下に出す。
+//   絵の右上に「🔥バフ×数」のボタン（HP の下の札からは抜いた）。押すと、付いているバフの名前（読み）と「効き目（消去不可）」を下に出す
+//   （同じ日にユーザー「（）内の文言いらない 代わりに（消去不可）にして、下の戦いの終わりまで～は消して」）。
 //   もう一度ボタンを押すか、出した所を押すと閉じる。見るだけ（戦闘は止めない）。付いた瞬間はボタンが光ってふくらむ（ago＝付いてからの秒）
 const UNIQUE_GLOW_SEC = 1.2
 const UniqueBuffs = ({ side, right, ago }) => {
   const [open, setOpen] = useState(false)
   const list = hpBuffChips(side)
   if (!list.length) return null
-  const atOf = (name) => side.pattern?.buffs?.find(b => b.name === name)?.at
   const g = ago >= 0 && ago < UNIQUE_GLOW_SEC ? 1 - ago / UNIQUE_GLOW_SEC : 0
   const gold = 'rgba(255,190,90,0.85)', red = 'linear-gradient(180deg, rgba(70,10,4,0.94) 0%, rgba(28,2,0,0.94) 100%)'
   return (
@@ -108,20 +108,16 @@ const UniqueBuffs = ({ side, right, ago }) => {
         <div onClick={() => setOpen(false)}
           style={{ marginTop:'4px', width:'min(210px, 62vw)', padding:'6px 8px', border:`1px solid ${gold}`, borderRadius:'3px', background: red,
             boxShadow:'0 4px 14px rgba(0,0,0,0.6)', color:'#ffe9c4', fontSize:'11px', lineHeight: 1.45, textAlign:'left', cursor:'pointer' }}>
-          {list.map(c => {
-            const at = atOf(c.name)
-            return (
-              <div key={c.name} style={{ marginBottom:'5px' }}>
-                <div style={{ fontFamily: JP_BOLD, fontWeight: 700, color:'#ffd27a', lineHeight: 1.6 }}>
-                  🔥 {rubySegmentsOf(c.name).map((sg, i) => (sg.ruby
-                    ? <ruby key={i}>{sg.text}<rt style={{ fontSize:'7px', color:'#ffd2a0' }}>{sg.ruby}</rt></ruby>
-                    : <span key={i}>{sg.text}</span>))}
-                </div>
-                <div>{buffText(c.table)}{at != null ? `（HP${Math.round(at * 100)}%を切って発動）` : ''}</div>
+          {list.map((c, n) => (
+            <div key={c.name} style={{ marginBottom: n < list.length - 1 ? '5px' : 0 }}>
+              <div style={{ fontFamily: JP_BOLD, fontWeight: 700, color:'#ffd27a', lineHeight: 1.6 }}>
+                🔥 {rubySegmentsOf(c.name).map((sg, i) => (sg.ruby
+                  ? <ruby key={i}>{sg.text}<rt style={{ fontSize:'7px', color:'#ffd2a0' }}>{sg.ruby}</rt></ruby>
+                  : <span key={i}>{sg.text}</span>))}
               </div>
-            )
-          })}
-          <div style={{ color:'#d9b48a', fontSize:'10px' }}>戦いの終わりまで続き、消すことはできません</div>
+              <div>{buffText(c.table)}（消去不可）</div>
+            </div>
+          ))}
         </div>
       )}
     </div>
