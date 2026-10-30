@@ -11,6 +11,7 @@
 //   miss … 受けた側に「MISS」
 //   heal … 回復した側に緑の数字
 //   tick … 毒・火傷・出血などで減った側に紫の数字（揺れない）
+//   技の名前の帯（skillBannerAt）… 敵が技を使ったとき、舞台の上に技の名前を出す（2026-10-30）
 // 絵の差し替え（待機・攻撃のGIF）は画面（V2capAtbStage.jsx）の側で行う
 // ============================================================
 
@@ -64,3 +65,20 @@ export const lungeOf = (elapsed, px = 22) =>
 // 被弾の揺れ（px）。だんだん小さく
 export const shakeOf = (elapsed, px = 6) =>
   (elapsed >= 0 && elapsed < HIT_SEC ? Math.sin(elapsed * 70) * px * (1 - elapsed / HIT_SEC) : 0)
+
+// 【確定】2026-10-30 ユーザー「敵のスキル発動時はスキル名を上に表示させてほしい、FFみたいに」：
+//   相手（side）が名前のある技を使った（act に skill がある）とき、舞台の上に技の名前の帯を BANNER_SEC のあいだ出す。
+//   通常攻撃（skill が無い）は出さない。はじめの BANNER_IN 秒で出てきて、終わりの BANNER_OUT 秒で消える。続けて技を使ったら新しいほうに替わる
+//   → { name, op（濃さ 0〜1）, k（出てきた割合 0〜1・すべり込みに使う）, t0 } か null
+export const BANNER_SEC = 1.8
+export const BANNER_IN = 0.12
+export const BANNER_OUT = 0.3
+export const skillBannerAt = (fx, now, side = 'b') => {
+  let last = null
+  for (const f of fx || []) if (f.kind === 'act' && f.side === side && f.skill && f.t0 <= now && (!last || f.t0 >= last.t0)) last = f
+  if (!last) return null
+  const e = now - last.t0
+  if (e >= BANNER_SEC) return null
+  const k = Math.min(1, e / BANNER_IN), out = Math.max(0, (e - (BANNER_SEC - BANNER_OUT)) / BANNER_OUT)
+  return { name: last.skill, op: k * (1 - out), k, t0: last.t0 }
+}

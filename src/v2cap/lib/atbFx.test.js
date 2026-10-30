@@ -1,7 +1,7 @@
 // v2cap の ATB戦闘の見た目の動き（記録 → 踏み込み・被弾・数字）のテスト（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { fxEventsOf, scheduleFx, lungeOf, shakeOf, LUNGE_SEC, HIT_SEC } from './atbFx.js'
+import { fxEventsOf, scheduleFx, lungeOf, shakeOf, LUNGE_SEC, HIT_SEC, skillBannerAt, BANNER_SEC, BANNER_IN, BANNER_OUT } from './atbFx.js'
 
 test('殴った側が踏み込み、受けた側に数字（外れは MISS・クリティカルの印）', () => {
   const ev = fxEventsOf([
@@ -65,4 +65,25 @@ test('技ごとに絵が違う側（ボス）は、動きごとに当たるコ�
     { kind: 'act', side: 'b' }, { kind: 'miss', side: 'a' },
   ], 10, { b: (e) => (e.motion ? e.motion.hitMs / 1000 : 0) })
   assert.deepEqual(ev.map(e => +e.t0.toFixed(3)), [10, 10.22, 10, 10.54, 10, 10])
+})
+
+test('【確定】2026-10-30 敵が技を使ったら舞台の上に技の名前（ユーザー「敵のスキル発動時はスキル名を上に表示させてほしい、FFみたいに」）：通常攻撃と自分の技は出さない・すぐ出てきて少し残って消える・続けて使ったら新しいほう', () => {
+  const ev = scheduleFx(fxEventsOf([
+    { side: 'ボス', type: 'skill', skill: '焦熱の吐息', hits: 1, damage: 80 },
+  ], '自分', 'ボス'), 10)
+  assert.equal(skillBannerAt(ev, 9.99), null, '使う前は出ない')
+  const a = skillBannerAt(ev, 10 + BANNER_IN / 2)
+  assert.ok(a.name === '焦熱の吐息' && a.op > 0 && a.op < 1 && a.k < 1, 'すぐ出てくる')
+  assert.deepEqual(skillBannerAt(ev, 11), { name: '焦熱の吐息', op: 1, k: 1, t0: 10 })
+  const b = skillBannerAt(ev, 10 + BANNER_SEC - BANNER_OUT / 2)
+  assert.ok(b.op > 0 && b.op < 1, '終わりに薄れる')
+  assert.equal(skillBannerAt(ev, 10 + BANNER_SEC), null, '消える')
+  // 通常攻撃（技の名前が無い）・自分の技は出さない
+  const plain = scheduleFx(fxEventsOf([{ side: 'ボス', type: 'normal', hit: true, damage: 30 }, { side: '自分', type: 'skill', skill: '影討ち', hits: 1, damage: 50 }], '自分', 'ボス'), 10)
+  assert.equal(skillBannerAt(plain, 10.5), null)
+  assert.equal(skillBannerAt(plain, 10.5, 'a').name, '影討ち', '向きを変えれば自分の技も取れる（いまは出さない）')
+  // 続けて技を使ったら新しいほう
+  const two = [...ev, ...scheduleFx(fxEventsOf([{ side: 'ボス', type: 'skill', skill: '黒翼烈風', hits: 1, damage: 90 }], '自分', 'ボス'), 11)]
+  assert.equal(skillBannerAt(two, 11.2).name, '黒翼烈風')
+  assert.equal(skillBannerAt(two, 10.5).name, '焦熱の吐息')
 })

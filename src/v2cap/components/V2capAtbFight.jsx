@@ -133,9 +133,10 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
         <div style={{ display:'flex', gap:'4px', alignItems:'center', flexWrap:'wrap', marginBottom:'8px' }}>
           {verPicker}
           <span style={{ color: TEXT.label, fontSize:'10px' }}>動きを見る［開発］</span>
-          {Object.entries(bossArt.motions).map(([k, m]) => (
+          {/* 1つめは通常攻撃＝技の名前の帯は出さない（戦闘と同じ）・ほかは技の名前を付ける */}
+          {Object.entries(bossArt.motions).map(([k, m], i) => (
             <button key={k} disabled={paused}
-              onClick={() => { fxRef.current = [...fxRef.current, { kind:'act', side:'b', motion: m, landed: true, t0: performance.now() / 1000 }] }}
+              onClick={() => { fxRef.current = [...fxRef.current, { kind:'act', side:'b', motion: m, landed: true, skill: i > 0 ? m.label : null, t0: performance.now() / 1000 }] }}
               style={{ ...miniBtn('#ff8866'), padding:'4px 8px', fontSize:'11px' }}>{m.label}</button>
           ))}
         </div>
