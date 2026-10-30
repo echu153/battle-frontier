@@ -8,7 +8,8 @@ import { BOSS_ART_DIR, BOSS_DEFS, bossFileOf } from './bossArt.js'
 import {
   BOSS_ILLUST_DEFS, BOSS_ILLUST_SIZE, illustPartsOf, illustKindOf, illustFxKindOf,
   bossIllustOf, illustPoseAt, idlePoseAt, motionPoseAt, illustPointAt, illustTrailsAt, mouthPointOf, rotPoint, partMove,
-  illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt, dustEllipsesOf, EASES, joltAt, illustBendKindOf, bendFramesOf, illustPoseKindOf, illustShowAt, illustGhostsAt, ART_FADE_MS, artAnchorAt, leanPoint,
+  illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt, dustEllipsesOf,
+  illustCastShowAt, EASES, joltAt, illustBendKindOf, bendFramesOf, illustPoseKindOf, illustShowAt, illustGhostsAt, ART_FADE_MS, artAnchorAt, leanPoint,
 } from './bossIllust.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { dilate, erode, leftTipOf, fitPart, inPoly } from '../../../tools/v2cap-boss-illust.mjs'
@@ -393,7 +394,7 @@ test('【確定】2026-10-29 雨摩座の技4つ：右手を胸元に引き寄�
   const a = bossIllustOf('amaza'), D = BOSS_ILLUST_DEFS.amaza.motions
   assert.deepEqual(Object.values(a.motions).map(m => m.label), BOSS_DEFS.amaza.motions.map(m => m.file))
   assert.equal(Object.values(a.motions).reduce((n, m) => n + Object.keys(m.fx || {}).length, 0), 9)
-  assert.equal(a.srcs.length, 8 + 9)
+  assert.equal(a.srcs.length, 8 + 9 + 8, 'パーツ8・エフェクト9・ポーズの絵8')
   assert.ok(a.motions.deluge.fx.flow && a.motions.sleet.fx.flow, '水天葬と氷雨の流れる水の絵（描いた滝の柱・雨の所から作る）')
   const armD = a.parts.find(p => p.key === 'armD').swap
   for (const [k, M] of Object.entries(D)) {
@@ -425,7 +426,9 @@ test('【確定】2026-10-29 氷雨は右腕を真上に掲げて、ためずに
   }
   assert.equal(m.charge, null, '雲をためない（水天葬だけ）')
   // 水の筋は掲げた手から差しのべた指先まで（水天葬と同じ通り道）
-  assert.deepEqual(S.arcs[0].pts, BOSS_ILLUST_DEFS.amaza.motions.deluge.arcs[0].pts)
+  // 水の筋は構えの絵の掲げた手から振り抜きの絵の手まで（2026-10-30 ポーズの絵）
+  assert.deepEqual(S.arcs[0].pts[0], S.anchors.windup.hand)
+  assert.deepEqual(S.arcs[0].pts.at(-1), S.anchors.strike.hand)
   assert.equal(S.arcs[0].toMs, S.hitMs)
   // 水天葬は今までどおり1.5秒溜める
   const Dl = BOSS_ILLUST_DEFS.amaza.motions.deluge
@@ -437,10 +440,11 @@ test('【確定】2026-10-29 雨摩座のエフェクト：雨礫・水縛の帯
   for (const k of ['shot', 'bind']) {
     const m = a.motions[k], fly = E.find(e => e.motion === k && e.kind === 'fly')
     assert.equal(m.impactMs, m.hitMs + fly.flyMs)
-    assert.ok(m.front[0] < 60 && m.front[1] > 200 && m.front[1] < 320, `${k}：出どころは手前の手の指先（${m.front}）`)
-    // 指先は手前の手のパーツの中（切り分けた所）
-    const p = a.parts.find(q => q.key === 'armN')
-    assert.ok(54 >= p.x && 54 <= p.x + p.w && 251 >= p.y && 251 <= p.y + p.h)
+    // 2026-10-30 ポーズの絵：出どころは振り抜きの絵の手（anchors.strike.hand を撃つ時刻の全体の姿勢で動かした所）
+    const D = BOSS_ILLUST_DEFS.amaza.motions[k]
+    const want = illustPointAt('amaza', { ...illustPoseAt('amaza', null, 0, 0), ...motionPoseAt(D.keys, D.hitMs) }, D.anchors.strike.hand, 'body').map(Math.round)
+    assert.ok(Math.hypot(m.front[0] - want[0], m.front[1] - want[1]) <= 1, `${k}：出どころは振り抜きの絵の手（${m.front}）`)
+    assert.ok(m.front[0] < 60, '相手のほう（左）へ伸ばした手')
   }
   for (const k of ['sleet', 'deluge']) {
     const m = a.motions[k]
@@ -512,8 +516,8 @@ test('【確定】2026-10-29 雨摩座の手振り：構えの絵の切り替え
   assert.equal(end.kind, 'water')
   assert.equal(end.alpha, 1)
   assert.ok(end.line.length > mid.line.length, '先へ描き足す')
-  const tip = illustPointAt('amaza', illustPoseAt('amaza', m, arc.toMs, 0), [54, 251], 'body')
-  assert.ok(Math.hypot(end.line.at(-1)[0] - tip[0], end.line.at(-1)[1] - tip[1]) < 1, '水の筋は差しのべた指先まで')
+  const tip = illustPointAt('amaza', illustPoseAt('amaza', m, arc.toMs, 0), BOSS_ILLUST_DEFS.amaza.motions.shot.anchors.strike.hand, 'body')
+  assert.ok(Math.hypot(end.line.at(-1)[0] - tip[0], end.line.at(-1)[1] - tip[1]) < 1, '水の筋は振り抜きの絵の手まで')
   const fading = illustTrailsAt('amaza', m, arc.toMs + arc.fadeMs / 2, 0)[0]
   assert.ok(fading.alpha < 1 && fading.line.length < end.line.length, '薄れながら根もとから消える')
   assert.deepEqual(illustTrailsAt('amaza', m, arc.toMs + arc.fadeMs, 0), [])
@@ -671,4 +675,42 @@ test('【確定】2026-10-30 技のポーズの絵（ユーザー「グラブル
     for (const p of Object.values(m.poses || {})) assert.ok(a.srcs.includes(p.src))
     assert.deepEqual(m.art, d.motions[k].art)
   }
+})
+
+test('【確定】2026-10-30 雨摩座の技のポーズの絵（黒龍と同じ仕組み・ユーザー「グラブルのベルゼバブぐらいしっかりと攻撃モーション動いてほしい」）：技ごとに構えと振り抜きの2枚・構え→振り抜き→部品の立ち絵の順に切り替える', () => {
+  const a = bossIllustOf('amaza'), D = BOSS_ILLUST_DEFS.amaza
+  for (const k of ['shot', 'sleet', 'bind', 'deluge']) {
+    const m = a.motions[k], d = D.motions[k]
+    assert.ok(m.poses.windup.src.includes(`il-pose-${k}-windup`) && m.poses.strike.src.includes(`il-pose-${k}-strike`), `${k}：構えと振り抜きの絵`)
+    const tw = d.art.find(([, n]) => n === 'windup')[0], ts = d.art.find(([, n]) => n === 'strike')[0], tr = d.art.findLast(([, n]) => n === null)[0]
+    assert.ok(tw < ts && ts <= m.hitMs && m.hitMs < tr && tr < m.totalMs, `${k}：構え→振り抜き（撃つ時刻までに）→部品`)
+    assert.equal(illustShowAt(m, (tw + ts) / 2 + 40).poses.at(-1).name, 'windup')
+    assert.equal(illustShowAt(m, m.hitMs).poses.at(-1).name, 'strike')
+    assert.equal(illustShowAt(m, tr + 100).rig, 1, '最後は部品の立ち絵')
+    assert.equal(d.ghosts.fromMs, ts, '振り抜きの残像')
+    // 水の筋は構えの手から振り抜きの手まで・撃つ時刻に振り抜きの手へ届く
+    assert.deepEqual(d.arcs[0].pts[0], d.anchors.windup.hand)
+    assert.deepEqual(d.arcs[0].pts.at(-1), d.anchors.strike.hand)
+    assert.equal(d.arcs[0].toMs, m.hitMs)
+    // 絵の置き場所：腰をそろえるために動かしたぶん、枠の外へ出てよい（余白の中）
+    for (const n of ['windup', 'strike']) {
+      const p = BOSS_ILLUST.amaza.poses[k][n]
+      assert.ok(p.x >= -D.poseMargin && p.y >= -D.poseMargin && p.x + p.w <= 640 + D.poseMargin && p.y + p.h <= 640 + D.poseMargin)
+    }
+  }
+  assert.equal(D.motions.deluge.art[0][1], 'windup', '水天葬は構え（5秒）のすぐあとなので、はじめから構えの絵')
+  assert.ok(Object.values(D.poseFit).length === 8, '8枚とも腰を立ち絵にそろえた')
+})
+
+test('【確定】2026-10-30 雨摩座は構えの5秒も水天葬の構えの絵（cast.art）・黒龍の構えは今までどおり', () => {
+  const a = bossIllustOf('amaza')
+  assert.equal(a.castArt, 'windup')
+  const s0 = illustCastShowAt(a, '水天葬', 0), s1 = illustCastShowAt(a, '水天葬', CAST_IN_MS), s2 = illustCastShowAt(a, '水天葬', 3000)
+  assert.equal(s0.motion, a.motions.deluge)
+  assert.ok(s0.show.rig === 1 && s0.show.poses[0].op === 0, '構えはじめは部品の立ち絵')
+  assert.ok(s1.show.rig === 0 && s1.show.poses[0].op === 1 && s1.show.poses[0].name === 'windup', `CAST_IN_MS で構えの絵へ`)
+  assert.deepEqual(s2.show, s1.show)
+  // 新しい絵は前半で出きり、部品は後半で消える（途中で透けない）
+  for (const t of [100, 250, 400]) { const s = illustCastShowAt(a, '水天葬', t).show; assert.ok(Math.max(s.rig, s.poses[0].op) === 1, `${t}ms`) }
+  assert.equal(illustCastShowAt(bossIllustOf('varuzenoku'), '終焉の黒焔', 3000), null, '黒龍は構えのあいだ部品のまま')
 })

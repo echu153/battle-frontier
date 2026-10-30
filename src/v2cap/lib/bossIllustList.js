@@ -55,12 +55,18 @@ export const BOSS_ILLUST = {
       bind: { fly: { w: 384, h: 240, ax: 3, ay: 17 }, hit: { w: 384, h: 379, ax: 192, ay: 190 } },
       deluge: { hit: { w: 384, h: 384, ax: 192, ay: 192 }, flow: { w: 320, h: 224, ax: 0, ay: 0, at: [92, 0, 202, 202] }, charge: { w: 384, h: 283, ax: 192, ay: 142 } },
     },
+    poses: {
+      shot: { windup: { x: -33, y: 10, w: 636, h: 640 }, strike: { x: -29, y: -3, w: 631, h: 640 } },
+      sleet: { windup: { x: -21, y: -47, w: 633, h: 637 }, strike: { x: -10, y: -85, w: 622, h: 636 } },
+      bind: { windup: { x: -36, y: -4, w: 640, h: 640 }, strike: { x: 7, y: -31, w: 637, h: 636 } },
+      deluge: { windup: { x: 3, y: -10, w: 641, h: 632 }, strike: { x: 9, y: -65, w: 636, h: 640 } },
+    },
     fit: {
       water: { s: 1.06, deg: 0, tx: -38, ty: -38, score: 0 },
       body: { s: 0.87, deg: -3, tx: 54, ty: 180, score: -0.292 },
       armC: { s: 1, deg: 0, tx: 0, ty: 0, score: 1.076 },
       armU: { s: 1.085, deg: -2, tx: -122, ty: -80, score: 0.46 },
     },
-    v: { 'il-water': '56a7ccb4', 'il-body': '812a7e41', 'il-armF': '3263d5b5', 'il-armD': 'bdd766a3', 'il-armN': '7eaed282', 'il-head': 'b65aea3c', 'il-armC': 'b8484a39', 'il-armU': 'a1317398', 'il-fx-shot-fly': '89f4d4f3', 'il-fx-shot-hit': 'b458f544', 'il-fx-sleet-hit': '846c1942', 'il-fx-sleet-flow': '0cc0a8c1', 'il-fx-bind-fly': 'ee7ff9a4', 'il-fx-bind-hit': '6d7032af', 'il-fx-deluge-hit': 'd828eed6', 'il-fx-deluge-flow': '604c35d7', 'il-fx-deluge-charge': 'fdaabfa2' },
+    v: { 'il-water': '56a7ccb4', 'il-body': '812a7e41', 'il-armF': '3263d5b5', 'il-armD': 'bdd766a3', 'il-armN': '7eaed282', 'il-head': 'b65aea3c', 'il-armC': 'b8484a39', 'il-armU': 'a1317398', 'il-pose-shot-windup': 'ea94a5a9', 'il-pose-shot-strike': 'd11944c3', 'il-pose-sleet-windup': '8791c6ea', 'il-pose-sleet-strike': '0a0ba8d3', 'il-pose-bind-windup': '4db95084', 'il-pose-bind-strike': '76796101', 'il-pose-deluge-windup': 'd049cf01', 'il-pose-deluge-strike': '2d98d10c', 'il-fx-shot-fly': '89f4d4f3', 'il-fx-shot-hit': 'b458f544', 'il-fx-sleet-hit': '846c1942', 'il-fx-sleet-flow': '0cc0a8c1', 'il-fx-bind-fly': 'ee7ff9a4', 'il-fx-bind-hit': '6d7032af', 'il-fx-deluge-hit': 'd828eed6', 'il-fx-deluge-flow': '604c35d7', 'il-fx-deluge-charge': 'fdaabfa2' },
   },
 }

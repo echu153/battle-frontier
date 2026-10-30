@@ -90,8 +90,8 @@ const ZERO = { x: 0, y: 0, r: 0, neck: 0, head: 0, wingN: 0, wingF: 0, wingNSq: 
 //   charge＝撃つ前に口でためる火の玉（kind のエフェクトの絵を fromMs〜toMs のあいだ口で大きくする・size＝枠の幅に対する大きさ）
 //     エフェクトに on があれば口ではなく相手の頭上（雨摩座の水天葬の渦の雲）：toMs のあと holdMs で薄れる・構えのあいだも出す
 // ボスごとの idleKeep＝技のあいだも残す待機のぶん（無ければ IDLE_KEEP）・cast＝構え（大技の詠唱）のあいだの姿勢 pose
-// 雨摩座の手の通り道（立ち絵 640px の上の点・水の筋 arcs）：SWEEP＝胸元の手（構えの絵）→差しのべた指先／THROW＝真上に掲げた手→差しのべた指先
-const SWEEP = [[285, 168], [230, 182], [160, 205], [100, 228], [54, 251]]
+// 雨摩座の手の通り道（立ち絵 640px の上の点）：THROW＝真上に掲げた手→差しのべた指先（はじめの点＝ポーズの絵が無いときの水天葬の手の光）。
+//   水の筋は 2026-10-30 からポーズの絵の手（anchors）を通る
 const THROW = [[110, -8], [62, 40], [34, 110], [36, 180], [54, 251]]
 export const BOSS_ILLUST_DEFS = {
   varuzenoku: {
@@ -312,6 +312,23 @@ export const BOSS_ILLUST_DEFS = {
     pivots: { armD: [200, 185], armC: [200, 185], armU: [200, 140] },
     // 軽くする（パーツは 120KB まで）：体は立ち絵まるごとなので少し粗く・水の帯は柔らかいので細かさを6割に
     quality: 80, shrink: { water: 0.6 },
+    // 【確定】2026-10-30 技のポーズの絵（黒龍と同じ仕組み・ユーザー「グラブルのベルゼバブぐらいしっかりと攻撃モーション動いてほしい（ATBの敵すべて）」→選んだ「技ごとに2枚」）：
+    //   技ごとに 構え（windup）と 振り抜き（strike）の全身の絵（元の絵の名前・イラスト版/）。技の art で切り替える
+    poses: {
+      shot: { windup: '雨礫_構え', strike: '雨礫_払う' },
+      sleet: { windup: '氷雨_構え', strike: '氷雨_振り下ろし' },
+      bind: { windup: '水縛の帯_構え', strike: '水縛の帯_放つ' },
+      deluge: { windup: '水天葬_構え', strike: '水天葬_振り下ろし' },
+    },
+    //   描いた絵は腰（帯飾りのまん中の大きな青い玉）の位置がまちまち（右へ最大38px・下へ最大85px）＝切り替えると体が跳ねるので、
+    //   腰を立ち絵の腰（立ち絵の px で 277, 222）にそろえる（poseFit の dx・dy は元の絵 1254px の px）。上へ動かした冠や袖の先を切らないよう余白を足す（poseMargin）
+    poseFit: {
+      '雨礫_構え': { dx: -72, dy: 20 }, '雨礫_払う': { dx: -75, dy: -5 },
+      '氷雨_構え': { dx: -54, dy: -98 }, '氷雨_振り下ろし': { dx: -49, dy: -167 },
+      '水縛の帯_構え': { dx: -71, dy: -8 }, '水縛の帯_放つ': { dx: 8, dy: -69 },
+      '水天葬_構え': { dx: 7, dy: -34 }, '水天葬_振り下ろし': { dx: 10, dy: -127 },
+    },
+    poseMargin: 100,
     // 届いたが今は使わない絵（髪・奥の腕は立ち絵と形が違って重ならなかった・頭と手前の腕は立ち絵から切るほうが同じ見た目）
     spare: ['頭', '髪', '腕_手前', '腕_奥'],
     // 待機：[振れ幅（y は枠の割合・ほかは°）, 1回のミリ秒, ずらし（0〜1）] の揺れの足し算。周期をずらして、水の中で漂うように
@@ -326,7 +343,8 @@ export const BOSS_ILLUST_DEFS = {
     //   （水の帯の角度も数字としては残す。画面では水の帯は切り離して待機の姿勢で動かす＝free）
     idleKeep: { y: 1, r: 1, head: 1, armN: 1, armF: 1, water: 1 },
     // 構え（水天葬の5秒）：天を仰いで右腕を真上に掲げる（armU）。水天葬のためと同じ形。【確定】2026-10-29 ユーザー「溜めるとき、別に震えなくていい」＝震えない
-    cast: { pose: { x: 0.02, y: -0.038, r: 4.8, head: 6.5, armF: -13, armUOn: 1 } },
+    //   【確定】2026-10-30 art＝構えのあいだ、構えた技（水天葬）の構え（windup）のポーズの絵を出す（構えはじめの CAST_IN_MS で切り替える・illustCastShowAt）
+    cast: { pose: { x: 0.02, y: -0.038, r: 4.8, head: 6.5, armF: -13, armUOn: 1 }, art: 'windup' },
     // 切り分け（立ち絵 640px の上の点）。頭＝冠と顔（首の付け根で傾ける）・手前の手＝袖口から先（ふだんの腕 armD から切る）・奥の手＝袖口から先（袖口で回す）
     cuts: {
       head: { from: 'body', pivot: [230, 145],
@@ -340,6 +358,10 @@ export const BOSS_ILLUST_DEFS = {
     //   払う・振り下ろすときは、手の通り道に水の筋（arcs＝立ち絵の点をなめらかにつないだ線を fromMs〜toMs で描き、fadeMs で薄れる）。
     //   構えの絵のあいだは手前の手（armN）が見えないので、払う直前に上げておき（＋）、払った瞬間に下へ振る（－）
     //   [54, 251]＝手前の手の指先（雨礫と水縛の帯が出る所）
+    //   【確定】2026-10-30 ポーズの絵（黒龍と同じ仕組み）：部品の動き（腕の構えの切り替えも）はそのまま残し、その上で art の時刻に
+    //     構え（windup）→振り抜き（strike）の全身の絵へ切り替える（切り替えの70msのあいだも部品の腕の形が絵とだいたい同じ＝つながる）。
+    //     ghosts＝振り抜きの残像。anchors＝絵の上の手（立ち絵の px・腰をそろえた置き方で測った）：飛ぶ絵の出どころ（shots の at）・
+    //     水の筋（arcs＝構えの手から振り抜きの手まで）・水天葬の手の光・水縛の帯の手の光
     motions: {
       // 雨礫：胸元に引き寄せて一瞬ため、さっと払って指先から水の礫
       shot: { totalMs: 1000, hitMs: 420, keys: [
@@ -350,8 +372,10 @@ export const BOSS_ILLUST_DEFS = {
         [420, { x: -0.05, y: 0.008, r: -3.5, head: -2, armN: -10, armF: -4 }],
         [600, { x: -0.045, y: 0.006, r: -3, head: -1.5, armN: -8, armF: -3 }],
         [1000, {}],
-      ], arcs: [{ kind: 'water', pts: SWEEP, fromMs: 345, toMs: 420, fadeMs: 200 }],
-      shots: [{ part: 'armN', pt: [54, 251], delayMs: 0, size: 1 }] },
+      ], art: [[0, null], [140, 'windup'], [400, 'strike'], [740, null]], ghosts: { fromMs: 400, toMs: 520, lagMs: 26, n: 3 },
+      anchors: { windup: { hand: [240, 172] }, strike: { hand: [-20, 128] } },
+      arcs: [{ kind: 'water', pts: [[240, 172], [170, 166], [95, 152], [30, 138], [-20, 128]], fromMs: 385, toMs: 420, fadeMs: 200 }],
+      shots: [{ at: 'hand', part: 'armN', pt: [54, 251], delayMs: 0, size: 1 }] },
       // 氷雨：天を仰いで右腕を真上に掲げ（水天葬と同じ構えの絵）、止めずにそのまま相手の方へ振り下ろす＝相手の頭上に雨雲（飛ぶ絵は無い）
       //   【確定】2026-10-29 ユーザー「氷雨も手上げるモーションで出すようにして、ためは不要」：胸元でためるのをやめ、掲げきったらすぐ振り下ろす
       sleet: { totalMs: 1150, hitMs: 340, keys: [
@@ -361,7 +385,9 @@ export const BOSS_ILLUST_DEFS = {
         [340, { x: -0.05, y: 0.012, r: -4, head: -2.5, armN: -12, armF: 5 }],
         [620, { x: -0.044, y: 0.01, r: -3.4, head: -2, armN: -10, armF: 4 }],
         [1150, {}],
-      ], arcs: [{ kind: 'water', pts: THROW, fromMs: 265, toMs: 340, fadeMs: 240 }] },
+      ], art: [[0, null], [60, 'windup'], [300, 'strike'], [700, null]], ghosts: { fromMs: 300, toMs: 420, lagMs: 26, n: 3 },
+      anchors: { windup: { hand: [140, -30] }, strike: { hand: [12, 243] } },
+      arcs: [{ kind: 'water', pts: [[140, -30], [85, 25], [45, 100], [22, 175], [12, 243]], fromMs: 265, toMs: 340, fadeMs: 240 }] },
       // 水縛の帯：身を引いて（水の帯も大きく振れる）右手を胸元へ、長めにためてから突き出すように払う＝帯が指先から相手へ
       bind: { totalMs: 1250, hitMs: 520, keys: [
         [0, {}],
@@ -371,8 +397,10 @@ export const BOSS_ILLUST_DEFS = {
         [520, { x: -0.065, y: 0.01, r: -4.8, head: -3, armN: -14, armF: -6 }],
         [760, { x: -0.058, y: 0.008, r: -4.2, head: -2.5, armN: -12, armF: -5 }],
         [1250, {}],
-      ], arcs: [{ kind: 'water', pts: SWEEP, fromMs: 445, toMs: 520, fadeMs: 220 }],
-      shots: [{ part: 'armN', pt: [54, 251], delayMs: 0, size: 1 }],
+      ], art: [[0, null], [130, 'windup'], [490, 'strike'], [860, null]], ghosts: { fromMs: 490, toMs: 620, lagMs: 26, n: 3 },
+      anchors: { windup: { hand: [190, 140] }, strike: { hand: [25, 152] } },
+      arcs: [{ kind: 'water', pts: [[190, 140], [140, 132], [90, 136], [50, 146], [25, 152]], fromMs: 445, toMs: 520, fadeMs: 220 }],
+      shots: [{ at: 'hand', part: 'armN', pt: [54, 251], delayMs: 0, size: 1 }],
       // 【確定】2026-10-30 ユーザー「水縛りの帯もしょぼい、もっと豪華にして」：手前の手の指先から相手へ波打つ水の綱・体に3重の水の輪が巻きついて締め上げ、はじける＝lib/bossScene.js
       scene: { kind: 'coil', hand: { pt: [54, 251], part: 'armN' } } },
       // 水天葬：右腕を真上に掲げて（構えの姿勢と同じ形）ため、相手の方へ振り下ろす＝相手の頭上の渦の雲から滝が落ちる
@@ -387,7 +415,10 @@ export const BOSS_ILLUST_DEFS = {
         [1600, { x: -0.07, y: 0.018, r: -6, head: -3.5, armN: -14, armF: 6 }],
         [1950, { x: -0.062, y: 0.014, r: -5.2, head: -2.8, armN: -12, armF: 5 }],
         [2500, {}],
-      ], arcs: [{ kind: 'water', pts: THROW, fromMs: 1525, toMs: 1600, fadeMs: 260 }],
+      ], art: [[0, 'windup'], [1560, 'strike'], [2100, null]], ghosts: { fromMs: 1560, toMs: 1700, lagMs: 28, n: 3 },
+      //   構えの5秒も構えの絵（cast.art）＝技のはじめから構えの絵のまま
+      anchors: { windup: { hand: [200, 0] }, strike: { hand: [20, 280] } },
+      arcs: [{ kind: 'water', pts: [[200, 0], [150, 60], [95, 145], [45, 225], [20, 280]], fromMs: 1525, toMs: 1600, fadeMs: 260 }],
       charge: { kind: 'charge', fromMs: 0, toMs: 1600, holdMs: 700 },
       // 【確定】2026-10-29 ユーザー「水天葬だったらほんとに滝が叩きつけてるようなエフェクトにしてほしい、派手に」：
       //   画面が暗くなり、雲の渦が回って手に光が集まり、振り下ろすと滝が落ちて叩きつける（光る・揺れる・しぶき・波紋・もや）＝lib/bossScene.js
@@ -545,6 +576,15 @@ export const artAnchorAt = (key, motion, ms, pose, name) => {
   const top = illustShowAt(motion, ms).poses.at(-1)
   const pt = top && motion.anchors?.[top.name]?.[name]
   return pt ? illustPointAt(key, pose, pt, 'body') : null
+}
+// 構えのあいだに出すポーズの絵（def.cast.art・雨摩座）：構えた技（名前が同じ技・無ければ最後の技＝BossFx と同じ）にその絵があれば、
+//   構えはじめの CAST_IN_MS で部品の立ち絵から切り替える（新しい絵は前半で出きり、部品は後半で消える）→ { motion, show }。無ければ null（黒龍は今までどおり）
+export const illustCastShowAt = (art, castName, castMs) => {
+  if (!art?.castArt) return null
+  const ms = Object.values(art.motions), m = ms.find(x => x.label === castName) || ms.at(-1)
+  if (!m?.poses?.[art.castArt]) return null
+  const k = Math.min(1, Math.max(0, castMs) / CAST_IN_MS)
+  return { motion: m, show: { rig: 1 - smooth(Math.max(0, 2 * k - 1)), poses: [{ name: art.castArt, op: smooth(Math.min(1, 2 * k)) }] } }
 }
 // 残像（motion.ghosts＝{ fromMs, toMs, lagMs, n, op }）：fromMs〜toMs のあいだ、lagMs ずつ前の姿勢でポーズの絵を薄く重ねる（振り抜いて飛び込む勢い）
 //   { name, ms（その残像の時刻）, op }。そのときに出ていたポーズの絵だけ（部品の立ち絵には残像を出さない）
@@ -717,7 +757,8 @@ export const bossIllustOf = (key) => {
   // 遭遇のイラストはドット絵版と同じ
   const illust = bossArtOf(key)?.illust || null
   return {
-    kind: 'illust', key, name: base.name, base: BOSS_ILLUST_SIZE, illust, parts, pivot: art.pivot, mouth: art.mouth, jaw, motions, orb, dust, ground: def.ground ?? null, flutter: !!def.idle.flutter,
+    kind: 'illust', key, name: base.name, base: BOSS_ILLUST_SIZE, illust, parts, pivot: art.pivot, mouth: art.mouth, jaw, motions, orb, dust, flutter: !!def.idle.flutter,
+    castArt: def.cast?.art || null,
     srcs: [...parts.map(p => p.src), ...parts.filter(p => p.bend).map(p => p.bend.src), ...Object.values(motions).flatMap(m => Object.values(m.fx || {}).map(f => f.src)),
       ...Object.values(motions).flatMap(m => Object.values(m.poses || {}).map(p => p.src)), ...(orb ? [orb.src] : [])],
   }

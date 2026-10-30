@@ -4,7 +4,7 @@ import { buffChips, ailChips, stateChips, needNow, CAST_SEC } from '../core/atb.
 import { STAT_DEFS } from '../core/stats.js'
 import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC } from '../lib/atbFx.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
-import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, artAnchorAt } from '../lib/bossIllust.js'
+import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, artAnchorAt, illustCastShowAt } from '../lib/bossIllust.js'
 import { FX_HEAD_Y, FX_FEET_Y, FX_SKY_Y, FX_TARGET_Y, SCENE_TOP, fallAt, coilAt, pourTimesOf, sceneEndMsOf, stageSceneOf } from '../lib/bossScene.js'
 
 // ============================================================
@@ -312,7 +312,9 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
     : illustPoseAt(rig.key, rigMotion, rigMs, now * 1000, !!lastAct && afterCast(lastAct.t0, castEnd))
   const trails = rigMotion ? illustTrailsAt(rig.key, rigMotion, rigMs, now * 1000) : []
   // 技のポーズの絵と残像（構えのあいだは部品の立ち絵）
-  const show = rigMotion && !casting ? illustShowAt(rigMotion, rigMs) : null
+  // 構えのあいだのポーズの絵（雨摩座＝構えた技の構えの絵・lib/bossIllust.js の illustCastShowAt・黒龍は無し）
+  const cs = casting ? illustCastShowAt(rig, me.cast.name, (st.t - me.cast.start) * 1000) : null
+  const show = rigMotion && !casting ? illustShowAt(rigMotion, rigMs) : cs?.show || null
   const ghosts = rigMotion && !casting ? illustGhostsAt(rigMotion, rigMs).map(g => ({ ...g, pose: illustPoseAt(rig.key, rigMotion, g.ms, now * 1000 - (rigMs - g.ms)) })) : []
   const dx = (frame >= 0 || rig ? 0 : lungeOf(now - lastOf('act')) * dir) + shakeOf(now - lastOf('hit'))
   const hitAgo = now - lastOf('hit')
@@ -342,7 +344,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
             // 待機の絵の枠（正方形）。攻撃の絵はこの枠に重ねる（ox・oy・w・h は待機の枠（クラスは 224px・ボスは base）を100%として割合で置く）
             <div style={{ position:'relative', height:'100%', aspectRatio:'1 / 1', maxWidth:'100%', filter: filters.join(' ') || 'none' }}>
               {rig && trails.length > 0 && <RigTrails art={rig} trails={trails} />}
-              {rig ? <IllustRig art={rig} pose={pose} freePose={illustFreePoseAt(rig.key, now * 1000)} motion={rigMotion} show={show} ghosts={ghosts} tMs={now * 1000} /> : (
+              {rig ? <IllustRig art={rig} pose={pose} freePose={illustFreePoseAt(rig.key, now * 1000)} motion={cs ? cs.motion : rigMotion} show={show} ghosts={ghosts} tMs={now * 1000} /> : (
                 <img src={src} alt="" draggable={false}
                   style={{ width:'100%', height:'100%', objectFit:'contain', userSelect:'none', visibility: frame >= 0 ? 'hidden' : 'visible' }} />
               )}
@@ -708,7 +710,10 @@ const sceneOfStage = (art, acts, now, cast, castEnd) => {
   const handPt = fromCast ? castM.scene.hand : live ? live.m.scene.hand : null
   if (handPt && (sc.hand || sc.items.some(it => it.space === 'hand'))) {
     const pose = !fromCast ? illustPoseAt(art.key, live.m, live.ms, now * 1000, live.after) : illustCastPoseAt(art.key, cast.ms, now * 1000)
-    sc.handAt = illustPointAt(art.key, pose, handPt.pt, handPt.part)
+    // ポーズの絵が出ていれば、その絵の上の手（anchors の hand）から
+    const castHand = fromCast && art.castArt ? castM.anchors?.[art.castArt]?.hand : null
+    sc.handAt = (!fromCast ? artAnchorAt(art.key, live.m, live.ms, pose, 'hand') : castHand ? illustPointAt(art.key, pose, castHand, 'body') : null)
+      || illustPointAt(art.key, pose, handPt.pt, handPt.part)
   }
   return sc
 }

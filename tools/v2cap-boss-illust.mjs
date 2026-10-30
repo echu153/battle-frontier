@@ -27,6 +27,7 @@
 //      回すだけだと付け根で折れて見え、硬い部品をつなぐと大きく振ったときつなぎ目が割れた（ユーザー「しっぽ動かすの不自然って思わない？」）
 //   ★2026-10-30 技のポーズの絵（poses）：技ごとのため・振り抜きの全身の絵（立ち絵と同じ大きさの正方形に描いてもらう）を、立ち絵と同じ割合で縮めて切り抜く。
 //      ずれていたら def.poseFit（元の絵の名前 → { s, dx, dy }）で直す（fixedFitOf と同じ）。無い絵は作らない（その技は部品の動きのまま）
+//      poseMargin＝枠のまわりに足す余白（立ち絵の px）：poseFit で動かして枠の外へ出た所（冠・袖の先）も切らずに残す（位置は負になってよい）
 //   ★2026-10-29 後ろの絵（split.back）：立ち絵から頭・首・前脚を消して後ろの翼と胸を描き足した絵（後ろ.png）を重ね、頭・首・前脚が
 //      止まっているとき覆っている所だけを埋める（翼の所は翼へ・ほかは体へ）。技で大きく動かすと、模様を折り返して埋めた所が切れ端や四角いかたまりに見えた
 //   ★2026-10-29 腕の構え（swaps）：右腕だけを描き変えた立ち絵（立ち絵_胸元.png・立ち絵_掲げる.png）を重ね、腕のまわり（armZone）だけを切り取って
@@ -667,13 +668,13 @@ const build = (key, def, dir) => {
     if (!existsSync(f)) { notes.push(`${file}：まだ無い（${mk} は部品の動きのまま）`); continue }
     const P = readRgba(f)
     bleed(P)
-    const fit = fixedFitOf(T0, P, def.poseFit?.[file] || {})
-    const t = trim(warpPart(P, fit, S, S, k))
+    const fit = fixedFitOf(T0, P, def.poseFit?.[file] || {}), M = def.poseMargin || 0
+    const t = trim(warpPart(P, M ? { ...fit, tx: fit.tx + M / k, ty: fit.ty + M / k } : fit, S + 2 * M, S + 2 * M, k))
     if (!t) throw new Error(`${file}：何も描かれていない`)
     // 全身の絵は大きいので縮めて軽くする（poseScale・画面の枠は 300px まで＝立ち絵の 640px の半分ほど）
     const ps = def.poseScale ?? 0.7, small = resizeRgba(t.img, Math.round(t.img.W * ps), Math.round(t.img.H * ps))
     sizes.push([file, writeWebp(small, path.join(OUT, bossFileOf(key, illustPoseKindOf(mk, name))), def.quality || QUALITY)])
-    poses[mk] = { ...poses[mk], [name]: { x: t.x, y: t.y, w: t.img.W, h: t.img.H } }
+    poses[mk] = { ...poses[mk], [name]: { x: t.x - M, y: t.y - M, w: t.img.W, h: t.img.H } }
   }
   // ④ エフェクト
   const fx = {}, trims = {}
