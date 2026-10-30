@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { bossIllustOf } from './bossIllust.js'
-import { POUR, COIL, SCENE_TOP, FX_TARGET_Y, FX_FEET_Y, FX_HEAD_Y, FX_SKY_Y, pourTimesOf, sceneEndMsOf, sceneAt, castSceneAt, fallAt, coilAt, stageSceneOf } from './bossScene.js'
+import { POUR, COIL, SCENE_TOP, FX_TARGET_Y, FX_FEET_Y, FX_HEAD_Y, FX_SKY_Y, pourTimesOf, sceneEndMsOf, sceneAt, castSceneAt, fallAt, coilAt, stageSceneOf, handFxOf, HAND_BURST_MS } from './bossScene.js'
 import { BOSS_ILLUST_DEFS, flutterBandsAt } from './bossIllust.js'
 import { BOSS_ILLUST } from './bossIllustList.js'
 
@@ -18,11 +18,12 @@ test('【確定】2026-10-29 水天葬の演出（ユーザー「水天葬だっ
   assert.ok(T.end >= T.E + T.T, '演出が終わる時刻は滝が切れたあと')
   for (const ms of [300, T.I + 50, T.E + 100]) assert.deepEqual(sceneAt(m, ms), sceneAt(m, ms))
   // 演出の無い技・始まる前・終わったあとは何も出さない
+  // 雨礫・氷雨は手の光と粒だけ（'hands'・2026-10-30）＝暗くも光りも揺れもしない
   for (const k of ['shot', 'sleet']) {
-    const o = bossIllustOf('amaza').motions[k]
-    assert.equal(o.scene, null, `${k} はまだ演出なし`)
-    assert.equal(sceneEndMsOf(o), 0)
-    assert.equal(sceneAt(o, 500).items.length, 0)
+    const o = bossIllustOf('amaza').motions[k], h = handFxOf(o)
+    assert.equal(o.scene.kind, 'hands', `${k} は手の演出だけ`)
+    assert.equal(sceneEndMsOf(o), h.ts + 600)
+    for (let ms = 0; ms < sceneEndMsOf(o); ms += 17) { const x = sceneAt(o, ms); assert.ok(x.dim === 0 && x.flash === 0 && x.shake[0] === 0 && !x.cloud) }
   }
   for (const ms of [-1, T.end]) {
     const s = sceneAt(m, ms)
@@ -75,7 +76,7 @@ test('【確定】2026-10-29 水天葬：水の筋は雲から足元のあいだ
     const s = sceneAt(m, ms, { landed: false })
     assert.ok(s.shake[0] === 0 && s.shake[1] === 0)
     assert.ok(s.flash <= 0.3)
-    assert.ok(s.items.every(it => it.t === 'rain' || it.t === 'mote'), `${ms}ms`)
+    assert.ok(s.items.every(it => it.t === 'rain' || it.t === 'mote' || it.t === 'hdrop'), `${ms}ms（手のしぶきは外れても出る）`)
   }
 })
 
@@ -88,9 +89,12 @@ test('【確定】2026-10-29 水天葬：構えのあいだから雲の渦が回
   // 渦は振り下ろすまでだんだん速く回る
   const sp = (ms) => sceneAt(m, ms + 10).cloud.spin - sceneAt(m, ms).cloud.spin
   assert.ok(sp(1400) > sp(200) * 1.5)
-  assert.ok(sceneAt(m, T.H - 10).hand.op > 0.9, '振り下ろすまで手が光る')
-  assert.ok(sceneAt(m, T.H + 80).hand.r > sceneAt(m, T.H - 10).hand.r, '振り下ろした瞬間にはじける')
-  assert.equal(sceneAt(m, T.H + 200).hand, null)
+  // 2026-10-30 ポーズの絵：振り抜きの絵に替わる時刻（ts）まで手が光り、ts で両手がはじける（ほかの技と同じ）
+  const ts = handFxOf(m).ts
+  assert.ok(ts <= T.H)
+  assert.ok(sceneAt(m, ts - 10).hand.op > 0.9, '振り下ろすまで手が光る')
+  assert.ok(sceneAt(m, ts + 80).hand.r > sceneAt(m, ts - 10).hand.r, '振り下ろした瞬間にはじける')
+  assert.equal(sceneAt(m, ts + HAND_BURST_MS + 10).hand, null)
   // 滝の絵
   assert.equal(fallAt(m, T.H - 1), null)
   assert.ok(fallAt(m, T.I + 130).sx > 1.06, '叩きつけた所で横へふくらむ')
@@ -181,7 +185,7 @@ test('【確定】2026-10-30 氷雨は雨そのものを流す（ユーザー「
   const [x, y, w, h] = flow.at
   assert.ok(y > hit.h * 0.25 && y + h < hit.h * 0.95, `雨の所は雲の下・足元のしぶきの上（${flow.at}）`)
   assert.ok(x >= 0 && x + w <= hit.w && w > hit.w * 0.7, '横はほぼいっぱい')
-  assert.equal(sleet.scene, null, '氷雨は演出（暗く・揺れる）はまだ')
+  assert.equal(sleet.scene.kind, 'hands', '氷雨は手の演出だけ（暗くも揺れもしない）')
 })
 
 test('【確定】2026-10-30 着物のひらひら（ユーザー「待機モーションで軽く着物ひらひらしててほしい」）：帯から下を横の帯に分けて、上から下へ伝わる波で左右にずらす・境目でつながる', () => {
@@ -204,4 +208,26 @@ test('【確定】2026-10-30 着物のひらひら（ユーザー「待機モー
   let mid = 0, low = 0
   for (let t = 0; t < f.periodMs * 2; t += 50) { mid = Math.max(mid, Math.abs(at(t, 2))); low = Math.max(low, Math.abs(at(t, f.bands))) }
   assert.ok(low > mid && low > f.amp * 0.5, `裾ほど大きい（${mid.toFixed(1)} → ${low.toFixed(1)}px）`)
+})
+
+test('【確定】2026-10-30 エフェクトをポーズの絵に合わせ直した（ユーザー「イラスト差し替えたんだからエフェクト更新して」→選んだ「今の絵のまま合わせ直す」）：構えの手に水が集まり、振り抜きの手ではじける（4つの技すべて・水天葬は両手）', () => {
+  const ms = bossIllustOf('amaza').motions
+  for (const k of ['shot', 'sleet', 'bind', 'deluge']) {
+    const o = ms[k], h = handFxOf(o)
+    assert.ok(h && h.tw < h.ts, `${k}：構え→振り抜き`)
+    assert.equal(h.nw, k === 'deluge' ? 2 : 1, `${k}：構えの手の数`)
+    // 構えのあいだ：手が光り、粒が手へ吸い込まれる（水天葬は両手に分かれる）
+    const g = sceneAt(o, h.ts - 20)
+    assert.ok(g.hand && g.hand.op > 0.5, `${k}：構えの手が光る`)
+    const hi = new Set(g.items.filter(it => it.t === 'mote').map(it => it.hi))
+    assert.equal(hi.size, h.nw, `${k}：粒は手の数だけに分かれる`)
+    // 振り抜いた瞬間：振り抜きの手ではじけ、しぶきは相手の方（左）へ飛ぶ
+    const b = sceneAt(o, h.ts + 90).items.filter(it => it.t === 'hdrop')
+    assert.ok(b.length >= 8 * h.ns, `${k}：しぶき`)
+    assert.ok(b.filter(it => it.x < 0).length > b.length * 0.7, `${k}：しぶきは相手の方へ`)
+    assert.equal(new Set(b.map(it => it.hi)).size, h.ns)
+    assert.equal(sceneAt(o, h.ts + HAND_BURST_MS + 5).items.filter(it => it.t === 'hdrop').length, 0)
+  }
+  // 水天葬の水の筋は両腕から
+  assert.equal(ms.deluge.arcs.length, 2)
 })

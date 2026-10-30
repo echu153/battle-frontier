@@ -375,7 +375,9 @@ export const BOSS_ILLUST_DEFS = {
       ], art: [[0, null], [140, 'windup'], [400, 'strike'], [740, null]], ghosts: { fromMs: 400, toMs: 520, lagMs: 26, n: 3 },
       anchors: { windup: { hand: [240, 172] }, strike: { hand: [-20, 128] } },
       arcs: [{ kind: 'water', pts: [[240, 172], [170, 166], [95, 152], [30, 138], [-20, 128]], fromMs: 385, toMs: 420, fadeMs: 200 }],
-      shots: [{ at: 'hand', part: 'armN', pt: [54, 251], delayMs: 0, size: 1 }] },
+      shots: [{ at: 'hand', part: 'armN', pt: [54, 251], delayMs: 0, size: 1 }],
+      // 構えの手に水が集まり、振り抜きの手ではじける（手の光と粒だけ・lib/bossScene.js の 'hands'）
+      scene: { kind: 'hands', hand: { pt: [54, 251], part: 'armN' } } },
       // 氷雨：天を仰いで右腕を真上に掲げ（水天葬と同じ構えの絵）、止めずにそのまま相手の方へ振り下ろす＝相手の頭上に雨雲（飛ぶ絵は無い）
       //   【確定】2026-10-29 ユーザー「氷雨も手上げるモーションで出すようにして、ためは不要」：胸元でためるのをやめ、掲げきったらすぐ振り下ろす
       sleet: { totalMs: 1150, hitMs: 340, keys: [
@@ -387,7 +389,8 @@ export const BOSS_ILLUST_DEFS = {
         [1150, {}],
       ], art: [[0, null], [60, 'windup'], [300, 'strike'], [700, null]], ghosts: { fromMs: 300, toMs: 420, lagMs: 26, n: 3 },
       anchors: { windup: { hand: [140, -30] }, strike: { hand: [12, 243] } },
-      arcs: [{ kind: 'water', pts: [[140, -30], [85, 25], [45, 100], [22, 175], [12, 243]], fromMs: 265, toMs: 340, fadeMs: 240 }] },
+      arcs: [{ kind: 'water', pts: [[140, -30], [85, 25], [45, 100], [22, 175], [12, 243]], fromMs: 265, toMs: 340, fadeMs: 240 }],
+      scene: { kind: 'hands', hand: { pt: [54, 251], part: 'armN' } } },
       // 水縛の帯：身を引いて（水の帯も大きく振れる）右手を胸元へ、長めにためてから突き出すように払う＝帯が指先から相手へ
       bind: { totalMs: 1250, hitMs: 520, keys: [
         [0, {}],
@@ -417,8 +420,12 @@ export const BOSS_ILLUST_DEFS = {
         [2500, {}],
       ], art: [[0, 'windup'], [1560, 'strike'], [2100, null]], ghosts: { fromMs: 1560, toMs: 1700, lagMs: 28, n: 3 },
       //   構えの5秒も構えの絵（cast.art）＝技のはじめから構えの絵のまま
-      anchors: { windup: { hand: [200, 0] }, strike: { hand: [20, 280] } },
-      arcs: [{ kind: 'water', pts: [[200, 0], [150, 60], [95, 145], [45, 225], [20, 280]], fromMs: 1525, toMs: 1600, fadeMs: 260 }],
+      //   両手（hand2＝もう片方の手）：手の光は両手に・水の筋も両手から
+      anchors: { windup: { hand: [200, 0], hand2: [510, 20] }, strike: { hand: [20, 280], hand2: [85, 312] } },
+      arcs: [
+        { kind: 'water', pts: [[200, 0], [150, 60], [95, 145], [45, 225], [20, 280]], fromMs: 1525, toMs: 1600, fadeMs: 260 },
+        { kind: 'water', pts: [[510, 20], [430, 85], [320, 170], [190, 250], [85, 312]], fromMs: 1525, toMs: 1600, fadeMs: 260 },
+      ],
       charge: { kind: 'charge', fromMs: 0, toMs: 1600, holdMs: 700 },
       // 【確定】2026-10-29 ユーザー「水天葬だったらほんとに滝が叩きつけてるようなエフェクトにしてほしい、派手に」：
       //   画面が暗くなり、雲の渦が回って手に光が集まり、振り下ろすと滝が落ちて叩きつける（光る・揺れる・しぶき・波紋・もや）＝lib/bossScene.js
