@@ -7,7 +7,7 @@ import { JP_BOLD } from './casinoStyle.js'
 import { rubySegmentsOf } from '../lib/skillRuby.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
 import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, rigLayersOf, artAnchorAt, illustCastShowAt, illustBuffShowAt, buffSceneAt, buffAfterAt, buffRainAt } from '../lib/bossIllust.js'
-import { bgRectOf, bgFxAt } from '../lib/bossBg.js'
+import { behindRectOf, bgRectOf, bgFxAt } from '../lib/bossBg.js'
 import BossFlowCanvas from './BossFlowCanvas.jsx'
 import { FX_HEAD_Y, FX_FEET_Y, FX_SKY_Y, FX_TARGET_Y, SCENE_TOP, fallAt, coilAt, pourTimesOf, sceneEndMsOf, stageSceneOf, flyPosOf } from '../lib/bossScene.js'
 
@@ -415,7 +415,7 @@ const buffAfterOf = (art, me, marks, now) => {
   const sinceOf = (nm) => { const f = marks.reduce((p, f) => (f.kind === 'rage' && f.skill === nm && f.t0 <= now && (!p || f.t0 >= p.t0) ? f : p), null); return f ? (now - f.t0) * 1000 : Infinity }
   return buffAfterAt(hpBuffChips(me).map(c => ({ b: art.buffs[c.name], since: sinceOf(c.name) })), now * 1000)
 }
-function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx, now, name, flex = '1 1 0', artH = ART_H, scale = 1, areaRef, castEnd = -1e9, squeeze = null, bossGlow = 0 }) {
+function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx, now, name, flex = '1 1 0', artH = ART_H, scale = 1, areaRef, castEnd = -1e9, squeeze = null, bossGlow = 0, rim = null }) {
   const mine = fx.filter(f => f.side === side)
   const lastOf = (kind) => mine.reduce((t, f) => (f.kind === kind && f.t0 <= now && f.t0 > t ? f.t0 : t), -1e9)
   const dir = right ? -1 : 1   // 前＝相手の方
@@ -455,6 +455,8 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   const glowAgo = now - lastOf('use')
   const rageAgo = now - lastOf('rage')
   const filters = []
+  // 体の縁の光（背景に溶けこむボス・lib/bossBg.js の rim）
+  if (rim) filters.push(rim)
   if (hitAgo >= 0 && hitAgo < HIT_SEC) filters.push('drop-shadow(0 0 6px #ff3344) brightness(1.25)')
   if (glowAgo >= 0 && glowAgo < GLOW_SEC) filters.push('drop-shadow(0 0 10px #ffee88) brightness(1.3)')
   if (buff) {
@@ -880,6 +882,16 @@ const BgRing = ({ ring, x, y, tMs }) => {
     </g>
   )
 }
+// ボスの後ろの色を抑える（lib/bossBg.js の behind）：色を抜く層と、薄い煙の層。box＝ボスの絵の枠
+const BgBehind = ({ behind, box }) => {
+  const r = behindRectOf(behind, box), at = { position:'absolute', left: r.x, top: r.y, width: r.w, height: r.h }
+  return (
+    <>
+      <div style={{ ...at, mixBlendMode:'saturation', background:`radial-gradient(closest-side, rgba(128,128,128,${behind.sat}) 55%, rgba(128,128,128,0) 100%)` }} />
+      <div style={{ ...at, background:`radial-gradient(closest-side, rgba(${behind.hazeColor},${behind.haze}) 45%, rgba(${behind.hazeColor},0) 100%)` }} />
+    </>
+  )
+}
 // ダンジョンのボス戦の背景（lib/bossBg.js）。舞台の絵の所（上のはしから足元の少し下まで）にだけ敷く。下のはしはぼかして、HPの行の色（bg.under）へつなぐ。
 //   ★舞台は isolation:isolate で、これは z-index:-1＝舞台の地の色より上・ほかの中身より下。舞台の boxShadow（技の暗転）はこれの下になるので、暗さはここにも掛ける（dim）
 //   動くものは絵と同じ大きさの SVG（viewBox＝元の絵の px）に、明るく重ねる（screen）。上のはしは名前が読めるように少し暗く
@@ -896,6 +908,7 @@ function BossBackground({ bg, geo, now, dim }) {
     <div style={{ position:'absolute', left: 0, right: 0, top: 0, height: H, zIndex: -1, overflow:'hidden', pointerEvents:'none', maskImage: mask, WebkitMaskImage: mask }}>
       <img src={bg.src} alt="" draggable={false} decoding="sync" style={{ position:'absolute', left: r.x, top: r.y, width: r.w, height: r.h, maxWidth:'none', userSelect:'none' }} />
       {bg.flow && bg.flowSrc && <BossFlowCanvas bg={bg} rect={r} tMs={now * 1000} />}
+      {bg.behind && <BgBehind behind={bg.behind} box={geo.b} />}
       <svg viewBox={`0 0 ${bg.w} ${bg.h}`} preserveAspectRatio="none" style={{ position:'absolute', left: r.x, top: r.y, width: r.w, height: r.h, overflow:'hidden', mixBlendMode:'screen' }}>
         <defs>
           {colors.map((c, i) => (
@@ -911,13 +924,6 @@ function BossBackground({ bg, geo, now, dim }) {
         {fx.embers.map((e, i) => <circle key={`e${i}`} cx={e.x} cy={e.y} r={e.r * 2.4} fill={`url(#${grad(e.color)})`} opacity={e.op.toFixed(3)} />)}
         {fx.spatter.map((e, i) => <circle key={`s${i}`} cx={e.x} cy={e.y} r={e.r * 2} fill={`url(#${grad(e.color)})`} opacity={e.op.toFixed(3)} />)}
         {fx.motes.map((e, i) => <circle key={`t${i}`} cx={e.x} cy={e.y} r={e.r * 2.6} fill={`url(#${grad(e.color)})`} opacity={Math.max(0, e.op).toFixed(3)} />)}
-        {fx.orbs.map((o, i) => (
-          <g key={`o${i}`}>
-            <circle cx={o.x} cy={o.y} r={o.r * 1.7} fill="rgb(120,200,255)" opacity={(0.12 * o.shine).toFixed(3)} />
-            <circle cx={o.x} cy={o.y} r={o.r} fill="rgb(70,140,210)" opacity="0.26" stroke="rgb(190,235,255)" strokeWidth="2" strokeOpacity={(0.75 * o.shine).toFixed(3)} />
-            <ellipse cx={o.x - o.r * 0.32} cy={o.y - o.r * 0.38} rx={o.r * 0.26} ry={o.r * 0.16} fill="rgb(235,250,255)" opacity={(0.8 * o.shine).toFixed(3)} />
-          </g>
-        ))}
       </svg>
       <div style={{ position:'absolute', inset: 0, background:`linear-gradient(to bottom, rgba(0,0,0,0.5) 0, rgba(0,0,0,0) 46px), rgba(0,0,0,${bg.dark})` }} />
       {dim && <div style={{ position:'absolute', inset: 0, background:`rgba(${dim.c},${dim.k.toFixed(3)})` }} />}
@@ -1039,7 +1045,7 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
         artH={size?.artH || ART_H} scale={playerScale} areaRef={pArea} squeeze={sc?.squeeze} />
       <Fighter st={st} side="b" me={st.b} right src={foeSrc} fx={fx} now={now} name={st.b.name}
         strips={foeArt?.kind === 'pixel' ? Object.values(foeArt.motions) : []} rig={foeArt?.kind === 'illust' ? foeArt : null}
-        flex={size?.flex} artH={size?.artH || ART_H} areaRef={bArea} castEnd={castSeen.current} bossGlow={sc?.bossGlow || 0} />
+        flex={size?.flex} artH={size?.artH || ART_H} areaRef={bArea} castEnd={castSeen.current} bossGlow={sc?.bossGlow || 0} rim={foeArt?.bg?.rim} />
       {sc?.beam && geo && sc.handsAt && <DoomBeam geo={geo} beam={sc.beam} hand={[geo.b.x + sc.handsAt[0][0] * (geo.b.w / foeArt.base), geo.b.y + sc.handsAt[0][1] * (geo.b.w / foeArt.base)]} />}
       {foeArt && <BossFx fx={fxAll} now={now} geo={geo} art={foeArt} cast={cast} castEnd={castSeen.current} scene={sc} />}
       {sc && geo && <SceneLayer geo={geo} sc={sc} hands={sc.handsAt ? sc.handsAt.map(p => [geo.b.x + p[0] * (geo.b.w / foeArt.base), geo.b.y + p[1] * (geo.b.w / foeArt.base)]) : null} s={geo.b.w / foeArt.base} />}

@@ -1,7 +1,7 @@
 // ============================================================
 // v2cap のダンジョンのボス戦の背景を、画面で使う形にする（決まりは src/v2cap/lib/bossBg.js）
 // ------------------------------------------------------------
-// 元の絵（ユーザーが置く・git に入れない）：public/エネミー/IDダンジョン/<フォルダ>/背景.png（横3：縦2・透明なし）
+// 元の絵（ユーザーが置く・git に入れない）：public/エネミー/IDダンジョン/<フォルダ>/背景.png（横3：縦2・透明なし）。別の名前で描き直したら lib/bossBg.js の source に書く（前の絵は置いたまま）
 // 作るもの：
 //   public/v2cap-art/boss/<key>-bg.webp      … 幅 WIDTH まで縮めた WebP
 //   public/v2cap-art/boss/<key>-bg-flow.webp … 流れ図（lib/bossBg.js の flow があるボス）。R・G＝流れる向き（0.5 が止まる）・B＝動かす強さ（絵の色から溶岩を選ぶ）
@@ -17,7 +17,7 @@ import { versionOf } from './v2cap-art-lib.mjs'
 import { BOSS_DEFS, BOSS_ART_SRC_DIR, BOSS_ART_DIR, bossFileOf } from '../src/v2cap/lib/bossArt.js'
 import { ENEMY_ART_SRC_DIR } from '../src/v2cap/lib/enemyArt.js'
 import { BOSS_BG } from '../src/v2cap/lib/bossBgList.js'
-import { BOSS_BG_DEFS, flowAt, lavaOf } from '../src/v2cap/lib/bossBg.js'
+import { BOSS_BG_DEFS, flowAt, flowPickOf } from '../src/v2cap/lib/bossBg.js'
 import { readRgba } from './v2cap-motion.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -42,7 +42,7 @@ const flowMapOf = (P, flow) => {
     const q = Math.floor((y / P.H) * FH) * FW + Math.floor((x / P.W) * FW)
     cnt[q] += 1
     if (!a) continue
-    const i = (y * P.W + x) * 4, v = lavaOf(a.pick, P.data[i], P.data[i + 1], P.data[i + 2]) * a.gain
+    const i = (y * P.W + x) * 4, v = flowPickOf(a.pick, P.data[i], P.data[i + 1], P.data[i + 2]) * a.gain
     sum[q] += v
     if (v > max[q]) max[q] = v
   }
@@ -68,9 +68,9 @@ const flowMapOf = (P, flow) => {
 
 const all = JSON.parse(JSON.stringify(BOSS_BG))
 for (const [key, def] of Object.entries(BOSS_DEFS)) {
-  const src = path.join(SRC, def.dir, '背景.png'), out = path.join(OUT, bossFileOf(key, 'bg'))
-  if (!existsSync(src)) { console.log(`  - ${def.name}：背景.png が無い`); continue }
-  const bgDef = BOSS_BG_DEFS[key], flowOut = path.join(OUT, bossFileOf(key, 'bg-flow'))
+  const bgDef = BOSS_BG_DEFS[key], source = bgDef?.source || '背景.png'
+  const src = path.join(SRC, def.dir, source), out = path.join(OUT, bossFileOf(key, 'bg')), flowOut = path.join(OUT, bossFileOf(key, 'bg-flow'))
+  if (!existsSync(src)) { console.log(`  - ${def.name}：${source} が無い`); continue }
   if (!FORCE && existsSync(out) && statSync(out).mtimeMs >= statSync(src).mtimeMs && all[key] && (!bgDef?.flow || existsSync(flowOut))) continue
   mkdirSync(OUT, { recursive: true })
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', src, '-vf', `scale=${WIDTH}:-2:flags=lanczos`, '-c:v', 'libwebp', '-quality', String(QUALITY), '-compression_level', '6', out])
