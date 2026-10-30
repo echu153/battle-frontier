@@ -103,7 +103,7 @@ test('【確定】2026-10-24 図鑑でタップしたときの大きい版：一
 })
 
 test('【確定】2026-10-13 安息の祠のハピネスフェアリー：エリアの一覧（15×20体）には入れず、絵は特別なモンスターとして持つ', () => {
-  assert.deepEqual(SPECIAL_ENEMY_NAMES, ['ハピネスフェアリー'])
+  assert.deepEqual(SPECIAL_ENEMY_NAMES, ['ハピネスフェアリー', 'ちびパピア', 'パピア', 'キングパピア'])   // パピアは 2026-10-30
   for (const n of SPECIAL_ENEMY_NAMES) assert.ok(!ENEMY_NAMES.includes(n), `${n} はエリアの敵ではない`)
   // 比べ方をそろえても、エリアの敵と重ならない（ファイル名から1体に決められる）
   assert.equal(new Set(ART_NAMES.map(normalizeArtName)).size, ART_NAMES.length)

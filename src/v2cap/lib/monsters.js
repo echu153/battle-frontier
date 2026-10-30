@@ -20,6 +20,7 @@
 //   同じ敵が②と③に出るのは場所違いなのでよい）
 // ============================================================
 import { AREAS_SORTED, ENEMY_SKILLS as V2_SKILLS } from '../core/enemies.js'
+import { PAPIA_TIERS } from './papia.js'
 
 // ===== 敵の技 =====
 // 今のⅡの技（src/v2cap/core/enemies.js）を土台に、この版だけの状態異常を足したもの。
@@ -632,4 +633,5 @@ export const ROSTERS = Object.fromEntries(AREA_ROSTERS.flatMap((_, k) => [1, 2, 
 //   LVはその場所のふつうの敵でいちばん高いLV（朝昼晩の敵と同じ決め方）。配分は魔法・守りは薄め。技はきらきらした魔法1つだけ
 //   ★名前は全エリアの敵と重ならないこと（絵のファイル名・サーバーの判定が名前で決まる）
 export const SHRINE_FAIRY = mk('ハピネスフェアリー', 'mag', { hp:30, mp:10, str:3, dex:12, agi:10, int_stat:26, vit:6, luk:3 }, [S.ほしくず])
-export const SPECIAL_ENEMIES = [SHRINE_FAIRY]
+// 【確定】2026-10-30 ユーザー指示「V1にいたパピアを実装したい、エリアによって出るパピアが異なる」：決まりと数字は papia.js。攻撃しないので技は無い
+export const SPECIAL_ENEMIES = [SHRINE_FAIRY, ...PAPIA_TIERS.map(t => mk(t.name, 'phys', { hp:100 }, []))]

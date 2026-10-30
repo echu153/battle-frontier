@@ -28,14 +28,14 @@ test('全部のモンスター（15エリア×20体＋祠のハピネスフェ�
   assert.equal(listed.length, new Set(listed).size, '同じモンスターを2つの種族に書いていない')
   for (const n of ALL_NAMES) assert.ok(RACE_BY_KEY[raceOf(n)], `${n} に種族がある`)
   for (const n of listed) assert.ok(ALL_NAMES.includes(n), `${n} はモンスターの一覧にいる（名前を変えたら名簿も直す）`)
-  assert.equal(listed.length, 301)
+  assert.equal(listed.length, 304)   // 2026-10-30 パピア3体を足した
   assert.equal(raceOf('いないモンスター'), null)
   assert.equal(raceDefOf('いないモンスター'), null)
 })
 
 test('【確定】案のシートでユーザーが確かめた数と直し', () => {
   const count = Object.fromEntries(RACES.map(r => [r.label, RACE_NAMES[r.key].length]))
-  assert.deepEqual(count, { 人間: 14, 亜人: 29, ドラゴン: 30, 妖精: 21, アンデッド: 23, 悪魔: 14, 天使: 7, 獣: 53, 海洋: 23, 昆虫: 21, 魔物: 66 })
+  assert.deepEqual(count, { 人間: 14, 亜人: 29, ドラゴン: 30, 妖精: 21, アンデッド: 23, 悪魔: 14, 天使: 7, 獣: 56, 海洋: 23, 昆虫: 21, 魔物: 66 })
   // ユーザーの直し「雪男：獣→亜人／大司書ノクトゥア：獣→魔物」「カエルとか蛇、カメとか（は魔物）　トカゲはドラゴンでもよさそう」
   assert.equal(raceOf('雪男'), 'demihuman')
   assert.equal(raceOf('イエティロード'), 'demihuman', '雪男の上位も合わせる')

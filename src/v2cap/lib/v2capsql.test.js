@@ -14,6 +14,7 @@ import { SLOTS, RARITIES, ALL_RARITIES, STARTER_AREA, UNIQUE_ITEMS, UNIQUE_DROP_
 import { SORTIE_CD, DROP_RARITY, CHEST_PCT, CHEST_SCRAP } from './sortie.js'
 import { SORTIE_CD_SLACK } from './cooldown.js'
 import { SHRINE_FAIRY_NAME, SHRINE_PCT, SHRINE_FIGHTS, SHRINE_EXP_TENTHS, SHRINE_GOLD_TENTHS } from './shrine.js'
+import { PAPIA_TIERS } from './papia.js'
 import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV, scrapAreaOf, enhanceScrapOf, ENHANCE_GOLD_ONLY_RARITY } from './smith.js'
 import { DAILY_SORTIES, DAILY_GOLD_PER_LV, DAY_RESET_HOUR, DAILY_TASK_KEYS, GUARD_DONE_KEY } from './daily.js'
 import { FOLD_KEYS } from './uiPrefs.js'
@@ -570,12 +571,28 @@ test('【確定】モンスター図鑑：討伐数は勝ったときだけサ�
   const settle = fnBody('v2cap_sortie_settle')
   const win = settle.match(/if v_win then\s+perform public\.v2cap_daily_bump\(v_uid, 'win', 1\);([\s\S]*?)end if;/)
   assert.ok(win, '勝ったときの枝')
-  assert.ok(win[1].includes('insert into public.v2cap_kills (player_id, enemy, n) values (v_uid, case when v_shrine then c_shrine_fairy else v_en.name end, 1)'))
+  assert.ok(win[1].includes('insert into public.v2cap_kills (player_id, enemy, n) values (v_uid, case when v_shrine or v_papia then p_enemy else v_en.name end, 1)'))
   // ★2026-10-24 から足したあとの数を受け取る（初めて倒した敵なら図鑑の報酬を数え直す・§15）
   assert.ok(win[1].includes('on conflict (player_id, enemy) do update set n = public.v2cap_kills.n + 1\n    returning n into v_kn;'))
   assert.equal((SQL.match(/insert into public\.v2cap_kills/g) || []).length, 1, '数えるのは出撃の精算だけ')
   // 作り直すと図鑑も空になる
   assert.ok(fnBody('v2cap_dev_reset').includes('delete from public.v2cap_kills where player_id = auth.uid();'))
+})
+
+test('【確定】パピア（2026-10-30）：エリアと名前と経験値の倍率がJSと同じ。Goldと装備と宝箱なし・逃げられたらふつうの負けと同じ', () => {
+  const settle = fnBody('v2cap_sortie_settle')
+  for (const t of PAPIA_TIERS) {
+    assert.ok(settle.includes(`when p_enemy = '${t.name}' and v_spot.area between ${t.areas[0]} and ${t.areas[1]} then ${t.tenths}`), t.name)
+  }
+  // 敵の表にいないので、パピアのときは敵の表を見ない
+  assert.ok(settle.includes('elsif not v_papia then\n    select * into v_en from public.v2cap_enemies where name = p_enemy and spot = p_spot;'))
+  // 経験値だけ：装備と宝箱を見るのはパピアの枝のあと（elsif v_win）の中だけ。Goldは入れない
+  const a = settle.indexOf('elsif v_win and v_papia then'), b = settle.indexOf('elsif v_win then'), c = settle.indexOf('if p_drop is not null then')
+  assert.ok(a > 0 && a < b && b < c, 'パピアの勝ちの枝に装備の判定が無い')
+  const branch = settle.slice(a, b)
+  assert.ok(branch.includes('v_exp := ((v_spot.exp_min + floor(random() * (v_spot.exp_max - v_spot.exp_min + 1))::int) * v_ptenths + 5) / 10;'))
+  assert.ok(!branch.includes('v_gold'), 'Goldは入らない')
+  assert.ok(settle.includes("'role', case when v_shrine then 'shrine' when v_papia then 'papia' else v_en.role end"))
 })
 
 test('【確定】安息の祠（2026-10-13）：見つかる確率・戦闘の数・経験値とGoldの倍率がJSと同じ。祠の中だけハピネスフェアリー・装備なし・最深部でスタミナ全回復', () => {
@@ -586,7 +603,7 @@ test('【確定】安息の祠（2026-10-13）：見つかる確率・戦闘の�
   assert.ok(settle.includes(`c_shrine_exp   constant int := ${SHRINE_EXP_TENTHS};`) && settle.includes(`c_shrine_gold  constant int := ${SHRINE_GOLD_TENTHS};`), '経験値×5・Goldはふつう')
   // 祠の中の戦闘は、祠のある場所で残りがあるときだけ（敵の表は見ない）
   assert.ok(settle.includes('if coalesce(v_row.shrine_left, 0) <= 0 or v_row.shrine_spot is distinct from p_spot then'))
-  assert.ok(settle.includes("v_boss := not v_shrine and v_en.role = 'boss';"))
+  assert.ok(settle.includes("v_boss := not v_shrine and not v_papia and v_en.role = 'boss';"))
   // 経験値とGold：表の値（範囲の中の整数を均等に1つ）× 倍率 を四捨五入（JSの rollShrineRewards と同じ）
   assert.ok(settle.includes('v_exp  := ((v_spot.exp_min  + floor(random() * (v_spot.exp_max  - v_spot.exp_min  + 1))::int) * c_shrine_exp + 5) / 10;'))
   assert.ok(settle.includes('v_gold := ((v_spot.gold_min + floor(random() * (v_spot.gold_max - v_spot.gold_min + 1))::int) * c_shrine_gold + 5) / 10;'))

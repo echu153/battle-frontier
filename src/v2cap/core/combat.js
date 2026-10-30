@@ -119,6 +119,8 @@ export const capEvaOf = (base) => (base <= CAP_EVA.knee ? base : CAP_EVA.knee + 
 //   （2026-10-17 ユーザー「回避力が直接上がるやつ、最高でも15％にして、40％とかだと強すぎる」）。今のⅡは今のまま
 export const CAP_EVA_BONUS_MAX = 15
 export const evasionRate = (attacker, defender, hitBonus = 0, evaBonus = 0, defRule = null) => {
+  // ★パピア（src/v2cap/lib/papia.js）：ステに関係なく evaBonus がそのまま回避率。命中の補正のぶんだけ当てやすくなる
+  if (defRule === 'papia') return clampPct(evaBonus - hitBonus, 0, EVA_RATE_MAX)
   const eva = Math.max(0, evasionScoreOf(defender))
   const dex = Math.max(1, attacker?.dex || 0)
   const raw = EVA_COEF * Math.pow(eva / (eva + dex), EVA_CURVE)

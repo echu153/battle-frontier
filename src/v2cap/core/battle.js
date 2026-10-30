@@ -49,6 +49,7 @@ import {
 
 export const NORMAL_ATTACK_MULT = 1.0 // 通常攻撃の倍率（消費MP0）
 export const MAX_TURNS = 100          // これを超えたら引き分け
+const PAPIA_IMMUNE_TURNS = MAX_TURNS  // パピアの状態異常・能力低下の無効（戦闘の終わりまで切れない長さ）
 
 // 職業の攻撃型。攻撃スキルの種別から決める（通常攻撃がSTR参照かINT参照か）
 export const attackKindOf = (cls) => {
@@ -264,8 +265,8 @@ export const fxOf = (side, start = {}) => {
   if (side.shield > 0) buff.shield = { v: Math.floor(side.shield) }
   const cut = incomingCut(side)
   if (cut > 0) buff.cut = { v: Math.round(cut), t: Math.max(0, ...(side.guardsT || []).map(g => g.turns)) }
-  if (side.ailImmune > 0) buff.ailImmune = { t: side.ailImmune }
-  if (side.debuffImmune > 0) buff.debuffImmune = { t: side.debuffImmune }
+  if (side.ailImmune > 0 && !side.papia) buff.ailImmune = { t: side.ailImmune }
+  if (side.debuffImmune > 0 && !side.papia) buff.debuffImmune = { t: side.debuffImmune }
   if (side.lifeSteal?.turns > 0) buff.drain = { v: Math.round(side.lifeSteal.pct || 0), t: side.lifeSteal.turns }
   return { st, ail, buff }
 }
@@ -374,6 +375,13 @@ export const createSide = (fighter, band = null) => {
   initSet(side, fighter)                 // ★防具のセット能力（v2cap。setFx が無ければ何もしない）
   // ★v2cap の武器の真化「無傷で勝つ」の能力：戦闘のはじめに最大HPの%のバリア（initIchiji が 0 にしたあとで張る）
   if (evo.shieldStart > 0) side.shield = Math.max(side.shield || 0, Math.floor(stats.hp * evo.shieldStart / 100))
+  // ★パピア（src/v2cap/lib/papia.js）：回避率は eva そのまま・状態異常と能力低下は効かない（initIchiji が 0 にしたあとで立てる）
+  if (fighter.papia) {
+    side.papia = fighter.papia
+    side.pa = { ...side.pa, evaBonus: fighter.papia.eva }
+    side.ailImmune = PAPIA_IMMUNE_TURNS
+    side.debuffImmune = PAPIA_IMMUNE_TURNS
+  }
   return side
 }
 
@@ -437,8 +445,14 @@ const rememberSkill = (side, skillName) => {
 // 受けるとき側の軽減。骸の壁（1回きり）と竜鱗の加護（確率）はここでまとめて掛ける
 // me は攻撃した側（跳ね返しの戻り先）。kind は 'phys' | 'mag'
 // pre … 防御で減る前のダメージ（v2cap の聖騎士の聖光が「防御や軽減で減らしたぶん」を数える）。無ければ dmg
-const applyIncoming = (me, foe, dmg, kind, rng, log, pre = null) => {
+const applyIncoming = (me, foe, dmg, kind, rng, log, pre = null, hits = 1) => {
   if (dmg <= 0) return 0
+  // ★パピア（src/v2cap/lib/papia.js）：どんな攻撃も1発につき1ダメージ（hits＝当たった数）。軽減と受けた側の反応は通らない
+  if (foe.papia) {
+    const n = Math.min(foe.hp, Math.max(1, hits))
+    foe.hp -= n
+    return n
+  }
   let d = dmg
   // 衰弱：撃つ側が弱っていると、与えるダメージが減る（物理も魔法もまとめて）
   d *= ailDealMult(me.ail)
@@ -1080,6 +1094,12 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   me.ctx = { dodged: me.justDodged, hurt: me.justHurt }
   me.justDodged = false
   me.justHurt = false
+  // ★パピア（src/v2cap/lib/papia.js）：攻撃しない。ターンごとの行を出し、決まった回数で逃げる
+  if (me.papia) {
+    log.push({ side: me.name, type: 'papiaAct', text: me.papia.lines[Math.min(me.moves, me.papia.lines.length) - 1] })
+    if (me.moves >= me.papia.turns) me.fled = true
+    return
+  }
   // ★上位職：フルバーストの反動（このターンは動けない）
   if (me.stunned > 0) {
     me.stunned -= 1
@@ -1399,7 +1419,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       const afterHurt = []
       // ★ユニーク：天罰の剛甲が「スキルで攻撃されたか」を見る（applyIncoming の間だけ立てる）
       me.curAtk = 'skill'
-      const dmg = applyIncoming(me, foe, raw, skill.kind, rng, afterHurt, wantPre ? Math.floor(raw * preScale) : null)
+      const dmg = applyIncoming(me, foe, raw, skill.kind, rng, afterHurt, wantPre ? Math.floor(raw * preScale) : null, hits)
       me.curAtk = null
       // ★先に「撃った」行を置く（状態異常やスタックの行より前に出す）。吸収の額は後で埋める
       const entry = { side: me.name, type: 'skill', skill: skill.name, kind: skill.kind,
@@ -1686,7 +1706,7 @@ const strike = (me, foe, { mult, kind = 'phys', label, hits = 1, atkStat = null,
     if (r.hit && r.crit) crit = true
   }
   const after = []
-  const dmg = hit > 0 ? applyIncoming(me, foe, raw, kind, rng, after, wantPre ? rawPre : null) : 0
+  const dmg = hit > 0 ? applyIncoming(me, foe, raw, kind, rng, after, wantPre ? rawPre : null, hit) : 0
   log.push({ side: me.name, type: 'strike', label, damage: dmg, hit: hit > 0, crit })
   for (const l of mirageLog) log.push(l)
   for (const l of after) log.push(l)
@@ -2080,7 +2100,7 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
     // 武器の進化「先手必勝」：確率でそのターンの先攻を取る（両方が引いたら通常どおり）
     const fA = a.evo.first > 0 && roll(a.evo.first, rng)
     const fB = b.evo.first > 0 && roll(b.evo.first, rng)
-    const aFirst = fA !== fB ? fA : goesFirst(eA, eB, pA, pB, rng)
+    const aFirst = b.papia ? true : fA !== fB ? fA : goesFirst(eA, eB, pA, pB, rng)   // パピアにはいつもこちらが先
     const order = aFirst ? [[a, b], [b, a]] : [[b, a], [a, b]]
 
     for (const [me, foe] of order) {
@@ -2093,7 +2113,7 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
       const ef = liveStats(foe)
       // 武器の進化「疾風の足」ぶんは追加行動率へ素直に足す
       // ★上位職：跳躍中・反動で動けないときは出ない／刻の加護（AGIが相手より高いと確率で）
-      if (!me.bigGuard && !me.jumping && !(me.stunned > 0) && (rollExtraAction(em, ef, rng) || (me.evo.extra > 0 && roll(me.evo.extra, rng))
+      if (!me.papia && !me.bigGuard && !me.jumping && !(me.stunned > 0) && (rollExtraAction(em, ef, rng) || (me.evo.extra > 0 && roll(me.evo.extra, rng))
         || (me.pa.ex?.extraIfFaster && em.agi > ef.agi && roll(me.pa.ex.extraIfFaster, rng)))) {
         log.push({ side: me.name, type: 'extra' })
         me.extraActs = (me.extraActs || 0) + 1   // ★上位クラス（2026-10-15）：パラドックスが見る
@@ -2102,7 +2122,7 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
       }
     }
 
-    if (a.hp <= 0 || b.hp <= 0) break
+    if (a.hp <= 0 || b.hp <= 0 || b.fled) break   // b.fled＝パピアが逃げた
     if (endOfTurn(a, b, turn, rng, log)) break
     // 画面でHPバーを出すための、ターン終わりのスナップショット（戦闘の結果には影響しない）。aFx・bFx はかかっている効果（fxOf）
     log.push({ type:'hp', turn, a: Math.max(0, a.hp), aMax: a.base.hp, b: Math.max(0, b.hp), bMax: b.base.hp, ...fxNow() })
@@ -2111,5 +2131,5 @@ export const runBattle = (fighterA, fighterB, { rng = Math.random, maxTurns = MA
   // 決着した時点のHPも1件出す（倒したときに 0 のバーが出るように。旧版と同じ）
   log.push({ type:'hp', turn: Math.min(turn, maxTurns), a: Math.max(0, a.hp), aMax: a.base.hp, b: Math.max(0, b.hp), bMax: b.base.hp, ...fxNow() })
   const winner = a.hp <= 0 && b.hp <= 0 ? 'draw' : a.hp <= 0 ? 'b' : b.hp <= 0 ? 'a' : 'draw'
-  return { winner, turns: Math.min(turn, maxTurns), log, a, b, fx0 }
+  return { winner, turns: Math.min(turn, maxTurns), log, a, b, fx0, fled: !!b.fled }
 }

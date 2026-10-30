@@ -65,6 +65,7 @@ const ROLE_LINE = {
   timed: (foe, lv) => ({ text:`${foe}（LV${lv}）が現れた！`, color:'#aaddff' }),
   normal: (foe, lv) => ({ text:`${foe}（LV${lv}）が現れた！`, color:'#88ccff' }),
   shrine: (foe, lv) => ({ text:`${foe}（LV${lv}）が現れた！`, color:'#ffb8e8' }),
+  papia: (foe) => ({ text:`🌟 ${foe}が現れた！`, color:'#ffcc00' }),   // ★パピアのLVは飾りになるので出さない（papia.js）
 }
 // ログを自動で一番下へ送るか（この端末で覚えておく。読めない・書けないときはオンのまま動く）
 // 右下の出撃ボタンを出すか（この端末で覚えておく・最初は出す）
@@ -171,9 +172,9 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       out.push({ kind:'act', who:'foe', appear: true, lines: [ROLE_LINE[enc.role](foe, enc.lv)] })
       out.push(...buildCapBattleView(r, you, foe))
       // ★勝ち負けの行は大きく出す（big・V2capLogLine。2026-10-10 ユーザー指示「倒した時のテロップ、わかりやすいように他よりも大きく」）
-      out.push(win
-        ? { text:`${foe}を倒した！`, color:'#ffcc00', big: true }
-        : { text:'敗北…', color:'#ff4444', big: true })
+      // ★パピアに逃げられたときは、逃げた行で終わる（敗北とは出さない・papia.js）
+      if (win) out.push({ text:`${foe}を倒した！`, color:'#ffcc00', big: true })
+      else if (!r.fled) out.push({ text:'敗北…', color:'#ff4444', big: true })
       setLogs(out)
 
       // ★1戦ごとにその場で反映する。EXP・Gold・アイテムLVはサーバーが場所の表から決める

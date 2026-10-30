@@ -5,6 +5,7 @@
 //   ・場所（15エリア×①②③＝45か所）を1本道で進む。**その場所のボスを倒すと次の場所が開く**
 //   ・10秒に1回。ボスは1戦ごとに+0.3%ずつ出やすくなり、出会うと0へ戻る（今のⅡと同じ）
 //   ・ボスでなければ 通常70%・時間限定（その時間帯の敵）25%・レア5%（2026-10-25・下の ENCOUNTER_PCT）
+//   ・ボスの抽選のあと、1%でパピア（2026-10-30・papia.js。残りを 70/25/5 で分ける）
 //   ・経験値とGoldは場所の表の値 × 役割の倍率（朝昼晩1.5倍・レア3倍・ボス5倍）。決めるのはサーバー
 //   ・装備はそのエリアのものが落ちる。レア度（ノーマル・レア・エピック・レジェンダリー）は敵の役割と①②③で決まる
 //     （下の「落ちる装備」）。部位は1時間ごとに「落ちやすい部位」が入れ替わる（今のⅡと同じ）。アイテムLV＝装備の必要LV
@@ -15,6 +16,7 @@ import { spotOf, enemyLvOf, scaleByRole, LAST_SPOT } from './areas.js'
 import { itemOf, RARITIES, ARMOR_LINES, ACCESSORY_TYPES } from './equipment.js'
 import { weaponsOf } from './jobs.js'
 import { scrapNameOf } from './smith.js'
+import { PAPIA_PCT, PAPIA_ROLE, papiaEnemyOf, takePapiaForce } from './papia.js'
 import {
   rollBoss, nextBossRate, bandAt, rollDropPart,
   SORTIE_CD, BOSS_RATE_STEP,
@@ -41,7 +43,10 @@ export const pickEncounter = (spotId, bossRate, at = new Date(), rng = Math.rand
   const band = bandAt(at)
   const r = spot.roster
   const make = (enemy, role) => ({ spot, enemy, role, isBoss: role === 'boss', lv: enemyLvOf(enemy.name, spot.id), band })
+  if (takePapiaForce()) return make(papiaEnemyOf(spot), PAPIA_ROLE)   // 開発用（papia.js）
   if (rollBoss(bossRate, rng)) return make(r.boss, 'boss')
+  // ★パピア（2026-10-30・papia.js）：ボスでなければ1%。出ない残りを 70/25/5 で分ける
+  if (rng() * 100 < PAPIA_PCT) return make(papiaEnemyOf(spot), PAPIA_ROLE)
   const pools = {
     normal: r.enemies,
     timed: r.timed.filter(e => e.band === band),
@@ -62,9 +67,12 @@ export const pickEncounter = (spotId, bossRate, at = new Date(), rng = Math.rand
 // ★サーバーの v2cap_sortie_settle と同じ規則。これはシミュレーションと表示のための写しで、実際に入る値はサーバーが返す
 export const randIn = ([lo, hi], rng = Math.random) => lo + Math.floor(rng() * (hi - lo + 1))
 export const lossExpOf = (spot) => spot.exp[0]
-export const rollRewards = (enc, rng = Math.random, win = true) => (win
-  ? { exp: scaleByRole(randIn(enc.spot.exp, rng), enc.role), gold: scaleByRole(randIn(enc.spot.gold, rng), enc.role) }
-  : { exp: lossExpOf(enc.spot), gold: 0 })
+// ★パピアはEXPだけ（倍率は papia.js）。逃げられたら負けと同じ
+export const rollRewards = (enc, rng = Math.random, win = true) => {
+  if (!win) return { exp: lossExpOf(enc.spot), gold: 0 }
+  if (enc.role === PAPIA_ROLE) return { exp: Math.floor((randIn(enc.spot.exp, rng) * enc.enemy.papia.tenths + 5) / 10), gold: 0 }
+  return { exp: scaleByRole(randIn(enc.spot.exp, rng), enc.role), gold: scaleByRole(randIn(enc.spot.gold, rng), enc.role) }
+}
 // 画面に出す「この役割ならいくつ〜いくつ」
 export const rewardRangeOf = (spot, role = 'normal') => ({
   exp: spot.exp.map(v => scaleByRole(v, role)),
@@ -153,7 +161,8 @@ export const rollDropKind = (part, cls, rng = Math.random) => {
 // bonusPct … 落ちる確率に足す%。塔の階層守護者でいるあいだ +1（tower.js の GUARD_DROP_BONUS・2026-10-14 ユーザー指示「ドロップ率1%増加」）
 //   ⚠画面の確率（サーバーは何が落ちたかの条件だけを見る＝セット能力と同じ扱い）
 export const rollEquipDrop = (enc, cls, at = new Date(), rng = Math.random, rareMult = 1, bonusPct = 0) => {
-  if (!enc || rng() * 100 >= (DROP_CHANCE[enc.role] ?? DROP_CHANCE.normal) + (bonusPct || 0)) return null
+  if (!enc || enc.role === PAPIA_ROLE) return null   // パピアは装備を落とさない（塔の守護者のボーナスも乗らない）
+  if (rng() * 100 >= (DROP_CHANCE[enc.role] ?? DROP_CHANCE.normal) + (bonusPct || 0)) return null
   const kind = rollDropKind(rollDropPart(at, rng), cls, rng)
   const item = kind ? itemOf(enc.spot.area, rollDropRarity(enc.role, enc.spot.sub, rng, rareMult), kind) : null
   return item ? { item, ilv: item.lv } : null

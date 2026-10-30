@@ -4128,6 +4128,10 @@ grant execute on function public.v2cap_set_gender(text) to authenticated;
 -- ★宝箱（2026-10-14 ユーザー指示・src/v2cap/lib/sortie.js の CHEST_PCT・CHEST_SCRAP と同じ数）：
 --   祠の外で勝って、装備が持ち物に入らなかったとき（落ちなかった・条件に合わなかった）だけ 5% で見つけて、その場で開ける。
 --   中身はその場所のエリアの残骸 1〜10 個（均等に1つ）＝ materials（{"エリアの番号": 個数}）に足す。返事の chest＝{ area, n }（無ければ null）
+-- ★パピア（2026-10-30 ユーザー指示・src/v2cap/lib/papia.js の PAPIA_TIERS と同じ数）：
+--   エリア1〜5＝ちびパピア×10／6〜10＝パピア×15／11〜15＝キングパピア×40。敵の表（v2cap_enemies）にはいないので、名前とエリアで確かめる。
+--   勝てば経験値＝場所の表の値×倍率・Goldなし・装備と宝箱なし（p_drop は見ない）。逃げられたら（p_win=false）ふつうの負けと同じ（最低EXP）。
+--   ボスの出やすさ・スタミナ・デイリーミッション・討伐数はふつうの敵と同じ
 -- ⚠引数を変えた（p_area → p_spot・ランクの p_rank をなくした・2026-10-23 印の p_key を足した）ので、前の形を落としてから作る
 --   （p_key の無い5つの形を残すと、5つで呼んだときにどちらか決められなくなる）
 drop function if exists public.v2cap_sortie_settle(int, text, boolean, text, boolean);
@@ -4164,6 +4168,8 @@ declare
   v_eq     public.v2cap_equipment;
   v_boss   boolean;
   v_shrine boolean;          -- 祠の中の戦闘か
+  v_papia  boolean;          -- パピアとの戦闘か
+  v_ptenths int;             -- パピアの経験値の倍率（10分率）
   v_found  boolean := false; -- この戦闘のあとで祠を見つけたか
   v_deep   boolean := false; -- 最深部に着いたか（祠の最後の1戦）
   v_sh_spot  int;
@@ -4207,11 +4213,18 @@ begin
   end if;
   -- 祠の中の戦闘：相手はハピネスフェアリーだけ。祠のある場所で、最深部までの残りがあるときだけ
   v_shrine := p_enemy = c_shrine_fairy;
+  -- パピア：そのエリアに出るパピアだけ通す（敵の表にはいない）
+  v_ptenths := case
+    when p_enemy = 'ちびパピア' and v_spot.area between 1 and 5 then 100
+    when p_enemy = 'パピア' and v_spot.area between 6 and 10 then 150
+    when p_enemy = 'キングパピア' and v_spot.area between 11 and 15 then 400
+  end;
+  v_papia := v_ptenths is not null;
   if v_shrine then
     if coalesce(v_row.shrine_left, 0) <= 0 or v_row.shrine_spot is distinct from p_spot then
       return jsonb_build_object('ok', false, 'error', 'いまは安息の祠にいません');
     end if;
-  else
+  elsif not v_papia then
     select * into v_en from public.v2cap_enemies where name = p_enemy and spot = p_spot;
     if not found then return jsonb_build_object('ok', false, 'error', 'その敵はこの場所にいません'); end if;
   end if;
@@ -4219,7 +4232,7 @@ begin
     return jsonb_build_object('ok', false, 'error', '出撃の間隔が短すぎます',
       'wait_ms', ceil(extract(epoch from (v_row.last_sortie_at + c_cd - now())) * 1000)::int);
   end if;
-  v_boss := not v_shrine and v_en.role = 'boss';
+  v_boss := not v_shrine and not v_papia and v_en.role = 'boss';
 
   -- オートはスタミナを1使う。足りなければ通さない（手動は使わない）
   if coalesce(p_auto, false) then
@@ -4234,6 +4247,9 @@ begin
     -- 安息の祠：経験値は場所の表の値×5・Goldはふつうの敵と同じ・装備は落とさない（p_drop は見ない）
     v_exp  := ((v_spot.exp_min  + floor(random() * (v_spot.exp_max  - v_spot.exp_min  + 1))::int) * c_shrine_exp + 5) / 10;
     v_gold := ((v_spot.gold_min + floor(random() * (v_spot.gold_max - v_spot.gold_min + 1))::int) * c_shrine_gold + 5) / 10;
+  elsif v_win and v_papia then
+    -- パピア：経験値は場所の表の値×倍率・Goldと装備と宝箱はなし（p_drop は見ない）
+    v_exp := ((v_spot.exp_min + floor(random() * (v_spot.exp_max - v_spot.exp_min + 1))::int) * v_ptenths + 5) / 10;
   elsif v_win then
     -- 役割の倍率（10分率）。朝昼晩1.5倍・レア3倍・ボス5倍
     v_tenths := case v_en.role when 'timed' then 15 when 'rare' then 30 when 'boss' then 50 else 10 end;
@@ -4320,14 +4336,14 @@ begin
   --   数える関数があって、画面が記録を送ってきたときだけ数える（この節だけ流し直しても出撃が止まらない）
   if p_rec is not null and to_regprocedure('public.v2cap_shinka_count(uuid, bigint, jsonb, boolean, text)') is not null then
     perform public.v2cap_shinka_count(v_uid, nullif(v_row.equipped ->> 'weapon', '')::bigint, p_rec, v_win,
-      case when v_shrine then c_shrine_fairy else v_en.name end);
+      case when v_shrine or v_papia then p_enemy else v_en.name end);
   end if;
 
   -- デイリーミッション（§10）：勝ったら「出撃に勝つ」を1つ数える（受注していない日は数えない）
   if v_win then
     perform public.v2cap_daily_bump(v_uid, 'win', 1);
-    -- モンスター図鑑：勝った敵の討伐数を1つ足す（敵の名前はこの場所にいることを上で確かめてある。祠ではハピネスフェアリー）
-    insert into public.v2cap_kills (player_id, enemy, n) values (v_uid, case when v_shrine then c_shrine_fairy else v_en.name end, 1)
+    -- モンスター図鑑：勝った敵の討伐数を1つ足す（敵の名前はこの場所にいることを上で確かめてある。祠ではハピネスフェアリー・パピアはその名前）
+    insert into public.v2cap_kills (player_id, enemy, n) values (v_uid, case when v_shrine or v_papia then p_enemy else v_en.name end, 1)
     on conflict (player_id, enemy) do update set n = public.v2cap_kills.n + 1
     returning n into v_kn;
     -- 初めて倒した敵なら、図鑑のボーナス（エリアの敵を全員見つけた数）を数え直す（§15・2026-10-24）
@@ -4346,7 +4362,7 @@ begin
      returning stamina, stamina_at into v_stam, v_stam_at;
   end if;
   v_out := jsonb_build_object('ok', true, 'win', v_win, 'boss', v_boss,
-    'role', case when v_shrine then 'shrine' else v_en.role end, 'enemy_lv', v_en.lv,
+    'role', case when v_shrine then 'shrine' when v_papia then 'papia' else v_en.role end, 'enemy_lv', v_en.lv,
     'exp', v_exp, 'gold', v_gold, 'drop', v_drop, 'unique', v_unique,
     'chest', case when v_chest > 0 then jsonb_build_object('area', v_spot.area, 'n', v_chest) end,
     'cleared', to_jsonb(v_cleared), 'open_until', public.v2cap_open_until(v_cleared), 'boss_rate', v_rate,
@@ -8092,6 +8108,9 @@ insert into public.v2cap_monster_race (name, race) values
   ('アリコーン', 'beast'),
   ('ルナウルフ', 'beast'),
   ('月喰いハティ', 'beast'),
+  ('ちびパピア', 'beast'),
+  ('パピア', 'beast'),
+  ('キングパピア', 'beast'),
   ('毒クラゲ', 'aquatic'),
   ('イリエザメ', 'aquatic'),
   ('大ウミヘビ', 'aquatic'),

@@ -39,6 +39,7 @@ import {
   openUntilOf, isSpotUnlocked, unlockedSpotsOf, clearSpot,
   DROP_CHANCE, DROP_RARITY, SUB_RARE_MULT, dropRarityOf, rollDropRarity, canDropRarity, lowestDropRarityOf,
 } from './sortie.js'
+import { PAPIA_PCT, setPapiaPctForTuning } from './papia.js'
 
 const rngOf = (seed) => { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }
 
@@ -1231,6 +1232,9 @@ test('敵の出方：ボス（遭遇率）が先→ボスでなければ 通常�
 
 test('【確定】2026-10-25 遭遇率：ボスでなければ 通常70%・時間限定25%・レア5%（どの場所・どの時間帯も）。それぞれの中は均等', () => {
   // ユーザー指示「遭遇率見直す　通常　70　時間限定　25　レア　５％　遭遇率はこれにして」
+  // ★2026-10-30 パピアの1%はこの前に引く＝ここでは0にして 70/25/5 だけを見る（パピアの1%は papia.test.js）
+  const papiaPct = PAPIA_PCT
+  setPapiaPctForTuning(0)
   assert.deepEqual(ENCOUNTER_PCT, { normal: 70, timed: 25, rare: 5 })
   const at = (h) => new Date(Date.UTC(2026, 0, 1, (h + 24 - 9) % 24))   // JSTの h 時
   const N = 60000
@@ -1270,6 +1274,7 @@ test('【確定】2026-10-25 遭遇率：ボスでなければ 通常70%・時�
   let boss = 0
   for (let i = 0; i < N; i++) if (pickEncounter(3, 10, new Date(), rng).role === 'boss') boss++
   assert.ok(Math.abs(boss * 100 / N - 10) < 0.6, `遭遇率10%でボス ${(boss * 100 / N).toFixed(2)}%`)
+  setPapiaPctForTuning(papiaPct)
 })
 
 test('敵の強さ：標準の戦闘力は右肩上がり・ボスの倍率はエリアごと（15）×①②③・ふつうの敵は0.6倍', () => {

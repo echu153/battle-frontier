@@ -45,6 +45,7 @@
 //     そのほか：--bossmin 6（エリア6から先のボスだけ動かす）／--stdkeepmin 20（LV20以下の行は出発点より下げない）
 //   node tools/v2cap-progress.mjs --enh   … 強化で、エリアごとに自分の戦闘力が何倍になるか（ENH_MULT の確かめ。--tune も毎回作り直す）
 //   node tools/v2cap-progress.mjs --shrine [--hours 450]   … 安息の祠のハピネスフェアリーにエリアごとどれだけ勝てるか（2026-10-13）
+//   node tools/v2cap-progress.mjs --papia [--eva 50]       … パピアに6ターンで何発当てられるか（2026-10-30）
 //   node tools/v2cap-progress.mjs --tower [--hours 450] [--seeds 1,2] [--ratios 0.5,0.6,0.7,0.8,0.9,1] [--n 8]
 //     … 塔の空いている層のNPCに、強さ（自分の戦闘力×倍率）ごとにどれだけ勝てるか・何ターンかかるか（2026-10-14・tower.js の NPC_MIN_RATIO を決める）
 //     ★祠そのもの（0.1%・経験値×5・スタミナ全回復）は進み方の計算には入れていない（1000戦に1回・EXPは2〜3%ほど増えるだけ）
@@ -84,6 +85,8 @@ const { shrineEncounterOf } = await import(B + 'v2cap/lib/shrine.js')
 const tower = await import(B + 'v2cap/lib/tower.js')
 
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] : d }
+// --papia-pct 0 … パピアの出現率を差し替えて回す（出現率が進み方をどれだけ変えるかを比べる・2026-10-30）
+if (arg('papia-pct', null) !== null) (await import(B + 'v2cap/lib/papia.js')).setPapiaPctForTuning(Number(arg('papia-pct', null)))
 const HOURS = Number(arg('hours', arg('days', 365)))   // 何時間ぶん回すか（--days は前の名前）
 const SEED = Number(arg('seed', 1))
 const START = arg('cls', '戦士')
@@ -478,7 +481,7 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
       if (win) {
         const ta = (turnsByArea[enc.spot.area] ||= { boss: [], n: 0, sum: 0 })
         if (enc.isBoss) ta.boss.push(r.turns)
-        else if (enc.role !== 'rare') { ta.n++; ta.sum += r.turns }
+        else if (enc.role !== 'rare' && enc.role !== 'papia') { ta.n++; ta.sum += r.turns }
       }
       // ★負けても経験値はその場所の最低値が入る（倍率なし・Goldなし）＝画面・サーバーと同じ
       const { exp, gold: g } = rollRewards(enc, rng, win)
@@ -504,7 +507,7 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
           scrapGot.dismantle += scrapYieldOf(d.item)
         }
         // 宝箱（2026-10-14〜）：装備が落ちなかった勝ちで5%・その場所のエリアの残骸1〜10個（画面・サーバーと同じ rollChest）
-        if (!d && smithOn) {
+        if (!d && smithOn && enc.role !== 'papia') {   // パピアは宝箱も無し（2026-10-30）
           const k = rollChest(rng)
           if (k) { scrap[enc.spot.area] = (scrap[enc.spot.area] || 0) + k; scrapGot.chest += k }
         }
@@ -1061,6 +1064,44 @@ const shrineReport = () => {
   console.log(`全体：${pct(all)}`)
 }
 
+// ===== --papia：パピアに6ターンで何発当てられるか（2026-10-30）=====
+// src/v2cap/lib/papia.js のHPと回避を決めるための確かめ。1時間ごとに「いまの自分」が HP99 のパピアと別の乱数で10戦し、
+//   当てた数（99−残りHP）を数える（本筋の進み方は変えない）。「HPがkなら倒せる割合」＝k発以上当てた割合
+//   node tools/v2cap-progress.mjs --papia [--eva 50] [--hours 450] [--cls 戦士] [--seeds 11,12] [--json]
+const papiaReport = () => {
+  const classes = arg('cls', null) ? [arg('cls', null)] : jobsLib.START_CLASSES
+  const seeds = String(arg('seeds', '11,12')).split(',').map(Number)
+  const eva = Number(arg('eva', 50))
+  const MAX = 12
+  const hist = AREA_LIST.map(() => Array(MAX + 1).fill(0))
+  const byCls = {}   // 「エリアの組|そのときの職業」→ 当てた数の表
+  const enemy = { name: 'パピア', papia: { hp: 99, eva } }
+  for (const c of classes) for (const s of seeds) {
+    const prng = rngOf(s * 7907 + c.length)
+    simulate({ hours: HOURS, seed: s, start: c, probe: ({ spot, fighter, prof }) => {
+      const a = areas.spotOf(spot).area - 1
+      const key = `${Math.floor(a / 5)}|${prof.class}`
+      const h2 = (byCls[key] ||= Array(MAX + 1).fill(0))
+      for (let i = 0; i < 10; i++) {
+        const r = runBattle(fighter(), enemyFighter(enemy), { rng: prng })
+        const n = Math.min(MAX, 99 - r.b.hp)
+        hist[a][n]++
+        h2[n]++
+      }
+    } })
+  }
+  if (process.argv.includes('--json')) {
+    console.log(JSON.stringify({ hist, byCls }))
+    return
+  }
+  const atLeast = (h, k) => { const t = h.reduce((x, y) => x + y, 0); return t ? h.slice(k).reduce((x, y) => x + y, 0) / t : 0 }
+  console.log(`パピアに6ターンで当てた数（回避${eva}%・${classes.length}職×${seeds.length}人・${HOURS}時間・1時間ごとにいまの場所で10戦）`)
+  console.log(['エリア', ...[2, 3, 4, 5, 6, 8].map(k => `${k}発以上`), '数えた戦闘'].join('\t'))
+  AREA_LIST.forEach((ar, a) => {
+    console.log([`E${a + 1} ${ar.name}`, ...[2, 3, 4, 5, 6, 8].map(k => `${(atLeast(hist[a], k) * 100).toFixed(0)}%`), hist[a].reduce((x, y) => x + y, 0)].join('\t'))
+  })
+}
+
 // ===== --tower：塔の空いている層のNPCにどれだけ勝てるか（2026-10-14）=====
 // 【確定】2026-10-14 ユーザー決定「負けたら2つ下（あるけみと同じ）」＝上がっていくには3回に2回より多く勝つ必要がある。
 //   空いている層のNPCは「n層＝LVnの標準の強さ」と「挑戦する人の戦闘力×NPC_MIN_RATIO」の高いほう（src/v2cap/lib/tower.js）。
@@ -1121,6 +1162,8 @@ if (!isMainThread) {
   await tune()
 } else if (process.argv.includes('--shrine')) {
   shrineReport()
+} else if (process.argv.includes('--papia')) {
+  papiaReport()
 } else if (process.argv.includes('--tower')) {
   towerReport()
 } else if (process.argv.includes('--enh')) {

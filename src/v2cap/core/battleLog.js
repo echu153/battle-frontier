@@ -181,6 +181,9 @@ export const buildBattleLog = (r, you, foe) => {
       out.push({ text:`✝ ${actor}の${l.skill}！ 倒れても一度だけ立ち上がれる！`, color: LOG_COLOR.heal })
     } else if (l.type === 'revive') {
       out.push({ text:`✝ ${actor}は立ち上がった！（HP${(l.hp || 0).toLocaleString()}）`, color:'#ffcc44' })
+    } else if (l.type === 'papiaAct') {
+      // ★パピア（「レベルキャップあり」版・2026-10-30）のターンごとの行
+      out.push({ text: l.text, color:'#ff8844' })
     } else if (l.type === 'immune') {
       out.push({ text:`🛡 ${actor}は${l.ail}にならない！`, color: LOG_COLOR.guard })
     } else if (l.type === 'debuffImmune') {
