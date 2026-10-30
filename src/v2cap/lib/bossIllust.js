@@ -287,21 +287,22 @@ export const BOSS_ILLUST_DEFS = {
       ] },
       // 終焉の黒焔：ため＝首を真上へ伸ばして天を仰ぎ口に黒い炎をためる（震えない・ゆっくりのけぞる）・吐きつけ＝首を前へ叩きつけて吐く。いちばん大きく揺れる
       //   【確定】2026-10-30 ユーザー「終焉の黒焔もっと大技っぽくしてほしい、貯める動作も長く」：
-      //     ため＝0.9秒→2.2秒（ゆっくりのけぞって止まり、吐く直前にもう一段引く）。戦闘では構えの5秒も ため の絵（def.cast）で火の玉が育ち、
-      //     構えのあとは技の途中（castSkipMs）から流す＝もう一度ためない（5秒のあとすぐ、もう一段引いて吐く）。
+      //     ため の絵でゆっくりのけぞって止まり、吐く直前にもう一段引く。戦闘では構えのあいだも ため の絵（def.cast）で火の玉が育ち、
+      //     構えのあとは技の途中（castSkipMs）から流す＝もう一度ためない（すぐ、もう一段引いて吐く）。
+      //   【確定】2026-10-30 ユーザー「溜めモーションは4秒でいい」：構えはじめ（技の頭）から吐くまで4秒＝hitMs 4000・castSkipMs 3500・構え 3.5秒（lib/dungeon.js の castSec）。「動きを見る」も同じ長さ
       //     吐きつけ＝黒焔の奔流（scene の doom・lib/bossScene.js）に火の玉5つ（shots）が続けて飛ぶ・当たると大爆発。big＝技の名前の帯を赤と金に
-      doom: { totalMs: 3900, hitMs: 2600, castSkipMs: 2100, big: true, keys: [
+      doom: { totalMs: 5300, hitMs: 4000, castSkipMs: 3500, big: true, keys: [
         [0, {}],
         [300, { lean: -0.03, neck: 6, head: 4, glow: 0.5 }],
-        [1800, { lean: -0.13 }, 'out'],
-        [2200, { lean: -0.13 }],
-        [2540, { lean: -0.165 }, 'out'],
-        [2600, { lean: 0.24 }, 'out'],
-        [3320, { lean: 0.21 }],
-        [3420, { lean: 0.15, neck: -7, head: -5, jaw: -10, arm: -22, wingN: 14, wingF: -10, glow: 0.4 }],
-        [3900, {}],
-      ], jolt: { atMs: 2600, ms: 320, lean: 0.05 }, charge: { kind: 'hit', fromMs: 300, toMs: 2600, size: 0.26 },
-      art: [[0, null], [300, 'windup'], [2540, 'strike'], [3420, null]], ghosts: { fromMs: 2540, toMs: 2700, lagMs: 28, n: 3 },
+        [2600, { lean: -0.13 }, 'out'],
+        [3600, { lean: -0.13 }],
+        [3940, { lean: -0.165 }, 'out'],
+        [4000, { lean: 0.24 }, 'out'],
+        [4720, { lean: 0.21 }],
+        [4820, { lean: 0.15, neck: -7, head: -5, jaw: -10, arm: -22, wingN: 14, wingF: -10, glow: 0.4 }],
+        [5300, {}],
+      ], jolt: { atMs: 4000, ms: 320, lean: 0.05 }, charge: { kind: 'hit', fromMs: 300, toMs: 4000, size: 0.26 },
+      art: [[0, null], [300, 'windup'], [3940, 'strike'], [4820, null]], ghosts: { fromMs: 3940, toMs: 4100, lagMs: 28, n: 3 },
       //   【確定】2026-10-30 ユーザー「大技うつとき、口元とエフェクトがずれてる」：口（mouth・hand）は、ポーズの絵で測り直した開いた口のまん中（前は上あごの歯の上だった）
       anchors: { windup: { mouth: [287, 102], hand: [287, 102] }, strike: { mouth: [71, 442], hand: [71, 442] } },
       shots: [{ at: 'mouth', delayMs: 0, size: 1.25 }, { at: 'mouth', delayMs: 70, size: 1 }, { at: 'mouth', delayMs: 140, size: 0.85 }, { at: 'mouth', delayMs: 210, size: 0.7 }, { at: 'mouth', delayMs: 280, size: 0.6 }],

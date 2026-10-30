@@ -44,7 +44,7 @@ export const POUR = {
 // 終焉の黒焔（kind 'doom'）：dim＝ためのあいだの暗さ・castDim＝構えの暗さ・hitDim＝当たったあと・after＝当たってから暗さが戻りはじめるまで（ms）・
 //   beamTail＝当たったあと奔流が残る長さ（ms・吐きつけの絵が出ているあいだ）・reach＝火の粉を吸い込む広さ（水天葬の何倍）
 export const DOOM = {
-  color: '22,0,0', dim: 0.62, castDim: 0.58, hitDim: 0.78, after: 1300, fade: 500, beamTail: 300, motes: 30, reach: 2.4,
+  color: '22,0,0', dim: 0.62, castDim: 0.62, hitDim: 0.78, after: 1300, fade: 500, beamTail: 300, motes: 30, reach: 2.4,
   splash: 90, jets: 18, mist: 14, rings: [[0, 1.1], [130, 0.85], [300, 0.65], [520, 0.5]], blobs: 42,
 }
 // 飛ぶエフェクトの進み（p＝飛んだ時間の割合 0〜1 → 口から相手までの割合）：はじめは少しゆっくり。画面の飛ぶ絵と奔流の先が同じ（火の玉が先頭）
@@ -158,7 +158,7 @@ const flickerAt = (ms) => (hash(Math.floor(ms / 70) + 99) > 0.93 ? 1 : 0)
 // 構え（5秒）のあいだ：背景がだんだん暗く・雲から小雨・雲の渦が回る・掲げた手に光が集まる
 export const castSceneAt = (m, castMs, P = POUR) => {
   const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null }
-  if (m?.scene?.kind === 'doom' && castMs >= 0) return doomCastSceneAt(castMs)
+  if (m?.scene?.kind === 'doom' && castMs >= 0) return doomCastSceneAt(m, castMs)
   if (m?.scene?.kind !== 'pour' || castMs < 0) return out
   const k = smooth(castMs / 1200)
   out.dim = P.castDim * k
@@ -341,10 +341,10 @@ const doomGather = (out, ms, k, a, D = DOOM) => {
   out.hand = { r: 12 + 34 * k + 3 * Math.sin(ms / 120), op: a }
   out.bossGlow = a * (0.2 + 0.8 * k) * (0.82 + 0.18 * Math.sin(ms / 170))
 }
-// 構え（5秒）のあいだ：ためた割合は構えの長さで数える
-const doomCastSceneAt = (castMs, D = DOOM) => {
+// 構えのあいだ：ためた割合は構えの長さ（＝技の途中から流す時刻 castSkipMs・lib/dungeon.js の castSec と同じ）で数える
+const doomCastSceneAt = (m, castMs, D = DOOM) => {
   const out = { dim: D.castDim * smooth(castMs / 1200), flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: 'fire', dimColor: D.color, bossGlow: 0, beam: null }
-  doomGather(out, castMs, clamp01(castMs / (CAST_SEC * 1000)), smooth(castMs / 500))
+  doomGather(out, castMs, clamp01(castMs / (m.castSkipMs || CAST_SEC * 1000)), smooth(castMs / 500))
   return out
 }
 // 技のあいだ（ms＝技を出しはじめてから）→ sceneAt と同じ形＋ tone・dimColor・bossGlow（竜の体の光 0〜1）・beam: { head（口から相手までの進み 0〜1）, w（太さの割合）, op }
@@ -358,7 +358,7 @@ export const doomSceneAt = (m, ms, landed = true, D = DOOM) => {
   const base = ms < H ? D.dim * smooth(ms / 900) : landed && e >= 0 ? D.hitDim : D.dim
   out.dim = ms < I + D.after ? base : base * (1 - smooth((ms - I - D.after) / D.fade))
   if (ms < H) {
-    doomGather(out, ms, clamp01(ms / H), smooth(ms / 400))
+    doomGather(out, ms, clamp01(ms / (m.castSkipMs || H)), smooth(ms / 400))
     return out
   }
   // 吐いた瞬間：少し光って揺れ、口で光がはじける

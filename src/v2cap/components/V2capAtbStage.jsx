@@ -544,7 +544,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
       <div style={{ marginTop:'3px' }}>
         {/* 大技の構えのゲージ（赤・2026-10-30 ユーザー「○○の構えとか表示させなくていい」で下の文字はやめた）・バフの行動のゲージ（金・0.5秒で貯まる）・ふだんのゲージ */}
         {me.cast
-          ? <Bar pct={((st.t - me.cast.start) / CAST_SEC) * 100} color="#ff5522" h={8} />
+          ? <Bar pct={((st.t - me.cast.start) / (me.cast.until - me.cast.start)) * 100} color="#ff5522" h={8} />
           : me.buffAct
             ? <Bar pct={((st.t - me.buffAct.start) / BUFF_GAUGE_SEC) * 100} color="#ffd24a" h={6} />
             : <Bar pct={(Math.min(me.gauge, need) / need) * 100} color={me.ail.paralyze ? '#888888' : right ? '#ff9944' : '#44aaff'} h={6} />}
@@ -766,7 +766,7 @@ function ChargeOrb({ m, a, acts, now, geo, art, s, cast, castEnd, sky = null }) 
   const castPt = cast && m.anchors?.[art.castArt]?.mouth
   if (castPt) {
     const [mx, my] = illustPointAt(art.key, illustCastPoseAt(art.key, cast.ms, now * 1000), castPt, 'body')
-    const k = Math.min(1, cast.ms / (CAST_SEC * 1000))
+    const k = Math.min(1, cast.ms / (m.castSkipMs || CAST_SEC * 1000))
     on = { frame: 0, x: geo.b.x + mx * s, y: geo.b.y + my * s, s: (c.size * geo.b.w / a.w) * (0.15 + 0.85 * easeOut(k)) * (1 + 0.07 * Math.sin(cast.ms / 28)),
       rot: cast.ms * 0.004, op: Math.min(1, cast.ms / 400) }
   }

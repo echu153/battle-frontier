@@ -40,8 +40,10 @@ const VARUZENOKU_DIFFS = {
   // 2026-10-30 HPの節目のバフ（60%で守り+25%・30%で攻撃+25%）を入れて測り直した（HPはそのまま＝サーバーの表は変えない）：
   //   ノーマル：0.35倍のままだと1回で倒せたのが22人中10人 → 0.33倍で12人（全員2回まで）
   //   ハード：0.4倍のままだと12人・3回かかる人が1人 → 0.38倍で12人（全員2回まで）
+  // 2026-10-30 25%の大技が切ってすぐ出る（防御が間に合いにくい）ようにして測り直した：
+  //   ノーマル：0.33倍のまま11人（全員2回まで）／ハード：0.38倍のままだと11人・3回かかる人が1人（聖騎士）→ 0.36倍で12人（全員2回まで）
   normal: { label: 'ノーマル', area: 2, recLv: 25, recPower: 500, power: 474, atk: 0.33, hp: 6500 },
-  hard: { label: 'ハード', area: 5, recLv: 45, recPower: 1050, power: 1027, atk: 0.38, hp: 15000 },
+  hard: { label: 'ハード', area: 5, recLv: 45, recPower: 1050, power: 1027, atk: 0.36, hp: 15000 },
   expert: { label: 'エキスパート', area: 8, recLv: 65, ready: false },
   master: { label: 'マスター', area: 12, recLv: 80, ready: false },
 }
@@ -53,13 +55,16 @@ export const DUNGEON_BOSSES = {
     skills: [
       { name: '焦熱の吐息', kind: 'mag', mult: 1.6, proc: 100, mp: 0, ail: { key: 'burn', chance: 70 } },
       { name: '黒翼烈風', kind: 'phys', mult: 1.8, proc: 100, mp: 0, ail: { key: 'slow', chance: 50 } },
-      { name: '終焉の黒焔', kind: 'mag', mult: 3.0, proc: 100, mp: 0 },   // 倍率2.5以上＝撃つ前に構え（5秒・防御で半分）
+      // 倍率2.5以上＝撃つ前に構え（防御で半分）。【確定】2026-10-30 ユーザー「溜めモーションは4秒でいい」：
+      //   castSec＝構えの長さ 3.5秒（このあと吐く直前に引く0.5秒＝lib/bossIllust.js の castSkipMs から吐くまで）＝構えはじめから吐くまで4秒
+      { name: '終焉の黒焔', kind: 'mag', mult: 3.0, proc: 100, mp: 0, castSec: 3.5 },
     ],
     pattern: {
       steps: [
         { at: 0.75, skill: '焦熱の吐息' },
         { at: 0.5, skill: '黒翼烈風' },
-        { at: 0.25, skill: '終焉の黒焔' },
+        // now＝切ったらゲージを待たずに構えに入る（ユーザー「大技に入るとき、ATBリセットしてるでしょ？そのHPを切ったらすぐモーションに移行していいよ」・atb.js の nowStep）
+        { at: 0.25, skill: '終焉の黒焔', now: true },
       ],
       bands: [
         { min: 0.75, weights: {} },                                                       // 75%より上＝黒爪だけ

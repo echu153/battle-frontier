@@ -98,6 +98,8 @@ export const CAST_MULT = 2.5
 export const BUFF_GAUGE_SEC = 0.5
 export const BUFF_WAIT_AFTER_ACT_SEC = 2.6
 export const BUFF_SHOW_SEC = 2.5
+// 大技の節目（pattern.steps の now・nowStep）で、技を出してから構えに入るまで（構えのない技の動きが終わるまで・どの動きより長い＝テストあり）
+export const NOW_WAIT_AFTER_ACT_SEC = 1.6
 
 // バフ・デバフの長さ（秒）＝BUFF_SEC_CONST ÷ 効果の合計%。強いほど短い
 //   【確定】2026-10-26 ユーザー選択「強さで長さが変わる・重ねない」：+30%→100秒・+20%→150秒
@@ -170,6 +172,7 @@ const createAtbSide = (fighter, band, { ai = false, cast = false } = {}) => {
   side.buffQueue = []          // 切ったがまだ行動していない節目のバフ（切った順）
   side.buffAct = null          // バフのゲージを貯めているあいだ：{ name, table, start, until }
   side.motionUntil = 0         // 技やバフの動きが終わる時刻（これより前はバフのゲージを貯めはじめない）
+  side.lastActAt = -Infinity   // 最後に技を出した時刻（大技の節目の待ち）
   side.noActUntil = 0          // バフを見せおわる時刻（これより前は技を出さない）
   if (fighter.hpNow != null) side.hp = Math.max(1, Math.min(side.base.hp, Math.floor(fighter.hpNow)))
   side.startHp = side.hp       // この戦闘を始めたときのHP（削った量＝startHp − いまのHP）
@@ -375,6 +378,27 @@ const buffStep = (st, me) => {
 // バフの行動のあいだ（ゲージを貯めてから見せおわるまで）か
 const inBuffAct = (side, now) => !!side.buffAct || now + EPS < side.noActUntil
 
+// 【確定】2026-10-30 大技の節目（ユーザー「大技に入るとき、ATBリセットしてるでしょ？そのHPを切ったらすぐモーションに移行していいよ」）：
+//   pattern.steps の now が付いた節目は、切ったらゲージを待たずに構えに入る（ゲージは空に・構えのあとも空から）。
+//   ただし技の動きと重ならないように、出した技の動きが終わるまで（NOW_WAIT_AFTER_ACT_SEC）と、バフの行動のあいだは待つ（バフが先）。麻痺のあいだも待つ。
+//   待っているあいだは、ほかの技を出さない（excessOf）
+const nowStepOf = (side) => {
+  if (!side.castBig || !side.pattern) return null
+  const frac = hpFracOf(side)
+  return side.pattern.steps.find(s => s.now && frac <= s.at && !side.patFired.includes(s.at)) || null
+}
+const nowStep = (st, me) => {
+  const s = nowStepOf(me)
+  if (!s || me.hp <= 0 || me.cast || me.ail.paralyze || me.buffAct || me.buffQueue.length) return
+  if (st.t + EPS < me.noActUntil || st.t + EPS < me.lastActAt + NOW_WAIT_AFTER_ACT_SEC) return
+  const { idx, skill } = slotByName(me, s.skill)
+  me.patFired.push(s.at)
+  me.patNext = null
+  if (!skill) return
+  me.gauge = 0
+  startCast(st, me, idx, skill, cdFor(me, skill))
+}
+
 // 挑戦の始め：もう切っている節目は撃ったことにする
 const initPattern = (side, rng) => {
   side.patRng = rng
@@ -478,6 +502,7 @@ const act = (st, me, foe, ch) => {
   const now = st.t
   me.acted += 1
   me.motionUntil = now + BUFF_WAIT_AFTER_ACT_SEC
+  me.lastActAt = now
   me.guardCut = 0   // 防御は「次の自分の行動まで」
   if (ch.guard) {
     me.guardCut = GUARD_CUT
@@ -513,22 +538,28 @@ const act = (st, me, foe, ch) => {
   advanceSource(me, ch, ch.idx === null || used === ch.idx)
 }
 
+// 詠唱に入る。長さは技ごと（skill.castSec・無ければ CAST_SEC）
+function startCast(st, me, idx, skill, cd) {
+  const sec = skill.castSec ?? CAST_SEC
+  me.cast = { idx, name: skill.name, start: st.t, until: st.t + sec, cd }
+  st.log.push({ side: me.name, type: 'cast', skill: skill.name, sec })
+}
+
 // ゲージが満タンになった側の行動。ボスの大技はここで詠唱に入る
 const startAct = (st, me, foe) => {
   const ch = chosenOf(me, st.t)
   me.patNext = null   // パターンのボス：次の行動はまた引く
   if (ch.skill) ch.cd = cdFor(me, ch.skill)
   if (me.castBig && ch.skill && (ch.skill.mult || 0) >= CAST_MULT) {
-    me.cast = { idx: ch.idx, name: ch.skill.name, start: st.t, until: st.t + CAST_SEC, cd: ch.cd }
-    st.log.push({ side: me.name, type: 'cast', skill: ch.skill.name, sec: CAST_SEC })
+    startCast(st, me, ch.idx, ch.skill, ch.cd)
     return
   }
   act(st, me, foe, ch)
 }
 
 // 余り（0以上なら動ける）。詠唱中・麻痺中は動かない
-//   バフの行動が待っているあいだ・バフの行動のあいだも動かない（バフが先）
-const excessOf = (side, now) => (side.cast || side.ail.paralyze || side.buffQueue.length || inBuffAct(side, now) ? -Infinity : side.gauge - needNow(side, now))
+//   バフの行動が待っているあいだ・バフの行動のあいだ・大技の節目で構えを待っているあいだも動かない（そちらが先）
+const excessOf = (side, now) => (side.cast || side.ail.paralyze || side.buffQueue.length || inBuffAct(side, now) || nowStepOf(side) ? -Infinity : side.gauge - needNow(side, now))
 
 // ===== 1刻み進める =====
 const stepOnce = (st) => {
@@ -552,6 +583,8 @@ const stepOnce = (st) => {
   expire(st, b)
   buffStep(st, a)
   buffStep(st, b)
+  nowStep(st, a)
+  nowStep(st, b)
 
   // ゲージを溜める（麻痺・詠唱・バフのゲージのあいだは止まる）
   const eA = liveStats(a)

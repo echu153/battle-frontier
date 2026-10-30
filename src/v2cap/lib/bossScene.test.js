@@ -237,7 +237,7 @@ test('【確定】2026-10-30 終焉の黒焔の演出（ユーザー「終焉の
   assert.ok(d.big, '技の名前の帯が大技の色')
   // ため：動きを見る（構えなし）でも2秒以上・構えのあとの残りは短い
   const tw = d.art.find(([, n]) => n === 'windup')[0], ts = d.art.find(([, n]) => n === 'strike')[0]
-  assert.ok(ts - tw >= 2000, 'ため の絵が2秒以上')
+  assert.ok(ts - tw >= 3500, 'ため の絵が3.5秒以上（ユーザー「溜めモーションは4秒でいい」・吐くまで4秒）')
   assert.ok(d.castSkipMs > tw && d.castSkipMs < ts && ts - d.castSkipMs <= 500, '構えのあとは ため の絵の途中から・すぐ吐く')
   assert.ok(d.impactMs - d.castSkipMs <= 1100, '構えのあと、HP が減ってから当たるまで短い')
   // ため：炎の色で暗くなり、火の粉が吸い込まれ、口の光が育ち、竜の体の光が増す・震えない

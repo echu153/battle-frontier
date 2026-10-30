@@ -7,7 +7,7 @@ import { mpCostOf } from '../core/battle.js'
 import {
   advance, reserve, unreserveAt, clearQueue, startMacro, stopMacro, toggleGuard,
   canUse, cdLeft, cdFor, cdRatio, guardReady, guardCdLeft, guardCdRatio, chosenOf,
-  GUARD_CUT, GUARD_CD, CAST_SEC, QUEUE_MAX, TURN_SEC,
+  GUARD_CUT, GUARD_CD, QUEUE_MAX, TURN_SEC,
 } from '../core/atb.js'
 import { MACRO_MARK, macroEntriesOf } from '../lib/atbMacro.js'
 import { fxEventsOf, scheduleFx, POP_SEC } from '../lib/atbFx.js'
@@ -258,7 +258,7 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
         {footer}
       </div>
       <div style={{ color: TEXT.empty, fontSize:'9px', marginTop:'6px' }}>
-        1ターン＝{TURN_SEC}秒（ターンで数える効果はこの長さで切れます）・ボスの大技は{CAST_SEC}秒の構えのあとに出ます
+        1ターン＝{TURN_SEC}秒（ターンで数える効果はこの長さで切れます）・ボスの大技はゲージが赤いあいだ構えてから出ます
       </div>
     </div>
   )

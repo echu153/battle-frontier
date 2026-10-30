@@ -6,7 +6,7 @@ import {
   DUNGEON_BOSSES, DIFF_KEYS, DUNGEON_MIN, DUNGEON_TRY_SEC, SUMMONS_PER_DAY, STAMINA_OWNER_FIRST, STAMINA_OWNER, STAMINA_HELPER, HELPERS_MAX,
   diffOf, isDiffReady, isDiffUnlocked, isSummonable, tryStaminaOf, dungeonFighter,
 } from './dungeon.js'
-import { createAtb, runFor, startMacro, fillPerSecOf, hpBuffChips, ATB_SLOW_CUT, FILL_PER_SEC, BUFF_GAUGE_SEC, BUFF_WAIT_AFTER_ACT_SEC, BUFF_SHOW_SEC, TURN_SEC, GAUGE_FULL } from '../core/atb.js'
+import { createAtb, runFor, startMacro, fillPerSecOf, hpBuffChips, ATB_SLOW_CUT, FILL_PER_SEC, BUFF_GAUGE_SEC, BUFF_WAIT_AFTER_ACT_SEC, BUFF_SHOW_SEC, TURN_SEC, GAUGE_FULL, NOW_WAIT_AFTER_ACT_SEC, CAST_SEC } from '../core/atb.js'
 import { inflict } from '../core/ailments.js'
 import { bossIllustOf, buffArtMsOf } from './bossIllust.js'
 import { liveStats } from '../core/battle.js'
@@ -80,7 +80,7 @@ test('【確定】2026-10-29 ボスの強さ：守りと速さは power・攻撃
     assert.equal(dungeonFighter('varuzenoku', k, d.hp * 9).hpNow, d.hp, 'いまのHPは全体より多くならない')
   }
   assert.deepEqual({ ...diffOf('varuzenoku', 'normal') }, { label: 'ノーマル', area: 2, recLv: 25, recPower: 500, power: 474, atk: 0.33, hp: 6500 })
-  assert.deepEqual({ ...diffOf('varuzenoku', 'hard') }, { label: 'ハード', area: 5, recLv: 45, recPower: 1050, power: 1027, atk: 0.38, hp: 15000 })
+  assert.deepEqual({ ...diffOf('varuzenoku', 'hard') }, { label: 'ハード', area: 5, recLv: 45, recPower: 1050, power: 1027, atk: 0.36, hp: 15000 })
 })
 
 test('【確定】2026-10-29 ボスの技：HP75%より上は黒爪だけ・75%を切ったら次の行動で焦熱の吐息を必ず・そのあとは吐息30%', () => {
@@ -304,10 +304,99 @@ test('【確定】2026-10-30 バフの行動は出血などを受けない（ユ
   assert.ok(ticks(t).length > 0, '終わったらまた刻む')
 })
 
+test('【確定】2026-10-30 大技の節目（ユーザー「大技に入るとき、ATBリセットしてるでしょ？そのHPを切ったらすぐモーションに移行していいよ」）：25%を切ったらゲージを待たずに構えに入る・ゲージは空に', () => {
+  // 最後の技から十分たって切る＝次の刻みで構えに入る
+  const st = newFight(11)
+  st.b.buffSeen.push('黒鱗の鎧', '逆鱗')   // 大技だけを見る
+  st.b.patFired.push(0.75, 0.5)
+  untilTrue(st, () => bossHits(st) >= 1)
+  runFor(st, NOW_WAIT_AFTER_ACT_SEC + 0.2)
+  assert.ok(st.b.gauge > 0 && st.b.gauge < GAUGE_FULL, 'ふだんのゲージは途中')
+  const tCut = st.t
+  st.b.hp = Math.floor(st.b.base.hp * 0.24)
+  runFor(st, 0.05)
+  assert.ok(st.b.cast, 'すぐ構えに入る')
+  assert.equal(st.b.cast.name, '終焉の黒焔')
+  assert.ok(st.t - tCut <= 0.051)
+  assert.equal(st.b.gauge, 0, 'ゲージは空に')
+  const hits = bossHits(st)
+  // 撃ったらゲージは空から・節目は1回だけ（次からはふだんの確率）
+  untilTrue(st, () => !st.b.cast)
+  assert.equal(bossHits(st), hits + 1)
+  assert.ok(st.b.gauge < 2, '撃ったあともゲージは空から')
+  assert.ok(st.b.patFired.includes(0.25))
+  runFor(st, 0.2)
+  assert.equal(st.b.cast, null, 'もう一度すぐ構えない')
+  // 技の動きのあいだに切ったら、動きが終わるのを待つ（そのあいだほかの技は出さない）
+  const m = newFight(12)
+  m.b.buffSeen.push('黒鱗の鎧', '逆鱗')
+  m.b.patFired.push(0.75, 0.5)
+  untilTrue(m, () => bossHits(m) >= 1)
+  const tHit = m.t, n = bossHits(m)
+  m.b.hp = Math.floor(m.b.base.hp * 0.24)
+  runFor(m, NOW_WAIT_AFTER_ACT_SEC - 0.1)
+  assert.equal(m.b.cast, null, '動きのあいだは待つ')
+  runFor(m, 0.2)
+  assert.ok(m.b.cast && m.b.cast.start + 1e-6 >= tHit + NOW_WAIT_AFTER_ACT_SEC, '動きが終わったら構える')
+  assert.equal(bossHits(m), n)
+  // バフの行動が先：30%と25%を一度に切ったら、バフを見せおわってから構える
+  const b = newFight(13)
+  b.b.buffSeen.push('黒鱗の鎧')
+  b.b.patFired.push(0.75, 0.5)
+  b.b.hp = Math.floor(b.b.base.hp * 0.24)
+  untilTrue(b, () => hpBuffChips(b.b).length)
+  assert.equal(b.b.cast, null, 'バフが先')
+  const tBuff = b.t
+  untilTrue(b, () => b.b.cast)
+  assert.ok(b.b.cast.start + 1e-6 >= tBuff + BUFF_SHOW_SEC, `見せおわってから（${tBuff}→${b.b.cast.start}）`)
+  // 麻痺のあいだは構えない
+  const p = newFight(14)
+  p.b.buffSeen.push('黒鱗の鎧', '逆鱗')
+  p.b.patFired.push(0.75, 0.5)
+  p.b.ail.paralyze = { turns: 1 }
+  p.b.parUntil = 1
+  p.b.hp = Math.floor(p.b.base.hp * 0.24)
+  runFor(p, 0.5)
+  assert.equal(p.b.cast, null, '麻痺のあいだは待つ')
+  runFor(p, 0.7)
+  assert.ok(p.b.cast, '解けたら構える')
+  // 持ち越しで25%をもう切っているなら撃たない（前の挑戦で撃った）
+  const c = createAtb(dummy(), dungeonFighter('varuzenoku', 'normal', 6500 * 0.2), { rng: rngOf(15), maxSec: 999 })
+  runFor(c, 1)
+  assert.equal(c.b.cast, null)
+})
+
+test('【確定】2026-10-30 溜めは4秒（ユーザー「溜めモーションは4秒でいい」）：構えはじめから吐くまで4秒＝構え3.5秒＋吐く直前に引く0.5秒・「動きを見る」も同じ長さ・雨摩座はまだ変えない', () => {
+  const a = bossIllustOf('varuzenoku'), d = a.motions.doom
+  const sk = DUNGEON_BOSSES.varuzenoku.skills.find(s => s.name === '終焉の黒焔')
+  assert.equal(sk.castSec * 1000, d.castSkipMs, '構えの長さ＝技の途中から流す時刻（つなぎ目が合う）')
+  assert.equal(d.hitMs, 4000, '吐くまで4秒')
+  assert.ok(d.hitMs - d.castSkipMs <= 500, '構えのあとすぐ吐く')
+  // 構えの長さはエンジンでも3.5秒
+  const st = newFight(16)
+  st.b.buffSeen.push('黒鱗の鎧', '逆鱗')
+  st.b.patFired.push(0.75, 0.5)
+  st.b.hp = Math.floor(st.b.base.hp * 0.24)
+  untilTrue(st, () => st.b.cast)
+  assert.ok(Math.abs(st.b.cast.until - st.b.cast.start - 3.5) < 1e-9)
+  const t0 = st.t
+  untilTrue(st, () => !st.b.cast)
+  assert.ok(Math.abs(st.t - t0 - 3.5) < 0.051, '3.5秒で撃つ')
+  // 雨摩座：節目で待たない形にはまだしていない・構えは今までどおり
+  const A = DUNGEON_BOSSES.amaza
+  assert.ok(A.pattern.steps.every(s => !s.now))
+  assert.equal(A.skills.find(s => s.name === '水天葬').castSec, undefined)
+  assert.equal(CAST_SEC, TURN_SEC)
+})
+
 test('【確定】2026-10-30 待つ長さは絵に合っている：どの技の動きも BUFF_WAIT_AFTER_ACT_SEC までに終わる・どのバフの見せ方も BUFF_SHOW_SEC までに終わる（動きを伸ばしたらここで止まる）', () => {
   for (const k of ['varuzenoku', 'amaza']) {
     const a = bossIllustOf(k)
-    for (const m of Object.values(a.motions)) assert.ok(m.totalMs - (m.castSkipMs || 0) <= BUFF_WAIT_AFTER_ACT_SEC * 1000, `${k} ${m.label}`)
+    for (const m of Object.values(a.motions)) {
+      assert.ok(m.totalMs - (m.castSkipMs || 0) <= BUFF_WAIT_AFTER_ACT_SEC * 1000, `${k} ${m.label}`)
+      // 構えのない技の動きは、大技の節目の待ちより短い（構えのある技のあとに節目で構えることはない＝節目は1回だけ・撃ったあとは次の節目が無い）
+      if (!m.castSkipMs && m !== Object.values(a.motions).at(-1)) assert.ok(m.totalMs <= NOW_WAIT_AFTER_ACT_SEC * 1000, `${k} ${m.label}`)
+    }
     for (const [n, b] of Object.entries(a.buffs)) assert.ok(buffArtMsOf(b) <= BUFF_SHOW_SEC * 1000, `${k} ${n}`)
   }
 })
