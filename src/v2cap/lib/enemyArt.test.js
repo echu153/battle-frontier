@@ -119,8 +119,10 @@ test('【確定】2026-10-30 パピア3体の絵がある（ユーザーが publ
   for (const n of ['ちびパピア', 'パピア', 'キングパピア']) assert.ok(hasEnemyArt(n), `${n} の絵が無い`)
 })
 
-test('★エリア①〜⑥の120体は全部絵がある（①② 2026-10-12・③ 10-14・④ 10-24・⑤⑥ 10-26 ユーザーが置いた分）', () => {
-  for (const name of ENEMY_NAMES_BY_AREA.slice(0, 6).flat()) assert.ok(hasEnemyArt(name), `${name} の絵が無い`)
+test('★エリア①〜⑦の140体は全部絵がある（①② 2026-10-12・③ 10-14・④ 10-24・⑤⑥ 10-26・⑦ 10-30 ユーザーが置いた分）', () => {
+  for (const name of ENEMY_NAMES_BY_AREA.slice(0, 7).flat()) assert.ok(hasEnemyArt(name), `${name} の絵が無い`)
+  // ⑧はユーザーが置いた4体だけ（2026-10-30・あとの16体は置かれたら足す）
+  for (const name of ENEMY_NAMES_BY_AREA[7].slice(0, 4)) assert.ok(hasEnemyArt(name), `${name} の絵が無い`)
 })
 
 // ===== 背景の抜き方（tools/v2cap-art-lib.mjs）=====
@@ -202,6 +204,38 @@ test('【確定】2026-10-26 ゆるいすき間（目で確かめた絵だけ）
   assert.equal(alphaAt(loose, 64, 64), 255, 'ばらつきのある灰色（海賊砲手のズボンのようなもの）は抜かない')
   assert.equal(alphaAt(loose, 0, 0), 0)
   assert.equal(alphaAt(loose, 18, 18), 255, '体')
+})
+
+test('【確定】2026-10-30 絵ごとのすき間の条件（目で確かめた絵だけ）：小さくてむらのあるすき間も抜く。haze は抜いた所につながる灰色のにじみだけ抜く', () => {
+  // 茶色の体の中に：すき間A（10×10・背景±8が1画素ごと）／Aのとなりのにじみ（色の無い灰色・背景+20）／Aのとなりの色のある所／
+  //   体に囲まれた、背景につながっていない同じ灰色
+  const img = synth(96, (x, y) => {
+    const inBody = x >= 16 && x < 80 && y >= 16 && y < 80
+    if (!inBody) return [120, 120, 119]
+    if (x >= 22 && x < 32 && y >= 22 && y < 32) return (x + y) % 2 ? [128, 128, 127] : [112, 112, 111]
+    if (x >= 32 && x < 42 && y >= 22 && y < 32) return [140, 140, 138]
+    if (x >= 22 && x < 32 && y >= 32 && y < 42) return [140, 120, 100]
+    if (x >= 60 && x < 70 && y >= 60 && y < 70) return [140, 140, 138]
+    return [120, 70, 40]
+  })
+  const SOFT = { min: 60, mean: 14, std: 9 }
+  const strict = keyBackground(img)
+  const loose = keyBackground(img, undefined, { loosePockets: true })
+  assert.equal(alphaAt(strict, 27, 27), 255, 'ふだんの条件では残す（いままでの絵が変わらない）')
+  assert.equal(alphaAt(loose, 27, 27), 255, 'ゆるいすき間の条件でも残す（小さい・むらが大きい）')
+  const soft = keyBackground(img, undefined, { softPockets: SOFT })
+  assert.equal(alphaAt(soft, 27, 27), 0, '絵ごとの条件なら抜く')
+  assert.equal(alphaAt(soft, 39, 27), 255, 'haze が無ければ、にじみは残す')
+  const hazy = keyBackground(img, undefined, { softPockets: { ...SOFT, haze: { sat: 18, lum: 24 } } })
+  assert.equal(alphaAt(hazy, 27, 27), 0)
+  assert.equal(alphaAt(hazy, 39, 27), 0, '抜いた所につながる灰色のにじみは抜く')
+  assert.equal(alphaAt(hazy, 27, 39), 255, '色のある所は残す')
+  assert.equal(alphaAt(hazy, 65, 65), 255, '背景につながっていない灰色（灰色の体など）は残す')
+  // ⚠灰色の体の絵には付けない（シャドウウルフの脇腹の毛・氷河ドレイクのウロコまで抜ける）
+  const tool = readFileSync(`${ROOT}tools/v2cap-enemy-art.mjs`, 'utf8')
+  const list = tool.match(/const SOFT_POCKETS = new Map\(\[[\s\S]*?\n\]\)/)
+  assert.ok(list, 'SOFT_POCKETS がある')
+  for (const n of ['シャドウウルフ', '氷河ドレイク']) assert.ok(!list[0].includes(n), `${n} は入れない`)
 })
 
 test('透明つきの見分け：縁がほとんど透明なら透明つき（抜かずにその透明を使う）・縁が不透明なら背景を抜く', () => {

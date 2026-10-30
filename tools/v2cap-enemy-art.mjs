@@ -60,7 +60,19 @@ const LOOSE_POCKETS = new Set([
   '払暁のワイバーン', 'ハヤテハヤブサ', '宵闇ヤマネコ', 'トオボエウルフ', 'ストームグリフォン', 'ドーンワイバーン',       // エリア⑥
   'ブレイズゴリラ', '岩砕きグリズリー',
 ])
-for (const n of LOOSE_POCKETS) if (!ART_NAMES.includes(n)) throw new Error(`LOOSE_POCKETS の ${n} はモンスターの一覧にいない`)
+// 【確定】2026-10-30 エリア⑦⑧：霧・鱗粉・渦に囲まれた背景の灰色が、上の条件でも残った絵（小さくて、霧のふちのむらが大きいすき間）。
+//   条件を絵ごとに広げる（tools/v2cap-art-lib.mjs の opts.softPockets）。新しく抜ける場所を赤く塗って、どれも背景だけと目で確かめたものだけ。
+//   ⚠確かめずに足さない：シャドウウルフは脇腹の灰色の毛、氷河ドレイクは灰色のウロコまで抜けるので入れない。
+//   胞子マイコニドだけは、胞子の雲のふちのにじみ（灰色がかった所）も抜く（haze）
+const SOFT = { min: 60, mean: 14, std: 9 }
+const SOFT_POCKETS = new Map([
+  ...['オオドクガ', 'シメコロシカズラ', '霧纏いトレント', 'コモレビピクシー', 'ヨロイカブト', 'ナゲキバンシー', 'チスイオオコウモリ', 'キラープラント',
+    'クイーンマンドラゴラ', 'ミストトレント', 'サンライトピクシー', 'グリーフバンシー', '妖蛾ポイズンモス', '霧魔女ミルヴァ', '森王エルダートレント',   // エリア⑦
+    '霜精', 'アイスゴーレム',   // エリア⑧
+  ].map(n => [n, SOFT]),
+  ['胞子マイコニド', { ...SOFT, haze: { sat: 18, lum: 24 } }],
+])
+for (const n of [...LOOSE_POCKETS, ...SOFT_POCKETS.keys()]) if (!ART_NAMES.includes(n)) throw new Error(`LOOSE_POCKETS・SOFT_POCKETS の ${n} はモンスターの一覧にいない`)
 
 // outs = [{ out, size }]（小さい版・大きい版のうち作るもの）
 const makeOne = (src, outs, name) => {
@@ -77,7 +89,7 @@ const makeOne = (src, outs, name) => {
       r = { img, mode: 'alpha', clear: clear / N, edgeLeft: border.filter(p => img.data[p * 4 + 3] > 128).length / border.length }
     }
   }
-  if (!r) r = keyBackground(decode(src, WORK, 'rgb24'), undefined, { loosePockets: LOOSE_POCKETS.has(name) })
+  if (!r) r = keyBackground(decode(src, WORK, 'rgb24'), undefined, { loosePockets: LOOSE_POCKETS.has(name), softPockets: SOFT_POCKETS.get(name) })
   // 透明なところの色を近くの体の色で埋める（縮めるときに背景の色が縁へ混ざらないように）
   bleed(r.img)
   const box = alphaBox(r.img)
@@ -133,7 +145,7 @@ for (const [name, src] of pick) {
     // 背景がほとんど抜けなかった絵（背景の色が違う・体が縁いっぱい）は知らせる
     if (clear < 0.15) light.push(`${name}（${path.relative(SRC, src)}）：透明にできたのは${Math.round(clear * 100)}%だけ`)
     if (edgeLeft > EDGE_LEFT_MAX) notKeyed.push(`${name}（${path.relative(SRC, src)}・${MODE_LABEL[mode]}）：縁の${Math.round(edgeLeft * 100)}%が透明になっていない`)
-    console.log(`${name} ← ${path.relative(SRC, src)}（${MODE_LABEL[mode]}${mode === 'flat' && LOOSE_POCKETS.has(name) ? '・ゆるいすき間' : ''}）`)
+    console.log(`${name} ← ${path.relative(SRC, src)}（${MODE_LABEL[mode]}${mode === 'flat' && (LOOSE_POCKETS.has(name) || SOFT_POCKETS.has(name)) ? '・ゆるいすき間' : ''}）`)
   } catch (e) {
     failed.push(`${name}（${path.relative(SRC, src)}）：${e.message}`)
   }

@@ -141,6 +141,8 @@ export const bgModelOf = ({ data: rgb, W, H }, k = KEY) => {
 
 // 背景を抜いた rgba を返す：{ img, clear（透明にできた割合）, mode, edgeLeft（抜いたあとも縁に残った体の割合） }
 // opts.loosePockets … flat の絵で「ゆるいすき間」も抜く（KEY.POCKET_LOOSE_*・目で確かめた絵だけに付ける）
+// opts.softPockets … { min, mean, std, haze:{ sat, lum } } 「ゆるいすき間」の条件を絵ごとに決める（loosePockets の代わり）。haze は霧のふちのにじみも抜く。
+//   これも目で確かめた絵だけに付ける（tools/v2cap-enemy-art.mjs の SOFT_POCKETS）
 export const keyBackground = (img, k = KEY, opts = {}) => {
   const { data: rgb, W, H } = img
   const N = W * H
@@ -191,12 +193,24 @@ export const keyBackground = (img, k = KEY, opts = {}) => {
       each(p, r => { if (!seen[r] && lay[r] < 0 && dist[r] <= k.T_IN) { seen[r] = 1; blob.push(r) } })
     }
     const n = blob.length
-    const loose = () => opts.loosePockets && n >= k.POCKET_LOOSE_MIN && sum / n <= k.POCKET_LOOSE_MEAN
-      && Math.sqrt(Math.max(0, ls2 / n - (ls / n) ** 2)) <= k.POCKET_LOOSE_STD
+    const soft = opts.softPockets
+    const loose = () => (soft
+      ? n >= soft.min && sum / n <= soft.mean && Math.sqrt(Math.max(0, ls2 / n - (ls / n) ** 2)) <= soft.std
+      : opts.loosePockets && n >= k.POCKET_LOOSE_MIN && sum / n <= k.POCKET_LOOSE_MEAN
+        && Math.sqrt(Math.max(0, ls2 / n - (ls / n) ** 2)) <= k.POCKET_LOOSE_STD)
     const isBg = n >= k.POCKET_MIN && (model.mode === 'flat'
       ? sum / n <= k.POCKET_MEAN || loose()
       : dark / n >= k.POCKET_TONE && light / n >= k.POCKET_TONE)
     if (isBg) for (const p of blob) { lay[p] = 0; core.push(p) }
+  }
+  // 霧のふちのにじみ（opts.softPockets.haze を付けた絵だけ）：抜いた所から、色がほとんど無くて明るさが背景に近い画素へ広げる
+  //   sat＝RGBの最大−最小の上限・lum＝背景との明るさの差の上限。flat の絵だけ
+  const haze = opts.softPockets?.haze
+  if (haze && model.mode === 'flat') {
+    const bgLum = (model.bg[0] + model.bg[1] + model.bg[2]) / 3
+    const hazy = (p) => Math.abs(lumOf(rgb, p) - bgLum) <= haze.lum
+      && Math.max(rgb[p * 3], rgb[p * 3 + 1], rgb[p * 3 + 2]) - Math.min(rgb[p * 3], rgb[p * 3 + 1], rgb[p * 3 + 2]) <= haze.sat
+    for (let h = 0; h < core.length; h++) each(core[h], r => { if (lay[r] < 0 && hazy(r)) { lay[r] = 0; core.push(r) } })
   }
   // 背景のまわり BAND px（lay 1..BAND）。checker は、いちばん近い背景の画素の色をその場所の背景の色にする
   //   （升目の色はとなりで変わるので、明るさから決めた色より正確。flat は1色なので同じ）
