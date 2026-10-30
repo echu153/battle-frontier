@@ -46,11 +46,13 @@ test('【確定】2026-10-31 ボス戦は絵がそろうまで戦闘の時計を
   assert.match(fight, /if \(!artReady\) return/, '絵がそろうまで舞台を出さない')
   assert.match(fight, /preloadArt\(artSrcs/)
   // 入口の画面でも同じ仕組みで読み始める（new Image で別に読むと、戦闘の画面で待ち直す）
+  //   挑戦の入口はボスが2体以上いるので、開いたボスと入っているボスの絵だけ読む（全部は読まない）
   for (const f of ['../components/V2capDungeon.jsx', '../components/V2capAtb.jsx']) {
     const src = read(f)
-    assert.match(src, /preloadArt\(bossArt\.srcs\)/, f)
+    assert.match(src, /preloadArt\((bossArt|art)\.srcs\)/, f)
     assert.doesNotMatch(src, /of bossArt[^\n]*new Image\(\)/, f)
   }
+  assert.match(read('../components/V2capDungeon.jsx'), /new Set\(\[openBoss, \.\.\.runBosses\.split\(','\)\]\)/, '開いたボスと入っているボス')
   // 背景の絵と流れ図も先に読む一覧に入っている
   for (const art of [bossIllustOf('varuzenoku'), bossIllustOf('amaza'), bossArtOf('varuzenoku')]) {
     assert.ok(art.srcs.includes(art.bg.src) && art.srcs.includes(art.bg.flowSrc), art.key)

@@ -9012,7 +9012,9 @@ create or replace function public.v2cap_dungeon_conf(p_boss text, p_diff text)
 returns table(hp int, area int) language sql immutable set search_path = public as $$
   select v.hp, v.area from (values
     ('varuzenoku', 'normal', 6500, 2),
-    ('varuzenoku', 'hard', 15000, 5)
+    ('varuzenoku', 'hard', 15000, 5),
+    ('amaza', 'normal', 6500, 2),
+    ('amaza', 'hard', 15000, 5)
   ) as v(boss, diff, hp, area)
   where v.boss = p_boss and v.diff = p_diff
 $$;
@@ -9057,6 +9059,8 @@ begin
   if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
   return jsonb_build_object('ok', true,
     'summoned_today', exists (select 1 from public.v2cap_dungeon_runs r where r.owner_id = v_uid and r.day = public.v2cap_dungeon_today()),
+    -- きょう呼んだボス（呼べるのはボスごとに1日1回）
+    'summoned_bosses', coalesce((select jsonb_agg(distinct r.boss) from public.v2cap_dungeon_runs r where r.owner_id = v_uid and r.day = public.v2cap_dungeon_today()), '[]'::jsonb),
     -- 入っているボス：まだ倒せる（時間内で倒していない）ものと、倒した・時間切れから30分以内のもの
     'runs', coalesce((select jsonb_agg(public.v2cap_dungeon_run_json(r.id, v_uid) order by r.started_at desc)
                       from public.v2cap_dungeon_runs r
@@ -9099,8 +9103,8 @@ begin
   if v_here < v_area then
     return jsonb_build_object('ok', false, 'error', format('エリア%sに着くと呼べます', v_area));
   end if;
-  if exists (select 1 from public.v2cap_dungeon_runs r where r.owner_id = v_uid and r.day = public.v2cap_dungeon_today()) then
-    return jsonb_build_object('ok', false, 'error', 'きょうはもう呼びました（朝5時に戻ります）');
+  if exists (select 1 from public.v2cap_dungeon_runs r where r.owner_id = v_uid and r.day = public.v2cap_dungeon_today() and r.boss = p_boss) then
+    return jsonb_build_object('ok', false, 'error', 'きょうはもうこのボスを呼びました（朝5時に戻ります）');
   end if;
   if exists (select 1 from public.v2cap_dungeon_runs r where r.owner_id = v_uid and r.cleared_at is null and r.ends_at > now()) then
     return jsonb_build_object('ok', false, 'error', 'いま呼んでいるボスがいます');
@@ -9287,3 +9291,53 @@ end;
 $$;
 revoke all on function public.v2cap_shop_buy(text) from public, anon;
 grant execute on function public.v2cap_shop_buy(text) to authenticated;
+
+-- ============================================================
+-- ===== 25. 商店の商人ソルド（2026-10-31）=====
+-- ============================================================
+-- 【確定】2026-10-31 ユーザー指示「糸目の胡散臭いお兄さん、関西弁の守銭奴にする予定」（商店の画面に、看板娘・親方・アレア・テオドールと同じ形でイラストを入れる）＋選んだこと「好感度あり」。
+--   人物・セリフ・段階は画面（src/v2cap/lib/merchant.js）。ここは日付と数を覚えるだけ（アレアの §20 と同じ形）
+--   ・merchant_affinity ＝ 好感度（その日はじめて話しかけたら+1・1日1回・下がらない・画面には出さない）
+--   ・merchant_talk_day ＝ 最後に話しかけた日（日本時間の5時で切り替え）。店を開いたときの「今日も」「久しぶり」「また」にも使う
+--   ・merchant_stage_seen ＝ 段階の場面をどこまで見せたか（画面が見せたら v2cap_merchant_seen で入れる）
+alter table public.v2cap_profiles add column if not exists merchant_affinity   int not null default 0;
+alter table public.v2cap_profiles add column if not exists merchant_talk_day   date;
+alter table public.v2cap_profiles add column if not exists merchant_stage_seen int not null default 0;
+
+-- 話しかけた：今日まだなら好感度+1（up=true）。返すのは好感度と見せた段階
+create or replace function public.v2cap_merchant_talk()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid   uuid := auth.uid();
+  v_today date := ((now() at time zone 'Asia/Tokyo') - interval '5 hours')::date;
+  v_row   public.v2cap_profiles;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select * into v_row from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  if v_row.merchant_talk_day is distinct from v_today then
+    update public.v2cap_profiles set merchant_affinity = merchant_affinity + 1, merchant_talk_day = v_today where id = v_uid;
+    return jsonb_build_object('ok', true, 'up', true, 'affinity', v_row.merchant_affinity + 1, 'seen', v_row.merchant_stage_seen);
+  end if;
+  return jsonb_build_object('ok', true, 'up', false, 'affinity', v_row.merchant_affinity, 'seen', v_row.merchant_stage_seen);
+end;
+$$;
+revoke all on function public.v2cap_merchant_talk() from public, anon;
+grant execute on function public.v2cap_merchant_talk() to authenticated;
+
+-- 段階の場面を見せた（下がらない・0〜9）
+create or replace function public.v2cap_merchant_seen(p_stage int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if p_stage is null or p_stage < 0 or p_stage > 9 then return jsonb_build_object('ok', false, 'error', '段階が正しくありません'); end if;
+  update public.v2cap_profiles set merchant_stage_seen = greatest(merchant_stage_seen, p_stage) where id = v_uid;
+  return jsonb_build_object('ok', true);
+end;
+$$;
+revoke all on function public.v2cap_merchant_seen(int) from public, anon;
+grant execute on function public.v2cap_merchant_seen(int) to authenticated;

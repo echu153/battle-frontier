@@ -1,14 +1,17 @@
 // v2cap の IDダンジョン（ボスを呼び、HPを持ち越して倒す・ATB）の決まりのテスト（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import {
-  DUNGEON_BOSSES, DIFF_KEYS, DUNGEON_MIN, DUNGEON_TRY_SEC, SUMMONS_PER_DAY, STAMINA_OWNER_FIRST, STAMINA_OWNER, STAMINA_HELPER, HELPERS_MAX,
+  CHALLENGE_CATS, DUNGEON_BOSSES, DIFF_KEYS, DUNGEON_MIN, DUNGEON_TRY_SEC, SUMMONS_PER_DAY, STAMINA_OWNER_FIRST, STAMINA_OWNER, STAMINA_HELPER, HELPERS_MAX,
   diffOf, isDiffReady, isDiffUnlocked, isSummonable, tryStaminaOf, dungeonFighter,
 } from './dungeon.js'
 import { createAtb, runFor, startMacro, fillPerSecOf, hpBuffChips, castMsOf, ATB_SLOW_CUT, FILL_PER_SEC, BUFF_GAUGE_SEC, BUFF_WAIT_AFTER_ACT_SEC, BUFF_SHOW_SEC, TURN_SEC, GAUGE_FULL, NOW_WAIT_AFTER_ACT_SEC, CAST_SEC } from '../core/atb.js'
 import { inflict } from '../core/ailments.js'
 import { bossIllustOf, buffArtMsOf } from './bossIllust.js'
+import { bossThumbOf } from './bossArt.js'
+import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { liveStats } from '../core/battle.js'
 import { statsOf } from '../core/enemies.js'
 import { CAP_RULES } from './rules.js'
@@ -30,7 +33,7 @@ test('【確定】2026-10-29 数字はサーバー（SQL §23）と同じ：HP�
   const conf = fnBody('v2cap_dungeon_conf')
   const rows = [...conf.matchAll(/\('(\w+)', '(\w+)', (\d+), (\d+)\)/g)].map(m => ({ boss: m[1], diff: m[2], hp: +m[3], area: +m[4] }))
   const ready = Object.entries(DUNGEON_BOSSES).filter(([boss]) => isSummonable(boss)).flatMap(([boss, b]) => DIFF_KEYS.filter(k => isDiffReady(boss, k)).map(diff => ({ boss, diff, hp: b.diffs[diff].hp, area: b.diffs[diff].area })))
-  assert.deepEqual(rows, ready, 'サーバーの難易度の表＝呼べる難易度（まだ数字の無い難易度・まだ呼べないボス＝雨摩座はサーバーにも無い）')
+  assert.deepEqual(rows, ready, 'サーバーの難易度の表＝呼べる難易度（まだ数字の無い難易度はサーバーにも無い）')
   assert.match(fnBody('v2cap_dungeon_summon'), new RegExp(`c_min\\s+constant int := ${DUNGEON_MIN};`))
   const start = fnBody('v2cap_dungeon_try_start')
   assert.match(start, new RegExp(`c_owner_first constant int := ${STAMINA_OWNER_FIRST};`))
@@ -38,9 +41,11 @@ test('【確定】2026-10-29 数字はサーバー（SQL §23）と同じ：HP�
   assert.match(start, new RegExp(`c_helper\\s+constant int := ${STAMINA_HELPER};`))
   assert.match(start, new RegExp(`c_try_sec\\s+constant int := ${DUNGEON_TRY_SEC};`))
   for (const fn of ['v2cap_dungeon_join', 'v2cap_dungeon_state']) assert.match(fnBody(fn), new RegExp(`c_helpers_max constant int := ${HELPERS_MAX};`), `${fn} の救援の人数`)
-  // 1日1回：きょう呼んだら（どの難易度でも）呼べない
+  // ボスごとに1日1回：きょうそのボスを呼んだら（どの難易度でも）呼べない（2026-10-31 ユーザー選択「ボスごとに1日1回」）・同時に1体
   assert.equal(SUMMONS_PER_DAY, 1)
-  assert.match(fnBody('v2cap_dungeon_summon'), /r\.owner_id = v_uid and r\.day = public\.v2cap_dungeon_today\(\)/)
+  assert.match(fnBody('v2cap_dungeon_summon'), /r\.owner_id = v_uid and r\.day = public\.v2cap_dungeon_today\(\) and r\.boss = p_boss/)
+  assert.match(fnBody('v2cap_dungeon_summon'), /r\.owner_id = v_uid and r\.cleared_at is null and r\.ends_at > now\(\)/, '同時に1体')
+  assert.match(fnBody('v2cap_dungeon_state'), /'summoned_bosses'/)
   assert.match(fnBody('v2cap_dungeon_today'), /at time zone 'Asia\/Tokyo'\) - interval '5 hours'/, '朝5時で切り替え')
 })
 
@@ -457,11 +462,35 @@ test('【確定】2026-10-30 持ち越しで節目をもう切っているなら
   assert.deepEqual(buffLog(full), [])
 })
 
-test('【確定】2026-10-30 雨摩座：黒龍の裏返し（魔法が主）・節目と割合と強さは黒龍と同じ・まだ呼べない（試し撃ちだけ）', () => {
+test('【確定】2026-10-31 メニューは「挑戦」・中は「強敵」に黒龍と雨摩座（ユーザー「これは『挑戦』にして」「ここに『強敵』ってカテゴリを作って、ここにヴァルゼノクとあまざ入れて」）・八獄と天穹十二宮はまだ入れない・画面に「IDダンジョン」と出さない', () => {
+  assert.deepEqual(CHALLENGE_CATS.map(c => c.label), ['強敵'], '「八獄」「てんきゅう12宮」はまだ入れない')
+  assert.deepEqual(CHALLENGE_CATS[0].bosses, ['varuzenoku', 'amaza'])
+  for (const c of CHALLENGE_CATS) for (const k of c.bosses) {
+    assert.ok(isSummonable(k), k)
+    // 一覧の小さい絵（ボスの種類を足したら node tools/v2cap-boss-thumb.mjs）
+    const src = bossThumbOf(k)
+    assert.ok(src, `${k} の一覧の絵`)
+    const file = new URL(`../../../public${src.split('?')[0]}`, import.meta.url)
+    assert.ok(existsSync(file) && statSync(file).size < 60 * 1024, `${k} の絵は軽い`)
+    assert.equal(src.split('?v=')[1], versionOf(fileURLToPath(file)), `${k} の印（node tools/v2cap-boss-thumb.mjs をやり直す）`)
+  }
+  const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8')
+  const home = read('../pages/V2capHome.jsx')
+  assert.match(home, /key:'dungeon', label:'挑戦'/)
+  assert.match(home, /dungeon:'🐉 挑戦'/)
+  // 画面に出る文字（コメントの外）に古い名前が残っていない
+  for (const f of ['../pages/V2capHome.jsx', '../components/V2capDungeon.jsx', '../components/V2capAtb.jsx']) {
+    for (const line of read(f).split(/\r?\n/)) assert.ok(/^\s*\/\//.test(line) || !line.includes('IDダンジョン'), `${f}: ${line.trim().slice(0, 60)}`)
+  }
+})
+
+test('【確定】2026-10-30 雨摩座：黒龍の裏返し（魔法が主）・節目と割合と強さは黒龍と同じ・2026-10-31 強敵として呼べる', () => {
   const A = DUNGEON_BOSSES.amaza, V = DUNGEON_BOSSES.varuzenoku
-  assert.equal(isSummonable('amaza'), false)
+  assert.equal(isSummonable('amaza'), true)
   assert.equal(isSummonable('varuzenoku'), true)
-  for (const k of DIFF_KEYS) assert.equal(isDiffUnlocked('amaza', k, 15), false, 'ダンジョンの入口では呼べない')
+  assert.equal(isDiffUnlocked('amaza', 'normal', 2), true)
+  assert.equal(isDiffUnlocked('amaza', 'hard', 4), false, 'エリア⑤に着くまで呼べない')
+  assert.equal(isDiffUnlocked('amaza', 'expert', 15), false, 'まだ数字が無い')
   assert.deepEqual(A.diffs, V.diffs, '強さは黒龍と同じ')
   assert.equal(A.kind, 'mag')
   assert.deepEqual(A.skills.map(s => [s.name, s.kind, s.mult, s.ail?.key ?? null, s.ail?.chance ?? null]), [

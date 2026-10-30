@@ -1,5 +1,5 @@
 // ============================================================
-// 「レベルキャップあり」版（v2cap）— IDダンジョン（ボスを呼び、HPを持ち越して倒す・ATB戦闘）
+// 「レベルキャップあり」版（v2cap）— 挑戦（ボスを呼び、HPを持ち越して倒す・ATB戦闘）
 // ------------------------------------------------------------
 // 【確定】2026-10-29 ユーザー選択（経緯は docs/v2cap-design.md §6-14 の「IDダンジョン」）：
 //   ・**自分で呼ぶ**（入口で難易度を選ぶ）。呼べるのは**全部の難易度を合わせて1日1回**（日本時間の朝5時に戻る）
@@ -10,6 +10,8 @@
 //     （ユーザー「一旦ハードまでの実装でいい」。エキスパート・マスターの決まりは設計書にある＝大技を止める・怒り・ギミック）
 //   ・報酬は**黒龍の専用の装備**（あとで作る）。いまは無し＝**削った量だけ数える**（報酬は削った量で差を付ける）
 //   ・ボスの技：HPの節目（75%・50%・25%）で1回ずつ必ず撃ち、そのあとも確率で使う・HP50%以下は毎回技（atb.js の pattern）
+// 【確定】2026-10-31 ユーザー「これは『挑戦』にして」「ここに『強敵』ってカテゴリを作って、ここにヴァルゼノクとあまざ入れて、ここに旧レイドのボスを入れる予定」＋選択「ボスごとに1日1回」：
+//   メニューの名前は「挑戦」（コードと DB の dungeon の名前はそのまま）。呼べるのは**ボスごとに1日1回**・同時に1体
 // ⚠数値の正はこのファイル。supabase_v2cap_dungeon_20261029.sql に同じ値（HP・スタミナ・時間・回数・人数・解禁のエリア）があり、
 //   dungeon.test.js が突き合わせる（片方だけ直すと落ちる）
 // ============================================================
@@ -18,7 +20,7 @@ import { CAP_RULES } from './rules.js'
 
 export const DUNGEON_MIN = 90          // 呼んだときから倒せる時間（分）
 export const DUNGEON_TRY_SEC = 180     // 挑戦1回の長さ（秒）＝ATBの時間切れ
-export const SUMMONS_PER_DAY = 1       // 全部の難易度を合わせて1日に呼べる回数
+export const SUMMONS_PER_DAY = 1       // ボスごとに、全部の難易度を合わせて1日に呼べる回数
 export const STAMINA_OWNER_FIRST = 0   // 呼んだ人の最初の1回
 export const STAMINA_OWNER = 3         // 呼んだ人の2回目から
 export const STAMINA_HELPER = 5        // 救援で入った人（毎回）
@@ -31,7 +33,7 @@ export const DIFF_KEYS = ['normal', 'hard', 'expert', 'master']
 //   power と atk・hp は測って決めた（推奨戦闘力の人で：半分は1回の挑戦で負けずに倒し、残りは2回目で倒す）。
 //   power は推奨LVの場所のボスの戦闘力（ノーマル＝②-③の474・ハード＝⑥-①959と⑥-②1163の間を推奨LVで割った1027）
 //   ready:false の難易度はまだ呼べない（数字を決めていない）
-//   summon:false のボスはまだ呼べない（試し撃ちだけ）
+//   summon:false のボスはまだ呼べない（試し撃ちだけ。いまは無い）
 // 黒龍の強さ（雨摩座も同じ数字を使う）
 const VARUZENOKU_DIFFS = {
   // 2026-10-29 鈍足を「ゲージ20%遅く」にしてエンジンで測り直した（前はノーマル 攻撃0.42倍・HP7000）。
@@ -82,9 +84,9 @@ export const DUNGEON_BOSSES = {
   },
   // 【確定】2026-10-30 ユーザー「あまざも黒龍と同じような行動パターンにして」→選択「黒龍の裏返し」：
   //   黒龍の物理と魔法を入れ替えた形（魔法が主）。節目・技の出る割合・強さ（diffs）は黒龍と同じ。
-  //   ★まだ呼べない（summon: false＝ダンジョンの入口に出ない・サーバーの表にも無い）。いまは試し撃ちだけ
+  //   【確定】2026-10-31 ユーザー「ヴァルゼノクとあまざ入れて」：強敵として呼べる（サーバーの表にも入れた）
   amaza: {
-    name: '雨摩座', kind: 'mag', race: '妖精', summon: false,   // 雨の精霊＝妖精（精霊も入れる・monsterRace.js）
+    name: '雨摩座', kind: 'mag', race: '妖精',   // 雨の精霊＝妖精（精霊も入れる・monsterRace.js）
     dist: { hp: 40, mp: 6, str: 12, dex: 7, agi: 7, int_stat: 16, vit: 9, luk: 3 },
     // 通常攻撃が雨礫（魔法1.0倍）
     skills: [
@@ -114,6 +116,12 @@ export const DUNGEON_BOSSES = {
     diffs: VARUZENOKU_DIFFS,
   },
 }
+
+// 「挑戦」のカテゴリ（入口の見出しとボス）。旧レイドのボスは強敵に足す予定。
+//   ★八獄・天穹十二宮もカテゴリに足す予定だが、ユーザー「※まだ入れないで」＝まだ足さない
+export const CHALLENGE_CATS = [
+  { key: 'rival', label: '強敵', bosses: ['varuzenoku', 'amaza'] },
+]
 
 export const diffOf = (bossKey, diffKey) => DUNGEON_BOSSES[bossKey]?.diffs?.[diffKey] || null
 export const isDiffReady = (bossKey, diffKey) => { const d = diffOf(bossKey, diffKey); return !!d && d.ready !== false }

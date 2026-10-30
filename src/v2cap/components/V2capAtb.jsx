@@ -10,7 +10,7 @@ import { loadPref, savePref } from '../core/prefs.js'
 import { motionOf } from '../lib/motionArt.js'
 import { homeIconOf } from '../lib/classArt.js'
 import { artGenderOf } from '../lib/gender.js'
-import { BOSS_DEFS, bossArtOf } from '../lib/bossArt.js'
+import { BOSS_DEFS, bossArtOf, bossThumbOf } from '../lib/bossArt.js'
 import { dungeonFighter, diffOf, isDiffReady, DIFF_KEYS } from '../lib/dungeon.js'
 import { bossIllustOf } from '../lib/bossIllust.js'
 import { AREA_LIST, SPOTS, SUB_NAMES, toFighter as enemyFighter, enemyPowerOf } from '../lib/areas.js'
@@ -130,7 +130,7 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
     return (
       <div style={{ ...box, padding:'12px' }}>
         <div style={{ color: TEXT.sub, fontSize:'11px', lineHeight:1.7, marginBottom:'10px' }}>
-          レイドボス・IDダンジョンで使うATB戦闘の試し撃ちです。<b style={{ color: TEXT.bright }}>報酬なし・戦闘の結果はサーバーへ送りません</b>（送るのはマクロの保存だけ）。<br />
+          レイドボス・挑戦で使うATB戦闘の試し撃ちです。<b style={{ color: TEXT.bright }}>報酬なし・戦闘の結果はサーバーへ送りません</b>（送るのはマクロの保存だけ）。<br />
           ゲージはふだん5秒で満タン。AGIが相手を上回るほど速くなります（相手の4倍で2倍速まで）。技は全部使えて、使うとクールダウンに入ります（MPは回復しません）。
         </div>
         <V2capAtbMacros macros={macros} onChange={editMacros} usable={usable} dirty={dirty} saving={saving} msg={macroMsg} onSave={saveMacros} />
@@ -149,11 +149,11 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
           const diffs = DIFF_KEYS.filter(k => isDiffReady(bossArt.key, k))
           return (
             <div style={{ display:'flex', gap:'10px', alignItems:'center', border:'1px solid #5a1a1a', background:'#140608', padding:'8px', marginBottom:'8px' }}>
-              {bossArt.illust && <img src={bossArt.illust} alt="" draggable={false} style={{ width:'96px', height:'96px', objectFit:'contain', flexShrink:0 }} />}
+              {bossThumbOf(bossArt.key) && <img src={bossThumbOf(bossArt.key)} alt="" draggable={false} style={{ width:'96px', height:'96px', objectFit:'contain', flexShrink:0 }} />}
               <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.7, minWidth:0 }}>
-                <b style={{ color:'#ff8866' }}>{bossArt.name}</b>（IDダンジョンのボス）<br />
+                <b style={{ color:'#ff8866' }}>{bossArt.name}</b>（挑戦のボス）<br />
                 {diffs.length > 0
-                  ? '強さと技はIDダンジョンと同じです（HPは持ち越さず、1回で全部）。'
+                  ? '強さと技は挑戦と同じです（HPは持ち越さず、1回で全部）。'
                   : '技の動きはできましたが、数字はまだです。強さと技は仮で、この場所のボスのものです（構えた大技は最後の技の動き）。'}
                 戦闘中の「動きを見る」で技の動きをどれでも流せます
                 {diffs.length > 0 && (

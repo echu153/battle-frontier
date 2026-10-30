@@ -43,6 +43,13 @@ const CdShade = ({ ratio, lite = false }) => (ratio > 0 ? (
   </>
 ) : null)
 
+// 技のボタンの格子：スマホの幅で3列・PCの幅で5列になる（1列の最小＝幅の30%・ただし180pxまで）
+const SKILL_GRID = 'repeat(auto-fill, minmax(min(30%, 180px), 1fr))'
+// 文字はクールダウンの膜より手前・1行に収める
+const SKILL_TEXT = { position:'relative', zIndex: 1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }
+// 技の名前の大きさ：ふだん11px。長い名前は、スマホの1列（画面の幅−余白を3つに分けた幅）に収まるまで小さく
+const skillNameSize = (name) => `min(11px, calc(((100vw - 60px) / 3 - 8px) / ${Math.max(1, name.length)}))`
+
 // 舞台だけを毎回更新する（技のボタンやログまで毎回作り直すと、スマホで間に合わない）。tickRef.current() で更新
 const PANEL_MS = 66   // ボタンや数字は1秒15回
 const LiveStage = ({ tickRef, st, fxRef, ...rest }) => {
@@ -270,8 +277,23 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
         )}
       </div>
 
-      {/* コマンド */}
-      <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginBottom:'8px' }}>
+      {/* コマンド：防御と通常攻撃は上の段に大きく・技は同じ大きさの格子（スマホ3列・PC5列）
+          【確定】2026-10-31 ユーザー「今スキルこんな感じで乱雑しててすごい押しづらいし見づらい」→選択「同じ大きさの格子」：
+          前は名前の長さで幅がばらばらだった。場所がいつも同じ＝指が覚える。クールダウン中は残りの秒を大きく。マクロ中心で技をたたむ案は検討中 */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'4px', marginBottom:'4px' }}>
+        <button onClick={() => toggleGuard(s)} disabled={s.over}
+          style={{ ...miniBtn(me.guardNext ? '#ffee44' : '#66ccff'), padding:'8px 4px', fontSize:'13px', minHeight:'48px', minWidth:0,
+            background: me.guardNext ? '#003060' : '#000818', textAlign:'center', position:'relative', overflow:'hidden' }}>
+          <div style={SKILL_TEXT}>🛡 防御{me.guardNext ? '（次に出る）' : ''}</div>
+          <div style={{ ...SKILL_TEXT, fontSize: gReady ? '9px' : '12px', fontWeight: gReady ? 'normal' : 'bold', color: gReady ? TEXT.label : '#ffffff', marginTop:'2px' }}>
+            {gReady ? `被ダメージ-${GUARD_CUT}%・CD${GUARD_CD}秒` : `あと${guardCdLeft(me, now).toFixed(1)}秒`}
+          </div>
+          <CdShade lite={lite} ratio={guardCdRatio(me, now)} />
+        </button>
+        <button onClick={() => reserve(s, null)} disabled={s.over}
+          style={{ ...miniBtn('#88ccff'), padding:'8px 4px', fontSize:'13px', minHeight:'48px', minWidth:0, textAlign:'center' }}>通常攻撃</button>
+      </div>
+      <div style={{ display:'grid', gridTemplateColumns: SKILL_GRID, gap:'4px', marginBottom:'8px' }}>
         {me.slots.map((sl, i) => {
           const left = cdLeft(me, i, now)
           // クールダウン中はふだんの色のままグレーをかける（下から色が戻る）。MP不足・封印などで使えないときは暗い色
@@ -279,27 +301,16 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
           const mp = mpCostOf(me, sl.skill)
           return (
             <button key={i} onClick={() => reserve(s, i)} disabled={s.over}
-              style={{ ...miniBtn(lit ? '#44aaff' : '#2a4a66'), padding:'6px 8px', fontSize:'11px', textAlign:'left',
-                color: lit ? '#88ccff' : TEXT.empty, position:'relative', overflow:'hidden', minWidth:'92px' }}>
-              <div>{sl.skill.name}</div>
-              <div style={{ fontSize:'9px', color: TEXT.label, marginTop:'2px' }}>
-                {left > 0 ? `あと${left.toFixed(1)}秒` : `CD${cdFor(me, sl.skill)}秒`}・MP{mp}
+              style={{ ...miniBtn(lit ? '#44aaff' : '#2a4a66'), padding:'5px 3px', minHeight:'46px', minWidth:0, textAlign:'center',
+                color: lit ? '#88ccff' : TEXT.empty, position:'relative', overflow:'hidden' }}>
+              <div style={{ ...SKILL_TEXT, fontSize: skillNameSize(sl.skill.name) }}>{sl.skill.name}</div>
+              <div style={{ ...SKILL_TEXT, fontSize: left > 0 ? '12px' : '9px', fontWeight: left > 0 ? 'bold' : 'normal', color: left > 0 ? '#ffffff' : TEXT.label, marginTop:'2px' }}>
+                {left > 0 ? `あと${left.toFixed(1)}秒` : `CD${cdFor(me, sl.skill)}秒・MP${mp}`}
               </div>
               <CdShade lite={lite} ratio={cdRatio(me, i, now)} />
             </button>
           )
         })}
-        <button onClick={() => reserve(s, null)} disabled={s.over}
-          style={{ ...miniBtn('#88ccff'), padding:'6px 8px', fontSize:'11px' }}>通常攻撃</button>
-        <button onClick={() => toggleGuard(s)} disabled={s.over}
-          style={{ ...miniBtn(me.guardNext ? '#ffee44' : '#66ccff'), padding:'6px 8px', fontSize:'11px',
-            background: me.guardNext ? '#003060' : '#000818', textAlign:'left', position:'relative', overflow:'hidden' }}>
-          <div>🛡 防御{me.guardNext ? '（次に出る）' : ''}</div>
-          <div style={{ fontSize:'9px', color: TEXT.label, marginTop:'2px' }}>
-            {gReady ? `被ダメージ-${GUARD_CUT}%・CD${GUARD_CD}秒` : `あと${guardCdLeft(me, now).toFixed(1)}秒`}
-          </div>
-          <CdShade lite={lite} ratio={guardCdRatio(me, now)} />
-        </button>
       </div>
 
       {/* ログ（2026-10-26 ユーザー指示「ログスキルの下に持ってきて」＝技のボタンの下） */}

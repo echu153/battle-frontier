@@ -85,7 +85,8 @@ const MENU = [
   ] },
   { title:'冒険', head:'adventure', items:[
     // 【確定】2026-10-29 IDダンジョン（ボスを呼び、HPを持ち越して倒す・ATB戦闘・救援）。いまは黒龍ヴァルゼノクのノーマル・ハード
-    { key:'dungeon', label:'IDダンジョン', icon:'🐉', color:'#ff6655', action:'黒龍ヴァルゼノクを呼ぶ・救援' },
+    // 【確定】2026-10-31 ユーザー「これは『挑戦』にして」＝メニューと画面の名前は「挑戦」（中のカテゴリは lib/dungeon.js の CHALLENGE_CATS）
+    { key:'dungeon', label:'挑戦', icon:'🐉', color:'#ff6655', action:'強敵に挑む・救援' },
     // 【確定】2026-10-14 塔（あるけみすと型の対人・1〜100層）。説明はいまの層で変わる（menuOf）
     // 【確定】2026-10-31 メニューの札は「覇天塔」だけ（ユーザー指示「ジークヴァルトのはてんとうは覇天塔だけにして」）。塔の画面の題などは TOWER_NAME のまま
     { key:'tower', label: TOWER_SHORT_NAME, icon:'🗼', color:'#b48cff', action:'階層守護者に挑む' },
@@ -107,7 +108,7 @@ const MENU = [
     { key:'tree', label:'ユグレシアの宝樹', icon:'🌳', color:'#44dd99', action:'祈る' },
   ] },
 ]
-const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', museum:'🏺 博物館', burger: <><ShopMark size={18} /> {SHOP_NAME}</>, asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場', shop:'🏪 商店', tower:`🗼 ${TOWER_NAME}`, dungeon:'🐉 IDダンジョン',
+const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', museum:'🏺 博物館', burger: <><ShopMark size={18} /> {SHOP_NAME}</>, asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場', shop:'🏪 商店', tower:`🗼 ${TOWER_NAME}`, dungeon:'🐉 挑戦',
   uniqueCheck:'💎 ユニークの能力の確かめ［開発］', atb:'⏱ ATB戦闘の試し撃ち［開発］' }
 // ATBの試し撃ち（2026-10-26・開発用）。開いたときだけ読み込む（ホームの重さを増やさない）
 const V2capAtb = lazy(() => import('../components/V2capAtb.jsx'))

@@ -44,6 +44,23 @@ test('【確定】2026-10-31 端末でプレイヤーとモンスターが消え
   }
 })
 
+test('【確定】2026-10-31 技のボタンは同じ大きさの格子（ユーザー「今スキルこんな感じで乱雑しててすごい押しづらいし見づらい」→選択「同じ大きさの格子」）：防御と通常攻撃は上の段・スマホ3列・PC5列', () => {
+  const src = readFileSync(new URL('../components/V2capAtbFight.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  assert.match(src, /const SKILL_GRID = 'repeat\(auto-fill, minmax\(min\(30%, 180px\), 1fr\)\)'/)
+  assert.match(src, /gridTemplateColumns: SKILL_GRID/)
+  // スマホの幅（320〜430px の画面＝中身 268〜378px）で3列・PCの幅（約930px）で5列
+  const cols = (W, gap = 4) => { const min = Math.min(W * 0.3, 180); return Math.floor((W + gap) / (min + gap)) }
+  for (const w of [268, 323, 378]) assert.equal(cols(w), 3, `${w}px`)
+  assert.equal(cols(930), 5)
+  // 防御と通常攻撃は技より先（上の段）
+  assert.ok(src.indexOf('🛡 防御{me.guardNext') < src.indexOf('{me.slots.map((sl, i) =>'))
+  assert.ok(src.indexOf('>通常攻撃</button>') < src.indexOf('{me.slots.map((sl, i) =>'))
+  // 幅を名前で変えない・長い名前は小さくして1行に
+  assert.doesNotMatch(src, /minWidth:'92px'/)
+  assert.match(src, /skillNameSize\(sl\.skill\.name\)/)
+  assert.match(src, /whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'/)
+})
+
 test('【確定】2026-10-31 スマホの軽い表示（ユーザー「30回に落としたって出る、大技の時はそれよりも下がる感じ」）：重いものをやめる・舞台だけを毎回更新する', () => {
   const fightSrc = readFileSync(new URL('../components/V2capAtbFight.jsx', import.meta.url), 'utf8')
   // ぼかしと重ね方は軽い表示で使わない
