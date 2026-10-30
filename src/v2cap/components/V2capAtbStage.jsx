@@ -129,11 +129,11 @@ const UniqueBuffs = ({ side, right, ago }) => {
 const ART_H = 'clamp(110px, 30vw, 170px)'
 const ART_H_BIG = 'clamp(140px, 40vw, 230px)'
 export const PLAYER_VS_BOSS = 0.62
-// ボスの絵ごとの舞台の大きさ：枠の高さ（両方そろえる＝HPバーが並ぶ）・自分の絵の倍率・ボスの側の幅（flex）
+// ボスの絵ごとの舞台の大きさ：枠の高さ（両方そろえる）・自分の絵の倍率・ボスの側の幅（fr＝自分の側を1として）
 //   イラスト版は枠を 300px まで（自分の絵はドット絵版のときとほぼ同じ大きさ＝0.48倍）
 const STAGE_OF = {
-  pixel: { artH: ART_H_BIG, player: PLAYER_VS_BOSS, flex: '1.35 1 0' },
-  illust: { artH: 'clamp(170px, 46vw, 300px)', player: 0.48, flex: '1.6 1 0' },
+  pixel: { artH: ART_H_BIG, player: PLAYER_VS_BOSS, fr: 1.35 },
+  illust: { artH: 'clamp(170px, 46vw, 300px)', player: 0.48, fr: 1.6 },
 }
 
 // 横に並べたコマの1枚から frame のコマだけを見せる（-1 なら隠す）。
@@ -415,7 +415,13 @@ const buffAfterOf = (art, me, marks, now) => {
   const sinceOf = (nm) => { const f = marks.reduce((p, f) => (f.kind === 'rage' && f.skill === nm && f.t0 <= now && (!p || f.t0 >= p.t0) ? f : p), null); return f ? (now - f.t0) * 1000 : Infinity }
   return buffAfterAt(hpBuffChips(me).map(c => ({ b: art.buffs[c.name], since: sinceOf(c.name) })), now * 1000)
 }
-function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx, now, name, flex = '1 1 0', artH = ART_H, scale = 1, areaRef, castEnd = -1e9, squeeze = null, bossGlow = 0 }) {
+//   返すのは舞台の格子の1列ぶんの FIGHTER_ROWS 行（名前・絵・HPとMPの文字・バー・札）。行の高さは両方の列でそろう
+//   【確定】2026-10-31 ユーザー「スマホ版、なんでHPバーがプレイヤーとモンスターとずれてんの一緒にして」：左の列は狭くて HP と MP の文字が2段に折り返し、そのぶんバーが下がっていた
+//   【確定】2026-10-31 ユーザー「スマホで見てみたらプレイヤーとモンスターが見えない、エフェクトだけ見えてる状態」：手元の Chromium では再現しない＝端末のブラウザの違い。
+//     絵の枠を aspect-ratio＋height:100% で作ると、Safari では flex の中で幅が 0 になることがある（絵だけ消えて、px で置くエフェクトは残る＝言われたとおりの見え方）。枠の幅は明示する。
+//     背景も負の z-index をやめた（BossBackground）。絵の枠は別の層にする（translate3d）＝背景の WebGL の層の上に必ず重なる
+const FIGHTER_ROWS = 5
+function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx, now, name, artH = ART_H, scale = 1, areaRef, castEnd = -1e9, squeeze = null, bossGlow = 0 }) {
   const mine = fx.filter(f => f.side === side)
   const lastOf = (kind) => mine.reduce((t, f) => (f.kind === kind && f.t0 <= now && f.t0 > t ? f.t0 : t), -1e9)
   const dir = right ? -1 : 1   // 前＝相手の方
@@ -478,8 +484,8 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   const hpColor = right ? '#cc3344' : '#44cc66'
 
   return (
-    <div style={{ flex, minWidth:0, display:'flex', flexDirection:'column', alignItems:'stretch' }}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'6px', fontSize:'12px', color: right ? '#ff8888' : '#88ccff',
+    <>
+      <div style={{ position:'relative', minWidth:0, display:'flex', justifyContent:'space-between', alignItems:'center', gap:'6px', fontSize:'12px', color: right ? '#ff8888' : '#88ccff',
         flexDirection: right ? 'row-reverse' : 'row', minHeight:'18px' }}>
         <span style={{ flex:'0 1 auto', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{name}</span>
         {/* 敵の技の名前：名前と同じ行の、名前の横の空いた所のまん中（絵に重ならない・名前とも重ならない） */}
@@ -491,13 +497,13 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
         )}
       </div>
       {/* 絵 */}
-      <div ref={areaRef} style={{ position:'relative', height: artH, display:'flex', justifyContent:'center', alignItems:'flex-end', margin:'4px 0' }}>
-        <div style={{ height:`${scale * 100}%`, display:'flex', alignItems:'flex-end', transformOrigin:'50% 100%',
-          transform:`translateX(${dx.toFixed(1)}px)${squeeze ? ` scale(${squeeze[0].toFixed(3)}, ${squeeze[1].toFixed(3)})` : ''}`,
+      <div ref={areaRef} style={{ position:'relative', minWidth:0, height: artH, display:'flex', justifyContent:'center', alignItems:'flex-end', margin:'4px 0' }}>
+        <div style={{ width:'100%', height:`${scale * 100}%`, display:'flex', justifyContent:'center', alignItems:'flex-end', transformOrigin:'50% 100%',
+          transform:`translate3d(${dx.toFixed(1)}px, 0, 0)${squeeze ? ` scale(${squeeze[0].toFixed(3)}, ${squeeze[1].toFixed(3)})` : ''}`,
           opacity: down ? 0.25 : 1, transition:'opacity 0.4s' }}>
           {src || rig ? (
             // 待機の絵の枠（正方形）。攻撃の絵はこの枠に重ねる（ox・oy・w・h は待機の枠（クラスは 224px・ボスは base）を100%として割合で置く）
-            <div style={{ position:'relative', height:'100%', aspectRatio:'1 / 1', maxWidth:'100%', filter: filters.join(' ') || 'none',
+            <div style={{ position:'relative', height:'100%', width:`min(100%, calc(${artH} * ${scale}))`, filter: filters.join(' ') || 'none',
               transform: bsc && bsc.punch !== 1 ? `scale(${bsc.punch.toFixed(4)})` : undefined, transformOrigin:'50% 92%' }}>
               {rig && trails.length > 0 && <RigTrails art={rig} trails={trails} />}
               {rig ? <IllustRig art={rig} pose={pose} freePose={illustFreePoseAt(rig.key, tMs)} motion={showMotion} show={show} ghosts={ghosts} tMs={tMs} aura={aura} /> : (
@@ -537,24 +543,26 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
           )
         })}
       </div>
-      {/* HP・ゲージ */}
-      <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color: TEXT.label, gap:'4px', flexWrap:'wrap' }}>
+      {/* HP・ゲージ。文字が折り返すと MP が上の段・HP がバーのすぐ上（wrap-reverse）。段の高さは格子で両方の列にそろう＝HPの文字とバーが同じ高さに並ぶ */}
+      <div style={{ position:'relative', minWidth:0, display:'flex', justifyContent:'space-between', fontSize:'10px', lineHeight: 1.5, color: TEXT.label, gap:'0 4px', flexWrap:'wrap-reverse', alignContent:'flex-start', alignItems:'flex-start' }}>
         <span>HP {Math.max(0, me.hp).toLocaleString()} / {me.base.hp.toLocaleString()}</span>
         {!right && <span>MP {Math.max(0, me.mp).toLocaleString()} / {me.base.mp.toLocaleString()}</span>}
       </div>
-      <Bar pct={(Math.max(0, me.hp) / me.base.hp) * 100} color={hpColor} h={10} />
-      <div style={{ marginTop:'3px' }}>
-        {/* 大技の構えのゲージ（赤・2026-10-30 ユーザー「○○の構えとか表示させなくていい」で下の文字はやめた）・バフの行動のゲージ（金・0.5秒で貯まる）・ふだんのゲージ */}
-        {me.cast
-          ? <Bar pct={((st.t - me.cast.start) / (me.cast.until - me.cast.start)) * 100} color="#ff5522" h={8} />
-          : me.buffAct
-            ? <Bar pct={((st.t - me.buffAct.start) / BUFF_GAUGE_SEC) * 100} color="#ffd24a" h={6} />
-            : <Bar pct={(Math.min(me.gauge, need) / need) * 100} color={me.ail.paralyze ? '#888888' : right ? '#ff9944' : '#44aaff'} h={6} />}
+      <div style={{ position:'relative', minWidth:0 }}>
+        <Bar pct={(Math.max(0, me.hp) / me.base.hp) * 100} color={hpColor} h={10} />
+        <div style={{ marginTop:'3px' }}>
+          {/* 大技の構えのゲージ（赤・2026-10-30 ユーザー「○○の構えとか表示させなくていい」で下の文字はやめた）・バフの行動のゲージ（金・0.5秒で貯まる）・ふだんのゲージ */}
+          {me.cast
+            ? <Bar pct={((st.t - me.cast.start) / (me.cast.until - me.cast.start)) * 100} color="#ff5522" h={8} />
+            : me.buffAct
+              ? <Bar pct={((st.t - me.buffAct.start) / BUFF_GAUGE_SEC) * 100} color="#ffd24a" h={6} />
+              : <Bar pct={(Math.min(me.gauge, need) / need) * 100} color={me.ail.paralyze ? '#888888' : right ? '#ff9944' : '#44aaff'} h={6} />}
+        </div>
       </div>
-      <div style={{ display:'flex', flexDirection:'column', alignItems: align }}>
+      <div style={{ position:'relative', minWidth:0, display:'flex', flexDirection:'column', alignItems: align }}>
         <Chips st={st} side={me} right={right} />
       </div>
-    </div>
+    </>
   )
 }
 
@@ -891,7 +899,8 @@ const BgBehind = ({ behind, box }) => {
   )
 }
 // ダンジョンのボス戦の背景（lib/bossBg.js）。舞台の絵の所（上のはしから足元の少し下まで）にだけ敷く。下のはしはぼかして、HPの行の色（bg.under）へつなぐ。
-//   ★舞台は isolation:isolate で、これは z-index:-1＝舞台の地の色より上・ほかの中身より下。舞台の boxShadow（技の暗転）はこれの下になるので、暗さはここにも掛ける（dim）
+//   ★舞台の子のいちばん先に置く＝あとの行（position:relative）がこの上に重なる。負の z-index にしない（2026-10-31・端末によってキャラが背景の下に隠れるおそれ）。
+//     舞台の boxShadow（技の暗転）はこれの下になるので、暗さはここにも掛ける（dim）
 //   動くものは絵と同じ大きさの SVG（viewBox＝元の絵の px）に、明るく重ねる（screen）。上のはしは名前が読めるように少し暗く
 const BG_BELOW_FEET = 10
 const BG_FADE = 18
@@ -903,7 +912,7 @@ function BossBackground({ bg, geo, now, dim }) {
   const colors = [...new Set([...fx.glows, ...fx.mist, ...fx.embers, ...fx.spatter, ...fx.motes].map(g => g.color))]
   const grad = (c) => `${id}c${colors.indexOf(c)}`
   return (
-    <div style={{ position:'absolute', left: 0, right: 0, top: 0, height: H, zIndex: -1, overflow:'hidden', pointerEvents:'none', maskImage: mask, WebkitMaskImage: mask }}>
+    <div style={{ position:'absolute', left: 0, right: 0, top: 0, height: H, zIndex: 0, overflow:'hidden', pointerEvents:'none', maskImage: mask, WebkitMaskImage: mask }}>
       <img src={bg.src} alt="" draggable={false} decoding="sync" style={{ position:'absolute', left: r.x, top: r.y, width: r.w, height: r.h, maxWidth:'none', userSelect:'none' }} />
       {bg.flow && bg.flowSrc && <BossFlowCanvas bg={bg} rect={r} tMs={now * 1000} />}
       {bg.behind && <BgBehind behind={bg.behind} box={geo.b} />}
@@ -1033,7 +1042,8 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
     return () => ro.disconnect()
   }, [foeBig, playerScale])
   return (
-    <div ref={stageRef} style={{ position:'relative', isolation:'isolate', overflow:'hidden', display:'flex', gap:'12px', alignItems:'flex-start', padding:'8px',
+    <div ref={stageRef} style={{ position:'relative', isolation:'isolate', overflow:'hidden', padding:'8px',
+      display:'grid', gridAutoFlow:'column', gridTemplateRows:`repeat(${FIGHTER_ROWS}, auto)`, gridTemplateColumns:`minmax(0, 1fr) minmax(0, ${size?.fr || 1}fr)`, columnGap:'12px',
       background: foeArt?.bg ? foeArt.bg.under : 'linear-gradient(180deg, #000a26 0%, #001338 70%, #00204a 100%)', border:'1px solid #0a2a55',
       // 演出：背景を暗く（内側の影は背景の上・中身の下）・舞台ごと揺れる
       boxShadow: dimOf ? `inset 0 0 0 2000px rgba(${dimOf.c},${dimOf.k.toFixed(3)})` : undefined,
@@ -1043,7 +1053,7 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
         artH={size?.artH || ART_H} scale={playerScale} areaRef={pArea} squeeze={sc?.squeeze} />
       <Fighter st={st} side="b" me={st.b} right src={foeSrc} fx={fx} now={now} name={st.b.name}
         strips={foeArt?.kind === 'pixel' ? Object.values(foeArt.motions) : []} rig={foeArt?.kind === 'illust' ? foeArt : null}
-        flex={size?.flex} artH={size?.artH || ART_H} areaRef={bArea} castEnd={castSeen.current} bossGlow={sc?.bossGlow || 0} />
+        artH={size?.artH || ART_H} areaRef={bArea} castEnd={castSeen.current} bossGlow={sc?.bossGlow || 0} />
       {sc?.beam && geo && sc.handsAt && <DoomBeam geo={geo} beam={sc.beam} hand={[geo.b.x + sc.handsAt[0][0] * (geo.b.w / foeArt.base), geo.b.y + sc.handsAt[0][1] * (geo.b.w / foeArt.base)]} />}
       {foeArt && <BossFx fx={fxAll} now={now} geo={geo} art={foeArt} cast={cast} castEnd={castSeen.current} scene={sc} />}
       {sc && geo && <SceneLayer geo={geo} sc={sc} hands={sc.handsAt ? sc.handsAt.map(p => [geo.b.x + p[0] * (geo.b.w / foeArt.base), geo.b.y + p[1] * (geo.b.w / foeArt.base)]) : null} s={geo.b.w / foeArt.base} />}
