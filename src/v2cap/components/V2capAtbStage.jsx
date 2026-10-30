@@ -4,6 +4,7 @@ import { buffChips, ailChips, stateChips, needNow, CAST_SEC } from '../core/atb.
 import { STAT_DEFS } from '../core/stats.js'
 import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC, skillBannerAt } from '../lib/atbFx.js'
 import { JP_BOLD } from './casinoStyle.js'
+import { rubySegmentsOf } from '../lib/skillRuby.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
 import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, artAnchorAt, illustCastShowAt } from '../lib/bossIllust.js'
 import { FX_HEAD_Y, FX_FEET_Y, FX_SKY_Y, FX_TARGET_Y, SCENE_TOP, fallAt, coilAt, pourTimesOf, sceneEndMsOf, stageSceneOf } from '../lib/bossScene.js'
@@ -337,7 +338,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
         <span style={{ flex:'0 1 auto', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{name}</span>
         {/* 敵の技の名前：名前と同じ行の、名前の横の空いた所のまん中（絵に重ならない・名前とも重ならない） */}
         {side === 'b' && (
-          <div style={{ flex:'1 1 0', minWidth:0, display:'flex', justifyContent:'center' }}>
+          <div style={{ flex:'1 1 0', minWidth:0, position:'relative', alignSelf:'stretch' }}>
             <SkillBanner b={skillBannerAt(fx, now, 'b')} />
           </div>
         )}
@@ -782,17 +783,21 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
 //   【確定】2026-10-30 ユーザー「スキルはモンスターの真ん中上部にして、文字ちょっと大きいから調整して」：舞台のまん中→モンスターの絵の枠の上のまん中・字は15px→12px
 //   【確定】2026-10-30 ユーザー「文字こんな感じで被ってるから調整してほしい名前と同じ行でもいいと思う、文字ももう少し小さめで」（雨摩座の顔に重なった）：
 //     名前の行の、名前の横の空いた所のまん中に置く（絵の枠の外＝重ならない）・字は12px→11px・帯の高さを名前の行に収める
+//   【確定】2026-10-30 ユーザー「これIDダンジョンは全部これね、スキルの感じルぴ振れる？」：漢字にルビ（lib/skillRuby.js）。
+//     ルビのぶん帯が高くなるので、名前の行の下にそろえて上へはみ出させる（名前の行の高さは変えない＝帯が出ても下の絵がずれない）
 const SkillBanner = ({ b }) => {
   if (!b) return null
   return (
-    <div style={{ position:'relative', zIndex: 5, pointerEvents:'none', opacity: b.op,
-      transform:`translateY(${((1 - b.k) * -4).toFixed(1)}px)`, maxWidth:'100%', lineHeight: 1.25,
+    <div style={{ position:'absolute', bottom:0, left:'50%', zIndex: 5, pointerEvents:'none', opacity: b.op,
+      transform:`translate(-50%, ${((1 - b.k) * 3).toFixed(1)}px)`, maxWidth:'100%', lineHeight: 1.25,
       padding:'1px 10px', borderRadius:'3px', border:'1px solid rgba(220,232,255,0.55)',
       background:'linear-gradient(180deg, rgba(10,18,44,0.88) 0%, rgba(2,6,20,0.88) 100%)',
       boxShadow:'0 2px 10px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(0,0,0,0.6)',
       color:'#ffffff', fontFamily: JP_BOLD, fontWeight: 700, fontSize:'11px', letterSpacing:'0.08em', whiteSpace:'nowrap',
       overflow:'hidden', textOverflow:'ellipsis', textShadow:'0 1px 2px #000, 0 0 6px rgba(120,160,255,0.45)' }}>
-      {b.name}
+      {rubySegmentsOf(b.name).map((sg, i) => (sg.ruby
+        ? <ruby key={i}>{sg.text}<rt style={{ fontSize:'7px', letterSpacing:0, color:'#cfe0ff', fontWeight: 700 }}>{sg.ruby}</rt></ruby>
+        : <span key={i}>{sg.text}</span>))}
     </div>
   )
 }
