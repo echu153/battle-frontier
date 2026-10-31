@@ -3,28 +3,27 @@ import { supabase } from '../../supabase'
 import V2capLogLine from './V2capLogLine.jsx'
 import V2Modal from './V2Modal.jsx'
 import { miniBtn } from './v2ui.js'
-import { runBattle } from '../core/battle.js'
 import { loadPref, savePref } from '../core/prefs.js'
-import { AREA_LIST, SPOTS, SUB_NAMES, spotOf, spotLabel, recLvText, toFighter as enemyFighter } from '../lib/areas.js'
+import { AREA_LIST, SPOTS, SUB_NAMES, spotOf, spotLabel, recLvText } from '../lib/areas.js'
 import {
-  pickEncounter, rollEquipDrop, nextBossRate, isSpotUnlocked, isSpotCleared, openUntilOf, SORTIE_CD, chestText,
+  isSpotUnlocked, isSpotCleared, openUntilOf, SORTIE_CD, chestText,
 } from '../lib/sortie.js'
-import { toFighter as playerFighter } from '../lib/loadout.js'
 import { staminaMaxOfProfile, rollStamina, staminaSpanMsOf } from '../lib/level.js'
 import { expText as expTextOf, gainedExpOf, levelUpLines, dropLineOf } from '../lib/settleLines.js'
 import { ITEM_BY_ID } from '../lib/equipment.js'
 import { guardDropBonusOf, floorLabel, TOWER_NAME } from '../lib/tower.js'
-import { encounterClockOf } from '../lib/shop.js'
 import { sortieClock, sendWithCooldownRetry, newSettleKey, settleKeyArgOf } from '../lib/cooldown.js'
 import { buildCapBattleView } from '../lib/battleView.js'
 import { enemyArtSrc } from '../lib/enemyArt.js'
 import { battleIconOf } from '../lib/classArt.js'
 import { artGenderOf } from '../lib/gender.js'
-import { shrineOf, shrineEncounterOf, SHRINE_NAME } from '../lib/shrine.js'
+import { shrineOf, SHRINE_NAME } from '../lib/shrine.js'
 import { SHRINE_ART, SHRINE_TEXT, MINCHO } from '../lib/fxStyle.js'
 import V2capShrineFx from './V2capShrineFx.jsx'
+import V2capReloadNote from './V2capReloadNote.jsx'
 import { dexCompleteText } from '../lib/dex.js'
-import { SHINKA_ON, srecOfBattle } from '../lib/shinka.js'
+import { decideSortie } from '../lib/sortieVerify.js'
+import { CORRECTED_TEXT, callSortie, isStaleBuild } from '../lib/dungeonVerifyCall.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — 出撃（ホームの右）
@@ -45,6 +44,8 @@ import { SHINKA_ON, srecOfBattle } from '../lib/shinka.js'
 //     行動ごとに動いた側のアイコン）。並びは battleView.js・見た目は V2capLogLine.jsx。
 //     敵のアイコンは enemyArt.js（エリア①から絵を足していく）、自分のアイコンは classArt.js の battleIconOf
 //     （SDの絵 → 無ければ顔のアップ。男女はキャラの性別＝gender.js の artGenderOf。性別が無いキャラは神殿の切り替え capArtGender）
+//   ・【確定】2026-11-01 ユーザー選択「全部無効・無料で約1,400人」：敵・勝ち負け・装備はサーバーが先に決める（lib/sortieVerify.js）。
+//     画面は精算のあとで届いた種で戦闘を再生してログを出す（結果を送らない）
 //   ・【確定】2026-10-13 ユーザー指示「安息の祠を追加」（決まりは lib/shrine.js・決めるのはサーバー）：
 //     精算の返事（shrine）で祠を見つけたら、次の出撃から祠の中＝見つけた場所でハピネスフェアリーと戦う（場所は選べない）。
 //     最後の1戦のあとは最深部の演出（V2capShrineFx）。祠のことはプロフィールの列（shrine_spot・shrine_left・shrine_total）でも持つ
@@ -81,11 +82,10 @@ const OPT_ROW = { display:'flex', alignItems:'center', gap:'8px', color:'#cfe2ff
 // 場所を選ぶ2つのプルダウン（エリア・入口／奥地／最奥）
 const SPOT_SELECT = { background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'8px', fontFamily:'monospace', fontSize:'12px' }
 
-export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
+export default function V2capSortie({ prof, onProfile, onScene }) {
   const [scene, setScene] = useState('town')
   const [selectedSpot, setSelectedSpot] = useState(() => Number(localStorage.getItem('v2capSelectedSpot')) || 1)
   const [logs, setLogs] = useState([])
-  const [bossRate, setBossRate] = useState(prof?.boss_rate || 0)
   const [now, setNow] = useState(Date.now())
   const [loading, setLoading] = useState(false)
   const [auto, setAuto] = useState(false)   // ★覚えておかない（リロードで勝手に走らないように）
@@ -98,8 +98,10 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   const [shrine, setShrine] = useState(() => shrineOf(prof))   // 安息の祠（いなければ null）。精算の返事とプロフィールから
   const [shrineBattle, setShrineBattle] = useState(false)   // 表示中の戦闘が祠の中か（何戦目かは出さない）
   const [fx, setFx] = useState(null)                  // 祠の演出（{ kind:'found'|'deepest', … }）
+  const [stale, setStale] = useState(false)           // 画面が古い（読み直すまで出撃しない）
   const busy = useRef(false)
   const logBox = useRef(null)
+  const snapRef = useRef(null)                        // サーバーの自分の写し（戦闘を再生するのに使う）
 
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 100); return () => clearInterval(t) }, [])
   // オン：行が増えるたび（精算の行が後から足されたときも）枠の一番下へ
@@ -116,7 +118,6 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   const toggleFab = (on) => { setFabOn(on); savePref(FAB_PREF, on) }
   useEffect(() => { onScene?.(scene) }, [scene, onScene])
   useEffect(() => { setStam({ n: prof?.stamina ?? 0, at: prof?.stamina_at || null }) }, [prof?.stamina, prof?.stamina_at])
-  useEffect(() => { setBossRate(prof?.boss_rate || 0) }, [prof?.boss_rate])
   // ★塔と待ち時間を共有する（2026-10-14・あるけみすとの「探索」と「闘技場」と同じ）：塔と1つの時計（lib/cooldown.js の sortieClock）。
   //   施設の画面へ行って戻っても残る。サーバーの最後の精算の時刻（last_sortie_at＝塔の挑戦も書く）は、ページを開いて最初の1回だけ読む
   //   （PCの時計とずれているので、そのまま比べると早すぎる出撃になる・2026-10-23）
@@ -140,6 +141,15 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   const stamMax = staminaMaxOfProfile(prof)   // LV＋図鑑のボーナス（2026-10-24）
   const stamNow = rollStamina(stam.n, stam.at, stamMax, now, staminaSpanMsOf(prof)).n   // 博物館の報酬で回復の間隔が短くなる（2026-10-23）
 
+  // サーバーに次の30戦を決めてもらう（lib/sortieVerify.js）。だめならわけを返す。画面が古いと再生がずれるので、その前に版を見る
+  const prepareBattles = async (spotId) => {
+    if (await isStaleBuild()) { setStale(true); setAuto(false); return '新しい版が出ています' }
+    const { data, error } = await supabase.rpc('v2cap_sortie_prepare', { p_spot: spotId })
+    if (error || !data?.ok) return error?.message || data?.error
+    const made = await callSortie({ kind: 'fill', player: data.player })
+    return made?.ok ? null : (made?.error || 'サーバーにつながりませんでした')
+  }
+
   const doBattle = async (isAuto = false) => {
     // ★祠の演出が出ている間は出撃しない（オートも手動も・2026-10-14 ユーザー指示「演出が入ってるとき、オートでも出撃進まないようにして」）
     if (busy.current || !spot || fx) return
@@ -148,63 +158,68 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
     sortieClock.start()
     setLoading(true); setScene('battle'); setLogs([]); setBattleNo(n => n + 1)
     try {
-      const me = playerFighter(prof, inventory)
       // 安息の祠の中なら、祠のある場所でハピネスフェアリーと戦う（装備は落ちない・ボスの出やすさは変わらない）
       const sh = shrine
-      // ★日月反転の秘薬が効いているあいだは時間帯が12時間ずれる（lib/shop.js）。ドロップの時刻（落ちやすい部位）は本当の時刻のまま
-      const enc = sh ? shrineEncounterOf(sh.spot) : pickEncounter(spot.id, bossRate, encounterClockOf(prof))
-      const r = runBattle(me, { ...(sh ? enemyFighter(enc.enemy, 8, enc.power) : enemyFighter(enc.enemy, 8)), boss: enc.isBoss })
-      const win = r.winner === 'a'
-      // ★防具のセット能力「海賊の嗅覚」：レア以上が落ちる確率1.2倍（me.setFx は loadout.js の toFighter が入れる）
-      // ★塔の階層守護者でいるあいだは装備のドロップ率+1%（tower.js の guardDropBonusOf・2026-10-14 ユーザー指示「ドロップ率1%増加」）
-      const drop = win && !sh
-        ? rollEquipDrop(enc, prof.class, new Date(), Math.random, me.setFx?.rareDropMult || 1, guardDropBonusOf(prof))
-        : null
-      if (!sh) setBossRate(nextBossRate(bossRate, enc.isBoss))
-      setShrineBattle(!!sh)
+      const spotId = sh ? sh.spot : spot.id
       const stamBefore = Math.max(0, stamNow - (isAuto ? 1 : 0))   // 最深部の演出でゲージを満たし始める値
 
-      const foe = enc.enemy.name
-      const you = me.name
-      // 自分のアイコンの男女はキャラの性別（2026-10-21・gender.js）。まだ決めていないキャラだけ神殿の切り替え（戦闘のたびに読む）
-      const gender = artGenderOf(prof, loadPref('capArtGender', 'm'))
-      setArt({ me: { src: battleIconOf(prof.class, gender), name: you }, foe: { src: enemyArtSrc(foe), name: foe } })
-      const out = []
-      // 「◯◯が現れた！」も敵のアイコンを付けて出す（あるけみすとの「◯◯が襲いかかってきた！」の形）
-      out.push({ kind:'act', who:'foe', appear: true, lines: [ROLE_LINE[enc.role](foe, enc.lv)] })
-      out.push(...buildCapBattleView(r, you, foe))
-      // ★勝ち負けの行は大きく出す（big・V2capLogLine。2026-10-10 ユーザー指示「倒した時のテロップ、わかりやすいように他よりも大きく」）
-      // ★パピアに逃げられたときは、逃げた行で終わる（敗北とは出さない・papia.js）
-      if (win) out.push({ text:`${foe}を倒した！`, color:'#ffcc00', big: true })
-      else if (!r.fled) out.push({ text:'敗北…', color:'#ff4444', big: true })
-      setLogs(out)
-
-      // ★1戦ごとにその場で反映する。EXP・Gold・アイテムLVはサーバーが場所の表から決める
-      // ★サーバーに早すぎると言われたら、サーバーが数えた残りを待って同じ精算を送り直す（戦闘の結果を捨てない・2026-10-23）。
+      // ★敵・勝ち負け・装備はサーバーが先に決めてある（2026-11-01 ユーザー選択「全部無効・無料で約1,400人」・lib/sortieVerify.js）。
+      //   精算で1つ取り出したあとに種が届くので、同じ種で戦闘を再生してログを出す。EXP・Gold・アイテムLVもサーバーが決める
+      // ★サーバーに早すぎると言われたら、サーバーが数えた残りを待って同じ精算を送り直す（2026-10-23）。
       //   戦闘ごとの印（p_key）を付けるので、送り直しても・通信が切れてブラウザが送り直しても2回は入らない
       const args = {
-        p_spot: sh ? sh.spot : spot.id, p_enemy: foe, p_win: win, p_drop: drop ? drop.item.id : null, p_auto: !!isAuto,
-        // 武器の真化（2026-10-26・shinka.js）：この戦闘の戦い方の記録。熟練度・勝ち・種族・時間帯はサーバーが数える。
-        //   お蔵入り（SHINKA_ON=false）のあいだは送らない（サーバーが前の形のままでも1回で通る）
-        ...(SHINKA_ON ? { p_rec: srecOfBattle(r, you) } : {}),
+        p_spot: spotId, p_auto: !!isAuto, p_have: snapRef.current?.at ?? null,
         ...settleKeyArgOf(prof, newSettleKey()),
       }
-      // ★サーバーが真化の前の版（p_rec を受け取らない）なら、記録を外してもう1回だけ送る（SQL を流す前に画面が出ても出撃は止めない）
-      let res
-      for (;;) {
-        res = await sendWithCooldownRetry(() => supabase.rpc('v2cap_sortie_settle', args),
-          { onWait: (ms) => sortieClock.wait(ms) })
-        if (!(res.error && args.p_rec && /p_rec|v2cap_sortie_settle/.test(res.error.message || ''))) break
-        delete args.p_rec
+      const send = () => sendWithCooldownRetry(() => supabase.rpc('v2cap_sortie_settle', args),
+        { onWait: (ms) => sortieClock.wait(ms) })
+      let res = await send()
+      // 先に決めた結果が無い（使い切った・場所や強さが変わった）：決めてもらってからもう一度
+      if (res.data?.need_prepare) {
+        const why = await prepareBattles(spotId)
+        if (why) {
+          setAuto(false)
+          setLogs([{ text:`⚠ 出撃の準備ができませんでした（${why}）`, color:'#ff8844' }])
+          return
+        }
+        res = await send()
       }
       const { data, error } = res
       if (data && data.stamina != null) setStam({ n: data.stamina, at: data.stamina_at || new Date().toISOString() })
       if (error || !data?.ok) {
         setAuto(false)
-        setLogs(l => [...l, { text:`⚠ 反映に失敗しました（${error?.message || data?.error}）`, color:'#ff8844' }])
+        setLogs([{ text:`⚠ 反映に失敗しました（${error?.message || data?.error || '結果がありません'}）`, color:'#ff8844' }])
         if (sh) onProfile(null)   // 祠のことがサーバーと食い違っていたら（別の画面で進めた など）取り直す
         return
       }
+      const win = !!data.win
+      const b = data.battle
+      if (b?.snap) snapRef.current = b.snap
+      // 同じ印の返事（通信が切れて送り直した）には写しが無いことがある＝そのときはログを出さず結果の行だけ
+      const d = b && snapRef.current
+        ? decideSortie({ snap: snapRef.current, spot: spotId, shrineSpot: b.shrine_spot, rate: b.rate, seed: b.seed, forcePapia: b.force })
+        : null
+      setShrineBattle(!!sh)
+      if (d) {
+        const { me, enc, r } = d
+        const foe = enc.enemy.name
+        const you = me.name
+        // 自分のアイコンの男女はキャラの性別（2026-10-21・gender.js）。まだ決めていないキャラだけ神殿の切り替え（戦闘のたびに読む）
+        const gender = artGenderOf(prof, loadPref('capArtGender', 'm'))
+        setArt({ me: { src: battleIconOf(prof.class, gender), name: you }, foe: { src: enemyArtSrc(foe), name: foe } })
+        const out = []
+        // 「◯◯が現れた！」も敵のアイコンを付けて出す（あるけみすとの「◯◯が襲いかかってきた！」の形）
+        out.push({ kind:'act', who:'foe', appear: true, lines: [ROLE_LINE[enc.role](foe, enc.lv)] })
+        out.push(...buildCapBattleView(r, you, foe))
+        // ★勝ち負けの行は大きく出す（big・V2capLogLine。2026-10-10 ユーザー指示「倒した時のテロップ、わかりやすいように他よりも大きく」）
+        // ★パピアに逃げられたときは、逃げた行で終わる（敗北とは出さない・papia.js）
+        if (win) out.push({ text:`${foe}を倒した！`, color:'#ffcc00', big: true })
+        else if (!r.fled) out.push({ text:'敗北…', color:'#ff4444', big: true })
+        // 古い画面のまま戦うと再生がずれる（入るのはサーバーの結果）
+        if (d.win !== win) out.push({ text: CORRECTED_TEXT, color:'#ff8844' })
+        setLogs(out)
+      }
+
       const after = []
       // ★LV100のぶんは入らないので、そう出す。ClassEXPは書かない（同じ量がいまの職業にも入る＝ユーザー指示で表記を外した）
       //   文面は settleLines.js（塔と同じものを使う）
@@ -223,7 +238,8 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
       after.push(...levelUpLines(prof.class, data.level))
       if (win) {
         // ★装備名だけをレア度の色で（頭の表記・必要LV・効果%は出さない＝settleLines.js の dropLineOf）
-        if (data.drop && drop) after.push(dropLineOf(drop.item))
+        const dropped = data.drop ? ITEM_BY_ID[data.drop.base_id] : null
+        if (dropped) after.push(dropLineOf(dropped))
         // ★ユニーク（2026-10-21）：ボスに勝ったとき0.5%でサーバーが引く（画面は申告しない）。落ちたら返事の unique に入っている。
         //   行はふつうの装備と同じ形（名前だけユニークの赤・ユーザー指示「ユニークの文言いらない、普通の赤文字でいい」）
         const uq = data.unique ? ITEM_BY_ID[data.unique.base_id] : null
@@ -236,7 +252,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
         // 図鑑の報酬（2026-10-24）：そのエリアの敵を全員見つけたら、サーバーが dex＝{ area, bonus } を返す（スタミナの最大値+1）
         if (data.dex?.area) after.push({ text: dexCompleteText(data.dex.area), color:'#c0b0ff' })
         // ボスを倒すと次の場所が開く（1本道）。開いたかどうかはサーバーの返事で見る
-        if (enc.isBoss && Number(data.open_until) > openUntilOf(cleared)) {
+        if (data.boss && Number(data.open_until) > openUntilOf(cleared)) {
           after.push({ text:`🔓 ${spotLabel(data.open_until)}が解放された！`, color:'#44ff88' })
         }
       }
@@ -320,6 +336,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
     return (
       <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', fontFamily:'monospace' }}>
         {fab}
+        {stale && <V2capReloadNote what="出撃" />}
         {fxLayer}
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px', gap:'8px', flexWrap:'wrap' }}>
           {shrineBattle
@@ -329,6 +346,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
           {auto && <span style={{ color:'#44ff88', fontSize:'11px' }}>▶ オート出撃中（⚡{stamNow}）</span>}
         </div>
         <div ref={logBox} style={{ marginBottom:'12px', maxHeight:'300px', overflowY:'auto' }}>
+          {loading && !logs.length && <div style={{ color:'#7fa6d0', fontSize:'12px' }}>⚔ 戦っています…</div>}
           {logs.map((l, i) => <V2capLogLine key={i} l={l} art={art} />)}
         </div>
         {timerRow}
@@ -361,6 +379,7 @@ export default function V2capSortie({ prof, inventory, onProfile, onScene }) {
   return (
     <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'12px', fontFamily:'monospace' }}>
       {fab}
+      {stale && <V2capReloadNote what="出撃" />}
       {fxLayer}
       {timerRow}
       {shrine ? (

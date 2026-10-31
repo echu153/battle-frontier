@@ -11,9 +11,9 @@ import { verifyTry } from './dungeonVerify.js'
 
 export const SUPABASE_URL = 'https://jxbcuqwqtstxgmpiruuu.supabase.co'
 export const SUPABASE_KEY = 'sb_publishable_vlexKdF2oJrIIwMFEA81OA_1XyShoIt'
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-const rpcOf = (fetchFn) => async (fn, args) => {
+export const rpcOf = (fetchFn) => async (fn, args) => {
   const res = await fetchFn(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
     method: 'POST',
     headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },

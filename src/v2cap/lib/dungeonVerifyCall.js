@@ -8,6 +8,7 @@
 // ・__BUILD_SHA__ … この画面のコミット（vite.config.js）。本番の関数が別のコミットなら画面が古い＝読み直してもらう
 // ============================================================
 const PATH = '/api/v2cap-dungeon-verify'
+const SORTIE_PATH = '/api/v2cap-sortie'
 export const PROD_ORIGIN = 'https://battle-frontier-six.vercel.app'
 export const BUILD_SHA = typeof __BUILD_SHA__ === 'string' ? __BUILD_SHA__ : ''
 const RETRY_MS = [600, 1500, 3000]   // うまくいかなかったときに待つ長さ（公開の切り替えや起動の遅れをまたぐ）
@@ -16,24 +17,28 @@ const LOCAL_HOSTS = ['localhost', '127.0.0.1']
 // サーバーの計算が画面と違ったときの一言（書き換えていなければ、古い画面のまま戦ったときだけ）
 export const CORRECTED_TEXT = '画面とサーバーの計算がずれたので、サーバーの計算で入れました'
 
-export const verifyUrlOf = (host = typeof location === 'undefined' ? '' : location.hostname) =>
-  (LOCAL_HOSTS.includes(host) ? PROD_ORIGIN + PATH : PATH)
+export const verifyUrlOf = (host = typeof location === 'undefined' ? '' : location.hostname, path = PATH) =>
+  (LOCAL_HOSTS.includes(host) ? PROD_ORIGIN + path : path)
 
-const post = (fetchFn, body, signal) => fetchFn(verifyUrlOf(), {
+const post = (fetchFn, body, signal, path = PATH) => fetchFn(verifyUrlOf(undefined, path), {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), keepalive: true, signal,
 })
 
-// 確かめてもらう。args＝{ run, player }。返事（{ ok, damage, reward, corrected, run }）か、届かなければ null
-export const callVerify = async (args, { fetchFn = fetch, retryMs = RETRY_MS, wait = (ms) => new Promise(r => setTimeout(r, ms)) } = {}) => {
+const callWithRetry = async (args, path, { fetchFn = fetch, retryMs = RETRY_MS, wait = (ms) => new Promise(r => setTimeout(r, ms)) } = {}) => {
   for (let i = 0; i <= retryMs.length; i++) {
     if (i > 0) await wait(retryMs[i - 1])
     try {
-      const res = await post(fetchFn, args)
+      const res = await post(fetchFn, args, undefined, path)
       if (res.status < 500) return await res.json()
     } catch { /* 通信が切れた：次へ */ }
   }
   return null
 }
+
+// 確かめてもらう。args＝{ run, player }。返事（{ ok, damage, reward, corrected, run }）か、届かなければ null
+export const callVerify = (args, opts) => callWithRetry(args, PATH, opts)
+// 出撃と塔の結果を決めてもらう。args＝{ kind:'fill'|'tower', player }。返事は { ok } だけ（結果は精算のあとで分かる）か、届かなければ null
+export const callSortie = (args, opts) => callWithRetry(args, SORTIE_PATH, opts)
 
 // 画面が古いか（挑戦の前に見る）。手元の開発と、版を聞けなかったときは止めない
 export const isStaleBuild = async ({ fetchFn = fetch, sha = BUILD_SHA, waitMs = STALE_WAIT_MS } = {}) => {

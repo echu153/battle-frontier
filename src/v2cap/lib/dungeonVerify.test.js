@@ -18,6 +18,7 @@ import { SUPABASE_KEY, SUPABASE_URL, verifyRequest } from './dungeonVerifyApi.js
 import { PROD_ORIGIN, callVerify, isStaleBuild, verifyUrlOf } from './dungeonVerifyCall.js'
 import handler from '../../../api/v2cap-dungeon-verify.js'
 
+const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8')
 const AT = Date.UTC(2026, 9, 31, 3, 0, 0)
 const LEARNED = SKILLS.map(s => s.name)
 const BOSSES = ['varuzenoku', 'amaza']
@@ -147,7 +148,7 @@ test('食事の残りは、いまの時計でなく挑戦を始めた時刻で�
 
 test('写しに入れない列を戦闘は読まない（読むと SQL の v2cap_dungeon_try_start を直すまでずれる）', () => {
   const sql = readFileSync(new URL('../../../supabase_v2cap_core.sql', import.meta.url), 'utf8')
-  const dropped = sql.match(/to_jsonb\(v_row\) - array\[([^\]]+)\]/)[1].split(',').map(s => s.trim().replace(/'/g, ''))
+  const dropped = sql.match(/to_jsonb\(p_row\) - array\[([^\]]+)\]/)[1].split(',').map(s => s.trim().replace(/'/g, ''))
   assert.ok(dropped.includes('materials') && dropped.length >= 5, dropped.join(' '))
   assert.ok(!dropped.some(k => ['class', 'lv', 'jobs', 'learned', 'equipped', 'ascension', 'gender', 'meal_until'].includes(k)), '戦闘に要る列は落とさない')
   const snap = snapOf('戦士')
@@ -172,6 +173,17 @@ test('★記録の形を見る：おかしな記録ではダメージが入ら�
   }
   assert.ok(validInputs([ok, { step: 3, k: 'guard', on: true }, { step: 9, k: 'macro', no: 2, steps: [{ guard: true }, { idx: null }, { idx: 1 }], loop: true }, { step: 9, k: 'stop' }]))
   assert.ok(validInputs([]), '押さなくてもよい（通常攻撃だけ）')
+})
+
+test('★押した記録の種類を増やしたら、回し直しと形の見張りにも足す（足さないと、ふつうの人の挑戦のダメージが0になる）', () => {
+  const atb = read('../core/atb.js')
+  const kinds = [...atb.matchAll(/input\(st, \{ k: '(\w+)'/g)].map(m => m[1])
+  assert.deepEqual(kinds, ['q', 'unq', 'clr', 'macro', 'stop', 'guard'])
+  const samples = { q: { idx: 0 }, unq: { pos: 0 }, clr: {}, macro: { no: 1, steps: [], loop: true }, stop: {}, guard: { on: true } }
+  for (const k of kinds) {
+    assert.ok(atb.includes(`e.k === '${k}'`), `applyInput が ${k} を入れ直す`)
+    assert.ok(validInputs([{ step: 0, k, ...samples[k] }]), `validInputs が ${k} を通す`)
+  }
 })
 
 test('★実時間より先へは進まない：すぐ送ってきても、そのぶんの時間しか回さない', () => {
@@ -329,7 +341,7 @@ test('置き場所の決まり：/api を画面へ回さない・api/ にテス�
   const source = vercel.rewrites[0].source
   assert.ok(!new RegExp(`^${source}$`).test('/api/v2cap-dungeon-verify'), '/api は index.html へ回さない')
   assert.ok(new RegExp(`^${source}$`).test('/v2cap'), '画面の道はそのまま')
-  assert.deepEqual(readdirSync(new URL('api/', root)), ['v2cap-dungeon-verify.js'], 'api/ の下は全部 Vercel の関数になる')
+  assert.deepEqual(readdirSync(new URL('api/', root)).sort(), ['v2cap-dungeon-verify.js', 'v2cap-sortie.js'], 'api/ の下は全部 Vercel の関数になる')
   const client = readFileSync(new URL('src/supabase.js', root), 'utf8')
   assert.ok(client.includes(`'${SUPABASE_URL}'`) && client.includes(`'${SUPABASE_KEY}'`))
   assert.match(readFileSync(new URL('public/sw.js', root), 'utf8'), /if \(req\.method !== 'GET'\) return/)
@@ -346,6 +358,7 @@ test('★回し直しが読むコード：画面の部品を読まない（Verce
     for (const m of src.matchAll(/(?:from|import)\s*['"](\.[^'"]+)['"]/g)) walk(path.posix.normalize(path.posix.join(path.posix.dirname(f), m[1])))
   }
   walk('api/v2cap-dungeon-verify.js')
+  walk('api/v2cap-sortie.js')
   const files = [...seen]
   assert.ok(files.includes('src/v2cap/core/atb.js') && files.includes('src/v2cap/core/battle.js'))
   assert.ok(files.every(f => f.endsWith('.js')), `画面の部品を読んでいない：${files.filter(f => !f.endsWith('.js'))}`)

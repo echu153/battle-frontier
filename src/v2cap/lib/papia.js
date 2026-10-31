@@ -33,7 +33,7 @@ export const PAPIA_TURNS = 6     // このターンにこちらが動いたあ�
 export let PAPIA_PCT = 1
 export const setPapiaPctForTuning = (v) => { PAPIA_PCT = v }
 
-// 開発用「次の出撃でパピア」（V2capHome の開発用ボタン・画面だけの印。サーバーはパピアの申告をそのまま通すので印は要らない）
+// シミュレーションの道具の「次の戦闘でパピア」（本物の出撃はサーバーの印＝v2cap_debug_papia_next・papia_force）
 let forceNext = false
 export const forcePapiaNext = () => { forceNext = true }
 export const isPapiaForced = () => forceNext

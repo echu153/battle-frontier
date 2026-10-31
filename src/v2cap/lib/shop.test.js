@@ -82,10 +82,11 @@ test('【確定】秘薬で変わるのは出会う敵だけ：時間限定の�
     if (enc.role === 'timed') seen.add(enc.enemy.band)
   }
   assert.deepEqual([...seen], ['朝'])
-  const SORTIE = read('../components/V2capSortie.jsx')
-  assert.ok(SORTIE.includes('pickEncounter(spot.id, bossRate, encounterClockOf(prof))'), '出撃は秘薬ぶんの時刻を渡す')
-  assert.ok(SORTIE.includes('rollEquipDrop(enc, prof.class, new Date(),'), '落ちやすい部位は本当の時刻のまま')
+  const SORTIE = read('./sortieVerify.js')
+  assert.ok(SORTIE.includes('pickEncounter(spot, rate, encounterClockOf(snap.prof, at), rng, forcePapia)'), '出撃は秘薬ぶんの時刻を渡す')
+  assert.ok(SORTIE.includes('rollEquipDrop(enc, snap.prof.class, at, rng,'), '落ちやすい部位は本当の時刻のまま')
   assert.equal(SORTIE.match(/pickEncounter\(/g).length, 1, '敵を決めるのはここだけ')
+  assert.ok(!read('../components/V2capSortie.jsx').includes('pickEncounter('), '画面では敵を決めない')
 })
 
 test('サーバー：値段と時間が shop.js と同じ・Goldが足りるかを見る・開発限定・権限', () => {

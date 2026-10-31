@@ -2,13 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import V2capLogLine from './V2capLogLine.jsx'
 import V2capIcon from './V2capIcon.jsx'
-import { runBattle } from '../core/battle.js'
+import V2capReloadNote from './V2capReloadNote.jsx'
 import { loadPref } from '../core/prefs.js'
 import { artGenderOf } from '../lib/gender.js'
 import { box, btn, miniBtn, TEXT } from './v2ui.js'
 import { toFighter as playerFighter } from '../lib/loadout.js'
 import { calcPower } from '../lib/level.js'
-import { ascEffectsOf } from '../lib/ascension.js'
 import { sortieClock, sendWithCooldownRetry, newSettleKey, settleKeyArgOf } from '../lib/cooldown.js'
 import { attackKindOf } from '../lib/jobs.js'
 import { buildCapBattleView } from '../lib/battleView.js'
@@ -16,13 +15,17 @@ import { expText, gainedExpOf, levelUpLines, dropLineOf } from '../lib/settleLin
 import {
   TOWER_NAME, FLOORS, LOSE_DROP, STREAK_PCT, GUARD_DROP_BONUS,
   floorLabel, clampFloor, floorAfterDefended, canChallenge, champOf, floorInfoOf,
-  towerBattleOf, towerIconSrc, iconClassOf, hpPmOf, snapshotOf, rollTowerDrop,
+  towerBattleOf, towerIconSrc, iconClassOf,
 } from '../lib/tower.js'
+import { decideTower } from '../lib/sortieVerify.js'
+import { CORRECTED_TEXT, callSortie, isStaleBuild } from '../lib/dungeonVerifyCall.js'
+import { ITEM_BY_ID } from '../lib/equipment.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — 塔（あるけみすと型の対人・2026-10-14）
 //   決まりと数は src/v2cap/lib/tower.js が正（1〜100層・負けたら2つ下・守護者は回復しない・空き層はNPC・席を降りられる）。
-//   ★戦闘はここで回して、結果を v2cap_tower_fight へ申告する（出撃と同じ形）
+//   【確定】2026-11-01 ユーザー選択「全部無効・無料で約1,400人」：勝ち負け・残りHP・守護者の姿はサーバーが決める（lib/sortieVerify.js の decideTower）。
+//     v2cap_tower_start → Vercel の関数 → v2cap_tower_fight の順で、結果が届いたあとに同じ種で戦闘を再生してログを出す
 //   ・【確定】ユーザー指示「該当者は画像みたいに現在の職業のアイコンが表示されるように」：
 //     一覧は 層・職業のアイコン（デフォルメの絵・丸い枠）・LV・名前（ユーザーが見せた画像の形）。自分の行は黄色。
 //     枠の色は通常攻撃が物理なら赤・魔法なら青。上位職はデフォルメの絵がまだ無いので系統の初期職の絵（tower.js の iconClassOf）
@@ -56,6 +59,7 @@ export default function V2capTower({ prof, inventory, onProfile }) {
   const [msg, setMsg] = useState('')
   const [now, setNow] = useState(Date.now())
   const [showRules, setShowRules] = useState(false)
+  const [stale, setStale] = useState(false)   // 画面が古い（読み直すまで挑戦しない）
   const listBox = useRef(null)
   const scrolled = useRef(false)
 
@@ -107,52 +111,65 @@ export default function V2capTower({ prof, inventory, onProfile }) {
     sortieClock.start()
     let freeCd = false   // 守護者が入れ替わっていた（待ち時間を使っていない）
     try {
-      // 自分のアイコンの男女はキャラの性別（2026-10-21・gender.js。まだ決めていないキャラだけ神殿の切り替え）。守護者になったときの姿にも入れる
+      // 画面が古いと再生がずれるので、待ち時間を使う前に版を見る
+      if (await isStaleBuild()) { setStale(true); setScene('lobby'); freeCd = true; return }
+      // 自分のアイコンの男女はキャラの性別（2026-10-21・gender.js。まだ決めていないキャラだけ神殿の切り替え）
       const gender = artGenderOf(prof, loadPref('capArtGender', 'm'))
-      // 戦うのは、いま効いている食事を足した姿（押した時点で数える）。連勝補正は食事なしの戦闘力で比べる
-      const fed = playerFighter(prof, inventory)
-      const { a, b, bonus } = towerBattleOf({ me: fed, myLv: prof.lv, champ, floor, myPower })
-      const r = runBattle(a, b)
-      const win = r.winner === 'a'
-      // 装備は出撃のふつうの敵と同じ（開いている一番先の場所・勝ち負けによらず）
-      const drop = rollTowerDrop(prof.cleared_spots, prof.class, new Date(), Math.random, me.setFx?.rareDropMult || 1)
-      // 自分のアイコンも一覧と同じ（上位職は系統の初期職のデフォルメの絵）
-      setArt({ me: { src: towerIconSrc({ cls: iconClassOf(prof.class), g: gender }), name: me.name }, foe: { src: towerIconSrc(champ.icon), name: champ.name } })
-      const out = []
-      out.push({ kind:'act', who:'foe', appear: true, lines: [
-        { text:`${floorLabel(floor)}の階層守護者 ${champ.name}（LV${champ.lv}）が立ちはだかる！`, color:'#ff88cc' },
-      ] })
-      if (bonus) out.push({ text:`✊ ${champ.streak}連勝中の守護者！ あなたのステータスが+${bonus}%（HP/MPを除く）`, color:'#44ff88' })
-      // ★守護者は減ったHPから始まる（1ターン目の表もその値）
-      out.push(...buildCapBattleView(r, me.name, champ.name, { b: b.startHp }))
-      out.push(win
-        ? { text:`${champ.name}を倒した！`, color:'#ffcc00', big: true }
-        : { text:'敗北…', color:'#ff4444', big: true })
-      setLogs(out)
-
-      // 早すぎると言われたら残りを待って送り直す・挑戦ごとの印を付ける（出撃と同じ＝lib/cooldown.js）
+      const onWait = { onWait: (ms) => sortieClock.wait(ms) }
+      // ① 写しと相手を押さえる ② 関数が回す（結果はまだ画面に来ない）③ 結果を入れる。早すぎると言われたら残りを待って送り直す・挑戦ごとの印を付ける（出撃と同じ＝lib/cooldown.js）
+      const started = await sendWithCooldownRetry(() => supabase.rpc('v2cap_tower_start', { p_floor: floor, p_foe: champ.playerId || null }), onWait)
+      if (started.error || !started.data?.ok) {
+        setLogs([{ text:`⚠ 反映に失敗しました（${started.error?.message || started.data?.error}）`, color:'#ff8844' }])
+        if (started.data?.changed) { freeCd = true; await load(); onProfile(null) }
+        return
+      }
+      const made = await callSortie({ kind: 'tower', player: started.data.player })
+      if (!made?.ok) {
+        freeCd = true
+        setLogs([{ text:`⚠ 反映に失敗しました（${made?.error || 'サーバーにつながりませんでした'}）`, color:'#ff8844' }])
+        return
+      }
       const args = {
-        p_floor: floor, p_foe: champ.playerId || null, p_win: win,
-        p_my_hp_pm: hpPmOf(r.a), p_my_mp: Math.max(0, Math.round(r.a.mp)),
-        p_foe_hp_pm: hpPmOf(r.b), p_foe_mp: Math.max(0, Math.round(r.b.mp)),
-        p_snapshot: snapshotOf(me, { lv: prof.lv, gender, ups: ascEffectsOf(prof).ups }), p_drop: drop ? drop.item.id : null,
         ...settleKeyArgOf(prof, newSettleKey()),
       }
       const { data, error } = await sendWithCooldownRetry(() => supabase.rpc('v2cap_tower_fight', args),
         { onWait: (ms) => sortieClock.wait(ms) })
       if (error || !data?.ok) {
-        setLogs(l => [...l, { text:`⚠ 反映に失敗しました（${error?.message || data?.error}）`, color:'#ff8844' }])
+        setLogs([{ text:`⚠ 反映に失敗しました（${error?.message || data?.error}）`, color:'#ff8844' }])
         // 守護者が入れ替わっていた（画面が古かった）ときは、待ち時間を使っていないので読み直してすぐ挑戦できる
         if (data?.changed) { freeCd = true; await load(); onProfile(null) }
         return
       }
+      const win = !!data.win
+      // 同じ印の返事（通信が切れて送り直した）には種が無いことがある＝そのときはログを出さず結果の行だけ
+      const d = data.battle?.snap ? decideTower({ snap: data.battle.snap, floor: data.battle.floor, row: data.battle.row, seed: data.battle.seed }) : null
+      if (d) {
+        const { champ: foe, b, bonus, r } = d
+        // 自分のアイコンも一覧と同じ（上位職は系統の初期職のデフォルメの絵）
+        setArt({ me: { src: towerIconSrc({ cls: iconClassOf(prof.class), g: gender }), name: d.me.name }, foe: { src: towerIconSrc(foe.icon), name: foe.name } })
+        const out = []
+        out.push({ kind:'act', who:'foe', appear: true, lines: [
+          { text:`${floorLabel(floor)}の階層守護者 ${foe.name}（LV${foe.lv}）が立ちはだかる！`, color:'#ff88cc' },
+        ] })
+        if (bonus) out.push({ text:`✊ ${foe.streak}連勝中の守護者！ あなたのステータスが+${bonus}%（HP/MPを除く）`, color:'#44ff88' })
+        // ★守護者は減ったHPから始まる（1ターン目の表もその値）
+        out.push(...buildCapBattleView(r, d.me.name, foe.name, { b: b.startHp }))
+        out.push(win
+          ? { text:`${foe.name}を倒した！`, color:'#ffcc00', big: true }
+          : { text:'敗北…', color:'#ff4444', big: true })
+        // 古い画面のまま戦うと再生がずれる（入るのはサーバーの結果）
+        if (d.win !== win) out.push({ text: CORRECTED_TEXT, color:'#ff8844' })
+        setLogs(out)
+      }
+
       const after = []
       after.push(win
         ? { text:`👑 ${floorLabel(floor)}の階層守護者になった！`, color:'#ffcc00' }
         : { text:`次は${floorLabel(data.next_floor)}から挑戦（負けると${LOSE_DROP}つ下）`, color:'#7fa6d0' })
       after.push({ text:`${expText(gainedExpOf(data), prof.lv)}　Gold +${data.gold}`, color:'#ffcc00' })
       after.push(...levelUpLines(prof.class, data.level))
-      if (data.drop && drop) after.push(dropLineOf(drop.item))
+      const dropped = data.drop ? ITEM_BY_ID[data.drop.base_id] : null
+      if (dropped) after.push(dropLineOf(dropped))
       setLogs(l => [...l, ...after])
       await load()
       onProfile(null)
@@ -178,6 +195,7 @@ export default function V2capTower({ prof, inventory, onProfile }) {
       <div style={{ ...box, padding:'12px' }}>
         <div style={{ color:'#ff88cc', fontSize:'13px', marginBottom:'10px' }}>🗼 {TOWER_NAME} {floorLabel(floor)}</div>
         <div style={{ marginBottom:'12px', maxHeight:'420px', overflowY:'auto' }}>
+          {busy && !logs.length && <div style={{ color:'#7fa6d0', fontSize:'12px' }}>⚔ 戦っています…</div>}
           {logs.map((l, i) => <V2capLogLine key={i} l={l} art={art} />)}
         </div>
         <button onClick={() => { setScene('lobby'); scrolled.current = false }} disabled={busy}
@@ -272,6 +290,7 @@ export default function V2capTower({ prof, inventory, onProfile }) {
         </div>
       )}
 
+      {stale && <V2capReloadNote />}
       {msg && <div style={{ ...box, padding:'10px 12px', marginBottom:'10px', fontSize:'11px', color:'#ffcc66' }}>{msg}</div>}
 
       {/* 一覧（ユーザーが見せた画像の形：職業のアイコン・LV・名前。上の層から） */}

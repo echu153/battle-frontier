@@ -278,7 +278,7 @@ test('【確定】2026-10-26 ユーザー指示「このシステム難しそう
   const equip = read('components/V2capEquip.jsx')
   assert.equal((equip.match(/\{SHINKA_ON && (w\.)?item\.part === '武器' && /g) || []).length, 2, '装備画面の熟練度と能力')
   assert.ok(read('pages/V2capHome.jsx').includes('{SHINKA_ON && <button onClick={shinkaReady}'), 'ホームの開発用ボタン')
-  assert.ok(read('components/V2capSortie.jsx').includes('...(SHINKA_ON ? { p_rec: srecOfBattle(r, you) } : {}),'), '精算に記録を送らない')
+  assert.ok(read('lib/sortieVerify.js').includes('if (SHINKA_ON) entry.rec = srecOfBattle(d.r, d.me.name)'), '精算に記録を渡さない')
   assert.ok(read('lib/jemitaKb.js').includes('...(SHINKA_ON ? ['), 'ジェミータの資料に書かない')
   assert.ok(!readFileSync(new URL('../../../supabase_v2cap_jemita_kb.sql', import.meta.url), 'utf8').includes('真化'), '資料の SQL にも無い')
   // 精算は §18 を流していないデータベースでも通る（数える関数があって、記録が来たときだけ数える）
@@ -288,13 +288,11 @@ test('【確定】2026-10-26 ユーザー指示「このシステム難しそう
 test('サーバー：精算は戦い方の記録（p_rec）を受け取り、着けている武器を数える。真化の抽選はサーバー', () => {
   assert.ok(SQL.includes('p_rec jsonb default null'))
   assert.ok(SQL.includes("perform public.v2cap_shinka_count(v_uid, nullif(v_row.equipped ->> 'weapon', '')::bigint, p_rec, v_win,"))
-  assert.ok(SQL.includes('grant execute on function public.v2cap_sortie_settle(int, text, boolean, text, boolean, text, jsonb) to authenticated;'))
+  assert.ok(SQL.includes("v_res := public.v2cap_sortie_apply(p_spot, v_e ->> 'enemy', (v_e ->> 'win')::boolean, v_e ->> 'drop', p_auto, p_key, v_e -> 'rec');"), '記録はサーバーが決めた結果から渡す（2026-11-01）')
   assert.ok(SQL.includes('revoke all on function public.v2cap_shinka_count(uuid, bigint, jsonb, boolean, text) from public, anon, authenticated;'), '数えるのは精算からだけ')
   assert.ok(/create or replace function public\.v2cap_shinka\(p_inv bigint\)[\s\S]*?random\(\)[\s\S]*?\$\$;/.test(SQL), '抽選はサーバー')
-  // 画面は記録を送る（サーバーが前の版なら外して送り直す）
-  const sortie = read('components/V2capSortie.jsx')
-  assert.ok(sortie.includes('p_rec: srecOfBattle(r, you)'))
-  assert.ok(sortie.includes('delete args.p_rec'))
+  // 画面は記録を送らない（勝ち負けと同じく、サーバーが決めた戦闘から作る・2026-11-01）
+  assert.ok(!read('components/V2capSortie.jsx').includes('p_rec'))
 })
 
 test('記録の項目の上限は SQL の種（shinka_fields）と同じ（tools/v2cap-sql.mjs が作る）', () => {

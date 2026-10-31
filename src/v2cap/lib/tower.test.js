@@ -59,9 +59,9 @@ test('【確定】守護者でいるあいだ、出撃の装備のドロップ�
   assert.ok(rollEquipDrop(enc, '戦士', new Date(), seq(x, 0, 0, 0), 1, guardDropBonusOf({ tower_guard: 3 })))
   // 9% ちょうどは守っていても落ちない（+1%まで）
   assert.equal(rollEquipDrop(enc, '戦士', new Date(), seq((DROP_CHANCE.normal + 1) / 100, 0, 0, 0), 1, 1), null)
-  // 出撃の画面は守っている印（tower_guard）から上乗せを渡している
-  const src = readFileSync(new URL('../components/V2capSortie.jsx', import.meta.url), 'utf8')
-  assert.match(src, /rollEquipDrop\(enc, prof\.class, new Date\(\), Math\.random, me\.setFx\?\.rareDropMult \|\| 1, guardDropBonusOf\(prof\)\)/)
+  // 出撃の結果を決めるとき、守っている印（tower_guard）から上乗せを渡している
+  const src = readFileSync(new URL('./sortieVerify.js', import.meta.url), 'utf8')
+  assert.match(src, /rollEquipDrop\(enc, snap\.prof\.class, at, rng, me\.setFx\?\.rareDropMult \|\| 1, guardDropBonusOf\(snap\.prof\)\)/)
 })
 
 test('【確定】連勝補正：n連勝中の守護者に挑むと +5n%（HP/MPには乗せない）。30層以下で相手が強いときだけ2倍', () => {
@@ -217,7 +217,7 @@ test('戦闘ログの1ターン目の表も、守護者の減ったHPから（�
   assert.equal(v[0].foe.hp, b.startHp, '1ターン目の表は減ったHP')
   assert.equal(v[0].foe.max, b.stats.hp)
   const src = readFileSync(new URL('../components/V2capTower.jsx', import.meta.url), 'utf8')
-  assert.ok(src.includes('buildCapBattleView(r, me.name, champ.name, { b: b.startHp })'), '画面が渡している')
+  assert.ok(src.includes('buildCapBattleView(r, d.me.name, foe.name, { b: b.startHp })'), '画面が渡している')
 })
 
 test('NPCの強さを測る道具と同じ作り方（npcFighterAt）で、強さを指定して作れる', () => {
@@ -247,8 +247,8 @@ test('姿には技の名前・回数と、編成にある技のぶんだけの�
   assert.deepEqual(snap.set, me.slots.map(x => ({ name: x.skill.name, uses: x.uses })))
   assert.deepEqual(snap.ups, { [names[0]]: 10 })
   assert.ok(!('slots' in snap), '技の中身は持たない')
-  const src = readFileSync(new URL('../components/V2capTower.jsx', import.meta.url), 'utf8')
-  assert.ok(src.includes('snapshotOf(me, { lv: prof.lv, gender, ups: ascEffectsOf(prof).ups })'), '画面はアセンションの上がり幅を渡している')
+  const src = readFileSync(new URL('./sortieVerify.js', import.meta.url), 'utf8')
+  assert.ok(src.includes("snapshotOf(d.me, { lv: snap.prof.lv, gender: artGenderOf(snap.prof, 'm'), ups: ascEffectsOf(snap.prof).ups })"), 'サーバーがアセンションの上がり幅を入れている')
 })
 
 test('守護者の技は今の名簿から引き直す：名簿に無い技は外れる・アセンションの上がり幅は付け直す', () => {
