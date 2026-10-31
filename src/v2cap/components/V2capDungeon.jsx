@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import V2capAtbFight from './V2capAtbFight.jsx'
+import V2capBossReward from './V2capBossReward.jsx'
 import { preloadArt } from '../lib/artPreload.js'
 import { box, miniBtn, TEXT } from './v2ui.js'
 import { createAtb } from '../core/atb.js'
@@ -17,7 +18,7 @@ import { CLASS_BY_ID } from '../lib/jobs.js'
 import { bossArtOf, bossThumbOf } from '../lib/bossArt.js'
 import { bossIllustOf } from '../lib/bossIllust.js'
 import {
-  CHALLENGE_CATS, CIRCLED, DUNGEON_BOSSES, DIFF_KEYS, DUNGEON_TRY_SEC, HELPERS_MAX, STAMINA_HELPER,
+  CHALLENGE_CATS, CIRCLED, DUNGEON_BOSSES, DIFF_COLOR, DIFF_KEYS, DUNGEON_TRY_SEC, HELPERS_MAX, STAMINA_HELPER,
   diffOf, isDiffReady, isDiffUnlocked, summonBlockOf, tryStaminaOf, dungeonFighter, msLeftOf,
 } from '../lib/dungeon.js'
 
@@ -35,11 +36,12 @@ import {
 //   メニューの名前は「挑戦」。入口はカテゴリごと（lib/dungeon.js の CHALLENGE_CATS）にボスを並べ、押すと難易度が開く。呼べるのはボスごとに1日1回・同時に1体
 // 【確定】2026-10-31 ユーザー「この履歴いらない」「ここら辺の説明いらない」「ボスは1体ずつ挑戦できる」「呼ぶじゃなくて挑戦する にして」「開発用に挑戦回数resetできるように」：
 //   倒した・時間切れのボスと説明は出さない。「挑戦する」でボスを出してそのまま戦闘へ（負けたら入口に残り、続きから挑む）。コードと DB の summon の名前はそのまま。回数を戻すのは開発用のボタン
+// 【確定】2026-10-31 ユーザー「戦闘開始と討伐後のテロップ的なのが欲しい、報酬画面も」：
+//   倒したら 倒れる動き → 討伐完了のテロップ（V2capAtbFight.jsx）→ 報酬画面（V2capBossReward.jsx）。ほかの人が先に倒していたら、自分の決着のすぐあとに報酬画面。負けと時間切れは今までどおり
 // ★戦闘は画面で回し、終わったら削った量をサーバーへ送る（v2cap_dungeon_try_end）。挑戦の途中で画面を離れたら、そこまでの量を送る
 // ============================================================
 
 const POLL_MS = 15000
-const DIFF_COLOR = { normal:'#66dd88', hard:'#ffaa44', expert:'#ff5566', master:'#cc77ff' }
 const DEV = '#ff88cc'
 const NO_SQL = 'サーバーにまだこの仕組みがありません（SQL を流すと使えます）'
 const errText = (error, data) => (/could not find the function/i.test(error?.message || '') ? NO_SQL : (error?.message || data?.error || 'うまくいきませんでした'))
@@ -62,7 +64,7 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
   const [msg, setMsg] = useState(null)            // { ok, text }
   const [busy, setBusy] = useState(false)
   const [nowMs, setNowMs] = useState(Date.now())
-  const [fight, setFight] = useState(null)        // { run, st, runKey, result, sent }
+  const [fight, setFight] = useState(null)        // { run, st, runKey, result, ended（討伐完了のテロップが終わった） }
   const [openBoss, setOpenBoss] = useState(null)  // 難易度を開いているボス
   const pending = useRef(null)                    // 送っていない挑戦（画面を離れたら送る）
 
@@ -142,6 +144,7 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
     const r = await report()
     if (r) setFight(f => (f ? { ...f, result: r } : f))
   }
+  const onCleared = () => setFight(f => (f ? { ...f, ended: true } : f))
   const giveUp = async () => {
     const r = await report()
     setFight(null)
@@ -155,24 +158,27 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
   if (fight) {
     const r = fight.result
     const boss = DUNGEON_BOSSES[fight.run.boss]
+    const won = fight.st.winner === 'a'
+    const clearedByOther = !won && fight.st.over && r?.ok && r.run.cleared
+    if (fight.ended || clearedByOther) {
+      return <V2capBossReward bossKey={fight.run.boss} diffKey={fight.run.diff} st={fight.st} result={r} onBack={() => { setFight(null); load(); window.scrollTo(0, 0) }} />
+    }
     return (
       <div style={{ ...box, padding:'12px' }}>
         <div style={{ color:'#ff8866', fontSize:'12px', marginBottom:'6px' }}>
           {boss.name}（{diffOf(fight.run.boss, fight.run.diff)?.label}）・残りHP {Math.max(0, fight.st.b.hp).toLocaleString()} / {fight.st.b.base.hp.toLocaleString()}
         </div>
         <V2capAtbFight st={fight.st} runKey={fight.runKey} macros={macros} playerSrc={playerSrc} playerMotion={playerMotion}
-          bossArt={artOfBoss(fight.run.boss)} onOver={onOver}
-          footer={fight.st.over
+          bossArt={artOfBoss(fight.run.boss)} onOver={onOver} onCleared={onCleared}
+          footer={won ? null : fight.st.over
             ? <button onClick={() => { setFight(null); load() }} disabled={!r} style={{ ...miniBtn('#44ddff'), flex:1, padding:'8px' }}>← 入口へ戻る</button>
             : <button onClick={giveUp} style={{ ...miniBtn('#ff8888'), flex:1, padding:'8px' }}>挑戦をやめる（ここまでの削りを入れる）</button>} />
-        {r && (
+        {r && !won && (
           <div style={{ marginTop:'8px', fontSize:'12px', color: r.ok ? '#ffdd66' : '#ff6666' }}>
-            {!r.ok ? r.text
-              : r.run.cleared ? `⚔ ${boss.name}を倒した！（この挑戦で${r.damage.toLocaleString()}ダメージ）`
-              : `${r.damage.toLocaleString()}ダメージを入れた（残りHP ${r.run.hp.toLocaleString()} / ${r.run.hp_max.toLocaleString()}）`}
+            {!r.ok ? r.text : `${r.damage.toLocaleString()}ダメージを入れた（残りHP ${r.run.hp.toLocaleString()} / ${r.run.hp_max.toLocaleString()}）`}
           </div>
         )}
-        {!r && fight.st.over && <div style={{ marginTop:'8px', fontSize:'11px', color: TEXT.label }}>削った量を送っています…</div>}
+        {!r && fight.st.over && !won && <div style={{ marginTop:'8px', fontSize:'11px', color: TEXT.label }}>削った量を送っています…</div>}
       </div>
     )
   }

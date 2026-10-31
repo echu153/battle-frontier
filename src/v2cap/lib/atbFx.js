@@ -61,6 +61,10 @@ export const scheduleFx = (events, t0, delay = {}) => {
   })
 }
 
+// その側に最後のダメージの数字が出る時刻（秒・起きた時刻 t0 つきの fx から。まだ先のものも入れる）。無ければ now
+//   ボスの倒れる動きとテロップは、止めの一撃の数字が出てから始める（殴る絵の「当たる」コマまで数字は遅れる）
+export const lastHitAtOf = (fx, side, now) => fx.reduce((t, f) => (f.side === side && (f.kind === 'hit' || f.kind === 'tick') && f.t0 > t ? f.t0 : t), now)
+
 // 動きの長さ（秒）
 export const LUNGE_SEC = 0.32
 export const HIT_SEC = 0.3

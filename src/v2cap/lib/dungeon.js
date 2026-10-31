@@ -27,6 +27,7 @@ export const STAMINA_HELPER = 5        // 救援で入った人（毎回）
 export const HELPERS_MAX = 5           // 救援で入れる人数（呼んだ人のほか）
 
 export const DIFF_KEYS = ['normal', 'hard', 'expert', 'master']
+export const DIFF_COLOR = { normal:'#66dd88', hard:'#ffaa44', expert:'#ff5566', master:'#cc77ff' }   // 難易度の文字の色（入口・報酬画面）
 
 // ボス。dist＝戦闘力に対するステの割合（%）・skills＝技（倍率・状態異常）・pattern＝技の出し方・diffs＝難易度ごとの強さ
 //   diffs の中身：area＝呼べるようになるエリア・recLv＝推奨LV・recPower＝推奨戦闘力・power＝守りと速さの戦闘力・atk＝攻撃（STR・INT）だけの倍率・hp＝全体のHP

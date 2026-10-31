@@ -2,7 +2,7 @@ import { createContext, useContext, useId, useLayoutEffect, useRef, useState } f
 import { TEXT } from './v2ui.js'
 import { buffChips, hpBuffChips, ailChips, stateChips, needNow, castMsOf, CAST_SEC, BUFF_GAUGE_SEC } from '../core/atb.js'
 import { STAT_DEFS } from '../core/stats.js'
-import { lungeOf, shakeOf, HIT_SEC, POP_SEC, GLOW_SEC, RAGE_SEC, skillBannerAt } from '../lib/atbFx.js'
+import { lungeOf, shakeOf, lastHitAtOf, HIT_SEC, POP_SEC, GLOW_SEC, RAGE_SEC, skillBannerAt } from '../lib/atbFx.js'
 import { JP_BOLD } from './casinoStyle.js'
 import { rubySegmentsOf } from '../lib/skillRuby.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
@@ -1090,7 +1090,7 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
   //   deathMark＝試し撃ちの［倒れる］（fx の kind 'death'）。流し終わるとボスは戻る（本当に倒れたら消えたまま）
   const deadAt = useRef(null)
   if (st.b.hp > 0) deadAt.current = null
-  else if (deadAt.current == null) deadAt.current = fx.reduce((t, f) => (f.side === 'b' && (f.kind === 'hit' || f.kind === 'tick') && f.t0 > t ? f.t0 : t), now)
+  else if (deadAt.current == null) deadAt.current = lastHitAtOf(fx, 'b', now)
   const deathMark = useRef(-1e9)
   for (const f of fx) if (f.kind === 'death' && f.t0 > deathMark.current) deathMark.current = f.t0
   const deathT0 = Math.max(deadAt.current ?? -1e9, deathMark.current)

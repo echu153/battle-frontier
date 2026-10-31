@@ -130,7 +130,7 @@ test('止めた形に重ねる：はじめは止めた形のずれをそのま�
 
 test('舞台のつなぎ：止めの一撃の数字が出る時刻から流す・そのあいだボスの技は片付ける・ボスの絵は薄くしない・試し撃ちの［倒れる］', () => {
   // HP が0になった瞬間ではなく、数字が出る時刻（殴る絵の「当たる」コマ）から
-  assert.match(stage, /deadAt\.current = fx\.reduce\(\(t, f\) => \(f\.side === 'b' && \(f\.kind === 'hit' \|\| f\.kind === 'tick'\) && f\.t0 > t \? f\.t0 : t\), now\)/)
+  assert.match(stage, /deadAt\.current = lastHitAtOf\(fx, 'b', now\)/)   // 決まりは lib/atbFx.js（テロップと同じ時刻）
   // 倒した瞬間の形で止める
   assert.match(stage, /const clock = death \? death\.t0 : now/)
   assert.match(stage, /const pose = death \? deathPoseOf\(pose0, death\) : pose0/)
