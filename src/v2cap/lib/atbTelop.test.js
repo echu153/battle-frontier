@@ -90,7 +90,8 @@ test('報酬画面の報酬の欄：EXP は実際に入った量・LVアップ�
   assert.match(reward, /reward === undefined && .*報酬は準備中です/)
   // ソロの行に倍率を書かない（ユーザー「これ完全ソロ討伐成功！にして、報酬3倍とか具体的な内容は言わないでほしい」）
   assert.match(reward, /reward\.solo && .*>完全ソロ討伐成功！<\/div>/)
-  assert.doesNotMatch(reward, /SOLO_REWARD_MULT|報酬3倍/)
+  const code = reward.split(/\r?\n/).filter(l => !/^\s*\/\//.test(l)).join('\n')   // コメントの外
+  assert.doesNotMatch(code, /SOLO_REWARD_MULT|報酬3倍/)
   assert.match(reward, /reward === null && .*この討伐の報酬はありません/)
 })
 
