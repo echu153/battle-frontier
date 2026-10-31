@@ -26,6 +26,7 @@ import { DRAW_MS, atbLevelOf, newAtbPacer } from '../lib/atbPacer.js'
 //   macros … マクロ①〜③（atbMacro.js の形）・bossArt … ボスの絵（bossArt.js／bossIllust.js・無ければ図鑑の絵）
 //   dev … 一時停止・「動きを見る」のボタン（試し撃ちだけ）・onOver … 決着がついたら1回呼ぶ（st を渡す）・footer … 下のボタン
 //   onEnded … 決着のテロップ（討伐完了・敗北・時間切れ）が終わったら1回呼ぶ（舞台を押すと飛ばせる）
+//   hold … 遭遇のイラストを出しているあいだ true（lib/useBossEncounter.js）＝戦闘開始のテロップも時計も始めない
 //   【確定】2026-10-31 ユーザー「戦闘開始と討伐後のテロップ的なのが欲しい」：戦闘開始のあいだは時計を止める・討伐完了はボスが倒れたあと（lib/atbTelop.js）
 //   ボスの技の名前が技の絵の名前と同じなら、その絵を流す（ダンジョンのボス・bossMotionKeyOf）。違えば仮の流し方
 //   削った量は、この挑戦を始めたときのHP（st.b.startHp＝持ち越し）から数える
@@ -65,7 +66,7 @@ const LiveStage = ({ tickRef, st, fxRef, ...rest }) => {
   return <V2capAtbStage st={st} fx={fxRef.current} now={performance.now() / 1000} {...rest} />
 }
 
-export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, playerMotion, bossArt = null, verPicker = null, dev = false, onOver, onEnded, footer }) {
+export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, playerMotion, bossArt = null, verPicker = null, dev = false, onOver, onEnded, footer, hold = false }) {
   const [paused, setPaused] = useState(false)
   const [, setFrame] = useState(0)
   const [logs, setLogs] = useState([])
@@ -122,7 +123,7 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
   //   画面の更新は requestAnimationFrame で1秒60回まで（lib/atbPacer.js・間に合わない端末は30回）。
   //   裏のタブでは requestAnimationFrame が止まるので、そのあいだはタイマーで進める（戦闘が固まって見えない）
   useEffect(() => {
-    if (paused || !artReady) return
+    if (paused || !artReady || hold) return
     last.current = performance.now()
     if (introT0.current === null) introT0.current = last.current
     const tick = (now) => {
@@ -187,7 +188,7 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
       tick(now)
     }, 33)
     return () => { cancelAnimationFrame(raf); clearInterval(id) }
-  }, [runKey, paused, playerMotion, bossArt, artReady]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [runKey, paused, playerMotion, bossArt, artReady, hold]) // eslint-disable-line react-hooks/exhaustive-deps
   // ログは新しい行が下に来る＝いちばん下まで送る
   useEffect(() => { if (logBox.current) logBox.current.scrollTop = logBox.current.scrollHeight }, [logs])
 

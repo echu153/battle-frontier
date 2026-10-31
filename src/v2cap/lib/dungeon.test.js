@@ -524,7 +524,7 @@ test('【確定】2026-10-31 入口：履歴と説明を出さない・「挑戦
   // 押したらボスを出して、そのまま挑戦を始める
   assert.match(src, />挑戦する<\/button>/)
   assert.match(src, /onClick=\{\(\) => challenge\(key, k\)\}/)
-  assert.match(src, /const challenge = async \(bossKey, diff\) => \{\n\s*const data = await call\('v2cap_dungeon_summon', \{ p_boss: bossKey, p_diff: diff \}\)\n\s*if \(!data\) return\n\s*setOpenBoss\(null\)\n\s*await start\(data\.run\)/)
+  assert.match(src, /const challenge = async \(bossKey, diff\) => \{\n\s*showEncounter\(bossKey, diff\)\n\s*const data = await call\('v2cap_dungeon_summon', \{ p_boss: bossKey, p_diff: diff \}\)\n\s*if \(!data\) \{ enc\.cancel\(\); return \}\n\s*setOpenBoss\(null\)\n\s*if \(await start\(data\.run\)\) enc\.finish\(\)/)
   // 画面に出す文字とサーバーの返事に「呼ぶ」を残さない（コメントの外）
   const noCall = (name, text) => {
     for (const line of text.split(/\r?\n/)) assert.ok(/^\s*(\/\/|--|\{\/\*)/.test(line) || !line.includes('呼'), `${name}: ${line.trim().slice(0, 60)}`)

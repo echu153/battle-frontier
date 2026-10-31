@@ -7,6 +7,7 @@ import { lastHitAtOf } from './atbFx.js'
 import { bossIllustOf } from './bossIllust.js'
 import { deathLandMs } from './bossDeath.js'
 import { DUNGEON_BOSSES, contributionPctOf } from './dungeon.js'
+import { bossEncounterOf } from './bossArt.js'
 
 const read = (f) => readFileSync(new URL(`../components/${f}`, import.meta.url), 'utf8')
 
@@ -104,8 +105,25 @@ test('その場にいなかった人は入口で受け取る：受け取りの�
   assert.match(src, /if \(r\?\.reward\) onProfile\?\.\(\)/, 'EXP と Gold が増えたらホームの数字も直す')
 })
 
+test('挑戦を押した瞬間に遭遇のイラスト（ユーザー「挑戦を押してから若干ラグがあって」「挑戦したら遭遇のイラストがどん！って出るように」）：サーバーの返事を待たない・出ているあいだ戦闘は始まらない', () => {
+  const src = read('V2capDungeon.jsx').replace(/\r\n/g, '\n')
+  // サーバーを呼ぶ前に出す（どの入り方も）
+  assert.match(src, /const challenge = async \(bossKey, diff\) => \{\n\s*showEncounter\(bossKey, diff\)\n\s*const data = await call\('v2cap_dungeon_summon'/)
+  assert.match(src, /const enter = async \(run\) => \{\n\s*showEncounter\(run\.boss, run\.diff\)\n\s*if \(await start\(run\)\) enc\.finish\(\)\n\s*else enc\.cancel\(\)/)
+  assert.match(src, /const retry = async \(\) => \{\n\s*showEncounter\(fight\.run\.boss, fight\.run\.diff\)/)
+  assert.match(src, /onClick=\{\(\) => enter\(run\)\}/, '入っているボスの「挑戦する」も同じ')
+  assert.match(src, /if \(!data\) \{ enc\.cancel\(\); return \}/, '始められなければ入口へ（わけは入口に出る）')
+  assert.match(src, /hold=\{enc\.hold\}/)
+  // 出ているあいだは戦闘の時計も戦闘開始のテロップも始めない
+  assert.match(read('V2capAtbFight.jsx'), /if \(paused \|\| !artReady \|\| hold\) return/)
+  // 戦闘に要る絵がそろうまで消えない＝「読みこみ中」を見せない
+  assert.match(src, /enc\.begin\(bossKey, diffKey, \[\.\.\.\(artOfBoss\(bossKey\)\?\.srcs \|\| \[\]\), bossEncounterOf\(bossKey\), playerSrc, motionSrc\]/)
+  for (const key of Object.keys(DUNGEON_BOSSES)) assert.ok(bossEncounterOf(key), `${key} に遭遇の大きな絵がある`)
+  assert.ok(!/background-clip|backgroundClip/i.test(read('V2capBossEncounter.jsx')))
+})
+
 test('日本語の大きな文字は JP_BOLD の太字（切り抜きのグラデーションにしない）', () => {
-  for (const f of ['V2capAtbTelop.jsx', 'V2capBossReward.jsx']) {
+  for (const f of ['V2capAtbTelop.jsx', 'V2capBossReward.jsx', 'V2capBossEncounter.jsx']) {
     const src = read(f)
     assert.match(src, /fontFamily: JP_BOLD, fontWeight:'bold'/, f)
     assert.ok(!/background-clip|backgroundClip/i.test(src), f)

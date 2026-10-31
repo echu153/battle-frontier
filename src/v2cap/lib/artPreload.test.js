@@ -42,14 +42,14 @@ test('【確定】2026-10-31 絵の先読み：届かない絵があっても決
 
 test('【確定】2026-10-31 ボス戦は絵がそろうまで戦闘の時計を進めない（ユーザー「実機でしっかり見てよ」・真っ黒な舞台に光の粒だけが出ていた）：入口でも読み始める・背景と流れ図も待つ', () => {
   const fight = read('../components/V2capAtbFight.jsx')
-  assert.match(fight, /if \(paused \|\| !artReady\) return/, '絵がそろうまで時計を止める')
+  assert.match(fight, /if \(paused \|\| !artReady \|\| hold\) return/, '絵がそろうまで時計を止める')
   assert.match(fight, /if \(!artReady\) return/, '絵がそろうまで舞台を出さない')
   assert.match(fight, /preloadArt\(artSrcs/)
   // 入口の画面でも同じ仕組みで読み始める（new Image で別に読むと、戦闘の画面で待ち直す）
   //   挑戦の入口はボスが2体以上いるので、開いたボスと入っているボスの絵だけ読む（全部は読まない）
   for (const f of ['../components/V2capDungeon.jsx', '../components/V2capAtb.jsx']) {
     const src = read(f)
-    assert.match(src, /preloadArt\((bossArt|art)\.srcs\)/, f)
+    assert.match(src, /preloadArt\(\[?(\.\.\.)?(bossArt|art)\.srcs/, f)
     assert.doesNotMatch(src, /of bossArt[^\n]*new Image\(\)/, f)
   }
   assert.match(read('../components/V2capDungeon.jsx'), /new Set\(\[openBoss, \.\.\.runBosses\.split\(','\)\]\)/, '開いたボスと入っているボス')
