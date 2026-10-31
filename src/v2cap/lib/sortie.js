@@ -34,16 +34,17 @@ const pick = (list, rng) => list[Math.floor(rng() * list.length)]
 //     レア＝いまの時間帯に出る3体（一日中の2体＋その時間帯の1体）
 //   ⚠前（2026-10-09〜10-25）は「レア0.5%を先に引く（今のⅡと同じ）→ ボス → ふつうの敵と時間帯の敵を合わせて均等」
 //     ＝時間帯の敵は①で半分・②③で3分の1、レアは200戦に1回だった
-//   ★出会う敵は画面が決める（サーバーは敵がその場所にいるかと役割だけ見る）＝SQLは変わらない
+//   ★出会う敵はサーバーが決める（2026-11-01・sortieVerify.js）。下の関数はサーバーの関数と画面の再生とシミュレーションで同じものを使う
 // role … normal／timed／rare／boss（経験値とGoldの倍率に使う）
+// forcePapia … 開発用「次の出撃でパピア」（サーバーの印 papia_force・v2cap_debug_papia_next）。シミュレーションの道具は papia.js の印を使う
 export const ENCOUNTER_PCT = { normal: 70, timed: 25, rare: 5 }
-export const pickEncounter = (spotId, bossRate, at = new Date(), rng = Math.random) => {
+export const pickEncounter = (spotId, bossRate, at = new Date(), rng = Math.random, forcePapia = takePapiaForce()) => {
   const spot = spotOf(spotId)
   if (!spot) return null
   const band = bandAt(at)
   const r = spot.roster
   const make = (enemy, role) => ({ spot, enemy, role, isBoss: role === 'boss', lv: enemyLvOf(enemy.name, spot.id), band })
-  if (takePapiaForce()) return make(papiaEnemyOf(spot), PAPIA_ROLE)   // 開発用（papia.js）
+  if (forcePapia) return make(papiaEnemyOf(spot), PAPIA_ROLE)
   if (rollBoss(bossRate, rng)) return make(r.boss, 'boss')
   // ★パピア（2026-10-30・papia.js）：ボスでなければ1%。出ない残りを 70/25/5 で分ける
   if (rng() * 100 < PAPIA_PCT) return make(papiaEnemyOf(spot), PAPIA_ROLE)
@@ -110,8 +111,8 @@ export const clearSpot = (cleared, id) =>
 //       （ふつうの敵＝レア以上・レアモンスターとボス＝エピック以上）。ボスのエピック・レジェンダリーはどの場所でも前と同じになる
 //     ・ユニーク（ボスに勝ったとき0.5%）はサーバーが別に引く＝ここでは変わらない
 //   ・落ちるのは**そのエリアの装備**（種類ごと・レア度ごとに1つずつ）。アイテムLV＝その装備の必要LV（エリア×レア度）
-// ★サーバー（v2cap_sortie_settle）は「そのエリアの装備か」「その役割の敵から落ちるレア度か」「いまの職業の武器か」を見る
-//   （落ちたかどうか・何が落ちたかは画面の申告。戦闘をサーバーで回すまでは今のⅡと同じ限界）
+// ★何が落ちたかはサーバーの関数が下の関数で決める（2026-11-01・sortieVerify.js）。
+//   SQL（v2cap_sortie_apply）は念のため「そのエリアの装備か」「その役割の敵から落ちるレア度か」「いまの職業の武器か」も見る
 export const DROP_CHANCE = { normal: 8, timed: 8, rare: 30, boss: 60 }
 export const DROP_RARITY = {
   normal: { N:82, R:15, E:3 },
@@ -159,7 +160,6 @@ export const rollDropKind = (part, cls, rng = Math.random) => {
 // 勝ったときの装備。落ちたら { item, ilv }（レア度は item.rarity・アイテムLV＝item.lv）
 // rareMult … 防具のセット能力「海賊の嗅覚」（落ちる確率そのものは変えない＝レア以上の割合だけ）
 // bonusPct … 落ちる確率に足す%。塔の階層守護者でいるあいだ +1（tower.js の GUARD_DROP_BONUS・2026-10-14 ユーザー指示「ドロップ率1%増加」）
-//   ⚠画面の確率（サーバーは何が落ちたかの条件だけを見る＝セット能力と同じ扱い）
 export const rollEquipDrop = (enc, cls, at = new Date(), rng = Math.random, rareMult = 1, bonusPct = 0) => {
   if (!enc || enc.role === PAPIA_ROLE) return null   // パピアは装備を落とさない（塔の守護者のボーナスも乗らない）
   if (rng() * 100 >= (DROP_CHANCE[enc.role] ?? DROP_CHANCE.normal) + (bonusPct || 0)) return null

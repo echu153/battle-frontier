@@ -86,7 +86,7 @@ test('必要EXP・必要ClassEXP・スタミナの式と係数がJSと同じ', (
 })
 
 test('【確定】1勝のEXPとGoldは場所の表 × 役割の倍率（朝昼晩1.5倍・レア3倍・ボス5倍）。サーバーが決める', () => {
-  const settle = fnBody('v2cap_sortie_settle')
+  const settle = fnBody('v2cap_sortie_apply')
   assert.ok(settle.includes(`v_tenths := case v_en.role when 'timed' then ${ROLE_TENTHS.timed} when 'rare' then ${ROLE_TENTHS.rare} when 'boss' then ${ROLE_TENTHS.boss} else ${ROLE_TENTHS.normal} end;`),
     '倍率がJS（areas.js の ROLE_TENTHS）と同じ')
   // 範囲の中の整数を均等に1つ → 倍率を掛けて四捨五入（JSの rollRewards・scaleByRole と同じ）
@@ -101,7 +101,7 @@ test('【確定】1勝のEXPとGoldは場所の表 × 役割の倍率（朝昼�
 })
 
 test('【確定】落ちた装備は「その場所のエリアの装備」で「その役割の敵から落ちるレア度」のときだけ持ち物に入る', () => {
-  const settle = fnBody('v2cap_sortie_settle')
+  const settle = fnBody('v2cap_sortie_apply')
   assert.match(settle, /v_eq\.area = v_spot\.area/)
   // JS（sortie.js の DROP_RARITY）から「そのレア度を落とす役割」を作って、SQLの条件と突き合わせる
   const all = Object.keys(DROP_RARITY)
@@ -137,7 +137,7 @@ test('装備の一覧はエリアとレア度を持つ。ランクの列（持�
 
 test('【確定】場所は1本道。ボスを倒した一番先の場所の次まで開く（難易度帯の表はもう読まない）', () => {
   assert.match(fnBody('v2cap_open_until'), /coalesce\(\(select max\(x\) from unnest\(coalesce\(p_cleared, '\{\}'\)\) as t\(x\)\), 0\) \+ 1/)
-  const settle = fnBody('v2cap_sortie_settle')
+  const settle = fnBody('v2cap_sortie_apply')
   assert.match(settle, /if p_spot > public\.v2cap_open_until\(v_row\.cleared_spots\) then/)
   assert.match(settle, /if v_boss and v_win and not \(v_cleared @> array\[p_spot\]\) then/)
   assert.match(settle, /select \* into v_row from public\.v2cap_profiles where id = v_uid for update;/, '行をつかんでから間隔を見る')
@@ -274,7 +274,7 @@ test('★今のⅡ（v2_）のテーブルは読みも書きもしない（こ�
 
 test('【確定】武器は職業ごとに装備できる種類だけ（着ける・落ちる・転職で外す の3か所で見る）', () => {
   assert.match(fnBody('v2cap_equip'), /if not \(v_eq\.type = any\(coalesce\(v_cls\.weapons, '\{\}'\)\)\) then/)
-  assert.match(fnBody('v2cap_sortie_settle'), /v_eq\.part <> '武器' or v_eq\.type = any\(coalesce\(v_cls\.weapons, '\{\}'\)\)/)
+  assert.match(fnBody('v2cap_sortie_apply'), /v_eq\.part <> '武器' or v_eq\.type = any\(coalesce\(v_cls\.weapons, '\{\}'\)\)/)
   const change = fnBody('v2cap_change_class')
   assert.match(change, /select not \(e\.type = any\(coalesce\(v_cls\.weapons, '\{\}'\)\)\) into v_off/)
   assert.match(change, /v_equip := v_equip - 'weapon'/)
@@ -353,7 +353,7 @@ test('【確定】作成（鍛冶屋）：レア・エピック・レジェン�
 
 // ===== ユニーク（2026-10-21）=====
 test('【確定】ユニーク：ボスに勝ったとき0.5%でサーバーが引く・その場所のボスのものだけ（大ボスは2つから1つ）・武器は職業を見ない', () => {
-  const s = fnBody('v2cap_sortie_settle')
+  const s = fnBody('v2cap_sortie_apply')
   assert.ok(s.includes(`c_unique_rate  constant numeric := ${UNIQUE_DROP_PCT / 100};`), '確率が equipment.js の UNIQUE_DROP_PCT と同じ')
   assert.equal(UNIQUE_DROP_PCT, 0.5, 'ユーザー「ボス0.５」')
   const block = s.slice(s.indexOf('if v_boss and (coalesce(v_row.unique_force, false) or random() < c_unique_rate) then'))
@@ -434,8 +434,8 @@ test('【確定】デイリーミッション：受注した時点のLVで報酬
   assert.ok(bump.includes('where id = p_player and daily_lv is not null and not daily_claimed;'), '受け取ったあとは数えない')
   // 出撃の精算：勝ったときだけ「出撃に勝つ」を数える
   // （同じ枝で図鑑の討伐数も足すので、枝の中にほかの行があってもよい）
-  assert.match(fnBody('v2cap_sortie_settle'), /if v_win then\s+perform public\.v2cap_daily_bump\(v_uid, 'win', 1\);[\s\S]*?end if;/)
-  assert.equal((fnBody('v2cap_sortie_settle').match(/v2cap_daily_bump/g) || []).length, 1, '数えるのは勝ったときの1か所だけ')
+  assert.match(fnBody('v2cap_sortie_apply'), /if v_win then\s+perform public\.v2cap_daily_bump\(v_uid, 'win', 1\);[\s\S]*?end if;/)
+  assert.equal((fnBody('v2cap_sortie_apply').match(/v2cap_daily_bump/g) || []).length, 1, '数えるのは勝ったときの1か所だけ')
   // 受け取り：受注している・受け取っていない・一覧を全部満たす。二重に受け取れない。EXPは戦闘と同じ扱い
   const cl = fnBody('v2cap_daily_claim')
   assert.match(cl, /perform 1 from public\.v2cap_profiles where id = v_uid for update;/)
@@ -457,9 +457,9 @@ test('【確定】デイリーミッション：受注した時点のLVで報酬
 test('【確定】2026-10-15 デイリーミッションの4つは、それぞれ数える所が1か所ずつある（足したのに数えない、を防ぐ）', () => {
   // キー → 数えるRPC と、数えるときの形
   const WHERE = {
-    win:   { fn: 'v2cap_sortie_settle', n: 1 },
+    win:   { fn: 'v2cap_sortie_apply', n: 1 },
     smith: { fn: ['v2cap_enhance', 'v2cap_dismantle'], n: 2 },
-    tower: { fn: 'v2cap_tower_fight', n: 1 },
+    tower: { fn: 'v2cap_tower_apply', n: 1 },
     pray:  { fn: 'v2cap_pray', n: 1 },
   }
   assert.deepEqual(Object.keys(WHERE), DAILY_TASK_KEYS, 'daily.js の一覧と同じ（足したらここにも数える所を書く）')
@@ -476,7 +476,7 @@ test('【確定】2026-10-15 デイリーミッションの4つは、それぞ�
     '成功の枝の外＝失敗しても数える')
   assert.match(fnBody('v2cap_dismantle'), /if v_n > 0 then\s+perform public\.v2cap_daily_bump\(v_uid, 'smith', 1\);\s+end if;/)
   // 塔は勝ち負けで分かれる前に数える（守護者になる前・経験値を入れる前）。入れ替わって戦えなかったとき（changed）は数えない
-  const tf = fnBody('v2cap_tower_fight')
+  const tf = fnBody('v2cap_tower_apply')
   const tb = tf.indexOf("perform public.v2cap_daily_bump(v_uid, 'tower', 1);")
   assert.ok(tb > tf.indexOf("'守護者が入れ替わりました。もう一度挑戦してください', 'changed', true);"), '入れ替わりの確かめのあと')
   assert.ok(tb < tf.indexOf('if v_win then'), '勝ち負けの枝より前＝どちらでも1回')
@@ -568,7 +568,7 @@ test('【確定】モンスター図鑑：討伐数は勝ったときだけサ�
   assert.ok(SQL.includes('create policy v2cap_kills_own on public.v2cap_kills for select to authenticated using (player_id = auth.uid());'))
   assert.ok(!/grant (insert|update|delete|all)[^;]*v2cap_kills/.test(SQL), '書き込みは開けない（RPCの中だけ）')
   // 出撃の精算：勝ったときだけ、この場所にいると確かめた敵（v_en）の名前で足す（安息の祠の中はハピネスフェアリー・2026-10-13）
-  const settle = fnBody('v2cap_sortie_settle')
+  const settle = fnBody('v2cap_sortie_apply')
   const win = settle.match(/if v_win then\s+perform public\.v2cap_daily_bump\(v_uid, 'win', 1\);([\s\S]*?)end if;/)
   assert.ok(win, '勝ったときの枝')
   assert.ok(win[1].includes('insert into public.v2cap_kills (player_id, enemy, n) values (v_uid, case when v_shrine or v_papia then p_enemy else v_en.name end, 1)'))
@@ -580,7 +580,7 @@ test('【確定】モンスター図鑑：討伐数は勝ったときだけサ�
 })
 
 test('【確定】パピア（2026-10-30）：エリアと名前と経験値の倍率がJSと同じ。Goldと装備と宝箱なし・逃げられたらふつうの負けと同じ', () => {
-  const settle = fnBody('v2cap_sortie_settle')
+  const settle = fnBody('v2cap_sortie_apply')
   for (const t of PAPIA_TIERS) {
     assert.ok(settle.includes(`when p_enemy = '${t.name}' and v_spot.area between ${t.areas[0]} and ${t.areas[1]} then ${t.tenths}`), t.name)
   }
@@ -596,7 +596,7 @@ test('【確定】パピア（2026-10-30）：エリアと名前と経験値の�
 })
 
 test('【確定】安息の祠（2026-10-13）：見つかる確率・戦闘の数・経験値とGoldの倍率がJSと同じ。祠の中だけハピネスフェアリー・装備なし・最深部でスタミナ全回復', () => {
-  const settle = fnBody('v2cap_sortie_settle')
+  const settle = fnBody('v2cap_sortie_apply')
   assert.ok(settle.includes(`c_shrine_fairy constant text := '${SHRINE_FAIRY_NAME}';`))
   assert.ok(settle.includes(`c_shrine_rate  constant numeric := ${SHRINE_PCT / 100};`), '0.1%')
   assert.ok(settle.includes(`c_shrine_min   constant int := ${SHRINE_FIGHTS[0]};`) && settle.includes(`c_shrine_max   constant int := ${SHRINE_FIGHTS[1]};`), '3〜8回')
@@ -636,7 +636,7 @@ test('【確定】安息の祠（2026-10-13）：見つかる確率・戦闘の�
 })
 
 test('【確定】宝箱（2026-10-14）：祠の外で勝って装備が入らなかったときだけ5%・その場所のエリアの残骸1〜10個。数はJSと同じ', () => {
-  const settle = fnBody('v2cap_sortie_settle')
+  const settle = fnBody('v2cap_sortie_apply')
   assert.ok(settle.includes(`c_chest_rate   constant numeric := ${CHEST_PCT / 100};`), '5%')
   assert.ok(settle.includes(`c_chest_min    constant int := ${CHEST_SCRAP[0]};`) && settle.includes(`c_chest_max    constant int := ${CHEST_SCRAP[1]};`), '1〜10個')
   // 引くのは祠の外の勝ち（elsif v_win）の中・落ちた装備を見たあと・装備が入らなかったときだけ（祠の勝ち・負けの枝には無い）
@@ -655,14 +655,15 @@ test('【確定】宝箱（2026-10-14）：祠の外で勝って装備が入ら�
 test('出撃の間隔はサーバーでも見る（10秒・通信の揺れぶん2秒の余裕）', () => {
   assert.equal(SORTIE_CD, 10)
   assert.equal(SORTIE_CD_SLACK, 2)
-  assert.ok(fnBody('v2cap_sortie_settle').includes(`c_cd constant interval := interval '${SORTIE_CD - SORTIE_CD_SLACK} seconds';`), 'cooldown.js と同じ8秒')
+  assert.ok(fnBody('v2cap_sortie_apply').includes(`c_cd constant interval := interval '${SORTIE_CD - SORTIE_CD_SLACK} seconds';`), 'cooldown.js と同じ8秒')
 })
 
 // 【確定】2026-10-23 ユーザー報告「⚠ 反映に失敗しました（出撃の間隔が短すぎます）」の直し（cooldown.js）。出撃の精算と塔の挑戦で同じ形
 const CD_FNS = [
   // ★2026-10-26 出撃の精算に真化の記録（p_rec jsonb）を足した＝前の形は印つきの6つ
-  { fn: 'v2cap_sortie_settle', sig: 'int, text, boolean, text, boolean, text, jsonb', old: 'int, text, boolean, text, boolean, text', msg: '出撃の間隔が短すぎます' },
-  { fn: 'v2cap_tower_fight', sig: 'int, uuid, boolean, int, int, int, int, jsonb, text, text', old: 'int, uuid, boolean, int, int, int, int, jsonb, text', msg: '待ち時間が終わっていません' },
+  // ★2026-11-01 結果はサーバーが決める（§26）：中身は内部ヘルパ（fn）へ移した。sig・old は画面から呼べた前の形（pub）＝もう呼べない
+  { fn: 'v2cap_sortie_apply', pub: 'v2cap_sortie_settle', sig: 'int, text, boolean, text, boolean, text, jsonb', old: 'int, text, boolean, text, boolean, text', msg: '出撃の間隔が短すぎます' },
+  { fn: 'v2cap_tower_apply', pub: 'v2cap_tower_fight', sig: 'int, uuid, boolean, int, int, int, int, jsonb, text, text', old: 'int, uuid, boolean, int, int, int, int, jsonb, text', msg: '待ち時間が終わっていません' },
 ]
 
 test('【確定】早すぎたら残り（wait_ms・サーバーの時計で数えた ms）を返す＝画面が待って送り直す。断るときは何も書かない', () => {
@@ -685,7 +686,7 @@ test('【確定】精算ごとの印（p_key）：同じ印がもう一度届い
   assert.ok(SQL.includes('alter table public.v2cap_profiles add column if not exists last_sortie_res jsonb;'))
   const replay = "if p_key is not null and v_row.last_sortie_key = p_key and v_row.last_sortie_res is not null then\n    return v_row.last_sortie_res || jsonb_build_object('replay', true);\n  end if;"
   const store = "update public.v2cap_profiles\n     set last_sortie_key = p_key,\n         last_sortie_res = case when p_key is not null then jsonb_set(v_out, '{level}', coalesce(v_res, '{}'::jsonb) - 'profile') end\n   where id = v_uid;\n  return v_out;\nend;"
-  for (const { fn, sig, old } of CD_FNS) {
+  for (const { fn, pub, sig, old } of CD_FNS) {
     const body = fnBody(fn)
     assert.ok(body.includes('p_key text default null'), `${fn}：印は後ろの引数（無くても呼べる・出撃はそのあとに真化の記録 p_rec）`)
     // 印は行をつかんだすぐあと・ほかのどの見る所より前（1回目で祠を出た・守護者になった・間隔が空いていない、でも同じ返事を返す）
@@ -701,28 +702,30 @@ test('【確定】精算ごとの印（p_key）：同じ印がもう一度届い
     assert.equal(body.split('return v_out;').length - 1, 1, `${fn}：通したときの返事は1か所だけ`)
     assert.ok(!/return jsonb_build_object\('ok', true/.test(body), `${fn}：覚えずに通す返事が無い`)
     // 前の形（印の無い形）は落とす（残すと、印なしで呼んだときにどちらか決められない）。新しい形にだけ権限
-    assert.ok(SQL.includes(`drop function if exists public.${fn}(${old});`), `${fn}：前の形を落とす`)
-    assert.ok(SQL.includes(`drop function if exists public.${fn}(${sig});`), `${fn}：流し直せる`)
-    assert.ok(SQL.includes(`grant execute on function public.${fn}(${sig}) to authenticated;`), `${fn}：新しい形に権限`)
-    assert.ok(!SQL.includes(`grant execute on function public.${fn}(${old}) to authenticated;`), `${fn}：前の形に権限を付けない`)
+    assert.ok(SQL.includes(`drop function if exists public.${pub}(${old});`), `${pub}：前の形を落とす`)
+    assert.ok(SQL.includes(`drop function if exists public.${pub}(${sig});`), `${pub}：申告を受け取る形を落とす`)
+    assert.ok(!SQL.includes(`grant execute on function public.${pub}(${sig}) to authenticated;`), `${pub}：申告を受け取る形に権限を付けない`)
+    assert.ok(!SQL.includes(`grant execute on function public.${pub}(${old}) to authenticated;`), `${pub}：前の形に権限を付けない`)
+    assert.ok(SQL.includes(`revoke all on function public.${fn}(${sig}) from public, anon, authenticated;`), `${fn}：内部ヘルパは画面から呼べない`)
+    assert.ok(!SQL.includes(`grant execute on function public.${fn}(`), `${fn}：権限を付けない`)
   }
 })
 
 test('★公開RPCは全部 v2cap_is_dev()（is_admin だけ）を通している', () => {
   const granted = [...SQL.matchAll(/grant execute on function public\.(v2cap_\w+)\(/g)].map(m => m[1])
   assert.ok(granted.length >= 10, `公開RPCを拾えている（${granted.length}本）`)
-  // 例外は挑戦の結果を入れる2本だけ（2026-10-31）。呼ぶのはサーバーの関数（ログインした人でない＝だれが開発者かを見られない）で、代わりに合い言葉を見る。
-  //   どれを確かめるかは開発者だけが始められる挑戦（try_start・try_end）の記録なので、開発者でない人の結果が入ることはない
-  const SECRET_ONLY = ['v2cap_dungeon_verify_load', 'v2cap_dungeon_verify_settle']
+  // 例外はサーバーの関数が呼ぶものだけ（2026-10-31 挑戦・2026-11-01 出撃と塔）。ログインした人でない＝だれが開発者かを見られないので、代わりに合い言葉を見る。
+  //   読み書きするのは開発者だけが始められる頼み（try_start・try_end・sortie_prepare・tower_start）の記録なので、開発者でない人の結果が入ることはない
+  const SECRET_ONLY = ['v2cap_dungeon_verify_load', 'v2cap_dungeon_verify_settle', 'v2cap_sortie_fill_load', 'v2cap_sortie_fill_save', 'v2cap_tower_try_load', 'v2cap_tower_try_save']
   for (const name of granted) {
     if (SECRET_ONLY.includes(name)) {
-      assert.match(fnBody(name), /begin\n  if not public\.v2cap_dungeon_verify_ok\(p_secret\) then return/, `${name} はまず合い言葉を見る`)
+      assert.match(fnBody(name), /begin\n {2}if not public\.v2cap_dungeon_verify_ok\(p_secret\) then return/, `${name} はまず合い言葉を見る`)
       assert.ok(!new RegExp(`grant execute on function public\\.${name}\\([^)]*\\) to authenticated`).test(SQL), `${name} はログインした人には開けない`)
       continue
     }
     assert.match(fnBody(name), /if not public\.v2cap_is_dev\(\) then/, `${name} が開発限定を見ている`)
   }
-  for (const name of ['v2cap_dungeon_try_start', 'v2cap_dungeon_try_end']) assert.ok(granted.includes(name) && !SECRET_ONLY.includes(name), `${name} は開発者だけ`)
+  for (const name of ['v2cap_dungeon_try_start', 'v2cap_dungeon_try_end', 'v2cap_sortie_prepare', 'v2cap_sortie_settle', 'v2cap_tower_start', 'v2cap_tower_fight', 'v2cap_debug_papia_next']) assert.ok(granted.includes(name) && !SECRET_ONLY.includes(name), `${name} は開発者だけ`)
   const gate = fnBody('v2cap_is_dev')
   assert.match(gate, /p\.is_admin/)
   assert.ok(!gate.includes('v2_testers'))
@@ -974,7 +977,7 @@ test('【確定】アセンション（2026-10-13）：つながったマスだ�
 })
 
 test('【確定】塔（2026-10-14）：100層・負けたら2つ下・待ち時間は出撃と同じ8秒を共有（数はJSと同じ）', () => {
-  const fight = fnBody('v2cap_tower_fight')
+  const fight = fnBody('v2cap_tower_apply')
   const retire = fnBody('v2cap_tower_retire')
   assert.equal(TOWER_FLOORS, 100)
   assert.equal(TOWER_LOSE, 2)
@@ -1002,7 +1005,7 @@ test('【確定】塔（2026-10-14）：100層・負けたら2つ下・待ち時
 })
 
 test('【確定】塔の報酬は出撃と同じ：開いている一番先の場所のふつうの敵1体ぶん（倍率なし）・装備はふつうの敵と同じ条件', () => {
-  const fight = fnBody('v2cap_tower_fight')
+  const fight = fnBody('v2cap_tower_apply')
   assert.ok(fight.includes('where id = public.v2cap_open_until(v_row.cleared_spots);'), '開いている一番先の場所')
   assert.ok(fight.includes('v_exp  := v_spot.exp_min  + floor(random() * (v_spot.exp_max  - v_spot.exp_min  + 1))::int;'), 'EXPは場所の表の値（倍率なし）')
   assert.ok(fight.includes('v_gold := v_spot.gold_min + floor(random() * (v_spot.gold_max - v_spot.gold_min + 1))::int;'), 'Goldも')
@@ -1083,7 +1086,7 @@ test('【確定】2026-10-24 図鑑の報酬（§15）：エリアの敵を全�
   assert.ok(fn.includes('having count(*) = count(k.enemy)'), '全員を1回以上倒したエリアだけ')
   assert.ok(SQL.includes('revoke all on function public.v2cap_dex_settle(uuid) from public, anon, authenticated;'), '中の関数は呼べない')
   // 出撃の精算：初めて倒した敵のときだけ数え直す。返事に dex（エリアと増えたあとのボーナス）
-  const settle = fnBody('v2cap_sortie_settle')
+  const settle = fnBody('v2cap_sortie_apply')
   assert.ok(settle.includes('returning n into v_kn;') && settle.includes('if v_kn = 1 then'), '初めて倒したとき')
   assert.ok(settle.includes('v_dex := public.v2cap_dex_settle(v_uid);'))
   assert.ok(settle.includes("'dex', case when v_dex > coalesce(v_dex0, 0) then jsonb_build_object('area', v_spot.area, 'bonus', v_dex) end,"))

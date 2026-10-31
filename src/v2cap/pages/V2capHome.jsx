@@ -34,7 +34,6 @@ import { START_CLASSES, weaponsOf, attackKindOf, classDescOf } from '../lib/jobs
 import { apLeftOf } from '../lib/ascension.js'
 import { TOWER_NAME, TOWER_SHORT_NAME, floorLabel, clampFloor } from '../lib/tower.js'
 import { openUntilOf } from '../lib/sortie.js'
-import { forcePapiaNext } from '../lib/papia.js'
 import { spotLabel } from '../lib/areas.js'
 import { RARITY_COLOR } from '../lib/equipment.js'
 import { SHINKA_ON } from '../lib/shinka.js'
@@ -308,6 +307,14 @@ export default function V2capHome() {
     setProf(data.profile)
     setDevMsg(data.in_shrine ? 'いまの祠を出たあと、次の出撃で安息の祠を見つけます' : '次の出撃で安息の祠を見つけます')
   }
+  // 次の出撃でパピア（開発用）。出会う敵はサーバーが決めるので、サーバーに印を付ける（前は画面だけの印だった）
+  const debugPapiaNext = async () => {
+    setBusy(true); setDevMsg('')
+    const { data, error: rpcErr } = await supabase.rpc('v2cap_debug_papia_next')
+    setBusy(false)
+    if (rpcErr || !data?.ok) { setDevMsg(`⚠ ${rpcErr?.message || data?.error || '失敗しました'}`); return }
+    setDevMsg('次の出撃でパピアに出会います')
+  }
   // ユニーク（2026-10-21・効果を試す用）：持っていないものを60個ぜんぶもらう／次にボスに勝ったとき必ず落とす
   const giveUniques = async () => {
     setBusy(true); setDevMsg('')
@@ -491,7 +498,7 @@ export default function V2capHome() {
                       </button>
                       <button onClick={placeShrine} disabled={busy} style={miniBtn('#9fe8ff')}>⛲ 安息の祠を出す</button>
                       {/* パピア（2026-10-30）：次の出撃で必ず出会う。その場所のエリアのパピアが出る（画面だけの印） */}
-                      <button onClick={() => { forcePapiaNext(); setDevMsg('次の出撃でパピアに出会います') }} disabled={busy} style={miniBtn('#ffcc00')}>🌟 次の出撃でパピア</button>
+                      <button onClick={debugPapiaNext} disabled={busy} style={miniBtn('#ffcc00')}>🌟 次の出撃でパピア</button>
                       {/* ユニーク（2026-10-21）：もらう・次のボスで必ず落とす・60個の能力の確かめ */}
                       <button onClick={giveUniques} disabled={busy} style={miniBtn(RARITY_COLOR.U)}>💎 ユニークを全部もらう</button>
                       <button onClick={uniqueNext} disabled={busy || prof?.unique_force} style={miniBtn(RARITY_COLOR.U)}>

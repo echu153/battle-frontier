@@ -147,7 +147,7 @@ test('食事の残りは、いまの時計でなく挑戦を始めた時刻で�
 
 test('写しに入れない列を戦闘は読まない（読むと SQL の v2cap_dungeon_try_start を直すまでずれる）', () => {
   const sql = readFileSync(new URL('../../../supabase_v2cap_core.sql', import.meta.url), 'utf8')
-  const dropped = sql.match(/to_jsonb\(v_row\) - array\[([^\]]+)\]/)[1].split(',').map(s => s.trim().replace(/'/g, ''))
+  const dropped = sql.match(/to_jsonb\(p_row\) - array\[([^\]]+)\]/)[1].split(',').map(s => s.trim().replace(/'/g, ''))
   assert.ok(dropped.includes('materials') && dropped.length >= 5, dropped.join(' '))
   assert.ok(!dropped.some(k => ['class', 'lv', 'jobs', 'learned', 'equipped', 'ascension', 'gender', 'meal_until'].includes(k)), '戦闘に要る列は落とさない')
   const snap = snapOf('戦士')
@@ -329,7 +329,7 @@ test('置き場所の決まり：/api を画面へ回さない・api/ にテス�
   const source = vercel.rewrites[0].source
   assert.ok(!new RegExp(`^${source}$`).test('/api/v2cap-dungeon-verify'), '/api は index.html へ回さない')
   assert.ok(new RegExp(`^${source}$`).test('/v2cap'), '画面の道はそのまま')
-  assert.deepEqual(readdirSync(new URL('api/', root)), ['v2cap-dungeon-verify.js'], 'api/ の下は全部 Vercel の関数になる')
+  assert.deepEqual(readdirSync(new URL('api/', root)).sort(), ['v2cap-dungeon-verify.js', 'v2cap-sortie.js'], 'api/ の下は全部 Vercel の関数になる')
   const client = readFileSync(new URL('src/supabase.js', root), 'utf8')
   assert.ok(client.includes(`'${SUPABASE_URL}'`) && client.includes(`'${SUPABASE_KEY}'`))
   assert.match(readFileSync(new URL('public/sw.js', root), 'utf8'), /if \(req\.method !== 'GET'\) return/)
@@ -346,6 +346,7 @@ test('★回し直しが読むコード：画面の部品を読まない（Verce
     for (const m of src.matchAll(/(?:from|import)\s*['"](\.[^'"]+)['"]/g)) walk(path.posix.normalize(path.posix.join(path.posix.dirname(f), m[1])))
   }
   walk('api/v2cap-dungeon-verify.js')
+  walk('api/v2cap-sortie.js')
   const files = [...seen]
   assert.ok(files.includes('src/v2cap/core/atb.js') && files.includes('src/v2cap/core/battle.js'))
   assert.ok(files.every(f => f.endsWith('.js')), `画面の部品を読んでいない：${files.filter(f => !f.endsWith('.js'))}`)

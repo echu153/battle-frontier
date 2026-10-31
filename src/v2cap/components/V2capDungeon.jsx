@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import V2capAtbFight from './V2capAtbFight.jsx'
 import V2capBossReward from './V2capBossReward.jsx'
+import V2capReloadNote from './V2capReloadNote.jsx'
 import { preloadArt } from '../lib/artPreload.js'
 import { box, miniBtn, TEXT } from './v2ui.js'
 import { calcPower } from '../core/stats.js'
@@ -239,12 +240,7 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
     <div>
       {msg && <div style={{ fontSize:'11px', marginBottom:'8px', color: msg.ok ? '#88ffaa' : '#ff8888' }}>{msg.text}</div>}
       {!state && !msg && <div style={{ color: TEXT.label, fontSize:'11px', marginBottom:'8px' }}>読み込み中...</div>}
-      {stale && (
-        <div style={{ ...box, padding:'10px', marginBottom:'10px', borderColor:'#8a6a2a' }}>
-          <div style={{ fontSize:'12px', color:'#ffd27a', marginBottom:'6px' }}>新しい版が出ています。読み直してから挑戦してください</div>
-          <button onClick={() => window.location.reload()} style={{ ...miniBtn('#44ddff'), width:'100%', padding:'8px' }}>読み直す</button>
-        </div>
-      )}
+      {stale && <V2capReloadNote />}
 
       {/* 受け取っていない報酬（自分が挑戦していないあいだに倒れたボス） */}
       {(state?.rewards || []).map(run => (
