@@ -484,17 +484,51 @@ test('【確定】2026-10-31 メニューは「挑戦」・中は「強敵」に
   }
 })
 
-test('【確定】2026-10-31 入口のボスの行の言葉と「呼ぶ」のボタンは同じ決まり（本番で、雨摩座を呼んでいるあいだ黒龍の行が「呼べます」のままボタンだけ暗かった）', () => {
+test('【確定】2026-10-31 入口のボスの行の言葉と「挑戦する」のボタンは同じ決まり（本番で、雨摩座を呼んでいるあいだ黒龍の行が「呼べます」のままボタンだけ暗かった）', () => {
   const at = (summoned, ownActive, reached = 15) => summonBlockOf('varuzenoku', { summoned, ownActive, reached })
-  assert.equal(at(false, false), null, '呼べる')
-  assert.equal(at(true, false), 'きょうはもう呼びました')
-  assert.equal(at(false, true), 'いま呼んでいるボスがいます')
-  assert.equal(at(true, true), 'きょうはもう呼びました', '呼んでいるボス自身の行')
-  assert.equal(at(false, false, 1), 'エリア②に着くと呼べます', 'どの難易度もまだのエリア')
-  assert.equal(at(false, false, 2), null, 'ノーマルだけでも呼べれば呼べる')
+  assert.equal(at(false, false), null, '挑戦できる')
+  assert.equal(at(true, false), 'きょうはもう挑戦しました')
+  assert.equal(at(false, true), 'いま挑戦中のボスがいます')
+  assert.equal(at(true, true), 'きょうはもう挑戦しました', '挑戦中のボス自身の行')
+  assert.equal(at(false, false, 1), 'エリア②に着くと挑戦できます', 'どの難易度もまだのエリア')
+  assert.equal(at(false, false, 2), null, 'ノーマルだけでも挑戦できれば挑戦できる')
   const src = readFileSync(new URL('../components/V2capDungeon.jsx', import.meta.url), 'utf8')
   assert.match(src, /const canSummon = \(key\) => !!state && !blockOf\(key\)/, 'ボタンも同じ決まり')
-  assert.match(src, /\{state && \(blockOf\(key\) \|\| '呼べます'\)\}/, '行の言葉も同じ決まり（読み込み中は出さない）')
+  assert.match(src, /\{state && \(blockOf\(key\) \|\| '挑戦できます'\)\}/, '行の言葉も同じ決まり（読み込み中は出さない）')
+})
+
+test('【確定】2026-10-31 入口：履歴と説明を出さない・「挑戦する」でそのまま戦闘へ（ユーザー「この履歴いらない」「ここら辺の説明いらない」「呼ぶじゃなくて挑戦する にして」）', () => {
+  const src = readFileSync(new URL('../components/V2capDungeon.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  const code = src.split(/\r?\n/).filter(l => !/^\s*(\/\/|\{\/\*)/.test(l)).join('\n')   // コメントの外
+  // 倒した・時間切れのボスは出さない（サーバーも返さない）
+  assert.match(src, /\{active\.map\(run => \{/)
+  assert.doesNotMatch(src, /\{runs\.map\(/)
+  assert.doesNotMatch(code, /討伐済み|時間切れ/)
+  assert.match(fnBody('v2cap_dungeon_state'), /'runs',[\s\S]*?where r\.cleared_at is null and r\.ends_at > now\(\)\), '\[\]'::jsonb\),\n\s*-- 救援の一覧/)
+  // 説明を出さない
+  assert.doesNotMatch(code, /残ったHPから|あなたの戦闘力|staminaMaxOfProfile/)
+  // 押したらボスを出して、そのまま挑戦を始める
+  assert.match(src, />挑戦する<\/button>/)
+  assert.match(src, /onClick=\{\(\) => challenge\(key, k\)\}/)
+  assert.match(src, /const challenge = async \(bossKey, diff\) => \{\n\s*const data = await call\('v2cap_dungeon_summon', \{ p_boss: bossKey, p_diff: diff \}\)\n\s*if \(!data\) return\n\s*setOpenBoss\(null\)\n\s*await start\(data\.run\)/)
+  // 画面に出す文字とサーバーの返事に「呼ぶ」を残さない（コメントの外）
+  const noCall = (name, text) => {
+    for (const line of text.split(/\r?\n/)) assert.ok(/^\s*(\/\/|--|\{\/\*)/.test(line) || !line.includes('呼'), `${name}: ${line.trim().slice(0, 60)}`)
+  }
+  noCall('V2capDungeon.jsx', src)
+  for (const fn of ['v2cap_dungeon_summon', 'v2cap_dungeon_try_start', 'v2cap_dungeon_try_end', 'v2cap_dungeon_rescue', 'v2cap_dungeon_join']) noCall(fn, fnBody(fn))
+})
+
+test('【確定】2026-10-31 開発用の挑戦回数リセット（ユーザー「開発用に挑戦回数resetできるように」）：開発者だけ・行は消さない', () => {
+  const fn = fnBody('v2cap_dev_dungeon_reset')
+  assert.match(fn, /if not public\.v2cap_is_dev\(\) then return jsonb_build_object\('ok', false, 'error', '開発限定です'\)/, 'サーバーも開発者だけ')
+  assert.match(fn, /where owner_id = v_uid and \(day = public\.v2cap_dungeon_today\(\) or \(cleared_at is null and ends_at > now\(\)\)\)/, '自分のきょうのボスと、終わっていないボス')
+  assert.doesNotMatch(fn, /delete from/, '行は消さない')
+  assert.match(SQL, /revoke all on function public\.v2cap_dev_dungeon_reset\(\) from public, anon;\ngrant execute on function public\.v2cap_dev_dungeon_reset\(\) to authenticated;/)
+  const src = readFileSync(new URL('../components/V2capDungeon.jsx', import.meta.url), 'utf8')
+  assert.match(src, /\{dev && \(\s*<button onClick=\{resetTries\}/, '画面も開発者だけ')
+  const home = readFileSync(new URL('../pages/V2capHome.jsx', import.meta.url), 'utf8')
+  assert.match(home, /<V2capDungeon [^>]*dev=\{isAdmin\}/)
 })
 
 test('【確定】2026-10-31 戦いが終わったら構えも終わる（本番で、構えのあいだに雨摩座を倒すと「水天葬」の札と渦と赤いゲージが出たまま止まっていた）', () => {

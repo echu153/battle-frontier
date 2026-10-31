@@ -535,7 +535,7 @@ export default function V2capHome() {
             {screen === 'uniqueCheck' && <V2capUniqueCheck prof={prof} inventory={inventory} />}
             {screen === 'dungeon' && (
               <Suspense fallback={<div style={{ color: TEXT.label, fontSize:'11px' }}>読み込み中...</div>}>
-                <V2capDungeon prof={prof} inventory={inventory} onProfile={refresh} />
+                <V2capDungeon prof={prof} inventory={inventory} onProfile={refresh} dev={isAdmin} />
               </Suspense>
             )}
             {screen === 'atb' && (

@@ -9061,11 +9061,11 @@ begin
     'summoned_today', exists (select 1 from public.v2cap_dungeon_runs r where r.owner_id = v_uid and r.day = public.v2cap_dungeon_today()),
     -- きょう呼んだボス（呼べるのはボスごとに1日1回）
     'summoned_bosses', coalesce((select jsonb_agg(distinct r.boss) from public.v2cap_dungeon_runs r where r.owner_id = v_uid and r.day = public.v2cap_dungeon_today()), '[]'::jsonb),
-    -- 入っているボス：まだ倒せる（時間内で倒していない）ものと、倒した・時間切れから30分以内のもの
+    -- 入っているボス：まだ倒せる（時間内で倒していない）ものだけ（2026-10-31 ユーザー「この履歴いらない」）
     'runs', coalesce((select jsonb_agg(public.v2cap_dungeon_run_json(r.id, v_uid) order by r.started_at desc)
                       from public.v2cap_dungeon_runs r
                       join public.v2cap_dungeon_members m on m.run_id = r.id and m.player_id = v_uid
-                      where least(r.ends_at, coalesce(r.cleared_at, r.ends_at)) > now() - interval '30 minutes'), '[]'::jsonb),
+                      where r.cleared_at is null and r.ends_at > now()), '[]'::jsonb),
     -- 救援の一覧：ほかの人が信号を出していて、まだ倒せて、空きがあり、自分が入っていないもの
     'rescues', coalesce((select jsonb_agg(public.v2cap_dungeon_run_json(r.id, v_uid) order by r.ends_at)
                          from (select r.* from public.v2cap_dungeon_runs r
@@ -9079,7 +9079,7 @@ $$;
 revoke all on function public.v2cap_dungeon_state() from public, anon;
 grant execute on function public.v2cap_dungeon_state() to authenticated;
 
--- ===== 呼ぶ =====
+-- ===== ボスを出す（画面の「挑戦する」・2026-10-31 ユーザー「呼ぶじゃなくて挑戦する にして」＝返事の文も合わせる）=====
 create or replace function public.v2cap_dungeon_summon(p_boss text, p_diff text)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
@@ -9097,17 +9097,17 @@ begin
   select * into v_row from public.v2cap_profiles where id = v_uid for update;
   if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
   select c.hp, c.area into v_hp, v_area from public.v2cap_dungeon_conf(p_boss, p_diff) c;
-  if v_hp is null then return jsonb_build_object('ok', false, 'error', 'その難易度はまだ呼べません'); end if;
+  if v_hp is null then return jsonb_build_object('ok', false, 'error', 'その難易度にはまだ挑戦できません'); end if;
   -- 行ったことのある一番先の場所のエリア（1エリア＝3か所）
   v_here := (public.v2cap_open_until(v_row.cleared_spots) - 1) / 3 + 1;
   if v_here < v_area then
-    return jsonb_build_object('ok', false, 'error', format('エリア%sに着くと呼べます', v_area));
+    return jsonb_build_object('ok', false, 'error', format('エリア%sに着くと挑戦できます', v_area));
   end if;
   if exists (select 1 from public.v2cap_dungeon_runs r where r.owner_id = v_uid and r.day = public.v2cap_dungeon_today() and r.boss = p_boss) then
-    return jsonb_build_object('ok', false, 'error', 'きょうはもうこのボスを呼びました（朝5時に戻ります）');
+    return jsonb_build_object('ok', false, 'error', 'きょうはもうこのボスに挑戦しました（朝5時に戻ります）');
   end if;
   if exists (select 1 from public.v2cap_dungeon_runs r where r.owner_id = v_uid and r.cleared_at is null and r.ends_at > now()) then
-    return jsonb_build_object('ok', false, 'error', 'いま呼んでいるボスがいます');
+    return jsonb_build_object('ok', false, 'error', 'いま挑戦中のボスがいます');
   end if;
   insert into public.v2cap_dungeon_runs (owner_id, owner_name, boss, diff, hp_max, hp, day, ends_at)
   values (v_uid, v_row.username, p_boss, p_diff, v_hp, v_hp, public.v2cap_dungeon_today(), now() + make_interval(mins => c_min))
@@ -9204,7 +9204,7 @@ begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   select * into v_run from public.v2cap_dungeon_runs where id = p_run for update;
-  if not found or v_run.owner_id <> v_uid then return jsonb_build_object('ok', false, 'error', '自分が呼んだボスだけ出せます'); end if;
+  if not found or v_run.owner_id <> v_uid then return jsonb_build_object('ok', false, 'error', '自分が挑戦しているボスだけ出せます'); end if;
   if v_run.cleared_at is not null or v_run.ends_at <= now() then return jsonb_build_object('ok', false, 'error', 'もう終わっています'); end if;
   update public.v2cap_dungeon_runs set rescue_open = true where id = p_run;
   return jsonb_build_object('ok', true, 'run', public.v2cap_dungeon_run_json(p_run, v_uid));
@@ -9242,6 +9242,26 @@ end;
 $$;
 revoke all on function public.v2cap_dungeon_join(bigint) from public, anon;
 grant execute on function public.v2cap_dungeon_join(bigint) to authenticated;
+
+-- ===== 開発用：きょうの挑戦回数を戻す（2026-10-31 ユーザー「開発用に挑戦回数resetできるように」）=====
+-- きょうの自分のボスと、まだ終わっていない自分のボスを前の日へ移して終わらせる（行は消さない）
+create or replace function public.v2cap_dev_dungeon_reset()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_n   int;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  update public.v2cap_dungeon_runs
+     set day = least(day, public.v2cap_dungeon_today() - 1), ends_at = least(ends_at, now()), rescue_open = false
+   where owner_id = v_uid and (day = public.v2cap_dungeon_today() or (cleared_at is null and ends_at > now()));
+  get diagnostics v_n = row_count;
+  return jsonb_build_object('ok', true, 'reset', v_n);
+end;
+$$;
+revoke all on function public.v2cap_dev_dungeon_reset() from public, anon;
+grant execute on function public.v2cap_dev_dungeon_reset() to authenticated;
 
 -- ============================================================
 -- ===== 24. 商店（性別変更薬・日月反転の秘薬・2026-10-31）=====
