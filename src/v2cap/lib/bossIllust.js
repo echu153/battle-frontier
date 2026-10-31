@@ -90,6 +90,8 @@ const ZERO = { x: 0, y: 0, r: 0, neck: 0, head: 0, wingN: 0, wingF: 0, wingNSq: 
 //   trails＝残像の筋（part のパーツの点 pts を、lagMs 前からいまの時刻までたどる。fromMs〜toMs のあいだだけ・kind＝claw 爪／wind 風）
 //   shots＝飛ぶ絵の出どころ（無ければ口から1つ）。{ part, pt（パーツの点）, delayMs（hitMs からの遅れ・−で先に出る）, size（飛ぶ絵の大きさの倍率） }
 //     1つめ（delayMs 0）が届いた時刻がダメージ（impactMs）
+//   strikes＝多段の技の振り抜きごと（無ければ1回）。{ atMs（1回目の hitMs からの遅れ）, size（飛ぶ絵と当たる絵の大きさの倍率）, dx・dy（当たる絵の場所のずれ・相手の絵の枠の幅に対して）, flip（当たる絵を裏返して逆に回す） }
+//     飛ぶ絵は振り抜きごとに同じ出どころ（shots）から出す。⚠間は飛ぶ時間より長く（飛ぶ絵は1枚を使い回す）・被弾の揺れ（HIT_SEC）より長く（テストあり）。jolt と ghosts は振り抜きごとに並べる
 //   charge＝撃つ前に口でためる火の玉（kind のエフェクトの絵を fromMs〜toMs のあいだ口で大きくする・size＝枠の幅に対する大きさ）
 //     エフェクトに on があれば口ではなく相手の頭上（雨摩座の水天葬の渦の雲）：toMs のあと holdMs で薄れる・構えのあいだも出す
 // ボスごとの idleKeep＝技のあいだも残す待機のぶん（無ければ IDLE_KEEP）・cast＝構え（大技の詠唱）のあいだの姿勢 pose
@@ -284,21 +286,31 @@ export const BOSS_ILLUST_DEFS = {
       // 【確定】2026-10-29 ユーザー「もっと羽を大きく広げて敵に向かってバフってやってもらいたい」：ため＝伸び上がって翼を大きく広げる・
       //   打ち下ろし＝両方の翼を前へ打ち下ろして体を包む。打ち下ろした時刻に胸の前と翼の先から風が相手へ飛ぶ（胸の前がいちばん大きい＝1つめ・ダメージ）。
       //   翼のふちに風の筋（打ち下ろしの絵の翼のふち）
-      gale: { totalMs: 1550, hitMs: 700, keys: [
+      //   【確定】2026-11-01 ユーザー「黒翼烈風は鈍足じゃなくて2回の多段ヒット」：2回打ち下ろす（新しい絵なし）。1回目のあと、起き上がって翼を上げ直し（ため の絵）、もう一度打ち下ろす（1回目より深く）。
+      //     風は振り抜きごとに飛ぶ（2回目は少し大きい）。当たる絵は2か所に出て、2回目は裏返して逆に回す＝同じ絵の出し直しに見えない。
+      //     数字と揺れも1発ごと（lib/atbFx.js）。⚠動きの長さは 1.6秒まで（core/atb.js の NOW_WAIT_AFTER_ACT_SEC＝大技の構えが待つ長さ・変えると戦闘の結果が変わる）
+      gale: { totalMs: 1590, hitMs: 700, strikes: [{ atMs: 0, dx: -0.12, dy: -0.08 }, { atMs: 420, size: 1.12, dx: 0.1, dy: 0.08, flip: true }], keys: [
         [0, {}],
         [220, { lean: -0.03, wingN: -8, wingNSq: -0.1, wingF: 4 }],
         [620, { lean: -0.12 }, 'out'],
         [640, { lean: -0.12 }],
         [700, { lean: 0.2 }, 'out'],
-        [1040, { lean: 0.18 }],
-        [1150, { lean: 0.12, neck: -3, head: -3, wingN: 20, wingNSq: 0.2, wingF: -14, wingFSq: 0.15 }],
-        [1550, {}],
-      ], jolt: { atMs: 700, ms: 260, lean: 0.035 },
-      art: [[0, null], [220, 'windup'], [640, 'strike'], [1150, null]], ghosts: { fromMs: 640, toMs: 760, lagMs: 28, n: 3 },
+        [840, { lean: 0.18 }],
+        [1050, { lean: -0.08 }, 'out'],
+        [1060, { lean: -0.08 }],
+        [1120, { lean: 0.24 }, 'out'],
+        [1280, { lean: 0.22 }],
+        [1370, { lean: 0.12, neck: -3, head: -3, wingN: 20, wingNSq: 0.2, wingF: -14, wingFSq: 0.15 }],
+        [1590, {}],
+      ], jolt: [{ atMs: 700, ms: 260, lean: 0.035 }, { atMs: 1120, ms: 260, lean: 0.045 }],
+      art: [[0, null], [220, 'windup'], [640, 'strike'], [860, 'windup'], [1060, 'strike'], [1370, null]],
+      ghosts: [{ fromMs: 640, toMs: 760, lagMs: 28, n: 3 }, { fromMs: 1060, toMs: 1180, lagMs: 28, n: 3 }],
       anchors: { strike: { chest: [190, 320], wingA: [60, 165], wingB: [50, 375] } },
       arcs: [
         { kind: 'wind', pts: [[420, 60], [250, 40], [110, 90], [40, 200], [45, 370]], fromMs: 640, toMs: 700, fadeMs: 240 },
         { kind: 'wind', pts: [[380, 110], [230, 95], [120, 140], [75, 230], [80, 360]], fromMs: 640, toMs: 700, fadeMs: 240 },
+        { kind: 'wind', pts: [[420, 60], [250, 40], [110, 90], [40, 200], [45, 370]], fromMs: 1060, toMs: 1120, fadeMs: 240 },
+        { kind: 'wind', pts: [[380, 110], [230, 95], [120, 140], [75, 230], [80, 360]], fromMs: 1060, toMs: 1120, fadeMs: 240 },
       ], shots: [
         { at: 'chest', part: 'body', pt: [285, 260], delayMs: 0, size: 1.45 },
         { at: 'wingA', part: 'wingF', pt: [55, 200], delayMs: -30, size: 0.9 },
@@ -586,11 +598,11 @@ export const motionPoseAt = (keys, ms) => {
 }
 // 当たった瞬間の揺れ（技の jolt＝{ atMs, ms, x, y }：atMs から ms のあいだ全体が小さく揺れて収まる・x・y は枠の割合）
 //   重い一撃の手ごたえ（しっぽの叩きつけの揺れと同じ形）。溜めのあいだは震えない（雨摩座でユーザー「溜めるとき、別に震えなくていい」）
-//   jolt.lean＝地面を支点に揺らす（黒龍：しっぽと足は地面に残る）
-export const joltAt = (jolt, ms) => {
-  const h = ms - (jolt?.atMs ?? 0)
-  if (!jolt || h < 0 || h >= jolt.ms) return { x: 0, y: 0, lean: 0 }
-  const d = (1 - h / jolt.ms) ** 2
+//   jolt.lean＝地面を支点に揺らす（黒龍：しっぽと足は地面に残る）・多段の技は振り抜きごとに並べる（重ならない）
+export const joltAt = (jolts, ms) => {
+  const jolt = [jolts].flat().find(j => j && ms >= j.atMs && ms < j.atMs + j.ms)
+  if (!jolt) return { x: 0, y: 0, lean: 0 }
+  const h = ms - jolt.atMs, d = (1 - h / jolt.ms) ** 2
   return { x: (jolt.x || 0) * Math.sin(h / 11) * d, y: (jolt.y || 0) * Math.sin(h / 8 + 1.2) * d, lean: (jolt.lean || 0) * Math.sin(h / 11) * d }
 }
 // 待機の姿勢（時刻 tMs）。羽ばたき（periodMs）：振り下ろし（はじめの35%）は速く、振り上げはゆっくり（いまはどのボスも使っていない）
@@ -854,10 +866,10 @@ export const buffAfterAt = (list, tMs) => {
   return out
 }
 // 残像（motion.ghosts＝{ fromMs, toMs, lagMs, n, op }）：fromMs〜toMs のあいだ、lagMs ずつ前の姿勢でポーズの絵を薄く重ねる（振り抜いて飛び込む勢い）
-//   { name, ms（その残像の時刻）, op }。そのときに出ていたポーズの絵だけ（部品の立ち絵には残像を出さない）
+//   { name, ms（その残像の時刻）, op }。そのときに出ていたポーズの絵だけ（部品の立ち絵には残像を出さない）。多段の技は振り抜きごとに並べる（重ならない）
 export const illustGhostsAt = (motion, ms) => {
-  const g = motion?.ghosts
-  if (!g || ms < g.fromMs || ms >= g.toMs) return []
+  const g = [motion?.ghosts].flat().find(x => x && ms >= x.fromMs && ms < x.toMs)
+  if (!g) return []
   const out = []
   for (let k = 1; k <= g.n; k++) {
     const t = ms - g.lagMs * k
@@ -970,7 +982,7 @@ export const illustTrailsAt = (key, motion, ms, tMs) => {
 //   { kind:'illust', key, name, base（＝640）, illust（遭遇のイラスト）, parts:[{ key, src, x, y, w, h, px, py, ax（長さの向き°）, parent?, nest, bend?（曲げた絵を並べた1枚：src・n・from・step・x・y・w・h） }], pivot, mouth,
 //     jaw:{ line, pivot, mouth }（口の中を描く）,
 //     motions:{ <key>: { label, keys, trails, totalMs, hitMs, flyMs, impactMs, front（当たる時刻の口・px）,
-//       shots:[{ front, delayMs, size }]（飛ぶ絵の出どころ・1つめが front）, fx:{ fly?, hit?, charge?（どれも on・anim・lead つき） }, charge?,
+//       shots:[{ front, delayMs, size }]（飛ぶ絵の出どころ・1つめが front）, strikes（多段の振り抜きごと・shots はその振り抜きの出どころ・1回の技は null）, fx:{ fly?, hit?, charge?（どれも on・anim・lead つき） }, charge?,
 //       scene?（派手な演出・lib/bossScene.js） } },
 //     orb:{ src, at, size, h（縦÷横） }（待機の口の火の玉）, dust:[[x, y], …]（しっぽを叩きつけた砂ぼこり）, srcs }
 export const bossIllustOf = (key) => {
@@ -1014,14 +1026,15 @@ export const bossIllustOf = (key) => {
     const poseAt = (ms) => ({ ...ZERO, ...motionPoseAt(md.keys, ms) })
     // 振り抜きのポーズの絵があれば、絵の上の点（anchors.strike の at・無ければ mouth）から出す（全体の姿勢だけで動かす）
     const sa = art.poses?.[m.key]?.strike && md.anchors?.strike
-    const shots = (md.shots || [{ delayMs: 0, size: 1 }]).map(sh => {
-      const p = poseAt(md.hitMs + sh.delayMs), apt = sa?.[sh.at || 'mouth']
+    const shotsAt = (hitMs) => (md.shots || [{ delayMs: 0, size: 1 }]).map(sh => {
+      const p = poseAt(hitMs + sh.delayMs), apt = sa?.[sh.at || 'mouth']
       const front = apt ? illustPointAt(key, p, apt, 'body') : sh.part ? illustPointAt(key, p, sh.pt, sh.part) : illustPointAt(key, p, mouthPointOf(key, p), 'head')
       return { front: front.map(Math.round), delayMs: sh.delayMs, size: sh.size ?? 1 }
     })
+    const shots = shotsAt(md.hitMs)
     // 当たる時刻＝撃ち出す時刻＋飛ぶ時間＋当たる絵が降りきるまで（lead・氷雨と水天葬）
     motions[m.key] = { label: m.file, keys: md.keys, trails: md.trails || [], arcs: md.arcs || [], jolt: md.jolt || null, totalMs: md.totalMs, hitMs: md.hitMs, flyMs, impactMs: md.hitMs + flyMs + (fx.hit?.lead || 0),
-      front: shots[0].front, shots, fx: Object.keys(fx).length ? fx : null, charge: md.charge && fx[md.charge.kind] ? md.charge : null, scene: md.scene || null,
+      front: shots[0].front, shots, strikes: md.strikes?.map(st => ({ ...st, shots: shotsAt(md.hitMs + st.atMs) })) || null, fx: Object.keys(fx).length ? fx : null, charge: md.charge && fx[md.charge.kind] ? md.charge : null, scene: md.scene || null,
       poses: posesOf(m.key), art: md.art || null, ghosts: md.ghosts || null, anchors: md.anchors || null, castSkipMs: md.castSkipMs || 0, big: !!md.big }
   }
   // 倒れる動き（lib/bossDeath.js）で使う絵：節目のバフ（buff）か技（motion・pose）のポーズの絵。どちらかが無ければ前のまま（薄くなるだけ）

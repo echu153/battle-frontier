@@ -1327,8 +1327,10 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       const elemHit = []   // トリニティブレイド：当たった段の属性
       // ★「撃った」行より後ろに流したいログを貯める（1発ごとの状態異常）
       const afterAil = []
+      // ★1発ごとの当たり（{ d, crit }・外れは null）。ATBの画面で多段を1発ずつ見せる（lib/atbFx.js）だけに使う＝計算には入らない
+      const perHit = []
       for (let h = 0; h < nHits; h++) {
-        if (mirage) { missed++; continue }
+        if (mirage) { missed++; perHit.push(null); continue }
         // ★多段で1発ごとに威力が上がる（体術師の飛天三角蹴り）。1発目は素のまま
         const ramp = skill.rampHit ? 1 + (skill.rampHit / 100) * h : 1
         // ★上位クラス（2026-10-15）：納刀の倍率を技が上書きする（秘剣・叢雲＝納刀中1.8倍・納刀していないと0.8倍）
@@ -1388,9 +1390,11 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
         if (r.hit && skill.ailPerHit && skill.ail) {
           tryInflict(me, foe, { ...skill.ail, chance: skill.ail.chance * off }, rng, afterAil)
         }
-        raw += r.hit && r.crit && me.evo.critDmg
+        const oneHit = r.hit && r.crit && me.evo.critDmg
           ? Math.floor(r.damage * (1 + me.evo.critDmg / 100))
           : r.damage
+        raw += oneHit
+        perHit.push(r.hit ? { d: oneHit, crit: !!r.crit } : null)
         if (r.hit) hits++; else missed++
         if (r.crit && r.hit) crit = true
       }
@@ -1431,6 +1435,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       // ★先に「撃った」行を置く（状態異常やスタックの行より前に出す）。吸収の額は後で埋める
       const entry = { side: me.name, type: 'skill', skill: skill.name, kind: skill.kind,
         damage: dmg, crit, hits, of: nHits, drain: 0 }
+      if (me.atb && nHits > 1) entry.perHit = perHit
       log.push(entry)
       for (const l of mirageLog) log.push(l)
       for (const l of afterHurt) log.push(l)

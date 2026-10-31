@@ -14,9 +14,26 @@
 //   tick … 毒・火傷・出血などで減った側に紫の数字（揺れない）
 //   技の名前の帯（skillBannerAt）… 敵が技を使ったとき、舞台の上に技の名前を出す（2026-10-30）
 // 絵の差し替え（待機・攻撃のGIF）は画面（V2capAtbStage.jsx）の側で行う
+// 【確定】2026-11-01 ユーザー「黒翼烈風は鈍足じゃなくて2回の多段ヒット」：絵に振り抜きが2回ある技（act の motion.strikes）は、数字と揺れと Miss も1発ごとに分けて、
+//   それぞれの振り抜きが届く時刻に出す（scheduleFx）。絵に振り抜きが1回しかない技（自分の多段など）は今までどおり合計を1つ
 // ============================================================
 
+// 多段の技の合計（total）を、1発ごとの当たり（perHit＝core/battle.js の [{ d, crit } | null]）の割合で分ける → [{ amount, crit } | null]
+//   軽減やバリアは合計に掛かるので割合で分ける。端数は最後に当たった発へ＝足すと合計と同じ
+export const splitHits = (total, perHit) => {
+  const sum = perHit.reduce((s, h) => s + (h?.d || 0), 0)
+  const last = perHit.reduce((p, h, i) => (h ? i : p), -1)
+  let left = total
+  return perHit.map((h, i) => {
+    if (!h) return null
+    const amount = i === last ? left : sum > 0 ? Math.floor((total * h.d) / sum) : 0
+    left -= amount
+    return { amount, crit: h.crit }
+  })
+}
+
 // side＝'a'（自分・左）｜'b'（相手・右）。aName／bName は st.a.name／st.b.name
+//   each＝多段の1発ごと（splitHits）。hit と miss の印に付けておき、絵に振り抜きが同じ数あれば scheduleFx が分ける
 export const fxEventsOf = (entries, aName, bName) => {
   const sideOf = (name) => (name === aName ? 'a' : name === bName ? 'b' : null)
   const other = (s) => (s === 'a' ? 'b' : 'a')
@@ -27,8 +44,9 @@ export const fxEventsOf = (entries, aName, bName) => {
     if (l.type === 'skill' || l.type === 'normal') {
       const landed = l.type === 'normal' ? !!l.hit : (l.hits ?? 1) > 0
       out.push({ kind: 'act', side: s, skill: l.skill || null })
-      if (landed && (l.damage || 0) > 0) out.push({ kind: 'hit', side: other(s), amount: l.damage, crit: !!l.crit })
-      else if (!landed) out.push({ kind: 'miss', side: other(s) })
+      const each = l.perHit ? { each: splitHits(l.damage || 0, l.perHit) } : null
+      if (landed && (l.damage || 0) > 0) out.push({ kind: 'hit', side: other(s), amount: l.damage, crit: !!l.crit, ...each })
+      else if (!landed) out.push({ kind: 'miss', side: other(s), ...each })
       if (l.drain > 0) out.push({ kind: 'heal', side: s, amount: l.drain })
     } else if (l.type === 'hpBuff') {
       // HPの節目で付いたボスのバフ（2026-10-30）：名前の帯（強い色）＋体が赤く燃える（RAGE_SEC）
@@ -53,16 +71,26 @@ export const fxEventsOf = (entries, aName, bName) => {
 //   殴ったあとの数字・揺れを、絵の「当たる」コマまで遅らせる（lib/motionArt.js の hitMs）
 //   秒の代わりに (act) => 秒 も渡せる＝技ごとに絵が違うボス（lib/bossArt.js・act に motion を付けてある・2026-10-28）
 //   act の castSkip（ミリ秒・2026-10-30 終焉の黒焔）＝構えのあとは技の途中から流す：t0 をそのぶん前にして、数字と揺れの遅れもそのぶん縮める
+//   act の motion.strikes（振り抜きごとの [{ atMs }]・黒翼烈風）と hit／miss の each が同じ数なら、1発ごとの印に分ける（strike＝何発目・0から）。
+//     当たって数字が0になった発（バリアで消えた端数）は何も出さない
 export const scheduleFx = (events, t0, delay = {}) => {
-  let d = 0
-  return events.map(e => {
+  let d = 0, strikes = null
+  return events.flatMap(e => {
     if (e.kind === 'act') {
       const dl = delay[e.side], skip = (e.castSkip || 0) / 1000
       d = Math.max(0, ((typeof dl === 'function' ? dl(e) : dl) || 0) - skip)
-      return { ...e, t0: t0 - skip }
+      strikes = e.motion?.strikes || null
+      return [{ ...e, t0: t0 - skip }]
     }
-    if (e.kind === 'use') { d = 0; return { ...e, t0 } }
-    return { ...e, t0: t0 + d }
+    if (e.kind === 'use') { d = 0; strikes = null; return [{ ...e, t0 }] }
+    if (e.each && e.each.length === strikes?.length) {
+      return e.each.flatMap((h, i) => {
+        const at = t0 + d + strikes[i].atMs / 1000
+        if (!h) return [{ kind: 'miss', side: e.side, strike: i, t0: at }]
+        return h.amount > 0 ? [{ kind: 'hit', side: e.side, amount: h.amount, crit: !!h.crit, strike: i, t0: at }] : []
+      })
+    }
+    return [{ ...e, t0: t0 + d }]
   })
 }
 
@@ -86,7 +114,11 @@ export const popTextOf = (f) => (f.kind === 'miss' ? MISS_TEXT : f.kind === 'hea
 const POP_PUNCH = 0.12
 export const popScaleOf = (f, a) => (f.crit && a >= 0 && a < POP_PUNCH ? 1.5 - 0.5 * (a / POP_PUNCH) : 1)
 // 浮かぶ文字の横の位置（絵の枠の %）。毒・出血などの数字は横へずらす（同じ所だと「Critical!」の上に重なって読めない）
-export const popLeftOf = (f) => (f.kind === 'tick' ? 78 : 50)
+//   多段の1発ごと（strike）は左右に振る＝前の数字がまだ出ているあいだに次が出る
+export const popLeftOf = (f) => (f.kind === 'tick' ? 78 : f.strike != null ? (f.strike % 2 ? 62 : 38) : 50)
+// 浮かぶ文字の高さ（絵の枠の %）。a＝出てからの割合・i＝いま出ている文字の並びの番号（重ならないように段をずらす）
+//   多段の1発ごとは決まった段（並びの番号で段を決めると、前の数字が消えた瞬間に次の数字が跳ねる）。あとの数字ほど下から出る＝前の数字はもう上がっている
+export const popTopOf = (f, a, i) => 30 - a * 26 + (f.strike != null ? f.strike * 7 : -(i % 3) * 14)
 
 // 踏み込みの量（px）。0→前へ→0 の山
 export const lungeOf = (elapsed, px = 22) =>

@@ -12,7 +12,8 @@ import { inflict, healMultOf } from '../core/ailments.js'
 import { bossIllustOf, buffArtMsOf } from './bossIllust.js'
 import { bossThumbOf } from './bossArt.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
-import { liveStats, hpStepMultOf, healMaxAmount } from '../core/battle.js'
+import { liveStats, hpStepMultOf, healMaxAmount, createSide, takeAction } from '../core/battle.js'
+import { splitHits } from './atbFx.js'
 import { statsOf } from '../core/enemies.js'
 import { CAP_RULES } from './rules.js'
 import { tenSortieExpOf } from './areas.js'
@@ -157,6 +158,40 @@ test('【確定】2026-11-01 黒翼烈風：鈍足をやめて2回の多段（�
   const one = { ...f, slots: f.slots.map(x => (x.skill.name === '黒翼烈風' ? { ...x, skill: { ...x.skill, mult: 1.8, hits: 1, ail: null, ailPerHit: false } } : x)) }
   const ratio = avg(f) / avg(one)
   assert.ok(ratio > 0.9 && ratio < 1.1, `2発の合計÷前の1発＝${ratio}`)
+})
+
+test('【確定】2026-11-01 黒翼烈風の記録に1発ごとの当たりを足した（画面で2回に分ける）：計算には入らない・足すと合計・絵の振り抜きと同じ数・オート戦闘の記録は増えない', () => {
+  const st = createAtb(dummy(), dungeonFighter('varuzenoku', 'hard'), { rng: rngOf(33), maxSec: 9999 })
+  st.b.hp = Math.floor(st.b.base.hp * 0.4)
+  runFor(st, 600)
+  const list = st.log.filter(l => l.side === BOSS && l.skill === '黒翼烈風' && l.type === 'skill')
+  assert.ok(list.length > 20)
+  const kinds = new Set()
+  for (const l of list) {
+    assert.equal(l.perHit.length, l.of, '1発ごと')
+    assert.equal(l.perHit.filter(Boolean).length, l.hits, '当たった数')
+    assert.equal(l.perHit.some(h => h?.crit), l.crit, 'クリティカルも1発ごと')
+    const each = splitHits(l.damage, l.perHit)
+    assert.equal(each.reduce((s, h) => s + (h?.amount || 0), 0), l.damage, '足すと合計')
+    kinds.add(l.perHit.map(h => (h ? 'o' : 'x')).join(''))
+  }
+  assert.ok(kinds.has('oo'), '2発とも当たることがある')
+  // 1発だけの技には付けない（記録を増やさない）
+  assert.ok(st.log.filter(l => l.type === 'skill' && l.of === 1).every(l => !('perHit' in l)))
+  // 振り抜きの数は技の回数と同じ（多段にしたら絵も2回に＝ここで止まる）
+  for (const [key, b] of Object.entries(DUNGEON_BOSSES)) {
+    const a = bossIllustOf(key)
+    for (const s of b.skills) {
+      const m = Object.values(a.motions).find(x => x.label === s.name)
+      if (m) assert.equal(m.strikes?.length || 1, s.hits || 1, `${key} ${s.name}`)
+    }
+  }
+  // オート戦闘（出撃・塔）の記録には付けない
+  const log = [], f = dungeonFighter('varuzenoku', 'hard')
+  takeAction(createSide(f), createSide(dummy()), rngOf(3), log, { idx: f.slots.findIndex(x => x.skill.name === '黒翼烈風'), noProc: true })
+  const e = log.find(l => l.type === 'skill')
+  assert.equal(e.of, 2)
+  assert.ok(!('perHit' in e))
 })
 
 test('【確定】2026-11-01 終焉の黒焔：4倍・当たると回復阻害（回復量−30%）・薬の回復も下がる', () => {

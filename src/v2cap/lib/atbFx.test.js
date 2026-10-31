@@ -2,7 +2,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { fxEventsOf, scheduleFx, lungeOf, shakeOf, LUNGE_SEC, HIT_SEC, skillBannerAt, BANNER_SEC, RAGE_BANNER_SEC, BANNER_IN, BANNER_OUT, popTextOf, popScaleOf, popLeftOf, MISS_TEXT, CRIT_TEXT } from './atbFx.js'
+import { fxEventsOf, scheduleFx, splitHits, lastHitAtOf, lungeOf, shakeOf, LUNGE_SEC, HIT_SEC, skillBannerAt, BANNER_SEC, RAGE_BANNER_SEC, BANNER_IN, BANNER_OUT, popTextOf, popScaleOf, popLeftOf, popTopOf, MISS_TEXT, CRIT_TEXT } from './atbFx.js'
+import { endTelopOf, LOSE_DELAY_MS } from './atbTelop.js'
 
 const stage = readFileSync(new URL('../components/V2capAtbStage.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 
@@ -147,6 +148,86 @@ test('【確定】2026-10-30 構えのあとに技の途中から流す（castSk
   assert.equal(ev2[0].t0, 100)
   assert.equal(ev2[1].t0, 100.5)
   assert.equal(skillBannerAt(ev2, 100.5, 'b').rage, false)
+})
+
+test('【確定】2026-11-01 多段の合計を1発ごとに分ける（splitHits）：足すと合計と同じ・外れは null・軽減されたぶんも割合で分ける', () => {
+  assert.deepEqual(splitHits(300, [{ d: 100, crit: false }, { d: 200, crit: true }]), [{ amount: 100, crit: false }, { amount: 200, crit: true }])
+  // 防御で半分になった合計（端数は最後に当たった発へ）
+  const half = splitHits(151, [{ d: 150, crit: false }, { d: 151, crit: false }])
+  assert.equal(half[0].amount + half[1].amount, 151)
+  assert.ok(Math.abs(half[0].amount - half[1].amount) <= 1)
+  // 片方だけ当たった：外れは null・当たった発が合計ぜんぶ
+  assert.deepEqual(splitHits(90, [null, { d: 120, crit: false }]), [null, { amount: 90, crit: false }])
+  assert.deepEqual(splitHits(90, [{ d: 120, crit: true }, null]), [{ amount: 90, crit: true }, null])
+  assert.deepEqual(splitHits(0, [null, null]), [null, null])
+  // どの分け方でも足すと合計
+  for (const [total, ds] of [[1, [3, 3]], [7, [1, 1, 1]], [1000, [333, 1, 999]], [5, [0, 7]]]) {
+    const out = splitHits(total, ds.map(d => ({ d, crit: false })))
+    assert.equal(out.reduce((s, h) => s + h.amount, 0), total, `${total}：${ds}`)
+  }
+})
+
+test('【確定】2026-11-01 ユーザー「黒翼烈風は鈍足じゃなくて2回の多段ヒット」：絵に振り抜きが2回ある技は、数字と Miss を1発ごとに届く時刻へ（クリティカルも1発ごと・合計の数字は出ない）', () => {
+  const motion = { impactMs: 1000, strikes: [{ atMs: 0 }, { atMs: 400 }] }
+  const run = (l) => scheduleFx(fxEventsOf([{ side: 'ボス', type: 'skill', skill: '黒翼烈風', of: 2, ...l }], '自分', 'ボス').map(e => (e.kind === 'act' ? { ...e, motion } : e)), 10, { b: (e) => e.motion.impactMs / 1000 })
+  const brief = (ev) => ev.filter(e => e.kind !== 'act').map(e => [e.kind, e.side, e.amount ?? null, +e.t0.toFixed(3), e.strike, !!e.crit])
+  // 2発とも当たった
+  assert.deepEqual(brief(run({ hits: 2, damage: 300, crit: true, perHit: [{ d: 100, crit: false }, { d: 200, crit: true }] })),
+    [['hit', 'a', 100, 11, 0, false], ['hit', 'a', 200, 11.4, 1, true]])
+  // 1発目だけ当たった・2発目だけ当たった（1発ごとに外れる）
+  assert.deepEqual(brief(run({ hits: 1, damage: 120, perHit: [{ d: 120, crit: false }, null] })), [['hit', 'a', 120, 11, 0, false], ['miss', 'a', null, 11.4, 1, false]])
+  assert.deepEqual(brief(run({ hits: 1, damage: 120, perHit: [null, { d: 120, crit: false }] })), [['miss', 'a', null, 11, 0, false], ['hit', 'a', 120, 11.4, 1, false]])
+  // 2発とも外れた
+  assert.deepEqual(brief(run({ hits: 0, damage: 0, perHit: [null, null] })), [['miss', 'a', null, 11, 0, false], ['miss', 'a', null, 11.4, 1, false]])
+  // バリアで全部消えた＝今までどおり何も出ない・端数で片方が0になった発は出さない
+  assert.deepEqual(brief(run({ hits: 2, damage: 0, perHit: [{ d: 100, crit: false }, { d: 100, crit: false }] })), [])
+  assert.deepEqual(brief(run({ hits: 2, damage: 1, perHit: [{ d: 100, crit: false }, { d: 100, crit: false }] })), [['hit', 'a', 1, 11.4, 1, false]])
+  // 名前の帯は act のまま1回（技の名前が2回出ない）
+  assert.equal(run({ hits: 2, damage: 300, perHit: [{ d: 100, crit: false }, { d: 200, crit: false }] }).filter(e => e.kind === 'act').length, 1)
+  // 技の動きの中で節目のバフや毒の数字（act のあと）は今までどおり1回目が届く時刻
+  const after = scheduleFx([{ kind: 'act', side: 'b', motion }, { kind: 'hit', side: 'a', each: [{ amount: 1, crit: false }, { amount: 2, crit: false }] }, { kind: 'tick', side: 'b', amount: 5 }], 10, { b: 1 })
+  assert.deepEqual(after.map(e => [e.kind, +e.t0.toFixed(3)]), [['act', 10], ['hit', 11], ['hit', 11.4], ['tick', 11]])
+})
+
+test('【確定】2026-11-01 絵に振り抜きが1回しかない多段（自分の多段・ドット絵版のボス）は今までどおり合計を1つ', () => {
+  const log = [{ side: '自分', type: 'skill', skill: '三連', hits: 2, of: 3, damage: 300, crit: true, perHit: [{ d: 100, crit: false }, null, { d: 200, crit: true }] }]
+  const ev = scheduleFx(fxEventsOf(log, '自分', 'ボス'), 10, { a: 0.3 })
+  assert.deepEqual(ev.filter(e => e.kind === 'hit').map(e => [e.amount, e.crit, +e.t0.toFixed(3), e.strike]), [[300, true, 10.3, undefined]])
+  const miss = scheduleFx(fxEventsOf([{ ...log[0], hits: 0, damage: 0, perHit: [null, null, null] }], '自分', 'ボス'), 10)
+  assert.deepEqual(miss.map(e => e.kind), ['act', 'miss'], 'Miss も1つ')
+  // 絵の振り抜きの数と違う（技の回数を変えて絵を直し忘れた）ときも合計を1つ
+  const two = scheduleFx([{ kind: 'act', side: 'a', motion: { strikes: [{ atMs: 0 }, { atMs: 400 }] } }, ...fxEventsOf(log, '自分', 'ボス').slice(1)], 10)
+  assert.deepEqual(two.filter(e => e.kind === 'hit').map(e => e.amount), [300])
+})
+
+test('【確定】2026-11-01 止めの一撃のあとのテロップは、いちばんあとの数字が出てから（多段の2発目まで待つ・2発目が外れなら1発目）', () => {
+  const motion = { strikes: [{ atMs: 0 }, { atMs: 420 }] }
+  const fx = (each) => scheduleFx([{ kind: 'act', side: 'b', motion }, { kind: 'hit', side: 'a', amount: 1, each }], 10, { b: 1 })
+  const both = fx([{ amount: 5, crit: false }, { amount: 5, crit: false }]), lastMiss = fx([{ amount: 5, crit: false }, null])
+  assert.ok(Math.abs(lastHitAtOf(both, 'a', 10) - 11.42) < 1e-9)
+  assert.ok(Math.abs(lastHitAtOf(lastMiss, 'a', 10) - 11) < 1e-9)
+  const lost = { a: { hp: 0 }, b: { hp: 100 }, winner: 'b' }
+  const t = endTelopOf(lost, both, 10000)
+  assert.equal(t.kind, 'lose')
+  assert.ok(Math.abs(t.at - (11420 + LOSE_DELAY_MS)) < 1e-6, '2発目の数字が出てから')
+})
+
+test('【確定】2026-11-01 多段の数字の置き場所（popLeftOf・popTopOf）：左右に振る・あとの数字が前の数字に重ならない・並びの番号で跳ねない', () => {
+  const s0 = { kind: 'hit', strike: 0 }, s1 = { kind: 'hit', strike: 1 }
+  assert.ok(popLeftOf(s0) < 50 && popLeftOf(s1) > 50, '左右に分かれる')
+  assert.ok(popLeftOf({ kind: 'miss', strike: 1 }) === popLeftOf(s1), 'Miss も同じ所')
+  assert.ok(popLeftOf(s1) < popLeftOf({ kind: 'tick' }), '毒や出血の数字にはぶつからない')
+  assert.equal(popTopOf(s1, 0.3, 0), popTopOf(s1, 0.3, 1), '前の数字が消えても跳ねない')
+  // 2発目が出た瞬間（0.42秒後・POP_SEC＝1秒）、1発目はもう上にいる
+  const gap = 0.42
+  assert.ok(popTopOf(s1, 0, 1) - popTopOf(s0, gap, 0) >= 15, '段が離れている')
+  // ふつうの文字は今までどおり並びで段をずらす
+  assert.equal(popTopOf({ kind: 'hit' }, 0, 0), 30)
+  assert.equal(popTopOf({ kind: 'hit' }, 0.5, 1), 30 - 13 - 14)
+  assert.match(stage, /top:`\$\{popTopOf\(f, a, i\)\}%`/)
+  // 舞台：飛ぶ絵は振り抜きごとに出し直し・当たる絵は振り抜きごとに1枚
+  assert.match(stage, /kind === 'hit' \? strikes : \[\]/)
+  assert.match(stage, /for \(const st of kind === 'fly' \? strikes : \[sh0\]\)/)
 })
 
 test('薬を飲んだとき：飲んだ側が光る・HPは緑の数字・MPは青い数字（技のMP回復と治す技は今までどおり）', () => {

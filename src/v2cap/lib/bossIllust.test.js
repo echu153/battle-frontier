@@ -14,6 +14,7 @@ import {
 } from './bossIllust.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { DUNGEON_BOSSES } from './dungeon.js'
+import { HIT_SEC } from './atbFx.js'
 import { dilate, erode, leftTipOf, fitPart, inPoly } from '../../../tools/v2cap-boss-illust.mjs'
 
 const OUT = new URL(`../../../public${BOSS_ART_DIR}/`, import.meta.url)
@@ -90,7 +91,7 @@ test('【確定】2026-10-30 技の姿勢（ポーズの絵で動かす）：た
   for (const [k, d] of Object.entries(M)) {
     const tS = d.art.find(([, n]) => n === 'strike')[0]
     for (const [, p] of d.keys) assert.ok(!p.x && !p.y && !p.r, `${k}：竜を横へずらさない・浮かせない・回さない（地面を支点に傾けるだけ）`)
-    assert.ok(!d.jolt.x && !d.jolt.y && d.jolt.lean > 0, `${k}：当たった瞬間の揺れも地面を支点に`)
+    for (const j of [d.jolt].flat()) assert.ok(!j.x && !j.y && j.lean > 0, `${k}：当たった瞬間の揺れも地面を支点に`)
     assert.ok(at(k, tS).lean < -0.05, `${k}：ため の絵で後ろへのけぞる`)
     assert.ok(at(k, d.hitMs).lean > 0.15, `${k}：振り抜き の絵で前へ押し出す`)
     assert.deepEqual(Object.values(at(k, 0)).every(v => v === 0), true, `${k} は待機から始まる`)
@@ -244,6 +245,46 @@ test('【確定】2026-10-30 黒翼烈風：風は 打ち下ろし の絵の胸�
   assert.ok(tr.length === 2 && tr.every(t => t.kind === 'wind'), '打ち下ろすあいだ翼のふちに筋')
   // 口から出る技は出どころが1つ
   assert.equal(bossIllustOf('varuzenoku').motions.breath.shots.length, 1)
+})
+
+test('【確定】2026-11-01 黒翼烈風は2回打ち下ろす（ユーザー「黒翼烈風は鈍足じゃなくて2回の多段ヒット」）：翼を上げ直してもう一度・風も揺れも筋も2回・2回目のほうが深い', () => {
+  const a = bossIllustOf('varuzenoku'), m = a.motions.gale, d = BOSS_ILLUST_DEFS.varuzenoku.motions.gale
+  assert.equal(m.strikes.length, 2)
+  assert.equal(m.strikes[0].atMs, 0, '1回目は今までの当たる時刻')
+  const gap = m.strikes[1].atMs
+  assert.ok(gap > m.flyMs + 40, '次を打ち下ろすときには前の風が届いている（飛ぶ絵は1枚を使い回す）')
+  assert.ok(gap > HIT_SEC * 1000, '受ける側の揺れがいったん収まってから次が当たる＝2回揺れて見える')
+  const hits = m.strikes.map(st => m.hitMs + st.atMs)
+  const [h1, h2] = hits
+  // 動き：打ち下ろす→止める→起き上がる（のけぞる）→もう一度打ち下ろす
+  const lean = (ms) => motionPoseAt(d.keys, ms).lean
+  assert.ok(lean(h1) > 0.15 && lean(h2) > lean(h1), '2回目のほうが深く押し出す')
+  assert.ok(lean(h2 - 60) < -0.05, 'あいだで起き上がってのけぞる')
+  for (const h of hits) {
+    const k = d.keys.find(([t]) => t === h)
+    assert.equal(k?.[2], 'out', `${h}：一気に振り抜く`)
+    assert.deepEqual(illustShowAt(m, h + ART_FADE_MS).poses.at(-1).name, 'strike', `${h}：打ち下ろしの絵`)
+    assert.ok(Math.abs(joltAt(d.jolt, h + 20).lean) > 0, `${h}：揺れる`)
+    assert.deepEqual(joltAt(d.jolt, h - 1), { x: 0, y: 0, lean: 0 }, `${h}：打ち下ろす前は揺れない`)
+    assert.ok(illustGhostsAt(m, h).length > 0, `${h}：残像`)
+    assert.equal(illustTrailsAt('varuzenoku', m, h - 20, 0).length, 2, `${h}：翼のふちに風の筋`)
+  }
+  assert.equal(illustShowAt(m, h2 - 100).poses.at(-1).name, 'windup', 'あいだは翼を上げた絵')
+  // 風の出どころ：振り抜きごとに、そのときの打ち下ろしの絵の上の点
+  m.strikes.forEach((st) => d.shots.forEach((sh, i) => {
+    const p = motionPoseAt(d.keys, m.hitMs + st.atMs + sh.delayMs)
+    assert.deepEqual(st.shots[i].front, illustPointAt('varuzenoku', { x: 0, y: 0, r: 0, ...p }, d.anchors.strike[sh.at], 'body').map(Math.round))
+  }))
+  assert.deepEqual(m.strikes[0].shots, m.shots, '1回目は今までの出どころ')
+  // ほかの技は1回のまま
+  for (const k of ['claw', 'breath', 'doom']) assert.equal(a.motions[k].strikes, null, k)
+  for (const mo of Object.values(bossIllustOf('amaza').motions)) assert.equal(mo.strikes, null, mo.label)
+  // 1回の技の揺れと残像は今までどおり
+  const c = a.motions.claw
+  assert.ok(Math.abs(joltAt(c.jolt, c.hitMs + 20).lean) > 0)
+  assert.ok(illustGhostsAt(c, c.hitMs).length > 0)
+  assert.deepEqual(joltAt(null, 100), { x: 0, y: 0, lean: 0 })
+  assert.deepEqual(illustGhostsAt(null, 100), [])
 })
 
 test('道具：多角形の中か（切り分け）', () => {
@@ -562,12 +603,13 @@ test('【確定】2026-10-29 黒龍の技のめりはり（ユーザー「攻撃
     assert.equal(d.keys[i][2], 'out', `${k}：振り抜く区間は出だしがいちばん速い`)
     assert.ok(d.hitMs - d.keys[i - 1][0] <= 120, `${k}：振り抜きは 120ms まで`)
     assert.ok(d.keys[i + 1][0] - d.hitMs >= 100, `${k}：当たった形でいったん止める`)
-    assert.equal(d.jolt?.atMs, d.hitMs, `${k}：当たった瞬間に揺れる`)
+    const j0 = [d.jolt].flat()[0]   // 多段の技は振り抜きごとに並ぶ（1回目）
+    assert.equal(j0?.atMs, d.hitMs, `${k}：当たった瞬間に揺れる`)
     assert.deepEqual(m[k].jolt, d.jolt)
     // 揺れは当たったあとだけ（溜めのあいだは揺れない）で、収まる。黒龍は地面を支点に揺らす（lean・しっぽと足は地面に残る）
     assert.deepEqual(joltAt(d.jolt, d.hitMs - 1), { x: 0, y: 0, lean: 0 })
     assert.ok(Math.abs(joltAt(d.jolt, d.hitMs + 20).lean) > 0)
-    assert.deepEqual(joltAt(d.jolt, d.hitMs + d.jolt.ms), { x: 0, y: 0, lean: 0 })
+    assert.deepEqual(joltAt(d.jolt, d.hitMs + j0.ms), { x: 0, y: 0, lean: 0 })
     const a = illustPoseAt('varuzenoku', m[k], d.hitMs + 20, 0), b = illustPoseAt('varuzenoku', { ...m[k], jolt: null }, d.hitMs + 20, 0)
     assert.ok(Math.abs(a.lean - b.lean - joltAt(d.jolt, d.hitMs + 20).lean) < 1e-12, '揺れは傾きに足す')
   }
@@ -645,12 +687,13 @@ test('【確定】2026-10-30 技のポーズの絵（ユーザー「グラブル
   for (const [k, m] of Object.entries(d.motions)) {
     assert.deepEqual(Object.keys(d.poses[k]).sort(), ['strike', 'windup'], `${k}：ためと振り抜き`)
     const names = m.art.map(([, n]) => n)
-    assert.deepEqual(names, [null, 'windup', 'strike', null], `${k}：部品→ため→振り抜き→部品`)
+    // 多段の技（strikes）は振り抜きごとに ため→振り抜き をくり返す（黒翼烈風）
+    assert.deepEqual(names, [null, ...(m.strikes || [{}]).flatMap(() => ['windup', 'strike']), null], `${k}：部品→ため→振り抜き→部品`)
     for (let i = 1; i < m.art.length; i++) assert.ok(m.art[i][0] > m.art[i - 1][0], `${k}：時刻の順`)
-    const tStrike = m.art.find(([, n]) => n === 'strike')[0], tBack = m.art.at(-1)[0]
+    const tStrike = m.art.find(([, n]) => n === 'strike')[0], tBack = m.art.at(-1)[0], g0 = [m.ghosts].flat()[0]
     assert.ok(tStrike < m.hitMs && m.hitMs - tStrike <= 80, `${k}：当たる直前に振り抜きの絵`)
     assert.ok(tBack - m.hitMs >= 250 && tBack < m.totalMs, `${k}：当たった形で止めてから立ち絵へ戻る`)
-    assert.ok(m.ghosts.fromMs === tStrike && m.ghosts.toMs > m.hitMs, `${k}：振り抜きから残像`)
+    assert.ok(g0.fromMs === tStrike && g0.toMs > m.hitMs, `${k}：振り抜きから残像`)
   }
   // 出し方（作った絵がある技のつもりの見本）：切り替えは新しい絵が前半で出きり、前の絵が後半で消える
   const mo = { totalMs: 1000, poses: { windup: {}, strike: {} }, art: [[0, null], [100, 'windup'], [400, 'strike'], [700, null]], ghosts: { fromMs: 400, toMs: 600, lagMs: 30, n: 3 } }

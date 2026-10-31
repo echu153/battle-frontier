@@ -2,7 +2,7 @@ import { createContext, useContext, useId, useLayoutEffect, useRef, useState } f
 import { TEXT } from './v2ui.js'
 import { buffChips, hpBuffChips, ailChips, stateChips, needShownOf, castMsOf, CAST_SEC, BUFF_GAUGE_SEC } from '../core/atb.js'
 import { STAT_DEFS } from '../core/stats.js'
-import { lungeOf, shakeOf, lastHitAtOf, popTextOf, popScaleOf, popLeftOf, CRIT_TEXT, HIT_SEC, POP_SEC, GLOW_SEC, RAGE_SEC, skillBannerAt } from '../lib/atbFx.js'
+import { lungeOf, shakeOf, lastHitAtOf, popTextOf, popScaleOf, popLeftOf, popTopOf, CRIT_TEXT, HIT_SEC, POP_SEC, GLOW_SEC, RAGE_SEC, skillBannerAt } from '../lib/atbFx.js'
 import { JP_BOLD } from './casinoStyle.js'
 import { rubySegmentsOf } from '../lib/skillRuby.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
@@ -68,6 +68,7 @@ import { deathAt, deathPoseOf, deathShowOf } from '../lib/bossDeath.js'
 //   ・2026-11-01 ユーザー「黒龍のバフ後のモーション、いまほわほわしてる」「びりびりが変すぎる」「もうちょっと体のうちから出るオーラみたいにしてほしい」：逆鱗のあとの赤い脈をやめて、
 //     描いてもらったオーラの絵を付いているあいだ竜の後ろで燃やす（BossAuraFlow）・体の中の光が細かくゆらぐ（after.pulse）。
 //     「これ大技の時のふわふわなのか、そしたら黒龍には合わないからいらない」：大技をためるときの体のまわりの赤い光もやめた
+//   ・2026-11-01 ユーザー「黒翼烈風は鈍足じゃなくて2回の多段ヒット」：絵に振り抜きが2回ある技（m.strikes）は、風を2回飛ばし、当たる絵・揺れ・数字（Miss）も1発ごと
 // ============================================================
 
 // 軽い表示（スマホ・遅い端末＝lib/atbPacer.js の段階）。2026-10-31 ユーザー「30回に落としたって出る、大技の時はそれよりも下がる感じ」：
@@ -607,7 +608,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
         {pops.map((f, i) => {
           const a = (now - f.t0) / POP_SEC
           return (
-            <span key={`${f.t0}-${i}`} style={{ position:'absolute', zIndex: 5, left:`${popLeftOf(f)}%`, top:`${30 - a * 26 - (i % 3) * 14}%`,
+            <span key={`${f.t0}-${i}`} style={{ position:'absolute', zIndex: 5, left:`${popLeftOf(f)}%`, top:`${popTopOf(f, a, i)}%`,
               transform:`translateX(-50%) scale(${popScaleOf(f, a).toFixed(3)})`, pointerEvents:'none', whiteSpace:'nowrap', fontWeight:'bold', textAlign:'center', lineHeight: 1.1,
               fontSize: f.crit ? '22px' : f.kind === 'miss' ? '20px' : '17px', color: f.crit ? '#ffcc00' : POP_COLOR[f.kind], opacity: Math.max(0, 1 - a * a),
               textShadow:'1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}>
@@ -646,6 +647,8 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
 // 相手の頭上・足元に出すエフェクト（on）の場所（FX_HEAD_Y・FX_FEET_Y）は lib/bossScene.js（演出と同じ場所）
 // 飛ぶ絵：出はじめは小さく（FX_GROW_SEC で元の大きさ）・だんだん速く
 const FX_GROW_SEC = 0.12
+// 1回だけ当たる技の振り抜き（多段の技は m.strikes）
+const ONE_STRIKE = [{ atMs: 0 }]
 
 // 絵の枠（正方形・下にそろえて横は真ん中・高さは場所の scale 倍）の、舞台の左上からの位置と大きさ
 const boxOf = (stage, area, scale) => {
@@ -686,12 +689,15 @@ function BossFx({ fx, now, geo, art, cast = null, castEnd = -1e9, scene = null }
     const sc = a.size ? (a.size * ((a.on ? geo?.p.w : geo?.b.w) || 0)) / a.w : s   // イラスト版は枠の幅に対する大きさ
     const lead = a.lead || 0
     // 飛ぶ絵は出どころ（shots）ごとに1枚（イラスト版の黒翼烈風は両方の翼から）。届く時刻は1つめ＝ダメージの時刻。ためる絵は ChargeOrb だけ
-    const shots = kind === 'fly' ? (m.shots || (m.front ? [{ front: m.front, delayMs: 0, size: 1 }] : [])) : kind === 'hit' ? [null] : []
-    return shots.map((sh, i) => {
+    //   多段の技（m.strikes）：飛ぶ絵は振り抜きごとに同じ1枚を出し直す（次の振り抜きまでに届く）・当たる絵は振り抜きごとに1枚（前の絵が消える前に次が出る）
+    const strikes = m.strikes || ONE_STRIKE
+    const shots = kind === 'fly' ? (m.shots || (m.front ? [{ front: m.front, delayMs: 0, size: 1 }] : [])) : kind === 'hit' ? strikes : []
+    return shots.map((sh0, i) => {
       let on = null
-      for (const f of acts) {
+      for (const f of acts) for (const st of kind === 'fly' ? strikes : [sh0]) {
         if (f.motion !== m) continue
-        const lag = (sh?.delayMs || 0) / 1000
+        const sh = kind === 'fly' ? st.shots?.[i] || sh0 : null
+        const lag = ((sh?.delayMs || 0) + st.atMs) / 1000
         const tFly = f.t0 + m.hitMs / 1000 + lag, tHit = f.t0 + m.impactMs / 1000 + lag
         if (kind === 'fly' && now >= tFly && now < tHit) {
           const e = now - tFly
@@ -699,7 +705,7 @@ function BossFx({ fx, now, geo, art, cast = null, castEnd = -1e9, scene = null }
           const q = flyPosOf(e / (tHit - tFly))
           const grow = Math.min(1, 0.5 + 0.5 * e / FX_GROW_SEC) * (a.frames > 1 ? 1 : 1 + 0.06 * Math.sin(e * 30))
           on = { frame: a.frames > 1 ? Math.floor(e * 1000 / a.ms) % a.frames : 0, x: from.x + (to.x - from.x) * q, y: from.y + (to.y - from.y) * q,
-            s: sc * sh.size * grow, rot: Math.atan2(to.y - from.y, to.x - from.x) - Math.PI }   // 飛ぶ絵は左向き
+            s: sc * sh.size * (st.size || 1) * grow, rot: Math.atan2(to.y - from.y, to.x - from.x) - Math.PI }   // 飛ぶ絵は左向き
           // 口から伸びて出てくる（a.emerge・終焉の黒焔）：絵は先（ax）が前で、うしろへ伸びる＝飛んだ距離より後ろ（口より竜の側）は見せない。絵といっしょに回る切り抜き
           if (a.emerge) {
             const lx = ((a.ax + (Math.hypot(on.x - from.x, on.y - from.y) + 0.03 * geo.b.w) / on.s) / a.w) * 100
@@ -708,7 +714,7 @@ function BossFx({ fx, now, geo, art, cast = null, castEnd = -1e9, scene = null }
         }
         if (kind === 'hit' && now >= tHit - lead / 1000) {
           const ms = (now - tHit) * 1000 + lead   // 当たる絵が出はじめてから
-          const actMs = (now - f.t0) * 1000 - (sh?.delayMs || 0)
+          const actMs = (now - f.t0) * 1000 - lag * 1000
           const fall = a.anim === 'drop' ? fallAt(m, actMs) : null
           const coil = a.anim === 'bind' ? coilAt(m, actMs) : null
           if (fall) {
@@ -742,8 +748,10 @@ function BossFx({ fx, now, geo, art, cast = null, castEnd = -1e9, scene = null }
           } else if (ms < a.durMs) {
             const k = ms / a.durMs, fade = k > 0.55 ? 1 - (k - 0.55) / 0.45 : 1
             // 出す場所：足元（絵の下のはしを枠の下へ）・頭上・ほかは体の真ん中
+            //   多段の技は振り抜きごとに場所をずらす（st.dx・dy）
             const sp = a.on === 'feet' ? { x: to.x, y: geo.p.y + geo.p.h * FX_FEET_Y, ay: a.h }
-              : a.on === 'head' || a.on === 'sky' ? { x: to.x, y: geo.p.y + geo.p.h * (a.on === 'sky' ? FX_SKY_Y : FX_HEAD_Y) } : to
+              : a.on === 'head' || a.on === 'sky' ? { x: to.x, y: geo.p.y + geo.p.h * (a.on === 'sky' ? FX_SKY_Y : FX_HEAD_Y) }
+              : { x: to.x + (st.dx || 0) * geo.p.w, y: to.y + (st.dy || 0) * geo.p.w }
             if (a.anim === 'drop' && m.fx.flow) {
               // 流れる雨の絵があるとき（氷雨）：描いた絵は雲だけ（雨の所から下は抜く）・雨は雲の下から足元まで流れる雨の絵を流す。
               //   【確定】2026-10-30 ユーザー「氷雨の最後の動いていない下部分のイラストいらないかも」：足元の動かないしぶき（描いた絵のいちばん下）はやめ、雨を足元まで伸ばした。
@@ -773,7 +781,7 @@ function BossFx({ fx, now, geo, art, cast = null, castEnd = -1e9, scene = null }
               on = a.wipe
                 // 爪の跡：大きくせず、右上から左下へ引いたように出す（はじめの22%で引ききる）
                 ? { frame: 0, ...sp, s: sc * (0.96 + 0.08 * easeOut(k)), op: fade, clip: wipeClipOf(Math.min(1, k / 0.22)) }
-                : { frame: 0, ...sp, s: sc * (0.55 + 0.6 * easeOut(k)), rot: ((a.spin || 0) * k * Math.PI) / 180, op: Math.min(1, k / 0.08) * fade }
+                : { frame: 0, ...sp, s: sc * (st.size || 1) * (0.55 + 0.6 * easeOut(k)), rot: ((st.flip ? -1 : 1) * (a.spin || 0) * k * Math.PI) / 180, flip: !!st.flip, op: Math.min(1, k / 0.08) * fade }
             }
           }
         }
