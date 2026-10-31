@@ -133,7 +133,7 @@ export const CIRCLED = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', 
 // いま挑戦できないわけ（入口のボスの行に出す・挑戦できるなら null）。「挑戦する」のボタンもこれで決める＝言葉とボタンが食い違わない
 //   summoned＝きょうこのボスに挑戦した／ownActive＝いま自分の挑戦中のボスがいる／reached＝行ったエリアの一番先
 export const summonBlockOf = (bossKey, { summoned, ownActive, reached }) => {
-  if (summoned) return 'きょうはもう挑戦しました'
+  if (summoned) return '挑戦済み'
   if (ownActive) return 'いま挑戦中のボスがいます'
   if (!DIFF_KEYS.some(k => isDiffUnlocked(bossKey, k, reached))) return `エリア${CIRCLED[diffOf(bossKey, DIFF_KEYS[0]).area - 1]}に着くと挑戦できます`
   return null

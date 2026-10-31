@@ -487,14 +487,14 @@ test('【確定】2026-10-31 メニューは「挑戦」・中は「強敵」に
 test('【確定】2026-10-31 入口のボスの行の言葉と「挑戦する」のボタンは同じ決まり（本番で、雨摩座を呼んでいるあいだ黒龍の行が「呼べます」のままボタンだけ暗かった）', () => {
   const at = (summoned, ownActive, reached = 15) => summonBlockOf('varuzenoku', { summoned, ownActive, reached })
   assert.equal(at(false, false), null, '挑戦できる')
-  assert.equal(at(true, false), 'きょうはもう挑戦しました')
+  assert.equal(at(true, false), '挑戦済み', 'ユーザー「挑戦済み に変更して」')
   assert.equal(at(false, true), 'いま挑戦中のボスがいます')
-  assert.equal(at(true, true), 'きょうはもう挑戦しました', '挑戦中のボス自身の行')
+  assert.equal(at(true, true), '挑戦済み', '挑戦中のボス自身の行')
   assert.equal(at(false, false, 1), 'エリア②に着くと挑戦できます', 'どの難易度もまだのエリア')
   assert.equal(at(false, false, 2), null, 'ノーマルだけでも挑戦できれば挑戦できる')
   const src = readFileSync(new URL('../components/V2capDungeon.jsx', import.meta.url), 'utf8')
   assert.match(src, /const canSummon = \(key\) => !!state && !blockOf\(key\)/, 'ボタンも同じ決まり')
-  assert.match(src, /\{state && \(blockOf\(key\) \|\| '挑戦できます'\)\}/, '行の言葉も同じ決まり（読み込み中は出さない）')
+  assert.match(src, /\{state && \(blockOf\(key\) \|\| '挑戦可能'\)\}/, '行の言葉も同じ決まり（読み込み中は出さない）・ユーザー「挑戦可能 に変更して」')
 })
 
 test('【確定】2026-10-31 入口：履歴と説明を出さない・「挑戦する」でそのまま戦闘へ（ユーザー「この履歴いらない」「ここら辺の説明いらない」「呼ぶじゃなくて挑戦する にして」）', () => {

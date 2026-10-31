@@ -245,7 +245,7 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
                   {thumb && <img src={thumb} alt="" draggable={false} style={{ width:'64px', height:'64px', objectFit:'contain', flexShrink:0 }} />}
                   <span style={{ flex:1, minWidth:0 }}>
                     <b style={{ color:'#ff8866', fontSize:'13px' }}>{boss.name}</b><br />
-                    <span style={{ color: TEXT.label, fontSize:'10px' }}>{state && (blockOf(key) || '挑戦できます')}</span>
+                    <span style={{ color: TEXT.label, fontSize:'10px' }}>{state && (blockOf(key) || '挑戦可能')}</span>
                   </span>
                   <span style={{ color: TEXT.label, fontSize:'12px', flexShrink:0 }}>{open ? '▲' : '▼'}</span>
                 </button>
