@@ -18,6 +18,7 @@ import { SUPABASE_KEY, SUPABASE_URL, verifyRequest } from './dungeonVerifyApi.js
 import { PROD_ORIGIN, callVerify, isStaleBuild, verifyUrlOf } from './dungeonVerifyCall.js'
 import handler from '../../../api/v2cap-dungeon-verify.js'
 
+const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8')
 const AT = Date.UTC(2026, 9, 31, 3, 0, 0)
 const LEARNED = SKILLS.map(s => s.name)
 const BOSSES = ['varuzenoku', 'amaza']
@@ -172,6 +173,17 @@ test('★記録の形を見る：おかしな記録ではダメージが入ら�
   }
   assert.ok(validInputs([ok, { step: 3, k: 'guard', on: true }, { step: 9, k: 'macro', no: 2, steps: [{ guard: true }, { idx: null }, { idx: 1 }], loop: true }, { step: 9, k: 'stop' }]))
   assert.ok(validInputs([]), '押さなくてもよい（通常攻撃だけ）')
+})
+
+test('★押した記録の種類を増やしたら、回し直しと形の見張りにも足す（足さないと、ふつうの人の挑戦のダメージが0になる）', () => {
+  const atb = read('../core/atb.js')
+  const kinds = [...atb.matchAll(/input\(st, \{ k: '(\w+)'/g)].map(m => m[1])
+  assert.deepEqual(kinds, ['q', 'unq', 'clr', 'macro', 'stop', 'guard'])
+  const samples = { q: { idx: 0 }, unq: { pos: 0 }, clr: {}, macro: { no: 1, steps: [], loop: true }, stop: {}, guard: { on: true } }
+  for (const k of kinds) {
+    assert.ok(atb.includes(`e.k === '${k}'`), `applyInput が ${k} を入れ直す`)
+    assert.ok(validInputs([{ step: 0, k, ...samples[k] }]), `validInputs が ${k} を通す`)
+  }
 })
 
 test('★実時間より先へは進まない：すぐ送ってきても、そのぶんの時間しか回さない', () => {
