@@ -9,7 +9,7 @@
 // ★透明つきの絵は、透明なところに元の背景の色が隠れて残っている。縮める前に近くの体の色で埋める（bleed）＝縁ににじまない
 // ★ChatGPT の透明つきの絵は、体の不透明さが 253 くらい（255 ではない）＝ほんの少し透ける。ALPHA_SNAP 以上は 255 にそろえる（親方の絵と同じ）
 // ★透明にならなかった絵は、縁の色から背景を見立てて抜く（tools/v2cap-art-lib.mjs の keyBackground）。頼んでいるのは真緑の背景。
-//   白っぽい背景とチェック模様は、腰から上の絵の下の縁に届く前かけまで抜けることがあるので、抜いたうえで知らせる（絵を見て確かめる）。
+//   白っぽい背景とチェック模様は、白いシャツまで抜けることがあるので、抜いたうえで知らせる（絵を見て確かめる）。
 //   抜いたあとも縁に体が多く残っていたら知らせて、終わりのコードを1にする
 //   node tools/v2cap-shop-art.mjs                         … public/V2商店 → public/v2cap-art/shop
 //   node tools/v2cap-shop-art.mjs --src <dir> --out <dir> … 道具を試すとき（元の絵と書き出す場所を変える）
@@ -28,11 +28,11 @@ const QUALITY = 82
 const ALPHA_MIN = 0.5      // 縁のこれ以上が透明なら「透明つき」（腰から上は下の縁が体で切れるので全部は透明にならない）
 const EDGE_LEFT_MAX = 0.45 // 背景を抜いたあと、縁に残った体の割合がこれを超えたら「背景が抜けていない」（下の縁＝体は縁の約2割）
 const ALPHA_SNAP = 240     // 不透明さがこれ以上なら 255 にそろえる（体の中がわずかに透けないように）
-const WHITE_MIN = 200      // 背景の RGB がどれもこれ以上なら白っぽい＝前かけまで抜けることがある
+const WHITE_MIN = 200      // 背景の RGB がどれもこれ以上なら白っぽい＝白いシャツまで抜けることがある
 
 const srcOf = (names) => names.map(n => path.join(SRC, `${n}.png`)).find(existsSync) || null
 const snapAlpha = ({ data, W, H }) => { for (let p = 0; p < W * H; p++) if (data[p * 4 + 3] >= ALPHA_SNAP) data[p * 4 + 3] = 255 }
-// 緑の背景を抜いたあと、線のふちに残った緑を消す。★青緑のコートの色が変わらないように、半分透けているふちの画素だけ（神官の道具と違うところ）
+// 緑の背景を抜いたあと、線のふちに残った緑を消す。★絵の中の色が変わらないように、半分透けているふちの画素だけ（神官の道具と違うところ）
 const removeGreenEdge = ({ data, W, H }) => {
   for (let p = 0; p < W * H; p++) if (data[p * 4 + 3] < 255) data[p * 4 + 1] = Math.min(data[p * 4 + 1], Math.max(data[p * 4], data[p * 4 + 2]))
 }
@@ -49,8 +49,8 @@ const load = (file) => {
     const r = keyBackground(rgb)
     if (r.edgeLeft > EDGE_LEFT_MAX) throw new Error(`${path.basename(file)}：背景が抜けていない（縁の${Math.round(r.edgeLeft * 100)}%が体のまま）`)
     img = r.img
-    if (model.mode === 'checker') { mode = 'チェック模様の背景を抜いた'; warned.push(`${path.basename(file)}：チェック模様の背景＝前かけまで抜けていないか絵を見る`) }
-    else if (model.bg.every(v => v >= WHITE_MIN)) { mode = '白っぽい背景を抜いた'; warned.push(`${path.basename(file)}：白っぽい背景＝前かけまで抜けていないか絵を見る`) }
+    if (model.mode === 'checker') { mode = 'チェック模様の背景を抜いた'; warned.push(`${path.basename(file)}：チェック模様の背景＝白いシャツまで抜けていないか絵を見る`) }
+    else if (model.bg.every(v => v >= WHITE_MIN)) { mode = '白っぽい背景を抜いた'; warned.push(`${path.basename(file)}：白っぽい背景＝白いシャツまで抜けていないか絵を見る`) }
     else {
       mode = `一色の背景（RGB ${model.bg.join(',')}）を抜いた`
       if (isGreen(model.bg)) removeGreenEdge(img)
