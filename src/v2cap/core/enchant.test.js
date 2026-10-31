@@ -63,7 +63,7 @@ test('band を渡さなければ時間帯つきの能力は常に有効（画面
 })
 
 // ===== 状態異常 =====
-test('出血：スタック上限5・現在HPの1%×スタック・3回刻んで消える（刻むのは行動した直後）', () => {
+test('出血：スタック上限5・現在HPの1%×スタック・1ターン付け直しがなければ1減る（ユーザー「1ターン更新なかったら1減る」・刻むのは行動した直後）', () => {
   const ail = createAilments()
   for (let i = 0; i < 8; i++) inflict(ail, 'bleed')
   assert.equal(ail.bleed.stacks, BLEED_MAX_STACKS)
@@ -71,24 +71,35 @@ test('出血：スタック上限5・現在HPの1%×スタック・3回刻んで
   // 現在HP10000・5スタック → 10000×1%×5 = 500
   let hp = 10000
   const hits = []
-  for (let t = 0; t < 4; t++) {
+  for (let t = 0; t < 9; t++) {
     const tick = tickBleed(ail, hp)
     if (!tick) break
     hp -= tick.damage
     hits.push(tick.damage)
   }
-  assert.deepEqual(hits, [500, 475, 451])   // 3回で終わり。現在HP基準なので減衰する
+  // 5スタックのまま1回→そのあと刻むたび1つ減る（5→5→4→3→2→1）。現在HP基準なので減衰する
+  assert.deepEqual(hits, [500, 475, 361, 259, 168, 82])
   assert.equal(hasAilment(ail, 'bleed'), false)
 })
 
-test('出血を付け直すと消えるまでの数え直しになる', () => {
+test('出血を付け直すと数え直しになる（減らない）', () => {
   const ail = createAilments()
-  inflict(ail, 'bleed')
+  inflict(ail, 'bleed', { stacks: 3 })
   tickBleed(ail, 1000)
+  assert.equal(ail.bleed.stacks, 3, 'はじめの刻みでは減らない')
   tickBleed(ail, 1000)
-  assert.equal(ail.bleed.age, 2)
+  assert.equal(ail.bleed.stacks, 2, '前の刻みから付け直しがなければ減る')
   inflict(ail, 'bleed')            // 付け直し
   assert.equal(ail.bleed.age, 0)
+  assert.equal(ail.bleed.stacks, 3)
+  tickBleed(ail, 1000)
+  assert.equal(ail.bleed.stacks, 3, '付け直したので減らない')
+})
+
+test('ATB の出血は刻みの回数で減らない（秒で減らす＝decay:false）', () => {
+  const ail = createAilments()
+  inflict(ail, 'bleed', { stacks: 2 })
+  for (let i = 0; i < 5; i++) tickBleed(ail, 1000, { decay: false })
   assert.equal(ail.bleed.stacks, 2)
 })
 

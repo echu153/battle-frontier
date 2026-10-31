@@ -7,6 +7,7 @@ import {
   fillRatio, cdOfProc, buffSecOf, buffChips,
   STEP_SEC, TURN_SEC, GAUGE_FULL, GUARD_CUT, GUARD_CD, CAST_SEC, MAX_DT,
 } from './atb.js'
+import { inflict } from './ailments.js'
 import { runBattle } from './battle.js'
 import { buildBattleLog } from './battleLog.js'
 
@@ -150,18 +151,47 @@ test('マクロ：手で押した技は次の1回だけ割り込み、そのあ�
   assert.equal(st.a.queue.length, 0)
 })
 
+test('出血は20秒付け直しがなければ1スタック減る（ユーザー「ATBバトルの場合は20秒に1減るようにして」）・付け直すと数え直し・行動で刻んでも減らない', () => {
+  const st = createAtb(fighter('自分'), fighter('敵', [], { stats: { hp: 1000000 } }), { rng: makeRng(31), maxSec: 120 })
+  inflict(st.b.ail, 'bleed', { stacks: 3 })
+  runFor(st, 19.5)
+  assert.ok(acts(st, '敵', 'ailTick').length >= 2, '行動で刻んでいる')
+  assert.equal(st.b.ail.bleed.stacks, 3, '20秒までは減らない')
+  runFor(st, 1)
+  assert.equal(st.b.ail.bleed.stacks, 2, '20秒で1つ減る')
+  // 付け直すと数え直し
+  runFor(st, 10)
+  inflict(st.b.ail, 'bleed')
+  assert.equal(st.b.ail.bleed.stacks, 3)
+  runFor(st, 19.5)
+  assert.equal(st.b.ail.bleed.stacks, 3, '付け直してから20秒までは減らない')
+  runFor(st, 1)
+  assert.equal(st.b.ail.bleed.stacks, 2)
+  // 0で消える
+  runFor(st, 41)
+  assert.equal(st.b.ail.bleed, undefined)
+})
+
+test('出血の減り方：防具のセット能力（受けた状態異常を縮める）は1ターンぶん早く減る', () => {
+  const st = createAtb(fighter('自分'), fighter('敵', [], { stats: { hp: 1000000 } }), { rng: makeRng(32), maxSec: 60 })
+  st.b.setFx = { ...(st.b.setFx || {}), ailTurnsCut: 1 }
+  inflict(st.b.ail, 'bleed', { stacks: 2 })
+  runFor(st, 20 - TURN_SEC + 0.5)
+  assert.equal(st.b.ail.bleed.stacks, 1)
+})
+
 test('マクロ：防御も入れられる（クールダウン中は使えるまで待つ）・別のマクロを押すと頭から・止められる', () => {
   const A = sk('技A')
   const st = createAtb(fighter('自分', [A]), fighter('敵'), { rng: makeRng(23), maxSec: 80 })
   startMacro(st, 1, [{ guard: true }, { idx: 0 }], true)
   runFor(st, 10.05)
   assert.deepEqual(acts(st, '自分').filter(l => l.type === 'guard' || l.type === 'skill').map(l => l.type), ['guard', 'skill'])
-  // 2回目の防御は45秒のクールダウン（50秒まで）＝それまでは通常攻撃でつなぐ
-  runFor(st, 36)
+  // 2回目の防御は45秒のクールダウン＝それまでは通常攻撃でつなぐ（防御はゲージを待たないので、1回目は始まってすぐ）
+  runFor(st, 30)
   assert.equal(acts(st, '自分', 'guard').length, 1)
   assert.equal(chosenOf(st.a, st.t).waiting, 'guard')
-  runFor(st, 8)
-  assert.equal(acts(st, '自分', 'guard').length, 2, '50秒の行動で2回目')
+  runFor(st, 6)
+  assert.equal(acts(st, '自分', 'guard').length, 2, '45秒たったらゲージを待たずに2回目')
   startMacro(st, 3, [{ idx: 0 }], false)
   assert.equal(st.a.macro.no, 3)
   assert.equal(st.a.macro.pos, 0)
@@ -208,15 +238,19 @@ test('デバフも時間で切れ、相手の枠に入る', () => {
   assert.equal(st.b.buffs.vit || 0, 0)
 })
 
-test('防御：次の自分の行動まで被ダメージ−50%・45秒は使えない', () => {
+test('防御：押したらゲージを待たずに出る（ユーザー「ゲージ無視して防御に移行していい」）・次の自分の行動まで被ダメージ−50%・45秒は使えない', () => {
   const st = createAtb(fighter('自分'), fighter('敵', [], { stats: { hp: 1000000 } }), { rng: makeRng(8), maxSec: 60 })
+  runFor(st, 2)
+  assert.ok(st.a.gauge > 30 && st.a.gauge < 100, 'ゲージは溜まりかけ')
   toggleGuard(st)
-  runFor(st, 5.05)
-  assert.equal(acts(st, '自分', 'guard').length, 1)
+  runFor(st, 0.05)
+  assert.equal(acts(st, '自分', 'guard').length, 1, '次の刻みで出る')
   assert.equal(st.a.guardCut, GUARD_CUT)
-  assert.ok(Math.abs(st.a.guardReadyAt - (TURN_SEC + GUARD_CD)) < 0.06)
-  toggleGuard(st)   // クールダウン中に押しても、使えるまでは通常攻撃
-  runFor(st, 5)
+  assert.equal(st.a.gauge, 0, 'ゲージは空になる＝1回の行動のぶん')
+  assert.ok(Math.abs(st.a.guardReadyAt - (2.05 + GUARD_CD)) < 0.06)
+  toggleGuard(st)   // クールダウン中に押しても何も起きない（予約にならない）
+  assert.equal(st.a.guardNext, false)
+  runFor(st, 5.05)
   assert.equal(st.a.guardCut, 0, '次の行動で切れる')
   assert.equal(acts(st, '自分', 'guard').length, 1)
   assert.equal(acts(st, '自分', 'normal').length, 1)
@@ -352,7 +386,7 @@ test('【確定】クールダウンの残りの割合（画面のグレー：�
   runFor(st, 8)
   assert.equal(cdRatio(st.a, 0, st.t), 0)
   toggleGuard(st)
-  runFor(st, 5.05)
+  runFor(st, 0.05)
   assert.ok(guardCdRatio(st.a, st.t) > 0.9)
 })
 

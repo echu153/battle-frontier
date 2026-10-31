@@ -67,7 +67,7 @@ test('瘴気：自分が付けた毒の1刻み+20%（上限も同じだけ）。
   const para = hitOnce({ skill: { ...poison, ail: { key: 'paralyze', chance: 100 } }, bFx: { ailTurnsCut: 1 } }).b.ail.paralyze
   assert.equal(para.turns, 1, '麻痺（1ターン）は縮めない')
   const bleed = hitOnce({ skill: { ...poison, ail: { key: 'bleed', chance: 100 } }, bFx: { ailTurnsCut: 1 } }).b.ail.bleed
-  assert.equal(bleed.age, 1, '出血は3回→2回で消える')
+  assert.equal(bleed.age, 1, '出血ははじめの刻みから減り始める')
 })
 
 // ===== ダメージ =====

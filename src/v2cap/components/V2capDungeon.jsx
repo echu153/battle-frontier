@@ -8,7 +8,7 @@ import { calcPower } from '../core/stats.js'
 import { loadPref } from '../core/prefs.js'
 import { macrosOf } from '../lib/atbMacro.js'
 import { damageOf, startTryAtb } from '../lib/dungeonVerify.js'
-import { CORRECTED_TEXT, callVerify, isStaleBuild } from '../lib/dungeonVerifyCall.js'
+import { callVerify, isStaleBuild } from '../lib/dungeonVerifyCall.js'
 import { totalStats } from '../lib/loadout.js'
 import { openAreaOf } from '../lib/sortie.js'
 import { motionOf } from '../lib/motionArt.js'
@@ -19,7 +19,7 @@ import { bossArtOf, bossThumbOf } from '../lib/bossArt.js'
 import { bossIllustOf } from '../lib/bossIllust.js'
 import {
   CHALLENGE_CATS, CIRCLED, DUNGEON_BOSSES, DIFF_COLOR, DIFF_KEYS, HELPERS_MAX, STAMINA_HELPER,
-  diffOf, isDiffReady, isDiffUnlocked, summonBlockOf, tryStaminaOf, msLeftOf,
+  contributionPctOf, diffOf, isDiffReady, isDiffUnlocked, summonBlockOf, tryStaminaOf, msLeftOf,
 } from '../lib/dungeon.js'
 
 // ============================================================
@@ -39,6 +39,8 @@ import {
 // 【確定】2026-10-31 ユーザー「戦闘開始と討伐後のテロップ的なのが欲しい、報酬画面も」：
 //   倒したら 倒れる動き → 討伐完了のテロップ（V2capAtbFight.jsx）→ 報酬画面（V2capBossReward.jsx）。ほかの人が先に倒していたら、自分の決着のすぐあとに報酬画面。負けと時間切れは今までどおり
 //   【確定】同じ日 ユーザー選択「EXPとGoldを渡す」：その場にいなかった人は、入口の「報酬を受け取る」から同じ報酬画面へ（決まりは lib/dungeon.js）
+//   【確定】2026-11-01 ユーザー「プレイヤーが敗北したときのテロップも欲しい、画面遷移も」「貢献度もわかるようにしてほしい、ダメージ与えた割合ね」：
+//     負けと時間切れも テロップ → 結果の画面（同じ部品・ボスの残りHP・貢献度・もう一度挑戦する）。入っているボスの行にも貢献度
 // 【確定】同じ日 ユーザー選択「サーバーの計算で入れる」：戦闘はサーバーが決めた種と写しで作り、終わったら押した記録を預ける（v2cap_dungeon_try_end）。
 //   サーバーが同じ戦闘を回し直して結果を入れる（lib/dungeonVerify.js）。挑戦の途中で画面を離れたら、そこまでの記録を預ける。確かめられないまま戻ったら入口で確かめ直す
 // ============================================================
@@ -67,7 +69,7 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
   const [msg, setMsg] = useState(null)            // { ok, text }
   const [busy, setBusy] = useState(false)
   const [nowMs, setNowMs] = useState(Date.now())
-  const [fight, setFight] = useState(null)        // { run, st, runKey, result, ended（討伐完了のテロップが終わった） }
+  const [fight, setFight] = useState(null)        // { run, st, runKey, result, ended（決着のテロップが終わった） }
   const [openBoss, setOpenBoss] = useState(null)  // 難易度を開いているボス
   const [claimed, setClaimed] = useState(null)    // 入口で受け取った報酬（v2cap_dungeon_claim の返事）
   const [stale, setStale] = useState(false)       // 画面が古い（読み直すまで挑戦しない）
@@ -136,15 +138,16 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
   const start = async (run) => {
     // 画面が古いままだと、サーバーの回し直しとずれる（スタミナを使う前に見る）
     setBusy(true)
-    if (await isStaleBuild()) { setBusy(false); setStale(true); return }
+    if (await isStaleBuild()) { setBusy(false); setStale(true); return false }
     const data = await call('v2cap_dungeon_try_start', { p_run: run.id })
-    if (!data) { load(); return }
+    if (!data) { load(); return false }
     // ★サーバーが決めた種と、サーバーが写し取った自分で戦う（回し直しも同じものから作る）
     const st = startTryAtb(data)
-    if (!st) { setMsg({ ok: false, text: 'このボスはまだ戦えません' }); return }
+    if (!st) { setMsg({ ok: false, text: 'このボスはまだ戦えません' }); return false }
     pending.current = { runId: run.id, st }
     setFight(f => ({ run, st, runKey: (f?.runKey || 0) + 1, result: null }))
     onProfile?.()   // スタミナが減った
+    return true
   }
   // 挑戦する：ボスを出して、そのまま戦闘へ（始められなかったら入口に残る）
   const challenge = async (bossKey, diff) => {
@@ -177,7 +180,11 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
     if (r) setFight(f => (f ? { ...f, result: r } : f))
     if (r?.reward) onProfile?.()   // EXP と Gold が増えた
   }
-  const onCleared = () => setFight(f => (f ? { ...f, ended: true } : f))
+  const onEnded = () => setFight(f => (f ? { ...f, ended: true } : f))
+  // もう一度挑戦する（結果の画面から）。始められなかったら入口へ（わけは入口に出る）
+  const retry = async () => {
+    if (!(await start(fight.run))) { setFight(null); window.scrollTo(0, 0) }
+  }
   const giveUp = async () => {
     const r = await report()
     // やめた所で、ほかの人がもう倒していたら報酬画面へ（その場で報酬が入る）
@@ -199,10 +206,13 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
   if (fight) {
     const r = fight.result
     const boss = DUNGEON_BOSSES[fight.run.boss]
-    const won = fight.st.winner === 'a'
-    const clearedByOther = !won && r?.ok && r.run.cleared
-    if (fight.ended || clearedByOther) {
-      return <V2capBossReward bossKey={fight.run.boss} diffKey={fight.run.diff} cls={prof?.class} st={fight.st} result={r} onBack={() => { setFight(null); load(); window.scrollTo(0, 0) }} />
+    // 結果の画面：決着のテロップが終わったら（討伐も負けも時間切れも）。やめた所でもう倒されていたら、すぐ
+    if (fight.ended || (!fight.st.over && r?.ok && r.run.cleared)) {
+      const canRetry = r?.ok && !r.run.cleared && msLeftOf(r.run.ends_at, nowMs) > 0
+      return <V2capBossReward bossKey={fight.run.boss} diffKey={fight.run.diff} cls={prof?.class} st={fight.st} result={r} busy={busy}
+        leftText={r?.ok && !r.run.cleared ? mmss(msLeftOf(r.run.ends_at, nowMs)) : null}
+        onRetry={canRetry ? retry : null} retryCost={canRetry ? tryStaminaOf(r.run.mine, r.run.my_tries) : 0}
+        onBack={() => { setFight(null); load(); window.scrollTo(0, 0) }} />
     }
     return (
       <div style={{ ...box, padding:'12px' }}>
@@ -210,17 +220,9 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
           {boss.name}（{diffOf(fight.run.boss, fight.run.diff)?.label}）・残りHP {Math.max(0, fight.st.b.hp).toLocaleString()} / {fight.st.b.base.hp.toLocaleString()}
         </div>
         <V2capAtbFight st={fight.st} runKey={fight.runKey} macros={macros} playerSrc={playerSrc} playerMotion={playerMotion}
-          bossArt={artOfBoss(fight.run.boss)} onOver={onOver} onCleared={onCleared}
-          footer={won ? null : fight.st.over
-            ? <button onClick={() => { setFight(null); load() }} disabled={!r} style={{ ...miniBtn('#44ddff'), flex:1, padding:'8px' }}>← 入口へ戻る</button>
+          bossArt={artOfBoss(fight.run.boss)} onOver={onOver} onEnded={onEnded}
+          footer={fight.st.over ? null
             : <button onClick={giveUp} style={{ ...miniBtn('#ff8888'), flex:1, padding:'8px' }}>挑戦をやめる（ここまでの削りを入れる）</button>} />
-        {r && !won && (
-          <div style={{ marginTop:'8px', fontSize:'12px', color: r.ok ? '#ffdd66' : '#ff6666' }}>
-            {!r.ok ? r.text : `${r.damage.toLocaleString()}ダメージを入れた（残りHP ${r.run.hp.toLocaleString()} / ${r.run.hp_max.toLocaleString()}）`}
-            {r.corrected && <div style={{ fontSize:'10px', color: TEXT.sub, marginTop:'2px' }}>{CORRECTED_TEXT}</div>}
-          </div>
-        )}
-        {!r && fight.st.over && !won && <div style={{ marginTop:'8px', fontSize:'11px', color: TEXT.label }}>結果を確かめています…</div>}
       </div>
     )
   }
@@ -279,7 +281,7 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
             <div style={{ display:'flex', flexWrap:'wrap', gap:'4px 10px', fontSize:'10px', color: TEXT.sub, margin:'6px 0' }}>
               {run.members.map(m => (
                 <span key={m.name} style={{ color: m.me ? '#88ccff' : TEXT.sub }}>
-                  {m.owner ? '👑' : '🤝'}{m.name}：{Number(m.damage).toLocaleString()}（{m.tries}回）
+                  {m.owner ? '👑' : '🤝'}{m.name}：{Number(m.damage).toLocaleString()}（貢献度{contributionPctOf(m.damage, run.hp_max).toFixed(1)}%・{m.tries}回）
                 </span>
               ))}
             </div>

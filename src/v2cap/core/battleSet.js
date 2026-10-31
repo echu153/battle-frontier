@@ -80,7 +80,7 @@
 //   cureHeal         状態異常が治るたび最大HPの%を回復
 // ★装備とセットの毎ターン回復（regenPct・regenLow）は合計 REGEN_CAP_PCT まで（2026-10-21 ユーザー選択「合計6%までにする」）
 // ============================================================
-import { hasAilment, AIL_KEYS, BLEED_TURNS } from './ailments.js'
+import { hasAilment, AIL_KEYS } from './ailments.js'
 
 // 【確定】2026-10-21 ユーザー選択：装備とセットの毎ターン回復（最大HPの%）は重ねても合計6%まで（技の継続回復は別）
 export const REGEN_CAP_PCT = 6
@@ -142,7 +142,8 @@ export const shortenAil = (side, key) => {
   const cut = side?.setFx?.ailTurnsCut || 0
   const a = cut ? side.ail?.[key] : null
   if (!a) return
-  if (key === 'bleed') a.age = Math.min(BLEED_TURNS - 1, (a.age || 0) + cut)
+  // 出血：はじめの刻みから減り始める（ATB は core/atb.js の bleedDecaySecOf が1ターンぶん早く減らす）
+  if (key === 'bleed') a.age = Math.max(a.age || 0, cut)
   else if (a.turns > 1) a.turns = Math.max(1, a.turns - cut)
 }
 export const ailCountOfSide = (side) => AIL_KEYS.filter(k => hasAilment(side?.ail || {}, k)).length

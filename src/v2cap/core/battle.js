@@ -1950,7 +1950,7 @@ export const drainCapOf = (me, crit) =>
 // ★出血は「出血している側が行動した直後」に刻む（2026-08-23 ユーザー指定）
 //   倍率は**入れた側**の武器の進化を見るので、相手（foe）を渡す
 export const tickBleedAfterAct = (side, log, foe = null) => {
-  const t = tickBleed(side.ail, side.hp)
+  const t = tickBleed(side.ail, side.hp, { decay: !side.atb })   // ATB は秒で減らす（core/atb.js の bleedDecayStep）
   if (!t) return
   const boost = 1 + (foe?.evo?.ail?.dmg || 0) / 100
   const dmg = Math.max(1, Math.floor(t.damage * boost))

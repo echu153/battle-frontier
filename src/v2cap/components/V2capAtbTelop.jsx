@@ -19,11 +19,14 @@ const KF = `
 const LOOK = {
   start: { color:'#ffffff', glow:'#6fb4ff', line:'#9fd0ff', word: '戦闘開始' },
   clear: { color:'#ffe9a8', glow:'#ffb300', line:'#ffd27a', word: '討伐完了' },
+  lose: { color:'#ffb0b0', glow:'#ff2244', line:'#ff7a7a', word: '敗北', gap: '0.6em' },
+  timeup: { color:'#ffe0a0', glow:'#ff9a30', line:'#ffc46a', word: '時間切れ' },
 }
 
 export default function V2capAtbTelop({ kind, sub = null, ms }) {
   const c = LOOK[kind]
   const anim = (name, ease = 'ease-out') => `${name} ${ms}ms ${ease} both`
+  const gap = c.gap || '0.28em'
   return (
     <div style={{ position:'absolute', inset:0, zIndex: 2, overflow:'hidden', pointerEvents:'none' }}>
       <style>{KF}</style>
@@ -33,7 +36,7 @@ export default function V2capAtbTelop({ kind, sub = null, ms }) {
         <div aria-hidden style={{ position:'absolute', left:0, right:0, bottom:0, height:'1px', background:`linear-gradient(90deg, transparent, ${c.line} 30%, ${c.line} 70%, transparent)`, animation: anim('atbTlLine') }} />
         <div style={{ animation: anim('atbTlWord') }}>
           {sub && <div style={{ fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'clamp(11px, 3vw, 13px)', letterSpacing:'0.2em', paddingLeft:'0.2em', color:'#d8e6ff', textShadow:'0 1px 2px #000', whiteSpace:'nowrap' }}>{sub}</div>}
-          <div style={{ fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'clamp(28px, 9vw, 44px)', lineHeight: 1.25, letterSpacing:'0.28em', paddingLeft:'0.28em', color: c.color, whiteSpace:'nowrap',
+          <div style={{ fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'clamp(28px, 9vw, 44px)', lineHeight: 1.25, letterSpacing: gap, paddingLeft: gap, color: c.color, whiteSpace:'nowrap',
             textShadow:`0 0 3px #000, 0 0 14px ${c.glow}, 0 2px 0 #000` }}>{c.word}</div>
         </div>
         {kind === 'clear' && <div aria-hidden style={{ position:'absolute', top:0, bottom:0, left:0, width:'24%', background:'linear-gradient(90deg, transparent, rgba(255,245,210,0.32), transparent)', animation: anim('atbTlSweep', 'linear') }} />}
