@@ -48,7 +48,7 @@ test('止めの一撃の時刻：その側の最後のダメージの数字（�
 test('報酬画面：倒したらテロップのあと・ほかの人が先に倒していたら決着のすぐあと・負けと時間切れは入口へ戻るまま', () => {
   const src = read('V2capDungeon.jsx')
   assert.match(src, /onOver=\{onOver\} onCleared=\{onCleared\}/)
-  assert.match(src, /const clearedByOther = !won && fight\.st\.over && r\?\.ok && r\.run\.cleared/)
+  assert.match(src, /const clearedByOther = !won && r\?\.ok && r\.run\.cleared/)
   assert.match(src, /if \(fight\.ended \|\| clearedByOther\) \{\s+return <V2capBossReward /)
   // 勝ったあとは「入口へ戻る」を報酬画面まで出さない（倒れる動きとテロップを待つ）
   assert.match(src, /footer=\{won \? null : fight\.st\.over/)
@@ -56,6 +56,24 @@ test('報酬画面：倒したらテロップのあと・ほかの人が先に�
   const reward = read('V2capBossReward.jsx')
   assert.match(reward, /<button onClick=\{onBack\} disabled=\{!r\}/)
   assert.match(reward, /useEffect\(\(\) => \{ window\.scrollTo\(0, 0\) \}, \[\]\)/)
+})
+
+test('報酬画面の報酬の欄：EXP は実際に入った量・LVアップの行・SQL を流す前は準備中・渡せるものが無ければ無し', () => {
+  const reward = read('V2capBossReward.jsx')
+  assert.match(reward, /EXP \+\{gainedExpOf\(reward\)\.toLocaleString\(\)\}/)
+  assert.match(reward, /Gold \+\{Number\(reward\.gold\)\.toLocaleString\(\)\}/)
+  assert.match(reward, /levelUpLines\(cls, reward\.level\)/)
+  assert.match(reward, /reward === undefined && .*報酬は準備中です/)
+  assert.match(reward, /reward === null && .*この討伐の報酬はありません/)
+})
+
+test('その場にいなかった人は入口で受け取る：受け取りのあと同じ報酬画面へ・やめた所でもう倒されていたら報酬画面へ', () => {
+  const src = read('V2capDungeon.jsx')
+  assert.match(src, /\(state\?\.rewards \|\| \[\]\)\.map\(run =>/)
+  assert.match(src, /call\('v2cap_dungeon_claim', \{ p_run: run\.id \}, \(data\) => \{ setClaimed\(data\); onProfile\?\.\(\); load\(\) \}\)/)
+  assert.match(src, /if \(claimed\) \{\s+return <V2capBossReward /)
+  assert.match(src, /if \(r\?\.ok && r\.run\.cleared\) \{ setFight\(f => \(f \? \{ \.\.\.f, result: r \} : f\)\); if \(r\.reward\) onProfile\?\.\(\); return \}/)
+  assert.match(src, /if \(r\?\.reward\) onProfile\?\.\(\)/, 'EXP と Gold が増えたらホームの数字も直す')
 })
 
 test('日本語の大きな文字は JP_BOLD の太字（切り抜きのグラデーションにしない）', () => {

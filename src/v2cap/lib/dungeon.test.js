@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import {
-  CHALLENGE_CATS, DUNGEON_BOSSES, DIFF_KEYS, DUNGEON_MIN, DUNGEON_TRY_SEC, SUMMONS_PER_DAY, STAMINA_OWNER_FIRST, STAMINA_OWNER, STAMINA_HELPER, HELPERS_MAX,
+  CHALLENGE_CATS, DUNGEON_BOSSES, DIFF_KEYS, DUNGEON_MIN, DUNGEON_TRY_SEC, SUMMONS_PER_DAY, STAMINA_OWNER_FIRST, STAMINA_OWNER, STAMINA_HELPER, HELPERS_MAX, HELPER_REWARD_MIN_PCT,
   diffOf, isDiffReady, isDiffUnlocked, isSummonable, summonBlockOf, tryStaminaOf, dungeonFighter,
 } from './dungeon.js'
 import { createAtb, runFor, startMacro, fillPerSecOf, hpBuffChips, castMsOf, ATB_SLOW_CUT, FILL_PER_SEC, BUFF_GAUGE_SEC, BUFF_WAIT_AFTER_ACT_SEC, BUFF_SHOW_SEC, TURN_SEC, GAUGE_FULL, NOW_WAIT_AFTER_ACT_SEC, CAST_SEC } from '../core/atb.js'
@@ -15,6 +15,8 @@ import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { liveStats } from '../core/battle.js'
 import { statsOf } from '../core/enemies.js'
 import { CAP_RULES } from './rules.js'
+import { tenSortieExpOf } from './areas.js'
+import { DAILY_GOLD_PER_LV } from './daily.js'
 
 const SQL = readFileSync(new URL('../../../supabase_v2cap_core.sql', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 const fnBody = (name) => {
@@ -84,8 +86,8 @@ test('【確定】2026-10-29 ボスの強さ：守りと速さは power・攻撃
     assert.equal(dungeonFighter('varuzenoku', k, d.hp * 0.4).hpNow, d.hp * 0.4)
     assert.equal(dungeonFighter('varuzenoku', k, d.hp * 9).hpNow, d.hp, 'いまのHPは全体より多くならない')
   }
-  assert.deepEqual({ ...diffOf('varuzenoku', 'normal') }, { label: 'ノーマル', area: 2, recLv: 25, recPower: 500, power: 474, atk: 0.33, hp: 6500 })
-  assert.deepEqual({ ...diffOf('varuzenoku', 'hard') }, { label: 'ハード', area: 5, recLv: 45, recPower: 1050, power: 1027, atk: 0.36, hp: 15000 })
+  assert.deepEqual({ ...diffOf('varuzenoku', 'normal') }, { label: 'ノーマル', area: 2, recLv: 25, recPower: 500, power: 474, atk: 0.33, hp: 6500, reward: { exp: 350, gold: 2500 } })
+  assert.deepEqual({ ...diffOf('varuzenoku', 'hard') }, { label: 'ハード', area: 5, recLv: 45, recPower: 1050, power: 1027, atk: 0.36, hp: 15000, reward: { exp: 700, gold: 4500 } })
 })
 
 test('【確定】2026-10-29 ボスの技：HP75%より上は黒爪だけ・75%を切ったら次の行動で焦熱の吐息を必ず・そのあとは吐息30%', () => {
@@ -504,7 +506,7 @@ test('【確定】2026-10-31 入口：履歴と説明を出さない・「挑戦
   assert.match(src, /\{active\.map\(run => \{/)
   assert.doesNotMatch(src, /\{runs\.map\(/)
   assert.doesNotMatch(code, /討伐済み|時間切れ/)
-  assert.match(fnBody('v2cap_dungeon_state'), /'runs',[\s\S]*?where r\.cleared_at is null and r\.ends_at > now\(\)\), '\[\]'::jsonb\),\n\s*-- 救援の一覧/)
+  assert.match(fnBody('v2cap_dungeon_state'), /'runs',[\s\S]*?where r\.cleared_at is null and r\.ends_at > now\(\)\), '\[\]'::jsonb\),\n\s*-- 受け取っていない報酬/)
   // 説明を出さない
   assert.doesNotMatch(code, /残ったHPから|あなたの戦闘力|staminaMaxOfProfile/)
   // 押したらボスを出して、そのまま挑戦を始める
@@ -517,6 +519,47 @@ test('【確定】2026-10-31 入口：履歴と説明を出さない・「挑戦
   }
   noCall('V2capDungeon.jsx', src)
   for (const fn of ['v2cap_dungeon_summon', 'v2cap_dungeon_try_start', 'v2cap_dungeon_try_end', 'v2cap_dungeon_rescue', 'v2cap_dungeon_join']) noCall(fn, fnBody(fn))
+})
+
+test('【確定】2026-10-31 報酬（ユーザー選択「EXPとGoldを渡す」）：数字はサーバーと同じ・EXP＝推奨の場所のボス10体ぶん・Gold＝推奨LV×100', () => {
+  const conf = fnBody('v2cap_dungeon_reward_conf')
+  const rows = [...conf.matchAll(/\('(\w+)', '(\w+)', (\d+), (\d+)\)/g)].map(m => ({ boss: m[1], diff: m[2], exp: +m[3], gold: +m[4] }))
+  const ready = Object.keys(DUNGEON_BOSSES).filter(isSummonable).flatMap(boss => DIFF_KEYS.filter(k => isDiffReady(boss, k)).map(diff => ({ boss, diff, ...diffOf(boss, diff).reward })))
+  assert.deepEqual(rows, ready, 'サーバーの報酬の表＝呼べる難易度の reward')
+  for (const { boss, diff, exp, gold } of ready) {
+    const { recLv } = diffOf(boss, diff)
+    assert.equal(exp, tenSortieExpOf(recLv) * 5, `${boss} ${diff} EXP＝ふつうの敵10回ぶん×ボスの5倍`)
+    assert.equal(gold, recLv * DAILY_GOLD_PER_LV, `${boss} ${diff} Gold＝デイリー1回ぶん`)
+  }
+  assert.deepEqual([diffOf('varuzenoku', 'normal').reward, diffOf('varuzenoku', 'hard').reward], [{ exp: 350, gold: 2500 }, { exp: 700, gold: 4500 }], 'ユーザーが選んだ数字')
+})
+
+test('【確定】2026-10-31 報酬の渡し方：呼んだ人は全部・救援の人は削った割合（最低3割）・ダメージ0は無し・1回だけ・直接は呼べない', () => {
+  const pay = fnBody('v2cap_dungeon_pay_reward')
+  assert.match(pay, new RegExp(`c_helper_min constant int := ${HELPER_REWARD_MIN_PCT};`))
+  assert.match(pay, /v_pct := case when v_mem\.is_owner then 100\s+else greatest\(c_helper_min, least\(100, \(v_mem\.damage \* 100 \/ greatest\(1, v_run\.hp_max\)\)::int\)\) end;/)
+  assert.match(pay, /if not found or v_run\.cleared_at is null then return null; end if;/, '倒れていなければ渡さない')
+  assert.match(pay, /where run_id = p_run and player_id = p_player for update;\s+if not found or v_mem\.reward_at is not null or v_mem\.damage <= 0 then return null; end if;/, '行をつかんでから1回だけ・ダメージ0は無し')
+  assert.match(pay, /public\.v2cap_apply_exp\(p_player, v_exp\)/, 'EXP はいつもの入口を通す（V1からの引き継ぎの倍率も）')
+  assert.match(SQL, /revoke all on function public\.v2cap_dungeon_pay_reward\(bigint, uuid\) from public, anon, authenticated;/, '渡す関数は直接呼べない')
+  assert.match(SQL, /revoke all on function public\.v2cap_dungeon_reward_conf\(text, text\) from public, anon, authenticated;/)
+  // 列を足すときに、これまでに倒したボスの分は渡したことにする（さかのぼって配らない）・列があれば何もしない（2回流しても消さない）
+  assert.match(SQL, /column_name = 'reward_at'\) then\s+alter table public\.v2cap_dungeon_members add column reward_at timestamptz;\s+update public\.v2cap_dungeon_members m set reward_at = now\(\) from public\.v2cap_dungeon_runs r where r\.id = m\.run_id and r\.cleared_at is not null;/)
+  // 挑戦の終わり：ボスのHPが減るのは残りまで・自分の量は先に倒されていても数える・倒れていたらその場で渡す
+  const end = fnBody('v2cap_dungeon_try_end')
+  assert.match(end, /v_d := greatest\(0, least\(coalesce\(p_damage, 0\), coalesce\(v_mem\.try_hp, 0\), v_run\.hp\)\);/)
+  assert.match(end, /v_mine := greatest\(0, least\(coalesce\(p_damage, 0\), coalesce\(v_mem\.try_hp, 0\)\)\);/)
+  assert.match(end, /set hp = hp - v_d,/)
+  assert.match(end, /set damage = damage \+ v_mine,/)
+  assert.match(end, /v_reward := public\.v2cap_dungeon_pay_reward\(p_run, v_uid\);/)
+  // その場にいなかった人：入口に出す・挑戦の途中は待つ（捨てられた挑戦は別）
+  const claim = fnBody('v2cap_dungeon_claim')
+  assert.match(claim, /if not public\.v2cap_is_dev\(\) then return jsonb_build_object\('ok', false, 'error', '開発限定です'\)/, 'サーバーも開発者だけ')
+  assert.match(claim, new RegExp(`c_try_sec constant int := ${DUNGEON_TRY_SEC};`))
+  assert.match(claim, /v_mem\.try_open_at > now\(\) - make_interval\(secs => c_try_sec \+ 60\)/)
+  const state = fnBody('v2cap_dungeon_state')
+  assert.match(state, new RegExp(`c_try_sec\\s+constant int := ${DUNGEON_TRY_SEC};`))
+  assert.match(state, /'rewards', coalesce\(.*\n.*\n.*\n\s+where r\.cleared_at is not null and m\.reward_at is null and m\.damage > 0\n\s+and \(m\.try_open_at is null or m\.try_open_at <= now\(\) - make_interval\(secs => c_try_sec \+ 60\)\)/)
 })
 
 test('【確定】2026-10-31 開発用の挑戦回数リセット（ユーザー「開発用に挑戦回数resetできるように」）：開発者だけ・行は消さない', () => {

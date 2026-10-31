@@ -31,13 +31,14 @@ import {
 //   ・スタミナ：呼んだ人は最初の1回0・そのあと3／救援で入った人は毎回5
 //   ・**救援信号**を出すと、入口の「救援の一覧」に出て、だれでも先着5人まで入れる（それぞれ自分の画面で同じボスを殴る）
 //   ・難易度はそのエリアに着いたら呼べる（②ノーマル・⑤ハード）。エキスパート・マスターは準備中
-//   ・報酬は黒龍の専用の装備（あとで）。いまは無し＝削った量を数えるだけ
+//   ・報酬はボスの専用の装備（あとで）と、削った量での差
 // 【確定】2026-10-31 ユーザー「これは『挑戦』にして」「ここに『強敵』ってカテゴリを作って、ここにヴァルゼノクとあまざ入れて」＋選択「ボスごとに1日1回」：
 //   メニューの名前は「挑戦」。入口はカテゴリごと（lib/dungeon.js の CHALLENGE_CATS）にボスを並べ、押すと難易度が開く。呼べるのはボスごとに1日1回・同時に1体
 // 【確定】2026-10-31 ユーザー「この履歴いらない」「ここら辺の説明いらない」「ボスは1体ずつ挑戦できる」「呼ぶじゃなくて挑戦する にして」「開発用に挑戦回数resetできるように」：
 //   倒した・時間切れのボスと説明は出さない。「挑戦する」でボスを出してそのまま戦闘へ（負けたら入口に残り、続きから挑む）。コードと DB の summon の名前はそのまま。回数を戻すのは開発用のボタン
 // 【確定】2026-10-31 ユーザー「戦闘開始と討伐後のテロップ的なのが欲しい、報酬画面も」：
 //   倒したら 倒れる動き → 討伐完了のテロップ（V2capAtbFight.jsx）→ 報酬画面（V2capBossReward.jsx）。ほかの人が先に倒していたら、自分の決着のすぐあとに報酬画面。負けと時間切れは今までどおり
+//   【確定】同じ日 ユーザー選択「EXPとGoldを渡す」：その場にいなかった人は、入口の「報酬を受け取る」から同じ報酬画面へ（決まりは lib/dungeon.js）
 // ★戦闘は画面で回し、終わったら削った量をサーバーへ送る（v2cap_dungeon_try_end）。挑戦の途中で画面を離れたら、そこまでの量を送る
 // ============================================================
 
@@ -66,6 +67,7 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
   const [nowMs, setNowMs] = useState(Date.now())
   const [fight, setFight] = useState(null)        // { run, st, runKey, result, ended（討伐完了のテロップが終わった） }
   const [openBoss, setOpenBoss] = useState(null)  // 難易度を開いているボス
+  const [claimed, setClaimed] = useState(null)    // 入口で受け取った報酬（v2cap_dungeon_claim の返事）
   const pending = useRef(null)                    // 送っていない挑戦（画面を離れたら送る）
 
   const myPower = useMemo(() => calcPower(totalStats(prof, inventory)), [prof, inventory])
@@ -108,6 +110,8 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
   }
   const rescue =(run) => call('v2cap_dungeon_rescue', { p_run: run.id }, () => { setMsg({ ok: true, text: '救援信号を出しました（入口の「救援の一覧」に出ます）' }); load() })
   const join = (run) => call('v2cap_dungeon_join', { p_run: run.id }, () => { setMsg({ ok: true, text: `${run.owner}さんの救援に入りました` }); load() })
+  // 報酬を受け取る（自分が挑戦していないあいだにボスが倒れたとき）
+  const claim = (run) => call('v2cap_dungeon_claim', { p_run: run.id }, (data) => { setClaimed(data); onProfile?.(); load() })
 
   // ===== 挑む =====
   const start = async (run) => {
@@ -138,15 +142,18 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
     const damage = Math.max(0, (p.st.b.startHp ?? 0) - Math.max(0, p.st.b.hp))
     const { data, error } = await supabase.rpc('v2cap_dungeon_try_end', { p_run: p.runId, p_damage: Math.floor(damage) })
     if (error || !data?.ok) return { ok: false, text: errText(error, data) }
-    return { ok: true, damage: data.damage, run: data.run }
+    return { ok: true, damage: data.damage, run: data.run, reward: data.reward }
   }, [])
   const onOver = async () => {
     const r = await report()
     if (r) setFight(f => (f ? { ...f, result: r } : f))
+    if (r?.reward) onProfile?.()   // EXP と Gold が増えた
   }
   const onCleared = () => setFight(f => (f ? { ...f, ended: true } : f))
   const giveUp = async () => {
     const r = await report()
+    // やめた所で、ほかの人がもう倒していたら報酬画面へ（その場で報酬が入る）
+    if (r?.ok && r.run.cleared) { setFight(f => (f ? { ...f, result: r } : f)); if (r.reward) onProfile?.(); return }
     setFight(null)
     if (r) setMsg(r.ok ? { ok: true, text: `挑戦をやめました（${r.damage.toLocaleString()}ダメージを入れた）` } : { ok: false, text: r.text })
     load()
@@ -154,14 +161,20 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
   // 戦っている途中で画面を離れたら、そこまでの量を送る
   useEffect(() => () => { report() }, [report])
 
+  // ===== 入口で受け取った報酬 =====
+  if (claimed) {
+    return <V2capBossReward bossKey={claimed.run.boss} diffKey={claimed.run.diff} cls={prof?.class} result={{ ok: true, ...claimed }}
+      onBack={() => { setClaimed(null); window.scrollTo(0, 0) }} />
+  }
+
   // ===== 戦闘 =====
   if (fight) {
     const r = fight.result
     const boss = DUNGEON_BOSSES[fight.run.boss]
     const won = fight.st.winner === 'a'
-    const clearedByOther = !won && fight.st.over && r?.ok && r.run.cleared
+    const clearedByOther = !won && r?.ok && r.run.cleared
     if (fight.ended || clearedByOther) {
-      return <V2capBossReward bossKey={fight.run.boss} diffKey={fight.run.diff} st={fight.st} result={r} onBack={() => { setFight(null); load(); window.scrollTo(0, 0) }} />
+      return <V2capBossReward bossKey={fight.run.boss} diffKey={fight.run.diff} cls={prof?.class} st={fight.st} result={r} onBack={() => { setFight(null); load(); window.scrollTo(0, 0) }} />
     }
     return (
       <div style={{ ...box, padding:'12px' }}>
@@ -197,6 +210,17 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
     <div>
       {msg && <div style={{ fontSize:'11px', marginBottom:'8px', color: msg.ok ? '#88ffaa' : '#ff8888' }}>{msg.text}</div>}
       {!state && !msg && <div style={{ color: TEXT.label, fontSize:'11px', marginBottom:'8px' }}>読み込み中...</div>}
+
+      {/* 受け取っていない報酬（自分が挑戦していないあいだに倒れたボス） */}
+      {(state?.rewards || []).map(run => (
+        <div key={run.id} style={{ ...box, padding:'10px', marginBottom:'10px', borderColor:'#8a6a2a', display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
+          <span style={{ flex:1, minWidth:'60%', fontSize:'12px' }}>
+            <b style={{ color: DIFF_COLOR[run.diff] }}>［{diffOf(run.boss, run.diff)?.label}］</b> <span style={{ color:'#ff8866' }}>{DUNGEON_BOSSES[run.boss]?.name}</span>
+            <span style={{ color:'#ffd27a', fontSize:'10px' }}>　報酬があります</span>
+          </span>
+          <button onClick={() => claim(run)} disabled={busy} style={{ ...miniBtn('#ffd27a'), padding:'8px 12px', whiteSpace:'nowrap' }}>🎁 報酬を受け取る</button>
+        </div>
+      ))}
 
       {/* 入っているボス（挑戦中・救援）。倒した・時間切れのボスは出さない */}
       {active.map(run => {
