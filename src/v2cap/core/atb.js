@@ -485,10 +485,16 @@ export const toggleGuard = (st) => {
   input(st, { k: 'guard', on: st.a.guardNext })
 }
 
+// 戦いの終わり。★構えも終わらせる（残すと、構えのあいだに倒したとき大技の札と渦と赤いゲージが出たまま止まる）
+const endFight = (st, winner) => {
+  st.over = true
+  st.winner = winner
+  st.a.cast = st.b.cast = null
+}
+
 const finish = (st) => {
   if (st.a.hp > 0 && st.b.hp > 0) return false
-  st.over = true
-  st.winner = st.a.hp <= 0 && st.b.hp <= 0 ? 'draw' : st.a.hp <= 0 ? 'b' : 'a'
+  endFight(st, st.a.hp <= 0 && st.b.hp <= 0 ? 'draw' : st.a.hp <= 0 ? 'b' : 'a')
   return true
 }
 
@@ -635,7 +641,7 @@ const stepOnce = (st) => {
     checkHpBuffsBoth(st)
   }
 
-  if (st.t + EPS >= st.maxSec) { st.over = true; st.winner = 'draw' }
+  if (st.t + EPS >= st.maxSec) endFight(st, 'draw')
 }
 
 // 実時間で進める（画面の setInterval から呼ぶ）。端数は次へ持ち越す＝刻みは常に STEP_SEC

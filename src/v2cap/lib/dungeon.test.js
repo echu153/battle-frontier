@@ -497,6 +497,36 @@ test('【確定】2026-10-31 入口のボスの行の言葉と「呼ぶ」のボ
   assert.match(src, /\{state && \(blockOf\(key\) \|\| '呼べます'\)\}/, '行の言葉も同じ決まり（読み込み中は出さない）')
 })
 
+test('【確定】2026-10-31 戦いが終わったら構えも終わる（本番で、構えのあいだに雨摩座を倒すと「水天葬」の札と渦と赤いゲージが出たまま止まっていた）', () => {
+  const casting = (key, buffs, seed) => {
+    const st = createAtb(dummy(), dungeonFighter(key, 'normal'), { rng: rngOf(seed), maxSec: 999 })
+    st.b.buffSeen.push(...buffs)
+    st.b.patFired.push(0.75, 0.5)
+    st.b.hp = Math.floor(st.b.base.hp * 0.24)
+    untilTrue(st, () => st.b.cast)
+    return st
+  }
+  for (const [key, buffs] of [['varuzenoku', ['黒鱗の鎧', '逆鱗']], ['amaza', ['霧雨の帳', '篠突く雨']]]) {
+    const win = casting(key, buffs, 31)
+    win.b.hp = 0
+    win.a.gauge = GAUGE_FULL
+    runFor(win, 0.05)
+    assert.equal(win.winner, 'a', key)
+    assert.equal(win.b.cast, null, `${key}：倒したら構えも終わる`)
+    const lose = casting(key, buffs, 32)
+    lose.a.hp = 0
+    lose.a.gauge = GAUGE_FULL
+    runFor(lose, 0.05)
+    assert.equal(lose.winner, 'b', key)
+    assert.equal(lose.b.cast, null, `${key}：負けても構えは終わる`)
+    const draw = casting(key, buffs, 33)
+    draw.maxSec = draw.t
+    runFor(draw, 0.05)
+    assert.equal(draw.winner, 'draw', key)
+    assert.equal(draw.b.cast, null, `${key}：時間切れでも構えは終わる`)
+  }
+})
+
 test('【確定】2026-10-30 雨摩座：黒龍の裏返し（魔法が主）・節目と割合と強さは黒龍と同じ・2026-10-31 強敵として呼べる', () => {
   const A = DUNGEON_BOSSES.amaza, V = DUNGEON_BOSSES.varuzenoku
   assert.equal(isSummonable('amaza'), true)
