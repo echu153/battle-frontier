@@ -73,7 +73,7 @@ test('【確定】セリフはユーザーが案を見て「この案で入れ�
   assert.equal(pickLine('streak8', { stage: 2, vars: vars(2) }).text, '……兄さん。わいの目、開けさせんといてや')
   assert.equal(pickLine('streak8', { stage: 3, vars: vars(3) }).text, '……おれおれおはん。ええ加減にせんと、ほんまに開けるで')
   assert.equal(pickLine('enterPoor', { stage: 4, vars: vars(4) }).text, 'おれおれおはん、銭ないんか。…貸さへんで。それだけは、仲良うても貸さへん')
-  assert.ok(allLines().some(l => l.text === 'この金貨か？ わいが最初に稼いだやつや。これだけは、なんぼ積まれても売らへん'), '絵の金貨の話')
+  assert.ok(allLines().some(l => l.text === 'この鎖の先か？ わいが最初に稼いだ金貨や。これだけは、なんぼ積まれても売らへん'), '絵の金の鎖の話')
   // 3つの表情を全部使う。場面の表情は決まったものだけ
   const used = new Set()
   for (const l of allLines()) { assert.ok(MERCHANT_FACE_KEYS.includes(l.face), `${l.kind}：${l.face}`); used.add(l.face) }
