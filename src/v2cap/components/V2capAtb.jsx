@@ -7,6 +7,7 @@ import { useBossEncounter } from '../lib/useBossEncounter.js'
 import { preloadArt } from '../lib/artPreload.js'
 import { box, miniBtn, TEXT } from './v2ui.js'
 import { createAtb, MAX_SEC } from '../core/atb.js'
+import { ITEM_MAX } from '../core/atbItems.js'
 import { macrosOf, validateMacros } from '../lib/atbMacro.js'
 import { loadPref, savePref } from '../core/prefs.js'
 import { motionOf } from '../lib/motionArt.js'
@@ -104,7 +105,8 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
     const dun = foe.bossArt ? dungeonFighter(foe.bossArt, bossDiff) : null
     const base = dun || { ...enemyFighter(foe, 8, foe.bossArt ? enemyPowerOf(spot.roster.boss) : undefined), boss: foe.role === 'ボス' || !!foe.bossArt }
     const enemy = hpMult === 1 ? base : { ...base, stats: { ...base.stats, hp: base.stats.hp * hpMult } }
-    st.current = createAtb(myFighter, enemy, { maxSec: MAX_SEC })
+    // 薬は買わなくても試せる（試し撃ちはサーバーへ送らない＝持ち物は減らない）
+    st.current = createAtb(myFighter, enemy, { maxSec: MAX_SEC, items: { hp: ITEM_MAX, mp: ITEM_MAX, cure: ITEM_MAX } })
     setRunKey(k => k + 1)
     setPhase('fight')
     if (bossEncounterOf(foe.bossArt)) {

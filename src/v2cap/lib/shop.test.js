@@ -8,8 +8,9 @@ import { bandAt, pickEncounter } from './sortie.js'
 import { spotOf } from './areas.js'
 import {
   SHOP_ITEMS, SHOP_ITEM_BY_KEY, FLIP_NAME, FLIP_MINUTES, FLIP_HOURS,
-  otherGenderOf, flipLeftMsOf, encounterClockOf, encounterBandOf, flipPreviewOf,
+  otherGenderOf, flipLeftMsOf, encounterClockOf, encounterBandOf, flipPreviewOf, itemCountOf, buyableQtyOf,
 } from './shop.js'
+import { BATTLE_ITEMS, ITEM_CD, ITEM_MAX, POTION_PCT, itemCountsOf } from '../core/atbItems.js'
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 const SQL = read('../../../supabase_v2cap_core.sql')
@@ -23,8 +24,13 @@ const jst = (h, m = 0) => new Date(Date.UTC(2026, 9, 31, h - 9, m))
 const MIN = 60 * 1000
 const on = (at, minutes = 30) => ({ flip_until: new Date(at.getTime() + minutes * MIN).toISOString() })
 
-test('【確定】品物は2つ：性別変更薬 30,000G・日月反転の秘薬 3,000G（ユーザーが候補から選んだ）', () => {
-  assert.deepEqual(SHOP_ITEMS.map(i => [i.key, i.name, i.gold]), [['gender', '性別変更薬', 30000], ['flip', '日月反転の秘薬', 3000]])
+test('【確定】品物：HPポーション 500G・MPポーション 500G・清めの雫 1,000G（2026-11-01）・性別変更薬 30,000G・日月反転の秘薬 3,000G（ユーザーが候補から選んだ）', () => {
+  assert.deepEqual(SHOP_ITEMS.map(i => [i.key, i.name, i.gold, !!i.bag]), [
+    ['hp', 'HPポーション', 500, true], ['mp', 'MPポーション', 500, true], ['cure', '清めの雫', 1000, true],
+    ['gender', '性別変更薬', 30000, false], ['flip', '日月反転の秘薬', 3000, false],
+  ])
+  assert.deepEqual(BATTLE_ITEMS.map(i => i.key), SHOP_ITEMS.filter(i => i.bag).map(i => i.key), '戦闘で飲む薬は全部売っている')
+  assert.deepEqual([POTION_PCT, ITEM_CD, ITEM_MAX], [30, 30, 99], 'ユーザー選択「最大の30%」「3種類で共通 30秒」・持てる数はこちらで決めた')
   assert.equal(FLIP_NAME, SHOP_ITEM_BY_KEY.flip.name)
   assert.equal(FLIP_MINUTES, 60)
   assert.equal(FLIP_HOURS, 12)
@@ -89,6 +95,48 @@ test('【確定】秘薬で変わるのは出会う敵だけ：時間限定の�
   assert.ok(!read('../components/V2capSortie.jsx').includes('pickEncounter('), '画面では敵を決めない')
 })
 
+test('持ち歩く薬：持っている数・いま買える数（Gold と持てる数の少ないほう）', () => {
+  const hp = SHOP_ITEM_BY_KEY.hp
+  assert.equal(itemCountOf({ items: { hp: 3 } }, 'hp'), 3)
+  for (const p of [null, {}, { items: null }, { items: {} }]) assert.equal(itemCountOf(p, 'hp'), 0)
+  assert.deepEqual(itemCountsOf({ hp: 'x', mp: -5, cure: 1000 }), { hp: 0, mp: 0, cure: ITEM_MAX }, 'おかしい値は直す')
+  assert.equal(buyableQtyOf({ gold: 1499 }, hp), 2)
+  assert.equal(buyableQtyOf({ gold: 499 }, hp), 0)
+  assert.equal(buyableQtyOf({ gold: 10000000 }, hp), ITEM_MAX)
+  assert.equal(buyableQtyOf({ gold: 10000000, items: { hp: 95 } }, hp), 4, '持てる数まで')
+  assert.equal(buyableQtyOf({ gold: 10000000, items: { hp: ITEM_MAX } }, hp), 0)
+  assert.equal(buyableQtyOf(null, hp), 0)
+})
+
+test('サーバー：持ち歩く薬の値段と持てる数が同じ・個数を見る・持ち物に入れる（画面から書けるのはこの関数だけ）', () => {
+  const s = fnBody('v2cap_shop_buy')
+  assert.ok(s.includes(`c_hp_gold      constant int := ${SHOP_ITEM_BY_KEY.hp.gold};`))
+  assert.ok(s.includes(`c_mp_gold      constant int := ${SHOP_ITEM_BY_KEY.mp.gold};`))
+  assert.ok(s.includes(`c_cure_gold    constant int := ${SHOP_ITEM_BY_KEY.cure.gold};`))
+  assert.ok(s.includes(`c_item_max     constant int := ${ITEM_MAX};`))
+  assert.ok(s.includes("p_item not in ('gender', 'flip', 'hp', 'mp', 'cure')"))
+  assert.ok(s.includes("if p_qty is null or p_qty < 1 or p_qty > c_item_max then"), '0個や負の数で Gold が増えない')
+  assert.ok(s.includes("if v_have + p_qty > c_item_max then"))
+  assert.ok(s.includes("set gold = gold - v_cost, items = items || jsonb_build_object(p_item, v_have + p_qty)"))
+  assert.ok(SQL.includes("alter table public.v2cap_profiles add column if not exists items jsonb not null default '{}'::jsonb;"))
+  assert.ok(SQL.includes('drop function if exists public.v2cap_shop_buy(text);'), '前の形を残すと呼び分けられない')
+  // 持ち物は画面から書けない
+  assert.ok(SQL.includes('grant select on table public.v2cap_profiles to authenticated;'))
+  assert.doesNotMatch(SQL, /grant (update|insert|all)[^;]*on table public\.v2cap_profiles/)
+})
+
+test('画面：薬は個数を選んで買う・戦闘で飲むボタンは回し直しと同じ入口', () => {
+  const shop = read('../components/V2capShop.jsx')
+  assert.ok(shop.includes("SHOP_ITEM_BY_KEY[confirm].bag ? { p_item: confirm, p_qty: qty } : { p_item: confirm }"))
+  assert.ok(shop.includes('<QtyPicker have={itemCountOf(prof, asking.key)} qty={qty} max={buyableQtyOf(prof, asking)} onQty={setQty} />'))
+  const fight = read('../components/V2capAtbFight.jsx')
+  assert.ok(fight.includes('onClick={() => drinkItem(s, it.key)}'))
+  assert.ok(fight.includes('{me.items && ('), '持っている数を知らない戦闘（SQL を流す前の写し）にはボタンを出さない')
+  assert.ok(read('./dungeonVerify.js').includes('items: snap.prof.items'), '持っている数はサーバーの写しから')
+  const dun = read('../components/V2capDungeon.jsx')
+  assert.ok(dun.includes('if (itemsUsedOf(p.st)) onProfileRef.current?.()'), '飲んだら商店の持っている数を読み直す')
+})
+
 test('サーバー：値段と時間が shop.js と同じ・Goldが足りるかを見る・開発限定・権限', () => {
   const s = fnBody('v2cap_shop_buy')
   assert.ok(s.includes(`c_gender_gold  constant int := ${SHOP_ITEM_BY_KEY.gender.gold};`))
@@ -101,8 +149,8 @@ test('サーバー：値段と時間が shop.js と同じ・Goldが足りるか�
   assert.ok(s.includes("gender = case when gender = 'm' then 'f' else 'm' end"))
   assert.ok(s.includes('flip_until = greatest(flip_until, now()) + make_interval(mins => c_flip_minutes)'), '効いているあいだに飲むと延びる（greatest は null を無視する）')
   assert.ok(SQL.includes('alter table public.v2cap_profiles add column if not exists flip_until timestamptz;'))
-  assert.ok(SQL.includes('revoke all on function public.v2cap_shop_buy(text) from public, anon;'))
-  assert.ok(SQL.includes('grant execute on function public.v2cap_shop_buy(text) to authenticated;'))
+  assert.ok(SQL.includes('revoke all on function public.v2cap_shop_buy(text, int) from public, anon;'))
+  assert.ok(SQL.includes('grant execute on function public.v2cap_shop_buy(text, int) to authenticated;'))
 })
 
 test('画面：ホームの施設に商店・買うのはサーバー・効いているあいだはステータスに出す', () => {
@@ -112,6 +160,6 @@ test('画面：ホームの施設に商店・買うのはサーバー・効い�
   assert.ok(home.includes("if (m.key === 'shop' && flip > 0) return { ...m, action:`日月反転中（${leftText(flip)}）` }"))
   assert.ok(home.includes('あとから変えるには商店の性別変更薬が必要'), 'キャラ作成の注意書き')
   const shop = read('../components/V2capShop.jsx')
-  assert.ok(shop.includes("supabase.rpc('v2cap_shop_buy', { p_item: confirm })"))
+  assert.ok(shop.includes("supabase.rpc('v2cap_shop_buy', "))
   assert.ok(read('../components/V2capStatus.jsx').includes('flipLeftMsOf(prof, now) > 0 && ('))
 })

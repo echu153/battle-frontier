@@ -117,7 +117,7 @@ test('【確定】セリフはユーザーが案を見て「この案で入れ�
   assert.deepEqual(Object.fromEntries(Object.entries(MERCHANT_LINES).map(([k, list]) => [k, list.length])), {
     intro: 2, enter: 2, enterDaily: 3, enterLong: 3, enterAgain: 3, enterNight: 3, enterPoor: 3, enterFlip: 3,
     tap: 29, tapNight: 5, streak3: 3, streak5: 3, streak8: 3,
-    askGender: 3, askFlip: 3, askFlipMore: 3, boughtF: 3, boughtM: 3, boughtFlip: 3, error: 1,
+    askGender: 3, askFlip: 3, askFlipMore: 3, askHp: 3, askMp: 3, askCure: 3, boughtItem: 3, boughtF: 3, boughtM: 3, boughtFlip: 3, error: 1,
   })
   assert.deepEqual([0, 1, 2, 3, 4].map(s => linesOf('tap', s).length), [8, 10, 12, 17, 19], '段階ごとのタップのセリフの数')
   const vars = (s) => varsOf({ username: 'おれおれお', gender: 'm' }, s)
@@ -236,6 +236,11 @@ test('買う確かめと買った結果の場面：性別変更薬は飲んだ�
   assert.equal(askKindOf('gender', true), 'askGender')
   assert.equal(askKindOf('flip'), 'askFlip')
   assert.equal(askKindOf('flip', true), 'askFlipMore')
+  // 持ち歩く薬（2026-11-01）
+  assert.equal(askKindOf('hp'), 'askHp')
+  assert.equal(askKindOf('mp', true), 'askMp')
+  assert.equal(askKindOf('cure'), 'askCure')
+  for (const item of ['hp', 'mp', 'cure']) assert.equal(boughtKindOf({ item, qty: 3, have: 5 }), 'boughtItem')
   assert.equal(boughtKindOf({ item: 'gender', gender: 'f' }), 'boughtF')
   assert.equal(boughtKindOf({ item: 'gender', gender: 'm' }), 'boughtM')
   assert.equal(boughtKindOf({ item: 'flip', flip_until: 'x' }), 'boughtFlip')

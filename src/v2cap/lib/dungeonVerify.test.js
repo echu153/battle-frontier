@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import {
-  STEP_SEC, advance, ailChips, buffChips, chosenOf, clearQueue, hpBuffChips, needNow, needShownOf, replayInputs, reserve, seedRng, startMacro, stateChips, stopMacro, toggleGuard, unreserveAt,
+  STEP_SEC, advance, ailChips, buffChips, chosenOf, clearQueue, drinkItem, hpBuffChips, needNow, needShownOf, replayInputs, reserve, seedRng, startMacro, stateChips, stopMacro, toggleGuard, unreserveAt,
 } from '../core/atb.js'
 import { atbPlayerOf } from './atbPlayer.js'
 import { CLASSES, canEquipType } from './jobs.js'
@@ -214,6 +214,7 @@ test('★記録の形を見る：おかしな記録ではダメージが入ら�
     ['技の番号が文字', [{ step: 0, k: 'q', idx: '__proto__' }]], ['技の番号が負', [{ step: 0, k: 'q', idx: -1 }]], ['外す位置が null', [{ step: 0, k: 'unq', pos: null }]],
     ['マクロが長すぎる', [{ step: 0, k: 'macro', no: 1, steps: Array(9).fill({ idx: 0 }), loop: true }]],
     ['マクロの手がおかしい', [{ step: 0, k: 'macro', no: 1, steps: [{ idx: 'x' }], loop: true }]], ['要素が null', [null]],
+    ['知らない薬', [{ step: 0, k: 'item', item: 'elixir' }]], ['薬の名前が __proto__', [{ step: 0, k: 'item', item: '__proto__' }]], ['薬の名前が無い', [{ step: 0, k: 'item' }]],
   ]) {
     assert.equal(validInputs(inputs), false, name)
     assert.deepEqual(verifyTry({ ...t, inputs, endStep: 100, elapsedSec: 100 }), { damage: 0, steps: 0, winner: null, reason: 'inputs' }, name)
@@ -225,8 +226,8 @@ test('★記録の形を見る：おかしな記録ではダメージが入ら�
 test('★押した記録の種類を増やしたら、回し直しと形の見張りにも足す（足さないと、ふつうの人の挑戦のダメージが0になる）', () => {
   const atb = read('../core/atb.js')
   const kinds = [...atb.matchAll(/input\(st, \{ k: '(\w+)'/g)].map(m => m[1])
-  assert.deepEqual(kinds, ['q', 'unq', 'clr', 'macro', 'stop', 'guard'])
-  const samples = { q: { idx: 0 }, unq: { pos: 0 }, clr: {}, macro: { no: 1, steps: [], loop: true }, stop: {}, guard: { on: true } }
+  assert.deepEqual(kinds, ['q', 'unq', 'clr', 'macro', 'stop', 'guard', 'item'])
+  const samples = { q: { idx: 0 }, unq: { pos: 0 }, clr: {}, macro: { no: 1, steps: [], loop: true }, stop: {}, guard: { on: true }, item: { item: 'hp' } }
   for (const k of kinds) {
     assert.ok(atb.includes(`e.k === '${k}'`), `applyInput が ${k} を入れ直す`)
     assert.ok(validInputs([{ step: 0, k, ...samples[k] }]), `validInputs が ${k} を通す`)
@@ -276,6 +277,63 @@ test('★書き換えた申告では増えない：入れるのはサーバー�
   const settle = db.calls.find(c => c.fn === 'v2cap_dungeon_verify_settle')
   assert.deepEqual(settle.args, { p_secret: 'あいことば', p_run: 12, p_player: PLAYER, p_try: 2, p_damage: damageOf(st), p_clean: false, p_reason: null })
   assert.ok(settle.args.p_damage < 15000, 'ボスは倒れない')
+})
+
+// ===== 薬（2026-11-01 ユーザー「挑戦とかで使用できるアイテムもここで販売してほしい」）=====
+const itemTryOf = (seed, items) => { const t = tryOf('戦士', 'amaza', seed, 15000); t.snap.prof.items = items; return t }
+// 画面と同じように進めて、HPが減ったら飲む
+const playDrinking = (t, press, stopAt = 1200) => {
+  const st = startTryAtb(t)
+  const r = seedRng(press)
+  startMacro(st, 1, st.a.slots.slice(0, 8).map((_, i) => ({ idx: i })), true)
+  while (!st.over && st.steps < stopAt) {
+    advance(st, 0.006 + r() * 0.03)
+    if (st.a.hp < st.a.base.hp * 0.7) drinkItem(st, 'hp')
+    if (st.a.mp < st.a.base.mp * 0.7) drinkItem(st, 'mp')
+    if (Object.keys(st.a.ail).length) drinkItem(st, 'cure')
+  }
+  return st
+}
+
+test('★薬を飲んだ挑戦もサーバーの回し直しと同じになる・飲んだ数はサーバーが数える', () => {
+  const seen = { hp: 0, mp: 0, cure: 0 }
+  for (const seed of [41, 42, 43, 44, 45, 46]) {
+    const t = itemTryOf(seed, { hp: 5, mp: 5, cure: 5 })
+    const st = playDrinking(t, seed)
+    for (const k of Object.keys(seen)) seen[k] += st.a.itemsUsed[k] || 0
+    const v = verifyTry({ ...wire(t), inputs: wire(st.inputs), endStep: st.steps, elapsedSec: st.t + 0.1 })
+    assert.deepEqual(v.items, st.a.itemsUsed, `種${seed}`)
+    assert.equal(v.damage, damageOf(st), `種${seed}`)
+    assert.equal(stateOf(replayInputs(startTryAtb(wire(t)), wire(st.inputs), st.steps)), stateOf(st), `種${seed} の状態`)
+  }
+  assert.ok(seen.hp > 0 && seen.mp > 0, `飲んでいる ${JSON.stringify(seen)}`)
+})
+
+test('★持っていない薬は記録を書き換えても飲めない（飲んだ数にも入らない）', () => {
+  const inputs = [100, 800, 1500, 2200].map(step => ({ step, k: 'item', item: 'hp' }))
+  // 飲む前にHPが減るように、守りを下げて戦う
+  const low = (items) => { const t = itemTryOf(51, items); Object.assign(t.snap.prof, { hp: 800, vit: 1, agi: 1 }); return t }
+  const none = verifyTry({ ...wire(low({})), inputs, endStep: 2400, elapsedSec: 200 })
+  assert.equal(none.items, undefined, '1つも持っていない')
+  const two = verifyTry({ ...wire(low({ hp: 2 })), inputs, endStep: 2400, elapsedSec: 200 })
+  assert.ok((two.items?.hp || 0) <= 2, JSON.stringify(two.items))
+  // 写しに items が無い（SQL を流す前に始めた挑戦）
+  const old = tryOf('戦士', 'amaza', 51, 15000)
+  assert.equal(startTryAtb(old).a.items, null, '薬のボタンを出さない')
+  assert.equal(verifyTry({ ...wire(old), inputs, endStep: 600, elapsedSec: 60 }).items, undefined)
+})
+
+test('★関数：飲んだ薬は回し直しの結果を送る・飲まなければ送らない（薬の SQL を流す前のサーバーでも通る）', async () => {
+  const t = itemTryOf(61, { hp: 5, mp: 5, cure: 5 })
+  const st = playDrinking(t, 61)
+  assert.ok(Object.keys(st.a.itemsUsed).length > 0, '飲んでいる')
+  const db = fakeDb(loadedOf(t, st))
+  await verifyRequest(req({ fetchFn: db.fetchFn, body: { run: 12, player: PLAYER, p_items: { hp: 0 }, items: { hp: 0 } } }))
+  assert.deepEqual(db.calls.find(c => c.fn === 'v2cap_dungeon_verify_settle').args.p_items, st.a.itemsUsed, '画面が混ぜたものは見ない')
+  const none = tryOf('戦士', 'amaza', 62, 15000)
+  const db2 = fakeDb(loadedOf(none, playLikeScreen(none, 62, 300)))
+  await verifyRequest(req({ fetchFn: db2.fetchFn }))
+  assert.ok(!('p_items' in db2.calls.find(c => c.fn === 'v2cap_dungeon_verify_settle').args))
 })
 
 test('★記録を書き換えても、できるのは本当に押せることだけ（技を連打しても行動の回数は増えない）', () => {

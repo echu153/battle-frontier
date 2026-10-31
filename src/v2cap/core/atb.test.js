@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   createAtb, runFor, advance, reserve, clearQueue, startMacro, stopMacro, toggleGuard, canUse, cdLeft, cdRatio, guardCdRatio, chosenOf, needFor,
+  canDrink, drinkItem, itemCdLeft, itemCdRatio, itemLeftOf, itemsUsedOf, replayInputs, seedRng,
   fillRatio, cdOfProc, buffSecOf, buffChips,
   STEP_SEC, TURN_SEC, GAUGE_FULL, GUARD_CUT, GUARD_CD, CAST_SEC, MAX_DT,
 } from './atb.js'
@@ -411,4 +412,159 @@ test('【確定】ボスの大技の構えは1ターンと同じ長さ（ユー�
   runFor(st, CAST_SEC)
   const order = st.log.filter(l => (l.side === '自分' && l.type === 'guard') || (l.side === 'ボス' && l.type === 'skill')).map(l => l.type)
   assert.deepEqual(order, ['guard', 'skill'], '大技より先に防御が出る')
+})
+
+// ===== 薬（core/atbItems.js）=====
+// 【確定】2026-11-01 ユーザー「挑戦とかで使用できるアイテムもここで販売してほしい」＋選択「最大の30%」「すぐ飲む・ゲージは空」「3種類で共通 30秒」
+const drinker = (items = { hp: 3, mp: 3, cure: 3 }, seed = 1) => createAtb(fighter('我'), fighter('敵'), { rng: makeRng(seed), items })
+
+test('【確定】HPポーション：最大HPの30%回復・ゲージは空になる・数が減る・押した記録が残る', () => {
+  const st = drinker()
+  st.a.hp = 100000
+  st.a.gauge = 80
+  runFor(st, STEP_SEC * 2)
+  const hp = st.a.hp, gauge = st.a.gauge
+  assert.ok(gauge > 80)
+  drinkItem(st, 'hp')
+  assert.equal(st.a.hp, hp + 300000, '押した瞬間に効く')
+  assert.equal(st.a.gauge, 0, '防御と同じく1回の行動のぶん')
+  assert.equal(itemLeftOf(st.a, 'hp'), 2)
+  assert.deepEqual(itemsUsedOf(st), { hp: 1 })
+  assert.deepEqual(st.inputs.at(-1), { step: st.steps, k: 'item', item: 'hp' })
+  const l = st.log.at(-1)
+  assert.equal(l.type, 'heal')
+  assert.equal(l.skill, 'HPポーション')
+  assert.equal(l.heal, 300000)
+  // 満タンを超えない
+  const st2 = drinker()
+  st2.a.hp = st2.a.base.hp - 5
+  drinkItem(st2, 'hp')
+  assert.equal(st2.a.hp, st2.a.base.hp)
+  assert.equal(st2.log.at(-1).heal, 5)
+})
+
+test('【確定】MPポーション：最大MPの30%回復（MPはふだん回復しない）', () => {
+  const st = drinker()
+  st.a.mp = 100
+  drinkItem(st, 'mp')
+  assert.equal(st.a.mp, 400)
+  assert.equal(st.log.at(-1).type, 'mpGain')
+  assert.equal(st.log.at(-1).mp, 300)
+  const st2 = drinker()
+  st2.a.mp = st2.a.base.mp - 7
+  drinkItem(st2, 'mp')
+  assert.equal(st2.a.mp, st2.a.base.mp, '満タンを超えない')
+})
+
+test('【確定】清めの雫：状態異常を全部治す・麻痺のあいだでも飲める・治ると動き出す', () => {
+  const st = drinker()
+  for (const k of ['poison', 'burn', 'seal', 'fear', 'blind', 'curse', 'weaken', 'silence', 'slow', 'healCut']) inflict(st.a.ail, k, { pct: 30 })
+  inflict(st.a.ail, 'bleed', { stacks: 3 })
+  inflict(st.a.ail, 'paralyze')
+  st.a.parObj = st.a.ail.paralyze   // 技で入ったときは afterEngine が付ける期限
+  st.a.parUntil = 5
+  runFor(st, STEP_SEC)
+  const before = st.a.acted
+  const gauge = st.a.gauge
+  runFor(st, 1)
+  assert.equal(st.a.gauge, gauge, '麻痺のあいだはゲージが止まる')
+  assert.equal(st.a.acted, before)
+  assert.ok(canDrink(st.a, 'cure', st.t), '麻痺のあいだでも飲める')
+  drinkItem(st, 'cure')
+  assert.deepEqual(Object.keys(st.a.ail), [], '全部治った')
+  const names = st.log.filter(l => l.type === 'cure').map(l => l.ail)
+  assert.equal(names.length, 12)
+  runFor(st, TURN_SEC + STEP_SEC)
+  assert.ok(st.a.acted > before, '治ったら動き出す')
+})
+
+test('【確定】3種類で共通の待ち時間30秒：どれかを飲むと全部飲めない・押しても減らない・記録にも残らない', () => {
+  const st = drinker()
+  st.a.hp = 100000
+  st.a.mp = 100
+  inflict(st.a.ail, 'blind')
+  drinkItem(st, 'hp')
+  assert.equal(itemCdLeft(st.a, st.t), 30)
+  assert.equal(itemCdRatio(st.a, st.t), 1)
+  const inputs = st.inputs.length, hp = st.a.hp
+  drinkItem(st, 'hp')
+  drinkItem(st, 'mp')
+  drinkItem(st, 'cure')
+  assert.equal(st.a.hp, hp)
+  assert.equal(st.a.mp, 100)
+  assert.equal(st.inputs.length, inputs, '飲めなかった押し方は残らない')
+  assert.deepEqual(itemsUsedOf(st), { hp: 1 })
+  runFor(st, 15)
+  assert.ok(Math.abs(itemCdRatio(st.a, st.t) - 0.5) < 1e-6)
+  runFor(st, 14.9)
+  st.a.mp = 100
+  assert.equal(canDrink(st.a, 'mp', st.t), false, '30秒まではまだ')
+  runFor(st, 0.15)
+  assert.equal(canDrink(st.a, 'mp', st.t), true, '30秒で飲める')
+})
+
+test('飲めないとき：持っていない・満タン・状態異常が無い・倒れた・終わった・薬を持たない戦闘・知らない薬', () => {
+  const st = drinker({ hp: 0, mp: 1, cure: 1 })
+  st.a.hp = 100
+  assert.equal(canDrink(st.a, 'hp', st.t), false, '持っていない')
+  assert.equal(canDrink(st.a, 'mp', st.t), false, 'MPが満タン')
+  assert.equal(canDrink(st.a, 'cure', st.t), false, '状態異常が無い')
+  const inputs = st.inputs.length
+  for (const k of ['hp', 'mp', 'cure', '__proto__', 'toString', 'elixir']) drinkItem(st, k)
+  assert.equal(st.inputs.length, inputs)
+  assert.equal(itemsUsedOf(st), null)
+  const none = createAtb(fighter('我'), fighter('敵'), { rng: makeRng(1) })
+  assert.equal(none.a.items, null, '薬のボタンを出さない')
+  none.a.hp = 100
+  drinkItem(none, 'hp')
+  assert.equal(none.a.hp, 100)
+  // 狂鬼化のあいだはHPが戻らない＝もったいないので飲めない
+  const b = drinker()
+  b.a.hp = 1
+  b.a.berserk = { turns: 2 }
+  assert.equal(canDrink(b.a, 'hp', b.t), false)
+  b.a.berserk = null
+  assert.equal(canDrink(b.a, 'hp', b.t), true)
+  // 決着のあと
+  const o = drinker()
+  o.a.hp = 100
+  o.over = true
+  drinkItem(o, 'hp')
+  assert.equal(o.a.hp, 100)
+})
+
+test('薬は行動を通らない：防御は切れない・出血は刻まない。回復阻害は技の回復と同じだけ効く', () => {
+  const st = drinker()
+  st.a.hp = 100000
+  st.a.guardCut = 50
+  inflict(st.a.ail, 'bleed', { stacks: 3 })
+  const n = st.log.length
+  drinkItem(st, 'hp')
+  assert.equal(st.a.guardCut, 50)
+  assert.deepEqual(st.log.slice(n).map(l => l.type), ['heal'], '出血の刻みが出ない')
+  const cut = drinker()
+  cut.a.hp = 100000
+  inflict(cut.a.ail, 'healCut', { pct: 50 })
+  drinkItem(cut, 'hp')
+  assert.equal(cut.log.at(-1).heal, 150000)
+})
+
+test('★飲んだ戦闘も、同じ種と押した記録で回し直すと同じになる', () => {
+  const start = () => {
+    const st = createAtb(fighter('我', [sk('斬')]), fighter('敵', [sk('牙', { mult: 2 })], { stats: { str: 400 } }), { rng: seedRng(7), items: { hp: 2, mp: 2, cure: 2 } })
+    st.a.hp = 500000
+    st.a.mp = 500
+    return st
+  }
+  const st = start()
+  for (let i = 0; i < 60 && !st.over; i++) {
+    runFor(st, 1)
+    if (i % 7 === 3) drinkItem(st, 'hp')
+    if (i % 7 === 5) reserve(st, 0)
+    if (i % 11 === 9) drinkItem(st, 'mp')
+  }
+  assert.ok(st.inputs.some(e => e.k === 'item'))
+  const again = replayInputs(start(), JSON.parse(JSON.stringify(st.inputs)), st.steps)
+  assert.deepEqual([again.a.hp, again.a.mp, again.b.hp, again.a.items, again.a.itemsUsed], [st.a.hp, st.a.mp, st.b.hp, st.a.items, st.a.itemsUsed])
+  assert.deepEqual(buildBattleLog({ log: again.log }, '我', '敵'), buildBattleLog({ log: st.log }, '我', '敵'))
 })

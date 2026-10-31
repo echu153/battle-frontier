@@ -610,7 +610,7 @@ test('【確定】2026-10-31 結果はサーバーが決める（ユーザー選
   assert.match(start, /'seed', v_seed, 'snap', v_snap/)
   // 入れる関数：合い言葉がないと通らない・ログインした人には開けない
   assert.match(fnBody('v2cap_dungeon_verify_ok'), /encode\(sha256\(convert_to\(coalesce\(p_secret, ''\), 'UTF8'\)\), 'hex'\) = '[0-9a-f]{64}'/, 'SQL には SHA-256 だけ')
-  for (const [fn, args] of [['v2cap_dungeon_verify_load', 'text, bigint, uuid'], ['v2cap_dungeon_verify_settle', 'text, bigint, uuid, int, int, text, boolean']]) {
+  for (const [fn, args] of [['v2cap_dungeon_verify_load', 'text, bigint, uuid'], ['v2cap_dungeon_verify_settle', 'text, bigint, uuid, int, int, text, boolean, jsonb']]) {
     assert.match(fnBody(fn), /if not public\.v2cap_dungeon_verify_ok\(p_secret\) then return jsonb_build_object\('ok', false, 'error', '合い言葉が違います'\); end if;/, fn)
     assert.ok(SQL.includes(`revoke all on function public.${fn}(${args}) from public, authenticated;`), `${fn} はログインした人の権限では呼べない`)
     assert.ok(SQL.includes(`grant execute on function public.${fn}(${args}) to anon;`), `${fn} は公開の鍵と合い言葉で呼ぶ`)
@@ -618,6 +618,12 @@ test('【確定】2026-10-31 結果はサーバーが決める（ユーザー選
   assert.match(SQL, /revoke all on function public\.v2cap_dungeon_verify_ok\(text\) from public, anon, authenticated;/)
   // 同時に2回確かめても入るのは1回・あとの挑戦の記録に入れない
   assert.match(fnBody('v2cap_dungeon_verify_settle'), /if v_mem\.try_sub is null or v_mem\.tries <> p_try then/)
+  // 飲んだ薬を引く（2026-11-01）：回し直しの結果だけ・2回は引かない（try_sub を消したあと）・0より下にしない
+  const settle = fnBody('v2cap_dungeon_verify_settle')
+  assert.match(settle, /p_items jsonb default null\)/)
+  assert.match(settle, /greatest\(0, coalesce\(\(p\.items->>e\.key\)::int, 0\) - e\.value::int\)/)
+  assert.ok(settle.indexOf('if v_mem.try_sub is null or v_mem.tries <> p_try then') < settle.indexOf('if p_items is not null then'), '入れた挑戦の聞き直しでは引かない')
+  assert.match(SQL, /drop function if exists public\.v2cap_dungeon_verify_settle\(text, bigint, uuid, int, int, text, boolean\);/, '前の形を残すと呼び分けられない')
   // ずれた挑戦を残す
   assert.match(fnBody('v2cap_dungeon_verify_settle'), /insert into public\.v2cap_dungeon_mismatch/)
   assert.match(SQL, /alter table public\.v2cap_dungeon_mismatch enable row level security;/)

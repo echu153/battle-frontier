@@ -7,8 +7,9 @@ import { GENDER_BY_KEY, genderOf } from '../lib/gender.js'
 import { leftText } from '../lib/burger.js'
 import {
   SHOP_COLOR, SHOP_ITEMS, SHOP_ITEM_BY_KEY, FLIP_COLOR, FLIP_MINUTES, FLIP_HOURS,
-  flipLeftMsOf, flipPreviewOf, encounterBandOf, otherGenderOf,
+  flipLeftMsOf, flipPreviewOf, encounterBandOf, otherGenderOf, itemCountOf, buyableQtyOf,
 } from '../lib/shop.js'
+import { ITEM_CD, ITEM_MAX, POTION_PCT } from '../core/atbItems.js'
 import {
   MERCHANT_STAGES, MERCHANT_STAGE_EVENTS, pickLine, enterKindOf, askKindOf, boughtKindOf, poorOf,
   stageOf, stageLabelOf, stageEventOf, varsOf, tapKindOf, nextStreak, isNight, fillLine, makeDailyAsker,
@@ -21,6 +22,7 @@ import {
 //   【確定】2026-10-31 商人ソルド（ユーザー指示「糸目の胡散臭いお兄さん、関西弁の守銭奴にする予定」・lib/merchant.js）：
 //     品物の右に商人を立たせる（スマホは上）。店を開いたとき・タップ・買う確かめ・買った結果で話す（ユーザー選択）。
 //     好感度は看板娘・アレアと同じ形（画面には出さない・サーバーの v2cap_merchant_talk）
+//   【確定】2026-11-01 ユーザー「挑戦とかで使用できるアイテムもここで販売してほしい」：持ち歩く薬は何個か選んで買う（持ち物に入る・戦闘で飲む＝core/atbItems.js）
 // ============================================================
 const gold = (n) => `${Number(n || 0).toLocaleString()}G`
 const BAND_STYLE = { color: FLIP_COLOR, fontSize:'13px' }
@@ -28,7 +30,7 @@ const BAND_STYLE = { color: FLIP_COLOR, fontSize:'13px' }
 const talkAsker = makeDailyAsker(() => supabase.rpc('v2cap_merchant_talk'))
 // 開発用（管理者だけ）：買う確かめと買った結果の反応を見るボタン（反応の商人だけを出す＝本当には買わない）・好感度の段階を仮に置くボタン（サーバーに書かない）
 const DEV = SHOP_COLOR
-const DEV_REACTS = ['askGender', 'askFlip', 'askFlipMore', 'boughtF', 'boughtM', 'boughtFlip', 'error']
+const DEV_REACTS = ['askHp', 'askMp', 'askCure', 'askGender', 'askFlip', 'askFlipMore', 'boughtItem', 'boughtF', 'boughtM', 'boughtFlip', 'error']
 
 // ♂ 男性（色つき）と性能差の一言
 function GenderLine({ g }) {
@@ -61,7 +63,28 @@ function FlipChange({ prof, now }) {
   )
 }
 
+// 持ち歩く薬：何個買うかを選ぶ（持っている数→買ったあとの数）。qty は1〜max
+function QtyPicker({ have, qty, max, onQty }) {
+  const step = (n) => onQty(Math.max(1, Math.min(max, n)))
+  const b = { ...miniBtn(SHOP_COLOR), padding:'6px 10px', fontSize:'12px' }
+  return (
+    <>
+      <div style={{ display:'flex', alignItems:'center', flexWrap:'wrap', gap:'6px' }}>
+        <button type="button" onClick={() => step(qty - 1)} disabled={qty <= 1} style={b} aria-label="1個へらす">−</button>
+        <span style={{ color: TEXT.body, fontSize:'14px', minWidth:'44px', textAlign:'center' }}>{qty}個</span>
+        <button type="button" onClick={() => step(qty + 1)} disabled={qty >= max} style={b} aria-label="1個ふやす">＋</button>
+        <button type="button" onClick={() => step(qty + 10)} disabled={qty >= max} style={b}>＋10</button>
+        <button type="button" onClick={() => step(max)} disabled={qty >= max} style={b}>最大</button>
+      </div>
+      <div style={{ marginTop:'6px' }}>持っている数：×{have} → ×{have + qty}</div>
+    </>
+  )
+}
+
 const ITEM_TEXT = {
+  hp: `HPが最大の${POTION_PCT}%回復します。`,
+  mp: `MPが最大の${POTION_PCT}%回復します。`,
+  cure: '状態異常が全部治ります。',
   gender: '飲むと、男女が入れ替わります。',
   flip: `${FLIP_MINUTES}分のあいだ、時間帯が${FLIP_HOURS}時間ずれて、いまとは違う時間帯の敵に出会えます。`,
 }
@@ -71,6 +94,7 @@ export default function V2capShop({ prof, onProfile, dev = false }) {
   const [now, setNow] = useState(() => new Date())
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t) }, [])
   const [confirm, setConfirm] = useState(null)   // 確かめている品物の key
+  const [qty, setQty] = useState(1)              // 持ち歩く薬を何個買うか
   const [bought, setBought] = useState(null)     // 結果のポップアップ（サーバーの返事）
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -151,6 +175,7 @@ export default function V2capShop({ prof, onProfile, dev = false }) {
   const beforeAsk = useRef(null)
   const ask = (key) => {
     setError('')
+    setQty(1)
     beforeAsk.current = merchant
     setAskSay(say(askKindOf(key, flipLeftMsOf(prof, now) > 0)))
     setConfirm(key)
@@ -165,7 +190,7 @@ export default function V2capShop({ prof, onProfile, dev = false }) {
   const buy = async () => {
     setBusy(true); setError('')
     try {
-      const { data, error: e } = await supabase.rpc('v2cap_shop_buy', { p_item: confirm })
+      const { data, error: e } = await supabase.rpc('v2cap_shop_buy', SHOP_ITEM_BY_KEY[confirm].bag ? { p_item: confirm, p_qty: qty } : { p_item: confirm })
       if (e || !data?.ok) { setError(e?.message || data?.error || '買えませんでした'); say('error'); return }
       setBought(data)
       setBoughtSay(say(boughtKindOf(data)))
@@ -184,16 +209,20 @@ export default function V2capShop({ prof, onProfile, dev = false }) {
     <div style={{ maxWidth:'1068px' }}>
       <style>{MERCHANT_CSS}</style>
       {asking && (
-        <V2Modal title={`${asking.icon} ${asking.name}を飲みますか？`} color={asking.color} busy={busy} confirmLabel={`${gold(asking.gold)}で買う`}
+        <V2Modal title={`${asking.icon} ${asking.name}を${asking.bag ? '買います' : '飲みます'}か？`} color={asking.color} busy={busy}
+          confirmLabel={`${gold(asking.gold * (asking.bag ? qty : 1))}で買う`}
           onConfirm={buy} onClose={cancelAsk}>
           {askSay && <MerchantSays face={askSay.face} line={askSay.text} />}
-          {asking.key === 'gender' ? <GenderChange g={sex} /> : <FlipChange prof={prof} now={now} />}
+          {asking.bag ? <QtyPicker have={itemCountOf(prof, asking.key)} qty={qty} max={buyableQtyOf(prof, asking)} onQty={setQty} />
+            : asking.key === 'gender' ? <GenderChange g={sex} /> : <FlipChange prof={prof} now={now} />}
         </V2Modal>
       )}
       {got && (
-        <V2Modal title={`${got.icon} ${got.name}を飲みました`} color={got.color} onClose={() => setBought(null)}>
+        <V2Modal title={got.bag ? `${got.icon} ${got.name}を${bought.qty}個買いました` : `${got.icon} ${got.name}を飲みました`} color={got.color} onClose={() => setBought(null)}>
           {boughtSay && <MerchantSays face={boughtSay.face} line={boughtSay.text} />}
-          {got.key === 'gender' ? (
+          {got.bag ? (
+            <div>持っている数：×{bought.have}</div>
+          ) : got.key === 'gender' ? (
             <>
               <div><span style={{ color: newSex?.color }}>{newSex?.mark} {newSex?.label}</span>になりました</div>
               <div style={{ color: TEXT.sub, fontSize:'11px', marginTop:'6px' }}>{newSex?.text}</div>
@@ -231,29 +260,41 @@ export default function V2capShop({ prof, onProfile, dev = false }) {
           </div>
           {error && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'8px' }}>⚠ {error}</div>}
 
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:'8px' }}>
-            {SHOP_ITEMS.map(it => {
-              const short = have < it.gold
-              const noSex = it.key === 'gender' && !sex
-              const off = busy || short || noSex
-              return (
-                <div key={it.key} style={{ ...box, padding:'10px 12px', display:'flex', flexDirection:'column', gap:'6px', minWidth:0 }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:'8px' }}>
-                    <span style={{ color: it.color, fontSize:'13px' }}>{it.icon} {it.name}</span>
-                    <span style={{ color:'#ffcc00', fontSize:'12px', whiteSpace:'nowrap' }}>{gold(it.gold)}</span>
-                  </div>
-                  <div style={{ color: TEXT.sub, fontSize:'11px', lineHeight:1.6 }}>{ITEM_TEXT[it.key]}</div>
-                  <div style={{ color: TEXT.body, fontSize:'11px', lineHeight:1.8 }}>
-                    {it.key === 'gender' ? <GenderChange g={sex} /> : <FlipChange prof={prof} now={now} />}
-                  </div>
-                  <button onClick={() => ask(it.key)} disabled={off}
-                    style={{ ...btn(it.color), width:'100%', padding:'8px', marginTop:'auto', opacity: off ? 0.5 : 1 }}>
-                    {short ? 'Goldが足りません' : '買う'}
-                  </button>
-                </div>
-              )
-            })}
-          </div>
+          {/* 持ち歩く薬（挑戦の戦闘で飲む）・その場で飲む薬 */}
+          {[
+            { title:'持ち歩く薬', note:`挑戦の戦闘で飲めます。押すとすぐ効きますが、ゲージが空になり、どの薬も${ITEM_CD}秒は飲めません。`, items: SHOP_ITEMS.filter(i => i.bag) },
+            { title:'その場で飲む薬', note:'買うとすぐに飲みます。', items: SHOP_ITEMS.filter(i => !i.bag) },
+          ].map(g => (
+            <div key={g.title} style={{ marginBottom:'10px' }}>
+              <div style={{ color: SHOP_COLOR, fontSize:'12px' }}>{g.title}</div>
+              <div style={{ color: TEXT.label, fontSize:'10px', lineHeight:1.6, marginBottom:'6px' }}>{g.note}</div>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:'8px' }}>
+                {g.items.map(it => {
+                  const short = have < it.gold
+                  const noSex = it.key === 'gender' && !sex
+                  const count = it.bag ? itemCountOf(prof, it.key) : 0
+                  const full = it.bag && count >= ITEM_MAX
+                  const off = busy || short || noSex || full
+                  return (
+                    <div key={it.key} style={{ ...box, padding:'10px 12px', display:'flex', flexDirection:'column', gap:'6px', minWidth:0 }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:'8px' }}>
+                        <span style={{ color: it.color, fontSize:'13px' }}>{it.icon} {it.name}</span>
+                        <span style={{ color:'#ffcc00', fontSize:'12px', whiteSpace:'nowrap' }}>{gold(it.gold)}</span>
+                      </div>
+                      <div style={{ color: TEXT.sub, fontSize:'11px', lineHeight:1.6 }}>{ITEM_TEXT[it.key]}</div>
+                      <div style={{ color: TEXT.body, fontSize:'11px', lineHeight:1.8 }}>
+                        {it.bag ? <div>持っている数：×{count}</div> : it.key === 'gender' ? <GenderChange g={sex} /> : <FlipChange prof={prof} now={now} />}
+                      </div>
+                      <button onClick={() => ask(it.key)} disabled={off}
+                        style={{ ...btn(it.color), width:'100%', padding:'8px', marginTop:'auto', opacity: off ? 0.5 : 1 }}>
+                        {full ? 'これ以上持てません' : short ? 'Goldが足りません' : '買う'}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

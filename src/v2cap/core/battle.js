@@ -788,7 +788,7 @@ const healAmount = (side, eff, rate) =>
   ))
 
 // ★上位職：最大HPの◯%を回復（内功・魂喰らい・奇跡・再生薬）。回復量の補正はふつうの回復と同じだけ掛ける
-const healMaxAmount = (side, pct) =>
+export const healMaxAmount = (side, pct) =>
   Math.max(1, Math.floor(side.base.hp * pct / 100
     * (1 + side.pa.healBonus / 100) * side.healMult
     * (1 + side.en.healPct / 100) * healMultOf(side.ail)

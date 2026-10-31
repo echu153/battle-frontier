@@ -183,7 +183,29 @@ export const MERCHANT_LINES = {
     { min: 2, max: 2, face: 'grin', text: 'まだ効いとるで、{call}。…まあ、買うてくれるんなら止めへんけど' },
     { min: 3, face: 'grin', text: 'まだ効いとるで、{call}。…止めへんけどな。商売やから' },
   ],
+  // 持ち歩く薬（【確定】2026-11-01 ユーザーが案を見て「この案で入れる」）
+  askHp: [
+    { max: 1, face: 'grin', text: '転ばぬ先の薬でっせ。転んでからやと、お代は倍になりますけどな' },
+    { min: 2, max: 2, face: 'grin', text: '傷の薬やな、{call}。持っとるだけで、ちょっと強なった気がするやろ' },
+    { min: 3, face: 'normal', text: '{call}、多めに持っときや。…心配しとるんやないで、売り上げの話や' },
+  ],
+  askMp: [
+    { max: 1, face: 'normal', text: '気力の薬でっせ。ここいちばんで息切れしたら、もったいないでっしゃろ' },
+    { min: 2, max: 2, face: 'normal', text: '気力の薬やな。ここいちばんで息切れしたら、もったいないで、{call}' },
+    { min: 3, face: 'grin', text: '{call}、気力は飲めば足せるけど、銭は飲んでも増えへんで。…せやから買うてや' },
+  ],
+  askCure: [
+    { max: 1, face: 'grin', text: '毒でも呪いでも、ひと口で洗い流しまっせ。お代も一緒に流れていきますけどな' },
+    { min: 2, max: 2, face: 'grin', text: 'これはほんまに効くで、{call}。…「これは」て何や、て顔やな' },
+    { min: 3, face: 'normal', text: '{call}、これは切らしたらあかんで。わけの分からん毒で、ええ客が減るのは困るねん' },
+  ],
   // ===== 買った結果（boughtKindOf）=====
+  // 持ち歩く薬（3種類で同じ）
+  boughtItem: [
+    { max: 1, face: 'grin', text: '毎度おおきに！ 切らす前に、また買いに来とくなはれ' },
+    { min: 2, max: 2, face: 'grin', text: 'おおきに、{call}！ 飲んだら、また買いに来てや' },
+    { min: 3, face: 'grin', text: 'おおきに、{call}！ 余らせて帰ってくるんやで。…余っても買い取らへんけどな' },
+  ],
   // 性別変更薬で女性になった
   boughtF: [
     { max: 1, face: 'grin', text: '毎度おおきに！ ようお似合いですわ、姉さん' },
@@ -251,8 +273,10 @@ export const enterKindOf = ({ affinity = 0, lastTalk = null, poor = false, flipp
   return last === dayOf(new Date(d.getTime() - 864e5)) ? 'enterDaily' : 'enterLong'
 }
 // 買う確かめの場面。flipping＝秘薬が効いている
-export const askKindOf = (item, flipping = false) => (item === 'gender' ? 'askGender' : flipping ? 'askFlipMore' : 'askFlip')
+const ASK_ITEM = { hp: 'askHp', mp: 'askMp', cure: 'askCure', gender: 'askGender' }
+export const askKindOf = (item, flipping = false) => ASK_ITEM[item] || (flipping ? 'askFlipMore' : 'askFlip')
 // 買った結果の場面。data＝サーバーの返事（item と、性別変更薬なら飲んだあとの gender）
-export const boughtKindOf = (data) => (data?.item === 'gender' ? (data.gender === 'f' ? 'boughtF' : 'boughtM') : 'boughtFlip')
+export const boughtKindOf = (data) => (SHOP_ITEMS.find(i => i.key === data?.item)?.bag ? 'boughtItem'
+  : data?.item === 'gender' ? (data.gender === 'f' ? 'boughtF' : 'boughtM') : 'boughtFlip')
 
 export { fillLine, isNight, nextStreak, tapKindOf, makeDailyAsker }

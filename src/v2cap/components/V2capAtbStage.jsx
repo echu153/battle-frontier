@@ -446,7 +446,7 @@ const RigTrails = ({ art, trails }) => (
   </svg>
 )
 
-const POP_COLOR ={ hit: '#ffffff', miss: '#d8e8f8', heal: '#44ff88', tick: '#cc99ff' }
+const POP_COLOR ={ hit: '#ffffff', miss: '#d8e8f8', heal: '#44ff88', mp: '#66aaff', tick: '#cc99ff' }
 // 構えのすぐあとに撃った技か：構えを最後に見た時刻（castEnd）から CAST_GAP_SEC 以内に動いた（構えが終わった刻みで撃つ＝ふつうは 0.03秒ほど）
 const CAST_GAP_SEC = 0.5
 const afterCast = (t0, castEnd) => t0 - castEnd > -0.05 && t0 - castEnd < CAST_GAP_SEC

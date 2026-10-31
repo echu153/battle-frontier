@@ -8,6 +8,7 @@ import V2capReloadNote from './V2capReloadNote.jsx'
 import { preloadArt } from '../lib/artPreload.js'
 import { box, miniBtn, TEXT } from './v2ui.js'
 import { calcPower } from '../core/stats.js'
+import { itemsUsedOf } from '../core/atb.js'
 import { loadPref } from '../core/prefs.js'
 import { macrosOf } from '../lib/atbMacro.js'
 import { damageOf, startTryAtb } from '../lib/dungeonVerify.js'
@@ -118,7 +119,8 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
       const r = await callVerify({ run: id, player: data.me }, { retryMs: [] })
       if (!r?.ok) continue
       done = true
-      if (r.reward) { setClaimed(r); onProfileRef.current?.() }
+      onProfileRef.current?.()   // 報酬・飲んだ薬で持ち物が変わる
+      if (r.reward) setClaimed(r)
       else setMsg({ ok: true, text: `前の挑戦の結果：${Number(r.damage).toLocaleString()}ダメージを入れました` })
     }
     settling.current = false
@@ -194,6 +196,7 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
       if (error || !data?.ok) return { ok: false, text: errText(error, data) }
       const r = await callVerify({ run: p.runId, player: data.player })
       if (!r?.ok) return { ok: false, text: VERIFY_LATER }
+      if (itemsUsedOf(p.st)) onProfileRef.current?.()   // 飲んだ薬が持ち物から減った（商店の持っている数）
       return { ok: true, damage: r.damage, run: r.run, reward: r.reward, corrected: r.corrected }
     } finally {
       settling.current = false

@@ -11,7 +11,8 @@
 //   ★同じ種と記録なら途中の状態まで同じ（dungeonVerify.test.js）。重さは180秒の戦闘で10ミリ秒以下
 // ⚠INPUTS_MAX は SQL の c_inputs_max と同じ（dungeon.test.js が突き合わせる）
 // ============================================================
-import { STEP_SEC, createAtb, replayInputs, seedRng } from '../core/atb.js'
+import { STEP_SEC, createAtb, itemsUsedOf, replayInputs, seedRng } from '../core/atb.js'
+import { isBattleItem } from '../core/atbItems.js'
 import { MACRO_STEPS } from './atbMacro.js'
 import { atbPlayerOf } from './atbPlayer.js'
 import { activeMealOf } from './burger.js'
@@ -28,7 +29,8 @@ export const startTryAtb = ({ boss, diff, hp, seed, snap }) => {
   if (!foe) return null
   const at = new Date(Number(snap.at))
   const me = atbPlayerOf(snap.prof, snap.inv, { meal: activeMealOf(snap.prof, at), at })
-  return createAtb(me, foe, { maxSec: DUNGEON_TRY_SEC, rng: seedRng(seed) })
+  // 持っている薬も写しから（2026-11-01 商店の薬）。SQL を流す前の写しには items が無い＝薬のボタンは出ない
+  return createAtb(me, foe, { maxSec: DUNGEON_TRY_SEC, rng: seedRng(seed), items: snap.prof.items })
 }
 
 // この挑戦で削った量（画面の申告もサーバーの計算も、この形で数える）
@@ -43,6 +45,7 @@ const validInput = (e) => {
   if (e.k === 'unq') return isIdx(e.pos)
   if (e.k === 'clr' || e.k === 'stop' || e.k === 'guard') return true
   if (e.k === 'macro') return Number.isInteger(e.no) && Array.isArray(e.steps) && e.steps.length <= MACRO_STEPS && e.steps.every(validEntry)
+  if (e.k === 'item') return isBattleItem(e.item)
   return false
 }
 export const validInputs = (inputs) => Array.isArray(inputs) && inputs.length <= INPUTS_MAX
@@ -56,8 +59,9 @@ export const allowedSteps = (elapsedSec) =>
 //   v＝verifyTry の返事
 export const cleanTryOf = (v) => !v.reason && (v.winner === 'a' || (v.winner === 'draw' && v.steps >= TRY_STEPS))
 
-// 回し直す。返すのは { damage（サーバーの計算）, steps, winner, reason（おかしかったわけ・無ければ null）}
+// 回し直す。返すのは { damage（サーバーの計算）, steps, winner, reason（おかしかったわけ・無ければ null）, items（飲んだ薬の数・飲まなければ付かない）}
 //   inputs・endStep は画面から届いたもの。elapsedSec はサーバーの時計（挑戦を始めてから記録が届くまで）
+//   ★飲んだ数も回し直しで数える＝持っていない薬を飲んだ記録を送っても効かない（core/atb.js の drinkItem が持っている数を見る）
 export const verifyTry = ({ boss, diff, hp, seed, snap, inputs, endStep, elapsedSec }) => {
   if (!validInputs(inputs)) return { damage: 0, steps: 0, winner: null, reason: 'inputs' }
   const st = startTryAtb({ boss, diff, hp, seed, snap })
@@ -65,5 +69,6 @@ export const verifyTry = ({ boss, diff, hp, seed, snap, inputs, endStep, elapsed
   const want = Number.isInteger(endStep) && endStep >= 0 ? endStep : 0
   const limit = allowedSteps(elapsedSec)
   replayInputs(st, inputs, Math.min(want, limit))
-  return { damage: damageOf(st), steps: st.steps, winner: st.winner, reason: want > limit ? 'too_fast' : null }
+  const items = itemsUsedOf(st)
+  return { damage: damageOf(st), steps: st.steps, winner: st.winner, reason: want > limit ? 'too_fast' : null, ...(items ? { items } : {}) }
 }

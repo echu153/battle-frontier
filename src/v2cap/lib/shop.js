@@ -1,11 +1,14 @@
 import { bandAt } from '../core/sortie.js'
+import { BATTLE_ITEM_BY_KEY, ITEM_MAX, itemCountsOf } from '../core/atbItems.js'
 
 // ============================================================
 // 「レベルキャップあり」版（v2cap）— 商店（2026-10-31）
 // ------------------------------------------------------------
+// 【確定】2026-11-01 ユーザー「挑戦とかで使用できるアイテムもここで販売してほしい・HPポーション 500・MPポーション 500・状態異常回復する薬 1000」：
+//   持ち歩く薬（bag）＝持ち物（サーバーの v2cap_profiles.items）に入り、挑戦の戦闘で飲む（効き方は core/atbItems.js）。何個か選んで買う
 // 【確定】2026-10-31 ユーザー指示「施設で商店を追加したい。現状以下のアイテムを購入できるように」：
 //   名前・効き方・値段はユーザーが候補から選んだ。値段は LV によらず同じ。
-//   買ったらその場で飲む（持ち物に入れない＝消耗品を入れる場所がまだ無い）
+//   下の2つは買ったらその場で飲む（持ち物に入れない）
 //   ・性別変更薬 … 男女が入れ替わる
 //   ・日月反転の秘薬（ユーザーの案は「昼夜逆転薬」）… 60分、時間帯が12時間ずれる。時間帯は朝・昼・晩の3つ（各8時間）で単純に入れ替えられないので、
 //     ユーザーが「12時間ずらす」を選んだ＝必ず今と違う時間帯になる。効いているあいだに飲むと60分延びる（こちらで決めた）
@@ -19,10 +22,18 @@ export const FLIP_NAME = '日月反転の秘薬'
 export const FLIP_MINUTES = 60
 export const FLIP_HOURS = 12
 export const SHOP_ITEMS = [
+  { ...BATTLE_ITEM_BY_KEY.hp, gold:500, bag:true },
+  { ...BATTLE_ITEM_BY_KEY.mp, gold:500, bag:true },
+  { ...BATTLE_ITEM_BY_KEY.cure, gold:1000, bag:true },
   { key:'gender', name:'性別変更薬', icon:'🧪', color:'#ff88cc', gold:30000 },
   { key:'flip', name:FLIP_NAME, icon:'🌗', color:FLIP_COLOR, gold:3000 },
 ]
 export const SHOP_ITEM_BY_KEY = Object.fromEntries(SHOP_ITEMS.map(i => [i.key, i]))
+
+// 持ち歩く薬：持っている数・いま買える数（Gold と持てる数の少ないほう）
+export const itemCountOf = (profile, key) => itemCountsOf(profile?.items)[key] || 0
+export const buyableQtyOf = (profile, item) =>
+  Math.max(0, Math.min(Math.floor((Number(profile?.gold) || 0) / item.gold), ITEM_MAX - itemCountOf(profile, item.key)))
 
 const MINUTE_MS = 60 * 1000
 const FLIP_SHIFT_MS = FLIP_HOURS * 60 * MINUTE_MS

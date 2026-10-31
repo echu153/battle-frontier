@@ -9346,8 +9346,10 @@ grant execute on function public.v2cap_dungeon_verify_load(text, bigint, uuid) t
 -- 回し直した結果を入れる（削った量・報酬）。p_try＝読んだときの挑戦の回数（同時に2回確かめても、あとの挑戦の記録に入れない）
 -- ★挑戦を始めたあとに時間切れ（90分）になっても、その挑戦のぶんは入れる。ほかの人が同じときに削っていても、いまのHPより多くは入らない
 -- p_clean＝この挑戦が負けなかったか（倒した・時間切れまで立っていた＝dungeonVerify.js の cleanTryOf）。null は前の版の呼び方（数えない）
+-- p_items＝この挑戦で飲んだ薬の数 { hp, mp, cure }（§24・回し直しの結果＝画面の申告は見ない）。飲まなければ null
 drop function if exists public.v2cap_dungeon_verify_settle(text, bigint, uuid, int, int, text);
-create or replace function public.v2cap_dungeon_verify_settle(p_secret text, p_run bigint, p_player uuid, p_try int, p_damage int, p_reason text default null, p_clean boolean default null)
+drop function if exists public.v2cap_dungeon_verify_settle(text, bigint, uuid, int, int, text, boolean);
+create or replace function public.v2cap_dungeon_verify_settle(p_secret text, p_run bigint, p_player uuid, p_try int, p_damage int, p_reason text default null, p_clean boolean default null, p_items jsonb default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_run public.v2cap_dungeon_runs;
@@ -9377,6 +9379,14 @@ begin
      set damage = damage + v_mine, flawed = flawed or coalesce(not p_clean, false),
          try_open_at = null, try_hp = null, try_seed = null, try_snap = null, try_sub = null, try_sub_at = null
    where run_id = p_run and player_id = p_player;
+  -- 飲んだ薬を持ち物から引く（0より下にはしない＝同じときに2つの挑戦で飲んだとき）。上の try_sub を消したので、聞き直しても2回は引かない
+  if p_items is not null then
+    update public.v2cap_profiles p
+       set items = p.items || (select coalesce(jsonb_object_agg(e.key, greatest(0, coalesce((p.items->>e.key)::int, 0) - e.value::int)), '{}'::jsonb)
+                                 from jsonb_each_text(p_items) e),
+           updated_at = now()
+     where p.id = p_player;
+  end if;
   -- 倒れていたら、その場で報酬を渡す（ほかの入っていた人は入口で受け取る）
   v_reward := public.v2cap_dungeon_pay_reward(p_run, p_player);
   -- ずれた挑戦を残す（入れたのはサーバーの計算のほう）
@@ -9391,8 +9401,8 @@ begin
   return v_res || jsonb_build_object('ok', true, 'run', public.v2cap_dungeon_run_json(p_run, p_player));
 end;
 $$;
-revoke all on function public.v2cap_dungeon_verify_settle(text, bigint, uuid, int, int, text, boolean) from public, authenticated;
-grant execute on function public.v2cap_dungeon_verify_settle(text, bigint, uuid, int, int, text, boolean) to anon;
+revoke all on function public.v2cap_dungeon_verify_settle(text, bigint, uuid, int, int, text, boolean, jsonb) from public, authenticated;
+grant execute on function public.v2cap_dungeon_verify_settle(text, bigint, uuid, int, int, text, boolean, jsonb) to anon;
 
 -- ===== 報酬を受け取る（自分が挑戦していないあいだにボスが倒れたとき・入口から）=====
 create or replace function public.v2cap_dungeon_claim(p_run bigint)
@@ -9507,25 +9517,49 @@ grant execute on function public.v2cap_dev_dungeon_reset() to authenticated;
 --   ・日月反転の秘薬 3,000G … flip_until まで、出会う敵の時間帯が12時間ずれる。効いているあいだに飲むと60分延びる
 --   ★効き目は画面の出撃が見る（src/v2cap/lib/shop.js の encounterClockOf）。ここは買う・Goldを減らす・印を付けるだけ
 --   ★値段と時間の写しは src/v2cap/lib/shop.js（shop.test.js が突き合わせる）
+-- 【確定】2026-11-01 ユーザー「挑戦とかで使用できるアイテムもここで販売してほしい」：持ち歩く薬（持ち物の items に入り、挑戦の戦闘で飲む）
+--   ・HPポーション 500G・MPポーション 500G・清めの雫 1,000G。何個か選んで買う（p_qty）・種類ごとに99個まで
+--   ★飲んだ数を引くのは v2cap_dungeon_verify_settle（§23・回し直しの結果）。効き方は src/v2cap/core/atbItems.js・core/atb.js の drinkItem
+--   ★v2cap_profiles は画面から書けない（select だけ）＝持っている数を増やせるのはこの関数だけ
 alter table public.v2cap_profiles add column if not exists flip_until timestamptz;
+alter table public.v2cap_profiles add column if not exists items jsonb not null default '{}'::jsonb;
 
-create or replace function public.v2cap_shop_buy(p_item text)
+drop function if exists public.v2cap_shop_buy(text);
+create or replace function public.v2cap_shop_buy(p_item text, p_qty int default 1)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   c_gender_gold  constant int := 30000;   -- shop.js の SHOP_ITEMS（gender）
   c_flip_gold    constant int := 3000;    -- shop.js の SHOP_ITEMS（flip）
   c_flip_minutes constant int := 60;      -- shop.js の FLIP_MINUTES
+  c_hp_gold      constant int := 500;     -- shop.js の SHOP_ITEMS（hp）
+  c_mp_gold      constant int := 500;     -- shop.js の SHOP_ITEMS（mp）
+  c_cure_gold    constant int := 1000;    -- shop.js の SHOP_ITEMS（cure）
+  c_item_max     constant int := 99;      -- core/atbItems.js の ITEM_MAX
   v_uid  uuid := auth.uid();
   v_row  public.v2cap_profiles;
   v_cost bigint;
+  v_have int;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
-  if p_item is null or p_item not in ('gender', 'flip') then
+  if p_item is null or p_item not in ('gender', 'flip', 'hp', 'mp', 'cure') then
     return jsonb_build_object('ok', false, 'error', '品物が正しくありません');
   end if;
   select * into v_row from public.v2cap_profiles where id = v_uid for update;
   if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  -- 持ち歩く薬：持ち物に入れる
+  if p_item in ('hp', 'mp', 'cure') then
+    if p_qty is null or p_qty < 1 or p_qty > c_item_max then return jsonb_build_object('ok', false, 'error', '個数が正しくありません'); end if;
+    v_have := coalesce((v_row.items->>p_item)::int, 0);
+    if v_have + p_qty > c_item_max then return jsonb_build_object('ok', false, 'error', 'これ以上持てません'); end if;
+    v_cost := p_qty * (case p_item when 'hp' then c_hp_gold when 'mp' then c_mp_gold else c_cure_gold end);
+    if v_row.gold < v_cost then return jsonb_build_object('ok', false, 'error', 'Goldが足りません'); end if;
+    update public.v2cap_profiles
+       set gold = gold - v_cost, items = items || jsonb_build_object(p_item, v_have + p_qty), updated_at = now()
+     where id = v_uid
+     returning * into v_row;
+    return jsonb_build_object('ok', true, 'item', p_item, 'qty', p_qty, 'have', v_have + p_qty, 'spent', v_cost, 'gold', v_row.gold);
+  end if;
   if p_item = 'gender' and v_row.gender is null then
     return jsonb_build_object('ok', false, 'error', '先にホームで性別を選んでください');
   end if;
@@ -9545,8 +9579,8 @@ begin
   return jsonb_build_object('ok', true, 'item', p_item, 'spent', v_cost, 'gold', v_row.gold, 'flip_until', v_row.flip_until);
 end;
 $$;
-revoke all on function public.v2cap_shop_buy(text) from public, anon;
-grant execute on function public.v2cap_shop_buy(text) to authenticated;
+revoke all on function public.v2cap_shop_buy(text, int) from public, anon;
+grant execute on function public.v2cap_shop_buy(text, int) to authenticated;
 
 -- ============================================================
 -- ===== 25. 商店の商人ソルド（2026-10-31）=====

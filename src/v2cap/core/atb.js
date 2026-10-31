@@ -32,11 +32,12 @@
 // ============================================================
 import {
   createSide, liveStats, mpCostOf, priorityOf, takeAction, tickBleedAfterAct, BUFF_MIN_PCT, BEAST_FORMS,
-  battleStart, startOfTurn, endOfTurn,
+  battleStart, startOfTurn, endOfTurn, healMaxAmount,
 } from './battle.js'
 import { STAT_KEYS, STAT_DEFS } from './stats.js'
 import { AIL_KEYS, AIL_LABEL, BLEED_DECAY_SEC, hasAilment, procCutOf, isSealed, usesMp } from './ailments.js'
-import { ichijiSkip, agitCutOf, STK_LABEL } from './battleIchiji.js'
+import { ichijiSkip, agitCutOf, STK_LABEL, canHeal, gainHp } from './battleIchiji.js'
+import { BATTLE_ITEM_BY_KEY, ITEM_CD, itemCountsOf } from './atbItems.js'
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
 // 秒の比べに使うごく小さい余裕（刻みの足し算の誤差で、ちょうど期限の瞬間を落とさない）
@@ -158,6 +159,9 @@ const createAtbSide = (fighter, band, { ai = false, cast = false } = {}) => {
   side.guardNext = false       // 次の行動は防御（ボタン。割り込み・マクロより先に出る）
   side.guardCut = 0            // 防御中の軽減率（battle.js の applyIncoming が見る）
   side.guardReadyAt = 0        // 防御が使えるようになる時刻
+  side.items = null            // 持っている薬 { hp, mp, cure }（createAtb の items。無ければ薬のボタンを出さない）
+  side.itemsUsed = {}          // この戦闘で飲んだ数（挑戦の終わりにサーバーが持ち物から引く）
+  side.itemReadyAt = 0         // 薬が飲めるようになる時刻
   side.cast = null             // 詠唱中：{ idx, name, start, until }
   side.rot = 0                 // 敵が次に見る枠
   side.parObj = null           // 麻痺の期限を付けた状態異常（入れ直しを見分ける）
@@ -181,12 +185,14 @@ const createAtbSide = (fighter, band, { ai = false, cast = false } = {}) => {
 }
 
 // fighterA が自分（予約で動く）・fighterB が相手（自分で選ぶ・大技は詠唱）
-export const createAtb = (fighterA, fighterB, { rng = Math.random, band = null, maxSec = MAX_SEC, castB = true } = {}) => {
+// items … 自分が持っている薬（v2cap_profiles.items の形）。渡さなければ薬は使えない
+export const createAtb = (fighterA, fighterB, { rng = Math.random, band = null, maxSec = MAX_SEC, castB = true, items = null } = {}) => {
   const st = {
     rng, band, maxSec, steps: 0, t: 0, acc: 0, turn: 1, over: false, winner: null, log: [], inputs: [],
     a: createAtbSide(fighterA, band),
     b: createAtbSide(fighterB, band, { ai: true, cast: castB }),
   }
+  if (items) st.a.items = itemCountsOf(items)
   battleStart(st.a, st.b, st.log)
   initPattern(st.a, rng)
   initPattern(st.b, rng)
@@ -506,6 +512,46 @@ export const toggleGuard = (st) => {
   input(st, { k: 'guard', on: st.a.guardNext })
 }
 
+// ===== 薬（core/atbItems.js・商店で買う）=====
+// 【確定】2026-11-01 ユーザー選択「すぐ飲む・ゲージは空」「3種類で共通 30秒」「最大の30%」：
+//   押した瞬間に効く（ゲージを待たない・麻痺のあいだでも飲める）。ゲージは空になる＝防御と同じく1回の行動のぶん。
+//   ★行動（act）を通らない＝防御は切れない・出血は刻まない。回復量の補正（回復阻害・火傷など）は技の回復と同じだけ掛かる
+//   ★持っている数は挑戦の写しから。ここでは数えるだけで、持ち物から引くのはサーバー（回し直しの itemsUsedOf → v2cap_dungeon_verify_settle）
+export const itemLeftOf = (side, key) => side.items?.[key] || 0
+export const itemsUsedOf = (st) => (Object.keys(st.a.itemsUsed).length ? { ...st.a.itemsUsed } : null)
+export const itemCdLeft = (side, now) => Math.max(0, side.itemReadyAt - now)
+export const itemCdRatio = (side, now) => Math.min(1, itemCdLeft(side, now) / ITEM_CD)
+// 飲んでも何も変わらないときは飲めない（もったいない）。狂鬼化のあいだはHPが戻らない
+const itemUseful = (side, key) => (key === 'hp' ? canHeal(side) && side.hp < side.base.hp
+  : key === 'mp' ? side.mp < side.base.mp
+  : AIL_KEYS.some(k => hasAilment(side.ail, k)))
+export const canDrink = (side, key, now) =>
+  !!BATTLE_ITEM_BY_KEY[key] && itemLeftOf(side, key) > 0 && itemCdLeft(side, now) <= EPS && side.hp > 0 && itemUseful(side, key)
+export const drinkItem = (st, key) => {
+  const me = st.a
+  if (st.over || !canDrink(me, key, st.t)) return
+  input(st, { k: 'item', item: key })
+  const def = BATTLE_ITEM_BY_KEY[key]
+  me.items[key] -= 1
+  me.itemsUsed[key] = (me.itemsUsed[key] || 0) + 1
+  me.itemReadyAt = st.t + ITEM_CD
+  me.gauge = Math.max(0, me.gauge - GAUGE_FULL)
+  if (key === 'hp') {
+    st.log.push({ side: me.name, type: 'heal', skill: def.name, heal: gainHp(me, healMaxAmount(me, def.pct)) })
+  } else if (key === 'mp') {
+    const before = me.mp
+    me.mp = Math.min(me.base.mp, me.mp + Math.max(1, Math.floor(me.base.mp * def.pct / 100)))
+    st.log.push({ side: me.name, type: 'mpGain', skill: def.name, mp: me.mp - before, item: true })
+  } else {
+    for (const k of AIL_KEYS) {
+      if (!hasAilment(me.ail, k)) continue
+      delete me.ail[k]
+      st.log.push({ side: me.name, type: 'cure', skill: def.name, ail: AIL_LABEL[k], item: true })
+    }
+    me.parObj = null
+  }
+}
+
 // 戦いの終わり。★構えも終わらせる（残すと、構えのあいだに倒したとき大技の札と渦と赤いゲージが出たまま止まる）
 const endFight = (st, winner) => {
   st.over = true
@@ -703,6 +749,7 @@ export const applyInput = (st, e) => {
   else if (e.k === 'macro') startMacro(st, e.no, e.steps, e.loop)
   else if (e.k === 'stop') stopMacro(st)
   else if (e.k === 'guard') toggleGuard(st)
+  else if (e.k === 'item') drinkItem(st, e.item)
 }
 // step の刻みまで進める（決着がついたらそこで止まる）
 export const runToStep = (st, step) => {

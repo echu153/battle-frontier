@@ -36,7 +36,8 @@ export const verifyRequest = async ({ body, secret, sha = '', fetchFn = fetch })
     const t = await rpc('v2cap_dungeon_verify_load', { p_secret: secret, p_run: run, p_player: player })
     if (!t?.ok || t.done) return { status: 200, body: t }
     const v = verifyTry({ boss: t.boss, diff: t.diff, hp: t.hp, seed: t.seed, snap: t.snap, inputs: t.inputs, endStep: t.end_step, elapsedSec: t.elapsed_sec })
-    const done = await rpc('v2cap_dungeon_verify_settle', { p_secret: secret, p_run: run, p_player: player, p_try: t.try, p_damage: v.damage, p_clean: cleanTryOf(v), p_reason: v.reason })
+    // 飲んだ薬（無ければ送らない＝薬の SQL を流す前のサーバーでも通る）
+    const done = await rpc('v2cap_dungeon_verify_settle', { p_secret: secret, p_run: run, p_player: player, p_try: t.try, p_damage: v.damage, p_clean: cleanTryOf(v), p_reason: v.reason, ...(v.items ? { p_items: v.items } : {}) })
     return { status: 200, body: done }
   } catch (e) {
     console.error(e)

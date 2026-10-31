@@ -12,6 +12,7 @@ test('【確定】2026-10-31 浮かぶ文字（ユーザー「当たらなかっ
   assert.equal(popTextOf({ kind: 'miss' }), 'Miss')
   assert.equal(popTextOf({ kind: 'hit', amount: 12345, crit: true }), '12,345', '数字は数字のまま（Critical! は上の行）')
   assert.equal(popTextOf({ kind: 'heal', amount: 200 }), '+200')
+  assert.equal(popTextOf({ kind: 'mp', amount: 300 }), '+300', 'MPポーション')
   assert.equal(popTextOf({ kind: 'tick', amount: 55 }), '55')
   // クリティカルだけ大きく出て、すぐ元の大きさへ
   assert.equal(popScaleOf({ kind: 'hit', crit: true }, 0), 1.5)
@@ -146,4 +147,14 @@ test('【確定】2026-10-30 構えのあとに技の途中から流す（castSk
   assert.equal(ev2[0].t0, 100)
   assert.equal(ev2[1].t0, 100.5)
   assert.equal(skillBannerAt(ev2, 100.5, 'b').rage, false)
+})
+
+test('薬を飲んだとき：飲んだ側が光る・HPは緑の数字・MPは青い数字（技のMP回復と治す技は今までどおり）', () => {
+  const fx = (l) => fxEventsOf([{ side: '我', ...l }], '我', '敵')
+  assert.deepEqual(fx({ type: 'heal', skill: 'HPポーション', heal: 300 }), [{ kind: 'use', side: 'a', skill: 'HPポーション' }, { kind: 'heal', side: 'a', amount: 300 }])
+  assert.deepEqual(fx({ type: 'mpGain', skill: 'MPポーション', mp: 40, item: true }), [{ kind: 'use', side: 'a', skill: 'MPポーション' }, { kind: 'mp', side: 'a', amount: 40 }])
+  assert.deepEqual(fx({ type: 'cure', skill: '清めの雫', ail: '毒', item: true }), [{ kind: 'use', side: 'a', skill: '清めの雫' }])
+  assert.deepEqual(fx({ type: 'mpGain', skill: '魂喰らい', mp: 10 }), [])
+  assert.deepEqual(fx({ type: 'cure', skill: '心身一如', ail: '毒' }), [])
+  assert.match(stage, /mp: '#66aaff'/, '舞台の青い数字')
 })

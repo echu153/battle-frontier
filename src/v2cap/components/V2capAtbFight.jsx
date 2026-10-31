@@ -8,8 +8,10 @@ import { mpCostOf } from '../core/battle.js'
 import {
   advance, reserve, unreserveAt, clearQueue, startMacro, stopMacro, toggleGuard,
   canUse, cdLeft, cdFor, cdRatio, guardReady, guardCdLeft, guardCdRatio, chosenOf,
+  canDrink, drinkItem, itemCdLeft, itemCdRatio, itemLeftOf,
   GUARD_CUT, GUARD_CD, QUEUE_MAX, TURN_SEC,
 } from '../core/atb.js'
+import { BATTLE_ITEMS } from '../core/atbItems.js'
 import { MACRO_MARK, macroEntriesOf } from '../lib/atbMacro.js'
 import { fxEventsOf, scheduleFx, POP_SEC } from '../lib/atbFx.js'
 import { START_TELOP_MS, CLEAR_TELOP_MS, FAIL_TELOP_MS, startTelopOn, endTelopOf } from '../lib/atbTelop.js'
@@ -359,6 +361,30 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
         <button onClick={() => reserve(s, null)} disabled={s.over}
           style={{ ...miniBtn('#88ccff'), padding:'8px 4px', fontSize:'13px', minHeight:'48px', minWidth:0, textAlign:'center' }}>通常攻撃</button>
       </div>
+      {/* 薬（商店で買う・core/atbItems.js）：押したらすぐ飲む。3種類で共通の待ち時間（スマホでも3つ並ぶ）
+          【確定】2026-11-01 ユーザー「挑戦とかで使用できるアイテムもここで販売してほしい」＋選択「すぐ飲む・ゲージは空」「3種類で共通 30秒」 */}
+      {me.items && (
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(3, minmax(0, 1fr))', gap:'4px', marginBottom:'4px' }}>
+          {BATTLE_ITEMS.map(it => {
+            const n = itemLeftOf(me, it.key)
+            const left = itemCdLeft(me, now)
+            const usable = canDrink(me, it.key, now)
+            // 待ち時間のあいだはふだんの色のままグレーをかける（技と同じ）。持っていない・飲んでも変わらないときは暗い色
+            const lit = usable || (n > 0 && left > 0)
+            return (
+              <button key={it.key} onClick={() => drinkItem(s, it.key)} disabled={s.over || !usable}
+                style={{ ...miniBtn(lit ? it.color : '#2a4a66'), padding:'5px 3px', minHeight:'46px', minWidth:0, textAlign:'center',
+                  color: lit ? it.color : TEXT.empty, position:'relative', overflow:'hidden' }}>
+                <div style={{ ...SKILL_TEXT, fontSize: skillNameSize(it.name) }}>{it.name}</div>
+                <div style={{ ...SKILL_TEXT, fontSize: left > 0 ? '12px' : '10px', fontWeight: left > 0 ? 'bold' : 'normal', color: left > 0 ? '#ffffff' : TEXT.label, marginTop:'2px' }}>
+                  {left > 0 ? `あと${left.toFixed(1)}秒` : `×${n}`}
+                </div>
+                <CdShade lite={lite} ratio={itemCdRatio(me, now)} />
+              </button>
+            )
+          })}
+        </div>
+      )}
       <div style={{ display:'grid', gridTemplateColumns: SKILL_GRID, gap:'4px', marginBottom:'8px' }}>
         {me.slots.map((sl, i) => {
           const left = cdLeft(me, i, now)

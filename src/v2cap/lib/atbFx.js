@@ -10,6 +10,7 @@
 //   hit  … 受けた側が揺れて赤く光り、ダメージの数字が出る（crit はクリティカル＝数字の上に「Critical!」）
 //   miss … 受けた側に「Miss」（揺れない・攻撃の絵とエフェクトは当たったときと同じに最後まで流す）
 //   heal … 回復した側に緑の数字
+//   mp   … MPポーションを飲んだ側に青い数字（2026-11-01）
 //   tick … 毒・火傷・出血などで減った側に紫の数字（揺れない）
 //   技の名前の帯（skillBannerAt）… 敵が技を使ったとき、舞台の上に技の名前を出す（2026-10-30）
 // 絵の差し替え（待機・攻撃のGIF）は画面（V2capAtbStage.jsx）の側で行う
@@ -37,6 +38,10 @@ export const fxEventsOf = (entries, aName, bName) => {
     } else if (l.type === 'heal' || l.type === 'regenTick') {
       if (l.type === 'heal') out.push({ kind: 'use', side: s, skill: l.skill || null })
       if ((l.heal || 0) > 0) out.push({ kind: 'heal', side: s, amount: l.heal })
+    } else if (l.item && (l.type === 'mpGain' || l.type === 'cure')) {
+      // 薬を飲んだ（core/atb.js の drinkItem）。HPポーションは上の heal と同じ（光る＋緑の数字）・MPポーションは青い数字
+      out.push({ kind: 'use', side: s, skill: l.skill || null })
+      if ((l.mp || 0) > 0) out.push({ kind: 'mp', side: s, amount: l.mp })
     } else if (l.type === 'ailTick' || l.type === 'hpCost') {
       if ((l.damage || 0) > 0) out.push({ kind: 'tick', side: s, amount: l.damage })
     }
@@ -76,7 +81,7 @@ export const RAGE_SEC = 1.4   // 節目のバフが付いたとき、体が赤�
 //   外れ＝「Miss」（前は MISS）／クリティカル＝数字の上に「Critical!」（前は数字のうしろの「!」だけ）。戦闘ログの文はそのまま
 export const MISS_TEXT = 'Miss'
 export const CRIT_TEXT = 'Critical!'
-export const popTextOf = (f) => (f.kind === 'miss' ? MISS_TEXT : f.kind === 'heal' ? `+${f.amount.toLocaleString()}` : f.amount.toLocaleString())
+export const popTextOf = (f) => (f.kind === 'miss' ? MISS_TEXT : f.kind === 'heal' || f.kind === 'mp' ? `+${f.amount.toLocaleString()}` : f.amount.toLocaleString())
 // クリティカルは大きく出て、すぐ元の大きさへ（a＝出てからの割合 0〜1）
 const POP_PUNCH = 0.12
 export const popScaleOf = (f, a) => (f.crit && a >= 0 && a < POP_PUNCH ? 1.5 - 0.5 * (a / POP_PUNCH) : 1)
