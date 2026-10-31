@@ -9049,10 +9049,10 @@ alter table public.v2cap_dungeon_mismatch enable row level security;
 create or replace function public.v2cap_dungeon_conf(p_boss text, p_diff text)
 returns table(hp int, area int) language sql immutable set search_path = public as $$
   select v.hp, v.area from (values
-    ('varuzenoku', 'normal', 6500, 2),
-    ('varuzenoku', 'hard', 15000, 5),
-    ('amaza', 'normal', 6500, 2),
-    ('amaza', 'hard', 15000, 5)
+    ('varuzenoku', 'normal', 13000, 2),
+    ('varuzenoku', 'hard', 30000, 5),
+    ('amaza', 'normal', 13000, 2),
+    ('amaza', 'hard', 30000, 5)
   ) as v(boss, diff, hp, area)
   where v.boss = p_boss and v.diff = p_diff
 $$;
