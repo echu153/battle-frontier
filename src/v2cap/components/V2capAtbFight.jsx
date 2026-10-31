@@ -270,7 +270,7 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
               onClick={() => { fxRef.current = [...fxRef.current, { kind:'rage', side:'b', skill: b.name, t0: performance.now() / 1000 }] }}
               style={{ ...miniBtn('#ffb060'), padding:'4px 8px', fontSize:'11px' }}>🔥 {b.name}</button>
           ))}
-          {/* HPの節目のバフのあとを見る（2026-11-01 黒龍の稲妻）：HPを最後の節目まで減らす＝本当にバフが付く（試し撃ちだけ） */}
+          {/* HPの節目のバフのあとを見る（2026-11-01 黒龍のオーラ）：HPを最後の節目まで減らす＝本当にバフが付く（試し撃ちだけ） */}
           {(s.b.pattern?.buffs || []).length > 0 && (
             <button disabled={paused} onClick={() => { s.b.hp = Math.min(s.b.hp, Math.floor(s.b.base.hp * s.b.pattern.buffs.at(-1).at)) }}
               style={{ ...miniBtn('#ff9a5a'), padding:'4px 8px', fontSize:'11px' }}>⚡ HP{Math.round(s.b.pattern.buffs.at(-1).at * 100)}%へ</button>

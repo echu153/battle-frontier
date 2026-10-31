@@ -249,12 +249,12 @@ test('【確定】2026-10-30 終焉の黒焔の演出（ユーザー「終焉の
   assert.ok(a.dim > 0.3 && b.dim >= a.dim)
   assert.ok(b.hand.r > a.hand.r, '口の光が育つ')
   assert.ok(a.items.some(it => it.t === 'mote' && it.space === 'hand'), '火の粉が口へ')
-  assert.ok(b.bossGlow > a.bossGlow - 0.2 && b.bossGlow > 0.6, '竜の体が光る')
+  assert.equal(b.bossGlow, undefined, '【確定】2026-11-01 ユーザー「これ大技の時のふわふわなのか、そしたら黒龍には合わないからいらない」：竜の体のまわりの赤い光はやめた')
   for (const ms of [500, 1500, H - 10]) assert.deepEqual(sceneAt(d, ms).shake, [0, 0], 'ためるあいだは震えない')
   // 構え：同じ形で、構えの長さで育つ
   const c0 = castSceneAt(d, 500), c1 = castSceneAt(d, 4800)
   assert.equal(c1.tone, 'fire')
-  assert.ok(c1.hand.r > c0.hand.r + 15 && c1.dim > 0.4 && c1.bossGlow > c0.bossGlow)
+  assert.ok(c1.hand.r > c0.hand.r + 15 && c1.dim > 0.4)
   assert.deepEqual(c1.shake, [0, 0])
   // 吐く：光って揺れ、奔流が口から伸びる
   const s0 = sceneAt(d, H + 30), s1 = sceneAt(d, I - 10)

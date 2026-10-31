@@ -342,22 +342,22 @@ const doomBlobs = (ms, head, D = DOOM) => {
   }
   return out
 }
-// 終焉の黒焔のためるあいだ（構えの5秒・技の ため）：k＝ためた割合 0〜1・a＝出てくる割合。火の粉が広い所から口へ吸い込まれ、口の光が育ち、竜の体が赤く光を増す
+// 終焉の黒焔のためるあいだ（構えの5秒・技の ため）：k＝ためた割合 0〜1・a＝出てくる割合。火の粉が広い所から口へ吸い込まれ、口の光が育つ
+//   【確定】2026-11-01 ユーザー「これ大技の時のふわふわなのか、そしたら黒龍には合わないからいらない」：竜の体のまわりの赤い光（bossGlow）はやめた
 const doomGather = (out, ms, k, a, D = DOOM) => {
   motes(out.items, D.motes, ms, 0.95 * a, 1, D.reach)
   out.hand = { r: 12 + 34 * k + 3 * Math.sin(ms / 120), op: a }
-  out.bossGlow = a * (0.2 + 0.8 * k) * (0.82 + 0.18 * Math.sin(ms / 170))
 }
 // 構えのあいだ：ためた割合は構えの長さ（＝技の途中から流す時刻 castSkipMs・lib/dungeon.js の castSec と同じ）で数える
 const doomCastSceneAt = (m, castMs, D = DOOM) => {
-  const out = { dim: D.castDim * smooth(castMs / 1200), flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: 'fire', dimColor: D.color, bossGlow: 0, beam: null }
+  const out = { dim: D.castDim * smooth(castMs / 1200), flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: 'fire', dimColor: D.color, beam: null }
   doomGather(out, castMs, clamp01(castMs / (m.castSkipMs || CAST_SEC * 1000)), smooth(castMs / 500))
   return out
 }
-// 技のあいだ（ms＝技を出しはじめてから）→ sceneAt と同じ形＋ tone・dimColor・bossGlow（竜の体の光 0〜1）・beam: { head（口から相手までの進み 0〜1）, w（太さの割合）, op }
+// 技のあいだ（ms＝技を出しはじめてから）→ sceneAt と同じ形＋ tone・dimColor・beam: { head（口から相手までの進み 0〜1）, w（太さの割合）, op }
 //   ★構えのあとは技の途中（castSkipMs）から流す＝どの時刻から見ても同じ形（暗さ・口の光は構えのおわりとつながる）
 export const doomSceneAt = (m, ms, D = DOOM) => {
-  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: 'fire', dimColor: D.color, bossGlow: 0, beam: null }
+  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: 'fire', dimColor: D.color, beam: null }
   const H = m.hitMs, I = m.impactMs, end = sceneEndMsOf(m)
   if (ms < 0 || ms >= end) return out
   const e = ms - I, s = ms - H
@@ -372,7 +372,6 @@ export const doomSceneAt = (m, ms, D = DOOM) => {
   out.flash = 0.45 * pulse(s, 220)
   let amp = 7 * pulse(s, 320)
   if (s < 280) out.hand = { r: 30 + 60 * easeOut(s / 220), op: 1 - s / 280 }
-  out.bossGlow = Math.max(0, 1 - s / (I - H + 420))
   // 黒焔の奔流：口から相手へ伸び、当たったあと beamTail のあいだ細りながら残る
   const tail = I + D.beamTail
   if (ms < tail) {
@@ -415,10 +414,9 @@ export const doomSceneAt = (m, ms, D = DOOM) => {
 //   暗さと光はいちばん強いもの・揺れは足す・描くものは並べる・雲と手は新しいほう（acts の after・landed は sceneAt と同じ）
 //   相手の縮みはかけ合わせる
 export const stageSceneOf = (acts, cast) => {
-  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, squeeze: null, tone: null, dimColor: null, bossGlow: 0, beam: null }
+  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, squeeze: null, tone: null, dimColor: null, beam: null }
   const add = (s) => {
     if (s.tone && (s.dim > 0 || s.items.length || s.hand || s.beam)) { out.tone = s.tone; out.dimColor = s.dimColor }
-    out.bossGlow = Math.max(out.bossGlow, s.bossGlow || 0)
     if (s.beam) out.beam = s.beam
     out.dim = Math.max(out.dim, s.dim)
     out.flash = Math.max(out.flash, s.flash)
