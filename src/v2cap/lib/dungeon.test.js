@@ -5,7 +5,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import {
   CHALLENGE_CATS, DUNGEON_BOSSES, DIFF_KEYS, DUNGEON_MIN, DUNGEON_TRY_SEC, SUMMONS_PER_DAY, STAMINA_OWNER_FIRST, STAMINA_OWNER, STAMINA_HELPER, HELPERS_MAX,
-  diffOf, isDiffReady, isDiffUnlocked, isSummonable, tryStaminaOf, dungeonFighter,
+  diffOf, isDiffReady, isDiffUnlocked, isSummonable, summonBlockOf, tryStaminaOf, dungeonFighter,
 } from './dungeon.js'
 import { createAtb, runFor, startMacro, fillPerSecOf, hpBuffChips, castMsOf, ATB_SLOW_CUT, FILL_PER_SEC, BUFF_GAUGE_SEC, BUFF_WAIT_AFTER_ACT_SEC, BUFF_SHOW_SEC, TURN_SEC, GAUGE_FULL, NOW_WAIT_AFTER_ACT_SEC, CAST_SEC } from '../core/atb.js'
 import { inflict } from '../core/ailments.js'
@@ -482,6 +482,19 @@ test('【確定】2026-10-31 メニューは「挑戦」・中は「強敵」に
   for (const f of ['../pages/V2capHome.jsx', '../components/V2capDungeon.jsx', '../components/V2capAtb.jsx']) {
     for (const line of read(f).split(/\r?\n/)) assert.ok(/^\s*\/\//.test(line) || !line.includes('IDダンジョン'), `${f}: ${line.trim().slice(0, 60)}`)
   }
+})
+
+test('【確定】2026-10-31 入口のボスの行の言葉と「呼ぶ」のボタンは同じ決まり（本番で、雨摩座を呼んでいるあいだ黒龍の行が「呼べます」のままボタンだけ暗かった）', () => {
+  const at = (summoned, ownActive, reached = 15) => summonBlockOf('varuzenoku', { summoned, ownActive, reached })
+  assert.equal(at(false, false), null, '呼べる')
+  assert.equal(at(true, false), 'きょうはもう呼びました')
+  assert.equal(at(false, true), 'いま呼んでいるボスがいます')
+  assert.equal(at(true, true), 'きょうはもう呼びました', '呼んでいるボス自身の行')
+  assert.equal(at(false, false, 1), 'エリア②に着くと呼べます', 'どの難易度もまだのエリア')
+  assert.equal(at(false, false, 2), null, 'ノーマルだけでも呼べれば呼べる')
+  const src = readFileSync(new URL('../components/V2capDungeon.jsx', import.meta.url), 'utf8')
+  assert.match(src, /const canSummon = \(key\) => !!state && !blockOf\(key\)/, 'ボタンも同じ決まり')
+  assert.match(src, /\{state && \(blockOf\(key\) \|\| '呼べます'\)\}/, '行の言葉も同じ決まり（読み込み中は出さない）')
 })
 
 test('【確定】2026-10-30 雨摩座：黒龍の裏返し（魔法が主）・節目と割合と強さは黒龍と同じ・2026-10-31 強敵として呼べる', () => {

@@ -129,6 +129,15 @@ export const isDiffReady = (bossKey, diffKey) => { const d = diffOf(bossKey, dif
 // 呼べるボスか（summon:false＝まだ呼べない・試し撃ちだけ）
 export const isSummonable = (bossKey) => !!DUNGEON_BOSSES[bossKey] && DUNGEON_BOSSES[bossKey].summon !== false
 export const isDiffUnlocked = (bossKey, diffKey, reachedArea) => isSummonable(bossKey) && isDiffReady(bossKey, diffKey) && (reachedArea || 1) >= diffOf(bossKey, diffKey).area
+export const CIRCLED = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩', '⑪', '⑫', '⑬', '⑭', '⑮']
+// いま呼べないわけ（入口のボスの行に出す・呼べるなら null）。「呼ぶ」のボタンもこれで決める＝言葉とボタンが食い違わない
+//   summoned＝きょうこのボスを呼んだ／ownActive＝いま自分の呼んだボスがいる／reached＝行ったエリアの一番先
+export const summonBlockOf = (bossKey, { summoned, ownActive, reached }) => {
+  if (summoned) return 'きょうはもう呼びました'
+  if (ownActive) return 'いま呼んでいるボスがいます'
+  if (!DIFF_KEYS.some(k => isDiffUnlocked(bossKey, k, reached))) return `エリア${CIRCLED[diffOf(bossKey, DIFF_KEYS[0]).area - 1]}に着くと呼べます`
+  return null
+}
 
 // 挑戦1回に使うスタミナ。owner＝呼んだ人か・tries＝その人がこのボスにもう挑んだ回数
 export const tryStaminaOf = (owner, tries) => (owner ? (tries > 0 ? STAMINA_OWNER : STAMINA_OWNER_FIRST) : STAMINA_HELPER)

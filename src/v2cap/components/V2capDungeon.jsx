@@ -18,8 +18,8 @@ import { CLASS_BY_ID } from '../lib/jobs.js'
 import { bossArtOf, bossThumbOf } from '../lib/bossArt.js'
 import { bossIllustOf } from '../lib/bossIllust.js'
 import {
-  CHALLENGE_CATS, DUNGEON_BOSSES, DIFF_KEYS, DUNGEON_MIN, DUNGEON_TRY_SEC, HELPERS_MAX, STAMINA_HELPER, STAMINA_OWNER, STAMINA_OWNER_FIRST,
-  diffOf, isDiffReady, isDiffUnlocked, tryStaminaOf, dungeonFighter, msLeftOf,
+  CHALLENGE_CATS, CIRCLED, DUNGEON_BOSSES, DIFF_KEYS, DUNGEON_MIN, DUNGEON_TRY_SEC, HELPERS_MAX, STAMINA_HELPER, STAMINA_OWNER, STAMINA_OWNER_FIRST,
+  diffOf, isDiffReady, isDiffUnlocked, summonBlockOf, tryStaminaOf, dungeonFighter, msLeftOf,
 } from '../lib/dungeon.js'
 
 // ============================================================
@@ -47,7 +47,6 @@ const Bar = ({ pct, color, h = 10 }) => (
     <div style={{ width:`${Math.max(0, Math.min(100, pct))}%`, height:'100%', background: color }} />
   </div>
 )
-const CIRCLED = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩', '⑪', '⑫', '⑬', '⑭', '⑮']
 // ボスの絵：イラスト版（無ければドット絵版）。試し撃ちで選んだ版を使う
 const artMemo = new Map()
 const artOfBoss = (key) => {
@@ -179,7 +178,8 @@ export default function V2capDungeon({ prof, inventory, onProfile }) {
   const ownActive = active.some(r => r.mine)
   // きょうこのボスを呼んだか（SQL をまだ流していないサーバーは全部まとめて1回）
   const summonedOf = (key) => (state?.summoned_bosses ? state.summoned_bosses.includes(key) : !!state?.summoned_today)
-  const canSummon = (key) => !!state && !summonedOf(key) && !ownActive
+  const blockOf = (key) => summonBlockOf(key, { summoned: summonedOf(key), ownActive, reached })
+  const canSummon = (key) => !!state && !blockOf(key)
 
   return (
     <div>
@@ -250,7 +250,7 @@ export default function V2capDungeon({ prof, inventory, onProfile }) {
                   {thumb && <img src={thumb} alt="" draggable={false} style={{ width:'64px', height:'64px', objectFit:'contain', flexShrink:0 }} />}
                   <span style={{ flex:1, minWidth:0 }}>
                     <b style={{ color:'#ff8866', fontSize:'13px' }}>{boss.name}</b><br />
-                    <span style={{ color: TEXT.label, fontSize:'10px' }}>{summonedOf(key) ? 'きょうはもう呼びました' : '呼べます'}</span>
+                    <span style={{ color: TEXT.label, fontSize:'10px' }}>{state && (blockOf(key) || '呼べます')}</span>
                   </span>
                   <span style={{ color: TEXT.label, fontSize:'12px', flexShrink:0 }}>{open ? '▲' : '▼'}</span>
                 </button>
