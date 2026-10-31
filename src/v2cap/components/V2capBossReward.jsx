@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { box, miniBtn, TEXT } from './v2ui.js'
 import { JP_BOLD } from './casinoStyle.js'
 import { bossThumbOf } from '../lib/bossArt.js'
-import { DIFF_COLOR, DUNGEON_BOSSES, HELPER_REWARD_MIN_PCT, SOLO_REWARD_MULT, contributionPctOf, diffOf } from '../lib/dungeon.js'
+import { DIFF_COLOR, DUNGEON_BOSSES, HELPER_REWARD_MIN_PCT, contributionPctOf, diffOf } from '../lib/dungeon.js'
 import { CORRECTED_TEXT } from '../lib/dungeonVerifyCall.js'
 import { gainedExpOf, levelUpLines } from '../lib/settleLines.js'
 
@@ -16,6 +16,7 @@ import { gainedExpOf, levelUpLines } from '../lib/settleLines.js'
 //   cls … いまの職業（LVアップの行）・onBack … 入口へ
 //   【確定】2026-11-01 ユーザー「プレイヤーが敗北したときのテロップも欲しい、画面遷移も」「貢献度もわかるようにしてほしい、ダメージ与えた割合ね」：
 //     倒せなかったときも同じ画面（見出しが「敗北」「時間切れ」・報酬の欄の代わりにボスの残りHP・残り時間）。貢献度はいつも出す（1人でも）
+//     【確定】同じ日 ユーザー「これ完全ソロ討伐成功！にして、報酬3倍とか具体的な内容は言わないでほしい」＝ソロの行に倍率を書かない
 //     onRetry … もう一度挑戦する（倒せなかったときだけ・null なら出さない）・retryCost … そのスタミナ・leftText … 討伐の残り時間・busy … 押している最中
 //   ★画面を切り替えたら上へ戻す（ポップアップのあとと同じ決まり）
 // ============================================================
@@ -104,7 +105,7 @@ export default function V2capBossReward({ bossKey, diffKey, cls, st = null, resu
             {reward === null && <div style={{ color: TEXT.sub, fontSize:'11px' }}>この討伐の報酬はありません</div>}
             {reward && (
               <>
-                {reward.solo && <div style={{ color: GOLD, fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'12px', marginBottom:'4px' }}>🏆 ひとりで倒されずに討伐！ 報酬{SOLO_REWARD_MULT}倍</div>}
+                {reward.solo && <div style={{ color: GOLD, fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'12px', marginBottom:'4px' }}>完全ソロ討伐成功！</div>}
                 <div style={{ color:'#ffcc00', fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'16px', lineHeight: 1.6 }}>EXP +{gainedExpOf(reward).toLocaleString()}</div>
                 <div style={{ color:'#ffcc00', fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'16px', lineHeight: 1.6 }}>Gold +{Number(reward.gold).toLocaleString()}</div>
                 {reward.pct < 100 && <div style={{ color: TEXT.sub, fontSize:'10px', marginTop:'2px' }}>救援のぶん：削った割合で{reward.pct}%（最低{HELPER_REWARD_MIN_PCT}%）</div>}
