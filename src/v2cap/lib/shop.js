@@ -5,7 +5,7 @@ import { BATTLE_ITEM_BY_KEY, ITEM_MAX, itemCountsOf } from '../core/atbItems.js'
 // 「レベルキャップあり」版（v2cap）— 商店（2026-10-31）
 // ------------------------------------------------------------
 // 【確定】2026-11-01 ユーザー「挑戦とかで使用できるアイテムもここで販売してほしい・HPポーション 500・MPポーション 500・状態異常回復する薬 1000」：
-//   持ち歩く薬（bag）＝持ち物（サーバーの v2cap_profiles.items）に入り、挑戦の戦闘で飲む（効き方は core/atbItems.js）。何個か選んで買う
+//   挑戦で使う薬（bag）＝持ち物（サーバーの v2cap_profiles.items）に入り、挑戦の戦闘で飲む（効き方は core/atbItems.js）。何個か選んで買う。持ち込む数は挑戦の入口で選ぶ（合計4つまで）
 // 【確定】2026-10-31 ユーザー指示「施設で商店を追加したい。現状以下のアイテムを購入できるように」：
 //   名前・効き方・値段はユーザーが候補から選んだ。値段は LV によらず同じ。
 //   下の2つは買ったらその場で飲む（持ち物に入れない）
@@ -30,7 +30,7 @@ export const SHOP_ITEMS = [
 ]
 export const SHOP_ITEM_BY_KEY = Object.fromEntries(SHOP_ITEMS.map(i => [i.key, i]))
 
-// 持ち歩く薬：持っている数・いま買える数（Gold と持てる数の少ないほう）
+// 挑戦で使う薬：持っている数・いま買える数（Gold と持てる数の少ないほう）
 export const itemCountOf = (profile, key) => itemCountsOf(profile?.items)[key] || 0
 export const buyableQtyOf = (profile, item) =>
   Math.max(0, Math.min(Math.floor((Number(profile?.gold) || 0) / item.gold), ITEM_MAX - itemCountOf(profile, item.key)))

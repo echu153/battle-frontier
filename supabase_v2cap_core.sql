@@ -9517,7 +9517,7 @@ grant execute on function public.v2cap_dev_dungeon_reset() to authenticated;
 --   ・日月反転の秘薬 3,000G … flip_until まで、出会う敵の時間帯が12時間ずれる。効いているあいだに飲むと60分延びる
 --   ★効き目は画面の出撃が見る（src/v2cap/lib/shop.js の encounterClockOf）。ここは買う・Goldを減らす・印を付けるだけ
 --   ★値段と時間の写しは src/v2cap/lib/shop.js（shop.test.js が突き合わせる）
--- 【確定】2026-11-01 ユーザー「挑戦とかで使用できるアイテムもここで販売してほしい」：持ち歩く薬（持ち物の items に入り、挑戦の戦闘で飲む）
+-- 【確定】2026-11-01 ユーザー「挑戦とかで使用できるアイテムもここで販売してほしい」：挑戦で使う薬（持ち物の items に入り、挑戦の戦闘で飲む）
 --   ・HPポーション 500G・MPポーション 500G・清めの雫 1,000G。何個か選んで買う（p_qty）・種類ごとに99個まで
 --   ★飲んだ数を引くのは v2cap_dungeon_verify_settle（§23・回し直しの結果）。効き方は src/v2cap/core/atbItems.js・core/atb.js の drinkItem
 --   ★v2cap_profiles は画面から書けない（select だけ）＝持っている数を増やせるのはこの関数だけ
@@ -9547,7 +9547,7 @@ begin
   end if;
   select * into v_row from public.v2cap_profiles where id = v_uid for update;
   if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
-  -- 持ち歩く薬：持ち物に入れる
+  -- 挑戦で使う薬：持ち物に入れる
   if p_item in ('hp', 'mp', 'cure') then
     if p_qty is null or p_qty < 1 or p_qty > c_item_max then return jsonb_build_object('ok', false, 'error', '個数が正しくありません'); end if;
     v_have := coalesce((v_row.items->>p_item)::int, 0);
@@ -9581,6 +9581,41 @@ end;
 $$;
 revoke all on function public.v2cap_shop_buy(text, int) from public, anon;
 grant execute on function public.v2cap_shop_buy(text, int) to authenticated;
+
+-- 【確定】2026-11-01 ユーザー「アイテムは4つまでしか持てないようにして、全部で合計4つ」「装備は挑戦タブから設定できるように」＋選択「戦闘に持ち込むのが4つ」：
+--   item_loadout＝戦闘に持ち込む数（3種類を合わせて4つまで）。挑戦の入口で選ぶ。写し（v2cap_battle_snap）に入るので、挑戦を始めたときの数で戦う
+--   飲むと items から減る。選んだ数は残る＝次の挑戦も同じ数（足りなければあるぶんだけ＝core/atbItems.js の carriedItemsOf）
+--   持っている数は見ない（減っても選んだ数を残すため）。持っている数を超えて持ち込めないのは carriedItemsOf が切る
+alter table public.v2cap_profiles add column if not exists item_loadout jsonb not null default '{}'::jsonb;
+
+create or replace function public.v2cap_set_item_loadout(p_loadout jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_carry_max constant int := 4;   -- core/atbItems.js の CARRY_MAX
+  v_uid   uuid := auth.uid();
+  v_out   jsonb := '{}'::jsonb;
+  v_total int := 0;
+  v_key   text;
+  v_val   text;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if jsonb_typeof(p_loadout) is distinct from 'object' then return jsonb_build_object('ok', false, 'error', '持ち込む数が正しくありません'); end if;
+  for v_key, v_val in select key, value from jsonb_each_text(p_loadout) loop
+    if v_key not in ('hp', 'mp', 'cure') or v_val is null or v_val !~ '^[0-9]$' then
+      return jsonb_build_object('ok', false, 'error', '持ち込む数が正しくありません');
+    end if;
+    v_total := v_total + v_val::int;
+    if v_val::int > 0 then v_out := v_out || jsonb_build_object(v_key, v_val::int); end if;
+  end loop;
+  if v_total > c_carry_max then return jsonb_build_object('ok', false, 'error', '持ち込めるのは合計4つまでです'); end if;
+  update public.v2cap_profiles set item_loadout = v_out, updated_at = now() where id = v_uid;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  return jsonb_build_object('ok', true, 'item_loadout', v_out);
+end;
+$$;
+revoke all on function public.v2cap_set_item_loadout(jsonb) from public, anon;
+grant execute on function public.v2cap_set_item_loadout(jsonb) to authenticated;
 
 -- ============================================================
 -- ===== 25. 商店の商人ソルド（2026-10-31）=====

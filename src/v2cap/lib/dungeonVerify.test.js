@@ -280,7 +280,7 @@ test('★書き換えた申告では増えない：入れるのはサーバー�
 })
 
 // ===== 薬（2026-11-01 ユーザー「挑戦とかで使用できるアイテムもここで販売してほしい」）=====
-const itemTryOf = (seed, items) => { const t = tryOf('戦士', 'amaza', seed, 15000); t.snap.prof.items = items; return t }
+const itemTryOf = (seed, items, loadout = { hp: 2, mp: 1, cure: 1 }) => { const t = tryOf('戦士', 'amaza', seed, 15000); t.snap.prof.items = items; t.snap.prof.item_loadout = loadout; return t }
 // 画面と同じように進めて、HPが減ったら飲む
 const playDrinking = (t, press, stopAt = 1200) => {
   const st = startTryAtb(t)
@@ -312,11 +312,16 @@ test('★薬を飲んだ挑戦もサーバーの回し直しと同じになる�
 test('★持っていない薬は記録を書き換えても飲めない（飲んだ数にも入らない）', () => {
   const inputs = [100, 800, 1500, 2200].map(step => ({ step, k: 'item', item: 'hp' }))
   // 飲む前にHPが減るように、守りを下げて戦う
-  const low = (items) => { const t = itemTryOf(51, items); Object.assign(t.snap.prof, { hp: 800, vit: 1, agi: 1 }); return t }
+  const low = (items, loadout) => { const t = itemTryOf(51, items, loadout); Object.assign(t.snap.prof, { hp: 800, vit: 1, agi: 1 }); return t }
   const none = verifyTry({ ...wire(low({})), inputs, endStep: 2400, elapsedSec: 200 })
   assert.equal(none.items, undefined, '1つも持っていない')
   const two = verifyTry({ ...wire(low({ hp: 2 })), inputs, endStep: 2400, elapsedSec: 200 })
   assert.ok((two.items?.hp || 0) <= 2, JSON.stringify(two.items))
+  // 持ち込んだ数を超えて飲めない（持ち物にはたくさんあっても）・選んでいなければ飲めない
+  const one = verifyTry({ ...wire(low({ hp: 9 }, { hp: 1 })), inputs, endStep: 2400, elapsedSec: 200 })
+  assert.ok((one.items?.hp || 0) <= 1, JSON.stringify(one.items))
+  const zero = verifyTry({ ...wire(low({ hp: 9 }, {})), inputs, endStep: 2400, elapsedSec: 200 })
+  assert.equal(zero.items, undefined, '選んでいない')
   // 写しに items が無い（SQL を流す前に始めた挑戦）
   const old = tryOf('戦士', 'amaza', 51, 15000)
   assert.equal(startTryAtb(old).a.items, null, '薬のボタンを出さない')

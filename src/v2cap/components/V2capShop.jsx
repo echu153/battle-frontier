@@ -9,7 +9,7 @@ import {
   SHOP_COLOR, SHOP_ITEMS, SHOP_ITEM_BY_KEY, FLIP_COLOR, FLIP_MINUTES, FLIP_HOURS,
   flipLeftMsOf, flipPreviewOf, encounterBandOf, otherGenderOf, itemCountOf, buyableQtyOf,
 } from '../lib/shop.js'
-import { ITEM_CD, ITEM_MAX, POTION_PCT } from '../core/atbItems.js'
+import { CARRY_MAX, ITEM_CD, ITEM_MAX, POTION_PCT } from '../core/atbItems.js'
 import {
   MERCHANT_STAGES, MERCHANT_STAGE_EVENTS, pickLine, enterKindOf, askKindOf, boughtKindOf, poorOf,
   stageOf, stageLabelOf, stageEventOf, varsOf, tapKindOf, nextStreak, isNight, fillLine, makeDailyAsker,
@@ -22,7 +22,7 @@ import {
 //   【確定】2026-10-31 商人ソルド（ユーザー指示「糸目の胡散臭いお兄さん、関西弁の守銭奴にする予定」・lib/merchant.js）：
 //     品物の右に商人を立たせる（スマホは上）。店を開いたとき・タップ・買う確かめ・買った結果で話す（ユーザー選択）。
 //     好感度は看板娘・アレアと同じ形（画面には出さない・サーバーの v2cap_merchant_talk）
-//   【確定】2026-11-01 ユーザー「挑戦とかで使用できるアイテムもここで販売してほしい」：持ち歩く薬は何個か選んで買う（持ち物に入る・戦闘で飲む＝core/atbItems.js）
+//   【確定】2026-11-01 ユーザー「挑戦とかで使用できるアイテムもここで販売してほしい」：挑戦で使う薬は何個か選んで買う（持ち物に入る・持ち込む数は挑戦の入口で選ぶ・戦闘で飲む＝core/atbItems.js）
 // ============================================================
 const gold = (n) => `${Number(n || 0).toLocaleString()}G`
 const BAND_STYLE = { color: FLIP_COLOR, fontSize:'13px' }
@@ -63,7 +63,7 @@ function FlipChange({ prof, now }) {
   )
 }
 
-// 持ち歩く薬：何個買うかを選ぶ（持っている数→買ったあとの数）。qty は1〜max
+// 挑戦で使う薬：何個買うかを選ぶ（持っている数→買ったあとの数）。qty は1〜max
 function QtyPicker({ have, qty, max, onQty }) {
   const step = (n) => onQty(Math.max(1, Math.min(max, n)))
   const b = { ...miniBtn(SHOP_COLOR), padding:'6px 10px', fontSize:'12px' }
@@ -94,7 +94,7 @@ export default function V2capShop({ prof, onProfile, dev = false }) {
   const [now, setNow] = useState(() => new Date())
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t) }, [])
   const [confirm, setConfirm] = useState(null)   // 確かめている品物の key
-  const [qty, setQty] = useState(1)              // 持ち歩く薬を何個買うか
+  const [qty, setQty] = useState(1)              // 挑戦で使う薬を何個買うか
   const [bought, setBought] = useState(null)     // 結果のポップアップ（サーバーの返事）
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -260,9 +260,9 @@ export default function V2capShop({ prof, onProfile, dev = false }) {
           </div>
           {error && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'8px' }}>⚠ {error}</div>}
 
-          {/* 持ち歩く薬（挑戦の戦闘で飲む）・その場で飲む薬 */}
+          {/* 挑戦で使う薬（持ち物に入る）・その場で飲む薬 */}
           {[
-            { title:'持ち歩く薬', note:`挑戦の戦闘で飲めます。押すとすぐ効きますが、ゲージが空になり、どの薬も${ITEM_CD}秒は飲めません。`, items: SHOP_ITEMS.filter(i => i.bag) },
+            { title:'挑戦で使う薬', note:`戦闘に持ち込むのは合計${CARRY_MAX}つまでで、挑戦の画面で選びます。押すとすぐ効きますが、ゲージが空になり、どの薬も${ITEM_CD}秒は飲めません。`, items: SHOP_ITEMS.filter(i => i.bag) },
             { title:'その場で飲む薬', note:'買うとすぐに飲みます。', items: SHOP_ITEMS.filter(i => !i.bag) },
           ].map(g => (
             <div key={g.title} style={{ marginBottom:'10px' }}>

@@ -5,6 +5,7 @@ import V2capBossReward from './V2capBossReward.jsx'
 import V2capBossEncounter from './V2capBossEncounter.jsx'
 import { useBossEncounter } from '../lib/useBossEncounter.js'
 import V2capReloadNote from './V2capReloadNote.jsx'
+import V2capItemLoadout from './V2capItemLoadout.jsx'
 import { preloadArt } from '../lib/artPreload.js'
 import { box, miniBtn, TEXT } from './v2ui.js'
 import { calcPower } from '../core/stats.js'
@@ -50,6 +51,7 @@ import {
 //     版の確かめ（isStaleBuild）はボスを開いたときに済ませておく＝押してから聞かない（staleNow）
 // 【確定】同じ日 ユーザー選択「サーバーの計算で入れる」：戦闘はサーバーが決めた種と写しで作り、終わったら押した記録を預ける（v2cap_dungeon_try_end）。
 //   サーバーが同じ戦闘を回し直して結果を入れる（lib/dungeonVerify.js）。挑戦の途中で画面を離れたら、そこまでの記録を預ける。確かめられないまま戻ったら入口で確かめ直す
+// 【確定】同じ日 ユーザー「アイテムは4つまでしか持てないようにして、全部で合計4つ」「装備は挑戦タブから設定できるように」：入口の上で持ち込む薬を選ぶ（V2capItemLoadout.jsx）
 // ============================================================
 
 const POLL_MS = 15000
@@ -72,7 +74,8 @@ const artOfBoss = (key) => {
   return artMemo.get(id)
 }
 
-export default function V2capDungeon({ prof, inventory, onProfile, dev = false }) {
+// onGo … 画面を切り替える（持ち込む薬の「商店で買う」）
+export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = false }) {
   const [state, setState] = useState(null)        // v2cap_dungeon_state の返事
   const [msg, setMsg] = useState(null)            // { ok, text }
   const [busy, setBusy] = useState(false)
@@ -85,6 +88,7 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
   const enc = useBossEncounter()                  // 遭遇のイラスト
   const staleAsked = useRef(null)                 // 版の確かめ { at, ask }
   const settling = useRef(false)                  // 結果を確かめてもらっているあいだ（入口の確かめ直しと重ねない）
+  const loadoutSave = useRef(Promise.resolve())   // 持ち込む薬の保存（送っている途中なら、挑戦を始める前に待つ）
   const onProfileRef = useRef(onProfile)
   onProfileRef.current = onProfile
 
@@ -153,6 +157,7 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
     // 画面が古いままだと、サーバーの回し直しとずれる（スタミナを使う前に見る）
     setBusy(true)
     if (await staleNow()) { setBusy(false); setStale(true); return false }
+    await loadoutSave.current   // 選んだばかりの持ち込む薬を、この挑戦の写しに入れる
     const data = await call('v2cap_dungeon_try_start', { p_run: run.id })
     if (!data) { load(); return false }
     // ★サーバーが決めた種と、サーバーが写し取った自分で戦う（回し直しも同じものから作る）
@@ -280,6 +285,9 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
       {!state && !msg && <div style={{ color: TEXT.label, fontSize:'11px', marginBottom:'8px' }}>読み込み中...</div>}
       {encounter}
       {stale && <V2capReloadNote />}
+
+      {/* 戦闘に持ち込む薬（合計4つまで） */}
+      <V2capItemLoadout prof={prof} onProfile={onProfile} onGo={onGo} saveRef={loadoutSave} />
 
       {/* 受け取っていない報酬（自分が挑戦していないあいだに倒れたボス） */}
       {(state?.rewards || []).map(run => (

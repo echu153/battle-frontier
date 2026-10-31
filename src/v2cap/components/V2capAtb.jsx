@@ -7,7 +7,7 @@ import { useBossEncounter } from '../lib/useBossEncounter.js'
 import { preloadArt } from '../lib/artPreload.js'
 import { box, miniBtn, TEXT } from './v2ui.js'
 import { createAtb, MAX_SEC } from '../core/atb.js'
-import { ITEM_MAX } from '../core/atbItems.js'
+import { itemCountsOf, itemTotalOf } from '../core/atbItems.js'
 import { macrosOf, validateMacros } from '../lib/atbMacro.js'
 import { loadPref, savePref } from '../core/prefs.js'
 import { motionOf } from '../lib/motionArt.js'
@@ -105,8 +105,9 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
     const dun = foe.bossArt ? dungeonFighter(foe.bossArt, bossDiff) : null
     const base = dun || { ...enemyFighter(foe, 8, foe.bossArt ? enemyPowerOf(spot.roster.boss) : undefined), boss: foe.role === 'ボス' || !!foe.bossArt }
     const enemy = hpMult === 1 ? base : { ...base, stats: { ...base.stats, hp: base.stats.hp * hpMult } }
-    // 薬は買わなくても試せる（試し撃ちはサーバーへ送らない＝持ち物は減らない）
-    st.current = createAtb(myFighter, enemy, { maxSec: MAX_SEC, items: { hp: ITEM_MAX, mp: ITEM_MAX, cure: ITEM_MAX } })
+    // 薬は買わなくても試せる（試し撃ちはサーバーへ送らない＝持ち物は減らない）。挑戦の入口で選んだ数・選んでいなければ HP2・MP1・雫1
+    const chosen = itemCountsOf(prof?.item_loadout)
+    st.current = createAtb(myFighter, enemy, { maxSec: MAX_SEC, items: itemTotalOf(chosen) ? chosen : { hp: 2, mp: 1, cure: 1 } })
     setRunKey(k => k + 1)
     setPhase('fight')
     if (bossEncounterOf(foe.bossArt)) {

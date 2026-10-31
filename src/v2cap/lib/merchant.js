@@ -183,7 +183,7 @@ export const MERCHANT_LINES = {
     { min: 2, max: 2, face: 'grin', text: 'まだ効いとるで、{call}。…まあ、買うてくれるんなら止めへんけど' },
     { min: 3, face: 'grin', text: 'まだ効いとるで、{call}。…止めへんけどな。商売やから' },
   ],
-  // 持ち歩く薬（【確定】2026-11-01 ユーザーが案を見て「この案で入れる」）
+  // 挑戦で使う薬（【確定】2026-11-01 ユーザーが案を見て「この案で入れる」）
   askHp: [
     { max: 1, face: 'grin', text: '転ばぬ先の薬でっせ。転んでからやと、お代は倍になりますけどな' },
     { min: 2, max: 2, face: 'grin', text: '傷の薬やな、{call}。持っとるだけで、ちょっと強なった気がするやろ' },
@@ -200,7 +200,7 @@ export const MERCHANT_LINES = {
     { min: 3, face: 'normal', text: '{call}、これは切らしたらあかんで。わけの分からん毒で、ええ客が減るのは困るねん' },
   ],
   // ===== 買った結果（boughtKindOf）=====
-  // 持ち歩く薬（3種類で同じ）
+  // 挑戦で使う薬（3種類で同じ）
   boughtItem: [
     { max: 1, face: 'grin', text: '毎度おおきに！ 切らす前に、また買いに来とくなはれ' },
     { min: 2, max: 2, face: 'grin', text: 'おおきに、{call}！ 飲んだら、また買いに来てや' },

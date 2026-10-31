@@ -12,7 +12,7 @@
 // ⚠INPUTS_MAX は SQL の c_inputs_max と同じ（dungeon.test.js が突き合わせる）
 // ============================================================
 import { STEP_SEC, createAtb, itemsUsedOf, replayInputs, seedRng } from '../core/atb.js'
-import { isBattleItem } from '../core/atbItems.js'
+import { carriedItemsOf, isBattleItem } from '../core/atbItems.js'
 import { MACRO_STEPS } from './atbMacro.js'
 import { atbPlayerOf } from './atbPlayer.js'
 import { activeMealOf } from './burger.js'
@@ -29,8 +29,8 @@ export const startTryAtb = ({ boss, diff, hp, seed, snap }) => {
   if (!foe) return null
   const at = new Date(Number(snap.at))
   const me = atbPlayerOf(snap.prof, snap.inv, { meal: activeMealOf(snap.prof, at), at })
-  // 持っている薬も写しから（2026-11-01 商店の薬）。SQL を流す前の写しには items が無い＝薬のボタンは出ない
-  return createAtb(me, foe, { maxSec: DUNGEON_TRY_SEC, rng: seedRng(seed), items: snap.prof.items })
+  // 持ち込む薬も写しから（2026-11-01 商店の薬・選んだ数と持っている数の少ないほう・合計4つまで）。SQL を流す前の写しには items が無い＝薬のボタンは出ない
+  return createAtb(me, foe, { maxSec: DUNGEON_TRY_SEC, rng: seedRng(seed), items: carriedItemsOf(snap.prof) })
 }
 
 // この挑戦で削った量（画面の申告もサーバーの計算も、この形で数える）

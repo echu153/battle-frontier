@@ -236,7 +236,7 @@ test('買う確かめと買った結果の場面：性別変更薬は飲んだ�
   assert.equal(askKindOf('gender', true), 'askGender')
   assert.equal(askKindOf('flip'), 'askFlip')
   assert.equal(askKindOf('flip', true), 'askFlipMore')
-  // 持ち歩く薬（2026-11-01）
+  // 挑戦で使う薬（2026-11-01）
   assert.equal(askKindOf('hp'), 'askHp')
   assert.equal(askKindOf('mp', true), 'askMp')
   assert.equal(askKindOf('cure'), 'askCure')

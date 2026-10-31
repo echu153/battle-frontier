@@ -36,7 +36,7 @@ import { TOWER_NAME, FLOORS, LOSE_DROP, GUARD_DROP_BONUS } from './tower.js'
 import { GOLD_PER_MEDAL } from './casino.js'
 import { GENDERS } from './gender.js'
 import { SHOP_ITEM_BY_KEY, FLIP_NAME, FLIP_MINUTES, FLIP_HOURS } from './shop.js'
-import { ITEM_CD, ITEM_MAX, POTION_PCT } from '../core/atbItems.js'
+import { CARRY_MAX, ITEM_CD, ITEM_MAX, POTION_PCT } from '../core/atbItems.js'
 import { ASC_RESET_GOLD_PER_LV } from './ascension.js'
 import { V1_BOX_NAMES } from './v1carry.js'
 import { JEMITA_RULES } from './jemitaPrompt.js'
@@ -229,8 +229,8 @@ const facilities = () => {
     '- 店には看板娘がいる。',
     '### 商店',
     '- 薬を買える（値段はLVによらず同じ）。',
-    `- 持ち歩く薬（買うと持ち物に入る・種類ごとに${ITEM_MAX}個まで）：${SHOP_ITEM_BY_KEY.hp.name}（${SHOP_ITEM_BY_KEY.hp.gold.toLocaleString()}G・HPが最大の${POTION_PCT}%回復）・${SHOP_ITEM_BY_KEY.mp.name}（${SHOP_ITEM_BY_KEY.mp.gold.toLocaleString()}G・MPが最大の${POTION_PCT}%回復）・${SHOP_ITEM_BY_KEY.cure.name}（${SHOP_ITEM_BY_KEY.cure.gold.toLocaleString()}G・状態異常が全部治る）。`,
-    `- 持ち歩く薬は挑戦の戦闘で飲む（出撃と覇天塔はオートなので使わない）。押すとすぐ効くが、ゲージが空になり、どの薬も${ITEM_CD}秒は飲めない。麻痺のあいだでも飲める。`,
+    `- 挑戦で使う薬（買うと持ち物に入る・種類ごとに${ITEM_MAX}個まで）：${SHOP_ITEM_BY_KEY.hp.name}（${SHOP_ITEM_BY_KEY.hp.gold.toLocaleString()}G・HPが最大の${POTION_PCT}%回復）・${SHOP_ITEM_BY_KEY.mp.name}（${SHOP_ITEM_BY_KEY.mp.gold.toLocaleString()}G・MPが最大の${POTION_PCT}%回復）・${SHOP_ITEM_BY_KEY.cure.name}（${SHOP_ITEM_BY_KEY.cure.gold.toLocaleString()}G・状態異常が全部治る）。`,
+    `- 挑戦で使う薬は、挑戦の画面で選んだ数（3種類を合わせて${CARRY_MAX}つまで）を戦闘に持ち込んで飲む（出撃と覇天塔はオートなので使わない）。飲むと持ち物から減り、次の挑戦も同じ数を持ち込む（足りなければあるぶんだけ）。押すとすぐ効くが、ゲージが空になり、どの薬も${ITEM_CD}秒は飲めない。麻痺のあいだでも飲める。`,
     '- ここから下の薬は買うとその場で飲む。',
     `- ${SHOP_ITEM_BY_KEY.gender.name}（${SHOP_ITEM_BY_KEY.gender.gold.toLocaleString()}G）：男女が入れ替わる。`,
     `- ${FLIP_NAME}（${SHOP_ITEM_BY_KEY.flip.gold.toLocaleString()}G）：${FLIP_MINUTES}分のあいだ、出会う敵の時間帯が${FLIP_HOURS}時間ずれる（必ずいまと違う時間帯になる）。効いているあいだに飲むと${FLIP_MINUTES}分延びる。`,

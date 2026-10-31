@@ -10,7 +10,7 @@ import {
   SHOP_ITEMS, SHOP_ITEM_BY_KEY, FLIP_NAME, FLIP_MINUTES, FLIP_HOURS,
   otherGenderOf, flipLeftMsOf, encounterClockOf, encounterBandOf, flipPreviewOf, itemCountOf, buyableQtyOf,
 } from './shop.js'
-import { BATTLE_ITEMS, ITEM_CD, ITEM_MAX, POTION_PCT, itemCountsOf } from '../core/atbItems.js'
+import { BATTLE_ITEMS, CARRY_MAX, ITEM_CD, ITEM_MAX, POTION_PCT, carriedItemsOf, itemCountsOf, itemTotalOf } from '../core/atbItems.js'
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 const SQL = read('../../../supabase_v2cap_core.sql')
@@ -95,7 +95,48 @@ test('【確定】秘薬で変わるのは出会う敵だけ：時間限定の�
   assert.ok(!read('../components/V2capSortie.jsx').includes('pickEncounter('), '画面では敵を決めない')
 })
 
-test('持ち歩く薬：持っている数・いま買える数（Gold と持てる数の少ないほう）', () => {
+test('【確定】2026-11-01 戦闘に持ち込むのは3種類を合わせて4つまで（ユーザー「アイテムは4つまでしか持てないようにして、全部で合計4つ」＋選択「戦闘に持ち込むのが4つ」）', () => {
+  assert.equal(CARRY_MAX, 4)
+  const of = (items, item_loadout) => carriedItemsOf({ items, item_loadout })
+  assert.deepEqual(of({ hp: 12, mp: 3, cure: 5 }, { hp: 2, mp: 1, cure: 1 }), { hp: 2, mp: 1, cure: 1 }, '選んだ数を持ち込む（商店では買いだめできる）')
+  assert.deepEqual(of({ hp: 1, mp: 3, cure: 0 }, { hp: 2, mp: 1, cure: 1 }), { hp: 1, mp: 1, cure: 0 }, '足りなければあるぶんだけ')
+  assert.deepEqual(of({ hp: 12 }, {}), { hp: 0, mp: 0, cure: 0 }, '選んでいなければ持ち込まない')
+  assert.deepEqual(of({ hp: 12 }, undefined), { hp: 0, mp: 0, cure: 0 }, '選ぶ SQL を流す前の写し')
+  assert.deepEqual(of({ hp: 12, mp: 12, cure: 12 }, { hp: 3, mp: 3, cure: 3 }), { hp: 3, mp: 1, cure: 0 }, '合計4つで切る（サーバーが断るが念のため）')
+  assert.equal(carriedItemsOf({}), null, '薬の SQL を流す前の写し＝薬のボタンを出さない')
+  assert.equal(carriedItemsOf(null), null)
+  for (const set of [{ hp: 4 }, { hp: 2, mp: 1, cure: 1 }, { mp: 2, cure: 2 }]) assert.equal(itemTotalOf(set), CARRY_MAX)
+})
+
+test('サーバー：持ち込む数を残す関数・合計を見る・開発限定・権限', () => {
+  const s = fnBody('v2cap_set_item_loadout')
+  assert.ok(s.includes(`c_carry_max constant int := ${CARRY_MAX};`))
+  assert.ok(s.includes("if not public.v2cap_is_dev() then"))
+  assert.ok(s.includes("if v_key not in ('hp', 'mp', 'cure') or v_val is null or v_val !~ '^[0-9]$' then"), '知らない薬・負の数・文字は断る')
+  assert.ok(s.includes('if v_total > c_carry_max then'))
+  assert.ok(SQL.includes("alter table public.v2cap_profiles add column if not exists item_loadout jsonb not null default '{}'::jsonb;"))
+  assert.ok(SQL.includes('revoke all on function public.v2cap_set_item_loadout(jsonb) from public, anon;'))
+  assert.ok(SQL.includes('grant execute on function public.v2cap_set_item_loadout(jsonb) to authenticated;'))
+  // 写しは列を全部持つ＝持ち込む数も入る（外す列に入れない）
+  const snap = fnBody('v2cap_battle_snap')
+  assert.ok(snap.includes('to_jsonb(p_row) - array['))
+  assert.ok(!/array\[[^\]]*'item_loadout'/.test(snap) && !/array\[[^\]]*'items'/.test(snap))
+})
+
+test('画面：挑戦の入口で持ち込む薬を選ぶ・押してすぐ挑戦しても選んだ数で始まる', () => {
+  const dun = read('../components/V2capDungeon.jsx')
+  assert.ok(dun.includes('<V2capItemLoadout prof={prof} onProfile={onProfile} onGo={onGo} saveRef={loadoutSave} />'))
+  assert.ok(dun.indexOf('await loadoutSave.current') < dun.indexOf("call('v2cap_dungeon_try_start'"), '保存を待ってから挑戦を始める')
+  const lo = read('../components/V2capItemLoadout.jsx')
+  assert.ok(lo.includes("supabase.rpc('v2cap_set_item_loadout', { p_loadout: next })"))
+  assert.ok(lo.includes('disabled={total >= CARRY_MAX || chosen[it.key] >= have[it.key]}'), '合計4つ・持っている数を超えて選べない')
+  assert.ok(lo.includes('if (prof?.item_loadout === undefined) return null'), 'SQL を流すまで出さない')
+  assert.ok(read('./dungeonVerify.js').includes('items: carriedItemsOf(snap.prof)'), '持ち込む数はサーバーの写しから')
+  assert.ok(read('../pages/V2capHome.jsx').includes('<V2capDungeon prof={prof} inventory={inventory} onProfile={refresh} onGo={setScreen} dev={isAdmin} />'), '「商店で買う」')
+  assert.ok(read('../components/V2capShop.jsx').includes('戦闘に持ち込むのは合計${CARRY_MAX}つまで'))
+})
+
+test('挑戦で使う薬：持っている数・いま買える数（Gold と持てる数の少ないほう）', () => {
   const hp = SHOP_ITEM_BY_KEY.hp
   assert.equal(itemCountOf({ items: { hp: 3 } }, 'hp'), 3)
   for (const p of [null, {}, { items: null }, { items: {} }]) assert.equal(itemCountOf(p, 'hp'), 0)
@@ -108,7 +149,7 @@ test('持ち歩く薬：持っている数・いま買える数（Gold と持て
   assert.equal(buyableQtyOf(null, hp), 0)
 })
 
-test('サーバー：持ち歩く薬の値段と持てる数が同じ・個数を見る・持ち物に入れる（画面から書けるのはこの関数だけ）', () => {
+test('サーバー：挑戦で使う薬の値段と持てる数が同じ・個数を見る・持ち物に入れる（画面から書けるのはこの関数だけ）', () => {
   const s = fnBody('v2cap_shop_buy')
   assert.ok(s.includes(`c_hp_gold      constant int := ${SHOP_ITEM_BY_KEY.hp.gold};`))
   assert.ok(s.includes(`c_mp_gold      constant int := ${SHOP_ITEM_BY_KEY.mp.gold};`))
@@ -132,7 +173,6 @@ test('画面：薬は個数を選んで買う・戦闘で飲むボタンは回�
   const fight = read('../components/V2capAtbFight.jsx')
   assert.ok(fight.includes('onClick={() => drinkItem(s, it.key)}'))
   assert.ok(fight.includes('{me.items && ('), '持っている数を知らない戦闘（SQL を流す前の写し）にはボタンを出さない')
-  assert.ok(read('./dungeonVerify.js').includes('items: snap.prof.items'), '持っている数はサーバーの写しから')
   const dun = read('../components/V2capDungeon.jsx')
   assert.ok(dun.includes('if (itemsUsedOf(p.st)) onProfileRef.current?.()'), '飲んだら商店の持っている数を読み直す')
 })
