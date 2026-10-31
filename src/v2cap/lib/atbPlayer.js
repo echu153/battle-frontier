@@ -7,9 +7,10 @@ import { toFighter as playerFighter, slotsOf } from './loadout.js'
 import { usableSkillNames, lineageOf } from './jobs.js'
 import { ascEffectsOf } from './ascension.js'
 
-export const atbPlayerOf = (prof, inventory) => {
+// opts … loadout.js の toFighter と同じ（挑戦は時刻と食事を決めて渡す＝画面とサーバーで同じ形になる・dungeonVerify.js）
+export const atbPlayerOf = (prof, inventory, opts = {}) => {
   const cls = prof?.class
   const lineage = lineageOf(cls)
   const names = usableSkillNames(cls, prof?.learned || [], lineage)
-  return { ...playerFighter(prof, inventory), slots: slotsOf(names.map(name => ({ name, uses: 1 })), cls, lineage, ascEffectsOf(prof).ups) }
+  return { ...playerFighter(prof, inventory, opts), slots: slotsOf(names.map(name => ({ name, uses: 1 })), cls, lineage, ascEffectsOf(prof).ups) }
 }

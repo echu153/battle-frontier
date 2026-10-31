@@ -27,7 +27,7 @@
 //   ⚠不発のときの効果（居合の構え・精神感応・居合の心得）はATBに不発が無いので対象外
 //
 // ★時間は**決まった刻み（STEP_SEC）**で進める＝同じ乱数と同じ入力なら同じ結果になる
-//   （あとで「乱数の種＋押した記録」をサーバーで回し直して確かめるため。押した記録は st.inputs）。
+//   （挑戦は「乱数の種＋押した記録 st.inputs」をサーバーで回し直して確かめる＝lib/dungeonVerify.js。ファイルの下の seedRng・replayInputs）。
 // ⚠オート戦闘の定数は触らない。ATB用の値はこのファイルだけに置く。
 // ============================================================
 import {
@@ -659,6 +659,41 @@ export const runFor = (st, sec) => {
   const end = st.steps + Math.round(sec / STEP_SEC)
   while (st.steps < end && !st.over) stepOnce(st)
   return st
+}
+
+// ===== 回し直し（挑戦の結果をサーバーで確かめる・lib/dungeonVerify.js）=====
+// 種から乱数の列を作る（mulberry32）。整数の計算だけなので、どの機種でも同じ列になる
+export const seedRng = (seed) => {
+  let a = Number(seed) | 0
+  return () => {
+    a = (a + 0x6D2B79F5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+// 押した記録の1つを、ボタンと同じ入口で入れ直す
+export const applyInput = (st, e) => {
+  if (e.k === 'q') reserve(st, e.idx)
+  else if (e.k === 'unq') unreserveAt(st, e.pos)
+  else if (e.k === 'clr') clearQueue(st)
+  else if (e.k === 'macro') startMacro(st, e.no, e.steps, e.loop)
+  else if (e.k === 'stop') stopMacro(st)
+  else if (e.k === 'guard') toggleGuard(st)
+}
+// step の刻みまで進める（決着がついたらそこで止まる）
+export const runToStep = (st, step) => {
+  while (st.steps < step && !st.over) stepOnce(st)
+  return st
+}
+// 押した記録を順に入れながら endStep まで進める。画面で押したのは「その刻みまで進んだあと、次の刻みの前」なので同じ順になる
+export const replayInputs = (st, inputs, endStep) => {
+  for (const e of inputs) {
+    if (e.step > endStep) break
+    runToStep(st, e.step)
+    applyInput(st, e)
+  }
+  return runToStep(st, endStep)
 }
 
 // ===== 画面用のまとめ =====

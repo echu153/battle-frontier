@@ -17,6 +17,7 @@ import { statsOf } from '../core/enemies.js'
 import { CAP_RULES } from './rules.js'
 import { tenSortieExpOf } from './areas.js'
 import { DAILY_GOLD_PER_LV } from './daily.js'
+import { INPUTS_MAX } from './dungeonVerify.js'
 
 const SQL = readFileSync(new URL('../../../supabase_v2cap_core.sql', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 const fnBody = (name) => {
@@ -545,13 +546,13 @@ test('【確定】2026-10-31 報酬の渡し方：呼んだ人は全部・救援
   assert.match(SQL, /revoke all on function public\.v2cap_dungeon_reward_conf\(text, text\) from public, anon, authenticated;/)
   // 列を足すときに、これまでに倒したボスの分は渡したことにする（さかのぼって配らない）・列があれば何もしない（2回流しても消さない）
   assert.match(SQL, /column_name = 'reward_at'\) then\s+alter table public\.v2cap_dungeon_members add column reward_at timestamptz;\s+update public\.v2cap_dungeon_members m set reward_at = now\(\) from public\.v2cap_dungeon_runs r where r\.id = m\.run_id and r\.cleared_at is not null;/)
-  // 挑戦の終わり：ボスのHPが減るのは残りまで・自分の量は先に倒されていても数える・倒れていたらその場で渡す
-  const end = fnBody('v2cap_dungeon_try_end')
+  // 結果を入れるとき：ボスのHPが減るのは残りまで・自分の量は先に倒されていても数える・倒れていたらその場で渡す
+  const end = fnBody('v2cap_dungeon_verify_settle')
   assert.match(end, /v_d := greatest\(0, least\(coalesce\(p_damage, 0\), coalesce\(v_mem\.try_hp, 0\), v_run\.hp\)\);/)
   assert.match(end, /v_mine := greatest\(0, least\(coalesce\(p_damage, 0\), coalesce\(v_mem\.try_hp, 0\)\)\);/)
   assert.match(end, /set hp = hp - v_d,/)
   assert.match(end, /set damage = damage \+ v_mine,/)
-  assert.match(end, /v_reward := public\.v2cap_dungeon_pay_reward\(p_run, v_uid\);/)
+  assert.match(end, /v_reward := public\.v2cap_dungeon_pay_reward\(p_run, p_player\);/)
   // その場にいなかった人：入口に出す・挑戦の途中は待つ（捨てられた挑戦は別）
   const claim = fnBody('v2cap_dungeon_claim')
   assert.match(claim, /if not public\.v2cap_is_dev\(\) then return jsonb_build_object\('ok', false, 'error', '開発限定です'\)/, 'サーバーも開発者だけ')
@@ -560,6 +561,47 @@ test('【確定】2026-10-31 報酬の渡し方：呼んだ人は全部・救援
   const state = fnBody('v2cap_dungeon_state')
   assert.match(state, new RegExp(`c_try_sec\\s+constant int := ${DUNGEON_TRY_SEC};`))
   assert.match(state, /'rewards', coalesce\(.*\n.*\n.*\n\s+where r\.cleared_at is not null and m\.reward_at is null and m\.damage > 0\n\s+and \(m\.try_open_at is null or m\.try_open_at <= now\(\) - make_interval\(secs => c_try_sec \+ 60\)\)/)
+})
+
+test('【確定】2026-10-31 結果はサーバーが決める（ユーザー選択「サーバーの計算で入れる」）：画面からは削った量を受け取らない・入れるのは合い言葉のある関数だけ', () => {
+  // 前の形（画面が削った量を送る）は消す
+  assert.match(SQL, /drop function if exists public\.v2cap_dungeon_try_end\(bigint, int\);/)
+  assert.doesNotMatch(SQL, /grant execute on function public\.v2cap_dungeon_try_end\(bigint, int\)/)
+  const end = fnBody('v2cap_dungeon_try_end')
+  assert.match(end, /^create or replace function public\.v2cap_dungeon_try_end\(p_run bigint, p_inputs jsonb, p_end_step int, p_claim int default null\)/)
+  assert.doesNotMatch(end, /update public\.v2cap_dungeon_runs|pay_reward|damage = /, '預けるだけ：ボスのHPもダメージも報酬も、ここでは動かさない')
+  assert.match(end, new RegExp(`c_inputs_max\\s+constant int := ${INPUTS_MAX};`), '記録の数の上限は dungeonVerify.js と同じ')
+  for (const fn of ['v2cap_dungeon_try_start', 'v2cap_dungeon_try_end']) {
+    assert.match(fnBody(fn), /if not public\.v2cap_is_dev\(\) then return jsonb_build_object\('ok', false, 'error', '開発限定です'\)/, `${fn} はサーバーも開発者だけ`)
+  }
+  // 種と写しはサーバーが決める
+  const start = fnBody('v2cap_dungeon_try_start')
+  assert.match(start, /v_seed := floor\(random\(\) \* 4294967296\)::bigint;/)
+  assert.match(start, /try_seed = v_seed, try_snap = v_snap/)
+  assert.match(start, /'seed', v_seed, 'snap', v_snap/)
+  // 入れる関数：合い言葉がないと通らない・ログインした人には開けない
+  assert.match(fnBody('v2cap_dungeon_verify_ok'), /encode\(sha256\(convert_to\(coalesce\(p_secret, ''\), 'UTF8'\)\), 'hex'\) = '[0-9a-f]{64}'/, 'SQL には SHA-256 だけ')
+  for (const [fn, args] of [['v2cap_dungeon_verify_load', 'text, bigint, uuid'], ['v2cap_dungeon_verify_settle', 'text, bigint, uuid, int, int, text']]) {
+    assert.match(fnBody(fn), /if not public\.v2cap_dungeon_verify_ok\(p_secret\) then return jsonb_build_object\('ok', false, 'error', '合い言葉が違います'\); end if;/, fn)
+    assert.ok(SQL.includes(`revoke all on function public.${fn}(${args}) from public, authenticated;`), `${fn} はログインした人の権限では呼べない`)
+    assert.ok(SQL.includes(`grant execute on function public.${fn}(${args}) to anon;`), `${fn} は公開の鍵と合い言葉で呼ぶ`)
+  }
+  assert.match(SQL, /revoke all on function public\.v2cap_dungeon_verify_ok\(text\) from public, anon, authenticated;/)
+  // 同時に2回確かめても入るのは1回・あとの挑戦の記録に入れない
+  assert.match(fnBody('v2cap_dungeon_verify_settle'), /if v_mem\.try_sub is null or v_mem\.tries <> p_try then/)
+  // ずれた挑戦を残す
+  assert.match(fnBody('v2cap_dungeon_verify_settle'), /insert into public\.v2cap_dungeon_mismatch/)
+  assert.match(SQL, /alter table public\.v2cap_dungeon_mismatch enable row level security;/)
+  // 記録を預けたまま確かめていないあいだは、受け取りと次の挑戦を待たせる
+  assert.match(fnBody('v2cap_dungeon_state'), /'pending', coalesce\(/)
+  assert.match(fnBody('v2cap_dungeon_state'), /and \(m\.try_sub is null or m\.try_sub_at <= now\(\) - make_interval\(mins => c_late_min\)\)\), '\[\]'::jsonb\),/)
+  assert.match(fnBody('v2cap_dungeon_claim'), /v_mem\.try_sub is not null and v_mem\.try_sub_at > now\(\) - make_interval\(mins => c_late_min\)/)
+  assert.match(fnBody('v2cap_dungeon_try_start'), /v_mem\.try_sub is not null and v_mem\.try_sub_at > now\(\) - make_interval\(mins => c_late_min\)/)
+  // 画面：サーバーの種と写しで戦い、押した記録を送る。削った量を自分で決めて送らない
+  const src = readFileSync(new URL('../components/V2capDungeon.jsx', import.meta.url), 'utf8')
+  assert.match(src, /const st = startTryAtb\(data\)/)
+  assert.match(src, /p_inputs: p\.st\.inputs, p_end_step: p\.st\.steps, p_claim: damageOf\(p\.st\)/)
+  assert.doesNotMatch(src, /p_damage|atbPlayerOf|createAtb/, '画面の持っている値では戦わない')
 })
 
 test('【確定】2026-10-31 開発用の挑戦回数リセット（ユーザー「開発用に挑戦回数resetできるように」）：開発者だけ・行は消さない', () => {

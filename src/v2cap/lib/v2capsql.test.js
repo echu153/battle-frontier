@@ -711,7 +711,18 @@ test('【確定】精算ごとの印（p_key）：同じ印がもう一度届い
 test('★公開RPCは全部 v2cap_is_dev()（is_admin だけ）を通している', () => {
   const granted = [...SQL.matchAll(/grant execute on function public\.(v2cap_\w+)\(/g)].map(m => m[1])
   assert.ok(granted.length >= 10, `公開RPCを拾えている（${granted.length}本）`)
-  for (const name of granted) assert.match(fnBody(name), /if not public\.v2cap_is_dev\(\) then/, `${name} が開発限定を見ている`)
+  // 例外は挑戦の結果を入れる2本だけ（2026-10-31）。呼ぶのはサーバーの関数（ログインした人でない＝だれが開発者かを見られない）で、代わりに合い言葉を見る。
+  //   どれを確かめるかは開発者だけが始められる挑戦（try_start・try_end）の記録なので、開発者でない人の結果が入ることはない
+  const SECRET_ONLY = ['v2cap_dungeon_verify_load', 'v2cap_dungeon_verify_settle']
+  for (const name of granted) {
+    if (SECRET_ONLY.includes(name)) {
+      assert.match(fnBody(name), /begin\n  if not public\.v2cap_dungeon_verify_ok\(p_secret\) then return/, `${name} はまず合い言葉を見る`)
+      assert.ok(!new RegExp(`grant execute on function public\\.${name}\\([^)]*\\) to authenticated`).test(SQL), `${name} はログインした人には開けない`)
+      continue
+    }
+    assert.match(fnBody(name), /if not public\.v2cap_is_dev\(\) then/, `${name} が開発限定を見ている`)
+  }
+  for (const name of ['v2cap_dungeon_try_start', 'v2cap_dungeon_try_end']) assert.ok(granted.includes(name) && !SECRET_ONLY.includes(name), `${name} は開発者だけ`)
   const gate = fnBody('v2cap_is_dev')
   assert.match(gate, /p\.is_admin/)
   assert.ok(!gate.includes('v2_testers'))

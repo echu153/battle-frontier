@@ -4,11 +4,11 @@ import V2capAtbFight from './V2capAtbFight.jsx'
 import V2capBossReward from './V2capBossReward.jsx'
 import { preloadArt } from '../lib/artPreload.js'
 import { box, miniBtn, TEXT } from './v2ui.js'
-import { createAtb } from '../core/atb.js'
 import { calcPower } from '../core/stats.js'
 import { loadPref } from '../core/prefs.js'
 import { macrosOf } from '../lib/atbMacro.js'
-import { atbPlayerOf } from '../lib/atbPlayer.js'
+import { damageOf, startTryAtb } from '../lib/dungeonVerify.js'
+import { CORRECTED_TEXT, callVerify, isStaleBuild } from '../lib/dungeonVerifyCall.js'
 import { totalStats } from '../lib/loadout.js'
 import { openAreaOf } from '../lib/sortie.js'
 import { motionOf } from '../lib/motionArt.js'
@@ -18,8 +18,8 @@ import { CLASS_BY_ID } from '../lib/jobs.js'
 import { bossArtOf, bossThumbOf } from '../lib/bossArt.js'
 import { bossIllustOf } from '../lib/bossIllust.js'
 import {
-  CHALLENGE_CATS, CIRCLED, DUNGEON_BOSSES, DIFF_COLOR, DIFF_KEYS, DUNGEON_TRY_SEC, HELPERS_MAX, STAMINA_HELPER,
-  diffOf, isDiffReady, isDiffUnlocked, summonBlockOf, tryStaminaOf, dungeonFighter, msLeftOf,
+  CHALLENGE_CATS, CIRCLED, DUNGEON_BOSSES, DIFF_COLOR, DIFF_KEYS, HELPERS_MAX, STAMINA_HELPER,
+  diffOf, isDiffReady, isDiffUnlocked, summonBlockOf, tryStaminaOf, msLeftOf,
 } from '../lib/dungeon.js'
 
 // ============================================================
@@ -39,12 +39,14 @@ import {
 // 【確定】2026-10-31 ユーザー「戦闘開始と討伐後のテロップ的なのが欲しい、報酬画面も」：
 //   倒したら 倒れる動き → 討伐完了のテロップ（V2capAtbFight.jsx）→ 報酬画面（V2capBossReward.jsx）。ほかの人が先に倒していたら、自分の決着のすぐあとに報酬画面。負けと時間切れは今までどおり
 //   【確定】同じ日 ユーザー選択「EXPとGoldを渡す」：その場にいなかった人は、入口の「報酬を受け取る」から同じ報酬画面へ（決まりは lib/dungeon.js）
-// ★戦闘は画面で回し、終わったら削った量をサーバーへ送る（v2cap_dungeon_try_end）。挑戦の途中で画面を離れたら、そこまでの量を送る
+// 【確定】同じ日 ユーザー選択「サーバーの計算で入れる」：戦闘はサーバーが決めた種と写しで作り、終わったら押した記録を預ける（v2cap_dungeon_try_end）。
+//   サーバーが同じ戦闘を回し直して結果を入れる（lib/dungeonVerify.js）。挑戦の途中で画面を離れたら、そこまでの記録を預ける。確かめられないまま戻ったら入口で確かめ直す
 // ============================================================
 
 const POLL_MS = 15000
 const DEV = '#ff88cc'
 const NO_SQL = 'サーバーにまだこの仕組みがありません（SQL を流すと使えます）'
+const VERIFY_LATER = '結果を確かめられませんでした（入口に戻ると確かめ直します）'
 const errText = (error, data) => (/could not find the function/i.test(error?.message || '') ? NO_SQL : (error?.message || data?.error || 'うまくいきませんでした'))
 const mmss = (ms) => { const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` }
 const Bar = ({ pct, color, h = 10 }) => (
@@ -68,7 +70,11 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
   const [fight, setFight] = useState(null)        // { run, st, runKey, result, ended（討伐完了のテロップが終わった） }
   const [openBoss, setOpenBoss] = useState(null)  // 難易度を開いているボス
   const [claimed, setClaimed] = useState(null)    // 入口で受け取った報酬（v2cap_dungeon_claim の返事）
+  const [stale, setStale] = useState(false)       // 画面が古い（読み直すまで挑戦しない）
   const pending = useRef(null)                    // 送っていない挑戦（画面を離れたら送る）
+  const settling = useRef(false)                  // 結果を確かめてもらっているあいだ（入口の確かめ直しと重ねない）
+  const onProfileRef = useRef(onProfile)
+  onProfileRef.current = onProfile
 
   const myPower = useMemo(() => calcPower(totalStats(prof, inventory)), [prof, inventory])
   const reached = openAreaOf(prof?.cleared_spots)
@@ -90,6 +96,19 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
     const { data, error } = await supabase.rpc('v2cap_dungeon_state')
     if (error || !data?.ok) { setMsg({ ok: false, text: errText(error, data) }); return }
     setState(data)
+    // 記録を預けたまま確かめられていない挑戦（通信が切れた・閉じた）を確かめ直す。届かなければ次の読み直しでもう一度
+    if (!data.pending?.length || settling.current) return
+    settling.current = true
+    let done = false
+    for (const id of data.pending) {
+      const r = await callVerify({ run: id, player: data.me }, { retryMs: [] })
+      if (!r?.ok) continue
+      done = true
+      if (r.reward) { setClaimed(r); onProfileRef.current?.() }
+      else setMsg({ ok: true, text: `前の挑戦の結果：${Number(r.damage).toLocaleString()}ダメージを入れました` })
+    }
+    settling.current = false
+    if (done) load()
   }, [])
   useEffect(() => { load() }, [load])
   // 入口にいるあいだは、ほかの人の削り・救援の一覧を取り直す（戦っているあいだは取らない）
@@ -115,11 +134,14 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
 
   // ===== 挑む =====
   const start = async (run) => {
+    // 画面が古いままだと、サーバーの回し直しとずれる（スタミナを使う前に見る）
+    setBusy(true)
+    if (await isStaleBuild()) { setBusy(false); setStale(true); return }
     const data = await call('v2cap_dungeon_try_start', { p_run: run.id })
-    if (!data) return
-    const foe = dungeonFighter(data.boss, data.diff, data.hp)
-    if (!foe) { setMsg({ ok: false, text: 'このボスはまだ戦えません' }); return }
-    const st = createAtb(atbPlayerOf(prof, inventory), foe, { maxSec: DUNGEON_TRY_SEC })
+    if (!data) { load(); return }
+    // ★サーバーが決めた種と、サーバーが写し取った自分で戦う（回し直しも同じものから作る）
+    const st = startTryAtb(data)
+    if (!st) { setMsg({ ok: false, text: 'このボスはまだ戦えません' }); return }
     pending.current = { runId: run.id, st }
     setFight(f => ({ run, st, runKey: (f?.runKey || 0) + 1, result: null }))
     onProfile?.()   // スタミナが減った
@@ -134,15 +156,21 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
   }
   // 開発用：きょうの挑戦回数を戻す（サーバーも開発者だけ）
   const resetTries = () => call('v2cap_dev_dungeon_reset', {}, () => { setMsg({ ok: true, text: '挑戦回数を戻しました' }); load() })
-  // 削った量を送る（1回だけ）。決着・あきらめる・画面を離れる、のどれか
+  // 押した記録を預けて、結果を確かめてもらう（1回だけ）。決着・あきらめる・画面を離れる、のどれか
   const report = useCallback(async () => {
     const p = pending.current
     if (!p) return null
     pending.current = null
-    const damage = Math.max(0, (p.st.b.startHp ?? 0) - Math.max(0, p.st.b.hp))
-    const { data, error } = await supabase.rpc('v2cap_dungeon_try_end', { p_run: p.runId, p_damage: Math.floor(damage) })
-    if (error || !data?.ok) return { ok: false, text: errText(error, data) }
-    return { ok: true, damage: data.damage, run: data.run, reward: data.reward }
+    settling.current = true
+    try {
+      const { data, error } = await supabase.rpc('v2cap_dungeon_try_end', { p_run: p.runId, p_inputs: p.st.inputs, p_end_step: p.st.steps, p_claim: damageOf(p.st) })
+      if (error || !data?.ok) return { ok: false, text: errText(error, data) }
+      const r = await callVerify({ run: p.runId, player: data.player })
+      if (!r?.ok) return { ok: false, text: VERIFY_LATER }
+      return { ok: true, damage: r.damage, run: r.run, reward: r.reward, corrected: r.corrected }
+    } finally {
+      settling.current = false
+    }
   }, [])
   const onOver = async () => {
     const r = await report()
@@ -189,9 +217,10 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
         {r && !won && (
           <div style={{ marginTop:'8px', fontSize:'12px', color: r.ok ? '#ffdd66' : '#ff6666' }}>
             {!r.ok ? r.text : `${r.damage.toLocaleString()}ダメージを入れた（残りHP ${r.run.hp.toLocaleString()} / ${r.run.hp_max.toLocaleString()}）`}
+            {r.corrected && <div style={{ fontSize:'10px', color: TEXT.sub, marginTop:'2px' }}>{CORRECTED_TEXT}</div>}
           </div>
         )}
-        {!r && fight.st.over && !won && <div style={{ marginTop:'8px', fontSize:'11px', color: TEXT.label }}>削った量を送っています…</div>}
+        {!r && fight.st.over && !won && <div style={{ marginTop:'8px', fontSize:'11px', color: TEXT.label }}>結果を確かめています…</div>}
       </div>
     )
   }
@@ -210,6 +239,12 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
     <div>
       {msg && <div style={{ fontSize:'11px', marginBottom:'8px', color: msg.ok ? '#88ffaa' : '#ff8888' }}>{msg.text}</div>}
       {!state && !msg && <div style={{ color: TEXT.label, fontSize:'11px', marginBottom:'8px' }}>読み込み中...</div>}
+      {stale && (
+        <div style={{ ...box, padding:'10px', marginBottom:'10px', borderColor:'#8a6a2a' }}>
+          <div style={{ fontSize:'12px', color:'#ffd27a', marginBottom:'6px' }}>新しい版が出ています。読み直してから挑戦してください</div>
+          <button onClick={() => window.location.reload()} style={{ ...miniBtn('#44ddff'), width:'100%', padding:'8px' }}>読み直す</button>
+        </div>
+      )}
 
       {/* 受け取っていない報酬（自分が挑戦していないあいだに倒れたボス） */}
       {(state?.rewards || []).map(run => (

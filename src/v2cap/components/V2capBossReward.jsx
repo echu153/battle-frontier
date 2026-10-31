@@ -3,6 +3,7 @@ import { box, miniBtn, TEXT } from './v2ui.js'
 import { JP_BOLD } from './casinoStyle.js'
 import { bossThumbOf } from '../lib/bossArt.js'
 import { DIFF_COLOR, DUNGEON_BOSSES, HELPER_REWARD_MIN_PCT, diffOf } from '../lib/dungeon.js'
+import { CORRECTED_TEXT } from '../lib/dungeonVerifyCall.js'
 import { gainedExpOf, levelUpLines } from '../lib/settleLines.js'
 
 // ============================================================
@@ -46,7 +47,7 @@ export default function V2capBossReward({ bossKey, diffKey, cls, st = null, resu
         </div>
       </div>
 
-      {!r && <div style={{ ...up(2), color: TEXT.label, fontSize:'11px', padding:'8px 0' }}>結果を送っています…</div>}
+      {!r && <div style={{ ...up(2), color: TEXT.label, fontSize:'11px', padding:'8px 0' }}>結果を確かめています…</div>}
       {r && !r.ok && <div style={{ ...up(2), color:'#ff8888', fontSize:'12px', padding:'8px 0' }}>{r.text}</div>}
       {r?.ok && (
         <>
@@ -54,6 +55,7 @@ export default function V2capBossReward({ bossKey, diffKey, cls, st = null, resu
             <div style={up(2)}>
               <Row label="この挑戦の時間" value={`${st.t.toFixed(1)}秒`} />
               <Row label="この挑戦のダメージ" value={r.damage.toLocaleString()} />
+              {r.corrected && <div style={{ color: TEXT.sub, fontSize:'10px', padding:'2px 0 4px' }}>{CORRECTED_TEXT}</div>}
             </div>
           )}
           {/* みんなが入れたダメージ（救援があるときだけ） */}
