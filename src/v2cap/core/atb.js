@@ -156,6 +156,7 @@ const createAtbSide = (fighter, band, { ai = false, cast = false } = {}) => {
   side.timed = []              // [{ table, sec, until, debuff }] 時間で切れるバフ・デバフ
   side.queue = []              // 割り込み：[{ idx }]（idx＝null は通常攻撃）。手で押した技・先頭から1回ずつ。マクロより先に出る
   side.macro = null            // 動いているマクロ：{ no, steps, pos, loop }（startMacro）
+  side.normalAil = fighter.normalAil || null   // 通常攻撃に付く状態異常（挑戦のボスのハードから）
   side.guardNext = false       // 次の行動は防御（ボタン。割り込み・マクロより先に出る）
   side.guardCut = 0            // 防御中の軽減率（battle.js の applyIncoming が見る）
   side.guardReadyAt = 0        // 防御が使えるようになる時刻

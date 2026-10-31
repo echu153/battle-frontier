@@ -1049,6 +1049,13 @@ export const lowHpMultOf = (skill, foe) => {
   return 1 + (l.max / 100) * t
 }
 
+// 相手のHPの段階で威力が変わる技（水天葬）。hpSteps＝[{ below: 40, mult: 1.5 }（未満）, { upTo: 10, mult: 3 }（以下）]。当てはまる中でいちばん大きい倍率（重ねない）
+export const hpStepMultOf = (skill, foe) => {
+  if (!skill?.hpSteps) return 1
+  const pct = (Math.max(0, foe.hp) / Math.max(1, foe.base.hp)) * 100
+  return skill.hpSteps.reduce((m, s) => ((s.below !== undefined ? pct < s.below : pct <= s.upTo) ? Math.max(m, s.mult) : m), 1)
+}
+
 // 鷹ノ目：最終命中率に掛ける倍率。相手が瀕死（HPが at% 以下）ならさらに伸びる
 export const hitMultOf = (me, foe) => {
   const h = me.pa.hitMult
@@ -1329,7 +1336,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
         // ★上位クラス：トリニティブレイドは雷の段だけ防御無視+（宿りの雷と同じ量）
         const hitDefPen = skill.hitElems?.[h] === 'thunder' ? Math.min(1, defPen + IMBUE_FX.thunder.defPen) : defPen
         const r = resolveAttack({
-          attacker: eMe, defender: eFoe, mult: ramp * baseMultOf(skill, h, ip) * burst * stanceMult * lowHpMultOf(skill, foe)
+          attacker: eMe, defender: eFoe, mult: ramp * baseMultOf(skill, h, ip) * burst * stanceMult * lowHpMultOf(skill, foe) * hpStepMultOf(skill, foe)
             * highHpMultOf(skill, me) * vsBuffMultOf(skill, foe) * repeatMultOf(skill, me)
             * switchKindMultOf(skill, prevKind) * varMult
             * comboMultOf(skill, prevSkill) * airMultOf(skill, wasAir)
@@ -1912,6 +1919,8 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
   if (me.uq) uniqueAfterAttack(me, foe, { hits: r.hit ? 1 : 0, crit: !!(r.hit && r.crit), kind: me.kind, mult: NORMAL_ATTACK_MULT * multScale, preAil }, rng, log)
   // ★上位クラス：宿りの追加効果（炎の追撃・氷・雷）
   if (r.hit && imb) applyImbueFx(me, foe, imb.elem, imb.k, rng, log)
+  // ★通常攻撃に付く状態異常（挑戦のボスのハードから・lib/dungeon.js の hardNormalAil）。当たったときだけ
+  if (r.hit && me.normalAil) tryInflict(me, foe, me.normalAil, rng, log)
   afterAttack(me, foe, r.hit ? 1 : 0, !!(r.hit && r.crit), rng, log)
 }
 

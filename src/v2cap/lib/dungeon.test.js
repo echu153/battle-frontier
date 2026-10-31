@@ -8,11 +8,11 @@ import {
   diffOf, isDiffReady, isDiffUnlocked, isSummonable, summonBlockOf, tryStaminaOf, dungeonFighter,
 } from './dungeon.js'
 import { createAtb, runFor, startMacro, fillPerSecOf, hpBuffChips, castMsOf, ATB_SLOW_CUT, FILL_PER_SEC, BUFF_GAUGE_SEC, BUFF_WAIT_AFTER_ACT_SEC, BUFF_SHOW_SEC, TURN_SEC, GAUGE_FULL, NOW_WAIT_AFTER_ACT_SEC, CAST_SEC } from '../core/atb.js'
-import { inflict } from '../core/ailments.js'
+import { inflict, healMultOf } from '../core/ailments.js'
 import { bossIllustOf, buffArtMsOf } from './bossIllust.js'
 import { bossThumbOf } from './bossArt.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
-import { liveStats } from '../core/battle.js'
+import { liveStats, hpStepMultOf, healMaxAmount } from '../core/battle.js'
 import { statsOf } from '../core/enemies.js'
 import { CAP_RULES } from './rules.js'
 import { tenSortieExpOf } from './areas.js'
@@ -85,6 +85,130 @@ test('【確定】2026-10-31 ボスの DEX と AGI（ユーザー「モンスタ
   }
 })
 
+// ===== 2026-11-01 ユーザーの調整（技リストを見て）=====
+// ボスの通常攻撃だけを見る（HPが満タンのあいだは技を出さない）
+const normalsOf = (boss, diff, me = dummy(), sec = 900) => {
+  const f = dungeonFighter(boss, diff)
+  const st = createAtb(me, f, { rng: rngOf(11), maxSec: 9999 })
+  runFor(st, sec)
+  return { st, name: f.name, hits: st.log.filter(l => l.side === f.name && l.type === 'normal' && l.hit), ails: st.log.filter(l => l.side === 'じぶん' && l.type === 'ailment') }
+}
+test('【確定】2026-11-01 ハードから通常攻撃に状態異常：黒爪＝出血20%・雨礫＝鈍足20%。ノーマルは付かない・当たったときだけ', () => {
+  assert.equal(dungeonFighter('varuzenoku', 'normal').normalAil, null)
+  assert.equal(dungeonFighter('amaza', 'normal').normalAil, null)
+  assert.deepEqual(dungeonFighter('varuzenoku', 'hard').normalAil, { key: 'bleed', chance: 20 })
+  assert.deepEqual(dungeonFighter('amaza', 'hard').normalAil, { key: 'slow', chance: 20 })
+  for (const boss of ['varuzenoku', 'amaza']) {
+    const n = normalsOf(boss, 'normal')
+    assert.ok(n.hits.length > 100)
+    assert.equal(n.ails.length, 0, 'ノーマルは通常攻撃で状態異常にならない')
+  }
+  const v = normalsOf('varuzenoku', 'hard')
+  assert.ok(v.hits.length > 100)
+  assert.ok(v.ails.length >= v.hits.length * 0.12 && v.ails.length <= v.hits.length * 0.28, `黒爪の出血はだいたい20%（${v.ails.length}/${v.hits.length}）`)
+  assert.ok(v.ails.every(l => l.ail === '出血'))
+  // ★外れたら付かない：状態異常の直前のボスの行動は、当たった通常攻撃
+  const nimble = { ...dummy(), stats: { ...dummy().stats, agi: 400 } }
+  const dodged = normalsOf('varuzenoku', 'hard', nimble)
+  const acts = dodged.st.log.filter(l => l.type === 'ailment' || (l.side === dodged.name && l.type === 'normal'))
+  assert.ok(dodged.ails.length > 0 && acts.some(l => l.type === 'normal' && !l.hit), '当たりも外れもある戦闘で確かめている')
+  acts.forEach((l, i) => { if (l.type === 'ailment') assert.equal(acts[i - 1].hit, true) })
+  const a = normalsOf('amaza', 'hard')
+  assert.ok(a.ails.length > 0 && a.ails.every(l => l.ail === '鈍足'), '雨礫は鈍足')
+})
+
+test('【確定】2026-11-01 黒翼烈風：鈍足をやめて2回の多段（合計1.8倍のまま）・1発ごとに出血50%', () => {
+  const s = DUNGEON_BOSSES.varuzenoku.skills.find(x => x.name === '黒翼烈風')
+  assert.equal(s.mult * s.hits, 1.8, '合計の倍率は前と同じ')
+  assert.equal(s.hits, 2)
+  assert.deepEqual(s.ail, { key: 'bleed', chance: 50 })
+  assert.equal(s.ailPerHit, true)
+  assert.ok(!s.noCrit, 'クリティカルは前と同じように出る')
+  // 実際に撃たせて数える（HPが25〜50%のあいだは黒翼烈風が出やすい）
+  const f = dungeonFighter('varuzenoku', 'hard')
+  const st = createAtb(dummy(), f, { rng: rngOf(21), maxSec: 9999 })
+  st.b.hp = Math.floor(st.b.base.hp * 0.4)
+  runFor(st, 900)
+  const counts = []
+  st.log.forEach((l, i) => {
+    if (l.side !== BOSS || l.skill !== '黒翼烈風' || l.type !== 'skill') return
+    assert.equal(l.of, 2, '2回当たりにいく')
+    let n = 0
+    for (let j = i + 1; j < st.log.length; j++) {
+      const x = st.log[j]
+      if (x.side === BOSS && (x.type === 'skill' || x.type === 'normal')) break
+      if (x.type === 'ailment') { assert.equal(x.ail, '出血', '鈍足は付かない'); n++ }
+    }
+    assert.ok(n <= l.hits, '当たった回数より多くは付かない')
+    counts.push({ n, hits: l.hits })
+  })
+  assert.ok(counts.length > 20, `何度も撃った（${counts.length}回）`)
+  const landed = counts.reduce((a, c) => a + c.hits, 0), inflicted = counts.reduce((a, c) => a + c.n, 0)
+  assert.ok(inflicted >= landed * 0.35 && inflicted <= landed * 0.65, `1発ごとにだいたい50%（${inflicted}/${landed}）`)
+  assert.ok(counts.some(c => c.n === 2), '1回で2つ付くこともある')
+  // 重ねて2発当てたときのダメージは、前の1発（1.8倍）と変わらない
+  const avg = (fighter) => {
+    const t = createAtb(dummy(), fighter, { rng: rngOf(21), maxSec: 9999 })
+    t.b.hp = Math.floor(t.b.base.hp * 0.4)
+    runFor(t, 900)
+    const xs = t.log.filter(l => l.side === BOSS && l.skill === '黒翼烈風' && l.type === 'skill' && l.hits === l.of && !l.crit).map(l => l.damage)
+    return xs.reduce((a, x) => a + x, 0) / xs.length
+  }
+  const one = { ...f, slots: f.slots.map(x => (x.skill.name === '黒翼烈風' ? { ...x, skill: { ...x.skill, mult: 1.8, hits: 1, ail: null, ailPerHit: false } } : x)) }
+  const ratio = avg(f) / avg(one)
+  assert.ok(ratio > 0.9 && ratio < 1.1, `2発の合計÷前の1発＝${ratio}`)
+})
+
+test('【確定】2026-11-01 終焉の黒焔：4倍・当たると回復阻害（回復量−30%）・薬の回復も下がる', () => {
+  const s = DUNGEON_BOSSES.varuzenoku.skills.find(x => x.name === '終焉の黒焔')
+  assert.equal(s.mult, 4)
+  assert.equal(s.castSec, 3.5)
+  assert.deepEqual(s.ail, { key: 'healCut', chance: 100, pct: 30 })
+  const st = createAtb(dummy(), dungeonFighter('varuzenoku', 'normal'), { rng: rngOf(5), maxSec: 9999 })
+  st.a.hp = Math.floor(st.a.base.hp / 2)
+  const before = healMaxAmount(st.a, 30)
+  st.b.hp = Math.floor(st.b.base.hp * 0.2)
+  for (let i = 0; i < 2000 && !st.log.some(l => l.skill === '終焉の黒焔' && l.type === 'skill' && l.hits > 0); i++) runFor(st, 0.1)
+  assert.ok(st.log.some(l => l.side === 'じぶん' && l.type === 'ailment' && l.ail === '回復阻害'), '画面の記録にも出る')
+  assert.equal(st.a.ail.healCut.pct, 30)
+  assert.equal(healMultOf(st.a.ail), 0.7)
+  assert.ok(Math.abs(healMaxAmount(st.a, 30) / before - 0.7) < 0.001, 'HPポーションの回復も−30%')
+})
+
+test('【確定】2026-11-01 水天葬：4倍・相手のHPが40%未満で1.5倍・10%以下で3倍（いちばん大きい倍率だけ）', () => {
+  const s = DUNGEON_BOSSES.amaza.skills.find(x => x.name === '水天葬')
+  assert.equal(s.mult, 4)
+  assert.equal(s.castSec, 3.5)
+  const at = (pct) => hpStepMultOf(s, { hp: pct * 10, base: { hp: 1000 } })
+  assert.deepEqual([100, 40, 39.9, 10.1, 10, 1, 0].map(at), [1, 1, 1.5, 1.5, 3, 3, 3], '40%ちょうどは上がらない・10%ちょうどは3倍')
+  assert.equal(hpStepMultOf({ name: 'ほかの技', mult: 1 }, { hp: 1, base: { hp: 1000 } }), 1, '書いていない技は変わらない')
+  // 実際のダメージ：撃つ瞬間の自分のHPで変わる
+  const fired = (pct) => {
+    const st = createAtb(dummy(), dungeonFighter('amaza', 'normal'), { rng: rngOf(9), maxSec: 9999 })
+    st.b.hp = Math.floor(st.b.base.hp * 0.2)
+    const xs = () => st.log.filter(l => l.side === '雨摩座' && l.skill === '水天葬' && l.type === 'skill' && l.hits > 0 && !l.crit)
+    for (let i = 0; i < 20000 && xs().length < 8; i++) { st.a.hp = Math.floor(st.a.base.hp * pct / 100); runFor(st, 0.1) }
+    assert.equal(xs().length, 8)
+    return xs().reduce((a, l) => a + l.damage, 0) / 8
+  }
+  const full = fired(90)
+  assert.ok(Math.abs(fired(40) / full - 1) < 0.1, '40%は上がらない')
+  assert.ok(Math.abs(fired(30) / full - 1.5) < 0.15, '40%未満は1.5倍')
+  assert.ok(Math.abs(fired(10) / full - 3) < 0.3, '10%以下は3倍（4.5倍にならない）')
+})
+
+test('【確定】2026-11-01 篠突く雨：INTだけ+35%（STRは上がらない）。逆鱗はそのまま', () => {
+  const st = createAtb(dummy(), dungeonFighter('amaza', 'normal'), { rng: rngOf(4), maxSec: 9999 })
+  const before = liveStats(st.b, true)
+  st.b.hp = Math.floor(st.b.base.hp * 0.29)
+  for (let i = 0; i < 400 && !hpBuffChips(st.b).some(c => c.name === '篠突く雨'); i++) runFor(st, 0.1)
+  assert.ok(hpBuffChips(st.b).some(c => c.name === '篠突く雨'))
+  const after = liveStats(st.b, true)
+  assert.equal(after.str, before.str, 'STRは上がらない')
+  assert.ok(Math.abs(after.int_stat / before.int_stat - 1.35) < 0.02, `INTは+35%（${after.int_stat}/${before.int_stat}）`)
+  assert.deepEqual(DUNGEON_BOSSES.varuzenoku.pattern.buffs.find(b => b.name === '逆鱗').table, { str: 25, int_stat: 25 })
+})
+
 test('【確定】2026-10-29 ボスの強さ：守りと速さは power・攻撃（STR・INT）だけ atk 倍・HPは全体（持ち越し）', () => {
   for (const k of ['normal', 'hard']) {
     const d = diffOf('varuzenoku', k), f = dungeonFighter('varuzenoku', k)
@@ -98,8 +222,8 @@ test('【確定】2026-10-29 ボスの強さ：守りと速さは power・攻撃
     assert.equal(dungeonFighter('varuzenoku', k, d.hp * 0.4).hpNow, d.hp * 0.4)
     assert.equal(dungeonFighter('varuzenoku', k, d.hp * 9).hpNow, d.hp, 'いまのHPは全体より多くならない')
   }
-  assert.deepEqual({ ...diffOf('varuzenoku', 'normal') }, { label: 'ノーマル', area: 2, recLv: 25, recPower: 500, power: 474, atk: 0.33, hp: 13000, reward: { exp: 175, gold: 1250 } })
-  assert.deepEqual({ ...diffOf('varuzenoku', 'hard') }, { label: 'ハード', area: 5, recLv: 45, recPower: 1050, power: 1027, atk: 0.36, hp: 30000, reward: { exp: 350, gold: 2250 } })
+  assert.deepEqual({ ...diffOf('varuzenoku', 'normal') }, { label: 'ノーマル', area: 2, recLv: 25, recPower: 500, power: 474, atk: 0.36, hp: 13000, reward: { exp: 175, gold: 1250 } })
+  assert.deepEqual({ ...diffOf('varuzenoku', 'hard') }, { label: 'ハード', area: 5, recLv: 45, recPower: 1050, power: 1027, atk: 0.4, hp: 30000, reward: { exp: 350, gold: 2250 } })
 })
 
 test('【確定】2026-10-29 ボスの技：HP75%より上は黒爪だけ・75%を切ったら次の行動で焦熱の吐息を必ず・そのあとは吐息30%', () => {
@@ -691,13 +815,13 @@ test('【確定】2026-10-30 雨摩座：黒龍の裏返し（魔法が主）・
   assert.deepEqual(A.diffs, V.diffs, '強さは黒龍と同じ')
   assert.equal(A.kind, 'mag')
   assert.deepEqual(A.skills.map(s => [s.name, s.kind, s.mult, s.ail?.key ?? null, s.ail?.chance ?? null]), [
-    ['氷雨', 'mag', 1.6, 'slow', 70], ['水縛の帯', 'phys', 1.8, 'paralyze', 30], ['水天葬', 'mag', 3.0, null, null],
+    ['氷雨', 'mag', 1.6, 'slow', 70], ['水縛の帯', 'mag', 1.8, 'paralyze', 30], ['水天葬', 'mag', 4.0, null, null],
   ])
   assert.deepEqual(A.pattern.steps.map(s => s.at), V.pattern.steps.map(s => s.at))
   const rename = { '焦熱の吐息': '氷雨', '黒翼烈風': '水縛の帯', '終焉の黒焔': '水天葬' }
   assert.deepEqual(A.pattern.bands, V.pattern.bands.map(b => ({ min: b.min, weights: Object.fromEntries(Object.entries(b.weights).map(([k, w]) => [rename[k], w])) })))
   assert.deepEqual(A.pattern.buffs, [
-    { at: 0.6, name: '霧雨の帳', table: { vit: 25 } }, { at: 0.3, name: '篠突く雨', table: { str: 25, int_stat: 25 } },
+    { at: 0.6, name: '霧雨の帳', table: { vit: 25 } }, { at: 0.3, name: '篠突く雨', table: { int_stat: 35 } },
   ])
   // 試し撃ちで戦える（75%を切ったら氷雨）
   const st = createAtb(dummy(), dungeonFighter('amaza', 'normal'), { rng: rngOf(4), maxSec: 999 })

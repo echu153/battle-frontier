@@ -91,6 +91,7 @@ export const PASSIVE_EFFECT_KEYS = [
 // reqJobs     : この技を覚えるのに要る転職回数（侍・狂戦士の後半5個＝5回以上）
 // ailPerHit   : 多段のとき「1発ごとに」状態異常を試す（マッドラッシュ・狂乱連斬）
 // lowHpBonus  : { max, at } 相手のHPが低いほど威力+%。at% 以下で最大（追い討ち）
+// hpSteps     : [{ below, mult }（未満）, { upTo, mult }（以下）] 相手のHPの段階で威力を掛ける。いちばん大きい倍率だけ（水天葬）
 // highHpBonus : { max, at } **自分の**HPが高いほど威力+%。満タンで最大（聖職者）
 // vsBuff      : { per, max } 相手に乗っているバフ1つにつき威力+%（異端審問官）
 // dispel      : { chance } 相手のバフを確率で1つ消す（異端審問官）

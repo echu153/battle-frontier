@@ -57,11 +57,16 @@ const VARUZENOKU_DIFFS = {
   // 【確定】2026-11-01 ユーザー「レイドボスのHP少ない気がするから2倍ぐらいにしてほしい」→選択「2倍」：ノーマル 6500→13000・ハード 15000→30000（攻撃はそのまま）。
   //   測り直し（22人×3通りの乱数＝66回）：1回で倒せた ノーマル 27〜29→0〜1回／ハード 21〜26→0回。3回以上 40〜48回。合計 約2分→約4分。
   //   完全ソロ討伐は推奨戦闘力ではほぼ無理＝強くなってから狙う形（ユーザーが選んだ）
-  normal: { label: 'ノーマル', area: 2, recLv: 25, recPower: 500, power: 474, atk: 0.33, hp: 13000, reward: { exp: 175, gold: 1250 } },
-  hard: { label: 'ハード', area: 5, recLv: 45, recPower: 1050, power: 1027, atk: 0.36, hp: 30000, reward: { exp: 350, gold: 2250 } },
+  // 【確定】2026-11-01 ユーザー「攻撃倍率少し上げていい」（技の調整と一緒に）：0.33→0.36・0.36→0.40（どちらも約1割）
+  normal: { label: 'ノーマル', area: 2, recLv: 25, recPower: 500, power: 474, atk: 0.36, hp: 13000, reward: { exp: 175, gold: 1250 } },
+  hard: { label: 'ハード', area: 5, recLv: 45, recPower: 1050, power: 1027, atk: 0.4, hp: 30000, reward: { exp: 350, gold: 2250 } },
   expert: { label: 'エキスパート', area: 8, recLv: 65, ready: false },
   master: { label: 'マスター', area: 12, recLv: 80, ready: false },
 }
+// 【確定】2026-11-01 ユーザーの調整（技リストを見て）：
+//   黒龍＝ハードから黒爪に出血20%・黒翼烈風は鈍足をやめて2回の多段（合計1.8倍のまま）で1発ごとに出血50%・終焉の黒焔は4倍＋回復阻害（回復量−30%）
+//   雨摩座＝ハードから雨礫に鈍足20%・水縛の帯は魔法に・篠突く雨は INT+35%（STRは上げない）・水天葬は4倍＋相手のHPが40%未満なら1.5倍／10%以下なら3倍（重ねない）
+//   hardNormalAil＝ハードから通常攻撃に付く状態異常（dungeonFighter が normalAil にする）
 // 【確定】2026-10-31 ユーザー「モンスターの能力ちょっと低いかも、AGIとDEXもう少し上げていい」：配分 DEX 7→12・AGI 7→8（ノーマル DEX33→57・AGI33→38／ハード DEX72→123・AGI72→82）。
 //   HP の配分は使っていない（難易度の hp で決まる）ので、そこから移して合計100のまま。同じ強さの場所のボス（盗賊団のリーダー）は DEX12・AGI9。攻撃の倍率は変えない。
 //   測り直し（22人×3通りの乱数＝66回。1回で倒せた・3回以上かかった・ボスの攻撃の外れ）：ノーマル 37〜38→26〜29回・0→0回・26%→12〜15%／ハード 37〜43→20〜24回・0〜1→1〜2回・22%→12%。
@@ -71,12 +76,13 @@ export const DUNGEON_BOSSES = {
     name: '黒龍ヴァルゼノク', kind: 'phys', race: 'ドラゴン',
     dist: { hp: 34, mp: 6, str: 16, dex: 12, agi: 8, int_stat: 12, vit: 9, luk: 3 },
     // 通常攻撃が黒爪（物理1.0倍）。技は節目で出る3つ（proc は100＝クールダウンは使わない・パターンが決める）
+    hardNormalAil: { key: 'bleed', chance: 20 },
     skills: [
       { name: '焦熱の吐息', kind: 'mag', mult: 1.6, proc: 100, mp: 0, ail: { key: 'burn', chance: 70 } },
-      { name: '黒翼烈風', kind: 'phys', mult: 1.8, proc: 100, mp: 0, ail: { key: 'slow', chance: 50 } },
+      { name: '黒翼烈風', kind: 'phys', mult: 0.9, hits: 2, proc: 100, mp: 0, ail: { key: 'bleed', chance: 50 }, ailPerHit: true },
       // 倍率2.5以上＝撃つ前に構え（防御で半分）。【確定】2026-10-30 ユーザー「溜めモーションは4秒でいい」：
       //   castSec＝構えの長さ 3.5秒（このあと吐く直前に引く0.5秒＝lib/bossIllust.js の castSkipMs から吐くまで）＝構えはじめから吐くまで4秒
-      { name: '終焉の黒焔', kind: 'mag', mult: 3.0, proc: 100, mp: 0, castSec: 3.5 },
+      { name: '終焉の黒焔', kind: 'mag', mult: 4.0, proc: 100, mp: 0, castSec: 3.5, ail: { key: 'healCut', chance: 100, pct: 30 } },
     ],
     pattern: {
       steps: [
@@ -106,11 +112,12 @@ export const DUNGEON_BOSSES = {
     name: '雨摩座', kind: 'mag', race: '妖精',   // 雨の精霊＝妖精（精霊も入れる・monsterRace.js）
     dist: { hp: 34, mp: 6, str: 12, dex: 12, agi: 8, int_stat: 16, vit: 9, luk: 3 },
     // 通常攻撃が雨礫（魔法1.0倍）
+    hardNormalAil: { key: 'slow', chance: 20 },
     skills: [
       { name: '氷雨', kind: 'mag', mult: 1.6, proc: 100, mp: 0, ail: { key: 'slow', chance: 70 } },
-      { name: '水縛の帯', kind: 'phys', mult: 1.8, proc: 100, mp: 0, ail: { key: 'paralyze', chance: 30 } },
+      { name: '水縛の帯', kind: 'mag', mult: 1.8, proc: 100, mp: 0, ail: { key: 'paralyze', chance: 30 } },
       // 倍率2.5以上＝撃つ前に構え（防御で半分）。黒龍の終焉の黒焔と同じ（ユーザー「同じにする」）：構え3.5秒＋振り下ろす直前の0.5秒＝振り下ろすまで4秒
-      { name: '水天葬', kind: 'mag', mult: 3.0, proc: 100, mp: 0, castSec: 3.5 },
+      { name: '水天葬', kind: 'mag', mult: 4.0, proc: 100, mp: 0, castSec: 3.5, hpSteps: [{ below: 40, mult: 1.5 }, { upTo: 10, mult: 3 }] },
     ],
     pattern: {
       steps: [
@@ -127,7 +134,7 @@ export const DUNGEON_BOSSES = {
       // 名前は雨から（霧雨で身を包む→篠突く雨＝激しく降る）
       buffs: [
         { at: 0.6, name: '霧雨の帳', table: { vit: 25 } },
-        { at: 0.3, name: '篠突く雨', table: { str: 25, int_stat: 25 } },
+        { at: 0.3, name: '篠突く雨', table: { int_stat: 35 } },
       ],
     },
     diffs: VARUZENOKU_DIFFS,
@@ -171,6 +178,7 @@ export const dungeonFighter = (bossKey, diffKey, hpNow = null) => {
   return {
     ...CAP_RULES, name: b.name, kind: b.kind, race: b.race, boss: true, stats,
     slots: b.skills.map(skill => ({ skill, uses: 9999 })), taken: null, pattern: b.pattern,
+    normalAil: b.hardNormalAil && diffKey !== 'normal' ? b.hardNormalAil : null,
     hpNow: hpNow == null ? null : Math.max(1, Math.min(d.hp, hpNow)),
   }
 }
