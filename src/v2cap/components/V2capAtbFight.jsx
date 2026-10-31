@@ -223,6 +223,12 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
               onClick={() => { fxRef.current = [...fxRef.current, { kind:'rage', side:'b', skill: b.name, t0: performance.now() / 1000 }] }}
               style={{ ...miniBtn('#ffb060'), padding:'4px 8px', fontSize:'11px' }}>🔥 {b.name}</button>
           ))}
+          {/* ボスの倒れる動き（lib/bossDeath.js）：流すだけ（戦闘には関係しない・流し終わるとボスは戻る） */}
+          {bossArt.death && (
+            <button disabled={paused}
+              onClick={() => { fxRef.current = [...fxRef.current, { kind:'death', side:'b', t0: performance.now() / 1000 }] }}
+              style={{ ...miniBtn('#ff6688'), padding:'4px 8px', fontSize:'11px' }}>💀 倒れる</button>
+          )}
         </div>
       )}
 

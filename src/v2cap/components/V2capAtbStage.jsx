@@ -10,7 +10,9 @@ import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illus
 import { behindRectOf, bgRectOf, bgFxAt, liteFxOf } from '../lib/bossBg.js'
 import { artIsLoaded } from '../lib/artPreload.js'
 import BossFlowCanvas from './BossFlowCanvas.jsx'
+import BossDissolve from './BossDissolve.jsx'
 import { FX_HEAD_Y, FX_FEET_Y, FX_SKY_Y, FX_TARGET_Y, SCENE_TOP, fallAt, coilAt, pourTimesOf, sceneEndMsOf, stageSceneOf, flyPosOf } from '../lib/bossScene.js'
+import { deathAt, deathPoseOf, deathShowOf } from '../lib/bossDeath.js'
 
 // ============================================================
 // 「レベルキャップあり」版（v2cap）— ATB戦闘の舞台（自分が左・モンスターが右）
@@ -56,6 +58,9 @@ import { FX_HEAD_Y, FX_FEET_Y, FX_SKY_Y, FX_TARGET_Y, SCENE_TOP, fallAt, coilAt,
 //     描いた絵は雲だけを見せる（alphaMask・足元の動かないしぶきはユーザー「いらないかも」でやめ、雨を足元まで伸ばした）
 //   ・2026-10-30 ユーザー「待機モーションで軽く着物ひらひらしててほしい」：雨摩座の帯から下を横の帯に分けて、上から下へ伝わる波で左右にずらす
 //     （IllustRig が体の動きの箱の中で帯ごとに同じパーツを切り抜いて描く・lib/bossIllust.js の flutterBandsAt）
+//   ・2026-10-31 ユーザーが選んだ「ボスの倒れる動き」（lib/bossDeath.js）：前は待機の動きのまま薄くなるだけだった。止めの一撃の数字が出る時刻（deadAt）から、
+//     倒した瞬間の形で止まって光り（Fighter の clock）→ 断末魔の絵 → 倒れた絵 → 消える（BossDissolve）。そのあいだボスの技のエフェクトと演出は片付ける。
+//     試し撃ちの「動きを見る」の［倒れる］は、fx の kind 'death' で同じ動きを流す（流し終わるとボスは戻る）
 // ============================================================
 
 // 軽い表示（スマホ・遅い端末＝lib/atbPacer.js の段階）。2026-10-31 ユーザー「30回に落としたって出る、大技の時はそれよりも下がる感じ」：
@@ -175,7 +180,8 @@ const rigWrap = (art, pose) => {
 //   （帯の上の境目で dx・下へ行くほど tan ずつずれる＝隣の帯と境目でつながる）。帯は少し重ねて切る（境目に細いすき間が出ない）
 //   HPの節目のバフのオーラ（aura＝{ p, op, scale, front, glow }・2026-10-30）：front は竜の手前（鎧の殻）・glow は光として手前に明るく重ねる（雨摩座の篠突く雨）・
 //   どちらも無ければいちばん奥（逆鱗の闘気）。体の動きでは動かさない
-const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [], tMs = 0, aura = null }) => {
+//   倒れる動き（death・lib/bossDeath.js）：切り離したパーツ（水の帯）は落ちて消える・倒れた絵は BossDissolve で消える
+const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [], tMs = 0, aura = null, death = null }) => {
   const lite = useContext(LiteCtx)
   const box = { x: 0, y: 0, w: art.base, h: art.base }
   const free = art.parts.filter(p => p.free && !p.nest)
@@ -191,8 +197,8 @@ const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [
   return (
     <>
       {auraEl && !aura.front && !aura.glow && auraEl}
-      {free.length > 0 && (
-        <div style={rigWrap(art, freePose)}>
+      {free.length > 0 && (!death || death.freeOp > 0.001) && (
+        <div style={death ? { ...rigWrap(art, { ...freePose, y: freePose.y + death.freeY }), opacity: death.freeOp } : rigWrap(art, freePose)}>
           {free.map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={freePose} />)}
         </div>
       )}
@@ -210,6 +216,7 @@ const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [
         ))}
         {still.length > 0 && <div style={rigStyle}>{still.map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={pose} />)}</div>}
         {poseReady && show?.poses.map(sp => <PoseArt key={sp.name} art={art} p={motion.poses[sp.name]} op={sp.op} />)}
+        {death && <BossDissolve base={art.base} p={art.death.arts.fall} b={art.death.burn} op={death.burn.op} k={death.burn.k} ash={death.burn.ash} lite={lite} />}
         {art.dust && pose.dust > 0 && <RigDust art={art} k={pose.dust} />}
       </div>
       {auraEl && (aura.front || aura.glow) && auraEl}
@@ -239,8 +246,8 @@ const BuffSparks = ({ art, sc, after }) => {
       <defs><filter id={id} x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="3" /></filter></defs>
       {sc?.rings.map((r, i) => (
         <g key={`r${i}`} opacity={r.op.toFixed(3)}>
-          <circle cx={r.x} cy={r.y} r={r.r} fill="none" stroke={`rgb(${sc.ringColor})`} strokeWidth={r.w * 1.8} filter={blur} opacity={lite ? 0.45 : undefined} />
-          <circle cx={r.x} cy={r.y} r={r.r} fill="none" stroke={`rgb(${sc.ringCore || '255,226,170'})`} strokeWidth={Math.max(1, r.w * 0.35)} />
+          <ellipse cx={r.x} cy={r.y} rx={r.r} ry={r.r * (r.flat || 1)} fill="none" stroke={`rgb(${sc.ringColor})`} strokeWidth={r.w * 1.8} filter={blur} opacity={lite ? 0.45 : undefined} />
+          <ellipse cx={r.x} cy={r.y} rx={r.r} ry={r.r * (r.flat || 1)} fill="none" stroke={`rgb(${sc.ringCore || '255,226,170'})`} strokeWidth={Math.max(1, r.w * 0.35)} />
         </g>
       ))}
       {after && dots(after.sparks, after.sparkColor, 'a', after.sparkCore)}
@@ -305,6 +312,20 @@ const RigDust = ({ art, k }) => {
         </radialGradient>
       </defs>
       {dustEllipsesOf(art.dust, k).map((c, i) => <ellipse key={i} cx={c.cx} cy={c.cy} rx={c.rx} ry={c.ry} fill={`url(#${id})`} opacity={c.op} />)}
+    </svg>
+  )
+}
+// 倒れる動きの砂ぼこりと煙（lib/bossDeath.js の puffs・立ち絵の px）：c＝'dust'｜'smoke'（色は art.death の dustColor・smokeColor）
+const DeathPuffs = ({ art, list }) => {
+  const id = useId().replace(/:/g, '')
+  const stops = (c) => <><stop offset="0%" stopColor={c[0]} stopOpacity="0.85" /><stop offset="60%" stopColor={c[1]} stopOpacity="0.45" /><stop offset="100%" stopColor={c[2]} stopOpacity="0" /></>
+  return (
+    <svg viewBox={`0 0 ${art.base} ${art.base}`} style={{ position:'absolute', inset:0, width:'100%', height:'100%', overflow:'visible', pointerEvents:'none' }}>
+      <defs>
+        {art.death.dustColor && <radialGradient id={`${id}dust`}>{stops(art.death.dustColor)}</radialGradient>}
+        {art.death.smokeColor && <radialGradient id={`${id}smoke`}>{stops(art.death.smokeColor)}</radialGradient>}
+      </defs>
+      {list.map((c, i) => <ellipse key={i} cx={c.cx.toFixed(1)} cy={c.cy.toFixed(1)} rx={c.rx.toFixed(1)} ry={c.ry.toFixed(1)} fill={`url(#${id}${c.c})`} opacity={c.op.toFixed(3)} />)}
     </svg>
   )
 }
@@ -438,43 +459,50 @@ const buffAfterOf = (art, me, marks, now) => {
 //     絵の枠を aspect-ratio＋height:100% で作ると、Safari では flex の中で幅が 0 になることがある（絵だけ消えて、px で置くエフェクトは残る＝言われたとおりの見え方）。枠の幅は明示する。
 //     背景も負の z-index をやめた（BossBackground）。絵の枠は別の層にする（translate3d）＝背景の WebGL の層の上に必ず重なる
 const FIGHTER_ROWS = 5
-function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx, now, name, artH = ART_H, scale = 1, areaRef, castEnd = -1e9, squeeze = null, bossGlow = 0 }) {
+//   death … 倒れる動き（lib/bossDeath.js の deathAt に t0＝倒れた時刻を足したもの・ボスだけ）
+function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx, now, name, artH = ART_H, scale = 1, areaRef, castEnd = -1e9, squeeze = null, bossGlow = 0, death = null }) {
   const lite = useContext(LiteCtx)
   const mine = fx.filter(f => f.side === side)
   const lastOf = (kind) => mine.reduce((t, f) => (f.kind === kind && f.t0 <= now && f.t0 > t ? f.t0 : t), -1e9)
   const dir = right ? -1 : 1   // 前＝相手の方
   // 攻撃の絵があれば流す（流しているあいだは踏み込まない）。act に motion が付いていればそちら（ボスの技ごとの絵）
-  const lastAct = mine.reduce((p, f) => (f.kind === 'act' && f.t0 <= now && (!p || f.t0 > p.t0) ? f : p), null)
+  // 倒れる動きのあいだは、倒れた瞬間の形で止める（ボスの姿勢・技の絵の時計）
+  const clock = death ? death.t0 : now
+  const lastAct = mine.reduce((p, f) => (f.kind === 'act' && f.t0 <= clock && (!p || f.t0 > p.t0) ? f : p), null)
   const mo = lastAct?.motion || motion
   const frame = mo?.ms && lastAct ? motionFrameAt(mo, (now - lastAct.t0) * 1000) : -1
   // イラスト版は姿勢で動かす（技の動きも姿勢の中＝踏み込まない）
-  const rigMotion = rig && lastAct?.motion?.keys ? lastAct.motion : null, rigMs = (now - (lastAct?.t0 ?? now)) * 1000
+  const rigMotion = rig && lastAct?.motion?.keys ? lastAct.motion : null, rigMs = (clock - (lastAct?.t0 ?? clock)) * 1000
   // HPの節目のバフが付いているあいだの見た目（逆鱗のあと・lib/bossIllust.js の buffAfterAt）：待機の速さ・体の脈・立ちのぼる火の粉。
   //   tMs＝部品の待機の時計（速さを掛けた時刻）。付いてからの時間は rage の印から（印が片付いたあとは十分たった）
-  const after = rig?.buffs ? buffAfterOf(rig, me, mine, now) : null
-  const tMs = now * 1000 * (after?.tempo || 1)
+  const afterNow = rig?.buffs ? buffAfterOf(rig, me, mine, clock) : null
+  const after = death ? null : afterNow
+  const tMs = clock * 1000 * (afterNow?.tempo || 1)
   // 構えのあいだは構えの姿勢（技を流しているあいだは技が先）
-  const castMs = me.cast ? castMsOf(me.cast, st.t + st.acc) : null
+  const castMs = me.cast && !death ? castMsOf(me.cast, st.t + st.acc) : null
   const casting = rig && castMs !== null && !(rigMotion && rigMs < rigMotion.totalMs)
-  const pose = !rig ? null : casting ? illustCastPoseAt(rig.key, castMs, tMs)
+  const pose0 = !rig ? null : casting ? illustCastPoseAt(rig.key, castMs, tMs)
     : illustPoseAt(rig.key, rigMotion, rigMs, tMs, !!lastAct && afterCast(lastAct.t0, castEnd))
-  const trails = rigMotion ? illustTrailsAt(rig.key, rigMotion, rigMs, tMs) : []
+  const pose = death ? deathPoseOf(pose0, death) : pose0
+  const trails = rigMotion && !death ? illustTrailsAt(rig.key, rigMotion, rigMs, tMs) : []
   // 技のポーズの絵と残像（構えのあいだは部品の立ち絵）
   // 構えのあいだのポーズの絵（雨摩座＝構えた技の構えの絵・lib/bossIllust.js の illustCastShowAt・黒龍は無し）
   const cs = casting ? illustCastShowAt(rig, me.cast.name, castMs) : null
   // HPの節目のバフの絵（黒龍・雨摩座・lib/bossIllust.js の illustBuffShowAt）：付いた瞬間にバフのポーズの絵とオーラ。技を流しているあいだ・構えのあいだは技が先（オーラは出す）
   const lastRage = mine.reduce((p, f) => (f.kind === 'rage' && f.t0 <= now && (!p || f.t0 >= p.t0) ? f : p), null)
-  const buff = rig && lastRage ? illustBuffShowAt(rig, lastRage.skill, (now - lastRage.t0) * 1000) : null
+  const buff = rig && lastRage && !death ? illustBuffShowAt(rig, lastRage.skill, (now - lastRage.t0) * 1000) : null
   const buffArt = buff ? rig.buffs[lastRage.skill] : null
   // 付いた瞬間の強い見せ方（逆鱗・buffSceneAt）：ポーズの絵のふくらみ・衝撃の輪・噴き上がる火の粉（舞台の暗さと揺れは V2capAtbStage）
-  const bsc = rig && lastRage ? buffSceneAt(rig.buffs?.[lastRage.skill], (now - lastRage.t0) * 1000) : null
+  const bsc = death ? death.scene : rig && lastRage ? buffSceneAt(rig.buffs?.[lastRage.skill], (now - lastRage.t0) * 1000) : null
   const moving = !!rigMotion && rigMs < rigMotion.totalMs
   const buffPose = buff && buffArt.pose && !moving && !casting
-  const show = buffPose ? { rig: buff.rig, poses: buff.pose > 0.001 ? [{ name: lastRage.skill, op: buff.pose }] : [] }
+  const show0 = buffPose ? { rig: buff.rig, poses: buff.pose > 0.001 ? [{ name: lastRage.skill, op: buff.pose }] : [] }
     : rigMotion && !casting ? illustShowAt(rigMotion, rigMs) : cs?.show || null
-  const showMotion = buffPose ? { poses: { [lastRage.skill]: buffArt.pose } } : cs ? cs.motion : rigMotion
+  const showMotion0 = buffPose ? { poses: { [lastRage.skill]: buffArt.pose } } : cs ? cs.motion : rigMotion
+  const show = death ? deathShowOf(show0, death) : show0
+  const showMotion = death ? { poses: { ...showMotion0?.poses, ...rig.death.arts } } : showMotion0
   const aura = buff?.aura && buffArt.aura ? { p: buffArt.aura, op: buff.aura.op * buffArt.auraOp, scale: buff.aura.scale, front: buffArt.front, glow: buffArt.glow } : null
-  const ghosts = rigMotion && !casting && !buffPose ? illustGhostsAt(rigMotion, rigMs).map(g => ({ ...g, pose: illustPoseAt(rig.key, rigMotion, g.ms, tMs - (rigMs - g.ms)) })) : []
+  const ghosts = rigMotion && !casting && !buffPose && !death ? illustGhostsAt(rigMotion, rigMs).map(g => ({ ...g, pose: illustPoseAt(rig.key, rigMotion, g.ms, tMs - (rigMs - g.ms)) })) : []
   const dx = (frame >= 0 || rig ? 0 : lungeOf(now - lastOf('act')) * dir) + shakeOf(now - lastOf('hit'))
   const hitAgo = now - lastOf('hit')
   const glowAgo = now - lastOf('use')
@@ -486,7 +514,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
     // バフの絵があるボス：付いた瞬間にぱっと明るく光り、赤い光が見せているあいだ残る
     const k = Math.max(0, 1 - (now - lastRage.t0) / (RAGE_SEC * 1.2))
     filters.push(`brightness(${(1 + 0.9 * buff.flash).toFixed(2)}) drop-shadow(0 0 ${(4 + 12 * k).toFixed(1)}px rgba(${buffArt.tint || '255,70,30'},${(0.25 + 0.55 * k).toFixed(2)}))`)
-  } else if (rageAgo >= 0 && rageAgo < RAGE_SEC) {
+  } else if (rageAgo >= 0 && rageAgo < RAGE_SEC && !death) {
     // 2回脈打って消える赤い光（節目のバフ・バフの絵が無いボス）
     const k = Math.sin(Math.PI * 2 * rageAgo / RAGE_SEC * 1.0) ** 2 * (1 - rageAgo / RAGE_SEC)
     filters.push(`drop-shadow(0 0 ${(6 + 14 * k).toFixed(1)}px rgba(255,70,30,${(0.35 + 0.6 * k).toFixed(2)})) brightness(${(1 + 0.35 * k).toFixed(2)})`)
@@ -495,6 +523,8 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   if (bossGlow > 0.01) filters.push(`drop-shadow(0 0 ${(4 + 14 * bossGlow).toFixed(1)}px rgba(255,60,16,${(0.25 + 0.6 * bossGlow).toFixed(2)})) brightness(${(1 + 0.22 * bossGlow).toFixed(3)})`)
   // 逆鱗のあと：体が赤く脈打つ（心臓のように2回ずつ）
   if (after?.glow > 0.01) filters.push(`drop-shadow(0 0 ${(3 + 9 * after.glow).toFixed(1)}px rgba(${after.glowColor},${(0.2 + 0.55 * after.glow).toFixed(2)}))`)
+  // 倒れた瞬間に白く光る（lib/bossDeath.js の bright）
+  if (death && death.bright > 1.001) filters.push(`brightness(${death.bright.toFixed(3)})`)
   if (me.ail.paralyze) filters.push('grayscale(0.6)')
   // 軽い表示：ぼかしを使わず、明るさと後ろの丸い光だけ（LiteCtx）
   let bright = 1, red = 0
@@ -502,14 +532,15 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
     if (hitAgo >= 0 && hitAgo < HIT_SEC) bright *= 1.25
     if (glowAgo >= 0 && glowAgo < GLOW_SEC) bright *= 1.3
     if (buff) { bright *= 1 + 0.9 * buff.flash; red = Math.max(0, 1 - (now - lastRage.t0) / (RAGE_SEC * 1.2)) }
-    else if (rageAgo >= 0 && rageAgo < RAGE_SEC) { const k = Math.sin(Math.PI * 2 * rageAgo / RAGE_SEC) ** 2 * (1 - rageAgo / RAGE_SEC); bright *= 1 + 0.35 * k; red = k }
+    else if (rageAgo >= 0 && rageAgo < RAGE_SEC && !death) { const k = Math.sin(Math.PI * 2 * rageAgo / RAGE_SEC) ** 2 * (1 - rageAgo / RAGE_SEC); bright *= 1 + 0.35 * k; red = k }
     bright *= 1 + 0.22 * bossGlow
+    if (death) bright *= death.bright
     red = Math.max(red, bossGlow, (after?.glow || 0) * 0.8)
   }
   const wrapFilter = lite ? `brightness(${bright.toFixed(3)}) grayscale(${me.ail.paralyze ? 0.6 : 0})` : filters.join(' ') || 'none'
   const redColor = buffArt?.tint || after?.glowColor || '255,60,16'
   const down = me.hp <= 0
-  const pops = mine.filter(f => f.kind !== 'act' && f.kind !== 'use' && f.kind !== 'rage' && now >= f.t0 && now - f.t0 < POP_SEC)
+  const pops = mine.filter(f => f.kind !== 'act' && f.kind !== 'use' && f.kind !== 'rage' && f.kind !== 'death' && now >= f.t0 && now - f.t0 < POP_SEC)
   const need = needNow(me, st.t)
   const align = right ? 'flex-end' : 'flex-start'
   const hpColor = right ? '#cc3344' : '#44cc66'
@@ -523,7 +554,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
         {side === 'b' && (
           <div style={{ flex:'1 1 0', minWidth:0, position:'relative', alignSelf:'stretch' }}>
             {/* 構えのあいだは構えた技の名前を赤と金で出したまま（2026-10-30 ユーザー「大技っぽく」） */}
-            <SkillBanner b={skillBannerAt(fx, now, 'b') || (me.cast ? { name: me.cast.name, op: 1, k: 1, rage: true } : null)} />
+            <SkillBanner b={death ? null : skillBannerAt(fx, now, 'b') || (me.cast ? { name: me.cast.name, op: 1, k: 1, rage: true } : null)} />
           </div>
         )}
       </div>
@@ -531,7 +562,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
       <div ref={areaRef} style={{ position:'relative', minWidth:0, height: artH, display:'flex', justifyContent:'center', alignItems:'flex-end', margin:'4px 0' }}>
         <div style={{ width:'100%', height:`${scale * 100}%`, display:'flex', justifyContent:'center', alignItems:'flex-end', transformOrigin:'50% 100%',
           transform:`translate3d(${dx.toFixed(1)}px, 0, 0)${squeeze ? ` scale(${squeeze[0].toFixed(3)}, ${squeeze[1].toFixed(3)})` : ''}`,
-          opacity: down ? 0.25 : 1, transition:'opacity 0.4s' }}>
+          opacity: down && !rig?.death ? 0.25 : 1, transition:'opacity 0.4s' }}>
           {src || rig ? (
             // 待機の絵の枠（正方形）。攻撃の絵はこの枠に重ねる（ox・oy・w・h は待機の枠（クラスは 224px・ボスは base）を100%として割合で置く）
             <div style={{ position:'relative', height:'100%', width:`min(100%, calc(${artH} * ${scale}))`, filter: wrapFilter,
@@ -539,11 +570,12 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
               {lite && red > 0.01 && <div style={{ position:'absolute', inset:'-14%', borderRadius:'50%', pointerEvents:'none', opacity: Math.min(1, red).toFixed(3),
                 background:`radial-gradient(closest-side, rgba(${redColor},0.6) 45%, rgba(${redColor},0) 100%)` }} />}
               {rig && trails.length > 0 && <RigTrails art={rig} trails={trails} />}
-              {rig ? <IllustRig art={rig} pose={pose} freePose={illustFreePoseAt(rig.key, tMs)} motion={showMotion} show={show} ghosts={ghosts} tMs={tMs} aura={aura} /> : (
+              {rig ? <IllustRig art={rig} pose={pose} freePose={illustFreePoseAt(rig.key, tMs + (now - clock) * 1000)} motion={showMotion} show={show} ghosts={ghosts} tMs={tMs} aura={aura} death={death} /> : (
                 <img src={src} alt="" draggable={false}
                   style={{ width:'100%', height:'100%', objectFit:'contain', userSelect:'none', visibility: frame >= 0 ? 'hidden' : 'visible' }} />
               )}
-              {/* HPの節目のバフの衝撃の輪と火の粉（逆鱗） */}
+              {rig && death?.puffs.length > 0 && <DeathPuffs art={rig} list={death.puffs} />}
+              {/* HPの節目のバフの衝撃の輪と火の粉（逆鱗）・倒れる動きの輪と粒 */}
               {rig && (bsc || after?.sparks.length > 0) && <BuffSparks art={rig} sc={bsc} after={after} />}
               {/* 攻撃の絵は、流していないときも隠して置いておく（FrameStrip） */}
               {strips.map(m => {
@@ -925,7 +957,9 @@ const BgRing = ({ ring, x, y, tMs }) => {
   )
 }
 // ボスの後ろの色を抑える（lib/bossBg.js の behind）：色を抜く層と、薄い煙の層。box＝ボスの絵の枠
-const BgBehind = ({ behind, box }) => {
+//   k＝濃さ（倒れて体が消えたら一緒に消える）
+const BgBehind = ({ behind: b0, box, k = 1 }) => {
+  const behind = k < 1 ? { ...b0, sat: b0.sat * k, haze: b0.haze * k } : b0
   const lite = useContext(LiteCtx)
   const r = behindRectOf(behind, box), at = { position:'absolute', left: r.x, top: r.y, width: r.w, height: r.h }
   // 軽い表示：色を抜く重ね方をやめて、暗い灰色の煙1枚で近い見た目に
@@ -944,7 +978,8 @@ const BgBehind = ({ behind, box }) => {
 //   動くものは絵と同じ大きさの SVG（viewBox＝元の絵の px）に、明るく重ねる（screen）。上のはしは名前が読めるように少し暗く
 const BG_BELOW_FEET = 10
 const BG_FADE = 18
-function BossBackground({ bg, geo, now, dim }) {
+//   behindK＝竜の後ろの色を抜く濃さ（倒れて体が消えたら一緒に消える）
+function BossBackground({ bg, geo, now, dim, behindK = 1 }) {
   const lite = useContext(LiteCtx)
   const id = useId().replace(/:/g, '')
   const W = geo.W - 2, H = geo.b.y + geo.b.h + BG_BELOW_FEET   // 2＝舞台の枠線
@@ -957,7 +992,7 @@ function BossBackground({ bg, geo, now, dim }) {
     <div style={{ position:'absolute', left: 0, right: 0, top: 0, height: H, zIndex: 0, overflow:'hidden', pointerEvents:'none' }}>
       <img src={bg.src} alt="" draggable={false} decoding="sync" style={{ position:'absolute', left: r.x, top: r.y, width: r.w, height: r.h, maxWidth:'none', userSelect:'none' }} />
       {bg.flow && bg.flowSrc && <BossFlowCanvas bg={bg} rect={r} tMs={now * 1000} lite={lite} />}
-      {bg.behind && <BgBehind behind={bg.behind} box={geo.b} />}
+      {bg.behind && <BgBehind behind={bg.behind} box={geo.b} k={behindK} />}
       <svg viewBox={`0 0 ${bg.w} ${bg.h}`} preserveAspectRatio="none" style={{ position:'absolute', left: r.x, top: r.y, width: r.w, height: r.h, overflow:'hidden', mixBlendMode: lite ? undefined : 'screen' }}>
         <defs>
           {colors.map((c, i) => (
@@ -1051,27 +1086,34 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
   const stageRef = useRef(null), pArea = useRef(null), bArea = useRef(null)
   const [geo, setGeo] = useState(null)
   const playerScale = size?.player || 1
+  // ボスの倒れる動き（lib/bossDeath.js）：HPが0になったのを見たら、止めの一撃の数字が出る時刻（deadAt）から流す（殴る絵の「当たる」コマまで数字は遅れる）。
+  //   deathMark＝試し撃ちの［倒れる］（fx の kind 'death'）。流し終わるとボスは戻る（本当に倒れたら消えたまま）
+  const deadAt = useRef(null)
+  if (st.b.hp > 0) deadAt.current = null
+  else if (deadAt.current == null) deadAt.current = fx.reduce((t, f) => (f.side === 'b' && (f.kind === 'hit' || f.kind === 'tick') && f.t0 > t ? f.t0 : t), now)
+  const deathMark = useRef(-1e9)
+  for (const f of fx) if (f.kind === 'death' && f.t0 > deathMark.current) deathMark.current = f.t0
+  const deathT0 = Math.max(deadAt.current ?? -1e9, deathMark.current)
+  const deathOn = foeArt?.death && now >= deathT0 && (deadAt.current != null || (now - deathT0) * 1000 < foeArt.death.endMs)
+  const death = deathOn ? { ...deathAt(foeArt.death, (now - deathT0) * 1000, lite ? 0.55 : 1), t0: deathT0 } : null
   // 構えを最後に見た時刻（構えのすぐあとの技を、構えの姿勢・相手の頭上の雲からつなぐ）
   const castSeen = useRef(-1e9)
   if (st.b.cast) castSeen.current = now
   // 構えの見せ方（前の技の動きが残っているあいだはゲージだけ赤い）
   const bCastMs = st.b.cast ? castMsOf(st.b.cast, st.t + st.acc) : null
-  const cast = bCastMs !== null ? { name: st.b.cast.name, ms: bCastMs } : null
+  const cast = bCastMs !== null && !death ? { name: st.b.cast.name, ms: bCastMs } : null
   // 派手な演出のあるボスの技の印は、戦闘の画面が古い印を片付けても演出が終わるまで覚えておく（keptActs）
   const kept = useRef([])
-  const sceneActs = foeArt?.kind === 'illust' ? fx.filter(f => f.kind === 'act' && f.side === 'b' && f.motion?.scene) : []
-  kept.current = [...kept.current.filter(f => !sceneActs.includes(f) && now - f.t0 < sceneEndMsOf(f.motion) / 1000), ...sceneActs]
+  const sceneActs = foeArt?.kind === 'illust' && !death ? fx.filter(f => f.kind === 'act' && f.side === 'b' && f.motion?.scene) : []
+  kept.current = death ? [] : [...kept.current.filter(f => !sceneActs.includes(f) && now - f.t0 < sceneEndMsOf(f.motion) / 1000), ...sceneActs]
   const fxAll = kept.current.some(f => !fx.includes(f)) ? [...fx, ...kept.current.filter(f => !fx.includes(f))] : fx
   const sc = foeArt?.kind === 'illust' ? sceneOfStage(foeArt, kept.current, now, cast, castSeen.current) : null
   // HPの節目のバフの強い見せ方（逆鱗・lib/bossIllust.js の buffSceneAt）：舞台を赤黒く暗く・吠える揺れ（技の演出と重ねる）
   const rageB = foeArt?.kind === 'illust' ? fx.reduce((p, f) => (f.kind === 'rage' && f.side === 'b' && f.t0 <= now && (!p || f.t0 >= p.t0) ? f : p), null) : null
-  const bsc = rageB ? buffSceneAt(foeArt.buffs?.[rageB.skill], (now - rageB.t0) * 1000) : null
+  const bsc = death ? death.scene : rageB ? buffSceneAt(foeArt.buffs?.[rageB.skill], (now - rageB.t0) * 1000) : null
   // 付いているあいだの空の暗さと雨（篠突く雨）。ボスが倒れると雨は 0.8秒で止む
   const after = foeArt?.kind === 'illust' && foeArt.buffs ? buffAfterOf(foeArt, st.b, fx.filter(f => f.side === 'b'), now) : null
-  const deadAt = useRef(null)
-  if (st.b.hp > 0) deadAt.current = null
-  else if (deadAt.current == null) deadAt.current = now
-  const rainOp = deadAt.current == null ? 1 : Math.max(0, 1 - (now - deadAt.current) / 0.8)
+  const rainOp = deadAt.current == null ? 1 : Math.min(1, Math.max(0, 1 - (now - deadAt.current) / 0.8))
   const rains = [bsc?.rain, rainOp > 0 ? after?.rain : null].filter(Boolean)
   const dimOf = [bsc?.dim ? { k: bsc.dim, c: bsc.dimColor } : null, after?.dim ? { k: after.dim * rainOp, c: after.dimColor } : null, sc?.dim ? { k: sc.dim, c: sc.dimColor } : null]
     .reduce((p, d) => (d && d.k > (p?.k || 0) ? { k: d.k, c: d.c || '0,3,14' } : p), null)
@@ -1096,19 +1138,19 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
       // 演出：背景を暗く（内側の影は背景の上・中身の下・変わるたびに舞台ぜんぶを塗り直すので、背景の絵があるボスは絵の層の暗さだけ）・舞台ごと揺れる
       boxShadow: dimOf && !foeArt?.bg ? `inset 0 0 0 2000px rgba(${dimOf.c},${dimOf.k.toFixed(3)})` : undefined,
       transform: shake[0] || shake[1] ? `translate(${shake[0].toFixed(1)}px, ${shake[1].toFixed(1)}px)` : undefined }}>
-      {foeArt?.bg && geo && <BossBackground bg={foeArt.bg} geo={geo} now={now} dim={dimOf} />}
+      {foeArt?.bg && geo && <BossBackground bg={foeArt.bg} geo={geo} now={now} dim={dimOf} behindK={death ? death.behind : 1} />}
       <Fighter st={st} side="a" me={st.a} src={playerSrc} motion={playerMotion} strips={playerMotion ? [playerMotion] : []} fx={fx} now={now} name={st.a.name}
         artH={size?.artH || ART_H} scale={playerScale} areaRef={pArea} squeeze={sc?.squeeze} />
       <Fighter st={st} side="b" me={st.b} right src={foeSrc} fx={fx} now={now} name={st.b.name}
         strips={foeArt?.kind === 'pixel' ? Object.values(foeArt.motions) : []} rig={foeArt?.kind === 'illust' ? foeArt : null}
-        artH={size?.artH || ART_H} areaRef={bArea} castEnd={castSeen.current} bossGlow={sc?.bossGlow || 0} />
+        artH={size?.artH || ART_H} areaRef={bArea} castEnd={castSeen.current} bossGlow={sc?.bossGlow || 0} death={death} />
       {sc?.beam && geo && sc.handsAt && <DoomBeam geo={geo} beam={sc.beam} hand={[geo.b.x + sc.handsAt[0][0] * (geo.b.w / foeArt.base), geo.b.y + sc.handsAt[0][1] * (geo.b.w / foeArt.base)]} />}
-      {foeArt && <BossFx fx={fxAll} now={now} geo={geo} art={foeArt} cast={cast} castEnd={castSeen.current} scene={sc} />}
+      {foeArt && <BossFx fx={death ? fxAll.filter(f => f.side !== 'b' || f.kind !== 'act') : fxAll} now={now} geo={geo} art={foeArt} cast={cast} castEnd={castSeen.current} scene={sc} />}
       {sc && geo && <SceneLayer geo={geo} sc={sc} hands={sc.handsAt ? sc.handsAt.map(p => [geo.b.x + p[0] * (geo.b.w / foeArt.base), geo.b.y + p[1] * (geo.b.w / foeArt.base)]) : null} s={geo.b.w / foeArt.base} />}
       {sc && geo && sc.flash > 0 && <Flash geo={geo} op={sc.flash} fire={sc.tone === 'fire'} />}
       {geo && rains.length > 0 && <BuffRain geo={geo} rains={rains} op={rainOp} />}
       {/* 稲妻が落ちた瞬間に舞台ぜんぶが光る（篠突く雨） */}
-      {bsc?.flash > 0.01 && <div style={{ position:'absolute', inset:0, zIndex: 4, pointerEvents:'none', background:'rgb(205,230,255)', opacity: bsc.flash.toFixed(3) }} />}
+      {bsc?.flash > 0.01 && <div style={{ position:'absolute', inset:0, zIndex: 4, pointerEvents:'none', background:`rgb(${bsc.flashColor || '205,230,255'})`, opacity: bsc.flash.toFixed(3) }} />}
     </div>
     </LiteCtx.Provider>
   )

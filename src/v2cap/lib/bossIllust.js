@@ -194,6 +194,21 @@ export const BOSS_ILLUST_DEFS = {
       gale: { windup: '黒翼烈風_ため', strike: '黒翼烈風_打ち下ろし' },
       doom: { windup: '終焉の黒焔_ため', strike: '終焉の黒焔_吐きつけ' },
     },
+    // 【確定】2026-10-31 倒れる動き（ユーザーが選んだ「ボスの倒れる動き」・lib/bossDeath.js）：新しい絵は描かない。
+    //   止まって光る → 逆鱗のポーズの絵で天へ吠える（のけぞる・衝撃の輪・火の粉）→ 終焉の黒焔の吐きつけの絵で前へ倒れこむ（揺れ・砂ぼこり）→
+    //   溶岩の光が消えて灰色になる → ふちを赤く光らせながら外から燃え尽きる（火の粉と煙が立ちのぼる）。竜を横へずらさず傾けるだけ（lean）
+    death: { tone: 'fire', roar: { buff: 'wrath' }, fall: { motion: 'doom', pose: 'strike' },
+      stopMs: 200, fallAt: 1350, fallMs: 130, ashAt: 1600, ashMs: 800, burnAt: 2150, burnMs: 1800, endMs: 5700,
+      dim: 0.58, dimColor: '26,0,0', dimOutAt: 2500, dimOutMs: 1400,
+      keys: [[0, {}], [200, {}], [340, { lean: -0.05 }, 'out'], [1350, { lean: -0.12 }], [1480, { lean: 0.23 }, 'out'], [1620, { lean: 0.17 }], [1860, { lean: 0.19 }], [5800, { lean: 0.19 }]],
+      shakes: [[0, 8, 420], [260, 4, 800], [1480, 12, 560]], flashes: [[0, 0.42, 260], [1480, 0.14, 220]], flashColor: '255,232,205', punch: 0.05,
+      rings: { at: [278, 122], n: 3, everyMs: 300, durMs: 800, maxR: 430, color: '255,96,40' }, sparkColor: '255,130,50',
+      burst: { n: 30, x: [120, 530], y: 590, rise: 420, size: 1.4 }, landBurst: { n: 18, x: [40, 330], y: 575, rise: 190, size: 1.1, spreadMs: 200 },
+      landRings: [{ x: 150, y: 575, maxR: 300, durMs: 620, k: 0.55 }],
+      dust: { ms: 1100, pts: [[60, 540], [170, 568], [300, 585], [430, 590]], scale: 2 }, dustColor: ['#a8978a', '#7a6a5e', '#4a3f38'],
+      body: { c: [300, 370], rx: 270, ry: 210 }, embers: { n: 50, lifeMs: 1300, rise: 330, drift: 26, size: 1.25 },
+      smoke: { n: 10, lifeMs: 1400, rise: 190, drift: 24, r: 62, op: 0.55 }, smokeColor: ['#2a2420', '#1c1714', '#0e0b0a'],
+      burn: { weights: [0.55, 0.33, 0.12], ctr: [0.45, 0.72], ashColor: [0.62, 0.58, 0.56], edge: [1, 0.3, 0.05], core: [1, 0.92, 0.7], ashMax: 1 } },
     // 曲げるパーツ（回さずに、角度ごとに曲げた絵を切り替える）：base＝付け根（ここからの距離 r0 までは曲げず、r1 で角度いっぱい・あいだはなめらかに）・
     //   from〜to°を step°ごとに作る（範囲の外は端の絵）・scale＝並べる絵の縮め（画面の枠は 300px まで）
     bend: { tailT: { base: [90, 492], r0: 20, r1: 150, from: -16, to: 48, step: 2, scale: 0.6 } },
@@ -397,6 +412,21 @@ export const BOSS_ILLUST_DEFS = {
           glow: { periodMs: 2200, color: '90,175,255' },
           embers: { n: 16, x: [130, 520], y: 600, rise: 360, size: 1.4, color: '100,185,255', core: '235,248,255' } } },
     },
+    // 【確定】2026-10-31 倒れる動き（ユーザーが選んだ「ボスの倒れる動き」・lib/bossDeath.js）：新しい絵は描かない。
+    //   止まって光る → 篠突く雨のポーズの絵で天を仰ぐ（水の輪・水の粒・水の帯が落ちて消える）→ 霧雨の帳のポーズの絵で身を包み、力が抜けてゆっくり沈む →
+    //   色が抜ける → ふちを青く光らせながら足元から水になって崩れる（水の粒が落ちて足元に波紋・光の粒が立ちのぼる）
+    death: { tone: 'water', roar: { buff: 'downpour' }, fall: { buff: 'veil' },
+      stopMs: 200, fallAt: 1250, fallMs: 130, ashAt: 1500, ashMs: 900, burnAt: 2000, burnMs: 1900, endMs: 6200,
+      dim: 0.5, dimColor: '0,10,36', dimOutAt: 2400, dimOutMs: 1500,
+      keys: [[0, {}], [200, {}], [340, { y: -0.012, r: 1.5 }, 'out'], [1250, { y: -0.035, r: 3.5 }], [1650, { y: 0.004, r: -1.5 }, 'out'], [3900, { y: 0.06, r: -4 }], [6300, { y: 0.06, r: -4 }]],
+      shakes: [[0, 7, 400], [260, 3, 600]], flashes: [[0, 0.42, 260]], flashColor: '225,240,255', punch: 0.04,
+      rings: { at: [296, 223], n: 3, everyMs: 320, durMs: 820, maxR: 430, color: '70,160,255', core: '225,245,255' }, sparkColor: '110,190,255', sparkCore: '235,248,255',
+      burst: { n: 30, x: [110, 540], y: 610, rise: 440, size: 1.25 },
+      freeOut: { at: 320, ms: 1000, y: 0.22 },
+      ripples: { n: 12, from: 1450, to: 3900, x: [110, 520], y: 618, maxR: 150, durMs: 760 },
+      body: { c: [340, 300], rx: 210, ry: 260 }, embers: { n: 24, lifeMs: 1700, rise: 300, drift: -10, size: 0.9 }, drops: { n: 34, lifeMs: 620, y: 620, size: 1.2 },
+      smoke: { n: 8, lifeMs: 1500, rise: 110, drift: -14, r: 64, op: 0.32 }, smokeColor: ['#dcf0ff', '#b4dcfa', '#aad7fa'],
+      burn: { weights: [0.5, 0.1, -0.4], ctr: [0.5, 0.45], ashColor: [0.82, 0.93, 1.06], edge: [0.36, 0.7, 1], core: [0.93, 0.98, 1], ashMax: 0.62 } },
     // 届いたが今は使わない絵（髪・奥の腕は立ち絵と形が違って重ならなかった・頭と手前の腕は立ち絵から切るほうが同じ見た目）
     spare: ['頭', '髪', '腕_手前', '腕_奥'],
     // 待機：[振れ幅（y は枠の割合・ほかは°）, 1回のミリ秒, ずらし（0〜1）] の揺れの足し算。周期をずらして、水の中で漂うように
@@ -983,6 +1013,10 @@ export const bossIllustOf = (key) => {
       front: shots[0].front, shots, fx: Object.keys(fx).length ? fx : null, charge: md.charge && fx[md.charge.kind] ? md.charge : null, scene: md.scene || null,
       poses: posesOf(m.key), art: md.art || null, ghosts: md.ghosts || null, anchors: md.anchors || null, castSkipMs: md.castSkipMs || 0, big: !!md.big }
   }
+  // 倒れる動き（lib/bossDeath.js）で使う絵：節目のバフ（buff）か技（motion・pose）のポーズの絵。どちらかが無ければ前のまま（薄くなるだけ）
+  const deathArtOf = (r) => (r?.buff ? buffs[def.buffs[r.buff]?.name]?.pose : motions[r?.motion]?.poses?.[r?.pose]) || null
+  const deathArts = def.death ? { roar: deathArtOf(def.death.roar), fall: deathArtOf(def.death.fall) } : null
+  const death = deathArts?.roar && deathArts.fall ? { ...def.death, arts: deathArts } : null
   const jaw = def.cuts?.jaw && art.parts.jaw ? { line: def.cuts.jaw.line, pivot: def.cuts.jaw.pivot, mouth: def.cuts.jaw.mouth } : null
   // 待機のときどきの動き（黒龍）：口の火の玉（頭の中に描く）・しっぽを叩きつけた砂ぼこりの場所
   const o = def.idle.orb, oa = art.fx?.idle?.orb
@@ -993,7 +1027,7 @@ export const bossIllustOf = (key) => {
   const bg = bossBgOf(key)
   return {
     kind: 'illust', key, name: base.name, base: BOSS_ILLUST_SIZE, illust, parts, pivot: art.pivot, mouth: art.mouth, jaw, motions, orb, dust, ground: def.ground ?? null, flutter: !!def.idle.flutter,
-    castArt: def.cast?.art || null, buffs, bg,
+    castArt: def.cast?.art || null, buffs, bg, death,
     srcs: [...parts.map(p => p.src), ...parts.filter(p => p.bend).map(p => p.bend.src), ...Object.values(motions).flatMap(m => Object.values(m.fx || {}).map(f => f.src)),
       ...Object.values(motions).flatMap(m => Object.values(m.poses || {}).map(p => p.src)), ...(orb ? [orb.src] : []),
       ...Object.values(buffs).flatMap(b => [b.pose?.src, b.aura?.src].filter(Boolean)), ...(bg ? [bg.src, bg.flowSrc].filter(Boolean) : [])],
