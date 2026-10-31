@@ -1,6 +1,6 @@
 import { createContext, useContext, useId, useLayoutEffect, useRef, useState } from 'react'
 import { TEXT } from './v2ui.js'
-import { buffChips, hpBuffChips, ailChips, stateChips, needNow, castMsOf, CAST_SEC, BUFF_GAUGE_SEC } from '../core/atb.js'
+import { buffChips, hpBuffChips, ailChips, stateChips, needShownOf, castMsOf, CAST_SEC, BUFF_GAUGE_SEC } from '../core/atb.js'
 import { STAT_DEFS } from '../core/stats.js'
 import { lungeOf, shakeOf, lastHitAtOf, popTextOf, popScaleOf, popLeftOf, CRIT_TEXT, HIT_SEC, POP_SEC, GLOW_SEC, RAGE_SEC, skillBannerAt } from '../lib/atbFx.js'
 import { JP_BOLD } from './casinoStyle.js'
@@ -551,7 +551,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   const redColor = buffArt?.tint || after?.glowColor || '255,60,16'
   const down = me.hp <= 0
   const pops = mine.filter(f => f.kind !== 'act' && f.kind !== 'use' && f.kind !== 'rage' && f.kind !== 'death' && now >= f.t0 && now - f.t0 < POP_SEC)
-  const need = needNow(me, st.t)
+  const need = needShownOf(me, st.t)   // ★読むだけ（ボスの次の行動を決める関数はここで使わない＝乱数が進む）
   const align = right ? 'flex-end' : 'flex-start'
   const hpColor = right ? '#cc3344' : '#44cc66'
 

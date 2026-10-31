@@ -468,6 +468,11 @@ export const needNow = (side, now) => {
   return ch.guard ? 0 : needFor(side, ch.skill)
 }
 
+// 画面に出すゲージの長さ。★読むだけ（乱数を引かない・状態を変えない）
+//   パターンのボスの chosenOf は次の行動を「決める」関数（乱数を引き、節目を使ったことにする）。画面から呼ぶと、そこで画面にだけ乱数が進んで
+//   サーバーの回し直しとずれる（2026-11-01 本番で、倒したのにサーバーではHP 57 残った）。⚠画面から needNow・chosenOf をボスに使わない（テストが見張る）
+export const needShownOf = (side, now) => (side.ai && side.pattern ? needFor(side, side.patNext?.skill ?? null) : needNow(side, now))
+
 // ===== 入力（画面のボタン）。押した記録を st.inputs に残す（あとでサーバーで回し直すため）=====
 const input = (st, rec) => st.inputs.push({ step: st.steps, ...rec })
 // 割り込み（手で押した技）。idx＝null は通常攻撃

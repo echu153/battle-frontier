@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import {
-  STEP_SEC, advance, clearQueue, replayInputs, reserve, seedRng, startMacro, stopMacro, toggleGuard, unreserveAt,
+  STEP_SEC, advance, ailChips, buffChips, chosenOf, clearQueue, hpBuffChips, needNow, needShownOf, replayInputs, reserve, seedRng, startMacro, stateChips, stopMacro, toggleGuard, unreserveAt,
 } from '../core/atb.js'
 import { atbPlayerOf } from './atbPlayer.js'
 import { CLASSES, canEquipType } from './jobs.js'
@@ -93,6 +93,44 @@ test('負けなかった挑戦か（ひとりで倒されずに倒したとき�
   assert.equal(cleanTryOf({ winner: 'draw', steps: 900, reason: null }), false, '相打ち')
   assert.equal(cleanTryOf({ winner: null, steps: 900, reason: null }), false, '途中でやめた')
   assert.equal(cleanTryOf({ winner: 'a', steps: 700, reason: 'too_fast' }), false, '記録がおかしい')
+})
+
+// 画面が戦闘のたびに読むものを全部読む（舞台の Fighter と戦闘の画面）
+const readLikeScreen = (st, need = needShownOf) => {
+  for (const s of [st.a, st.b]) { need(s, st.t); buffChips(s, st.t); hpBuffChips(s); ailChips(st, s); stateChips(s) }
+  chosenOf(st.a, st.t)
+}
+const playWithScreen = (t, press, need) => {
+  const st = startTryAtb(t)
+  const r = seedRng(press)
+  startMacro(st, 1, st.a.slots.slice(0, 8).map((_, i) => ({ idx: i })), true)
+  while (!st.over) {
+    advance(st, 0.006 + r() * 0.03)
+    readLikeScreen(st, need)
+    if (r() < 0.01) reserve(st, Math.floor(r() * st.a.slots.length))
+  }
+  return st
+}
+
+test('★画面が読むだけでは戦闘が変わらない：ボスの節目と乱数を画面で進めない（2026-11-01 本番で、倒したのにサーバーではHP 57 残った）', () => {
+  for (const boss of BOSSES) {
+    for (const seed of [11, 12, 13]) {
+      const t = tryOf('暗殺者', boss, seed)
+      const st = playWithScreen(t, seed)
+      const again = replayInputs(startTryAtb(t), wire(st.inputs), st.steps)
+      assert.equal(stateOf(again), stateOf(st), `${boss} 種${seed}`)
+    }
+  }
+  // 読み方を前の形（次の行動を決める needNow）に戻すと、ずれる＝このテストが不具合を見つけられる
+  const broken = BOSSES.flatMap(boss => [11, 12, 13].map(seed => {
+    const t = tryOf('暗殺者', boss, seed)
+    const st = playWithScreen(t, seed, needNow)
+    return stateOf(replayInputs(startTryAtb(t), wire(st.inputs), st.steps)) !== stateOf(st)
+  }))
+  assert.ok(broken.some(Boolean), '前の形ならずれる')
+  // 舞台と戦闘の画面は、次の行動を決める関数をボスに使わない
+  assert.doesNotMatch(read('../components/V2capAtbStage.jsx'), /needNow|chosenOf/)
+  assert.match(read('../components/V2capAtbFight.jsx'), /const me = s\.a[\s\S]*chosenOf\(me, now\)/, '戦闘の画面が読むのは自分だけ')
 })
 
 test('★180秒の時間切れでも一致する（いちばん長い戦闘）', () => {
