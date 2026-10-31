@@ -73,6 +73,17 @@ test('【確定】2026-10-29 スタミナ：呼んだ人は最初0・そのあ�
   assert.equal(tryStaminaOf(false, 3), 5)
 })
 
+test('【確定】2026-10-31 ボスの DEX と AGI（ユーザー「モンスターの能力ちょっと低いかも、AGIとDEXもう少し上げていい」）：配分は合計100のまま・HPは難易度の hp のまま', () => {
+  for (const key of Object.keys(DUNGEON_BOSSES)) {
+    const d = DUNGEON_BOSSES[key].dist
+    assert.equal(Object.values(d).reduce((a, b) => a + b, 0), 100, `${key} の配分の合計`)
+    assert.deepEqual([d.dex, d.agi], [12, 8], `${key} の DEX と AGI`)
+    const n = dungeonFighter(key, 'normal').stats, h = dungeonFighter(key, 'hard').stats
+    assert.deepEqual([n.dex, n.agi, n.hp], [57, 38, 6500], `${key} ノーマル`)
+    assert.deepEqual([h.dex, h.agi, h.hp], [123, 82, 15000], `${key} ハード`)
+  }
+})
+
 test('【確定】2026-10-29 ボスの強さ：守りと速さは power・攻撃（STR・INT）だけ atk 倍・HPは全体（持ち越し）', () => {
   for (const k of ['normal', 'hard']) {
     const d = diffOf('varuzenoku', k), f = dungeonFighter('varuzenoku', k)

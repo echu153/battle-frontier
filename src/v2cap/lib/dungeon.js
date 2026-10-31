@@ -54,10 +54,14 @@ const VARUZENOKU_DIFFS = {
   expert: { label: 'エキスパート', area: 8, recLv: 65, ready: false },
   master: { label: 'マスター', area: 12, recLv: 80, ready: false },
 }
+// 【確定】2026-10-31 ユーザー「モンスターの能力ちょっと低いかも、AGIとDEXもう少し上げていい」：配分 DEX 7→12・AGI 7→8（ノーマル DEX33→57・AGI33→38／ハード DEX72→123・AGI72→82）。
+//   HP の配分は使っていない（難易度の hp で決まる）ので、そこから移して合計100のまま。同じ強さの場所のボス（盗賊団のリーダー）は DEX12・AGI9。攻撃の倍率は変えない。
+//   測り直し（22人×3通りの乱数＝66回。1回で倒せた・3回以上かかった・ボスの攻撃の外れ）：ノーマル 37〜38→26〜29回・0→0回・26%→12〜15%／ハード 37〜43→20〜24回・0〜1→1〜2回・22%→12%。
+//   DEX12・AGI9 だと 1回で倒せるのが21〜23回／18〜21回・ハードで3回以上が4〜5回に増えた（上げすぎ）
 export const DUNGEON_BOSSES = {
   varuzenoku: {
     name: '黒龍ヴァルゼノク', kind: 'phys', race: 'ドラゴン',
-    dist: { hp: 40, mp: 6, str: 16, dex: 7, agi: 7, int_stat: 12, vit: 9, luk: 3 },
+    dist: { hp: 34, mp: 6, str: 16, dex: 12, agi: 8, int_stat: 12, vit: 9, luk: 3 },
     // 通常攻撃が黒爪（物理1.0倍）。技は節目で出る3つ（proc は100＝クールダウンは使わない・パターンが決める）
     skills: [
       { name: '焦熱の吐息', kind: 'mag', mult: 1.6, proc: 100, mp: 0, ail: { key: 'burn', chance: 70 } },
@@ -92,7 +96,7 @@ export const DUNGEON_BOSSES = {
   //   【確定】2026-10-31 ユーザー「ヴァルゼノクとあまざ入れて」：強敵として呼べる（サーバーの表にも入れた）
   amaza: {
     name: '雨摩座', kind: 'mag', race: '妖精',   // 雨の精霊＝妖精（精霊も入れる・monsterRace.js）
-    dist: { hp: 40, mp: 6, str: 12, dex: 7, agi: 7, int_stat: 16, vit: 9, luk: 3 },
+    dist: { hp: 34, mp: 6, str: 12, dex: 12, agi: 8, int_stat: 16, vit: 9, luk: 3 },
     // 通常攻撃が雨礫（魔法1.0倍）
     skills: [
       { name: '氷雨', kind: 'mag', mult: 1.6, proc: 100, mp: 0, ail: { key: 'slow', chance: 70 } },
