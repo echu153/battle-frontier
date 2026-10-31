@@ -80,8 +80,8 @@ test('【確定】2026-10-31 ボスの DEX と AGI（ユーザー「モンスタ
     assert.equal(Object.values(d).reduce((a, b) => a + b, 0), 100, `${key} の配分の合計`)
     assert.deepEqual([d.dex, d.agi], [12, 8], `${key} の DEX と AGI`)
     const n = dungeonFighter(key, 'normal').stats, h = dungeonFighter(key, 'hard').stats
-    assert.deepEqual([n.dex, n.agi, n.hp], [57, 38, 6500], `${key} ノーマル`)
-    assert.deepEqual([h.dex, h.agi, h.hp], [123, 82, 15000], `${key} ハード`)
+    assert.deepEqual([n.dex, n.agi, n.hp], [57, 38, 13000], `${key} ノーマル`)
+    assert.deepEqual([h.dex, h.agi, h.hp], [123, 82, 30000], `${key} ハード`)
   }
 })
 
@@ -98,8 +98,8 @@ test('【確定】2026-10-29 ボスの強さ：守りと速さは power・攻撃
     assert.equal(dungeonFighter('varuzenoku', k, d.hp * 0.4).hpNow, d.hp * 0.4)
     assert.equal(dungeonFighter('varuzenoku', k, d.hp * 9).hpNow, d.hp, 'いまのHPは全体より多くならない')
   }
-  assert.deepEqual({ ...diffOf('varuzenoku', 'normal') }, { label: 'ノーマル', area: 2, recLv: 25, recPower: 500, power: 474, atk: 0.33, hp: 6500, reward: { exp: 175, gold: 1250 } })
-  assert.deepEqual({ ...diffOf('varuzenoku', 'hard') }, { label: 'ハード', area: 5, recLv: 45, recPower: 1050, power: 1027, atk: 0.36, hp: 15000, reward: { exp: 350, gold: 2250 } })
+  assert.deepEqual({ ...diffOf('varuzenoku', 'normal') }, { label: 'ノーマル', area: 2, recLv: 25, recPower: 500, power: 474, atk: 0.33, hp: 13000, reward: { exp: 175, gold: 1250 } })
+  assert.deepEqual({ ...diffOf('varuzenoku', 'hard') }, { label: 'ハード', area: 5, recLv: 45, recPower: 1050, power: 1027, atk: 0.36, hp: 30000, reward: { exp: 350, gold: 2250 } })
 })
 
 test('【確定】2026-10-29 ボスの技：HP75%より上は黒爪だけ・75%を切ったら次の行動で焦熱の吐息を必ず・そのあとは吐息30%', () => {
@@ -119,7 +119,7 @@ test('【確定】2026-10-29 ボスの技：HP75%より上は黒爪だけ・75%�
 })
 
 test('【確定】2026-10-29 HP50%以下は毎回技（50%で黒翼烈風を必ず）・25%で終焉の黒焔を必ず（構えてから）', () => {
-  const st = createAtb(dummy(), dungeonFighter('varuzenoku', 'normal', 6500 * 0.6), { rng: rngOf(7), maxSec: 999 })
+  const st = createAtb(dummy(), dungeonFighter('varuzenoku', 'normal', 13000 * 0.6), { rng: rngOf(7), maxSec: 999 })
   runFor(st, 1)
   const n0 = bossActs(st).length
   st.b.hp = Math.floor(st.b.base.hp * 0.49)
@@ -139,14 +139,14 @@ test('【確定】2026-10-29 HP50%以下は毎回技（50%で黒翼烈風を必�
 })
 
 test('【確定】2026-10-29 挑戦の始めにもう切っている節目は撃たない（前の挑戦で撃った）・同じ種なら同じ結果', () => {
-  const st = createAtb(dummy(), dungeonFighter('varuzenoku', 'normal', 6500 * 0.4), { rng: rngOf(11), maxSec: 999 })
-  assert.equal(st.b.hp, 6500 * 0.4)
-  assert.equal(st.b.startHp, 6500 * 0.4, '削った量はここから数える')
+  const st = createAtb(dummy(), dungeonFighter('varuzenoku', 'normal', 13000 * 0.4), { rng: rngOf(11), maxSec: 999 })
+  assert.equal(st.b.hp, 13000 * 0.4)
+  assert.equal(st.b.startHp, 13000 * 0.4, '削った量はここから数える')
   assert.deepEqual([...st.b.patFired].sort(), [0.5, 0.75])
   runFor(st, 60)
   const acts = bossActs(st)
   assert.ok(acts.every(a => a === '焦熱の吐息' || a === '黒翼烈風'), '50%より下から始めた：吐息か烈風（必ず撃つ技はない）')
-  const again = createAtb(dummy(), dungeonFighter('varuzenoku', 'normal', 6500 * 0.4), { rng: rngOf(11), maxSec: 999 })
+  const again = createAtb(dummy(), dungeonFighter('varuzenoku', 'normal', 13000 * 0.4), { rng: rngOf(11), maxSec: 999 })
   runFor(again, 60)
   assert.deepEqual(bossActs(again), acts, '同じ種なら同じ')
 })
@@ -195,7 +195,7 @@ test('【確定】2026-10-30 HPの節目のバフ：60%で黒鱗の鎧（VIT+25%
 
 test('【確定】2026-10-30 節目のバフはバフ消しでも消えない（選ばれもしない＝「強化が消えた」と出ない）', () => {
   const me = { ...dummy(), slots: [{ skill: { name: 'ためしの消し', kind: 'phys', mult: 0.1, proc: 100, mp: 0, dispel: { chance: 100 } }, uses: 9999 }] }
-  const st = createAtb(me, dungeonFighter('varuzenoku', 'normal', 6500 * 0.2), { rng: rngOf(9), maxSec: 999 })
+  const st = createAtb(me, dungeonFighter('varuzenoku', 'normal', 13000 * 0.2), { rng: rngOf(9), maxSec: 999 })
   startMacro(st, 1, [{ idx: 0 }], true)
   const s0 = liveStats(st.b)
   runFor(st, 120)
@@ -417,7 +417,7 @@ test('【確定】2026-10-30 大技の節目（ユーザー「大技に入ると
   runFor(p, 0.7)
   assert.ok(p.b.cast, '解けたら構える')
   // 持ち越しで25%をもう切っているなら撃たない（前の挑戦で撃った）
-  const c = createAtb(dummy(), dungeonFighter('varuzenoku', 'normal', 6500 * 0.2), { rng: rngOf(15), maxSec: 999 })
+  const c = createAtb(dummy(), dungeonFighter('varuzenoku', 'normal', 13000 * 0.2), { rng: rngOf(15), maxSec: 999 })
   runFor(c, 1)
   assert.equal(c.b.cast, null)
 })
@@ -467,10 +467,10 @@ test('【確定】2026-10-30 待つ長さは絵に合っている：どの技の
 })
 
 test('【確定】2026-10-30 持ち越しで節目をもう切っているなら、はじめから付いている（記録にも出る・ゲージは貯めない）', () => {
-  const st = createAtb(dummy(), dungeonFighter('varuzenoku', 'normal', 6500 * 0.5), { rng: rngOf(2), maxSec: 999 })
+  const st = createAtb(dummy(), dungeonFighter('varuzenoku', 'normal', 13000 * 0.5), { rng: rngOf(2), maxSec: 999 })
   assert.deepEqual(buffLog(st), ['黒鱗の鎧'], '始めた時点で')
   assert.equal(st.t, 0)
-  const low = createAtb(dummy(), dungeonFighter('varuzenoku', 'normal', 6500 * 0.1), { rng: rngOf(2), maxSec: 999 })
+  const low = createAtb(dummy(), dungeonFighter('varuzenoku', 'normal', 13000 * 0.1), { rng: rngOf(2), maxSec: 999 })
   assert.deepEqual(buffLog(low), ['黒鱗の鎧', '逆鱗'])
   const full = createAtb(dummy(), dungeonFighter('varuzenoku', 'normal'), { rng: rngOf(2), maxSec: 999 })
   assert.deepEqual(buffLog(full), [])

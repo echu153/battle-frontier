@@ -426,5 +426,5 @@ test('★回し直しが読むコード：画面の部品を読まない（Verce
     }
   }
   assert.deepEqual(found, KNOWN, '戦闘で通るなら、丸めるか掛け算で書く')
-  assert.equal(diffOf('varuzenoku', 'hard').hp, 15000)
+  assert.equal(diffOf('varuzenoku', 'hard').hp, 30000)
 })
