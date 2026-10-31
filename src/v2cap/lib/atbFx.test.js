@@ -1,9 +1,38 @@
 // v2cap の ATB戦闘の見た目の動き（記録 → 踏み込み・被弾・数字）のテスト（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { fxEventsOf, scheduleFx, lungeOf, shakeOf, LUNGE_SEC, HIT_SEC, skillBannerAt, BANNER_SEC, RAGE_BANNER_SEC, BANNER_IN, BANNER_OUT } from './atbFx.js'
+import { readFileSync } from 'node:fs'
+import { fxEventsOf, scheduleFx, lungeOf, shakeOf, LUNGE_SEC, HIT_SEC, skillBannerAt, BANNER_SEC, RAGE_BANNER_SEC, BANNER_IN, BANNER_OUT, popTextOf, popScaleOf, MISS_TEXT, CRIT_TEXT } from './atbFx.js'
 
-test('殴った側が踏み込み、受けた側に数字（外れは MISS・クリティカルの印）', () => {
+const stage = readFileSync(new URL('../components/V2capAtbStage.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+
+test('【確定】2026-10-31 浮かぶ文字（ユーザー「当たらなかったらMissとかにして」「クリティカルになったら英語でクリティカルって表示されるようにして」）：外れは Miss・クリティカルは数字の上に Critical!', () => {
+  assert.equal(MISS_TEXT, 'Miss')
+  assert.equal(CRIT_TEXT, 'Critical!')
+  assert.equal(popTextOf({ kind: 'miss' }), 'Miss')
+  assert.equal(popTextOf({ kind: 'hit', amount: 12345, crit: true }), '12,345', '数字は数字のまま（Critical! は上の行）')
+  assert.equal(popTextOf({ kind: 'heal', amount: 200 }), '+200')
+  assert.equal(popTextOf({ kind: 'tick', amount: 55 }), '55')
+  // クリティカルだけ大きく出て、すぐ元の大きさへ
+  assert.equal(popScaleOf({ kind: 'hit', crit: true }, 0), 1.5)
+  assert.ok(popScaleOf({ kind: 'hit', crit: true }, 0.06) > 1 && popScaleOf({ kind: 'hit', crit: true }, 0.06) < 1.5)
+  assert.equal(popScaleOf({ kind: 'hit', crit: true }, 0.2), 1)
+  assert.equal(popScaleOf({ kind: 'hit', crit: false }, 0), 1)
+  assert.equal(popScaleOf({ kind: 'miss' }, 0), 1)
+  // 舞台：クリティカルの行を出す・前の「数字のうしろの !」はやめた・大技の光（zIndex 4）より手前
+  assert.match(stage, /\{f\.crit && <span style=\{\{ display:'block', fontSize:'14px' \}\}>\{CRIT_TEXT\}<\/span>\}/)
+  assert.doesNotMatch(stage, /f\.crit \? '!' : ''/)
+  assert.match(stage, /key=\{`\$\{f\.t0\}-\$\{i\}`\} style=\{\{ position:'absolute', zIndex: 5,/)
+})
+
+test('【確定】2026-10-31 ユーザー「回避されてもモーションは継続するようにして」：外れても当たる絵を出す（舞台）・外れた攻撃は受ける側を揺らさない（hit の印が無い）', () => {
+  assert.match(stage, /if \(kind === 'hit' && now >= tHit - lead \/ 1000\) \{/)
+  assert.doesNotMatch(stage, /kind === 'hit' && f\.landed/)
+  const ev = scheduleFx(fxEventsOf([{ side: 'ボス', type: 'skill', skill: '黒爪', hits: 0, of: 1, damage: 0 }], '自分', 'ボス'), 10, { b: () => 0.5 })
+  assert.deepEqual(ev.map(e => [e.kind, e.side, e.t0]), [['act', 'b', 10], ['miss', 'a', 10.5]], 'Miss は当たるはずの時刻に出る')
+})
+
+test('殴った側が踏み込み、受けた側に数字（外れは Miss・クリティカルの印）', () => {
   const ev = fxEventsOf([
     { side: '自分', type: 'normal', hit: true, damage: 120 },
     { side: 'ボス', type: 'skill', skill: '大技', hits: 1, damage: 900, crit: true },

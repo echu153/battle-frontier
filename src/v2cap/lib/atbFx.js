@@ -7,8 +7,8 @@
 // ここは戦闘の記録（core/atb.js の st.log の1件）→ 画面の動き、の読み替えだけ（純関数）。
 //   act  … 動いた側が前に踏み込む（あとで攻撃モーションのGIFに差し替える）
 //   use  … 補助技・回復・防御を使った側が光る（前には出ない）
-//   hit  … 受けた側が揺れて赤く光り、ダメージの数字が出る（crit はクリティカル）
-//   miss … 受けた側に「MISS」
+//   hit  … 受けた側が揺れて赤く光り、ダメージの数字が出る（crit はクリティカル＝数字の上に「Critical!」）
+//   miss … 受けた側に「Miss」（揺れない・攻撃の絵とエフェクトは当たったときと同じに最後まで流す）
 //   heal … 回復した側に緑の数字
 //   tick … 毒・火傷・出血などで減った側に紫の数字（揺れない）
 //   技の名前の帯（skillBannerAt）… 敵が技を使ったとき、舞台の上に技の名前を出す（2026-10-30）
@@ -71,6 +71,15 @@ export const HIT_SEC = 0.3
 export const POP_SEC = 1.0
 export const GLOW_SEC = 0.45
 export const RAGE_SEC = 1.4   // 節目のバフが付いたとき、体が赤く燃える長さ（絵のエフェクトが届くまでの仮）
+
+// 浮かぶ文字。【確定】2026-10-31 ユーザー「当たらなかったらMissとかにして」「クリティカルになったら英語でクリティカルって表示されるようにして」：
+//   外れ＝「Miss」（前は MISS）／クリティカル＝数字の上に「Critical!」（前は数字のうしろの「!」だけ）。戦闘ログの文はそのまま
+export const MISS_TEXT = 'Miss'
+export const CRIT_TEXT = 'Critical!'
+export const popTextOf = (f) => (f.kind === 'miss' ? MISS_TEXT : f.kind === 'heal' ? `+${f.amount.toLocaleString()}` : f.amount.toLocaleString())
+// クリティカルは大きく出て、すぐ元の大きさへ（a＝出てからの割合 0〜1）
+const POP_PUNCH = 0.12
+export const popScaleOf = (f, a) => (f.crit && a >= 0 && a < POP_PUNCH ? 1.5 - 0.5 * (a / POP_PUNCH) : 1)
 
 // 踏み込みの量（px）。0→前へ→0 の山
 export const lungeOf = (elapsed, px = 22) =>

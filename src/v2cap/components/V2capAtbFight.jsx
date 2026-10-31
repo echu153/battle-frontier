@@ -78,6 +78,7 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
   const stageTick = useRef(null)
   const lastPanel = useRef(0)
   const [lite, setLite] = useState(() => atbLevelOf() >= 1)   // 軽い表示（lib/atbPacer.js）
+  const [devMiss, setDevMiss] = useState(false)   // 試し撃ちの「動きを見る」：外れた形で流す
   const overSent = useRef(false)
   const onOverRef = useRef(onOver)
   onOverRef.current = onOver
@@ -135,7 +136,7 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
           if (lines.length) setLogs(v => [...v, ...lines].slice(-80))
           const t0 = now / 1000
           let evs = fxEventsOf(fresh, s.a.name, s.b.name)
-          // ボスは技ごとに絵が違う：構えた技を覚えておき、動いた（act）ごとに流す絵を付ける（landed＝当たったか。外れたら当たるエフェクトを出さない）
+          // ボスは技ごとに絵が違う：構えた技を覚えておき、動いた（act）ごとに流す絵を付ける（landed＝当たったか。外れてもエフェクトは最後まで流す＝相手が縮まないだけ）
           //   ダメージの数字と揺れは、エフェクトが自分に届いたとき（impactMs）
           if (bossArt) {
             for (const l of fresh) if (l.type === 'cast' && l.side === s.b.name) bossMemo.current.casts.add(l.skill)
@@ -250,9 +251,18 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
           {/* 1つめは通常攻撃＝技の名前の帯は出さない（戦闘と同じ）・ほかは技の名前を付ける */}
           {Object.entries(bossArt.motions).map(([k, m], i) => (
             <button key={k} disabled={paused}
-              onClick={() => { fxRef.current = [...fxRef.current, { kind:'act', side:'b', motion: m, landed: true, skill: i > 0 ? m.label : null, t0: performance.now() / 1000 }] }}
+              onClick={() => {
+                const t0 = performance.now() / 1000
+                fxRef.current = [...fxRef.current, { kind:'act', side:'b', motion: m, landed: !devMiss, skill: i > 0 ? m.label : null, t0 },
+                  ...(devMiss ? [{ kind:'miss', side:'a', t0: t0 + m.impactMs / 1000 }] : [])]
+              }}
               style={{ ...miniBtn('#ff8866'), padding:'4px 8px', fontSize:'11px' }}>{m.label}</button>
           ))}
+          {/* 外れたときの見え方（2026-10-31 ユーザー「回避されてもモーションは継続するようにして」）：入れると、上の技の動きを外れた形で流す（当たる時刻に Miss）。クリティカルの文字の見本（戦闘には関係しない） */}
+          <button disabled={paused} onClick={() => setDevMiss(v => !v)}
+            style={{ ...miniBtn(devMiss ? '#ffee44' : '#9fb3c8'), padding:'4px 8px', fontSize:'11px' }}>🎯 外れた形で流す：{devMiss ? 'ON' : 'OFF'}</button>
+          <button disabled={paused} onClick={() => { fxRef.current = [...fxRef.current, { kind:'hit', side:'b', amount: 12345, crit: true, t0: performance.now() / 1000 }] }}
+            style={{ ...miniBtn('#ffcc00'), padding:'4px 8px', fontSize:'11px' }}>💥 Critical</button>
           {/* HPの節目のバフ（2026-10-30 ユーザー「バフ行動のボタンも用意しといて、確認し辛い」）：名前の帯・ポーズの絵・オーラだけ流す（バフは付かない） */}
           {(s.b.pattern?.buffs || []).map(b => (
             <button key={`buff-${b.name}`} disabled={paused}

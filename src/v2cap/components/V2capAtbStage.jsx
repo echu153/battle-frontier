@@ -2,7 +2,7 @@ import { createContext, useContext, useId, useLayoutEffect, useRef, useState } f
 import { TEXT } from './v2ui.js'
 import { buffChips, hpBuffChips, ailChips, stateChips, needNow, castMsOf, CAST_SEC, BUFF_GAUGE_SEC } from '../core/atb.js'
 import { STAT_DEFS } from '../core/stats.js'
-import { lungeOf, shakeOf, lastHitAtOf, HIT_SEC, POP_SEC, GLOW_SEC, RAGE_SEC, skillBannerAt } from '../lib/atbFx.js'
+import { lungeOf, shakeOf, lastHitAtOf, popTextOf, popScaleOf, CRIT_TEXT, HIT_SEC, POP_SEC, GLOW_SEC, RAGE_SEC, skillBannerAt } from '../lib/atbFx.js'
 import { JP_BOLD } from './casinoStyle.js'
 import { rubySegmentsOf } from '../lib/skillRuby.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
@@ -30,7 +30,7 @@ import { deathAt, deathPoseOf, deathShowOf } from '../lib/bossDeath.js'
 //     ボスのときは両方の絵の枠を同じ高さにして（HPバーが同じ高さに並ぶ）、自分の絵は枠の PLAYER_VS_BOSS 倍に縮めて下にそろえる
 //   ・ボスの技のエフェクト（BossFx・2026-10-28 ユーザー「エフェクトは別に作って、しっかり敵（プレイヤー）に当たってるように見せたい」）：
 //     飛ぶ絵＝当たるコマで竜のいちばん前から出て、自分の真ん中まで飛ぶ（向きも合わせる）／当たる絵＝届いたとき自分の上で1回。
-//     ダメージの数字と揺れは届いたとき（V2capAtb.jsx が impactMs まで遅らせる）。外れたら当たる絵は出さない
+//     ダメージの数字と揺れは届いたとき（V2capAtb.jsx が impactMs まで遅らせる）。外れても当たる絵は出す（2026-10-31・下）
 //   ・ボスのイラスト版（IllustRig・lib/bossIllust.js・2026-10-28 ユーザー「イラスト版も作ったからドット絵版は別バージョンで作っておいて」）：
 //     パーツ（奥の翼・手前の翼・体・頭）を重ね、姿勢（翼・首・全体の角度とずれ・口の火）で動かす。ドット絵版より大きく出す
 //     （STAGE_OF.illust＝枠を高く・自分はそのぶん小さく。グラブルのように「どんと大きく」）。エフェクトは1枚の塗りを動きで見せる
@@ -61,6 +61,9 @@ import { deathAt, deathPoseOf, deathShowOf } from '../lib/bossDeath.js'
 //   ・2026-10-31 ユーザーが選んだ「ボスの倒れる動き」（lib/bossDeath.js）：前は待機の動きのまま薄くなるだけだった。止めの一撃の数字が出る時刻（deadAt）から、
 //     倒した瞬間の形で止まって光り（Fighter の clock）→ 断末魔の絵 → 倒れた絵 → 消える（BossDissolve）。そのあいだボスの技のエフェクトと演出は片付ける。
 //     試し撃ちの「動きを見る」の［倒れる］は、fx の kind 'death' で同じ動きを流す（流し終わるとボスは戻る）
+//   ・2026-10-31 ユーザー「回避されてもモーションは継続するようにして、当たらなかったらMissとかにして」「クリティカルになったら英語でクリティカルって表示されるようにして」：
+//     外れても当たる絵と演出（lib/bossScene.js）は最後まで流す。受ける側は揺れず光らず縮まず、当たる時刻に「Miss」。クリティカルは数字の上に「Critical!」（文字は lib/atbFx.js）。
+//     大技の光に隠れないように、浮かぶ文字は光（Flash）より手前
 // ============================================================
 
 // 軽い表示（スマホ・遅い端末＝lib/atbPacer.js の段階）。2026-10-31 ユーザー「30回に落としたって出る、大技の時はそれよりも下がる感じ」：
@@ -437,8 +440,7 @@ const RigTrails = ({ art, trails }) => (
   </svg>
 )
 
-const POP_COLOR ={ hit: '#ffffff', miss: '#9fb3c8', heal: '#44ff88', tick: '#cc99ff' }
-const popText = (f) => (f.kind === 'miss' ? 'MISS' : f.kind === 'heal' ? `+${f.amount.toLocaleString()}` : f.amount.toLocaleString())
+const POP_COLOR ={ hit: '#ffffff', miss: '#d8e8f8', heal: '#44ff88', tick: '#cc99ff' }
 // 構えのすぐあとに撃った技か：構えを最後に見た時刻（castEnd）から CAST_GAP_SEC 以内に動いた（構えが終わった刻みで撃つ＝ふつうは 0.03秒ほど）
 const CAST_GAP_SEC = 0.5
 const afterCast = (t0, castEnd) => t0 - castEnd > -0.05 && t0 - castEnd < CAST_GAP_SEC
@@ -597,11 +599,12 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
         {pops.map((f, i) => {
           const a = (now - f.t0) / POP_SEC
           return (
-            <span key={`${f.t0}-${i}`} style={{ position:'absolute', zIndex: 3, left:'50%', top:`${30 - a * 26 - (i % 3) * 14}%`,
-              transform:'translateX(-50%)', pointerEvents:'none', whiteSpace:'nowrap', fontWeight:'bold',
-              fontSize: f.crit ? '22px' : '17px', color: f.crit ? '#ffcc00' : POP_COLOR[f.kind], opacity: Math.max(0, 1 - a * a),
+            <span key={`${f.t0}-${i}`} style={{ position:'absolute', zIndex: 5, left:'50%', top:`${30 - a * 26 - (i % 3) * 14}%`,
+              transform:`translateX(-50%) scale(${popScaleOf(f, a).toFixed(3)})`, pointerEvents:'none', whiteSpace:'nowrap', fontWeight:'bold', textAlign:'center', lineHeight: 1.1,
+              fontSize: f.crit ? '22px' : f.kind === 'miss' ? '20px' : '17px', color: f.crit ? '#ffcc00' : POP_COLOR[f.kind], opacity: Math.max(0, 1 - a * a),
               textShadow:'1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}>
-              {popText(f)}{f.crit ? '!' : ''}
+              {f.crit && <span style={{ display:'block', fontSize:'14px' }}>{CRIT_TEXT}</span>}
+              {popTextOf(f)}
             </span>
           )
         })}
@@ -695,7 +698,7 @@ function BossFx({ fx, now, geo, art, cast = null, castEnd = -1e9, scene = null }
             if (lx < 100) on.mask = `linear-gradient(to right, #000 ${Math.max(0, lx - 10).toFixed(1)}%, transparent ${lx.toFixed(1)}%)`
           }
         }
-        if (kind === 'hit' && f.landed !== false && now >= tHit - lead / 1000) {
+        if (kind === 'hit' && now >= tHit - lead / 1000) {
           const ms = (now - tHit) * 1000 + lead   // 当たる絵が出はじめてから
           const actMs = (now - f.t0) * 1000 - (sh?.delayMs || 0)
           const fall = a.anim === 'drop' ? fallAt(m, actMs) : null

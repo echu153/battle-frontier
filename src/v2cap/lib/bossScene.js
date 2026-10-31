@@ -170,11 +170,13 @@ export const castSceneAt = (m, castMs, P = POUR) => {
   return out
 }
 
-// 技のあいだ（ms＝技を出しはじめてから・after＝構えのすぐあと・landed＝当たったか＝外れたら滝は落ちない（暗さ・雲・手の光だけ））
+// 技のあいだ（ms＝技を出しはじめてから・after＝構えのすぐあと・landed＝当たったか）
+//   【確定】2026-10-31 ユーザー「回避されてもモーションは継続するようにして」：外れても演出は当たったときと同じに最後まで流す（前は滝が落ちず、光らず、揺れなかった）。
+//   landed で変わるのは相手の反応（水縛の帯で縮む squeeze）だけ。数字の代わりに「Miss」が出る（lib/atbFx.js）
 //   → { dim, flash（0〜1）, shake: [x, y]（px）, items, cloud: { spin, glow, flicker }, hand: { r, op } }
 export const sceneAt = (m, ms, { after = false, landed = true } = {}, P = POUR) => {
   if (m?.scene?.kind === 'coil') return coilSceneAt(m, ms, landed)
-  if (m?.scene?.kind === 'doom') return doomSceneAt(m, ms, landed)
+  if (m?.scene?.kind === 'doom') return doomSceneAt(m, ms)
   const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null }
   if (m?.scene?.kind === 'hands') { if (ms >= 0 && ms < sceneEndMsOf(m)) handFxAt(m, ms, out); return out }
   if (m?.scene?.kind !== 'pour') return out
@@ -189,10 +191,10 @@ export const sceneAt = (m, ms, { after = false, landed = true } = {}, P = POUR) 
   out.dim = ms < H ? d0 + (P.dim - d0) * toHit(ms) : ms < E ? P.dim : P.dim * (1 - smooth((ms - E) / 600))
   // 光：振り下ろした瞬間に少し・叩きつけた瞬間に大きく
   const f1 = ms >= H && ms < H + 180 ? 0.3 * (1 - (ms - H) / 180) : 0
-  const f2 = landed && e >= 0 && e < 380 ? 0.85 * (e < 40 ? e / 40 : Math.pow(1 - (e - 40) / 340, 1.5)) : 0
+  const f2 = e >= 0 && e < 380 ? 0.85 * (e < 40 ? e / 40 : Math.pow(1 - (e - 40) / 340, 1.5)) : 0
   out.flash = Math.max(f1, f2)
   // 揺れ：叩きつけた瞬間に大きく（だんだん小さく）・落ちているあいだは小さく揺れ続ける
-  if (landed && e >= 0 && ms < E + 200) {
+  if (e >= 0 && ms < E + 200) {
     const k = clamp01(e / 700), rumble = ms < E ? 1.8 : 1.8 * (1 - (ms - E) / 200)
     const amp = 11 * (1 - k) * (1 - k) + rumble
     out.shake = [amp * Math.sin(e * 0.11), amp * 0.65 * Math.cos(e * 0.153)]
@@ -213,7 +215,7 @@ export const sceneAt = (m, ms, { after = false, landed = true } = {}, P = POUR) 
   const glow = ms < H ? 0.45 + 0.55 * toHit(ms) : ms < E ? 0.75 + 0.25 * Math.sin(ms / 60) : Math.max(0, 1 - (ms - E) / T)
   out.cloud = { spin, glow, flicker: ms < E ? flickerAt(ms) : 0 }
   // 流れ落ちる水の筋（雲から足元へ・いまの滝の先まで）。落ち終わると上から切れる
-  if (landed && ms >= H && ms < E + T) {
+  if (ms >= H && ms < E + T) {
     const cut = ms < E ? 0 : smooth((ms - E) / T)
     const y0 = SCENE_TOP * (1 - cut), y1 = ms < I ? SCENE_TOP * (1 - easeOut((ms - H) / L)) : 0
     const span = -SCENE_TOP + 0.6
@@ -229,7 +231,7 @@ export const sceneAt = (m, ms, { after = false, landed = true } = {}, P = POUR) 
     if (ms < I) for (const [dx, r, op] of [[0, 0.2, 0.85], [-0.13, 0.11, 0.6], [0.13, 0.11, 0.6]]) out.items.push({ t: 'glow', x: dx, y: y1, r, op })
   }
   // 叩きつけた所：大きなしぶき・落ち続けるあいだの小さなしぶき・波紋・もや
-  if (landed && e >= 0) {
+  if (e >= 0) {
     drops(out.items, P.splash, 1000, e, [0.7, 2.0], [550, 950], [0.006, 0.018], 0.36)
     for (let j = 0, tb = I + 120; tb < E; j++, tb += P.burstEvery) {
       drops(out.items, 10, 5000 + j * 50, ms - tb, [0.5, 1.3], [400, 620], [0.005, 0.013], 0.42)
@@ -285,15 +287,15 @@ export const coilSceneAt = (m, ms, landed = true, C = COIL) => {
   out.dim = ms < H ? C.dim * smooth((ms - 120) / (H - 120)) : ms < B + 150 ? C.dim : C.dim * (1 - smooth((ms - B - 150) / 400))
   // 構えの手に水が集まり、振り抜きの手ではじける（ほかの技と同じ）
   handFxAt(m, ms, out)
-  if (!landed || e < 0) return out
+  if (e < 0) return out
   // 光と揺れ：巻きついた瞬間・締め上げるたび・はじけた瞬間
   const sq = C.squeezes.map(t => e - t)
   out.flash = Math.max(0.5 * pulse(e, 260), ...sq.map(d => 0.2 * pulse(d, 160)), 0.45 * pulse(ms - B, 280))
   const amp = 6 * pulse(e, 400) + sq.reduce((a, d) => a + 3.5 * pulse(d, 220), 0) + 5 * pulse(ms - B, 320)
   out.shake = [amp * Math.sin(e * 0.13), amp * 0.6 * Math.cos(e * 0.17)]
-  // 相手が縮む（締め上げるたび横に縮んで縦に伸びる）
+  // 相手が縮む（締め上げるたび横に縮んで縦に伸びる）。外れたときは縮まない
   const b = Math.max(0.7 * bump(e, 180), ...sq.map(d => bump(d, 200)))
-  if (ms < B) out.squeeze = [1 - 0.09 * b, 1 + 0.04 * b]
+  if (landed && ms < B) out.squeeze = [1 - 0.09 * b, 1 + 0.04 * b]
   // 水の輪：はじめは大きく、すぐ巻きついて細る・締め上げるたび細る・回り続ける・はじけたら外へ広がって消える
   const snap = easeOut(e / 180), tight = Math.max(...sq.map(d => bump(d, 200)))
   const burst = clamp01((ms - B) / 260)
@@ -354,13 +356,13 @@ const doomCastSceneAt = (m, castMs, D = DOOM) => {
 }
 // 技のあいだ（ms＝技を出しはじめてから）→ sceneAt と同じ形＋ tone・dimColor・bossGlow（竜の体の光 0〜1）・beam: { head（口から相手までの進み 0〜1）, w（太さの割合）, op }
 //   ★構えのあとは技の途中（castSkipMs）から流す＝どの時刻から見ても同じ形（暗さ・口の光は構えのおわりとつながる）
-export const doomSceneAt = (m, ms, landed = true, D = DOOM) => {
+export const doomSceneAt = (m, ms, D = DOOM) => {
   const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: 'fire', dimColor: D.color, bossGlow: 0, beam: null }
   const H = m.hitMs, I = m.impactMs, end = sceneEndMsOf(m)
   if (ms < 0 || ms >= end) return out
   const e = ms - I, s = ms - H
   // 暗さ：ためるあいだに暗くなり、当たるともっと暗く・after のあと戻る
-  const base = ms < H ? D.dim * smooth(ms / 900) : landed && e >= 0 ? D.hitDim : D.dim
+  const base = ms < H ? D.dim * smooth(ms / 900) : e >= 0 ? D.hitDim : D.dim
   out.dim = ms < I + D.after ? base : base * (1 - smooth((ms - I - D.after) / D.fade))
   if (ms < H) {
     doomGather(out, ms, clamp01(ms / (m.castSkipMs || H)), smooth(ms / 400))
@@ -378,7 +380,7 @@ export const doomSceneAt = (m, ms, landed = true, D = DOOM) => {
     const head = flyPosOf(clamp01(s / (I - H)))
     out.beam = { head, w: (0.45 + 0.55 * easeOut(s / 140)) * fade, op: Math.min(1, s / 50) * Math.sqrt(fade), blobs: doomBlobs(ms, head, D) }
   }
-  if (landed && e >= 0) {
+  if (e >= 0) {
     // 当たった瞬間：大きく光り、大きく揺れる（だんだん小さく）
     out.flash = Math.max(out.flash, 0.95 * (e < 40 ? e / 40 : pulse(e - 40, 520)))
     const k = clamp01(e / 1000), rumble = e < 800 ? 1.6 * (1 - e / 800) : 0

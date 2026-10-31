@@ -48,7 +48,7 @@ test('【確定】2026-10-29 水天葬：振り下ろすまでに画面が暗く
   assert.equal(amp(T.E + 200, T.end), 0)
 })
 
-test('【確定】2026-10-29 水天葬：水の筋は雲から足元のあいだを流れ落ち（滝の先より下には出ない）・しぶきは地面より上・波紋は足元で広がる・外れたら滝は落ちない', () => {
+test('【確定】2026-10-29 水天葬：水の筋は雲から足元のあいだを流れ落ち（滝の先より下には出ない）・しぶきは地面より上・波紋は足元で広がる・外れても滝は落ちる', () => {
   for (let ms = T.H; ms < T.E + T.T; ms += 17) {
     const front = ms < T.I ? SCENE_TOP * (1 - (1 - (1 - (ms - T.H) / (T.I - T.H)) ** 2)) : 0
     for (const it of sceneAt(m, ms).items.filter(it => it.t === 'streak' && it.y1 < -0.3)) {
@@ -70,13 +70,9 @@ test('【確定】2026-10-29 水天葬：水の筋は雲から足元のあいだ
   const r1 = at(T.I + 100, 'ring')[0], r2 = at(T.I + 400, 'ring')[0]
   assert.ok(r2.rx > r1.rx && Math.abs(r1.y) < 0.05, '波紋は足元で広がる')
   assert.ok(at(T.I + 500, 'foam').length === 1, '落ちているあいだ足元が泡立つ')
-  // 外れたとき：暗さ・雲・手の光は出るが、滝・光・揺れ・しぶきは無い
-  for (let ms = 0; ms < T.end; ms += 11) {
-    const s = sceneAt(m, ms, { landed: false })
-    assert.ok(s.shake[0] === 0 && s.shake[1] === 0)
-    assert.ok(s.flash <= 0.3)
-    assert.ok(s.items.every(it => it.t === 'rain' || it.t === 'mote' || it.t === 'hdrop'), `${ms}ms（手のしぶきは外れても出る）`)
-  }
+  // 【確定】2026-10-31 ユーザー「回避されてもモーションは継続するようにして」：外れても当たったときと同じに流す（滝・光・揺れ・しぶき）
+  for (let ms = 0; ms < T.end; ms += 11) assert.deepEqual(sceneAt(m, ms, { landed: false }), sceneAt(m, ms), `${ms}ms`)
+  assert.ok(sceneAt(m, T.I + 100, { landed: false }).flash > 0.5 && sceneAt(m, T.I + 200, { landed: false }).items.some(it => it.t === 'drop'), '外れても光ってしぶきが上がる')
 })
 
 test('【確定】2026-10-29 水天葬：構えのあいだから雲の渦が回り（技へつながる）、掲げた手に光が集まり、振り下ろした瞬間にはじける・滝の絵は叩きつけた所でふくらみ、落ち終わると上から切れる', () => {
@@ -162,11 +158,13 @@ test('【確定】2026-10-30 水縛の帯（ユーザー「水縛りの帯もし
   assert.ok(coilAt(b, B + 200).s > 1.2 && coilAt(b, B + 200).op < 0.4)
   assert.equal(coilAt(b, B + 280), null)
   assert.equal(coilAt(m, I + 100), null, '水天葬は巻きつかない')
-  // 外れたとき：巻きつかない
-  for (let ms = I; ms < B + 300; ms += 37) {
+  // 【確定】2026-10-31 外れても帯は巻きついてはじける（当たったときと同じ）。相手の体だけ縮まない
+  for (let ms = 0; ms < sceneEndMsOf(b); ms += 37) {
     const s = sceneAt(b, ms, { landed: false })
-    assert.ok(s.items.length === 0 && !s.squeeze && s.flash === 0, `${ms}ms`)
+    assert.equal(s.squeeze, null, `${ms}ms：縮まない`)
+    assert.deepEqual(s, { ...sceneAt(b, ms), squeeze: null }, `${ms}ms：ほかは同じ`)
   }
+  assert.equal(sceneAt(b, I + 250, { landed: false }).items.filter(it => it.t === 'coil').length, 3, '外れても巻きつく')
 })
 
 test('【確定】2026-10-30 氷雨・水天葬はもっと上から降る（ユーザー「氷雨、水天葬、これもっと上から降らせて」）：雲は空の上のほう・滝は雲から足元まで・氷雨の絵は大きく縦にも伸ばす', () => {
@@ -270,11 +268,12 @@ test('【確定】2026-10-30 終焉の黒焔の演出（ユーザー「終焉の
   assert.ok(Math.max(...Array.from({ length: 20 }, (_, i) => Math.hypot(...sceneAt(d, I + 10 + i * 9).shake))) > 8, '大きく揺れる')
   assert.ok(h.dim > a.dim, 'もっと暗く')
   for (const t of ['drop', 'jet', 'ring', 'mist', 'foam']) assert.ok(hm.items.some(it => it.t === t), t)
-  // 奔流は吐きつけの絵が出ているあいだに消える・外れたら爆発しない
+  // 奔流は吐きつけの絵が出ているあいだに消える・外れても爆発する（【確定】2026-10-31 ユーザー「回避されてもモーションは継続するようにして」）
   assert.equal(sceneAt(d, I + DOOM.beamTail).beam, null)
   assert.ok(I + DOOM.beamTail <= d.art.at(-1)[0], '奔流は絵が戻るまでに消える')
   const miss = sceneAt(d, I + 200, { landed: false })
-  assert.ok(miss.flash < 0.05 && !miss.items.some(it => it.t === 'drop'), '外れたら爆発しない')
+  assert.ok(miss.flash > 0.3 && miss.items.some(it => it.t === 'drop'), '外れても爆発する')
+  for (let ms = 0; ms < sceneEndMsOf(d); ms += 41) assert.deepEqual(sceneAt(d, ms, { landed: false }), sceneAt(d, ms), `${ms}ms`)
   // 終わる・どの水の技にも tone は付かない
   const end = sceneEndMsOf(d)
   assert.equal(sceneAt(d, end).dim, 0)
