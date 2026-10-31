@@ -477,7 +477,8 @@ test('【確定】2026-10-30 持ち越しで節目をもう切っているなら
 })
 
 test('【確定】2026-10-31 メニューは「挑戦」・中は「強敵」に黒龍と雨摩座（ユーザー「これは『挑戦』にして」「ここに『強敵』ってカテゴリを作って、ここにヴァルゼノクとあまざ入れて」）・八獄と天穹十二宮はまだ入れない・画面に「IDダンジョン」と出さない', () => {
-  assert.deepEqual(CHALLENGE_CATS.map(c => c.label), ['強敵'], '「八獄」「てんきゅう12宮」はまだ入れない')
+  // 2026-11-01 グループの名前は「強敵」→「四凶」（ユーザー選択）
+  assert.deepEqual(CHALLENGE_CATS.map(c => c.label), ['四凶'], '「八獄」「てんきゅう12宮」はまだ入れない')
   assert.deepEqual(CHALLENGE_CATS[0].bosses, ['varuzenoku', 'amaza'])
   for (const c of CHALLENGE_CATS) for (const k of c.bosses) {
     assert.ok(isSummonable(k), k)

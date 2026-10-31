@@ -131,10 +131,11 @@ export const DUNGEON_BOSSES = {
   },
 }
 
-// 「挑戦」のカテゴリ（入口の見出しとボス）。旧レイドのボスは強敵に足す予定。
+// 「挑戦」のカテゴリ（入口の見出しとボス）。旧レイドの残りの2体（雷鋼機神ゼルギアス・閻魔）も四凶に足す予定。
+//   【確定】2026-11-01 ユーザー「今の強敵のグループ名を良い感じに変えたい」→選んだ「四凶」（しきょう・八獄と同じ「数＋不吉な字」・「四強」と同じ読み）。key はそのまま
 //   ★八獄・天穹十二宮もカテゴリに足す予定だが、ユーザー「※まだ入れないで」＝まだ足さない
 export const CHALLENGE_CATS = [
-  { key: 'rival', label: '強敵', bosses: ['varuzenoku', 'amaza'] },
+  { key: 'rival', label: '四凶', bosses: ['varuzenoku', 'amaza'] },
 ]
 
 export const diffOf = (bossKey, diffKey) => DUNGEON_BOSSES[bossKey]?.diffs?.[diffKey] || null
