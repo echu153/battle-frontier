@@ -46,11 +46,13 @@ import {
 //     負けと時間切れも テロップ → 結果の画面（同じ部品・ボスの残りHP・貢献度・もう一度挑戦する）。入っているボスの行にも貢献度
 //   【確定】同じ日 ユーザー「挑戦を押してから若干ラグがあってから始まるから、スムーズに遷移させるようにして」「挑戦したら遭遇のイラストがどん！って出るようにしてほしい」：
 //     押した瞬間に遭遇のイラスト（V2capBossEncounter.jsx）。サーバーの返事と絵は裏で待つ（lib/useBossEncounter.js）。始められなかったら入口へ
+//     版の確かめ（isStaleBuild）はボスを開いたときに済ませておく＝押してから聞かない（staleNow）
 // 【確定】同じ日 ユーザー選択「サーバーの計算で入れる」：戦闘はサーバーが決めた種と写しで作り、終わったら押した記録を預ける（v2cap_dungeon_try_end）。
 //   サーバーが同じ戦闘を回し直して結果を入れる（lib/dungeonVerify.js）。挑戦の途中で画面を離れたら、そこまでの記録を預ける。確かめられないまま戻ったら入口で確かめ直す
 // ============================================================
 
 const POLL_MS = 15000
+const STALE_ASK_MS = 60000
 const DEV = '#ff88cc'
 const NO_SQL = 'サーバーにまだこの仕組みがありません（SQL を流すと使えます）'
 const VERIFY_LATER = '結果を確かめられませんでした（入口に戻ると確かめ直します）'
@@ -80,6 +82,7 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
   const [stale, setStale] = useState(false)       // 画面が古い（読み直すまで挑戦しない）
   const pending = useRef(null)                    // 送っていない挑戦（画面を離れたら送る）
   const enc = useBossEncounter()                  // 遭遇のイラスト
+  const staleAsked = useRef(null)                 // 版の確かめ { at, ask }
   const settling = useRef(false)                  // 結果を確かめてもらっているあいだ（入口の確かめ直しと重ねない）
   const onProfileRef = useRef(onProfile)
   onProfileRef.current = onProfile
@@ -98,7 +101,10 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
       const art = key && artOfBoss(key)
       if (art) preloadArt([...art.srcs, bossEncounterOf(key)].filter(Boolean))
     }
+    if (openBoss || runBosses) staleAsked.current = { at: Date.now(), ask: isStaleBuild() }
   }, [openBoss, runBosses])
+  // 版の確かめ（STALE_ASK_MS 以内に聞いたならその答え＝押してから待たない）
+  const staleNow = () => (staleAsked.current && Date.now() - staleAsked.current.at < STALE_ASK_MS ? staleAsked.current.ask : isStaleBuild())
 
   const load = useCallback(async () => {
     const { data, error } = await supabase.rpc('v2cap_dungeon_state')
@@ -144,7 +150,7 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
   const start = async (run) => {
     // 画面が古いままだと、サーバーの回し直しとずれる（スタミナを使う前に見る）
     setBusy(true)
-    if (await isStaleBuild()) { setBusy(false); setStale(true); return false }
+    if (await staleNow()) { setBusy(false); setStale(true); return false }
     const data = await call('v2cap_dungeon_try_start', { p_run: run.id })
     if (!data) { load(); return false }
     // ★サーバーが決めた種と、サーバーが写し取った自分で戦う（回し直しも同じものから作る）

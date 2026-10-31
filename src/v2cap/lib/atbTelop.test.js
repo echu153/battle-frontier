@@ -114,6 +114,12 @@ test('挑戦を押した瞬間に遭遇のイラスト（ユーザー「挑戦�
   assert.match(src, /onClick=\{\(\) => enter\(run\)\}/, '入っているボスの「挑戦する」も同じ')
   assert.match(src, /if \(!data\) \{ enc\.cancel\(\); return \}/, '始められなければ入口へ（わけは入口に出る）')
   assert.match(src, /hold=\{enc\.hold\}/)
+  // 押したら見せる長さも絵も待たない（ユーザー「遭遇イラスト出たときはタップしたら戦闘画面に遷移できるようにして」）
+  const hook = readFileSync(new URL('./useBossEncounter.js', import.meta.url), 'utf8')
+  assert.match(hook, /Promise\.race\(\[tapped, Promise\.all\(\[shown, preloadArt\(srcs\)\]\)\]\)/)
+  assert.match(src, /onTap=\{enc\.skip\}/)
+  // 版の確かめはボスを開いたときに済ませる（押してから聞かない）
+  assert.match(src, /if \(await staleNow\(\)\)/)
   // 出ているあいだは戦闘の時計も戦闘開始のテロップも始めない
   assert.match(read('V2capAtbFight.jsx'), /if \(paused \|\| !artReady \|\| hold\) return/)
   // 戦闘に要る絵がそろうまで消えない＝「読みこみ中」を見せない
