@@ -22,9 +22,6 @@
 import { fillLine, isNight, nextStreak, tapKindOf, makeDailyAsker, dayOf, CLERK_RARE_WEIGHT } from './clerk.js'
 import { SHOP_ITEMS } from './shop.js'
 
-// ★絵が届くまで false＝商店の画面は前のまま（2026-10-31 セリフと画面の作りを先に入れた）。絵を入れるときに外す
-export const MERCHANT_ON = false
-
 export const MERCHANT_NAME = 'ソルド'
 export const MERCHANT_ART_DIR = '/v2cap-art/shop'
 export const merchantSrc = (key) => `${MERCHANT_ART_DIR}/${key}.webp`
@@ -37,9 +34,10 @@ export const MERCHANT_FACES = [
 ]
 export const MERCHANT_FACE_KEYS = MERCHANT_FACES.map(f => f.key)
 // 画面で使う版の大きさ（tools/v2cap-shop-art.mjs が作る。3枚は同じ大きさ・merchant.test.js が突き合わせる）
-export const MERCHANT_FACE_SIZE = { w: 464, h: 640 }
+export const MERCHANT_FACE_SIZE = { w: 428, h: 640 }
 // 小さく出すとき（ポップアップの中・スマホの上）に見せるところ：x＝頭のまん中の横の位置（幅に対する割合）・top＝上から見せる高さ（高さに対する割合）
-export const MERCHANT_FOCUS = { x: 0.5, top: 0.47 }
+// 背中のリュックで絵が右に広いので、絵のまん中ではなく頭のまん中に合わせる（髪が左右で切れない・merchant.test.js が見張る）
+export const MERCHANT_FOCUS = { x: 0.4, top: 0.47 }
 
 // ===== 好感度（看板娘・アレアと同じペース・画面には出さない）=====
 //   その日はじめて話しかけたら（タップ）+1。1日1回・朝5時区切り・下がらない。数えるのはサーバー（v2cap_merchant_talk）

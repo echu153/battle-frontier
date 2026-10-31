@@ -10,7 +10,7 @@ import {
   flipLeftMsOf, flipPreviewOf, encounterBandOf, otherGenderOf,
 } from '../lib/shop.js'
 import {
-  MERCHANT_ON, MERCHANT_STAGES, MERCHANT_STAGE_EVENTS, pickLine, enterKindOf, askKindOf, boughtKindOf, poorOf,
+  MERCHANT_STAGES, MERCHANT_STAGE_EVENTS, pickLine, enterKindOf, askKindOf, boughtKindOf, poorOf,
   stageOf, stageLabelOf, stageEventOf, varsOf, tapKindOf, nextStreak, isNight, fillLine, makeDailyAsker,
 } from '../lib/merchant.js'
 
@@ -20,7 +20,7 @@ import {
 //   ★決まりの正は src/v2cap/lib/shop.js。買う・Gold はサーバー（v2cap_shop_buy）
 //   【確定】2026-10-31 商人ソルド（ユーザー指示「糸目の胡散臭いお兄さん、関西弁の守銭奴にする予定」・lib/merchant.js）：
 //     品物の右に商人を立たせる（スマホは上）。店を開いたとき・タップ・買う確かめ・買った結果で話す（ユーザー選択）。
-//     好感度は看板娘・アレアと同じ形（画面には出さない・サーバーの v2cap_merchant_talk）。絵が届くまで MERCHANT_ON=false＝画面は前のまま
+//     好感度は看板娘・アレアと同じ形（画面には出さない・サーバーの v2cap_merchant_talk）
 // ============================================================
 const gold = (n) => `${Number(n || 0).toLocaleString()}G`
 const BAND_STYLE = { color: FLIP_COLOR, fontSize:'13px' }
@@ -181,18 +181,18 @@ export default function V2capShop({ prof, onProfile, dev = false }) {
   const newSex = GENDER_BY_KEY[bought?.gender]
 
   return (
-    <div style={{ maxWidth: MERCHANT_ON ? '1068px' : '760px' }}>
-      {MERCHANT_ON && <style>{MERCHANT_CSS}</style>}
+    <div style={{ maxWidth:'1068px' }}>
+      <style>{MERCHANT_CSS}</style>
       {asking && (
         <V2Modal title={`${asking.icon} ${asking.name}を飲みますか？`} color={asking.color} busy={busy} confirmLabel={`${gold(asking.gold)}で買う`}
           onConfirm={buy} onClose={cancelAsk}>
-          {MERCHANT_ON && askSay && <MerchantSays face={askSay.face} line={askSay.text} />}
+          {askSay && <MerchantSays face={askSay.face} line={askSay.text} />}
           {asking.key === 'gender' ? <GenderChange g={sex} /> : <FlipChange prof={prof} now={now} />}
         </V2Modal>
       )}
       {got && (
         <V2Modal title={`${got.icon} ${got.name}を飲みました`} color={got.color} onClose={() => setBought(null)}>
-          {MERCHANT_ON && boughtSay && <MerchantSays face={boughtSay.face} line={boughtSay.text} />}
+          {boughtSay && <MerchantSays face={boughtSay.face} line={boughtSay.text} />}
           {got.key === 'gender' ? (
             <>
               <div><span style={{ color: newSex?.color }}>{newSex?.mark} {newSex?.label}</span>になりました</div>
@@ -214,19 +214,17 @@ export default function V2capShop({ prof, onProfile, dev = false }) {
         </V2Modal>
       )}
 
-      <div className={MERCHANT_ON ? 'mer-cols' : undefined}>
+      <div className="mer-cols">
         {/* 商人（広い画面は右・狭い画面は上） */}
-        {MERCHANT_ON && (
-          <div className="mer-side">
-            <V2capMerchant face={merchant.face} line={merchant.text} tick={merchant.tick} onTap={tapMerchant} />
-            {dev && (
-              <div style={{ display:'flex', justifyContent:'center', flexWrap:'wrap', gap:'6px', marginTop:'8px' }}>
-                <button type="button" onClick={devReact} style={miniBtn(DEV)}>🧪 商人の反応［開発］</button>
-                <button type="button" onClick={devNextStage} style={miniBtn(DEV)}>🧪 段階：{stageLabelOf(stage)}［開発］</button>
-              </div>
-            )}
-          </div>
-        )}
+        <div className="mer-side">
+          <V2capMerchant face={merchant.face} line={merchant.text} tick={merchant.tick} onTap={tapMerchant} />
+          {dev && (
+            <div style={{ display:'flex', justifyContent:'center', flexWrap:'wrap', gap:'6px', marginTop:'8px' }}>
+              <button type="button" onClick={devReact} style={miniBtn(DEV)}>🧪 商人の反応［開発］</button>
+              <button type="button" onClick={devNextStage} style={miniBtn(DEV)}>🧪 段階：{stageLabelOf(stage)}［開発］</button>
+            </div>
+          )}
+        </div>
         <div className="mer-main">
           <div style={{ ...box, padding:'8px 12px', marginBottom:'8px', fontSize:'11px', color: TEXT.label }}>
             持っているGold <span style={{ color:'#ffcc00', fontSize:'13px' }}>{gold(have)}</span>

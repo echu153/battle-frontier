@@ -28,7 +28,8 @@ export const MERCHANT_CSS = `
 .mer-main { grid-column: 1; grid-row: 1; min-width: 0; }
 .mer-side { grid-column: 2; grid-row: 1; position: sticky; top: 44px; }
 .mer { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.mer-bubble { position: relative; box-sizing: border-box; width: 100%; min-height: 64px; display: flex; align-items: center;
+/* 広い画面は3行ぶんの高さを取る＝セリフが3行になっても体が下がらない（タップで表情を切り替えても体が動かない。4行は段階の場面の長いセリフだけ） */
+.mer-bubble { position: relative; box-sizing: border-box; width: 100%; min-height: 88px; display: flex; align-items: center;
   background: ${BUBBLE_BG}; color: ${BUBBLE_FG}; border: 2px solid ${ACCENT}; border-radius: 12px;
   padding: 10px 12px; font-family: monospace; font-size: 13px; line-height: 1.6; }
 .mer-bubble::before, .mer-bubble::after { content: ''; position: absolute; left: 50%; transform: translateX(-50%); border: solid transparent; }
@@ -51,7 +52,7 @@ export const MERCHANT_CSS = `
   .mer { flex-direction: row-reverse; align-items: center; gap: 14px; }
   .mer-btn { flex: 0 0 auto; width: ${THUMB.w}px; height: ${THUMB.h}px; overflow: hidden; }
   .mer-btn img { width: ${THUMB.imgW}px; max-width: none; max-height: none; margin-left: ${THUMB.left}px; }
-  .mer-bubble { flex: 1; min-width: 0; }
+  .mer-bubble { flex: 1; min-width: 0; min-height: 64px; }
   .mer-bubble::before { left: -12px; top: 50%; bottom: auto; transform: translateY(-50%); border-width: 9px 12px 9px 0; border-color: transparent ${ACCENT} transparent transparent; }
   .mer-bubble::after { left: -8px; top: 50%; bottom: auto; transform: translateY(-50%); border-width: 7px 9px 7px 0; border-color: transparent ${BUBBLE_BG} transparent transparent; }
 }

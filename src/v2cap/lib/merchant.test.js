@@ -4,13 +4,14 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import {
-  MERCHANT_ON, MERCHANT_NAME, MERCHANT_ART_DIR, MERCHANT_FACES, MERCHANT_FACE_KEYS, MERCHANT_FACE_SIZE, MERCHANT_LINES, MERCHANT_STAGES, MERCHANT_STAGE_EVENTS,
+  MERCHANT_NAME, MERCHANT_ART_DIR, MERCHANT_FACES, MERCHANT_FACE_KEYS, MERCHANT_FACE_SIZE, MERCHANT_FOCUS, MERCHANT_LINES, MERCHANT_STAGES, MERCHANT_STAGE_EVENTS,
   CASUAL_STAGE, NAME_STAGE, merchantSrc, stageOf, stageLabelOf, callOf, varsOf, stageEventOf, linesOf, pickLine, poorOf, enterKindOf, askKindOf, boughtKindOf, MERCHANT_RARE_WEIGHT,
 } from './merchant.js'
 import { SHOP_ITEMS } from './shop.js'
 
 const PUB = new URL('../../../public/', import.meta.url)
 const fileOf = (key) => new URL(`.${merchantSrc(key)}`, PUB)
+const pathOf = (url) => url.pathname.replace(/^\/([A-Za-z]:)/, '$1')
 const read = (rel) => readFileSync(new URL(`../${rel}`, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 // WebP の大きさ（VP8X・VP8L・VP8 のどれか）
 const webpSize = (buf) => {
@@ -23,7 +24,6 @@ const allLines = () => [
   ...Object.entries(MERCHANT_LINES).flatMap(([kind, list]) => list.map(l => ({ kind, ...l }))),
   ...Object.entries(MERCHANT_STAGE_EVENTS).map(([s, l]) => ({ kind: `段階${s}の場面`, ...l })),
 ]
-const NO_ART = !MERCHANT_ON && '絵が届くまで MERCHANT_ON=false'
 
 test('表情は3つ（普通・にんまり・薄目＝ユーザー選択）・元の絵は public/V2商店/ の保存名で読む', () => {
   assert.deepEqual(MERCHANT_FACES.map(f => f.label), ['普通', 'にんまり', '薄目'])
@@ -34,7 +34,7 @@ test('表情は3つ（普通・にんまり・薄目＝ユーザー選択）・�
   assert.ok(readFileSync(new URL('../../../.gitignore', import.meta.url), 'utf8').includes('/public/V2商店/'), '元の絵は git に入れない')
 })
 
-test('絵がそろっている。3枚は同じ大きさ（切り替えても体が動かない）', { skip: NO_ART }, () => {
+test('絵がそろっている。3枚は同じ大きさ（切り替えても体が動かない）', () => {
   for (const k of MERCHANT_FACE_KEYS) {
     const f = fileOf(k)
     assert.ok(existsSync(f), `${k} の絵が無い＝ node tools/v2cap-shop-art.mjs`)
@@ -42,11 +42,11 @@ test('絵がそろっている。3枚は同じ大きさ（切り替えても体�
   }
 })
 
-test('絵の透明なところは本当に透明（透明度0）＝商人が箱の中や膜の中に見えない', { skip: NO_ART }, async (t) => {
+test('絵の透明なところは本当に透明（透明度0）＝商人が箱の中や膜の中に見えない', async (t) => {
   let decode
-  try { ({ decode } = await import('../../../tools/v2cap-art-lib.mjs')); decode(fileOf(MERCHANT_FACE_KEYS[0]).pathname.replace(/^\/([A-Za-z]:)/, '$1'), 64, 'rgba') } catch { t.skip('ffmpeg が無い'); return }
+  try { ({ decode } = await import('../../../tools/v2cap-art-lib.mjs')); decode(pathOf(fileOf(MERCHANT_FACE_KEYS[0])), 64, 'rgba') } catch { t.skip('ffmpeg が無い'); return }
   for (const k of MERCHANT_FACE_KEYS) {
-    const img = decode(fileOf(k).pathname.replace(/^\/([A-Za-z]:)/, '$1'), 4096, 'rgba')
+    const img = decode(pathOf(fileOf(k)), 4096, 'rgba')
     const at = (x, y) => img.data[(y * img.W + x) * 4 + 3]
     assert.deepEqual([at(0, 0), at(img.W - 1, 0)], [0, 0], `${k}：上のすみは透明`)
     let low = 0
@@ -55,9 +55,62 @@ test('絵の透明なところは本当に透明（透明度0）＝商人が箱�
   }
 })
 
-test('public/v2cap-art/shop の絵はどれも一覧に載っている（名前を変えて残った絵がない）', { skip: NO_ART }, () => {
+test('public/v2cap-art/shop の絵はどれも一覧に載っている（名前を変えて残った絵がない）', () => {
   const known = new Set(MERCHANT_FACE_KEYS.map(k => `${k}.webp`))
   for (const f of readdirSync(new URL(`.${MERCHANT_ART_DIR}/`, PUB))) assert.ok(known.has(f), `${f} は一覧に無い`)
+})
+
+test('【確定】表情を切り替えても体が跳ねない＝3枚の体が重なる・下の端が同じ高さ（ChatGPT は描き直すと大きさと位置が少し変わる＝tools/v2cap-shop-art.mjs が重ねる）', async (t) => {
+  // 2026-10-31 重ねる前の絵だと、普通と薄目の差は 19.8（薄目だけ約1.03倍で左へ約26px）。重ねたら 10.7（にんまりはどちらも 6 くらい）
+  let decode
+  try { ({ decode } = await import('../../../tools/v2cap-art-lib.mjs')); decode(pathOf(fileOf(MERCHANT_FACE_KEYS[0])), 64, 'rgba') } catch { t.skip('ffmpeg が無い'); return }
+  const grayOf = (key) => {
+    const { data, W, H } = decode(pathOf(fileOf(key)), 320, 'rgba')
+    const g = new Float32Array(W * H)
+    for (let p = 0; p < W * H; p++) {
+      const a = data[p * 4 + 3] / 255
+      g[p] = (data[p * 4] * 0.3 + data[p * 4 + 1] * 0.59 + data[p * 4 + 2] * 0.11) * a + 128 * (1 - a)
+    }
+    return g
+  }
+  const base = grayOf(MERCHANT_FACE_KEYS[0])
+  for (const key of MERCHANT_FACE_KEYS.slice(1)) {
+    const g = grayOf(key)
+    let sum = 0
+    for (let p = 0; p < base.length; p++) sum += Math.abs(base[p] - g[p])
+    assert.ok(sum / base.length < 15, `${key}：普通との差（${(sum / base.length).toFixed(1)}）`)
+  }
+  const bottoms = MERCHANT_FACE_KEYS.map(key => {
+    const { data, W, H } = decode(pathOf(fileOf(key)), 4096, 'rgba')
+    for (let y = H - 1; y >= 0; y--) for (let x = 0; x < W; x++) if (data[(y * W + x) * 4 + 3] > 128) return y
+    return -1
+  })
+  assert.ok(Math.max(...bottoms) - Math.min(...bottoms) <= 1, `下の端（${bottoms.join('・')}）`)
+})
+
+test('小さく出すとき（スマホの上・ポップアップの中）は、頭のまん中に合わせて髪が左右で切れない（リュックで絵が右に広い）', async (t) => {
+  // アレアのときのユーザー指示「ひだりの髪が少し見切れちゃってるから、もう少しバランスよく見えるように」と同じ考え
+  let decode
+  try { ({ decode } = await import('../../../tools/v2cap-art-lib.mjs')); decode(pathOf(fileOf(MERCHANT_FACE_KEYS[0])), 64, 'rgba') } catch { t.skip('ffmpeg が無い'); return }
+  const src = read('components/V2capMerchant.jsx')
+  const frames = ['SAY', 'THUMB'].map(n => {
+    const m = src.match(new RegExp(`const ${n} = cropOf\\((\\d+), (\\d+)\\)`))
+    return { w: Number(m[1]), h: Number(m[2]) }
+  })
+  for (const key of MERCHANT_FACE_KEYS) {
+    const img = decode(pathOf(fileOf(key)), 4096, 'rgba')
+    // 頭の高さ（リュックの毛布より上＝上から16%まで）で、絵のある左右の端
+    let l = img.W, r = -1
+    for (let y = 0; y < Math.round(0.16 * img.H); y++) {
+      for (let x = 0; x < img.W; x++) if (img.data[(y * img.W + x) * 4 + 3] > 128) { if (x < l) l = x; if (x > r) r = x }
+    }
+    assert.ok(Math.abs((l + r) / 2 / img.W - MERCHANT_FOCUS.x) < 0.02, `${key}：頭のまん中（${((l + r) / 2 / img.W).toFixed(3)}）に合わせる`)
+    for (const frame of frames) {
+      const k = frame.h / (img.H * MERCHANT_FOCUS.top)
+      const half = frame.w / k / 2, mid = MERCHANT_FOCUS.x * img.W
+      assert.ok(mid - half <= l && r <= mid + half, `${key} ${frame.w}×${frame.h}：髪が枠に入る（見える ${Math.round(mid - half)}〜${Math.round(mid + half)}・髪 ${l}〜${r}）`)
+    }
+  }
 })
 
 test('【確定】セリフはユーザーが案を見て「この案で入れて」（2026-10-31）：場面ごとの数と文', () => {
@@ -218,19 +271,19 @@ test('同じセリフが2回続かない（2つ以上あるとき）・段階に
   assert.ok(Math.abs(hit / N - (5 * 0.25) / weight) < 0.01, `ちらっと本音の出る割合（${hit / N}）`)
 })
 
-test('画面：品物の右に商人（狭い画面は上）・買う確かめと買った結果にも商人・開発用のボタンは管理者だけ・絵が届くまでは前のまま', () => {
+test('画面：品物の右に商人（狭い画面は上）・買う確かめと買った結果にも商人・開発用のボタンは管理者だけ', () => {
   assert.ok(read('pages/V2capHome.jsx').includes("{screen === 'shop' && <V2capShop prof={prof} onProfile={refresh} dev={isAdmin} />}"))
   const s = read('components/V2capShop.jsx')
   assert.ok(s.includes('<V2capMerchant face={merchant.face} line={merchant.text} tick={merchant.tick} onTap={tapMerchant} />'))
-  assert.ok(s.includes('{MERCHANT_ON && askSay && <MerchantSays face={askSay.face} line={askSay.text} />}'), '買う確かめ')
-  assert.ok(s.includes('{MERCHANT_ON && boughtSay && <MerchantSays face={boughtSay.face} line={boughtSay.text} />}'), '買った結果')
+  assert.ok(s.includes('{askSay && <MerchantSays face={askSay.face} line={askSay.text} />}'), '買う確かめ')
+  assert.ok(s.includes('{boughtSay && <MerchantSays face={boughtSay.face} line={boughtSay.text} />}'), '買った結果')
   assert.ok(s.includes('setBoughtSay(say(boughtKindOf(data)))') && s.includes("say('error'); return"), '買えた・買えなかったで話す')
   assert.ok(s.includes('onConfirm={buy} onClose={cancelAsk}'), '「やめる」で確かめのセリフを残さない（看板娘と同じ）')
   assert.ok(s.includes("const talkAsker = makeDailyAsker(() => supabase.rpc('v2cap_merchant_talk'))"), '同じ日は1回だけサーバーに聞く（開発モードで2回走っても大丈夫）')
   assert.ok(s.includes("supabase.rpc('v2cap_merchant_seen', { p_stage: ev.stage }).then(() => {})"), 'then を付けないと送られない')
   assert.ok(s.includes('{dev && ('), '開発用のボタンは dev のときだけ')
   assert.ok(s.includes('color={DEV} keepScroll'), '開発用のポップアップは見るだけ＝閉じても今の場所のまま')
-  assert.ok(s.includes("className={MERCHANT_ON ? 'mer-cols' : undefined}") && s.includes("maxWidth: MERCHANT_ON ? '1068px' : '760px'"), '絵が届くまでは前の並びのまま')
+  assert.ok(s.includes('className="mer-cols"') && s.includes("maxWidth:'1068px'"), '品物と商人が並ぶ幅')
   const css = read('components/V2capMerchant.jsx')
   assert.ok(css.includes('.mer-btn:not(:disabled):hover { filter: brightness(1.05); }'), '押すときの光り方は看板娘と同じく控えめ')
   assert.ok(css.includes('.mer-btn::after { content: none; }'), 'ボタンの光沢（dev-ui.css の button::after）を絵に重ねない＝箱の中に見えない')
