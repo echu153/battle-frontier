@@ -285,9 +285,10 @@ export default function V2capDungeon({ prof, inventory, onProfile, dev = false }
               <button onClick={() => start(run)} disabled={busy || stam < cost} style={{ ...miniBtn('#ff8866'), flex:1, padding:'8px' }}>
                 ⚔ 挑戦する（スタミナ{cost}）
               </button>
-              {run.mine && !run.rescue_open && (
-                <button onClick={() => rescue(run)} disabled={busy} style={{ ...miniBtn('#44ddff'), flex:1, padding:'8px' }}>📣 救援信号を出す</button>
-              )}
+              {/* 救援信号は1回挑戦してから（ユーザー選択「信号を出す人の条件」・サーバーも見る） */}
+              {run.mine && !run.rescue_open && (run.my_tries > 0
+                ? <button onClick={() => rescue(run)} disabled={busy} style={{ ...miniBtn('#44ddff'), flex:1, padding:'8px' }}>📣 救援信号を出す</button>
+                : <span style={{ color: TEXT.label, fontSize:'10px', alignSelf:'center' }}>1回挑戦すると救援信号を出せます</span>)}
               {run.mine && run.rescue_open && <span style={{ color:'#44ddff', fontSize:'10px', alignSelf:'center' }}>📣 救援信号を出しています（{run.members.length - 1}/{HELPERS_MAX}人）</span>}
             </div>
             {stam < cost && <div style={{ color:'#ff8888', fontSize:'10px', marginTop:'4px' }}>スタミナが足りません</div>}

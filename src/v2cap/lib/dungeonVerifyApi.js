@@ -7,7 +7,7 @@
 //   ・もう入れた挑戦は入れ直さない（同じ結果を返すだけ）＝通信が切れて聞き直しても2回入らない
 // ⚠画面の決まりは V2capDungeon.jsx・送り方は dungeonVerifyCall.js。下の2つは src/supabase.js と同じ（dungeonVerify.test.js が突き合わせる）
 // ============================================================
-import { verifyTry } from './dungeonVerify.js'
+import { cleanTryOf, verifyTry } from './dungeonVerify.js'
 
 export const SUPABASE_URL = 'https://jxbcuqwqtstxgmpiruuu.supabase.co'
 export const SUPABASE_KEY = 'sb_publishable_vlexKdF2oJrIIwMFEA81OA_1XyShoIt'
@@ -36,7 +36,7 @@ export const verifyRequest = async ({ body, secret, sha = '', fetchFn = fetch })
     const t = await rpc('v2cap_dungeon_verify_load', { p_secret: secret, p_run: run, p_player: player })
     if (!t?.ok || t.done) return { status: 200, body: t }
     const v = verifyTry({ boss: t.boss, diff: t.diff, hp: t.hp, seed: t.seed, snap: t.snap, inputs: t.inputs, endStep: t.end_step, elapsedSec: t.elapsed_sec })
-    const done = await rpc('v2cap_dungeon_verify_settle', { p_secret: secret, p_run: run, p_player: player, p_try: t.try, p_damage: v.damage, p_reason: v.reason })
+    const done = await rpc('v2cap_dungeon_verify_settle', { p_secret: secret, p_run: run, p_player: player, p_try: t.try, p_damage: v.damage, p_clean: cleanTryOf(v), p_reason: v.reason })
     return { status: 200, body: done }
   } catch (e) {
     console.error(e)

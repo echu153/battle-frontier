@@ -13,7 +13,7 @@ import { CLASSES, canEquipType } from './jobs.js'
 import { ITEMS, itemIdOf } from './equipment.js'
 import { SKILLS } from './skills.js'
 import { DUNGEON_TRY_SEC, diffOf } from './dungeon.js'
-import { INPUTS_MAX, TIME_SLACK_SEC, TRY_STEPS, allowedSteps, damageOf, startTryAtb, validInputs, verifyTry } from './dungeonVerify.js'
+import { INPUTS_MAX, TIME_SLACK_SEC, TRY_STEPS, allowedSteps, cleanTryOf, damageOf, startTryAtb, validInputs, verifyTry } from './dungeonVerify.js'
 import { SUPABASE_KEY, SUPABASE_URL, verifyRequest } from './dungeonVerifyApi.js'
 import { PROD_ORIGIN, callVerify, isStaleBuild, verifyUrlOf } from './dungeonVerifyCall.js'
 import handler from '../../../api/v2cap-dungeon-verify.js'
@@ -84,6 +84,15 @@ test('★ふつうに遊んだ人の結果とサーバーの計算が一致す�
     })
   })
   assert.ok(seen.a > 0 && seen.b > 0 && seen.stop > 0, `いろいろな終わり方を通っている ${JSON.stringify(seen)}`)
+})
+
+test('負けなかった挑戦か（ひとりで倒されずに倒したときの報酬の条件）：倒した・時間切れまで立っていた＝負けではない', () => {
+  assert.equal(cleanTryOf({ winner: 'a', steps: 700, reason: null }), true)
+  assert.equal(cleanTryOf({ winner: 'draw', steps: TRY_STEPS, reason: null }), true, '時間切れは負けではない')
+  assert.equal(cleanTryOf({ winner: 'b', steps: 900, reason: null }), false, '倒された')
+  assert.equal(cleanTryOf({ winner: 'draw', steps: 900, reason: null }), false, '相打ち')
+  assert.equal(cleanTryOf({ winner: null, steps: 900, reason: null }), false, '途中でやめた')
+  assert.equal(cleanTryOf({ winner: 'a', steps: 700, reason: 'too_fast' }), false, '記録がおかしい')
 })
 
 test('★180秒の時間切れでも一致する（いちばん長い戦闘）', () => {
@@ -227,7 +236,7 @@ test('★書き換えた申告では増えない：入れるのはサーバー�
   const r = await verifyRequest(req({ fetchFn: db.fetchFn, body: { run: 12, player: PLAYER, damage: 999999, p_damage: 999999, claim: 999999, won: true, hp: 1 } }))
   assert.equal(r.status, 200)
   const settle = db.calls.find(c => c.fn === 'v2cap_dungeon_verify_settle')
-  assert.deepEqual(settle.args, { p_secret: 'あいことば', p_run: 12, p_player: PLAYER, p_try: 2, p_damage: damageOf(st), p_reason: null })
+  assert.deepEqual(settle.args, { p_secret: 'あいことば', p_run: 12, p_player: PLAYER, p_try: 2, p_damage: damageOf(st), p_clean: false, p_reason: null })
   assert.ok(settle.args.p_damage < 15000, 'ボスは倒れない')
 })
 

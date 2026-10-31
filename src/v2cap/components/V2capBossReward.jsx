@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { box, miniBtn, TEXT } from './v2ui.js'
 import { JP_BOLD } from './casinoStyle.js'
 import { bossThumbOf } from '../lib/bossArt.js'
-import { DIFF_COLOR, DUNGEON_BOSSES, HELPER_REWARD_MIN_PCT, contributionPctOf, diffOf } from '../lib/dungeon.js'
+import { DIFF_COLOR, DUNGEON_BOSSES, HELPER_REWARD_MIN_PCT, SOLO_REWARD_MULT, contributionPctOf, diffOf } from '../lib/dungeon.js'
 import { CORRECTED_TEXT } from '../lib/dungeonVerifyCall.js'
 import { gainedExpOf, levelUpLines } from '../lib/settleLines.js'
 
@@ -104,6 +104,7 @@ export default function V2capBossReward({ bossKey, diffKey, cls, st = null, resu
             {reward === null && <div style={{ color: TEXT.sub, fontSize:'11px' }}>この討伐の報酬はありません</div>}
             {reward && (
               <>
+                {reward.solo && <div style={{ color: GOLD, fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'12px', marginBottom:'4px' }}>🏆 ひとりで倒されずに討伐！ 報酬{SOLO_REWARD_MULT}倍</div>}
                 <div style={{ color:'#ffcc00', fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'16px', lineHeight: 1.6 }}>EXP +{gainedExpOf(reward).toLocaleString()}</div>
                 <div style={{ color:'#ffcc00', fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'16px', lineHeight: 1.6 }}>Gold +{Number(reward.gold).toLocaleString()}</div>
                 {reward.pct < 100 && <div style={{ color: TEXT.sub, fontSize:'10px', marginTop:'2px' }}>救援のぶん：削った割合で{reward.pct}%（最低{HELPER_REWARD_MIN_PCT}%）</div>}

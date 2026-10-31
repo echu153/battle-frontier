@@ -8970,6 +8970,9 @@ grant execute on function public.v2cap_poker_action(text) to authenticated;
 --   ・難易度は**そのエリアに着いたら**呼べる（行ったことのある一番先の場所のエリア）。**いまはノーマル・ハードだけ**
 --   ・【確定】2026-10-31 報酬（ユーザー選択「EXPとGoldを渡す」）：倒したら EXP と Gold（v2cap_dungeon_reward_conf）。呼んだ人は全部・救援の人は削った割合（最低3割）・ダメージ0は無し。
 --     自分の挑戦の終わりで倒れていたらその場で渡す（try_end）。その場にいなかった人は入口で受け取る（state の rewards・claim）。専用の装備はあとで
+--   ・【確定】2026-11-01 ユーザー「後報酬は1人で倒されずにソロ攻略したら報酬豪華になるようにして」→選択「3倍なんだけど、今の報酬が少し大きすぎるから半分にして」：
+--     基本の報酬を半分に・ひとりで倒されずに倒したら3倍（v2cap_dungeon_pay_reward）。負け・途中でやめた・戻らなかった挑戦があると flawed（時間切れは負けではない）
+--   ・【確定】同じ日 ユーザー選択「信号を出す人の条件」：救援信号は1回挑戦してから（v2cap_dungeon_rescue）。救援に入る人に条件は付けない
 -- ★戦闘は画面で回すが、結果はサーバーが決める。【確定】2026-10-31 ユーザー選択「サーバーの計算で入れる」「pushだけで揃う」（決まりの正は src/v2cap/lib/dungeonVerify.js）：
 --   ①try_start：乱数の種を決め、自分のキャラと着けている装備を写し取って返す（画面もこの写しで戦う）
 --   ②try_end：画面は押した記録と終わりの刻みを預けるだけ（申告の p_claim は比べるためだけに持つ）
@@ -9023,6 +9026,7 @@ alter table public.v2cap_dungeon_members add column if not exists try_seed bigin
 alter table public.v2cap_dungeon_members add column if not exists try_snap jsonb;             -- この挑戦の自分の写し { prof, inv, at }
 alter table public.v2cap_dungeon_members add column if not exists try_sub jsonb;              -- 預かった記録 { inputs, end_step, claim }
 alter table public.v2cap_dungeon_members add column if not exists try_sub_at timestamptz;     -- 記録が届いた時刻
+alter table public.v2cap_dungeon_members add column if not exists flawed boolean not null default false;   -- 負け・途中でやめた・戻らなかった挑戦があった（ひとりで倒されずに倒したときの報酬の条件）
 alter table public.v2cap_dungeon_members add column if not exists try_last jsonb;             -- 最後に確かめた結果（聞き直されたら同じものを返す）
 
 -- 画面の申告とサーバーの計算がずれた挑戦の記録（だれも直接は読めない・SQL Editor で見る）
@@ -9054,14 +9058,14 @@ returns table(hp int, area int) language sql immutable set search_path = public 
 $$;
 revoke all on function public.v2cap_dungeon_conf(text, text) from public, anon, authenticated;
 
--- 倒したときの報酬（dungeon.js の diffs の reward と同じ）。EXP＝推奨の場所のボス10体ぶん・Gold＝推奨LV×100（デイリー1回ぶん）
+-- 倒したときの報酬（dungeon.js の diffs の reward と同じ）。EXP＝推奨の場所のボス5体ぶん・Gold＝推奨LV×50（デイリー半分）
 create or replace function public.v2cap_dungeon_reward_conf(p_boss text, p_diff text)
 returns table(exp int, gold int) language sql immutable set search_path = public as $$
   select v.exp, v.gold from (values
-    ('varuzenoku', 'normal', 350, 2500),
-    ('varuzenoku', 'hard', 700, 4500),
-    ('amaza', 'normal', 350, 2500),
-    ('amaza', 'hard', 700, 4500)
+    ('varuzenoku', 'normal', 175, 1250),
+    ('varuzenoku', 'hard', 350, 2250),
+    ('amaza', 'normal', 175, 1250),
+    ('amaza', 'hard', 350, 2250)
   ) as v(boss, diff, exp, gold)
   where v.boss = p_boss and v.diff = p_diff
 $$;
@@ -9092,15 +9096,18 @@ revoke all on function public.v2cap_dungeon_run_json(bigint, uuid) from public, 
 
 -- 報酬を渡す（内部ヘルパ・try_end と claim からだけ呼ぶ）。倒されたボスに、ダメージを入れた人へ1回だけ。渡せないときは null
 --   呼んだ人は全部（救援信号を出して損をしない）・救援の人は削った割合（最低3割＝dungeon.js の HELPER_REWARD_MIN_PCT）
+--   ひとりで倒されずに倒した人は3倍（dungeon.js の SOLO_REWARD_MULT）＝ほかの人が1回も挑んでいない・自分の挑戦に flawed が無い
 create or replace function public.v2cap_dungeon_pay_reward(p_run bigint, p_player uuid)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   c_helper_min constant int := 30;
+  c_solo_mult  constant int := 3;
   v_run  public.v2cap_dungeon_runs;
   v_mem  public.v2cap_dungeon_members;
   v_exp  int;
   v_gold int;
   v_pct  int;
+  v_solo boolean;
 begin
   select * into v_run from public.v2cap_dungeon_runs where id = p_run;
   if not found or v_run.cleared_at is null then return null; end if;
@@ -9111,11 +9118,13 @@ begin
   if v_exp is null then return null; end if;
   v_pct := case when v_mem.is_owner then 100
                 else greatest(c_helper_min, least(100, (v_mem.damage * 100 / greatest(1, v_run.hp_max))::int)) end;
-  v_exp := v_exp * v_pct / 100;
-  v_gold := v_gold * v_pct / 100;
+  v_solo := v_mem.is_owner and not v_mem.flawed
+            and not exists (select 1 from public.v2cap_dungeon_members m where m.run_id = p_run and m.player_id <> p_player and m.tries > 0);
+  v_exp := v_exp * v_pct / 100 * (case when v_solo then c_solo_mult else 1 end);
+  v_gold := v_gold * v_pct / 100 * (case when v_solo then c_solo_mult else 1 end);
   update public.v2cap_dungeon_members set reward_at = now() where run_id = p_run and player_id = p_player;
   update public.v2cap_profiles set gold = gold + v_gold, updated_at = now() where id = p_player;
-  return jsonb_build_object('exp', v_exp, 'gold', v_gold, 'pct', v_pct, 'level', public.v2cap_apply_exp(p_player, v_exp));
+  return jsonb_build_object('exp', v_exp, 'gold', v_gold, 'pct', v_pct, 'solo', v_solo, 'level', public.v2cap_apply_exp(p_player, v_exp));
 end;
 $$;
 revoke all on function public.v2cap_dungeon_pay_reward(bigint, uuid) from public, anon, authenticated;
@@ -9254,7 +9263,8 @@ begin
   select * into v_row from public.v2cap_profiles where id = v_uid;
   v_snap := public.v2cap_battle_snap(v_row);
   update public.v2cap_dungeon_members
-     set tries = tries + 1, try_open_at = now(), try_hp = v_run.hp, try_seed = v_seed, try_snap = v_snap, try_sub = null, try_sub_at = null
+     set tries = tries + 1, flawed = flawed or v_mem.try_open_at is not null,   -- 前の挑戦が結果の出ないまま残っていた＝戻らなかった
+         try_open_at = now(), try_hp = v_run.hp, try_seed = v_seed, try_snap = v_snap, try_sub = null, try_sub_at = null
    where run_id = p_run and player_id = v_uid;
   return jsonb_build_object('ok', true, 'hp', v_run.hp, 'hp_max', v_run.hp_max, 'boss', v_run.boss, 'diff', v_run.diff, 'seed', v_seed, 'snap', v_snap,
                             'ends_at', v_run.ends_at, 'cost', v_cost, 'stamina', v_stam, 'stamina_at', v_at);
@@ -9284,7 +9294,7 @@ begin
   if v_mem.try_sub is not null then return jsonb_build_object('ok', true, 'player', v_uid); end if;
   if v_mem.try_open_at is null or v_mem.try_snap is null then return jsonb_build_object('ok', false, 'error', '挑戦していません'); end if;
   if v_mem.try_open_at < now() - make_interval(mins => c_late_min) then
-    update public.v2cap_dungeon_members set try_open_at = null where run_id = p_run and player_id = v_uid;
+    update public.v2cap_dungeon_members set try_open_at = null, flawed = true where run_id = p_run and player_id = v_uid;
     return jsonb_build_object('ok', false, 'error', '挑戦の終わりが遅すぎます');
   end if;
   -- 形や大きさがおかしい記録は持たない（回し直しで「記録がおかしい」になり、ダメージは入らない）
@@ -9335,7 +9345,9 @@ grant execute on function public.v2cap_dungeon_verify_load(text, bigint, uuid) t
 
 -- 回し直した結果を入れる（削った量・報酬）。p_try＝読んだときの挑戦の回数（同時に2回確かめても、あとの挑戦の記録に入れない）
 -- ★挑戦を始めたあとに時間切れ（90分）になっても、その挑戦のぶんは入れる。ほかの人が同じときに削っていても、いまのHPより多くは入らない
-create or replace function public.v2cap_dungeon_verify_settle(p_secret text, p_run bigint, p_player uuid, p_try int, p_damage int, p_reason text default null)
+-- p_clean＝この挑戦が負けなかったか（倒した・時間切れまで立っていた＝dungeonVerify.js の cleanTryOf）。null は前の版の呼び方（数えない）
+drop function if exists public.v2cap_dungeon_verify_settle(text, bigint, uuid, int, int, text);
+create or replace function public.v2cap_dungeon_verify_settle(p_secret text, p_run bigint, p_player uuid, p_try int, p_damage int, p_reason text default null, p_clean boolean default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_run public.v2cap_dungeon_runs;
@@ -9362,7 +9374,8 @@ begin
      set hp = hp - v_d, cleared_at = case when hp - v_d <= 0 and cleared_at is null then now() else cleared_at end
    where id = p_run returning * into v_run;
   update public.v2cap_dungeon_members
-     set damage = damage + v_mine, try_open_at = null, try_hp = null, try_seed = null, try_snap = null, try_sub = null, try_sub_at = null
+     set damage = damage + v_mine, flawed = flawed or coalesce(not p_clean, false),
+         try_open_at = null, try_hp = null, try_seed = null, try_snap = null, try_sub = null, try_sub_at = null
    where run_id = p_run and player_id = p_player;
   -- 倒れていたら、その場で報酬を渡す（ほかの入っていた人は入口で受け取る）
   v_reward := public.v2cap_dungeon_pay_reward(p_run, p_player);
@@ -9378,8 +9391,8 @@ begin
   return v_res || jsonb_build_object('ok', true, 'run', public.v2cap_dungeon_run_json(p_run, p_player));
 end;
 $$;
-revoke all on function public.v2cap_dungeon_verify_settle(text, bigint, uuid, int, int, text) from public, authenticated;
-grant execute on function public.v2cap_dungeon_verify_settle(text, bigint, uuid, int, int, text) to anon;
+revoke all on function public.v2cap_dungeon_verify_settle(text, bigint, uuid, int, int, text, boolean) from public, authenticated;
+grant execute on function public.v2cap_dungeon_verify_settle(text, bigint, uuid, int, int, text, boolean) to anon;
 
 -- ===== 報酬を受け取る（自分が挑戦していないあいだにボスが倒れたとき・入口から）=====
 create or replace function public.v2cap_dungeon_claim(p_run bigint)
@@ -9426,6 +9439,9 @@ begin
   select * into v_run from public.v2cap_dungeon_runs where id = p_run for update;
   if not found or v_run.owner_id <> v_uid then return jsonb_build_object('ok', false, 'error', '自分が挑戦しているボスだけ出せます'); end if;
   if v_run.cleared_at is not null or v_run.ends_at <= now() then return jsonb_build_object('ok', false, 'error', 'もう終わっています'); end if;
+  if not exists (select 1 from public.v2cap_dungeon_members m where m.run_id = p_run and m.player_id = v_uid and m.tries > 0) then
+    return jsonb_build_object('ok', false, 'error', '1回挑戦すると救援信号を出せます');
+  end if;
   update public.v2cap_dungeon_runs set rescue_open = true where id = p_run;
   return jsonb_build_object('ok', true, 'run', public.v2cap_dungeon_run_json(p_run, v_uid));
 end;

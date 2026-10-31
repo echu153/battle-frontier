@@ -52,6 +52,10 @@ export const validInputs = (inputs) => Array.isArray(inputs) && inputs.length <=
 export const allowedSteps = (elapsedSec) =>
   Math.min(TRY_STEPS, Math.floor((Math.max(0, Number(elapsedSec) || 0) + TIME_SLACK_SEC) / STEP_SEC))
 
+// この挑戦が負けなかったか（ひとりで倒されずに倒したときの報酬の条件）。倒した・時間切れまで立っていた＝負けではない／倒された・途中でやめた・記録がおかしい＝負け
+//   v＝verifyTry の返事
+export const cleanTryOf = (v) => !v.reason && (v.winner === 'a' || (v.winner === 'draw' && v.steps >= TRY_STEPS))
+
 // 回し直す。返すのは { damage（サーバーの計算）, steps, winner, reason（おかしかったわけ・無ければ null）}
 //   inputs・endStep は画面から届いたもの。elapsedSec はサーバーの時計（挑戦を始めてから記録が届くまで）
 export const verifyTry = ({ boss, diff, hp, seed, snap, inputs, endStep, elapsedSec }) => {
