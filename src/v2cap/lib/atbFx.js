@@ -80,6 +80,8 @@ export const popTextOf = (f) => (f.kind === 'miss' ? MISS_TEXT : f.kind === 'hea
 // クリティカルは大きく出て、すぐ元の大きさへ（a＝出てからの割合 0〜1）
 const POP_PUNCH = 0.12
 export const popScaleOf = (f, a) => (f.crit && a >= 0 && a < POP_PUNCH ? 1.5 - 0.5 * (a / POP_PUNCH) : 1)
+// 浮かぶ文字の横の位置（絵の枠の %）。毒・出血などの数字は横へずらす（同じ所だと「Critical!」の上に重なって読めない）
+export const popLeftOf = (f) => (f.kind === 'tick' ? 78 : 50)
 
 // 踏み込みの量（px）。0→前へ→0 の山
 export const lungeOf = (elapsed, px = 22) =>

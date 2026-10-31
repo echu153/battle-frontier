@@ -2,7 +2,7 @@ import { createContext, useContext, useId, useLayoutEffect, useRef, useState } f
 import { TEXT } from './v2ui.js'
 import { buffChips, hpBuffChips, ailChips, stateChips, needNow, castMsOf, CAST_SEC, BUFF_GAUGE_SEC } from '../core/atb.js'
 import { STAT_DEFS } from '../core/stats.js'
-import { lungeOf, shakeOf, lastHitAtOf, popTextOf, popScaleOf, CRIT_TEXT, HIT_SEC, POP_SEC, GLOW_SEC, RAGE_SEC, skillBannerAt } from '../lib/atbFx.js'
+import { lungeOf, shakeOf, lastHitAtOf, popTextOf, popScaleOf, popLeftOf, CRIT_TEXT, HIT_SEC, POP_SEC, GLOW_SEC, RAGE_SEC, skillBannerAt } from '../lib/atbFx.js'
 import { JP_BOLD } from './casinoStyle.js'
 import { rubySegmentsOf } from '../lib/skillRuby.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
@@ -599,7 +599,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
         {pops.map((f, i) => {
           const a = (now - f.t0) / POP_SEC
           return (
-            <span key={`${f.t0}-${i}`} style={{ position:'absolute', zIndex: 5, left:'50%', top:`${30 - a * 26 - (i % 3) * 14}%`,
+            <span key={`${f.t0}-${i}`} style={{ position:'absolute', zIndex: 5, left:`${popLeftOf(f)}%`, top:`${30 - a * 26 - (i % 3) * 14}%`,
               transform:`translateX(-50%) scale(${popScaleOf(f, a).toFixed(3)})`, pointerEvents:'none', whiteSpace:'nowrap', fontWeight:'bold', textAlign:'center', lineHeight: 1.1,
               fontSize: f.crit ? '22px' : f.kind === 'miss' ? '20px' : '17px', color: f.crit ? '#ffcc00' : POP_COLOR[f.kind], opacity: Math.max(0, 1 - a * a),
               textShadow:'1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000' }}>

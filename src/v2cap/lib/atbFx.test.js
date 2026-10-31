@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { fxEventsOf, scheduleFx, lungeOf, shakeOf, LUNGE_SEC, HIT_SEC, skillBannerAt, BANNER_SEC, RAGE_BANNER_SEC, BANNER_IN, BANNER_OUT, popTextOf, popScaleOf, MISS_TEXT, CRIT_TEXT } from './atbFx.js'
+import { fxEventsOf, scheduleFx, lungeOf, shakeOf, LUNGE_SEC, HIT_SEC, skillBannerAt, BANNER_SEC, RAGE_BANNER_SEC, BANNER_IN, BANNER_OUT, popTextOf, popScaleOf, popLeftOf, MISS_TEXT, CRIT_TEXT } from './atbFx.js'
 
 const stage = readFileSync(new URL('../components/V2capAtbStage.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 
@@ -19,10 +19,14 @@ test('【確定】2026-10-31 浮かぶ文字（ユーザー「当たらなかっ
   assert.equal(popScaleOf({ kind: 'hit', crit: true }, 0.2), 1)
   assert.equal(popScaleOf({ kind: 'hit', crit: false }, 0), 1)
   assert.equal(popScaleOf({ kind: 'miss' }, 0), 1)
+  // 毒・出血などの数字は横へずらす（本番の幅375で「Critical!」の上に出血の数字が重なって読めなかった）
+  assert.equal(popLeftOf({ kind: 'hit', crit: true }), 50)
+  assert.equal(popLeftOf({ kind: 'miss' }), 50)
+  assert.ok(popLeftOf({ kind: 'tick' }) > 70)
   // 舞台：クリティカルの行を出す・前の「数字のうしろの !」はやめた・大技の光（zIndex 4）より手前
   assert.match(stage, /\{f\.crit && <span style=\{\{ display:'block', fontSize:'14px' \}\}>\{CRIT_TEXT\}<\/span>\}/)
   assert.doesNotMatch(stage, /f\.crit \? '!' : ''/)
-  assert.match(stage, /key=\{`\$\{f\.t0\}-\$\{i\}`\} style=\{\{ position:'absolute', zIndex: 5,/)
+  assert.match(stage, /key=\{`\$\{f\.t0\}-\$\{i\}`\} style=\{\{ position:'absolute', zIndex: 5, left:`\$\{popLeftOf\(f\)\}%`,/)
 })
 
 test('【確定】2026-10-31 ユーザー「回避されてもモーションは継続するようにして」：外れても当たる絵を出す（舞台）・外れた攻撃は受ける側を揺らさない（hit の印が無い）', () => {
