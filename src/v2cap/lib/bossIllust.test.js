@@ -842,12 +842,10 @@ test('【確定】2026-10-30 逆鱗の強い見せ方とそのあとの待機（
   assert.ok(h.sparks.length > 5 && h.sparks.every(p => p.y < 590 && p.op >= 0 && p.op <= 1), '火の粉は足元から上へ')
   assert.ok(z.dim < 0.05 && Math.abs(z.punch - 1) < 0.01, '見せ終わると戻る')
   assert.equal(buffSceneAt(w, 2000 + BUFF_AURA_OUT_MS), null)
-  // そのあと：脈と火の粉は見せ終わってから出てくる・待機はポーズの絵に切り替わったあと速くなる
+  // そのあと：火の粉は見せ終わってから出てくる・待機はポーズの絵に切り替わったあと速くなる（赤い脈は 2026-11-01 にやめて稲妻へ＝lib/bossCrackle.test.js）
   assert.equal(buffAfterAt([{ b: w, since: 0 }], 0).tempo, 1, '付いた瞬間はまだ速くしない（立ち絵が見えている）')
   const early = buffAfterAt([{ b: w, since: 1000 }], 0)
-  assert.ok(early.tempo > 1.2 && early.glow === 0 && early.sparks.every(p => p.op === 0), 'ポーズの絵のあいだに速くなり、脈と火の粉はまだ')
-  const beats = Array.from({ length: 60 }, (_, i) => buffAfterAt([{ b: w, since: Infinity }], i * 25).glow)
-  assert.ok(Math.max(...beats) > 0.8 && Math.min(...beats) < 0.05, '体が赤く脈打つ（強く光ったり消えたり）')
+  assert.ok(early.tempo > 1.2 && early.sparks.every(p => p.op === 0), 'ポーズの絵のあいだに速くなり、火の粉はまだ')
   const late = buffAfterAt([{ b: w, since: Infinity }, { b: m, since: Infinity }], 5000)
   assert.ok(late.sparks.length === w.after.embers.n && late.sparks.some(p => p.op > 0.1), '火の粉が絶えず立ちのぼる')
 })

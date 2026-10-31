@@ -11,6 +11,7 @@ import { behindRectOf, bgRectOf, bgFxAt, liteFxOf } from '../lib/bossBg.js'
 import { artIsLoaded } from '../lib/artPreload.js'
 import BossFlowCanvas from './BossFlowCanvas.jsx'
 import BossDissolve from './BossDissolve.jsx'
+import BossCrackle from './BossCrackle.jsx'
 import { FX_HEAD_Y, FX_FEET_Y, FX_SKY_Y, FX_TARGET_Y, SCENE_TOP, fallAt, coilAt, pourTimesOf, sceneEndMsOf, stageSceneOf, flyPosOf } from '../lib/bossScene.js'
 import { deathAt, deathPoseOf, deathShowOf } from '../lib/bossDeath.js'
 
@@ -64,6 +65,8 @@ import { deathAt, deathPoseOf, deathShowOf } from '../lib/bossDeath.js'
 //   ・2026-10-31 ユーザー「回避されてもモーションは継続するようにして、当たらなかったらMissとかにして」「クリティカルになったら英語でクリティカルって表示されるようにして」：
 //     外れても当たる絵と演出（lib/bossScene.js）は最後まで流す。受ける側は揺れず光らず縮まず、当たる時刻に「Miss」。クリティカルは数字の上に「Critical!」（文字は lib/atbFx.js）。
 //     大技の光に隠れないように、浮かぶ文字は光（Flash）より手前
+//   ・2026-11-01 ユーザー「黒龍のバフ後のモーション、いまほわほわしてるけど、黒龍はもっとびりびりしてほしい、かっこいい感じに」：逆鱗のあとの赤い脈をやめて、
+//     いま出ている絵のふちを赤い稲妻が走り続ける（BossCrackle・lib/bossCrackle.js）。ときどき強い一発で体が瞬く（after.flick）
 // ============================================================
 
 // 軽い表示（スマホ・遅い端末＝lib/atbPacer.js の段階）。2026-10-31 ユーザー「30回に落としたって出る、大技の時はそれよりも下がる感じ」：
@@ -184,7 +187,8 @@ const rigWrap = (art, pose) => {
 //   HPの節目のバフのオーラ（aura＝{ p, op, scale, front, glow }・2026-10-30）：front は竜の手前（鎧の殻）・glow は光として手前に明るく重ねる（雨摩座の篠突く雨）・
 //   どちらも無ければいちばん奥（逆鱗の闘気）。体の動きでは動かさない
 //   倒れる動き（death・lib/bossDeath.js）：切り離したパーツ（水の帯）は落ちて消える・倒れた絵は BossDissolve で消える
-const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [], tMs = 0, aura = null, death = null }) => {
+//   体を走る稲妻（crackle・lib/bossIllust.js の buffAfterAt）：いちばん濃く出ている絵のふちから出す（姿勢の箱の中＝傾きもいっしょ）
+const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [], tMs = 0, aura = null, death = null, crackle = null }) => {
   const lite = useContext(LiteCtx)
   const box = { x: 0, y: 0, w: art.base, h: art.base }
   const free = art.parts.filter(p => p.free && !p.nest)
@@ -197,6 +201,8 @@ const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [
   const bands = art.flutter && !lite ? flutterBandsAt(art.key, tMs) : []
   const pct = (y) => (y / art.base) * 100
   const auraEl = aura && aura.op > 0.001 ? <AuraArt art={art} a={lite ? { ...aura, glow: false } : aura} /> : null
+  const topPose = crackle && poseReady && show?.poses.length ? show.poses.reduce((p, s) => (s.op >= p.op ? s : p)) : null
+  const crackleArt = topPose && topPose.op >= rigOp ? motion.poses[topPose.name] : null
   return (
     <>
       {auraEl && !aura.front && !aura.glow && auraEl}
@@ -220,6 +226,7 @@ const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [
         {still.length > 0 && <div style={rigStyle}>{still.map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={pose} />)}</div>}
         {poseReady && show?.poses.map(sp => <PoseArt key={sp.name} art={art} p={motion.poses[sp.name]} op={sp.op} />)}
         {death && <BossDissolve base={art.base} p={art.death.arts.fall} b={art.death.burn} op={death.burn.op} k={death.burn.k} ash={death.burn.ash} lite={lite} />}
+        {crackle && <BossCrackle base={art.base} artKey={crackleArt ? crackleArt.src : `rig:${art.key}`} items={crackleArt ? [crackleArt] : art.parts.filter(p => !p.free)} crackle={crackle} lite={lite} />}
         {art.dust && pose.dust > 0 && <RigDust art={art} k={pose.dust} />}
       </div>
       {auraEl && (aura.front || aura.glow) && auraEl}
@@ -523,8 +530,10 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   }
   // 大技をためるあいだ：竜の体が赤く光を増す（終焉の黒焔・lib/bossScene.js の bossGlow）
   if (bossGlow > 0.01) filters.push(`drop-shadow(0 0 ${(4 + 14 * bossGlow).toFixed(1)}px rgba(255,60,16,${(0.25 + 0.6 * bossGlow).toFixed(2)})) brightness(${(1 + 0.22 * bossGlow).toFixed(3)})`)
-  // 逆鱗のあと：体が赤く脈打つ（心臓のように2回ずつ）
+  // 篠突く雨のあと：体が青く脈打つ（心臓のように2回ずつ）
   if (after?.glow > 0.01) filters.push(`drop-shadow(0 0 ${(3 + 9 * after.glow).toFixed(1)}px rgba(${after.glowColor},${(0.2 + 0.55 * after.glow).toFixed(2)}))`)
+  // 逆鱗のあと：稲妻の強い一発で体が瞬く（ふちだけ細く光る）
+  if (after?.flick > 0.01) filters.push(`brightness(${(1 + 0.4 * after.flick).toFixed(3)}) drop-shadow(0 0 2px rgba(${after.crackle.c.color},${(0.95 * after.flick).toFixed(2)}))`)
   // 倒れた瞬間に白く光る（lib/bossDeath.js の bright）
   if (death && death.bright > 1.001) filters.push(`brightness(${death.bright.toFixed(3)})`)
   if (me.ail.paralyze) filters.push('grayscale(0.6)')
@@ -537,6 +546,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
     else if (rageAgo >= 0 && rageAgo < RAGE_SEC && !death) { const k = Math.sin(Math.PI * 2 * rageAgo / RAGE_SEC) ** 2 * (1 - rageAgo / RAGE_SEC); bright *= 1 + 0.35 * k; red = k }
     bright *= 1 + 0.22 * bossGlow
     if (death) bright *= death.bright
+    bright *= 1 + 0.4 * (after?.flick || 0)
     red = Math.max(red, bossGlow, (after?.glow || 0) * 0.8)
   }
   const wrapFilter = lite ? `brightness(${bright.toFixed(3)}) grayscale(${me.ail.paralyze ? 0.6 : 0})` : filters.join(' ') || 'none'
@@ -572,7 +582,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
               {lite && red > 0.01 && <div style={{ position:'absolute', inset:'-14%', borderRadius:'50%', pointerEvents:'none', opacity: Math.min(1, red).toFixed(3),
                 background:`radial-gradient(closest-side, rgba(${redColor},0.6) 45%, rgba(${redColor},0) 100%)` }} />}
               {rig && trails.length > 0 && <RigTrails art={rig} trails={trails} />}
-              {rig ? <IllustRig art={rig} pose={pose} freePose={illustFreePoseAt(rig.key, tMs + (now - clock) * 1000)} motion={showMotion} show={show} ghosts={ghosts} tMs={tMs} aura={aura} death={death} /> : (
+              {rig ? <IllustRig art={rig} pose={pose} freePose={illustFreePoseAt(rig.key, tMs + (now - clock) * 1000)} motion={showMotion} show={show} ghosts={ghosts} tMs={tMs} aura={aura} death={death} crackle={after?.crackle || null} /> : (
                 <img src={src} alt="" draggable={false}
                   style={{ width:'100%', height:'100%', objectFit:'contain', userSelect:'none', visibility: frame >= 0 ? 'hidden' : 'visible' }} />
               )}

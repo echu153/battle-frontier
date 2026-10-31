@@ -5,7 +5,9 @@
 //
 // ★出血と毒は**旧版（無印バトルフロンティア）と同じ仕様**（2026-08-16 ユーザー決定）
 //   ・出血：攻撃が当たるたび1スタック（上限5）。毎ターン **現在HPの1%×スタック数**。
-//           **最後に付与されてから3回ぶん**刻んで消える（付け直すと数え直し）
+//           【確定】2026-11-01 ユーザー「出血の効果は1ターン更新なかったら1減るようにして、ATBバトルの場合は20秒に1減るようにして」：
+//           前の「最後に付与されてから3回ぶん刻んで消える」はやめた。**1ターン付け直しがなければ1スタック減る**（0で消える・付け直すと数え直し）。
+//           ATB は秒で数える＝**20秒付け直しがなければ1スタック減る**（BLEED_DECAY_SEC・core/atb.js の bleedDecayStep）
 //           出どころ＝旧版 src/lib/pvp.js の applyTurnStart と evoCombat.js
 //   ・毒  ：毎ターン **最大HPの3%**・4ターン。**すでに毒なら重ねて入らない**
 //   ★どちらも**割合ダメージなのでVITで軽減されない**（硬い相手にも通る）
@@ -28,7 +30,7 @@ export const AIL_KEYS = ['bleed', 'poison', 'slow', 'paralyze', 'healCut', 'sile
 // 出血（旧版準拠）
 export const BLEED_MAX_STACKS = 5
 export const BLEED_HP_RATE    = 0.01  // 現在HPに対する割合 × スタック数
-export const BLEED_TURNS      = 3     // 最後に付与されてからの持続
+export const BLEED_DECAY_SEC  = 20    // ATB：付け直しがないとき1スタック減るまで（秒）
 // 毒（旧版準拠）
 // ★2026-08-23：**1刻みのダメージに上限**を付ける（付けた側の攻撃力から決まる）。
 //   出血・毒は「最大HP／現在HPの割合」なので、HPが桁違いに大きいユニークボスやレイドでは
@@ -207,11 +209,15 @@ export const consumeParalyze = (ail) => {
 //   ターン終わりにまとめて刻んでいたころは、相手が動いた実感と傷が繋がっていなかった。
 //   毒はこれまでどおりターン終わり（ATBでは TICK_SEC ごと）に刻む。
 //   戻り値は { key, damage, stacks } ／ 出血していなければ null
-export const tickBleed = (ail, hp) => {
+//   age＝付け直してから刻んだ回数。前の刻みから付け直しがなければ（1以上）、刻んだあと1スタック減る＝1ターン付け直しがなければ1減る
+//   decay:false＝刻みの回数で減らさない（ATB は秒で減らす）
+export const tickBleed = (ail, hp, { decay = true } = {}) => {
   if (!(ail?.bleed?.stacks > 0)) return null
   const out = { key: 'bleed', damage: bleedTickOf(ail.bleed, hp), stacks: ail.bleed.stacks }
+  if (!decay) return out
+  if (ail.bleed.age >= 1) ail.bleed.stacks -= 1
   ail.bleed.age += 1
-  if (ail.bleed.age >= BLEED_TURNS) delete ail.bleed
+  if (ail.bleed.stacks <= 0) delete ail.bleed
   return out
 }
 

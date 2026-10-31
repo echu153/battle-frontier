@@ -167,5 +167,9 @@ export const dungeonFighter = (bossKey, diffKey, hpNow = null) => {
   }
 }
 
+// 貢献度（%）：与えたダメージがボスの全体のHPの何割か（ユーザー「貢献度もわかるようにしてほしい、ダメージ与えた割合ね」）。
+//   救援の人の報酬の割合と同じ物差し。同じときに殴っていると合計が100%を超えることがあるので、1人ぶんは100%まで
+export const contributionPctOf = (damage, hpMax) => Math.min(100, (Number(damage) / Math.max(1, Number(hpMax))) * 100)
+
 // 残り時間（ミリ秒）。endsAt＝ISO の時刻
 export const msLeftOf = (endsAt, now = Date.now()) => Math.max(0, new Date(endsAt).getTime() - now)

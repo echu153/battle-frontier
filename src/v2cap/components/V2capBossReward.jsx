@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { box, miniBtn, TEXT } from './v2ui.js'
 import { JP_BOLD } from './casinoStyle.js'
 import { bossThumbOf } from '../lib/bossArt.js'
-import { DIFF_COLOR, DUNGEON_BOSSES, HELPER_REWARD_MIN_PCT, diffOf } from '../lib/dungeon.js'
+import { DIFF_COLOR, DUNGEON_BOSSES, HELPER_REWARD_MIN_PCT, contributionPctOf, diffOf } from '../lib/dungeon.js'
 import { CORRECTED_TEXT } from '../lib/dungeonVerifyCall.js'
 import { gainedExpOf, levelUpLines } from '../lib/settleLines.js'
 
@@ -14,6 +14,9 @@ import { gainedExpOf, levelUpLines } from '../lib/settleLines.js'
 //   【確定】同じ日 ユーザー選択「EXPとGoldを渡す」：報酬の欄に EXP と Gold（渡すのはサーバー・EXP は実際に入った量＝gainedExpOf）とLVアップの行。救援の人は割合も出す
 //   st … 戦闘の状態（core/atb.js・入口で受け取ったときは無い）・result … 削った量を送った返事か受け取りの返事（V2capDungeon.jsx。まだなら null）
 //   cls … いまの職業（LVアップの行）・onBack … 入口へ
+//   【確定】2026-11-01 ユーザー「プレイヤーが敗北したときのテロップも欲しい、画面遷移も」「貢献度もわかるようにしてほしい、ダメージ与えた割合ね」：
+//     倒せなかったときも同じ画面（見出しが「敗北」「時間切れ」・報酬の欄の代わりにボスの残りHP・残り時間）。貢献度はいつも出す（1人でも）
+//     onRetry … もう一度挑戦する（倒せなかったときだけ・null なら出さない）・retryCost … そのスタミナ・leftText … 討伐の残り時間・busy … 押している最中
 //   ★画面を切り替えたら上へ戻す（ポップアップのあとと同じ決まり）
 // ============================================================
 
@@ -29,16 +32,22 @@ const Row = ({ label, value }) => (
   </div>
 )
 
-export default function V2capBossReward({ bossKey, diffKey, cls, st = null, result: r, onBack }) {
+export default function V2capBossReward({ bossKey, diffKey, cls, st = null, result: r, busy = false, leftText = null, onRetry = null, retryCost = 0, onBack }) {
   useEffect(() => { window.scrollTo(0, 0) }, [])
   const boss = DUNGEON_BOSSES[bossKey], d = diffOf(bossKey, diffKey), thumb = bossThumbOf(bossKey)
   const members = r?.ok ? r.run.members : []
   const hpMax = r?.ok ? r.run.hp_max : 1
   const reward = r?.reward
+  // 倒せたか（届くまでは手元の戦闘で）。見出しと色
+  const cleared = r?.ok ? r.run.cleared : (!st || st.b.hp <= 0)
+  const head = cleared ? { text:'討伐報酬', color: GOLD, glow:'rgba(255,179,0,0.55)', border:'#8a6a2a' }
+    : st?.winner === 'b' ? { text:'敗北', color:'#ff9a9a', glow:'rgba(255,34,68,0.6)', border:'#8a3a3a' }
+    : st?.over && st.winner !== 'a' ? { text:'時間切れ', color:'#ffc46a', glow:'rgba(255,154,48,0.55)', border:'#8a6a2a' }
+    : { text:'挑戦結果', color: TEXT.bright, glow:'rgba(120,160,255,0.45)', border:'#0044aa' }
   return (
-    <div style={{ ...box, padding:'14px', borderColor:'#8a6a2a' }}>
+    <div style={{ ...box, padding:'14px', borderColor: head.border }}>
       <style>{KF}</style>
-      <div style={{ ...up(0), textAlign:'center', fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'20px', letterSpacing:'0.24em', paddingLeft:'0.24em', color: GOLD, textShadow:'0 0 10px rgba(255,179,0,0.55), 0 2px 0 #000', marginBottom:'10px' }}>討伐報酬</div>
+      <div style={{ ...up(0), textAlign:'center', fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'20px', letterSpacing:'0.24em', paddingLeft:'0.24em', color: head.color, textShadow:`0 0 10px ${head.glow}, 0 2px 0 #000`, marginBottom:'10px' }}>{head.text}</div>
       <div style={{ ...up(1), display:'flex', alignItems:'center', gap:'12px', marginBottom:'8px' }}>
         {thumb && <img src={thumb} alt="" draggable={false} style={{ width:'88px', height:'88px', objectFit:'contain', flexShrink:0 }} />}
         <div style={{ minWidth:0 }}>
@@ -58,24 +67,37 @@ export default function V2capBossReward({ bossKey, diffKey, cls, st = null, resu
               {r.corrected && <div style={{ color: TEXT.sub, fontSize:'10px', padding:'2px 0 4px' }}>{CORRECTED_TEXT}</div>}
             </div>
           )}
-          {/* みんなが入れたダメージ（救援があるときだけ） */}
-          {members.length > 1 && (
+          {/* 倒せなかったとき：ボスの残りHP */}
+          {!cleared && (
             <div style={{ ...up(3), borderTop:'1px solid #001428', padding:'6px 0' }}>
-              <div style={{ color: TEXT.label, fontSize:'11px', marginBottom:'4px' }}>みんなのダメージ</div>
+              <div style={{ display:'flex', justifyContent:'space-between', gap:'8px', fontSize:'11px', color: TEXT.label, marginBottom:'3px' }}>
+                <span>ボスの残りHP</span>
+                <span style={{ color: TEXT.bright, fontWeight:'bold' }}>{r.run.hp.toLocaleString()} / {hpMax.toLocaleString()}（{((r.run.hp / hpMax) * 100).toFixed(1)}%）</span>
+              </div>
+              <div style={{ height:'8px', background:'#000818', border:'1px solid #13405f' }}>
+                <div style={{ width:`${Math.min(100, (r.run.hp / hpMax) * 100)}%`, height:'100%', background:'#cc3344' }} />
+              </div>
+              {leftText && <div style={{ color: TEXT.sub, fontSize:'10px', marginTop:'4px', textAlign:'right' }}>討伐の残り時間 {leftText}</div>}
+            </div>
+          )}
+          {/* 貢献度：与えたダメージがボスの全体のHPの何割か（1人でも出す） */}
+          {members.length > 0 && (
+            <div style={{ ...up(3), borderTop:'1px solid #001428', padding:'6px 0' }}>
+              <div style={{ color: TEXT.label, fontSize:'11px', marginBottom:'4px' }}>貢献度（与えたダメージの割合）</div>
               {members.map(m => (
                 <div key={m.name} style={{ marginBottom:'4px' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', gap:'8px', fontSize:'11px', color: m.me ? TEXT.bright : TEXT.sub }}>
                     <span>{m.owner ? '👑' : '🤝'}{m.name}</span>
-                    <span>{Number(m.damage).toLocaleString()}（{((m.damage / hpMax) * 100).toFixed(1)}%）</span>
+                    <span><b>{contributionPctOf(m.damage, hpMax).toFixed(1)}%</b>（{Number(m.damage).toLocaleString()}）</span>
                   </div>
                   <div style={{ height:'4px', background:'#000818' }}>
-                    <div style={{ width:`${Math.min(100, (m.damage / hpMax) * 100)}%`, height:'100%', background: m.me ? GOLD : '#44688a' }} />
+                    <div style={{ width:`${contributionPctOf(m.damage, hpMax)}%`, height:'100%', background: m.me ? GOLD : '#44688a' }} />
                   </div>
                 </div>
               ))}
             </div>
           )}
-          <div style={{ ...up(4), border:`1px solid #8a6a2a`, background:'#000818', padding:'10px', marginTop:'8px' }}>
+          {cleared && <div style={{ ...up(4), border:`1px solid #8a6a2a`, background:'#000818', padding:'10px', marginTop:'8px' }}>
             <div style={{ color: GOLD, fontSize:'12px', fontWeight:'bold', marginBottom:'6px' }}>報酬</div>
             {/* undefined＝サーバーがまだ前の版（SQL を流す前）・null＝渡せるものが無い（ダメージ0など） */}
             {reward === undefined && <div style={{ color: TEXT.sub, fontSize:'11px' }}>報酬は準備中です</div>}
@@ -88,10 +110,11 @@ export default function V2capBossReward({ bossKey, diffKey, cls, st = null, resu
                 {levelUpLines(cls, reward.level).map((l, i) => <div key={i} style={{ color: l.color, fontSize:'12px', marginTop:'4px' }}>{l.text}</div>)}
               </>
             )}
-          </div>
+          </div>}
         </>
       )}
 
+      {onRetry && <button onClick={onRetry} disabled={busy} style={{ ...up(5), ...miniBtn('#ff8866'), width:'100%', padding:'10px', fontSize:'13px', marginTop:'12px' }}>⚔ もう一度挑戦する（スタミナ{retryCost}）</button>}
       <button onClick={onBack} disabled={!r} style={{ ...up(5), ...miniBtn('#44ddff'), width:'100%', padding:'10px', fontSize:'13px', marginTop:'12px' }}>← 入口へ戻る</button>
     </div>
   )

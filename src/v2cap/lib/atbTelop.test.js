@@ -2,11 +2,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { START_TELOP_MS, CLEAR_TELOP_MS, NO_DEATH_DELAY_MS, startTelopOn, clearTelopDelayOf } from './atbTelop.js'
+import { START_TELOP_MS, CLEAR_TELOP_MS, FAIL_TELOP_MS, LOSE_DELAY_MS, TIMEUP_DELAY_MS, NO_DEATH_DELAY_MS, startTelopOn, clearTelopDelayOf, endTelopOf } from './atbTelop.js'
 import { lastHitAtOf } from './atbFx.js'
 import { bossIllustOf } from './bossIllust.js'
 import { deathLandMs } from './bossDeath.js'
-import { DUNGEON_BOSSES } from './dungeon.js'
+import { DUNGEON_BOSSES, contributionPctOf } from './dungeon.js'
 
 const read = (f) => readFileSync(new URL(`../components/${f}`, import.meta.url), 'utf8')
 
@@ -45,16 +45,40 @@ test('止めの一撃の時刻：その側の最後のダメージの数字（�
   assert.equal(lastHitAtOf([], 'b', 7), 7)
 })
 
-test('報酬画面：倒したらテロップのあと・ほかの人が先に倒していたら決着のすぐあと・負けと時間切れは入口へ戻るまま', () => {
+test('決着のテロップ（ユーザー「プレイヤーが敗北したときのテロップも欲しい」）：ボスが倒れたら討伐完了・自分が倒れたら敗北・どちらも立っていれば時間切れ', () => {
+  const art = bossIllustOf('varuzenoku')
+  const fx = [{ side:'b', kind:'hit', t0: 10.2 }, { side:'a', kind:'hit', t0: 10.4 }]
+  const clear = endTelopOf({ b: { hp: 0 }, winner:'a' }, fx, 10000, art)
+  assert.deepEqual(clear, { kind:'clear', ms: CLEAR_TELOP_MS, at: 10200 + clearTelopDelayOf(art) })
+  assert.equal(endTelopOf({ b: { hp: 0 }, winner:'draw' }, fx, 10000, art).kind, 'clear', '相打ちもボスが倒れていれば討伐完了')
+  assert.deepEqual(endTelopOf({ b: { hp: 50 }, winner:'b' }, fx, 10000, art), { kind:'lose', ms: FAIL_TELOP_MS, at: 10400 + LOSE_DELAY_MS })
+  assert.deepEqual(endTelopOf({ b: { hp: 50 }, winner:'draw' }, [], 10000, art), { kind:'timeup', ms: FAIL_TELOP_MS, at: 10000 + TIMEUP_DELAY_MS })
+  const look = read('V2capAtbTelop.jsx')
+  for (const w of ['戦闘開始', '討伐完了', '敗北', '時間切れ']) assert.ok(look.includes(`word: '${w}'`), w)
+})
+
+test('貢献度：与えたダメージがボスの全体のHPの何割か・1人ぶんは100%まで（ユーザー「貢献度もわかるようにしてほしい、ダメージ与えた割合ね」）', () => {
+  assert.equal(contributionPctOf(3250, 6500), 50)
+  assert.equal(contributionPctOf(0, 6500), 0)
+  assert.equal(contributionPctOf(9000, 6500), 100)
+  assert.match(read('V2capBossReward.jsx'), /members\.length > 0 &&/, '1人でも出す')
+  assert.match(read('V2capDungeon.jsx'), /貢献度\{contributionPctOf\(m\.damage, run\.hp_max\)\.toFixed\(1\)\}%/, '入っているボスの行にも出す')
+})
+
+test('結果の画面：討伐も負けも時間切れもテロップのあと・やめた所でもう倒されていたらすぐ・もう一度挑戦できるのは倒せなかったときだけ', () => {
   const src = read('V2capDungeon.jsx')
-  assert.match(src, /onOver=\{onOver\} onCleared=\{onCleared\}/)
-  assert.match(src, /const clearedByOther = !won && r\?\.ok && r\.run\.cleared/)
-  assert.match(src, /if \(fight\.ended \|\| clearedByOther\) \{\s+return <V2capBossReward /)
-  // 勝ったあとは「入口へ戻る」を報酬画面まで出さない（倒れる動きとテロップを待つ）
-  assert.match(src, /footer=\{won \? null : fight\.st\.over/)
+  assert.match(src, /onOver=\{onOver\} onEnded=\{onEnded\}/)
+  assert.match(src, /if \(fight\.ended \|\| \(!fight\.st\.over && r\?\.ok && r\.run\.cleared\)\) \{/)
+  assert.match(src, /const canRetry = r\?\.ok && !r\.run\.cleared && msLeftOf\(r\.run\.ends_at, nowMs\) > 0/)
+  // 決着のあとは下のボタンを出さない（テロップのあとの画面で選ぶ）
+  assert.match(src, /footer=\{fight\.st\.over \? null/)
   // 報酬画面の「入口へ戻る」は結果が届くまで押せない・画面を切り替えたら上へ
   const reward = read('V2capBossReward.jsx')
   assert.match(reward, /<button onClick=\{onBack\} disabled=\{!r\}/)
+  assert.match(reward, /text:'敗北'/)
+  assert.match(reward, /text:'時間切れ'/)
+  assert.match(reward, /ボスの残りHP/)
+  assert.match(reward, /もう一度挑戦する（スタミナ\{retryCost\}）/)
   assert.match(reward, /useEffect\(\(\) => \{ window\.scrollTo\(0, 0\) \}, \[\]\)/)
 })
 

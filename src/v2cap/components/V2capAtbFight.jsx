@@ -11,8 +11,8 @@ import {
   GUARD_CUT, GUARD_CD, QUEUE_MAX, TURN_SEC,
 } from '../core/atb.js'
 import { MACRO_MARK, macroEntriesOf } from '../lib/atbMacro.js'
-import { fxEventsOf, scheduleFx, lastHitAtOf, POP_SEC } from '../lib/atbFx.js'
-import { START_TELOP_MS, CLEAR_TELOP_MS, startTelopOn, clearTelopDelayOf } from '../lib/atbTelop.js'
+import { fxEventsOf, scheduleFx, POP_SEC } from '../lib/atbFx.js'
+import { START_TELOP_MS, CLEAR_TELOP_MS, FAIL_TELOP_MS, startTelopOn, endTelopOf } from '../lib/atbTelop.js'
 import { enemyArtSrc } from '../lib/enemyArt.js'
 import { newBossMotionMemo, bossMotionKeyOf } from '../lib/bossArt.js'
 import { artLoadedCount, preloadArt } from '../lib/artPreload.js'
@@ -25,7 +25,7 @@ import { DRAW_MS, atbLevelOf, newAtbPacer } from '../lib/atbPacer.js'
 //   st … core/atb.js の createAtb の状態（親が作る）・runKey … 新しい戦闘を始めたら変える（ログ・動きを空にする）
 //   macros … マクロ①〜③（atbMacro.js の形）・bossArt … ボスの絵（bossArt.js／bossIllust.js・無ければ図鑑の絵）
 //   dev … 一時停止・「動きを見る」のボタン（試し撃ちだけ）・onOver … 決着がついたら1回呼ぶ（st を渡す）・footer … 下のボタン
-//   onCleared … 討伐完了のテロップが終わったら1回呼ぶ（勝ったときだけ・舞台を押すと飛ばせる）
+//   onEnded … 決着のテロップ（討伐完了・敗北・時間切れ）が終わったら1回呼ぶ（舞台を押すと飛ばせる）
 //   【確定】2026-10-31 ユーザー「戦闘開始と討伐後のテロップ的なのが欲しい」：戦闘開始のあいだは時計を止める・討伐完了はボスが倒れたあと（lib/atbTelop.js）
 //   ボスの技の名前が技の絵の名前と同じなら、その絵を流す（ダンジョンのボス・bossMotionKeyOf）。違えば仮の流し方
 //   削った量は、この挑戦を始めたときのHP（st.b.startHp＝持ち越し）から数える
@@ -65,7 +65,7 @@ const LiveStage = ({ tickRef, st, fxRef, ...rest }) => {
   return <V2capAtbStage st={st} fx={fxRef.current} now={performance.now() / 1000} {...rest} />
 }
 
-export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, playerMotion, bossArt = null, verPicker = null, dev = false, onOver, onCleared, footer }) {
+export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, playerMotion, bossArt = null, verPicker = null, dev = false, onOver, onEnded, footer }) {
   const [paused, setPaused] = useState(false)
   const [, setFrame] = useState(0)
   const [logs, setLogs] = useState([])
@@ -82,12 +82,12 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
   const overSent = useRef(false)
   const onOverRef = useRef(onOver)
   onOverRef.current = onOver
-  const onClearedRef = useRef(onCleared)
-  onClearedRef.current = onCleared
-  // テロップ（lib/atbTelop.js）：introT0＝戦闘開始を出し始めた時刻・clearAt＝討伐完了を出す時刻（どちらもミリ秒）・telopPeek＝［開発］の見本
+  const onEndedRef = useRef(onEnded)
+  onEndedRef.current = onEnded
+  // テロップ（lib/atbTelop.js）：introT0＝戦闘開始を出し始めた時刻（ミリ秒）・endTelop＝決着のテロップ（endTelopOf）・telopPeek＝［開発］の見本
   const introT0 = useRef(null)
-  const clearAt = useRef(null)
-  const clearedSent = useRef(false)
+  const endTelop = useRef(null)
+  const endedSent = useRef(false)
   const telopPeek = useRef(null)
 
   // ボス戦は絵がそろうまで始めない（lib/artPreload.js・初めて開いたとき、絵が届く前に戦闘が始まっていた）
@@ -110,8 +110,8 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
     bossMemo.current = newBossMotionMemo()
     overSent.current = false
     introT0.current = null
-    clearAt.current = null
-    clearedSent.current = false
+    endTelop.current = null
+    endedSent.current = false
     telopPeek.current = null
     setLogs([{ text:`${s.b.name}が現れた！`, color:'#88ccff' }])
     setPaused(false)
@@ -155,9 +155,9 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
       if (s?.over && !overSent.current) {
         overSent.current = true
         onOverRef.current?.(s)
-        if (s.winner === 'a') clearAt.current = lastHitAtOf(fxRef.current, 'b', now / 1000) * 1000 + clearTelopDelayOf(bossArt)
+        endTelop.current = endTelopOf(s, fxRef.current, now, bossArt)
       }
-      if (clearAt.current !== null && !clearedSent.current && now >= clearAt.current + CLEAR_TELOP_MS) { clearedSent.current = true; onClearedRef.current?.(s) }
+      if (endTelop.current && !endedSent.current && now >= endTelop.current.at + endTelop.current.ms) { endedSent.current = true; onEndedRef.current?.(s) }
       last.current = now
       stageTick.current?.()
       if (s?.over || now - lastPanel.current >= PANEL_MS) { lastPanel.current = now; setFrame(f => f + 1) }
@@ -209,15 +209,16 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
   const entryText = (e) => (e.guard ? '🛡 防御' : e.idx === null ? '通常攻撃' : me.slots[e.idx]?.skill?.name)
   const entryCd = (e) => (e.guard ? guardCdRatio(me, now) : e.idx !== null && e.idx !== undefined ? cdRatio(me, e.idx, now) : 0)
 
-  // いま出すテロップ（戦闘開始＝時計を止めているあいだ／討伐完了＝ボスが倒れたあと／［開発］の見本）。CSS の動きなので、出ているあいだ出し続けるだけ
+  // いま出すテロップ（戦闘開始＝時計を止めているあいだ／決着＝討伐完了・敗北・時間切れ／［開発］の見本）。CSS の動きなので、出ているあいだ出し続けるだけ
   const wallMs = performance.now()
+  const et = endTelop.current
   const peek = telopPeek.current && wallMs - telopPeek.current.t0 < telopPeek.current.ms ? telopPeek.current : null
   const telop = introT0.current !== null && startTelopOn(introT0.current, wallMs) ? { id:`start-${runKey}`, kind:'start', ms: START_TELOP_MS }
-    : clearAt.current !== null && wallMs >= clearAt.current && wallMs < clearAt.current + CLEAR_TELOP_MS ? { id:`clear-${runKey}`, kind:'clear', ms: CLEAR_TELOP_MS }
+    : et && wallMs >= et.at && wallMs < et.at + et.ms ? { id:`${et.kind}-${runKey}`, kind: et.kind, ms: et.ms }
     : peek ? { id:`peek-${peek.t0}`, kind: peek.kind, ms: peek.ms } : null
-  // 勝ったあと、討伐完了が終わるまでは舞台を押すと飛ばせる（倒れる動きのあいだも）
-  const ending = clearAt.current !== null && !clearedSent.current
-  const skipEnding = () => { clearAt.current = performance.now() - CLEAR_TELOP_MS }
+  // 決着のあと、テロップが終わるまでは舞台を押すと飛ばせる（倒れる動きのあいだも）
+  const ending = !!et && !endedSent.current
+  const skipEnding = () => { et.at = performance.now() - et.ms }
 
   if (!artReady) return (
     <div style={{ padding:'64px 12px', textAlign:'center', background:'#000a26', border:'1px solid #0a2a55', color: TEXT.label, fontSize:'12px' }}>
@@ -269,6 +270,11 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
               onClick={() => { fxRef.current = [...fxRef.current, { kind:'rage', side:'b', skill: b.name, t0: performance.now() / 1000 }] }}
               style={{ ...miniBtn('#ffb060'), padding:'4px 8px', fontSize:'11px' }}>🔥 {b.name}</button>
           ))}
+          {/* HPの節目のバフのあとを見る（2026-11-01 黒龍の稲妻）：HPを最後の節目まで減らす＝本当にバフが付く（試し撃ちだけ） */}
+          {(s.b.pattern?.buffs || []).length > 0 && (
+            <button disabled={paused} onClick={() => { s.b.hp = Math.min(s.b.hp, Math.floor(s.b.base.hp * s.b.pattern.buffs.at(-1).at)) }}
+              style={{ ...miniBtn('#ff9a5a'), padding:'4px 8px', fontSize:'11px' }}>⚡ HP{Math.round(s.b.pattern.buffs.at(-1).at * 100)}%へ</button>
+          )}
           {/* ボスの倒れる動き（lib/bossDeath.js）：流すだけ（戦闘には関係しない・流し終わるとボスは戻る） */}
           {bossArt.death && (
             <button disabled={paused}
@@ -280,6 +286,8 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
             style={{ ...miniBtn('#9fd0ff'), padding:'4px 8px', fontSize:'11px' }}>🎬 戦闘開始</button>
           <button disabled={paused} onClick={() => { telopPeek.current = { kind:'clear', ms: CLEAR_TELOP_MS, t0: performance.now() } }}
             style={{ ...miniBtn('#ffd27a'), padding:'4px 8px', fontSize:'11px' }}>🎬 討伐完了</button>
+          <button disabled={paused} onClick={() => { telopPeek.current = { kind:'lose', ms: FAIL_TELOP_MS, t0: performance.now() } }}
+            style={{ ...miniBtn('#ff9a9a'), padding:'4px 8px', fontSize:'11px' }}>🎬 敗北</button>
         </div>
       )}
 

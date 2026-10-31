@@ -44,6 +44,7 @@
 import { BOSS_ILLUST } from './bossIllustList.js'
 import { BOSS_DEFS, BOSS_ART_DIR, bossFileOf, bossArtOf } from './bossArt.js'
 import { bossBgOf } from './bossBg.js'
+import { surgeFlickAt } from './bossCrackle.js'
 
 export const BOSS_ILLUST_SRC = 'イラスト版'   // 元の絵のフォルダの中
 export const BOSS_ILLUST_SIZE = 640          // 立ち絵の大きさ（画面で使う版・正方形のpx）。パーツの位置はこの大きさで持つ
@@ -186,7 +187,11 @@ export const BOSS_ILLUST_DEFS = {
         show: { holdMs: 2000, dim: 0.55, dimColor: '26,0,0', shake: 7, punch: 0.07, flicker: 0.035,
           rings: { at: [278, 122], n: 3, everyMs: 280, durMs: 750, maxR: 430, color: '255,96,40' },
           burst: { n: 30, x: [120, 530], y: 590, rise: 420, size: 1.4, color: '255,140,60' } },
-        after: { glow: { periodMs: 1500, color: '255,50,16' }, embers: { n: 16, x: [130, 520], y: 590, rise: 360, size: 1.3, color: '255,120,40' }, tempo: 1.35 } },
+        //   【確定】2026-11-01 ユーザー「黒龍のバフ後のモーション、いまほわほわしてるけど、黒龍はもっとびりびりしてほしい、かっこいい感じに」：
+        //     赤い脈（glow）をやめて、体のふちを赤い稲妻が走り続ける（crackle・lib/bossCrackle.js・付いた瞬間の吠えの途中 fromMs から）。火の粉は少し減らした
+        after: { crackle: { fromMs: 700, n: 18, everyMs: [200, 500], lifeMs: [80, 170], stepMs: 40, reach: [110, 320], out: [70, 170], outRate: 0.3, jitter: 26, forkRate: 0.6,
+            surge: { everyMs: 2400, lenMs: 420, n: 8, lifeMs: 140, far: 1.5 }, color: '255,44,28', core: '255,236,224' },
+          embers: { n: 10, x: [130, 520], y: 590, rise: 360, size: 1.3, color: '255,120,40' }, tempo: 1.35 } },
     },
     poses: {
       claw: { windup: '黒爪_ため', strike: '黒爪_振り抜き' },
@@ -811,16 +816,20 @@ export const buffSceneAt = (b, ms) => {
 // 【確定】2026-10-30 付いているあいだの見た目（def.buffs の after・ユーザー「逆鱗後はモーションも変更していい」）：
 //   list＝付いているバフ [{ b（bossIllustOf の buffs の1つ）, since（付いてからのミリ秒・印が片付いたあとは Infinity） }]・tMs＝いまのミリ秒 →
 //   { glow（体が赤く脈打つ強さ 0〜1）, glowColor, sparks（足元から絶えず立ちのぼる火の粉）, sparkColor, sparkCore, tempo（待機の速さ）, dim, dimColor（舞台の暗さ）,
-//   rain（降り続ける雨・buffRainAt に渡す決まり＋ k（濃さ）・t（時計）か null） } か null（after のあるバフが無い）
-//   脈と火の粉は見せ終わるころから 0.6秒で出てくる。待機の速さはポーズの絵を出して部品の立ち絵が隠れたあと（BUFF_IN_MS）に切り替える
+//   rain（降り続ける雨・buffRainAt に渡す決まり＋ k（濃さ）・t（時計）か null）, crackle（体を走る稲妻・lib/bossCrackle.js の決まり c＋ k（濃さ）・t（時計）か null）, flick（強い一発の体の瞬き 0〜1） } か null（after のあるバフが無い）
+//   脈と火の粉は見せ終わるころから 0.6秒で出てくる（稲妻は fromMs から 0.3秒で）。待機の速さはポーズの絵を出して部品の立ち絵が隠れたあと（BUFF_IN_MS）に切り替える
 //   （速さを変えた瞬間に待機の動きが飛ぶのを隠す）
 export const buffAfterAt = (list, tMs) => {
   const on = list.filter(x => x.b?.after)
   if (!on.length) return null
-  const out = { glow: 0, glowColor: null, sparks: [], sparkColor: null, sparkCore: null, tempo: 1, dim: 0, dimColor: null, rain: null }
+  const out = { glow: 0, glowColor: null, sparks: [], sparkColor: null, sparkCore: null, tempo: 1, dim: 0, dimColor: null, rain: null, crackle: null, flick: 0 }
   for (const { b, since } of on) {
     const a = b.after, k = smooth(Math.min(1, Math.max(0, since - buffHoldOf(b)) / 600))
     if (since >= BUFF_IN_MS && a.tempo) out.tempo = Math.max(out.tempo, a.tempo)
+    if (a.crackle) {
+      const ck = smooth(Math.min(1, Math.max(0, since - a.crackle.fromMs) / 300))
+      if (ck > 0) { out.crackle = { c: a.crackle, k: ck, t: tMs }; out.flick = Math.max(out.flick, ck * surgeFlickAt(a.crackle, tMs)) }
+    }
     if (a.glow && k > 0) {
       // 心臓のように2回ずつ（強く・弱く）
       const u = (tMs % a.glow.periodMs) / a.glow.periodMs

@@ -35,7 +35,7 @@ import {
   battleStart, startOfTurn, endOfTurn,
 } from './battle.js'
 import { STAT_KEYS, STAT_DEFS } from './stats.js'
-import { AIL_KEYS, AIL_LABEL, hasAilment, procCutOf, isSealed, usesMp } from './ailments.js'
+import { AIL_KEYS, AIL_LABEL, BLEED_DECAY_SEC, hasAilment, procCutOf, isSealed, usesMp } from './ailments.js'
 import { ichijiSkip, agitCutOf, STK_LABEL } from './battleIchiji.js'
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
@@ -271,6 +271,18 @@ const afterEngine = (st, side, before, permanent = false) => {
 }
 
 // 期限切れを落とす
+// 出血が秒で減る（ATB・lib は core/ailments.js の tickBleed の説明）。付け直すと inflict が新しい形を作る＝decayAt が無い＝数え直し
+//   防具のセット能力（受けた状態異常を縮める）は、縮めたターンのぶん早く減る
+const bleedDecaySecOf = (side) => Math.max(TURN_SEC, BLEED_DECAY_SEC - (side.setFx?.ailTurnsCut || 0) * TURN_SEC)
+const bleedDecayStep = (st, side) => {
+  const b = side.ail.bleed
+  if (!b) return
+  if (b.decayAt === undefined) { b.decayAt = st.t + bleedDecaySecOf(side); return }
+  if (st.t + EPS < b.decayAt) return
+  b.stacks -= 1
+  b.decayAt = st.t + bleedDecaySecOf(side)
+  if (b.stacks <= 0) delete side.ail.bleed
+}
 const expire = (st, side) => {
   const now = st.t
   if (side.timed.length) {
@@ -449,9 +461,11 @@ export const chosenOf = (side, now) => {
   return { idx: null, skill: null }
 }
 // いまの行動に要るゲージ
+//   【確定】2026-11-01 ユーザー「こっちが防御したらゲージ無視して防御に移行していい」：防御はゲージを待たない（0）。
+//   次の刻みで防御に入り、ゲージは空になる（act）＝1回の行動のぶん。溜めきる前に押すと、そのぶん次の行動が遅れる
 export const needNow = (side, now) => {
   const ch = chosenOf(side, now)
-  return ch.guard ? GAUGE_FULL : needFor(side, ch.skill)
+  return ch.guard ? 0 : needFor(side, ch.skill)
 }
 
 // ===== 入力（画面のボタン）。押した記録を st.inputs に残す（あとでサーバーで回し直すため）=====
@@ -479,8 +493,10 @@ export const startMacro = (st, no, steps, loop = true) => {
   input(st, { k: 'macro', no, steps: list, loop: !!loop })
 }
 export const stopMacro = (st) => { st.a.macro = null; input(st, { k: 'stop' }) }
+// 防御のボタン。クールダウン中は何も起きない（前は予約になり、使えるようになった瞬間に勝手に出る形になる）
+//   ふだんは次の刻みで出る。麻痺のあいだは待つ（もう一度押すとやめる）
 export const toggleGuard = (st) => {
-  if (st.over) return
+  if (st.over || !guardReady(st.a, st.t)) return
   st.a.guardNext = !st.a.guardNext
   input(st, { k: 'guard', on: st.a.guardNext })
 }
@@ -600,6 +616,8 @@ const stepOnce = (st) => {
   }
   expire(st, a)
   expire(st, b)
+  bleedDecayStep(st, a)
+  bleedDecayStep(st, b)
   checkHpBuffsBoth(st)   // ★どこで節目を切っても、大技の構えより前にバフの行動に入る（ユーザー「もしバフのタイミングと重なったら先にバフ重ねてから大技に移行して」）
   buffStep(st, a)
   buffStep(st, b)
@@ -710,7 +728,7 @@ export const ailChips = (st, side) => AIL_KEYS
     const a = side.ail[k]
     const toTick = st.turn * TURN_SEC - st.t
     const sec = k === 'paralyze' ? side.parUntil - st.t
-      : k === 'bleed' ? 0
+      : k === 'bleed' ? (a.decayAt ?? st.t) - st.t   // 次に1つ減るまで
       : toTick + Math.max(0, (a.turns || 1) - 1) * TURN_SEC
     return { key: k, label: AIL_LABEL[k], sec: Math.max(0, Math.ceil(sec)), stacks: k === 'bleed' ? a.stacks : 0 }
   })
