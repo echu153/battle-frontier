@@ -45,10 +45,10 @@ export default function V2capItemLoadout({ prof, onProfile, onGo, saveRef }) {
             <span style={{ color: chosen[it.key] > have[it.key] ? '#ff8844' : TEXT.label, fontSize:'10px' }}> ×{have[it.key]}</span>
           </span>
           <button type="button" onClick={() => change(it.key, -1)} disabled={chosen[it.key] <= 0} aria-label={`${it.name}を1つへらす`}
-            style={{ ...miniBtn(SHOP_COLOR), padding:'5px 10px', fontSize:'13px', opacity: chosen[it.key] <= 0 ? 0.35 : 1 }}>−</button>
+            style={{ ...miniBtn(SHOP_COLOR), width:'36px', padding:'5px 0', fontSize:'13px', opacity: chosen[it.key] <= 0 ? 0.35 : 1 }}>−</button>
           <span style={{ color: TEXT.body, fontSize:'13px', width:'16px', textAlign:'center' }}>{chosen[it.key]}</span>
           <button type="button" onClick={() => change(it.key, 1)} disabled={total >= CARRY_MAX || chosen[it.key] >= have[it.key]} aria-label={`${it.name}を1つふやす`}
-            style={{ ...miniBtn(SHOP_COLOR), padding:'5px 10px', fontSize:'13px', opacity: total >= CARRY_MAX || chosen[it.key] >= have[it.key] ? 0.35 : 1 }}>＋</button>
+            style={{ ...miniBtn(SHOP_COLOR), width:'36px', padding:'5px 0', fontSize:'13px', opacity: total >= CARRY_MAX || chosen[it.key] >= have[it.key] ? 0.35 : 1 }}>＋</button>
         </div>
       ))}
       {short && <div style={{ color:'#ff8844', fontSize:'10px', marginTop:'2px' }}>足りないぶんは持ち込めません</div>}
