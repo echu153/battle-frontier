@@ -11,7 +11,7 @@ import { ENCOUNTER_OUT_MS } from '../lib/useBossEncounter.js'
 // 【確定】2026-11-01 ユーザー「そもそも遭遇絵を使用してなくない？挑戦したら遭遇のイラストがどん！って出るようにしてほしい」：
 //   画面いっぱいに、ボスの背景を暗く敷いて、遭遇のイラストが手前へ叩きつけられる（大きく→行きすぎて→止まる）。
 //   叩きつけた瞬間に白く光り・画面が揺れ・輪と集中線が走る。そのあとはゆっくり近づく（裏の準備を待つあいだも止まって見えない）。下にボスの名前と難易度。
-//   決まり（いつ消えるか）は lib/useBossEncounter.js。押すと、サーバーの返事を待たずに戦闘の画面へ進む
+//   決まり（いつ消えるか）は lib/useBossEncounter.js。押すまで出たまま（下に「タップで戦闘開始」）。押すと、サーバーの返事を待たずに戦闘の画面へ進む
 //   ★CSS の動きだけ（transform と opacity）＝スマホでも軽い。大きな絵が届く前は一覧の小さい絵を出す（どちらも同じ切り抜き）
 //   ★日本語の大きな文字は JP_BOLD＋bold（切り抜きのグラデーションにしない）
 // ============================================================
@@ -25,6 +25,7 @@ const KF = `
 @keyframes beRing { from { opacity: 0.85; transform: translate(-50%, -50%) scale(0.2) } to { opacity: 0; transform: translate(-50%, -50%) scale(1.5) } }
 @keyframes beLines { from { opacity: 0.8; transform: scale(1.2) } to { opacity: 0; transform: scale(1) } }
 @keyframes beName { from { opacity: 0; transform: translateY(14px) } to { opacity: 1; transform: translateY(0) } }
+@keyframes beHint { 0%, 100% { opacity: 0.4 } 50% { opacity: 1 } }
 `
 const HIT = '0.13s'   // 叩きつける瞬間（beSlam の42%あたり）
 const ACCENT = { varuzenoku: '#ff7a3a', amaza: '#7ad0ff' }
@@ -63,6 +64,7 @@ export default function V2capBossEncounter({ bossKey, diffKey, out = false, onTa
         {d && <div style={{ fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'clamp(12px, 3.4vw, 15px)', letterSpacing:'0.2em', paddingLeft:'0.2em', color: DIFF_COLOR[diffKey], textShadow:'0 1px 2px #000' }}>{d.label}</div>}
         <div style={{ fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'clamp(26px, 8vw, 44px)', lineHeight: 1.3, letterSpacing:'0.08em', paddingLeft:'0.08em', color:'#ffffff', whiteSpace:'nowrap',
           textShadow:`0 0 3px #000, 0 0 16px ${accent}, 0 2px 0 #000` }}>{boss?.name}</div>
+        {onTap && <div style={{ marginTop:'6px', fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'clamp(12px, 3.4vw, 15px)', letterSpacing:'0.14em', paddingLeft:'0.14em', color:'#ffffff', textShadow:'0 1px 2px #000', animation:'beHint 1.6s ease-in-out 0.6s infinite both' }}>タップで戦闘開始</div>}
       </div>
       <div aria-hidden style={{ position:'absolute', inset:0, background:'#ffffff', opacity: 0, pointerEvents:'none', animation:`beFlash 0.32s ease-out ${HIT} forwards` }} />
     </div>

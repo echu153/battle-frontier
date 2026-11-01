@@ -47,7 +47,8 @@ import {
 //   【確定】2026-11-01 ユーザー「プレイヤーが敗北したときのテロップも欲しい、画面遷移も」「貢献度もわかるようにしてほしい、ダメージ与えた割合ね」：
 //     負けと時間切れも テロップ → 結果の画面（同じ部品・ボスの残りHP・貢献度・もう一度挑戦する）。入っているボスの行にも貢献度
 //   【確定】同じ日 ユーザー「挑戦を押してから若干ラグがあってから始まるから、スムーズに遷移させるようにして」「挑戦したら遭遇のイラストがどん！って出るようにしてほしい」：
-//     押した瞬間に遭遇のイラスト（V2capBossEncounter.jsx）。サーバーの返事と絵は裏で待つ（lib/useBossEncounter.js）。始められなかったら入口へ
+//     押した瞬間に遭遇のイラスト（V2capBossEncounter.jsx）。サーバーの返事と絵は裏で待つ（lib/useBossEncounter.js）。絵は押すまで出たまま。始められなかったら入口へ
+//     遭遇のイラストはどの画面でも同じ所に置く（{encounter} を一番上の先頭に）＝裏で入口から戦闘へ変わっても作り直さない（作り直すと、どん！がもう一度出る）
 //     版の確かめ（isStaleBuild）はボスを開いたときに済ませておく＝押してから聞かない（staleNow）
 //     遭遇のイラストを押したのにサーバーの返事がまだなら、手元の値で作った見た目だけの戦闘（earlyFight）を先に出す。時計は動かず、返事が来たら本物に差し替える（ユーザー「遭遇時にタップ押したら画面遷移ができてない」）
 // 【確定】同じ日 ユーザー選択「サーバーの計算で入れる」：戦闘はサーバーが決めた種と写しで作り、終わったら押した記録を預ける（v2cap_dungeon_try_end）。
@@ -172,7 +173,7 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
     window.scrollTo(0, 0)
     return true
   }
-  // 押した瞬間に遭遇のイラストを出す（戦闘に要る絵がそろうまで消えない）
+  // 押した瞬間に遭遇のイラストを出す（戦闘に要る絵も裏で読んでおく）
   const motionSrc = playerMotion?.src
   const showEncounter = (bossKey, diffKey, hp) => enc.begin(bossKey, diffKey, [...(artOfBoss(bossKey)?.srcs || []), bossEncounterOf(bossKey), playerSrc, motionSrc].filter(Boolean), hp)
   // 入っているボスにもう一度挑む
@@ -261,16 +262,16 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
     if (shown.ended || (!shown.st.over && r?.ok && r.run.cleared)) {
       const canRetry = r?.ok && !r.run.cleared && msLeftOf(r.run.ends_at, nowMs) > 0
       return <>
+        {encounter}
         <V2capBossReward bossKey={fight.run.boss} diffKey={fight.run.diff} cls={prof?.class} st={fight.st} result={r} busy={busy}
           leftText={r?.ok && !r.run.cleared ? mmss(msLeftOf(r.run.ends_at, nowMs)) : null}
           onRetry={canRetry ? retry : null} retryCost={canRetry ? tryStaminaOf(r.run.mine, r.run.my_tries) : 0}
           onBack={() => { setFight(null); load(); window.scrollTo(0, 0) }} />
-        {encounter}
       </>
     }
-    return (
+    return <>
+      {encounter}
       <div style={{ ...box, padding:'12px' }}>
-        {encounter}
         <div style={{ color:'#ff8866', fontSize:'12px', marginBottom:'6px' }}>
           {boss.name}（{diffOf(shown.run.boss, shown.run.diff)?.label}）・残りHP {Math.max(0, shown.st.b.hp).toLocaleString()} / {shown.st.b.base.hp.toLocaleString()}
         </div>
@@ -279,7 +280,7 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
           footer={earlyFight || shown.st.over ? null
             : <button onClick={giveUp} style={{ ...miniBtn('#ff8888'), flex:1, padding:'8px' }}>挑戦をやめる（ここまでの削りを入れる）</button>} />
       </div>
-    )
+    </>
   }
 
   // ===== 入口 =====
@@ -292,11 +293,11 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
   const blockOf = (key) => summonBlockOf(key, { summoned: summonedOf(key), ownActive, reached })
   const canSummon = (key) => !!state && !blockOf(key)
 
-  return (
+  return <>
+    {encounter}
     <div>
       {msg && <div style={{ fontSize:'11px', marginBottom:'8px', color: msg.ok ? '#88ffaa' : '#ff8888' }}>{msg.text}</div>}
       {!state && !msg && <div style={{ color: TEXT.label, fontSize:'11px', marginBottom:'8px' }}>読み込み中...</div>}
-      {encounter}
       {stale && <V2capReloadNote />}
 
       {/* 戦闘に持ち込む薬（合計4つまで） */}
@@ -417,5 +418,5 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
         <button onClick={resetTries} disabled={busy} style={{ ...miniBtn(DEV), width:'100%', padding:'8px', marginTop:'10px' }}>🧪 きょうの挑戦回数を戻す［開発］</button>
       )}
     </div>
-  )
+  </>
 }

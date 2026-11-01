@@ -6,7 +6,8 @@ import { START_TELOP_MS, CLEAR_TELOP_MS, FAIL_TELOP_MS, LOSE_DELAY_MS, TIMEUP_DE
 import { lastHitAtOf } from './atbFx.js'
 import { bossIllustOf } from './bossIllust.js'
 import { deathLandMs } from './bossDeath.js'
-import { DUNGEON_BOSSES, contributionPctOf } from './dungeon.js'
+import { DUNGEON_BOSSES, DUNGEON_TRY_SEC, contributionPctOf } from './dungeon.js'
+import { ENCOUNTER_WAIT_MAX_MS } from './useBossEncounter.js'
 import { bossEncounterOf } from './bossArt.js'
 
 const read = (f) => readFileSync(new URL(`../components/${f}`, import.meta.url), 'utf8')
@@ -114,15 +115,16 @@ test('挑戦を押した瞬間に遭遇のイラスト（ユーザー「挑戦�
   assert.match(src, /onClick=\{\(\) => enter\(run\)\}/, '入っているボスの「挑戦する」も同じ')
   assert.match(src, /if \(!data\) \{ enc\.cancel\(\); return \}/, '始められなければ入口へ（わけは入口に出る）')
   assert.match(src, /hold=\{enc\.hold\}/)
-  // 押したら見せる長さも絵も待たない（ユーザー「遭遇イラスト出たときはタップしたら戦闘画面に遷移できるようにして」）
+  // 押したら絵を待たない（ユーザー「遭遇イラスト出たときはタップしたら戦闘画面に遷移できるようにして」）
   const hook = readFileSync(new URL('./useBossEncounter.js', import.meta.url), 'utf8')
-  assert.match(hook, /Promise\.race\(\[tapped, Promise\.all\(\[shown, preloadArt\(srcs\)\]\)\]\)/)
+  assert.match(hook, /Promise\.race\(\[tapped, tooLong\]\)/)
   assert.match(src, /onTap=\{enc\.skip\}/)
   // 版の確かめはボスを開いたときに済ませる（押してから聞かない）
   assert.match(src, /if \(await staleNow\(\)\)/)
   // 出ているあいだは戦闘の時計も戦闘開始のテロップも始めない
   assert.match(read('V2capAtbFight.jsx'), /if \(paused \|\| !artReady \|\| hold\) return/)
-  // 戦闘に要る絵がそろうまで消えない＝「読みこみ中」を見せない
+  // 戦闘に要る絵は押す前に裏で読んでおく（押したらすぐ戦闘の絵が出る）
+  assert.match(hook, /preloadArt\(srcs\)/)
   assert.match(src, /enc\.begin\(bossKey, diffKey, \[\.\.\.\(artOfBoss\(bossKey\)\?\.srcs \|\| \[\]\), bossEncounterOf\(bossKey\), playerSrc, motionSrc\]/)
   for (const key of Object.keys(DUNGEON_BOSSES)) assert.ok(bossEncounterOf(key), `${key} に遭遇の大きな絵がある`)
   assert.ok(!/background-clip|backgroundClip/i.test(read('V2capBossEncounter.jsx')))
@@ -147,6 +149,24 @@ test('【確定】2026-11-01 遭遇のイラストを押したら、サーバー
   assert.match(src, /const st = startTryAtb\(data\)\n\s*if \(!st\) \{[^\n]*\n\s*pending\.current = \{ runId: run\.id, st \}/)
   // 試し撃ちは押す前に finish する＝先に出す戦闘は要らない
   assert.match(read('V2capAtb.jsx'), /enc\.begin\([^\n]*\n\s*enc\.finish\(\)/)
+})
+
+test('【確定】2026-11-01 遭遇のイラストは押すまで出たまま（ユーザー「遭遇した後のタップで遷移するやつ、いつになったら実装するの？」＝前は押さなくても約1.4秒で勝手に進んでいた）', () => {
+  const hook = readFileSync(new URL('./useBossEncounter.js', import.meta.url), 'utf8')
+  // 消えるのは押されたときと、放っておかれたときだけ（短い時間で勝手に消える時計を置かない）
+  assert.ok(!hook.includes('ENCOUNTER_MIN_MS'))
+  assert.equal(hook.match(/setTimeout\(/g).length, 2, '時計は「放っておかれたとき」と「消える長さ」だけ')
+  // 放っておかれてから戦闘の180秒を戦っても、サーバーの受付（v2cap_dungeon_try_end の c_late_min）に間に合う
+  const sql = readFileSync(new URL('../../../supabase_v2cap_core.sql', import.meta.url), 'utf8')
+  const lateMin = Number(/function public\.v2cap_dungeon_try_end[\s\S]*?c_late_min\s+constant int := (\d+);/.exec(sql)[1])
+  assert.ok(ENCOUNTER_WAIT_MAX_MS >= 5 * 60 * 1000, '勝手に進むのは放っておかれたときだけ')
+  assert.ok(ENCOUNTER_WAIT_MAX_MS + (DUNGEON_TRY_SEC + 60) * 1000 <= lateMin * 60 * 1000)
+  // 押せると分かる一言
+  assert.match(read('V2capBossEncounter.jsx'), /タップで戦闘開始/)
+  // 裏で入口から戦闘へ変わっても作り直さない＝どの画面でも一番上の先頭（作り直すと、どん！がもう一度出る）
+  const src = read('V2capDungeon.jsx').replace(/\r\n/g, '\n')
+  assert.equal(src.match(/^\s*\{encounter\}$/gm).length, 3)
+  assert.equal(src.match(/return <>\n\s*\{encounter\}\n/g).length, 3)
 })
 
 test('日本語の大きな文字は JP_BOLD の太字（切り抜きのグラデーションにしない）', () => {
