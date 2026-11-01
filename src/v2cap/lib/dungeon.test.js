@@ -99,7 +99,9 @@ test('【確定】2026-11-01 ハードから通常攻撃に状態異常：黒爪
   assert.equal(dungeonFighter('amaza', 'normal').normalAil, null)
   assert.deepEqual(dungeonFighter('varuzenoku', 'hard').normalAil, { key: 'bleed', chance: 20 })
   assert.deepEqual(dungeonFighter('amaza', 'hard').normalAil, { key: 'slow', chance: 20 })
-  for (const boss of ['varuzenoku', 'amaza']) {
+  assert.equal(dungeonFighter('zerugiasu', 'normal').normalAil, null)
+  assert.deepEqual(dungeonFighter('zerugiasu', 'hard').normalAil, { key: 'blind', chance: 20 })
+  for (const boss of Object.keys(DUNGEON_BOSSES)) {
     const n = normalsOf(boss, 'normal')
     assert.ok(n.hits.length > 100)
     assert.equal(n.ails.length, 0, 'ノーマルは通常攻撃で状態異常にならない')
@@ -585,7 +587,7 @@ test('【確定】2026-10-30 大技の節目（ユーザー「大技に入ると
 })
 
 test('【確定】2026-11-01 ユーザー「大技するとき、ゲージ貯まってから大技に行ってない？該当のHP切った瞬間に大技に移行してほしいんだけど」：どの時刻に切っても、ふつうのゲージは増えず、ほかの技も出ない', () => {
-  for (const key of ['varuzenoku', 'amaza']) {
+  for (const key of Object.keys(DUNGEON_BOSSES)) {
     const boss = DUNGEON_BOSSES[key], [first, last] = boss.pattern.buffs
     const name = boss.name
     // 30%のバフの行動の前・金のゲージ・見せているあいだ・そのあとを 0.1秒きざみで全部切ってみる
@@ -652,7 +654,7 @@ test('【確定】2026-11-01 ユーザー「HP25％以下の大技使用率も�
 })
 
 test('【確定】2026-10-30 溜めは4秒（ユーザー「溜めモーションは4秒でいい」・雨摩座も「同じにする」）：構えはじめから吐くまで4秒＝構え3.5秒＋直前の0.5秒・「動きを見る」も同じ長さ', () => {
-  for (const [key, big] of [['varuzenoku', 'doom'], ['amaza', 'deluge']]) {
+  for (const [key, big] of [['varuzenoku', 'doom'], ['amaza', 'deluge'], ['zerugiasu', 'ruin']]) {
     const d = bossIllustOf(key).motions[big]
     const sk = DUNGEON_BOSSES[key].skills.find(s => s.name === d.label)
     assert.equal(sk.castSec * 1000, d.castSkipMs, `${key}：構えの長さ＝技の途中から流す時刻（つなぎ目が合う）`)
@@ -684,7 +686,7 @@ test('【確定】2026-10-30 溜めは4秒（ユーザー「溜めモーショ�
 })
 
 test('【確定】2026-10-30 待つ長さは絵に合っている：どの技の動きも BUFF_WAIT_AFTER_ACT_SEC までに終わる・どのバフの見せ方も BUFF_SHOW_SEC までに終わる（動きを伸ばしたらここで止まる）', () => {
-  for (const k of ['varuzenoku', 'amaza']) {
+  for (const k of Object.keys(DUNGEON_BOSSES)) {
     const a = bossIllustOf(k)
     for (const m of Object.values(a.motions)) {
       assert.ok(m.totalMs - (m.castSkipMs || 0) <= BUFF_WAIT_AFTER_ACT_SEC * 1000, `${k} ${m.label}`)
@@ -708,7 +710,7 @@ test('【確定】2026-10-30 持ち越しで節目をもう切っているなら
 test('【確定】2026-10-31 メニューは「挑戦」・中は「強敵」に黒龍と雨摩座（ユーザー「これは『挑戦』にして」「ここに『強敵』ってカテゴリを作って、ここにヴァルゼノクとあまざ入れて」）・八獄と天穹十二宮はまだ入れない・画面に「IDダンジョン」と出さない', () => {
   // 2026-11-01 グループの名前は「強敵」→「四凶」（ユーザー選択）
   assert.deepEqual(CHALLENGE_CATS.map(c => c.label), ['四凶'], '「八獄」「てんきゅう12宮」はまだ入れない')
-  assert.deepEqual(CHALLENGE_CATS[0].bosses, ['varuzenoku', 'amaza'])
+  assert.deepEqual(CHALLENGE_CATS[0].bosses, ['varuzenoku', 'amaza', 'zerugiasu'], '2026-11-01 ユーザー「進めて」でゼルギアスも')
   for (const c of CHALLENGE_CATS) for (const k of c.bosses) {
     assert.ok(isSummonable(k), k)
     // 一覧の小さい絵（ボスの種類を足したら node tools/v2cap-boss-thumb.mjs）
@@ -889,7 +891,7 @@ test('【確定】2026-10-31 戦いが終わったら構えも終わる（本番
     untilTrue(st, () => st.b.cast)
     return st
   }
-  for (const [key, buffs] of [['varuzenoku', ['黒鱗の鎧', '逆鱗']], ['amaza', ['霧雨の帳', '篠突く雨']]]) {
+  for (const [key, buffs] of [['varuzenoku', ['黒鱗の鎧', '逆鱗']], ['amaza', ['霧雨の帳', '篠突く雨']], ['zerugiasu', ['雷鋼装甲', '炉心臨界']]]) {
     const win = casting(key, buffs, 31)
     win.b.hp = 0
     win.a.gauge = GAUGE_FULL
@@ -938,4 +940,73 @@ test('【確定】2026-10-30 雨摩座：黒龍の裏返し（魔法が主）・
   runFor(st, 9)
   assert.equal(acts()[n0], '氷雨')
   assert.deepEqual(buffLog(st, '雨摩座'), ['霧雨の帳'])
+})
+
+test('【確定】2026-11-01 ゼルギアス（ユーザー「ゼルギアスと閻魔も一緒に作りたい」→技の案に「これでいい」→「進めて」）：ぜんぶ物理・節目と割合と強さは黒龍と同じ・技とバフの名前は絵と同じ', () => {
+  const Z = DUNGEON_BOSSES.zerugiasu, V = DUNGEON_BOSSES.varuzenoku
+  assert.equal(isSummonable('zerugiasu'), true)
+  assert.equal(isDiffUnlocked('zerugiasu', 'normal', 1), false, 'エリア②に着くまで呼べない')
+  assert.equal(isDiffUnlocked('zerugiasu', 'normal', 2), true)
+  assert.equal(isDiffUnlocked('zerugiasu', 'hard', 4), false, 'エリア⑤に着くまで呼べない')
+  assert.equal(isDiffUnlocked('zerugiasu', 'expert', 15), false, 'まだ数字が無い')
+  assert.deepEqual(Z.diffs, V.diffs, '強さは黒龍と同じ')
+  assert.deepEqual(Z.dist, V.dist, '配分も黒龍と同じ')
+  assert.equal(Z.kind, 'phys')
+  assert.deepEqual(Z.skills.map(s => [s.name, s.kind, s.mult, s.hits ?? 1, s.ail?.key ?? null, s.ail?.chance ?? null]), [
+    ['雷霆掃射', 'phys', 0.55, 3, 'silence', 70], ['神雷崩撃', 'phys', 1.8, 1, 'paralyze', 40], ['神雷終焉', 'phys', 4.0, 1, null, null],
+  ])
+  assert.deepEqual(Z.pattern.steps.map(s => s.at), V.pattern.steps.map(s => s.at))
+  const rename = { '焦熱の吐息': '雷霆掃射', '黒翼烈風': '神雷崩撃', '終焉の黒焔': '神雷終焉' }
+  assert.deepEqual(Z.pattern.bands, V.pattern.bands.map(b => ({ min: b.min, weights: Object.fromEntries(Object.entries(b.weights).map(([k, w]) => [rename[k], w])) })))
+  assert.deepEqual(Z.pattern.buffs, [
+    { at: 0.6, name: '雷鋼装甲', table: { vit: 25 } }, { at: 0.3, name: '炉心臨界', table: { str: 25, agi: 25 } },
+  ])
+  // 絵と同じ名前（違うと動きが出ない）：技＝動きの label（1つめが通常攻撃の雷鋼弾）・バフ＝絵の buffs
+  const a = bossIllustOf('zerugiasu')
+  assert.deepEqual(Object.values(a.motions).map(m => m.label), ['雷鋼弾', ...Z.skills.map(s => s.name)])
+  assert.deepEqual(Object.keys(a.buffs), Z.pattern.buffs.map(b => b.name))
+  // 試し撃ちで戦える（満タンのあいだは雷鋼弾だけ・75%を切ったら雷霆掃射）
+  const st = createAtb(dummy(), dungeonFighter('zerugiasu', 'normal'), { rng: rngOf(4), maxSec: 999 })
+  runFor(st, 20)
+  const acts = () => st.log.filter(l => l.side === Z.name && (l.type === 'skill' || l.type === 'normal')).map(l => l.skill || '雷鋼弾')
+  assert.ok(acts().length >= 3 && acts().every(x => x === '雷鋼弾'))
+  const n0 = acts().length
+  st.b.hp = Math.floor(st.b.base.hp * 0.55)
+  runFor(st, 9)
+  assert.equal(acts()[n0], '雷霆掃射')
+  assert.deepEqual(buffLog(st, Z.name), ['雷鋼装甲'])
+})
+
+test('【確定】2026-11-01 神雷終焉：必ず当たる・相手が麻痺していると1.5倍・当てると麻痺は消える', () => {
+  const shoot = (name, seed, { eva = 0, par = false } = {}) => {
+    const f = dungeonFighter('zerugiasu', 'normal'), me = createSide(f), foe = createSide(dummy()), log = []
+    if (eva) foe.pa.evaBonus = eva
+    if (par) inflict(foe.ail, 'paralyze')
+    takeAction(me, foe, rngOf(seed), log, { idx: f.slots.findIndex(x => x.skill.name === name), noProc: true })
+    return { e: log.find(l => l.type === 'skill' && l.skill === name), foe }
+  }
+  const SEEDS = Array.from({ length: 300 }, (_, i) => (i + 1) * 7919)
+  const hitsOf = (name) => SEEDS.filter(s => shoot(name, s, { eva: 60 }).e?.hits > 0).length
+  assert.equal(hitsOf('神雷終焉'), SEEDS.length, '避けやすい相手でも全部当たる')
+  assert.ok(hitsOf('神雷崩撃') < SEEDS.length * 0.9, 'ふつうの技は外れる')
+  const avg = (par) => {
+    const xs = SEEDS.map(s => shoot('神雷終焉', s, { par }).e).filter(e => !e.crit)
+    return xs.reduce((a, e) => a + e.damage, 0) / xs.length
+  }
+  assert.ok(Math.abs(avg(true) / avg(false) - 1.5) < 0.05, `麻痺で1.5倍（${avg(true)}/${avg(false)}）`)
+  assert.ok(SEEDS.every(s => !shoot('神雷終焉', s, { par: true }).foe.ail.paralyze), '当てると麻痺は消える')
+})
+
+test('【確定】2026-11-01 炉心臨界：STRとAGIが+25%（INTは上がらない）・ボスのゲージも速くなる', () => {
+  const st = createAtb(dummy(), dungeonFighter('zerugiasu', 'normal'), { rng: rngOf(4), maxSec: 9999 })
+  const before = liveStats(st.b, true)
+  st.b.hp = Math.floor(st.b.base.hp * 0.29)
+  for (let i = 0; i < 400 && !hpBuffChips(st.b).some(c => c.name === '炉心臨界'); i++) runFor(st, 0.1)
+  assert.ok(hpBuffChips(st.b).some(c => c.name === '炉心臨界'))
+  const after = liveStats(st.b, true)
+  assert.equal(after.int_stat, before.int_stat, 'INTは上がらない')
+  assert.ok(Math.abs(after.str / before.str - 1.25) < 0.03, `STRは+25%（${after.str}/${before.str}）`)
+  assert.ok(Math.abs(after.agi / before.agi - 1.25) < 0.03, `AGIは+25%（${after.agi}/${before.agi}）`)
+  const foe = { agi: before.agi }
+  assert.ok(fillPerSecOf(st.b, after, foe) > fillPerSecOf(st.b, before, foe), 'AGIが相手を上回るぶんゲージが速い')
 })

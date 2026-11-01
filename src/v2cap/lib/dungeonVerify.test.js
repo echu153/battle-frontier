@@ -21,7 +21,7 @@ import handler from '../../../api/v2cap-dungeon-verify.js'
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8')
 const AT = Date.UTC(2026, 9, 31, 3, 0, 0)
 const LEARNED = SKILLS.map(s => s.name)
-const BOSSES = ['varuzenoku', 'amaza']
+const BOSSES = ['varuzenoku', 'amaza', 'zerugiasu']
 const RARE = (cls) => ITEMS.find(i => i.part === '武器' && i.area === 5 && i.rarity === 'R' && canEquipType(cls, i.type))
 // サーバーの写しと同じ形（JSON を通した { prof, inv, at }）。7枠を着けた LV45 のキャラ
 const snapOf = (cls, over = {}) => {

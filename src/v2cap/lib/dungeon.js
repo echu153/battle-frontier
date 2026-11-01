@@ -44,7 +44,7 @@ export const DIFF_COLOR = { normal:'#66dd88', hard:'#ffaa44', expert:'#ff5566', 
 //     reward＝倒したときの報酬（EXP＝推奨の場所のボス5体ぶん・Gold＝推奨LV×50＝デイリー半分）
 //   ready:false の難易度はまだ呼べない（数字を決めていない）
 //   summon:false のボスはまだ呼べない（試し撃ちだけ。いまは無い）
-// 黒龍の強さ（雨摩座も同じ数字を使う）
+// 黒龍の強さ（雨摩座とゼルギアスも同じ数字を使う）
 const VARUZENOKU_DIFFS = {
   // 2026-10-29 鈍足を「ゲージ20%遅く」にしてエンジンで測り直した（前はノーマル 攻撃0.42倍・HP7000）。
   //   ノーマル：0.42倍・7000だと1回で倒せたのが22人中6人に減った → 0.35倍・6500で12人（残りも全員2回目）
@@ -141,13 +141,47 @@ export const DUNGEON_BOSSES = {
     },
     diffs: VARUZENOKU_DIFFS,
   },
+  // 【確定】2026-11-01 ユーザー「ゼルギアスと閻魔も一緒に作りたい」→技の案に「これでいい」→「進めて」：3体目。ぜんぶ物理の機神。
+  //   節目・技の出る割合・強さ（diffs）は黒龍と同じ。種族は魔物（機神は生き物でないので、いろいろなものが混ざった魔物へ）
+  //   測った（22人×3通りの乱数＝66回。職ごとの挑戦回数の平均・合計の時間の平均）：ノーマル 3.7回・251秒（雨摩座 3.3回・259秒／黒龍 3.0回・227秒）／ハード 4.8回・296秒（4.2回・298秒／3.4回・247秒）
+  zerugiasu: {
+    name: '雷鋼機神ゼルギアス', kind: 'phys', race: '魔物',
+    dist: { hp: 34, mp: 6, str: 16, dex: 12, agi: 8, int_stat: 12, vit: 9, luk: 3 },
+    // 通常攻撃が雷鋼弾（物理1.0倍）
+    hardNormalAil: { key: 'blind', chance: 20 },
+    skills: [
+      { name: '雷霆掃射', kind: 'phys', mult: 0.55, hits: 3, proc: 100, mp: 0, ail: { key: 'silence', chance: 70 } },
+      { name: '神雷崩撃', kind: 'phys', mult: 1.8, proc: 100, mp: 0, ail: { key: 'paralyze', chance: 40 } },
+      // 倍率2.5以上＝撃つ前に構え（防御で半分）。構えは黒龍と同じ4秒。必ず当たる・麻痺していると1.5倍（当てると麻痺は消える）
+      { name: '神雷終焉', kind: 'phys', mult: 4.0, proc: 100, mp: 0, castSec: 3.5, sureHit: true, burstAil: { key: 'paralyze', perStack: 0.5 } },
+    ],
+    pattern: {
+      steps: [
+        { at: 0.75, skill: '雷霆掃射' },
+        { at: 0.5, skill: '神雷崩撃' },
+        { at: 0.25, skill: '神雷終焉', now: true },   // 切ったらゲージを待たずに構えに入る（黒龍と同じ）
+      ],
+      bands: [
+        { min: 0.75, weights: {} },
+        { min: 0.5, weights: { '雷霆掃射': 30 } },
+        { min: 0.25, weights: { '雷霆掃射': 50, '神雷崩撃': 50 } },
+        { min: -1, weights: { '雷霆掃射': 25, '神雷崩撃': 25, '神雷終焉': 50 } },   // 行動3回に1回（黒龍と同じ）
+      ],
+      // 名前は機神の体から（鋼の装甲で固める→炉心が臨界を超えて攻めも速さも上がる）
+      buffs: [
+        { at: 0.6, name: '雷鋼装甲', table: { vit: 25 } },
+        { at: 0.3, name: '炉心臨界', table: { str: 25, agi: 25 } },
+      ],
+    },
+    diffs: VARUZENOKU_DIFFS,
+  },
 }
 
-// 「挑戦」のカテゴリ（入口の見出しとボス）。旧レイドの残りの2体（雷鋼機神ゼルギアス・閻魔）も四凶に足す予定。
+// 「挑戦」のカテゴリ（入口の見出しとボス）。旧レイドの残りの1体（閻魔）も四凶に足す予定。
 //   【確定】2026-11-01 ユーザー「今の強敵のグループ名を良い感じに変えたい」→選んだ「四凶」（しきょう・八獄と同じ「数＋不吉な字」・「四強」と同じ読み）。key はそのまま
 //   ★八獄・天穹十二宮もカテゴリに足す予定だが、ユーザー「※まだ入れないで」＝まだ足さない
 export const CHALLENGE_CATS = [
-  { key: 'rival', label: '四凶', bosses: ['varuzenoku', 'amaza'] },
+  { key: 'rival', label: '四凶', bosses: ['varuzenoku', 'amaza', 'zerugiasu'] },
 ]
 
 export const diffOf = (bossKey, diffKey) => DUNGEON_BOSSES[bossKey]?.diffs?.[diffKey] || null
