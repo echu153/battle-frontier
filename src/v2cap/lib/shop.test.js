@@ -131,6 +131,10 @@ test('画面：挑戦の入口で持ち込む薬を選ぶ・押してすぐ挑�
   assert.ok(lo.includes("supabase.rpc('v2cap_set_item_loadout', { p_loadout: next })"))
   assert.ok(lo.includes('disabled={total >= CARRY_MAX || chosen[it.key] >= have[it.key]}'), '合計4つ・持っている数を超えて選べない')
   assert.ok(lo.includes('if (prof?.item_loadout === undefined) return null'), 'SQL を流すまで出さない')
+  // ユーザー「ここもっとコンパクトにして」：1種類1行・商店へのボタンは見出しの行・足りないときの一言はそのときだけ1行
+  assert.ok(!lo.includes('<br />'), '名前と持っている数は同じ行')
+  assert.ok(lo.indexOf('🏪 商店で買う') < lo.indexOf('BATTLE_ITEMS.map'), '商店へのボタンのために下に1行とらない')
+  assert.ok(lo.includes('{short && <div'), '足りないときの一言は足りないときだけ')
   assert.ok(read('./dungeonVerify.js').includes('items: carriedItemsOf(snap.prof)'), '持ち込む数はサーバーの写しから')
   assert.ok(read('../pages/V2capHome.jsx').includes('<V2capDungeon prof={prof} inventory={inventory} onProfile={refresh} onGo={setScreen} dev={isAdmin} />'), '「商店で買う」')
   assert.ok(read('../components/V2capShop.jsx').includes('戦闘に持ち込むのは合計${CARRY_MAX}つまで'))
