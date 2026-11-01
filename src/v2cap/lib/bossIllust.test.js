@@ -10,7 +10,7 @@ import {
   bossIllustOf, illustPoseAt, idlePoseAt, motionPoseAt, illustPointAt, illustTrailsAt, mouthPointOf, rotPoint, partMove,
   illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt, dustEllipsesOf,
   illustCastShowAt, EASES, joltAt, illustBendKindOf, bendFramesOf, illustPoseKindOf, illustShowAt, illustGhostsAt, ART_FADE_MS, artAnchorAt, leanPoint,
-  illustBuffShowAt, illustBuffKindOf, buffSceneAt, buffAfterAt, buffRainAt, buffHoldOf, rigLayersOf, flutterBandsAt, buffArtMsOf, BUFF_IN_MS, BUFF_HOLD_MS, BUFF_OUT_MS, BUFF_AURA_IN_MS, BUFF_AURA_OUT_MS, BUFF_ART_MS, BUFF_FLASH_MS,
+  illustBuffShowAt, illustBuffKindOf, buffSceneAt, introSceneAt, buffAfterAt, buffRainAt, buffHoldOf, rigLayersOf, flutterBandsAt, buffArtMsOf, BUFF_IN_MS, BUFF_HOLD_MS, BUFF_OUT_MS, BUFF_AURA_IN_MS, BUFF_AURA_OUT_MS, BUFF_ART_MS, BUFF_FLASH_MS,
 } from './bossIllust.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { DUNGEON_BOSSES } from './dungeon.js'
@@ -981,4 +981,26 @@ test('【確定】2026-11-01 ゼルギアスの待機：羽根を左右4枚ず�
   assert.equal(open.r, 0)
   // 技がまだ無くても画面が読める形
   assert.deepEqual(a.motions, {})
+  assert.equal(a.intro, null, '開戦の動きはまだ無い')
+})
+
+test('【確定】2026-11-01 開戦の動きの見せ方：吠えた瞬間から出て、バフの見せ場より弱い（ユーザー「これから戦闘するぞーって感じ」）', () => {
+  const wrath = BOSS_ILLUST_DEFS.varuzenoku.buffs.wrath.show, downpour = BOSS_ILLUST_DEFS.amaza.buffs.downpour.show
+  for (const [key, big] of [['varuzenoku', wrath], ['amaza', downpour]]) {
+    const m = bossIllustOf(key).intro
+    assert.equal(introSceneAt(m, m.showAt - 1), null, '吠える前は出ない')
+    const sc = introSceneAt(m, m.showAt + 200)
+    assert.ok(sc.rings.length > 0 && sc.sparks.length > 0 && sc.dim > 0, key)
+    assert.equal(introSceneAt(m, m.showAt + m.show.holdMs + 1000), null, '見せ終わったら出ない')
+    assert.ok(m.show.shake <= big.shake && m.show.punch < big.punch && m.show.dim < big.dim, `${key}：バフの見せ場より弱い`)
+    // いつもの技の動きには無い（技のあいだに輪が出ない）
+    for (const mo of Object.values(bossIllustOf(key).motions)) assert.equal(introSceneAt(mo, 500), null)
+    // 動きの終わりは待機へ戻る・絵も部品の立ち絵へ戻る
+    assert.deepEqual(m.keys.at(-1)[1], {})
+    assert.equal(m.art.at(-1)[1], null)
+    assert.ok(illustShowAt(m, m.showAt + 100).poses.some(p => p.name === 'strike'), `${key}：吠えているあいだは借りた絵`)
+    assert.deepEqual(illustShowAt(m, m.totalMs).poses, [])
+  }
+  // 黒龍は傾けるだけ（しっぽと足は地面に残る）
+  for (const [, p] of BOSS_ILLUST_DEFS.varuzenoku.intro.keys) for (const f of ['x', 'y', 'r']) assert.equal(p[f], undefined)
 })

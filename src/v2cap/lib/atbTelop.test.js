@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { START_TELOP_MS, CLEAR_TELOP_MS, FAIL_TELOP_MS, LOSE_DELAY_MS, TIMEUP_DELAY_MS, NO_DEATH_DELAY_MS, startTelopOn, clearTelopDelayOf, endTelopOf } from './atbTelop.js'
+import { START_TELOP_MS, CLEAR_TELOP_MS, FAIL_TELOP_MS, LOSE_DELAY_MS, TIMEUP_DELAY_MS, NO_DEATH_DELAY_MS, startTelopOn, startTelopShown, clearTelopDelayOf, endTelopOf } from './atbTelop.js'
 import { lastHitAtOf } from './atbFx.js'
 import { bossIllustOf } from './bossIllust.js'
 import { deathLandMs } from './bossDeath.js'
@@ -19,7 +19,7 @@ test('戦闘開始のテロップのあいだは時計を止める（絵を読�
   assert.equal(startTelopOn(1000, 1000 + START_TELOP_MS), false)
   // 戦闘の画面は、止まっているあいだ advance を呼ばない
   const src = read('V2capAtbFight.jsx')
-  assert.match(src, /if \(s && !s\.over && !startTelopOn\(introT0\.current, now\)\) \{\s+advance\(/)
+  assert.match(src, /if \(s && !s\.over && !startTelopOn\(introT0\.current, now, introMs\)\) \{\s+advance\(/)
 })
 
 test('討伐完了はボスが倒れて体がほとんど消えたころに出る（どのボスも）', () => {
@@ -175,4 +175,37 @@ test('日本語の大きな文字は JP_BOLD の太字（切り抜きのグラ�
     assert.match(src, /fontFamily: JP_BOLD, fontWeight:'bold'/, f)
     assert.ok(!/background-clip|backgroundClip/i.test(src), f)
   }
+})
+
+test('【確定】2026-11-01 開戦の動き：遭遇の絵を押す→ボスの動き→戦闘開始のテロップ→時計（ユーザー「これから戦闘するぞーって感じ」→選んだ「今ある絵で作る」「飛ばせない」）', () => {
+  const t0 = 1000, intro = 1900
+  // 動きのあいだも時計は止まったまま・テロップは動きのあと
+  assert.equal(startTelopOn(t0, t0 + intro + START_TELOP_MS - 1, intro), true)
+  assert.equal(startTelopOn(t0, t0 + intro + START_TELOP_MS, intro), false)
+  assert.equal(startTelopShown(t0, t0 + intro - 1, intro), false)
+  assert.equal(startTelopShown(t0, t0 + intro, intro), true)
+  assert.equal(startTelopShown(t0, t0 + intro + START_TELOP_MS, intro), false)
+  assert.equal(startTelopShown(null, 5000, intro), false, '絵を読んでいるあいだは出さない')
+  // 動きが無い敵（ドット絵版・図鑑の絵）は今までどおりすぐテロップ
+  assert.equal(startTelopShown(t0, t0), true)
+  assert.equal(startTelopOn(t0, t0 + START_TELOP_MS), false)
+  for (const key of ['varuzenoku', 'amaza']) {
+    const a = bossIllustOf(key), m = a.intro
+    // 新しい絵は描かない：技のポーズの絵を借りる（技のぶんを読んであるので増えない）
+    assert.ok(m.poses.windup && m.poses.strike, key)
+    for (const p of Object.values(m.poses)) assert.ok(a.srcs.includes(p.src), key)
+    // 吠えてからテロップ・動きが終わる前に時計が動かない
+    assert.ok(m.showAt < m.telopAt && m.telopAt <= m.totalMs, key)
+    assert.ok(m.telopAt + START_TELOP_MS >= m.totalMs, key)
+    // 技の動きの一覧には入れない（戦闘の技として流れない）
+    assert.ok(!Object.values(a.motions).includes(m), key)
+  }
+  const src = read('V2capAtbFight.jsx')
+  // 見せるだけ：st を変えず動きの記録に足すだけ。技の名前を付けない＝帯は出ない
+  assert.match(src, /if \(bossArt\?\.intro\) fxRef\.current = \[\.\.\.fxRef\.current, \{ kind:'act', side:'b', motion: bossArt\.intro, t0: last\.current \/ 1000 \}\]/)
+  // 遭遇の絵を出しているあいだは始めない＝見た目だけの戦闘から本物に替わる（runKey）前には流れない
+  assert.ok(src.indexOf('if (paused || !artReady || hold) return') < src.indexOf('if (bossArt?.intro) fxRef.current'))
+  // 飛ばせない：戦闘開始の前を押して飛ばす所を作らない（押して飛ばせるのは決着のあとだけ）
+  assert.ok(!/introT0\.current = performance\.now\(\) -/.test(src))
+  assert.equal((src.match(/onClick=\{skipEnding\}/g) || []).length, 1)
 })

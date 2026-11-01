@@ -143,8 +143,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
   const [mk, times = '0', out = path.join(ROOT, `pose-${args[0] || 'idle'}.png`)] = args
   const art = bossIllustOf(key)
   if (!art) throw new Error(`イラスト版が無い：${key}`)
-  const motion = mk === 'idle' || mk === 'cast' ? null : art.motions[mk]
-  if (mk !== 'idle' && mk !== 'cast' && !motion) throw new Error(`技が無い：${mk}（${Object.keys(art.motions).join('・')}・idle）`)
+  // intro＝開戦の動き（技と同じ形で流す）
+  const motion = mk === 'idle' || mk === 'cast' ? null : mk === 'intro' ? art.intro : art.motions[mk]
+  if (mk !== 'idle' && mk !== 'cast' && !motion) throw new Error(`技が無い：${mk}（${Object.keys(art.motions).join('・')}・idle・intro）`)
   const load = (src) => readRgba(path.join(ROOT, 'public', decodeURI(src.split('?')[0])))
   const imgs = art.parts.map(p => load(p.src)), orbImg = art.orb ? load(art.orb.src) : null
   const bendImgs = Object.fromEntries(art.parts.filter(p => p.bend).map(p => [p.key, load(p.bend.src)]))

@@ -204,6 +204,25 @@ export const BOSS_ILLUST_DEFS = {
       gale: { windup: '黒翼烈風_ため', strike: '黒翼烈風_打ち下ろし' },
       doom: { windup: '終焉の黒焔_ため', strike: '終焉の黒焔_吐きつけ' },
     },
+    // 【確定】2026-11-01 開戦の動き（ユーザー「遭遇⇒戦闘開始の間に敵のモーション追加してほしい、これから戦闘するぞーって感じ」→選んだ「今ある絵で作る」「飛ばせない」）：
+    //   遭遇の絵を押したあと、戦闘の時計を止めたまま流す（見せるだけ・lib/atbTelop.js）。新しい絵は描かない＝poses は技のポーズの絵を借りる（[技, 絵の名前]）。
+    //   黒翼烈風の ため の絵でのけぞる → 打ち下ろし の絵で翼を広げて身を低くし、相手へ吠える（衝撃の輪・揺れ・火の粉）。竜は傾けるだけ（lean・しっぽと足は地面に残る）。
+    //   telopAt＝戦闘開始のテロップを出す時刻（起き上がる途中から重ねる）・show＝吠えた瞬間（showAt）からの見せ方（buffSceneAt と同じ形・逆鱗より弱く）
+    intro: { totalMs: 2250, telopAt: 1900, poses: { windup: ['gale', 'windup'], strike: ['gale', 'strike'] },
+      keys: [
+        [0, {}],
+        [280, { lean: -0.03, wingN: -6, wingF: 4 }],
+        [760, { lean: -0.12 }],
+        [920, { lean: -0.13 }],
+        [990, { lean: 0.17 }, 'out'],
+        [1700, { lean: 0.13 }],
+        [1800, { lean: 0.12, neck: -3, head: -3, wingN: 20, wingNSq: 0.2, wingF: -14, wingFSq: 0.15 }],
+        [2250, {}],
+      ], jolt: { atMs: 990, ms: 300, lean: 0.035 },
+      art: [[0, null], [280, 'windup'], [930, 'strike'], [1800, null]], ghosts: { fromMs: 930, toMs: 1050, lagMs: 28, n: 3 },
+      showAt: 990, show: { holdMs: 850, dim: 0.4, dimColor: '26,0,0', shake: 6, punch: 0.04,
+        rings: { at: [80, 315], n: 3, everyMs: 240, durMs: 700, maxR: 400, color: '255,96,40' },
+        burst: { n: 24, x: [120, 530], y: 590, rise: 320, size: 1.2, color: '255,140,60' } } },
     // 【確定】2026-10-31 倒れる動き（ユーザーが選んだ「ボスの倒れる動き」・lib/bossDeath.js）：新しい絵は描かない。
     //   止まって光る → 逆鱗のポーズの絵で天へ吠える（のけぞる・衝撃の輪・火の粉）→ 終焉の黒焔の吐きつけの絵で前へ倒れこむ（揺れ・砂ぼこり）→
     //   溶岩の光が消えて灰色になる → ふちを赤く光らせながら外から燃え尽きる（火の粉と煙が立ちのぼる）。竜を横へずらさず傾けるだけ（lean）
@@ -424,6 +443,22 @@ export const BOSS_ILLUST_DEFS = {
           glow: { periodMs: 2200, color: '90,175,255' },
           embers: { n: 16, x: [130, 520], y: 600, rise: 360, size: 1.4, color: '100,185,255', core: '235,248,255' } } },
     },
+    // 【確定】2026-11-01 開戦の動き（黒龍と同じ仕組み・ユーザー「これから戦闘するぞーって感じ」→選んだ「今ある絵で作る」「飛ばせない」）：
+    //   氷雨の構えの絵で片手を天へ掲げる → 雨礫の払うの絵で相手を指さす（手の通り道に水の筋・指先から水の輪・足元から水の粒）
+    intro: { totalMs: 2100, telopAt: 1750, poses: { windup: ['sleet', 'windup'], strike: ['shot', 'strike'] },
+      keys: [
+        [0, {}],
+        [240, { x: 0.006, y: -0.012, r: 1.8, head: 2.4, armF: -4, armUOn: 1 }],
+        [780, { x: 0.016, y: -0.03, r: 4, head: 5.5, armF: -10, armUOn: 1, armN: 22 }],
+        [900, { x: 0.018, y: -0.034, r: 4.4, head: 6, armF: -11, armUOn: 1, armN: 22 }],
+        [980, { x: -0.05, y: 0.008, r: -3.5, head: -2, armN: -10, armF: -4 }, 'out'],
+        [1600, { x: -0.045, y: 0.006, r: -3, head: -1.5, armN: -8, armF: -3 }],
+        [2100, {}],
+      ], art: [[0, null], [120, 'windup'], [940, 'strike'], [1650, null]], ghosts: { fromMs: 940, toMs: 1060, lagMs: 26, n: 3 },
+      arcs: [{ kind: 'water', pts: [[158, -30], [99, 27], [50, 85], [18, 112], [-3, 127]], fromMs: 920, toMs: 980, fadeMs: 260 }],
+      showAt: 980, show: { holdMs: 750, dim: 0.4, dimColor: '0,10,36', shake: 3, punch: 0.03,
+        rings: { at: [-42, 148], n: 3, everyMs: 240, durMs: 700, maxR: 360, color: '70,160,255', core: '225,245,255' },
+        burst: { n: 24, x: [110, 520], y: 610, rise: 360, size: 1.15, color: '80,170,255', core: '235,248,255' } } },
     // 【確定】2026-10-31 倒れる動き（ユーザーが選んだ「ボスの倒れる動き」・lib/bossDeath.js）：新しい絵は描かない。
     //   止まって光る → 篠突く雨のポーズの絵で天を仰ぐ（水の輪・水の粒・水の帯が落ちて消える）→ 霧雨の帳のポーズの絵で身を包み、力が抜けてゆっくり沈む →
     //   色が抜ける → ふちを青く光らせながら足元から水になって崩れる（水の粒が落ちて足元に波紋・光の粒が立ちのぼる）
@@ -858,6 +893,8 @@ export const buffSceneAt = (b, ms) => {
     ringCore: s.rings?.core || null, sparkCore: s.burst?.core || null, bolts, boltColor: s.boltColor || null, flash,
     rain: s.rain ? { ...s.rain, k: Math.min(1, ms / 140) * fadeOut, t: ms } : null }
 }
+// 開戦の動きの見せ方（衝撃の輪・揺れ・暗さ）：motion＝bossIllustOf の intro・ms＝流しはじめてからのミリ秒。吠えた瞬間（showAt）から buffSceneAt と同じ形。ほかの時間と intro の無い動きは null
+export const introSceneAt = (motion, ms) => (motion?.show ? buffSceneAt(motion, ms - motion.showAt) : null)
 // 【確定】2026-10-30 付いているあいだの見た目（def.buffs の after・ユーザー「逆鱗後はモーションも変更していい」）：
 //   list＝付いているバフ [{ b（bossIllustOf の buffs の1つ）, since（付いてからのミリ秒・印が片付いたあとは Infinity） }]・tMs＝いまのミリ秒 →
 //   { glow（体が赤く脈打つ強さ 0〜1）, glowColor, sparks（足元から絶えず立ちのぼる火の粉）, sparkColor, sparkCore, tempo（待機の速さ）, dim, dimColor（舞台の暗さ）,
@@ -1075,6 +1112,8 @@ export const bossIllustOf = (key) => {
   const deathArtOf = (r) => (r?.buff ? buffs[def.buffs[r.buff]?.name]?.pose : motions[r?.motion]?.poses?.[r?.pose]) || null
   const deathArts = def.death ? { roar: deathArtOf(def.death.roar), fall: deathArtOf(def.death.fall) } : null
   const death = deathArts?.roar && deathArts.fall ? { ...def.death, arts: deathArts } : null
+  // 開戦の動き（def.intro）：借りるポーズの絵を、技の動きと同じ形で持たせる（絵は技のぶんを読んであるので増えない）。絵が無ければ部品の動きだけ
+  const intro = def.intro ? { ...def.intro, trails: [], arcs: def.intro.arcs || [], poses: Object.fromEntries(Object.entries(def.intro.poses).map(([n, [mk, pn]]) => [n, motions[mk]?.poses?.[pn]]).filter(([, p]) => p)) } : null
   const jaw = def.cuts?.jaw && art.parts.jaw ? { line: def.cuts.jaw.line, pivot: def.cuts.jaw.pivot, mouth: def.cuts.jaw.mouth } : null
   // 待機のときどきの動き（黒龍）：口の火の玉（頭の中に描く）・しっぽを叩きつけた砂ぼこりの場所
   const o = def.idle.orb, oa = art.fx?.idle?.orb
@@ -1085,7 +1124,7 @@ export const bossIllustOf = (key) => {
   const bg = bossBgOf(key)
   return {
     kind: 'illust', key, name: base.name, base: BOSS_ILLUST_SIZE, illust, parts, pivot: art.pivot, mouth: art.mouth, jaw, motions, orb, dust, ground: def.ground ?? null, flutter: !!def.idle.flutter,
-    castArt: def.cast?.art || null, buffs, bg, death,
+    castArt: def.cast?.art || null, buffs, bg, death, intro,
     srcs: [...parts.map(p => p.src), ...parts.filter(p => p.bend).map(p => p.bend.src), ...Object.values(motions).flatMap(m => Object.values(m.fx || {}).map(f => f.src)),
       ...Object.values(motions).flatMap(m => Object.values(m.poses || {}).map(p => p.src)), ...(orb ? [orb.src] : []),
       ...Object.values(buffs).flatMap(b => [b.pose?.src, b.aura?.src].filter(Boolean)), ...(bg ? [bg.src, bg.flowSrc].filter(Boolean) : [])],

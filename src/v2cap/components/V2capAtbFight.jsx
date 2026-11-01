@@ -14,7 +14,7 @@ import {
 import { BATTLE_ITEMS } from '../core/atbItems.js'
 import { MACRO_MARK, macroEntriesOf } from '../lib/atbMacro.js'
 import { fxEventsOf, scheduleFx, POP_SEC } from '../lib/atbFx.js'
-import { START_TELOP_MS, CLEAR_TELOP_MS, FAIL_TELOP_MS, startTelopOn, endTelopOf } from '../lib/atbTelop.js'
+import { START_TELOP_MS, CLEAR_TELOP_MS, FAIL_TELOP_MS, startTelopOn, startTelopShown, endTelopOf } from '../lib/atbTelop.js'
 import { enemyArtSrc } from '../lib/enemyArt.js'
 import { newBossMotionMemo, bossMotionKeyOf } from '../lib/bossArt.js'
 import { artLoadedCount, preloadArt } from '../lib/artPreload.js'
@@ -87,8 +87,9 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
   onOverRef.current = onOver
   const onEndedRef = useRef(onEnded)
   onEndedRef.current = onEnded
-  // テロップ（lib/atbTelop.js）：introT0＝戦闘開始を出し始めた時刻（ミリ秒）・endTelop＝決着のテロップ（endTelopOf）・telopPeek＝［開発］の見本
+  // テロップ（lib/atbTelop.js）：introT0＝開戦の動きを始めた時刻（動きが無ければ戦闘開始を出し始めた時刻・ミリ秒）・introMs＝テロップを出すまでの長さ・endTelop＝決着のテロップ（endTelopOf）・telopPeek＝［開発］の見本
   const introT0 = useRef(null)
+  const introMs = bossArt?.intro?.telopAt || 0
   const endTelop = useRef(null)
   const endedSent = useRef(false)
   const telopPeek = useRef(null)
@@ -127,10 +128,14 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
   useEffect(() => {
     if (paused || !artReady || hold) return
     last.current = performance.now()
-    if (introT0.current === null) introT0.current = last.current
+    if (introT0.current === null) {
+      introT0.current = last.current
+      // 開戦の動き（lib/bossIllust.js の intro）：見せるだけ（st を変えない・動きの記録に足すだけ）。技の名前は付けない＝帯は出ない
+      if (bossArt?.intro) fxRef.current = [...fxRef.current, { kind:'act', side:'b', motion: bossArt.intro, t0: last.current / 1000 }]
+    }
     const tick = (now) => {
-      // 戦闘開始のテロップのあいだは時計を進めない（last は下で更新する＝あとで時間が飛ばない）
-      if (s && !s.over && !startTelopOn(introT0.current, now)) {
+      // 開戦の動きと戦闘開始のテロップのあいだは時計を進めない（last は下で更新する＝あとで時間が飛ばない）
+      if (s && !s.over && !startTelopOn(introT0.current, now, introMs)) {
         advance(s, (now - last.current) / 1000)
         if (s.log.length > seen.current) {
           const fresh = s.log.slice(seen.current)
@@ -212,11 +217,11 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
   const entryText = (e) => (e.guard ? '🛡 防御' : e.idx === null ? '通常攻撃' : me.slots[e.idx]?.skill?.name)
   const entryCd = (e) => (e.guard ? guardCdRatio(me, now) : e.idx !== null && e.idx !== undefined ? cdRatio(me, e.idx, now) : 0)
 
-  // いま出すテロップ（戦闘開始＝時計を止めているあいだ／決着＝討伐完了・敗北・時間切れ／［開発］の見本）。CSS の動きなので、出ているあいだ出し続けるだけ
+  // いま出すテロップ（戦闘開始＝開戦の動きのあと・時計を止めているあいだ／決着＝討伐完了・敗北・時間切れ／［開発］の見本）。CSS の動きなので、出ているあいだ出し続けるだけ
   const wallMs = performance.now()
   const et = endTelop.current
   const peek = telopPeek.current && wallMs - telopPeek.current.t0 < telopPeek.current.ms ? telopPeek.current : null
-  const telop = introT0.current !== null && startTelopOn(introT0.current, wallMs) ? { id:`start-${runKey}`, kind:'start', ms: START_TELOP_MS }
+  const telop = startTelopShown(introT0.current, wallMs, introMs) ? { id:`start-${runKey}`, kind:'start', ms: START_TELOP_MS }
     : et && wallMs >= et.at && wallMs < et.at + et.ms ? { id:`${et.kind}-${runKey}`, kind: et.kind, ms: et.ms }
     : peek ? { id:`peek-${peek.t0}`, kind: peek.kind, ms: peek.ms } : null
   // 決着のあと、テロップが終わるまでは舞台を押すと飛ばせる（倒れる動きのあいだも）
@@ -285,6 +290,11 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
             <button disabled={paused}
               onClick={() => { fxRef.current = [...fxRef.current, { kind:'death', side:'b', t0: performance.now() / 1000 }] }}
               style={{ ...miniBtn('#ff6688'), padding:'4px 8px', fontSize:'11px' }}>💀 倒れる</button>
+          )}
+          {/* 開戦の動き（lib/bossIllust.js の intro）：もう一度流す（時計は止めない） */}
+          {bossArt.intro && (
+            <button disabled={paused} onClick={() => { fxRef.current = [...fxRef.current, { kind:'act', side:'b', motion: bossArt.intro, t0: performance.now() / 1000 }] }}
+              style={{ ...miniBtn('#ffb060'), padding:'4px 8px', fontSize:'11px' }}>🐉 開戦の動き</button>
           )}
           {/* テロップの見本（時計は止めない） */}
           <button disabled={paused} onClick={() => { telopPeek.current = { kind:'start', ms: START_TELOP_MS, t0: performance.now() } }}

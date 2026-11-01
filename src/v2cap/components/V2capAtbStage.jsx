@@ -6,7 +6,7 @@ import { lungeOf, shakeOf, lastHitAtOf, popTextOf, popScaleOf, popLeftOf, popTop
 import { JP_BOLD } from './casinoStyle.js'
 import { rubySegmentsOf } from '../lib/skillRuby.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
-import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, rigLayersOf, artAnchorAt, illustCastShowAt, illustBuffShowAt, buffSceneAt, buffAfterAt, buffRainAt } from '../lib/bossIllust.js'
+import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, rigLayersOf, artAnchorAt, illustCastShowAt, illustBuffShowAt, buffSceneAt, introSceneAt, buffAfterAt, buffRainAt } from '../lib/bossIllust.js'
 import { behindRectOf, bgRectOf, bgFxAt, liteFxOf } from '../lib/bossBg.js'
 import { artIsLoaded } from '../lib/artPreload.js'
 import BossFlowCanvas from './BossFlowCanvas.jsx'
@@ -503,8 +503,8 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   const lastRage = mine.reduce((p, f) => (f.kind === 'rage' && f.t0 <= now && (!p || f.t0 >= p.t0) ? f : p), null)
   const buff = rig && lastRage && !death ? illustBuffShowAt(rig, lastRage.skill, (now - lastRage.t0) * 1000) : null
   const buffArt = buff ? rig.buffs[lastRage.skill] : null
-  // 付いた瞬間の強い見せ方（逆鱗・buffSceneAt）：ポーズの絵のふくらみ・衝撃の輪・噴き上がる火の粉（舞台の暗さと揺れは V2capAtbStage）
-  const bsc = death ? death.scene : rig && lastRage ? buffSceneAt(rig.buffs?.[lastRage.skill], (now - lastRage.t0) * 1000) : null
+  // 付いた瞬間の強い見せ方（逆鱗・buffSceneAt）と開戦の動きの吠えた瞬間（introSceneAt）：ポーズの絵のふくらみ・衝撃の輪・噴き上がる火の粉（舞台の暗さと揺れは V2capAtbStage）
+  const bsc = death ? death.scene : introSceneAt(rigMotion, rigMs) || (rig && lastRage ? buffSceneAt(rig.buffs?.[lastRage.skill], (now - lastRage.t0) * 1000) : null)
   const moving = !!rigMotion && rigMs < rigMotion.totalMs
   const buffPose = buff && buffArt.pose && !moving && !casting
   const show0 = buffPose ? { rig: buff.rig, poses: buff.pose > 0.001 ? [{ name: lastRage.skill, op: buff.pose }] : [] }
@@ -1129,7 +1129,9 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
   const sc = foeArt?.kind === 'illust' ? sceneOfStage(foeArt, kept.current, now, cast, castSeen.current) : null
   // HPの節目のバフの強い見せ方（逆鱗・lib/bossIllust.js の buffSceneAt）：舞台を赤黒く暗く・吠える揺れ（技の演出と重ねる）
   const rageB = foeArt?.kind === 'illust' ? fx.reduce((p, f) => (f.kind === 'rage' && f.side === 'b' && f.t0 <= now && (!p || f.t0 >= p.t0) ? f : p), null) : null
-  const bsc = death ? death.scene : rageB ? buffSceneAt(foeArt.buffs?.[rageB.skill], (now - rageB.t0) * 1000) : null
+  // 開戦の動き（lib/bossIllust.js の intro）の吠えた瞬間も同じ形（暗さと揺れ）
+  const introF = foeArt?.intro ? fx.reduce((p, f) => (f.kind === 'act' && f.motion === foeArt.intro && f.t0 <= now ? f : p), null) : null
+  const bsc = death ? death.scene : (introF && introSceneAt(introF.motion, (now - introF.t0) * 1000)) || (rageB ? buffSceneAt(foeArt.buffs?.[rageB.skill], (now - rageB.t0) * 1000) : null)
   // 付いているあいだの空の暗さと雨（篠突く雨）。ボスが倒れると雨は 0.8秒で止む
   const after = foeArt?.kind === 'illust' && foeArt.buffs ? buffAfterOf(foeArt, st.b, fx.filter(f => f.side === 'b'), now) : null
   const rainOp = deadAt.current == null ? 1 : Math.min(1, Math.max(0, 1 - (now - deadAt.current) / 0.8))

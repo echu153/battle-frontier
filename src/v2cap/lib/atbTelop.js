@@ -18,8 +18,12 @@ export const LOSE_DELAY_MS = 500     // 敗北：止めの一撃の数字が出�
 export const TIMEUP_DELAY_MS = 200   // 時間切れ：決着からすぐ
 const BURN_SHOWN = 0.7               // 体が消える動きのうち、ここまで進んだら出す
 
-// 戦闘開始のテロップのあいだか（時計を止めるか）。t0＝出し始めた時刻（ミリ秒・まだなら null＝絵を読んでいるあいだ）
-export const startTelopOn = (t0, nowMs) => t0 === null || nowMs - t0 < START_TELOP_MS
+// 【確定】2026-11-01 ユーザー「遭遇⇒戦闘開始の間に敵のモーション追加してほしい、これから戦闘するぞーって感じ」→選んだ「飛ばせない」：
+//   遭遇の絵を押す → ボスの開戦の動き（lib/bossIllust.js の intro）→ 戦闘開始のテロップ → 時計が動く。動きのあいだも時計を止める（st を変えない＝サーバーの回し直しとずれない）
+// 戦闘開始の前か（時計を止めるか）。t0＝動きを始めた時刻（ミリ秒・まだなら null＝絵を読んでいるあいだ）・introMs＝テロップを出すまでの長さ（intro.telopAt・動きが無ければ 0）
+export const startTelopOn = (t0, nowMs, introMs = 0) => t0 === null || nowMs - t0 < introMs + START_TELOP_MS
+// 戦闘開始のテロップを出しているか（開戦の動きのあいだは出さない）
+export const startTelopShown = (t0, nowMs, introMs = 0) => t0 !== null && nowMs - t0 >= introMs && nowMs - t0 < introMs + START_TELOP_MS
 // 討伐完了を出すまでの長さ（止めの一撃の数字が出てから・ミリ秒）。art＝ボスの絵（lib/bossIllust.js の death があれば倒れる動きを待つ）
 export const clearTelopDelayOf = (art) => (art?.death ? Math.round(art.death.burnAt + art.death.burnMs * BURN_SHOWN) : NO_DEATH_DELAY_MS)
 // 決着のテロップ（st＝決着した戦闘・fx＝起きた時刻つきの動き・nowMs＝いま・art＝ボスの絵）。返すのは { kind, at（出す時刻・ミリ秒）, ms（出ている長さ）}
