@@ -49,6 +49,7 @@ import {
 //   【確定】同じ日 ユーザー「挑戦を押してから若干ラグがあってから始まるから、スムーズに遷移させるようにして」「挑戦したら遭遇のイラストがどん！って出るようにしてほしい」：
 //     押した瞬間に遭遇のイラスト（V2capBossEncounter.jsx）。サーバーの返事と絵は裏で待つ（lib/useBossEncounter.js）。始められなかったら入口へ
 //     版の確かめ（isStaleBuild）はボスを開いたときに済ませておく＝押してから聞かない（staleNow）
+//     遭遇のイラストを押したのにサーバーの返事がまだなら、手元の値で作った見た目だけの戦闘（earlyFight）を先に出す。時計は動かず、返事が来たら本物に差し替える（ユーザー「遭遇時にタップ押したら画面遷移ができてない」）
 // 【確定】同じ日 ユーザー選択「サーバーの計算で入れる」：戦闘はサーバーが決めた種と写しで作り、終わったら押した記録を預ける（v2cap_dungeon_try_end）。
 //   サーバーが同じ戦闘を回し直して結果を入れる（lib/dungeonVerify.js）。挑戦の途中で画面を離れたら、そこまでの記録を預ける。確かめられないまま戻ったら入口で確かめ直す
 // 【確定】同じ日 ユーザー「アイテムは4つまでしか持てないようにして、全部で合計4つ」「装備は挑戦タブから設定できるように」：入口の上で持ち込む薬を選ぶ（V2capItemLoadout.jsx）
@@ -173,10 +174,10 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
   }
   // 押した瞬間に遭遇のイラストを出す（戦闘に要る絵がそろうまで消えない）
   const motionSrc = playerMotion?.src
-  const showEncounter = (bossKey, diffKey) => enc.begin(bossKey, diffKey, [...(artOfBoss(bossKey)?.srcs || []), bossEncounterOf(bossKey), playerSrc, motionSrc].filter(Boolean))
+  const showEncounter = (bossKey, diffKey, hp) => enc.begin(bossKey, diffKey, [...(artOfBoss(bossKey)?.srcs || []), bossEncounterOf(bossKey), playerSrc, motionSrc].filter(Boolean), hp)
   // 入っているボスにもう一度挑む
   const enter = async (run) => {
-    showEncounter(run.boss, run.diff)
+    showEncounter(run.boss, run.diff, run.hp)
     if (await start(run)) enc.finish()
     else enc.cancel()
   }
@@ -217,7 +218,7 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
   const onEnded = () => setFight(f => (f ? { ...f, ended: true } : f))
   // もう一度挑戦する（結果の画面から）。始められなかったら入口へ（わけは入口に出る）
   const retry = async () => {
-    showEncounter(fight.run.boss, fight.run.diff)
+    showEncounter(fight.run.boss, fight.run.diff, fight.result?.run?.hp)
     if (await start(fight.run)) { enc.finish(); return }
     enc.cancel()
     setFight(null)
@@ -235,6 +236,15 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
   useEffect(() => () => { report() }, [report])
 
   const encounter = enc.enc && <V2capBossEncounter key={enc.enc.id} bossKey={enc.enc.bossKey} diffKey={enc.enc.diffKey} out={enc.enc.out} onTap={enc.skip} />
+  // 遭遇のイラストを押したのにサーバーの返事がまだ：見た目だけの戦闘（時計は動かない・押した記録も送らない・返事が来たら捨てる）
+  const earlyOn = !!enc.enc?.early
+  const earlyFight = useMemo(() => {
+    if (!earlyOn) return null
+    const { bossKey: boss, diffKey: diff, hp } = enc.enc
+    const st = startTryAtb({ boss, diff, hp, seed: 0, snap: { prof, inv: inventory, at: Date.now() } })
+    return st && { run: { boss, diff }, st, runKey: 0 }
+  }, [earlyOn]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (earlyOn) window.scrollTo(0, 0) }, [earlyOn])
 
   // ===== 入口で受け取った報酬 =====
   if (claimed) {
@@ -243,11 +253,12 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
   }
 
   // ===== 戦闘 =====
-  if (fight) {
-    const r = fight.result
-    const boss = DUNGEON_BOSSES[fight.run.boss]
+  const shown = earlyFight || fight
+  if (shown) {
+    const r = shown.result
+    const boss = DUNGEON_BOSSES[shown.run.boss]
     // 結果の画面：決着のテロップが終わったら（討伐も負けも時間切れも）。やめた所でもう倒されていたら、すぐ
-    if (fight.ended || (!fight.st.over && r?.ok && r.run.cleared)) {
+    if (shown.ended || (!shown.st.over && r?.ok && r.run.cleared)) {
       const canRetry = r?.ok && !r.run.cleared && msLeftOf(r.run.ends_at, nowMs) > 0
       return <>
         <V2capBossReward bossKey={fight.run.boss} diffKey={fight.run.diff} cls={prof?.class} st={fight.st} result={r} busy={busy}
@@ -261,11 +272,11 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
       <div style={{ ...box, padding:'12px' }}>
         {encounter}
         <div style={{ color:'#ff8866', fontSize:'12px', marginBottom:'6px' }}>
-          {boss.name}（{diffOf(fight.run.boss, fight.run.diff)?.label}）・残りHP {Math.max(0, fight.st.b.hp).toLocaleString()} / {fight.st.b.base.hp.toLocaleString()}
+          {boss.name}（{diffOf(shown.run.boss, shown.run.diff)?.label}）・残りHP {Math.max(0, shown.st.b.hp).toLocaleString()} / {shown.st.b.base.hp.toLocaleString()}
         </div>
-        <V2capAtbFight st={fight.st} runKey={fight.runKey} macros={macros} playerSrc={playerSrc} playerMotion={playerMotion}
-          bossArt={artOfBoss(fight.run.boss)} onOver={onOver} onEnded={onEnded} hold={enc.hold}
-          footer={fight.st.over ? null
+        <V2capAtbFight st={shown.st} runKey={shown.runKey} macros={macros} playerSrc={playerSrc} playerMotion={playerMotion}
+          bossArt={artOfBoss(shown.run.boss)} onOver={onOver} onEnded={onEnded} hold={enc.hold}
+          footer={earlyFight || shown.st.over ? null
             : <button onClick={giveUp} style={{ ...miniBtn('#ff8888'), flex:1, padding:'8px' }}>挑戦をやめる（ここまでの削りを入れる）</button>} />
       </div>
     )
