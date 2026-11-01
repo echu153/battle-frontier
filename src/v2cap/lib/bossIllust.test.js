@@ -1,7 +1,7 @@
 // v2cap のダンジョンのボスのイラスト版（パーツを重ねて動かす・塗りのエフェクト）のテスト（node --test）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { Buffer } from 'node:buffer'
 import { BOSS_ILLUST } from './bossIllustList.js'
 import { BOSS_ART_DIR, BOSS_DEFS, bossFileOf } from './bossArt.js'
@@ -1074,7 +1074,7 @@ test('【確定】2026-11-01 開戦の動き：ユーザーの言ったとおり
   assert.ok(introBeamAt(z, 400).op > 0, '落ちるあいだの雷の筋')
 
   // どのボスも：終わりは待機の形へ戻り、絵も部品の立ち絵へ戻る。見せ方が終わると何も残らない
-  for (const key of ['varuzenoku', 'amaza', 'zerugiasu']) {
+  for (const key of ['varuzenoku', 'amaza', 'zerugiasu', 'enma']) {
     const art = bossIllustOf(key), m = art.intro
     assert.deepEqual(m.keys.at(-1)[1], {}, key)
     assert.deepEqual(m.enter.at(-1)[1], {}, key)
@@ -1089,6 +1089,84 @@ test('【確定】2026-11-01 開戦の動き：ユーザーの言ったとおり
       assert.equal(introBeamAt(mo, 500), null)
     }
   }
+})
+
+test('【確定】2026-11-01 閻魔の待機（制作帳のとおり）：袖と裾がなびく・足と杖は動かさない・手の炎がゆらぐ・首がわずかに動く・体は上下に動かさない・魂の炎が漂う', () => {
+  const a = bossIllustOf('enma'), def = BOSS_ILLUST_DEFS.enma
+  const { moving, still } = rigLayersOf(a)
+  assert.deepEqual(moving.map(p => p.key), ['body', 'head'], '帯に入るのは体と頭だけ')
+  assert.deepEqual(still.map(p => p.key), ['staff', 'legL', 'legR', 'hand'], '杖・靴・手は帯の上に重ねる')
+  assert.ok(flutterBandsAt('enma', 1000).length > 1, '袖と裾がなびく')
+  assert.deepEqual(a.parts.filter(p => p.free).map(p => p.key), ['soulA', 'soulB', 'soulC', 'soulD', 'soulE'])
+  assert.ok(a.parts.filter(p => p.free).every(p => !p.nest), '魂の炎は1つずつ動く（親といっしょに動かない）')
+  const p = idlePoseAt(def.idle, 1234)
+  assert.equal(p.y, 0)
+  assert.equal(p.r, 0)
+  assert.ok(Math.abs(p.head) <= 1, '首はわずかに')
+  // 手の炎：絵は先に読む・手のひらの上（手の写しより奥に描く＝画面）
+  assert.ok(a.handFlame && a.srcs.includes(a.handFlame.src))
+  const hand = a.parts.find(x => x.key === 'hand')
+  assert.ok(a.handFlame.x + a.handFlame.w / 2 > hand.x && a.handFlame.x + a.handFlame.w / 2 < hand.x + hand.w, '炎は手の真上')
+  assert.ok(a.handFlame.y + a.handFlame.h > hand.y, '炎の根もとは手に重なる')
+  const stage = readFileSync(new URL('../components/V2capAtbStage.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  assert.ok(stage.indexOf('art.handFlame && <BossAuraFlow') < stage.indexOf("{still.map(p => <RigPart"), '炎は手の写しより奥')
+  // 帯ごとに同じ物を描くので、光と炎は帯の外
+  assert.match(stage, /art\.lights && !art\.flutter && <RigLights/)
+})
+
+test('【確定】2026-11-01 閻魔の技：どれも足は動かさない（傾けるだけ）・ポーズの絵・大技の構えは3.5秒のあとにつながる・足の位置を立ち絵にそろえた', () => {
+  const a = bossIllustOf('enma'), def = BOSS_ILLUST_DEFS.enma
+  assert.deepEqual(Object.keys(a.motions), ['soul', 'pillar', 'chains', 'hell'])
+  for (const m of Object.values(a.motions)) {
+    if (!m.big) assert.ok(m.totalMs <= 1600, `${m.label}：大技を除いて動きは1.6秒まで（core/atb.js の NOW_WAIT_AFTER_ACT_SEC）`)
+    assert.deepEqual(m.keys.at(-1)[1], {}, `${m.label}：終わりは待機の形`)
+    for (const [, k] of m.keys) for (const f of ['x', 'y', 'r']) assert.equal(k[f], undefined, `${m.label}：足がすべらない`)
+    assert.ok(m.poses.windup && m.poses.strike, `${m.label}：構えと振り抜きの絵`)
+    assert.ok(m.fx?.hit, `${m.label}：当たる絵`)
+    assert.ok(illustShowAt(m, m.hitMs + 20).poses.at(-1).name === 'strike', `${m.label}：撃つ時刻は振り抜きの絵`)
+    assert.ok(m.scene, `${m.label}：演出`)
+  }
+  // 魂火：手の炎を持って投げる＝飛ぶ／ほかは足元から
+  assert.ok(a.motions.soul.fx.fly && a.motions.soul.fx.charge && a.motions.soul.charge.still, '手の炎は回さない')
+  assert.equal(a.motions.pillar.fx.fly, undefined)
+  assert.equal(a.motions.pillar.fx.hit.anim, 'rise')
+  assert.equal(a.motions.chains.fx.hit.anim, 'bind')
+  assert.ok(a.motions.chains.fx.hit.rise, '鎖は足元から伸びる')
+  assert.equal(a.motions.chains.scene.chains, true)
+  // 無間地獄：相手の足元の地割れの輪＋下から噴き上がる炎。奔流は無し
+  const h = a.motions.hell
+  assert.ok(h.big && h.castSkipMs === 3500 && h.hitMs === 4000)
+  assert.equal(h.fx.charge.on, 'feet')
+  assert.equal(h.fx.hit.anim, 'rise')
+  assert.ok(h.fx.flow, '炎を上へ流す絵')
+  assert.equal(h.scene.noBeam, true)
+  assert.equal(motionPoseAt(h.keys, 3500).lean, def.cast.pose.lean, '3500 の形は構えの姿勢と同じ（つなぎ目で跳ねない）')
+  assert.equal(a.castArt, 'windup')
+  // ポーズの絵は足がそろっている（靴のまん中＝元の絵の px で立ち絵の 554。poseFit は測った値）
+  for (const n of ['業火断罪_構え', '無間地獄_構え']) assert.equal(def.poseFit[n].s, 1.04, `${n}：少し小さく描かれていた`)
+  // バフ：六道輪廻の理の輪は描いた輪のまん中で回る・忿怒相はそのあとも業火が燃える
+  assert.ok(a.buffs['六道輪廻の理'].spin > 0 && a.buffs['六道輪廻の理'].spinAt)
+  const s0 = illustBuffShowAt(a, '六道輪廻の理', 500), s1 = illustBuffShowAt(a, '六道輪廻の理', 1000)
+  assert.ok(s1.aura.rot > s0.aura.rot, '輪がゆっくり回る')
+  assert.equal(illustBuffShowAt(a, '忿怒相', 1000).aura.rot, 0, '業火は回さない')
+  assert.ok(a.buffs['忿怒相'].after.flame)
+})
+
+test('【確定】2026-11-01 閻魔の登場（ユーザー「暗闇から突如現れる、持っている杖をどんと床について威圧する」）：暗闇に見えない→影が突然現れる→杖を突いて揺れる。舞台は暗いところから戻る', () => {
+  const m = bossIllustOf('enma').intro, slam = m.shows.at(-1)
+  assert.equal(introEnterAt(m, 0).op, 0, 'はじめは見えない')
+  assert.equal(introEnterAt(m, 400).op, 0)
+  assert.ok(introEnterAt(m, 560).op > 0.99 && introEnterAt(m, 560).bright < 0.3, '突然現れるが暗い影のまま')
+  assert.ok(m.shows[0].dim > 0.8, '舞台は真っ暗')
+  assert.deepEqual(illustShowAt(m, 700).poses.map(p => p.name), ['windup'], '杖を持ち上げた絵')
+  assert.ok(illustShowAt(m, slam.at + 20).poses.some(p => p.name === 'strike'), '杖を突いた絵')
+  assert.ok(introEnterAt(m, slam.at).bright > 1, '突いた瞬間に光る')
+  assert.equal(introSceneAt(m, slam.at - 1)?.rings.length || 0, 0, '突く前は輪が無い')
+  assert.ok(introSceneAt(m, slam.at + 200).rings.length > 0 && introSceneAt(m, slam.at + 200).shake[0] !== 0, '衝撃の輪と揺れ')
+  assert.ok(illustPoseAt('enma', m, slam.at + 100, 0).dust > 0, '砂ぼこり')
+  const wrath = BOSS_ILLUST_DEFS.enma.buffs.wrath.show
+  assert.ok(slam.shake <= wrath.shake && slam.punch < wrath.punch && slam.dim < wrath.dim, '忿怒相の見せ場より弱い')
+  for (const [, p] of m.keys) for (const f of ['x', 'y', 'r']) assert.equal(p[f], undefined, '足は動かさない')
 })
 
 test('開戦の動きの見せ方を重ねる：揺れは足す・暗さは濃いほう・輪と粒は全部', () => {

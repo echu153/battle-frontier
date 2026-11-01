@@ -3,10 +3,12 @@ export const BOSS_THUMB = {
   varuzenoku: '43af002f',
   amaza: 'b498b575',
   zerugiasu: '73e7914f',
+  enma: '0fa30424',
 }
 // 挑戦を押した瞬間に出す大きな絵（遭遇のイラスト）の中身の印
 export const BOSS_ENCOUNTER = {
   varuzenoku: '3e24c3fa',
   amaza: '248d13ec',
   zerugiasu: 'c8efb9bd',
+  enma: '3f015251',
 }

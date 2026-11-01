@@ -99,6 +99,17 @@ export const BOSS_DEFS = {
     ],
     effects: [],
   },
+  // 【確定】2026-11-01 4体目（ユーザー「閻魔も作ったから最後まで全部つくって」）。イラスト版だけ。技の名前と効き目はユーザーが決めた（同じ制作帳）。動きとエフェクトは lib/bossIllust.js
+  enma: {
+    name: '閻魔', dir: '閻魔', pixel: false,
+    motions: [
+      { file: '魂火', key: 'soul' },
+      { file: '業火断罪', key: 'pillar' },
+      { file: '業縛の鎖', key: 'chains' },
+      { file: '無間地獄', key: 'hell' },
+    ],
+    effects: [],
+  },
 }
 // 当たる（撃ち出す）コマ（流すコマの中で0から）。6コマの絵は④＝2・8コマの絵は⑤＝3
 export const BOSS_HIT_OF = { 4: 2, 6: 3 }

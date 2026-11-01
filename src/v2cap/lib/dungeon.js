@@ -44,7 +44,7 @@ export const DIFF_COLOR = { normal:'#66dd88', hard:'#ffaa44', expert:'#ff5566', 
 //     reward＝倒したときの報酬（EXP＝推奨の場所のボス5体ぶん・Gold＝推奨LV×50＝デイリー半分）
 //   ready:false の難易度はまだ呼べない（数字を決めていない）
 //   summon:false のボスはまだ呼べない（試し撃ちだけ。いまは無い）
-// 黒龍の強さ（雨摩座とゼルギアスも同じ数字を使う）
+// 黒龍の強さ（雨摩座・ゼルギアス・閻魔も同じ数字を使う）
 const VARUZENOKU_DIFFS = {
   // 2026-10-29 鈍足を「ゲージ20%遅く」にしてエンジンで測り直した（前はノーマル 攻撃0.42倍・HP7000）。
   //   ノーマル：0.42倍・7000だと1回で倒せたのが22人中6人に減った → 0.35倍・6500で12人（残りも全員2回目）
@@ -175,13 +175,46 @@ export const DUNGEON_BOSSES = {
     },
     diffs: VARUZENOKU_DIFFS,
   },
+  // 【確定】2026-11-01 ユーザー「ゼルギアスと閻魔も一緒に作りたい」→技の案に「これでいい」→「閻魔も作ったから最後まで全部つくって」：4体目。ぜんぶ魔法の裁判官。呪いや封印を積んだ罪に見立てて、大技がその数だけ重くなる。
+  //   節目・技の出る割合・強さ（diffs）は黒龍と同じ。
+  enma: {
+    name: '閻魔', kind: 'mag', race: '悪魔',
+    dist: { hp: 34, mp: 6, str: 12, dex: 12, agi: 8, int_stat: 16, vit: 9, luk: 3 },
+    // 通常攻撃が魂火（魔法1.0倍）
+    hardNormalAil: { key: 'curse', chance: 20 },
+    skills: [
+      { name: '業火断罪', kind: 'mag', mult: 1.6, proc: 100, mp: 0, ail: { key: 'curse', chance: 70 } },
+      { name: '業縛の鎖', kind: 'mag', mult: 1.8, proc: 100, mp: 0, ail: { key: 'seal', chance: 50 } },
+      // 倍率2.5以上＝撃つ前に構え（防御で半分）。構えは黒龍と同じ4秒。相手の状態異常1つにつき+25%（+75%まで）・当てると全部消える＝構えのあいだに清めの雫で消すと4倍で済む
+      { name: '無間地獄', kind: 'mag', mult: 4.0, proc: 100, mp: 0, castSec: 3.5, consumeAllAil: { per: 25, max: 75 } },
+    ],
+    pattern: {
+      steps: [
+        { at: 0.75, skill: '業火断罪' },
+        { at: 0.5, skill: '業縛の鎖' },
+        { at: 0.25, skill: '無間地獄', now: true },   // 切ったらゲージを待たずに構えに入る（黒龍と同じ）
+      ],
+      bands: [
+        { min: 0.75, weights: {} },
+        { min: 0.5, weights: { '業火断罪': 30 } },
+        { min: 0.25, weights: { '業火断罪': 50, '業縛の鎖': 50 } },
+        { min: -1, weights: { '業火断罪': 25, '業縛の鎖': 25, '無間地獄': 50 } },   // 行動3回に1回（黒龍と同じ）
+      ],
+      // 名前は仏の教えから（六道を巡る理で身を固める→静かな顔が怒りの形相に変わる）。六道輪廻の理は V1 の「奇数ターンは物理・偶数ターンは魔法が通る」を入れない（名前と見た目だけ・制作帳）
+      buffs: [
+        { at: 0.6, name: '六道輪廻の理', table: { vit: 25 } },
+        { at: 0.3, name: '忿怒相', table: { int_stat: 35 } },
+      ],
+    },
+    diffs: VARUZENOKU_DIFFS,
+  },
 }
 
-// 「挑戦」のカテゴリ（入口の見出しとボス）。旧レイドの残りの1体（閻魔）も四凶に足す予定。
+// 「挑戦」のカテゴリ（入口の見出しとボス）。
 //   【確定】2026-11-01 ユーザー「今の強敵のグループ名を良い感じに変えたい」→選んだ「四凶」（しきょう・八獄と同じ「数＋不吉な字」・「四強」と同じ読み）。key はそのまま
 //   ★八獄・天穹十二宮もカテゴリに足す予定だが、ユーザー「※まだ入れないで」＝まだ足さない
 export const CHALLENGE_CATS = [
-  { key: 'rival', label: '四凶', bosses: ['varuzenoku', 'amaza', 'zerugiasu'] },
+  { key: 'rival', label: '四凶', bosses: ['varuzenoku', 'amaza', 'zerugiasu', 'enma'] },
 ]
 
 export const diffOf = (bossKey, diffKey) => DUNGEON_BOSSES[bossKey]?.diffs?.[diffKey] || null

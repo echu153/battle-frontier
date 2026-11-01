@@ -127,6 +127,40 @@ const fillUnder = (img, c, from, S) => {
   }
   for (const p of holes) if (img.data[p * 4 + 3]) for (let ch = 0; ch < 3; ch++) img.data[p * 4 + ch] *= UNDER_SHADE
 }
+// 多角形 poly の中を、行ごとに左右のすぐ外の色（3px の平均）でつなぐ（透明度は元のまま＝止まっているときの形は変わらない）。片側の外が透明な行は残った側の色・両側とも透明な行は消す
+const inpaintRows = (img, poly, S) => {
+  const sideOf = (x0, dir, y) => {
+    const sum = [0, 0, 0]
+    for (let n = 1; n <= 3; n++) {
+      const x = x0 + dir * n, i = (y * S + x) * 4
+      if (x < 0 || x >= S || img.data[i + 3] < 200) return null
+      for (let ch = 0; ch < 3; ch++) sum[ch] += img.data[i + ch] / 3
+    }
+    return sum
+  }
+  for (let y = 0; y < S; y++) {
+    let x0 = -1, x1 = -1
+    for (let x = 0; x < S; x++) if (inPoly(poly, x + 0.5, y + 0.5)) { if (x0 < 0) x0 = x; x1 = x }
+    if (x0 < 0) continue
+    const L = sideOf(x0, -1, y), R = sideOf(x1, 1, y)
+    for (let x = x0; x <= x1; x++) {
+      const i = (y * S + x) * 4, t = (x - x0 + 1) / (x1 - x0 + 2)
+      if (!L && !R) { img.data[i + 3] = 0; continue }
+      for (let ch = 0; ch < 3; ch++) img.data[i + ch] = Math.round((L || R)[ch] * (1 - t) + (R || L)[ch] * t)
+    }
+  }
+}
+// 足元のまん中（下のはしのまん中）からの距離で外を透明にする：k＝消えはじめる距離（1＝左右と上のはし）。明るい画素（炎の舌）ほど外まで残す
+const domeFade = (img, k) => {
+  for (let y = 0; y < img.H; y++) for (let x = 0; x < img.W; x++) {
+    const i = (y * img.W + x) * 4
+    if (!img.data[i + 3]) continue
+    const lum = (0.3 * img.data[i] + 0.59 * img.data[i + 1] + 0.11 * img.data[i + 2]) / 255
+    const r = Math.hypot((x - img.W / 2) / (img.W / 2), (img.H - y) / img.H) - 0.16 * lum
+    const t = Math.min(1, Math.max(0, (r - k) / (0.98 - k)))
+    img.data[i + 3] = Math.round(img.data[i + 3] * (1 - t * t * (3 - 2 * t)))
+  }
+}
 const centroidOf = (m, W) => {
   let sx = 0, sy = 0, n = 0
   for (let p = 0; p < m.length; p++) if (m[p]) { sx += p % W; sy += (p / W) | 0; n++ }
@@ -641,8 +675,9 @@ const build = (key, def, dir) => {
       const k = Math.min(1, polyEdgeDist(c.take, x + 0.5, y + 0.5) / c.feather), i = (y * S + x) * 4 + 3
       img.data[i] = Math.round(img.data[i] * k * k * (3 - 2 * k))
     }
-    // dropInset＝親のパーツからはふちを残して内だけ抜く（すき間を埋めたあとに抜く＝下の⑤の2）
-    if (!c.dropInset) for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) if (inPoly(c.drop || c.take, x + 0.5, y + 0.5)) from.data[(y * S + x) * 4 + 3] = 0
+    // dropInset＝親のパーツからはふちを残して内だけ抜く（すき間を埋めたあとに抜く＝下の⑤の2）・copy＝親はそのまま（動かない写しを上に重ねるだけ）・
+    //   inpaint＝親の多角形の中を左右の色でつなぐ（下の⑤の2・閻魔の杖）
+    if (!c.dropInset && !c.copy && !c.inpaint) for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) if (inPoly(c.drop || c.take, x + 0.5, y + 0.5)) from.data[(y * S + x) * 4 + 3] = 0
     layers[part] = img
     pivotOf[part] = c.pivot
     notes.push(`${part}：${def.base === 'stand' && c.from === 'body' ? '立ち絵' : FILES[c.from] || c.from}から切り分けた`)
@@ -667,6 +702,10 @@ const build = (key, def, dir) => {
       if (inPoly(c.take, x + 0.5, y + 0.5) && polyEdgeDist(c.take, x + 0.5, y + 0.5) >= c.dropInset) layers[c.from].data[(y * S + x) * 4 + 3] = 0
     }
   }
+  // ⑤の3 細い物の写し（inpaint・閻魔の杖）：親のパーツの多角形の中を、行ごとに左右の色をつないで埋める。
+  //   【確定】2026-11-01 杖は着物のひらひらの帯に入れず上に重ねる。親に残すと、ずれた杖が横に見えて二重になり、抜くと、ずれた着物のふちから穴が透ける。
+  //   両側とも透明な行（裾の下など）は埋めない＝もともと後ろに何も無い
+  for (const c of Object.values(def.cuts || {})) if (c.inpaint) inpaintRows(layers[c.from], c.take, S)
   // 後ろの絵（split.back）：切り分けで空いた所のうち、翼に入れなかった所（胸・肩・首の付け根）を体に埋める（体のまま動かない）
   if (back) {
     let n = 0
@@ -680,6 +719,8 @@ const build = (key, def, dir) => {
   // 親：切り分けたパーツは元のパーツの子。adopt なら逆（首が頭の親）
   const parent = {}
   for (const [p, c] of Object.entries(def.cuts || {})) {
+    // solo＝親といっしょに動かない（閻魔の魂の炎：1枚の絵から切って、1つずつ漂う）
+    if (c.solo) continue
     if (c.adopt) { if (parent[c.from]) parent[p] = parent[c.from]; parent[c.from] = p } else parent[p] = c.from
   }
   Object.assign(pivotOf, def.pivots || {})
@@ -774,6 +815,8 @@ const build = (key, def, dir) => {
       fx[e.motion] = { ...fx[e.motion], [e.kind]: { w: small.W, h: small.H, ax: 0, ay: 0, at } }
       continue
     }
+    // dome＝絵いっぱいに描かれた炎の四角いふちを消す（足元のまん中から広がる丸屋根の外を透明に・明るい炎の舌ほど外まで残す・無間地獄）
+    if (e.dome) domeFade(img, e.dome)
     const t = trim(img)
     const kk = Math.min(1, FX_SIDE / Math.max(t.img.W, t.img.H))
     const small = kk < 1 ? resizeRgba(t.img, Math.round(t.img.W * kk), Math.round(t.img.H * kk)) : t.img

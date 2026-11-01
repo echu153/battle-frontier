@@ -8,7 +8,7 @@ import {
   diffOf, isDiffReady, isDiffUnlocked, isSummonable, summonBlockOf, tryStaminaOf, dungeonFighter,
 } from './dungeon.js'
 import { createAtb, runFor, startMacro, fillPerSecOf, hpBuffChips, castMsOf, ATB_SLOW_CUT, FILL_PER_SEC, BUFF_GAUGE_SEC, BUFF_WAIT_AFTER_ACT_SEC, BUFF_SHOW_SEC, TURN_SEC, GAUGE_FULL, NOW_WAIT_AFTER_ACT_SEC, CAST_SEC } from '../core/atb.js'
-import { inflict, healMultOf } from '../core/ailments.js'
+import { inflict, healMultOf, hasAilment } from '../core/ailments.js'
 import { bossIllustOf, buffArtMsOf } from './bossIllust.js'
 import { bossThumbOf } from './bossArt.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
@@ -101,6 +101,8 @@ test('【確定】2026-11-01 ハードから通常攻撃に状態異常：黒爪
   assert.deepEqual(dungeonFighter('amaza', 'hard').normalAil, { key: 'slow', chance: 20 })
   assert.equal(dungeonFighter('zerugiasu', 'normal').normalAil, null)
   assert.deepEqual(dungeonFighter('zerugiasu', 'hard').normalAil, { key: 'blind', chance: 20 })
+  assert.equal(dungeonFighter('enma', 'normal').normalAil, null)
+  assert.deepEqual(dungeonFighter('enma', 'hard').normalAil, { key: 'curse', chance: 20 })
   for (const boss of Object.keys(DUNGEON_BOSSES)) {
     const n = normalsOf(boss, 'normal')
     assert.ok(n.hits.length > 100)
@@ -654,7 +656,7 @@ test('【確定】2026-11-01 ユーザー「HP25％以下の大技使用率も�
 })
 
 test('【確定】2026-10-30 溜めは4秒（ユーザー「溜めモーションは4秒でいい」・雨摩座も「同じにする」）：構えはじめから吐くまで4秒＝構え3.5秒＋直前の0.5秒・「動きを見る」も同じ長さ', () => {
-  for (const [key, big] of [['varuzenoku', 'doom'], ['amaza', 'deluge'], ['zerugiasu', 'ruin']]) {
+  for (const [key, big] of [['varuzenoku', 'doom'], ['amaza', 'deluge'], ['zerugiasu', 'ruin'], ['enma', 'hell']]) {
     const d = bossIllustOf(key).motions[big]
     const sk = DUNGEON_BOSSES[key].skills.find(s => s.name === d.label)
     assert.equal(sk.castSec * 1000, d.castSkipMs, `${key}：構えの長さ＝技の途中から流す時刻（つなぎ目が合う）`)
@@ -710,7 +712,7 @@ test('【確定】2026-10-30 持ち越しで節目をもう切っているなら
 test('【確定】2026-10-31 メニューは「挑戦」・中は「強敵」に黒龍と雨摩座（ユーザー「これは『挑戦』にして」「ここに『強敵』ってカテゴリを作って、ここにヴァルゼノクとあまざ入れて」）・八獄と天穹十二宮はまだ入れない・画面に「IDダンジョン」と出さない', () => {
   // 2026-11-01 グループの名前は「強敵」→「四凶」（ユーザー選択）
   assert.deepEqual(CHALLENGE_CATS.map(c => c.label), ['四凶'], '「八獄」「てんきゅう12宮」はまだ入れない')
-  assert.deepEqual(CHALLENGE_CATS[0].bosses, ['varuzenoku', 'amaza', 'zerugiasu'], '2026-11-01 ユーザー「進めて」でゼルギアスも')
+  assert.deepEqual(CHALLENGE_CATS[0].bosses, ['varuzenoku', 'amaza', 'zerugiasu', 'enma'], '2026-11-01 ユーザー「進めて」でゼルギアス・「最後まで全部つくって」で閻魔も＝四凶の4体')
   for (const c of CHALLENGE_CATS) for (const k of c.bosses) {
     assert.ok(isSummonable(k), k)
     // 一覧の小さい絵（ボスの種類を足したら node tools/v2cap-boss-thumb.mjs）
@@ -891,7 +893,7 @@ test('【確定】2026-10-31 戦いが終わったら構えも終わる（本番
     untilTrue(st, () => st.b.cast)
     return st
   }
-  for (const [key, buffs] of [['varuzenoku', ['黒鱗の鎧', '逆鱗']], ['amaza', ['霧雨の帳', '篠突く雨']], ['zerugiasu', ['雷鋼装甲', '炉心臨界']]]) {
+  for (const [key, buffs] of [['varuzenoku', ['黒鱗の鎧', '逆鱗']], ['amaza', ['霧雨の帳', '篠突く雨']], ['zerugiasu', ['雷鋼装甲', '炉心臨界']], ['enma', ['六道輪廻の理', '忿怒相']]]) {
     const win = casting(key, buffs, 31)
     win.b.hp = 0
     win.a.gauge = GAUGE_FULL
@@ -995,6 +997,67 @@ test('【確定】2026-11-01 神雷終焉：必ず当たる・相手が麻痺し
   }
   assert.ok(Math.abs(avg(true) / avg(false) - 1.5) < 0.05, `麻痺で1.5倍（${avg(true)}/${avg(false)}）`)
   assert.ok(SEEDS.every(s => !shoot('神雷終焉', s, { par: true }).foe.ail.paralyze), '当てると麻痺は消える')
+})
+
+test('【確定】2026-11-01 閻魔（ユーザー「ゼルギアスと閻魔も一緒に作りたい」→技の案に「これでいい」→「閻魔も作ったから最後まで全部つくって」）：ぜんぶ魔法・節目と割合と強さは黒龍と同じ・技とバフの名前は案のとおり', () => {
+  const E = DUNGEON_BOSSES.enma, V = DUNGEON_BOSSES.varuzenoku
+  assert.equal(isSummonable('enma'), true)
+  assert.equal(isDiffUnlocked('enma', 'normal', 1), false, 'エリア②に着くまで呼べない')
+  assert.equal(isDiffUnlocked('enma', 'normal', 2), true)
+  assert.equal(isDiffUnlocked('enma', 'hard', 4), false, 'エリア⑤に着くまで呼べない')
+  assert.equal(isDiffUnlocked('enma', 'expert', 15), false, 'まだ数字が無い')
+  assert.deepEqual(E.diffs, V.diffs, '強さは黒龍と同じ')
+  assert.deepEqual(E.dist, DUNGEON_BOSSES.amaza.dist, '配分は魔法の雨摩座と同じ')
+  assert.equal(E.kind, 'mag')
+  assert.equal(E.race, '悪魔')
+  assert.deepEqual(E.skills.map(s => [s.name, s.kind, s.mult, s.ail?.key ?? null, s.ail?.chance ?? null]), [
+    ['業火断罪', 'mag', 1.6, 'curse', 70], ['業縛の鎖', 'mag', 1.8, 'seal', 50], ['無間地獄', 'mag', 4.0, null, null],
+  ])
+  assert.deepEqual(E.pattern.steps.map(s => s.at), V.pattern.steps.map(s => s.at))
+  const rename = { '焦熱の吐息': '業火断罪', '黒翼烈風': '業縛の鎖', '終焉の黒焔': '無間地獄' }
+  assert.deepEqual(E.pattern.bands, V.pattern.bands.map(b => ({ min: b.min, weights: Object.fromEntries(Object.entries(b.weights).map(([k, w]) => [rename[k], w])) })))
+  assert.deepEqual(E.pattern.buffs, [
+    { at: 0.6, name: '六道輪廻の理', table: { vit: 25 } }, { at: 0.3, name: '忿怒相', table: { int_stat: 35 } },
+  ])
+  // 絵と同じ名前（違うと動きが出ない）：技＝動きの label（1つめが通常攻撃の魂火）・バフ＝絵の buffs
+  const a = bossIllustOf('enma')
+  assert.deepEqual(Object.values(a.motions).map(m => m.label), ['魂火', ...E.skills.map(s => s.name)])
+  assert.deepEqual(Object.keys(a.buffs), E.pattern.buffs.map(b => b.name))
+  // 試し撃ちで戦える（満タンのあいだは魂火だけ・75%を切ったら業火断罪）
+  const st = createAtb(dummy(), dungeonFighter('enma', 'normal'), { rng: rngOf(4), maxSec: 999 })
+  runFor(st, 20)
+  const acts = () => st.log.filter(l => l.side === E.name && (l.type === 'skill' || l.type === 'normal')).map(l => l.skill || '魂火')
+  assert.ok(acts().length >= 3 && acts().every(x => x === '魂火'))
+  const n0 = acts().length
+  st.b.hp = Math.floor(st.b.base.hp * 0.55)
+  runFor(st, 9)
+  assert.equal(acts()[n0], '業火断罪')
+  assert.deepEqual(buffLog(st, E.name), ['六道輪廻の理'])
+})
+
+test('【確定】2026-11-01 無間地獄：相手の状態異常1つにつき+25%（+75%＝7倍まで）・当てると全部消える＝構えのあいだに清めの雫で消すと4倍で済む', () => {
+  const shoot = (seed, ails = []) => {
+    const f = dungeonFighter('enma', 'normal'), me = createSide(f), foe = createSide(dummy()), log = []
+    for (const k of ails) inflict(foe.ail, k)
+    takeAction(me, foe, rngOf(seed), log, { idx: f.slots.findIndex(x => x.skill.name === '無間地獄'), noProc: true })
+    return { e: log.find(l => l.type === 'skill' && l.skill === '無間地獄'), foe }
+  }
+  const SEEDS = Array.from({ length: 300 }, (_, i) => (i + 1) * 7919)
+  const avg = (ails) => {
+    const xs = SEEDS.map(s => shoot(s, ails).e).filter(e => e && e.hits > 0 && !e.crit)
+    return xs.reduce((a, e) => a + e.damage, 0) / xs.length
+  }
+  const none = avg([])
+  assert.ok(Math.abs(avg(['curse']) / none - 1.25) < 0.05, '呪い1つで+25%（先に消えるので、呪いの受けるダメージ+15%は重ならない）')
+  assert.ok(Math.abs(avg(['seal']) / none - 1.25) < 0.05, '封印1つで+25%')
+  assert.ok(Math.abs(avg(['seal', 'slow']) / none - 1.5) < 0.05, '2つで+50%')
+  assert.ok(Math.abs(avg(['seal', 'slow', 'blind']) / none - 1.75) < 0.05, '3つで+75%')
+  assert.ok(Math.abs(avg(['seal', 'slow', 'blind', 'weaken']) / none - 1.75) < 0.05, '4つでも+75%まで')
+  // 当てると全部消える（外れたときは消えない）
+  for (const s of SEEDS) {
+    const { e, foe } = shoot(s, ['seal', 'slow'])
+    if (e?.hits > 0) { assert.equal(hasAilment(foe.ail, 'seal'), false); assert.equal(hasAilment(foe.ail, 'slow'), false) }
+  }
 })
 
 test('【確定】2026-11-01 炉心臨界：STRとAGIが+25%（INTは上がらない）・ボスのゲージも速くなる', () => {

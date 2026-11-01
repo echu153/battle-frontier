@@ -85,9 +85,10 @@ const srcOf = (key, kind) => {
 //     【確定】2026-10-30 ユーザー「しっぽが不自然、一緒に動いちゃってる」（技で飛び込むとき）：竜を丸ごと横へずらすと、地面のしっぽまですべった。
 //     技は x・y・r で竜を動かさず、lean で上の体だけを押し出す（しっぽと足は地面に残る）
 //   機神（ゼルギアス）：wL1〜wL4・wR1〜wR4＝左右の翼の羽根の角度（上から順。左は＋で・右は−で羽根の先が上がる）
+//   閻魔：soulA〜soulE＝漂う魂の炎の角度（遠くの点が中心＝上下に動く）
 const ZERO = { x: 0, y: 0, r: 0, neck: 0, head: 0, wingN: 0, wingF: 0, wingNSq: 0, wingFSq: 0, arm: 0, jaw: 0, glow: 0, armN: 0, armF: 0, water: 0,
   armD: 0, armC: 0, armU: 0, armCOn: 0, armUOn: 0, tail: 0, tailT: 0, dust: 0, orb: 0, orbOp: 0, orbT: 0, lean: 0,
-  wL1: 0, wL2: 0, wL3: 0, wL4: 0, wR1: 0, wR2: 0, wR3: 0, wR4: 0 }
+  wL1: 0, wL2: 0, wL3: 0, wL4: 0, wR1: 0, wR2: 0, wR3: 0, wR4: 0, soulA: 0, soulB: 0, soulC: 0, soulD: 0, soulE: 0 }
 // 技ごとの動き：keys＝[時刻ミリ秒, 姿勢（待機に足す）, 区間の速さ（EASES・無ければ smooth）]・hitMs＝当たる（撃ち出す）時刻・jolt＝当たった瞬間の揺れ（joltAt）
 //   trails＝残像の筋（part のパーツの点 pts を、lagMs 前からいまの時刻までたどる。fromMs〜toMs のあいだだけ・kind＝claw 爪／wind 風）
 //   shots＝飛ぶ絵の出どころ（無ければ口から1つ）。{ part, pt（パーツの点）, delayMs（hitMs からの遅れ・−で先に出る）, size（飛ぶ絵の大きさの倍率） }
@@ -820,6 +821,201 @@ export const BOSS_ILLUST_DEFS = {
       { file: '炉心の光', motion: 'idle', kind: 'core' },
     ],
   },
+  // 【確定】2026-11-01 4体目 閻魔（ユーザー「閻魔も作ったから最後まで全部つくって、今から出かけてくるから本番pushまで一旦全部進めてみて」）：
+  //   立ち絵そのものが体（base: 'stand'）。地面に立っているので、ポーズの絵は足の位置を立ち絵にそろえ（poseFit）、動きは地面を支点に傾けるだけ（lean＝足は動かない）。
+  //   待機（制作帳のとおり）：袖と裾がなびく（flutter）・足と杖は動かさない（still）・手の上の魂の炎がゆらぐ（handFlame）・首がわずかに動く・体は上下に動かさない・まわりを魂の炎が漂う（free）
+  //   ChatGPT の体（体.png）は使わなかった（杖の後ろは左右の色でつなぎ、頭の後ろは動かしても見えない）
+  enma: {
+    base: 'stand', files: { soulA: '魂の炎' }, fixed: { soulA: {} }, spare: ['体'], quality: 80, ground: 622,
+    // 奥から手前へ。魂の炎は切り離して漂う（free＝いちばん奥の別の枠・技のあいだも待機のまま）。杖・靴・手は帯の上に重ねる（手は炎の手前＝指のあいだから炎が見える）
+    layers: ['soulA', 'soulB', 'soulC', 'soulD', 'soulE', 'body', 'head', 'staff', 'legL', 'legR', 'hand'],
+    free: ['soulA', 'soulB', 'soulC', 'soulD', 'soulE'],
+    still: ['staff', 'legL', 'legR', 'hand'],
+    // 魂の炎は1つずつ遠くの点を中心に少しだけ回す＝ふわふわ上下する（左の炎は右の遠く・右の炎は左の遠くが中心）
+    pivots: { soulA: [505, 145] },
+    // ポーズの絵は足（両方の靴のまん中と靴の下）を立ち絵にそろえる（元の絵 1254px の px・立ち絵の足のまん中 554, 靴の下 1224）。
+    //   構えの2枚は少し小さく描かれていた（靴の間隔と帯のお面の幅で 1.04 倍）。オーラは描いた場所から体へ寄せる（輪は頭のうしろへ・業火は足元へ）
+    poses: {
+      soul: { windup: '魂火_構え', strike: '魂火_放つ' },
+      pillar: { windup: '業火断罪_構え', strike: '業火断罪_突く' },
+      chains: { windup: '業縛の鎖_構え', strike: '業縛の鎖_引く' },
+      hell: { windup: '無間地獄_構え', strike: '無間地獄_振り下ろし' },
+    },
+    poseFit: {
+      '魂火_放つ': { dx: 18 },
+      '業火断罪_構え': { s: 1.04, dx: 74, dy: -30 },
+      '業縛の鎖_構え': { dx: 47, dy: -6 }, '業縛の鎖_引く': { dx: 47, dy: -3 },
+      '無間地獄_構え': { s: 1.04, dx: 26, dy: -27 }, '無間地獄_振り下ろし': { dx: -50, dy: -10 },
+      '六道輪廻の理_ポーズ': { dx: 13, dy: -10 }, '忿怒相_ポーズ': { dx: 2, dy: -13 },
+      '六道輪廻の理_オーラ': { dx: -30, dy: -130 }, '忿怒相_オーラ': { dy: 70 },
+    },
+    poseMargin: 100,
+    // 構え（無間地獄の3.5秒）：杖を天へ掲げた構えの絵のまま、相手の足元で地割れの輪が広がる
+    cast: { pose: { lean: -0.05 }, art: 'windup' },
+    idle: {
+      // [振れ幅（°）, 1回のミリ秒, ずらし]。魂の炎は中心が遠いので 1.5° で約10px 動く
+      sway: { head: [1, 5200, 0.2], soulA: [1.5, 4300, 0], soulB: [-1.3, 3700, 0.3], soulC: [1.6, 4900, 0.55], soulD: [-1.5, 4100, 0.15], soulE: [1.4, 5300, 0.7] },
+      // 袖と裾がなびく（帯の下から裾まで・雨摩座と同じ仕組み・足と杖は still）
+      flutter: { from: 300, to: 640, bands: 5, amp: 7, periodMs: 3000, waves: 0.85 },
+      // 手のひらの上の魂の炎（x・y・w＝立ち絵の px・amp＝揺らぎ）。読む所を流れるムラでずらして燃やす（components/BossAuraFlow.jsx）
+      handFlame: { x: 467, y: 22, w: 98, amp: 0.06 },
+      lights: [{ at: [510, 150], size: 0.3, periodMs: 1700, min: 0.2, max: 0.38, color: '130,90,255' }],
+    },
+    idleKeep: { head: 1 },
+    // 【確定】2026-11-01 HPの節目のバフ：六道輪廻の理＝杖を立てて印を結ぶ・背中に6つの魂の炎の輪が現れてゆっくり回る（spin＝1秒の°・spinAt＝輪のまん中）／
+    //   忿怒相＝怒りの形相で叫ぶ・足元から赤黒い業火（付いたあとも燃え続ける）
+    buffs: {
+      rinne: { name: '六道輪廻の理', pose: '六道輪廻の理_ポーズ', aura: '六道輪廻の理_オーラ', spin: 40, spinAt: [301, 266], tint: '170,120,255',
+        show: { holdMs: 2000, dim: 0.45, dimColor: '8,0,24', punch: 0.02,
+          rings: { at: [301, 266], n: 2, everyMs: 420, durMs: 900, maxR: 400, color: '170,120,255', core: '240,230,255' },
+          burst: { n: 18, x: [120, 500], y: 610, rise: 420, size: 1, color: '170,120,255', core: '240,230,255' } } },
+      wrath: { name: '忿怒相', pose: '忿怒相_ポーズ', aura: '忿怒相_オーラ', tint: '255,60,40',
+        show: { holdMs: 2000, dim: 0.6, dimColor: '26,0,4', shake: 7, punch: 0.06, flicker: 0.035,
+          rings: { at: [280, 120], n: 3, everyMs: 280, durMs: 750, maxR: 430, color: '255,70,40' },
+          burst: { n: 30, x: [120, 530], y: 610, rise: 440, size: 1.4, color: '255,90,50' } },
+        after: { flame: { op: 0.9, amp: 0.05 }, embers: { n: 12, x: [120, 530], y: 610, rise: 380, size: 1.3, color: '255,80,40' }, tempo: 1.3 } },
+    },
+    // 【確定】2026-11-01 開戦の動き（ユーザー「閻魔 暗闇から突如現れる、持っている杖をどんと床について威圧する」・飛ばせない）：
+    //   舞台が真っ暗 → 杖を持ち上げた影が突然現れる（0.45秒で見えはじめ、暗いまま）→ 杖を床へどんと突く（業火断罪の絵を借りる・光る・揺れる・杖の先から衝撃の輪・砂ぼこり）→ 舞台が明るくなって立ち絵へ
+    intro: { totalMs: 2300, telopAt: 2000, poses: { windup: { motion: 'pillar', pose: 'windup' }, strike: { motion: 'pillar', pose: 'strike' } },
+      enter: [
+        [0, { op: 0, bright: 0.12 }],
+        [450, { op: 0, bright: 0.12 }],
+        [510, { bright: 0.18 }, 'out'],
+        [930, { bright: 0.45 }],
+        [980, { bright: 1.45 }, 'out'],
+        [1500, {}],
+      ],
+      keys: [
+        [0, { lean: -0.03 }],
+        [450, { lean: -0.03 }],
+        [930, { lean: -0.075 }],
+        [980, { lean: 0.075 }, 'out'],
+        [1500, { lean: 0.055 }],
+        [1900, {}],
+        [2300, {}],
+      ], jolt: { atMs: 980, ms: 300, lean: 0.03 },
+      art: [[0, 'windup'], [955, 'strike'], [1700, null]], ghosts: { fromMs: 955, toMs: 1080, lagMs: 26, n: 3 },
+      dust: [[205, 618]], dustAt: [980],
+      shows: [
+        { at: 0, holdMs: 1000, dim: 0.88, dimColor: '0,0,0' },
+        { at: 980, holdMs: 900, dim: 0.42, dimColor: '18,0,6', shake: 6, punch: 0.03,
+          rings: { at: [205, 618], flat: 0.28, n: 3, everyMs: 140, durMs: 700, maxR: 480, color: '255,70,40', core: '255,225,200' },
+          burst: { n: 24, x: [120, 500], y: 610, rise: 300, size: 1.1, color: '255,90,50', core: '255,235,210' } },
+      ] },
+    // 倒れる動き（lib/bossDeath.js・黒龍と同じ形・新しい絵なし）：忿怒相のポーズで天へ叫ぶ（紫の輪と魂）→ 無間地獄の振り下ろしの絵で杖にすがって前へ崩れる（揺れ・砂ぼこり）→ 色が抜ける →
+    //   ふちを紫に光らせながら魂になって消える。まわりの魂の炎は上へ昇って消える（freeOut）
+    death: { tone: 'fire', roar: { buff: 'wrath' }, fall: { motion: 'hell', pose: 'strike' },
+      stopMs: 200, fallAt: 1350, fallMs: 130, ashAt: 1600, ashMs: 800, burnAt: 2150, burnMs: 1800, endMs: 5700,
+      dim: 0.58, dimColor: '14,0,18', dimOutAt: 2500, dimOutMs: 1400,
+      keys: [[0, {}], [200, {}], [340, { lean: -0.04 }, 'out'], [1350, { lean: -0.07 }], [1480, { lean: 0.08 }, 'out'], [1620, { lean: 0.05 }], [1860, { lean: 0.06 }], [5800, { lean: 0.06 }]],
+      shakes: [[0, 8, 420], [260, 4, 800], [1480, 12, 560]], flashes: [[0, 0.42, 260], [1480, 0.14, 220]], flashColor: '255,226,240', punch: 0.05,
+      rings: { at: [280, 120], n: 3, everyMs: 300, durMs: 800, maxR: 430, color: '180,90,255', core: '240,225,255' }, sparkColor: '180,100,255', sparkCore: '240,230,255',
+      burst: { n: 30, x: [120, 520], y: 610, rise: 420, size: 1.4 }, landBurst: { n: 18, x: [30, 330], y: 612, rise: 190, size: 1.1, spreadMs: 200 },
+      landRings: [{ x: 120, y: 616, maxR: 300, durMs: 620, k: 0.55 }],
+      dust: { ms: 1100, pts: [[60, 610], [300, 620], [460, 620]], scale: 2 }, dustColor: ['#8a7f8c', '#5f5562', '#3a3340'],
+      body: { c: [310, 320], rx: 250, ry: 270 }, embers: { n: 50, lifeMs: 1300, rise: 330, drift: 10, size: 1.25 },
+      smoke: { n: 10, lifeMs: 1400, rise: 190, drift: 14, r: 62, op: 0.5 }, smokeColor: ['#2a2230', '#1c1622', '#0e0a14'],
+      freeOut: { at: 320, ms: 900, y: -0.15 },
+      burn: { weights: [0.4, 0.4, 0.2], ctr: [0.5, 0.6], ashColor: [0.6, 0.56, 0.62], edge: [0.7, 0.25, 1], core: [0.95, 0.85, 1], ashMax: 1 } },
+    // 切り分け（立ち絵 640px の上の点）：
+    //   魂の炎＝1枚の絵（soulA・左上の炎だけ残る）から4つ切る（solo＝いっしょに動かない）。
+    //   頭＝冠・顔・ひげ（首の付け根で回す・feather でふちをなじませる・dropInset で体の絵の内だけ抜く＝止まっているときは立ち絵と同じ）。
+    //   杖＝帯の下から杖の先まで（着物のひらひらで曲がらない。体の絵の杖は左右の色でつなぐ＝inpaint）。靴＝雨摩座の足と同じ。手＝炎の手前に重ねる写し（copy＝体の絵はそのまま）
+    cuts: {
+      soulB: { from: 'soulA', solo: true, pivot: [420, 300], take: [[0, 214], [150, 214], [150, 390], [0, 390]] },
+      soulC: { from: 'soulA', solo: true, pivot: [440, 490], take: [[20, 400], [180, 400], [180, 570], [20, 570]] },
+      soulD: { from: 'soulA', solo: true, pivot: [230, 225], take: [[520, 130], [640, 130], [640, 315], [520, 315]] },
+      soulE: { from: 'soulA', solo: true, pivot: [200, 400], take: [[450, 316], [640, 316], [640, 490], [450, 490]] },
+      head: { from: 'body', pivot: [295, 150], feather: 6, dropInset: 9,
+        take: [[190, 137], [190, 60], [235, 0], [290, 0], [355, 40], [355, 130], [316, 130], [310, 152], [294, 172], [262, 172], [244, 152], [238, 134], [222, 124], [222, 137]] },
+      staff: { from: 'body', pivot: [150, 460], feather: 3, inpaint: true, take: [[111, 296], [145, 296], [194, 634], [159, 634]] },
+      legL: { from: 'body', pivot: [120, 610], feather: 5, dropInset: 10, take: [[68, 600], [96, 574], [120, 568], [152, 572], [166, 600], [166, 648], [68, 648]] },
+      legR: { from: 'body', pivot: [440, 610], feather: 5, dropInset: 10, take: [[388, 612], [408, 580], [440, 574], [470, 586], [498, 606], [500, 648], [388, 648]] },
+      hand: { from: 'body', pivot: [500, 200], feather: 3, copy: true, take: [[474, 196], [486, 160], [500, 152], [518, 146], [552, 148], [558, 178], [530, 198], [520, 212], [500, 216], [482, 220], [472, 212]] },
+    },
+    // 技。どれも、部品で少し引く→構えの絵で後ろへのけぞって間を取る→振り抜きの絵で上の体を相手のほうへ押し出す（残像）→止まる→立ち絵へ戻る。足は動かさない（lean だけ）
+    //   ⚠動きの長さは 1.6秒まで（大技を除く・core/atb.js の NOW_WAIT_AFTER_ACT_SEC）
+    //   anchors＝絵の上の点（立ち絵の px・足をそろえた置き方で測った）：hand＝手の光の出どころ／mouth＝炎を持つ所（魂火）
+    motions: {
+      // 魂火：手を肩の後ろへ引いて炎を持ち（手の炎の絵）、相手へ投げつける＝ドクロの炎が飛ぶ
+      soul: { totalMs: 1100, hitMs: 430, keys: [
+        [0, {}],
+        [130, { lean: -0.015 }],
+        [300, { lean: -0.05 }],
+        [400, { lean: -0.055 }],
+        [430, { lean: 0.05 }, 'out'],
+        [640, { lean: 0.045 }],
+        [1100, {}],
+      ], jolt: { atMs: 430, ms: 200, lean: 0.015 },
+      art: [[0, null], [130, 'windup'], [405, 'strike'], [780, null]], ghosts: { fromMs: 405, toMs: 540, lagMs: 26, n: 3 },
+      anchors: { windup: { hand: [518, 83], mouth: [520, 45] }, strike: { hand: [160, 148] } },
+      arcs: [{ kind: 'soul', pts: [[518, 83], [420, 40], [300, 55], [210, 100], [160, 148]], fromMs: 395, toMs: 430, fadeMs: 200 }],
+      charge: { kind: 'charge', fromMs: 130, toMs: 405, size: 0.17, still: true },
+      shots: [{ at: 'hand', delayMs: 0, size: 1 }],
+      scene: { kind: 'hands', tone: 'soul', hand: { pt: [505, 190], part: 'body' } } },
+      // 業火断罪：杖を両手で高く持ち上げ、床へ一気に突き立てる＝相手の足元から赤い業火の柱が噴き上がる（飛ばない）
+      pillar: { totalMs: 1500, hitMs: 520, keys: [
+        [0, {}],
+        [140, { lean: -0.02 }],
+        [440, { lean: -0.06 }],
+        [490, { lean: -0.065 }],
+        [520, { lean: 0.06 }, 'out'],
+        [960, { lean: 0.05 }],
+        [1500, {}],
+      ], jolt: { atMs: 520, ms: 260, lean: 0.03 },
+      art: [[0, null], [130, 'windup'], [495, 'strike'], [1040, null]], ghosts: { fromMs: 495, toMs: 620, lagMs: 26, n: 3 },
+      anchors: { windup: { hand: [272, 12] }, strike: { hand: [211, 627] } },
+      scene: { kind: 'burst', tone: 'fire', dimColor: '20,0,4', hand: { pt: [211, 627], part: 'body' } } },
+      // 業縛の鎖：手を腰の後ろへ引き、突き出して拳を握り、手前へぐっと引き寄せる＝地面から黒い鎖が伸びて相手を締め上げる（飛ばない）
+      chains: { totalMs: 1500, hitMs: 540, keys: [
+        [0, {}],
+        [140, { lean: -0.02 }],
+        [460, { lean: -0.05 }],
+        [510, { lean: -0.055 }],
+        [540, { lean: 0.03 }, 'out'],
+        [780, { lean: -0.02 }],
+        [1040, { lean: -0.015 }],
+        [1500, {}],
+      ], jolt: { atMs: 540, ms: 220, lean: 0.02 },
+      art: [[0, null], [130, 'windup'], [515, 'strike'], [1100, null]], ghosts: { fromMs: 515, toMs: 640, lagMs: 26, n: 3 },
+      anchors: { windup: { hand: [529, 336] }, strike: { hand: [433, 184] } },
+      scene: { kind: 'coil', tone: 'fire', chains: true, dimColor: '12,0,10', hand: { pt: [433, 184], part: 'body' } } },
+      // 無間地獄：杖を天へ掲げて裁きを唱える（構え3.5秒＋打ち下ろす直前の0.5秒＝4秒・黒龍の終焉の黒焔と同じ長さ）・相手の足元に地割れの輪が広がる →
+      //   杖を打ち下ろすと、地の底から業火と亡者の手が噴き上がる（kind 'doom' の暗さ・光・揺れ・火の粉を使う・奔流は無し noBeam）。3500 の形は def.cast.pose と同じ
+      hell: { totalMs: 5300, hitMs: 4000, castSkipMs: 3500, big: true, keys: [
+        [0, {}],
+        [300, { lean: -0.02 }],
+        [2600, { lean: -0.05 }, 'out'],
+        [3500, { lean: -0.05 }],
+        [3940, { lean: -0.08 }, 'out'],
+        [4000, { lean: 0.09 }, 'out'],
+        [4720, { lean: 0.075 }],
+        [4820, { lean: 0.05 }],
+        [5300, {}],
+      ], jolt: { atMs: 4000, ms: 320, lean: 0.04 }, charge: { kind: 'charge', fromMs: 0, toMs: 4000, holdMs: 700 },
+      art: [[0, 'windup'], [3950, 'strike'], [4820, null]], ghosts: { fromMs: 3950, toMs: 4100, lagMs: 28, n: 3 },
+      anchors: { windup: { hand: [168, 16] }, strike: { hand: [36, 622] } },
+      scene: { kind: 'doom', noBeam: true, dimColor: '18,0,6', hand: { pt: [168, 16], part: 'body' } } },
+    },
+    // on＝相手のどこに出すか（大きさは自分の絵の枠の幅に対して）・anim 'rise'＝下から噴き上がる（lead＝絵が出はじめてから当たるまで）・rise＝鎖が足元から伸びて見える
+    effects: [
+      { file: '魂火_飛ぶ', motion: 'soul', kind: 'fly', size: 0.4, flyMs: 320 },
+      { file: '魂火_当たる', motion: 'soul', kind: 'hit', size: 0.52, durMs: 560, spin: 30 },
+      { file: '手の炎', motion: 'soul', kind: 'charge' },
+      // 流れる炎の絵（kind 'flow'）：滝と同じ作りで、上へ流す（crop＝元の絵の px）
+      { file: '業火断罪_当たる', motion: 'pillar', kind: 'hit', on: 'feet', size: 1.45, sy: 1.3, anim: 'rise', lead: 140, durMs: 1050 },
+      { file: '業火断罪_当たる', motion: 'pillar', kind: 'flow', crop: [430, 300, 830, 1050], band: 0.3, blurY: 8 },
+      { file: '業縛の鎖_当たる', motion: 'chains', kind: 'hit', on: 'body', size: 1.15, anim: 'bind', rise: true, durMs: 1100 },
+      // 地割れの輪は業火より奥に重ねる＝並びは輪が先
+      { file: '無間地獄_ためる', motion: 'hell', kind: 'charge', on: 'feet', size: 1.5 },
+      //   dome＝絵いっぱいに描かれた炎の四角いふちを消す（道具が絵に焼きこむ）
+      { file: '無間地獄_当たる', motion: 'hell', kind: 'hit', on: 'feet', size: 2.3, anim: 'rise', lead: 160, durMs: 1500, dome: 0.55 },
+      { file: '無間地獄_当たる', motion: 'hell', kind: 'flow', crop: [250, 150, 1000, 1150], band: 0.3, blurY: 10 },
+      // 手のひらの上でゆらぐ魂の炎（大きさと場所は idle.handFlame）
+      { file: '手の炎', motion: 'idle', kind: 'flame' },
+    ],
+  },
 }
 
 const smooth = (k) => k * k * (3 - 2 * k)
@@ -1002,7 +1198,8 @@ export const illustBuffShowAt = (art, name, ms) => {
   const from = b.front ? 1.22 : 0.78
   // flicker＝見せているあいだオーラが揺らめく（逆鱗の闘気・大きさが速く小さく揺れる）
   const fl = b.show?.flicker ? 1 + b.show.flicker * Math.sin(ms / 45) * (1 - aOut) * Math.min(1, ms / BUFF_AURA_IN_MS) : 1
-  const aura = b.aura ? { op: smooth(aIn) * (1 - smooth(aOut)), scale: (from + (1 - from) * easeOutBack(aIn) + 0.08 * aOut) * fl } : null
+  // rot＝ゆっくり回す角度°（六道輪廻の理の輪・b.spin）
+  const aura = b.aura ? { op: smooth(aIn) * (1 - smooth(aOut)), scale: (from + (1 - from) * easeOutBack(aIn) + 0.08 * aOut) * fl, rot: ((b.spin || 0) * ms) / 1000 } : null
   const flash = ms < BUFF_FLASH_MS ? (1 - ms / BUFF_FLASH_MS) ** 2 : 0
   return { rig, pose, aura, flash }
 }
@@ -1302,7 +1499,7 @@ export const bossIllustOf = (key) => {
     const a = art.buffs?.[id]
     if (!a?.pose && !a?.aura) continue
     const one = (what) => (a[what] ? { ...a[what], src: srcOf(key, illustBuffKindOf(id, what)) } : null)
-    buffs[d.name] = { pose: one('pose'), aura: one('aura'), front: !!d.front, glow: !!d.glow, auraOp: d.auraOp ?? 1, tint: d.tint || null, show: d.show || null, after: d.after || null }
+    buffs[d.name] = { pose: one('pose'), aura: one('aura'), front: !!d.front, glow: !!d.glow, auraOp: d.auraOp ?? 1, tint: d.tint || null, show: d.show || null, after: d.after || null, spin: d.spin || 0, spinAt: d.spinAt || null }
   }
   const motions = {}
   for (const m of base.motions) {
@@ -1314,7 +1511,7 @@ export const bossIllustOf = (key) => {
       const a = art.fx?.[m.key]?.[d.kind]
       if (!a) continue
       fx[d.kind] = { ...a, frames: 1, src: srcOf(key, illustFxKindOf(m.key, d.kind)), size: d.size, durMs: d.durMs, spin: d.spin || 0, wipe: !!d.wipe, emerge: !!d.emerge,
-        on: d.on || null, anim: d.anim || null, lead: d.lead || 0, fadeTop: d.fadeTop || 0, sy: d.sy || 1 }
+        on: d.on || null, anim: d.anim || null, lead: d.lead || 0, fadeTop: d.fadeTop || 0, sy: d.sy || 1, rise: !!d.rise }
       if (d.kind === 'fly') flyMs = d.flyMs
     }
     const poseAt = (ms) => ({ ...ZERO, ...motionPoseAt(md.keys, ms) })
@@ -1343,14 +1540,17 @@ export const bossIllustOf = (key) => {
   const dust = def.idle.slam?.dust || def.intro?.dust || null
   // 待機の光（立ち絵の上に重ねる・file は絵＝元の絵の名前は effects の motion 'idle'）
   const lights = def.idle.lights ? def.idle.lights.map(l => ({ ...l, src: l.file && art.fx?.idle?.[l.file] ? srcOf(key, illustFxKindOf('idle', l.file)) : null })) : null
+  // 手のひらの上でゆらぐ炎（閻魔・立ち絵の px で置く・components/BossAuraFlow.jsx）
+  const hf = def.idle.handFlame, hfa = art.fx?.idle?.flame
+  const handFlame = hf && hfa ? { src: srcOf(key, illustFxKindOf('idle', 'flame')), x: hf.x, y: hf.y, w: hf.w, h: hf.w * (hfa.h / hfa.w), amp: hf.amp } : null
   // 遭遇のイラストはドット絵版と同じ
   const illust = bossArtOf(key)?.illust || null
   const bg = bossBgOf(key)
   return {
     kind: 'illust', key, name: base.name, base: BOSS_ILLUST_SIZE, illust, parts, pivot: art.pivot, mouth: art.mouth, jaw, motions, orb, dust, ground: def.ground ?? null, flutter: !!def.idle.flutter,
-    castArt: def.cast?.art || null, buffs, bg, death, intro, lights,
+    castArt: def.cast?.art || null, buffs, bg, death, intro, lights, handFlame,
     srcs: [...parts.map(p => p.src), ...parts.filter(p => p.bend).map(p => p.bend.src), ...Object.values(motions).flatMap(m => Object.values(m.fx || {}).map(f => f.src)),
-      ...Object.values(motions).flatMap(m => Object.values(m.poses || {}).map(p => p.src)), ...(orb ? [orb.src] : []), ...(lights || []).map(l => l.src).filter(Boolean),
+      ...Object.values(motions).flatMap(m => Object.values(m.poses || {}).map(p => p.src)), ...(orb ? [orb.src] : []), ...(handFlame ? [handFlame.src] : []), ...(lights || []).map(l => l.src).filter(Boolean),
       ...Object.values(buffs).flatMap(b => [b.pose?.src, b.aura?.src].filter(Boolean)), ...(bg ? [bg.src, bg.flowSrc].filter(Boolean) : [])],
   }
 }

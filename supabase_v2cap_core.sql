@@ -9054,7 +9054,9 @@ returns table(hp int, area int) language sql immutable set search_path = public 
     ('amaza', 'normal', 13000, 2),
     ('amaza', 'hard', 30000, 5),
     ('zerugiasu', 'normal', 13000, 2),
-    ('zerugiasu', 'hard', 30000, 5)
+    ('zerugiasu', 'hard', 30000, 5),
+    ('enma', 'normal', 13000, 2),
+    ('enma', 'hard', 30000, 5)
   ) as v(boss, diff, hp, area)
   where v.boss = p_boss and v.diff = p_diff
 $$;
@@ -9069,7 +9071,9 @@ returns table(exp int, gold int) language sql immutable set search_path = public
     ('amaza', 'normal', 175, 1250),
     ('amaza', 'hard', 350, 2250),
     ('zerugiasu', 'normal', 175, 1250),
-    ('zerugiasu', 'hard', 350, 2250)
+    ('zerugiasu', 'hard', 350, 2250),
+    ('enma', 'normal', 175, 1250),
+    ('enma', 'hard', 350, 2250)
   ) as v(boss, diff, exp, gold)
   where v.boss = p_boss and v.diff = p_diff
 $$;

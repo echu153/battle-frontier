@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs'
 import { bossIllustOf, BOSS_ILLUST_DEFS } from './bossIllust.js'
 import { deathAt, deathLandMs, deathPoseOf, deathShowOf } from './bossDeath.js'
 
-const BOSSES = ['varuzenoku', 'amaza', 'zerugiasu']
+const BOSSES = ['varuzenoku', 'amaza', 'zerugiasu', 'enma']
 const stage = readFileSync(new URL('../components/V2capAtbStage.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 const fight = readFileSync(new URL('../components/V2capAtbFight.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 

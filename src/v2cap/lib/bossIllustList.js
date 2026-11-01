@@ -113,4 +113,41 @@ export const BOSS_ILLUST = {
     },
     v: { 'il-wL4': '911ef5ec', 'il-wL3': 'b6a8b6f6', 'il-wL2': 'd04fb600', 'il-wL1': '983d75cd', 'il-wR4': 'be3d79c2', 'il-wR3': 'b97148f2', 'il-wR2': 'e23292c0', 'il-wR1': '842831a0', 'il-body': '582b4530', 'il-armF': '18f2148a', 'il-armN': '3fe0ad48', 'il-pose-ruin-windup': '07c0ab4e', 'il-pose-ruin-strike': '443d357f', 'il-buff-armor-pose': 'a02dd575', 'il-buff-armor-aura': '6e26f1e8', 'il-buff-overload-pose': 'd6f2e631', 'il-buff-overload-aura': '3cfad7b0', 'il-fx-shell-fly': '066f39ec', 'il-fx-shell-hit': '8db55fc9', 'il-fx-volley-fly': 'c5750402', 'il-fx-volley-hit': '19c76907', 'il-fx-smite-hit': '1a0df76d', 'il-fx-ruin-fly': '9c645d5a', 'il-fx-ruin-hit': '7275a1d5', 'il-fx-ruin-charge': '9465a5be', 'il-fx-idle-core': '340711fc' },
   },
+  enma: {
+    parts: {
+      soulA: { x: 102, y: 76, w: 108, h: 138, px: 505, py: 145, ax: 180 },
+      soulB: { x: 15, y: 214, w: 125, h: 169, px: 420, py: 300, ax: -179 },
+      soulC: { x: 41, y: 415, w: 127, h: 142, px: 440, py: 490, ax: 180 },
+      soulD: { x: 532, y: 145, w: 96, h: 165, px: 230, py: 225, ax: 1 },
+      soulE: { x: 460, y: 321, w: 162, h: 159, px: 200, py: 400, ax: -2 },
+      body: { x: 27, y: 0, w: 580, h: 628, px: 303, py: 364, ax: 77 },
+      head: { x: 190, y: 2, w: 165, h: 170, px: 295, py: 150, ax: -108, parent: 'body' },
+      staff: { x: 111, y: 296, w: 80, h: 334, px: 150, py: 460, ax: -40, parent: 'body' },
+      legL: { x: 68, y: 568, w: 98, h: 62, px: 120, py: 610, ax: -86, parent: 'body' },
+      legR: { x: 388, y: 574, w: 110, h: 54, px: 440, py: 610, ax: -82, parent: 'body' },
+      hand: { x: 472, y: 156, w: 79, h: 64, px: 500, py: 200, ax: -51, parent: 'body' },
+    },
+    pivot: [303, 364], mouth: [193, 119],
+    fx: {
+      soul: { fly: { w: 384, h: 212, ax: 8, ay: 151 }, hit: { w: 384, h: 370, ax: 192, ay: 185 }, charge: { w: 211, h: 384, ax: 106, ay: 192 } },
+      pillar: { hit: { w: 384, h: 384, ax: 192, ay: 192 }, flow: { w: 320, h: 420, ax: 0, ay: 0, at: [132, 92, 122, 230] } },
+      chains: { hit: { w: 353, h: 384, ax: 177, ay: 192 } },
+      hell: { charge: { w: 384, h: 208, ax: 192, ay: 104 }, hit: { w: 384, h: 384, ax: 192, ay: 192 }, flow: { w: 320, h: 299, ax: 0, ay: 0, at: [77, 46, 230, 306] } },
+      idle: { flame: { w: 211, h: 384, ax: 106, ay: 192 } },
+    },
+    poses: {
+      soul: { windup: { x: 29, y: 5, w: 578, h: 625 }, strike: { x: 27, y: 4, w: 613, h: 625 } },
+      pillar: { windup: { x: 58, y: -26, w: 616, h: 654 }, strike: { x: 10, y: 15, w: 620, h: 623 } },
+      chains: { windup: { x: 44, y: 1, w: 608, h: 629 }, strike: { x: 41, y: 5, w: 617, h: 627 } },
+      hell: { windup: { x: 11, y: -23, w: 639, h: 655 }, strike: { x: 9, y: 7, w: 592, h: 622 } },
+    },
+    buffs: {
+      rinne: { pose: { x: 112, y: -2, w: 427, h: 634 }, aura: { x: 24, y: -66, w: 566, h: 623 } },
+      wrath: { pose: { x: 1, y: -7, w: 636, h: 635 }, aura: { x: 5, y: 41, w: 632, h: 630 } },
+    },
+    fit: {
+      soulA: { s: 1, deg: 0, tx: 0, ty: 0, score: 0 },
+    },
+    v: { 'il-soulA': '6a66b645', 'il-soulB': 'ac0e0178', 'il-soulC': 'a32c09b3', 'il-soulD': '3db991f7', 'il-soulE': 'f5851b38', 'il-body': '383f5d45', 'il-head': 'a82f81e1', 'il-staff': 'c9e4f1cf', 'il-legL': '28aa1f2c', 'il-legR': '5799da00', 'il-hand': 'fecbb06e', 'il-pose-soul-windup': 'c3c18f66', 'il-pose-soul-strike': '579deeb7', 'il-pose-pillar-windup': 'e29810dc', 'il-pose-pillar-strike': 'c9108f45', 'il-pose-chains-windup': '5e330a58', 'il-pose-chains-strike': 'fdd0273b', 'il-pose-hell-windup': '364f426f', 'il-pose-hell-strike': '87687079', 'il-buff-rinne-pose': 'f3389191', 'il-buff-rinne-aura': 'd6005436', 'il-buff-wrath-pose': 'e2438b6c', 'il-buff-wrath-aura': '1388c44a', 'il-fx-soul-fly': '060fa75b', 'il-fx-soul-hit': 'a5d5c3a4', 'il-fx-soul-charge': '64b6da9c', 'il-fx-pillar-hit': '434fb1f1', 'il-fx-pillar-flow': 'f77a6dbc', 'il-fx-chains-hit': '75a720d4', 'il-fx-hell-charge': '59f63d34', 'il-fx-hell-hit': 'd29c416b', 'il-fx-hell-flow': 'b99b775d', 'il-fx-idle-flame': '64b6da9c' },
+  },
 }

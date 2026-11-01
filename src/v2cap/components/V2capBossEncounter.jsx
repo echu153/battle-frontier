@@ -28,7 +28,7 @@ const KF = `
 @keyframes beHint { 0%, 100% { opacity: 0.4 } 50% { opacity: 1 } }
 `
 const HIT = '0.13s'   // 叩きつける瞬間（beSlam の42%あたり）
-const ACCENT = { varuzenoku: '#ff7a3a', amaza: '#7ad0ff', zerugiasu: '#8ab4ff' }
+const ACCENT = { varuzenoku: '#ff7a3a', amaza: '#7ad0ff', zerugiasu: '#8ab4ff', enma: '#b98aff' }
 
 export default function V2capBossEncounter({ bossKey, diffKey, out = false, onTap = null }) {
   const [big, setBig] = useState(false)

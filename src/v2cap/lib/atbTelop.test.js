@@ -189,7 +189,7 @@ test('【確定】2026-11-01 開戦の動き：遭遇の絵を押す→ボスの
   // 動きが無い敵（ドット絵版・図鑑の絵）は今までどおりすぐテロップ
   assert.equal(startTelopShown(t0, t0), true)
   assert.equal(startTelopOn(t0, t0 + START_TELOP_MS), false)
-  for (const key of ['varuzenoku', 'amaza', 'zerugiasu']) {
+  for (const key of ['varuzenoku', 'amaza', 'zerugiasu', 'enma']) {
     const a = bossIllustOf(key), m = a.intro
     // 新しい絵は描かない：技やバフのポーズの絵を借りる（読んであるので増えない）
     for (const p of Object.values(m.poses)) assert.ok(a.srcs.includes(p.src), key)

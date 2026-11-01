@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url'
 import { decode, bleed, alphaBox, encodeSquare, versionOf } from './v2cap-art-lib.mjs'
 import { BOSS_DEFS, BOSS_ART_SRC_DIR, BOSS_ART_DIR, BOSS_THUMB_SIZE, BOSS_ENCOUNTER_SIZE, bossFileOf } from '../src/v2cap/lib/bossArt.js'
 import { ENEMY_ART_SRC_DIR } from '../src/v2cap/lib/enemyArt.js'
+import { BOSS_THUMB, BOSS_ENCOUNTER } from '../src/v2cap/lib/bossThumbList.js'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const SRC = path.join(ROOT, 'public', ENEMY_ART_SRC_DIR, BOSS_ART_SRC_DIR)
@@ -21,7 +22,13 @@ const lines = ['// tools/v2cap-boss-thumb.mjs が書くファイル（手で直�
 const big = ['// 挑戦を押した瞬間に出す大きな絵（遭遇のイラスト）の中身の印', 'export const BOSS_ENCOUNTER = {']
 for (const [key, def] of Object.entries(BOSS_DEFS)) {
   const file = path.join(SRC, def.dir, 'イラスト.png')
-  if (!existsSync(file)) { console.log(`  ${key}：元の絵がない（${file}）`); continue }
+  // 元の絵が無いボス（別の作業場所など）は、作ってある絵と一覧を消さない
+  if (!existsSync(file)) {
+    console.log(`  ${key}：元の絵がない（${file}）`)
+    if (BOSS_THUMB[key]) lines.push(`  ${key}: '${BOSS_THUMB[key]}',`)
+    if (BOSS_ENCOUNTER[key]) big.push(`  ${key}: '${BOSS_ENCOUNTER[key]}',`)
+    continue
+  }
   const img = decode(file, 1254, 'rgba')
   bleed(img)
   const box = alphaBox(img)

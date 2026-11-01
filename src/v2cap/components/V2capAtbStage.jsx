@@ -199,7 +199,8 @@ const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [
   const rigOp = show && poseReady ? show.rig : 1
   const { moving, still } = rigLayersOf(art)
   const rigStyle = { position:'absolute', inset:0, opacity: rigOp < 1 ? rigOp : undefined, visibility: rigOp <= 0.001 ? 'hidden' : undefined }
-  const rig = <div style={rigStyle}>{moving.map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={pose} />)}{art.lights && <RigLights art={art} tMs={tMs} />}</div>
+  //   待機の光は部品の上。着物のひらひらがあるボス（閻魔）は帯ごとに同じ物を描くので、光と手の炎は帯の外（still の所）に1回だけ
+  const rig = <div style={rigStyle}>{moving.map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={pose} />)}{art.lights && !art.flutter && <RigLights art={art} tMs={tMs} />}</div>
   const bands = art.flutter && !lite ? flutterBandsAt(art.key, tMs) : []
   const pct = (y) => (y / art.base) * 100
   const auraEl = aura && aura.op > 0.001 ? <AuraArt art={art} a={lite ? { ...aura, glow: false } : aura} /> : null
@@ -224,7 +225,14 @@ const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [
             {rig}
           </div>
         ))}
-        {still.length > 0 && <div style={rigStyle}>{still.map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={pose} />)}</div>}
+        {still.length > 0 && (
+          <div style={rigStyle}>
+            {art.lights && art.flutter && <RigLights art={art} tMs={tMs} />}
+            {/* 手のひらの上でゆらぐ炎（閻魔）：手の写し（still）より奥＝指のあいだから炎が見える */}
+            {art.handFlame && <BossAuraFlow base={art.base} p={art.handFlame} amp={art.handFlame.amp} op={1} tMs={tMs} lite={lite} />}
+            {still.map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={pose} />)}
+          </div>
+        )}
         {poseReady && show?.poses.map(sp => <PoseArt key={sp.name} art={art} p={motion.poses[sp.name]} op={sp.op} />)}
         {death && <BossDissolve base={art.base} p={art.death.arts.fall} b={art.death.burn} op={death.burn.op} k={death.burn.k} ash={death.burn.ash} lite={lite} />}
         {art.dust && pose.dust > 0 && <RigDust art={art} k={pose.dust} />}
@@ -324,11 +332,13 @@ const BuffRain = ({ geo, rains, op = 1 }) => {
   )
 }
 // HPの節目のバフのオーラ1枚（立ち絵の px で置く）：広げる中心は、手前の殻＝絵の真ん中・後ろの闘気と光の闘気＝足元（下のまん中）。光（glow）は下の絵を明るくする重ね方（screen）
+//   rot・at＝ゆっくり回す角度と回す中心（六道輪廻の理の輪・立ち絵の px。広げる中心もここ）
 const AuraArt = ({ art, a }) => (
   <img src={a.p.src} alt="" draggable={false} decoding="sync"
     style={{ position:'absolute', left:`${(a.p.x / art.base) * 100}%`, top:`${(a.p.y / art.base) * 100}%`, width:`${(a.p.w / art.base) * 100}%`, height:`${(a.p.h / art.base) * 100}%`,
       maxWidth:'none', userSelect:'none', pointerEvents:'none', opacity: a.op < 1 ? a.op : undefined, mixBlendMode: a.glow ? 'screen' : undefined,
-      transform:`scale(${a.scale.toFixed(3)})`, transformOrigin: a.front ? '50% 50%' : '50% 100%' }} />
+      transform:`${a.rot ? `rotate(${a.rot.toFixed(2)}deg) ` : ''}scale(${a.scale.toFixed(3)})`,
+      transformOrigin: a.at ? `${(((a.at[0] - a.p.x) / a.p.w) * 100).toFixed(2)}% ${(((a.at[1] - a.p.y) / a.p.h) * 100).toFixed(2)}%` : a.front ? '50% 50%' : '50% 100%' }} />
 )
 // 砂ぼこり（k＝出てからの割合 0〜1）：打った所（しっぽの下のふち）から左右へ広がり、少し上がりながら薄れる。はじめの 12% で濃くなる
 //   （小さく出すと粒が並んで見えた・2026-10-29）。色はくすんだ茶色（白いと雲に見えた）。lib の dustEllipsesOf と同じ形
@@ -456,6 +466,8 @@ const TRAIL_STYLE = {
   water: { glow: 'rgba(40,130,255,0.9)', core: 'rgba(225,248,255,1)', gw: 30, cw: 8 },
   // 雷（ゼルギアスの剣の通り道）
   bolt: { glow: 'rgba(70,130,255,0.95)', core: 'rgba(240,248,255,1)', gw: 26, cw: 6 },
+  // 魂の炎（閻魔の投げる手）
+  soul: { glow: 'rgba(130,70,255,0.9)', core: 'rgba(240,228,255,1)', gw: 26, cw: 6 },
 }
 const RigTrails = ({ art, trails }) => (
   <svg viewBox={`0 0 ${art.base} ${art.base}`} style={{ position:'absolute', inset:0, width:'100%', height:'100%', overflow:'visible', pointerEvents:'none', zIndex: 1 }}>
@@ -541,7 +553,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   const showMotion0 = buffPose ? { poses: { [lastRage.skill]: buffArt.pose } } : cs ? cs.motion : rigMotion
   const show = death ? deathShowOf(show0, death) : show0
   const showMotion = death ? { poses: { ...showMotion0?.poses, ...rig.death.arts } } : showMotion0
-  const aura = buff?.aura && buffArt.aura ? { p: buffArt.aura, op: buff.aura.op * buffArt.auraOp, scale: buff.aura.scale, front: buffArt.front, glow: buffArt.glow } : null
+  const aura = buff?.aura && buffArt.aura ? { p: buffArt.aura, op: buff.aura.op * buffArt.auraOp, scale: buff.aura.scale, front: buffArt.front, glow: buffArt.glow, rot: buff.aura.rot, at: buffArt.spinAt } : null
   const ghosts = rigMotion && !casting && !buffPose && !death ? illustGhostsAt(rigMotion, rigMs).map(g => ({ ...g, pose: illustPoseAt(rig.key, rigMotion, g.ms, tMs - (rigMs - g.ms)) })) : []
   const dx = (frame >= 0 || rig ? 0 : lungeOf(now - lastOf('act')) * dir) + shakeOf(now - lastOf('hit'))
   const hitAgo = now - lastOf('hit')
@@ -779,7 +791,10 @@ function BossFx({ fx, now, geo, art, cast = null, castEnd = -1e9, scene = null }
             }
           } else if (coil) {
             // 水縛の帯（派手な演出）：大きく出て一気に締まり・締め上げるたび縮み・はじけたら広がって消える（lib/bossScene.js の coilAt）
-            on = { frame: 0, x: to.x, y: to.y, s: sc * coil.s, rot: coil.rot, op: coil.op, filter: `brightness(${coil.bright.toFixed(3)})` }
+            //   a.rise＝足元から伸びて見える（業縛の鎖・はじめの 200ms で下から見えてくる）
+            const rp = a.rise ? easeOut(Math.min(1, (actMs - m.impactMs) / 200)) * 112 : 112
+            on = { frame: 0, x: to.x, y: to.y, s: sc * coil.s, rot: coil.rot, op: coil.op, filter: `brightness(${coil.bright.toFixed(3)})`,
+              mask: rp < 112 ? `linear-gradient(to top, #000 ${Math.max(0, rp - 12).toFixed(1)}%, transparent ${rp.toFixed(1)}%)` : undefined }
           } else if (a.frames > 1) {
             const frame = motionFrameAt(a, ms)
             if (frame >= 0) on = { frame, x: to.x, y: to.y, s: sc }
@@ -815,6 +830,22 @@ function BossFx({ fx, now, geo, art, cast = null, castEnd = -1e9, scene = null }
               // 外から締まる（水の帯）：大きく出て、はじめの30%で元の大きさへ（小さく揺れて止まる）
               const t = Math.min(1, k / 0.3)
               on = { frame: 0, ...sp, s: sc * (1.35 - 0.35 * easeOut(t)), rot: Math.sin(ms / 60) * 0.04 * (1 - t), op: Math.min(1, k / 0.1) * fade }
+            } else if (a.anim === 'rise') {
+              // 下から噴き上がる（閻魔の業火断罪・無間地獄）：lead のあいだに下から見えてくる（先のふちはぼかす）・噴き上がった瞬間は明るい・
+              //   裏返した絵と交互に揺らして燃えて見せる・流れる炎の絵（m.fx.flow）を上へ流す（FlowColumn）。終わりは薄れる（fade）
+              const p = (lead ? easeOut(Math.min(1, ms / lead)) : 1) * 112
+              const wob = Math.sin(ms / 41) * 0.025 + Math.sin(ms / 23) * 0.015, hot = Math.max(0, 1 - Math.max(0, ms - lead) / 280)
+              const sy = (a.sy || 1) * (0.88 + 0.12 * easeOut(Math.min(1, ms / (lead + 200)))) * (1 + wob)
+              const op = Math.min(1, ms / 70) * fade
+              on = { frame: 0, ...sp, s: sc, sx: 1 - wob, sy, op, filter: `brightness(${(1 + 0.55 * hot).toFixed(3)})`,
+                mask: `linear-gradient(to top, #000 0%, #000 ${Math.max(0, p - 12).toFixed(1)}%, transparent ${p.toFixed(1)}%)` }
+              putExtra(<Sprite key={`${a.src}#flip`} a={a} {...on} flip op={op * (0.4 + 0.3 * Math.sin(ms / 65))} />)
+              const fl = m.fx.flow
+              if (fl) {
+                const H = fl.at[3] * sc * sy, top = sp.y - a.h * sc * sy + fl.at[1] * sc * sy, f = 100 - Math.min(100, p)
+                putExtra(<FlowColumn key={`${a.src}#rise`} flow={fl} left={sp.x - a.ax * sc + fl.at[0] * sc} top={top} W={fl.at[2] * sc} H={H} ms={ms} speed={-RISE_PER_SEC} unit={H} op={op * 0.45} plain
+                  mask={alphaMask([0, 16, 88, 100, f, f + 10], (y) => Math.min(1, y / 16, (100 - y) / 12) * Math.min(1, Math.max(0, (y - f) / 10)))} />)
+              }
             } else {
               on = a.wipe
                 // 爪の跡：大きくせず、右上から左下へ引いたように出す（はじめの22%で引ききる）
@@ -834,6 +865,7 @@ function BossFx({ fx, now, geo, art, cast = null, castEnd = -1e9, scene = null }
 //   中の箱は横のぼかし（柱のふち）。ms＝撃ってから・front・cut＝滝の先と落ち終わりの切れ目（画面の px）
 const FLOW_PX_PER_SEC = 3.4   // 滝：1秒に「当たる絵の柱の高さ」の何倍落ちるか
 const RAIN_PX_PER_SEC = 4.2   // 氷雨：1秒に雨の所の高さの何倍落ちるか
+const RISE_PER_SEC = 1.7      // 噴き上がる炎：1秒に流れる所の高さの何倍昇るか
 const FLOW_WIDE = 1.35        // 柱を描いた所より何倍広く流すか（ふちはぼかす）
 function PourFlow({ a, flow, x, sky, bottom, s, fall, ms, front, cut, op }) {
   const fw = flow.at[2], W = fw * s * fall.sx * FLOW_WIDE, top = sky - 0.04 * (bottom - sky), H = bottom - top
@@ -847,7 +879,8 @@ function PourFlow({ a, flow, x, sky, bottom, s, fall, ms, front, cut, op }) {
 // 流れる水の絵（flow）を縦に並べて流す箱（滝の柱・氷雨の雨）。2枚重ね（奥＝箱の幅・手前＝1.3倍広く1.45倍速く明るく重ねる）。
 //   外の箱は縦の切り抜き（mask）、中の箱は横のぼかし（ふち）。ms＝流しはじめてから・speed＝1秒に unit（無ければ箱の高さ）の何倍落ちるか・
 //   W0＝流れた量を数える幅（ふくらんでも流れが跳ねない）
-function FlowColumn({ flow, left, top, W, W0 = W, H, ms, speed, unit = H, op, mask, filter }) {
+//   plain＝奥の1枚だけ（噴き上がる炎：明るく重ねると白っぽくなって、描いた炎の濃い赤が消えた）
+function FlowColumn({ flow, left, top, W, W0 = W, H, ms, speed, unit = H, op, mask, filter, plain = false }) {
   const lite = useContext(LiteCtx)
   const layer = (k, sp, extra) => {
     const w = W * k, tile = w * (flow.h / flow.w), tile0 = W0 * k * (flow.h / flow.w)
@@ -861,14 +894,14 @@ function FlowColumn({ flow, left, top, W, W0 = W, H, ms, speed, unit = H, op, ma
   return (
     <div style={{ position:'absolute', zIndex: 2, left, top, width: W, height: H, pointerEvents:'none', opacity: op, maskImage: mask, WebkitMaskImage: mask, filter: lite ? undefined : filter }}>
       {layer(1, 1, {})}
-      {!lite && layer(1.3, 1.45, { opacity: 0.5, mixBlendMode:'screen', filter:'brightness(1.25)' })}
+      {!lite && !plain && layer(1.3, 1.45, { opacity: 0.5, mixBlendMode:'screen', filter:'brightness(1.25)' })}
     </div>
   )
 }
 // 縦の切り抜き（mask-image）：at の % ごとに alpha(y)（0〜1）を並べる（0〜100 の外は捨てる・並べ替える）
 const alphaMask = (at, alpha) => `linear-gradient(to bottom, ${[...new Set(at.filter(y => y >= 0 && y <= 100).map(y => +y.toFixed(2)))].sort((p, q) => p - q)
   .map(y => `rgba(0,0,0,${Math.min(1, Math.max(0, alpha(y))).toFixed(3)}) ${y}%`).join(', ')})`
-// 撃つ前に口でためる火の玉（イラスト版の charge）：口（首と頭の動きについていく）で、小さく出てだんだん大きく・回りながら脈打つ
+// 撃つ前に口でためる火の玉（イラスト版の charge）：口（首と頭の動きについていく）で、小さく出てだんだん大きく・回りながら脈打つ（c.still＝回さない・閻魔の手の炎）
 //   エフェクトに on があれば相手の頭上の雲（雨摩座の水天葬）：構えのあいだに大きくなり、技のあいだは出したまま、
 //   toMs（滝が落ちる）のあと holdMs で薄れる。ゆっくり脈打って小さく揺れる（渦は斜めから見た形なので回さない）
 //   派手な演出（m.scene）のときは、滝が落ち終わるまで出したまま（そのあと tailMs で薄れる）・ときどき稲光で明るく（sky＝演出の雲）
@@ -877,10 +910,11 @@ function ChargeOrb({ m, a, acts, now, geo, art, s, cast, castEnd, sky = null }) 
   let on = null
   if (a.on) {
     if (!geo) return <Sprite a={a} frame={-1} />
-    const at = { x: geo.p.x + geo.p.w / 2, y: geo.p.y + geo.p.h * (a.on === 'sky' ? FX_SKY_Y : FX_HEAD_Y) }
+    // 頭上・空（雲）のほか、足元（無間地獄の地割れの輪）
+    const at = { x: geo.p.x + geo.p.w / 2, y: geo.p.y + geo.p.h * (a.on === 'sky' ? FX_SKY_Y : a.on === 'feet' ? FX_FEET_Y : FX_HEAD_Y) }
     const P = m.scene ? pourTimesOf(m) : null
     const filter = sky ? `brightness(${(1 + 0.2 * sky.glow + 0.7 * sky.flicker).toFixed(3)})` : undefined
-    const cloud = (k, op) => ({ frame: 0, x: at.x, y: at.y, op, rot: Math.sin(now * 2.2) * 0.035, filter,
+    const cloud = (k, op) => ({ frame: 0, x: at.x, y: at.y, op, rot: a.on === 'feet' ? 0 : Math.sin(now * 2.2) * 0.035, filter,
       s: (a.size * geo.p.w / a.w) * (0.35 + 0.65 * easeOut(k)) * (1 + 0.035 * Math.sin(now * 6)) })
     if (cast) on = cloud(Math.min(1, cast.ms / 1200), Math.min(1, cast.ms / 400))
     for (const f of acts) {
@@ -901,7 +935,7 @@ function ChargeOrb({ m, a, acts, now, geo, art, s, cast, castEnd, sky = null }) 
     const [mx, my] = illustPointAt(art.key, illustCastPoseAt(art.key, cast.ms, now * 1000), castPt, 'body')
     const k = Math.min(1, cast.ms / (m.castSkipMs || CAST_SEC * 1000))
     on = { frame: 0, x: geo.b.x + mx * s, y: geo.b.y + my * s, s: (c.size * geo.b.w / a.w) * (0.15 + 0.85 * easeOut(k)) * (1 + 0.07 * Math.sin(cast.ms / 28)),
-      rot: cast.ms * 0.004, op: Math.min(1, cast.ms / 400) }
+      rot: c.still ? 0 : cast.ms * 0.004, op: Math.min(1, cast.ms / 400) }
   }
   for (const f of acts) {
     if (f.motion !== m) continue
@@ -912,7 +946,7 @@ function ChargeOrb({ m, a, acts, now, geo, art, s, cast, castEnd, sky = null }) 
     const [mx, my] = artAnchorAt(art.key, m, ms, pose, 'mouth') || (c.part ? illustPointAt(art.key, pose, c.pt, c.part) : illustPointAt(art.key, pose, mouthPointOf(art.key, pose), 'head'))
     const k = (ms - c.fromMs) / (c.toMs - c.fromMs)
     on = { frame: 0, x: geo.b.x + mx * s, y: geo.b.y + my * s, s: (c.size * geo.b.w / a.w) * (0.15 + 0.85 * easeOut(k)) * (1 + 0.07 * Math.sin(ms / 28)),
-      rot: ms * 0.004, op: Math.min(1, k / 0.12) }
+      rot: c.still ? 0 : ms * 0.004, op: Math.min(1, k / 0.12) }
   }
   return <Sprite a={a} {...(on || { frame: -1 })} />
 }
@@ -929,11 +963,12 @@ function SceneLayer({ geo, sc, hands, s }) {
   const X = (x) => ox + x * U, Y = (y) => oy + y * U
   const c = sc.cloud, cy = Y(SCENE_TOP)
   // 色：ふつうは水・tone 'fire' は炎（終焉の黒焔・煙は黒）
-  const fire = sc.tone === 'fire'
-  const K = fire ? ['#ff4a12', '#ffa030', '#fff0c0'] : ['#c8ebff', '#d7f0ff', '#ffffff']
-  const M = fire ? ['#3a1410', '#22100c', '#140806'] : ['#dcf0ff', '#b4dcfa', '#aad7fa']
-  const Gl = fire ? ['#fff4d0', '#ffb040', '#ff3a10'] : ['#ffffff', '#bee6ff', '#78beff']
-  const dropC = fire ? '#ffb060' : '#e6f6ff', ringC = fire ? '#ff8a3c' : '#d4eeff'
+  //   tone 'soul'＝青紫の魂の炎（閻魔の魂火）
+  const fire = sc.tone === 'fire', soul = sc.tone === 'soul'
+  const K = fire ? ['#ff4a12', '#ffa030', '#fff0c0'] : soul ? ['#7a3cff', '#b48cff', '#f4ecff'] : ['#c8ebff', '#d7f0ff', '#ffffff']
+  const M = fire ? ['#3a1410', '#22100c', '#140806'] : soul ? ['#6a4ab0', '#3a2a70', '#201540'] : ['#dcf0ff', '#b4dcfa', '#aad7fa']
+  const Gl = fire ? ['#fff4d0', '#ffb040', '#ff3a10'] : soul ? ['#ffffff', '#c8a8ff', '#7a3cff'] : ['#ffffff', '#bee6ff', '#78beff']
+  const dropC = fire ? '#ffb060' : soul ? '#d8c4ff' : '#e6f6ff', ringC = fire ? '#ff8a3c' : soul ? '#b894ff' : '#d4eeff'
   return (
     <svg style={{ position:'absolute', inset:0, width:'100%', height:'100%', zIndex: 2, pointerEvents:'none', overflow:'visible' }}>
       <defs>
@@ -986,7 +1021,7 @@ function SceneLayer({ geo, sc, hands, s }) {
         if (it.space === 'hand' && hands) {
           const h = hands[it.hi || 0] || hands[0], x = h[0] + it.x * s, y = h[1] + it.y * s
           if (it.t === 'mote') return <circle key={i} cx={x} cy={y} r={it.r * s * 2} fill={`url(#${id}g)`} opacity={it.op} />
-          if (it.t === 'hdrop') return <ellipse key={i} cx={x} cy={y} rx={it.rx * s} ry={it.ry * s} fill="#e6f6ff" opacity={it.op} transform={`rotate(${it.rot.toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)})`} />
+          if (it.t === 'hdrop') return <ellipse key={i} cx={x} cy={y} rx={it.rx * s} ry={it.ry * s} fill={dropC} opacity={it.op} transform={`rotate(${it.rot.toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)})`} />
         }
         return null
       })}
