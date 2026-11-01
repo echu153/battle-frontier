@@ -523,7 +523,7 @@ export const slashSceneAt = (m, ms, landed = true, D = SLASH) => {
     const k = (ms - W) / (I - W)
     for (let i = 0; i < D.rush; i++) {
       const x0 = 0.2 + 2.4 * rnd(i, 92), len = 0.5 + 0.9 * rnd(i, 93)
-      out.items.push({ t: 'speed', x1: x0 - 0.6 * k, x2: x0 - 0.6 * k + len, y: -0.05 - rnd(i, 91), w: 0.006 + 0.016 * rnd(i, 94), op: (0.45 + 0.5 * rnd(i, 95)) * Math.sin(Math.PI * k) })
+      out.items.push({ t: 'speed', x1: x0 - 0.6 * k, x2: x0 - 0.6 * k + len, y: -0.05 - rnd(i, 91), w: 0.012 + 0.03 * rnd(i, 94), op: (0.35 + 0.4 * rnd(i, 95)) * Math.sin(Math.PI * k) })
     }
   }
   if (e >= 0) {

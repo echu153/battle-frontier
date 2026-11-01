@@ -807,7 +807,8 @@ export const BOSS_ILLUST_DEFS = {
         [1600, {}],
       ], jolt: { atMs: 640, ms: 260, x: 0.016, y: 0.012 },
       ghosts: { fromMs: 360, toMs: 560, lagMs: 30, n: 4, op: 0.5, rig: true },
-      trails: [{ kind: 'slash', ribbon: true, part: 'armF', pts: [[478, 352], [632, 555]], fromMs: 560, toMs: 650, lagMs: 90, fadeMs: 260 }],
+      // 刃の通った面：剣先に近い半分だけ（三日月に見える・付け根まで塗ると平たい扇に見えた）
+      trails: [{ kind: 'slash', ribbon: true, part: 'armF', pts: [[552, 450], [632, 555]], fromMs: 560, toMs: 650, lagMs: 90, fadeMs: 260 }],
       art: [[0, null], [120, 'windup'], [370, 'rush'], [570, 'strike'], [1000, null]],
       dustAt: [370, 1370],
       scene: { kind: 'slash', tone: 'thunder', dimColor: '0,6,26', hand: { pt: [632, 555], part: 'armF' }, windMs: 360, boltsAt: [150, 280] } },

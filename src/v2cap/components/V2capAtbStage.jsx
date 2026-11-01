@@ -1021,7 +1021,8 @@ function SceneLayer({ geo, sc, hands, s }) {
           </g>
         )
         // 突進の風の筋（ゼルギアス）
-        if (it.t === 'speed') return <line key={i} x1={X(it.x1)} y1={Y(it.y)} x2={X(it.x2)} y2={Y(it.y)} stroke="#cfe4ff" strokeWidth={Math.max(1, it.w * U)} strokeLinecap="round" opacity={it.op} />
+        //   進む側（左）が太く、後ろへ細くなる（ただの線だと細くて安っぽかった）
+        if (it.t === 'speed') return <polygon key={i} points={`${X(it.x1).toFixed(1)},${(Y(it.y) - it.w * U).toFixed(1)} ${X(it.x2).toFixed(1)},${Y(it.y).toFixed(1)} ${X(it.x1).toFixed(1)},${(Y(it.y) + it.w * U).toFixed(1)}`} fill="#a8cdff" opacity={it.op} />
         // 太い雷の筋（砲口から相手へ・sky は空から剣へ）：外がぼかした青・中が明るい青・芯が白
         if (it.t === 'tracer' && hands) {
           const h = hands[0], [ax, ay] = it.sky ? [h[0] + it.ox * U, -U * 0.3] : h, [bx, by] = it.sky ? h : [X(it.x), Y(it.y)]
