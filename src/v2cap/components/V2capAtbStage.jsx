@@ -201,7 +201,7 @@ const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [
   const { moving, still } = rigLayersOf(art)
   const rigStyle = { position:'absolute', inset:0, opacity: rigOp < 1 ? rigOp : undefined, visibility: rigOp <= 0.001 ? 'hidden' : undefined }
   //   待機の光は部品の上。着物のひらひらがあるボス（閻魔）は帯ごとに同じ物を描くので、光と手の炎は帯の外（still の所）に1回だけ
-  const rig = <div style={rigStyle}>{moving.map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={pose} />)}{art.lights && !art.flutter && <RigLights art={art} tMs={tMs} />}</div>
+  const rig = <div style={rigStyle}><RigStack art={art} parts={moving} box={box} pose={pose} top={art.lights && !art.flutter && <RigLights art={art} tMs={tMs} />} /></div>
   const bands = art.flutter && !lite ? flutterBandsAt(art.key, tMs) : []
   const pct = (y) => (y / art.base) * 100
   const auraEl = aura && aura.op > 0.001 ? <AuraArt art={art} a={lite ? { ...aura, glow: false } : aura} /> : null
@@ -217,7 +217,7 @@ const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [
       {!lite && ghosts.map((g, i) => (
         // 部品の残像（g.name が無い・ゼルギアスの突進）は青白く
         <div key={`g${i}`} style={{ ...rigWrap(art, g.pose), opacity: g.op, filter: g.name ? undefined : 'brightness(0.7) sepia(1) hue-rotate(175deg) saturate(4) brightness(1.5)' }}>
-          {g.name ? <PoseArt art={art} p={motion.poses[g.name]} /> : moving.map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={g.pose} />)}
+          {g.name ? <PoseArt art={art} p={motion.poses[g.name]} /> : <RigStack art={art} parts={moving} box={box} pose={g.pose} />}
         </div>
       ))}
       <div style={lite ? { ...rigWrap(art, pose), willChange:'transform' } : rigWrap(art, pose)}>
@@ -245,8 +245,25 @@ const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [
     </>
   )
 }
+// 部品を奥から順に並べる。腰の決まり（art.hips・ゼルギアス）があれば、続いた部品ごとに箱に入れて腰のずれ（pose.hipX・hipY）で動かす：
+//   脚より上＝そのままずれる（体は曲がらない）・脚＝足の裏を地面に残して追いかける（lib の hipPoint と同じ）。top＝いちばん手前に重ねる物（待機の光）
+const RigStack = ({ art, parts, box, pose, top = null }) => {
+  const list = (ps) => ps.map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={pose} />)
+  if (!art.hips) return <>{list(parts)}{top}</>
+  const groups = []
+  for (const p of parts) { if (groups.at(-1)?.leg === p.leg) groups.at(-1).parts.push(p); else groups.push({ leg: p.leg, parts: [p] }) }
+  const dx = pose.hipX * art.base, dy = pose.hipY * art.base, h = art.hips.ground - art.hips.y
+  const hipTf = `translate(${(pose.hipX * 100).toFixed(2)}%, ${(pose.hipY * 100).toFixed(2)}%)`
+  const legTf = `matrix(1, 0, ${(-dx / h).toFixed(4)}, ${(1 - dy / h).toFixed(4)}, 0, 0)`, legOrigin = `50% ${(art.hips.ground / art.base) * 100}%`
+  return groups.map((g, i) => (
+    <div key={i} style={{ position:'absolute', inset:0, transform: g.leg ? legTf : hipTf, transformOrigin: g.leg ? legOrigin : undefined }}>
+      {list(g.parts)}
+      {i === groups.length - 1 && top}
+    </div>
+  ))
+}
 // 待機の光（lib/bossIllust.js の rigLightsAt・ゼルギアスの炉心と肩の玉）：立ち絵の上に明るく重ねる。絵（src）か丸い光。軽い表示では重ね方を使わず少し薄く
-const RigLights = ({ art, tMs }) => {
+const RigLights =({ art, tMs }) => {
   const lite = useContext(LiteCtx)
   return rigLightsAt(art.lights, tMs).map((l, i) => {
     const box = { position:'absolute', left:`${(l.at[0] / art.base) * 100}%`, top:`${(l.at[1] / art.base) * 100}%`, width:`${l.size * 100}%`, aspectRatio:'1 / 1', transform:'translate(-50%, -50%)',
@@ -378,9 +395,11 @@ const DeathPuffs = ({ art, list }) => {
 // パーツ1つぶんの CSS（lib/bossIllust.js の partMove と同じ：長さの向きに縮めてから回す）
 const partTransform = (p, pose) => {
   if (p.bend) return undefined   // 曲げるパーツは回さない（角度は曲げた絵の選び方に使う＝BendFrames）
-  const deg = pose[p.key], sq = pose[`${p.key}Sq`] || 0
+  const deg = pose[p.key], sq = pose[`${p.key}Sq`] || 0, sl = pose[`${p.key}Sl`] || 0
   if (typeof deg !== 'number') return undefined
-  return `rotate(${deg.toFixed(2)}deg)${sq ? ` rotate(${p.ax || 0}deg) scaleX(${(1 - sq).toFixed(3)}) rotate(${-(p.ax || 0)}deg)` : ''}`
+  // sl＝長さの向きにすべる（立ち絵の px・砲身の反動）。% は自分の幅に対する割合
+  const slide = sl ? ` rotate(${p.ax || 0}deg) translateX(${((sl / p.w) * 100).toFixed(3)}%) rotate(${-(p.ax || 0)}deg)` : ''
+  return `rotate(${deg.toFixed(2)}deg)${slide}${sq ? ` rotate(${p.ax || 0}deg) scaleX(${(1 - sq).toFixed(3)}) rotate(${-(p.ax || 0)}deg)` : ''}`
 }
 //   腕の構えの絵（p.swap・雨摩座）は切り替える割合で濃さを変え、見えないときは隠す（子のパーツもいっしょ）
 const RigPart = ({ art, p, box, pose }) => {
@@ -395,10 +414,12 @@ const RigPart = ({ art, p, box, pose }) => {
       transform: partTransform(p, pose), willChange: lite && !p.bend ? 'transform' : undefined,
       transformOrigin:`${((p.px - p.x) / p.w) * 100}% ${((p.py - p.y) / p.h) * 100}%` }}>
       {p.key === 'head' && <MouthInside art={art} p={p} pose={pose} />}
+      {/* back の子は親の奥（砲身は腕の筒の中へすべりこむ） */}
+      {art.parts.filter(c => c.nest && c.back && c.parent === p.key).map(c => <RigPart key={c.key} art={art} p={c} box={p} pose={pose} />)}
       {p.bend
         ? <BendFrames p={p} deg={pose[p.key] || 0} />
         : <img src={p.src} alt="" draggable={false} decoding="sync" style={{ position:'relative', width:'100%', height:'100%', display:'block', maxWidth:'none', userSelect:'none' }} />}
-      {art.parts.filter(c => c.nest && c.parent === p.key).map(c => <RigPart key={c.key} art={art} p={c} box={p} pose={pose} />)}
+      {art.parts.filter(c => c.nest && !c.back && c.parent === p.key).map(c => <RigPart key={c.key} art={art} p={c} box={p} pose={pose} />)}
       {/* 待機のときどき口に出る火の玉（黒龍・pose.orb＝大きさ）：頭といっしょに動く。ゆっくり回ってゆらめく */}
       {p.key === 'head' && art.orb && pose.orb > 0.001 && (
         <img src={art.orb.src} alt="" draggable={false} decoding="sync"

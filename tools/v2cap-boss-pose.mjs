@@ -17,7 +17,7 @@ import { bossIllustOf, illustPoseAt, illustCastPoseAt, illustFreePoseAt, rotPoin
 
 const SELF = fileURLToPath(import.meta.url)
 const ROOT = path.resolve(path.dirname(SELF), '..')
-const PAD = { l: 160, t: 160, r: 60, b: 60 }   // 踏み込み・のけぞりで枠の外へ出るぶん
+const PAD = { l: 160, t: 160, r: 180, b: 60 }   // 踏み込み・のけぞりで枠の外へ出るぶん
 
 // 1コマ：{ W, H, data }（RGBA）。art＝bossIllustOf・imgs＝パーツの絵（art.parts と同じ並び）
 //   freePose＝体の動きから切り離したパーツ（p.free・雨摩座の水の帯）の姿勢（画面と同じ＝待機のまま）
@@ -33,13 +33,22 @@ export const renderPose = (art, imgs, pose, freePose = pose, orbImg = null, bend
   const chainOf = (key) => { const c = []; for (let q = key; q && byKey[q]; q = byKey[q].p.parent) c.unshift(byKey[q].p); return c }
   // 画面の点 → 立ち絵の点（全体のずれ・回す・傾ける（lean）の逆）
   const unWhole = (X, Y, pz) => leanPoint(rotPoint([X - PAD.l - pz.x * S, Y - PAD.t - pz.y * S], art.pivot, -pz.r), art.ground, -(pz.lean || 0))
+  // 腰のずれ（hipPoint）の逆
+  const unHip = ([x, y], pz, leg) => {
+    if (!art.hips) return [x, y]
+    const dx = (pz.hipX || 0) * S, dy = (pz.hipY || 0) * S, g = art.hips.ground, h = g - art.hips.y
+    if (!leg) return [x - dx, y - dy]
+    const oy = g + (y - g) / (1 - dy / h)
+    return [x - dx * (g - oy) / h, oy]
+  }
   const toLocal = (X, Y, chain, pose) => {
-    let pt = unWhole(X, Y, pose)
+    let pt = unHip(unWhole(X, Y, pose), pose, chain.some(p => p.leg))
     for (const p of chain) {
-      // partMove（縮めてから回す）の逆：戻してから伸ばす
+      // partMove（縮めてからすべらせて回す）の逆：戻してから伸ばす
       if (p.bend) continue   // 曲げるパーツは回さない
-      const c = [p.px, p.py], sq = pose[`${p.key}Sq`] || 0
+      const c = [p.px, p.py], sq = pose[`${p.key}Sq`] || 0, sl = pose[`${p.key}Sl`] || 0
       pt = rotPoint(pt, c, -(pose[p.key] || 0))
+      if (sl) { const t = (p.ax || 0) * Math.PI / 180; pt = [pt[0] - Math.cos(t) * sl, pt[1] - Math.sin(t) * sl] }
       if (sq) { pt = rotPoint(pt, c, -(p.ax || 0)); pt = rotPoint([c[0] + (pt[0] - c[0]) / (1 - sq), pt[1]], c, p.ax || 0) }
     }
     return pt
@@ -58,6 +67,7 @@ export const renderPose = (art, imgs, pose, freePose = pose, orbImg = null, bend
     if (o <= 0) return
     const inside = key === 'head' && art.jaw && (pose.jaw || 0) < -0.5
       ? [...art.jaw.line, ...art.jaw.line.map(q => rotPoint(q, art.jaw.pivot, pose.jaw)).reverse()] : null
+    for (const c of art.parts) if (c.nest && c.back && c.parent === key) drawPart(c.key, o)   // 親の奥の子（砲身）
     for (let Y = 0; Y < H; Y++) for (let X = 0; X < W; X++) {
       const [u, v] = toLocal(X, Y, chain, ps)
       const i = (Y * W + X) * 4
@@ -81,7 +91,7 @@ export const renderPose = (art, imgs, pose, freePose = pose, orbImg = null, bend
         + (sample(img, x0, y0 + 1, ch) * (1 - fx) + sample(img, x0 + 1, y0 + 1, ch) * fx) * fy)
       over(i, px[0], px[1], px[2], px[3] * o)
     }
-    for (const c of art.parts) if (c.nest && c.parent === key) drawPart(c.key, o)
+    for (const c of art.parts) if (c.nest && !c.back && c.parent === key) drawPart(c.key, o)
     // 口の火の玉（画面の RigPart と同じ：頭の中・回ってゆらめく）
     if (key === 'head' && orbImg && art.orb && pose.orb > 0.001) {
       const s = art.orb.size * S * pose.orb * (1 + 0.05 * Math.sin(pose.orbT / 45)) / orbImg.W, rot = pose.orbT * 0.12

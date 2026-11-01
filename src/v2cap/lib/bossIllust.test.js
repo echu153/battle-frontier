@@ -7,7 +7,7 @@ import { BOSS_ILLUST } from './bossIllustList.js'
 import { BOSS_ART_DIR, BOSS_DEFS, bossFileOf } from './bossArt.js'
 import {
   BOSS_ILLUST_DEFS, BOSS_ILLUST_SIZE, illustPartsOf, illustKindOf, illustFxKindOf,
-  bossIllustOf, illustPoseAt, reachXOf, idlePoseAt, motionPoseAt, illustPointAt, illustTrailsAt, mouthPointOf, rotPoint, partMove,
+  bossIllustOf, illustPoseAt, reachXOf, idlePoseAt, motionPoseAt, illustPointAt, illustTrailsAt, mouthPointOf, rotPoint, partMove, hipPoint,
   illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt, dustEllipsesOf,
   illustCastShowAt, EASES, joltAt, illustBendKindOf, bendFramesOf, illustPoseKindOf, illustShowAt, illustGhostsAt, ART_FADE_MS, artAnchorAt, leanPoint,
   illustBuffShowAt, illustBuffKindOf, buffSceneAt, introSceneAt, introEnterAt, introBeamAt, rigLightsAt, buffAfterAt, buffRainAt, buffHoldOf, rigLayersOf, flutterBandsAt, buffArtMsOf, BUFF_IN_MS, BUFF_HOLD_MS, BUFF_OUT_MS, BUFF_AURA_IN_MS, BUFF_AURA_OUT_MS, BUFF_ART_MS, BUFF_FLASH_MS,
@@ -962,7 +962,7 @@ test('【確定】2026-10-30 雨摩座の足は着物のひらひらで動かな
 test('【確定】2026-11-01 ゼルギアスの待機：羽根を左右4枚ずつ切り分けて、扇のように軽く開閉する（ユーザー「待機モーションでは鉄の翼軽く開閉してほしい」）', () => {
   const a = bossIllustOf('zerugiasu'), def = BOSS_ILLUST_DEFS.zerugiasu
   // 羽根は肩と塔の後ろ＝体より奥
-  assert.deepEqual(a.parts.map(p => p.key), ['wL4', 'wL3', 'wL2', 'wL1', 'wR4', 'wR3', 'wR2', 'wR1', 'body', 'armF', 'armN'])
+  assert.deepEqual(a.parts.map(p => p.key), ['wL4', 'wL3', 'wL2', 'wL1', 'wR4', 'wR3', 'wR2', 'wR1', 'legL', 'legR', 'body', 'armN', 'barrel', 'armF', 'sword'])
   // どの羽根も翼ごとに同じ1点で回す（扇）
   for (const n of [1, 2, 3, 4]) {
     assert.deepEqual(def.cuts[`wL${n}`].pivot, [215, 155])
@@ -984,6 +984,50 @@ test('【確定】2026-11-01 ゼルギアスの待機：羽根を左右4枚ず�
   assert.ok(a.lights[0].src && a.srcs.includes(a.lights[0].src), '炉心の光の絵は先に読む')
 })
 
+test('【確定】2026-11-02 ゼルギアスの大技以外の3つは立ち絵だけで動かす（ユーザー「もう絶対左のイメージは崩さないで」「画像①をもとに攻撃モーションを組み立ててほしい」）', () => {
+  const a = bossIllustOf('zerugiasu'), def = BOSS_ILLUST_DEFS.zerugiasu
+  // 描いてもらった攻撃の絵（絵柄が変わる）は使わない。ポーズの絵は大技だけ（ユーザーが「いちばんよかった」とした絵）
+  assert.deepEqual(Object.keys(def.poses), ['ruin'])
+  for (const k of ['shell', 'volley', 'smite']) {
+    assert.equal(a.motions[k].poses, null, k + '：ポーズの絵を出さない')
+    assert.equal(a.motions[k].art, null, k + '：切り替えの時刻も持たない')
+  }
+  // 絵の無いエフェクトの名前を残さない（ユーザー「エフェクトはそのままで」）
+  assert.ok(!def.effects.some(e => ['雷鋼弾_閃光', '神雷崩撃_斬撃'].includes(e.file)))
+  // 手首から先は腕の子・砲身は腕の子で奥に重ねる（筒の中へすべりこむ）・脚は腰を追いかける
+  const by = Object.fromEntries(a.parts.map(p => [p.key, p]))
+  assert.ok(by.sword.nest && by.sword.parent === 'armF' && !by.sword.back)
+  assert.ok(by.barrel.nest && by.barrel.parent === 'armN' && by.barrel.back)
+  assert.ok(by.legL.leg && by.legR.leg && !by.body.leg && !by.armN.leg)
+  // 腰がずれても足の裏は地面に残り、腰の高さでは体と同じだけずれる。体は形を変えない（曲がらない）
+  const h = a.hips, pz = { hipX: 0.05, hipY: 0.02 }
+  assert.deepEqual(hipPoint([170, h.ground], h, pz, true), [170, h.ground])
+  const atHip = hipPoint([290, h.y], h, pz, true), body = hipPoint([290, h.y], h, pz, false)
+  assert.ok(Math.abs(atHip[0] - body[0]) < 1e-9 && Math.abs(atHip[1] - body[1]) < 1e-9)
+  const hd = hipPoint([330, 100], h, pz, false), ch = hipPoint([330, 300], h, pz, false)
+  assert.ok(Math.abs((ch[1] - hd[1]) - 200) < 1e-9 && Math.abs(ch[0] - hd[0]) < 1e-9, '体の上と下は同じだけずれる')
+  // 足の裏：撃つあいだは地面に残る（すべっても高さは変わらない）・神雷崩撃は飛びこむと地面から離れ、踏みこみで地面に着く
+  const low = (p, pts, part) => Math.max(...pts.map(q => illustPointAt('zerugiasu', p, q, part)[1]))
+  const footY = (k, ms, pts, part) => low(illustPoseAt('zerugiasu', a.motions[k], ms, 0), pts, part)
+  const L = [[110, 596], [185, 600], [240, 586]], R = [[405, 584], [480, 590], [555, 594]], restL = low(idlePoseAt(def.idle, 0), L, 'legL'), restR = low(idlePoseAt(def.idle, 0), R, 'legR')
+  for (const t of [300, 430, 600, 820]) {
+    assert.ok(Math.abs(footY('shell', t, L, 'legL') - restL) < 3, '雷鋼弾 ' + t + 'ms：左足は地面のまま')
+    assert.ok(Math.abs(footY('shell', t, R, 'legR') - restR) < 3, '雷鋼弾 ' + t + 'ms：右足は地面のまま')
+  }
+  assert.ok(footY('smite', 520, L, 'legL') < restL - 10 && footY('smite', 520, R, 'legR') < restR - 80, '飛びこむと足が地面から離れる')
+  for (const t of [730, 980]) {
+    assert.ok(Math.abs(footY('smite', t, L, 'legL') - restL) < 20 && Math.abs(footY('smite', t, R, 'legR') - restR) < 20, '踏みこむと足が地面に着く')
+  }
+  // 踏みこみ：足を前後に開く（左足は左へ・右足は右へ）・剣の腕は炉心より下を通る
+  const lunge = motionPoseAt(def.motions.smite.keys, 730)
+  assert.ok(lunge.legL > 10 && lunge.legR < -10)
+  const hand = illustPointAt('zerugiasu', lunge, [476, 346], 'armF'), core = illustPointAt('zerugiasu', lunge, [356, 213], 'body')
+  assert.ok(hand[1] - core[1] > 60, '手は炉心より下＝炉心を隠さない')
+  // 大砲を上げるときは左の下の羽根もいっしょに上げる（付け根が腕の後ろ＝腕だけ上げると羽根が宙に浮いて見えた）
+  const aim = motionPoseAt(def.motions.shell.keys, 430)
+  assert.ok(aim.wL4 - aim.wR4 * -1 > 20 && aim.wL3 > aim.wL2 && aim.wL2 > aim.wL1, '下の羽根ほど腕といっしょに上がる')
+})
+
 test('【確定】2026-11-01 ゼルギアスの技（ユーザー「大技以外のモーションがすべてしょぼすぎる」「剣はプレイヤーに届いてない」「銃で放つときのモーションもなんか安っぽい」）：砲身は相手へ向き、撃つと全身が押される・剣は相手の側へ振って届く', () => {
   const a = bossIllustOf('zerugiasu'), def = BOSS_ILLUST_DEFS.zerugiasu
   assert.deepEqual(Object.values(a.motions).map(m => m.label), ['雷鋼弾', '雷霆掃射', '神雷崩撃', '神雷終焉'])
@@ -995,7 +1039,7 @@ test('【確定】2026-11-01 ゼルギアスの技（ユーザー「大技以外
   }
   // 大砲の技：撃つ時刻に砲身の延長に相手がいる（舞台が広いときも狭いときも）。前は相手より上を向いて撃っていた
   const shell = a.motions.shell, up = illustPoseAt('zerugiasu', def.motions.shell, shell.hitMs, 0)
-  const muzzle = illustPointAt('zerugiasu', up, [65, 475], 'armN'), shoulder = illustPointAt('zerugiasu', up, [222, 205], 'armN')
+  const muzzle = illustPointAt('zerugiasu', up, [65, 475], 'barrel'), shoulder = illustPointAt('zerugiasu', up, [222, 205], 'armN')
   const barrel = Math.atan2(muzzle[1] - shoulder[1], muzzle[0] - shoulder[0])
   for (const target of [[-501, 486], [-344, 486]]) {
     const to = Math.atan2(target[1] - muzzle[1], target[0] - muzzle[0])
@@ -1004,7 +1048,8 @@ test('【確定】2026-11-01 ゼルギアスの技（ユーザー「大技以外
   assert.ok(shell.fx.fly, '弾が飛ぶ')
   // 撃った反動：砲身が跳ね上がり、全身が後ろ（右）へ押される
   const kick = motionPoseAt(def.motions.shell.keys, 485), aim = motionPoseAt(def.motions.shell.keys, shell.hitMs)
-  assert.ok(kick.armN - aim.armN >= 15 && kick.x - aim.x >= 0.06 && kick.lean < aim.lean)
+  assert.ok(kick.armN - aim.armN >= 15 && (kick.x + kick.hipX) - (aim.x + aim.hipX) >= 0.06 && kick.lean < aim.lean)
+  assert.ok(kick.barrelSl < -10 && aim.barrelSl === 0, '撃つと砲身が腕の筒へすべりこむ')
   assert.equal(shell.scene.kind, 'gun')
   // 雷霆掃射：3発。弾1つが1発で、数字と揺れが1発ごとに分かれる
   const v = a.motions.volley

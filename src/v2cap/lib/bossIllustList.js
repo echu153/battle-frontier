@@ -81,19 +81,23 @@ export const BOSS_ILLUST = {
   },
   zerugiasu: {
     parts: {
-      wL4: { x: 53, y: 238, w: 117, h: 134, px: 215, py: 155, ax: 124, parent: 'body' },
-      wL3: { x: 13, y: 190, w: 177, h: 128, px: 215, py: 155, ax: 141, parent: 'body' },
+      wL4: { x: 53, y: 160, w: 173, h: 212, px: 215, py: 155, ax: 122, parent: 'body' },
+      wL3: { x: 13, y: 160, w: 213, h: 158, px: 215, py: 155, ax: 140, parent: 'body' },
       wL2: { x: 12, y: 152, w: 176, h: 61, px: 215, py: 155, ax: 164, parent: 'body' },
       wL1: { x: 31, y: 83, w: 165, h: 79, px: 215, py: 155, ax: -163, parent: 'body' },
       wR4: { x: 428, y: 200, w: 150, h: 172, px: 425, py: 170, ax: 55, parent: 'body' },
       wR3: { x: 442, y: 186, w: 183, h: 134, px: 425, py: 170, ax: 36, parent: 'body' },
       wR2: { x: 458, y: 164, w: 170, h: 49, px: 425, py: 170, ax: 9, parent: 'body' },
       wR1: { x: 456, y: 95, w: 157, h: 75, px: 425, py: 170, ax: -21, parent: 'body' },
-      body: { x: 83, y: 28, w: 476, h: 576, px: 305, py: 322, ax: 55 },
-      armF: { x: 393, y: 167, w: 227, h: 381, px: 432, py: 205, ax: 68, parent: 'body' },
-      armN: { x: 25, y: 143, w: 262, h: 364, px: 222, py: 205, ax: 120, parent: 'body' },
+      legL: { x: 83, y: 318, w: 252, h: 286, px: 290, py: 358, ax: 125, parent: 'body' },
+      legR: { x: 365, y: 340, w: 194, h: 236, px: 402, py: 368, ax: 70, parent: 'body' },
+      body: { x: 119, y: 28, w: 363, h: 439, px: 305, py: 322, ax: -76 },
+      armN: { x: 115, y: 143, w: 172, h: 200, px: 222, py: 205, ax: 118, parent: 'body' },
+      barrel: { x: 25, y: 290, w: 175, h: 217, px: 168, py: 296, ax: 119, parent: 'armN' },
+      armF: { x: 393, y: 167, w: 103, h: 173, px: 432, py: 205, ax: 79, parent: 'body' },
+      sword: { x: 436, y: 311, w: 184, h: 237, px: 476, py: 346, ax: 55, parent: 'armF' },
     },
-    pivot: [305, 322], mouth: [85, 588],
+    pivot: [305, 322], mouth: [176, 131],
     fx: {
       shell: { fly: { w: 384, h: 148, ax: 3, ay: 94 }, hit: { w: 384, h: 354, ax: 192, ay: 177 } },
       volley: { fly: { w: 384, h: 85, ax: 15, ay: 49 }, hit: { w: 384, h: 336, ax: 192, ay: 168 } },
@@ -111,7 +115,7 @@ export const BOSS_ILLUST = {
     fit: {
       body: { s: 0.985, deg: 0, tx: 20, ty: 4, score: 0.123 },
     },
-    v: { 'il-wL4': '911ef5ec', 'il-wL3': 'b6a8b6f6', 'il-wL2': 'd04fb600', 'il-wL1': '983d75cd', 'il-wR4': 'be3d79c2', 'il-wR3': 'b97148f2', 'il-wR2': 'e23292c0', 'il-wR1': '842831a0', 'il-body': '582b4530', 'il-armF': '18f2148a', 'il-armN': '3fe0ad48', 'il-pose-ruin-windup': '07c0ab4e', 'il-pose-ruin-strike': '443d357f', 'il-buff-armor-pose': 'a02dd575', 'il-buff-armor-aura': '6e26f1e8', 'il-buff-overload-pose': 'd6f2e631', 'il-buff-overload-aura': '3cfad7b0', 'il-fx-shell-fly': '066f39ec', 'il-fx-shell-hit': '8db55fc9', 'il-fx-volley-fly': 'c5750402', 'il-fx-volley-hit': '19c76907', 'il-fx-smite-hit': '1a0df76d', 'il-fx-ruin-fly': '9c645d5a', 'il-fx-ruin-hit': '7275a1d5', 'il-fx-ruin-charge': '9465a5be', 'il-fx-idle-core': '340711fc' },
+    v: { 'il-wL4': '96ea07e7', 'il-wL3': '7a332dfb', 'il-wL2': 'd3c6359b', 'il-wL1': '983d75cd', 'il-wR4': 'be3d79c2', 'il-wR3': '7e0a59b9', 'il-wR2': 'e23292c0', 'il-wR1': '842831a0', 'il-legL': 'cb88cb86', 'il-legR': '7d0f6ca9', 'il-body': '14ce522d', 'il-armN': 'b3f82d31', 'il-barrel': 'cbe21df2', 'il-armF': '8104a6ee', 'il-sword': 'efe519e0', 'il-pose-ruin-windup': '07c0ab4e', 'il-pose-ruin-strike': '443d357f', 'il-buff-armor-pose': 'a02dd575', 'il-buff-armor-aura': '6e26f1e8', 'il-buff-overload-pose': 'd6f2e631', 'il-buff-overload-aura': '3cfad7b0', 'il-fx-shell-fly': '066f39ec', 'il-fx-shell-hit': '8db55fc9', 'il-fx-volley-fly': 'c5750402', 'il-fx-volley-hit': '19c76907', 'il-fx-smite-hit': '1a0df76d', 'il-fx-ruin-fly': '9c645d5a', 'il-fx-ruin-hit': '7275a1d5', 'il-fx-ruin-charge': '9465a5be', 'il-fx-idle-core': '340711fc' },
   },
   enma: {
     parts: {

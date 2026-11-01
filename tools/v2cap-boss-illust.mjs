@@ -694,9 +694,12 @@ const build = (key, def, dir) => {
   // 立ち絵が体のとき：切り分けで空いた所を ChatGPT の体で埋める（止まっているときは切り分けたパーツが覆う・動くと見える）
   if (fill) {
     let n = 0
+    // noFill＝切り分けたあと埋めない所（ゼルギアスの脚：ChatGPT の体にも脚があるので、埋めると脚が二重に見える）
+    const noFill = Object.values(def.cuts || {}).filter(c => c.noFill).map(c => c.drop || c.take)
     for (let p = 0; p < S * S; p++) {
       // 腕の構えで切り替える所（zone）は3つの絵が埋めるので、埋めない
       if (zone?.[p] || layers.body.data[p * 4 + 3] >= T.data[p * 4 + 3] || fill.data[p * 4 + 3] < SEEN) continue
+      if (noFill.some(poly => inPoly(poly, p % S + 0.5, Math.floor(p / S) + 0.5))) continue
       fill.data.copy(layers.body.data, p * 4, p * 4, p * 4 + 4)
       n++
     }
@@ -723,6 +726,32 @@ const build = (key, def, dir) => {
       n++
     }
     notes.push(`体：切り分けで空いた所 ${n}px を${def.split.back.file}で埋めた`)
+  }
+  // despeckle＝切り分けで残った小さなかけら（まわりから離れた px 数がこれより小さいまとまり）を消す。動かすと宙に浮いて見える（ゼルギアスの体に残った羽根や刃のふち）
+  if (def.despeckle) {
+    let n = 0
+    for (const part of PARTS) {
+      const img = layers[part]
+      if (!img) continue
+      const seen = new Uint8Array(S * S)
+      for (let p0 = 0; p0 < S * S; p0++) {
+        if (seen[p0] || img.data[p0 * 4 + 3] < 8) continue
+        const stack = [p0], blob = []
+        seen[p0] = 1
+        while (stack.length) {
+          const p = stack.pop(), x = p % S, y = (p / S) | 0
+          blob.push(p)
+          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+            const xx = x + dx, yy = y + dy
+            if (xx < 0 || yy < 0 || xx >= S || yy >= S) continue
+            const q = yy * S + xx
+            if (!seen[q] && img.data[q * 4 + 3] >= 8) { seen[q] = 1; stack.push(q) }
+          }
+        }
+        if (blob.length < def.despeckle) { for (const p of blob) img.data[p * 4 + 3] = 0; n += blob.length }
+      }
+    }
+    notes.push(`小さなかけら ${n}px を消した`)
   }
   // 親：切り分けたパーツは元のパーツの子。adopt なら逆（首が頭の親）
   const parent = {}

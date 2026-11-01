@@ -87,9 +87,12 @@ const srcOf = (key, kind) => {
 //   機神（ゼルギアス）：wL1〜wL4・wR1〜wR4＝左右の翼の羽根の角度（上から順。左は＋で・右は−で羽根の先が上がる）
 //   閻魔：soulA〜soulE＝漂う魂の炎の角度（遠くの点が中心＝上下に動く）
 //   dash＝相手まで踏み込む割合（0〜1・motion.reach の点が相手の真ん中に届く距離 reachXOf を掛けて x に足す＝舞台の幅が変わっても届く）
+//   hipX・hipY＝腰のずれ（枠の割合・def.hips）：脚より上は形を変えずに動き（体は曲がらない）、脚は足の裏を地面に残して追いかける（hipPoint）／
+//   legL・legR＝脚を腰で回す角度（ゼルギアス・飛びこむ・踏みこむ）／sword＝手首から先の角度／barrelSl＝砲身のすべり（立ち絵の px・長さの向き・−で肩の側＝撃った反動）
 const ZERO = { x: 0, y: 0, r: 0, neck: 0, head: 0, wingN: 0, wingF: 0, wingNSq: 0, wingFSq: 0, arm: 0, jaw: 0, glow: 0, armN: 0, armF: 0, water: 0,
   armD: 0, armC: 0, armU: 0, armCOn: 0, armUOn: 0, tail: 0, tailT: 0, dust: 0, orb: 0, orbOp: 0, orbT: 0, lean: 0,
-  wL1: 0, wL2: 0, wL3: 0, wL4: 0, wR1: 0, wR2: 0, wR3: 0, wR4: 0, dash: 0, soulA: 0, soulB: 0, soulC: 0, soulD: 0, soulE: 0 }
+  wL1: 0, wL2: 0, wL3: 0, wL4: 0, wR1: 0, wR2: 0, wR3: 0, wR4: 0, dash: 0, soulA: 0, soulB: 0, soulC: 0, soulD: 0, soulE: 0,
+  hipX: 0, hipY: 0, legL: 0, legR: 0, sword: 0, barrel: 0, barrelSl: 0 }
 // 技ごとの動き：keys＝[時刻ミリ秒, 姿勢（待機に足す）, 区間の速さ（EASES・無ければ smooth）]・hitMs＝当たる（撃ち出す）時刻・jolt＝当たった瞬間の揺れ（joltAt）
 //   trails＝残像の筋（part のパーツの点 pts を、lagMs 前からいまの時刻までたどる。fromMs〜toMs のあいだだけ・kind＝claw 爪／wind 風）
 //   shots＝飛ぶ絵の出どころ（無ければ口から1つ）。{ part, pt（パーツの点）, delayMs（hitMs からの遅れ・−で先に出る）, size（飛ぶ絵の大きさの倍率） }
@@ -120,6 +123,10 @@ const ZERU_FAN = [1, 0.55, 0.15, -0.25]
 const zeruFan = (amp, periodMs) => Object.fromEntries(ZERU_FAN.flatMap((k, i) => [[`wL${i + 1}`, [amp * k, periodMs, 0]], [`wR${i + 1}`, [-amp * k, periodMs, 0]]]))
 // ゼルギアスの羽根をぜんぶ同じだけ回す姿勢（deg＞0 で羽根の先が上がる）
 const zeruWings = (deg) => Object.fromEntries([1, 2, 3, 4].flatMap(i => [[`wL${i}`, deg], [`wR${i}`, -deg]]))
+// 大砲の腕の角度 armN＋羽根 deg：左の下の羽根は付け根が腕の後ろにあるので、腕といっしょに上げる（下の羽根ほど腕に近い）。
+//   【確定】2026-11-02 腕だけ上げると、付け根が切れた羽根が腕の下で宙に浮いて見えた
+const ZERU_ARM_WING = [0.15, 0.45, 0.7, 0.8]
+const zeruGun = (armN, deg = 0) => ({ armN, ...zeruWings(deg), ...Object.fromEntries(ZERU_ARM_WING.map((k, i) => [`wL${i + 1}`, deg + armN * k])) })
 export const BOSS_ILLUST_DEFS = {
   varuzenoku: {
     // 【確定】2026-10-29 描き直し：立ち絵そのものが体。ChatGPT の体（翼としっぽの無い体）は、体の形を知るためだけに使う（split.by）。
@@ -646,8 +653,12 @@ export const BOSS_ILLUST_DEFS = {
     // 【確定】2026-11-01 ユーザー選択「大砲と剣を回す形から」・ユーザーが絵17枚を描いた（「ゼルギアスのイラスト用意できた」）：
     //   大砲の腕（armN）と剣の腕（armF）を立ち絵から切って回す（機械なので回しても不自然にならない）。動かすと見える肩の裏は ChatGPT の体で埋める（fill）。
     //   胸の装甲が開く大技とバフだけポーズの絵。羽根は体の後ろ・腕は体の手前
-    base: 'stand', files: {}, fill: '体', quality: 80, ground: 602,
-    layers: ['wL4', 'wL3', 'wL2', 'wL1', 'wR4', 'wR3', 'wR2', 'wR1', 'body', 'armF', 'armN'],
+    //   【確定】2026-11-02 ユーザー「もう絶対左のイメージは崩さないで」「画像①をもとに攻撃モーションを組み立ててほしい」（描いてもらった攻撃の絵は絵柄が変わる＝使わない）：
+    //   大技以外の3つは立ち絵そのものを動かす。脚（legL・legR＝足の裏を地面に残して腰を追いかける・飛びこむときは腰で回す）・手首から先の剣（sword）・砲身の前半分（barrel＝撃つと腕の筒へすべりこむ）を足した。
+    //   胴は回さない・曲げない（hipX・hipY で位置だけ動く）。全身の傾きは lean
+    base: 'stand', files: {}, fill: '体', quality: 80, ground: 602, despeckle: 40,
+    layers: ['wL4', 'wL3', 'wL2', 'wL1', 'wR4', 'wR3', 'wR2', 'wR1', 'legL', 'legR', 'body', 'armN', 'barrel', 'armF', 'sword'],
+    hips: { y: 360, legs: ['legL', 'legR'] },
     // 待機：鉄の翼を軽く開閉（ユーザー指定）＋砲身と剣がわずかに揺れる。lights＝炉心が脈打つ・肩の玉が明滅する（rigLightsAt・立ち絵の上に光を重ねる＝file は絵・無ければ丸い光）
     idle: { sway: { ...zeruFan(5, 4200), armN: [0.9, 3600, 0], armF: [0.7, 4300, 0.3] },
       lights: [
@@ -661,9 +672,7 @@ export const BOSS_ILLUST_DEFS = {
     idleKeep: { ...Object.fromEntries([1, 2, 3, 4].flatMap(i => [[`wL${i}`, 1], [`wR${i}`, 1]])), armN: 1, armF: 1 },
     // ポーズの絵：描いた大きさがまちまち＝肩の塔の玉の間隔で大きさをそろえ（立ち絵 481px）、足の左右のまん中と足の下を立ち絵にそろえる（踏ん張った足が動かない）。
     //   poseFit の dx・dy は元の絵 1254px の px。腕を上げた所が枠の外へ出るので余白を足す
-    poses: { ruin: { windup: '神雷終焉_構え', strike: '神雷終焉_撃つ' },
-      shell: { windup: '雷鋼弾_構え', strike: '雷鋼弾_撃つ' }, volley: { windup: '雷霆掃射_構え', strike: '雷霆掃射_撃つ' },
-      smite: { windup: '神雷崩撃_振りかぶる', rush: '神雷崩撃_突進', strike: '神雷崩撃_振り下ろす' } },
+    poses: { ruin: { windup: '神雷終焉_構え', strike: '神雷終焉_撃つ' } },
     poseFit: {
       '神雷終焉_構え': { s: 1.173, dx: -25, dy: -37 }, '神雷終焉_撃つ': { s: 1.07, dx: -18, dy: 12 },
       '雷鋼装甲_ポーズ': { s: 1.098, dx: -25, dy: 19 }, '炉心臨界_ポーズ': { s: 1.098, dx: -29, dy: -71 },
@@ -733,10 +742,10 @@ export const BOSS_ILLUST_DEFS = {
         take: [[157.5, 160], [161.7, 155.8], [176, 152], [188, 165], [186, 190], [160.8, 191.2], [140, 200.5], [115, 211], [81, 216], [30, 245], [0, 260], [0, 130], [50, 140], [100, 145], [130, 157]],
         drop: [[157.5, 160], [161.7, 155.8], [167.5, 158.3], [174, 160], [172, 165], [171.5, 170], [172.5, 173.3], [175, 178.3], [173.7, 185], [170.8, 189.2], [160.8, 191.2], [140, 200.5], [115, 211], [81, 216], [30, 245], [0, 260], [0, 130], [50, 140], [100, 145], [130, 157]] },
       wL3: { from: 'body', pivot: [215, 155], under: true,
-        take: [[160.8, 191.2], [186, 190], [190, 205], [186, 218], [172, 216], [150, 236], [130, 250], [100, 279], [70, 310], [0, 350], [0, 260], [30, 245], [81, 216], [115, 211], [140, 200.5]],
+        take: [[160.8, 191.2], [186, 190], [208, 160], [226, 176], [186, 218], [172, 216], [150, 236], [130, 250], [100, 279], [70, 310], [0, 350], [0, 260], [30, 245], [81, 216], [115, 211], [140, 200.5]],
         drop: [[160.8, 191.2], [170.8, 189.2], [167.5, 195], [165.8, 201.3], [171.7, 203.3], [176.7, 203.3], [177, 209], [172, 216], [150, 236], [130, 250], [100, 279], [70, 310], [0, 350], [0, 260], [30, 245], [81, 216], [115, 211], [140, 200.5]] },
       wL4: { from: 'body', pivot: [215, 155], under: true,
-        take: [[150, 236], [166, 240], [170, 262], [160, 290], [140, 310], [125, 320], [116.7, 312.8], [110, 320], [60, 385], [0, 385], [0, 350], [70, 310], [100, 279], [130, 250]],
+        take: [[150, 236], [166, 240], [205, 160], [226, 176], [170, 262], [160, 290], [140, 310], [125, 320], [116.7, 312.8], [110, 320], [60, 385], [0, 385], [0, 350], [70, 310], [100, 279], [130, 250]],
         drop: [[150, 236], [155.8, 240.8], [155, 248.3], [152.5, 260], [150, 268], [146.2, 272], [143.3, 280.6], [133.3, 293.9], [122.2, 301.7], [116.7, 312.8], [110, 320], [60, 385], [0, 385], [0, 350], [70, 310], [100, 279], [130, 250]] },
       wR1: { from: 'body', pivot: [425, 170], under: true,
         take: [[474, 130], [480, 120], [500, 80], [640, 80], [640, 150], [560, 155], [530, 160], [515, 163], [493, 165], [475.3, 165], [460, 170], [456, 145], [460, 132]],
@@ -755,74 +764,87 @@ export const BOSS_ILLUST_DEFS = {
         take: [[393, 173], [427, 167], [467, 180], [474.5, 180], [477, 185.8], [480, 192.5], [461, 188], [456.7, 200], [458.3, 210.8], [455.8, 228.3], [450, 222], [441.7, 214], [436, 218], [440, 232], [448, 241], [458, 250], [470, 262], [480, 275], [490, 288], [510, 320], [540, 360], [550, 400], [585, 450], [632, 555], [600, 545], [510, 440], [485, 418], [472, 395], [458, 372], [452, 352], [443, 330], [432, 318], [434, 305], [420, 288], [403, 266], [413, 256], [425.8, 243.7], [415.4, 229], [392.5, 204]] },
       armN: { from: 'body', pivot: [222, 205],
         take: [[163, 148], [200, 143], [287, 190], [267, 233], [243, 263], [238, 300], [202, 351], [164, 397], [131, 447], [106, 484], [90, 525], [45, 530], [15, 520], [10, 480], [20, 440], [50, 400], [75, 372], [92, 345], [108, 322], [116.7, 312.8], [122.2, 301.7], [133.3, 293.9], [143.3, 280.6], [146.2, 272], [150, 268], [152.5, 260], [155, 248.3], [155.8, 240.8], [160, 233], [157, 193], [160, 160]] },
+      // 手首から先（手・つか・つば・刃）：手首で回す＝振りかぶって寝かせ、振り下ろすと腕より遅れて追いつく
+      sword: { from: 'armF', pivot: [476, 346],
+        take: [[434, 318], [443, 309], [455, 318], [462, 330], [466, 338], [489, 336], [494, 340], [510, 338], [530, 360], [640, 470], [640, 570], [600, 560], [510, 470], [470, 400], [452, 378], [452, 360], [455, 345], [448, 338]] },
+      // 砲身（筒の口から砲口まで）：撃つと腕の筒の中へすべりこむ（back＝腕の奥に重ねる）。長さの向きは撃つ向きと同じ
+      barrel: { from: 'armN', pivot: [168, 296], back: true,
+        take: [[158, 290], [176, 290], [172, 304], [165, 318], [190, 330], [192, 342], [215, 345], [215, 400], [160, 540], [0, 540], [0, 400], [100, 330], [118, 317], [140, 318], [150, 302]] },
+      // 脚：腰の飾りの下に隠れる付け根（drop の外・take の中）は脚の色を伸ばして埋める（回してもすき間が見えない）。ChatGPT の体で埋めない（noFill・体の絵にも脚がある）
+      legL: { from: 'body', pivot: [290, 358], under: true, noFill: true,
+        take: [[250, 318], [335, 318], [335, 395], [303, 420], [300, 640], [30, 640], [30, 520], [120, 470], [166, 422], [189, 393], [207, 375], [221, 368], [241, 353]],
+        drop: [[281, 338], [291, 360], [299, 372], [303, 392], [302, 420], [300, 640], [30, 640], [30, 520], [120, 470], [166, 422], [189, 393], [207, 375], [221, 368], [241, 353]] },
+      legR: { from: 'body', pivot: [402, 368], under: true, noFill: true,
+        take: [[372, 340], [435, 340], [441, 351], [470, 351], [530, 400], [640, 640], [350, 640], [362, 470], [365, 440], [370, 420]],
+        drop: [[380, 392], [404, 386], [412, 378], [430, 376], [441, 351], [470, 351], [530, 400], [640, 640], [350, 640], [362, 470], [365, 440], [370, 420]] },
     },
-    // 技。[65, 475]＝砲口（大砲の腕の上の点）。⚠動きの長さは 1.6秒まで（大技を除く・core/atb.js の NOW_WAIT_AFTER_ACT_SEC）
-    // 【確定】2026-11-01 ユーザー「大技以外のモーションがすべてしょぼすぎる」「エフェクト細いし、剣はプレイヤーに届いてない」「もっと派手に動いて」「銃で放つときのモーションもなんか安っぽい」「イラストが必要なら用意するから、妥協しないで」：
-    //   前は腕を回すだけで、体は止まったままだった。大砲は相手より上を向いて撃っていて、剣は相手と逆の側（右）を回って足元で止まっていた。
-    //   大砲＝砲身を相手へまっすぐ向けて（armN 38° で砲身の延長に相手）・腰を落としてため・撃つと砲身が跳ね上がり全身が後ろへ押される。
-    //   剣＝頭の上を通って相手の側へ振り下ろす（前は逆回り）・reach の剣先が相手の真ん中に届くまで突進する（dash・舞台の幅が変わっても届く）。
-    //   技ごとの全身の絵（poses）が届いたら art のとおりに切り替える（無いあいだは部品のまま＝illustShowAt）
+    // 技。[65, 475]＝砲口（砲身の上の点）・[618, 545]＝剣先（剣の上の点）。⚠動きの長さは 1.6秒まで（大技を除く・core/atb.js の NOW_WAIT_AFTER_ACT_SEC）
+    // 【確定】2026-11-01 ユーザー「大技以外のモーションがすべてしょぼすぎる」「エフェクト細いし、剣はプレイヤーに届いてない」「もっと派手に動いて」「銃で放つときのモーションもなんか安っぽい」：
+    //   前は腕を回すだけで、体は止まったままだった。砲身は相手へまっすぐ向ける（armN 38° で砲身の延長に相手）。剣は頭の上を通って相手の側へ振り下ろし、reach の剣先が相手の真ん中に届くまで突進する（dash・舞台の幅が変わっても届く）。
+    // 【確定】2026-11-02 立ち絵だけで作り直した（上の決まり）：撃つ前に腰を沈めて前へ寄せ（ため）→撃った瞬間に砲身がすべりこみ、腕が跳ね上がり、腰ごと押されて足がすべる→ゆっくり戻る。
+    //   剣は肩を回すだけにせず、手首で寝かせて振り下ろすと遅れて追いつく（しなる）。突進は脚を腰で回して後ろへ流し、踏みこみで前後に開く。大砲を上げるときは左の下の羽根もいっしょに上げる（zeruGun）
     motions: {
-      // 雷鋼弾：大砲を相手へ向けて腰を落とし（砲口に光が集まる）→ 撃った瞬間に砲身が跳ね上がり、全身が後ろへ押されて羽根があおられる
+      // 雷鋼弾：腰を沈めて大砲を相手へ振り上げる（砲口に光が集まる）→ 撃った瞬間に砲身がすべりこみ、腕が跳ね上がり、腰ごと押されて足がすべる・羽根があおられる
       shell: { totalMs: 1300, hitMs: 430, keys: [
         [0, {}],
-        [180, { armN: 44, armF: -18, lean: -0.05, x: 0.025, ...zeruWings(8) }],
-        [330, { armN: 38, armF: -24, lean: -0.075, x: 0.04, y: 0.012, ...zeruWings(12) }],
-        [430, { armN: 38, armF: -26, lean: -0.08, x: 0.045, y: 0.016, ...zeruWings(14) }],
-        [485, { armN: 58, armF: -46, lean: -0.17, x: 0.13, y: 0.004, ...zeruWings(-10) }, 'out'],
-        [620, { armN: 50, armF: -36, lean: -0.13, x: 0.1, ...zeruWings(-4) }],
+        [150, { armF: -10, sword: -6, hipX: 0.012, hipY: 0.012, ...zeruGun(22, 5) }],
+        [300, { armF: -26, sword: -12, hipX: -0.012, hipY: 0.024, lean: 0.03, ...zeruGun(41, 12) }, 'out'],
+        [430, { armF: -28, sword: -14, hipX: -0.016, hipY: 0.026, lean: 0.035, ...zeruGun(38, 14) }],
+        [470, { barrelSl: -24, armF: -44, sword: -26, hipX: 0.05, hipY: 0.012, lean: -0.1, x: 0.035, ...zeruGun(56, -14) }, 'out'],
+        [600, { barrelSl: -16, armF: -50, sword: -32, hipX: 0.06, hipY: 0.016, lean: -0.12, x: 0.045, ...zeruGun(60, -6) }],
+        [820, { barrelSl: -2, armF: -30, sword: -12, hipX: 0.022, hipY: 0.012, lean: -0.045, x: 0.035, ...zeruGun(44, 4) }],
+        [1060, { armF: -8, sword: -3, hipX: 0.004, hipY: 0.004, lean: -0.01, x: 0.012, ...zeruGun(14, 1) }],
         [1300, {}],
       ], jolt: { atMs: 440, ms: 200, x: 0.012, y: 0.008 },
-      art: [[0, null], [100, 'windup'], [425, 'strike'], [780, null]],
-      shots: [{ part: 'armN', pt: [65, 475], delayMs: 0, size: 1 }],
-      scene: { kind: 'gun', tone: 'thunder', dimColor: '0,6,26', hand: { pt: [65, 475], part: 'armN' } } },
-      // 雷霆掃射：腰を深く落として羽根を広げて機体を固定 → 3連射。1発ごとに砲身が跳ねて全身が後ろへずれ、3発目がいちばん大きい。狙いは 頭→足→胸
+      dustAt: [445],
+      shots: [{ part: 'barrel', pt: [65, 475], delayMs: 0, size: 1 }],
+      scene: { kind: 'gun', tone: 'thunder', dimColor: '0,6,26', hand: { pt: [65, 475], part: 'barrel' } } },
+      // 雷霆掃射：足を開いて腰を落とし、羽根を広げて機体を固定・剣は右へ振って釣り合いをとる → 3連射。1発ごとに砲身がすべりこみ、腰が押されて足がずれていく。3発目がいちばん大きい。狙いは 頭→足→胸
       volley: { totalMs: 1600, hitMs: 360, strikes: [{ atMs: 0, dx: -0.08, dy: -0.12 }, { atMs: 320, size: 1.1, dx: 0.1, dy: 0.06, flip: true }, { atMs: 640, size: 1.35, dx: 0, dy: -0.02 }], keys: [
         [0, {}],
-        [220, { armN: 40, armF: -34, lean: -0.06, x: 0.02, y: 0.035, ...zeruWings(14) }],
-        [360, { armN: 35, armF: -36, lean: -0.07, x: 0.025, y: 0.04, ...zeruWings(16) }],
-        [410, { armN: 50, armF: -46, lean: -0.14, x: 0.075, y: 0.03, ...zeruWings(4) }, 'out'],
-        [680, { armN: 40, armF: -38, lean: -0.08, x: 0.055, y: 0.04, ...zeruWings(14) }],
-        [730, { armN: 54, armF: -48, lean: -0.15, x: 0.105, y: 0.03, ...zeruWings(4) }, 'out'],
-        [1000, { armN: 38, armF: -40, lean: -0.09, x: 0.085, y: 0.04, ...zeruWings(14) }],
-        [1055, { armN: 62, armF: -60, lean: -0.2, x: 0.16, y: 0.02, ...zeruWings(-8) }, 'out'],
-        [1250, { armN: 52, armF: -44, lean: -0.14, x: 0.13, y: 0.01, ...zeruWings(-2) }],
+        [220, { armF: -52, sword: -18, hipY: 0.03, legL: 6, legR: -6, y: 0.012, lean: 0.03, ...zeruGun(40, 16) }],
+        [360, { armF: -56, sword: -22, hipY: 0.034, legL: 6, legR: -6, y: 0.012, lean: 0.035, ...zeruGun(36, 18) }],
+        [400, { barrelSl: -20, armF: -66, sword: -30, hipX: 0.03, hipY: 0.026, legL: 6, legR: -6, y: 0.012, lean: -0.05, x: 0.015, ...zeruGun(50, 4) }, 'out'],
+        [680, { armF: -58, sword: -24, hipX: 0.012, hipY: 0.034, legL: 6, legR: -6, y: 0.012, lean: 0.01, x: 0.02, ...zeruGun(30, 16) }],
+        [720, { barrelSl: -20, armF: -70, sword: -32, hipX: 0.04, hipY: 0.026, legL: 6, legR: -6, y: 0.012, lean: -0.06, x: 0.04, ...zeruGun(46, 4) }, 'out'],
+        [1000, { armF: -60, sword: -26, hipX: 0.02, hipY: 0.034, legL: 6, legR: -6, y: 0.012, lean: 0, x: 0.05, ...zeruGun(37, 16) }],
+        [1045, { barrelSl: -28, armF: -84, sword: -44, hipX: 0.075, hipY: 0.016, legL: 6, legR: -6, y: 0.012, lean: -0.14, x: 0.085, ...zeruGun(64, -12) }, 'out'],
+        [1250, { barrelSl: -14, armF: -64, sword: -26, hipX: 0.06, hipY: 0.016, legL: 4, legR: -4, y: 0.008, lean: -0.1, x: 0.085, ...zeruGun(56, -2) }],
         [1600, {}],
       ], jolt: { atMs: 370, ms: 160, x: 0.008, y: 0.006 },
-      art: [[0, null], [90, 'windup'], [355, 'strike'], [640, 'windup'], [675, 'strike'], [960, 'windup'], [995, 'strike'], [1330, null]],
-      shots: [{ part: 'armN', pt: [65, 475], delayMs: 0, size: 1 }, { part: 'armN', pt: [65, 475], delayMs: 320, size: 1 }, { part: 'armN', pt: [65, 475], delayMs: 640, size: 1.25 }],
-      scene: { kind: 'gun', tone: 'thunder', dimColor: '0,6,26', hand: { pt: [65, 475], part: 'armN' }, chargeMs: 240 } },
-      // 神雷崩撃：剣を頭の上へ振りかぶって腰を落とす（空から雷が剣に落ちる）→ 相手の目の前まで突進 → 頭の上を通って相手へ振り下ろす（剣先が相手に届く・当たった形で少し止まる）→ 跳んで元の場所へ戻る
-      smite: { totalMs: 1600, hitMs: 540, reach: { part: 'armF', pt: [632, 555], atMs: 640 }, keys: [
+      dustAt: [1010],
+      shots: [{ part: 'barrel', pt: [65, 475], delayMs: 0, size: 1 }, { part: 'barrel', pt: [65, 475], delayMs: 320, size: 1 }, { part: 'barrel', pt: [65, 475], delayMs: 640, size: 1.25 }],
+      scene: { kind: 'gun', tone: 'thunder', dimColor: '0,6,26', hand: { pt: [65, 475], part: 'barrel' }, chargeMs: 240 } },
+      // 神雷崩撃：腰を落として剣を頭の上へ振りかぶり、刃を後ろへ寝かせる（空から雷が剣に落ちる）→ 足を地面から離して相手の目の前まで飛びこむ → 踏みこんで前後に足を開き、腕が先に振り抜けて刃が遅れて追いつく（剣先が相手に届く・当たった形で少し止まる）→ 跳んで元の場所へ戻る
+      smite: { totalMs: 1600, hitMs: 540, reach: { part: 'sword', pt: [618, 545], atMs: 640 }, keys: [
         [0, {}],
-        [120, { armF: -40, armN: -8, lean: -0.04, x: 0.01 }],
-        [300, { armF: -118, armN: -22, lean: -0.13, x: 0.05, y: 0.03, ...zeruWings(20) }],
-        [360, { armF: -122, armN: -24, lean: -0.14, x: 0.055, y: 0.035, ...zeruWings(22) }],
-        [520, { armF: -128, armN: -30, lean: 0.14, r: -5, y: 0.005, dash: 1, ...zeruWings(30) }, 'out'],
-        [565, { armF: -130, armN: -30, lean: 0.15, r: -5, y: 0.005, dash: 1, ...zeruWings(30) }],
-        [640, { armF: -272, armN: -12, lean: 0.2, r: -8, y: 0.02, dash: 1, ...zeruWings(-12) }, 'out'],
-        [730, { armF: -272, armN: -12, lean: 0.2, r: -8, y: 0.02, dash: 1, ...zeruWings(-12) }],
-        [980, { armF: -262, armN: -10, lean: 0.16, r: -6, y: 0.015, dash: 1, ...zeruWings(-6) }],
-        [1210, { armF: -120, armN: -6, lean: -0.1, y: -0.09, dash: 0.1, x: 0.02, ...zeruWings(18) }, 'out'],
-        [1370, { armF: -50, lean: -0.04, y: 0.012, ...zeruWings(-4) }],
+        [110, { armF: -50, sword: 22, hipX: 0.02, hipY: 0.02, ...zeruGun(4, 6) }],
+        [300, { armF: -148, sword: 64, hipX: 0.03, hipY: 0.034, lean: -0.1, legL: 5, legR: -5, y: 0.012, ...zeruGun(10, 22) }],
+        [360, { armF: -152, sword: 70, hipX: 0.03, hipY: 0.036, lean: -0.11, legL: 5, legR: -5, y: 0.012, ...zeruGun(12, 24) }],
+        [520, { armF: -160, sword: 78, lean: 0.16, r: -6, y: -0.125, legL: -32, legR: -24, dash: 1, ...zeruGun(30, 28) }, 'out'],
+        [565, { armF: -176, sword: 86, lean: 0.17, r: -6, y: -0.125, legL: -34, legR: -26, dash: 1, ...zeruGun(34, 28) }],
+        [640, { armF: -296, sword: 32, lean: 0.2, r: -4, y: 0.055, hipY: 0.01, legL: 18, legR: -22, dash: 1, ...zeruGun(80, -14) }, 'out'],
+        [730, { armF: -298, sword: 30, lean: 0.2, r: -4, y: 0.055, hipY: 0.012, legL: 18, legR: -22, dash: 1, ...zeruGun(84, -12) }],
+        [980, { armF: -290, sword: 28, lean: 0.16, r: -3, y: 0.05, hipY: 0.01, legL: 16, legR: -20, dash: 1, ...zeruGun(74, -6) }],
+        [1210, { armF: -130, sword: 30, lean: -0.08, y: -0.09, legL: 10, legR: -10, dash: 0.1, x: 0.02, ...zeruGun(20, 18) }, 'out'],
+        [1370, { armF: -40, sword: 8, hipY: 0.03, y: 0.004, lean: -0.02, ...zeruWings(-4) }],
         [1600, {}],
       ], jolt: { atMs: 640, ms: 260, x: 0.016, y: 0.012 },
       ghosts: { fromMs: 360, toMs: 560, lagMs: 30, n: 4, op: 0.5, rig: true },
       // 刃の通った面：剣先に近い半分だけ（三日月に見える・付け根まで塗ると平たい扇に見えた）
-      trails: [{ kind: 'slash', ribbon: true, part: 'armF', pts: [[552, 450], [632, 555]], fromMs: 560, toMs: 650, lagMs: 90, fadeMs: 260 }],
-      art: [[0, null], [120, 'windup'], [370, 'rush'], [570, 'strike'], [1000, null]],
+      trails: [{ kind: 'slash', ribbon: true, part: 'sword', pts: [[552, 450], [618, 545]], fromMs: 560, toMs: 650, lagMs: 90, fadeMs: 260 }],
       dustAt: [370, 1370],
-      scene: { kind: 'slash', tone: 'thunder', dimColor: '0,6,26', hand: { pt: [632, 555], part: 'armF' }, windMs: 360, boltsAt: [150, 280] } },
+      scene: { kind: 'slash', tone: 'thunder', dimColor: '0,6,26', hand: { pt: [618, 545], part: 'sword' }, windMs: 360, boltsAt: [150, 280] } },
       // 神雷終焉：構え＝胸の装甲が開き、剣を地面に突き立てて大砲を水平に構える（砲口に光が集まる）・撃つ＝極太の雷（反動で上体が押される）。黒龍の終焉の黒焔と同じ長さ（構え3.5秒＋0.5秒）
       ruin: { totalMs: 5300, hitMs: 4000, castSkipMs: 3500, big: true, keys: [
         [0, {}],
-        [300, { lean: -0.02, armN: 30 }],
+        [300, { lean: -0.02, ...zeruGun(30) }],
         [2600, { lean: -0.06 }, 'out'],
         [3600, { lean: -0.06 }],
         [3940, { lean: -0.085 }, 'out'],
         [4000, { lean: -0.05 }, 'out'],
         [4720, { lean: -0.04 }],
-        [4820, { lean: -0.03, armN: 40, armF: -6 }],
+        [4820, { lean: -0.03, armF: -6, ...zeruGun(40) }],
         [5300, {}],
       ], jolt: { atMs: 4000, ms: 320, lean: 0.03 }, charge: { kind: 'charge', fromMs: 300, toMs: 4000, size: 0.34 },
       art: [[0, null], [300, 'windup'], [3940, 'strike'], [4820, null]], ghosts: { fromMs: 3940, toMs: 4100, lagMs: 28, n: 3 },
@@ -833,13 +855,10 @@ export const BOSS_ILLUST_DEFS = {
     effects: [
       { file: '雷鋼弾_飛ぶ', motion: 'shell', kind: 'fly', size: 0.62, flyMs: 150 },
       { file: '雷鋼弾_当たる', motion: 'shell', kind: 'hit', size: 0.95, durMs: 560, spin: 0 },
-      { file: '雷鋼弾_閃光', motion: 'shell', kind: 'flash', size: 0.8, durMs: 240 },
       // 太さ：描き直しの絵が届くまで縦に伸ばす（前の絵は細い）
       { file: '雷霆掃射_飛ぶ', motion: 'volley', kind: 'fly', size: 0.55, flyMs: 130, sy: 2.6 },
       { file: '雷霆掃射_当たる', motion: 'volley', kind: 'hit', size: 0.8, durMs: 340, spin: 40 },
-      { file: '雷鋼弾_閃光', motion: 'volley', kind: 'flash', size: 0.62, durMs: 200 },
       { file: '神雷崩撃_当たる', motion: 'smite', kind: 'hit', on: 'feet', size: 1.5, sy: 1.5, anim: 'drop', lead: 100, durMs: 900 },
-      { file: '神雷崩撃_斬撃', motion: 'smite', kind: 'cut', size: 0.95, durMs: 420, wipe: true },
       { file: '神雷終焉_飛ぶ', motion: 'ruin', kind: 'fly', size: 0.75, flyMs: 420, emerge: true },
       { file: '神雷終焉_当たる', motion: 'ruin', kind: 'hit', size: 1, durMs: 1100, spin: 0 },
       { file: '神雷終焉_ためる', motion: 'ruin', kind: 'charge', size: 0.34 },
@@ -1426,21 +1445,37 @@ export const rotPoint = ([x, y], [cx, cy], deg) => {
 // パーツ p（一覧の px・py＝回す中心・ax＝長さの向き°）1つぶんの動き：長さの向きに pose[<key>Sq] だけ縮めてから pose[<key>] 回す
 //   画面の CSS では rotate(deg) rotate(ax) scaleX(1 − sq) rotate(−ax)（中心は px・py）
 export const partMove = (pt, p, pose) => {
-  const c = [p.px, p.py], sq = pose[`${p.key}Sq`] || 0
+  const c = [p.px, p.py], sq = pose[`${p.key}Sq`] || 0, sl = pose[`${p.key}Sl`] || 0
   let q = pt
   if (sq) {
     q = rotPoint(q, c, -(p.ax || 0))
     q = rotPoint([c[0] + (q[0] - c[0]) * (1 - sq), q[1]], c, p.ax || 0)
   }
+  if (sl) {
+    const t = (p.ax || 0) * Math.PI / 180
+    q = [q[0] + Math.cos(t) * sl, q[1] + Math.sin(t) * sl]
+  }
   return rotPoint(q, c, pose[p.key] || 0)
+}
+// 腰のずれ（pose.hipX・hipY・def.hips）で点がどこへ動くか（立ち絵の px）：脚より上はそのままずれる＝体は曲がらない。
+//   脚（leg）は地面の高さの点が動かず、腰の高さ hips.y でちょうど腰と同じだけずれる（足の裏を地面に残して追いかける）。画面の RigStack と同じ
+export const hipPoint = ([x, y], hips, pose, leg) => {
+  if (!hips) return [x, y]
+  const dx = (pose.hipX || 0) * BOSS_ILLUST_SIZE, dy = (pose.hipY || 0) * BOSS_ILLUST_SIZE
+  if (!leg) return [x + dx, y + dy]
+  const h = hips.ground - hips.y
+  return [x + dx * (hips.ground - y) / h, hips.ground + (y - hips.ground) * (1 - dy / h)]
 }
 // 地面を支点に傾ける（lean・画面の skewX と同じ）：上ほど左へ（＋のとき）。地面の高さ gy の点は動かない
 export const leanPoint = ([x, y], gy, lean) => (lean && gy != null ? [x + (y - gy) * lean, y] : [x, y])
 export const groundOf = (key) => BOSS_ILLUST_DEFS[key]?.ground ?? null
+// 腰の決まり（def.hips があるボスだけ）：{ y（腰の高さ）, ground（足の裏の高さ）, legs（脚のパーツ） }
+export const hipsOf = (key) => { const d = BOSS_ILLUST_DEFS[key]; return d?.hips ? { ...d.hips, ground: d.ground } : null }
 export const illustPointAt = (key, pose, pt, part = 'head') => {
-  const a = BOSS_ILLUST[key]
+  const a = BOSS_ILLUST[key], def = BOSS_ILLUST_DEFS[key]
   let p = pt
   for (let q = part, pp = a.parts[q]; pp; q = pp.parent, pp = a.parts[q]) if (!pp.bend) p = partMove(p, { ...pp, key: q }, pose)   // 曲げるパーツは回さない
+  p = hipPoint(p, hipsOf(key), pose, !!def?.hips?.legs.includes(part))
   p = leanPoint(p, groundOf(key), pose.lean)
   p = rotPoint(p, a.pivot, pose.r)
   return [p[0] + pose.x * BOSS_ILLUST_SIZE, p[1] + pose.y * BOSS_ILLUST_SIZE]
@@ -1532,7 +1567,9 @@ export const bossIllustOf = (key) => {
     bend: art.parts[p].bend ? { ...art.parts[p].bend, src: srcOf(key, illustBendKindOf(p)) } : null,
     nest: !!art.parts[p].parent && art.parts[p].parent in ZERO,
     swap: def.swaps?.[p] ? (def.swaps[p].on ? { on: def.swaps[p].on } : { others: ons }) : null,
-    free: !!def.free?.includes(p), still: !!def.still?.includes(p) }))
+    free: !!def.free?.includes(p), still: !!def.still?.includes(p),
+    // back＝子のパーツを親の奥に重ねる（砲身は腕の筒の中へすべりこむ）・leg＝脚（腰のずれを追いかける）
+    back: !!def.cuts?.[p]?.back, leg: !!def.hips?.legs.includes(p) }))
   // 技のポーズの絵（できているものだけ）：{ windup: { src, x, y, w, h }, strike: … }（x・y・w・h は立ち絵の px）
   const posesOf = (mk) => {
     const out = {}
@@ -1593,7 +1630,7 @@ export const bossIllustOf = (key) => {
   const illust = bossArtOf(key)?.illust || null
   const bg = bossBgOf(key)
   return {
-    kind: 'illust', key, name: base.name, base: BOSS_ILLUST_SIZE, illust, parts, pivot: art.pivot, mouth: art.mouth, jaw, motions, orb, dust, ground: def.ground ?? null, flutter: !!def.idle.flutter,
+    kind: 'illust', key, name: base.name, base: BOSS_ILLUST_SIZE, illust, parts, pivot: art.pivot, mouth: art.mouth, jaw, motions, orb, dust, ground: def.ground ?? null, hips: hipsOf(key), flutter: !!def.idle.flutter,
     castArt: def.cast?.art || null, buffs, bg, death, intro, lights, handFlame,
     srcs: [...parts.map(p => p.src), ...parts.filter(p => p.bend).map(p => p.bend.src), ...Object.values(motions).flatMap(m => Object.values(m.fx || {}).map(f => f.src)),
       ...Object.values(motions).flatMap(m => Object.values(m.poses || {}).map(p => p.src)), ...(orb ? [orb.src] : []), ...(handFlame ? [handFlame.src] : []), ...(lights || []).map(l => l.src).filter(Boolean),
