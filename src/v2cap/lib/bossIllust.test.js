@@ -10,7 +10,7 @@ import {
   bossIllustOf, illustPoseAt, idlePoseAt, motionPoseAt, illustPointAt, illustTrailsAt, mouthPointOf, rotPoint, partMove,
   illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt, dustEllipsesOf,
   illustCastShowAt, EASES, joltAt, illustBendKindOf, bendFramesOf, illustPoseKindOf, illustShowAt, illustGhostsAt, ART_FADE_MS, artAnchorAt, leanPoint,
-  illustBuffShowAt, illustBuffKindOf, buffSceneAt, introSceneAt, buffAfterAt, buffRainAt, buffHoldOf, rigLayersOf, flutterBandsAt, buffArtMsOf, BUFF_IN_MS, BUFF_HOLD_MS, BUFF_OUT_MS, BUFF_AURA_IN_MS, BUFF_AURA_OUT_MS, BUFF_ART_MS, BUFF_FLASH_MS,
+  illustBuffShowAt, illustBuffKindOf, buffSceneAt, introSceneAt, introEnterAt, introBeamAt, buffAfterAt, buffRainAt, buffHoldOf, rigLayersOf, flutterBandsAt, buffArtMsOf, BUFF_IN_MS, BUFF_HOLD_MS, BUFF_OUT_MS, BUFF_AURA_IN_MS, BUFF_AURA_OUT_MS, BUFF_ART_MS, BUFF_FLASH_MS,
 } from './bossIllust.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { DUNGEON_BOSSES } from './dungeon.js'
@@ -981,26 +981,85 @@ test('【確定】2026-11-01 ゼルギアスの待機：羽根を左右4枚ず�
   assert.equal(open.r, 0)
   // 技がまだ無くても画面が読める形
   assert.deepEqual(a.motions, {})
-  assert.equal(a.intro, null, '開戦の動きはまだ無い')
 })
 
-test('【確定】2026-11-01 開戦の動きの見せ方：吠えた瞬間から出て、バフの見せ場より弱い（ユーザー「これから戦闘するぞーって感じ」）', () => {
-  const wrath = BOSS_ILLUST_DEFS.varuzenoku.buffs.wrath.show, downpour = BOSS_ILLUST_DEFS.amaza.buffs.downpour.show
-  for (const [key, big] of [['varuzenoku', wrath], ['amaza', downpour]]) {
-    const m = bossIllustOf(key).intro
-    assert.equal(introSceneAt(m, m.showAt - 1), null, '吠える前は出ない')
-    const sc = introSceneAt(m, m.showAt + 200)
-    assert.ok(sc.rings.length > 0 && sc.sparks.length > 0 && sc.dim > 0, key)
-    assert.equal(introSceneAt(m, m.showAt + m.show.holdMs + 1000), null, '見せ終わったら出ない')
-    assert.ok(m.show.shake <= big.shake && m.show.punch < big.punch && m.show.dim < big.dim, `${key}：バフの見せ場より弱い`)
-    // いつもの技の動きには無い（技のあいだに輪が出ない）
-    for (const mo of Object.values(bossIllustOf(key).motions)) assert.equal(introSceneAt(mo, 500), null)
-    // 動きの終わりは待機へ戻る・絵も部品の立ち絵へ戻る
-    assert.deepEqual(m.keys.at(-1)[1], {})
-    assert.equal(m.art.at(-1)[1], null)
-    assert.ok(illustShowAt(m, m.showAt + 100).poses.some(p => p.name === 'strike'), `${key}：吠えているあいだは借りた絵`)
-    assert.deepEqual(illustShowAt(m, m.totalMs).poses, [])
+test('【確定】2026-11-01 開戦の動き：ユーザーの言ったとおりの登場（黒龍＝洞窟の奥から出て咆哮／雨摩座＝天からゆっくり神々しく／ゼルギアス＝空からさっそうと）', () => {
+  // 黒龍：暗い奥に小さく立つ → 足音に合わせて3歩で手前へ（大きく明るくなる）→ 吠える
+  const v = bossIllustOf('varuzenoku').intro
+  const far = introEnterAt(v, 0)
+  assert.ok(far.s < 0.5 && far.bright < 0.2 && far.y < 0)
+  assert.equal(v.dustAt.length, 3)
+  let s = far.s, bright = far.bright
+  for (const at of v.dustAt) {
+    const e = introEnterAt(v, at - 1)
+    assert.ok(e.s > s && e.bright > bright, `${at}：1歩ごとに大きく明るくなる`)
+    s = e.s
+    bright = e.bright
   }
-  // 黒龍は傾けるだけ（しっぽと足は地面に残る）
-  for (const [, p] of BOSS_ILLUST_DEFS.varuzenoku.intro.keys) for (const f of ['x', 'y', 'r']) assert.equal(p[f], undefined)
+  assert.equal(introEnterAt(v, v.dustAt.at(-1)), null, '手前まで来たらふつうの形')
+  const roar = v.shows.at(-1), wrath = BOSS_ILLUST_DEFS.varuzenoku.buffs.wrath.show
+  assert.ok(roar.at > v.dustAt.at(-1), '吠えるのは歩き終わってから')
+  assert.equal(introSceneAt(v, roar.at - 1)?.rings.length || 0, 0, '吠える前は輪が無い')
+  assert.ok(introSceneAt(v, roar.at + 200).rings.length > 0)
+  assert.ok(illustShowAt(v, roar.at + 100).poses.some(p => p.name === 'strike'), '吠えるときは黒翼烈風の打ち下ろしの絵')
+  assert.ok(roar.shake <= wrath.shake && roar.punch < wrath.punch && roar.dim < wrath.dim, '逆鱗の見せ場より弱い')
+  // 竜は傾けるだけ（しっぽと足は地面に残る）
+  for (const [, p] of v.keys) for (const f of ['x', 'y', 'r']) assert.equal(p[f], undefined)
+
+  // 雨摩座：舞台の上の外から、光の柱の中をゆっくり降りる
+  const a = bossIllustOf('amaza').intro
+  const top = introEnterAt(a, 0)
+  assert.ok(top.y <= -1 && top.op === 0 && top.glow > 0)
+  assert.ok(introEnterAt(a, 1200).y < -0.2, '1.2秒ではまだ降りきらない＝ゆっくり')
+  assert.ok(introEnterAt(a, 2400).y > -0.05, '2.4秒でほぼ降りきる')
+  assert.ok(introBeamAt(a, 1200).op > 0.5, '光の柱')
+  assert.ok(introSceneAt(a, 1200).sparks.length > 0, '光の粒が舞い落ちる')
+  assert.ok(a.shows.every(sh => !sh.shake), '揺らさない（神々しく）')
+  assert.deepEqual(illustShowAt(a, 1000).poses.map(p => p.name), ['rest'], '身を包むポーズの絵で降りる')
+  assert.ok(a.poses.rest, '絵は霧雨の帳のポーズを借りる')
+
+  // ゼルギアス：空から一気に落ちて着地で沈む・羽根は風で上がってから打ち下ろす
+  const z = bossIllustOf('zerugiasu').intro
+  assert.ok(introEnterAt(z, 0).y <= -1)
+  assert.ok(Math.abs(introEnterAt(z, 480).y) < 1e-9, '0.5秒で着地＝さっそうと')
+  assert.ok(introEnterAt(z, 560).sy < 0.9, '着地で沈む')
+  const fall = illustPoseAt('zerugiasu', z, 300, 0), land = illustPoseAt('zerugiasu', z, 560, 0)
+  assert.ok(fall.wL1 > 10 && fall.wR1 < -10, '落ちるあいだ羽根の先は上')
+  assert.ok(land.wL1 < -5 && land.wR1 > 5, '着地で打ち下ろす')
+  const hit = introSceneAt(z, 600)
+  assert.ok(hit.rings.length > 0 && hit.sparks.length > 0 && hit.bolts.length > 0 && hit.shake[0] !== 0, '衝撃の輪・粒・稲妻・揺れ')
+  assert.ok(illustPoseAt('zerugiasu', z, 700, 0).dust > 0, '砂ぼこり')
+  assert.ok(bossIllustOf('zerugiasu').dust.length > 0)
+  assert.equal(introBeamAt(z, 50), null)
+  assert.ok(introBeamAt(z, 400).op > 0, '落ちるあいだの雷の筋')
+
+  // どのボスも：終わりは待機の形へ戻り、絵も部品の立ち絵へ戻る。見せ方が終わると何も残らない
+  for (const key of ['varuzenoku', 'amaza', 'zerugiasu']) {
+    const art = bossIllustOf(key), m = art.intro
+    assert.deepEqual(m.keys.at(-1)[1], {}, key)
+    assert.deepEqual(m.enter.at(-1)[1], {}, key)
+    assert.equal(introEnterAt(m, m.totalMs), null, key)
+    assert.equal(introSceneAt(m, m.totalMs + 2000), null, key)
+    assert.equal(introBeamAt(m, m.totalMs), null, key)
+    assert.deepEqual(illustShowAt(m, m.totalMs).poses, [], key)
+    // いつもの技には無い（技のあいだに登場の動きや輪が出ない）
+    for (const mo of Object.values(art.motions)) {
+      assert.equal(introSceneAt(mo, 500), null)
+      assert.equal(introEnterAt(mo, 500), null)
+      assert.equal(introBeamAt(mo, 500), null)
+    }
+  }
+})
+
+test('開戦の動きの見せ方を重ねる：揺れは足す・暗さは濃いほう・輪と粒は全部', () => {
+  const ring = { at: [0, 0], n: 1, durMs: 1000, maxR: 100, color: '1,2,3' }
+  const m = { shows: [{ at: 0, holdMs: 1000, dim: 0.2, dimColor: 'a', shake: 4, punch: 0.1, rings: ring }, { at: 0, holdMs: 1000, dim: 0.5, dimColor: 'b', shake: 4, punch: 0.1, rings: ring }] }
+  const one = buffSceneAt({ show: m.shows[0] }, 200), two = introSceneAt(m, 200)
+  assert.equal(two.rings.length, one.rings.length * 2)
+  assert.ok(Math.abs(two.shake[0] - one.shake[0] * 2) < 1e-9)
+  assert.equal(two.dimColor, 'b')
+  assert.ok(two.dim > one.dim)
+  assert.ok(two.punch > one.punch)
+  // 元の答えの配列を書き換えない
+  assert.equal(one.rings.length, 1)
 })

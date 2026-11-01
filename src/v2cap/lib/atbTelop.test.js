@@ -177,7 +177,7 @@ test('日本語の大きな文字は JP_BOLD の太字（切り抜きのグラ�
   }
 })
 
-test('【確定】2026-11-01 開戦の動き：遭遇の絵を押す→ボスの動き→戦闘開始のテロップ→時計（ユーザー「これから戦闘するぞーって感じ」→選んだ「今ある絵で作る」「飛ばせない」）', () => {
+test('【確定】2026-11-01 開戦の動き：遭遇の絵を押す→ボスの動き→戦闘開始のテロップ→時計（ユーザー「これから戦闘するぞーって感じ」→選んだ「飛ばせない」）', () => {
   const t0 = 1000, intro = 1900
   // 動きのあいだも時計は止まったまま・テロップは動きのあと
   assert.equal(startTelopOn(t0, t0 + intro + START_TELOP_MS - 1, intro), true)
@@ -189,13 +189,12 @@ test('【確定】2026-11-01 開戦の動き：遭遇の絵を押す→ボスの
   // 動きが無い敵（ドット絵版・図鑑の絵）は今までどおりすぐテロップ
   assert.equal(startTelopShown(t0, t0), true)
   assert.equal(startTelopOn(t0, t0 + START_TELOP_MS), false)
-  for (const key of ['varuzenoku', 'amaza']) {
+  for (const key of ['varuzenoku', 'amaza', 'zerugiasu']) {
     const a = bossIllustOf(key), m = a.intro
-    // 新しい絵は描かない：技のポーズの絵を借りる（技のぶんを読んであるので増えない）
-    assert.ok(m.poses.windup && m.poses.strike, key)
+    // 新しい絵は描かない：技やバフのポーズの絵を借りる（読んであるので増えない）
     for (const p of Object.values(m.poses)) assert.ok(a.srcs.includes(p.src), key)
-    // 吠えてからテロップ・動きが終わる前に時計が動かない
-    assert.ok(m.showAt < m.telopAt && m.telopAt <= m.totalMs, key)
+    // 動きの終わりごろにテロップ・動きが終わる前に時計が動かない
+    assert.ok(m.telopAt <= m.totalMs, key)
     assert.ok(m.telopAt + START_TELOP_MS >= m.totalMs, key)
     // 技の動きの一覧には入れない（戦闘の技として流れない）
     assert.ok(!Object.values(a.motions).includes(m), key)
@@ -205,6 +204,8 @@ test('【確定】2026-11-01 開戦の動き：遭遇の絵を押す→ボスの
   assert.match(src, /if \(bossArt\?\.intro\) fxRef\.current = \[\.\.\.fxRef\.current, \{ kind:'act', side:'b', motion: bossArt\.intro, t0: last\.current \/ 1000 \}\]/)
   // 遭遇の絵を出しているあいだは始めない＝見た目だけの戦闘から本物に替わる（runKey）前には流れない
   assert.ok(src.indexOf('if (paused || !artReady || hold) return') < src.indexOf('if (bossArt?.intro) fxRef.current'))
+  // 始まるまでボスは登場の前の形で待つ（サーバーの返事を待つあいだ、立ったボスが一瞬見えない）
+  assert.match(src, /introWait=\{introT0\.current === null\}/)
   // 飛ばせない：戦闘開始の前を押して飛ばす所を作らない（押して飛ばせるのは決着のあとだけ）
   assert.ok(!/introT0\.current = performance\.now\(\) -/.test(src))
   assert.equal((src.match(/onClick=\{skipEnding\}/g) || []).length, 1)

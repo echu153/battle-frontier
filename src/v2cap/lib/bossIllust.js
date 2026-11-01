@@ -116,6 +116,8 @@ const AMAZA_POSE_WAIST = {
 // ゼルギアスの翼の開閉（idle.sway）：amp＝いちばん上の羽根の振れ幅（°）・periodMs＝1回のミリ秒。上の羽根ほど大きく上がり、いちばん下は逆へ少し下がる＝扇が開く
 const ZERU_FAN = [1, 0.55, 0.15, -0.25]
 const zeruFan = (amp, periodMs) => Object.fromEntries(ZERU_FAN.flatMap((k, i) => [[`wL${i + 1}`, [amp * k, periodMs, 0]], [`wR${i + 1}`, [-amp * k, periodMs, 0]]]))
+// ゼルギアスの羽根をぜんぶ同じだけ回す姿勢（deg＞0 で羽根の先が上がる）
+const zeruWings = (deg) => Object.fromEntries([1, 2, 3, 4].flatMap(i => [[`wL${i}`, deg], [`wR${i}`, -deg]]))
 export const BOSS_ILLUST_DEFS = {
   varuzenoku: {
     // 【確定】2026-10-29 描き直し：立ち絵そのものが体。ChatGPT の体（翼としっぽの無い体）は、体の形を知るためだけに使う（split.by）。
@@ -204,25 +206,51 @@ export const BOSS_ILLUST_DEFS = {
       gale: { windup: '黒翼烈風_ため', strike: '黒翼烈風_打ち下ろし' },
       doom: { windup: '終焉の黒焔_ため', strike: '終焉の黒焔_吐きつけ' },
     },
-    // 【確定】2026-11-01 開戦の動き（ユーザー「遭遇⇒戦闘開始の間に敵のモーション追加してほしい、これから戦闘するぞーって感じ」→選んだ「今ある絵で作る」「飛ばせない」）：
-    //   遭遇の絵を押したあと、戦闘の時計を止めたまま流す（見せるだけ・lib/atbTelop.js）。新しい絵は描かない＝poses は技のポーズの絵を借りる（[技, 絵の名前]）。
+    // 【確定】2026-11-01 開戦の動き（ユーザー「戦闘開始時のモーション：黒龍 洞窟の奥から登場してプレイヤーに対して咆哮を放つ」・飛ばせない）：
+    //   遭遇の絵を押したあと、戦闘の時計を止めたまま流す（見せるだけ・lib/atbTelop.js）。新しい絵は描かない＝poses は技のポーズの絵を借りる（{ motion, pose } か { buff }）。
+    //   enter＝絵ぜんたいの登場（introEnterAt）：暗い奥に小さく立つ → 足音に合わせて3歩で手前へ（大きく明るくなる・揺れと砂ぼこり）→
     //   黒翼烈風の ため の絵でのけぞる → 打ち下ろし の絵で翼を広げて身を低くし、相手へ吠える（衝撃の輪・揺れ・火の粉）。竜は傾けるだけ（lean・しっぽと足は地面に残る）。
-    //   telopAt＝戦闘開始のテロップを出す時刻（起き上がる途中から重ねる）・show＝吠えた瞬間（showAt）からの見せ方（buffSceneAt と同じ形・逆鱗より弱く）
-    intro: { totalMs: 2250, telopAt: 1900, poses: { windup: ['gale', 'windup'], strike: ['gale', 'strike'] },
+    //   telopAt＝戦闘開始のテロップを出す時刻（起き上がる途中から重ねる）・shows＝at からの見せ方（buffSceneAt と同じ形・吠えるのは逆鱗より弱く）・dustAt＝砂ぼこりが立つ時刻
+    intro: { totalMs: 3400, telopAt: 3050, poses: { windup: { motion: 'gale', pose: 'windup' }, strike: { motion: 'gale', pose: 'strike' } },
+      enter: [
+        [0, { s: 0.42, x: -0.16, y: -0.2, bright: 0.12 }],
+        [220, { s: 0.42, x: -0.16, y: -0.2, bright: 0.12 }],
+        [620, { s: 0.6, x: -0.11, y: -0.135, bright: 0.38 }, 'out'],
+        [700, { s: 0.6, x: -0.11, y: -0.135, bright: 0.38 }],
+        [1100, { s: 0.79, x: -0.055, y: -0.065, bright: 0.68 }, 'out'],
+        [1180, { s: 0.79, x: -0.055, y: -0.065, bright: 0.68 }],
+        [1580, {}, 'out'],
+      ],
       keys: [
         [0, {}],
-        [280, { lean: -0.03, wingN: -6, wingF: 4 }],
-        [760, { lean: -0.12 }],
-        [920, { lean: -0.13 }],
-        [990, { lean: 0.17 }, 'out'],
-        [1700, { lean: 0.13 }],
-        [1800, { lean: 0.12, neck: -3, head: -3, wingN: 20, wingNSq: 0.2, wingF: -14, wingFSq: 0.15 }],
-        [2250, {}],
-      ], jolt: { atMs: 990, ms: 300, lean: 0.035 },
-      art: [[0, null], [280, 'windup'], [930, 'strike'], [1800, null]], ghosts: { fromMs: 930, toMs: 1050, lagMs: 28, n: 3 },
-      showAt: 990, show: { holdMs: 850, dim: 0.4, dimColor: '26,0,0', shake: 6, punch: 0.04,
-        rings: { at: [80, 315], n: 3, everyMs: 240, durMs: 700, maxR: 400, color: '255,96,40' },
-        burst: { n: 24, x: [120, 530], y: 590, rise: 320, size: 1.2, color: '255,140,60' } } },
+        [220, {}],
+        [420, { lean: 0.035, neck: -1 }],
+        [620, {}],
+        [700, {}],
+        [900, { lean: -0.03, neck: 1 }],
+        [1100, {}],
+        [1180, {}],
+        [1380, { lean: 0.035, neck: -1 }],
+        [1580, {}],
+        [1700, { lean: -0.03, wingN: -6, wingF: 4 }],
+        [2060, { lean: -0.12 }],
+        [2200, { lean: -0.13 }],
+        [2270, { lean: 0.17 }, 'out'],
+        [2900, { lean: 0.13 }],
+        [3000, { lean: 0.12, neck: -3, head: -3, wingN: 20, wingNSq: 0.2, wingF: -14, wingFSq: 0.15 }],
+        [3400, {}],
+      ], jolt: { atMs: 2270, ms: 300, lean: 0.035 },
+      art: [[0, null], [1700, 'windup'], [2210, 'strike'], [3000, null]], ghosts: { fromMs: 2210, toMs: 2330, lagMs: 28, n: 3 },
+      dustAt: [620, 1100, 1580],
+      shows: [
+        { at: 0, holdMs: 1250, dim: 0.62, dimColor: '0,0,0' },
+        { at: 620, holdMs: 150, shake: 2.5 },
+        { at: 1100, holdMs: 170, shake: 4 },
+        { at: 1580, holdMs: 200, shake: 6 },
+        { at: 2270, holdMs: 700, dim: 0.4, dimColor: '26,0,0', shake: 6, punch: 0.04,
+          rings: { at: [80, 315], n: 3, everyMs: 240, durMs: 700, maxR: 400, color: '255,96,40' },
+          burst: { n: 24, x: [120, 530], y: 590, rise: 320, size: 1.2, color: '255,140,60' } },
+      ] },
     // 【確定】2026-10-31 倒れる動き（ユーザーが選んだ「ボスの倒れる動き」・lib/bossDeath.js）：新しい絵は描かない。
     //   止まって光る → 逆鱗のポーズの絵で天へ吠える（のけぞる・衝撃の輪・火の粉）→ 終焉の黒焔の吐きつけの絵で前へ倒れこむ（揺れ・砂ぼこり）→
     //   溶岩の光が消えて灰色になる → ふちを赤く光らせながら外から燃え尽きる（火の粉と煙が立ちのぼる）。竜を横へずらさず傾けるだけ（lean）
@@ -443,22 +471,25 @@ export const BOSS_ILLUST_DEFS = {
           glow: { periodMs: 2200, color: '90,175,255' },
           embers: { n: 16, x: [130, 520], y: 600, rise: 360, size: 1.4, color: '100,185,255', core: '235,248,255' } } },
     },
-    // 【確定】2026-11-01 開戦の動き（黒龍と同じ仕組み・ユーザー「これから戦闘するぞーって感じ」→選んだ「今ある絵で作る」「飛ばせない」）：
-    //   氷雨の構えの絵で片手を天へ掲げる → 雨礫の払うの絵で相手を指さす（手の通り道に水の筋・指先から水の輪・足元から水の粒）
-    intro: { totalMs: 2100, telopAt: 1750, poses: { windup: ['sleet', 'windup'], strike: ['shot', 'strike'] },
-      keys: [
-        [0, {}],
-        [240, { x: 0.006, y: -0.012, r: 1.8, head: 2.4, armF: -4, armUOn: 1 }],
-        [780, { x: 0.016, y: -0.03, r: 4, head: 5.5, armF: -10, armUOn: 1, armN: 22 }],
-        [900, { x: 0.018, y: -0.034, r: 4.4, head: 6, armF: -11, armUOn: 1, armN: 22 }],
-        [980, { x: -0.05, y: 0.008, r: -3.5, head: -2, armN: -10, armF: -4 }, 'out'],
-        [1600, { x: -0.045, y: 0.006, r: -3, head: -1.5, armN: -8, armF: -3 }],
-        [2100, {}],
-      ], art: [[0, null], [120, 'windup'], [940, 'strike'], [1650, null]], ghosts: { fromMs: 940, toMs: 1060, lagMs: 26, n: 3 },
-      arcs: [{ kind: 'water', pts: [[158, -30], [99, 27], [50, 85], [18, 112], [-3, 127]], fromMs: 920, toMs: 980, fadeMs: 260 }],
-      showAt: 980, show: { holdMs: 750, dim: 0.4, dimColor: '0,10,36', shake: 3, punch: 0.03,
-        rings: { at: [-42, 148], n: 3, everyMs: 240, durMs: 700, maxR: 360, color: '70,160,255', core: '225,245,255' },
-        burst: { n: 24, x: [110, 520], y: 610, rise: 360, size: 1.15, color: '80,170,255', core: '235,248,255' } } },
+    // 【確定】2026-11-01 開戦の動き（黒龍と同じ仕組み・ユーザー「あまざ 天からゆっくりと降りてくる※神々しく」・飛ばせない）：
+    //   霧雨の帳のポーズの絵（目を閉じて身を包む）のまま、光の柱の中を天からゆっくり降りる（舞台は少し暗く・光の粒が舞い落ちる・体のまわりがほのかに光る）→
+    //   降りきるころに腕を開いて立ち絵へ（fadeMs でゆっくり切り替える）・体のまわりに金の輪が広がる。水の帯もいっしょに降りる（enter は絵ぜんたいを動かす）
+    intro: { totalMs: 3000, telopAt: 2800, poses: { rest: { buff: 'veil' } }, fadeMs: 600,
+      enter: [
+        [0, { y: -1.3, op: 0, glow: 1 }],
+        [120, { y: -1.25, glow: 1 }],
+        [2500, { glow: 0.7 }, 'soft'],
+        [3000, {}],
+      ], glowColor: '255,240,190',
+      keys: [[0, { r: -1.5 }], [2500, {}], [3000, {}]],
+      art: [[0, 'rest'], [2300, null]],
+      beam: { fromMs: 0, toMs: 3000, inMs: 500, outMs: 700, op: 0.85, w: 0.62, color: '255,244,205' },
+      shows: [
+        { at: 0, holdMs: 2300, dim: 0.5, dimColor: '0,6,26' },
+        { at: 100, holdMs: 1500, burst: { n: 22, x: [90, 550], y: -40, rise: -600, size: 0.9, color: '255,236,180', core: '255,252,235' } },
+        { at: 1000, holdMs: 1500, burst: { n: 22, x: [90, 550], y: -40, rise: -600, size: 0.9, color: '255,236,180', core: '255,252,235' } },
+        { at: 2350, holdMs: 450, punch: 0.012, rings: { at: [296, 223], n: 2, everyMs: 300, durMs: 900, maxR: 380, color: '255,226,160', core: '255,250,230' } },
+      ] },
     // 【確定】2026-10-31 倒れる動き（ユーザーが選んだ「ボスの倒れる動き」・lib/bossDeath.js）：新しい絵は描かない。
     //   止まって光る → 篠突く雨のポーズの絵で天を仰ぐ（水の輪・水の粒・水の帯が落ちて消える）→ 霧雨の帳のポーズの絵で身を包み、力が抜けてゆっくり沈む →
     //   色が抜ける → ふちを青く光らせながら足元から水になって崩れる（水の粒が落ちて足元に波紋・光の粒が立ちのぼる）
@@ -613,6 +644,37 @@ export const BOSS_ILLUST_DEFS = {
     base: 'stand', files: {}, quality: 80,
     layers: ['wL4', 'wL3', 'wL2', 'wL1', 'wR4', 'wR3', 'wR2', 'wR1', 'body'],
     idle: { sway: zeruFan(5, 4200) },
+    // 技のあいだも翼の開閉はそのまま（止めると頭と終わりで羽根が跳ねる）
+    idleKeep: Object.fromEntries([1, 2, 3, 4].flatMap(i => [[`wL${i}`, 1], [`wR${i}`, 1]])),
+    // 【確定】2026-11-01 開戦の動き（ユーザー「ゼルギアス 空からさっそうと降り立つ、ヒーローのように」・飛ばせない）：
+    //   雷の筋とともに空から一気に落ちる（羽根の先は風で上へ）→ 着地で踏ん張って沈む（sy）・羽根を打ち下ろす・雷が落ちる・足元に衝撃の輪と砂ぼこり・舞台が揺れる → すっと立ち上がる。
+    //   新しい絵は使わない（体の絵が届いたら大砲や剣も動かせる）
+    intro: { totalMs: 1800, telopAt: 1500, poses: {},
+      enter: [
+        [0, { y: -1.45, op: 0 }],
+        [180, { y: -1.45 }],
+        [480, {}, 'in'],
+        [560, { sy: 0.84, s: 1.04, bright: 1.5 }, 'out'],
+        [900, { sy: 1.03, s: 0.99, bright: 1.05 }],
+        [1200, {}],
+      ],
+      keys: [
+        [0, zeruWings(14)],
+        [480, zeruWings(14)],
+        [560, zeruWings(-10), 'out'],
+        [900, zeruWings(3)],
+        [1200, {}],
+        [1800, {}],
+      ],
+      beam: { fromMs: 180, toMs: 900, inMs: 120, outMs: 420, op: 0.8, w: 0.3, color: '170,205,255' },
+      dust: [[215, 590], [440, 590]], dustAt: [480],
+      shows: [
+        { at: 0, holdMs: 500, dim: 0.5, dimColor: '0,6,26' },
+        { at: 380, holdMs: 200, boltColor: '130,180,255', bolts: [{ at: 0, from: [305, -200], to: [305, 560], flash: 0.35 }] },
+        { at: 480, holdMs: 800, dim: 0.35, dimColor: '0,6,26', shake: 9, boltColor: '130,180,255', bolts: [{ at: 90, from: [60, -170], to: [305, 590], flash: 0.3 }],
+          rings: { at: [305, 590], flat: 0.28, n: 3, everyMs: 130, durMs: 650, maxR: 460, color: '110,170,255', core: '225,240,255' },
+          burst: { n: 30, x: [150, 470], y: 590, rise: 300, size: 1.2, color: '110,170,255', core: '235,245,255' } },
+      ] },
     // 羽根（立ち絵 640px の上の点）：drop＝見えている羽根（肩と塔に隠れていない所）・take＝それに肩と塔の後ろの付け根を足した所。
     //   under＝付け根は親の絵を写さず、羽根の色を伸ばして埋める（道具）
     cuts: {
@@ -655,6 +717,7 @@ const lerpPose = (a, b, k) => Object.fromEntries(Object.keys(ZERO).map(f => [f, 
 export const EASES = {
   smooth,
   out: (k) => 1 - (1 - k) ** 3,
+  soft: (k) => 1 - (1 - k) ** 2,   // out より出だしがゆるい（雨摩座がゆっくり降りる）
   in: (k) => k ** 3,
   back: (k) => 1 + 2.4 * (k - 1) ** 3 + 1.4 * (k - 1) ** 2,
 }
@@ -726,6 +789,7 @@ const IDLE_KEEP = { wingN: 0.35, wingF: 0.35, wingNSq: 0.35, wingFSq: 0.35, y: 0
 // 構え：はじめの CAST_IN_MS で構えの姿勢へ移る／構えのすぐあとの技は、はじめの CAST_OUT_MS で構えの姿勢から技の動きへつなぐ
 export const CAST_IN_MS = 500
 export const CAST_OUT_MS = 320
+const INTRO_DUST_MS = 650   // 開戦の動きの砂ぼこりが出ている長さ
 // いまの姿勢：motion（bossIllustOf の motions の1つ）を流しはじめて ms たったとき。技のあいだは羽ばたきを弱める
 //   fromCast＝構えのすぐあとに撃った技（構えの姿勢からつなぐ＝手を掲げたままの形から急に待機に戻らない）
 export const illustPoseAt = (key, motion, ms, tMs, fromCast = false) => {
@@ -736,7 +800,13 @@ export const illustPoseAt = (key, motion, ms, tMs, fromCast = false) => {
   const keep = def.idleKeep || IDLE_KEEP, cp = fromCast && def.cast ? def.cast.pose : null
   const w = cp ? 1 - smooth(Math.min(1, Math.max(0, ms) / CAST_OUT_MS)) : 0
   const j = joltAt(motion.jolt, ms)
-  return Object.fromEntries(Object.keys(ZERO).map(f => [f, idle[f] * (keep[f] || 0) + add[f] + (cp?.[f] || 0) * w + (j[f] || 0)]))
+  const out = Object.fromEntries(Object.keys(ZERO).map(f => [f, idle[f] * (keep[f] || 0) + add[f] + (cp?.[f] || 0) * w + (j[f] || 0)]))
+  // 開戦の動きの足音と着地（motion.dustAt）：砂ぼこり
+  for (const at of motion.dustAt || []) {
+    const h = ms - at
+    if (h >= 0 && h < INTRO_DUST_MS) out.dust = Math.max(out.dust, Math.max(0.001, h / INTRO_DUST_MS))
+  }
+  return out
 }
 // 着物のひらひら（def.idle.flutter）：横の帯ごとの { y0, y1（立ち絵の px）, dx（上の境目のずれ px）, tan（下へ1px行くごとのずれ） }。
 //   帯の上の境目のずれから下の境目のずれまで斜めに傾ける（隣の帯と境目でつながる＝絵が途切れない）。いちばん上の帯（体の上半分）は動かない。
@@ -869,7 +939,7 @@ export const buffSceneAt = (b, ms) => {
   if (s.rings) for (let i = 0; i < s.rings.n; i++) {
     const t = (ms - 80 - i * s.rings.everyMs) / (s.rings.durMs || 700)
     if (t <= 0 || t >= 1) continue
-    rings.push({ x: s.rings.at[0], y: s.rings.at[1], r: 30 + (s.rings.maxR || 420) * (1 - (1 - t) ** 2), op: (1 - t) ** 1.2, w: 14 * (1 - t) + 2 })
+    rings.push({ x: s.rings.at[0], y: s.rings.at[1], r: 30 + (s.rings.maxR || 420) * (1 - (1 - t) ** 2), op: (1 - t) ** 1.2, w: 14 * (1 - t) + 2, flat: s.rings.flat })
   }
   const sparks = []
   if (s.burst) for (let i = 0; i < s.burst.n; i++) {
@@ -893,8 +963,44 @@ export const buffSceneAt = (b, ms) => {
     ringCore: s.rings?.core || null, sparkCore: s.burst?.core || null, bolts, boltColor: s.boltColor || null, flash,
     rain: s.rain ? { ...s.rain, k: Math.min(1, ms / 140) * fadeOut, t: ms } : null }
 }
-// 開戦の動きの見せ方（衝撃の輪・揺れ・暗さ）：motion＝bossIllustOf の intro・ms＝流しはじめてからのミリ秒。吠えた瞬間（showAt）から buffSceneAt と同じ形。ほかの時間と intro の無い動きは null
-export const introSceneAt = (motion, ms) => (motion?.show ? buffSceneAt(motion, ms - motion.showAt) : null)
+// 開戦の動きの見せ方（衝撃の輪・揺れ・暗さ・光の粒・稲妻）：motion＝bossIllustOf の intro・ms＝流しはじめてからのミリ秒。
+//   shows の1つずつを at から buffSceneAt と同じ形で作って重ねる（揺れは足す・暗さは濃いほう・輪と粒と稲妻は全部）。出ているものが無ければ null（intro の無い動きも）
+export const introSceneAt = (motion, ms) => {
+  const list = (motion?.shows || []).map(s => buffSceneAt({ show: s }, ms - s.at)).filter(Boolean)
+  if (!list.length) return null
+  const out = { ...list[0], shake: [...list[0].shake], rings: [...list[0].rings], sparks: [...list[0].sparks], bolts: [...list[0].bolts] }
+  for (const c of list.slice(1)) {
+    out.shake[0] += c.shake[0]
+    out.shake[1] += c.shake[1]
+    out.punch *= c.punch
+    out.rings.push(...c.rings)
+    out.sparks.push(...c.sparks)
+    out.bolts.push(...c.bolts)
+    if (c.dim > out.dim) { out.dim = c.dim; out.dimColor = c.dimColor }
+    out.flash = Math.max(out.flash, c.flash)
+    for (const f of ['ringColor', 'sparkColor', 'ringCore', 'sparkCore', 'boltColor']) out[f] ||= c[f]
+  }
+  return out
+}
+// 開戦の動きの絵ぜんたいの登場（motion.enter＝[ミリ秒, { s（大きさ）, sy（縦の縮み）, x, y（ずれ・枠の割合）, bright（明るさ）, op（濃さ）, glow（体のまわりの光 0〜1） }, 区間の速さ]）。
+//   書いていない値はふつうの形（s 1・sy 1・x 0・y 0・bright 1・op 1・glow 0）。流し終わったら null（ふつうの形に戻っている＝最後のキーは {}）
+const ENTER_ZERO = { s: 1, sy: 1, x: 0, y: 0, bright: 1, op: 1, glow: 0 }
+export const introEnterAt = (motion, ms) => {
+  const e = motion?.enter
+  if (!e || ms >= e.at(-1)[0]) return null
+  if (ms <= e[0][0]) return { ...ENTER_ZERO, ...e[0][1] }
+  let i = 0
+  while (i < e.length - 2 && ms >= e[i + 1][0]) i++
+  const [t0, p0] = e[i], [t1, p1, ease] = e[i + 1]
+  const k = (EASES[ease] || smooth)((ms - t0) / (t1 - t0))
+  return Object.fromEntries(Object.keys(ENTER_ZERO).map(f => [f, (p0[f] ?? ENTER_ZERO[f]) + ((p1[f] ?? ENTER_ZERO[f]) - (p0[f] ?? ENTER_ZERO[f])) * k]))
+}
+// 開戦の動きの光の柱（motion.beam＝{ fromMs, toMs, inMs, outMs, op, w（枠の高さに対する幅）, color }）：いまの濃さつき。出ていなければ null
+export const introBeamAt = (motion, ms) => {
+  const b = motion?.beam
+  if (!b || ms < b.fromMs || ms >= b.toMs) return null
+  return { w: b.w, color: b.color, op: b.op * Math.min(1, (ms - b.fromMs) / b.inMs) * Math.min(1, (b.toMs - ms) / b.outMs) }
+}
 // 【確定】2026-10-30 付いているあいだの見た目（def.buffs の after・ユーザー「逆鱗後はモーションも変更していい」）：
 //   list＝付いているバフ [{ b（bossIllustOf の buffs の1つ）, since（付いてからのミリ秒・印が片付いたあとは Infinity） }]・tMs＝いまのミリ秒 →
 //   { glow（体が赤く脈打つ強さ 0〜1）, glowColor, sparks（足元から絶えず立ちのぼる火の粉）, sparkColor, sparkCore, tempo（待機の速さ）, dim, dimColor（舞台の暗さ）,
@@ -1108,17 +1214,17 @@ export const bossIllustOf = (key) => {
       front: shots[0].front, shots, strikes: md.strikes || null, fx: Object.keys(fx).length ? fx : null, charge: md.charge && fx[md.charge.kind] ? md.charge : null, scene: md.scene || null,
       poses: posesOf(m.key), art: md.art || null, ghosts: md.ghosts || null, anchors: md.anchors || null, castSkipMs: md.castSkipMs || 0, big: !!md.big }
   }
-  // 倒れる動き（lib/bossDeath.js）で使う絵：節目のバフ（buff）か技（motion・pose）のポーズの絵。どちらかが無ければ前のまま（薄くなるだけ）
-  const deathArtOf = (r) => (r?.buff ? buffs[def.buffs[r.buff]?.name]?.pose : motions[r?.motion]?.poses?.[r?.pose]) || null
-  const deathArts = def.death ? { roar: deathArtOf(def.death.roar), fall: deathArtOf(def.death.fall) } : null
+  // 倒れる動き（lib/bossDeath.js）と開戦の動きで借りる絵：節目のバフ（buff）か技（motion・pose）のポーズの絵。どちらかが無ければ前のまま（薄くなるだけ）
+  const borrowedArtOf = (r) => (r?.buff ? buffs[def.buffs[r.buff]?.name]?.pose : motions[r?.motion]?.poses?.[r?.pose]) || null
+  const deathArts = def.death ? { roar: borrowedArtOf(def.death.roar), fall: borrowedArtOf(def.death.fall) } : null
   const death = deathArts?.roar && deathArts.fall ? { ...def.death, arts: deathArts } : null
   // 開戦の動き（def.intro）：借りるポーズの絵を、技の動きと同じ形で持たせる（絵は技のぶんを読んであるので増えない）。絵が無ければ部品の動きだけ
-  const intro = def.intro ? { ...def.intro, trails: [], arcs: def.intro.arcs || [], poses: Object.fromEntries(Object.entries(def.intro.poses).map(([n, [mk, pn]]) => [n, motions[mk]?.poses?.[pn]]).filter(([, p]) => p)) } : null
+  const intro = def.intro ? { ...def.intro, trails: [], arcs: def.intro.arcs || [], poses: Object.fromEntries(Object.entries(def.intro.poses).map(([n, r]) => [n, borrowedArtOf(r)]).filter(([, p]) => p)) } : null
   const jaw = def.cuts?.jaw && art.parts.jaw ? { line: def.cuts.jaw.line, pivot: def.cuts.jaw.pivot, mouth: def.cuts.jaw.mouth } : null
   // 待機のときどきの動き（黒龍）：口の火の玉（頭の中に描く）・しっぽを叩きつけた砂ぼこりの場所
   const o = def.idle.orb, oa = art.fx?.idle?.orb
   const orb = o && oa ? { src: srcOf(key, illustFxKindOf('idle', 'orb')), at: o.at, size: o.size, h: oa.h / oa.w } : null
-  const dust = def.idle.slam?.dust || null
+  const dust = def.idle.slam?.dust || def.intro?.dust || null
   // 遭遇のイラストはドット絵版と同じ
   const illust = bossArtOf(key)?.illust || null
   const bg = bossBgOf(key)

@@ -246,7 +246,7 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
       {/* 自分（左）とモンスター（右）・テロップは舞台の上に重ねる */}
       <div style={{ position:'relative' }}>
         <LiveStage tickRef={stageTick} st={s} fxRef={fxRef} playerSrc={playerSrc} playerMotion={playerMotion}
-          foeSrc={bossArt ? bossArt.idle?.src || null : enemyArtSrc(en.name)} foeBig={!!bossArt} foeArt={bossArt} lite={lite} />
+          foeSrc={bossArt ? bossArt.idle?.src || null : enemyArtSrc(en.name)} foeBig={!!bossArt} foeArt={bossArt} lite={lite} introWait={introT0.current === null} />
         {/* 予約（手で押した技）：舞台の左端＝プレイヤーの左に、上から順に並ぶ。マクロより先に1回ずつ出る。押すと外す
             【確定】2026-11-01 ユーザー「スキルの予約はプレイヤー側の左側に表示させるようにして、予約の上限は8個まで」：前はマクロの欄の中で、増えると下の技のボタンがずれた。
             テロップ（zIndex 2）と決着の押す面（zIndex 3）より下。使えるまで待っている技はクールダウンのグレーで分かる */}
