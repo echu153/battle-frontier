@@ -78,7 +78,7 @@ import { deathAt, deathPoseOf, deathShowOf } from '../lib/bossDeath.js'
 //   体の光は明るさ（brightness）と後ろの丸い光で出す。filter はいつも付けておく（付け外しのたびに層が作り直されて、絵が一瞬消えることがある）
 const LiteCtx = createContext(false)
 // 大技などの細かい粒は半分に（軽い表示）
-const LITE_THIN = new Set(['mist', 'rain', 'drop', 'mote', 'hdrop', 'bubble', 'foam', 'dhand'])
+const LITE_THIN = new Set(['mist', 'rain', 'drop', 'mote', 'hdrop', 'bubble', 'foam'])
 
 const Bar = ({ pct, color, h = 10 }) => (
   <div style={{ height:`${h}px`, background:'#000818', border:'1px solid #13405f', overflow:'hidden' }}>
@@ -1067,7 +1067,7 @@ const SPIRAL = Array.from({ length: 25 }, (_, j) => j / 24)
 //   水の輪（coil）＝体のまわりの楕円。奥の半分（上）は暗く細く、手前の半分（下）は明るく、点線が回る
 function SceneLayer({ geo, sc, hands, s }) {
   const lite = useContext(LiteCtx)
-  const items = lite ? sc.items.filter((it, i) => !LITE_THIN.has(it.t) || i % 2 === 0) : sc.items
+  const items = lite ? sc.items.filter((it, i) => !it.thin && (!LITE_THIN.has(it.t) || i % 2 === 0)) : sc.items
   const id = useId().replace(/:/g, '')
   const U = geo.p.w, ox = geo.p.x + U / 2, oy = geo.p.y + geo.p.h * FX_FEET_Y
   const X = (x) => ox + x * U, Y = (y) => oy + y * U

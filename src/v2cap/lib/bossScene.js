@@ -494,7 +494,8 @@ export const deadHandsAt = (items, e) => {
     const p = (e - h.at) / h.life
     if (p < 0 || p >= 1) return
     const rise = easeOut(p / 0.22), sink = smooth((p - 0.8) / 0.2)
-    items.push({ t: 'dhand', x: h.x + 0.015 * Math.sin(e / 170 + i), y: 0.3 - (h.h + 0.3) * rise + 0.3 * sink, s: h.s,
+    //   thin＝軽い表示では出さない腕（左右の組ごと）。並びの何番目かで間引くと、左右の片方だけ残って、腕が増えるたび入れ替わる
+    items.push({ t: 'dhand', thin: Math.floor(i / 2) % 2 === 1, x: h.x + 0.015 * Math.sin(e / 170 + i), y: 0.3 - (h.h + 0.3) * rise + 0.3 * sink, s: h.s,
       rot: h.lean * (1 + 0.8 * (1 - rise)) + 7 * Math.sin(e / 150 + i * 1.7),
       curl: -0.85 + 1.6 * smooth((p - 0.28) / 0.2) - 0.9 * smooth((p - 0.56) / 0.14) + 0.8 * smooth((p - 0.76) / 0.14),
       op: Math.min(1, p / 0.06) * (p > 0.86 ? (1 - p) / 0.14 : 1) })

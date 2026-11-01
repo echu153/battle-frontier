@@ -402,6 +402,13 @@ test('【確定】2026-11-01 ユーザー「手のモーションもつけて」
   assert.equal(deadHandPathOf(0.3), deadHandPathOf(0.3))
   assert.match(deadHandPathOf(0), /^M[-\d. L]+Z/)
   assert.deepEqual(at(500), at(500))
+  // 軽い表示（スマホ）：左右の組ごとに間引く＝両側に残る・腕が増えても入れ替わらない（本番で見つけた：並びの何番目かで間引くと片側だけ残った）
+  const kept = (e) => at(e).filter(x => !x.thin)
+  assert.ok(kept(500).some(x => x.x < 0) && kept(500).some(x => x.x > 0), '両側に残る')
+  assert.equal(kept(500).filter(x => x.x < 0).length, kept(500).filter(x => x.x > 0).length, '左右で同じ数')
+  assert.deepEqual(kept(400).map(x => x.s), kept(900).map(x => x.s), '同じ腕が残る')
+  assert.match(stageSrc, /sc\.items\.filter\(\(it, i\) => !it\.thin && /)
+  assert.ok(!/const LITE_THIN = new Set\([^)]*'dhand'/.test(stageSrc), '並びの何番目かで間引かない')
 })
 
 test('【確定】2026-11-01 ユーザー「鎖もモーションしっかり動くようにして」：足元から伸びて巻きつき、締め上げるたび細って巻きが進み、最後にちぎれて飛ぶ', () => {
