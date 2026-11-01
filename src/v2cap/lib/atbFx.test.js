@@ -32,7 +32,7 @@ test('【確定】2026-10-31 浮かぶ文字（ユーザー「当たらなかっ
 })
 
 test('【確定】2026-10-31 ユーザー「回避されてもモーションは継続するようにして」：外れても当たる絵を出す（舞台）・外れた攻撃は受ける側を揺らさない（hit の印が無い）', () => {
-  assert.match(stage, /if \(kind === 'hit' && now >= tHit - lead \/ 1000\) \{/)
+  assert.match(stage, /if \(\(kind === 'hit' \|\| kind === 'cut'\) && now >= tHit - lead \/ 1000\) \{/)
   assert.doesNotMatch(stage, /kind === 'hit' && f\.landed/)
   const ev = scheduleFx(fxEventsOf([{ side: 'ボス', type: 'skill', skill: '黒爪', hits: 0, of: 1, damage: 0 }], '自分', 'ボス'), 10, { b: () => 0.5 })
   assert.deepEqual(ev.map(e => [e.kind, e.side, e.t0]), [['act', 'b', 10], ['miss', 'a', 10.5]], 'Miss は当たるはずの時刻に出る')
@@ -226,7 +226,7 @@ test('【確定】2026-11-01 多段の数字の置き場所（popLeftOf・popTop
   assert.equal(popTopOf({ kind: 'hit' }, 0.5, 1), 30 - 13 - 14)
   assert.match(stage, /top:`\$\{popTopOf\(f, a, i\)\}%`/)
   // 舞台：飛ぶ絵1枚が1発（その発の時刻に、その発の場所へ届く）・当たる絵は1発ごとに1枚
-  assert.match(stage, /kind === 'hit' \? m\.strikes \|\| ONE_STRIKE : \[\]/)
+  assert.match(stage, /kind === 'hit' \? m\.strikes \|\| ONE_STRIKE : kind === 'cut' \? ONE_STRIKE : \[\]/)
   assert.match(stage, /landMs = m\.strikes \? st\.atMs : launchMs/)
   assert.match(stage, /x: from\.x \+ \(spot\.x - from\.x\) \* q/)
 })

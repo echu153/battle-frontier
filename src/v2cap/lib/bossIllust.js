@@ -86,9 +86,10 @@ const srcOf = (key, kind) => {
 //     技は x・y・r で竜を動かさず、lean で上の体だけを押し出す（しっぽと足は地面に残る）
 //   機神（ゼルギアス）：wL1〜wL4・wR1〜wR4＝左右の翼の羽根の角度（上から順。左は＋で・右は−で羽根の先が上がる）
 //   閻魔：soulA〜soulE＝漂う魂の炎の角度（遠くの点が中心＝上下に動く）
+//   dash＝相手まで踏み込む割合（0〜1・motion.reach の点が相手の真ん中に届く距離 reachXOf を掛けて x に足す＝舞台の幅が変わっても届く）
 const ZERO = { x: 0, y: 0, r: 0, neck: 0, head: 0, wingN: 0, wingF: 0, wingNSq: 0, wingFSq: 0, arm: 0, jaw: 0, glow: 0, armN: 0, armF: 0, water: 0,
   armD: 0, armC: 0, armU: 0, armCOn: 0, armUOn: 0, tail: 0, tailT: 0, dust: 0, orb: 0, orbOp: 0, orbT: 0, lean: 0,
-  wL1: 0, wL2: 0, wL3: 0, wL4: 0, wR1: 0, wR2: 0, wR3: 0, wR4: 0, soulA: 0, soulB: 0, soulC: 0, soulD: 0, soulE: 0 }
+  wL1: 0, wL2: 0, wL3: 0, wL4: 0, wR1: 0, wR2: 0, wR3: 0, wR4: 0, dash: 0, soulA: 0, soulB: 0, soulC: 0, soulD: 0, soulE: 0 }
 // 技ごとの動き：keys＝[時刻ミリ秒, 姿勢（待機に足す）, 区間の速さ（EASES・無ければ smooth）]・hitMs＝当たる（撃ち出す）時刻・jolt＝当たった瞬間の揺れ（joltAt）
 //   trails＝残像の筋（part のパーツの点 pts を、lagMs 前からいまの時刻までたどる。fromMs〜toMs のあいだだけ・kind＝claw 爪／wind 風）
 //   shots＝飛ぶ絵の出どころ（無ければ口から1つ）。{ part, pt（パーツの点）, delayMs（hitMs からの遅れ・−で先に出る）, size（飛ぶ絵の大きさの倍率） }
@@ -660,7 +661,9 @@ export const BOSS_ILLUST_DEFS = {
     idleKeep: { ...Object.fromEntries([1, 2, 3, 4].flatMap(i => [[`wL${i}`, 1], [`wR${i}`, 1]])), armN: 1, armF: 1 },
     // ポーズの絵：描いた大きさがまちまち＝肩の塔の玉の間隔で大きさをそろえ（立ち絵 481px）、足の左右のまん中と足の下を立ち絵にそろえる（踏ん張った足が動かない）。
     //   poseFit の dx・dy は元の絵 1254px の px。腕を上げた所が枠の外へ出るので余白を足す
-    poses: { ruin: { windup: '神雷終焉_構え', strike: '神雷終焉_撃つ' } },
+    poses: { ruin: { windup: '神雷終焉_構え', strike: '神雷終焉_撃つ' },
+      shell: { windup: '雷鋼弾_構え', strike: '雷鋼弾_撃つ' }, volley: { windup: '雷霆掃射_構え', strike: '雷霆掃射_撃つ' },
+      smite: { windup: '神雷崩撃_振りかぶる', rush: '神雷崩撃_突進', strike: '神雷崩撃_振り下ろす' } },
     poseFit: {
       '神雷終焉_構え': { s: 1.173, dx: -25, dy: -37 }, '神雷終焉_撃つ': { s: 1.07, dx: -18, dy: 12 },
       '雷鋼装甲_ポーズ': { s: 1.098, dx: -25, dy: 19 }, '炉心臨界_ポーズ': { s: 1.098, dx: -29, dy: -71 },
@@ -753,44 +756,63 @@ export const BOSS_ILLUST_DEFS = {
       armN: { from: 'body', pivot: [222, 205],
         take: [[163, 148], [200, 143], [287, 190], [267, 233], [243, 263], [238, 300], [202, 351], [164, 397], [131, 447], [106, 484], [90, 525], [45, 530], [15, 520], [10, 480], [20, 440], [50, 400], [75, 372], [92, 345], [108, 322], [116.7, 312.8], [122.2, 301.7], [133.3, 293.9], [143.3, 280.6], [146.2, 272], [150, 268], [152.5, 260], [155, 248.3], [155.8, 240.8], [160, 233], [157, 193], [160, 160]] },
     },
-    // 技。[65, 475]＝砲口（大砲の腕の上の点）。大砲の技は腕を上げて相手へ向けてから撃つ（反動で跳ねる）。剣の技は腕を大きく振りかぶって振り下ろす。
-    //   ⚠動きの長さは 1.6秒まで（大技を除く・core/atb.js の NOW_WAIT_AFTER_ACT_SEC）
+    // 技。[65, 475]＝砲口（大砲の腕の上の点）。⚠動きの長さは 1.6秒まで（大技を除く・core/atb.js の NOW_WAIT_AFTER_ACT_SEC）
+    // 【確定】2026-11-01 ユーザー「大技以外のモーションがすべてしょぼすぎる」「エフェクト細いし、剣はプレイヤーに届いてない」「もっと派手に動いて」「銃で放つときのモーションもなんか安っぽい」「イラストが必要なら用意するから、妥協しないで」：
+    //   前は腕を回すだけで、体は止まったままだった。大砲は相手より上を向いて撃っていて、剣は相手と逆の側（右）を回って足元で止まっていた。
+    //   大砲＝砲身を相手へまっすぐ向けて（armN 38° で砲身の延長に相手）・腰を落としてため・撃つと砲身が跳ね上がり全身が後ろへ押される。
+    //   剣＝頭の上を通って相手の側へ振り下ろす（前は逆回り）・reach の剣先が相手の真ん中に届くまで突進する（dash・舞台の幅が変わっても届く）。
+    //   技ごとの全身の絵（poses）が届いたら art のとおりに切り替える（無いあいだは部品のまま＝illustShowAt）
     motions: {
-      // 雷鋼弾：大砲を持ち上げて相手へ向け、砲口に光を集めて1発。反動で砲身が跳ねる
-      shell: { totalMs: 1250, hitMs: 500, keys: [
+      // 雷鋼弾：大砲を相手へ向けて腰を落とし（砲口に光が集まる）→ 撃った瞬間に砲身が跳ね上がり、全身が後ろへ押されて羽根があおられる
+      shell: { totalMs: 1300, hitMs: 430, keys: [
         [0, {}],
-        [300, { armN: 50, armF: -6, lean: -0.02 }],
-        [460, { armN: 52, armF: -7, lean: -0.03 }],
-        [500, { armN: 59, armF: -7, lean: -0.065 }, 'out'],
-        [640, { armN: 53, armF: -6, lean: -0.035 }],
-        [1250, {}],
-      ], jolt: { atMs: 500, ms: 170, lean: 0.016 }, charge: { kind: 'hit', part: 'armN', pt: [65, 475], fromMs: 240, toMs: 500, size: 0.15 },
-      shots: [{ part: 'armN', pt: [65, 475], delayMs: 0, size: 1 }] },
-      // 雷霆掃射：腰を落として大砲を水平に構え、雷の弾を3連射（1発ごとに反動で跳ねる・数字と揺れも1発ごと）
-      volley: { totalMs: 1580, hitMs: 460, strikes: [{ atMs: 0, dx: -0.08, dy: -0.06 }, { atMs: 330, size: 1.1, dx: 0.08, dy: 0.02, flip: true }, { atMs: 660, size: 1.2, dx: -0.02, dy: -0.12 }], keys: [
+        [180, { armN: 44, armF: -18, lean: -0.05, x: 0.025, ...zeruWings(8) }],
+        [330, { armN: 38, armF: -24, lean: -0.075, x: 0.04, y: 0.012, ...zeruWings(12) }],
+        [430, { armN: 38, armF: -26, lean: -0.08, x: 0.045, y: 0.016, ...zeruWings(14) }],
+        [485, { armN: 58, armF: -46, lean: -0.17, x: 0.13, y: 0.004, ...zeruWings(-10) }, 'out'],
+        [620, { armN: 50, armF: -36, lean: -0.13, x: 0.1, ...zeruWings(-4) }],
+        [1300, {}],
+      ], jolt: { atMs: 440, ms: 200, x: 0.012, y: 0.008 },
+      art: [[0, null], [100, 'windup'], [425, 'strike'], [780, null]],
+      shots: [{ part: 'armN', pt: [65, 475], delayMs: 0, size: 1 }],
+      scene: { kind: 'gun', tone: 'thunder', dimColor: '0,6,26', hand: { pt: [65, 475], part: 'armN' } } },
+      // 雷霆掃射：腰を深く落として羽根を広げて機体を固定 → 3連射。1発ごとに砲身が跳ねて全身が後ろへずれ、3発目がいちばん大きい。狙いは 頭→足→胸
+      volley: { totalMs: 1600, hitMs: 360, strikes: [{ atMs: 0, dx: -0.08, dy: -0.12 }, { atMs: 320, size: 1.1, dx: 0.1, dy: 0.06, flip: true }, { atMs: 640, size: 1.35, dx: 0, dy: -0.02 }], keys: [
         [0, {}],
-        [300, { armN: 50, armF: -10, lean: -0.03 }],
-        [440, { armN: 52, armF: -10, lean: -0.035 }],
-        [460, { armN: 57, armF: -10, lean: -0.055 }, 'out'],
-        [640, { armN: 52, armF: -10, lean: -0.035 }],
-        [790, { armN: 57, armF: -10, lean: -0.055 }, 'out'],
-        [970, { armN: 52, armF: -10, lean: -0.035 }],
-        [1120, { armN: 58, armF: -10, lean: -0.06 }, 'out'],
-        [1250, { armN: 53, armF: -9, lean: -0.035 }],
-        [1580, {}],
-      ], jolt: { atMs: 460, ms: 120, lean: 0.01 }, charge: { kind: 'hit', part: 'armN', pt: [65, 475], fromMs: 220, toMs: 460, size: 0.1 },
-      shots: [{ part: 'armN', pt: [65, 475], delayMs: 0, size: 1 }, { part: 'armN', pt: [65, 475], delayMs: 330, size: 1 }, { part: 'armN', pt: [65, 475], delayMs: 660, size: 1.1 }] },
-      // 神雷崩撃：雷の剣を頭上へ振りかぶり、相手の方へ一気に振り下ろす（剣の通り道に雷の筋）＝相手の真上から剣の形の極太の雷が落ちる
-      smite: { totalMs: 1550, hitMs: 780, keys: [
+        [220, { armN: 40, armF: -34, lean: -0.06, x: 0.02, y: 0.035, ...zeruWings(14) }],
+        [360, { armN: 35, armF: -36, lean: -0.07, x: 0.025, y: 0.04, ...zeruWings(16) }],
+        [410, { armN: 50, armF: -46, lean: -0.14, x: 0.075, y: 0.03, ...zeruWings(4) }, 'out'],
+        [680, { armN: 40, armF: -38, lean: -0.08, x: 0.055, y: 0.04, ...zeruWings(14) }],
+        [730, { armN: 54, armF: -48, lean: -0.15, x: 0.105, y: 0.03, ...zeruWings(4) }, 'out'],
+        [1000, { armN: 38, armF: -40, lean: -0.09, x: 0.085, y: 0.04, ...zeruWings(14) }],
+        [1055, { armN: 62, armF: -60, lean: -0.2, x: 0.16, y: 0.02, ...zeruWings(-8) }, 'out'],
+        [1250, { armN: 52, armF: -44, lean: -0.14, x: 0.13, y: 0.01, ...zeruWings(-2) }],
+        [1600, {}],
+      ], jolt: { atMs: 370, ms: 160, x: 0.008, y: 0.006 },
+      art: [[0, null], [90, 'windup'], [355, 'strike'], [640, 'windup'], [675, 'strike'], [960, 'windup'], [995, 'strike'], [1330, null]],
+      shots: [{ part: 'armN', pt: [65, 475], delayMs: 0, size: 1 }, { part: 'armN', pt: [65, 475], delayMs: 320, size: 1 }, { part: 'armN', pt: [65, 475], delayMs: 640, size: 1.25 }],
+      scene: { kind: 'gun', tone: 'thunder', dimColor: '0,6,26', hand: { pt: [65, 475], part: 'armN' }, chargeMs: 240 } },
+      // 神雷崩撃：剣を頭の上へ振りかぶって腰を落とす（空から雷が剣に落ちる）→ 相手の目の前まで突進 → 頭の上を通って相手へ振り下ろす（剣先が相手に届く・当たった形で少し止まる）→ 跳んで元の場所へ戻る
+      smite: { totalMs: 1600, hitMs: 540, reach: { part: 'armF', pt: [632, 555], atMs: 640 }, keys: [
         [0, {}],
-        [320, { armF: -60, armN: -5, lean: -0.03 }],
-        [600, { armF: -112, armN: -8, lean: -0.07 }],
-        [720, { armF: -116, armN: -8, lean: -0.08 }],
-        [780, { armF: 48, armN: 10, lean: 0.1 }, 'out'],
-        [1120, { armF: 44, armN: 8, lean: 0.085 }],
-        [1550, {}],
-      ], jolt: { atMs: 780, ms: 240, lean: 0.03 },
-      arcs: [{ kind: 'bolt', pts: [[657, -108], [800, 60], [790, 300], [615, 545], [302, 568]], fromMs: 720, toMs: 780, fadeMs: 240 }] },
+        [120, { armF: -40, armN: -8, lean: -0.04, x: 0.01 }],
+        [300, { armF: -118, armN: -22, lean: -0.13, x: 0.05, y: 0.03, ...zeruWings(20) }],
+        [360, { armF: -122, armN: -24, lean: -0.14, x: 0.055, y: 0.035, ...zeruWings(22) }],
+        [520, { armF: -128, armN: -30, lean: 0.14, r: -5, y: 0.005, dash: 1, ...zeruWings(30) }, 'out'],
+        [565, { armF: -130, armN: -30, lean: 0.15, r: -5, y: 0.005, dash: 1, ...zeruWings(30) }],
+        [640, { armF: -272, armN: -12, lean: 0.2, r: -8, y: 0.02, dash: 1, ...zeruWings(-12) }, 'out'],
+        [730, { armF: -272, armN: -12, lean: 0.2, r: -8, y: 0.02, dash: 1, ...zeruWings(-12) }],
+        [980, { armF: -262, armN: -10, lean: 0.16, r: -6, y: 0.015, dash: 1, ...zeruWings(-6) }],
+        [1210, { armF: -120, armN: -6, lean: -0.1, y: -0.09, dash: 0.1, x: 0.02, ...zeruWings(18) }, 'out'],
+        [1370, { armF: -50, lean: -0.04, y: 0.012, ...zeruWings(-4) }],
+        [1600, {}],
+      ], jolt: { atMs: 640, ms: 260, x: 0.016, y: 0.012 },
+      ghosts: { fromMs: 360, toMs: 560, lagMs: 30, n: 4, op: 0.5, rig: true },
+      // 刃の通った面：剣先に近い半分だけ（三日月に見える・付け根まで塗ると平たい扇に見えた）
+      trails: [{ kind: 'slash', ribbon: true, part: 'armF', pts: [[552, 450], [632, 555]], fromMs: 560, toMs: 650, lagMs: 90, fadeMs: 260 }],
+      art: [[0, null], [120, 'windup'], [370, 'rush'], [570, 'strike'], [1000, null]],
+      dustAt: [370, 1370],
+      scene: { kind: 'slash', tone: 'thunder', dimColor: '0,6,26', hand: { pt: [632, 555], part: 'armF' }, windMs: 360, boltsAt: [150, 280] } },
       // 神雷終焉：構え＝胸の装甲が開き、剣を地面に突き立てて大砲を水平に構える（砲口に光が集まる）・撃つ＝極太の雷（反動で上体が押される）。黒龍の終焉の黒焔と同じ長さ（構え3.5秒＋0.5秒）
       ruin: { totalMs: 5300, hitMs: 4000, castSkipMs: 3500, big: true, keys: [
         [0, {}],
@@ -809,11 +831,15 @@ export const BOSS_ILLUST_DEFS = {
       scene: { kind: 'doom', tone: 'thunder', dimColor: '0,6,26', hand: { pt: [47, 262], part: 'body' } } },
     },
     effects: [
-      { file: '雷鋼弾_飛ぶ', motion: 'shell', kind: 'fly', size: 0.36, flyMs: 260 },
-      { file: '雷鋼弾_当たる', motion: 'shell', kind: 'hit', size: 0.52, durMs: 520, spin: 0 },
-      { file: '雷霆掃射_飛ぶ', motion: 'volley', kind: 'fly', size: 0.34, flyMs: 200 },
-      { file: '雷霆掃射_当たる', motion: 'volley', kind: 'hit', size: 0.42, durMs: 300, spin: 40 },
-      { file: '神雷崩撃_当たる', motion: 'smite', kind: 'hit', on: 'feet', size: 1.05, sy: 1.35, anim: 'drop', lead: 110, durMs: 800 },
+      { file: '雷鋼弾_飛ぶ', motion: 'shell', kind: 'fly', size: 0.62, flyMs: 150 },
+      { file: '雷鋼弾_当たる', motion: 'shell', kind: 'hit', size: 0.95, durMs: 560, spin: 0 },
+      { file: '雷鋼弾_閃光', motion: 'shell', kind: 'flash', size: 0.8, durMs: 240 },
+      // 太さ：描き直しの絵が届くまで縦に伸ばす（前の絵は細い）
+      { file: '雷霆掃射_飛ぶ', motion: 'volley', kind: 'fly', size: 0.55, flyMs: 130, sy: 2.6 },
+      { file: '雷霆掃射_当たる', motion: 'volley', kind: 'hit', size: 0.8, durMs: 340, spin: 40 },
+      { file: '雷鋼弾_閃光', motion: 'volley', kind: 'flash', size: 0.62, durMs: 200 },
+      { file: '神雷崩撃_当たる', motion: 'smite', kind: 'hit', on: 'feet', size: 1.5, sy: 1.5, anim: 'drop', lead: 100, durMs: 900 },
+      { file: '神雷崩撃_斬撃', motion: 'smite', kind: 'cut', size: 0.95, durMs: 420, wipe: true },
       { file: '神雷終焉_飛ぶ', motion: 'ruin', kind: 'fly', size: 0.75, flyMs: 420, emerge: true },
       { file: '神雷終焉_当たる', motion: 'ruin', kind: 'hit', size: 1, durMs: 1100, spin: 0 },
       { file: '神雷終焉_ためる', motion: 'ruin', kind: 'charge', size: 0.34 },
@@ -1102,7 +1128,8 @@ export const CAST_OUT_MS = 320
 const INTRO_DUST_MS = 650   // 開戦の動きの砂ぼこりが出ている長さ
 // いまの姿勢：motion（bossIllustOf の motions の1つ）を流しはじめて ms たったとき。技のあいだは羽ばたきを弱める
 //   fromCast＝構えのすぐあとに撃った技（構えの姿勢からつなぐ＝手を掲げたままの形から急に待機に戻らない）
-export const illustPoseAt = (key, motion, ms, tMs, fromCast = false) => {
+//   reachX＝踏み込みの距離（枠の幅に対する割合・reachXOf）。姿勢の dash を掛けて x に足す
+export const illustPoseAt = (key, motion, ms, tMs, fromCast = false, reachX = 0) => {
   const def = BOSS_ILLUST_DEFS[key]
   const idle = idlePoseAt(def.idle, tMs)
   const add = motion ? motionPoseAt(motion.keys, ms) : null
@@ -1111,6 +1138,7 @@ export const illustPoseAt = (key, motion, ms, tMs, fromCast = false) => {
   const w = cp ? 1 - smooth(Math.min(1, Math.max(0, ms) / CAST_OUT_MS)) : 0
   const j = joltAt(motion.jolt, ms)
   const out = Object.fromEntries(Object.keys(ZERO).map(f => [f, idle[f] * (keep[f] || 0) + add[f] + (cp?.[f] || 0) * w + (j[f] || 0)]))
+  out.x += out.dash * reachX
   // 開戦の動きの足音と着地（motion.dustAt）：砂ぼこり
   for (const at of motion.dustAt || []) {
     const h = ms - at
@@ -1357,7 +1385,8 @@ export const buffAfterAt = (list, tMs) => {
   return out
 }
 // 残像（motion.ghosts＝{ fromMs, toMs, lagMs, n, op }）：fromMs〜toMs のあいだ、lagMs ずつ前の姿勢でポーズの絵を薄く重ねる（振り抜いて飛び込む勢い）
-//   { name, ms（その残像の時刻）, op }。そのときに出ていたポーズの絵だけ（部品の立ち絵には残像を出さない）
+//   { name, ms（その残像の時刻）, op }。そのときに出ていたポーズの絵だけ（部品の立ち絵には残像を出さない）。
+//   g.rig＝部品の立ち絵にも残像を出す（ゼルギアスの突進・name は null）
 export const illustGhostsAt = (motion, ms) => {
   const g = motion?.ghosts
   if (!g || ms < g.fromMs || ms >= g.toMs) return []
@@ -1366,7 +1395,7 @@ export const illustGhostsAt = (motion, ms) => {
     const t = ms - g.lagMs * k
     if (t < g.fromMs - g.lagMs) break
     const top = illustShowAt(motion, t).poses.at(-1)
-    if (top) out.push({ name: top.name, ms: t, op: (g.op ?? 0.45) * (1 - k / (g.n + 1)) })
+    if (top || g.rig) out.push({ name: top?.name ?? null, ms: t, op: (g.op ?? 0.45) * (1 - k / (g.n + 1)) })
   }
   return out
 }
@@ -1409,6 +1438,14 @@ export const illustPointAt = (key, pose, pt, part = 'head') => {
   p = rotPoint(p, a.pivot, pose.r)
   return [p[0] + pose.x * BOSS_ILLUST_SIZE, p[1] + pose.y * BOSS_ILLUST_SIZE]
 }
+// 相手まで届く距離（枠の幅に対する割合）：motion.reach＝{ part, pt（パーツの点・剣先）, atMs（届く時刻） }。
+//   atMs の姿勢で pt が相手の真ん中（targetX＝立ち絵の px・舞台の大きさから）に来るまでのずれ。dash は足す前の形で測る。ポーズの絵があれば anchors の reach
+export const reachXOf = (key, motion, targetX) => {
+  const r = motion?.reach
+  if (!r || targetX == null) return 0
+  const pose = { ...ZERO, ...motionPoseAt(motion.keys, r.atMs) }
+  return (targetX - (artAnchorAt(key, motion, r.atMs, pose, 'reach') || illustPointAt(key, pose, r.pt, r.part))[0]) / BOSS_ILLUST_SIZE
+}
 // 開いた口の火が出る所（頭の上の点）：口の線の上の mouth を、下あごの半分の角度だけ回す（上あごと下あごの真ん中）
 export const mouthPointOf = (key, pose) => {
   const j = BOSS_ILLUST_DEFS[key]?.cuts?.jaw
@@ -1446,7 +1483,8 @@ const smoothPath = (pts, n = 6) => {
 // 残像の筋（引っかく爪・翼の風）：motion.trails の点を、少し前からいまの時刻までたどった線（立ち絵の px）
 //   → [{ kind, line: [[x, y], …（古い→新しい）], alpha }]。toMs を過ぎたら fadeMs で薄れながら縮む
 //   motion.arcs（雨摩座の払う手の水の筋）：決まった通り道を fromMs〜toMs で先へ描き足し、toMs のあと fadeMs で根もとから消える（体の傾き・ずれに合わせる）
-export const illustTrailsAt = (key, motion, ms, tMs) => {
+//   tr.ribbon＝pts の2点のあいだを塗る帯（剣の刃が通った面・{ kind, alpha, ribbon: [線, 線] }）。reachX＝踏み込みの距離（illustPoseAt）
+export const illustTrailsAt = (key, motion, ms, tMs, reachX = 0) => {
   const out = []
   for (const a of motion?.arcs || []) {
     if (ms < a.fromMs || ms >= a.toMs + a.fadeMs) continue
@@ -1454,16 +1492,17 @@ export const illustTrailsAt = (key, motion, ms, tMs) => {
     const head = Math.max(1, Math.round(Math.min(1, (ms - a.fromMs) / (a.toMs - a.fromMs)) * last))
     const fade = ms <= a.toMs ? 0 : (ms - a.toMs) / a.fadeMs
     const tail = Math.min(head - 1, Math.floor(fade * last))
-    const pose = illustPoseAt(key, motion, ms, tMs)
+    const pose = illustPoseAt(key, motion, ms, tMs, false, reachX)
     out.push({ kind: a.kind, alpha: 1 - fade, line: path.slice(tail, head + 1).map(p => illustPointAt(key, pose, p, 'body')) })
   }
   for (const tr of motion?.trails || []) {
     if (ms < tr.fromMs || ms >= tr.toMs + tr.fadeMs) continue
     const t1 = Math.min(ms, tr.toMs), t0 = Math.max(tr.fromMs, ms - tr.lagMs)
     if (t1 - t0 < 1) continue
-    const n = Math.max(2, Math.ceil((t1 - t0) / 10))
+    const n = Math.max(2, Math.ceil((t1 - t0) / (tr.ribbon ? 3 : 10)))
     const alpha = ms <= tr.toMs ? 1 : 1 - (ms - tr.toMs) / tr.fadeMs
-    const poses = Array.from({ length: n + 1 }, (_, i) => { const t = t0 + (t1 - t0) * i / n; return illustPoseAt(key, motion, t, tMs - (ms - t)) })
+    const poses = Array.from({ length: n + 1 }, (_, i) => { const t = t0 + (t1 - t0) * i / n; return illustPoseAt(key, motion, t, tMs - (ms - t), false, reachX) })
+    if (tr.ribbon) { out.push({ kind: tr.kind, alpha, ribbon: tr.pts.map(pt => poses.map(p => illustPointAt(key, p, pt, tr.part))) }); continue }
     for (const pt of tr.pts) out.push({ kind: tr.kind, alpha, line: poses.map(p => illustPointAt(key, p, pt, tr.part)) })
   }
   return out
@@ -1525,7 +1564,7 @@ export const bossIllustOf = (key) => {
     // 当たる時刻＝撃ち出す時刻＋飛ぶ時間＋当たる絵が降りきるまで（lead・氷雨と水天葬）
     motions[m.key] = { label: m.file, keys: md.keys, trails: md.trails || [], arcs: md.arcs || [], jolt: md.jolt || null, totalMs: md.totalMs, hitMs: md.hitMs, flyMs, impactMs: md.hitMs + flyMs + (fx.hit?.lead || 0),
       front: shots[0].front, shots, strikes: md.strikes || null, fx: Object.keys(fx).length ? fx : null, charge: md.charge && fx[md.charge.kind] ? md.charge : null, scene: md.scene || null,
-      poses: posesOf(m.key), art: md.art || null, ghosts: md.ghosts || null, anchors: md.anchors || null, castSkipMs: md.castSkipMs || 0, big: !!md.big }
+      poses: posesOf(m.key), art: md.art || null, ghosts: md.ghosts || null, anchors: md.anchors || null, castSkipMs: md.castSkipMs || 0, big: !!md.big, reach: md.reach || null, dustAt: md.dustAt || null }
   }
   // 倒れる動き（lib/bossDeath.js）と開戦の動きで借りる絵：節目のバフ（buff）か技（motion・pose）のポーズの絵。どちらかが無ければ前のまま（薄くなるだけ）
   const borrowedArtOf = (r) => (r?.buff ? buffs[def.buffs[r.buff]?.name]?.pose : motions[r?.motion]?.poses?.[r?.pose]) || null

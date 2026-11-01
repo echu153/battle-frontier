@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { bossIllustOf } from './bossIllust.js'
-import { DOOM, flyPosOf, POUR, COIL, SCENE_TOP, FX_TARGET_Y, FX_FEET_Y, FX_HEAD_Y, FX_SKY_Y, pourTimesOf, sceneEndMsOf, sceneAt, castSceneAt, fallAt, coilAt, stageSceneOf, handFxOf, HAND_BURST_MS } from './bossScene.js'
+import { DOOM, flyPosOf, POUR, COIL, SCENE_TOP, FX_TARGET_Y, FX_FEET_Y, FX_HEAD_Y, FX_SKY_Y, pourTimesOf, sceneEndMsOf, sceneAt, castSceneAt, fallAt, coilAt, stageSceneOf, handFxOf, HAND_BURST_MS, gunSceneAt, slashSceneAt, boltPathOf, flashStarOf } from './bossScene.js'
 import { BOSS_ILLUST_DEFS, flutterBandsAt } from './bossIllust.js'
 import { BOSS_ILLUST } from './bossIllustList.js'
 
@@ -287,4 +287,53 @@ test('【確定】2026-10-30 終焉の黒焔の演出（ユーザー「終焉の
   assert.equal(bm.blobs.length, DOOM.blobs)
   assert.ok(bm.blobs.every(x => x.p >= 0 && x.p <= bm.head + 1e-9 && x.op >= 0 && x.r > 0))
   assert.ok(bm.blobs.some(x => x.dark) && bm.blobs.some(x => !x.dark))
+})
+
+test('【確定】2026-11-01 ゼルギアスの大砲（ユーザー「エフェクト細いし」「銃で放つときのモーションもなんか安っぽい」）：撃つたび閃光・輪・太い雷の筋・光と揺れ。当たると足元の輪と火花・相手が押される', () => {
+  const { shell, volley } = bossIllustOf('zerugiasu').motions
+  // 撃つ前は砲口に光が集まる
+  assert.ok(gunSceneAt(shell, shell.hitMs - 60).hand.op > 0)
+  assert.equal(gunSceneAt(shell, 0).hand, null)
+  const fired = gunSceneAt(shell, shell.hitMs + 10)
+  assert.ok(fired.items.some(it => it.t === 'mflash') && fired.items.some(it => it.t === 'mring') && fired.items.some(it => it.t === 'tracer'))
+  assert.ok(fired.flash > 0.2 && Math.hypot(...fired.shake) > 1 && fired.dim > 0.2)
+  // 雷の筋は太い（枠の幅の1割前後）・弾といっしょに伸びる
+  const tr = (ms) => gunSceneAt(shell, ms).items.find(it => it.t === 'tracer')
+  assert.ok(tr(shell.hitMs + 80).w >= 0.09)
+  assert.ok(tr(shell.hitMs + 100).k > tr(shell.hitMs + 30).k)
+  // 当たると足元の輪・相手が押される。外れたら押されない（演出は同じ）
+  const hit = gunSceneAt(shell, shell.impactMs + 20), miss = gunSceneAt(shell, shell.impactMs + 20, false)
+  assert.ok(hit.items.some(it => it.t === 'ring') && hit.knock < 0)
+  assert.equal(miss.knock, 0)
+  assert.equal(miss.items.length, hit.items.length)
+  // 雷霆掃射：1発ごとに閃光。3発目がいちばん大きい
+  const flashAt = (i) => gunSceneAt(volley, volley.hitMs + volley.shots[i].delayMs + 10).items.find(it => it.t === 'mflash')
+  assert.ok(flashAt(0) && flashAt(1) && flashAt(2).r > flashAt(0).r)
+  // 終わったら何も出ない・同じ時刻なら同じ絵（止めて確かめられる）
+  assert.deepEqual(gunSceneAt(volley, volley.hitMs + 500), gunSceneAt(volley, volley.hitMs + 500))
+  assert.equal(gunSceneAt(shell, sceneEndMsOf(shell)).items.length, 0)
+  assert.equal(sceneAt(shell, shell.hitMs + 10).items.length, fired.items.length, 'sceneAt から流れる')
+  assert.ok(stageSceneOf([{ m: shell, ms: shell.impactMs + 20 }], null).knock < 0)
+})
+
+test('【確定】2026-11-01 ゼルギアスの神雷崩撃：振りかぶると空から雷が剣へ落ち、突進の筋、当たると大きく光って揺れて相手が縮む', () => {
+  const { smite } = bossIllustOf('zerugiasu').motions
+  const wind = slashSceneAt(smite, smite.scene.boltsAt[0] + 20)
+  assert.ok(wind.items.some(it => it.t === 'tracer' && it.sky) && wind.hand.op > 0 && wind.dim > 0)
+  assert.ok(slashSceneAt(smite, smite.scene.windMs + 60).items.some(it => it.t === 'speed'))
+  const hit = slashSceneAt(smite, smite.impactMs + 40)
+  assert.ok(hit.flash > 0.7 && Math.hypot(...hit.shake) > 3 && hit.knock < 0 && hit.squeeze[1] < 1)
+  assert.ok(!slashSceneAt(smite, smite.impactMs + 40, false).squeeze, '外れたら縮まない')
+  assert.equal(slashSceneAt(smite, sceneEndMsOf(smite)).items.length, 0)
+})
+
+test('稲妻の折れ線と砲口の星形：両はしは決めた点・同じ種なら同じ形・相手の方のとげが長い', () => {
+  const p = boltPathOf(0, 0, 100, 0, 5, 8, 10)
+  assert.equal(p.length, 9)
+  assert.deepEqual([p[0], p.at(-1)], [[0, 0], [100, 0]])
+  assert.deepEqual(p, boltPathOf(0, 0, 100, 0, 5, 8, 10))
+  assert.notDeepEqual(p, boltPathOf(0, 0, 100, 0, 6, 8, 10))
+  const star = flashStarOf(100, Math.PI, 3)
+  const reach = (f) => Math.max(...star.filter(f).map(q => Math.hypot(q[0], q[1])))
+  assert.ok(reach(q => q[0] < 0) > reach(q => q[0] > 0), '左へ撃つと左のとげが長い')
 })

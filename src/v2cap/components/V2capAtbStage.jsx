@@ -6,13 +6,13 @@ import { lungeOf, shakeOf, lastHitAtOf, popTextOf, popScaleOf, popLeftOf, popTop
 import { JP_BOLD } from './casinoStyle.js'
 import { rubySegmentsOf } from '../lib/skillRuby.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
-import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, rigLayersOf, artAnchorAt, illustCastShowAt, illustBuffShowAt, buffSceneAt, introSceneAt, introEnterAt, introBeamAt, rigLightsAt, buffAfterAt, buffRainAt } from '../lib/bossIllust.js'
+import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, reachXOf, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, rigLayersOf, artAnchorAt, illustCastShowAt, illustBuffShowAt, buffSceneAt, introSceneAt, introEnterAt, introBeamAt, rigLightsAt, buffAfterAt, buffRainAt } from '../lib/bossIllust.js'
 import { behindRectOf, bgRectOf, bgFxAt, liteFxOf } from '../lib/bossBg.js'
 import { artIsLoaded } from '../lib/artPreload.js'
 import BossFlowCanvas from './BossFlowCanvas.jsx'
 import BossDissolve from './BossDissolve.jsx'
 import BossAuraFlow from './BossAuraFlow.jsx'
-import { FX_HEAD_Y, FX_FEET_Y, FX_SKY_Y, FX_TARGET_Y, SCENE_TOP, fallAt, coilAt, pourTimesOf, sceneEndMsOf, stageSceneOf, flyPosOf } from '../lib/bossScene.js'
+import { FX_HEAD_Y, FX_FEET_Y, FX_SKY_Y, FX_TARGET_Y, SCENE_TOP, fallAt, coilAt, pourTimesOf, sceneEndMsOf, stageSceneOf, flyPosOf, boltPathOf, flashStarOf } from '../lib/bossScene.js'
 import { deathAt, deathPoseOf, deathShowOf } from '../lib/bossDeath.js'
 
 // ============================================================
@@ -214,7 +214,10 @@ const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [
         </div>
       )}
       {!lite && ghosts.map((g, i) => (
-        <div key={`g${i}`} style={{ ...rigWrap(art, g.pose), opacity: g.op }}><PoseArt art={art} p={motion.poses[g.name]} /></div>
+        // 部品の残像（g.name が無い・ゼルギアスの突進）は青白く
+        <div key={`g${i}`} style={{ ...rigWrap(art, g.pose), opacity: g.op, filter: g.name ? undefined : 'brightness(0.7) sepia(1) hue-rotate(175deg) saturate(4) brightness(1.5)' }}>
+          {g.name ? <PoseArt art={art} p={motion.poses[g.name]} /> : moving.map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={g.pose} />)}
+        </div>
       ))}
       <div style={lite ? { ...rigWrap(art, pose), willChange:'transform' } : rigWrap(art, pose)}>
         {bands.length === 0 ? rig : bands.map((b, i) => (
@@ -469,17 +472,32 @@ const TRAIL_STYLE = {
   // 魂の炎（閻魔の投げる手）
   soul: { glow: 'rgba(130,70,255,0.9)', core: 'rgba(240,228,255,1)', gw: 26, cw: 6 },
 }
+// 剣の刃が通った面の帯（tr.ribbon＝[付け根の線, 剣先の線]）：新しいほど濃い。外がぼかした青・中が明るい青・剣先の側の半分が白
+const ribbonPolys = (a, b) => a.slice(1).map((p, k) => [a[k], p, b[k + 1], b[k]].map(q => `${q[0].toFixed(1)},${q[1].toFixed(1)}`).join(' '))
+const RigRibbon = ({ tr }) => {
+  const lite = useContext(LiteCtx)
+  const [a, b] = tr.ribbon, n = a.length - 1, mid = a.map((p, k) => [(p[0] + b[k][0]) / 2, (p[1] + b[k][1]) / 2])
+  const quads = (u, v, fill, k0) => ribbonPolys(u, v).map((pts, k) => <polygon key={k} points={pts} fill={fill} opacity={(k0 + (1 - k0) * (k + 1) / n).toFixed(3)} />)
+  return (
+    <g opacity={tr.alpha.toFixed(3)}>
+      <g style={lite ? undefined : { filter:'blur(7px)' }} opacity={lite ? 0.45 : 0.9}>{quads(a, b, '#3f7dff', 0.1)}</g>
+      {quads(a, b, '#8fc0ff', 0.05)}
+      {quads(mid, b, '#ffffff', 0)}
+    </g>
+  )
+}
 const RigTrails = ({ art, trails }) => (
   <svg viewBox={`0 0 ${art.base} ${art.base}`} style={{ position:'absolute', inset:0, width:'100%', height:'100%', overflow:'visible', pointerEvents:'none', zIndex: 1 }}>
     {['glow', 'core'].map(layer => (
       <g key={layer} strokeLinecap="round" style={layer === 'glow' ? { filter:'blur(3px)' } : undefined}>
-        {trails.flatMap((tr, i) => tr.line.slice(1).map((b, k) => {
+        {trails.filter(tr => tr.line).flatMap((tr, i) => tr.line.slice(1).map((b, k) => {
           const a = tr.line[k], f = (k + 1) / (tr.line.length - 1), st = TRAIL_STYLE[tr.kind]
           return <line key={`${i}-${k}`} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke={st[layer]}
             strokeWidth={(layer === 'glow' ? st.gw : st.cw) * (0.25 + 0.75 * f)} opacity={tr.alpha * (0.15 + 0.85 * f)} />
         }))}
       </g>
     ))}
+    {trails.filter(tr => tr.ribbon).map((tr, i) => <RigRibbon key={i} tr={tr} />)}
   </svg>
 )
 
@@ -506,7 +524,8 @@ const buffAfterOf = (art, me, marks, now) => {
 const FIGHTER_ROWS = 5
 //   death … 倒れる動き（lib/bossDeath.js の deathAt に t0＝倒れた時刻を足したもの・ボスだけ）
 //   introWait … 開戦の動きを始める前（遭遇の絵の後ろ・サーバーの返事を待っているあいだ）。ボスは登場の前の形で待つ
-function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx, now, name, artH = ART_H, scale = 1, areaRef, castEnd = -1e9, squeeze = null, death = null, introWait = false }) {
+//   reachTo … 相手の真ん中（立ち絵の px・ボスだけ）。剣先が届くまで踏み込む距離を出す（lib/bossIllust.js の reachXOf）／knock … 技で押される（px・自分だけ）
+function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx, now, name, artH = ART_H, scale = 1, areaRef, castEnd = -1e9, squeeze = null, death = null, introWait = false, reachTo = null, knock = 0 }) {
   const lite = useContext(LiteCtx)
   const mine = fx.filter(f => f.side === side)
   const lastOf = (kind) => mine.reduce((t, f) => (f.kind === kind && f.t0 <= now && f.t0 > t ? f.t0 : t), -1e9)
@@ -533,10 +552,11 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   // 構えのあいだは構えの姿勢（技を流しているあいだは技が先）
   const castMs = me.cast && !death ? castMsOf(me.cast, st.t + st.acc) : null
   const casting = rig && castMs !== null && !(rigMotion && rigMs < rigMotion.totalMs)
+  const reachX = rigMotion?.reach ? reachXOf(rig.key, rigMotion, reachTo) : 0
   const pose0 = !rig ? null : casting ? illustCastPoseAt(rig.key, castMs, tMs)
-    : illustPoseAt(rig.key, rigMotion, rigMs, tMs, !!lastAct && afterCast(lastAct.t0, castEnd))
+    : illustPoseAt(rig.key, rigMotion, rigMs, tMs, !!lastAct && afterCast(lastAct.t0, castEnd), reachX)
   const pose = death ? deathPoseOf(pose0, death) : pose0
-  const trails = rigMotion && !death ? illustTrailsAt(rig.key, rigMotion, rigMs, tMs) : []
+  const trails = rigMotion && !death ? illustTrailsAt(rig.key, rigMotion, rigMs, tMs, reachX) : []
   // 技のポーズの絵と残像（構えのあいだは部品の立ち絵）
   // 構えのあいだのポーズの絵（雨摩座＝構えた技の構えの絵・lib/bossIllust.js の illustCastShowAt・黒龍は無し）
   const cs = casting ? illustCastShowAt(rig, me.cast.name, castMs) : null
@@ -554,8 +574,8 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   const show = death ? deathShowOf(show0, death) : show0
   const showMotion = death ? { poses: { ...showMotion0?.poses, ...rig.death.arts } } : showMotion0
   const aura = buff?.aura && buffArt.aura ? { p: buffArt.aura, op: buff.aura.op * buffArt.auraOp, scale: buff.aura.scale, front: buffArt.front, glow: buffArt.glow, rot: buff.aura.rot, at: buffArt.spinAt } : null
-  const ghosts = rigMotion && !casting && !buffPose && !death ? illustGhostsAt(rigMotion, rigMs).map(g => ({ ...g, pose: illustPoseAt(rig.key, rigMotion, g.ms, tMs - (rigMs - g.ms)) })) : []
-  const dx = (frame >= 0 || rig ? 0 : lungeOf(now - lastOf('act')) * dir) + shakeOf(now - lastOf('hit'))
+  const ghosts = rigMotion && !casting && !buffPose && !death ? illustGhostsAt(rigMotion, rigMs).map(g => ({ ...g, pose: illustPoseAt(rig.key, rigMotion, g.ms, tMs - (rigMs - g.ms), false, reachX) })) : []
+  const dx = (frame >= 0 || rig ? 0 : lungeOf(now - lastOf('act')) * dir) + shakeOf(now - lastOf('hit')) + knock
   const hitAgo = now - lastOf('hit')
   const glowAgo = now - lastOf('use')
   const rageAgo = now - lastOf('rage')
@@ -737,10 +757,25 @@ function BossFx({ fx, now, geo, art, cast = null, castEnd = -1e9, scene = null }
   return motions.flatMap(m => Object.entries(m.fx || {}).flatMap(([kind, a]) => {
     if (kind === 'flow') return []   // 流れる水の絵は滝の中（PourFlow）
     const sc = a.size ? (a.size * ((a.on ? geo?.p.w : geo?.b.w) || 0)) / a.w : s   // イラスト版は枠の幅に対する大きさ
+    // 砲口の閃光（kind 'flash'・ゼルギアス）：撃つたび、絵の右のはしを砲口に合わせて相手の方へ向ける。一気にふくらんで消える
+    if (kind === 'flash') return (m.shots || []).map((sh, i) => {
+      let on = null
+      for (const f of acts) {
+        if (f.motion !== m) continue
+        const ms = (now - f.t0) * 1000, e = ms - m.hitMs - (sh.delayMs || 0)
+        if (e < 0 || e >= a.durMs) continue
+        const pose = illustPoseAt(art.key, m, ms, now * 1000), h = m.scene.hand
+        const [mx, my] = artAnchorAt(art.key, m, ms, pose, 'hand') || illustPointAt(art.key, pose, h.pt, h.part)
+        const x = geo.b.x + mx * s, y = geo.b.y + my * s, k = e / a.durMs
+        on = { frame: 0, x, y, s: sc * (sh.size || 1) * (0.55 + 0.7 * easeOut(k)), rot: Math.atan2(to.y - y, to.x - x) - Math.PI, op: k < 0.5 ? 1 : 1 - (k - 0.5) / 0.5 }
+      }
+      return <Sprite key={`${a.src}#${i}`} a={a} {...(on || { frame: -1 })} />
+    })
     const lead = a.lead || 0
     // 飛ぶ絵は出どころ（shots）ごとに1枚（イラスト版の黒翼烈風は両方の翼から）。届く時刻は1つめ＝ダメージの時刻。ためる絵は ChargeOrb だけ
     //   多段の技（m.strikes）：i 番目の飛ぶ絵は i 発目の時刻に、その発の場所（dx・dy）へ届く＝1枚が1発。当たる絵は1発ごとに1枚（前の絵が消える前に次が出る）
-    const shots = kind === 'fly' ? (m.shots || (m.front ? [{ front: m.front, delayMs: 0, size: 1 }] : [])) : kind === 'hit' ? m.strikes || ONE_STRIKE : []
+    //   斬撃の跡（kind 'cut'・ゼルギアス）は当たる絵と同じ時刻に相手の上へ（wipe で引いて出す）
+    const shots = kind === 'fly' ? (m.shots || (m.front ? [{ front: m.front, delayMs: 0, size: 1 }] : [])) : kind === 'hit' ? m.strikes || ONE_STRIKE : kind === 'cut' ? ONE_STRIKE : []
     return shots.map((sh, i) => {
       let on = null
       const st = m.strikes?.[i] || ONE_STRIKE[0]
@@ -755,14 +790,14 @@ function BossFx({ fx, now, geo, art, cast = null, castEnd = -1e9, scene = null }
           const q = flyPosOf(e / (tHit - tFly))
           const grow = Math.min(1, 0.5 + 0.5 * e / FX_GROW_SEC) * (a.frames > 1 ? 1 : 1 + 0.06 * Math.sin(e * 30))
           on = { frame: a.frames > 1 ? Math.floor(e * 1000 / a.ms) % a.frames : 0, x: from.x + (spot.x - from.x) * q, y: from.y + (spot.y - from.y) * q,
-            s: sc * sh.size * grow, rot: Math.atan2(spot.y - from.y, spot.x - from.x) - Math.PI }   // 飛ぶ絵は左向き
+            s: sc * sh.size * grow, sy: a.sy, rot: Math.atan2(spot.y - from.y, spot.x - from.x) - Math.PI }   // 飛ぶ絵は左向き
           // 口から伸びて出てくる（a.emerge・終焉の黒焔）：絵は先（ax）が前で、うしろへ伸びる＝飛んだ距離より後ろ（口より竜の側）は見せない。絵といっしょに回る切り抜き
           if (a.emerge) {
             const lx = ((a.ax + (Math.hypot(on.x - from.x, on.y - from.y) + 0.03 * geo.b.w) / on.s) / a.w) * 100
             if (lx < 100) on.mask = `linear-gradient(to right, #000 ${Math.max(0, lx - 10).toFixed(1)}%, transparent ${lx.toFixed(1)}%)`
           }
         }
-        if (kind === 'hit' && now >= tHit - lead / 1000) {
+        if ((kind === 'hit' || kind === 'cut') && now >= tHit - lead / 1000) {
           const ms = (now - tHit) * 1000 + lead   // 当たる絵が出はじめてから
           const actMs = (now - f.t0) * 1000 - landMs
           const fall = a.anim === 'drop' ? fallAt(m, actMs) : null
@@ -977,6 +1012,8 @@ function SceneLayer({ geo, sc, hands, s }) {
         </linearGradient>
         <radialGradient id={`${id}m`}><stop offset="0" stopColor={M[0]} stopOpacity={fire ? 0.9 : 0.6} /><stop offset="0.45" stopColor={M[1]} stopOpacity={fire ? 0.55 : 0.28} /><stop offset="0.75" stopColor={M[2]} stopOpacity={fire ? 0.2 : 0.08} /><stop offset="1" stopColor={M[2]} stopOpacity="0" /></radialGradient>
         <radialGradient id={`${id}g`}><stop offset="0" stopColor={Gl[0]} /><stop offset="0.35" stopColor={Gl[1]} stopOpacity="0.9" /><stop offset="1" stopColor={Gl[2]} stopOpacity="0" /></radialGradient>
+        {/* 線（幅や高さが 0 になる）をぼかすので、枠は px で広くとる */}
+        <filter id={`${id}b`} filterUnits="userSpaceOnUse" x="-400" y="-400" width={geo.W + 800} height="1600"><feGaussianBlur stdDeviation={(U * 0.03).toFixed(2)} /></filter>
       </defs>
       {c && c.glow > 0 && (
         <g transform={`translate(${ox.toFixed(1)} ${cy.toFixed(1)}) rotate(6) scale(1 0.42)`} opacity={Math.min(1, c.glow).toFixed(3)}>
@@ -1018,6 +1055,42 @@ function SceneLayer({ geo, sc, hands, s }) {
             <circle cx={X(it.x) - it.r * U * 0.35} cy={Y(it.y) - it.r * U * 0.35} r={it.r * U * 0.25} fill="#ffffff" />
           </g>
         )
+        // 突進の風の筋（ゼルギアス）
+        //   進む側（左）が太く、後ろへ細くなる（ただの線だと細くて安っぽかった）
+        if (it.t === 'speed') return <polygon key={i} points={`${X(it.x1).toFixed(1)},${(Y(it.y) - it.w * U).toFixed(1)} ${X(it.x2).toFixed(1)},${Y(it.y).toFixed(1)} ${X(it.x1).toFixed(1)},${(Y(it.y) + it.w * U).toFixed(1)}`} fill="#a8cdff" opacity={it.op} />
+        // 太い雷の筋（砲口から相手へ・sky は空から剣へ）：外がぼかした青・中が明るい青・芯が白
+        if (it.t === 'tracer' && hands) {
+          const h = hands[0], [ax, ay] = it.sky ? [h[0] + it.ox * U, -U * 0.3] : h, [bx, by] = it.sky ? h : [X(it.x), Y(it.y)]
+          const pts = boltPathOf(ax, ay, ax + (bx - ax) * it.k, ay + (by - ay) * it.k, it.seed, it.n, it.amp * U).map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' '), w = it.w * U
+          return (
+            <g key={i} opacity={it.op.toFixed(3)} fill="none" strokeLinejoin="round" strokeLinecap="round">
+              <polyline points={pts} stroke="#3f7dff" strokeWidth={w * 2.6} opacity={lite ? 0.3 : 0.75} filter={lite ? undefined : `url(#${id}b)`} />
+              <polyline points={pts} stroke="#8fc0ff" strokeWidth={w} />
+              <polyline points={pts} stroke="#ffffff" strokeWidth={w * 0.42} />
+            </g>
+          )
+        }
+        if (it.space === 'hand' && hands && (it.t === 'mflash' || it.t === 'mring')) {
+          // 砲口の閃光（星形）と衝撃の輪（砲身に直角）：r などは立ち絵の px
+          const [hx, hy] = hands[0], aim = Math.atan2(Y(FX_TARGET_Y - FX_FEET_Y) - hy, X(0) - hx)
+          if (it.t === 'mflash') {
+            const star = flashStarOf(it.r * s, aim, it.seed), poly = (k) => star.map(p => `${(p[0] * k).toFixed(1)},${(p[1] * k).toFixed(1)}`).join(' ')
+            return (
+              <g key={i} opacity={it.op.toFixed(3)} transform={`translate(${hx.toFixed(1)} ${hy.toFixed(1)})`}>
+                <polygon points={poly(1)} fill="#3f7dff" opacity="0.75" filter={lite ? undefined : `url(#${id}b)`} />
+                <polygon points={poly(0.82)} fill="#8fc0ff" />
+                <polygon points={poly(0.5)} fill="#ffffff" />
+              </g>
+            )
+          }
+          const cx = hx + Math.cos(aim) * it.off * s, cy = hy + Math.sin(aim) * it.off * s, deg = (aim * 180) / Math.PI
+          return (
+            <g key={i} opacity={it.op.toFixed(3)} fill="none" transform={`rotate(${deg.toFixed(1)} ${cx.toFixed(1)} ${cy.toFixed(1)})`}>
+              <ellipse cx={cx} cy={cy} rx={it.r * s * 0.36} ry={it.r * s} stroke="#3f7dff" strokeWidth={it.w * s * 2} opacity="0.55" />
+              <ellipse cx={cx} cy={cy} rx={it.r * s * 0.36} ry={it.r * s} stroke="#e4f1ff" strokeWidth={Math.max(1, it.w * s * 0.7)} />
+            </g>
+          )
+        }
         if (it.space === 'hand' && hands) {
           const h = hands[it.hi || 0] || hands[0], x = h[0] + it.x * s, y = h[1] + it.y * s
           if (it.t === 'mote') return <circle key={i} cx={x} cy={y} r={it.r * s * 2} fill={`url(#${id}g)`} opacity={it.op} />
@@ -1154,7 +1227,8 @@ const wipeClipOf = (r) => {
 
 // 演出（lib/bossScene.js の stageSceneOf）に、いま流れている技と構えを渡す。handsAt＝手（立ち絵の px・手の光と粒としぶきを出す所・ポーズの絵の両手）
 //   構えた技＝名前が同じ技・無ければ最後の技（BossFx と同じ）。技を流しているあいだは構えの演出は出さない（技が先＝Fighter と同じ）
-const sceneOfStage = (art, acts, now, cast, castEnd) => {
+//   reachTo＝相手の真ん中（立ち絵の px）：踏み込む技の手（剣先）も踏み込んだ先で出す
+const sceneOfStage = (art, acts, now, cast, castEnd, reachTo = null) => {
   const motions = Object.values(art.motions)
   const castM = cast ? motions.find(m => m.label === cast.name) || motions.at(-1) : null
   // after＝構えのすぐあとの技か（技の途中から流す技は t0 が前にずれているので、動いた時刻で見る）
@@ -1166,7 +1240,7 @@ const sceneOfStage = (art, acts, now, cast, castEnd) => {
   const fromCast = !running && !!castM?.scene
   const handPt = fromCast ? castM.scene.hand : live ? live.m.scene.hand : null
   if (handPt && (sc.hand || sc.beam || sc.items.some(it => it.space === 'hand'))) {
-    const pose = !fromCast ? illustPoseAt(art.key, live.m, live.ms, now * 1000, live.after) : illustCastPoseAt(art.key, cast.ms, now * 1000)
+    const pose = !fromCast ? illustPoseAt(art.key, live.m, live.ms, now * 1000, live.after, reachXOf(art.key, live.m, reachTo)) : illustCastPoseAt(art.key, cast.ms, now * 1000)
     // ポーズの絵が出ていれば、その絵の上の手（anchors の hand・hand2＝両手）から。無ければ決まりの手（scene.hand）
     const castAn = fromCast && art.castArt ? castM.anchors?.[art.castArt] : null
     const pts = ['hand', 'hand2'].map(n => (!fromCast ? artAnchorAt(art.key, live.m, live.ms, pose, n) : castAn?.[n] ? illustPointAt(art.key, pose, castAn[n], 'body') : null)).filter(Boolean)
@@ -1205,7 +1279,9 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
   const sceneActs = foeArt?.kind === 'illust' && !death ? fx.filter(f => f.kind === 'act' && f.side === 'b' && f.motion?.scene) : []
   kept.current = death ? [] : [...kept.current.filter(f => !sceneActs.includes(f) && now - f.t0 < sceneEndMsOf(f.motion) / 1000), ...sceneActs]
   const fxAll = kept.current.some(f => !fx.includes(f)) ? [...fx, ...kept.current.filter(f => !fx.includes(f))] : fx
-  const sc = foeArt?.kind === 'illust' ? sceneOfStage(foeArt, kept.current, now, cast, castSeen.current) : null
+  // 踏み込む技（lib/bossIllust.js の reachXOf）の行き先＝自分の真ん中（ボスの絵の枠の左上からの、立ち絵の px）
+  const reachTo = geo && foeArt?.kind === 'illust' ? (geo.p.x + geo.p.w / 2 - geo.b.x) / (geo.b.w / foeArt.base) : null
+  const sc = foeArt?.kind === 'illust' ? sceneOfStage(foeArt, kept.current, now, cast, castSeen.current, reachTo) : null
   // HPの節目のバフの強い見せ方（逆鱗・lib/bossIllust.js の buffSceneAt）：舞台を赤黒く暗く・吠える揺れ（技の演出と重ねる）
   const rageB = foeArt?.kind === 'illust' ? fx.reduce((p, f) => (f.kind === 'rage' && f.side === 'b' && f.t0 <= now && (!p || f.t0 >= p.t0) ? f : p), null) : null
   // 開戦の動き（lib/bossIllust.js の intro）の吠えた瞬間も同じ形（暗さと揺れ）
@@ -1240,10 +1316,10 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
       transform: shake[0] || shake[1] ? `translate(${shake[0].toFixed(1)}px, ${shake[1].toFixed(1)}px)` : undefined }}>
       {foeArt?.bg && geo && <BossBackground bg={foeArt.bg} geo={geo} now={now} dim={dimOf} behindK={death ? death.behind : 1} />}
       <Fighter st={st} side="a" me={st.a} src={playerSrc} motion={playerMotion} strips={playerMotion ? [playerMotion] : []} fx={fx} now={now} name={st.a.name}
-        artH={size?.artH || ART_H} scale={playerScale} areaRef={pArea} squeeze={sc?.squeeze} />
+        artH={size?.artH || ART_H} scale={playerScale} areaRef={pArea} squeeze={sc?.squeeze} knock={sc?.knock || 0} />
       <Fighter st={st} side="b" me={st.b} right src={foeSrc} fx={fx} now={now} name={st.b.name}
         strips={foeArt?.kind === 'pixel' ? Object.values(foeArt.motions) : []} rig={foeArt?.kind === 'illust' ? foeArt : null}
-        artH={size?.artH || ART_H} areaRef={bArea} castEnd={castSeen.current} death={death} introWait={introWait} />
+        artH={size?.artH || ART_H} areaRef={bArea} castEnd={castSeen.current} death={death} introWait={introWait} reachTo={reachTo} />
       {sc?.beam && geo && sc.handsAt && <DoomBeam geo={geo} beam={sc.beam} tone={sc.tone} hand={[geo.b.x + sc.handsAt[0][0] * (geo.b.w / foeArt.base), geo.b.y + sc.handsAt[0][1] * (geo.b.w / foeArt.base)]} />}
       {foeArt && <BossFx fx={death ? fxAll.filter(f => f.side !== 'b' || f.kind !== 'act') : fxAll} now={now} geo={geo} art={foeArt} cast={cast} castEnd={castSeen.current} scene={sc} />}
       {sc && geo && <SceneLayer geo={geo} sc={sc} hands={sc.handsAt ? sc.handsAt.map(p => [geo.b.x + p[0] * (geo.b.w / foeArt.base), geo.b.y + p[1] * (geo.b.w / foeArt.base)]) : null} s={geo.b.w / foeArt.base} />}
