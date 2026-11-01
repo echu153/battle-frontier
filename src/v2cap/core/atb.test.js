@@ -3,7 +3,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  createAtb, runFor, advance, reserve, clearQueue, startMacro, stopMacro, toggleGuard, canUse, cdLeft, cdRatio, guardCdRatio, chosenOf, needFor,
+  createAtb, runFor, advance, reserve, unreserveAt, clearQueue, QUEUE_MAX, startMacro, stopMacro, toggleGuard, canUse, cdLeft, cdRatio, guardCdRatio, chosenOf, needFor,
   canDrink, drinkItem, itemCdLeft, itemCdRatio, itemLeftOf, itemsUsedOf, replayInputs, seedRng,
   fillRatio, cdOfProc, buffSecOf, buffChips,
   STEP_SEC, TURN_SEC, GAUGE_FULL, GUARD_CUT, GUARD_CD, CAST_SEC, MAX_DT,
@@ -135,6 +135,24 @@ test('マクロ：くり返さないマクロは最後まで出たら止まる�
   runFor(st, 10)
   assert.equal(acts(st, '自分', 'skill').length, 2)
   assert.equal(acts(st, '自分', 'normal').length, 2)
+})
+
+test('予約は8個まで（ユーザー「予約の上限は8個まで」）：9個目は入らず、押した記録にも残らない。外すと、また入る', () => {
+  const st = createAtb(fighter('自分', [sk('技A')]), fighter('相手'), { rng: () => 0.5 })
+  assert.equal(QUEUE_MAX, 8)
+  for (let i = 0; i < QUEUE_MAX; i++) reserve(st, 0)
+  assert.equal(st.a.queue.length, 8)
+  assert.equal(st.inputs.length, 8)
+  reserve(st, 0)
+  assert.equal(st.a.queue.length, 8, '9個目は入らない')
+  assert.equal(st.inputs.length, 8, 'サーバーの回し直しにも9個目は無い')
+  unreserveAt(st, 3)
+  assert.equal(st.a.queue.length, 7)
+  reserve(st, null)
+  assert.equal(st.a.queue.length, 8)
+  assert.equal(st.a.queue[7].idx, null, '後ろに足す')
+  clearQueue(st)
+  assert.equal(st.a.queue.length, 0)
 })
 
 test('マクロ：手で押した技は次の1回だけ割り込み、そのあとマクロの続きに戻る（ユーザー選択）', () => {

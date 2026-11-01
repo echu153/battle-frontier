@@ -2,6 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
+import { QUEUE_MAX } from '../core/atb.js'
 
 const stage = readFileSync(new URL('../components/V2capAtbStage.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 const fighter = stage.slice(stage.indexOf('function Fighter('), stage.indexOf('// ボスの技のエフェクトが当たる場所'))
@@ -99,4 +100,23 @@ test('【確定】2026-10-31 絵が一瞬消えない（ユーザー「たまー
   assert.match(hpRow, /<UniqueBuffs side=\{me\}/)
   assert.equal((fighter.match(/<UniqueBuffs /g) || []).length, 1)
   assert.match(stage, /🔥×\{list\.length\}/, '短い札')
+})
+
+test('【確定】2026-11-01 予約は舞台の左端に並ぶ（ユーザー「スキルの予約はプレイヤー側の左側に表示させるようにして、予約の上限は8個まで」）：マクロの欄には出さない・8個並んでも絵の枠に収まる', () => {
+  const src = readFileSync(new URL('../components/V2capAtbFight.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  const onStage = src.slice(src.indexOf('<LiveStage tickRef'), src.indexOf('{/* マクロ①〜③ */}'))
+  // 舞台の枠の中・テロップより奥。押すと外せる・全部外せる・いくつ入っているか分かる。決着のあとは出さない
+  assert.match(onStage, /me\.queue\.length > 0 && !s\.over && \(/)
+  assert.ok(onStage.indexOf('me.queue') < onStage.indexOf('{telop &&'))
+  assert.match(onStage, /position:'absolute', left:'3px', top: QUEUE_TOP_PX/)
+  assert.match(onStage, /zIndex: 1, display:'flex', flexDirection:'column'/)
+  assert.match(onStage, /onClick=\{\(\) => unreserveAt\(s, i\)\}/)
+  assert.match(onStage, /onClick=\{\(\) => clearQueue\(s\)\}/)
+  assert.match(onStage, /予約 \{me\.queue\.length\}\/\{QUEUE_MAX\}/)
+  // マクロの欄と技のボタンの側には出さない＝増えても下のボタンがずれない
+  assert.ok(!src.slice(src.indexOf('{/* マクロ①〜③ */}')).includes('me.queue.'))
+  // 見出し＋上限ぶん（1行＋すき間1px）が、いちばん低い絵の枠に収まる＝HPの文字に重ならない
+  const row = Number(/const QUEUE_ROW_PX = (\d+)/.exec(src)[1])
+  const minArt = Number(/illust: \{ artH: 'clamp\((\d+)px/.exec(stage)[1])
+  assert.ok((QUEUE_MAX + 1) * row + QUEUE_MAX <= minArt, `${(QUEUE_MAX + 1) * row + QUEUE_MAX}px は絵の枠 ${minArt}px に収まらない`)
 })

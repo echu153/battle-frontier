@@ -56,6 +56,10 @@ const SKILL_GRID = 'repeat(auto-fill, minmax(min(30%, 180px), 1fr))'
 const SKILL_TEXT = { position:'relative', zIndex: 1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }
 // 技の名前の大きさ：ふだん11px。長い名前は、スマホの1列（画面の幅−余白を3つに分けた幅）に収まるまで小さく
 const skillNameSize = (name) => `min(11px, calc(((100vw - 60px) / 3 - 8px) / ${Math.max(1, name.length)}))`
+// 予約の欄（舞台の左端）：上から絵の枠の頭まで・1行の高さ（見出し＋8個＋すき間 が、いちばん低い絵の枠 170px に収まる）
+const QUEUE_TOP_PX = 36
+const QUEUE_ROW_PX = 18
+const QUEUE_BG = 'rgba(0, 8, 24, 0.78)'
 
 // 舞台だけを毎回更新する（技のボタンやログまで毎回作り直すと、スマホで間に合わない）。tickRef.current() で更新
 const PANEL_MS = 66   // ボタンや数字は1秒15回
@@ -243,6 +247,24 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
       <div style={{ position:'relative' }}>
         <LiveStage tickRef={stageTick} st={s} fxRef={fxRef} playerSrc={playerSrc} playerMotion={playerMotion}
           foeSrc={bossArt ? bossArt.idle?.src || null : enemyArtSrc(en.name)} foeBig={!!bossArt} foeArt={bossArt} lite={lite} />
+        {/* 予約（手で押した技）：舞台の左端＝プレイヤーの左に、上から順に並ぶ。マクロより先に1回ずつ出る。押すと外す
+            【確定】2026-11-01 ユーザー「スキルの予約はプレイヤー側の左側に表示させるようにして、予約の上限は8個まで」：前はマクロの欄の中で、増えると下の技のボタンがずれた。
+            テロップ（zIndex 2）と決着の押す面（zIndex 3）より下。使えるまで待っている技はクールダウンのグレーで分かる */}
+        {me.queue.length > 0 && !s.over && (
+          <div style={{ position:'absolute', left:'3px', top: QUEUE_TOP_PX, width:'clamp(58px, 13%, 120px)', zIndex: 1, display:'flex', flexDirection:'column', gap:'1px', fontSize:'clamp(10px, 2.6vw, 12px)' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'2px', height: QUEUE_ROW_PX }}>
+              <span style={{ fontSize:'9px', whiteSpace:'nowrap', color: me.queue.length >= QUEUE_MAX ? '#ffee44' : '#ffffff', textShadow:'0 1px 2px #000' }}>予約 {me.queue.length}/{QUEUE_MAX}</span>
+              <button onClick={() => clearQueue(s)} title="全部外す" style={{ ...miniBtn('#ff8888'), padding:'0 4px', height: QUEUE_ROW_PX, background: QUEUE_BG }}>✕</button>
+            </div>
+            {me.queue.map((q, i) => (
+              <button key={i} onClick={() => unreserveAt(s, i)} title="押すと外す"
+                style={{ ...miniBtn(i === 0 ? '#ffee44' : '#88ccff'), fontSize:'inherit', padding:'0 3px', height: QUEUE_ROW_PX, minWidth:0, textAlign:'left', background: QUEUE_BG, position:'relative', overflow:'hidden' }}>
+                <div style={SKILL_TEXT}>{entryText(q)}</div>
+                <CdShade lite={lite} ratio={entryCd(q)} />
+              </button>
+            ))}
+          </div>
+        )}
         {telop && <V2capAtbTelop key={telop.id} kind={telop.kind} sub={en.name} ms={telop.ms} />}
         {ending && <div onClick={skipEnding} style={{ position:'absolute', inset:0, zIndex: 3, cursor:'pointer' }} />}
       </div>
@@ -336,23 +358,6 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
         ) : (
           <div style={{ color: TEXT.empty, fontSize:'10px' }}>
             {macros.some(m => m.steps.length) ? '①〜③を押すと、そのマクロの頭から出ます' : 'マクロは「ATB戦闘の試し撃ち」の準備の画面で登録できます'}
-          </div>
-        )}
-        {/* 割り込み（手で押した技）。マクロより先に、1回ずつ出る */}
-        {me.queue.length > 0 && (
-          <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', alignItems:'center', marginTop:'6px' }}>
-            <span style={{ color: TEXT.label, fontSize:'10px' }}>割り込み（{me.queue.length}/{QUEUE_MAX}）</span>
-            {me.queue.map((q, i) => {
-              const wait = i === 0 && q.idx !== null && !canUse(me, q.idx, now)
-              return (
-                <button key={i} onClick={() => unreserveAt(s, i)} title="押すと外す"
-                  style={{ ...miniBtn(i === 0 ? '#ffee44' : '#88ccff'), padding:'4px 7px', fontSize:'11px', position:'relative', overflow:'hidden' }}>
-                  {i + 1}. {entryText(q)}{wait ? `（あと${cdLeft(me, q.idx, now).toFixed(1)}秒）` : ''} ✕
-                  <CdShade lite={lite} ratio={entryCd(q)} />
-                </button>
-              )
-            })}
-            <button onClick={() => clearQueue(s)} style={{ ...miniBtn('#ff8888'), padding:'4px 8px' }}>空にする</button>
           </div>
         )}
       </div>
