@@ -1408,8 +1408,9 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
       display:'grid', gridAutoFlow:'column', gridTemplateRows:`repeat(${FIGHTER_ROWS}, auto)`, gridTemplateColumns:`minmax(0, 1fr) minmax(0, ${size?.fr || 1}fr)`, columnGap:'12px',
       background: foeArt?.bg ? foeArt.bg.under : 'linear-gradient(180deg, #000a26 0%, #001338 70%, #00204a 100%)', border:'1px solid #0a2a55',
       // 演出：背景を暗く（内側の影は背景の上・中身の下・変わるたびに舞台ぜんぶを塗り直すので、背景の絵があるボスは絵の層の暗さだけ）・舞台ごと揺れる
+      //   揺れは整数の px＝小数だと背景の絵の下のはしが細い光の線になって HP や MP の文字にかかった（2026-11-01 本番で確かめた：小数は11枚中3枚に線・整数は0枚）
       boxShadow: dimOf && !foeArt?.bg ? `inset 0 0 0 2000px rgba(${dimOf.c},${dimOf.k.toFixed(3)})` : undefined,
-      transform: shake[0] || shake[1] ? `translate(${shake[0].toFixed(1)}px, ${shake[1].toFixed(1)}px)` : undefined }}>
+      transform: shake[0] || shake[1] ? `translate(${Math.round(shake[0])}px, ${Math.round(shake[1])}px)` : undefined }}>
       {foeArt?.bg && geo && <BossBackground bg={foeArt.bg} geo={geo} now={now} dim={dimOf} behindK={death ? death.behind : 1} />}
       {hasBackFx && geo && <BossFxBack fx={death ? fxAll.filter(f => f.side !== 'b' || f.kind !== 'act') : fxAll} now={now} geo={geo} art={foeArt} cast={cast} castEnd={castSeen.current} tiles={chainTiles} />}
       <Fighter st={st} side="a" me={st.a} src={playerSrc} motion={playerMotion} strips={playerMotion ? [playerMotion] : []} fx={fx} now={now} name={st.a.name}

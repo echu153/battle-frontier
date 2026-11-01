@@ -351,6 +351,8 @@ test('【確定】2026-11-01 ユーザー「むげんじごくのわっか、枠
   // 本番で測って直した：背景の下のはし（BG_BELOW_FEET）で切ると HP の文字の上半分に7px重なった＝絵の行の下の余白より下へ出さない（舞台の枠線のぶん1px引く）
   const margin = +stageSrc.match(/ref=\{areaRef\}[^\n]*margin:'(\d+)px 0'/)[1], border = +stageSrc.match(/border:'(\d+)px solid #0a2a55'/)[1]
   assert.ok(+stageSrc.match(/const FX_BELOW_FEET = (\d+)/)[1] <= margin - border, 'エフェクトを切る高さが HP の行より下')
+  // 舞台の揺れは整数の px：小数だと背景の絵の下のはしが細い光の線になって HP や MP の文字にかかる
+  assert.match(stageSrc, /transform: shake\[0\] \|\| shake\[1\] \? `translate\(\$\{Math\.round\(shake\[0\]\)\}px, \$\{Math\.round\(shake\[1\]\)\}px\)`/)
   // 自分の絵より奥に描く（輪の上に立って見える・炎の中で喰らって見える）：背景のあと、自分の絵より先
   const a = stageSrc.indexOf('<BossBackground bg={foeArt.bg}'), b = stageSrc.indexOf('<BossFxBack fx='), c = stageSrc.indexOf('<Fighter st={st} side="a"')
   assert.ok(a < b && b < c)
