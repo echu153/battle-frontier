@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import V2capAtbMacros from './V2capAtbMacros.jsx'
 import V2capAtbFight from './V2capAtbFight.jsx'
+import V2capBossEncounter from './V2capBossEncounter.jsx'
+import { useBossEncounter } from '../lib/useBossEncounter.js'
 import { preloadArt } from '../lib/artPreload.js'
 import { box, miniBtn, TEXT } from './v2ui.js'
 import { createAtb, MAX_SEC } from '../core/atb.js'
@@ -11,7 +13,7 @@ import { loadPref, savePref } from '../core/prefs.js'
 import { motionOf } from '../lib/motionArt.js'
 import { homeIconOf } from '../lib/classArt.js'
 import { artGenderOf } from '../lib/gender.js'
-import { BOSS_DEFS, bossArtOf, bossThumbOf } from '../lib/bossArt.js'
+import { BOSS_DEFS, bossArtOf, bossEncounterOf, bossThumbOf } from '../lib/bossArt.js'
 import { dungeonFighter, diffOf, isDiffReady, DIFF_KEYS } from '../lib/dungeon.js'
 import { bossIllustOf } from '../lib/bossIllust.js'
 import { AREA_LIST, SPOTS, SUB_NAMES, toFighter as enemyFighter, enemyPowerOf } from '../lib/areas.js'
@@ -53,6 +55,7 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
   const [phase, setPhase] = useState('setup')   // setup | fight
   const [runKey, setRunKey] = useState(0)        // 新しい戦闘を始めるたびに変える（戦闘の部品がログと動きを空にする）
   const st = useRef(null)
+  const enc = useBossEncounter()   // 遭遇のイラスト（挑戦と同じ）
 
   const spot = SPOTS.find(s => s.area === area && s.sub === sub) || SPOTS[0]
   const foes = useMemo(() => [
@@ -107,6 +110,10 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
     st.current = createAtb(myFighter, enemy, { maxSec: MAX_SEC, items: itemTotalOf(chosen) ? chosen : { hp: 2, mp: 1, cure: 1 } })
     setRunKey(k => k + 1)
     setPhase('fight')
+    if (bossEncounterOf(foe.bossArt)) {
+      enc.begin(foe.bossArt, bossDiff, [...(bossArt?.srcs || []), bossEncounterOf(foe.bossArt), playerSrc, playerMotion?.src].filter(Boolean))
+      enc.finish()
+    }
   }
 
   // ===== マクロ =====
@@ -196,8 +203,9 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
   // ===== 戦闘（画面は V2capAtbFight.jsx・ダンジョンと同じ）=====
   return (
     <div style={{ ...box, padding:'12px' }}>
+      {enc.enc && <V2capBossEncounter key={enc.enc.id} bossKey={enc.enc.bossKey} diffKey={enc.enc.diffKey} out={enc.enc.out} onTap={enc.skip} />}
       <V2capAtbFight st={st.current} runKey={runKey} macros={macros} playerSrc={playerSrc} playerMotion={playerMotion}
-        bossArt={bossArt} verPicker={verPicker} dev
+        bossArt={bossArt} verPicker={verPicker} dev hold={enc.hold}
         footer={<>
           <button onClick={start} style={{ ...miniBtn('#44ddff'), flex:1, padding:'8px' }}>↻ もう一度</button>
           <button onClick={() => { setPhase('setup'); st.current = null }} style={{ ...miniBtn('#88aaff'), flex:1, padding:'8px' }}>← 相手を選び直す</button>

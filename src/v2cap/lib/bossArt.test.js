@@ -44,7 +44,7 @@ test('public/v2cap-art/boss の絵はどれも一覧に載っている（名前�
     if (e.flow) known.add(bossFileOf(key, 'bg-flow'))   // 背景の流れ図
   }
   for (const key of Object.keys(BOSS_THUMB)) known.add(bossFileOf(key, 'thumb'))   // 一覧の小さい絵
-  for (const key of Object.keys(BOSS_ENCOUNTER)) known.add(bossFileOf(key, 'encounter'))   // ボスを選んだポップアップに出す大きな絵
+  for (const key of Object.keys(BOSS_ENCOUNTER)) known.add(bossFileOf(key, 'encounter'))   // ボスを選んだポップアップと、挑戦を押した瞬間に出す大きな絵
   for (const f of readdirSync(OUT)) assert.ok(known.has(f), `${f} は一覧に無い`)
 })
 

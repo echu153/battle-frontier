@@ -28,7 +28,7 @@ import { DRAW_MS, atbLevelOf, newAtbPacer } from '../lib/atbPacer.js'
 //   macros … マクロ①〜③（atbMacro.js の形）・bossArt … ボスの絵（bossArt.js／bossIllust.js・無ければ図鑑の絵）
 //   dev … 一時停止・「動きを見る」のボタン（試し撃ちだけ）・onOver … 決着がついたら1回呼ぶ（st を渡す）・footer … 下のボタン
 //   onEnded … 決着のテロップ（討伐完了・敗北・時間切れ）が終わったら1回呼ぶ（舞台を押すと飛ばせる）
-//   hold … 「挑戦する」を押してからサーバーの返事が来るまで true（V2capDungeon.jsx の launch）＝戦闘開始のテロップも時計も始めない
+//   hold … 遭遇のイラストを出しているあいだ true（lib/useBossEncounter.js）＝戦闘開始のテロップも時計も始めない
 //   【確定】2026-10-31 ユーザー「戦闘開始と討伐後のテロップ的なのが欲しい」：戦闘開始のあいだは時計を止める・討伐完了はボスが倒れたあと（lib/atbTelop.js）
 //   ボスの技の名前が技の絵の名前と同じなら、その絵を流す（ダンジョンのボス・bossMotionKeyOf）。違えば仮の流し方
 //   削った量は、この挑戦を始めたときのHP（st.b.startHp＝持ち越し）から数える
