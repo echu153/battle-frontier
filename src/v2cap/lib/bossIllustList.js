@@ -89,13 +89,28 @@ export const BOSS_ILLUST = {
       wR3: { x: 442, y: 186, w: 183, h: 134, px: 425, py: 170, ax: 36, parent: 'body' },
       wR2: { x: 458, y: 164, w: 170, h: 49, px: 425, py: 170, ax: 9, parent: 'body' },
       wR1: { x: 456, y: 95, w: 157, h: 75, px: 425, py: 170, ax: -21, parent: 'body' },
-      body: { x: 25, y: 28, w: 595, h: 576, px: 305, py: 322, ax: 99 },
+      body: { x: 83, y: 28, w: 476, h: 576, px: 305, py: 322, ax: 55 },
+      armF: { x: 393, y: 167, w: 227, h: 381, px: 432, py: 205, ax: 68, parent: 'body' },
+      armN: { x: 25, y: 143, w: 262, h: 364, px: 222, py: 205, ax: 120, parent: 'body' },
     },
-    pivot: [305, 322], mouth: [27, 461],
+    pivot: [305, 322], mouth: [85, 588],
     fx: {
+      shell: { fly: { w: 384, h: 148, ax: 3, ay: 94 }, hit: { w: 384, h: 354, ax: 192, ay: 177 } },
+      volley: { fly: { w: 384, h: 85, ax: 15, ay: 49 }, hit: { w: 384, h: 336, ax: 192, ay: 168 } },
+      smite: { hit: { w: 373, h: 384, ax: 187, ay: 192 } },
+      ruin: { fly: { w: 384, h: 178, ax: 0, ay: 91 }, hit: { w: 384, h: 384, ax: 192, ay: 192 }, charge: { w: 384, h: 379, ax: 192, ay: 190 } },
+      idle: { core: { w: 354, h: 384, ax: 177, ay: 192 } },
+    },
+    poses: {
+      ruin: { windup: { x: -45, y: 7, w: 707, h: 598 }, strike: { x: 3, y: 75, w: 616, h: 529 } },
+    },
+    buffs: {
+      armor: { pose: { x: 38, y: 54, w: 568, h: 550 }, aura: { x: 14, y: 0, w: 617, h: 640 } },
+      overload: { pose: { x: -41, y: -47, w: 693, h: 652 }, aura: { x: 0, y: 0, w: 640, h: 640 } },
     },
     fit: {
+      body: { s: 0.985, deg: 0, tx: 20, ty: 4, score: 0.123 },
     },
-    v: { 'il-wL4': '911ef5ec', 'il-wL3': 'b6a8b6f6', 'il-wL2': 'd04fb600', 'il-wL1': '983d75cd', 'il-wR4': 'be3d79c2', 'il-wR3': 'b97148f2', 'il-wR2': 'e23292c0', 'il-wR1': '842831a0', 'il-body': '49bf44ca' },
+    v: { 'il-wL4': '911ef5ec', 'il-wL3': 'b6a8b6f6', 'il-wL2': 'd04fb600', 'il-wL1': '983d75cd', 'il-wR4': 'be3d79c2', 'il-wR3': 'b97148f2', 'il-wR2': 'e23292c0', 'il-wR1': '842831a0', 'il-body': '582b4530', 'il-armF': '18f2148a', 'il-armN': '3fe0ad48', 'il-pose-ruin-windup': '07c0ab4e', 'il-pose-ruin-strike': '443d357f', 'il-buff-armor-pose': 'a02dd575', 'il-buff-armor-aura': '6e26f1e8', 'il-buff-overload-pose': 'd6f2e631', 'il-buff-overload-aura': '3cfad7b0', 'il-fx-shell-fly': '066f39ec', 'il-fx-shell-hit': '8db55fc9', 'il-fx-volley-fly': 'c5750402', 'il-fx-volley-hit': '19c76907', 'il-fx-smite-hit': '1a0df76d', 'il-fx-ruin-fly': '9c645d5a', 'il-fx-ruin-hit': '7275a1d5', 'il-fx-ruin-charge': '9465a5be', 'il-fx-idle-core': '340711fc' },
   },
 }

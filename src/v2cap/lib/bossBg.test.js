@@ -12,7 +12,7 @@ const OUT = new URL(`../../../public${BOSS_ART_DIR}/`, import.meta.url)
 
 test('【確定】2026-10-30 ボス戦の背景：黒龍と雨摩座にある・軽い・中身の印が絵と同じ・ボスの絵と一緒に先に読む', () => {
   assert.equal(BOSS_BG_DIR, BOSS_ART_DIR)
-  assert.deepEqual(Object.keys(BOSS_BG).sort(), ['amaza', 'varuzenoku'])
+  assert.deepEqual(Object.keys(BOSS_BG).sort(), ['amaza', 'varuzenoku', 'zerugiasu'])
   for (const [key, e] of Object.entries(BOSS_BG)) {
     assert.ok(BOSS_DEFS[key] && BOSS_BG_DEFS[key], `${key} の決まりがある`)
     const file = new URL(bossFileOf(key, 'bg'), OUT)

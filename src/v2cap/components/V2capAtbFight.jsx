@@ -297,7 +297,7 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
           <button disabled={paused} onClick={() => { fxRef.current = [...fxRef.current, { kind:'hit', side:'b', amount: 12345, crit: true, t0: performance.now() / 1000 }] }}
             style={{ ...miniBtn('#ffcc00'), padding:'4px 8px', fontSize:'11px' }}>💥 Critical</button>
           {/* HPの節目のバフ（2026-10-30 ユーザー「バフ行動のボタンも用意しといて、確認し辛い」）：名前の帯・ポーズの絵・オーラだけ流す（バフは付かない） */}
-          {(s.b.pattern?.buffs || []).map(b => (
+          {[...new Set([...(s.b.pattern?.buffs || []).map(b => b.name), ...Object.keys(bossArt.buffs || {})])].map(name => ({ name })).map(b => (
             <button key={`buff-${b.name}`} disabled={paused}
               onClick={() => { fxRef.current = [...fxRef.current, { kind:'rage', side:'b', skill: b.name, t0: performance.now() / 1000 }] }}
               style={{ ...miniBtn('#ffb060'), padding:'4px 8px', fontSize:'11px' }}>🔥 {b.name}</button>

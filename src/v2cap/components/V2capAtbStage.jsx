@@ -6,7 +6,7 @@ import { lungeOf, shakeOf, lastHitAtOf, popTextOf, popScaleOf, popLeftOf, popTop
 import { JP_BOLD } from './casinoStyle.js'
 import { rubySegmentsOf } from '../lib/skillRuby.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
-import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, rigLayersOf, artAnchorAt, illustCastShowAt, illustBuffShowAt, buffSceneAt, introSceneAt, introEnterAt, introBeamAt, buffAfterAt, buffRainAt } from '../lib/bossIllust.js'
+import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, rigLayersOf, artAnchorAt, illustCastShowAt, illustBuffShowAt, buffSceneAt, introSceneAt, introEnterAt, introBeamAt, rigLightsAt, buffAfterAt, buffRainAt } from '../lib/bossIllust.js'
 import { behindRectOf, bgRectOf, bgFxAt, liteFxOf } from '../lib/bossBg.js'
 import { artIsLoaded } from '../lib/artPreload.js'
 import BossFlowCanvas from './BossFlowCanvas.jsx'
@@ -199,7 +199,7 @@ const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [
   const rigOp = show && poseReady ? show.rig : 1
   const { moving, still } = rigLayersOf(art)
   const rigStyle = { position:'absolute', inset:0, opacity: rigOp < 1 ? rigOp : undefined, visibility: rigOp <= 0.001 ? 'hidden' : undefined }
-  const rig = <div style={rigStyle}>{moving.map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={pose} />)}</div>
+  const rig = <div style={rigStyle}>{moving.map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={pose} />)}{art.lights && <RigLights art={art} tMs={tMs} />}</div>
   const bands = art.flutter && !lite ? flutterBandsAt(art.key, tMs) : []
   const pct = (y) => (y / art.base) * 100
   const auraEl = aura && aura.op > 0.001 ? <AuraArt art={art} a={lite ? { ...aura, glow: false } : aura} /> : null
@@ -232,6 +232,17 @@ const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [
       {auraEl && (aura.front || aura.glow) && auraEl}
     </>
   )
+}
+// 待機の光（lib/bossIllust.js の rigLightsAt・ゼルギアスの炉心と肩の玉）：立ち絵の上に明るく重ねる。絵（src）か丸い光。軽い表示では重ね方を使わず少し薄く
+const RigLights = ({ art, tMs }) => {
+  const lite = useContext(LiteCtx)
+  return rigLightsAt(art.lights, tMs).map((l, i) => {
+    const box = { position:'absolute', left:`${(l.at[0] / art.base) * 100}%`, top:`${(l.at[1] / art.base) * 100}%`, width:`${l.size * 100}%`, aspectRatio:'1 / 1', transform:'translate(-50%, -50%)',
+      pointerEvents:'none', opacity: ((lite ? 0.7 : 1) * l.op).toFixed(3), mixBlendMode: lite ? undefined : 'screen' }
+    return l.src
+      ? <img key={i} src={l.src} alt="" draggable={false} decoding="sync" style={{ ...box, maxWidth:'none', userSelect:'none' }} />
+      : <div key={i} style={{ ...box, borderRadius:'50%', background:`radial-gradient(closest-side, rgba(${l.color},0.95) 0%, rgba(${l.color},0.45) 35%, rgba(${l.color},0) 100%)` }} />
+  })
 }
 // 技のポーズの絵1枚（立ち絵の px で置く）
 const PoseArt = ({ art, p, op = 1 }) => (
@@ -443,6 +454,8 @@ const TRAIL_STYLE = {
   wind: { glow: 'rgba(255,110,80,0.5)', core: 'rgba(255,238,228,0.9)', gw: 18, cw: 3 },
   // 水（雨摩座の払う手）：白い袖の上を通るので、濃い青で太く
   water: { glow: 'rgba(40,130,255,0.9)', core: 'rgba(225,248,255,1)', gw: 30, cw: 8 },
+  // 雷（ゼルギアスの剣の通り道）
+  bolt: { glow: 'rgba(70,130,255,0.95)', core: 'rgba(240,248,255,1)', gw: 26, cw: 6 },
 }
 const RigTrails = ({ art, trails }) => (
   <svg viewBox={`0 0 ${art.base} ${art.base}`} style={{ position:'absolute', inset:0, width:'100%', height:'100%', overflow:'visible', pointerEvents:'none', zIndex: 1 }}>
@@ -896,7 +909,7 @@ function ChargeOrb({ m, a, acts, now, geo, art, s, cast, castEnd, sky = null }) 
     if (ms < c.fromMs || ms >= c.toMs) continue
     const pose = illustPoseAt(art.key, m, ms, now * 1000)
     // ポーズの絵が出ていれば、その絵の口（ため の絵は上を向いた口）に置く
-    const [mx, my] = artAnchorAt(art.key, m, ms, pose, 'mouth') || illustPointAt(art.key, pose, mouthPointOf(art.key, pose), 'head')
+    const [mx, my] = artAnchorAt(art.key, m, ms, pose, 'mouth') || (c.part ? illustPointAt(art.key, pose, c.pt, c.part) : illustPointAt(art.key, pose, mouthPointOf(art.key, pose), 'head'))
     const k = (ms - c.fromMs) / (c.toMs - c.fromMs)
     on = { frame: 0, x: geo.b.x + mx * s, y: geo.b.y + my * s, s: (c.size * geo.b.w / a.w) * (0.15 + 0.85 * easeOut(k)) * (1 + 0.07 * Math.sin(ms / 28)),
       rot: ms * 0.004, op: Math.min(1, k / 0.12) }
@@ -1062,19 +1075,25 @@ function BossBackground({ bg, geo, now, dim, behindK = 1 }) {
 
 // 黒焔の奔流（sc.beam・終焉の黒焔）：口（hand）から相手の体の真ん中へ流れる炎のかたまり（棒に見えないように・下に暗い赤のぼかしを敷く）。
 //   飛ぶ絵の後ろに描く（前に描くと、塗りの絵の上に濁って重なった）。hand＝口（舞台の px）
-function DoomBeam({ geo, beam, hand }) {
+//   tone 'thunder'＝青白い雷（ゼルギアスの神雷終焉）・ふつうは炎と黒い煙（終焉の黒焔）
+const BEAM_COLOR = {
+  fire: { smoke: ['#3a1410', '#22100c', '#140806'], smokeOp: [0.9, 0.55], glow: ['#fff4d0', '#ffb040', '#ff3a10'], line: '#7a1200' },
+  thunder: { smoke: ['#bcd8ff', '#6fa4ff', '#2a5cff'], smokeOp: [0.75, 0.4], glow: ['#ffffff', '#a8ccff', '#3a78ff'], line: '#2a64ff' },
+}
+function DoomBeam({ geo, beam, hand, tone = 'fire' }) {
   const lite = useContext(LiteCtx)
   const id = useId().replace(/:/g, '')
+  const C = BEAM_COLOR[tone] || BEAM_COLOR.fire
   const U = geo.p.w, [hx, hy] = hand, dx = geo.p.x + U / 2 - hx, dy = geo.p.y + geo.p.h * FX_TARGET_Y - hy, len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len
   return (
     <svg style={{ position:'absolute', inset:0, width:'100%', height:'100%', zIndex: 2, pointerEvents:'none', overflow:'visible' }}>
       <defs>
-        <radialGradient id={`${id}m`}><stop offset="0" stopColor="#3a1410" stopOpacity="0.9" /><stop offset="0.45" stopColor="#22100c" stopOpacity="0.55" /><stop offset="1" stopColor="#140806" stopOpacity="0" /></radialGradient>
-        <radialGradient id={`${id}g`}><stop offset="0" stopColor="#fff4d0" /><stop offset="0.35" stopColor="#ffb040" stopOpacity="0.9" /><stop offset="1" stopColor="#ff3a10" stopOpacity="0" /></radialGradient>
+        <radialGradient id={`${id}m`}><stop offset="0" stopColor={C.smoke[0]} stopOpacity={C.smokeOp[0]} /><stop offset="0.45" stopColor={C.smoke[1]} stopOpacity={C.smokeOp[1]} /><stop offset="1" stopColor={C.smoke[2]} stopOpacity="0" /></radialGradient>
+        <radialGradient id={`${id}g`}><stop offset="0" stopColor={C.glow[0]} /><stop offset="0.35" stopColor={C.glow[1]} stopOpacity="0.9" /><stop offset="1" stopColor={C.glow[2]} stopOpacity="0" /></radialGradient>
         <filter id={`${id}b`} x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation={(U * 0.012).toFixed(2)} /></filter>
       </defs>
       <g opacity={beam.op.toFixed(3)}>
-        <line x1={hx} y1={hy} x2={hx + dx * beam.head} y2={hy + dy * beam.head} stroke="#7a1200" strokeWidth={U * 0.2 * beam.w} strokeLinecap="round" opacity={lite ? 0.35 : 0.6} filter={lite ? undefined : `url(#${id}b)`} />
+        <line x1={hx} y1={hy} x2={hx + dx * beam.head} y2={hy + dy * beam.head} stroke={C.line} strokeWidth={U * 0.2 * beam.w} strokeLinecap="round" opacity={lite ? 0.35 : 0.6} filter={lite ? undefined : `url(#${id}b)`} />
         {beam.blobs.map((q, i) => (
           <circle key={i} cx={hx + dx * q.p + nx * q.off * U} cy={hy + dy * q.p + ny * q.off * U} r={q.r * U * (0.5 + 0.5 * beam.w) * (q.dark ? 1.25 : 1)}
             fill={`url(#${id}${q.dark ? 'm' : 'g'})`} opacity={q.op.toFixed(3)} />
@@ -1190,7 +1209,7 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
       <Fighter st={st} side="b" me={st.b} right src={foeSrc} fx={fx} now={now} name={st.b.name}
         strips={foeArt?.kind === 'pixel' ? Object.values(foeArt.motions) : []} rig={foeArt?.kind === 'illust' ? foeArt : null}
         artH={size?.artH || ART_H} areaRef={bArea} castEnd={castSeen.current} death={death} introWait={introWait} />
-      {sc?.beam && geo && sc.handsAt && <DoomBeam geo={geo} beam={sc.beam} hand={[geo.b.x + sc.handsAt[0][0] * (geo.b.w / foeArt.base), geo.b.y + sc.handsAt[0][1] * (geo.b.w / foeArt.base)]} />}
+      {sc?.beam && geo && sc.handsAt && <DoomBeam geo={geo} beam={sc.beam} tone={sc.tone} hand={[geo.b.x + sc.handsAt[0][0] * (geo.b.w / foeArt.base), geo.b.y + sc.handsAt[0][1] * (geo.b.w / foeArt.base)]} />}
       {foeArt && <BossFx fx={death ? fxAll.filter(f => f.side !== 'b' || f.kind !== 'act') : fxAll} now={now} geo={geo} art={foeArt} cast={cast} castEnd={castSeen.current} scene={sc} />}
       {sc && geo && <SceneLayer geo={geo} sc={sc} hands={sc.handsAt ? sc.handsAt.map(p => [geo.b.x + p[0] * (geo.b.w / foeArt.base), geo.b.y + p[1] * (geo.b.w / foeArt.base)]) : null} s={geo.b.w / foeArt.base} />}
       {sc && geo && sc.flash > 0 && <Flash geo={geo} op={sc.flash} fire={sc.tone === 'fire'} />}

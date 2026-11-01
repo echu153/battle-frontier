@@ -350,14 +350,15 @@ const doomGather = (out, ms, k, a, D = DOOM) => {
 }
 // 構えのあいだ：ためた割合は構えの長さ（＝技の途中から流す時刻 castSkipMs・lib/dungeon.js の castSec と同じ）で数える
 const doomCastSceneAt = (m, castMs, D = DOOM) => {
-  const out = { dim: D.castDim * smooth(castMs / 1200), flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: 'fire', dimColor: D.color, beam: null }
+  const out = { dim: D.castDim * smooth(castMs / 1200), flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: m.scene.tone || 'fire', dimColor: m.scene.dimColor || D.color, beam: null }
   doomGather(out, castMs, clamp01(castMs / (m.castSkipMs || CAST_SEC * 1000)), smooth(castMs / 500))
   return out
 }
 // 技のあいだ（ms＝技を出しはじめてから）→ sceneAt と同じ形＋ tone・dimColor・beam: { head（口から相手までの進み 0〜1）, w（太さの割合）, op }
 //   ★構えのあとは技の途中（castSkipMs）から流す＝どの時刻から見ても同じ形（暗さ・口の光は構えのおわりとつながる）
 export const doomSceneAt = (m, ms, D = DOOM) => {
-  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: 'fire', dimColor: D.color, beam: null }
+  //   tone・dimColor＝ボスごとの色（無ければ炎＝黒龍。ゼルギアスの神雷終焉は 'thunder'＝青白い）
+  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: m.scene?.tone || 'fire', dimColor: m.scene?.dimColor || D.color, beam: null }
   const H = m.hitMs, I = m.impactMs, end = sceneEndMsOf(m)
   if (ms < 0 || ms >= end) return out
   const e = ms - I, s = ms - H

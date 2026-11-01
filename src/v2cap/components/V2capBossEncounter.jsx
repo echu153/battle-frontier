@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { JP_BOLD } from './casinoStyle.js'
-import { bossEncounterOf, bossThumbOf } from '../lib/bossArt.js'
+import { BOSS_DEFS, bossEncounterOf, bossThumbOf } from '../lib/bossArt.js'
 import { bossBgOf } from '../lib/bossBg.js'
 import { DIFF_COLOR, DUNGEON_BOSSES, diffOf } from '../lib/dungeon.js'
 import { ENCOUNTER_OUT_MS } from '../lib/useBossEncounter.js'
@@ -28,7 +28,7 @@ const KF = `
 @keyframes beHint { 0%, 100% { opacity: 0.4 } 50% { opacity: 1 } }
 `
 const HIT = '0.13s'   // 叩きつける瞬間（beSlam の42%あたり）
-const ACCENT = { varuzenoku: '#ff7a3a', amaza: '#7ad0ff' }
+const ACCENT = { varuzenoku: '#ff7a3a', amaza: '#7ad0ff', zerugiasu: '#8ab4ff' }
 
 export default function V2capBossEncounter({ bossKey, diffKey, out = false, onTap = null }) {
   const [big, setBig] = useState(false)
@@ -63,7 +63,7 @@ export default function V2capBossEncounter({ bossKey, diffKey, out = false, onTa
         background:'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.78) 55%)', animation:'beName 0.3s ease-out 0.24s both' }}>
         {d && <div style={{ fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'clamp(12px, 3.4vw, 15px)', letterSpacing:'0.2em', paddingLeft:'0.2em', color: DIFF_COLOR[diffKey], textShadow:'0 1px 2px #000' }}>{d.label}</div>}
         <div style={{ fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'clamp(26px, 8vw, 44px)', lineHeight: 1.3, letterSpacing:'0.08em', paddingLeft:'0.08em', color:'#ffffff', whiteSpace:'nowrap',
-          textShadow:`0 0 3px #000, 0 0 16px ${accent}, 0 2px 0 #000` }}>{boss?.name}</div>
+          textShadow:`0 0 3px #000, 0 0 16px ${accent}, 0 2px 0 #000` }}>{boss?.name || BOSS_DEFS[bossKey]?.name}</div>
         {onTap && <div style={{ marginTop:'6px', fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'clamp(12px, 3.4vw, 15px)', letterSpacing:'0.14em', paddingLeft:'0.14em', color:'#ffffff', textShadow:'0 1px 2px #000', animation:'beHint 1.6s ease-in-out 0.6s infinite both' }}>タップで戦闘開始</div>}
       </div>
       <div aria-hidden style={{ position:'absolute', inset:0, background:'#ffffff', opacity: 0, pointerEvents:'none', animation:`beFlash 0.32s ease-out ${HIT} forwards` }} />

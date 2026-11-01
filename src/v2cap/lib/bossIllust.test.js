@@ -10,7 +10,7 @@ import {
   bossIllustOf, illustPoseAt, idlePoseAt, motionPoseAt, illustPointAt, illustTrailsAt, mouthPointOf, rotPoint, partMove,
   illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt, dustEllipsesOf,
   illustCastShowAt, EASES, joltAt, illustBendKindOf, bendFramesOf, illustPoseKindOf, illustShowAt, illustGhostsAt, ART_FADE_MS, artAnchorAt, leanPoint,
-  illustBuffShowAt, illustBuffKindOf, buffSceneAt, introSceneAt, introEnterAt, introBeamAt, buffAfterAt, buffRainAt, buffHoldOf, rigLayersOf, flutterBandsAt, buffArtMsOf, BUFF_IN_MS, BUFF_HOLD_MS, BUFF_OUT_MS, BUFF_AURA_IN_MS, BUFF_AURA_OUT_MS, BUFF_ART_MS, BUFF_FLASH_MS,
+  illustBuffShowAt, illustBuffKindOf, buffSceneAt, introSceneAt, introEnterAt, introBeamAt, rigLightsAt, buffAfterAt, buffRainAt, buffHoldOf, rigLayersOf, flutterBandsAt, buffArtMsOf, BUFF_IN_MS, BUFF_HOLD_MS, BUFF_OUT_MS, BUFF_AURA_IN_MS, BUFF_AURA_OUT_MS, BUFF_ART_MS, BUFF_FLASH_MS,
 } from './bossIllust.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { DUNGEON_BOSSES } from './dungeon.js'
@@ -962,7 +962,7 @@ test('【確定】2026-10-30 雨摩座の足は着物のひらひらで動かな
 test('【確定】2026-11-01 ゼルギアスの待機：羽根を左右4枚ずつ切り分けて、扇のように軽く開閉する（ユーザー「待機モーションでは鉄の翼軽く開閉してほしい」）', () => {
   const a = bossIllustOf('zerugiasu'), def = BOSS_ILLUST_DEFS.zerugiasu
   // 羽根は肩と塔の後ろ＝体より奥
-  assert.deepEqual(a.parts.map(p => p.key), ['wL4', 'wL3', 'wL2', 'wL1', 'wR4', 'wR3', 'wR2', 'wR1', 'body'])
+  assert.deepEqual(a.parts.map(p => p.key), ['wL4', 'wL3', 'wL2', 'wL1', 'wR4', 'wR3', 'wR2', 'wR1', 'body', 'armF', 'armN'])
   // どの羽根も翼ごとに同じ1点で回す（扇）
   for (const n of [1, 2, 3, 4]) {
     assert.deepEqual(def.cuts[`wL${n}`].pivot, [215, 155])
@@ -979,8 +979,48 @@ test('【確定】2026-11-01 ゼルギアスの待機：羽根を左右4枚ず�
   // 体は上下に動かさない（黒龍と同じ）
   assert.equal(open.y, 0)
   assert.equal(open.r, 0)
-  // 技がまだ無くても画面が読める形
-  assert.deepEqual(a.motions, {})
+  // 炉心と肩の玉が脈打つ（濃さは min〜max）
+  for (const t of [0, 650, 1300, 5000]) for (const l of rigLightsAt(a.lights, t)) assert.ok(l.op >= l.min - 1e-9 && l.op <= l.max + 1e-9)
+  assert.ok(a.lights[0].src && a.srcs.includes(a.lights[0].src), '炉心の光の絵は先に読む')
+})
+
+test('【確定】2026-11-01 ゼルギアスの技：大砲と剣の腕を回す形から（ユーザー選択）・大技とバフだけポーズの絵', () => {
+  const a = bossIllustOf('zerugiasu'), def = BOSS_ILLUST_DEFS.zerugiasu
+  assert.deepEqual(Object.values(a.motions).map(m => m.label), ['雷鋼弾', '雷霆掃射', '神雷崩撃', '神雷終焉'])
+  assert.deepEqual(Object.keys(a.buffs), ['雷鋼装甲', '炉心臨界'])
+  for (const m of Object.values(a.motions)) {
+    if (!m.big) assert.ok(m.totalMs <= 1600, `${m.label}：大技を除いて動きは1.6秒まで（core/atb.js の NOW_WAIT_AFTER_ACT_SEC）`)
+    assert.deepEqual(m.keys.at(-1)[1], {}, `${m.label}：終わりは待機の形`)
+    assert.ok(m.fx?.hit, `${m.label}：当たる絵がある`)
+  }
+  // 大砲の技：撃つ時刻に腕が上がって砲口が相手のほう（左）へ出る
+  const shell = a.motions.shell, up = illustPoseAt('zerugiasu', def.motions.shell, 460, 0)
+  assert.ok(up.armN > 45)
+  const muzzle = illustPointAt('zerugiasu', up, [65, 475], 'armN')
+  assert.ok(muzzle[0] < 0 && muzzle[1] < 300, '砲身は水平に近く、枠の左へ出る')
+  assert.ok(shell.fx.fly, '弾が飛ぶ')
+  // 雷霆掃射：3発。弾1つが1発で、数字と揺れが1発ごとに分かれる
+  const v = a.motions.volley
+  assert.equal(v.shots.length, 3)
+  assert.equal(v.strikes.length, 3)
+  for (let i = 1; i < 3; i++) assert.ok(v.strikes[i].atMs - v.strikes[i - 1].atMs > HIT_SEC * 1000, '揺れがいったん収まってから次が当たる')
+  // 神雷崩撃：剣を振りかぶって振り下ろす・雷は相手の真上から落ちる（飛ばない）
+  const smite = def.motions.smite
+  assert.ok(motionPoseAt(smite.keys, 700).armF < -100, '振りかぶる')
+  assert.ok(motionPoseAt(smite.keys, 780).armF > 40, '振り下ろす')
+  assert.equal(a.motions.smite.fx.fly, undefined)
+  assert.equal(a.motions.smite.fx.hit.on, 'feet')
+  // 神雷終焉：胸の開いた絵で構え、砲口に光をためて撃つ・構えのあとは途中から
+  const r = a.motions.ruin
+  assert.ok(r.big && r.castSkipMs === 3500 && r.hitMs === 4000)
+  assert.ok(r.poses.windup && r.poses.strike && r.fx.charge)
+  assert.equal(a.castArt, 'windup')
+  assert.equal(r.scene.tone, 'thunder', '光線は青白い')
+  // バフ：ポーズとオーラの絵・炉心臨界はそのあとも闘気が燃える
+  for (const b of Object.values(a.buffs)) assert.ok(b.pose && b.aura)
+  assert.ok(a.buffs['炉心臨界'].after.flame)
+  // 倒れる動きも新しい絵なし
+  assert.ok(a.death.arts.roar && a.death.arts.fall)
 })
 
 test('【確定】2026-11-01 開戦の動き：ユーザーの言ったとおりの登場（黒龍＝洞窟の奥から出て咆哮／雨摩座＝天からゆっくり神々しく／ゼルギアス＝空からさっそうと）', () => {

@@ -25,6 +25,23 @@ import { BOSS_BG } from './bossBgList.js'
 export const BOSS_BG_DIR = '/v2cap-art/boss'   // lib/bossArt.js の BOSS_ART_DIR と同じ（テストあり）
 
 export const BOSS_BG_DEFS = {
+  // 【確定】2026-11-01 機神の墓場（ユーザーが描いた・制作帳の2案のうち夕暮れの荒野）：黒と青の機神の後ろは暗く、見せ場は左の夕焼け。機神が暗い雲に溶けないよう、後ろを少し明るくして形を浮かせる（behind）。
+  //   動くもの：夕焼けの明かりがゆっくり脈打つ・地平線の砂ぼこりと火の粉が流れる
+  zerugiasu: {
+    under: '#07070c', dark: 0.06, crop: 0.16,
+    behind: { sat: 0.8, haze: 0.14, hazeColor: '112,122,150', cy: 0.55, rx: 0.72, ry: 0.72 },
+    fx: {
+      embers: { n: 14, x: [0, 1100], y: [660, 900], rise: 300, life: [3000, 5200], r: [1.5, 3.5], color: '255,170,90' },
+      mist: [
+        { x: 420, y: 650, rx: 420, ry: 46, drift: 110, periodMs: 28000, op: 0.16, color: '190,150,120' },
+        { x: 1080, y: 650, rx: 460, ry: 50, drift: 130, periodMs: 34000, op: 0.14, color: '120,125,150' },
+      ],
+      glows: [
+        { x: 290, y: 590, r: 300, op: 0.26, amp: 0.1, periodMs: 5200, color: '255,140,60' },
+        { x: 300, y: 790, r: 170, op: 0.12, amp: 0.06, periodMs: 6100, color: '255,150,70' },
+      ],
+    },
+  },
   // 灼熱の洞窟：火の粉が立ちのぼる・溶岩の滝が流れる・溶岩の明かりがゆっくり脈打つ
   varuzenoku: {
     under: '#100605', dark: 0.08, crop: 0.14,

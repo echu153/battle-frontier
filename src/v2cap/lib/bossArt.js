@@ -87,11 +87,16 @@ export const BOSS_DEFS = {
     effects: [],
   },
   // 【確定】2026-11-01 3体目（ユーザー「ゼルギアスこれになった」「待機モーションでは鉄の翼軽く開閉してほしい」）。イラスト版だけ。
-  //   技の名前と効き目はユーザーが決めた（制作帳 https://claude.ai/artifact/3f43ahB5hXt72WoZ1kdSg7）。いまは待機だけ＝技の動きと絵はこれから。
+  //   技の名前と効き目はユーザーが決めた（制作帳 https://claude.ai/artifact/3f43ahB5hXt72WoZ1kdSg7）。動きとエフェクトは lib/bossIllust.js。
   //   挑戦にはまだ出ない（lib/dungeon.js に無い）＝試し撃ちだけ
   zerugiasu: {
     name: '雷鋼機神ゼルギアス', dir: 'ゼルギアス', pixel: false,
-    motions: [],
+    motions: [
+      { file: '雷鋼弾', key: 'shell' },
+      { file: '雷霆掃射', key: 'volley' },
+      { file: '神雷崩撃', key: 'smite' },
+      { file: '神雷終焉', key: 'ruin' },
+    ],
     effects: [],
   },
 }

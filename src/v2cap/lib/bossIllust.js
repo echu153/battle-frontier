@@ -641,11 +641,55 @@ export const BOSS_ILLUST_DEFS = {
   //   遭遇のイラストに飛び散る雷が無く、そのまま立ち絵に使えた（base: 'stand'）。羽根は左右4枚ずつ離れて描かれているので、1枚ずつ切り分ける（ChatGPT の体はいらない）。
   //   どの羽根の線も肩の後ろの1点（左 [215, 155]・右 [425, 170]）へ集まる＝そこを中心に回すと扇のように開く。体は上下に動かさない（黒龍と同じ）
   zerugiasu: {
-    base: 'stand', files: {}, quality: 80,
-    layers: ['wL4', 'wL3', 'wL2', 'wL1', 'wR4', 'wR3', 'wR2', 'wR1', 'body'],
-    idle: { sway: zeruFan(5, 4200) },
-    // 技のあいだも翼の開閉はそのまま（止めると頭と終わりで羽根が跳ねる）
-    idleKeep: Object.fromEntries([1, 2, 3, 4].flatMap(i => [[`wL${i}`, 1], [`wR${i}`, 1]])),
+    // 【確定】2026-11-01 ユーザー選択「大砲と剣を回す形から」・ユーザーが絵17枚を描いた（「ゼルギアスのイラスト用意できた」）：
+    //   大砲の腕（armN）と剣の腕（armF）を立ち絵から切って回す（機械なので回しても不自然にならない）。動かすと見える肩の裏は ChatGPT の体で埋める（fill）。
+    //   胸の装甲が開く大技とバフだけポーズの絵。羽根は体の後ろ・腕は体の手前
+    base: 'stand', files: {}, fill: '体', quality: 80, ground: 602,
+    layers: ['wL4', 'wL3', 'wL2', 'wL1', 'wR4', 'wR3', 'wR2', 'wR1', 'body', 'armF', 'armN'],
+    // 待機：鉄の翼を軽く開閉（ユーザー指定）＋砲身と剣がわずかに揺れる。lights＝炉心が脈打つ・肩の玉が明滅する（rigLightsAt・立ち絵の上に光を重ねる＝file は絵・無ければ丸い光）
+    idle: { sway: { ...zeruFan(5, 4200), armN: [0.9, 3600, 0], armF: [0.7, 4300, 0.3] },
+      lights: [
+        { file: 'core', at: [356, 213], size: 0.112, periodMs: 2600, min: 0.05, max: 0.75 },
+        { at: [205, 95], size: 0.075, periodMs: 1900, phase: 0, min: 0.05, max: 0.7, color: '170,210,255' },
+        { at: [247, 118], size: 0.06, periodMs: 2300, phase: 0.3, min: 0.05, max: 0.7, color: '170,210,255' },
+        { at: [410, 124], size: 0.06, periodMs: 2100, phase: 0.55, min: 0.05, max: 0.7, color: '170,210,255' },
+        { at: [450, 97], size: 0.075, periodMs: 1700, phase: 0.8, min: 0.05, max: 0.7, color: '170,210,255' },
+      ] },
+    // 技のあいだも翼の開閉と腕の揺れはそのまま（止めると頭と終わりで跳ねる）
+    idleKeep: { ...Object.fromEntries([1, 2, 3, 4].flatMap(i => [[`wL${i}`, 1], [`wR${i}`, 1]])), armN: 1, armF: 1 },
+    // ポーズの絵：描いた大きさがまちまち＝肩の塔の玉の間隔で大きさをそろえ（立ち絵 481px）、足の左右のまん中と足の下を立ち絵にそろえる（踏ん張った足が動かない）。
+    //   poseFit の dx・dy は元の絵 1254px の px。腕を上げた所が枠の外へ出るので余白を足す
+    poses: { ruin: { windup: '神雷終焉_構え', strike: '神雷終焉_撃つ' } },
+    poseFit: {
+      '神雷終焉_構え': { s: 1.173, dx: -25, dy: -37 }, '神雷終焉_撃つ': { s: 1.07, dx: -18, dy: 12 },
+      '雷鋼装甲_ポーズ': { s: 1.098, dx: -25, dy: 19 }, '炉心臨界_ポーズ': { s: 1.098, dx: -29, dy: -71 },
+    },
+    poseMargin: 110,
+    // 構え（神雷終焉の3.5秒）：胸の装甲が開いた構えの絵のまま、砲口に光が集まる
+    cast: { pose: { lean: -0.06 }, art: 'windup' },
+    // HPの節目のバフ（黒龍と同じ仕組み）：雷鋼装甲＝大砲と剣を交差して羽根で身を包む＋雷の網（手前に半透明）・炉心臨界＝腕を広げて天を仰ぐ＋青白い闘気（後ろ・付いたあとも燃え続ける）
+    buffs: {
+      armor: { name: '雷鋼装甲', pose: '雷鋼装甲_ポーズ', aura: '雷鋼装甲_オーラ', front: true, auraOp: 0.6 },
+      overload: { name: '炉心臨界', pose: '炉心臨界_ポーズ', aura: '炉心臨界_オーラ', tint: '120,175,255',
+        show: { holdMs: 2000, dim: 0.55, dimColor: '0,8,30', shake: 7, punch: 0.05, flicker: 0.03,
+          bolts: [{ at: 70, from: [40, -170], to: [340, 215], flash: 0.45 }, { at: 520, from: [600, -170], to: [340, 215], flash: 0.3 }], boltColor: '130,180,255',
+          rings: { at: [340, 215], n: 3, everyMs: 280, durMs: 750, maxR: 430, color: '110,170,255', core: '225,240,255' },
+          burst: { n: 30, x: [130, 480], y: 600, rise: 420, size: 1.3, color: '110,170,255', core: '235,245,255' } },
+        after: { flame: { op: 0.85, amp: 0.05 }, embers: { n: 10, x: [130, 480], y: 600, rise: 360, size: 1.2, color: '120,175,255', core: '235,245,255' }, tempo: 1.35 } },
+    },
+    // 倒れる動き（lib/bossDeath.js・黒龍と同じ形・新しい絵なし）：炉心臨界のポーズで炉心が暴走して天を仰ぐ → 雷鋼装甲のポーズで崩れて身をかがめる（揺れ・砂ぼこり）→ 光が消えて鉄の色に → ふちを青白く光らせながら燃え尽きる
+    death: { tone: 'thunder', roar: { buff: 'overload' }, fall: { buff: 'armor' },
+      stopMs: 200, fallAt: 1350, fallMs: 130, ashAt: 1600, ashMs: 800, burnAt: 2150, burnMs: 1800, endMs: 5700,
+      dim: 0.58, dimColor: '0,6,26', dimOutAt: 2500, dimOutMs: 1400,
+      keys: [[0, {}], [200, {}], [340, { lean: -0.04 }, 'out'], [1350, { lean: -0.08 }], [1480, { lean: 0.1 }, 'out'], [1620, { lean: 0.07 }], [1860, { lean: 0.08 }], [5800, { lean: 0.08 }]],
+      shakes: [[0, 8, 420], [260, 4, 800], [1480, 12, 560]], flashes: [[0, 0.42, 260], [1480, 0.14, 220]], flashColor: '225,240,255', punch: 0.05,
+      rings: { at: [340, 215], n: 3, everyMs: 300, durMs: 800, maxR: 430, color: '110,170,255', core: '225,240,255' }, sparkColor: '120,175,255', sparkCore: '235,245,255',
+      burst: { n: 30, x: [130, 480], y: 600, rise: 420, size: 1.4 }, landBurst: { n: 18, x: [150, 470], y: 600, rise: 190, size: 1.1, spreadMs: 200 },
+      landRings: [{ x: 305, y: 600, maxR: 300, durMs: 620, k: 0.55 }],
+      dust: { ms: 1100, pts: [[170, 595], [305, 600], [440, 600]], scale: 2 }, dustColor: ['#8a8f99', '#60656e', '#3a3e46'],
+      body: { c: [310, 330], rx: 250, ry: 260 }, embers: { n: 50, lifeMs: 1300, rise: 330, drift: 10, size: 1.25 },
+      smoke: { n: 10, lifeMs: 1400, rise: 190, drift: 14, r: 62, op: 0.55 }, smokeColor: ['#2a2c32', '#1c1e24', '#0e0f14'],
+      burn: { weights: [0.4, 0.4, 0.2], ctr: [0.5, 0.6], ashColor: [0.58, 0.6, 0.66], edge: [0.25, 0.55, 1], core: [0.85, 0.93, 1], ashMax: 1 } },
     // 【確定】2026-11-01 開戦の動き（ユーザー「ゼルギアス 空からさっそうと降り立つ、ヒーローのように」・飛ばせない）：
     //   雷の筋とともに空から一気に落ちる（羽根の先は風で上へ）→ 着地で踏ん張って沈む（sy）・羽根を打ち下ろす・雷が落ちる・足元に衝撃の輪と砂ぼこり・舞台が揺れる → すっと立ち上がる。
     //   新しい絵は使わない（体の絵が届いたら大砲や剣も動かせる）
@@ -702,9 +746,79 @@ export const BOSS_ILLUST_DEFS = {
       wR4: { from: 'body', pivot: [425, 170], under: true,
         take: [[459, 212.5], [473.3, 224], [490, 240], [520, 268], [560, 300], [640, 345], [640, 385], [560, 385], [540, 360], [510, 320], [490, 288], [480, 275], [470, 262], [458, 250], [448, 241], [440, 232], [435.8, 220], [428, 215], [432, 200], [446, 200]],
         drop: [[459, 212.5], [473.3, 224], [490, 240], [520, 268], [560, 300], [640, 345], [640, 385], [560, 385], [540, 360], [510, 320], [490, 288], [480, 275], [470, 262], [458, 250], [448, 241], [440, 232], [435.8, 220], [436.7, 216.7], [441.7, 213.7], [450, 220.8], [455.8, 228.3]] },
+      // 腕（肩の装甲から先）：剣の腕＝肩のまん中で回す・大砲の腕＝肩のまん中で回す（＋で砲身が上がる＝52° で相手へ水平）
+      armF: { from: 'body', pivot: [432, 205],
+        take: [[393, 173], [427, 167], [467, 180], [474.5, 180], [477, 185.8], [480, 192.5], [461, 188], [456.7, 200], [458.3, 210.8], [455.8, 228.3], [450, 222], [441.7, 214], [436, 218], [440, 232], [448, 241], [458, 250], [470, 262], [480, 275], [490, 288], [510, 320], [540, 360], [550, 400], [585, 450], [632, 555], [600, 545], [510, 440], [485, 418], [472, 395], [458, 372], [452, 352], [443, 330], [432, 318], [434, 305], [420, 288], [403, 266], [413, 256], [425.8, 243.7], [415.4, 229], [392.5, 204]] },
+      armN: { from: 'body', pivot: [222, 205],
+        take: [[163, 148], [200, 143], [287, 190], [267, 233], [243, 263], [238, 300], [202, 351], [164, 397], [131, 447], [106, 484], [90, 525], [45, 530], [15, 520], [10, 480], [20, 440], [50, 400], [75, 372], [92, 345], [108, 322], [116.7, 312.8], [122.2, 301.7], [133.3, 293.9], [143.3, 280.6], [146.2, 272], [150, 268], [152.5, 260], [155, 248.3], [155.8, 240.8], [160, 233], [157, 193], [160, 160]] },
     },
-    motions: {},
-    effects: [],
+    // 技。[65, 475]＝砲口（大砲の腕の上の点）。大砲の技は腕を上げて相手へ向けてから撃つ（反動で跳ねる）。剣の技は腕を大きく振りかぶって振り下ろす。
+    //   ⚠動きの長さは 1.6秒まで（大技を除く・core/atb.js の NOW_WAIT_AFTER_ACT_SEC）
+    motions: {
+      // 雷鋼弾：大砲を持ち上げて相手へ向け、砲口に光を集めて1発。反動で砲身が跳ねる
+      shell: { totalMs: 1250, hitMs: 500, keys: [
+        [0, {}],
+        [300, { armN: 50, armF: -6, lean: -0.02 }],
+        [460, { armN: 52, armF: -7, lean: -0.03 }],
+        [500, { armN: 59, armF: -7, lean: -0.065 }, 'out'],
+        [640, { armN: 53, armF: -6, lean: -0.035 }],
+        [1250, {}],
+      ], jolt: { atMs: 500, ms: 170, lean: 0.016 }, charge: { kind: 'hit', part: 'armN', pt: [65, 475], fromMs: 240, toMs: 500, size: 0.15 },
+      shots: [{ part: 'armN', pt: [65, 475], delayMs: 0, size: 1 }] },
+      // 雷霆掃射：腰を落として大砲を水平に構え、雷の弾を3連射（1発ごとに反動で跳ねる・数字と揺れも1発ごと）
+      volley: { totalMs: 1580, hitMs: 460, strikes: [{ atMs: 0, dx: -0.08, dy: -0.06 }, { atMs: 330, size: 1.1, dx: 0.08, dy: 0.02, flip: true }, { atMs: 660, size: 1.2, dx: -0.02, dy: -0.12 }], keys: [
+        [0, {}],
+        [300, { armN: 50, armF: -10, lean: -0.03 }],
+        [440, { armN: 52, armF: -10, lean: -0.035 }],
+        [460, { armN: 57, armF: -10, lean: -0.055 }, 'out'],
+        [640, { armN: 52, armF: -10, lean: -0.035 }],
+        [790, { armN: 57, armF: -10, lean: -0.055 }, 'out'],
+        [970, { armN: 52, armF: -10, lean: -0.035 }],
+        [1120, { armN: 58, armF: -10, lean: -0.06 }, 'out'],
+        [1250, { armN: 53, armF: -9, lean: -0.035 }],
+        [1580, {}],
+      ], jolt: { atMs: 460, ms: 120, lean: 0.01 }, charge: { kind: 'hit', part: 'armN', pt: [65, 475], fromMs: 220, toMs: 460, size: 0.1 },
+      shots: [{ part: 'armN', pt: [65, 475], delayMs: 0, size: 1 }, { part: 'armN', pt: [65, 475], delayMs: 330, size: 1 }, { part: 'armN', pt: [65, 475], delayMs: 660, size: 1.1 }] },
+      // 神雷崩撃：雷の剣を頭上へ振りかぶり、相手の方へ一気に振り下ろす（剣の通り道に雷の筋）＝相手の真上から剣の形の極太の雷が落ちる
+      smite: { totalMs: 1550, hitMs: 780, keys: [
+        [0, {}],
+        [320, { armF: -60, armN: -5, lean: -0.03 }],
+        [600, { armF: -112, armN: -8, lean: -0.07 }],
+        [720, { armF: -116, armN: -8, lean: -0.08 }],
+        [780, { armF: 48, armN: 10, lean: 0.1 }, 'out'],
+        [1120, { armF: 44, armN: 8, lean: 0.085 }],
+        [1550, {}],
+      ], jolt: { atMs: 780, ms: 240, lean: 0.03 },
+      arcs: [{ kind: 'bolt', pts: [[657, -108], [800, 60], [790, 300], [615, 545], [302, 568]], fromMs: 720, toMs: 780, fadeMs: 240 }] },
+      // 神雷終焉：構え＝胸の装甲が開き、剣を地面に突き立てて大砲を水平に構える（砲口に光が集まる）・撃つ＝極太の雷（反動で上体が押される）。黒龍の終焉の黒焔と同じ長さ（構え3.5秒＋0.5秒）
+      ruin: { totalMs: 5300, hitMs: 4000, castSkipMs: 3500, big: true, keys: [
+        [0, {}],
+        [300, { lean: -0.02, armN: 30 }],
+        [2600, { lean: -0.06 }, 'out'],
+        [3600, { lean: -0.06 }],
+        [3940, { lean: -0.085 }, 'out'],
+        [4000, { lean: -0.05 }, 'out'],
+        [4720, { lean: -0.04 }],
+        [4820, { lean: -0.03, armN: 40, armF: -6 }],
+        [5300, {}],
+      ], jolt: { atMs: 4000, ms: 320, lean: 0.03 }, charge: { kind: 'charge', fromMs: 300, toMs: 4000, size: 0.34 },
+      art: [[0, null], [300, 'windup'], [3940, 'strike'], [4820, null]], ghosts: { fromMs: 3940, toMs: 4100, lagMs: 28, n: 3 },
+      anchors: { windup: { mouth: [-8, 248], hand: [-8, 248] }, strike: { mouth: [47, 262], hand: [47, 262] } },
+      shots: [{ at: 'mouth', delayMs: 0, size: 1.2 }],
+      scene: { kind: 'doom', tone: 'thunder', dimColor: '0,6,26', hand: { pt: [47, 262], part: 'body' } } },
+    },
+    effects: [
+      { file: '雷鋼弾_飛ぶ', motion: 'shell', kind: 'fly', size: 0.36, flyMs: 260 },
+      { file: '雷鋼弾_当たる', motion: 'shell', kind: 'hit', size: 0.52, durMs: 520, spin: 0 },
+      { file: '雷霆掃射_飛ぶ', motion: 'volley', kind: 'fly', size: 0.34, flyMs: 200 },
+      { file: '雷霆掃射_当たる', motion: 'volley', kind: 'hit', size: 0.42, durMs: 300, spin: 40 },
+      { file: '神雷崩撃_当たる', motion: 'smite', kind: 'hit', on: 'feet', size: 1.05, sy: 1.35, anim: 'drop', lead: 110, durMs: 800 },
+      { file: '神雷終焉_飛ぶ', motion: 'ruin', kind: 'fly', size: 0.75, flyMs: 420, emerge: true },
+      { file: '神雷終焉_当たる', motion: 'ruin', kind: 'hit', size: 1, durMs: 1100, spin: 0 },
+      { file: '神雷終焉_ためる', motion: 'ruin', kind: 'charge', size: 0.34 },
+      // 待機で脈打つ炉心の光（大きさと場所は idle.lights）
+      { file: '炉心の光', motion: 'idle', kind: 'core' },
+    ],
   },
 }
 
@@ -982,6 +1096,8 @@ export const introSceneAt = (motion, ms) => {
   }
   return out
 }
+// 待機の光（def.idle.lights・ゼルギアスの炉心と肩の玉）：いまの濃さつき。min〜max を periodMs で脈打つ（phase＝ずらし 0〜1）。tMs＝待機の時計
+export const rigLightsAt = (lights, tMs) => lights.map(l => ({ ...l, op: l.min + (l.max - l.min) * (0.5 + 0.5 * Math.sin(2 * Math.PI * (tMs / l.periodMs + (l.phase || 0)))) }))
 // 開戦の動きの絵ぜんたいの登場（motion.enter＝[ミリ秒, { s（大きさ）, sy（縦の縮み）, x, y（ずれ・枠の割合）, bright（明るさ）, op（濃さ）, glow（体のまわりの光 0〜1） }, 区間の速さ]）。
 //   書いていない値はふつうの形（s 1・sy 1・x 0・y 0・bright 1・op 1・glow 0）。流し終わったら null（ふつうの形に戻っている＝最後のキーは {}）
 const ENTER_ZERO = { s: 1, sy: 1, x: 0, y: 0, bright: 1, op: 1, glow: 0 }
@@ -1225,14 +1341,16 @@ export const bossIllustOf = (key) => {
   const o = def.idle.orb, oa = art.fx?.idle?.orb
   const orb = o && oa ? { src: srcOf(key, illustFxKindOf('idle', 'orb')), at: o.at, size: o.size, h: oa.h / oa.w } : null
   const dust = def.idle.slam?.dust || def.intro?.dust || null
+  // 待機の光（立ち絵の上に重ねる・file は絵＝元の絵の名前は effects の motion 'idle'）
+  const lights = def.idle.lights ? def.idle.lights.map(l => ({ ...l, src: l.file && art.fx?.idle?.[l.file] ? srcOf(key, illustFxKindOf('idle', l.file)) : null })) : null
   // 遭遇のイラストはドット絵版と同じ
   const illust = bossArtOf(key)?.illust || null
   const bg = bossBgOf(key)
   return {
     kind: 'illust', key, name: base.name, base: BOSS_ILLUST_SIZE, illust, parts, pivot: art.pivot, mouth: art.mouth, jaw, motions, orb, dust, ground: def.ground ?? null, flutter: !!def.idle.flutter,
-    castArt: def.cast?.art || null, buffs, bg, death, intro,
+    castArt: def.cast?.art || null, buffs, bg, death, intro, lights,
     srcs: [...parts.map(p => p.src), ...parts.filter(p => p.bend).map(p => p.bend.src), ...Object.values(motions).flatMap(m => Object.values(m.fx || {}).map(f => f.src)),
-      ...Object.values(motions).flatMap(m => Object.values(m.poses || {}).map(p => p.src)), ...(orb ? [orb.src] : []),
+      ...Object.values(motions).flatMap(m => Object.values(m.poses || {}).map(p => p.src)), ...(orb ? [orb.src] : []), ...(lights || []).map(l => l.src).filter(Boolean),
       ...Object.values(buffs).flatMap(b => [b.pose?.src, b.aura?.src].filter(Boolean)), ...(bg ? [bg.src, bg.flowSrc].filter(Boolean) : [])],
   }
 }
