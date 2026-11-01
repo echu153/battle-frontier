@@ -138,6 +138,8 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
     return () => clearInterval(id)
   }, [fight, load])
   useEffect(() => { const id = setInterval(() => setNowMs(Date.now()), 1000); return () => clearInterval(id) }, [])
+  // 入口の一言はいちばん上に出る＝下まで動かしたままだと上の帯に隠れるので、出すたびに上へ戻す
+  useEffect(() => { if (msg?.text) window.scrollTo(0, 0) }, [msg?.text])
 
   const call = async (fn, args, after) => {
     setBusy(true); setMsg(null)
