@@ -79,4 +79,23 @@ export const BOSS_ILLUST = {
     },
     v: { 'il-water': '56a7ccb4', 'il-body': '366e5e3d', 'il-armF': '3263d5b5', 'il-armD': 'bdd766a3', 'il-armN': '7eaed282', 'il-head': 'b65aea3c', 'il-armC': 'b8484a39', 'il-armU': 'a1317398', 'il-legs': '73fc2634', 'il-pose-shot-windup': 'e26463d9', 'il-pose-shot-strike': '84f98092', 'il-pose-sleet-windup': '9d83d96c', 'il-pose-sleet-strike': '5b01fc01', 'il-pose-bind-windup': 'f3710ed7', 'il-pose-bind-strike': '46e45994', 'il-pose-deluge-windup': 'b47d0548', 'il-pose-deluge-strike': '7ffde424', 'il-buff-veil-pose': 'c6a9c61e', 'il-buff-veil-aura': 'ff53ea44', 'il-buff-downpour-pose': '80b7c430', 'il-buff-downpour-aura': '7fc4ee35', 'il-fx-shot-fly': '89f4d4f3', 'il-fx-shot-hit': 'b458f544', 'il-fx-sleet-hit': '846c1942', 'il-fx-sleet-flow': '0cc0a8c1', 'il-fx-bind-fly': 'ee7ff9a4', 'il-fx-bind-hit': '6d7032af', 'il-fx-deluge-hit': 'd828eed6', 'il-fx-deluge-flow': '604c35d7', 'il-fx-deluge-charge': 'fdaabfa2' },
   },
+  zerugiasu: {
+    parts: {
+      wL4: { x: 53, y: 238, w: 117, h: 134, px: 215, py: 155, ax: 124, parent: 'body' },
+      wL3: { x: 13, y: 190, w: 177, h: 128, px: 215, py: 155, ax: 141, parent: 'body' },
+      wL2: { x: 12, y: 152, w: 176, h: 61, px: 215, py: 155, ax: 164, parent: 'body' },
+      wL1: { x: 31, y: 83, w: 165, h: 79, px: 215, py: 155, ax: -163, parent: 'body' },
+      wR4: { x: 428, y: 200, w: 150, h: 172, px: 425, py: 170, ax: 55, parent: 'body' },
+      wR3: { x: 442, y: 186, w: 183, h: 134, px: 425, py: 170, ax: 36, parent: 'body' },
+      wR2: { x: 458, y: 164, w: 170, h: 49, px: 425, py: 170, ax: 9, parent: 'body' },
+      wR1: { x: 456, y: 95, w: 157, h: 75, px: 425, py: 170, ax: -21, parent: 'body' },
+      body: { x: 25, y: 28, w: 595, h: 576, px: 305, py: 322, ax: 99 },
+    },
+    pivot: [305, 322], mouth: [27, 461],
+    fx: {
+    },
+    fit: {
+    },
+    v: { 'il-wL4': '911ef5ec', 'il-wL3': 'b6a8b6f6', 'il-wL2': 'd04fb600', 'il-wL1': '983d75cd', 'il-wR4': 'be3d79c2', 'il-wR3': 'b97148f2', 'il-wR2': 'e23292c0', 'il-wR1': '842831a0', 'il-body': '49bf44ca' },
+  },
 }

@@ -958,3 +958,27 @@ test('【確定】2026-10-30 雨摩座の足は着物のひらひらで動かな
   assert.equal(lv.moving.length, v.parts.filter(p => !p.nest && !p.free).length)
   assert.deepEqual(flutterBandsAt('varuzenoku', 1000), [])
 })
+
+test('【確定】2026-11-01 ゼルギアスの待機：羽根を左右4枚ずつ切り分けて、扇のように軽く開閉する（ユーザー「待機モーションでは鉄の翼軽く開閉してほしい」）', () => {
+  const a = bossIllustOf('zerugiasu'), def = BOSS_ILLUST_DEFS.zerugiasu
+  // 羽根は肩と塔の後ろ＝体より奥
+  assert.deepEqual(a.parts.map(p => p.key), ['wL4', 'wL3', 'wL2', 'wL1', 'wR4', 'wR3', 'wR2', 'wR1', 'body'])
+  // どの羽根も翼ごとに同じ1点で回す（扇）
+  for (const n of [1, 2, 3, 4]) {
+    assert.deepEqual(def.cuts[`wL${n}`].pivot, [215, 155])
+    assert.deepEqual(def.cuts[`wR${n}`].pivot, [425, 170])
+  }
+  const period = def.idle.sway.wL1[1], open = idlePoseAt(def.idle, period / 4), shut = idlePoseAt(def.idle, period * 3 / 4)
+  for (const n of [1, 2, 3, 4]) {
+    assert.ok(Math.abs(open[`wL${n}`] + open[`wR${n}`]) < 1e-9, '左右は同じだけ開く（左は＋で・右は−で羽根の先が上がる）')
+    assert.ok(Math.abs(open[`wL${n}`] + shut[`wL${n}`]) < 1e-9, '開くと閉じるは同じ振れ幅')
+  }
+  // 開くとき：上の羽根ほど大きく上がり、いちばん下は逆へ少し下がる。軽く＝いちばん上でも 6° まで
+  assert.ok(open.wL1 > open.wL2 && open.wL2 > open.wL3 && open.wL3 > 0 && open.wL4 < 0)
+  assert.ok(open.wL1 <= 6)
+  // 体は上下に動かさない（黒龍と同じ）
+  assert.equal(open.y, 0)
+  assert.equal(open.r, 0)
+  // 技がまだ無くても画面が読める形
+  assert.deepEqual(a.motions, {})
+})

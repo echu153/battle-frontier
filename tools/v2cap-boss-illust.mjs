@@ -95,6 +95,38 @@ export const inPoly = (poly, x, y) => {
   }
   return c
 }
+// 切り分けの under：付け根の隠れていた所（take の中で drop の外）は親の絵を写さず、切り出した所の色を1pxずつ伸ばして影の暗さで埋める。親に隠れている所だけ（止まっているときは見えない）
+//   【確定】2026-11-01 ゼルギアスの羽根：親の絵のままだと、羽根を開いたとき肩のふちの金の線が羽根といっしょに動いて二重に見えた。暗くしないと伸ばした金色が肩の下から筋で見えた
+const UNDER_SHADE = 0.35
+const fillUnder = (img, c, from, S) => {
+  const holes = []
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    if (!inPoly(c.take, x + 0.5, y + 0.5) || inPoly(c.drop, x + 0.5, y + 0.5)) continue
+    const p = y * S + x
+    img.data[p * 4 + 3] = 0
+    if (from.data[p * 4 + 3] >= 128) holes.push(p)
+  }
+  for (let left = holes; left.length;) {
+    const next = [], done = []
+    for (const p of left) {
+      const x = p % S, y = (p / S) | 0, sum = [0, 0, 0]
+      let n = 0
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const xx = x + dx, yy = y + dy
+        if (xx < 0 || yy < 0 || xx >= S || yy >= S) continue
+        const i = (yy * S + xx) * 4
+        if (img.data[i + 3] < 128) continue
+        for (let ch = 0; ch < 3; ch++) sum[ch] += img.data[i + ch]
+        n++
+      }
+      if (n) done.push([p, sum.map(v => v / n)]); else next.push(p)
+    }
+    if (!done.length) break
+    for (const [p, rgb] of done) { rgb.forEach((v, ch) => { img.data[p * 4 + ch] = v }); img.data[p * 4 + 3] = 255 }
+    left = next
+  }
+  for (const p of holes) if (img.data[p * 4 + 3]) for (let ch = 0; ch < 3; ch++) img.data[p * 4 + ch] *= UNDER_SHADE
+}
 const centroidOf = (m, W) => {
   let sx = 0, sy = 0, n = 0
   for (let p = 0; p < m.length; p++) if (m[p]) { sx += p % W; sy += (p / W) | 0; n++ }
@@ -602,6 +634,7 @@ const build = (key, def, dir) => {
       // 手前に出すパーツ（over）に覆われていた所は切り出さない（止まっているときは立ち絵と同じに見える）
       if (over) img.data[i + 3] = Math.round(img.data[i + 3] * (1 - over.data[i + 3] / 255))
     }
+    if (c.under) fillUnder(img, c, from, S)
     // feather＝多角形のふちから内へ px でぼかす（上に重ねたとき、まわりになじむ）
     if (c.feather) for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
       if (!inPoly(c.take, x + 0.5, y + 0.5)) continue
