@@ -4998,7 +4998,7 @@ declare
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
-  if p_open is null or p_key is null or not (p_key = any(array['openStatus', 'openMenu', 'openDaily'])) then
+  if p_open is null or p_key is null or not (p_key = any(array['openStatus', 'openMenu', 'openDaily', 'openNavi'])) then
     return jsonb_build_object('ok', false, 'error', '覚えられない設定です');
   end if;
   update public.v2cap_profiles
@@ -5010,6 +5010,32 @@ end;
 $$;
 revoke all on function public.v2cap_set_ui_pref(text, boolean) from public, anon;
 grant execute on function public.v2cap_set_ui_pref(text, boolean) to authenticated;
+
+-- 【確定】2026-11-02 案内役ナハト（src/v2cap/lib/navi.js）：終えた案内の印をキャラのデータ（ui_prefs.navi）に足す。
+--   戦闘の結果や報酬には関わらない（案内だけ・報酬なし＝ユーザー選択）。印の名前は lib/navi.js の NAVI_STEPS の key
+create or replace function public.v2cap_navi_mark(p_keys text[])
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if coalesce(array_length(p_keys, 1), 0) not between 1 and 40
+     or exists (select 1 from unnest(p_keys) k where k is null or k !~ '^[a-z0-9_]{1,24}$') then
+    return jsonb_build_object('ok', false, 'error', '覚えられない印です');
+  end if;
+  update public.v2cap_profiles
+     set ui_prefs = jsonb_set(coalesce(ui_prefs, '{}'::jsonb), '{navi}', (
+       select coalesce(jsonb_agg(distinct x), '[]'::jsonb)
+         from (select jsonb_array_elements_text(coalesce(ui_prefs -> 'navi', '[]'::jsonb)) as x
+               union select unnest(p_keys)) t))
+   where id = v_uid;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  return jsonb_build_object('ok', true);
+end;
+$$;
+revoke all on function public.v2cap_navi_mark(text[]) from public, anon;
+grant execute on function public.v2cap_navi_mark(text[]) to authenticated;
 
 -- ============================================================
 -- ===== 9. 開発用 =====

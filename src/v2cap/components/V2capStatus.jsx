@@ -60,7 +60,7 @@ function MiniBar({ label, val, pct, color }) {
   )
 }
 
-export default function V2capStatus({ prof, inventory, onProfile, open = true, onToggle, onAvatar }) {
+export default function V2capStatus({ prof, inventory, onProfile, open = true, onToggle, onAvatar, pointsTick = 0 }) {
   const [now, setNow] = useState(Date.now())
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t) }, [])
 
@@ -253,7 +253,7 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
         {open ? '▲ ステータスを閉じる' : '▼ ステータスを表示'}
       </button>
       {/* 振っていないポイントがあるときは、閉じていても気づけるように出す */}
-      {!open && <V2capPoints prof={prof} onProfile={onProfile} />}
+      {!open && <V2capPoints prof={prof} onProfile={onProfile} openTick={pointsTick} />}
 
       {open && (<>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'2px', marginBottom:'6px' }}>
@@ -262,7 +262,7 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'2px', marginBottom:'6px' }}>
           {['str', 'dex', 'agi', 'int_stat', 'vit', 'luk'].map(statCell)}
         </div>
-        <V2capPoints prof={prof} onProfile={onProfile} />
+        <V2capPoints prof={prof} onProfile={onProfile} openTick={pointsTick} />
 
         {passive && (
           <div style={{ ...cell, marginBottom:'6px' }}>

@@ -14,6 +14,7 @@ export const FOLD_DEFAULTS = {
   openStatus: true,
   openMenu: true,
   openDaily: false,
+  openNavi: true,   // 案内役ナハトの枠（2026-11-02・lib/navi.js）
 }
 export const FOLD_KEYS = Object.keys(FOLD_DEFAULTS)
 

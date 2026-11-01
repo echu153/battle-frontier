@@ -500,11 +500,11 @@ test('【確定】2026-10-15 「守っていれば達成」の移し替え（一
   assert.ok(SQL.indexOf(m[0]) > SQL.indexOf("values ('touzoku_luk_20261015');"))
 })
 
-test('【確定】2026-10-15 ホームの開け閉め：キャラのデータ（ui_prefs）に覚えるのは uiPrefs.js の3つだけ', () => {
+test('【確定】2026-10-15 ホームの開け閉め：キャラのデータ（ui_prefs）に覚えるのは uiPrefs.js の4つだけ', () => {
   assert.ok(SQL.includes("alter table public.v2cap_profiles add column if not exists ui_prefs jsonb not null default '{}'::jsonb;"))
   const f = fnBody('v2cap_set_ui_pref')
   assert.ok(f.includes(`not (p_key = any(array[${FOLD_KEYS.map(k => `'${k}'`).join(', ')}]))`), 'キーの一覧が uiPrefs.js の FOLD_KEYS と同じ')
-  assert.deepEqual(FOLD_KEYS, ['openStatus', 'openMenu', 'openDaily'])
+  assert.deepEqual(FOLD_KEYS, ['openStatus', 'openMenu', 'openDaily', 'openNavi'])
   assert.ok(f.includes('if p_open is null or p_key is null'))
   assert.ok(f.includes("set ui_prefs = jsonb_set(coalesce(ui_prefs, '{}'::jsonb), array[p_key], to_jsonb(p_open))"))
   assert.ok(f.includes('where id = v_uid;'), '自分の行だけ')

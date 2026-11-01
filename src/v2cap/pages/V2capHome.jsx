@@ -57,6 +57,8 @@ function UpdateButton() {
 }
 import V2capGenderPick from '../components/V2capGenderPick.jsx'
 import { CarryLines } from '../components/V2capV1Carry.jsx'
+import V2capNavi from '../components/V2capNavi.jsx'
+import { NAVI_NAME, NAVI_SCROLL_ID } from '../lib/navi.js'
 
 // ============================================================
 // バトルフロンティアⅡ「レベルキャップあり」版 — ホーム（開発限定）
@@ -166,6 +168,8 @@ export default function V2capHome() {
   const [devMsg, setDevMsg] = useState('')
   const [confirmReset, setConfirmReset] = useState(false)
   const [carry, setCarry] = useState(null)   // 作成したときに V1 から引き継いだもの（作成の直後に1回だけ知らせる・2026-10-23）
+  const [pointsTick, setPointsTick] = useState(0)     // 案内役ナハトの「振る」を押した回数（ステータスポイントの小窓を開く）
+  const [naviPreview, setNaviPreview] = useState(null)   // 開発用「案内を最初から見る」の何枚目か（null＝ふつう）
   // ★開け閉めは覚えておく。今のⅡ（v2:openStatus・v2:openMenu）とは別のキー。
   //   【確定】2026-10-15 ユーザー指示「閉じたら閉じる、開いたら開くを継続させて」：端末だけでなくキャラのデータにも覚える（useCapFold）。
   //   今日のミッションの開け閉めも同じに覚える（前は毎回畳んで始めていた）
@@ -463,18 +467,22 @@ export default function V2capHome() {
             </button>
           </div>
         )}
+        {/* 案内役ナハト（2026-11-02・決まりは lib/navi.js）：ホームの上の細い枠。施設の画面と戦闘中は隠す（終えた印を覚えているので外さない） */}
+        <V2capNavi prof={prof} inventory={inventory} hidden={!isHome || inBattle} onGo={pickScreen}
+          onPoints={() => setPointsTick(t => t + 1)} onDaily={() => { if (!openDaily) toggleDaily() }}
+          preview={naviPreview} onPreview={setNaviPreview} />
         {isHome ? (
           <div style={TWO_COLUMN}>
             {/* ===== 左：キャラクターの状態（ホームだけ） ===== */}
             <div style={COL_LEFT}>
               <V2capStatus prof={prof} inventory={inventory} onProfile={refresh}
-                open={openStatus} onToggle={toggleStatus} onAvatar={() => setScreen('profile')} />
+                open={openStatus} onToggle={toggleStatus} onAvatar={() => setScreen('profile')} pointsTick={pointsTick} />
             </div>
 
             {/* ===== 右：やること（今日のミッション・出撃・メニュー・開発用） ===== */}
             <div style={COL_RIGHT}>
-              {!inBattle && <V2capDaily prof={prof} onProfile={refresh} open={openDaily} onToggle={toggleDaily} />}
-              <div style={{ marginBottom:'8px' }}>
+              {!inBattle && <div id={NAVI_SCROLL_ID.daily} style={{ scrollMarginTop:'48px' }}><V2capDaily prof={prof} onProfile={refresh} open={openDaily} onToggle={toggleDaily} /></div>}
+              <div id={NAVI_SCROLL_ID.sortie} style={{ marginBottom:'8px', scrollMarginTop:'48px' }}>
                 <V2capSortie prof={prof} inventory={inventory} onProfile={refresh} onScene={onScene} />
               </div>
               {!inBattle && (
@@ -506,6 +514,8 @@ export default function V2capHome() {
                       </button>
                       <button onClick={() => setScreen('uniqueCheck')} style={miniBtn(RARITY_COLOR.U)}>💎 ユニークの能力を確かめる</button>
                       <button onClick={() => setScreen('atb')} style={miniBtn('#44ddff')}>⏱ ATB戦闘の試し撃ち</button>
+                      {/* 案内役ナハトの全部のセリフを順に見る（サーバーに何も書かない） */}
+                      <button onClick={() => { setNaviPreview(0); window.scrollTo(0, 0) }} style={miniBtn('#b79bff')}>🕯 {NAVI_NAME}の案内を最初から見る</button>
                       {/* 武器の真化はお蔵入りのあいだ出さない（SHINKA_ON・2026-10-26 ユーザー指示「一旦お蔵入り」） */}
                       {SHINKA_ON && <button onClick={shinkaReady} disabled={busy} style={miniBtn('#ffaa44')}>🗡 着けている武器の熟練度をMAX（真化を外す）</button>}
                       <button onClick={() => setConfirmReset(true)} disabled={busy} style={miniBtn('#ff8844')}>キャラを作り直す</button>

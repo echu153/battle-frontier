@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import V2Modal from './V2Modal.jsx'
 import { STAT_DEFS, STAT_KEYS } from '../core/stats.js'
@@ -20,12 +20,20 @@ const btn = (color, disabled) => ({
   fontSize:'10px', padding:'1px 6px', cursor: disabled ? 'not-allowed' : 'pointer', fontFamily:'monospace',
 })
 
-export default function V2capPoints({ prof, onProfile }) {
+// openTick … 増えるたびに小窓を開く（案内役ナハトの「振る」のボタン・2026-11-02）
+export default function V2capPoints({ prof, onProfile, openTick = 0 }) {
   const have = prof?.stat_points || 0
   const [open, setOpen] = useState(false)
   const [add, setAdd] = useState({})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // 増えたときだけ開く（施設の画面から戻って作り直されたときや、ステータス欄を開け閉めしたときに開き直さない）
+  const seenTick = useRef(openTick)
+  useEffect(() => {
+    if (openTick === seenTick.current) return
+    seenTick.current = openTick
+    setOpen(true)
+  }, [openTick])
   if (have <= 0 && !open) return null
 
   const used = Object.values(add).reduce((a, b) => a + b, 0)
