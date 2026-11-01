@@ -14,8 +14,8 @@
 //   tick … 毒・火傷・出血などで減った側に紫の数字（揺れない）
 //   技の名前の帯（skillBannerAt）… 敵が技を使ったとき、舞台の上に技の名前を出す（2026-10-30）
 // 絵の差し替え（待機・攻撃のGIF）は画面（V2capAtbStage.jsx）の側で行う
-// 【確定】2026-11-01 ユーザー「黒翼烈風は鈍足じゃなくて2回の多段ヒット」：絵に振り抜きが2回ある技（act の motion.strikes）は、数字と揺れと Miss も1発ごとに分けて、
-//   それぞれの振り抜きが届く時刻に出す（scheduleFx）。絵に振り抜きが1回しかない技（自分の多段など）は今までどおり合計を1つ
+// 【確定】2026-11-01 ユーザー「黒翼烈風は鈍足じゃなくて2回の多段ヒット」「そこから風刃が2個出て②ヒットするだけ」：絵に1発ごとの時刻がある技（act の motion.strikes・飛ぶ絵1枚が1発）は、数字と揺れと Miss も1発ごとに分けて、
+//   それぞれが届く時刻に出す（scheduleFx）。絵に1発ごとの時刻がない技（自分の多段など）は今までどおり合計を1つ
 // ============================================================
 
 // 多段の技の合計（total）を、1発ごとの当たり（perHit＝core/battle.js の [{ d, crit } | null]）の割合で分ける → [{ amount, crit } | null]
@@ -33,7 +33,7 @@ export const splitHits = (total, perHit) => {
 }
 
 // side＝'a'（自分・左）｜'b'（相手・右）。aName／bName は st.a.name／st.b.name
-//   each＝多段の1発ごと（splitHits）。hit と miss の印に付けておき、絵に振り抜きが同じ数あれば scheduleFx が分ける
+//   each＝多段の1発ごと（splitHits）。hit と miss の印に付けておき、絵に1発ごとの時刻が同じ数あれば scheduleFx が分ける
 export const fxEventsOf = (entries, aName, bName) => {
   const sideOf = (name) => (name === aName ? 'a' : name === bName ? 'b' : null)
   const other = (s) => (s === 'a' ? 'b' : 'a')
@@ -71,7 +71,7 @@ export const fxEventsOf = (entries, aName, bName) => {
 //   殴ったあとの数字・揺れを、絵の「当たる」コマまで遅らせる（lib/motionArt.js の hitMs）
 //   秒の代わりに (act) => 秒 も渡せる＝技ごとに絵が違うボス（lib/bossArt.js・act に motion を付けてある・2026-10-28）
 //   act の castSkip（ミリ秒・2026-10-30 終焉の黒焔）＝構えのあとは技の途中から流す：t0 をそのぶん前にして、数字と揺れの遅れもそのぶん縮める
-//   act の motion.strikes（振り抜きごとの [{ atMs }]・黒翼烈風）と hit／miss の each が同じ数なら、1発ごとの印に分ける（strike＝何発目・0から）。
+//   act の motion.strikes（1発ごとの [{ atMs }]・黒翼烈風）と hit／miss の each が同じ数なら、1発ごとの印に分ける（strike＝何発目・0から）。
 //     当たって数字が0になった発（バリアで消えた端数）は何も出さない
 export const scheduleFx = (events, t0, delay = {}) => {
   let d = 0, strikes = null

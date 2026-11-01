@@ -167,7 +167,7 @@ test('【確定】2026-11-01 多段の合計を1発ごとに分ける（splitHit
   }
 })
 
-test('【確定】2026-11-01 ユーザー「黒翼烈風は鈍足じゃなくて2回の多段ヒット」：絵に振り抜きが2回ある技は、数字と Miss を1発ごとに届く時刻へ（クリティカルも1発ごと・合計の数字は出ない）', () => {
+test('【確定】2026-11-01 ユーザー「黒翼烈風は鈍足じゃなくて2回の多段ヒット」：絵に1発ごとの時刻がある技は、数字と Miss を1発ごとに届く時刻へ（クリティカルも1発ごと・合計の数字は出ない）', () => {
   const motion = { impactMs: 1000, strikes: [{ atMs: 0 }, { atMs: 400 }] }
   const run = (l) => scheduleFx(fxEventsOf([{ side: 'ボス', type: 'skill', skill: '黒翼烈風', of: 2, ...l }], '自分', 'ボス').map(e => (e.kind === 'act' ? { ...e, motion } : e)), 10, { b: (e) => e.motion.impactMs / 1000 })
   const brief = (ev) => ev.filter(e => e.kind !== 'act').map(e => [e.kind, e.side, e.amount ?? null, +e.t0.toFixed(3), e.strike, !!e.crit])
@@ -189,13 +189,13 @@ test('【確定】2026-11-01 ユーザー「黒翼烈風は鈍足じゃなくて
   assert.deepEqual(after.map(e => [e.kind, +e.t0.toFixed(3)]), [['act', 10], ['hit', 11], ['hit', 11.4], ['tick', 11]])
 })
 
-test('【確定】2026-11-01 絵に振り抜きが1回しかない多段（自分の多段・ドット絵版のボス）は今までどおり合計を1つ', () => {
+test('【確定】2026-11-01 絵に1発ごとの時刻がない多段（自分の多段・ドット絵版のボス）は今までどおり合計を1つ', () => {
   const log = [{ side: '自分', type: 'skill', skill: '三連', hits: 2, of: 3, damage: 300, crit: true, perHit: [{ d: 100, crit: false }, null, { d: 200, crit: true }] }]
   const ev = scheduleFx(fxEventsOf(log, '自分', 'ボス'), 10, { a: 0.3 })
   assert.deepEqual(ev.filter(e => e.kind === 'hit').map(e => [e.amount, e.crit, +e.t0.toFixed(3), e.strike]), [[300, true, 10.3, undefined]])
   const miss = scheduleFx(fxEventsOf([{ ...log[0], hits: 0, damage: 0, perHit: [null, null, null] }], '自分', 'ボス'), 10)
   assert.deepEqual(miss.map(e => e.kind), ['act', 'miss'], 'Miss も1つ')
-  // 絵の振り抜きの数と違う（技の回数を変えて絵を直し忘れた）ときも合計を1つ
+  // 絵の1発ごとの数と違う（技の回数を変えて絵を直し忘れた）ときも合計を1つ
   const two = scheduleFx([{ kind: 'act', side: 'a', motion: { strikes: [{ atMs: 0 }, { atMs: 400 }] } }, ...fxEventsOf(log, '自分', 'ボス').slice(1)], 10)
   assert.deepEqual(two.filter(e => e.kind === 'hit').map(e => e.amount), [300])
 })
@@ -225,9 +225,10 @@ test('【確定】2026-11-01 多段の数字の置き場所（popLeftOf・popTop
   assert.equal(popTopOf({ kind: 'hit' }, 0, 0), 30)
   assert.equal(popTopOf({ kind: 'hit' }, 0.5, 1), 30 - 13 - 14)
   assert.match(stage, /top:`\$\{popTopOf\(f, a, i\)\}%`/)
-  // 舞台：飛ぶ絵は振り抜きごとに出し直し・当たる絵は振り抜きごとに1枚
-  assert.match(stage, /kind === 'hit' \? strikes : \[\]/)
-  assert.match(stage, /for \(const st of kind === 'fly' \? strikes : \[sh0\]\)/)
+  // 舞台：飛ぶ絵1枚が1発（その発の時刻に、その発の場所へ届く）・当たる絵は1発ごとに1枚
+  assert.match(stage, /kind === 'hit' \? m\.strikes \|\| ONE_STRIKE : \[\]/)
+  assert.match(stage, /landMs = m\.strikes \? st\.atMs : launchMs/)
+  assert.match(stage, /x: from\.x \+ \(spot\.x - from\.x\) \* q/)
 })
 
 test('薬を飲んだとき：飲んだ側が光る・HPは緑の数字・MPは青い数字（技のMP回復と治す技は今までどおり）', () => {

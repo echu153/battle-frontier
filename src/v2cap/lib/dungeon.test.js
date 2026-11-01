@@ -160,7 +160,7 @@ test('【確定】2026-11-01 黒翼烈風：鈍足をやめて2回の多段（�
   assert.ok(ratio > 0.9 && ratio < 1.1, `2発の合計÷前の1発＝${ratio}`)
 })
 
-test('【確定】2026-11-01 黒翼烈風の記録に1発ごとの当たりを足した（画面で2回に分ける）：計算には入らない・足すと合計・絵の振り抜きと同じ数・オート戦闘の記録は増えない', () => {
+test('【確定】2026-11-01 黒翼烈風の記録に1発ごとの当たりを足した（画面で2回に分ける）：計算には入らない・足すと合計・絵の風の刃と同じ数・オート戦闘の記録は増えない', () => {
   const st = createAtb(dummy(), dungeonFighter('varuzenoku', 'hard'), { rng: rngOf(33), maxSec: 9999 })
   st.b.hp = Math.floor(st.b.base.hp * 0.4)
   runFor(st, 600)
@@ -178,7 +178,7 @@ test('【確定】2026-11-01 黒翼烈風の記録に1発ごとの当たりを�
   assert.ok(kinds.has('oo'), '2発とも当たることがある')
   // 1発だけの技には付けない（記録を増やさない）
   assert.ok(st.log.filter(l => l.type === 'skill' && l.of === 1).every(l => !('perHit' in l)))
-  // 振り抜きの数は技の回数と同じ（多段にしたら絵も2回に＝ここで止まる）
+  // 絵の1発ごとの数は技の回数と同じ（多段にしたら絵も2発に＝ここで止まる）
   for (const [key, b] of Object.entries(DUNGEON_BOSSES)) {
     const a = bossIllustOf(key)
     for (const s of b.skills) {
