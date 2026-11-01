@@ -727,7 +727,7 @@ test('【確定】2026-10-31 メニューは「挑戦」・中は「強敵」に
   assert.match(home, /key:'dungeon', label:'挑戦'/)
   assert.match(home, /dungeon:'🐉 挑戦'/)
   // 画面に出る文字（コメントの外）に古い名前が残っていない
-  for (const f of ['../pages/V2capHome.jsx', '../components/V2capDungeon.jsx', '../components/V2capAtb.jsx']) {
+  for (const f of ['../pages/V2capHome.jsx', '../components/V2capDungeon.jsx', '../components/V2capBossPick.jsx', '../components/V2capAtb.jsx']) {
     for (const line of read(f).split(/\r?\n/)) assert.ok(/^\s*\/\//.test(line) || !line.includes('IDダンジョン'), `${f}: ${line.trim().slice(0, 60)}`)
   }
 })
@@ -741,7 +741,7 @@ test('【確定】2026-10-31 入口のボスの行の言葉と「挑戦する」
   assert.equal(at(false, false, 1), 'エリア②に着くと挑戦できます', 'どの難易度もまだのエリア')
   assert.equal(at(false, false, 2), null, 'ノーマルだけでも挑戦できれば挑戦できる')
   const src = readFileSync(new URL('../components/V2capDungeon.jsx', import.meta.url), 'utf8')
-  assert.match(src, /const canSummon = \(key\) => !!state && !blockOf\(key\)/, 'ボタンも同じ決まり')
+  assert.match(src, /block=\{state \? blockOf\(pick\.boss\) : '読み込み中\.\.\.'\}/, 'ボタンも同じ決まり')
   assert.match(src, /\{state && \(blockOf\(key\) \|\| '挑戦可能'\)\}/, '行の言葉も同じ決まり（読み込み中は出さない）・ユーザー「挑戦可能 に変更して」')
 })
 
@@ -756,14 +756,15 @@ test('【確定】2026-10-31 入口：履歴と説明を出さない・「挑戦
   // 説明を出さない
   assert.doesNotMatch(code, /残ったHPから|あなたの戦闘力|staminaMaxOfProfile/)
   // 押したらボスを出して、そのまま挑戦を始める
-  assert.match(src, />挑戦する<\/button>/)
-  assert.match(src, /onClick=\{\(\) => challenge\(key, k\)\}/)
-  assert.match(src, /const challenge = async \(bossKey, diff\) => \{\n\s*showEncounter\(bossKey, diff\)\n\s*const data = await call\('v2cap_dungeon_summon', \{ p_boss: bossKey, p_diff: diff \}\)\n\s*if \(!data\) \{ enc\.cancel\(\); return \}\n\s*setOpenBoss\(null\)\n\s*if \(await start\(data\.run\)\) enc\.finish\(\)/)
+  const pick = readFileSync(new URL('../components/V2capBossPick.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  assert.match(pick, /⚔ 挑戦する\{cost > 0 \? `（スタミナ\$\{cost\}）` : ''\}<\/button>/)
+  assert.match(src, /const challenge = async \(bossKey, diff\) => \{\n\s*setLaunch\(\{ boss: bossKey, diff, hp: null \}\)\n\s*const data = await call\('v2cap_dungeon_summon', \{ p_boss: bossKey, p_diff: diff \}\)\n\s*if \(!data\) \{ setLaunch\(null\); return \}\n\s*await start\(data\.run\)/)
   // 画面に出す文字とサーバーの返事に「呼ぶ」を残さない（コメントの外）
   const noCall = (name, text) => {
     for (const line of text.split(/\r?\n/)) assert.ok(/^\s*(\/\/|--|\{\/\*)/.test(line) || !line.includes('呼'), `${name}: ${line.trim().slice(0, 60)}`)
   }
   noCall('V2capDungeon.jsx', src)
+  noCall('V2capBossPick.jsx', pick)
   for (const fn of ['v2cap_dungeon_summon', 'v2cap_dungeon_try_start', 'v2cap_dungeon_try_end', 'v2cap_dungeon_rescue', 'v2cap_dungeon_join']) noCall(fn, fnBody(fn))
 })
 

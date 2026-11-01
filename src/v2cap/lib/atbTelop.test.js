@@ -6,8 +6,7 @@ import { START_TELOP_MS, CLEAR_TELOP_MS, FAIL_TELOP_MS, LOSE_DELAY_MS, TIMEUP_DE
 import { lastHitAtOf } from './atbFx.js'
 import { bossIllustOf } from './bossIllust.js'
 import { deathLandMs } from './bossDeath.js'
-import { DUNGEON_BOSSES, DUNGEON_TRY_SEC, contributionPctOf } from './dungeon.js'
-import { ENCOUNTER_WAIT_MAX_MS } from './useBossEncounter.js'
+import { DUNGEON_BOSSES, contributionPctOf, firstDiffOf } from './dungeon.js'
 import { bossEncounterOf } from './bossArt.js'
 
 const read = (f) => readFileSync(new URL(`../components/${f}`, import.meta.url), 'utf8')
@@ -106,78 +105,83 @@ test('その場にいなかった人は入口で受け取る：受け取りの�
   assert.match(src, /if \(r\?\.reward\) onProfile\?\.\(\)/, 'EXP と Gold が増えたらホームの数字も直す')
 })
 
-test('挑戦を押した瞬間に遭遇のイラスト（ユーザー「挑戦を押してから若干ラグがあって」「挑戦したら遭遇のイラストがどん！って出るように」）：サーバーの返事を待たない・出ているあいだ戦闘は始まらない', () => {
+test('【確定】2026-11-01 ボスを押すとポップアップ（ユーザー「挑戦するキャラを選択したらそこでポップアップが出て難易度選択して挑戦するようにして」「そこでイラストばっと出るようにして、持っていくアイテムも表示されるように」）', () => {
   const src = read('V2capDungeon.jsx').replace(/\r\n/g, '\n')
-  // サーバーを呼ぶ前に出す（どの入り方も）
-  assert.match(src, /const challenge = async \(bossKey, diff\) => \{\n\s*showEncounter\(bossKey, diff\)\n\s*const data = await call\('v2cap_dungeon_summon'/)
-  assert.match(src, /const enter = async \(run\) => \{\n\s*showEncounter\(run\.boss, run\.diff, run\.hp\)\n\s*if \(await start\(run\)\) enc\.finish\(\)\n\s*else enc\.cancel\(\)/)
-  assert.match(src, /const retry = async \(\) => \{\n\s*showEncounter\(fight\.run\.boss, fight\.run\.diff, fight\.result\?\.run\?\.hp\)/)
-  assert.match(src, /onClick=\{\(\) => enter\(run\)\}/, '入っているボスの「挑戦する」も同じ')
-  assert.match(src, /if \(!data\) \{ enc\.cancel\(\); return \}/, '始められなければ入口へ（わけは入口に出る）')
-  assert.match(src, /hold=\{enc\.hold\}/)
-  // 押したら絵を待たない（ユーザー「遭遇イラスト出たときはタップしたら戦闘画面に遷移できるようにして」）
-  const hook = readFileSync(new URL('./useBossEncounter.js', import.meta.url), 'utf8')
-  assert.match(hook, /Promise\.race\(\[tapped, tooLong\]\)/)
-  assert.match(src, /onTap=\{enc\.skip\}/)
-  // 版の確かめはボスを開いたときに済ませる（押してから聞かない）
-  assert.match(src, /if \(await staleNow\(\)\)/)
-  // 出ているあいだは戦闘の時計も戦闘開始のテロップも始めない
-  assert.match(read('V2capAtbFight.jsx'), /if \(paused \|\| !artReady \|\| hold\) return/)
-  // 戦闘に要る絵は押す前に裏で読んでおく（押したらすぐ戦闘の絵が出る）
-  assert.match(hook, /preloadArt\(srcs\)/)
-  assert.match(src, /enc\.begin\(bossKey, diffKey, \[\.\.\.\(artOfBoss\(bossKey\)\?\.srcs \|\| \[\]\), bossEncounterOf\(bossKey\), playerSrc, motionSrc\]/)
+  const pick = read('V2capBossPick.jsx').replace(/\r\n/g, '\n')
+  // 入口のボスの行は押すとポップアップ。難易度も薬の欄も入口には置かない。もう入っているボスは続きから
+  assert.match(src, /onClick=\{\(\) => openPick\(key, active\.find\(r => r\.mine && r\.boss === key\) \|\| null\)\}/)
+  assert.ok(!src.includes('DIFF_KEYS.map'), '難易度はポップアップで選ぶ')
+  assert.ok(!src.includes('<V2capItemLoadout'), '薬はポップアップで選ぶ')
+  // 入っているボスの「挑戦する」も、結果の画面の「もう一度挑戦する」も同じポップアップ（新しい数字で開く）
+  assert.match(src, /onClick=\{\(\) => openPick\(run\.boss, run\)\}/)
+  assert.match(src, /onRetry=\{canRetry \? \(\) => openPick\(fight\.run\.boss, \{ \.\.\.fight\.run, \.\.\.r\.run \}\) : null\}/)
+  assert.match(src, /const openPick = \(boss, run = null\) => \{ setPick\(\{ boss, run \}\); load\(\) \}/)
+  // ポップアップの中身：遭遇のイラストを叩きつける・難易度を選ぶ・持ち込む薬
   for (const key of Object.keys(DUNGEON_BOSSES)) assert.ok(bossEncounterOf(key), `${key} に遭遇の大きな絵がある`)
-  assert.ok(!/background-clip|backgroundClip/i.test(read('V2capBossEncounter.jsx')))
+  assert.match(pick, /const src = bossEncounterOf\(bossKey\)/)
+  assert.match(pick, /animation:'bpSlam /)
+  assert.match(pick, /\{DIFF_KEYS\.map\(k => \{/)
+  assert.match(pick, /onClick=\{\(\) => setDiff\(k\)\}/)
+  assert.match(pick, /<V2capItemLoadout prof=\{prof\} onProfile=\{onProfile\} onGo=\{onGo\} saveRef=\{saveRef\} \/>/)
+  assert.match(pick, /onClick=\{\(\) => onStart\(diff\)\} disabled=\{!canGo\}/)
+  // 挑戦できない難易度も押せる（わけが読める）が、挑戦するのボタンは押せない
+  assert.match(pick, /const canGo = !busy && !short && \(run \? true : unlocked && !block\)/)
+  // はじめに選んでおくのは挑戦できるいちばん低い難易度（1日1回なので、うっかり難しいほうで始めない）
+  for (const reached of [1, 2, 5, 15]) assert.equal(firstDiffOf('varuzenoku', reached), 'normal')
+  // 背景を押しても閉じない（V2Modal と同じ）。「やめる」はその場のまま（画面の上へ戻さない）
+  assert.match(pick, /<button type="button" onClick=\{onClose\}/)
+  assert.match(pick, /e\.key === 'Escape'/)
+  assert.equal(pick.match(/onClick=/g).length, 3, '押せるのは難易度・やめる・挑戦する（薬の欄の中は別）')
+  assert.ok(!pick.includes('scrollTo'))
+  assert.match(src, /const closePick = useCallback\(\(\) => setPick\(null\), \[\]\)/)
+  // イラストが窓より大きく出ても、スクロールバーを出さない・下の欄だけスクロールする
+  assert.match(pick, /position:'fixed', inset:0, zIndex: 1000, overflow:'hidden'/)
+  assert.match(pick, /flex:'1 1 auto', minHeight: 0, overflowY:'auto'/)
+  // 大きな絵は入口を開いたときに全部のボスを読んでおく（開いた瞬間に大きな絵で出す）。戦闘の絵は開いたボスだけ
+  assert.match(src, /preloadArt\(Object\.keys\(DUNGEON_BOSSES\)\.map\(bossEncounterOf\)\.filter\(Boolean\)\)/)
+  assert.match(pick, /\{thumb && !big && <img src=\{thumb\}/, '届く前は一覧の小さい絵')
+  // どの画面でも一番上の先頭＝入口から戦闘へ変わっても作り直さない（作り直すと、叩きつける動きがもう一度出る）
+  assert.equal(src.match(/^\s*\{popup\}$/gm).length, 3)
+  assert.equal(src.match(/return <>\n\s*\{popup\}\n/g).length, 3)
 })
 
-test('【確定】2026-11-01 遭遇のイラストを押したら、サーバーの返事を待たずに戦闘の画面へ（ユーザー「遭遇時にタップ押したら画面遷移ができてない」＝前は返事が届くまで絵が消えなかった）', () => {
-  const hook = readFileSync(new URL('./useBossEncounter.js', import.meta.url), 'utf8')
-  // 返事の前に押されたら、すぐ消え始める。戦闘の時計は返事が来て finish するまで動かない
-  assert.match(hook, /if \(!ready\.current\) setEnc\(e => \(e \? \{ \.\.\.e, out: true, early: true \} : e\)\)/)
-  assert.match(hook, /hold: !!enc && \(!enc\.out \|\| enc\.early\)/)
-  assert.match(hook, /\{ \.\.\.e, out: true, early: false \}/)
-  // 消えたあとも finish までは透明なまま残る＝返事を待つあいだの画面は押せない（消す setEnc(null) は finish と cancel だけ）
-  assert.match(read('V2capBossEncounter.jsx'), /beOut \$\{ENCOUNTER_OUT_MS\}ms ease-out forwards/)
-  assert.equal(hook.match(/setEnc\(null\)/g).length, 2)
-  // 先に出す戦闘は見た目だけ：本物と同じ関数で手元の値から作る・やめるボタンを出さない
+test('【確定】2026-11-01 ポップアップの「挑戦する」を押したら、サーバーの返事を待たずに戦闘の画面へ（ユーザー「挑戦を押してから若干ラグがあってから始まるから、スムーズに遷移させるようにして」）', () => {
   const src = read('V2capDungeon.jsx').replace(/\r\n/g, '\n')
+  // サーバーを呼ぶ前に見た目だけの戦闘を出す（どの入り方も）。始められなければ入口へ（わけは入口に出る）
+  assert.match(src, /const challenge = async \(bossKey, diff\) => \{\n\s*setLaunch\(\{ boss: bossKey, diff, hp: null \}\)\n\s*const data = await call\('v2cap_dungeon_summon'/)
+  assert.match(src, /if \(!data\) \{ setLaunch\(null\); return \}/)
+  assert.match(src, /const enter = async \(run\) => \{\n\s*setLaunch\(\{ boss: run\.boss, diff: run\.diff, hp: run\.hp \}\)\n\s*const ok = await start\(run\)\n\s*setLaunch\(null\)\n\s*if \(!ok\) \{ setFight\(null\); window\.scrollTo\(0, 0\) \}/)
+  assert.match(src, /if \(run\) enter\(run\)\n\s*else challenge\(boss, diff\)/)
+  // 返事が来るまで時計も戦闘開始のテロップも始めない
+  assert.match(src, /hold=\{!!launch\}/)
+  assert.match(read('V2capAtbFight.jsx'), /if \(paused \|\| !artReady \|\| hold\) return/)
+  // 先に出す戦闘は見た目だけ：本物と同じ関数で手元の値から作る・やめるボタンを出さない
   assert.match(src, /const shown = earlyFight \|\| fight/)
   assert.match(src, /startTryAtb\(\{ boss, diff, hp, seed: 0, snap: \{ prof, inv: inventory, at: Date\.now\(\) \} \}\)/)
   assert.match(src, /st=\{shown\.st\} runKey=\{shown\.runKey\}/)
+  assert.match(src, /footer=\{earlyFight \|\| shown\.st\.over \? null/)
   // ★サーバーへ送る記録は本物の戦闘だけ（pending に入るのは start の1か所・返事の種と写しで作った st）
   assert.equal(src.match(/pending\.current = \{/g).length, 1)
   assert.match(src, /const st = startTryAtb\(data\)\n\s*if \(!st\) \{[^\n]*\n\s*pending\.current = \{ runId: run\.id, st \}/)
-  // 試し撃ちは押す前に finish する＝先に出す戦闘は要らない
-  assert.match(read('V2capAtb.jsx'), /enc\.begin\([^\n]*\n\s*enc\.finish\(\)/)
-})
-
-test('【確定】2026-11-01 遭遇のイラストは押すまで出たまま（ユーザー「遭遇した後のタップで遷移するやつ、いつになったら実装するの？」＝前は押さなくても約1.4秒で勝手に進んでいた）', () => {
-  const hook = readFileSync(new URL('./useBossEncounter.js', import.meta.url), 'utf8')
-  // 消えるのは押されたときと、放っておかれたときだけ（短い時間で勝手に消える時計を置かない）
-  assert.ok(!hook.includes('ENCOUNTER_MIN_MS'))
-  assert.equal(hook.match(/setTimeout\(/g).length, 2, '時計は「放っておかれたとき」と「消える長さ」だけ')
-  // 放っておかれてから戦闘の180秒を戦っても、サーバーの受付（v2cap_dungeon_try_end の c_late_min）に間に合う
-  const sql = readFileSync(new URL('../../../supabase_v2cap_core.sql', import.meta.url), 'utf8')
-  const lateMin = Number(/function public\.v2cap_dungeon_try_end[\s\S]*?c_late_min\s+constant int := (\d+);/.exec(sql)[1])
-  assert.ok(ENCOUNTER_WAIT_MAX_MS >= 5 * 60 * 1000, '勝手に進むのは放っておかれたときだけ')
-  assert.ok(ENCOUNTER_WAIT_MAX_MS + (DUNGEON_TRY_SEC + 60) * 1000 <= lateMin * 60 * 1000)
-  // 押せると分かる一言
-  assert.match(read('V2capBossEncounter.jsx'), /タップで戦闘開始/)
-  // 裏で入口から戦闘へ変わっても作り直さない＝どの画面でも一番上の先頭（作り直すと、どん！がもう一度出る）
-  const src = read('V2capDungeon.jsx').replace(/\r\n/g, '\n')
-  assert.equal(src.match(/^\s*\{encounter\}$/gm).length, 3)
-  assert.equal(src.match(/return <>\n\s*\{encounter\}\n/g).length, 3)
+  // 版の確かめはボスを開いたときに済ませる（押してから聞かない）・戦闘に要る絵は押す前に裏で読んでおく
+  assert.match(src, /if \(await staleNow\(\)\)/)
+  assert.match(src, /new Set\(\[pickBoss, \.\.\.runBosses\.split\(','\)\]\)/)
+  assert.match(src, /preloadArt\(\[\.\.\.art\.srcs, playerSrc, motionSrc\]\.filter\(Boolean\)\)/)
+  // 同じ絵を2回見せない・2回押させない：全画面の遭遇の絵は、挑戦にも試し撃ちにも置かない
+  for (const f of ['V2capDungeon.jsx', 'V2capAtb.jsx', 'V2capAtbFight.jsx']) {
+    assert.ok(!/V2capBossEncounter|useBossEncounter|タップで戦闘開始/.test(read(f)), f)
+  }
 })
 
 test('日本語の大きな文字は JP_BOLD の太字（切り抜きのグラデーションにしない）', () => {
-  for (const f of ['V2capAtbTelop.jsx', 'V2capBossReward.jsx', 'V2capBossEncounter.jsx']) {
+  for (const f of ['V2capAtbTelop.jsx', 'V2capBossReward.jsx', 'V2capBossPick.jsx']) {
     const src = read(f)
     assert.match(src, /fontFamily: JP_BOLD, fontWeight:'bold'/, f)
     assert.ok(!/background-clip|backgroundClip/i.test(src), f)
   }
 })
 
-test('【確定】2026-11-01 開戦の動き：遭遇の絵を押す→ボスの動き→戦闘開始のテロップ→時計（ユーザー「これから戦闘するぞーって感じ」→選んだ「飛ばせない」）', () => {
+test('【確定】2026-11-01 開戦の動き：「挑戦する」を押す→ボスの動き→戦闘開始のテロップ→時計（ユーザー「これから戦闘するぞーって感じ」→選んだ「飛ばせない」）', () => {
   const t0 = 1000, intro = 1900
   // 動きのあいだも時計は止まったまま・テロップは動きのあと
   assert.equal(startTelopOn(t0, t0 + intro + START_TELOP_MS - 1, intro), true)
@@ -202,7 +206,7 @@ test('【確定】2026-11-01 開戦の動き：遭遇の絵を押す→ボスの
   const src = read('V2capAtbFight.jsx')
   // 見せるだけ：st を変えず動きの記録に足すだけ。技の名前を付けない＝帯は出ない
   assert.match(src, /if \(bossArt\?\.intro\) fxRef\.current = \[\.\.\.fxRef\.current, \{ kind:'act', side:'b', motion: bossArt\.intro, t0: last\.current \/ 1000 \}\]/)
-  // 遭遇の絵を出しているあいだは始めない＝見た目だけの戦闘から本物に替わる（runKey）前には流れない
+  // 返事を待っているあいだは始めない＝見た目だけの戦闘から本物に替わる（runKey）前には流れない
   assert.ok(src.indexOf('if (paused || !artReady || hold) return') < src.indexOf('if (bossArt?.intro) fxRef.current'))
   // 始まるまでボスは登場の前の形で待つ（サーバーの返事を待つあいだ、立ったボスが一瞬見えない）
   assert.match(src, /introWait=\{introT0\.current === null\}/)

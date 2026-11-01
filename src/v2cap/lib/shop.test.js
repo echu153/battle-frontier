@@ -123,9 +123,10 @@ test('サーバー：持ち込む数を残す関数・合計を見る・開発�
   assert.ok(!/array\[[^\]]*'item_loadout'/.test(snap) && !/array\[[^\]]*'items'/.test(snap))
 })
 
-test('画面：挑戦の入口で持ち込む薬を選ぶ・押してすぐ挑戦しても選んだ数で始まる', () => {
+test('画面：挑戦のポップアップで持ち込む薬を選ぶ・押してすぐ挑戦しても選んだ数で始まる', () => {
   const dun = read('../components/V2capDungeon.jsx')
-  assert.ok(dun.includes('<V2capItemLoadout prof={prof} onProfile={onProfile} onGo={onGo} saveRef={loadoutSave} />'))
+  assert.ok(read('../components/V2capBossPick.jsx').includes('<V2capItemLoadout prof={prof} onProfile={onProfile} onGo={onGo} saveRef={saveRef} />'))
+  assert.ok(dun.includes('prof={prof} onProfile={onProfile} onGo={onGo} saveRef={loadoutSave} onStart={startPick}'))
   assert.ok(dun.indexOf('await loadoutSave.current') < dun.indexOf("call('v2cap_dungeon_try_start'"), '保存を待ってから挑戦を始める')
   const lo = read('../components/V2capItemLoadout.jsx')
   assert.ok(lo.includes("supabase.rpc('v2cap_set_item_loadout', { p_loadout: next })"))
