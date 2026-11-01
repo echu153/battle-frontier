@@ -402,11 +402,14 @@ const inBuffAct = (side, now) => !!side.buffAct || now + EPS < side.noActUntil
 
 // 【確定】2026-10-30 大技の節目（ユーザー「大技に入るとき、ATBリセットしてるでしょ？そのHPを切ったらすぐモーションに移行していいよ」）：
 //   pattern.steps の now が付いた節目は、切ったらゲージを待たずに構えに入る（ゲージは空に・構えのあとも空から）。
-//   バフの行動のあいだは待つ（バフが先・見せおわってから構える）。麻痺のあいだも待つ。待っているあいだは、ほかの技を出さず、ふつうのゲージも貯めない（excessOf・stepOnce）
+//   バフのゲージを貯めおわるまでは待つ（バフが先）。麻痺のあいだも待つ。待っているあいだは、ほかの技を出さず、ふつうのゲージも貯めない（excessOf・stepOnce）
 // 【確定】2026-10-31 ユーザー「HP25％以下になったらゲージ状況がどうなっても大技のゲージに移行して、空振りが多すぎる」「もしバフのタイミングと重なったら先にバフ重ねてから大技に移行して」：
 //   ふつうのゲージがどうなっていても、切った瞬間に大技のゲージ（赤）へ移る。25%以下のふだんの確率で大技を引いたときも同じ
 //   （前はふつうのゲージが満タンになったのに攻撃が出ず、そこから赤いゲージが始まった＝空振りに見えた）。
 //   出した技の動きが残っていれば、構えの見せ方はそのあとから（showAt・NOW_WAIT_AFTER_ACT_SEC）。赤いゲージはそのぶん長い＝構えの見せ方の長さは変わらない
+// 【確定】2026-11-01 ユーザー「大技するとき、ゲージ貯まってから大技に行ってない？該当のHP切った瞬間に大技に移行してほしいんだけど」：
+//   バフを見せているあいだ（noActUntil）に切っても待たない＝すぐ赤いゲージへ（前はそのあいだふつうのゲージが上がり、見せおわってから赤に変わった）。
+//   構えの見せ方はバフを見せおわってから＝赤いゲージがそのぶん長く、大技を撃つ時刻は前と同じ。バフのゲージ（金）を貯めおわるまでは今までどおりバフが先
 const nowStepOf = (side) => {
   if (!side.castBig || !side.pattern) return null
   const frac = hpFracOf(side)
@@ -417,7 +420,6 @@ const isBig = (skill) => (skill?.mult || 0) >= CAST_MULT
 const nextBigOf = (side) => nowStepOf(side) || (side.castBig && side.pattern && isBig(side.patNext?.skill) ? side.patNext : null)
 const nowStep = (st, me) => {
   if (!me.castBig || !me.pattern || me.hp <= 0 || me.cast || me.ail.paralyze || me.buffAct || me.buffQueue.length) return
-  if (st.t + EPS < me.noActUntil) return
   const s = nowStepOf(me)
   const { idx, skill } = s ? slotByName(me, s.skill) : patternPick(me)
   if (s) me.patFired.push(s.at)
@@ -425,7 +427,7 @@ const nowStep = (st, me) => {
   me.patNext = null
   if (!skill) return
   me.gauge = 0
-  startCast(st, me, idx, skill, cdFor(me, skill), Math.max(st.t, me.lastActAt + NOW_WAIT_AFTER_ACT_SEC))
+  startCast(st, me, idx, skill, cdFor(me, skill), Math.max(st.t, me.lastActAt + NOW_WAIT_AFTER_ACT_SEC, me.noActUntil))
 }
 
 // 挑戦の始め：もう切っている節目は撃ったことにする

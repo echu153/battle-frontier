@@ -554,16 +554,19 @@ test('【確定】2026-10-30 大技の節目（ユーザー「大技に入ると
   }
   assert.ok(bigs >= 3, `大技が何度か出る（${bigs}回）`)
   assert.equal(twice, 0, '大技の直後は大技を引かない')
-  // バフの行動が先：30%と25%を一度に切ったら、バフを見せおわってから構える
+  // バフの行動が先：30%と25%を一度に切ったら、バフが付いてから赤いゲージ。構えの見せ方はバフを見せおわってから
   const b = newFight(13)
   b.b.buffSeen.push('黒鱗の鎧')
   b.b.patFired.push(0.75, 0.5)
   b.b.hp = Math.floor(b.b.base.hp * 0.24)
-  untilTrue(b, () => hpBuffChips(b.b).length)
+  runFor(b, 0.05)
   assert.equal(b.b.cast, null, 'バフが先')
+  untilTrue(b, () => hpBuffChips(b.b).length)
   const tBuff = b.t
-  untilTrue(b, () => b.b.cast)
-  assert.ok(b.b.cast.start + 1e-6 >= tBuff + BUFF_SHOW_SEC, `見せおわってから（${tBuff}→${b.b.cast.start}）`)
+  assert.ok(b.b.cast, 'バフが付いたらすぐ赤いゲージ')
+  assert.equal(b.b.gauge, 0)
+  assert.ok(Math.abs(b.b.cast.showAt - (tBuff + BUFF_SHOW_SEC)) < 1e-6, `構えの見せ方は見せおわってから（${tBuff}→${b.b.cast.showAt}）`)
+  assert.equal(castMsOf(b.b.cast, b.t), null, 'バフを見せているあいだは構えの絵を出さない')
   // 麻痺のあいだは構えない
   const p = newFight(14)
   p.b.buffSeen.push('黒鱗の鎧', '逆鱗')
@@ -579,6 +582,73 @@ test('【確定】2026-10-30 大技の節目（ユーザー「大技に入ると
   const c = createAtb(dummy(), dungeonFighter('varuzenoku', 'normal', 13000 * 0.2), { rng: rngOf(15), maxSec: 999 })
   runFor(c, 1)
   assert.equal(c.b.cast, null)
+})
+
+test('【確定】2026-11-01 ユーザー「大技するとき、ゲージ貯まってから大技に行ってない？該当のHP切った瞬間に大技に移行してほしいんだけど」：どの時刻に切っても、ふつうのゲージは増えず、ほかの技も出ない', () => {
+  for (const key of ['varuzenoku', 'amaza']) {
+    const boss = DUNGEON_BOSSES[key], [first, last] = boss.pattern.buffs
+    const name = boss.name
+    // 30%のバフの行動の前・金のゲージ・見せているあいだ・そのあとを 0.1秒きざみで全部切ってみる
+    for (let off = 0.1; off <= 9; off += 0.1) {
+      const st = createAtb(dummy(), dungeonFighter(key, 'normal'), { rng: rngOf(40 + Math.round(off * 10)), maxSec: 999 })
+      st.b.buffSeen.push(first.name)
+      st.b.patFired.push(0.75, 0.5)
+      st.b.hp = Math.floor(st.b.base.hp * 0.29)
+      runFor(st, off)
+      assert.equal(st.b.cast, null, '切る前は構えていない')
+      const acts = () => st.log.filter(l => l.side === name && (l.type === 'skill' || l.type === 'normal')).length
+      const g0 = st.b.gauge, n0 = acts()
+      st.b.hp = Math.floor(st.b.base.hp * 0.24)
+      runFor(st, 0.05)
+      for (let i = 0; !st.b.cast; i++) {
+        assert.ok(i < 80, `${key} ${off.toFixed(1)}秒：赤いゲージにならない`)
+        // 待ってよいのはバフのゲージを貯めおわるまで（前はバフを見せているあいだも待ち、そのあいだふつうのゲージが上がった）
+        assert.ok(st.b.buffQueue.length || st.b.buffAct, `${key} ${off.toFixed(1)}秒：バフの行動でもないのに待っている（ゲージ${st.b.gauge}）`)
+        assert.ok(st.b.gauge <= g0, `${key} ${off.toFixed(1)}秒：切ったあとにふつうのゲージが増えた`)
+        runFor(st, 0.05)
+      }
+      assert.equal(st.b.gauge, 0, 'ふつうのゲージは空に')
+      assert.equal(acts(), n0, 'ほかの技を出さない')
+      assert.equal(st.b.cast.name, boss.pattern.steps.find(s => s.now).skill)
+      assert.ok(st.b.buffSeen.includes(last.name))
+    }
+  }
+  // バフを見せているあいだに切る：すぐ赤いゲージ・構えの見せ方と撃つ時刻は、見せおわってから（＝撃つ時刻は前と同じ）
+  const st = newFight(21)
+  st.b.buffSeen.push('黒鱗の鎧')
+  st.b.patFired.push(0.75, 0.5)
+  st.b.hp = Math.floor(st.b.base.hp * 0.29)
+  untilTrue(st, () => hpBuffChips(st.b).length)
+  const tBuff = st.t
+  runFor(st, 1)
+  assert.ok(st.b.gauge > 0 && !st.b.cast, 'まだ切っていないのでふつうのゲージ')
+  st.b.hp = Math.floor(st.b.base.hp * 0.24)
+  runFor(st, 0.05)
+  assert.ok(st.b.cast, 'すぐ赤いゲージ')
+  assert.equal(st.b.gauge, 0)
+  assert.ok(Math.abs(st.b.cast.showAt - (tBuff + BUFF_SHOW_SEC)) < 1e-6)
+  assert.equal(castMsOf(st.b.cast, st.t), null, 'バフのポーズが先')
+  assert.ok(Math.abs(st.b.cast.until - st.b.cast.showAt - 3.5) < 1e-6)
+  runFor(st, tBuff + BUFF_SHOW_SEC - st.t + 0.05)
+  assert.ok(castMsOf(st.b.cast, st.t) >= 0, '見せおわったら構えの絵')
+})
+
+test('【確定】2026-11-01 ユーザー「HP25％以下の大技使用率もう少し上げてほしい、3回に1回くらいうつ感じで」：25%以下は行動3回に1回・続けては出ない', () => {
+  for (const key of Object.keys(DUNGEON_BOSSES)) {
+    const boss = DUNGEON_BOSSES[key], big = boss.pattern.steps.find(s => s.now).skill
+    assert.equal(boss.pattern.bands.at(-1).weights[big], 50, `${key}：引ける番の50%（直後は引かないので3回に1回）`)
+    let acts = 0, bigs = 0
+    for (let seed = 1; seed <= 6; seed++) {
+      const st = createAtb(dummy(), dungeonFighter(key, 'normal', 13000 * 0.2), { rng: rngOf(seed), maxSec: 999 })
+      runFor(st, 600)
+      const names = st.log.filter(l => l.side === boss.name && (l.type === 'skill' || l.type === 'normal')).map(l => l.skill || '通常')
+      names.forEach((n, i) => assert.ok(!(n === big && names[i - 1] === big), `${key}：大技が続けて出た`))
+      acts += names.length
+      bigs += names.filter(n => n === big).length
+    }
+    assert.ok(acts > 400, `${key}：${acts}行動`)
+    assert.ok(Math.abs(bigs / acts - 1 / 3) < 0.04, `${key}：大技は行動の3分の1（${bigs}/${acts}）`)
+  }
 })
 
 test('【確定】2026-10-30 溜めは4秒（ユーザー「溜めモーションは4秒でいい」・雨摩座も「同じにする」）：構えはじめから吐くまで4秒＝構え3.5秒＋直前の0.5秒・「動きを見る」も同じ長さ', () => {
