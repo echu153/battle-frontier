@@ -959,9 +959,9 @@ function ChargeOrb({ m, a, acts, now, geo, art, s, cast, castEnd, sky = null }) 
   if (a.on) {
     if (!geo) return <Sprite a={a} frame={-1} />
     // 頭上・空（雲）のほか、足元（無間地獄の地割れの輪）
-    //   【確定】2026-11-01 ユーザー「むげんじごくのわっか、枠からはみ出てHPとかに被ってるから改善して」：足元の輪は、いちばん大きくなっても手前のふちが絵の枠の下におさまる所まで上げる（少しつぶす＝sy）
+    //   【確定】2026-11-01 ユーザー「むげんじごくのわっか、枠からはみ出てHPとかに被ってるから改善して」：足元の輪は、いちばん大きくなっても手前のふちが HP の行より上におさまる所まで上げる（少しつぶす＝sy）
     const ringH = a.on === 'feet' ? a.h * (a.size * geo.p.w / a.w) * (a.sy || 1) : 0
-    const at = { x: geo.p.x + geo.p.w / 2, y: a.on === 'feet' ? Math.min(geo.p.y + geo.p.h * FX_FEET_Y, frameBottomOf(geo) - 2 - ringH / 2) : geo.p.y + geo.p.h * (a.on === 'sky' ? FX_SKY_Y : FX_HEAD_Y) }
+    const at = { x: geo.p.x + geo.p.w / 2, y: a.on === 'feet' ? Math.min(geo.p.y + geo.p.h * FX_FEET_Y, fxBottomOf(geo) - 2 - ringH / 2) : geo.p.y + geo.p.h * (a.on === 'sky' ? FX_SKY_Y : FX_HEAD_Y) }
     const P = m.scene ? pourTimesOf(m) : null
     const filter = sky ? `brightness(${(1 + 0.2 * sky.glow + 0.7 * sky.flicker).toFixed(3)})` : undefined
     const cloud = (k, op) => ({ frame: 0, x: at.x, y: at.y, op, rot: a.on === 'feet' ? 0 : Math.sin(now * 2.2) * 0.035, filter: a.on === 'feet' ? `brightness(${(1.1 + 0.25 * Math.sin(now * 9)).toFixed(3)})` : filter, sy: a.sy || 1,
@@ -1043,12 +1043,12 @@ function ChainCanvas({ geo, a, tiles, front, H }) {
   })
   return <canvas ref={ref} style={{ position:'absolute', left: 0, top: 0, width: geo.W, height: H, zIndex: front ? 2 : undefined, maxWidth:'none', pointerEvents:'none', filter: front ? undefined : 'brightness(0.55)' }} />
 }
-// 自分の絵より奥の層（舞台の中で背景のすぐあとに置く）：足元の地割れの輪・噴き上がる炎・鎖の奥の半分。絵の枠の下で切る
+// 自分の絵より奥の層（舞台の中で背景のすぐあとに置く）：足元の地割れの輪・噴き上がる炎・鎖の奥の半分。HP の行のすぐ上で切る
 function BossFxBack({ fx, now, geo, art, cast, castEnd, tiles }) {
   const acts = fx.filter(f => f.kind === 'act' && f.side === 'b' && f.motion?.fx)
   const motions = Object.values(art.motions)
   const castM = cast ? motions.find(m => m.label === cast.name) || motions.at(-1) : null
-  const H = frameBottomOf(geo)
+  const H = fxBottomOf(geo)
   return (
     <div style={{ position:'absolute', left: 0, right: 0, top: 0, height: H, overflow:'hidden', pointerEvents:'none' }}>
       {motions.flatMap(m => Object.entries(m.fx || {}).map(([kind, a]) => {
@@ -1229,8 +1229,10 @@ const BgBehind = ({ behind: b0, box, k = 1 }) => {
 //     舞台の boxShadow（技の暗転）はこれの下になるので、暗さはここにも掛ける（dim）
 //   動くものは絵と同じ大きさの SVG（viewBox＝元の絵の px）に、明るく重ねる（screen）。上のはしは名前が読めるように少し暗く
 const BG_BELOW_FEET = 10
-// 絵の枠の下のはし（舞台の上からの px）：背景と、ボスのエフェクトはここで切る＝下の HP の行にかからない
-const frameBottomOf = (geo) => geo.b.y + geo.b.h + BG_BELOW_FEET
+// ボスのエフェクトと演出を切る高さ（舞台の上からの px）：HP の行のすぐ上。3＝絵の行の下の余白 4px − 舞台の枠線 1px
+//   【確定】2026-11-01 本番で測って直した：背景は HP の文字の裏まで敷いてある（BG_BELOW_FEET）ので、背景の下のはしで切ると炎や鎖が文字の上半分に7px重なった
+const FX_BELOW_FEET = 3
+const fxBottomOf = (geo) => geo.b.y + geo.b.h + FX_BELOW_FEET
 const BG_FADE = 18
 //   behindK＝竜の後ろの色を抜く濃さ（倒れて体が消えたら一緒に消える）
 function BossBackground({ bg, geo, now, dim, behindK = 1 }) {
@@ -1416,10 +1418,10 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
         strips={foeArt?.kind === 'pixel' ? Object.values(foeArt.motions) : []} rig={foeArt?.kind === 'illust' ? foeArt : null}
         artH={size?.artH || ART_H} areaRef={bArea} castEnd={castSeen.current} death={death} introWait={introWait} reachTo={reachTo} />
       {sc?.beam && geo && sc.handsAt && <DoomBeam geo={geo} beam={sc.beam} tone={sc.tone} hand={[geo.b.x + sc.handsAt[0][0] * (geo.b.w / foeArt.base), geo.b.y + sc.handsAt[0][1] * (geo.b.w / foeArt.base)]} />}
-      {/* 【確定】2026-11-01 ユーザー「枠からはみ出てHPとかに被ってるから改善して」：ボスのエフェクトと演出は絵の枠の下で切る（下の HP の行にかからない） */}
-      <div style={{ position:'absolute', left: 0, right: 0, top: 0, height: geo ? frameBottomOf(geo) : 0, overflow:'hidden', pointerEvents:'none' }}>
+      {/* 【確定】2026-11-01 ユーザー「枠からはみ出てHPとかに被ってるから改善して」：ボスのエフェクトと演出は HP の行のすぐ上で切る（fxBottomOf） */}
+      <div style={{ position:'absolute', left: 0, right: 0, top: 0, height: geo ? fxBottomOf(geo) : 0, overflow:'hidden', pointerEvents:'none' }}>
         {foeArt && <BossFx fx={death ? fxAll.filter(f => f.side !== 'b' || f.kind !== 'act') : fxAll} now={now} geo={geo} art={foeArt} cast={cast} castEnd={castSeen.current} scene={sc} />}
-        {chainTiles.length > 0 && geo && <ChainCanvas geo={geo} a={chainFx} tiles={chainTiles} front H={frameBottomOf(geo)} />}
+        {chainTiles.length > 0 && geo && <ChainCanvas geo={geo} a={chainFx} tiles={chainTiles} front H={fxBottomOf(geo)} />}
         {sc && geo && <SceneLayer geo={geo} sc={sc} hands={sc.handsAt ? sc.handsAt.map(p => [geo.b.x + p[0] * (geo.b.w / foeArt.base), geo.b.y + p[1] * (geo.b.w / foeArt.base)]) : null} s={geo.b.w / foeArt.base} />}
       </div>
       {sc && geo && sc.flash > 0 && <Flash geo={geo} op={sc.flash} fire={sc.tone === 'fire'} />}

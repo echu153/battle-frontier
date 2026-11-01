@@ -343,16 +343,20 @@ test('稲妻の折れ線と砲口の星形：両はしは決めた点・同じ�
 const enma = bossIllustOf('enma').motions
 const stageSrc = readFileSync(new URL('../components/V2capAtbStage.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 
-test('【確定】2026-11-01 ユーザー「むげんじごくのわっか、枠からはみ出てHPとかに被ってるから改善して」：足元の輪は枠の下におさまる所まで上げる・ボスのエフェクトは絵の枠の下で切る', () => {
-  assert.match(stageSrc, /Math\.min\(geo\.p\.y \+ geo\.p\.h \* FX_FEET_Y, frameBottomOf\(geo\) - 2 - ringH \/ 2\)/)
-  // 舞台の絵の枠（背景と同じ高さ）で切る：奥の層と手前の層の両方
-  assert.equal(stageSrc.match(/height: H, overflow:'hidden', pointerEvents:'none'/g).length, 1, '奥の層')
-  assert.match(stageSrc, /height: geo \? frameBottomOf\(geo\) : 0, overflow:'hidden', pointerEvents:'none'[^\n]*\n\s*\{foeArt && <BossFx /)
+test('【確定】2026-11-01 ユーザー「むげんじごくのわっか、枠からはみ出てHPとかに被ってるから改善して」：足元の輪は HP の行より上におさまる所まで上げる・ボスのエフェクトは HP の行のすぐ上で切る', () => {
+  assert.match(stageSrc, /Math\.min\(geo\.p\.y \+ geo\.p\.h \* FX_FEET_Y, fxBottomOf\(geo\) - 2 - ringH \/ 2\)/)
+  // HP の行のすぐ上で切る：奥の層と手前の層の両方
+  assert.match(stageSrc, /const H = fxBottomOf\(geo\)\n\s*return \(\n\s*<div style=\{\{ position:'absolute', left: 0, right: 0, top: 0, height: H, overflow:'hidden', pointerEvents:'none' \}\}>/, '奥の層')
+  assert.match(stageSrc, /height: geo \? fxBottomOf\(geo\) : 0, overflow:'hidden', pointerEvents:'none'[^\n]*\n\s*\{foeArt && <BossFx /)
+  // 本番で測って直した：背景の下のはし（BG_BELOW_FEET）で切ると HP の文字の上半分に7px重なった＝絵の行の下の余白より下へ出さない（舞台の枠線のぶん1px引く）
+  const margin = +stageSrc.match(/ref=\{areaRef\}[^\n]*margin:'(\d+)px 0'/)[1], border = +stageSrc.match(/border:'(\d+)px solid #0a2a55'/)[1]
+  assert.ok(+stageSrc.match(/const FX_BELOW_FEET = (\d+)/)[1] <= margin - border, 'エフェクトを切る高さが HP の行より下')
   // 自分の絵より奥に描く（輪の上に立って見える・炎の中で喰らって見える）：背景のあと、自分の絵より先
   const a = stageSrc.indexOf('<BossBackground bg={foeArt.bg}'), b = stageSrc.indexOf('<BossFxBack fx='), c = stageSrc.indexOf('<Fighter st={st} side="a"')
   assert.ok(a < b && b < c)
   assert.equal(enma.hell.fx.charge.on, 'feet')
-  assert.ok(enma.hell.fx.charge.sy < 1, '少しつぶす')
+  // つぶさないと輪のまん中が足元から離れすぎる（自分が輪の手前のふちに立って見える）
+  assert.ok(enma.hell.fx.charge.sy <= 0.65, '少しつぶす')
 })
 
 test('【確定】2026-11-01 ユーザー「断罪はもっと炎っぽく、無間地獄も炎をしっかりモーションして」：炎は絵のまま燃やす（components/BossFireFx.jsx）・火の粉が絶えず立ちのぼる・巻かれてもがく（外れたらもがかない）', () => {
