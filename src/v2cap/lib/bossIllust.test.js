@@ -1149,16 +1149,18 @@ test('【確定】2026-11-01 閻魔の技：どれも足は動かさない（傾
   assert.ok(a.motions.soul.fx.fly && a.motions.soul.fx.charge && a.motions.soul.charge.still, '手の炎は回さない')
   assert.equal(a.motions.pillar.fx.fly, undefined)
   assert.equal(a.motions.pillar.fx.hit.anim, 'rise')
-  assert.equal(a.motions.chains.fx.hit.anim, 'bind')
-  assert.ok(a.motions.chains.fx.hit.rise, '鎖は足元から伸びる')
+  // 業縛の鎖：絵から切った鎖のひと続きを lib/bossScene.js の chainTilesAt が並べる（拳を握ってから lead のあいだに伸びて巻きつく＝そこがダメージ）
+  assert.equal(a.motions.chains.fx.hit.anim, 'wrap')
   assert.equal(a.motions.chains.scene.chains, true)
+  assert.equal(a.motions.chains.impactMs, a.motions.chains.hitMs + a.motions.chains.fx.hit.lead)
+  assert.ok(a.motions.chains.fx.hit.w > a.motions.chains.fx.hit.h * 2, '切った絵は横に長いひと続き')
   // 無間地獄：相手の足元の地割れの輪＋下から噴き上がる炎。奔流は無し
   const h = a.motions.hell
   assert.ok(h.big && h.castSkipMs === 3500 && h.hitMs === 4000)
   assert.equal(h.fx.charge.on, 'feet')
   assert.equal(h.fx.hit.anim, 'rise')
-  assert.ok(h.fx.flow, '炎を上へ流す絵')
   assert.equal(h.scene.noBeam, true)
+  assert.equal(h.scene.hands, true, '亡者の腕')
   assert.equal(motionPoseAt(h.keys, 3500).lean, def.cast.pose.lean, '3500 の形は構えの姿勢と同じ（つなぎ目で跳ねない）')
   assert.equal(a.castArt, 'windup')
   // ポーズの絵は足がそろっている（靴のまん中＝元の絵の px で立ち絵の 554。poseFit は測った値）

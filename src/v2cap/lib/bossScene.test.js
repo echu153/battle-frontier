@@ -5,6 +5,8 @@ import { bossIllustOf } from './bossIllust.js'
 import { DOOM, flyPosOf, POUR, COIL, SCENE_TOP, FX_TARGET_Y, FX_FEET_Y, FX_HEAD_Y, FX_SKY_Y, pourTimesOf, sceneEndMsOf, sceneAt, castSceneAt, fallAt, coilAt, stageSceneOf, handFxOf, HAND_BURST_MS, gunSceneAt, slashSceneAt, boltPathOf, flashStarOf } from './bossScene.js'
 import { BOSS_ILLUST_DEFS, flutterBandsAt } from './bossIllust.js'
 import { BOSS_ILLUST } from './bossIllustList.js'
+import { readFileSync } from 'node:fs'
+import { CHAIN, chainTilesAt, deadHandsAt, deadHandPathOf, burstSceneAt, doomSceneAt, coilSceneAt } from './bossScene.js'
 
 const m = bossIllustOf('amaza').motions.deluge
 const T = pourTimesOf(m)
@@ -336,4 +338,90 @@ test('稲妻の折れ線と砲口の星形：両はしは決めた点・同じ�
   const star = flashStarOf(100, Math.PI, 3)
   const reach = (f) => Math.max(...star.filter(f).map(q => Math.hypot(q[0], q[1])))
   assert.ok(reach(q => q[0] < 0) > reach(q => q[0] > 0), '左へ撃つと左のとげが長い')
+})
+
+const enma = bossIllustOf('enma').motions
+const stageSrc = readFileSync(new URL('../components/V2capAtbStage.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+
+test('【確定】2026-11-01 ユーザー「むげんじごくのわっか、枠からはみ出てHPとかに被ってるから改善して」：足元の輪は枠の下におさまる所まで上げる・ボスのエフェクトは絵の枠の下で切る', () => {
+  assert.match(stageSrc, /Math\.min\(geo\.p\.y \+ geo\.p\.h \* FX_FEET_Y, frameBottomOf\(geo\) - 2 - ringH \/ 2\)/)
+  // 舞台の絵の枠（背景と同じ高さ）で切る：奥の層と手前の層の両方
+  assert.equal(stageSrc.match(/height: H, overflow:'hidden', pointerEvents:'none'/g).length, 1, '奥の層')
+  assert.match(stageSrc, /height: geo \? frameBottomOf\(geo\) : 0, overflow:'hidden', pointerEvents:'none'[^\n]*\n\s*\{foeArt && <BossFx /)
+  // 自分の絵より奥に描く（輪の上に立って見える・炎の中で喰らって見える）：背景のあと、自分の絵より先
+  const a = stageSrc.indexOf('<BossBackground bg={foeArt.bg}'), b = stageSrc.indexOf('<BossFxBack fx='), c = stageSrc.indexOf('<Fighter st={st} side="a"')
+  assert.ok(a < b && b < c)
+  assert.equal(enma.hell.fx.charge.on, 'feet')
+  assert.ok(enma.hell.fx.charge.sy < 1, '少しつぶす')
+})
+
+test('【確定】2026-11-01 ユーザー「断罪はもっと炎っぽく、無間地獄も炎をしっかりモーションして」：炎は絵のまま燃やす（components/BossFireFx.jsx）・火の粉が絶えず立ちのぼる・巻かれてもがく（外れたらもがかない）', () => {
+  for (const m of [enma.pillar, enma.hell]) {
+    assert.equal(m.fx.hit.anim, 'rise', m.label)
+    assert.ok(m.fx.hit.amp > 0, m.label)
+    assert.equal(m.fx.flow, undefined, '前の流れる絵はやめた')
+  }
+  assert.match(stageSrc, /<BossFireFx src=\{a\.src\}/)
+  // 炎の部品は挑戦の前から置いておく（当たった瞬間に作ると一瞬止まる）＝出ていないときも作る
+  assert.match(stageSrc, /if \(a\.anim === 'rise'\) return <FireColumn/)
+  const shader = readFileSync(new URL('../components/BossFireFx.jsx', import.meta.url), 'utf8')
+  assert.match(shader, /fract\(t \* 1\.1\)/, '中身を上へ流す')
+  assert.match(shader, /uniform float burn/, '上から燃え尽きる')
+  const P = enma.pillar, b = burstSceneAt(P, P.impactMs + 200), miss = burstSceneAt(P, P.impactMs + 200, undefined, false)
+  assert.ok(b.writhe > 0.9, 'もがく')
+  assert.equal(miss.writhe, 0, '外れたらもがかない')
+  assert.ok(b.items.filter(i => i.t === 'drop').length > 20, '火の粉')
+  assert.ok(burstSceneAt(P, P.impactMs + 2000).writhe < 0.01, 'おわると止まる')
+  assert.equal(doomSceneAt(enma.hell, enma.hell.impactMs + 300).beam, null, '奔流は無い')
+  assert.ok(doomSceneAt(enma.hell, enma.hell.impactMs + 300).writhe > 0.9)
+  assert.equal(doomSceneAt(enma.hell, enma.hell.impactMs + 300, undefined, false).writhe, 0)
+  // 黒龍とゼルギアスの大技は変えない
+  const v = bossIllustOf('varuzenoku').motions.doom
+  assert.equal(doomSceneAt(v, v.impactMs + 300).writhe, 0)
+  assert.ok(doomSceneAt(v, v.hitMs + 60).beam, '黒龍の奔流はそのまま')
+})
+
+test('【確定】2026-11-01 ユーザー「手のモーションもつけて」（無間地獄の亡者の腕と読んだ）：地の底から突き上がり、指を開いて→握って→開いて→握りながら沈む', () => {
+  const at = (e) => { const out = []; deadHandsAt(out, e); return out }
+  assert.equal(at(-1).length, 0)
+  assert.ok(at(300).length >= 8, '何本も出る')
+  assert.equal(at(1600).length, 0, 'おわると消える')
+  const h = (e) => at(e).find(x => x.x < -0.5 && x.s === 0.3)
+  assert.ok(h(40).y > h(300).y, '突き上がる（上が −）')
+  assert.ok(h(200).curl < -0.5, '指を開く')
+  assert.ok(h(600).curl > 0.4, '握る')
+  assert.ok(h(880).curl < h(600).curl, 'また開く')
+  // 腕の形：指の曲がりで形が変わる。決まった値なので同じ時刻なら同じ絵
+  assert.notEqual(deadHandPathOf(-0.8), deadHandPathOf(0.8))
+  assert.equal(deadHandPathOf(0.3), deadHandPathOf(0.3))
+  assert.match(deadHandPathOf(0), /^M[-\d. L]+Z/)
+  assert.deepEqual(at(500), at(500))
+})
+
+test('【確定】2026-11-01 ユーザー「鎖もモーションしっかり動くようにして」：足元から伸びて巻きつき、締め上げるたび細って巻きが進み、最後にちぎれて飛ぶ', () => {
+  const m = enma.chains, lead = m.fx.hit.lead, I = m.impactMs, radius = (ts) => Math.max(...ts.map(t => Math.abs(t.x)))
+  assert.equal(chainTilesAt(m, I - lead - 1).length, 0, '拳を握る前は出ない')
+  const grow = [I - lead + 30, I - lead + 90, I].map(ms => chainTilesAt(m, ms).length)
+  assert.ok(grow[0] < grow[1] && grow[1] < grow[2], '伸びていく')
+  const full = chainTilesAt(m, I)
+  assert.ok(full.some(t => t.front) && full.some(t => !t.front), '手前と奥に分かれる（奥は自分の絵の後ろ）')
+  assert.ok(Math.min(...full.map(t => t.y)) < -0.5, '体の高さまで巻き上がる')
+  assert.ok(radius(chainTilesAt(m, I + 800)) < radius(chainTilesAt(m, I + 30)), '締め上げて細る')
+  assert.notDeepEqual(chainTilesAt(m, I + 500).map(t => t.rot), chainTilesAt(m, I + 700).map(t => t.rot), '巻きが進む')
+  const fly = chainTilesAt(m, I + CHAIN.burstMs + 200)
+  assert.ok(fly.length > 0 && fly[0].op < 1, 'ちぎれて薄れる')
+  assert.ok(radius(fly) > radius(chainTilesAt(m, I + CHAIN.burstMs - 10)), '外へ飛ぶ')
+  assert.equal(chainTilesAt(m, I + CHAIN.burstMs + CHAIN.flyMs).length, 0, 'おわると消える')
+  assert.deepEqual(chainTilesAt(m, I + 400), chainTilesAt(m, I + 400), '同じ時刻なら同じ形')
+  assert.ok(full.length < 60, '毎コマの数は少ない')
+  // 締め上げるたび相手が縮む・もがく（外れたら縮まない）
+  const s = coilSceneAt(m, I + CHAIN.squeezes[0] + 80)
+  assert.ok(s.squeeze[0] < 1 && s.writhe > 0.5)
+  assert.equal(coilSceneAt(m, I + CHAIN.squeezes[0] + 80, false).squeeze, null)
+  assert.equal(coilSceneAt(m, I + 100).items.filter(i => i.t === 'coil' || i.t === 'bubble').length, 0, '水の輪と泡は出さない')
+  // 閻魔の引く動きと締め上げる時刻がそろっている
+  for (const [i, at] of [945, 1185, 1425].entries()) {
+    assert.ok(Math.abs(at - (I + CHAIN.squeezes[i])) < 10, '手前へ引くと締まる')
+    assert.ok(m.keys.some(([t, p]) => t === at && p.lean < -0.03), '引く動き')
+  }
 })

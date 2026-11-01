@@ -150,6 +150,14 @@ const inpaintRows = (img, poly, S) => {
     }
   }
 }
+// 多角形（640 の px）の外を透明にする。ふち 2px はぼかす
+const polyCut = (img, poly) => {
+  const k = BOSS_ILLUST_SIZE / img.W
+  for (let y = 0; y < img.H; y++) for (let x = 0; x < img.W; x++) {
+    const X = (x + 0.5) * k, Y = (y + 0.5) * k, i = (y * img.W + x) * 4 + 3
+    img.data[i] = inPoly(poly, X, Y) ? Math.round(img.data[i] * Math.min(1, polyEdgeDist(poly, X, Y) / 2)) : 0
+  }
+}
 // 足元のまん中（下のはしのまん中）からの距離で外を透明にする：k＝消えはじめる距離（1＝左右と上のはし）。明るい画素（炎の舌）ほど外まで残す
 const domeFade = (img, k) => {
   for (let y = 0; y < img.H; y++) for (let x = 0; x < img.W; x++) {
@@ -817,8 +825,10 @@ const build = (key, def, dir) => {
     }
     // dome＝絵いっぱいに描かれた炎の四角いふちを消す（足元のまん中から広がる丸屋根の外を透明に・明るい炎の舌ほど外まで残す・無間地獄）
     if (e.dome) domeFade(img, e.dome)
+    // poly＝絵の一部だけ使う（640 の px の多角形・ふちを少しぼかす・閻魔の鎖のひと続き）
+    if (e.poly) polyCut(img, e.poly)
     const t = trim(img)
-    const kk = Math.min(1, FX_SIDE / Math.max(t.img.W, t.img.H))
+    const kk = Math.min(1, (e.side || FX_SIDE) / Math.max(t.img.W, t.img.H))
     const small = kk < 1 ? resizeRgba(t.img, Math.round(t.img.W * kk), Math.round(t.img.H * kk)) : t.img
     trims[e.file] = { x: t.x, y: t.y, k: small.W / t.img.W }
     sizes.push([e.file, writeWebp(small, path.join(OUT, bossFileOf(key, illustFxKindOf(e.motion, e.kind))), FX_QUALITY)])

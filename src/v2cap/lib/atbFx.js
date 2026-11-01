@@ -124,6 +124,25 @@ export const popTopOf = (f, a, i) => 30 - a * 26 + (f.strike != null ? f.strike 
 export const lungeOf = (elapsed, px = 22) =>
   (elapsed >= 0 && elapsed < LUNGE_SEC ? Math.sin(Math.PI * elapsed / LUNGE_SEC) * px : 0)
 // 被弾の揺れ（px）。だんだん小さく
+// 【確定】2026-11-01 ユーザー「ひげきしたときのモーションがしょぼいからもっと本当に喰らってるようにして」：
+//   ボス戦で自分が受けたとき（f＝最後のダメージの印・hpMax＝自分の最大HP・pushed＝技が別に押している＝ゼルギアスの knock）。前は細かく揺れて赤く光るだけだった。
+//   一気に押されて足元を中心にのけぞる → 一瞬つぶれて伸び戻る → よろけて戻る。当たった瞬間は白く光り（flash）、そのあと技の色の光が残る（glow）。
+//   強さは、ダメージがHPのどれだけか（小さくても 0.5・HPの2割で 1）とクリティカル。x・y＝枠の %・rot＝°（マイナスで後ろへ）・sx・sy＝縦横の倍率
+export const HIT_REACT_SEC = 0.72
+const HIT_REACT_IN = 0.06
+export const hitReactOf = (f, now, hpMax, pushed = false) => {
+  const h = f ? now - f.t0 : -1
+  if (h < 0 || h >= HIT_REACT_SEC) return null
+  const s = Math.min(1, 0.5 + (f.amount / Math.max(1, hpMax)) * 2.5 + (f.crit ? 0.25 : 0))
+  const k = (h - HIT_REACT_IN) / (HIT_REACT_SEC - HIT_REACT_IN)
+  const push = h < HIT_REACT_IN ? 1 - (1 - h / HIT_REACT_IN) ** 2 : (1 - k) ** 2.2 * (1 + 0.5 * Math.sin(k * 9) * (1 - k))
+  const jolt = h < 0.3 ? Math.sin(h * 62) * (1 - h / 0.3) : 0
+  const sq = h < 0.16 ? Math.sin((Math.PI * h) / 0.16) : h < 0.34 ? -0.35 * Math.sin((Math.PI * (h - 0.16)) / 0.18) : 0
+  return { x: -(pushed ? 6 : 16) * s * push + 1.8 * s * jolt, y: -2.5 * s * Math.sin(Math.min(1, h / 0.22) * Math.PI), rot: -13 * s * push + 1.6 * s * jolt,
+    sx: 1 + 0.09 * s * sq, sy: 1 - 0.14 * s * sq, flash: h < 0.09 ? 1 - h / 0.09 : 0, glow: (1 - h / HIT_REACT_SEC) ** 1.5 }
+}
+// 炎や鎖に巻かれているあいだ（w＝強さ 0〜1・bossScene の writhe）：もがいて小刻みに揺れる。now＝秒
+export const writheOf = (w, now) => ({ x: w * (1.5 * Math.sin(now * 47) + 0.9 * Math.sin(now * 83)), rot: w * (3 * Math.sin(now * 31) + 1.4 * Math.sin(now * 71)) })
 export const shakeOf = (elapsed, px = 6) =>
   (elapsed >= 0 && elapsed < HIT_SEC ? Math.sin(elapsed * 70) * px * (1 - elapsed / HIT_SEC) : 0)
 

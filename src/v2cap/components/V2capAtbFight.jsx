@@ -286,7 +286,8 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
                 const t0 = performance.now() / 1000
                 // 多段の技（2026-11-01 黒翼烈風）は1発ごとの数字の見本も流す（戦闘と同じ scheduleFx を通す）
                 const each = m.strikes ? m.strikes.map(() => (devMiss ? null : { amount: 1234, crit: false })) : null
-                const mark = devMiss ? [{ kind:'miss', side:'a', each }] : each ? [{ kind:'hit', side:'a', each }] : []
+                //   1回の技も数字の見本を出す（2026-11-01 ユーザー「ひげきしたときのモーションがしょぼい」＝受けた瞬間の動きをここで見る）
+                const mark = devMiss ? [{ kind:'miss', side:'a', each }] : each ? [{ kind:'hit', side:'a', each }] : [{ kind:'hit', side:'a', amount: 123, crit: false }]
                 fxRef.current = [...fxRef.current, ...scheduleFx([{ kind:'act', side:'b', motion: m, landed: !devMiss, skill: i > 0 ? m.label : null }, ...mark], t0, { b: m.impactMs / 1000 })]
               }}
               style={{ ...miniBtn('#ff8866'), padding:'4px 8px', fontSize:'11px' }}>{m.label}</button>

@@ -22,6 +22,10 @@ import { CAST_SEC } from '../core/atb.js'
 //   雨礫・氷雨は演出の種類 'hands'（手の光と粒だけ・暗くも揺れもしない）。水天葬は両手（hand2）
 // 【確定】2026-11-01 閻魔（ユーザー「閻魔も作ったから最後まで全部つくって」）：魂火＝'hands' の色違い（tone 'soul'）／業火断罪＝'burst'（杖を突いた瞬間に光って揺れ、相手の足元で火の粉・輪・煙）／
 //   業縛の鎖＝'coil' の絵の動きだけ（chains＝水の輪と泡は出さない・tone 'fire'）／無間地獄＝'doom' から奔流を抜いた形（noBeam・炎は下から噴き上がる絵＝画面の rise）
+// 【確定】2026-11-01 ユーザー「断罪はもっと炎っぽく、無間地獄も炎をしっかりモーションして、手のモーションもつけて」「鎖もモーションしっかり動くようにして」：
+//   炎の絵は components/BossFireFx.jsx で燃やす・火の粉が絶えず立ちのぼる（embersUp）・無間地獄は地の底から亡者の腕が伸びて指を開いて握る（deadHandsAt・deadHandPathOf）。
+//   鎖は絵の1枚を出すのをやめ、絵から切った鎖のひと続きを、足元から体のまわりへらせんに並べて伸ばし、締め上げるたび巻き直して細り、最後にちぎれ飛ぶ（chainTilesAt）。
+//   writhe＝炎や鎖に巻かれて、もがく強さ（外れたときは 0）
 // 【確定】2026-10-30 ユーザー「終焉の黒焔もっと大技っぽくしてほしい、貯める動作も長く」（kind 'doom'）：
 //   ため＝舞台が赤黒く暗くなり、火の粉が広い所から口へ渦を巻いて吸い込まれ、口の光が育ち、竜の体が赤く光を増す（震えない＝ユーザー「溜めるとき、別に震えなくていい」）。
 //   吐きつけ＝光・揺れと一緒に、口から相手へ黒焔の奔流（beam・画面 SceneLayer）。当たると大きく光って揺れ、火の粉・炎の柱・足元の輪・黒い煙・足元の残り火。
@@ -57,6 +61,9 @@ const G = 5.5   // しぶきの落ちる速さ（枠の幅/秒²）
 export const COIL = { dim: 0.42, squeezes: [300, 600, 900], burstMs: 1100, rings: [-0.2, 0, 0.2], bubbles: 12 }
 // 足元で噴き上がる技（kind 'burst'・業火断罪）：dim＝暗さ・after＝当たってから暗さが戻りはじめるまで（ms）・splash＝火の粉・jets＝炎の筋・rings＝足元の輪・mist＝煙
 export const BURST = { dim: 0.42, after: 620, fade: 400, splash: 46, jets: 12, mist: 6, rings: [[0, 1], [130, 0.75], [300, 0.55]] }
+// 業縛の鎖（chainTilesAt）：strands＝本数・wraps＝1本が巻く回数・rx＝巻く半径・flat＝斜めから見た縦のつぶれ・thick＝鎖の太さ・pitch＝切った絵のひと続きの間隔（どれも相手の絵の枠の幅が1）・
+//   heights＝1本ずつの巻き終わりの高さ・squeezes＝巻きついてから締め上げる時刻（ms）・burstMs＝ちぎれる時刻・flyMs＝飛び散る長さ
+export const CHAIN = { strands: 2, wraps: 2, rx: 0.56, flat: 0.3, thick: 0.2, pitch: 0.42, heights: [0.7, 0.42], squeezes: [140, 380, 620], burstMs: 860, flyMs: 420 }
 export const FX_TARGET_Y = 0.58
 const BODY_Y = FX_TARGET_Y - FX_FEET_Y   // 体の真ん中（足元から）
 
@@ -183,8 +190,8 @@ export const castSceneAt = (m, castMs, P = POUR) => {
 //   → { dim, flash（0〜1）, shake: [x, y]（px）, items, cloud: { spin, glow, flicker }, hand: { r, op } }
 export const sceneAt = (m, ms, { after = false, landed = true } = {}, P = POUR) => {
   if (m?.scene?.kind === 'coil') return coilSceneAt(m, ms, landed)
-  if (m?.scene?.kind === 'doom') return doomSceneAt(m, ms)
-  if (m?.scene?.kind === 'burst') return burstSceneAt(m, ms)
+  if (m?.scene?.kind === 'doom') return doomSceneAt(m, ms, DOOM, landed)
+  if (m?.scene?.kind === 'burst') return burstSceneAt(m, ms, BURST, landed)
   if (m?.scene?.kind === 'gun') return gunSceneAt(m, ms, landed)
   if (m?.scene?.kind === 'slash') return slashSceneAt(m, ms, landed)
   const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: m?.scene?.tone || null }
@@ -291,7 +298,8 @@ const pulse = (e, len) => (e >= 0 && e < len ? Math.pow(1 - e / len, 1.5) : 0)
 export const coilSceneAt = (m, ms, landed = true, C = COIL) => {
   // chains＝描いた鎖の絵だけ（業縛の鎖・水の輪と泡は出さない・しぶきは火の粉の色）
   const chains = !!m.scene.chains
-  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, squeeze: null, tone: m.scene.tone || null, dimColor: m.scene.dimColor || null }
+  if (chains) C = { ...C, squeezes: CHAIN.squeezes, burstMs: CHAIN.burstMs }
+  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, squeeze: null, tone: m.scene.tone || null, dimColor: m.scene.dimColor || null, writhe: 0 }
   const H = m.hitMs, I = m.impactMs, B = I + C.burstMs, end = sceneEndMsOf(m)
   if (ms < 0 || ms >= end) return out
   const e = ms - I
@@ -299,6 +307,14 @@ export const coilSceneAt = (m, ms, landed = true, C = COIL) => {
   out.dim = ms < H ? C.dim * smooth((ms - 120) / (H - 120)) : ms < B + 150 ? C.dim : C.dim * (1 - smooth((ms - B - 150) / 400))
   // 構えの手に水が集まり、振り抜きの手ではじける（ほかの技と同じ）
   handFxAt(m, ms, out)
+  // 鎖が地面から出るところ：足元の外に火の粉と輪
+  if (chains && ms >= H && e < 200) {
+    for (let i = 0; i < CHAIN.strands; i++) {
+      const a = chainStartAngleOf(i), gx = Math.cos(a) * CHAIN.rx * 1.55, gy = Math.sin(a) * CHAIN.rx * 1.55 * CHAIN.flat, q = (ms - H) / 420
+      drops(out.items, 8, 9700 + i * 30, ms - H, [0.4, 1], [260, 420], [0.005, 0.012], 0.12, { oy: gy })
+      if (q < 1) out.items.push({ t: 'ring', x: gx, y: gy, rx: 0.05 + 0.16 * easeOut(q), ry: (0.05 + 0.16 * easeOut(q)) * 0.3, w: 0.012 * (1 - q) + 0.003, op: 0.9 * (1 - q) })
+    }
+  }
   if (e < 0) return out
   // 光と揺れ：巻きついた瞬間・締め上げるたび・はじけた瞬間
   const sq = C.squeezes.map(t => e - t)
@@ -308,6 +324,11 @@ export const coilSceneAt = (m, ms, landed = true, C = COIL) => {
   // 相手が縮む（締め上げるたび横に縮んで縦に伸びる）。外れたときは縮まない
   const b = Math.max(0.7 * bump(e, 180), ...sq.map(d => bump(d, 200)))
   if (landed && ms < B) out.squeeze = [1 - 0.09 * b, 1 + 0.04 * b]
+  // 鎖に巻かれてもがく（締め上げるたび強く）・体のまわりが赤く熱い
+  if (chains) {
+    if (landed && ms < B) out.writhe = 0.45 + 0.55 * b
+    if (ms < B + 200) out.items.push({ t: 'glow', x: 0, y: BODY_Y, r: 0.42, op: (0.08 + 0.2 * b) * Math.min(1, e / 80) * (1 - clamp01((ms - B) / 200)) })
+  }
   // 水の輪：はじめは大きく、すぐ巻きついて細る・締め上げるたび細る・回り続ける・はじけたら外へ広がって消える
   const snap = easeOut(e / 180), tight = Math.max(...sq.map(d => bump(d, 200)))
   const burst = clamp01((ms - B) / 260)
@@ -317,8 +338,8 @@ export const coilSceneAt = (m, ms, landed = true, C = COIL) => {
       op: Math.min(1, e / 60) * (1 - burst) })
   })
   // しぶき：締め上げるたび体のまわりへ・はじけたら大きく
-  C.squeezes.forEach((t, j) => drops(out.items, 12, 9000 + j * 40, e - t, [0.5, 1.2], [350, 550], [0.006, 0.014], 0.5, { oy: BODY_Y, around: true }))
-  drops(out.items, 46, 9500, ms - B, [0.8, 2.0], [500, 850], [0.008, 0.02], 0.4, { oy: BODY_Y, around: true })
+  C.squeezes.forEach((t, j) => drops(out.items, 12, 9000 + j * 40, e - t, [0.5, 1.2], [350, 550], chains ? [0.003, 0.007] : [0.006, 0.014], 0.5, { oy: BODY_Y, around: true }))
+  drops(out.items, chains ? 30 : 46, 9500, ms - B, [0.8, 2.0], [500, 850], chains ? [0.003, 0.008] : [0.008, 0.02], 0.4, { oy: BODY_Y, around: true })
   // はじけたとき足元に波紋
   if (ms >= B && ms < B + 650) { const k = (ms - B) / 650, rx = 0.15 + 0.9 * easeOut(k); out.items.push({ t: 'ring', x: 0, y: -0.01, rx, ry: rx * 0.24, w: 0.02 * (1 - k) + 0.004, op: 0.8 * (1 - k) }) }
   // 泡：足元から体のまわりを立ちのぼる（水の中に閉じこめられる）
@@ -368,9 +389,9 @@ const doomCastSceneAt = (m, castMs, D = DOOM) => {
 }
 // 技のあいだ（ms＝技を出しはじめてから）→ sceneAt と同じ形＋ tone・dimColor・beam: { head（口から相手までの進み 0〜1）, w（太さの割合）, op }
 //   ★構えのあとは技の途中（castSkipMs）から流す＝どの時刻から見ても同じ形（暗さ・口の光は構えのおわりとつながる）
-export const doomSceneAt = (m, ms, D = DOOM) => {
+export const doomSceneAt = (m, ms, D = DOOM, landed = true) => {
   //   tone・dimColor＝ボスごとの色（無ければ炎＝黒龍。ゼルギアスの神雷終焉は 'thunder'＝青白い）
-  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: m.scene?.tone || 'fire', dimColor: m.scene?.dimColor || D.color, beam: null }
+  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: m.scene?.tone || 'fire', dimColor: m.scene?.dimColor || D.color, beam: null, writhe: 0 }
   const H = m.hitMs, I = m.impactMs, end = sceneEndMsOf(m)
   if (ms < 0 || ms >= end) return out
   const e = ms - I, s = ms - H
@@ -397,6 +418,12 @@ export const doomSceneAt = (m, ms, D = DOOM) => {
     out.flash = Math.max(out.flash, 0.95 * (e < 40 ? e / 40 : pulse(e - 40, 520)))
     const k = clamp01(e / 1000), rumble = e < 800 ? 1.6 * (1 - e / 800) : 0
     amp += 15 * (1 - k) * (1 - k) + rumble
+    // 地の底から業火（無間地獄）：火の粉が絶えず立ちのぼる・亡者の腕が伸びる・炎に巻かれてもがく
+    if (m.scene?.hands) {
+      embersUp(out.items, 46, 18000, e, 2.1, 1.7, D.after + 200)
+      deadHandsAt(out.items, e)
+      if (landed) out.writhe = 1 - smooth((e - D.after) / D.fade)
+    }
     // 火の粉・炎の柱・足元の輪・黒い煙・足元の残り火
     drops(out.items, D.splash, 12000, e, [0.8, 2.2], [600, 1100], [0.006, 0.018], 0.5)
     drops(out.items, 40, 13000, e - 120, [0.5, 1.5], [500, 900], [0.006, 0.015], 0.5, { oy: BODY_Y, around: true })
@@ -423,10 +450,95 @@ export const doomSceneAt = (m, ms, D = DOOM) => {
   return out
 }
 
+// 炎から立ちのぼる火の粉（足元から上へ・左右にゆれて消える）：spread＝広さ・rise＝高さ（枠の幅が1）・until＝ここから薄れる（ms）
+const embersUp = (items, n, seed, e, spread, rise, until) => {
+  const all = 1 - smooth((e - until) / 320)
+  if (e < 0 || all <= 0) return
+  for (let i = 0; i < n; i++) {
+    const per = 480 + 520 * rnd(seed + i, 1), k = ((e + rnd(seed + i, 2) * per) % per) / per
+    const r = 0.004 + 0.008 * rnd(seed + i, 5)
+    items.push({ t: 'drop', x: (rnd(seed + i, 3) - 0.5) * spread + 0.04 * Math.sin(e / 90 + i), y: -0.02 - rise * (0.25 + 0.75 * rnd(seed + i, 4)) * easeOut(k), rx: r * 2.2, ry: r, rot: 90, op: all * Math.min(1, k / 0.1) * (1 - k) })
+  }
+}
+// 亡者の腕の形（手首が原点・指先が上・大きさ1）：curl＝指の曲がり（＋で握る・−で開いて爪を立てる）。fill で塗る1本のパス。画面は枠の幅 × s に広げて回す
+const HAND_FINGERS = [[-0.3, -0.2, -64, 0.5, 0.09], [-0.25, -0.5, -22, 0.66, 0.08], [-0.08, -0.56, -6, 0.76, 0.082], [0.1, -0.54, 9, 0.7, 0.078], [0.26, -0.43, 26, 0.54, 0.066]]
+const poly = (arr) => `M${arr.map(([x, y]) => `${x.toFixed(3)} ${y.toFixed(3)}`).join('L')}Z`
+export const deadHandPathOf = (curl) => {
+  let d = poly([[-0.17, 0.02], [-0.34, -0.24], [-0.31, -0.54], [0.3, -0.5], [0.36, -0.22], [0.17, 0.02]]) + poly([[-0.17, 0], [0.17, 0], [0.24, 1.7], [-0.24, 1.7]])
+  for (const [bx, by, a, len, w] of HAND_FINGERS) {
+    const dir = a < 0 ? 1 : -1, L = [], R = []
+    let ang = a * (1 - 0.3 * Math.max(0, curl)), x = bx, y = by
+    for (const [k, bend, wk] of [[0.42, 12, 1], [0.33, 30, 0.82], [0.25, 40, 0.6]]) {
+      const th = (ang * Math.PI) / 180, nx = Math.cos(th), ny = Math.sin(th)
+      L.push([x - nx * w * wk, y - ny * w * wk])
+      R.push([x + nx * w * wk, y + ny * w * wk])
+      x += Math.sin(th) * len * k
+      y -= Math.cos(th) * len * k
+      ang += dir * bend * curl
+    }
+    d += poly([...L, [x, y], ...R.reverse()])
+  }
+  return d
+}
+// 亡者の腕（無間地獄）：地の底から突き上がり、指を開いて → 握って → 開いて → 握りながら沈む。奥（上）は小さく、手前（下）は大きい。e＝当たってからの ms
+//   x・h＝足元からの場所と手首の高さ（枠の幅が1）・s＝大きさ・lean＝傾き（相手へ向かう）・at＝出る時刻・life＝長さ
+const HELL_HANDS = [
+  { x: -0.2, h: 1.04, s: 0.2, lean: 6, at: 90, life: 1100 }, { x: 0.24, h: 1.12, s: 0.2, lean: -8, at: 220, life: 1000 },
+  { x: -0.74, h: 0.98, s: 0.18, lean: 14, at: 260, life: 950 }, { x: 0.78, h: 0.92, s: 0.18, lean: -14, at: 300, life: 950 },
+  { x: -0.58, h: 0.62, s: 0.3, lean: 10, at: 0, life: 1240 }, { x: 0.62, h: 0.58, s: 0.31, lean: -12, at: 130, life: 1120 },
+  { x: -0.92, h: 0.3, s: 0.34, lean: 16, at: 40, life: 1180 }, { x: 0.96, h: 0.28, s: 0.36, lean: -18, at: 80, life: 1150 },
+  { x: -0.34, h: 0.2, s: 0.27, lean: 20, at: 200, life: 1050 }, { x: 0.38, h: 0.18, s: 0.28, lean: -22, at: 160, life: 1080 },
+]
+export const deadHandsAt = (items, e) => {
+  HELL_HANDS.forEach((h, i) => {
+    const p = (e - h.at) / h.life
+    if (p < 0 || p >= 1) return
+    const rise = easeOut(p / 0.22), sink = smooth((p - 0.8) / 0.2)
+    items.push({ t: 'dhand', x: h.x + 0.015 * Math.sin(e / 170 + i), y: 0.3 - (h.h + 0.3) * rise + 0.3 * sink, s: h.s,
+      rot: h.lean * (1 + 0.8 * (1 - rise)) + 7 * Math.sin(e / 150 + i * 1.7),
+      curl: -0.85 + 1.6 * smooth((p - 0.28) / 0.2) - 0.9 * smooth((p - 0.56) / 0.14) + 0.8 * smooth((p - 0.76) / 0.14),
+      op: Math.min(1, p / 0.06) * (p > 0.86 ? (1 - p) / 0.14 : 1) })
+  })
+}
+// 業縛の鎖の1本の上の点（t＝0 地面の外〜1 巻き終わり）：地面の遠くから体へ渦を巻いて寄り、巻きながら上がる。x・y＝足元から（枠の幅が1）・z＝手前ほど＋（sin）
+const chainStartAngleOf = (i) => (i * 2 * Math.PI) / CHAIN.strands + 0.6
+const chainPointAt = (i, t, tight, slide, C) => {
+  const a = chainStartAngleOf(i) + 2 * Math.PI * C.wraps * t + slide, sn = Math.sin(a)
+  const r = C.rx * (1 - 0.2 * tight) * (1 + 0.55 * (1 - smooth(t / 0.16)))
+  return { x: r * Math.cos(a), y: -C.heights[i] * smooth((t - 0.1) / 0.9) + r * C.flat * sn, z: sn }
+}
+// 業縛の鎖のいまの形（ms＝技を出しはじめてから・lead のあいだに伸びて、当たる時刻に巻き終わる）→ [{ x, y, rot（ラジアン・進む向き）, s（遠近の倍率）, front（体より手前）, op }]（頭の側から順＝根もとの側が上に重なる）。
+//   締め上げるたび細って、巻きが進む（slide）。ちぎれると外へ飛び散る
+export const chainTilesAt = (m, ms, C = CHAIN) => {
+  const lead = m.fx?.hit?.lead || 0, e = ms - m.impactMs, k = (e - C.burstMs) / C.flyMs
+  if (e < -lead || k >= 1) return []
+  const head = e < 0 ? easeOut((e + lead) / Math.max(1, lead)) : 1
+  const steps = C.squeezes.map(t => smooth((e - t) / 90)), tc = steps.reduce((a, v) => a + v, 0) / C.squeezes.length
+  const snap = e >= 0 ? 0.12 * pulse(e, 160) : 0.12
+  const tight = tc + 0.3 * Math.max(0, ...C.squeezes.map(t => bump(e - t, 200))) - snap
+  const slide = 0.7 * tc + Math.max(0, e) * 0.00035
+  const out = []
+  for (let i = 0; i < C.strands; i++) {
+    const tiles = []
+    const N = 130
+    let p = chainPointAt(i, 0, tight, slide, C), acc = C.pitch
+    for (let j = 1; j <= N; j++) {
+      const t = (j / N) * head, q = chainPointAt(i, t, tight, slide, C), d = Math.hypot(q.x - p.x, q.y - p.y)
+      acc += d
+      if (acc >= C.pitch) {
+        acc -= C.pitch
+        tiles.push({ x: q.x, y: q.y, rot: Math.atan2(q.y - p.y, q.x - p.x), s: 0.82 + 0.28 * q.z, front: q.z >= 0, op: 1 })
+      }
+      p = q
+    }
+    out.push(...tiles.reverse().map((c, n) => (k < 0 ? c : { ...c, x: c.x * (1 + 1.7 * k), y: c.y - 0.2 * k + 1.1 * k * k, rot: c.rot + ((n % 2 ? 1 : -1) * 3.2 * k), op: 1 - k * k })))
+  }
+  return out
+}
 // 足元で噴き上がる技（kind 'burst'・業火断罪）のあいだ（ms＝技を出しはじめてから）→ sceneAt と同じ形＋ tone・dimColor
 //   構えで暗くなり手に光が集まる → 振り抜きの絵で手の光がはじける・少し光って揺れる → 当たった瞬間に大きく光って揺れ、相手の足元で火の粉・炎の筋・輪・煙
-export const burstSceneAt = (m, ms, B = BURST) => {
-  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: m.scene.tone || null, dimColor: m.scene.dimColor || null }
+export const burstSceneAt = (m, ms, B = BURST, landed = true) => {
+  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: m.scene.tone || null, dimColor: m.scene.dimColor || null, writhe: 0 }
   const H = m.hitMs, I = m.impactMs
   if (ms < 0 || ms >= sceneEndMsOf(m)) return out
   const e = ms - I, s = ms - H
@@ -437,6 +549,9 @@ export const burstSceneAt = (m, ms, B = BURST) => {
   if (e >= 0) {
     out.flash = Math.max(out.flash, 0.6 * (e < 40 ? e / 40 : pulse(e - 40, 320)))
     amp += 9 * (1 - clamp01(e / 600)) ** 2
+    // 火の粉が絶えず立ちのぼる・炎に巻かれてもがく
+    embersUp(out.items, 30, 19000, e, 1.05, 1.5, B.after)
+    if (landed) out.writhe = 1 - smooth((e - B.after) / B.fade)
     drops(out.items, B.splash, 16000, e, [0.7, 1.9], [500, 950], [0.006, 0.016], 0.42)
     jets(out.items, B.jets, 17000, e, 1.1)
     for (const [at, size] of B.rings) {
@@ -587,9 +702,10 @@ export const slashSceneAt = (m, ms, landed = true, D = SLASH) => {
 //   暗さと光はいちばん強いもの・揺れは足す・描くものは並べる・雲と手は新しいほう（acts の after・landed は sceneAt と同じ）
 //   相手の縮みはかけ合わせる
 export const stageSceneOf = (acts, cast) => {
-  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, squeeze: null, tone: null, dimColor: null, beam: null, knock: 0 }
+  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, squeeze: null, tone: null, dimColor: null, beam: null, knock: 0, writhe: 0 }
   const add = (s) => {
     out.knock += s.knock || 0
+    out.writhe = Math.max(out.writhe, s.writhe || 0)
     if (s.tone && (s.dim > 0 || s.items.length || s.hand || s.beam)) { out.tone = s.tone; out.dimColor = s.dimColor }
     if (s.beam) out.beam = s.beam
     out.dim = Math.max(out.dim, s.dim)

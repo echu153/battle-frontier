@@ -2,7 +2,7 @@ import { createContext, useContext, useId, useLayoutEffect, useRef, useState } f
 import { TEXT } from './v2ui.js'
 import { buffChips, hpBuffChips, ailChips, stateChips, needShownOf, castMsOf, CAST_SEC, BUFF_GAUGE_SEC } from '../core/atb.js'
 import { STAT_DEFS } from '../core/stats.js'
-import { lungeOf, shakeOf, lastHitAtOf, popTextOf, popScaleOf, popLeftOf, popTopOf, CRIT_TEXT, HIT_SEC, POP_SEC, GLOW_SEC, RAGE_SEC, skillBannerAt } from '../lib/atbFx.js'
+import { hitReactOf, writheOf, lungeOf, shakeOf, lastHitAtOf, popTextOf, popScaleOf, popLeftOf, popTopOf, CRIT_TEXT, HIT_SEC, POP_SEC, GLOW_SEC, RAGE_SEC, skillBannerAt } from '../lib/atbFx.js'
 import { JP_BOLD } from './casinoStyle.js'
 import { rubySegmentsOf } from '../lib/skillRuby.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
@@ -12,7 +12,8 @@ import { artIsLoaded } from '../lib/artPreload.js'
 import BossFlowCanvas from './BossFlowCanvas.jsx'
 import BossDissolve from './BossDissolve.jsx'
 import BossAuraFlow from './BossAuraFlow.jsx'
-import { FX_HEAD_Y, FX_FEET_Y, FX_SKY_Y, FX_TARGET_Y, SCENE_TOP, fallAt, coilAt, pourTimesOf, sceneEndMsOf, stageSceneOf, flyPosOf, boltPathOf, flashStarOf } from '../lib/bossScene.js'
+import BossFireFx from './BossFireFx.jsx'
+import { FX_HEAD_Y, FX_FEET_Y, FX_SKY_Y, FX_TARGET_Y, SCENE_TOP, CHAIN, chainTilesAt, deadHandPathOf, fallAt, coilAt, pourTimesOf, sceneEndMsOf, stageSceneOf, flyPosOf, boltPathOf, flashStarOf } from '../lib/bossScene.js'
 import { deathAt, deathPoseOf, deathShowOf } from '../lib/bossDeath.js'
 
 // ============================================================
@@ -77,7 +78,7 @@ import { deathAt, deathPoseOf, deathShowOf } from '../lib/bossDeath.js'
 //   体の光は明るさ（brightness）と後ろの丸い光で出す。filter はいつも付けておく（付け外しのたびに層が作り直されて、絵が一瞬消えることがある）
 const LiteCtx = createContext(false)
 // 大技などの細かい粒は半分に（軽い表示）
-const LITE_THIN = new Set(['mist', 'rain', 'drop', 'mote', 'hdrop', 'bubble', 'foam'])
+const LITE_THIN = new Set(['mist', 'rain', 'drop', 'mote', 'hdrop', 'bubble', 'foam', 'dhand'])
 
 const Bar = ({ pct, color, h = 10 }) => (
   <div style={{ height:`${h}px`, background:'#000818', border:'1px solid #13405f', overflow:'hidden' }}>
@@ -524,8 +525,9 @@ const buffAfterOf = (art, me, marks, now) => {
 const FIGHTER_ROWS = 5
 //   death … 倒れる動き（lib/bossDeath.js の deathAt に t0＝倒れた時刻を足したもの・ボスだけ）
 //   introWait … 開戦の動きを始める前（遭遇の絵の後ろ・サーバーの返事を待っているあいだ）。ボスは登場の前の形で待つ
+//   react … 受けた瞬間に押されてのけぞる（lib/atbFx.js の hitReactOf・ボス戦の自分）／tone … 受けた技の色（演出の tone）／writhe … 炎や鎖に巻かれてもがく強さ（bossScene）
 //   reachTo … 相手の真ん中（立ち絵の px・ボスだけ）。剣先が届くまで踏み込む距離を出す（lib/bossIllust.js の reachXOf）／knock … 技で押される（px・自分だけ）
-function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx, now, name, artH = ART_H, scale = 1, areaRef, castEnd = -1e9, squeeze = null, death = null, introWait = false, reachTo = null, knock = 0 }) {
+function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx, now, name, artH = ART_H, scale = 1, areaRef, castEnd = -1e9, squeeze = null, death = null, introWait = false, reachTo = null, knock = 0, react = false, tone = null, writhe = 0 }) {
   const lite = useContext(LiteCtx)
   const mine = fx.filter(f => f.side === side)
   const lastOf = (kind) => mine.reduce((t, f) => (f.kind === kind && f.t0 <= now && f.t0 > t ? f.t0 : t), -1e9)
@@ -577,10 +579,19 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   const ghosts = rigMotion && !casting && !buffPose && !death ? illustGhostsAt(rigMotion, rigMs).map(g => ({ ...g, pose: illustPoseAt(rig.key, rigMotion, g.ms, tMs - (rigMs - g.ms), false, reachX) })) : []
   const dx = (frame >= 0 || rig ? 0 : lungeOf(now - lastOf('act')) * dir) + shakeOf(now - lastOf('hit')) + knock
   const hitAgo = now - lastOf('hit')
+  // 受けた瞬間の動き（自分・ボス戦）：押されてのけぞる・つぶれて伸び戻る・白く光ってから技の色が残る／巻かれてもがく
+  const hitMark = react ? mine.reduce((p, f) => (f.kind === 'hit' && f.t0 <= now && (!p || f.t0 > p.t0) ? f : p), null) : null
+  const hr = react ? hitReactOf(hitMark, now, me.base.hp, knock !== 0) : null
+  const wr = writhe > 0.01 ? writheOf(writhe, now) : null
+  const hitRgb = tone === 'fire' ? '255,110,30' : tone === 'soul' ? '170,110,255' : '255,50,60'
+  const reactTf = hr || wr ? `translate(${((hr?.x || 0) + (wr?.x || 0)).toFixed(2)}%, ${(hr?.y || 0).toFixed(2)}%) rotate(${((hr?.rot || 0) + (wr?.rot || 0)).toFixed(2)}deg) scale(${(hr?.sx || 1).toFixed(3)}, ${(hr?.sy || 1).toFixed(3)})` : null
   const glowAgo = now - lastOf('use')
   const rageAgo = now - lastOf('rage')
   const filters = []
-  if (hitAgo >= 0 && hitAgo < HIT_SEC) filters.push('drop-shadow(0 0 6px #ff3344) brightness(1.25)')
+  if (hr) filters.push(`brightness(${(1 + 1.5 * hr.flash).toFixed(2)}) drop-shadow(0 0 ${(3 + 9 * hr.glow).toFixed(1)}px rgba(${hitRgb},${(0.25 + 0.7 * hr.glow).toFixed(2)}))`)
+  else if (hitAgo >= 0 && hitAgo < HIT_SEC) filters.push('drop-shadow(0 0 6px #ff3344) brightness(1.25)')
+  // 炎や鎖に巻かれているあいだ：熱く光って脈打つ
+  if (writhe > 0.01) filters.push(`brightness(${(1 + writhe * (0.14 + 0.1 * Math.sin(now * 40))).toFixed(3)}) drop-shadow(0 0 ${(2 + 6 * writhe).toFixed(1)}px rgba(${hitRgb},${(0.6 * writhe).toFixed(2)}))`)
   if (glowAgo >= 0 && glowAgo < GLOW_SEC) filters.push('drop-shadow(0 0 10px #ffee88) brightness(1.3)')
   if (buff) {
     // バフの絵があるボス：付いた瞬間にぱっと明るく光り、赤い光が見せているあいだ残る
@@ -604,7 +615,8 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   // 軽い表示：ぼかしを使わず、明るさと後ろの丸い光だけ（LiteCtx）
   let bright = 1, red = 0
   if (lite) {
-    if (hitAgo >= 0 && hitAgo < HIT_SEC) bright *= 1.25
+    if (hr) { bright *= 1 + 1.5 * hr.flash; red = Math.max(red, hr.glow) } else if (hitAgo >= 0 && hitAgo < HIT_SEC) bright *= 1.25
+    if (writhe > 0.01) { bright *= 1 + 0.14 * writhe; red = Math.max(red, 0.7 * writhe) }
     if (glowAgo >= 0 && glowAgo < GLOW_SEC) bright *= 1.3
     if (buff) { bright *= 1 + 0.9 * buff.flash; red = Math.max(0, 1 - (now - lastRage.t0) / (RAGE_SEC * 1.2)) }
     else if (rageAgo >= 0 && rageAgo < RAGE_SEC && !death) { const k = Math.sin(Math.PI * 2 * rageAgo / RAGE_SEC) ** 2 * (1 - rageAgo / RAGE_SEC); bright *= 1 + 0.35 * k; red = k }
@@ -614,7 +626,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
     if (enter) { bright *= enter.bright; red = Math.max(red, enter.glow) }
   }
   const wrapFilter = lite ? `brightness(${bright.toFixed(3)}) grayscale(${me.ail.paralyze ? 0.6 : 0})` : filters.join(' ') || 'none'
-  const redColor = (enter?.glow > 0 && rig.intro.glowColor) || buffArt?.tint || after?.glowColor || '255,60,16'
+  const redColor = hr || wr ? hitRgb : (enter?.glow > 0 && rig.intro.glowColor) || buffArt?.tint || after?.glowColor || '255,60,16'
   const down = me.hp <= 0
   const pops = mine.filter(f => f.kind !== 'act' && f.kind !== 'use' && f.kind !== 'rage' && f.kind !== 'death' && now >= f.t0 && now - f.t0 < POP_SEC)
   const need = needShownOf(me, st.t)   // ★読むだけ（ボスの次の行動を決める関数はここで使わない＝乱数が進む）
@@ -643,7 +655,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
           {src || rig ? (
             // 待機の絵の枠（正方形）。攻撃の絵はこの枠に重ねる（ox・oy・w・h は待機の枠（クラスは 224px・ボスは base）を100%として割合で置く）
             <div style={{ position:'relative', height:'100%', width:`min(100%, calc(${artH} * ${scale}))`, filter: wrapFilter, opacity: enter && enter.op < 1 ? enter.op : undefined,
-              transform: [enter && `translate(${(enter.x * 100).toFixed(2)}%, ${(enter.y * 100).toFixed(2)}%) scale(${enter.s.toFixed(4)}, ${(enter.s * enter.sy).toFixed(4)})`, bsc && bsc.punch !== 1 && `scale(${bsc.punch.toFixed(4)})`].filter(Boolean).join(' ') || undefined,
+              transform: [enter && `translate(${(enter.x * 100).toFixed(2)}%, ${(enter.y * 100).toFixed(2)}%) scale(${enter.s.toFixed(4)}, ${(enter.s * enter.sy).toFixed(4)})`, bsc && bsc.punch !== 1 && `scale(${bsc.punch.toFixed(4)})`, reactTf].filter(Boolean).join(' ') || undefined,
               transformOrigin:'50% 92%' }}>
               {lite && red > 0.01 && <div style={{ position:'absolute', inset:'-14%', borderRadius:'50%', pointerEvents:'none', opacity: Math.min(1, red).toFixed(3),
                 background:`radial-gradient(closest-side, rgba(${redColor},0.6) 45%, rgba(${redColor},0) 100%)` }} />}
@@ -756,6 +768,7 @@ function BossFx({ fx, now, geo, art, cast = null, castEnd = -1e9, scene = null }
   const castM = cast && geo ? motions.find(m => m.label === cast.name) || motions.at(-1) : null
   return motions.flatMap(m => Object.entries(m.fx || {}).flatMap(([kind, a]) => {
     if (kind === 'flow') return []   // 流れる水の絵は滝の中（PourFlow）
+    if (backFxOf(kind, a)) return []   // 自分の絵より奥に描くもの（BossFxBack）
     const sc = a.size ? (a.size * ((a.on ? geo?.p.w : geo?.b.w) || 0)) / a.w : s   // イラスト版は枠の幅に対する大きさ
     // 砲口の閃光（kind 'flash'・ゼルギアス）：撃つたび、絵の右のはしを砲口に合わせて相手の方へ向ける。一気にふくらんで消える
     if (kind === 'flash') return (m.shots || []).map((sh, i) => {
@@ -946,10 +959,12 @@ function ChargeOrb({ m, a, acts, now, geo, art, s, cast, castEnd, sky = null }) 
   if (a.on) {
     if (!geo) return <Sprite a={a} frame={-1} />
     // 頭上・空（雲）のほか、足元（無間地獄の地割れの輪）
-    const at = { x: geo.p.x + geo.p.w / 2, y: geo.p.y + geo.p.h * (a.on === 'sky' ? FX_SKY_Y : a.on === 'feet' ? FX_FEET_Y : FX_HEAD_Y) }
+    //   【確定】2026-11-01 ユーザー「むげんじごくのわっか、枠からはみ出てHPとかに被ってるから改善して」：足元の輪は、いちばん大きくなっても手前のふちが絵の枠の下におさまる所まで上げる（少しつぶす＝sy）
+    const ringH = a.on === 'feet' ? a.h * (a.size * geo.p.w / a.w) * (a.sy || 1) : 0
+    const at = { x: geo.p.x + geo.p.w / 2, y: a.on === 'feet' ? Math.min(geo.p.y + geo.p.h * FX_FEET_Y, frameBottomOf(geo) - 2 - ringH / 2) : geo.p.y + geo.p.h * (a.on === 'sky' ? FX_SKY_Y : FX_HEAD_Y) }
     const P = m.scene ? pourTimesOf(m) : null
     const filter = sky ? `brightness(${(1 + 0.2 * sky.glow + 0.7 * sky.flicker).toFixed(3)})` : undefined
-    const cloud = (k, op) => ({ frame: 0, x: at.x, y: at.y, op, rot: a.on === 'feet' ? 0 : Math.sin(now * 2.2) * 0.035, filter,
+    const cloud = (k, op) => ({ frame: 0, x: at.x, y: at.y, op, rot: a.on === 'feet' ? 0 : Math.sin(now * 2.2) * 0.035, filter: a.on === 'feet' ? `brightness(${(1.1 + 0.25 * Math.sin(now * 9)).toFixed(3)})` : filter, sy: a.sy || 1,
       s: (a.size * geo.p.w / a.w) * (0.35 + 0.65 * easeOut(k)) * (1 + 0.035 * Math.sin(now * 6)) })
     if (cast) on = cloud(Math.min(1, cast.ms / 1200), Math.min(1, cast.ms / 400))
     for (const f of acts) {
@@ -985,6 +1000,66 @@ function ChargeOrb({ m, a, acts, now, geo, art, s, cast, castEnd, sky = null }) 
   }
   return <Sprite a={a} {...(on || { frame: -1 })} />
 }
+// 自分の絵より奥に描くエフェクトか：足元の地割れの輪・噴き上がる炎（自分が炎の中で喰らって見える）・鎖の奥の半分
+const backFxOf = (kind, a) => (kind === 'charge' && a.on === 'feet') || (kind === 'hit' && (a.anim === 'rise' || a.anim === 'wrap'))
+// 噴き上がる炎（anim 'rise'・components/BossFireFx.jsx）：足元に下のはしをそろえる。lead のあいだに下から噴き上がり、durMs の終わりごろ上から燃え尽きる
+function FireColumn({ m, a, acts, now, geo }) {
+  const lite = useContext(LiteCtx)
+  const w = a.size * geo.p.w, h = w * (a.h / a.w) * (a.sy || 1), lead = a.lead || 0
+  let ms = -1
+  for (const f of acts) if (f.motion === m) { const e = (now - f.t0) * 1000 - m.impactMs + lead; if (e >= 0 && e < a.durMs) ms = e }
+  const on = ms >= 0, k = on ? ms / a.durMs : 0, bk = Math.min(1, Math.max(0, (k - 0.62) / 0.38))
+  return <BossFireFx src={a.src} left={geo.p.x + geo.p.w / 2 - w / 2} top={geo.p.y + geo.p.h * FX_FEET_Y - h} w={w} h={h} on={on} reveal={on ? easeOut(Math.min(1, ms / (lead + 120))) : 0}
+    burn={bk * bk * (3 - 2 * bk)} hot={on ? Math.max(0, 1 - Math.max(0, ms - lead) / 300) : 0} amp={a.amp || 0.05} tMs={on ? ms : 0} lite={lite} />
+}
+// 業縛の鎖（lib/bossScene.js の chainTilesAt）：絵から切った鎖のひと続きを並べる。奥の半分は自分の絵の後ろ（少し暗く）・手前の半分は前。
+//   1枚の canvas に描く（毎コマ30枚ほど・<img> を並べるより軽い）。a.axis＝切った絵の鎖の向き（°）。出ていないときは作らない
+const chainImgs = new Map()
+const chainImgOf = (src) => { if (!chainImgs.has(src)) { const im = new Image(); im.src = src; chainImgs.set(src, im) } return chainImgs.get(src) }
+function ChainCanvas({ geo, a, tiles, front, H }) {
+  const ref = useRef(null)
+  useLayoutEffect(() => {
+    const c = ref.current
+    if (!c) return
+    const dpr = Math.min(2, window.devicePixelRatio || 1), pw = Math.round(geo.W * dpr), ph = Math.round(H * dpr)
+    if (c.width !== pw) c.width = pw
+    if (c.height !== ph) c.height = ph
+    const g = c.getContext('2d')
+    g.setTransform(dpr, 0, 0, dpr, 0, 0)
+    g.clearRect(0, 0, geo.W, H)
+    const im = chainImgOf(a.src)
+    if (!im.complete || !im.naturalWidth) return
+    const U = geo.p.w, ox = geo.p.x + U / 2, oy = geo.p.y + geo.p.h * FX_FEET_Y, axis = ((a.axis || 0) * Math.PI) / 180
+    for (const t of tiles) {
+      if (t.front !== front) continue
+      const th = CHAIN.thick * U * t.s, tw = th * (a.w / a.h)
+      g.save()
+      g.globalAlpha = t.op
+      g.translate(ox + t.x * U, oy + t.y * U)
+      g.rotate(t.rot - axis)
+      g.drawImage(im, -tw / 2, -th / 2, tw, th)
+      g.restore()
+    }
+  })
+  return <canvas ref={ref} style={{ position:'absolute', left: 0, top: 0, width: geo.W, height: H, zIndex: front ? 2 : undefined, maxWidth:'none', pointerEvents:'none', filter: front ? undefined : 'brightness(0.55)' }} />
+}
+// 自分の絵より奥の層（舞台の中で背景のすぐあとに置く）：足元の地割れの輪・噴き上がる炎・鎖の奥の半分。絵の枠の下で切る
+function BossFxBack({ fx, now, geo, art, cast, castEnd, tiles }) {
+  const acts = fx.filter(f => f.kind === 'act' && f.side === 'b' && f.motion?.fx)
+  const motions = Object.values(art.motions)
+  const castM = cast ? motions.find(m => m.label === cast.name) || motions.at(-1) : null
+  const H = frameBottomOf(geo)
+  return (
+    <div style={{ position:'absolute', left: 0, right: 0, top: 0, height: H, overflow:'hidden', pointerEvents:'none' }}>
+      {motions.flatMap(m => Object.entries(m.fx || {}).map(([kind, a]) => {
+        if (!backFxOf(kind, a)) return null
+        if (kind === 'charge') return m.charge ? <ChargeOrb key={a.src} m={m} a={a} acts={acts} now={now} geo={geo} art={art} s={geo.b.w / art.base} cast={castM === m ? cast : null} castEnd={castEnd} /> : null
+        if (a.anim === 'rise') return <FireColumn key={a.src} m={m} a={a} acts={acts} now={now} geo={geo} />
+        return tiles.length > 0 ? <ChainCanvas key={a.src} geo={geo} a={a} tiles={tiles} front={false} H={H} /> : null
+      }))}
+    </div>
+  )
+}
 // 派手な演出の動くもの（lib/bossScene.js の stageSceneOf の items・cloud・hand）を舞台の上に描く。
 //   場所は相手の足元の真ん中が原点・相手の絵の枠の幅が1。手に集まる光・手からのしぶき（space: 'hand'）は手（hands[hi]）から（立ち絵の px × s）
 //   雲の渦の光＝相手の頭上で、斜めから見た形（縦に縮めた）の渦巻きが回る・まん中が光る
@@ -1014,6 +1089,9 @@ function SceneLayer({ geo, sc, hands, s }) {
         <radialGradient id={`${id}g`}><stop offset="0" stopColor={Gl[0]} /><stop offset="0.35" stopColor={Gl[1]} stopOpacity="0.9" /><stop offset="1" stopColor={Gl[2]} stopOpacity="0" /></radialGradient>
         {/* 線（幅や高さが 0 になる）をぼかすので、枠は px で広くとる */}
         <filter id={`${id}b`} filterUnits="userSpaceOnUse" x="-400" y="-400" width={geo.W + 800} height="1600"><feGaussianBlur stdDeviation={(U * 0.03).toFixed(2)} /></filter>
+        {/* 亡者の腕：暗い赤の影（腕の下は炎へ消える）・ふちだけ炎の色 */}
+        <linearGradient id={`${id}hf`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#1d0306" /><stop offset="0.5" stopColor="#2c0508" /><stop offset="1" stopColor="#2c0508" stopOpacity="0" /></linearGradient>
+        <linearGradient id={`${id}hr`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#ffc070" /><stop offset="0.5" stopColor="#ff5a20" /><stop offset="1" stopColor="#ff5a20" stopOpacity="0" /></linearGradient>
       </defs>
       {c && c.glow > 0 && (
         <g transform={`translate(${ox.toFixed(1)} ${cy.toFixed(1)}) rotate(6) scale(1 0.42)`} opacity={Math.min(1, c.glow).toFixed(3)}>
@@ -1046,6 +1124,15 @@ function SceneLayer({ geo, sc, hands, s }) {
               <path d={front} stroke="#4aa0ff" strokeWidth={it.w * U * 1.6} opacity="0.4" />
               <path d={front} stroke="#9fd8ff" strokeWidth={it.w * U} />
               <path d={front} stroke="#ffffff" strokeWidth={it.w * U * 0.35} strokeDasharray={`${(U * 0.09).toFixed(1)} ${(U * 0.06).toFixed(1)}`} strokeDashoffset={(-it.dash * U / 100).toFixed(1)} />
+            </g>
+          )
+        }
+        if (it.t === 'dhand') {
+          const d = deadHandPathOf(it.curl)
+          return (
+            <g key={i} opacity={it.op.toFixed(3)} transform={`translate(${X(it.x).toFixed(1)} ${Y(it.y).toFixed(1)}) rotate(${it.rot.toFixed(1)}) scale(${(it.s * U).toFixed(2)})`}>
+              <path d={d} fill="none" stroke={`url(#${id}hr)`} strokeWidth={0.05} strokeLinejoin="round" />
+              <path d={d} fill={`url(#${id}hf)`} />
             </g>
           )
         }
@@ -1142,6 +1229,8 @@ const BgBehind = ({ behind: b0, box, k = 1 }) => {
 //     舞台の boxShadow（技の暗転）はこれの下になるので、暗さはここにも掛ける（dim）
 //   動くものは絵と同じ大きさの SVG（viewBox＝元の絵の px）に、明るく重ねる（screen）。上のはしは名前が読めるように少し暗く
 const BG_BELOW_FEET = 10
+// 絵の枠の下のはし（舞台の上からの px）：背景と、ボスのエフェクトはここで切る＝下の HP の行にかからない
+const frameBottomOf = (geo) => geo.b.y + geo.b.h + BG_BELOW_FEET
 const BG_FADE = 18
 //   behindK＝竜の後ろの色を抜く濃さ（倒れて体が消えたら一緒に消える）
 function BossBackground({ bg, geo, now, dim, behindK = 1 }) {
@@ -1282,6 +1371,11 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
   // 踏み込む技（lib/bossIllust.js の reachXOf）の行き先＝自分の真ん中（ボスの絵の枠の左上からの、立ち絵の px）
   const reachTo = geo && foeArt?.kind === 'illust' ? (geo.p.x + geo.p.w / 2 - geo.b.x) / (geo.b.w / foeArt.base) : null
   const sc = foeArt?.kind === 'illust' ? sceneOfStage(foeArt, kept.current, now, cast, castSeen.current, reachTo) : null
+  // 自分の絵より奥に描くものがあるボスか（閻魔）・業縛の鎖のいまの形（lib/bossScene.js の chainTilesAt）
+  const hasBackFx = foeArt?.kind === 'illust' && Object.values(foeArt.motions).some(m => Object.entries(m.fx || {}).some(([kind, a]) => backFxOf(kind, a)))
+  const chainAct = kept.current.filter(f => f.motion.scene?.chains).at(-1)
+  const chainFx = chainAct?.motion.fx?.hit
+  const chainTiles = chainAct && chainFx ? chainTilesAt(chainAct.motion, (now - chainAct.t0) * 1000) : []
   // HPの節目のバフの強い見せ方（逆鱗・lib/bossIllust.js の buffSceneAt）：舞台を赤黒く暗く・吠える揺れ（技の演出と重ねる）
   const rageB = foeArt?.kind === 'illust' ? fx.reduce((p, f) => (f.kind === 'rage' && f.side === 'b' && f.t0 <= now && (!p || f.t0 >= p.t0) ? f : p), null) : null
   // 開戦の動き（lib/bossIllust.js の intro）の吠えた瞬間も同じ形（暗さと揺れ）
@@ -1315,14 +1409,19 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
       boxShadow: dimOf && !foeArt?.bg ? `inset 0 0 0 2000px rgba(${dimOf.c},${dimOf.k.toFixed(3)})` : undefined,
       transform: shake[0] || shake[1] ? `translate(${shake[0].toFixed(1)}px, ${shake[1].toFixed(1)}px)` : undefined }}>
       {foeArt?.bg && geo && <BossBackground bg={foeArt.bg} geo={geo} now={now} dim={dimOf} behindK={death ? death.behind : 1} />}
+      {hasBackFx && geo && <BossFxBack fx={death ? fxAll.filter(f => f.side !== 'b' || f.kind !== 'act') : fxAll} now={now} geo={geo} art={foeArt} cast={cast} castEnd={castSeen.current} tiles={chainTiles} />}
       <Fighter st={st} side="a" me={st.a} src={playerSrc} motion={playerMotion} strips={playerMotion ? [playerMotion] : []} fx={fx} now={now} name={st.a.name}
-        artH={size?.artH || ART_H} scale={playerScale} areaRef={pArea} squeeze={sc?.squeeze} knock={sc?.knock || 0} />
+        artH={size?.artH || ART_H} scale={playerScale} areaRef={pArea} squeeze={sc?.squeeze} knock={sc?.knock || 0} react={foeBig} tone={sc?.tone} writhe={sc?.writhe || 0} />
       <Fighter st={st} side="b" me={st.b} right src={foeSrc} fx={fx} now={now} name={st.b.name}
         strips={foeArt?.kind === 'pixel' ? Object.values(foeArt.motions) : []} rig={foeArt?.kind === 'illust' ? foeArt : null}
         artH={size?.artH || ART_H} areaRef={bArea} castEnd={castSeen.current} death={death} introWait={introWait} reachTo={reachTo} />
       {sc?.beam && geo && sc.handsAt && <DoomBeam geo={geo} beam={sc.beam} tone={sc.tone} hand={[geo.b.x + sc.handsAt[0][0] * (geo.b.w / foeArt.base), geo.b.y + sc.handsAt[0][1] * (geo.b.w / foeArt.base)]} />}
-      {foeArt && <BossFx fx={death ? fxAll.filter(f => f.side !== 'b' || f.kind !== 'act') : fxAll} now={now} geo={geo} art={foeArt} cast={cast} castEnd={castSeen.current} scene={sc} />}
-      {sc && geo && <SceneLayer geo={geo} sc={sc} hands={sc.handsAt ? sc.handsAt.map(p => [geo.b.x + p[0] * (geo.b.w / foeArt.base), geo.b.y + p[1] * (geo.b.w / foeArt.base)]) : null} s={geo.b.w / foeArt.base} />}
+      {/* 【確定】2026-11-01 ユーザー「枠からはみ出てHPとかに被ってるから改善して」：ボスのエフェクトと演出は絵の枠の下で切る（下の HP の行にかからない） */}
+      <div style={{ position:'absolute', left: 0, right: 0, top: 0, height: geo ? frameBottomOf(geo) : 0, overflow:'hidden', pointerEvents:'none' }}>
+        {foeArt && <BossFx fx={death ? fxAll.filter(f => f.side !== 'b' || f.kind !== 'act') : fxAll} now={now} geo={geo} art={foeArt} cast={cast} castEnd={castSeen.current} scene={sc} />}
+        {chainTiles.length > 0 && geo && <ChainCanvas geo={geo} a={chainFx} tiles={chainTiles} front H={frameBottomOf(geo)} />}
+        {sc && geo && <SceneLayer geo={geo} sc={sc} hands={sc.handsAt ? sc.handsAt.map(p => [geo.b.x + p[0] * (geo.b.w / foeArt.base), geo.b.y + p[1] * (geo.b.w / foeArt.base)]) : null} s={geo.b.w / foeArt.base} />}
+      </div>
       {sc && geo && sc.flash > 0 && <Flash geo={geo} op={sc.flash} fire={sc.tone === 'fire'} />}
       {geo && rains.length > 0 && <BuffRain geo={geo} rains={rains} op={rainOp} />}
       {/* 稲妻が落ちた瞬間に舞台ぜんぶが光る（篠突く雨） */}

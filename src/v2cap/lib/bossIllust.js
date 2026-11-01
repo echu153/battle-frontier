@@ -994,17 +994,24 @@ export const BOSS_ILLUST_DEFS = {
       anchors: { windup: { hand: [272, 12] }, strike: { hand: [211, 627] } },
       scene: { kind: 'burst', tone: 'fire', dimColor: '20,0,4', hand: { pt: [211, 627], part: 'body' } } },
       // 業縛の鎖：手を腰の後ろへ引き、突き出して拳を握り、手前へぐっと引き寄せる＝地面から黒い鎖が伸びて相手を締め上げる（飛ばない）
-      chains: { totalMs: 1500, hitMs: 540, keys: [
+      //   【確定】2026-11-01 ユーザー「鎖もモーションしっかり動くようにして」：鎖は lib/bossScene.js の chainTilesAt。拳を握ると足元の外から伸びて 260ms で巻きつき（当たる）、
+      //   手前へぐいぐい引くたび（keys の 945・1185 と 1425）締め上がる＝CHAIN.squeezes と同じ時刻
+      chains: { totalMs: 1560, hitMs: 540, keys: [
         [0, {}],
         [140, { lean: -0.02 }],
         [460, { lean: -0.05 }],
         [510, { lean: -0.055 }],
         [540, { lean: 0.03 }, 'out'],
-        [780, { lean: -0.02 }],
-        [1040, { lean: -0.015 }],
-        [1500, {}],
+        [800, { lean: 0.005 }],
+        [920, { lean: 0.005 }],
+        [945, { lean: -0.04 }, 'out'],
+        [1160, { lean: -0.015 }],
+        [1185, { lean: -0.05 }, 'out'],
+        [1400, { lean: -0.02 }],
+        [1425, { lean: -0.055 }, 'out'],
+        [1560, {}],
       ], jolt: { atMs: 540, ms: 220, lean: 0.02 },
-      art: [[0, null], [130, 'windup'], [515, 'strike'], [1100, null]], ghosts: { fromMs: 515, toMs: 640, lagMs: 26, n: 3 },
+      art: [[0, null], [130, 'windup'], [515, 'strike'], [1490, null]], ghosts: { fromMs: 515, toMs: 640, lagMs: 26, n: 3 },
       anchors: { windup: { hand: [529, 336] }, strike: { hand: [433, 184] } },
       scene: { kind: 'coil', tone: 'fire', chains: true, dimColor: '12,0,10', hand: { pt: [433, 184], part: 'body' } } },
       // 無間地獄：杖を天へ掲げて裁きを唱える（構え3.5秒＋打ち下ろす直前の0.5秒＝4秒・黒龍の終焉の黒焔と同じ長さ）・相手の足元に地割れの輪が広がる →
@@ -1022,22 +1029,22 @@ export const BOSS_ILLUST_DEFS = {
       ], jolt: { atMs: 4000, ms: 320, lean: 0.04 }, charge: { kind: 'charge', fromMs: 0, toMs: 4000, holdMs: 700 },
       art: [[0, 'windup'], [3950, 'strike'], [4820, null]], ghosts: { fromMs: 3950, toMs: 4100, lagMs: 28, n: 3 },
       anchors: { windup: { hand: [168, 16] }, strike: { hand: [36, 622] } },
-      scene: { kind: 'doom', noBeam: true, dimColor: '18,0,6', hand: { pt: [168, 16], part: 'body' } } },
+      scene: { kind: 'doom', noBeam: true, hands: true, dimColor: '18,0,6', hand: { pt: [168, 16], part: 'body' } } },
     },
     // on＝相手のどこに出すか（大きさは自分の絵の枠の幅に対して）・anim 'rise'＝下から噴き上がる（lead＝絵が出はじめてから当たるまで）・rise＝鎖が足元から伸びて見える
     effects: [
       { file: '魂火_飛ぶ', motion: 'soul', kind: 'fly', size: 0.4, flyMs: 320 },
       { file: '魂火_当たる', motion: 'soul', kind: 'hit', size: 0.52, durMs: 560, spin: 30 },
       { file: '手の炎', motion: 'soul', kind: 'charge' },
-      // 流れる炎の絵（kind 'flow'）：滝と同じ作りで、上へ流す（crop＝元の絵の px）
-      { file: '業火断罪_当たる', motion: 'pillar', kind: 'hit', on: 'feet', size: 1.45, sy: 1.3, anim: 'rise', lead: 140, durMs: 1050 },
-      { file: '業火断罪_当たる', motion: 'pillar', kind: 'flow', crop: [430, 300, 830, 1050], band: 0.3, blurY: 8 },
-      { file: '業縛の鎖_当たる', motion: 'chains', kind: 'hit', on: 'body', size: 1.15, anim: 'bind', rise: true, durMs: 1100 },
-      // 地割れの輪は業火より奥に重ねる＝並びは輪が先
-      { file: '無間地獄_ためる', motion: 'hell', kind: 'charge', on: 'feet', size: 1.5 },
-      //   dome＝絵いっぱいに描かれた炎の四角いふちを消す（道具が絵に焼きこむ）
-      { file: '無間地獄_当たる', motion: 'hell', kind: 'hit', on: 'feet', size: 2.3, anim: 'rise', lead: 160, durMs: 1500, dome: 0.55 },
-      { file: '無間地獄_当たる', motion: 'hell', kind: 'flow', crop: [250, 150, 1000, 1150], band: 0.3, blurY: 10 },
+      // 噴き上がる炎（anim 'rise'）は自分の絵より奥で燃やす（components/BossFireFx.jsx・amp＝揺らぎの大きさ）＝自分が炎の中で喰らって見える
+      { file: '業火断罪_当たる', motion: 'pillar', kind: 'hit', on: 'feet', size: 1.45, sy: 1.3, anim: 'rise', amp: 0.055, lead: 140, durMs: 1050 },
+      // 鎖（anim 'wrap'）：絵のいちばん手前の鎖から、飾りの輪とその隣の輪のひと続きを切る（poly＝640 の px・立ち絵と同じ大きさで見た点）。chainTilesAt が並べる。axis＝切った絵の鎖の向き（°）
+      { file: '業縛の鎖_当たる', motion: 'chains', kind: 'hit', anim: 'wrap', lead: 260, axis: 5.4,
+        poly: [[185, 540.7], [238.3, 553.3], [246.7, 541.7], [266.7, 537.3], [363.3, 537.3], [378.3, 545], [398.3, 578.3], [398.3, 619.3], [371.7, 627.3], [243.3, 627.3], [238.3, 612.7], [203.3, 612.7], [185, 604]] },
+      // 地割れの輪は業火より奥に重ねる＝並びは輪が先。sy＝少しつぶす（枠の下におさめる）
+      { file: '無間地獄_ためる', motion: 'hell', kind: 'charge', on: 'feet', size: 1.5, sy: 0.8 },
+      //   dome＝絵いっぱいに描かれた炎の四角いふちを消す（道具が絵に焼きこむ）。side＝大きく出すので細かく
+      { file: '無間地獄_当たる', motion: 'hell', kind: 'hit', on: 'feet', size: 2.3, anim: 'rise', amp: 0.06, lead: 160, durMs: 1500, dome: 0.55, side: 480 },
       // 手のひらの上でゆらぐ魂の炎（大きさと場所は idle.handFlame）
       { file: '手の炎', motion: 'idle', kind: 'flame' },
     ],
@@ -1550,7 +1557,7 @@ export const bossIllustOf = (key) => {
       const a = art.fx?.[m.key]?.[d.kind]
       if (!a) continue
       fx[d.kind] = { ...a, frames: 1, src: srcOf(key, illustFxKindOf(m.key, d.kind)), size: d.size, durMs: d.durMs, spin: d.spin || 0, wipe: !!d.wipe, emerge: !!d.emerge,
-        on: d.on || null, anim: d.anim || null, lead: d.lead || 0, fadeTop: d.fadeTop || 0, sy: d.sy || 1, rise: !!d.rise }
+        on: d.on || null, anim: d.anim || null, lead: d.lead || 0, fadeTop: d.fadeTop || 0, sy: d.sy || 1, rise: !!d.rise, amp: d.amp || 0, axis: d.axis || 0 }
       if (d.kind === 'fly') flyMs = d.flyMs
     }
     const poseAt = (ms) => ({ ...ZERO, ...motionPoseAt(md.keys, ms) })

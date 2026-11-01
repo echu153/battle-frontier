@@ -130,9 +130,9 @@ export const BOSS_ILLUST = {
     pivot: [303, 364], mouth: [193, 119],
     fx: {
       soul: { fly: { w: 384, h: 212, ax: 8, ay: 151 }, hit: { w: 384, h: 370, ax: 192, ay: 185 }, charge: { w: 211, h: 384, ax: 106, ay: 192 } },
-      pillar: { hit: { w: 384, h: 384, ax: 192, ay: 192 }, flow: { w: 320, h: 420, ax: 0, ay: 0, at: [132, 92, 122, 230] } },
-      chains: { hit: { w: 353, h: 384, ax: 177, ay: 192 } },
-      hell: { charge: { w: 384, h: 208, ax: 192, ay: 104 }, hit: { w: 384, h: 384, ax: 192, ay: 192 }, flow: { w: 320, h: 299, ax: 0, ay: 0, at: [77, 46, 230, 306] } },
+      pillar: { hit: { w: 384, h: 384, ax: 192, ay: 192 } },
+      chains: { hit: { w: 384, h: 162, ax: 192, ay: 81 } },
+      hell: { charge: { w: 384, h: 208, ax: 192, ay: 104 }, hit: { w: 480, h: 480, ax: 240, ay: 240 } },
       idle: { flame: { w: 211, h: 384, ax: 106, ay: 192 } },
     },
     poses: {
@@ -148,6 +148,6 @@ export const BOSS_ILLUST = {
     fit: {
       soulA: { s: 1, deg: 0, tx: 0, ty: 0, score: 0 },
     },
-    v: { 'il-soulA': '6a66b645', 'il-soulB': 'ac0e0178', 'il-soulC': 'a32c09b3', 'il-soulD': '3db991f7', 'il-soulE': 'f5851b38', 'il-body': '383f5d45', 'il-head': 'a82f81e1', 'il-staff': 'c9e4f1cf', 'il-legL': '28aa1f2c', 'il-legR': '5799da00', 'il-hand': 'fecbb06e', 'il-pose-soul-windup': 'c3c18f66', 'il-pose-soul-strike': '579deeb7', 'il-pose-pillar-windup': 'e29810dc', 'il-pose-pillar-strike': 'c9108f45', 'il-pose-chains-windup': '5e330a58', 'il-pose-chains-strike': 'fdd0273b', 'il-pose-hell-windup': '364f426f', 'il-pose-hell-strike': '87687079', 'il-buff-rinne-pose': 'f3389191', 'il-buff-rinne-aura': 'd6005436', 'il-buff-wrath-pose': 'e2438b6c', 'il-buff-wrath-aura': '1388c44a', 'il-fx-soul-fly': '060fa75b', 'il-fx-soul-hit': 'a5d5c3a4', 'il-fx-soul-charge': '64b6da9c', 'il-fx-pillar-hit': '434fb1f1', 'il-fx-pillar-flow': 'f77a6dbc', 'il-fx-chains-hit': '75a720d4', 'il-fx-hell-charge': '59f63d34', 'il-fx-hell-hit': 'd29c416b', 'il-fx-hell-flow': 'b99b775d', 'il-fx-idle-flame': '64b6da9c' },
+    v: { 'il-soulA': '6a66b645', 'il-soulB': 'ac0e0178', 'il-soulC': 'a32c09b3', 'il-soulD': '3db991f7', 'il-soulE': 'f5851b38', 'il-body': '383f5d45', 'il-head': 'a82f81e1', 'il-staff': 'c9e4f1cf', 'il-legL': '28aa1f2c', 'il-legR': '5799da00', 'il-hand': 'fecbb06e', 'il-pose-soul-windup': 'c3c18f66', 'il-pose-soul-strike': '579deeb7', 'il-pose-pillar-windup': 'e29810dc', 'il-pose-pillar-strike': 'c9108f45', 'il-pose-chains-windup': '5e330a58', 'il-pose-chains-strike': 'fdd0273b', 'il-pose-hell-windup': '364f426f', 'il-pose-hell-strike': '87687079', 'il-buff-rinne-pose': 'f3389191', 'il-buff-rinne-aura': 'd6005436', 'il-buff-wrath-pose': 'e2438b6c', 'il-buff-wrath-aura': '1388c44a', 'il-fx-soul-fly': '060fa75b', 'il-fx-soul-hit': 'a5d5c3a4', 'il-fx-soul-charge': '64b6da9c', 'il-fx-pillar-hit': '434fb1f1', 'il-fx-chains-hit': '8ffd431a', 'il-fx-hell-charge': '59f63d34', 'il-fx-hell-hit': '821d40d8', 'il-fx-idle-flame': '64b6da9c' },
   },
 }
