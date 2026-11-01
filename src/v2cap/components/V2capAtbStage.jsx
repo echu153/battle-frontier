@@ -523,7 +523,7 @@ const buffAfterOf = (art, me, marks, now) => {
 //     背景も負の z-index をやめた（BossBackground）。絵の枠は別の層にする（translate3d）＝背景の WebGL の層の上に必ず重なる
 const FIGHTER_ROWS = 5
 //   death … 倒れる動き（lib/bossDeath.js の deathAt に t0＝倒れた時刻を足したもの・ボスだけ）
-//   introWait … 開戦の動きを始める前（遭遇の絵の後ろ・サーバーの返事を待っているあいだ）。ボスは登場の前の形で待つ
+//   introWait … 開戦の動きを始める前（サーバーの返事を待っているあいだ）。ボスは登場の前の形で待つ
 //   reachTo … 相手の真ん中（立ち絵の px・ボスだけ）。剣先が届くまで踏み込む距離を出す（lib/bossIllust.js の reachXOf）／knock … 技で押される（px・自分だけ）
 function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx, now, name, artH = ART_H, scale = 1, areaRef, castEnd = -1e9, squeeze = null, death = null, introWait = false, reachTo = null, knock = 0 }) {
   const lite = useContext(LiteCtx)

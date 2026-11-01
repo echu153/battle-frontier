@@ -52,7 +52,7 @@ test('【確定】2026-10-31 ボス戦は絵がそろうまで戦闘の時計を
     assert.match(src, /preloadArt\(\[?(\.\.\.)?(bossArt|art)\.srcs/, f)
     assert.doesNotMatch(src, /of bossArt[^\n]*new Image\(\)/, f)
   }
-  assert.match(read('../components/V2capDungeon.jsx'), /new Set\(\[openBoss, \.\.\.runBosses\.split\(','\)\]\)/, '開いたボスと入っているボス')
+  assert.match(read('../components/V2capDungeon.jsx'), /new Set\(\[pickBoss, \.\.\.runBosses\.split\(','\)\]\)/, '開いたボスと入っているボス')
   // 背景の絵と流れ図も先に読む一覧に入っている
   for (const art of [bossIllustOf('varuzenoku'), bossIllustOf('amaza'), bossArtOf('varuzenoku')]) {
     assert.ok(art.srcs.includes(art.bg.src) && art.srcs.includes(art.bg.flowSrc), art.key)

@@ -2,7 +2,7 @@
 // 「レベルキャップあり」版（v2cap）— 挑戦（ボスを呼び、HPを持ち越して倒す・ATB戦闘）
 // ------------------------------------------------------------
 // 【確定】2026-10-29 ユーザー選択（経緯は docs/v2cap-design.md §6-14 の「IDダンジョン」）：
-//   ・**自分で呼ぶ**（入口で難易度を選ぶ）。呼べるのは**全部の難易度を合わせて1日1回**（日本時間の朝5時に戻る）
+//   ・**自分で呼ぶ**（ボスを押したポップアップで難易度を選ぶ）。呼べるのは**全部の難易度を合わせて1日1回**（日本時間の朝5時に戻る）
 //   ・呼んだときから**90分**。**HPは持ち越し**＝負けても残ったHPから挑み直せる。挑戦1回は ATB の180秒まで
 //   ・スタミナ：**呼んだ人は最初の1回0・そのあと3**／**救援で入った人は挑むたびに5**（自分の「1日1回」は使わない）
 //   ・**救援信号**：だれでも（入口の「救援の一覧」）・**先着5人**（呼んだ人と合わせて6人。それぞれ自分の画面で同じボスを殴る）
@@ -223,6 +223,8 @@ export const isDiffReady = (bossKey, diffKey) => { const d = diffOf(bossKey, dif
 // 呼べるボスか（summon:false＝まだ呼べない・試し撃ちだけ）
 export const isSummonable = (bossKey) => !!DUNGEON_BOSSES[bossKey] && DUNGEON_BOSSES[bossKey].summon !== false
 export const isDiffUnlocked = (bossKey, diffKey, reachedArea) => isSummonable(bossKey) && isDiffReady(bossKey, diffKey) && (reachedArea || 1) >= diffOf(bossKey, diffKey).area
+// ポップアップを開いたときに選んでおく難易度：挑戦できるいちばん低い難易度（ボスごとに1日1回なので、うっかり難しいほうで始めない）。どれもまだなら先頭
+export const firstDiffOf = (bossKey, reachedArea) => DIFF_KEYS.find(k => isDiffUnlocked(bossKey, k, reachedArea)) || DIFF_KEYS[0]
 export const CIRCLED = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩', '⑪', '⑫', '⑬', '⑭', '⑮']
 // いま挑戦できないわけ（入口のボスの行に出す・挑戦できるなら null）。「挑戦する」のボタンもこれで決める＝言葉とボタンが食い違わない
 //   summoned＝きょうこのボスに挑戦した／ownActive＝いま自分の挑戦中のボスがいる／reached＝行ったエリアの一番先

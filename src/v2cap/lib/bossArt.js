@@ -35,7 +35,7 @@ export const BOSS_SHEET_COLS = [3, 4]   // 3列（6コマ）か4列（8コマ）
 export const BOSS_SHEET_ROWS = 2
 export const BOSS_ILLUST_SIZE = 768
 export const BOSS_THUMB_SIZE = 256     // 一覧の小さい絵（tools/v2cap-boss-thumb.mjs）
-export const BOSS_ENCOUNTER_SIZE = 960 // 挑戦を押した瞬間に出す大きな絵（同じ道具）
+export const BOSS_ENCOUNTER_SIZE = 960 // ボスを選んだポップアップに出す大きな絵（同じ道具）
 
 // ボスごとの決まり。dir＝元の絵のフォルダ（ユーザーが付けた名前）
 //   idleMs  … 待機のコマの数 → 1コマずつの長さ（ミリ秒）
@@ -126,7 +126,7 @@ export const bossSrcOf = (key, kind) => {
 export const bossFxKindOf = (motion, kind) => `fx-${motion}-${kind}`
 // 一覧の小さい絵（挑戦の入口・試し撃ち）。ドット絵版が無いボスにもある
 export const bossThumbOf = (key) => (BOSS_THUMB[key] ? `${BOSS_ART_DIR}/${bossFileOf(key, 'thumb')}?v=${BOSS_THUMB[key]}` : null)
-// 挑戦を押した瞬間に出す大きな絵（遭遇のイラスト・components/V2capBossEncounter.jsx）
+// ボスを選んだポップアップに出す大きな絵（遭遇のイラスト・components/V2capBossPick.jsx）
 export const bossEncounterOf = (key) => (BOSS_ENCOUNTER[key] ? `${BOSS_ART_DIR}/${bossFileOf(key, 'encounter')}?v=${BOSS_ENCOUNTER[key]}` : null)
 
 // 画面で使う形（無ければ null）

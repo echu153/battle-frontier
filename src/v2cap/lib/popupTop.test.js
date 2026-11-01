@@ -41,7 +41,7 @@ test('挑戦の入口の一言はいちばん上に出るので、出すたび�
   const dungeon = read('components/V2capDungeon.jsx')
   assert.ok(dungeon.includes('useEffect(() => { if (msg?.text) window.scrollTo(0, 0) }, [msg?.text])'))
   const entry = dungeon.slice(dungeon.indexOf('// ===== 入口 ====='))
-  assert.ok(entry.indexOf('{msg && <div') < entry.indexOf('<V2capItemLoadout'), '一言は持ち込む薬の欄より上')
+  assert.ok(entry.indexOf('{msg && <div') < entry.indexOf('{active.map(run =>'), '一言は入っているボスの行より上')
 })
 
 test('開発用の「いらっしゃいませーを見る」は管理者だけ（ニャーガーキング）', () => {

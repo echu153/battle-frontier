@@ -2,10 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import V2capAtbFight from './V2capAtbFight.jsx'
 import V2capBossReward from './V2capBossReward.jsx'
-import V2capBossEncounter from './V2capBossEncounter.jsx'
-import { useBossEncounter } from '../lib/useBossEncounter.js'
+import V2capBossPick, { PICK_OUT_MS } from './V2capBossPick.jsx'
 import V2capReloadNote from './V2capReloadNote.jsx'
-import V2capItemLoadout from './V2capItemLoadout.jsx'
 import { preloadArt } from '../lib/artPreload.js'
 import { box, miniBtn, TEXT } from './v2ui.js'
 import { calcPower } from '../core/stats.js'
@@ -23,8 +21,8 @@ import { CLASS_BY_ID } from '../lib/jobs.js'
 import { bossArtOf, bossEncounterOf, bossThumbOf } from '../lib/bossArt.js'
 import { bossIllustOf } from '../lib/bossIllust.js'
 import {
-  CHALLENGE_CATS, CIRCLED, DUNGEON_BOSSES, DIFF_COLOR, DIFF_KEYS, HELPERS_MAX, STAMINA_HELPER,
-  contributionPctOf, diffOf, isDiffReady, isDiffUnlocked, summonBlockOf, tryStaminaOf, msLeftOf,
+  CHALLENGE_CATS, DUNGEON_BOSSES, DIFF_COLOR, HELPERS_MAX, STAMINA_HELPER,
+  contributionPctOf, diffOf, summonBlockOf, tryStaminaOf, msLeftOf,
 } from '../lib/dungeon.js'
 
 // ============================================================
@@ -46,14 +44,17 @@ import {
 //   【確定】同じ日 ユーザー選択「EXPとGoldを渡す」：その場にいなかった人は、入口の「報酬を受け取る」から同じ報酬画面へ（決まりは lib/dungeon.js）
 //   【確定】2026-11-01 ユーザー「プレイヤーが敗北したときのテロップも欲しい、画面遷移も」「貢献度もわかるようにしてほしい、ダメージ与えた割合ね」：
 //     負けと時間切れも テロップ → 結果の画面（同じ部品・ボスの残りHP・貢献度・もう一度挑戦する）。入っているボスの行にも貢献度
-//   【確定】同じ日 ユーザー「挑戦を押してから若干ラグがあってから始まるから、スムーズに遷移させるようにして」「挑戦したら遭遇のイラストがどん！って出るようにしてほしい」：
-//     押した瞬間に遭遇のイラスト（V2capBossEncounter.jsx）。サーバーの返事と絵は裏で待つ（lib/useBossEncounter.js）。絵は押すまで出たまま。始められなかったら入口へ
-//     遭遇のイラストはどの画面でも同じ所に置く（{encounter} を一番上の先頭に）＝裏で入口から戦闘へ変わっても作り直さない（作り直すと、どん！がもう一度出る）
+//   【確定】同じ日 ユーザー「挑戦を押してから若干ラグがあってから始まるから、スムーズに遷移させるようにして」：
+//     押した瞬間に戦闘の画面へ。サーバーの返事が来るまでは、手元の値で作った見た目だけの戦闘（launch・earlyFight）を出す。時計は動かず、返事が来たら本物に差し替える。始められなかったら入口へ
 //     版の確かめ（isStaleBuild）はボスを開いたときに済ませておく＝押してから聞かない（staleNow）
-//     遭遇のイラストを押したのにサーバーの返事がまだなら、手元の値で作った見た目だけの戦闘（earlyFight）を先に出す。時計は動かず、返事が来たら本物に差し替える（ユーザー「遭遇時にタップ押したら画面遷移ができてない」）
+//   【確定】同じ日 ユーザー「挑戦するキャラを選択したらそこでポップアップが出て難易度選択して挑戦するようにして」「そこでイラストばっと出るようにして、持っていくアイテムも表示されるように」：
+//     ボスを押すとポップアップ（V2capBossPick.jsx）。遭遇のイラストはそこで叩きつける。難易度と持ち込む薬もそこで選ぶ（入口の上の薬の欄はやめた）。
+//     ポップアップの「挑戦する」のあとは戦闘の画面へ直行（全画面の遭遇のイラストとそのタップはやめた＝同じ絵を2回見せない・2回押させない）。
+//     入っているボスの「挑戦する」と結果の画面の「もう一度挑戦する」も同じポップアップ（難易度は決まっている・薬は選び直せる）。
+//     ポップアップはどの画面でも同じ所に置く（{popup} を一番上の先頭に）＝戦闘の画面に変わっても作り直さない（作り直すと、叩きつける動きがもう一度出る）
 // 【確定】同じ日 ユーザー選択「サーバーの計算で入れる」：戦闘はサーバーが決めた種と写しで作り、終わったら押した記録を預ける（v2cap_dungeon_try_end）。
 //   サーバーが同じ戦闘を回し直して結果を入れる（lib/dungeonVerify.js）。挑戦の途中で画面を離れたら、そこまでの記録を預ける。確かめられないまま戻ったら入口で確かめ直す
-// 【確定】同じ日 ユーザー「アイテムは4つまでしか持てないようにして、全部で合計4つ」「装備は挑戦タブから設定できるように」：入口の上で持ち込む薬を選ぶ（V2capItemLoadout.jsx）
+// 【確定】同じ日 ユーザー「アイテムは4つまでしか持てないようにして、全部で合計4つ」「装備は挑戦タブから設定できるように」：ポップアップで持ち込む薬を選ぶ（V2capItemLoadout.jsx）
 // ============================================================
 
 const POLL_MS = 15000
@@ -83,11 +84,11 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
   const [busy, setBusy] = useState(false)
   const [nowMs, setNowMs] = useState(Date.now())
   const [fight, setFight] = useState(null)        // { run, st, runKey, result, ended（決着のテロップが終わった） }
-  const [openBoss, setOpenBoss] = useState(null)  // 難易度を開いているボス
+  const [pick, setPick] = useState(null)          // 開いているポップアップ { boss, run（もう入っているボス・新しく挑戦するときは無し）, out（消えている途中） }
+  const [launch, setLaunch] = useState(null)      // 「挑戦する」を押してからサーバーの返事が来るまで { boss, diff, hp }
   const [claimed, setClaimed] = useState(null)    // 入口で受け取った報酬（v2cap_dungeon_claim の返事）
   const [stale, setStale] = useState(false)       // 画面が古い（読み直すまで挑戦しない）
   const pending = useRef(null)                    // 送っていない挑戦（画面を離れたら送る）
-  const enc = useBossEncounter()                  // 遭遇のイラスト
   const staleAsked = useRef(null)                 // 版の確かめ { at, ask }
   const settling = useRef(false)                  // 結果を確かめてもらっているあいだ（入口の確かめ直しと重ねない）
   const loadoutSave = useRef(Promise.resolve())   // 持ち込む薬の保存（送っている途中なら、挑戦を始める前に待つ）
@@ -101,15 +102,18 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
   const baseCls = CLASS_BY_ID[prof?.class]?.req?.cls
   const playerSrc = useMemo(() => homeIconOf(prof?.class, myGender, baseCls), [prof?.class, myGender, baseCls])
   const playerMotion = useMemo(() => motionOf(prof?.class, myGender, 'attack', baseCls), [prof?.class, myGender, baseCls])
-  // 開いたボスと入っているボスの絵を先に読む（押してから待たない）
+  // 開いたボスと入っているボスの戦闘の絵を先に読む（押してから待たない）。遭遇のイラストは全部のボス＝ポップアップを開いた瞬間に大きな絵で出す
+  const pickBoss = pick?.boss
+  const motionSrc = playerMotion?.src
   const runBosses = (state?.runs || []).map(r => r.boss).join(',')
+  useEffect(() => { preloadArt(Object.keys(DUNGEON_BOSSES).map(bossEncounterOf).filter(Boolean)) }, [])
   useEffect(() => {
-    for (const key of new Set([openBoss, ...runBosses.split(',')])) {
+    for (const key of new Set([pickBoss, ...runBosses.split(',')])) {
       const art = key && artOfBoss(key)
-      if (art) preloadArt([...art.srcs, bossEncounterOf(key)].filter(Boolean))
+      if (art) preloadArt([...art.srcs, playerSrc, motionSrc].filter(Boolean))
     }
-    if (openBoss || runBosses) staleAsked.current = { at: Date.now(), ask: isStaleBuild() }
-  }, [openBoss, runBosses])
+    if (pickBoss || runBosses) staleAsked.current = { at: Date.now(), ask: isStaleBuild() }
+  }, [pickBoss, runBosses, playerSrc, motionSrc])
   // 版の確かめ（STALE_ASK_MS 以内に聞いたならその答え＝押してから待たない）
   const staleNow = () => (staleAsked.current && Date.now() - staleAsked.current.at < STALE_ASK_MS ? staleAsked.current.ask : isStaleBuild())
 
@@ -173,24 +177,32 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
     window.scrollTo(0, 0)
     return true
   }
-  // 押した瞬間に遭遇のイラストを出す（戦闘に要る絵も裏で読んでおく）
-  const motionSrc = playerMotion?.src
-  const showEncounter = (bossKey, diffKey, hp) => enc.begin(bossKey, diffKey, [...(artOfBoss(bossKey)?.srcs || []), bossEncounterOf(bossKey), playerSrc, motionSrc].filter(Boolean), hp)
-  // 入っているボスにもう一度挑む
+  // 入っているボスにもう一度挑む（入口の行からも、結果の画面からも）。始められなかったら入口へ（わけは入口に出る）
   const enter = async (run) => {
-    showEncounter(run.boss, run.diff, run.hp)
-    if (await start(run)) enc.finish()
-    else enc.cancel()
+    setLaunch({ boss: run.boss, diff: run.diff, hp: run.hp })
+    const ok = await start(run)
+    setLaunch(null)
+    if (!ok) { setFight(null); window.scrollTo(0, 0) }
   }
   // 挑戦する：ボスを出して、そのまま戦闘へ（始められなかったら入口に残る）
   const challenge = async (bossKey, diff) => {
-    showEncounter(bossKey, diff)
+    setLaunch({ boss: bossKey, diff, hp: null })
     const data = await call('v2cap_dungeon_summon', { p_boss: bossKey, p_diff: diff })
-    if (!data) { enc.cancel(); return }
-    setOpenBoss(null)
-    if (await start(data.run)) enc.finish()
-    else enc.cancel()
+    if (!data) { setLaunch(null); return }
+    await start(data.run)
+    setLaunch(null)
     load()
+  }
+  // ポップアップを開く（スタミナと挑戦済みを読み直す＝結果の画面から開いたときは、戦闘の前の数字のまま）
+  const openPick = (boss, run = null) => { setPick({ boss, run }); load() }
+  const closePick = useCallback(() => setPick(null), [])
+  // ポップアップの「挑戦する」：押した瞬間に戦闘の画面へ（ポップアップは上に重ねたまま消える）
+  const startPick = (diff) => {
+    const { boss, run } = pick
+    setPick(p => p && { ...p, out: true })
+    setTimeout(() => setPick(p => (p?.out ? null : p)), PICK_OUT_MS)
+    if (run) enter(run)
+    else challenge(boss, diff)
   }
   // 開発用：きょうの挑戦回数を戻す（サーバーも開発者だけ）
   const resetTries = () => call('v2cap_dev_dungeon_reset', {}, () => { setMsg({ ok: true, text: '挑戦回数を戻しました' }); load() })
@@ -217,14 +229,6 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
     if (r?.reward) onProfile?.()   // EXP と Gold が増えた
   }
   const onEnded = () => setFight(f => (f ? { ...f, ended: true } : f))
-  // もう一度挑戦する（結果の画面から）。始められなかったら入口へ（わけは入口に出る）
-  const retry = async () => {
-    showEncounter(fight.run.boss, fight.run.diff, fight.result?.run?.hp)
-    if (await start(fight.run)) { enc.finish(); return }
-    enc.cancel()
-    setFight(null)
-    window.scrollTo(0, 0)
-  }
   const giveUp = async () => {
     const r = await report()
     // やめた所で、ほかの人がもう倒していたら報酬画面へ（その場で報酬が入る）
@@ -236,16 +240,28 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
   // 戦っている途中で画面を離れたら、そこまでの量を送る
   useEffect(() => () => { report() }, [report])
 
-  const encounter = enc.enc && <V2capBossEncounter key={enc.enc.id} bossKey={enc.enc.bossKey} diffKey={enc.enc.diffKey} out={enc.enc.out} onTap={enc.skip} />
-  // 遭遇のイラストを押したのにサーバーの返事がまだ：見た目だけの戦闘（時計は動かない・押した記録も送らない・返事が来たら捨てる）
-  const earlyOn = !!enc.enc?.early
+  // サーバーの返事がまだ：見た目だけの戦闘（時計は動かない・押した記録も送らない・返事が来たら捨てる）
   const earlyFight = useMemo(() => {
-    if (!earlyOn) return null
-    const { bossKey: boss, diffKey: diff, hp } = enc.enc
+    if (!launch) return null
+    const { boss, diff, hp } = launch
     const st = startTryAtb({ boss, diff, hp, seed: 0, snap: { prof, inv: inventory, at: Date.now() } })
     return st && { run: { boss, diff }, st, runKey: 0 }
-  }, [earlyOn]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (earlyOn) window.scrollTo(0, 0) }, [earlyOn])
+  }, [launch]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (launch) window.scrollTo(0, 0) }, [launch])
+
+  const stam =state?.stamina ?? prof?.stamina ?? 0
+  const runs = state?.runs || []
+  const active = runs.filter(r => !r.cleared && msLeftOf(r.ends_at, nowMs) > 0)
+  const ownActive = active.some(r => r.mine)
+  // きょうこのボスを呼んだか（SQL をまだ流していないサーバーは全部まとめて1回）
+  const summonedOf = (key) => (state?.summoned_bosses ? state.summoned_bosses.includes(key) : !!state?.summoned_today)
+  const blockOf = (key) => summonBlockOf(key, { summoned: summonedOf(key), ownActive, reached })
+
+  const popup = pick && (
+    <V2capBossPick bossKey={pick.boss} run={pick.run} reached={reached} myPower={myPower} block={state ? blockOf(pick.boss) : '読み込み中...'}
+      cost={pick.run ? tryStaminaOf(pick.run.mine, pick.run.my_tries) : 0} stam={stam} busy={busy} out={pick.out}
+      prof={prof} onProfile={onProfile} onGo={onGo} saveRef={loadoutSave} onStart={startPick} onClose={closePick} />
+  )
 
   // ===== 入口で受け取った報酬 =====
   if (claimed) {
@@ -262,21 +278,21 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
     if (shown.ended || (!shown.st.over && r?.ok && r.run.cleared)) {
       const canRetry = r?.ok && !r.run.cleared && msLeftOf(r.run.ends_at, nowMs) > 0
       return <>
-        {encounter}
+        {popup}
         <V2capBossReward bossKey={fight.run.boss} diffKey={fight.run.diff} cls={prof?.class} st={fight.st} result={r} busy={busy}
           leftText={r?.ok && !r.run.cleared ? mmss(msLeftOf(r.run.ends_at, nowMs)) : null}
-          onRetry={canRetry ? retry : null} retryCost={canRetry ? tryStaminaOf(r.run.mine, r.run.my_tries) : 0}
+          onRetry={canRetry ? () => openPick(fight.run.boss, { ...fight.run, ...r.run }) : null} retryCost={canRetry ? tryStaminaOf(r.run.mine, r.run.my_tries) : 0}
           onBack={() => { setFight(null); load(); window.scrollTo(0, 0) }} />
       </>
     }
     return <>
-      {encounter}
+      {popup}
       <div style={{ ...box, padding:'12px' }}>
         <div style={{ color:'#ff8866', fontSize:'12px', marginBottom:'6px' }}>
           {boss.name}（{diffOf(shown.run.boss, shown.run.diff)?.label}）・残りHP {Math.max(0, shown.st.b.hp).toLocaleString()} / {shown.st.b.base.hp.toLocaleString()}
         </div>
         <V2capAtbFight st={shown.st} runKey={shown.runKey} macros={macros} playerSrc={playerSrc} playerMotion={playerMotion}
-          bossArt={artOfBoss(shown.run.boss)} onOver={onOver} onEnded={onEnded} hold={enc.hold}
+          bossArt={artOfBoss(shown.run.boss)} onOver={onOver} onEnded={onEnded} hold={!!launch}
           footer={earlyFight || shown.st.over ? null
             : <button onClick={giveUp} style={{ ...miniBtn('#ff8888'), flex:1, padding:'8px' }}>挑戦をやめる（ここまでの削りを入れる）</button>} />
       </div>
@@ -284,24 +300,12 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
   }
 
   // ===== 入口 =====
-  const stam =state?.stamina ?? prof?.stamina ?? 0
-  const runs = state?.runs || []
-  const active = runs.filter(r => !r.cleared && msLeftOf(r.ends_at, nowMs) > 0)
-  const ownActive = active.some(r => r.mine)
-  // きょうこのボスを呼んだか（SQL をまだ流していないサーバーは全部まとめて1回）
-  const summonedOf = (key) => (state?.summoned_bosses ? state.summoned_bosses.includes(key) : !!state?.summoned_today)
-  const blockOf = (key) => summonBlockOf(key, { summoned: summonedOf(key), ownActive, reached })
-  const canSummon = (key) => !!state && !blockOf(key)
-
   return <>
-    {encounter}
+    {popup}
     <div>
       {msg && <div style={{ fontSize:'11px', marginBottom:'8px', color: msg.ok ? '#88ffaa' : '#ff8888' }}>{msg.text}</div>}
       {!state && !msg && <div style={{ color: TEXT.label, fontSize:'11px', marginBottom:'8px' }}>読み込み中...</div>}
       {stale && <V2capReloadNote />}
-
-      {/* 戦闘に持ち込む薬（合計4つまで） */}
-      <V2capItemLoadout prof={prof} onProfile={onProfile} onGo={onGo} saveRef={loadoutSave} />
 
       {/* 受け取っていない報酬（自分が挑戦していないあいだに倒れたボス） */}
       {(state?.rewards || []).map(run => (
@@ -341,7 +345,7 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
               ))}
             </div>
             <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
-              <button onClick={() => enter(run)} disabled={busy || stam < cost} style={{ ...miniBtn('#ff8866'), flex:1, padding:'8px' }}>
+              <button onClick={() => openPick(run.boss, run)} disabled={busy || stam < cost} style={{ ...miniBtn('#ff8866'), flex:1, padding:'8px' }}>
                 ⚔ 挑戦する（スタミナ{cost}）
               </button>
               {/* 救援信号は1回挑戦してから（ユーザー選択「信号を出す人の条件」・サーバーも見る） */}
@@ -355,42 +359,23 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
         )
       })}
 
-      {/* カテゴリごとのボス（押すと難易度が開く） */}
+      {/* カテゴリごとのボス（押すとポップアップ。もう入っているボスは続きから） */}
       {CHALLENGE_CATS.map(cat => (
         <div key={cat.key} style={{ ...box, padding:'10px', marginBottom:'10px' }}>
           <div style={{ color:'#ff8866', fontSize:'13px', fontWeight:'bold', marginBottom:'6px' }}>{cat.label}</div>
           {cat.bosses.map(key => {
-            const boss = DUNGEON_BOSSES[key], thumb = bossThumbOf(key), open = openBoss === key
+            const boss = DUNGEON_BOSSES[key], thumb = bossThumbOf(key)
             return (
               <div key={key} style={{ borderTop:'1px solid #001428' }}>
-                <button onClick={() => setOpenBoss(open ? null : key)} aria-expanded={open}
+                <button onClick={() => openPick(key, active.find(r => r.mine && r.boss === key) || null)}
                   style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', padding:'6px 2px', background:'none', border:'none', cursor:'pointer', textAlign:'left' }}>
                   {thumb && <img src={thumb} alt="" draggable={false} style={{ width:'64px', height:'64px', objectFit:'contain', flexShrink:0 }} />}
                   <span style={{ flex:1, minWidth:0 }}>
                     <b style={{ color:'#ff8866', fontSize:'13px' }}>{boss.name}</b><br />
                     <span style={{ color: TEXT.label, fontSize:'10px' }}>{state && (blockOf(key) || '挑戦可能')}</span>
                   </span>
-                  <span style={{ color: TEXT.label, fontSize:'12px', flexShrink:0 }}>{open ? '▲' : '▼'}</span>
+                  <span style={{ color: TEXT.label, fontSize:'14px', flexShrink:0 }}>›</span>
                 </button>
-                {open && DIFF_KEYS.map(k => {
-                  const d = diffOf(key, k)
-                  const ready = isDiffReady(key, k)
-                  const unlocked = isDiffUnlocked(key, k, reached)
-                  const enough = ready && myPower >= d.recPower
-                  return (
-                    <div key={k} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'6px 0', borderTop:'1px solid #001428', opacity: unlocked ? 1 : 0.55 }}>
-                      <b style={{ color: DIFF_COLOR[k], width:'72px', flexShrink:0, fontSize:'12px', whiteSpace:'nowrap' }}>{d.label}</b>
-                      <span style={{ fontSize:'10px', color: TEXT.sub, flex:1, minWidth:0 }}>
-                        推奨LV{d.recLv}
-                        {ready && <>・推奨戦闘力 <span style={{ color: enough ? '#88ffaa' : '#ff8888' }}>{d.recPower.toLocaleString()}</span></>}
-                        {!ready ? '・準備中' : !unlocked ? `・エリア${CIRCLED[d.area - 1]}に着くと挑戦できます` : ''}
-                      </span>
-                      {/* 挑戦できないとき（挑戦した日・挑戦中のボスがいる・まだのエリア）はボタンを暗くする（押せないのが分かるように） */}
-                      <button onClick={() => challenge(key, k)} disabled={busy || !unlocked || !canSummon(key)}
-                        style={{ ...miniBtn(DIFF_COLOR[k]), padding:'6px 12px', opacity: unlocked && canSummon(key) ? 1 : 0.35, whiteSpace:'nowrap', flexShrink:0 }}>挑戦する</button>
-                    </div>
-                  )
-                })}
               </div>
             )
           })}
