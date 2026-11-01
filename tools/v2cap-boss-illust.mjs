@@ -779,7 +779,8 @@ const build = (key, def, dir) => {
     const small = kk < 1 ? resizeRgba(t.img, Math.round(t.img.W * kk), Math.round(t.img.H * kk)) : t.img
     trims[e.file] = { x: t.x, y: t.y, k: small.W / t.img.W }
     sizes.push([e.file, writeWebp(small, path.join(OUT, bossFileOf(key, illustFxKindOf(e.motion, e.kind))), FX_QUALITY)])
-    const a = e.kind === 'fly' ? leftTipOf(small) : { x: Math.round(small.W / 2), y: Math.round(small.H / 2) }
+    // flash＝砲口の閃光（絵の右のはしを砲口に合わせる）
+    const a = e.kind === 'fly' ? leftTipOf(small) : e.kind === 'flash' ? { x: small.W, y: Math.round(small.H / 2) } : { x: Math.round(small.W / 2), y: Math.round(small.H / 2) }
     fx[e.motion] = { ...fx[e.motion], [e.kind]: { w: small.W, h: small.H, ax: a.x, ay: a.y } }
   }
   return { entry: { parts, pivot: pivotOf.body.map(Math.round), mouth: [tip.x, tip.y], fx, ...(Object.keys(poses).length ? { poses } : {}), ...(Object.keys(buffs).length ? { buffs } : {}), fit: fits }, notes, sizes }

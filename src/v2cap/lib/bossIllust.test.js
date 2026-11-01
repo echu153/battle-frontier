@@ -7,7 +7,7 @@ import { BOSS_ILLUST } from './bossIllustList.js'
 import { BOSS_ART_DIR, BOSS_DEFS, bossFileOf } from './bossArt.js'
 import {
   BOSS_ILLUST_DEFS, BOSS_ILLUST_SIZE, illustPartsOf, illustKindOf, illustFxKindOf,
-  bossIllustOf, illustPoseAt, idlePoseAt, motionPoseAt, illustPointAt, illustTrailsAt, mouthPointOf, rotPoint, partMove,
+  bossIllustOf, illustPoseAt, reachXOf, idlePoseAt, motionPoseAt, illustPointAt, illustTrailsAt, mouthPointOf, rotPoint, partMove,
   illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt, dustEllipsesOf,
   illustCastShowAt, EASES, joltAt, illustBendKindOf, bendFramesOf, illustPoseKindOf, illustShowAt, illustGhostsAt, ART_FADE_MS, artAnchorAt, leanPoint,
   illustBuffShowAt, illustBuffKindOf, buffSceneAt, introSceneAt, introEnterAt, introBeamAt, rigLightsAt, buffAfterAt, buffRainAt, buffHoldOf, rigLayersOf, flutterBandsAt, buffArtMsOf, BUFF_IN_MS, BUFF_HOLD_MS, BUFF_OUT_MS, BUFF_AURA_IN_MS, BUFF_AURA_OUT_MS, BUFF_ART_MS, BUFF_FLASH_MS,
@@ -984,7 +984,7 @@ test('【確定】2026-11-01 ゼルギアスの待機：羽根を左右4枚ず�
   assert.ok(a.lights[0].src && a.srcs.includes(a.lights[0].src), '炉心の光の絵は先に読む')
 })
 
-test('【確定】2026-11-01 ゼルギアスの技：大砲と剣の腕を回す形から（ユーザー選択）・大技とバフだけポーズの絵', () => {
+test('【確定】2026-11-01 ゼルギアスの技（ユーザー「大技以外のモーションがすべてしょぼすぎる」「剣はプレイヤーに届いてない」「銃で放つときのモーションもなんか安っぽい」）：砲身は相手へ向き、撃つと全身が押される・剣は相手の側へ振って届く', () => {
   const a = bossIllustOf('zerugiasu'), def = BOSS_ILLUST_DEFS.zerugiasu
   assert.deepEqual(Object.values(a.motions).map(m => m.label), ['雷鋼弾', '雷霆掃射', '神雷崩撃', '神雷終焉'])
   assert.deepEqual(Object.keys(a.buffs), ['雷鋼装甲', '炉心臨界'])
@@ -993,21 +993,40 @@ test('【確定】2026-11-01 ゼルギアスの技：大砲と剣の腕を回す
     assert.deepEqual(m.keys.at(-1)[1], {}, `${m.label}：終わりは待機の形`)
     assert.ok(m.fx?.hit, `${m.label}：当たる絵がある`)
   }
-  // 大砲の技：撃つ時刻に腕が上がって砲口が相手のほう（左）へ出る
-  const shell = a.motions.shell, up = illustPoseAt('zerugiasu', def.motions.shell, 460, 0)
-  assert.ok(up.armN > 45)
-  const muzzle = illustPointAt('zerugiasu', up, [65, 475], 'armN')
-  assert.ok(muzzle[0] < 0 && muzzle[1] < 300, '砲身は水平に近く、枠の左へ出る')
+  // 大砲の技：撃つ時刻に砲身の延長に相手がいる（舞台が広いときも狭いときも）。前は相手より上を向いて撃っていた
+  const shell = a.motions.shell, up = illustPoseAt('zerugiasu', def.motions.shell, shell.hitMs, 0)
+  const muzzle = illustPointAt('zerugiasu', up, [65, 475], 'armN'), shoulder = illustPointAt('zerugiasu', up, [222, 205], 'armN')
+  const barrel = Math.atan2(muzzle[1] - shoulder[1], muzzle[0] - shoulder[0])
+  for (const target of [[-501, 486], [-344, 486]]) {
+    const to = Math.atan2(target[1] - muzzle[1], target[0] - muzzle[0])
+    assert.ok(Math.abs(barrel - to) * 180 / Math.PI < 12, `砲身と相手の向きの差：${Math.round((barrel - to) * 180 / Math.PI)}°`)
+  }
   assert.ok(shell.fx.fly, '弾が飛ぶ')
+  // 撃った反動：砲身が跳ね上がり、全身が後ろ（右）へ押される
+  const kick = motionPoseAt(def.motions.shell.keys, 485), aim = motionPoseAt(def.motions.shell.keys, shell.hitMs)
+  assert.ok(kick.armN - aim.armN >= 15 && kick.x - aim.x >= 0.06 && kick.lean < aim.lean)
+  assert.equal(shell.scene.kind, 'gun')
   // 雷霆掃射：3発。弾1つが1発で、数字と揺れが1発ごとに分かれる
   const v = a.motions.volley
   assert.equal(v.shots.length, 3)
   assert.equal(v.strikes.length, 3)
   for (let i = 1; i < 3; i++) assert.ok(v.strikes[i].atMs - v.strikes[i - 1].atMs > HIT_SEC * 1000, '揺れがいったん収まってから次が当たる')
-  // 神雷崩撃：剣を振りかぶって振り下ろす・雷は相手の真上から落ちる（飛ばない）
-  const smite = def.motions.smite
-  assert.ok(motionPoseAt(smite.keys, 700).armF < -100, '振りかぶる')
-  assert.ok(motionPoseAt(smite.keys, 780).armF > 40, '振り下ろす')
+  // 神雷崩撃：頭の上へ振りかぶり、相手の側へ振り下ろす（前は逆の側を回って足元で止まり、届かなかった）。剣先は相手の真ん中まで届く（舞台の幅によらない）・雷は相手の真上から落ちる（飛ばない）
+  const smite = def.motions.smite, sm = a.motions.smite
+  assert.ok(motionPoseAt(smite.keys, 360).armF < -100, '振りかぶる')
+  assert.ok(motionPoseAt(smite.keys, 640).armF < -250, '頭の上を通って相手の側へ')
+  assert.equal(motionPoseAt(smite.keys, 640).dash, 1, '当たるときは踏み込みきっている')
+  assert.equal(sm.impactMs, smite.reach.atMs, '剣が届いた時刻にダメージ')
+  for (const tx of [-501, -344]) {
+    const reachX = reachXOf('zerugiasu', sm, tx), p = illustPoseAt('zerugiasu', sm, sm.impactMs, 0, false, reachX)
+    const tip = illustPointAt('zerugiasu', p, smite.reach.pt, smite.reach.part)
+    assert.ok(Math.abs(tip[0] - tx) < 20, `剣先 ${Math.round(tip[0])}・相手 ${tx}`)
+    assert.ok(tip[1] > 380 && tip[1] < 620, '相手の体の高さ')
+    assert.equal(illustPoseAt('zerugiasu', sm, 0, 0, false, reachX).x, 0, 'はじめは元の場所')
+  }
+  assert.equal(reachXOf('zerugiasu', a.motions.shell, -501), 0, '大砲の技は踏み込まない')
+  assert.ok(illustTrailsAt('zerugiasu', sm, 620, 0).some(t => t.ribbon), '刃の通った面の帯')
+  assert.ok(illustGhostsAt(sm, 450).length > 0, '突進の残像')
   assert.equal(a.motions.smite.fx.fly, undefined)
   assert.equal(a.motions.smite.fx.hit.on, 'feet')
   // 神雷終焉：胸の開いた絵で構え、砲口に光をためて撃つ・構えのあとは途中から

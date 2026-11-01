@@ -75,7 +75,9 @@ export const pourTimesOf = (m, P = POUR) => {
 // 演出が終わる時刻（技を出しはじめてから ms）。画面はこの時刻まで技の印を覚えておく（戦闘の画面が古い印を片付けても切れない）
 export const sceneEndMsOf = (m) => (m?.scene?.kind === 'pour' ? pourTimesOf(m).end : m?.scene?.kind === 'coil' ? m.impactMs + COIL.burstMs + 900
   : m?.scene?.kind === 'doom' ? m.impactMs + DOOM.after + DOOM.fade + 900
-  : m?.scene?.kind === 'hands' ? (handFxOf(m)?.ts ?? 0) + 600 : 0)
+  : m?.scene?.kind === 'hands' ? (handFxOf(m)?.ts ?? 0) + 600
+  : m?.scene?.kind === 'gun' ? m.impactMs + (m.strikes?.at(-1).atMs || 0) + 800
+  : m?.scene?.kind === 'slash' ? m.impactMs + 1100 : 0)
 
 // しぶき（n 粒・上へはね上がって落ちる）。e＝はねてからの ms・spread＝はねる所の広さ・oy＝はねる高さ（足元から）・around＝まわりじゅうへ
 const drops = (items, n, seed, e, v, life, size, spread, { oy = 0, around = false } = {}) => {
@@ -177,6 +179,8 @@ export const castSceneAt = (m, castMs, P = POUR) => {
 export const sceneAt = (m, ms, { after = false, landed = true } = {}, P = POUR) => {
   if (m?.scene?.kind === 'coil') return coilSceneAt(m, ms, landed)
   if (m?.scene?.kind === 'doom') return doomSceneAt(m, ms)
+  if (m?.scene?.kind === 'gun') return gunSceneAt(m, ms, landed)
+  if (m?.scene?.kind === 'slash') return slashSceneAt(m, ms, landed)
   const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null }
   if (m?.scene?.kind === 'hands') { if (ms >= 0 && ms < sceneEndMsOf(m)) handFxAt(m, ms, out); return out }
   if (m?.scene?.kind !== 'pour') return out
@@ -411,12 +415,140 @@ export const doomSceneAt = (m, ms, D = DOOM) => {
   return out
 }
 
+// ===== 大砲と剣の技（ゼルギアス）=====
+// 【確定】2026-11-01 ユーザー「大技以外のモーションがすべてしょぼすぎる」「エフェクト細いし」「もっと派手に動いて」「銃で放つときのモーションもなんか安っぽい」：
+//   kind 'gun'（雷鋼弾・雷霆掃射）：撃つ前に砲口へ光が集まる → 撃つたび砲口で閃光がはじけ（mflash）・衝撃の輪（mring）・火花（hdrop）・太い雷の筋が相手まで走り（tracer）、舞台が暗く光って揺れる。
+//     当たるたび足元に輪と火花が広がり、相手が押される（knock＝画面の px）
+//   kind 'slash'（神雷崩撃）：振りかぶるあいだ暗くなり、空から雷が剣に落ちて（tracer の sky）剣先が光る → 突進の筋（speed）→ 当たると大きく光って揺れ、輪・火花・相手が縮んで押される
+//   外れても演出は同じ（2026-10-31 の決まり）。変わるのは相手の反応（knock・squeeze）だけ
+export const GUN = { chargeMs: 260, flashMs: 170, ringMs: 320, tail: 130, w: 0.11, dim: 0.34 }
+export const SLASH = { dim: 0.5, hitDim: 0.62, after: 480, fade: 320, w: 0.16, rush: 14 }
+const ONE_SHOT = [{ atMs: 0 }]
+const sceneBase = (m) => ({ dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: m.scene?.tone || 'fire', dimColor: m.scene?.dimColor || null, beam: null, knock: 0 })
+// 稲妻の折れ線（画面の px）：(x0, y0) から (x1, y1) まで n 区間・amp＝横へのぶれの大きさ（両はしは小さく）。同じ seed なら同じ形
+export const boltPathOf = (x0, y0, x1, y1, seed, n, amp) => {
+  const dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len, out = [[x0, y0]]
+  for (let i = 1; i < n; i++) {
+    const p = i / n, off = (rnd(seed, i) - 0.5) * 2 * amp * Math.sin(Math.PI * p) ** 0.7
+    out.push([x0 + dx * p + nx * off, y0 + dy * p + ny * off])
+  }
+  out.push([x1, y1])
+  return out
+}
+// 砲口の閃光の星形（中心からのずれ・px）：相手の方（aim＝ラジアン）のとげほど長い
+export const flashStarOf = (r, aim, seed, n = 7) => Array.from({ length: n * 2 }, (_, i) => {
+  const a = aim + (i * Math.PI) / n + (rnd(seed, i) - 0.5) * 0.3, front = Math.max(0, Math.cos(a - aim))
+  const R = i % 2 ? r * (0.26 + 0.1 * rnd(seed, i + 20)) : r * (0.55 + 0.35 * rnd(seed, i + 40)) * (1 + 1.5 * front * front)
+  return [Math.cos(a) * R, Math.sin(a) * R]
+})
+// 当たった所：足元の輪・はね上がる火花・吹き上がる光の筋。P＝強さ
+const impactAt = (items, e, seed, P) => {
+  drops(items, Math.round(34 * P), seed, e, [0.7, 1.9], [320, 620], [0.006, 0.016], 0.45)
+  drops(items, Math.round(20 * P), seed + 500, e, [0.6, 1.5], [240, 480], [0.006, 0.014], 0.3, { oy: BODY_Y, around: true })
+  jets(items, Math.round(10 * P), seed + 900, e, 1.1 * P)
+  for (const [at, size] of [[0, 1], [90, 0.7]]) {
+    const q = (e - at) / 420
+    if (q < 0 || q >= 1) continue
+    const rx = (0.1 + 0.85 * easeOut(q)) * size * P
+    items.push({ t: 'ring', x: 0, y: -0.01, rx, ry: rx * 0.26, w: 0.034 * (1 - q) + 0.004, op: 0.95 * (1 - q) })
+  }
+}
+// 大砲の技（ms＝技を出しはじめてから）→ sceneAt と同じ形＋ knock
+export const gunSceneAt = (m, ms, landed = true, G = GUN) => {
+  const out = sceneBase(m)
+  if (ms < 0 || ms >= sceneEndMsOf(m)) return out
+  const strikes = m.strikes || ONE_SHOT, first = m.hitMs + (m.shots[0].delayMs || 0), chargeMs = m.scene.chargeMs ?? G.chargeMs
+  if (ms < first && ms >= first - chargeMs) {
+    const k = (ms - first + chargeMs) / chargeMs
+    motes(out.items, 16, ms, 0.95 * smooth(k * 3), 1, 0.85)
+    out.hand = { r: 8 + 26 * k * k + 2 * Math.sin(ms / 30), op: smooth(k * 3) }
+  }
+  let amp = 0
+  m.shots.forEach((sh, i) => {
+    const P = sh.size ?? 1, at = m.hitMs + (sh.delayMs || 0), s = ms - at
+    if (s < 0) return
+    const st = strikes[i] || strikes[0], land = m.impactMs + (st.atMs || 0), e = ms - land, seed = 900 + i * 37
+    if (s < G.flashMs) {
+      const k = s / G.flashMs
+      out.items.push({ t: 'mflash', space: 'hand', r: 120 * P * (0.7 + 0.6 * easeOut(k)), op: 1 - k * k, seed })
+      out.hand = { r: 46 * P + 70 * P * easeOut(k), op: 1 - k }
+    }
+    for (const [ringAt, size] of [[0, 1], [70, 0.65]]) {
+      const q = (s - ringAt) / G.ringMs
+      if (q >= 0 && q < 1) out.items.push({ t: 'mring', space: 'hand', r: (22 + 130 * easeOut(q)) * size * P, w: (1 - q) * 13 * P + 1, op: (1 - q) * 0.95, off: 44 * easeOut(q) * P })
+    }
+    for (let j = 0; j < 14; j++) {
+      const sd = seed + 200 + j, life = 170 + 120 * rnd(sd, 61)
+      if (s >= life) continue
+      const ang = Math.PI - 0.45 + (rnd(sd, 62) - 0.5) * 1.6, sp = 320 + 520 * rnd(sd, 63), t = s / 1000, r = 2.5 + 3 * rnd(sd, 64)
+      const vx = Math.cos(ang) * sp, vy = Math.sin(ang) * sp
+      out.items.push({ t: 'hdrop', space: 'hand', hi: 0, x: vx * t, y: vy * t + 300 * t * t, rx: r * 2.6, ry: r, rot: (Math.atan2(vy + 600 * t, vx) * 180) / Math.PI, op: 1 - s / life })
+    }
+    // 太い雷の筋：砲口から相手へ、弾といっしょに伸びる。当たったあと tail で細く消える。形は少しずつ変わる
+    const tail = e > 0 ? e / G.tail : 0
+    if (tail < 1) out.items.push({ t: 'tracer', space: 'hand', x: st.dx || 0, y: BODY_Y + (st.dy || 0), k: flyPosOf(clamp01(s / Math.max(1, land - at))), w: G.w * P * (0.55 + 0.45 * easeOut(s / 60)) * (1 - 0.5 * tail),
+      op: Math.min(1, s / 20) * (1 - tail), seed: seed + Math.floor(ms / 36) * 7, amp: 0.045, n: 8 })
+    out.flash = Math.max(out.flash, 0.4 * P * pulse(s, 130))
+    out.dim = Math.max(out.dim, G.dim * pulse(s, 320))
+    amp += 8 * P * pulse(s, 230)
+    if (e >= 0) {
+      out.flash = Math.max(out.flash, 0.55 * P * pulse(e, 240))
+      amp += 12 * P * pulse(e, 340)
+      if (landed) out.knock -= 16 * P * pulse(e, 300)
+      impactAt(out.items, e, 1200 + i * 71, P)
+    }
+  })
+  out.shake = [amp * Math.sin(ms * 0.13), amp * 0.7 * Math.cos(ms * 0.17)]
+  return out
+}
+// 剣の技（ms＝技を出しはじめてから）。scene.windMs＝振りかぶり終わる時刻（ここから突進）・boltsAt＝空から雷が剣に落ちる時刻
+export const slashSceneAt = (m, ms, landed = true, D = SLASH) => {
+  const out = sceneBase(m)
+  if (ms < 0 || ms >= sceneEndMsOf(m)) return out
+  const S = m.scene, I = m.impactMs, e = ms - I, W = S.windMs
+  let amp = 0
+  if (ms < I) {
+    motes(out.items, 18, ms, 0.95 * smooth(ms / 140), 1, 1.2)
+    out.hand = { r: 12 + 34 * clamp01(ms / W) + 3 * Math.sin(ms / 28), op: smooth(ms / 120) }
+  }
+  S.boltsAt.forEach((at, i) => {
+    const q = (ms - at) / 150
+    if (q < 0 || q >= 1) return
+    out.items.push({ t: 'tracer', space: 'hand', sky: true, ox: i % 2 ? 0.5 : -0.5, k: 1, w: D.w * (1 - 0.5 * q), op: 1 - q * q, seed: 3000 + i * 11 + Math.floor(ms / 30) * 7, amp: 0.07, n: 9 })
+    out.flash = Math.max(out.flash, 0.4 * (1 - q))
+    amp += 5 * (1 - q)
+  })
+  // 突進のあいだの風の筋（相手のいる所から、元の場所のほうへ）
+  if (ms >= W && ms < I) {
+    const k = (ms - W) / (I - W)
+    for (let i = 0; i < D.rush; i++) {
+      const x0 = 0.2 + 2.4 * rnd(i, 92), len = 0.5 + 0.9 * rnd(i, 93)
+      out.items.push({ t: 'speed', x1: x0 - 0.6 * k, x2: x0 - 0.6 * k + len, y: -0.05 - rnd(i, 91), w: 0.006 + 0.016 * rnd(i, 94), op: (0.45 + 0.5 * rnd(i, 95)) * Math.sin(Math.PI * k) })
+    }
+  }
+  if (e >= 0) {
+    out.flash = Math.max(out.flash, 0.95 * (e < 30 ? e / 30 : pulse(e - 30, 380)))
+    amp += 18 * pulse(e, 620)
+    if (landed) {
+      out.knock -= 26 * pulse(e, 420)
+      const q = pulse(e, 260)
+      out.squeeze = [1 + 0.1 * q, 1 - 0.16 * q]
+    }
+    impactAt(out.items, e, 2200, 1.6)
+    impactAt(out.items, e - 130, 2600, 1.1)
+  }
+  out.dim = ms < I ? D.dim * smooth(ms / 240) : e < D.after ? D.hitDim : D.hitDim * (1 - smooth((e - D.after) / D.fade))
+  out.shake = [amp * Math.sin(ms * 0.11), amp * 0.65 * Math.cos(ms * 0.153)]
+  return out
+}
+
 // 画面ぜんたい：いま流れている技（acts＝[{ m, ms, after }]）と構え（cast＝{ m, ms }）を合わせる
 //   暗さと光はいちばん強いもの・揺れは足す・描くものは並べる・雲と手は新しいほう（acts の after・landed は sceneAt と同じ）
 //   相手の縮みはかけ合わせる
 export const stageSceneOf = (acts, cast) => {
-  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, squeeze: null, tone: null, dimColor: null, beam: null }
+  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, squeeze: null, tone: null, dimColor: null, beam: null, knock: 0 }
   const add = (s) => {
+    out.knock += s.knock || 0
     if (s.tone && (s.dim > 0 || s.items.length || s.hand || s.beam)) { out.tone = s.tone; out.dimColor = s.dimColor }
     if (s.beam) out.beam = s.beam
     out.dim = Math.max(out.dim, s.dim)
