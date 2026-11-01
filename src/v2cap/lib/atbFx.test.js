@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { hitReactOf, writheOf, HIT_REACT_SEC, fxEventsOf, scheduleFx, splitHits, lastHitAtOf, lungeOf, shakeOf, LUNGE_SEC, HIT_SEC, skillBannerAt, BANNER_SEC, RAGE_BANNER_SEC, BANNER_IN, BANNER_OUT, popTextOf, popScaleOf, popLeftOf, popTopOf, MISS_TEXT, CRIT_TEXT } from './atbFx.js'
+import { hitReactOf, HIT_REACT_SEC, fxEventsOf, scheduleFx, splitHits, lastHitAtOf, lungeOf, shakeOf, LUNGE_SEC, HIT_SEC, skillBannerAt, BANNER_SEC, RAGE_BANNER_SEC, BANNER_IN, BANNER_OUT, popTextOf, popScaleOf, popLeftOf, popTopOf, MISS_TEXT, CRIT_TEXT } from './atbFx.js'
 import { endTelopOf, LOSE_DELAY_MS } from './atbTelop.js'
 
 const stage = readFileSync(new URL('../components/V2capAtbStage.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
@@ -241,13 +241,13 @@ test('薬を飲んだとき：飲んだ側が光る・HPは緑の数字・MPは�
   assert.match(stage, /mp: '#66aaff'/, '舞台の青い数字')
 })
 
-test('【確定】2026-11-01 受けた瞬間の動き（ユーザー「ひげきしたときのモーションがしょぼいからもっと本当に喰らってるようにして」）：押されてのけぞる・つぶれて伸び戻る・白く光ってから色が残る・もとへ戻る', () => {
+test('【確定】2026-11-01 受けた瞬間の動き（ユーザー「ひげきしたときのモーションがしょぼいからもっと本当に喰らってるようにして」）：押される・つぶれる・白く光ってから色が残る・もとへ戻る', () => {
   const f = { kind: 'hit', amount: 100, crit: false, t0: 10 }, HP = 1000
   assert.equal(hitReactOf(null, 10, HP), null)
   assert.equal(hitReactOf(f, 9.99, HP), null, '当たる前は動かない')
   assert.equal(hitReactOf(f, 10 + HIT_REACT_SEC, HP), null, '終わったら戻る')
   const hit = hitReactOf(f, 10.06, HP)
-  assert.ok(hit.x < -5 && hit.rot < -4, '相手と逆（左）へ押されて後ろへのけぞる')
+  assert.ok(hit.x < -5, '相手と逆（左）へ押される')
   assert.ok(hitReactOf(f, 10.02, HP).flash > 0.5 && hitReactOf(f, 10.2, HP).flash === 0, 'はじめだけ白く光る')
   assert.ok(hitReactOf(f, 10.08, HP).sy < 1 && hitReactOf(f, 10.08, HP).sx > 1, 'つぶれる')
   assert.ok(Math.abs(hitReactOf(f, 10 + HIT_REACT_SEC - 0.01, HP).x) < 0.5, 'おわりはもとの場所の近く')
@@ -255,13 +255,28 @@ test('【確定】2026-11-01 受けた瞬間の動き（ユーザー「ひげき
   const weak = hitReactOf({ ...f, amount: 1 }, 10.06, HP), big = hitReactOf({ ...f, amount: 400 }, 10.06, HP), crit = hitReactOf({ ...f, crit: true }, 10.06, HP)
   assert.ok(weak.x < -5, '小さくても見える')
   assert.ok(big.x < hit.x && crit.x < hit.x)
-  // ゼルギアスの押す技（knock）は重ねすぎない
-  assert.ok(hitReactOf(f, 10.06, HP, true).x > hit.x)
-  // もがく
-  assert.equal(Math.abs(writheOf(0, 1.3).x), 0)
-  assert.notEqual(writheOf(1, 1.3).x, 0)
   // 画面：自分だけ（ボスは揺れのまま）。挑戦と試し撃ちの舞台で使う
-  assert.match(stage, /react=\{foeBig\} tone=\{sc\?\.tone\} writhe=\{sc\?\.writhe \|\| 0\}/)
-  assert.match(stage, /const hr = react \? hitReactOf\(hitMark, now, me\.base\.hp, knock !== 0\) : null/)
+  assert.match(stage, /react=\{foeBig\} tone=\{sc\?\.tone\} wrapped=\{sc\?\.wrapped \|\| 0\}/)
+  assert.match(stage, /const hr = react \? hitReactOf\(hitMark, now, me\.base\.hp\) : null/)
   assert.ok(!/<Fighter st=\{st\} side="b"[^>]*react/.test(stage), 'ボスの側には付けない')
+})
+
+test('【確定】2026-11-01 自分は受けてもグラグラしない（ユーザー「プレイヤーの被ダメージのグラグラモーションはいらない」）：行って戻るだけ', () => {
+  const f = { kind: 'hit', amount: 100, crit: false, t0: 10 }, HP = 1000
+  // 押された向きから戻り続ける（往復しない）・傾けない・伸びない
+  let prev = -Infinity
+  for (let h = 0; h < HIT_REACT_SEC; h += 1 / 120) {
+    const r = hitReactOf(f, 10 + h, HP)
+    assert.ok(r.x >= prev, `${h.toFixed(3)}秒で押し返されている`)
+    assert.equal(r.rot, undefined, '傾けない')
+    assert.ok(r.sx >= 1 && r.sy <= 1, 'つぶれるだけで伸びない')
+    prev = r.x
+  }
+  // 多段：次の1発の瞬間に元の場所へ戻らない（はじめのコマで押し切る）
+  assert.ok(hitReactOf(f, 10, HP).x < -5)
+  // 画面：自分の側は細かい揺れを通らない・回さない（ボスの側の揺れはそのまま）
+  assert.match(stage, /\(side === 'b' \? shakeOf\(now - lastOf\('hit'\)\) : 0\)/)
+  assert.ok(!/rotate/.test(stage.match(/const reactTf = .*/)[0]))
+  assert.ok(!/writhe/.test(stage), '巻かれてもがかない')
+  assert.ok(!/knock/.test(stage), '押すのは hitReactOf だけ（別に押すと、押す量が途中で切り替わって戻る途中でもう一度跳ねた）')
 })

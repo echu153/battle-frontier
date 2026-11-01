@@ -303,11 +303,8 @@ test('【確定】2026-11-01 ゼルギアスの大砲（ユーザー「エフェ
   const tr = (ms) => gunSceneAt(shell, ms).items.find(it => it.t === 'tracer')
   assert.ok(tr(shell.hitMs + 80).w >= 0.09)
   assert.ok(tr(shell.hitMs + 100).k > tr(shell.hitMs + 30).k)
-  // 当たると足元の輪・相手が押される。外れたら押されない（演出は同じ）
-  const hit = gunSceneAt(shell, shell.impactMs + 20), miss = gunSceneAt(shell, shell.impactMs + 20, false)
-  assert.ok(hit.items.some(it => it.t === 'ring') && hit.knock < 0)
-  assert.equal(miss.knock, 0)
-  assert.equal(miss.items.length, hit.items.length)
+  // 当たると足元の輪（相手が押されるのは lib/atbFx.js の hitReactOf）
+  assert.ok(gunSceneAt(shell, shell.impactMs + 20).items.some(it => it.t === 'ring'))
   // 雷霆掃射：1発ごとに閃光。3発目がいちばん大きい
   const flashAt = (i) => gunSceneAt(volley, volley.hitMs + volley.shots[i].delayMs + 10).items.find(it => it.t === 'mflash')
   assert.ok(flashAt(0) && flashAt(1) && flashAt(2).r > flashAt(0).r)
@@ -315,7 +312,6 @@ test('【確定】2026-11-01 ゼルギアスの大砲（ユーザー「エフェ
   assert.deepEqual(gunSceneAt(volley, volley.hitMs + 500), gunSceneAt(volley, volley.hitMs + 500))
   assert.equal(gunSceneAt(shell, sceneEndMsOf(shell)).items.length, 0)
   assert.equal(sceneAt(shell, shell.hitMs + 10).items.length, fired.items.length, 'sceneAt から流れる')
-  assert.ok(stageSceneOf([{ m: shell, ms: shell.impactMs + 20 }], null).knock < 0)
 })
 
 test('【確定】2026-11-01 ゼルギアスの神雷崩撃：振りかぶると空から雷が剣へ落ち、突進の筋、当たると大きく光って揺れて相手が縮む', () => {
@@ -324,7 +320,7 @@ test('【確定】2026-11-01 ゼルギアスの神雷崩撃：振りかぶると
   assert.ok(wind.items.some(it => it.t === 'tracer' && it.sky) && wind.hand.op > 0 && wind.dim > 0)
   assert.ok(slashSceneAt(smite, smite.scene.windMs + 60).items.some(it => it.t === 'speed'))
   const hit = slashSceneAt(smite, smite.impactMs + 40)
-  assert.ok(hit.flash > 0.7 && Math.hypot(...hit.shake) > 3 && hit.knock < 0 && hit.squeeze[1] < 1)
+  assert.ok(hit.flash > 0.7 && Math.hypot(...hit.shake) > 3 && hit.squeeze[1] < 1)
   assert.ok(!slashSceneAt(smite, smite.impactMs + 40, false).squeeze, '外れたら縮まない')
   assert.equal(slashSceneAt(smite, sceneEndMsOf(smite)).items.length, 0)
 })
@@ -361,7 +357,7 @@ test('【確定】2026-11-01 ユーザー「むげんじごくのわっか、枠
   assert.ok(enma.hell.fx.charge.sy <= 0.65, '少しつぶす')
 })
 
-test('【確定】2026-11-01 ユーザー「断罪はもっと炎っぽく、無間地獄も炎をしっかりモーションして」：炎は絵のまま燃やす（components/BossFireFx.jsx）・火の粉が絶えず立ちのぼる・巻かれてもがく（外れたらもがかない）', () => {
+test('【確定】2026-11-01 ユーザー「断罪はもっと炎っぽく、無間地獄も炎をしっかりモーションして」：炎は絵のまま燃やす（components/BossFireFx.jsx）・火の粉が絶えず立ちのぼる・巻かれて光る（外れたらもがかない）', () => {
   for (const m of [enma.pillar, enma.hell]) {
     assert.equal(m.fx.hit.anim, 'rise', m.label)
     assert.ok(m.fx.hit.amp > 0, m.label)
@@ -374,16 +370,16 @@ test('【確定】2026-11-01 ユーザー「断罪はもっと炎っぽく、無
   assert.match(shader, /fract\(t \* 1\.1\)/, '中身を上へ流す')
   assert.match(shader, /uniform float burn/, '上から燃え尽きる')
   const P = enma.pillar, b = burstSceneAt(P, P.impactMs + 200), miss = burstSceneAt(P, P.impactMs + 200, undefined, false)
-  assert.ok(b.writhe > 0.9, 'もがく')
-  assert.equal(miss.writhe, 0, '外れたらもがかない')
+  assert.ok(b.wrapped > 0.9, '炎に巻かれて光る')
+  assert.equal(miss.wrapped, 0, '外れたら光らない')
   assert.ok(b.items.filter(i => i.t === 'drop').length > 20, '火の粉')
-  assert.ok(burstSceneAt(P, P.impactMs + 2000).writhe < 0.01, 'おわると止まる')
+  assert.ok(burstSceneAt(P, P.impactMs + 2000).wrapped < 0.01, 'おわると止まる')
   assert.equal(doomSceneAt(enma.hell, enma.hell.impactMs + 300).beam, null, '奔流は無い')
-  assert.ok(doomSceneAt(enma.hell, enma.hell.impactMs + 300).writhe > 0.9)
-  assert.equal(doomSceneAt(enma.hell, enma.hell.impactMs + 300, undefined, false).writhe, 0)
+  assert.ok(doomSceneAt(enma.hell, enma.hell.impactMs + 300).wrapped > 0.9)
+  assert.equal(doomSceneAt(enma.hell, enma.hell.impactMs + 300, undefined, false).wrapped, 0)
   // 黒龍とゼルギアスの大技は変えない
   const v = bossIllustOf('varuzenoku').motions.doom
-  assert.equal(doomSceneAt(v, v.impactMs + 300).writhe, 0)
+  assert.equal(doomSceneAt(v, v.impactMs + 300).wrapped, 0)
   assert.ok(doomSceneAt(v, v.hitMs + 60).beam, '黒龍の奔流はそのまま')
 })
 
@@ -427,9 +423,9 @@ test('【確定】2026-11-01 ユーザー「鎖もモーションしっかり動
   assert.equal(chainTilesAt(m, I + CHAIN.burstMs + CHAIN.flyMs).length, 0, 'おわると消える')
   assert.deepEqual(chainTilesAt(m, I + 400), chainTilesAt(m, I + 400), '同じ時刻なら同じ形')
   assert.ok(full.length < 60, '毎コマの数は少ない')
-  // 締め上げるたび相手が縮む・もがく（外れたら縮まない）
+  // 締め上げるたび相手が縮む・光る（外れたら縮まない）
   const s = coilSceneAt(m, I + CHAIN.squeezes[0] + 80)
-  assert.ok(s.squeeze[0] < 1 && s.writhe > 0.5)
+  assert.ok(s.squeeze[0] < 1 && s.wrapped > 0.5)
   assert.equal(coilSceneAt(m, I + CHAIN.squeezes[0] + 80, false).squeeze, null)
   assert.equal(coilSceneAt(m, I + 100).items.filter(i => i.t === 'coil' || i.t === 'bubble').length, 0, '水の輪と泡は出さない')
   // 閻魔の引く動きと締め上げる時刻がそろっている

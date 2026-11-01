@@ -2,7 +2,7 @@ import { createContext, useContext, useId, useLayoutEffect, useRef, useState } f
 import { TEXT } from './v2ui.js'
 import { buffChips, hpBuffChips, ailChips, stateChips, needShownOf, castMsOf, CAST_SEC, BUFF_GAUGE_SEC } from '../core/atb.js'
 import { STAT_DEFS } from '../core/stats.js'
-import { hitReactOf, writheOf, lungeOf, shakeOf, lastHitAtOf, popTextOf, popScaleOf, popLeftOf, popTopOf, CRIT_TEXT, HIT_SEC, POP_SEC, GLOW_SEC, RAGE_SEC, skillBannerAt } from '../lib/atbFx.js'
+import { hitReactOf, lungeOf, shakeOf, lastHitAtOf, popTextOf, popScaleOf, popLeftOf, popTopOf, CRIT_TEXT, HIT_SEC, POP_SEC, GLOW_SEC, RAGE_SEC, skillBannerAt } from '../lib/atbFx.js'
 import { JP_BOLD } from './casinoStyle.js'
 import { rubySegmentsOf } from '../lib/skillRuby.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
@@ -525,9 +525,9 @@ const buffAfterOf = (art, me, marks, now) => {
 const FIGHTER_ROWS = 5
 //   death … 倒れる動き（lib/bossDeath.js の deathAt に t0＝倒れた時刻を足したもの・ボスだけ）
 //   introWait … 開戦の動きを始める前（遭遇の絵の後ろ・サーバーの返事を待っているあいだ）。ボスは登場の前の形で待つ
-//   react … 受けた瞬間に押されてのけぞる（lib/atbFx.js の hitReactOf・ボス戦の自分）／tone … 受けた技の色（演出の tone）／writhe … 炎や鎖に巻かれてもがく強さ（bossScene）
-//   reachTo … 相手の真ん中（立ち絵の px・ボスだけ）。剣先が届くまで踏み込む距離を出す（lib/bossIllust.js の reachXOf）／knock … 技で押される（px・自分だけ）
-function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx, now, name, artH = ART_H, scale = 1, areaRef, castEnd = -1e9, squeeze = null, death = null, introWait = false, reachTo = null, knock = 0, react = false, tone = null, writhe = 0 }) {
+//   react … 受けた瞬間に押される（lib/atbFx.js の hitReactOf・ボス戦の自分）／tone … 受けた技の色（演出の tone）／wrapped … 炎や鎖に巻かれて体が光る強さ（bossScene）
+//   reachTo … 相手の真ん中（立ち絵の px・ボスだけ）。剣先が届くまで踏み込む距離を出す（lib/bossIllust.js の reachXOf）
+function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx, now, name, artH = ART_H, scale = 1, areaRef, castEnd = -1e9, squeeze = null, death = null, introWait = false, reachTo = null, react = false, tone = null, wrapped = 0 }) {
   const lite = useContext(LiteCtx)
   const mine = fx.filter(f => f.side === side)
   const lastOf = (kind) => mine.reduce((t, f) => (f.kind === kind && f.t0 <= now && f.t0 > t ? f.t0 : t), -1e9)
@@ -577,21 +577,21 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   const showMotion = death ? { poses: { ...showMotion0?.poses, ...rig.death.arts } } : showMotion0
   const aura = buff?.aura && buffArt.aura ? { p: buffArt.aura, op: buff.aura.op * buffArt.auraOp, scale: buff.aura.scale, front: buffArt.front, glow: buffArt.glow, rot: buff.aura.rot, at: buffArt.spinAt } : null
   const ghosts = rigMotion && !casting && !buffPose && !death ? illustGhostsAt(rigMotion, rigMs).map(g => ({ ...g, pose: illustPoseAt(rig.key, rigMotion, g.ms, tMs - (rigMs - g.ms), false, reachX) })) : []
-  const dx = (frame >= 0 || rig ? 0 : lungeOf(now - lastOf('act')) * dir) + shakeOf(now - lastOf('hit')) + knock
+  // 被弾の揺れはボスの側だけ（ユーザー「プレイヤーの被ダメージのグラグラモーションはいらない」）
+  const dx = (frame >= 0 || rig ? 0 : lungeOf(now - lastOf('act')) * dir) + (side === 'b' ? shakeOf(now - lastOf('hit')) : 0)
   const hitAgo = now - lastOf('hit')
-  // 受けた瞬間の動き（自分・ボス戦）：押されてのけぞる・つぶれて伸び戻る・白く光ってから技の色が残る／巻かれてもがく
+  // 受けた瞬間の動き（自分・ボス戦）：押されて戻る・一瞬つぶれる・白く光ってから技の色が残る
   const hitMark = react ? mine.reduce((p, f) => (f.kind === 'hit' && f.t0 <= now && (!p || f.t0 > p.t0) ? f : p), null) : null
-  const hr = react ? hitReactOf(hitMark, now, me.base.hp, knock !== 0) : null
-  const wr = writhe > 0.01 ? writheOf(writhe, now) : null
+  const hr = react ? hitReactOf(hitMark, now, me.base.hp) : null
   const hitRgb = tone === 'fire' ? '255,110,30' : tone === 'soul' ? '170,110,255' : '255,50,60'
-  const reactTf = hr || wr ? `translate(${((hr?.x || 0) + (wr?.x || 0)).toFixed(2)}%, ${(hr?.y || 0).toFixed(2)}%) rotate(${((hr?.rot || 0) + (wr?.rot || 0)).toFixed(2)}deg) scale(${(hr?.sx || 1).toFixed(3)}, ${(hr?.sy || 1).toFixed(3)})` : null
+  const reactTf = hr ? `translate(${hr.x.toFixed(2)}%, ${hr.y.toFixed(2)}%) scale(${hr.sx.toFixed(3)}, ${hr.sy.toFixed(3)})` : null
   const glowAgo = now - lastOf('use')
   const rageAgo = now - lastOf('rage')
   const filters = []
   if (hr) filters.push(`brightness(${(1 + 1.5 * hr.flash).toFixed(2)}) drop-shadow(0 0 ${(3 + 9 * hr.glow).toFixed(1)}px rgba(${hitRgb},${(0.25 + 0.7 * hr.glow).toFixed(2)}))`)
   else if (hitAgo >= 0 && hitAgo < HIT_SEC) filters.push('drop-shadow(0 0 6px #ff3344) brightness(1.25)')
   // 炎や鎖に巻かれているあいだ：熱く光って脈打つ
-  if (writhe > 0.01) filters.push(`brightness(${(1 + writhe * (0.14 + 0.1 * Math.sin(now * 40))).toFixed(3)}) drop-shadow(0 0 ${(2 + 6 * writhe).toFixed(1)}px rgba(${hitRgb},${(0.6 * writhe).toFixed(2)}))`)
+  if (wrapped > 0.01) filters.push(`brightness(${(1 + wrapped * (0.14 + 0.1 * Math.sin(now * 40))).toFixed(3)}) drop-shadow(0 0 ${(2 + 6 * wrapped).toFixed(1)}px rgba(${hitRgb},${(0.6 * wrapped).toFixed(2)}))`)
   if (glowAgo >= 0 && glowAgo < GLOW_SEC) filters.push('drop-shadow(0 0 10px #ffee88) brightness(1.3)')
   if (buff) {
     // バフの絵があるボス：付いた瞬間にぱっと明るく光り、赤い光が見せているあいだ残る
@@ -616,7 +616,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   let bright = 1, red = 0
   if (lite) {
     if (hr) { bright *= 1 + 1.5 * hr.flash; red = Math.max(red, hr.glow) } else if (hitAgo >= 0 && hitAgo < HIT_SEC) bright *= 1.25
-    if (writhe > 0.01) { bright *= 1 + 0.14 * writhe; red = Math.max(red, 0.7 * writhe) }
+    if (wrapped > 0.01) { bright *= 1 + 0.14 * wrapped; red = Math.max(red, 0.7 * wrapped) }
     if (glowAgo >= 0 && glowAgo < GLOW_SEC) bright *= 1.3
     if (buff) { bright *= 1 + 0.9 * buff.flash; red = Math.max(0, 1 - (now - lastRage.t0) / (RAGE_SEC * 1.2)) }
     else if (rageAgo >= 0 && rageAgo < RAGE_SEC && !death) { const k = Math.sin(Math.PI * 2 * rageAgo / RAGE_SEC) ** 2 * (1 - rageAgo / RAGE_SEC); bright *= 1 + 0.35 * k; red = k }
@@ -626,7 +626,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
     if (enter) { bright *= enter.bright; red = Math.max(red, enter.glow) }
   }
   const wrapFilter = lite ? `brightness(${bright.toFixed(3)}) grayscale(${me.ail.paralyze ? 0.6 : 0})` : filters.join(' ') || 'none'
-  const redColor = hr || wr ? hitRgb : (enter?.glow > 0 && rig.intro.glowColor) || buffArt?.tint || after?.glowColor || '255,60,16'
+  const redColor = hr || wrapped > 0.01 ? hitRgb : (enter?.glow > 0 && rig.intro.glowColor) || buffArt?.tint || after?.glowColor || '255,60,16'
   const down = me.hp <= 0
   const pops = mine.filter(f => f.kind !== 'act' && f.kind !== 'use' && f.kind !== 'rage' && f.kind !== 'death' && now >= f.t0 && now - f.t0 < POP_SEC)
   const need = needShownOf(me, st.t)   // ★読むだけ（ボスの次の行動を決める関数はここで使わない＝乱数が進む）
@@ -1414,7 +1414,7 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
       {foeArt?.bg && geo && <BossBackground bg={foeArt.bg} geo={geo} now={now} dim={dimOf} behindK={death ? death.behind : 1} />}
       {hasBackFx && geo && <BossFxBack fx={death ? fxAll.filter(f => f.side !== 'b' || f.kind !== 'act') : fxAll} now={now} geo={geo} art={foeArt} cast={cast} castEnd={castSeen.current} tiles={chainTiles} />}
       <Fighter st={st} side="a" me={st.a} src={playerSrc} motion={playerMotion} strips={playerMotion ? [playerMotion] : []} fx={fx} now={now} name={st.a.name}
-        artH={size?.artH || ART_H} scale={playerScale} areaRef={pArea} squeeze={sc?.squeeze} knock={sc?.knock || 0} react={foeBig} tone={sc?.tone} writhe={sc?.writhe || 0} />
+        artH={size?.artH || ART_H} scale={playerScale} areaRef={pArea} squeeze={sc?.squeeze} react={foeBig} tone={sc?.tone} wrapped={sc?.wrapped || 0} />
       <Fighter st={st} side="b" me={st.b} right src={foeSrc} fx={fx} now={now} name={st.b.name}
         strips={foeArt?.kind === 'pixel' ? Object.values(foeArt.motions) : []} rig={foeArt?.kind === 'illust' ? foeArt : null}
         artH={size?.artH || ART_H} areaRef={bArea} castEnd={castSeen.current} death={death} introWait={introWait} reachTo={reachTo} />

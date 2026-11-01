@@ -25,7 +25,7 @@ import { CAST_SEC } from '../core/atb.js'
 // 【確定】2026-11-01 ユーザー「断罪はもっと炎っぽく、無間地獄も炎をしっかりモーションして、手のモーションもつけて」「鎖もモーションしっかり動くようにして」：
 //   炎の絵は components/BossFireFx.jsx で燃やす・火の粉が絶えず立ちのぼる（embersUp）・無間地獄は地の底から亡者の腕が伸びて指を開いて握る（deadHandsAt・deadHandPathOf）。
 //   鎖は絵の1枚を出すのをやめ、絵から切った鎖のひと続きを、足元から体のまわりへらせんに並べて伸ばし、締め上げるたび巻き直して細り、最後にちぎれ飛ぶ（chainTilesAt）。
-//   writhe＝炎や鎖に巻かれて、もがく強さ（外れたときは 0）
+//   wrapped＝炎や鎖に巻かれて、自分の体が熱く光る強さ（外れたときは 0）。動かさない＝ユーザー「プレイヤーの被ダメージのグラグラモーションはいらない」
 // 【確定】2026-10-30 ユーザー「終焉の黒焔もっと大技っぽくしてほしい、貯める動作も長く」（kind 'doom'）：
 //   ため＝舞台が赤黒く暗くなり、火の粉が広い所から口へ渦を巻いて吸い込まれ、口の光が育ち、竜の体が赤く光を増す（震えない＝ユーザー「溜めるとき、別に震えなくていい」）。
 //   吐きつけ＝光・揺れと一緒に、口から相手へ黒焔の奔流（beam・画面 SceneLayer）。当たると大きく光って揺れ、火の粉・炎の柱・足元の輪・黒い煙・足元の残り火。
@@ -192,7 +192,7 @@ export const sceneAt = (m, ms, { after = false, landed = true } = {}, P = POUR) 
   if (m?.scene?.kind === 'coil') return coilSceneAt(m, ms, landed)
   if (m?.scene?.kind === 'doom') return doomSceneAt(m, ms, DOOM, landed)
   if (m?.scene?.kind === 'burst') return burstSceneAt(m, ms, BURST, landed)
-  if (m?.scene?.kind === 'gun') return gunSceneAt(m, ms, landed)
+  if (m?.scene?.kind === 'gun') return gunSceneAt(m, ms)
   if (m?.scene?.kind === 'slash') return slashSceneAt(m, ms, landed)
   const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: m?.scene?.tone || null }
   if (m?.scene?.kind === 'hands') { if (ms >= 0 && ms < sceneEndMsOf(m)) handFxAt(m, ms, out); return out }
@@ -299,7 +299,7 @@ export const coilSceneAt = (m, ms, landed = true, C = COIL) => {
   // chains＝描いた鎖の絵だけ（業縛の鎖・水の輪と泡は出さない・しぶきは火の粉の色）
   const chains = !!m.scene.chains
   if (chains) C = { ...C, squeezes: CHAIN.squeezes, burstMs: CHAIN.burstMs }
-  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, squeeze: null, tone: m.scene.tone || null, dimColor: m.scene.dimColor || null, writhe: 0 }
+  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, squeeze: null, tone: m.scene.tone || null, dimColor: m.scene.dimColor || null, wrapped: 0 }
   const H = m.hitMs, I = m.impactMs, B = I + C.burstMs, end = sceneEndMsOf(m)
   if (ms < 0 || ms >= end) return out
   const e = ms - I
@@ -324,9 +324,9 @@ export const coilSceneAt = (m, ms, landed = true, C = COIL) => {
   // 相手が縮む（締め上げるたび横に縮んで縦に伸びる）。外れたときは縮まない
   const b = Math.max(0.7 * bump(e, 180), ...sq.map(d => bump(d, 200)))
   if (landed && ms < B) out.squeeze = [1 - 0.09 * b, 1 + 0.04 * b]
-  // 鎖に巻かれてもがく（締め上げるたび強く）・体のまわりが赤く熱い
+  // 鎖に巻かれて光る（締め上げるたび強く）・体のまわりが赤く熱い
   if (chains) {
-    if (landed && ms < B) out.writhe = 0.45 + 0.55 * b
+    if (landed && ms < B) out.wrapped = 0.45 + 0.55 * b
     if (ms < B + 200) out.items.push({ t: 'glow', x: 0, y: BODY_Y, r: 0.42, op: (0.08 + 0.2 * b) * Math.min(1, e / 80) * (1 - clamp01((ms - B) / 200)) })
   }
   // 水の輪：はじめは大きく、すぐ巻きついて細る・締め上げるたび細る・回り続ける・はじけたら外へ広がって消える
@@ -391,7 +391,7 @@ const doomCastSceneAt = (m, castMs, D = DOOM) => {
 //   ★構えのあとは技の途中（castSkipMs）から流す＝どの時刻から見ても同じ形（暗さ・口の光は構えのおわりとつながる）
 export const doomSceneAt = (m, ms, D = DOOM, landed = true) => {
   //   tone・dimColor＝ボスごとの色（無ければ炎＝黒龍。ゼルギアスの神雷終焉は 'thunder'＝青白い）
-  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: m.scene?.tone || 'fire', dimColor: m.scene?.dimColor || D.color, beam: null, writhe: 0 }
+  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: m.scene?.tone || 'fire', dimColor: m.scene?.dimColor || D.color, beam: null, wrapped: 0 }
   const H = m.hitMs, I = m.impactMs, end = sceneEndMsOf(m)
   if (ms < 0 || ms >= end) return out
   const e = ms - I, s = ms - H
@@ -418,11 +418,11 @@ export const doomSceneAt = (m, ms, D = DOOM, landed = true) => {
     out.flash = Math.max(out.flash, 0.95 * (e < 40 ? e / 40 : pulse(e - 40, 520)))
     const k = clamp01(e / 1000), rumble = e < 800 ? 1.6 * (1 - e / 800) : 0
     amp += 15 * (1 - k) * (1 - k) + rumble
-    // 地の底から業火（無間地獄）：火の粉が絶えず立ちのぼる・亡者の腕が伸びる・炎に巻かれてもがく
+    // 地の底から業火（無間地獄）：火の粉が絶えず立ちのぼる・亡者の腕が伸びる・炎に巻かれて光る
     if (m.scene?.hands) {
       embersUp(out.items, 46, 18000, e, 2.1, 1.7, D.after + 200)
       deadHandsAt(out.items, e)
-      if (landed) out.writhe = 1 - smooth((e - D.after) / D.fade)
+      if (landed) out.wrapped = 1 - smooth((e - D.after) / D.fade)
     }
     // 火の粉・炎の柱・足元の輪・黒い煙・足元の残り火
     drops(out.items, D.splash, 12000, e, [0.8, 2.2], [600, 1100], [0.006, 0.018], 0.5)
@@ -539,7 +539,7 @@ export const chainTilesAt = (m, ms, C = CHAIN) => {
 // 足元で噴き上がる技（kind 'burst'・業火断罪）のあいだ（ms＝技を出しはじめてから）→ sceneAt と同じ形＋ tone・dimColor
 //   構えで暗くなり手に光が集まる → 振り抜きの絵で手の光がはじける・少し光って揺れる → 当たった瞬間に大きく光って揺れ、相手の足元で火の粉・炎の筋・輪・煙
 export const burstSceneAt = (m, ms, B = BURST, landed = true) => {
-  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: m.scene.tone || null, dimColor: m.scene.dimColor || null, writhe: 0 }
+  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: m.scene.tone || null, dimColor: m.scene.dimColor || null, wrapped: 0 }
   const H = m.hitMs, I = m.impactMs
   if (ms < 0 || ms >= sceneEndMsOf(m)) return out
   const e = ms - I, s = ms - H
@@ -550,9 +550,9 @@ export const burstSceneAt = (m, ms, B = BURST, landed = true) => {
   if (e >= 0) {
     out.flash = Math.max(out.flash, 0.6 * (e < 40 ? e / 40 : pulse(e - 40, 320)))
     amp += 9 * (1 - clamp01(e / 600)) ** 2
-    // 火の粉が絶えず立ちのぼる・炎に巻かれてもがく
+    // 火の粉が絶えず立ちのぼる・炎に巻かれて光る
     embersUp(out.items, 30, 19000, e, 1.05, 1.5, B.after)
-    if (landed) out.writhe = 1 - smooth((e - B.after) / B.fade)
+    if (landed) out.wrapped = 1 - smooth((e - B.after) / B.fade)
     drops(out.items, B.splash, 16000, e, [0.7, 1.9], [500, 950], [0.006, 0.016], 0.42)
     jets(out.items, B.jets, 17000, e, 1.1)
     for (const [at, size] of B.rings) {
@@ -575,13 +575,13 @@ export const burstSceneAt = (m, ms, B = BURST, landed = true) => {
 // ===== 大砲と剣の技（ゼルギアス）=====
 // 【確定】2026-11-01 ユーザー「大技以外のモーションがすべてしょぼすぎる」「エフェクト細いし」「もっと派手に動いて」「銃で放つときのモーションもなんか安っぽい」：
 //   kind 'gun'（雷鋼弾・雷霆掃射）：撃つ前に砲口へ光が集まる → 撃つたび砲口で閃光がはじけ（mflash）・衝撃の輪（mring）・火花（hdrop）・太い雷の筋が相手まで走り（tracer）、舞台が暗く光って揺れる。
-//     当たるたび足元に輪と火花が広がり、相手が押される（knock＝画面の px）
-//   kind 'slash'（神雷崩撃）：振りかぶるあいだ暗くなり、空から雷が剣に落ちて（tracer の sky）剣先が光る → 突進の筋（speed）→ 当たると大きく光って揺れ、輪・火花・相手が縮んで押される
-//   外れても演出は同じ（2026-10-31 の決まり）。変わるのは相手の反応（knock・squeeze）だけ
+//     当たるたび足元に輪と火花が広がる（相手が押されるのは全部のボスと同じ＝lib/atbFx.js の hitReactOf）
+//   kind 'slash'（神雷崩撃）：振りかぶるあいだ暗くなり、空から雷が剣に落ちて（tracer の sky）剣先が光る → 突進の筋（speed）→ 当たると大きく光って揺れ、輪・火花・相手が縮む
+//   外れても演出は同じ（2026-10-31 の決まり）。変わるのは相手の反応（squeeze）だけ
 export const GUN = { chargeMs: 260, flashMs: 170, ringMs: 320, tail: 130, w: 0.11, dim: 0.34 }
 export const SLASH = { dim: 0.5, hitDim: 0.62, after: 480, fade: 320, w: 0.16, rush: 14 }
 const ONE_SHOT = [{ atMs: 0 }]
-const sceneBase = (m) => ({ dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: m.scene?.tone || 'fire', dimColor: m.scene?.dimColor || null, beam: null, knock: 0 })
+const sceneBase = (m) => ({ dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: m.scene?.tone || 'fire', dimColor: m.scene?.dimColor || null, beam: null })
 // 稲妻の折れ線（画面の px）：(x0, y0) から (x1, y1) まで n 区間・amp＝横へのぶれの大きさ（両はしは小さく）。同じ seed なら同じ形
 export const boltPathOf = (x0, y0, x1, y1, seed, n, amp) => {
   const dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len, out = [[x0, y0]]
@@ -610,8 +610,8 @@ const impactAt = (items, e, seed, P) => {
     items.push({ t: 'ring', x: 0, y: -0.01, rx, ry: rx * 0.26, w: 0.034 * (1 - q) + 0.004, op: 0.95 * (1 - q) })
   }
 }
-// 大砲の技（ms＝技を出しはじめてから）→ sceneAt と同じ形＋ knock
-export const gunSceneAt = (m, ms, landed = true, G = GUN) => {
+// 大砲の技（ms＝技を出しはじめてから）→ sceneAt と同じ形
+export const gunSceneAt = (m, ms, G = GUN) => {
   const out = sceneBase(m)
   if (ms < 0 || ms >= sceneEndMsOf(m)) return out
   const strikes = m.strikes || ONE_SHOT, first = m.hitMs + (m.shots[0].delayMs || 0), chargeMs = m.scene.chargeMs ?? G.chargeMs
@@ -651,7 +651,6 @@ export const gunSceneAt = (m, ms, landed = true, G = GUN) => {
     if (e >= 0) {
       out.flash = Math.max(out.flash, 0.55 * P * pulse(e, 240))
       amp += 12 * P * pulse(e, 340)
-      if (landed) out.knock -= 16 * P * pulse(e, 300)
       impactAt(out.items, e, 1200 + i * 71, P)
     }
   })
@@ -687,7 +686,6 @@ export const slashSceneAt = (m, ms, landed = true, D = SLASH) => {
     out.flash = Math.max(out.flash, 0.95 * (e < 30 ? e / 30 : pulse(e - 30, 380)))
     amp += 18 * pulse(e, 620)
     if (landed) {
-      out.knock -= 26 * pulse(e, 420)
       const q = pulse(e, 260)
       out.squeeze = [1 + 0.1 * q, 1 - 0.16 * q]
     }
@@ -703,10 +701,9 @@ export const slashSceneAt = (m, ms, landed = true, D = SLASH) => {
 //   暗さと光はいちばん強いもの・揺れは足す・描くものは並べる・雲と手は新しいほう（acts の after・landed は sceneAt と同じ）
 //   相手の縮みはかけ合わせる
 export const stageSceneOf = (acts, cast) => {
-  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, squeeze: null, tone: null, dimColor: null, beam: null, knock: 0, writhe: 0 }
+  const out = { dim: 0, flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, squeeze: null, tone: null, dimColor: null, beam: null, wrapped: 0 }
   const add = (s) => {
-    out.knock += s.knock || 0
-    out.writhe = Math.max(out.writhe, s.writhe || 0)
+    out.wrapped = Math.max(out.wrapped, s.wrapped || 0)
     if (s.tone && (s.dim > 0 || s.items.length || s.hand || s.beam)) { out.tone = s.tone; out.dimColor = s.dimColor }
     if (s.beam) out.beam = s.beam
     out.dim = Math.max(out.dim, s.dim)

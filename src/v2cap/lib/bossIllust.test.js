@@ -261,7 +261,7 @@ test('【確定】2026-11-01 黒翼烈風は風を起こすのが1回・風の�
   assert.equal(m.shots.length, m.strikes.length)
   assert.equal(m.strikes[0].atMs, 0, '1発目は今までの当たる時刻')
   const gap = m.strikes[1].atMs
-  assert.ok(gap > HIT_SEC * 1000, '受ける側の揺れがいったん収まってから次が当たる＝2回揺れて見える')
+  assert.ok(gap > HIT_SEC * 1000, '間をあけて次が当たる＝2回当たったと見える')
   assert.ok(m.impactMs + gap < m.totalMs, '動きが終わる前に2発目が届く')
   assert.ok(m.totalMs <= 1600, '動きの長さは大技の構えが待つ1.6秒まで（core/atb.js の NOW_WAIT_AFTER_ACT_SEC）')
   assert.ok(m.hitMs + m.shots[1].delayMs < m.art.at(-1)[0], '2つめの刃も打ち下ろしの絵のあいだに出る')
@@ -1010,7 +1010,7 @@ test('【確定】2026-11-01 ゼルギアスの技（ユーザー「大技以外
   const v = a.motions.volley
   assert.equal(v.shots.length, 3)
   assert.equal(v.strikes.length, 3)
-  for (let i = 1; i < 3; i++) assert.ok(v.strikes[i].atMs - v.strikes[i - 1].atMs > HIT_SEC * 1000, '揺れがいったん収まってから次が当たる')
+  for (let i = 1; i < 3; i++) assert.ok(v.strikes[i].atMs - v.strikes[i - 1].atMs > HIT_SEC * 1000, '間をあけて次が当たる')
   // 神雷崩撃：頭の上へ振りかぶり、相手の側へ振り下ろす（前は逆の側を回って足元で止まり、届かなかった）。剣先は相手の真ん中まで届く（舞台の幅によらない）・雷は相手の真上から落ちる（飛ばない）
   const smite = def.motions.smite, sm = a.motions.smite
   assert.ok(motionPoseAt(smite.keys, 360).armF < -100, '振りかぶる')
