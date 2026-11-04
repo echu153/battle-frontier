@@ -2,9 +2,9 @@
 // 【確定】2026-11-02 ユーザーが案を見て「この案で作る」（姿・話し方・出し方・報酬なしは navi.js の冒頭）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import {
-  NAVI_STEPS, NAVI_KEYS, NAVI_END_KEY, NAVI_FAREWELL, NAVI_NAME, NAVI_TAP, NAVI_ART_ON, NAVI_ART_DIR, NAVI_FACES, NAVI_FACE_KEYS, NAVI_SCROLL_ID,
+  NAVI_STEPS, NAVI_KEYS, NAVI_END_KEY, NAVI_FAREWELL, NAVI_NAME, NAVI_TAP, NAVI_ART_DIR, NAVI_ART_FACES, NAVI_FACE_SIZE, NAVI_FACES, NAVI_FACE_KEYS, NAVI_SCROLL_ID,
   naviSrc, naviMarkedOf, naviCtxOf, naviStateOf, naviViewOf, naviFarewellView, naviPreviewViews, pickNaviTap,
 } from './navi.js'
 import { FOLD_KEYS } from './uiPrefs.js'
@@ -246,16 +246,44 @@ test('裏設定をばらさない：看板娘の付け耳・アレアの正体�
   for (const t of allLines()) assert.ok(!/付け耳|元素|ハル|アレア|テオドール|トルステン|ソルド/.test(t), t)
 })
 
-test('絵：4枚の表情・絵が届くまでは仮の絵', () => {
+// WebP の大きさ（VP8X・VP8L・VP8 のどれか）
+const webpSize = (buf) => {
+  const kind = buf.toString('ascii', 12, 16)
+  if (kind === 'VP8X') return { w: 1 + buf.readUIntLE(24, 3), h: 1 + buf.readUIntLE(27, 3) }
+  if (kind === 'VP8L') { const b = buf.readUInt32LE(21); return { w: 1 + (b & 0x3fff), h: 1 + ((b >> 14) & 0x3fff) } }
+  return { w: buf.readUInt16LE(26) & 0x3fff, h: buf.readUInt16LE(28) & 0x3fff }
+}
+const ART_DIR = new URL(`../../../public${NAVI_ART_DIR}/`, import.meta.url)
+
+test('絵：表情は4つ・できている表情だけ絵があり、まだの表情は「普通」の絵で出す', () => {
   assert.deepEqual(NAVI_FACES.map(f => f.label), ['普通', '得意', '怒り', 'しょんぼり'])
-  assert.equal(naviSrc('smug'), '/v2cap-art/navi/smug.webp')
-  const dir = new URL(`../../../public${NAVI_ART_DIR}/`, import.meta.url)
-  if (NAVI_ART_ON) {
-    for (const k of NAVI_FACE_KEYS) assert.ok(existsSync(new URL(`${k}.webp`, dir)), `${k} の絵が無い＝ node tools/v2cap-navi-art.mjs`)
-    for (const f of readdirSync(dir)) assert.ok(NAVI_FACE_KEYS.includes(f.replace('.webp', '')), `${f} は一覧に無い`)
-  } else {
-    assert.ok(read('components/V2capNavi.jsx').includes(': <SpiritArt face={face} />'), '絵が届くまでは仮の絵')
+  assert.equal(NAVI_ART_FACES[0], 'normal', '土台の「普通」はいつもある')
+  for (const k of NAVI_ART_FACES) assert.ok(NAVI_FACE_KEYS.includes(k), k)
+  for (const k of NAVI_FACE_KEYS) assert.equal(naviSrc(k), `/v2cap-art/navi/${NAVI_ART_FACES.includes(k) ? k : 'normal'}.webp`, k)
+  assert.deepEqual(readdirSync(ART_DIR).sort(), NAVI_ART_FACES.map(k => `${k}.webp`).sort(), '道具が作った絵と一覧が同じ（node tools/v2cap-navi-art.mjs）')
+  for (const k of NAVI_ART_FACES) assert.deepEqual(webpSize(readFileSync(new URL(`${k}.webp`, ART_DIR))), NAVI_FACE_SIZE, `${k} の大きさ`)
+  assert.ok(!/SpiritArt|<svg/.test(read('components/V2capNavi.jsx')), '仮の絵は外した')
+})
+
+test('絵の透明なところは本当に透明（四すみ）＝暗い枠の上で四角く見えない', async (t) => {
+  let decode
+  try { ({ decode } = await import('../../../tools/v2cap-art-lib.mjs')); decode(new URL('normal.webp', ART_DIR).pathname.replace(/^\/([A-Za-z]:)/, '$1'), 64, 'rgba') } catch { t.skip('ffmpeg が無い'); return }
+  for (const k of NAVI_ART_FACES) {
+    const img = decode(new URL(`${k}.webp`, ART_DIR).pathname.replace(/^\/([A-Za-z]:)/, '$1'), 4096, 'rgba')
+    const at = (x, y) => img.data[(y * img.W + x) * 4 + 3]
+    assert.deepEqual([at(0, 0), at(img.W - 1, 0), at(0, img.H - 1), at(img.W - 1, img.H - 1)], [0, 0, 0, 0], k)
   }
+})
+
+test('【確定】2026-11-05 ユーザー選択「普通を土台に目と口だけ差し替え」：道具は表情の絵の目と口のまわりだけを「普通」に重ねる', () => {
+  // ユーザー「いらすとがずれる」：表情ごとに描いてもらうと、王冠の形・体の大きさ・位置まで変わった
+  const tool = readRoot('tools/v2cap-navi-art.mjs')
+  assert.ok(tool.includes("const baseFace = NAVI_FACES.find(f => f.key === 'normal')"), '土台は「普通」')
+  assert.ok(tool.includes('const fit = align(base.img, e.img)'), '重ねる前に大きさと位置を「普通」に合わせる')
+  assert.ok(tool.includes('composeFace(base.img, e.img, fit, mask)'), '目と口のまわりだけを重ねる')
+  assert.ok(tool.includes('inside[p] - inset'), '体の輪郭の線にはさわらない')
+  assert.ok(tool.includes('if (iou < SHAPE_MIN) throw'), '体ごと描き変わった絵は止める')
+  assert.ok(tool.includes('encodeSquare(img, bb,'), '4枚とも「普通」と同じ箱で切る＝表情を変えても動かない')
 })
 
 test('画面：ホームの上の枠・戦闘中と施設の画面では隠す・ボタンの決まりを絵にかけない', () => {

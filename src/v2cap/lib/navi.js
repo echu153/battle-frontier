@@ -29,10 +29,12 @@ export const NAVI_NAME = 'ナハト'
 // ===== 絵 =====
 // 元の絵は public/V2ナビ/<名前>.png（git に入れない）→ `node tools/v2cap-navi-art.mjs` で public/v2cap-art/navi/<キー>.webp。
 // プロンプトのページ https://claude.ai/artifact/1c59bcvqcqNT9Q3ZPavYRm
-// ★絵が届くまで NAVI_ART_ON=false＝画面の仮の絵（V2capNavi.jsx の SpiritArt）を出す
-export const NAVI_ART_ON = false
+// 【確定】2026-11-05 ユーザー指示「いらすとがずれる」→選択「普通を土台に目と口だけ差し替え」：
+//   表情ごとに描いてもらうと王冠・体・位置まで変わるので、道具が「普通」の絵に目と口のまわりだけを重ねる（王冠・体・腕は4枚とも同じ）
+// NAVI_ART_FACES … 絵ができている表情（道具が作ったもの）。まだの表情は「普通」の絵で出す
 export const NAVI_ART_DIR = '/v2cap-art/navi'
-export const naviSrc = (key) => `${NAVI_ART_DIR}/${key}.webp`
+export const NAVI_ART_FACES = ['normal']
+export const naviSrc = (key) => `${NAVI_ART_DIR}/${NAVI_ART_FACES.includes(key) ? key : 'normal'}.webp`
 export const NAVI_FACES = [
   { key: 'normal', label: '普通', src: ['普通'] },
   { key: 'smug', label: '得意', src: ['得意'] },

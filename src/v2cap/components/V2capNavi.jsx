@@ -3,7 +3,7 @@ import { supabase } from '../../supabase'
 import { miniBtn, TEXT } from './v2ui.js'
 import { useCapFold } from './useCapFold.js'
 import {
-  NAVI_ART_ON, NAVI_NAME, NAVI_FACE_SIZE, NAVI_END_KEY, NAVI_SCROLL_ID, naviSrc, naviMarkedOf, naviStateOf, naviViewOf, naviFarewellView,
+  NAVI_NAME, NAVI_FACE_SIZE, NAVI_END_KEY, NAVI_SCROLL_ID, naviSrc, naviMarkedOf, naviStateOf, naviViewOf, naviFarewellView,
   naviPreviewViews, pickNaviTap, nextStreak, tapKindOf,
 } from '../lib/navi.js'
 
@@ -51,48 +51,9 @@ const NAVI_CSS = `
 @media (prefers-reduced-motion: reduce) { .nvi-art svg, .nvi-art img, .nvi-bubble span { animation: none !important } }
 `
 
-// 絵が届くまでの仮の絵（プロンプトのページの見本と同じ形）。表情は目と口と王冠の位置だけ変える
-const LID = {
-  normal: <rect x="28" y="42" width="44" height="7.5" fill="#1b1638" />,
-  smug: <rect x="28" y="42" width="44" height="11" fill="#1b1638" />,
-  angry: <path d="M27 40 L49 53 L49 40 Z M73 40 L51 53 L51 40 Z" fill="#1b1638" />,
-  sad: <rect x="28" y="42" width="44" height="12" fill="#1b1638" />,
-}
-const MOUTH = {
-  normal: <path d="M45 67 H55" stroke={ACCENT} strokeWidth="1.8" strokeLinecap="round" fill="none" />,
-  smug: <><path d="M43 66 Q51 72 58 63" stroke={ACCENT} strokeWidth="1.8" strokeLinecap="round" fill="none" /><path d="M47 69 L49 73 L51 69.6 Z" fill="#ece8f8" /></>,
-  angry: <path d="M42 69 q4 -4 8 0 t8 0" stroke={ACCENT} strokeWidth="1.8" strokeLinecap="round" fill="none" />,
-  sad: <path d="M44 70 Q50 64 56 70" stroke={ACCENT} strokeWidth="1.8" strokeLinecap="round" fill="none" />,
-}
-const CROWN = { normal: 'rotate(-11 50 22)', smug: 'rotate(-6 50 22)', angry: 'translate(0 -6) rotate(-14 50 22)', sad: 'translate(-7 9) rotate(-24 50 22)' }
-const PUPIL_Y = { normal: 55, smug: 56, angry: 55, sad: 58 }
-function SpiritArt({ face = 'normal' }) {
-  const f = LID[face] ? face : 'normal'
-  return (
-    <svg viewBox="0 0 100 100" aria-hidden="true">
-      <ellipse cx="14" cy="60" rx="6" ry="8" fill="#231d47" stroke={ACCENT} strokeWidth="1.6" />
-      <ellipse cx="86" cy="60" rx="6" ry="8" fill="#231d47" stroke={ACCENT} strokeWidth="1.6" />
-      <path d="M50 26 C70 26 80 41 80 56 C80 72 62 80 50 97 C38 80 20 72 20 56 C20 41 30 26 50 26 Z" fill="#1b1638" stroke={ACCENT} strokeWidth="1.8" />
-      <path d="M27 70 Q50 83 73 70 L66 80 Q50 89 34 80 Z" fill="#74264f" stroke="#2a1730" strokeWidth="1" />
-      <ellipse cx="38" cy="53" rx="8.5" ry="9.5" fill="#ffd257" />
-      <ellipse cx="62" cy="53" rx="8.5" ry="9.5" fill="#ffd257" />
-      {LID[f]}
-      <circle cx="38" cy={PUPIL_Y[f]} r="3.2" fill="#1b1638" />
-      <circle cx="62" cy={PUPIL_Y[f]} r="3.2" fill="#1b1638" />
-      {MOUTH[f]}
-      <g transform={CROWN[f]}>
-        <path d="M34 31 L31 12 L41 21 L50 7 L59 21 L69 12 L66 31 Z" fill="#dcae34" stroke="#5e4510" strokeWidth="1.6" strokeLinejoin="round" />
-        <path d="M56 14 L52 21 L56 25 L52 31" fill="none" stroke="#3b2a08" strokeWidth="1.5" />
-        <circle cx="42" cy="26" r="2.4" fill="#d24a6a" />
-        <circle cx="50" cy="26" r="2.4" fill="#3b2a08" />
-      </g>
-    </svg>
-  )
-}
+// 絵は lib/navi.js の naviSrc（まだ描いていない表情は「普通」の絵）。大きさは道具が作る正方形
 function Spirit({ face }) {
-  return NAVI_ART_ON
-    ? <img src={naviSrc(face)} alt="" width={NAVI_FACE_SIZE.w} height={NAVI_FACE_SIZE.h} />
-    : <SpiritArt face={face} />
+  return <img src={naviSrc(face)} alt="" width={NAVI_FACE_SIZE.w} height={NAVI_FACE_SIZE.h} />
 }
 
 export default function V2capNavi({ prof, inventory, hidden = false, onGo, onPoints, onDaily, preview = null, onPreview }) {
