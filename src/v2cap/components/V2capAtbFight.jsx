@@ -211,8 +211,8 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
   const en = s.b
   const now = s.t
   const ch = chosenOf(me, now)
+  // 削った割合は出さない（相手のHPが分かる・2026-11-05 ユーザー「あと敵のHPの数値は見れないようにして」）。ダメージ/秒は出す
   const dealt = Math.max(0, (en.startHp ?? en.base.hp) - Math.max(0, en.hp))
-  const dealtPct = (dealt / en.base.hp) * 100
   const dps = dealt / Math.max(0.1, now)
   const waitName = ch.waiting === 'guard' ? '防御' : me.slots[ch.waiting]?.skill?.name
   const nextLabel = ch.guard ? '🛡 防御' : ch.skill ? ch.skill.name : ch.waiting != null ? `通常攻撃（${waitName}を待っている）` : '通常攻撃'
@@ -270,7 +270,7 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
       </div>
       <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color: TEXT.label, margin:'6px 0', gap:'8px', flexWrap:'wrap' }}>
         <span>次：{nextLabel}</span>
-        <span>削り {dealtPct.toFixed(1)}%・{Math.round(dps).toLocaleString()}ダメージ/秒</span>
+        <span>{Math.round(dps).toLocaleString()}ダメージ/秒</span>
         <span>{now.toFixed(1)}秒 / {s.maxSec}秒</span>
         {dev && <span>更新 {drawRate.current.rate}回/秒（最低{drawRate.current.low.length ? Math.min(...drawRate.current.low) : '-'}）{lite ? '・軽い表示' : ''}{drawRate.current.slow ? '・30回に落とした' : ''} [開発]</span>}
       </div>
@@ -432,8 +432,8 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
       {s.over && (
         <div style={{ marginBottom:'8px', fontSize:'13px', color: s.winner === 'a' ? '#ffcc00' : s.winner === 'b' ? '#ff4444' : TEXT.label }}>
           {s.winner === 'a' ? `⚔ ${en.name}を倒した！（${now.toFixed(1)}秒）`
-            : s.winner === 'b' ? `敗北…（${now.toFixed(1)}秒・${dealtPct.toFixed(1)}%削った）`
-            : `⏱ 時間切れ（${s.maxSec}秒で${dealtPct.toFixed(1)}%削った・${Math.round(dps).toLocaleString()}ダメージ/秒）`}
+            : s.winner === 'b' ? `敗北…（${now.toFixed(1)}秒）`
+            : `⏱ 時間切れ（${s.maxSec}秒・${Math.round(dps).toLocaleString()}ダメージ/秒）`}
         </div>
       )}
       <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>

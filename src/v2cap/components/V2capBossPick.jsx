@@ -17,6 +17,7 @@ import { CIRCLED, DIFF_COLOR, DIFF_KEYS, DUNGEON_BOSSES, diffOf, firstDiffOf, is
 // 【確定】同じ日 ユーザー「難易度選択のポップアップはただイラスト表示させるだけでいい、挑戦する押した後いつも通りの遭遇の演出はいるようにして」：
 //   ここのイラストは出すだけ（動きを付けない）。どん！と出すのは「挑戦する」のあとの全画面（V2capBossEncounter.jsx）
 //   大きな絵が届く前は一覧の小さい絵を出す（どちらも同じ切り抜き）
+// 【確定】2026-11-05 ユーザー「あと敵のHPの数値は見れないようにして」：入っているボスの残りHPはバーだけ（数字も割合も出さない）
 //   ★日本語の大きな文字は JP_BOLD＋bold（切り抜きのグラデーションにしない）
 // ============================================================
 
@@ -64,8 +65,15 @@ export default function V2capBossPick({ bossKey, run = null, reached, myPower, b
         <div style={{ flex:'1 1 auto', minHeight: 0, overflowY:'auto', touchAction:'pan-y', overscrollBehavior:'contain', padding:'8px 10px 0', borderTop:`1px solid ${accent}66` }}>
           {run ? (
             <div style={{ fontSize:'11px', color: TEXT.sub, marginBottom:'8px' }}>
-              <b style={{ color, fontSize:'12px' }}>［{d?.label}］</b> 残りHP {run.hp.toLocaleString()} / {run.hp_max.toLocaleString()}（{((run.hp / run.hp_max) * 100).toFixed(1)}%）
-              {!run.mine && <span>・{run.owner}さんの救援</span>}
+              <b style={{ color, fontSize:'12px' }}>［{d?.label}］</b>
+              {!run.mine && <span> {run.owner}さんの救援</span>}
+              {/* 残りHPはバーだけ（数字を出さない） */}
+              <div style={{ display:'flex', alignItems:'center', gap:'6px', marginTop:'4px', fontSize:'10px', color: TEXT.label }}>
+                <span style={{ flexShrink: 0 }}>残りHP</span>
+                <div style={{ flex: 1, height:'8px', background:'#000818', border:'1px solid #13405f' }}>
+                  <div style={{ width:`${Math.max(0, Math.min(100, (run.hp / run.hp_max) * 100))}%`, height:'100%', background:'#cc3344' }} />
+                </div>
+              </div>
             </div>
           ) : (
             <div style={{ marginBottom:'8px' }}>

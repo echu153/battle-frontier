@@ -59,6 +59,10 @@ import {
 // 【確定】同じ日 ユーザー選択「サーバーの計算で入れる」：戦闘はサーバーが決めた種と写しで作り、終わったら押した記録を預ける（v2cap_dungeon_try_end）。
 //   サーバーが同じ戦闘を回し直して結果を入れる（lib/dungeonVerify.js）。挑戦の途中で画面を離れたら、そこまでの記録を預ける。確かめられないまま戻ったら入口で確かめ直す
 // 【確定】同じ日 ユーザー「アイテムは4つまでしか持てないようにして、全部で合計4つ」「装備は挑戦タブから設定できるように」：ポップアップで持ち込む薬を選ぶ（V2capItemLoadout.jsx）
+// 【確定】2026-11-05 ユーザー「これ 2列2行にして」：入口のカテゴリの中のボスは2列の格子
+// 【確定】同じ日 ユーザー「あと敵のHPの数値は見れないようにして」：ボスのHPは数字も割合も出さず、バーだけ
+//   （戦闘の舞台と見出し・入っているボスの行・救援の一覧・ポップアップ・結果の画面）。削った割合も出さない（V2capAtbFight.jsx）。
+//   与えたダメージと貢献度（2026-11-01 にユーザーが頼んだ物）はそのまま
 // ============================================================
 
 const POLL_MS = 15000
@@ -73,6 +77,14 @@ const Bar = ({ pct, color, h = 10 }) => (
     <div style={{ width:`${Math.max(0, Math.min(100, pct))}%`, height:'100%', background: color }} />
   </div>
 )
+// 文の中に置く小さいHPのバー（救援の一覧・ボスのHPは数字を出さない）。「HP」の文字と別の行に分かれないよう、文字ごと nowrap で包む（スマホの幅で分かれた）
+const MiniBar = ({ pct }) => (
+  <span style={{ display:'inline-block', width:'40px', height:'6px', verticalAlign:'middle', background:'#000818', border:'1px solid #13405f' }}>
+    <span style={{ display:'block', width:`${Math.max(0, Math.min(100, pct))}%`, height:'100%', background:'#cc3344' }} />
+  </span>
+)
+// 入口の一覧のボスの絵（2列の格子の1つの枠）
+const THUMB_SIZE = 'clamp(64px, 22vw, 104px)'
 // ボスの絵：イラスト版（無ければドット絵版）。試し撃ちで選んだ版を使う
 const artMemo = new Map()
 const artOfBoss = (key) => {
@@ -296,7 +308,7 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
       {encounter}
       <div style={{ ...box, padding:'12px' }}>
         <div style={{ color:'#ff8866', fontSize:'12px', marginBottom:'6px' }}>
-          {boss.name}（{diffOf(shown.run.boss, shown.run.diff)?.label}）・残りHP {Math.max(0, shown.st.b.hp).toLocaleString()} / {shown.st.b.base.hp.toLocaleString()}
+          {boss.name}（{diffOf(shown.run.boss, shown.run.diff)?.label}）
         </div>
         <V2capAtbFight st={shown.st} runKey={shown.runKey} macros={macros} playerSrc={playerSrc} playerMotion={playerMotion}
           bossArt={artOfBoss(shown.run.boss)} onOver={onOver} onEnded={onEnded} hold={enc.hold}
@@ -340,10 +352,8 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
               </span>
               <span style={{ color: left < 10 * 60000 ? '#ff8866' : TEXT.body }}>残り {mmss(left)}</span>
             </div>
-            <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color: TEXT.label, margin:'4px 0 2px' }}>
-              <span>HP {run.hp.toLocaleString()} / {run.hp_max.toLocaleString()}</span>
-              <span>{((run.hp / run.hp_max) * 100).toFixed(1)}%</span>
-            </div>
+            {/* ボスのHPは数字を出さない＝バーだけ */}
+            <div style={{ fontSize:'10px', color: TEXT.label, margin:'4px 0 2px' }}>HP</div>
             <Bar pct={(run.hp / run.hp_max) * 100} color="#cc3344" />
             <div style={{ display:'flex', flexWrap:'wrap', gap:'4px 10px', fontSize:'10px', color: TEXT.sub, margin:'6px 0' }}>
               {run.members.map(m => (
@@ -367,26 +377,24 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
         )
       })}
 
-      {/* カテゴリごとのボス（押すとポップアップ。もう入っているボスは続きから） */}
+      {/* カテゴリごとのボス（押すとポップアップ。もう入っているボスは続きから）
+          【確定】2026-11-05 ユーザー「これ 2列2行にして」：2列の格子（4体で2行）。1つの枠は 絵・名前・挑戦できるか を上から */}
       {CHALLENGE_CATS.map(cat => (
         <div key={cat.key} style={{ ...box, padding:'10px', marginBottom:'10px' }}>
-          <div style={{ color:'#ff8866', fontSize:'13px', fontWeight:'bold', marginBottom:'6px' }}>{cat.label}</div>
-          {cat.bosses.map(key => {
-            const boss = DUNGEON_BOSSES[key], thumb = bossThumbOf(key)
-            return (
-              <div key={key} style={{ borderTop:'1px solid #001428' }}>
-                <button onClick={() => openPick(key, active.find(r => r.mine && r.boss === key) || null)}
-                  style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', padding:'6px 2px', background:'none', border:'none', cursor:'pointer', textAlign:'left' }}>
-                  {thumb && <img src={thumb} alt="" draggable={false} style={{ width:'64px', height:'64px', objectFit:'contain', flexShrink:0 }} />}
-                  <span style={{ flex:1, minWidth:0 }}>
-                    <b style={{ color:'#ff8866', fontSize:'13px' }}>{boss.name}</b><br />
-                    <span style={{ color: TEXT.label, fontSize:'10px' }}>{state && (blockOf(key) || '挑戦可能')}</span>
-                  </span>
-                  <span style={{ color: TEXT.label, fontSize:'14px', flexShrink:0 }}>›</span>
+          <div style={{ color:'#ff8866', fontSize:'13px', fontWeight:'bold', marginBottom:'8px' }}>{cat.label}</div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(2, minmax(0, 1fr))', gap:'8px' }}>
+            {cat.bosses.map(key => {
+              const boss = DUNGEON_BOSSES[key], thumb = bossThumbOf(key)
+              return (
+                <button key={key} onClick={() => openPick(key, active.find(r => r.mine && r.boss === key) || null)}
+                  style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'3px', width:'100%', minWidth: 0, padding:'8px 4px', background:'none', border:'none', cursor:'pointer', textAlign:'center' }}>
+                  {thumb && <img src={thumb} alt="" draggable={false} style={{ width: THUMB_SIZE, height: THUMB_SIZE, objectFit:'contain' }} />}
+                  <b style={{ color:'#ff8866', fontSize:'13px', lineHeight: 1.3 }}>{boss.name}</b>
+                  <span style={{ color: TEXT.label, fontSize:'10px', lineHeight: 1.3, minHeight:'1.3em' }}>{state && (blockOf(key) || '挑戦可能')}</span>
                 </button>
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
         </div>
       ))}
 
@@ -400,7 +408,7 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
           <div key={run.id} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'6px 0', borderTop:'1px solid #001428', fontSize:'10px' }}>
             <b style={{ color: DIFF_COLOR[run.diff], flexShrink:0 }}>{diffOf(run.boss, run.diff)?.label}</b>
             <span style={{ flex:1, minWidth:0, color: TEXT.sub }}>
-              <span style={{ color:'#ff8866' }}>{DUNGEON_BOSSES[run.boss]?.name}</span>・{run.owner}さん・HP {((run.hp / run.hp_max) * 100).toFixed(0)}%・残り {mmss(msLeftOf(run.ends_at, nowMs))}・{run.members.length}/{HELPERS_MAX + 1}人
+              <span style={{ color:'#ff8866' }}>{DUNGEON_BOSSES[run.boss]?.name}</span>・{run.owner}さん・<span style={{ whiteSpace:'nowrap' }}>HP <MiniBar pct={(run.hp / run.hp_max) * 100} /></span>・残り {mmss(msLeftOf(run.ends_at, nowMs))}・{run.members.length}/{HELPERS_MAX + 1}人
             </span>
             <button onClick={() => join(run)} disabled={busy} style={{ ...miniBtn('#44ddff'), padding:'6px 10px' }}>救援に入る</button>
           </div>
