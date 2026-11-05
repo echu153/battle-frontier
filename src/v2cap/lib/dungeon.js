@@ -260,3 +260,13 @@ export const contributionPctOf = (damage, hpMax) => Math.min(100, (Number(damage
 
 // 残り時間（ミリ秒）。endsAt＝ISO の時刻
 export const msLeftOf = (endsAt, now = Date.now()) => Math.max(0, new Date(endsAt).getTime() - now)
+
+// 挑戦の結果が届いたら、入口の状態（v2cap_dungeon_state の返事）のそのボスの行を、結果と一緒に届いた今の行（v2cap_dungeon_run_json）に置き換える。
+//   倒れたボスは「入っているボス」と「救援の一覧」から外す。一覧に無い行は足さない（読み直しに任せる）・届いていなければ前のまま
+//   【確定】2026-11-06 ユーザー「挑戦して討伐完了してこの画面に戻るとき、一瞬上のほうに挑戦途中のバーみたいなのが表示されるから、表示されないようにして」
+//   「討伐しても出るのはおかしい、途中だったら出ててもいいけど」：入口は戦闘の前に読んだ状態のまま戻り、読み直しが届くまで倒したボスが「挑戦中」の行で出ていた
+export const stateWithRunOf = (state, run) => {
+  if (!state || !run?.id) return state
+  const put = (list) => list && list.flatMap(r => (r.id !== run.id ? [r] : run.cleared ? [] : [{ ...r, ...run }]))
+  return { ...state, runs: put(state.runs), rescues: put(state.rescues) }
+}

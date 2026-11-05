@@ -24,7 +24,7 @@ import { bossArtOf, bossEncounterOf, bossThumbOf } from '../lib/bossArt.js'
 import { bossIllustOf } from '../lib/bossIllust.js'
 import {
   CHALLENGE_CATS, DUNGEON_BOSSES, DIFF_COLOR, HELPERS_MAX, STAMINA_HELPER,
-  contributionPctOf, diffOf, summonBlockOf, tryStaminaOf, msLeftOf,
+  contributionPctOf, diffOf, summonBlockOf, tryStaminaOf, msLeftOf, stateWithRunOf,
 } from '../lib/dungeon.js'
 
 // ============================================================
@@ -239,14 +239,17 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
       settling.current = false
     }
   }, [])
+  // 結果が届いたら、入口のそのボスの行もすぐ直す（倒したボスが、戻った瞬間に「挑戦中」の行で出ない・stateWithRunOf）
   const onOver = async () => {
     const r = await report()
+    if (r?.ok) setState(s => stateWithRunOf(s, r.run))
     if (r) setFight(f => (f ? { ...f, result: r } : f))
     if (r?.reward) onProfile?.()   // EXP と Gold が増えた
   }
   const onEnded = () => setFight(f => (f ? { ...f, ended: true } : f))
   const giveUp = async () => {
     const r = await report()
+    if (r?.ok) setState(s => stateWithRunOf(s, r.run))
     // やめた所で、ほかの人がもう倒していたら報酬画面へ（その場で報酬が入る）
     if (r?.ok && r.run.cleared) { setFight(f => (f ? { ...f, result: r } : f)); if (r.reward) onProfile?.(); return }
     setFight(null)

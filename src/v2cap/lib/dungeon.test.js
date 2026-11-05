@@ -5,7 +5,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import {
   CHALLENGE_CATS, DUNGEON_BOSSES, DIFF_KEYS, DUNGEON_MIN, DUNGEON_TRY_SEC, SUMMONS_PER_DAY, STAMINA_OWNER_FIRST, STAMINA_OWNER, STAMINA_HELPER, HELPERS_MAX, HELPER_REWARD_MIN_PCT, SOLO_REWARD_MULT,
-  diffOf, isDiffReady, isDiffUnlocked, isSummonable, summonBlockOf, tryStaminaOf, dungeonFighter,
+  diffOf, isDiffReady, isDiffUnlocked, isSummonable, summonBlockOf, tryStaminaOf, dungeonFighter, stateWithRunOf, msLeftOf,
 } from './dungeon.js'
 import { createAtb, runFor, startMacro, fillPerSecOf, hpBuffChips, castMsOf, ATB_SLOW_CUT, FILL_PER_SEC, BUFF_GAUGE_SEC, BUFF_WAIT_AFTER_ACT_SEC, BUFF_SHOW_SEC, TURN_SEC, GAUGE_FULL, NOW_WAIT_AFTER_ACT_SEC, CAST_SEC } from '../core/atb.js'
 import { inflict, healMultOf, hasAilment } from '../core/ailments.js'
@@ -1097,4 +1097,32 @@ test('【確定】2026-11-01 炉心臨界：STRとAGIが+25%（INTは上がら�
   assert.ok(Math.abs(after.agi / before.agi - 1.25) < 0.03, `AGIは+25%（${after.agi}/${before.agi}）`)
   const foe = { agi: before.agi }
   assert.ok(fillPerSecOf(st.b, after, foe) > fillPerSecOf(st.b, before, foe), 'AGIが相手を上回るぶんゲージが速い')
+})
+
+test('【確定】2026-11-06 挑戦の結果が届いたら入口のそのボスの行を直す（ユーザー「挑戦して討伐完了してこの画面に戻るとき、一瞬上のほうに挑戦途中のバーみたいなのが表示されるから、表示されないようにして」「討伐しても出るのはおかしい、途中だったら出ててもいいけど」）', () => {
+  const run = (id, more = {}) => ({ id, boss: 'zerugiasu', diff: 'normal', owner: 'a', mine: true, hp: 5000, hp_max: 13000, ends_at: '2026-11-06T12:00:00Z', cleared: false, rescue_open: false, members: [], my_tries: 1, ...more })
+  const s = { ok: true, runs: [run(1), run(2, { boss: 'enma' })], rescues: [run(3, { mine: false }), run(1)], rewards: [] }
+  // 入口の「入っているボス」は、倒れていない・時間の残っている行（V2capDungeon.jsx の active と同じ）
+  const now = Date.parse('2026-11-06T11:00:00Z'), active = (st) => st.runs.filter(r => !r.cleared && msLeftOf(r.ends_at, now) > 0).map(r => r.id)
+  assert.deepEqual(active(s), [1, 2])
+  // 倒したボスは、入っているボスからも救援の一覧からも外れる（ほかの行はそのまま）
+  const won = stateWithRunOf(s, run(1, { hp: 0, cleared: true }))
+  assert.deepEqual(active(won), [2])
+  assert.deepEqual(won.rescues.map(r => r.id), [3])
+  // 途中（負け・時間切れ）なら行は残る（ユーザー「途中だったら出ててもいい」）。HPと回数は届いた値
+  const lost = stateWithRunOf(s, run(1, { hp: 3200, my_tries: 2 }))
+  assert.deepEqual(lost.runs.map(r => [r.id, r.hp, r.my_tries]), [[1, 3200, 2], [2, 5000, 1]])
+  // 届いていない・前の状態が無ければそのまま。一覧に無い行は足さない（読み直しに任せる）・元の状態は書き換えない
+  assert.equal(stateWithRunOf(s, null), s)
+  assert.equal(stateWithRunOf(s, {}), s)
+  assert.equal(stateWithRunOf(null, run(1)), null)
+  assert.deepEqual(stateWithRunOf(s, run(9)).runs.map(r => r.id), [1, 2])
+  assert.deepEqual(s.runs.map(r => r.id), [1, 2])
+  assert.equal(s.runs[0].hp, 5000)
+  // 画面：決着（onOver）とやめる（giveUp）で結果が届いたら、入口へ戻る前に直す（前は戦闘の前に読んだ状態のまま戻り、読み直しが届くまで倒したボスが出ていた）
+  const src = readFileSync(new URL('../components/V2capDungeon.jsx', import.meta.url), 'utf8')
+  for (const [from, to] of [['const onOver = async', 'const onEnded ='], ['const giveUp = async', '// 戦っている途中で画面を離れたら']]) {
+    const body = src.slice(src.indexOf(from), src.indexOf(to))
+    assert.ok(body.length > 0 && body.includes('if (r?.ok) setState(s => stateWithRunOf(s, r.run))'), from)
+  }
 })
