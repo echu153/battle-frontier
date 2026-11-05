@@ -762,6 +762,8 @@ test('【確定】2026-11-05 ボスのHPは数字も割合も出さない＝バ�
   // 挑戦の画面（戦闘の見出し・入っているボスの行・救援の一覧・ポップアップ・結果の画面）にHPの数字と割合を出さない
   const leak = /\.hp\)?\.toLocaleString\(\)|hp_max\.toLocaleString|hpMax\.toLocaleString|\.hp \/ (run\.hp_max|hpMax)\) \* 100\)\.toFixed/
   for (const f of ['../components/V2capDungeon.jsx', '../components/V2capBossPick.jsx', '../components/V2capBossReward.jsx']) assert.doesNotMatch(read(f), leak, f)
+  // 救援の一覧は文の中の小さいバー。「HP」の文字と別の行に分かれない（本番のスマホの幅で分かれた）
+  assert.ok(read('../components/V2capDungeon.jsx').includes("<span style={{ whiteSpace:'nowrap' }}>HP <MiniBar pct={(run.hp / run.hp_max) * 100} /></span>"))
   // 貢献度（与えたダメージの割合）は残す（2026-11-01 ユーザー「貢献度もわかるようにしてほしい、ダメージ与えた割合ね」）
   assert.match(read('../components/V2capBossReward.jsx'), /contributionPctOf\(m\.damage, hpMax\)\.toFixed\(1\)/)
   assert.match(read('../components/V2capDungeon.jsx'), /貢献度\{contributionPctOf\(m\.damage, run\.hp_max\)\.toFixed\(1\)\}%/)

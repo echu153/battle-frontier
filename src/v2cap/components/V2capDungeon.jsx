@@ -77,7 +77,7 @@ const Bar = ({ pct, color, h = 10 }) => (
     <div style={{ width:`${Math.max(0, Math.min(100, pct))}%`, height:'100%', background: color }} />
   </div>
 )
-// 文の中に置く小さいHPのバー（救援の一覧・ボスのHPは数字を出さない）
+// 文の中に置く小さいHPのバー（救援の一覧・ボスのHPは数字を出さない）。「HP」の文字と別の行に分かれないよう、文字ごと nowrap で包む（スマホの幅で分かれた）
 const MiniBar = ({ pct }) => (
   <span style={{ display:'inline-block', width:'40px', height:'6px', verticalAlign:'middle', background:'#000818', border:'1px solid #13405f' }}>
     <span style={{ display:'block', width:`${Math.max(0, Math.min(100, pct))}%`, height:'100%', background:'#cc3344' }} />
@@ -408,7 +408,7 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
           <div key={run.id} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'6px 0', borderTop:'1px solid #001428', fontSize:'10px' }}>
             <b style={{ color: DIFF_COLOR[run.diff], flexShrink:0 }}>{diffOf(run.boss, run.diff)?.label}</b>
             <span style={{ flex:1, minWidth:0, color: TEXT.sub }}>
-              <span style={{ color:'#ff8866' }}>{DUNGEON_BOSSES[run.boss]?.name}</span>・{run.owner}さん・HP <MiniBar pct={(run.hp / run.hp_max) * 100} />・残り {mmss(msLeftOf(run.ends_at, nowMs))}・{run.members.length}/{HELPERS_MAX + 1}人
+              <span style={{ color:'#ff8866' }}>{DUNGEON_BOSSES[run.boss]?.name}</span>・{run.owner}さん・<span style={{ whiteSpace:'nowrap' }}>HP <MiniBar pct={(run.hp / run.hp_max) * 100} /></span>・残り {mmss(msLeftOf(run.ends_at, nowMs))}・{run.members.length}/{HELPERS_MAX + 1}人
             </span>
             <button onClick={() => join(run)} disabled={busy} style={{ ...miniBtn('#44ddff'), padding:'6px 10px' }}>救援に入る</button>
           </div>
