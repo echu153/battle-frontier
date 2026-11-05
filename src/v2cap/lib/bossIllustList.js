@@ -107,6 +107,8 @@ export const BOSS_ILLUST = {
     },
     poses: {
       ruin: { windup: { x: -45, y: 7, w: 707, h: 598 }, strike: { x: 3, y: 75, w: 616, h: 529 } },
+      shell: { windup: { x: 8, y: 26, w: 619, h: 578 }, strike: { x: 2, y: 23, w: 635, h: 582 } },
+      volley: { windup: { x: -24, y: -27, w: 672, h: 632 }, strike: { x: -14, y: -9, w: 659, h: 613 } },
     },
     buffs: {
       armor: { pose: { x: 38, y: 54, w: 568, h: 550 }, aura: { x: 14, y: 0, w: 617, h: 640 } },
@@ -115,7 +117,7 @@ export const BOSS_ILLUST = {
     fit: {
       body: { s: 0.985, deg: 0, tx: 20, ty: 4, score: 0.123 },
     },
-    v: { 'il-wL4': '96ea07e7', 'il-wL3': '7a332dfb', 'il-wL2': 'd3c6359b', 'il-wL1': '983d75cd', 'il-wR4': 'be3d79c2', 'il-wR3': '7e0a59b9', 'il-wR2': 'e23292c0', 'il-wR1': '842831a0', 'il-legL': 'cb88cb86', 'il-legR': '7d0f6ca9', 'il-body': '14ce522d', 'il-armN': 'b3f82d31', 'il-barrel': 'cbe21df2', 'il-armF': '8104a6ee', 'il-sword': 'efe519e0', 'il-pose-ruin-windup': '07c0ab4e', 'il-pose-ruin-strike': '443d357f', 'il-buff-armor-pose': 'a02dd575', 'il-buff-armor-aura': '6e26f1e8', 'il-buff-overload-pose': 'd6f2e631', 'il-fx-shell-fly': '066f39ec', 'il-fx-shell-hit': '8db55fc9', 'il-fx-volley-fly': 'c5750402', 'il-fx-volley-hit': '19c76907', 'il-fx-smite-hit': '1a0df76d', 'il-fx-ruin-fly': '9c645d5a', 'il-fx-ruin-hit': '7275a1d5', 'il-fx-ruin-charge': '9465a5be', 'il-fx-idle-core': '340711fc' },
+    v: { 'il-wL4': '96ea07e7', 'il-wL3': '7a332dfb', 'il-wL2': 'd3c6359b', 'il-wL1': '983d75cd', 'il-wR4': 'be3d79c2', 'il-wR3': '7e0a59b9', 'il-wR2': 'e23292c0', 'il-wR1': '842831a0', 'il-legL': 'cb88cb86', 'il-legR': '7d0f6ca9', 'il-body': '14ce522d', 'il-armN': 'b3f82d31', 'il-barrel': 'cbe21df2', 'il-armF': '8104a6ee', 'il-sword': 'efe519e0', 'il-pose-ruin-windup': '07c0ab4e', 'il-pose-ruin-strike': '443d357f', 'il-pose-shell-windup': '1399d11b', 'il-pose-shell-strike': '30dfca62', 'il-pose-volley-windup': '001d6ad3', 'il-pose-volley-strike': 'a78c4f7a', 'il-buff-armor-pose': 'a02dd575', 'il-buff-armor-aura': '6e26f1e8', 'il-buff-overload-pose': 'd6f2e631', 'il-fx-shell-fly': '066f39ec', 'il-fx-shell-hit': '8db55fc9', 'il-fx-volley-fly': 'c5750402', 'il-fx-volley-hit': '19c76907', 'il-fx-smite-hit': '1a0df76d', 'il-fx-ruin-fly': '9c645d5a', 'il-fx-ruin-hit': '7275a1d5', 'il-fx-ruin-charge': '9465a5be', 'il-fx-idle-core': '340711fc' },
   },
   enma: {
     parts: {

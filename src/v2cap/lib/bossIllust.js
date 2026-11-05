@@ -682,10 +682,14 @@ export const BOSS_ILLUST_DEFS = {
     idleKeep: { ...Object.fromEntries([1, 2, 3, 4].flatMap(i => [[`wL${i}`, 1], [`wR${i}`, 1]])), armN: 1, armF: 1 },
     // ポーズの絵：描いた大きさがまちまち＝肩の塔の玉の間隔で大きさをそろえ（立ち絵 481px）、足の左右のまん中と足の下を立ち絵にそろえる（踏ん張った足が動かない）。
     //   poseFit の dx・dy は元の絵 1254px の px。腕を上げた所が枠の外へ出るので余白を足す
-    poses: { ruin: { windup: '神雷終焉_構え', strike: '神雷終焉_撃つ' } },
+    poses: { ruin: { windup: '神雷終焉_構え', strike: '神雷終焉_撃つ' },
+      shell: { windup: '雷鋼弾_構え', strike: '雷鋼弾_撃つ' }, volley: { windup: '雷霆掃射_構え', strike: '雷霆掃射_撃つ' } },
     poseFit: {
       '神雷終焉_構え': { s: 1.173, dx: -25, dy: -37 }, '神雷終焉_撃つ': { s: 1.07, dx: -18, dy: 12 },
       '雷鋼装甲_ポーズ': { s: 1.098, dx: -25, dy: 19 }, '炉心臨界_ポーズ': { s: 1.098, dx: -29, dy: -71 },
+      // 2026-11-05 雷鋼弾と雷霆掃射（イラスト.png から1回で描いた絵＝大きさはほぼ立ち絵のまま。雷霆掃射は足を開いたぶん体が少し高い）
+      '雷鋼弾_構え': { s: 0.998, dx: 0, dy: -1 }, '雷鋼弾_撃つ': { s: 1.006, dx: -1, dy: -3 },
+      '雷霆掃射_構え': { s: 1.05, dx: -17, dy: -29 }, '雷霆掃射_撃つ': { s: 1.03, dx: -9, dy: -43 },
     },
     poseMargin: 110,
     // 構え（神雷終焉の3.5秒）：胸の装甲が開いた構えの絵のまま、砲口に光が集まる
@@ -797,37 +801,44 @@ export const BOSS_ILLUST_DEFS = {
     // 【確定】2026-11-02 立ち絵だけで作り直した（上の決まり）：撃つ前に腰を沈めて前へ寄せ（ため）→撃った瞬間に砲身がすべりこみ、腕が跳ね上がり、腰ごと押されて足がすべる→ゆっくり戻る。
     //   剣は肩を回すだけにせず、手首で寝かせて振り下ろすと遅れて追いつく（しなる）。突進は脚を腰で回して後ろへ流し、踏みこみで前後に開く。大砲を上げるときは左の下の羽根もいっしょに上げる（zeruGun）
     motions: {
-      // 雷鋼弾：腰を沈めて大砲を相手へ振り上げる（砲口に光が集まる）→ 撃った瞬間に砲身がすべりこみ、腕が跳ね上がり、腰ごと押されて足がすべる・羽根があおられる
-      //   【確定】2026-11-05 剣は動かさない（ユーザー「通常攻撃うつとき剣が揺れるのがちょっと変だった」・雷霆掃射も同じ）
+      // 【確定】2026-11-05 雷鋼弾と雷霆掃射は専用の絵（ユーザー「通常スキルと７５％スキルは専用イラスト作ったほうがよさそう」・届いた4枚はどれも イラスト.png から1回で描いたもの）：
+      //   部品の立ち絵で大砲を構えの角度まで上げ（armN 33＝構えの絵の砲身と同じ向き）→構えの絵→撃った瞬間に撃つの絵（反動で砲口が跳ね上がる）→構えの絵→部品の立ち絵で下ろす。
+      //   絵の切り替えは 40ms（70ms だと撃った瞬間に前の絵と重なって砲口が2つ見えた）
+      //   絵が出ているあいだの動きは全体のずれと傾き（x・lean）と揺れだけ（絵は腰で動かない）。弾の筋・閃光・飛ぶ弾は撃った瞬間の砲口（構えの絵の砲口）から出す＝撃つの絵の手も構えの砲口
+      //   （跳ね上がった砲口から相手へ筋を引くと、砲身と筋の向きが60°ずれた）。剣は動かさない（ユーザー「通常攻撃うつとき剣が揺れるのがちょっと変だった」）
+      // 雷鋼弾：大砲を相手へ向けて前へ寄る（砲口に光が集まる）→ 撃った瞬間に砲口が跳ね上がり、全身が後ろへ押されて足がすべる → 構えに戻って下ろす
       shell: { totalMs: 1300, hitMs: 430, keys: [
         [0, {}],
-        [150, { hipX: 0.012, hipY: 0.012, ...zeruGun(22, 5) }],
-        [300, { hipX: -0.012, hipY: 0.024, lean: 0.03, ...zeruGun(41, 12) }, 'out'],
-        [430, { hipX: -0.016, hipY: 0.026, lean: 0.035, ...zeruGun(38, 14) }],
-        [470, { barrelSl: -24, hipX: 0.05, hipY: 0.012, lean: -0.1, x: 0.035, ...zeruGun(56, -14) }, 'out'],
-        [600, { barrelSl: -16, hipX: 0.06, hipY: 0.016, lean: -0.12, x: 0.045, ...zeruGun(60, -6) }],
-        [820, { barrelSl: -2, hipX: 0.022, hipY: 0.012, lean: -0.045, x: 0.035, ...zeruGun(44, 4) }],
-        [1060, { hipX: 0.004, hipY: 0.004, lean: -0.01, x: 0.012, ...zeruGun(14, 1) }],
+        [120, { hipY: 0.006, ...zeruGun(33, 4) }],
+        [300, { lean: 0.025, ...zeruGun(33) }],
+        [430, { lean: 0.03, ...zeruGun(33) }],
+        [470, { lean: -0.09, x: 0.035, ...zeruGun(33) }, 'out'],
+        [640, { lean: -0.06, x: 0.04, ...zeruGun(33) }],
+        [840, { lean: -0.015, x: 0.02, ...zeruGun(33) }],
         [1300, {}],
       ], jolt: { atMs: 440, ms: 200, x: 0.012, y: 0.008 },
       dustAt: [445],
-      shots: [{ part: 'barrel', pt: [65, 475], delayMs: 0, size: 1 }],
+      art: [[0, null], [120, 'windup'], [430, 'strike'], [650, 'windup'], [840, null]], fadeMs: 40,
+      anchors: { windup: { hand: [48, 293], mouth: [48, 293] }, strike: { hand: [48, 293], mouth: [48, 293] } },
+      shots: [{ at: 'mouth', delayMs: 0, size: 1 }],
       scene: { kind: 'gun', tone: 'thunder', dimColor: '0,6,26', hand: { pt: [65, 475], part: 'barrel' } } },
-      // 雷霆掃射：足を開いて腰を落とし、羽根を広げて機体を固定 → 3連射。1発ごとに砲身がすべりこみ、腰が押されて足がずれていく。3発目がいちばん大きい。狙いは 頭→足→胸
+      // 雷霆掃射：体を少し高くして（構えの絵は足を開いて踏ん張った形）大砲を水平に構える → 3連射。1発ごとに撃つの絵で砲口が跳ね、全身が後ろへずれていく。3発目がいちばん大きい。狙いは 頭→足→胸
       volley: { totalMs: 1600, hitMs: 360, strikes: [{ atMs: 0, dx: -0.08, dy: -0.12 }, { atMs: 320, size: 1.1, dx: 0.1, dy: 0.06, flip: true }, { atMs: 640, size: 1.35, dx: 0, dy: -0.02 }], keys: [
         [0, {}],
-        [220, { hipY: 0.03, legL: 6, legR: -6, y: 0.012, lean: 0.03, ...zeruGun(40, 16) }],
-        [360, { hipY: 0.034, legL: 6, legR: -6, y: 0.012, lean: 0.035, ...zeruGun(36, 18) }],
-        [400, { barrelSl: -20, hipX: 0.03, hipY: 0.026, legL: 6, legR: -6, y: 0.012, lean: -0.05, x: 0.015, ...zeruGun(50, 4) }, 'out'],
-        [680, { hipX: 0.012, hipY: 0.034, legL: 6, legR: -6, y: 0.012, lean: 0.01, x: 0.02, ...zeruGun(30, 16) }],
-        [720, { barrelSl: -20, hipX: 0.04, hipY: 0.026, legL: 6, legR: -6, y: 0.012, lean: -0.06, x: 0.04, ...zeruGun(46, 4) }, 'out'],
-        [1000, { hipX: 0.02, hipY: 0.034, legL: 6, legR: -6, y: 0.012, lean: 0, x: 0.05, ...zeruGun(37, 16) }],
-        [1045, { barrelSl: -28, hipX: 0.075, hipY: 0.016, legL: 6, legR: -6, y: 0.012, lean: -0.14, x: 0.085, ...zeruGun(64, -12) }, 'out'],
-        [1250, { barrelSl: -14, hipX: 0.06, hipY: 0.016, legL: 4, legR: -4, y: 0.008, lean: -0.1, x: 0.085, ...zeruGun(56, -2) }],
+        [110, { hipY: -0.035, ...zeruGun(63, 12) }],
+        [360, { hipY: -0.035, lean: 0.02, ...zeruGun(63, 12) }],
+        [390, { hipY: -0.035, lean: -0.05, x: 0.015, ...zeruGun(63, 12) }, 'out'],
+        [680, { hipY: -0.035, lean: 0.01, x: 0.02, ...zeruGun(63, 12) }],
+        [710, { hipY: -0.035, lean: -0.06, x: 0.035, ...zeruGun(63, 12) }, 'out'],
+        [1000, { hipY: -0.035, lean: 0, x: 0.04, ...zeruGun(63, 12) }],
+        [1040, { hipY: -0.035, lean: -0.11, x: 0.07, ...zeruGun(63, 12) }, 'out'],
+        [1320, { hipY: -0.035, lean: -0.03, x: 0.03, ...zeruGun(63, 12) }],
         [1600, {}],
       ], jolt: { atMs: 370, ms: 160, x: 0.008, y: 0.006 },
       dustAt: [1010],
-      shots: [{ part: 'barrel', pt: [65, 475], delayMs: 0, size: 1 }, { part: 'barrel', pt: [65, 475], delayMs: 320, size: 1 }, { part: 'barrel', pt: [65, 475], delayMs: 640, size: 1.25 }],
+      art: [[0, null], [110, 'windup'], [360, 'strike'], [500, 'windup'], [680, 'strike'], [820, 'windup'], [1000, 'strike'], [1200, 'windup'], [1320, null]], fadeMs: 40,
+      anchors: { windup: { hand: [8, 193], mouth: [8, 193] }, strike: { hand: [8, 193], mouth: [8, 193] } },
+      shots: [{ at: 'mouth', delayMs: 0, size: 1 }, { at: 'mouth', delayMs: 320, size: 1 }, { at: 'mouth', delayMs: 640, size: 1.25 }],
       scene: { kind: 'gun', tone: 'thunder', dimColor: '0,6,26', hand: { pt: [65, 475], part: 'barrel' }, chargeMs: 240 } },
       // 神雷崩撃：腰を落として剣を頭の上へ振りかぶり、刃を後ろへ寝かせる（空から雷が剣に落ちる）→ 足を地面から離して相手の目の前まで飛びこむ → 踏みこんで前後に足を開き、腕が先に振り抜けて刃が遅れて追いつく（剣先が相手に届く・当たった形で少し止まる）→ 跳んで元の場所へ戻る
       smite: { totalMs: 1600, hitMs: 540, reach: { part: 'sword', pt: [618, 545], atMs: 640 }, keys: [
@@ -1225,7 +1236,8 @@ export const illustShowAt = (motion, ms) => {
 export const artAnchorAt = (key, motion, ms, pose, name) => {
   const top = illustShowAt(motion, ms).poses.at(-1)
   const pt = top && motion.anchors?.[top.name]?.[name]
-  return pt ? illustPointAt(key, pose, pt, 'body') : null
+  // ポーズの絵は全体の姿勢（x・y・r・lean）だけで動く＝腰のずれ（hipX・hipY）は足さない
+  return pt ? illustPointAt(key, { ...pose, hipX: 0, hipY: 0 }, pt, 'body') : null
 }
 // 構えのあいだに出すポーズの絵（def.cast.art・雨摩座）：構えた技（名前が同じ技・無ければ最後の技＝BossFx と同じ）にその絵があれば、
 //   構えはじめの CAST_IN_MS で部品の立ち絵から切り替える（新しい絵は前半で出きり、部品は後半で消える）→ { motion, show }。無ければ null（黒龍は今までどおり）
@@ -1654,7 +1666,7 @@ export const bossIllustOf = (key) => {
     // 当たる時刻＝撃ち出す時刻＋飛ぶ時間＋当たる絵が降りきるまで（lead・氷雨と水天葬）
     motions[m.key] = { label: m.file, keys: md.keys, trails: md.trails || [], arcs: md.arcs || [], jolt: md.jolt || null, totalMs: md.totalMs, hitMs: md.hitMs, flyMs, impactMs: md.hitMs + flyMs + (fx.hit?.lead || 0),
       front: shots[0].front, shots, strikes: md.strikes || null, fx: Object.keys(fx).length ? fx : null, charge: md.charge && fx[md.charge.kind] ? md.charge : null, scene: md.scene || null,
-      poses: posesOf(m.key), art: md.art || null, ghosts: md.ghosts || null, anchors: md.anchors || null, castSkipMs: md.castSkipMs || 0, big: !!md.big, reach: md.reach || null, dustAt: md.dustAt || null }
+      poses: posesOf(m.key), art: md.art || null, fadeMs: md.fadeMs, ghosts: md.ghosts || null, anchors: md.anchors || null, castSkipMs: md.castSkipMs || 0, big: !!md.big, reach: md.reach || null, dustAt: md.dustAt || null }
   }
   // 倒れる動き（lib/bossDeath.js）と開戦の動きで借りる絵：節目のバフ（buff）か技（motion・pose）のポーズの絵。どちらかが無ければ前のまま（薄くなるだけ）
   const borrowedArtOf = (r) => (r?.buff ? buffs[def.buffs[r.buff]?.name]?.pose : motions[r?.motion]?.poses?.[r?.pose]) || null
