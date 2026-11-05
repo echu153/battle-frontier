@@ -1771,6 +1771,8 @@ const getMaterialEventStatus = () => {
 export default function Game() {
   const nav = useNavigate()
   const [profile, setProfile] = useState(null)
+  // 最初のキャラ読みこみがサーバーの不調で失敗した(キャラなしとは別)。読めるまで「読み込み中」の下に案内を出して、少しずつ読み直す
+  const [profileLoadErr, setProfileLoadErr] = useState(false)
   const profileRef = useRef(null)  // 常に最新のprofileを保持（focus/visibility等の空依存useEffectから参照するため）
   const [remaining, setRemaining] = useState(0)
   const [canAct, setCanAct] = useState(false)
@@ -1959,6 +1961,12 @@ export default function Game() {
 
   useEffect(() => { fetchProfile() }, [])
   useEffect(() => { fetchAnnouncements() }, [])
+  // 読めなかったときは15秒ごとに読み直す(サーバーが戻ったら自動で入れる)。読めたら止まる
+  useEffect(() => {
+    if (!profileLoadErr || profile) return
+    const id = setInterval(() => { fetchProfile().catch(() => {}) }, 15000)
+    return () => clearInterval(id)
+  }, [profileLoadErr, profile])
 
   // キャラ作成直後は初心者ガイドを自動で1回開く（受動プレイヤー向けオンボーディング）
   useEffect(() => {
@@ -2360,9 +2368,13 @@ export default function Game() {
   }
 
   const fetchProfile = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { nav('/login'); return }
-    const [{ data }, { data: cl }, { data: gpCheck }, { data: ticketRow }, { data: dkCheck }, { data: bpCheck }] = await Promise.all([
+    const { data: { user }, error: userErr } = await supabase.auth.getUser()
+    if (!user) {
+      // 通信の失敗(ログインの係に届かない)はログアウトではない。/login へ飛ばすと App が /game へ戻して行き来が止まらない
+      if (userErr?.name === 'AuthRetryableFetchError') { setProfileLoadErr(true); return }
+      nav('/login'); return
+    }
+    const [{ data, error: profErr }, { data: cl }, { data: gpCheck }, { data: ticketRow }, { data: dkCheck }, { data: bpCheck }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
       supabase.from('class_levels').select('*').eq('player_id', user.id),
       supabase.from('player_items').select('id, items!inner(effect)').eq('player_id', user.id).eq('items.effect', 'gambler_proof').maybeSingle(),
@@ -2370,6 +2382,11 @@ export default function Game() {
       supabase.from('player_items').select('id, items!inner(effect)').eq('player_id', user.id).eq('items.effect', 'dragon_knight_proof').maybeSingle(),
       supabase.from('player_items').select('id, items!inner(effect)').eq('player_id', user.id).eq('items.effect', 'breeder_proof').maybeSingle(),
     ])
+    // 行が無い(PGRST116)ときだけキャラ作成へ。読めなかった(401など)のに /create へ飛ばすと、App が
+    // キャラありとみなして /game へ戻し、/game⇔/create の行き来でログインの係へ1秒に何回も問い合わせ続けた
+    // (2026-11-05 Supabase の受付が合い言葉を全部弾いたとき)。読めないときはその場で待って、また読みに行く。
+    if (!data && profErr && profErr.code !== 'PGRST116') { setProfileLoadErr(true); return }
+    setProfileLoadErr(false)
     setExpDungeonTicket(ticketRow ? { id: ticketRow.id, quantity: ticketRow.quantity } : null)
     if (!data) { nav('/create'); return }
     // ★2026-08-03 宿屋廃止: 街にいる間は常に全快に戻す（回復手段が無くなったため詰まないように）。
@@ -5552,7 +5569,16 @@ export default function Game() {
     )
   }
 
-  if (!profile) return <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>読み込み中...</div>
+  if (!profile) return (
+    <div style={{ color:'#0088ff', textAlign:'center', marginTop:'40vh' }}>
+      読み込み中...
+      {profileLoadErr && (
+        <div style={{ color:'#88aacc', fontSize:'12px', marginTop:'12px', lineHeight:1.7 }}>
+          サーバーにつながりにくくなっています。<br />つながりしだい自動で始まります。
+        </div>
+      )}
+    </div>
+  )
 
   // メンテナンス中チェック（★管理者(is_admin)はメンテ中でもプレイ可＝動作確認用）
   const maintenanceAnnouncement = announcements.find(a => a.title === 'MAINTENANCE')
