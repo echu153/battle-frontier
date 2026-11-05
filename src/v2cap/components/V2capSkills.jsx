@@ -8,6 +8,8 @@ import {
 //   威力の行もこの版の capPowerText（上位クラスの物理＋魔法・連撃・跳躍・割合の回復を書ける）
 import { SKILL_BY_NAME, setMpCost, validateSkillSet, capPowerText } from '../lib/skills.js'
 import { box, btn, miniBtn, TEXT } from './v2ui.js'
+import V2Modal from './V2Modal.jsx'
+import { MacroHelp } from './V2capAtbMacros.jsx'
 import { totalStats, currentSetOf } from '../lib/loadout.js'
 import { learnOrderOf, learnAtOf, jobOf, lineageOf } from '../lib/jobs.js'
 
@@ -28,6 +30,9 @@ const normalize = (set) => {
 //   どちらを開いていたかは端末に覚える。一度開いた側は隠すだけ（切り替えても書きかけが消えない）
 const V2capSkillsAtb = lazy(() => import('./V2capSkillsAtb.jsx'))
 const MODES = [['auto', '⚔ 出撃・塔（オート）'], ['atb', '⏱ 挑戦（ATB）']]
+// 【確定】2026-11-06 ユーザー指示「スキルセット内の説明文言はHELPにまとめて」：説明の文は画面から外し、切り替えの横の ❓ HELP の小窓に
+//   （出撃・塔／覚え方／挑戦に持っていく技／マクロ）。画面に残すのは数（最大MP・想定利用MP・持っていく数）と、その場の印の一言（線を引いた技）だけ
+const HELP_HEAD = { color:'#ffcc00', fontSize:'12px', marginTop:'10px' }
 const ROW_INDENT = '28px'
 const mpLabel = (s) => (s.mpPct ? `MP 残りの${Math.round(Math.min(1, s.mpPct) * 100)}%` : `MP${s.mp}`)
 
@@ -42,6 +47,7 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
   const [error, setError] = useState('')
   const [mode, setMode] = useState(() => (loadPref('capSkillMode', 'auto') === 'atb' ? 'atb' : 'auto'))
   const [atbOpened, setAtbOpened] = useState(mode === 'atb')
+  const [help, setHelp] = useState(false)   // HELP の小窓
   const pickMode = (m) => { setMode(m); savePref('capSkillMode', m); if (m === 'atb') setAtbOpened(true) }
 
   const learned = prof.learned || []
@@ -97,13 +103,30 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
 
   return (
     <div style={{ fontFamily:'monospace' }}>
-      <div style={{ display:'flex', gap:'6px', marginBottom:'10px' }}>
+      {help && (
+        <V2Modal title="❓ HELP" color="#ffcc00" keepScroll onClose={() => setHelp(false)}>
+          <div style={{ ...HELP_HEAD, marginTop:0 }}>出撃・塔（オート）のスキルセット</div>
+          <div>スキルはその職業でだけ使えます（上位職は下位職のスキルもそのまま使えます）。編成は職業ごとに保存され、転職して戻ると元の編成に戻ります。</div>
+          <div>上から順に発動し、1周ごとに次の枠へ回ります（1→2→3→4→5→1…）。回数はその枠を使える総回数です。</div>
+          <div><span style={{ color:'#ffaa66' }}>不発のターンは通常攻撃になり、その枠に留まります</span>（使用回数もMPも減りません）。空き枠・使用回数切れ・MP不足の枠は飛ばします。</div>
+          <div>想定利用MP（消費MP×回数の合計）が最大MPを超える編成は保存できません。</div>
+          <div style={HELP_HEAD}>スキルの覚え方</div>
+          <div>スキルはCLASS LVで覚えます。まだ覚えていない技は、覚えるCLASS LVを出しています。ほかの職業で覚えたスキルは、その職業に戻れば使えます。</div>
+          <div style={HELP_HEAD}>挑戦（ATB）に持っていく技</div>
+          <div>挑戦（ATB戦闘）で使う技を選びます。いくつ持っていってもかまいません。外した技は戦闘のボタンに出ず、マクロに入っていても飛ばします。</div>
+          <div>これから覚える技は、持っていく側に入ります。編成は職業ごとに保存されます。</div>
+          <div style={HELP_HEAD}>マクロ（①〜③）</div>
+          <MacroHelp />
+        </V2Modal>
+      )}
+      <div style={{ display:'flex', gap:'6px', marginBottom:'10px', alignItems:'stretch' }}>
         {MODES.map(([k, label]) => (
           <button key={k} onClick={() => pickMode(k)}
             style={{ ...btn(mode === k ? '#44aaff' : '#62789a'), flex:1, padding:'8px 4px', color: mode === k ? '#88ccff' : '#93a9be', background: mode === k ? '#002a5a' : '#000818' }}>
             {label}
           </button>
         ))}
+        <button onClick={() => setHelp(true)} style={{ ...miniBtn('#88aaff'), flexShrink:0 }}>❓ HELP</button>
       </div>
       {atbOpened && (
         <div style={{ display: mode === 'atb' ? 'block' : 'none' }}>
@@ -118,10 +141,6 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
         <div style={{ color: TEXT.label, fontSize:'10px', marginBottom:'8px', lineHeight:'1.8' }}>
           あなたの最大MPは<span style={{ color:'#4488ff' }}>{maxMp}MP</span>です。
           いまの編成の想定利用MPは<span style={{ color: mpCost > maxMp ? '#ff4444' : '#44ffaa' }}>{mpCost}MP</span>です。
-        </div>
-        <div style={{ color:'#88ddaa', fontSize:'10px', marginBottom:'5px', lineHeight:'1.6' }}>
-          スキルはその職業でだけ使えます（上位職は下位職のスキルもそのまま使えます）。
-          編成は職業ごとに保存され、転職して戻ると元の編成に戻ります。
         </div>
         <div style={{ display:'grid', gap:'3px' }}>
           {Array.from({ length: SKILL_SET_SLOTS }).map((_, i) => {
@@ -154,19 +173,10 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
           </button>
           <button onClick={() => setDraft(normalize(currentSetOf(prof)))} disabled={busy} style={btn('#7fa6d0')}>戻す</button>
         </div>
-        <div style={{ color: TEXT.label, fontSize:'9px', marginTop:'8px', lineHeight:'1.8' }}>
-          上から順に発動し、1周ごとに次の枠へ回ります（1→2→3→4→5→1…）。回数はその枠を使える総回数です。
-          <span style={{ color:'#ffaa66' }}>不発のターンは通常攻撃になり、その枠に留まります</span>（使用回数もMPも減りません）。
-          空き枠・使用回数切れ・MP不足の枠は飛ばします。
-        </div>
       </div>
 
       <div style={{ ...box, padding:'14px' }}>
-        <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'4px' }}>📖 {cls}のスキル</div>
-        <div style={{ color: TEXT.sub, fontSize:'10px', marginBottom:'8px', lineHeight:1.7 }}>
-          スキルはCLASS LVで覚えます（いまの職業：{cls}・CLASS LV{jlv}）。まだ覚えていない技は、覚えるCLASS LVを出しています。
-          ほかの職業で覚えたスキルは、その職業に戻れば使えます。
-        </div>
+        <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'8px' }}>📖 {cls}のスキル <span style={{ color: TEXT.label, fontSize:'10px' }}>CLASS LV{jlv}</span></div>
         <div style={{ display:'flex', gap:'5px', marginBottom:'6px' }}>
           <input value={query} onChange={e => setQuery(e.target.value)} placeholder="スキル名・職業・説明で検索"
             style={{ flex:1, background:'#001028', border:'1px solid #0044aa', color:'#88ccff', padding:'5px 7px', fontFamily:'monospace', fontSize:'11px', boxSizing:'border-box' }} />

@@ -62,6 +62,14 @@ test('画面：スキルセットに「挑戦（ATB）」があり、持って�
   assert.ok(atb.includes("supabase.rpc('v2cap_set_atb_macros'"), 'マクロを保存する')
   assert.ok(atb.includes('usable={brought}'), 'マクロに足せるのは持っていく技だけ')
   assert.ok(atb.includes('validateMacros(macros, usable)'), 'マクロの確かめはサーバーと同じ「使える覚えた技」')
+  // 【確定】2026-11-06 ユーザー指示「スキルセット内の説明文言はHELPにまとめて」：説明の文は ❓ HELP の小窓の中だけ
+  const help = skills.slice(skills.indexOf('<V2Modal title="❓ HELP"'), skills.indexOf('</V2Modal>'))
+  const outside = skills.replace(help, '')
+  for (const w of ['その職業でだけ使えます', '上から順に発動し', '不発のターンは通常攻撃', 'スキルはCLASS LVで覚えます', '挑戦（ATB戦闘）で使う技を選びます', 'これから覚える技は']) {
+    assert.ok(help.includes(w), `HELP に「${w}」`)
+    assert.ok(!outside.includes(w) && !atb.includes(w), `画面には「${w}」を出さない`)
+  }
+  assert.ok(help.includes('<MacroHelp />') && atb.includes('intro={false}'), 'マクロの説明も HELP へ（スキルセットの欄には出さない）')
   // 戦闘の画面の案内も、試し撃ち（開発用）でなくスキルセットを指す
   assert.ok(read('../components/V2capAtbFight.jsx').includes('マクロはスキルセットの「挑戦（ATB）」で登録できます'))
 })

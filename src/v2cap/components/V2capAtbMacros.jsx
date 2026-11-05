@@ -15,17 +15,22 @@ import { MACRO_STEPS, MACRO_MARK, STEP_NORMAL, STEP_GUARD, stepLabel } from '../
 const sel = { background:'#000818', color: TEXT.body, border:'1px solid #0044aa', fontFamily:'monospace', fontSize:'11px', padding:'4px' }
 const isMark = (s) => s === STEP_NORMAL || s === STEP_GUARD
 
-export default function V2capAtbMacros({ macros, onChange, usable, dirty, saving, msg, onSave, framed = true }) {
+// マクロの説明（試し撃ちの画面はこの部品の上に・スキルセットは ❓ HELP の小窓に＝intro={false}）
+export const MacroHelp = () => (
+  <>
+    <div>戦闘中に①〜③を押すと、登録した順にゲージが溜まりしだい出て、最後まで出たら頭に戻ってくり返します（1つ{MACRO_STEPS}個まで）。</div>
+    <div>技が使えないあいだ（クールダウン中・MP不足）は、通常攻撃でつないで待ちます。戦闘中に技を押すと、次の1回だけ割り込みます。</div>
+  </>
+)
+
+export default function V2capAtbMacros({ macros, onChange, usable, dirty, saving, msg, onSave, framed = true, intro = true }) {
   const edit = (i, next) => onChange(macros.map((m, j) => (j === i ? { ...m, ...next } : m)))
   const have = new Set(usable)
   const skipped = macros.some(m => m.steps.some(s => !isMark(s) && !have.has(s)))
   return (
     <div style={framed ? { border:'1px solid #13405f', padding:'8px', marginBottom:'10px' } : {}}>
       <div style={{ color: TEXT.bright, fontSize:'12px', marginBottom:'4px' }}>マクロ（①〜③）</div>
-      <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.7, marginBottom:'6px' }}>
-        戦闘中に①〜③を押すと、登録した順にゲージが溜まりしだい出て、最後まで出たら頭に戻ってくり返します（1つ{MACRO_STEPS}個まで）。
-        技が使えないあいだ（クールダウン中・MP不足）は、通常攻撃でつないで待ちます。戦闘中に技を押すと、次の1回だけ割り込みます。
-      </div>
+      {intro && <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.7, marginBottom:'6px' }}><MacroHelp /></div>}
       {macros.map((m, i) => (
         <div key={i} style={{ borderTop: i ? '1px solid #0a2a44' : 'none', padding:'6px 0', display:'flex', flexWrap:'wrap', gap:'4px', alignItems:'center' }}>
           <span style={{ color:'#ffee44', fontSize:'13px' }}>{MACRO_MARK[i]}</span>
