@@ -456,6 +456,8 @@ const applyIncoming = (me, foe, dmg, kind, rng, log, pre = null, hits = 1) => {
   let d = dmg
   // 衰弱：撃つ側が弱っていると、与えるダメージが減る（物理も魔法もまとめて）
   d *= ailDealMult(me.ail)
+  // ★時間で強くなる（四凶・core/atb.js の enrageOf）：撃つ側の与えるダメージ+%（挑戦ごとの戦闘の時間で決まる・ATB の外では0）
+  if (me.enrageDeal) d *= 1 + me.enrageDeal / 100
   // 呪い：受ける側が呪われていると、受けるダメージが増える
   d *= ailTakenMult(foe.ail)
   // エリアの相性：そのエリアの敵は片方の型が少し通りやすい（enemies.js の bias）

@@ -24,6 +24,8 @@ import { gainedExpOf, levelUpLines } from '../lib/settleLines.js'
 //   【確定】同じ日 ユーザー「無駄改行入れないで」（「貢献度」の見出しだけの行の下に、自分の名前と%の行・バーの行が続いていた）：
 //     貢献度は上の行と同じ1行（自分の分）。救援の人がいればその下に1人1行（名前と%だけ・バーと（ダメージ）はやめた）。
 //     倒せなかったときのボスの残りHP（見出しの横にバー）と討伐の残り時間も1行ずつ
+//   【確定】同じ日 ユーザー「これ討伐時間とかイラストの行の右側に移動できない？」：結果の行（討伐時間・与えたダメージ・残りHP・残り時間・貢献度）は
+//     ボスの絵の右（名前と難易度の下）に置く。報酬の欄とボタンはその下の横いっぱいのまま
 //   ★画面を切り替えたら上へ戻す（ポップアップのあとと同じ決まり）
 // ============================================================
 
@@ -62,19 +64,15 @@ export default function V2capBossReward({ bossKey, diffKey, cls, st = null, resu
     <div style={{ ...box, padding:'14px', borderColor: head.border }}>
       <style>{KF}</style>
       <div style={{ ...up(0), textAlign:'center', fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'20px', letterSpacing:'0.24em', paddingLeft:'0.24em', color: head.color, textShadow:`0 0 10px ${head.glow}, 0 2px 0 #000`, marginBottom:'10px' }}>{head.text}</div>
-      <div style={{ ...up(1), display:'flex', alignItems:'center', gap:'12px', marginBottom:'8px' }}>
+      {/* ボスの絵の右に、名前・難易度と結果の行（ユーザー「これ討伐時間とかイラストの行の右側に移動できない？」） */}
+      <div style={{ ...up(1), display:'flex', alignItems:'flex-start', gap:'12px', marginBottom:'8px' }}>
         {thumb && <img src={thumb} alt="" draggable={false} style={{ width:'88px', height:'88px', objectFit:'contain', flexShrink:0 }} />}
-        <div style={{ minWidth:0 }}>
+        <div style={{ minWidth:0, flex: 1 }}>
           <div style={{ fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'16px', color:'#ff8866' }}>{boss.name}</div>
-          <div style={{ fontSize:'12px', fontWeight:'bold', color: DIFF_COLOR[diffKey], marginTop:'2px' }}>{d?.label}</div>
-        </div>
-      </div>
-
-      {!r && <div style={{ ...up(2), color: TEXT.label, fontSize:'11px', padding:'8px 0' }}>結果を確かめています…</div>}
-      {r && !r.ok && <div style={{ ...up(2), color:'#ff8888', fontSize:'12px', padding:'8px 0' }}>{r.text}</div>}
-      {r?.ok && (
-        <>
-          {st && (
+          <div style={{ fontSize:'12px', fontWeight:'bold', color: DIFF_COLOR[diffKey], margin:'2px 0 4px' }}>{d?.label}</div>
+          {!r && <div style={{ ...up(2), color: TEXT.label, fontSize:'11px', padding:'8px 0' }}>結果を確かめています…</div>}
+          {r && !r.ok && <div style={{ ...up(2), color:'#ff8888', fontSize:'12px', padding:'8px 0' }}>{r.text}</div>}
+          {r?.ok && st && (
             <div style={up(2)}>
               {/* 倒せなかったときは「討伐」と言えないので「戦闘時間」 */}
               <Row label={cleared ? '討伐時間' : '戦闘時間'} value={`${st.t.toFixed(1)}秒`} />
@@ -83,7 +81,7 @@ export default function V2capBossReward({ bossKey, diffKey, cls, st = null, resu
             </div>
           )}
           {/* 倒せなかったとき：ボスの残りHP（バーだけ＝数字を出さない）・討伐の残り時間。どちらもほかの行と同じ1行（見出しだけの行を作らない） */}
-          {!cleared && (
+          {r?.ok && !cleared && (
             <div style={up(3)}>
               <div style={{ display:'flex', alignItems:'center', padding:'5px 0', borderTop:'1px solid #001428', fontSize:'12px' }}>
                 <span style={{ color: TEXT.label, width: LABEL_W, flexShrink: 0 }}>ボスの残りHP</span>
@@ -106,6 +104,11 @@ export default function V2capBossReward({ bossKey, diffKey, cls, st = null, resu
               ))}
             </div>
           )}
+        </div>
+      </div>
+
+      {r?.ok && (
+        <>
           {cleared && <div style={{ ...up(4), border:`1px solid #8a6a2a`, background:'#000818', padding:'10px', marginTop:'8px' }}>
             <div style={{ color: GOLD, fontSize:'12px', fontWeight:'bold', marginBottom:'6px' }}>報酬</div>
             {/* undefined＝サーバーがまだ前の版（SQL を流す前）・null＝渡せるものが無い（ダメージ0など） */}

@@ -20,6 +20,7 @@ import { macrosOf, validateMacros } from '../lib/atbMacro.js'
 //     決まりは lib/atbSkills.js。挑戦も試し撃ちも、ここで持っていく技だけで戦う（lib/atbPlayer.js）
 //   ・マクロ①〜③：前は試し撃ち（開発用）の準備の画面にだけあった。同じ部品（V2capAtbMacros.jsx）をここにも置く。
 //     足せるのは持っていく技だけ（保存の確かめはサーバーと同じ「使える覚えた技」）
+//   ・説明の文はスキルセットの ❓ HELP（2026-11-06 ユーザー「スキルセット内の説明文言はHELPにまとめて」）
 //   ・2つの欄は別々に保存する（片方を保存しても、もう片方の書きかけは消えない＝保存されている値が変わった欄だけ作り直す）
 // クールダウンは発動率からの秒（core/atb.js の cdOfProc・アセンションで上がった発動率まで）。装備の発動率+は戦闘で縮む
 // ============================================================
@@ -81,10 +82,6 @@ export default function V2capSkillsAtb({ prof, onProfile }) {
           <span style={{ color:'#88ccff', fontSize:'12px', flex:1 }}>⏱ 挑戦に持っていく技（{cls}）</span>
           <span style={{ color: TEXT.label, fontSize:'11px' }}>{brought.length}/{usable.length}</span>
         </div>
-        <div style={{ color:'#88ddaa', fontSize:'10px', marginBottom:'8px', lineHeight:'1.7' }}>
-          挑戦（ATB戦闘）で使う技を選びます。いくつ持っていってもかまいません。外した技は戦闘のボタンに出ず、マクロに入っていても飛ばします。
-          これから覚える技は、持っていく側に入ります。編成は職業ごとに保存されます。
-        </div>
         {usable.length === 0 && <div style={{ color: TEXT.empty, fontSize:'11px', padding:'6px' }}>まだ覚えた技がありません</div>}
         <div style={{ display:'grid', gap:'3px' }}>
           {usable.map(name => {
@@ -117,7 +114,7 @@ export default function V2capSkillsAtb({ prof, onProfile }) {
       </div>
 
       <div style={{ ...box, padding:'14px' }}>
-        <V2capAtbMacros macros={macros} onChange={editMacros} usable={brought} framed={false}
+        <V2capAtbMacros macros={macros} onChange={editMacros} usable={brought} framed={false} intro={false}
           dirty={macroDirty} saving={macroBusy} msg={macroMsg} onSave={saveMacros} />
       </div>
     </div>

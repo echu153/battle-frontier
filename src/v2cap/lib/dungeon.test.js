@@ -5,9 +5,9 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import {
   CHALLENGE_CATS, DUNGEON_BOSSES, DIFF_KEYS, DUNGEON_MIN, DUNGEON_TRY_SEC, SUMMONS_PER_DAY, STAMINA_OWNER_FIRST, STAMINA_OWNER, STAMINA_HELPER, HELPERS_MAX, HELPER_REWARD_MIN_PCT, SOLO_REWARD_MULT,
-  diffOf, isDiffReady, isDiffUnlocked, isSummonable, summonBlockOf, tryStaminaOf, dungeonFighter, stateWithRunOf, msLeftOf,
+  diffOf, isDiffReady, isDiffUnlocked, isSummonable, summonBlockOf, tryStaminaOf, dungeonFighter, stateWithRunOf, msLeftOf, bossEnrageOf,
 } from './dungeon.js'
-import { createAtb, runFor, startMacro, fillPerSecOf, hpBuffChips, castMsOf, ATB_SLOW_CUT, FILL_PER_SEC, BUFF_GAUGE_SEC, BUFF_WAIT_AFTER_ACT_SEC, BUFF_SHOW_SEC, TURN_SEC, GAUGE_FULL, NOW_WAIT_AFTER_ACT_SEC, CAST_SEC } from '../core/atb.js'
+import { createAtb, runFor, enrageOf, stateChips, startMacro, fillPerSecOf, hpBuffChips, castMsOf, ATB_SLOW_CUT, FILL_PER_SEC, BUFF_GAUGE_SEC, BUFF_WAIT_AFTER_ACT_SEC, BUFF_SHOW_SEC, TURN_SEC, GAUGE_FULL, NOW_WAIT_AFTER_ACT_SEC, CAST_SEC } from '../core/atb.js'
 import { inflict, healMultOf, hasAilment } from '../core/ailments.js'
 import { bossIllustOf, buffArtMsOf } from './bossIllust.js'
 import { bossThumbOf, bossTintOf } from './bossArt.js'
@@ -790,6 +790,64 @@ test('【確定】2026-11-06 入口のボスの枠にボスの色を薄く敷く
   const src = readFileSync(new URL('../components/V2capDungeon.jsx', import.meta.url), 'utf8')
   assert.match(src, /\.\.\.bossCardBg\(bossTintOf\(key\)\)/)
   assert.ok(src.includes('radial-gradient(ellipse 85% 70% at 50% 40%, ${tint}47, transparent 75%), linear-gradient(${tint}1a, ${tint}1a), #0b0c14'))
+})
+
+test('【確定】2026-11-06 四凶は時間で強くなる：30秒ごとに与えるダメージ+5%（足し算）・3分から命中率+10%・挑戦ごとの戦闘の時間で決める（ユーザー「四強のやつらは30秒ごとに与えるダメージ＋5％、3分以上ならさらに命中率＋１０％」）', () => {
+  const enrage = { everySec: 30, dealPct: 5, hitAtSec: 180, hitPct: 10 }
+  for (const key of CHALLENGE_CATS.find(c => c.key === 'rival').bosses) {
+    assert.deepEqual(bossEnrageOf(key), enrage, key)
+    assert.deepEqual(dungeonFighter(key, 'normal').enrage, enrage, `${key} の戦闘に乗る`)
+  }
+  const at = (t) => enrageOf(enrage, t)
+  assert.deepEqual(at(0), { deal: 0, hit: 0 })
+  assert.deepEqual(at(29.9), { deal: 0, hit: 0 })
+  assert.deepEqual(at(30), { deal: 5, hit: 0 })
+  assert.deepEqual(at(60), { deal: 10, hit: 0 })
+  assert.deepEqual(at(179.9), { deal: 25, hit: 0 })
+  assert.deepEqual(at(180), { deal: 30, hit: 10 })
+  assert.deepEqual(at(600), { deal: 100, hit: 10 }, '上限なし')
+  assert.deepEqual(enrageOf(null, 600), { deal: 0, hit: 0 }, '四凶でない敵は強くならない')
+
+  // 戦闘の中：刻みごとに入れ直す・命中はもとの命中補正に足す・札に出す・自分は強くならない
+  const st = createAtb(dummy(), dungeonFighter('varuzenoku', 'normal'), { rng: rngOf(7), maxSec: 9999 })
+  const base = st.b.pa.hitBonus
+  runFor(st, 29.8)
+  assert.equal(st.b.enrageDeal, 0)
+  runFor(st, 0.4)
+  assert.equal(st.b.enrageDeal, 5)
+  assert.ok(stateChips(st.b).some(c => c.label === '🔥 与ダメ+5%'))
+  runFor(st, 150)
+  assert.equal(st.b.enrageDeal, 30)
+  assert.equal(st.b.enrageHit, 10)
+  assert.equal(st.b.pa.hitBonus, base + 10, '命中率+10')
+  assert.ok(stateChips(st.b).some(c => c.label === '🎯 命中+10%'))
+  assert.equal(st.a.enrageDeal, 0, '自分は強くならない')
+  // ⚠ side.rage はバーサク・執行本能の高ぶりの数（battle.js が通常攻撃で0に戻す）＝同じ名前にすると効かない（はじめはそうなっていた）
+  assert.equal(typeof st.b.rage, 'number')
+
+  // 与えるダメージ：同じ乱数で強くならない戦闘と並べる（自分は倒れない・削らない＝ボスの行動の順は同じ）。30〜60秒の1発は1.05倍・30秒までは同じ
+  const soft = () => ({ ...dummy(), stats: { ...dummy().stats, vit: 1 } })   // 1発が大きいほうが切り捨てで割合が消えない
+  const pair = () => [enrage, null].map(r => createAtb(soft(), { ...dungeonFighter('varuzenoku', 'normal'), enrage: r }, { rng: rngOf(9), maxSec: 9999 }))
+  const [up, flat] = pair()
+  const hitsOf = (s) => s.log.filter(l => l.side === BOSS && (l.type === 'skill' || l.type === 'normal') && l.damage > 0)
+  for (const s of [up, flat]) runFor(s, 29.9)
+  const n30 = hitsOf(flat).length
+  assert.deepEqual(hitsOf(up).map(l => l.damage), hitsOf(flat).map(l => l.damage), '30秒までは同じ')
+  for (const s of [up, flat]) runFor(s, 30)
+  const u = hitsOf(up), f = hitsOf(flat)
+  assert.equal(u.length, f.length)
+  assert.ok(f.length - n30 >= 3, '30〜60秒にボスの攻撃が当たっている')
+  for (let i = n30; i < f.length; i++) {
+    const ratio = u[i].damage / f[i].damage
+    assert.ok(ratio > 1.03 && ratio < 1.07, `${i}発目 ${u[i].damage}÷${f[i].damage}`)
+  }
+
+  // 挑戦ごとに0から：ボスを呼んでからの時間・救援に入った時間は使わない（ユーザー「発行から20分たって救援参加したら与ダメとか増えてるとかにはならない」）
+  const fresh = createAtb(dummy(), dungeonFighter('varuzenoku', 'normal', 100), { rng: rngOf(7), maxSec: 9999 })
+  assert.equal(fresh.t, 0)
+  assert.equal(fresh.b.enrageDeal, 0)
+  runFor(fresh, 10)
+  assert.equal(fresh.b.enrageDeal, 0)
 })
 
 test('【確定】2026-11-06 結果の画面の見出しは「討伐時間」「与えたダメージ」「貢献度」（ユーザー「討伐時間 与えたダメージ 貢献度 にして」）', () => {
