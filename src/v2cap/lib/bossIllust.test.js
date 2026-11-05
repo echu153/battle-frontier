@@ -10,7 +10,7 @@ import {
   bossIllustOf, illustPoseAt, reachXOf, idlePoseAt, motionPoseAt, illustPointAt, illustTrailsAt, mouthPointOf, rotPoint, partMove, hipPoint,
   illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt, dustEllipsesOf,
   illustCastShowAt, EASES, joltAt, illustBendKindOf, bendFramesOf, illustPoseKindOf, illustShowAt, illustGhostsAt, ART_FADE_MS, artAnchorAt, leanPoint,
-  illustBuffShowAt, illustBuffKindOf, buffSceneAt, introSceneAt, introEnterAt, introBeamAt, rigLightsAt, buffAfterAt, buffRainAt, buffHoldOf, rigLayersOf, flutterBandsAt, buffArtMsOf, BUFF_IN_MS, BUFF_HOLD_MS, BUFF_OUT_MS, BUFF_AURA_IN_MS, BUFF_AURA_OUT_MS, BUFF_ART_MS, BUFF_FLASH_MS,
+  illustBuffShowAt, illustBuffKindOf, buffSceneAt, introSceneAt, introEnterAt, introBeamAt, rigLightsAt, buffAfterAt, buffRainAt, buffHoldOf, zapArcsAt, rigLayersOf, flutterBandsAt, buffArtMsOf, BUFF_IN_MS, BUFF_HOLD_MS, BUFF_OUT_MS, BUFF_AURA_IN_MS, BUFF_AURA_OUT_MS, BUFF_ART_MS, BUFF_FLASH_MS,
 } from './bossIllust.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { DUNGEON_BOSSES } from './dungeon.js'
@@ -1028,6 +1028,33 @@ test('【確定】2026-11-02 ゼルギアスの大技以外の3つは立ち絵�
   assert.ok(aim.wL4 - aim.wR4 * -1 > 20 && aim.wL3 > aim.wL2 && aim.wL2 > aim.wL1, '下の羽根ほど腕といっしょに上がる')
 })
 
+test('【確定】2026-11-05 ゼルギアス：大砲の技で剣を動かさない・炉心臨界のあとは体にまとわりつく電気（ユーザー「通常攻撃うつとき剣が揺れるのがちょっと変だった」「３０％のエフェクトがその場にあるだけで全然あってない」「ゼルギアスに電気のオーラがまとわりつくようにしてほしい」）', () => {
+  const a = bossIllustOf('zerugiasu'), def = BOSS_ILLUST_DEFS.zerugiasu
+  for (const k of ['shell', 'volley']) for (const [, p] of def.motions[k].keys) assert.ok(!('armF' in p) && !('sword' in p), k + '：剣の腕と手首は動かさない')
+  const b = a.buffs['炉心臨界'], hold = buffHoldOf(b)
+  // 付いて見せ終わると、体の光がちらつき、稲妻が走る（オーラの絵・燃え続ける闘気・立ちのぼる火の粉は出さない）
+  const on = buffAfterAt([{ b, since: hold + 2000 }], 5000)
+  assert.ok(on.zap && on.zapGlow > 0.2 && on.glow === 0, '体の光は電気だけの光（雨摩座の脈とは別）')
+  assert.equal(on.flame, null)
+  assert.equal(on.sparks.length, 0)
+  assert.equal(buffAfterAt([{ b, since: 100 }], 0).zap, null, '見せているあいだはまだ')
+  // 稲妻は体の部品といっしょに動く（全体を右へずらすと、同じだけ右へ）・本数は n まで・濃さは 0〜1
+  const still = illustPoseAt('zerugiasu', null, 0, 0), moved = { ...still, x: 0.25 }
+  let seen = 0
+  for (let t = 0; t < 3000; t += 37) {
+    const p = zapArcsAt('zerugiasu', on.zap, still, t), q = zapArcsAt('zerugiasu', on.zap, moved, t)
+    assert.ok(p.length <= on.zap.n && p.length === q.length)
+    for (const [i, arc] of p.entries()) {
+      assert.ok(arc.op >= 0 && arc.op <= 1 && arc.pts.length >= 2)
+      assert.ok(Math.abs(q[i].pts[0][0] - arc.pts[0][0] - 0.25 * BOSS_ILLUST_SIZE) < 1e-6, '始まりの点は体といっしょに動く')
+    }
+    seen += p.length
+  }
+  assert.ok(seen > 40, '絶えず走っている')
+  // 稲妻の点は全部、切り分けた部品の上
+  for (const [part] of b.after.zap.anchors) assert.ok(a.parts.some(p => p.key === part), part)
+})
+
 test('【確定】2026-11-01 ゼルギアスの技（ユーザー「大技以外のモーションがすべてしょぼすぎる」「剣はプレイヤーに届いてない」「銃で放つときのモーションもなんか安っぽい」）：砲身は相手へ向き、撃つと全身が押される・剣は相手の側へ振って届く', () => {
   const a = bossIllustOf('zerugiasu'), def = BOSS_ILLUST_DEFS.zerugiasu
   assert.deepEqual(Object.values(a.motions).map(m => m.label), ['雷鋼弾', '雷霆掃射', '神雷崩撃', '神雷終焉'])
@@ -1080,9 +1107,10 @@ test('【確定】2026-11-01 ゼルギアスの技（ユーザー「大技以外
   assert.ok(r.poses.windup && r.poses.strike && r.fx.charge)
   assert.equal(a.castArt, 'windup')
   assert.equal(r.scene.tone, 'thunder', '光線は青白い')
-  // バフ：ポーズとオーラの絵・炉心臨界はそのあとも闘気が燃える
-  for (const b of Object.values(a.buffs)) assert.ok(b.pose && b.aura)
-  assert.ok(a.buffs['炉心臨界'].after.flame)
+  // バフ：ポーズの絵（雷鋼装甲はオーラの絵も）・炉心臨界のあとは体にまとわりつく電気（2026-11-05・オーラの絵と燃え続ける闘気はやめた）
+  for (const b of Object.values(a.buffs)) assert.ok(b.pose)
+  assert.ok(a.buffs['雷鋼装甲'].aura && !a.buffs['炉心臨界'].aura)
+  assert.ok(a.buffs['炉心臨界'].after.zap && !a.buffs['炉心臨界'].after.flame && !a.buffs['炉心臨界'].after.embers)
   // 倒れる動きも新しい絵なし
   assert.ok(a.death.arts.roar && a.death.arts.fall)
 })
