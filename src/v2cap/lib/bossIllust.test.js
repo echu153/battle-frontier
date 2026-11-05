@@ -8,7 +8,7 @@ import { BOSS_ART_DIR, BOSS_DEFS, bossFileOf } from './bossArt.js'
 import {
   BOSS_ILLUST_DEFS, BOSS_ILLUST_SIZE, illustPartsOf, illustKindOf, illustFxKindOf,
   bossIllustOf, illustPoseAt, reachXOf, idlePoseAt, motionPoseAt, illustPointAt, illustTrailsAt, mouthPointOf, rotPoint, partMove, hipPoint,
-  illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt, dustEllipsesOf,
+  illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt, illustFreeShowAt, dustEllipsesOf,
   illustCastShowAt, EASES, joltAt, illustBendKindOf, bendFramesOf, illustPoseKindOf, illustShowAt, illustGhostsAt, ART_FADE_MS, artAnchorAt, handMsOf, leanPoint,
   illustBuffShowAt, illustBuffKindOf, buffSceneAt, introSceneAt, introEnterAt, introBeamAt, rigLightsAt, buffAfterAt, buffRainAt, buffHoldOf, zapArcsAt, zapArtOf, rigLayersOf, flutterBandsAt, buffArtMsOf, BUFF_IN_MS, BUFF_HOLD_MS, BUFF_OUT_MS, BUFF_AURA_IN_MS, BUFF_AURA_OUT_MS, BUFF_ART_MS, BUFF_FLASH_MS,
 } from './bossIllust.js'
@@ -1440,4 +1440,54 @@ test('開戦の動きの見せ方を重ねる：揺れは足す・暗さは濃�
   assert.ok(two.punch > one.punch)
   // 元の答えの配列を書き換えない
   assert.equal(one.rings.length, 1)
+})
+
+test('【確定】2026-11-06 ユーザー「えんまの周りの紫のエフェクト、ずっと後ろにあるだけで閻魔が動いても何もないから違和感ある」「エフェクトとモーションは合わせるようにして」：魂の炎も体の傾きについていき、構えで寄って光り、振り抜きで燃え広がって戻る', () => {
+  const a = bossIllustOf('enma'), F = a.freeFollow, B = F.burst
+  const at = (m, ms, o = {}) => illustFreeShowAt('enma', { motion: m, ms, ...o }, 1000)
+  const souls = a.parts.filter(p => p.free)
+  assert.deepEqual(souls.map(p => p.key), ['soulA', 'soulB', 'soulC', 'soulD', 'soulE'])
+  // 技も構えも無いときは待機のまま（null）・雨摩座の水の帯は変えない（承認済み）
+  assert.equal(illustFreeShowAt('enma', {}, 1000), null)
+  assert.equal(bossIllustOf('amaza').freeFollow, null)
+  for (const m of Object.values(bossIllustOf('amaza').motions)) assert.equal(illustFreeShowAt('amaza', { motion: m, ms: 300 }, 1000), null)
+  const C = a.pivot, ctr = (p) => [p.x + p.w / 2, p.y + p.h / 2]
+  const still = (o) => Math.abs(o.dx) < 1e-9 && Math.abs(o.dy) < 1e-9 && Math.abs(o.s - 1) < 1e-9 && Math.abs(o.glow) < 1e-9
+  for (const mk of ['soul', 'pillar', 'chains', 'hell']) {
+    const m = a.motions[mk], ts = m.art.find(([, n]) => n === 'strike')[0], W = m.anchors.windup.hand
+    // 体の傾きについていく（lagMs 遅れて）
+    const pre = at(m, ts - 20)
+    assert.equal(pre.pose.lean, illustPoseAt('enma', m, ts - 20 - F.lagMs, 1000).lean, `${mk}：傾きについていく`)
+    assert.ok(Math.abs(pre.pose.lean) > 0.02, `${mk}：体といっしょに傾く`)
+    for (const p of souls) {
+      const c = ctr(p), g = pre.parts[p.key]
+      // 構えの絵のあいだ：ふつうの技は体の真ん中へ縮んで光る・大技（無間地獄）は掲げた杖の先のまわりへ吸い寄せられる
+      //   （大技を途中までの寄せにしたら、炎が体の裏に入って見えなくなった＝杖の先の近くまで寄せる）
+      const T = mk === 'hell' ? W : C
+      assert.ok(Math.hypot(T[0] - c[0] - g.dx, T[1] - c[1] - g.dy) < Math.hypot(T[0] - c[0], T[1] - c[1]) - 5 && g.glow > 0.2, `${mk} ${p.key}：寄って光る`)
+      if (mk === 'hell') assert.ok(Math.hypot(W[0] - c[0] - g.dx, W[1] - c[1] - g.dy) < F.orbit.r + 90, `${p.key}：杖の先の近くまで寄る`)
+      // 振り抜いた瞬間：体の真ん中から外へ燃え広がって大きく明るく
+      const b = at(m, ts + B.outMs).parts[p.key]
+      assert.ok(Math.hypot(c[0] + b.dx - C[0], c[1] + b.dy - C[1]) > Math.hypot(c[0] - C[0], c[1] - C[1]) + 30 && b.s > 1.2 && b.glow > 0.6, `${mk} ${p.key}：外へ燃え広がる`)
+    }
+    // おわると元の場所へ戻る
+    const end = at(m, m.totalMs + 1000)
+    for (const p of souls) assert.ok(still(end.parts[p.key]), `${mk} ${p.key}：戻る`)
+  }
+  for (const p of souls) assert.ok(still(at(a.motions.soul, 100).parts[p.key]), '構えの絵の前は動かない')
+  // 業縛の鎖：引くたび（keys の 'out'）また燃え上がる
+  const ch = a.motions.chains, pulls = ch.keys.filter(([t, , e]) => e === 'out' && t > 800).map(([t]) => t)
+  assert.equal(pulls.length, 3)
+  for (const t of pulls) assert.ok(at(ch, t + B.outMs).parts.soulB.glow > at(ch, t - 5).parts.soulB.glow, `${t}：引くたび燃え上がる`)
+  // 無間地獄：構えのあいだ杖の先へ吸い寄せられ（大技はもっと寄る）、構えから技へ跳ねずにつながる
+  const h = a.motions.hell, cast = (ms) => illustFreeShowAt('enma', { castM: h, castMs: ms }, 1000)
+  assert.ok(cast(3000).parts.soulE.dy < at(a.motions.soul, 395).parts.soulE.dy - 30, '大技の構えは大きく寄る')
+  const c1 = cast(h.castSkipMs), a1 = at(h, h.castSkipMs, { fromCast: true })
+  assert.ok(Math.abs(c1.pose.lean - a1.pose.lean) < 1e-9, '傾きがつながる')
+  assert.deepEqual(c1.parts, a1.parts, '炎がつながる')
+  // 画面：技と構えのあいだは freeShow の形で描く（倒れる動きのあいだは今までどおり落ちて消える）
+  const stage = readFileSync(new URL('../components/V2capAtbStage.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  assert.match(stage, /rigWrap\(art, freeShow \? freeShow\.pose : freePose\)/)
+  assert.match(stage, /const o = !death && freeShow\?\.parts\[p\.key\]/)
+  assert.match(stage, /freeShow=\{freeShow\}/)
 })

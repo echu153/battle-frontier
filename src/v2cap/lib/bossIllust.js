@@ -919,9 +919,18 @@ export const BOSS_ILLUST_DEFS = {
   //   ChatGPT の体（体.png）は使わなかった（杖の後ろは左右の色でつなぎ、頭の後ろは動かしても見えない）
   enma: {
     base: 'stand', files: { soulA: '魂の炎' }, fixed: { soulA: {} }, spare: ['体'], quality: 80, ground: 622,
-    // 奥から手前へ。魂の炎は切り離して漂う（free＝いちばん奥の別の枠・技のあいだも待機のまま）。杖・靴・手は帯の上に重ねる（手は炎の手前＝指のあいだから炎が見える）
+    // 奥から手前へ。魂の炎は切り離して漂う（free＝いちばん奥の別の枠・技と構えのあいだは freeFollow で体と技に合わせる）。杖・靴・手は帯の上に重ねる（手は炎の手前＝指のあいだから炎が見える）
     layers: ['soulA', 'soulB', 'soulC', 'soulD', 'soulE', 'body', 'head', 'staff', 'legL', 'legR', 'hand'],
     free: ['soulA', 'soulB', 'soulC', 'soulD', 'soulE'],
+    // 【確定】2026-11-06 ユーザー「えんまの周りの紫のエフェクト、ずっと後ろにあるだけで閻魔が動いても何もないから違和感ある」「エフェクトとモーションは合わせるようにして」：
+    //   魂の炎も技に合わせて動かす（illustFreeShowAt）。lagMs＝体の傾きに遅れてついていく長さ・
+    //   gather＝ふつうの技の構えで体の真ん中へ縮む割合（寄りきるまで gatherIn）・castGather＝大技の構えで杖の先のまわりの輪
+    //     （orbit＝杖の先から dy 上が真ん中・半径 r px・縦のつぶれ flat・回る速さ spin rad/秒・shrink＝縮む割合・glow＝明るさの足し）へ吸い寄せられる割合（castIn）・
+    //   glow＝寄りきったときの明るさの足し・burst＝振り抜いた瞬間に体から外へ燃え広がる（px＝立ち絵の px・s＝大きさの足し・outMs で広がり backMs で戻る）・color＝光の色
+    //   （大技の構えを途中までの寄せにすると、炎が体の裏に入って見えなくなった＝杖の先は体の外なので、そこまで寄せる。
+    //    杖の先を真ん中に小さく回すと、掲げた腕と頭の裏に隠れた＝少し上を真ん中に大きく回す＝腕の裏を通るとき隠れて、回って見える）
+    freeFollow: { lagMs: 90, gather: 0.2, castGather: 0.85, gatherIn: 260, castIn: 1200, glow: 0.35, color: '170,110,255',
+      orbit: { dy: -36, r: 95, flat: 0.6, spin: 1.4, shrink: 0.25, glow: 0.7 }, burst: { px: 56, s: 0.3, glow: 0.8, outMs: 130, backMs: 700 } },
     still: ['staff', 'legL', 'legR', 'hand'],
     // 魂の炎は1つずつ遠くの点を中心に少しだけ回す＝ふわふわ上下する（左の炎は右の遠く・右の炎は左の遠くが中心）
     pivots: { soulA: [505, 145] },
@@ -1596,6 +1605,52 @@ export const illustGhostsAt = (motion, ms) => {
 }
 // 体の動きから切り離したパーツ（def.free・雨摩座の水の帯）の姿勢：技・構えのあいだも待機のまま
 export const illustFreePoseAt = (key, tMs) => idlePoseAt(BOSS_ILLUST_DEFS[key].idle, tMs)
+// 【確定】2026-11-06 ユーザー「えんまの周りの紫のエフェクト、ずっと後ろにあるだけで閻魔が動いても何もないから違和感ある」「エフェクトとモーションは合わせるようにして」：
+//   切り離したパーツを技に合わせる（def.freeFollow があるボスだけ＝閻魔の魂の炎。雨摩座の水の帯は待機のまま＝承認済み）。
+//   ・枠ごと体の傾き（x・y・r・lean）に lagMs 遅れてついていく（なびく）。パーツの回転（ふわふわ）は待機のまま
+//   ・構えの絵のあいだ（art の windup）：体の真ん中（pivot）へ gather だけ縮んで明るくなる＝息を吸うように力をためる。
+//     大技の構え（構え・castSkipMs のある技）：構えの手（anchors の windup.hand＝掲げた杖の先）のまわりを回る輪へ castGather 吸い寄せられ、小さく明るくなる
+//   ・振り抜きの絵に替わった瞬間（strike）：寄った所から体の真ん中（pivot）の外へ burst.px 燃え広がって大きく明るくなり、backMs でもとへ戻る。
+//     そのあとの 'out' の拍子（keys の3つめ・振り抜きから200ms以上あと＝業縛の鎖を引くたび）は半分の強さで燃え上がる
+//   motion・ms＝流している技と時刻・fromCast・reachX は illustPoseAt と同じ／castM・castMs＝構えている技と構えはじめてから（構えのあいだ）
+//   → { pose（枠の姿勢）, parts: { <key>: { dx, dy（立ち絵の px）, s（大きさの倍率）, glow（明るさの足し） } } } か null（決まりが無い・技も構えも無い）
+const c01 = (k) => Math.min(1, Math.max(0, k))
+export const illustFreeShowAt = (key, { motion = null, ms = 0, castM = null, castMs = null, fromCast = false, reachX = 0 } = {}, tMs = 0) => {
+  const def = BOSS_ILLUST_DEFS[key], F = def?.freeFollow, L = BOSS_ILLUST[key]
+  const casting = castMs !== null, m = casting ? castM : motion
+  if (!F || !m || !L) return null
+  const body = casting ? illustCastPoseAt(key, Math.max(0, castMs - F.lagMs), tMs) : illustPoseAt(key, m, ms - F.lagMs, tMs, fromCast, reachX)
+  const pose = { ...idlePoseAt(def.idle, tMs), x: body.x, y: body.y, r: body.r, lean: body.lean }
+  // 拍子：構えの絵の時刻 tw・振り抜きの時刻 ts（構えのあいだはずっと構え）
+  const t = casting ? castMs : ms
+  const tw = casting ? 0 : m.art?.find(([, n]) => n === 'windup')?.[0]
+  const ts = casting ? null : m.art?.find(([, n]) => n === 'strike')?.[0]
+  const big = casting || !!m.castSkipMs, gMax = big ? F.castGather : F.gather, B = F.burst
+  const out = (k) => 1 - (1 - c01(k)) ** 2
+  let g = 0
+  if (tw != null && t >= tw) {
+    g = gMax * smooth(c01((t - tw) / (big ? F.castIn : F.gatherIn)))
+    if (ts != null && t >= ts) g *= 1 - out((t - ts) / B.outMs)
+  }
+  const beats = ts == null ? [] : [[ts, 1], ...m.keys.filter(([at, , e]) => e === 'out' && at > ts + 200).map(([at]) => [at, 0.5])]
+  //   拍子ごとの燃え上がりは足す（鎖を引くのは振り抜きの燃え広がりが戻りきる前＝大きい方だけだと燃え上がって見えなかった）・1.3 まで
+  let b = 0
+  for (const [at, k] of beats) {
+    const h = t - at
+    if (h >= 0) b += k * (h < B.outMs ? out(h / B.outMs) : 1 - smooth(c01((h - B.outMs) / B.backMs)))
+  }
+  b = Math.min(1.3, b)
+  const W = (big && m.anchors?.windup?.hand) || null, C = L.pivot, O = F.orbit, parts = {}
+  def.free.forEach((k, i) => {
+    const p = L.parts[k], cx = p.x + p.w / 2, cy = p.y + p.h / 2, d = Math.hypot(cx - C[0], cy - C[1]) || 1
+    // 寄る先：大技は杖の先のまわりの輪の上（炎ごとに角度をずらして回る）・ふつうの技は体の真ん中
+    const a = (2 * Math.PI * i) / def.free.length + (O.spin * t) / 1000
+    const [tx, ty] = W ? [W[0] + O.r * Math.cos(a), W[1] + O.dy + O.r * O.flat * Math.sin(a)] : C
+    parts[k] = { dx: (tx - cx) * g + ((cx - C[0]) / d) * B.px * b, dy: (ty - cy) * g + ((cy - C[1]) / d) * B.px * b,
+      s: 1 - (W ? O.shrink : 0.15) * (g / gMax) + B.s * b, glow: (W ? O.glow : F.glow) * (g / gMax) + B.glow * b }
+  })
+  return { pose, parts }
+}
 // 構え（大技の詠唱）のあいだの姿勢：castMs＝構えはじめてからのミリ秒。構えの決まり（cast）が無いボスは待機のまま
 export const illustCastPoseAt = (key, castMs, tMs) => {
   const def = BOSS_ILLUST_DEFS[key]
@@ -1800,7 +1855,7 @@ export const bossIllustOf = (key) => {
   const bg = bossBgOf(key)
   return {
     kind: 'illust', key, name: base.name, base: BOSS_ILLUST_SIZE, illust, parts, pivot: art.pivot, mouth: art.mouth, jaw, motions, orb, dust, ground: def.ground ?? null, hips: hipsOf(key), flutter: !!def.idle.flutter,
-    castArt: def.cast?.art || null, buffs, bg, death, intro, lights, handFlame,
+    castArt: def.cast?.art || null, buffs, bg, death, intro, lights, handFlame, freeFollow: def.freeFollow || null,
     srcs: [...parts.map(p => p.src), ...parts.filter(p => p.bend).map(p => p.bend.src), ...Object.values(motions).flatMap(m => Object.values(m.fx || {}).map(f => f.src)),
       ...Object.values(motions).flatMap(m => Object.values(m.poses || {}).map(p => p.src)), ...(orb ? [orb.src] : []), ...(handFlame ? [handFlame.src] : []), ...(lights || []).map(l => l.src).filter(Boolean),
       ...Object.values(buffs).flatMap(b => [b.pose?.src, b.aura?.src].filter(Boolean)), ...(bg ? [bg.src, bg.flowSrc].filter(Boolean) : [])],

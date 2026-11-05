@@ -6,7 +6,7 @@ import { hitReactOf, lungeOf, shakeOf, lastHitAtOf, popTextOf, popScaleOf, popLe
 import { JP_BOLD } from './casinoStyle.js'
 import { rubySegmentsOf } from '../lib/skillRuby.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
-import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, reachXOf, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, rigLayersOf, artAnchorAt, handMsOf, illustCastShowAt, illustBuffShowAt, buffSceneAt, introSceneAt, introEnterAt, introBeamAt, rigLightsAt, buffAfterAt, buffRainAt, zapArcsAt, zapArtOf } from '../lib/bossIllust.js'
+import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustFreeShowAt, illustTrailsAt, illustPointAt, reachXOf, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, rigLayersOf, artAnchorAt, handMsOf, illustCastShowAt, illustBuffShowAt, buffSceneAt, introSceneAt, introEnterAt, introBeamAt, rigLightsAt, buffAfterAt, buffRainAt, zapArcsAt, zapArtOf } from '../lib/bossIllust.js'
 import { behindRectOf, bgRectOf, bgFxAt, liteFxOf } from '../lib/bossBg.js'
 import { artIsLoaded } from '../lib/artPreload.js'
 import BossFlowCanvas from './BossFlowCanvas.jsx'
@@ -191,7 +191,8 @@ const rigWrap = (art, pose) => {
 //   どちらも無ければいちばん奥（逆鱗の闘気）。体の動きでは動かさない
 //   倒れる動き（death・lib/bossDeath.js）：切り離したパーツ（水の帯）は落ちて消える・倒れた絵は BossDissolve で消える
 //   付いているあいだ燃え続けるオーラ（flame・lib/bossIllust.js の buffAfterAt）：いちばん奥（体の動きでは動かさない）
-const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [], tMs = 0, aura = null, death = null, flame = null }) => {
+//   freeShow＝切り離したパーツを技に合わせる形（lib/bossIllust.js の illustFreeShowAt・閻魔の魂の炎）：枠は体の傾きについていき、炎ごとに寄る・燃え広がる・光る。無ければ待機のまま
+const IllustRig = ({ art, pose, freePose, freeShow = null, motion = null, show = null, ghosts = [], tMs = 0, aura = null, death = null, flame = null }) => {
   const lite = useContext(LiteCtx)
   const box = { x: 0, y: 0, w: art.base, h: art.base }
   const free = art.parts.filter(p => p.free && !p.nest)
@@ -210,8 +211,21 @@ const IllustRig = ({ art, pose, freePose, motion = null, show = null, ghosts = [
       {flame && flame.op > 0.001 && <BossAuraFlow base={art.base} p={flame.p} amp={flame.amp} op={flame.op} tMs={flame.t} lite={lite} />}
       {auraEl && !aura.front && !aura.glow && auraEl}
       {free.length > 0 && (!death || death.freeOp > 0.001) && (
-        <div style={death ? { ...rigWrap(art, { ...freePose, y: freePose.y + death.freeY }), opacity: death.freeOp } : rigWrap(art, freePose)}>
-          {free.map(p => <RigPart key={p.key} art={art} p={p} box={box} pose={freePose} />)}
+        <div style={death ? { ...rigWrap(art, { ...freePose, y: freePose.y + death.freeY }), opacity: death.freeOp } : rigWrap(art, freeShow ? freeShow.pose : freePose)}>
+          {free.map(p => {
+            const o = !death && freeShow?.parts[p.key]
+            const part = <RigPart key={p.key} art={art} p={p} box={box} pose={o ? freeShow.pose : freePose} />
+            if (!o) return part
+            // 炎ごとの寄り・燃え広がり（立ち絵の px）と大きさ（炎のまん中から）・明るさ（軽い表示は光のにじみを付けない）
+            const pc = (v) => ((v / art.base) * 100).toFixed(2)
+            return (
+              <div key={p.key} style={{ position:'absolute', inset:0, transform:`translate(${pc(o.dx)}%, ${pc(o.dy)}%) scale(${o.s.toFixed(3)})`,
+                transformOrigin:`${pc(p.x + p.w / 2)}% ${pc(p.y + p.h / 2)}%`,
+                filter: o.glow > 0.01 ? `brightness(${(1 + o.glow).toFixed(3)})${lite ? '' : ` drop-shadow(0 0 ${(2 + 8 * o.glow).toFixed(1)}px rgba(${art.freeFollow.color},${Math.min(0.85, 0.7 * o.glow).toFixed(2)}))`}` : undefined }}>
+                {part}
+              </div>
+            )
+          })}
         </div>
       )}
       {!lite && ghosts.map((g, i) => (
@@ -633,6 +647,10 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   const zapArt = after?.zap && rig && !death ? zapArtOf(show, showMotion) : false
   const zap = zapArt !== false ? zapArcsAt(rig.key, lite ? { ...after.zap, n: Math.ceil(after.zap.n / 2) } : after.zap, pose, now * 1000, zapArt) : null
   const ghosts = rigMotion && !casting && !buffPose && !death ? illustGhostsAt(rigMotion, rigMs).map(g => ({ ...g, pose: illustPoseAt(rig.key, rigMotion, g.ms, tMs - (rigMs - g.ms), false, reachX) })) : []
+  // 切り離したパーツを技と構えに合わせる（閻魔の魂の炎・lib/bossIllust.js の illustFreeShowAt）。構えている技は名前が同じ技（無ければ最後の技＝BossFx と同じ）
+  const castM = casting ? Object.values(rig.motions).find(m => m.label === me.cast.name) || Object.values(rig.motions).at(-1) : null
+  const freeShow = rig?.freeFollow && !death ? illustFreeShowAt(rig.key, { motion: rigMotion, ms: rigMs, castM, castMs: casting ? castMs : null,
+    fromCast: !!lastAct && afterCast(lastAct.t0, castEnd), reachX }, tMs) : null
   // 被弾の揺れはボスの側だけ（ユーザー「プレイヤーの被ダメージのグラグラモーションはいらない」）
   const dx = (frame >= 0 || rig ? 0 : lungeOf(now - lastOf('act')) * dir) + (side === 'b' ? shakeOf(now - lastOf('hit')) : 0)
   const hitAgo = now - lastOf('hit')
@@ -718,7 +736,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
               {lite && red > 0.01 && <div style={{ position:'absolute', inset:'-14%', borderRadius:'50%', pointerEvents:'none', opacity: Math.min(1, red).toFixed(3),
                 background:`radial-gradient(closest-side, rgba(${redColor},0.6) 45%, rgba(${redColor},0) 100%)` }} />}
               {rig && trails.length > 0 && <RigTrails art={rig} trails={trails} />}
-              {rig ? <IllustRig art={rig} pose={pose} freePose={illustFreePoseAt(rig.key, tMs + (now - clock) * 1000)} motion={showMotion} show={show} ghosts={ghosts} tMs={tMs} aura={aura} death={death} flame={flame} /> : (
+              {rig ? <IllustRig art={rig} pose={pose} freePose={illustFreePoseAt(rig.key, tMs + (now - clock) * 1000)} freeShow={freeShow} motion={showMotion} show={show} ghosts={ghosts} tMs={tMs} aura={aura} death={death} flame={flame} /> : (
                 <img src={src} alt="" draggable={false}
                   style={{ width:'100%', height:'100%', objectFit:'contain', userSelect:'none', visibility: frame >= 0 ? 'hidden' : 'visible' }} />
               )}
