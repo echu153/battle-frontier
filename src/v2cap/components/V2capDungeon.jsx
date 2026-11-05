@@ -22,6 +22,8 @@ import { artGenderOf } from '../lib/gender.js'
 import { CLASS_BY_ID } from '../lib/jobs.js'
 import { bossArtOf, bossEncounterOf, bossThumbOf, bossTintOf } from '../lib/bossArt.js'
 import { bossIllustOf } from '../lib/bossIllust.js'
+import { menuHeadReady } from '../lib/menuHead.js'
+import { MenuHead } from './V2Status.jsx'
 import {
   CHALLENGE_CATS, DUNGEON_BOSSES, DIFF_COLOR, HELPERS_MAX, STAMINA_HELPER,
   contributionPctOf, diffOf, summonBlockOf, tryStaminaOf, msLeftOf, stateWithRunOf,
@@ -392,7 +394,10 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
           【確定】2026-11-05 ユーザー「これ 2列2行にして」：2列の格子（4体で2行）。1つの枠は 絵・名前・挑戦できるか を上から */}
       {CHALLENGE_CATS.map(cat => (
         <div key={cat.key} style={{ ...box, padding:'10px', marginBottom:'10px' }}>
-          <div style={{ color:'#ff8866', fontSize:'13px', fontWeight:'bold', marginBottom:'8px' }}>{cat.label}</div>
+          {/* 【確定】2026-11-06 ユーザー「四凶のところ、ちょっとアイコン？バナーみたいなの差し込みたい」→選んだ「見出しの帯」：ホームの見出しと同じ帯（lib/menuHead.js の CAT_HEAD_DEFS）。
+              絵が届くまでは今までどおり文字だけ */}
+          {cat.head && menuHeadReady(cat.head) ? <MenuHead head={cat.head} title={cat.label} />
+            : <div style={{ color:'#ff8866', fontSize:'13px', fontWeight:'bold', marginBottom:'8px' }}>{cat.label}</div>}
           <div style={{ display:'grid', gridTemplateColumns:'repeat(2, minmax(0, 1fr))', gap:'8px' }}>
             {cat.bosses.map(key => {
               const boss = DUNGEON_BOSSES[key], thumb = bossThumbOf(key)

@@ -16,5 +16,14 @@ export const MENU_HEAD_DEFS = {
   adventure: { source:'冒険.png',   color:'#ff7755' },
   facility:  { source:'施設.png',   color:'#ffbb55' },
 }
+// 【確定】2026-11-06 ユーザー「四凶のところ、ちょっとアイコン？バナーみたいなの差し込みたい」「イラストはチャットＧＰＴに作ってもらう」→選んだ「見出しの帯」「厚塗り」：
+//   挑戦の入口のカテゴリ（lib/dungeon.js の CHALLENGE_CATS の head）にも、ホームと同じ帯を敷く。元の絵のフォルダは dir（public/V2挑戦）。
+//   絵はユーザーの「4体の色の文様が1番、一応不吉な背景もつくってみたい」＝四凶_紋様.png が本命・四凶_風景.png も作る（届いたら並べて選ぶ）。
+//   絵が届くまで（一覧の MENU_HEAD に無いあいだ）は今までどおり文字だけ（menuHeadReady）
+export const CAT_HEAD_DEFS = {
+  rival: { source:'四凶_紋様.png', dir:'V2挑戦', color:'#ff8866' },
+}
+export const headDefOf = (key) => MENU_HEAD_DEFS[key] || CAT_HEAD_DEFS[key] || null
+export const menuHeadReady = (key) => !!headDefOf(key) && !!MENU_HEAD[key]
 export const menuHeadFileOf = (key) => `menu-${key}.webp`
 export const menuHeadSrcOf = (key) => `${MENU_HEAD_DIR}/${menuHeadFileOf(key)}?v=${MENU_HEAD[key]?.v || ''}`
