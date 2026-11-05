@@ -17,11 +17,11 @@ export const MENU_HEAD_DEFS = {
   facility:  { source:'施設.png',   color:'#ffbb55' },
 }
 // 【確定】2026-11-06 ユーザー「四凶のところ、ちょっとアイコン？バナーみたいなの差し込みたい」「イラストはチャットＧＰＴに作ってもらう」→選んだ「見出しの帯」「厚塗り」：
-//   挑戦の入口のカテゴリ（lib/dungeon.js の CHALLENGE_CATS の head）にも、ホームと同じ帯を敷く。元の絵のフォルダは dir（public/V2挑戦）。
-//   絵はユーザーの「4体の色の文様が1番、一応不吉な背景もつくってみたい」＝四凶_紋様.png が本命・四凶_風景.png も作る（届いたら並べて選ぶ）。
-//   絵が届くまで（一覧の MENU_HEAD に無いあいだ）は今までどおり文字だけ（menuHeadReady）
+//   挑戦の入口のカテゴリ（lib/dungeon.js の CHALLENGE_CATS の head）にも、ホームと同じ帯を敷く。元の絵のフォルダは dir（public の下）。
+//   絵：ユーザーは「4体の色の文様が1番、一応不吉な背景もつくってみたい」→ 置いたのは不吉な風景の1枚（public/エネミー/IDダンジョン/四凶バナー.png・
+//   赤黒い雲・裂けた大地と遺跡・地平線から立つ赤・青・黄・紫の光の柱＝ボスのカードの色）。絵が無いあいだは文字だけ（menuHeadReady）
 export const CAT_HEAD_DEFS = {
-  rival: { source:'四凶_紋様.png', dir:'V2挑戦', color:'#ff8866' },
+  rival: { source:'四凶バナー.png', dir:'エネミー/IDダンジョン', color:'#ff8866' },
 }
 export const headDefOf = (key) => MENU_HEAD_DEFS[key] || CAT_HEAD_DEFS[key] || null
 export const menuHeadReady = (key) => !!headDefOf(key) && !!MENU_HEAD[key]

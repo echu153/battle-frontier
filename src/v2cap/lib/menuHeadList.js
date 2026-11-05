@@ -3,4 +3,5 @@ export const MENU_HEAD = {
   chara: { w: 766, h: 240, v: 'cea470d1' },
   adventure: { w: 766, h: 240, v: '76b22a38' },
   facility: { w: 1046, h: 240, v: 'e256dde7' },
+  rival: { w: 722, h: 240, v: '6229a1cc' },
 }
