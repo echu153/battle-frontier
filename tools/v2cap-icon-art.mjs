@@ -1,13 +1,13 @@
 // ============================================================
 // v2cap のメニューと画面の題のアイコンの絵を、画面で使う軽い版（透明つきの正方形の WebP）にする（決まりは src/v2cap/lib/menuIcon.js）
 // ------------------------------------------------------------
-// 元の絵（ユーザーが置く・git に入れない）：public/V2アイコン/<source>（ChatGPT で描いた 1024×1024 の PNG）
+// 元の絵（ユーザーが置く・git に入れない）：public/<source>（ChatGPT で描いた正方形の PNG・source は menuIcon.js の MENU_ICON_DEFS）
 // 作るもの：public/v2cap-art/icon/<key>.webp（MENU_ICON_SIZE の正方形）・src/v2cap/lib/menuIconList.js（中身の印）
 // ★透明つきでなければ、背景が一色（真緑など）かチェック模様なら抜く（tools/v2cap-art-lib.mjs の keyBackground）。抜けなければ止める
 // ★透明なところに元の背景の色が隠れているので、縮める前に近くの色で埋める（bleed）＝縁ににじまない
 // ★ChatGPT の透明つきの絵は不透明さが 253 くらい（ほんの少し透ける）＝ ALPHA_SNAP 以上は 255 にそろえる（神官の絵と同じ）
-// 使い方：node tools/v2cap-icon-art.mjs [--force] [--src <元の絵のフォルダ>] [--out <書き出す場所>]
-//   worktree では元の絵が本体のフォルダにあるので --src で渡す（例 --src ../../../public/V2アイコン）
+// 使い方：node tools/v2cap-icon-art.mjs [--force] [--public <元の絵の public>] [--out <書き出す場所>]
+//   worktree では元の絵が本体のフォルダにあるので --public で渡す（例 --public ../../../public）
 // ★元の絵が無くても（別のPCなど）、作ってある絵と一覧は消さない
 // ============================================================
 import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs'
@@ -15,11 +15,11 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { probe, decode, bleed, alphaBox, encodeSquare, keyBackground, bgModelOf, transparentBorderRatio, versionOf } from './v2cap-art-lib.mjs'
 import { MENU_ICON } from '../src/v2cap/lib/menuIconList.js'
-import { MENU_ICON_DEFS, MENU_ICON_DIR, MENU_ICON_SRC_DIR, MENU_ICON_SIZE, menuIconFileOf } from '../src/v2cap/lib/menuIcon.js'
+import { MENU_ICON_DEFS, MENU_ICON_DIR, MENU_ICON_SIZE, menuIconFileOf } from '../src/v2cap/lib/menuIcon.js'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const argOf = (name) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : null }
-const SRC = path.resolve(argOf('--src') || path.join(ROOT, 'public', MENU_ICON_SRC_DIR))
+const SRC = path.resolve(argOf('--public') || path.join(ROOT, 'public'))
 // --out … 道具を試すとき（絵も一覧もそこへ書く＝ゲームのファイルを変えない）
 const OUT = path.resolve(argOf('--out') || path.join(ROOT, 'public', MENU_ICON_DIR.slice(1)))
 const LIST = argOf('--out') ? path.join(OUT, 'menuIconList.js') : path.join(ROOT, 'src', 'v2cap', 'lib', 'menuIconList.js')

@@ -21,6 +21,9 @@ import { gainedExpOf, levelUpLines } from '../lib/settleLines.js'
 //   【確定】2026-11-05 ユーザー「あと敵のHPの数値は見れないようにして」：ボスの残りHPはバーだけ（数字も割合も出さない）。貢献度はそのまま
 //   【確定】2026-11-06 ユーザー「討伐時間 与えたダメージ 貢献度 にして」（前は「この挑戦の時間」「この挑戦のダメージ」「貢献度（与えたダメージの割合）」）。
 //     倒せなかったとき（敗北・時間切れ）は「討伐」と言えないので時間の行は「戦闘時間」（こちらの判断）
+//   【確定】同じ日 ユーザー「無駄改行入れないで」（「貢献度」の見出しだけの行の下に、自分の名前と%の行・バーの行が続いていた）：
+//     貢献度は上の行と同じ1行（自分の分）。救援の人がいればその下に1人1行（名前と%だけ・バーと（ダメージ）はやめた）。
+//     倒せなかったときのボスの残りHP（見出しの横にバー）と討伐の残り時間も1行ずつ
 //   ★画面を切り替えたら上へ戻す（ポップアップのあとと同じ決まり）
 // ============================================================
 
@@ -40,6 +43,9 @@ export default function V2capBossReward({ bossKey, diffKey, cls, st = null, resu
   useEffect(() => { window.scrollTo(0, 0) }, [])
   const boss = DUNGEON_BOSSES[bossKey], d = diffOf(bossKey, diffKey), thumb = bossThumbOf(bossKey)
   const members = r?.ok ? r.run.members : []
+  // 貢献度（%）：自分（me）とほかの人
+  const pctOf = (m) => contributionPctOf(m?.damage || 0, hpMax).toFixed(1)
+  const mine = members.find(m => m.me) || null, others = members.filter(m => !m.me)
   const hpMax = r?.ok ? r.run.hp_max : 1
   const reward = r?.reward
   // 倒せたか（届くまでは手元の戦闘で）。見出しと色
@@ -72,29 +78,26 @@ export default function V2capBossReward({ bossKey, diffKey, cls, st = null, resu
               {r.corrected && <div style={{ color: TEXT.sub, fontSize:'10px', padding:'2px 0 4px' }}>{CORRECTED_TEXT}</div>}
             </div>
           )}
-          {/* 倒せなかったとき：ボスの残りHP（バーだけ＝数字を出さない） */}
+          {/* 倒せなかったとき：ボスの残りHP（バーだけ＝数字を出さない）・討伐の残り時間。どちらもほかの行と同じ1行（見出しだけの行を作らない） */}
           {!cleared && (
-            <div style={{ ...up(3), borderTop:'1px solid #001428', padding:'6px 0' }}>
-              <div style={{ fontSize:'11px', color: TEXT.label, marginBottom:'3px' }}>ボスの残りHP</div>
-              <div style={{ height:'8px', background:'#000818', border:'1px solid #13405f' }}>
-                <div style={{ width:`${Math.min(100, (r.run.hp / hpMax) * 100)}%`, height:'100%', background:'#cc3344' }} />
+            <div style={up(3)}>
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', padding:'5px 0', borderTop:'1px solid #001428', fontSize:'12px' }}>
+                <span style={{ color: TEXT.label, flexShrink: 0 }}>ボスの残りHP</span>
+                <div style={{ flex: 1, height:'8px', background:'#000818', border:'1px solid #13405f' }}>
+                  <div style={{ width:`${Math.min(100, (r.run.hp / hpMax) * 100)}%`, height:'100%', background:'#cc3344' }} />
+                </div>
               </div>
-              {leftText && <div style={{ color: TEXT.sub, fontSize:'10px', marginTop:'4px', textAlign:'right' }}>討伐の残り時間 {leftText}</div>}
+              {leftText && <Row label="討伐の残り時間" value={leftText} />}
             </div>
           )}
-          {/* 貢献度：与えたダメージがボスの全体のHPの何割か（1人でも出す） */}
+          {/* 貢献度：与えたダメージがボスの全体のHPの何割か（1人でも出す）。自分の分は上の行と同じ1行・救援の人がいればその下に1人1行 */}
           {members.length > 0 && (
-            <div style={{ ...up(3), borderTop:'1px solid #001428', padding:'6px 0' }}>
-              <div style={{ color: TEXT.label, fontSize:'11px', marginBottom:'4px' }}>貢献度</div>
-              {members.map(m => (
-                <div key={m.name} style={{ marginBottom:'4px' }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', gap:'8px', fontSize:'11px', color: m.me ? TEXT.bright : TEXT.sub }}>
-                    <span>{m.owner ? '👑' : '🤝'}{m.name}</span>
-                    <span><b>{contributionPctOf(m.damage, hpMax).toFixed(1)}%</b>（{Number(m.damage).toLocaleString()}）</span>
-                  </div>
-                  <div style={{ height:'4px', background:'#000818' }}>
-                    <div style={{ width:`${contributionPctOf(m.damage, hpMax)}%`, height:'100%', background: m.me ? GOLD : '#44688a' }} />
-                  </div>
+            <div style={up(3)}>
+              <Row label="貢献度" value={`${pctOf(mine)}%`} />
+              {others.map(m => (
+                <div key={m.name} style={{ display:'flex', justifyContent:'space-between', gap:'8px', padding:'0 0 5px 12px', fontSize:'11px', color: TEXT.sub }}>
+                  <span>{m.owner ? '👑' : '🤝'}{m.name}</span>
+                  <b>{pctOf(m)}%</b>
                 </div>
               ))}
             </div>

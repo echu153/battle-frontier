@@ -765,7 +765,7 @@ test('【確定】2026-11-05 ボスのHPは数字も割合も出さない＝バ�
   // 救援の一覧は文の中の小さいバー。「HP」の文字と別の行に分かれない（本番のスマホの幅で分かれた）
   assert.ok(read('../components/V2capDungeon.jsx').includes("<span style={{ whiteSpace:'nowrap' }}>HP <MiniBar pct={(run.hp / run.hp_max) * 100} /></span>"))
   // 貢献度（与えたダメージの割合）は残す（2026-11-01 ユーザー「貢献度もわかるようにしてほしい、ダメージ与えた割合ね」）
-  assert.match(read('../components/V2capBossReward.jsx'), /contributionPctOf\(m\.damage, hpMax\)\.toFixed\(1\)/)
+  assert.match(read('../components/V2capBossReward.jsx'), /contributionPctOf\(m\?\.damage \|\| 0, hpMax\)\.toFixed\(1\)/)
   assert.match(read('../components/V2capDungeon.jsx'), /貢献度\{contributionPctOf\(m\.damage, run\.hp_max\)\.toFixed\(1\)\}%/)
 })
 
@@ -798,8 +798,13 @@ test('【確定】2026-11-06 結果の画面の見出しは「討伐時間」「
   // 倒せなかったとき（敗北・時間切れ）は「討伐」と言えないので「戦闘時間」
   assert.ok(code.includes("<Row label={cleared ? '討伐時間' : '戦闘時間'} value={`${st.t.toFixed(1)}秒`} />"))
   assert.ok(code.includes('<Row label="与えたダメージ" value={r.damage.toLocaleString()} />'))
-  assert.match(code, />貢献度<\/div>/)
   assert.doesNotMatch(code, /この挑戦の時間|この挑戦のダメージ|与えたダメージの割合/)
+  // 【確定】同じ日 ユーザー「無駄改行入れないで」：見出しだけの行を作らない。貢献度（自分の分）・ボスの残りHP・討伐の残り時間もほかの行と同じ1行
+  assert.ok(code.includes('<Row label="貢献度" value={`${pctOf(mine)}%`} />'))
+  assert.match(code, /\{others\.map\(m => \(\n\s*<div key=\{m\.name\}[^\n]*>\n\s*<span>\{m\.owner \? '👑' : '🤝'\}\{m\.name\}<\/span>\n\s*<b>\{pctOf\(m\)\}%<\/b>\n\s*<\/div>/, '救援の人は1人1行')
+  assert.ok(code.includes("<span style={{ color: TEXT.label, flexShrink: 0 }}>ボスの残りHP</span>"), '残りHPは見出しの横にバー')
+  assert.ok(code.includes('{leftText && <Row label="討伐の残り時間" value={leftText} />}'))
+  assert.doesNotMatch(code, />(貢献度|ボスの残りHP)<\/div>/, '見出しだけの行')
 })
 
 test('【確定】2026-10-31 入口：履歴と説明を出さない・「挑戦する」でそのまま戦闘へ（ユーザー「この履歴いらない」「ここら辺の説明いらない」「呼ぶじゃなくて挑戦する にして」）', () => {
