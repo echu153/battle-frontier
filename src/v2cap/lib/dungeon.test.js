@@ -724,8 +724,8 @@ test('【確定】2026-10-31 メニューは「挑戦」・中は「強敵」に
   }
   const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8')
   const home = read('../pages/V2capHome.jsx')
-  assert.match(home, /key:'dungeon', label:'挑戦'/)
-  assert.match(home, /dungeon:'🐉 挑戦'/)
+  assert.match(home, /key:'dungeon', label:'挑戦', icon: <MenuIcon k="challenge" \/>/)
+  assert.ok(home.includes('dungeon: <><MenuIcon k="challenge" size={18} /> 挑戦</>'), '画面の題も同じ絵のアイコン（2026-11-06 ユーザー「挑戦のアイコンも作りたい」）')
   // 画面に出る文字（コメントの外）に古い名前が残っていない
   for (const f of ['../pages/V2capHome.jsx', '../components/V2capDungeon.jsx', '../components/V2capBossPick.jsx', '../components/V2capAtb.jsx']) {
     for (const line of read(f).split(/\r?\n/)) assert.ok(/^\s*\/\//.test(line) || !line.includes('IDダンジョン'), `${f}: ${line.trim().slice(0, 60)}`)

@@ -40,10 +40,16 @@ import { SHINKA_ON } from '../lib/shinka.js'
 import { GENDER_BY_KEY, genderOf } from '../lib/gender.js'
 import { SHOP_NAME, MEAL_COLOR, activeMealOf, leftText } from '../lib/burger.js'
 import { MARK_SRC } from '../lib/clerk.js'
+import { MENU_ICON_DEFS, menuIconSrcOf } from '../lib/menuIcon.js'
 
 // ニャーガーキングのマーク（メニューと店の題で🍔の代わり。文字と同じ高さに並べる）
 function ShopMark({ size = 16 }) {
   return <img src={MARK_SRC} alt="" width={size} height={size} style={{ verticalAlign:'-3px' }} />
+}
+// 絵のアイコン（lib/menuIcon.js・絵文字の代わり）。並べ方はニャーガーキングのマークと同じ。絵がまだ無ければ絵文字のまま
+function MenuIcon({ k, size = 16 }) {
+  const src = menuIconSrcOf(k)
+  return src ? <img src={src} alt="" width={size} height={size} style={{ verticalAlign:'-3px' }} /> : MENU_ICON_DEFS[k].fallback
 }
 // 帯の「🔄 更新」（決まりは lib/appUpdate.js）。押したらそのまま読み直すので、確かめのポップアップは挟まない
 function UpdateButton() {
@@ -87,7 +93,8 @@ const MENU = [
   { title:'冒険', head:'adventure', items:[
     // 【確定】2026-10-29 IDダンジョン（ボスを呼び、HPを持ち越して倒す・ATB戦闘・救援）。いまは黒龍ヴァルゼノクのノーマル・ハード
     // 【確定】2026-10-31 ユーザー「これは『挑戦』にして」＝メニューと画面の名前は「挑戦」（中のカテゴリは lib/dungeon.js の CHALLENGE_CATS）
-    { key:'dungeon', label:'挑戦', icon:'🐉', color:'#ff6655', action:'強敵に挑む・救援' },
+    // 【確定】2026-11-06 ユーザー「挑戦のアイコンも作りたい」→選択「魔物の頭骨と交差した剣」「ボスの絵と同じ厚塗り」：絵のアイコン（lib/menuIcon.js・絵が届くまでは🐉）
+    { key:'dungeon', label:'挑戦', icon: <MenuIcon k="challenge" />, color:'#ff6655', action:'強敵に挑む・救援' },
     // 【確定】2026-10-14 塔（あるけみすと型の対人・1〜100層）。説明はいまの層で変わる（menuOf）
     // 【確定】2026-10-31 メニューの札は「覇天塔」だけ（ユーザー指示「ジークヴァルトのはてんとうは覇天塔だけにして」）。塔の画面の題などは TOWER_NAME のまま
     { key:'tower', label: TOWER_SHORT_NAME, icon:'🗼', color:'#b48cff', action:'階層守護者に挑む' },
@@ -109,7 +116,7 @@ const MENU = [
     { key:'tree', label:'ユグレシアの宝樹', icon:'🌳', color:'#44dd99', action:'祈る' },
   ] },
 ]
-const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', museum:'🏺 博物館', burger: <><ShopMark size={18} /> {SHOP_NAME}</>, asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場', shop:'🏪 商店', tower:`🗼 ${TOWER_NAME}`, dungeon:'🐉 挑戦',
+const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', museum:'🏺 博物館', burger: <><ShopMark size={18} /> {SHOP_NAME}</>, asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場', shop:'🏪 商店', tower:`🗼 ${TOWER_NAME}`, dungeon: <><MenuIcon k="challenge" size={18} /> 挑戦</>,
   uniqueCheck:'💎 ユニークの能力の確かめ［開発］', atb:'⏱ ATB戦闘の試し撃ち［開発］' }
 // ATBの試し撃ち（2026-10-26・開発用）。開いたときだけ読み込む（ホームの重さを増やさない）
 const V2capAtb = lazy(() => import('../components/V2capAtb.jsx'))
