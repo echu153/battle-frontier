@@ -9,12 +9,13 @@ import {
   BOSS_ILLUST_DEFS, BOSS_ILLUST_SIZE, illustPartsOf, illustKindOf, illustFxKindOf,
   bossIllustOf, illustPoseAt, reachXOf, idlePoseAt, motionPoseAt, illustPointAt, illustTrailsAt, mouthPointOf, rotPoint, partMove, hipPoint,
   illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt, dustEllipsesOf,
-  illustCastShowAt, EASES, joltAt, illustBendKindOf, bendFramesOf, illustPoseKindOf, illustShowAt, illustGhostsAt, ART_FADE_MS, artAnchorAt, leanPoint,
+  illustCastShowAt, EASES, joltAt, illustBendKindOf, bendFramesOf, illustPoseKindOf, illustShowAt, illustGhostsAt, ART_FADE_MS, artAnchorAt, handMsOf, leanPoint,
   illustBuffShowAt, illustBuffKindOf, buffSceneAt, introSceneAt, introEnterAt, introBeamAt, rigLightsAt, buffAfterAt, buffRainAt, buffHoldOf, zapArcsAt, zapArtOf, rigLayersOf, flutterBandsAt, buffArtMsOf, BUFF_IN_MS, BUFF_HOLD_MS, BUFF_OUT_MS, BUFF_AURA_IN_MS, BUFF_AURA_OUT_MS, BUFF_ART_MS, BUFF_FLASH_MS,
 } from './bossIllust.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { DUNGEON_BOSSES } from './dungeon.js'
 import { HIT_SEC } from './atbFx.js'
+import { GUN } from './bossScene.js'
 import { dilate, erode, leftTipOf, fitPart, inPoly } from '../../../tools/v2cap-boss-illust.mjs'
 
 const OUT = new URL(`../../../public${BOSS_ART_DIR}/`, import.meta.url)
@@ -1036,15 +1037,14 @@ test('【確定】2026-11-05 雷鋼弾は体をほぼ止めて絵の切り替え
   for (const [, p] of d.keys) for (const f of ['lean', 'hipX', 'hipY', 'y', 'r']) assert.ok(!(f in p), f)
   assert.equal(d.dustAt, undefined)
   assert.ok(Math.max(...d.keys.map(([, p]) => p.x || 0)) <= 0.02)
-  // 部品と絵のあいだはゆっくり重ねる・構えと撃つのあいだはすばやく
-  const [, first, fire, back, last] = d.art
-  assert.ok(first[2] >= 100 && last[2] >= 100 && last[1] === null)
-  assert.ok(fire[2] <= 40 && back[2] <= 40)
+  // 部品から構えの絵へはゆっくり重ねる・構えと撃つのあいだはすばやく（撃ったあとは撃つの絵から部品へ＝下の「攻撃した後のモーション」のテスト）
+  const [, first, fire] = d.art
+  assert.ok(first[1] === 'windup' && first[2] >= 100 && fire[1] === 'strike' && fire[2] <= 40)
   // ゆっくり重ねるあいだも、部品の大砲は構えの絵と同じ角度（切り替えで跳ねない）
-  for (const t of [first[0], first[0] + first[2], last[0], last[0] + last[2]]) assert.equal(motionPoseAt(d.keys, t).armN, 33, t + 'ms')
+  for (const t of [first[0], first[0] + first[2]]) assert.equal(motionPoseAt(d.keys, t).armN, 33, t + 'ms')
   // 部品の大砲の砲口は、構えの絵の砲口と重なる（絵の大砲はこちらへ向いて短い＝部品も縮める・砲口が2つ見えない）。雷霆掃射も同じ
   const z = BOSS_ILLUST_DEFS.zerugiasu.motions
-  for (const [k, t] of [['shell', first[0]], ['shell', last[0] + last[2]], ['volley', z.volley.art[1][0]], ['volley', z.volley.art.at(-1)[0]]]) {
+  for (const [k, t] of [['shell', first[0]], ['volley', z.volley.art[1][0]], ['volley', z.volley.art.at(-1)[0]]]) {
     const p = illustPoseAt('zerugiasu', z[k], t, 0), rig = illustPointAt('zerugiasu', p, [65, 475], 'barrel'), img = illustPointAt('zerugiasu', { ...p, hipX: 0, hipY: 0 }, z[k].anchors.windup.hand, 'body')
     assert.ok(Math.hypot(rig[0] - img[0], rig[1] - img[1]) < 15, `${k} ${t}ms：部品の砲口 ${rig.map(Math.round)}・絵の砲口 ${img.map(Math.round)}`)
   }
@@ -1053,12 +1053,51 @@ test('【確定】2026-11-05 雷鋼弾は体をほぼ止めて絵の切り替え
   assert.ok(mid.poses[0].op === 1 && mid.rig > 0 && mid.rig < 1)
 })
 
-test('【確定】2026-11-05 ゼルギアスの雷鋼弾と雷霆掃射は専用の絵（ユーザー「通常スキルと７５％スキルは専用イラスト作ったほうがよさそう」）：構え→撃つ→構え・弾は撃った瞬間の砲口から', () => {
+test('【確定】2026-11-05 雷鋼弾は撃ったあと構えの絵へ戻らず、跳ね上がった向きから止まらずに下ろす（ユーザー「通常攻撃だけやっぱりおかしい、攻撃した後のモーションが違和感」）', () => {
+  const a = bossIllustOf('zerugiasu'), m = a.motions.shell, d = BOSS_ILLUST_DEFS.zerugiasu.motions.shell
+  // 撃ったあと構えの絵は出ない（前は撃つの絵→構えの絵の 40ms で大砲が2本重なって見え、構えの形で 0.3秒止まってから下ろしていた）
+  const fire = d.art.find(([, n]) => n === 'strike')
+  for (let t = fire[0] + fire[2]; t < m.totalMs; t += 5) assert.ok(!illustShowAt(m, t).poses.some(p => p.name === 'windup'), t + 'ms：構えの絵へ戻らない')
+  // 撃つの絵から部品の立ち絵へは、撃った光（閃光）が出ているあいだに切り替えきる
+  const back = d.art.at(-1)
+  assert.ok(back[1] === null && back[0] > m.hitMs && back[0] + back[2] <= m.hitMs + GUN.flashMs, `${back[0]}〜${back[0] + back[2]}ms`)
+  // 切り替えるあいだ、部品の大砲は撃つの絵の砲身と同じ向き（跳ね上がった砲口に重なる＝砲口が2つ見えない）
+  const MUZZLE = [68, 144]   // 撃つの絵の砲口の光の真ん中（立ち絵の px・撃つの絵から測った）
+  for (const t of [back[0], back[0] + back[2]]) {
+    const p = illustPoseAt('zerugiasu', m, t, 0), rig = illustPointAt('zerugiasu', p, [65, 475], 'barrel'), sh = illustPointAt('zerugiasu', p, [222, 205], 'armN')
+    const img = illustPointAt('zerugiasu', { ...p, hipX: 0, hipY: 0 }, MUZZLE, 'body')
+    assert.ok(Math.hypot(rig[0] - img[0], rig[1] - img[1]) < 25, `${t}ms：部品の砲口 ${rig.map(Math.round)}・撃つの絵の砲口 ${img.map(Math.round)}`)
+    const da = (Math.atan2(rig[1] - sh[1], rig[0] - sh[0]) - Math.atan2(img[1] - sh[1], img[0] - sh[0])) * 180 / Math.PI
+    assert.ok(Math.abs(da) < 6, `${t}ms：砲身の向きの差 ${da.toFixed(1)}°`)
+  }
+  // 部品は撃つの絵の裏で跳ね上げる（見えているあいだに跳ねない）：構えの絵が出きってから撃つまでのどこかで、部品は見えない
+  const jump = d.keys.findIndex(([, p]) => (p.armN || 0) > 60)
+  assert.equal(illustShowAt(m, d.keys[jump - 1][0]).rig, 0)
+  assert.equal(illustShowAt(m, d.keys[jump][0]).rig, 0)
+  // 左の下の羽根も腕といっしょに上げる（付け根の切れ目を見せない）＝構えと同じ割合
+  const kick = motionPoseAt(d.keys, back[0]), aim = motionPoseAt(d.keys, m.hitMs)
+  for (const w of ['wL1', 'wL2', 'wL3', 'wL4']) assert.ok(Math.abs(kick[w] / kick.armN - aim[w] / aim.armN) < 1e-9, w)
+  // 切り替えたら止まらずに下ろす：大砲の角度は待機の形まで減り続け、どの 0.1秒でも 1° より多く下がる（止まって見えない）
+  const t0 = back[0] + back[2], rest = d.keys.find(([t, p]) => t > t0 && !p.armN)[0]
+  let prev = motionPoseAt(d.keys, t0).armN
+  for (let t = t0 + 10; t < m.totalMs; t += 10) { const n = motionPoseAt(d.keys, t)?.armN ?? 0; assert.ok(n <= prev + 1e-9, t + 'ms：上がらない'); prev = n }
+  for (let t = t0; t + 100 <= rest; t += 10) assert.ok(motionPoseAt(d.keys, t).armN - motionPoseAt(d.keys, t + 100).armN > 1, t + 'ms から 0.1秒で下がる')
+  assert.ok(rest <= m.totalMs - 100, '終わる前に待機の形に戻る')
+  // 撃った光（閃光・輪・弾の筋）は撃った瞬間の砲口から動かない（大砲を下ろしても）。撃つ前は今の時刻（砲口に光が集まる）・ほかの技は今の時刻
+  assert.ok(m.pinHand)
+  for (const t of [m.hitMs + 100, m.hitMs + 300, m.totalMs - 10]) assert.equal(handMsOf(m, t), m.hitMs)
+  assert.equal(handMsOf(m, 200), 200)
+  assert.equal(handMsOf(a.motions.volley, 900), 900)
+  const p = illustPoseAt('zerugiasu', m, handMsOf(m, 800), 0)
+  assert.deepEqual(artAnchorAt('zerugiasu', m, handMsOf(m, 800), p, 'hand'), illustPointAt('zerugiasu', { ...p, hipX: 0, hipY: 0 }, d.anchors.windup.hand, 'body'))
+})
+
+test('【確定】2026-11-05 ゼルギアスの雷鋼弾と雷霆掃射は専用の絵（ユーザー「通常スキルと７５％スキルは専用イラスト作ったほうがよさそう」）：構え→撃つ（→雷霆掃射は構え・雷鋼弾は部品の立ち絵）・弾は撃った瞬間の砲口から', () => {
   const a = bossIllustOf('zerugiasu'), def = BOSS_ILLUST_DEFS.zerugiasu
   for (const [k, n] of [['shell', 1], ['volley', 3]]) {
     const m = a.motions[k], d = def.motions[k]
     assert.ok(m.poses?.windup && m.poses?.strike, k + '：構えと撃つの絵がある')
-    // 撃つ時刻（1発ずつ）に撃つの絵が出はじめ、そのあと構えに戻る・はじめと終わりは部品の立ち絵
+    // 撃つ時刻（1発ずつ）に撃つの絵が出はじめる（雷霆掃射はそのあと構えに戻る・雷鋼弾は部品の立ち絵で下ろす）・はじめと終わりは部品の立ち絵
     for (const sh of d.shots) {
       const at = d.hitMs + sh.delayMs
       assert.equal(illustShowAt(m, at - 1).poses.at(-1).name, 'windup', k + '：撃つ直前は構え')
@@ -1074,8 +1113,8 @@ test('【確定】2026-11-05 ゼルギアスの雷鋼弾と雷霆掃射は専用
     assert.deepEqual(m.shots[0].front, front.map(Math.round))
     assert.ok(front[0] < 120, k + '：砲口は体の左（相手の側）')
     // 絵が出ているあいだは腰を動かさない＝絵の上の点は全体の姿勢だけで動く（artAnchorAt）
-    const p = { ...illustPoseAt('zerugiasu', d, d.hitMs + 200, 0), hipX: 0.05, hipY: 0.05 }
-    assert.deepEqual(artAnchorAt('zerugiasu', m, d.hitMs + 200, p, 'hand'), illustPointAt('zerugiasu', { ...p, hipX: 0, hipY: 0 }, d.anchors.strike.hand, 'body'))
+    const p = { ...illustPoseAt('zerugiasu', d, d.hitMs + 25, 0), hipX: 0.05, hipY: 0.05 }
+    assert.deepEqual(artAnchorAt('zerugiasu', m, d.hitMs + 25, p, 'hand'), illustPointAt('zerugiasu', { ...p, hipX: 0, hipY: 0 }, d.anchors.strike.hand, 'body'))
   }
   // 部品の大砲は構えの絵の砲身と同じ向き（切り替えで跳ねない）：雷鋼弾 33°・雷霆掃射 56°（腰を上げたぶん少し下げる）
   assert.equal(motionPoseAt(def.motions.shell.keys, 300).armN, 33)
@@ -1125,7 +1164,7 @@ test('【確定】2026-11-05 炉心臨界のあとは、技や構えのポーズ
   const m = a.motions.shell, fire = m.art.find(([, n]) => n === 'strike')[0]
   assert.equal(zapArtOf(null, null), null)
   assert.equal(zapArtOf(illustShowAt(m, 0), m), null)
-  assert.equal(zapArtOf(illustShowAt(m, fire + 80), m), m.poses.strike.zap)
+  assert.equal(zapArtOf(illustShowAt(m, fire + 25), m), m.poses.strike.zap)
   assert.equal(zapArtOf(illustShowAt(a.motions.volley, 300), a.motions.volley), a.motions.volley.poses.windup.zap)
   // 神雷終焉の構えのあいだ・節目のバフのポーズの絵のあいだも
   const cs = illustCastShowAt(a, '神雷終焉', 3000)

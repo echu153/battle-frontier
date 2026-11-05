@@ -820,20 +820,25 @@ export const BOSS_ILLUST_DEFS = {
       //   絵の切り替えは 40ms（70ms だと撃った瞬間に前の絵と重なって砲口が2つ見えた）
       //   絵が出ているあいだの動きは全体のずれと傾き（x・lean）と揺れだけ（絵は腰で動かない）。弾の筋・閃光・飛ぶ弾は撃った瞬間の砲口（構えの絵の砲口）から出す＝撃つの絵の手も構えの砲口
       //   （跳ね上がった砲口から相手へ筋を引くと、砲身と筋の向きが60°ずれた）。剣は動かさない（ユーザー「通常攻撃うつとき剣が揺れるのがちょっと変だった」）
-      // 雷鋼弾：大砲を相手へ向けて前へ寄る（砲口に光が集まる）→ 撃った瞬間に砲口が跳ね上がり、全身が後ろへ押されて足がすべる → 構えに戻って下ろす
+      // 雷鋼弾：大砲を相手へ向ける（砲口に光が集まる）→ 撃った瞬間に撃つの絵（砲口が跳ね上がり、少しだけ後ろへ押される）→ 跳ね上がった向きから止まらずに下ろす
       //   【確定】2026-11-05 ユーザー「通常攻撃だけちょっと違和感」「余計な動きが多い気がするからもっとスムーズに」：構えのあいだの前のめり・撃ったときの大きな傾き（絵ごと斜めにゆがむ）・
       //   足のすべり・砂ぼこり・腰の沈みをやめた。体はほぼ止めて、絵の切り替えで見せる（撃つと少しだけ後ろへ押される x 0.018・傾けない）。
-      //   部品の立ち絵と絵のあいだはゆっくり重ねて切り替え（120〜140ms＝大砲の角度は同じ・長さも armNSq で構えの絵にそろえる＝砲口が2つ見えない）、構えと撃つのあいだはすばやく（30〜40ms）
-      shell: { totalMs: 1300, hitMs: 430, keys: [
+      //   部品の立ち絵から構えの絵へはゆっくり重ねて切り替え（120ms＝大砲の角度は同じ・長さも armNSq で構えの絵にそろえる＝砲口が2つ見えない）、構えと撃つのあいだはすばやく（30ms）
+      //   【確定】2026-11-05 ユーザー「通常攻撃だけやっぱりおかしい、攻撃した後のモーションが違和感」：撃ったあと構えの絵へ戻すのをやめた
+      //   （撃つの絵→構えの絵の 40ms で大砲が2本重なって見え、構えの形で 0.3秒止まってから下ろしていた）。撃つの絵の裏（部品は見えない）で部品の大砲を撃つの絵と同じ向きへ
+      //   跳ね上げておき（76°・縮め 0.42＝撃つの絵の砲身に重なる・左の羽根も腕といっしょ＝付け根の切れ目を見せない）、撃った光のあいだに部品の立ち絵へ切り替え（470〜540ms）、
+      //   そこから止まらずに待機の形まで下ろす（はじめはゆっくり・下りきる前にゆるむ）。撃った光（閃光・輪・弾の筋）は撃った瞬間の砲口に残す（pinHand＝大砲を下ろしても光は動かない）
+      shell: { totalMs: 1300, hitMs: 430, pinHand: true, keys: [
         [0, {}],
         [150, { armNSq: 0.375, ...zeruGun(33) }],
         [430, { armNSq: 0.375, ...zeruGun(33) }],
-        [470, { x: 0.018, armNSq: 0.375, ...zeruGun(33) }, 'out'],
-        [760, { armNSq: 0.375, ...zeruGun(33) }],
-        [980, { armNSq: 0.375, ...zeruGun(33) }],
+        [440, { armNSq: 0.42, ...zeruGun(76) }],
+        [470, { x: 0.018, armNSq: 0.42, ...zeruGun(76) }, 'out'],
+        [540, { x: 0.017, armNSq: 0.42, ...zeruGun(76) }],
+        [1180, {}],
         [1300, {}],
       ], jolt: { atMs: 440, ms: 160, x: 0.006, y: 0.004 },
-      art: [[0, null], [160, 'windup', 120], [430, 'strike', 30], [640, 'windup', 40], [840, null, 140]],
+      art: [[0, null], [160, 'windup', 120], [430, 'strike', 30], [470, null, 70]],
       anchors: { windup: { hand: [48, 293], mouth: [48, 293] }, strike: { hand: [48, 293], mouth: [48, 293] } },
       shots: [{ at: 'mouth', delayMs: 0, size: 1 }],
       scene: { kind: 'gun', tone: 'thunder', dimColor: '0,6,26', hand: { pt: [65, 475], part: 'barrel' } } },
@@ -1256,6 +1261,9 @@ export const artAnchorAt = (key, motion, ms, pose, name) => {
   // ポーズの絵は全体の姿勢（x・y・r・lean）だけで動く＝腰のずれ（hipX・hipY）は足さない
   return pt ? illustPointAt(key, { ...pose, hipX: 0, hipY: 0 }, pt, 'body') : null
 }
+// 光の出どころ（手・砲口）を測る時刻：motion.pinHand のある技（雷鋼弾）は、撃ったあとも撃った瞬間（最後の弾）の砲口から出す。
+//   撃ったあと大砲を下ろしても、閃光・輪・弾の筋は撃った所に残る（2026-11-05 雷鋼弾は撃つの絵から部品の立ち絵で下ろす）。ほかの技は今の時刻
+export const handMsOf = (motion, ms) => (motion?.pinHand ? Math.min(ms, motion.hitMs + (motion.shots?.at(-1)?.delayMs || 0)) : ms)
 // 構えのあいだに出すポーズの絵（def.cast.art・雨摩座）：構えた技（名前が同じ技・無ければ最後の技＝BossFx と同じ）にその絵があれば、
 //   構えはじめの CAST_IN_MS で部品の立ち絵から切り替える（新しい絵は前半で出きり、部品は後半で消える）→ { motion, show }。無ければ null（黒龍は今までどおり）
 export const illustCastShowAt = (art, castName, castMs) => {
@@ -1769,7 +1777,7 @@ export const bossIllustOf = (key) => {
     // 当たる時刻＝撃ち出す時刻＋飛ぶ時間＋当たる絵が降りきるまで（lead・氷雨と水天葬）
     motions[m.key] = { label: m.file, keys: md.keys, trails: md.trails || [], arcs: md.arcs || [], jolt: md.jolt || null, totalMs: md.totalMs, hitMs: md.hitMs, flyMs, impactMs: md.hitMs + flyMs + (fx.hit?.lead || 0),
       front: shots[0].front, shots, strikes: md.strikes || null, fx: Object.keys(fx).length ? fx : null, charge: md.charge && fx[md.charge.kind] ? md.charge : null, scene: md.scene || null,
-      poses: posesOf(m.key), art: md.art || null, fadeMs: md.fadeMs, ghosts: md.ghosts || null, anchors: md.anchors || null, castSkipMs: md.castSkipMs || 0, big: !!md.big, reach: md.reach || null, dustAt: md.dustAt || null }
+      poses: posesOf(m.key), art: md.art || null, fadeMs: md.fadeMs, ghosts: md.ghosts || null, anchors: md.anchors || null, castSkipMs: md.castSkipMs || 0, big: !!md.big, reach: md.reach || null, dustAt: md.dustAt || null, pinHand: !!md.pinHand }
   }
   // 倒れる動き（lib/bossDeath.js）と開戦の動きで借りる絵：節目のバフ（buff）か技（motion・pose）のポーズの絵。どちらかが無ければ前のまま（薄くなるだけ）
   const borrowedArtOf = (r) => (r?.buff ? buffs[def.buffs[r.buff]?.name]?.pose : motions[r?.motion]?.poses?.[r?.pose]) || null

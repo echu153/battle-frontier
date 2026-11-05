@@ -6,7 +6,7 @@ import { hitReactOf, lungeOf, shakeOf, lastHitAtOf, popTextOf, popScaleOf, popLe
 import { JP_BOLD } from './casinoStyle.js'
 import { rubySegmentsOf } from '../lib/skillRuby.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
-import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, reachXOf, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, rigLayersOf, artAnchorAt, illustCastShowAt, illustBuffShowAt, buffSceneAt, introSceneAt, introEnterAt, introBeamAt, rigLightsAt, buffAfterAt, buffRainAt, zapArcsAt, zapArtOf } from '../lib/bossIllust.js'
+import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, reachXOf, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, rigLayersOf, artAnchorAt, handMsOf, illustCastShowAt, illustBuffShowAt, buffSceneAt, introSceneAt, introEnterAt, introBeamAt, rigLightsAt, buffAfterAt, buffRainAt, zapArcsAt, zapArtOf } from '../lib/bossIllust.js'
 import { behindRectOf, bgRectOf, bgFxAt, liteFxOf } from '../lib/bossBg.js'
 import { artIsLoaded } from '../lib/artPreload.js'
 import BossFlowCanvas from './BossFlowCanvas.jsx'
@@ -837,8 +837,8 @@ function BossFx({ fx, now, geo, art, cast = null, castEnd = -1e9, scene = null }
         if (f.motion !== m) continue
         const ms = (now - f.t0) * 1000, e = ms - m.hitMs - (sh.delayMs || 0)
         if (e < 0 || e >= a.durMs) continue
-        const pose = illustPoseAt(art.key, m, ms, now * 1000), h = m.scene.hand
-        const [mx, my] = artAnchorAt(art.key, m, ms, pose, 'hand') || illustPointAt(art.key, pose, h.pt, h.part)
+        const hm = handMsOf(m, ms), pose = illustPoseAt(art.key, m, hm, now * 1000), h = m.scene.hand
+        const [mx, my] = artAnchorAt(art.key, m, hm, pose, 'hand') || illustPointAt(art.key, pose, h.pt, h.part)
         const x = geo.b.x + mx * s, y = geo.b.y + my * s, k = e / a.durMs
         on = { frame: 0, x, y, s: sc * (sh.size || 1) * (0.55 + 0.7 * easeOut(k)), rot: Math.atan2(to.y - y, to.x - x) - Math.PI, op: k < 0.5 ? 1 : 1 - (k - 0.5) / 0.5 }
       }
@@ -1391,10 +1391,12 @@ const sceneOfStage = (art, acts, now, cast, castEnd, reachTo = null) => {
   const fromCast = !running && !!castM?.scene
   const handPt = fromCast ? castM.scene.hand : live ? live.m.scene.hand : null
   if (handPt && (sc.hand || sc.beam || sc.items.some(it => it.space === 'hand'))) {
-    const pose = !fromCast ? illustPoseAt(art.key, live.m, live.ms, now * 1000, live.after, reachXOf(art.key, live.m, reachTo)) : illustCastPoseAt(art.key, cast.ms, now * 1000)
+    // 撃ったあとの光を撃った所に残す技（motion.pinHand・雷鋼弾）は、撃った瞬間の姿勢で測る（handMsOf）
+    const hm = !fromCast ? handMsOf(live.m, live.ms) : 0
+    const pose = !fromCast ? illustPoseAt(art.key, live.m, hm, now * 1000, live.after, reachXOf(art.key, live.m, reachTo)) : illustCastPoseAt(art.key, cast.ms, now * 1000)
     // ポーズの絵が出ていれば、その絵の上の手（anchors の hand・hand2＝両手）から。無ければ決まりの手（scene.hand）
     const castAn = fromCast && art.castArt ? castM.anchors?.[art.castArt] : null
-    const pts = ['hand', 'hand2'].map(n => (!fromCast ? artAnchorAt(art.key, live.m, live.ms, pose, n) : castAn?.[n] ? illustPointAt(art.key, pose, castAn[n], 'body') : null)).filter(Boolean)
+    const pts = ['hand', 'hand2'].map(n => (!fromCast ? artAnchorAt(art.key, live.m, hm, pose, n) : castAn?.[n] ? illustPointAt(art.key, pose, castAn[n], 'body') : null)).filter(Boolean)
     sc.handsAt = pts.length ? pts : [illustPointAt(art.key, pose, handPt.pt, handPt.part)]
   }
   return sc
