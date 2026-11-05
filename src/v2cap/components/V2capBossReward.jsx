@@ -10,7 +10,7 @@ import { gainedExpOf, levelUpLines } from '../lib/settleLines.js'
 // 「レベルキャップあり」版（v2cap）— 挑戦の報酬画面（討伐完了のテロップのあと）
 // ------------------------------------------------------------
 // 【確定】2026-10-31 ユーザー「戦闘開始と討伐後のテロップ的なのが欲しい、報酬画面も」：
-//   ボスの絵と名前・難易度／この挑戦の時間とダメージ／みんなが入れたダメージ（救援があるとき）／報酬／入口へ戻る。
+//   ボスの絵と名前・難易度／討伐時間と与えたダメージ（この挑戦の分）／みんなが入れたダメージ（救援があるとき）／報酬／入口へ戻る。
 //   【確定】同じ日 ユーザー選択「EXPとGoldを渡す」：報酬の欄に EXP と Gold（渡すのはサーバー・EXP は実際に入った量＝gainedExpOf）とLVアップの行。救援の人は割合も出す
 //   st … 戦闘の状態（core/atb.js・入口で受け取ったときは無い）・result … 削った量を送った返事か受け取りの返事（V2capDungeon.jsx。まだなら null）
 //   cls … いまの職業（LVアップの行）・onBack … 入口へ
@@ -19,6 +19,8 @@ import { gainedExpOf, levelUpLines } from '../lib/settleLines.js'
 //     【確定】同じ日 ユーザー「これ完全ソロ討伐成功！にして、報酬3倍とか具体的な内容は言わないでほしい」＝ソロの行に倍率を書かない
 //     onRetry … もう一度挑戦する（倒せなかったときだけ・null なら出さない）・retryCost … そのスタミナ・leftText … 討伐の残り時間・busy … 押している最中
 //   【確定】2026-11-05 ユーザー「あと敵のHPの数値は見れないようにして」：ボスの残りHPはバーだけ（数字も割合も出さない）。貢献度はそのまま
+//   【確定】2026-11-06 ユーザー「討伐時間 与えたダメージ 貢献度 にして」（前は「この挑戦の時間」「この挑戦のダメージ」「貢献度（与えたダメージの割合）」）。
+//     倒せなかったとき（敗北・時間切れ）は「討伐」と言えないので時間の行は「戦闘時間」（こちらの判断）
 //   ★画面を切り替えたら上へ戻す（ポップアップのあとと同じ決まり）
 // ============================================================
 
@@ -64,8 +66,9 @@ export default function V2capBossReward({ bossKey, diffKey, cls, st = null, resu
         <>
           {st && (
             <div style={up(2)}>
-              <Row label="この挑戦の時間" value={`${st.t.toFixed(1)}秒`} />
-              <Row label="この挑戦のダメージ" value={r.damage.toLocaleString()} />
+              {/* 倒せなかったときは「討伐」と言えないので「戦闘時間」 */}
+              <Row label={cleared ? '討伐時間' : '戦闘時間'} value={`${st.t.toFixed(1)}秒`} />
+              <Row label="与えたダメージ" value={r.damage.toLocaleString()} />
               {r.corrected && <div style={{ color: TEXT.sub, fontSize:'10px', padding:'2px 0 4px' }}>{CORRECTED_TEXT}</div>}
             </div>
           )}
@@ -82,7 +85,7 @@ export default function V2capBossReward({ bossKey, diffKey, cls, st = null, resu
           {/* 貢献度：与えたダメージがボスの全体のHPの何割か（1人でも出す） */}
           {members.length > 0 && (
             <div style={{ ...up(3), borderTop:'1px solid #001428', padding:'6px 0' }}>
-              <div style={{ color: TEXT.label, fontSize:'11px', marginBottom:'4px' }}>貢献度（与えたダメージの割合）</div>
+              <div style={{ color: TEXT.label, fontSize:'11px', marginBottom:'4px' }}>貢献度</div>
               {members.map(m => (
                 <div key={m.name} style={{ marginBottom:'4px' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', gap:'8px', fontSize:'11px', color: m.me ? TEXT.bright : TEXT.sub }}>

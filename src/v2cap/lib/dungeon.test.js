@@ -5,12 +5,12 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import {
   CHALLENGE_CATS, DUNGEON_BOSSES, DIFF_KEYS, DUNGEON_MIN, DUNGEON_TRY_SEC, SUMMONS_PER_DAY, STAMINA_OWNER_FIRST, STAMINA_OWNER, STAMINA_HELPER, HELPERS_MAX, HELPER_REWARD_MIN_PCT, SOLO_REWARD_MULT,
-  diffOf, isDiffReady, isDiffUnlocked, isSummonable, summonBlockOf, tryStaminaOf, dungeonFighter,
+  diffOf, isDiffReady, isDiffUnlocked, isSummonable, summonBlockOf, tryStaminaOf, dungeonFighter, stateWithRunOf, msLeftOf,
 } from './dungeon.js'
 import { createAtb, runFor, startMacro, fillPerSecOf, hpBuffChips, castMsOf, ATB_SLOW_CUT, FILL_PER_SEC, BUFF_GAUGE_SEC, BUFF_WAIT_AFTER_ACT_SEC, BUFF_SHOW_SEC, TURN_SEC, GAUGE_FULL, NOW_WAIT_AFTER_ACT_SEC, CAST_SEC } from '../core/atb.js'
 import { inflict, healMultOf, hasAilment } from '../core/ailments.js'
 import { bossIllustOf, buffArtMsOf } from './bossIllust.js'
-import { bossThumbOf } from './bossArt.js'
+import { bossThumbOf, bossTintOf } from './bossArt.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { liveStats, hpStepMultOf, healMaxAmount, createSide, takeAction } from '../core/battle.js'
 import { splitHits } from './atbFx.js'
@@ -724,8 +724,8 @@ test('【確定】2026-10-31 メニューは「挑戦」・中は「強敵」に
   }
   const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8')
   const home = read('../pages/V2capHome.jsx')
-  assert.match(home, /key:'dungeon', label:'挑戦'/)
-  assert.match(home, /dungeon:'🐉 挑戦'/)
+  assert.match(home, /key:'dungeon', label:'挑戦', icon: <MenuIcon k="challenge" \/>/)
+  assert.ok(home.includes('dungeon: <><MenuIcon k="challenge" size={18} /> 挑戦</>'), '画面の題も同じ絵のアイコン（2026-11-06 ユーザー「挑戦のアイコンも作りたい」）')
   // 画面に出る文字（コメントの外）に古い名前が残っていない
   for (const f of ['../pages/V2capHome.jsx', '../components/V2capDungeon.jsx', '../components/V2capBossPick.jsx', '../components/V2capAtb.jsx']) {
     for (const line of read(f).split(/\r?\n/)) assert.ok(/^\s*\/\//.test(line) || !line.includes('IDダンジョン'), `${f}: ${line.trim().slice(0, 60)}`)
@@ -767,6 +767,39 @@ test('【確定】2026-11-05 ボスのHPは数字も割合も出さない＝バ�
   // 貢献度（与えたダメージの割合）は残す（2026-11-01 ユーザー「貢献度もわかるようにしてほしい、ダメージ与えた割合ね」）
   assert.match(read('../components/V2capBossReward.jsx'), /contributionPctOf\(m\.damage, hpMax\)\.toFixed\(1\)/)
   assert.match(read('../components/V2capDungeon.jsx'), /貢献度\{contributionPctOf\(m\.damage, run\.hp_max\)\.toFixed\(1\)\}%/)
+})
+
+test('【確定】2026-11-06 入口のボスの枠にボスの色を薄く敷く（ユーザー「黒龍 あか・あまざ あお・ゼルギアス 黄色・閻魔 紫 の薄い背景にしてほしい」）', () => {
+  // 色の向き（色相・度）で見る
+  const hueOf = (hex) => {
+    const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
+    const max = Math.max(r, g, b), d = max - Math.min(r, g, b)
+    const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4
+    return (h * 60 + 360) % 360
+  }
+  const hue = (key) => hueOf(bossTintOf(key))
+  assert.ok(hue('varuzenoku') < 15 || hue('varuzenoku') > 345, '黒龍は赤')
+  assert.ok(hue('amaza') >= 200 && hue('amaza') <= 240, '雨摩座は青')
+  assert.ok(hue('zerugiasu') >= 40 && hue('zerugiasu') <= 60, 'ゼルギアスは黄色')
+  assert.ok(hue('enma') >= 255 && hue('enma') <= 290, '閻魔は紫')
+  // 挑戦のカテゴリの全部のボスに色がある（ユーザー「今後4強以外にもいろいろ出す予定」＝ボスを足すときは色も決める）
+  for (const cat of CHALLENGE_CATS) for (const key of cat.bosses) {
+    assert.match(bossTintOf(key) || '', /^#[0-9a-f]{6}$/, `${key} の色が無い（ユーザーに聞いて lib/bossArt.js の BOSS_TINT に足す）`)
+  }
+  // 入口の枠はこの色を薄く敷く（文字と絵が見づらくならない濃さ＝本番で見比べた値）
+  const src = readFileSync(new URL('../components/V2capDungeon.jsx', import.meta.url), 'utf8')
+  assert.match(src, /\.\.\.bossCardBg\(bossTintOf\(key\)\)/)
+  assert.ok(src.includes('radial-gradient(ellipse 85% 70% at 50% 40%, ${tint}47, transparent 75%), linear-gradient(${tint}1a, ${tint}1a), #0b0c14'))
+})
+
+test('【確定】2026-11-06 結果の画面の見出しは「討伐時間」「与えたダメージ」「貢献度」（ユーザー「討伐時間 与えたダメージ 貢献度 にして」）', () => {
+  const src = readFileSync(new URL('../components/V2capBossReward.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  const code = src.split(/\r?\n/).filter(l => !/^\s*(\/\/|\{\/\*)/.test(l)).join('\n')   // コメントの外
+  // 倒せなかったとき（敗北・時間切れ）は「討伐」と言えないので「戦闘時間」
+  assert.ok(code.includes("<Row label={cleared ? '討伐時間' : '戦闘時間'} value={`${st.t.toFixed(1)}秒`} />"))
+  assert.ok(code.includes('<Row label="与えたダメージ" value={r.damage.toLocaleString()} />'))
+  assert.match(code, />貢献度<\/div>/)
+  assert.doesNotMatch(code, /この挑戦の時間|この挑戦のダメージ|与えたダメージの割合/)
 })
 
 test('【確定】2026-10-31 入口：履歴と説明を出さない・「挑戦する」でそのまま戦闘へ（ユーザー「この履歴いらない」「ここら辺の説明いらない」「呼ぶじゃなくて挑戦する にして」）', () => {
@@ -1097,4 +1130,32 @@ test('【確定】2026-11-01 炉心臨界：STRとAGIが+25%（INTは上がら�
   assert.ok(Math.abs(after.agi / before.agi - 1.25) < 0.03, `AGIは+25%（${after.agi}/${before.agi}）`)
   const foe = { agi: before.agi }
   assert.ok(fillPerSecOf(st.b, after, foe) > fillPerSecOf(st.b, before, foe), 'AGIが相手を上回るぶんゲージが速い')
+})
+
+test('【確定】2026-11-06 挑戦の結果が届いたら入口のそのボスの行を直す（ユーザー「挑戦して討伐完了してこの画面に戻るとき、一瞬上のほうに挑戦途中のバーみたいなのが表示されるから、表示されないようにして」「討伐しても出るのはおかしい、途中だったら出ててもいいけど」）', () => {
+  const run = (id, more = {}) => ({ id, boss: 'zerugiasu', diff: 'normal', owner: 'a', mine: true, hp: 5000, hp_max: 13000, ends_at: '2026-11-06T12:00:00Z', cleared: false, rescue_open: false, members: [], my_tries: 1, ...more })
+  const s = { ok: true, runs: [run(1), run(2, { boss: 'enma' })], rescues: [run(3, { mine: false }), run(1)], rewards: [] }
+  // 入口の「入っているボス」は、倒れていない・時間の残っている行（V2capDungeon.jsx の active と同じ）
+  const now = Date.parse('2026-11-06T11:00:00Z'), active = (st) => st.runs.filter(r => !r.cleared && msLeftOf(r.ends_at, now) > 0).map(r => r.id)
+  assert.deepEqual(active(s), [1, 2])
+  // 倒したボスは、入っているボスからも救援の一覧からも外れる（ほかの行はそのまま）
+  const won = stateWithRunOf(s, run(1, { hp: 0, cleared: true }))
+  assert.deepEqual(active(won), [2])
+  assert.deepEqual(won.rescues.map(r => r.id), [3])
+  // 途中（負け・時間切れ）なら行は残る（ユーザー「途中だったら出ててもいい」）。HPと回数は届いた値
+  const lost = stateWithRunOf(s, run(1, { hp: 3200, my_tries: 2 }))
+  assert.deepEqual(lost.runs.map(r => [r.id, r.hp, r.my_tries]), [[1, 3200, 2], [2, 5000, 1]])
+  // 届いていない・前の状態が無ければそのまま。一覧に無い行は足さない（読み直しに任せる）・元の状態は書き換えない
+  assert.equal(stateWithRunOf(s, null), s)
+  assert.equal(stateWithRunOf(s, {}), s)
+  assert.equal(stateWithRunOf(null, run(1)), null)
+  assert.deepEqual(stateWithRunOf(s, run(9)).runs.map(r => r.id), [1, 2])
+  assert.deepEqual(s.runs.map(r => r.id), [1, 2])
+  assert.equal(s.runs[0].hp, 5000)
+  // 画面：決着（onOver）とやめる（giveUp）で結果が届いたら、入口へ戻る前に直す（前は戦闘の前に読んだ状態のまま戻り、読み直しが届くまで倒したボスが出ていた）
+  const src = readFileSync(new URL('../components/V2capDungeon.jsx', import.meta.url), 'utf8')
+  for (const [from, to] of [['const onOver = async', 'const onEnded ='], ['const giveUp = async', '// 戦っている途中で画面を離れたら']]) {
+    const body = src.slice(src.indexOf(from), src.indexOf(to))
+    assert.ok(body.length > 0 && body.includes('if (r?.ok) setState(s => stateWithRunOf(s, r.run))'), from)
+  }
 })

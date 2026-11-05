@@ -20,11 +20,11 @@ import { motionOf } from '../lib/motionArt.js'
 import { homeIconOf } from '../lib/classArt.js'
 import { artGenderOf } from '../lib/gender.js'
 import { CLASS_BY_ID } from '../lib/jobs.js'
-import { bossArtOf, bossEncounterOf, bossThumbOf } from '../lib/bossArt.js'
+import { bossArtOf, bossEncounterOf, bossThumbOf, bossTintOf } from '../lib/bossArt.js'
 import { bossIllustOf } from '../lib/bossIllust.js'
 import {
   CHALLENGE_CATS, DUNGEON_BOSSES, DIFF_COLOR, HELPERS_MAX, STAMINA_HELPER,
-  contributionPctOf, diffOf, summonBlockOf, tryStaminaOf, msLeftOf,
+  contributionPctOf, diffOf, summonBlockOf, tryStaminaOf, msLeftOf, stateWithRunOf,
 } from '../lib/dungeon.js'
 
 // ============================================================
@@ -63,6 +63,8 @@ import {
 // 【確定】同じ日 ユーザー「あと敵のHPの数値は見れないようにして」：ボスのHPは数字も割合も出さず、バーだけ
 //   （戦闘の舞台と見出し・入っているボスの行・救援の一覧・ポップアップ・結果の画面）。削った割合も出さない（V2capAtbFight.jsx）。
 //   与えたダメージと貢献度（2026-11-01 にユーザーが頼んだ物）はそのまま
+// 【確定】2026-11-06 ユーザー「黒龍 あか・あまざ あお・ゼルギアス 黄色・閻魔 紫 の薄い背景にしてほしい、文字やイラストが見づらくならない程度に」：
+//   入口のボスの枠にボスの色を薄く敷く（bossCardBg・色は lib/bossArt.js の bossTintOf）。「今後4強以外にもいろいろ出す予定」＝ボスを足すときは色も決める
 // ============================================================
 
 const POLL_MS = 15000
@@ -85,6 +87,12 @@ const MiniBar = ({ pct }) => (
 )
 // 入口の一覧のボスの絵（2列の格子の1つの枠）
 const THUMB_SIZE = 'clamp(64px, 22vw, 104px)'
+// 入口のボスの枠の背景：ボスの色（lib/bossArt.js の bossTintOf）を薄く敷く。絵の後ろを少し濃く、まわりは薄く。
+//   下地は色のない暗い色（紺の上に重ねると黄色が灰色にくすんだ・本番で見比べた）。color はなぞったときの光（src/dev-ui.css の currentColor）
+//   色の無いボスは前のまま（背景なし）
+const bossCardBg = (tint) => (tint
+  ? { background:`radial-gradient(ellipse 85% 70% at 50% 40%, ${tint}47, transparent 75%), linear-gradient(${tint}1a, ${tint}1a), #0b0c14`, border:`1px solid ${tint}66`, color: tint }
+  : { background:'none', border:'none' })
 // ボスの絵：イラスト版（無ければドット絵版）。試し撃ちで選んだ版を使う
 const artMemo = new Map()
 const artOfBoss = (key) => {
@@ -239,14 +247,17 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
       settling.current = false
     }
   }, [])
+  // 結果が届いたら、入口のそのボスの行もすぐ直す（倒したボスが、戻った瞬間に「挑戦中」の行で出ない・stateWithRunOf）
   const onOver = async () => {
     const r = await report()
+    if (r?.ok) setState(s => stateWithRunOf(s, r.run))
     if (r) setFight(f => (f ? { ...f, result: r } : f))
     if (r?.reward) onProfile?.()   // EXP と Gold が増えた
   }
   const onEnded = () => setFight(f => (f ? { ...f, ended: true } : f))
   const giveUp = async () => {
     const r = await report()
+    if (r?.ok) setState(s => stateWithRunOf(s, r.run))
     // やめた所で、ほかの人がもう倒していたら報酬画面へ（その場で報酬が入る）
     if (r?.ok && r.run.cleared) { setFight(f => (f ? { ...f, result: r } : f)); if (r.reward) onProfile?.(); return }
     setFight(null)
@@ -387,7 +398,7 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
               const boss = DUNGEON_BOSSES[key], thumb = bossThumbOf(key)
               return (
                 <button key={key} onClick={() => openPick(key, active.find(r => r.mine && r.boss === key) || null)}
-                  style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'3px', width:'100%', minWidth: 0, padding:'8px 4px', background:'none', border:'none', cursor:'pointer', textAlign:'center' }}>
+                  style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'3px', width:'100%', minWidth: 0, boxSizing:'border-box', padding:'8px 4px', ...bossCardBg(bossTintOf(key)), cursor:'pointer', textAlign:'center' }}>
                   {thumb && <img src={thumb} alt="" draggable={false} style={{ width: THUMB_SIZE, height: THUMB_SIZE, objectFit:'contain' }} />}
                   <b style={{ color:'#ff8866', fontSize:'13px', lineHeight: 1.3 }}>{boss.name}</b>
                   <span style={{ color: TEXT.label, fontSize:'10px', lineHeight: 1.3, minHeight:'1.3em' }}>{state && (blockOf(key) || '挑戦可能')}</span>
