@@ -3,7 +3,7 @@
 //   ここで式・定数・種を機械的に比べる（今のⅡの v2sql.test.js と同じ考え方）
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { STAT_KEYS } from '../core/stats.js'
 import { SKILL_SET_SLOTS, SKILL_USE_MAX } from '../core/skills.js'
 import { DEFAULT_USES_MAX } from './skills.js'
@@ -33,6 +33,7 @@ import { DEX_AREA_STAM } from './dex.js'
 import { BURGER_GOLD, TOPPING_GOLD, MEAL_MINUTES, MEAL_STATS, toppingsOf } from './burger.js'
 import { rewrite } from '../../../tools/v2cap-sql.mjs'
 import { MACRO_COUNT, MACRO_STEPS, STEP_NORMAL, STEP_GUARD } from './atbMacro.js'
+import { ATB_OFF_MAX, validateAtbOff } from './atbSkills.js'
 
 // ★改行はLFにそろえてから見る（Windowsで core.autocrlf=true のまま取り出すとCRLFになり、改行を含む正規表現が合わなくなる。
 //   2026-10-12 別セッションの作業ツリーで「ClassLVの数え直し」のテストが落ちたので直した）。CRLFの書き直しは下の種のテストで別に見る
@@ -1189,6 +1190,36 @@ test('【確定】2026-10-26 ATBのマクロ（§19）：列 atb_macros・職業
   assert.ok(f.includes("format('%sはいまのクラスで使える覚えた技ではありません', s)"))
   assert.ok(SQL.includes('revoke all on function public.v2cap_set_atb_macros(jsonb) from public, anon;'))
   assert.ok(SQL.includes('grant execute on function public.v2cap_set_atb_macros(jsonb) to authenticated;'))
+})
+
+test('【確定】2026-11-06 ATB戦闘に持っていく技（§27）：列 atb_off＝外した技・職業ごと・使える覚えた技だけ・写しに入る', () => {
+  // ユーザー指示「スキルセットで…ATB戦に持っていくスキルを設定できるように」＋選んだこと「数の上限なし」
+  assert.ok(SQL.includes("alter table public.v2cap_profiles add column if not exists atb_off jsonb not null default '{}'::jsonb;"))
+  const f = fnBody('v2cap_set_atb_off')
+  assert.ok(f.includes('if not public.v2cap_is_dev() then'), '開発限定')
+  assert.ok(f.includes(`c_max  constant int := ${ATB_OFF_MAX};`), '外せる数の上限は atbSkills.js と同じ')
+  assert.ok(f.includes("or not (coalesce(v_row.learned, '[]'::jsonb) ? s)"), '覚えた技だけ')
+  assert.ok(f.includes('not (v_sk.cls = any(v_lin))'), 'その職業と下位職の技だけ')
+  assert.ok(f.includes('array[class], v_out)'), '職業ごとに置き換える')
+  // 文言は画面の確かめ（validateAtbOff）と同じ
+  assert.equal(validateAtbOff('x'), '外す技の形式が不正です')
+  assert.ok(f.includes("'error', '外す技の形式が不正です'"))
+  assert.equal(validateAtbOff(Array(ATB_OFF_MAX + 1).fill('a'), ['a']), `外す技は${ATB_OFF_MAX}個までです`)
+  assert.ok(f.includes("format('外す技は%s個までです', c_max)"))
+  assert.equal(validateAtbOff(['ない技'], []), 'ない技はいまのクラスで使える覚えた技ではありません')
+  assert.ok(f.includes("format('%sはいまのクラスで使える覚えた技ではありません', s)"))
+  assert.ok(SQL.includes('revoke all on function public.v2cap_set_atb_off(jsonb) from public, anon;'))
+  assert.ok(SQL.includes('grant execute on function public.v2cap_set_atb_off(jsonb) to authenticated;'))
+  // ★挑戦の写し（v2cap_battle_snap）から atb_off を落とさない＝サーバーの回し直しも同じ技で戦う
+  const snap = fnBody('v2cap_battle_snap')
+  assert.ok(!snap.includes("'atb_off'"), '写しに外した技が入る')
+  // 作業フォルダ直下の追加分は §27 と同じ（あれば）
+  const deltaUrl = new URL('../../../v2cap_atb_off_20261106.sql', import.meta.url)
+  if (existsSync(deltaUrl)) {
+    const delta = readFileSync(deltaUrl, 'utf8').replace(/\r\n/g, '\n')
+    const body = delta.slice(delta.indexOf('-- ============================================================'))
+    assert.ok(SQL.includes(body.trimEnd()), '追加分は全文の §27 と同じ')
+  }
 })
 
 test('【確定】2026-10-27 賭博場のアレア（§20）：その日の「いらっしゃい」の日付・好感度（1日1回+1・下がらない）・見せた段階の場面', () => {

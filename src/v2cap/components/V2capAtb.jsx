@@ -9,6 +9,7 @@ import { box, miniBtn, TEXT } from './v2ui.js'
 import { createAtb, MAX_SEC } from '../core/atb.js'
 import { itemCountsOf, itemTotalOf } from '../core/atbItems.js'
 import { macrosOf, validateMacros } from '../lib/atbMacro.js'
+import { atbUsableOf, saveErrText } from '../lib/atbSkills.js'
 import { loadPref, savePref } from '../core/prefs.js'
 import { motionOf } from '../lib/motionArt.js'
 import { homeIconOf } from '../lib/classArt.js'
@@ -26,7 +27,7 @@ import { atbPlayerOf } from '../lib/atbPlayer.js'
 // 【確定】2026-10-26 ユーザー指示「ATBのエンジンと試し撃ち画面（開発専用・報酬なし）を作って。細かい数字は試しながら決める」
 //   ・レイドボス・IDダンジョンに載せる前の、手触りと数字を見るための場所。**報酬なし・サーバーへ何も送らない**
 //   ・相手はエリアの敵（ボス・ふつう・朝昼晩・レア）。HPの倍率で長い戦い（レイドのボスの代わり）も見られる
-//   ・自分は持っている技を全部使える（ATBの決まり）。技を押すと割り込みの列の後ろに入り、ゲージが満タンになると先頭から出る
+//   ・自分は持っていく技を使える（2026-11-06〜 スキルセットの「挑戦（ATB）」で選ぶ・何も外していなければ全部）。技を押すと割り込みの列の後ろに入り、ゲージが満タンになると先頭から出る
 //   ・自分が左・モンスターが右（2026-10-26 ユーザー指示・舞台は V2capAtbStage.jsx・動きは lib/atbFx.js）
 //   ・マクロ①〜③（2026-10-26 ユーザー指示）：準備の画面で登録・保存（サーバーに職業ごと）、戦闘中に押すとその順に出る。
 //     いま画面に出ている形（保存前でも）で戦う＝試しながら組み替えられる
@@ -68,7 +69,7 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
   ], [spot])
   const foe = foes.find(e => e.name === foeName) || foes[0]
 
-  // 自分：いまの装備・ステのまま、持っている技（下位職のぶんも）を全部持たせる＝ATBの決まり
+  // 自分：いまの装備・ステのまま、持っていく技（下位職のぶんも・スキルセットで外した技は持たない）を持たせる＝挑戦と同じ
   const myFighter = useMemo(() => atbPlayerOf(prof, inventory), [prof, inventory])
 
   // 絵：自分はクラスの待機GIF（ホームのアイコンと同じ・男女はキャラの性別）／相手は図鑑と同じ絵（ドット絵が届いたら差し替える）
@@ -117,20 +118,18 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
   }
 
   // ===== マクロ =====
+  // 足せるのは持っていく技。保存の確かめはサーバーと同じ「使える覚えた技」（外した技が手に残っていても保存できる＝戦闘では飛ばす）
   const usable = useMemo(() => myFighter.slots.map(s => s.skill.name), [myFighter])
+  const learnedUsable = useMemo(() => atbUsableOf(prof), [prof])
   const editMacros = (next) => { setMacros(next); setDirty(true); setMacroMsg(null) }
   const saveMacros = async () => {
-    const err = validateMacros(macros, usable)
+    const err = validateMacros(macros, learnedUsable)
     if (err) { setMacroMsg({ ok: false, text: err }); return }
     setSaving(true)
     const { data, error } = await supabase.rpc('v2cap_set_atb_macros', { p_macros: macros })
     setSaving(false)
-    if (error || !data?.ok) {
-      // サーバーに保存の関数がまだ無い（SQL §19 を流す前）ときは、英語のまま出さずに案内する
-      const missing = /could not find the function/i.test(error?.message || '')
-      setMacroMsg({ ok: false, text: missing ? 'サーバーにまだ保存の仕組みがありません（SQLを流すと保存できます）' : (error?.message || data?.error || '保存できませんでした') })
-      return
-    }
+    // サーバーに保存の関数がまだ無い（SQL §19 を流す前）ときは、英語のまま出さずに案内する（saveErrText）
+    if (error || !data?.ok) { setMacroMsg({ ok: false, text: saveErrText(error, data) }); return }
     setDirty(false)
     setMacroMsg({ ok: true, text: `${prof?.class}のマクロを保存しました` })
     onProfile?.()
@@ -141,7 +140,7 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
       <div style={{ ...box, padding:'12px' }}>
         <div style={{ color: TEXT.sub, fontSize:'11px', lineHeight:1.7, marginBottom:'10px' }}>
           レイドボス・挑戦で使うATB戦闘の試し撃ちです。<b style={{ color: TEXT.bright }}>報酬なし・戦闘の結果はサーバーへ送りません</b>（送るのはマクロの保存だけ）。<br />
-          ゲージはふだん5秒で満タン。AGIが相手を上回るほど速くなります（相手の4倍で2倍速まで）。技は全部使えて、使うとクールダウンに入ります（MPは回復しません）。
+          ゲージはふだん5秒で満タン。AGIが相手を上回るほど速くなります（相手の4倍で2倍速まで）。技はスキルセットの「挑戦（ATB）」で持っていく技にしたものが使えて、使うとクールダウンに入ります（MPは回復しません）。
         </div>
         <V2capAtbMacros macros={macros} onChange={editMacros} usable={usable} dirty={dirty} saving={saving} msg={macroMsg} onSave={saveMacros} />
         <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', marginBottom:'8px' }}>
@@ -193,7 +192,7 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
           <span style={{ color: TEXT.sub, fontSize:'10px' }}>（大きくするとレイドのボスのような長い戦いになります）</span>
         </div>
         <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.7, marginBottom:'10px' }}>
-          自分は今の装備・ステータスのまま、覚えている技を{myFighter.slots.length}個すべて持って戦います。制限時間{MAX_SEC}秒。
+          自分は今の装備・ステータスのまま、持っていく技{myFighter.slots.length}個で戦います（スキルセットの「挑戦（ATB）」で選べます）。制限時間{MAX_SEC}秒。
         </div>
         <button onClick={start} style={{ ...miniBtn('#44ddff'), width:'100%', padding:'10px', fontSize:'13px' }}>⏱ ATBで戦う</button>
       </div>

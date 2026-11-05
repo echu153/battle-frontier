@@ -335,9 +335,11 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
           <span style={{ color: TEXT.label, fontSize:'11px' }}>マクロ</span>
           {macros.map((m, i) => {
             const on = run?.no === i + 1
+            // 持っていかない技だけのマクロは押せない（戦闘では飛ばす＝出す手が無い・lib/atbMacro.js の macroEntriesOf）
+            const has = macroEntriesOf(m, me.slots).length > 0
             return (
-              <button key={i} onClick={() => runMacro(i)} disabled={s.over || !m.steps.length}
-                style={{ ...miniBtn(on ? '#ffee44' : m.steps.length ? '#44ddff' : '#2a4a66'), padding:'6px 12px', fontSize:'13px',
+              <button key={i} onClick={() => runMacro(i)} disabled={s.over || !has}
+                style={{ ...miniBtn(on ? '#ffee44' : has ? '#44ddff' : '#2a4a66'), padding:'6px 12px', fontSize:'13px',
                   background: on ? '#003060' : '#000818' }}>
                 {MACRO_MARK[i]}
               </button>
@@ -358,7 +360,7 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
           </div>
         ) : (
           <div style={{ color: TEXT.empty, fontSize:'10px' }}>
-            {macros.some(m => m.steps.length) ? '①〜③を押すと、そのマクロの頭から出ます' : 'マクロは「ATB戦闘の試し撃ち」の準備の画面で登録できます'}
+            {macros.some(m => m.steps.length) ? '①〜③を押すと、そのマクロの頭から出ます' : 'マクロはスキルセットの「挑戦（ATB）」で登録できます'}
           </div>
         )}
       </div>

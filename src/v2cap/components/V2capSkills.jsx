@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { supabase } from '../../supabase'
+import { loadPref, savePref } from '../core/prefs.js'
 import {
   KIND_COLOR, KIND_LABEL, KIND_TABS, filterSkills, sortSkills, SKILL_SET_SLOTS, SKILL_USE_MAX,
 } from '../core/skills.js'
@@ -22,6 +23,11 @@ const normalize = (set) => {
   ;(set || []).slice(0, SKILL_SET_SLOTS).forEach((e, i) => { out[i] = { name: e?.name || '', uses: e?.uses || 1 } })
   return out
 }
+// 【確定】2026-11-06 ユーザー指示「スキルセットでATBのマクロを作成できる場所とATB戦に持っていくスキルを設定できるように」：
+//   画面の上で「出撃・塔（オート）」と「挑戦（ATB）」を切り替える。ATB の側は V2capSkillsAtb.jsx（戦闘の計算を読むので別ファイルで後から読む）。
+//   どちらを開いていたかは端末に覚える。一度開いた側は隠すだけ（切り替えても書きかけが消えない）
+const V2capSkillsAtb = lazy(() => import('./V2capSkillsAtb.jsx'))
+const MODES = [['auto', '⚔ 出撃・塔（オート）'], ['atb', '⏱ 挑戦（ATB）']]
 const ROW_INDENT = '28px'
 const mpLabel = (s) => (s.mpPct ? `MP 残りの${Math.round(Math.min(1, s.mpPct) * 100)}%` : `MP${s.mp}`)
 
@@ -34,6 +40,9 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
   const [sortAsc, setSortAsc] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [mode, setMode] = useState(() => (loadPref('capSkillMode', 'auto') === 'atb' ? 'atb' : 'auto'))
+  const [atbOpened, setAtbOpened] = useState(mode === 'atb')
+  const pickMode = (m) => { setMode(m); savePref('capSkillMode', m); if (m === 'atb') setAtbOpened(true) }
 
   const learned = prof.learned || []
   const favorites = prof.favorites || []
@@ -88,6 +97,22 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
 
   return (
     <div style={{ fontFamily:'monospace' }}>
+      <div style={{ display:'flex', gap:'6px', marginBottom:'10px' }}>
+        {MODES.map(([k, label]) => (
+          <button key={k} onClick={() => pickMode(k)}
+            style={{ ...btn(mode === k ? '#44aaff' : '#62789a'), flex:1, padding:'8px 4px', color: mode === k ? '#88ccff' : '#93a9be', background: mode === k ? '#002a5a' : '#000818' }}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {atbOpened && (
+        <div style={{ display: mode === 'atb' ? 'block' : 'none' }}>
+          <Suspense fallback={<div style={{ color: TEXT.label, fontSize:'11px', padding:'10px' }}>読み込み中...</div>}>
+            <V2capSkillsAtb prof={prof} onProfile={onProfile} />
+          </Suspense>
+        </div>
+      )}
+      <div style={{ display: mode === 'auto' ? 'block' : 'none' }}>
       <div style={{ ...box, padding:'14px', marginBottom:'12px' }}>
         <div style={{ color:'#88ccff', fontSize:'12px', marginBottom:'6px' }}>🎯 スキルセット（{cls}）</div>
         <div style={{ color: TEXT.label, fontSize:'10px', marginBottom:'8px', lineHeight:'1.8' }}>
@@ -207,6 +232,7 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
             )
           })}
         </div>
+      </div>
       </div>
     </div>
   )

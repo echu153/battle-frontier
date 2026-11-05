@@ -9998,3 +9998,56 @@ end;
 $$;
 revoke all on function public.v2cap_tower_fight(text) from public, anon;
 grant execute on function public.v2cap_tower_fight(text) to authenticated;
+
+-- ============================================================
+-- ===== 27. ATB戦闘に持っていく技（2026-11-06）=====
+-- ============================================================
+-- 【確定】2026-11-06 ユーザー指示「スキルセットでATBのマクロを作成できる場所とATB戦に持っていくスキルを設定できるように」
+--   ＋選んだこと「数の上限なし」：全部持っていってもよい・使わない技を外せるだけ。
+--   覚えるのは「外した技」（あとで覚えた技はそのまま持っていく側に入る）。形と決まりの正は src/v2cap/lib/atbSkills.js（validateAtbOff と同じ文言）
+--   atb_off ＝ { 職業: [技の名前] }。写し（§26 の v2cap_battle_snap）にそのまま入る＝挑戦の回し直しも同じ技で戦う
+alter table public.v2cap_profiles add column if not exists atb_off jsonb not null default '{}'::jsonb;
+
+-- いまの職業の「外した技」をまとめて置き換える。技はその職業（と下位職）の覚えた技だけ（パッシブは外せない＝もともと持たない）
+create or replace function public.v2cap_set_atb_off(p_names jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_max  constant int := 64;
+  v_uid  uuid := auth.uid();
+  v_row  public.v2cap_profiles;
+  v_in   jsonb := coalesce(p_names, '[]'::jsonb);
+  v_lin  text[];
+  v_sk   public.v2cap_skills;
+  v_out  jsonb := '[]'::jsonb;
+  x      jsonb;
+  s      text;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select * into v_row from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  if jsonb_typeof(v_in) <> 'array' then return jsonb_build_object('ok', false, 'error', '外す技の形式が不正です'); end if;
+  if jsonb_array_length(v_in) > c_max then
+    return jsonb_build_object('ok', false, 'error', format('外す技は%s個までです', c_max));
+  end if;
+  v_lin := public.v2cap_lineage(v_row.class);
+  for x in select value from jsonb_array_elements(v_in) loop
+    if jsonb_typeof(x) <> 'string' then return jsonb_build_object('ok', false, 'error', '外す技の形式が不正です'); end if;
+    s := x #>> '{}';
+    select * into v_sk from public.v2cap_skills k where k.name = s;
+    if not found or v_sk.passive or not (v_sk.cls = any(v_lin)) or not (coalesce(v_row.learned, '[]'::jsonb) ? s) then
+      return jsonb_build_object('ok', false, 'error', format('%sはいまのクラスで使える覚えた技ではありません', s));
+    end if;
+    if not (v_out ? s) then v_out := v_out || jsonb_build_array(s); end if;   -- 同じ技は1つに
+  end loop;
+  update public.v2cap_profiles
+     set atb_off = jsonb_set(case when jsonb_typeof(atb_off) = 'object' then atb_off else '{}'::jsonb end,
+                             array[class], v_out),
+         updated_at = now()
+   where id = v_uid
+   returning * into v_row;
+  return jsonb_build_object('ok', true, 'profile', to_jsonb(v_row));
+end;
+$$;
+revoke all on function public.v2cap_set_atb_off(jsonb) from public, anon;
+grant execute on function public.v2cap_set_atb_off(jsonb) to authenticated;

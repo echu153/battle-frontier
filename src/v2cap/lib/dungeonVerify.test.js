@@ -86,6 +86,24 @@ test('★ふつうに遊んだ人の結果とサーバーの計算が一致す�
   assert.ok(seen.a > 0 && seen.b > 0 && seen.stop > 0, `いろいろな終わり方を通っている ${JSON.stringify(seen)}`)
 })
 
+test('【確定】2026-11-06 ATBに持っていく技（atb_off＝外した技）は写しから読む：外した技は持たず、画面とサーバーの計算も一致する', () => {
+  // ユーザー指示「スキルセットで…ATB戦に持っていくスキルを設定できるように」＋選んだこと「数の上限なし」
+  const all = startTryAtb(tryOf('侍', 'amaza', 7)).a.slots.map(sl => sl.skill.name)
+  assert.equal(all.length, 17, '何も外していなければ全部（侍＝自分の10＋剣士の7）')
+  const off = [all[0], all[3], all[16], '名簿に無い技']
+  // ほかの職業（剣士）で外した技は、侍では外れない
+  const t = { ...tryOf('侍', 'amaza', 7), snap: snapOf('侍', { atb_off: { 侍: off, 剣士: [all[1]] } }) }
+  const names = startTryAtb(t).a.slots.map(sl => sl.skill.name)
+  assert.deepEqual(names, all.filter(n => !off.includes(n)), '外した技だけ抜ける・並びはそのまま')
+  const st = playLikeScreen(t, 11)
+  const v = verifyTry({ ...wire(t), inputs: wire(st.inputs), endStep: st.steps, elapsedSec: st.t + 0.1 })
+  assert.deepEqual(v, { damage: damageOf(st), steps: st.steps, winner: st.winner, reason: null })
+  assert.equal(stateOf(replayInputs(startTryAtb(wire(t)), wire(st.inputs), st.steps)), stateOf(st))
+  // 全部外したら通常攻撃と防御だけ
+  const none = { ...tryOf('侍', 'amaza', 7), snap: snapOf('侍', { atb_off: { 侍: all } }) }
+  assert.equal(startTryAtb(none).a.slots.length, 0)
+})
+
 test('負けなかった挑戦か（ひとりで倒されずに倒したときの報酬の条件）：倒した・時間切れまで立っていた＝負けではない', () => {
   assert.equal(cleanTryOf({ winner: 'a', steps: 700, reason: null }), true)
   assert.equal(cleanTryOf({ winner: 'draw', steps: TRY_STEPS, reason: null }), true, '時間切れは負けではない')
