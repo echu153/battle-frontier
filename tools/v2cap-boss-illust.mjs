@@ -868,6 +868,68 @@ const build = (key, def, dir) => {
   return { entry: { parts, pivot: pivotOf.body.map(Math.round), mouth: [tip.x, tip.y], fx, ...(Object.keys(poses).length ? { poses } : {}), ...(Object.keys(buffs).length ? { buffs } : {}), fit: fits }, notes, sizes }
 }
 
+// 【確定】2026-11-05 ポーズの絵の上の、電気が走る点（def.zapPoints・ゼルギアスの炉心臨界のあと・ユーザー「３０％バフのびりびり、他のスキル発動中もびりびりするようにして」）：
+//   部品の立ち絵は決めた点（ZERU_ZAP）を部品といっしょに動かすが、ポーズの絵は1枚なので、絵の形から点を選ぶ。
+//   形のふちの点 edge 個と、ふちから 14px（立ち絵の px）より内側の点 inner 個を、たがいにいちばん離れるように順に足す（羽根の先・剣の先・足先が先に入る）。
+//   小さなかけら（形ぜんたいの 1% より小さい）は使わない。img＝書き出した絵・a＝絵を置く場所（立ち絵の px の x・y・w・h）→ 立ち絵の px [[x, y], …]
+const zapPointsOf = (img, a, { edge: nEdge = 36, inner: nIn = 14 } = {}) => {
+  const { W, H, data } = img, N = W * H
+  const on = new Uint8Array(N)
+  for (let p = 0; p < N; p++) on[p] = data[p * 4 + 3] >= 128 ? 1 : 0
+  // かけらを落とす（4方向につながったかたまりごとに数える）
+  const lab = new Int32Array(N).fill(-1), sizes = []
+  for (let p = 0; p < N; p++) {
+    if (!on[p] || lab[p] >= 0) continue
+    const id = sizes.length, st = [p]
+    lab[p] = id
+    let n = 0
+    while (st.length) {
+      const q = st.pop(), x = q % W, y = (q - x) / W
+      n++
+      for (const r of [x > 0 ? q - 1 : -1, x < W - 1 ? q + 1 : -1, y > 0 ? q - W : -1, y < H - 1 ? q + W : -1]) if (r >= 0 && on[r] && lab[r] < 0) { lab[r] = id; st.push(r) }
+    }
+    sizes.push(n)
+  }
+  const total = sizes.reduce((s, n) => s + n, 0)
+  for (let p = 0; p < N; p++) if (on[p] && sizes[lab[p]] < total * 0.01) on[p] = 0
+  // 透明な所からの距離（面取りの距離・となり 3・ななめ 4。絵のはしは外が透明）
+  const d = new Int32Array(N)
+  for (let p = 0; p < N; p++) d[p] = on[p] ? 1e9 : 0
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const p = y * W + x
+    if (!d[p]) continue
+    d[p] = x === 0 || y === 0 || x === W - 1 || y === H - 1 ? 3 : Math.min(d[p], d[p - 1] + 3, d[p - W] + 3, d[p - W - 1] + 4, d[p - W + 1] + 4)
+  }
+  for (let y = H - 1; y >= 0; y--) for (let x = W - 1; x >= 0; x--) {
+    const p = y * W + x
+    if (!d[p] || x === 0 || y === 0 || x === W - 1 || y === H - 1) continue
+    d[p] = Math.min(d[p], d[p + 1] + 3, d[p + W] + 3, d[p + W + 1] + 4, d[p + W - 1] + 4)
+  }
+  const sx = a.w / W, sy = a.h / H, deep = (14 / sx) * 3
+  const edges = [], inners = []
+  for (let p = 0; p < N; p++) {
+    if (!d[p]) continue
+    const x = p % W, y = (p - x) / W
+    if (d[p] <= 4) edges.push([x, y])
+    else if (d[p] >= deep && x % 3 === 0 && y % 3 === 0) inners.push([x, y])
+  }
+  // いちばん遠い点を順に足す（はじめの1つはいちばん上のふち）
+  const far = (cands, chosen, n) => {
+    const best = cands.map(c => chosen.reduce((m, q) => Math.min(m, (c[0] - q[0]) ** 2 + (c[1] - q[1]) ** 2), Infinity)), out = []
+    for (let k = 0; k < n && k < cands.length; k++) {
+      let bi = 0
+      if (!chosen.length && !out.length) { for (let i = 1; i < cands.length; i++) if (cands[i][1] < cands[bi][1]) bi = i }
+      else for (let i = 1; i < cands.length; i++) if (best[i] > best[bi]) bi = i
+      const q = cands[bi]
+      out.push(q)
+      for (let i = 0; i < cands.length; i++) best[i] = Math.min(best[i], (cands[i][0] - q[0]) ** 2 + (cands[i][1] - q[1]) ** 2)
+    }
+    return out
+  }
+  const e = far(edges, [], nEdge)
+  return [...e, ...far(inners, e, nIn)].map(([x, y]) => [Math.round(a.x + (x + 0.5) * sx), Math.round(a.y + (y + 0.5) * sy)])
+}
+
 const writeList = (all) => {
   const lines = ['// tools/v2cap-boss-illust.mjs が書くファイル（手で直さない）。ボス → イラスト版のパーツ・エフェクト',
     `//   parts … 立ち絵（${BOSS_ILLUST_SIZE}px）の上の位置（x・y・w・h）・回す中心（px・py）・長さの向き（ax°）・親（parent）・曲げた絵（bend＝枚数 n・from°・step°・枠 x・y・w・h）。並びはボスごとの layers（無ければ ILLUST_PARTS）`,
@@ -875,8 +937,10 @@ const writeList = (all) => {
     '//   fx … 技のキー → fly（飛ぶ）・hit（当たる）のエフェクトの大きさ（px）と合わせる点（ax・ay＝飛ぶは先・当たるは真ん中）・flow（流れる水の絵・at＝当たる絵の上の場所）',
     '//   poses … 技 → ため（windup）・振り抜き（strike）の全身の絵の位置（立ち絵の px）',
     '//   buffs … HPの節目のバフ → ポーズ（pose）・オーラ（aura）の絵の位置（立ち絵の px）',
+    '//   zap … ポーズの絵の上の、電気が走る点（立ち絵の px・def.zapPoints のボスだけ＝ゼルギアスの炉心臨界のあと）',
     '//   fit … パーツを立ち絵に重ねた倍率・角度・位置（元の絵の px・確かめ用）／v … 絵ごとの中身の印（画面のアドレスの ?v=）',
     'export const BOSS_ILLUST = {']
+  const zapOf = (a) => (a.zap ? `, zap: [${a.zap.map(p => `[${p.join(', ')}]`).join(', ')}]` : '')
   for (const [key, e] of Object.entries(all)) {
     const kinds = [...illustPartsOf(key).filter(p => e.parts[p]).map(illustKindOf), ...illustPartsOf(key).filter(p => e.parts[p]?.bend).map(illustBendKindOf),
       ...Object.entries(e.poses || {}).flatMap(([mk, ps]) => Object.keys(ps).map(n => illustPoseKindOf(mk, n))),
@@ -895,11 +959,11 @@ const writeList = (all) => {
     }
     if (e.poses) {
       lines.push('    },', '    poses: {')
-      for (const [mk, ps] of Object.entries(e.poses)) lines.push(`      ${mk}: { ${Object.entries(ps).map(([n, a]) => `${n}: { x: ${a.x}, y: ${a.y}, w: ${a.w}, h: ${a.h} }`).join(', ')} },`)
+      for (const [mk, ps] of Object.entries(e.poses)) lines.push(`      ${mk}: { ${Object.entries(ps).map(([n, a]) => `${n}: { x: ${a.x}, y: ${a.y}, w: ${a.w}, h: ${a.h}${zapOf(a)} }`).join(', ')} },`)
     }
     if (e.buffs) {
       lines.push('    },', '    buffs: {')
-      for (const [id, b] of Object.entries(e.buffs)) lines.push(`      ${id}: { ${Object.entries(b).map(([w, a]) => `${w}: { x: ${a.x}, y: ${a.y}, w: ${a.w}, h: ${a.h} }`).join(', ')} },`)
+      for (const [id, b] of Object.entries(e.buffs)) lines.push(`      ${id}: { ${Object.entries(b).map(([w, a]) => `${w}: { x: ${a.x}, y: ${a.y}, w: ${a.w}, h: ${a.h}${zapOf(a)} }`).join(', ')} },`)
     }
     lines.push('    },', '    fit: {')
     for (const [p, f] of Object.entries(e.fit || {})) lines.push(`      ${p}: { s: ${f.s}, deg: ${f.deg}, tx: ${f.tx}, ty: ${f.ty}, score: ${f.score} },`)
@@ -936,6 +1000,16 @@ if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
       console.log(`  ✗ ${name}：${e.message}`)
       process.exitCode = 1
     }
+  }
+  // ポーズの絵の上の、電気が走る点（def.zapPoints）：書き出した絵から毎回測る（絵を作り直さなくても入る・同じ絵なら同じ点）
+  for (const [key, def] of Object.entries(BOSS_ILLUST_DEFS)) {
+    if (!def.zapPoints || !all[key]) continue
+    const at = (kind, a) => {
+      const f = path.join(OUT, bossFileOf(key, kind))
+      if (existsSync(f)) a.zap = zapPointsOf(readRgba(f), a, def.zapPoints)
+    }
+    for (const [mk, ps] of Object.entries(all[key].poses || {})) for (const [n, a] of Object.entries(ps)) at(illustPoseKindOf(mk, n), a)
+    for (const [id, b] of Object.entries(all[key].buffs || {})) if (b.pose) at(illustBuffKindOf(id, 'pose'), b.pose)
   }
   writeList(all)
   console.log(`作った ${made} → src/v2cap/lib/bossIllustList.js`)

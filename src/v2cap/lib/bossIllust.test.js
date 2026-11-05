@@ -10,7 +10,7 @@ import {
   bossIllustOf, illustPoseAt, reachXOf, idlePoseAt, motionPoseAt, illustPointAt, illustTrailsAt, mouthPointOf, rotPoint, partMove, hipPoint,
   illustCastPoseAt, CAST_IN_MS, CAST_OUT_MS, swapOpacityOf, illustFreePoseAt, dustEllipsesOf,
   illustCastShowAt, EASES, joltAt, illustBendKindOf, bendFramesOf, illustPoseKindOf, illustShowAt, illustGhostsAt, ART_FADE_MS, artAnchorAt, leanPoint,
-  illustBuffShowAt, illustBuffKindOf, buffSceneAt, introSceneAt, introEnterAt, introBeamAt, rigLightsAt, buffAfterAt, buffRainAt, buffHoldOf, zapArcsAt, rigLayersOf, flutterBandsAt, buffArtMsOf, BUFF_IN_MS, BUFF_HOLD_MS, BUFF_OUT_MS, BUFF_AURA_IN_MS, BUFF_AURA_OUT_MS, BUFF_ART_MS, BUFF_FLASH_MS,
+  illustBuffShowAt, illustBuffKindOf, buffSceneAt, introSceneAt, introEnterAt, introBeamAt, rigLightsAt, buffAfterAt, buffRainAt, buffHoldOf, zapArcsAt, zapArtOf, rigLayersOf, flutterBandsAt, buffArtMsOf, BUFF_IN_MS, BUFF_HOLD_MS, BUFF_OUT_MS, BUFF_AURA_IN_MS, BUFF_AURA_OUT_MS, BUFF_ART_MS, BUFF_FLASH_MS,
 } from './bossIllust.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { DUNGEON_BOSSES } from './dungeon.js'
@@ -1014,7 +1014,9 @@ test('【確定】2026-11-02 ゼルギアスの大技以外の3つは立ち絵�
     assert.ok(Math.abs(footY('shell', t, L, 'legL') - restL) < 3, '雷鋼弾 ' + t + 'ms：左足は地面のまま')
     assert.ok(Math.abs(footY('shell', t, R, 'legR') - restR) < 3, '雷鋼弾 ' + t + 'ms：右足は地面のまま')
   }
-  assert.ok(footY('smite', 520, L, 'legL') < restL - 10 && footY('smite', 520, R, 'legR') < restR - 80, '飛びこむと足が地面から離れる')
+  // 2026-11-05 突進は浮かない（ユーザー「ふわっと浮いてる気がするから直進で殺すようにして」）：前の足は地面すれすれ・体は上へ上がらない
+  for (const t of [400, 480, 550]) assert.ok(Math.abs(footY('smite', t, L, 'legL') - restL) < 25, t + 'ms：前の足は地面すれすれ')
+  for (const [, p] of BOSS_ILLUST_DEFS.zerugiasu.motions.smite.keys) assert.ok(!(p.y < 0), '跳び上がらない')
   for (const t of [730, 980]) {
     assert.ok(Math.abs(footY('smite', t, L, 'legL') - restL) < 20 && Math.abs(footY('smite', t, R, 'legR') - restR) < 20, '踏みこむと足が地面に着く')
   }
@@ -1028,6 +1030,29 @@ test('【確定】2026-11-02 ゼルギアスの大技以外の3つは立ち絵�
   assert.ok(aim.wL4 - aim.wR4 * -1 > 20 && aim.wL3 > aim.wL2 && aim.wL2 > aim.wL1, '下の羽根ほど腕といっしょに上がる')
 })
 
+test('【確定】2026-11-05 雷鋼弾は体をほぼ止めて絵の切り替えで見せる（ユーザー「通常攻撃だけちょっと違和感」「余計な動きが多い気がするからもっとスムーズに」）', () => {
+  const d = BOSS_ILLUST_DEFS.zerugiasu.motions.shell, m = bossIllustOf('zerugiasu').motions.shell
+  // 前のめり・傾き・腰・上下・砂ぼこりは無し。押されるのは撃った瞬間に少しだけ
+  for (const [, p] of d.keys) for (const f of ['lean', 'hipX', 'hipY', 'y', 'r']) assert.ok(!(f in p), f)
+  assert.equal(d.dustAt, undefined)
+  assert.ok(Math.max(...d.keys.map(([, p]) => p.x || 0)) <= 0.02)
+  // 部品と絵のあいだはゆっくり重ねる・構えと撃つのあいだはすばやく
+  const [, first, fire, back, last] = d.art
+  assert.ok(first[2] >= 100 && last[2] >= 100 && last[1] === null)
+  assert.ok(fire[2] <= 40 && back[2] <= 40)
+  // ゆっくり重ねるあいだも、部品の大砲は構えの絵と同じ角度（切り替えで跳ねない）
+  for (const t of [first[0], first[0] + first[2], last[0], last[0] + last[2]]) assert.equal(motionPoseAt(d.keys, t).armN, 33, t + 'ms')
+  // 部品の大砲の砲口は、構えの絵の砲口と重なる（絵の大砲はこちらへ向いて短い＝部品も縮める・砲口が2つ見えない）。雷霆掃射も同じ
+  const z = BOSS_ILLUST_DEFS.zerugiasu.motions
+  for (const [k, t] of [['shell', first[0]], ['shell', last[0] + last[2]], ['volley', z.volley.art[1][0]], ['volley', z.volley.art.at(-1)[0]]]) {
+    const p = illustPoseAt('zerugiasu', z[k], t, 0), rig = illustPointAt('zerugiasu', p, [65, 475], 'barrel'), img = illustPointAt('zerugiasu', { ...p, hipX: 0, hipY: 0 }, z[k].anchors.windup.hand, 'body')
+    assert.ok(Math.hypot(rig[0] - img[0], rig[1] - img[1]) < 15, `${k} ${t}ms：部品の砲口 ${rig.map(Math.round)}・絵の砲口 ${img.map(Math.round)}`)
+  }
+  // 重ねているあいだは、新しい絵が先に出きってから前の絵が消える（後ろが透けない）
+  const mid = illustShowAt(m, first[0] + first[2] * 0.75)
+  assert.ok(mid.poses[0].op === 1 && mid.rig > 0 && mid.rig < 1)
+})
+
 test('【確定】2026-11-05 ゼルギアスの雷鋼弾と雷霆掃射は専用の絵（ユーザー「通常スキルと７５％スキルは専用イラスト作ったほうがよさそう」）：構え→撃つ→構え・弾は撃った瞬間の砲口から', () => {
   const a = bossIllustOf('zerugiasu'), def = BOSS_ILLUST_DEFS.zerugiasu
   for (const [k, n] of [['shell', 1], ['volley', 3]]) {
@@ -1038,7 +1063,7 @@ test('【確定】2026-11-05 ゼルギアスの雷鋼弾と雷霆掃射は専用
       const at = d.hitMs + sh.delayMs
       assert.equal(illustShowAt(m, at - 1).poses.at(-1).name, 'windup', k + '：撃つ直前は構え')
       assert.equal(illustShowAt(m, at + ART_FADE_MS).poses.at(-1).name, 'strike', k + '：撃った瞬間に撃つの絵')
-      assert.ok(m.fadeMs <= 40 && illustShowAt(m, at + 40).poses.length === 1, k + '：撃つの絵へすぐ切り替わる（砲口が2つ見えない）')
+      assert.ok(illustShowAt(m, at + 40).poses.length === 1, k + '：撃つの絵へすぐ切り替わる（砲口が2つ見えない）')
     }
     assert.equal(illustShowAt(m, 0).rig, 1)
     assert.equal(illustShowAt(m, m.totalMs - 1).rig, 1, k + '：終わりは部品の立ち絵')
@@ -1052,9 +1077,9 @@ test('【確定】2026-11-05 ゼルギアスの雷鋼弾と雷霆掃射は専用
     const p = { ...illustPoseAt('zerugiasu', d, d.hitMs + 200, 0), hipX: 0.05, hipY: 0.05 }
     assert.deepEqual(artAnchorAt('zerugiasu', m, d.hitMs + 200, p, 'hand'), illustPointAt('zerugiasu', { ...p, hipX: 0, hipY: 0 }, d.anchors.strike.hand, 'body'))
   }
-  // 部品の大砲は構えの絵の砲身と同じ向き（切り替えで跳ねない）：雷鋼弾 33°・雷霆掃射 63°（水平）
+  // 部品の大砲は構えの絵の砲身と同じ向き（切り替えで跳ねない）：雷鋼弾 33°・雷霆掃射 56°（腰を上げたぶん少し下げる）
   assert.equal(motionPoseAt(def.motions.shell.keys, 300).armN, 33)
-  assert.equal(motionPoseAt(def.motions.volley.keys, 300).armN, 63)
+  assert.equal(motionPoseAt(def.motions.volley.keys, 300).armN, 56)
   // 絵は立ち絵と同じ大きさと場所に重なる（雷鋼弾は イラスト.png からほぼそのまま）
   for (const f of ['雷鋼弾_構え', '雷鋼弾_撃つ']) assert.ok(Math.abs(def.poseFit[f].s - 1) < 0.01 && Math.abs(def.poseFit[f].dx) <= 2 && Math.abs(def.poseFit[f].dy) <= 4, f)
 })
@@ -1086,6 +1111,78 @@ test('【確定】2026-11-05 ゼルギアス：大砲の技で剣を動かさな
   for (const [part] of b.after.zap.anchors) assert.ok(a.parts.some(p => p.key === part), part)
 })
 
+test('【確定】2026-11-05 炉心臨界のあとは、技や構えのポーズの絵のあいだも電気が走る（ユーザー「３０％バフのびりびり、他のスキル発動中もびりびりするようにして」）', () => {
+  const a = bossIllustOf('zerugiasu'), def = BOSS_ILLUST_DEFS.zerugiasu
+  // ポーズの絵ぜんぶ（技6枚・バフ2枚）に点がある：ふち＋内側（道具が絵の形から選ぶ）・どれも絵の枠の中・同じ点はない
+  const arts = [...Object.values(a.motions).flatMap(m => Object.values(m.poses || {})), ...Object.values(a.buffs).map(b => b.pose)]
+  assert.equal(arts.length, 8)
+  for (const p of arts) {
+    assert.equal(p.zap.length, def.zapPoints.edge + def.zapPoints.inner, p.src)
+    for (const [x, y] of p.zap) assert.ok(x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h, p.src)
+    assert.equal(new Set(p.zap.map(String)).size, p.zap.length)
+  }
+  // 部品の立ち絵のあいだは部品の点（null）・ポーズの絵が出ていれば いちばん濃い絵の点
+  const m = a.motions.shell, fire = m.art.find(([, n]) => n === 'strike')[0]
+  assert.equal(zapArtOf(null, null), null)
+  assert.equal(zapArtOf(illustShowAt(m, 0), m), null)
+  assert.equal(zapArtOf(illustShowAt(m, fire + 80), m), m.poses.strike.zap)
+  assert.equal(zapArtOf(illustShowAt(a.motions.volley, 300), a.motions.volley), a.motions.volley.poses.windup.zap)
+  // 神雷終焉の構えのあいだ・節目のバフのポーズの絵のあいだも
+  const cs = illustCastShowAt(a, '神雷終焉', 3000)
+  assert.equal(zapArtOf(cs.show, cs.motion), cs.motion.poses.windup.zap)
+  const ov = a.buffs['炉心臨界']
+  assert.equal(zapArtOf({ rig: 0, poses: [{ name: '炉心臨界', op: 1 }] }, { poses: { 炉心臨界: ov.pose } }), ov.pose.zap)
+  // 点の無い絵なら走らせない（false）
+  assert.equal(zapArtOf({ rig: 0, poses: [{ name: 'x', op: 1 }] }, { poses: { x: { src: 'x' } } }), false)
+  // 絵の上の稲妻は全体の姿勢で動き、腰では動かない（ポーズの絵と同じ動き方）
+  const z = { ...ov.after.zap, k: 1 }, p0 = illustPoseAt('zerugiasu', null, 0, 0)
+  let seen = 0
+  for (let t = 0; t < 2000; t += 53) {
+    const p = zapArcsAt('zerugiasu', z, p0, t, m.poses.strike.zap), q = zapArcsAt('zerugiasu', z, { ...p0, x: 0.1, hipX: 0.05 }, t, m.poses.strike.zap)
+    assert.equal(p.length, q.length)
+    for (const [i, arc] of p.entries()) assert.ok(Math.abs(q[i].pts[0][0] - arc.pts[0][0] - 0.1 * BOSS_ILLUST_SIZE) < 1e-6)
+    seen += p.length
+  }
+  assert.ok(seen > 40, '絶えず走っている')
+})
+
+test('【確定】2026-11-05 炉心臨界は電気を溜めてから放つ（ユーザー「あと３０％のバフのモーション、もっと電気溜めるようにして、時間は同じでいい」）', () => {
+  const b = bossIllustOf('zerugiasu').buffs['炉心臨界'], g = b.show.gather
+  assert.equal(buffHoldOf(b), 2000, '時間は同じ')
+  assert.ok(g.fromMs < 200 && g.toMs >= 1300 && g.toMs <= 1600, '2秒のうち、はじめから1.3秒より長く溜める')
+  const avg = (from, to, f) => { let s = 0, n = 0; for (let t = from; t < to; t += 7) { s += f(buffSceneAt(b, t)); n++ } return s / n }
+  // 溜めるあいだ：吸い込まれる光の粒と、稲妻（炉心へ走る・体を這う）が、だんだん増える
+  const sp0 = avg(g.fromMs + 50, g.fromMs + 350, sc => sc.sparks.length), sp1 = avg(g.toMs - 350, g.toMs - 50, sc => sc.sparks.length)
+  assert.ok(sp1 > sp0 * 1.5 && sp1 >= 10, `粒 ${sp0.toFixed(1)} → ${sp1.toFixed(1)}`)
+  const zp0 = avg(g.fromMs + 50, g.fromMs + 350, sc => sc.zaps.length), zp1 = avg(g.toMs - 350, g.toMs - 50, sc => sc.zaps.length)
+  assert.ok(zp1 > zp0 * 1.5 && zp1 >= 6, `稲妻 ${zp0.toFixed(1)} → ${zp1.toFixed(1)}`)
+  // 粒は炉心のまわりの輪の中から吸い込まれる・炉心へ走る稲妻は炉心で終わる
+  let toCore = 0
+  for (let t = g.fromMs; t < g.toMs; t += 11) {
+    const sc = buffSceneAt(b, t)
+    for (const p of sc.sparks) assert.ok(Math.hypot(p.x - g.at[0], (p.y - g.at[1]) / 0.85) <= g.motes.r[1] + 1e-6)
+    toCore += sc.zaps.filter(z => z.pts.at(-1)[0] === g.at[0] && z.pts.at(-1)[1] === g.at[1]).length
+  }
+  assert.ok(toCore > 20, '体のふちから炉心へ稲妻が走る')
+  // 炉心の光はふくらみ、放った瞬間がいちばん大きい
+  const r = (t) => buffSceneAt(b, t).core.r
+  assert.ok(r(300) < r(g.toMs - 30) && r(g.toMs - 30) < r(g.toMs + 30))
+  // 放つまで衝撃の輪は出ない・放つと出る。放った瞬間に炉心から粒が飛び散る
+  assert.equal(avg(0, g.toMs, sc => sc.rings.length), 0)
+  assert.ok(buffSceneAt(b, g.toMs + 150).rings.length >= 1)
+  assert.ok(buffSceneAt(b, g.toMs + 120).sparks.some(p => Math.hypot(p.x - g.at[0], p.y - g.at[1]) > 60))
+  assert.ok(Math.max(...Array.from({ length: 12 }, (_, i) => buffSceneAt(b, g.toMs + i * 10).flash)) >= 0.5, '放つと舞台が光る')
+  // 揺れは溜めるあいだ小さく、放った瞬間がいちばん大きい
+  const sh = (from, to) => Math.max(...Array.from({ length: 24 }, (_, i) => Math.hypot(...buffSceneAt(b, from + (to - from) * i / 24).shake)))
+  assert.ok(sh(400, 800) < sh(g.toMs, g.toMs + 150) * 0.5)
+  // 見せ終わると消える（そのあとは after の電気）・同じ時刻なら同じ形
+  assert.deepEqual(buffSceneAt(b, 777), buffSceneAt(b, 777))
+  assert.equal(buffSceneAt(b, 2000 + BUFF_AURA_OUT_MS), null)
+  // ほかのボスの見せ方は前のまま（稲妻と炉心の光は無い）
+  const w = bossIllustOf('varuzenoku').buffs['逆鱗']
+  assert.ok(buffSceneAt(w, 500).zaps.length === 0 && buffSceneAt(w, 500).core === null)
+})
+
 test('【確定】2026-11-01 ゼルギアスの技（ユーザー「大技以外のモーションがすべてしょぼすぎる」「剣はプレイヤーに届いてない」「銃で放つときのモーションもなんか安っぽい」）：砲身は相手へ向き、撃つと全身が押される・剣は相手の側へ振って届く', () => {
   const a = bossIllustOf('zerugiasu'), def = BOSS_ILLUST_DEFS.zerugiasu
   assert.deepEqual(Object.values(a.motions).map(m => m.label), ['雷鋼弾', '雷霆掃射', '神雷崩撃', '神雷終焉'])
@@ -1106,7 +1203,7 @@ test('【確定】2026-11-01 ゼルギアスの技（ユーザー「大技以外
   assert.ok(shell.fx.fly, '弾が飛ぶ')
   // 撃った反動：砲身が跳ね上がり、全身が後ろ（右）へ押される
   const kick = motionPoseAt(def.motions.shell.keys, 485), aim = motionPoseAt(def.motions.shell.keys, shell.hitMs)
-  assert.ok((kick.x + kick.hipX) - (aim.x + aim.hipX) >= 0.03 && kick.lean < aim.lean - 0.08, '撃つと全身が後ろへ押される（砲口が跳ねるのは撃つの絵）')
+  assert.ok(kick.x - aim.x >= 0.012 && kick.x - aim.x <= 0.03 && kick.lean === 0, '撃つと少しだけ後ろへ押される・傾けない（砲口が跳ねるのは撃つの絵）')
   assert.equal(shell.scene.kind, 'gun')
   // 雷霆掃射：3発。弾1つが1発で、数字と揺れが1発ごとに分かれる
   const v = a.motions.volley

@@ -88,11 +88,12 @@ const srcOf = (key, kind) => {
 //   閻魔：soulA〜soulE＝漂う魂の炎の角度（遠くの点が中心＝上下に動く）
 //   dash＝相手まで踏み込む割合（0〜1・motion.reach の点が相手の真ん中に届く距離 reachXOf を掛けて x に足す＝舞台の幅が変わっても届く）
 //   hipX・hipY＝腰のずれ（枠の割合・def.hips）：脚より上は形を変えずに動き（体は曲がらない）、脚は足の裏を地面に残して追いかける（hipPoint）／
-//   legL・legR＝脚を腰で回す角度（ゼルギアス・飛びこむ・踏みこむ）／sword＝手首から先の角度／barrelSl＝砲身のすべり（立ち絵の px・長さの向き・−で肩の側＝撃った反動）
+//   legL・legR＝脚を腰で回す角度（ゼルギアス・飛びこむ・踏みこむ）／sword＝手首から先の角度／barrelSl＝砲身のすべり（立ち絵の px・長さの向き・−で肩の側＝撃った反動）／
+//   armNSq＝大砲の腕を長さの向きに縮める割合（こちらへ向けた構えの絵の大砲は短く見える＝部品も同じ長さにして重ねる）
 const ZERO = { x: 0, y: 0, r: 0, neck: 0, head: 0, wingN: 0, wingF: 0, wingNSq: 0, wingFSq: 0, arm: 0, jaw: 0, glow: 0, armN: 0, armF: 0, water: 0,
   armD: 0, armC: 0, armU: 0, armCOn: 0, armUOn: 0, tail: 0, tailT: 0, dust: 0, orb: 0, orbOp: 0, orbT: 0, lean: 0,
   wL1: 0, wL2: 0, wL3: 0, wL4: 0, wR1: 0, wR2: 0, wR3: 0, wR4: 0, dash: 0, soulA: 0, soulB: 0, soulC: 0, soulD: 0, soulE: 0,
-  hipX: 0, hipY: 0, legL: 0, legR: 0, sword: 0, barrel: 0, barrelSl: 0 }
+  hipX: 0, hipY: 0, legL: 0, legR: 0, sword: 0, barrel: 0, barrelSl: 0, armNSq: 0 }
 // 技ごとの動き：keys＝[時刻ミリ秒, 姿勢（待機に足す）, 区間の速さ（EASES・無ければ smooth）]・hitMs＝当たる（撃ち出す）時刻・jolt＝当たった瞬間の揺れ（joltAt）
 //   trails＝残像の筋（part のパーツの点 pts を、lagMs 前からいまの時刻までたどる。fromMs〜toMs のあいだだけ・kind＝claw 爪／wind 風）
 //   shots＝飛ぶ絵の出どころ（無ければ口から1つ）。{ part, pt（パーツの点）, delayMs（hitMs からの遅れ・−で先に出る）, size（飛ぶ絵の大きさの倍率） }
@@ -692,6 +693,9 @@ export const BOSS_ILLUST_DEFS = {
       '雷霆掃射_構え': { s: 1.05, dx: -17, dy: -29 }, '雷霆掃射_撃つ': { s: 1.03, dx: -9, dy: -43 },
     },
     poseMargin: 110,
+    // 【確定】2026-11-05 ユーザー「３０％バフのびりびり、他のスキル発動中もびりびりするようにして」：ポーズの絵の上にも電気を走らせる。
+    //   点は道具が絵の形から選ぶ（ふち 36・内側 14＝tools/v2cap-boss-illust.mjs の zapPointsOf → 一覧の zap）
+    zapPoints: { edge: 36, inner: 14 },
     // 構え（神雷終焉の3.5秒）：胸の装甲が開いた構えの絵のまま、砲口に光が集まる
     cast: { pose: { lean: -0.06 }, art: 'windup' },
     // HPの節目のバフ（黒龍と同じ仕組み）：雷鋼装甲＝大砲と剣を交差して羽根で身を包む＋雷の網（手前に半透明）・炉心臨界＝腕を広げて天を仰ぐ＋青白い闘気（後ろ・付いたあとも燃え続ける）
@@ -701,10 +705,20 @@ export const BOSS_ILLUST_DEFS = {
       //   オーラの絵（炉心臨界_オーラ）と、そのあと燃え続ける闘気・足元から立ちのぼる火の粉はやめた（体が動いても同じ場所に残り、形も合っていなかった）。
       //   付いたあとは、体の形にそって青白い光がちらつき（glow＝drop-shadow）、体の部品の上を小さな稲妻が走る（zap・zapArcsAt＝部品といっしょに動く）
       overload: { name: '炉心臨界', pose: '炉心臨界_ポーズ', tint: '120,175,255',
-        show: { holdMs: 2000, dim: 0.55, dimColor: '0,8,30', shake: 7, punch: 0.05, flicker: 0.03,
-          bolts: [{ at: 70, from: [40, -170], to: [340, 215], flash: 0.45 }, { at: 520, from: [600, -170], to: [340, 215], flash: 0.3 }], boltColor: '130,180,255',
-          rings: { at: [340, 215], n: 3, everyMs: 280, durMs: 750, maxR: 430, color: '110,170,255', core: '225,240,255' },
-          burst: { n: 30, x: [130, 480], y: 600, rise: 420, size: 1.3, color: '110,170,255', core: '235,245,255' } },
+        // 【確定】2026-11-05 ユーザー「あと３０％のバフのモーション、もっと電気溜めるようにして、時間は同じでいい」：付いた瞬間から輪と火の粉が広がる（放つだけ）のをやめ、
+        //   2秒のまま「溜めて→放つ」にした（gather・buffSceneAt）。0.07秒 空から炉心へ稲妻（火がつく）→ 0.12〜1.45秒 溜める：まわりの光の粒が渦を巻いて炉心へ吸い込まれ（motes）、
+        //   羽根の先・大砲・剣・足先から炉心へ稲妻が走り（arcs）、体の上を小さな稲妻が這い（crackle）、炉心の光がふくらんで速く脈打つ（glow）。どれもだんだん増える・揺れも小さくうなって強まる
+        //   → 1.45秒 放つ：空から大きな稲妻・舞台が光る・炉心が大きく光る・衝撃の輪・光の粒が炉心から飛び散る（release）・いちばん大きく揺れる → 2秒まで体の上を稲妻が這い続ける
+        show: { holdMs: 2000, dim: 0.58, dimColor: '0,8,30', shake: 7, punch: 0.05, flicker: 0.03,
+          gather: { at: [340, 214], fromMs: 120, toMs: 1450, color: '125,180,255',
+            motes: { n: 28, r: [170, 330], lifeMs: 520, size: 1 },
+            arcs: { n: 6, lifeMs: 150, amp: 16, w: 3.2 },
+            crackle: { n: 14, lifeMs: 200, reach: 150, len: 60, amp: 11, w: 2.6 },
+            glow: { r0: 22, r1: 70 },
+            release: { n: 28, dist: [170, 360], lifeMs: 560, size: 1.2 } },
+          bolts: [{ at: 70, from: [40, -170], to: [340, 215], flash: 0.3 }, { at: 820, from: [640, -170], to: [340, 215], flash: 0.1 }, { at: 1450, from: [600, -170], to: [340, 215], flash: 0.6 }],
+          boltColor: '130,180,255',
+          rings: { at: [340, 215], atMs: 1450, n: 3, everyMs: 140, durMs: 620, maxR: 460, color: '110,170,255', core: '225,240,255' } },
         after: { zap: { color: '120,175,255', n: 10, lifeMs: 220, reach: 170, len: 70, amp: 12, w: 3, anchors: ZERU_ZAP }, tempo: 1.35 } },
     },
     // 倒れる動き（lib/bossDeath.js・黒龍と同じ形・新しい絵なし）：炉心臨界のポーズで炉心が暴走して天を仰ぐ → 雷鋼装甲のポーズで崩れて身をかがめる（揺れ・砂ぼこり）→ 光が消えて鉄の色に → ふちを青白く光らせながら燃え尽きる
@@ -807,32 +821,34 @@ export const BOSS_ILLUST_DEFS = {
       //   絵が出ているあいだの動きは全体のずれと傾き（x・lean）と揺れだけ（絵は腰で動かない）。弾の筋・閃光・飛ぶ弾は撃った瞬間の砲口（構えの絵の砲口）から出す＝撃つの絵の手も構えの砲口
       //   （跳ね上がった砲口から相手へ筋を引くと、砲身と筋の向きが60°ずれた）。剣は動かさない（ユーザー「通常攻撃うつとき剣が揺れるのがちょっと変だった」）
       // 雷鋼弾：大砲を相手へ向けて前へ寄る（砲口に光が集まる）→ 撃った瞬間に砲口が跳ね上がり、全身が後ろへ押されて足がすべる → 構えに戻って下ろす
+      //   【確定】2026-11-05 ユーザー「通常攻撃だけちょっと違和感」「余計な動きが多い気がするからもっとスムーズに」：構えのあいだの前のめり・撃ったときの大きな傾き（絵ごと斜めにゆがむ）・
+      //   足のすべり・砂ぼこり・腰の沈みをやめた。体はほぼ止めて、絵の切り替えで見せる（撃つと少しだけ後ろへ押される x 0.018・傾けない）。
+      //   部品の立ち絵と絵のあいだはゆっくり重ねて切り替え（120〜140ms＝大砲の角度は同じ・長さも armNSq で構えの絵にそろえる＝砲口が2つ見えない）、構えと撃つのあいだはすばやく（30〜40ms）
       shell: { totalMs: 1300, hitMs: 430, keys: [
         [0, {}],
-        [120, { hipY: 0.006, ...zeruGun(33, 4) }],
-        [300, { lean: 0.025, ...zeruGun(33) }],
-        [430, { lean: 0.03, ...zeruGun(33) }],
-        [470, { lean: -0.09, x: 0.035, ...zeruGun(33) }, 'out'],
-        [640, { lean: -0.06, x: 0.04, ...zeruGun(33) }],
-        [840, { lean: -0.015, x: 0.02, ...zeruGun(33) }],
+        [150, { armNSq: 0.375, ...zeruGun(33) }],
+        [430, { armNSq: 0.375, ...zeruGun(33) }],
+        [470, { x: 0.018, armNSq: 0.375, ...zeruGun(33) }, 'out'],
+        [760, { armNSq: 0.375, ...zeruGun(33) }],
+        [980, { armNSq: 0.375, ...zeruGun(33) }],
         [1300, {}],
-      ], jolt: { atMs: 440, ms: 200, x: 0.012, y: 0.008 },
-      dustAt: [445],
-      art: [[0, null], [120, 'windup'], [430, 'strike'], [650, 'windup'], [840, null]], fadeMs: 40,
+      ], jolt: { atMs: 440, ms: 160, x: 0.006, y: 0.004 },
+      art: [[0, null], [160, 'windup', 120], [430, 'strike', 30], [640, 'windup', 40], [840, null, 140]],
       anchors: { windup: { hand: [48, 293], mouth: [48, 293] }, strike: { hand: [48, 293], mouth: [48, 293] } },
       shots: [{ at: 'mouth', delayMs: 0, size: 1 }],
       scene: { kind: 'gun', tone: 'thunder', dimColor: '0,6,26', hand: { pt: [65, 475], part: 'barrel' } } },
+      //   雷霆掃射の部品の大砲は 56°・縮め 0.315＝腰を上げた（hipY −0.035）ぶん少し下げると、構えの絵の砲口 [8, 193] にぴったり重なる
       // 雷霆掃射：体を少し高くして（構えの絵は足を開いて踏ん張った形）大砲を水平に構える → 3連射。1発ごとに撃つの絵で砲口が跳ね、全身が後ろへずれていく。3発目がいちばん大きい。狙いは 頭→足→胸
       volley: { totalMs: 1600, hitMs: 360, strikes: [{ atMs: 0, dx: -0.08, dy: -0.12 }, { atMs: 320, size: 1.1, dx: 0.1, dy: 0.06, flip: true }, { atMs: 640, size: 1.35, dx: 0, dy: -0.02 }], keys: [
         [0, {}],
-        [110, { hipY: -0.035, ...zeruGun(63, 12) }],
-        [360, { hipY: -0.035, lean: 0.02, ...zeruGun(63, 12) }],
-        [390, { hipY: -0.035, lean: -0.05, x: 0.015, ...zeruGun(63, 12) }, 'out'],
-        [680, { hipY: -0.035, lean: 0.01, x: 0.02, ...zeruGun(63, 12) }],
-        [710, { hipY: -0.035, lean: -0.06, x: 0.035, ...zeruGun(63, 12) }, 'out'],
-        [1000, { hipY: -0.035, lean: 0, x: 0.04, ...zeruGun(63, 12) }],
-        [1040, { hipY: -0.035, lean: -0.11, x: 0.07, ...zeruGun(63, 12) }, 'out'],
-        [1320, { hipY: -0.035, lean: -0.03, x: 0.03, ...zeruGun(63, 12) }],
+        [110, { hipY: -0.035, armNSq: 0.315, ...zeruGun(56, 12) }],
+        [360, { hipY: -0.035, armNSq: 0.315, lean: 0.02, ...zeruGun(56, 12) }],
+        [390, { hipY: -0.035, armNSq: 0.315, lean: -0.05, x: 0.015, ...zeruGun(56, 12) }, 'out'],
+        [680, { hipY: -0.035, armNSq: 0.315, lean: 0.01, x: 0.02, ...zeruGun(56, 12) }],
+        [710, { hipY: -0.035, armNSq: 0.315, lean: -0.06, x: 0.035, ...zeruGun(56, 12) }, 'out'],
+        [1000, { hipY: -0.035, armNSq: 0.315, lean: 0, x: 0.04, ...zeruGun(56, 12) }],
+        [1040, { hipY: -0.035, armNSq: 0.315, lean: -0.11, x: 0.07, ...zeruGun(56, 12) }, 'out'],
+        [1320, { hipY: -0.035, armNSq: 0.315, lean: -0.03, x: 0.03, ...zeruGun(56, 12) }],
         [1600, {}],
       ], jolt: { atMs: 370, ms: 160, x: 0.008, y: 0.006 },
       dustAt: [1010],
@@ -846,19 +862,20 @@ export const BOSS_ILLUST_DEFS = {
         [110, { armF: -50, sword: 22, hipX: 0.02, hipY: 0.02, ...zeruGun(4, 6) }],
         [300, { armF: -148, sword: 64, hipX: 0.03, hipY: 0.034, lean: -0.1, legL: 5, legR: -5, y: 0.012, ...zeruGun(10, 22) }],
         [360, { armF: -152, sword: 70, hipX: 0.03, hipY: 0.036, lean: -0.11, legL: 5, legR: -5, y: 0.012, ...zeruGun(12, 24) }],
-        [520, { armF: -160, sword: 78, lean: 0.16, r: -6, y: -0.125, legL: -32, legR: -24, dash: 1, ...zeruGun(30, 28) }, 'out'],
-        [565, { armF: -176, sword: 86, lean: 0.17, r: -6, y: -0.125, legL: -34, legR: -26, dash: 1, ...zeruGun(34, 28) }],
+        // 【確定】2026-11-05 ユーザー「ふわっと浮いてる気がするから直進で殺すようにして」：跳び上がって（y −0.125）着く前にゆるむ（out）のをやめた。
+        //   地面すれすれをまっすぐ、だんだん速く（in）。前の足を出し、後ろの足で蹴る形のまま相手の目の前へ
+        [550, { armF: -176, sword: 86, hipY: 0.02, lean: 0.18, r: -3, y: 0.02, legL: 14, legR: -28, dash: 1, ...zeruGun(30, 28) }, 'in'],
         [640, { armF: -296, sword: 32, lean: 0.2, r: -4, y: 0.055, hipY: 0.01, legL: 18, legR: -22, dash: 1, ...zeruGun(80, -14) }, 'out'],
         [730, { armF: -298, sword: 30, lean: 0.2, r: -4, y: 0.055, hipY: 0.012, legL: 18, legR: -22, dash: 1, ...zeruGun(84, -12) }],
         [980, { armF: -290, sword: 28, lean: 0.16, r: -3, y: 0.05, hipY: 0.01, legL: 16, legR: -20, dash: 1, ...zeruGun(74, -6) }],
-        [1210, { armF: -130, sword: 30, lean: -0.08, y: -0.09, legL: 10, legR: -10, dash: 0.1, x: 0.02, ...zeruGun(20, 18) }, 'out'],
-        [1370, { armF: -40, sword: 8, hipY: 0.03, y: 0.004, lean: -0.02, ...zeruWings(-4) }],
+        // 戻りも跳ばない：まっすぐ後ろへすべって元の場所へ
+        [1280, { armF: -60, sword: 10, lean: -0.04, y: 0.008, legL: 4, legR: -4, ...zeruGun(10, 6) }],
         [1600, {}],
       ], jolt: { atMs: 640, ms: 260, x: 0.016, y: 0.012 },
       ghosts: { fromMs: 360, toMs: 560, lagMs: 30, n: 4, op: 0.5, rig: true },
       // 刃の通った面：剣先に近い半分だけ（三日月に見える・付け根まで塗ると平たい扇に見えた）
       trails: [{ kind: 'slash', ribbon: true, part: 'sword', pts: [[552, 450], [618, 545]], fromMs: 560, toMs: 650, lagMs: 90, fadeMs: 260 }],
-      dustAt: [370, 1370],
+      dustAt: [370, 640],
       scene: { kind: 'slash', tone: 'thunder', dimColor: '0,6,26', hand: { pt: [618, 545], part: 'sword' }, windMs: 360, boltsAt: [150, 280] } },
       // 神雷終焉：構え＝胸の装甲が開き、剣を地面に突き立てて大砲を水平に構える（砲口に光が集まる）・撃つ＝極太の雷（反動で上体が押される）。黒龍の終焉の黒焔と同じ長さ（構え3.5秒＋0.5秒）
       ruin: { totalMs: 5300, hitMs: 4000, castSkipMs: 3500, big: true, keys: [
@@ -1215,7 +1232,7 @@ export const flutterBandsAt = (key, tMs) => {
     ...ys.slice(0, -1).map((y0, i) => ({ y0, y1: ys[i + 1], dx: shift(y0), tan: (shift(ys[i + 1]) - shift(y0)) / (ys[i + 1] - y0) }))]
 }
 // 技のあいだに出す絵（2026-10-30 ポーズの絵）：{ rig＝部品の立ち絵の濃さ, poses:[{ name, op }]（下から順） }
-//   motion.art＝[[ミリ秒, 'windup'|'strike'|null], …]（その時刻から出す絵・null は部品）・fadeMs（無ければ ART_FADE_MS）で切り替える。
+//   motion.art＝[[ミリ秒, 'windup'|'strike'|null, 切り替えのミリ秒?], …]（その時刻から出す絵・null は部品）・切り替えは3つめ（無ければ fadeMs・それも無ければ ART_FADE_MS）。
 //   新しい絵は前半で出きり、前の絵は後半で消える（途中で両方が透けて後ろが見えない）。できていない絵の名前は部品の立ち絵として扱う
 export const ART_FADE_MS = 70
 export const illustShowAt = (motion, ms) => {
@@ -1225,7 +1242,7 @@ export const illustShowAt = (motion, ms) => {
   let i = -1
   while (i + 1 < tl.length && ms >= tl[i + 1][0]) i++
   const cur = i >= 0 && has(tl[i][1]) ? tl[i][1] : null, prev = i >= 1 && has(tl[i - 1][1]) ? tl[i - 1][1] : null
-  const fade = motion.fadeMs ?? ART_FADE_MS, w = i >= 0 ? Math.min(1, (ms - tl[i][0]) / fade) : 1
+  const fade = (i >= 0 ? tl[i][2] : null) ?? motion.fadeMs ?? ART_FADE_MS, w = i >= 0 ? Math.min(1, (ms - tl[i][0]) / fade) : 1
   const inOp = i >= 1 && prev !== cur ? smooth(Math.min(1, 2 * w)) : 1, outOp = 1 - smooth(Math.max(0, 2 * w - 1))
   const shown = [[prev, i >= 1 && prev !== cur && w < 1 ? outOp : 0], [cur, inOp]]
   const rig = shown.filter(([n]) => !n).reduce((m, [, o]) => Math.max(m, o), 0)
@@ -1316,19 +1333,28 @@ export const buffRainAt = (r, tMs) => {
 //   rings: [{ x, y, r, op, w }]（口から広がる衝撃の輪）, sparks: [{ x, y, r, op }]（足元から噴き上がる火の粉）, ringColor, sparkColor, ringCore, sparkCore（芯の色）,
 //   bolts: [{ pts, op }]（手へ落ちる稲妻）, boltColor, flash（舞台ぜんぶが光る 0〜1）, rain（土砂降り・buffRainAt に渡す決まり＋ k（濃さ）・t（時計））}（立ち絵の px）か null（show が無い・終わった）
 //   揺れは吠えた瞬間がいちばん強く、見せているあいだに弱まる。ふくらみはすぐに punch まで→少し戻る。暗さは見せ終わると戻る
+//   電気を溜める（gather・ゼルギアスの炉心臨界）ときは、zaps（稲妻 [{ pts, op, w }]・zapColor）と core（炉心の光 { x, y, r, op }・coreColor）も（gatherAt）。輪は rings.atMs から
 export const buffSceneAt = (b, ms) => {
   const s = b?.show
   if (!s || !(ms >= 0)) return null
   const hold = buffHoldOf(b)
   if (ms >= hold + BUFF_AURA_OUT_MS) return null
   const fadeOut = 1 - smooth(Math.min(1, Math.max(0, ms - hold) / BUFF_AURA_OUT_MS))
+  const g = s.gather, rel = g ? g.toMs : 0
   const dim = (s.dim || 0) * Math.min(1, ms / 180) * fadeOut
-  const amp = (s.shake || 0) * Math.max(0, 1 - ms / hold) ** 1.5
+  // 揺れ：ふつうは吠えた瞬間がいちばん強く、見せているあいだに弱まる。溜める（gather）ときは、火がついた瞬間に小さく揺れ、溜めるあいだ小さくうなって強まり、放った瞬間がいちばん強い
+  const env = !g ? Math.max(0, 1 - ms / hold) ** 1.5
+    : ms < rel ? Math.max(0.5 * Math.max(0, 1 - ms / 250) ** 2, 0.12 + 0.4 * smooth(Math.min(1, Math.max(0, ms - g.fromMs) / (rel - g.fromMs))) ** 2)
+    : 1.15 * Math.max(0, 1 - (ms - rel) / (hold - rel)) ** 1.5
+  const amp = (s.shake || 0) * env
   const shake = [amp * Math.sin(ms / 23), amp * 0.6 * Math.sin(ms / 31 + 1.3)]
-  const punch = s.punch ? 1 + s.punch * (ms < 160 ? smooth(ms / 160) : 1 - 0.45 * smooth(Math.min(1, (ms - 160) / 400))) * fadeOut : 1
+  // ふくらみ：ふつうはすぐに punch まで→少し戻る。溜めるときは、溜めるあいだゆっくり少しふくらみ、放った瞬間に punch まで→少し戻る
+  const pk = !g ? (ms < 160 ? smooth(ms / 160) : 1 - 0.45 * smooth(Math.min(1, (ms - 160) / 400)))
+    : ms < rel ? 0.35 * smooth(ms / rel) : ms < rel + 90 ? 0.35 + 0.65 * smooth((ms - rel) / 90) : 1 - 0.45 * smooth(Math.min(1, (ms - rel - 90) / 400))
+  const punch = s.punch ? 1 + s.punch * pk * fadeOut : 1
   const rings = []
   if (s.rings) for (let i = 0; i < s.rings.n; i++) {
-    const t = (ms - 80 - i * s.rings.everyMs) / (s.rings.durMs || 700)
+    const t = (ms - (s.rings.atMs ?? 80) - i * s.rings.everyMs) / (s.rings.durMs || 700)
     if (t <= 0 || t >= 1) continue
     rings.push({ x: s.rings.at[0], y: s.rings.at[1], r: 30 + (s.rings.maxR || 420) * (1 - (1 - t) ** 2), op: (1 - t) ** 1.2, w: 14 * (1 - t) + 2, flat: s.rings.flat })
   }
@@ -1350,16 +1376,78 @@ export const buffSceneAt = (b, ms) => {
     }) })
     if (b.flash) flash = Math.max(flash, b.flash * (1 - t) ** 2)
   }
-  return { dim, dimColor: s.dimColor || null, shake, punch, rings, sparks, ringColor: s.rings?.color || null, sparkColor: s.burst?.color || null,
-    ringCore: s.rings?.core || null, sparkCore: s.burst?.core || null, bolts, boltColor: s.boltColor || null, flash,
-    rain: s.rain ? { ...s.rain, k: Math.min(1, ms / 140) * fadeOut, t: ms } : null }
+  // 電気を溜める（ゼルギアスの炉心臨界・gatherAt）：光の粒は sparks へ・稲妻は zaps へ・炉心の光は core
+  const zaps = []
+  const core = g ? gatherAt(g, b.pose?.zap, ms, fadeOut, sparks, zaps) : null
+  return { dim, dimColor: s.dimColor || null, shake, punch, rings, sparks, ringColor: s.rings?.color || null, sparkColor: s.burst?.color || g?.color || null,
+    ringCore: s.rings?.core || null, sparkCore: s.burst?.core || (g ? '235,245,255' : null), bolts, boltColor: s.boltColor || null, flash,
+    rain: s.rain ? { ...s.rain, k: Math.min(1, ms / 140) * fadeOut, t: ms } : null, zaps, zapColor: g?.color || null, core, coreColor: g?.color || null }
+}
+// 【確定】2026-11-05 電気を溜めて放つ（show.gather・ゼルギアスの炉心臨界・ユーザー「もっと電気溜めるようにして、時間は同じでいい」）：
+//   g＝決まり（at＝炉心の立ち絵の px・fromMs〜toMs＝溜める・toMs＝放つ）・pts＝バフのポーズの絵の上の電気の点（一覧の zap）・ms＝付いてからのミリ秒・fadeOut＝見せ終わりの消え方。
+//   sparks に光の粒（motes＝まわりから渦を巻いて吸い込まれる・release＝放った瞬間に炉心から飛び散る）、zaps に稲妻（arcs＝体のふちから炉心へ・crackle＝体の上を這う）を足し、
+//   炉心の光 { x, y, r, op } を返す（glow が無ければ null）。粒も稲妻も溜めるほど増える（はじめは2〜3割）。同じ時刻なら同じ形
+const gatherAt = (g, pts, ms, fadeOut, sparks, zaps) => {
+  const [cx, cy] = g.at, span = g.toMs - g.fromMs
+  const progAt = (t) => smooth(Math.min(1, Math.max(0, (t - g.fromMs) / span)))
+  const prog = progAt(ms), after = ms >= g.toMs
+  // 吸い込まれる光の粒：炉心のまわり（r の輪の中）から、渦を巻いてだんだん速く炉心へ。放つまでに4割より進む回だけ出す（吸い込まれる途中の粒は放った瞬間の光に消える）
+  if (g.motes && ms >= g.fromMs && !after) for (let i = 0; i < g.motes.n; i++) {
+    const life = g.motes.lifeMs * (0.75 + 0.5 * hash01(i, 81)), u = (ms - g.fromMs) / life + hash01(i, 82), turn = Math.floor(u), t = u - turn, born = ms - t * life
+    if (born < g.fromMs - 1e-6 || born > g.toMs - 0.4 * life) continue
+    const r = (salt) => hash01(i * 53 + turn * 19, salt)
+    if (r(83) > 0.3 + 0.7 * progAt(born)) continue
+    const a0 = 2 * Math.PI * r(84), R = g.motes.r[0] + (g.motes.r[1] - g.motes.r[0]) * r(85), ang = a0 + (r(86) < 0.5 ? -1.3 : 1.3) * t, d = R * (1 - t ** 1.7)
+    sparks.push({ x: cx + Math.cos(ang) * d, y: cy + Math.sin(ang) * d * 0.85, r: (2 + 2.2 * r(87)) * (0.55 + 0.45 * (1 - t)) * (g.motes.size || 1),
+      op: Math.min(1, t / 0.18) * (0.5 + 0.5 * progAt(born)) })
+  }
+  // 炉心へ走る稲妻：体のふち（炉心から 110px より遠い点・点が無ければ粒の輪の外）から炉心へ。放った瞬間に止む
+  if (g.arcs && !after) {
+    const far = (pts || []).filter(p => Math.hypot(p[0] - cx, p[1] - cy) > 110)
+    for (let i = 0; i < g.arcs.n; i++) {
+      const life = g.arcs.lifeMs * (0.8 + 0.4 * hash01(i, 88)), u = ms / life + hash01(i, 89), turn = Math.floor(u), t = u - turn
+      if (t > 0.55) continue
+      const born = ms - t * life
+      if (born < g.fromMs || born >= g.toMs) continue
+      const r = (salt) => hash01(i * 41 + turn * 23, salt)
+      if (r(90) > 0.15 + 0.85 * progAt(born)) continue
+      const ang = 2 * Math.PI * r(91), R = g.motes?.r[1] || 300
+      const A = far.length ? far[Math.floor(r(91) * far.length)] : [cx + Math.cos(ang) * R, cy + Math.sin(ang) * R * 0.85]
+      zaps.push({ pts: zigzag(A, [cx, cy], i * 97 + turn * 11 + Math.floor(ms / 40), 8, g.arcs.amp), op: (1 - t / 0.55) ** 0.6 * (0.55 + 0.45 * progAt(born)), w: g.arcs.w })
+    }
+  }
+  // 体の上を這う稲妻：溜めるほど多く濃く、放ったあとはいちばん多いまま（見せ終わると消える）
+  if (g.crackle && pts?.length && ms >= g.fromMs) {
+    const n = Math.round(g.crackle.n * (after ? 1 : 0.25 + 0.75 * prog)), k = after ? fadeOut : 0.45 + 0.55 * prog
+    if (n > 0 && k > 0.01) zaps.push(...zapArcsOn(pts, { ...g.crackle, n, k }, ms))
+  }
+  // 放った瞬間に炉心から飛び散る光の粒
+  if (g.release && after) for (let i = 0; i < g.release.n; i++) {
+    const t = (ms - g.toMs - hash01(i, 93) * 90) / (g.release.lifeMs * (0.7 + 0.6 * hash01(i, 94)))
+    if (t <= 0 || t >= 1) continue
+    const ang = 2 * Math.PI * hash01(i, 91), D = g.release.dist[0] + (g.release.dist[1] - g.release.dist[0]) * hash01(i, 92), d = D * (1 - (1 - t) ** 2)
+    sparks.push({ x: cx + Math.cos(ang) * d, y: cy + Math.sin(ang) * d * 0.85, r: (2.4 + 2.6 * hash01(i, 95)) * (1 - 0.5 * t) * (g.release.size || 1), op: (1 - t) ** 0.8 * fadeOut })
+  }
+  // 炉心の光：溜めるほど大きく明るく、だんだん速く脈打つ。放った瞬間に大きく光ってから少し小さく残り、見せ終わると消える
+  if (!g.glow) return null
+  const gl = g.glow
+  let r, op
+  if (!after) {
+    r = gl.r0 + (gl.r1 - gl.r0) * prog
+    op = (0.3 + 0.7 * prog) * (0.8 + 0.2 * Math.sin(ms / (70 - 45 * prog)))
+  } else {
+    const k = smooth(Math.min(1, (ms - g.toMs) / 420))
+    r = gl.r1 * (2.2 - 1.4 * k)
+    op = (1 - 0.5 * k) * fadeOut
+  }
+  return { x: cx, y: cy, r, op: op * Math.min(1, ms / 120) }
 }
 // 開戦の動きの見せ方（衝撃の輪・揺れ・暗さ・光の粒・稲妻）：motion＝bossIllustOf の intro・ms＝流しはじめてからのミリ秒。
 //   shows の1つずつを at から buffSceneAt と同じ形で作って重ねる（揺れは足す・暗さは濃いほう・輪と粒と稲妻は全部）。出ているものが無ければ null（intro の無い動きも）
 export const introSceneAt = (motion, ms) => {
   const list = (motion?.shows || []).map(s => buffSceneAt({ show: s }, ms - s.at)).filter(Boolean)
   if (!list.length) return null
-  const out = { ...list[0], shake: [...list[0].shake], rings: [...list[0].rings], sparks: [...list[0].sparks], bolts: [...list[0].bolts] }
+  const out = { ...list[0], shake: [...list[0].shake], rings: [...list[0].rings], sparks: [...list[0].sparks], bolts: [...list[0].bolts], zaps: [...list[0].zaps] }
   for (const c of list.slice(1)) {
     out.shake[0] += c.shake[0]
     out.shake[1] += c.shake[1]
@@ -1367,9 +1455,11 @@ export const introSceneAt = (motion, ms) => {
     out.rings.push(...c.rings)
     out.sparks.push(...c.sparks)
     out.bolts.push(...c.bolts)
+    out.zaps.push(...c.zaps)
+    out.core ||= c.core
     if (c.dim > out.dim) { out.dim = c.dim; out.dimColor = c.dimColor }
     out.flash = Math.max(out.flash, c.flash)
-    for (const f of ['ringColor', 'sparkColor', 'ringCore', 'sparkCore', 'boltColor']) out[f] ||= c[f]
+    for (const f of ['ringColor', 'sparkColor', 'ringCore', 'sparkCore', 'boltColor', 'zapColor', 'coreColor']) out[f] ||= c[f]
   }
   return out
 }
@@ -1453,8 +1543,8 @@ const zigzag = ([x0, y0], [x1, y1], seed, n, amp) => {
   out.push([x1, y1])
   return out
 }
-export const zapArcsAt = (key, z, pose, tMs) => {
-  const pts = z.anchors.map(([part, x, y]) => illustPointAt(key, pose, [x, y], part)), out = []
+const zapArcsOn = (pts, z, tMs) => {
+  const out = []
   for (let i = 0; i < z.n; i++) {
     const life = z.lifeMs * (0.7 + 0.6 * hash01(i, 71)), u = tMs / life + hash01(i, 72), turn = Math.floor(u), t = u - turn
     if (t > 0.6) continue
@@ -1467,6 +1557,19 @@ export const zapArcsAt = (key, z, pose, tMs) => {
     out.push({ pts: zigzag(A, B, i * 131 + turn * 7 + Math.floor(tMs / 45), 6, z.amp), op: z.k * (1 - t / 0.6) ** 0.6, w: z.w })
   }
   return out
+}
+//   arts＝ポーズの絵の上の点（一覧の zap・zapArtOf）：技や構えやバフのポーズの絵が出ているあいだは、その絵の点に走らせる。
+//   ポーズの絵は腰では動かず、全体の姿勢（x・y・r・lean）だけで動く（artAnchorAt と同じ）
+export const zapArcsAt = (key, z, pose, tMs, arts = null) => zapArcsOn(arts
+  ? arts.map(pt => illustPointAt(key, { ...pose, hipX: 0, hipY: 0 }, pt, 'body'))
+  : z.anchors.map(([part, x, y]) => illustPointAt(key, pose, [x, y], part)), z, tMs)
+// 【確定】2026-11-05 炉心臨界のあとの電気を走らせる点（ユーザー「３０％バフのびりびり、他のスキル発動中もびりびりするようにして」）：
+//   show＝いま出している絵（illustShowAt などの答え・null は部品の立ち絵だけ）・motion＝その絵を持つもの（poses）→
+//   部品の立ち絵が半分より濃いときは null（部品の点）、ポーズの絵が出ているときは いちばん濃い絵の点（一覧の zap）、その絵に点が無ければ false（走らせない）
+export const zapArtOf = (show, motion) => {
+  if (!show || (show.rig ?? 1) >= 0.5) return null
+  const top = show.poses.reduce((p, sp) => (!p || sp.op >= p.op ? sp : p), null)
+  return (top && motion?.poses?.[top.name]?.zap) || false
 }
 // 残像（motion.ghosts＝{ fromMs, toMs, lagMs, n, op }）：fromMs〜toMs のあいだ、lagMs ずつ前の姿勢でポーズの絵を薄く重ねる（振り抜いて飛び込む勢い）
 //   { name, ms（その残像の時刻）, op }。そのときに出ていたポーズの絵だけ（部品の立ち絵には残像を出さない）。

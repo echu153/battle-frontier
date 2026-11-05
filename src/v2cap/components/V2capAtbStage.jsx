@@ -6,7 +6,7 @@ import { hitReactOf, lungeOf, shakeOf, lastHitAtOf, popTextOf, popScaleOf, popLe
 import { JP_BOLD } from './casinoStyle.js'
 import { rubySegmentsOf } from '../lib/skillRuby.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
-import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, reachXOf, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, rigLayersOf, artAnchorAt, illustCastShowAt, illustBuffShowAt, buffSceneAt, introSceneAt, introEnterAt, introBeamAt, rigLightsAt, buffAfterAt, buffRainAt, zapArcsAt } from '../lib/bossIllust.js'
+import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, reachXOf, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, rigLayersOf, artAnchorAt, illustCastShowAt, illustBuffShowAt, buffSceneAt, introSceneAt, introEnterAt, introBeamAt, rigLightsAt, buffAfterAt, buffRainAt, zapArcsAt, zapArtOf } from '../lib/bossIllust.js'
 import { behindRectOf, bgRectOf, bgFxAt, liteFxOf } from '../lib/bossBg.js'
 import { artIsLoaded } from '../lib/artPreload.js'
 import BossFlowCanvas from './BossFlowCanvas.jsx'
@@ -281,24 +281,26 @@ const PoseArt = ({ art, p, op = 1 }) => (
 )
 // 体にまとわりつく小さな稲妻（ゼルギアスの炉心臨界のあと・lib/bossIllust.js の zapArcsAt・立ち絵の px）：青白い光の筋の上に白い芯。
 //   体の光（drop-shadow）は絵の枠ぜんたいの filter（after.glow）がかける＝稲妻にも光がかかる
+const zapPaths = (arcs, color, pre = '') => arcs.map((a, i) => {
+  const d = `M${a.pts.map(p => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join('L')}`
+  return (
+    <g key={`${pre}${i}`} opacity={a.op.toFixed(3)}>
+      <path d={d} fill="none" stroke={`rgba(${color},0.6)`} strokeWidth={a.w * 3.2} strokeLinecap="round" strokeLinejoin="round" />
+      <path d={d} fill="none" stroke="rgba(235,245,255,0.95)" strokeWidth={a.w} strokeLinecap="round" strokeLinejoin="round" />
+    </g>
+  )
+})
 const RigZap = ({ art, arcs, color }) => {
   const lite = useContext(LiteCtx)
   return (
     <svg viewBox={`0 0 ${art.base} ${art.base}`} style={{ position:'absolute', inset:0, width:'100%', height:'100%', overflow:'visible', pointerEvents:'none', mixBlendMode: lite ? undefined : 'screen' }}>
-      {arcs.map((a, i) => {
-        const d = `M${a.pts.map(p => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join('L')}`
-        return (
-          <g key={i} opacity={a.op.toFixed(3)}>
-            <path d={d} fill="none" stroke={`rgba(${color},0.6)`} strokeWidth={a.w * 3.2} strokeLinecap="round" strokeLinejoin="round" />
-            <path d={d} fill="none" stroke="rgba(235,245,255,0.95)" strokeWidth={a.w} strokeLinecap="round" strokeLinejoin="round" />
-          </g>
-        )
-      })}
+      {zapPaths(arcs, color)}
     </svg>
   )
 }
 // HPの節目のバフの衝撃の輪と火の粉と稲妻（lib/bossIllust.js の buffSceneAt・buffAfterAt・立ち絵の px）。明るく重ねる（screen）。
 //   輪＝ぼかした太い色の輪＋細い明るい芯・火の粉＝ぼかした光の玉＋明るい芯（芯の色は決まりに書いてあれば＝雨摩座は水の色）・稲妻＝ぼかした太い線＋細い白い線
+//   電気を溜める（ゼルギアスの炉心臨界・sc.core と sc.zaps）：炉心の光＝白い芯から色へ広がる丸い光（いちばん奥）・溜めるときの稲妻＝体にまとわりつく稲妻と同じ描き方（軽い表示は半分）
 const BuffSparks = ({ art, sc, after }) => {
   const id = useId()
   const lite = useContext(LiteCtx)
@@ -311,7 +313,17 @@ const BuffSparks = ({ art, sc, after }) => {
   ))
   return (
     <svg viewBox={`0 0 ${art.base} ${art.base}`} style={{ position:'absolute', inset:0, width:'100%', height:'100%', overflow:'visible', pointerEvents:'none', mixBlendMode: lite ? undefined : 'screen' }}>
-      <defs><filter id={id} x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="3" /></filter></defs>
+      <defs>
+        <filter id={id} x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="3" /></filter>
+        {sc?.core && (
+          <radialGradient id={`${id}c`}>
+            <stop offset="0" stopColor="rgb(245,250,255)" />
+            <stop offset="0.35" stopColor={`rgb(${sc.coreColor})`} stopOpacity="0.8" />
+            <stop offset="1" stopColor={`rgb(${sc.coreColor})`} stopOpacity="0" />
+          </radialGradient>
+        )}
+      </defs>
+      {sc?.core && sc.core.op > 0.001 && <circle cx={sc.core.x} cy={sc.core.y} r={sc.core.r} fill={`url(#${id}c)`} opacity={sc.core.op.toFixed(3)} />}
       {sc?.rings.map((r, i) => (
         <g key={`r${i}`} opacity={r.op.toFixed(3)}>
           <ellipse cx={r.x} cy={r.y} rx={r.r} ry={r.r * (r.flat || 1)} fill="none" stroke={`rgb(${sc.ringColor})`} strokeWidth={r.w * 1.8} filter={blur} opacity={lite ? 0.45 : undefined} />
@@ -320,6 +332,7 @@ const BuffSparks = ({ art, sc, after }) => {
       ))}
       {after && dots(after.sparks, after.sparkColor, 'a', after.sparkCore)}
       {sc && dots(sc.sparks, sc.sparkColor, 's', sc.sparkCore)}
+      {sc?.zaps?.length > 0 && zapPaths(lite ? sc.zaps.filter((_, i) => i % 2 === 0) : sc.zaps, sc.zapColor, 'z')}
       {sc?.bolts.map((b, i) => {
         const pts = b.pts.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ')
         return (
@@ -615,9 +628,10 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   const show = death ? deathShowOf(show0, death) : show0
   const showMotion = death ? { poses: { ...showMotion0?.poses, ...rig.death.arts } } : showMotion0
   const aura = buff?.aura && buffArt.aura ? { p: buffArt.aura, op: buff.aura.op * buffArt.auraOp, scale: buff.aura.scale, front: buffArt.front, glow: buffArt.glow, rot: buff.aura.rot, at: buffArt.spinAt } : null
-  // 炉心臨界のあとの電気（after.zap）：部品の立ち絵が出ているときだけ稲妻を走らせる（ポーズの絵・倒れる動きのあいだは体の光だけ）。軽い表示は半分
-  const zap = after?.zap && rig && !death && !buffPose && (show?.rig ?? 1) >= 0.5
-    ? zapArcsAt(rig.key, lite ? { ...after.zap, n: Math.ceil(after.zap.n / 2) } : after.zap, pose, now * 1000) : null
+  // 炉心臨界のあとの電気（after.zap）：部品の立ち絵が出ているときは部品の点、技や構えやバフのポーズの絵が出ているときはその絵の点（一覧の zap・lib/bossIllust.js の zapArtOf）に
+  //   稲妻を走らせる（2026-11-05 ユーザー「３０％バフのびりびり、他のスキル発動中もびりびりするようにして」）。倒れる動きのあいだは体の光だけ。軽い表示は半分
+  const zapArt = after?.zap && rig && !death ? zapArtOf(show, showMotion) : false
+  const zap = zapArt !== false ? zapArcsAt(rig.key, lite ? { ...after.zap, n: Math.ceil(after.zap.n / 2) } : after.zap, pose, now * 1000, zapArt) : null
   const ghosts = rigMotion && !casting && !buffPose && !death ? illustGhostsAt(rigMotion, rigMs).map(g => ({ ...g, pose: illustPoseAt(rig.key, rigMotion, g.ms, tMs - (rigMs - g.ms), false, reachX) })) : []
   // 被弾の揺れはボスの側だけ（ユーザー「プレイヤーの被ダメージのグラグラモーションはいらない」）
   const dx = (frame >= 0 || rig ? 0 : lungeOf(now - lastOf('act')) * dir) + (side === 'b' ? shakeOf(now - lastOf('hit')) : 0)
