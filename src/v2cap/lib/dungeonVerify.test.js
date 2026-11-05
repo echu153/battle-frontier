@@ -151,9 +151,9 @@ test('★画面が読むだけでは戦闘が変わらない：ボスの節目�
   assert.match(read('../components/V2capAtbFight.jsx'), /const me = s\.a[\s\S]*chosenOf\(me, now\)/, '戦闘の画面が読むのは自分だけ')
 })
 
-test('★180秒の時間切れでも一致する（いちばん長い戦闘）', () => {
-  const t = tryOf('聖騎士', 'varuzenoku', 42, 15000)
-  // 倒れない・倒しきれない（装備なし・技なし）
+test('★念のための上限（DUNGEON_TRY_SEC＝10分）の時間切れでも一致する（いちばん長い戦闘）', () => {
+  const t = tryOf('聖騎士', 'varuzenoku', 42, 30000)
+  // 倒れない・倒しきれない（装備なし・技なし）。【2026-11-06】上限を10分にしたら、残りHP 15000 は10分の手前で削りきった＝ハードの満タン（30000）から
   Object.assign(t.snap.prof, { hp: 1000000, vit: 5000, str: 1, int_stat: 1, equipped: {}, learned: [] })
   t.snap.inv = []
   const st = playLikeScreen(t, 3)

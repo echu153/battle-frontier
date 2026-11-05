@@ -19,6 +19,7 @@ import { enemyArtSrc } from '../lib/enemyArt.js'
 import { newBossMotionMemo, bossMotionKeyOf } from '../lib/bossArt.js'
 import { artLoadedCount, preloadArt } from '../lib/artPreload.js'
 import { DRAW_MS, atbLevelOf, newAtbPacer } from '../lib/atbPacer.js'
+import { DUNGEON_TRY_SEC } from '../lib/dungeon.js'
 
 // ============================================================
 // 「レベルキャップあり」版（v2cap）— ATB戦闘の画面（舞台・マクロ・技のボタン・ログ・時間を進める）
@@ -271,7 +272,8 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
       <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color: TEXT.label, margin:'6px 0', gap:'8px', flexWrap:'wrap' }}>
         <span>次：{nextLabel}</span>
         <span>{Math.round(dps).toLocaleString()}ダメージ/秒</span>
-        <span>{now.toFixed(1)}秒 / {s.maxSec}秒</span>
+        {/* 時間制限のある戦闘だけ「/ ◯秒」。挑戦は時間制限なし（念のための上限 DUNGEON_TRY_SEC は出さない・2026-11-06 ユーザー「1回ずつの時間制限なくす」） */}
+        <span>{now.toFixed(1)}秒{s.maxSec < DUNGEON_TRY_SEC ? ` / ${s.maxSec}秒` : ''}</span>
         {dev && <span>更新 {drawRate.current.rate}回/秒（最低{drawRate.current.low.length ? Math.min(...drawRate.current.low) : '-'}）{lite ? '・軽い表示' : ''}{drawRate.current.slow ? '・30回に落とした' : ''} [開発]</span>}
       </div>
       {/* ボスの技の絵を流してみる（戦闘には関係しない） */}

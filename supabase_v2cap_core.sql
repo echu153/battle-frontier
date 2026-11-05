@@ -9286,8 +9286,8 @@ create or replace function public.v2cap_dungeon_state()
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   c_helpers_max constant int := 5;
-  c_try_sec     constant int := 180;
-  c_late_min    constant int := 15;
+  c_try_sec     constant int := 600;   -- 挑戦1回の念のための上限（秒）＝lib/dungeon.js の DUNGEON_TRY_SEC（2026-11-06 時間制限なし・前は180）
+  c_late_min    constant int := 25;    -- 遭遇の絵の待ち10分＋戦闘の上限10分＋余裕（2026-11-06・前は15）
   v_uid  uuid := auth.uid();
   v_stam int;
   v_row  public.v2cap_profiles;
@@ -9377,8 +9377,8 @@ declare
   c_owner_first constant int := 0;
   c_owner       constant int := 3;
   c_helper      constant int := 5;
-  c_try_sec     constant int := 180;
-  c_late_min    constant int := 15;
+  c_try_sec     constant int := 600;   -- 挑戦1回の念のための上限（秒）＝lib/dungeon.js の DUNGEON_TRY_SEC（2026-11-06 時間制限なし・前は180）
+  c_late_min    constant int := 25;    -- 遭遇の絵の待ち10分＋戦闘の上限10分＋余裕（2026-11-06・前は15）
   v_uid  uuid := auth.uid();
   v_run  public.v2cap_dungeon_runs;
   v_mem  public.v2cap_dungeon_members;
@@ -9397,11 +9397,11 @@ begin
   if not found then return jsonb_build_object('ok', false, 'error', 'このボスには入っていません'); end if;
   if v_run.cleared_at is not null or v_run.hp <= 0 then return jsonb_build_object('ok', false, 'error', 'もう倒されています'); end if;
   if v_run.ends_at <= now() then return jsonb_build_object('ok', false, 'error', '時間切れです'); end if;
-  -- 前の挑戦の記録を預かったまま、まだ確かめられていないなら始めない（入口が確かめ直す）。15分たっても確かめられなかったものは捨てる
+  -- 前の挑戦の記録を預かったまま、まだ確かめられていないなら始めない（入口が確かめ直す）。c_late_min（25分）たっても確かめられなかったものは捨てる
   if v_mem.try_sub is not null and v_mem.try_sub_at > now() - make_interval(mins => c_late_min) then
     return jsonb_build_object('ok', false, 'error', '前の挑戦の結果を確かめています', 'pending', true);
   end if;
-  -- 挑戦中（前の挑戦の終わりがまだ届いていない）なら始めない。180秒＋余裕を過ぎたものは捨てる（スタミナは戻さない）
+  -- 挑戦中（前の挑戦の終わりがまだ届いていない）なら始めない。戦闘の上限（c_try_sec）＋余裕を過ぎたものは捨てる（スタミナは戻さない）
   if v_mem.try_sub is null and v_mem.try_open_at is not null and v_mem.try_open_at > now() - make_interval(secs => c_try_sec + 60) then
     return jsonb_build_object('ok', false, 'error', '挑戦中です');
   end if;
@@ -9431,7 +9431,7 @@ drop function if exists public.v2cap_dungeon_try_end(bigint, int);
 create or replace function public.v2cap_dungeon_try_end(p_run bigint, p_inputs jsonb, p_end_step int, p_claim int default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
-  c_late_min     constant int := 15;       -- 挑戦を始めてから、終わりを受け付ける長さ（分）
+  c_late_min     constant int := 25;       -- 挑戦を始めてから、終わりを受け付ける長さ（分）＝遭遇の絵の待ち10分＋戦闘の上限10分＋余裕（2026-11-06・前は15）
   c_inputs_max   constant int := 5000;     -- 押した記録の数の上限（dungeonVerify.js の INPUTS_MAX）
   c_inputs_bytes constant int := 500000;   -- 押した記録の大きさの上限
   v_uid uuid := auth.uid();
@@ -9560,8 +9560,8 @@ grant execute on function public.v2cap_dungeon_verify_settle(text, bigint, uuid,
 create or replace function public.v2cap_dungeon_claim(p_run bigint)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
-  c_try_sec constant int := 180;
-  c_late_min constant int := 15;
+  c_try_sec constant int := 600;   -- 挑戦1回の念のための上限（秒）＝lib/dungeon.js の DUNGEON_TRY_SEC（2026-11-06 時間制限なし・前は180）
+  c_late_min constant int := 25;    -- 遭遇の絵の待ち10分＋戦闘の上限10分＋余裕（2026-11-06・前は15）
   v_uid uuid := auth.uid();
   v_run public.v2cap_dungeon_runs;
   v_mem public.v2cap_dungeon_members;
@@ -9573,7 +9573,7 @@ begin
   if not found or v_run.cleared_at is null then return jsonb_build_object('ok', false, 'error', 'まだ倒されていません'); end if;
   select * into v_mem from public.v2cap_dungeon_members where run_id = p_run and player_id = v_uid for update;
   if not found then return jsonb_build_object('ok', false, 'error', 'このボスには入っていません'); end if;
-  -- 挑戦の途中なら待つ（その終わりで削った量を足して渡す）。180秒＋余裕を過ぎた挑戦は捨てたものとして渡す
+  -- 挑戦の途中なら待つ（その終わりで削った量を足して渡す）。戦闘の上限（c_try_sec）＋余裕を過ぎた挑戦は捨てたものとして渡す
   if v_mem.try_open_at is not null and v_mem.try_open_at > now() - make_interval(secs => c_try_sec + 60) then
     return jsonb_build_object('ok', false, 'error', '挑戦の途中です');
   end if;

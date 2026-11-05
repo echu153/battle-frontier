@@ -850,6 +850,23 @@ test('【確定】2026-11-06 四凶は時間で強くなる：30秒ごとに与�
   assert.equal(fresh.b.enrageDeal, 0)
 })
 
+test('【確定】2026-11-06 挑戦1回の時間制限は無し（ユーザー「1回ずつの時間制限なくす」）：念のための上限10分は画面に出さない・サーバーの受付もそれに合わせる', () => {
+  assert.equal(DUNGEON_TRY_SEC, 600, '念のための上限＝10分（測って、いちばん長い戦闘は約6分）')
+  const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8')
+  // 戦闘の時計は「/ ◯秒」を出さない（時間制限のある試し撃ちの敵だけ出す）
+  assert.ok(read('../components/V2capAtbFight.jsx').includes('<span>{now.toFixed(1)}秒{s.maxSec < DUNGEON_TRY_SEC ? ` / ${s.maxSec}秒` : \'\'}</span>'))
+  // 試し撃ちの挑戦のボスも同じ（ほかの敵は MAX_SEC のまま）
+  assert.match(read('../components/V2capAtb.jsx'), /maxSec: dun \? DUNGEON_TRY_SEC : MAX_SEC/)
+  // サーバー：挑戦中とみなす長さ（c_try_sec）は上限と同じ・終わりを受け付ける長さ（c_late_min）は4つの関数で同じ25分
+  const sql = readFileSync(new URL('../../../supabase_v2cap_core.sql', import.meta.url), 'utf8')
+  for (const fn of ['v2cap_dungeon_state', 'v2cap_dungeon_try_start', 'v2cap_dungeon_try_end', 'v2cap_dungeon_claim']) {
+    const body = new RegExp(`function public\\.${fn}\\([\\s\\S]*?\\$\\$;`).exec(sql)[0]
+    assert.equal(Number(/c_late_min\s+constant int := (\d+);/.exec(body)[1]), 25, `${fn} の c_late_min`)
+    const trySec = /c_try_sec\s+constant int := (\d+);/.exec(body)
+    if (trySec) assert.equal(Number(trySec[1]), DUNGEON_TRY_SEC, `${fn} の c_try_sec`)
+  }
+})
+
 test('【確定】2026-11-06 結果の画面の見出しは「討伐時間」「与えたダメージ」「貢献度」（ユーザー「討伐時間 与えたダメージ 貢献度 にして」）', () => {
   const src = readFileSync(new URL('../components/V2capBossReward.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
   const code = src.split(/\r?\n/).filter(l => !/^\s*(\/\/|\{\/\*)/.test(l)).join('\n')   // コメントの外

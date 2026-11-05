@@ -45,7 +45,7 @@ test('見出しの帯は横幅いっぱいのまま高さだけ変わる（幅�
 test('【確定】2026-11-06 ユーザー「四凶のところ、ちょっとアイコン？バナーみたいなの差し込みたい」→選んだ「見出しの帯」「厚塗り」：挑戦のカテゴリの見出しにもホームと同じ帯（絵が届くまでは文字だけ）', () => {
   assert.equal(CHALLENGE_CATS.find(c => c.key === 'rival').head, 'rival')
   for (const c of CHALLENGE_CATS) if (c.head) assert.ok(CAT_HEAD_DEFS[c.head], `${c.label} の帯の決まりが無い`)
-  assert.equal(CAT_HEAD_DEFS.rival.dir, 'V2挑戦')
+  assert.equal(CAT_HEAD_DEFS.rival.dir, 'エネミー/IDダンジョン', 'ユーザーが置いた所（ボスの絵と同じフォルダ）')
   assert.ok(!Object.keys(MENU_HEAD_DEFS).some(k => k in CAT_HEAD_DEFS), 'ホームの帯と名前がかぶらない')
   // 絵ができていれば一覧の印と同じ（できるまでは menuHeadReady が false＝文字だけ）
   for (const key of Object.keys(CAT_HEAD_DEFS)) {
@@ -58,7 +58,8 @@ test('【確定】2026-11-06 ユーザー「四凶のところ、ちょっとア
   const dungeon = readFileSync(new URL('../components/V2capDungeon.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
   assert.ok(dungeon.includes('cat.head && menuHeadReady(cat.head) ? <MenuHead head={cat.head} title={cat.label} />'))
   assert.ok(dungeon.includes("fontWeight:'bold', marginBottom:'8px' }}>{cat.label}</div>}"), '絵が届くまでは文字だけ')
-  assert.ok(readFileSync(new URL('../../../.gitignore', import.meta.url), 'utf8').includes('/public/V2挑戦/'), '元の絵は git に入れない')
+  const ignore = readFileSync(new URL('../../../.gitignore', import.meta.url), 'utf8')
+  for (const def of Object.values(CAT_HEAD_DEFS)) assert.ok(ignore.includes(`/public/${def.dir.split('/')[0]}/`), `${def.source}：元の絵は git に入れない`)
   assert.ok(readFileSync(new URL('../../../tools/v2cap-menu-art.mjs', import.meta.url), 'utf8').includes('...CAT_HEAD_DEFS'), '道具も挑戦の帯を切り抜く')
 })
 
