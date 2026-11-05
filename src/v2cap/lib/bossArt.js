@@ -26,7 +26,7 @@
 //   （1枚ずつ別に作るので、竜の大きさや位置が少しずつ違う）
 // ============================================================
 import { BOSS_ART } from './bossArtList.js'
-import { BOSS_ENCOUNTER, BOSS_THUMB } from './bossThumbList.js'
+import { BOSS_ENCOUNTER, BOSS_FACE, BOSS_THUMB } from './bossThumbList.js'
 import { bossBgOf } from './bossBg.js'
 
 export const BOSS_ART_SRC_DIR = 'IDダンジョン'   // public/エネミー の下（ENEMY_ART_SRC_DIR）・元の絵。敵の絵の道具はここを読まない
@@ -36,6 +36,16 @@ export const BOSS_SHEET_ROWS = 2
 export const BOSS_ILLUST_SIZE = 768
 export const BOSS_THUMB_SIZE = 256     // 一覧の小さい絵（tools/v2cap-boss-thumb.mjs）
 export const BOSS_ENCOUNTER_SIZE = 960 // ボスを選んだポップアップと、挑戦を押した瞬間に出す大きな絵（同じ道具）
+export const BOSS_FACE_SIZE = 192      // 挑戦の入口の顔のアップ（同じ道具・クラスの顔のアップと同じ大きさ）
+// 顔のアップを切り取る正方形（元の絵 イラスト.png の中）：[真ん中の横, 真ん中の縦, 一辺]（横と一辺は絵の幅・縦は絵の高さに対する割合）
+//   【確定】2026-11-06 ユーザー「一旦1列に戻して、ここの部分は顔付近だけ表示されるようにして※クラスの顔アイコンみたいな感じ」
+//   目盛りつきの図で測り、切り取った4枚を並べて確かめた。★ボスを足すときはここにも足して node tools/v2cap-boss-thumb.mjs（無いボスは一覧の小さい絵を出す）
+export const BOSS_FACE_BOX = {
+  varuzenoku: [0.456, 0.256, 0.25],    // 左を向いた頭と吐く炎
+  amaza:      [0.37, 0.176, 0.15],     // 顔と冠
+  zerugiasu:  [0.4975, 0.24, 0.17],    // 青い目の頭（下に胸の炉心）
+  enma:       [0.4125, 0.176, 0.175],  // 顔とひげと冠
+}
 
 // ボスごとの決まり。dir＝元の絵のフォルダ（ユーザーが付けた名前）
 //   idleMs  … 待機のコマの数 → 1コマずつの長さ（ミリ秒）
@@ -128,6 +138,8 @@ export const bossFxKindOf = (motion, kind) => `fx-${motion}-${kind}`
 export const bossThumbOf = (key) => (BOSS_THUMB[key] ? `${BOSS_ART_DIR}/${bossFileOf(key, 'thumb')}?v=${BOSS_THUMB[key]}` : null)
 // ボスを選んだポップアップと、挑戦を押した瞬間に出す大きな絵（遭遇のイラスト・components/V2capBossPick.jsx と V2capBossEncounter.jsx）
 export const bossEncounterOf = (key) => (BOSS_ENCOUNTER[key] ? `${BOSS_ART_DIR}/${bossFileOf(key, 'encounter')}?v=${BOSS_ENCOUNTER[key]}` : null)
+// 挑戦の入口の顔のアップ（BOSS_FACE_BOX で切り取ったもの・無ければ null）
+export const bossFaceOf = (key) => (BOSS_FACE[key] ? `${BOSS_ART_DIR}/${bossFileOf(key, 'face')}?v=${BOSS_FACE[key]}` : null)
 // 遭遇のイラストに添える色（ポップアップの枠・全画面の輪・名前の光）
 const BOSS_ACCENT = { varuzenoku: '#ff7a3a', amaza: '#7ad0ff', zerugiasu: '#8ab4ff', enma: '#b98aff' }
 export const bossAccentOf = (key) => BOSS_ACCENT[key] || '#ffd27a'

@@ -12,3 +12,10 @@ export const BOSS_ENCOUNTER = {
   zerugiasu: 'c8efb9bd',
   enma: '3f015251',
 }
+// 挑戦の入口の顔のアップ（lib/bossArt.js の BOSS_FACE_BOX で切り取る）の中身の印
+export const BOSS_FACE = {
+  varuzenoku: 'f96ad8eb',
+  amaza: 'ae160a43',
+  zerugiasu: 'ec79a989',
+  enma: '17d45e40',
+}

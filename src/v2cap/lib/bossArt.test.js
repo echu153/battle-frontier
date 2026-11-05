@@ -10,7 +10,7 @@ import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { BOSS_ILLUST } from './bossIllustList.js'
 import { illustPartsOf, illustKindOf, illustFxKindOf, illustBendKindOf, illustPoseKindOf, illustBuffKindOf } from './bossIllust.js'
 import { BOSS_BG } from './bossBgList.js'
-import { BOSS_ENCOUNTER, BOSS_THUMB } from './bossThumbList.js'
+import { BOSS_ENCOUNTER, BOSS_FACE, BOSS_THUMB } from './bossThumbList.js'
 import { componentsOf } from '../../../tools/v2cap-motion.mjs'
 
 const OUT = new URL(`../../../public${BOSS_ART_DIR}/`, import.meta.url)
@@ -45,6 +45,7 @@ test('public/v2cap-art/boss の絵はどれも一覧に載っている（名前�
   }
   for (const key of Object.keys(BOSS_THUMB)) known.add(bossFileOf(key, 'thumb'))   // 一覧の小さい絵
   for (const key of Object.keys(BOSS_ENCOUNTER)) known.add(bossFileOf(key, 'encounter'))   // ボスを選んだポップアップと、挑戦を押した瞬間に出す大きな絵
+  for (const key of Object.keys(BOSS_FACE)) known.add(bossFileOf(key, 'face'))   // 挑戦の入口の顔のアップ（2026-11-06）
   for (const f of readdirSync(OUT)) assert.ok(known.has(f), `${f} は一覧に無い`)
 })
 

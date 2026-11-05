@@ -10,7 +10,7 @@ import {
 import { createAtb, runFor, enrageOf, stateChips, startMacro, fillPerSecOf, hpBuffChips, castMsOf, ATB_SLOW_CUT, FILL_PER_SEC, BUFF_GAUGE_SEC, BUFF_WAIT_AFTER_ACT_SEC, BUFF_SHOW_SEC, TURN_SEC, GAUGE_FULL, NOW_WAIT_AFTER_ACT_SEC, CAST_SEC } from '../core/atb.js'
 import { inflict, healMultOf, hasAilment } from '../core/ailments.js'
 import { bossIllustOf, buffArtMsOf } from './bossIllust.js'
-import { bossThumbOf, bossTintOf } from './bossArt.js'
+import { bossThumbOf, bossTintOf, bossFaceOf, BOSS_FACE_BOX } from './bossArt.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { liveStats, hpStepMultOf, healMaxAmount, createSide, takeAction } from '../core/battle.js'
 import { splitHits } from './atbFx.js'
@@ -745,10 +745,23 @@ test('【確定】2026-10-31 入口のボスの行の言葉と「挑戦する」
   assert.match(src, /\{state && \(blockOf\(key\) \|\| '挑戦可能'\)\}/, '行の言葉も同じ決まり（読み込み中は出さない）・ユーザー「挑戦可能 に変更して」')
 })
 
-test('【確定】2026-11-05 入口のカテゴリの中のボスは2列の格子（ユーザー「これ 2列2行にして」）', () => {
+test('【確定】2026-11-06 入口は1列（1行に1体）・左にボスの顔のアップ（ユーザー「一旦1列に戻して、ここの部分は顔付近だけ表示されるようにして※クラスの顔アイコンみたいな感じ」・前の2列は 11-05）', () => {
   const src = readFileSync(new URL('../components/V2capDungeon.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
-  assert.match(src, /\{CHALLENGE_CATS\.map\(cat => \([\s\S]*?gridTemplateColumns:'repeat\(2, minmax\(0, 1fr\)\)'[\s\S]*?\{cat\.bosses\.map\(key => \{/, 'カテゴリの中を2列に')
-  assert.equal(CHALLENGE_CATS[0].bosses.length, 4, '四凶は4体＝2行')
+  assert.match(src, /\{CHALLENGE_CATS\.map\(cat => \([\s\S]*?<div style=\{\{ display:'flex', flexDirection:'column', gap:'6px' \}\}>\n\s*\{cat\.bosses\.map\(key => \{/, 'カテゴリの中は1列')
+  assert.doesNotMatch(src, /gridTemplateColumns:'repeat\(2/, '2列の格子は使わない')
+  assert.match(src, /<BossFace bossKey=\{key\} \/>/, '行の左に顔のアップ')
+  // 顔のアップは神殿のクラスの顔アイコンと同じ形（60pxの正方形・顔を全面に）
+  assert.ok(src.includes("<div style={{ width:'60px', height:'60px', flexShrink:0, overflow:'hidden', background: tint ? `${tint}30` : '#0b1a2e', border:'1px solid #002244'"))
+  assert.ok(src.includes("objectFit: face ? 'cover' : 'contain'"))
+  // 挑戦のカテゴリの全部のボスに顔のアップがある（ボスを足すときは BOSS_FACE_BOX にも足して node tools/v2cap-boss-thumb.mjs）
+  for (const cat of CHALLENGE_CATS) for (const k of cat.bosses) {
+    assert.ok(BOSS_FACE_BOX[k], `${k} の顔の切り取り`)
+    const url = bossFaceOf(k)
+    assert.ok(url, `${k} の顔のアップ`)
+    const file = new URL(`../../../public${url.split('?')[0]}`, import.meta.url)
+    assert.ok(existsSync(file) && statSync(file).size < 40 * 1024, `${k} の顔のアップは軽い`)
+    assert.equal(url.split('?v=')[1], versionOf(fileURLToPath(file)), `${k} の印（node tools/v2cap-boss-thumb.mjs をやり直す）`)
+  }
 })
 
 test('【確定】2026-11-05 ボスのHPは数字も割合も出さない＝バーだけ（ユーザー「あと敵のHPの数値は見れないようにして」）', () => {
@@ -789,7 +802,7 @@ test('【確定】2026-11-06 入口のボスの枠にボスの色を薄く敷く
   // 入口の枠はこの色を薄く敷く（文字と絵が見づらくならない濃さ＝本番で見比べた値）
   const src = readFileSync(new URL('../components/V2capDungeon.jsx', import.meta.url), 'utf8')
   assert.match(src, /\.\.\.bossCardBg\(bossTintOf\(key\)\)/)
-  assert.ok(src.includes('radial-gradient(ellipse 85% 70% at 50% 40%, ${tint}47, transparent 75%), linear-gradient(${tint}1a, ${tint}1a), #0b0c14'))
+  assert.ok(src.includes('radial-gradient(ellipse 45% 120% at 10% 50%, ${tint}47, transparent 75%), linear-gradient(${tint}1a, ${tint}1a), #0b0c14'))
 })
 
 test('【確定】2026-11-06 四凶は時間で強くなる：30秒ごとに与えるダメージ+5%（足し算）・3分から命中率+10%・挑戦ごとの戦闘の時間で決める（ユーザー「四強のやつらは30秒ごとに与えるダメージ＋5％、3分以上ならさらに命中率＋１０％」）', () => {

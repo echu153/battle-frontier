@@ -20,7 +20,7 @@ import { motionOf } from '../lib/motionArt.js'
 import { homeIconOf } from '../lib/classArt.js'
 import { artGenderOf } from '../lib/gender.js'
 import { CLASS_BY_ID } from '../lib/jobs.js'
-import { bossArtOf, bossEncounterOf, bossThumbOf, bossTintOf } from '../lib/bossArt.js'
+import { bossArtOf, bossEncounterOf, bossFaceOf, bossThumbOf, bossTintOf } from '../lib/bossArt.js'
 import { bossIllustOf } from '../lib/bossIllust.js'
 import { menuHeadReady } from '../lib/menuHead.js'
 import { MenuHead } from './V2Status.jsx'
@@ -62,6 +62,7 @@ import {
 //   サーバーが同じ戦闘を回し直して結果を入れる（lib/dungeonVerify.js）。挑戦の途中で画面を離れたら、そこまでの記録を預ける。確かめられないまま戻ったら入口で確かめ直す
 // 【確定】同じ日 ユーザー「アイテムは4つまでしか持てないようにして、全部で合計4つ」「装備は挑戦タブから設定できるように」：ポップアップで持ち込む薬を選ぶ（V2capItemLoadout.jsx）
 // 【確定】2026-11-05 ユーザー「これ 2列2行にして」：入口のカテゴリの中のボスは2列の格子
+//   → 2026-11-06 ユーザー「一旦1列に戻して、ここの部分は顔付近だけ表示されるようにして※クラスの顔アイコンみたいな感じ」で1列（1行に1体・左に顔のアップ）に戻した
 // 【確定】同じ日 ユーザー「あと敵のHPの数値は見れないようにして」：ボスのHPは数字も割合も出さず、バーだけ
 //   （戦闘の舞台と見出し・入っているボスの行・救援の一覧・ポップアップ・結果の画面）。削った割合も出さない（V2capAtbFight.jsx）。
 //   与えたダメージと貢献度（2026-11-01 にユーザーが頼んだ物）はそのまま
@@ -87,13 +88,21 @@ const MiniBar = ({ pct }) => (
     <span style={{ display:'block', width:`${Math.max(0, Math.min(100, pct))}%`, height:'100%', background:'#cc3344' }} />
   </span>
 )
-// 入口の一覧のボスの絵（2列の格子の1つの枠）
-const THUMB_SIZE = 'clamp(64px, 22vw, 104px)'
-// 入口のボスの枠の背景：ボスの色（lib/bossArt.js の bossTintOf）を薄く敷く。絵の後ろを少し濃く、まわりは薄く。
+// 入口のボスの顔のアップ（神殿のクラスの顔アイコンと同じ形＝60pxの正方形・顔を全面に・後ろにボスの色）。顔のアップが無いボスは一覧の小さい絵を縮めて出す
+const BossFace = ({ bossKey }) => {
+  const face = bossFaceOf(bossKey), src = face || bossThumbOf(bossKey), tint = bossTintOf(bossKey)
+  if (!src) return null
+  return (
+    <div style={{ width:'60px', height:'60px', flexShrink:0, overflow:'hidden', background: tint ? `${tint}30` : '#0b1a2e', border:'1px solid #002244', display:'flex', alignItems:'center', justifyContent:'center' }}>
+      <img src={src} alt="" draggable={false} style={{ width:'100%', height:'100%', objectFit: face ? 'cover' : 'contain' }} />
+    </div>
+  )
+}
+// 入口のボスの行の背景：ボスの色（lib/bossArt.js の bossTintOf）を薄く敷く。左の顔の後ろを少し濃く、右へ薄く（1列の行・2026-11-06〜）。
 //   下地は色のない暗い色（紺の上に重ねると黄色が灰色にくすんだ・本番で見比べた）。color はなぞったときの光（src/dev-ui.css の currentColor）
 //   色の無いボスは前のまま（背景なし）
 const bossCardBg = (tint) => (tint
-  ? { background:`radial-gradient(ellipse 85% 70% at 50% 40%, ${tint}47, transparent 75%), linear-gradient(${tint}1a, ${tint}1a), #0b0c14`, border:`1px solid ${tint}66`, color: tint }
+  ? { background:`radial-gradient(ellipse 45% 120% at 10% 50%, ${tint}47, transparent 75%), linear-gradient(${tint}1a, ${tint}1a), #0b0c14`, border:`1px solid ${tint}66`, color: tint }
   : { background:'none', border:'none' })
 // ボスの絵：イラスト版（無ければドット絵版）。試し撃ちで選んだ版を使う
 const artMemo = new Map()
@@ -390,23 +399,27 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
         )
       })}
 
-      {/* カテゴリごとのボス（押すとポップアップ。もう入っているボスは続きから）
-          【確定】2026-11-05 ユーザー「これ 2列2行にして」：2列の格子（4体で2行）。1つの枠は 絵・名前・挑戦できるか を上から */}
+      {/* カテゴリごとのボス（押すとポップアップ。もう入っているボスは続きから）。2026-11-05 の2列は 11-06 に1列へ戻した（下） */}
       {CHALLENGE_CATS.map(cat => (
         <div key={cat.key} style={{ ...box, padding:'10px', marginBottom:'10px' }}>
           {/* 【確定】2026-11-06 ユーザー「四凶のところ、ちょっとアイコン？バナーみたいなの差し込みたい」→選んだ「見出しの帯」：ホームの見出しと同じ帯（lib/menuHead.js の CAT_HEAD_DEFS）。
               絵が届くまでは今までどおり文字だけ */}
           {cat.head && menuHeadReady(cat.head) ? <MenuHead head={cat.head} title={cat.label} />
             : <div style={{ color:'#ff8866', fontSize:'13px', fontWeight:'bold', marginBottom:'8px' }}>{cat.label}</div>}
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(2, minmax(0, 1fr))', gap:'8px' }}>
+          {/* 【確定】2026-11-06 ユーザー「一旦1列に戻して、ここの部分は顔付近だけ表示されるようにして※クラスの顔アイコンみたいな感じ」：
+              1列（1行に1体）・左に顔のアップ（BossFace）・名前と挑戦できるか・右に ›。ボスの色の背景（bossCardBg）はそのまま（前の2列は 2026-11-05） */}
+          <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
             {cat.bosses.map(key => {
-              const boss = DUNGEON_BOSSES[key], thumb = bossThumbOf(key)
+              const boss = DUNGEON_BOSSES[key]
               return (
                 <button key={key} onClick={() => openPick(key, active.find(r => r.mine && r.boss === key) || null)}
-                  style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'3px', width:'100%', minWidth: 0, boxSizing:'border-box', padding:'8px 4px', ...bossCardBg(bossTintOf(key)), cursor:'pointer', textAlign:'center' }}>
-                  {thumb && <img src={thumb} alt="" draggable={false} style={{ width: THUMB_SIZE, height: THUMB_SIZE, objectFit:'contain' }} />}
-                  <b style={{ color:'#ff8866', fontSize:'13px', lineHeight: 1.3 }}>{boss.name}</b>
-                  <span style={{ color: TEXT.label, fontSize:'10px', lineHeight: 1.3, minHeight:'1.3em' }}>{state && (blockOf(key) || '挑戦可能')}</span>
+                  style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', boxSizing:'border-box', padding:'6px 8px', ...bossCardBg(bossTintOf(key)), cursor:'pointer', textAlign:'left' }}>
+                  <BossFace bossKey={key} />
+                  <span style={{ flex:1, minWidth:0 }}>
+                    <b style={{ color:'#ff8866', fontSize:'13px' }}>{boss.name}</b><br />
+                    <span style={{ color: TEXT.label, fontSize:'10px' }}>{state && (blockOf(key) || '挑戦可能')}</span>
+                  </span>
+                  <span style={{ color: TEXT.label, fontSize:'14px', flexShrink:0 }}>›</span>
                 </button>
               )
             })}
