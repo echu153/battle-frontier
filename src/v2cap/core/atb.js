@@ -149,6 +149,10 @@ const createAtbSide = (fighter, band, { ai = false, cast = false } = {}) => {
   side.atb = true
   side.ai = ai
   side.castBig = cast
+  // ★時間で強くなる（四凶・enrageOf）。値は刻みごとに enrageStep が入れ直す（side.rage はバーサクの高ぶりの数＝別物）
+  side.enrage = fighter.enrage || null
+  side.enrageDeal = 0
+  side.enrageHit = 0
   // 武器の進化「◯%で先手を取る」は開始のゲージに読み替える
   side.gauge = Math.min(GAUGE_FULL, GAUGE_FULL * (side.evo?.first || 0) / 100)
   side.cd = {}                 // 技の枠 → 使えるようになる時刻（秒）
@@ -651,10 +655,30 @@ const startAct = (st, me, foe) => {
 const excessOf = (side, now) => (side.cast || side.ail.paralyze || side.buffQueue.length || inBuffAct(side, now) || nextBigOf(side) ? -Infinity : side.gauge - needNow(side, now))
 
 // ===== 1刻み進める =====
+// ===== 時間で強くなる（四凶・lib/dungeon.js の CHALLENGE_CATS の enrage）=====
+// ⚠ side.rage はバーサク・執行本能の高ぶりの数（battle.js）＝名前を分けた（同じ名前にしたら通常攻撃で0に戻され、効かなかった）
+// 【確定】2026-11-06 ユーザー「四強のやつらは30秒ごとに与えるダメージ＋5％、3分以上ならさらに命中率＋１０％」
+//   「これは挑戦するごとに計算する…発行から20分たって救援参加したら与ダメとか増えてるとかにはならない」＝この戦闘の時間（st.t・挑戦ごとに0から）で決める
+//   deal … 与えるダメージ+%（足し算＝30秒で+5%・60秒で+10%…・上限なし。core/battle.js の applyIncoming が撃つ側の enrageDeal を掛ける）
+//   hit  … 命中率+（pa.hitBonus に足す＝暗闇の−25と同じ物差し・技にも通常攻撃にも乗る）
+export const enrageOf = (enrage, t) => (enrage
+  ? { deal: Math.floor((t + EPS) / enrage.everySec) * enrage.dealPct, hit: t + EPS >= enrage.hitAtSec ? enrage.hitPct : 0 }
+  : { deal: 0, hit: 0 })
+const enrageStep = (st, side) => {
+  if (!side.enrage) return
+  if (side.enrageHitBase == null) side.enrageHitBase = side.pa.hitBonus   // もとの命中補正（戦闘の始めで決まったもの）
+  const r = enrageOf(side.enrage, st.t)
+  side.enrageDeal = r.deal
+  side.enrageHit = r.hit
+  side.pa.hitBonus = side.enrageHitBase + r.hit
+}
+
 const stepOnce = (st) => {
   st.steps += 1
   st.t = st.steps * STEP_SEC
   const { a, b } = st
+  enrageStep(st, a)
+  enrageStep(st, b)
 
   // ターンの時計：ターンで数える効果を進める（オート戦闘のターンの終わり→次のターンの頭と同じ）
   if (st.t + EPS >= st.turn * TURN_SEC) {
@@ -790,6 +814,9 @@ export const ailChips = (st, side) => AIL_KEYS
 // 職の軸の状態（空中・呪力・竜気・獣の型・納刀…）。時間では切れず、技を撃つと変わる
 export const stateChips = (side) => {
   const out = []
+  // ★時間で強くなる（四凶・enrageOf）
+  if (side.enrageDeal > 0) out.push({ key:'enrage', label:`🔥 与ダメ+${side.enrageDeal}%` })
+  if (side.enrageHit > 0) out.push({ key:'enrageHit', label:`🎯 命中+${side.enrageHit}%` })
   if (side.air) out.push({ key:'air', label:'🕊 空中' })
   if (side.jumping) out.push({ key:'jump', label:'🐉 跳躍中' })
   if (side.form) out.push({ key:'form', label:`🐾 ${BEAST_FORMS[side.form]?.label || side.form}の型` })

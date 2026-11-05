@@ -214,9 +214,15 @@ export const DUNGEON_BOSSES = {
 //   【確定】2026-11-01 ユーザー「今の強敵のグループ名を良い感じに変えたい」→選んだ「四凶」（しきょう・八獄と同じ「数＋不吉な字」・「四強」と同じ読み）。key はそのまま
 //   ★八獄・天穹十二宮もカテゴリに足す予定だが、ユーザー「※まだ入れないで」＝まだ足さない
 //   head＝見出しの帯の絵（lib/menuHead.js の CAT_HEAD_DEFS・2026-11-06 ユーザー「四凶のところ、ちょっとアイコン？バナーみたいなの差し込みたい」→選んだ「見出しの帯」）
+//   enrage … 時間で強くなる（core/atb.js の enrageOf）。everySec 秒ごとに与えるダメージ+dealPct%（足し算・上限なし）・hitAtSec 秒から命中率+hitPct
+//   【確定】2026-11-06 ユーザー「四強のやつらは30秒ごとに与えるダメージ＋5％、3分以上ならさらに命中率＋１０％」
+//     「これは挑戦するごとに計算するから、挑戦を初めて受けた時間ではないからね※発行から20分たって救援参加したら与ダメとか増えてるとかにはならない」
+//     ＝挑戦1回の戦闘の時間（ATB の st.t・挑戦ごとに0から）で決める。ボスを呼んだ時刻・救援に入った時刻は使わない
 export const CHALLENGE_CATS = [
-  { key: 'rival', label: '四凶', head: 'rival', bosses: ['varuzenoku', 'amaza', 'zerugiasu', 'enma'] },
+  { key: 'rival', label: '四凶', head: 'rival', bosses: ['varuzenoku', 'amaza', 'zerugiasu', 'enma'], enrage: { everySec: 30, dealPct: 5, hitAtSec: 180, hitPct: 10 } },
 ]
+// そのボスの「時間で強くなる」（入っているカテゴリの enrage・無ければ null）
+export const bossEnrageOf = (bossKey) => CHALLENGE_CATS.find(c => c.bosses.includes(bossKey))?.enrage || null
 
 export const diffOf = (bossKey, diffKey) => DUNGEON_BOSSES[bossKey]?.diffs?.[diffKey] || null
 export const isDiffReady = (bossKey, diffKey) => { const d = diffOf(bossKey, diffKey); return !!d && d.ready !== false }
@@ -252,6 +258,7 @@ export const dungeonFighter = (bossKey, diffKey, hpNow = null) => {
     slots: b.skills.map(skill => ({ skill, uses: 9999 })), taken: null, pattern: b.pattern,
     normalAil: b.hardNormalAil && diffKey !== 'normal' ? b.hardNormalAil : null,
     hpNow: hpNow == null ? null : Math.max(1, Math.min(d.hp, hpNow)),
+    enrage: bossEnrageOf(bossKey),   // 時間で強くなる（四凶）
   }
 }
 
