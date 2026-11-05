@@ -10,7 +10,7 @@ import {
 import { createAtb, runFor, startMacro, fillPerSecOf, hpBuffChips, castMsOf, ATB_SLOW_CUT, FILL_PER_SEC, BUFF_GAUGE_SEC, BUFF_WAIT_AFTER_ACT_SEC, BUFF_SHOW_SEC, TURN_SEC, GAUGE_FULL, NOW_WAIT_AFTER_ACT_SEC, CAST_SEC } from '../core/atb.js'
 import { inflict, healMultOf, hasAilment } from '../core/ailments.js'
 import { bossIllustOf, buffArtMsOf } from './bossIllust.js'
-import { bossThumbOf } from './bossArt.js'
+import { bossThumbOf, bossTintOf } from './bossArt.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { liveStats, hpStepMultOf, healMaxAmount, createSide, takeAction } from '../core/battle.js'
 import { splitHits } from './atbFx.js'
@@ -767,6 +767,39 @@ test('【確定】2026-11-05 ボスのHPは数字も割合も出さない＝バ�
   // 貢献度（与えたダメージの割合）は残す（2026-11-01 ユーザー「貢献度もわかるようにしてほしい、ダメージ与えた割合ね」）
   assert.match(read('../components/V2capBossReward.jsx'), /contributionPctOf\(m\.damage, hpMax\)\.toFixed\(1\)/)
   assert.match(read('../components/V2capDungeon.jsx'), /貢献度\{contributionPctOf\(m\.damage, run\.hp_max\)\.toFixed\(1\)\}%/)
+})
+
+test('【確定】2026-11-06 入口のボスの枠にボスの色を薄く敷く（ユーザー「黒龍 あか・あまざ あお・ゼルギアス 黄色・閻魔 紫 の薄い背景にしてほしい」）', () => {
+  // 色の向き（色相・度）で見る
+  const hueOf = (hex) => {
+    const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
+    const max = Math.max(r, g, b), d = max - Math.min(r, g, b)
+    const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4
+    return (h * 60 + 360) % 360
+  }
+  const hue = (key) => hueOf(bossTintOf(key))
+  assert.ok(hue('varuzenoku') < 15 || hue('varuzenoku') > 345, '黒龍は赤')
+  assert.ok(hue('amaza') >= 200 && hue('amaza') <= 240, '雨摩座は青')
+  assert.ok(hue('zerugiasu') >= 40 && hue('zerugiasu') <= 60, 'ゼルギアスは黄色')
+  assert.ok(hue('enma') >= 255 && hue('enma') <= 290, '閻魔は紫')
+  // 挑戦のカテゴリの全部のボスに色がある（ユーザー「今後4強以外にもいろいろ出す予定」＝ボスを足すときは色も決める）
+  for (const cat of CHALLENGE_CATS) for (const key of cat.bosses) {
+    assert.match(bossTintOf(key) || '', /^#[0-9a-f]{6}$/, `${key} の色が無い（ユーザーに聞いて lib/bossArt.js の BOSS_TINT に足す）`)
+  }
+  // 入口の枠はこの色を薄く敷く（文字と絵が見づらくならない濃さ＝本番で見比べた値）
+  const src = readFileSync(new URL('../components/V2capDungeon.jsx', import.meta.url), 'utf8')
+  assert.match(src, /\.\.\.bossCardBg\(bossTintOf\(key\)\)/)
+  assert.ok(src.includes('radial-gradient(ellipse 85% 70% at 50% 40%, ${tint}47, transparent 75%), linear-gradient(${tint}1a, ${tint}1a), #0b0c14'))
+})
+
+test('【確定】2026-11-06 結果の画面の見出しは「討伐時間」「与えたダメージ」「貢献度」（ユーザー「討伐時間 与えたダメージ 貢献度 にして」）', () => {
+  const src = readFileSync(new URL('../components/V2capBossReward.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  const code = src.split(/\r?\n/).filter(l => !/^\s*(\/\/|\{\/\*)/.test(l)).join('\n')   // コメントの外
+  // 倒せなかったとき（敗北・時間切れ）は「討伐」と言えないので「戦闘時間」
+  assert.ok(code.includes("<Row label={cleared ? '討伐時間' : '戦闘時間'} value={`${st.t.toFixed(1)}秒`} />"))
+  assert.ok(code.includes('<Row label="与えたダメージ" value={r.damage.toLocaleString()} />'))
+  assert.match(code, />貢献度<\/div>/)
+  assert.doesNotMatch(code, /この挑戦の時間|この挑戦のダメージ|与えたダメージの割合/)
 })
 
 test('【確定】2026-10-31 入口：履歴と説明を出さない・「挑戦する」でそのまま戦闘へ（ユーザー「この履歴いらない」「ここら辺の説明いらない」「呼ぶじゃなくて挑戦する にして」）', () => {

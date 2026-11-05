@@ -131,6 +131,11 @@ export const bossEncounterOf = (key) => (BOSS_ENCOUNTER[key] ? `${BOSS_ART_DIR}/
 // 遭遇のイラストに添える色（ポップアップの枠・全画面の輪・名前の光）
 const BOSS_ACCENT = { varuzenoku: '#ff7a3a', amaza: '#7ad0ff', zerugiasu: '#8ab4ff', enma: '#b98aff' }
 export const bossAccentOf = (key) => BOSS_ACCENT[key] || '#ffd27a'
+// 挑戦の入口のボスの枠に薄く敷く色（components/V2capDungeon.jsx の bossCardBg）。遭遇の差し色（上）とは別
+//   【確定】2026-11-06 ユーザー「黒龍 あか・あまざ あお・ゼルギアス 黄色・閻魔 紫 の薄い背景にしてほしい、文字やイラストが見づらくならない程度に」
+//   ★ボスを足すときは色も決める（ユーザーに聞く・dungeon.test.js が挑戦のカテゴリの全部のボスにあるか見る）
+const BOSS_TINT = { varuzenoku: '#ff4040', amaza: '#3d8bff', zerugiasu: '#ffcc33', enma: '#a95cff' }
+export const bossTintOf = (key) => BOSS_TINT[key] || null
 
 // 画面で使う形（無ければ null）
 //   { name, base, idle:{ src, frames, ms:[…] }, illust, motions:{ <key>: lib/motionArt.js の motionOf と同じ形＋label＋エフェクト } }
