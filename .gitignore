@@ -56,5 +56,7 @@ tools/v2-skills.html
 /public/V2商店/
 # v2cap ホームのメニューの見出しの帯の元の絵（ユーザーが ChatGPT で作って置く・1枚約1MB）。画面で使う版は public/v2cap-art/home（tools/v2cap-menu-art.mjs）
 /public/V2ホーム画面/
+# v2cap 挑戦の入口のカテゴリ（四凶）の見出しの帯の元の絵（ユーザーが ChatGPT で作って置く）。画面で使う版は public/v2cap-art/home（tools/v2cap-menu-art.mjs）
+/public/V2挑戦/
 # v2cap 案内役ナハトの元の絵（ユーザーが ChatGPT で作って置く）。画面で使う版は public/v2cap-art/navi（tools/v2cap-navi-art.mjs）
 /public/V2ナビ/

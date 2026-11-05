@@ -10,7 +10,7 @@ import { SLOT_LABEL } from '../core/equipment.js'
 import { fusedName } from '../core/fusion.js'
 import { RANK_COLOR } from './v2ui.js'
 import { JP_BOLD } from './casinoStyle.js'
-import { MENU_HEAD_DEFS, menuHeadSrcOf } from '../lib/menuHead.js'
+import { headDefOf, menuHeadSrcOf } from '../lib/menuHead.js'
 import V2ItemTip, { V2SkillTip, V2Tip } from './V2ItemTip.jsx'
 
 // ★見た目は旧版（無印）の街のステータスと同じ値にそろえてある。
@@ -243,9 +243,10 @@ export default function V2Status({ prof, inventory, runes, fishDex, dex, pet, cl
   )
 }
 
-// メニューの見出しの帯。絵は高さに合わせて右へ寄せ、文字は絵の溶けた左に置く（決まりは lib/menuHead.js）
-function MenuHead({ head, title }) {
-  const { color } = MENU_HEAD_DEFS[head]
+// メニューの見出しの帯。絵は高さに合わせて右へ寄せ、文字は絵の溶けた左に置く（決まりは lib/menuHead.js）。
+//   挑戦の入口のカテゴリの見出し（四凶・V2capDungeon.jsx）も同じ帯
+export function MenuHead({ head, title }) {
+  const { color } = headDefOf(head)
   return (
     <div style={{ display:'flex', alignItems:'center', width:'100%', aspectRatio:'6 / 1', minHeight:'56px', maxHeight:'80px', boxSizing:'border-box', padding:'0 10px', marginBottom:'6px',
       borderRadius:'4px', border:'1px solid #003366',

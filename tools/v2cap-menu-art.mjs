@@ -2,6 +2,7 @@
 // v2cap のホームのメニューの見出しの帯の絵を、画面で使う形にする（決まりは src/v2cap/lib/menuHead.js）
 // ------------------------------------------------------------
 // 元の絵（ユーザーが置く・git に入れない）：public/V2ホーム画面/<名前>.png（ChatGPT で描いた 1536×1024。真ん中に細長い帯・上下は真っ黒の余白）
+//   挑戦の入口のカテゴリの帯（CAT_HEAD_DEFS・2026-11-06 四凶）は dir のフォルダ（public/V2挑戦）から
 // 作るもの：
 //   public/v2cap-art/home/menu-<key>.webp … 帯だけを切り抜き、左を透明へ溶かした WebP
 //   src/v2cap/lib/menuHeadList.js         … 一覧（できた絵の大きさ・中身の印）
@@ -14,7 +15,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { decode, encodeRect, probe, versionOf } from './v2cap-art-lib.mjs'
 import { MENU_HEAD } from '../src/v2cap/lib/menuHeadList.js'
-import { MENU_HEAD_DEFS, MENU_HEAD_DIR, MENU_HEAD_SRC_DIR, menuHeadFileOf } from '../src/v2cap/lib/menuHead.js'
+import { MENU_HEAD_DEFS, CAT_HEAD_DEFS, MENU_HEAD_DIR, MENU_HEAD_SRC_DIR, menuHeadFileOf } from '../src/v2cap/lib/menuHead.js'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const SRC = path.join(ROOT, 'public', MENU_HEAD_SRC_DIR)
@@ -51,8 +52,8 @@ const fadeLeft = ({ data, W, H }) => {
 
 const all = JSON.parse(JSON.stringify(MENU_HEAD))
 const failed = []
-for (const [key, def] of Object.entries(MENU_HEAD_DEFS)) {
-  const src = path.join(SRC, def.source), out = path.join(OUT, menuHeadFileOf(key))
+for (const [key, def] of Object.entries({ ...MENU_HEAD_DEFS, ...CAT_HEAD_DEFS })) {
+  const src = path.join(def.dir ? path.join(ROOT, 'public', def.dir) : SRC, def.source), out = path.join(OUT, menuHeadFileOf(key))
   if (!existsSync(src)) { console.log(`  - ${def.source} が無い`); continue }
   if (!FORCE && existsSync(out) && statSync(out).mtimeMs >= statSync(src).mtimeMs && all[key]) continue
   try {
