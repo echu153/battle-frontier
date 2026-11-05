@@ -32,10 +32,14 @@ const KF = `
 `
 const GOLD = '#ffd27a'
 const up = (i) => ({ animation:`brwUp 0.35s ease-out ${(i * 0.09).toFixed(2)}s both` })
+// 行は「見出し 値」の表：見出しは左から（書き出しをそろえる）・値は見出しのすぐ右の欄で右揃え
+//   【確定】2026-11-06 ユーザー「討伐時間 ○○秒みたいに右揃えにして」「今の感じで先頭のスタートは同じ所で」（前は値が枠の右はしで、PC の幅だと見出しと離れていた）
+const LABEL_W = '96px'   // 見出しの欄（いちばん長い「与えたダメージ」「討伐の残り時間」が12pxで入る）
+const VALUE_W = '60px'   // 値の欄（右揃え・「165.7秒」「30,000」「100.0%」が入る）。ボスの残りHPのバーもこの幅
 const Row = ({ label, value }) => (
-  <div style={{ display:'flex', justifyContent:'space-between', gap:'10px', padding:'5px 0', borderTop:'1px solid #001428', fontSize:'12px' }}>
-    <span style={{ color: TEXT.label }}>{label}</span>
-    <span style={{ color: TEXT.bright, fontWeight:'bold' }}>{value}</span>
+  <div style={{ display:'flex', alignItems:'baseline', padding:'5px 0', borderTop:'1px solid #001428', fontSize:'12px' }}>
+    <span style={{ color: TEXT.label, width: LABEL_W, flexShrink: 0 }}>{label}</span>
+    <span style={{ color: TEXT.bright, fontWeight:'bold', width: VALUE_W, flexShrink: 0, textAlign:'right', whiteSpace:'nowrap' }}>{value}</span>
   </div>
 )
 
@@ -81,9 +85,9 @@ export default function V2capBossReward({ bossKey, diffKey, cls, st = null, resu
           {/* 倒せなかったとき：ボスの残りHP（バーだけ＝数字を出さない）・討伐の残り時間。どちらもほかの行と同じ1行（見出しだけの行を作らない） */}
           {!cleared && (
             <div style={up(3)}>
-              <div style={{ display:'flex', alignItems:'center', gap:'10px', padding:'5px 0', borderTop:'1px solid #001428', fontSize:'12px' }}>
-                <span style={{ color: TEXT.label, flexShrink: 0 }}>ボスの残りHP</span>
-                <div style={{ flex: 1, height:'8px', background:'#000818', border:'1px solid #13405f' }}>
+              <div style={{ display:'flex', alignItems:'center', padding:'5px 0', borderTop:'1px solid #001428', fontSize:'12px' }}>
+                <span style={{ color: TEXT.label, width: LABEL_W, flexShrink: 0 }}>ボスの残りHP</span>
+                <div style={{ width: VALUE_W, flexShrink: 0, boxSizing:'border-box', height:'8px', background:'#000818', border:'1px solid #13405f' }}>
                   <div style={{ width:`${Math.min(100, (r.run.hp / hpMax) * 100)}%`, height:'100%', background:'#cc3344' }} />
                 </div>
               </div>
@@ -95,9 +99,9 @@ export default function V2capBossReward({ bossKey, diffKey, cls, st = null, resu
             <div style={up(3)}>
               <Row label="貢献度" value={`${pctOf(mine)}%`} />
               {others.map(m => (
-                <div key={m.name} style={{ display:'flex', justifyContent:'space-between', gap:'8px', padding:'0 0 5px 12px', fontSize:'11px', color: TEXT.sub }}>
-                  <span>{m.owner ? '👑' : '🤝'}{m.name}</span>
-                  <b>{pctOf(m)}%</b>
+                <div key={m.name} style={{ display:'flex', alignItems:'baseline', padding:'0 0 5px', fontSize:'11px', color: TEXT.sub }}>
+                  <span style={{ width: LABEL_W, flexShrink: 0, boxSizing:'border-box', paddingLeft:'12px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{m.owner ? '👑' : '🤝'}{m.name}</span>
+                  <b style={{ width: VALUE_W, flexShrink: 0, textAlign:'right' }}>{pctOf(m)}%</b>
                 </div>
               ))}
             </div>
