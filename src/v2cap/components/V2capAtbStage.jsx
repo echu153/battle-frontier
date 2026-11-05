@@ -1399,6 +1399,9 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
   const chainAct = kept.current.filter(f => f.motion.scene?.chains).at(-1)
   const chainFx = chainAct?.motion.fx?.hit
   const chainTiles = chainAct && chainFx ? chainTilesAt(chainAct.motion, (now - chainAct.t0) * 1000) : []
+  // 演出の動くもののうち奥のもの（back＝無間地獄の奥の亡者の腕）は自分の絵の後ろに描く＝つかみかかっても顔や体を隠さない（2026-11-05）
+  const scBack = sc?.items.some(it => it.back) ? { ...sc, cloud: null, items: sc.items.filter(it => it.back) } : null
+  const scFront = scBack ? { ...sc, items: sc.items.filter(it => !it.back) } : sc
   // HPの節目のバフの強い見せ方（逆鱗・lib/bossIllust.js の buffSceneAt）：舞台を赤黒く暗く・吠える揺れ（技の演出と重ねる）
   const rageB = foeArt?.kind === 'illust' ? fx.reduce((p, f) => (f.kind === 'rage' && f.side === 'b' && f.t0 <= now && (!p || f.t0 >= p.t0) ? f : p), null) : null
   // 開戦の動き（lib/bossIllust.js の intro）の吠えた瞬間も同じ形（暗さと揺れ）
@@ -1434,6 +1437,12 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
       transform: shake[0] || shake[1] ? `translate(${Math.round(shake[0])}px, ${Math.round(shake[1])}px)` : undefined }}>
       {foeArt?.bg && geo && <BossBackground bg={foeArt.bg} geo={geo} now={now} dim={dimOf} behindK={death ? death.behind : 1} />}
       {hasBackFx && geo && <BossFxBack fx={death ? fxAll.filter(f => f.side !== 'b' || f.kind !== 'act') : fxAll} now={now} geo={geo} art={foeArt} cast={cast} castEnd={castSeen.current} tiles={chainTiles} />}
+      {/* 奥の演出（scBack）：zIndex 0 で囲む＝中の重なり（SceneLayer の zIndex 2）を閉じこめて、あとに描く自分の絵より奥にする */}
+      {scBack && geo && (
+        <div style={{ position:'absolute', left: 0, right: 0, top: 0, height: fxBottomOf(geo), overflow:'hidden', pointerEvents:'none', zIndex: 0 }}>
+          <SceneLayer geo={geo} sc={scBack} hands={null} s={geo.b.w / foeArt.base} />
+        </div>
+      )}
       <Fighter st={st} side="a" me={st.a} src={playerSrc} motion={playerMotion} strips={playerMotion ? [playerMotion] : []} fx={fx} now={now} name={st.a.name}
         artH={size?.artH || ART_H} scale={playerScale} areaRef={pArea} squeeze={sc?.squeeze} react={foeBig} tone={sc?.tone} wrapped={sc?.wrapped || 0} />
       <Fighter st={st} side="b" me={st.b} right src={foeSrc} fx={fx} now={now} name={st.b.name}
@@ -1444,7 +1453,7 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
       <div style={{ position:'absolute', left: 0, right: 0, top: 0, height: geo ? fxBottomOf(geo) : 0, overflow:'hidden', pointerEvents:'none' }}>
         {foeArt && <BossFx fx={death ? fxAll.filter(f => f.side !== 'b' || f.kind !== 'act') : fxAll} now={now} geo={geo} art={foeArt} cast={cast} castEnd={castSeen.current} scene={sc} />}
         {chainTiles.length > 0 && geo && <ChainCanvas geo={geo} a={chainFx} tiles={chainTiles} front H={fxBottomOf(geo)} />}
-        {sc && geo && <SceneLayer geo={geo} sc={sc} hands={sc.handsAt ? sc.handsAt.map(p => [geo.b.x + p[0] * (geo.b.w / foeArt.base), geo.b.y + p[1] * (geo.b.w / foeArt.base)]) : null} s={geo.b.w / foeArt.base} />}
+        {sc && geo && <SceneLayer geo={geo} sc={scFront} hands={sc.handsAt ? sc.handsAt.map(p => [geo.b.x + p[0] * (geo.b.w / foeArt.base), geo.b.y + p[1] * (geo.b.w / foeArt.base)]) : null} s={geo.b.w / foeArt.base} />}
       </div>
       {sc && geo && sc.flash > 0 && <Flash geo={geo} op={sc.flash} fire={sc.tone === 'fire'} />}
       {geo && rains.length > 0 && <BuffRain geo={geo} rains={rains} op={rainOp} />}

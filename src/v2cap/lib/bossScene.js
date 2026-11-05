@@ -24,6 +24,7 @@ import { CAST_SEC } from '../core/atb.js'
 //   業縛の鎖＝'coil' の絵の動きだけ（chains＝水の輪と泡は出さない・tone 'fire'）／無間地獄＝'doom' から奔流を抜いた形（noBeam・炎は下から噴き上がる絵＝画面の rise）
 // 【確定】2026-11-01 ユーザー「断罪はもっと炎っぽく、無間地獄も炎をしっかりモーションして、手のモーションもつけて」「鎖もモーションしっかり動くようにして」：
 //   炎の絵は components/BossFireFx.jsx で燃やす・火の粉が絶えず立ちのぼる（embersUp）・無間地獄は地の底から亡者の腕が伸びて指を開いて握る（deadHandsAt・deadHandPathOf）。
+//   【確定】2026-11-05 ユーザー「無間地獄に出る手、出た後にプレイヤー側に攻撃する感じにしてほしい」：腕は構えのあいだに這い出て待ち、打ち下ろすと相手へつかみかかる（当たる時刻に握る）
 //   鎖は絵の1枚を出すのをやめ、絵から切った鎖のひと続きを、足元から体のまわりへらせんに並べて伸ばし、締め上げるたび巻き直して細り、最後にちぎれ飛ぶ（chainTilesAt）。
 //   wrapped＝炎や鎖に巻かれて、自分の体が熱く光る強さ（外れたときは 0）。動かさない＝ユーザー「プレイヤーの被ダメージのグラグラモーションはいらない」
 // 【確定】2026-10-30 ユーザー「終焉の黒焔もっと大技っぽくしてほしい、貯める動作も長く」（kind 'doom'）：
@@ -385,6 +386,8 @@ const doomGather = (out, ms, k, a, D = DOOM) => {
 const doomCastSceneAt = (m, castMs, D = DOOM) => {
   const out = { dim: D.castDim * smooth(castMs / 1200), flash: 0, shake: [0, 0], items: [], cloud: null, hand: null, tone: m.scene.tone || 'fire', dimColor: m.scene.dimColor || D.color, beam: null }
   doomGather(out, castMs, clamp01(castMs / (m.castSkipMs || CAST_SEC * 1000)), smooth(castMs / 500))
+  // 亡者の腕（無間地獄）は構えのうちに地割れから這い出る。構えの時刻は技の時刻と同じ時計（このあと技は castSkipMs から流す）
+  if (m.scene?.hands) deadHandsAt(out.items, castMs - m.impactMs, m.impactMs - m.hitMs)
   return out
 }
 // 技のあいだ（ms＝技を出しはじめてから）→ sceneAt と同じ形＋ tone・dimColor・beam: { head（口から相手までの進み 0〜1）, w（太さの割合）, op }
@@ -395,6 +398,8 @@ export const doomSceneAt = (m, ms, D = DOOM, landed = true) => {
   const H = m.hitMs, I = m.impactMs, end = sceneEndMsOf(m)
   if (ms < 0 || ms >= end) return out
   const e = ms - I, s = ms - H
+  // 亡者の腕（無間地獄）：構えのあいだに這い出て待ち、打ち下ろすと相手へつかみかかる＝当たる前から出す
+  if (m.scene?.hands) deadHandsAt(out.items, e, I - H)
   // 暗さ：ためるあいだに暗くなり、当たるともっと暗く・after のあと戻る
   const base = ms < H ? D.dim * smooth(ms / 900) : e >= 0 ? D.hitDim : D.dim
   out.dim = ms < I + D.after ? base : base * (1 - smooth((ms - I - D.after) / D.fade))
@@ -418,10 +423,9 @@ export const doomSceneAt = (m, ms, D = DOOM, landed = true) => {
     out.flash = Math.max(out.flash, 0.95 * (e < 40 ? e / 40 : pulse(e - 40, 520)))
     const k = clamp01(e / 1000), rumble = e < 800 ? 1.6 * (1 - e / 800) : 0
     amp += 15 * (1 - k) * (1 - k) + rumble
-    // 地の底から業火（無間地獄）：火の粉が絶えず立ちのぼる・亡者の腕が伸びる・炎に巻かれて光る
+    // 地の底から業火（無間地獄）：火の粉が絶えず立ちのぼる・炎に巻かれて光る（亡者の腕は上で出している）
     if (m.scene?.hands) {
       embersUp(out.items, 46, 18000, e, 2.1, 1.7, D.after + 200)
-      deadHandsAt(out.items, e)
       if (landed) out.wrapped = 1 - smooth((e - D.after) / D.fade)
     }
     // 火の粉・炎の柱・足元の輪・黒い煙・足元の残り火
@@ -480,25 +484,61 @@ export const deadHandPathOf = (curl) => {
   }
   return d
 }
-// 亡者の腕（無間地獄）：地の底から突き上がり、指を開いて → 握って → 開いて → 握りながら沈む。奥（上）は小さく、手前（下）は大きい。e＝当たってからの ms
-//   x・h＝足元からの場所と手首の高さ（枠の幅が1）・s＝大きさ・lean＝傾き（相手へ向かう）・at＝出る時刻・life＝長さ
-const HELL_HANDS = [
-  { x: -0.2, h: 1.04, s: 0.2, lean: 6, at: 90, life: 1100 }, { x: 0.24, h: 1.12, s: 0.2, lean: -8, at: 220, life: 1000 },
-  { x: -0.74, h: 0.98, s: 0.18, lean: 14, at: 260, life: 950 }, { x: 0.78, h: 0.92, s: 0.18, lean: -14, at: 300, life: 950 },
-  { x: -0.58, h: 0.62, s: 0.3, lean: 10, at: 0, life: 1240 }, { x: 0.62, h: 0.58, s: 0.31, lean: -12, at: 130, life: 1120 },
-  { x: -0.92, h: 0.3, s: 0.34, lean: 16, at: 40, life: 1180 }, { x: 0.96, h: 0.28, s: 0.36, lean: -18, at: 80, life: 1150 },
-  { x: -0.34, h: 0.2, s: 0.27, lean: 20, at: 200, life: 1050 }, { x: 0.38, h: 0.18, s: 0.28, lean: -22, at: 160, life: 1080 },
+// 亡者の腕（無間地獄）。t＝当たる時刻（I・ダメージ）からの ms（当たる前は −）・lead＝杖を打ち下ろしてから当たるまで（I − H）
+//   【確定】2026-11-01 ユーザー「手のモーションもつけて」（亡者の腕と読んだ）：地の底から突き上がり、指を開いて握る。奥（上）は小さく、手前（下）は大きい
+//   【確定】2026-11-05 ユーザー「無間地獄に出る手、出た後にプレイヤー側に攻撃する感じにしてほしい」「今はただ出てるだけだから」：
+//     裁きを唱えるあいだ（構え）に地割れから這い出て、指をうごめかせて待つ → 杖を振りかぶると少し引いて指を大きく開く →
+//     打ち下ろすと一斉に相手（自分）へ伸びてつかみかかり、当たる時刻に握る → つかんだまま地の底へ引きずり、握ったまま沈む。
+//     ダメージの時刻（impactMs）は変えず、出るのを前へずらした（前は当たってから出て、その場で開いて握るだけだった）
+//   x・h＝待つ場所（足元から・手首の高さ・枠の幅が1）・s＝大きさ・lean＝待つあいだの傾き（相手へ向かう）・at＝這い出る順（ms）
+export const HELL_HANDS = [
+  { x: -0.2, h: 1.04, s: 0.2, lean: 6, at: 90 }, { x: 0.24, h: 1.12, s: 0.2, lean: -8, at: 220 },
+  { x: -0.74, h: 0.98, s: 0.18, lean: 14, at: 260 }, { x: 0.78, h: 0.92, s: 0.18, lean: -14, at: 300 },
+  { x: -0.58, h: 0.62, s: 0.3, lean: 10, at: 0 }, { x: 0.62, h: 0.58, s: 0.31, lean: -12, at: 130 },
+  { x: -0.92, h: 0.3, s: 0.34, lean: 16, at: 40 }, { x: 0.96, h: 0.28, s: 0.36, lean: -18, at: 80 },
+  { x: -0.34, h: 0.2, s: 0.27, lean: 20, at: 200 }, { x: 0.38, h: 0.18, s: 0.28, lean: -22, at: 160 },
 ]
-export const deadHandsAt = (items, e) => {
+//   時刻（当たる時刻からの ms）：out＝這い出はじめ・rise＝出きるまで・coil＝振りかぶって引く長さ（打ち下ろすまで）・grab＝届いてから握るまで・drag＝引きずる・sink＝沈む（届いてから）
+//   aim＝つかみかかる向き（まっすぐ上から相手の側へ傾ける角度・°）：下の腕ほど上向き（aim[0]）、上の腕ほど横向き（aim[1]＝手首の高さ1で）。
+//     それより下へは向けない（指が下を向くと、腕が空から生えて見える）・reach＝届いたとき手首からつかむ所までの残り（大きさ s の何倍）・
+//   body＝体のどこをつかむか（x＝体のまん中から外へ・手首の高さの何倍＝上の腕は肩・下の腕は脚・上下の限り）。
+//     体のふちをつかむ＝自分が見えるまま（手前に描くので、まん中まで伸ばすと黒い腕で体が隠れた）・min＝近くの腕も少なくともこれだけ伸びる（動かないと襲って見えない）・
+//   back＝手首の高さがこれより上の腕は奥＝自分の絵の後ろに描く（画面の scBack・頭の後ろから顔にかぶらない）
+export const HELL = { out: -1700, rise: 420, coil: 360, grab: 90, drag: [250, 800], sink: [800, 1150], aim: [50, 80], reach: 1, min: 0.15,
+  body: { x: 0.12, k: 0.75, lo: 0.12, hi: 0.7 }, back: 0.9 }
+// 腕がつかみかかる先 → { to（届いたときの手首）, aim（そのときの傾き °・＋は時計回り＝右へ）, u（相手へ向かう向き） }
+export const hellReachOf = (h) => {
+  const B = HELL.body, tx = Math.sign(h.x) * B.x, ty = -Math.min(B.hi, Math.max(B.lo, h.h * B.k))
+  const dx = tx - h.x, dy = ty + h.h, dist = Math.hypot(dx, dy), k = Math.max(1 - (HELL.reach * h.s) / dist, Math.min(0.6, HELL.min / dist))
+  const th = (Math.atan2(dx, -dy) * 180) / Math.PI, most = HELL.aim[0] + (HELL.aim[1] - HELL.aim[0]) * clamp01(h.h)
+  return { to: { x: h.x + dx * k, y: -h.h + dy * k }, aim: Math.sign(dx) * Math.min(most, Math.abs(th)), u: [dx / dist, dy / dist] }
+}
+export const deadHandsAt = (items, t, lead = 160) => {
   HELL_HANDS.forEach((h, i) => {
-    const p = (e - h.at) / h.life
-    if (p < 0 || p >= 1) return
-    const rise = easeOut(p / 0.22), sink = smooth((p - 0.8) / 0.2)
-    //   thin＝軽い表示では出さない腕（左右の組ごと）。並びの何番目かで間引くと、左右の片方だけ残って、腕が増えるたび入れ替わる
-    items.push({ t: 'dhand', thin: Math.floor(i / 2) % 2 === 1, x: h.x + 0.015 * Math.sin(e / 170 + i), y: 0.3 - (h.h + 0.3) * rise + 0.3 * sink, s: h.s,
-      rot: h.lean * (1 + 0.8 * (1 - rise)) + 7 * Math.sin(e / 150 + i * 1.7),
-      curl: -0.85 + 1.6 * smooth((p - 0.28) / 0.2) - 0.9 * smooth((p - 0.56) / 0.14) + 0.8 * smooth((p - 0.76) / 0.14),
-      op: Math.min(1, p / 0.06) * (p > 0.86 ? (1 - p) / 0.14 : 1) })
+    // 腕ごとに少しずらす（at の順）：杖を打ち下ろしてから伸びはじめ（tl）、当たる時刻のまわりで届く（tg）
+    const d = (h.at / 300 - 0.5) * 60
+    const te = HELL.out + h.at, tc = -lead - HELL.coil + d / 2, tl = -lead + d, tg = d / 2
+    if (t < te || t >= tg + HELL.sink[1]) return
+    const { to, aim, u } = hellReachOf(h)
+    // 這い出て、ゆらゆら待つ（指をうごめかせる）→ 振りかぶると相手と逆へ少し引いて、指を大きく開く
+    const r = easeOut((t - te) / HELL.rise), c = smooth((t - tc) / (tl - tc))
+    const wx = h.x + 0.015 * Math.sin(t / 170 + i) * (1 - c) - u[0] * 0.05 * c, wy = 0.3 - (h.h + 0.3) * r - u[1] * 0.05 * c
+    const wRot = (h.lean * (1 + 0.8 * (1 - r)) + 7 * Math.sin(t / 150 + i * 1.7)) * (1 - c) - Math.sign(aim) * 8 * c
+    const wCurl = (0.4 * (1 - r) + r * (-0.55 + 0.3 * Math.sin((t - te) / 120 + i))) * (1 - c) - 0.95 * c
+    //   thin＝軽い表示では出さない腕（左右の組ごと）。並びの何番目かで間引くと、左右の片方だけ残って、腕が増えるたび入れ替わる・n＝何本目
+    const it = { t: 'dhand', n: i, thin: Math.floor(i / 2) % 2 === 1, back: h.h >= HELL.back, x: wx, y: wy, s: h.s, rot: wRot, curl: wCurl, op: Math.min(1, (t - te) / 80) }
+    if (t >= tl) {
+      // つかみかかる：だんだん速く伸びて当たる時刻に届く → 握る → 引きずり下ろす → 握ったまま沈む
+      const q = clamp01((t - tl) / (tg - tl)), g = t - tg
+      const pull = smooth((g - HELL.drag[0]) / (HELL.drag[1] - HELL.drag[0])), sink = smooth((g - HELL.sink[0]) / (HELL.sink[1] - HELL.sink[0]))
+      it.x = wx + (to.x - wx) * q * q - u[0] * 0.05 * pull
+      it.y = wy + (to.y - wy) * q * q + 0.16 * pull + 0.35 * sink
+      it.rot = wRot + (aim - wRot) * easeOut(q / 0.6) + Math.sign(aim) * 12 * pull
+      it.curl = -0.95 + 1.85 * smooth(g / HELL.grab)
+      it.s = h.s * (1 + 0.1 * q - 0.1 * smooth(g / 300))
+      it.op *= 1 - sink
+    }
+    items.push(it)
   })
 }
 // 業縛の鎖の1本の上の点（t＝0 地面の外〜1 巻き終わり）：地面の遠くから体へ渦を巻いて寄り、巻きながら上がる。x・y＝足元から（枠の幅が1）・z＝手前ほど＋（sin）

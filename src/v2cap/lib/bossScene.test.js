@@ -6,7 +6,7 @@ import { DOOM, flyPosOf, POUR, COIL, SCENE_TOP, FX_TARGET_Y, FX_FEET_Y, FX_HEAD_
 import { BOSS_ILLUST_DEFS, flutterBandsAt } from './bossIllust.js'
 import { BOSS_ILLUST } from './bossIllustList.js'
 import { readFileSync } from 'node:fs'
-import { CHAIN, chainTilesAt, deadHandsAt, deadHandPathOf, burstSceneAt, doomSceneAt, coilSceneAt } from './bossScene.js'
+import { CHAIN, chainTilesAt, deadHandsAt, deadHandPathOf, HELL, HELL_HANDS, hellReachOf, burstSceneAt, doomSceneAt, coilSceneAt } from './bossScene.js'
 
 const m = bossIllustOf('amaza').motions.deluge
 const T = pourTimesOf(m)
@@ -383,26 +383,67 @@ test('【確定】2026-11-01 ユーザー「断罪はもっと炎っぽく、無
   assert.ok(doomSceneAt(v, v.hitMs + 60).beam, '黒龍の奔流はそのまま')
 })
 
-test('【確定】2026-11-01 ユーザー「手のモーションもつけて」（無間地獄の亡者の腕と読んだ）：地の底から突き上がり、指を開いて→握って→開いて→握りながら沈む', () => {
-  const at = (e) => { const out = []; deadHandsAt(out, e); return out }
-  assert.equal(at(-1).length, 0)
-  assert.ok(at(300).length >= 8, '何本も出る')
-  assert.equal(at(1600).length, 0, 'おわると消える')
-  const h = (e) => at(e).find(x => x.x < -0.5 && x.s === 0.3)
-  assert.ok(h(40).y > h(300).y, '突き上がる（上が −）')
-  assert.ok(h(200).curl < -0.5, '指を開く')
-  assert.ok(h(600).curl > 0.4, '握る')
-  assert.ok(h(880).curl < h(600).curl, 'また開く')
+test('【確定】2026-11-05 ユーザー「無間地獄に出る手、出た後にプレイヤー側に攻撃する感じにしてほしい」「今はただ出てるだけだから」：構えのうちに這い出て待ち、打ち下ろすと相手へつかみかかって当たる時刻に握る→引きずって沈む', () => {
+  // 前（2026-11-01 ユーザー「手のモーションもつけて」＝亡者の腕と読んだ）は、当たってから地の底から出て、その場で指を開いて握るだけだった
+  const m = enma.hell, I = m.impactMs, lead = I - m.hitMs
+  assert.equal(I, m.hitMs + m.fx.hit.lead, 'ダメージの時刻は変えない')
+  const at = (t) => { const out = []; deadHandsAt(out, t, lead); return out }
+  const arm = (t, n) => at(t).find(x => x.n === n)
+  const far = (it) => Math.hypot(it.x, it.y - (FX_TARGET_Y - FX_FEET_Y))   // 自分の体の真ん中からの遠さ
+  // 出る：当たる前（構えのうち）に全部出きって、しばらく待つ
+  assert.equal(at(HELL.out - 1).length, 0, 'それより前は出ない')
+  const outT = HELL.out + Math.max(...HELL_HANDS.map(h => h.at)) + HELL.rise, coilT = -lead - HELL.coil - 30
+  assert.ok(coilT - outT >= 250, '出きってから少し待つ')
+  assert.equal(at(outT).length, HELL_HANDS.length, '全部出る')
+  for (const it of at(outT)) assert.ok(it.y < -0.1 && it.op === 1, '地面の上に出きっている')
+  assert.ok(castSceneAt(m, m.castSkipMs - 300).items.some(it => it.t === 'dhand'), '本物の戦闘では構えのうちに出る')
+  assert.deepEqual(castSceneAt(m, m.castSkipMs).items.filter(it => it.t === 'dhand'), doomSceneAt(m, m.castSkipMs).items.filter(it => it.t === 'dhand'), '構えから技へ跳ねずにつながる')
+  HELL_HANDS.forEach((h, n) => {
+    const w = arm(coilT, n), c = arm(-lead - 1, n)
+    assert.ok(Math.abs(w.x - h.x) < 0.03, `${n}本目：待つあいだはその場`)
+    assert.ok(far(c) > far(w) && c.curl < -0.85, `${n}本目：振りかぶると相手と逆へ少し引いて、指を大きく開く`)
+    // つかみかかる：打ち下ろしてから相手へ寄っていき、当たる時刻のまわりで届いて握る
+    const path = [-80, -60, -40, -20, 0].map(t => far(arm(t, n)))
+    for (let i = 1; i < path.length; i++) assert.ok(path[i] <= path[i - 1] + 1e-9, `${n}本目：寄っていく`)
+    assert.ok(far(arm(0, n)) < far(c) - 0.05, `${n}本目：相手へ伸びる`)
+    const { to } = hellReachOf(h)
+    let reachT = null
+    for (let t = -lead; t <= 200 && reachT === null; t += 5) if (Math.hypot(arm(t, n).x - to.x, arm(t, n).y - to.y) < 0.01) reachT = t
+    assert.ok(reachT !== null && Math.abs(reachT) <= 40, `${n}本目：届くのは当たる時刻（${reachT}）`)
+    assert.ok(arm(reachT - 30, n).curl < -0.5 && arm(120, n).curl > 0.8, `${n}本目：開いたまま届いて握る`)
+    const g = arm(60, n)
+    assert.equal(Math.sign(g.rot), Math.sign(-h.x), `${n}本目：指は相手を向く`)
+    assert.ok(Math.abs(g.rot) >= HELL.aim[0] && Math.abs(g.rot) <= HELL.aim[1] + 1e-9, `${n}本目：下へは向けない（空から生えて見える）`)
+    // 引きずり下ろして、握ったまま沈む
+    assert.ok(arm(650, n).y > arm(150, n).y + 0.08 && arm(650, n).curl > 0.8, `${n}本目：引きずる`)
+  })
+  assert.equal(at(HELL.sink[1] + 60).length, 0, 'おわると消える')
+  // 体のふちをつかむ（まん中まで伸ばすと、手前に描く黒い腕で体が隠れた）・奥の腕（頭の後ろ・上の腕）は自分の絵の後ろに描く＝顔にかぶらない
+  for (const it of at(100)) assert.ok(Math.abs(it.x) >= HELL.body.x, `${it.n}本目：手首は体のふちの外`)
+  HELL_HANDS.forEach((h, n) => assert.equal(arm(0, n).back, h.h >= HELL.back))
+  assert.ok(HELL_HANDS.some(h => h.h >= HELL.back) && HELL_HANDS.some(h => h.h < HELL.back), '奥と手前の両方')
+  const backAt = stageSrc.indexOf('<SceneLayer geo={geo} sc={scBack}'), meAt = stageSrc.indexOf('<Fighter st={st} side="a"')
+  assert.ok(backAt > 0 && backAt < meAt, '奥の腕は自分の絵より先に描く')
+  assert.match(stageSrc, /zIndex: 0 \}\}>\n\s*<SceneLayer geo=\{geo\} sc=\{scBack\}/, 'zIndex 0 で囲む（中の zIndex 2 を閉じこめる）')
+  assert.match(stageSrc, /<SceneLayer geo=\{geo\} sc=\{scFront\}/)
+  // 外れても同じに流す（2026-10-31 ユーザー「回避されてもモーションは継続するようにして」）・黒龍とゼルギアスの大技には出ない
+  const dh = (s) => s.items.filter(it => it.t === 'dhand')
+  assert.deepEqual(dh(doomSceneAt(m, I + 100, undefined, false)), dh(doomSceneAt(m, I + 100)))
+  for (const v of [bossIllustOf('varuzenoku').motions.doom, bossIllustOf('zerugiasu').motions.ruin]) {
+    assert.equal(dh(castSceneAt(v, 3000)).length + dh(doomSceneAt(v, v.impactMs - 200)).length + dh(doomSceneAt(v, v.impactMs + 200)).length, 0, v.label)
+  }
   // 腕の形：指の曲がりで形が変わる。決まった値なので同じ時刻なら同じ絵
   assert.notEqual(deadHandPathOf(-0.8), deadHandPathOf(0.8))
   assert.equal(deadHandPathOf(0.3), deadHandPathOf(0.3))
   assert.match(deadHandPathOf(0), /^M[-\d. L]+Z/)
   assert.deepEqual(at(500), at(500))
   // 軽い表示（スマホ）：左右の組ごとに間引く＝両側に残る・腕が増えても入れ替わらない（本番で見つけた：並びの何番目かで間引くと片側だけ残った）
-  const kept = (e) => at(e).filter(x => !x.thin)
-  assert.ok(kept(500).some(x => x.x < 0) && kept(500).some(x => x.x > 0), '両側に残る')
-  assert.equal(kept(500).filter(x => x.x < 0).length, kept(500).filter(x => x.x > 0).length, '左右で同じ数')
-  assert.deepEqual(kept(400).map(x => x.s), kept(900).map(x => x.s), '同じ腕が残る')
+  const kept = (t) => at(t).filter(x => !x.thin)
+  for (const t of [-1000, -100, 400]) {
+    assert.ok(kept(t).some(x => x.x < 0) && kept(t).some(x => x.x > 0), '両側に残る')
+    assert.equal(kept(t).filter(x => x.x < 0).length, kept(t).filter(x => x.x > 0).length, '左右で同じ数')
+  }
+  assert.deepEqual(kept(-1000).map(x => x.n), kept(400).map(x => x.n), '同じ腕が残る')
   assert.match(stageSrc, /sc\.items\.filter\(\(it, i\) => !it\.thin && /)
   assert.ok(!/const LITE_THIN = new Set\([^)]*'dhand'/.test(stageSrc), '並びの何番目かで間引かない')
 })
