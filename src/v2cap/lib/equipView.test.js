@@ -36,12 +36,27 @@ test('【確定】絞り込みは 部位・レア度・エリア の3つのプ�
   assert.ok(!/onClick=\{\(\) => g\.set(Part|Rarity)\(/.test(bar), '部位・レア度はボタンにしない')
 })
 
+// ★2026-11-06 作成を「エリア装備」と「挑戦装備」に分けた（ユーザー「鍛冶屋に作成にエリア装備と挑戦装備分けて作成できるように」）＝
+//   この決まりはエリア装備の作成（AreaCraft）が持つ
 test('【確定】鍛冶屋の作成の選び方も 部位・レア度・エリア の3つのプルダウンを横並び（2026-10-14 ユーザー指示「作成もプルダウンの横並びで」）', () => {
-  const start = SMITH.indexOf('function CraftTab')
+  const start = SMITH.indexOf('function AreaCraft')
+  assert.ok(start > 0, 'エリア装備の作成がある')
   const craft = SMITH.slice(start, SMITH.indexOf('\nfunction ', start + 1))
   const selects = [...craft.matchAll(/<select value=\{(\w+)\}/g)].map(m => m[1])
   assert.deepEqual(selects, ['part', 'rarity', 'area'])
   assert.ok(!/onClick=\{\(\) => set(Part|Rarity|Area)\(/.test(craft), '部位・レア度・エリアはボタンにしない')
+})
+
+test('【確定】鍛冶屋の作成は「エリア装備」と「挑戦装備」に分ける（2026-11-06 ユーザー「鍛冶屋に作成にエリア装備と挑戦装備分けて作成できるように」）', () => {
+  const start = SMITH.indexOf('function CraftTab')
+  const tab = SMITH.slice(start, SMITH.indexOf('\nfunction ', start + 1))
+  assert.ok(SMITH.includes("const CRAFT_KINDS = [{ key:'area', label:'エリア装備' }, { key:'challenge', label:'挑戦装備' }]"), '2つの名前はユーザーの言葉のまま')
+  assert.ok(tab.includes("{kind === 'challenge' ? <ChallengeCraft {...props} /> : <AreaCraft {...props} />}"), '選んだほうだけを出す')
+  // 挑戦装備はボスと難易度のプルダウン（エリア装備と同じ横並び）・作るのはサーバーの v2cap_craft_challenge
+  const cs = SMITH.indexOf('function ChallengeCraft')
+  const ch = SMITH.slice(cs, SMITH.indexOf('\nfunction ', cs + 1))
+  assert.deepEqual([...ch.matchAll(/<select value=\{(\w+)\}/g)].map(m => m[1]), ['bossKey', 'diffKey'])
+  assert.ok(ch.includes("call('v2cap_craft_challenge', { p_equip_id: item.id })"))
 })
 
 test('【確定】画面を切り替えたら一番上から見せる（2026-10-14 ユーザー指示「装備押すと中途半端なところで遷移する、一番上で遷移するようにして」）', () => {

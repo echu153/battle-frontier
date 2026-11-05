@@ -17,7 +17,8 @@ import { StatGain } from './v2capGear.jsx'
 import V2capPoints from './V2capPoints.jsx'
 import V2capArmorSets from './V2capArmorSets.jsx'
 import V2capUniqueFx from './V2capUniqueFx.jsx'
-import { isUnique } from '../lib/equipment.js'
+import V2capChallengeFx from './V2capChallengeGear.jsx'
+import { isUnique, isChallenge } from '../lib/equipment.js'
 import { SHOP_NAME, MEAL_COLOR, leftText, burgerEffectText, toppingText } from '../lib/burger.js'
 import { FLIP_COLOR, flipLeftMsOf, encounterBandOf } from '../lib/shop.js'
 
@@ -298,6 +299,8 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
         <V2capArmorSets sets={bd.sets} compact cell={cell} valueCell={valueCell} />
         {/* ユニークの固有の能力（2026-10-21）。着けているものだけ（カーソルで能力の文） */}
         <V2capUniqueFx items={Object.values(worn).map(w => w.item).filter(isUnique)} compact cell={cell} valueCell={valueCell} />
+        {/* 挑戦（四凶）の専用装備の能力（2026-11-06）。ユニークと同じ形 */}
+        <V2capChallengeFx items={Object.values(worn).map(w => w.item).filter(isChallenge)} compact cell={cell} valueCell={valueCell} />
 
         <div style={{ color:'#7fa6d0', fontSize:'10px', marginBottom:'2px' }}>スキル編成</div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'2px' }}>

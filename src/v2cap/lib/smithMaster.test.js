@@ -152,7 +152,8 @@ test('画面：鍛冶屋の右に親方（狭い画面は上）・強化と作�
   assert.ok(read('pages/V2capHome.jsx').includes("{screen === 'smith' && <V2capSmith prof={prof} inventory={inventory} onProfile={refresh} onGo={setScreen} />}"))
   const smith = read('components/V2capSmith.jsx')
   assert.ok(smith.includes('<V2capSmithMaster face={master.face} line={master.text} tick={master.tick} onTap={tapMaster} />'))
-  assert.equal((smith.match(/say=\{fxJob\.say && <MasterSays face=\{fxJob\.say\.face\} line=\{fxJob\.say\.text\} \/>\}/g) || []).length, 2, '強化と作成の演出に親方を渡す')
+  // ★2026-11-06 作成を「エリア装備」と「挑戦装備」に分けた＝強化・エリア装備の作成・挑戦装備の作成の3つ
+  assert.equal((smith.match(/say=\{fxJob\.say && <MasterSays face=\{fxJob\.say\.face\} line=\{fxJob\.say\.text\} \/>\}/g) || []).length, 3, '強化と作成（エリア装備・挑戦装備）の演出に親方を渡す')
   for (const f of ['components/V2capEnhanceFx.jsx', 'components/V2capCraftFx.jsx']) {
     const fx = read(f)
     assert.ok(/export default function \w+\(\{ job, say,/.test(fx), `${f}：say を受け取る`)

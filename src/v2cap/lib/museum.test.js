@@ -76,7 +76,8 @@ test('★ユニークは寄贈できない・博物館の画面のどこにも�
   assert.deepEqual(donatablesOf({ equipped: {} }, inv, []), [])
   // サーバーも弾く（断りの文にユニークと書かない）
   const take = fnBody('v2cap_museum_take')
-  assert.match(take, /if v_item\.rarity = 'U' then\s+return jsonb_build_object\('ok', false, 'error', 'この装備は寄贈できません'\);/)
+  // ★2026-11-06 挑戦（四凶）の専用装備（boss がある行）も同じ断りで弾く（下の「専用装備は寄贈できない」）
+  assert.match(take, /if v_item\.rarity = 'U' or v_item\.boss is not null then\s+return jsonb_build_object\('ok', false, 'error', 'この装備は寄贈できません'\);/)
   assert.ok(!/'error', '[^']*ユニーク/.test(take), '断りの文にユニークと書かない')
 })
 

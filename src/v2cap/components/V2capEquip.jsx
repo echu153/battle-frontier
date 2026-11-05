@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { supabase } from '../../supabase'
 import { box, miniBtn, TEXT } from './v2ui.js'
-import { ITEM_BY_ID, SLOTS, SLOT_LABEL, ARMOR_EFFECT, slotsFor, kindLabel, needLvOf, isUnique, RARITY_COLOR } from '../lib/equipment.js'
+import { ITEM_BY_ID, SLOTS, SLOT_LABEL, ARMOR_EFFECT, slotsFor, kindLabel, needLvOf, isUnique, isChallenge, hasGearFx, sameGearKeyOf, RARITY_COLOR } from '../lib/equipment.js'
 import { UniqueText } from './V2capUniqueFx.jsx'
+import { ChallengeText, ChallengeNote, challengeFromOf } from './V2capChallengeGear.jsx'
 import { canEquipType } from '../lib/jobs.js'
 import { equippedItems, wornIdsOf } from '../lib/loadout.js'
 import { powerAt, statsAt, effectivePowerAt, syncLabelOf } from '../lib/gear.js'
@@ -72,6 +73,12 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
                       {isUnique(w.item)
                         ? <V2Tip width="260px" color={RARITY_COLOR.U} style={{ color: nameColor(w.item), borderBottom:`1px dotted ${RARITY_COLOR.U}` }}
                             body={<><div style={{ color: RARITY_COLOR.U }}>{w.item.name}（{w.item.boss}が落とす）</div><UniqueText item={w.item} /></>}>
+                            {w.item.name}
+                          </V2Tip>
+                        // 挑戦（四凶）の専用装備（2026-11-06）も、カーソルで能力
+                        : isChallenge(w.item)
+                        ? <V2Tip width="260px" color={RARITY_COLOR.L} style={{ color: nameColor(w.item), borderBottom:`1px dotted ${RARITY_COLOR.L}` }}
+                            body={<><div style={{ color: RARITY_COLOR.L }}>{w.item.name}（{challengeFromOf(w.item)}が落とす）</div><ChallengeText item={w.item} /></>}>
                             {w.item.name}
                           </V2Tip>
                         : <span style={{ color: nameColor(w.item) }}>{w.item.name}</span>}
@@ -158,13 +165,16 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
                     <div style={{ color:'#7fa6d0' }}>{item.boss}が落とす・同じものは1つまで着けられる</div>
                   </div>
                 )}
+                {/* 挑戦（四凶）の専用装備（2026-11-06）：能力と落とすボス・難易度 */}
+                {isChallenge(item) && <ChallengeNote item={item} />}
                 <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', alignItems:'center' }}>
                   {usable
                     ? slotsFor(item).map(slot => {
                       // ★同じユニークは1つまで（2026-10-21 ユーザー選択）：ほかの枠に同じユニークが着いていたら、その枠には着けられない
-                      const twin = isUnique(item) && SLOTS.some(s => s !== slot && worn[s]?.item.id === item.id && String(worn[s].inv.id) !== String(inv.id))
+                      //   挑戦の専用装備（2026-11-06）も同じ名前は1つまで（ノーマルとハードの同じ装備も1つ・sameGearKeyOf）
+                      const twin = hasGearFx(item) && SLOTS.some(s => s !== slot && worn[s] && sameGearKeyOf(worn[s].item) === sameGearKeyOf(item) && String(worn[s].inv.id) !== String(inv.id))
                       return twin
-                        ? <span key={slot} style={{ color:'#c69a5c', fontSize:'10px' }}>{SLOT_LABEL[slot]}：同じユニークは1つまで</span>
+                        ? <span key={slot} style={{ color:'#c69a5c', fontSize:'10px' }}>{SLOT_LABEL[slot]}：同じ{isChallenge(item) ? '専用装備' : 'ユニーク'}は1つまで</span>
                         : (
                           <button key={slot} onClick={() => equip(slot, inv)} disabled={busy || String(prof.equipped?.[slot]) === String(inv.id)}
                             style={miniBtn('#44aaff')}>{SLOT_LABEL[slot]}に着ける</button>

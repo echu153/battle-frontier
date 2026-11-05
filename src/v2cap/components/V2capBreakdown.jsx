@@ -11,7 +11,8 @@ import { nameColor } from './v2capGearView.js'
 import { PlusTag, StatGain } from './v2capGear.jsx'
 import V2capArmorSets from './V2capArmorSets.jsx'
 import V2capUniqueFx from './V2capUniqueFx.jsx'
-import { isUnique } from '../lib/equipment.js'
+import V2capChallengeFx from './V2capChallengeGear.jsx'
+import { isUnique, isChallenge } from '../lib/equipment.js'
 import { SHOP_NAME, MEAL_COLOR, burgerEffectText, toppingText, leftText } from '../lib/burger.js'
 
 // ============================================================
@@ -98,6 +99,11 @@ export default function V2capBreakdown({ prof, inventory }) {
       {Object.values(worn).some(w => isUnique(w.item)) && (<>
         <div style={{ color:'#88aaff', fontSize:'11px', margin:'10px 0 4px' }}>ユニークの固有の能力</div>
         <V2capUniqueFx items={Object.values(worn).map(w => w.item).filter(isUnique)} />
+      </>)}
+      {/* 挑戦（四凶）の専用装備の能力（2026-11-06） */}
+      {Object.values(worn).some(w => isChallenge(w.item)) && (<>
+        <div style={{ color:'#88aaff', fontSize:'11px', margin:'10px 0 4px' }}>専用装備の能力</div>
+        <V2capChallengeFx items={Object.values(worn).map(w => w.item).filter(isChallenge)} />
       </>)}
 
       <div style={{ color:'#88aaff', fontSize:'11px', margin:'10px 0 4px', display:'flex', justifyContent:'space-between', gap:'6px', flexWrap:'wrap' }}>

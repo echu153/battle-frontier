@@ -22,6 +22,9 @@ import { ticketOf, canUseTicket } from '../lib/v1carry.js'
 import { pickLine, enterKindOf, enhanceKindOf, shortWhatOf, varsOf, isNight, nextStreak, tapKindOf } from '../lib/smithMaster.js'
 import { SHINKA_ON, SHINKA_MAX, isShinka, shinkaNameOf } from '../lib/shinka.js'
 import { ShinkaTab, ShinkaNote } from './V2capShinka.jsx'
+import { ChallengeNote } from './V2capChallengeGear.jsx'
+import { CHALLENGE_CATS, DUNGEON_BOSSES, DIFF_COLOR, diffOf } from '../lib/dungeon.js'
+import { CHALLENGE_DIFFS, CH_CRAFT_MATS, challengeItemsOf, chMatsOf, chCraftCostOf, chCraftErrorOf, chCraftTimesOf } from '../lib/challenge.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — 鍛冶屋（強化・分解・作成）
@@ -44,8 +47,8 @@ import { ShinkaTab, ShinkaNote } from './V2capShinka.jsx'
 // help＝決まりの説明。タブの下には出さず、❓ HELP にまとめる（2026-10-26 ユーザー指示「ここの説明はHELPにまとめて、強化分解作成すべてここの部分いらない」）
 const TABS = [
   { key:'enhance',   label:'強化', help:`Goldとその装備のエリアの残骸で強化値を+1（+${PLUS_MAX}まで・+1ごとに強さ+10%・最低でも戦闘力+1）。ノーマルの装備はGoldだけで強化できます。失敗すると残骸とGoldはなくなり、強化値はそのままです。着けている装備も強化できます。` },
-  { key:'dismantle', label:'分解', help:`装備を、その装備のエリアの残骸にします（${ALL_RARITIES.map(r => `${rarityLabel(r)}${SCRAP_YIELD[r]}`).join('・')}個）。着けている装備とお気に入り（★）の装備は分解できません。ユニークはまとめての分解に入りません（1つずつなら分解できます）。` },
-  { key:'craft',     label:'作成', help:'レア・エピック・レジェンダリーの装備を、Goldとそのエリアの残骸で作ります（必ずできます・+0で持ち物に入ります）。武器はどの職業のものでも作れます。' },
+  { key:'dismantle', label:'分解', help:`装備を、その装備のエリアの残骸にします（${ALL_RARITIES.map(r => `${rarityLabel(r)}${SCRAP_YIELD[r]}`).join('・')}個）。着けている装備とお気に入り（★）の装備は分解できません。ユニークと挑戦の専用装備はまとめての分解に入りません（1つずつなら分解できます）。` },
+  { key:'craft',     label:'作成', help:`「エリア装備」は、レア・エピック・レジェンダリーの装備を、Goldとそのエリアの残骸で作ります。「挑戦装備」は、挑戦の四凶の専用装備を、そのボスをその難易度で倒すと手に入る素材${CH_CRAFT_MATS}個とGoldで作ります。どちらも必ずできて、+0で持ち物に入ります。武器はどの職業のものでも作れます。` },
   // 武器の真化（2026-10-26・lib/shinka.js）。代償が付くこともあるのは HELP に書く（ユーザー指示「真化するときにデメリットがつくこともあることを伝える」）
   // ★お蔵入り（SHINKA_ON=false・2026-10-26 ユーザー指示「一旦お蔵入り」）のあいだはタブも HELP も出さない（下の filter）
   { key:'shinka',    label:'真化', help:`着けている武器で戦うと、1戦ごとに熟練度が1上がります（勝ち負けとも）。熟練度が${SHINKA_MAX.toLocaleString()}になった武器は、ここで真化できます。真化すると、その武器での戦い方（クリティカルがよく出た・ある種族の敵を多く倒した・よくかわした など）から能力が1つ付きます。どれが付くかは、その武器の戦い方の中から選ばれます。代償（デメリット）が付く能力もあります。真化は1本につき1回だけで、やり直せません。真化した武器を分解すると能力も消えます（まとめての分解と博物館への寄贈には入りません）。` },
@@ -349,7 +352,29 @@ function DismantleTab({ all, wornIds, list, busy, call, setError, setNotice, say
 }
 
 // ===== 作成 =====
-function CraftTab({ prof, all, busy, call, setError, setNotice, say }) {
+// 【確定】2026-11-06 ユーザー「鍛冶屋に作成にエリア装備と挑戦装備分けて作成できるように」：
+//   作成の中を「エリア装備」（残骸で作る今までの作成）と「挑戦装備」（四凶の特別な素材で専用装備を作る・lib/challenge.js）に分ける。どちらを開くかは端末で覚えておく
+const CRAFT_KINDS = [{ key:'area', label:'エリア装備' }, { key:'challenge', label:'挑戦装備' }]
+function CraftTab(props) {
+  const [kind, setKind] = useStored('capCraftKind', 'area')
+  const pick = (k) => { setKind(k); props.setError(''); props.setNotice('') }
+  return (
+    <>
+      <div style={{ display:'flex', gap:'4px', marginBottom:'8px' }}>
+        {CRAFT_KINDS.map(k => (
+          <button key={k.key} type="button" onClick={() => pick(k.key)} disabled={props.busy}
+            style={{ ...miniBtn(kind === k.key ? '#ffaa44' : '#62789a'), color: kind === k.key ? '#ffcc66' : '#93a9be' }}>
+            {k.label}
+          </button>
+        ))}
+      </div>
+      {kind === 'challenge' ? <ChallengeCraft {...props} /> : <AreaCraft {...props} />}
+    </>
+  )
+}
+
+// エリア装備：レア・エピック・レジェンダリーを、Goldとそのエリアの残骸で作る
+function AreaCraft({ prof, all, busy, call, setError, setNotice, say }) {
   // 作れるのは行ったことのあるエリアまで（残骸もそのエリアの装備からしか出ない）
   const maxArea = openAreaOf(prof.cleared_spots)
   const [area, setArea] = useState(maxArea)
@@ -448,6 +473,99 @@ function CraftTab({ prof, all, busy, call, setError, setNotice, say }) {
                 <span style={{ color: needLvOf(item) > prof.lv ? '#ff8844' : '#cfe2ff', fontSize:'11px', whiteSpace:'nowrap' }}>要求レベル{needLvOf(item)}LV</span>
               </div>
               <ItemStats inv={{ ilv: item.lv, plus: 0 }} item={item} lv={prof.lv} />
+              <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center', fontSize:'10px' }}>
+                <span style={{ flex:1, minWidth:0, color:'#c69a5c' }}>{usable ? '' : `${prof.class}は${item.type}を装備できない（作ることはできる）`}</span>
+                <button onClick={() => setConfirm(item)} disabled={busy || !!err} title={err || ''} style={miniBtn('#ffaa44')}>作る</button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </>
+  )
+}
+
+// 挑戦装備：四凶の専用装備を、そのボスのその難易度の特別な素材50個とGoldで作る（lib/challenge.js・サーバーの v2cap_craft_challenge）
+//   ボスと難易度を選ぶと、その段階の3つが並ぶ。素材はその難易度で倒したときだけ手に入る（エリア装備の残骸と同じく、作れるかは素材で決まる）
+function ChallengeCraft({ prof, all, busy, call, setError, setNotice, say }) {
+  const bosses = CHALLENGE_CATS.flatMap(c => c.bosses)
+  const [boss, setBoss] = useStored('capChCraftBoss', bosses[0])
+  const [diff, setDiff] = useStored('capChCraftDiff', CHALLENGE_DIFFS[0])
+  const bossKey = bosses.includes(boss) ? boss : bosses[0]
+  const diffKey = CHALLENGE_DIFFS.includes(diff) ? diff : CHALLENGE_DIFFS[0]
+  const items = challengeItemsOf(bossKey, diffKey)
+  const [confirm, setConfirm] = useState(null)
+  const have = chMatsOf(prof.challenge_mats, bossKey, diffKey)
+  const gold = Number(prof.gold) || 0
+  const cost = chCraftCostOf(items[0])
+  const times = items[0] ? chCraftTimesOf(items[0], prof) : 0
+  const ownCount = useMemo(() => {
+    const out = {}
+    for (const r of all) out[r.item.id] = (out[r.item.id] || 0) + 1
+    return out
+  }, [all])
+  // 作成の演出はエリア装備と同じ（V2capCraftFx）。job の scrapName・scrap に素材の名前と数を入れる
+  const [fxJob, setFxJob] = useState(null)
+  const startCraft = async (item) => {
+    if (!item || busy) return
+    const c = chCraftCostOf(item)
+    if (!c || chCraftErrorOf(item, prof)) return
+    const job = {
+      id: Date.now(), item, name: item.name, rarity: item.rarity, part: item.part, kind: kindLabel(item), lv: needLvOf(item),
+      power: powerAt(item, item.lv, 0), sync: syncLabelOf(item, item.lv, prof.lv), statText: statLine(statsAt(item, item.lv, null, 0)),
+      scrapName: c.name, scrap: c.mats, gold: c.gold, result: null,
+    }
+    setConfirm(null); setFxJob(job)
+    const { data, error } = await call('v2cap_craft_challenge', { p_equip_id: item.id })
+    if (error) { setFxJob(null); setError(error); say('error'); return }
+    const line = say('craft', { item: item.name })
+    setFxJob(j => (j && j.id === job.id ? { ...j, result: data, say: line } : j))
+    setNotice(`🔨 ${item.name}（LV${needLvOf(item, data.ilv)}）を作りました`)
+  }
+  const again = fxJob ? chCraftErrorOf(fxJob.item, prof) : null
+  const againTimes = fxJob ? chCraftTimesOf(fxJob.item, prof) : 0
+  return (
+    <>
+      {confirm && <ChallengeCraftModal item={confirm} prof={prof} busy={busy} onConfirm={() => startCraft(confirm)} onClose={() => setConfirm(null)} />}
+      {fxJob && (
+        <V2capCraftFx job={fxJob} say={fxJob.say && <MasterSays face={fxJob.say.face} line={fxJob.say.text} />}
+          nextLabel={!again && againTimes > 0 ? `続けて作成（あと${againTimes}個）` : null}
+          nextReason={again ? `続けて作成するには：${again}` : ''}
+          onAgain={() => startCraft(fxJob.item)} onClose={() => setFxJob(null)} />
+      )}
+      <div style={{ display:'flex', gap:'4px', marginBottom:'6px' }}>
+        <select value={bossKey} onChange={e => setBoss(e.target.value)} style={filterSelect(true)}>
+          {bosses.map(b => <option key={b} value={b} style={optionStyle()}>{DUNGEON_BOSSES[b].name}</option>)}
+        </select>
+        <select value={diffKey} onChange={e => setDiff(e.target.value)} style={filterSelect(true, DIFF_COLOR[diffKey])}>
+          {CHALLENGE_DIFFS.map(d => <option key={d} value={d} style={optionStyle(DIFF_COLOR[d])}>{diffOf(bossKey, d)?.label || d}</option>)}
+        </select>
+      </div>
+      {cost && (
+        <div style={{ background:'#000818', border:'1px solid #553322', padding:'6px 8px', marginBottom:'8px', fontSize:'10px', color: TEXT.sub, lineHeight:1.7 }}>
+          1つ作るのに：<span style={{ color: have < cost.mats ? SHORT : '#cfe2ff' }}>{cost.name} {cost.mats}個</span>（所持数：{have.toLocaleString()}）・
+          <span style={{ color: gold < cost.gold ? SHORT : '#ffcc00' }}>Gold {cost.gold.toLocaleString()}</span>（所持数：{gold.toLocaleString()}）
+          <span style={{ color: times > 0 ? '#44ff88' : TEXT.empty }}>　いま作れるのは {times}個</span>
+        </div>
+      )}
+      <div style={{ display:'grid', gap:'4px' }}>
+        {items.map(item => {
+          const usable = item.part !== '武器' || canEquipType(prof.class, item.type)
+          const err = chCraftErrorOf(item, prof)
+          const n = ownCount[item.id] || 0
+          return (
+            <div key={item.id} style={rowBox('#002244')}>
+              <div style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12px' }}>
+                <span style={{ color: nameColor(item), flex:1, minWidth:0 }}>
+                  {item.name}
+                  <span style={{ color: TEXT.sub, fontSize:'10px', marginLeft:'5px' }}>{kindLabel(item)}</span>
+                  {item.line && <span style={{ color:'#88ddaa', fontSize:'10px', marginLeft:'5px' }}>{ARMOR_EFFECT[item.line]?.label}</span>}
+                  {n > 0 && <span style={{ color:'#44aaff', fontSize:'10px', marginLeft:'5px' }}>{n}個所持</span>}
+                </span>
+                <span style={{ color: needLvOf(item) > prof.lv ? '#ff8844' : '#cfe2ff', fontSize:'11px', whiteSpace:'nowrap' }}>要求レベル{needLvOf(item)}LV</span>
+              </div>
+              <ItemStats inv={{ ilv: item.lv, plus: 0 }} item={item} lv={prof.lv} />
+              <ChallengeNote item={item} />
               <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center', fontSize:'10px' }}>
                 <span style={{ flex:1, minWidth:0, color:'#c69a5c' }}>{usable ? '' : `${prof.class}は${item.type}を装備できない（作ることはできる）`}</span>
                 <button onClick={() => setConfirm(item)} disabled={busy || !!err} title={err || ''} style={miniBtn('#ffaa44')}>作る</button>
@@ -612,6 +730,26 @@ function CraftModal({ item, prof, busy, onConfirm, onClose }) {
         { name: scrapNameOf(item.area), n: cost.scrap, unit:'個', have: scrapOf(prof.materials, item.area), color:'#cfe2ff' },
       ]} />
       {/* 「+0で持ち物に入ります。」は出さない（2026-10-26 ユーザー指示。作成の結果のポップアップの「+0で持ち物に入りました」と同じ） */}
+      <div style={{ color: TEXT.sub, fontSize:'11px' }}>必ずできます。</div>
+    </V2Modal>
+  )
+}
+
+// 挑戦装備の作成の確認（エリア装備の CraftModal と同じ形・素材は四凶の特別な素材）
+function ChallengeCraftModal({ item, prof, busy, onConfirm, onClose }) {
+  const cost = chCraftCostOf(item)
+  return (
+    <V2Modal title="🔨 装備を作る" color="#ffaa44" busy={busy} confirmLabel="作る" onConfirm={onConfirm} onClose={onClose}>
+      <div>
+        <span style={{ color: nameColor(item) }}>{item.name}</span>
+        <span style={{ color: TEXT.sub, fontSize:'11px' }}>（{kindLabel(item)}・LV{needLvOf(item)}）</span>を作ります。
+      </div>
+      <ItemStats inv={{ ilv: item.lv, plus: 0 }} item={item} lv={prof.lv} />
+      <ChallengeNote item={item} />
+      <Materials label="作成素材" list={[
+        { name:'Gold', n: cost.gold, unit:'', have: Number(prof.gold) || 0, color:'#ffcc00' },
+        { name: cost.name, n: cost.mats, unit:'個', have: chMatsOf(prof.challenge_mats, item.bossKey, item.diff), color:'#cfe2ff' },
+      ]} />
       <div style={{ color: TEXT.sub, fontSize:'11px' }}>必ずできます。</div>
     </V2Modal>
   )

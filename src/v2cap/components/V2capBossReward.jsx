@@ -5,6 +5,8 @@ import { bossThumbOf } from '../lib/bossArt.js'
 import { DIFF_COLOR, DUNGEON_BOSSES, HELPER_REWARD_MIN_PCT, contributionPctOf, diffOf } from '../lib/dungeon.js'
 import { CORRECTED_TEXT } from '../lib/dungeonVerifyCall.js'
 import { gainedExpOf, levelUpLines } from '../lib/settleLines.js'
+import { chDropsOf } from '../lib/challenge.js'
+import { RARITY_COLOR, kindLabel, needLvOf } from '../lib/equipment.js'
 
 // ============================================================
 // 「レベルキャップあり」版（v2cap）— 挑戦の報酬画面（討伐完了のテロップのあと）
@@ -26,6 +28,8 @@ import { gainedExpOf, levelUpLines } from '../lib/settleLines.js'
 //     倒せなかったときのボスの残りHP（見出しの横にバー）と討伐の残り時間も1行ずつ
 //   【確定】同じ日 ユーザー「これ討伐時間とかイラストの行の右側に移動できない？」：結果の行（討伐時間・与えたダメージ・残りHP・残り時間・貢献度）は
 //     ボスの絵の右（名前と難易度の下）に置く。報酬の欄とボタンはその下の横いっぱいのまま
+//   【確定】2026-11-06 ユーザー「4強の報酬を決めたい」→案に全部「推奨」：報酬の欄の Gold の下に、落としたもの（エリアの装備・特別な素材・専用装備）を1つ1行で出す
+//     （渡すのはサーバーの v2cap_dungeon_pay_reward・表は lib/challengeDefs.js）。ソロ討伐の素材3倍も倍率は書かない（上の「具体的な内容は言わないで」と同じ）
 //   ★画面を切り替えたら上へ戻す（ポップアップのあとと同じ決まり）
 // ============================================================
 
@@ -36,6 +40,8 @@ const GOLD = '#ffd27a'
 const up = (i) => ({ animation:`brwUp 0.35s ease-out ${(i * 0.09).toFixed(2)}s both` })
 // 行は「見出し 値」の表：見出しは左から（書き出しをそろえる）・値は見出しのすぐ右の欄で右揃え
 //   【確定】2026-11-06 ユーザー「討伐時間 ○○秒みたいに右揃えにして」「今の感じで先頭のスタートは同じ所で」（前は値が枠の右はしで、PC の幅だと見出しと離れていた）
+// 落としたものの札（装備・素材・専用装備）
+const DROP_TAG = { fontSize:'9px', border:'1px solid', padding:'0 4px', flexShrink: 0, lineHeight: 1.6 }
 const LABEL_W = '96px'   // 見出しの欄（いちばん長い「与えたダメージ」「討伐の残り時間」が12pxで入る）
 const VALUE_W = '60px'   // 値の欄（右揃え・「165.7秒」「30,000」「100.0%」が入る）。ボスの残りHPのバーもこの幅
 const Row = ({ label, value }) => (
@@ -119,7 +125,21 @@ export default function V2capBossReward({ bossKey, diffKey, cls, st = null, resu
                 {reward.solo && <div style={{ color: GOLD, fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'12px', marginBottom:'4px' }}>完全ソロ討伐成功！</div>}
                 <div style={{ color:'#ffcc00', fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'16px', lineHeight: 1.6 }}>EXP +{gainedExpOf(reward).toLocaleString()}</div>
                 <div style={{ color:'#ffcc00', fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'16px', lineHeight: 1.6 }}>Gold +{Number(reward.gold).toLocaleString()}</div>
-                {reward.pct < 100 && <div style={{ color: TEXT.sub, fontSize:'10px', marginTop:'2px' }}>救援のぶん：削った割合で{reward.pct}%（最低{HELPER_REWARD_MIN_PCT}%）</div>}
+                {/* 落としたもの（2026-11-06・lib/challenge.js の chDropsOf）：エリアの装備・特別な素材・専用装備。1つ1行（札と中身を同じ行に） */}
+                {chDropsOf(reward).map((x, i) => (
+                  <div key={i} style={{ display:'flex', alignItems:'baseline', gap:'6px', fontSize:'12px', lineHeight: 1.8 }}>
+                    <span style={{ ...DROP_TAG, color: x.kind === 'own' ? RARITY_COLOR.L : TEXT.label, borderColor: x.kind === 'own' ? RARITY_COLOR.L : '#33506e' }}>
+                      {x.kind === 'gear' ? '装備' : x.kind === 'mat' ? '素材' : '専用装備'}
+                    </span>
+                    {x.kind === 'mat'
+                      ? <span style={{ color:'#cfe2ff' }}>{x.name} ×{x.n}</span>
+                      : <span style={{ minWidth: 0 }}>
+                          <span style={{ color: RARITY_COLOR[x.item.rarity], fontWeight:'bold' }}>{x.item.name}</span>
+                          <span style={{ color: TEXT.sub, fontSize:'10px' }}>（{kindLabel(x.item)}・LV{needLvOf(x.item, x.ilv)}）</span>
+                        </span>}
+                  </div>
+                ))}
+                {reward.pct < 100 &&<div style={{ color: TEXT.sub, fontSize:'10px', marginTop:'2px' }}>救援のぶん：削った割合で{reward.pct}%（最低{HELPER_REWARD_MIN_PCT}%）</div>}
                 {levelUpLines(cls, reward.level).map((l, i) => <div key={i} style={{ color: l.color, fontSize:'12px', marginTop:'4px' }}>{l.text}</div>)}
               </>
             )}

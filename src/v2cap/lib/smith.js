@@ -69,7 +69,8 @@ export const dismantleGainOf = (rows) => {
 //   ★ユニークは0.5%のボス固有なので、まとめての分解でうっかり消さないようにした（2026-10-21）
 //   ★お気に入り（inv.fav）は1つずつでも分解できない（2026-10-26 ユーザー指示・サーバーの v2cap_dismantle も飛ばす）
 // ★真化した武器（2026-10-26・shinka.js）もまとめての分解に入れない（1つずつなら分解できる・確認に「能力も消える」と出す）
-export const bulkPickable = ({ inv, item }, wornIds) => !wornIds.has(String(inv.id)) && plusOf(inv) === 0 && item?.rarity !== 'U' && !inv?.fav && !inv?.shinka
+// ★挑戦（四凶）の専用装備（2026-11-06・item.bossKey）もユニークと同じく、まとめての分解に入れない（1つずつなら分解できる）
+export const bulkPickable = ({ inv, item }, wornIds) => !wornIds.has(String(inv.id)) && plusOf(inv) === 0 && item?.rarity !== 'U' && !item?.bossKey && !inv?.fav && !inv?.shinka
 
 // ===== 強化 =====
 // +n にする回（n＝1〜10）の 残骸の数・成功率(%)。【確定】2026-10-10 ユーザーの表
@@ -115,7 +116,8 @@ export const rollEnhance = (rate, rng = Math.random) => rng() * 100 < rate
 export const CRAFT_RARITIES = ['R', 'E', 'L']
 export const CRAFT_SCRAP = { R:30, E:100, L:300 }
 export const CRAFT_GOLD_PER_LV = { R:50, E:100, L:200 }
-export const canCraft = (item) => !!item && (CRAFT_SCRAP[item.rarity] || 0) > 0
+// ★挑戦（四凶）の専用装備（2026-11-06・item.bossKey）は残骸では作れない＝鍛冶屋の「挑戦装備」で素材から作る（challenge.js）
+export const canCraft = (item) => !!item && !item.bossKey && (CRAFT_SCRAP[item.rarity] || 0) > 0
 // 作るのにかかるもの（エリアとレア度が同じなら、どの種類でも同じ）。ノーマルは null
 export const craftCostOf = (item) => (canCraft(item)
   ? { area: item.area, scrap: CRAFT_SCRAP[item.rarity], gold: Math.max(1, item.lv || 1) * CRAFT_GOLD_PER_LV[item.rarity] }
@@ -124,6 +126,7 @@ export const craftCostOf = (item) => (canCraft(item)
 export const craftErrorOf = (item, prof) => {
   if (!item) return 'その装備はありません'
   const c = craftCostOf(item)
+  if (item.bossKey) return 'この装備は「挑戦装備」で作ります'
   if (!c) return item.rarity === 'U' ? 'ユニークの装備は作れません' : 'ノーマルの装備は作れません'
   if (scrapOf(prof?.materials, c.area) < c.scrap) return `${scrapNameOf(c.area)}が足りません`
   if ((Number(prof?.gold) || 0) < c.gold) return 'Goldが足りません'

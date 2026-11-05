@@ -14,7 +14,7 @@
 // ★スキルセットは**職業ごと**（skill_sets[職業]）。使えるのはその職業と下位職の技だけ
 // ============================================================
 import { STAT_KEYS, calcPower } from '../core/stats.js'
-import { ITEM_BY_ID, SLOTS, isUnique } from './equipment.js'
+import { ITEM_BY_ID, SLOTS, isUnique, hasGearFx, sameGearKeyOf } from './equipment.js'
 import { SKILL_BY_NAME, isPassive, passiveOf } from './skills.js'
 import { statsAt, effectivePowerAt, armorEffects } from './gear.js'
 import { plusOf } from './smith.js'
@@ -33,6 +33,7 @@ const zero = () => Object.fromEntries(STAT_KEYS.map(k => [k, 0]))
 // 装着中の装備を { slot: { inv, item } } の形で引く（inv は { id, base_id, ilv, plus }。レア度は装備 item が持つ）
 // ★【確定】2026-10-21 ユーザー選択「1つまで」：同じユニークは1つしか着けられない（装飾品の2枠に同じものは着けられない）。
 //   サーバー（v2cap_equip）も弾くが、前に着けていたものが残っていても、ここで後ろの枠のほうを数えない
+// ★2026-11-06 挑戦（四凶）の専用装備も同じ（同じ名前は1つまで＝ノーマルとハードの同じ装備も1つ・equipment.js の sameGearKeyOf・サーバーの v2cap_equip も弾く）
 export const equippedItems = (profile, inventory) => {
   const byId = Object.fromEntries((inventory || []).map(i => [String(i.id), i]))
   const out = {}
@@ -44,9 +45,10 @@ export const equippedItems = (profile, inventory) => {
     const item = inv && ITEM_BY_ID[inv.base_id]
     if (!inv || !item) continue
     if (item.part === '武器' && !canEquipType(profile?.class, item.type)) continue
-    if (isUnique(item)) {
-      if (uniques.has(item.id)) continue
-      uniques.add(item.id)
+    if (hasGearFx(item)) {
+      const key = sameGearKeyOf(item)
+      if (uniques.has(key)) continue
+      uniques.add(key)
     }
     out[slot] = { inv, item }
   }
@@ -55,6 +57,9 @@ export const equippedItems = (profile, inventory) => {
 // 着けているユニーク（固有の能力を戦闘へ渡す・画面に出す）
 export const wornUniquesOf = (profile, inventory) =>
   Object.values(equippedItems(profile, inventory)).map(w => w.item).filter(isUnique)
+// 着けている能力つきの装備（ユニークと専用装備・2026-11-06）。戦闘へ渡す能力はこれをまとめる
+export const wornFxItemsOf = (profile, inventory) =>
+  Object.values(equippedItems(profile, inventory)).map(w => w.item).filter(hasGearFx)
 export const wornIdsOf = (profile, inventory) =>
   new Set(Object.values(equippedItems(profile, inventory)).map(w => String(w.inv.id)))
 
@@ -162,10 +167,10 @@ export const toFighter = (profile, inventory, opts = {}) => {
     //   職業名で引き、狂戦士・竜騎士など同じ名前の職業に今のⅡのパッシブが付いてしまう
     passives: passiveOf(profile?.class) ? [passiveOf(profile?.class)] : [],
     // ★防具のセット能力（2部位・4部位の戦闘の効果。3部位の能力値は stats に入っている）と、
-    //   着けているユニークの固有の能力（2026-10-21）を1つにまとめたもの（fxMerge.js）。どれも無ければ null
+    //   着けているユニークの固有の能力（2026-10-21）・挑戦の専用装備の能力（2026-11-06）を1つにまとめたもの（fxMerge.js）。どれも無ければ null
     // ★性別（2026-10-21・gender.js）：男性＝与えるダメージ+2%（sexDeal）・女性＝受けるダメージ−2%（sexCut）も同じ入れ物に重ねる
     // ★ニャーガーキングのトッピング（その状態異常にかかる確率×0.8・2026-10-25）も同じ入れ物に重ねる
-    setFx: mergeFx(mergeFx(combinedFxOf(setFxOf(bd.sets), wornUniquesOf(profile, inventory)),
+    setFx: mergeFx(mergeFx(combinedFxOf(setFxOf(bd.sets), wornFxItemsOf(profile, inventory)),
       genderFxOf(genderOf(profile)), GENDER_BY_KEY[genderOf(profile)]?.label),
       mealFxOf(bd.meal), SHOP_NAME),
   }

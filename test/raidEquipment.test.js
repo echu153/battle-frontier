@@ -14,7 +14,8 @@ const sqlWeaponNames = () => {
   const names = new Set()
   // ★Ⅱ系（supabase_v2*.sql＝今のⅡとレベルキャップあり版）は無印の交換所に触らないので見ない。
   //   見ると、装備の枠名の列（'weapon','head',…）を装備名と取り違える（2026-10-09 実際に踏んだ）
-  for (const f of readdirSync(repoRoot).filter(n => n.endsWith('.sql') && !n.startsWith('supabase_v2'))) {
+  //   ★v2cap_*.sql（レベルキャップあり版の追加分＝作業フォルダ直下に置いてユーザーが流すもの）も同じ（2026-11-06 v2cap_equip を含む追加分で踏んだ）
+  for (const f of readdirSync(repoRoot).filter(n => n.endsWith('.sql') && !n.startsWith('supabase_v2') && !n.startsWith('v2cap_'))) {
     const sql = readFileSync(join(repoRoot, f), 'utf8')
     for (const m of sql.matchAll(/'weapon',\s*'([^']+)'/g)) {
       // weapons テーブルの slot 列など、装備名でないものを弾く（'weapon','s' 等）
