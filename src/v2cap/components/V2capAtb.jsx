@@ -15,7 +15,7 @@ import { motionOf } from '../lib/motionArt.js'
 import { homeIconOf } from '../lib/classArt.js'
 import { artGenderOf } from '../lib/gender.js'
 import { BOSS_DEFS, bossArtOf, bossEncounterOf, bossThumbOf } from '../lib/bossArt.js'
-import { dungeonFighter, diffOf, isDiffReady, DIFF_KEYS } from '../lib/dungeon.js'
+import { dungeonFighter, diffOf, isDiffReady, DIFF_KEYS, DUNGEON_TRY_SEC } from '../lib/dungeon.js'
 import { bossIllustOf } from '../lib/bossIllust.js'
 import { AREA_LIST, SPOTS, SUB_NAMES, toFighter as enemyFighter, enemyPowerOf } from '../lib/areas.js'
 import { CLASS_BY_ID } from '../lib/jobs.js'
@@ -108,7 +108,8 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
     const enemy = hpMult === 1 ? base : { ...base, stats: { ...base.stats, hp: base.stats.hp * hpMult } }
     // 薬は買わなくても試せる（試し撃ちはサーバーへ送らない＝持ち物は減らない）。挑戦の入口で選んだ数・選んでいなければ HP2・MP1・雫1
     const chosen = itemCountsOf(prof?.item_loadout)
-    st.current = createAtb(myFighter, enemy, { maxSec: MAX_SEC, items: itemTotalOf(chosen) ? chosen : { hp: 2, mp: 1, cure: 1 } })
+    // 挑戦のボスは挑戦と同じく時間制限なし（念のための上限 DUNGEON_TRY_SEC・2026-11-06）。ほかの敵は MAX_SEC のまま
+    st.current = createAtb(myFighter, enemy, { maxSec: dun ? DUNGEON_TRY_SEC : MAX_SEC, items: itemTotalOf(chosen) ? chosen : { hp: 2, mp: 1, cure: 1 } })
     setRunKey(k => k + 1)
     setPhase('fight')
     if (bossEncounterOf(foe.bossArt)) {
@@ -192,7 +193,7 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
           <span style={{ color: TEXT.sub, fontSize:'10px' }}>（大きくするとレイドのボスのような長い戦いになります）</span>
         </div>
         <div style={{ color: TEXT.sub, fontSize:'10px', lineHeight:1.7, marginBottom:'10px' }}>
-          自分は今の装備・ステータスのまま、持っていく技{myFighter.slots.length}個で戦います（スキルセットの「挑戦（ATB）」で選べます）。制限時間{MAX_SEC}秒。
+          自分は今の装備・ステータスのまま、持っていく技{myFighter.slots.length}個で戦います（スキルセットの「挑戦（ATB）」で選べます）。{foe.bossArt ? '時間制限なし（挑戦と同じ）' : `制限時間${MAX_SEC}秒`}。
         </div>
         <button onClick={start} style={{ ...miniBtn('#44ddff'), width:'100%', padding:'10px', fontSize:'13px' }}>⏱ ATBで戦う</button>
       </div>

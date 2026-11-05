@@ -16,7 +16,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { preloadArt } from './artPreload.js'
 
-// 押されないまま、これだけたったら進む（サーバーは挑戦を始めてから15分までしか終わりを受け付けない＝v2cap_dungeon_try_end の c_late_min。戦闘の180秒が入る長さ）
+// 押されないまま、これだけたったら進む（サーバーは挑戦を始めてから25分までしか終わりを受け付けない＝v2cap_dungeon_try_end の c_late_min。戦闘の念のための上限10分が入る長さ）
 export const ENCOUNTER_WAIT_MAX_MS = 10 * 60 * 1000
 export const ENCOUNTER_OUT_MS = 240    // 消える長さ
 
