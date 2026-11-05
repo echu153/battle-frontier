@@ -18,6 +18,7 @@ import { gainedExpOf, levelUpLines } from '../lib/settleLines.js'
 //     倒せなかったときも同じ画面（見出しが「敗北」「時間切れ」・報酬の欄の代わりにボスの残りHP・残り時間）。貢献度はいつも出す（1人でも）
 //     【確定】同じ日 ユーザー「これ完全ソロ討伐成功！にして、報酬3倍とか具体的な内容は言わないでほしい」＝ソロの行に倍率を書かない
 //     onRetry … もう一度挑戦する（倒せなかったときだけ・null なら出さない）・retryCost … そのスタミナ・leftText … 討伐の残り時間・busy … 押している最中
+//   【確定】2026-11-05 ユーザー「あと敵のHPの数値は見れないようにして」：ボスの残りHPはバーだけ（数字も割合も出さない）。貢献度はそのまま
 //   ★画面を切り替えたら上へ戻す（ポップアップのあとと同じ決まり）
 // ============================================================
 
@@ -68,13 +69,10 @@ export default function V2capBossReward({ bossKey, diffKey, cls, st = null, resu
               {r.corrected && <div style={{ color: TEXT.sub, fontSize:'10px', padding:'2px 0 4px' }}>{CORRECTED_TEXT}</div>}
             </div>
           )}
-          {/* 倒せなかったとき：ボスの残りHP */}
+          {/* 倒せなかったとき：ボスの残りHP（バーだけ＝数字を出さない） */}
           {!cleared && (
             <div style={{ ...up(3), borderTop:'1px solid #001428', padding:'6px 0' }}>
-              <div style={{ display:'flex', justifyContent:'space-between', gap:'8px', fontSize:'11px', color: TEXT.label, marginBottom:'3px' }}>
-                <span>ボスの残りHP</span>
-                <span style={{ color: TEXT.bright, fontWeight:'bold' }}>{r.run.hp.toLocaleString()} / {hpMax.toLocaleString()}（{((r.run.hp / hpMax) * 100).toFixed(1)}%）</span>
-              </div>
+              <div style={{ fontSize:'11px', color: TEXT.label, marginBottom:'3px' }}>ボスの残りHP</div>
               <div style={{ height:'8px', background:'#000818', border:'1px solid #13405f' }}>
                 <div style={{ width:`${Math.min(100, (r.run.hp / hpMax) * 100)}%`, height:'100%', background:'#cc3344' }} />
               </div>

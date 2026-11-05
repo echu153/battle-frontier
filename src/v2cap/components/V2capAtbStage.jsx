@@ -747,7 +747,8 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
       </div>
       {/* HP・ゲージ。文字が折り返すと MP が上の段・HP がバーのすぐ上（wrap-reverse）。段の高さは格子で両方の列にそろう＝HPの文字とバーが同じ高さに並ぶ */}
       <div style={{ position:'relative', minWidth:0, display:'flex', justifyContent:'space-between', fontSize:'10px', lineHeight: 1.5, color: TEXT.label, gap:'0 4px', flexWrap:'wrap-reverse', alignContent:'flex-start', alignItems:'flex-start' }}>
-        <span>HP {Math.max(0, me.hp).toLocaleString()} / {me.base.hp.toLocaleString()}</span>
+        {/* 相手（右）のHPは数字を出さない＝バーだけ（2026-11-05 ユーザー「あと敵のHPの数値は見れないようにして」） */}
+        <span>{right ? 'HP' : `HP ${Math.max(0, me.hp).toLocaleString()} / ${me.base.hp.toLocaleString()}`}</span>
         {!right && <span>MP {Math.max(0, me.mp).toLocaleString()} / {me.base.mp.toLocaleString()}</span>}
         {/* 固有のバフのボタン（2026-10-31 ユーザー「バフのところもう少し小さくして、イラストと被ってる、押せればいいから」＝絵の上から HP の文字の行へ。名前の行は技の名前の帯を押しつぶした） */}
         <UniqueBuffs side={me} right={right} ago={rageAgo} />

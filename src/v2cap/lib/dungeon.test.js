@@ -745,6 +745,28 @@ test('【確定】2026-10-31 入口のボスの行の言葉と「挑戦する」
   assert.match(src, /\{state && \(blockOf\(key\) \|\| '挑戦可能'\)\}/, '行の言葉も同じ決まり（読み込み中は出さない）・ユーザー「挑戦可能 に変更して」')
 })
 
+test('【確定】2026-11-05 入口のカテゴリの中のボスは2列の格子（ユーザー「これ 2列2行にして」）', () => {
+  const src = readFileSync(new URL('../components/V2capDungeon.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  assert.match(src, /\{CHALLENGE_CATS\.map\(cat => \([\s\S]*?gridTemplateColumns:'repeat\(2, minmax\(0, 1fr\)\)'[\s\S]*?\{cat\.bosses\.map\(key => \{/, 'カテゴリの中を2列に')
+  assert.equal(CHALLENGE_CATS[0].bosses.length, 4, '四凶は4体＝2行')
+})
+
+test('【確定】2026-11-05 ボスのHPは数字も割合も出さない＝バーだけ（ユーザー「あと敵のHPの数値は見れないようにして」）', () => {
+  const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  // 戦闘の舞台：相手（右）は「HP」の文字とバーだけ・自分の HP と MP は数字のまま
+  assert.ok(read('../components/V2capAtbStage.jsx').includes("<span>{right ? 'HP' : `HP ${Math.max(0, me.hp).toLocaleString()} / ${me.base.hp.toLocaleString()}`}</span>"))
+  // 削った割合も出さない（相手のHPが分かる）。ダメージ/秒は自分の数字なので出す
+  const fight = read('../components/V2capAtbFight.jsx')
+  assert.doesNotMatch(fight, /dealtPct|削り \{|%削った/)
+  assert.match(fight, /\{Math\.round\(dps\)\.toLocaleString\(\)\}ダメージ\/秒/)
+  // 挑戦の画面（戦闘の見出し・入っているボスの行・救援の一覧・ポップアップ・結果の画面）にHPの数字と割合を出さない
+  const leak = /\.hp\)?\.toLocaleString\(\)|hp_max\.toLocaleString|hpMax\.toLocaleString|\.hp \/ (run\.hp_max|hpMax)\) \* 100\)\.toFixed/
+  for (const f of ['../components/V2capDungeon.jsx', '../components/V2capBossPick.jsx', '../components/V2capBossReward.jsx']) assert.doesNotMatch(read(f), leak, f)
+  // 貢献度（与えたダメージの割合）は残す（2026-11-01 ユーザー「貢献度もわかるようにしてほしい、ダメージ与えた割合ね」）
+  assert.match(read('../components/V2capBossReward.jsx'), /contributionPctOf\(m\.damage, hpMax\)\.toFixed\(1\)/)
+  assert.match(read('../components/V2capDungeon.jsx'), /貢献度\{contributionPctOf\(m\.damage, run\.hp_max\)\.toFixed\(1\)\}%/)
+})
+
 test('【確定】2026-10-31 入口：履歴と説明を出さない・「挑戦する」でそのまま戦闘へ（ユーザー「この履歴いらない」「ここら辺の説明いらない」「呼ぶじゃなくて挑戦する にして」）', () => {
   const src = readFileSync(new URL('../components/V2capDungeon.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
   const code = src.split(/\r?\n/).filter(l => !/^\s*(\/\/|\{\/\*)/.test(l)).join('\n')   // コメントの外
