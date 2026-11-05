@@ -26,7 +26,7 @@ import {
   HILO_MIN_BET, HILO_MAX_BET, HILO_FIRST_X13, HILO_NEXT_X13, HILO_MAX_STREAK, HILO_CAP_MULT,
   ROULETTE_MAX_TOTAL, ROULETTE_MAX_BETS, ROULETTE_STRAIGHT, RED_NUMBERS, LUCKY_COUNT_W, LUCKY_MULTS, BET_KINDS,
   unlockOf, BJ_MIN_BET, BJ_MAX_BET, BJ_PAY_NUM, BJ_PAY_DEN, BJ_DEALER_STAND, BJ_HIT_SOFT17,
-  POKER_MIN_ANTE, POKER_MAX_ANTE, POKER_RAISE_MULT, POKER_HANDS, POKER_DEALER_CARDS,
+  POKER_MIN_ANTE, POKER_MAX_ANTE, POKER_RAISE_MULT, POKER_HANDS, POKER_DEALER_CARDS, POKER_UNLOCK,
 } from './casino.js'
 import { FLOORS as TOWER_FLOORS, LOSE_DROP as TOWER_LOSE } from './tower.js'
 import { DEX_AREA_STAM } from './dex.js'
@@ -1306,7 +1306,7 @@ test('【確定】2026-10-28 ポーカー（§22・カリビアンスタッド�
   assert.equal(constOf(start, 'c_min'), String(POKER_MIN_ANTE))
   assert.equal(constOf(start, 'c_max'), String(POKER_MAX_ANTE))
   assert.equal(constOf(start, 'c_raise'), String(POKER_RAISE_MULT))
-  assert.equal(constOf(start, 'c_unlock'), String(unlockOf('poker').need))
+  assert.equal(constOf(start, 'c_unlock'), String(POKER_UNLOCK.need), 'ポーカーを止めている間も、サーバーの解禁の線は同じ')
   assert.ok(start.includes('if public.v2cap_casino_won(v_c.stats) < c_unlock then'), '解禁はサーバーで確かめる')
   assert.ok(start.includes('if v_p.medals < p_ante::bigint * (1 + c_raise) then'), '配るときにアンティの3倍が要る')
   // 2026-10-28 1枚交換・ディーラー7枚（ユーザー選択「7枚から5枚（推奨）」）：13枚＝こちら5・ディーラー7・交換で引く1

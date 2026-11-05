@@ -20,11 +20,13 @@
 // 【2026-10-28】ポーカー（カリビアンスタッド・V2capPoker.jsx・ユーザー指示「じゃあポーカーも作っておいて、対ディーラー用の」）を足した。
 //   ディーラーと勝負するゲーム（ブラックジャック・ポーカー）は「テーブル」タブにまとめ、中で切り替える（TABLES）。
 //   タブを6つにするとスマホ（375px）で1段に収まらず、ルーレットが画面の下へ押される（2026-10-27 ユーザー指示「スクロールなしで回せるように」）
+// 【2026-11-05】ポーカーは一旦お蔵入り（ユーザー「ポーカーは調整難しそうだから一旦消して、ブラックジャックだけでいい」・lib/casino.js の POKER_ON）。
+//   卓が1つだけのときは、タブは「BJ」で中の切り替えも出さない。ポーカーの途中の勝負が残っていれば、その1回だけ最後まで遊べる（新しくは配れない）
 // ============================================================
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import { useStored } from '../core/prefs.js'
-import { GOLD_PER_MEDAL, maxExchangeOf, casinoWonOf, unlockOf, isUnlocked, newlyUnlockedOf } from '../lib/casino.js'
+import { GOLD_PER_MEDAL, maxExchangeOf, casinoWonOf, unlockOf, isUnlocked, newlyUnlockedOf, POKER_ON } from '../lib/casino.js'
 import {
   pickLine, enterKindOf, tapKindOf, nextStreak, isNight, welcomeDueLocal, dayOf, makeDailyAsker,
   stageOf, varsOf, stageEventOf, fillLine, loseDue, welcomeLineOf, TABLE_QUIET_KINDS, tableTalkDue, dealerNameOf,
@@ -49,10 +51,10 @@ const TABS = [
   { key:'table',    icon:'♠',  label:'テーブル' },
   { key:'exchange', icon:'💱', label:'両替所' },
 ]
-// テーブルの中の卓（解禁の順・lib/casino.js の CASINO_UNLOCKS）
+// テーブルの中の卓（解禁の順・lib/casino.js の CASINO_UNLOCKS）。short＝卓が1つだけのときのタブの名前
 const TABLES = [
-  { key:'bj',    icon:'♠', label:'ブラックジャック' },
-  { key:'poker', icon:'♦', label:'ポーカー' },
+  { key:'bj',    icon:'♠', label:'ブラックジャック', short:'BJ' },
+  { key:'poker', icon:'♦', label:'ポーカー',         short:'ポーカー' },
 ]
 const TAB_CSS = '@media (max-width: 480px) { .cs-tab-ico { display: none } }'
 const EXCHANGE_PRESETS = [1, 10, 100, 1000]
@@ -96,8 +98,11 @@ export default function V2capCasino({ prof, onProfile, dev = false }) {
   // 前に「BJ」タブを開いていた端末は「テーブル」のブラックジャックへ（2026-10-28 まとめる前の値）
   const tab = tabStored === 'bj' ? 'table' : tabStored
   const [tableStored, setTable] = useStored('capCasinoTable', 'bj')   // テーブルの中で開いている卓
-  const table = TABLES.some(t => t.key === tableStored) ? tableStored : TABLES[0].key
   const [state, setState] = useState(null)       // v2cap_casino_state の返事（開いたときだけ）
+  // 置く卓：ポーカーは止めている間（POKER_ON＝false）も、開いたときに途中の勝負が残っていれば、その1回だけ置く
+  const pokerLeft = !POKER_ON && !!state?.poker?.active
+  const tables = TABLES.filter(t => t.key !== 'poker' || POKER_ON || pokerLeft)
+  const table = tables.some(t => t.key === tableStored) ? tableStored : tables[0].key
   // won＝これまでの払い出し（解禁の数え方・サーバーの won_total）
   const [money, setMoney] = useState({ medals: Number(prof?.medals) || 0, gold: Number(prof?.gold) || 0, day_net: 0, won: 0 })
   const [error, setError] = useState('')
@@ -261,8 +266,9 @@ export default function V2capCasino({ prof, onProfile, dev = false }) {
     setTable(key)
     sitAt(key)
   }
-  // テーブルのタブ：どれか1つでも遊べれば ♠・どれも遊べなければ 🔒
-  const tableLocked = TABLES.every(t => !isUnlocked(t.key, money.won))
+  // テーブルのタブ：どれか1つでも遊べれば ♠・どれも遊べなければ 🔒。卓が1つだけなら、その卓の名前（BJ）で中の切り替えは出さない
+  const tableLocked = tables.every(t => !isUnlocked(t.key, money.won))
+  const tableLabel = tables.length === 1 ? tables[0].short : TABS.find(t => t.key === 'table').label
   // まだ遊べないゲーム：何か・あと何枚か（これまでの払い出し）
   const lockedPanel = (u) => (
     <div style={panel(CASINO.purple)}>
@@ -325,7 +331,7 @@ export default function V2capCasino({ prof, onProfile, dev = false }) {
               return (
                 <button key={t.key} onClick={() => pickTab(t.key)} style={{ ...pill(color, tab === t.key), padding:'5px 7px', whiteSpace:'nowrap',
                   animation: glow ? 'csPulse 0.9s ease-in-out infinite' : undefined, boxShadow: glow ? `0 0 10px ${color}` : undefined }}>
-                  {locked ? '🔒 ' : <span className="cs-tab-ico">{t.icon} </span>}{t.label}
+                  {locked ? '🔒 ' : <span className="cs-tab-ico">{t.icon} </span>}{t.key === 'table' ? tableLabel : t.label}
                 </button>
               )
             })}
@@ -341,10 +347,10 @@ export default function V2capCasino({ prof, onProfile, dev = false }) {
               <div style={{ display: tab === 'slot' ? 'block' : 'none' }}><V2capSlot init={state.slot} medals={money.medals} onMoney={onMoney} onTalk={onTalk} active={tab === 'slot'} /></div>
               <div style={{ display: tab === 'hilo' ? 'block' : 'none' }}><V2capHilo init={state.hilo} medals={money.medals} onMoney={onMoney} onTalk={onTalk} /></div>
               <div style={{ display: tab === 'roulette' ? 'block' : 'none' }}><V2capRoulette init={state.roulette} medals={money.medals} onMoney={onMoney} onTalk={onTalk} /></div>
-              {/* ===== テーブル：卓を切り替える（まだ遊べない卓は 🔒・解禁したばかりの卓は開くまで光る） ===== */}
-              {tab === 'table' && (
+              {/* ===== テーブル：卓を切り替える（まだ遊べない卓は 🔒・解禁したばかりの卓は開くまで光る・卓が1つだけなら出さない） ===== */}
+              {tab === 'table' && tables.length > 1 && (
                 <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginBottom:'6px' }}>
-                  {TABLES.map(t => {
+                  {tables.map(t => {
                     const locked = !isUnlocked(t.key, money.won)
                     const glow = fresh.includes(t.key)
                     const color = locked ? CASINO.dim : CASINO.purple
@@ -363,9 +369,10 @@ export default function V2capCasino({ prof, onProfile, dev = false }) {
                   <V2capBlackjack init={state.bj} medals={money.medals} onMoney={onMoney} onTalk={onTalk} dealerName={dealerNameOf(seen)} />
                 </div>
               )}
-              {isUnlocked('poker', money.won) && (
+              {/* ポーカーは止めている間（POKER_ON＝false）は置かない。途中の勝負が残っていたときだけ、その1回を最後まで（closing＝新しくは配れない） */}
+              {tables.some(t => t.key === 'poker') && isUnlocked('poker', money.won) && (
                 <div style={{ display: tab === 'table' && table === 'poker' ? 'block' : 'none' }}>
-                  <V2capPoker init={state.poker} medals={money.medals} onMoney={onMoney} onTalk={onTalk} dealerName={dealerNameOf(seen)} />
+                  <V2capPoker init={state.poker} medals={money.medals} onMoney={onMoney} onTalk={onTalk} dealerName={dealerNameOf(seen)} closing={!POKER_ON} />
                 </div>
               )}
               {tab === 'table' && !isUnlocked(table, money.won) && lockedPanel(unlockOf(table))}

@@ -60,13 +60,25 @@ test('【2026-10-28】タブはスマホでも1段（480px 以下は頭の絵文
   const tabs = casino.slice(casino.indexOf('const TABS = ['), casino.indexOf('// テーブルの中の卓'))
   assert.equal((tabs.match(/\{ key:'/g) || []).length, 5, 'タブは5つ')
   assert.ok(tabs.includes("{ key:'table',    icon:'♠',  label:'テーブル' },"))
-  assert.ok(casino.includes("{ key:'bj',    icon:'♠', label:'ブラックジャック' },") && casino.includes("{ key:'poker', icon:'♦', label:'ポーカー' },"))
+  assert.ok(casino.includes("{ key:'bj',    icon:'♠', label:'ブラックジャック', short:'BJ' },") && casino.includes("{ key:'poker', icon:'♦', label:'ポーカー',         short:'ポーカー' },"))
   assert.ok(casino.includes("const TAB_CSS = '@media (max-width: 480px) { .cs-tab-ico { display: none } }'"))
-  assert.ok(casino.includes(`{locked ? '🔒 ' : <span className="cs-tab-ico">{t.icon} </span>}{t.label}`), '🔒 は狭い画面でも外さない')
+  assert.ok(casino.includes(`{locked ? '🔒 ' : <span className="cs-tab-ico">{t.icon} </span>}{t.key === 'table' ? tableLabel : t.label}`), '🔒 は狭い画面でも外さない')
   assert.ok(casino.includes("const tab = tabStored === 'bj' ? 'table' : tabStored"), '前に「BJ」タブを開いていた端末はテーブルへ')
   assert.ok(casino.includes("{tab === 'table' && !isUnlocked(table, money.won) && lockedPanel(unlockOf(table))}"), 'まだ遊べない卓は何枚で遊べるか')
   assert.ok(casino.includes("{isUnlocked('bj', money.won) && (") && casino.includes('<V2capBlackjack init={state.bj}'), '解禁してから卓を置く')
-  assert.ok(casino.includes("{isUnlocked('poker', money.won) && (") && casino.includes('<V2capPoker init={state.poker}'))
+  assert.ok(casino.includes("{tables.some(t => t.key === 'poker') && isUnlocked('poker', money.won) && (") && casino.includes('<V2capPoker init={state.poker}'))
+})
+
+test('【2026-11-05】ポーカーは一旦お蔵入り（ユーザー「ポーカーは調整難しそうだから一旦消して、ブラックジャックだけでいい」）：タブは「BJ」・途中の勝負が残っていればその1回だけ最後まで', () => {
+  const casino = read('components/V2capCasino.jsx')
+  assert.ok(read('lib/casino.js').includes('export const POKER_ON = false'), '戻すなら true にするだけ（決まり・画面・SQL §22・セリフは残す）')
+  assert.ok(casino.includes('const pokerLeft = !POKER_ON && !!state?.poker?.active'), '開いたときに途中の勝負が残っていれば')
+  assert.ok(casino.includes("const tables = TABLES.filter(t => t.key !== 'poker' || POKER_ON || pokerLeft)"))
+  assert.ok(casino.includes('const tableLabel = tables.length === 1 ? tables[0].short : TABS.find(t => t.key === \'table\').label'), '卓が1つならタブは「BJ」')
+  assert.ok(casino.includes("{tab === 'table' && tables.length > 1 && ("), '卓が1つなら中の切り替えは出さない')
+  assert.ok(casino.includes('closing={!POKER_ON}'))
+  const poker = read('components/V2capPoker.jsx')
+  assert.ok(poker.includes(') : closing ? (') && poker.includes('ポーカーはいまお休み中です'), '残っていた勝負を終えたら、新しくは配れない')
 })
 
 test('【2026-10-28】ポーカー：決まりの説明は ❓ HELP・ディーラーの2〜5枚目は伏せて置く・勝負したら1枚ずつめくる', () => {

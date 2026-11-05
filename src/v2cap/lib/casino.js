@@ -246,9 +246,14 @@ export const rouletteRtp = () => {
 // ============================================================
 // desc の {dealer} は卓の名札（アレアが名乗るまでは「ディーラー」＝lib/alea.js の dealerNameOf）
 // 【確定】2026-10-28 ポーカー（カリビアンスタッド）は **3万枚**（ユーザー選択「3万枚（推奨）」＝ブラックジャックの次の段）
+// 【2026-11-05】ポーカーは一旦お蔵入り（ユーザー「ポーカーは調整難しそうだから一旦消して、ブラックジャックだけでいい」）＝ POKER_ON を false。
+//   決まり（下のポーカーの節）・画面（V2capPoker.jsx）・サーバー（SQL §22）・アレアのセリフは残してある。戻すなら true にするだけ。
+//   止めている間は解禁の表にも入れない（解禁の演出も出さない）。途中の勝負が残っていれば、その1回だけ最後まで遊べる（V2capCasino.jsx）
+export const POKER_ON = false
+export const POKER_UNLOCK = { key: 'poker', label: 'ポーカー', need: 30000, desc: '{dealer}と1対1で、5枚の役の強さで勝負する卓' }
 export const CASINO_UNLOCKS = [
   { key: 'bj', label: 'ブラックジャック', need: 10000, desc: '{dealer}と1対1で、カードの合計を21に近づけて勝負する卓' },
-  { key: 'poker', label: 'ポーカー', need: 30000, desc: '{dealer}と1対1で、5枚の役の強さで勝負する卓' },
+  ...(POKER_ON ? [POKER_UNLOCK] : []),
 ]
 export const casinoWonOf = (stats) => Object.values(stats || {}).reduce((s, g) => s + (Number(g?.won) || 0), 0)
 export const unlockOf = (key) => CASINO_UNLOCKS.find(u => u.key === key) || null

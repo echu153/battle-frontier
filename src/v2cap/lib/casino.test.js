@@ -7,7 +7,7 @@ import {
   SLOT_AT_GAMES, SLOT_PREMIUM_GAMES, SLOT_CZ_GAMES, SLOT_AT_ADD, SLOT_AT_TOKU, SLOT_TOKU_GAMES, SLOT_MISS_PAY, slotRtp,
   RANK_LABELS, hiloCountOf, hiloMult100Of, hiloChanceOf, hiloNextPotOf, hiloPayoutOf, HILO_MAX_STREAK,
   WHEEL_ORDER, RED_NUMBERS, colorOfNumber, betWins, betPayoutOf, validBet, rouletteRtp, LUCKY_COUNT_W, LUCKY_MULTS, ROULETTE_STRAIGHT,
-  CASINO_UNLOCKS, casinoWonOf, isUnlocked, newlyUnlockedOf, unlockOf,
+  CASINO_UNLOCKS, casinoWonOf, isUnlocked, newlyUnlockedOf, unlockOf, POKER_ON, POKER_UNLOCK,
   BJ_MIN_BET, BJ_MAX_BET, BJ_BETS, BJ_PAY_NUM, BJ_PAY_DEN, bjPointOf, bjValueOf, bjIsNatural, bjDealerPeeks, bjDealerHits, bjResultOf, bjPayoutOf, bjOutcomeOf, bjBestActionOf, bjRtp,
   POKER_MIN_ANTE, POKER_MAX_ANTE, POKER_ANTES, POKER_RAISE_MULT, POKER_DEALER_CARDS, POKER_HANDS, pkScoreOf, pkCatOf, pkHandOf, pkBestOf, pkQualifies, pkResultOf, pkPayoutOf, pkDiscardOf,
 } from './casino.js'
@@ -322,11 +322,11 @@ const PK_R = { 2: 0, 3: 1, 4: 2, 5: 3, 6: 4, 7: 5, 8: 6, 9: 7, T: 8, J: 9, Q: 10
 const PK_S = { s: 0, h: 1, d: 2, c: 3 }
 const pk = (str) => str.split(' ').map(x => PK_S[x[1]] * 13 + PK_R[x[0]])
 
-test('【確定】解禁：ポーカーはこれまでの払い出し3万枚（ブラックジャックの次の段）', () => {
-  assert.deepEqual(CASINO_UNLOCKS.map(u => [u.key, u.need]), [['bj', 10000], ['poker', 30000]])
-  assert.equal(isUnlocked('poker', 29999), false)
-  assert.equal(isUnlocked('poker', 30000), true)
-  assert.deepEqual(newlyUnlockedOf(9999, 30000).map(u => u.key), ['bj', 'poker'], '一度に2つ越えたら両方')
+test('【確定】解禁：ポーカーはこれまでの払い出し3万枚（ブラックジャックの次の段）・2026-11-05 一旦お蔵入り＝止めている間は解禁の表に入れない', () => {
+  assert.equal(POKER_UNLOCK.need, 30000)
+  assert.equal(POKER_ON, false, 'ユーザー「ポーカーは調整難しそうだから一旦消して、ブラックジャックだけでいい」')
+  assert.deepEqual(CASINO_UNLOCKS.map(u => [u.key, u.need]), POKER_ON ? [['bj', 10000], ['poker', 30000]] : [['bj', 10000]])
+  assert.deepEqual(newlyUnlockedOf(9999, 30000).map(u => u.key), POKER_ON ? ['bj', 'poker'] : ['bj'], '止めている間はポーカーの解禁の演出も出さない')
 })
 
 test('ポーカーの役：10種類の判定と強さの順（A2345 のストレートは5が上・マークは関係なし）', () => {

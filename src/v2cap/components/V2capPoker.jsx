@@ -42,7 +42,8 @@ const errorTextOf = (error, data, fallback) => {
 const openCards = (cards, n) => (cards.length === n && cards.every(x => !x.down && x.c != null) ? cards.map(x => x.c) : null)
 
 // onTalk … アレアに結果を伝える（V2capCasino・lib/alea.js の pokerTalkOf／winTalkOf）。dealerName … 卓の名札
-export default function V2capPoker({ init, medals, onMoney, onTalk, dealerName = 'ディーラー' }) {
+// closing … ポーカーを止めている間（lib/casino.js の POKER_ON＝false）に、残っていた途中の勝負だけ遊ぶ。終わったら新しくは配れない
+export default function V2capPoker({ init, medals, onMoney, onTalk, dealerName = 'ディーラー', closing = false }) {
   const narrow = useNarrow()
   const dealerW = narrow ? DEALER_W.narrow : DEALER_W.wide
   const [anteSel, setAnteSel] = useStored('capPokerAnte', 50)
@@ -269,6 +270,12 @@ export default function V2capPoker({ init, medals, onMoney, onTalk, dealerName =
             </button>
           </div>
         </>
+      ) : closing ? (
+        // 【2026-11-05】ポーカーはお休み中（POKER_ON＝false）：残っていた勝負を終えたら、新しくは配れない
+        <div style={{ textAlign:'center', fontSize:'12px', color: CASINO.label, margin:'12px 0 4px', lineHeight:1.7 }}>
+          ポーカーはいまお休み中です。ブラックジャックで遊べます<br />
+          <span style={{ fontSize:'10px', color: CASINO.dim }}>（次に賭博場を開くと、このタブは出なくなります）</span>
+        </div>
       ) : (
         <>
           <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', justifyContent:'center', margin:'8px 0' }}>
