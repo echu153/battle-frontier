@@ -126,6 +126,16 @@ const zeruWings = (deg) => Object.fromEntries([1, 2, 3, 4].flatMap(i => [[`wL${i
 // 大砲の腕の角度 armN＋羽根 deg：左の下の羽根は付け根が腕の後ろにあるので、腕といっしょに上げる（下の羽根ほど腕に近い）。
 //   【確定】2026-11-02 腕だけ上げると、付け根が切れた羽根が腕の下で宙に浮いて見えた
 const ZERU_ARM_WING = [0.15, 0.45, 0.7, 0.8]
+// 炉心臨界のあとの電気が走る点（[部品, x, y]・立ち絵の px）：羽根の先と中ほど・塔の先・頭・炉心のふち・肩・砲身・剣・ひざ・足先
+const ZERU_ZAP = [
+  ['wL1', 33, 85], ['wL1', 120, 120], ['wL2', 16, 210], ['wL2', 90, 190], ['wL3', 16, 315], ['wL3', 100, 260], ['wL4', 55, 368], ['wL4', 110, 300],
+  ['wR1', 608, 97], ['wR1', 520, 130], ['wR2', 623, 210], ['wR2', 540, 190], ['wR3', 622, 317], ['wR3', 540, 250], ['wR4', 574, 367], ['wR4', 510, 300],
+  ['body', 205, 40], ['body', 247, 72], ['body', 410, 76], ['body', 447, 33], ['body', 330, 100], ['body', 330, 195], ['body', 385, 235], ['body', 440, 190],
+  ['body', 260, 160], ['body', 400, 165], ['body', 300, 300], ['body', 370, 300], ['body', 345, 420],
+  ['armN', 180, 170], ['armN', 190, 260], ['barrel', 150, 330], ['barrel', 120, 400], ['barrel', 90, 440], ['barrel', 65, 475],
+  ['sword', 495, 360], ['sword', 530, 410], ['sword', 560, 460], ['sword', 617, 543],
+  ['legL', 250, 400], ['legL', 200, 470], ['legL', 160, 520], ['legL', 110, 590], ['legR', 440, 410], ['legR', 420, 460], ['legR', 480, 520], ['legR', 520, 585],
+]
 const zeruGun = (armN, deg = 0) => ({ armN, ...zeruWings(deg), ...Object.fromEntries(ZERU_ARM_WING.map((k, i) => [`wL${i + 1}`, deg + armN * k])) })
 export const BOSS_ILLUST_DEFS = {
   varuzenoku: {
@@ -683,12 +693,15 @@ export const BOSS_ILLUST_DEFS = {
     // HPの節目のバフ（黒龍と同じ仕組み）：雷鋼装甲＝大砲と剣を交差して羽根で身を包む＋雷の網（手前に半透明）・炉心臨界＝腕を広げて天を仰ぐ＋青白い闘気（後ろ・付いたあとも燃え続ける）
     buffs: {
       armor: { name: '雷鋼装甲', pose: '雷鋼装甲_ポーズ', aura: '雷鋼装甲_オーラ', front: true, auraOp: 0.6 },
-      overload: { name: '炉心臨界', pose: '炉心臨界_ポーズ', aura: '炉心臨界_オーラ', tint: '120,175,255',
+      // 【確定】2026-11-05 ユーザー「３０％のエフェクトがその場にあるだけで全然あってない」「ゼルギアスに電気のオーラがまとわりつくようにしてほしい」：
+      //   オーラの絵（炉心臨界_オーラ）と、そのあと燃え続ける闘気・足元から立ちのぼる火の粉はやめた（体が動いても同じ場所に残り、形も合っていなかった）。
+      //   付いたあとは、体の形にそって青白い光がちらつき（glow＝drop-shadow）、体の部品の上を小さな稲妻が走る（zap・zapArcsAt＝部品といっしょに動く）
+      overload: { name: '炉心臨界', pose: '炉心臨界_ポーズ', tint: '120,175,255',
         show: { holdMs: 2000, dim: 0.55, dimColor: '0,8,30', shake: 7, punch: 0.05, flicker: 0.03,
           bolts: [{ at: 70, from: [40, -170], to: [340, 215], flash: 0.45 }, { at: 520, from: [600, -170], to: [340, 215], flash: 0.3 }], boltColor: '130,180,255',
           rings: { at: [340, 215], n: 3, everyMs: 280, durMs: 750, maxR: 430, color: '110,170,255', core: '225,240,255' },
           burst: { n: 30, x: [130, 480], y: 600, rise: 420, size: 1.3, color: '110,170,255', core: '235,245,255' } },
-        after: { flame: { op: 0.85, amp: 0.05 }, embers: { n: 10, x: [130, 480], y: 600, rise: 360, size: 1.2, color: '120,175,255', core: '235,245,255' }, tempo: 1.35 } },
+        after: { zap: { color: '120,175,255', n: 10, lifeMs: 220, reach: 170, len: 70, amp: 12, w: 3, anchors: ZERU_ZAP }, tempo: 1.35 } },
     },
     // 倒れる動き（lib/bossDeath.js・黒龍と同じ形・新しい絵なし）：炉心臨界のポーズで炉心が暴走して天を仰ぐ → 雷鋼装甲のポーズで崩れて身をかがめる（揺れ・砂ぼこり）→ 光が消えて鉄の色に → ふちを青白く光らせながら燃え尽きる
     death: { tone: 'thunder', roar: { buff: 'overload' }, fall: { buff: 'armor' },
@@ -785,31 +798,32 @@ export const BOSS_ILLUST_DEFS = {
     //   剣は肩を回すだけにせず、手首で寝かせて振り下ろすと遅れて追いつく（しなる）。突進は脚を腰で回して後ろへ流し、踏みこみで前後に開く。大砲を上げるときは左の下の羽根もいっしょに上げる（zeruGun）
     motions: {
       // 雷鋼弾：腰を沈めて大砲を相手へ振り上げる（砲口に光が集まる）→ 撃った瞬間に砲身がすべりこみ、腕が跳ね上がり、腰ごと押されて足がすべる・羽根があおられる
+      //   【確定】2026-11-05 剣は動かさない（ユーザー「通常攻撃うつとき剣が揺れるのがちょっと変だった」・雷霆掃射も同じ）
       shell: { totalMs: 1300, hitMs: 430, keys: [
         [0, {}],
-        [150, { armF: -10, sword: -6, hipX: 0.012, hipY: 0.012, ...zeruGun(22, 5) }],
-        [300, { armF: -26, sword: -12, hipX: -0.012, hipY: 0.024, lean: 0.03, ...zeruGun(41, 12) }, 'out'],
-        [430, { armF: -28, sword: -14, hipX: -0.016, hipY: 0.026, lean: 0.035, ...zeruGun(38, 14) }],
-        [470, { barrelSl: -24, armF: -44, sword: -26, hipX: 0.05, hipY: 0.012, lean: -0.1, x: 0.035, ...zeruGun(56, -14) }, 'out'],
-        [600, { barrelSl: -16, armF: -50, sword: -32, hipX: 0.06, hipY: 0.016, lean: -0.12, x: 0.045, ...zeruGun(60, -6) }],
-        [820, { barrelSl: -2, armF: -30, sword: -12, hipX: 0.022, hipY: 0.012, lean: -0.045, x: 0.035, ...zeruGun(44, 4) }],
-        [1060, { armF: -8, sword: -3, hipX: 0.004, hipY: 0.004, lean: -0.01, x: 0.012, ...zeruGun(14, 1) }],
+        [150, { hipX: 0.012, hipY: 0.012, ...zeruGun(22, 5) }],
+        [300, { hipX: -0.012, hipY: 0.024, lean: 0.03, ...zeruGun(41, 12) }, 'out'],
+        [430, { hipX: -0.016, hipY: 0.026, lean: 0.035, ...zeruGun(38, 14) }],
+        [470, { barrelSl: -24, hipX: 0.05, hipY: 0.012, lean: -0.1, x: 0.035, ...zeruGun(56, -14) }, 'out'],
+        [600, { barrelSl: -16, hipX: 0.06, hipY: 0.016, lean: -0.12, x: 0.045, ...zeruGun(60, -6) }],
+        [820, { barrelSl: -2, hipX: 0.022, hipY: 0.012, lean: -0.045, x: 0.035, ...zeruGun(44, 4) }],
+        [1060, { hipX: 0.004, hipY: 0.004, lean: -0.01, x: 0.012, ...zeruGun(14, 1) }],
         [1300, {}],
       ], jolt: { atMs: 440, ms: 200, x: 0.012, y: 0.008 },
       dustAt: [445],
       shots: [{ part: 'barrel', pt: [65, 475], delayMs: 0, size: 1 }],
       scene: { kind: 'gun', tone: 'thunder', dimColor: '0,6,26', hand: { pt: [65, 475], part: 'barrel' } } },
-      // 雷霆掃射：足を開いて腰を落とし、羽根を広げて機体を固定・剣は右へ振って釣り合いをとる → 3連射。1発ごとに砲身がすべりこみ、腰が押されて足がずれていく。3発目がいちばん大きい。狙いは 頭→足→胸
+      // 雷霆掃射：足を開いて腰を落とし、羽根を広げて機体を固定 → 3連射。1発ごとに砲身がすべりこみ、腰が押されて足がずれていく。3発目がいちばん大きい。狙いは 頭→足→胸
       volley: { totalMs: 1600, hitMs: 360, strikes: [{ atMs: 0, dx: -0.08, dy: -0.12 }, { atMs: 320, size: 1.1, dx: 0.1, dy: 0.06, flip: true }, { atMs: 640, size: 1.35, dx: 0, dy: -0.02 }], keys: [
         [0, {}],
-        [220, { armF: -52, sword: -18, hipY: 0.03, legL: 6, legR: -6, y: 0.012, lean: 0.03, ...zeruGun(40, 16) }],
-        [360, { armF: -56, sword: -22, hipY: 0.034, legL: 6, legR: -6, y: 0.012, lean: 0.035, ...zeruGun(36, 18) }],
-        [400, { barrelSl: -20, armF: -66, sword: -30, hipX: 0.03, hipY: 0.026, legL: 6, legR: -6, y: 0.012, lean: -0.05, x: 0.015, ...zeruGun(50, 4) }, 'out'],
-        [680, { armF: -58, sword: -24, hipX: 0.012, hipY: 0.034, legL: 6, legR: -6, y: 0.012, lean: 0.01, x: 0.02, ...zeruGun(30, 16) }],
-        [720, { barrelSl: -20, armF: -70, sword: -32, hipX: 0.04, hipY: 0.026, legL: 6, legR: -6, y: 0.012, lean: -0.06, x: 0.04, ...zeruGun(46, 4) }, 'out'],
-        [1000, { armF: -60, sword: -26, hipX: 0.02, hipY: 0.034, legL: 6, legR: -6, y: 0.012, lean: 0, x: 0.05, ...zeruGun(37, 16) }],
-        [1045, { barrelSl: -28, armF: -84, sword: -44, hipX: 0.075, hipY: 0.016, legL: 6, legR: -6, y: 0.012, lean: -0.14, x: 0.085, ...zeruGun(64, -12) }, 'out'],
-        [1250, { barrelSl: -14, armF: -64, sword: -26, hipX: 0.06, hipY: 0.016, legL: 4, legR: -4, y: 0.008, lean: -0.1, x: 0.085, ...zeruGun(56, -2) }],
+        [220, { hipY: 0.03, legL: 6, legR: -6, y: 0.012, lean: 0.03, ...zeruGun(40, 16) }],
+        [360, { hipY: 0.034, legL: 6, legR: -6, y: 0.012, lean: 0.035, ...zeruGun(36, 18) }],
+        [400, { barrelSl: -20, hipX: 0.03, hipY: 0.026, legL: 6, legR: -6, y: 0.012, lean: -0.05, x: 0.015, ...zeruGun(50, 4) }, 'out'],
+        [680, { hipX: 0.012, hipY: 0.034, legL: 6, legR: -6, y: 0.012, lean: 0.01, x: 0.02, ...zeruGun(30, 16) }],
+        [720, { barrelSl: -20, hipX: 0.04, hipY: 0.026, legL: 6, legR: -6, y: 0.012, lean: -0.06, x: 0.04, ...zeruGun(46, 4) }, 'out'],
+        [1000, { hipX: 0.02, hipY: 0.034, legL: 6, legR: -6, y: 0.012, lean: 0, x: 0.05, ...zeruGun(37, 16) }],
+        [1045, { barrelSl: -28, hipX: 0.075, hipY: 0.016, legL: 6, legR: -6, y: 0.012, lean: -0.14, x: 0.085, ...zeruGun(64, -12) }, 'out'],
+        [1250, { barrelSl: -14, hipX: 0.06, hipY: 0.016, legL: 4, legR: -4, y: 0.008, lean: -0.1, x: 0.085, ...zeruGun(56, -2) }],
         [1600, {}],
       ], jolt: { atMs: 370, ms: 160, x: 0.008, y: 0.006 },
       dustAt: [1010],
@@ -1377,7 +1391,7 @@ export const introBeamAt = (motion, ms) => {
 export const buffAfterAt = (list, tMs) => {
   const on = list.filter(x => x.b?.after)
   if (!on.length) return null
-  const out = { glow: 0, glowColor: null, sparks: [], sparkColor: null, sparkCore: null, tempo: 1, dim: 0, dimColor: null, rain: null, flame: null, pulse: 0 }
+  const out = { glow: 0, glowColor: null, sparks: [], sparkColor: null, sparkCore: null, tempo: 1, dim: 0, dimColor: null, rain: null, flame: null, pulse: 0, zap: null, zapGlow: 0 }
   for (const { b, since } of on) {
     const a = b.after, k = smooth(Math.min(1, Math.max(0, since - buffHoldOf(b)) / 600))
     if (since >= BUFF_IN_MS && a.tempo) out.tempo = Math.max(out.tempo, a.tempo)
@@ -1406,7 +1420,39 @@ export const buffAfterAt = (list, tMs) => {
       out.sparkCore = a.embers.core || null
     }
     if (a.dim && k > 0) { out.dim = Math.max(out.dim, a.dim * k); out.dimColor = a.dimColor || null }
+    // 電気のオーラ（ゼルギアスの炉心臨界・a.zap）：体の形にそった青白い光がちらつく（zapGlow＝ゆっくりした波＋55ミリ秒ごとのゆらぎ・画面は白い芯と青い光の2重）・稲妻は zapArcsAt
+    if (a.zap && k > 0) {
+      out.zapGlow = Math.max(out.zapGlow, k * (0.6 + 0.2 * Math.sin(tMs / 95) + 0.2 * (hash01(Math.floor(tMs / 55), 61) * 2 - 1)))
+      out.zap = { ...a.zap, k }
+    }
     if (a.rain && k > 0) out.rain = { ...a.rain, k, t: tMs }
+  }
+  return out
+}
+// 体にまとわりつく小さな稲妻（buffAfterAt の zap）：z.anchors の点（部品といっしょに動く＝illustPointAt）から、近くの点（reach px まで）へ、
+//   無ければ外へ短く（len px）ぎざぎざに走る。n 本がそれぞれ lifeMs ごとに場所を変え、前半だけ光る（消えている間がある＝ちらつく）。形は 45 ミリ秒ごとに変わる。
+//   同じ時刻なら同じ形（決まった乱れ）→ [{ pts（立ち絵の px・技の動きのずれこみ）, op（0〜1）, w（太さ）}]
+const zigzag = ([x0, y0], [x1, y1], seed, n, amp) => {
+  const dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len, out = [[x0, y0]]
+  for (let i = 1; i < n; i++) {
+    const p = i / n, off = (hash01(seed, i) - 0.5) * 2 * amp * Math.sin(Math.PI * p)
+    out.push([x0 + dx * p + nx * off, y0 + dy * p + ny * off])
+  }
+  out.push([x1, y1])
+  return out
+}
+export const zapArcsAt = (key, z, pose, tMs) => {
+  const pts = z.anchors.map(([part, x, y]) => illustPointAt(key, pose, [x, y], part)), out = []
+  for (let i = 0; i < z.n; i++) {
+    const life = z.lifeMs * (0.7 + 0.6 * hash01(i, 71)), u = tMs / life + hash01(i, 72), turn = Math.floor(u), t = u - turn
+    if (t > 0.6) continue
+    const r = (salt) => hash01(i * 37 + turn * 17, salt)
+    const ai = Math.floor(r(73) * pts.length), A = pts[ai]
+    const near = pts.map((p, j) => [j, Math.hypot(p[0] - A[0], p[1] - A[1])]).filter(([j, d]) => j !== ai && d < z.reach)
+    let B
+    if (near.length && r(74) < 0.7) B = pts[near[Math.floor(r(75) * near.length)][0]]
+    else { const ang = r(76) * Math.PI * 2, len = z.len * (0.5 + 0.5 * r(77)); B = [A[0] + Math.cos(ang) * len, A[1] + Math.sin(ang) * len] }
+    out.push({ pts: zigzag(A, B, i * 131 + turn * 7 + Math.floor(tMs / 45), 6, z.amp), op: z.k * (1 - t / 0.6) ** 0.6, w: z.w })
   }
   return out
 }

@@ -110,12 +110,12 @@ export const BOSS_ILLUST = {
     },
     buffs: {
       armor: { pose: { x: 38, y: 54, w: 568, h: 550 }, aura: { x: 14, y: 0, w: 617, h: 640 } },
-      overload: { pose: { x: -41, y: -47, w: 693, h: 652 }, aura: { x: 0, y: 0, w: 640, h: 640 } },
+      overload: { pose: { x: -41, y: -47, w: 693, h: 652 } },
     },
     fit: {
       body: { s: 0.985, deg: 0, tx: 20, ty: 4, score: 0.123 },
     },
-    v: { 'il-wL4': '96ea07e7', 'il-wL3': '7a332dfb', 'il-wL2': 'd3c6359b', 'il-wL1': '983d75cd', 'il-wR4': 'be3d79c2', 'il-wR3': '7e0a59b9', 'il-wR2': 'e23292c0', 'il-wR1': '842831a0', 'il-legL': 'cb88cb86', 'il-legR': '7d0f6ca9', 'il-body': '14ce522d', 'il-armN': 'b3f82d31', 'il-barrel': 'cbe21df2', 'il-armF': '8104a6ee', 'il-sword': 'efe519e0', 'il-pose-ruin-windup': '07c0ab4e', 'il-pose-ruin-strike': '443d357f', 'il-buff-armor-pose': 'a02dd575', 'il-buff-armor-aura': '6e26f1e8', 'il-buff-overload-pose': 'd6f2e631', 'il-buff-overload-aura': '3cfad7b0', 'il-fx-shell-fly': '066f39ec', 'il-fx-shell-hit': '8db55fc9', 'il-fx-volley-fly': 'c5750402', 'il-fx-volley-hit': '19c76907', 'il-fx-smite-hit': '1a0df76d', 'il-fx-ruin-fly': '9c645d5a', 'il-fx-ruin-hit': '7275a1d5', 'il-fx-ruin-charge': '9465a5be', 'il-fx-idle-core': '340711fc' },
+    v: { 'il-wL4': '96ea07e7', 'il-wL3': '7a332dfb', 'il-wL2': 'd3c6359b', 'il-wL1': '983d75cd', 'il-wR4': 'be3d79c2', 'il-wR3': '7e0a59b9', 'il-wR2': 'e23292c0', 'il-wR1': '842831a0', 'il-legL': 'cb88cb86', 'il-legR': '7d0f6ca9', 'il-body': '14ce522d', 'il-armN': 'b3f82d31', 'il-barrel': 'cbe21df2', 'il-armF': '8104a6ee', 'il-sword': 'efe519e0', 'il-pose-ruin-windup': '07c0ab4e', 'il-pose-ruin-strike': '443d357f', 'il-buff-armor-pose': 'a02dd575', 'il-buff-armor-aura': '6e26f1e8', 'il-buff-overload-pose': 'd6f2e631', 'il-fx-shell-fly': '066f39ec', 'il-fx-shell-hit': '8db55fc9', 'il-fx-volley-fly': 'c5750402', 'il-fx-volley-hit': '19c76907', 'il-fx-smite-hit': '1a0df76d', 'il-fx-ruin-fly': '9c645d5a', 'il-fx-ruin-hit': '7275a1d5', 'il-fx-ruin-charge': '9465a5be', 'il-fx-idle-core': '340711fc' },
   },
   enma: {
     parts: {

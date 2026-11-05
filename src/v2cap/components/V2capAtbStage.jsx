@@ -6,7 +6,7 @@ import { hitReactOf, lungeOf, shakeOf, lastHitAtOf, popTextOf, popScaleOf, popLe
 import { JP_BOLD } from './casinoStyle.js'
 import { rubySegmentsOf } from '../lib/skillRuby.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
-import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, reachXOf, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, rigLayersOf, artAnchorAt, illustCastShowAt, illustBuffShowAt, buffSceneAt, introSceneAt, introEnterAt, introBeamAt, rigLightsAt, buffAfterAt, buffRainAt } from '../lib/bossIllust.js'
+import { illustPoseAt, illustCastPoseAt, illustFreePoseAt, illustTrailsAt, illustPointAt, reachXOf, mouthPointOf, rotPoint, swapOpacityOf, dustEllipsesOf, bendFramesOf, illustShowAt, illustGhostsAt, flutterBandsAt, rigLayersOf, artAnchorAt, illustCastShowAt, illustBuffShowAt, buffSceneAt, introSceneAt, introEnterAt, introBeamAt, rigLightsAt, buffAfterAt, buffRainAt, zapArcsAt } from '../lib/bossIllust.js'
 import { behindRectOf, bgRectOf, bgFxAt, liteFxOf } from '../lib/bossBg.js'
 import { artIsLoaded } from '../lib/artPreload.js'
 import BossFlowCanvas from './BossFlowCanvas.jsx'
@@ -279,6 +279,24 @@ const PoseArt = ({ art, p, op = 1 }) => (
     style={{ position:'absolute', left:`${(p.x / art.base) * 100}%`, top:`${(p.y / art.base) * 100}%`, width:`${(p.w / art.base) * 100}%`, height:`${(p.h / art.base) * 100}%`,
       maxWidth:'none', userSelect:'none', pointerEvents:'none', opacity: op < 1 ? op : undefined }} />
 )
+// 体にまとわりつく小さな稲妻（ゼルギアスの炉心臨界のあと・lib/bossIllust.js の zapArcsAt・立ち絵の px）：青白い光の筋の上に白い芯。
+//   体の光（drop-shadow）は絵の枠ぜんたいの filter（after.glow）がかける＝稲妻にも光がかかる
+const RigZap = ({ art, arcs, color }) => {
+  const lite = useContext(LiteCtx)
+  return (
+    <svg viewBox={`0 0 ${art.base} ${art.base}`} style={{ position:'absolute', inset:0, width:'100%', height:'100%', overflow:'visible', pointerEvents:'none', mixBlendMode: lite ? undefined : 'screen' }}>
+      {arcs.map((a, i) => {
+        const d = `M${a.pts.map(p => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join('L')}`
+        return (
+          <g key={i} opacity={a.op.toFixed(3)}>
+            <path d={d} fill="none" stroke={`rgba(${color},0.6)`} strokeWidth={a.w * 3.2} strokeLinecap="round" strokeLinejoin="round" />
+            <path d={d} fill="none" stroke="rgba(235,245,255,0.95)" strokeWidth={a.w} strokeLinecap="round" strokeLinejoin="round" />
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
 // HPの節目のバフの衝撃の輪と火の粉と稲妻（lib/bossIllust.js の buffSceneAt・buffAfterAt・立ち絵の px）。明るく重ねる（screen）。
 //   輪＝ぼかした太い色の輪＋細い明るい芯・火の粉＝ぼかした光の玉＋明るい芯（芯の色は決まりに書いてあれば＝雨摩座は水の色）・稲妻＝ぼかした太い線＋細い白い線
 const BuffSparks = ({ art, sc, after }) => {
@@ -597,6 +615,9 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   const show = death ? deathShowOf(show0, death) : show0
   const showMotion = death ? { poses: { ...showMotion0?.poses, ...rig.death.arts } } : showMotion0
   const aura = buff?.aura && buffArt.aura ? { p: buffArt.aura, op: buff.aura.op * buffArt.auraOp, scale: buff.aura.scale, front: buffArt.front, glow: buffArt.glow, rot: buff.aura.rot, at: buffArt.spinAt } : null
+  // 炉心臨界のあとの電気（after.zap）：部品の立ち絵が出ているときだけ稲妻を走らせる（ポーズの絵・倒れる動きのあいだは体の光だけ）。軽い表示は半分
+  const zap = after?.zap && rig && !death && !buffPose && (show?.rig ?? 1) >= 0.5
+    ? zapArcsAt(rig.key, lite ? { ...after.zap, n: Math.ceil(after.zap.n / 2) } : after.zap, pose, now * 1000) : null
   const ghosts = rigMotion && !casting && !buffPose && !death ? illustGhostsAt(rigMotion, rigMs).map(g => ({ ...g, pose: illustPoseAt(rig.key, rigMotion, g.ms, tMs - (rigMs - g.ms), false, reachX) })) : []
   // 被弾の揺れはボスの側だけ（ユーザー「プレイヤーの被ダメージのグラグラモーションはいらない」）
   const dx = (frame >= 0 || rig ? 0 : lungeOf(now - lastOf('act')) * dir) + (side === 'b' ? shakeOf(now - lastOf('hit')) : 0)
@@ -625,6 +646,8 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   }
   // 篠突く雨のあと：体が青く脈打つ（心臓のように2回ずつ）
   if (after?.glow > 0.01) filters.push(`drop-shadow(0 0 ${(3 + 9 * after.glow).toFixed(1)}px rgba(${after.glowColor},${(0.2 + 0.55 * after.glow).toFixed(2)}))`)
+  // 炉心臨界のあと：体の形にそった電気の光（白い芯＋青い光・ちらつく）
+  if (after?.zapGlow > 0.01) filters.push(`drop-shadow(0 0 ${(1.5 + 1.5 * after.zapGlow).toFixed(1)}px rgba(215,235,255,${(0.45 + 0.45 * after.zapGlow).toFixed(2)})) drop-shadow(0 0 ${(5 + 11 * after.zapGlow).toFixed(1)}px rgba(${after.zap.color},${(0.4 + 0.5 * after.zapGlow).toFixed(2)}))`)
   // 逆鱗のあと：体の中の光が細かくゆらぐ（暗い所はそのまま・溶岩の筋が明るくなる）
   if (after?.pulse > 0.01) filters.push(`brightness(${(1 + 0.16 * after.pulse).toFixed(3)}) contrast(${(1 + 0.1 * after.pulse).toFixed(3)})`)
   // 倒れた瞬間に白く光る（lib/bossDeath.js の bright）
@@ -643,11 +666,11 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
     else if (rageAgo >= 0 && rageAgo < RAGE_SEC && !death) { const k = Math.sin(Math.PI * 2 * rageAgo / RAGE_SEC) ** 2 * (1 - rageAgo / RAGE_SEC); bright *= 1 + 0.35 * k; red = k }
     if (death) bright *= death.bright
     bright *= 1 + 0.16 * (after?.pulse || 0)
-    red = Math.max(red, (after?.glow || 0) * 0.8)
+    red = Math.max(red, (after?.glow || 0) * 0.8, (after?.zapGlow || 0) * 0.6)
     if (enter) { bright *= enter.bright; red = Math.max(red, enter.glow) }
   }
   const wrapFilter = lite ? `brightness(${bright.toFixed(3)}) grayscale(${me.ail.paralyze ? 0.6 : 0})` : filters.join(' ') || 'none'
-  const redColor = hr || wrapped > 0.01 ? hitRgb : (enter?.glow > 0 && rig.intro.glowColor) || buffArt?.tint || after?.glowColor || '255,60,16'
+  const redColor = hr || wrapped > 0.01 ? hitRgb : (enter?.glow > 0 && rig.intro.glowColor) || buffArt?.tint || after?.glowColor || after?.zap?.color || '255,60,16'
   const down = me.hp <= 0
   const pops = mine.filter(f => f.kind !== 'act' && f.kind !== 'use' && f.kind !== 'rage' && f.kind !== 'death' && now >= f.t0 && now - f.t0 < POP_SEC)
   const need = needShownOf(me, st.t)   // ★読むだけ（ボスの次の行動を決める関数はここで使わない＝乱数が進む）
@@ -685,6 +708,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
                 <img src={src} alt="" draggable={false}
                   style={{ width:'100%', height:'100%', objectFit:'contain', userSelect:'none', visibility: frame >= 0 ? 'hidden' : 'visible' }} />
               )}
+              {zap?.length > 0 && <RigZap art={rig} arcs={zap} color={after.zap.color} />}
               {rig && death?.puffs.length > 0 && <DeathPuffs art={rig} list={death.puffs} />}
               {/* HPの節目のバフの衝撃の輪と火の粉（逆鱗）・倒れる動きの輪と粒 */}
               {/*   開戦の動きのあいだは絵ぜんたいの登場で動かない＝舞台の同じ場所に出す（登場の動きを打ち消す） */}
