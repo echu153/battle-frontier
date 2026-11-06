@@ -24,7 +24,7 @@ import { scarecrowArtOf, scarecrowFaceOf } from '../lib/scarecrowArt.js'
 // 【確定】2026-11-06 ユーザー「V２の冒険のコンテンツにデイリーで挑めるものを追加する、挑戦とは別」
 //   「まずはエリア①クリアで開放する経験値のもらえる案山子を追加したい」→ 選んだ（どれも推奨・決まりの正は lib/scarecrow.js）：
 //   ・メニューの名前は「修練場」。あとでデイリーで挑めるものをここへ足す
-//   ・案山子：挑戦と同じ ATB で60秒（自分で技を選ぶ・マクロも使える）・反撃しない・1日1回・エリア①のクリアで開く
+//   ・案山子：挑戦と同じ ATB で60秒（自分で技を選ぶ・マクロも使える）・反撃しない・状態異常にならない（11-06）・1日1回・エリア①のクリアで開く
 //   ・EXP は与えたダメージで増える（目安どおりで出撃30回ぶん・50〜150%）
 // 流れ：入口の「修練する」→ すぐ戦闘（遭遇の絵は無い）→ 60秒で「修練終了」のテロップ → 結果の画面（与えたダメージ・EXP・LVアップ）→ 修練場へ戻る
 //   ★戦闘はサーバーが決めた種と写しで作り、終わったら押した記録を預ける（v2cap_scarecrow_end）。サーバーが同じ戦闘を回し直して EXP を入れる（挑戦と同じ形）。
@@ -239,7 +239,7 @@ export default function V2capTraining({ prof, inventory, onProfile, dev = false 
           <Face />
           <span style={{ flex:1, minWidth:0 }}>
             <b style={{ color: COLOR, fontSize:'13px' }}>{SCARECROW_NAME}</b>
-            <span style={{ color: TEXT.label, fontSize:'10px' }}>　1日1回・{SCARECROW_SEC}秒・反撃しない</span><br />
+            <span style={{ color: TEXT.label, fontSize:'10px' }}>　1日1回・{SCARECROW_SEC}秒・反撃しない・状態異常にならない</span><br />
             <span style={{ color: block ? TEXT.label : '#88ffaa', fontSize:'10px' }}>{state && (block || '修練できます')}</span>
           </span>
         </div>

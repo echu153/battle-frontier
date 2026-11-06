@@ -5,7 +5,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { advance, reserve, seedRng, startMacro, toggleGuard } from '../core/atb.js'
+import { advance, createAtb, reserve, seedRng, startMacro, toggleGuard } from '../core/atb.js'
+import { AIL_KEYS, hasAilment } from '../core/ailments.js'
+import { atbPlayerOf } from './atbPlayer.js'
 import { CLASSES, canEquipType } from './jobs.js'
 import { ITEMS, itemIdOf } from './equipment.js'
 import { SKILLS } from './skills.js'
@@ -84,6 +86,30 @@ test('案山子の強さは写したときのLVで決まる（LVが上がるほ�
   assert.equal(a.idle, true)
   assert.deepEqual(a.slots, [])
   assert.ok(a.stats.agi < a.stats.vit, '避けにくい（AGI は小さく）')
+})
+
+test('【確定】2026-11-06 案山子は状態異常にかからない（ユーザー「案山子は状態異常かからないように」）・ログは種類ごとに1回だけ', () => {
+  assert.equal(scarecrowFighter(25).noAil, true)
+  let blocked = 0
+  for (const cls of ['盗賊', '呪術師', '薬師', '暗殺者', '霊薬師', '忍者']) {
+    const snap = snapOf(cls)
+    const play = (noAil) => {
+      const me = atbPlayerOf(snap.prof, snap.inv, { at: new Date(AT) })
+      const st = createAtb(me, { ...scarecrowFighter(25), noAil }, { maxSec: SCARECROW_SEC, rng: seedRng(11) })
+      startMacro(st, 1, st.a.slots.map((_, i) => ({ idx: i })), true)
+      let got = false
+      while (!st.over) { advance(st, 0.05); if (AIL_KEYS.some(k => hasAilment(st.b.ail, k))) got = true }
+      return { st, got }
+    }
+    const on = play(true)
+    assert.equal(on.got, false, `${cls}：案山子に状態異常が一度も入らない`)
+    assert.equal(on.st.log.filter(l => l.side === on.st.b.name && l.type === 'ailTick').length, 0, `${cls}：持続ダメージも刻まない`)
+    const im = on.st.log.filter(l => l.side === on.st.b.name && l.type === 'immune').map(l => l.ail)
+    assert.equal(new Set(im).size, im.length, `${cls}：「〜にならない」は種類ごとに1回だけ`)
+    // 確かめが空振りしていない：印が無ければ同じ遊び方で状態異常が入る職がある
+    if (play(false).got) blocked++
+  }
+  assert.ok(blocked >= 3, `状態異常を使う職で、印が無ければ入る（${blocked}職）`)
 })
 
 test('ふつうに遊んだ結果は、サーバーの回し直しと同じ（与えたダメージ・割合）', () => {

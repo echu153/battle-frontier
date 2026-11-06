@@ -5,6 +5,7 @@
 //   「まずはエリア①クリアで開放する経験値のもらえる案山子を追加したい」「案山子のイラストも用意したい」→ 選んだ（どれも推奨）：
 //   ・メニューは冒険の「修練場」（デイリーで挑めるものをここへ足していく。案山子が1つ目）
 //   ・戦いは挑戦と同じ ATB（60秒・自分で技を選ぶ）。**案山子は反撃しない**（core/atb.js の idle＝ゲージが溜まらない）
+//   ・**案山子は状態異常にかからない**（11-06 ユーザー「案山子は状態異常かからないように」・core/battle.js の noAil）。能力低下（デバフ）はかかる
 //   ・**1日1回**（日本時間の朝5時に戻る＝挑戦と同じ v2cap_dungeon_today）。**エリア①をクリア**（①-③のボスを倒した）すると開く
 //   ・EXPは**与えたダメージで増える**：同じ職・同じLVの目安の強さの人が60秒で出すダメージ（scarecrowStd.js）で「基準の量」、
 //     多く削ると最大1.5倍・少ないと最低0.5倍。基準の量は**出撃30回ぶん**（そのLVの推奨の場所で30回出撃したくらい＝areas.js の tenSortieExpOf×3）
@@ -39,7 +40,7 @@ export const scarecrowPowerOf = (lv) => Math.max(1, Math.round(stdPowerAt(Math.m
 export const scarecrowFighter = (lv) => {
   const stats = statsOf({ power: scarecrowPowerOf(lv), dist: DIST })
   stats.hp = SCARECROW_HP
-  return { ...CAP_RULES, name: SCARECROW_NAME, kind: 'phys', race: null, stats, slots: [], taken: null, idle: true }
+  return { ...CAP_RULES, name: SCARECROW_NAME, kind: 'phys', race: null, stats, slots: [], taken: null, idle: true, noAil: true }
 }
 
 // 戦闘を作る。seed・snap は v2cap_scarecrow_start の返事（画面）か、サーバーが預かった同じ値（回し直し）。

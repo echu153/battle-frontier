@@ -354,6 +354,10 @@ export const createSide = (fighter, band = null) => {
     //   （2026-10-10 ユーザー決定）。渡さなければ今のⅡと同じ。ailTimes はその戦闘でかかった回数
     ailDiminish: !!fighter.ailDiminish,
     ailTimes: {},
+    // ★noAil … 状態異常に一切かからない（修練場の案山子＝lib/scarecrow.js・2026-11-06 ユーザー「案山子は状態異常かからないように」）。
+    //   noAilSeen はログに出した種類（種類ごとに最初の1回だけ「〜にならない」と出す＝60秒の戦闘でログを埋めない）
+    noAil: !!fighter.noAil,
+    noAilSeen: {},
     enStacks: {},                        // 当てるたびに積むスタック（ステ名→合計%）
     enCut: en.startCut,                  // スケルトン：次に受けるダメージを軽減（受けるまで消えない）
     reflected: false,                    // ウラノス：跳ね返しは最初の1回だけ
@@ -871,6 +875,11 @@ const applyDebuff = (foe, table, log) => {
 // me は入れる側。武器の進化は**入れる側の付与率＋**と**受ける側の抵抗**の両方が効く
 // 入ったら true（防具のセット能力の「攻撃を受けると相手に状態異常」がログの並びに使う）
 const tryInflict = (me, foe, a, rng, log) => {
+  // ★状態異常に一切かからない相手（修練場の案山子）。確率を引く前に止める（乱数を引かない）
+  if (foe?.noAil) {
+    if (!foe.noAilSeen[a.key]) { foe.noAilSeen[a.key] = true; log.push({ side: foe.name, type: 'immune', ail: AIL_LABEL[a.key] }) }
+    return false
+  }
   // ★上位職：不動（麻痺・鈍足にかからない）／★ユニーク：炎竜鱗の手甲・九頭の鱗衣・深淵歩きの脚甲
   if (foe?.pa?.ex?.immune?.includes(a.key) || setImmune(foe, a.key)) {
     log.push({ side: foe.name, type: 'immune', ail: AIL_LABEL[a.key] })
