@@ -261,6 +261,7 @@ export function MenuHead({ head, title }) {
 // ★**2列 × まとまりごと**に並べる（2026-08-26 ユーザー指示）。
 //   groups は「まとまりの配列」で、title がまとまりの見出し、head が見出しの帯の絵（lib/menuHead.js）、items が2列に流れる中身（2026-10-31 ユーザー指示で役割ごとに見出しをつけた）。
 //   【確定】2026-10-31 ユーザー指示「その行に1つしかなくてもアイコンの大きさは同じにして」：数が奇数でも最後の1つを伸ばさない（どのボタンも同じ大きさ）。
+//   【確定】2026-11-07 ユーザー指示「編成する　とかホーム画面のこの部分全部いらない」→選択「全部消す」：ボタンは名前だけ。下の小さい説明の行（m.action）は出さない
 export function V2Menu({ groups, open, onToggle, onPick, badges = {} }) {
   return (
     <div style={{ border:'1px solid #0044aa', background:'#001040', padding:'10px', marginBottom:'8px' }}>
@@ -280,7 +281,6 @@ export function V2Menu({ groups, open, onToggle, onPick, badges = {} }) {
                 {/* ★新着の目印。お知らせのように「来ているのに気づかない」が起きる先だけ付ける */}
                 {badges[m.badge] && <span style={{ marginLeft:'4px', background:'#ff4400', color:'#fff',
                   fontSize:'7px', padding:'1px 4px', borderRadius:'6px' }}>NEW</span>}
-                <span style={{ display:'block', color:'#7fa6d0', fontSize:'9px', marginTop:'2px' }}>{m.action}</span>
               </button>
             ))}
           </div>

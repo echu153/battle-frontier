@@ -79,6 +79,16 @@ test('【確定】どのボタンも同じ大きさ：その行に1つしかな�
   assert.ok(menu.includes('{group.title}'), 'まとまりの見出しを出す')
 })
 
+test('【確定】2026-11-07 ボタンは名前だけ：下の小さい説明の行（編成する・着ける・外す など）を出さない', () => {
+  // ユーザー指示「編成する　とかホーム画面のこの部分全部いらない」→選択「全部消す」（APの残り・食事中などの状態の行も）
+  const status = readFileSync(new URL('../components/V2Status.jsx', import.meta.url), 'utf8')
+  const menu = status.slice(status.indexOf('export function V2Menu'))
+  assert.ok(!menu.includes('{m.action}'), 'ボタンの下の説明の行')
+  assert.ok(!/action:/.test(MENU_SRC), 'メニューの中身に説明を持たせない')
+  assert.ok(!SRC.includes('menuOf('), '状態で説明を変える仕組み')
+  assert.ok(SRC.includes('<V2Menu groups={MENU} '))
+})
+
 test('【確定】メニューの塔の札は「覇天塔」だけ（塔の画面の題などは正式な名前のまま）', () => {
   assert.equal(TOWER_SHORT_NAME, '覇天塔')
   assert.ok(TOWER_NAME.endsWith(TOWER_SHORT_NAME), '正式な名前の後ろと同じ')

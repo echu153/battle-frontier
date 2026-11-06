@@ -30,18 +30,16 @@ import V2capUniqueCheck from '../components/V2capUniqueCheck.jsx'
 import { deviceMark } from '../lib/altWatch.js'
 import { updateApp } from '../lib/appUpdate.js'
 import V2capShop from '../components/V2capShop.jsx'
-import { SHOP_COLOR, flipLeftMsOf } from '../lib/shop.js'
+import { SHOP_COLOR } from '../lib/shop.js'
 import { START_CLASSES, weaponsOf, attackKindOf, classDescOf } from '../lib/jobs.js'
-import { apLeftOf } from '../lib/ascension.js'
-import { TOWER_NAME, TOWER_SHORT_NAME, floorLabel, clampFloor } from '../lib/tower.js'
+import { TOWER_NAME, TOWER_SHORT_NAME } from '../lib/tower.js'
 import { openUntilOf } from '../lib/sortie.js'
-import { isScarecrowOpen } from '../lib/scarecrowRules.js'
 import { DAY_QUEST_TITLE } from '../lib/dayQuestRules.js'
 import { spotLabel } from '../lib/areas.js'
 import { RARITY_COLOR } from '../lib/equipment.js'
 import { SHINKA_ON } from '../lib/shinka.js'
 import { GENDER_BY_KEY, genderOf } from '../lib/gender.js'
-import { SHOP_NAME, MEAL_COLOR, activeMealOf, leftText } from '../lib/burger.js'
+import { SHOP_NAME, MEAL_COLOR } from '../lib/burger.js'
 import { MARK_SRC } from '../lib/clerk.js'
 import { MENU_ICON_DEFS, menuIconSrcOf } from '../lib/menuIcon.js'
 
@@ -84,44 +82,45 @@ import { NAVI_NAME, NAVI_SCROLL_ID } from '../lib/navi.js'
 // ============================================================
 // 【確定】2026-10-31 ユーザー指示「メニューがバラバラになってるからそれぞれの役割ごとにまとめたい」：役割ごとの3つ（見出しつき）に分けた。中の並びもユーザーの指定どおり
 //   「キャラクター」はユーザーの「プレイヤー関連（もっといい名称あるはず）」。ゲームの中の呼び方（キャラクター名・キャラを作り直す）にそろえた
+// 【確定】2026-11-07 ユーザー指示「編成する　とかホーム画面のこの部分全部いらない」→選択「全部消す」：ボタンは名前だけ（下の小さい説明の行を出さない）。
+//   そのときの状態を出していた行（APの残り・食事中・日月反転中・覇天塔の層・エリア①クリアで開く）も消した。homeMenu.test.js が見張る
 const MENU = [
   { title:'キャラクター', head:'chara', items:[
-    { key:'profile', label:'プロフィール', icon:'👤', color:'#88aaff', action:'アイコン・ステの内訳' },
-    { key:'skills',  label:'スキルセット', icon:'📖', color:'#44ff88', action:'編成する' },
-    { key:'equip',   label:'装備',         icon:'🛡', color:'#88ccff', action:'着ける・外す' },
-    // 【確定】2026-10-13 アセンション（スキルツリー）。説明は残りのAPで変わる（menuOf）
-    { key:'asc', label:'アセンション', icon:'✨', color:'#ffaa44', action:'APを振る' },
-    { key:'dex',     label:'モンスター図鑑', icon:'📕', color:'#c0b0ff', action:'敵とドロップを見る' },
+    { key:'profile', label:'プロフィール', icon:'👤', color:'#88aaff' },
+    { key:'skills',  label:'スキルセット', icon:'📖', color:'#44ff88' },
+    { key:'equip',   label:'装備',         icon:'🛡', color:'#88ccff' },
+    // 【確定】2026-10-13 アセンション（スキルツリー）
+    { key:'asc', label:'アセンション', icon:'✨', color:'#ffaa44' },
+    { key:'dex',     label:'モンスター図鑑', icon:'📕', color:'#c0b0ff' },
   ] },
   { title:'冒険', head:'adventure', items:[
     // 【確定】2026-10-29 IDダンジョン（ボスを呼び、HPを持ち越して倒す・ATB戦闘・救援）。いまは黒龍ヴァルゼノクのノーマル・ハード
     // 【確定】2026-10-31 ユーザー「これは『挑戦』にして」＝メニューと画面の名前は「挑戦」（中のカテゴリは lib/dungeon.js の CHALLENGE_CATS）
     // 【確定】2026-11-06 ユーザー「挑戦のアイコンも作りたい」→選択「魔物の頭骨と交差した剣」「ボスの絵と同じ厚塗り」：絵のアイコン（lib/menuIcon.js・絵が届くまでは🐉）
-    { key:'dungeon', label:'挑戦', icon: <MenuIcon k="challenge" />, color:'#ff6655', action:'強敵に挑む・救援' },
-    // 【確定】2026-10-14 塔（あるけみすと型の対人・1〜100層）。説明はいまの層で変わる（menuOf）
+    { key:'dungeon', label:'挑戦', icon: <MenuIcon k="challenge" />, color:'#ff6655' },
+    // 【確定】2026-10-14 塔（あるけみすと型の対人・1〜100層）
     // 【確定】2026-10-31 メニューの札は「覇天塔」だけ（ユーザー指示「ジークヴァルトのはてんとうは覇天塔だけにして」）。塔の画面の題などは TOWER_NAME のまま
-    { key:'tower', label: TOWER_SHORT_NAME, icon:'🗼', color:'#b48cff', action:'階層守護者に挑む' },
+    { key:'tower', label: TOWER_SHORT_NAME, icon:'🗼', color:'#b48cff' },
     // 【確定】2026-11-06 ユーザー「V２の冒険のコンテンツにデイリーで挑めるものを追加する、挑戦とは別」→選んだ名前「修練場」：
-    //   デイリーで挑めるものの入れ物。1つ目は案山子（エリア①のクリアで開く・lib/scarecrow.js）。開く前は説明が「エリア①クリアで開く」（menuOf）
+    //   デイリーで挑めるものの入れ物。1つ目は案山子（エリア①のクリアで開く・lib/scarecrow.js）
     // 【確定】2026-11-06 ユーザー「修練場の枠、他にもコンテンツ入れるから名前変えたい」→選んだ名前「日替わりクエスト」：毎日の案山子＋曜日で変わるクエスト（lib/dayQuestRules.js）。
     //   中の画面の key は 'training' のまま（開け閉めの保存などを変えない）
-    { key:'training', label: DAY_QUEST_TITLE, icon:'📜', color:'#9ad06a', action:'案山子・曜日のクエスト' },
+    { key:'training', label: DAY_QUEST_TITLE, icon:'📜', color:'#9ad06a' },
   ] },
   { title:'施設', head:'facility', items:[
-    // 【確定】2026-10-31 商店（性別変更薬・日月反転の秘薬・lib/shop.js）。説明は秘薬が効いていれば残り時間（menuOf）
+    // 【確定】2026-10-31 商店（性別変更薬・日月反転の秘薬・lib/shop.js）
     //   いちばん初めに置く（ユーザー指示「商店は施設の一番初めにして、後は全部1つずつ順番ずらして※最後にユグレシア」）
-    { key:'shop', label:'商店', icon:'🏪', color: SHOP_COLOR, action:'薬を買う' },
-    { key:'temple', label:'神殿',   icon:'🏛', color:'#ff88cc', action:'転職する' },
-    { key:'smith',  label:'鍛冶屋', icon:'🔨', color:'#ffcc00', action:'強化・分解・作成' },
+    { key:'shop', label:'商店', icon:'🏪', color: SHOP_COLOR },
+    { key:'temple', label:'神殿',   icon:'🏛', color:'#ff88cc' },
+    { key:'smith',  label:'鍛冶屋', icon:'🔨', color:'#ffcc00' },
     // 【確定】2026-10-22 博物館（装備の寄贈・V1と同じ形の土台。登録でもらえる能力はあとで）
-    { key:'museum', label:'博物館', icon:'🏺', color:'#d8b070', action:'装備を寄贈する' },
-    // 【確定】2026-10-25 ハンバーガー屋「ニャーガーキング」（食べると60分ステ+10%・トッピングで状態異常にかかりにくく）。説明は食事中なら残り時間（menuOf）
+    { key:'museum', label:'博物館', icon:'🏺', color:'#d8b070' },
+    // 【確定】2026-10-25 ハンバーガー屋「ニャーガーキング」（食べると60分ステ+10%・トッピングで状態異常にかかりにくく）
     //   アイコンは店のマーク（ワッペン＝猫耳としっぽのついたハンバーガー・lib/clerk.js の MARK_SRC）。ユーザー選択「メニューの🍔の代わりに使う」
-    { key:'burger', label: SHOP_NAME, icon: <ShopMark />, color: MEAL_COLOR, action:'バーガーを食べる' },
+    { key:'burger', label: SHOP_NAME, icon: <ShopMark />, color: MEAL_COLOR },
     // 【確定】2026-10-13 賭博場（スロット・ハイ&ロー・ルーレット・両替所）。景品の交換所はあとで
-    //   説明は 2026-10-31 に短くした（2列だと1行に入らない・ハイ&ローとテーブルの卓はまとめて「カード」）
-    { key:'casino', label:'賭博場', icon:'🎰', color:'#ff4fa3', action:'スロット・ルーレット・カード' },
-    { key:'tree', label:'ユグレシアの宝樹', icon:'🌳', color:'#44dd99', action:'祈る' },
+    { key:'casino', label:'賭博場', icon:'🎰', color:'#ff4fa3' },
+    { key:'tree', label:'ユグレシアの宝樹', icon:'🌳', color:'#44dd99' },
   ] },
 ]
 const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', museum:'🏺 博物館', burger: <><ShopMark size={18} /> {SHOP_NAME}</>, asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場', shop:'🏪 商店', tower:`🗼 ${TOWER_NAME}`, training:`📜 ${DAY_QUEST_TITLE}`, dungeon: <><MenuIcon k="challenge" size={18} /> 挑戦</>,
@@ -143,24 +142,6 @@ const touchWatch = (create = false) => {
 const V2capDungeon = lazy(() => import('../components/V2capDungeon.jsx'))
 // 日替わりクエスト（旧 修練場・2026-11-06・案山子と曜日のクエスト）。戦闘の画面（ATB）ごと、開いたときだけ読み込む
 const V2capTraining = lazy(() => import('../components/V2capTraining.jsx'))
-// メニューの説明に、いまの職業で残っているAPを出す（振り忘れに気づけるように）。塔はいまの層（守っていればその層）
-const towerActionOf = (prof) => (prof?.tower_guard
-  ? `👑 ${floorLabel(prof.tower_guard)}を守っている`
-  : `${floorLabel(clampFloor(prof?.tower_floor || 1))}の階層守護者に挑む`)
-const menuOf = (prof) => {
-  const left = Math.max(0, apLeftOf(prof))
-  const meal = activeMealOf(prof)
-  const flip = flipLeftMsOf(prof)
-  return MENU.map(g => ({ ...g, items: g.items.map(m => {
-    if (m.key === 'asc' && left > 0) return { ...m, action:`APを振る（残り${left}）` }
-    if (m.key === 'tower') return { ...m, action: towerActionOf(prof) }
-    if (m.key === 'burger' && meal) return { ...m, action:`食事中（${leftText(meal.leftMs)}）` }
-    if (m.key === 'shop' && flip > 0) return { ...m, action:`日月反転中（${leftText(flip)}）` }
-    if (m.key === 'training' && !isScarecrowOpen(prof?.cleared_spots)) return { ...m, action:'エリア①クリアで開く' }
-    return m
-  }) }))
-}
-
 // 今のⅡと同じ2列（grid の auto-fit は列を同じ幅にしかできないので flex で組む）
 //   左 … flex:'1 1 340px'／右 … flex:'999 1 340px'＝余った幅はほぼ右へ。688px より狭いと折り返して1列
 const TWO_COLUMN = { display:'flex', flexWrap:'wrap', gap:'8px', alignItems:'flex-start', maxWidth:'980px', margin:'0 auto' }
@@ -518,7 +499,7 @@ export default function V2capHome() {
               </div>
               {!inBattle && (
                 <>
-                  <V2Menu groups={menuOf(prof)} open={openMenu} onToggle={toggleMenu} onPick={pickScreen} />
+                  <V2Menu groups={MENU} open={openMenu} onToggle={toggleMenu} onPick={pickScreen} />
                   <div style={{ ...box, padding:'10px', borderColor:'#553366' }}>
                     <div style={{ color:'#ff88cc', fontSize:'11px', marginBottom:'6px' }}>🧪 開発用</div>
                     <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
