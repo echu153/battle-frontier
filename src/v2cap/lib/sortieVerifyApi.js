@@ -26,14 +26,17 @@ const tower = async (rpc, secret, player) => {
 const KINDS = { fill, tower }
 
 // 頼みを1つ処理する。{ status, body } を返す。body.kind＝fill（出撃）・tower（塔）。結果は返さない
-export const sortieRequest = async ({ body, secret, fetchFn = fetch }) => {
+//   ping … いまの版を答えるだけ（出撃の画面を開いたときに関数を起こしておく・dungeonVerifyCall.js の warmSortie）
+//   決めたときの返事にも版（sha）を付ける＝画面はこれで古くないかを見る（2026-11-07・前は別の関数に先に聞いていた）
+export const sortieRequest = async ({ body, secret, sha = '', fetchFn = fetch }) => {
+  if (body?.ping) return { status: 200, body: { ok: true, sha } }
   const run = KINDS[Object.hasOwn(KINDS, String(body?.kind)) ? body.kind : '']
   const player = String(body?.player || '')
   if (!run || !UUID.test(player)) return { status: 400, body: { ok: false, error: 'どの頼みか分かりません' } }
   if (!secret) return { status: 500, body: { ok: false, error: '合い言葉の設定がありません' } }
   try {
     const out = await run(rpcOf(fetchFn), secret, player)
-    return { status: 200, body: out?.ok ? { ok: true } : out }
+    return { status: 200, body: out?.ok ? { ok: true, ...(sha ? { sha } : {}) } : out }
   } catch (e) {
     console.error(e)
     return { status: 500, body: { ok: false, error: '結果を決められませんでした' } }

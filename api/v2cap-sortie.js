@@ -17,6 +17,6 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST だけです' })
   let body = null
   try { body = req.body } catch { /* 形の悪い JSON は「どの頼みか分かりません」へ */ }
-  const { status, body: out } = await sortieRequest({ body, secret: process.env.BF_DUNGEON_SECRET })
+  const { status, body: out } = await sortieRequest({ body, secret: process.env.BF_DUNGEON_SECRET, sha: process.env.VERCEL_GIT_COMMIT_SHA || '' })
   return res.status(status).json(out)
 }

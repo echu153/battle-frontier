@@ -18,7 +18,7 @@ import {
   towerBattleOf, towerIconSrc, iconClassOf,
 } from '../lib/tower.js'
 import { decideTower } from '../lib/sortieVerify.js'
-import { CORRECTED_TEXT, callSortie, isStaleBuild } from '../lib/dungeonVerifyCall.js'
+import { CORRECTED_TEXT, callSortie, askSortieStale, warmSortie } from '../lib/dungeonVerifyCall.js'
 import { ITEM_BY_ID } from '../lib/equipment.js'
 
 // ============================================================
@@ -64,6 +64,13 @@ export default function V2capTower({ prof, inventory, onProfile }) {
   const scrolled = useRef(false)
 
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 200); return () => clearInterval(t) }, [])
+  // 30戦を決める関数（塔も同じ関数）を先に起こしておく：開いたとき・画面に戻ってきたとき（lib/dungeonVerifyCall.js の warmSortie・2026-11-07）
+  useEffect(() => {
+    const warm = () => { if (document.visibilityState !== 'hidden') void warmSortie() }
+    warm()
+    document.addEventListener('visibilitychange', warm)
+    return () => document.removeEventListener('visibilitychange', warm)
+  }, [])
 
   const load = useCallback(async () => {
     const { data, error } = await supabase.from('v2cap_tower_floors').select('floor, player_id, snapshot, hp_pm, mp, streak, since')
@@ -111,8 +118,8 @@ export default function V2capTower({ prof, inventory, onProfile }) {
     sortieClock.start()
     let freeCd = false   // 守護者が入れ替わっていた（待ち時間を使っていない）
     try {
-      // 画面が古いと再生がずれるので、待ち時間を使う前に版を見る
-      if (await isStaleBuild()) { setStale(true); setScene('lobby'); freeCd = true; return }
+      // 画面が古いと再生がずれるので、待ち時間を使う前に版を見る。聞く先は次に呼ぶ関数と同じ・1分以内に聞いていればその答え（askSortieStale・2026-11-07）
+      if (await askSortieStale()) { setStale(true); setScene('lobby'); freeCd = true; return }
       // 自分のアイコンの男女はキャラの性別（2026-10-21・gender.js。まだ決めていないキャラだけ神殿の切り替え）
       const gender = artGenderOf(prof, loadPref('capArtGender', 'm'))
       const onWait = { onWait: (ms) => sortieClock.wait(ms) }

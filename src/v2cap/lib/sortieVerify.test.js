@@ -15,7 +15,7 @@ import { nextBossRate } from './sortie.js'
 import { npcFighterOf } from './tower.js'
 import { SORTIE_BATCH, decideSortie, decideTower, fillSortie, randomSeed, towerResultOf } from './sortieVerify.js'
 import { sortieRequest } from './sortieVerifyApi.js'
-import { callSortie, verifyUrlOf } from './dungeonVerifyCall.js'
+import { callSortie, verifyUrlOf, staleShaOf, askSortieStale, warmSortie, WARM_GAP_MS, SORTIE_STALE_REUSE_MS } from './dungeonVerifyCall.js'
 import handler from '../../../api/v2cap-sortie.js'
 
 const SQL = readFileSync(new URL('../../../supabase_v2cap_core.sql', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
@@ -404,7 +404,8 @@ test('★画面：戦闘の結果を自分で決めない・送らない（再�
     for (const w of ['runBattle', 'rollEquipDrop', 'rollTowerDrop', 'pickEncounter', 'p_win', 'p_enemy', 'p_drop', 'p_snapshot', 'p_my_hp_pm', 'Math.random']) {
       assert.ok(!src.includes(w), `${name}の画面に ${w} が残っていない`)
     }
-    assert.ok(src.includes('isStaleBuild()'), `${name}：古い画面のまま戦わない`)
+    // 2026-11-07 から出撃は30戦を決めた返事の版（staleShaOf）・塔は出撃と同じ関数に聞く（askSortieStale）
+    assert.ok(src.includes(name === '出撃' ? 'staleShaOf(made.sha)' : 'askSortieStale()'), `${name}：古い画面のまま戦わない`)
     assert.ok(src.includes('<V2capReloadNote'), `${name}：読み直しの案内`)
     assert.ok(src.includes('CORRECTED_TEXT'), `${name}：ずれたら知らせる`)
   }
@@ -420,4 +421,56 @@ test('★画面：戦闘の結果を自分で決めない・送らない（再�
   assert.ok(home.includes("supabase.rpc('v2cap_debug_papia_next')"))
   assert.ok(!home.includes('forcePapiaNext'))
   assert.ok(SPOTS.length > 0)
+})
+
+// 【確定】2026-11-07 ユーザー「最初のオート出撃、戦闘ログが出るまで5秒くらいかかるんだけどなんで？」→「直して」
+//   最初の出撃（30戦を決める準備が入る回）は、別の関数への版の確かめ＋眠っている関数を起こす待ちが乗っていた
+test('【確定】2026-11-07 関数：ping は版を答える（DB を呼ばない）・決めた返事に版を付ける', async () => {
+  const none = fakeDb({})
+  assert.deepEqual(await sortieRequest({ body: { ping: true }, secret: '', sha: 'abc', fetchFn: none.fetchFn }), { status: 200, body: { ok: true, sha: 'abc' } })
+  assert.equal(none.calls.length, 0, '起こすだけ＝DB を呼ばない')
+  for (const kind of ['fill', 'tower']) {
+    const load = kind === 'fill' ? 'v2cap_sortie_fill_load' : 'v2cap_tower_try_load'
+    const done = fakeDb({ [load]: { ok: true, done: true } })
+    assert.deepEqual(await sortieRequest(req({ kind }, { sha: 'abc', fetchFn: done.fetchFn })), { status: 200, body: { ok: true, sha: 'abc' } }, kind)
+  }
+  assert.ok(read('../../../api/v2cap-sortie.js').includes("sha: process.env.VERCEL_GIT_COMMIT_SHA || ''"), '入口が版を渡す')
+})
+
+test('【確定】2026-11-07 画面から呼ぶ：版の比べ方・起こすのは3分に1回まで・塔の版の確かめは1分以内なら聞き直さない', async () => {
+  assert.equal(staleShaOf('bbb', 'aaa'), true)
+  assert.equal(staleShaOf('aaa', 'aaa'), false)
+  assert.equal(staleShaOf('', 'aaa'), false, '関数の版が分からない')
+  assert.equal(staleShaOf('bbb', ''), false, '手元の開発')
+  assert.equal(WARM_GAP_MS, 3 * 60 * 1000)
+  assert.equal(SORTIE_STALE_REUSE_MS, 60 * 1000)
+  let n = 0
+  const ask = () => { n++; return Promise.resolve(false) }
+  const t0 = 1e15   // ほかのテストの印と重ならない時刻
+  await warmSortie({ now: t0, ask })
+  await warmSortie({ now: t0 + WARM_GAP_MS - 1, ask })
+  assert.equal(n, 1, '3分以内は起こし直さない')
+  await askSortieStale({ now: t0 + SORTIE_STALE_REUSE_MS - 1, ask })
+  assert.equal(n, 1, '塔は1分以内なら同じ答え')
+  await askSortieStale({ now: t0 + SORTIE_STALE_REUSE_MS, ask })
+  assert.equal(n, 2, '1分を過ぎたら聞き直す')
+  await warmSortie({ now: t0 + SORTIE_STALE_REUSE_MS + WARM_GAP_MS, ask })
+  assert.equal(n, 3)
+  // 聞く先は出撃と塔の関数（挑戦の関数を起こさない）
+  const call = readFileSync(new URL('./dungeonVerifyCall.js', import.meta.url), 'utf8')
+  assert.ok(call.includes('ask = () => isStaleBuild({ path: SORTIE_PATH })'))
+})
+
+test('【確定】2026-11-07 出撃の画面：版は30戦を決めた返事で見る・開いたときと戻ってきたときに関数を起こす・準備のあいだ「探索中…」', () => {
+  const src = read('../components/V2capSortie.jsx').replaceAll(String.fromCharCode(13), '')
+  assert.ok(!src.includes('isStaleBuild'), '準備の前に別の関数へ版を聞かない（往復が1回多い）')
+  assert.ok(src.includes("if (made?.ok && staleShaOf(made.sha)) { setStale(true); setAuto(false); return '新しい版が出ています' }"))
+  assert.ok(src.includes('setLogs([{ text:`🔍 ${sh ? SHRINE_NAME : spot.name}を探索中…`'), '準備のあいだログの枠を空にしない')
+  const tower = read('../components/V2capTower.jsx').replaceAll(String.fromCharCode(13), '')
+  assert.ok(!tower.includes('isStaleBuild'), '塔も挑戦の関数へ聞かない')
+  assert.ok(tower.includes('if (await askSortieStale()) {'))
+  for (const [f, s] of [['出撃', src], ['塔', tower]]) {
+    assert.ok(s.includes("const warm = () => { if (document.visibilityState !== 'hidden') void warmSortie() }"), f)
+    assert.ok(s.includes("document.addEventListener('visibilitychange', warm)"), `${f}：画面に戻ってきたときも`)
+  }
 })

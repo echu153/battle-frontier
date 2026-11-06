@@ -23,7 +23,7 @@ import V2capShrineFx from './V2capShrineFx.jsx'
 import V2capReloadNote from './V2capReloadNote.jsx'
 import { dexCompleteText } from '../lib/dex.js'
 import { decideSortie } from '../lib/sortieVerify.js'
-import { CORRECTED_TEXT, callSortie, isStaleBuild } from '../lib/dungeonVerifyCall.js'
+import { CORRECTED_TEXT, callSortie, staleShaOf, warmSortie } from '../lib/dungeonVerifyCall.js'
 
 // ============================================================
 // 「レベルキャップあり」版 — 出撃（ホームの右）
@@ -104,6 +104,13 @@ export default function V2capSortie({ prof, onProfile, onScene }) {
   const snapRef = useRef(null)                        // サーバーの自分の写し（戦闘を再生するのに使う）
 
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 100); return () => clearInterval(t) }, [])
+  // 30戦を決める関数（塔も同じ関数）を先に起こしておく：開いたとき・画面に戻ってきたとき（lib/dungeonVerifyCall.js の warmSortie・2026-11-07）
+  useEffect(() => {
+    const warm = () => { if (document.visibilityState !== 'hidden') void warmSortie() }
+    warm()
+    document.addEventListener('visibilitychange', warm)
+    return () => document.removeEventListener('visibilitychange', warm)
+  }, [])
   // オン：行が増えるたび（精算の行が後から足されたときも）枠の一番下へ
   useEffect(() => {
     const el = logBox.current
@@ -141,12 +148,14 @@ export default function V2capSortie({ prof, onProfile, onScene }) {
   const stamMax = staminaMaxOfProfile(prof)   // LV＋図鑑のボーナス（2026-10-24）
   const stamNow = rollStamina(stam.n, stam.at, stamMax, now, staminaSpanMsOf(prof)).n   // 博物館の報酬で回復の間隔が短くなる（2026-10-23）
 
-  // サーバーに次の30戦を決めてもらう（lib/sortieVerify.js）。だめならわけを返す。画面が古いと再生がずれるので、その前に版を見る
+  // サーバーに次の30戦を決めてもらう（lib/sortieVerify.js）。だめならわけを返す。画面が古いと再生がずれるので、精算の前に版を見る
+  // 【確定】2026-11-07 ユーザー「最初のオート出撃、戦闘ログが出るまで5秒くらいかかる」→「直して」：版は30戦を決めた関数の返事（sha）で見る。
+  //   前は先に別の関数（挑戦の関数）へ聞いていた＝往復が1回多く、その関数が眠っていると起こす待ちも乗っていた
   const prepareBattles = async (spotId) => {
-    if (await isStaleBuild()) { setStale(true); setAuto(false); return '新しい版が出ています' }
     const { data, error } = await supabase.rpc('v2cap_sortie_prepare', { p_spot: spotId })
     if (error || !data?.ok) return error?.message || data?.error
     const made = await callSortie({ kind: 'fill', player: data.player })
+    if (made?.ok && staleShaOf(made.sha)) { setStale(true); setAuto(false); return '新しい版が出ています' }
     return made?.ok ? null : (made?.error || 'サーバーにつながりませんでした')
   }
 
@@ -176,6 +185,8 @@ export default function V2capSortie({ prof, onProfile, onScene }) {
       let res = await send()
       // 先に決めた結果が無い（使い切った・場所や強さが変わった）：決めてもらってからもう一度
       if (res.data?.need_prepare) {
+        // 準備のあいだ（30戦を決める）もログの枠を空にしない（2026-11-07）。戦闘が届いたら置き換わる
+        setLogs([{ text:`🔍 ${sh ? SHRINE_NAME : spot.name}を探索中…`, color:'#7fa6d0' }])
         const why = await prepareBattles(spotId)
         if (why) {
           setAuto(false)
@@ -218,7 +229,7 @@ export default function V2capSortie({ prof, onProfile, onScene }) {
         // 古い画面のまま戦うと再生がずれる（入るのはサーバーの結果）
         if (d.win !== win) out.push({ text: CORRECTED_TEXT, color:'#ff8844' })
         setLogs(out)
-      }
+      } else setLogs([])   // 「探索中…」を残さない
 
       const after = []
       // ★LV100のぶんは入らないので、そう出す。ClassEXPは書かない（同じ量がいまの職業にも入る＝ユーザー指示で表記を外した）
