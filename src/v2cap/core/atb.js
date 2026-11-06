@@ -153,8 +153,10 @@ const createAtbSide = (fighter, band, { ai = false, cast = false } = {}) => {
   side.enrage = fighter.enrage || null
   side.enrageDeal = 0
   side.enrageHit = 0
+  // ★動かない相手（修練場の案山子・lib/scarecrow.js）：ゲージが溜まらない＝一度も行動しない。毒や出血などの時間の効果は受ける
+  side.idle = !!fighter.idle
   // 武器の進化「◯%で先手を取る」は開始のゲージに読み替える
-  side.gauge = Math.min(GAUGE_FULL, GAUGE_FULL * (side.evo?.first || 0) / 100)
+  side.gauge = side.idle ? 0 : Math.min(GAUGE_FULL, GAUGE_FULL * (side.evo?.first || 0) / 100)
   side.cd = {}                 // 技の枠 → 使えるようになる時刻（秒）
   side.cdLen = {}              // 技の枠 → そのクールダウンの長さ（秒）＝画面の「下から色が戻る」の割合に使う
   side.timed = []              // [{ table, sec, until, debuff }] 時間で切れるバフ・デバフ
@@ -706,7 +708,7 @@ const stepOnce = (st) => {
   const eA = liveStats(a)
   const eB = liveStats(b)
   for (const [me, eMe, eFoe] of [[a, eA, eB], [b, eB, eA]]) {
-    if (me.cast || me.ail.paralyze || me.buffAct || nextBigOf(me)) continue
+    if (me.idle || me.cast || me.ail.paralyze || me.buffAct || nextBigOf(me)) continue
     // ★満タンを少し超えたぶんは次へ持ち越す（100で切ると、刻みの端数のぶん速い側ほど遅くなる）
     me.gauge = Math.min(GAUGE_FULL * 2, me.gauge + fillPerSecOf(me, eMe, eFoe) * STEP_SEC)
   }

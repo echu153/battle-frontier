@@ -141,6 +141,11 @@ export const hitReactOf = (f, now, hpMax) => {
   return { x: -16 * s * push, y: -2.5 * s * Math.sin(Math.min(1, h / 0.22) * Math.PI),
     sx: 1 + 0.09 * s * sq, sy: 1 - 0.14 * s * sq, flash: h < 0.09 ? 1 - h / 0.09 : 0, glow: (1 - h / HIT_REACT_SEC) ** 1.5 }
 }
+// 修練場の案山子の揺れ（度）：殴られると根元から相手と逆の向き（右）へ傾き、ゆれながら戻る。続けて殴られたら、そのたびに新しく傾く
+//   【確定】2026-11-06 ユーザー選択「立ち絵と背景の2枚」＝殴られたときの揺れは立ち絵を動かして作る（lib/scarecrowArt.js の wobble）
+export const WOBBLE_SEC = 1.1
+export const wobbleOf = (elapsed, crit = false) =>
+  (elapsed >= 0 && elapsed < WOBBLE_SEC ? (crit ? 9 : 5.5) * Math.exp(-elapsed * 3.6) * Math.sin(Math.min(elapsed / 0.07, 1) * Math.PI / 2 + Math.max(0, elapsed - 0.07) * 15) : 0)
 // 被弾の揺れ（px）。だんだん小さく（ボスの側だけ。自分は揺らさない＝hitReactOf）
 export const shakeOf = (elapsed, px = 6) =>
   (elapsed >= 0 && elapsed < HIT_SEC ? Math.sin(elapsed * 70) * px * (1 - elapsed / HIT_SEC) : 0)

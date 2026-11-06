@@ -437,6 +437,7 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
         <div style={{ marginBottom:'8px', fontSize:'13px', color: s.winner === 'a' ? '#ffcc00' : s.winner === 'b' ? '#ff4444' : TEXT.label }}>
           {s.winner === 'a' ? `⚔ ${en.name}を倒した！（${now.toFixed(1)}秒）`
             : s.winner === 'b' ? `敗北…（${now.toFixed(1)}秒）`
+            : bossArt?.timeupKind === 'train' ? `🌾 修練終了（${s.maxSec}秒・${Math.round(dps).toLocaleString()}ダメージ/秒）`
             : `⏱ 時間切れ（${s.maxSec}秒・${Math.round(dps).toLocaleString()}ダメージ/秒）`}
         </div>
       )}

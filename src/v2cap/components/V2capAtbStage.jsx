@@ -2,7 +2,7 @@ import { createContext, useContext, useId, useLayoutEffect, useRef, useState } f
 import { TEXT } from './v2ui.js'
 import { buffChips, hpBuffChips, ailChips, stateChips, needShownOf, castMsOf, CAST_SEC, BUFF_GAUGE_SEC } from '../core/atb.js'
 import { STAT_DEFS } from '../core/stats.js'
-import { hitReactOf, lungeOf, shakeOf, lastHitAtOf, popTextOf, popScaleOf, popLeftOf, popTopOf, CRIT_TEXT, HIT_SEC, POP_SEC, GLOW_SEC, RAGE_SEC, skillBannerAt } from '../lib/atbFx.js'
+import { hitReactOf, lungeOf, shakeOf, wobbleOf, lastHitAtOf, popTextOf, popScaleOf, popLeftOf, popTopOf, CRIT_TEXT, HIT_SEC, POP_SEC, GLOW_SEC, RAGE_SEC, skillBannerAt } from '../lib/atbFx.js'
 import { JP_BOLD } from './casinoStyle.js'
 import { rubySegmentsOf } from '../lib/skillRuby.js'
 import { motionFrameAt, IDLE_SIZE } from '../lib/motionArt.js'
@@ -591,9 +591,9 @@ const buffAfterOf = (art, me, marks, now) => {
 const FIGHTER_ROWS = 5
 //   death … 倒れる動き（lib/bossDeath.js の deathAt に t0＝倒れた時刻を足したもの・ボスだけ）
 //   introWait … 開戦の動きを始める前（遭遇の絵の後ろ・サーバーの返事を待っているあいだ）。ボスは登場の前の形で待つ
-//   react … 受けた瞬間に押される（lib/atbFx.js の hitReactOf・ボス戦の自分）／tone … 受けた技の色（演出の tone）／wrapped … 炎や鎖に巻かれて体が光る強さ（bossScene）
+//   wobble … 殴られると根元から傾いて戻る（修練場の案山子・lib/atbFx.js の wobbleOf）／react … 受けた瞬間に押される（lib/atbFx.js の hitReactOf・ボス戦の自分）／tone … 受けた技の色（演出の tone）／wrapped … 炎や鎖に巻かれて体が光る強さ（bossScene）
 //   reachTo … 相手の真ん中（立ち絵の px・ボスだけ）。剣先が届くまで踏み込む距離を出す（lib/bossIllust.js の reachXOf）
-function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx, now, name, artH = ART_H, scale = 1, areaRef, castEnd = -1e9, squeeze = null, death = null, introWait = false, reachTo = null, react = false, tone = null, wrapped = 0 }) {
+function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx, now, name, artH = ART_H, scale = 1, areaRef, castEnd = -1e9, squeeze = null, death = null, introWait = false, reachTo = null, react = false, tone = null, wrapped = 0, wobble = false }) {
   const lite = useContext(LiteCtx)
   const mine = fx.filter(f => f.side === side)
   const lastOf = (kind) => mine.reduce((t, f) => (f.kind === kind && f.t0 <= now && f.t0 > t ? f.t0 : t), -1e9)
@@ -652,7 +652,10 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
   const freeShow = rig?.freeFollow && !death ? illustFreeShowAt(rig.key, { motion: rigMotion, ms: rigMs, castM, castMs: casting ? castMs : null,
     fromCast: !!lastAct && afterCast(lastAct.t0, castEnd), reachX }, tMs) : null
   // 被弾の揺れはボスの側だけ（ユーザー「プレイヤーの被ダメージのグラグラモーションはいらない」）
-  const dx = (frame >= 0 || rig ? 0 : lungeOf(now - lastOf('act')) * dir) + (side === 'b' ? shakeOf(now - lastOf('hit')) : 0)
+  const dx = (frame >= 0 || rig ? 0 : lungeOf(now - lastOf('act')) * dir) + (side === 'b' && !wobble ? shakeOf(now - lastOf('hit')) : 0)
+  // 案山子：最後に受けた1発で傾く（クリティカルは大きく）
+  const wobHit = wobble ? mine.reduce((p, f) => (f.kind === 'hit' && f.t0 <= now && (!p || f.t0 > p.t0) ? f : p), null) : null
+  const wob = wobHit ? wobbleOf(now - wobHit.t0, !!wobHit.crit) : 0
   const hitAgo = now - lastOf('hit')
   // 受けた瞬間の動き（自分・ボス戦）：押されて戻る・一瞬つぶれる・白く光ってから技の色が残る
   const hitMark = react ? mine.reduce((p, f) => (f.kind === 'hit' && f.t0 <= now && (!p || f.t0 > p.t0) ? f : p), null) : null
@@ -731,7 +734,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
           {src || rig ? (
             // 待機の絵の枠（正方形）。攻撃の絵はこの枠に重ねる（ox・oy・w・h は待機の枠（クラスは 224px・ボスは base）を100%として割合で置く）
             <div style={{ position:'relative', height:'100%', width:`min(100%, calc(${artH} * ${scale}))`, filter: wrapFilter, opacity: enter && enter.op < 1 ? enter.op : undefined,
-              transform: [enter && `translate(${(enter.x * 100).toFixed(2)}%, ${(enter.y * 100).toFixed(2)}%) scale(${enter.s.toFixed(4)}, ${(enter.s * enter.sy).toFixed(4)})`, bsc && bsc.punch !== 1 && `scale(${bsc.punch.toFixed(4)})`, reactTf].filter(Boolean).join(' ') || undefined,
+              transform: [enter && `translate(${(enter.x * 100).toFixed(2)}%, ${(enter.y * 100).toFixed(2)}%) scale(${enter.s.toFixed(4)}, ${(enter.s * enter.sy).toFixed(4)})`, bsc && bsc.punch !== 1 && `scale(${bsc.punch.toFixed(4)})`, reactTf, wob && `rotate(${wob.toFixed(2)}deg)`].filter(Boolean).join(' ') || undefined,
               transformOrigin:'50% 92%' }}>
               {lite && red > 0.01 && <div style={{ position:'absolute', inset:'-14%', borderRadius:'50%', pointerEvents:'none', opacity: Math.min(1, red).toFixed(3),
                 background:`radial-gradient(closest-side, rgba(${redColor},0.6) 45%, rgba(${redColor},0) 100%)` }} />}
@@ -1506,7 +1509,7 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
         artH={size?.artH || ART_H} scale={playerScale} areaRef={pArea} squeeze={sc?.squeeze} react={foeBig} tone={sc?.tone} wrapped={sc?.wrapped || 0} />
       <Fighter st={st} side="b" me={st.b} right src={foeSrc} fx={fx} now={now} name={st.b.name}
         strips={foeArt?.kind === 'pixel' ? Object.values(foeArt.motions) : []} rig={foeArt?.kind === 'illust' ? foeArt : null}
-        artH={size?.artH || ART_H} areaRef={bArea} castEnd={castSeen.current} death={death} introWait={introWait} reachTo={reachTo} />
+        artH={size?.artH || ART_H} areaRef={bArea} castEnd={castSeen.current} death={death} introWait={introWait} reachTo={reachTo} wobble={!!foeArt?.wobble} />
       {sc?.beam && geo && sc.handsAt && <DoomBeam geo={geo} beam={sc.beam} tone={sc.tone} hand={[geo.b.x + sc.handsAt[0][0] * (geo.b.w / foeArt.base), geo.b.y + sc.handsAt[0][1] * (geo.b.w / foeArt.base)]} />}
       {/* 【確定】2026-11-01 ユーザー「枠からはみ出てHPとかに被ってるから改善して」：ボスのエフェクトと演出は HP の行のすぐ上で切る（fxBottomOf） */}
       <div style={{ position:'absolute', left: 0, right: 0, top: 0, height: geo ? fxBottomOf(geo) : 0, overflow:'hidden', pointerEvents:'none' }}>

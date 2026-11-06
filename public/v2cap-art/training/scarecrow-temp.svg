@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 修練場の案山子の仮の絵（ユーザーの絵が届くまで・lib/scarecrowArt.js）。足元を下のはしにそろえる -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M196 504 L256 470 L316 504" stroke="#5a3a22" stroke-width="16"/>
+    <path d="M256 140 V490" stroke="#6b4428" stroke-width="22"/>
+    <path d="M110 200 H402" stroke="#6b4428" stroke-width="18"/>
+    <path d="M110 200 l-14 10 M402 200 l14 10" stroke="#8a6a4a" stroke-width="10"/>
+  </g>
+  <ellipse cx="256" cy="290" rx="78" ry="104" fill="#c8a04a"/>
+  <path d="M190 250 q66 -24 132 0 M186 300 q70 -20 140 0 M196 350 q60 -16 120 0" stroke="#a07a30" stroke-width="7" fill="none"/>
+  <path d="M206 214 h100 l12 86 q-62 30 -124 0 z" fill="#6f7680" stroke="#454b52" stroke-width="6"/>
+  <path d="M226 236 l10 40 M272 230 l-6 46" stroke="#4b5158" stroke-width="5"/>
+  <circle cx="256" cy="168" r="48" fill="#c8a04a"/>
+  <path d="M204 168 q0 -64 52 -64 q52 0 52 64 z" fill="#5d646d" stroke="#3c4148" stroke-width="6"/>
+  <rect x="214" y="160" width="84" height="16" fill="#2a2e33"/>
+  <path d="M232 380 q24 14 48 0 l-6 22 q-18 8 -36 0 z" fill="#8a3a30"/>
+  <path d="M300 250 l60 -46 M208 320 l-64 -30" stroke="#7a5a3a" stroke-width="5"/>
+  <path d="M358 206 l10 -8 M142 288 l-10 -6" stroke="#ccc" stroke-width="4"/>
+</svg>

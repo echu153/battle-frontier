@@ -10244,3 +10244,231 @@ end;
 $$;
 revoke all on function public.v2cap_craft_challenge(text, text) from public, anon;
 grant execute on function public.v2cap_craft_challenge(text, text) to authenticated;
+
+-- ============================================================
+-- ===== 29. 修練場の案山子（1日1回・60秒なぐる・与えたダメージでEXP・2026-11-06）=====
+-- ============================================================
+-- 【確定】2026-11-06 ユーザー「V２の冒険のコンテンツにデイリーで挑めるものを追加する、挑戦とは別」
+--   「まずはエリア①クリアで開放する経験値のもらえる案山子を追加したい」→ 選んだ（どれも推奨・決まりの正は src/v2cap/lib/scarecrow.js）：
+--   ・冒険の「修練場」。戦いは挑戦と同じ ATB で60秒・案山子は反撃しない・1日1回（朝5時に戻る＝v2cap_dungeon_today）
+--   ・エリア①をクリア（①-③のボスを倒した＝cleared_spots に 3）すると開く
+--   ・EXP＝そのLVの推奨の場所で30回出撃したくらい（v2cap_ten_sortie_exp×3）× 与えたダメージの割合（同じ職・同じLVの目安の人と比べて50〜150%）
+-- ★ダメージと割合はサーバーが同じ戦闘を回し直して決める（§23 の挑戦と同じ形・Vercel の api/v2cap-dungeon-verify.js に kind:'scarecrow' で頼む）。
+--   画面の申告（claim）は比べて、ずれたら v2cap_dungeon_mismatch に boss='scarecrow' で残すだけ。合い言葉も §23 と同じ（v2cap_dungeon_verify_ok）
+-- ★始めたら、その日の1回を使う（途中で閉じても戻らない＝やり直して運のよい結果を選べない）。
+--   結果が届かなかった1回は、あとで入口に来たときに「通常攻撃だけで60秒」として確かめる（v2cap_scarecrow_end の遅れた形）
+-- ★数（60秒・30回ぶん・50〜150%・解禁の場所）は scarecrow.js と同じ（scarecrow.test.js が突き合わせる）
+-- ★表は関数からだけ読み書きする（RLS で直接は読めない）
+create table if not exists public.v2cap_scarecrow_tries (
+  id          bigserial primary key,
+  player_id   uuid not null references auth.users(id) on delete cascade,
+  day         date not null,                          -- 修練した日（日本時間の5時で切り替え）
+  started_at  timestamptz not null default now(),
+  seed        bigint not null,                        -- 乱数の種（サーバーが決める）
+  snap        jsonb not null,                         -- 自分の写し { prof, inv, at }（§26 の v2cap_battle_snap）
+  sub         jsonb,                                  -- 預かった記録 { inputs, end_step, claim, late }
+  sub_at      timestamptz,                            -- 記録が届いた時刻
+  result      jsonb,                                  -- 入れた結果 { damage, pct, exp, gained, level_ups, lv, ... }
+  settled_at  timestamptz,
+  unique (player_id, day)
+);
+alter table public.v2cap_scarecrow_tries enable row level security;
+
+-- 入るEXP（scarecrow.js の scarecrowExpOf と同じ）：推奨の場所で30回ぶん × 割合（50〜150%）・切り上げ
+create or replace function public.v2cap_scarecrow_exp(p_lv int, p_pct int)
+returns int language sql stable set search_path = public as $$
+  select ((public.v2cap_ten_sortie_exp(greatest(1, coalesce(p_lv, 1)))::bigint * 3 * greatest(50, least(150, coalesce(p_pct, 50))) + 99) / 100)::int
+$$;
+revoke all on function public.v2cap_scarecrow_exp(int, int) from public, anon, authenticated;
+
+-- きょうの1回を画面の形に（無ければ null）
+create or replace function public.v2cap_scarecrow_try_json(p_try public.v2cap_scarecrow_tries)
+returns jsonb language sql stable set search_path = public as $$
+  select case when p_try.id is null then null else jsonb_build_object(
+    'id', p_try.id,
+    'status', case when p_try.settled_at is not null then 'done' when p_try.sub is not null then 'pending' else 'open' end,
+    'started_at', p_try.started_at,
+    'result', p_try.result) end
+$$;
+revoke all on function public.v2cap_scarecrow_try_json(public.v2cap_scarecrow_tries) from public, anon, authenticated;
+
+-- ===== 入口の様子：開いているか・きょうの1回 =====
+create or replace function public.v2cap_scarecrow_state()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_unlock constant int := 3;   -- ①-③（scarecrow.js の SCARECROW_UNLOCK_SPOT）
+  v_uid uuid := auth.uid();
+  v_row public.v2cap_profiles;
+  v_try public.v2cap_scarecrow_tries;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select * into v_row from public.v2cap_profiles where id = v_uid;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  select * into v_try from public.v2cap_scarecrow_tries where player_id = v_uid and day = public.v2cap_dungeon_today();
+  return jsonb_build_object('ok', true, 'me', v_uid,
+    'open', c_unlock = any(coalesce(v_row.cleared_spots, '{}')),
+    'today', public.v2cap_scarecrow_try_json(v_try));
+end;
+$$;
+revoke all on function public.v2cap_scarecrow_state() from public, anon;
+grant execute on function public.v2cap_scarecrow_state() to authenticated;
+
+-- ===== 修練を始める（種と写しを返す・その日の1回を使う）=====
+create or replace function public.v2cap_scarecrow_start()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_unlock constant int := 3;
+  v_uid  uuid := auth.uid();
+  v_row  public.v2cap_profiles;
+  v_try  public.v2cap_scarecrow_tries;
+  v_seed bigint;
+  v_snap jsonb;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  -- ★行をつかんでから見る（連打しても1日に2回始めない。表の unique でも止まる）
+  select * into v_row from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  if not (c_unlock = any(coalesce(v_row.cleared_spots, '{}'))) then
+    return jsonb_build_object('ok', false, 'error', 'エリア①をクリアすると修練できます');
+  end if;
+  select * into v_try from public.v2cap_scarecrow_tries where player_id = v_uid and day = public.v2cap_dungeon_today();
+  if found then
+    return jsonb_build_object('ok', false, 'error', 'きょうはもう修練しました', 'today', public.v2cap_scarecrow_try_json(v_try));
+  end if;
+  v_seed := floor(random() * 4294967296)::bigint;
+  v_snap := public.v2cap_battle_snap(v_row);
+  insert into public.v2cap_scarecrow_tries (player_id, day, seed, snap)
+  values (v_uid, public.v2cap_dungeon_today(), v_seed, v_snap) returning * into v_try;
+  return jsonb_build_object('ok', true, 'id', v_try.id, 'seed', v_seed, 'snap', v_snap);
+end;
+$$;
+revoke all on function public.v2cap_scarecrow_start() from public, anon;
+grant execute on function public.v2cap_scarecrow_start() to authenticated;
+
+-- ===== 修練の終わり（押した記録を預ける。ダメージはここでは決めない）=====
+-- 2回届いても最初の記録を使う。c_late_min（10分）より遅く届いた記録は持たない＝「通常攻撃だけで60秒」として確かめる
+--   （結果が届かなかった1回を、入口が確かめ直すときもこの形で呼ぶ）
+create or replace function public.v2cap_scarecrow_end(p_id bigint, p_inputs jsonb, p_end_step int, p_claim int default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_late_min     constant int := 10;      -- 始めてから記録を受け付ける長さ（分）＝60秒の修練＋絵の読みこみ＋余裕
+  c_steps        constant int := 1200;    -- 60秒の刻みの数（scarecrow.js の SCARECROW_STEPS）
+  c_inputs_max   constant int := 5000;    -- 押した記録の数の上限（dungeonVerify.js の INPUTS_MAX）
+  c_inputs_bytes constant int := 500000;  -- 押した記録の大きさの上限
+  v_uid uuid := auth.uid();
+  v_try public.v2cap_scarecrow_tries;
+  v_inputs jsonb := p_inputs;
+  v_late boolean;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select * into v_try from public.v2cap_scarecrow_tries where id = p_id and player_id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', '修練していません'); end if;
+  if v_try.sub is not null then return jsonb_build_object('ok', true, 'player', v_uid, 'id', v_try.id); end if;
+  v_late := v_try.started_at < now() - make_interval(mins => c_late_min);
+  -- 形や大きさがおかしい記録は持たない（回し直しで「記録がおかしい」になり、割合は下限）
+  if v_late then
+    v_inputs := '[]'::jsonb;
+  elsif jsonb_typeof(v_inputs) is distinct from 'array' then
+    v_inputs := null;
+  elsif jsonb_array_length(v_inputs) > c_inputs_max or octet_length(v_inputs::text) > c_inputs_bytes then
+    v_inputs := null;
+  end if;
+  update public.v2cap_scarecrow_tries
+     set sub = jsonb_build_object('inputs', v_inputs,
+                                  'end_step', case when v_late then c_steps else greatest(0, least(coalesce(p_end_step, 0), c_steps)) end,
+                                  'claim', case when v_late then null else p_claim end, 'late', v_late),
+         sub_at = now()
+   where id = v_try.id;
+  return jsonb_build_object('ok', true, 'player', v_uid, 'id', v_try.id);
+end;
+$$;
+revoke all on function public.v2cap_scarecrow_end(bigint, jsonb, int, int) from public, anon;
+grant execute on function public.v2cap_scarecrow_end(bigint, jsonb, int, int) to authenticated;
+
+-- ===== 回し直しの関数（Vercel の api/v2cap-dungeon-verify.js・kind:'scarecrow'）だけが呼ぶ2つ =====
+-- 預かった記録を読む。もう入れた1回なら、入れた結果を done で返す（通信が切れて聞き直しても同じ返事）
+create or replace function public.v2cap_scarecrow_verify_load(p_secret text, p_id bigint, p_player uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_try public.v2cap_scarecrow_tries;
+begin
+  if not public.v2cap_dungeon_verify_ok(p_secret) then return jsonb_build_object('ok', false, 'error', '合い言葉が違います'); end if;
+  select * into v_try from public.v2cap_scarecrow_tries where id = p_id and player_id = p_player;
+  if not found then return jsonb_build_object('ok', false, 'error', '修練していません'); end if;
+  if v_try.settled_at is not null then
+    return coalesce(v_try.result, '{}'::jsonb) || jsonb_build_object('ok', true, 'done', true, 'today', public.v2cap_scarecrow_try_json(v_try));
+  end if;
+  if v_try.sub is null then return jsonb_build_object('ok', false, 'error', '修練の記録がまだ届いていません'); end if;
+  return jsonb_build_object('ok', true, 'seed', v_try.seed, 'snap', v_try.snap,
+                            'inputs', v_try.sub->'inputs', 'end_step', v_try.sub->'end_step',
+                            'elapsed_sec', extract(epoch from v_try.sub_at - v_try.started_at));
+end;
+$$;
+revoke all on function public.v2cap_scarecrow_verify_load(text, bigint, uuid) from public, authenticated;
+grant execute on function public.v2cap_scarecrow_verify_load(text, bigint, uuid) to anon;
+
+-- 回し直した結果を入れる（与えたダメージ・割合 → EXP）。もう入れた1回は入れ直さない
+--   p_pct＝目安の人と比べた割合（scarecrow.js の scarecrowPctOf・ここでも50〜150に収める）
+create or replace function public.v2cap_scarecrow_verify_settle(p_secret text, p_id bigint, p_player uuid, p_damage int, p_pct int, p_reason text default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_try   public.v2cap_scarecrow_tries;
+  v_lv    int;
+  v_pct   int;
+  v_exp   int;
+  v_apply jsonb;
+  v_claim bigint;
+  v_why   text;
+  v_res   jsonb;
+begin
+  if not public.v2cap_dungeon_verify_ok(p_secret) then return jsonb_build_object('ok', false, 'error', '合い言葉が違います'); end if;
+  select * into v_try from public.v2cap_scarecrow_tries where id = p_id and player_id = p_player for update;
+  if not found then return jsonb_build_object('ok', false, 'error', '修練していません'); end if;
+  if v_try.settled_at is not null then
+    return coalesce(v_try.result, '{}'::jsonb) || jsonb_build_object('ok', true, 'done', true, 'today', public.v2cap_scarecrow_try_json(v_try));
+  end if;
+  if v_try.sub is null then return jsonb_build_object('ok', false, 'error', '修練の記録がまだ届いていません'); end if;
+  -- 案山子の強さと割合の物差しは、写したときのLV（修練のあいだにLVが上がっても変わらない）
+  v_lv  := greatest(1, coalesce((v_try.snap->'prof'->>'lv')::int, 1));
+  v_pct := greatest(50, least(150, coalesce(p_pct, 50)));
+  v_exp := public.v2cap_scarecrow_exp(v_lv, v_pct);
+  v_apply := public.v2cap_apply_exp(p_player, v_exp);
+  if not coalesce((v_apply->>'ok')::boolean, false) then return v_apply; end if;
+  v_claim := (v_try.sub->>'claim')::bigint;
+  v_why := coalesce(p_reason, case when v_claim is not null and v_claim is distinct from coalesce(p_damage, 0) then 'claim' end);
+  if v_why is not null then
+    insert into public.v2cap_dungeon_mismatch (run_id, player_id, name, boss, diff, claim, damage, reason)
+    values (v_try.id, p_player, v_try.snap->'prof'->>'username', 'scarecrow', null, v_claim, greatest(0, coalesce(p_damage, 0)), v_why);
+  end if;
+  -- level＝v2cap_apply_exp の返り値（出撃・塔と同じ形＝画面の gainedExpOf・levelUpLines がそのまま読む）。キャラの行（profile）は大きいので残さない
+  v_res := jsonb_build_object('damage', greatest(0, coalesce(p_damage, 0)), 'pct', v_pct, 'exp', v_exp, 'base_lv', v_lv,
+    'level', v_apply - 'profile',
+    'late', coalesce((v_try.sub->>'late')::boolean, false), 'corrected', v_why is not null);
+  -- 結果を残す。押した記録はもう使わないので捨てる（表を軽く）
+  update public.v2cap_scarecrow_tries set result = v_res, settled_at = now(), sub = sub - 'inputs' where id = v_try.id
+  returning * into v_try;
+  return v_res || jsonb_build_object('ok', true, 'today', public.v2cap_scarecrow_try_json(v_try));
+end;
+$$;
+revoke all on function public.v2cap_scarecrow_verify_settle(text, bigint, uuid, int, int, text) from public, authenticated;
+grant execute on function public.v2cap_scarecrow_verify_settle(text, bigint, uuid, int, int, text) to anon;
+
+-- ===== 開発用：きょうの修練を戻す（もう一度できる）=====
+create or replace function public.v2cap_dev_scarecrow_reset()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_n   int;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  delete from public.v2cap_scarecrow_tries where player_id = v_uid and day = public.v2cap_dungeon_today();
+  get diagnostics v_n = row_count;
+  return jsonb_build_object('ok', true, 'reset', v_n);
+end;
+$$;
+revoke all on function public.v2cap_dev_scarecrow_reset() from public, anon;
+grant execute on function public.v2cap_dev_scarecrow_reset() to authenticated;
