@@ -136,6 +136,9 @@ export const buildBattleLog = (r, you, foe) => {
     } else if (l.type === 'sealed') {
       // 封印：このあと通常攻撃の行が続く
       out.push({ text:`🔒 ${actor}は封印されて技が出せない！`, color: LOG_COLOR.ail })
+    } else if (l.type === 'locked') {
+      // ATBのパターンのボス（四凶）：恐怖・サイレンスのあいだは大技以外の技が出せない（このあと通常攻撃の行が続く・atb.js の LOCK_AILS）
+      out.push({ text:`🔒 ${actor}は${l.ail}で技が出せない！`, color: LOG_COLOR.ail })
     } else if (l.type === 'reflect') {
       out.push({ text:`🔮 ${actor}はダメージを${l.damage.toLocaleString()}跳ね返した！`, color:'#88ddff' })
     } else if (l.type === 'enCut') {
@@ -222,8 +225,8 @@ export const buildBattleLog = (r, you, foe) => {
     } else if (l.type === 'sin') {
       out.push({ text:`⚖ ${actor}の罪が${l.n}になった！`, color: LOG_COLOR.ail })
     } else if (l.type === 'agit') {
-      // side は動揺した側
-      out.push({ text:`🌀 ${actor}は動揺している！（スキルの発動率-${(l.n || 0) * 3}%）`, color: LOG_COLOR.ail })
+      // side は動揺した側。ATBのパターンのボス（四凶）はゲージが遅くなる（l.gauge・atb.js の fillPerSecOf）
+      out.push({ text:`🌀 ${actor}は動揺している！（${l.gauge ? 'ゲージの速さ' : 'スキルの発動率'}-${(l.n || 0) * 3}%）`, color: LOG_COLOR.ail })
     } else if (l.type === 'repeat') {
       out.push({ text:`🔁 ${actor}の${l.skill}！ 「${l.target}」をもう一度！`, color: LOG_COLOR.extra })
     } else if (l.type === 'repeatFail') {

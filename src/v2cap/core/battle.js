@@ -1125,6 +1125,24 @@ const bumpHitStack = (me, hits) => {
   if (me.pa.hitStack && hits > 0) me.hitStacks = Math.min(me.pa.hitStack.max, me.hitStacks + 1)
 }
 
+// ★不発のときの通常攻撃（居合の構え＝威力1.5倍・武器の進化「居合の心得」も同じ枠）と、そのあとの納刀（居合の構え）
+//   ATB（atb.js）には不発が無いので、クールダウンを待つあいだの通常攻撃を同じ扱いにする（opt.waitCd・2026-11-06 ATBの懸念 1-4）
+const misfireNormal = (me, foe, rng, log) => {
+  normalAttack(me, foe, rng, log, me.pa.misfireAtkMult * (1 + me.evo.misfireDmg / 100))
+  const ms = me.pa.ex?.misfireStance
+  if (ms && !me.stance && me.hp > 0) {
+    me.stance = { ...ms }
+    log.push({ side: me.name, type: 'stance', skill: '居合の構え' })
+  }
+}
+// ★精神感応（サイキッカー）：相手のスキルが不発するたび、念動の追撃。psychic＝精神感応を持つ側・target＝不発した側
+//   ATB には不発が無いので、atb.js が「動揺が PSY_CHASE_AGIT つ以上の相手が技を使ったとき」に呼ぶ（2026-11-06 ATBの懸念 1-4）
+export const psyChase = (psychic, target, rng, log) => {
+  const mc = psychic.pa.ex?.misfireChase
+  if (!mc || psychic.hp <= 0 || target.hp <= 0) return
+  strike(psychic, target, { mult: mc.mult, kind: 'mag', atkStat: 'str', add: [{ stat: 'int_stat', rate: mc.mult }], label: '念動の追撃' }, rng, log)
+}
+
 // 1回の行動を解決する。戻り値はログ用の1件
 // ★opt はATB戦闘（atb.js）のためのもの。オート戦闘（runBattle）は opt を渡さないので挙動は変わらない
 //     idx        … 撃つ枠を指定する（null＝通常攻撃・省略＝いままで通り findSlot が自動で選ぶ）
@@ -1133,6 +1151,7 @@ const bumpHitStack = (me, hits) => {
 //     wildOk     … 狂乱のでたらめで選んでよい技（大技を構えてから撃つボスは、大技を外す＝構えなしで大技を出さない）
 //     keepIdx    … 狂乱でも差し替えない（構えを終えた大技＝構えで見せた技をそのまま出す）
 //     onNormal   … 通常攻撃をしたら呼ぶ（ATB の「通常攻撃でMPが戻る」・2026-11-06）。狂乱でほかの技が出たとき・動けなかったときは呼ばない
+//     waitCd     … クールダウンを待つあいだの通常攻撃（不発のときと同じ扱い＝居合の構え）
 export const takeAction = (me, foe, rng, log, opt = {}) => {
   me.moves += 1   // 疾き刃・遅咲き・積み重ねが見る。麻痺で動けなくても1回と数える
   // ★「かわした次の攻撃」「被弾した次の攻撃」は**1回の行動にだけ**乗る。
@@ -1197,23 +1216,19 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
   if (skill && !opt.noProc && !roll(skill.proc + me.pa.procBonus + me.en.procBonus + me.evo.proc + (stance?.proc || 0) - silenced + procUp, rng)) {
     log.push({ side: me.name, type: 'misfire', skill: skill.name })
     me.rage = 0
-    // 居合の構えはここで威力2倍。武器の進化「居合の心得」も同じ枠で乗る
-    normalAttack(me, foe, rng, log, me.pa.misfireAtkMult * (1 + me.evo.misfireDmg / 100))
+    misfireNormal(me, foe, rng, log)
     opt.onNormal?.()
-    // ★上位クラス：居合の構え（不発の通常攻撃のあと納刀状態になる）
-    const ms = me.pa.ex?.misfireStance
-    if (ms && !me.stance && me.hp > 0) {
-      me.stance = { ...ms }
-      log.push({ side: me.name, type: 'stance', skill: '居合の構え' })
-    }
-    // ★上位クラス：精神感応（相手のスキルが不発するたび、念動の追撃）
-    const mc = foe.pa.ex?.misfireChase
-    if (mc && foe.hp > 0 && me.hp > 0) {
-      strike(foe, me, { mult: mc.mult, kind: 'mag', atkStat: 'str', add: [{ stat: 'int_stat', rate: mc.mult }], label: '念動の追撃' }, rng, log)
-    }
+    psyChase(foe, me, rng, log)
     return
   }
-  if (!skill) { me.rage = 0; normalAttack(me, foe, rng, log); opt.onNormal?.(); return }
+  if (!skill) {
+    me.rage = 0
+    // ★ATB：クールダウンを待つあいだの通常攻撃は、不発のときと同じ扱い（居合の構え＝威力1.5倍のあと納刀・2026-11-06 ATBの懸念 1-4）
+    if (opt.waitCd) misfireNormal(me, foe, rng, log)
+    else normalAttack(me, foe, rng, log)
+    opt.onNormal?.()
+    return
+  }
 
   // ★上位クラス（2026-10-15）：リピート＝直前に撃った技をもう一度（その技のMPは半分）。
   //   直前が切り札・奥義・クイック・リピート（noRepeatTarget）か、まだ何も撃っていなければ通常攻撃（MPと回数は減らさず、次の枠へ）
@@ -1855,7 +1870,8 @@ const onHitRework = (me, foe, skill, ip, imb, elemHit, off, rng, log) => {
   if (skill.agitate && foe.hp > 0 && (skill.agitate.chance == null || roll(skill.agitate.chance, rng))) {
     const before = foe.agit || 0
     foe.agit = Math.min(AGIT_MAX, before + skill.agitate.n)
-    if (foe.agit > before) log.push({ side: foe.name, type: 'agit', n: foe.agit })
+    // ★ATBのパターンのボス（四凶）は、動揺でゲージが遅くなる（atb.js の fillPerSecOf）＝記録の行もそちらの言い方（gauge）
+    if (foe.agit > before) log.push({ side: foe.name, type: 'agit', n: foe.agit, ...(foe.atb && foe.pattern ? { gauge: true } : {}) })
   }
   if (skill.gainOnHit) {
     const g = skill.gainOnHit
