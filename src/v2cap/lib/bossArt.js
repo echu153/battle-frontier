@@ -151,6 +151,21 @@ export const bossTintOf = (key) => BOSS_TINT[key] || null
 // 挑戦の入口のボスの名前を折り返してよい所（components/V2capDungeon.jsx）：漢字からカタカナに変わる所だけ（黒龍｜ヴァルゼノク・雷鋼機神｜ゼルギアス）
 //   【確定】2026-11-06 ユーザー「ここ同じ高さで2列にして」→ スマホの幅の2列では名前が2行になる。言葉の途中（黒龍ヴァル｜ゼノク）で折れないように
 export const bossNamePartsOf = (name) => name.replace(/(\p{Script=Han})(?=\p{Script=Katakana})/gu, '$1|').split('|')
+// 挑戦の入口の2列の枠の大きさ（components/V2capDungeon.jsx）：スマホの幅では、いちばん長い名前が1行に入るまで、名前の文字・顔のアップ・下の言葉（挑戦可能など）を同じ割合で小さくする
+//   【確定】2026-11-06 ユーザー「スマホ版でボスの名前1行に収まるぐらいの文字の大きさに調整して、イラストもそれに合わせて小さくして」
+//   枠の幅＝(画面の幅 − 54px) ÷ 2（画面の両側の余白48＋2列の間6・本番で 320〜478px を測った）。名前の欄＝枠 − 22px（枠の線2・内側の余白12・顔の線2・顔との間6）− 顔。
+//   割合＝(枠 − 22 − 4) ÷ (文字数×13 + 60)（4px は余裕）。1 を超えたら 1＝460px より広い画面と PC は 13px・60px・10px のまま。
+//   名前は 9px より小さくしない（顔も同じ割合の 41.5px で止める＝約350px より細い画面は言葉の切れ目で2行・bossNamePartsOf）。下の言葉も 9px で止める
+export const BOSS_CARD = { namePx: 13, facePx: 60, notePx: 10, nameMinPx: 9, noteMinPx: 9, outsidePx: 54, insidePx: 22, roomPx: 4 }
+// 大きさ＝clamp(min, a×画面の幅 − b, max)（a は画面の幅 1px あたり）。longest＝いちばん長い名前の文字数
+export const bossCardFitOf = (longest) => {
+  const { namePx, facePx, notePx, nameMinPx, noteMinPx, outsidePx, insidePx, roomPx } = BOSS_CARD
+  const d = longest * namePx + facePx, c = outsidePx / 2 + insidePx + roomPx
+  const fit = (full, min) => ({ a: full / (2 * d), b: full * c / d, min, max: full })
+  return { name: fit(namePx, nameMinPx), face: fit(facePx, facePx * nameMinPx / namePx), note: fit(notePx, noteMinPx) }
+}
+export const bossCardCss = ({ a, b, min, max }) => `clamp(${+min.toFixed(2)}px, calc(${+(a * 100).toFixed(4)}vw - ${+b.toFixed(3)}px), ${max}px)`
+export const bossCardPxAt = ({ a, b, min, max }, vw) => Math.min(max, Math.max(min, a * vw - b))
 
 // 画面で使う形（無ければ null）
 //   { name, base, idle:{ src, frames, ms:[…] }, illust, motions:{ <key>: lib/motionArt.js の motionOf と同じ形＋label＋エフェクト } }
