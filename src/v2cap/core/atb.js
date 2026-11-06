@@ -24,11 +24,14 @@
 //         封印・恐怖・サイレンスのあいだは**大技以外の技を使わない（通常攻撃になる）**・動揺は**1つにつきゲージ−3%**
 //         （2026-11-06 ATBの懸念の洗い出し 1-3・ユーザー「封印などを効かせる」＝LOCK_AILS・fillPerSecOf）
 //     追加行動率+%・刻の加護                           → ゲージの溜まりが速くなる（AGIの追加行動はゲージの速さに含める）
+//       ★パラドックスが数える「追加で動いた回数」は、戦闘の30秒ごとに1回（EXTRA_ACT_EVERY_SEC・2026-11-06 ユーザー選択・ATBの懸念 1-5）
 //     先手+%                                           → 開始のゲージ
 //     先制（スキルの優先度・納刀）                       → その行動に要るゲージが軽くなる
 //     クイック（もう一度行動）                           → ゲージが満タンになる
 //     5つの枠を全部使ったら（ユニーク）                   → 違う技を5つ使ったら（battle.js）
-//   ⚠不発のときの効果（居合の構え・精神感応・居合の心得）はATBに不発が無いので対象外
+//     不発のときの効果（ATBに不発は無い。2026-11-06 ATBの懸念 1-4・ユーザー「残りの効かないを直す」）：
+//       居合の構え・居合の心得 → クールダウンを待つあいだの通常攻撃を、不発のときの通常攻撃と同じ扱い（威力1.5倍のあと納刀・waitCd）
+//       精神感応              → 動揺が PSY_CHASE_AGIT つ以上の相手が技を使ったら念動の追撃（act）
 //
 // ★時間は**決まった刻み（STEP_SEC）**で進める＝同じ乱数と同じ入力なら同じ結果になる
 //   （挑戦は「乱数の種＋押した記録 st.inputs」をサーバーで回し直して確かめる＝lib/dungeonVerify.js。ファイルの下の seedRng・replayInputs）。
@@ -38,7 +41,7 @@
 // ============================================================
 import {
   createSide, liveStats, mpCostOf, priorityOf, takeAction, tickBleedAfterAct, BUFF_MIN_PCT, BEAST_FORMS,
-  battleStart, startOfTurn, endOfTurn, healMaxAmount,
+  battleStart, startOfTurn, endOfTurn, healMaxAmount, psyChase,
 } from './battle.js'
 import { STAT_KEYS, STAT_DEFS } from './stats.js'
 import { AIL_KEYS, AIL_LABEL, BLEED_DECAY_SEC, hasAilment, procCutOf, isSealed, usesMp } from './ailments.js'
@@ -97,6 +100,13 @@ export const GUARD_CD  = 45
 //   ★オートの出撃・塔は変えない（battle.js の takeAction は opt.onNormal を渡したときだけ知らせる）
 //   端数は切り捨て・最低1（MPポーションと同じ）。最大を超えない（防具のセット能力で最大を超えて始めたぶんは減らさない）
 export const NORMAL_MP_PCT = 3
+// 精神感応（サイキッカー）の念動の追撃が出る、相手の動揺の数（ATB には不発が無いので、動揺がこれ以上の相手が技を使ったら追撃）
+//   【確定】2026-11-06 ユーザー「残りの効かないを直す」＝一覧の案「相手の動揺が3以上のとき念動の追撃」（ATBの懸念の洗い出し 1-4）
+export const PSY_CHASE_AGIT = 3
+// パラドックス（クロノマンサー）が数える「追加で動いた回数」。ATB は追加行動がゲージの速さになり、回数としては起きないので、
+//   戦闘の EXTRA_ACT_EVERY_SEC 秒ごとに1回と数える（クイックはいままでどおり1回）。
+//   【確定】2026-11-06 ユーザー選択「30秒ごとに1回」（ATBの懸念の洗い出し 1-5。もう1つの案「ゲージの速さで増えたぶんを数える」は約30秒で上限の+60%に届いた）
+export const EXTRA_ACT_EVERY_SEC = 30
 export const normalMpOf = (side) => Math.max(1, Math.floor(side.base.mp * NORMAL_MP_PCT / 100))
 const normalMpBack = (side) => {
   if (side.hp <= 0 || side.mp >= side.base.mp) return
@@ -488,7 +498,8 @@ const resolveEntry = (side, e, now, from) => {
   if (e.guard) return guardReady(side, now) ? { guard: true, skill: null, from } : { idx: null, skill: null, waiting: 'guard' }
   if (e.idx === null) return { idx: null, skill: null, from }
   if (canUse(side, e.idx, now)) return { idx: e.idx, skill: side.slots[e.idx].skill, from }
-  return { idx: null, skill: null, waiting: e.idx }
+  // waitCd＝クールダウンを待っている（MP不足だけのときは false）。そのあいだの通常攻撃は不発のときと同じ扱い（居合の構え・battle.js の opt.waitCd）
+  return { idx: null, skill: null, waiting: e.idx, waitCd: (side.cd[e.idx] || 0) > now + EPS }
 }
 // いまのマクロの手（無ければ null）
 export const macroEntryOf = (side) => (side.macro ? side.macro.steps[side.macro.pos] || null : null)
@@ -646,6 +657,8 @@ const act = (st, me, foe, ch) => {
     // ★大技を構えてから撃つ側（ボス）：狂乱のでたらめに大技を入れない（構えなしで大技を出さない）・構えを終えた大技は狂乱でも差し替えない
     //   封印・恐怖・サイレンスのあいだのパターンのボスは、でたらめに選べる技も無い（通常攻撃のまま）
     wildOk: lockAilOf(me) ? noSkill : me.castBig ? notBig : null, keepIdx: !!ch.casted,
+    // ★クールダウンを待つあいだの通常攻撃は、不発のときと同じ扱い（居合の構え・2026-11-06 ATBの懸念 1-4）
+    waitCd: !!ch.waitCd,
   })
   if (normal) normalMpBack(me)   // ★通常攻撃でMPが戻る（NORMAL_MP_PCT）
   const n = me.slots.length
@@ -656,6 +669,8 @@ const act = (st, me, foe, ch) => {
     me.cdLen[used] = used === ch.idx ? ch.cd : cdFor(me, me.slots[used].skill)
     me.cd[used] = now + me.cdLen[used]
     if (me.ai) me.rot = (used + 1) % n
+    // ★精神感応（サイキッカー）：動揺が PSY_CHASE_AGIT つ以上の相手が技を使ったら念動の追撃（ATB には不発が無いので・2026-11-06 ATBの懸念 1-4）
+    if ((me.agit || 0) >= PSY_CHASE_AGIT) psyChase(foe, me, st.rng, st.log)
   }
   tickBleedAfterAct(me, st.log, foe)     // ★出血は行動した直後に刻む
   afterEngine(st, me, beforeMe)
@@ -720,6 +735,11 @@ const stepOnce = (st) => {
   const { a, b } = st
   enrageStep(st, a)
   enrageStep(st, b)
+  // ★パラドックスが数える「追加で動いた回数」：戦闘の EXTRA_ACT_EVERY_SEC 秒ごとに1回（刻みの数で数える＝回し直しても同じ）
+  if (st.steps % Math.round(EXTRA_ACT_EVERY_SEC / STEP_SEC) === 0) {
+    a.extraActs = (a.extraActs || 0) + 1
+    b.extraActs = (b.extraActs || 0) + 1
+  }
 
   // ターンの時計：ターンで数える効果を進める（オート戦闘のターンの終わり→次のターンの頭と同じ）
   if (st.t + EPS >= st.turn * TURN_SEC) {

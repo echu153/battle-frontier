@@ -81,7 +81,7 @@ test('【確定】2026-11-06 ユーザー「表示のずれを直す」（ATBの
   assert.ok(help.indexOf('挑戦（ATB）に持っていく技') < help.indexOf('<AtbRulesHelp />') && help.indexOf('<AtbRulesHelp />') < help.indexOf('<MacroHelp />'), '持っていく技 → 技の効き方 → マクロ の順')
   const src = read('../components/V2capAtbRulesHelp.jsx')
   assert.ok(!/from '\.\.\/core\//.test(src), '戦闘の計算は読み込まない（スキルセットを開くのを重くしない）')
-  const { TURN_SEC, cdOfProc, PRIORITY_CUT, BUFF_SEC_MIN, BUFF_SEC_MAX, DEBUFF_SEC_MAX, ATB_SLOW_CUT } = await import('../core/atb.js')
+  const { TURN_SEC, cdOfProc, PRIORITY_CUT, BUFF_SEC_MIN, BUFF_SEC_MAX, DEBUFF_SEC_MAX, ATB_SLOW_CUT, PSY_CHASE_AGIT, EXTRA_ACT_EVERY_SEC } = await import('../core/atb.js')
   const { AGIT_PER } = await import('../core/battleIchiji.js')
   const has = (w) => assert.ok(src.includes(w), `HELP の文に「${w}」（つまみと合わせる）`)
   has(`1ターン＝${TURN_SEC}秒で数えます（3ターンならおよそ${3 * TURN_SEC}秒）。「毎ターン」の効果も${TURN_SEC}秒ごと`)
@@ -90,6 +90,10 @@ test('【確定】2026-11-06 ユーザー「表示のずれを直す」（ATBの
   has(`${BUFF_SEC_MIN}〜${BUFF_SEC_MAX}秒（弱体は${DEBUFF_SEC_MAX}秒まで）`)
   has(`鈍足はゲージが${ATB_SLOW_CUT}%遅く`)
   has(`動揺は1つにつきボスのゲージが${AGIT_PER}%遅く`)
+  // 2026-11-06 ユーザー「残りの効かないを直す」（ATBの懸念 1-4・1-5）：不発の効果とパラドックスの読み替え
+  has('居合の構えは、クールダウンを待つあいだの通常攻撃で起きます（威力1.5倍のあと納刀）')
+  has(`精神感応の念動の追撃は、動揺が${PSY_CHASE_AGIT}つ以上の相手が技を使ったときに出ます`)
+  has(`パラドックスは、戦闘の${EXTRA_ACT_EVERY_SEC}秒ごとに1回追加行動したと数えます（クイックも1回）`)
   // 文の中身が戦闘の決まりと合うことは core/atb.test.js（重ならない・不発なし・クイック）と lib/dungeon.test.js（四凶の封印など・大技の構え）が見る
   for (const w of ['重ねがけできません', '強いほうが残り、長さは最初から', '不発はありません', '追加行動はなく', 'クイックはゲージがすぐ満タン', '1回の戦闘で◯回まで', '大技以外の技を使えなくなります', '大技はかならず構えてから']) has(w)
 })

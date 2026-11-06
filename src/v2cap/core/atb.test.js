@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
-  createAtb, runFor, advance, reserve, unreserveAt, clearQueue, QUEUE_MAX, startMacro, stopMacro, toggleGuard, canUse, cdLeft, cdRatio, guardCdRatio, chosenOf, needFor,
+  createAtb, runFor, advance, reserve, unreserveAt, clearQueue, QUEUE_MAX, startMacro, stopMacro, toggleGuard, cdLeft, cdRatio, guardCdRatio, chosenOf, needFor,
   canDrink, drinkItem, itemCdLeft, itemCdRatio, itemLeftOf, itemsUsedOf, replayInputs, seedRng,
   fillRatio, cdOfProc, buffSecOf, buffChips, normalMpOf,
   STEP_SEC, TURN_SEC, GAUGE_FULL, GUARD_CUT, GUARD_CD, CAST_SEC, MAX_DT, NORMAL_MP_PCT,
@@ -12,6 +12,7 @@ import {
 import { inflict } from './ailments.js'
 import { runBattle, takeAction } from './battle.js'
 import { buildBattleLog } from './battleLog.js'
+import { passiveOf } from '../lib/skills.js'
 
 const makeRng = (seed) => {
   let s = seed >>> 0
@@ -394,6 +395,47 @@ test('狂乱のボスも、大技は構えてから撃つ（2026-11-06 ATBの懸
   me.a.frenzy = { turns: 999 }
   runFor(me, 300)
   assert.ok(acts(me, '自分', 'skill').some(l => l.skill === '大技'), '自分は狂乱で大技も出る（構えは無い）')
+})
+
+test('居合の構え（侍）：ATB ではクールダウンを待つあいだの通常攻撃が、不発のときと同じ扱い（威力1.5倍のあと納刀）・MP不足の待ちでは起きない（2026-11-06 ATBの懸念 1-4）', () => {
+  // ★前は ATB に不発が無いので一度も起きなかった
+  const iai = passiveOf('侍')
+  assert.equal(iai.name, '居合の構え')
+  const run = (skill, passives, sec, mp = 1000) => {
+    const st = createAtb(fighter('侍', [skill], { stats: { mp }, extra: { cls: '侍', passives } }), fighter('的'), { rng: makeRng(5), maxSec: 120 })
+    startMacro(st, 1, [{ idx: 0 }], true)
+    runFor(st, sec)
+    return st.log.filter(l => l.side === '侍')
+  }
+  const heavy = sk('重い技', { proc: 70 })   // クールダウン21秒＝そのあいだは通常攻撃で待つ
+  const on = run(heavy, [iai], 24), off = run(heavy, [], 24)
+  assert.deepEqual(on.filter(l => l.type === 'skill' || l.type === 'normal').map(l => l.skill || '通常'), ['重い技', '通常', '通常', '通常'])
+  assert.equal(on.filter(l => l.type === 'stance' && l.skill === '居合の構え').length, 1, '待ちの通常攻撃のあと納刀（納刀中はもう一度は構えない）')
+  const nOn = on.filter(l => l.type === 'normal'), nOff = off.filter(l => l.type === 'normal')
+  assert.ok(Math.abs(nOn[0].damage / nOff[0].damage - 1.5) < 0.02, `待ちの通常攻撃は威力1.5倍（${nOn[0].damage}／${nOff[0].damage}）`)
+  // MP不足で待つあいだ（クールダウンは終わっている）は起きない
+  const costly = sk('高い技', { mp: 600 })
+  const mpWait = run(costly, [iai], 40)
+  assert.ok(mpWait.filter(l => l.type === 'normal').length >= 3, 'MP不足で通常攻撃をつなぐ')
+  assert.equal(mpWait.filter(l => l.type === 'stance').length, 0, 'MP不足の待ちでは納刀しない')
+})
+
+test('パラドックス（クロノマンサー）が数える「追加で動いた回数」：ATB では戦闘の30秒ごとに1回・クイックも1回（2026-11-06 ユーザー選択・ATBの懸念 1-5）', () => {
+  // ★前は ATB で数えるのがクイックだけ（戦闘中2回まで＝最大+12%）だった
+  const st = createAtb(fighter('自分'), fighter('的'), { rng: makeRng(1), maxSec: 400 })
+  assert.equal(st.a.extraActs, 0)
+  runFor(st, 29.9)
+  assert.equal(st.a.extraActs, 0)
+  runFor(st, 0.1)
+  assert.equal(st.a.extraActs, 1, '30秒で1回')
+  runFor(st, 270)
+  assert.equal(st.a.extraActs, 10, '300秒で10回（パラドックスの上限+60%）')
+  // クイック（もう一度行動）もいままでどおり1回と数える
+  const quick = sk('クイック', { kind: 'buff', mult: 0, extraTurn: { max: 2 } })
+  const st2 = createAtb(fighter('自分', [quick]), fighter('的'), { rng: makeRng(2), maxSec: 60 })
+  startMacro(st2, 1, [{ idx: 0 }], true)
+  runFor(st2, 20)
+  assert.equal(st2.a.extraActs, 2, 'クイック2回（30秒前）')
 })
 
 test('敵は枠の順に、使える技を出す（クールダウン中は飛ばして通常攻撃）', () => {

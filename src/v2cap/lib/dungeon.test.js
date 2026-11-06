@@ -20,6 +20,7 @@ import { tenSortieExpOf } from './areas.js'
 import { DAILY_GOLD_PER_LV } from './daily.js'
 import { INPUTS_MAX } from './dungeonVerify.js'
 import { buildBattleLog } from '../core/battleLog.js'
+import { passiveOf } from './skills.js'
 
 const SQL = readFileSync(new URL('../../../supabase_v2cap_core.sql', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 const fnBody = (name) => {
@@ -1429,4 +1430,28 @@ test('四凶の動揺は1つにつきゲージ−3%（2026-11-06 ATBの懸念 1-
   assert.ok(st2.b.agit === 5 && lines.includes('🌀 閻魔は動揺している！（ゲージの速さ-15%）'), lines.filter(t => t.includes('動揺')).join('\n'))
   // 出撃（オート）の動揺の行は前のまま（発動率）
   assert.deepEqual(buildBattleLog({ log: [{ side: '敵', type: 'agit', n: 2 }] }, 'じぶん', '敵').map(l => l.text), ['🌀 敵は動揺している！（スキルの発動率-6%）'])
+})
+
+test('精神感応（サイキッカー）：ATB では、動揺が3つ以上の四凶が技を使ったら念動の追撃（2026-11-06 ATBの懸念 1-4・ユーザー「残りの効かないを直す」）', () => {
+  // ★前は ATB に不発が無いので一度も出なかった
+  const psy = { ...dummy(), cls: 'サイキッカー', passives: [passiveOf('サイキッカー')] }
+  assert.equal(psy.passives[0].name, '精神感応')
+  const run = (agit) => {
+    const st = createAtb(psy, dungeonFighter('enma', 'normal', 13000 * 0.4), { rng: rngOf(3), maxSec: 60 })
+    const out = { skill: 0, chase: 0 }
+    let seen = 0
+    while (!st.over && st.t < 30) {
+      st.b.agit = agit
+      runFor(st, 0.05)
+      for (const l of st.log.slice(seen)) {
+        if (l.side === '閻魔' && l.type === 'skill') out.skill++
+        if (l.side === 'じぶん' && l.type === 'strike' && l.label === '念動の追撃') out.chase++
+      }
+      seen = st.log.length
+    }
+    return out
+  }
+  const r3 = run(3), r2 = run(2)
+  assert.ok(r3.skill > 0 && r3.chase === r3.skill, `動揺3：技${r3.skill}回・追撃${r3.chase}回`)
+  assert.ok(r2.skill > 0 && r2.chase === 0, `動揺2では出ない（技${r2.skill}回）`)
 })
