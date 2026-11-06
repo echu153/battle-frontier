@@ -204,7 +204,7 @@ export default function V2capMuseum({ prof, inventory, onProfile, dev = false })
             <div style={{ marginTop:'8px', paddingTop:'6px', borderTop:'1px solid #3a2e14', fontSize:'13px', lineHeight:1.7 }}>
               {result.rewards.map(w => <div key={w.key} style={{ color:'#ffcc00' }}>🎉 {rewardText(w)}</div>)}
               {result.rewards.some(w => w.kind === 'sp') && (
-                <div style={{ color: TEXT.sub, fontSize:'11px' }}>ステータスポイントは、ホームの「ステータスポイントが あります（振る）」から振れます</div>
+                <div style={{ color: TEXT.sub, fontSize:'11px' }}>もらったステータスポイントは、ホームのステータス欄から割り振れます</div>
               )}
             </div>
           )}

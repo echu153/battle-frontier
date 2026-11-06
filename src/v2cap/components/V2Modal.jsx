@@ -59,7 +59,7 @@ export default function V2Modal({
             <>
               <button onClick={onClose} disabled={busy} style={modalBtn('#88aaff', busy)}>{cancelLabel}</button>
               <button onClick={confirm} disabled={busy} style={modalBtn(danger ? '#ff8844' : '#ffcc00', busy)}>
-                {busy ? '処理中...' : confirmLabel}
+                {busy ? '通信中...' : confirmLabel}
               </button>
             </>
           ) : (

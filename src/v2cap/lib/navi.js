@@ -77,7 +77,7 @@ export const NAVI_STEPS = [
     task: '出撃して戦い、「街に戻る」', action: SORTIE_BTN },
   { key: 'points', face: 'normal', doneIf: early(pointsUsed), readyIf: c => (c.prof?.stat_points || 0) > 0,
     line: '貴様の内に力が溜まっておる。好きな所へ注げ。一度注げば戻らぬぞ',
-    task: 'ステータスポイントを振る', action: { kind: 'points', label: '振る' } },
+    task: 'ステータスポイントを割り振る', action: { kind: 'points', label: '割り振る' } },
   { key: 'equip', face: 'normal', doneIf: early(wearsOwnGear), readyIf: c => c.inv.some(r => isOwnGear(r.base_id)),
     line: '拾ったものは身に着けろ。持ち歩くだけでは、ただの荷物だ',
     task: '落ちた装備を着ける', action: screenBtn('equip', '装備を開く') },

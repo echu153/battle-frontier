@@ -55,7 +55,7 @@ export default function V2capPoints({ prof, onProfile, openTick = 0 }) {
     setError('')
     const { data, error: e } = await supabase.rpc('v2cap_allocate_points', { p_add: picked })
     setBusy(false)
-    if (e || !data?.ok) { setError(e?.message || data?.error || '振れませんでした'); return }
+    if (e || !data?.ok) { setError(e?.message || data?.error || '割り振れませんでした'); return }
     setOpen(false)
     setAdd({})
     onProfile?.(null)
@@ -66,14 +66,16 @@ export default function V2capPoints({ prof, onProfile, openTick = 0 }) {
       <button onClick={() => setOpen(true)}
         style={{ width:'100%', margin:'0 0 6px', padding:'5px', background:'#1a1400', border:'1px solid #ffcc00',
           color:'#ffcc00', fontSize:'11px', cursor:'pointer', fontFamily:'monospace' }}>
-        🔺 ステータスポイントが {have} あります（振る）
+        {/* 【確定】2026-11-06 ユーザー指示「割り振れるステータスポイントが〇あります見たいにしてほしい」
+             （前は「ステータスポイントが 17 あります（振る）」＝機械的。押せることは枠で分かるので（振る）は付けない） */}
+        🔺 割り振れるステータスポイントが {have} あります
       </button>
       {open && (
-        <V2Modal title="ステータスポイントを振る" color="#ffcc00" busy={busy}
+        <V2Modal title="ステータスポイントを割り振る" color="#ffcc00" busy={busy}
           confirmLabel={`決定（${used}）`} cancelLabel="やめる" onConfirm={decide} onClose={close}>
           <div style={{ marginBottom:'6px' }}>
             残り <span style={{ color:'#ffcc00' }}>{left}</span> / {have}
-            <span style={{ color:'#7fa6d0', fontSize:'10px', marginLeft:'6px' }}>1ポイントで HP+8・MP+3・ほか+1。振ったら戻せません</span>
+            <span style={{ color:'#7fa6d0', fontSize:'10px', marginLeft:'6px' }}>1ポイントで HP+8・MP+3・ほかは+1。割り振ると元に戻せません</span>
           </div>
           {STAT_KEYS.map(k => {
             const d = STAT_DEFS[k]

@@ -300,7 +300,7 @@ test('画面：ホームの上の枠・戦闘中と施設の画面では隠す�
   assert.ok(FOLD_KEYS.includes('openNavi'), 'たたんだかをキャラのデータに覚える')
 })
 
-test('「振る」のボタンはステータスポイントの小窓を開く（ステータス欄を畳んでいても）', () => {
+test('「割り振る」のボタンはステータスポイントの小窓を開く（ステータス欄を畳んでいても）', () => {
   const st = read('components/V2capStatus.jsx')
   assert.equal(st.match(/<V2capPoints prof=\{prof\} onProfile=\{onProfile\} openTick=\{pointsTick\} \/>/g)?.length, 2)
   const pt = read('components/V2capPoints.jsx')

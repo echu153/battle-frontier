@@ -402,7 +402,7 @@ export default function V2capCasino({ prof, onProfile, dev = false }) {
               </button>
               {exAmount > maxEx && <div style={{ color:CASINO.red, fontSize:'11px', marginTop:'6px' }}>Goldが足りません</div>}
               {exMsg && <div style={{ color: exMsg.startsWith('⚠') ? '#ff6666' : CASINO.green, fontSize:'12px', marginTop:'8px' }}>{exMsg}</div>}
-              <div style={{ color:CASINO.dim, fontSize:'10px', marginTop:'12px' }}>※ 景品の交換所はあとで作ります</div>
+              <div style={{ color:CASINO.dim, fontSize:'10px', marginTop:'12px' }}>※ 景品の交換所はただいま準備中です</div>
             </div>
           )}
         </div>

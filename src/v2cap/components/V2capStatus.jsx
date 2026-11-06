@@ -190,7 +190,7 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
           <div style={{ fontSize:'11px', color:'#9ec2e6' }}>
             {/* 上がり方の説明は長いので、LVに合わせたときだけ出す */}
             <V2Tip color="#ffcc00" width="250px" style={{ borderBottom:'1px dotted #ffcc00' }}
-              body={`LVアップでステは上がらず、ステータスポイントが${POINTS_PER_LV}（${POINTS_STEP}の倍数のLVは${POINTS_ON_STEP}）入ります。ステータスの下の「振る」で好きなステに振れます。`}>
+              body={`LVが上がっても能力は自動では伸びません。かわりにステータスポイントを${POINTS_PER_LV}（${POINTS_STEP}の倍数のLVでは${POINTS_ON_STEP}）獲得し、好きな能力に割り振れます。`}>
               <span style={{ color:'#ffcc00' }}>LV{prof.lv}</span>/{MAX_LV}
             </V2Tip>
             {lvMax && <span style={{ color:'#ff8844' }}> MAX</span>}
