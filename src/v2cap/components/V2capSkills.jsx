@@ -10,6 +10,7 @@ import { SKILL_BY_NAME, setMpCost, validateSkillSet, capPowerText } from '../lib
 import { box, btn, miniBtn, TEXT } from './v2ui.js'
 import V2Modal from './V2Modal.jsx'
 import { MacroHelp } from './V2capAtbMacros.jsx'
+import { AtbRulesHelp } from './V2capAtbRulesHelp.jsx'
 import { totalStats, currentSetOf } from '../lib/loadout.js'
 import { learnOrderOf, learnAtOf, jobOf, lineageOf } from '../lib/jobs.js'
 
@@ -115,6 +116,8 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
           <div style={HELP_HEAD}>挑戦（ATB）に持っていく技</div>
           <div>挑戦（ATB戦闘）で使う技を選びます。いくつ持っていってもかまいません。外した技は戦闘のボタンに出ず、マクロに入っていても飛ばします。</div>
           <div>これから覚える技は、持っていく側に入ります。編成は職業ごとに保存されます。</div>
+          <div style={HELP_HEAD}>挑戦（ATB）での技の効き方</div>
+          <AtbRulesHelp />
           <div style={HELP_HEAD}>マクロ（①〜③）</div>
           <MacroHelp />
         </V2Modal>
