@@ -52,13 +52,14 @@ test('【確定】鍛冶屋の作成は「エリア装備」と「挑戦装備�
   const tab = SMITH.slice(start, SMITH.indexOf('\nfunction ', start + 1))
   assert.ok(SMITH.includes("const CRAFT_KINDS = [{ key:'area', label:'エリア装備' }, { key:'challenge', label:'挑戦装備' }]"), '2つの名前はユーザーの言葉のまま')
   assert.ok(tab.includes("{kind === 'challenge' ? <ChallengeCraft {...props} /> : <AreaCraft {...props} />}"), '選んだほうだけを出す')
-  // 挑戦装備はボスと「使う素材（難易度）」のプルダウン（エリア装備と同じ横並び）・作るのはサーバーの v2cap_craft_challenge
-  //   【2026-11-06】専用装備は必要LV70の1つ＝ノーマルとハードのどちらの素材でも作れる（使う素材の難易度を p_diff で渡す）
+  // 挑戦装備はボスのプルダウン（エリア装備と同じ横並び）・作るのはサーバーの v2cap_craft_challenge
+  //   【2026-11-06】専用装備も素材もボスごとに1つ（ユーザー「なんで難易度ごとに素材わかれてるの？専用装備、アイテムは全部一緒」）＝
+  //   その前の「使う素材（ノーマル／ハード）」のプルダウンはやめた
   const cs = SMITH.indexOf('function ChallengeCraft')
   const ch = SMITH.slice(cs, SMITH.indexOf('\nfunction ', cs + 1))
-  assert.deepEqual([...ch.matchAll(/<select value=\{(\w+)\}/g)].map(m => m[1]), ['bossKey', 'diffKey'])
-  assert.ok(ch.includes("call('v2cap_craft_challenge', { p_equip_id: item.id, p_diff: useDiff })"))
-  assert.ok(ch.includes('{matNameOf(bossKey, d)}（{diffOf(bossKey, d)?.label || d}）'), '素材のプルダウンは素材の名前（難易度）')
+  assert.deepEqual([...ch.matchAll(/<select value=\{(\w+)\}/g)].map(m => m[1]), ['bossKey'])
+  assert.ok(ch.includes("call('v2cap_craft_challenge', { p_equip_id: item.id })"))
+  assert.ok(!/p_diff|diffKey/.test(ch), '難易度は選ばない')
 })
 
 test('【確定】画面を切り替えたら一番上から見せる（2026-10-14 ユーザー指示「装備押すと中途半端なところで遷移する、一番上で遷移するようにして」）', () => {

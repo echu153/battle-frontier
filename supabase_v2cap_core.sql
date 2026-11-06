@@ -9162,19 +9162,34 @@ returns jsonb language sql stable security definer set search_path = public as $
 $$;
 revoke all on function public.v2cap_dungeon_run_json(bigint, uuid) from public, anon, authenticated;
 
--- ★2026-11-06 挑戦（四凶）の特別な素材（src/v2cap/lib/challengeDefs.js の CHALLENGE_MATS）。{"ボスのキー:難易度": 個数}（例 {"varuzenoku:normal": 12}）
+-- ★2026-11-06 挑戦（四凶）の特別な素材（src/v2cap/lib/challengeDefs.js の CHALLENGE_MATS）。{"ボスのキー": 個数}（例 {"varuzenoku": 12}）
 --   入れるのは v2cap_dungeon_pay_reward・使うのは鍛冶屋の作成「挑戦装備」（§28 の v2cap_craft_challenge）
 alter table public.v2cap_profiles add column if not exists challenge_mats jsonb not null default '{}'::jsonb;
+-- ★同じ日（本番に出したあと）素材をボスごとに1つにした（ユーザー「なんで難易度ごとに素材わかれてるの？」）：
+--   前の形の鍵「ボス:難易度」（例 varuzenoku:normal・varuzenoku:hard）は、同じボスの鍵（varuzenoku）へ足し合わせる。
+--   何度流してもよい（前の形の鍵が無い行は何もしない）
+update public.v2cap_profiles p
+   set challenge_mats = (select coalesce(jsonb_object_agg(s.k, s.n), '{}'::jsonb)
+                           from (select split_part(e.key, ':', 1) as k,
+                                        sum(case when e.value ~ '^[0-9]+$' then e.value::int else 0 end) as n
+                                   from jsonb_each_text(p.challenge_mats) e
+                                  group by 1) s)
+ where exists (select 1 from jsonb_object_keys(p.challenge_mats) k where position(':' in k) > 0);
 
 -- 報酬を渡す（内部ヘルパ・try_end と claim からだけ呼ぶ）。倒されたボスに、ダメージを入れた人へ1回だけ。渡せないときは null
 --   呼んだ人は全部（救援信号を出して損をしない）・救援の人は削った割合（最低3割＝dungeon.js の HELPER_REWARD_MIN_PCT）
 --   ひとりで倒されずに倒した人は3倍（dungeon.js の SOLO_REWARD_MULT）＝ほかの人が1回も挑んでいない・自分の挑戦に flawed が無い
 -- ★2026-11-06 落とすもの（ユーザー「4強の報酬を決めたい」→案に全部「推奨」・表の正は src/v2cap/lib/challengeDefs.js）：
 --   ①その難易度のエリア（v2cap_dungeon_conf の area）の装備を1つ。部位は6つから均等・武器はいまの職業が使える種類
---   ②特別な素材（ボス×難易度）を50%で1〜5個
+--   ②特別な素材（ボスごとに1つ・下の【確定】）
 --   ③専用装備そのもの（そのボスの3つから1つ・必要LV70）
 --   ④ユニーク（そのボスの1つ・必要LV85・id が「UC:ボス:種類」）
---   救援の人は、①③④の確率と②の数に貢献度の割合（v_pct・最低3割）を掛ける（②の数は最低1）。ひとりで倒されずに倒したら②の数も3倍
+--   救援の人は、①③④の確率に貢献度の割合（v_pct・最低3割）を掛ける
+-- ★同じ日（本番に出したあと）ユーザー「なんで難易度ごとに素材わかれてるの？専用装備、アイテムは全部一緒」→素材はボスごとに1つ（鍵＝ボスのキー）。
+--   ②の数もユーザーが決めた（足し合わせ）：「まず自分がホストの場合1個確定」「完全ソロ討伐で確定1つ」
+--   「そこから討伐時、貢献度が10%以上で確率で1つ、難易度によって上がる ノーマル10% ハード20% expert40% master60」
+--   ＝呼んだ人1個（c_mat_host）＋完全ソロ討伐1個（c_mat_solo・v_solo と同じ）＋貢献度（自分のダメージ÷最大HP）10%以上なら c_mat_chance の確率で1個。
+--   前の「50%で1〜5個・救援は貢献度の割合・ソロは3倍」はやめた（表の正は src/v2cap/lib/challengeDefs.js の CH_MAT_*）
 -- ★同じ日（案のシートのあと）ユーザー「難易度によって専用アイテムとレジェンダリーユニークのドロップ率も上げて」→選んだ「ハードは1.5倍」：
 --   c_rates（難易度ごと・%）＝ノーマル：①レア75／エピック20／レジェンダリー5・③2・④0.1／ハード：①レア72／エピック20／レジェンダリー8・③3・④0.15
 --   （表の正は src/v2cap/lib/challengeDefs.js の CH_RATES・challenge.test.js が突き合わせる）。まだ無い難易度はノーマルの数
@@ -9184,9 +9199,10 @@ declare
   c_helper_min constant int := 30;
   c_solo_mult  constant int := 3;
   c_rates      constant jsonb := '{"normal": {"r": 75, "e": 20, "own": 2, "uq": 0.1}, "hard": {"r": 72, "e": 20, "own": 3, "uq": 0.15}}';
-  c_mat_pct    constant int := 50;       -- ②が入る確率（%）
-  c_mat_min    constant int := 1;        -- ②の数（この範囲の整数を均等に1つ）
-  c_mat_max    constant int := 5;
+  c_mat_host   constant int := 1;        -- ②呼んだ人なら必ず
+  c_mat_solo   constant int := 1;        -- ②完全ソロ討伐（v_solo）ならさらに必ず
+  c_mat_min_contrib constant numeric := 10;   -- ②貢献度（与えたダメージ÷最大HP の%）がこれ以上なら、難易度の確率でさらに1個
+  c_mat_chance constant jsonb := '{"normal": 10, "hard": 20, "expert": 40, "master": 60}';
   v_rate jsonb;
   v_run  public.v2cap_dungeon_runs;
   v_mem  public.v2cap_dungeon_members;
@@ -9252,11 +9268,13 @@ begin
         v_gear := jsonb_build_object('id', v_inv, 'base_id', v_eq.id, 'ilv', v_eq.lv);
       end if;
     end if;
-    -- ② 特別な素材（ボス×難易度）
-    if random() * 100 < c_mat_pct then
-      v_n := c_mat_min + floor(random() * (c_mat_max - c_mat_min + 1))::int;
-      v_n := greatest(1, round(v_n * v_pct / 100.0)::int) * (case when v_solo then c_solo_mult else 1 end);
-      v_key := v_run.boss || ':' || v_run.diff;
+    -- ② 特別な素材（ボスごとに1つ）：呼んだ人は1個・完全ソロ討伐でさらに1個・貢献度10%以上なら難易度の確率でさらに1個
+    v_n := (case when v_mem.is_owner then c_mat_host else 0 end) + (case when v_solo then c_mat_solo else 0 end);
+    if v_mem.damage * 100.0 / greatest(1, v_run.hp_max) >= c_mat_min_contrib then
+      if random() * 100 < coalesce((c_mat_chance ->> v_run.diff)::numeric, 0) then v_n := v_n + 1; end if;
+    end if;
+    if v_n > 0 then
+      v_key := v_run.boss;
       update public.v2cap_profiles p
          set challenge_mats = jsonb_set(coalesce(p.challenge_mats, '{}'::jsonb), array[v_key],
                                         to_jsonb(coalesce((p.challenge_mats ->> v_key)::int, 0) + v_n))
@@ -10186,8 +10204,9 @@ grant execute on function public.v2cap_set_atb_off(jsonb) to authenticated;
 --   ・素材は v2cap_profiles.challenge_mats（§23）。必ずできる・+0で持ち物に入る（エリアの作成と同じ）
 -- ★表の写しは src/v2cap/lib/challengeDefs.js（CH_CRAFT_MATS・CH_CRAFT_GOLD_PER_LV）。v2capsql.test.js が突き合わせる
 -- 【確定】同じ日（案のシートのあと）ユーザー「レジェンダリーは必要レベル70」：専用装備は**必要LV70の1つ**（エリア⑪の行・ノーマルでもハードでも同じ）。
---   作るときは使う素材の難易度（p_diff）を選ぶ＝ノーマルの素材でもハードの素材でも50個（こちらで決めた）。Gold は必要LV×200＝14,000
---   前の版（p_equip_id だけ・段階のエリアから難易度を引いた）は消す
+--   Gold は必要LV×200＝14,000
+-- 【確定】同じ日（本番に出したあと）ユーザー「なんで難易度ごとに素材わかれてるの？専用装備、アイテムは全部一緒」：素材もボスごとに1つ（鍵＝ボスのキー・§23）。
+--   作るのはそのボスの素材50個（その前の版の「使う素材の難易度 p_diff を選ぶ」はやめた＝引数2つの版は消す）
 -- 前の版の段階ごとの専用装備（C2:…＝ノーマル LV25・C5:…＝ハード LV40）を持っている人は C11:…（同じボス・同じ種類）へ付け替え、古い行を消す
 --   （強化値・お気に入りは持ち物の行のまま残る。博物館は専用装備を受け付けないので行は無い＝念のため、使われていない行だけ消す）
 update public.v2cap_inventory i
@@ -10199,8 +10218,8 @@ delete from public.v2cap_equipment e
  where split_part(e.id, ':', 1) in ('C2', 'C5') and e.boss is not null
    and not exists (select 1 from public.v2cap_inventory i where i.base_id = e.id)
    and not exists (select 1 from public.v2cap_museum m where m.base_id = e.id);
-drop function if exists public.v2cap_craft_challenge(text);
-create or replace function public.v2cap_craft_challenge(p_equip_id text, p_diff text)
+drop function if exists public.v2cap_craft_challenge(text, text);
+create or replace function public.v2cap_craft_challenge(p_equip_id text)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   c_mats        constant int := 50;
@@ -10221,11 +10240,7 @@ begin
   if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
   select * into v_eq from public.v2cap_equipment where id = p_equip_id;
   if not found or v_eq.boss is null or v_eq.rarity <> 'L' then return jsonb_build_object('ok', false, 'error', 'その装備はありません'); end if;
-  -- 使う素材の難易度：そのボスにある難易度だけ（v2cap_dungeon_conf と同じ表＝素材の鍵は matKeyOf と同じ「ボス:難易度」）
-  if p_diff is null or not exists (select 1 from public.v2cap_dungeon_conf(v_eq.boss, p_diff) c) then
-    return jsonb_build_object('ok', false, 'error', 'その素材では作れません');
-  end if;
-  v_key  := v_eq.boss || ':' || p_diff;
+  v_key  := v_eq.boss;   -- 素材の鍵＝ボスのキー（matKeyOf と同じ）
   v_mats := coalesce(v_row.challenge_mats, '{}'::jsonb);
   v_have := coalesce((v_mats ->> v_key)::int, 0);
   v_gold := greatest(1, v_eq.lv)::bigint * c_gold_per_lv;
@@ -10242,8 +10257,8 @@ begin
     'key', v_key, 'mats', c_mats, 'gold', v_gold, 'challenge_mats', v_mats, 'gold_left', v_row.gold - v_gold);
 end;
 $$;
-revoke all on function public.v2cap_craft_challenge(text, text) from public, anon;
-grant execute on function public.v2cap_craft_challenge(text, text) to authenticated;
+revoke all on function public.v2cap_craft_challenge(text) from public, anon;
+grant execute on function public.v2cap_craft_challenge(text) to authenticated;
 
 -- ============================================================
 -- ===== 29. 修練場の案山子（1日1回・60秒なぐる・与えたダメージでEXP・2026-11-06）=====

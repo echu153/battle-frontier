@@ -7,10 +7,10 @@ import { existsSync, readFileSync } from 'node:fs'
 import {
   CHALLENGE_TIER_AREA, CHALLENGE_DIFFS, CHALLENGE_GEAR_AREA, CHALLENGE_BONUS, CHALLENGE_MATS, CHALLENGE_GEAR_DEFS,
   CHALLENGE_UNIQUE_DEFS, CHALLENGE_UNIQUE_LV, CHALLENGE_UNIQUE_POINTS,
-  CH_RATES, CH_MAT_PCT, CH_MAT_RANGE, CH_MAT_SOLO_MULT, CH_CRAFT_MATS, CH_CRAFT_GOLD_PER_LV,
+  CH_RATES, CH_MAT_HOST, CH_MAT_SOLO, CH_MAT_CHANCE_MIN, CH_MAT_CHANCE, CH_CRAFT_MATS, CH_CRAFT_GOLD_PER_LV,
 } from './challengeDefs.js'
 import {
-  matKeyOf, matNameOf, matNameOfKey, chMatsOf, chMatGainOf, chMatMeanOf, challengeItemsOf, challengeUniqueOf, chCraftCostOf,
+  matKeyOf, matNameOf, matNameOfKey, chMatsOf, chMatBaseOf, chMatChanceOf, chMatMeanOf, challengeItemsOf, challengeUniqueOf, chCraftCostOf,
   chCraftErrorOf, chCraftTimesOf, chDropsOf, chRatesOf, rollChallengeDrops, CH_PARTS,
 } from './challenge.js'
 import {
@@ -46,16 +46,22 @@ test('段階：難易度ごとのエリア（倒すと必ずもらうエリア�
   assert.deepEqual(CHALLENGE_DIFFS, ['normal', 'hard'])
 })
 
-test('特別な素材：四凶 × 段階ごとに1つ・名前は V1 の素材（ノーマル＝ふつうの素材・ハード＝希少な素材）', () => {
+test('【確定】特別な素材はボスごとに1つ（ユーザー「なんで難易度ごとに素材わかれてるの？専用装備、アイテムは全部一緒」）・名前は V1 の希少な素材（選んだ「今のハードの名前」）', () => {
   assert.deepEqual(Object.keys(CHALLENGE_MATS).sort(), [...BOSSES].sort())
-  const names = BOSSES.flatMap(b => CHALLENGE_DIFFS.map(d => matNameOf(b, d)))
-  assert.equal(new Set(names).size, names.length, '名前は重ならない')
-  assert.deepEqual(names, ['黒龍の鱗', '黒龍の逆鱗', '水禍の雫', '雨禍の心核', '雷鋼片', '神雷炉心', '獄王の断罪片', '閻魔の審判核'])
-  assert.equal(matKeyOf('varuzenoku', 'hard'), 'varuzenoku:hard')
-  assert.equal(matNameOfKey('amaza:normal'), '水禍の雫')
-  assert.equal(matNameOfKey('nope:normal'), '素材')
-  assert.equal(chMatsOf({ 'enma:hard': 7 }, 'enma', 'hard'), 7)
-  assert.equal(chMatsOf(undefined, 'enma', 'hard'), 0, 'SQLを流す前の行（challenge_mats が無い）は0')
+  const names = BOSSES.map(b => matNameOf(b))
+  assert.deepEqual(names, ['黒龍の逆鱗', '雨禍の心核', '神雷炉心', '閻魔の審判核'])
+  assert.equal(matKeyOf('varuzenoku'), 'varuzenoku', '持ち物の鍵はボスのキー（難易度を付けない）')
+  assert.equal(matNameOfKey('amaza'), '雨禍の心核')
+  assert.equal(matNameOfKey('amaza:normal'), '雨禍の心核', '前の形の鍵でもボスの素材の名前')
+  assert.equal(matNameOfKey('nope'), '素材')
+  assert.equal(chMatsOf({ enma: 7 }, 'enma'), 7)
+  assert.equal(chMatsOf(undefined, 'enma'), 0, 'SQLを流す前の行（challenge_mats が無い）は0')
+  // 前の形の鍵（ボス:難易度）は SQL で同じボスの鍵へ足し合わせる（§23・alter table のすぐあと＝報酬を渡す関数より前）
+  const at = SQL.indexOf("alter table public.v2cap_profiles add column if not exists challenge_mats jsonb not null default '{}'::jsonb;")
+  const mig = SQL.indexOf('update public.v2cap_profiles p\n   set challenge_mats = (select coalesce(jsonb_object_agg(s.k, s.n), \'{}\'::jsonb)')
+  assert.ok(at > 0 && mig > at && mig < SQL.indexOf('create or replace function public.v2cap_dungeon_pay_reward('), '列を足したあと・報酬の関数の前で足し合わせる')
+  const m = SQL.slice(mig, SQL.indexOf(';', mig))
+  assert.ok(m.includes("select split_part(e.key, ':', 1) as k,") && m.includes('group by 1') && m.includes("position(':' in k) > 0"), '「ボス:難易度」を「ボス」へ・前の形の鍵が無い行は触らない')
 })
 
 test('専用装備：V1 のレイドの交換所の12個をそのまま使う（名前）・ボスごとに3つ・種類は V2 にある', () => {
@@ -155,35 +161,33 @@ test('着けると能力が戦闘へ渡る・同じ専用装備（同じ名前�
   assert.ok(eq.includes("format('%sはもう着けています（同じ専用装備は1つまで）', v_eq.name)"))
 })
 
-test('作成：その難易度の素材50個＋Gold 必要LV×200（ノーマルとハードのどちらの素材でも作れる）・残骸の作成では作れない・まとめての分解に入らない', () => {
+test('作成：そのボスの素材50個＋Gold 必要LV×200・残骸の作成では作れない・まとめての分解に入らない', () => {
   assert.equal(CH_CRAFT_MATS, 50)
   assert.equal(CH_CRAFT_GOLD_PER_LV, 200)
   const it = ITEM_BY_ID['C11:amaza:杖']
-  assert.deepEqual(chCraftCostOf(it, 'normal'), { key: 'amaza:normal', name: '水禍の雫', mats: 50, gold: 14000 })
-  assert.deepEqual(chCraftCostOf(it, 'hard'), { key: 'amaza:hard', name: '雨禍の心核', mats: 50, gold: 14000 })
-  assert.equal(chCraftCostOf(it, 'expert'), null, '素材の無い難易度では作れない')
-  assert.equal(chCraftCostOf(itemOf(11, 'L', '杖'), 'normal'), null, 'エリアの装備は挑戦装備では作れない')
-  assert.equal(chCraftErrorOf(it, { gold: 99999, challenge_mats: { 'amaza:normal': 49 } }, 'normal'), '水禍の雫が足りません')
-  assert.equal(chCraftErrorOf(it, { gold: 13999, challenge_mats: { 'amaza:normal': 50 } }, 'normal'), 'Goldが足りません')
-  assert.equal(chCraftErrorOf(it, { gold: 14000, challenge_mats: { 'amaza:normal': 50 } }, 'normal'), null)
-  assert.equal(chCraftErrorOf(it, { gold: 14000, challenge_mats: { 'amaza:hard': 50 } }, 'hard'), null, 'ハードの素材でも作れる')
-  assert.equal(chCraftErrorOf(it, { gold: 14000, challenge_mats: { 'amaza:hard': 50 } }, 'normal'), '水禍の雫が足りません', '選んだ素材で数える')
-  assert.equal(chCraftTimesOf(it, { gold: 30000, challenge_mats: { 'amaza:normal': 160 } }, 'normal'), 2)
+  assert.deepEqual(chCraftCostOf(it), { key: 'amaza', name: '雨禍の心核', mats: 50, gold: 14000 })
+  assert.equal(chCraftCostOf(itemOf(11, 'L', '杖')), null, 'エリアの装備は挑戦装備では作れない')
+  assert.equal(chCraftErrorOf(it, { gold: 99999, challenge_mats: { amaza: 49 } }), '雨禍の心核が足りません')
+  assert.equal(chCraftErrorOf(it, { gold: 13999, challenge_mats: { amaza: 50 } }), 'Goldが足りません')
+  assert.equal(chCraftErrorOf(it, { gold: 14000, challenge_mats: { amaza: 50 } }), null)
+  assert.equal(chCraftErrorOf(it, { gold: 14000, challenge_mats: { enma: 50 } }), '雨禍の心核が足りません', 'ほかのボスの素材では作れない')
+  assert.equal(chCraftTimesOf(it, { gold: 30000, challenge_mats: { amaza: 160 } }), 2)
   assert.ok(!canCraft(it))
   assert.equal(craftErrorOf(it, { gold: 1e9, materials: { 11: 1e6 } }), 'この装備は「挑戦装備」で作ります')
   assert.ok(!bulkPickable({ inv: { id: 1, plus: 0 }, item: it }, new Set()), 'まとめての分解に入れない')
   assert.equal(SCRAP_YIELD[it.rarity], 25, '分解はレジェンダリーと同じ（⑪の残骸）')
-  // サーバー：v2cap_craft_challenge（使う素材の難易度 p_diff を受け取る）・v2cap_craft は弾く（同じ文）
+  // サーバー：v2cap_craft_challenge（装備だけ受け取る・素材はそのボスのもの）・v2cap_craft は弾く（同じ文）
   const c = fnBody('v2cap_craft_challenge')
-  assert.ok(c.startsWith('create or replace function public.v2cap_craft_challenge(p_equip_id text, p_diff text)'))
+  assert.ok(c.startsWith('create or replace function public.v2cap_craft_challenge(p_equip_id text)'))
   assert.ok(c.includes(`c_mats        constant int := ${CH_CRAFT_MATS};`) && c.includes(`c_gold_per_lv constant int := ${CH_CRAFT_GOLD_PER_LV};`))
-  assert.ok(c.includes("v_key  := v_eq.boss || ':' || p_diff;"), '素材の鍵は matKeyOf と同じ形')
-  assert.ok(c.includes('not exists (select 1 from public.v2cap_dungeon_conf(v_eq.boss, p_diff) c)'), 'そのボスにある難易度の素材だけ')
+  assert.ok(c.includes('v_key  := v_eq.boss;'), '素材の鍵は matKeyOf と同じ（ボスのキー）')
+  assert.ok(!c.includes('p_diff'), '使う素材の難易度は選ばない')
   assert.ok(c.includes("or v_eq.rarity <> 'L' then return jsonb_build_object('ok', false, 'error', 'その装備はありません')"), 'ユニークは作れない')
   assert.ok(c.includes("if v_have < c_mats then return jsonb_build_object('ok', false, 'error', '素材が足りません'); end if;"))
   assert.ok(c.indexOf('v_have < c_mats') < c.indexOf('v_row.gold < v_gold'), '見る順は 素材→Gold（chCraftErrorOf と同じ）')
-  assert.ok(SQL.includes('drop function if exists public.v2cap_craft_challenge(text);'), '前の版（引数1つ）は消す')
-  assert.ok(SQL.includes('grant execute on function public.v2cap_craft_challenge(text, text) to authenticated;'))
+  assert.ok(SQL.includes('drop function if exists public.v2cap_craft_challenge(text, text);'), 'その前の版（素材の難易度を選ぶ・引数2つ）は消す')
+  assert.ok(!SQL.includes('drop function if exists public.v2cap_craft_challenge(text);'), 'いまの版（引数1つ）を消す行は無い')
+  assert.ok(SQL.includes('grant execute on function public.v2cap_craft_challenge(text) to authenticated;'))
   assert.ok(fnBody('v2cap_craft').includes("if v_eq.boss is not null then\n    return jsonb_build_object('ok', false, 'error', 'この装備は「挑戦装備」で作ります');"))
 })
 
@@ -219,16 +223,11 @@ test('【確定】落とし方：難易度ごとの確率（ハードは1.5倍�
     assert.deepEqual(rates[d], { r: CH_RATES[d].gear.R, e: CH_RATES[d].gear.E, own: CH_RATES[d].own, uq: CH_RATES[d].unique }, d)
   }
   assert.ok(p.includes("v_rate := coalesce(c_rates -> v_run.diff, c_rates -> 'normal');"))
-  assert.ok(p.includes(`c_mat_pct    constant int := ${CH_MAT_PCT};`) && p.includes(`c_mat_min    constant int := ${CH_MAT_RANGE[0]};`) && p.includes(`c_mat_max    constant int := ${CH_MAT_RANGE[1]};`))
-  assert.deepEqual([CH_MAT_PCT, ...CH_MAT_RANGE], [50, 1, 5], '素材は難易度で変えない')
-  assert.equal(CH_MAT_SOLO_MULT, SOLO_REWARD_MULT, 'ソロ討伐の素材の倍率は EXP・Gold と同じ')
   // 部位・装飾品・防具の系統は equipment.js と同じ並び
   assert.deepEqual(CH_PARTS, PARTS)
   assert.ok(p.includes(`(array['${PARTS.join("', '")}'])[1 + floor(random() * ${PARTS.length})::int]`))
   assert.ok(p.includes(`(array['${ACCESSORY_TYPES.join("', '")}'])[1 + floor(random() * ${ACCESSORY_TYPES.length})::int]`))
   assert.ok(p.includes(`(array['${ARMOR_LINES.join("', '")}'])[1 + floor(random() * ${ARMOR_LINES.length})::int] || v_part`))
-  assert.ok(p.includes("v_key := v_run.boss || ':' || v_run.diff;"), '素材の鍵は matKeyOf と同じ形')
-  assert.ok(p.includes('v_n := greatest(1, round(v_n * v_pct / 100.0)::int) * (case when v_solo then c_solo_mult else 1 end);'), 'chMatGainOf と同じ式')
   assert.ok(p.includes("if random() * 100 < (v_rate ->> 'own')::numeric * v_pct / 100.0 then"), '救援の人は専用装備の確率にも割合を掛ける')
   assert.ok(p.includes("where e.boss = v_run.boss and e.rarity = 'L' order by random() limit 1"), '専用装備はそのボスの3つから（どの難易度でも同じ）')
   assert.ok(p.includes("if random() * 100 < (v_rate ->> 'uq')::numeric * v_pct / 100.0 then"), 'ユニークも救援の人は割合を掛ける')
@@ -238,12 +237,35 @@ test('【確定】落とし方：難易度ごとの確率（ハードは1.5倍�
   assert.ok(SQL.includes("alter table public.v2cap_profiles add column if not exists challenge_mats jsonb not null default '{}'::jsonb;"))
 })
 
-test('落とし方：素材の数（救援は割合・最低1／ソロは3倍）と、難易度ごとの抽選の割合', () => {
-  assert.equal(chMatGainOf(3), 3)
-  assert.equal(chMatGainOf(1, HELPER_REWARD_MIN_PCT), 1, '最低1')
-  assert.equal(chMatGainOf(5, 30), 2, '5×0.3＝1.5 → 2（SQL の round と同じ）')
-  assert.equal(chMatGainOf(4, 100, true), 12)
-  assert.equal(chMatMeanOf(), 1.5, '50%で1〜5個＝平均1.5個（約33回で50個）')
+test('【確定】素材の数（ユーザー「まず自分がホストの場合1個確定」「完全ソロ討伐で確定1つ」「貢献度が10%以上で確率で1つ、難易度によって上がる ノーマル10% ハード20% expert40% master60」＝足し合わせ）', () => {
+  assert.equal(CH_MAT_HOST, 1)
+  assert.equal(CH_MAT_SOLO, 1)
+  assert.equal(CH_MAT_CHANCE_MIN, 10)
+  assert.deepEqual(CH_MAT_CHANCE, { normal: 10, hard: 20, expert: 40, master: 60 })
+  assert.deepEqual(Object.keys(CH_MAT_CHANCE), DIFF_KEYS, '難易度は4つとも決めてある')
+  assert.equal(chMatBaseOf({ owner: true, solo: false }), 1, 'ホストなら1個')
+  assert.equal(chMatBaseOf({ owner: true, solo: true }), 2, '完全ソロ討伐ならさらに1個')
+  assert.equal(chMatBaseOf({ owner: false }), 0, '救援の人に確定は無い')
+  assert.equal(chMatChanceOf('hard', 10), 20, '貢献度10%ちょうどは入る')
+  assert.equal(chMatChanceOf('hard', 9.9), 0, '10%未満は確率なし')
+  assert.equal(chMatChanceOf('master', 50), 60)
+  assert.equal(chMatMeanOf({ diff: 'normal', owner: true, solo: true }), 2.1, 'ひとりで倒すと平均2.1個（約24回で50個）')
+  assert.equal(chMatMeanOf({ diff: 'hard', owner: true, solo: true }), 2.2)
+  assert.equal(chMatMeanOf({ diff: 'normal', owner: true, solo: false, contrib: 5 }), 1, '救援の人に削ってもらって自分が10%未満なら確定の1個だけ')
+  assert.equal(chMatMeanOf({ diff: 'hard', owner: false, contrib: 30 }), 0.2, '救援の人（30%削った）はハードで20%')
+  // SQL も同じ（数・確率・10%の線・足し合わせ・鍵はボス）
+  const p = fnBody('v2cap_dungeon_pay_reward')
+  assert.ok(p.includes(`c_mat_host   constant int := ${CH_MAT_HOST};`) && p.includes(`c_mat_solo   constant int := ${CH_MAT_SOLO};`))
+  assert.ok(p.includes(`c_mat_min_contrib constant numeric := ${CH_MAT_CHANCE_MIN};`))
+  assert.deepEqual(JSON.parse(p.match(/c_mat_chance constant jsonb := '([^']+)';/)[1]), CH_MAT_CHANCE)
+  assert.ok(p.includes('v_n := (case when v_mem.is_owner then c_mat_host else 0 end) + (case when v_solo then c_mat_solo else 0 end);'), 'chMatBaseOf と同じ（完全ソロ討伐は EXP・Gold が3倍になる v_solo と同じ）')
+  assert.ok(p.includes('if v_mem.damage * 100.0 / greatest(1, v_run.hp_max) >= c_mat_min_contrib then'), '貢献度は自分のダメージ÷最大HP（救援の最低3割は使わない）')
+  assert.ok(p.includes('if random() * 100 < coalesce((c_mat_chance ->> v_run.diff)::numeric, 0) then v_n := v_n + 1; end if;'))
+  assert.ok(p.includes('v_key := v_run.boss;'), '素材の鍵はボスのキー（matKeyOf と同じ）')
+  assert.ok(!/c_mat_pct|c_mat_min |c_mat_max/.test(p), '前の「50%で1〜5個」は無い')
+})
+
+test('落とし方：難易度ごとの抽選の割合（乱数を回して見る）', () => {
   // 乱数を回して割合を見る（シードつき）
   let s = 1234567   // mulberry32（続けて引いても偏らない）
   const rng = () => {
@@ -255,21 +277,33 @@ test('落とし方：素材の数（救援は割合・最低1／ソロは3倍）
   const N = 60000
   for (const diff of CHALLENGE_DIFFS) {
     const want = CH_RATES[diff]
-    const n = { R: 0, E: 0, L: 0, mat: 0, own: 0, uq: 0, weapon: 0 }
+    const n = { R: 0, E: 0, L: 0, extra: 0, badMat: 0, own: 0, uq: 0, weapon: 0 }
     for (let i = 0; i < N; i++) {
       const r = rollChallengeDrops({ diff, weapons: ['短剣', '投擲', '刀'] }, rng)
       n[r.gear.rarity]++
       if (r.gear.area !== CHALLENGE_TIER_AREA[diff]) throw new Error(`${diff}＝その段階のエリアの装備`)
       if (ITEM_BY_ID[`${r.gear.area}${r.gear.rarity}:${r.gear.kind}`] == null) throw new Error(`${r.gear.kind} の装備がある`)
       if (PARTS.indexOf(KIND_BY_KEY[r.gear.kind].part) === 0) { n.weapon++; assert.ok(['短剣', '投擲', '刀'].includes(r.gear.kind), 'いまの職業の武器') }
-      if (r.mat) n.mat++
+      if (r.mat === 2) n.extra++   // ホスト（ソロでない・貢献度100）＝確定1個＋確率で1個
+      else if (r.mat !== 1) n.badMat++
       if (r.own) n.own++
       if (r.uq) n.uq++
     }
     const near = (got, w, tol) => assert.ok(Math.abs(got / N * 100 - w) < tol, `${diff}：${got / N * 100} ≈ ${w}`)
     near(n.R, want.gear.R, 1.5); near(n.E, want.gear.E, 1.5); near(n.L, want.gear.L, 0.8)
-    near(n.mat, CH_MAT_PCT, 1.5); near(n.own, want.own, 0.5); near(n.uq, want.unique, 0.08); near(n.weapon, 100 / 6, 1.2)
+    near(n.extra, CH_MAT_CHANCE[diff], 0.8); near(n.own, want.own, 0.5); near(n.uq, want.unique, 0.08); near(n.weapon, 100 / 6, 1.2)
+    assert.equal(n.badMat, 0, 'ホストは1個か2個')
   }
+  // 完全ソロ討伐は2個か3個（ハードは20%で3個）・救援の人で貢献度10%未満は0個
+  let solo3 = 0, helper = 0
+  for (let i = 0; i < N; i++) {
+    const r = rollChallengeDrops({ diff: 'hard', solo: true, weapons: ['杖'] }, rng)
+    if (r.mat === 3) solo3++
+    else assert.equal(r.mat, 2)
+    if (rollChallengeDrops({ diff: 'hard', owner: false, pct: 30, contrib: 5, weapons: ['杖'] }, rng).mat) helper++
+  }
+  assert.ok(Math.abs(solo3 / N * 100 - 20) < 0.8, `${solo3 / N * 100}`)
+  assert.equal(helper, 0)
   // 救援の人（割合30%）は装備も専用装備も3割の確率
   let g = 0
   for (let i = 0; i < N; i++) if (rollChallengeDrops({ diff: 'normal', pct: 30, weapons: ['杖'] }, rng).gear) g++
@@ -278,7 +312,7 @@ test('落とし方：素材の数（救援は割合・最低1／ソロは3倍）
 })
 
 test('報酬の画面に出す行（chDropsOf）：装備・素材・専用装備・ユニークの順・無いものは出さない', () => {
-  const r = { exp: 1, gold: 1, gear: { id: 9, base_id: '5E:片手剣', ilv: 35 }, mat: { key: 'zerugiasu:hard', n: 4 },
+  const r = { exp: 1, gold: 1, gear: { id: 9, base_id: '5E:片手剣', ilv: 35 }, mat: { key: 'zerugiasu', n: 2 },
     own: { id: 10, base_id: 'C11:zerugiasu:短剣', ilv: 70 }, uq: { id: 11, base_id: 'UC:zerugiasu:ベルト', ilv: 85 } }
   assert.deepEqual(chDropsOf(r).map(x => x.kind), ['gear', 'mat', 'own', 'uq'])
   assert.equal(chDropsOf(r)[1].name, '神雷炉心')
@@ -357,16 +391,17 @@ test('【確定】ユニーク4つの能力（ユーザー「能力は問題な�
   assert.ok(read('../core/atb.js').includes('takeAction'), 'ATB は battle.js の takeAction をそのまま呼ぶ')
 })
 
-test('流す追加分（作業フォルダ直下の v2cap_challenge_reward2_20261106.sql・あれば）は全文と同じ', () => {
-  const url = new URL('../../../v2cap_challenge_reward2_20261106.sql', import.meta.url)
+test('流す追加分（作業フォルダ直下の v2cap_challenge_reward3_20261106.sql・あれば）は全文と同じ', () => {
+  const url = new URL('../../../v2cap_challenge_reward3_20261106.sql', import.meta.url)
   if (!existsSync(url)) return
   const delta = readFileSync(url, 'utf8').replace(/\r\n/g, '\n')
   const fns = [...delta.matchAll(/create or replace function public\.\w+\([\s\S]*?\n\$\$;/g)].map(m => m[0])
   assert.deepEqual(fns.map(f => f.match(/function public\.(\w+)/)[1]), ['v2cap_dungeon_pay_reward', 'v2cap_craft_challenge'])
   for (const f of fns) assert.ok(SQL.includes(f), `${f.match(/function public\.(\w+)/)[1]} は全文と同じ`)
-  for (const it of [...CHALLENGE_ITEMS, ...CHALLENGE_UNIQUE_ITEMS]) assert.ok(delta.includes(`('${it.id}', '${it.name}', `), it.id)
-  assert.ok(delta.indexOf("('C11:varuzenoku:両手剣'") < delta.indexOf('update public.v2cap_inventory i'), '種を入れてから付け替える')
-  assert.ok(delta.includes('drop function if exists public.v2cap_craft_challenge(text);'))
+  const mig = SQL.match(/update public\.v2cap_profiles p\n   set challenge_mats = \(select[\s\S]*?;\n/)[0]
+  assert.ok(delta.includes(mig), '素材の鍵の足し合わせは全文と同じ')
+  assert.ok(delta.indexOf(mig) < delta.indexOf('create or replace function public.v2cap_craft_challenge('), '足し合わせてから作成の関数')
+  assert.ok(delta.includes('drop function if exists public.v2cap_craft_challenge(text, text);'))
   for (const line of delta.split(/\r?\n/).filter(l => /^(alter table|revoke|grant|drop function) /.test(l))) assert.ok(SQL.includes(line), line)
 })
 
