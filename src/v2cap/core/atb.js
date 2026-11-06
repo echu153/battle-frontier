@@ -5,12 +5,13 @@
 //   ・ゲージはふだん1倍。AGIが相手を大きく上回ると速くなる（相手の4倍で2倍速・そこで上限）＝fillRatio
 //   ・技は**クールダウン制・秒で数える**（AGIでは縮まない）。長さはオートの発動率から
 //   ・ATBでは**持っている技を全部使える**（枠なし）
-//   ・**MPはオートと同じ**＝満タンで始まり回復なし（尽きたら通常攻撃）
+//   ・MPは満タンで始まる。**通常攻撃をするたび最大MPの3%が戻る**（2026-11-06 ユーザー・前は「オートと同じ＝回復なし」）＝NORMAL_MP_PCT
 //   ・**バフは強さで長さが変わる・重ねない**（かけ直すと強いほうが残り、長さが戻る）
 //   ・**時間は止まらない＋予約できる**（ゲージが満タンになった瞬間に予約の先頭が出る）
 //   ・全職共通の「防御」：次の自分の行動まで受けるダメージ−50%。**長めのクールダウンつき**
 //     （ユーザー「連発したらヌルゲーになる」）
 //   ・ボスの大技は**詠唱のバー**で前ぶれを出す（そのあいだに防御・回復で備えられる）
+//     ＝**大技はかならず構えてから・構えた大技がそのまま出る**。狂乱のボスも同じ（でたらめに選ぶのは大技以外。2026-11-06 ATBの懸念 1-1）
 //   ・予約（マクロ）の先頭の技がクールダウン中・MP不足なら**使えるまで待つ**（そのあいだは通常攻撃でつなぐ）
 //
 // ★ダメージ・命中・状態異常などの中身は battle.js の takeAction をそのまま呼ぶ＝**計算を二重に書かない**。
@@ -29,6 +30,8 @@
 // ★時間は**決まった刻み（STEP_SEC）**で進める＝同じ乱数と同じ入力なら同じ結果になる
 //   （挑戦は「乱数の種＋押した記録 st.inputs」をサーバーで回し直して確かめる＝lib/dungeonVerify.js。ファイルの下の seedRng・replayInputs）。
 // ⚠オート戦闘の定数は触らない。ATB用の値はこのファイルだけに置く。
+// ⚠ATBで出るダメージが変わる直しをしたら、案山子（日替わりクエスト）の目安の表 lib/scarecrowStd.js を測り直して貼り直す
+//   （v2cap-tools/scarecrow-1106 の measure.mjs → fit.mjs --write。2026-11-06 通常攻撃でMPが戻る直しのとき、銃士の係数が 1.169→1.307 になった）
 // ============================================================
 import {
   createSide, liveStats, mpCostOf, priorityOf, takeAction, tickBleedAfterAct, BUFF_MIN_PCT, BEAST_FORMS,
@@ -84,6 +87,18 @@ export const PRIORITY_CUT = 20
 //   【確定】2026-10-26 試し撃ちのあとユーザー選択「CDを長く」：−50%のまま・45秒（前は30秒）
 export const GUARD_CUT = 50
 export const GUARD_CD  = 45
+
+// 通常攻撃で戻るMP（最大MPの%）。技・防御・薬では戻らない。敵も同じ（四凶のボスの技はMPを使わないので変わらない）
+//   【確定】2026-11-06 ユーザー「通常攻撃したらMP回復するシステムまだないよね？ないなら通常攻撃で最大MPの3%回復するようにして」
+//   （前は「MPはオートと同じ＝回復なし」。尽きると最後まで通常攻撃だけになり、マクロの次の技も待ったままだった）
+//   ★オートの出撃・塔は変えない（battle.js の takeAction は opt.onNormal を渡したときだけ知らせる）
+//   端数は切り捨て・最低1（MPポーションと同じ）。最大を超えない（防具のセット能力で最大を超えて始めたぶんは減らさない）
+export const NORMAL_MP_PCT = 3
+export const normalMpOf = (side) => Math.max(1, Math.floor(side.base.mp * NORMAL_MP_PCT / 100))
+const normalMpBack = (side) => {
+  if (side.hp <= 0 || side.mp >= side.base.mp) return
+  side.mp = Math.min(side.base.mp, side.mp + normalMpOf(side))
+}
 
 // ボスの大技の詠唱（秒）。倍率が CAST_MULT 以上の敵の技は、撃つ前に詠唱のバーが出る
 //   【確定】2026-10-26 ユーザー指示「ボスの大技の構え（詠唱）も5秒にして。同じ速さなら1回は備えられるように」
@@ -422,6 +437,7 @@ const nowStepOf = (side) => {
   return side.pattern.steps.find(s => s.now && frac <= s.at && !side.patFired.includes(s.at)) || null
 }
 const isBig = (skill) => (skill?.mult || 0) >= CAST_MULT
+const notBig = (skill) => !isBig(skill)
 // 次の行動が、ゲージを待たずに構える大技か
 const nextBigOf = (side) => nowStepOf(side) || (side.castBig && side.pattern && isBig(side.patNext?.skill) ? side.patNext : null)
 const nowStep = (st, me) => {
@@ -610,11 +626,15 @@ const act = (st, me, foe, ch) => {
   const beforeMe = { ...me.buffs }
   const beforeFoe = { ...foe.buffs }
   let quick = false
+  let normal = false
   // どの枠が出たかを ptr で受け取る（takeAction は撃った枠の次を ptr に入れる。狂乱でほかの枠が出ることもある）
   me.ptr = null
   takeAction(me, foe, st.rng, st.log, {
-    idx: ch.idx, noProc: true, noParalyze: true, bigGuardSec: TURN_SEC, onQuick: () => { quick = true },
+    idx: ch.idx, noProc: true, noParalyze: true, bigGuardSec: TURN_SEC, onQuick: () => { quick = true }, onNormal: () => { normal = true },
+    // ★大技を構えてから撃つ側（ボス）：狂乱のでたらめに大技を入れない（構えなしで大技を出さない）・構えを終えた大技は狂乱でも差し替えない
+    wildOk: me.castBig ? notBig : null, keepIdx: !!ch.casted,
   })
+  if (normal) normalMpBack(me)   // ★通常攻撃でMPが戻る（NORMAL_MP_PCT）
   const n = me.slots.length
   const used = me.ptr === null ? null : (me.ptr - 1 + n) % n
   me.ptr = 0
@@ -734,7 +754,7 @@ const stepOnce = (st) => {
     const skill = me.slots[c.idx]?.skill
     // ★詠唱のあいだに封印・MP不足になったら通常攻撃に落ちる（takeAction が封印を見る・MPはここで見る）
     const ok = skill && (skill.mpPct ? me.mp > 0 : mpCostOf(me, skill) <= me.mp)
-    act(st, me, foe, ok ? { idx: c.idx, skill, cd: c.cd } : { idx: null, skill: null })
+    act(st, me, foe, ok ? { idx: c.idx, skill, cd: c.cd, casted: true } : { idx: null, skill: null })
     if (finish(st)) return
     checkHpBuffsBoth(st)
   }

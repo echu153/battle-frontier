@@ -20,7 +20,7 @@ import { motionOf } from '../lib/motionArt.js'
 import { homeIconOf } from '../lib/classArt.js'
 import { artGenderOf } from '../lib/gender.js'
 import { CLASS_BY_ID } from '../lib/jobs.js'
-import { bossArtOf, bossCardCss, bossCardFitOf, bossEncounterOf, bossFaceOf, bossNamePartsOf, bossThumbOf, bossTintOf } from '../lib/bossArt.js'
+import { bossArtOf, bossCardCss, bossCardFitOf, bossEncounterOf, bossFaceOf, bossNamePartsOf, bossPanelMinOf, bossThumbOf, bossTintOf } from '../lib/bossArt.js'
 import { bossIllustOf } from '../lib/bossIllust.js'
 import { menuHeadReady } from '../lib/menuHead.js'
 import { MenuHead } from './V2Status.jsx'
@@ -93,15 +93,23 @@ const MiniBar = ({ pct }) => (
 //   【確定】2026-11-06 ユーザー「スマホ版でボスの名前1行に収まるぐらいの文字の大きさに調整して、イラストもそれに合わせて小さくして」：
 //   スマホの幅では、いちばん長い名前が1行に入るまで、名前の文字・顔・下の言葉を同じ割合で小さくする（式と決まりは lib/bossArt.js の BOSS_CARD）。
 //   375px で 名前 約9.9px・顔 約46px・下の言葉 9px。460px より広い画面と PC は 13px・60px・10px のまま。いちばん長い名前は挑戦のカテゴリの全部のボスから数える
-const CARD_FIT = bossCardFitOf(Math.max(...CHALLENGE_CATS.flatMap(c => c.bosses.map(k => [...DUNGEON_BOSSES[k].name].length))))
+const LONGEST_NAME = Math.max(...CHALLENGE_CATS.flatMap(c => c.bosses.map(k => [...DUNGEON_BOSSES[k].name].length)))
+const CARD_FIT = bossCardFitOf(LONGEST_NAME)
 const FACE_SIZE = bossCardCss(CARD_FIT.face)
 const NAME_SIZE = bossCardCss(CARD_FIT.name)
 const NOTE_SIZE = bossCardCss(CARD_FIT.note)
+// PCで左にカテゴリ・右半分に救援の一覧を並べるときの、1つの列のいちばん細い幅（いまは 434px＝画面の幅 約904px から並ぶ）。
+//   半分の幅でも、いちばん長い名前が 13px・顔 60px のまま1行に入る＝左の見え方はスマホ（460px より広い画面）と同じ
+const CAT_COL_MIN = bossPanelMinOf(LONGEST_NAME)
+//   【確定】2026-11-06 ユーザー「挑戦の顔アイコン、わかりやすく軽く枠を付けてほしい」：顔のまわりにボスの色の細い枠（前は暗い紺 #002244 で背景に溶けていた）。
+//   線は1pxのまま（太くしない＝軽く・名前の欄の幅の計算 BOSS_CARD も線1pxで数えている）。外に暗いふちを1本（枠の色の背景と分ける）・ボスの色でほんのり光らせる・角を少し丸める
+const faceRingOf = (tint) => ({ border:`1px solid ${tint ? `${tint}e0` : '#5577aa'}`, borderRadius:'4px',
+  boxShadow: tint ? `0 0 0 1px #000000a0, 0 0 7px ${tint}55` : '0 0 0 1px #000000a0' })
 const BossFace = ({ bossKey }) => {
   const face = bossFaceOf(bossKey), src = face || bossThumbOf(bossKey), tint = bossTintOf(bossKey)
   if (!src) return null
   return (
-    <div style={{ width: FACE_SIZE, height: FACE_SIZE, flexShrink:0, overflow:'hidden', background: tint ? `${tint}30` : '#0b1a2e', border:'1px solid #002244', display:'flex', alignItems:'center', justifyContent:'center' }}>
+    <div style={{ width: FACE_SIZE, height: FACE_SIZE, flexShrink:0, overflow:'hidden', background: tint ? `${tint}30` : '#0b1a2e', ...faceRingOf(tint), display:'flex', alignItems:'center', justifyContent:'center' }}>
       <img src={src} alt="" draggable={false} style={{ width:'100%', height:'100%', objectFit: face ? 'cover' : 'contain' }} />
     </div>
   )
@@ -407,9 +415,15 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
         )
       })}
 
+      {/* 【確定】2026-11-06 ユーザー「PC版は救援一覧を右半分にして」「左のモンスターの見え方は基本スマホと一緒にしてほしい（スマホの画面の画像）」：
+          広い画面は 左にカテゴリ（四凶）・右半分に救援の一覧。左の枠はスマホと同じ見え方（顔のアップの2列・名前 13px・顔 60px）。
+          並べるのは、半分の幅でもいちばん長い名前が 13px のまま1行に入るとき（CAT_COL_MIN）だけ＝それより細い画面（スマホ・細い窓）は前と同じく縦に並ぶ。
+          CSS の auto-fit で決める（画面の幅を JS で見ない）。右の救援の一覧は左の高さまで伸びる（右半分の枠に見える） */}
+      <div style={{ display:'grid', gridTemplateColumns:`repeat(auto-fit, minmax(min(100%, ${CAT_COL_MIN}px), 1fr))`, gap:'10px' }}>
+      <div style={{ display:'flex', flexDirection:'column', gap:'10px', minWidth:0 }}>
       {/* カテゴリごとのボス（押すとポップアップ。もう入っているボスは続きから）。2026-11-05 の2列 → 11-06 に1列（顔のアップ）→ 同じ日 顔のアップの枠のまま2列（下） */}
       {CHALLENGE_CATS.map(cat => (
-        <div key={cat.key} style={{ ...box, padding:'10px', marginBottom:'10px' }}>
+        <div key={cat.key} style={{ ...box, padding:'10px' }}>
           {/* 【確定】2026-11-06 ユーザー「四凶のところ、ちょっとアイコン？バナーみたいなの差し込みたい」→選んだ「見出しの帯」：ホームの見出しと同じ帯（lib/menuHead.js の CAT_HEAD_DEFS）。
               絵が届くまでは今までどおり文字だけ */}
           {cat.head && menuHeadReady(cat.head) ? <MenuHead head={cat.head} title={cat.label} />
@@ -441,9 +455,10 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
           </div>
         </div>
       ))}
+      </div>
 
       {/* 救援の一覧 */}
-      <div style={{ ...box, padding:'10px' }}>
+      <div style={{ ...box, padding:'10px', minWidth:0 }}>
         <div style={{ color:'#44ddff', fontSize:'12px', marginBottom:'6px' }}>
           救援の一覧 <span style={{ color: TEXT.label, fontSize:'10px' }}>（入ると、挑むたびにスタミナ{STAMINA_HELPER}）</span>
         </div>
@@ -457,6 +472,7 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
             <button onClick={() => join(run)} disabled={busy} style={{ ...miniBtn('#44ddff'), padding:'6px 10px' }}>救援に入る</button>
           </div>
         ))}
+      </div>
       </div>
 
       {dev && (

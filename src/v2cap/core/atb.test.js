@@ -2,14 +2,15 @@
 // ★オート戦闘（runBattle）がターンの処理の切り出しで変わっていないことも一緒に見る
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import {
   createAtb, runFor, advance, reserve, unreserveAt, clearQueue, QUEUE_MAX, startMacro, stopMacro, toggleGuard, canUse, cdLeft, cdRatio, guardCdRatio, chosenOf, needFor,
   canDrink, drinkItem, itemCdLeft, itemCdRatio, itemLeftOf, itemsUsedOf, replayInputs, seedRng,
-  fillRatio, cdOfProc, buffSecOf, buffChips,
-  STEP_SEC, TURN_SEC, GAUGE_FULL, GUARD_CUT, GUARD_CD, CAST_SEC, MAX_DT,
+  fillRatio, cdOfProc, buffSecOf, buffChips, normalMpOf,
+  STEP_SEC, TURN_SEC, GAUGE_FULL, GUARD_CUT, GUARD_CD, CAST_SEC, MAX_DT, NORMAL_MP_PCT,
 } from './atb.js'
 import { inflict } from './ailments.js'
-import { runBattle } from './battle.js'
+import { runBattle, takeAction } from './battle.js'
 import { buildBattleLog } from './battleLog.js'
 
 const makeRng = (seed) => {
@@ -220,13 +221,66 @@ test('マクロ：防御も入れられる（クールダウン中は使える�
   assert.ok(st.inputs.some(i => i.k === 'macro' && i.no === 3), '押した記録に残る')
 })
 
-test('MPは回復しない：足りなくなった技は使えないまま（マクロは待ち続け、通常攻撃でつなぐ）', () => {
-  const st = createAtb(fighter('自分', [sk('MP技', { mp: 10 })], { stats: { mp: 25 } }), fighter('敵'), { rng: makeRng(5), maxSec: 60 })
+// 【確定】2026-11-06 ユーザー「通常攻撃したらMP回復するシステムまだないよね？ないなら通常攻撃で最大MPの3%回復するようにして」
+//   （前は「MPは回復しない＝尽きたら最後まで通常攻撃・マクロの次の技も待ったまま」）
+test('【確定】通常攻撃をするたび最大MPの3%が戻る（切り捨て・最低1・最大を超えない）・技と防御では戻らない', () => {
+  assert.equal(NORMAL_MP_PCT, 3)
+  // 技を持たない＝いつも通常攻撃
+  const st = createAtb(fighter('自分', [], { stats: { mp: 1000 } }), fighter('敵'), { rng: makeRng(5), maxSec: 60 })
+  st.a.mp = 0
+  runFor(st, 3 * TURN_SEC + STEP_SEC)
+  const n = acts(st, '自分', 'normal').length
+  assert.ok(n >= 2)
+  assert.equal(st.a.mp, n * 30, '1回で30（1000の3%）')
+  st.a.mp = 990
+  runFor(st, TURN_SEC)
+  assert.equal(st.a.mp, 1000, '最大を超えない')
+  st.a.mp = 1100   // 防具のセット能力（若葉の息吹）で最大を超えて始めたぶんは減らさない
+  runFor(st, TURN_SEC)
+  assert.equal(st.a.mp, 1100)
+  assert.equal(normalMpOf({ base: { mp: 250 } }), 7, '端数は切り捨て')
+  assert.equal(normalMpOf({ base: { mp: 20 } }), 1, '最低1')
+  // 技と防御では戻らない
+  const s2 = createAtb(fighter('自分', [sk('MP技', { mp: 10 })], { stats: { mp: 1000 } }), fighter('敵'), { rng: makeRng(5), maxSec: 60 })
+  reserve(s2, 0)
+  runFor(s2, TURN_SEC + STEP_SEC)
+  assert.equal(acts(s2, '自分', 'skill').length, 1)
+  assert.equal(s2.a.mp, 990, '技を撃っても戻らない')
+  toggleGuard(s2)
+  runFor(s2, STEP_SEC * 2)
+  assert.equal(acts(s2, '自分', 'guard').length, 1)
+  assert.equal(s2.a.mp, 990, '防御でも戻らない')
+  // HELP（マクロの説明）の数も同じ
+  const help = readFileSync(new URL('../components/V2capAtbMacros.jsx', import.meta.url), 'utf8')
+  assert.ok(help.includes(`通常攻撃をするたび最大MPの${NORMAL_MP_PCT}%が戻ります`))
+  // 試し撃ちの説明に前の決まり（MPは回復しない）を残さない（2026-11-06 本番で見つけた）
+  const trial = readFileSync(new URL('../components/V2capAtb.jsx', import.meta.url), 'utf8')
+  assert.ok(!/MPは回復しません|MPは回復しない/.test(trial))
+})
+
+test('MPが足りない技は、マクロが通常攻撃でつないで待ち、通常攻撃で戻ったMPで撃てるようになったら出る', () => {
+  // 最大MP100（通常攻撃1回で3）・消費10の技：満タンから10回撃つと尽き、そのあとは通常攻撃4回（3×4＝12）でまた出る
+  const st = createAtb(fighter('自分', [sk('MP技', { mp: 10 })], { stats: { mp: 100 } }), fighter('敵'), { rng: makeRng(5), maxSec: 120 })
   startMacro(st, 1, [{ idx: 0 }], true)
-  runFor(st, 60)
-  assert.equal(acts(st, '自分', 'skill').length, 2, 'MP25で10の技は2回まで')
-  assert.equal(st.a.mp, 5)
-  assert.equal(canUse(st.a, 0, st.t), false)
+  runFor(st, 120)
+  const order = st.log.filter(l => l.side === '自分' && (l.type === 'skill' || l.type === 'normal')).map(l => (l.type === 'skill' ? 'S' : 'n')).join('')
+  assert.ok(order.startsWith('S'.repeat(10) + 'nnnnS'), order)
+  assert.ok(acts(st, '自分', 'skill').length > 10, 'MPが尽きても、通常攻撃で戻ったぶん撃てる')
+  assert.ok(st.a.mp <= st.a.base.mp)
+})
+
+test('オートの通常攻撃ではMPは戻らない（battle.js の takeAction は onNormal を渡したときだけ知らせる）', () => {
+  const st = createAtb(fighter('自分', [sk('MP技', { mp: 10 })]), fighter('敵'), { rng: makeRng(5) })
+  st.a.mp = 0
+  takeAction(st.a, st.b, makeRng(1), [], { idx: null })
+  assert.equal(st.a.mp, 0, 'onNormal を渡さない＝オートの出撃・塔と同じ')
+  const calls = []
+  takeAction(st.a, st.b, makeRng(1), [], { idx: null, onNormal: () => calls.push('通常') })
+  assert.deepEqual(calls, ['通常'])
+  st.a.mp = 100
+  takeAction(st.a, st.b, makeRng(1), [], { idx: 0, noProc: true, onNormal: () => calls.push('技') })
+  assert.deepEqual(calls, ['通常'], '技を撃ったときは呼ばない')
+  assert.equal(st.a.mp, 90)
 })
 
 test('バフは時間で切れる・同じステは重ならない（強いほうが残り、長さが戻る）', () => {
@@ -306,6 +360,40 @@ test('ボスの大技は詠唱のバーを出してから撃つ（そのあい�
   // 【確定】2026-10-30 ユーザー「○○の構えとか表示させなくていい」：記録の行にも出さない（技の名前は名前の帯・構えはゲージの色で分かる）
   const lines = buildBattleLog({ log: st.log }, '自分', 'ボス').map(l => l.text).join('\n')
   assert.doesNotMatch(lines, /構え/)
+})
+
+test('狂乱のボスも、大技は構えてから撃つ（2026-11-06 ATBの懸念 1-1）：でたらめの技に大技は入らない・構えた大技は差し替えない', () => {
+  // ★前は battle.js の狂乱の差し替えが構えの判定（startAct）より後にあり、狂乱のボスが構えなしで大技を撃った。
+  //   構えを終えた大技も、狂乱だと別の技にすり替わった（構えの前ぶれと出る技が合わない）
+  const big = sk('大技', { mult: 3, proc: 60 })
+  const small = sk('小技')
+  let bigs = 0, noCast = 0, swapped = 0, casts = 0
+  for (let seed = 1; seed <= 30; seed++) {
+    const st = createAtb(fighter('自分'), fighter('ボス', [small, big]), { rng: makeRng(seed), maxSec: 60 })
+    let seen = 0, open = null
+    while (!st.over && st.t < 60) {
+      st.b.ail.frenzy = { turns: 3 }   // ずっと狂乱
+      runFor(st, STEP_SEC)
+      for (const l of st.log.slice(seen)) {
+        if (l.side !== 'ボス') continue
+        if (l.type === 'cast') { open = l.skill; casts++ }
+        else if (l.type === 'skill' || l.type === 'normal') {
+          if (l.skill === '大技') { bigs++; if (open !== '大技') noCast++ }
+          if (open && l.skill !== open) swapped++
+          open = null
+        }
+      }
+      seen = st.log.length
+    }
+  }
+  assert.equal(noCast, 0, '構えなしの大技は出ない')
+  assert.equal(swapped, 0, '構えた技がそのまま出る')
+  assert.ok(casts > 0 && bigs === casts, `大技は構えてから出る（狂乱でも消えない）構え${casts}・大技${bigs}`)
+  // 自分（構えの無い側）の狂乱はいままでどおり＝撃てる攻撃の技からでたらめ（大技も入る）
+  const me = createAtb(fighter('自分', [small, big]), fighter('的'), { rng: makeRng(3), maxSec: 300 })
+  me.a.frenzy = { turns: 999 }
+  runFor(me, 300)
+  assert.ok(acts(me, '自分', 'skill').some(l => l.skill === '大技'), '自分は狂乱で大技も出る（構えは無い）')
 })
 
 test('敵は枠の順に、使える技を出す（クールダウン中は飛ばして通常攻撃）', () => {
@@ -461,7 +549,7 @@ test('【確定】HPポーション：最大HPの30%回復・ゲージは空に�
   assert.equal(st2.log.at(-1).heal, 5)
 })
 
-test('【確定】MPポーション：最大MPの30%回復（MPはふだん回復しない）', () => {
+test('【確定】MPポーション：最大MPの30%回復', () => {
   const st = drinker()
   st.a.mp = 100
   drinkItem(st, 'mp')

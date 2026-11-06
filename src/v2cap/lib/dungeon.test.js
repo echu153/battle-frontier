@@ -7,10 +7,10 @@ import {
   CHALLENGE_CATS, DUNGEON_BOSSES, DIFF_KEYS, DUNGEON_MIN, DUNGEON_TRY_SEC, SUMMONS_PER_DAY, STAMINA_OWNER_FIRST, STAMINA_OWNER, STAMINA_HELPER, HELPERS_MAX, HELPER_REWARD_MIN_PCT, SOLO_REWARD_MULT,
   diffOf, isDiffReady, isDiffUnlocked, isSummonable, summonBlockOf, tryStaminaOf, dungeonFighter, stateWithRunOf, msLeftOf, bossEnrageOf,
 } from './dungeon.js'
-import { createAtb, runFor, enrageOf, stateChips, startMacro, fillPerSecOf, hpBuffChips, castMsOf, ATB_SLOW_CUT, FILL_PER_SEC, BUFF_GAUGE_SEC, BUFF_WAIT_AFTER_ACT_SEC, BUFF_SHOW_SEC, TURN_SEC, GAUGE_FULL, NOW_WAIT_AFTER_ACT_SEC, CAST_SEC } from '../core/atb.js'
+import { createAtb, runFor, enrageOf, stateChips, startMacro, fillPerSecOf, hpBuffChips, castMsOf, ATB_SLOW_CUT, FILL_PER_SEC, BUFF_GAUGE_SEC, BUFF_WAIT_AFTER_ACT_SEC, BUFF_SHOW_SEC, TURN_SEC, GAUGE_FULL, NOW_WAIT_AFTER_ACT_SEC, CAST_SEC, CAST_MULT } from '../core/atb.js'
 import { inflict, healMultOf, hasAilment } from '../core/ailments.js'
 import { bossIllustOf, buffArtMsOf } from './bossIllust.js'
-import { bossThumbOf, bossTintOf, bossFaceOf, bossNamePartsOf, BOSS_FACE_BOX, BOSS_CARD, bossCardFitOf, bossCardCss, bossCardPxAt } from './bossArt.js'
+import { bossThumbOf, bossTintOf, bossFaceOf, bossNamePartsOf, BOSS_FACE_BOX, BOSS_CARD, bossCardFitOf, bossCardCss, bossCardPxAt, bossPanelMinOf } from './bossArt.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { liveStats, hpStepMultOf, healMaxAmount, createSide, takeAction } from '../core/battle.js'
 import { splitHits } from './atbFx.js'
@@ -765,7 +765,12 @@ test('【確定】2026-11-06 入口は顔のアップの枠を2列・全部同�
   assert.ok(list.length > 0 && !list.includes('>›<'), '2列の枠に › を出さない')
   // 顔のアップは神殿のクラスの顔アイコンと同じ形（60pxの正方形・顔を全面に）。スマホの幅では名前と同じ割合で小さく（下のテスト）
   assert.ok(src.includes('const FACE_SIZE = bossCardCss(CARD_FIT.face)'))
-  assert.ok(src.includes("<div style={{ width: FACE_SIZE, height: FACE_SIZE, flexShrink:0, overflow:'hidden', background: tint ? `${tint}30` : '#0b1a2e', border:'1px solid #002244'"))
+  assert.ok(src.includes("<div style={{ width: FACE_SIZE, height: FACE_SIZE, flexShrink:0, overflow:'hidden', background: tint ? `${tint}30` : '#0b1a2e', ...faceRingOf(tint)"))
+  // 【確定】2026-11-06 ユーザー「挑戦の顔アイコン、わかりやすく軽く枠を付けてほしい」：ボスの色の細い枠（線は1pxのまま＝名前の欄の幅の計算と同じ）・外に暗いふち・ほんのり光る
+  assert.ok(src.includes("const faceRingOf = (tint) => ({ border:`1px solid ${tint ? `${tint}e0` : '#5577aa'}`, borderRadius:'4px',"))
+  assert.ok(src.includes('boxShadow: tint ? `0 0 0 1px #000000a0, 0 0 7px ${tint}55`'), '外に暗いふち・ボスの色で光る')
+  assert.ok(!/<div style=\{\{ width: FACE_SIZE[^\n]*#002244/.test(src), '前の暗い紺の枠（背景に溶けた）に戻さない')
+  for (const cat of CHALLENGE_CATS) for (const k of cat.bosses) assert.match(bossTintOf(k) || '', /^#[0-9a-f]{6}$/i, `${k}：枠の色（6桁）`)
   assert.ok(src.includes("objectFit: face ? 'cover' : 'contain'"))
   // 挑戦のカテゴリの全部のボスに顔のアップがある（ボスを足すときは BOSS_FACE_BOX にも足して node tools/v2cap-boss-thumb.mjs）
   for (const cat of CHALLENGE_CATS) for (const k of cat.bosses) {
@@ -805,10 +810,34 @@ test('【確定】2026-11-06 スマホの幅では名前が1行に入るまで�
   assert.equal(bossCardCss(nine.note), 'clamp(9px, calc(2.8249vw - 2.994px), 10px)')
   // 画面はこの大きさを使う
   const src = readFileSync(new URL('../components/V2capDungeon.jsx', import.meta.url), 'utf8')
-  assert.ok(src.includes('const CARD_FIT = bossCardFitOf(Math.max(...CHALLENGE_CATS.flatMap(c => c.bosses.map(k => [...DUNGEON_BOSSES[k].name].length))))'))
+  assert.ok(src.includes('const LONGEST_NAME = Math.max(...CHALLENGE_CATS.flatMap(c => c.bosses.map(k => [...DUNGEON_BOSSES[k].name].length)))'))
+  assert.ok(src.includes('const CARD_FIT = bossCardFitOf(LONGEST_NAME)'))
   for (const s of ['const NAME_SIZE = bossCardCss(CARD_FIT.name)', 'const NOTE_SIZE = bossCardCss(CARD_FIT.note)', "fontSize: NAME_SIZE, wordBreak:'keep-all'", "<span style={{ color: TEXT.label, fontSize: NOTE_SIZE }}>{state && (blockOf(key) || '挑戦可能')}</span>"]) {
     assert.ok(src.includes(s), s)
   }
+})
+
+test('【確定】2026-11-06 PCは左にカテゴリ（四凶）・右半分に救援の一覧。左の見え方はスマホと同じ（ユーザー「PC版は救援一覧を右半分にして」「左のモンスターの見え方は基本スマホと一緒にしてほしい」）', () => {
+  const { namePx, facePx, insidePx, cardGapPx, panelInsidePx } = BOSS_CARD
+  const longest = Math.max(...CHALLENGE_CATS.flatMap(c => c.bosses.map(k => [...DUNGEON_BOSSES[k].name].length)))
+  const min = bossPanelMinOf(longest)
+  assert.equal(bossPanelMinOf(9), 434, '9文字のとき（画面の幅 約904px から並ぶ）')
+  // 並べたときの左の枠（いちばん細くて min）でも、いちばん長い名前が 13px・顔 60px のまま1行に入る
+  const card = (min - panelInsidePx - cardGapPx) / 2
+  assert.ok(longest * namePx <= card - insidePx - facePx, '半分の幅でも名前は1行')
+  // 並ぶのは 2×min＋10px より広いとき＝大きさの式もいつも 13px・60px（スマホの 460px より広い画面と同じ見え方）
+  const fit = bossCardFitOf(longest)
+  assert.deepEqual([fit.name, fit.face].map(f => bossCardPxAt(f, 2 * min + 10)), [namePx, facePx])
+  // 画面：auto-fit の格子に 左の列（カテゴリ）→ 右の列（救援の一覧）。細い画面は前と同じく縦に並ぶ
+  const src = readFileSync(new URL('../components/V2capDungeon.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  assert.ok(src.includes('const CAT_COL_MIN = bossPanelMinOf(LONGEST_NAME)'))
+  const grid = src.indexOf("<div style={{ display:'grid', gridTemplateColumns:`repeat(auto-fit, minmax(min(100%, ${CAT_COL_MIN}px), 1fr))`, gap:'10px' }}>")
+  const left = src.indexOf("<div style={{ display:'flex', flexDirection:'column', gap:'10px', minWidth:0 }}>")
+  const cats = src.indexOf('{CHALLENGE_CATS.map(cat => (')
+  const rescue = src.indexOf('{/* 救援の一覧 */}')
+  assert.ok(grid > 0 && grid < left && left < cats && cats < rescue, '格子 → 左の列 → カテゴリ → 救援の一覧の順')
+  assert.ok(src.includes("<div key={cat.key} style={{ ...box, padding:'10px' }}>"), 'カテゴリの枠に下の余白を付けない（縦に並ぶときも列と格子の gap で10px）')
+  assert.ok(src.slice(rescue).startsWith("{/* 救援の一覧 */}\n      <div style={{ ...box, padding:'10px', minWidth:0 }}>"), '救援の一覧の枠')
 })
 
 test('【確定】2026-11-05 ボスのHPは数字も割合も出さない＝バーだけ（ユーザー「あと敵のHPの数値は見れないようにして」）', () => {
@@ -1214,7 +1243,7 @@ test('【確定】2026-11-01 閻魔（ユーザー「ゼルギアスと閻魔も
   assert.deepEqual(E.diffs, V.diffs, '強さは黒龍と同じ')
   assert.deepEqual(E.dist, DUNGEON_BOSSES.amaza.dist, '配分は魔法の雨摩座と同じ')
   assert.equal(E.kind, 'mag')
-  assert.equal(E.race, '悪魔')
+  assert.equal(E.race, 'demon', '悪魔（monsterRace.js のキーで書く＝異端審問官の悪魔への上乗せが乗る）')
   assert.deepEqual(E.skills.map(s => [s.name, s.kind, s.mult, s.ail?.key ?? null, s.ail?.chance ?? null]), [
     ['業火断罪', 'mag', 1.6, 'curse', 70], ['業縛の鎖', 'mag', 1.8, 'seal', 50], ['無間地獄', 'mag', 4.0, null, null],
   ])
@@ -1304,5 +1333,38 @@ test('【確定】2026-11-06 挑戦の結果が届いたら入口のそのボス
   for (const [from, to] of [['const onOver = async', 'const onEnded ='], ['const giveUp = async', '// 戦っている途中で画面を離れたら']]) {
     const body = src.slice(src.indexOf(from), src.indexOf(to))
     assert.ok(body.length > 0 && body.includes('if (r?.ok) setState(s => stateWithRunOf(s, r.run))'), from)
+  }
+})
+
+test('狂乱にした四凶も、大技は構えてから撃つ（2026-11-06 ATBの懸念 1-1）：どのボスも・どのHPの帯でも・構えのあいだに狂乱になっても', () => {
+  // ★前は狂乱の黒龍（HP80%）の行動の3分の1が構えなしの終焉の黒焔（4倍）だった（サイキッカーのマインドブレイク・マインドジャック）。
+  //   構えを終えた大技も、狂乱だと別の技にすり替わった（構えの前ぶれと出る技が合わない）
+  for (const boss of Object.keys(DUNGEON_BOSSES).filter(isSummonable)) {
+    const B = DUNGEON_BOSSES[boss]
+    const bigs = B.skills.filter(s => (s.mult || 0) >= CAST_MULT).map(s => s.name)
+    assert.ok(bigs.length > 0, `${B.name} に大技がある`)
+    let casts = 0, fired = 0
+    for (const [hp, when] of [[0.8, 'always'], [0.2, 'always'], [0.2, 'cast']]) {
+      for (let seed = 1; seed <= 12; seed++) {
+        const st = createAtb(dummy(), dungeonFighter(boss, 'normal', B.diffs.normal.hp * hp), { rng: rngOf(seed), maxSec: 60 })
+        let seen = 0, open = null
+        while (!st.over && st.t < 40) {
+          if (when === 'always' || st.b.cast) st.b.ail.frenzy = { turns: 3 }
+          runFor(st, 0.05)
+          for (const l of st.log.slice(seen)) {
+            if (l.side !== B.name) continue
+            if (l.type === 'cast') { open = l.skill; casts++ }
+            else if (l.type === 'skill' || l.type === 'normal') {
+              const what = `${B.name} HP${hp * 100}% 狂乱${when} 種${seed}`
+              if (bigs.includes(l.skill)) { assert.equal(open, l.skill, `${what}：${l.skill} は構えてから`); fired++ }
+              else assert.equal(open, null, `${what}：構えた ${open} が ${l.skill || '通常攻撃'} にすり替わらない`)
+              open = null
+            }
+          }
+          seen = st.log.length
+        }
+      }
+    }
+    assert.ok(casts > 0 && fired > 0, `${B.name}：構え${casts}・大技${fired}`)
   }
 })

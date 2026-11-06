@@ -74,9 +74,12 @@ const VARUZENOKU_DIFFS = {
 //   HP の配分は使っていない（難易度の hp で決まる）ので、そこから移して合計100のまま。同じ強さの場所のボス（盗賊団のリーダー）は DEX12・AGI9。攻撃の倍率は変えない。
 //   測り直し（22人×3通りの乱数＝66回。1回で倒せた・3回以上かかった・ボスの攻撃の外れ）：ノーマル 37〜38→26〜29回・0→0回・26%→12〜15%／ハード 37〜43→20〜24回・0〜1→1〜2回・22%→12%。
 //   DEX12・AGI9 だと 1回で倒せるのが21〜23回／18〜21回・ハードで3回以上が4〜5回に増えた（上げすぎ）
+// ★race は monsterRace.js の**キー**で書く（'dragon' など。日本語の名前で書くと技が見る種族と合わない）。
+//   【2026-11-06 ATBの懸念の洗い出し 1-2】前は 'ドラゴン'・'妖精'・'魔物'・'悪魔' と書いていて、閻魔に異端審問官の悪魔への上乗せ（+20%・×1.3）が乗っていなかった
+//   ＝monsterRace.test.js が「種族をじかに書いたところ（race の値）は全部キー」を見張る
 export const DUNGEON_BOSSES = {
   varuzenoku: {
-    name: '黒龍ヴァルゼノク', kind: 'phys', race: 'ドラゴン',
+    name: '黒龍ヴァルゼノク', kind: 'phys', race: 'dragon',
     dist: { hp: 34, mp: 6, str: 16, dex: 12, agi: 8, int_stat: 12, vit: 9, luk: 3 },
     // 通常攻撃が黒爪（物理1.0倍）。技は節目で出る3つ（proc は100＝クールダウンは使わない・パターンが決める）
     hardNormalAil: { key: 'bleed', chance: 20 },
@@ -114,7 +117,7 @@ export const DUNGEON_BOSSES = {
   //   黒龍の物理と魔法を入れ替えた形（魔法が主）。節目・技の出る割合・強さ（diffs）は黒龍と同じ。
   //   【確定】2026-10-31 ユーザー「ヴァルゼノクとあまざ入れて」：強敵として呼べる（サーバーの表にも入れた）
   amaza: {
-    name: '雨摩座', kind: 'mag', race: '妖精',   // 雨の精霊＝妖精（精霊も入れる・monsterRace.js）
+    name: '雨摩座', kind: 'mag', race: 'fairy',   // 雨の精霊＝妖精（精霊も入れる・monsterRace.js）
     dist: { hp: 34, mp: 6, str: 12, dex: 12, agi: 8, int_stat: 16, vit: 9, luk: 3 },
     // 通常攻撃が雨礫（魔法1.0倍）
     hardNormalAil: { key: 'slow', chance: 20 },
@@ -148,7 +151,7 @@ export const DUNGEON_BOSSES = {
   //   節目・技の出る割合・強さ（diffs）は黒龍と同じ。種族は魔物（機神は生き物でないので、いろいろなものが混ざった魔物へ）
   //   測った（22人×3通りの乱数＝66回。職ごとの挑戦回数の平均・合計の時間の平均）：ノーマル 3.7回・251秒（雨摩座 3.3回・259秒／黒龍 3.0回・227秒）／ハード 4.8回・296秒（4.2回・298秒／3.4回・247秒）
   zerugiasu: {
-    name: '雷鋼機神ゼルギアス', kind: 'phys', race: '魔物',
+    name: '雷鋼機神ゼルギアス', kind: 'phys', race: 'monster',   // 魔物
     dist: { hp: 34, mp: 6, str: 16, dex: 12, agi: 8, int_stat: 12, vit: 9, luk: 3 },
     // 通常攻撃が雷鋼弾（物理1.0倍）
     hardNormalAil: { key: 'blind', chance: 20 },
@@ -181,7 +184,7 @@ export const DUNGEON_BOSSES = {
   // 【確定】2026-11-01 ユーザー「ゼルギアスと閻魔も一緒に作りたい」→技の案に「これでいい」→「閻魔も作ったから最後まで全部つくって」：4体目。ぜんぶ魔法の裁判官。呪いや封印を積んだ罪に見立てて、大技がその数だけ重くなる。
   //   節目・技の出る割合・強さ（diffs）は黒龍と同じ。
   enma: {
-    name: '閻魔', kind: 'mag', race: '悪魔',
+    name: '閻魔', kind: 'mag', race: 'demon',   // 悪魔（異端審問官の退魔の心得・破魔の光・断罪が乗る）
     dist: { hp: 34, mp: 6, str: 12, dex: 12, agi: 8, int_stat: 16, vit: 9, luk: 3 },
     // 通常攻撃が魂火（魔法1.0倍）
     hardNormalAil: { key: 'curse', chance: 20 },

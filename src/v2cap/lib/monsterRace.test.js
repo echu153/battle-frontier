@@ -2,8 +2,9 @@
 // 【確定】2026-10-25 ユーザー指示「モンスターに種族を追加したい、モンスター図鑑ではそれを分かるように」
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { RACES, RACE_BY_KEY, RACE_NAMES, RACE_OF, raceOf, raceDefOf } from './monsterRace.js'
+import { DUNGEON_BOSSES, dungeonFighter } from './dungeon.js'
 import { DEX_ALL } from './dex.js'
 import { SPECIAL_ENEMIES } from './monsters.js'
 import { SPOTS, toFighter } from './areas.js'
@@ -71,6 +72,27 @@ test('戦闘：敵の fighter に種族が入る（どの場所の敵も・祠�
   assert.equal(toFighter(sh.enemy, 8, sh.power).race, 'fairy')
 })
 
+test('挑戦（四凶）のボスの種族も名簿のキー（2026-11-06 ATBの懸念 1-2）：黒龍＝ドラゴン・雨摩座＝妖精・ゼルギアス＝魔物・閻魔＝悪魔', () => {
+  // ★前は dungeon.js に日本語の名前（'悪魔' など）で書いてあり、技が見る種族（'demon'）と合わず、閻魔に異端審問官の上乗せが乗らなかった
+  for (const [boss, b] of Object.entries(DUNGEON_BOSSES)) {
+    assert.ok(RACE_BY_KEY[b.race], `${b.name} の種族「${b.race}」が名簿のキー`)
+    assert.equal(dungeonFighter(boss, 'normal').race, b.race, `${b.name}：戦闘の fighter に種族が入る`)
+  }
+  assert.deepEqual(Object.fromEntries(Object.entries(DUNGEON_BOSSES).map(([k, b]) => [k, RACE_BY_KEY[b.race]?.label])),
+    { varuzenoku: 'ドラゴン', amaza: '妖精', zerugiasu: '魔物', enma: '悪魔' })
+})
+
+test('種族をじかに書いているところ（race: \'…\'）は、どれも名簿のキー（日本語の名前で書くと技が空振りする）', () => {
+  const root = new URL('../', import.meta.url)   // src/v2cap/
+  const files = readdirSync(root, { recursive: true }).map(f => f.replace(/\\/g, '/')).filter(f => /\.jsx?$/.test(f) && !/\.test\.js$/.test(f))
+  const found = []
+  for (const f of files) {
+    for (const m of readFileSync(new URL(f, root), 'utf8').matchAll(/\brace\s*:\s*['"]([^'"]*)['"]/g)) found.push([f, m[1]])
+  }
+  for (const [f, race] of found) assert.ok(RACE_BY_KEY[race], `${f}：race: '${race}' は monsterRace.js のキー（${RACES.map(r => r.key).join('・')}）で書く`)
+  assert.ok(found.filter(([f]) => f === 'lib/dungeon.js').length >= 4, `四凶の4体が見つかる（${found.length}）`)
+})
+
 test('戦闘：異端審問官の破魔の光は、アンデッドと悪魔に 1.3倍×退魔の心得+20%（魔物などはそのまま）', () => {
   const stats = { hp: 10000, mp: 2000, str: 300, dex: 150, agi: 150, int_stat: 300, vit: 150, luk: 30 }
   const hit = (race) => {
@@ -85,6 +107,7 @@ test('戦闘：異端審問官の破魔の光は、アンデッドと悪魔に 1
   const base = hit('monster')
   assert.ok(Math.abs(hit('undead') / base - 1.3 * 1.2) < 0.02, `アンデッド ${hit('undead')} ／ 魔物 ${base}`)
   assert.ok(Math.abs(hit('demon') / base - 1.3 * 1.2) < 0.02, '悪魔')
+  assert.ok(Math.abs(hit(dungeonFighter('enma', 'normal').race) / base - 1.3 * 1.2) < 0.02, '挑戦の閻魔（悪魔）にも')
   assert.equal(hit('angel'), base, '天使には効かない')
   assert.equal(hit(null), base, '種族の無い相手（対人）にも効かない')
 })
