@@ -308,6 +308,40 @@ test('ボスの大技は詠唱のバーを出してから撃つ（そのあい�
   assert.doesNotMatch(lines, /構え/)
 })
 
+test('狂乱のボスも、大技は構えてから撃つ（2026-11-06 ATBの懸念 1-1）：でたらめの技に大技は入らない・構えた大技は差し替えない', () => {
+  // ★前は battle.js の狂乱の差し替えが構えの判定（startAct）より後にあり、狂乱のボスが構えなしで大技を撃った。
+  //   構えを終えた大技も、狂乱だと別の技にすり替わった（構えの前ぶれと出る技が合わない）
+  const big = sk('大技', { mult: 3, proc: 60 })
+  const small = sk('小技')
+  let bigs = 0, noCast = 0, swapped = 0, casts = 0
+  for (let seed = 1; seed <= 30; seed++) {
+    const st = createAtb(fighter('自分'), fighter('ボス', [small, big]), { rng: makeRng(seed), maxSec: 60 })
+    let seen = 0, open = null
+    while (!st.over && st.t < 60) {
+      st.b.ail.frenzy = { turns: 3 }   // ずっと狂乱
+      runFor(st, STEP_SEC)
+      for (const l of st.log.slice(seen)) {
+        if (l.side !== 'ボス') continue
+        if (l.type === 'cast') { open = l.skill; casts++ }
+        else if (l.type === 'skill' || l.type === 'normal') {
+          if (l.skill === '大技') { bigs++; if (open !== '大技') noCast++ }
+          if (open && l.skill !== open) swapped++
+          open = null
+        }
+      }
+      seen = st.log.length
+    }
+  }
+  assert.equal(noCast, 0, '構えなしの大技は出ない')
+  assert.equal(swapped, 0, '構えた技がそのまま出る')
+  assert.ok(casts > 0 && bigs === casts, `大技は構えてから出る（狂乱でも消えない）構え${casts}・大技${bigs}`)
+  // 自分（構えの無い側）の狂乱はいままでどおり＝撃てる攻撃の技からでたらめ（大技も入る）
+  const me = createAtb(fighter('自分', [small, big]), fighter('的'), { rng: makeRng(3), maxSec: 300 })
+  me.a.frenzy = { turns: 999 }
+  runFor(me, 300)
+  assert.ok(acts(me, '自分', 'skill').some(l => l.skill === '大技'), '自分は狂乱で大技も出る（構えは無い）')
+})
+
 test('敵は枠の順に、使える技を出す（クールダウン中は飛ばして通常攻撃）', () => {
   const st = createAtb(fighter('自分'), fighter('敵', [sk('牙', { proc: 80 }), sk('爪', { proc: 80 })]), { rng: makeRng(11), maxSec: 40 })
   runFor(st, 40)

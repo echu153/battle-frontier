@@ -11,6 +11,7 @@
 //   ・全職共通の「防御」：次の自分の行動まで受けるダメージ−50%。**長めのクールダウンつき**
 //     （ユーザー「連発したらヌルゲーになる」）
 //   ・ボスの大技は**詠唱のバー**で前ぶれを出す（そのあいだに防御・回復で備えられる）
+//     ＝**大技はかならず構えてから・構えた大技がそのまま出る**。狂乱のボスも同じ（でたらめに選ぶのは大技以外。2026-11-06 ATBの懸念 1-1）
 //   ・予約（マクロ）の先頭の技がクールダウン中・MP不足なら**使えるまで待つ**（そのあいだは通常攻撃でつなぐ）
 //
 // ★ダメージ・命中・状態異常などの中身は battle.js の takeAction をそのまま呼ぶ＝**計算を二重に書かない**。
@@ -422,6 +423,7 @@ const nowStepOf = (side) => {
   return side.pattern.steps.find(s => s.now && frac <= s.at && !side.patFired.includes(s.at)) || null
 }
 const isBig = (skill) => (skill?.mult || 0) >= CAST_MULT
+const notBig = (skill) => !isBig(skill)
 // 次の行動が、ゲージを待たずに構える大技か
 const nextBigOf = (side) => nowStepOf(side) || (side.castBig && side.pattern && isBig(side.patNext?.skill) ? side.patNext : null)
 const nowStep = (st, me) => {
@@ -614,6 +616,8 @@ const act = (st, me, foe, ch) => {
   me.ptr = null
   takeAction(me, foe, st.rng, st.log, {
     idx: ch.idx, noProc: true, noParalyze: true, bigGuardSec: TURN_SEC, onQuick: () => { quick = true },
+    // ★大技を構えてから撃つ側（ボス）：狂乱のでたらめに大技を入れない（構えなしで大技を出さない）・構えを終えた大技は狂乱でも差し替えない
+    wildOk: me.castBig ? notBig : null, keepIdx: !!ch.casted,
   })
   const n = me.slots.length
   const used = me.ptr === null ? null : (me.ptr - 1 + n) % n
@@ -734,7 +738,7 @@ const stepOnce = (st) => {
     const skill = me.slots[c.idx]?.skill
     // ★詠唱のあいだに封印・MP不足になったら通常攻撃に落ちる（takeAction が封印を見る・MPはここで見る）
     const ok = skill && (skill.mpPct ? me.mp > 0 : mpCostOf(me, skill) <= me.mp)
-    act(st, me, foe, ok ? { idx: c.idx, skill, cd: c.cd } : { idx: null, skill: null })
+    act(st, me, foe, ok ? { idx: c.idx, skill, cd: c.cd, casted: true } : { idx: null, skill: null })
     if (finish(st)) return
     checkHpBuffsBoth(st)
   }

@@ -7,7 +7,7 @@ import {
   CHALLENGE_CATS, DUNGEON_BOSSES, DIFF_KEYS, DUNGEON_MIN, DUNGEON_TRY_SEC, SUMMONS_PER_DAY, STAMINA_OWNER_FIRST, STAMINA_OWNER, STAMINA_HELPER, HELPERS_MAX, HELPER_REWARD_MIN_PCT, SOLO_REWARD_MULT,
   diffOf, isDiffReady, isDiffUnlocked, isSummonable, summonBlockOf, tryStaminaOf, dungeonFighter, stateWithRunOf, msLeftOf, bossEnrageOf,
 } from './dungeon.js'
-import { createAtb, runFor, enrageOf, stateChips, startMacro, fillPerSecOf, hpBuffChips, castMsOf, ATB_SLOW_CUT, FILL_PER_SEC, BUFF_GAUGE_SEC, BUFF_WAIT_AFTER_ACT_SEC, BUFF_SHOW_SEC, TURN_SEC, GAUGE_FULL, NOW_WAIT_AFTER_ACT_SEC, CAST_SEC } from '../core/atb.js'
+import { createAtb, runFor, enrageOf, stateChips, startMacro, fillPerSecOf, hpBuffChips, castMsOf, ATB_SLOW_CUT, FILL_PER_SEC, BUFF_GAUGE_SEC, BUFF_WAIT_AFTER_ACT_SEC, BUFF_SHOW_SEC, TURN_SEC, GAUGE_FULL, NOW_WAIT_AFTER_ACT_SEC, CAST_SEC, CAST_MULT } from '../core/atb.js'
 import { inflict, healMultOf, hasAilment } from '../core/ailments.js'
 import { bossIllustOf, buffArtMsOf } from './bossIllust.js'
 import { bossThumbOf, bossTintOf, bossFaceOf, bossNamePartsOf, BOSS_FACE_BOX, BOSS_CARD, bossCardFitOf, bossCardCss, bossCardPxAt } from './bossArt.js'
@@ -1214,7 +1214,7 @@ test('【確定】2026-11-01 閻魔（ユーザー「ゼルギアスと閻魔も
   assert.deepEqual(E.diffs, V.diffs, '強さは黒龍と同じ')
   assert.deepEqual(E.dist, DUNGEON_BOSSES.amaza.dist, '配分は魔法の雨摩座と同じ')
   assert.equal(E.kind, 'mag')
-  assert.equal(E.race, '悪魔')
+  assert.equal(E.race, 'demon', '悪魔（monsterRace.js のキーで書く＝異端審問官の悪魔への上乗せが乗る）')
   assert.deepEqual(E.skills.map(s => [s.name, s.kind, s.mult, s.ail?.key ?? null, s.ail?.chance ?? null]), [
     ['業火断罪', 'mag', 1.6, 'curse', 70], ['業縛の鎖', 'mag', 1.8, 'seal', 50], ['無間地獄', 'mag', 4.0, null, null],
   ])
@@ -1304,5 +1304,38 @@ test('【確定】2026-11-06 挑戦の結果が届いたら入口のそのボス
   for (const [from, to] of [['const onOver = async', 'const onEnded ='], ['const giveUp = async', '// 戦っている途中で画面を離れたら']]) {
     const body = src.slice(src.indexOf(from), src.indexOf(to))
     assert.ok(body.length > 0 && body.includes('if (r?.ok) setState(s => stateWithRunOf(s, r.run))'), from)
+  }
+})
+
+test('狂乱にした四凶も、大技は構えてから撃つ（2026-11-06 ATBの懸念 1-1）：どのボスも・どのHPの帯でも・構えのあいだに狂乱になっても', () => {
+  // ★前は狂乱の黒龍（HP80%）の行動の3分の1が構えなしの終焉の黒焔（4倍）だった（サイキッカーのマインドブレイク・マインドジャック）。
+  //   構えを終えた大技も、狂乱だと別の技にすり替わった（構えの前ぶれと出る技が合わない）
+  for (const boss of Object.keys(DUNGEON_BOSSES).filter(isSummonable)) {
+    const B = DUNGEON_BOSSES[boss]
+    const bigs = B.skills.filter(s => (s.mult || 0) >= CAST_MULT).map(s => s.name)
+    assert.ok(bigs.length > 0, `${B.name} に大技がある`)
+    let casts = 0, fired = 0
+    for (const [hp, when] of [[0.8, 'always'], [0.2, 'always'], [0.2, 'cast']]) {
+      for (let seed = 1; seed <= 12; seed++) {
+        const st = createAtb(dummy(), dungeonFighter(boss, 'normal', B.diffs.normal.hp * hp), { rng: rngOf(seed), maxSec: 60 })
+        let seen = 0, open = null
+        while (!st.over && st.t < 40) {
+          if (when === 'always' || st.b.cast) st.b.ail.frenzy = { turns: 3 }
+          runFor(st, 0.05)
+          for (const l of st.log.slice(seen)) {
+            if (l.side !== B.name) continue
+            if (l.type === 'cast') { open = l.skill; casts++ }
+            else if (l.type === 'skill' || l.type === 'normal') {
+              const what = `${B.name} HP${hp * 100}% 狂乱${when} 種${seed}`
+              if (bigs.includes(l.skill)) { assert.equal(open, l.skill, `${what}：${l.skill} は構えてから`); fired++ }
+              else assert.equal(open, null, `${what}：構えた ${open} が ${l.skill || '通常攻撃'} にすり替わらない`)
+              open = null
+            }
+          }
+          seen = st.log.length
+        }
+      }
+    }
+    assert.ok(casts > 0 && fired > 0, `${B.name}：構え${casts}・大技${fired}`)
   }
 })
