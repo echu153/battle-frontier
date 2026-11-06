@@ -1132,6 +1132,7 @@ const bumpHitStack = (me, hits) => {
 //     noParalyze … 麻痺の判定をしない（ATBは麻痺＝ゲージが止まる、で表現する）
 //     wildOk     … 狂乱のでたらめで選んでよい技（大技を構えてから撃つボスは、大技を外す＝構えなしで大技を出さない）
 //     keepIdx    … 狂乱でも差し替えない（構えを終えた大技＝構えで見せた技をそのまま出す）
+//     onNormal   … 通常攻撃をしたら呼ぶ（ATB の「通常攻撃でMPが戻る」・2026-11-06）。狂乱でほかの技が出たとき・動けなかったときは呼ばない
 export const takeAction = (me, foe, rng, log, opt = {}) => {
   me.moves += 1   // 疾き刃・遅咲き・積み重ねが見る。麻痺で動けなくても1回と数える
   // ★「かわした次の攻撃」「被弾した次の攻撃」は**1回の行動にだけ**乗る。
@@ -1198,6 +1199,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     me.rage = 0
     // 居合の構えはここで威力2倍。武器の進化「居合の心得」も同じ枠で乗る
     normalAttack(me, foe, rng, log, me.pa.misfireAtkMult * (1 + me.evo.misfireDmg / 100))
+    opt.onNormal?.()
     // ★上位クラス：居合の構え（不発の通常攻撃のあと納刀状態になる）
     const ms = me.pa.ex?.misfireStance
     if (ms && !me.stance && me.hp > 0) {
@@ -1211,7 +1213,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
     }
     return
   }
-  if (!skill) { me.rage = 0; normalAttack(me, foe, rng, log); return }
+  if (!skill) { me.rage = 0; normalAttack(me, foe, rng, log); opt.onNormal?.(); return }
 
   // ★上位クラス（2026-10-15）：リピート＝直前に撃った技をもう一度（その技のMPは半分）。
   //   直前が切り札・奥義・クイック・リピート（noRepeatTarget）か、まだ何も撃っていなければ通常攻撃（MPと回数は減らさず、次の枠へ）
@@ -1222,6 +1224,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       me.ptr = (idx + 1) % me.slots.length
       log.push({ side: me.name, type: 'repeatFail', skill: skill.name })
       normalAttack(me, foe, rng, log)
+      opt.onNormal?.()
       return
     }
     log.push({ side: me.name, type: 'repeat', skill: skill.name, target: prev.name })
