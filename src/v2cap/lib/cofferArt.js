@@ -41,17 +41,50 @@ const BG_DEF = {
   },
 }
 
+// ===== 待機の動き（11-07 ユーザー「タカラモチの待機モーション欲しい」→選んだ「ふたの開け閉め」「金貨の腕とコイントス」「目と口の光・まばたき」）=====
+//   立ち絵を部品に切り分けて重ね、画面で動かす（動きは lib/cofferMotion.js・描くのは components/V2capCofferParts.jsx）。
+//   切るのは道具 tools/v2cap-coffer-parts.mjs（tools/v2cap-scarecrow-art.mjs から呼ぶ）。位置はどれも元の絵（1254px）の px。
+//   部品はどれも立ち絵と同じ正方形（同じ切り取り sq）＝重ねると立ち絵と同じ。止まっているときは立ち絵そのもの
+//   lid  … ふた（＋ふたを押し上げる右手 rarm）。ちょうつがいの高さ（pivotY）へ縦に縮めて閉じる＝閉じる向きだけ（開いた所は背景）
+//   larm … 金貨をつまむ左腕。付け根（pivot）で回す。coin＝金貨（色で切る）・glint＝金貨のきらめき
+//   eyes … まばたきで目にかぶせるまぶた（まわりの暗がりで目を埋めた絵）・face＝目と笑い口の光を脈打たせる範囲
+//   feather＝切れ目をぼかす幅（その内側だけが部品・ぼかしの所は下の絵にも元の絵を残す）・fill＝部品が動いて見える下の絵の埋め方（clear＝透明／fill＝まわりの色）
+export const COFFER_CUTS = {
+  lid: { feather: 14, fill: 'clear', pivotY: 606,
+    poly: [[215, 180], [235, 110], [290, 25], [380, 5], [500, 0], [640, 25], [800, 60], [900, 90], [1000, 140], [1100, 160], [1180, 185], [1240, 260],
+      [1252, 380], [1250, 470], [1225, 560], [1200, 615], [1160, 622], [1146, 612], [1118, 563], [1050, 517], [1000, 467], [960, 430], [920, 392],
+      [880, 352], [840, 322], [800, 305], [720, 290], [650, 292], [600, 300], [580, 310], [540, 325], [480, 335], [430, 345], [408, 380], [392, 404],
+      [330, 374], [288, 320], [260, 272], [232, 224], [205, 192]] },
+  rarm: { feather: 16, fill: 'fill',
+    poly: [[630, 285], [650, 262], [700, 258], [760, 262], [805, 275], [840, 300], [868, 340], [885, 385], [905, 430], [922, 480], [935, 530], [930, 552],
+      [880, 556], [842, 552], [830, 510], [815, 460], [795, 418], [770, 400], [720, 392], [680, 375], [645, 345], [628, 318]] },
+  larm: { feather: 12, fill: 'fill', pivot: [415, 585],
+    poly: [[0, 310], [70, 305], [130, 300], [200, 300], [245, 330], [258, 360], [262, 400], [262, 440], [270, 480], [300, 515], [345, 530], [385, 535],
+      [418, 545], [432, 575], [427, 614], [380, 616], [320, 616], [262, 606], [210, 585], [165, 562], [110, 560], [60, 545], [25, 520], [0, 480]] },
+  coin: { at: [189, 337], rx: 60, ry: 66 },
+  glint: { at: [222, 280], r: 56 },
+  eyes: [{ at: [481, 426], rx: 33, ry: 45, rot: 10 }, { at: [626, 466], rx: 54, ry: 34, rot: -8 }],
+  face: { box: [425, 372, 745, 560] },
+}
+export const COFFER_PART_NAMES = ['base', 'lid', 'larm', 'coin', 'glint', 'glow', 'lids']
+
 const srcOf = (name, v) => `${COFFER_ART_DIR}/${name}.webp?v=${v}`
 export const cofferStandOf = () => (COFFER_ART.stand ? srcOf('coffer', COFFER_ART.stand) : COFFER_TEMP_SRC)
 export const cofferFaceOf = () => (COFFER_ART.face ? srcOf('coffer-face', COFFER_ART.face) : COFFER_TEMP_SRC)
 export const cofferBgOf = () => (COFFER_ART.bg ? { ...BG_DEF, w: COFFER_ART.bg.w, h: COFFER_ART.bg.h, src: srcOf('coffer-bg', COFFER_ART.bg.v) } : null)
+// 部品（道具が書いた一覧に全部そろっているときだけ）。sq＝立ち絵の切り取り（元の絵の px）＝部品の位置を枠の割合にする
+export const cofferPartsOf = () => {
+  const p = COFFER_ART.parts
+  if (!p || !COFFER_ART.sq || COFFER_PART_NAMES.some(n => !p[n])) return null
+  return { sq: COFFER_ART.sq, cuts: COFFER_CUTS, src: Object.fromEntries(COFFER_PART_NAMES.map(n => [n, srcOf(`coffer-${n}`, p[n])])) }
+}
 
-// 戦闘の舞台に渡す形（lib/scarecrowArt.js の scarecrowArtOf と同じ形）。60秒なぐりきったら「クエスト終了」
+// 戦闘の舞台に渡す形（lib/scarecrowArt.js の scarecrowArtOf と同じ形）。60秒なぐりきったら「クエスト終了」。parts があれば部品を重ねて待機で動かす
 let memo = null
 export const cofferArtOf = () => {
   if (memo) return memo
-  const src = cofferStandOf(), bg = cofferBgOf()
-  memo = { kind: 'pixel', key: 'coffer', name: COFFER_NAME, base: COFFER_STAND_SIZE, idle: { src }, motions: {}, bg, wobble: true, timeupKind: 'quest',
-    srcs: [src, ...(bg ? [bg.src] : [])] }
+  const src = cofferStandOf(), bg = cofferBgOf(), parts = cofferPartsOf()
+  memo = { kind: 'pixel', key: 'coffer', name: COFFER_NAME, base: COFFER_STAND_SIZE, idle: { src }, motions: {}, bg, wobble: true, timeupKind: 'quest', parts,
+    srcs: [...(parts ? Object.values(parts.src) : [src]), ...(bg ? [bg.src] : [])] }
   return memo
 }

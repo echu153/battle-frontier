@@ -1,4 +1,5 @@
 import { createContext, useContext, useId, useLayoutEffect, useRef, useState } from 'react'
+import V2capCofferParts from './V2capCofferParts.jsx'
 import { TEXT } from './v2ui.js'
 import { buffChips, hpBuffChips, ailChips, stateChips, needShownOf, castMsOf, CAST_SEC, BUFF_GAUGE_SEC } from '../core/atb.js'
 import { STAT_DEFS } from '../core/stats.js'
@@ -593,7 +594,8 @@ const FIGHTER_ROWS = 5
 //   introWait … 開戦の動きを始める前（遭遇の絵の後ろ・サーバーの返事を待っているあいだ）。ボスは登場の前の形で待つ
 //   wobble … 殴られると根元から傾いて戻る（修練場の案山子・lib/atbFx.js の wobbleOf）／react … 受けた瞬間に押される（lib/atbFx.js の hitReactOf・ボス戦の自分）／tone … 受けた技の色（演出の tone）／wrapped … 炎や鎖に巻かれて体が光る強さ（bossScene）
 //   reachTo … 相手の真ん中（立ち絵の px・ボスだけ）。剣先が届くまで踏み込む距離を出す（lib/bossIllust.js の reachXOf）
-function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx, now, name, artH = ART_H, scale = 1, areaRef, castEnd = -1e9, squeeze = null, death = null, introWait = false, reachTo = null, react = false, tone = null, wrapped = 0, wobble = false }) {
+//   parts … 立ち絵を部品に分けて待機で動かす絵（タカラモチ・lib/cofferArt.js の cofferPartsOf）。あれば立ち絵の img の代わりに描く
+function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx, now, name, artH = ART_H, scale = 1, areaRef, castEnd = -1e9, squeeze = null, death = null, introWait = false, reachTo = null, react = false, tone = null, wrapped = 0, wobble = false, parts = null }) {
   const lite = useContext(LiteCtx)
   const mine = fx.filter(f => f.side === side)
   const lastOf = (kind) => mine.reduce((t, f) => (f.kind === kind && f.t0 <= now && f.t0 > t ? f.t0 : t), -1e9)
@@ -739,7 +741,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
               {lite && red > 0.01 && <div style={{ position:'absolute', inset:'-14%', borderRadius:'50%', pointerEvents:'none', opacity: Math.min(1, red).toFixed(3),
                 background:`radial-gradient(closest-side, rgba(${redColor},0.6) 45%, rgba(${redColor},0) 100%)` }} />}
               {rig && trails.length > 0 && <RigTrails art={rig} trails={trails} />}
-              {rig ? <IllustRig art={rig} pose={pose} freePose={illustFreePoseAt(rig.key, tMs + (now - clock) * 1000)} freeShow={freeShow} motion={showMotion} show={show} ghosts={ghosts} tMs={tMs} aura={aura} death={death} flame={flame} /> : (
+              {rig ? <IllustRig art={rig} pose={pose} freePose={illustFreePoseAt(rig.key, tMs + (now - clock) * 1000)} freeShow={freeShow} motion={showMotion} show={show} ghosts={ghosts} tMs={tMs} aura={aura} death={death} flame={flame} /> : parts ? <V2capCofferParts parts={parts} tMs={now * 1000} /> : (
                 <img src={src} alt="" draggable={false}
                   style={{ width:'100%', height:'100%', objectFit:'contain', userSelect:'none', visibility: frame >= 0 ? 'hidden' : 'visible' }} />
               )}
@@ -1509,7 +1511,7 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
         artH={size?.artH || ART_H} scale={playerScale} areaRef={pArea} squeeze={sc?.squeeze} react={foeBig} tone={sc?.tone} wrapped={sc?.wrapped || 0} />
       <Fighter st={st} side="b" me={st.b} right src={foeSrc} fx={fx} now={now} name={st.b.name}
         strips={foeArt?.kind === 'pixel' ? Object.values(foeArt.motions) : []} rig={foeArt?.kind === 'illust' ? foeArt : null}
-        artH={size?.artH || ART_H} areaRef={bArea} castEnd={castSeen.current} death={death} introWait={introWait} reachTo={reachTo} wobble={!!foeArt?.wobble} />
+        artH={size?.artH || ART_H} areaRef={bArea} castEnd={castSeen.current} death={death} introWait={introWait} reachTo={reachTo} wobble={!!foeArt?.wobble} parts={foeArt?.parts || null} />
       {sc?.beam && geo && sc.handsAt && <DoomBeam geo={geo} beam={sc.beam} tone={sc.tone} hand={[geo.b.x + sc.handsAt[0][0] * (geo.b.w / foeArt.base), geo.b.y + sc.handsAt[0][1] * (geo.b.w / foeArt.base)]} />}
       {/* 【確定】2026-11-01 ユーザー「枠からはみ出てHPとかに被ってるから改善して」：ボスのエフェクトと演出は HP の行のすぐ上で切る（fxBottomOf） */}
       <div style={{ position:'absolute', left: 0, right: 0, top: 0, height: geo ? fxBottomOf(geo) : 0, overflow:'hidden', pointerEvents:'none' }}>

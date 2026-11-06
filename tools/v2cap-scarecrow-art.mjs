@@ -21,8 +21,9 @@ import { keyGreen } from './v2cap-motion.mjs'
 import { ENEMY_ART_SRC_DIR } from '../src/v2cap/lib/enemyArt.js'
 import { SCARECROW_SRC_DIR, SCARECROW_SRC_STAND, SCARECROW_SRC_BG, SCARECROW_ART_DIR, SCARECROW_STAND_SIZE, SCARECROW_FACE_SIZE, SCARECROW_FACE_BOX } from '../src/v2cap/lib/scarecrowArt.js'
 import { SCARECROW_ART } from '../src/v2cap/lib/scarecrowArtList.js'
-import { COFFER_SRC_STAND, COFFER_SRC_BG, COFFER_STAND_SIZE, COFFER_FACE_SIZE, COFFER_FACE_BOX } from '../src/v2cap/lib/cofferArt.js'
+import { COFFER_SRC_STAND, COFFER_SRC_BG, COFFER_STAND_SIZE, COFFER_FACE_SIZE, COFFER_FACE_BOX, COFFER_CUTS } from '../src/v2cap/lib/cofferArt.js'
 import { COFFER_ART } from '../src/v2cap/lib/cofferArtList.js'
+import { buildCofferParts } from './v2cap-coffer-parts.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const argOf = (name) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : null }
@@ -37,7 +38,7 @@ const SUBJECTS = [
   { label: '案山子', out: 'scarecrow', stand: SCARECROW_SRC_STAND, bg: SCARECROW_SRC_BG, size: SCARECROW_STAND_SIZE, faceSize: SCARECROW_FACE_SIZE, faceBox: SCARECROW_FACE_BOX,
     art: SCARECROW_ART, list: 'scarecrowArtList.js', name: 'SCARECROW_ART', what: '案山子' },
   { label: '宝箱の魔物', out: 'coffer', stand: COFFER_SRC_STAND, bg: COFFER_SRC_BG, size: COFFER_STAND_SIZE, faceSize: COFFER_FACE_SIZE, faceBox: COFFER_FACE_BOX,
-    art: COFFER_ART, list: 'cofferArtList.js', name: 'COFFER_ART', what: '宝箱の魔物' },
+    art: COFFER_ART, list: 'cofferArtList.js', name: 'COFFER_ART', what: '宝箱の魔物', cuts: COFFER_CUTS },
 ]
 
 for (const sub of SUBJECTS) {
@@ -69,6 +70,13 @@ for (const sub of SUBJECTS) {
     const outFace = path.join(OUT, `${sub.out}-face.webp`)
     encodeSquare(img, { x0: fx0, y0: fy0, x1: fx0 + side - 1, y1: fy0 + side - 1 }, outFace, { size: sub.faceSize, margin: 0, quality: 85 })
     art.face = versionOf(outFace)
+    // 待機の動きの部品（タカラモチ・tools/v2cap-coffer-parts.mjs）：立ち絵と同じ切り取り sq で書く
+    if (sub.cuts) {
+      const r = buildCofferParts(img, sq, { cuts: sub.cuts, outDir: OUT, size: sub.size })
+      art.sq = { x0: sq.x0, y0: sq.y0, S: sq.x1 - sq.x0 + 1 }
+      art.parts = r.versions
+      console.log(`  部品：${Object.entries(r.sizes).map(([n, k]) => `${n} ${k}KB`).join('・')}`)
+    }
     console.log(`  立ち絵：${Math.round(statSync(out).size / 1024)}KB${keyed ? '（真緑を抜いた）' : '（透明つき）'}・顔 ${Math.round(statSync(outFace).size / 1024)}KB`)
   } else {
     console.log(`  立ち絵：元の絵がない（${stand}）`)
@@ -90,6 +98,8 @@ for (const sub of SUBJECTS) {
   if (art.stand) lines.push(`  stand: '${art.stand}',`)
   if (art.face) lines.push(`  face: '${art.face}',`)
   if (art.bg) lines.push(`  bg: { w: ${art.bg.w}, h: ${art.bg.h}, v: '${art.bg.v}' },`)
+  if (art.sq) lines.push(`  sq: { x0: ${art.sq.x0}, y0: ${art.sq.y0}, S: ${art.sq.S} },`)
+  if (art.parts) lines.push(`  parts: { ${Object.entries(art.parts).map(([n, v]) => `${n}: '${v}'`).join(', ')} },`)
   lines.push('}', '')
   writeFileSync(LIST, lines.join('\n'))
   console.log('  一覧を書いた：', path.relative(ROOT, LIST))
