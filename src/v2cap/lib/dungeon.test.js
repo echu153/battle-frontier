@@ -10,7 +10,7 @@ import {
 import { createAtb, runFor, enrageOf, stateChips, startMacro, fillPerSecOf, hpBuffChips, castMsOf, ATB_SLOW_CUT, FILL_PER_SEC, BUFF_GAUGE_SEC, BUFF_WAIT_AFTER_ACT_SEC, BUFF_SHOW_SEC, TURN_SEC, GAUGE_FULL, NOW_WAIT_AFTER_ACT_SEC, CAST_SEC } from '../core/atb.js'
 import { inflict, healMultOf, hasAilment } from '../core/ailments.js'
 import { bossIllustOf, buffArtMsOf } from './bossIllust.js'
-import { bossThumbOf, bossTintOf, bossFaceOf, bossNamePartsOf, BOSS_FACE_BOX } from './bossArt.js'
+import { bossThumbOf, bossTintOf, bossFaceOf, bossNamePartsOf, BOSS_FACE_BOX, BOSS_CARD, bossCardFitOf, bossCardCss, bossCardPxAt } from './bossArt.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { liveStats, hpStepMultOf, healMaxAmount, createSide, takeAction } from '../core/battle.js'
 import { splitHits } from './atbFx.js'
@@ -752,8 +752,9 @@ test('【確定】2026-11-06 入口は顔のアップの枠を2列・全部同�
   // 1つの枠は横並び（左に顔のアップ・名前と挑戦できるか）で、細い幅でもはみ出さない（minWidth:0）
   assert.match(src, /style=\{\{ display:'flex', alignItems:'center', gap:'6px', width:'100%', minWidth:0, boxSizing:'border-box', padding:'6px', \.\.\.bossCardBg\(bossTintOf\(key\)\)/)
   assert.match(src, /<BossFace bossKey=\{key\} \/>/, '枠の左に顔のアップ')
-  // 名前は漢字からカタカナに変わる所でだけ折る（スマホの幅で「黒龍ヴァル｜ゼノク」「雷鋼機神ゼルギア｜ス」と折れた）
-  assert.ok(src.includes("<b style={{ color:'#ff8866', fontSize:'13px', wordBreak:'keep-all', overflowWrap:'anywhere' }}>"))
+  // 名前を折るときは漢字からカタカナに変わる所でだけ（スマホの幅で「黒龍ヴァル｜ゼノク」「雷鋼機神ゼルギア｜ス」と折れた）。
+  //   スマホの幅でも名前は1行に入る大きさにした（下のテスト）＝折れるのは約350px より細い画面だけ
+  assert.ok(src.includes("<b style={{ color:'#ff8866', fontSize: NAME_SIZE, wordBreak:'keep-all', overflowWrap:'anywhere' }}>"))
   assert.ok(src.includes('{bossNamePartsOf(boss.name).map((p, i) => <span key={i}>{i > 0 && <wbr />}{p}</span>)}'))
   assert.deepEqual(bossNamePartsOf('黒龍ヴァルゼノク'), ['黒龍', 'ヴァルゼノク'])
   assert.deepEqual(bossNamePartsOf('雷鋼機神ゼルギアス'), ['雷鋼機神', 'ゼルギアス'])
@@ -762,8 +763,8 @@ test('【確定】2026-11-06 入口は顔のアップの枠を2列・全部同�
   // 1列のときの右の › は外した（2列では名前の幅が足りない）
   const list = src.slice(src.indexOf('{CHALLENGE_CATS.map(cat => ('), src.indexOf('{/* 救援の一覧 */}'))
   assert.ok(list.length > 0 && !list.includes('>›<'), '2列の枠に › を出さない')
-  // 顔のアップは神殿のクラスの顔アイコンと同じ形（60pxの正方形・顔を全面に）。スマホの幅では少し小さく（いちばん小さくて48px）
-  assert.ok(src.includes("const FACE_SIZE = 'clamp(48px, 14vw, 60px)'"))
+  // 顔のアップは神殿のクラスの顔アイコンと同じ形（60pxの正方形・顔を全面に）。スマホの幅では名前と同じ割合で小さく（下のテスト）
+  assert.ok(src.includes('const FACE_SIZE = bossCardCss(CARD_FIT.face)'))
   assert.ok(src.includes("<div style={{ width: FACE_SIZE, height: FACE_SIZE, flexShrink:0, overflow:'hidden', background: tint ? `${tint}30` : '#0b1a2e', border:'1px solid #002244'"))
   assert.ok(src.includes("objectFit: face ? 'cover' : 'contain'"))
   // 挑戦のカテゴリの全部のボスに顔のアップがある（ボスを足すときは BOSS_FACE_BOX にも足して node tools/v2cap-boss-thumb.mjs）
@@ -774,6 +775,39 @@ test('【確定】2026-11-06 入口は顔のアップの枠を2列・全部同�
     const file = new URL(`../../../public${url.split('?')[0]}`, import.meta.url)
     assert.ok(existsSync(file) && statSync(file).size < 40 * 1024, `${k} の顔のアップは軽い`)
     assert.equal(url.split('?v=')[1], versionOf(fileURLToPath(file)), `${k} の印（node tools/v2cap-boss-thumb.mjs をやり直す）`)
+  }
+})
+
+test('【確定】2026-11-06 スマホの幅では名前が1行に入るまで、名前の文字・顔・下の言葉を同じ割合で小さくする（ユーザー「スマホ版でボスの名前1行に収まるぐらいの文字の大きさに調整して、イラストもそれに合わせて小さくして」）', () => {
+  const { namePx, facePx, notePx, nameMinPx, noteMinPx, outsidePx, insidePx } = BOSS_CARD
+  // いちばん長い名前は挑戦のカテゴリの全部のボスから数える（いまは雷鋼機神ゼルギアスの9文字）
+  const longest = Math.max(...CHALLENGE_CATS.flatMap(c => c.bosses.map(k => [...DUNGEON_BOSSES[k].name].length)))
+  const fit = bossCardFitOf(longest)
+  // よくあるスマホの幅（351px〜）：いちばん長い名前が1行に入る。枠の幅＝(画面の幅 − 54) ÷ 2・名前の欄＝枠 − 22 − 顔（本番で 320〜478px を測った）
+  //   ★名前の長いボスを足してここが落ちたら、本番のスマホの幅で見直す（9px より小さくはしない）
+  for (const vw of [351, 360, 375, 390, 393, 412, 414, 428, 430, 440, 459]) {
+    const card = (vw - outsidePx) / 2, name = bossCardPxAt(fit.name, vw), face = bossCardPxAt(fit.face, vw)
+    assert.ok(longest * name <= card - insidePx - face, `${vw}px で名前が1行に入る`)
+    assert.ok(Math.abs(face / name - facePx / namePx) < 1e-9, `${vw}px で顔は名前と同じ割合`)
+    assert.ok(name >= nameMinPx && bossCardPxAt(fit.note, vw) >= noteMinPx, `${vw}px でも文字は 9px より小さくしない`)
+  }
+  // 460px より広い画面と PC は前のまま（名前 13px・顔 60px・下の言葉 10px）
+  for (const vw of [460, 478, 768, 1024, 1920]) {
+    assert.deepEqual([fit.name, fit.face, fit.note].map(f => bossCardPxAt(f, vw)), [namePx, facePx, notePx], `${vw}px`)
+  }
+  // とても細い画面（320px）は 9px と 41.5px で止め、名前は言葉の切れ目で2行（上のテスト）
+  assert.equal(bossCardPxAt(fit.name, 320), nameMinPx)
+  assert.ok(Math.abs(bossCardPxAt(fit.face, 320) - facePx * nameMinPx / namePx) < 1e-9)
+  // 9文字のときの画面の式（本番で 351〜460px を測った値）
+  const nine = bossCardFitOf(9)
+  assert.equal(bossCardCss(nine.name), 'clamp(9px, calc(3.6723vw - 3.893px), 13px)')
+  assert.equal(bossCardCss(nine.face), 'clamp(41.54px, calc(16.9492vw - 17.966px), 60px)')
+  assert.equal(bossCardCss(nine.note), 'clamp(9px, calc(2.8249vw - 2.994px), 10px)')
+  // 画面はこの大きさを使う
+  const src = readFileSync(new URL('../components/V2capDungeon.jsx', import.meta.url), 'utf8')
+  assert.ok(src.includes('const CARD_FIT = bossCardFitOf(Math.max(...CHALLENGE_CATS.flatMap(c => c.bosses.map(k => [...DUNGEON_BOSSES[k].name].length))))'))
+  for (const s of ['const NAME_SIZE = bossCardCss(CARD_FIT.name)', 'const NOTE_SIZE = bossCardCss(CARD_FIT.note)', "fontSize: NAME_SIZE, wordBreak:'keep-all'", "<span style={{ color: TEXT.label, fontSize: NOTE_SIZE }}>{state && (blockOf(key) || '挑戦可能')}</span>"]) {
+    assert.ok(src.includes(s), s)
   }
 })
 

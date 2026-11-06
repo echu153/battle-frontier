@@ -20,7 +20,7 @@ import { motionOf } from '../lib/motionArt.js'
 import { homeIconOf } from '../lib/classArt.js'
 import { artGenderOf } from '../lib/gender.js'
 import { CLASS_BY_ID } from '../lib/jobs.js'
-import { bossArtOf, bossEncounterOf, bossFaceOf, bossNamePartsOf, bossThumbOf, bossTintOf } from '../lib/bossArt.js'
+import { bossArtOf, bossCardCss, bossCardFitOf, bossEncounterOf, bossFaceOf, bossNamePartsOf, bossThumbOf, bossTintOf } from '../lib/bossArt.js'
 import { bossIllustOf } from '../lib/bossIllust.js'
 import { menuHeadReady } from '../lib/menuHead.js'
 import { MenuHead } from './V2Status.jsx'
@@ -90,8 +90,13 @@ const MiniBar = ({ pct }) => (
   </span>
 )
 // 入口のボスの顔のアップ（神殿のクラスの顔アイコンと同じ形＝60pxの正方形・顔を全面に・後ろにボスの色）。顔のアップが無いボスは一覧の小さい絵を縮めて出す
-//   2列（2026-11-06〜）のスマホの幅では少し小さく（375px で約52px・いちばん小さくて48px）＝名前が言葉の切れ目で2行に収まる（本番で 320〜478px の幅を測った）
-const FACE_SIZE = 'clamp(48px, 14vw, 60px)'
+//   【確定】2026-11-06 ユーザー「スマホ版でボスの名前1行に収まるぐらいの文字の大きさに調整して、イラストもそれに合わせて小さくして」：
+//   スマホの幅では、いちばん長い名前が1行に入るまで、名前の文字・顔・下の言葉を同じ割合で小さくする（式と決まりは lib/bossArt.js の BOSS_CARD）。
+//   375px で 名前 約9.9px・顔 約46px・下の言葉 9px。460px より広い画面と PC は 13px・60px・10px のまま。いちばん長い名前は挑戦のカテゴリの全部のボスから数える
+const CARD_FIT = bossCardFitOf(Math.max(...CHALLENGE_CATS.flatMap(c => c.bosses.map(k => [...DUNGEON_BOSSES[k].name].length))))
+const FACE_SIZE = bossCardCss(CARD_FIT.face)
+const NAME_SIZE = bossCardCss(CARD_FIT.name)
+const NOTE_SIZE = bossCardCss(CARD_FIT.note)
 const BossFace = ({ bossKey }) => {
   const face = bossFaceOf(bossKey), src = face || bossThumbOf(bossKey), tint = bossTintOf(bossKey)
   if (!src) return null
@@ -412,8 +417,10 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
           {/* 【確定】2026-11-06 ユーザー「一旦1列に戻して、ここの部分は顔付近だけ表示されるようにして※クラスの顔アイコンみたいな感じ」：
               1つの枠は 左に顔のアップ（BossFace）・名前と挑戦できるか。ボスの色の背景（bossCardBg）はそのまま
               → 同じ日 ユーザー「ここ同じ高さで2列にして」：この枠のまま2列の格子に。全部の枠を同じ高さ（gridAutoRows:'1fr'＝名前や言葉が折れて高くなる枠があっても、ほかの行の枠もそろう）。
-              スマホの幅では名前が2行になる＝漢字からカタカナに変わる所だけで折る（bossNamePartsOf・keep-all＋wbr・それでも入らないとても細い幅は語の中で折る＝anywhere）。
               1列のときの右の › は外した（2列では名前の幅が足りず「雷鋼機神ゼルギア｜ス」と折れた・ホームの2列のボタンにも › は無い）。
+              → 同じ日 ユーザー「スマホ版でボスの名前1行に収まるぐらいの文字の大きさに調整して、イラストもそれに合わせて小さくして」：
+              スマホの幅では名前の文字・顔・下の言葉を同じ割合で小さくして名前を1行に（NAME_SIZE・FACE_SIZE・NOTE_SIZE＝lib/bossArt.js の BOSS_CARD）。
+              それでも入らないとても細い画面（約350px より細い）だけ、漢字からカタカナに変わる所で2行に折る（bossNamePartsOf・keep-all＋wbr・それでも入らなければ語の中で＝anywhere）。
               前の2列（2026-11-05）は 絵・名前・挑戦できるか を上から並べた背の高い枠だった */}
           <div style={{ display:'grid', gridTemplateColumns:'repeat(2, minmax(0, 1fr))', gridAutoRows:'1fr', gap:'6px' }}>
             {cat.bosses.map(key => {
@@ -423,10 +430,10 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
                   style={{ display:'flex', alignItems:'center', gap:'6px', width:'100%', minWidth:0, boxSizing:'border-box', padding:'6px', ...bossCardBg(bossTintOf(key)), cursor:'pointer', textAlign:'left' }}>
                   <BossFace bossKey={key} />
                   <span style={{ flex:1, minWidth:0 }}>
-                    <b style={{ color:'#ff8866', fontSize:'13px', wordBreak:'keep-all', overflowWrap:'anywhere' }}>
+                    <b style={{ color:'#ff8866', fontSize: NAME_SIZE, wordBreak:'keep-all', overflowWrap:'anywhere' }}>
                       {bossNamePartsOf(boss.name).map((p, i) => <span key={i}>{i > 0 && <wbr />}{p}</span>)}
                     </b><br />
-                    <span style={{ color: TEXT.label, fontSize:'10px' }}>{state && (blockOf(key) || '挑戦可能')}</span>
+                    <span style={{ color: TEXT.label, fontSize: NOTE_SIZE }}>{state && (blockOf(key) || '挑戦可能')}</span>
                   </span>
                 </button>
               )
