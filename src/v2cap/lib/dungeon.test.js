@@ -10,7 +10,7 @@ import {
 import { createAtb, runFor, enrageOf, stateChips, startMacro, fillPerSecOf, hpBuffChips, castMsOf, ATB_SLOW_CUT, FILL_PER_SEC, BUFF_GAUGE_SEC, BUFF_WAIT_AFTER_ACT_SEC, BUFF_SHOW_SEC, TURN_SEC, GAUGE_FULL, NOW_WAIT_AFTER_ACT_SEC, CAST_SEC, CAST_MULT } from '../core/atb.js'
 import { inflict, healMultOf, hasAilment } from '../core/ailments.js'
 import { bossIllustOf, buffArtMsOf } from './bossIllust.js'
-import { bossThumbOf, bossTintOf, bossFaceOf, bossNamePartsOf, BOSS_FACE_BOX, BOSS_CARD, bossCardFitOf, bossCardCss, bossCardPxAt } from './bossArt.js'
+import { bossThumbOf, bossTintOf, bossFaceOf, bossNamePartsOf, BOSS_FACE_BOX, BOSS_CARD, bossCardFitOf, bossCardCss, bossCardPxAt, bossPanelMinOf } from './bossArt.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { liveStats, hpStepMultOf, healMaxAmount, createSide, takeAction } from '../core/battle.js'
 import { splitHits } from './atbFx.js'
@@ -811,10 +811,34 @@ test('【確定】2026-11-06 スマホの幅では名前が1行に入るまで�
   assert.equal(bossCardCss(nine.note), 'clamp(9px, calc(2.8249vw - 2.994px), 10px)')
   // 画面はこの大きさを使う
   const src = readFileSync(new URL('../components/V2capDungeon.jsx', import.meta.url), 'utf8')
-  assert.ok(src.includes('const CARD_FIT = bossCardFitOf(Math.max(...CHALLENGE_CATS.flatMap(c => c.bosses.map(k => [...DUNGEON_BOSSES[k].name].length))))'))
+  assert.ok(src.includes('const LONGEST_NAME = Math.max(...CHALLENGE_CATS.flatMap(c => c.bosses.map(k => [...DUNGEON_BOSSES[k].name].length)))'))
+  assert.ok(src.includes('const CARD_FIT = bossCardFitOf(LONGEST_NAME)'))
   for (const s of ['const NAME_SIZE = bossCardCss(CARD_FIT.name)', 'const NOTE_SIZE = bossCardCss(CARD_FIT.note)', "fontSize: NAME_SIZE, wordBreak:'keep-all'", "<span style={{ color: TEXT.label, fontSize: NOTE_SIZE }}>{state && (blockOf(key) || '挑戦可能')}</span>"]) {
     assert.ok(src.includes(s), s)
   }
+})
+
+test('【確定】2026-11-06 PCは左にカテゴリ（四凶）・右半分に救援の一覧。左の見え方はスマホと同じ（ユーザー「PC版は救援一覧を右半分にして」「左のモンスターの見え方は基本スマホと一緒にしてほしい」）', () => {
+  const { namePx, facePx, insidePx, cardGapPx, panelInsidePx } = BOSS_CARD
+  const longest = Math.max(...CHALLENGE_CATS.flatMap(c => c.bosses.map(k => [...DUNGEON_BOSSES[k].name].length)))
+  const min = bossPanelMinOf(longest)
+  assert.equal(bossPanelMinOf(9), 434, '9文字のとき（画面の幅 約904px から並ぶ）')
+  // 並べたときの左の枠（いちばん細くて min）でも、いちばん長い名前が 13px・顔 60px のまま1行に入る
+  const card = (min - panelInsidePx - cardGapPx) / 2
+  assert.ok(longest * namePx <= card - insidePx - facePx, '半分の幅でも名前は1行')
+  // 並ぶのは 2×min＋10px より広いとき＝大きさの式もいつも 13px・60px（スマホの 460px より広い画面と同じ見え方）
+  const fit = bossCardFitOf(longest)
+  assert.deepEqual([fit.name, fit.face].map(f => bossCardPxAt(f, 2 * min + 10)), [namePx, facePx])
+  // 画面：auto-fit の格子に 左の列（カテゴリ）→ 右の列（救援の一覧）。細い画面は前と同じく縦に並ぶ
+  const src = readFileSync(new URL('../components/V2capDungeon.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  assert.ok(src.includes('const CAT_COL_MIN = bossPanelMinOf(LONGEST_NAME)'))
+  const grid = src.indexOf("<div style={{ display:'grid', gridTemplateColumns:`repeat(auto-fit, minmax(min(100%, ${CAT_COL_MIN}px), 1fr))`, gap:'10px' }}>")
+  const left = src.indexOf("<div style={{ display:'flex', flexDirection:'column', gap:'10px', minWidth:0 }}>")
+  const cats = src.indexOf('{CHALLENGE_CATS.map(cat => (')
+  const rescue = src.indexOf('{/* 救援の一覧 */}')
+  assert.ok(grid > 0 && grid < left && left < cats && cats < rescue, '格子 → 左の列 → カテゴリ → 救援の一覧の順')
+  assert.ok(src.includes("<div key={cat.key} style={{ ...box, padding:'10px' }}>"), 'カテゴリの枠に下の余白を付けない（縦に並ぶときも列と格子の gap で10px）')
+  assert.ok(src.slice(rescue).startsWith("{/* 救援の一覧 */}\n      <div style={{ ...box, padding:'10px', minWidth:0 }}>"), '救援の一覧の枠')
 })
 
 test('【確定】2026-11-05 ボスのHPは数字も割合も出さない＝バーだけ（ユーザー「あと敵のHPの数値は見れないようにして」）', () => {
