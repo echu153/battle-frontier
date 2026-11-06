@@ -29,6 +29,8 @@
 // ★時間は**決まった刻み（STEP_SEC）**で進める＝同じ乱数と同じ入力なら同じ結果になる
 //   （挑戦は「乱数の種＋押した記録 st.inputs」をサーバーで回し直して確かめる＝lib/dungeonVerify.js。ファイルの下の seedRng・replayInputs）。
 // ⚠オート戦闘の定数は触らない。ATB用の値はこのファイルだけに置く。
+// ⚠ATBで出るダメージが変わる直しをしたら、案山子（日替わりクエスト）の目安の表 lib/scarecrowStd.js を測り直して貼り直す
+//   （v2cap-tools/scarecrow-1106 の measure.mjs → fit.mjs --write。2026-11-06 通常攻撃でMPが戻る直しのとき、銃士の係数が 1.169→1.307 になった）
 // ============================================================
 import {
   createSide, liveStats, mpCostOf, priorityOf, takeAction, tickBleedAfterAct, BUFF_MIN_PCT, BEAST_FORMS,
