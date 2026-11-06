@@ -5,7 +5,7 @@
 //   ・ゲージはふだん1倍。AGIが相手を大きく上回ると速くなる（相手の4倍で2倍速・そこで上限）＝fillRatio
 //   ・技は**クールダウン制・秒で数える**（AGIでは縮まない）。長さはオートの発動率から
 //   ・ATBでは**持っている技を全部使える**（枠なし）
-//   ・**MPはオートと同じ**＝満タンで始まり回復なし（尽きたら通常攻撃）
+//   ・MPは満タンで始まる。**通常攻撃をするたび最大MPの3%が戻る**（2026-11-06 ユーザー・前は「オートと同じ＝回復なし」）＝NORMAL_MP_PCT
 //   ・**バフは強さで長さが変わる・重ねない**（かけ直すと強いほうが残り、長さが戻る）
 //   ・**時間は止まらない＋予約できる**（ゲージが満タンになった瞬間に予約の先頭が出る）
 //   ・全職共通の「防御」：次の自分の行動まで受けるダメージ−50%。**長めのクールダウンつき**
@@ -84,6 +84,18 @@ export const PRIORITY_CUT = 20
 //   【確定】2026-10-26 試し撃ちのあとユーザー選択「CDを長く」：−50%のまま・45秒（前は30秒）
 export const GUARD_CUT = 50
 export const GUARD_CD  = 45
+
+// 通常攻撃で戻るMP（最大MPの%）。技・防御・薬では戻らない。敵も同じ（四凶のボスの技はMPを使わないので変わらない）
+//   【確定】2026-11-06 ユーザー「通常攻撃したらMP回復するシステムまだないよね？ないなら通常攻撃で最大MPの3%回復するようにして」
+//   （前は「MPはオートと同じ＝回復なし」。尽きると最後まで通常攻撃だけになり、マクロの次の技も待ったままだった）
+//   ★オートの出撃・塔は変えない（battle.js の takeAction は opt.onNormal を渡したときだけ知らせる）
+//   端数は切り捨て・最低1（MPポーションと同じ）。最大を超えない（防具のセット能力で最大を超えて始めたぶんは減らさない）
+export const NORMAL_MP_PCT = 3
+export const normalMpOf = (side) => Math.max(1, Math.floor(side.base.mp * NORMAL_MP_PCT / 100))
+const normalMpBack = (side) => {
+  if (side.hp <= 0 || side.mp >= side.base.mp) return
+  side.mp = Math.min(side.base.mp, side.mp + normalMpOf(side))
+}
 
 // ボスの大技の詠唱（秒）。倍率が CAST_MULT 以上の敵の技は、撃つ前に詠唱のバーが出る
 //   【確定】2026-10-26 ユーザー指示「ボスの大技の構え（詠唱）も5秒にして。同じ速さなら1回は備えられるように」
@@ -610,11 +622,13 @@ const act = (st, me, foe, ch) => {
   const beforeMe = { ...me.buffs }
   const beforeFoe = { ...foe.buffs }
   let quick = false
+  let normal = false
   // どの枠が出たかを ptr で受け取る（takeAction は撃った枠の次を ptr に入れる。狂乱でほかの枠が出ることもある）
   me.ptr = null
   takeAction(me, foe, st.rng, st.log, {
-    idx: ch.idx, noProc: true, noParalyze: true, bigGuardSec: TURN_SEC, onQuick: () => { quick = true },
+    idx: ch.idx, noProc: true, noParalyze: true, bigGuardSec: TURN_SEC, onQuick: () => { quick = true }, onNormal: () => { normal = true },
   })
+  if (normal) normalMpBack(me)   // ★通常攻撃でMPが戻る（NORMAL_MP_PCT）
   const n = me.slots.length
   const used = me.ptr === null ? null : (me.ptr - 1 + n) % n
   me.ptr = 0
