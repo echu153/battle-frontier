@@ -66,7 +66,9 @@ export const COFFER_CUTS = {
   eyes: [{ at: [481, 426], rx: 33, ry: 45, rot: 10 }, { at: [626, 466], rx: 54, ry: 34, rot: -8 }],
   face: { box: [425, 372, 745, 560] },
 }
-export const COFFER_PART_NAMES = ['base', 'lid', 'larm', 'coin', 'glint', 'glow', 'lids']
+//   drop … 殴られたときにこぼれる金貨（立ち絵の金貨だけを切った小さい絵・ほかと違って正方形の切り取りではない）
+export const COFFER_PART_NAMES = ['base', 'lid', 'larm', 'coin', 'glint', 'glow', 'lids', 'drop']
+export const COFFER_DROP_BOX = 140   // こぼれる金貨の絵の切り取り（金貨のまん中の正方形の一辺・元の絵の px）
 
 const srcOf = (name, v) => `${COFFER_ART_DIR}/${name}.webp?v=${v}`
 export const cofferStandOf = () => (COFFER_ART.stand ? srcOf('coffer', COFFER_ART.stand) : COFFER_TEMP_SRC)

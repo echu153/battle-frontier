@@ -87,3 +87,46 @@ export const cofferIdleAt = (t) => {
   const blink = blinkOf(t) * (1 - env)
   return { lid, arm, coin, glint, glow, blink }
 }
+
+// ===== 殴られたときにこぼれる金貨（2026-11-07 ユーザー「攻撃ヒットしたとき、コインが落ちるエフェクトもつけてほしいね」）=====
+//   攻撃が当たるたび（印の kind 'hit'・毒などの継続ダメージ 'tick' は入れない）、宝箱の口から金貨が飛び出して、床に落ちて1回はね、
+//   少し止まってから消える。クリティカルは多め。位置と速さは元の絵（1254px）の px・px/秒（描くときに枠の割合にする）
+//   ★印の時刻（ミリ秒）と何枚目かだけで決まる（同じ時刻なら同じ飛び方）。印は2.5秒で片付くので、それより早く消す
+export const COFFER_DROP = {
+  n: 3, critN: 7, maxHits: 8, keepMs: 2200,
+  from: [[470, 930], [545, 600]],   // 飛び出す所（宝箱の口の金貨の山の上）
+  vx: [-650, 330], vy: [-1250, -800], g: 3400,   // 金貨の山の上まで高く上げる（低いと山の金色に溶けて見えなかった）
+  floor: [1150, 1215],              // 落ちる床の高さ（手前ほど下）
+  bounce: 0.3, restMs: 300, fadeMs: 300,
+  size: [0.95, 1.25], spin: [12, 22],
+}
+// hits＝[{ t0（ミリ秒）, crit }]・t＝いまの時計（ミリ秒）・lite＝軽い表示（半分の枚数）
+//   返す形：[{ key, x, y（元の絵の px）, s（大きさの倍率）, sx（横の倍率・回って見える）, sy（縦の倍率・床に寝ると薄い）, op }]
+export const coinDropsAt = (hits, t, { lite = false } = {}) => {
+  const D = COFFER_DROP, out = []
+  const recent = (hits || []).filter(h => t >= h.t0 && t - h.t0 < D.keepMs).slice(-D.maxHits)
+  for (const h of recent) {
+    const n0 = h.crit ? D.critN : D.n, n = lite ? Math.ceil(n0 / 2) : n0
+    for (let i = 0; i < n; i++) {
+      const r = (k) => hash01(Math.round(h.t0) * 131 + i * 17 + k)
+      const x0 = lerp(D.from[0][0], D.from[0][1], r(1)), y0 = lerp(D.from[1][0], D.from[1][1], r(2))
+      const vx = lerp(D.vx[0], D.vx[1], r(3)), vy = lerp(D.vy[0], D.vy[1], r(4)), fl = lerp(D.floor[0], D.floor[1], r(5))
+      const s = lerp(D.size[0], D.size[1], r(6)), w = lerp(D.spin[0], D.spin[1], r(7)), ph = r(8) * Math.PI * 2
+      const tt = (t - h.t0) / 1000
+      // 床に着くまで → 1回はねる → 床に寝て止まる → 消える
+      const t1 = (-vy + Math.sqrt(vy * vy + 2 * D.g * (fl - y0))) / D.g
+      const vb = -D.bounce * (vy + D.g * t1), t2 = t1 + 2 * -vb / D.g
+      let x, y, sx = 1, sy = 1, op = 1
+      if (tt < t1) { x = x0 + vx * tt; y = y0 + vy * tt + 0.5 * D.g * tt * tt; sx = Math.cos(w * tt + ph) }
+      else if (tt < t2) { const u = tt - t1; x = x0 + vx * t1 + vx * 0.5 * u; y = fl + vb * u + 0.5 * D.g * u * u; sx = Math.cos(w * 0.5 * tt + ph) }
+      else {
+        x = x0 + vx * t1 + vx * 0.5 * (t2 - t1); y = fl; sy = 0.45
+        const restT = (tt - t2) * 1000
+        op = 1 - smooth(D.restMs, D.restMs + D.fadeMs, restT)
+      }
+      if (op <= 0.001) continue
+      out.push({ key: `${Math.round(h.t0)}-${i}`, x, y, s, sx, sy, op })
+    }
+  }
+  return out
+}

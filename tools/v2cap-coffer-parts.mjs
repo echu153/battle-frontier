@@ -7,10 +7,12 @@
 //   lid   … ふた＋ふたを押し上げる右手／larm … 左腕（金貨は抜く）／coin … 金貨／glint … 金貨のきらめき
 //   glow  … 目と笑い口の明るい所（明るくして光をにじませた写し・画面で脈打たせる）
 //   lids  … まばたきのまぶた（両目を、まわりの暗がりの色で埋めた絵。目の所だけ）
+//   drop  … 殴られたときにこぼれる金貨（金貨だけを、金貨のまん中の正方形で小さく）
 // ============================================================
 import path from 'node:path'
 import { statSync } from 'node:fs'
 import { bleed, encodeSquare, versionOf } from './v2cap-art-lib.mjs'
+import { COFFER_DROP_BOX } from '../src/v2cap/lib/cofferArt.js'
 
 // 点 (x, y) が多角形の中か
 const inPoly = (poly, x, y) => {
@@ -210,11 +212,11 @@ export const buildCofferParts = (img, sq, { cuts, outDir, size, quality = 84 }) 
 
   // ===== 書き出す（どれも立ち絵と同じ正方形・同じ大きさ）=====
   const out = {}, sizes = {}
-  const write = (name, f) => {
+  const write = (name, f, box = sq, side = size) => {
     const rgba = fromPre(f, W, H)
     bleed(rgba, 6)
     const file = path.join(outDir, `coffer-${name}.webp`)
-    encodeSquare(rgba, sq, file, { size, margin: 0, quality })
+    encodeSquare(rgba, box, file, { size: side, margin: 0, quality })
     out[name] = versionOf(file)
     sizes[name] = Math.round(statSync(file).size / 1024)
   }
@@ -225,5 +227,7 @@ export const buildCofferParts = (img, sq, { cuts, outDir, size, quality = 84 }) 
   write('glint', layerOf(glint))
   write('glow', glow)
   write('lids', lids)
+  const h = COFFER_DROP_BOX / 2
+  write('drop', layerOf(coin), { x0: c.at[0] - h, y0: c.at[1] - h, x1: c.at[0] + h - 1, y1: c.at[1] + h - 1 }, 64)
   return { versions: out, sizes }
 }

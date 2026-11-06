@@ -1,11 +1,11 @@
 // v2cap タカラモチの待機の動きのテスト（node --test）
 //   ★止まっているときは立ち絵そのもの／ふたは閉じる向きだけ（開いた所は背景）／コイントスで金貨が飛んで手に戻る・飛んでいるあいだきらめきは消える・
 //     受け止めるとぱっと光る／まばたきはときどき・短い・コイントスのあいだはしない／動きはなめらか（コマごとに跳ばない）／
-//     部品の絵が全部そろっていて、戦闘の舞台に渡る／切る位置が絵の中、を見張る
+//     部品の絵が全部そろっていて、戦闘の舞台に渡る／切る位置が絵の中／殴られたら金貨がこぼれて床に落ちて消える、を見張る
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
-import { cofferIdleAt, blinkOf, tossClockOf, TOSS, COFFER_LID_SQ, COFFER_TOSS_AT, COFFER_TOSS_EVERY, COFFER_TOSS_MS, COFFER_TOSS_UP } from './cofferMotion.js'
+import { cofferIdleAt, blinkOf, tossClockOf, coinDropsAt, TOSS, COFFER_DROP, COFFER_LID_SQ, COFFER_TOSS_AT, COFFER_TOSS_EVERY, COFFER_TOSS_MS, COFFER_TOSS_UP } from './cofferMotion.js'
 import { cofferArtOf, cofferPartsOf, COFFER_CUTS, COFFER_PART_NAMES } from './cofferArt.js'
 import { COFFER_ART } from './cofferArtList.js'
 
@@ -90,7 +90,9 @@ test('【確定】部品の絵が全部そろっていて、戦闘の舞台に�
   assert.equal(art.wobble, true, '殴られたときに傾く動きは残す')
   // 舞台：部品があれば立ち絵の img の代わりに部品を描く
   const stage = readFileSync(new URL('../components/V2capAtbStage.jsx', import.meta.url), 'utf8')
-  assert.match(stage, /parts \? <V2capCofferParts parts=\{parts\} tMs=\{now \* 1000\} \/>/)
+  assert.ok(stage.includes('parts ? <V2capCofferParts parts={parts} tMs={now * 1000} lite={lite} upright={wob}'))
+  // こぼれる金貨は攻撃が当たった印だけ（毒などの継続ダメージ tick は入れない）
+  assert.ok(stage.includes("hits={mine.filter(f => f.kind === 'hit' && f.t0 <= now).map(f => ({ t0: f.t0 * 1000, crit: !!f.crit }))}"))
   assert.match(stage, /parts=\{foeArt\?\.parts \|\| null\}/)
 })
 
@@ -103,4 +105,37 @@ test('【確定】切る位置は元の絵（1254px）の中・目は光の範�
   const [px, py] = COFFER_CUTS.larm.pivot
   assert.ok(px > Math.min(...xs) && px < Math.max(...xs) && py > Math.min(...ys) && py < Math.max(...ys), '腕を回す点は腕の付け根')
   assert.ok(COFFER_CUTS.lid.pivotY > 560 && COFFER_CUTS.lid.pivotY < 640, 'ふたはちょうつがいの高さへ閉じる')
+})
+
+test('【確定】2026-11-07 殴られたら金貨がこぼれる：口から上へ飛び出し、床に落ちてはね、寝て止まってから消える（クリティカルは多め・軽い表示は半分）', () => {
+  const h = [{ t0: 10000, crit: false }]
+  assert.equal(coinDropsAt(h, 9999).length, 0, '当たる前は出ない')
+  assert.equal(coinDropsAt(h, 10000).length, COFFER_DROP.n)
+  assert.equal(coinDropsAt([{ t0: 10000, crit: true }], 10000).length, COFFER_DROP.critN)
+  assert.equal(coinDropsAt([{ t0: 10000, crit: true }], 10000, { lite: true }).length, Math.ceil(COFFER_DROP.critN / 2))
+  // 1枚ずつ：はじめは口の金貨の山の上・まず上がる・床より下へ行かない・寝て止まるのは床の高さ・消える
+  for (let k = 0; k < 300; k++) {
+    const hk = [{ t0: 5000 + k * 37, crit: true }]
+    const at = (dt) => coinDropsAt(hk, hk[0].t0 + dt)
+    const up = at(120)
+    for (const c of at(0)) {
+      assert.ok(c.x >= COFFER_DROP.from[0][0] && c.x <= COFFER_DROP.from[0][1] && c.y >= COFFER_DROP.from[1][0] && c.y <= COFFER_DROP.from[1][1], '口から出る')
+      assert.ok(up.find(u => u.key === c.key).y < c.y, '出てすぐは上へ')
+    }
+    let gone = false
+    for (let dt = 0; dt <= 2600; dt += 20) {
+      const cs = at(dt)
+      for (const c of cs) {
+        assert.ok(c.y <= COFFER_DROP.floor[1] + 1e-6, `床より下へ行かない（${c.y}）`)
+        if (c.sy < 1) assert.ok(c.y >= COFFER_DROP.floor[0] && c.y <= COFFER_DROP.floor[1], '床に寝る')
+      }
+      if (!cs.length) { gone = true; assert.ok(dt <= COFFER_DROP.keepMs, `${dt}ms で消える`); break }
+    }
+    assert.ok(gone, '消える')
+  }
+  // 印は2.5秒で片付く（components/V2capAtbFight.jsx の POP_SEC + 1.5）＝それより早く消す
+  assert.ok(COFFER_DROP.keepMs < 2500)
+  assert.deepEqual(coinDropsAt(h, 10400), coinDropsAt(h, 10400), '同じ印なら同じ飛び方')
+  const many = Array.from({ length: 20 }, (_, i) => ({ t0: 10000 + i * 50, crit: false }))
+  assert.ok(coinDropsAt(many, 11000).length <= COFFER_DROP.maxHits * COFFER_DROP.n, 'こぼすのは新しい8回ぶんまで')
 })

@@ -6,13 +6,17 @@
 //   部品の絵はどれも立ち絵と同じ正方形＝枠いっぱいに重ねる。位置は元の絵の px を枠の割合（%）にして使う（sq＝立ち絵の切り取り）
 //   重ね順：動かない所 → ふた（＋右手）→ 目と口の光 → まぶた（まばたきのときだけ）→ 左腕（金貨・きらめき）
 //   ★使うのは transform と opacity とマスクだけ（軽い表示でも同じ・ぼかしは使わない）
+//   2026-11-07 ユーザー「攻撃ヒットしたとき、コインが落ちるエフェクトもつけてほしいね」：hits（当たった印・ミリ秒）ごとに金貨がこぼれる（coinDropsAt）。
+//     いちばん手前に描き、殴られて傾く動き（upright＝傾きの度）を打ち消す＝床に落ちた金貨は傾かない。軽い表示は半分の枚数
 // ============================================================
-import { cofferIdleAt } from '../lib/cofferMotion.js'
+import { cofferIdleAt, coinDropsAt } from '../lib/cofferMotion.js'
+import { COFFER_DROP_BOX } from '../lib/cofferArt.js'
 
 const FULL = { position:'absolute', left:0, top:0, width:'100%', height:'100%', userSelect:'none', pointerEvents:'none', maxWidth:'none' }
 
-export default function V2capCofferParts({ parts, tMs }) {
+export default function V2capCofferParts({ parts, tMs, hits = [], upright = 0, lite = false }) {
   const m = cofferIdleAt(tMs)
+  const drops = coinDropsAt(hits, tMs, { lite })
   const { src, sq, cuts } = parts
   const X = (x) => (x - sq.x0) / sq.S * 100, Y = (y) => (y - sq.y0) / sq.S * 100
   const at = (p) => `${X(p[0]).toFixed(2)}% ${Y(p[1]).toFixed(2)}%`
@@ -55,6 +59,18 @@ export default function V2capCofferParts({ parts, tMs }) {
           {m.glint.op > 0.01 && img(src.glint, { opacity: m.glint.op.toFixed(3), transform:`scale(${m.glint.s.toFixed(4)})`, transformOrigin: at(cuts.glint.at) })}
         </div>
       </div>
+      {/* こぼれる金貨：枠ごとの傾きを打ち消して（Fighter の傾きと同じ中心 50% 92%）、同じ正方形に置く */}
+      {drops.length > 0 && (
+        <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', pointerEvents:'none', transform: upright ? `rotate(${(-upright).toFixed(2)}deg)` : undefined, transformOrigin:'50% 92%' }}>
+          <div style={{ position:'relative', width:'100%', aspectRatio:'1 / 1' }}>
+            {drops.map(c => (
+              <img key={c.key} src={src.drop} alt="" draggable={false} style={{ position:'absolute', left:`${X(c.x).toFixed(2)}%`, top:`${Y(c.y).toFixed(2)}%`,
+                width:`${(COFFER_DROP_BOX * 0.8 / sq.S * 100 * c.s).toFixed(2)}%`, maxWidth:'none', pointerEvents:'none', userSelect:'none',
+                transform:`translate(-50%, -50%) scale(${c.sx.toFixed(3)}, ${c.sy.toFixed(3)})`, opacity: c.op.toFixed(3) }} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

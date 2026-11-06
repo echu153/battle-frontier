@@ -741,7 +741,8 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
               {lite && red > 0.01 && <div style={{ position:'absolute', inset:'-14%', borderRadius:'50%', pointerEvents:'none', opacity: Math.min(1, red).toFixed(3),
                 background:`radial-gradient(closest-side, rgba(${redColor},0.6) 45%, rgba(${redColor},0) 100%)` }} />}
               {rig && trails.length > 0 && <RigTrails art={rig} trails={trails} />}
-              {rig ? <IllustRig art={rig} pose={pose} freePose={illustFreePoseAt(rig.key, tMs + (now - clock) * 1000)} freeShow={freeShow} motion={showMotion} show={show} ghosts={ghosts} tMs={tMs} aura={aura} death={death} flame={flame} /> : parts ? <V2capCofferParts parts={parts} tMs={now * 1000} /> : (
+              {rig ? <IllustRig art={rig} pose={pose} freePose={illustFreePoseAt(rig.key, tMs + (now - clock) * 1000)} freeShow={freeShow} motion={showMotion} show={show} ghosts={ghosts} tMs={tMs} aura={aura} death={death} flame={flame} /> : parts ? <V2capCofferParts parts={parts} tMs={now * 1000} lite={lite} upright={wob}
+                hits={mine.filter(f => f.kind === 'hit' && f.t0 <= now).map(f => ({ t0: f.t0 * 1000, crit: !!f.crit }))} /> : (
                 <img src={src} alt="" draggable={false}
                   style={{ width:'100%', height:'100%', objectFit:'contain', userSelect:'none', visibility: frame >= 0 ? 'hidden' : 'visible' }} />
               )}
