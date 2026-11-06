@@ -6,14 +6,15 @@ import { DUNGEON_BOSSES } from '../lib/dungeon.js'
 // 「レベルキャップあり」版 — 挑戦（四凶）の専用装備の能力（2026-11-06・lib/challengeDefs.js）
 //   ユニークの V2capUniqueFx と同じ形。色はレジェンダリーの黄色（専用装備のレア度はレジェンダリー）
 //   ・ChallengeText … 能力の文（改行はそのまま行にする）
-//   ・ChallengeNote … 装備の行の下の枠（能力の文と、落とすボス・難易度）
+//   ・ChallengeNote … 装備の行の下の枠（能力の文と、落とすボス）
 //   ・V2capChallengeFx … 着けている専用装備の一覧（compact＝ホームのステータス欄の1行・ふつう＝プロフィールの全文）
+// ★2026-11-06 ユーザー「レジェンダリーは必要レベル70」＝ノーマルでもハードでも同じ装備（前は難易度ごとに別で「（ノーマル）」を付けていた）
 // ============================================================
 const L = RARITY_COLOR.L
-const NOTE = '同じ専用装備は1つまで（ノーマルとハードの同じ装備も1つ）。鍛冶屋の作成「挑戦装備」で作れる'
+const NOTE = '同じ専用装備は1つまで。鍛冶屋の作成「挑戦装備」で作れる'
 
-// 「黒龍ヴァルゼノク（ノーマル）」
-export const challengeFromOf = (item) => `${item?.boss || ''}（${DUNGEON_BOSSES[item?.bossKey]?.diffs?.[item?.diff]?.label || ''}）`
+// 「黒龍ヴァルゼノク」（落とすボスの名前。どの難易度でも落とす）
+export const challengeFromOf = (item) => item?.boss || DUNGEON_BOSSES[item?.bossKey]?.name || ''
 
 export const ChallengeText = ({ item, style = null }) => (
   <div style={{ whiteSpace:'pre-line', color:'#fff2b0', lineHeight:1.6, ...style }}>{item?.text || ''}</div>

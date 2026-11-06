@@ -126,7 +126,7 @@ export const craftCostOf = (item) => (canCraft(item)
 export const craftErrorOf = (item, prof) => {
   if (!item) return 'その装備はありません'
   const c = craftCostOf(item)
-  if (item.bossKey) return 'この装備は「挑戦装備」で作ります'
+  if (item.bossKey && item.rarity !== 'U') return 'この装備は「挑戦装備」で作ります'   // 四凶のユニーク（bossKey がある）は下の「作れません」
   if (!c) return item.rarity === 'U' ? 'ユニークの装備は作れません' : 'ノーマルの装備は作れません'
   if (scrapOf(prof?.materials, c.area) < c.scrap) return `${scrapNameOf(c.area)}が足りません`
   if ((Number(prof?.gold) || 0) < c.gold) return 'Goldが足りません'

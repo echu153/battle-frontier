@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { box, miniBtn, TEXT } from './v2ui.js'
 import { runBattle } from '../core/battle.js'
-import { RARITY_COLOR, kindLabel, UNIQUE_ITEMS } from '../lib/equipment.js'
+import { RARITY_COLOR, kindLabel } from '../lib/equipment.js'
 import { toFighter, wornUniquesOf } from '../lib/loadout.js'
-import { checkUnique, FOE } from '../lib/uniqueCheck.js'
+import { checkUnique, CHECK_ITEMS, FOE } from '../lib/uniqueCheck.js'
 import { buildCapBattleView } from '../lib/battleView.js'
 import { CAP_RULES } from '../lib/rules.js'
 import { UniqueText } from './V2capUniqueFx.jsx'
@@ -33,8 +33,8 @@ export default function V2capUniqueCheck({ prof, inventory }) {
     let i = 0
     const out = []
     const step = () => {
-      if (i >= UNIQUE_ITEMS.length) { setRunning(false); return }
-      out.push(checkUnique(UNIQUE_ITEMS[i]))
+      if (i >= CHECK_ITEMS.length) { setRunning(false); return }
+      out.push(checkUnique(CHECK_ITEMS[i]))
       i += 1
       setResults([...out])
       setTimeout(step, 0)
@@ -65,7 +65,7 @@ export default function V2capUniqueCheck({ prof, inventory }) {
           能力の項目ごとに、その能力だけを抜いた装備と比べたり、戦闘のログに出るかを見ます。乱数は「いつも当たる」「いつも外れる」に固定しているので、毎回同じ結果になります。
         </div>
         <div style={{ display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap', fontSize:'12px' }}>
-          <span>発動を確認：<b style={{ color: okN === UNIQUE_ITEMS.length ? OK : NG }}>{okN}</b> / {UNIQUE_ITEMS.length}{running ? '（確かめ中…）' : ''}</span>
+          <span>発動を確認：<b style={{ color: okN === CHECK_ITEMS.length ? OK : NG }}>{okN}</b> / {CHECK_ITEMS.length}{running ? '（確かめ中…）' : ''}</span>
           <button onClick={runAll} disabled={running} style={miniBtn('#ff88cc')}>もう一度</button>
           <button onClick={() => setOnly(v => !v)} style={miniBtn(only ? NG : '#62789a')}>{only ? '全部を出す' : '✗だけ出す'}</button>
           <button onClick={() => setOpen(new Set(open.size ? [] : results.map(r => r.item.id)))} style={miniBtn('#62789a')}>{open.size ? 'たたむ' : '全部ひらく'}</button>

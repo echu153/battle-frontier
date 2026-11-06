@@ -18,7 +18,7 @@ const MULT = new Set(['resistAll', 'rareDropMult', 'inflictUpAll'])
 const MULT_MAP = new Set(['resist', 'inflictUp'])
 const ADD_MAP = new Set(['statPct', 'whileAilStat', 'allSkillsBuff', 'defIgnore', 'kindDeal'])
 const LIST = new Set(['vsAilDmg', 'convertAdds', 'counterAil', 'onHitAils', 'onHitAilIf', 'onHitStack', 'onHitTimed',
-  'drainIfAil', 'lowHpDeal', 'hpDeal', 'turnGrow', 'hitGrow', 'chaseIfAil', 'addDmg', 'counterAilIf', 'earlyBuffs'])
+  'drainIfAil', 'lowHpDeal', 'hpDeal', 'turnGrow', 'hitGrow', 'chaseIfAil', 'addDmg', 'counterAilIf', 'earlyBuffs', 'dodgeAil'])
 const UNION = new Set(['immune', 'dispelTurns'])
 const OR = new Set(['gutsOnce', 'dodgeOnce'])
 

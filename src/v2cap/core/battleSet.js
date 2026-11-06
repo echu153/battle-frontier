@@ -78,6 +78,12 @@
 //   dodgeHeal        攻撃をかわしたとき最大HPの%を回復
 //   revive           戦闘中1回、倒れるダメージを受けてもHP%で復活
 //   cureHeal         状態異常が治るたび最大HPの%を回復
+// ★四凶のユニーク（2026-11-06・src/v2cap/lib/challengeDefs.js の CHALLENGE_UNIQUE_DEFS）で足した項目：
+//   lostHpDeal {per, pct, max}   失ったHP per% ごとに与ダメージ+pct%（max まで・焔環ツォルン）
+//   dodgeAil [{key, chance}]     攻撃をかわしたとき、確率で相手に状態異常（1回の攻撃につき1回・相手の抵抗は通る・小糠雨の耳飾り）
+//   breakAil {key, pct}          その状態異常の相手に当てると、その状態異常を消して、その攻撃の与ダメージ+pct%
+//                                （攻撃の前にかかっていたら・全部外れたら消さない・同じ攻撃の「当てたら状態異常」はそのあとに引く＝ドンナーカイル）
+//   perAilDeal {pct, max}        相手の状態異常1つにつき与ダメージ+pct%（max まで・業秤の首飾り）
 // ★装備とセットの毎ターン回復（regenPct・regenLow）は合計 REGEN_CAP_PCT まで（2026-10-21 ユーザー選択「合計6%までにする」）
 // ============================================================
 import { hasAilment, AIL_KEYS } from './ailments.js'
@@ -116,6 +122,7 @@ export const initSet = (side, fighter) => {
   side.uq = {
     streak: 0, grow: {}, critStacks: 0, critDmg: 0, used: new Set(), allOn: false,
     firstDone: false, burst: false, ward: 0, seen: { phys: false, mag: false }, echoAcc: 0, ails: [], flat: {},
+    breakOn: false,   // ドンナーカイル：この攻撃で状態異常を消して+%にしたか（攻撃が終わったら戻す）
   }
 }
 
@@ -177,6 +184,9 @@ export const setDealMult = (me, foe, eMe, eFoe, kind = null) => {
   // ★ユニーク：ケイヴキーパー（HPが低いとき）・ソリスティス（HPが高いとき）・サンダーフォール（物理）・海王の潮汐ペンダント（奇数ターン）
   for (const l of fx.lowHpDeal || []) if (hpPct(me) <= l.at) pct += l.pct
   for (const h of fx.hpDeal || []) pct += hpPct(me) >= h.at ? h.hi : h.lo
+  // ★四凶のユニーク：焔環ツォルン（失ったHPの割合で）・業秤の首飾り（相手の状態異常の数で）。小数の誤差で段が落ちないよう少し足して切り捨て
+  if (fx.lostHpDeal) pct += Math.min(fx.lostHpDeal.max, fx.lostHpDeal.pct * Math.floor((100 - hpPct(me)) / fx.lostHpDeal.per + 1e-9))
+  if (fx.perAilDeal) pct += Math.min(fx.perAilDeal.max, fx.perAilDeal.pct * ailCountOfSide(foe))
   if (kind && fx.kindDeal?.[kind]) pct += fx.kindDeal[kind]
   if (fx.tide?.odd && (me.turn || 0) % 2 === 0) pct += fx.tide.odd
   return 1 + pct / 100

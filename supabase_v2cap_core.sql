@@ -2180,30 +2180,22 @@ insert into public.v2cap_equipment (id, name, part, type, line, area, rarity, lv
   ('U44:鈍器', 'ヴァンドルング', '武器', '鈍器', null, 15, 'U', 80, 44, null),
   ('U45:ネックレス', '海王の潮汐ペンダント', 'アクセ', 'ネックレス', null, 15, 'U', 80, 45, null),
   ('U45:重鎧足', '深淵歩きの脚甲', '足', '重鎧', '重鎧', 15, 'U', 80, 45, null),
-  ('C2:varuzenoku:両手剣', 'ヴァルブレイカー', '武器', '両手剣', null, 2, 'L', 25, null, 'varuzenoku'),
-  ('C2:varuzenoku:銃', 'マレディクシオン', '武器', '銃', null, 2, 'L', 25, null, 'varuzenoku'),
-  ('C2:varuzenoku:重鎧鎧', '黒龍の鎧', '鎧', '重鎧', '重鎧', 2, 'L', 25, null, 'varuzenoku'),
-  ('C2:amaza:杖', '濡羽杖アマザネ', '武器', '杖', null, 2, 'L', 25, null, 'amaza'),
-  ('C2:amaza:軽装鎧', '哭雨の羽衣', '鎧', '軽装', '軽装', 2, 'L', 25, null, 'amaza'),
-  ('C2:amaza:リング', '水禍の蒼珠', 'アクセ', 'リング', null, 2, 'L', 25, null, 'amaza'),
-  ('C2:zerugiasu:重鎧鎧', '雷鋼の機神鎧', '鎧', '重鎧', '重鎧', 2, 'L', 25, null, 'zerugiasu'),
-  ('C2:zerugiasu:短剣', '蒼雷の短刃', '武器', '短剣', null, 2, 'L', 25, null, 'zerugiasu'),
-  ('C2:zerugiasu:イヤリング', '神雷の環', 'アクセ', 'イヤリング', null, 2, 'L', 25, null, 'zerugiasu'),
-  ('C2:enma:宝珠', '冥獄宝珠・断罪', '武器', '宝珠', null, 2, 'L', 25, null, 'enma'),
-  ('C2:enma:軽装鎧', '冥府王の獄衣', '鎧', '軽装', '軽装', 2, 'L', 25, null, 'enma'),
-  ('C2:enma:ネックレス', '六道輪廻の数珠', 'アクセ', 'ネックレス', null, 2, 'L', 25, null, 'enma'),
-  ('C5:varuzenoku:両手剣', 'ヴァルブレイカー', '武器', '両手剣', null, 5, 'L', 40, null, 'varuzenoku'),
-  ('C5:varuzenoku:銃', 'マレディクシオン', '武器', '銃', null, 5, 'L', 40, null, 'varuzenoku'),
-  ('C5:varuzenoku:重鎧鎧', '黒龍の鎧', '鎧', '重鎧', '重鎧', 5, 'L', 40, null, 'varuzenoku'),
-  ('C5:amaza:杖', '濡羽杖アマザネ', '武器', '杖', null, 5, 'L', 40, null, 'amaza'),
-  ('C5:amaza:軽装鎧', '哭雨の羽衣', '鎧', '軽装', '軽装', 5, 'L', 40, null, 'amaza'),
-  ('C5:amaza:リング', '水禍の蒼珠', 'アクセ', 'リング', null, 5, 'L', 40, null, 'amaza'),
-  ('C5:zerugiasu:重鎧鎧', '雷鋼の機神鎧', '鎧', '重鎧', '重鎧', 5, 'L', 40, null, 'zerugiasu'),
-  ('C5:zerugiasu:短剣', '蒼雷の短刃', '武器', '短剣', null, 5, 'L', 40, null, 'zerugiasu'),
-  ('C5:zerugiasu:イヤリング', '神雷の環', 'アクセ', 'イヤリング', null, 5, 'L', 40, null, 'zerugiasu'),
-  ('C5:enma:宝珠', '冥獄宝珠・断罪', '武器', '宝珠', null, 5, 'L', 40, null, 'enma'),
-  ('C5:enma:軽装鎧', '冥府王の獄衣', '鎧', '軽装', '軽装', 5, 'L', 40, null, 'enma'),
-  ('C5:enma:ネックレス', '六道輪廻の数珠', 'アクセ', 'ネックレス', null, 5, 'L', 40, null, 'enma')
+  ('C11:varuzenoku:両手剣', 'ヴァルブレイカー', '武器', '両手剣', null, 11, 'L', 70, null, 'varuzenoku'),
+  ('C11:varuzenoku:銃', 'マレディクシオン', '武器', '銃', null, 11, 'L', 70, null, 'varuzenoku'),
+  ('C11:varuzenoku:重鎧鎧', '黒龍の鎧', '鎧', '重鎧', '重鎧', 11, 'L', 70, null, 'varuzenoku'),
+  ('C11:amaza:杖', '濡羽杖アマザネ', '武器', '杖', null, 11, 'L', 70, null, 'amaza'),
+  ('C11:amaza:軽装鎧', '哭雨の羽衣', '鎧', '軽装', '軽装', 11, 'L', 70, null, 'amaza'),
+  ('C11:amaza:リング', '水禍の蒼珠', 'アクセ', 'リング', null, 11, 'L', 70, null, 'amaza'),
+  ('C11:zerugiasu:重鎧鎧', '雷鋼の機神鎧', '鎧', '重鎧', '重鎧', 11, 'L', 70, null, 'zerugiasu'),
+  ('C11:zerugiasu:短剣', '蒼雷の短刃', '武器', '短剣', null, 11, 'L', 70, null, 'zerugiasu'),
+  ('C11:zerugiasu:イヤリング', '神雷の環', 'アクセ', 'イヤリング', null, 11, 'L', 70, null, 'zerugiasu'),
+  ('C11:enma:宝珠', '冥獄宝珠・断罪', '武器', '宝珠', null, 11, 'L', 70, null, 'enma'),
+  ('C11:enma:軽装鎧', '冥府王の獄衣', '鎧', '軽装', '軽装', 11, 'L', 70, null, 'enma'),
+  ('C11:enma:ネックレス', '六道輪廻の数珠', 'アクセ', 'ネックレス', null, 11, 'L', 70, null, 'enma'),
+  ('UC:varuzenoku:リング', '焔環ツォルン', 'アクセ', 'リング', null, 11, 'U', 85, null, null),
+  ('UC:amaza:イヤリング', '小糠雨の耳飾り', 'アクセ', 'イヤリング', null, 11, 'U', 85, null, null),
+  ('UC:zerugiasu:ベルト', 'ドンナーカイル', 'アクセ', 'ベルト', null, 11, 'U', 85, null, null),
+  ('UC:enma:ネックレス', '業秤の首飾り', 'アクセ', 'ネックレス', null, 11, 'U', 85, null, null)
 on conflict (id) do update set name = excluded.name, part = excluded.part, type = excluded.type, line = excluded.line,
   area = excluded.area, rarity = excluded.rarity, lv = excluded.lv, spot = excluded.spot, boss = excluded.boss;
 -- @@end:equipment
@@ -9178,22 +9170,24 @@ alter table public.v2cap_profiles add column if not exists challenge_mats jsonb 
 --   呼んだ人は全部（救援信号を出して損をしない）・救援の人は削った割合（最低3割＝dungeon.js の HELPER_REWARD_MIN_PCT）
 --   ひとりで倒されずに倒した人は3倍（dungeon.js の SOLO_REWARD_MULT）＝ほかの人が1回も挑んでいない・自分の挑戦に flawed が無い
 -- ★2026-11-06 落とすもの（ユーザー「4強の報酬を決めたい」→案に全部「推奨」・表の正は src/v2cap/lib/challengeDefs.js）：
---   ①その難易度のエリア（v2cap_dungeon_conf の area）の装備を1つ。部位は6つから均等・武器はいまの職業が使える種類・レア75／エピック20／レジェンダリー5
+--   ①その難易度のエリア（v2cap_dungeon_conf の area）の装備を1つ。部位は6つから均等・武器はいまの職業が使える種類
 --   ②特別な素材（ボス×難易度）を50%で1〜5個
---   ③専用装備そのもの（そのボスのその難易度の3つから1つ）を2%
---   救援の人は、①③の確率と②の数に貢献度の割合（v_pct・最低3割）を掛ける（②の数は最低1）。ひとりで倒されずに倒したら②の数も3倍
---   ★ユニークは四凶ごとに新しく作る（ユーザーが案のシートで決める）までは落とさない
+--   ③専用装備そのもの（そのボスの3つから1つ・必要LV70）
+--   ④ユニーク（そのボスの1つ・必要LV85・id が「UC:ボス:種類」）
+--   救援の人は、①③④の確率と②の数に貢献度の割合（v_pct・最低3割）を掛ける（②の数は最低1）。ひとりで倒されずに倒したら②の数も3倍
+-- ★同じ日（案のシートのあと）ユーザー「難易度によって専用アイテムとレジェンダリーユニークのドロップ率も上げて」→選んだ「ハードは1.5倍」：
+--   c_rates（難易度ごと・%）＝ノーマル：①レア75／エピック20／レジェンダリー5・③2・④0.1／ハード：①レア72／エピック20／レジェンダリー8・③3・④0.15
+--   （表の正は src/v2cap/lib/challengeDefs.js の CH_RATES・challenge.test.js が突き合わせる）。まだ無い難易度はノーマルの数
 create or replace function public.v2cap_dungeon_pay_reward(p_run bigint, p_player uuid)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   c_helper_min constant int := 30;
   c_solo_mult  constant int := 3;
-  c_gear_r     constant int := 75;       -- ①のレア度（%）：レア75・エピック20・残りがレジェンダリー
-  c_gear_e     constant int := 20;
+  c_rates      constant jsonb := '{"normal": {"r": 75, "e": 20, "own": 2, "uq": 0.1}, "hard": {"r": 72, "e": 20, "own": 3, "uq": 0.15}}';
   c_mat_pct    constant int := 50;       -- ②が入る確率（%）
   c_mat_min    constant int := 1;        -- ②の数（この範囲の整数を均等に1つ）
   c_mat_max    constant int := 5;
-  c_own_pct    constant numeric := 2;    -- ③の確率（%）
+  v_rate jsonb;
   v_run  public.v2cap_dungeon_runs;
   v_mem  public.v2cap_dungeon_members;
   v_exp  int;
@@ -9212,9 +9206,11 @@ declare
   v_gear jsonb;
   v_mat  jsonb;
   v_own  jsonb;
+  v_uq   jsonb;
 begin
   select * into v_run from public.v2cap_dungeon_runs where id = p_run;
   if not found or v_run.cleared_at is null then return null; end if;
+  v_rate := coalesce(c_rates -> v_run.diff, c_rates -> 'normal');
   -- ★行をつかんでから見る（同時に受け取っても1回だけ）
   select * into v_mem from public.v2cap_dungeon_members where run_id = p_run and player_id = p_player for update;
   if not found or v_mem.reward_at is not null or v_mem.damage <= 0 then return null; end if;
@@ -9249,7 +9245,8 @@ begin
       end if;
       v_x := random() * 100;
       select * into v_eq from public.v2cap_equipment e
-       where e.id = v_area::text || (case when v_x < c_gear_r then 'R' when v_x < c_gear_r + c_gear_e then 'E' else 'L' end) || ':' || v_kind;
+       where e.id = v_area::text || (case when v_x < (v_rate ->> 'r')::numeric then 'R'
+                                          when v_x < (v_rate ->> 'r')::numeric + (v_rate ->> 'e')::numeric then 'E' else 'L' end) || ':' || v_kind;
       if found then
         insert into public.v2cap_inventory (player_id, base_id, ilv) values (p_player, v_eq.id, v_eq.lv) returning id into v_inv;
         v_gear := jsonb_build_object('id', v_inv, 'base_id', v_eq.id, 'ilv', v_eq.lv);
@@ -9266,17 +9263,26 @@ begin
        where p.id = p_player;
       v_mat := jsonb_build_object('key', v_key, 'n', v_n);
     end if;
-    -- ③ 専用装備そのもの（そのボスのその難易度の段階から1つ）
-    if random() * 100 < c_own_pct * v_pct / 100.0 then
-      select * into v_eq from public.v2cap_equipment e where e.boss = v_run.boss and e.area = v_area order by random() limit 1;
+    -- ③ 専用装備そのもの（そのボスの3つから1つ・どの難易度でも同じ必要LV70の装備）
+    if random() * 100 < (v_rate ->> 'own')::numeric * v_pct / 100.0 then
+      select * into v_eq from public.v2cap_equipment e where e.boss = v_run.boss and e.rarity = 'L' order by random() limit 1;
       if found then
         insert into public.v2cap_inventory (player_id, base_id, ilv) values (p_player, v_eq.id, v_eq.lv) returning id into v_inv;
         v_own := jsonb_build_object('id', v_inv, 'base_id', v_eq.id, 'ilv', v_eq.lv);
       end if;
     end if;
+    -- ④ ユニーク（そのボスの1つ・id の「UC:ボス:」で引く＝ユニークの行は boss が null）
+    if random() * 100 < (v_rate ->> 'uq')::numeric * v_pct / 100.0 then
+      select * into v_eq from public.v2cap_equipment e
+       where e.rarity = 'U' and split_part(e.id, ':', 1) = 'UC' and split_part(e.id, ':', 2) = v_run.boss limit 1;
+      if found then
+        insert into public.v2cap_inventory (player_id, base_id, ilv) values (p_player, v_eq.id, v_eq.lv) returning id into v_inv;
+        v_uq := jsonb_build_object('id', v_inv, 'base_id', v_eq.id, 'ilv', v_eq.lv);
+      end if;
+    end if;
   end if;
   return jsonb_build_object('exp', v_exp, 'gold', v_gold, 'pct', v_pct, 'solo', v_solo, 'level', public.v2cap_apply_exp(p_player, v_exp),
-                            'gear', v_gear, 'mat', v_mat, 'own', v_own);
+                            'gear', v_gear, 'mat', v_mat, 'own', v_own, 'uq', v_uq);
 end;
 $$;
 revoke all on function public.v2cap_dungeon_pay_reward(bigint, uuid) from public, anon, authenticated;
@@ -10179,7 +10185,22 @@ grant execute on function public.v2cap_set_atb_off(jsonb) to authenticated;
 --   ・鍛冶屋の作成を「エリア装備」と「挑戦装備」に分けた。挑戦装備は、そのボスのその難易度の特別な素材50個＋Gold（必要LV×200）で作る
 --   ・素材は v2cap_profiles.challenge_mats（§23）。必ずできる・+0で持ち物に入る（エリアの作成と同じ）
 -- ★表の写しは src/v2cap/lib/challengeDefs.js（CH_CRAFT_MATS・CH_CRAFT_GOLD_PER_LV）。v2capsql.test.js が突き合わせる
-create or replace function public.v2cap_craft_challenge(p_equip_id text)
+-- 【確定】同じ日（案のシートのあと）ユーザー「レジェンダリーは必要レベル70」：専用装備は**必要LV70の1つ**（エリア⑪の行・ノーマルでもハードでも同じ）。
+--   作るときは使う素材の難易度（p_diff）を選ぶ＝ノーマルの素材でもハードの素材でも50個（こちらで決めた）。Gold は必要LV×200＝14,000
+--   前の版（p_equip_id だけ・段階のエリアから難易度を引いた）は消す
+-- 前の版の段階ごとの専用装備（C2:…＝ノーマル LV25・C5:…＝ハード LV40）を持っている人は C11:…（同じボス・同じ種類）へ付け替え、古い行を消す
+--   （強化値・お気に入りは持ち物の行のまま残る。博物館は専用装備を受け付けないので行は無い＝念のため、使われていない行だけ消す）
+update public.v2cap_inventory i
+   set base_id = 'C11:' || split_part(i.base_id, ':', 2) || ':' || split_part(i.base_id, ':', 3)
+ where split_part(i.base_id, ':', 1) in ('C2', 'C5')
+   and exists (select 1 from public.v2cap_equipment e
+                where e.id = 'C11:' || split_part(i.base_id, ':', 2) || ':' || split_part(i.base_id, ':', 3));
+delete from public.v2cap_equipment e
+ where split_part(e.id, ':', 1) in ('C2', 'C5') and e.boss is not null
+   and not exists (select 1 from public.v2cap_inventory i where i.base_id = e.id)
+   and not exists (select 1 from public.v2cap_museum m where m.base_id = e.id);
+drop function if exists public.v2cap_craft_challenge(text);
+create or replace function public.v2cap_craft_challenge(p_equip_id text, p_diff text)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   c_mats        constant int := 50;
@@ -10187,7 +10208,6 @@ declare
   v_uid  uuid := auth.uid();
   v_row  public.v2cap_profiles;
   v_eq   public.v2cap_equipment;
-  v_diff text;
   v_key  text;
   v_have int;
   v_gold bigint;
@@ -10200,15 +10220,12 @@ begin
   select * into v_row from public.v2cap_profiles where id = v_uid for update;
   if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
   select * into v_eq from public.v2cap_equipment where id = p_equip_id;
-  if not found or v_eq.boss is null then return jsonb_build_object('ok', false, 'error', 'その装備はありません'); end if;
-  -- 段階のエリアから難易度を引く（v2cap_dungeon_conf と同じ表＝難易度とエリアの対応を二重に書かない）
-  select x.diff into v_diff
-    from unnest(array['normal', 'hard', 'expert', 'master']) as x(diff)
-    join lateral public.v2cap_dungeon_conf(v_eq.boss, x.diff) c on true
-   where c.area = v_eq.area
-   limit 1;
-  if v_diff is null then return jsonb_build_object('ok', false, 'error', 'その装備はまだ作れません'); end if;
-  v_key  := v_eq.boss || ':' || v_diff;
+  if not found or v_eq.boss is null or v_eq.rarity <> 'L' then return jsonb_build_object('ok', false, 'error', 'その装備はありません'); end if;
+  -- 使う素材の難易度：そのボスにある難易度だけ（v2cap_dungeon_conf と同じ表＝素材の鍵は matKeyOf と同じ「ボス:難易度」）
+  if p_diff is null or not exists (select 1 from public.v2cap_dungeon_conf(v_eq.boss, p_diff) c) then
+    return jsonb_build_object('ok', false, 'error', 'その素材では作れません');
+  end if;
+  v_key  := v_eq.boss || ':' || p_diff;
   v_mats := coalesce(v_row.challenge_mats, '{}'::jsonb);
   v_have := coalesce((v_mats ->> v_key)::int, 0);
   v_gold := greatest(1, v_eq.lv)::bigint * c_gold_per_lv;
@@ -10225,5 +10242,5 @@ begin
     'key', v_key, 'mats', c_mats, 'gold', v_gold, 'challenge_mats', v_mats, 'gold_left', v_row.gold - v_gold);
 end;
 $$;
-revoke all on function public.v2cap_craft_challenge(text) from public, anon;
-grant execute on function public.v2cap_craft_challenge(text) to authenticated;
+revoke all on function public.v2cap_craft_challenge(text, text) from public, anon;
+grant execute on function public.v2cap_craft_challenge(text, text) to authenticated;

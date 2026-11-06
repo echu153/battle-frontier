@@ -22,7 +22,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 const B = new URL('../src/', import.meta.url).href
 const { STAGES, STAGE_ORDER, CLASSES, bonusSeqOf, lineageOf, JOB_LV_HPMP } = await import(B + 'v2cap/lib/jobs.js')
 const { SKILLS, isPassive } = await import(B + 'v2cap/lib/skills.js')
-const { ITEMS, STARTER_ITEMS, UNIQUE_ITEMS, CHALLENGE_ITEMS, starterIdsOf } = await import(B + 'v2cap/lib/equipment.js')
+const { ITEMS, STARTER_ITEMS, UNIQUE_ITEMS, CHALLENGE_ITEMS, CHALLENGE_UNIQUE_ITEMS, isChallenge, starterIdsOf } = await import(B + 'v2cap/lib/equipment.js')
 const { SPOTS, spotLvOf, enemyLevels, recLvOf } = await import(B + 'v2cap/lib/areas.js')
 const { DAILY_TASKS } = await import(B + 'v2cap/lib/daily.js')
 const { mpNodesOf, ASC_CLASSES } = await import(B + 'v2cap/lib/ascension.js')
@@ -72,8 +72,9 @@ export const seeds = () => ({
     // ★持ち物（v2cap_inventory）が参照するので消さずに入れ直す。一覧から外れた行は §2 の作り直しのあとで消す
     'insert into public.v2cap_equipment (id, name, part, type, line, area, rarity, lv, spot, boss) values',
     // ★初期装備（エリア0・必要LV1・2026-10-12）とユニーク（ボス固有・必要LV80・spot＝落とすボスの場所・2026-10-21）も同じ表に入れる
-    // ★挑戦（四凶）の専用装備（2026-11-06）も入れる：boss＝落とすボスのキー（dungeon.js）・area＝段階のエリア
-    [...ITEMS, ...STARTER_ITEMS, ...UNIQUE_ITEMS, ...CHALLENGE_ITEMS].map(i => `  (${q(i.id)}, ${q(i.name)}, ${q(i.part)}, ${q(i.type)}, ${i.line ? q(i.line) : 'null'}, ${i.area}, ${q(i.rarity)}, ${i.lv}, ${i.spot ?? 'null'}, ${i.bossKey ? q(i.bossKey) : 'null'})`).join(',\n'),
+    // ★挑戦（四凶）の専用装備（2026-11-06）も入れる：boss＝落とすボスのキー（dungeon.js）・area＝⑪（必要LV70）
+    // ★四凶のユニーク（UC:…・必要LV85）も入れる：boss は null（ほかのユニークと同じ＝レア度 U で弾く）。報酬の抽選は id の「UC:ボス:」で引く
+    [...ITEMS, ...STARTER_ITEMS, ...UNIQUE_ITEMS, ...CHALLENGE_ITEMS, ...CHALLENGE_UNIQUE_ITEMS].map(i => `  (${q(i.id)}, ${q(i.name)}, ${q(i.part)}, ${q(i.type)}, ${i.line ? q(i.line) : 'null'}, ${i.area}, ${q(i.rarity)}, ${i.lv}, ${i.spot ?? 'null'}, ${isChallenge(i) ? q(i.bossKey) : 'null'})`).join(',\n'),
     'on conflict (id) do update set name = excluded.name, part = excluded.part, type = excluded.type, line = excluded.line,',
     '  area = excluded.area, rarity = excluded.rarity, lv = excluded.lv, spot = excluded.spot, boss = excluded.boss;',
   ].join('\n'),

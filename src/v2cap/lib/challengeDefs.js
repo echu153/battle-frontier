@@ -9,23 +9,38 @@
 //   → 案を見て全部「推奨」を選んだ：
 //   ・倒したら、その難易度のエリアの装備を必ず1つ（ノーマル＝②・ハード＝⑤。武器はいまの職業が使える種類）。レア75・エピック20・レジェンダリー5
 //   ・特別な素材は50%で1〜5個。**ボス×難易度ごとに別**（名前はV1の2つ＝ノーマルが V1 のふつうの素材・ハードが V1 の希少な素材）
-//   ・専用装備そのものは2%。**難易度ごとに強さが違う**（ノーマル＝②のレジェンダリー・ハード＝⑤のレジェンダリーに合計+10）
+//   ・専用装備そのものは2%。難易度ごとに強さが違う（ノーマル＝②のレジェンダリー・ハード＝⑤のレジェンダリーに合計+10）＝同じ日に下の【確定】で「必要LV70の1つ」へ変えた
 //   ・作成は素材50個＋Gold（必要LV×200＝レジェンダリーの作成と同じ）
 //   ・救援の人は、確率と素材の数に貢献度の割合（最低3割＝dungeon.js の HELPER_REWARD_MIN_PCT）を掛ける／ひとりで倒されずに倒したら素材の数も3倍
 //   ・ユニークは0.1%で、**四凶ごとに新しく1つ作る**（名前・能力・ステはユーザーが案のシートで決める）。決まるまでは落とさない
 //   ・V1の12個（V1 のレイドの交換所の装備）を、V2の種類と配分・V2の今ある能力の仕組みに合わせた（下の CHALLENGE_GEAR_DEFS）
+// 【確定】同じ日（案のシート https://claude.ai/artifact/XQpra128M75ttkd3aPchvK を見て）ユーザー「能力は問題ない」
+//   「装備ステータスはレジェンドが70　ユニークが85にして」→聞き直して「レジェンダリーは必要レベル70、ユニークはレベル85って意味」
+//   「難易度によって専用アイテムとレジェンダリーユニークのドロップ率も上げて」→選んだ「ハードは1.5倍」：
+//   ・専用装備は**必要LV70の1つ**（ノーマルとハードで同じ装備・前の「ノーマルLV25／ハードLV40」はやめた）。強さは同じLVのレジェンダリー＋10のまま
+//   ・ユニーク4つ（下の CHALLENGE_UNIQUE_DEFS）は**必要LV85**。4つとも装飾品（ユーザー「全部アクセにしてほしい、誰でも装備できるように」）
+//   ・落ちる確率はハードが1.5倍（下の CH_RATES）。素材の確率と数は難易度で変えない
+//   ・こちらで決めたこと（ユーザーに伝える）：鍛冶屋ではノーマルとハードのどちらの素材でも50個で作れる／ユニークのステは前の60個の装飾品65（LV80）をLV85にのばした69
 // ★このファイルは表だけ（ほかを読まない）。装備の一覧へは equipment.js が入れる（CHALLENGE_ITEMS）。
 //   素材の数・作成・落とし方の関数は challenge.js。抽選はサーバー（v2cap_dungeon_pay_reward）・作成もサーバー（v2cap_craft_challenge）
 //   ⚠数を変えたら SQL も直す（v2capsql.test.js が突き合わせる）
 // ============================================================
 
 // 難易度ごとの段階＝その難易度を呼べるエリア（dungeon.js の diffs の area と同じ・challenge.test.js が見る）。
-//   専用装備のアイテムLVは、このエリアのレジェンダリーと同じ（②＝LV25・⑤＝LV40）。エキスパート（⑧）・マスター（⑫）は呼べるようになったら足す
+//   倒すと必ずもらうエリアの装備は、このエリアのもの（②＝ノーマル・⑤＝ハード）。エキスパート（⑧）・マスター（⑫）は呼べるようになったら足す
 export const CHALLENGE_TIER_AREA = { normal: 2, hard: 5 }
 export const CHALLENGE_DIFFS = Object.keys(CHALLENGE_TIER_AREA)
 
-// 専用装備の強さ：同じエリアのレジェンダリーの戦闘力（強化の前）に足す点（ユーザー「ステータス10ポイント多めに」）
+// 専用装備のエリア＝必要LV70のレジェンダリーのエリア（⑪・equipment.js の reqLvOf(11, 'L') が70）。
+//   アイテムLV・強化と分解の残骸（⑪の残骸）・防具のセット（⑪の重鎧／軽装）はこのエリアのもの。ノーマルでもハードでも同じ装備
+export const CHALLENGE_GEAR_AREA = 11
+// 専用装備の強さ：同じアイテムLVのレジェンダリーの戦闘力（強化の前）に足す点（ユーザー「ステータス10ポイント多めに」）
 export const CHALLENGE_BONUS = 10
+// ユニーク（四凶）：必要LV85・振れるポイント（LV85・強化+0のステの合計）。
+//   69＝前の60個の装飾品65（LV80）を、装備の強さと同じ割合（本体の戦闘力 LV85÷LV80＝325÷308）でのばした数（68.6→69）。
+//   LV80で着けると前の60個と同じ65（必要LVに足りない＝いまのLV相当）。強化と分解の残骸は専用装備と同じ⑪
+export const CHALLENGE_UNIQUE_LV = 85
+export const CHALLENGE_UNIQUE_POINTS = 69
 
 // 特別な素材の名前（ボス × 難易度）。V1 の素材：ノーマル＝V1 のふつうの素材・ハード＝V1 の希少な素材
 export const CHALLENGE_MATS = {
@@ -36,11 +51,15 @@ export const CHALLENGE_MATS = {
 }
 
 // 落とし方（サーバーの v2cap_dungeon_pay_reward と同じ数）
-export const CH_GEAR_RARITY = { R: 75, E: 20, L: 5 }   // 必ず1つ落ちるエリアの装備のレア度（%）
-export const CH_MAT_PCT = 50                           // 特別な素材が入る確率（%）
+// 難易度ごと：gear＝必ず1つ落ちるエリアの装備のレア度（%）・own＝専用装備そのもの（%）・unique＝ユニーク（%）。
+//   【確定】ユーザーが選んだ「ハードは1.5倍」（ノーマルは前のまま。レジェンダリー5→8はレアから引く＝エピックは20のまま）
+export const CH_RATES = {
+  normal: { gear: { R: 75, E: 20, L: 5 }, own: 2, unique: 0.1 },
+  hard: { gear: { R: 72, E: 20, L: 8 }, own: 3, unique: 0.15 },
+}
+export const CH_MAT_PCT = 50                           // 特別な素材が入る確率（%・難易度で変えない）
 export const CH_MAT_RANGE = [1, 5]                     // 入ったときの数（この範囲の整数を均等に1つ）
 export const CH_MAT_SOLO_MULT = 3                      // ひとりで倒されずに倒したら素材の数を何倍にするか（EXP・Goldと同じ）
-export const CH_OWN_PCT = 2                            // 専用装備そのものが落ちる確率（%）
 // 作成（鍛冶屋の「挑戦装備」）
 export const CH_CRAFT_MATS = 50                        // 使う素材の数
 export const CH_CRAFT_GOLD_PER_LV = 200                // Gold＝必要LV×これ（レジェンダリーの作成と同じ）
@@ -100,4 +119,27 @@ export const CHALLENGE_GEAR_DEFS = [
     text: '6ターンごとに、次の攻撃の与ダメージ+30%',
     fx: { burstEvery: { every: 6, pct: 30 } },
     v1: '攻撃力の2%を特殊攻撃力に加算' },
+]
+
+// ユニーク（四凶ごとに1つ・2026-11-06）。案のシートでユーザーが決めた（「能力は問題ない」＝シートの案のまま）。
+//   kind＝装飾品の種類（4つとも別）・stats＝LV85・強化+0のステ（合計 CHALLENGE_UNIQUE_POINTS）。ステの割り振りはシートの案（65）を69にのばしたもの
+//   fx＝戦闘の効果。4つとも新しい項目を足した（src/v2cap/core/battleSet.js の冒頭：lostHpDeal・dodgeAil・breakAil・perAilDeal）
+//   名前：雨摩座と閻魔は漢字・黒龍は漢字二字＋カタカナ・ゼルギアスはカタカナ（ユーザー「あまざ・閻魔は漢字、黒龍は今の感じ、ゼルギアスも今の感じで」）
+export const CHALLENGE_UNIQUE_DEFS = [
+  { boss: 'varuzenoku', kind: 'リング', name: '焔環ツォルン',
+    text: '失ったHP10%ごとに、与ダメージ+4%（最大+36%）',
+    fx: { lostHpDeal: { per: 10, pct: 4, max: 36 } },
+    stats: { str: 21, int_stat: 21, vit: 16, agi: 11 } },
+  { boss: 'amaza', kind: 'イヤリング', name: '小糠雨の耳飾り',
+    text: '回避+10%\n攻撃をかわしたとき、30%で相手を鈍足',
+    fx: { evaBonus: 10, dodgeAil: [{ key: 'slow', chance: 30 }] },
+    stats: { agi: 26, dex: 16, vit: 16, int_stat: 11 } },
+  { boss: 'zerugiasu', kind: 'ベルト', name: 'ドンナーカイル',
+    text: '攻撃ヒット時、20%で麻痺\n麻痺している相手に当てると、麻痺を消して与ダメージ+50%',
+    fx: { onHitAils: [{ key: 'paralyze', chance: 20 }], breakAil: { key: 'paralyze', pct: 50 } },
+    stats: { dex: 21, agi: 16, str: 16, int_stat: 16 } },
+  { boss: 'enma', kind: 'ネックレス', name: '業秤の首飾り',
+    text: '相手の状態異常1つにつき、与ダメージ+8%（最大+32%）',
+    fx: { perAilDeal: { pct: 8, max: 32 } },
+    stats: { int_stat: 21, str: 21, dex: 16, luk: 11 } },
 ]

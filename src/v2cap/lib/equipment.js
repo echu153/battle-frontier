@@ -21,7 +21,9 @@
 // ============================================================
 import { GEAR_NAMES } from './gearNames.js'
 import { UNIQUE_DEFS } from './uniqueDefs.js'
-import { CHALLENGE_GEAR_DEFS, CHALLENGE_TIER_AREA, CHALLENGE_BONUS } from './challengeDefs.js'
+import {
+  CHALLENGE_GEAR_DEFS, CHALLENGE_GEAR_AREA, CHALLENGE_BONUS, CHALLENGE_UNIQUE_DEFS, CHALLENGE_UNIQUE_LV,
+} from './challengeDefs.js'
 
 // ===== レア度 =====
 // ★RARITIES はエリアごとの一覧（落ちる・作る）のレア度。ユニーク（U）はボス固有なので入れない（下の「ユニーク」）
@@ -210,30 +212,45 @@ export const isUnique = (item) => item?.rarity === UNIQUE_RARITY
 // その場所のボスが落とすユニーク（1つか2つ）
 export const uniquesOfSpot = (spot) => UNIQUE_ITEMS.filter(u => u.spot === spot)
 
-// ===== 挑戦（四凶）の専用装備（2026-11-06）=====
-// 【確定】ユーザーが選んだ案（表と経緯は challengeDefs.js）：レア度はレジェンダリー・難易度ごとに強さが違う
-//   （ノーマル＝②のレジェンダリーと同じアイテムLV25・ハード＝⑤のLV40）。強さはそのレジェンダリーの戦闘力に CHALLENGE_BONUS（+10）を足す（gear.js）。
-//   配分はV2の同じ種類の装備と同じ・能力（fx）はユニークと同じ入れ物（loadout.js が戦闘へ渡す）
-// id は「C＋段階のエリア：ボス：種類」（例 C2:varuzenoku:両手剣）。area＝段階のエリア（強化と分解の残骸・防具のセットに使う）
-//   boss＝ボスの名前（画面）・bossKey＝dungeon.js のキー・diff＝難易度・extra＝足す戦闘力
+// ===== 挑戦（四凶）の専用装備とユニーク（2026-11-06）=====
+// 【確定】ユーザーが選んだ案（表と経緯は challengeDefs.js）：専用装備はレア度レジェンダリー・**必要LV70の1つ**
+//   （ユーザー「レジェンダリーは必要レベル70」＝ノーマルでもハードでも同じ装備）。強さは同じアイテムLVのレジェンダリーの戦闘力に
+//   CHALLENGE_BONUS（+10）を足す（gear.js）。配分はV2の同じ種類の装備と同じ・能力（fx）はユニークと同じ入れ物（loadout.js が戦闘へ渡す）
+// id は「C＋エリア：ボス：種類」（例 C11:varuzenoku:両手剣）。area＝⑪（必要LV70のレジェンダリーのエリア・強化と分解の残骸・防具のセットに使う）
+//   boss＝ボスの名前（画面）・bossKey＝dungeon.js のキー・extra＝足す戦闘力
+//   ⚠前（同じ日の最初の版）は「C2:…（ノーマル・LV25）」「C5:…（ハード・LV40）」の24個だった。持っている人の分はSQLで C11 へ付け替えた
 // ★落ちる・作る一覧（ITEMS）には入れない。作るのは鍛冶屋の「挑戦装備」（challenge.js・サーバーの v2cap_craft_challenge）
 const CH_BOSS_NAME = { varuzenoku: '黒龍ヴァルゼノク', amaza: '雨摩座', zerugiasu: '雷鋼機神ゼルギアス', enma: '閻魔' }
 export const challengeItemIdOf = (area, bossKey, kindKey) => `C${area}:${bossKey}:${kindKey}`
-export const CHALLENGE_ITEMS = Object.entries(CHALLENGE_TIER_AREA).flatMap(([diff, area]) => CHALLENGE_GEAR_DEFS.map(d => {
+export const CHALLENGE_ITEMS = CHALLENGE_GEAR_DEFS.map(d => {
   const k = KIND_BY_KEY[d.kind]
+  const area = CHALLENGE_GEAR_AREA
   return { id: challengeItemIdOf(area, d.boss, d.kind), name: d.name, part: k.part, type: k.type, line: k.line, kind: d.kind,
     area, rarity: 'L', lv: reqLvOf(area, 'L'), dist: k.dist, text: d.text, fx: d.fx,
-    boss: CH_BOSS_NAME[d.boss], bossKey: d.boss, diff, extra: CHALLENGE_BONUS }
-}))
-export const isChallenge = (item) => !!item?.bossKey
+    boss: CH_BOSS_NAME[d.boss], bossKey: d.boss, extra: CHALLENGE_BONUS }
+})
+// ユニーク（四凶ごとに1つ・装飾品・必要LV85）。ほかのユニークと同じ扱い（レア度 U・名前は赤・同じものは1つまで・強化できる・作れない）。
+//   id は「UC：ボス：種類」（例 UC:varuzenoku:リング）。UNIQUE_ITEMS（出撃のボスが落とす60個・spot がある）には入れない
+//   ステ（dist）はLV85のときの値＝gear.js が item.lv（85）を基準にのばす・縮める。area＝専用装備と同じ⑪（強化と分解の残骸）
+export const challengeUniqueIdOf = (bossKey, kindKey) => `UC:${bossKey}:${kindKey}`
+export const CHALLENGE_UNIQUE_ITEMS = CHALLENGE_UNIQUE_DEFS.map(d => {
+  const k = KIND_BY_KEY[d.kind]
+  return { id: challengeUniqueIdOf(d.boss, d.kind), name: d.name, part: k.part, type: k.type, line: k.line, kind: d.kind,
+    area: CHALLENGE_GEAR_AREA, rarity: UNIQUE_RARITY, lv: CHALLENGE_UNIQUE_LV, dist: { ...d.stats }, text: d.text, fx: d.fx,
+    boss: CH_BOSS_NAME[d.boss], bossKey: d.boss }
+})
+// 専用装備か（四凶のユニークは入れない＝ユニークとして扱う）
+export const isChallenge = (item) => !!item?.bossKey && !isUnique(item)
+// 四凶のユニークか（落とすボスの表示に使う）
+export const isChallengeUnique = (item) => !!item?.bossKey && isUnique(item)
 // 能力（fx）を持つ装備＝ユニークと専用装備（着けると戦闘へ渡す・画面に能力の文を出す・同じものは1つまで）
 export const hasGearFx = (item) => isUnique(item) || isChallenge(item)
-// 「同じもの」の見分け：ユニークは装備そのもの・専用装備は名前（ノーマルとハードの同じ装備も同じものとして数える）
+// 「同じもの」の見分け：ユニークは装備そのもの・専用装備は名前
 export const sameGearKeyOf = (item) => (isChallenge(item) ? `C:${item.name}` : item?.id)
 
 // ★ID から引く一覧には初期装備とユニーク・専用装備も入れる（持ち物・装備の画面・戦闘は ITEM_BY_ID で引く）。
 //   ITEMS（エリア×レア度の1560点）には入れない＝落ちる・作る一覧やシミュの「いちばん良い装備」には出ない
-export const ITEM_BY_ID = Object.fromEntries([...ITEMS, ...STARTER_ITEMS, ...UNIQUE_ITEMS, ...CHALLENGE_ITEMS].map(i => [i.id, i]))
+export const ITEM_BY_ID = Object.fromEntries([...ITEMS, ...STARTER_ITEMS, ...UNIQUE_ITEMS, ...CHALLENGE_ITEMS, ...CHALLENGE_UNIQUE_ITEMS].map(i => [i.id, i]))
 export const itemOf = (area, rarity, kindKey) => ITEM_BY_ID[itemIdOf(area, rarity, kindKey)] || null
 
 // この装備をどの枠に着けられるか

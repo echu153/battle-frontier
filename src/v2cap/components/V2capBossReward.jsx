@@ -125,11 +125,12 @@ export default function V2capBossReward({ bossKey, diffKey, cls, st = null, resu
                 {reward.solo && <div style={{ color: GOLD, fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'12px', marginBottom:'4px' }}>完全ソロ討伐成功！</div>}
                 <div style={{ color:'#ffcc00', fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'16px', lineHeight: 1.6 }}>EXP +{gainedExpOf(reward).toLocaleString()}</div>
                 <div style={{ color:'#ffcc00', fontFamily: JP_BOLD, fontWeight:'bold', fontSize:'16px', lineHeight: 1.6 }}>Gold +{Number(reward.gold).toLocaleString()}</div>
-                {/* 落としたもの（2026-11-06・lib/challenge.js の chDropsOf）：エリアの装備・特別な素材・専用装備。1つ1行（札と中身を同じ行に） */}
+                {/* 落としたもの（2026-11-06・lib/challenge.js の chDropsOf）：エリアの装備・特別な素材・専用装備・ユニーク。1つ1行（札と中身を同じ行に）
+                    ユニークの札は「装備」で、名前だけユニークの赤（出撃と同じ・2026-10-21 ユーザー「ドロップしたときユニークの文言いらない、普通の赤文字でいい」） */}
                 {chDropsOf(reward).map((x, i) => (
                   <div key={i} style={{ display:'flex', alignItems:'baseline', gap:'6px', fontSize:'12px', lineHeight: 1.8 }}>
                     <span style={{ ...DROP_TAG, color: x.kind === 'own' ? RARITY_COLOR.L : TEXT.label, borderColor: x.kind === 'own' ? RARITY_COLOR.L : '#33506e' }}>
-                      {x.kind === 'gear' ? '装備' : x.kind === 'mat' ? '素材' : '専用装備'}
+                      {x.kind === 'gear' || x.kind === 'uq' ? '装備' : x.kind === 'mat' ? '素材' : '専用装備'}
                     </span>
                     {x.kind === 'mat'
                       ? <span style={{ color:'#cfe2ff' }}>{x.name} ×{x.n}</span>

@@ -10,10 +10,10 @@
 // ============================================================
 import { runBattle, createSide, takeAction, liveStats, mpCostOf } from '../core/battle.js'
 import { setDealMult, setTakenMult, setResistMult, regenPctOf } from '../core/battleSet.js'
-import { AIL_LABEL, POISON_TURNS, inflict } from '../core/ailments.js'
+import { AIL_LABEL, POISON_TURNS, inflict, hasAilment } from '../core/ailments.js'
 import { STAT_DEFS } from '../core/stats.js'
 import { SKILL_BY_NAME } from './skills.js'
-import { UNIQUE_ITEMS } from './equipment.js'
+import { UNIQUE_ITEMS, CHALLENGE_UNIQUE_ITEMS } from './equipment.js'
 import { combinedFxOf } from './fxMerge.js'
 import { CAP_RULES } from './rules.js'
 import { dropRarityOf, lowestDropRarityOf } from './sortie.js'
@@ -397,6 +397,52 @@ export const CHECK = {
     const low = lowestDropRarityOf('boss')
     return res(fx.rareDropMult === v && up.L > base.L && up[low] < base[low], `ボスのレジェンダリー ${base.L}%→${up.L}%（${low === 'N' ? 'レア' : 'エピック'}以上×${v}）`)
   },
+  // ===== 四凶のユニーク（2026-11-06）=====
+  lostHpDeal: (item, v) => {
+    const at = (pct) => dealRatio(item, 'lostHpDeal', 'phys', (a) => hpTo(a, pct))
+    const want = (lost) => 1 + Math.min(v.max, v.pct * Math.floor(lost / v.per)) / 100
+    const full = at(100), half = at(50), low = at(1)
+    return res(near(full, 1) && near(half, want(50)) && near(low, want(99)), `HP100%で×${f2(full)}・HP50%で×${f2(half)}・HP1%で×${f2(low)}`)
+  },
+  perAilDeal: (item, v) => {
+    const kind = isMag(item) ? 'mag' : 'phys'
+    const withAils = (keys) => dealRatio(item, 'perAilDeal', kind, (x, y) => { for (const k of keys) inflict(y.ail, k, {}) })
+    const none = withAils([]), two = withAils(['poison', 'slow']), five = withAils(['poison', 'slow', 'burn', 'blind', 'weaken'])
+    return res(near(none, 1) && near(two, 1 + Math.min(v.max, v.pct * 2) / 100) && near(five, 1 + Math.min(v.max, v.pct * 5) / 100),
+      `状態異常0つで×${f2(none)}・2つで×${f2(two)}・5つで×${f2(five)}`)
+  },
+  // 相手をその状態異常にしておいて1回攻撃する。⚠オートの戦闘では、麻痺した相手は自分の番で1回休むと治る
+  //   ＝速い側が麻痺させても、次の自分の攻撃のときには治っていることが多い（ATBでは止まっている間の攻撃に乗る）
+  breakAil: (item, v) => {
+    const once = (drop, rng = LOW, fo = {}) => {
+      const a = createSide(me(item, { drop }))
+      const b = createSide(foe(fo))
+      inflict(b.ail, v.key, {})
+      const log = []
+      takeAction(a, b, rng, log)
+      return { log, b, dmg: log.filter(l => (l.type === 'skill' || l.type === 'normal') && l.side === ME).reduce((t, l) => t + (l.damage || 0), 0) }
+    }
+    const w = once([]), wo = once(['breakAil'])
+    const line = w.log.find(l => l.type === 'uniqueAct' && (l.text || '').includes('打ち消して'))
+    const x = ratio(w.dmg, wo.dmg)
+    // 外れたら消さない（相手をとても速くして命中を下げる）
+    const miss = once([], HIGH, { stats: { agi: 6000 } })
+    const kept = miss.dmg === 0 && hasAilment(miss.b.ail, v.key)
+    return res(!!line && near(x, 1 + v.pct / 100, 0.04) && kept, `${AIL_LABEL[v.key]}の相手に×${f2(x)}・消した・外れたら残る`)
+  },
+  // 相手の攻撃をかわす：蜃気楼（最初の攻撃を必ずかわす）を足して、乱数は「いつも当たる」＝状態異常の抽選は通る
+  dodgeAil: (item, list) => allOf(list.map(d => {
+    const once = (drop) => {
+      const a = createSide(me(item, { fx: { ...fxOf(item, drop), dodgeOnce: true } }))
+      const b = createSide(foe())
+      const log = []
+      takeAction(b, a, LOW, log)
+      return { log, b }
+    }
+    const w = once([]), wo = once(['dodgeAil'])
+    const line = w.log.find(l => l.type === 'uniqueFx' && (l.text || '').includes('かわして'))
+    return res(!!line && hasAilment(w.b.ail, d.key) && !hasAilment(wo.b.ail, d.key), line?.text || `かわしても${AIL_LABEL[d.key]}にならなかった`)
+  })),
 }
 // 画面に出す項目の名前
 export const CHECK_LABEL = {
@@ -412,6 +458,7 @@ export const CHECK_LABEL = {
   nextSameCut: '同じ種類の次のダメ−', calmCut: '状態異常でないとき受けるダメ−', earlyCut: 'はじめの数ターン受けるダメ−', vsSlowCut: '鈍足の相手から受けるダメ−',
   counterAil: '受けたら相手を状態異常', counterAilIf: '状態異常の相手から受けたら', counterSeal: 'スキルを受けたら封印', dodgeHeal: 'かわすと回復',
   revive: '1回だけ復活', earlyBuff: 'はじめの数ターンステ+', convertAdds: 'ステを足す', mpCut: '消費MP', rareDropMult: 'レア以上が落ちやすい',
+  lostHpDeal: '失ったHPで与ダメ+', perAilDeal: '相手の状態異常の数で与ダメ+', breakAil: '状態異常を消して与ダメ+', dodgeAil: 'かわすと相手を状態異常',
 }
 
 // 1つのユニークを確かめる。返すのは { item, ok, checks:[{ key, label, ok, detail }] }
@@ -427,8 +474,10 @@ export const checkUnique = (item) => {
   })
   return { item, ok: checks.length > 0 && checks.every(c => c.ok), checks }
 }
-// 60個ぜんぶ（onEach＝1つ終わるたびに呼ぶ。画面で進み具合を出すため）
-export const checkAllUniques = (onEach = null) => UNIQUE_ITEMS.map((item, i) => {
+// 確かめるユニーク＝出撃のボスの60個＋四凶の4つ（2026-11-06）
+export const CHECK_ITEMS = [...UNIQUE_ITEMS, ...CHALLENGE_UNIQUE_ITEMS]
+// ぜんぶ（onEach＝1つ終わるたびに呼ぶ。画面で進み具合を出すため）
+export const checkAllUniques = (onEach = null) => CHECK_ITEMS.map((item, i) => {
   const r = checkUnique(item)
   if (onEach) onEach(r, i)
   return r

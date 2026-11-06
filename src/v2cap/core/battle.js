@@ -593,11 +593,14 @@ function uniqueOnHurt(me, foe, out, rng, log) {
 
 // 自分の攻撃（スキル・通常攻撃）の与ダメージ倍率のうち、その攻撃だけに乗るもの：
 //   プリズムハート（スキル）・刹那の星刀（最初の攻撃スキル）・デスロール（当て続けた数）・クロックワークベルト（溜まった一撃）
-function uniqueMainMult(me, isSkill, uLog) {
+//   ★四凶のユニーク：ドンナーカイル（攻撃の前から相手がその状態異常なら+%。消すのは当たったとき＝uniqueBreak）
+function uniqueMainMult(me, isSkill, uLog, foe = null) {
   const fx = me.setFx
   const uq = me.uq
   if (!fx || !uq) return 1
   let pct = 0
+  uq.breakOn = !!(fx.breakAil && foe && hasAilment(foe.ail, fx.breakAil.key))
+  if (uq.breakOn) pct += fx.breakAil.pct
   if (isSkill && fx.skillDeal) pct += fx.skillDeal
   if (isSkill && fx.firstSkill && !uq.firstDone) {
     uq.firstDone = true
@@ -666,12 +669,34 @@ function uniqueAfterAttack(me, foe, { hits, crit, kind, mult, preAil }, rng, log
   }
 }
 
-// 攻撃をかわしたとき（かわした側 foe）：エウロスブーツ（HP回復）。1回の攻撃につき1回
-function uniqueDodged(foe, log) {
+// 攻撃をかわしたとき（かわした側 foe・撃った側 me）：エウロスブーツ（HP回復）・小糠雨の耳飾り（確率で相手に状態異常）。1回の攻撃につき1回
+function uniqueDodged(foe, log, me = null, rng = null) {
   const p = foe.setFx?.dodgeHeal
-  if (!p || foe.hp <= 0) return
-  const got = gainHp(foe, healMaxAmount(foe, p))
-  if (got > 0) log.push(uniLog(foe, 'dodgeHeal', `かわしてHPが${got.toLocaleString()}回復した！`, true))
+  if (foe.hp <= 0) return
+  if (p) {
+    const got = gainHp(foe, healMaxAmount(foe, p))
+    if (got > 0) log.push(uniLog(foe, 'dodgeHeal', `かわしてHPが${got.toLocaleString()}回復した！`, true))
+  }
+  if (!me || !rng || me.hp <= 0) return
+  for (const d of foe.setFx?.dodgeAil || []) {
+    const got = []
+    if (tryInflict(foe, me, { key: d.key, chance: d.chance }, rng, got)) {
+      log.push(uniLog(foe, 'dodgeAil', `かわして${me.name}を${AIL_LABEL[d.key]}にした！`, true))
+    }
+    for (const l of got) log.push(l)
+  }
+}
+
+// ドンナーカイル：当たったら、攻撃の前からかかっていた状態異常を消す（全部外れたら消さない）。
+//   呼ぶのは当たり外れが決まったあと・「当てたら状態異常」（onHit）の前＝同じ攻撃でまた麻痺にできる
+function uniqueBreak(me, foe, hits, uLog) {
+  const fx = me.setFx
+  const uq = me.uq
+  if (!fx?.breakAil || !uq?.breakOn) return
+  uq.breakOn = false
+  if (hits <= 0 || !hasAilment(foe.ail, fx.breakAil.key)) return
+  delete foe.ail[fx.breakAil.key]
+  uLog.push(uniLog(me, 'breakAil', `${foe.name}の${AIL_LABEL[fx.breakAil.key]}を打ち消して、与ダメージ+${fx.breakAil.pct}%！`))
 }
 
 // スキルを撃ったとき（使った枠を覚える）：深紅の牙輪・深紅の魔眼石（5つの枠を全部うめて、全部を1回ずつ使ったら+%）
@@ -1312,7 +1337,7 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       if (skill.preAil && skill.ails) for (const a of skill.ails) tryInflict(me, foe, { ...a, chance: a.chance * off }, rng, log)
       // ★防具のセット能力：与ダメージ+％（深淵の力・群狼の牙・業火・蜘蛛の糸・峰風）は上位職のぶんと同じくダメージ全体に掛ける
       // ★ユニーク：物理／魔法の与ダメージ+%は種別で（setDealMult の kind）・この攻撃だけに乗るもの（uniqueMainMult）
-      const dealMult = passiveDealMult(me, foe) * setDealMult(me, foe, eMe, eFoe, skill.kind) * uniqueMainMult(me, true, uLog)
+      const dealMult = passiveDealMult(me, foe) * setDealMult(me, foe, eMe, eFoe, skill.kind) * uniqueMainMult(me, true, uLog, foe)
       // ★防具のセット能力：蜃気楼（受ける側が戦闘中1回、この攻撃を完全にかわす＝全部の発が外れる）
       const mirageLog = []
       const mirage = useSetDodge(foe, mirageLog)
@@ -1406,7 +1431,8 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
       const preScale = wantPre && raw > 0 ? Math.max(1, rawPre / raw) : 1
       // かわされたぶん／当てたぶんは、相手側の「かわすたび」フックと次の行動の条件になる
       evoOnDodge(foe, missed)
-      if (missed > 0 && foe.setFx) uniqueDodged(foe, uLog)   // ★ユニーク：エウロスブーツ（かわしたら回復）
+      if (missed > 0 && foe.setFx) uniqueDodged(foe, uLog, me, rng)   // ★ユニーク：エウロスブーツ（かわしたら回復）・小糠雨の耳飾り（鈍足）
+      if (me.uq) uniqueBreak(me, foe, hits, uLog)   // ★ユニーク：ドンナーカイル（当たったら麻痺を消す・onHit より前）
       foe.justDodged = hits === 0
       foe.justHurt = hits > 0
       if (hits === 0) foe.dodgeCount = (foe.dodgeCount || 0) + 1   // ★上位クラス：流転掌が見る
@@ -1883,7 +1909,7 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
   const preRatio = r.hit && r.pre ? r.pre / Math.max(1, r.damage) : 1
   evoOnDodge(foe, r.hit ? 0 : 1)
   const uLog = []   // ★ユニーク：この攻撃で出た行（撃った行の後ろに出す）
-  if (!r.hit && foe.setFx) uniqueDodged(foe, uLog)   // ★ユニーク：エウロスブーツ（かわしたら回復）
+  if (!r.hit && foe.setFx) uniqueDodged(foe, uLog, me, rng)   // ★ユニーク：エウロスブーツ（かわしたら回復）・小糠雨の耳飾り（鈍足）
   foe.justDodged = !r.hit
   foe.justHurt = !!r.hit
   if (!r.hit) foe.dodgeCount = (foe.dodgeCount || 0) + 1   // ★上位クラス：流転掌が見る
@@ -1895,7 +1921,8 @@ const normalAttack = (me, foe, rng, log, multScale = 1) => {
   // ★防具のセット能力：与ダメージ+％も同じ枠・大地の守り（受けるクリティカルダメージ−%）
   // ★ユニーク：物理／魔法の与ダメージ+%（kind）・この攻撃だけに乗るもの（デスロール・クロックワークベルト。スキルのものは乗らない）
   const ichijiK = passiveDealMult(me, foe) * consumeDodgeBoost(me) * setDealMult(me, foe, eMe, eFoe, me.kind)
-    * uniqueMainMult(me, false, uLog)
+    * uniqueMainMult(me, false, uLog, foe)
+  if (me.uq) uniqueBreak(me, foe, r.hit ? 1 : 0, uLog)   // ★ユニーク：ドンナーカイル（当たったら麻痺を消す・onHit より前）
   if (r.hit && ichijiK !== 1) r.damage = Math.max(1, Math.floor(r.damage * ichijiK))
   if (r.hit && r.crit && foe.setFx?.critTakenCut) r.damage = Math.max(1, Math.floor(r.damage * setCritTakenMult(foe)))
   // 通常攻撃も「物理攻撃」なのでエンチャントの与ダメージ+%とヒット時効果が乗る

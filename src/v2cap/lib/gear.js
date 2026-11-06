@@ -35,11 +35,12 @@ export const N_SET_BASE = RARITY_BASE.N * SET_PART_SUM   // 316
 //   元の強さが10以上なら0.1倍が1以上なので今までと同じ
 // ★ユニーク（2026-10-21）：ステはユーザーが1つずつ決めた値（LV80・+0）＝その合計がLV80の戦闘力。
 //   ほかのLVでは本体の戦闘力の比で増える・減る（LV80より低いLVで着けると、同じ割合のままそのLV相当まで小さくなる＝案のシートの決まり）
+//   ★四凶のユニーク（2026-11-06・必要LV85）はLV85のステを決めてある＝基準のLVは装備のアイテムLV（item.lv）。ほかのユニークは80
 // ★挑戦（四凶）の専用装備（2026-11-06）：同じアイテムLVのレジェンダリーの強さに item.extra（+10）を足す
 //   （ユーザー「エリアのレジェンダリーよりもステータス10ポイント多めに」）。強化はこの合計に掛ける・必要LVに足りないときはLV相当のレジェンダリー＋10
 const distSum = (dist) => Object.values(dist || {}).reduce((t, v) => t + v, 0)
 const basePowerOf = (item, ilv) => (isUnique(item)
-  ? distSum(item.dist) * bodyPowerAt(ilv) / bodyPowerAt(UNIQUE_LV)
+  ? distSum(item.dist) * bodyPowerAt(ilv) / bodyPowerAt(item.lv || UNIQUE_LV)
   : (RARITY_BASE[item?.rarity] || 0) * (PART_MULT[item?.part] || 1) * bodyPowerAt(ilv) * GEAR_RATIO / N_SET_BASE + (item?.extra || 0))
 export const powerAt = (item, ilv, plus = 0) => {
   const base = basePowerOf(item, ilv)
