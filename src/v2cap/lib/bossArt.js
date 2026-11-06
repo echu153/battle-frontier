@@ -148,6 +148,9 @@ export const bossAccentOf = (key) => BOSS_ACCENT[key] || '#ffd27a'
 //   ★ボスを足すときは色も決める（ユーザーに聞く・dungeon.test.js が挑戦のカテゴリの全部のボスにあるか見る）
 const BOSS_TINT = { varuzenoku: '#ff4040', amaza: '#3d8bff', zerugiasu: '#ffcc33', enma: '#a95cff' }
 export const bossTintOf = (key) => BOSS_TINT[key] || null
+// 挑戦の入口のボスの名前を折り返してよい所（components/V2capDungeon.jsx）：漢字からカタカナに変わる所だけ（黒龍｜ヴァルゼノク・雷鋼機神｜ゼルギアス）
+//   【確定】2026-11-06 ユーザー「ここ同じ高さで2列にして」→ スマホの幅の2列では名前が2行になる。言葉の途中（黒龍ヴァル｜ゼノク）で折れないように
+export const bossNamePartsOf = (name) => name.replace(/(\p{Script=Han})(?=\p{Script=Katakana})/gu, '$1|').split('|')
 
 // 画面で使う形（無ければ null）
 //   { name, base, idle:{ src, frames, ms:[…] }, illust, motions:{ <key>: lib/motionArt.js の motionOf と同じ形＋label＋エフェクト } }

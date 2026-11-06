@@ -20,7 +20,7 @@ import { motionOf } from '../lib/motionArt.js'
 import { homeIconOf } from '../lib/classArt.js'
 import { artGenderOf } from '../lib/gender.js'
 import { CLASS_BY_ID } from '../lib/jobs.js'
-import { bossArtOf, bossEncounterOf, bossFaceOf, bossThumbOf, bossTintOf } from '../lib/bossArt.js'
+import { bossArtOf, bossEncounterOf, bossFaceOf, bossNamePartsOf, bossThumbOf, bossTintOf } from '../lib/bossArt.js'
 import { bossIllustOf } from '../lib/bossIllust.js'
 import { menuHeadReady } from '../lib/menuHead.js'
 import { MenuHead } from './V2Status.jsx'
@@ -63,6 +63,7 @@ import {
 // 【確定】同じ日 ユーザー「アイテムは4つまでしか持てないようにして、全部で合計4つ」「装備は挑戦タブから設定できるように」：ポップアップで持ち込む薬を選ぶ（V2capItemLoadout.jsx）
 // 【確定】2026-11-05 ユーザー「これ 2列2行にして」：入口のカテゴリの中のボスは2列の格子
 //   → 2026-11-06 ユーザー「一旦1列に戻して、ここの部分は顔付近だけ表示されるようにして※クラスの顔アイコンみたいな感じ」で1列（1行に1体・左に顔のアップ）に戻した
+//   → 同じ日 ユーザー「ここ同じ高さで2列にして」：顔のアップの枠のまま2列。全部の枠を同じ高さに
 // 【確定】同じ日 ユーザー「あと敵のHPの数値は見れないようにして」：ボスのHPは数字も割合も出さず、バーだけ
 //   （戦闘の舞台と見出し・入っているボスの行・救援の一覧・ポップアップ・結果の画面）。削った割合も出さない（V2capAtbFight.jsx）。
 //   与えたダメージと貢献度（2026-11-01 にユーザーが頼んだ物）はそのまま
@@ -89,16 +90,18 @@ const MiniBar = ({ pct }) => (
   </span>
 )
 // 入口のボスの顔のアップ（神殿のクラスの顔アイコンと同じ形＝60pxの正方形・顔を全面に・後ろにボスの色）。顔のアップが無いボスは一覧の小さい絵を縮めて出す
+//   2列（2026-11-06〜）のスマホの幅では少し小さく（375px で約52px・いちばん小さくて48px）＝名前が言葉の切れ目で2行に収まる（本番で 320〜478px の幅を測った）
+const FACE_SIZE = 'clamp(48px, 14vw, 60px)'
 const BossFace = ({ bossKey }) => {
   const face = bossFaceOf(bossKey), src = face || bossThumbOf(bossKey), tint = bossTintOf(bossKey)
   if (!src) return null
   return (
-    <div style={{ width:'60px', height:'60px', flexShrink:0, overflow:'hidden', background: tint ? `${tint}30` : '#0b1a2e', border:'1px solid #002244', display:'flex', alignItems:'center', justifyContent:'center' }}>
+    <div style={{ width: FACE_SIZE, height: FACE_SIZE, flexShrink:0, overflow:'hidden', background: tint ? `${tint}30` : '#0b1a2e', border:'1px solid #002244', display:'flex', alignItems:'center', justifyContent:'center' }}>
       <img src={src} alt="" draggable={false} style={{ width:'100%', height:'100%', objectFit: face ? 'cover' : 'contain' }} />
     </div>
   )
 }
-// 入口のボスの行の背景：ボスの色（lib/bossArt.js の bossTintOf）を薄く敷く。左の顔の後ろを少し濃く、右へ薄く（1列の行・2026-11-06〜）。
+// 入口のボスの枠の背景：ボスの色（lib/bossArt.js の bossTintOf）を薄く敷く。左の顔の後ろを少し濃く、右へ薄く（顔のアップの枠・2026-11-06〜）。
 //   下地は色のない暗い色（紺の上に重ねると黄色が灰色にくすんだ・本番で見比べた）。color はなぞったときの光（src/dev-ui.css の currentColor）
 //   色の無いボスは前のまま（背景なし）
 const bossCardBg = (tint) => (tint
@@ -399,7 +402,7 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
         )
       })}
 
-      {/* カテゴリごとのボス（押すとポップアップ。もう入っているボスは続きから）。2026-11-05 の2列は 11-06 に1列へ戻した（下） */}
+      {/* カテゴリごとのボス（押すとポップアップ。もう入っているボスは続きから）。2026-11-05 の2列 → 11-06 に1列（顔のアップ）→ 同じ日 顔のアップの枠のまま2列（下） */}
       {CHALLENGE_CATS.map(cat => (
         <div key={cat.key} style={{ ...box, padding:'10px', marginBottom:'10px' }}>
           {/* 【確定】2026-11-06 ユーザー「四凶のところ、ちょっとアイコン？バナーみたいなの差し込みたい」→選んだ「見出しの帯」：ホームの見出しと同じ帯（lib/menuHead.js の CAT_HEAD_DEFS）。
@@ -407,19 +410,24 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
           {cat.head && menuHeadReady(cat.head) ? <MenuHead head={cat.head} title={cat.label} />
             : <div style={{ color:'#ff8866', fontSize:'13px', fontWeight:'bold', marginBottom:'8px' }}>{cat.label}</div>}
           {/* 【確定】2026-11-06 ユーザー「一旦1列に戻して、ここの部分は顔付近だけ表示されるようにして※クラスの顔アイコンみたいな感じ」：
-              1列（1行に1体）・左に顔のアップ（BossFace）・名前と挑戦できるか・右に ›。ボスの色の背景（bossCardBg）はそのまま（前の2列は 2026-11-05） */}
-          <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+              1つの枠は 左に顔のアップ（BossFace）・名前と挑戦できるか。ボスの色の背景（bossCardBg）はそのまま
+              → 同じ日 ユーザー「ここ同じ高さで2列にして」：この枠のまま2列の格子に。全部の枠を同じ高さ（gridAutoRows:'1fr'＝名前や言葉が折れて高くなる枠があっても、ほかの行の枠もそろう）。
+              スマホの幅では名前が2行になる＝漢字からカタカナに変わる所だけで折る（bossNamePartsOf・keep-all＋wbr・それでも入らないとても細い幅は語の中で折る＝anywhere）。
+              1列のときの右の › は外した（2列では名前の幅が足りず「雷鋼機神ゼルギア｜ス」と折れた・ホームの2列のボタンにも › は無い）。
+              前の2列（2026-11-05）は 絵・名前・挑戦できるか を上から並べた背の高い枠だった */}
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(2, minmax(0, 1fr))', gridAutoRows:'1fr', gap:'6px' }}>
             {cat.bosses.map(key => {
               const boss = DUNGEON_BOSSES[key]
               return (
                 <button key={key} onClick={() => openPick(key, active.find(r => r.mine && r.boss === key) || null)}
-                  style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', boxSizing:'border-box', padding:'6px 8px', ...bossCardBg(bossTintOf(key)), cursor:'pointer', textAlign:'left' }}>
+                  style={{ display:'flex', alignItems:'center', gap:'6px', width:'100%', minWidth:0, boxSizing:'border-box', padding:'6px', ...bossCardBg(bossTintOf(key)), cursor:'pointer', textAlign:'left' }}>
                   <BossFace bossKey={key} />
                   <span style={{ flex:1, minWidth:0 }}>
-                    <b style={{ color:'#ff8866', fontSize:'13px' }}>{boss.name}</b><br />
+                    <b style={{ color:'#ff8866', fontSize:'13px', wordBreak:'keep-all', overflowWrap:'anywhere' }}>
+                      {bossNamePartsOf(boss.name).map((p, i) => <span key={i}>{i > 0 && <wbr />}{p}</span>)}
+                    </b><br />
                     <span style={{ color: TEXT.label, fontSize:'10px' }}>{state && (blockOf(key) || '挑戦可能')}</span>
                   </span>
-                  <span style={{ color: TEXT.label, fontSize:'14px', flexShrink:0 }}>›</span>
                 </button>
               )
             })}

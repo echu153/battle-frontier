@@ -10,7 +10,7 @@ import {
 import { createAtb, runFor, enrageOf, stateChips, startMacro, fillPerSecOf, hpBuffChips, castMsOf, ATB_SLOW_CUT, FILL_PER_SEC, BUFF_GAUGE_SEC, BUFF_WAIT_AFTER_ACT_SEC, BUFF_SHOW_SEC, TURN_SEC, GAUGE_FULL, NOW_WAIT_AFTER_ACT_SEC, CAST_SEC } from '../core/atb.js'
 import { inflict, healMultOf, hasAilment } from '../core/ailments.js'
 import { bossIllustOf, buffArtMsOf } from './bossIllust.js'
-import { bossThumbOf, bossTintOf, bossFaceOf, BOSS_FACE_BOX } from './bossArt.js'
+import { bossThumbOf, bossTintOf, bossFaceOf, bossNamePartsOf, BOSS_FACE_BOX } from './bossArt.js'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
 import { liveStats, hpStepMultOf, healMaxAmount, createSide, takeAction } from '../core/battle.js'
 import { splitHits } from './atbFx.js'
@@ -745,13 +745,26 @@ test('【確定】2026-10-31 入口のボスの行の言葉と「挑戦する」
   assert.match(src, /\{state && \(blockOf\(key\) \|\| '挑戦可能'\)\}/, '行の言葉も同じ決まり（読み込み中は出さない）・ユーザー「挑戦可能 に変更して」')
 })
 
-test('【確定】2026-11-06 入口は1列（1行に1体）・左にボスの顔のアップ（ユーザー「一旦1列に戻して、ここの部分は顔付近だけ表示されるようにして※クラスの顔アイコンみたいな感じ」・前の2列は 11-05）', () => {
+test('【確定】2026-11-06 入口は顔のアップの枠を2列・全部同じ高さ（ユーザー「一旦1列に戻して、ここの部分は顔付近だけ表示されるようにして※クラスの顔アイコンみたいな感じ」→「ここ同じ高さで2列にして」）', () => {
   const src = readFileSync(new URL('../components/V2capDungeon.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
-  assert.match(src, /\{CHALLENGE_CATS\.map\(cat => \([\s\S]*?<div style=\{\{ display:'flex', flexDirection:'column', gap:'6px' \}\}>\n\s*\{cat\.bosses\.map\(key => \{/, 'カテゴリの中は1列')
-  assert.doesNotMatch(src, /gridTemplateColumns:'repeat\(2/, '2列の格子は使わない')
-  assert.match(src, /<BossFace bossKey=\{key\} \/>/, '行の左に顔のアップ')
-  // 顔のアップは神殿のクラスの顔アイコンと同じ形（60pxの正方形・顔を全面に）
-  assert.ok(src.includes("<div style={{ width:'60px', height:'60px', flexShrink:0, overflow:'hidden', background: tint ? `${tint}30` : '#0b1a2e', border:'1px solid #002244'"))
+  // 2列の格子・全部の行を同じ高さ（名前や言葉が折れて高くなる枠があっても、ほかの行の枠もそろう）
+  assert.match(src, /\{CHALLENGE_CATS\.map\(cat => \([\s\S]*?<div style=\{\{ display:'grid', gridTemplateColumns:'repeat\(2, minmax\(0, 1fr\)\)', gridAutoRows:'1fr', gap:'6px' \}\}>\n\s*\{cat\.bosses\.map\(key => \{/, 'カテゴリの中は2列・同じ高さ')
+  // 1つの枠は横並び（左に顔のアップ・名前と挑戦できるか）で、細い幅でもはみ出さない（minWidth:0）
+  assert.match(src, /style=\{\{ display:'flex', alignItems:'center', gap:'6px', width:'100%', minWidth:0, boxSizing:'border-box', padding:'6px', \.\.\.bossCardBg\(bossTintOf\(key\)\)/)
+  assert.match(src, /<BossFace bossKey=\{key\} \/>/, '枠の左に顔のアップ')
+  // 名前は漢字からカタカナに変わる所でだけ折る（スマホの幅で「黒龍ヴァル｜ゼノク」「雷鋼機神ゼルギア｜ス」と折れた）
+  assert.ok(src.includes("<b style={{ color:'#ff8866', fontSize:'13px', wordBreak:'keep-all', overflowWrap:'anywhere' }}>"))
+  assert.ok(src.includes('{bossNamePartsOf(boss.name).map((p, i) => <span key={i}>{i > 0 && <wbr />}{p}</span>)}'))
+  assert.deepEqual(bossNamePartsOf('黒龍ヴァルゼノク'), ['黒龍', 'ヴァルゼノク'])
+  assert.deepEqual(bossNamePartsOf('雷鋼機神ゼルギアス'), ['雷鋼機神', 'ゼルギアス'])
+  assert.deepEqual(bossNamePartsOf('雨摩座'), ['雨摩座'])
+  assert.deepEqual(bossNamePartsOf('閻魔'), ['閻魔'])
+  // 1列のときの右の › は外した（2列では名前の幅が足りない）
+  const list = src.slice(src.indexOf('{CHALLENGE_CATS.map(cat => ('), src.indexOf('{/* 救援の一覧 */}'))
+  assert.ok(list.length > 0 && !list.includes('>›<'), '2列の枠に › を出さない')
+  // 顔のアップは神殿のクラスの顔アイコンと同じ形（60pxの正方形・顔を全面に）。スマホの幅では少し小さく（いちばん小さくて48px）
+  assert.ok(src.includes("const FACE_SIZE = 'clamp(48px, 14vw, 60px)'"))
+  assert.ok(src.includes("<div style={{ width: FACE_SIZE, height: FACE_SIZE, flexShrink:0, overflow:'hidden', background: tint ? `${tint}30` : '#0b1a2e', border:'1px solid #002244'"))
   assert.ok(src.includes("objectFit: face ? 'cover' : 'contain'"))
   // 挑戦のカテゴリの全部のボスに顔のアップがある（ボスを足すときは BOSS_FACE_BOX にも足して node tools/v2cap-boss-thumb.mjs）
   for (const cat of CHALLENGE_CATS) for (const k of cat.bosses) {
