@@ -568,6 +568,8 @@ export default function V2capHome() {
               <span style={{ color:'#88ccff', fontSize:'13px' }}>{SCREEN_TITLE[screen]}</span>
               {/* 賭博場の効果音の切り替えは題の行の右端（2026-10-27 ユーザー指示「音ありなし右上に設置するようにして」） */}
               {screen === 'casino' && <span style={{ marginLeft:'auto' }}><CasinoSoundToggle /></span>}
+              {/* 日替わりクエストはどの枠も朝5時で変わる＝題の行の右はしに1回だけ（2026-11-07 ユーザー「（AM 5：00更新）は日替わりクエスト全部だからHELPか右上の方に書いて」） */}
+              {screen === 'training' && <span style={{ marginLeft:'auto', color: TEXT.label, fontSize:'11px', whiteSpace:'nowrap' }}>（AM 5：00更新）</span>}
             </div>
             {screen === 'profile' && <V2capProfile prof={prof} inventory={inventory} onProfile={refresh} />}
             {screen === 'equip' && <V2capEquip prof={prof} inventory={inventory} onProfile={refresh} onGo={setScreen} />}

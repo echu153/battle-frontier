@@ -46,24 +46,28 @@ const LATE_MS = 10 * 60 * 1000   // 始めてから記録を受け付ける長�
 const errText = (error, data) => (/could not find the function/i.test(error?.message || '') ? NO_SQL : (error?.message || data?.error || 'うまくいきませんでした'))
 
 // ===== クエストごとの違い（呼ぶ関数・絵・言葉・報酬）=====
+//   【確定】2026-11-07 ユーザー「戦った時間⇒これ挑戦の言い方と合わせて」「きょうはもう修練しました→挑戦済みにして」
+//     「与えたダメージが多いほど、獲得できるEXPが増加します↑今な感じになおして、類似の内容はすべて」「金貨⇒Goldに統一」
+//     「（AM 5：00更新）は日替わりクエスト全部だからHELPか右上の方に書いて」（→ 題の行の右はし・pages/V2capHome.jsx）
+//     ＝時間の行は挑戦の倒せなかったときと同じ「戦闘時間」・どちらの枠も「挑戦できます」「挑戦済み」「⚔ 挑戦する」・入る量は「獲得できる◯◯」
 const SCARECROW_RPC = { state: 'v2cap_scarecrow_state', start: 'v2cap_scarecrow_start', end: 'v2cap_scarecrow_end', reset: 'v2cap_dev_scarecrow_reset' }
 const DAY_RPC = { state: 'v2cap_dayquest_state', start: 'v2cap_dayquest_start', end: 'v2cap_dayquest_end', reset: 'v2cap_dev_dayquest_reset' }
 const SCARECROW_Q = {
   key: 'scarecrow', name: SCARECROW_NAME, color: COLOR, border: '#3a6a2a', title: '#d8ffc8', glow: '95,208,122',
   startAtb: startScarecrowAtb, art: scarecrowArtOf, face: scarecrowFaceOf, reward: 'exp',
-  w: { go: '⚔ 修練する', can: '修練できます', done: 'きょうはもう修練しました', checking: '修練の結果を確かめています', locked: 'エリア①をクリアすると修練できます',
-    result: '修練結果', time: '修練時間', quit: '修練をやめる（ここまでのダメージで入れる）', more: '与えたダメージが多いほど、入るEXPが増えます（AM 5：00更新）',
+  w: { go: '⚔ 挑戦する', can: '挑戦できます', done: '挑戦済み', checking: '結果を確かめています', locked: 'エリア①をクリアすると挑戦できます',
+    result: '修練結果', time: '戦闘時間', quit: 'やめる（ここまでのダメージで獲得）', more: '与えたダメージが多いほど、獲得できるEXPが増加します',
     practice: '🧪 試しになぐる（EXPなし）［開発］', reset: '🧪 きょうの修練を戻す［開発］', resetDone: 'きょうの修練を戻しました' },
 }
 // 曜日のクエスト（key ごとの絵と色。月〜金のクエストを足すときはここにも足す）
 const DAY_LOOK = {
   [COFFER_KEY]: { color: '#ffcc55', border: '#6a5420', title: '#fff0c0', glow: '255,190,60', art: cofferArtOf, face: cofferFaceOf,
-    more: '与えたダメージが多いほど、こぼれる金貨が増えます（AM 5：00更新）' },
+    more: '与えたダメージが多いほど、獲得できるGoldが増加します' },
 }
 const DAY_Q = Object.fromEntries(Object.entries(DAY_LOOK).filter(([k]) => DAY_QUESTS[k]).map(([k, look]) => [k, {
   key: k, name: DAY_QUESTS[k].name, reward: DAY_QUESTS[k].reward, ...look, startAtb: startDayQuestAtb,
-  w: { go: '⚔ 挑む', can: '挑めます', done: 'きょうはもう挑みました', checking: 'クエストの結果を確かめています', locked: 'エリア①をクリアすると挑めます',
-    result: 'クエスト結果', time: '戦った時間', quit: 'やめる（ここまでのダメージで入れる）', more: look.more,
+  w: { go: '⚔ 挑戦する', can: '挑戦できます', done: '挑戦済み', checking: '結果を確かめています', locked: 'エリア①をクリアすると挑戦できます',
+    result: 'クエスト結果', time: '戦闘時間', quit: 'やめる（ここまでのダメージで獲得）', more: look.more,
     practice: '🧪 試しになぐる（Goldなし）［開発］', reset: '🧪 きょうのクエストを戻す［開発］', resetDone: 'きょうのクエストを戻しました' },
 }]))
 const dayQOf = (quest) => DAY_Q[quest] || null
@@ -73,8 +77,8 @@ const rangeOf = (q, lv) => (q.reward === 'gold'
   : `${scarecrowExpOf(lv, SCARECROW_PCT_MIN).toLocaleString()}〜${scarecrowExpOf(lv, SCARECROW_PCT_MAX).toLocaleString()}`)
 const gotOf = (q, r) => (q.reward === 'gold' ? `+${Number(r?.gold || 0).toLocaleString()} Gold` : `EXP +${gainedExpOf(r).toLocaleString()}`)
 
-const LABEL_W = '96px'
-const VALUE_W = '72px'
+const LABEL_W = '108px'   // 「獲得できるGold」が入る幅（96px では値にくっついた）
+const VALUE_W = '100px'   // 値の欄（右揃え）。Gold の幅（LV80 で 20,000〜60,000）が入る＝同じ枠の値の右はしがそろう
 const Row = ({ label, value, color = TEXT.bright }) => (
   <div style={{ display:'flex', alignItems:'baseline', padding:'5px 0', borderTop:'1px solid #001428', fontSize:'12px' }}>
     <span style={{ color: TEXT.label, width: LABEL_W, flexShrink: 0 }}>{label}</span>
@@ -104,9 +108,8 @@ function QuestResult({ q, cls, st, r, onBack }) {
             <>
               {sec !== null && <Row label={q.w.time} value={`${sec.toFixed(1)}秒`} />}
               <Row label="与えたダメージ" value={Number(r.damage).toLocaleString()} />
-              <Row label="目安との比" value={`${r.pct}%`} color={r.pct >= 100 ? '#ffd27a' : TEXT.bright} />
               {r.corrected && <div style={{ color: TEXT.sub, fontSize:'10px', padding:'2px 0 4px' }}>{CORRECTED_TEXT}</div>}
-              {r.late && <div style={{ color: TEXT.sub, fontSize:'10px', padding:'2px 0 4px' }}>結果が届かなかったので、通常攻撃だけの{SCARECROW_SEC}秒として入れました</div>}
+              {r.late && <div style={{ color: TEXT.sub, fontSize:'10px', padding:'2px 0 4px' }}>結果が届かなかったので、通常攻撃だけの{SCARECROW_SEC}秒として計算しました</div>}
             </>
           )}
         </div>
@@ -254,7 +257,7 @@ function QuestCard({ q, flow, open, lv, sub, dev, onStart, onPractice }) {
         </span>
       </div>
       <div style={{ marginTop:'8px' }}>
-        <Row label={q.reward === 'gold' ? '入るGold' : '入るEXP'} value={rangeOf(q, lv)} color="#ffcc00" />
+        <Row label={q.reward === 'gold' ? '獲得できるGold' : '獲得できるEXP'} value={rangeOf(q, lv)} color="#ffcc00" />
         {today?.status === 'done' && today.result && <Row label="きょうの結果" value={gotOf(q, today.result)} color="#ffcc00" />}
       </div>
       <div style={{ color: TEXT.sub, fontSize:'10px', margin:'6px 0 8px' }}>{q.w.more}</div>
