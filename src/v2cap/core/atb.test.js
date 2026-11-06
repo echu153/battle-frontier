@@ -253,6 +253,9 @@ test('【確定】通常攻撃をするたび最大MPの3%が戻る（切り捨�
   // HELP（マクロの説明）の数も同じ
   const help = readFileSync(new URL('../components/V2capAtbMacros.jsx', import.meta.url), 'utf8')
   assert.ok(help.includes(`通常攻撃をするたび最大MPの${NORMAL_MP_PCT}%が戻ります`))
+  // 試し撃ちの説明に前の決まり（MPは回復しない）を残さない（2026-11-06 本番で見つけた）
+  const trial = readFileSync(new URL('../components/V2capAtb.jsx', import.meta.url), 'utf8')
+  assert.ok(!/MPは回復しません|MPは回復しない/.test(trial))
 })
 
 test('MPが足りない技は、マクロが通常攻撃でつないで待ち、通常攻撃で戻ったMPで撃てるようになったら出る', () => {
