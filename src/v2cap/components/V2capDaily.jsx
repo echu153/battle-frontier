@@ -65,7 +65,7 @@ export default function V2capDaily({ prof, onProfile, open = false, onToggle }) 
     <span>
       📋 今日のミッション
       {!d.accepted
-        ? <span style={{ color:'#ffcc00', fontSize:'10px', marginLeft:'6px' }}>{busy ? '受注しています...' : 'まだ受注していません'}</span>
+        ? <span style={{ color:'#ffcc00', fontSize:'10px', marginLeft:'6px' }}>{busy ? '受注しています…' : 'まだ受注していません'}</span>
         : (
           <>
             <span style={{ color: done ? '#44ff88' : '#ffcc00', fontSize:'11px', marginLeft:'6px' }}>{doneCountOf(d)}/{DAILY_TASKS.length}</span>
@@ -104,13 +104,13 @@ export default function V2capDaily({ prof, onProfile, open = false, onToggle }) 
         {!d.accepted ? (
           <button onClick={accept} disabled={busy}
             style={{ ...btn('#ffcc00'), width:'100%', marginTop:'6px', cursor: busy ? 'not-allowed' : 'pointer' }}>
-            {busy ? '受注しています...' : '📋 受注する'}
+            {busy ? '受注しています…' : '📋 受注する'}
           </button>
         ) : (
           <button onClick={claim} disabled={!!claimErr || busy}
             style={{ ...btn(claimErr ? '#334455' : '#ffcc00'), width:'100%', marginTop:'6px',
               color: claimErr ? '#445566' : '#ffcc00', cursor: claimErr ? 'not-allowed' : 'pointer' }}>
-            {busy ? '受け取っています...' : d.claimed ? '受け取り済み' : done ? '🎁 報酬を受け取る' : '達成すると受け取れます'}
+            {busy ? '受け取っています…' : d.claimed ? '受け取り済み' : done ? '🎁 報酬を受け取る' : '達成すると受け取れます'}
           </button>
         )}
         {/* 説明は HELP から（2026-10-24 ユーザー指示「これはHELPにまとめて」） */}

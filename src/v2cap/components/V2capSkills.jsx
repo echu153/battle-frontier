@@ -133,7 +133,7 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
       </div>
       {atbOpened && (
         <div style={{ display: mode === 'atb' ? 'block' : 'none' }}>
-          <Suspense fallback={<div style={{ color: TEXT.label, fontSize:'11px', padding:'10px' }}>読み込み中...</div>}>
+          <Suspense fallback={<div style={{ color: TEXT.label, fontSize:'11px', padding:'10px' }}>読み込み中…</div>}>
             <V2capSkillsAtb prof={prof} onProfile={onProfile} />
           </Suspense>
         </div>
@@ -172,7 +172,7 @@ export default function V2capSkills({ prof, inventory, onProfile }) {
         {(setErr || error) && <div style={{ color:'#ff4444', fontSize:'11px', marginTop:'8px' }}>⚠ {setErr || error}</div>}
         <div style={{ display:'flex', gap:'6px', marginTop:'8px' }}>
           <button onClick={save} disabled={busy || !!setErr} style={{ ...btn('#44aaff'), opacity: (busy || setErr) ? 0.4 : 1 }}>
-            {busy ? '保存中...' : '保存'}
+            {busy ? '保存中…' : '保存'}
           </button>
           <button onClick={() => setDraft(normalize(currentSetOf(prof)))} disabled={busy} style={btn('#7fa6d0')}>戻す</button>
         </div>

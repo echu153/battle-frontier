@@ -60,7 +60,7 @@ export default function V2capAtbMacros({ macros, onChange, usable, dirty, saving
         <div style={{ display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap', marginTop:'4px' }}>
           <button onClick={onSave} disabled={!dirty || saving}
             style={{ ...miniBtn(dirty ? '#44ff88' : TEXT.empty), padding:'6px 12px', fontSize:'11px', cursor: dirty && !saving ? 'pointer' : 'default' }}>
-            {saving ? '保存中...' : dirty ? '💾 マクロを保存' : '保存済み'}
+            {saving ? '保存中…' : dirty ? '💾 マクロを保存' : '保存済み'}
           </button>
           {msg && <span style={{ color: msg.ok ? '#44ff88' : '#ff6666', fontSize:'10px' }}>{msg.text}</span>}
         </div>

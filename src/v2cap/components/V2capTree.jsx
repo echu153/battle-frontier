@@ -236,7 +236,7 @@ export default function V2capTree({ prof, onProfile, unlimited = false }) {
           {ready || busy ? (
             <span style={{ position:'relative', display:'inline-flex', alignItems:'center', justifyContent:'center', gap:'10px' }}>
               <img src={PRAY_ICON} alt="" width={34} height={34} style={{ display:'block', filter:'drop-shadow(0 0 6px #ffd75e99)' }} />
-              {busy ? '祈っています...' : '祈る'}
+              {busy ? '祈っています…' : '祈る'}
             </span>
           ) : (
             <>

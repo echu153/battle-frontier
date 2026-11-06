@@ -225,7 +225,7 @@ export const SKILLS = [
   { name:'仕留めの矢', cls:'狩人', kind:'phys', mult:1.41, add:[{ stat:'dex', rate:0.4 }], proc:82, mp:18, lowHpBonus:{ max:45, at:20 }, desc:'とどめの一矢。相手のHPが低いほど威力が上がる（HP20%以下で最大+45%）。DEXも威力になる' },
   { name:'鷹ノ目',   cls:'狩人', kind:'passive', mp:0, passive:{ hitMult:{ mult:1.1, lowMult:1.3, at:30 } }, desc:'命中率が1.1倍。相手のHPが30%以下なら1.3倍' },
   { name:'貫き矢',   cls:'狩人', kind:'phys', mult:1.53, add:[{ stat:'dex', rate:0.3 }], defPen:0.35, proc:88, mp:14, reqJobs:5, desc:'相手の防御を35%無視。DEXも威力になる' },
-  { name:'追い討ち', cls:'狩人', kind:'phys', mult:1.27, add:[{ stat:'dex', rate:0.3 }], proc:88, mp:14, lowHpBonus:{ max:50, at:20 }, reqJobs:5, desc:'DEXも威力になる。相手のHPが低いほど威力が上がる（HP20%以下で最大＋50%）' },
+  { name:'追い討ち', cls:'狩人', kind:'phys', mult:1.27, add:[{ stat:'dex', rate:0.3 }], proc:88, mp:14, lowHpBonus:{ max:50, at:20 }, reqJobs:5, desc:'DEXも威力になる。相手のHPが低いほど威力が上がる（HP20%以下で最大+50%）' },
   { name:'スモークボム',     cls:'狩人', kind:'phys', mult:1.75, add:[{ stat:'dex', rate:0.3 }], proc:85, mp:16, buff:{ enemy:{ dex:-25 } }, reqJobs:5, desc:'目つぶし。相手のDEX-25%（重ねがけ可）。DEXも威力になる' },
   { name:'鷹爪連射', cls:'狩人', kind:'phys', mult:0.34, add:[{ stat:'dex', rate:0.15 }], hits:4, proc:80, mp:20, noCrit:true, lowHpBonus:{ max:30, at:20 }, reqJobs:5, desc:'4連射。DEXも威力になる。クリティカルしない。相手のHPが低いほど威力が上がる' },
   { name:'トラップセット',   cls:'狩人', kind:'buff', proc:95, mp:13, buff:{ enemy:{ agi:-35 } }, priority:1, reqJobs:5, desc:'相手のAGI-35%（重ねがけ可）' },

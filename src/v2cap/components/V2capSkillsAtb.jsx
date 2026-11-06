@@ -105,7 +105,7 @@ export default function V2capSkillsAtb({ prof, onProfile }) {
         </div>
         <div style={{ display:'flex', gap:'6px', marginTop:'8px', alignItems:'center', flexWrap:'wrap' }}>
           <button onClick={saveOff} disabled={offBusy || !offDirty} style={{ ...btn('#44aaff'), opacity: (offBusy || !offDirty) ? 0.4 : 1 }}>
-            {offBusy ? '保存中...' : '保存'}
+            {offBusy ? '保存中…' : '保存'}
           </button>
           <button onClick={() => { setOff(JSON.parse(savedOffKey)); setOffMsg(null) }} disabled={offBusy || !offDirty} style={{ ...btn('#7fa6d0'), opacity: offDirty ? 1 : 0.4 }}>戻す</button>
           <button onClick={() => { setOff([]); setOffMsg(null) }} disabled={offBusy || off.length === 0} style={{ ...miniBtn('#7fa6d0'), padding:'6px 8px', fontSize:'11px', opacity: off.length ? 1 : 0.4 }}>全部持っていく</button>

@@ -33,5 +33,5 @@ test('【確定】2026-11-06 作り手のメモや処理の言葉を画面に出
   for (const { f, src } of screens()) {
     assert.ok(!src.includes('あとで作ります'), `${f}：あとで作ります`)
   }
-  assert.ok(!read('components/V2Modal.jsx').includes("'処理中...'"), '確かめの小窓の待ち時間は「通信中...」')
+  assert.ok(!read('components/V2Modal.jsx').includes("'処理中...'") && read('components/V2Modal.jsx').includes("'通信中…'"), '確かめの小窓の待ち時間は「通信中…」')
 })

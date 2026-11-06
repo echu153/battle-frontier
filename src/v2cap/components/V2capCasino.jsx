@@ -339,7 +339,7 @@ export default function V2capCasino({ prof, onProfile, dev = false }) {
 
           {error && <div style={{ color:'#ff6666', fontSize:'12px', marginBottom:'8px' }}>⚠ {error}</div>}
 
-          {!error && !state && <div style={{ color:CASINO.label, fontSize:'12px', padding:'20px', textAlign:'center' }}>読み込み中...</div>}
+          {!error && !state && <div style={{ color:CASINO.label, fontSize:'12px', padding:'20px', textAlign:'center' }}>読み込み中…</div>}
 
           {/* ★3つとも開いたままにして、見えていないものは隠す（タブを行き来しても、ATの残りや勝負の途中が開いたときの古い状態に戻らない） */}
           {state && (

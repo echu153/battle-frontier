@@ -363,7 +363,7 @@ export default function V2capSortie({ prof, onProfile, onScene }) {
               border:`1px solid ${canAct ? '#ffcc00' : '#003366'}`,
               color: canAct ? '#ffcc00' : '#7fa6d0', cursor: canAct ? 'pointer' : 'not-allowed',
               fontFamily:'monospace', fontSize:'13px', marginBottom:'8px' }}>
-            {!canAct ? '⏳ 待機中...' : shrine ? shrineGo : `⚔ ${spot?.name}へ再出撃！`}
+            {!canAct ? '⏳ 待機中…' : shrine ? shrineGo : `⚔ ${spot?.name}へ再出撃！`}
           </button>
         )}
         <button onClick={() => { setAuto(false); setScene('town') }} disabled={loading}
@@ -425,7 +425,7 @@ export default function V2capSortie({ prof, onProfile, onScene }) {
         style={{ width:'100%', padding:'14px', background:'#001840', border:`1px solid ${canAct ? '#ffcc00' : '#003366'}`,
           color: canAct ? '#ffcc00' : '#7fa6d0', cursor: canAct ? 'pointer' : 'not-allowed',
           fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px', marginBottom:'8px' }}>
-        {!canAct ? '⏳ 待機中...' : shrine ? shrineGo : `⚔ ${spot?.name}へ出撃！`}
+        {!canAct ? '⏳ 待機中…' : shrine ? shrineGo : `⚔ ${spot?.name}へ出撃！`}
       </button>
       <button onClick={() => setAuto(true)} disabled={stamNow < 1}
         style={{ width:'100%', padding:'8px', background: stamNow > 0 ? '#00281a' : '#000818',

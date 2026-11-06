@@ -285,7 +285,7 @@ export default function V2capTower({ prof, inventory, onProfile }) {
             style={{ width:'100%', padding:'14px', background: canAct ? '#1a0018' : '#000e1a',
               border:`1px solid ${canAct ? '#ff88cc' : '#003366'}`, color: canAct ? '#ff88cc' : '#7fa6d0',
               cursor: canAct ? 'pointer' : 'not-allowed', fontFamily:'monospace', fontSize:'14px', letterSpacing:'2px' }}>
-            {busy ? '⏳ 待機中...' : remain > 0 ? `⏳ ${remain.toFixed(1)}秒` : `⚔ ${floorLabel(floor)}の階層守護者に挑戦する`}
+            {busy ? '⏳ 待機中…' : remain > 0 ? `⏳ ${remain.toFixed(1)}秒` : `⚔ ${floorLabel(floor)}の階層守護者に挑戦する`}
           </button>
         </div>
       )}

@@ -116,7 +116,7 @@ export default function V2capDex({ prof }) {
           </span>
         </div>
 
-        {kills === null ? <div style={{ color: TEXT.label, fontSize:'11px', padding:'8px' }}>読み込み中...</div> : (
+        {kills === null ? <div style={{ color: TEXT.label, fontSize:'11px', padding:'8px' }}>読み込み中…</div> : (
           <div style={{ display:'grid', gap:'3px' }}>
             {rows.map(e => {
               const found = isFound(kills, e.name)

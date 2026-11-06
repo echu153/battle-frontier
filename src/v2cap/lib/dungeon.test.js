@@ -743,7 +743,7 @@ test('【確定】2026-10-31 入口のボスの行の言葉と「挑戦する」
   assert.equal(at(false, false, 1), 'エリア②に着くと挑戦できます', 'どの難易度もまだのエリア')
   assert.equal(at(false, false, 2), null, 'ノーマルだけでも挑戦できれば挑戦できる')
   const src = readFileSync(new URL('../components/V2capDungeon.jsx', import.meta.url), 'utf8')
-  assert.match(src, /block=\{state \? blockOf\(pick\.boss\) : '読み込み中\.\.\.'\}/, 'ボタンも同じ決まり')
+  assert.match(src, /block=\{state \? blockOf\(pick\.boss\) : '読み込み中…'\}/, 'ボタンも同じ決まり（2026-11-07 表記ルールで「...」→「…」）')
   assert.match(src, /\{state && \(blockOf\(key\) \|\| '挑戦可能'\)\}/, '行の言葉も同じ決まり（読み込み中は出さない）・ユーザー「挑戦可能 に変更して」')
 })
 

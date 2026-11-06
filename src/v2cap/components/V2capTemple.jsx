@@ -375,7 +375,7 @@ function ClassDetail({ cls, prof, inventory, busy, msg, error, say, gender, onGe
         <button onClick={onAsk} disabled={busy || isNow || !canBecome(cls, prof.jobs)}
           style={{ ...btn(isNow || miss ? '#62789a' : '#ff88cc'), width:'100%', padding:'12px', fontSize:'14px', letterSpacing:'2px',
             cursor: busy || isNow || miss ? 'not-allowed' : 'pointer' }}>
-          {busy ? '転職しています...' : isNow ? 'いまのクラスです' : miss ? `転職条件：${reqText(cls)}` : 'このクラスに転職する'}
+          {busy ? '転職しています…' : isNow ? 'いまのクラスです' : miss ? `転職条件：${reqText(cls)}` : 'このクラスに転職する'}
         </button>
       </div>
 

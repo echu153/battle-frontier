@@ -314,7 +314,7 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
   const blockOf = (key) => summonBlockOf(key, { summoned: summonedOf(key), ownActive, reached })
 
   const popup = pick && (
-    <V2capBossPick bossKey={pick.boss} run={pick.run} reached={reached} myPower={myPower} block={state ? blockOf(pick.boss) : '読み込み中...'}
+    <V2capBossPick bossKey={pick.boss} run={pick.run} reached={reached} myPower={myPower} block={state ? blockOf(pick.boss) : '読み込み中…'}
       cost={pick.run ? tryStaminaOf(pick.run.mine, pick.run.my_tries) : 0} stam={stam} busy={busy}
       prof={prof} onProfile={onProfile} onGo={onGo} saveRef={loadoutSave} onStart={startPick} onClose={closePick} />
   )
@@ -362,7 +362,7 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
     {popup}
     <div>
       {msg && <div style={{ fontSize:'11px', marginBottom:'8px', color: msg.ok ? '#88ffaa' : '#ff8888' }}>{msg.text}</div>}
-      {!state && !msg && <div style={{ color: TEXT.label, fontSize:'11px', marginBottom:'8px' }}>読み込み中...</div>}
+      {!state && !msg && <div style={{ color: TEXT.label, fontSize:'11px', marginBottom:'8px' }}>読み込み中…</div>}
       {stale && <V2capReloadNote />}
 
       {/* 受け取っていない報酬（自分が挑戦していないあいだに倒れたボス） */}

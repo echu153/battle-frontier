@@ -241,7 +241,7 @@ export default function V2capSlot({ init, medals, onMoney, onTalk, active = true
 
   // ===== ATの告知・7を狙え =====
   const announceAt = (from) => {
-    fx('popup', { text: 'AT確定!!', color: 'rainbow', size: 52, ms: 2200, sub: from === 'premium' ? `中段チェリー・${SLOT_PREMIUM_GAMES}G` : undefined })
+    fx('popup', { text: 'AT確定！！', color: 'rainbow', size: 52, ms: 2200, sub: from === 'premium' ? `中段チェリー・${SLOT_PREMIUM_GAMES}G` : undefined })
     sfx.fanfare('at'); fx('rays', { color: CASINO.pink, ms: 3000 }); fx('confetti', { n: 140 }); fx('flash', { color: '#ffffff', ms: 500 })
     fx('shake', { ms: 500, power: 6 }); vibrate([80, 50, 80, 50, 200])
     onTalk?.(atTalkOf(from))   // 当たりの流れに入った（中段チェリーはびっくり）
@@ -334,14 +334,14 @@ export default function V2capSlot({ init, medals, onMoney, onTalk, active = true
       }
       if (r.add > 0) {
         setTimeout(() => {
-          fx('popup', { text: `+${r.add}G 上乗せ!`, color: CASINO.gold, size: 34 + Math.min(20, r.add / 5), ms: 1400, top: '48%' })
+          fx('popup', { text: `+${r.add}G 上乗せ！`, color: CASINO.gold, size: 34 + Math.min(20, r.add / 5), ms: 1400, top: '48%' })
           sfx.uwanose(r.add >= 30); fx('flash', { color: CASINO.gold, ms: 300 }); vibrate(50)
         }, r.toku_add > 0 ? 500 : 0)
         addLog(`${rl ? rl[0] : '上乗せ'} → +${r.add}G`, CASINO.gold)
       }
       if (r.toku_in) {
         setTimeout(() => {
-          fx('popup', { text: '上乗せ特化ゾーン突入!!', color: '#ffd700', size: 30, ms: 2000, sub: `${SLOT_TOKU_GAMES}G 毎G上乗せ` })
+          fx('popup', { text: '上乗せ特化ゾーン突入！！', color: '#ffd700', size: 30, ms: 2000, sub: `${SLOT_TOKU_GAMES}G 毎G上乗せ` })
           sfx.fanfare('toku'); fx('rays', { color: '#ffd700', ms: 2200 }); fx('confetti', { n: 60 }); vibrate([80, 40, 80])
         }, 600)
         addLog('上乗せ特化ゾーン突入', '#ffd700')
@@ -473,7 +473,7 @@ export default function V2capSlot({ init, medals, onMoney, onTalk, active = true
               boxShadow:`0 0 ${6 + notice * 4}px ${ntColor}`,
               animation: nt.color === 'rainbow' ? 'csPulse 0.5s ease-in-out infinite, csHue 1.2s linear infinite' : 'csPulse 0.5s ease-in-out infinite' }}>
               <span style={{ color: ntColor, textShadow:`0 0 6px ${ntColor}` }}>
-                {phase === 'spin' && res.current?.intro ? '7を狙え!!' : nt.text}
+                {phase === 'spin' && res.current?.intro ? '7を狙え！！' : nt.text}
               </span>
             </span>
           </div>

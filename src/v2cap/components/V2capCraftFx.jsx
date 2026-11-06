@@ -162,7 +162,7 @@ export default function V2capCraftFx({ job, say, nextLabel, nextReason, onAgain,
           {ended && (
             <div style={{ fontFamily: JP_BOLD, fontWeight:'bold', fontSize: 30 + tier.level * 3, letterSpacing:5, color:'#ffffff',
               textShadow:`0 0 6px ${tier.color}, 0 0 16px ${tier.color}, 0 0 30px ${tier.color}, 0 2px 0 #000`, animation:'cfText 0.6s cubic-bezier(.2,1.4,.4,1) both' }}>
-              完成!
+              完成！
             </div>
           )}
         </div>

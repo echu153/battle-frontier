@@ -287,7 +287,7 @@ export default function V2capMuseum({ prof, inventory, onProfile, dev = false })
           {/* ===== 寄贈できる装備 ===== */}
           <div style={{ ...box, padding:'12px', marginBottom:'10px' }}>
             <div style={{ color:'#d8b070', fontSize:'12px', marginBottom:'6px' }}>寄贈できる装備（{donatables.length}）</div>
-            {rows === null ? <div style={{ color: TEXT.label, fontSize:'11px' }}>読み込み中...</div>
+            {rows === null ? <div style={{ color: TEXT.label, fontSize:'11px' }}>読み込み中…</div>
               : donatables.length === 0 ? (
                 <div style={{ color: TEXT.empty, fontSize:'11px' }}>寄贈できる装備はありません（着けていない装備で、未強化・+5・+9のうちまだ登録していない段階のもの）</div>
               ) : (

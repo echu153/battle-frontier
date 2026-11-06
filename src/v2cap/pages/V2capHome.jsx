@@ -379,7 +379,7 @@ export default function V2capHome() {
     </div>
   )
 
-  if (loading) return <div style={{ ...page, textAlign:'center', paddingTop:'40px', color:'#0088ff' }}>読み込み中...</div>
+  if (loading) return <div style={{ ...page, textAlign:'center', paddingTop:'40px', color:'#0088ff' }}>読み込み中…</div>
 
   if (sqlError) {
     return (
@@ -439,7 +439,7 @@ export default function V2capHome() {
             </div>
             {error && <div style={{ color:'#ff4444', fontSize:'11px', marginBottom:'8px' }}>⚠ {error}</div>}
             <button type="submit" disabled={busy} style={{ ...btn('#ffcc00'), width:'100%', padding:'10px' }}>
-              {busy ? '作成中...' : `${pick}で始める`}
+              {busy ? '作成中…' : `${pick}で始める`}
             </button>
           </form>
         </div>
@@ -475,7 +475,7 @@ export default function V2capHome() {
             </div>
             <V2capGenderPick value={sex} onChange={setSex} disabled={busy} />
             <button onClick={saveGender} disabled={busy} style={{ ...btn('#ffcc00'), width:'100%', padding:'8px', marginTop:'8px' }}>
-              {busy ? '保存中...' : `${GENDER_BY_KEY[sex]?.label || ''}にする`}
+              {busy ? '保存中…' : `${GENDER_BY_KEY[sex]?.label || ''}にする`}
             </button>
           </div>
         )}
@@ -567,22 +567,22 @@ export default function V2capHome() {
             {screen === 'tower' && <V2capTower prof={prof} inventory={inventory} onProfile={refresh} />}
             {screen === 'uniqueCheck' && <V2capUniqueCheck prof={prof} inventory={inventory} />}
             {screen === 'dungeon' && (
-              <Suspense fallback={<div style={{ color: TEXT.label, fontSize:'11px' }}>読み込み中...</div>}>
+              <Suspense fallback={<div style={{ color: TEXT.label, fontSize:'11px' }}>読み込み中…</div>}>
                 <V2capDungeon prof={prof} inventory={inventory} onProfile={refresh} onGo={setScreen} dev={isAdmin} />
               </Suspense>
             )}
             {screen === 'training' && (
-              <Suspense fallback={<div style={{ color: TEXT.label, fontSize:'11px' }}>読み込み中...</div>}>
+              <Suspense fallback={<div style={{ color: TEXT.label, fontSize:'11px' }}>読み込み中…</div>}>
                 <V2capTraining prof={prof} inventory={inventory} onProfile={refresh} dev={isAdmin} />
               </Suspense>
             )}
             {screen === 'altWatch' && isAdmin && (
-              <Suspense fallback={<div style={{ color: TEXT.label, fontSize:'11px' }}>読み込み中...</div>}>
+              <Suspense fallback={<div style={{ color: TEXT.label, fontSize:'11px' }}>読み込み中…</div>}>
                 <V2capAltWatch />
               </Suspense>
             )}
             {screen === 'atb' && (
-              <Suspense fallback={<div style={{ color: TEXT.label, fontSize:'11px' }}>読み込み中...</div>}>
+              <Suspense fallback={<div style={{ color: TEXT.label, fontSize:'11px' }}>読み込み中…</div>}>
                 <V2capAtb prof={prof} inventory={inventory} onProfile={refresh} />
               </Suspense>
             )}

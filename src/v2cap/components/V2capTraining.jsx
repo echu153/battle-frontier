@@ -75,7 +75,7 @@ const dayQOf = (quest) => DAY_Q[quest] || null
 const rangeOf = (q, lv) => (q.reward === 'gold'
   ? `${cofferGoldOf(lv, SCARECROW_PCT_MIN).toLocaleString()}〜${cofferGoldOf(lv, SCARECROW_PCT_MAX).toLocaleString()}`
   : `${scarecrowExpOf(lv, SCARECROW_PCT_MIN).toLocaleString()}〜${scarecrowExpOf(lv, SCARECROW_PCT_MAX).toLocaleString()}`)
-const gotOf = (q, r) => (q.reward === 'gold' ? `+${Number(r?.gold || 0).toLocaleString()} Gold` : `EXP +${gainedExpOf(r).toLocaleString()}`)
+const gotOf = (q, r) => (q.reward === 'gold' ? `Gold +${Number(r?.gold || 0).toLocaleString()}` : `EXP +${gainedExpOf(r).toLocaleString()}`)
 
 const LABEL_W = '108px'   // 「獲得できるGold」が入る幅（96px では値にくっついた）
 const VALUE_W = '100px'   // 値の欄（右揃え）。Gold の幅（LV80 で 20,000〜60,000）が入る＝同じ枠の値の右はしがそろう
@@ -247,7 +247,7 @@ function QuestCard({ q, flow, open, lv, sub, dev, onStart, onPractice }) {
   return (
     <div style={{ ...box, padding:'10px', marginBottom:'10px', borderColor: q.border }}>
       {flow.msg && <div style={{ fontSize:'11px', marginBottom:'8px', color: flow.msg.ok ? '#88ffaa' : '#ff8888' }}>{flow.msg.text}</div>}
-      {!flow.state && !flow.msg && <div style={{ color: TEXT.label, fontSize:'11px', marginBottom:'8px' }}>読み込み中...</div>}
+      {!flow.state && !flow.msg && <div style={{ color: TEXT.label, fontSize:'11px', marginBottom:'8px' }}>読み込み中…</div>}
       <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
         <Face q={q} />
         <span style={{ flex:1, minWidth:0 }}>

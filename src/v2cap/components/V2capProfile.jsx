@@ -133,7 +133,7 @@ export default function V2capProfile({ prof, inventory, onProfile }) {
             style={{ color: TEXT.sub, fontSize:'11px', maxWidth:'100%' }} />
           {preview && <img src={preview} alt="" style={{ width:'48px', height:'48px', objectFit:'cover' }} />}
           {file && (
-            <button onClick={upload} disabled={busy} style={btn('#ffcc00')}>{busy ? 'アップロード中...' : 'アップロードしてアイコンにする'}</button>
+            <button onClick={upload} disabled={busy} style={btn('#ffcc00')}>{busy ? 'アップロード中…' : 'アップロードしてアイコンにする'}</button>
           )}
         </div>
         {uploaded.length > 0 && (

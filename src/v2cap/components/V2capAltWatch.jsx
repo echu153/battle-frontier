@@ -35,7 +35,7 @@ export default function V2capAltWatch() {
           <span style={{ color: TEXT.bright }}>{res ? `${res.people}人` : '—'}</span>
           <span style={{ color: TEXT.label }}>疑わしい組み</span>
           <span style={{ color: TEXT.bright }}>{res ? `${pairs.length}組` : '—'}</span>
-          <button onClick={load} disabled={busy} style={{ ...miniBtn('#88aaff'), marginLeft:'auto' }}>{busy ? '読み込み中...' : '読み直す'}</button>
+          <button onClick={load} disabled={busy} style={{ ...miniBtn('#88aaff'), marginLeft:'auto' }}>{busy ? '読み込み中…' : '読み直す'}</button>
         </div>
         <div style={{ color: TEXT.sub, fontSize:'10px', marginTop:'6px', lineHeight:1.6 }}>
           同じ端末＝同じ人の見込みが高い。同じIPだけ＝家族・スマホ回線・学校などの他人のこともある。IPも端末も元に戻せない形で残しているので、だれのIPかは分からない

@@ -506,7 +506,7 @@ export default function V2capAscension({ prof, onProfile }) {
             {!open.has(selNode.id) && route.length > 0 && (
               <button onClick={openRoute} disabled={busy || !!routeErr}
                 style={{ ...miniBtn(routeErr ? '#2a3a55' : GOLD), padding:'6px 10px', fontSize:'11px', cursor: routeErr ? 'not-allowed' : 'pointer', flexShrink:0 }}>
-                {busy ? '開いています...' : `このルートで開く（${route.length}AP）`}
+                {busy ? '開いています…' : `このルートで開く（${route.length}AP）`}
               </button>
             )}
           </div>

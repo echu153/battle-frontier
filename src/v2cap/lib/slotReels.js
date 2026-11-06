@@ -109,10 +109,10 @@ export const missStopsOf = (pos, j, rng = Math.random) => {
 export const NOTICE_LEVELS = [
   null,
   { text:'チャンス', color:'#33a0ff' },
-  { text:'チャンス!', color:'#33dd77' },
-  { text:'激アツ!!', color:'#ff3355' },
-  { text:'超激アツ!!!', color:'#ffcc00' },
-  { text:'確定!!', color:'rainbow' },
+  { text:'チャンス！', color:'#33dd77' },
+  { text:'激アツ！！', color:'#ff3355' },
+  { text:'超激アツ！！！', color:'#ffcc00' },
+  { text:'確定！！', color:'rainbow' },
 ]
 const NOTICE_TABLE = {
   at:     [5, 5, 15, 35, 25, 15],   // AT直撃・CZ成功
