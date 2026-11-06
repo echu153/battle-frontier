@@ -12,7 +12,7 @@ import V2capLogLine from './V2capLogLine.jsx'
 // ============================================================
 // 「レベルキャップあり」版 — ユニークの固有の能力が発動するかの確かめ［開発］（2026-10-21）
 //   ユーザー「一旦今のままで実装して、効果がすべて発動するかも実機確認して」
-//   ・60個ぜんぶ：uniqueCheck.js（テストと同じもの）をこの画面で走らせ、能力の項目ごとに ✓／✗ と中身を出す
+//   ・ぜんぶ（出撃の60個＋四凶の4つ＝uniqueCheck.js の CHECK_ITEMS）：uniqueCheck.js（テストと同じもの）をこの画面で走らせ、能力の項目ごとに ✓／✗ と中身を出す
 //     （本物の戦闘エンジン・乱数は「いつも当たる」「いつも外れる」に固定＝毎回同じ結果）
 //   ・いまの装備で木人と戦う：着けているユニークの能力が、ふだんの戦闘のログに出るか（ふだんと同じ乱数・10ターン）
 // ============================================================
@@ -60,7 +60,7 @@ export default function V2capUniqueCheck({ prof, inventory }) {
   return (
     <div style={{ fontFamily:'monospace', display:'grid', gap:'10px' }}>
       <div style={{ ...box, padding:'12px' }}>
-        <div style={{ color: U, fontSize:'12px', marginBottom:'6px' }}>💎 60個の固有の能力（本物の戦闘エンジンで確かめる）</div>
+        <div style={{ color: U, fontSize:'12px', marginBottom:'6px' }}>💎 {CHECK_ITEMS.length}個の固有の能力（本物の戦闘エンジンで確かめる）</div>
         <div style={{ fontSize:'11px', color: TEXT.sub, lineHeight:1.7, marginBottom:'8px' }}>
           能力の項目ごとに、その能力だけを抜いた装備と比べたり、戦闘のログに出るかを見ます。乱数は「いつも当たる」「いつも外れる」に固定しているので、毎回同じ結果になります。
         </div>
