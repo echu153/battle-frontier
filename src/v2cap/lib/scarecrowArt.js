@@ -2,31 +2,34 @@
 // 「レベルキャップあり」版（v2cap）— 修練場の案山子の絵（立ち絵・入口の顔のアップ・背景）
 // ------------------------------------------------------------
 // 【確定】2026-11-06 ユーザー「案山子のイラストも用意したい」→ 選んだ「訓練場の藁人形」「立ち絵と背景の2枚」（どれも推奨）：
-//   元の絵（ユーザーが ChatGPT で描いて置く・git に入れない）：public/エネミー/修練場/案山子/立ち絵.png（正方形・透明か真緑）・背景.png（横3：縦2・1536×1024）
+//   元の絵（ユーザーが ChatGPT で描いて置く・git に入れない）：public/エネミー/IDダンジョン/デイリー/案山子.png（正方形・透明か真緑）・案山子背景.png（横3：縦2・1536×1024）
 //   → node tools/v2cap-scarecrow-art.mjs → public/v2cap-art/training/scarecrow.webp・scarecrow-face.webp・scarecrow-bg.webp と一覧 scarecrowArtList.js
+//   11-06 絵がそろった：見た目は「かぼちゃ頭」→「黒い布袋の頭」に変えた（ユーザーが顔の見本を渡した）・背景は森のはずれの騎士団の野外の稽古場
 //   絵が届くまでは仮の絵（SCARECROW_TEMP_SRC・簡単な影絵）で動く。背景は四凶と同じ部品（V2capAtbStage の BossBackground）に敷く
 //   ★こっちから見て左向き（相手のプレイヤーは左にいる）。殴られたときの揺れは立ち絵を傾けて作る（wobble・lib/atbFx.js の wobbleOf）
 // ============================================================
 import { SCARECROW_ART } from './scarecrowArtList.js'
 import { SCARECROW_NAME } from './scarecrowRules.js'
 
-export const SCARECROW_SRC_DIR = '修練場/案山子'          // public/エネミー の下
+export const SCARECROW_SRC_DIR = 'IDダンジョン/デイリー'   // public/エネミー の下（11-06 ユーザーが置いた場所）
+export const SCARECROW_SRC_STAND = '案山子.png'
+export const SCARECROW_SRC_BG = '案山子背景.png'
 export const SCARECROW_ART_DIR = '/v2cap-art/training'
 export const SCARECROW_STAND_SIZE = 512                  // 立ち絵（正方形・足元を下のはしにそろえる）
 export const SCARECROW_FACE_SIZE = 120                   // 入口の顔のアップ
 // 顔のアップの切り取り（立ち絵の中の正方形＝[真ん中の x, 真ん中の y, 一辺]・どれも立ち絵の幅に対する割合）。null なら体の上のはしから決める（道具）
-//   ★絵が届いたら見て決める
-export const SCARECROW_FACE_BOX = null
+//   11-06 届いた絵（黒い布袋の頭・少し画面の左）に合わせた：頭の結び目から首の縄まで
+export const SCARECROW_FACE_BOX = [0.465, 0.152, 0.3]
 export const SCARECROW_TEMP_SRC = `${SCARECROW_ART_DIR}/scarecrow-temp.svg`
 
 // 背景（四凶と同じ形・lib/bossBg.js の BOSS_BG_DEFS）。crop＝下を切る割合・dark＝暗さ・under＝HPの行の色。
-//   動くもの（木漏れ日のちり）は絵の px。★絵が届いたら、光の筋の場所に合わせて置き直す
+//   動くもの（木漏れ日のちり）は絵の px（元の絵 1536×1024）。11-06 届いた絵の光の筋（左上から旗と武器立てへ）に合わせた
 const BG_DEF = {
   under: '#060c08', dark: 0.04, crop: 0.2,
   fx: {
-    motes: { n: 14, x: [380, 900], y: [380, 760], rise: 90, life: [6000, 10000], r: [2, 4.5], color: '255,236,180' },
+    motes: { n: 14, x: [220, 760], y: [160, 640], rise: 90, life: [6000, 10000], r: [2, 4.5], color: '255,236,180' },
     glows: [
-      { x: 620, y: 520, r: 280, op: 0.12, amp: 0.05, periodMs: 6400, color: '255,226,150' },
+      { x: 500, y: 380, r: 300, op: 0.12, amp: 0.05, periodMs: 6400, color: '255,226,150' },
     ],
   },
 }

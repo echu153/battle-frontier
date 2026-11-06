@@ -1,13 +1,13 @@
 // ============================================================
 // v2cap 修練場の案山子の絵（立ち絵・入口の顔のアップ・背景）を、画面で使う形にする（決まりは src/v2cap/lib/scarecrowArt.js）
 // ------------------------------------------------------------
-// 元の絵（ユーザーが置く・git に入れない）：public/エネミー/修練場/案山子/立ち絵.png（透明か真緑の背景）・背景.png（横3：縦2・透明なし）
+// 元の絵（ユーザーが置く・git に入れない）：public/エネミー/IDダンジョン/デイリー/案山子.png（透明か真緑の背景）・案山子背景.png（横3：縦2・透明なし）
 // 作るもの：
 //   public/v2cap-art/training/scarecrow.webp       … 立ち絵（SCARECROW_STAND_SIZE の正方形・透明つき・足元を下のはしにそろえる＝床に立つ）
 //   public/v2cap-art/training/scarecrow-face.webp  … 修練場の入口の顔のアップ（SCARECROW_FACE_SIZE の正方形）
 //   public/v2cap-art/training/scarecrow-bg.webp    … 背景（幅 1280 まで縮める）
 //   src/v2cap/lib/scarecrowArtList.js              … 一覧（中身の印・背景の元の大きさ）
-// 使い方：node tools/v2cap-scarecrow-art.mjs [--src <元の絵のフォルダ>]（worktree では本体の public/エネミー/修練場/案山子 を渡す）
+// 使い方：node tools/v2cap-scarecrow-art.mjs [--src <元の絵のフォルダ>]（worktree では本体の public/エネミー/IDダンジョン/デイリー を渡す）
 // ★元の絵が無いもの（別のPCなど）は、作ってある絵と一覧を消さない
 // ★ffmpeg（libwebp）を使う
 // ============================================================
@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url'
 import { decode, bleed, alphaBox, encodeSquare, probe, transparentBorderRatio, versionOf } from './v2cap-art-lib.mjs'
 import { keyGreen } from './v2cap-motion.mjs'
 import { ENEMY_ART_SRC_DIR } from '../src/v2cap/lib/enemyArt.js'
-import { SCARECROW_SRC_DIR, SCARECROW_ART_DIR, SCARECROW_STAND_SIZE, SCARECROW_FACE_SIZE, SCARECROW_FACE_BOX } from '../src/v2cap/lib/scarecrowArt.js'
+import { SCARECROW_SRC_DIR, SCARECROW_SRC_STAND, SCARECROW_SRC_BG, SCARECROW_ART_DIR, SCARECROW_STAND_SIZE, SCARECROW_FACE_SIZE, SCARECROW_FACE_BOX } from '../src/v2cap/lib/scarecrowArt.js'
 import { SCARECROW_ART } from '../src/v2cap/lib/scarecrowArtList.js'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -32,7 +32,7 @@ mkdirSync(OUT, { recursive: true })
 const art = { ...SCARECROW_ART }
 
 // ===== 立ち絵・顔のアップ =====
-const stand = path.join(SRC, '立ち絵.png')
+const stand = path.join(SRC, SCARECROW_SRC_STAND)
 if (existsSync(stand)) {
   const img = decode(stand, 1254, 'rgba')
   // 縁がほとんど透明でなければ真緑の背景（透明にできなかった絵）として抜く
@@ -63,7 +63,7 @@ if (existsSync(stand)) {
 }
 
 // ===== 背景 =====
-const bgFile = path.join(SRC, '背景.png')
+const bgFile = path.join(SRC, SCARECROW_SRC_BG)
 if (existsSync(bgFile)) {
   const { w, h } = probe(bgFile)
   const out = path.join(OUT, 'scarecrow-bg.webp')
