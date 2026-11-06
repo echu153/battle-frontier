@@ -1855,7 +1855,8 @@ const onHitRework = (me, foe, skill, ip, imb, elemHit, off, rng, log) => {
   if (skill.agitate && foe.hp > 0 && (skill.agitate.chance == null || roll(skill.agitate.chance, rng))) {
     const before = foe.agit || 0
     foe.agit = Math.min(AGIT_MAX, before + skill.agitate.n)
-    if (foe.agit > before) log.push({ side: foe.name, type: 'agit', n: foe.agit })
+    // ★ATBのパターンのボス（四凶）は、動揺でゲージが遅くなる（atb.js の fillPerSecOf）＝記録の行もそちらの言い方（gauge）
+    if (foe.agit > before) log.push({ side: foe.name, type: 'agit', n: foe.agit, ...(foe.atb && foe.pattern ? { gauge: true } : {}) })
   }
   if (skill.gainOnHit) {
     const g = skill.gainOnHit

@@ -20,7 +20,10 @@
 // ★オート前提の効果の読み替え（ATBで死なせない）：
 //     発動率+%（パッシブ・エンチャント・武器の進化・納刀）→ クールダウンが短くなる
 //     サイレンス・恐怖・動揺（発動率−）                  → クールダウンが長くなる
-//     追加行動率+%・刻の加護                            → ゲージの溜まりが速くなる（AGIの追加行動はゲージの速さに含める）
+//       ★パターンのボス（四凶）はクールダウンを見ず・技は MP0 なので、そのままでは封印も効かない。代わりに
+//         封印・恐怖・サイレンスのあいだは**大技以外の技を使わない（通常攻撃になる）**・動揺は**1つにつきゲージ−3%**
+//         （2026-11-06 ATBの懸念の洗い出し 1-3・ユーザー「封印などを効かせる」＝LOCK_AILS・fillPerSecOf）
+//     追加行動率+%・刻の加護                           → ゲージの溜まりが速くなる（AGIの追加行動はゲージの速さに含める）
 //     先手+%                                           → 開始のゲージ
 //     先制（スキルの優先度・納刀）                       → その行動に要るゲージが軽くなる
 //     クイック（もう一度行動）                           → ゲージが満タンになる
@@ -151,7 +154,10 @@ export const ATB_SLOW_CUT = 20
 export const fillPerSecOf = (me, eMe, eFoe) => {
   const extra = (me.evo?.extra || 0) + (me.pa?.ex?.extraIfFaster && eMe.agi > eFoe.agi ? me.pa.ex.extraIfFaster : 0)
   const slow = hasAilment(me.ail || {}, 'slow') ? 1 - ATB_SLOW_CUT / 100 : 1
-  return FILL_PER_SEC * fillRatio(eMe.agi, eFoe.agi) * (1 + extra / 100) * slow
+  // ★パターンのボス（四凶）の動揺：1つにつきゲージ−3%（AGIT_PER）。パターンはクールダウンを見ないので、こちらで効かせる（2026-11-06 ATBの懸念 1-3）
+  //   パターンの無い側は、いままでどおりクールダウンが長くなる（cdFor）＝二重には効かない
+  const agit = me.pattern ? 1 - agitCutOf(me) / 100 : 1
+  return FILL_PER_SEC * fillRatio(eMe.agi, eFoe.agi) * (1 + extra / 100) * slow * agit
 }
 
 // ===== 1サイド =====
@@ -438,6 +444,12 @@ const nowStepOf = (side) => {
 }
 const isBig = (skill) => (skill?.mult || 0) >= CAST_MULT
 const notBig = (skill) => !isBig(skill)
+const noSkill = () => false
+// ★パターンのボス（四凶）の技を止める状態異常（2026-11-06 ATBの懸念の洗い出し 1-3・ユーザー「封印などを効かせる」）
+//   パターンはクールダウンを見ず、技は MP0 なので、オートの読み替え（封印＝MPの技・サイレンスと恐怖＝発動率−→クールダウン）では止まらなかった。
+//   ＝このどれかがかかっているあいだは**大技以外の技を使わない（通常攻撃になる）**。大技は止めない（構えてから出る）。並びは記録の行に出す順
+export const LOCK_AILS = ['seal', 'fear', 'silence']
+export const lockAilOf = (side) => (side?.pattern ? LOCK_AILS.find(k => hasAilment(side.ail || {}, k)) || null : null)
 // 次の行動が、ゲージを待たずに構える大技か
 const nextBigOf = (side) => nowStepOf(side) || (side.castBig && side.pattern && isBig(side.patNext?.skill) ? side.patNext : null)
 const nowStep = (st, me) => {
@@ -632,7 +644,8 @@ const act = (st, me, foe, ch) => {
   takeAction(me, foe, st.rng, st.log, {
     idx: ch.idx, noProc: true, noParalyze: true, bigGuardSec: TURN_SEC, onQuick: () => { quick = true }, onNormal: () => { normal = true },
     // ★大技を構えてから撃つ側（ボス）：狂乱のでたらめに大技を入れない（構えなしで大技を出さない）・構えを終えた大技は狂乱でも差し替えない
-    wildOk: me.castBig ? notBig : null, keepIdx: !!ch.casted,
+    //   封印・恐怖・サイレンスのあいだのパターンのボスは、でたらめに選べる技も無い（通常攻撃のまま）
+    wildOk: lockAilOf(me) ? noSkill : me.castBig ? notBig : null, keepIdx: !!ch.casted,
   })
   if (normal) normalMpBack(me)   // ★通常攻撃でMPが戻る（NORMAL_MP_PCT）
   const n = me.slots.length
@@ -662,8 +675,14 @@ export const castMsOf = (cast, t) => (t + EPS < cast.showAt ? null : (t - cast.s
 
 // ゲージが満タンになった側の行動。ボスの大技はここで詠唱に入る
 const startAct = (st, me, foe) => {
-  const ch = chosenOf(me, st.t)
+  let ch = chosenOf(me, st.t)
   me.patNext = null   // パターンのボス：次の行動はまた引く
+  // ★パターンのボス：封印・恐怖・サイレンスのあいだは、大技以外の技を通常攻撃にする（記録に1行。封印は前からの「封印されて技が出せない」）
+  const lock = ch.skill && !isBig(ch.skill) ? lockAilOf(me) : null
+  if (lock) {
+    st.log.push(lock === 'seal' ? { side: me.name, type: 'sealed' } : { side: me.name, type: 'locked', ail: AIL_LABEL[lock] })
+    ch = { idx: null, skill: null }
+  }
   if (ch.skill) ch.cd = cdFor(me, ch.skill)
   if (me.castBig && ch.skill && (ch.skill.mult || 0) >= CAST_MULT) {
     startCast(st, me, ch.idx, ch.skill, ch.cd)

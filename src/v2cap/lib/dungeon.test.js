@@ -19,6 +19,7 @@ import { CAP_RULES } from './rules.js'
 import { tenSortieExpOf } from './areas.js'
 import { DAILY_GOLD_PER_LV } from './daily.js'
 import { INPUTS_MAX } from './dungeonVerify.js'
+import { buildBattleLog } from '../core/battleLog.js'
 
 const SQL = readFileSync(new URL('../../../supabase_v2cap_core.sql', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 const fnBody = (name) => {
@@ -1343,4 +1344,65 @@ test('狂乱にした四凶も、大技は構えてから撃つ（2026-11-06 ATB
     }
     assert.ok(casts > 0 && fired > 0, `${B.name}：構え${casts}・大技${fired}`)
   }
+})
+
+test('四凶に封印・恐怖・サイレンスが効く（2026-11-06 ATBの懸念 1-3・ユーザー「封印などを効かせる」）：そのあいだは大技以外の技を使わず通常攻撃・大技は構えてから出る・記録に行が出る・狂乱でも同じ', () => {
+  // ★前はパターンがクールダウンを見ず・技が MP0 なので、どれをかけても技は止まらなかった（HP40%の閻魔に付けたままでも行動700回のうち技700回）
+  for (const boss of Object.keys(DUNGEON_BOSSES).filter(isSummonable)) {
+    const B = DUNGEON_BOSSES[boss]
+    const bigs = B.skills.filter(s => (s.mult || 0) >= CAST_MULT).map(s => s.name)
+    const run = (ails, hp, seed) => {
+      const st = createAtb(dummy(), dungeonFighter(boss, 'normal', B.diffs.normal.hp * hp), { rng: rngOf(seed), maxSec: 60 })
+      const out = { skill: 0, normal: 0, big: 0, lines: 0 }
+      let seen = 0
+      while (!st.over && st.t < 40) {
+        for (const k of ails) st.b.ail[k] = { turns: 3 }
+        runFor(st, 0.05)
+        for (const l of st.log.slice(seen)) {
+          if (l.side !== B.name) continue
+          if (l.type === 'normal') out.normal++
+          else if (l.type === 'skill') { if (bigs.includes(l.skill)) out.big++; else out.skill++ }
+          else if (l.type === 'sealed' || l.type === 'locked') out.lines++
+        }
+        seen = st.log.length
+      }
+      return out
+    }
+    const sum = (ails, hp) => [1, 2, 3].map(s => run(ails, hp, s)).reduce((a, o) => ({ skill: a.skill + o.skill, normal: a.normal + o.normal, big: a.big + o.big, lines: a.lines + o.lines }))
+    for (const hp of [0.4, 0.2]) {
+      assert.ok(sum([], hp).skill > 0, `${B.name} HP${hp * 100}%：ふだんは技を使う`)
+      for (const ails of [['seal'], ['fear'], ['silence'], ['seal', 'frenzy']]) {
+        const r = sum(ails, hp)
+        const what = `${B.name} HP${hp * 100}% ${ails.join('+')}`
+        assert.equal(r.skill, 0, `${what}：大技以外の技は使わない`)
+        assert.ok(r.normal > 0 && r.lines > 0, `${what}：通常攻撃になり、記録に行が出る（通常攻撃${r.normal}・行${r.lines}）`)
+        if (hp === 0.2) assert.ok(r.big > 0, `${what}：大技は止まらない（構えてから出る）`)
+      }
+    }
+  }
+  // 記録の行：封印は前からの「封印されて技が出せない」・恐怖とサイレンスは同じ形
+  const st = createAtb(dummy(), dungeonFighter('enma', 'normal', 13000 * 0.4), { rng: rngOf(1), maxSec: 60 })
+  st.b.ail.fear = { turns: 99 }
+  runFor(st, 20)
+  const lines = buildBattleLog({ log: st.log }, 'じぶん', '閻魔').map(l => l.text)
+  assert.ok(lines.includes('🔒 閻魔は恐怖で技が出せない！'), lines.join('\n'))
+})
+
+test('四凶の動揺は1つにつきゲージ−3%（2026-11-06 ATBの懸念 1-3）：パターンのボスはクールダウンを見ないので、ゲージの速さで効かせる。記録の行も「ゲージの速さ」', () => {
+  const st = createAtb(dummy(), dungeonFighter('enma', 'normal'), { rng: rngOf(1), maxSec: 60 })
+  const speed = (side, foe) => fillPerSecOf(side, liveStats(side), liveStats(foe))
+  const boss0 = speed(st.b, st.a), me0 = speed(st.a, st.b)
+  st.b.agit = 5
+  st.a.agit = 5
+  assert.ok(Math.abs(speed(st.b, st.a) / boss0 - 0.85) < 1e-9, `ボス：5つで−15%（${speed(st.b, st.a) / boss0}）`)
+  assert.equal(speed(st.a, st.b), me0, 'パターンの無い側は、いままでどおりクールダウンで効く（ゲージは変わらない）')
+  // サイキッカーの技で動揺させると、記録の行は「ゲージの速さ」
+  const shake = { name: 'ゆさぶり', cls: '戦士', kind: 'phys', mult: 1, proc: 100, mp: 0, sureHit: true, agitate: { n: 1, chance: 100 } }
+  const st2 = createAtb({ ...dummy(), slots: [{ skill: shake, uses: 1 }] }, dungeonFighter('enma', 'normal'), { rng: rngOf(2), maxSec: 60 })
+  startMacro(st2, 1, [{ idx: 0 }], true)
+  runFor(st2, 30)
+  const lines = buildBattleLog({ log: st2.log }, 'じぶん', '閻魔').map(l => l.text)
+  assert.ok(st2.b.agit === 5 && lines.includes('🌀 閻魔は動揺している！（ゲージの速さ-15%）'), lines.filter(t => t.includes('動揺')).join('\n'))
+  // 出撃（オート）の動揺の行は前のまま（発動率）
+  assert.deepEqual(buildBattleLog({ log: [{ side: '敵', type: 'agit', n: 2 }] }, 'じぶん', '敵').map(l => l.text), ['🌀 敵は動揺している！（スキルの発動率-6%）'])
 })
