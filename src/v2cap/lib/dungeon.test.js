@@ -765,7 +765,12 @@ test('【確定】2026-11-06 入口は顔のアップの枠を2列・全部同�
   assert.ok(list.length > 0 && !list.includes('>›<'), '2列の枠に › を出さない')
   // 顔のアップは神殿のクラスの顔アイコンと同じ形（60pxの正方形・顔を全面に）。スマホの幅では名前と同じ割合で小さく（下のテスト）
   assert.ok(src.includes('const FACE_SIZE = bossCardCss(CARD_FIT.face)'))
-  assert.ok(src.includes("<div style={{ width: FACE_SIZE, height: FACE_SIZE, flexShrink:0, overflow:'hidden', background: tint ? `${tint}30` : '#0b1a2e', border:'1px solid #002244'"))
+  assert.ok(src.includes("<div style={{ width: FACE_SIZE, height: FACE_SIZE, flexShrink:0, overflow:'hidden', background: tint ? `${tint}30` : '#0b1a2e', ...faceRingOf(tint)"))
+  // 【確定】2026-11-06 ユーザー「挑戦の顔アイコン、わかりやすく軽く枠を付けてほしい」：ボスの色の細い枠（線は1pxのまま＝名前の欄の幅の計算と同じ）・外に暗いふち・ほんのり光る
+  assert.ok(src.includes("const faceRingOf = (tint) => ({ border:`1px solid ${tint ? `${tint}e0` : '#5577aa'}`, borderRadius:'4px',"))
+  assert.ok(src.includes('boxShadow: tint ? `0 0 0 1px #000000a0, 0 0 7px ${tint}55`'), '外に暗いふち・ボスの色で光る')
+  assert.ok(!/<div style=\{\{ width: FACE_SIZE[^\n]*#002244/.test(src), '前の暗い紺の枠（背景に溶けた）に戻さない')
+  for (const cat of CHALLENGE_CATS) for (const k of cat.bosses) assert.match(bossTintOf(k) || '', /^#[0-9a-f]{6}$/i, `${k}：枠の色（6桁）`)
   assert.ok(src.includes("objectFit: face ? 'cover' : 'contain'"))
   // 挑戦のカテゴリの全部のボスに顔のアップがある（ボスを足すときは BOSS_FACE_BOX にも足して node tools/v2cap-boss-thumb.mjs）
   for (const cat of CHALLENGE_CATS) for (const k of cat.bosses) {

@@ -97,11 +97,15 @@ const CARD_FIT = bossCardFitOf(Math.max(...CHALLENGE_CATS.flatMap(c => c.bosses.
 const FACE_SIZE = bossCardCss(CARD_FIT.face)
 const NAME_SIZE = bossCardCss(CARD_FIT.name)
 const NOTE_SIZE = bossCardCss(CARD_FIT.note)
+//   【確定】2026-11-06 ユーザー「挑戦の顔アイコン、わかりやすく軽く枠を付けてほしい」：顔のまわりにボスの色の細い枠（前は暗い紺 #002244 で背景に溶けていた）。
+//   線は1pxのまま（太くしない＝軽く・名前の欄の幅の計算 BOSS_CARD も線1pxで数えている）。外に暗いふちを1本（枠の色の背景と分ける）・ボスの色でほんのり光らせる・角を少し丸める
+const faceRingOf = (tint) => ({ border:`1px solid ${tint ? `${tint}e0` : '#5577aa'}`, borderRadius:'4px',
+  boxShadow: tint ? `0 0 0 1px #000000a0, 0 0 7px ${tint}55` : '0 0 0 1px #000000a0' })
 const BossFace = ({ bossKey }) => {
   const face = bossFaceOf(bossKey), src = face || bossThumbOf(bossKey), tint = bossTintOf(bossKey)
   if (!src) return null
   return (
-    <div style={{ width: FACE_SIZE, height: FACE_SIZE, flexShrink:0, overflow:'hidden', background: tint ? `${tint}30` : '#0b1a2e', border:'1px solid #002244', display:'flex', alignItems:'center', justifyContent:'center' }}>
+    <div style={{ width: FACE_SIZE, height: FACE_SIZE, flexShrink:0, overflow:'hidden', background: tint ? `${tint}30` : '#0b1a2e', ...faceRingOf(tint), display:'flex', alignItems:'center', justifyContent:'center' }}>
       <img src={src} alt="" draggable={false} style={{ width:'100%', height:'100%', objectFit: face ? 'cover' : 'contain' }} />
     </div>
   )
