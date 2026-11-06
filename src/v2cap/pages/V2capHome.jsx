@@ -34,6 +34,7 @@ import { START_CLASSES, weaponsOf, attackKindOf, classDescOf } from '../lib/jobs
 import { apLeftOf } from '../lib/ascension.js'
 import { TOWER_NAME, TOWER_SHORT_NAME, floorLabel, clampFloor } from '../lib/tower.js'
 import { openUntilOf } from '../lib/sortie.js'
+import { isScarecrowOpen } from '../lib/scarecrowRules.js'
 import { spotLabel } from '../lib/areas.js'
 import { RARITY_COLOR } from '../lib/equipment.js'
 import { SHINKA_ON } from '../lib/shinka.js'
@@ -98,6 +99,9 @@ const MENU = [
     // 【確定】2026-10-14 塔（あるけみすと型の対人・1〜100層）。説明はいまの層で変わる（menuOf）
     // 【確定】2026-10-31 メニューの札は「覇天塔」だけ（ユーザー指示「ジークヴァルトのはてんとうは覇天塔だけにして」）。塔の画面の題などは TOWER_NAME のまま
     { key:'tower', label: TOWER_SHORT_NAME, icon:'🗼', color:'#b48cff', action:'階層守護者に挑む' },
+    // 【確定】2026-11-06 ユーザー「V２の冒険のコンテンツにデイリーで挑めるものを追加する、挑戦とは別」→選んだ名前「修練場」：
+    //   デイリーで挑めるものの入れ物。1つ目は案山子（エリア①のクリアで開く・lib/scarecrow.js）。開く前は説明が「エリア①クリアで開く」（menuOf）
+    { key:'training', label:'修練場', icon:'🌾', color:'#9ad06a', action:'案山子をなぐる（1日1回）' },
   ] },
   { title:'施設', head:'facility', items:[
     // 【確定】2026-10-31 商店（性別変更薬・日月反転の秘薬・lib/shop.js）。説明は秘薬が効いていれば残り時間（menuOf）
@@ -116,12 +120,14 @@ const MENU = [
     { key:'tree', label:'ユグレシアの宝樹', icon:'🌳', color:'#44dd99', action:'祈る' },
   ] },
 ]
-const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', museum:'🏺 博物館', burger: <><ShopMark size={18} /> {SHOP_NAME}</>, asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場', shop:'🏪 商店', tower:`🗼 ${TOWER_NAME}`, dungeon: <><MenuIcon k="challenge" size={18} /> 挑戦</>,
+const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', museum:'🏺 博物館', burger: <><ShopMark size={18} /> {SHOP_NAME}</>, asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場', shop:'🏪 商店', tower:`🗼 ${TOWER_NAME}`, training:'🌾 修練場', dungeon: <><MenuIcon k="challenge" size={18} /> 挑戦</>,
   uniqueCheck:'💎 ユニークの能力の確かめ［開発］', atb:'⏱ ATB戦闘の試し撃ち［開発］' }
 // ATBの試し撃ち（2026-10-26・開発用）。開いたときだけ読み込む（ホームの重さを増やさない）
 const V2capAtb = lazy(() => import('../components/V2capAtb.jsx'))
 // IDダンジョン（2026-10-29）。戦闘の画面（ATB）ごと、開いたときだけ読み込む
 const V2capDungeon = lazy(() => import('../components/V2capDungeon.jsx'))
+// 修練場（2026-11-06・案山子）。戦闘の画面（ATB）ごと、開いたときだけ読み込む
+const V2capTraining = lazy(() => import('../components/V2capTraining.jsx'))
 // メニューの説明に、いまの職業で残っているAPを出す（振り忘れに気づけるように）。塔はいまの層（守っていればその層）
 const towerActionOf = (prof) => (prof?.tower_guard
   ? `👑 ${floorLabel(prof.tower_guard)}を守っている`
@@ -135,6 +141,7 @@ const menuOf = (prof) => {
     if (m.key === 'tower') return { ...m, action: towerActionOf(prof) }
     if (m.key === 'burger' && meal) return { ...m, action:`食事中（${leftText(meal.leftMs)}）` }
     if (m.key === 'shop' && flip > 0) return { ...m, action:`日月反転中（${leftText(flip)}）` }
+    if (m.key === 'training' && !isScarecrowOpen(prof?.cleared_spots)) return { ...m, action:'エリア①クリアで開く' }
     return m
   }) }))
 }
@@ -560,6 +567,11 @@ export default function V2capHome() {
             {screen === 'dungeon' && (
               <Suspense fallback={<div style={{ color: TEXT.label, fontSize:'11px' }}>読み込み中...</div>}>
                 <V2capDungeon prof={prof} inventory={inventory} onProfile={refresh} onGo={setScreen} dev={isAdmin} />
+              </Suspense>
+            )}
+            {screen === 'training' && (
+              <Suspense fallback={<div style={{ color: TEXT.label, fontSize:'11px' }}>読み込み中...</div>}>
+                <V2capTraining prof={prof} inventory={inventory} onProfile={refresh} dev={isAdmin} />
               </Suspense>
             )}
             {screen === 'atb' && (

@@ -275,7 +275,9 @@ test('【確定】2026-11-01 自分は受けてもグラグラしない（ユー
   // 多段：次の1発の瞬間に元の場所へ戻らない（はじめのコマで押し切る）
   assert.ok(hitReactOf(f, 10, HP).x < -5)
   // 画面：自分の側は細かい揺れを通らない・回さない（ボスの側の揺れはそのまま）
-  assert.match(stage, /\(side === 'b' \? shakeOf\(now - lastOf\('hit'\)\) : 0\)/)
+  assert.match(stage, /\(side === 'b' && !wobble \? shakeOf\(now - lastOf\('hit'\)\) : 0\)/)
+  // 傾けるのは修練場の案山子（wobble・2026-11-06）だけ＝自分の側（side a）には付けない
+  assert.ok(!/<Fighter st=\{st\} side="a"[^>]*wobble/.test(stage), '自分は傾けない')
   assert.ok(!/rotate/.test(stage.match(/const reactTf = .*/)[0]))
   assert.ok(!/writhe/.test(stage), '巻かれてもがかない')
   assert.ok(!/knock/.test(stage), '押すのは hitReactOf だけ（別に押すと、押す量が途中で切り替わって戻る途中でもう一度跳ねた）')

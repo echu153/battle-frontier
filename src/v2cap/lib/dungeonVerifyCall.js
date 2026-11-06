@@ -37,6 +37,8 @@ const callWithRetry = async (args, path, { fetchFn = fetch, retryMs = RETRY_MS, 
 
 // 確かめてもらう。args＝{ run, player }。返事（{ ok, damage, reward, corrected, run }）か、届かなければ null
 export const callVerify = (args, opts) => callWithRetry(args, PATH, opts)
+// 修練場の案山子を確かめてもらう。args＝{ id, player }。返事（{ ok, damage, pct, exp, gained, level_ups, … }）か、届かなければ null
+export const callScarecrowVerify = (args, opts) => callWithRetry({ ...args, kind: 'scarecrow' }, PATH, opts)
 // 出撃と塔の結果を決めてもらう。args＝{ kind:'fill'|'tower', player }。返事は { ok } だけ（結果は精算のあとで分かる）か、届かなければ null
 export const callSortie = (args, opts) => callWithRetry(args, SORTIE_PATH, opts)
 

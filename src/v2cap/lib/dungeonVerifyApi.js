@@ -8,6 +8,7 @@
 // ⚠画面の決まりは V2capDungeon.jsx・送り方は dungeonVerifyCall.js。下の2つは src/supabase.js と同じ（dungeonVerify.test.js が突き合わせる）
 // ============================================================
 import { cleanTryOf, verifyTry } from './dungeonVerify.js'
+import { verifyScarecrow } from './scarecrow.js'
 
 export const SUPABASE_URL = 'https://jxbcuqwqtstxgmpiruuu.supabase.co'
 export const SUPABASE_KEY = 'sb_publishable_vlexKdF2oJrIIwMFEA81OA_1XyShoIt'
@@ -27,6 +28,7 @@ export const rpcOf = (fetchFn) => async (fn, args) => {
 //   ping … いまの版を答えるだけ（画面が古くないかを挑戦の前に見る・dungeonVerifyCall.js）
 export const verifyRequest = async ({ body, secret, sha = '', fetchFn = fetch }) => {
   if (body?.ping) return { status: 200, body: { ok: true, sha } }
+  if (body?.kind === 'scarecrow') return scarecrowRequest({ body, secret, fetchFn })
   const run = Number(body?.run)
   const player = String(body?.player || '')
   if (!Number.isSafeInteger(run) || !UUID.test(player)) return { status: 400, body: { ok: false, error: 'どの挑戦か分かりません' } }
@@ -38,6 +40,26 @@ export const verifyRequest = async ({ body, secret, sha = '', fetchFn = fetch })
     const v = verifyTry({ boss: t.boss, diff: t.diff, hp: t.hp, seed: t.seed, snap: t.snap, inputs: t.inputs, endStep: t.end_step, elapsedSec: t.elapsed_sec })
     // 飲んだ薬（無ければ送らない＝薬の SQL を流す前のサーバーでも通る）
     const done = await rpc('v2cap_dungeon_verify_settle', { p_secret: secret, p_run: run, p_player: player, p_try: t.try, p_damage: v.damage, p_clean: cleanTryOf(v), p_reason: v.reason, ...(v.items ? { p_items: v.items } : {}) })
+    return { status: 200, body: done }
+  } catch (e) {
+    console.error(e)
+    return { status: 500, body: { ok: false, error: '結果を確かめられませんでした' } }
+  }
+}
+
+// 修練場の案山子（2026-11-06・lib/scarecrow.js）：同じ関数に kind:'scarecrow' で頼む（Vercel の関数を増やさない）。
+//   { kind:'scarecrow', id（v2cap_scarecrow_start の id）, player }。読む → 回し直す → 入れる の流れは挑戦と同じ
+const scarecrowRequest = async ({ body, secret, fetchFn }) => {
+  const id = Number(body?.id)
+  const player = String(body?.player || '')
+  if (!Number.isSafeInteger(id) || !UUID.test(player)) return { status: 400, body: { ok: false, error: 'どの修練か分かりません' } }
+  if (!secret) return { status: 500, body: { ok: false, error: '合い言葉の設定がありません' } }
+  const rpc = rpcOf(fetchFn)
+  try {
+    const t = await rpc('v2cap_scarecrow_verify_load', { p_secret: secret, p_id: id, p_player: player })
+    if (!t?.ok || t.done) return { status: 200, body: t }
+    const v = verifyScarecrow({ seed: t.seed, snap: t.snap, inputs: t.inputs, endStep: t.end_step, elapsedSec: t.elapsed_sec })
+    const done = await rpc('v2cap_scarecrow_verify_settle', { p_secret: secret, p_id: id, p_player: player, p_damage: v.damage, p_pct: v.pct, p_reason: v.reason })
     return { status: 200, body: done }
   } catch (e) {
     console.error(e)
