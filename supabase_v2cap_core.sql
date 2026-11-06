@@ -4116,6 +4116,145 @@ revoke all on function public.v2cap_set_gender(text) from public, anon;
 grant execute on function public.v2cap_set_gender(text) to authenticated;
 
 -- ============================================================
+-- ===== 4-2. サブ垢の見張り（入ったときの接続元と端末の印・2026-11-06）=====
+-- ============================================================
+-- 【確定】2026-11-06 ユーザー「複数アカウント作れないようにしたい・同じIPアドレスからアカウント作成は1個しかできないみたいなことできる？」→
+--   選んだのは「① 記録して見張る」だけ（同じIPで作れなくする・24時間に1キャラ・救援の穴をふさぐ は選ばなかった）。
+--   ・**止めない**。ホームを開いたときとキャラを作った直後に、接続元のIPと端末の印（画面が端末に覚えさせた乱数・lib/altWatch.js）を残すだけ
+--   ・**IPそのものは残さない**。だれも読めない塩（v2cap_watch_salt）を混ぜた sha256 にして、同じかどうかだけ分かるようにする
+--     ★塩は最初に流したときに1回だけ作る（作り直すと、それまでの記録と突き合わせられなくなる）
+--   ・管理者は開発用の「サブ垢の見張り」（v2cap_watch_pairs）で、同じ端末・同じIPを使ったキャラの組みと、
+--     挑戦の救援で一緒になった回数を見て、止めるかを人が決める
+--   ・⚠スマホ回線・学校・会社などは他人どうしが同じIPになる。家族も同じWi-Fiなら同じIP。「同じIP」だけで決めつけない（端末の印のほうが強い）
+--   ・IPは Supabase が渡す頼みの見出し（request.headers）から読む：cf-connecting-ip → x-real-ip → x-forwarded-for の先頭
+create table if not exists public.v2cap_watch_salt (
+  id   int  primary key default 1 check (id = 1),
+  salt text not null
+);
+alter table public.v2cap_watch_salt enable row level security;
+revoke all on public.v2cap_watch_salt from public, anon, authenticated;
+insert into public.v2cap_watch_salt (id, salt)
+values (1, encode(sha256(convert_to(gen_random_uuid()::text || clock_timestamp()::text || gen_random_uuid()::text, 'UTF8')), 'hex'))
+on conflict (id) do nothing;
+
+create table if not exists public.v2cap_watch (
+  user_id   uuid not null references auth.users(id) on delete cascade,
+  kind      text not null check (kind in ('ip', 'device')),
+  hash      text not null,                          -- 塩を混ぜた sha256（元の値には戻せない）
+  first_at  timestamptz not null default now(),
+  last_at   timestamptz not null default now(),
+  times     int  not null default 1,                -- 同じ印でホームを開いた回数
+  at_create boolean not null default false,         -- キャラを作ったときにも使っていた
+  primary key (user_id, kind, hash)
+);
+create index if not exists v2cap_watch_hash_idx on public.v2cap_watch (kind, hash);
+alter table public.v2cap_watch enable row level security;
+revoke all on public.v2cap_watch from public, anon, authenticated;
+
+-- 塩を混ぜた sha256（中だけで使う）。値が空なら null＝残さない
+create or replace function public.v2cap_watch_hash(p_kind text, p_value text)
+returns text language sql stable security definer set search_path = public as $$
+  select case when nullif(btrim(coalesce(p_value, '')), '') is null then null
+    else encode(sha256(convert_to((select s.salt from public.v2cap_watch_salt s where s.id = 1) || '|' || p_kind || '|' || btrim(p_value), 'UTF8')), 'hex') end
+$$;
+revoke all on function public.v2cap_watch_hash(text, text) from public, anon, authenticated;
+
+-- ホームを開いたとき（p_create＝false）・キャラを作った直後（true）に画面が呼ぶ。失敗しても画面は止めない
+create or replace function public.v2cap_watch_touch(p_device text default null, p_create boolean default false)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid   uuid := auth.uid();
+  v_dev   text := btrim(coalesce(p_device, ''));
+  v_h     jsonb;
+  v_src   text;
+  v_ip    text;
+  v_n     int := 0;
+  v_admin boolean;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  begin
+    v_h := nullif(current_setting('request.headers', true), '')::jsonb;
+  exception when others then
+    v_h := null;
+  end;
+  v_src := case when coalesce(v_h->>'cf-connecting-ip', '') <> '' then 'cf-connecting-ip'
+                when coalesce(v_h->>'x-real-ip', '') <> '' then 'x-real-ip'
+                when coalesce(v_h->>'x-forwarded-for', '') <> '' then 'x-forwarded-for' end;
+  v_ip := nullif(btrim(split_part(coalesce(v_h->>v_src, ''), ',', 1)), '');
+  -- 端末の印は画面が作る英数字とハイフンだけ（ほかの形は残さない）
+  if v_dev !~ '^[A-Za-z0-9-]{8,64}$' then v_dev := null; end if;
+  insert into public.v2cap_watch as w (user_id, kind, hash, at_create)
+  select v_uid, x.kind, x.hash, coalesce(p_create, false)
+    from (values ('ip', public.v2cap_watch_hash('ip', v_ip)),
+                 ('device', public.v2cap_watch_hash('device', v_dev))) as x(kind, hash)
+   where x.hash is not null
+  on conflict (user_id, kind, hash) do update
+    set last_at = now(), times = w.times + 1, at_create = w.at_create or excluded.at_create;
+  get diagnostics v_n = row_count;
+  v_admin := coalesce((select pr.is_admin from public.profiles pr where pr.id = v_uid), false);
+  -- 何が読めたかだけ返す（IPそのものは返さない）。管理者には見出しの名前も返す（どこからIPを読めているかの確かめ用）
+  return jsonb_build_object('ok', true, 'ip', v_ip is not null, 'src', v_src, 'device', v_dev is not null, 'saved', v_n,
+    'heads', case when v_admin then (select coalesce(jsonb_agg(k order by k), '[]'::jsonb) from jsonb_object_keys(coalesce(v_h, '{}'::jsonb)) k) end);
+end;
+$$;
+revoke all on function public.v2cap_watch_touch(text, boolean) from public, anon;
+grant execute on function public.v2cap_watch_touch(text, boolean) to authenticated;
+
+-- 管理者の「サブ垢の見張り」。同じ端末か同じIPを使ったことのあるキャラの組み（両方ともキャラがある人だけ）。
+--   並びは 同じ端末 → 救援で一緒になった回数 → 同じIPの数 → 最近 の順
+create or replace function public.v2cap_watch_pairs(p_limit int default 100)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_lim int := least(greatest(coalesce(p_limit, 100), 1), 300);
+  v_out jsonb;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  -- ★公開したあとも管理者だけ（v2cap_is_dev は公開のときに開けるので、ここは profiles.is_admin を別に見る）
+  if not coalesce((select pr.is_admin from public.profiles pr where pr.id = v_uid), false) then
+    return jsonb_build_object('ok', false, 'error', '管理者だけが見られます');
+  end if;
+  with pair as (
+    select a.user_id as a_id, b.user_id as b_id,
+           bool_or(a.kind = 'device') as device,
+           (count(*) filter (where a.kind = 'ip'))::int as ip,
+           bool_or(a.kind = 'device' and a.at_create and b.at_create) as at_create,   -- 作ったときから同じ端末
+           max(least(a.last_at, b.last_at)) as last_at
+      from public.v2cap_watch a
+      join public.v2cap_watch b on b.kind = a.kind and b.hash = a.hash and b.user_id > a.user_id
+     group by a.user_id, b.user_id
+  )
+  select coalesce(jsonb_agg(r.j order by r.n), '[]'::jsonb) into v_out
+    from (
+      select row_number() over (order by p.device desc, q.rescue desc, p.ip desc, p.last_at desc) as n,
+             jsonb_build_object(
+               'a', jsonb_build_object('id', pa.id, 'name', pa.username, 'lv', pa.lv, 'cls', pa.class, 'made', pa.created_at,
+                                       'seen', (select max(w.last_at) from public.v2cap_watch w where w.user_id = pa.id)),
+               'b', jsonb_build_object('id', pb.id, 'name', pb.username, 'lv', pb.lv, 'cls', pb.class, 'made', pb.created_at,
+                                       'seen', (select max(w.last_at) from public.v2cap_watch w where w.user_id = pb.id)),
+               'device', p.device, 'ip', p.ip, 'atCreate', p.at_create, 'rescue', q.rescue, 'last', p.last_at) as j
+        from pair p
+        join public.v2cap_profiles pa on pa.id = p.a_id
+        join public.v2cap_profiles pb on pb.id = p.b_id
+        cross join lateral (
+          select count(*)::int as rescue
+            from public.v2cap_dungeon_members m1
+            join public.v2cap_dungeon_members m2 on m2.run_id = m1.run_id and m2.player_id = p.b_id
+           where m1.player_id = p.a_id
+        ) q
+       order by n
+       limit v_lim
+    ) r;
+  return jsonb_build_object('ok', true, 'pairs', v_out,
+    'people', (select count(distinct w.user_id)::int from public.v2cap_watch w));
+end;
+$$;
+revoke all on function public.v2cap_watch_pairs(int) from public, anon;
+grant execute on function public.v2cap_watch_pairs(int) to authenticated;
+
+-- ============================================================
 -- ===== 5. 出撃の精算（1戦ごと）=====
 -- ============================================================
 -- 戦闘は画面で回し、ここへ「どの場所の、どの敵と戦って、勝ったか」と、落ちた装備（基本装備とランク）を送る。

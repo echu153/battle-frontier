@@ -27,6 +27,7 @@ import { welcomeLineOf } from '../lib/alea.js'
 import V2capAscension from '../components/V2capAscension.jsx'
 import V2capTower from '../components/V2capTower.jsx'
 import V2capUniqueCheck from '../components/V2capUniqueCheck.jsx'
+import { deviceMark } from '../lib/altWatch.js'
 import { updateApp } from '../lib/appUpdate.js'
 import V2capShop from '../components/V2capShop.jsx'
 import { SHOP_COLOR, flipLeftMsOf } from '../lib/shop.js'
@@ -124,6 +125,17 @@ const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキル
   uniqueCheck:'💎 ユニークの能力の確かめ［開発］', atb:'⏱ ATB戦闘の試し撃ち［開発］' }
 // ATBの試し撃ち（2026-10-26・開発用）。開いたときだけ読み込む（ホームの重さを増やさない）
 const V2capAtb = lazy(() => import('../components/V2capAtb.jsx'))
+// サブ垢の見張り（2026-11-06・管理者だけ・lib/altWatch.js）。開いたときだけ読み込む
+const V2capAltWatch = lazy(() => import('../components/V2capAltWatch.jsx'))
+SCREEN_TITLE.altWatch = '🔍 サブ垢の見張り［管理］'
+// ホームを開いたとき・キャラを作った直後に、端末の印を送る（IPはサーバーが見る・supabase_v2cap_core.sql §4-2）。
+//   開発モードは effect が2回走るので、開いたときの分は読み込みごとに1回だけ。失敗しても遊びは止めない
+let watchSent = false
+const touchWatch = (create = false) => {
+  if (!create && watchSent) return
+  if (!create) watchSent = true
+  supabase.rpc('v2cap_watch_touch', { p_device: deviceMark(), p_create: create }).then(() => {}, () => {})
+}
 // IDダンジョン（2026-10-29）。戦闘の画面（ATB）ごと、開いたときだけ読み込む
 const V2capDungeon = lazy(() => import('../components/V2capDungeon.jsx'))
 // 修練場（2026-11-06・案山子）。戦闘の画面（ATB）ごと、開いたときだけ読み込む
@@ -217,6 +229,7 @@ export default function V2capHome() {
         ])
         // ★開発限定。管理者以外は旧版へ戻す（アクセスは管理者へ通知）
         if (!p?.is_admin) { reportDevAccess('v2cap', 'V2レベルキャップあり[開発]'); nav('/game'); return }
+        touchWatch()
         if (!alive) return
         setName(p?.username || '')
         setIsAdmin(!!p?.is_admin)
@@ -268,6 +281,7 @@ export default function V2capHome() {
     if (rpcErr || !data?.ok) { setError(rpcErr?.message || data?.error || '作成に失敗しました'); return }
     setProf(data.profile)
     setInventory([])
+    touchWatch(true)
     // ★V1からの引き継ぎ（サーバーの v2cap_v1_carry が作成のときに入れる）：受け取ったものを知らせ、ユニークが入った持ち物を読み直す
     if (data.carry) setCarry(data.carry)
     refresh()
@@ -528,6 +542,8 @@ export default function V2capHome() {
                       </button>
                       <button onClick={() => setScreen('uniqueCheck')} style={miniBtn(RARITY_COLOR.U)}>💎 ユニークの能力を確かめる</button>
                       <button onClick={() => setScreen('atb')} style={miniBtn('#44ddff')}>⏱ ATB戦闘の試し撃ち</button>
+                      {/* サブ垢の見張り（2026-11-06）：公開したあとも管理者だけ（開発用の枠を出す人が変わっても、ここは isAdmin で見る） */}
+                      {isAdmin && <button onClick={() => setScreen('altWatch')} style={miniBtn('#ff8888')}>🔍 サブ垢の見張り</button>}
                       {/* 案内役ナハトの全部のセリフを順に見る（サーバーに何も書かない） */}
                       <button onClick={() => { setNaviPreview(0); window.scrollTo(0, 0) }} style={miniBtn('#b79bff')}>🕯 {NAVI_NAME}の案内を最初から見る</button>
                       {/* 武器の真化はお蔵入りのあいだ出さない（SHINKA_ON・2026-10-26 ユーザー指示「一旦お蔵入り」） */}
@@ -572,6 +588,11 @@ export default function V2capHome() {
             {screen === 'training' && (
               <Suspense fallback={<div style={{ color: TEXT.label, fontSize:'11px' }}>読み込み中...</div>}>
                 <V2capTraining prof={prof} inventory={inventory} onProfile={refresh} dev={isAdmin} />
+              </Suspense>
+            )}
+            {screen === 'altWatch' && isAdmin && (
+              <Suspense fallback={<div style={{ color: TEXT.label, fontSize:'11px' }}>読み込み中...</div>}>
+                <V2capAltWatch />
               </Suspense>
             )}
             {screen === 'atb' && (
