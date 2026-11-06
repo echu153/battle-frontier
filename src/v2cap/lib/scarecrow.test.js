@@ -26,7 +26,8 @@ import { scarecrowArtOf, SCARECROW_TEMP_SRC } from './scarecrowArt.js'
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 const SQL = read('../../../supabase_v2cap_core.sql')
-const sec29 = SQL.slice(SQL.indexOf('===== 29. 修練場の案山子'))
+// §29 だけ（次の §30＝日替わりクエストの曜日のクエストの手前まで・lib/dayQuest.test.js）
+const sec29 = SQL.slice(SQL.indexOf('===== 29. 修練場の案山子'), SQL.indexOf('===== 30. 日替わりクエスト')).replace(/\n+-- =+\n-- $/, '\n')
 const fnOf = (name) => { const i = sec29.indexOf(`function public.${name}(`); assert.ok(i >= 0, `${name} が無い`); return sec29.slice(i, sec29.indexOf('\n$$;', i)) }
 const AT = Date.UTC(2026, 10, 6, 3, 0, 0)
 const LEARNED = SKILLS.map(s => s.name)

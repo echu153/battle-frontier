@@ -717,9 +717,9 @@ test('★公開RPCは全部 v2cap_is_dev()（is_admin だけ）を通してい�
   assert.ok(granted.length >= 10, `公開RPCを拾えている（${granted.length}本）`)
   // 例外はサーバーの関数が呼ぶものだけ（2026-10-31 挑戦・2026-11-01 出撃と塔）。ログインした人でない＝だれが開発者かを見られないので、代わりに合い言葉を見る。
   //   読み書きするのは開発者だけが始められる頼み（try_start・try_end・sortie_prepare・tower_start）の記録なので、開発者でない人の結果が入ることはない
-  //   2026-11-06 修練場の案山子も同じ（始めるのは開発者だけ＝v2cap_scarecrow_start）
+  //   2026-11-06 修練場の案山子も同じ（始めるのは開発者だけ＝v2cap_scarecrow_start）・日替わりクエストの曜日のクエストも同じ（v2cap_dayquest_start）
   const SECRET_ONLY = ['v2cap_dungeon_verify_load', 'v2cap_dungeon_verify_settle', 'v2cap_sortie_fill_load', 'v2cap_sortie_fill_save', 'v2cap_tower_try_load', 'v2cap_tower_try_save',
-    'v2cap_scarecrow_verify_load', 'v2cap_scarecrow_verify_settle']
+    'v2cap_scarecrow_verify_load', 'v2cap_scarecrow_verify_settle', 'v2cap_dayquest_verify_load', 'v2cap_dayquest_verify_settle']
   for (const name of granted) {
     if (SECRET_ONLY.includes(name)) {
       assert.match(fnBody(name), /begin\n {2}if not public\.v2cap_dungeon_verify_ok\(p_secret\) then return/, `${name} はまず合い言葉を見る`)
@@ -728,7 +728,7 @@ test('★公開RPCは全部 v2cap_is_dev()（is_admin だけ）を通してい�
     }
     assert.match(fnBody(name), /if not public\.v2cap_is_dev\(\) then/, `${name} が開発限定を見ている`)
   }
-  for (const name of ['v2cap_dungeon_try_start', 'v2cap_dungeon_try_end', 'v2cap_scarecrow_start', 'v2cap_scarecrow_end', 'v2cap_sortie_prepare', 'v2cap_sortie_settle', 'v2cap_tower_start', 'v2cap_tower_fight', 'v2cap_debug_papia_next']) assert.ok(granted.includes(name) && !SECRET_ONLY.includes(name), `${name} は開発者だけ`)
+  for (const name of ['v2cap_dungeon_try_start', 'v2cap_dungeon_try_end', 'v2cap_scarecrow_start', 'v2cap_scarecrow_end', 'v2cap_dayquest_start', 'v2cap_dayquest_end', 'v2cap_sortie_prepare', 'v2cap_sortie_settle', 'v2cap_tower_start', 'v2cap_tower_fight', 'v2cap_debug_papia_next']) assert.ok(granted.includes(name) && !SECRET_ONLY.includes(name), `${name} は開発者だけ`)
   const gate = fnBody('v2cap_is_dev')
   assert.match(gate, /p\.is_admin/)
   assert.ok(!gate.includes('v2_testers'))

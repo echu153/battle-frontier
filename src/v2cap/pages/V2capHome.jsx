@@ -35,6 +35,7 @@ import { apLeftOf } from '../lib/ascension.js'
 import { TOWER_NAME, TOWER_SHORT_NAME, floorLabel, clampFloor } from '../lib/tower.js'
 import { openUntilOf } from '../lib/sortie.js'
 import { isScarecrowOpen } from '../lib/scarecrowRules.js'
+import { DAY_QUEST_TITLE } from '../lib/dayQuestRules.js'
 import { spotLabel } from '../lib/areas.js'
 import { RARITY_COLOR } from '../lib/equipment.js'
 import { SHINKA_ON } from '../lib/shinka.js'
@@ -101,7 +102,9 @@ const MENU = [
     { key:'tower', label: TOWER_SHORT_NAME, icon:'🗼', color:'#b48cff', action:'階層守護者に挑む' },
     // 【確定】2026-11-06 ユーザー「V２の冒険のコンテンツにデイリーで挑めるものを追加する、挑戦とは別」→選んだ名前「修練場」：
     //   デイリーで挑めるものの入れ物。1つ目は案山子（エリア①のクリアで開く・lib/scarecrow.js）。開く前は説明が「エリア①クリアで開く」（menuOf）
-    { key:'training', label:'修練場', icon:'🌾', color:'#9ad06a', action:'案山子をなぐる（1日1回）' },
+    // 【確定】2026-11-06 ユーザー「修練場の枠、他にもコンテンツ入れるから名前変えたい」→選んだ名前「日替わりクエスト」：毎日の案山子＋曜日で変わるクエスト（lib/dayQuestRules.js）。
+    //   中の画面の key は 'training' のまま（開け閉めの保存などを変えない）
+    { key:'training', label: DAY_QUEST_TITLE, icon:'📜', color:'#9ad06a', action:'案山子・曜日のクエスト' },
   ] },
   { title:'施設', head:'facility', items:[
     // 【確定】2026-10-31 商店（性別変更薬・日月反転の秘薬・lib/shop.js）。説明は秘薬が効いていれば残り時間（menuOf）
@@ -120,13 +123,13 @@ const MENU = [
     { key:'tree', label:'ユグレシアの宝樹', icon:'🌳', color:'#44dd99', action:'祈る' },
   ] },
 ]
-const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', museum:'🏺 博物館', burger: <><ShopMark size={18} /> {SHOP_NAME}</>, asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場', shop:'🏪 商店', tower:`🗼 ${TOWER_NAME}`, training:'🌾 修練場', dungeon: <><MenuIcon k="challenge" size={18} /> 挑戦</>,
+const SCREEN_TITLE = { profile:'👤 プロフィール', skills:'📖 スキルセット', equip:'🛡 装備', dex:'📕 モンスター図鑑', smith:'🔨 鍛冶屋', temple:'🏛 神殿', museum:'🏺 博物館', burger: <><ShopMark size={18} /> {SHOP_NAME}</>, asc:'✨ アセンション', tree:'🌳 ユグレシアの宝樹', casino:'🎰 賭博場', shop:'🏪 商店', tower:`🗼 ${TOWER_NAME}`, training:`📜 ${DAY_QUEST_TITLE}`, dungeon: <><MenuIcon k="challenge" size={18} /> 挑戦</>,
   uniqueCheck:'💎 ユニークの能力の確かめ［開発］', atb:'⏱ ATB戦闘の試し撃ち［開発］' }
 // ATBの試し撃ち（2026-10-26・開発用）。開いたときだけ読み込む（ホームの重さを増やさない）
 const V2capAtb = lazy(() => import('../components/V2capAtb.jsx'))
 // IDダンジョン（2026-10-29）。戦闘の画面（ATB）ごと、開いたときだけ読み込む
 const V2capDungeon = lazy(() => import('../components/V2capDungeon.jsx'))
-// 修練場（2026-11-06・案山子）。戦闘の画面（ATB）ごと、開いたときだけ読み込む
+// 日替わりクエスト（旧 修練場・2026-11-06・案山子と曜日のクエスト）。戦闘の画面（ATB）ごと、開いたときだけ読み込む
 const V2capTraining = lazy(() => import('../components/V2capTraining.jsx'))
 // メニューの説明に、いまの職業で残っているAPを出す（振り忘れに気づけるように）。塔はいまの層（守っていればその層）
 const towerActionOf = (prof) => (prof?.tower_guard

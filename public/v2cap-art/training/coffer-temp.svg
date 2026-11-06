@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 日替わりクエスト（土日）の宝箱の魔物の仮の絵（ユーザーの絵が届くまで・lib/cofferArt.js）。足元を下のはしにそろえる・左向き -->
+  <ellipse cx="256" cy="500" rx="170" ry="12" fill="#000" opacity="0.35"/>
+  <!-- 箱 -->
+  <rect x="110" y="300" width="292" height="196" rx="14" fill="#7a4a22" stroke="#3a220e" stroke-width="8"/>
+  <rect x="110" y="300" width="292" height="34" fill="#c8a040" stroke="#3a220e" stroke-width="6"/>
+  <rect x="236" y="300" width="40" height="196" fill="#c8a040" stroke="#3a220e" stroke-width="6"/>
+  <rect x="240" y="348" width="32" height="40" rx="6" fill="#ffe27a" stroke="#3a220e" stroke-width="5"/>
+  <!-- 開いたふた（左が上がる） -->
+  <path d="M104 296 L120 168 Q256 120 400 196 L404 296 Z" fill="#8a5428" stroke="#3a220e" stroke-width="8"/>
+  <path d="M112 236 Q256 192 402 250" fill="none" stroke="#c8a040" stroke-width="16"/>
+  <!-- 中からのぞく金貨の魔物 -->
+  <g>
+    <circle cx="210" cy="292" r="62" fill="#f2c440" stroke="#8a5a10" stroke-width="7"/>
+    <circle cx="282" cy="300" r="48" fill="#e8b430" stroke="#8a5a10" stroke-width="6"/>
+    <circle cx="186" cy="282" r="13" fill="#fff"/><circle cx="182" cy="284" r="7" fill="#1a1006"/>
+    <circle cx="228" cy="278" r="13" fill="#fff"/><circle cx="224" cy="280" r="7" fill="#1a1006"/>
+    <path d="M172 252 l14 -40 l12 34 M222 244 l12 -38 l10 36" fill="#f2c440" stroke="#8a5a10" stroke-width="6" stroke-linejoin="round"/>
+  </g>
+  <!-- こぼれた金貨 -->
+  <g fill="#ffd24a" stroke="#8a5a10" stroke-width="4">
+    <ellipse cx="86" cy="488" rx="22" ry="10"/><ellipse cx="66" cy="474" rx="20" ry="9"/><ellipse cx="430" cy="490" rx="22" ry="10"/>
+  </g>
+</svg>

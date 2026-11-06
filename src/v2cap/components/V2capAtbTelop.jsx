@@ -21,7 +21,8 @@ const LOOK = {
   clear: { color:'#ffe9a8', glow:'#ffb300', line:'#ffd27a', word: '討伐完了' },
   lose: { color:'#ffb0b0', glow:'#ff2244', line:'#ff7a7a', word: '敗北', gap: '0.6em' },
   timeup: { color:'#ffe0a0', glow:'#ff9a30', line:'#ffc46a', word: '時間切れ' },
-  train: { color:'#e8ffd8', glow:'#5fd07a', line:'#a8e8a0', word: '修練終了' },   // 修練場の案山子（60秒なぐりきった）
+  train: { color:'#e8ffd8', glow:'#5fd07a', line:'#a8e8a0', word: '修練終了' },   // 日替わりクエストの案山子（60秒なぐりきった）
+  quest: { color:'#fff0c0', glow:'#ffb830', line:'#ffd27a', word: 'クエスト終了' },   // 日替わりクエストの曜日のクエスト（60秒なぐりきった・lib/cofferArt.js）
 }
 
 export default function V2capAtbTelop({ kind, sub = null, ms }) {

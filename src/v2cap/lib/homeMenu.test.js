@@ -20,7 +20,7 @@ const groups = MENU_SRC.split("{ title:'").slice(1).map(s => ({
 test('メニューは役割ごとの3つ：キャラクター・冒険・施設（並びもユーザーの指定どおり）', () => {
   assert.deepEqual(groups, [
     { title:'キャラクター', head:'chara', keys:['profile', 'skills', 'equip', 'asc', 'dex'] },
-    { title:'冒険', head:'adventure', keys:['dungeon', 'tower', 'training'] },   // 修練場は 2026-11-06（デイリーで挑めるもの・1つ目は案山子）
+    { title:'冒険', head:'adventure', keys:['dungeon', 'tower', 'training'] },   // 日替わりクエスト（旧 修練場）は 2026-11-06（毎日の案山子＋曜日のクエスト）
     { title:'施設', head:'facility', keys:['shop', 'temple', 'smith', 'museum', 'burger', 'casino', 'tree'] },
   ])
 })

@@ -10487,3 +10487,262 @@ end;
 $$;
 revoke all on function public.v2cap_dev_scarecrow_reset() from public, anon;
 grant execute on function public.v2cap_dev_scarecrow_reset() to authenticated;
+
+-- ============================================================
+-- ===== 30. 日替わりクエストの曜日のクエスト（土日＝宝箱の魔物・1日1回・60秒なぐる・与えたダメージでGold・2026-11-06）=====
+-- ============================================================
+-- 【確定】2026-11-06 ユーザー「修練場の枠、他にもコンテンツ入れるから名前変えたい」「案山子以外は曜日で変わるコンテンツにする予定」
+--   「このコンテンツはAM5時にリセット」「土日はGold効率いいクエストにする予定」「月～金はあとで決めるから一旦土台作って」→ 選んだ（どれも推奨・決まりの正は src/v2cap/lib/dayQuestRules.js）：
+--   ・冒険の「日替わりクエスト」（旧 修練場）。案山子（§29）は毎日、ここは曜日で変わる
+--   ・曜日は日本時間の朝5時で切り替わった日（v2cap_dungeon_today）の曜日。どのクエストかは v2cap_dayquest_of（いまは土日だけ＝宝箱の魔物 'coffer'）
+--   ・戦い方は案山子と同じ（ATB 60秒・反撃しない・1日1回・エリア①のクリアで開く・与えたダメージの割合50〜150%）
+--   ・Gold＝LV×500（目安どおりで）× 割合（v2cap_dayquest_gold）
+-- ★ダメージと割合はサーバーが同じ戦闘を回し直して決める（§29 と同じ形・Vercel の api/v2cap-dungeon-verify.js に kind:'dayquest' で頼む）。
+--   画面の申告（claim）は比べて、ずれたら v2cap_dungeon_mismatch に boss='dayquest:クエスト' で残すだけ。合い言葉も §23 と同じ
+-- ★始めたら、その日の1回を使う。どのクエストかは始めたときに決めて預かる（朝5時をまたいで終わっても、始めたクエストで入れる）
+-- ★表は関数からだけ読み書きする（RLS で直接は読めない）
+create table if not exists public.v2cap_dayquest_tries (
+  id          bigserial primary key,
+  player_id   uuid not null references auth.users(id) on delete cascade,
+  day         date not null,                          -- 挑んだ日（日本時間の5時で切り替え）
+  quest       text not null,                          -- どのクエストか（dayQuestRules.js の DAY_QUESTS の key）
+  started_at  timestamptz not null default now(),
+  seed        bigint not null,                        -- 乱数の種（サーバーが決める）
+  snap        jsonb not null,                         -- 自分の写し { prof, inv, at }（§26 の v2cap_battle_snap）
+  sub         jsonb,                                  -- 預かった記録 { inputs, end_step, claim, late }
+  sub_at      timestamptz,                            -- 記録が届いた時刻
+  result      jsonb,                                  -- 入れた結果 { damage, pct, gold, quest, ... }
+  settled_at  timestamptz,
+  unique (player_id, day)
+);
+alter table public.v2cap_dayquest_tries enable row level security;
+
+-- あるクエスト（dayQuestRules.js の DAY_QUESTS の key と同じ）
+create or replace function public.v2cap_dayquest_keys()
+returns text[] language sql immutable set search_path = public as $$
+  select array['coffer']::text[]
+$$;
+revoke all on function public.v2cap_dayquest_keys() from public, anon, authenticated;
+
+-- その日の曜日のクエスト（無ければ null）。dayQuestRules.js の DAY_QUEST_BY_DOW と同じ（0＝日 … 6＝土）
+create or replace function public.v2cap_dayquest_of(p_day date)
+returns text language sql immutable set search_path = public as $$
+  select case extract(dow from p_day)::int
+    when 0 then 'coffer'
+    when 6 then 'coffer'
+    else null end
+$$;
+revoke all on function public.v2cap_dayquest_of(date) from public, anon, authenticated;
+
+-- 入る Gold（dayQuestRules.js の cofferGoldOf と同じ）：LV×500 × 割合（50〜150%）・切り上げ
+create or replace function public.v2cap_dayquest_gold(p_lv int, p_pct int)
+returns int language sql immutable set search_path = public as $$
+  select ((greatest(1, coalesce(p_lv, 1))::bigint * 500 * greatest(50, least(150, coalesce(p_pct, 50))) + 99) / 100)::int
+$$;
+revoke all on function public.v2cap_dayquest_gold(int, int) from public, anon, authenticated;
+
+-- きょうの1回を画面の形に（無ければ null）
+create or replace function public.v2cap_dayquest_try_json(p_try public.v2cap_dayquest_tries)
+returns jsonb language sql stable set search_path = public as $$
+  select case when p_try.id is null then null else jsonb_build_object(
+    'id', p_try.id,
+    'quest', p_try.quest,
+    'status', case when p_try.settled_at is not null then 'done' when p_try.sub is not null then 'pending' else 'open' end,
+    'started_at', p_try.started_at,
+    'result', p_try.result) end
+$$;
+revoke all on function public.v2cap_dayquest_try_json(public.v2cap_dayquest_tries) from public, anon, authenticated;
+
+-- ===== 入口の様子：開いているか・きょうの曜日とクエスト・きょうの1回 =====
+create or replace function public.v2cap_dayquest_state()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_unlock constant int := 3;   -- ①-③（dayQuestRules.js の DAY_QUEST_UNLOCK_SPOT）
+  v_uid uuid := auth.uid();
+  v_day date := public.v2cap_dungeon_today();
+  v_row public.v2cap_profiles;
+  v_try public.v2cap_dayquest_tries;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select * into v_row from public.v2cap_profiles where id = v_uid;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  select * into v_try from public.v2cap_dayquest_tries where player_id = v_uid and day = v_day;
+  return jsonb_build_object('ok', true, 'me', v_uid,
+    'open', c_unlock = any(coalesce(v_row.cleared_spots, '{}')),
+    'dow', extract(dow from v_day)::int,
+    'quest', public.v2cap_dayquest_of(v_day),
+    'today', public.v2cap_dayquest_try_json(v_try));
+end;
+$$;
+revoke all on function public.v2cap_dayquest_state() from public, anon;
+grant execute on function public.v2cap_dayquest_state() to authenticated;
+
+-- ===== クエストを始める（種と写しを返す・その日の1回を使う）=====
+--   p_quest … 開発者だけ：その曜日でないクエストを試す（平日に土日のクエストを確かめる）。ほかの人が渡しても使わない
+create or replace function public.v2cap_dayquest_start(p_quest text default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_unlock constant int := 3;
+  v_uid   uuid := auth.uid();
+  v_day   date := public.v2cap_dungeon_today();
+  v_row   public.v2cap_profiles;
+  v_try   public.v2cap_dayquest_tries;
+  v_quest text;
+  v_seed  bigint;
+  v_snap  jsonb;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  -- ★行をつかんでから見る（連打しても1日に2回始めない。表の unique でも止まる）
+  select * into v_row from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  if not (c_unlock = any(coalesce(v_row.cleared_spots, '{}'))) then
+    return jsonb_build_object('ok', false, 'error', 'エリア①をクリアすると挑めます');
+  end if;
+  v_quest := public.v2cap_dayquest_of(v_day);
+  if p_quest is not null and public.v2cap_is_dev() then
+    if not (p_quest = any(public.v2cap_dayquest_keys())) then return jsonb_build_object('ok', false, 'error', 'そのクエストはありません'); end if;
+    v_quest := p_quest;
+  end if;
+  if v_quest is null then return jsonb_build_object('ok', false, 'error', 'きょうのクエストはありません'); end if;
+  select * into v_try from public.v2cap_dayquest_tries where player_id = v_uid and day = v_day;
+  if found then
+    return jsonb_build_object('ok', false, 'error', 'きょうはもう挑みました', 'today', public.v2cap_dayquest_try_json(v_try));
+  end if;
+  v_seed := floor(random() * 4294967296)::bigint;
+  v_snap := public.v2cap_battle_snap(v_row);
+  insert into public.v2cap_dayquest_tries (player_id, day, quest, seed, snap)
+  values (v_uid, v_day, v_quest, v_seed, v_snap) returning * into v_try;
+  return jsonb_build_object('ok', true, 'id', v_try.id, 'quest', v_quest, 'seed', v_seed, 'snap', v_snap);
+end;
+$$;
+revoke all on function public.v2cap_dayquest_start(text) from public, anon;
+grant execute on function public.v2cap_dayquest_start(text) to authenticated;
+
+-- ===== クエストの終わり（押した記録を預ける。ダメージはここでは決めない）=====
+-- 2回届いても最初の記録を使う。c_late_min（10分）より遅く届いた記録は持たない＝「通常攻撃だけで60秒」として確かめる（§29 と同じ）
+create or replace function public.v2cap_dayquest_end(p_id bigint, p_inputs jsonb, p_end_step int, p_claim int default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_late_min     constant int := 10;      -- 始めてから記録を受け付ける長さ（分）＝60秒の戦い＋絵の読みこみ＋余裕
+  c_steps        constant int := 1200;    -- 60秒の刻みの数（scarecrow.js の SCARECROW_STEPS）
+  c_inputs_max   constant int := 5000;    -- 押した記録の数の上限（dungeonVerify.js の INPUTS_MAX）
+  c_inputs_bytes constant int := 500000;  -- 押した記録の大きさの上限
+  v_uid uuid := auth.uid();
+  v_try public.v2cap_dayquest_tries;
+  v_inputs jsonb := p_inputs;
+  v_late boolean;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  select * into v_try from public.v2cap_dayquest_tries where id = p_id and player_id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', '挑んでいません'); end if;
+  if v_try.sub is not null then return jsonb_build_object('ok', true, 'player', v_uid, 'id', v_try.id); end if;
+  v_late := v_try.started_at < now() - make_interval(mins => c_late_min);
+  -- 形や大きさがおかしい記録は持たない（回し直しで「記録がおかしい」になり、割合は下限）
+  if v_late then
+    v_inputs := '[]'::jsonb;
+  elsif jsonb_typeof(v_inputs) is distinct from 'array' then
+    v_inputs := null;
+  elsif jsonb_array_length(v_inputs) > c_inputs_max or octet_length(v_inputs::text) > c_inputs_bytes then
+    v_inputs := null;
+  end if;
+  update public.v2cap_dayquest_tries
+     set sub = jsonb_build_object('inputs', v_inputs,
+                                  'end_step', case when v_late then c_steps else greatest(0, least(coalesce(p_end_step, 0), c_steps)) end,
+                                  'claim', case when v_late then null else p_claim end, 'late', v_late),
+         sub_at = now()
+   where id = v_try.id;
+  return jsonb_build_object('ok', true, 'player', v_uid, 'id', v_try.id);
+end;
+$$;
+revoke all on function public.v2cap_dayquest_end(bigint, jsonb, int, int) from public, anon;
+grant execute on function public.v2cap_dayquest_end(bigint, jsonb, int, int) to authenticated;
+
+-- ===== 回し直しの関数（Vercel の api/v2cap-dungeon-verify.js・kind:'dayquest'）だけが呼ぶ2つ =====
+-- 預かった記録を読む。もう入れた1回なら、入れた結果を done で返す（通信が切れて聞き直しても同じ返事）
+create or replace function public.v2cap_dayquest_verify_load(p_secret text, p_id bigint, p_player uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_try public.v2cap_dayquest_tries;
+begin
+  if not public.v2cap_dungeon_verify_ok(p_secret) then return jsonb_build_object('ok', false, 'error', '合い言葉が違います'); end if;
+  select * into v_try from public.v2cap_dayquest_tries where id = p_id and player_id = p_player;
+  if not found then return jsonb_build_object('ok', false, 'error', '挑んでいません'); end if;
+  if v_try.settled_at is not null then
+    return coalesce(v_try.result, '{}'::jsonb) || jsonb_build_object('ok', true, 'done', true, 'today', public.v2cap_dayquest_try_json(v_try));
+  end if;
+  if v_try.sub is null then return jsonb_build_object('ok', false, 'error', 'クエストの記録がまだ届いていません'); end if;
+  return jsonb_build_object('ok', true, 'quest', v_try.quest, 'seed', v_try.seed, 'snap', v_try.snap,
+                            'inputs', v_try.sub->'inputs', 'end_step', v_try.sub->'end_step',
+                            'elapsed_sec', extract(epoch from v_try.sub_at - v_try.started_at));
+end;
+$$;
+revoke all on function public.v2cap_dayquest_verify_load(text, bigint, uuid) from public, authenticated;
+grant execute on function public.v2cap_dayquest_verify_load(text, bigint, uuid) to anon;
+
+-- 回し直した結果を入れる（与えたダメージ・割合 → クエストの報酬）。もう入れた1回は入れ直さない
+--   p_pct＝目安の人と比べた割合（scarecrow.js の scarecrowPctOf・ここでも50〜150に収める）
+create or replace function public.v2cap_dayquest_verify_settle(p_secret text, p_id bigint, p_player uuid, p_damage int, p_pct int, p_reason text default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_try   public.v2cap_dayquest_tries;
+  v_lv    int;
+  v_pct   int;
+  v_gold  int := 0;
+  v_claim bigint;
+  v_why   text;
+  v_res   jsonb;
+begin
+  if not public.v2cap_dungeon_verify_ok(p_secret) then return jsonb_build_object('ok', false, 'error', '合い言葉が違います'); end if;
+  select * into v_try from public.v2cap_dayquest_tries where id = p_id and player_id = p_player for update;
+  if not found then return jsonb_build_object('ok', false, 'error', '挑んでいません'); end if;
+  if v_try.settled_at is not null then
+    return coalesce(v_try.result, '{}'::jsonb) || jsonb_build_object('ok', true, 'done', true, 'today', public.v2cap_dayquest_try_json(v_try));
+  end if;
+  if v_try.sub is null then return jsonb_build_object('ok', false, 'error', 'クエストの記録がまだ届いていません'); end if;
+  -- 割合の物差しと報酬は、写したときのLV（クエストのあいだにLVが上がっても変わらない）
+  v_lv  := greatest(1, coalesce((v_try.snap->'prof'->>'lv')::int, 1));
+  v_pct := greatest(50, least(150, coalesce(p_pct, 50)));
+  -- クエストごとの報酬（あとで月〜金のクエストを足すときは、ここに足す）
+  if v_try.quest = 'coffer' then
+    v_gold := public.v2cap_dayquest_gold(v_lv, v_pct);
+    update public.v2cap_profiles set gold = gold + v_gold, updated_at = now() where id = p_player;
+    if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  else
+    return jsonb_build_object('ok', false, 'error', 'そのクエストはありません');
+  end if;
+  v_claim := (v_try.sub->>'claim')::bigint;
+  v_why := coalesce(p_reason, case when v_claim is not null and v_claim is distinct from coalesce(p_damage, 0) then 'claim' end);
+  if v_why is not null then
+    insert into public.v2cap_dungeon_mismatch (run_id, player_id, name, boss, diff, claim, damage, reason)
+    values (v_try.id, p_player, v_try.snap->'prof'->>'username', 'dayquest:' || v_try.quest, null, v_claim, greatest(0, coalesce(p_damage, 0)), v_why);
+  end if;
+  v_res := jsonb_build_object('quest', v_try.quest, 'damage', greatest(0, coalesce(p_damage, 0)), 'pct', v_pct, 'gold', v_gold, 'base_lv', v_lv,
+    'late', coalesce((v_try.sub->>'late')::boolean, false), 'corrected', v_why is not null);
+  -- 結果を残す。押した記録はもう使わないので捨てる（表を軽く）
+  update public.v2cap_dayquest_tries set result = v_res, settled_at = now(), sub = sub - 'inputs' where id = v_try.id
+  returning * into v_try;
+  return v_res || jsonb_build_object('ok', true, 'today', public.v2cap_dayquest_try_json(v_try));
+end;
+$$;
+revoke all on function public.v2cap_dayquest_verify_settle(text, bigint, uuid, int, int, text) from public, authenticated;
+grant execute on function public.v2cap_dayquest_verify_settle(text, bigint, uuid, int, int, text) to anon;
+
+-- ===== 開発用：きょうのクエストを戻す（もう一度できる）=====
+create or replace function public.v2cap_dev_dayquest_reset()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_n   int;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  delete from public.v2cap_dayquest_tries where player_id = v_uid and day = public.v2cap_dungeon_today();
+  get diagnostics v_n = row_count;
+  return jsonb_build_object('ok', true, 'reset', v_n);
+end;
+$$;
+revoke all on function public.v2cap_dev_dayquest_reset() from public, anon;
+grant execute on function public.v2cap_dev_dayquest_reset() to authenticated;

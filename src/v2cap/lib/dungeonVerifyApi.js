@@ -9,6 +9,7 @@
 // ============================================================
 import { cleanTryOf, verifyTry } from './dungeonVerify.js'
 import { verifyScarecrow } from './scarecrow.js'
+import { verifyDayQuest } from './dayQuest.js'
 
 export const SUPABASE_URL = 'https://jxbcuqwqtstxgmpiruuu.supabase.co'
 export const SUPABASE_KEY = 'sb_publishable_vlexKdF2oJrIIwMFEA81OA_1XyShoIt'
@@ -29,6 +30,7 @@ export const rpcOf = (fetchFn) => async (fn, args) => {
 export const verifyRequest = async ({ body, secret, sha = '', fetchFn = fetch }) => {
   if (body?.ping) return { status: 200, body: { ok: true, sha } }
   if (body?.kind === 'scarecrow') return scarecrowRequest({ body, secret, fetchFn })
+  if (body?.kind === 'dayquest') return dayQuestRequest({ body, secret, fetchFn })
   const run = Number(body?.run)
   const player = String(body?.player || '')
   if (!Number.isSafeInteger(run) || !UUID.test(player)) return { status: 400, body: { ok: false, error: 'どの挑戦か分かりません' } }
@@ -47,7 +49,7 @@ export const verifyRequest = async ({ body, secret, sha = '', fetchFn = fetch })
   }
 }
 
-// 修練場の案山子（2026-11-06・lib/scarecrow.js）：同じ関数に kind:'scarecrow' で頼む（Vercel の関数を増やさない）。
+// 日替わりクエストの案山子（2026-11-06・lib/scarecrow.js）：同じ関数に kind:'scarecrow' で頼む（Vercel の関数を増やさない）。
 //   { kind:'scarecrow', id（v2cap_scarecrow_start の id）, player }。読む → 回し直す → 入れる の流れは挑戦と同じ
 const scarecrowRequest = async ({ body, secret, fetchFn }) => {
   const id = Number(body?.id)
@@ -60,6 +62,26 @@ const scarecrowRequest = async ({ body, secret, fetchFn }) => {
     if (!t?.ok || t.done) return { status: 200, body: t }
     const v = verifyScarecrow({ seed: t.seed, snap: t.snap, inputs: t.inputs, endStep: t.end_step, elapsedSec: t.elapsed_sec })
     const done = await rpc('v2cap_scarecrow_verify_settle', { p_secret: secret, p_id: id, p_player: player, p_damage: v.damage, p_pct: v.pct, p_reason: v.reason })
+    return { status: 200, body: done }
+  } catch (e) {
+    console.error(e)
+    return { status: 500, body: { ok: false, error: '結果を確かめられませんでした' } }
+  }
+}
+
+// 日替わりクエストの曜日のクエスト（2026-11-06・lib/dayQuest.js）：同じ関数に kind:'dayquest' で頼む。
+//   { kind:'dayquest', id（v2cap_dayquest_start の id）, player }。どのクエストかはサーバーが預かった quest（画面からは受け取らない）
+const dayQuestRequest = async ({ body, secret, fetchFn }) => {
+  const id = Number(body?.id)
+  const player = String(body?.player || '')
+  if (!Number.isSafeInteger(id) || !UUID.test(player)) return { status: 400, body: { ok: false, error: 'どのクエストか分かりません' } }
+  if (!secret) return { status: 500, body: { ok: false, error: '合い言葉の設定がありません' } }
+  const rpc = rpcOf(fetchFn)
+  try {
+    const t = await rpc('v2cap_dayquest_verify_load', { p_secret: secret, p_id: id, p_player: player })
+    if (!t?.ok || t.done) return { status: 200, body: t }
+    const v = verifyDayQuest({ quest: t.quest, seed: t.seed, snap: t.snap, inputs: t.inputs, endStep: t.end_step, elapsedSec: t.elapsed_sec })
+    const done = await rpc('v2cap_dayquest_verify_settle', { p_secret: secret, p_id: id, p_player: player, p_damage: v.damage, p_pct: v.pct, p_reason: v.reason })
     return { status: 200, body: done }
   } catch (e) {
     console.error(e)

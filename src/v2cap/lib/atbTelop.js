@@ -32,6 +32,6 @@ export const endTelopOf = (st, fx, nowMs, art = null) => {
   const sec = nowMs / 1000
   if (st.b.hp <= 0) return { kind: 'clear', ms: CLEAR_TELOP_MS, at: lastHitAtOf(fx, 'b', sec) * 1000 + clearTelopDelayOf(art) }
   if (st.winner === 'b') return { kind: 'lose', ms: FAIL_TELOP_MS, at: lastHitAtOf(fx, 'a', sec) * 1000 + LOSE_DELAY_MS }
-  // 修練場の案山子は60秒なぐりきったら終わり＝「時間切れ」でなく「修練終了」（art.timeupKind・lib/scarecrowArt.js）
+  // 日替わりクエストの案山子は60秒なぐりきったら終わり＝「時間切れ」でなく「修練終了」（art.timeupKind・lib/scarecrowArt.js）。曜日のクエストは「クエスト終了」（lib/cofferArt.js）
   return { kind: art?.timeupKind || 'timeup', ms: FAIL_TELOP_MS, at: nowMs + TIMEUP_DELAY_MS }
 }

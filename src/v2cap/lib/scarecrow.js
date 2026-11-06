@@ -1,5 +1,5 @@
 // ============================================================
-// 「レベルキャップあり」版（v2cap）— 修練場の案山子（1日1回・60秒なぐる・与えたダメージでEXP）
+// 「レベルキャップあり」版（v2cap）— 日替わりクエスト（旧 修練場）の案山子（1日1回・60秒なぐる・与えたダメージでEXP）
 // ------------------------------------------------------------
 // 【確定】2026-11-06 ユーザー「V２の冒険のコンテンツにデイリーで挑めるものを追加する、挑戦とは別」
 //   「まずはエリア①クリアで開放する経験値のもらえる案山子を追加したい」「案山子のイラストも用意したい」→ 選んだ（どれも推奨）：
@@ -11,6 +11,7 @@
 //     多く削ると最大1.5倍・少ないと最低0.5倍。基準の量は**出撃30回ぶん**（そのLVの推奨の場所で30回出撃したくらい＝areas.js の tenSortieExpOf×3）
 //     ＝デイリーミッション1つ（10回ぶん）の3倍・四凶1体（25回ぶん）より少し多い
 //   ・見た目は訓練場の藁人形（ユーザーが描く立ち絵と背景の2枚・lib/scarecrowArt.js）
+//   ・11-06 ユーザー「修練場の枠、他にもコンテンツ入れるから名前変えたい」→ 選んだ「日替わりクエスト」。案山子は毎日、ほかは曜日で変わる（lib/dayQuest.js）
 // ★ダメージはサーバーが同じ戦闘を回し直して決める（挑戦と同じ・lib/dungeonVerify.js の形をそのまま使う）。EXPを入れるのは SQL の v2cap_scarecrow_verify_settle
 //   ⚠数（60秒・30回ぶん・50〜150%・解禁の場所）は SQL と同じ（scarecrow.test.js が突き合わせる）
 // ============================================================
@@ -37,19 +38,23 @@ export const SCARECROW_HP = 999999999
 //   配分は守りと速さだけ使う（攻めない）。避けにくいように AGI は小さく
 const DIST = { hp: 34, mp: 6, str: 12, dex: 12, agi: 4, int_stat: 14, vit: 14, luk: 4 }
 export const scarecrowPowerOf = (lv) => Math.max(1, Math.round(stdPowerAt(Math.max(1, lv || 1)) * NORMAL_RATIO))
-export const scarecrowFighter = (lv) => {
+// 動かない的（案山子と、日替わりクエストの曜日の魔物＝lib/dayQuest.js）。守りは同じ＝目安の表（scarecrowStd.js）をそのまま使える
+//   ⚠守りや状態異常の決まりを的ごとに変えるなら、目安の表も的ごとに測り直す
+export const idleTargetOf = (lv, name) => {
   const stats = statsOf({ power: scarecrowPowerOf(lv), dist: DIST })
   stats.hp = SCARECROW_HP
-  return { ...CAP_RULES, name: SCARECROW_NAME, kind: 'phys', race: null, stats, slots: [], taken: null, idle: true, noAil: true }
+  return { ...CAP_RULES, name, kind: 'phys', race: null, stats, slots: [], taken: null, idle: true, noAil: true }
 }
+export const scarecrowFighter = (lv) => idleTargetOf(lv, SCARECROW_NAME)
 
 // 戦闘を作る。seed・snap は v2cap_scarecrow_start の返事（画面）か、サーバーが預かった同じ値（回し直し）。
 //   snap＝{ prof, inv, at }（挑戦と同じ v2cap_battle_snap）。案山子の強さは写したときのLV。薬は持ちこまない
-export const startScarecrowAtb = ({ seed, snap }) => {
+export const startIdleAtb = (foe, { seed, snap }) => {
   const at = new Date(Number(snap.at))
   const me = atbPlayerOf(snap.prof, snap.inv, { meal: activeMealOf(snap.prof, at), at })
-  return createAtb(me, scarecrowFighter(snap.prof?.lv), { maxSec: SCARECROW_SEC, rng: seedRng(seed) })
+  return createAtb(me, foe, { maxSec: SCARECROW_SEC, rng: seedRng(seed) })
 }
+export const startScarecrowAtb = ({ seed, snap }) => startIdleAtb(scarecrowFighter(snap.prof?.lv), { seed, snap })
 // 与えたダメージ（画面の申告もサーバーの計算も、この形で数える）
 export const scarecrowDamageOf = (st) => Math.floor(Math.max(0, st.b.startHp - Math.max(0, st.b.hp)))
 
@@ -69,12 +74,14 @@ export const scarecrowExpOf = (lv, pct) => Math.ceil(tenSortieExpOf(Math.max(1, 
 
 // ===== 回し直し（Vercel の関数・lib/dungeonVerifyApi.js）=====
 // 返すのは { damage, pct, steps, reason（おかしかったわけ・無ければ null）}。elapsedSec はサーバーの時計（始めてから記録が届くまで）
-export const verifyScarecrow = ({ seed, snap, inputs, endStep, elapsedSec }) => {
+//   start＝戦闘を作る関数（日替わりクエストの曜日の魔物も同じ形で回し直す・lib/dayQuest.js）
+export const verifyIdleWith = (start, { seed, snap, inputs, endStep, elapsedSec }) => {
   if (!validInputs(inputs)) return { damage: 0, pct: SCARECROW_PCT_MIN, steps: 0, reason: 'inputs' }
-  const st = startScarecrowAtb({ seed, snap })
+  const st = start({ seed, snap })
   const want = Number.isInteger(endStep) && endStep >= 0 ? Math.min(endStep, SCARECROW_STEPS) : 0
   const limit = allowedSteps(elapsedSec)
   replayInputs(st, inputs, Math.min(want, limit))
   const damage = scarecrowDamageOf(st)
   return { damage, pct: scarecrowPctOf(damage, snap.prof?.class, snap.prof?.lv), steps: st.steps, reason: want > limit ? 'too_fast' : null }
 }
+export const verifyScarecrow = (args) => verifyIdleWith(startScarecrowAtb, args)
