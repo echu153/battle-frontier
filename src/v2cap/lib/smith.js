@@ -18,9 +18,13 @@
 //   （Gold・成功率・失敗したときはほかの装備と同じ）
 // 【確定】2026-10-12 ユーザーが選んだ「最低でも+1にする」：1回の強化で戦闘力は最低でも+1（gear.js の powerAt）。
 //   +1ごとに元の強さの10%だと、弱い装備（元の強さが10未満）は数字が動かない回があった
-// ★抽選と残骸・Goldの出し入れはサーバー（v2cap_enhance・v2cap_dismantle）。ここは表示とテストのための写し
+// 【確定】2026-11-08 **強化石**（ユーザー指示「強化石を使って強化するシステムにする、＋6以降は残骸が必要に、挑戦装備産は固有の素材を必要に」）：
+//   上の「強化石は使わない」「ノーマルはGoldだけ」と、強化の残骸の表は下の「強化」の【確定】で置きかえた
+// ★抽選と強化石・残骸・Goldの出し入れはサーバー（v2cap_enhance・v2cap_dismantle）。ここは表示とテストのための写し
 //   （v2capsql.test.js が表の数を突き合わせる）
 // ============================================================
+
+import { CHALLENGE_MATS } from './challengeDefs.js'
 
 // ===== 強化値 =====
 // PLUS_MAX＝鍛冶屋のふつうの強化で上げられる上限
@@ -73,37 +77,70 @@ export const dismantleGainOf = (rows) => {
 export const bulkPickable = ({ inv, item }, wornIds) => !wornIds.has(String(inv.id)) && plusOf(inv) === 0 && item?.rarity !== 'U' && !item?.bossKey && !inv?.fav && !inv?.shinka
 
 // ===== 強化 =====
-// +n にする回（n＝1〜10）の 残骸の数・成功率(%)。【確定】2026-10-10 ユーザーの表
-//   残骸は+5まで n 個、+6からは1個多い（+6で7・+7で8 … +10で11）
-//   成功率は+1が100%、そこから10%ずつ下がって+10で10%
-export const ENHANCE_SCRAP = [1, 2, 3, 4, 5, 7, 8, 9, 10, 11]
+// +n にする回（n＝1〜10）の 強化石・残骸・ボスの素材の数と成功率(%)。
+// 【確定】2026-11-08 ユーザー指示「強化石を使って強化するシステムにする、＋6以降は残骸が必要に、挑戦装備産は固有の素材を必要に」
+//   「強化石は出撃で確率で手に入る」→ 案を見て4つとも「推奨」を選んだ：
+//   ・強化石は**どの段も1回1個**（ノーマルも使う）。Gold・成功率は今までどおり
+//   ・**+6からは、その装備のエリアの残骸も使う**（数は前の表の+6〜+10のまま＝7・8・9・10・11）。ノーマルは今までどおり残骸を使わない
+//   ・**挑戦の装備**（専用装備と四凶のユニーク＝bossKey がある）は、+6から残骸の代わりに**そのボスの素材を1個**（challengeDefs.js の CHALLENGE_MATS）
+//   ・強化石は出撃で勝った戦闘ごとに2%で1個（sortie.js の STONE_PCT）。挑戦や日替わりクエストで手に入るようにするのは、あとで（ユーザー「予定」）
+//   ⚠前（2026-10-10〜11-07）は「強化石なし・Goldと残骸（+1から1・2・3・4・5・7・8・9・10・11個）・ノーマルはGoldだけ」
+//   成功率は+1が100%、そこから10%ずつ下がって+10で10%（2026-10-10 ユーザーの表）
+export const STONE_NAME = '強化石'
+export const ENHANCE_STONE = 1
+export const ENHANCE_SCRAP = [0, 0, 0, 0, 0, 7, 8, 9, 10, 11]
+export const ENHANCE_BOSS_MAT = [0, 0, 0, 0, 0, 1, 1, 1, 1, 1]
+// 残骸（挑戦の装備はボスの素材）を使い始める回（+6）。説明の文に出す
+export const ENHANCE_SCRAP_FROM = ENHANCE_SCRAP.findIndex(n => n > 0) + 1
 export const ENHANCE_RATE = [100, 90, 80, 70, 60, 50, 40, 30, 20, 10]
 export const ENHANCE_GOLD_PER_LV = 20
 export const enhanceGoldOf = (ilv, next) => Math.max(1, ilv || 1) * ENHANCE_GOLD_PER_LV * next
-// +n にする回の残骸の数。ノーマル（初期装備もノーマル）は0＝Goldだけ（2026-10-12 ユーザー指示）。★サーバーも rarity = 'N' なら0
-export const ENHANCE_GOLD_ONLY_RARITY = 'N'
-export const enhanceScrapOf = (item, next) => (item?.rarity === ENHANCE_GOLD_ONLY_RARITY ? 0 : ENHANCE_SCRAP[next - 1])
-// 次の強化にかかるもの。上限なら null（scrap が0なら残骸は使わない）
+// 持っている強化石の数（サーバーは v2cap_profiles.enh_stone）
+export const stoneOf = (prof) => Math.max(0, Math.floor(Number(prof?.enh_stone) || 0))
+// 挑戦の装備（専用装備・四凶のユニーク＝equipment.js の isChallenge と isChallengeUnique の両方）か。強化でボスの素材を使う
+export const usesBossMat = (item) => !!item?.bossKey
+// +n にする回の残骸の数。ノーマル（初期装備もノーマル）と挑戦の装備は0。★サーバーも rarity = 'N' かボスの装備なら0
+export const ENHANCE_NO_SCRAP_RARITY = 'N'
+export const enhanceScrapOf = (item, next) =>
+  (item?.rarity === ENHANCE_NO_SCRAP_RARITY || usesBossMat(item) ? 0 : ENHANCE_SCRAP[next - 1] || 0)
+// +n にする回のボスの素材の数（挑戦の装備だけ）
+export const enhanceBossMatOf = (item, next) => (usesBossMat(item) ? ENHANCE_BOSS_MAT[next - 1] || 0 : 0)
+// 持っているボスの素材の数（サーバーは v2cap_profiles.challenge_mats＝{ ボス: 個数 }・challenge.js の chMatsOf と同じ）
+const bossMatHaveOf = (prof, key) => Math.max(0, Math.floor(Number(prof?.challenge_mats?.[String(key || '')]) || 0))
+// 次の強化にかかるもの。上限なら null（scrap・mat が0ならそれは使わない。matKey・matName は挑戦の装備だけ）
 export const enhanceCostOf = (item, inv) => {
   const plus = plusOf(inv)
   if (!item || plus >= PLUS_MAX) return null
   const next = plus + 1
+  const boss = usesBossMat(item) ? String(item.bossKey) : null
   return {
     next, area: scrapAreaOf(item),
+    stone: ENHANCE_STONE,
     scrap: enhanceScrapOf(item, next),
+    mat: enhanceBossMatOf(item, next), matKey: boss, matName: boss ? CHALLENGE_MATS[boss] || '素材' : null,
     gold: enhanceGoldOf(inv?.ilv, next),
     rate: ENHANCE_RATE[next - 1],
   }
 }
-// 強化できないわけ（できるなら null）。見る順はサーバー（v2cap_enhance）と同じ。画面では残骸の名前まで出す
+// 強化できないわけ（できるなら null）。見る順はサーバー（v2cap_enhance）と同じ（上限→強化石→残骸→ボスの素材→Gold）。
+// 画面では残骸と素材の名前まで出す
 export const enhanceErrorOf = (item, inv, prof) => {
   if (!item || !inv) return 'その装備を持っていません'
   const c = enhanceCostOf(item, inv)
   if (!c) return `強化値は+${PLUS_MAX}が上限です`
+  if (stoneOf(prof) < c.stone) return `${STONE_NAME}が足りません`
   if (c.scrap > 0 && scrapOf(prof?.materials, c.area) < c.scrap) return `${scrapNameOf(c.area)}が足りません`
+  if (c.mat > 0 && bossMatHaveOf(prof, c.matKey) < c.mat) return `${c.matName}が足りません`
   if ((Number(prof?.gold) || 0) < c.gold) return 'Goldが足りません'
   return null
 }
+// 1回の強化で使ったもの（「〜を失いました」の文）。res＝サーバーの返事（stone・scrap・area・mat・mat_key・gold）
+export const enhanceSpentText = (res) => [
+  res?.stone > 0 ? `${STONE_NAME} ${res.stone}個` : null,
+  res?.scrap > 0 ? `${scrapNameOf(res.area)} ${res.scrap}個` : null,
+  res?.mat > 0 ? `${CHALLENGE_MATS[res.mat_key] || '素材'} ${res.mat}個` : null,
+  `Gold ${(Number(res?.gold) || 0).toLocaleString()}`,
+].filter(Boolean).join('・')
 // 1回の抽選（サーバーの random() * 100 < 成功率 と同じ。シミュレーションとテスト用）
 export const rollEnhance = (rate, rng = Math.random) => rng() * 100 < rate
 // ===== 作成 =====
@@ -133,14 +170,17 @@ export const craftErrorOf = (item, prof) => {
   return null
 }
 
-// +from から +to まで上げるのに、平均でかかる量（説明とテスト用）
+// +from から +to まで上げるのに、平均でかかる量（説明とテスト用）。
+// scrap＝レア・エピック・レジェンダリー・ユニークのとき／mat＝挑戦の装備のとき（どちらか一方を使う）
 export const expectedEnhanceCost = (ilv, from = 0, to = PLUS_MAX) => {
-  let scrap = 0, gold = 0, tries = 0
+  let stone = 0, scrap = 0, mat = 0, gold = 0, tries = 0
   for (let n = from + 1; n <= to; n++) {
     const p = ENHANCE_RATE[n - 1] / 100
     tries += 1 / p
+    stone += ENHANCE_STONE / p
     scrap += ENHANCE_SCRAP[n - 1] / p
+    mat += ENHANCE_BOSS_MAT[n - 1] / p
     gold += enhanceGoldOf(ilv, n) / p
   }
-  return { tries, scrap, gold }
+  return { tries, stone, scrap, mat, gold }
 }

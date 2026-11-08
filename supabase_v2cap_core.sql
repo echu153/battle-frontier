@@ -3093,6 +3093,9 @@ alter table public.v2cap_profiles drop column if exists cleared_areas;
 -- ★2026-10-10 装備の強化と分解：持っている残骸（エリアごと）。{"1": 12, "2": 5} ＝エリアの番号→個数
 --   （名前は src/v2cap/lib/smith.js の SCRAP_NAMES。サーバーは番号だけで持つ）。キャラは消さない
 alter table public.v2cap_profiles add column if not exists materials jsonb not null default '{}'::jsonb;
+-- ★2026-11-08 強化石：持っている数。鍛冶屋の強化で1回1個使う（§8 の v2cap_enhance）・出撃で勝った戦闘ごとに2%で1個入る（§5 の v2cap_sortie_apply）。
+--   名前と数の写しは src/v2cap/lib/smith.js（STONE_NAME・ENHANCE_STONE）と sortie.js（STONE_PCT）。キャラは消さない
+alter table public.v2cap_profiles add column if not exists enh_stone int not null default 0;
 -- ★2026-10-10 デイリーミッション（§10）：その日（日本時間の5時で切り替わる）・受注した時点のLV（null＝まだ受注していない）・
 --   進み（{"win": 3}）・受け取ったか。日付が変わると v2cap_daily_roll が空にする。キャラは消さない
 alter table public.v2cap_profiles add column if not exists daily_day date;
@@ -4286,6 +4289,9 @@ grant execute on function public.v2cap_watch_pairs(int) to authenticated;
 -- ★宝箱（2026-10-14 ユーザー指示・src/v2cap/lib/sortie.js の CHEST_PCT・CHEST_SCRAP と同じ数）：
 --   祠の外で勝って、装備が持ち物に入らなかったとき（落ちなかった・条件に合わなかった）だけ 5% で見つけて、その場で開ける。
 --   中身はその場所のエリアの残骸 1〜10 個（均等に1つ）＝ materials（{"エリアの番号": 個数}）に足す。返事の chest＝{ area, n }（無ければ null）
+-- ★強化石（2026-11-08 ユーザーが選んだ「2%で1個」・src/v2cap/lib/sortie.js の STONE_PCT・STONE_N と同じ数）：
+--   勝った戦闘ごとに 2% で1個（装備・宝箱・ユニークとは別に引く。祠のフェアリー・パピアに勝ったときも引く）＝ enh_stone に足す。
+--   返事の stone＝入った数（入らなければ null）。使うのは鍛冶屋の強化（§8 の v2cap_enhance）
 -- ★パピア（2026-10-30 ユーザー指示・src/v2cap/lib/papia.js の PAPIA_TIERS と同じ数）：
 --   エリア1〜5＝ちびパピア×10／6〜10＝パピア×15／11〜15＝キングパピア×40。敵の表（v2cap_enemies）にはいないので、名前とエリアで確かめる。
 --   勝てば経験値＝場所の表の値×倍率・Goldなし・装備と宝箱なし（p_drop は見ない）。逃げられたら（p_win=false）ふつうの負けと同じ（最低EXP）。
@@ -4318,6 +4324,9 @@ declare
   c_chest_rate   constant numeric := 0.05;
   c_chest_min    constant int := 1;
   c_chest_max    constant int := 10;
+  -- 強化石（sortie.js の STONE_PCT・STONE_N）
+  c_stone_rate   constant numeric := 0.02;
+  c_stone_n      constant int := 1;
   -- ユニーク（equipment.js の UNIQUE_DROP_PCT＝0.5%）
   c_unique_rate  constant numeric := 0.005;
   v_uid    uuid := auth.uid();
@@ -4342,6 +4351,7 @@ declare
   v_inv    bigint;
   v_drop   jsonb := null;
   v_chest  int := 0;         -- 宝箱から出た残骸の数（見つけなければ0）
+  v_stone  int := 0;         -- 入った強化石の数（入らなければ0）
   v_ueq    public.v2cap_equipment;
   v_unique jsonb := null;    -- 落ちたユニーク（落ちなければ null）
   v_uforce boolean := false; -- 開発用の「次のボスで必ずユニーク」を使ったか
@@ -4452,6 +4462,10 @@ begin
     --   （2026-10-09 ユーザー指示。sortie.js の lossExpOf と同じ）
     v_exp := v_spot.exp_min;
   end if;
+  -- 強化石：勝った戦闘ごとに 2% で1個（装備・宝箱・ユニークとは別に引く。祠のフェアリー・パピアに勝ったときも）
+  if v_win and random() < c_stone_rate then
+    v_stone := c_stone_n;
+  end if;
 
   v_cleared := coalesce(v_row.cleared_spots, '{}');
   if v_boss and v_win and not (v_cleared @> array[p_spot]) then
@@ -4481,6 +4495,7 @@ begin
            then jsonb_set(coalesce(materials, '{}'::jsonb), array[v_spot.area::text],
                           to_jsonb(coalesce((materials ->> v_spot.area::text)::int, 0) + v_chest))
            else materials end,
+         enh_stone = coalesce(enh_stone, 0) + v_stone,
          stamina = greatest(0, stamina - v_cost),
          shrine_spot = case when v_sh_left > 0 then v_sh_spot end,
          shrine_left = greatest(0, v_sh_left),
@@ -4525,6 +4540,7 @@ begin
     'role', case when v_shrine then 'shrine' when v_papia then 'papia' else v_en.role end, 'enemy_lv', v_en.lv,
     'exp', v_exp, 'gold', v_gold, 'drop', v_drop, 'unique', v_unique,
     'chest', case when v_chest > 0 then jsonb_build_object('area', v_spot.area, 'n', v_chest) end,
+    'stone', case when v_stone > 0 then v_stone end,
     'cleared', to_jsonb(v_cleared), 'open_until', public.v2cap_open_until(v_cleared), 'boss_rate', v_rate,
     'level', v_res,
     'stamina', v_stam, 'stamina_at', v_stam_at,
@@ -4896,12 +4912,23 @@ grant execute on function public.v2cap_gear_fav(bigint, boolean) to authenticate
 --   ・**失敗すると残骸とGoldはなくなり、強化値はそのまま**（下がらない・壊れない）
 -- 【確定】2026-10-12 ユーザー指示「初期装備は残骸不要、Goldだけで強化できるように」→「全装備のノーマル装備の強化で残骸の消費は不要に、※Goldのみで」：
 --   **ノーマル（初期装備もノーマル）は残骸を使わない**（Gold・成功率・失敗したときは同じ）
--- ★表の写しは src/v2cap/lib/smith.js（ENHANCE_SCRAP・ENHANCE_RATE・ENHANCE_GOLD_PER_LV・enhanceScrapOf）。v2capsql.test.js が突き合わせる
+-- 【確定】2026-11-08 ユーザー指示「強化石を使って強化するシステムにする、＋6以降は残骸が必要に、挑戦装備産は固有の素材を必要に」
+--   （案を見て4つとも「推奨」を選んだ。上の残骸の表と「ノーマルはGoldだけ」はここで置きかえた）：
+--   ・**強化石**（v2cap_profiles.enh_stone）は**どの段も1回1個**（ノーマルも使う）
+--   ・**残骸は+6から**（+6〜+10＝7・8・9・10・11個・その装備のエリアの残骸）。ノーマルは今までどおり残骸を使わない
+--   ・**挑戦の装備**（専用装備＝v2cap_equipment.boss がある行・四凶のユニーク＝id が「UC:ボス:」の行）は、
+--     +6から残骸の代わりに**そのボスの素材を1個**（challenge_mats＝{ ボス: 個数 }）
+--   ・Gold・成功率は今までどおり。失敗すると使ったもの（強化石・残骸か素材・Gold）はなくなり、強化値はそのまま
+--   ・強化石が入るのは出撃（§5 の v2cap_sortie_apply・勝った戦闘ごとに2%で1個）
+-- ★表の写しは src/v2cap/lib/smith.js（ENHANCE_STONE・ENHANCE_SCRAP・ENHANCE_BOSS_MAT・ENHANCE_RATE・ENHANCE_GOLD_PER_LV・enhanceScrapOf）。
+--   v2capsql.test.js が突き合わせる。足りないときの文と見る順（上限→強化石→残骸→ボスの素材→Gold）も smith.js の enhanceErrorOf と同じ
 create or replace function public.v2cap_enhance(p_inventory_id bigint)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   c_max         constant int := 10;
-  c_scrap       constant int[] := array[1, 2, 3, 4, 5, 7, 8, 9, 10, 11];
+  c_stone       constant int := 1;
+  c_scrap       constant int[] := array[0, 0, 0, 0, 0, 7, 8, 9, 10, 11];
+  c_mat         constant int[] := array[0, 0, 0, 0, 0, 1, 1, 1, 1, 1];
   c_rate        constant int[] := array[100, 90, 80, 70, 60, 50, 40, 30, 20, 10];
   c_gold_per_lv constant int := 20;
   v_uid  uuid := auth.uid();
@@ -4916,6 +4943,10 @@ declare
   v_have int;
   v_mats jsonb;
   v_ok   boolean;
+  v_boss  text;    -- 挑戦の装備なら、そのボス（素材の鍵）。ほかは null
+  v_mneed int;     -- ボスの素材の数
+  v_mhave int;
+  v_cmats jsonb;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
@@ -4930,23 +4961,35 @@ begin
     return jsonb_build_object('ok', false, 'error', format('強化値は+%sが上限です', c_max));
   end if;
   v_next := v_plus + 1;
-  -- ★ノーマル（初期装備もノーマル）は残骸を使わない＝Goldだけ（smith.js の enhanceScrapOf）
-  v_need := case when v_eq.rarity = 'N' then 0 else c_scrap[v_next] end;
+  -- 挑戦の装備（専用装備は boss の列・四凶のユニークは id の「UC:ボス:」）なら、そのボス
+  v_boss := coalesce(v_eq.boss, case when split_part(v_eq.id, ':', 1) = 'UC' then nullif(split_part(v_eq.id, ':', 2), '') end);
+  -- ★残骸は+6から。ノーマル（初期装備もノーマル）と挑戦の装備は残骸を使わない（smith.js の enhanceScrapOf）
+  v_need := case when v_eq.rarity = 'N' or v_boss is not null then 0 else c_scrap[v_next] end;
+  -- ★挑戦の装備は+6から、残骸の代わりにそのボスの素材（smith.js の enhanceBossMatOf）
+  v_mneed := case when v_boss is not null then c_mat[v_next] else 0 end;
   v_gold := greatest(1, v_inv.ilv)::bigint * c_gold_per_lv * v_next;
   v_key  := greatest(1, coalesce(v_eq.area, 1))::text;
   v_mats := coalesce(v_row.materials, '{}'::jsonb);
   v_have := coalesce((v_mats ->> v_key)::int, 0);
+  v_cmats := coalesce(v_row.challenge_mats, '{}'::jsonb);
+  v_mhave := case when v_boss is not null then coalesce((v_cmats ->> v_boss)::int, 0) else 0 end;
+  if coalesce(v_row.enh_stone, 0) < c_stone then return jsonb_build_object('ok', false, 'error', '強化石が足りません'); end if;
   if v_have < v_need then return jsonb_build_object('ok', false, 'error', '残骸が足りません'); end if;
+  if v_mhave < v_mneed then return jsonb_build_object('ok', false, 'error', '素材が足りません'); end if;
   if v_row.gold < v_gold then return jsonb_build_object('ok', false, 'error', 'Goldが足りません'); end if;
 
   -- 抽選（成功率は%。+1は100%なので必ず成功する）
   v_ok := random() * 100 < c_rate[v_next];
-  -- 成功でも失敗でも、残骸とGoldは使う（残骸を使わないノーマルは、残骸の数にさわらない）
+  -- 成功でも失敗でも、強化石・残骸（か素材）・Goldは使う（使わないものは数にさわらない）
   if v_need > 0 then
     v_mats := jsonb_set(v_mats, array[v_key], to_jsonb(v_have - v_need));
   end if;
+  if v_mneed > 0 then
+    v_cmats := jsonb_set(v_cmats, array[v_boss], to_jsonb(v_mhave - v_mneed));
+  end if;
   update public.v2cap_profiles
-     set materials = v_mats, gold = gold - v_gold, updated_at = now()
+     set enh_stone = coalesce(enh_stone, 0) - c_stone, materials = v_mats, challenge_mats = v_cmats,
+         gold = gold - v_gold, updated_at = now()
    where id = v_uid;
   if v_ok then
     update public.v2cap_inventory set plus = v_next where id = v_inv.id;
@@ -4954,7 +4997,9 @@ begin
   -- デイリーミッション（§10）：「装備を強化または分解する」を1つ数える（失敗しても1回）
   perform public.v2cap_daily_bump(v_uid, 'smith', 1);
   return jsonb_build_object('ok', true, 'success', v_ok, 'plus', case when v_ok then v_next else v_plus end,
-    'area', greatest(1, coalesce(v_eq.area, 1)), 'scrap', v_need, 'gold', v_gold, 'materials', v_mats, 'gold_left', v_row.gold - v_gold);
+    'stone', c_stone, 'stone_left', coalesce(v_row.enh_stone, 0) - c_stone,
+    'area', greatest(1, coalesce(v_eq.area, 1)), 'scrap', v_need, 'mat', v_mneed, 'mat_key', v_boss,
+    'gold', v_gold, 'materials', v_mats, 'challenge_mats', v_cmats, 'gold_left', v_row.gold - v_gold);
 end;
 $$;
 revoke all on function public.v2cap_enhance(bigint) from public, anon;
@@ -5237,6 +5282,22 @@ end;
 $$;
 revoke all on function public.v2cap_debug_gain_medals(int) from public, anon;
 grant execute on function public.v2cap_debug_gain_medals(int) to authenticated;
+
+-- 強化石を入れる（2026-11-08・鍛冶屋の強化を試す用。開発用の欄のボタン）。ふつうは出撃で勝った戦闘ごとに2%で1個（§5）
+create or replace function public.v2cap_debug_gain_stones(p_amount int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_n int := greatest(1, least(coalesce(p_amount, 0), 1000));
+begin
+  if auth.uid() is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  update public.v2cap_profiles set enh_stone = coalesce(enh_stone, 0) + v_n, updated_at = now() where id = auth.uid();
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  return jsonb_build_object('ok', true, 'got', v_n, 'stones', (select enh_stone from public.v2cap_profiles where id = auth.uid()));
+end;
+$$;
+revoke all on function public.v2cap_debug_gain_stones(int) from public, anon;
+grant execute on function public.v2cap_debug_gain_stones(int) to authenticated;
 
 -- 安息の祠を出す（2026-10-13・演出を試す用。開発用の欄のボタン）：開いている場所に祠を置く（戦闘の数は 3〜8 を引く・
 --   いま祠にいれば置き直す）。ふつうは出撃の精算が 0.1% で置く（§5）

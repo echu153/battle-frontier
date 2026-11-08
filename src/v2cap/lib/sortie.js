@@ -15,7 +15,7 @@
 import { spotOf, enemyLvOf, scaleByRole, LAST_SPOT } from './areas.js'
 import { itemOf, RARITIES, ARMOR_LINES, ACCESSORY_TYPES } from './equipment.js'
 import { weaponsOf } from './jobs.js'
-import { scrapNameOf } from './smith.js'
+import { scrapNameOf, STONE_NAME } from './smith.js'
 import { PAPIA_PCT, PAPIA_ROLE, papiaEnemyOf, takePapiaForce } from './papia.js'
 import {
   rollBoss, nextBossRate, bandAt, rollDropPart,
@@ -186,3 +186,17 @@ export const rollChest = (rng = Math.random) => (rng() * 100 < CHEST_PCT
   : 0)
 // ログの1行（ユーザーの文のまま）
 export const chestText = (area, n) => `宝箱を見つけた！${scrapNameOf(area)}×${n}を獲得した！`
+
+// ===== 強化石 =====
+// 【確定】2026-11-08 ユーザー指示「強化石は出撃で確率で手に入る」→ ユーザーが選んだ「2%で1個」：
+//   出撃で**勝った戦闘ごとに2%で1個**（装備・宝箱・ユニークとは別に引く）。負けたら出ない。
+//   こちらで決めた細部：勝った敵なら役割を問わない（安息の祠のフェアリー・パピアに勝ったときも引く）。ログの1行だけ（演出なし・オートも止まらない）
+//   使い道は鍛冶屋の強化（smith.js の ENHANCE_STONE）。挑戦や日替わりクエストで手に入るようにするのは、あとで
+// ★決めるのはサーバー（v2cap_sortie_apply の c_stone_rate）。ここはシミュレーションと表示のための写し
+//   ⚠数を変えたら SQL の c_stone_… も直す（v2capsql.test.js が突き合わせる）
+export const STONE_PCT = 2   // 勝った戦闘で、強化石が出る確率（%）
+export const STONE_N = 1     // 出たときの数
+// 強化石を引く。出たら数、出なければ0（勝ったかどうかは呼び出し側で見る）
+export const rollStone = (rng = Math.random) => (rng() * 100 < STONE_PCT ? STONE_N : 0)
+// ログの1行（宝箱と同じ形）
+export const stoneText = (n) => `${STONE_NAME}×${n}を獲得した！`

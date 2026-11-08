@@ -35,7 +35,7 @@ export const callOf = (profile) => (profile?.gender === 'm' ? '兄ちゃん' : p
 export const varsOf = (profile) => ({ call: callOf(profile) })
 
 // ===== セリフ =====
-// face＝出す表情。{call}＝呼び方・{item}＝作った装備の名前・{n}＝分解した数・{what}＝足りないもの（「新緑の残骸」「Gold」）
+// face＝出す表情。{call}＝呼び方・{item}＝作った装備の名前・{n}＝分解した数・{what}＝足りないもの（「強化石」「新緑の残骸」「Gold」など）
 // ★レア度の名前（ノーマル・レジェンダリーなど）は言わない（2026-10-26 ユーザー指示「レアリティを直接言わないで」・smithMaster.test.js が見張る）
 // ★「+9」のような強化値の数・成功率・「強化値」のようなゲームの仕組みの言葉は言わない
 //   （2026-10-26 ユーザー指示「＋9 とかメタい発言しないでほしい、世界観守って」・smithMaster.test.js が見張る）
@@ -52,8 +52,9 @@ export const MASTER_LINES = {
   // ふつうにタップしたとき（同じセリフが2回続かないように選ぶ）
   tap: [
     { face: 'normal', text: 'しくじっても、装備が傷むことはねえ。安心して任せな' },
-    { face: 'smile', text: 'いらねえ装備は分解しな。残骸がありゃ、強化も作成もできるぜ' },
-    { face: 'normal', text: '鍛えるほど、うまくいかねえことも増える。残骸とGoldは多めに用意しときな' },
+    { face: 'smile', text: 'いらねえ装備は分解しな。残骸は、ぐっと鍛え上げるときにも作成にも使うぜ' },
+    { face: 'normal', text: '鍛えるほど、うまくいかねえことも増える。強化石とGoldは多めに用意しときな' },
+    { face: 'smile', text: '強化石は、魔物を倒してるとたまに見つかる。見つけたら持ってきな' },
     { face: 'normal', text: 'どこまで鍛え上げられるか、てっぺんを目指してみな' },
     { face: 'smile', text: 'いい装備を作るには、残骸がたんまりいる。コツコツ集めな' },
     { face: 'smile', text: 'ガハハ！ 今日もいい音で鉄が鳴ってらあ' },
@@ -99,8 +100,8 @@ export const MASTER_LINES = {
     { face: 'smile', text: '見ろ、{item}が目を覚ましたぜ。お前さんと戦ってきた日々が刻まれてらあ' },
     { face: 'smile', text: '{item}、生まれ変わったな。こいつはもう、お前さんだけの得物だ' },
   ],
-  // 強化の画面を開いたけれど、残骸かGoldが足りない
-  short: [{ face: 'normal', text: 'おっと、{what}が足りねえな。出撃して集めてきな' }],
+  // 強化の画面を開いたけれど、強化石・残骸・ボスの素材・Goldのどれかが足りない（ボスの素材は出撃では集まらないので「出撃して」とは言わない）
+  short: [{ face: 'normal', text: 'おっと、{what}が足りねえな。そろえてから、また来な' }],
   // うまくいかなかった（通信など）
   error: [{ face: 'normal', text: 'おっと、うまくいかなかったみてえだ。もう一回頼む' }],
 }
@@ -121,7 +122,7 @@ export const enterKindOf = (at = new Date()) => (isNight(at) ? 'enterNight' : 'e
 export const GREAT_PLUS = ENHANCE_RATE.findIndex(r => r <= 40) + 1
 export const enhanceKindOf = (success, plus) =>
   (!success ? 'enhanceFail' : plus >= PLUS_MAX ? 'enhanceMax' : plus >= GREAT_PLUS ? 'enhanceGreat' : 'enhanceOk')
-// 強化できないわけ（smith.js の enhanceErrorOf）から、足りないもの（「新緑の残骸」「Gold」）。足りないせいでなければ null
+// 強化できないわけ（smith.js の enhanceErrorOf）から、足りないもの（「強化石」「新緑の残骸」「黒龍の逆鱗」「Gold」）。足りないせいでなければ null
 export const shortWhatOf = (err) => (err && /が足りません$/.test(err) ? err.replace(/が足りません$/, '') : null)
 
 export { isNight, nextStreak, tapKindOf, fillLine }

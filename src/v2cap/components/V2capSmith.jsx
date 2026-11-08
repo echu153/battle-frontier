@@ -12,6 +12,7 @@ import { powerAt, statsAt, effectivePowerAt, syncLabelOf } from '../lib/gear.js'
 import {
   PLUS_MAX, plusOf, scrapNameOf, scrapOf, scrapAreaOf, dismantleGainOf, bulkPickable, enhanceCostOf, enhanceErrorOf,
   SCRAP_YIELD, CRAFT_RARITIES, craftCostOf, craftErrorOf,
+  STONE_NAME, ENHANCE_STONE, ENHANCE_SCRAP_FROM, stoneOf, enhanceSpentText,
 } from '../lib/smith.js'
 import { statLine, nameColor, PLUS_COLOR, gainText, areaOptionLabel, filterSelect, optionStyle, useGearRows, useFavToggle, withFavs } from './v2capGearView.js'
 import { PlusTag, GearFilterBar, StatChange, FavStar } from './v2capGear.jsx'
@@ -30,8 +31,9 @@ import { CH_CRAFT_MATS, challengeItemsOf, chMatsOf, chCraftCostOf, chCraftErrorO
 // 「レベルキャップあり」版 — 鍛冶屋（強化・分解・作成）
 // ------------------------------------------------------------
 // 【確定】2026-10-10 ユーザー指示「鍛冶屋を追加、ここで装備の強化・分解・作成が可能」。数の正は src/v2cap/lib/smith.js
-//   ・強化 … Goldとその装備のエリアの残骸で+1（+10まで・+1ごとに強さ+10%・最低でも戦闘力+1）。失敗すると残骸とGoldはなくなり、強化値はそのまま。
-//            ノーマル（初期装備も）はGoldだけ（残骸なし・2026-10-12 ユーザー指示）
+//   ・強化 … Goldと強化石で+1（+10まで・+1ごとに強さ+10%・最低でも戦闘力+1）。失敗すると使ったものはなくなり、強化値はそのまま。
+//            【確定】2026-11-08 強化石はどの段も1個・+6からはその装備のエリアの残骸も（ノーマルは残骸なし）・
+//            挑戦の装備は+6から残骸の代わりにそのボスの素材1個（ユーザー指示・smith.js の「強化」）。前は Goldと残骸・ノーマルはGoldだけ
 //   ・分解 … 装備をその装備のエリアの残骸にする（ノーマル1・レア5・エピック10・レジェンダリー25）。
 //            まとめて選べる（レア度で・チェックで・表示中を全部。まとめて選ぶときは装備中と強化したものは選ばない）。
 //            お気に入り（★）の装備は分解できない（2026-10-26 ユーザー指示「お気に入りされた武器は分解できないように」・サーバーの v2cap_dismantle も飛ばす）
@@ -46,7 +48,7 @@ import { CH_CRAFT_MATS, challengeItemsOf, chMatsOf, chCraftCostOf, chCraftErrorO
 // ============================================================
 // help＝決まりの説明。タブの下には出さず、❓ HELP にまとめる（2026-10-26 ユーザー指示「ここの説明はHELPにまとめて、強化分解作成すべてここの部分いらない」）
 const TABS = [
-  { key:'enhance',   label:'強化', help:`Goldとその装備のエリアの残骸で強化値を+1（+${PLUS_MAX}まで・+1ごとに強さ+10%・最低でも戦闘力+1）。ノーマルの装備はGoldだけで強化できます。失敗すると残骸とGoldはなくなり、強化値はそのままです。着けている装備も強化できます。` },
+  { key:'enhance',   label:'強化', help:`Goldと${STONE_NAME}${ENHANCE_STONE}個で強化値を+1（+${PLUS_MAX}まで・+1ごとに強さ+10%・最低でも戦闘力+1）。+${ENHANCE_SCRAP_FROM}からは、その装備のエリアの残骸も使います（ノーマルの装備は残骸を使いません）。挑戦の装備は、残骸の代わりにそのボスの素材を使います。${STONE_NAME}は出撃で敵を倒すと、ときどき手に入ります。失敗すると使った素材とGoldはなくなり、強化値はそのままです。着けている装備も強化できます。` },
   { key:'dismantle', label:'分解', help:`装備を、その装備のエリアの残骸にします（${ALL_RARITIES.map(r => `${rarityLabel(r)}${SCRAP_YIELD[r]}`).join('・')}個）。着けている装備とお気に入り（★）の装備は分解できません。ユニークと挑戦の専用装備はまとめての分解に入りません（1つずつなら分解できます）。` },
   { key:'craft',     label:'作成', help:`「エリア装備」は、レア・エピック・レジェンダリーの装備を、Goldとそのエリアの残骸で作ります。「挑戦装備」は、挑戦の四凶の専用装備を、そのボスを倒すと手に入る素材${CH_CRAFT_MATS}個とGoldで作ります。どちらも必ずできて、+0で持ち物に入ります。武器はどの職業のものでも作れます。` },
   // 武器の真化（2026-10-26・lib/shinka.js）。代償が付くこともあるのは HELP に書く（ユーザー指示「真化するときにデメリットがつくこともあることを伝える」）
@@ -193,7 +195,7 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call, say, toggleFav }) {
     setFxJob(j => (j && j.id === job.id ? { ...j, result: data, say: line } : j))
     setMsg(data.success
       ? { ok: true, text: `✨ 成功！ +${data.plus} になりました` }
-      : { ok: false, text: `💥 失敗… +${data.plus} のまま（${data.scrap > 0 ? `${scrapNameOf(data.area)} ${data.scrap}個と ` : ''}Gold ${Number(data.gold).toLocaleString()} はなくなりました）` })
+      : { ok: false, text: `💥 失敗… +${data.plus} のまま（${enhanceSpentText(data)} はなくなりました）` })
   }
   // 【確定】2026-10-23 V1からの引き継ぎの強化券（v1carry.js）：ユニークの装備1つを、すぐ券の強化値にする（1回だけ・失敗なし・Goldも残骸も使わない）
   const ticket = ticketOf(prof)
@@ -232,7 +234,7 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call, say, toggleFav }) {
           <div>強化値 +{plusOf(ticketRow.inv)} → <span style={{ color: PLUS_COLOR }}>+{ticket}</span></div>
           <div>戦闘力 {powerAt(ticketRow.item, ticketRow.inv.ilv, plusOf(ticketRow.inv))} → <span style={{ color:'#44ff88' }}>{powerAt(ticketRow.item, ticketRow.inv.ilv, ticket)}</span></div>
           <StatChange from={statsAt(ticketRow.item, ticketRow.inv.ilv, null, plusOf(ticketRow.inv))} to={statsAt(ticketRow.item, ticketRow.inv.ilv, null, ticket)} />
-          <div style={{ color: TEXT.sub, fontSize:'11px' }}>必ず成功します（Goldと残骸は使いません）。強化券は1枚だけで、使うとなくなります。</div>
+          <div style={{ color: TEXT.sub, fontSize:'11px' }}>必ず成功します（Gold・{STONE_NAME}・残骸は使いません）。強化券は1枚だけで、使うとなくなります。</div>
         </V2Modal>
       )}
       {ticket > 0 && (
@@ -631,6 +633,7 @@ function SmithModal({ row, prof, busy, msg, say, onEnhance, onClose }) {
   const sync = syncLabelOf(item, inv.ilv, prof.lv)
   const now = powerAt(item, inv.ilv, plus)
   const have = cost ? scrapOf(prof.materials, cost.area) : 0
+  const matHave = cost?.matKey ? chMatsOf(prof.challenge_mats, cost.matKey) : 0
   const gold = Number(prof.gold) || 0
   const short = { color: SHORT }
   return (
@@ -653,10 +656,13 @@ function SmithModal({ row, prof, busy, msg, say, onEnhance, onClose }) {
           {/* 上がるステ（2026-10-24 ユーザー指示「ちゃんと武器のステータスどのくらい上昇してるのかも記載するようにして」）。
               前は灰色の小さい字で「STR+5 DEX+3 → STR+6 DEX+4」。戦闘力と同じく装備そのものの強さ（必要LV不足の弱まりは入れない） */}
           <StatChange from={statsAt(item, inv.ilv, null, plus)} to={statsAt(item, inv.ilv, null, cost.next)} />
-          {/* 2026-10-26 ユーザー指示「使うもの⇒強化素材・持っている⇒所持数：」「強化素材は1行ずつ書いて、Goldが一番上になるように」 */}
+          {/* 2026-10-26 ユーザー指示「使うもの⇒強化素材・持っている⇒所持数：」「強化素材は1行ずつ書いて、Goldが一番上になるように」。
+              2026-11-08〜 Goldの下に強化石（どの段も）、その下に+6からの残骸か、挑戦の装備ならボスの素材（smith.js の enhanceCostOf） */}
           <Materials label="強化素材" list={[
             { name:'Gold', n: cost.gold, unit:'', have: gold, color:'#ffcc00' },
+            { name: STONE_NAME, n: cost.stone, unit:'個', have: stoneOf(prof), color:'#9fd8ff' },
             ...(cost.scrap > 0 ? [{ name: scrapNameOf(cost.area), n: cost.scrap, unit:'個', have, color:'#cfe2ff' }] : []),
+            ...(cost.mat > 0 ? [{ name: cost.matName, n: cost.mat, unit:'個', have: matHave, color:'#ffb088' }] : []),
           ]} />
           <div>成功率 <span style={{ color: cost.rate >= 50 ? '#44ff88' : SHORT }}>{cost.rate}%</span></div>
           {/* 「失敗すると残骸とGoldはなくなり、強化値はそのままです。」は出さない＝HELP の強化の説明にある（同じ日 ユーザー指示「この文言はいらない、Helpにいれて」） */}

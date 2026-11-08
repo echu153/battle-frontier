@@ -11,11 +11,11 @@ import { NEED_BASE, NEED_PERMIL, MAX_LV, STAMINA_BASE, STAMINA_RECOVER_MS, STAMI
 import { JOB_NEED_PCT, JOB_NEED_BASE_PERMIL, JOB_MAX } from './jobs.js'
 import { ROLE_TENTHS, SPOTS as SPOTS_ALL, recLvOf } from './areas.js'
 import { SLOTS, RARITIES, ALL_RARITIES, STARTER_AREA, UNIQUE_ITEMS, UNIQUE_DROP_PCT, UNIQUE_LV } from './equipment.js'
-import { SORTIE_CD, DROP_RARITY, CHEST_PCT, CHEST_SCRAP } from './sortie.js'
+import { SORTIE_CD, DROP_RARITY, CHEST_PCT, CHEST_SCRAP, STONE_PCT, STONE_N, rollStone } from './sortie.js'
 import { SORTIE_CD_SLACK } from './cooldown.js'
 import { SHRINE_FAIRY_NAME, SHRINE_PCT, SHRINE_FIGHTS, SHRINE_EXP_TENTHS, SHRINE_GOLD_TENTHS } from './shrine.js'
 import { PAPIA_TIERS } from './papia.js'
-import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV, scrapAreaOf, enhanceScrapOf, ENHANCE_GOLD_ONLY_RARITY } from './smith.js'
+import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV, scrapAreaOf, enhanceScrapOf, ENHANCE_NO_SCRAP_RARITY, ENHANCE_STONE, ENHANCE_BOSS_MAT } from './smith.js'
 import { DAILY_SORTIES, DAILY_GOLD_PER_LV, DAY_RESET_HOUR, DAILY_TASK_KEYS, GUARD_DONE_KEY } from './daily.js'
 import { FOLD_KEYS } from './uiPrefs.js'
 import { AVATAR_PRESETS, AVATAR_FILE_RE } from './avatar.js'
@@ -306,10 +306,12 @@ test('【確定】分解：その装備のエリアの残骸が、レア度で �
   assert.ok(!SQL.includes('create or replace function public.v2cap_discard('), '捨てるRPCはもう無い')
 })
 
-test('【確定】強化：+10まで・残骸は 1,2,3,4,5,7,8,9,10,11・Goldは必要LV×20×n・成功率は100%から10%ずつ下がる（JSと同じ）。失敗しても強化値はそのまま', () => {
+test('【確定】強化：+10まで・強化石1個（2026-11-08〜）・残骸は+6から 7,8,9,10,11・Goldは必要LV×20×n・成功率は100%から10%ずつ下がる（JSと同じ）。失敗しても強化値はそのまま', () => {
   const e = fnBody('v2cap_enhance')
   assert.ok(e.includes(`c_max         constant int := ${PLUS_MAX};`), '上限がJSと同じ')
+  assert.ok(e.includes(`c_stone       constant int := ${ENHANCE_STONE};`), '強化石の数がJSと同じ')
   assert.ok(e.includes(`c_scrap       constant int[] := array[${ENHANCE_SCRAP.join(', ')}];`), '残骸の数がJSと同じ')
+  assert.ok(e.includes(`c_mat         constant int[] := array[${ENHANCE_BOSS_MAT.join(', ')}];`), 'ボスの素材の数がJSと同じ')
   assert.ok(e.includes(`c_rate        constant int[] := array[${ENHANCE_RATE.join(', ')}];`), '成功率がJSと同じ')
   assert.ok(e.includes(`c_gold_per_lv constant int := ${ENHANCE_GOLD_PER_LV};`), 'Goldの係数がJSと同じ')
   assert.ok(e.includes('v_gold := greatest(1, v_inv.ilv)::bigint * c_gold_per_lv * v_next;'), 'Gold＝必要LV×20×n（smith.js の enhanceGoldOf）')
@@ -318,20 +320,31 @@ test('【確定】強化：+10まで・残骸は 1,2,3,4,5,7,8,9,10,11・Goldは
   assert.match(e, /where id = p_inventory_id and player_id = v_uid for update;/, '自分の装備だけ')
   // 残骸はその装備のエリアのもの。足りないと通さない
   assert.ok(e.includes('v_key  := greatest(1, coalesce(v_eq.area, 1))::text;'))
-  // 【確定】2026-10-12 ノーマル（初期装備もノーマル）は残骸を使わない＝Goldだけ（smith.js の enhanceScrapOf と同じ）。残骸の数にはさわらない
-  assert.equal(ENHANCE_GOLD_ONLY_RARITY, 'N')
-  assert.ok(e.includes(`v_need := case when v_eq.rarity = '${ENHANCE_GOLD_ONLY_RARITY}' then 0 else c_scrap[v_next] end;`), 'ノーマルは残骸0')
+  // 【確定】2026-10-12 ノーマル（初期装備もノーマル）は残骸を使わない（smith.js の enhanceScrapOf と同じ）。残骸の数にはさわらない
+  //   2026-11-08〜 挑戦の装備（専用装備は boss の列・四凶のユニークは id の「UC:ボス:」）も残骸の代わりにボスの素材
+  assert.equal(ENHANCE_NO_SCRAP_RARITY, 'N')
+  assert.ok(e.includes("v_boss := coalesce(v_eq.boss, case when split_part(v_eq.id, ':', 1) = 'UC' then nullif(split_part(v_eq.id, ':', 2), '') end);"), '挑戦の装備のボス')
+  assert.ok(e.includes(`v_need := case when v_eq.rarity = '${ENHANCE_NO_SCRAP_RARITY}' or v_boss is not null then 0 else c_scrap[v_next] end;`), 'ノーマルと挑戦の装備は残骸0')
+  assert.ok(e.includes('v_mneed := case when v_boss is not null then c_mat[v_next] else 0 end;'), '挑戦の装備はボスの素材')
+  assert.ok(e.includes("v_mhave := case when v_boss is not null then coalesce((v_cmats ->> v_boss)::int, 0) else 0 end;"), '素材は challenge_mats のそのボスの数')
   assert.match(e, /if v_need > 0 then\s+v_mats := jsonb_set\(v_mats, array\[v_key\], to_jsonb\(v_have - v_need\)\);\s+end if;/, '残骸0のときは materials を書かない')
-  assert.equal(enhanceScrapOf({ area: STARTER_AREA, rarity: 'N' }, 3), 0, '初期装備（ノーマル）')
-  assert.equal(enhanceScrapOf({ area: 7, rarity: 'N' }, 3), 0, '落ちたノーマル')
-  for (const r of ['R', 'E', 'L']) assert.equal(enhanceScrapOf({ area: 1, rarity: r }, 3), ENHANCE_SCRAP[2], `${r}は今までどおり残骸を使う`)
-  assert.ok(e.includes("if v_have < v_need then return jsonb_build_object('ok', false, 'error', '残骸が足りません'); end if;"))
-  assert.ok(e.includes("if v_row.gold < v_gold then return jsonb_build_object('ok', false, 'error', 'Goldが足りません'); end if;"))
-  // 成功でも失敗でも残骸とGoldは使う（分岐の前）・強化値を上げるのは成功のときだけ
-  const spend = e.indexOf('set materials = v_mats, gold = gold - v_gold')
+  assert.match(e, /if v_mneed > 0 then\s+v_cmats := jsonb_set\(v_cmats, array\[v_boss\], to_jsonb\(v_mhave - v_mneed\)\);\s+end if;/, '素材0のときは challenge_mats を書かない')
+  assert.equal(enhanceScrapOf({ area: STARTER_AREA, rarity: 'N' }, 6), 0, '初期装備（ノーマル）')
+  assert.equal(enhanceScrapOf({ area: 7, rarity: 'N' }, 6), 0, '落ちたノーマル')
+  for (const r of ['R', 'E', 'L']) assert.equal(enhanceScrapOf({ area: 1, rarity: r }, 6), ENHANCE_SCRAP[5], `${r}は+6から残骸を使う`)
+  // 足りないときの見る順は smith.js の enhanceErrorOf と同じ（強化石→残骸→素材→Gold）
+  const lack = ["if coalesce(v_row.enh_stone, 0) < c_stone then return jsonb_build_object('ok', false, 'error', '強化石が足りません'); end if;",
+    "if v_have < v_need then return jsonb_build_object('ok', false, 'error', '残骸が足りません'); end if;",
+    "if v_mhave < v_mneed then return jsonb_build_object('ok', false, 'error', '素材が足りません'); end if;",
+    "if v_row.gold < v_gold then return jsonb_build_object('ok', false, 'error', 'Goldが足りません'); end if;"].map(s => e.indexOf(s))
+  assert.ok(lack.every(i => i > 0) && lack.every((i, k) => k === 0 || lack[k - 1] < i), '強化石→残骸→素材→Gold の順')
+  // 成功でも失敗でも強化石・残骸（か素材）・Goldは使う（分岐の前）・強化値を上げるのは成功のときだけ
+  const spend = e.indexOf('set enh_stone = coalesce(enh_stone, 0) - c_stone, materials = v_mats, challenge_mats = v_cmats,')
   const branch = e.search(/if v_ok then\s+update public\.v2cap_inventory set plus = v_next where id = v_inv\.id;\s+end if;/)
   assert.ok(spend > 0 && branch > spend, '使うのは分岐の前・強化値は成功のときだけ上がる')
   assert.ok(!/plus = v_plus - 1|plus = plus - 1|delete from public\.v2cap_inventory/.test(e), '失敗しても下がらない・壊れない')
+  // 返事：使ったもの（画面の「〜を失いました」＝smith.js の enhanceSpentText）
+  assert.ok(e.includes("'stone', c_stone,") && e.includes("'mat', v_mneed, 'mat_key', v_boss,"))
 })
 
 test('【確定】作成（鍛冶屋）：レア・エピック・レジェンダリーを Gold とその装備のエリアの残骸で作る（JSと同じ表）。ノーマルは作れない・武器は職業を見ない', () => {
@@ -651,6 +664,26 @@ test('【確定】宝箱（2026-10-14）：祠の外で勝って装備が入ら�
   assert.ok(settle.includes("materials = case when v_chest > 0\n           then jsonb_set(coalesce(materials, '{}'::jsonb), array[v_spot.area::text],\n                          to_jsonb(coalesce((materials ->> v_spot.area::text)::int, 0) + v_chest))\n           else materials end,"))
   // 返事：見つけたときだけ { area, n }（画面がログを出す）
   assert.ok(settle.includes("'chest', case when v_chest > 0 then jsonb_build_object('area', v_spot.area, 'n', v_chest) end,"))
+})
+
+test('【確定】2026-11-08 強化石：出撃で勝った戦闘ごとに2%で1個（装備・宝箱とは別に引く・祠とパピアも）。数はJSと同じ', () => {
+  // ユーザー指示「強化石は出撃で確率で手に入る」→ 選んだ「2%で1個」
+  assert.equal(STONE_PCT, 2)
+  assert.equal(STONE_N, 1)
+  assert.ok(SQL.includes('alter table public.v2cap_profiles add column if not exists enh_stone int not null default 0;'), '持っている数の列')
+  const settle = fnBody('v2cap_sortie_apply')
+  assert.ok(settle.includes(`c_stone_rate   constant numeric := ${STONE_PCT / 100};`), '2%')
+  assert.ok(settle.includes(`c_stone_n      constant int := ${STONE_N};`), '1個')
+  // 引くのは勝ち負けの枝のあと（祠・パピア・ふつうの勝ちのどれでも）・勝ったときだけ
+  const roll = 'if v_win and random() < c_stone_rate then\n    v_stone := c_stone_n;\n  end if;'
+  const r = settle.indexOf(roll), loss = settle.indexOf('v_exp := v_spot.exp_min;'), upd = settle.indexOf('update public.v2cap_profiles')
+  assert.ok(r > loss && r < upd, '勝ち負けの枝のあと・書きこむ前')
+  assert.equal(settle.split('c_stone_rate').length - 1, 2, '強化石を引くのは1か所だけ（定数と引く所）')
+  assert.ok(settle.includes('enh_stone = coalesce(enh_stone, 0) + v_stone,'), '持っている数に足す')
+  // 返事：入ったときだけ数（画面がログを出す）
+  assert.ok(settle.includes("'stone', case when v_stone > 0 then v_stone end,"))
+  assert.equal(rollStone(() => 0.0199), 1)
+  assert.equal(rollStone(() => 0.02), 0)
 })
 
 test('出撃の間隔はサーバーでも見る（10秒・通信の揺れぶん2秒の余裕）', () => {

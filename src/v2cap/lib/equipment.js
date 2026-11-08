@@ -152,7 +152,7 @@ export const ITEMS = Array.from({ length: AREA_COUNT }, (_, i) => i + 1).flatMap
 //   ・名前は「見習いの◯◯」、装飾品だけ「古びた◯◯」
 //   ・どこにも落ちない（エリア0）・作れない（ノーマル）。分解すると始まりの森の残骸（smith.js の scrapAreaOf）。
 //     強化は残骸を使わずGoldだけ（smith.js の enhanceScrapOf・2026-10-12 ユーザー指示「初期装備は残骸不要、Goldだけで強化できるように」
-//     →同じ日に「全装備のノーマル装備」も同じにした）
+//     →同じ日に「全装備のノーマル装備」も同じにした）。2026-11-08 から強化石は使う（ノーマルも1回1個・残骸は使わないまま）
 // ★サーバーの v2cap_equipment（エリア0の行）と v2cap_classes.starter は tools/v2cap-sql.mjs がここから作る
 export const STARTER_AREA = 0
 export const STARTER_LV = 1

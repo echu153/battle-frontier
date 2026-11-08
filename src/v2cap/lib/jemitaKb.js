@@ -26,7 +26,8 @@ import {
 } from './equipment.js'
 import { ARMOR_SETS, SET_TIERS, SET_PARTS, SET_RARITIES, setTierText } from './armorSets.js'
 import { MAX_LV, POINTS_PER_LV, POINTS_STEP, POINTS_ON_STEP, POINT_UNIT, STAMINA_BASE, STAMINA_RECOVER_MS } from './level.js'
-import { PLUS_MAX, PLUS_CAP, ENHANCE_RATE, SCRAP_NAMES, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP } from './smith.js'
+import { PLUS_MAX, PLUS_CAP, ENHANCE_RATE, SCRAP_NAMES, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, STONE_NAME, ENHANCE_STONE, ENHANCE_SCRAP_FROM } from './smith.js'
+import { STONE_PCT } from './sortie.js'
 import { SHOP_NAME, BURGERS, TOPPINGS, TOPPING_GROUPS, BURGER_GOLD, TOPPING_GOLD, MEAL_MINUTES, MEAL_STAT_PCT, TOPPING_RESIST_PCT } from './burger.js'
 import { DAILY_TASKS } from './daily.js'
 import { FORTUNES } from '../core/tree.js'
@@ -212,7 +213,9 @@ const facilities = () => {
   return [
     '## 施設',
     '### 鍛冶屋（強化・分解・作成）',
-    `- 強化：+${PLUS_MAX}まで。成功率は ${rates}（画面に出る）。Goldと、その装備のエリアの残骸を使う（ノーマルはGoldだけ）。`,
+    `- 強化：+${PLUS_MAX}まで。成功率は ${rates}（画面に出る）。1回ごとにGoldと${STONE_NAME}${ENHANCE_STONE}個を使う。+${ENHANCE_SCRAP_FROM}からは、その装備のエリアの残骸も使う（ノーマルは残骸を使わない）。`
+      + `挑戦の専用装備と四凶のユニークは、+${ENHANCE_SCRAP_FROM}から残骸の代わりにそのボスの素材を1個使う。失敗すると使ったものはなくなり、強化値はそのまま。`,
+    `- ${STONE_NAME}：出撃で勝つと${STONE_PCT}%で1個手に入る。`,
     `- 分解：装備を残骸にする（${RARITIES.map(r => `${RARITY_LABEL[r]}${SCRAP_YIELD[r]}個`).join('・')}）。残骸はエリアごと（${SCRAP_NAMES.slice(0, 3).join('・')}…）。`,
     `- 作成：残骸とGoldで、${CRAFT_RARITIES.map(r => `${RARITY_LABEL[r]}（残骸${CRAFT_SCRAP[r]}個）`).join('・')}の装備を作れる（そのエリアの装備）。`,
     `- V1からの引き継ぎでもらえる券を使うと、ユニークをその券の強化値（最大+${PLUS_CAP}）にできる。`,

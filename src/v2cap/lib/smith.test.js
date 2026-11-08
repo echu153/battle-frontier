@@ -12,7 +12,10 @@ import {
   dismantleGainOf, bulkPickable, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, enhanceGoldOf,
   enhanceScrapOf, enhanceCostOf, enhanceErrorOf, rollEnhance, expectedEnhanceCost,
   CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV, canCraft, craftCostOf, craftErrorOf,
+  STONE_NAME, ENHANCE_STONE, ENHANCE_BOSS_MAT, ENHANCE_SCRAP_FROM, stoneOf, usesBossMat, enhanceBossMatOf, enhanceSpentText,
 } from './smith.js'
+import { CHALLENGE_ITEMS, CHALLENGE_UNIQUE_ITEMS, UNIQUE_ITEMS } from './equipment.js'
+import { CHALLENGE_MATS } from './challengeDefs.js'
 
 const rngOf = (seed) => { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }
 
@@ -156,8 +159,16 @@ test('戦闘のステは強化値ぶん上がる。防具のメリット（重�
   assert.deepEqual(c.armor, b.armor, '防具のメリットは強化で変わらない')
 })
 
-test('【確定】1回の強化：残骸 1,2,3,4,5,7,8,9,10,11・Gold＝必要LV×20×n・成功率 100,90,…,10%', () => {
-  assert.deepEqual(ENHANCE_SCRAP, [1, 2, 3, 4, 5, 7, 8, 9, 10, 11])
+// 強化の費用（挑戦の装備でないとき：ボスの素材は使わない）
+const costOf = (next, area, stone, scrap, gold, rate) => ({ next, area, stone, scrap, mat: 0, matKey: null, matName: null, gold, rate })
+
+test('【確定】2026-11-08 1回の強化：強化石はどの段も1個・残骸は+6から（7,8,9,10,11）・Gold＝必要LV×20×n・成功率 100,90,…,10%', () => {
+  // ユーザー指示「強化石を使って強化するシステムにする、＋6以降は残骸が必要に」→ 選んだ「どの段も1回1個」。
+  //   ⚠前（2026-10-10〜11-07）は強化石なし・残骸 1,2,3,4,5,7,8,9,10,11（+1から）
+  assert.equal(STONE_NAME, '強化石')
+  assert.equal(ENHANCE_STONE, 1)
+  assert.deepEqual(ENHANCE_SCRAP, [0, 0, 0, 0, 0, 7, 8, 9, 10, 11])
+  assert.equal(ENHANCE_SCRAP_FROM, 6)
   assert.deepEqual(ENHANCE_RATE, [100, 90, 80, 70, 60, 50, 40, 30, 20, 10])
   assert.equal(ENHANCE_GOLD_PER_LV, 20)
   // ユーザーに見せた例
@@ -166,37 +177,82 @@ test('【確定】1回の強化：残骸 1,2,3,4,5,7,8,9,10,11・Gold＝必要LV
   assert.equal(enhanceGoldOf(90, 1), 1800)
   assert.equal(enhanceGoldOf(90, 10), 18000)
   const item = itemOf(1, 'R', '片手剣')   // 必要LV10
-  assert.deepEqual(enhanceCostOf(item, { ilv: 10, plus: 0 }), { next: 1, area: 1, scrap: 1, gold: 200, rate: 100 })
-  assert.deepEqual(enhanceCostOf(item, { ilv: 10, plus: 5 }), { next: 6, area: 1, scrap: 7, gold: 1200, rate: 50 })
-  assert.deepEqual(enhanceCostOf(item, { ilv: 10, plus: 9 }), { next: 10, area: 1, scrap: 11, gold: 2000, rate: 10 })
+  assert.deepEqual(enhanceCostOf(item, { ilv: 10, plus: 0 }), costOf(1, 1, 1, 0, 200, 100), '+1〜+5は強化石とGoldだけ')
+  assert.deepEqual(enhanceCostOf(item, { ilv: 10, plus: 4 }), costOf(5, 1, 1, 0, 1000, 60))
+  assert.deepEqual(enhanceCostOf(item, { ilv: 10, plus: 5 }), costOf(6, 1, 1, 7, 1200, 50), '+6から残骸も')
+  assert.deepEqual(enhanceCostOf(item, { ilv: 10, plus: 9 }), costOf(10, 1, 1, 11, 2000, 10))
   assert.equal(enhanceCostOf(item, { ilv: 10, plus: 10 }), null, '+10より上は無い')
 })
 
-test('強化できないわけ：上限・その装備のエリアの残骸が足りない・Goldが足りない（見る順はサーバーと同じ）', () => {
+test('強化できないわけ：上限・強化石・その装備のエリアの残骸・Gold（見る順はサーバーと同じ）', () => {
   const item = itemOf(2, 'R', '斧')   // 荒野の残骸・必要LV15（ノーマルは残骸を使わないのでレアで見る）
-  const inv = { id: 7, base_id: item.id, ilv: 15, plus: 2 }   // 次は+3：残骸3・Gold900
-  const prof = (materials, gold) => ({ materials, gold })
+  const inv = { id: 7, base_id: item.id, ilv: 15, plus: 5 }   // 次は+6：強化石1・残骸7・Gold1,800
+  const prof = (materials, gold, enh_stone = 1) => ({ materials, gold, enh_stone })
   assert.equal(enhanceErrorOf(item, { ...inv, plus: 10 }, prof({ 2: 99 }, 99999)), '強化値は+10が上限です')
-  assert.equal(enhanceErrorOf(item, inv, prof({ 1: 99, 2: 2 }, 99999)), '荒野の残骸が足りません', 'ほかのエリアの残骸では強化できない')
-  assert.equal(enhanceErrorOf(item, inv, prof({ 2: 3 }, 899)), 'Goldが足りません')
-  assert.equal(enhanceErrorOf(item, inv, prof({ 2: 3 }, 900)), null)
+  assert.equal(enhanceErrorOf(item, inv, prof({ 2: 99 }, 99999, 0)), '強化石が足りません', '強化石が先')
+  assert.equal(enhanceErrorOf(item, inv, prof({ 1: 99, 2: 6 }, 99999)), '荒野の残骸が足りません', 'ほかのエリアの残骸では強化できない')
+  assert.equal(enhanceErrorOf(item, inv, prof({ 2: 7 }, 1799)), 'Goldが足りません')
+  assert.equal(enhanceErrorOf(item, inv, prof({ 2: 7 }, 1800)), null)
+  // +5まで（+1〜+5にする回）は残骸を1つも持っていなくても、強化石とGoldがあれば強化できる
+  assert.equal(enhanceErrorOf(item, { ...inv, plus: 4 }, prof({}, 1500)), null)
+  assert.equal(enhanceErrorOf(item, { ...inv, plus: 4 }, { materials: {}, gold: 1500 }), '強化石が足りません', '強化石の列が無い（SQLを流す前）は0個')
+  assert.equal(stoneOf({ enh_stone: 3 }), 3)
+  assert.equal(stoneOf({}), 0)
 })
 
-test('【確定】2026-10-12 ノーマル（初期装備も）はGoldだけで強化できる（残骸0）。Gold・成功率はほかの装備と同じ', () => {
-  // ユーザー指示「初期装備は残骸不要、Goldだけで強化できるように」→「全装備のノーマル装備の強化で残骸の消費は不要に、※Goldのみで」
+test('【確定】ノーマル（初期装備も）は残骸を使わない（2026-10-12〜）。2026-11-08 から強化石は使う。Gold・成功率はほかの装備と同じ', () => {
+  // ユーザー指示「初期装備は残骸不要、Goldだけで強化できるように」→「全装備のノーマル装備の強化で残骸の消費は不要に、※Goldのみで」。
+  //   2026-11-08 ユーザーが選んだ「強化石を使う・残骸は使わない」（強化石はほかの装備と同じ1回1個）
   const item = ITEM_BY_ID['0N:短剣']   // 見習いの短剣（エリア0・必要LV1）
   assert.equal(item.name, '見習いの短剣')
   for (let n = 1; n <= PLUS_MAX; n++) {
     assert.equal(enhanceScrapOf(item, n), 0, `+${n}は残骸なし`)
     for (const it of ITEMS.filter(i => i.rarity === 'N' && i.part === '武器' && i.type === '短剣')) assert.equal(enhanceScrapOf(it, n), 0, `${it.id}（落ちたノーマル）も残骸なし`)
-    for (const r of ['R', 'E', 'L']) assert.equal(enhanceScrapOf(itemOf(1, r, '短剣'), n), ENHANCE_SCRAP[n - 1], `${r}は今までどおり残骸を使う`)
+    for (const r of ['R', 'E', 'L']) assert.equal(enhanceScrapOf(itemOf(1, r, '短剣'), n), ENHANCE_SCRAP[n - 1], `${r}は+6から残骸を使う`)
   }
-  assert.deepEqual(enhanceCostOf(item, { ilv: 1, plus: 0 }), { next: 1, area: 1, scrap: 0, gold: 20, rate: 100 })
-  assert.deepEqual(enhanceCostOf(item, { ilv: 1, plus: 9 }), { next: 10, area: 1, scrap: 0, gold: 200, rate: 10 })
-  assert.deepEqual(enhanceCostOf(itemOf(15, 'N', '両手剣'), { ilv: 75, plus: 4 }), { next: 5, area: 15, scrap: 0, gold: 7500, rate: 60 }, 'エリア15のノーマルもGoldだけ')
-  // 残骸を1つも持っていなくても、Goldがあれば強化できる
-  assert.equal(enhanceErrorOf(item, { id: 1, ilv: 1, plus: 4 }, { materials: {}, gold: 100 }), null)
-  assert.equal(enhanceErrorOf(item, { id: 1, ilv: 1, plus: 4 }, { gold: 99 }), 'Goldが足りません')
+  assert.deepEqual(enhanceCostOf(item, { ilv: 1, plus: 0 }), costOf(1, 1, 1, 0, 20, 100))
+  assert.deepEqual(enhanceCostOf(item, { ilv: 1, plus: 9 }), costOf(10, 1, 1, 0, 200, 10), '+10にする回も残骸なし')
+  assert.deepEqual(enhanceCostOf(itemOf(15, 'N', '両手剣'), { ilv: 75, plus: 6 }), costOf(7, 15, 1, 0, 10500, 40), 'エリア15のノーマルも残骸なし')
+  // 残骸を1つも持っていなくても、強化石とGoldがあれば強化できる
+  assert.equal(enhanceErrorOf(item, { id: 1, ilv: 1, plus: 8 }, { materials: {}, gold: 180, enh_stone: 1 }), null)
+  assert.equal(enhanceErrorOf(item, { id: 1, ilv: 1, plus: 8 }, { gold: 180 }), '強化石が足りません', 'ノーマルも強化石を使う')
+  assert.equal(enhanceErrorOf(item, { id: 1, ilv: 1, plus: 4 }, { gold: 99, enh_stone: 1 }), 'Goldが足りません')
+})
+
+test('【確定】2026-11-08 挑戦の装備（専用装備と四凶のユニーク）は、+6から残骸の代わりにそのボスの素材を1個', () => {
+  // ユーザー指示「挑戦装備産は固有の素材を必要に」→ 選んだ「+6から残骸の代わりにボスの素材1個」
+  assert.deepEqual(ENHANCE_BOSS_MAT, [0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
+  const own = CHALLENGE_ITEMS.find(i => i.bossKey === 'varuzenoku' && i.part === '武器')
+  const uq = CHALLENGE_UNIQUE_ITEMS.find(i => i.bossKey === 'enma')
+  assert.ok(own && uq)
+  for (const it of [own, uq]) {
+    assert.equal(usesBossMat(it), true, `${it.name}は挑戦の装備`)
+    for (let n = 1; n <= PLUS_MAX; n++) {
+      assert.equal(enhanceScrapOf(it, n), 0, `${it.name}：+${n}は残骸を使わない`)
+      assert.equal(enhanceBossMatOf(it, n), n >= 6 ? 1 : 0, `${it.name}：+${n}のボスの素材`)
+    }
+  }
+  assert.deepEqual(enhanceCostOf(own, { ilv: 70, plus: 4 }),
+    { next: 5, area: 11, stone: 1, scrap: 0, mat: 0, matKey: 'varuzenoku', matName: CHALLENGE_MATS.varuzenoku, gold: 7000, rate: 60 })
+  assert.deepEqual(enhanceCostOf(own, { ilv: 70, plus: 5 }),
+    { next: 6, area: 11, stone: 1, scrap: 0, mat: 1, matKey: 'varuzenoku', matName: '黒龍の逆鱗', gold: 8400, rate: 50 })
+  assert.equal(enhanceCostOf(uq, { ilv: 85, plus: 9 }).matName, '閻魔の審判核', '四凶のユニークはそのボスの素材')
+  // ほかのボスの素材や残骸では強化できない
+  const prof = (challenge_mats) => ({ enh_stone: 1, gold: 1e9, materials: { 11: 999 }, challenge_mats })
+  assert.equal(enhanceErrorOf(own, { id: 1, ilv: 70, plus: 5 }, prof({ amaza: 9 })), '黒龍の逆鱗が足りません')
+  assert.equal(enhanceErrorOf(own, { id: 1, ilv: 70, plus: 5 }, prof({ varuzenoku: 1 })), null)
+  assert.equal(enhanceErrorOf(own, { id: 1, ilv: 70, plus: 4 }, prof({})), null, '+5まではボスの素材なし')
+  // ほかの装備（ふつうのユニーク・エリアの装備）はボスの素材を使わない
+  for (const it of [itemOf(11, 'L', '両手剣'), UNIQUE_ITEMS[0]]) {
+    assert.equal(usesBossMat(it), false, it.name)
+    assert.equal(enhanceCostOf(it, { ilv: it.lv, plus: 5 }).mat, 0, it.name)
+  }
+})
+
+test('【確定】2026-11-08 強化で使ったものの文（失敗したとき「〜を失いました」）', () => {
+  assert.equal(enhanceSpentText({ stone: 1, scrap: 0, area: 3, mat: 0, gold: 400 }), '強化石 1個・Gold 400')
+  assert.equal(enhanceSpentText({ stone: 1, scrap: 7, area: 3, mat: 0, gold: 2400 }), '強化石 1個・洞窟の残骸 7個・Gold 2,400')
+  assert.equal(enhanceSpentText({ stone: 1, scrap: 0, area: 11, mat: 1, mat_key: 'enma', gold: 8400 }), '強化石 1個・閻魔の審判核 1個・Gold 8,400')
 })
 
 test('抽選は「乱数×100 < 成功率」（+1は必ず成功・+10は1割）', () => {
@@ -208,13 +264,17 @@ test('抽選は「乱数×100 < 成功率」（+1は必ず成功・+10は1割）
   assert.ok(Math.abs(hit / N - 0.1) < 0.01, `+10の成功は約10%（${(hit / N * 100).toFixed(1)}%）`)
 })
 
-test('平均でかかる量（ユーザーに見せた数）：+10まで残骸約245個・LV90でGold約40万／+5まで残骸約21個・LV90でGold約3.8万', () => {
+test('平均でかかる量（2026-11-08 ユーザーに見せた数）：+10まで強化石約29個・残骸約224個・ボスの素材は+6→+10で約23個／LV90でGold約40万', () => {
   const all = expectedEnhanceCost(90)
-  assert.equal(Math.round(all.scrap), 245)
-  assert.equal(Math.round(all.gold / 10000), 40)
   assert.equal(Math.round(all.tries * 10) / 10, 29.3)
+  assert.equal(Math.round(all.stone), 29, '強化石は1回1個＝回数と同じ')
+  assert.equal(Math.round(all.scrap), 224, '残骸は+6から（前は+1からで約245個）')
+  assert.equal(Math.round(all.mat * 10) / 10, 22.8, '挑戦の装備のボスの素材')
+  assert.equal(Math.round(all.gold / 10000), 40)
+  const six = expectedEnhanceCost(90, 0, 6)
+  assert.equal(Math.round(six.stone * 10) / 10, 8.5, '+6まで強化石約8.5個')
   const five = expectedEnhanceCost(90, 0, 5)
-  assert.equal(Math.round(five.scrap), 21)
+  assert.equal(five.scrap, 0, '+5までは残骸なし')
   assert.equal(Math.round(five.gold / 1000), 38)
   // 最後の+10の回だけで残骸約110個（平均10回）
   const last = expectedEnhanceCost(90, 9, 10)

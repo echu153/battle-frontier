@@ -75,7 +75,7 @@ const jobsLib = await import(B + 'v2cap/lib/jobs.js')
 const { statsAt } = await import(B + 'v2cap/lib/gear.js')
 const { toFighter, totalStats } = await import(B + 'v2cap/lib/loadout.js')
 const { CAP_RULES } = await import(B + 'v2cap/lib/rules.js')
-const { pickEncounter, rollRewards, nextBossRate, openUntilOf, clearSpot, rollEquipDrop, rollChest } = await import(B + 'v2cap/lib/sortie.js')
+const { pickEncounter, rollRewards, nextBossRate, openUntilOf, clearSpot, rollEquipDrop, rollChest, rollStone } = await import(B + 'v2cap/lib/sortie.js')
 const { LAST_SPOT, AREA_LIST, toFighter: enemyFighter, stdPowerAt } = areas
 const { applyExp, bodyPowerAt, totalExpTo, POINT_UNIT, totalPointsTo } = level
 const { applyJobExp, jobOf, learnOrderOf, attackKindOf, canEquipType, JOB_MAX, nextClassesOf, CLASS_BY_ID } = jobsLib
@@ -107,6 +107,8 @@ const PLUS_ON = !process.argv.includes('--noplus')
 //   ・作成はしない
 //   ・残骸は分解のほか、**宝箱**からも入る（2026-10-14〜・勝って装備が落ちなかったときに5%で、その場所のエリアの残骸1〜10個＝
 //     画面・サーバーと同じ決まりの sortie.js の rollChest）。--report に「残骸の入り方」（分解・宝箱）を出す
+//   ・**強化石**（2026-11-08〜・ユーザー指示「強化石を使って強化するシステムにする」）：勝った戦闘ごとに2%で1個（sortie.js の rollStone）。
+//     強化は1回1個・残骸は+6から（smith.js の enhanceCostOf）。--report に「強化石の入り方と使った数」を出す
 const SMITH_ON = !process.argv.includes('--nosmith')
 const SMITH_CAP = arg('smithcap', 'table')
 // アセンション（2026-10-30〜・ユーザー指示「モンスターはプレイヤーのレベルもそうだけど装備、アセンション、スキルなども考慮したうえで
@@ -231,6 +233,7 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
   const scrap = {}
   const scrapGot = { dismantle: 0, chest: 0 }   // 残骸の入り方（分解・宝箱）の合計
   let goldSpent = 0, enhTries = 0, enhWins = 0
+  let stones = 0, stonesGot = 0   // 強化石（2026-11-08〜）：持っている数・入った数の合計
   const plusByArea = {}   // エリア → そこにいた1時間ごとの「着けている装備の強化値の平均」の合計と数
   // エリアごとの「見込みの強化値つき÷強化なし」の戦闘力（--enh が敵の倍率 ENH_MULT を作るのに使う）
   const enhByArea = {}
@@ -345,9 +348,11 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
       let tried = false
       for (const w of worn) {
         const c = enhanceCostOf(w.item, { plus: w.plus, ilv: w.item.lv })
-        if (!c || gold < c.gold || (c.scrap > 0 && (scrap[c.area] || 0) < c.scrap)) continue
+        // 強化石（2026-11-08〜）も払えるときだけ。挑戦の装備（ボスの素材）はシミュでは拾わない
+        if (!c || stones < c.stone || c.mat > 0 || gold < c.gold || (c.scrap > 0 && (scrap[c.area] || 0) < c.scrap)) continue
         gold -= c.gold
         goldSpent += c.gold
+        stones -= c.stone
         if (c.scrap > 0) scrap[c.area] -= c.scrap
         enhTries++
         if (rollEnhance(c.rate, rng)) { plusById.set(w.id, w.plus + 1); enhWins++; up = true }
@@ -511,6 +516,8 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
           const k = rollChest(rng)
           if (k) { scrap[enc.spot.area] = (scrap[enc.spot.area] || 0) + k; scrapGot.chest += k }
         }
+        // 強化石（2026-11-08〜）：勝った戦闘ごとに2%で1個（祠・パピアも＝画面・サーバーと同じ rollStone）
+        if (smithOn) { const s = rollStone(rng); stones += s; stonesGot += s }
       }
       // 初期職がClassLV30（上限）になったら、すぐ系統の上位職へ（★最初の職業のClassLV30の時間は転職の前に数える）
       if (CLASS_BY_ID[cls]?.stage === 'shoki' && j.lv >= JOB_MAX) {
@@ -553,7 +560,7 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
     hourly, spotClearHour, lvAtClear, firstBossWin, lvAtSpotHour, expAtSpotHour, expInSpot, hoursInSpot, powerByLv,
     learned, cls, start, jobs, job30Hour, advancedHour, expAtJobHour, expAtLvHour, gold,
     fightsInSpot, enhByArea, turnsByArea,
-    plusByArea, goldSpent, enhTries, enhWins, scrap, scrapGot,
+    plusByArea, goldSpent, enhTries, enhWins, scrap, scrapGot, stones, stonesGot,
     asc: ascByCls,
     final: { profile: prof(), inventory },   // 最後のキャラ（職業ごとの強さを比べるのに使う）
   }
@@ -854,7 +861,7 @@ const report = async () => {
   const all = {}
   const plusAcc = AREA_LIST.map(() => ({ sum: 0, n: 0 }))   // --smith：エリアごとの「着けている装備の強化値の平均」
   const spent = []
-  const got = { dismantle: [], chest: [] }   // 残骸の入り方（人ごとの合計）
+  const got = { dismantle: [], chest: [], stone: [], stoneLeft: [] }   // 残骸の入り方・強化石の入った数と余った数（人ごとの合計）
   const allRuns = await runMany(classes.flatMap(c => seeds.map(s => ({ hours: HOURS, seed: s, start: c }))))
   let ri = 0
   for (const c of classes) {
@@ -868,6 +875,8 @@ const report = async () => {
       spent.push(r.goldSpent || 0)
       got.dismantle.push(r.scrapGot?.dismantle || 0)
       got.chest.push(r.scrapGot?.chest || 0)
+      got.stone.push(r.stonesGot || 0)
+      got.stoneLeft.push(r.stones || 0)
     }
   }
   const runs = classes.length * seeds.length
@@ -903,6 +912,8 @@ const report = async () => {
     // 残骸がどこから入ったか（2026-10-14 宝箱を足したとき：分解だけのころとくらべるため）
     const perHour = (v) => (v / HOURS).toFixed(1)
     console.log(`残骸の入り方（${HOURS}時間の合計の中央値・1時間あたり）\t分解 ${median(got.dismantle)}（${perHour(median(got.dismantle))}）・宝箱 ${median(got.chest)}（${perHour(median(got.chest))}）`)
+    // 強化石（2026-11-08〜）：入った数と、最後に余った数（余りが少ないほど強化石が強化の足かせ）
+    console.log(`強化石（${HOURS}時間の合計の中央値）\t入った ${median(got.stone)}（1時間あたり ${perHour(median(got.stone))}）・余り ${median(got.stoneLeft)}`)
   }
 }
 

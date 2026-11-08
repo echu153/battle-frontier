@@ -170,7 +170,8 @@ test('【確定】2026-10-26 鍛冶屋と装備画面の一覧：★は右上・
   assert.ok(!SMITH.includes('次は <span'), '強化の一覧に「次は」の行を出さない')
   assert.ok(/<Materials label="強化素材" list=\{\[\s*\{ name:'Gold'/.test(SMITH), '強化素材：Gold がいちばん上')
   assert.ok(/<Materials label="作成素材" list=\{\[\s*\{ name:'Gold'/.test(SMITH), '作成素材も Gold がいちばん上')
-  assert.equal((SMITH.match(/失敗すると残骸とGoldはなくなり/g) || []).length, 1, '失敗の文は HELP の説明だけ（強化の画面には出さない）')
+  // 2026-11-08 強化石から「失敗すると使った素材とGoldはなくなり」（使うものが強化石・残骸・ボスの素材・Goldになったため）
+  assert.equal((SMITH.match(/失敗すると使った素材とGoldはなくなり/g) || []).length, 1, '失敗の文は HELP の説明だけ（強化の画面には出さない）')
   assert.ok(!/\}\s*:\s*'ノーマルの装備は残骸を使いません/.test(SMITH))
   const fx = codeOf('../components/V2capEnhanceFx.jsx')
   assert.ok(!fx.includes('強化値はそのまま'), '失敗の結果に「強化値はそのまま（+N）」を出さない')

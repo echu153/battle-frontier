@@ -54,7 +54,7 @@ test('初期装備はどこにも落ちない・作れない（エリア×レア
     assert.ok(!ITEMS.includes(it), `${it.id}は落ちる・作る一覧に入らない`)
     assert.equal(canCraft(it), false)
     assert.equal(scrapAreaOf(it), 1, '分解すると始まりの森の残骸')
-    assert.equal(enhanceCostOf(it, { ilv: STARTER_LV, plus: 0 }).scrap, 0, '強化は残骸なし（Goldだけ・2026-10-12 ユーザー指示）')
+    assert.equal(enhanceCostOf(it, { ilv: STARTER_LV, plus: 0 }).scrap, 0, '強化は残骸なし（2026-10-12 ユーザー指示。2026-11-08 から強化石とGold）')
   }
   for (const cls of START_CLASSES) {
     const total = starterIdsOf(cls).reduce((t, id) => t + powerAt(ITEM_BY_ID[id], STARTER_LV), 0)

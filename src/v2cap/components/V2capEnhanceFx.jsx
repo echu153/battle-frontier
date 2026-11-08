@@ -17,6 +17,7 @@ import { createParticles } from './fxParticles.js'
 import { GearGlyph } from './v2capFxParts.jsx'
 import { StatChange } from './v2capGear.jsx'
 import { enhanceTierOf, enhanceChargeMsOf, enhanceHoldMsOf, enhanceGlowOf, enhanceTitleOf } from '../lib/fxStyle.js'
+import { enhanceSpentText } from '../lib/smith.js'
 import { DISPLAY_FONT, JP_BOLD, RAINBOW_BASE } from './casinoStyle.js'
 
 const KF = `
@@ -293,7 +294,8 @@ export default function V2capEnhanceFx({ job, say, nextLabel, nextReason, onAgai
               ) : (
                 <>
                   {/* 「強化値はそのまま（+N）」は出さない（2026-10-26 ユーザー指示「ここいらない」＝そのことは HELP に書いてある） */}
-                  <div style={{ color:'#ff8844' }}>{r.scrap > 0 ? `${job.scrapName} ${r.scrap}個と ` : ''}Gold {Number(r.gold).toLocaleString()} を失いました</div>
+                  {/* 使ったもの（強化石・+6からの残骸かボスの素材・Gold＝2026-11-08〜 smith.js の enhanceSpentText） */}
+                  <div style={{ color:'#ff8844' }}>{enhanceSpentText(r)} を失いました</div>
                 </>
               )}
               {!nextLabel && nextReason && <div style={{ color:'#7fa6d0', fontSize:11 }}>{nextReason}</div>}
