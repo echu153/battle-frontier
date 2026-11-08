@@ -203,6 +203,12 @@ export const ALEA_LINES = {
     { min: 2, max: 2, face: 'smile', text: 'はい、どうぞ。…ほどほどにね' },
     { min: 3, face: 'smile', text: '{name}、はい。…勝ってきてね' },
   ],
+  // 景品の交換所で交換した（2026-11-09・セリフはこちらの案＝ユーザーが見て直す）
+  prize: [
+    { max: 1, face: 'smile', text: '…交換ですね。どうぞ。大事に使ってあげてください' },
+    { min: 2, max: 2, face: 'smile', text: 'はい、交換ね。…ちゃんと使ってあげてね' },
+    { min: 3, face: 'smile', text: '{name}、はい。…それで強くなって、また遊びに来てね' },
+  ],
   // 選んだ枚数がお財布を超えた
   short: [
     { max: 1, face: 'jito', text: '…お財布、からっぽみたいですね。外でひと稼ぎしてからどうぞ' },

@@ -15,18 +15,23 @@ import { BATTLE_ITEM_BY_KEY, ITEM_MAX, itemCountsOf } from '../core/atbItems.js'
 //   ★変わるのは出会う敵だけ（時間限定の敵とレア＝pickEncounter に渡す時刻）。
 //     本当の時刻で決まるもの（落ちやすい部位・デイリーの区切り・NPC の夜のセリフ）は変えない
 //   ★買う・Gold はサーバー（v2cap_shop_buy）。値段と時間の写しは SQL §24（shop.test.js が突き合わせる）
+// 【確定】2026-11-09 ユーザー指示「商店にステータス振りなおしのアイテム追加する」＋選んだこと「10,000G」「忘却の秘薬」：
+//   その場で飲む。割り振ったステータスポイントが全部戻る（本体のステは初期値へ・数え方は level.js の spentPointsOf）。
+//   まだ振っていなければ買えない（Gold を無駄にしない）。戻ったポイントはホームのステータスから振り直す
 // ============================================================
 export const SHOP_COLOR = '#5fe0d0'
 export const FLIP_COLOR = '#ffcc66'
 export const FLIP_NAME = '日月反転の秘薬'
 export const FLIP_MINUTES = 60
 export const FLIP_HOURS = 12
+export const FORGET_NAME = '忘却の秘薬'
 export const SHOP_ITEMS = [
   { ...BATTLE_ITEM_BY_KEY.hp, gold:500, bag:true },
   { ...BATTLE_ITEM_BY_KEY.mp, gold:500, bag:true },
   { ...BATTLE_ITEM_BY_KEY.cure, gold:1000, bag:true },
   { key:'gender', name:'性別変更薬', icon:'🧪', color:'#ff88cc', gold:30000 },
   { key:'flip', name:FLIP_NAME, icon:'🌗', color:FLIP_COLOR, gold:3000 },
+  { key:'forget', name:FORGET_NAME, icon:'🌀', color:'#b79bff', gold:10000 },
 ]
 export const SHOP_ITEM_BY_KEY = Object.fromEntries(SHOP_ITEMS.map(i => [i.key, i]))
 

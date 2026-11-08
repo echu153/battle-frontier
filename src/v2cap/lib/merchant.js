@@ -199,6 +199,12 @@ export const MERCHANT_LINES = {
     { min: 2, max: 2, face: 'grin', text: 'これはほんまに効くで、{call}。…「これは」て何や、て顔やな' },
     { min: 3, face: 'normal', text: '{call}、これは切らしたらあかんで。わけの分からん毒で、ええ客が減るのは困るねん' },
   ],
+  // 忘却の秘薬（2026-11-09・セリフはこちらの案＝ユーザーが見て直す）
+  askForget: [
+    { max: 1, face: 'grin', text: '鍛えた癖を、きれいさっぱり忘れる薬でっせ。忘れたことも忘れるさかい、後悔もしまへん' },
+    { min: 2, max: 2, face: 'normal', text: '一からやり直すんか、{call}。体は忘れても、払うたお代は忘れへんで' },
+    { min: 3, face: 'normal', text: '{call}、迷うてるんやったら飲んだらええ。どんな{call}になっても、わいは覚えとるさかい' },
+  ],
   // ===== 買った結果（boughtKindOf）=====
   // 挑戦で使う薬（3種類で同じ）
   boughtItem: [
@@ -222,6 +228,11 @@ export const MERCHANT_LINES = {
     { max: 1, face: 'grin', text: '毎度おおきに！ 昼と夜がひっくり返っとるあいだに、しっかり稼いできとくなはれ' },
     { min: 2, max: 2, face: 'grin', text: 'おおきに、{call}！ 稼いだ銭は、またここで使うてや' },
     { min: 3, face: 'grin', text: 'おおきに、{call}！ 無事に帰ってきいや。…銭もな' },
+  ],
+  boughtForget: [
+    { max: 1, face: 'grin', text: '毎度おおきに！ まっさらな体で、一から鍛え直しとくなはれ' },
+    { min: 2, max: 2, face: 'grin', text: 'おおきに、{call}！ 今度は迷わんようにな。…迷うたら、また売ったるけど' },
+    { min: 3, face: 'grin', text: 'おおきに、{call}！ ぜんぶ忘れてもうても、わいの店のことだけは覚えといてや' },
   ],
   // うまくいかなかった（通信・サーバーの断り＝お代は引かれていない）
   error: [{ face: 'normal', text: 'ありゃ、うまいこといかへんかったわ。お代はもろてへんから、安心しとき' }],
@@ -273,10 +284,10 @@ export const enterKindOf = ({ affinity = 0, lastTalk = null, poor = false, flipp
   return last === dayOf(new Date(d.getTime() - 864e5)) ? 'enterDaily' : 'enterLong'
 }
 // 買う確かめの場面。flipping＝秘薬が効いている
-const ASK_ITEM = { hp: 'askHp', mp: 'askMp', cure: 'askCure', gender: 'askGender' }
+const ASK_ITEM = { hp: 'askHp', mp: 'askMp', cure: 'askCure', gender: 'askGender', forget: 'askForget' }
 export const askKindOf = (item, flipping = false) => ASK_ITEM[item] || (flipping ? 'askFlipMore' : 'askFlip')
 // 買った結果の場面。data＝サーバーの返事（item と、性別変更薬なら飲んだあとの gender）
 export const boughtKindOf = (data) => (SHOP_ITEMS.find(i => i.key === data?.item)?.bag ? 'boughtItem'
-  : data?.item === 'gender' ? (data.gender === 'f' ? 'boughtF' : 'boughtM') : 'boughtFlip')
+  : data?.item === 'gender' ? (data.gender === 'f' ? 'boughtF' : 'boughtM') : data?.item === 'forget' ? 'boughtForget' : 'boughtFlip')
 
 export { fillLine, isNight, nextStreak, tapKindOf, makeDailyAsker }

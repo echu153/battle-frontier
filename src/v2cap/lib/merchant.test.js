@@ -117,7 +117,7 @@ test('【確定】セリフはユーザーが案を見て「この案で入れ�
   assert.deepEqual(Object.fromEntries(Object.entries(MERCHANT_LINES).map(([k, list]) => [k, list.length])), {
     intro: 2, enter: 2, enterDaily: 3, enterLong: 3, enterAgain: 3, enterNight: 3, enterPoor: 3, enterFlip: 3,
     tap: 29, tapNight: 5, streak3: 3, streak5: 3, streak8: 3,
-    askGender: 3, askFlip: 3, askFlipMore: 3, askHp: 3, askMp: 3, askCure: 3, boughtItem: 3, boughtF: 3, boughtM: 3, boughtFlip: 3, error: 1,
+    askGender: 3, askFlip: 3, askFlipMore: 3, askHp: 3, askMp: 3, askCure: 3, askForget: 3, boughtItem: 3, boughtF: 3, boughtM: 3, boughtFlip: 3, boughtForget: 3, error: 1,
   })
   assert.deepEqual([0, 1, 2, 3, 4].map(s => linesOf('tap', s).length), [8, 10, 12, 17, 19], '段階ごとのタップのセリフの数')
   const vars = (s) => varsOf({ username: 'おれおれお', gender: 'm' }, s)
@@ -244,6 +244,11 @@ test('買う確かめと買った結果の場面：性別変更薬は飲んだ�
   assert.equal(boughtKindOf({ item: 'gender', gender: 'f' }), 'boughtF')
   assert.equal(boughtKindOf({ item: 'gender', gender: 'm' }), 'boughtM')
   assert.equal(boughtKindOf({ item: 'flip', flip_until: 'x' }), 'boughtFlip')
+  // 忘却の秘薬（2026-11-09）
+  assert.equal(askKindOf('forget'), 'askForget')
+  assert.equal(askKindOf('forget', true), 'askForget', '秘薬が効いていても忘却の秘薬の確かめ')
+  assert.equal(boughtKindOf({ item: 'forget', points: 30 }), 'boughtForget')
+  for (const it of SHOP_ITEMS) assert.ok(MERCHANT_LINES[askKindOf(it.key)], `${it.name}の確かめのセリフがある`)
   // 飲んだあとの呼び方に合っている
   assert.ok(MERCHANT_LINES.boughtF[1].text.includes('今日からは姉さん'))
   assert.ok(MERCHANT_LINES.boughtM[1].text.includes('今日からは兄さん'))

@@ -5,7 +5,7 @@
 //   交換所はあと設置するからまずは土台を。スロット・ハイローは昔作ったやつだから改善するところがあれば
 //   バージョンアップして。中毒性高く、当たったらドーパミンが大量に出るような演出も」＋選んだこと：
 //   ・通貨は**メダル**（この版だけ）。両替所で **100 Gold＝1枚**（前作と同じ）。メダルからGoldへは戻せない
-//   ・景品の交換所はあとで作る
+//   ・景品の交換所はあとで作る → 2026-11-09 作った（下の PRIZES）
 //   ・還元率は**どのゲームも約97%**（賭けたメダルが平均で97%戻る）
 //   ・スロット＝**AT機で作り直す**（前作はCZ・ATがベットなし＋ナビがそのまま出るので実質160%だった）
 //   ・ハイ&ロー＝**連勝はしご**（前作のダブルアップは「8〜A」と「2〜6」で枚数が違った）
@@ -18,6 +18,16 @@ export const GOLD_PER_MEDAL = 100
 export const EXCHANGE_MAX = 1000000   // 1回で替えられるメダルの上限
 export const exchangeGoldOf = (medals) => Math.max(0, Math.floor(medals || 0)) * GOLD_PER_MEDAL
 export const maxExchangeOf = (gold) => Math.min(EXCHANGE_MAX, Math.floor(Math.max(0, Number(gold) || 0) / GOLD_PER_MEDAL))
+
+// ===== 景品の交換所 =====
+// 【確定】2026-11-09 ユーザー指示「とりあえず交換所で強化石を交換できるようにして」＋選んだこと「強化石1個＝メダル50枚（5,000 Gold ぶん）」「回数の上限なし」。
+//   置き場所は「両替所」のタブの中（前に「景品の交換所はただいま準備中です」と出していた所）。タブを6つにするとスマホで2段になるので、タブは足さない
+//   ★交換はサーバー（SQL §11 の v2cap_casino_prize）。メダルを減らして強化石（v2cap_profiles.enh_stone）を足す。当日の収支と解禁の払い出しには数えない
+//   名前は鍛冶屋の STONE_NAME（lib/smith.js）。景品を足すときは、ここと SQL の両方に足す（v2capsql.test.js が突き合わせる）
+export const PRIZES = [{ key:'stone', medals:50 }]
+export const PRIZE_BY_KEY = Object.fromEntries(PRIZES.map(p => [p.key, p]))
+export const PRIZE_QTY_MAX = 9999   // 1回で替えられる数（こちらで決めた。何回でも替えられる）
+export const prizeMaxOf = (medals, prize) => Math.min(PRIZE_QTY_MAX, Math.floor(Math.max(0, Number(medals) || 0) / prize.medals))
 
 // 日付が変わるのは日本時間の5時（デイリー・宝樹と同じ）。当日の収支（day_net）はこの日ごと
 export const CASINO_DAY_RESET_HOUR = 5

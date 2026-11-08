@@ -129,7 +129,7 @@ test('【確定】話し方：はじめてと顔なじみは気だるいてい�
 test('名前で呼ぶのは仲良し（20日目）から（〇〇くん／〇〇ちゃん＝看板娘と同じ）。それより前のセリフに {name} は出てこない', () => {
   assert.equal(NAME_STAGE, 3)
   for (const l of allLines()) if (l.text.includes('{name}')) assert.ok((l.min ?? 0) >= NAME_STAGE, `${l.kind}：${l.text}`)
-  for (const kind of ['enterDaily', 'enterLong', 'enterAgain', 'enterNight', 'streak3', 'streak5', 'streak8', 'atStart', 'bigWin', 'hugeWin', 'lose', 'exchange', 'short']) {
+  for (const kind of ['enterDaily', 'enterLong', 'enterAgain', 'enterNight', 'streak3', 'streak5', 'streak8', 'atStart', 'bigWin', 'hugeWin', 'lose', 'exchange', 'prize', 'short']) {
     assert.ok(linesOf(kind, 3).every(l => l.text.includes('{name}')), `${kind} の20日目から`)
     assert.ok(linesOf(kind, 2).every(l => !l.text.includes('{name}')), `${kind} の20日目より前`)
   }

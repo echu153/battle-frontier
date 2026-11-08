@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  GOLD_PER_MEDAL, exchangeGoldOf, maxExchangeOf, winTierOf,
+  GOLD_PER_MEDAL, exchangeGoldOf, maxExchangeOf, winTierOf, PRIZES, PRIZE_BY_KEY, PRIZE_QTY_MAX, prizeMaxOf,
   SLOT_ROLES, SLOT_TOTAL, SLOT_ROLE_BY_KEY, SLOT_NORMAL_AT, SLOT_NORMAL_CZ, SLOT_CZ_WIN, SLOT_TOKU_ADDS, SLOT_ORDERS, orderIndexOf,
   SLOT_AT_GAMES, SLOT_PREMIUM_GAMES, SLOT_CZ_GAMES, SLOT_AT_ADD, SLOT_AT_TOKU, SLOT_TOKU_GAMES, SLOT_MISS_PAY, slotRtp,
   RANK_LABELS, hiloCountOf, hiloMult100Of, hiloChanceOf, hiloNextPotOf, hiloPayoutOf, HILO_MAX_STREAK,
@@ -11,6 +11,7 @@ import {
   BJ_MIN_BET, BJ_MAX_BET, BJ_BETS, BJ_PAY_NUM, BJ_PAY_DEN, bjPointOf, bjValueOf, bjIsNatural, bjDealerPeeks, bjDealerHits, bjResultOf, bjPayoutOf, bjOutcomeOf, bjBestActionOf, bjRtp,
   POKER_MIN_ANTE, POKER_MAX_ANTE, POKER_ANTES, POKER_RAISE_MULT, POKER_DEALER_CARDS, POKER_HANDS, pkScoreOf, pkCatOf, pkHandOf, pkBestOf, pkQualifies, pkResultOf, pkPayoutOf, pkDiscardOf,
 } from './casino.js'
+import { readFileSync } from 'node:fs'
 import { displayTable, pickStops, classOf, missStopsOf, DISPLAY_OF_ROLE, REELS, REEL_LEN, winLinesOf, noticeKindOf, noticeLevelOf, NOTICE_TABLE_FOR_TEST } from './slotReels.js'
 
 const rngOf = (seed) => { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 } }
@@ -20,6 +21,36 @@ test('【確定】両替所：100 Gold＝1枚（前作と同じ）', () => {
   assert.equal(exchangeGoldOf(123), 12300)
   assert.equal(maxExchangeOf(12345), 123)
   assert.equal(maxExchangeOf(-5), 0)
+})
+
+test('【確定】2026-11-09 景品の交換所：強化石1個＝メダル50枚・回数の上限なし（ユーザー「とりあえず交換所で強化石を交換できるようにして」＋選択）', () => {
+  assert.deepEqual(PRIZES, [{ key:'stone', medals:50 }])
+  assert.equal(PRIZE_QTY_MAX, 9999, '1回で替えられる数（何回でも替えられる）')
+  assert.equal(prizeMaxOf(149, PRIZE_BY_KEY.stone), 2)
+  assert.equal(prizeMaxOf(49, PRIZE_BY_KEY.stone), 0)
+  assert.equal(prizeMaxOf(-5, PRIZE_BY_KEY.stone), 0)
+  assert.equal(prizeMaxOf(1e9, PRIZE_BY_KEY.stone), PRIZE_QTY_MAX)
+  // サーバー：値段・1回の上限が同じ・メダルを見る・強化石に足す・当日の収支と払い出しには数えない
+  const SQL = readFileSync(new URL('../../../supabase_v2cap_core.sql', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  const i = SQL.indexOf('create or replace function public.v2cap_casino_prize(')
+  assert.ok(i >= 0)
+  const fn = SQL.slice(i, SQL.indexOf('\n$$;', i))
+  assert.ok(fn.includes(`c_stone_medals constant int := ${PRIZE_BY_KEY.stone.medals};`))
+  assert.ok(fn.includes(`c_qty_max      constant int := ${PRIZE_QTY_MAX};`))
+  assert.ok(fn.includes("if not public.v2cap_is_dev() then"))
+  assert.ok(fn.includes("if p_prize is distinct from 'stone' then"), '知らない景品は断る')
+  assert.ok(fn.includes('if p_qty is null or p_qty < 1 or p_qty > c_qty_max then'), '0個や負の数でメダルが増えない')
+  assert.ok(fn.includes('for update;'), '同時に替えてもメダルが合う')
+  assert.ok(fn.includes("if v_row.medals < v_cost then return jsonb_build_object('ok', false, 'error', 'メダルが足りません'); end if;"))
+  assert.ok(fn.includes('set medals = medals - v_cost, enh_stone = coalesce(enh_stone, 0) + p_qty'))
+  assert.ok(!fn.includes('v2cap_casino_book'), '収支と払い出し（解禁）には数えない')
+  assert.ok(SQL.includes('revoke all on function public.v2cap_casino_prize(text, int) from public, anon;'))
+  assert.ok(SQL.includes('grant execute on function public.v2cap_casino_prize(text, int) to authenticated;'))
+  // 画面：両替所のタブの中・タブは足さない・準備中の文は消した
+  const casino = readFileSync(new URL('../components/V2capCasino.jsx', import.meta.url), 'utf8')
+  assert.ok(casino.includes("supabase.rpc('v2cap_casino_prize', { p_prize: 'stone', p_qty: n })"))
+  assert.ok(casino.includes('🎁 景品の交換所'))
+  assert.ok(!casino.includes('ただいま準備中'))
 })
 
 test('当たりの大きさの段階：WIN／BIG WIN（10倍）／MEGA WIN（30倍）／JACKPOT（100倍）', () => {

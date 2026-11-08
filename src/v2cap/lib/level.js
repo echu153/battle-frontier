@@ -49,7 +49,7 @@ export const totalExpTo = (lv) => {
 //   5の倍数は3じゃなくて5ポイントで」：LVアップではステは上がらず、そのLVに上がったときにポイントが入る
 //   （LV2・3・4は3、LV5は5、LV6〜9は3、LV10は5…）。LV100までの合計は337。
 // 【確定】振れるのは8種すべて（ユーザー決定）。1ポイントで HP+8・MP+3・ほか+1（どれに振っても戦闘力+1）。
-//   振り直しはいまはできない（ユーザー決定）。
+//   振り直しは商店の忘却の秘薬（2026-11-09 ユーザー指示・下の spentPointsOf）。前は「振り直しはいまはできない（ユーザー決定）」。
 // ★サーバーの v2cap_apply_exp（入るポイント）と v2cap_allocate_points（振る）が同じ決まり（v2capsql.test.js が見張る）
 export const POINTS_PER_LV = 3
 export const POINTS_STEP = 5        // このLVの倍数では
@@ -75,6 +75,17 @@ export const validateAllocation = (add, have) => {
 }
 // 振ったあとのステ（state のステに足す）
 export const applyAllocation = (state, add) => Object.fromEntries(STAT_KEYS.map(k => [k, (state[k] || 0) + (add[k] || 0) * POINT_UNIT[k]]))
+// 【確定】2026-11-09 ユーザー指示「商店にステータス振りなおしのアイテム追加する」＝商店の忘却の秘薬（lib/shop.js）。
+//   本体のステは「初期値＋振ったポイント×1ポイントの量」だけで決まる（ほかに本体のステを書くところは無い）ので、
+//   初期値との差から振ったポイントを数え直せる。割り切れないぶん（無いはず）はステに残す＝ポイントを多く返さない
+//   ★サーバーの v2cap_shop_buy（'forget'）が同じ数え方（v2capsql.test.js が見張る）
+export const spentPointsOf = (state) => STAT_KEYS.reduce((t, k) =>
+  t + Math.floor(Math.max(0, (Number(state?.[k]) || 0) - INITIAL_STATS[k]) / POINT_UNIT[k]), 0)
+// 振り直したあとの本体のステ（初期値＋割り切れないぶん）
+export const forgetStatsOf = (state) => Object.fromEntries(STAT_KEYS.map(k => {
+  const over = Math.max(0, (Number(state?.[k]) || 0) - INITIAL_STATS[k])
+  return [k, INITIAL_STATS[k] + over % POINT_UNIT[k]]
+}))
 
 // ===== 本体の戦闘力の目安 =====
 // LV1の初期ステは戦闘力39。ポイントは1つで戦闘力+1なので、全部振ったときの本体＝39＋そのLVまでのポイント。

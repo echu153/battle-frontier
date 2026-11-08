@@ -5534,7 +5534,7 @@ grant execute on function public.v2cap_daily_claim() to authenticated;
 -- ============================================================
 -- 【確定】2026-10-13 ユーザー指示「V2capに無印の時みたいに賭博場を設置したい、新たにルーレットも追加したい。
 --   交換所はあと設置するからまずは土台を」＋選んだこと（設計 §6-5）：
---   ・通貨は**メダル**（v2cap_profiles.medals）。両替所で **100 Gold＝1枚**。メダルからGoldへは戻せない。景品の交換所はあとで
+--   ・通貨は**メダル**（v2cap_profiles.medals）。両替所で **100 Gold＝1枚**。メダルからGoldへは戻せない。景品の交換所は 2026-11-09 に作った（11-1-2）
 --   ・還元率は**どのゲームも約97%**
 --   ・スロット＝AT機（押し順ベル・CZ・AT・上乗せ・特化ゾーン・中段チェリー）／ハイ&ロー＝連勝はしご／ルーレット＝ラッキーナンバー付き
 -- ★抽選と払い出しは全部ここ。画面（src/v2cap/components/V2capCasino.jsx ほか）は返事を見せるだけ
@@ -5698,6 +5698,39 @@ end;
 $$;
 revoke all on function public.v2cap_casino_exchange(int) from public, anon;
 grant execute on function public.v2cap_casino_exchange(int) to authenticated;
+
+-- ---- 11-1-2. 景品の交換所：メダル → 強化石（2026-11-09）----
+-- 【確定】2026-11-09 ユーザー指示「とりあえず交換所で強化石を交換できるようにして」＋選んだこと「強化石1個＝メダル50枚」「回数の上限なし」
+--   ・強化石は enh_stone（§2）に足す。当日の収支（day_net）と解禁の払い出し（won）には数えない（両替と同じ）
+--   ・1回で替えられるのは9999個まで（こちらで決めた）。何回でも替えられる
+--   ★値段の写しは src/v2cap/lib/casino.js の PRIZES・PRIZE_QTY_MAX（v2capsql.test.js が突き合わせる）
+create or replace function public.v2cap_casino_prize(p_prize text, p_qty int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  c_stone_medals constant int := 50;     -- casino.js の PRIZES（stone）
+  c_qty_max      constant int := 9999;   -- casino.js の PRIZE_QTY_MAX
+  v_uid  uuid := auth.uid();
+  v_row  public.v2cap_profiles;
+  v_cost bigint;
+begin
+  if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
+  if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if p_prize is distinct from 'stone' then return jsonb_build_object('ok', false, 'error', '景品が正しくありません'); end if;
+  if p_qty is null or p_qty < 1 or p_qty > c_qty_max then return jsonb_build_object('ok', false, 'error', '個数が正しくありません'); end if;
+  select * into v_row from public.v2cap_profiles where id = v_uid for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  v_cost := p_qty::bigint * c_stone_medals;
+  if v_row.medals < v_cost then return jsonb_build_object('ok', false, 'error', 'メダルが足りません'); end if;
+  perform public.v2cap_casino_lock(v_uid);
+  update public.v2cap_profiles
+     set medals = medals - v_cost, enh_stone = coalesce(enh_stone, 0) + p_qty, updated_at = now()
+   where id = v_uid
+   returning * into v_row;
+  return jsonb_build_object('ok', true, 'prize', p_prize, 'got', p_qty, 'spent', v_cost, 'stones', v_row.enh_stone) || public.v2cap_casino_money(v_uid);
+end;
+$$;
+revoke all on function public.v2cap_casino_prize(text, int) from public, anon;
+grant execute on function public.v2cap_casino_prize(text, int) to authenticated;
 
 -- ---- 11-2. スロット（AT機）----
 -- レバー：役を引いて、払い出し（押し順ベルは止めるまで保留）とCZ・AT・上乗せを決める。
@@ -9897,6 +9930,11 @@ grant execute on function public.v2cap_dev_dungeon_reset() to authenticated;
 --   ・HPポーション 500G・MPポーション 500G・清めの雫 1,000G。何個か選んで買う（p_qty）・種類ごとに99個まで
 --   ★飲んだ数を引くのは v2cap_dungeon_verify_settle（§23・回し直しの結果）。効き方は src/v2cap/core/atbItems.js・core/atb.js の drinkItem
 --   ★v2cap_profiles は画面から書けない（select だけ）＝持っている数を増やせるのはこの関数だけ
+-- 【確定】2026-11-09 ユーザー指示「商店にステータス振りなおしのアイテム追加する」＋選んだこと「10,000G」「忘却の秘薬」：
+--   ・忘却の秘薬（'forget'）10,000G … その場で飲む。割り振ったステータスポイントが全部戻る（stat_points に足す）・本体のステは初期値へ
+--   ・本体のステは「初期値＋振ったポイント×1ポイントの量」だけで決まる（書くのは §3 の v2cap_allocate_points だけ）ので、初期値との差から数え直す。
+--     割り切れないぶん（無いはず）はステに残す＝ポイントを多く返さない。まだ振っていなければ断る（Gold を無駄にしない）
+--   ★数え方の写しは src/v2cap/lib/level.js の spentPointsOf・forgetStatsOf（v2capsql.test.js・shop.test.js が突き合わせる）
 alter table public.v2cap_profiles add column if not exists flip_until timestamptz;
 alter table public.v2cap_profiles add column if not exists items jsonb not null default '{}'::jsonb;
 
@@ -9911,18 +9949,36 @@ declare
   c_mp_gold      constant int := 500;     -- shop.js の SHOP_ITEMS（mp）
   c_cure_gold    constant int := 1000;    -- shop.js の SHOP_ITEMS（cure）
   c_item_max     constant int := 99;      -- core/atbItems.js の ITEM_MAX
+  c_forget_gold  constant int := 10000;   -- shop.js の SHOP_ITEMS（forget）
   v_uid  uuid := auth.uid();
   v_row  public.v2cap_profiles;
   v_cost bigint;
   v_have int;
+  v_back int;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
-  if p_item is null or p_item not in ('gender', 'flip', 'hp', 'mp', 'cure') then
+  if p_item is null or p_item not in ('gender', 'flip', 'hp', 'mp', 'cure', 'forget') then
     return jsonb_build_object('ok', false, 'error', '品物が正しくありません');
   end if;
   select * into v_row from public.v2cap_profiles where id = v_uid for update;
   if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
+  -- 忘却の秘薬：割り振ったポイントを全部戻す（初期値 HP40・MP12・ほか5／1ポイントで HP+8・MP+3・ほか+1＝core/stats.js の INITIAL_STATS と STAT_DEFS の unit）
+  if p_item = 'forget' then
+    v_back := greatest(0, v_row.hp - 40) / 8 + greatest(0, v_row.mp - 12) / 3
+            + greatest(0, v_row.str - 5) + greatest(0, v_row.dex - 5) + greatest(0, v_row.agi - 5)
+            + greatest(0, v_row.int_stat - 5) + greatest(0, v_row.vit - 5) + greatest(0, v_row.luk - 5);
+    if v_back <= 0 then return jsonb_build_object('ok', false, 'error', 'まだステータスポイントを割り振っていません'); end if;
+    if v_row.gold < c_forget_gold then return jsonb_build_object('ok', false, 'error', 'Goldが足りません'); end if;
+    update public.v2cap_profiles
+       set gold = gold - c_forget_gold,
+           hp = 40 + greatest(0, hp - 40) % 8, mp = 12 + greatest(0, mp - 12) % 3,
+           str = 5, dex = 5, agi = 5, int_stat = 5, vit = 5, luk = 5,
+           stat_points = stat_points + v_back, updated_at = now()
+     where id = v_uid
+     returning * into v_row;
+    return jsonb_build_object('ok', true, 'item', p_item, 'spent', c_forget_gold, 'gold', v_row.gold, 'back', v_back, 'points', v_row.stat_points);
+  end if;
   -- 挑戦で使う薬：持ち物に入れる
   if p_item in ('hp', 'mp', 'cure') then
     if p_qty is null or p_qty < 1 or p_qty > c_item_max then return jsonb_build_object('ok', false, 'error', '個数が正しくありません'); end if;

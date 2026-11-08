@@ -7,9 +7,10 @@ import { readFileSync } from 'node:fs'
 import { bandAt, pickEncounter } from './sortie.js'
 import { spotOf } from './areas.js'
 import {
-  SHOP_ITEMS, SHOP_ITEM_BY_KEY, FLIP_NAME, FLIP_MINUTES, FLIP_HOURS,
+  SHOP_ITEMS, SHOP_ITEM_BY_KEY, FLIP_NAME, FLIP_MINUTES, FLIP_HOURS, FORGET_NAME,
   otherGenderOf, flipLeftMsOf, encounterClockOf, encounterBandOf, flipPreviewOf, itemCountOf, buyableQtyOf,
 } from './shop.js'
+import { INITIAL_STATS, POINT_UNIT, STAT_KEYS, applyAllocation, spentPointsOf, forgetStatsOf } from './level.js'
 import { BATTLE_ITEMS, CARRY_MAX, ITEM_CD, ITEM_MAX, POTION_PCT, carriedItemsOf, itemCountsOf, itemTotalOf } from '../core/atbItems.js'
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
@@ -27,13 +28,52 @@ const on = (at, minutes = 30) => ({ flip_until: new Date(at.getTime() + minutes 
 test('【確定】品物：HPポーション 500G・MPポーション 500G・清めの雫 1,000G（2026-11-01）・性別変更薬 30,000G・日月反転の秘薬 3,000G（ユーザーが候補から選んだ）', () => {
   assert.deepEqual(SHOP_ITEMS.map(i => [i.key, i.name, i.gold, !!i.bag]), [
     ['hp', 'HPポーション', 500, true], ['mp', 'MPポーション', 500, true], ['cure', '清めの雫', 1000, true],
-    ['gender', '性別変更薬', 30000, false], ['flip', '日月反転の秘薬', 3000, false],
+    ['gender', '性別変更薬', 30000, false], ['flip', '日月反転の秘薬', 3000, false], ['forget', '忘却の秘薬', 10000, false],
   ])
   assert.deepEqual(BATTLE_ITEMS.map(i => i.key), SHOP_ITEMS.filter(i => i.bag).map(i => i.key), '戦闘で飲む薬は全部売っている')
   assert.deepEqual([POTION_PCT, ITEM_CD, ITEM_MAX], [30, 30, 99], 'ユーザー選択「最大の30%」「3種類で共通 30秒」・持てる数はこちらで決めた')
   assert.equal(FLIP_NAME, SHOP_ITEM_BY_KEY.flip.name)
   assert.equal(FLIP_MINUTES, 60)
   assert.equal(FLIP_HOURS, 12)
+})
+
+test('【確定】2026-11-09 忘却の秘薬（ユーザー「商店にステータス振りなおしのアイテム追加する」＋選択「10,000G」「忘却の秘薬」）：割り振ったポイントが全部戻る', () => {
+  assert.equal(FORGET_NAME, SHOP_ITEM_BY_KEY.forget.name)
+  assert.deepEqual(INITIAL_STATS, { hp:40, mp:12, str:5, dex:5, agi:5, int_stat:5, vit:5, luk:5 }, 'サーバーの数え方に書いた初期値')
+  assert.deepEqual(POINT_UNIT, { hp:8, mp:3, str:1, dex:1, agi:1, int_stat:1, vit:1, luk:1 }, 'サーバーの数え方に書いた1ポイントの量')
+  assert.equal(spentPointsOf(INITIAL_STATS), 0, '振っていない')
+  assert.equal(spentPointsOf(null), 0)
+  const add = { hp: 7, mp: 4, str: 20, dex: 3, agi: 0, int_stat: 1, vit: 9, luk: 2 }
+  const after = applyAllocation(INITIAL_STATS, add)
+  assert.equal(spentPointsOf(after), 46, '振った数がそのまま戻る')
+  assert.deepEqual(forgetStatsOf(after), INITIAL_STATS, '本体のステは初期値へ')
+  // 割り切れないぶん（無いはず）はステに残す＝ポイントを多く返さない
+  const odd = { ...INITIAL_STATS, hp: 40 + 8 * 2 + 5, mp: 12 + 3 + 2 }
+  assert.equal(spentPointsOf(odd), 3)
+  assert.deepEqual(forgetStatsOf(odd), { ...INITIAL_STATS, hp: 45, mp: 14 })
+  // 初期値より低いステ（無いはず）はポイントにしない
+  assert.equal(spentPointsOf({ ...INITIAL_STATS, str: 2 }), 0)
+  for (const k of STAT_KEYS) assert.ok(forgetStatsOf(after)[k] >= INITIAL_STATS[k])
+})
+
+test('サーバー：忘却の秘薬の値段・数え方が level.js と同じ・まだ振っていなければ断る', () => {
+  const s = fnBody('v2cap_shop_buy')
+  assert.ok(s.includes(`c_forget_gold  constant int := ${SHOP_ITEM_BY_KEY.forget.gold};`))
+  assert.ok(s.includes("p_item not in ('gender', 'flip', 'hp', 'mp', 'cure', 'forget')"))
+  const back = STAT_KEYS.map(k => POINT_UNIT[k] > 1
+    ? `greatest(0, v_row.${k} - ${INITIAL_STATS[k]}) / ${POINT_UNIT[k]}` : `greatest(0, v_row.${k} - ${INITIAL_STATS[k]})`)
+  for (const b of back) assert.ok(s.includes(b), b)
+  assert.ok(s.includes("if v_back <= 0 then return jsonb_build_object('ok', false, 'error', 'まだステータスポイントを割り振っていません'); end if;"))
+  assert.ok(s.includes('hp = 40 + greatest(0, hp - 40) % 8, mp = 12 + greatest(0, mp - 12) % 3,'))
+  assert.ok(s.includes('str = 5, dex = 5, agi = 5, int_stat = 5, vit = 5, luk = 5,'))
+  assert.ok(s.includes('stat_points = stat_points + v_back'))
+  // 本体のステを書くのは振る関数と忘却の秘薬だけ（ほかで書くと数え直しがずれる）
+  const writers = SQL.split('create or replace function public.').filter(f => /\n\s+(str|vit|luk)\s*=/.test(f)).map(f => f.slice(0, f.indexOf('(')))
+  assert.deepEqual(writers.sort(), ['v2cap_allocate_points', 'v2cap_shop_buy'])
+  // 画面：まだ振っていなければ買えない・飲んだあとに戻ったポイント
+  const shop = read('../components/V2capShop.jsx')
+  assert.ok(shop.includes("const noSpent = it.key === 'forget' && spentPointsOf(prof) <= 0"))
+  assert.ok(shop.includes('割り振れるステータスポイント：'))
 })
 
 test('性別変更薬：男女が入れ替わる（性別がまだ無ければ変えられない）', () => {
@@ -160,7 +200,7 @@ test('サーバー：挑戦で使う薬の値段と持てる数が同じ・個�
   assert.ok(s.includes(`c_mp_gold      constant int := ${SHOP_ITEM_BY_KEY.mp.gold};`))
   assert.ok(s.includes(`c_cure_gold    constant int := ${SHOP_ITEM_BY_KEY.cure.gold};`))
   assert.ok(s.includes(`c_item_max     constant int := ${ITEM_MAX};`))
-  assert.ok(s.includes("p_item not in ('gender', 'flip', 'hp', 'mp', 'cure')"))
+  assert.ok(s.includes("p_item not in ('gender', 'flip', 'hp', 'mp', 'cure', 'forget')"))
   assert.ok(s.includes("if p_qty is null or p_qty < 1 or p_qty > c_item_max then"), '0個や負の数で Gold が増えない')
   assert.ok(s.includes("if v_have + p_qty > c_item_max then"))
   assert.ok(s.includes("set gold = gold - v_cost, items = items || jsonb_build_object(p_item, v_have + p_qty)"))

@@ -5,6 +5,7 @@ import V2capMerchant, { MerchantSays, MERCHANT_CSS } from './V2capMerchant.jsx'
 import { box, btn, miniBtn, TEXT } from './v2ui.js'
 import { GENDER_BY_KEY, genderOf } from '../lib/gender.js'
 import { leftText } from '../lib/burger.js'
+import { spentPointsOf } from '../lib/level.js'
 import {
   SHOP_COLOR, SHOP_ITEMS, SHOP_ITEM_BY_KEY, FLIP_COLOR, FLIP_MINUTES, FLIP_HOURS,
   flipLeftMsOf, flipPreviewOf, encounterBandOf, otherGenderOf, itemCountOf, buyableQtyOf,
@@ -23,6 +24,7 @@ import {
 //     品物の右に商人を立たせる（スマホは上）。店を開いたとき・タップ・買う確かめ・買った結果で話す（ユーザー選択）。
 //     好感度は看板娘・アレアと同じ形（画面には出さない・サーバーの v2cap_merchant_talk）
 //   【確定】2026-11-01 ユーザー「挑戦とかで使用できるアイテムもここで販売してほしい」：挑戦で使う薬は何個か選んで買う（持ち物に入る・持ち込む数は挑戦のポップアップで選ぶ・戦闘で飲む＝core/atbItems.js）
+//   【確定】2026-11-09 忘却の秘薬（ユーザー「商店にステータス振りなおしのアイテム追加する」）：割り振ったポイントが全部戻る。まだ振っていなければ買えない
 // ============================================================
 const gold = (n) => `${Number(n || 0).toLocaleString()}G`
 const BAND_STYLE = { color: FLIP_COLOR, fontSize:'13px' }
@@ -30,7 +32,7 @@ const BAND_STYLE = { color: FLIP_COLOR, fontSize:'13px' }
 const talkAsker = makeDailyAsker(() => supabase.rpc('v2cap_merchant_talk'))
 // 開発用（管理者だけ）：買う確かめと買った結果の反応を見るボタン（反応の商人だけを出す＝本当には買わない）・好感度の段階を仮に置くボタン（サーバーに書かない）
 const DEV = SHOP_COLOR
-const DEV_REACTS = ['askHp', 'askMp', 'askCure', 'askGender', 'askFlip', 'askFlipMore', 'boughtItem', 'boughtF', 'boughtM', 'boughtFlip', 'error']
+const DEV_REACTS = ['askHp', 'askMp', 'askCure', 'askGender', 'askFlip', 'askFlipMore', 'askForget', 'boughtItem', 'boughtF', 'boughtM', 'boughtFlip', 'boughtForget', 'error']
 
 // ♂ 男性（色つき）と性能差の一言
 function GenderLine({ g }) {
@@ -63,6 +65,19 @@ function FlipChange({ prof, now }) {
   )
 }
 
+// 忘却の秘薬：割り振ったポイント → 飲むと戻る（割り振れるポイントが増える）
+function ForgetChange({ prof }) {
+  const spent = spentPointsOf(prof)
+  if (spent <= 0) return <div style={{ color:'#ff8844' }}>まだステータスポイントを割り振っていません</div>
+  const have = Number(prof?.stat_points) || 0
+  return (
+    <>
+      <div>割り振ったポイント：{spent}</div>
+      <div>飲むと：割り振れるポイント {have} → <span style={{ color:'#ffcc00' }}>{have + spent}</span></div>
+    </>
+  )
+}
+
 // 挑戦で使う薬：何個買うかを選ぶ（持っている数→買ったあとの数）。qty は1〜max
 function QtyPicker({ have, qty, max, onQty }) {
   const step = (n) => onQty(Math.max(1, Math.min(max, n)))
@@ -87,6 +102,7 @@ const ITEM_TEXT = {
   cure: '状態異常が全部治ります。',
   gender: '飲むと、男女が入れ替わります。',
   flip: `${FLIP_MINUTES}分のあいだ、時間帯が${FLIP_HOURS}時間ずれて、いまとは違う時間帯の敵に出会えます。`,
+  forget: '飲むと、割り振ったステータスポイントが全部戻ります。もう一度、好きなステータスに割り振れます。',
 }
 
 // dev … 開発用（管理者だけ）。商人の反応と段階を確かめるボタンを出す
@@ -214,7 +230,7 @@ export default function V2capShop({ prof, onProfile, dev = false }) {
           onConfirm={buy} onClose={cancelAsk}>
           {askSay && <MerchantSays face={askSay.face} line={askSay.text} />}
           {asking.bag ? <QtyPicker have={itemCountOf(prof, asking.key)} qty={qty} max={buyableQtyOf(prof, asking)} onQty={setQty} />
-            : asking.key === 'gender' ? <GenderChange g={sex} /> : <FlipChange prof={prof} now={now} />}
+            : asking.key === 'gender' ? <GenderChange g={sex} /> : asking.key === 'forget' ? <ForgetChange prof={prof} /> : <FlipChange prof={prof} now={now} />}
         </V2Modal>
       )}
       {got && (
@@ -226,6 +242,11 @@ export default function V2capShop({ prof, onProfile, dev = false }) {
             <>
               <div><span style={{ color: newSex?.color }}>{newSex?.mark} {newSex?.label}</span>になりました</div>
               <div style={{ color: TEXT.sub, fontSize:'11px', marginTop:'6px' }}>{newSex?.text}</div>
+            </>
+          ) : got.key === 'forget' ? (
+            <>
+              <div>割り振れるステータスポイント：<span style={{ color:'#ffcc00' }}>{bought.points}</span></div>
+              <div style={{ color: TEXT.sub, fontSize:'11px', marginTop:'6px' }}>ホームのステータスから割り振れます。</div>
             </>
           ) : (
             <>
@@ -272,9 +293,10 @@ export default function V2capShop({ prof, onProfile, dev = false }) {
                 {g.items.map(it => {
                   const short = have < it.gold
                   const noSex = it.key === 'gender' && !sex
+                  const noSpent = it.key === 'forget' && spentPointsOf(prof) <= 0
                   const count = it.bag ? itemCountOf(prof, it.key) : 0
                   const full = it.bag && count >= ITEM_MAX
-                  const off = busy || short || noSex || full
+                  const off = busy || short || noSex || noSpent || full
                   return (
                     <div key={it.key} style={{ ...box, padding:'10px 12px', display:'flex', flexDirection:'column', gap:'6px', minWidth:0 }}>
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:'8px' }}>
@@ -283,11 +305,11 @@ export default function V2capShop({ prof, onProfile, dev = false }) {
                       </div>
                       <div style={{ color: TEXT.sub, fontSize:'11px', lineHeight:1.6 }}>{ITEM_TEXT[it.key]}</div>
                       <div style={{ color: TEXT.body, fontSize:'11px', lineHeight:1.8 }}>
-                        {it.bag ? <div>持っている数：×{count}</div> : it.key === 'gender' ? <GenderChange g={sex} /> : <FlipChange prof={prof} now={now} />}
+                        {it.bag ? <div>持っている数：×{count}</div> : it.key === 'gender' ? <GenderChange g={sex} /> : it.key === 'forget' ? <ForgetChange prof={prof} /> : <FlipChange prof={prof} now={now} />}
                       </div>
                       <button onClick={() => ask(it.key)} disabled={off}
                         style={{ ...btn(it.color), width:'100%', padding:'8px', marginTop:'auto', opacity: off ? 0.5 : 1 }}>
-                        {full ? 'これ以上持てません' : short ? 'Goldが足りません' : '買う'}
+                        {full ? 'これ以上持てません' : noSpent ? 'まだ割り振っていません' : short ? 'Goldが足りません' : '買う'}
                       </button>
                     </div>
                   )

@@ -20,13 +20,16 @@
 // 【2026-10-28】ポーカー（カリビアンスタッド・V2capPoker.jsx・ユーザー指示「じゃあポーカーも作っておいて、対ディーラー用の」）を足した。
 //   ディーラーと勝負するゲーム（ブラックジャック・ポーカー）は「テーブル」タブにまとめ、中で切り替える（TABLES）。
 //   タブを6つにするとスマホ（375px）で1段に収まらず、ルーレットが画面の下へ押される（2026-10-27 ユーザー指示「スクロールなしで回せるように」）
+// 【確定】2026-11-09 景品の交換所（ユーザー「とりあえず交換所で強化石を交換できるようにして」＋選択「メダル50枚で1個」「上限なし」・lib/casino.js の PRIZES）：
+//   「両替所」のタブの中、両替の下に置く（前に「準備中」と出していた所）。タブは足さない（6つにするとスマホで2段になる）
 // 【2026-11-05】ポーカーは一旦お蔵入り（ユーザー「ポーカーは調整難しそうだから一旦消して、ブラックジャックだけでいい」・lib/casino.js の POKER_ON）。
 //   卓が1つだけのときは、タブは「BJ」で中の切り替えも出さない。ポーカーの途中の勝負が残っていれば、その1回だけ最後まで遊べる（新しくは配れない）
 // ============================================================
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import { useStored } from '../core/prefs.js'
-import { GOLD_PER_MEDAL, maxExchangeOf, casinoWonOf, unlockOf, isUnlocked, newlyUnlockedOf, POKER_ON } from '../lib/casino.js'
+import { GOLD_PER_MEDAL, maxExchangeOf, casinoWonOf, unlockOf, isUnlocked, newlyUnlockedOf, POKER_ON, PRIZE_BY_KEY, prizeMaxOf } from '../lib/casino.js'
+import { STONE_NAME, stoneOf } from '../lib/smith.js'
 import {
   pickLine, enterKindOf, tapKindOf, nextStreak, isNight, welcomeDueLocal, dayOf, makeDailyAsker,
   stageOf, varsOf, stageEventOf, fillLine, loseDue, welcomeLineOf, TABLE_QUIET_KINDS, tableTalkDue, dealerNameOf,
@@ -58,6 +61,7 @@ const TABLES = [
 ]
 const TAB_CSS = '@media (max-width: 480px) { .cs-tab-ico { display: none } }'
 const EXCHANGE_PRESETS = [1, 10, 100, 1000]
+const PRIZE_PRESETS = [1, 10, 100]
 
 // SQL がまだ流されていないときの見え方
 const sqlMissing = (msg) => /v2cap_casino_state|v2cap_slot|v2cap_hilo|v2cap_roulette|v2cap_bj|v2cap_poker|Could not find the function/i.test(msg || '')
@@ -109,6 +113,10 @@ export default function V2capCasino({ prof, onProfile, dev = false }) {
   const [busy, setBusy] = useState(false)
   const [exAmount, setExAmount] = useState(10)
   const [exMsg, setExMsg] = useState('')
+  // 景品の交換所（強化石）：持っている数は交換の返事で直す
+  const [stones, setStones] = useState(() => stoneOf(prof))
+  const [prizeQty, setPrizeQty] = useState(1)
+  const [prizeMsg, setPrizeMsg] = useState('')
   const [welcome, setWelcome] = useState(null)   // 開発用に出している「いらっしゃい」のセリフ（null＝出していない）
 
   // ===== アレア（lib/alea.js）=====
@@ -246,6 +254,21 @@ export default function V2capCasino({ prof, onProfile, dev = false }) {
     await onProfile?.(null)
   }
 
+  // 景品の交換所：メダル → 強化石（サーバーの v2cap_casino_prize）
+  const takePrize = async (n) => {
+    if (busy || !(n > 0)) return
+    setBusy(true); setPrizeMsg('')
+    const { data, error: err } = await supabase.rpc('v2cap_casino_prize', { p_prize: 'stone', p_qty: n })
+    setBusy(false)
+    if (err || !data?.ok) { setPrizeMsg(`⚠ ${err?.message || data?.error || '交換できませんでした'}`); return }
+    onMoney(data)
+    setStones(Number(data.stones) || 0)
+    sfx.coin(0)
+    setPrizeMsg(`🪙 ${fmt(data.spent)}枚 → ${STONE_NAME}×${fmt(data.got)}`)
+    say('prize')
+    await onProfile?.(null)
+  }
+
   // タブを開く。テーブルの卓を開いたら、アレアが卓についたひとこと（卓ごとにこの画面で1回）／まだ遊べなければ「もう少し遊んでから」
   //   （ブラックジャック＝bjSit／bjLocked・ポーカー＝pokerSit／pokerLocked）
   const sat = useRef(new Set())
@@ -287,6 +310,9 @@ export default function V2capCasino({ prof, onProfile, dev = false }) {
   )
 
   const maxEx = maxExchangeOf(money.gold)
+  const stonePrize = PRIZE_BY_KEY.stone
+  const maxPrize = prizeMaxOf(money.medals, stonePrize)
+  const prizeOk = !busy && prizeQty >= 1 && prizeQty <= maxPrize
   // 両替する枚数を選ぶ。お財布を超える枚数を選んだら、アレアがジト目（ボタンは押すたび・打ちこみは超えた瞬間だけ）
   const pickAmount = (n, typed = false) => {
     if (n > maxEx && (!typed || exAmount <= maxEx)) say('short')
@@ -379,6 +405,7 @@ export default function V2capCasino({ prof, onProfile, dev = false }) {
             </>
           )}
           {state && tab === 'exchange' && (
+            <>
             <div style={panel(CASINO.goldDeep)}>
               <div style={{ color:CASINO.gold, fontSize:'13px', fontWeight:'bold', marginBottom:'4px' }}>💱 両替所</div>
               <div style={{ color:CASINO.label, fontSize:'11px', marginBottom:'10px' }}>
@@ -402,8 +429,35 @@ export default function V2capCasino({ prof, onProfile, dev = false }) {
               </button>
               {exAmount > maxEx && <div style={{ color:CASINO.red, fontSize:'11px', marginTop:'6px' }}>Goldが足りません</div>}
               {exMsg && <div style={{ color: exMsg.startsWith('⚠') ? '#ff6666' : CASINO.green, fontSize:'12px', marginTop:'8px' }}>{exMsg}</div>}
-              <div style={{ color:CASINO.dim, fontSize:'10px', marginTop:'12px' }}>※ 景品の交換所はただいま準備中です</div>
             </div>
+            {/* ===== 景品の交換所（2026-11-09）：メダル → 強化石 ===== */}
+            <div style={{ ...panel(CASINO.purple), marginTop:'8px' }}>
+              <div style={{ color:CASINO.purple, fontSize:'13px', fontWeight:'bold', marginBottom:'4px' }}>🎁 景品の交換所</div>
+              <div style={{ color:CASINO.label, fontSize:'11px', marginBottom:'10px' }}>
+                メダル{stonePrize.medals}枚で{STONE_NAME}1個と交換します。{STONE_NAME}は鍛冶屋の強化で使います。
+              </div>
+              <div style={{ fontSize:'12px', color:CASINO.body, marginBottom:'8px' }}>
+                持っている{STONE_NAME}：<span style={{ color:CASINO.bright }}>×{fmt(stones)}</span>
+              </div>
+              <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', marginBottom:'10px' }}>
+                {PRIZE_PRESETS.map(n => (
+                  <button key={n} onClick={() => setPrizeQty(n)} style={pill(CASINO.purple, prizeQty === n)}>{fmt(n)}個</button>
+                ))}
+                <button onClick={() => setPrizeQty(maxPrize)} disabled={maxPrize < 1} style={pill(CASINO.purple, prizeQty === maxPrize && maxPrize > 0)}>全部（{fmt(maxPrize)}個）</button>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'10px', fontSize:'12px', color:CASINO.body }}>
+                <input type="number" min={1} max={Math.max(1, maxPrize)} value={prizeQty}
+                  onChange={e => setPrizeQty(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+                  style={{ width:'110px', background:'#000', color:CASINO.purple, border:`1px solid ${CASINO.purple}`, padding:'6px', fontFamily:'monospace', fontSize:'13px' }} />
+                <span>個 ＝ <span style={{ color:CASINO.gold }}>🪙 {fmt(prizeQty * stonePrize.medals)}枚</span></span>
+              </div>
+              <button onClick={() => takePrize(prizeQty)} disabled={!prizeOk} style={bigBtn(CASINO.purple, prizeOk)}>
+                {STONE_NAME}×{fmt(prizeQty)}と交換する
+              </button>
+              {prizeQty > maxPrize && <div style={{ color:CASINO.red, fontSize:'11px', marginTop:'6px' }}>メダルが足りません</div>}
+              {prizeMsg && <div style={{ color: prizeMsg.startsWith('⚠') ? '#ff6666' : CASINO.green, fontSize:'12px', marginTop:'8px' }}>{prizeMsg}</div>}
+            </div>
+            </>
           )}
         </div>
       </div>

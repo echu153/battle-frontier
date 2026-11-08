@@ -34,9 +34,9 @@ import { FORTUNES } from '../core/tree.js'
 import { STREAK_MAX_DAY } from './tree.js'
 import { MUSEUM_TIERS, MUSEUM_SET_SP, MUSEUM_RARITY_STAM_SEC, MUSEUM_AREA_STAM_SEC } from './museum.js'
 import { TOWER_NAME, FLOORS, LOSE_DROP, GUARD_DROP_BONUS } from './tower.js'
-import { GOLD_PER_MEDAL } from './casino.js'
+import { GOLD_PER_MEDAL, PRIZE_BY_KEY } from './casino.js'
 import { GENDERS } from './gender.js'
-import { SHOP_ITEM_BY_KEY, FLIP_NAME, FLIP_MINUTES, FLIP_HOURS } from './shop.js'
+import { SHOP_ITEM_BY_KEY, FLIP_NAME, FLIP_MINUTES, FLIP_HOURS, FORGET_NAME } from './shop.js'
 import { CARRY_MAX, ITEM_CD, ITEM_MAX, POTION_PCT } from '../core/atbItems.js'
 import { ASC_RESET_GOLD_PER_LV } from './ascension.js'
 import { V1_BOX_NAMES } from './v1carry.js'
@@ -87,7 +87,7 @@ const basics = () => {
   return [
     '## 基本',
     '- ソロのゲーム（パーティは無い）。キャラを作って出撃で敵と戦い、LVと装備を上げて先のエリアへ進む。',
-    `- LVの上限はLV${MAX_LV}。LVが上がるとステータスポイントが${POINTS_PER_LV}点（LV${POINTS_STEP}の倍数では${POINTS_ON_STEP}点）入り、好きなステに振れる（1点で ${unit}）。`,
+    `- LVの上限はLV${MAX_LV}。LVが上がるとステータスポイントが${POINTS_PER_LV}点（LV${POINTS_STEP}の倍数では${POINTS_ON_STEP}点）入り、好きなステに振れる（1点で ${unit}）。振り直すには商店の${FORGET_NAME}を飲む（割り振ったポイントが全部戻る）。`,
     `- 性別はキャラ作成のときに選ぶ：${sexes}（戦闘の中だけ）。あとから変えるには商店の${SHOP_ITEM_BY_KEY.gender.name}を使う。`,
     '- 戦闘力＝ステの合計の目安。推奨LVより低くても、戦闘力が高ければ勝てることがある。',
     '',
@@ -237,6 +237,7 @@ const facilities = () => {
     '- ここから下の薬は買うとその場で飲む。',
     `- ${SHOP_ITEM_BY_KEY.gender.name}（${SHOP_ITEM_BY_KEY.gender.gold.toLocaleString()}G）：男女が入れ替わる。`,
     `- ${FLIP_NAME}（${SHOP_ITEM_BY_KEY.flip.gold.toLocaleString()}G）：${FLIP_MINUTES}分のあいだ、出会う敵の時間帯が${FLIP_HOURS}時間ずれる（必ずいまと違う時間帯になる）。効いているあいだに飲むと${FLIP_MINUTES}分延びる。`,
+    `- ${FORGET_NAME}（${SHOP_ITEM_BY_KEY.forget.gold.toLocaleString()}G）：割り振ったステータスポイントが全部戻り、もう一度好きなステに振れる（まだ振っていなければ買えない）。`,
     '### 今日のミッション（デイリー）',
     `- 毎朝5時に切り替わり、自動で受注。${DAILY_TASKS.map(t => `${t.label}（${t.goal}${t.unit}）`).join('・')}。全部終えるとEXPとGold（LVに応じた量）。`,
     '### ユグレシアの宝樹',
@@ -251,6 +252,7 @@ const facilities = () => {
     `- 守護者でいるあいだは出撃の装備のドロップ率+${GUARD_DROP_BONUS}%。守っているあいだは挑戦できない。`,
     '### 賭博場',
     `- Goldをメダルに替えて遊ぶ（${GOLD_PER_MEDAL}G＝1枚）。スロット・ハイ&ロー・ルーレット。`,
+    `- 両替所の中に景品の交換所がある：メダル${PRIZE_BY_KEY.stone.medals}枚で${STONE_NAME}1個（何個でも替えられる）。メダルはGoldに戻せない。`,
     '### V1からの引き継ぎ',
     `- V1のキャラがあると、Ⅱのキャラ作成のときに引き継げる：EXPのボーナス・いちばん強化した装備に見合うユニークと強化の券・${Object.values(V1_BOX_NAMES).join('と')}（中身は残骸）。`,
   ].join('\n')
