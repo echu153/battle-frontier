@@ -9469,24 +9469,25 @@ alter table public.v2cap_dungeon_mismatch enable row level security;
 
 -- 難易度ごとの全体のHPと、呼べるようになるエリア（dungeon.js の diffs と同じ）
 --   2026-11-09 エキスパート（⑧・70000）・マスター（⑫・200000）を足した（ユーザー選択「HP70000」・「20万くらいにして…もっと急カーブに強くなって」）
+--   2026-11-09 同じ日 エキスパートを 70000→110000（周回する人で測り直して ユーザー「11万にする」・流すのは v2cap_challenge_exma2_20261109.sql）
 create or replace function public.v2cap_dungeon_conf(p_boss text, p_diff text)
 returns table(hp int, area int) language sql immutable set search_path = public as $$
   select v.hp, v.area from (values
     ('varuzenoku', 'normal', 13000, 2),
     ('varuzenoku', 'hard', 30000, 5),
-    ('varuzenoku', 'expert', 70000, 8),
+    ('varuzenoku', 'expert', 110000, 8),
     ('varuzenoku', 'master', 200000, 12),
     ('amaza', 'normal', 13000, 2),
     ('amaza', 'hard', 30000, 5),
-    ('amaza', 'expert', 70000, 8),
+    ('amaza', 'expert', 110000, 8),
     ('amaza', 'master', 200000, 12),
     ('zerugiasu', 'normal', 13000, 2),
     ('zerugiasu', 'hard', 30000, 5),
-    ('zerugiasu', 'expert', 70000, 8),
+    ('zerugiasu', 'expert', 110000, 8),
     ('zerugiasu', 'master', 200000, 12),
     ('enma', 'normal', 13000, 2),
     ('enma', 'hard', 30000, 5),
-    ('enma', 'expert', 70000, 8),
+    ('enma', 'expert', 110000, 8),
     ('enma', 'master', 200000, 12)
   ) as v(boss, diff, hp, area)
   where v.boss = p_boss and v.diff = p_diff

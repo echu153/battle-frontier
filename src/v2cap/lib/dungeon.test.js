@@ -71,8 +71,9 @@ test('【確定】2026-10-29 呼べる難易度：そのエリアに着いたら
   assert.deepEqual(DIFF_KEYS.map(k => diffOf('varuzenoku', k).area), [2, 5, 8, 12])
   // 【確定】2026-11-09 ユーザー「エキスパートは70、masterは80れべ位の戦闘力を想定してる」＝エキスパートの推奨LV 65→70
   assert.deepEqual(DIFF_KEYS.map(k => diffOf('varuzenoku', k).recLv), [25, 45, 70, 80])
-  // 【確定】2026-11-09 数字（推奨LVの人で測った）：エキスパート＝選択「HP70000（もっと難しく）」・マスター＝ユーザー「20万くらいにして…もっと急カーブに強くなって」
-  assert.deepEqual(DIFF_KEYS.map(k => diffOf('varuzenoku', k).hp), [13000, 30000, 70000, 200000])
+  // 【確定】2026-11-09 数字：エキスパート＝周回する人（250時間の人）で測り直して ユーザー「11万にする」（前は選択「HP70000」＝ハードと同じ手ごたえで横ばい）・
+  //   マスター＝ユーザー「20万くらいにして…もっと急カーブに強くなって」
+  assert.deepEqual(DIFF_KEYS.map(k => diffOf('varuzenoku', k).hp), [13000, 30000, 110000, 200000])
   assert.deepEqual(DIFF_KEYS.map(k => diffOf('varuzenoku', k).recPower), [500, 1050, 1500, 1600])
 })
 
