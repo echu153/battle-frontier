@@ -11,11 +11,12 @@ import { NEED_BASE, NEED_PERMIL, MAX_LV, STAMINA_BASE, STAMINA_RECOVER_MS, STAMI
 import { JOB_NEED_PCT, JOB_NEED_BASE_PERMIL, JOB_MAX } from './jobs.js'
 import { ROLE_TENTHS, SPOTS as SPOTS_ALL, recLvOf } from './areas.js'
 import { SLOTS, RARITIES, ALL_RARITIES, STARTER_AREA, UNIQUE_ITEMS, UNIQUE_DROP_PCT, UNIQUE_LV } from './equipment.js'
-import { SORTIE_CD, DROP_RARITY, CHEST_PCT, CHEST_SCRAP, STONE_PCT, STONE_N, rollStone, STONE2_PCT, STONE2_N, rollStone2, stone2Text } from './sortie.js'
+import { SORTIE_CD, DROP_RARITY, CHEST_PCT, CHEST_SCRAP, STONE_PCT, STONE_N, rollStone, STONE2_PCT, STONE2_N, rollStone2, stone2Text, STONE_HIGH_AREA, STONE3_PCT, STONE3_N, rollStone3, stone3Text, STONE4_PCT, STONE4_N, rollStone4, stone4Text } from './sortie.js'
 import { SORTIE_CD_SLACK } from './cooldown.js'
 import { SHRINE_FAIRY_NAME, SHRINE_PCT, SHRINE_FIGHTS, SHRINE_EXP_TENTHS, SHRINE_GOLD_TENTHS } from './shrine.js'
 import { PAPIA_TIERS } from './papia.js'
-import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV, scrapAreaOf, enhanceScrapOf, ENHANCE_NO_SCRAP_RARITY, ENHANCE_STONE, ENHANCE_BOSS_MAT, STONE_TIERS, STONE2_FROM, STONE_CRAFT, STONE_CRAFT_MAX } from './smith.js'
+import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV, scrapAreaOf, enhanceScrapOf, ENHANCE_NO_SCRAP_RARITY, ENHANCE_STONE, ENHANCE_BOSS_MAT, STONE_TIERS, STONE2_FROM, STONE_CRAFT, STONE_CRAFT_MAX, STONE_CRAFT_GOLD, STONE_CRAFT_TIERS, stoneCraftErrorOf } from './smith.js'
+import { CH_STONE4_PCT } from './challengeDefs.js'
 import { DAILY_SORTIES, DAILY_GOLD_PER_LV, DAY_RESET_HOUR, DAILY_TASK_KEYS, GUARD_DONE_KEY } from './daily.js'
 import { FOLD_KEYS } from './uiPrefs.js'
 import { AVATAR_PRESETS, AVATAR_FILE_RE } from './avatar.js'
@@ -306,7 +307,7 @@ test('【確定】分解：その装備のエリアの残骸が、レア度で �
   assert.ok(!SQL.includes('create or replace function public.v2cap_discard('), '捨てるRPCはもう無い')
 })
 
-test('【確定】強化：+10まで・強化石1個（2026-11-08〜）・残骸は+6から 7,8,9,10,11・Goldは必要LV×20×n・成功率は100%から10%ずつ下がる（JSと同じ）。失敗しても強化値はそのまま', () => {
+test('【確定】強化：+20まで（2026-11-09〜・前は+10）・強化石1個（2026-11-08〜）・残骸は+6から・Goldは必要LV×20×n・成功率はJSと同じ。失敗しても強化値はそのまま', () => {
   const e = fnBody('v2cap_enhance')
   assert.ok(e.includes(`c_max         constant int := ${PLUS_MAX};`), '上限がJSと同じ')
   assert.ok(e.includes(`c_stone       constant int := ${ENHANCE_STONE};`), '強化石の数がJSと同じ')
@@ -336,11 +337,16 @@ test('【確定】強化：+10まで・強化石1個（2026-11-08〜）・残骸
   // 2026-11-09〜 強化石は段ごと（+6から良質な強化石＝enh_stone2）。足りないときの文は smith.js の enhanceErrorOf と同じ
   assert.ok(e.includes(`c_stone2_from constant int := ${STONE2_FROM};`), '良質な強化石の段がJSと同じ')
   assert.equal(STONE_TIERS[1].col, 'enh_stone2')
-  assert.ok(e.includes('v_tier := case when v_next >= c_stone2_from then 1 else 0 end;'))
-  assert.ok(e.includes('v_shave := case when v_tier = 1 then coalesce(v_row.enh_stone2, 0) else coalesce(v_row.enh_stone, 0) end;'))
-  assert.ok(e.includes(`'error', case when v_tier = 1 then '${STONE_TIERS[1].name}が足りません' else '${STONE_TIERS[0].name}が足りません' end`))
+  // 2026-11-09〜 +11から希少（enh_stone3）・+16から至高（enh_stone4）
+  assert.ok(e.includes(`c_stone3_from constant int := ${STONE_TIERS[2].from};`), '希少な強化石の段がJSと同じ')
+  assert.ok(e.includes(`c_stone4_from constant int := ${STONE_TIERS[3].from};`), '至高の強化石の段がJSと同じ')
+  assert.deepEqual(STONE_TIERS.map(t => t.col), ['enh_stone', 'enh_stone2', 'enh_stone3', 'enh_stone4'])
+  assert.ok(e.includes('v_tier := case when v_next >= c_stone4_from then 3 when v_next >= c_stone3_from then 2 when v_next >= c_stone2_from then 1 else 0 end;'))
+  assert.ok(e.includes('v_shave := case v_tier when 3 then coalesce(v_row.enh_stone4, 0) when 2 then coalesce(v_row.enh_stone3, 0)'))
+  assert.ok(e.includes('when 1 then coalesce(v_row.enh_stone2, 0) else coalesce(v_row.enh_stone, 0) end;'))
+  assert.ok(e.includes(`(array[${STONE_TIERS.map(t => `'${t.name}'`).join(', ')}])[v_tier + 1] || 'が足りません'`), '足りないときの文は smith.js の enhanceErrorOf と同じ')
   assert.ok(e.includes("'stone', c_stone, 'stone_tier', v_tier, 'stone_left', v_shave - c_stone,"), '使った段を返す（画面の「〜を失いました」）')
-  const lack = ["if v_shave < c_stone then return jsonb_build_object('ok', false, 'error', case when v_tier = 1",
+  const lack = ['if v_shave < c_stone then',
     "if v_have < v_need then return jsonb_build_object('ok', false, 'error', '残骸が足りません'); end if;",
     "if v_mhave < v_mneed then return jsonb_build_object('ok', false, 'error', '素材が足りません'); end if;",
     "if v_row.gold < v_gold then return jsonb_build_object('ok', false, 'error', 'Goldが足りません'); end if;"].map(s => e.indexOf(s))
@@ -348,6 +354,8 @@ test('【確定】強化：+10まで・強化石1個（2026-11-08〜）・残骸
   // 成功でも失敗でも強化石・残骸（か素材）・Goldは使う（分岐の前）・強化値を上げるのは成功のときだけ
   const spend = e.indexOf('set enh_stone = coalesce(enh_stone, 0) - case when v_tier = 0 then c_stone else 0 end,')
   assert.ok(e.includes('enh_stone2 = coalesce(enh_stone2, 0) - case when v_tier = 1 then c_stone else 0 end,'), '良質な強化石はその段のときだけ減る')
+  assert.ok(e.includes('enh_stone3 = coalesce(enh_stone3, 0) - case when v_tier = 2 then c_stone else 0 end,'), '希少もその段のときだけ')
+  assert.ok(e.includes('enh_stone4 = coalesce(enh_stone4, 0) - case when v_tier = 3 then c_stone else 0 end,'), '至高もその段のときだけ')
   const branch = e.search(/if v_ok then\s+update public\.v2cap_inventory set plus = v_next where id = v_inv\.id;\s+end if;/)
   assert.ok(spend > 0 && branch > spend, '使うのは分岐の前・強化値は成功のときだけ上がる')
   assert.ok(!/plus = v_plus - 1|plus = plus - 1|delete from public\.v2cap_inventory/.test(e), '失敗しても下がらない・壊れない')
@@ -715,19 +723,67 @@ test('【確定】2026-11-09 良質な強化石：出撃で勝った戦闘ごと
   assert.ok(sortie.includes('if (data.stone2 > 0) after.push({ text: stone2Text(data.stone2)'), '画面はログを出す')
 })
 
-test('【確定】2026-11-09 良質な強化石を作る：強化石10個で1個（鍛冶屋・v2cap_stone_craft）。数はJSと同じ', () => {
+test('【確定】2026-11-09 希少な強化石＝エリア11からの場所で勝つと・至高の強化石＝エリア11からのボスに勝つと・四凶の報酬でも（列 enh_stone3・enh_stone4）。数はJSと同じ', () => {
+  // ユーザー選択「出撃・ボス・挑戦＋作る」。確率はシミュで決めた
+  for (const c of ['enh_stone3', 'enh_stone4']) assert.ok(SQL.includes(`alter table public.v2cap_profiles add column if not exists ${c} int not null default 0;`), c)
+  const settle = fnBody('v2cap_sortie_apply')
+  assert.ok(settle.includes(`c_stone_high   constant int := ${STONE_HIGH_AREA};`))
+  assert.ok(settle.includes(`c_stone3_rate  constant numeric := ${STONE3_PCT / 100};`), '希少の確率がJSと同じ')
+  assert.ok(settle.includes(`c_stone3_n     constant int := ${STONE3_N};`))
+  assert.ok(settle.includes(`c_stone4_rate  constant numeric := ${STONE4_PCT / 100};`), '至高の確率がJSと同じ')
+  assert.ok(settle.includes(`c_stone4_n     constant int := ${STONE4_N};`))
+  assert.ok(settle.includes('if v_win and v_spot.area >= c_stone_high and random() < c_stone3_rate then'), '希少はエリア11からの勝ち')
+  assert.ok(settle.includes('if v_win and v_boss and v_spot.area >= c_stone_high and random() < c_stone4_rate then'), '至高はエリア11からのボスの勝ち')
+  assert.ok(settle.includes('enh_stone3 = coalesce(enh_stone3, 0) + v_stone3,') && settle.includes('enh_stone4 = coalesce(enh_stone4, 0) + v_stone4,'))
+  assert.ok(settle.includes("'stone3', case when v_stone3 > 0 then v_stone3 end,") && settle.includes("'stone4', case when v_stone4 > 0 then v_stone4 end,"))
+  // JS の写し（乱数はどの場所でも1つ使う）
+  assert.equal(rollStone3(STONE_HIGH_AREA, () => STONE3_PCT / 100 - 1e-9), 1)
+  assert.equal(rollStone3(STONE_HIGH_AREA - 1, () => 0), 0, 'エリア10までは出ない')
+  assert.equal(rollStone4(STONE_HIGH_AREA, true, () => STONE4_PCT / 100 - 1e-9), 1)
+  assert.equal(rollStone4(STONE_HIGH_AREA, false, () => 0), 0, 'ボスでなければ出ない')
+  assert.equal(rollStone4(STONE_HIGH_AREA - 1, true, () => 0), 0)
+  assert.equal(stone3Text(1), '希少な強化石×1を獲得した！')
+  assert.equal(stone4Text(2), '至高の強化石×2を獲得した！')
+  const sortie = readFileSync(new URL('../components/V2capSortie.jsx', import.meta.url), 'utf8')
+  assert.ok(sortie.includes('if (data.stone3 > 0) after.push({ text: stone3Text(data.stone3)') && sortie.includes('if (data.stone4 > 0) after.push({ text: stone4Text(data.stone4)'), '画面はログを出す')
+  // 四凶の報酬（⑤）
+  const pay = fnBody('v2cap_dungeon_pay_reward')
+  assert.ok(pay.includes(`c_stone4     constant jsonb := '${JSON.stringify(CH_STONE4_PCT).replace(/,/g, ', ').replace(/:/g, ': ')}';`), '四凶の至高の確率がJSと同じ')
+  assert.ok(pay.includes('if random() * 100 < coalesce((c_stone4 ->> v_run.diff)::numeric, 0) * v_pct / 100.0 then'), '難易度の確率×報酬の割合')
+  assert.ok(pay.includes("'stone4', case when v_stone4 > 0 then v_stone4 end"))
+})
+
+test('【確定】2026-11-09 1つ上の強化石を作る：1つ下の石10個（希少と至高はGoldも）で1個（鍛冶屋・v2cap_stone_craft）。数と文はJSと同じ', () => {
   const f = fnBody('v2cap_stone_craft')
   assert.ok(f.includes(`c_need    constant int := ${STONE_CRAFT};`))
   assert.ok(f.includes(`c_qty_max constant int := ${STONE_CRAFT_MAX};`))
+  assert.ok(f.includes(`c_gold3   constant int := ${STONE_CRAFT_GOLD[2]};`), '希少を作るGoldがJSと同じ')
+  assert.ok(f.includes(`c_gold4   constant int := ${STONE_CRAFT_GOLD[3]};`), '至高を作るGoldがJSと同じ')
+  assert.equal(STONE_CRAFT_GOLD[1], 0, '良質は強化石だけ（Goldなし）')
+  assert.deepEqual(STONE_CRAFT_TIERS, [1, 2, 3])
   assert.ok(f.includes('if not public.v2cap_is_dev() then'))
-  assert.ok(f.includes('if p_qty is null or p_qty < 1 or p_qty > c_qty_max then'), '0個や負の数で強化石が増えない')
+  assert.ok(f.includes("if p_tier is null or p_tier not in (1, 2, 3) then return jsonb_build_object('ok', false, 'error', '作れない石です'); end if;"))
+  assert.ok(f.includes('if p_qty is null or p_qty < 1 or p_qty > c_qty_max then'), '0個や負の数で石が増えない')
   assert.match(f, /select \* into v_row from public\.v2cap_profiles where id = v_uid for update;/, '行をつかんでから見る')
-  assert.ok(f.includes("if coalesce(v_row.enh_stone, 0) < v_cost then return jsonb_build_object('ok', false, 'error', '強化石が足りません'); end if;"))
-  assert.ok(f.includes('set enh_stone = coalesce(enh_stone, 0) - v_cost, enh_stone2 = coalesce(enh_stone2, 0) + p_qty'))
-  assert.ok(SQL.includes('revoke all on function public.v2cap_stone_craft(int) from public, anon;'))
-  assert.ok(SQL.includes('grant execute on function public.v2cap_stone_craft(int) to authenticated;'))
+  assert.ok(f.includes(`(array[${STONE_TIERS.slice(0, 3).map(t => `'${t.name}'`).join(', ')}])[p_tier] || 'が足りません'`), '足りない石の名前')
+  assert.ok(f.includes("if v_row.gold < v_gold then return jsonb_build_object('ok', false, 'error', 'Goldが足りません'); end if;"))
+  const order = ['作れない石です', '個数が正しくありません', 'for update', "|| 'が足りません'", 'Goldが足りません'].map(x => f.indexOf(x))
+  assert.ok(order.every((x, k) => x > 0 && (k === 0 || order[k - 1] < x)), '段→個数→石→Gold の順（smith.js の stoneCraftErrorOf と同じ）')
+  assert.ok(f.includes('enh_stone2 = coalesce(enh_stone2, 0) + case when p_tier = 1 then p_qty when p_tier = 2 then -v_cost else 0 end,'))
+  assert.ok(f.includes('enh_stone3 = coalesce(enh_stone3, 0) + case when p_tier = 2 then p_qty when p_tier = 3 then -v_cost else 0 end,'))
+  assert.ok(f.includes('enh_stone4 = coalesce(enh_stone4, 0) + case when p_tier = 3 then p_qty else 0 end,'))
+  assert.ok(SQL.includes('drop function if exists public.v2cap_stone_craft(int);'), '前の引数1つの形は消す')
+  assert.ok(SQL.indexOf('drop function if exists public.v2cap_stone_craft(int);') < SQL.indexOf('create or replace function public.v2cap_stone_craft('), '消してから作る')
+  assert.ok(SQL.includes('revoke all on function public.v2cap_stone_craft(int, int) from public, anon;'))
+  assert.ok(SQL.includes('grant execute on function public.v2cap_stone_craft(int, int) to authenticated;'))
+  assert.ok(!SQL.includes('grant execute on function public.v2cap_stone_craft(int) to'), '前の形の権限は書かない')
+  // 画面の確かめ（JS）も同じ文
+  const prof = { enh_stone: 10, enh_stone2: 10, enh_stone3: 10, gold: STONE_CRAFT_GOLD[3] }
+  assert.deepEqual([[4, 1], [1, 0], [1, 1], [1, 2], [2, 2], [3, 1]].map(([t, n]) => stoneCraftErrorOf(prof, t, n)),
+    ['作れない石です', '個数が正しくありません', null, '強化石が足りません', '良質な強化石が足りません', null])
+  assert.equal(stoneCraftErrorOf({ ...prof, gold: STONE_CRAFT_GOLD[3] - 1 }, 3, 1), 'Goldが足りません')
   const smith = readFileSync(new URL('../components/V2capSmith.jsx', import.meta.url), 'utf8')
-  assert.ok(smith.includes("call('v2cap_stone_craft', { p_qty: n })"), '鍛冶屋の画面から作る')
+  assert.ok(smith.includes("call('v2cap_stone_craft', { p_qty: n, p_tier: tier })"), '鍛冶屋の画面から作る（段を渡す）')
 })
 
 test('出撃の間隔はサーバーでも見る（10秒・通信の揺れぶん2秒の余裕）', () => {

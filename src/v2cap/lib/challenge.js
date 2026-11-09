@@ -6,8 +6,9 @@
 // ============================================================
 import {
   CHALLENGE_MATS, CHALLENGE_TIER_AREA, CHALLENGE_DIFFS,
-  CH_RATES, CH_MAT_HOST, CH_MAT_SOLO, CH_MAT_CHANCE_MIN, CH_MAT_CHANCE, CH_CRAFT_MATS, CH_CRAFT_GOLD_PER_LV,
+  CH_RATES, CH_MAT_HOST, CH_MAT_SOLO, CH_MAT_CHANCE_MIN, CH_MAT_CHANCE, CH_CRAFT_MATS, CH_CRAFT_GOLD_PER_LV, CH_STONE4_PCT,
 } from './challengeDefs.js'
+import { STONE4_NAME } from './smith.js'
 import { CHALLENGE_ITEMS, CHALLENGE_UNIQUE_ITEMS, ITEM_BY_ID, isChallenge } from './equipment.js'
 
 export { CHALLENGE_DIFFS, CH_CRAFT_MATS }
@@ -58,8 +59,9 @@ export const chCraftTimesOf = (item, prof) => {
 }
 
 // ===== 報酬の画面 =====
-// サーバーの報酬（v2cap_dungeon_pay_reward の gear・mat・own・uq）から、画面に出す行を作る。
-//   [{ kind:'gear'|'own'|'uq', item, ilv } | { kind:'mat', name, n }]。何も落ちていなければ空
+// サーバーの報酬（v2cap_dungeon_pay_reward の gear・mat・own・uq・stone4）から、画面に出す行を作る。
+//   [{ kind:'gear'|'own'|'uq', item, ilv } | { kind:'mat', name, n }]。何も落ちていなければ空。
+//   至高の強化石（2026-11-09）は素材の行（kind:'mat'）で出す
 export const chDropsOf = (reward) => {
   const out = []
   const g = reward?.gear && ITEM_BY_ID[reward.gear.base_id]
@@ -69,18 +71,19 @@ export const chDropsOf = (reward) => {
   if (o) out.push({ kind: 'own', item: o, ilv: reward.own.ilv })
   const u = reward?.uq && ITEM_BY_ID[reward.uq.base_id]
   if (u) out.push({ kind: 'uq', item: u, ilv: reward.uq.ilv })
+  if (reward?.stone4 > 0) out.push({ kind: 'mat', name: STONE4_NAME, n: reward.stone4 })
   return out
 }
 
 // ===== シミュとテスト：サーバーと同じ抽選 =====
 // pct＝報酬の割合（呼んだ人100・救援の人は貢献度で最低30＝装備・専用装備・ユニークの確率に掛ける）・owner＝呼んだ人か・solo＝完全ソロ討伐・
 //   contrib＝貢献度（%・素材の確率の10%の線）・cls の武器（weapons）。rng は [0,1)。
-//   返すのは { gear: { area, rarity, kind } | null, mat: n | 0, own: true | false, uq: true | false }（引く順もサーバーと同じ）
+//   返すのは { gear: { area, rarity, kind } | null, mat: n | 0, own: true | false, uq: true | false, stone4: 0 | 1 }（引く順もサーバーと同じ）
 export const CH_PARTS = ['武器', '頭', '鎧', '腕', '足', 'アクセ']
 export const rollChallengeDrops = ({ diff, pct = 100, owner = true, solo = false, contrib = 100, weapons = [] }, rng = Math.random) => {
   const area = CHALLENGE_TIER_AREA[diff]
   const rates = chRatesOf(diff)
-  if (!area || !rates) return { gear: null, mat: 0, own: false, uq: false }
+  if (!area || !rates) return { gear: null, mat: 0, own: false, uq: false, stone4: 0 }
   let gear = null
   if (rng() * 100 < pct) {
     let part = CH_PARTS[Math.floor(rng() * CH_PARTS.length)]
@@ -99,5 +102,7 @@ export const rollChallengeDrops = ({ diff, pct = 100, owner = true, solo = false
   if (contrib >= CH_MAT_CHANCE_MIN && rng() * 100 < chMatChanceOf(diff, contrib)) mat += 1
   const own = rng() * 100 < rates.own * pct / 100
   const uq = rng() * 100 < rates.unique * pct / 100
-  return { gear, mat, own, uq }
+  // ⑤ 至高の強化石（2026-11-09・challengeDefs.js の CH_STONE4_PCT）
+  const stone4 = rng() * 100 < (CH_STONE4_PCT[diff] || 0) * pct / 100 ? 1 : 0
+  return { gear, mat, own, uq, stone4 }
 }

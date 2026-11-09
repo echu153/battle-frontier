@@ -3100,6 +3100,12 @@ alter table public.v2cap_profiles add column if not exists enh_stone int not nul
 --   強化石10個から作れる（§8 の v2cap_stone_craft）・賭博場の景品の交換所でも替えられる（§11 の v2cap_casino_prize）。
 --   名前と数の写しは src/v2cap/lib/smith.js（STONE_TIERS・STONE_CRAFT）と sortie.js（STONE2_PCT）。キャラは消さない
 alter table public.v2cap_profiles add column if not exists enh_stone2 int not null default 0;
+-- ★2026-11-09 希少な強化石（+11〜+15の強化）・至高の強化石（+16〜+20の強化）：持っている数。1回1個使う（§8 の v2cap_enhance）・
+--   希少はエリア11からの出撃で勝つと・至高はエリア11からのボスに勝つと低い確率で1個（§5）・至高は四凶の報酬でも（v2cap_dungeon_pay_reward）・
+--   1つ下の石10個＋Goldから作れる（§8 の v2cap_stone_craft）。写しは smith.js（STONE_TIERS・STONE_CRAFT_GOLD）と sortie.js（STONE3_PCT・STONE4_PCT）。
+--   キャラは消さない
+alter table public.v2cap_profiles add column if not exists enh_stone3 int not null default 0;
+alter table public.v2cap_profiles add column if not exists enh_stone4 int not null default 0;
 -- ★2026-10-10 デイリーミッション（§10）：その日（日本時間の5時で切り替わる）・受注した時点のLV（null＝まだ受注していない）・
 --   進み（{"win": 3}）・受け取ったか。日付が変わると v2cap_daily_roll が空にする。キャラは消さない
 alter table public.v2cap_profiles add column if not exists daily_day date;
@@ -4334,6 +4340,12 @@ declare
   -- 良質な強化石（sortie.js の STONE2_PCT・STONE2_N・2026-11-09）
   c_stone2_rate  constant numeric := 0.002;
   c_stone2_n     constant int := 1;
+  -- 希少な強化石・至高の強化石（sortie.js の STONE_HIGH_AREA・STONE3_PCT・STONE3_N・STONE4_PCT・STONE4_N・2026-11-09）
+  c_stone_high   constant int := 11;
+  c_stone3_rate  constant numeric := 0.004;
+  c_stone3_n     constant int := 1;
+  c_stone4_rate  constant numeric := 0.02;
+  c_stone4_n     constant int := 1;
   -- ユニーク（equipment.js の UNIQUE_DROP_PCT＝0.5%）
   c_unique_rate  constant numeric := 0.005;
   v_uid    uuid := auth.uid();
@@ -4360,6 +4372,8 @@ declare
   v_chest  int := 0;         -- 宝箱から出た残骸の数（見つけなければ0）
   v_stone  int := 0;         -- 入った強化石の数（入らなければ0）
   v_stone2 int := 0;         -- 入った良質な強化石の数（2026-11-09・入らなければ0）
+  v_stone3 int := 0;         -- 入った希少な強化石の数（2026-11-09・入らなければ0）
+  v_stone4 int := 0;         -- 入った至高の強化石の数（2026-11-09・入らなければ0）
   v_ueq    public.v2cap_equipment;
   v_unique jsonb := null;    -- 落ちたユニーク（落ちなければ null）
   v_uforce boolean := false; -- 開発用の「次のボスで必ずユニーク」を使ったか
@@ -4478,6 +4492,14 @@ begin
   if v_win and random() < c_stone2_rate then
     v_stone2 := c_stone2_n;
   end if;
+  -- 希少な強化石（2026-11-09）：エリア11からの場所で勝った戦闘ごと（祠のフェアリー・パピアも＝場所のエリアで見る）
+  if v_win and v_spot.area >= c_stone_high and random() < c_stone3_rate then
+    v_stone3 := c_stone3_n;
+  end if;
+  -- 至高の強化石（2026-11-09）：エリア11からのボスに勝ったとき
+  if v_win and v_boss and v_spot.area >= c_stone_high and random() < c_stone4_rate then
+    v_stone4 := c_stone4_n;
+  end if;
 
   v_cleared := coalesce(v_row.cleared_spots, '{}');
   if v_boss and v_win and not (v_cleared @> array[p_spot]) then
@@ -4509,6 +4531,8 @@ begin
            else materials end,
          enh_stone = coalesce(enh_stone, 0) + v_stone,
          enh_stone2 = coalesce(enh_stone2, 0) + v_stone2,
+         enh_stone3 = coalesce(enh_stone3, 0) + v_stone3,
+         enh_stone4 = coalesce(enh_stone4, 0) + v_stone4,
          stamina = greatest(0, stamina - v_cost),
          shrine_spot = case when v_sh_left > 0 then v_sh_spot end,
          shrine_left = greatest(0, v_sh_left),
@@ -4555,6 +4579,8 @@ begin
     'chest', case when v_chest > 0 then jsonb_build_object('area', v_spot.area, 'n', v_chest) end,
     'stone', case when v_stone > 0 then v_stone end,
     'stone2', case when v_stone2 > 0 then v_stone2 end,
+    'stone3', case when v_stone3 > 0 then v_stone3 end,
+    'stone4', case when v_stone4 > 0 then v_stone4 end,
     'cleared', to_jsonb(v_cleared), 'open_until', public.v2cap_open_until(v_cleared), 'boss_rate', v_rate,
     'level', v_res,
     'stamina', v_stam, 'stamina_at', v_stam_at,
@@ -4937,17 +4963,23 @@ grant execute on function public.v2cap_gear_fav(bigint, boolean) to authenticate
 -- 【確定】2026-11-09 強化石は強化値の段ごとに種類が変わる（ユーザー選択「強化値の段ごと」「+6から良質」）：
 --   +1〜+5にする回＝強化石（enh_stone）・+6〜+10にする回＝**良質な強化石**（enh_stone2）。どちらも1回1個
 --   ・良質な強化石は出撃（§5）・強化石10個から作る（下の v2cap_stone_craft）・賭博場の景品の交換所（§11）
+-- 【確定】2026-11-09 **+20まで**（後半にGoldと強化石が余る → ユーザー「+11から先で吸う」→ 選んだこと）：
+--   +11〜+15にする回＝**希少な強化石**（enh_stone3）・+16〜+20にする回＝**至高の強化石**（enh_stone4）。どちらも1回1個・神域は使わない
+--   ・成功率は+11の9%から1%ずつ下げて、+19と+20は1%（ユーザー選択）・残骸は+11からも1個ずつ増やす（12〜21）・ボスの素材は1個のまま・Gold は同じ式
+--   ・希少と至高は出撃（§5）・至高は四凶の報酬でも・1つ下の石10個＋Goldから作る（下の v2cap_stone_craft）
 -- ★表の写しは src/v2cap/lib/smith.js（ENHANCE_STONE・ENHANCE_SCRAP・ENHANCE_BOSS_MAT・ENHANCE_RATE・ENHANCE_GOLD_PER_LV・enhanceScrapOf）。
 --   v2capsql.test.js が突き合わせる。足りないときの文と見る順（上限→強化石→残骸→ボスの素材→Gold）も smith.js の enhanceErrorOf と同じ
 create or replace function public.v2cap_enhance(p_inventory_id bigint)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
-  c_max         constant int := 10;
+  c_max         constant int := 20;
   c_stone       constant int := 1;
   c_stone2_from constant int := 6;   -- この回から良質な強化石（smith.js の STONE_TIERS）
-  c_scrap       constant int[] := array[0, 0, 0, 0, 0, 7, 8, 9, 10, 11];
-  c_mat         constant int[] := array[0, 0, 0, 0, 0, 1, 1, 1, 1, 1];
-  c_rate        constant int[] := array[100, 90, 80, 70, 60, 50, 40, 30, 20, 10];
+  c_stone3_from constant int := 11;  -- この回から希少な強化石（2026-11-09）
+  c_stone4_from constant int := 16;  -- この回から至高の強化石（2026-11-09）
+  c_scrap       constant int[] := array[0, 0, 0, 0, 0, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
+  c_mat         constant int[] := array[0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+  c_rate        constant int[] := array[100, 90, 80, 70, 60, 50, 40, 30, 20, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1];
   c_gold_per_lv constant int := 20;
   v_uid  uuid := auth.uid();
   v_row  public.v2cap_profiles;
@@ -4965,7 +4997,7 @@ declare
   v_mneed int;     -- ボスの素材の数
   v_mhave int;
   v_cmats jsonb;
-  v_tier  int;     -- 使う強化石の段（0＝強化石・1＝良質な強化石）
+  v_tier  int;     -- 使う強化石の段（0＝強化石・1＝良質・2＝希少・3＝至高）
   v_shave int;     -- その強化石を持っている数
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
@@ -4993,10 +5025,13 @@ begin
   v_have := coalesce((v_mats ->> v_key)::int, 0);
   v_cmats := coalesce(v_row.challenge_mats, '{}'::jsonb);
   v_mhave := case when v_boss is not null then coalesce((v_cmats ->> v_boss)::int, 0) else 0 end;
-  -- ★2026-11-09 +6からは良質な強化石（enh_stone2）。足りないときの文は smith.js の enhanceErrorOf と同じ
-  v_tier := case when v_next >= c_stone2_from then 1 else 0 end;
-  v_shave := case when v_tier = 1 then coalesce(v_row.enh_stone2, 0) else coalesce(v_row.enh_stone, 0) end;
-  if v_shave < c_stone then return jsonb_build_object('ok', false, 'error', case when v_tier = 1 then '良質な強化石が足りません' else '強化石が足りません' end); end if;
+  -- ★2026-11-09 +6からは良質（enh_stone2）・+11からは希少（enh_stone3）・+16からは至高（enh_stone4）。足りないときの文は smith.js の enhanceErrorOf と同じ
+  v_tier := case when v_next >= c_stone4_from then 3 when v_next >= c_stone3_from then 2 when v_next >= c_stone2_from then 1 else 0 end;
+  v_shave := case v_tier when 3 then coalesce(v_row.enh_stone4, 0) when 2 then coalesce(v_row.enh_stone3, 0)
+                         when 1 then coalesce(v_row.enh_stone2, 0) else coalesce(v_row.enh_stone, 0) end;
+  if v_shave < c_stone then
+    return jsonb_build_object('ok', false, 'error', (array['強化石', '良質な強化石', '希少な強化石', '至高の強化石'])[v_tier + 1] || 'が足りません');
+  end if;
   if v_have < v_need then return jsonb_build_object('ok', false, 'error', '残骸が足りません'); end if;
   if v_mhave < v_mneed then return jsonb_build_object('ok', false, 'error', '素材が足りません'); end if;
   if v_row.gold < v_gold then return jsonb_build_object('ok', false, 'error', 'Goldが足りません'); end if;
@@ -5013,6 +5048,8 @@ begin
   update public.v2cap_profiles
      set enh_stone = coalesce(enh_stone, 0) - case when v_tier = 0 then c_stone else 0 end,
          enh_stone2 = coalesce(enh_stone2, 0) - case when v_tier = 1 then c_stone else 0 end,
+         enh_stone3 = coalesce(enh_stone3, 0) - case when v_tier = 2 then c_stone else 0 end,
+         enh_stone4 = coalesce(enh_stone4, 0) - case when v_tier = 3 then c_stone else 0 end,
          materials = v_mats, challenge_mats = v_cmats,
          gold = gold - v_gold, updated_at = now()
    where id = v_uid;
@@ -5030,35 +5067,54 @@ $$;
 revoke all on function public.v2cap_enhance(bigint) from public, anon;
 grant execute on function public.v2cap_enhance(bigint) to authenticated;
 
--- 良質な強化石を作る：強化石10個で1個（必ずできる・1回で9999個まで）
+-- 1つ上の強化石を作る：1つ下の石10個（＋希少と至高はGold）で1個（必ずできる・1回で9999個まで）
 -- 【確定】2026-11-09 ユーザー選択「出撃＋鍛冶屋で作る」（「強化石10個から良質1個」）。1回で作れる数の上限はこちらで決めた
--- ★数の写しは src/v2cap/lib/smith.js の STONE_CRAFT・STONE_CRAFT_MAX（v2capsql.test.js が突き合わせる）
-create or replace function public.v2cap_stone_craft(p_qty int)
+-- 【確定】2026-11-09 希少（p_tier 2＝良質10個から）と至高（p_tier 3＝希少10個から）も作れる・Gold も使う
+--   （ユーザー選択「1つ下の石10個＋Gold」・額はシミュで決めた）。前の引数1つの形は消してから作る（p_tier を省くと良質＝前と同じ）
+-- ★数の写しは src/v2cap/lib/smith.js の STONE_CRAFT・STONE_CRAFT_MAX・STONE_CRAFT_GOLD（v2capsql.test.js が突き合わせる）。
+--   見る順と文は smith.js の stoneCraftErrorOf と同じ（段→個数→石→Gold）
+drop function if exists public.v2cap_stone_craft(int);
+create or replace function public.v2cap_stone_craft(p_qty int, p_tier int default 1)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   c_need    constant int := 10;     -- smith.js の STONE_CRAFT
   c_qty_max constant int := 9999;   -- smith.js の STONE_CRAFT_MAX
+  c_gold3   constant int := 30000;  -- 希少を1個作るGold（smith.js の STONE_CRAFT_GOLD[2]）
+  c_gold4   constant int := 100000;  -- 至高を1個作るGold（smith.js の STONE_CRAFT_GOLD[3]）
   v_uid  uuid := auth.uid();
   v_row  public.v2cap_profiles;
   v_cost int;
+  v_gold bigint;
+  v_have int;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
+  if p_tier is null or p_tier not in (1, 2, 3) then return jsonb_build_object('ok', false, 'error', '作れない石です'); end if;
   if p_qty is null or p_qty < 1 or p_qty > c_qty_max then return jsonb_build_object('ok', false, 'error', '個数が正しくありません'); end if;
-  -- ★行をつかんでから見る（連打しても強化石を二重に使えないように）
+  -- ★行をつかんでから見る（連打しても石とGoldを二重に使えないように）
   select * into v_row from public.v2cap_profiles where id = v_uid for update;
   if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
   v_cost := p_qty * c_need;
-  if coalesce(v_row.enh_stone, 0) < v_cost then return jsonb_build_object('ok', false, 'error', '強化石が足りません'); end if;
+  v_gold := p_qty::bigint * case p_tier when 2 then c_gold3 when 3 then c_gold4 else 0 end;
+  v_have := case p_tier when 1 then coalesce(v_row.enh_stone, 0) when 2 then coalesce(v_row.enh_stone2, 0) else coalesce(v_row.enh_stone3, 0) end;
+  if v_have < v_cost then
+    return jsonb_build_object('ok', false, 'error', (array['強化石', '良質な強化石', '希少な強化石'])[p_tier] || 'が足りません');
+  end if;
+  if v_row.gold < v_gold then return jsonb_build_object('ok', false, 'error', 'Goldが足りません'); end if;
   update public.v2cap_profiles
-     set enh_stone = coalesce(enh_stone, 0) - v_cost, enh_stone2 = coalesce(enh_stone2, 0) + p_qty, updated_at = now()
+     set enh_stone  = coalesce(enh_stone, 0)  - case when p_tier = 1 then v_cost else 0 end,
+         enh_stone2 = coalesce(enh_stone2, 0) + case when p_tier = 1 then p_qty when p_tier = 2 then -v_cost else 0 end,
+         enh_stone3 = coalesce(enh_stone3, 0) + case when p_tier = 2 then p_qty when p_tier = 3 then -v_cost else 0 end,
+         enh_stone4 = coalesce(enh_stone4, 0) + case when p_tier = 3 then p_qty else 0 end,
+         gold = gold - v_gold, updated_at = now()
    where id = v_uid
    returning * into v_row;
-  return jsonb_build_object('ok', true, 'got', p_qty, 'spent', v_cost, 'stones', v_row.enh_stone, 'stones2', v_row.enh_stone2);
+  return jsonb_build_object('ok', true, 'tier', p_tier, 'got', p_qty, 'spent', v_cost, 'gold', v_gold, 'gold_left', v_row.gold,
+    'stones', v_row.enh_stone, 'stones2', v_row.enh_stone2, 'stones3', v_row.enh_stone3, 'stones4', v_row.enh_stone4);
 end;
 $$;
-revoke all on function public.v2cap_stone_craft(int) from public, anon;
-grant execute on function public.v2cap_stone_craft(int) to authenticated;
+revoke all on function public.v2cap_stone_craft(int, int) from public, anon;
+grant execute on function public.v2cap_stone_craft(int, int) to authenticated;
 
 -- 作成：選んだ装備を1つ作って持ち物に入れる（+0・アイテムLV＝その装備の必要LV）
 -- 【確定】2026-10-10 ユーザーの表：作れるのはレア・エピック・レジェンダリー（ノーマルは作れない）。使うのは Gold と、その装備のエリアの残骸
@@ -5340,22 +5396,27 @@ grant execute on function public.v2cap_debug_gain_medals(int) to authenticated;
 
 -- 強化石を入れる（2026-11-08・鍛冶屋の強化を試す用。開発用の欄のボタン）。ふつうは出撃で勝った戦闘ごとに2%で1個（§5）
 -- ★2026-11-09 p_tier＝1 で良質な強化石（enh_stone2）。前の引数1つの形は消してから作る（2つの形が並ぶと呼び分けられない）
+-- ★2026-11-09 p_tier＝2 で希少な強化石（enh_stone3）・3 で至高の強化石（enh_stone4）も
 drop function if exists public.v2cap_debug_gain_stones(int);
 create or replace function public.v2cap_debug_gain_stones(p_amount int, p_tier int default 0)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_n int := greatest(1, least(coalesce(p_amount, 0), 1000));
+  v_t int := case when p_tier in (1, 2, 3) then p_tier else 0 end;
 begin
   if auth.uid() is null then return jsonb_build_object('ok', false, 'error', 'ログインが必要です'); end if;
   if not public.v2cap_is_dev() then return jsonb_build_object('ok', false, 'error', '開発限定です'); end if;
   update public.v2cap_profiles
-     set enh_stone = coalesce(enh_stone, 0) + case when p_tier = 1 then 0 else v_n end,
-         enh_stone2 = coalesce(enh_stone2, 0) + case when p_tier = 1 then v_n else 0 end,
+     set enh_stone = coalesce(enh_stone, 0) + case when v_t = 0 then v_n else 0 end,
+         enh_stone2 = coalesce(enh_stone2, 0) + case when v_t = 1 then v_n else 0 end,
+         enh_stone3 = coalesce(enh_stone3, 0) + case when v_t = 2 then v_n else 0 end,
+         enh_stone4 = coalesce(enh_stone4, 0) + case when v_t = 3 then v_n else 0 end,
          updated_at = now()
    where id = auth.uid();
   if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
-  return jsonb_build_object('ok', true, 'got', v_n, 'tier', case when p_tier = 1 then 1 else 0 end,
-    'stones', (select case when p_tier = 1 then enh_stone2 else enh_stone end from public.v2cap_profiles where id = auth.uid()));
+  return jsonb_build_object('ok', true, 'got', v_n, 'tier', v_t,
+    'stones', (select case v_t when 1 then enh_stone2 when 2 then enh_stone3 when 3 then enh_stone4 else enh_stone end
+               from public.v2cap_profiles where id = auth.uid()));
 end;
 $$;
 revoke all on function public.v2cap_debug_gain_stones(int, int) from public, anon;
@@ -9504,6 +9565,7 @@ declare
   c_mat_solo   constant int := 1;        -- ②完全ソロ討伐（v_solo）ならさらに必ず
   c_mat_min_contrib constant numeric := 10;   -- ②貢献度（与えたダメージ÷最大HP の%）がこれ以上なら、難易度の確率でさらに1個
   c_mat_chance constant jsonb := '{"normal": 10, "hard": 20, "expert": 40, "master": 60}';
+  c_stone4     constant jsonb := '{"normal": 10, "hard": 20}';   -- ⑤至高の強化石（%・challengeDefs.js の CH_STONE4_PCT・2026-11-09）
   v_rate jsonb;
   v_run  public.v2cap_dungeon_runs;
   v_mem  public.v2cap_dungeon_members;
@@ -9524,6 +9586,7 @@ declare
   v_mat  jsonb;
   v_own  jsonb;
   v_uq   jsonb;
+  v_stone4 int := 0;
 begin
   select * into v_run from public.v2cap_dungeon_runs where id = p_run;
   if not found or v_run.cleared_at is null then return null; end if;
@@ -9599,9 +9662,14 @@ begin
         v_uq := jsonb_build_object('id', v_inv, 'base_id', v_eq.id, 'ilv', v_eq.lv);
       end if;
     end if;
+    -- ⑤ 至高の強化石（2026-11-09・ユーザー選択「出撃・ボス・挑戦＋作る」）：専用装備と同じく 難易度の確率×報酬の割合
+    if random() * 100 < coalesce((c_stone4 ->> v_run.diff)::numeric, 0) * v_pct / 100.0 then
+      v_stone4 := 1;
+      update public.v2cap_profiles set enh_stone4 = coalesce(enh_stone4, 0) + v_stone4 where id = p_player;
+    end if;
   end if;
   return jsonb_build_object('exp', v_exp, 'gold', v_gold, 'pct', v_pct, 'solo', v_solo, 'level', public.v2cap_apply_exp(p_player, v_exp),
-                            'gear', v_gear, 'mat', v_mat, 'own', v_own, 'uq', v_uq);
+                            'gear', v_gear, 'mat', v_mat, 'own', v_own, 'uq', v_uq, 'stone4', case when v_stone4 > 0 then v_stone4 end);
 end;
 $$;
 revoke all on function public.v2cap_dungeon_pay_reward(bigint, uuid) from public, anon, authenticated;

@@ -3,7 +3,7 @@
 //   「難易度によって専用アイテムとレジェンダリーユニークのドロップ率も上げて」→「ハードは1.5倍」
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import {
   CHALLENGE_TIER_AREA, CHALLENGE_DIFFS, CHALLENGE_GEAR_AREA, CHALLENGE_BONUS, CHALLENGE_MATS, CHALLENGE_GEAR_DEFS,
   CHALLENGE_UNIQUE_DEFS, CHALLENGE_UNIQUE_LV, CHALLENGE_UNIQUE_POINTS,
@@ -308,7 +308,7 @@ test('落とし方：難易度ごとの抽選の割合（乱数を回して見�
   let g = 0
   for (let i = 0; i < N; i++) if (rollChallengeDrops({ diff: 'normal', pct: 30, weapons: ['杖'] }, rng).gear) g++
   assert.ok(Math.abs(g / N * 100 - 30) < 1.5)
-  assert.deepEqual(rollChallengeDrops({ diff: 'expert' }, rng), { gear: null, mat: 0, own: false, uq: false }, 'まだ無い段階は何も落とさない')
+  assert.deepEqual(rollChallengeDrops({ diff: 'expert' }, rng), { gear: null, mat: 0, own: false, uq: false, stone4: 0 }, 'まだ無い段階は何も落とさない')
 })
 
 test('報酬の画面に出す行（chDropsOf）：装備・素材・専用装備・ユニークの順・無いものは出さない', () => {
@@ -321,6 +321,9 @@ test('報酬の画面に出す行（chDropsOf）：装備・素材・専用装�
   assert.deepEqual(chDropsOf({ exp: 1, gold: 1 }), [], 'SQL を流す前の返事（gear が無い）でも壊れない')
   assert.deepEqual(chDropsOf({ gear: null, mat: null, own: null, uq: null }), [])
   assert.deepEqual(chDropsOf(null), [])
+  // 2026-11-09〜 至高の強化石（stone4）は素材の行でいちばん下
+  assert.deepEqual(chDropsOf({ ...r, stone4: 1 }).at(-1), { kind: 'mat', name: '至高の強化石', n: 1 })
+  assert.deepEqual(chDropsOf({ stone4: null }), [])
   // 画面の文字とコード（説明のコメントは除く）
   const screen = read('../components/V2capBossReward.jsx')
     .replace(/\{\/\*[\s\S]*?\*\/\}/g, '').split(/\r?\n/).map(l => l.replace(/\/\/.*$/, '')).join('\n')
@@ -397,7 +400,15 @@ test('流す追加分（作業フォルダ直下の v2cap_challenge_reward3_2026
   const delta = readFileSync(url, 'utf8').replace(/\r\n/g, '\n')
   const fns = [...delta.matchAll(/create or replace function public\.\w+\([\s\S]*?\n\$\$;/g)].map(m => m[0])
   assert.deepEqual(fns.map(f => f.match(/function public\.(\w+)/)[1]), ['v2cap_dungeon_pay_reward', 'v2cap_craft_challenge'])
-  for (const f of fns) assert.ok(SQL.includes(f), `${f.match(/function public\.(\w+)/)[1]} は全文と同じ`)
+  // ★あとで出した追加分（ファイル名の日付が後のもの）で同じ関数を作り直していれば、その関数はそちらでくらべる（2026-11-09 +20 で報酬の関数を作り直した）
+  const root = new URL('../../../', import.meta.url)
+  const later = readdirSync(root).filter(n => /^v2cap_\w+_(\d{8})\.sql$/.test(n) && n.match(/_(\d{8})\.sql$/)[1] > '20261106')
+  const redefinedLater = (name) => later.some(n => readFileSync(new URL(n, root), 'utf8').includes(`create or replace function public.${name}(`))
+  for (const f of fns) {
+    const name = f.match(/function public\.(\w+)/)[1]
+    if (redefinedLater(name)) continue
+    assert.ok(SQL.includes(f), `${name} は全文と同じ`)
+  }
   const mig = SQL.match(/update public\.v2cap_profiles p\n   set challenge_mats = \(select[\s\S]*?;\n/)[0]
   assert.ok(delta.includes(mig), '素材の鍵の足し合わせは全文と同じ')
   assert.ok(delta.indexOf(mig) < delta.indexOf('create or replace function public.v2cap_craft_challenge('), '足し合わせてから作成の関数')

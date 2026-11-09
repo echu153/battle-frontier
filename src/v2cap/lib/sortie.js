@@ -15,7 +15,7 @@
 import { spotOf, enemyLvOf, scaleByRole, LAST_SPOT } from './areas.js'
 import { itemOf, RARITIES, ARMOR_LINES, ACCESSORY_TYPES } from './equipment.js'
 import { weaponsOf } from './jobs.js'
-import { scrapNameOf, STONE_NAME, STONE2_NAME } from './smith.js'
+import { scrapNameOf, STONE_NAME, STONE2_NAME, STONE3_NAME, STONE4_NAME } from './smith.js'
 import { PAPIA_PCT, PAPIA_ROLE, papiaEnemyOf, takePapiaForce } from './papia.js'
 import {
   rollBoss, nextBossRate, bandAt, rollDropPart,
@@ -208,3 +208,24 @@ export const STONE2_PCT = 0.2   // 勝った戦闘で、良質な強化石が出
 export const STONE2_N = 1
 export const rollStone2 = (rng = Math.random, pct = STONE2_PCT) => (rng() * 100 < pct ? STONE2_N : 0)
 export const stone2Text = (n) => `${STONE2_NAME}×${n}を獲得した！`
+// 【確定】2026-11-09 希少な強化石（+11〜+15）・至高の強化石（+16〜+20）（smith.js の STONE_TIERS）：ユーザー選択「出撃・ボス・挑戦＋作る」→
+//   希少＝**エリア11からの場所**で勝った戦闘ごとに STONE3_PCT で1個（祠のフェアリーとパピアも＝その場所のエリアで見る）
+//   至高＝**エリア11からのボス**に勝ったとき STONE4_PCT で1個（四凶の報酬でも出る＝challengeDefs.js の CH_STONE4_PCT）
+//   こちらで決めた細部：前のエリアのボスを狩り続けて集められないように、どちらもエリア11から（STONE_HIGH_AREA）。確率はシミュで決めた
+//   ★決めるのはサーバー（v2cap_sortie_apply の c_stone3_…・c_stone4_…）。⚠数を変えたら SQL も直す（v2capsql.test.js が突き合わせる）
+//   ★乱数は場所やボスに関係なく1つずつ使う（シミュで確率だけを変えて同じ人どうしをくらべられるように）
+export const STONE_HIGH_AREA = 11
+export const STONE3_PCT = 0.4   // エリア11からの場所で勝った戦闘で、希少な強化石が出る確率（%）
+export const STONE3_N = 1
+export const rollStone3 = (area, rng = Math.random, pct = STONE3_PCT) => {
+  const r = rng()
+  return Number(area) >= STONE_HIGH_AREA && r * 100 < pct ? STONE3_N : 0
+}
+export const stone3Text = (n) => `${STONE3_NAME}×${n}を獲得した！`
+export const STONE4_PCT = 2   // エリア11からのボスに勝ったとき、至高の強化石が出る確率（%）
+export const STONE4_N = 1
+export const rollStone4 = (area, boss, rng = Math.random, pct = STONE4_PCT) => {
+  const r = rng()
+  return boss && Number(area) >= STONE_HIGH_AREA && r * 100 < pct ? STONE4_N : 0
+}
+export const stone4Text = (n) => `${STONE4_NAME}×${n}を獲得した！`

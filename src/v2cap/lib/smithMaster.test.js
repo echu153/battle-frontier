@@ -106,11 +106,12 @@ test('【確定】好感度は無い（ユーザー指示「鍛冶屋のおっ�
   for (const s of ['v2cap_smith_talk', 'v2cap_smith_seen', 'smith_affinity', 'smith_stage_seen', '好感度 {']) assert.ok(!smith.includes(s), s)
 })
 
-test('強化の結果：失敗→なぐさめる・+1〜6→喜ぶ・+7〜9（成功率40%以下）→すげえぞ・+10（上限）→最高傑作。成功はどれも笑顔', () => {
+test('強化の結果：失敗→なぐさめる・+1〜6→喜ぶ・+7〜19（成功率40%以下）→すげえぞ・上限（2026-11-09〜 +20）→最高傑作。成功はどれも笑顔', () => {
   assert.equal(GREAT_PLUS, 7)
   assert.equal(ENHANCE_RATE[GREAT_PLUS - 1], 40)
-  assert.equal(PLUS_MAX, 10)
-  assert.deepEqual([1, 6, 7, 9, 10].map(p => enhanceKindOf(true, p)), ['enhanceOk', 'enhanceOk', 'enhanceGreat', 'enhanceGreat', 'enhanceMax'])
+  assert.equal(PLUS_MAX, 20)
+  assert.deepEqual([1, 6, 7, 9, 10, 15, 19, 20].map(p => enhanceKindOf(true, p)),
+    ['enhanceOk', 'enhanceOk', 'enhanceGreat', 'enhanceGreat', 'enhanceGreat', 'enhanceGreat', 'enhanceGreat', 'enhanceMax'])
   assert.equal(enhanceKindOf(false, 9), 'enhanceFail')
   assert.ok([...MASTER_LINES.enhanceOk, ...MASTER_LINES.enhanceGreat, ...MASTER_LINES.enhanceMax].every(l => l.face === 'smile'))
   assert.ok(MASTER_LINES.enhanceFail.some(l => l.text.includes('次いこうぜ')), '失敗はなぐさめる')

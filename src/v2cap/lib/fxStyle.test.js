@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { WIN_TIERS } from './casino.js'
-import { enhanceTierOf, enhanceChargeMsOf, enhanceHoldMsOf, enhanceGlowOf, enhanceTitleOf, CRAFT_TIERS, craftTierOf, craftTitleOf, CRAFT_STRIKES, REVELATION_STYLE, FORTUNE_NAMES, revelationStyleOf, TREE_ART } from './fxStyle.js'
+import { enhanceTierOf, enhanceChargeMsOf, enhanceHoldMsOf, enhanceGlowOf, enhanceTitleOf, CRAFT_TIERS, craftTierOf, craftTitleOf, CRAFT_STRIKES, REVELATION_STYLE, FORTUNE_NAMES, revelationStyleOf, TREE_ART, ENHANCE_TIERS } from './fxStyle.js'
 import { CRAFT_RARITIES } from './smith.js'
 import { RARITY_COLOR } from './equipment.js'
 import { PLUS_MAX } from './smith.js'
@@ -11,7 +11,7 @@ import { ITEM_BY_ID } from './equipment.js'
 import { powerAt, statsAt, statChangeOf } from './gear.js'
 
 test('【確定】強化の演出：+1〜+10 のどれにも段階がある・高いほど派手（+10は虹）', () => {
-  const order = ['blue', 'purple', 'gold', 'max']
+  const order = ['blue', 'purple', 'gold', 'orange', 'red', 'max']   // 2026-11-09〜 上限が+20（+11〜+15 希少の橙・+16〜+19 至高の赤・+20 虹）
   let prev = 0
   for (let p = 1; p <= PLUS_MAX; p++) {
     const t = enhanceTierOf(p)
@@ -22,12 +22,15 @@ test('【確定】強化の演出：+1〜+10 のどれにも段階がある・�
   }
   assert.equal(enhanceTierOf(PLUS_MAX).key, 'max')
   assert.equal(enhanceTierOf(1).key, 'blue')
+  assert.deepEqual([10, 11, 15, 16, 19, 20].map(p => enhanceTierOf(p).key), ['gold', 'orange', 'orange', 'red', 'red', 'max'], '虹は上限の+20だけ')
+  for (const t of ENHANCE_TIERS) assert.ok(t.lv >= 1 && t.lv <= 4, `${t.key} の光の量`)
 })
 
 test('【確定】強化のためる時間：+5 にする回までは前のまま（1.5〜1.9秒）・+6 にする回から強化値ごとに長く（+10 で5秒）', () => {
   // 2026-10-24 ユーザー指示「強化値が＋6の強化以降、強化値によって成否の演出（光が貯まるまでの時間）が遅くなるようにして ※緊張感を持たせるため」
   assert.deepEqual([1, 2, 3, 4, 5].map(enhanceChargeMsOf), [1500, 1600, 1700, 1800, 1900], '+5 までは前（成功率で決めていた値）と同じ')
   assert.deepEqual([6, 7, 8, 9, 10].map(enhanceChargeMsOf), [2500, 3000, 3500, 4000, 5000])
+  assert.deepEqual([11, 15, 16, 20].map(enhanceChargeMsOf), [5250, 6250, 6500, 7500], '2026-11-09〜 +11からも+1ごとに0.25秒')
   for (let n = 2; n <= PLUS_MAX; n++) assert.ok(enhanceChargeMsOf(n) > enhanceChargeMsOf(n - 1), `+${n} は +${n - 1} より長い`)
   assert.ok(enhanceChargeMsOf(6) - enhanceChargeMsOf(5) >= 500, '+6 から目に見えて長くなる')
   // 演出は強化値（plusTo）で決める（前は成功率 job.rate を渡していた）

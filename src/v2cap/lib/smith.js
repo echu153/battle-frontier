@@ -7,7 +7,7 @@
 //   ・強化に使うのは **Gold と、その装備が落ちるエリアの「残骸」だけ**（強化石は使わない）
 //   ・残骸は**装備を分解すると手に入る**（その装備のエリアの残骸）。数はレア度で決まる
 //     ＝ ノーマル1・レア5・エピック10・レジェンダリー25
-//   ・強化値は **+10 まで**。+1 ごとに元の強さの0.1倍ずつ足す（**足し算**：+5で1.5倍・+10で2.0倍）。
+//   ・強化値は **+10 まで**（2026-11-09 から+20まで＝下の PLUS_MAX）。+1 ごとに元の強さの0.1倍ずつ足す（**足し算**：+5で1.5倍・+10で2.0倍）。
 //     ただし1回の強化で戦闘力は**最低でも+1**（2026-10-12・下の注）
 //   ・1回の強化（+n にする回）にかかる量と成功率は下の表。Gold＝**必要LV × 20 × n**
 //   ・**失敗すると残骸とGoldはなくなり、強化値はそのまま**（下がらない・壊れない）
@@ -28,11 +28,12 @@ import { CHALLENGE_MATS } from './challengeDefs.js'
 
 // ===== 強化値 =====
 // PLUS_MAX＝鍛冶屋のふつうの強化で上げられる上限
-export const PLUS_MAX = 10
+// 【確定】2026-11-09 **+20まで**（ユーザー選択「+11〜+15は希少な強化石・+16〜+20は至高の強化石・神域は使わない」。前は+10）
+export const PLUS_MAX = 20
 // PLUS_CAP＝持ち物の強化値の上限。【確定】2026-10-23 V1からの引き継ぎの強化券（v1carry.js）は V1 の強化値（最大+16）まで上げられる
-//   （ユーザー「+10以降も反映させていい（通常プレイでも後日追加させるからいい）」）。+11からも +1ごとに元の強さの0.1倍を足す（+16で2.6倍）。
-//   ★ふつうの強化（+11から先の成功率など）はユーザーがあとで足す。それまで +11 より上になるのは強化券だけ
-export const PLUS_CAP = 16
+//   （ユーザー「+10以降も反映させていい（通常プレイでも後日追加させるからいい）」）。+11からも +1ごとに元の強さの0.1倍を足す。
+//   2026-11-09 からはふつうの強化も+20まで＝上限も+20（+16で2.6倍・+20で3.0倍）。券の上限は+16のまま（v1carry.js の V1_TICKET_MAX）
+export const PLUS_CAP = 20
 // 持ち物の行の強化値（SQLを流す前の行には plus が無いので0として扱う）
 export const plusOf = (inv) => Math.max(0, Math.min(PLUS_CAP, Math.floor(Number(inv?.plus) || 0)))
 // 強さの倍率（足し算）。+0 はちょうど1（強化していない装備の強さは前と変わらない）。
@@ -90,36 +91,71 @@ export const bulkPickable = ({ inv, item }, wornIds) => !wornIds.has(String(inv.
 //   「ノーマル 強化石・レア 良質な強化石・エピック 希少な強化石・レジェンド 至高の強化石・ユニーク 神域の強化石」→
 //   「強化値の段ごと」と「+6から良質」を選んだ）：
 //   ・+1〜+5にする回＝強化石・+6〜+10にする回＝**良質な強化石**（どちらも1回1個）。残骸を使い始める+6と同じ段
-//   ・希少・至高・神域は、+11から先の強化を足すときに使う（STONE_LATER・まだ手に入らない）
+//   ・希少・至高・神域は、+11から先の強化を足すときに使う（→ 下の 2026-11-09「+11〜+20」で希少と至高を入れた・神域は使わない）
 //   ・良質な強化石は、出撃で勝つと低い確率で出る（sortie.js の STONE2_PCT）・鍛冶屋で強化石10個から1個作れる（STONE_CRAFT）
 //     ・賭博場の景品の交換所にも並べる（メダル500枚・casino.js の PRIZES）（3つともユーザー選択）
 //   ★サーバーは v2cap_enhance（良質は v2cap_profiles.enh_stone2）・作るのは v2cap_stone_craft
+// 【確定】2026-11-09 **+11〜+20**（後半にGold・強化石・メダルが余る → ユーザー「+11から先で吸う」→ 選んだこと）：
+//   ・+11〜+15にする回＝**希少な強化石**・+16〜+20にする回＝**至高の強化石**（どちらも1回1個）。**神域の強化石は使わない**
+//   ・成功率は+11の9%から1%ずつ下げて、+19と+20は1%（ユーザー選択「1%ずつ下げる」）
+//   ・強さは今までどおり+1ごとに元の0.1倍（+20で3.0倍）。後半の強さに入れて、エリア11〜15の敵を測り直した（ユーザー選択・areas.js の ENH_MULT）
+//   ・希少＝エリア11からの出撃で勝つとまれに（sortie.js の STONE3_PCT）・至高＝エリア11からのボスに勝つとまれに（STONE4_PCT）と
+//     四凶の報酬でまれに（challengeDefs.js の CH_STONE4_PCT）。どれも鍛冶屋で1つ下の石10個＋Goldから作れる（ユーザー選択・STONE_CRAFT_GOLD）
+//   ・残骸は+11からも1段ごとに1個ずつ増やす（12〜21）・挑戦の装備のボスの素材は1個のまま・Gold は今までどおり 必要LV×20×n（こちらで決めた）
+//   ★サーバーは希少＝v2cap_profiles.enh_stone3・至高＝enh_stone4。icon・color は画面の印（鍛冶屋・出撃のログ・挑戦の報酬）
 export const STONE_TIERS = [
-  { name: '強化石', from: 1, col: 'enh_stone' },
-  { name: '良質な強化石', from: 6, col: 'enh_stone2' },
+  { name: '強化石', from: 1, col: 'enh_stone', icon: '💎', color: '#9fd8ff' },
+  { name: '良質な強化石', from: 6, col: 'enh_stone2', icon: '💠', color: '#c9a6ff' },
+  { name: '希少な強化石', from: 11, col: 'enh_stone3', icon: '🔶', color: '#ffb347' },
+  { name: '至高の強化石', from: 16, col: 'enh_stone4', icon: '🌟', color: '#ffe033' },
 ]
-export const STONE_LATER = ['希少な強化石', '至高の強化石', '神域の強化石']
 export const STONE_NAME = STONE_TIERS[0].name
 export const STONE2_NAME = STONE_TIERS[1].name
 export const STONE2_FROM = STONE_TIERS[1].from
-// +n にする回に使う強化石の段（0＝強化石・1＝良質な強化石）
+export const STONE3_NAME = STONE_TIERS[2].name
+export const STONE3_FROM = STONE_TIERS[2].from
+export const STONE4_NAME = STONE_TIERS[3].name
+export const STONE4_FROM = STONE_TIERS[3].from
+// +n にする回に使う強化石の段（0＝強化石・1＝良質・2＝希少・3＝至高）
 export const stoneTierOf = (next) => STONE_TIERS.reduce((t, s, i) => (next >= s.from ? i : t), 0)
 export const ENHANCE_STONE = 1
-export const ENHANCE_SCRAP = [0, 0, 0, 0, 0, 7, 8, 9, 10, 11]
-export const ENHANCE_BOSS_MAT = [0, 0, 0, 0, 0, 1, 1, 1, 1, 1]
+export const ENHANCE_SCRAP = [0, 0, 0, 0, 0, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
+export const ENHANCE_BOSS_MAT = [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
 // 残骸（挑戦の装備はボスの素材）を使い始める回（+6）。説明の文に出す
 export const ENHANCE_SCRAP_FROM = ENHANCE_SCRAP.findIndex(n => n > 0) + 1
-export const ENHANCE_RATE = [100, 90, 80, 70, 60, 50, 40, 30, 20, 10]
+export const ENHANCE_RATE = [100, 90, 80, 70, 60, 50, 40, 30, 20, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1]
 export const ENHANCE_GOLD_PER_LV = 20
 export const enhanceGoldOf = (ilv, next) => Math.max(1, ilv || 1) * ENHANCE_GOLD_PER_LV * next
-// 持っている強化石の数（tier＝段・サーバーは v2cap_profiles.enh_stone と enh_stone2。SQLを流す前の行は0）
+// 持っている強化石の数（tier＝段・サーバーは v2cap_profiles.enh_stone〜enh_stone4。SQLを流す前の行は0）
 export const stoneHaveOf = (prof, tier = 0) => Math.max(0, Math.floor(Number(prof?.[STONE_TIERS[tier]?.col]) || 0))
 export const stoneOf = (prof) => stoneHaveOf(prof, 0)
 export const stone2Of = (prof) => stoneHaveOf(prof, 1)
-// 良質な強化石を作る（鍛冶屋・サーバーは v2cap_stone_craft）：強化石10個で1個・1回で9999個まで（必ずできる）
+export const stone3Of = (prof) => stoneHaveOf(prof, 2)
+export const stone4Of = (prof) => stoneHaveOf(prof, 3)
+// 1つ上の強化石を作る（鍛冶屋・サーバーは v2cap_stone_craft）：1つ下の石10個で1個・1回で9999個まで（必ずできる）。
+//   tier＝作る石の段（1＝良質・2＝希少・3＝至高）。良質は強化石だけ（2026-11-09 ユーザー選択「強化石10個から良質1個」）・
+//   希少と至高は Gold も使う（2026-11-09 ユーザー選択「1つ下の石10個＋Gold」・Gold の額はシミュで決めた）
 export const STONE_CRAFT = 10
 export const STONE_CRAFT_MAX = 9999
-export const stoneCraftMaxOf = (prof) => Math.min(STONE_CRAFT_MAX, Math.floor(stoneOf(prof) / STONE_CRAFT))
+export const STONE_CRAFT_GOLD = [0, 0, 30000, 100000]
+export const STONE_CRAFT_TIERS = [1, 2, 3]
+// n個作るのにかかるもの（from＝使う石の段・stone＝その数・gold）
+export const stoneCraftCostOf = (tier, n) => ({ from: tier - 1, stone: n * STONE_CRAFT, gold: n * (STONE_CRAFT_GOLD[tier] || 0) })
+// いま作れるいちばん多い数（石と Gold の両方で決まる）
+export const stoneCraftMaxOf = (prof, tier = 1) => {
+  const g = STONE_CRAFT_GOLD[tier] || 0
+  const byGold = g > 0 ? Math.floor((Number(prof?.gold) || 0) / g) : STONE_CRAFT_MAX
+  return Math.max(0, Math.min(STONE_CRAFT_MAX, Math.floor(stoneHaveOf(prof, tier - 1) / STONE_CRAFT), byGold))
+}
+// 作れないわけ（作れるなら null）。見る順はサーバー（v2cap_stone_craft）と同じ（段→個数→石→Gold）
+export const stoneCraftErrorOf = (prof, tier, n) => {
+  if (!STONE_CRAFT_TIERS.includes(tier)) return '作れない石です'
+  if (!Number.isInteger(n) || n < 1 || n > STONE_CRAFT_MAX) return '個数が正しくありません'
+  const c = stoneCraftCostOf(tier, n)
+  if (stoneHaveOf(prof, c.from) < c.stone) return `${STONE_TIERS[c.from].name}が足りません`
+  if ((Number(prof?.gold) || 0) < c.gold) return 'Goldが足りません'
+  return null
+}
 // 挑戦の装備（専用装備・四凶のユニーク＝equipment.js の isChallenge と isChallengeUnique の両方）か。強化でボスの素材を使う
 export const usesBossMat = (item) => !!item?.bossKey
 // +n にする回の残骸の数。ノーマル（初期装備もノーマル）と挑戦の装備は0。★サーバーも rarity = 'N' かボスの装備なら0
@@ -197,17 +233,19 @@ export const craftErrorOf = (item, prof) => {
 
 // +from から +to まで上げるのに、平均でかかる量（説明とテスト用）。
 // scrap＝レア・エピック・レジェンダリー・ユニークのとき／mat＝挑戦の装備のとき（どちらか一方を使う）。
-// stone＝強化石と良質な強化石の合計・stone2＝そのうちの良質な強化石
+// stone＝強化石の合計（どの段も）・stone2＝そのうちの良質な強化石・stones＝段ごと（[強化石, 良質, 希少, 至高]）
 export const expectedEnhanceCost = (ilv, from = 0, to = PLUS_MAX) => {
   let stone = 0, stone2 = 0, scrap = 0, mat = 0, gold = 0, tries = 0
+  const stones = STONE_TIERS.map(() => 0)
   for (let n = from + 1; n <= to; n++) {
     const p = ENHANCE_RATE[n - 1] / 100
     tries += 1 / p
     stone += ENHANCE_STONE / p
+    stones[stoneTierOf(n)] += ENHANCE_STONE / p
     if (stoneTierOf(n) === 1) stone2 += ENHANCE_STONE / p
     scrap += ENHANCE_SCRAP[n - 1] / p
     mat += ENHANCE_BOSS_MAT[n - 1] / p
     gold += enhanceGoldOf(ilv, n) / p
   }
-  return { tries, stone, stone2, scrap, mat, gold }
+  return { tries, stone, stone2, stones, scrap, mat, gold }
 }

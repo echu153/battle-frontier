@@ -73,7 +73,7 @@ export const MASTER_LINES = {
   streak3: [{ face: 'normal', text: 'おっ？ どうした、俺の顔になんかついてるか？' }],
   streak5: [{ face: 'smile', text: 'ガハハ！ くすぐってえな！' }],
   streak8: [{ face: 'normal', text: 'おいおい、それじゃ仕事にならねえだろ！' }],
-  // 強化の結果（enhanceKindOf）：+1〜6に成功・+7〜9に成功（成功率40%以下）・+10（上限）に成功・失敗
+  // 強化の結果（enhanceKindOf）：+1〜6に成功・+7から上に成功（成功率40%以下）・上限（smith.js の PLUS_MAX＝2026-11-09 から+20）に成功・失敗
   enhanceOk: [
     { face: 'smile', text: 'よっしゃあ！ いい仕上がりだぜ' },
     { face: 'smile', text: 'ガハハ！ どうだ、見事なもんだろう！' },

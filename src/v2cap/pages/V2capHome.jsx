@@ -34,7 +34,7 @@ import { SHOP_COLOR } from '../lib/shop.js'
 import { START_CLASSES, weaponsOf, attackKindOf, classDescOf } from '../lib/jobs.js'
 import { TOWER_NAME, TOWER_SHORT_NAME } from '../lib/tower.js'
 import { openUntilOf } from '../lib/sortie.js'
-import { STONE_NAME, STONE2_NAME } from '../lib/smith.js'
+import { STONE_TIERS } from '../lib/smith.js'
 import { DAY_QUEST_TITLE } from '../lib/dayQuestRules.js'
 import { spotLabel } from '../lib/areas.js'
 import { RARITY_COLOR } from '../lib/equipment.js'
@@ -308,7 +308,7 @@ export default function V2capHome() {
     const { data, error: rpcErr } = await supabase.rpc('v2cap_debug_gain_stones', { p_amount: amount, p_tier: tier })
     setBusy(false)
     if (rpcErr || !data?.ok) { setDevMsg(`⚠ ${rpcErr?.message || data?.error || '失敗しました'}`); return }
-    setDevMsg(`${tier === 1 ? STONE2_NAME : STONE_NAME}+${data.got.toLocaleString()}（${Number(data.stones).toLocaleString()}個）`)
+    setDevMsg(`${STONE_TIERS[Number(data.tier) || 0]?.name}+${data.got.toLocaleString()}（${Number(data.stones).toLocaleString()}個）`)
     await refresh()
   }
   // 安息の祠を出す（2026-10-13・演出を試す用）：出撃で選んでいる場所（開いていなければ開いている一番先）に置く
@@ -524,16 +524,12 @@ export default function V2capHome() {
                           メダル+{n.toLocaleString()}
                         </button>
                       ))}
-                      {[10, 100].map(n => (
-                        <button key={`s${n}`} onClick={() => gainStones(n)} disabled={busy} style={miniBtn('#9fd8ff')}>
-                          {STONE_NAME}+{n}
+                      {/* 強化石は段ごと（2026-11-09〜 強化石・良質・希少・至高＝smith.js の STONE_TIERS） */}
+                      {STONE_TIERS.flatMap((t, tier) => [10, 100].map(n => (
+                        <button key={`s${tier}-${n}`} onClick={() => gainStones(n, tier)} disabled={busy} style={miniBtn(t.color)}>
+                          {t.name}+{n}
                         </button>
-                      ))}
-                      {[10, 100].map(n => (
-                        <button key={`s2${n}`} onClick={() => gainStones(n, 1)} disabled={busy} style={miniBtn('#c9a6ff')}>
-                          {STONE2_NAME}+{n}
-                        </button>
-                      ))}
+                      )))}
                       <button onClick={shrineNext} disabled={busy || prof?.shrine_force} style={miniBtn('#9fe8ff')}>
                         {prof?.shrine_force ? '⛲ 次の出撃で祠を見つける（待機中）' : '⛲ 次の出撃で祠を見つける'}
                       </button>

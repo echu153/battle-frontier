@@ -75,12 +75,12 @@ const jobsLib = await import(B + 'v2cap/lib/jobs.js')
 const { statsAt } = await import(B + 'v2cap/lib/gear.js')
 const { toFighter, totalStats } = await import(B + 'v2cap/lib/loadout.js')
 const { CAP_RULES } = await import(B + 'v2cap/lib/rules.js')
-const { pickEncounter, rollRewards, nextBossRate, openUntilOf, clearSpot, rollEquipDrop, rollChest, rollStone, rollStone2, STONE2_PCT } = await import(B + 'v2cap/lib/sortie.js')
+const { pickEncounter, rollRewards, nextBossRate, openUntilOf, clearSpot, rollEquipDrop, rollChest, rollStone, rollStone2, STONE2_PCT, rollStone3, STONE3_PCT, rollStone4, STONE4_PCT } = await import(B + 'v2cap/lib/sortie.js')
 const { LAST_SPOT, AREA_LIST, toFighter: enemyFighter, stdPowerAt } = areas
 const { applyExp, bodyPowerAt, totalExpTo, POINT_UNIT, totalPointsTo } = level
 const { applyJobExp, jobOf, learnOrderOf, attackKindOf, canEquipType, JOB_MAX, nextClassesOf, CLASS_BY_ID } = jobsLib
 const { ICHIJI_BUILDS } = await import(B + 'v2cap/lib/skillsIchiji.js')
-const { enhanceCostOf, rollEnhance, scrapYieldOf, scrapAreaOf, STONE_CRAFT } = await import(B + 'v2cap/lib/smith.js')
+const { enhanceCostOf, rollEnhance, scrapYieldOf, scrapAreaOf, STONE_CRAFT, STONE_CRAFT_GOLD, PLUS_MAX } = await import(B + 'v2cap/lib/smith.js')
 const { shrineEncounterOf } = await import(B + 'v2cap/lib/shrine.js')
 const tower = await import(B + 'v2cap/lib/tower.js')
 
@@ -112,9 +112,19 @@ const PLUS_ON = !process.argv.includes('--noplus')
 //   ・**良質な強化石**（2026-11-09〜・+6〜+10の強化に使う）：勝った戦闘ごとに STONE2_PCT で1個（sortie.js の rollStone2）。
 //     足りないときは、強化石を10個で1個に作る（鍛冶屋と同じ STONE_CRAFT・+1〜+5の強化を先にするので、余った強化石から作る）。
 //     --stone2 0.2 で確率（%）を変えて測る
+//   ・**希少な強化石・至高の強化石**（2026-11-09〜・+11〜+15・+16〜+20の強化に使う）：エリア11からの場所で勝つと STONE3_PCT（rollStone3）・
+//     エリア11からのボスに勝つと STONE4_PCT（rollStone4）。足りないときは1つ下の石10個＋Gold（STONE_CRAFT_GOLD）で作る
+//     （作ったあとも強化のGoldが払えるときだけ）。四凶の報酬（挑戦）はシミュでは回さない。
+//     --stone3 0.2 --stone4 2 で確率（%）を、--craftgold 10000,50000 で作るときのGold（希少,至高）を変えて測る
 const SMITH_ON = !process.argv.includes('--nosmith')
 const SMITH_CAP = arg('smithcap', 'table')
 const STONE2_AT = Number(arg('stone2', STONE2_PCT))
+const STONE3_AT = Number(arg('stone3', STONE3_PCT))
+const STONE4_AT = Number(arg('stone4', STONE4_PCT))
+// --highcap 10：エリア11〜15の見込みの強化値（areas.js の ASSUMED_PLUS）を変えて測る（+11から先を入れる前とくらべる・2026-11-09）
+const HIGH_CAP = arg('highcap', null)
+if (HIGH_CAP !== null) for (let k = 10; k < areas.ASSUMED_PLUS.length; k++) areas.ASSUMED_PLUS[k] = Number(HIGH_CAP)
+const CRAFT_GOLD = (() => { const a = arg('craftgold', null); if (!a) return STONE_CRAFT_GOLD; const [g3, g4] = a.split(',').map(Number); return [0, 0, g3, g4 ?? g3] })()
 // アセンション（2026-10-30〜・ユーザー指示「モンスターはプレイヤーのレベルもそうだけど装備、アセンション、スキルなども考慮したうえで
 //   設計してほしい」）：CLASS LVが上がってAPが入るたびに、ふつうの人の開け方（simulate の ascSpend）で開く。--noasc で開かない
 //   ⚠前（2026-10-13〜10-29）は「敵の強さの測り直しには入れない」（ユーザー決定）で、開かずに測っていた
@@ -237,8 +247,9 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
   const scrap = {}
   const scrapGot = { dismantle: 0, chest: 0 }   // 残骸の入り方（分解・宝箱）の合計
   let goldSpent = 0, enhTries = 0, enhWins = 0
-  let stones = 0, stonesGot = 0   // 強化石（2026-11-08〜）：持っている数・入った数の合計
-  let stones2 = 0, stones2Got = 0, stones2Made = 0   // 良質な強化石（2026-11-09〜）：持っている数・出撃で入った数・作った数
+  // 強化石（2026-11-08〜）・良質（11-09〜）・希少・至高（11-09〜）：段ごとに 持っている数・出撃で入った数・作った数
+  const stoneBag = [0, 0, 0, 0], stoneGot = [0, 0, 0, 0], stoneMade = [0, 0, 0, 0]
+  let goldCraft = 0   // 石を作るのに使ったGold
   const plusByArea = {}   // エリア → そこにいた1時間ごとの「着けている装備の強化値の平均」の合計と数
   // エリアごとの「見込みの強化値つき÷強化なし」の戦闘力（--enh が敵の倍率 ENH_MULT を作るのに使う）
   const enhByArea = {}
@@ -342,7 +353,7 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
   const SLOT_RANK = { weapon: 0, head: 1, body: 2, arm: 3, foot: 4, acc1: 5, acc2: 6 }
   const enhance = () => {
     let up = false
-    const cap = SMITH_CAP === 'none' ? 10 : areas.assumedPlusAt(openUntilOf(cleared))
+    const cap = SMITH_CAP === 'none' ? PLUS_MAX : areas.assumedPlusAt(openUntilOf(cleared))
     for (let guard = 0; guard < 1000; guard++) {
       const worn = Object.entries(equipped)
         .map(([slot, row]) => ({ slot, id: inventory[row - 1]?.base_id }))
@@ -354,15 +365,22 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
       for (const w of worn) {
         const c = enhanceCostOf(w.item, { plus: w.plus, ilv: w.item.lv })
         // 強化石（2026-11-08〜）も払えるときだけ。挑戦の装備（ボスの素材）はシミュでは拾わない
-        // 良質な強化石（2026-11-09〜・+6から）が足りなければ、強化石10個から作る（ほかが払えるときだけ）
+        // 使う段の石が足りなければ、1つ下の石10個（＋Gold）から作る。1つ下も足りなければさらに下から作る
+        //   （強化石→良質→希少→至高・ほかが払えるときだけ・作ったあとも強化のGoldが残るときだけ）
         if (!c || c.mat > 0 || gold < c.gold || (c.scrap > 0 && (scrap[c.area] || 0) < c.scrap)) continue
-        if (c.stoneTier === 1) {
-          if (stones2 < c.stone && stones >= STONE_CRAFT) { stones -= STONE_CRAFT; stones2 += 1; stones2Made += 1 }
-          if (stones2 < c.stone) continue
-        } else if (stones < c.stone) continue
+        const t = c.stoneTier
+        const ensure = (k, need) => {
+          while (stoneBag[k] < need) {
+            if (k === 0 || !ensure(k - 1, STONE_CRAFT) || gold - CRAFT_GOLD[k] < c.gold) return false
+            stoneBag[k - 1] -= STONE_CRAFT; stoneBag[k] += 1; stoneMade[k] += 1
+            gold -= CRAFT_GOLD[k]; goldCraft += CRAFT_GOLD[k]
+          }
+          return true
+        }
+        if (!ensure(t, c.stone)) continue
         gold -= c.gold
         goldSpent += c.gold
-        if (c.stoneTier === 1) stones2 -= c.stone; else stones -= c.stone
+        stoneBag[t] -= c.stone
         if (c.scrap > 0) scrap[c.area] -= c.scrap
         enhTries++
         if (rollEnhance(c.rate, rng)) { plusById.set(w.id, w.plus + 1); enhWins++; up = true }
@@ -527,9 +545,14 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
           if (k) { scrap[enc.spot.area] = (scrap[enc.spot.area] || 0) + k; scrapGot.chest += k }
         }
         // 強化石（2026-11-08〜）：勝った戦闘ごとに2%で1個（祠・パピアも＝画面・サーバーと同じ rollStone）
-        if (smithOn) { const s = rollStone(rng); stones += s; stonesGot += s }
+        if (smithOn) { const s = rollStone(rng); stoneBag[0] += s; stoneGot[0] += s }
         // 良質な強化石（2026-11-09〜）：強化石とは別に引く（sortie.js の rollStone2）
-        if (smithOn) { const s = rollStone2(rng, STONE2_AT); stones2 += s; stones2Got += s }
+        if (smithOn) { const s = rollStone2(rng, STONE2_AT); stoneBag[1] += s; stoneGot[1] += s }
+        // 希少・至高（2026-11-09〜）：エリア11からの場所で勝つと希少・エリア11からのボスに勝つと至高（sortie.js の rollStone3・rollStone4）
+        if (smithOn) {
+          const s3 = rollStone3(enc.spot.area, rng, STONE3_AT); stoneBag[2] += s3; stoneGot[2] += s3
+          const s4 = rollStone4(enc.spot.area, enc.role === 'boss', rng, STONE4_AT); stoneBag[3] += s4; stoneGot[3] += s4
+        }
       }
       // 初期職がClassLV30（上限）になったら、すぐ系統の上位職へ（★最初の職業のClassLV30の時間は転職の前に数える）
       if (CLASS_BY_ID[cls]?.stage === 'shoki' && j.lv >= JOB_MAX) {
@@ -572,7 +595,9 @@ export const simulate = ({ hours = HOURS, seed = SEED, start = START, gear = GEA
     hourly, spotClearHour, lvAtClear, firstBossWin, lvAtSpotHour, expAtSpotHour, expInSpot, hoursInSpot, powerByLv,
     learned, cls, start, jobs, job30Hour, advancedHour, expAtJobHour, expAtLvHour, gold,
     fightsInSpot, enhByArea, turnsByArea,
-    plusByArea, goldSpent, enhTries, enhWins, scrap, scrapGot, stones, stonesGot, stones2, stones2Got, stones2Made,
+    plusByArea, goldSpent, goldCraft, enhTries, enhWins, scrap, scrapGot,
+    stones: stoneBag[0], stonesGot: stoneGot[0], stones2: stoneBag[1], stones2Got: stoneGot[1], stones2Made: stoneMade[1],
+    stoneBag, stoneGot, stoneMade, gold450: gold,
     asc: ascByCls,
     final: { profile: prof(), inventory },   // 最後のキャラ（職業ごとの強さを比べるのに使う）
   }
@@ -715,8 +740,11 @@ const tune = async () => {
   }
   // 強化の倍率（ENH_MULT）：そのエリアにいる間の「強化つき÷強化なし」の戦闘力の平均へ、damp の割合で近づける
   //   （2026-10-13〜 鍛冶屋を実際に使う人＝見込みの強化値が上限。見込みが+0のエリアは1のまま）。来た人がいないエリアは動かさない
+  //   --enhfrom 11：そのエリアから先だけ動かす（2026-11-09 +11〜+20 を入れたとき、エリア11〜15だけ測り直した）
+  const ENH_FROM = Number(arg('enhfrom', 1))
   const updateEnh = (results, damp) => {
     areas.ENH_MULT.forEach((m, k) => {
+      if (k + 1 < ENH_FROM) return
       if (areas.ASSUMED_PLUS[k] === 0) { areas.ENH_MULT[k] = 1; return }
       let sum = 0, n = 0
       for (const r of results) { const v = r.enhByArea?.[k + 1]; if (v) { sum += v.sum; n += v.n } }
@@ -873,7 +901,7 @@ const report = async () => {
   const all = {}
   const plusAcc = AREA_LIST.map(() => ({ sum: 0, n: 0 }))   // --smith：エリアごとの「着けている装備の強化値の平均」
   const spent = []
-  const got = { dismantle: [], chest: [], stone: [], stoneLeft: [], stone2: [], stone2Left: [], stone2Made: [] }   // 残骸の入り方・強化石の入った数と余った数（人ごとの合計）
+  const got = { dismantle: [], chest: [], stone: [], stoneLeft: [], stone2: [], stone2Left: [], stone2Made: [], tiers: [[], [], [], []], gold365: [], gold450: [], craft: [] }   // 残骸の入り方・強化石の入った数と余った数（人ごとの合計）
   const allRuns = await runMany(classes.flatMap(c => seeds.map(s => ({ hours: HOURS, seed: s, start: c }))))
   let ri = 0
   for (const c of classes) {
@@ -892,6 +920,10 @@ const report = async () => {
       got.stone2.push(r.stones2Got || 0)
       got.stone2Left.push(r.stones2 || 0)
       got.stone2Made.push(r.stones2Made || 0)
+      for (let t = 0; t < 4; t++) got.tiers[t].push({ got: r.stoneGot?.[t] || 0, made: r.stoneMade?.[t] || 0, left: r.stoneBag?.[t] || 0 })
+      got.gold365.push(gold365)
+      got.gold450.push(r.gold450 ?? 0)
+      got.craft.push(r.goldCraft || 0)
     }
   }
   const runs = classes.length * seeds.length
@@ -931,6 +963,11 @@ const report = async () => {
     console.log(`強化石（${HOURS}時間の合計の中央値）\t入った ${median(got.stone)}（1時間あたり ${perHour(median(got.stone))}）・余り ${median(got.stoneLeft)}`)
     // 良質な強化石（2026-11-09〜）：出撃で入った数・強化石から作った数・余り
     console.log(`良質な強化石（${HOURS}時間の合計の中央値・出撃で${STONE2_AT}%）\t出撃で入った ${median(got.stone2)}・作った ${median(got.stone2Made)}・余り ${median(got.stone2Left)}`)
+    // 希少・至高（2026-11-09〜）と Gold の余り（後半に Gold が余るのを吸えているか）
+    const tierLine = (t, label, pct) => console.log(`${label}（${HOURS}時間の合計の中央値・${pct}）\t出撃で入った ${median(got.tiers[t].map(x => x.got))}・作った ${median(got.tiers[t].map(x => x.made))}・余り ${median(got.tiers[t].map(x => x.left))}`)
+    tierLine(2, '希少な強化石', `エリア11から勝つと${STONE3_AT}%・作るGold ${CRAFT_GOLD[2]}`)
+    tierLine(3, '至高の強化石', `エリア11からのボスで${STONE4_AT}%・作るGold ${CRAFT_GOLD[3]}`)
+    console.log(`Goldの余り（中央値）\t365時間目 ${median(got.gold365)}・${HOURS}時間目 ${median(got.gold450)}・石を作るのに使った ${median(got.craft)}`)
   }
 }
 

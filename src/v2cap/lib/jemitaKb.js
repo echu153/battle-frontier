@@ -26,8 +26,9 @@ import {
 } from './equipment.js'
 import { ARMOR_SETS, SET_TIERS, SET_PARTS, SET_RARITIES, setTierText } from './armorSets.js'
 import { MAX_LV, POINTS_PER_LV, POINTS_STEP, POINTS_ON_STEP, POINT_UNIT, STAMINA_BASE, STAMINA_RECOVER_MS } from './level.js'
-import { PLUS_MAX, PLUS_CAP, ENHANCE_RATE, SCRAP_NAMES, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, STONE_NAME, ENHANCE_STONE, ENHANCE_SCRAP_FROM, STONE2_NAME, STONE2_FROM, STONE_CRAFT } from './smith.js'
-import { STONE_PCT, STONE2_PCT } from './sortie.js'
+import { PLUS_MAX, ENHANCE_RATE, SCRAP_NAMES, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, STONE_NAME, ENHANCE_STONE, ENHANCE_SCRAP_FROM, STONE2_NAME, STONE2_FROM, STONE_CRAFT, STONE_TIERS, STONE3_NAME, STONE4_NAME, STONE_CRAFT_GOLD } from './smith.js'
+import { STONE_PCT, STONE2_PCT, STONE3_PCT, STONE4_PCT, STONE_HIGH_AREA } from './sortie.js'
+import { CH_STONE4_PCT } from './challengeDefs.js'
 import { SHOP_NAME, BURGERS, TOPPINGS, TOPPING_GROUPS, BURGER_GOLD, TOPPING_GOLD, MEAL_MINUTES, MEAL_STAT_PCT, TOPPING_RESIST_PCT } from './burger.js'
 import { DAILY_TASKS } from './daily.js'
 import { FORTUNES } from '../core/tree.js'
@@ -39,7 +40,7 @@ import { GENDERS } from './gender.js'
 import { SHOP_ITEM_BY_KEY, FLIP_NAME, FLIP_MINUTES, FLIP_HOURS, FORGET_NAME } from './shop.js'
 import { CARRY_MAX, ITEM_CD, ITEM_MAX, POTION_PCT } from '../core/atbItems.js'
 import { ASC_RESET_GOLD_PER_LV } from './ascension.js'
-import { V1_BOX_NAMES } from './v1carry.js'
+import { V1_BOX_NAMES, V1_TICKET_MAX } from './v1carry.js'
 import { JEMITA_RULES } from './jemitaPrompt.js'
 import { SHINKA_ON, SHINKA_MAX, FLAGS, flagLabelOf, shinkaNameOf, shinkaLines } from './shinka.js'
 
@@ -213,13 +214,15 @@ const facilities = () => {
   return [
     '## 施設',
     '### 鍛冶屋（強化・分解・作成）',
-    `- 強化：+${PLUS_MAX}まで。成功率は ${rates}（画面に出る）。1回ごとにGoldと強化石${ENHANCE_STONE}個を使う（+${STONE2_FROM - 1}までは${STONE_NAME}・+${STONE2_FROM}からは${STONE2_NAME}）。+${ENHANCE_SCRAP_FROM}からは、その装備のエリアの残骸も使う（ノーマルは残骸を使わない）。`
+    `- 強化：+${PLUS_MAX}まで。成功率は ${rates}（画面に出る）。1回ごとにGoldと強化石${ENHANCE_STONE}個を使う（${STONE_TIERS.map((t, i) => `+${t.from}〜+${(STONE_TIERS[i + 1]?.from ?? PLUS_MAX + 1) - 1}は${t.name}`).join('・')}）。+${ENHANCE_SCRAP_FROM}からは、その装備のエリアの残骸も使う（ノーマルは残骸を使わない）。`
       + `挑戦の専用装備と四凶のユニークは、+${ENHANCE_SCRAP_FROM}から残骸の代わりにそのボスの素材を1個使う。失敗すると使ったものはなくなり、強化値はそのまま。`,
     `- ${STONE_NAME}：出撃で勝つと${STONE_PCT}%で1個手に入る。`,
     `- ${STONE2_NAME}：出撃で勝つと${STONE2_PCT}%で1個手に入る。鍛冶屋の強化の一覧の上の「作る」で、${STONE_NAME}${STONE_CRAFT}個から1個作れる（必ずできる）。`,
+    `- ${STONE3_NAME}：エリア${STONE_HIGH_AREA}からの場所で、出撃で勝つと${STONE3_PCT}%で1個手に入る。「作る」で${STONE2_NAME}${STONE_CRAFT}個とGold ${STONE_CRAFT_GOLD[2].toLocaleString()}から1個作れる。`,
+    `- ${STONE4_NAME}：エリア${STONE_HIGH_AREA}からのボスに勝つと${STONE4_PCT}%で1個・挑戦の四凶の報酬でも手に入る（呼んだ人はノーマル${CH_STONE4_PCT.normal}%・ハード${CH_STONE4_PCT.hard}%）。「作る」で${STONE3_NAME}${STONE_CRAFT}個とGold ${STONE_CRAFT_GOLD[3].toLocaleString()}から1個作れる。`,
     `- 分解：装備を残骸にする（${RARITIES.map(r => `${RARITY_LABEL[r]}${SCRAP_YIELD[r]}個`).join('・')}）。残骸はエリアごと（${SCRAP_NAMES.slice(0, 3).join('・')}…）。`,
     `- 作成：残骸とGoldで、${CRAFT_RARITIES.map(r => `${RARITY_LABEL[r]}（残骸${CRAFT_SCRAP[r]}個）`).join('・')}の装備を作れる（そのエリアの装備）。`,
-    `- V1からの引き継ぎでもらえる券を使うと、ユニークをその券の強化値（最大+${PLUS_CAP}）にできる。`,
+    `- V1からの引き継ぎでもらえる券を使うと、ユニークをその券の強化値（最大+${V1_TICKET_MAX}）にできる。`,
     // 武器の真化はお蔵入りのあいだ書かない（SHINKA_ON・2026-10-26 ユーザー指示「一旦お蔵入り」＝ゲームに無い機能を案内しない）
     ...(SHINKA_ON ? [
       `- 真化：着けている武器で戦うと1戦ごとに熟練度が1上がる（勝ち負けとも）。熟練度が${SHINKA_MAX.toLocaleString()}になった武器は鍛冶屋で真化でき、その武器での戦い方から能力が1つ付く（どれが付くかは戦い方の中から抽選）。`

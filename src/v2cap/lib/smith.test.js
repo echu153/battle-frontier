@@ -13,7 +13,8 @@ import {
   enhanceScrapOf, enhanceCostOf, enhanceErrorOf, rollEnhance, expectedEnhanceCost,
   CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV, canCraft, craftCostOf, craftErrorOf,
   STONE_NAME, ENHANCE_STONE, ENHANCE_BOSS_MAT, ENHANCE_SCRAP_FROM, stoneOf, usesBossMat, enhanceBossMatOf, enhanceSpentText,
-  STONE_TIERS, STONE_LATER, STONE2_NAME, STONE2_FROM, stoneTierOf, stoneHaveOf, stone2Of, STONE_CRAFT, STONE_CRAFT_MAX, stoneCraftMaxOf,
+  STONE_TIERS, STONE2_NAME, STONE2_FROM, stoneTierOf, stoneHaveOf, stone2Of, STONE_CRAFT, STONE_CRAFT_MAX, stoneCraftMaxOf,
+  STONE3_NAME, STONE3_FROM, STONE4_NAME, STONE4_FROM, stone3Of, stone4Of, STONE_CRAFT_GOLD, STONE_CRAFT_TIERS, stoneCraftCostOf, stoneCraftErrorOf,
 } from './smith.js'
 import { CHALLENGE_ITEMS, CHALLENGE_UNIQUE_ITEMS, UNIQUE_ITEMS } from './equipment.js'
 import { CHALLENGE_MATS } from './challengeDefs.js'
@@ -56,18 +57,20 @@ test('【確定】まとめて選ぶときは、着けているものと強化�
   assert.equal(bulkPickable({ inv: { id: 6, plus: 0, fav: false } }, worn), true)
 })
 
-test('【確定】強化値は+10まで。+1ごとに元の強さの0.1倍ずつ足す（足し算：+5で1.5倍・+10で2倍）', () => {
-  assert.equal(PLUS_MAX, 10)
+test('【確定】強化値は+20まで（2026-11-09〜・前は+10）。+1ごとに元の強さの0.1倍ずつ足す（足し算：+5で1.5倍・+10で2倍・+20で3倍）', () => {
+  assert.equal(PLUS_MAX, 20)
   assert.equal(plusMultOf(0), 1)
   assert.equal(plusMultOf(1), 1.1)
   assert.equal(plusMultOf(5), 1.5)
   assert.equal(plusMultOf(10), 2)
-  // 【確定】2026-10-23 V1からの引き継ぎの強化券で +16 まで入る（PLUS_CAP）。ふつうの強化は +10 まで（PLUS_MAX）
-  assert.equal(PLUS_CAP, 16)
-  assert.equal(plusOf({ plus: 12 }), 12, '強化券で入った+11より上はそのまま')
-  assert.equal(plusOf({ plus: 20 }), 16, 'PLUS_CAP より上は PLUS_CAP')
+  assert.equal(plusMultOf(20), 3)
+  // 【確定】2026-10-23 V1からの引き継ぎの強化券で +16 まで入る。2026-11-09 からふつうの強化も+20まで＝持ち物の上限（PLUS_CAP）も+20
+  assert.equal(PLUS_CAP, 20)
+  assert.equal(plusOf({ plus: 12 }), 12)
+  assert.equal(plusOf({ plus: 25 }), 20, 'PLUS_CAP より上は PLUS_CAP')
   assert.equal(plusMultOf(16), 2.6)
-  assert.equal(enhanceCostOf(ITEMS[0], { plus: 12 }), null, '+10より上はふつうの強化では上がらない')
+  assert.ok(enhanceCostOf(ITEMS[0], { plus: 12 }), '+12からもふつうの強化で上がる')
+  assert.equal(enhanceCostOf(ITEMS[0], { plus: 20 }), null, '+20より上はない')
   assert.equal(plusOf({}), 0)
   assert.equal(plusLabel(0), '')
   assert.equal(plusLabel(3), '+3')
@@ -82,7 +85,7 @@ test('【確定】2026-10-12 強化は1回ごとに戦闘力が最低でも+1（
   // ユーザー「装備強化するとき、1.1倍だから数値が上がらない場合がある、初期の装備とかは上り幅わかりづらい」→「最低でも+1にする」を選んだ
   for (const item of [...ITEMS, ...STARTER_ITEMS]) {
     for (const ilv of [item.lv, item.lv + 7]) {
-      for (let p = 0; p < PLUS_CAP; p++) {   // 強化券で入る +16 まで（2026-10-23）
+      for (let p = 0; p < PLUS_CAP; p++) {   // 上限の +20 まで（2026-11-09〜・前は強化券の+16まで）
         assert.ok(powerAt(item, ilv, p + 1) >= powerAt(item, ilv, p) + 1, `${item.id} LV${ilv} +${p}→+${p + 1}`)
       }
     }
@@ -94,9 +97,10 @@ test('【確定】2026-10-12 強化は1回ごとに戦闘力が最低でも+1（
   const big = itemOf(15, 'L', '両手剣')
   assert.equal(powerAt(big, big.lv, 10), 2 * powerAt(big, big.lv) - 1, '丸めの差は1まで')
   assert.equal(powerAt(big, big.lv, 1), Math.round(powerAt(big, big.lv) * 1.1))
-  // +11からも同じ足し方（強化券・2026-10-23）。PLUS_CAP（+16）より上は+16と同じ
+  // +11からも同じ足し方（2026-10-23 強化券・2026-11-09〜 ふつうの強化も）。PLUS_CAP（+20）より上は+20と同じ
   assert.equal(powerAt(ear, 1, 12), 16)
-  assert.equal(powerAt(ear, 1, 20), powerAt(ear, 1, PLUS_CAP))
+  assert.equal(powerAt(ear, 1, 20), 24)
+  assert.equal(powerAt(ear, 1, 25), powerAt(ear, 1, PLUS_CAP))
 })
 
 test('強化値は必要LVに足りないときも掛ける（2026-10-18〜 LV相当の強さに強化値を掛ける＝ステの合計はその戦闘力）', () => {
@@ -160,22 +164,27 @@ test('戦闘のステは強化値ぶん上がる。防具のメリット（重�
   assert.deepEqual(c.armor, b.armor, '防具のメリットは強化で変わらない')
 })
 
-// 強化の費用（挑戦の装備でないとき：ボスの素材は使わない）。2026-11-09〜 +6からは良質な強化石（段1）
-const tierOf = (next) => (next >= 6 ? { stoneTier: 1, stoneName: '良質な強化石' } : { stoneTier: 0, stoneName: '強化石' })
+// 強化の費用（挑戦の装備でないとき：ボスの素材は使わない）。2026-11-09〜 +6からは良質・+11からは希少・+16からは至高
+const tierOf = (next) => (next >= 16 ? { stoneTier: 3, stoneName: '至高の強化石' } : next >= 11 ? { stoneTier: 2, stoneName: '希少な強化石' }
+  : next >= 6 ? { stoneTier: 1, stoneName: '良質な強化石' } : { stoneTier: 0, stoneName: '強化石' })
 const costOf = (next, area, stone, scrap, gold, rate) => ({ next, area, stone, ...tierOf(next), scrap, mat: 0, matKey: null, matName: null, gold, rate })
 
-test('【確定】2026-11-09 強化石は強化値の段ごと：+1〜+5＝強化石・+6〜+10＝良質な強化石（どちらも1回1個）。希少・至高・神域は+11から先を足すとき', () => {
+test('【確定】2026-11-09 強化石は強化値の段ごと：+1〜+5＝強化石・+6〜+10＝良質・+11〜+15＝希少・+16〜+20＝至高（どれも1回1個）。神域は使わない', () => {
   // ユーザーの表「ノーマル 強化石・レア 良質な強化石・エピック 希少な強化石・レジェンド 至高の強化石・ユニーク 神域の強化石」→
-  //   選んだ「強化値の段ごと」「+6から良質」
-  assert.deepEqual(STONE_TIERS.map(t => [t.name, t.from, t.col]), [['強化石', 1, 'enh_stone'], ['良質な強化石', 6, 'enh_stone2']])
-  assert.deepEqual(STONE_LATER, ['希少な強化石', '至高の強化石', '神域の強化石'])
+  //   選んだ「強化値の段ごと」「+6から良質」→ 同じ日「+6〜+10が上質・+11〜+15は希少な・+16〜+20が至高・でいい・神域は使わない」
+  assert.deepEqual(STONE_TIERS.map(t => [t.name, t.from, t.col]), [
+    ['強化石', 1, 'enh_stone'], ['良質な強化石', 6, 'enh_stone2'], ['希少な強化石', 11, 'enh_stone3'], ['至高の強化石', 16, 'enh_stone4']])
+  assert.ok(!STONE_TIERS.some(t => t.name.includes('神域')), '神域は使わない')
+  assert.deepEqual([STONE3_NAME, STONE3_FROM, STONE4_NAME, STONE4_FROM], ['希少な強化石', 11, '至高の強化石', 16])
+  for (const t of STONE_TIERS) assert.ok(t.icon && /^#[0-9a-f]{6}$/.test(t.color), `${t.name}の印と色`)
   assert.equal(STONE2_NAME, '良質な強化石')
   assert.equal(STONE2_FROM, 6)
   assert.equal(STONE2_FROM, ENHANCE_SCRAP_FROM, '残骸を使い始める段と同じ（「+6からが本番」の1か所）')
-  assert.deepEqual(Array.from({ length: PLUS_MAX }, (_, i) => stoneTierOf(i + 1)), [0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
+  assert.deepEqual(Array.from({ length: PLUS_MAX }, (_, i) => stoneTierOf(i + 1)), [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3])
   // 持っている数（SQLを流す前の行は0）
   assert.deepEqual([stoneHaveOf({ enh_stone: 3, enh_stone2: 2 }, 0), stoneHaveOf({ enh_stone: 3, enh_stone2: 2 }, 1)], [3, 2])
   assert.deepEqual([stone2Of({ enh_stone: 3 }), stone2Of({}), stone2Of({ enh_stone2: -4 })], [0, 0, 0])
+  assert.deepEqual([stone3Of({ enh_stone3: 5 }), stone4Of({ enh_stone4: 2 }), stone3Of({}), stone4Of({ enh_stone3: 9 })], [5, 2, 0, 0])
 })
 
 test('【確定】2026-11-09 良質な強化石は鍛冶屋で強化石10個から1個作れる（ユーザー選択「出撃＋鍛冶屋で作る」）・1回で9999個まで', () => {
@@ -186,14 +195,37 @@ test('【確定】2026-11-09 良質な強化石は鍛冶屋で強化石10個か�
   assert.equal(stoneCraftMaxOf({}), 0)
 })
 
+test('【確定】2026-11-09 希少と至高も1つ下の石10個から作れる・Goldも使う（ユーザー選択「1つ下の石10個＋Gold」）', () => {
+  assert.deepEqual(STONE_CRAFT_TIERS, [1, 2, 3])
+  assert.equal(STONE_CRAFT_GOLD.length, STONE_TIERS.length)
+  assert.deepEqual(STONE_CRAFT_GOLD.slice(0, 2), [0, 0], '良質は強化石だけ（Goldなし）')
+  assert.ok(STONE_CRAFT_GOLD[3] > STONE_CRAFT_GOLD[2] && STONE_CRAFT_GOLD[2] > 0, '至高のほうが高い')
+  assert.deepEqual(stoneCraftCostOf(1, 3), { from: 0, stone: 30, gold: 0 })
+  assert.deepEqual(stoneCraftCostOf(2, 3), { from: 1, stone: 30, gold: 3 * STONE_CRAFT_GOLD[2] })
+  assert.deepEqual(stoneCraftCostOf(3, 1), { from: 2, stone: 10, gold: STONE_CRAFT_GOLD[3] })
+  // 作れる数は石とGoldの少ないほう
+  const g3 = STONE_CRAFT_GOLD[2], g4 = STONE_CRAFT_GOLD[3]
+  assert.equal(stoneCraftMaxOf({ enh_stone2: 50, gold: g3 * 2 }, 2), 2, 'Goldで決まる')
+  assert.equal(stoneCraftMaxOf({ enh_stone2: 25, gold: g3 * 9 }, 2), 2, '石で決まる')
+  assert.equal(stoneCraftMaxOf({ enh_stone3: 99, gold: g4 }, 3), 1)
+  assert.equal(stoneCraftMaxOf({ enh_stone: 99 }, 1), 9, '良質は Gold を見ない')
+  // 作れないわけ（見る順はサーバーと同じ：段→個数→石→Gold）
+  const prof = { enh_stone: 10, enh_stone2: 10, enh_stone3: 10, gold: g4 }
+  assert.equal(stoneCraftErrorOf(prof, 4, 1), '作れない石です', '神域は作れない')
+  assert.equal(stoneCraftErrorOf(prof, 2, 0), '個数が正しくありません')
+  assert.equal(stoneCraftErrorOf(prof, 2, 2), '良質な強化石が足りません')
+  assert.equal(stoneCraftErrorOf({ ...prof, gold: g4 - 1 }, 3, 1), 'Goldが足りません')
+  assert.equal(stoneCraftErrorOf(prof, 3, 1), null)
+})
+
 test('【確定】2026-11-08 1回の強化：強化石はどの段も1個・残骸は+6から（7,8,9,10,11）・Gold＝必要LV×20×n・成功率 100,90,…,10%', () => {
   // ユーザー指示「強化石を使って強化するシステムにする、＋6以降は残骸が必要に」→ 選んだ「どの段も1回1個」。
   //   ⚠前（2026-10-10〜11-07）は強化石なし・残骸 1,2,3,4,5,7,8,9,10,11（+1から）
   assert.equal(STONE_NAME, '強化石')
   assert.equal(ENHANCE_STONE, 1)
-  assert.deepEqual(ENHANCE_SCRAP, [0, 0, 0, 0, 0, 7, 8, 9, 10, 11])
+  assert.deepEqual(ENHANCE_SCRAP.slice(0, 10), [0, 0, 0, 0, 0, 7, 8, 9, 10, 11])
   assert.equal(ENHANCE_SCRAP_FROM, 6)
-  assert.deepEqual(ENHANCE_RATE, [100, 90, 80, 70, 60, 50, 40, 30, 20, 10])
+  assert.deepEqual(ENHANCE_RATE.slice(0, 10), [100, 90, 80, 70, 60, 50, 40, 30, 20, 10])
   assert.equal(ENHANCE_GOLD_PER_LV, 20)
   // ユーザーに見せた例
   assert.equal(enhanceGoldOf(5, 1), 100)
@@ -205,14 +237,33 @@ test('【確定】2026-11-08 1回の強化：強化石はどの段も1個・残�
   assert.deepEqual(enhanceCostOf(item, { ilv: 10, plus: 4 }), costOf(5, 1, 1, 0, 1000, 60))
   assert.deepEqual(enhanceCostOf(item, { ilv: 10, plus: 5 }), costOf(6, 1, 1, 7, 1200, 50), '+6から残骸も')
   assert.deepEqual(enhanceCostOf(item, { ilv: 10, plus: 9 }), costOf(10, 1, 1, 11, 2000, 10))
-  assert.equal(enhanceCostOf(item, { ilv: 10, plus: 10 }), null, '+10より上は無い')
+  assert.equal(enhanceCostOf(item, { ilv: 10, plus: PLUS_MAX }), null, '上限より上は無い')
+})
+
+test('【確定】2026-11-09 +11〜+20：成功率は9%から1%ずつ下げて+19・+20は1%（ユーザー選択）・残骸は1段ごとに1個ずつ増やす・Goldは同じ式', () => {
+  assert.deepEqual(ENHANCE_RATE.slice(10), [9, 8, 7, 6, 5, 4, 3, 2, 1, 1])
+  assert.deepEqual(ENHANCE_SCRAP.slice(10), [12, 13, 14, 15, 16, 17, 18, 19, 20, 21])
+  assert.deepEqual(ENHANCE_BOSS_MAT.slice(10), [1, 1, 1, 1, 1, 1, 1, 1, 1, 1], '挑戦の装備は1個のまま')
+  assert.equal(ENHANCE_RATE.length, PLUS_MAX)
+  assert.equal(ENHANCE_SCRAP.length, PLUS_MAX)
+  assert.equal(ENHANCE_BOSS_MAT.length, PLUS_MAX)
+  for (let n = 2; n <= PLUS_MAX; n++) assert.ok(ENHANCE_RATE[n - 1] <= ENHANCE_RATE[n - 2], `+${n}は前より成功しやすくならない`)
+  const item = itemOf(1, 'R', '片手剣')   // 必要LV10
+  assert.deepEqual(enhanceCostOf(item, { ilv: 10, plus: 10 }), costOf(11, 1, 1, 12, 2200, 9), '+11から希少な強化石')
+  assert.deepEqual(enhanceCostOf(item, { ilv: 10, plus: 15 }), costOf(16, 1, 1, 17, 3200, 4), '+16から至高の強化石')
+  assert.deepEqual(enhanceCostOf(item, { ilv: 10, plus: 19 }), costOf(20, 1, 1, 21, 4000, 1))
+  const prof = { materials: { 1: 99 }, gold: 1e9, enh_stone: 9, enh_stone2: 9, enh_stone3: 0, enh_stone4: 1 }
+  assert.equal(enhanceErrorOf(item, { ilv: 10, plus: 12 }, prof), '希少な強化石が足りません', '良質では+13にできない')
+  assert.equal(enhanceErrorOf(item, { ilv: 10, plus: 17 }, prof), null)
+  assert.equal(enhanceErrorOf(item, { ilv: 10, plus: 20 }, prof), '強化値は+20が上限です')
+  assert.equal(enhanceSpentText({ stone: 1, stone_tier: 3, scrap: 21, area: 1, mat: 0, gold: 4000 }), '至高の強化石 1個・新緑の残骸 21個・Gold 4,000')
 })
 
 test('強化できないわけ：上限・強化石・その装備のエリアの残骸・Gold（見る順はサーバーと同じ）', () => {
   const item = itemOf(2, 'R', '斧')   // 荒野の残骸・必要LV15（ノーマルは残骸を使わないのでレアで見る）
   const inv = { id: 7, base_id: item.id, ilv: 15, plus: 5 }   // 次は+6：強化石1・残骸7・Gold1,800
   const prof = (materials, gold, enh_stone2 = 1) => ({ materials, gold, enh_stone: 1, enh_stone2 })
-  assert.equal(enhanceErrorOf(item, { ...inv, plus: 10 }, prof({ 2: 99 }, 99999)), '強化値は+10が上限です')
+  assert.equal(enhanceErrorOf(item, { ...inv, plus: 20 }, prof({ 2: 99 }, 99999)), '強化値は+20が上限です')
   assert.equal(enhanceErrorOf(item, inv, prof({ 2: 99 }, 99999, 0)), '良質な強化石が足りません', '強化石が先（+6からは良質な強化石）')
   assert.equal(enhanceErrorOf(item, inv, { materials: { 2: 99 }, gold: 99999, enh_stone: 99 }), '良質な強化石が足りません', '+6からは強化石では強化できない')
   assert.equal(enhanceErrorOf(item, inv, prof({ 1: 99, 2: 6 }, 99999)), '荒野の残骸が足りません', 'ほかのエリアの残骸では強化できない')
@@ -247,7 +298,7 @@ test('【確定】ノーマル（初期装備も）は残骸を使わない（20
 
 test('【確定】2026-11-08 挑戦の装備（専用装備と四凶のユニーク）は、+6から残骸の代わりにそのボスの素材を1個', () => {
   // ユーザー指示「挑戦装備産は固有の素材を必要に」→ 選んだ「+6から残骸の代わりにボスの素材1個」
-  assert.deepEqual(ENHANCE_BOSS_MAT, [0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
+  assert.deepEqual(ENHANCE_BOSS_MAT.slice(0, 10), [0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
   const own = CHALLENGE_ITEMS.find(i => i.bossKey === 'varuzenoku' && i.part === '武器')
   const uq = CHALLENGE_UNIQUE_ITEMS.find(i => i.bossKey === 'enma')
   assert.ok(own && uq)
@@ -294,7 +345,7 @@ test('抽選は「乱数×100 < 成功率」（+1は必ず成功・+10は1割）
 })
 
 test('平均でかかる量（2026-11-08 ユーザーに見せた数）：+10まで強化石約29個・残骸約224個・ボスの素材は+6→+10で約23個／LV90でGold約40万', () => {
-  const all = expectedEnhanceCost(90)
+  const all = expectedEnhanceCost(90, 0, 10)
   assert.equal(Math.round(all.tries * 10) / 10, 29.3)
   assert.equal(Math.round(all.stone), 29, '強化石は1回1個＝回数と同じ')
   assert.equal(Math.round(all.stone2 * 10) / 10, 22.8, '2026-11-09〜 そのうち+6〜+10の良質な強化石は約23個（ほぼ8割）')
@@ -311,6 +362,16 @@ test('平均でかかる量（2026-11-08 ユーザーに見せた数）：+10ま
   const last = expectedEnhanceCost(90, 9, 10)
   assert.equal(Math.round(last.scrap), 110)
   assert.equal(Math.round(last.tries), 10)
+})
+
+test('2026-11-09 +11〜+20の平均でかかる量（LV90）：+11〜+15 希少約75個・Gold約178万／+16〜+20 至高約308個・Gold約1,038万', () => {
+  const a = expectedEnhanceCost(90, 10, 15), b = expectedEnhanceCost(90, 15, 20)
+  assert.equal(Math.round(a.stones[2] * 10) / 10, 74.6)
+  assert.equal(a.stones[3], 0)
+  assert.equal(Math.round(a.gold / 10000), 178)
+  assert.equal(Math.round(b.stones[3] * 10) / 10, 308.3)
+  assert.equal(Math.round(b.gold / 10000), 1038)
+  assert.deepEqual(expectedEnhanceCost(90).stones.map(Math.round), [6, 23, 75, 308], '+20まで：強化石・良質・希少・至高')
 })
 
 test('【確定】作成（鍛冶屋）：レア30・エピック100・レジェンダリー300個のその装備のエリアの残骸と、Gold＝必要LV×50／100／200。ノーマルは作れない', () => {

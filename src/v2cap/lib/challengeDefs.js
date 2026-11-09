@@ -63,8 +63,12 @@ export const CH_RATES = {
   normal: { gear: { R: 75, E: 20, L: 5 }, own: 2, unique: 0.1 },
   hard: { gear: { R: 72, E: 20, L: 8 }, own: 3, unique: 0.15 },
 }
+// 【確定】2026-11-09 至高の強化石（+16〜+20の強化に使う・smith.js の STONE_TIERS）：ユーザー選択「出撃・ボス・挑戦＋作る」→
+//   四凶の報酬でも、専用装備・ユニークと同じく「難易度の確率×貢献度の割合（呼んだ人は100%）」で1個（数はこちらで決めた）
+//   ★決めるのはサーバー（v2cap_dungeon_pay_reward の c_stone4）。⚠数を変えたら SQL も直す（v2capsql.test.js が突き合わせる）
+export const CH_STONE4_PCT = { normal: 10, hard: 20 }
 // 特別な素材の数（倒したとき・足し合わせ）：
-export const CH_MAT_HOST = 1                           // 呼んだ人（ホスト）なら必ず
+export const CH_MAT_HOST = 1                          // 呼んだ人（ホスト）なら必ず
 export const CH_MAT_SOLO = 1                           // 完全ソロ討伐（ひとりで倒されずに倒した＝EXP・Gold が3倍になるのと同じ）なら、さらに必ず
 export const CH_MAT_CHANCE_MIN = 10                    // 貢献度（与えたダメージ÷ボスの最大HP）がこの%以上なら、下の確率でさらに1個（救援の人も）
 export const CH_MAT_CHANCE = { normal: 10, hard: 20, expert: 40, master: 60 }   // 難易度ごとの確率（%・エキスパートとマスターは呼べるようになったら使う）

@@ -7,12 +7,12 @@
 //   ①EXP：V1 のキャラLV÷10（切り捨て・最大LV50）のLVに着くまで EXP×1.5。V1 のLV500から200ごとに +0.1（LV700で×1.6）
 //   ②装備：V1 でいちばん強化値の高い装備（同じならレア度の高いほう）。V1 のボス装備なら同じボスのユニーク、
 //     v2cap に同じものが無い装備は同じ種類（武器は武器種・防具は防具・装飾品は装飾品）のユニークからランダム。
-//     ＋「ユニークをその強化値にする券」1枚（最大+16＝V1 の強化の上限・smith.js の PLUS_CAP）
+//     ＋「ユニークをその強化値にする券」1枚（最大+16＝V1 の強化の上限・下の V1_TICKET_MAX）
 //   ③箱：不思議な箱1つ＝残骸1〜3個・奇妙な箱1つ＝残骸5〜10個。エリアは15エリアからランダム。数の上限なし
 // ★入れるのはサーバー（supabase_v2cap_core.sql の v2cap_v1_carry・倍率は v2cap_apply_exp・券は v2cap_v1_ticket_use）。
 //   ここは表示とテストのための写し（v1carry.test.js が SQL と突き合わせる）
 // ============================================================
-import { PLUS_CAP, scrapNameOf } from './smith.js'
+import { scrapNameOf } from './smith.js'
 
 // ===== ① EXP =====
 export const V1_EXP_BASE = 15    // ×1.5（10分率）
@@ -61,8 +61,8 @@ export const V1_WEAPON_KINDS = {
 // 防具・装飾品は部位を問わない（V1 は防具・装飾品が1枠ずつ）
 export const V1_ARMOR_PARTS = ['頭', '鎧', '腕', '足']
 export const V1_ACC_PART = 'アクセ'
-// 券の上限（V1 の強化の上限 +16）
-export const V1_TICKET_MAX = PLUS_CAP
+// 券の上限（V1 の強化の上限 +16）。2026-11-09 からふつうの強化は+20まで（smith.js の PLUS_CAP も20）＝券は+16のまま
+export const V1_TICKET_MAX = 16
 // いま持っている券の強化値（0＝持っていない）
 export const ticketOf = (prof) => Math.max(0, Math.min(V1_TICKET_MAX, Math.floor(Number(prof?.v1_ticket) || 0)))
 // 券を使えるか（ユニークで、いまの強化値が券より下）

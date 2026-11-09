@@ -146,7 +146,7 @@ export default function V2capEnhanceFx({ job, say, nextLabel, nextReason, onAgai
     setProgress(1)
     setPhase('climax')
     const c = center()
-    const lv = tier.key === 'max' ? 4 : tier.key === 'gold' ? 3 : tier.key === 'purple' ? 2 : 1
+    const lv = tier.lv || 1   // はじける光の量（lib/fxStyle.js の ENHANCE_TIERS）
     if (r.success) {
       setFlash({ color: '#ffffff', key: Date.now() })
       fx.current?.clear()

@@ -15,8 +15,9 @@ const mean = (xs) => xs.reduce((t, x) => t + x, 0) / xs.length
 //   手直しそのものは下の「序盤の手直し」のテスト
 const base = enemyBasePowerOf
 
-test('【確定】強化の見込み：エリア1は+0・2〜3は+3・4〜10は+6・11〜15は+10。〇-①は前のエリアの値', () => {
-  assert.deepEqual(ASSUMED_PLUS, [0, 3, 3, 6, 6, 6, 6, 6, 6, 6, 10, 10, 10, 10, 10])
+test('【確定】強化の見込み：エリア1は+0・2〜3は+3・4〜10は+6・11〜15は+20（2026-11-09〜・前は+10）。〇-①は前のエリアの値', () => {
+  // 2026-11-09 ユーザー選択「+11から先の強さを後半に入れて測り直す」：エリア11〜15はシミュの人が石とGoldの続くかぎり上げる（上限+20）
+  assert.deepEqual(ASSUMED_PLUS, [0, 3, 3, 6, 6, 6, 6, 6, 6, 6, 20, 20, 20, 20, 20])
   for (const s of SPOTS) {
     const want = s.sub === 1 && s.area > 1 ? ASSUMED_PLUS[s.area - 2] : ASSUMED_PLUS[s.area - 1]
     assert.equal(assumedPlusAt(s.id), want, spotLabel(s))
@@ -24,7 +25,7 @@ test('【確定】強化の見込み：エリア1は+0・2〜3は+3・4〜10は+
   assert.equal(assumedPlusAt(4), 0, '荒廃した草原①はエリア1と同じ+0')
   assert.equal(assumedPlusAt(5), 3, '荒廃した草原②から+3')
   assert.equal(assumedPlusAt(31), 6, '腐海の沼獄①は+6のまま')
-  assert.equal(assumedPlusAt(32), 10)
+  assert.equal(assumedPlusAt(32), 20)
 })
 
 test('強化の見込みの倍率：見込みが+0のエリアだけ1倍・ほかは1倍より大きい（測った値）', () => {

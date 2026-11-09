@@ -11,19 +11,27 @@ import { RARITY_COLOR } from './equipment.js'
 import { PLUS_MAX, ENHANCE_RATE } from './smith.js'
 
 // ===== 強化 =====
-// 強化値（上がったあと）で色と派手さを変える。+10 は虹
+// 強化値（上がったあと）で色と派手さを変える。上限（smith.js の PLUS_MAX）は虹。lv＝はじける光の量（1〜4）
+// 【確定】2026-11-09 上限が+20になった：虹は上限の+20へ。+16〜+19は至高の強化石の段・+11〜+15は希少の段の色
+//   （前は+10が虹＝上限だった。+8〜+10の金・+5〜+7の紫・+1〜+4の青はそのまま）
 export const ENHANCE_TIERS = [
-  { min: 10, key: 'max',    color: '#ff66ff', colors: ['#ff3355', '#ffcc00', '#44ff88', '#33e0ff', '#a77bff', '#ffffff'], label: 'MAX' },
-  { min: 8,  key: 'gold',   color: '#ffcc00', colors: ['#ffe680', '#ffcc00', '#ffffff'] },
-  { min: 5,  key: 'purple', color: '#b388ff', colors: ['#d1b3ff', '#b388ff', '#ffffff'] },
-  { min: 1,  key: 'blue',   color: '#33c5ff', colors: ['#9fe3ff', '#33c5ff', '#ffffff'] },
+  { min: 20, key: 'max',    lv: 4, color: '#ff66ff', colors: ['#ff3355', '#ffcc00', '#44ff88', '#33e0ff', '#a77bff', '#ffffff'], label: 'MAX' },
+  { min: 16, key: 'red',    lv: 4, color: '#ff5577', colors: ['#ffa0b0', '#ff5577', '#ffe033', '#ffffff'] },
+  { min: 11, key: 'orange', lv: 3, color: '#ffb347', colors: ['#ffd699', '#ffb347', '#ffffff'] },
+  { min: 8,  key: 'gold',   lv: 3, color: '#ffcc00', colors: ['#ffe680', '#ffcc00', '#ffffff'] },
+  { min: 5,  key: 'purple', lv: 2, color: '#b388ff', colors: ['#d1b3ff', '#b388ff', '#ffffff'] },
+  { min: 1,  key: 'blue',   lv: 1, color: '#33c5ff', colors: ['#9fe3ff', '#33c5ff', '#ffffff'] },
 ]
 export const enhanceTierOf = (plusTo) => ENHANCE_TIERS.find(t => plusTo >= t.min) || ENHANCE_TIERS.at(-1)
 // ためる時間（ms）。plusTo＝強化したあとの強化値（+n にする回の n）
 //   +5 にする回までは前のまま（成功率が低いほど少し長い＝+1 1.5秒 … +5 1.9秒）。
 // 【確定】2026-10-24 ユーザー指示「強化値が＋6の強化以降、強化値によって成否の演出（光が貯まるまでの時間）が遅くなるようにして
 //   ※緊張感を持たせるため」：+6 にする回からは強化値ごとに長く（下の表・+10 で5秒）。押すと飛ばせるのはそのまま
-export const ENHANCE_CHARGE_SLOW = { 6: 2500, 7: 3000, 8: 3500, 9: 4000, 10: 5000 }
+// 【確定】2026-11-09 +11 にする回からも少しずつ長く（+1ごとに0.25秒・+20 で7.5秒）＝上限が+20になったので（smith.js の PLUS_MAX）
+export const ENHANCE_CHARGE_SLOW = {
+  6: 2500, 7: 3000, 8: 3500, 9: 4000, 10: 5000,
+  11: 5250, 12: 5500, 13: 5750, 14: 6000, 15: 6250, 16: 6500, 17: 6750, 18: 7000, 19: 7250, 20: 7500,
+}
 export const enhanceChargeMsOf = (plusTo) => {
   const n = Math.max(1, Math.min(PLUS_MAX, Math.floor(Number(plusTo) || 1)))
   return ENHANCE_CHARGE_SLOW[n] ?? 1500 + (100 - ENHANCE_RATE[n - 1]) * 10
