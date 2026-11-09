@@ -99,8 +99,8 @@ test('【確定】好感度は無い（ユーザー指示「鍛冶屋のおっ�
   for (const name of ['MASTER_STAGES', 'MASTER_STAGE_EVENTS', 'stageOf', 'stageEventOf']) assert.equal(M[name], undefined, name)
   // 顔なじみ・常連を前提にしたセリフは入れない
   for (const l of allLines()) assert.ok(!/また来たな|よく来るな|常連|こないだ|久しぶり/.test(l.text), `${l.kind}：${l.text}`)
-  // タップは 2026-11-08 に強化石のセリフを1つ足して12
-  assert.deepEqual([linesOf('enter').length, linesOf('tap').length], [3, 12])
+  // タップは 2026-11-08 に強化石のセリフを1つ・2026-11-09 に良質な強化石（練り直す）のセリフを1つ足して13
+  assert.deepEqual([linesOf('enter').length, linesOf('tap').length], [3, 13])
   // 画面もサーバーに好感度を聞かない・好感度の列を読まない
   const smith = read('components/V2capSmith.jsx')
   for (const s of ['v2cap_smith_talk', 'v2cap_smith_seen', 'smith_affinity', 'smith_stage_seen', '好感度 {']) assert.ok(!smith.includes(s), s)
@@ -126,13 +126,15 @@ test('【確定】2026-10-26 親方は強化値の数・成功率・ゲームの
 
 test('足りないもの：強化できないわけ（smith.js の enhanceErrorOf）から「強化石」「◯◯の残骸」「ボスの素材」「Gold」を取り出す', () => {
   const sword = { rarity: 'R', area: 1, lv: 10 }
-  const inv = { ilv: 10, plus: 5 }   // 次は+6：強化石1・新緑の残骸7（2026-11-08〜）
+  const inv = { ilv: 10, plus: 5 }   // 次は+6：良質な強化石1（2026-11-09〜）・新緑の残骸7（2026-11-08〜）
   const own = { rarity: 'L', area: 11, lv: 70, bossKey: 'varuzenoku' }   // 挑戦の専用装備：+6から黒龍の逆鱗
-  assert.equal(shortWhatOf(enhanceErrorOf(sword, inv, { materials: { 1: 99 }, gold: 99999 })), '強化石')
-  assert.equal(shortWhatOf(enhanceErrorOf(sword, inv, { materials: {}, gold: 99999, enh_stone: 1 })), '新緑の残骸')
-  assert.equal(shortWhatOf(enhanceErrorOf(own, { ilv: 70, plus: 5 }, { gold: 99999, enh_stone: 1 })), '黒龍の逆鱗')
-  assert.equal(shortWhatOf(enhanceErrorOf(sword, inv, { materials: { 1: 99 }, gold: 0, enh_stone: 1 })), 'Gold')
-  assert.equal(shortWhatOf(enhanceErrorOf(sword, inv, { materials: { 1: 99 }, gold: 99999, enh_stone: 1 })), null)
+  assert.equal(shortWhatOf(enhanceErrorOf(sword, inv, { materials: { 1: 99 }, gold: 99999, enh_stone: 9 })), '良質な強化石')
+  assert.equal(shortWhatOf(enhanceErrorOf(sword, { ilv: 10, plus: 2 }, { materials: { 1: 99 }, gold: 99999 })), '強化石')
+  assert.equal(shortWhatOf(enhanceErrorOf(sword, inv, { materials: {}, gold: 99999, enh_stone2: 1 })), '新緑の残骸')
+  assert.equal(shortWhatOf(enhanceErrorOf(own, { ilv: 70, plus: 5 }, { gold: 99999, enh_stone2: 1 })), '黒龍の逆鱗')
+  assert.equal(shortWhatOf(enhanceErrorOf(sword, inv, { materials: { 1: 99 }, gold: 0, enh_stone2: 1 })), 'Gold')
+  assert.equal(shortWhatOf(enhanceErrorOf(sword, inv, { materials: { 1: 99 }, gold: 99999, enh_stone2: 1 })), null)
+  assert.equal(pickLine('short', { vars: { what: '良質な強化石' } }).text, 'おっと、良質な強化石が足りねえな。そろえてから、また来な')
   assert.equal(shortWhatOf(enhanceErrorOf(sword, { ilv: 10, plus: PLUS_MAX }, { materials: { 1: 99 }, gold: 99999 })), null, '上限は足りないせいではない')
   // ボスの素材は出撃では集まらないので「出撃して」とは言わない（2026-11-08〜）
   assert.equal(pickLine('short', { vars: { what: '新緑の残骸' } }).text, 'おっと、新緑の残骸が足りねえな。そろえてから、また来な')

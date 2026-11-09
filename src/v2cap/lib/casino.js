@@ -24,7 +24,9 @@ export const maxExchangeOf = (gold) => Math.min(EXCHANGE_MAX, Math.floor(Math.ma
 //   置き場所は「両替所」のタブの中（前に「景品の交換所はただいま準備中です」と出していた所）。タブを6つにするとスマホで2段になるので、タブは足さない
 //   ★交換はサーバー（SQL §11 の v2cap_casino_prize）。メダルを減らして強化石（v2cap_profiles.enh_stone）を足す。当日の収支と解禁の払い出しには数えない
 //   名前は鍛冶屋の STONE_NAME（lib/smith.js）。景品を足すときは、ここと SQL の両方に足す（v2capsql.test.js が突き合わせる）
-export const PRIZES = [{ key:'stone', medals:50 }]
+// 【確定】2026-11-09 良質な強化石も並べる（ユーザーが選んだ「メダル500枚」＝強化石10個ぶん・鍛冶屋で作るのと同じ値打ち）。
+//   tier＝強化石の段（lib/smith.js の STONE_TIERS・0＝強化石・1＝良質な強化石）
+export const PRIZES = [{ key:'stone', medals:50, tier:0 }, { key:'stone2', medals:500, tier:1 }]
 export const PRIZE_BY_KEY = Object.fromEntries(PRIZES.map(p => [p.key, p]))
 export const PRIZE_QTY_MAX = 9999   // 1回で替えられる数（こちらで決めた。何回でも替えられる）
 export const prizeMaxOf = (medals, prize) => Math.min(PRIZE_QTY_MAX, Math.floor(Math.max(0, Number(medals) || 0) / prize.medals))

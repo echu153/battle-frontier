@@ -6,7 +6,7 @@ import { miniBtn } from './v2ui.js'
 import { loadPref, savePref } from '../core/prefs.js'
 import { AREA_LIST, SPOTS, SUB_NAMES, spotOf, spotLabel, recLvText } from '../lib/areas.js'
 import {
-  isSpotUnlocked, isSpotCleared, openUntilOf, SORTIE_CD, chestText, stoneText,
+  isSpotUnlocked, isSpotCleared, openUntilOf, SORTIE_CD, chestText, stoneText, stone2Text,
 } from '../lib/sortie.js'
 import { staminaMaxOfProfile, rollStamina, staminaSpanMsOf } from '../lib/level.js'
 import { expText as expTextOf, gainedExpOf, levelUpLines, dropLineOf } from '../lib/settleLines.js'
@@ -262,6 +262,8 @@ export default function V2capSortie({ prof, onProfile, onScene }) {
         }
         // 強化石（2026-11-08 ユーザー指示・決まりは sortie.js の「強化石」）：勝った戦闘ごとにサーバーが2%で引く。入ったら返事の stone に数
         if (data.stone > 0) after.push({ text: stoneText(data.stone), color:'#9fd8ff' })
+        // 良質な強化石（2026-11-09・sortie.js の STONE2_PCT）：強化石とは別にサーバーが引く。入ったら返事の stone2 に数
+        if (data.stone2 > 0) after.push({ text: stone2Text(data.stone2), color:'#c9a6ff' })
         // 図鑑の報酬（2026-10-24）：そのエリアの敵を全員見つけたら、サーバーが dex＝{ area, bonus } を返す（スタミナの最大値+1）
         if (data.dex?.area) after.push({ text: dexCompleteText(data.dex.area), color:'#c0b0ff' })
         // ボスを倒すと次の場所が開く（1本道）。開いたかどうかはサーバーの返事で見る

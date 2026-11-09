@@ -34,7 +34,7 @@ import { SHOP_COLOR } from '../lib/shop.js'
 import { START_CLASSES, weaponsOf, attackKindOf, classDescOf } from '../lib/jobs.js'
 import { TOWER_NAME, TOWER_SHORT_NAME } from '../lib/tower.js'
 import { openUntilOf } from '../lib/sortie.js'
-import { STONE_NAME } from '../lib/smith.js'
+import { STONE_NAME, STONE2_NAME } from '../lib/smith.js'
 import { DAY_QUEST_TITLE } from '../lib/dayQuestRules.js'
 import { spotLabel } from '../lib/areas.js'
 import { RARITY_COLOR } from '../lib/equipment.js'
@@ -302,12 +302,13 @@ export default function V2capHome() {
     await refresh()
   }
   // 強化石を入れる（2026-11-08・鍛冶屋の強化を試す用）。ふつうは出撃で勝った戦闘ごとに2%で1個
-  const gainStones = async (amount) => {
+  //   tier＝1 で良質な強化石（2026-11-09・+6からの強化に使う）
+  const gainStones = async (amount, tier = 0) => {
     setBusy(true); setDevMsg('')
-    const { data, error: rpcErr } = await supabase.rpc('v2cap_debug_gain_stones', { p_amount: amount })
+    const { data, error: rpcErr } = await supabase.rpc('v2cap_debug_gain_stones', { p_amount: amount, p_tier: tier })
     setBusy(false)
     if (rpcErr || !data?.ok) { setDevMsg(`⚠ ${rpcErr?.message || data?.error || '失敗しました'}`); return }
-    setDevMsg(`${STONE_NAME}+${data.got.toLocaleString()}（${Number(data.stones).toLocaleString()}個）`)
+    setDevMsg(`${tier === 1 ? STONE2_NAME : STONE_NAME}+${data.got.toLocaleString()}（${Number(data.stones).toLocaleString()}個）`)
     await refresh()
   }
   // 安息の祠を出す（2026-10-13・演出を試す用）：出撃で選んでいる場所（開いていなければ開いている一番先）に置く
@@ -526,6 +527,11 @@ export default function V2capHome() {
                       {[10, 100].map(n => (
                         <button key={`s${n}`} onClick={() => gainStones(n)} disabled={busy} style={miniBtn('#9fd8ff')}>
                           {STONE_NAME}+{n}
+                        </button>
+                      ))}
+                      {[10, 100].map(n => (
+                        <button key={`s2${n}`} onClick={() => gainStones(n, 1)} disabled={busy} style={miniBtn('#c9a6ff')}>
+                          {STONE2_NAME}+{n}
                         </button>
                       ))}
                       <button onClick={shrineNext} disabled={busy || prof?.shrine_force} style={miniBtn('#9fe8ff')}>

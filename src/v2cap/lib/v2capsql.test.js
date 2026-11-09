@@ -11,11 +11,11 @@ import { NEED_BASE, NEED_PERMIL, MAX_LV, STAMINA_BASE, STAMINA_RECOVER_MS, STAMI
 import { JOB_NEED_PCT, JOB_NEED_BASE_PERMIL, JOB_MAX } from './jobs.js'
 import { ROLE_TENTHS, SPOTS as SPOTS_ALL, recLvOf } from './areas.js'
 import { SLOTS, RARITIES, ALL_RARITIES, STARTER_AREA, UNIQUE_ITEMS, UNIQUE_DROP_PCT, UNIQUE_LV } from './equipment.js'
-import { SORTIE_CD, DROP_RARITY, CHEST_PCT, CHEST_SCRAP, STONE_PCT, STONE_N, rollStone } from './sortie.js'
+import { SORTIE_CD, DROP_RARITY, CHEST_PCT, CHEST_SCRAP, STONE_PCT, STONE_N, rollStone, STONE2_PCT, STONE2_N, rollStone2, stone2Text } from './sortie.js'
 import { SORTIE_CD_SLACK } from './cooldown.js'
 import { SHRINE_FAIRY_NAME, SHRINE_PCT, SHRINE_FIGHTS, SHRINE_EXP_TENTHS, SHRINE_GOLD_TENTHS } from './shrine.js'
 import { PAPIA_TIERS } from './papia.js'
-import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV, scrapAreaOf, enhanceScrapOf, ENHANCE_NO_SCRAP_RARITY, ENHANCE_STONE, ENHANCE_BOSS_MAT } from './smith.js'
+import { PLUS_MAX, ENHANCE_SCRAP, ENHANCE_RATE, ENHANCE_GOLD_PER_LV, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, CRAFT_GOLD_PER_LV, scrapAreaOf, enhanceScrapOf, ENHANCE_NO_SCRAP_RARITY, ENHANCE_STONE, ENHANCE_BOSS_MAT, STONE_TIERS, STONE2_FROM, STONE_CRAFT, STONE_CRAFT_MAX } from './smith.js'
 import { DAILY_SORTIES, DAILY_GOLD_PER_LV, DAY_RESET_HOUR, DAILY_TASK_KEYS, GUARD_DONE_KEY } from './daily.js'
 import { FOLD_KEYS } from './uiPrefs.js'
 import { AVATAR_PRESETS, AVATAR_FILE_RE } from './avatar.js'
@@ -333,13 +333,21 @@ test('【確定】強化：+10まで・強化石1個（2026-11-08〜）・残骸
   assert.equal(enhanceScrapOf({ area: 7, rarity: 'N' }, 6), 0, '落ちたノーマル')
   for (const r of ['R', 'E', 'L']) assert.equal(enhanceScrapOf({ area: 1, rarity: r }, 6), ENHANCE_SCRAP[5], `${r}は+6から残骸を使う`)
   // 足りないときの見る順は smith.js の enhanceErrorOf と同じ（強化石→残骸→素材→Gold）
-  const lack = ["if coalesce(v_row.enh_stone, 0) < c_stone then return jsonb_build_object('ok', false, 'error', '強化石が足りません'); end if;",
+  // 2026-11-09〜 強化石は段ごと（+6から良質な強化石＝enh_stone2）。足りないときの文は smith.js の enhanceErrorOf と同じ
+  assert.ok(e.includes(`c_stone2_from constant int := ${STONE2_FROM};`), '良質な強化石の段がJSと同じ')
+  assert.equal(STONE_TIERS[1].col, 'enh_stone2')
+  assert.ok(e.includes('v_tier := case when v_next >= c_stone2_from then 1 else 0 end;'))
+  assert.ok(e.includes('v_shave := case when v_tier = 1 then coalesce(v_row.enh_stone2, 0) else coalesce(v_row.enh_stone, 0) end;'))
+  assert.ok(e.includes(`'error', case when v_tier = 1 then '${STONE_TIERS[1].name}が足りません' else '${STONE_TIERS[0].name}が足りません' end`))
+  assert.ok(e.includes("'stone', c_stone, 'stone_tier', v_tier, 'stone_left', v_shave - c_stone,"), '使った段を返す（画面の「〜を失いました」）')
+  const lack = ["if v_shave < c_stone then return jsonb_build_object('ok', false, 'error', case when v_tier = 1",
     "if v_have < v_need then return jsonb_build_object('ok', false, 'error', '残骸が足りません'); end if;",
     "if v_mhave < v_mneed then return jsonb_build_object('ok', false, 'error', '素材が足りません'); end if;",
     "if v_row.gold < v_gold then return jsonb_build_object('ok', false, 'error', 'Goldが足りません'); end if;"].map(s => e.indexOf(s))
   assert.ok(lack.every(i => i > 0) && lack.every((i, k) => k === 0 || lack[k - 1] < i), '強化石→残骸→素材→Gold の順')
   // 成功でも失敗でも強化石・残骸（か素材）・Goldは使う（分岐の前）・強化値を上げるのは成功のときだけ
-  const spend = e.indexOf('set enh_stone = coalesce(enh_stone, 0) - c_stone, materials = v_mats, challenge_mats = v_cmats,')
+  const spend = e.indexOf('set enh_stone = coalesce(enh_stone, 0) - case when v_tier = 0 then c_stone else 0 end,')
+  assert.ok(e.includes('enh_stone2 = coalesce(enh_stone2, 0) - case when v_tier = 1 then c_stone else 0 end,'), '良質な強化石はその段のときだけ減る')
   const branch = e.search(/if v_ok then\s+update public\.v2cap_inventory set plus = v_next where id = v_inv\.id;\s+end if;/)
   assert.ok(spend > 0 && branch > spend, '使うのは分岐の前・強化値は成功のときだけ上がる')
   assert.ok(!/plus = v_plus - 1|plus = plus - 1|delete from public\.v2cap_inventory/.test(e), '失敗しても下がらない・壊れない')
@@ -684,6 +692,42 @@ test('【確定】2026-11-08 強化石：出撃で勝った戦闘ごとに2%で1
   assert.ok(settle.includes("'stone', case when v_stone > 0 then v_stone end,"))
   assert.equal(rollStone(() => 0.0199), 1)
   assert.equal(rollStone(() => 0.02), 0)
+})
+
+test('【確定】2026-11-09 良質な強化石：出撃で勝った戦闘ごとに低い確率で1個（強化石とは別に引く・祠とパピアも）・列 enh_stone2。数はJSと同じ', () => {
+  // ユーザー選択「出撃＋鍛冶屋で作る」。確率はシミュで「強化値の平均が前と同じ」になるように決めた
+  assert.equal(STONE2_N, 1)
+  assert.ok(STONE2_PCT > 0 && STONE2_PCT < STONE_PCT, '強化石よりまれ')
+  assert.ok(SQL.includes('alter table public.v2cap_profiles add column if not exists enh_stone2 int not null default 0;'), '持っている数の列')
+  const settle = fnBody('v2cap_sortie_apply')
+  assert.ok(settle.includes(`c_stone2_rate  constant numeric := ${STONE2_PCT / 100};`), '確率がJSと同じ')
+  assert.ok(settle.includes(`c_stone2_n     constant int := ${STONE2_N};`), '1個')
+  const roll = 'if v_win and random() < c_stone2_rate then\n    v_stone2 := c_stone2_n;\n  end if;'
+  const r = settle.indexOf(roll), r1 = settle.indexOf('if v_win and random() < c_stone_rate then'), upd = settle.indexOf('update public.v2cap_profiles')
+  assert.ok(r > r1 && r < upd, '強化石のあと・書きこむ前（強化石とは別に引く）')
+  assert.equal(settle.split('c_stone2_rate').length - 1, 2, '引くのは1か所だけ')
+  assert.ok(settle.includes('enh_stone2 = coalesce(enh_stone2, 0) + v_stone2,'))
+  assert.ok(settle.includes("'stone2', case when v_stone2 > 0 then v_stone2 end,"), '入ったときだけ数を返す（画面のログ）')
+  assert.equal(rollStone2(() => STONE2_PCT / 100 - 1e-9), 1)
+  assert.equal(rollStone2(() => STONE2_PCT / 100), 0)
+  assert.equal(stone2Text(1), '良質な強化石×1を獲得した！')
+  const sortie = readFileSync(new URL('../components/V2capSortie.jsx', import.meta.url), 'utf8')
+  assert.ok(sortie.includes('if (data.stone2 > 0) after.push({ text: stone2Text(data.stone2)'), '画面はログを出す')
+})
+
+test('【確定】2026-11-09 良質な強化石を作る：強化石10個で1個（鍛冶屋・v2cap_stone_craft）。数はJSと同じ', () => {
+  const f = fnBody('v2cap_stone_craft')
+  assert.ok(f.includes(`c_need    constant int := ${STONE_CRAFT};`))
+  assert.ok(f.includes(`c_qty_max constant int := ${STONE_CRAFT_MAX};`))
+  assert.ok(f.includes('if not public.v2cap_is_dev() then'))
+  assert.ok(f.includes('if p_qty is null or p_qty < 1 or p_qty > c_qty_max then'), '0個や負の数で強化石が増えない')
+  assert.match(f, /select \* into v_row from public\.v2cap_profiles where id = v_uid for update;/, '行をつかんでから見る')
+  assert.ok(f.includes("if coalesce(v_row.enh_stone, 0) < v_cost then return jsonb_build_object('ok', false, 'error', '強化石が足りません'); end if;"))
+  assert.ok(f.includes('set enh_stone = coalesce(enh_stone, 0) - v_cost, enh_stone2 = coalesce(enh_stone2, 0) + p_qty'))
+  assert.ok(SQL.includes('revoke all on function public.v2cap_stone_craft(int) from public, anon;'))
+  assert.ok(SQL.includes('grant execute on function public.v2cap_stone_craft(int) to authenticated;'))
+  const smith = readFileSync(new URL('../components/V2capSmith.jsx', import.meta.url), 'utf8')
+  assert.ok(smith.includes("call('v2cap_stone_craft', { p_qty: n })"), '鍛冶屋の画面から作る')
 })
 
 test('出撃の間隔はサーバーでも見る（10秒・通信の揺れぶん2秒の余裕）', () => {

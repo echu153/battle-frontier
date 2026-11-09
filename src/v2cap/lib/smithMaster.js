@@ -55,6 +55,7 @@ export const MASTER_LINES = {
     { face: 'smile', text: 'いらねえ装備は分解しな。残骸は、ぐっと鍛え上げるときにも作成にも使うぜ' },
     { face: 'normal', text: '鍛えるほど、うまくいかねえことも増える。強化石とGoldは多めに用意しときな' },
     { face: 'smile', text: '強化石は、魔物を倒してるとたまに見つかる。見つけたら持ってきな' },
+    { face: 'normal', text: 'いい石は滅多に見つからねえ。強化石を持ってきな、まとめて練り直してやる' },
     { face: 'normal', text: 'どこまで鍛え上げられるか、てっぺんを目指してみな' },
     { face: 'smile', text: 'いい装備を作るには、残骸がたんまりいる。コツコツ集めな' },
     { face: 'smile', text: 'ガハハ！ 今日もいい音で鉄が鳴ってらあ' },
@@ -87,6 +88,11 @@ export const MASTER_LINES = {
   craft: [
     { face: 'smile', text: 'できたぞ！ {item}だ。大事に使えよ！' },
     { face: 'smile', text: 'ほらよ、{item}の出来上がりだ。いい出来だろ？' },
+  ],
+  // 良質な強化石を作った（2026-11-09・強化石を練り直す）
+  stoneCraft: [
+    { face: 'smile', text: 'ほらよ、練り直してやったぜ。小せえ石も、集めて叩けばいい石になる' },
+    { face: 'smile', text: 'できたぞ。こいつなら、ぐっと鍛え上げるときにも負けやしねえ' },
   ],
   // 分解した
   dismantle: [{ face: 'normal', text: 'おう、{n}個ばらしといたぜ。残骸は大事に使えよ' }],

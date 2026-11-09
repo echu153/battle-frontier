@@ -15,7 +15,7 @@
 import { spotOf, enemyLvOf, scaleByRole, LAST_SPOT } from './areas.js'
 import { itemOf, RARITIES, ARMOR_LINES, ACCESSORY_TYPES } from './equipment.js'
 import { weaponsOf } from './jobs.js'
-import { scrapNameOf, STONE_NAME } from './smith.js'
+import { scrapNameOf, STONE_NAME, STONE2_NAME } from './smith.js'
 import { PAPIA_PCT, PAPIA_ROLE, papiaEnemyOf, takePapiaForce } from './papia.js'
 import {
   rollBoss, nextBossRate, bandAt, rollDropPart,
@@ -200,3 +200,11 @@ export const STONE_N = 1     // 出たときの数
 export const rollStone = (rng = Math.random) => (rng() * 100 < STONE_PCT ? STONE_N : 0)
 // ログの1行（宝箱と同じ形）
 export const stoneText = (n) => `${STONE_NAME}×${n}を獲得した！`
+// 【確定】2026-11-09 良質な強化石（+6〜+10の強化に使う・smith.js の STONE_TIERS）：ユーザー選択「出撃＋鍛冶屋で作る」→
+//   出撃で勝った戦闘ごとに STONE2_PCT で1個（強化石の2%とは別に引く・祠とパピアも）。確率はシミュで
+//   「エリア4から+6・エリア11から+10に届く（強化値の平均が前と同じ）」ように決めた（tools/v2cap-progress.mjs --report）
+// ★決めるのはサーバー（v2cap_sortie_apply の c_stone2_rate）。⚠数を変えたら SQL の c_stone2_… も直す（v2capsql.test.js が突き合わせる）
+export const STONE2_PCT = 0.2   // 勝った戦闘で、良質な強化石が出る確率（%）
+export const STONE2_N = 1
+export const rollStone2 = (rng = Math.random, pct = STONE2_PCT) => (rng() * 100 < pct ? STONE2_N : 0)
+export const stone2Text = (n) => `${STONE2_NAME}×${n}を獲得した！`

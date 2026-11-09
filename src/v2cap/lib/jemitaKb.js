@@ -26,8 +26,8 @@ import {
 } from './equipment.js'
 import { ARMOR_SETS, SET_TIERS, SET_PARTS, SET_RARITIES, setTierText } from './armorSets.js'
 import { MAX_LV, POINTS_PER_LV, POINTS_STEP, POINTS_ON_STEP, POINT_UNIT, STAMINA_BASE, STAMINA_RECOVER_MS } from './level.js'
-import { PLUS_MAX, PLUS_CAP, ENHANCE_RATE, SCRAP_NAMES, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, STONE_NAME, ENHANCE_STONE, ENHANCE_SCRAP_FROM } from './smith.js'
-import { STONE_PCT } from './sortie.js'
+import { PLUS_MAX, PLUS_CAP, ENHANCE_RATE, SCRAP_NAMES, SCRAP_YIELD, CRAFT_RARITIES, CRAFT_SCRAP, STONE_NAME, ENHANCE_STONE, ENHANCE_SCRAP_FROM, STONE2_NAME, STONE2_FROM, STONE_CRAFT } from './smith.js'
+import { STONE_PCT, STONE2_PCT } from './sortie.js'
 import { SHOP_NAME, BURGERS, TOPPINGS, TOPPING_GROUPS, BURGER_GOLD, TOPPING_GOLD, MEAL_MINUTES, MEAL_STAT_PCT, TOPPING_RESIST_PCT } from './burger.js'
 import { DAILY_TASKS } from './daily.js'
 import { FORTUNES } from '../core/tree.js'
@@ -213,9 +213,10 @@ const facilities = () => {
   return [
     '## 施設',
     '### 鍛冶屋（強化・分解・作成）',
-    `- 強化：+${PLUS_MAX}まで。成功率は ${rates}（画面に出る）。1回ごとにGoldと${STONE_NAME}${ENHANCE_STONE}個を使う。+${ENHANCE_SCRAP_FROM}からは、その装備のエリアの残骸も使う（ノーマルは残骸を使わない）。`
+    `- 強化：+${PLUS_MAX}まで。成功率は ${rates}（画面に出る）。1回ごとにGoldと強化石${ENHANCE_STONE}個を使う（+${STONE2_FROM - 1}までは${STONE_NAME}・+${STONE2_FROM}からは${STONE2_NAME}）。+${ENHANCE_SCRAP_FROM}からは、その装備のエリアの残骸も使う（ノーマルは残骸を使わない）。`
       + `挑戦の専用装備と四凶のユニークは、+${ENHANCE_SCRAP_FROM}から残骸の代わりにそのボスの素材を1個使う。失敗すると使ったものはなくなり、強化値はそのまま。`,
     `- ${STONE_NAME}：出撃で勝つと${STONE_PCT}%で1個手に入る。`,
+    `- ${STONE2_NAME}：出撃で勝つと${STONE2_PCT}%で1個手に入る。鍛冶屋の強化の一覧の上の「作る」で、${STONE_NAME}${STONE_CRAFT}個から1個作れる（必ずできる）。`,
     `- 分解：装備を残骸にする（${RARITIES.map(r => `${RARITY_LABEL[r]}${SCRAP_YIELD[r]}個`).join('・')}）。残骸はエリアごと（${SCRAP_NAMES.slice(0, 3).join('・')}…）。`,
     `- 作成：残骸とGoldで、${CRAFT_RARITIES.map(r => `${RARITY_LABEL[r]}（残骸${CRAFT_SCRAP[r]}個）`).join('・')}の装備を作れる（そのエリアの装備）。`,
     `- V1からの引き継ぎでもらえる券を使うと、ユニークをその券の強化値（最大+${PLUS_CAP}）にできる。`,
@@ -252,7 +253,7 @@ const facilities = () => {
     `- 守護者でいるあいだは出撃の装備のドロップ率+${GUARD_DROP_BONUS}%。守っているあいだは挑戦できない。`,
     '### 賭博場',
     `- Goldをメダルに替えて遊ぶ（${GOLD_PER_MEDAL}G＝1枚）。スロット・ハイ&ロー・ルーレット。`,
-    `- 両替所の中に景品の交換所がある：メダル${PRIZE_BY_KEY.stone.medals}枚で${STONE_NAME}1個（何個でも替えられる）。メダルはGoldに戻せない。`,
+    `- 両替所の中に景品の交換所がある：メダル${PRIZE_BY_KEY.stone.medals}枚で${STONE_NAME}1個・メダル${PRIZE_BY_KEY.stone2.medals}枚で${STONE2_NAME}1個（何個でも替えられる）。メダルはGoldに戻せない。`,
     '### V1からの引き継ぎ',
     `- V1のキャラがあると、Ⅱのキャラ作成のときに引き継げる：EXPのボーナス・いちばん強化した装備に見合うユニークと強化の券・${Object.values(V1_BOX_NAMES).join('と')}（中身は残骸）。`,
   ].join('\n')

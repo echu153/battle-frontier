@@ -1,4 +1,5 @@
 // v2cap 賭博場：表・還元率・リールの見え方（node --test）
+import { STONE_TIERS, STONE_CRAFT } from './smith.js'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
@@ -24,7 +25,11 @@ test('【確定】両替所：100 Gold＝1枚（前作と同じ）', () => {
 })
 
 test('【確定】2026-11-09 景品の交換所：強化石1個＝メダル50枚・回数の上限なし（ユーザー「とりあえず交換所で強化石を交換できるようにして」＋選択）', () => {
-  assert.deepEqual(PRIZES, [{ key:'stone', medals:50 }])
+  // 2026-11-09 良質な強化石も並べた（ユーザーが選んだ「メダル500枚」＝強化石10個ぶん・鍛冶屋で作るのと同じ値打ち）
+  assert.deepEqual(PRIZES, [{ key:'stone', medals:50, tier:0 }, { key:'stone2', medals:500, tier:1 }])
+  assert.equal(PRIZE_BY_KEY.stone2.medals, PRIZE_BY_KEY.stone.medals * STONE_CRAFT, '良質1個＝強化石10個ぶん')
+  assert.deepEqual(PRIZES.map(p => STONE_TIERS[p.tier].name), ['強化石', '良質な強化石'])
+  assert.equal(prizeMaxOf(999, PRIZE_BY_KEY.stone2), 1)
   assert.equal(PRIZE_QTY_MAX, 9999, '1回で替えられる数（何回でも替えられる）')
   assert.equal(prizeMaxOf(149, PRIZE_BY_KEY.stone), 2)
   assert.equal(prizeMaxOf(49, PRIZE_BY_KEY.stone), 0)
@@ -35,20 +40,24 @@ test('【確定】2026-11-09 景品の交換所：強化石1個＝メダル50枚
   const i = SQL.indexOf('create or replace function public.v2cap_casino_prize(')
   assert.ok(i >= 0)
   const fn = SQL.slice(i, SQL.indexOf('\n$$;', i))
-  assert.ok(fn.includes(`c_stone_medals constant int := ${PRIZE_BY_KEY.stone.medals};`))
+  assert.ok(fn.includes(`c_stone_medals  constant int := ${PRIZE_BY_KEY.stone.medals};`))
+  assert.ok(fn.includes(`c_stone2_medals constant int := ${PRIZE_BY_KEY.stone2.medals};`))
   assert.ok(fn.includes(`c_qty_max      constant int := ${PRIZE_QTY_MAX};`))
   assert.ok(fn.includes("if not public.v2cap_is_dev() then"))
-  assert.ok(fn.includes("if p_prize is distinct from 'stone' then"), '知らない景品は断る')
+  assert.ok(fn.includes("if p_prize is null or p_prize not in ('stone', 'stone2') then"), '知らない景品は断る')
+  assert.ok(fn.includes("v_cost := p_qty::bigint * case when p_prize = 'stone2' then c_stone2_medals else c_stone_medals end;"))
   assert.ok(fn.includes('if p_qty is null or p_qty < 1 or p_qty > c_qty_max then'), '0個や負の数でメダルが増えない')
   assert.ok(fn.includes('for update;'), '同時に替えてもメダルが合う')
   assert.ok(fn.includes("if v_row.medals < v_cost then return jsonb_build_object('ok', false, 'error', 'メダルが足りません'); end if;"))
-  assert.ok(fn.includes('set medals = medals - v_cost, enh_stone = coalesce(enh_stone, 0) + p_qty'))
+  assert.ok(fn.includes("enh_stone = coalesce(enh_stone, 0) + case when p_prize = 'stone' then p_qty else 0 end,"))
+  assert.ok(fn.includes("enh_stone2 = coalesce(enh_stone2, 0) + case when p_prize = 'stone2' then p_qty else 0 end,"))
   assert.ok(!fn.includes('v2cap_casino_book'), '収支と払い出し（解禁）には数えない')
   assert.ok(SQL.includes('revoke all on function public.v2cap_casino_prize(text, int) from public, anon;'))
   assert.ok(SQL.includes('grant execute on function public.v2cap_casino_prize(text, int) to authenticated;'))
   // 画面：両替所のタブの中・タブは足さない・準備中の文は消した
   const casino = readFileSync(new URL('../components/V2capCasino.jsx', import.meta.url), 'utf8')
-  assert.ok(casino.includes("supabase.rpc('v2cap_casino_prize', { p_prize: 'stone', p_qty: n })"))
+  assert.ok(casino.includes("supabase.rpc('v2cap_casino_prize', { p_prize: prize.key, p_qty: n })"))
+  assert.ok(casino.includes('setStones([Number(data.stones) || 0, Number(data.stones2) || 0])'), '交換のあと両方の数を直す')
   assert.ok(casino.includes('🎁 景品の交換所'))
   assert.ok(!casino.includes('ただいま準備中'))
 })

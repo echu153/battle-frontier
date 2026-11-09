@@ -13,6 +13,7 @@ import {
   PLUS_MAX, plusOf, scrapNameOf, scrapOf, scrapAreaOf, dismantleGainOf, bulkPickable, enhanceCostOf, enhanceErrorOf,
   SCRAP_YIELD, CRAFT_RARITIES, craftCostOf, craftErrorOf,
   STONE_NAME, ENHANCE_STONE, ENHANCE_SCRAP_FROM, stoneOf, enhanceSpentText,
+  STONE2_NAME, STONE2_FROM, STONE_CRAFT, stoneHaveOf, stone2Of, stoneCraftMaxOf,
 } from '../lib/smith.js'
 import { statLine, nameColor, PLUS_COLOR, gainText, areaOptionLabel, filterSelect, optionStyle, useGearRows, useFavToggle, withFavs } from './v2capGearView.js'
 import { PlusTag, GearFilterBar, StatChange, FavStar } from './v2capGear.jsx'
@@ -48,7 +49,8 @@ import { CH_CRAFT_MATS, challengeItemsOf, chMatsOf, chCraftCostOf, chCraftErrorO
 // ============================================================
 // help＝決まりの説明。タブの下には出さず、❓ HELP にまとめる（2026-10-26 ユーザー指示「ここの説明はHELPにまとめて、強化分解作成すべてここの部分いらない」）
 const TABS = [
-  { key:'enhance',   label:'強化', help:`Goldと${STONE_NAME}${ENHANCE_STONE}個で強化値を+1（+${PLUS_MAX}まで・+1ごとに強さ+10%・最低でも戦闘力+1）。+${ENHANCE_SCRAP_FROM}からは、その装備のエリアの残骸も使います（ノーマルの装備は残骸を使いません）。挑戦の装備は、残骸の代わりにそのボスの素材を使います。${STONE_NAME}は出撃で敵を倒すと、ときどき手に入ります。失敗すると使った素材とGoldはなくなり、強化値はそのままです。着けている装備も強化できます。` },
+  // 2026-11-09〜 強化石は段ごと（+5まで強化石・+6から良質な強化石・smith.js の STONE_TIERS）
+  { key:'enhance',   label:'強化', help:`Goldと強化石${ENHANCE_STONE}個で強化値を+1（+${PLUS_MAX}まで・+1ごとに強さ+10%・最低でも戦闘力+1）。+${STONE2_FROM - 1}までは${STONE_NAME}、+${STONE2_FROM}からは${STONE2_NAME}を使います。${STONE2_NAME}は、強化の一覧の上の「作る」で${STONE_NAME}${STONE_CRAFT}個から作れます。+${ENHANCE_SCRAP_FROM}からは、その装備のエリアの残骸も使います（ノーマルの装備は残骸を使いません）。挑戦の装備は、残骸の代わりにそのボスの素材を使います。${STONE_NAME}は出撃で敵を倒すと、ときどき手に入ります（${STONE2_NAME}はまれです）。失敗すると使った素材とGoldはなくなり、強化値はそのままです。着けている装備も強化できます。` },
   { key:'dismantle', label:'分解', help:`装備を、その装備のエリアの残骸にします（${ALL_RARITIES.map(r => `${rarityLabel(r)}${SCRAP_YIELD[r]}`).join('・')}個）。着けている装備とお気に入り（★）の装備は分解できません。ユニークと挑戦の専用装備はまとめての分解に入りません（1つずつなら分解できます）。` },
   { key:'craft',     label:'作成', help:`「エリア装備」は、レア・エピック・レジェンダリーの装備を、Goldとそのエリアの残骸で作ります。「挑戦装備」は、挑戦の四凶の専用装備を、そのボスを倒すと手に入る素材${CH_CRAFT_MATS}個とGoldで作ります。どちらも必ずできて、+0で持ち物に入ります。武器はどの職業のものでも作れます。` },
   // 武器の真化（2026-10-26・lib/shinka.js）。代償が付くこともあるのは HELP に書く（ユーザー指示「真化するときにデメリットがつくこともあることを伝える」）
@@ -59,6 +61,8 @@ const FAV_HELP = '装備の★を押すとお気に入りになります（も�
 const HELP_HEAD = { color:'#ffaa44', fontSize:'12px', marginBottom:'2px' }
 const rowBox = (border, bg = '#000818') => ({ background: bg, border:`1px solid ${border}`, padding:'6px 8px' })
 const SHORT = '#ff8844'
+// 強化石の段ごとの色（0＝強化石・1＝良質な強化石・2026-11-09）
+const STONE_COLOR = ['#9fd8ff', '#c9a6ff']
 
 export default function V2capSmith({ prof, inventory, onProfile, onGo }) {
   const [tab, setTab] = useState('enhance')
@@ -164,6 +168,8 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call, say, toggleFav }) {
   const [shortLine, setShortLine] = useState(null) // 足りなくて強化できない装備を開いたときの親方のひとこと（強化の画面にも出す）
   const [ticketId, setTicketId] = useState(null) // 強化券を使う確認を開いている持ち物のID
   const [ticketMsg, setTicketMsg] = useState(null)
+  const [craftOpen, setCraftOpen] = useState(false)   // 良質な強化石を作る画面（2026-11-09）
+  const [craftMsg, setCraftMsg] = useState(null)
   // 【確定】2026-10-13 ユーザー指示「黒い砂漠の強化みたいな演出」「強化の成否もポップアップ」＝強化の演出（V2capEnhanceFx.jsx）
   //   押した時点の装備の様子を job に写して演出を始め、サーバーの結果が届いたら job.result に入れる
   const [fxJob, setFxJob] = useState(null)
@@ -206,6 +212,15 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call, say, toggleFav }) {
     setTicketId(null)
     setTicketMsg(error ? { ok: false, text: `⚠ ${error}` } : { ok: true, text: `🎫 「${ticketRow.item.name}」が +${data.plus} になりました` })
   }
+  // 良質な強化石を作る（2026-11-09・サーバーの v2cap_stone_craft）：強化石10個で1個・必ずできる
+  const craftStone = async (n) => {
+    if (busy || !(n > 0)) return
+    setCraftMsg(null)
+    const { data, error } = await call('v2cap_stone_craft', { p_qty: n })
+    if (error) { setCraftMsg({ ok: false, text: `⚠ ${error}` }); say('error'); return }
+    setCraftMsg({ ok: true, text: `💠 ${STONE2_NAME}を${Number(data.got).toLocaleString()}個作りました` })
+    say('stoneCraft')
+  }
   // 結果のポップアップの「続けて +N にする」（次も強化できるときだけ）
   const nextCost = row ? enhanceCostOf(row.item, row.inv) : null
   const nextErr = row && nextCost ? enhanceErrorOf(row.item, row.inv, prof) : null
@@ -244,6 +259,17 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call, say, toggleFav }) {
         </div>
       )}
       {ticketMsg && <div style={{ color: ticketMsg.ok ? '#44ff88' : SHORT, fontSize:'11px', marginBottom:'6px' }}>{ticketMsg.text}</div>}
+      {craftOpen && (
+        <StoneCraftModal prof={prof} busy={busy} msg={craftMsg} onCraft={craftStone}
+          onClose={() => { if (!busy) { setCraftOpen(false); setCraftMsg(null) } }} />
+      )}
+      {/* 持っている強化石（2026-11-09〜 段ごと）と、良質な強化石を作るボタンを1行に */}
+      <div style={{ ...rowBox('#2a4466'), marginBottom:'6px', fontSize:'11px', display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap' }}>
+        <span style={{ color: STONE_COLOR[0] }}>💎 {STONE_NAME} ×{stoneOf(prof).toLocaleString()}</span>
+        <span style={{ color: STONE_COLOR[1] }}>💠 {STONE2_NAME} ×{stone2Of(prof).toLocaleString()}</span>
+        <button onClick={() => { setCraftOpen(true); setCraftMsg(null) }} disabled={busy}
+          style={{ ...miniBtn(STONE_COLOR[1]), marginLeft:'auto', flexShrink:0 }}>💠 作る</button>
+      </div>
       <GearFilterBar g={list} />
       <div style={{ display:'grid', gap:'4px', maxHeight:'560px', overflowY:'auto' }}>
         {rows.length === 0 && <Empty all={all} />}
@@ -660,7 +686,7 @@ function SmithModal({ row, prof, busy, msg, say, onEnhance, onClose }) {
               2026-11-08〜 Goldの下に強化石（どの段も）、その下に+6からの残骸か、挑戦の装備ならボスの素材（smith.js の enhanceCostOf） */}
           <Materials label="強化素材" list={[
             { name:'Gold', n: cost.gold, unit:'', have: gold, color:'#ffcc00' },
-            { name: STONE_NAME, n: cost.stone, unit:'個', have: stoneOf(prof), color:'#9fd8ff' },
+            { name: cost.stoneName, n: cost.stone, unit:'個', have: stoneHaveOf(prof, cost.stoneTier), color: STONE_COLOR[cost.stoneTier] },
             ...(cost.scrap > 0 ? [{ name: scrapNameOf(cost.area), n: cost.scrap, unit:'個', have, color:'#cfe2ff' }] : []),
             ...(cost.mat > 0 ? [{ name: cost.matName, n: cost.mat, unit:'個', have: matHave, color:'#ffb088' }] : []),
           ]} />
@@ -669,6 +695,30 @@ function SmithModal({ row, prof, busy, msg, say, onEnhance, onClose }) {
           {err && <div style={short}>⚠ {err}</div>}
         </>
       ) : <div style={{ color: PLUS_COLOR }}>強化値は+{Math.max(PLUS_MAX, plus)}（上限）です</div>}
+      {msg && <div style={{ color: msg.ok ? '#44ff88' : SHORT, marginTop:'6px' }}>{msg.text}</div>}
+    </V2Modal>
+  )
+}
+
+// 良質な強化石を作る画面（2026-11-09）：強化石10個で1個。数は 1・10・100・作れるだけ から選ぶ
+function StoneCraftModal({ prof, busy, msg, onCraft, onClose }) {
+  const max = stoneCraftMaxOf(prof)
+  const [n, setN] = useState(1)
+  const ok = !busy && n >= 1 && n <= max
+  const pickStyle = (on) => ({ ...miniBtn(on ? STONE_COLOR[1] : '#62789a'), padding:'5px 8px' })
+  return (
+    <V2Modal title={`💠 ${STONE2_NAME}を作る`} color={STONE_COLOR[1]} busy={busy}
+      confirmLabel={`${n.toLocaleString()}個作る`} cancelLabel="閉じる"
+      onConfirm={ok ? () => onCraft(n) : undefined} onClose={onClose}>
+      <div>{STONE_NAME}{STONE_CRAFT}個で、{STONE2_NAME}1個を作ります（必ずできます）。</div>
+      <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', margin:'8px 0' }}>
+        {[1, 10, 100].map(k => <button key={k} onClick={() => setN(k)} style={pickStyle(n === k)}>{k}個</button>)}
+        <button onClick={() => setN(Math.max(1, max))} disabled={max < 1} style={pickStyle(max > 0 && n === max)}>作れるだけ（{max.toLocaleString()}個）</button>
+      </div>
+      <Materials label="作成素材" list={[{ name: STONE_NAME, n: n * STONE_CRAFT, unit:'個', have: stoneOf(prof), color: STONE_COLOR[0] }]} />
+      <div style={{ marginTop:'4px' }}>できるもの：<span style={{ color: STONE_COLOR[1] }}>{STONE2_NAME} {n.toLocaleString()}個</span>
+        <span style={{ color: TEXT.sub, fontSize:'11px' }}>（所持数：{stone2Of(prof).toLocaleString()}）</span></div>
+      {n > max && <div style={{ color: SHORT }}>⚠ {STONE_NAME}が足りません</div>}
       {msg && <div style={{ color: msg.ok ? '#44ff88' : SHORT, marginTop:'6px' }}>{msg.text}</div>}
     </V2Modal>
   )
