@@ -262,7 +262,7 @@ function EnhanceTab({ prof, all, wornIds, list, busy, call, say, toggleFav }) {
       )}
       {ticketMsg && <div style={{ color: ticketMsg.ok ? '#44ff88' : SHORT, fontSize:'11px', marginBottom:'6px' }}>{ticketMsg.text}</div>}
       {craftOpen && (
-        <StoneCraftModal prof={prof} busy={busy} msg={craftMsg} onCraft={craftStone}
+        <StoneCraftModal prof={prof} busy={busy} msg={craftMsg} onCraft={craftStone} onTier={() => setCraftMsg(null)}
           onClose={() => { if (!busy) { setCraftOpen(false); setCraftMsg(null) } }} />
       )}
       {/* 持っている強化石（2026-11-09〜 段ごと・4種類）と、1つ上の石を作るボタン。狭い画面では折り返す */}
@@ -703,7 +703,8 @@ function SmithModal({ row, prof, busy, msg, say, onEnhance, onClose }) {
 
 // 1つ上の強化石を作る画面（2026-11-09）：上のボタンで作る石（良質・希少・至高）を選ぶ。1つ下の石10個（希少と至高はGoldも）で1個。
 //   数は 1・10・100・作れるだけ から選ぶ。素材は Gold がいちばん上（強化と同じ）
-function StoneCraftModal({ prof, busy, msg, onCraft, onClose }) {
+// onTier＝作る石を切りかえたとき（前の石の「作りました」を消す）
+function StoneCraftModal({ prof, busy, msg, onCraft, onTier, onClose }) {
   const [tier, setTier] = useState(1)
   const [n, setN] = useState(1)
   const max = stoneCraftMaxOf(prof, tier)
@@ -719,7 +720,7 @@ function StoneCraftModal({ prof, busy, msg, onCraft, onClose }) {
       onConfirm={ok ? () => onCraft(n, tier) : undefined} onClose={onClose}>
       <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', marginBottom:'8px' }}>
         {STONE_CRAFT_TIERS.map(t => (
-          <button key={t} onClick={() => setTier(t)} style={pickStyle(tier === t, STONE_TIERS[t].color)}>{STONE_TIERS[t].icon} {STONE_TIERS[t].name}</button>
+          <button key={t} onClick={() => { if (t !== tier) { setTier(t); onTier?.() } }} style={pickStyle(tier === t, STONE_TIERS[t].color)}>{STONE_TIERS[t].icon} {STONE_TIERS[t].name}</button>
         ))}
       </div>
       <div>{from.name}{STONE_CRAFT}個{STONE_CRAFT_GOLD[tier] > 0 ? `とGold ${STONE_CRAFT_GOLD[tier].toLocaleString()}` : ''}で、{to.name}1個を作ります（必ずできます）。</div>
