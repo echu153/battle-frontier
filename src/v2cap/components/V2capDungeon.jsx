@@ -16,6 +16,7 @@ import { damageOf, startTryAtb } from '../lib/dungeonVerify.js'
 import { callVerify, isStaleBuild } from '../lib/dungeonVerifyCall.js'
 import { totalStats } from '../lib/loadout.js'
 import { openAreaOf } from '../lib/sortie.js'
+import { LAST_SPOT } from '../lib/areas.js'
 import { motionOf } from '../lib/motionArt.js'
 import { homeIconOf } from '../lib/classArt.js'
 import { artGenderOf } from '../lib/gender.js'
@@ -147,7 +148,9 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
   onProfileRef.current = onProfile
 
   const myPower = useMemo(() => calcPower(totalStats(prof, inventory)), [prof, inventory])
-  const reached = openAreaOf(prof?.cleared_spots)
+  // 【確定】2026-11-09 ユーザー「管理者なんだから権限で条件満たすようにしてよ」：開発者（管理者・dev）はエリアの解禁を待たずに、どの難易度にも挑戦できる
+  //   （サーバーの v2cap_dungeon_summon も開発者はエリアを見ない）。ふつうの人は今までどおり行ったことのある一番先のエリア
+  const reached = dev ? openAreaOf([LAST_SPOT]) : openAreaOf(prof?.cleared_spots)
   const macros = useMemo(() => macrosOf(prof), [prof])
   const myGender = artGenderOf(prof, loadPref('capArtGender', 'm'))
   const baseCls = CLASS_BY_ID[prof?.class]?.req?.cls

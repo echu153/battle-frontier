@@ -19,7 +19,8 @@ import { liveStats, hpStepMultOf, healMaxAmount, createSide, takeAction } from '
 import { splitHits } from './atbFx.js'
 import { statsOf } from '../core/enemies.js'
 import { CAP_RULES } from './rules.js'
-import { tenSortieExpOf } from './areas.js'
+import { tenSortieExpOf, LAST_SPOT } from './areas.js'
+import { openAreaOf } from './sortie.js'
 import { DAILY_GOLD_PER_LV } from './daily.js'
 import { INPUTS_MAX } from './dungeonVerify.js'
 import { buildBattleLog } from '../core/battleLog.js'
@@ -1546,4 +1547,16 @@ test('【確定】2026-11-09 マスターを選ぶと、奥義と条件を1行�
   const src = readFileSync(new URL('../components/V2capBossPick.jsx', import.meta.url), 'utf8')
   assert.ok(src.includes("{diff === 'master' && boss.ultimate && ("))
   assert.ok(src.includes('奥義「{boss.ultimate.skill.name}」：{ULT_HINTS[boss.ultimate.check]}'))
+})
+
+test('【確定】2026-11-09 開発者（管理者）はエリアの解禁を待たずに、どの難易度にも挑戦できる（ユーザー「管理者なんだから権限で条件満たすようにしてよ」）', () => {
+  // 画面：開発者は「最後のエリアまで行った」として扱う
+  const src = readFileSync(new URL('../components/V2capDungeon.jsx', import.meta.url), 'utf8')
+  assert.ok(src.includes('const reached = dev ? openAreaOf([LAST_SPOT]) : openAreaOf(prof?.cleared_spots)'))
+  for (const k of DIFF_KEYS) assert.ok(isDiffUnlocked('varuzenoku', k, openAreaOf([LAST_SPOT])), `${k}：最後のエリアなら全部`)
+  assert.equal(isDiffUnlocked('varuzenoku', 'master', openAreaOf([18])), false, 'ふつうの人（⑥まで）は今までどおり')
+  // サーバー：開発者はエリアを見ない（ふつうの人は今までどおり断る）
+  const summon = fnBody('v2cap_dungeon_summon')
+  assert.ok(summon.includes('if v_here < v_area and not public.v2cap_is_dev() then'))
+  assert.ok(summon.includes("format('エリア%sに着くと挑戦できます', v_area)"))
 })

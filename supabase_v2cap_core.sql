@@ -9761,9 +9761,10 @@ begin
   if not found then return jsonb_build_object('ok', false, 'error', 'キャラクターがいません'); end if;
   select c.hp, c.area into v_hp, v_area from public.v2cap_dungeon_conf(p_boss, p_diff) c;
   if v_hp is null then return jsonb_build_object('ok', false, 'error', 'その難易度にはまだ挑戦できません'); end if;
-  -- 行ったことのある一番先の場所のエリア（1エリア＝3か所）
+  -- 行ったことのある一番先の場所のエリア（1エリア＝3か所）。
+  --   【確定】2026-11-09 ユーザー「管理者なんだから権限で条件満たすようにしてよ」：開発者（管理者）はエリアを見ない＝どの難易度にも挑戦できる（画面 V2capDungeon.jsx も同じ）
   v_here := (public.v2cap_open_until(v_row.cleared_spots) - 1) / 3 + 1;
-  if v_here < v_area then
+  if v_here < v_area and not public.v2cap_is_dev() then
     return jsonb_build_object('ok', false, 'error', format('エリア%sに着くと挑戦できます', v_area));
   end if;
   if exists (select 1 from public.v2cap_dungeon_runs r where r.owner_id = v_uid and r.day = public.v2cap_dungeon_today() and r.boss = p_boss) then
