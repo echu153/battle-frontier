@@ -1,7 +1,7 @@
 import { createContext, useContext, useId, useLayoutEffect, useRef, useState } from 'react'
 import V2capCofferParts from './V2capCofferParts.jsx'
 import { TEXT } from './v2ui.js'
-import { buffChips, hpBuffChips, ailChips, stateChips, needShownOf, castMsOf, CAST_SEC, BUFF_GAUGE_SEC } from '../core/atb.js'
+import { buffChips, hpBuffChips, ailChips, stateChips, needShownOf, castMsOf, ultStatusOf, CAST_SEC, BUFF_GAUGE_SEC } from '../core/atb.js'
 import { STAT_DEFS } from '../core/stats.js'
 import { hitReactOf, lungeOf, shakeOf, wobbleOf, lastHitAtOf, popTextOf, popScaleOf, popLeftOf, popTopOf, CRIT_TEXT, HIT_SEC, POP_SEC, GLOW_SEC, RAGE_SEC, skillBannerAt } from '../lib/atbFx.js'
 import { JP_BOLD } from './casinoStyle.js'
@@ -91,16 +91,33 @@ const chip = (color, bg = '#000818') => ({ fontSize:'10px', padding:'1px 5px', b
 const buffText = (table) => Object.entries(table)
   .map(([k, v]) => `${STAT_DEFS[k]?.label || k}${v >= 0 ? '+' : ''}${Math.round(v)}%`).join('・')
 
+// 四凶のマスターの奥義の条件（構えのあいだだけ・core/atb.js の ultStatusOf）
+//   【確定】2026-11-09 案「構えのあいだは、条件を出す（例：『黒龍を怯ませろ！』と削った量のバー）」＝ユーザー「案のまま（推奨）」。
+//   満たしていれば緑＋✓。削る条件は量をバーだけで出す（ボスのHPの数字は出さない＝2026-11-05 ユーザー「敵のHPの数値は見れないようにして」）
+const ULT_NOTE = { dps: '怯ませろ！', ail: '状態異常を入れろ！', guard: '防御で受けろ！', cleanse: '状態異常を消せ！' }
+const UltNote = ({ st, side }) => {
+  const s = ultStatusOf(st, side)
+  if (!s) return null
+  const tail = s.ok ? ' ✓' : s.check === 'cleanse' ? ` あと${s.n}つ` : ''
+  return (
+    <div style={{ marginTop:'3px', display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'2px' }}>
+      <span style={{ fontSize:'11px', fontFamily: JP_BOLD, fontWeight: 700, color: s.ok ? '#88ff99' : '#ffdd55', textShadow:'1px 1px 0 #000' }}>⚠ {ULT_NOTE[s.check]}{tail}</span>
+      {s.check === 'dps' && <div style={{ width:'100%' }}><Bar pct={Math.min(100, (s.done / s.need) * 100)} color="#ffd24a" h={4} /></div>}
+    </div>
+  )
+}
+
 // かかっているもの（時間で切れるバフ・デバフ／状態異常／職の状態）
 const Chips = ({ st, side, right }) => {
   const buffs = buffChips(side, st.t)
   const ails = ailChips(st, side)
-  const states = stateChips(side)
+  const states = stateChips(side, st.t)
   if (!buffs.length && !ails.length && !states.length) return null
   return (
     <div style={{ display:'flex', flexWrap:'wrap', gap:'4px', marginTop:'4px', justifyContent: right ? 'flex-end' : 'flex-start' }}>
+      {/* name … 四凶のマスターの期限つきのバフ（竜鱗硬化など・2026-11-09） */}
       {buffs.map((c, i) => (
-        <span key={`b${i}`} style={chip(c.debuff ? '#ff88bb' : '#66bbff')}>{buffText(c.table)} {c.sec}秒</span>
+        <span key={`b${i}`} style={chip(c.debuff ? '#ff88bb' : '#66bbff')}>{c.name ? `${c.name} ` : ''}{buffText(c.table)} {c.sec}秒</span>
       ))}
       {ails.map(c => (
         <span key={c.key} style={chip('#cc99ff')}>{c.label}{c.stacks ? `×${c.stacks}` : ''}{c.sec ? ` ${c.sec}秒` : ''}</span>
@@ -800,6 +817,7 @@ function Fighter({ st, side, me, right, src, motion, strips = [], rig = null, fx
             : me.buffAct
               ? <Bar pct={((st.t - me.buffAct.start) / BUFF_GAUGE_SEC) * 100} color="#ffd24a" h={6} />
               : <Bar pct={(Math.min(me.gauge, need) / need) * 100} color={me.ail.paralyze ? '#888888' : right ? '#ff9944' : '#44aaff'} h={6} />}
+          {right && me.cast?.ult && <UltNote st={st} side={me} />}
         </div>
       </div>
       <div style={{ position:'relative', minWidth:0, display:'flex', flexDirection:'column', alignItems: align }}>

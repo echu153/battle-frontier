@@ -4,7 +4,7 @@ import { JP_BOLD } from './casinoStyle.js'
 import { miniBtn, TEXT } from './v2ui.js'
 import { bossAccentOf, bossEncounterOf, bossThumbOf } from '../lib/bossArt.js'
 import { bossBgOf } from '../lib/bossBg.js'
-import { CIRCLED, DIFF_COLOR, DIFF_KEYS, DUNGEON_BOSSES, diffOf, firstDiffOf, isDiffReady, isDiffUnlocked } from '../lib/dungeon.js'
+import { CIRCLED, DIFF_COLOR, DIFF_KEYS, DUNGEON_BOSSES, ULT_AT, ULT_HINTS, diffOf, firstDiffOf, isDiffReady, isDiffUnlocked } from '../lib/dungeon.js'
 
 // ============================================================
 // 「レベルキャップあり」版（v2cap）— 挑戦するボスを選んだときのポップアップ（遭遇のイラスト・難易度・持ち込む薬）
@@ -92,6 +92,10 @@ export default function V2capBossPick({ bossKey, run = null, reached, myPower, b
                 {ready && <>・推奨戦闘力 <span style={{ color: myPower >= d.recPower ? '#88ffaa' : '#ff8888' }}>{d.recPower.toLocaleString()}</span></>}
                 {!ready ? '・準備中' : !unlocked ? `・エリア${CIRCLED[d.area - 1]}に着くと挑戦できます` : ''}
               </div>
+              {/* マスターの奥義（2026-11-09・lib/dungeon.js の ULT_HINTS）：挑む前に条件が分かるように */}
+              {diff === 'master' && boss.ultimate && (
+                <div style={{ fontSize:'11px', color:'#ffdd55', marginTop:'3px' }}>⚠ HP{Math.round(ULT_AT * 100)}%から奥義「{boss.ultimate.skill.name}」：{ULT_HINTS[boss.ultimate.check]}</div>
+              )}
             </div>
           )}
           {/* 戦闘に持ち込む薬（合計4つまで） */}

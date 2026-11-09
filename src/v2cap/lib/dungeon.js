@@ -63,8 +63,16 @@ const VARUZENOKU_DIFFS = {
   // 【確定】2026-11-01 ユーザー「攻撃倍率少し上げていい」（技の調整と一緒に）：0.33→0.36・0.36→0.40（どちらも約1割）
   normal: { label: 'ノーマル', area: 2, recLv: 25, recPower: 500, power: 474, atk: 0.36, hp: 13000, reward: { exp: 175, gold: 1250 } },
   hard: { label: 'ハード', area: 5, recLv: 45, recPower: 1050, power: 1027, atk: 0.4, hp: 30000, reward: { exp: 350, gold: 2250 } },
-  expert: { label: 'エキスパート', area: 8, recLv: 65, ready: false },
-  master: { label: 'マスター', area: 12, recLv: 80, ready: false },
+  // 【確定】2026-11-09 エキスパート・マスターの数字（動きは下の DIFF_RULES・patternOf）。推奨LVの人（tools/v2cap-progress.mjs で育てた11職×2人）を
+  //   慣れた動き（ふつうの大技には防御・奥義の条件ごとに備える）で戦わせて測った（v2cap-tools/shikyou-exma-1109/exma-sim.mjs）：
+  //   ・ユーザー「エキスパートは70、masterは80れべ位の戦闘力を想定してる」＝推奨LV 65→70・80。守り（power）はその推奨LVの人のいちばん下（ハードの1027と同じ決め方）・
+  //     推奨戦闘力はその人たちの22人中20人以上が届く数。⚠LV65→80 の戦闘力は+8%しか上がらない（ゲームの目安 stdPowerAt も+7%・測る人は LV80 でも強化+6）
+  //   ・エキスパート：選択「HP70000（もっと難しく）」＝LV70の人で 挑戦まんなか5〜7回・倒された5〜7回・合計6〜8分・完全ソロ討伐0/44（今のハードは3〜4回・約4分）
+  //   ・マスター：ユーザー「20万くらいにして、なんでそんな小刻みでしかHP増やせないの もっと急カーブに強くなって」＝HP200000。
+  //     LV80の人で 挑戦まんなか16〜27回・合計16〜23分（いちばん長い人で約1時間）・90分で倒せないのは44回中0〜2回＝救援で早く倒す前提
+  //   ・報酬は前と同じ決まり（ユーザー選択）：EXP＝そのLVの出撃10回ぶん×2.5・Gold＝推奨LV×50
+  expert: { label: 'エキスパート', area: 8, recLv: 70, recPower: 1500, power: 1514, atk: 0.4, hp: 70000, reward: { exp: 550, gold: 3500 } },
+  master: { label: 'マスター', area: 12, recLv: 80, recPower: 1600, power: 1585, atk: 0.4, hp: 200000, reward: { exp: 825, gold: 4000 } },
 }
 // 【確定】2026-11-01 ユーザーの調整（技リストを見て）：
 //   黒龍＝ハードから黒爪に出血20%・黒翼烈風は鈍足をやめて2回の多段（合計1.8倍のまま）で1発ごとに出血50%・終焉の黒焔は4倍＋回復阻害（回復量−30%）
@@ -111,6 +119,13 @@ export const DUNGEON_BOSSES = {
         { at: 0.3, name: '逆鱗', table: { str: 25, int_stat: 25 } },
       ],
     },
+    // 【確定】2026-11-09 エキスパート・マスターで足す技とバフ（案のシートのとおり・前の決まり 10-29 の「強化が全部消える」「鱗が硬い」「構えのあいだに削ると不発」を入れた）
+    exSkill: { name: '黒尾薙ぎ', kind: 'phys', mult: 2.0, proc: 100, mp: 0, stripTimed: true },                                    // 当たると強化が全部消える
+    maSkill: { name: '黒焔流星', kind: 'mag', mult: 0.5, hits: 5, proc: 100, mp: 0, ail: { key: 'burn', chance: 30 }, ailPerHit: true },
+    timedBuff: { name: '竜鱗硬化', sec: 15, table: { vit: 100 } },                                                            // 15秒 守り+100%
+    // 構えのあいだに最大HPの pct% を削ると不発。【確定】2026-11-09 ユーザー選択「1.5%＝38%が止める（推奨）」（HP70000 のとき・1.2%＝52%・2%＝29%）
+    //   → 同じ日 マスターのHPが200000になった＝1.5%のままだと止められるのは4%だけ。選んだ「38%くらいが止める」を保って 0.45%（900・LV80の人の41%）
+    ultimate: { check: 'dps', pct: 0.45, skill: { name: '滅界の黒焔', kind: 'mag', mult: 4.0, proc: 100, mp: 0, castSec: 10 } },
     diffs: VARUZENOKU_DIFFS,
   },
   // 【確定】2026-10-30 ユーザー「あまざも黒龍と同じような行動パターンにして」→選択「黒龍の裏返し」：
@@ -145,6 +160,12 @@ export const DUNGEON_BOSSES = {
         { at: 0.3, name: '篠突く雨', table: { int_stat: 35 } },
       ],
     },
+    // 【確定】2026-11-09 エキスパート・マスターで足す技とバフ（案のシートのとおり）
+    exSkill: { name: '雨喰み', kind: 'mag', mult: 1.4, proc: 100, mp: 0, mpBurnPct: 15 },                                       // 当たるとMPを最大の15%減らす
+    maSkill: { name: '五月雨', kind: 'mag', mult: 0.4, hits: 6, proc: 100, mp: 0, ail: { key: 'slow', chance: 20 }, ailPerHit: true },
+    timedBuff: { name: '豪雨', sec: 20, table: { int_stat: 60 } },                                                             // 20秒 魔力+60%
+    // 撃つ瞬間に雨摩座へ状態異常が1つでも入っていれば、水が濁ってふつうの大技（4倍）。上位職では体術師だけ入れる技が無い（救援に頼る＝ユーザー了承）
+    ultimate: { check: 'ail', skill: { name: '大海嘯', kind: 'mag', mult: 4.0, proc: 100, mp: 0, castSec: 10 } },
     diffs: VARUZENOKU_DIFFS,
   },
   // 【確定】2026-11-01 ユーザー「ゼルギアスと閻魔も一緒に作りたい」→技の案に「これでいい」→「進めて」：3体目。ぜんぶ物理の機神。
@@ -179,6 +200,12 @@ export const DUNGEON_BOSSES = {
         { at: 0.3, name: '炉心臨界', table: { str: 25, agi: 25 } },
       ],
     },
+    // 【確定】2026-11-09 エキスパート・マスターで足す技とバフ（案のシートのとおり）
+    exSkill: { name: '電磁縛鎖', kind: 'phys', mult: 1.4, proc: 100, mp: 0, sureHit: true, gaugeZero: true },                 // 必中・当たるとゲージが0
+    maSkill: { name: '雷鋼連弾', kind: 'phys', mult: 0.45, hits: 6, proc: 100, mp: 0, ail: { key: 'blind', chance: 15 }, ailPerHit: true },
+    timedBuff: { name: '過給駆動', sec: 20, table: { agi: 60 } },                                                              // 20秒 速さ+60%
+    // 必中。撃つ瞬間に防御していれば1/10（防御のクールダウン45秒を取っておく・奥義は50秒ごと＝毎回間に合う）
+    ultimate: { check: 'guard', skill: { name: '神雷天墜', kind: 'phys', mult: 4.0, proc: 100, mp: 0, castSec: 10, sureHit: true } },
     diffs: VARUZENOKU_DIFFS,
   },
   // 【確定】2026-11-01 ユーザー「ゼルギアスと閻魔も一緒に作りたい」→技の案に「これでいい」→「閻魔も作ったから最後まで全部つくって」：4体目。ぜんぶ魔法の裁判官。呪いや封印を積んだ罪に見立てて、大技がその数だけ重くなる。
@@ -212,6 +239,12 @@ export const DUNGEON_BOSSES = {
         { at: 0.3, name: '忿怒相', table: { int_stat: 35 } },
       ],
     },
+    // 【確定】2026-11-09 エキスパート・マスターで足す技とバフ（案のシートのとおり）
+    exSkill: { name: '閻魔帳', kind: 'mag', mult: 1.5, proc: 100, mp: 0, ails: [{ key: 'curse', chance: 50 }, { key: 'seal', chance: 50 }] },
+    maSkill: { name: '紅蓮地獄', kind: 'mag', mult: 0.55, hits: 4, proc: 100, mp: 0, ail: { key: 'bleed', chance: 25 }, ailPerHit: true },
+    timedBuff: { name: '浄玻璃の鏡', sec: 15, table: {}, reflect: 30 },                                                        // 15秒 受けたダメージの30%を返す
+    // 撃つ瞬間、相手に状態異常が1つも無ければ「無罪」＝ふつうの大技（4倍）。1つでもあれば「有罪」＝即死級（清めの雫・治す技で消す）
+    ultimate: { check: 'cleanse', skill: { name: '閻魔裁定', kind: 'mag', mult: 4.0, proc: 100, mp: 0, castSec: 10 } },
     diffs: VARUZENOKU_DIFFS,
   },
 }
@@ -251,20 +284,92 @@ export const summonBlockOf = (bossKey, { summoned, ownActive, reached }) => {
 // 挑戦1回に使うスタミナ。owner＝呼んだ人か・tries＝その人がこのボスにもう挑んだ回数
 export const tryStaminaOf = (owner, tries) => (owner ? (tries > 0 ? STAMINA_OWNER : STAMINA_OWNER_FIRST) : STAMINA_HELPER)
 
+// ===== エキスパート・マスターの動き（四凶・2026-11-09）=====
+// 【確定】2026-11-09 ユーザー「エキスパート、masterの行動も完成させたい」「エキスパートから明らかに完全討伐は難しくする予定」＋指示、
+//   案の4問を全部「推奨」（案のシート https://claude.ai/artifact/PYto7D4tMZcYKUNuGuD2ig・docs/v2cap-design.md §6-14）。4体とも同じ形で、技とバフと奥義の条件がボスごと：
+//   エキスパート … 通常攻撃のゲージ20%早い（normalSpeed）・技は90%から・節目 90%技A／75%新技E／50%技B／25%大技・
+//                  HPの節目のバフは70%（守り）と40%（攻め）で今の1.6倍（5%刻み）
+//   マスター     … 通常攻撃50%早い・エキスパートの技も使う・節目 90%A／75%E／60%新技M／50%B／40%大技（今の大技を40%から）・60%以下は毎回技・
+//                  バフは今の2倍・期限つきのバフ（timedBuff）を80%と30%・20%から奥義（ultimate・core/atb.js の ultStep）
+//   ノーマル・ハードは今のまま（patternOf はボスの pattern をそのまま返す）
+export const DIFF_RULES = {
+  expert: { normalSpeed: 1.2, buffMult: 1.6 },
+  master: { normalSpeed: 1.5, buffMult: 2 },
+}
+// 奥義の条件の一言（難易度を選ぶポップアップ V2capBossPick.jsx に出す・2026-11-09 案「条件は画面と HELP に書く」＝挑戦には HELP が無いので選ぶ所に）
+export const ULT_HINTS = { dps: '構えのあいだに削れば止まる', ail: '状態異常を入れておけば弱まる', guard: '防御で受ければ耐えられる', cleanse: '状態異常を消しておけば耐えられる' }
+export const ULT_AT = 0.2         // 奥義を使いはじめるHP
+export const ULT_EVERY_SEC = 50   // 撃った（止められた）あと次に構えるまで（防御のクールダウン45秒より長く＝ゼルギアスの奥義に毎回備えられる）
+export const ULT_FIRST_SEC = 10   // 20%以下から始まった挑戦の1回目
+const r5 = (v) => Math.round(v / 5) * 5
+const scaledBuff = (b, at, mult) => ({ at, name: b.name, table: Object.fromEntries(Object.entries(b.table).map(([k, v]) => [k, r5(v * mult)])) })
+// 難易度ごとの技の出し方（atb.js の pattern の形）
+export const patternOf = (bossKey, diffKey) => {
+  const b = DUNGEON_BOSSES[bossKey]
+  if (!b) return null
+  const rule = DIFF_RULES[diffKey]
+  if (!rule) return b.pattern
+  const [A, B, Big] = b.skills.map(s => s.name)
+  const E = b.exSkill.name
+  const [def, off] = b.pattern.buffs
+  if (diffKey === 'expert') {
+    return {
+      steps: [{ at: 0.9, skill: A }, { at: 0.75, skill: E }, { at: 0.5, skill: B }, { at: 0.25, skill: Big, now: true }],
+      bands: [
+        { min: 0.9, weights: {} },                                              // 90%より上＝通常攻撃だけ
+        { min: 0.75, weights: { [A]: 30 } },
+        { min: 0.5, weights: { [A]: 25, [E]: 25 } },
+        { min: 0.25, weights: { [A]: 35, [B]: 35, [E]: 30 } },                  // 50%以下は毎回技
+        { min: -1, weights: { [A]: 20, [B]: 15, [E]: 15, [Big]: 50 } },         // 大技は行動3回に1回（今と同じ）
+      ],
+      buffs: [scaledBuff(def, 0.7, rule.buffMult), scaledBuff(off, 0.4, rule.buffMult)],
+    }
+  }
+  const M = b.maSkill.name, tb = b.timedBuff
+  return {
+    steps: [{ at: 0.9, skill: A }, { at: 0.75, skill: E }, { at: 0.6, skill: M }, { at: 0.5, skill: B }, { at: 0.4, skill: Big, now: true }],
+    bands: [
+      { min: 0.9, weights: {} },
+      { min: 0.75, weights: { [A]: 30 } },
+      { min: 0.6, weights: { [A]: 25, [E]: 25 } },
+      { min: 0.4, weights: { [A]: 25, [B]: 25, [E]: 25, [M]: 25 } },            // 60%以下は毎回技
+      { min: -1, weights: { [A]: 15, [B]: 15, [E]: 15, [M]: 15, [Big]: 40 } },  // 40%から今の大技
+    ],
+    // 期限つきのバフは同じ名前を2つの節目で使う＝id で見分ける（atb.js の checkHpBuffs）
+    buffs: [
+      { ...tb, at: 0.8, id: `${tb.name}@80` },
+      scaledBuff(def, 0.7, rule.buffMult),
+      scaledBuff(off, 0.4, rule.buffMult),
+      { ...tb, at: 0.3, id: `${tb.name}@30` },
+    ],
+  }
+}
+// その難易度で使う技（ノーマル・ハード＝今の3つ・エキスパート＋新技E・マスター＋新技M＋奥義）
+export const skillsOf = (bossKey, diffKey) => {
+  const b = DUNGEON_BOSSES[bossKey]
+  if (!b) return []
+  return [...b.skills, ...(DIFF_RULES[diffKey] ? [b.exSkill] : []), ...(diffKey === 'master' ? [b.maSkill, b.ultimate.skill] : [])]
+}
+
 // 戦闘用のボス（ATB の相手）。hpNow＝いまのHP（持ち越し）。最大HPは全体の hp
-export const dungeonFighter = (bossKey, diffKey, hpNow = null) => {
+//   anyDiff … まだ呼べない（ready:false）難易度でも作る（試し撃ち［開発］と、数字を測る道具）
+export const dungeonFighter = (bossKey, diffKey, hpNow = null, { anyDiff = false } = {}) => {
   const b = DUNGEON_BOSSES[bossKey], d = diffOf(bossKey, diffKey)
-  if (!b || !isDiffReady(bossKey, diffKey)) return null
+  if (!b || !d || !(d.hp > 0) || (!anyDiff && !isDiffReady(bossKey, diffKey))) return null
   const stats = statsOf({ power: d.power, dist: b.dist })
   stats.str = Math.round(stats.str * d.atk)
   stats.int_stat = Math.round(stats.int_stat * d.atk)
   stats.hp = d.hp
   return {
     ...CAP_RULES, name: b.name, kind: b.kind, race: b.race, boss: true, stats,
-    slots: b.skills.map(skill => ({ skill, uses: 9999 })), taken: null, pattern: b.pattern,
+    slots: skillsOf(bossKey, diffKey).map(skill => ({ skill, uses: 9999 })), taken: null, pattern: patternOf(bossKey, diffKey),
     normalAil: b.hardNormalAil && diffKey !== 'normal' ? b.hardNormalAil : null,
     hpNow: hpNow == null ? null : Math.max(1, Math.min(d.hp, hpNow)),
     enrage: bossEnrageOf(bossKey),   // 時間で強くなる（四凶）
+    normalSpeed: DIFF_RULES[diffKey]?.normalSpeed || 1,
+    ult: diffKey === 'master'
+      ? { skill: b.ultimate.skill.name, check: b.ultimate.check, pct: b.ultimate.pct || 0, at: ULT_AT, every: ULT_EVERY_SEC, firstSec: ULT_FIRST_SEC }
+      : null,
   }
 }
 

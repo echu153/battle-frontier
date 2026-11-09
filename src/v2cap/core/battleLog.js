@@ -93,8 +93,26 @@ export const buildBattleLog = (r, you, foe) => {
       // ATB専用（オート戦闘は出さない）。次の自分の行動まで続く
       out.push({ text:`🛡 ${actor}は身を守っている！（次の行動まで被ダメージ-${l.cut}%）`, color: LOG_COLOR.guard })
     } else if (l.type === 'hpBuff') {
-      // ATB専用：IDダンジョンのボスがHPの節目で付けるバフ（消えない・消せない・2026-10-30）
-      out.push({ text:`🔥 ${actor}の${l.skill}！ ${l.effect}（戦いの終わりまで）`, color:'#ff7a4d' })
+      // ATB専用：IDダンジョンのボスがHPの節目で付けるバフ（消えない・消せない・2026-10-30）。sec＝四凶のマスターの期限つきのバフ（2026-11-09）
+      out.push({ text:`🔥 ${actor}の${l.skill}！ ${l.effect}（${l.sec ? `${l.sec}秒` : '戦いの終わりまで'}）`, color:'#ff7a4d' })
+    } else if (l.type === 'mpBurn') {
+      // 四凶のエキスパートの技（雨喰み・2026-11-09）：side＝MPを減らされた側
+      out.push({ text:`💧 ${actor}のMPが${l.mp.toLocaleString()}吸い取られた！`, color: LOG_COLOR.ail })
+    } else if (l.type === 'gaugeZero') {
+      // 四凶のエキスパートの技（電磁縛鎖）：side＝ゲージを止められた側
+      out.push({ text:`⚡ ${actor}のゲージが0になった！`, color: LOG_COLOR.ail })
+    } else if (l.type === 'strip') {
+      // 四凶のエキスパートの技（黒尾薙ぎ）：side＝強化を消された側
+      out.push({ text:`💨 ${actor}の強化が${l.n}つ吹き飛ばされた！`, color: LOG_COLOR.ail })
+    } else if (l.type === 'ultBreak') {
+      // 四凶のマスターの奥義（2026-11-09）：構えのあいだに削りきった＝怯んで不発
+      out.push({ text:`💥 ${actor}は怯んだ！ ${l.skill}は不発！`, color: LOG_COLOR.extra })
+    } else if (l.type === 'ult') {
+      // 四凶のマスターの奥義：ok＝条件を満たした・damage＝決まった量のダメージ（防御でも減らない。guard で ok なら1/10）
+      const okText = { ail: `${actor}に状態異常が入っていて、${l.skill}が弱まった！`, cleanse: `${target}に罪は無い。無罪！`, guard: `${target}は${l.skill}を防御で受けとめた！` }
+      const ngText = { dps: `${actor}の${l.skill}！`, ail: `${actor}の${l.skill}！`, guard: `${actor}の${l.skill}！`, cleanse: `${target}は有罪！ ${actor}の${l.skill}！` }
+      const text = l.ok ? okText[l.check] || `${actor}の${l.skill}！` : ngText[l.check] || `${actor}の${l.skill}！`
+      out.push({ text: l.damage ? `${l.ok ? '🛡' : '☠'} ${text} ${target}に${l.damage.toLocaleString()}ダメージ！` : `🛡 ${text}`, color: l.ok ? LOG_COLOR.guard : (mine ? LOG_COLOR.mine : LOG_COLOR.foe) })
     } else if (l.type === 'air') {
       out.push({ text:`🕊 ${actor}は跳び上がった！`, color: LOG_COLOR.extra })
     } else if (l.type === 'land') {

@@ -6,7 +6,10 @@ import { fileURLToPath } from 'node:url'
 import {
   CHALLENGE_CATS, DUNGEON_BOSSES, DIFF_KEYS, DUNGEON_MIN, DUNGEON_TRY_SEC, SUMMONS_PER_DAY, STAMINA_OWNER_FIRST, STAMINA_OWNER, STAMINA_HELPER, HELPERS_MAX, HELPER_REWARD_MIN_PCT, SOLO_REWARD_MULT,
   diffOf, isDiffReady, isDiffUnlocked, isSummonable, summonBlockOf, tryStaminaOf, dungeonFighter, stateWithRunOf, msLeftOf, bossEnrageOf,
+  DIFF_RULES, patternOf, skillsOf, ULT_AT, ULT_EVERY_SEC, ULT_FIRST_SEC, ULT_HINTS,
 } from './dungeon.js'
+import { SKILL_RUBY } from './skillRuby.js'
+import { GUARD_CD } from '../core/atb.js'
 import { createAtb, runFor, enrageOf, stateChips, startMacro, fillPerSecOf, hpBuffChips, castMsOf, ATB_SLOW_CUT, FILL_PER_SEC, BUFF_GAUGE_SEC, BUFF_WAIT_AFTER_ACT_SEC, BUFF_SHOW_SEC, TURN_SEC, GAUGE_FULL, NOW_WAIT_AFTER_ACT_SEC, CAST_SEC, CAST_MULT } from '../core/atb.js'
 import { inflict, healMultOf, hasAilment } from '../core/ailments.js'
 import { bossIllustOf, buffArtMsOf } from './bossIllust.js'
@@ -55,18 +58,22 @@ test('【確定】2026-10-29 数字はサーバー（SQL §23）と同じ：HP�
   assert.match(fnBody('v2cap_dungeon_today'), /at time zone 'Asia\/Tokyo'\) - interval '5 hours'/, '朝5時で切り替え')
 })
 
-test('【確定】2026-10-29 呼べる難易度：そのエリアに着いたら（②ノーマル・⑤ハード）。エキスパート・マスターは準備中', () => {
+test('【確定】2026-10-29 呼べる難易度：そのエリアに着いたら（②ノーマル・⑤ハード・2026-11-09 ⑧エキスパート・⑫マスター）', () => {
   assert.equal(isDiffUnlocked('varuzenoku', 'normal', 1), false)
   assert.equal(isDiffUnlocked('varuzenoku', 'normal', 2), true)
   assert.equal(isDiffUnlocked('varuzenoku', 'hard', 4), false)
   assert.equal(isDiffUnlocked('varuzenoku', 'hard', 5), true)
-  for (const k of ['expert', 'master']) {
-    assert.equal(isDiffReady('varuzenoku', k), false)
-    assert.equal(isDiffUnlocked('varuzenoku', k, 15), false)
-    assert.equal(dungeonFighter('varuzenoku', k), null)
-  }
+  assert.equal(isDiffUnlocked('varuzenoku', 'expert', 7), false)
+  assert.equal(isDiffUnlocked('varuzenoku', 'expert', 8), true)
+  assert.equal(isDiffUnlocked('varuzenoku', 'master', 11), false)
+  assert.equal(isDiffUnlocked('varuzenoku', 'master', 12), true)
+  for (const k of DIFF_KEYS) assert.ok(isDiffReady('varuzenoku', k) && dungeonFighter('varuzenoku', k), k)
   assert.deepEqual(DIFF_KEYS.map(k => diffOf('varuzenoku', k).area), [2, 5, 8, 12])
-  assert.deepEqual(DIFF_KEYS.map(k => diffOf('varuzenoku', k).recLv), [25, 45, 65, 80])
+  // 【確定】2026-11-09 ユーザー「エキスパートは70、masterは80れべ位の戦闘力を想定してる」＝エキスパートの推奨LV 65→70
+  assert.deepEqual(DIFF_KEYS.map(k => diffOf('varuzenoku', k).recLv), [25, 45, 70, 80])
+  // 【確定】2026-11-09 数字（推奨LVの人で測った）：エキスパート＝選択「HP70000（もっと難しく）」・マスター＝ユーザー「20万くらいにして…もっと急カーブに強くなって」
+  assert.deepEqual(DIFF_KEYS.map(k => diffOf('varuzenoku', k).hp), [13000, 30000, 70000, 200000])
+  assert.deepEqual(DIFF_KEYS.map(k => diffOf('varuzenoku', k).recPower), [500, 1050, 1500, 1600])
 })
 
 test('【確定】2026-10-29 スタミナ：呼んだ人は最初0・そのあと3／救援で入った人は毎回5', () => {
@@ -1156,7 +1163,7 @@ test('【確定】2026-10-30 雨摩座：黒龍の裏返し（魔法が主）・
   assert.equal(isSummonable('varuzenoku'), true)
   assert.equal(isDiffUnlocked('amaza', 'normal', 2), true)
   assert.equal(isDiffUnlocked('amaza', 'hard', 4), false, 'エリア⑤に着くまで呼べない')
-  assert.equal(isDiffUnlocked('amaza', 'expert', 15), false, 'まだ数字が無い')
+  assert.equal(isDiffUnlocked('amaza', 'expert', 8), true, 'エリア⑧で呼べる（2026-11-09）')
   assert.deepEqual(A.diffs, V.diffs, '強さは黒龍と同じ')
   assert.equal(A.kind, 'mag')
   assert.deepEqual(A.skills.map(s => [s.name, s.kind, s.mult, s.ail?.key ?? null, s.ail?.chance ?? null]), [
@@ -1186,7 +1193,7 @@ test('【確定】2026-11-01 ゼルギアス（ユーザー「ゼルギアスと
   assert.equal(isDiffUnlocked('zerugiasu', 'normal', 1), false, 'エリア②に着くまで呼べない')
   assert.equal(isDiffUnlocked('zerugiasu', 'normal', 2), true)
   assert.equal(isDiffUnlocked('zerugiasu', 'hard', 4), false, 'エリア⑤に着くまで呼べない')
-  assert.equal(isDiffUnlocked('zerugiasu', 'expert', 15), false, 'まだ数字が無い')
+  assert.equal(isDiffUnlocked('zerugiasu', 'expert', 8), true, 'エリア⑧で呼べる（2026-11-09）')
   assert.deepEqual(Z.diffs, V.diffs, '強さは黒龍と同じ')
   assert.deepEqual(Z.dist, V.dist, '配分も黒龍と同じ')
   assert.equal(Z.kind, 'phys')
@@ -1241,7 +1248,7 @@ test('【確定】2026-11-01 閻魔（ユーザー「ゼルギアスと閻魔も
   assert.equal(isDiffUnlocked('enma', 'normal', 1), false, 'エリア②に着くまで呼べない')
   assert.equal(isDiffUnlocked('enma', 'normal', 2), true)
   assert.equal(isDiffUnlocked('enma', 'hard', 4), false, 'エリア⑤に着くまで呼べない')
-  assert.equal(isDiffUnlocked('enma', 'expert', 15), false, 'まだ数字が無い')
+  assert.equal(isDiffUnlocked('enma', 'expert', 8), true, 'エリア⑧で呼べる（2026-11-09）')
   assert.deepEqual(E.diffs, V.diffs, '強さは黒龍と同じ')
   assert.deepEqual(E.dist, DUNGEON_BOSSES.amaza.dist, '配分は魔法の雨摩座と同じ')
   assert.equal(E.kind, 'mag')
@@ -1454,4 +1461,88 @@ test('精神感応（サイキッカー）：ATB では、動揺が3つ以上の
   const r3 = run(3), r2 = run(2)
   assert.ok(r3.skill > 0 && r3.chase === r3.skill, `動揺3：技${r3.skill}回・追撃${r3.chase}回`)
   assert.ok(r2.skill > 0 && r2.chase === 0, `動揺2では出ない（技${r2.skill}回）`)
+})
+
+// ===== エキスパート・マスター（2026-11-09）=====
+// 【確定】2026-11-09 ユーザー「エキスパート、masterの行動も完成させたい」「エキスパートから明らかに完全討伐は難しくする予定」＋指示、案の4問を全部「推奨」
+//   （案のシート https://claude.ai/artifact/PYto7D4tMZcYKUNuGuD2ig）。4体とも同じ形・技とバフと奥義の条件がボスごと
+test('【確定】エキスパート：通常攻撃20%早い・技は90%から・節目 90/75/50/25・バフは70%と40%で今の1.6倍（5%刻み）', () => {
+  assert.deepEqual(DIFF_RULES.expert, { normalSpeed: 1.2, buffMult: 1.6 })
+  for (const [key, b] of Object.entries(DUNGEON_BOSSES)) {
+    const [A, B, Big] = b.skills.map(s => s.name), E = b.exSkill.name
+    const p = patternOf(key, 'expert')
+    assert.deepEqual(p.steps, [{ at: 0.9, skill: A }, { at: 0.75, skill: E }, { at: 0.5, skill: B }, { at: 0.25, skill: Big, now: true }], key)
+    assert.deepEqual(p.bands[0], { min: 0.9, weights: {} }, `${key}：90%より上は通常攻撃だけ`)
+    for (const band of p.bands.slice(3)) assert.equal(Object.values(band.weights).reduce((t, w) => t + w, 0), 100, `${key}：50%以下は毎回技`)
+    assert.deepEqual(p.buffs.map(x => [x.at, x.name]), [[0.7, b.pattern.buffs[0].name], [0.4, b.pattern.buffs[1].name]])
+    for (const [i, x] of p.buffs.entries()) for (const [k, v] of Object.entries(b.pattern.buffs[i].table)) assert.equal(x.table[k], Math.round(v * 1.6 / 5) * 5, `${key} ${x.name} ${k}`)
+    assert.deepEqual(skillsOf(key, 'expert').map(s => s.name), [A, B, Big, E])
+    assert.equal(patternOf(key, 'normal'), b.pattern, 'ノーマル・ハードは今のまま')
+    assert.equal(patternOf(key, 'hard'), b.pattern)
+    assert.deepEqual(skillsOf(key, 'hard'), b.skills)
+  }
+  assert.equal(patternOf('varuzenoku', 'expert').buffs[1].table.str, 40, '逆鱗 +25→+40')
+  assert.equal(patternOf('amaza', 'expert').buffs[1].table.int_stat, 55, '篠突く雨 +35→+55')
+})
+
+test('【確定】マスター：通常攻撃50%早い・エキスパートの技も使う・60%で新技M・40%から今の大技・60%以下は毎回技・バフ2倍・期限つきのバフを80%と30%', () => {
+  assert.deepEqual(DIFF_RULES.master, { normalSpeed: 1.5, buffMult: 2 })
+  for (const [key, b] of Object.entries(DUNGEON_BOSSES)) {
+    const [A, B, Big] = b.skills.map(s => s.name), E = b.exSkill.name, M = b.maSkill.name
+    const p = patternOf(key, 'master')
+    assert.deepEqual(p.steps, [{ at: 0.9, skill: A }, { at: 0.75, skill: E }, { at: 0.6, skill: M }, { at: 0.5, skill: B }, { at: 0.4, skill: Big, now: true }], key)
+    assert.deepEqual(p.bands.map(x => x.min), [0.9, 0.75, 0.6, 0.4, -1])
+    for (const band of p.bands.slice(3)) assert.equal(Object.values(band.weights).reduce((t, w) => t + w, 0), 100, `${key}：60%以下は毎回技`)
+    assert.ok(!(Big in p.bands[2].weights) && p.bands[4].weights[Big] > 0, `${key}：今の大技は40%から`)
+    assert.deepEqual(p.buffs.map(x => [x.at, x.name, x.sec || 0]), [[0.8, b.timedBuff.name, b.timedBuff.sec], [0.7, b.pattern.buffs[0].name, 0], [0.4, b.pattern.buffs[1].name, 0], [0.3, b.timedBuff.name, b.timedBuff.sec]])
+    assert.equal(new Set(p.buffs.map(x => x.id || x.name)).size, 4, '同じ名前の期限つきのバフは id で分ける')
+    for (const [i, x] of p.buffs.slice(1, 3).entries()) for (const [k, v] of Object.entries(b.pattern.buffs[i].table)) assert.equal(x.table[k], v * 2)
+    assert.deepEqual(skillsOf(key, 'master').map(s => s.name), [A, B, Big, E, M, b.ultimate.skill.name])
+  }
+})
+
+test('【確定】ボスごとの新しい技・期限つきのバフ・奥義（案のシートのとおり）・技の名前の読み方・構えるのは奥義だけ', () => {
+  const want = {
+    varuzenoku: ['黒尾薙ぎ', '黒焔流星', '竜鱗硬化', '滅界の黒焔', 'dps'],
+    amaza: ['雨喰み', '五月雨', '豪雨', '大海嘯', 'ail'],
+    zerugiasu: ['電磁縛鎖', '雷鋼連弾', '過給駆動', '神雷天墜', 'guard'],
+    enma: ['閻魔帳', '紅蓮地獄', '浄玻璃の鏡', '閻魔裁定', 'cleanse'],
+  }
+  for (const [key, [ex, ma, tb, ult, check]] of Object.entries(want)) {
+    const b = DUNGEON_BOSSES[key]
+    assert.deepEqual([b.exSkill.name, b.maSkill.name, b.timedBuff.name, b.ultimate.skill.name, b.ultimate.check], [ex, ma, tb, ult, check], key)
+    for (const name of [ex, ma, tb, ult]) assert.ok(SKILL_RUBY[name], `${name} の読み方（lib/skillRuby.js）`)
+    assert.ok(b.exSkill.mult < CAST_MULT && b.maSkill.mult < CAST_MULT, `${key}：新しい技は構えない`)
+    assert.ok(b.ultimate.skill.mult >= CAST_MULT && b.ultimate.skill.castSec === 10, `${key}：奥義は構え10秒`)
+    assert.ok(b.timedBuff.sec >= 15 && b.timedBuff.sec <= 20)
+  }
+  assert.equal(DUNGEON_BOSSES.varuzenoku.exSkill.stripTimed, true, '黒尾薙ぎ＝強化を全部消す')
+  assert.equal(DUNGEON_BOSSES.amaza.exSkill.mpBurnPct, 15, '雨喰み＝MPを15%')
+  assert.equal(DUNGEON_BOSSES.zerugiasu.exSkill.gaugeZero, true, '電磁縛鎖＝ゲージ0')
+  assert.equal(DUNGEON_BOSSES.enma.timedBuff.reflect, 30, '浄玻璃の鏡＝30%返す')
+  // 【確定】2026-11-09 ユーザー選択「1.5%＝38%が止める（推奨）」：黒龍の奥義を止める削る量（HP70000 のとき）
+  //   → マスターのHPが200000になった＝選んだ「38%くらいが止める」を保って0.45%（LV80の人の41%）
+  assert.equal(DUNGEON_BOSSES.varuzenoku.ultimate.pct, 0.45)
+})
+
+test('【確定】奥義は20%から・50秒ごと（防御のクールダウン45秒より長い＝ゼルギアスの奥義に毎回備えられる）・20%以下から始まった挑戦は10秒後', () => {
+  assert.deepEqual([ULT_AT, ULT_EVERY_SEC, ULT_FIRST_SEC], [0.2, 50, 10])
+  assert.ok(ULT_EVERY_SEC > GUARD_CD, '防御が毎回間に合う')
+  for (const key of Object.keys(DUNGEON_BOSSES)) {
+    const f = dungeonFighter(key, 'master')
+    assert.deepEqual(f.ult, { skill: DUNGEON_BOSSES[key].ultimate.skill.name, check: DUNGEON_BOSSES[key].ultimate.check, pct: DUNGEON_BOSSES[key].ultimate.pct || 0, at: 0.2, every: 50, firstSec: 10 })
+    assert.equal(f.normalSpeed, 1.5)
+    assert.equal(dungeonFighter(key, 'expert', null, { anyDiff: true }).normalSpeed, 1.2)
+    assert.equal(dungeonFighter(key, 'expert', null, { anyDiff: true }).ult, null, 'エキスパートは奥義なし')
+    assert.equal(dungeonFighter(key, 'hard').normalSpeed, 1)
+    assert.equal(dungeonFighter(key, 'hard').ult, null)
+  }
+})
+
+test('【確定】2026-11-09 マスターを選ぶと、奥義と条件を1行出す（難易度を選ぶポップアップ＝挑む前に分かる・案「条件は画面とHELPに書く」）', () => {
+  assert.deepEqual(Object.keys(ULT_HINTS).sort(), ['ail', 'cleanse', 'dps', 'guard'])
+  for (const b of Object.values(DUNGEON_BOSSES)) assert.ok(ULT_HINTS[b.ultimate.check], b.name)
+  const src = readFileSync(new URL('../components/V2capBossPick.jsx', import.meta.url), 'utf8')
+  assert.ok(src.includes("{diff === 'master' && boss.ultimate && ("))
+  assert.ok(src.includes('奥義「{boss.ultimate.skill.name}」：{ULT_HINTS[boss.ultimate.check]}'))
 })

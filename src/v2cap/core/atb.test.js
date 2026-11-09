@@ -716,3 +716,116 @@ test('★飲んだ戦闘も、同じ種と押した記録で回し直すと同�
   assert.deepEqual([again.a.hp, again.a.mp, again.b.hp, again.a.items, again.a.itemsUsed], [st.a.hp, st.a.mp, st.b.hp, st.a.items, st.a.itemsUsed])
   assert.deepEqual(buildBattleLog({ log: again.log }, '我', '敵'), buildBattleLog({ log: st.log }, '我', '敵'))
 })
+
+// ===== 四凶のエキスパート・マスター（2026-11-09・lib/dungeon.js の DIFF_RULES・patternOf）=====
+// 【確定】2026-11-09 ユーザー「エキスパート、masterの行動も完成させたい」＋指示＋案「推奨」（案のシート https://claude.ai/artifact/PYto7D4tMZcYKUNuGuD2ig）
+const bossOf = (skills, extra = {}, statsOver = {}) => fighter('ボス', skills, { stats: { hp: 100000, mp: 0, str: 1, int_stat: 1, ...statsOver }, extra: { boss: true, ...extra } })
+const quietPattern = (more = {}) => ({ steps: [], bands: [{ min: -1, weights: {} }], buffs: [], ...more })
+
+test('【確定】通常攻撃のゲージ：エキスパート20%早い・マスター50%早い（技は今のまま）', () => {
+  assert.equal(needFor({ normalSpeed: 1.2 }, null), Math.round(GAUGE_FULL / 1.2))
+  assert.equal(needFor({ normalSpeed: 1.5 }, null), Math.round(GAUGE_FULL / 1.5))
+  assert.equal(needFor({ normalSpeed: 1.5 }, sk('技')), GAUGE_FULL, '技に要るゲージは変わらない')
+  assert.equal(needFor({}, null), GAUGE_FULL)
+  // 通常攻撃だけのボス（同じ速さ）：50%早いと、同じ時間で1.5倍ほど殴る
+  const count = (speed) => {
+    const st = createAtb(fighter('我'), bossOf([], { pattern: quietPattern(), normalSpeed: speed }), { rng: makeRng(1), maxSec: 61 })
+    runFor(st, 60)
+    return acts(st, 'ボス', 'normal').length
+  }
+  const one = count(1), fast = count(1.5)
+  assert.ok(Math.abs(fast / one - 1.5) < 0.1, `${one}回 → ${fast}回`)
+})
+
+test('【確定】マスターの期限つきのバフ：節目で付いて秒で切れる・持ち越しで始めから切っていれば付けない・浄玻璃の鏡は受けたダメージを返す', () => {
+  const pattern = quietPattern({ buffs: [{ at: 0.9, name: '硬化', id: '硬化@90', sec: 10, table: { vit: 100 } }, { at: 0.8, name: '鏡', id: '鏡@80', sec: 10, table: {}, reflect: 30 }] })
+  const st = createAtb(fighter('我', [], { stats: { str: 3000 } }), bossOf([], { pattern }), { rng: makeRng(2), maxSec: 120 })
+  st.b.hp = Math.floor(st.b.base.hp * 0.85)
+  runFor(st, 3)
+  assert.equal(st.b.buffs.vit, 100, '90%を切ったら守り+100%')
+  assert.equal(buffChips(st.b, st.t)[0].name, '硬化', '札に名前')
+  assert.deepEqual(st.b.hpBuffsOn, [], '消えないバフの枠には入らない')
+  runFor(st, 10)
+  assert.ok(!(st.b.buffs.vit > 0), '10秒で切れる')
+  st.b.hp = Math.floor(st.b.base.hp * 0.75)
+  runFor(st, 3)
+  assert.equal(st.b.atbReflect, 30)
+  const hpMe = st.a.hp
+  runFor(st, 6)
+  assert.ok(st.log.some(l => l.side === 'ボス' && l.type === 'reflect'), '殴ると返す')
+  assert.ok(st.a.hp < hpMe)
+  runFor(st, 5)
+  assert.equal(st.b.atbReflect, 0, '10秒で切れる')
+  // 持ち越しで、始めから90%を切っていた挑戦は、期限つきのバフを付けない（前の挑戦で使った）
+  const again = createAtb(fighter('我'), bossOf([], { pattern, hpNow: 50000 }), { rng: makeRng(2) })
+  assert.ok(!(again.b.buffs.vit > 0) && again.b.atbReflect === 0)
+  assert.deepEqual(again.b.buffSeen, ['硬化@90', '鏡@80'])
+})
+
+test('【確定】エキスパートの技：黒尾薙ぎ＝時間で切れる強化を全部消す（消えない強化は残す）・電磁縛鎖＝ゲージ0・雨喰み＝MPを最大の15%減らす', () => {
+  const strip = sk('尾', { stripTimed: true }), zero = sk('鎖', { gaugeZero: true }), burn = sk('喰', { kind: 'mag', mpBurnPct: 15 })
+  const make = (s) => {
+    const st = createAtb(fighter('我', [sk('強化30', { kind: 'buff', mult: 0, buff: { self: { str: 30 } } })], { stats: { mp: 1000, agi: 300 } }),
+      bossOf([s], { pattern: quietPattern({ bands: [{ min: -1, weights: { [s.name]: 100 } }] }) }), { rng: makeRng(3), maxSec: 60 })   // 毎回その技（始めに切っている節目は撃たない）
+    st.a.baseBuffs.dex = 10
+    return st
+  }
+  const a = make(strip)
+  reserve(a, 0)
+  runFor(a, 4)   // 自分は3秒で強化・ボスは5秒で薙ぐ
+  assert.equal(a.a.buffs.str, 30)
+  runFor(a, 2)
+  assert.ok(a.log.some(l => l.type === 'strip' && l.side === '我'))
+  assert.ok(!(a.a.buffs.str > 0), '技の強化は消える')
+  assert.equal(a.a.buffs.dex, 10, '消えない強化（職業補正など）は残る')
+  const b = make(zero)
+  runFor(b, 4.9)   // 自分は3秒ごと＝4.9秒でゲージ約6割・ボスは5秒で鎖
+  const g = b.a.gauge
+  runFor(b, 0.15)
+  assert.ok(b.log.some(l => l.type === 'gaugeZero' && l.side === '我'))
+  assert.ok(g > 50 && b.a.gauge < 5, `ゲージ ${g} → ${b.a.gauge}`)
+  const c = make(burn)
+  runFor(c, TURN_SEC + STEP_SEC)
+  assert.equal(c.log.find(l => l.type === 'mpBurn').mp, 150)
+})
+
+test('【確定】マスターの奥義：20%から構え10秒・満たせなければ最大HPの1.5倍・50秒ごと・4つの条件', async () => {
+  const { ULT_LETHAL_RATIO, ULT_GUARD_RATIO, ultStatusOf } = await import('./atb.js')
+  const ult = (check, extra = {}) => sk('奥義', { kind: 'mag', mult: 4, castSec: 10, ...extra })
+  const start = (check, { me = {}, pct = 1 } = {}) => createAtb(fighter('我', [], { stats: { hp: 100000, str: 3000, ...me } }),
+    bossOf([ult(check)], { pattern: quietPattern(), hpNow: 15000, ult: { skill: '奥義', check, pct, at: 0.2, every: 50, firstSec: 10 } }, { str: 300, int_stat: 300 }),
+    { rng: makeRng(4), maxSec: 200 })
+  // 20%以下から始まった挑戦は10秒後に1回目
+  const ng = start('ail')
+  runFor(ng, 10 + STEP_SEC)
+  assert.ok(ng.b.cast?.ult, '10秒で構える')
+  assert.equal(ultStatusOf(ng, ng.b).ok, false)
+  runFor(ng, 10 + STEP_SEC * 2)
+  const hit = ng.log.find(l => l.type === 'ult')
+  assert.deepEqual([hit.ok, hit.damage], [false, Math.ceil(100000 * ULT_LETHAL_RATIO)], '満たせなければ最大HPの1.5倍')
+  assert.equal(ng.winner, 'b')
+  // 防御で受ける（ゼルギアス）：撃つ瞬間に防御していれば1/10
+  const gd = start('guard', { me: { str: 5, int_stat: 5 } })
+  runFor(gd, 19)
+  toggleGuard(gd)
+  runFor(gd, 2)
+  const g = gd.log.find(l => l.type === 'ult')
+  assert.deepEqual([g.ok, g.damage], [true, Math.ceil(100000 * ULT_LETHAL_RATIO * ULT_GUARD_RATIO)])
+  assert.ok(gd.a.hp > 0)
+  // 50秒ごと（撃ったときから数える）
+  runFor(gd, 48.5)
+  assert.ok(!gd.b.cast)
+  runFor(gd, 1.0)
+  assert.ok(gd.b.cast?.ult, '50秒後にまた構える')
+  // 削る（黒龍）：構えのあいだに最大HPの pct% を削ると、その瞬間に怯んで不発
+  const dp = start('dps', { pct: 1 })
+  runFor(dp, 21)
+  assert.ok(dp.log.some(l => l.type === 'ultBreak'), '削れたら不発')
+  assert.ok(!dp.log.some(l => l.type === 'ult'))
+  // 罪を消す（閻魔）：状態異常が無ければ ふつうの大技（技の倍率どおり）
+  const cl = start('cleanse')
+  runFor(cl, 21)
+  const c = cl.log.find(l => l.type === 'ult')
+  assert.deepEqual([c.ok, c.damage], [true, undefined])
+  assert.ok(cl.log.some(l => l.type === 'skill' && l.skill === '奥義'), '技として撃つ')
+})

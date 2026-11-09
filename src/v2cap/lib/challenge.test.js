@@ -35,15 +35,15 @@ const fnBody = (name) => {
 }
 const BOSSES = CHALLENGE_CATS.flatMap(c => c.bosses)
 
-test('段階：難易度ごとのエリア（倒すと必ずもらうエリアの装備）は dungeon.js の diffs と同じ・呼べる難易度は全部ある（ノーマル②・ハード⑤）', () => {
-  assert.deepEqual(CHALLENGE_TIER_AREA, { normal: 2, hard: 5 })
+test('段階：難易度ごとのエリア（倒すと必ずもらうエリアの装備）は dungeon.js の diffs と同じ・呼べる難易度は全部ある（ノーマル②・ハード⑤・2026-11-09 エキスパート⑧・マスター⑫）', () => {
+  assert.deepEqual(CHALLENGE_TIER_AREA, { normal: 2, hard: 5, expert: 8, master: 12 })
   for (const b of BOSSES) {
     for (const d of DIFF_KEYS) {
       if (!isDiffReady(b, d)) { assert.equal(CHALLENGE_TIER_AREA[d], undefined, `${d}はまだ呼べない＝段階も無い`); continue }
       assert.equal(CHALLENGE_TIER_AREA[d], DUNGEON_BOSSES[b].diffs[d].area, `${b} ${d}`)
     }
   }
-  assert.deepEqual(CHALLENGE_DIFFS, ['normal', 'hard'])
+  assert.deepEqual(CHALLENGE_DIFFS, ['normal', 'hard', 'expert', 'master'])
 })
 
 test('【確定】特別な素材はボスごとに1つ（ユーザー「なんで難易度ごとに素材わかれてるの？専用装備、アイテムは全部一緒」）・名前は V1 の希少な素材（選んだ「今のハードの名前」）', () => {
@@ -208,14 +208,17 @@ test('【確定】落とし方：難易度ごとの確率（ハードは1.5倍�
   assert.deepEqual(CH_RATES, {
     normal: { gear: { R: 75, E: 20, L: 5 }, own: 2, unique: 0.1 },
     hard: { gear: { R: 72, E: 20, L: 8 }, own: 3, unique: 0.15 },
-  }, 'ユーザーが選んだ「ハードは1.5倍」（ノーマルは前のまま）')
+    // 【確定】2026-11-09 ユーザー選択「1.5倍ずつ（推奨）」
+    expert: { gear: { R: 68, E: 20, L: 12 }, own: 4.5, unique: 0.22 },
+    master: { gear: { R: 62, E: 20, L: 18 }, own: 6.75, unique: 0.34 },
+  }, 'ユーザーが選んだ「ハードは1.5倍」（ノーマルは前のまま）・エキスパートとマスターも1.5倍ずつ')
   assert.deepEqual(Object.keys(CH_RATES), CHALLENGE_DIFFS, '呼べる難易度の数だけ')
   for (const d of CHALLENGE_DIFFS) {
     const g = CH_RATES[d].gear
     assert.equal(g.R + g.E + g.L, 100)
     assert.equal(chRatesOf(d), CH_RATES[d])
   }
-  assert.equal(chRatesOf('expert'), null)
+  assert.equal(chRatesOf('nightmare'), null, '無い難易度')
   const p = fnBody('v2cap_dungeon_pay_reward')
   const rates = JSON.parse(p.match(/c_rates {6}constant jsonb := '([^']+)';/)[1])
   assert.deepEqual(Object.keys(rates), CHALLENGE_DIFFS)
@@ -308,7 +311,7 @@ test('落とし方：難易度ごとの抽選の割合（乱数を回して見�
   let g = 0
   for (let i = 0; i < N; i++) if (rollChallengeDrops({ diff: 'normal', pct: 30, weapons: ['杖'] }, rng).gear) g++
   assert.ok(Math.abs(g / N * 100 - 30) < 1.5)
-  assert.deepEqual(rollChallengeDrops({ diff: 'expert' }, rng), { gear: null, mat: 0, own: false, uq: false, stone4: 0 }, 'まだ無い段階は何も落とさない')
+  assert.deepEqual(rollChallengeDrops({ diff: 'nightmare' }, rng), { gear: null, mat: 0, own: false, uq: false, stone4: 0 }, 'まだ無い段階は何も落とさない')
 })
 
 test('報酬の画面に出す行（chDropsOf）：装備・素材・専用装備・ユニークの順・無いものは出さない', () => {

@@ -9468,17 +9468,26 @@ create table if not exists public.v2cap_dungeon_mismatch (
 alter table public.v2cap_dungeon_mismatch enable row level security;
 
 -- 難易度ごとの全体のHPと、呼べるようになるエリア（dungeon.js の diffs と同じ）
+--   2026-11-09 エキスパート（⑧・70000）・マスター（⑫・200000）を足した（ユーザー選択「HP70000」・「20万くらいにして…もっと急カーブに強くなって」）
 create or replace function public.v2cap_dungeon_conf(p_boss text, p_diff text)
 returns table(hp int, area int) language sql immutable set search_path = public as $$
   select v.hp, v.area from (values
     ('varuzenoku', 'normal', 13000, 2),
     ('varuzenoku', 'hard', 30000, 5),
+    ('varuzenoku', 'expert', 70000, 8),
+    ('varuzenoku', 'master', 200000, 12),
     ('amaza', 'normal', 13000, 2),
     ('amaza', 'hard', 30000, 5),
+    ('amaza', 'expert', 70000, 8),
+    ('amaza', 'master', 200000, 12),
     ('zerugiasu', 'normal', 13000, 2),
     ('zerugiasu', 'hard', 30000, 5),
+    ('zerugiasu', 'expert', 70000, 8),
+    ('zerugiasu', 'master', 200000, 12),
     ('enma', 'normal', 13000, 2),
-    ('enma', 'hard', 30000, 5)
+    ('enma', 'hard', 30000, 5),
+    ('enma', 'expert', 70000, 8),
+    ('enma', 'master', 200000, 12)
   ) as v(boss, diff, hp, area)
   where v.boss = p_boss and v.diff = p_diff
 $$;
@@ -9490,12 +9499,20 @@ returns table(exp int, gold int) language sql immutable set search_path = public
   select v.exp, v.gold from (values
     ('varuzenoku', 'normal', 175, 1250),
     ('varuzenoku', 'hard', 350, 2250),
+    ('varuzenoku', 'expert', 550, 3500),
+    ('varuzenoku', 'master', 825, 4000),
     ('amaza', 'normal', 175, 1250),
     ('amaza', 'hard', 350, 2250),
+    ('amaza', 'expert', 550, 3500),
+    ('amaza', 'master', 825, 4000),
     ('zerugiasu', 'normal', 175, 1250),
     ('zerugiasu', 'hard', 350, 2250),
+    ('zerugiasu', 'expert', 550, 3500),
+    ('zerugiasu', 'master', 825, 4000),
     ('enma', 'normal', 175, 1250),
-    ('enma', 'hard', 350, 2250)
+    ('enma', 'hard', 350, 2250),
+    ('enma', 'expert', 550, 3500),
+    ('enma', 'master', 825, 4000)
   ) as v(boss, diff, exp, gold)
   where v.boss = p_boss and v.diff = p_diff
 $$;
@@ -9555,17 +9572,19 @@ update public.v2cap_profiles p
 -- ★同じ日（案のシートのあと）ユーザー「難易度によって専用アイテムとレジェンダリーユニークのドロップ率も上げて」→選んだ「ハードは1.5倍」：
 --   c_rates（難易度ごと・%）＝ノーマル：①レア75／エピック20／レジェンダリー5・③2・④0.1／ハード：①レア72／エピック20／レジェンダリー8・③3・④0.15
 --   （表の正は src/v2cap/lib/challengeDefs.js の CH_RATES・challenge.test.js が突き合わせる）。まだ無い難易度はノーマルの数
+-- ★2026-11-09 エキスパート・マスターを足した（ユーザー選択「1.5倍ずつ（推奨）」）：エキスパート ①レア68／エピック20／レジェンダリー12・③4.5・④0.22・⑤40／
+--   マスター ①レア62／エピック20／レジェンダリー18・③6.75・④0.34・⑤60
 create or replace function public.v2cap_dungeon_pay_reward(p_run bigint, p_player uuid)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   c_helper_min constant int := 30;
   c_solo_mult  constant int := 3;
-  c_rates      constant jsonb := '{"normal": {"r": 75, "e": 20, "own": 2, "uq": 0.1}, "hard": {"r": 72, "e": 20, "own": 3, "uq": 0.15}}';
+  c_rates      constant jsonb := '{"normal": {"r": 75, "e": 20, "own": 2, "uq": 0.1}, "hard": {"r": 72, "e": 20, "own": 3, "uq": 0.15}, "expert": {"r": 68, "e": 20, "own": 4.5, "uq": 0.22}, "master": {"r": 62, "e": 20, "own": 6.75, "uq": 0.34}}';
   c_mat_host   constant int := 1;        -- ②呼んだ人なら必ず
   c_mat_solo   constant int := 1;        -- ②完全ソロ討伐（v_solo）ならさらに必ず
   c_mat_min_contrib constant numeric := 10;   -- ②貢献度（与えたダメージ÷最大HP の%）がこれ以上なら、難易度の確率でさらに1個
   c_mat_chance constant jsonb := '{"normal": 10, "hard": 20, "expert": 40, "master": 60}';
-  c_stone4     constant jsonb := '{"normal": 10, "hard": 20}';   -- ⑤至高の強化石（%・challengeDefs.js の CH_STONE4_PCT・2026-11-09）
+  c_stone4     constant jsonb := '{"normal": 10, "hard": 20, "expert": 40, "master": 60}';   -- ⑤至高の強化石（%・challengeDefs.js の CH_STONE4_PCT・2026-11-09）
   v_rate jsonb;
   v_run  public.v2cap_dungeon_runs;
   v_mem  public.v2cap_dungeon_members;

@@ -45,7 +45,7 @@ import {
 } from './battle.js'
 import { STAT_KEYS, STAT_DEFS } from './stats.js'
 import { AIL_KEYS, AIL_LABEL, BLEED_DECAY_SEC, hasAilment, procCutOf, isSealed, usesMp } from './ailments.js'
-import { ichijiSkip, agitCutOf, STK_LABEL, canHeal, gainHp } from './battleIchiji.js'
+import { ichijiSkip, agitCutOf, STK_LABEL, canHeal, gainHp, keepAlive } from './battleIchiji.js'
 import { BATTLE_ITEM_BY_KEY, ITEM_CD, itemCountsOf } from './atbItems.js'
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
@@ -152,9 +152,12 @@ export const cdFor = (side, skill) => {
   return cdOfProc(skill.proc, bonus)
 }
 // その行動に要るゲージ（先制で軽くなる）
+//   【確定】2026-11-09 ユーザー「エキスパート 通常攻撃のゲージが20％早く」「master 通常攻撃が５０％早く」：
+//   side.normalSpeed（四凶のボス・lib/dungeon.js の DIFF_RULES）があれば、通常攻撃に要るゲージを 1/normalSpeed に（技は今のまま）
 export const needFor = (side, skill) => {
   const cut = Math.min(60, PRIORITY_CUT * Math.max(0, priorityOf(side, skill)))
-  return Math.round(GAUGE_FULL * (1 - cut / 100))
+  const need = Math.round(GAUGE_FULL * (1 - cut / 100))
+  return !skill && side?.normalSpeed > 1 ? Math.round(need / side.normalSpeed) : need
 }
 // 鈍足はATBでは**ゲージが20%遅くなる**（AGIは下げない＝battle.js の livePct が side.atb を見る）
 //   【確定】2026-10-29 ユーザー選択「ゲージが20%遅くなる」：AGI−20%のままだと、ボスより速い人にしか効かなかった
@@ -217,6 +220,13 @@ const createAtbSide = (fighter, band, { ai = false, cast = false } = {}) => {
   side.lastActAt = -Infinity   // 最後に技を出した時刻（大技の構えを見せはじめる時刻）
   side.justBig = false         // 最後の行動が大技か（続けて大技を引かない）
   side.noActUntil = 0          // バフを見せおわる時刻（これより前は技を出さない）
+  // 四凶のエキスパート・マスター（2026-11-09・lib/dungeon.js の dungeonFighter）
+  side.normalSpeed = fighter.normalSpeed || 1   // 通常攻撃のゲージの速さ（needFor）
+  side.ult = fighter.ult || null               // マスターの奥義（ultStep）
+  side.ultNextAt = null                        // 次に奥義を構える時刻（null＝まだ節目を切っていない）
+  side.atbReflect = 0                          // 受けたダメージを返す%（浄玻璃の鏡・battle.js の applyIncoming が見る）
+  side.atbReflectUntil = 0
+  side.atbReflectName = ''
   if (fighter.hpNow != null) side.hp = Math.max(1, Math.min(side.base.hp, Math.floor(fighter.hpNow)))
   side.startHp = side.hp       // この戦闘を始めたときのHP（削った量＝startHp − いまのHP）
   return side
@@ -241,8 +251,11 @@ export const createAtb = (fighterA, fighterB, { rng = Math.random, band = null, 
   afterEngine(st, st.a, { ...st.a.buffs }, true)
   afterEngine(st, st.b, { ...st.b.buffs }, true)
   // 持ち越しで、もう切っている節目のバフは、はじめから付いている（ゲージを貯めない）
+  //   ★期限つきのバフ（sec）は、はじめから付けない（前の挑戦で使った＝もう切れている）
   checkHpBuffs(st, st.a, true)
   checkHpBuffs(st, st.b, true)
+  // 奥義：もう節目を切って始まった挑戦は、始まって firstSec 秒後に1回目
+  for (const s of [st.a, st.b]) if (s.ult && hpFracOf(s) <= s.ult.at) s.ultNextAt = s.ult.firstSec
   return st
 }
 
@@ -334,6 +347,7 @@ const expire = (st, side) => {
     side.timed = side.timed.filter(e => e.until + EPS > now)
     if (side.timed.length !== n) recomputeBuffs(side)
   }
+  if (side.atbReflect && side.atbReflectUntil <= now + EPS) { side.atbReflect = 0; side.atbReflectUntil = 0; side.atbReflectName = '' }
   if (side.ail.paralyze && side.parUntil <= now + EPS) { delete side.ail.paralyze; side.parObj = null }
   if (side.bigGuard && side.bigGuardUntil && side.bigGuardUntil <= now + EPS) { side.bigGuard = 0; side.bigGuardUntil = 0 }
   if (!side.bigGuard) side.bigGuardUntil = 0
@@ -401,20 +415,33 @@ const patternPick = (side) => {
 //   バフの行動は技の行動（act）を通らない＝**出血が刻まない**・麻痺や鈍足でも止まらず遅れない（stepOnce の時計だけで進む）。
 //   ターンの区切りの毒なども、ゲージを貯めてから見せおわるまでは刻まない（inBuffAct・endOfTurn の noAil）。同時に2つ切ったら、見せおわってから次
 const effectText = (table) => Object.entries(table).map(([k, v]) => `${STAT_DEFS[k]?.label || k}${v >= 0 ? '+' : ''}${v}%`).join('・')
+// 【確定】2026-11-09 ユーザー「master … ベット（別途）期限アリのバフも使用するように」＋案「HP80%と30%で15〜20秒だけ付く強いバフ」：
+//   pattern.buffs の sec が付いたものは**期限つき**＝sec 秒で切れる（時間で切れる枠 timed へ・消えない枠には入れない＝バフ消しで消せる）。
+//   reflect … 受けたダメージの%を相手に返す（浄玻璃の鏡・ステの表は無い）。同じ名前を2つの節目で使うので id（名前@節目）で見分ける
 const applyHpBuff = (st, side, b) => {
-  side.hpBuffsOn.push({ name: b.name, table: { ...b.table } })
-  for (const [k, v] of Object.entries(b.table)) side.lockBuffs[k] = (side.lockBuffs[k] || 0) + v
-  st.log.push({ side: side.name, type: 'hpBuff', skill: b.name, effect: effectText(b.table) })
+  if (b.sec) {
+    if (Object.keys(b.table || {}).length) side.timed.push({ table: { ...b.table }, sec: b.sec, until: st.t + b.sec, debuff: false, name: b.name })
+    if (b.reflect) { side.atbReflect = b.reflect; side.atbReflectUntil = st.t + b.sec; side.atbReflectName = b.name }
+    const fx = [Object.keys(b.table || {}).length ? effectText(b.table) : '', b.reflect ? `受けたダメージの${b.reflect}%を返す` : ''].filter(Boolean).join('・')
+    st.log.push({ side: side.name, type: 'hpBuff', skill: b.name, effect: fx, sec: b.sec })
+  } else {
+    side.hpBuffsOn.push({ name: b.name, table: { ...b.table } })
+    for (const [k, v] of Object.entries(b.table)) side.lockBuffs[k] = (side.lockBuffs[k] || 0) + v
+    st.log.push({ side: side.name, type: 'hpBuff', skill: b.name, effect: effectText(b.table) })
+  }
   recomputeBuffs(side)
   side.motionUntil = st.t + BUFF_SHOW_SEC
   side.noActUntil = st.t + BUFF_SHOW_SEC
 }
+const buffIdOf = (b) => b.id || b.name
 const checkHpBuffs = (st, side, instant = false) => {
   const list = side.pattern?.buffs
   if (!list?.length || side.hp <= 0) return
   for (const b of list) {
-    if (hpFracOf(side) > b.at || side.buffSeen.includes(b.name)) continue
-    side.buffSeen.push(b.name)
+    if (hpFracOf(side) > b.at || side.buffSeen.includes(buffIdOf(b))) continue
+    side.buffSeen.push(buffIdOf(b))
+    // 持ち越しで始めからもう切っている期限つきのバフは使わない（前の挑戦で使って、もう切れている）
+    if (instant && b.sec) continue
     if (instant) applyHpBuff(st, side, b)
     else side.buffQueue.push(b)
   }
@@ -431,7 +458,8 @@ const buffStep = (st, me) => {
   }
   if (!me.buffQueue.length || me.cast || st.t + EPS < me.motionUntil) return
   const b = me.buffQueue.shift()
-  me.buffAct = { name: b.name, table: b.table, start: st.t, until: st.t + BUFF_GAUGE_SEC }
+  // ★バフの中身を丸ごと渡す（期限つきの sec・reflect も。名前と表だけ渡すと、期限つきのバフが消えないバフとして付いた＝2026-11-09 測って見つけた）
+  me.buffAct = { ...b, start: st.t, until: st.t + BUFF_GAUGE_SEC }
   me.gauge = 0
 }
 // バフの行動のあいだ（ゲージを貯めてから見せおわるまで）か
@@ -472,6 +500,87 @@ const nowStep = (st, me) => {
   if (!skill) return
   me.gauge = 0
   startCast(st, me, idx, skill, cdFor(me, skill), Math.max(st.t, me.lastActAt + NOW_WAIT_AFTER_ACT_SEC, me.noActUntil))
+}
+
+// ===== マスターの奥義（四凶・2026-11-09）=====
+// 【確定】2026-11-09 ユーザー「２０％以下でさらに新たな大技を使用、この大技はデバフ等やDPSチェックを達成させないと即死級の威力にする、各ボスごとに条件は異なるようにする」
+//   ＋案「案のまま（推奨）」（案のシート https://claude.ai/artifact/PYto7D4tMZcYKUNuGuD2ig）：
+//   side.ult ＝ { skill, at, every, firstSec, check, pct }（lib/dungeon.js の dungeonFighter が付ける）
+//   ・HPの割合が at（20%）以下で構える（構えは技の castSec＝10秒・そのあいだボスは動かない）。1回目は切ったとき、
+//     そのあと撃った（止められた）ときから every（50）秒ごと。その挑戦が at 以下から始まったときは firstSec（10）秒後に1回目
+//   ・check … 構えのあいだ／撃つ瞬間の条件（満たせば ok）
+//       dps     … 構えのあいだにボスの最大HPの pct% を削る → 怯んで不発（黒龍・ultBreakStep が削った瞬間に止める）
+//       ail     … 撃つ瞬間、ボスに状態異常が1つでも入っている → ふつうの大技（技の倍率どおり）（雨摩座）
+//       guard   … 撃つ瞬間に防御している → 最大HPの ULT_LETHAL_RATIO×ULT_GUARD_RATIO（ゼルギアス）
+//       cleanse … 撃つ瞬間、相手（プレイヤー）に状態異常が1つも無い → ふつうの大技（閻魔）
+//   ・満たせなかった＝相手の最大HPの ULT_LETHAL_RATIO 倍のダメージ（防御・バリアでも減らない＝即死級）
+//   ★ゼルギアス：防御のクールダウン（GUARD_CD 45秒）より間隔（50秒）が長い＝取っておけば毎回間に合う（テストが見張る）
+export const ULT_LETHAL_RATIO = 1.5
+export const ULT_GUARD_RATIO = 0.1
+const hasAnyAil = (side) => AIL_KEYS.some(k => hasAilment(side.ail || {}, k))
+const ailCountOf = (side) => AIL_KEYS.filter(k => hasAilment(side.ail || {}, k)).length
+// いま構えている奥義の条件の様子（画面用・読むだけ）。構えていなければ null
+//   dps＝{ done, need }（削った量・要る量）・cleanse＝{ n }（相手の状態異常の数）
+export const ultStatusOf = (st, side) => {
+  const c = side?.cast?.ult
+  if (!c) return null
+  const foe = side === st.a ? st.b : st.a
+  if (c.check === 'dps') { const done = Math.max(0, c.startHp - side.hp); return { check: c.check, ok: done >= c.need, done, need: c.need } }
+  if (c.check === 'ail') return { check: c.check, ok: hasAnyAil(side) }
+  if (c.check === 'guard') return { check: c.check, ok: foe.guardCut > 0 }
+  const n = ailCountOf(foe)
+  return { check: c.check, ok: n === 0, n }
+}
+// 奥義を構える（刻みごと）。麻痺・バフの行動・ほかの構えのあいだは待つ
+const ultStep = (st, me) => {
+  const u = me.ult
+  if (!u || !me.castBig || me.hp <= 0 || me.cast || me.ail.paralyze || me.buffAct || me.buffQueue.length) return
+  if (hpFracOf(me) > u.at) return
+  if (me.ultNextAt == null) me.ultNextAt = st.t   // いま節目を切った＝すぐ構える
+  if (st.t + EPS < me.ultNextAt) return
+  const { idx, skill } = slotByName(me, u.skill)
+  if (!skill) return
+  me.gauge = 0
+  me.patNext = null
+  startCast(st, me, idx, skill, 0, Math.max(st.t, me.lastActAt + NOW_WAIT_AFTER_ACT_SEC, me.noActUntil))
+  me.cast.ult = { check: u.check, startHp: me.hp, need: u.check === 'dps' ? Math.max(1, Math.ceil(me.base.hp * (u.pct || 0) / 100)) : 0 }
+  me.ultNextAt = Infinity   // 撃ったら（止められたら）そこから数える
+}
+// 奥義のあとの後始末（撃った・止められた）
+const afterUlt = (st, me) => {
+  me.ultNextAt = st.t + me.ult.every
+  me.lastActAt = st.t
+  me.motionUntil = st.t + BUFF_WAIT_AFTER_ACT_SEC
+  me.justBig = true
+  me.gauge = 0
+}
+// 削る条件（dps）：構えのあいだに要る量を削ったら、その瞬間に怯んで不発
+const ultBreakStep = (st, me) => {
+  const c = me.cast?.ult
+  if (!c || c.check !== 'dps' || me.hp <= 0 || c.startHp - me.hp < c.need) return
+  const name = me.cast.name
+  me.cast = null
+  afterUlt(st, me)
+  st.log.push({ side: me.name, type: 'ultBreak', skill: name })
+}
+// 構えが終わった奥義を撃つ
+const resolveUlt = (st, me, foe, c, skill) => {
+  const check = c.ult.check
+  const ok = check === 'ail' ? hasAnyAil(me) : check === 'guard' ? foe.guardCut > 0 : check === 'cleanse' ? !hasAnyAil(foe) : false
+  if (ok && check !== 'guard') {
+    // ふつうの大技（技の倍率どおり・防御で半分）
+    st.log.push({ side: me.name, type: 'ult', skill: skill.name, check, ok: true })
+    act(st, me, foe, { idx: c.idx, skill, cd: 0, casted: true })
+    afterUlt(st, me)
+    return
+  }
+  // 決まった量のダメージ（防御・バリアでも減らない）。防御で受けた（guard）ときだけ1/10
+  me.acted += 1
+  const dmg = Math.max(1, Math.ceil(foe.base.hp * ULT_LETHAL_RATIO * (ok ? ULT_GUARD_RATIO : 1)))
+  foe.hp -= dmg
+  keepAlive(foe, st.log)
+  st.log.push({ side: me.name, type: 'ult', skill: skill.name, check, ok, damage: dmg })
+  afterUlt(st, me)
 }
 
 // 挑戦の始め：もう切っている節目は撃ったことにする
@@ -675,6 +784,22 @@ const act = (st, me, foe, ch) => {
   tickBleedAfterAct(me, st.log, foe)     // ★出血は行動した直後に刻む
   afterEngine(st, me, beforeMe)
   afterEngine(st, foe, beforeFoe)
+  // ★四凶のエキスパートの技（2026-11-09）：当たったら相手のゲージを0に（電磁縛鎖）・相手の時間で切れる強化を全部消す（黒尾薙ぎ）。
+  //   afterEngine のあとで消す（前で消すと、下がったぶんを「デバフが入った」と読み違える）。職業補正などの消えない強化は消さない
+  if (foe.gaugeZero) {
+    foe.gaugeZero = false
+    foe.gauge = 0
+    st.log.push({ side: foe.name, type: 'gaugeZero', skill: ch.skill?.name || '' })
+  }
+  if (foe.stripTimed) {
+    foe.stripTimed = false
+    const n = foe.timed.filter(e => !e.debuff).length
+    if (n > 0) {
+      foe.timed = foe.timed.filter(e => e.debuff)
+      recomputeBuffs(foe)
+      st.log.push({ side: foe.name, type: 'strip', skill: ch.skill?.name || '', n })
+    }
+  }
   me.gauge = quick ? GAUGE_FULL : Math.max(0, me.gauge - need)
   advanceSource(me, ch, ch.idx === null || used === ch.idx)
 }
@@ -762,6 +887,8 @@ const stepOnce = (st) => {
   buffStep(st, b)
   nowStep(st, a)
   nowStep(st, b)
+  ultStep(st, a)
+  ultStep(st, b)
 
   // ゲージを溜める（麻痺・詠唱・バフのゲージ・大技の構えを待っているあいだは止まる）
   const eA = liveStats(a)
@@ -784,6 +911,10 @@ const stepOnce = (st) => {
     checkHpBuffsBoth(st)
   }
 
+  // 奥義の削る条件：要る量を削ったら、その瞬間に怯んで不発（撃つ瞬間より前に見る）
+  ultBreakStep(st, b)
+  ultBreakStep(st, a)
+
   // 詠唱が終わった大技を撃つ。★同じ刻みで動ける側は先に動く（上の段）＝構えの終わりと次の行動が同じ瞬間でも防御が間に合う
   //   （2026-10-26 ユーザー指示「同じ速さなら1回は備えられるように」）
   for (const [me, foe] of [[b, a], [a, b]]) {
@@ -791,6 +922,13 @@ const stepOnce = (st) => {
     const c = me.cast
     me.cast = null
     const skill = me.slots[c.idx]?.skill
+    // ★マスターの奥義：条件で撃ち方が変わる（resolveUlt）
+    if (c.ult && skill) {
+      resolveUlt(st, me, foe, c, skill)
+      if (finish(st)) return
+      checkHpBuffsBoth(st)
+      continue
+    }
     // ★詠唱のあいだに封印・MP不足になったら通常攻撃に落ちる（takeAction が封印を見る・MPはここで見る）
     const ok = skill && (skill.mpPct ? me.mp > 0 : mpCostOf(me, skill) <= me.mp)
     act(st, me, foe, ok ? { idx: c.idx, skill, cd: c.cd, casted: true } : { idx: null, skill: null })
@@ -858,8 +996,9 @@ export const replayInputs = (st, inputs, endStep) => {
 // HPの節目で付いたボスのバフ（消えない・消せない）：[{ name, table }]
 export const hpBuffChips = (side) => side.hpBuffsOn || []
 // 時間で切れるバフ・デバフ（残り秒つき）
+//   name … 四凶のマスターの期限つきのバフ（竜鱗硬化など）だけ名前がある
 export const buffChips = (side, now) => side.timed
-  .map(e => ({ table: e.table, debuff: e.debuff, sec: Math.max(0, Math.ceil(e.until - now)), pct: (e.until - now) / e.sec }))
+  .map(e => ({ table: e.table, debuff: e.debuff, sec: Math.max(0, Math.ceil(e.until - now)), pct: (e.until - now) / e.sec, ...(e.name ? { name: e.name } : {}) }))
   .filter(c => c.sec > 0)
 // 状態異常（残り秒の目安つき）。ターンで数えるものは「次の時計まで＋残りターン」
 export const ailChips = (st, side) => AIL_KEYS
@@ -873,11 +1012,17 @@ export const ailChips = (st, side) => AIL_KEYS
     return { key: k, label: AIL_LABEL[k], sec: Math.max(0, Math.ceil(sec)), stacks: k === 'bleed' ? a.stacks : 0 }
   })
 // 職の軸の状態（空中・呪力・竜気・獣の型・納刀…）。時間では切れず、技を撃つと変わる
-export const stateChips = (side) => {
+//   now … 渡すと、期限つきの状態（浄玻璃の鏡）に残りの秒を付ける
+export const stateChips = (side, now = null) => {
   const out = []
   // ★時間で強くなる（四凶・enrageOf）
   if (side.enrageDeal > 0) out.push({ key:'enrage', label:`🔥 与ダメ+${side.enrageDeal}%` })
   if (side.enrageHit > 0) out.push({ key:'enrageHit', label:`🎯 命中+${side.enrageHit}%` })
+  // ★四凶のマスターの期限つきのバフ（浄玻璃の鏡）
+  if (side.atbReflect > 0) {
+    const left = now == null ? '' : ` ${Math.max(0, Math.ceil(side.atbReflectUntil - now))}秒`
+    out.push({ key:'reflect', label:`🪞 ${side.atbReflectName || '反射'} ダメージを${side.atbReflect}%返す${left}` })
+  }
   if (side.air) out.push({ key:'air', label:'🕊 空中' })
   if (side.jumping) out.push({ key:'jump', label:'🐉 跳躍中' })
   if (side.form) out.push({ key:'form', label:`🐾 ${BEAST_FORMS[side.form]?.label || side.form}の型` })

@@ -33,7 +33,8 @@
 
 // 難易度ごとの段階＝その難易度を呼べるエリア（dungeon.js の diffs の area と同じ・challenge.test.js が見る）。
 //   倒すと必ずもらうエリアの装備は、このエリアのもの（②＝ノーマル・⑤＝ハード）。エキスパート（⑧）・マスター（⑫）は呼べるようになったら足す
-export const CHALLENGE_TIER_AREA = { normal: 2, hard: 5 }
+//   【確定】2026-11-09 エキスパート（⑧）・マスター（⑫）を呼べるようにした（lib/dungeon.js の diffs）
+export const CHALLENGE_TIER_AREA = { normal: 2, hard: 5, expert: 8, master: 12 }
 export const CHALLENGE_DIFFS = Object.keys(CHALLENGE_TIER_AREA)
 
 // 専用装備のエリア＝必要LV70のレジェンダリーのエリア（⑪・equipment.js の reqLvOf(11, 'L') が70）。
@@ -62,11 +63,15 @@ export const CHALLENGE_MATS = {
 export const CH_RATES = {
   normal: { gear: { R: 75, E: 20, L: 5 }, own: 2, unique: 0.1 },
   hard: { gear: { R: 72, E: 20, L: 8 }, own: 3, unique: 0.15 },
+  // 【確定】2026-11-09 ユーザー選択「1.5倍ずつ（推奨）」：エキスパート＝ハードの1.5倍・マスター＝その1.5倍（レジェンダリーはレアから引く・エピックは20のまま・ユニークは小数2けた）
+  expert: { gear: { R: 68, E: 20, L: 12 }, own: 4.5, unique: 0.22 },
+  master: { gear: { R: 62, E: 20, L: 18 }, own: 6.75, unique: 0.34 },
 }
 // 【確定】2026-11-09 至高の強化石（+16〜+20の強化に使う・smith.js の STONE_TIERS）：ユーザー選択「出撃・ボス・挑戦＋作る」→
 //   四凶の報酬でも、専用装備・ユニークと同じく「難易度の確率×貢献度の割合（呼んだ人は100%）」で1個（数はこちらで決めた）
 //   ★決めるのはサーバー（v2cap_dungeon_pay_reward の c_stone4）。⚠数を変えたら SQL も直す（v2capsql.test.js が突き合わせる）
-export const CH_STONE4_PCT = { normal: 10, hard: 20 }
+//   【確定】2026-11-09 エキスパート・マスターは素材の確率（CH_MAT_CHANCE）と同じ40%・60%（ユーザー選択「1.5倍ずつ（推奨）」の中身）
+export const CH_STONE4_PCT = { normal: 10, hard: 20, expert: 40, master: 60 }
 // 特別な素材の数（倒したとき・足し合わせ）：
 export const CH_MAT_HOST = 1                          // 呼んだ人（ホスト）なら必ず
 export const CH_MAT_SOLO = 1                           // 完全ソロ討伐（ひとりで倒されずに倒した＝EXP・Gold が3倍になるのと同じ）なら、さらに必ず

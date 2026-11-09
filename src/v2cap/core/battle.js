@@ -544,6 +544,13 @@ const applyIncoming = (me, foe, dmg, kind, rng, log, pre = null, hits = 1) => {
     log.push({ side: foe.name, type: 'reflect', damage: back })
     keepAlive(me, log)
   }
+  // ★四凶のマスターの期限つきのバフ「浄玻璃の鏡」（ATB・core/atb.js が付けて秒で外す）：受けたダメージの atbReflect% を相手に返す
+  if (me && foe.atbReflect > 0 && out > 0 && foe.hp > 0 && me.hp > 0) {
+    const back = Math.max(1, Math.floor(out * foe.atbReflect / 100))
+    me.hp -= back
+    log.push({ side: foe.name, type: 'reflect', damage: back })
+    keepAlive(me, log)
+  }
   // ★防具のセット能力：攻撃を受けると確率で相手に状態異常（帯電装甲＝麻痺15%・炎獄の鎧＝火傷20%）。
   //   1回の攻撃につき1回（連撃でも1回）。相手の抵抗・麻痺の0.8倍は通常どおり効く
   if (me && foe.setFx?.counterAil && foe.hp > 0 && me.hp > 0) {
@@ -1518,6 +1525,15 @@ export const takeAction = (me, foe, rng, log, opt = {}) => {
         }
         // ★上位職：状態異常を2つ以上持つ技（毒霧の術）。それぞれ判定する（先に付ける技＝爆炎毒は撃つ前に済ませてある）
         if (skill.ails && !skill.preAil) for (const a of skill.ails) tryInflict(me, foe, { ...a, chance: a.chance * off }, rng, log)
+        // ★四凶のエキスパート・マスターの技（2026-11-09・lib/dungeon.js）。当たったときだけ
+        //   mpBurnPct … 相手のMPを最大MPの%減らす（雨喰み）
+        //   gaugeZero … 相手のATBのゲージを0に（電磁縛鎖）／stripTimed … 相手の時間で切れる強化を全部消す（黒尾薙ぎ）＝どちらも core/atb.js の act が行動のあとで行う
+        if (skill.mpBurnPct && foe.hp > 0) {
+          const lost = Math.min(Math.max(0, foe.mp), Math.floor(foe.base.mp * skill.mpBurnPct / 100))
+          if (lost > 0) { foe.mp -= lost; log.push({ side: foe.name, type: 'mpBurn', skill: skill.name, mp: lost }) }
+        }
+        if (skill.gaugeZero) foe.gaugeZero = true
+        if (skill.stripTimed) foe.stripTimed = true
         // ★上位クラス（2026-10-15）：当てたときの効果
         onHitRework(me, foe, skill, ip, imb, elemHit, off, rng, log)
       }
