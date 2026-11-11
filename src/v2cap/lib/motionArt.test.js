@@ -125,24 +125,22 @@ test('技の種類の動きのファイル名（物理・魔法・補助・回�
   }
 })
 
-test('プロンプト帳（tools/v2cap-skill-motion-book.mjs）：33職×男女の、ATBで使う技の種類ぜんぶにマネキンがある・ファイル名を道具が読める', async () => {
+// 【確定】2026-11-11 ユーザー「クオリティ低すぎ　マネキンいらないだろ」＝頼む文は待機の絵1枚＋言葉（攻撃モーションと同じ形）
+test('プロンプト帳（tools/v2cap-skill-motion-book.mjs）：33職×男女の、ATBで使う技の種類ぜんぶに頼む文がある・ファイル名を道具が読める・マネキンは使わない', async () => {
   const { bookRows } = await import('../../../tools/v2cap-skill-motion-book.mjs')
-  const { FAMILY } = await import('../../../tools/v2cap-mannequin/plan.mjs')
   const rows = bookRows()
   assert.equal(rows.length, Object.keys(ART_BASE).length)
-  const used = new Set()
   for (const c of rows) for (const x of c.g) {
     assert.ok(x.w, `${c.cls}${x.g} の持ち物`)
     assert.ok(x.kinds.some(k => k.kind === 'buff'), `${c.cls} は補助の技がある`)
     for (const k of x.kinds) {
-      assert.ok(FAMILY[k.fam], `${c.cls}${x.g} ${k.kind} のマネキン`)
-      used.add(k.fam)
       const t = motionTargetOf(k.file)
       assert.deepEqual([t?.cls, t?.g, t?.key], [c.cls, x.g, k.kind], `${k.file} を道具が読める`)
-      assert.ok(k.prompt.includes(`（${c.cls}・${x.g === 'm' ? '男性' : '女性'}）`) && k.prompt.includes(x.w), `${k.file} の頼む文にクラスと持ち物`)
+      assert.ok(k.prompt.startsWith(`添付のドット絵キャラクター（${c.cls}・${x.g === 'm' ? '男性' : '女性'}）が`) && k.prompt.includes(x.w), `${k.file} の頼む文にクラスと持ち物`)
+      assert.ok(k.prompt.includes('真緑（#00FF00）') && k.prompt.includes('横一列に6コマ'), '攻撃モーションと同じ形（道具が切れる）')
+      assert.ok(!/マネキン|1枚目|2枚目/.test(k.prompt), `${k.file} は待機の絵1枚で頼む`)
     }
   }
-  assert.deepEqual([...used].sort(), Object.keys(FAMILY).sort(), 'マネキンはどれも使う（使わないものを作らない）')
   assert.equal(rows.reduce((s, c) => s + c.g.reduce((t, x) => t + x.kinds.length, 0), 0), 154, '2026-11-11 の数え（クラス×種類77×男女）')
 })
 

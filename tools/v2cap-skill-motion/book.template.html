@@ -4,7 +4,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&family=M+PLUS+1p:wght@400;700&display=swap">
 <style>
-/* 攻撃モーション プロンプト帳と同じ帳面：上に使い方、下にクラスごとのカード（男女を左右に・その中に技の種類の行）。見出しだけドットの字 */
+/* 攻撃モーション プロンプト帳と同じ帳面：上に使い方、下にクラスごとのカード（男女を左右に・その中に技の種類の行）。見出しだけドットの字
+   2026-11-11 ユーザー「マネキンいらないだろ」＝マネキンの絵はやめた（待機の絵1枚で頼む） */
 :root {
   --bg: #f3f1f8;
   --panel: #ffffff;
@@ -76,7 +77,6 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .kind { font-size: 12px; font-weight: 700; border-radius: 4px; padding: 0 6px; border: 1px solid currentColor; }
 .kind.phys { color: var(--k-phys); } .kind.mag { color: var(--k-mag); } .kind.buff { color: var(--k-buff); } .kind.heal { color: var(--k-heal); }
 .act { color: var(--muted); font-size: 12px; }
-.mann { display: block; width: 100%; max-width: 100%; aspect-ratio: 3 / 1; object-fit: contain; border-radius: 6px; cursor: grab; background: var(--green-key); }
 .file { color: var(--muted); }
 .btn { font: inherit; font-size: 13px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
@@ -95,9 +95,9 @@ pre { white-space: pre-wrap; word-break: break-word; font-family: var(--font-bod
 
 <div class="wrap">
   <h1>技モーション プロンプト帳</h1>
-  <p class="lead">ATB戦闘で技を使ったときに流す動きを、技の種類（物理・魔法・補助・回復）ごとに ChatGPT で作るための頼み方です。木の人形（マネキン）の動きの手本と、キャラの待機の絵をいっしょに渡すと、そのキャラが同じ動きをする6コマが届きます。</p>
+  <p class="lead">ATB戦闘で技を使ったときに流す動きを、技の種類（物理・魔法・補助・回復）ごとに ChatGPT で作るための頼み方です。攻撃モーションと同じく、キャラの待機の絵1枚とプロンプトで頼みます。</p>
   <ol class="steps">
-    <li>作る行の<b>マネキンの絵</b>（緑の横長）と、上の<b>待機の絵</b>の2枚を ChatGPT へ添付する。マネキンを1枚目に（ドラッグするか、右クリック→画像をコピーして貼る）</li>
+    <li>そのクラス・性別の<b>待機の絵</b>を ChatGPT へ添付する（絵をドラッグするか、右クリック→画像をコピーして貼る）</li>
     <li><b>プロンプトをコピー</b>して貼る。<span class="green" aria-hidden="true"></span> 真緑の背景で、横に6コマ並んだ1枚が届く</li>
     <li>届いた画像を <code>public/V2newjob/攻撃モーション/</code> に、行に書いた名前（例：<code>剣士男物理.png</code>）で置く</li>
   </ol>
@@ -114,13 +114,12 @@ pre { white-space: pre-wrap; word-break: break-word; font-family: var(--font-bod
 
   <div class="grid" id="grid"></div>
 
-  <p class="foot">キャラがマネキンの見た目（木の人形・灰色の板）に寄ったら「マネキンはポーズの手本だけ。描くのは2枚目のキャラだけ」と頼み直してください。向きが真横に変わったら「体の向きは2枚目と同じ斜め前のまま」、武器が変わったり増えたりしたら「持ち物は6コマ全部で2枚目と同じにして」と頼み直すと戻ります。コマがくっつくと武器や効果の先が切れるので、そのときは「コマの間をもっと広く空けて」。絵が無い技は、物理と魔法は今の攻撃の動き・補助は光るだけ・回復は補助の動きで代わりに流れます。「作成済み」のしるしはこのブラウザにだけ残ります。</p>
+  <p class="foot">コマがくっついていると、武器や効果の先が切れることがあります。そのときは「コマの間をもっと広く空けて」と頼み直してください。途中で武器が変わったり増えたりしたら「持ち物は6コマ全部で添付の絵と同じにして」、顔や大きさがずれたら「①と同じキャラのまま、大きさと足の位置を全部のコマでそろえて」と頼み直すと戻ります。絵が無い技は、物理と魔法は今の攻撃の動き・補助は光るだけ・回復は補助の動きで代わりに流れます。「作成済み」のしるしはこのブラウザにだけ残ります。</p>
 </div>
 <div class="toast" id="toast" hidden></div>
 
 <script>
 const DATA = /*__DATA__*/null
-const MANN = /*__MANN__*/null
 const KEY = 'bf-skill-motion-done-v1'
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || 'null') } catch { return null } }
 const save = (s) => { try { localStorage.setItem(KEY, JSON.stringify(s)) } catch { /* 保存できなくても画面はそのまま使える */ } }
@@ -174,7 +173,6 @@ const render = () => {
           const pre = el('pre', {}, k.prompt)
           return el('div', { class: 'one' + (done.has(k.file) ? ' is-done' : '') },
             el('div', { class: 'kindrow' }, el('span', { class: `kind ${k.kind}` }, k.label), el('span', { class: 'act' }, k.act)),
-            el('img', { class: 'mann', src: MANN[k.fam].src, alt: `マネキンの動きの手本：${MANN[k.fam].label}`, draggable: 'true', loading: 'lazy' }),
             el('span', { class: 'file' }, k.file),
             el('div', { class: 'row' },
               el('button', { class: 'btn primary', type: 'button', onclick: () => copy(k.prompt, 'プロンプト', pre) }, 'プロンプトをコピー'),
