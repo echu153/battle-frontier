@@ -1447,7 +1447,8 @@ const sceneOfStage = (art, acts, now, cast, castEnd, reachTo = null) => {
 // foeArt … ダンジョンのボスの絵（lib/bossArt.js の bossArtOf＝ドット絵版／lib/bossIllust.js の bossIllustOf＝イラスト版）。
 //   あれば技ごとの絵とエフェクトを流す
 //   lite … 軽い表示（LiteCtx）
-export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, foeSrc, foeBig = false, foeArt = null, lite = false, introWait = false }) {
+//   playerStrips … 自分の絵ぜんぶ（攻撃と技の種類ごと・lib/motionArt.js の playerMotionsOf の list）。どれを流すかは act の motion
+export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, playerStrips = null, foeSrc, foeBig = false, foeArt = null, lite = false, introWait = false }) {
   const size = foeBig ? STAGE_OF[foeArt?.kind === 'illust' ? 'illust' : 'pixel'] : null
   // ボスのエフェクトの位置：絵の場所（動かない枠）を測る。大きさが変わったら測り直す
   const stageRef = useRef(null), pArea = useRef(null), bArea = useRef(null)
@@ -1526,7 +1527,7 @@ export default function V2capAtbStage({ st, fx, now, playerSrc, playerMotion, fo
           <SceneLayer geo={geo} sc={scBack} hands={null} s={geo.b.w / foeArt.base} />
         </div>
       )}
-      <Fighter st={st} side="a" me={st.a} src={playerSrc} motion={playerMotion} strips={playerMotion ? [playerMotion] : []} fx={fx} now={now} name={st.a.name}
+      <Fighter st={st} side="a" me={st.a} src={playerSrc} motion={playerMotion} strips={playerStrips || (playerMotion ? [playerMotion] : [])} fx={fx} now={now} name={st.a.name}
         artH={size?.artH || ART_H} scale={playerScale} areaRef={pArea} squeeze={sc?.squeeze} react={foeBig} tone={sc?.tone} wrapped={sc?.wrapped || 0} />
       <Fighter st={st} side="b" me={st.b} right src={foeSrc} fx={fx} now={now} name={st.b.name}
         strips={foeArt?.kind === 'pixel' ? Object.values(foeArt.motions) : []} rig={foeArt?.kind === 'illust' ? foeArt : null}

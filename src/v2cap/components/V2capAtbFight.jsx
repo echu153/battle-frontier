@@ -20,6 +20,11 @@ import { newBossMotionMemo, bossMotionKeyOf } from '../lib/bossArt.js'
 import { artLoadedCount, preloadArt } from '../lib/artPreload.js'
 import { DRAW_MS, atbLevelOf, newAtbPacer } from '../lib/atbPacer.js'
 import { DUNGEON_TRY_SEC } from '../lib/dungeon.js'
+import { withPlayerMotions } from '../lib/motionArt.js'
+import { SKILL_BY_NAME } from '../lib/skills.js'
+
+// 技の名前 → 種類（物理・魔法・補助・回復）＝自分の技の絵を選ぶ（lib/motionArt.js の withPlayerMotions）
+const skillKindOf = (name) => SKILL_BY_NAME[name]?.kind || null
 
 // ============================================================
 // 「レベルキャップあり」版（v2cap）— ATB戦闘の画面（舞台・マクロ・技のボタン・ログ・時間を進める）
@@ -73,7 +78,9 @@ const LiveStage = ({ tickRef, st, fxRef, ...rest }) => {
   return <V2capAtbStage st={st} fx={fxRef.current} now={performance.now() / 1000} {...rest} />
 }
 
-export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, playerMotion, bossArt = null, verPicker = null, dev = false, onOver, onEnded, footer, hold = false }) {
+//   playerMotions … 自分の絵（lib/motionArt.js の playerMotionsOf＝攻撃と技の種類ごとの絵）
+export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, playerMotions = null, bossArt = null, verPicker = null, dev = false, onOver, onEnded, footer, hold = false }) {
+  const playerMotion = playerMotions?.attack || null
   const [paused, setPaused] = useState(false)
   const [, setFrame] = useState(0)
   const [logs, setLogs] = useState([])
@@ -100,7 +107,7 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
   const telopPeek = useRef(null)
 
   // ボス戦は絵がそろうまで始めない（lib/artPreload.js・初めて開いたとき、絵が届く前に戦闘が始まっていた）
-  const artSrcs = useMemo(() => (bossArt ? [...new Set([...bossArt.srcs, playerSrc, playerMotion?.src].filter(Boolean))] : []), [bossArt, playerSrc, playerMotion])
+  const artSrcs = useMemo(() => (bossArt ? [...new Set([...bossArt.srcs, playerSrc, ...(playerMotions?.list || []).map(m => m.src)].filter(Boolean))] : []), [bossArt, playerSrc, playerMotions])
   const [artN, setArtN] = useState(0)
   const [artReady, setArtReady] = useState(() => artLoadedCount(artSrcs) === artSrcs.length)
   useEffect(() => {
@@ -148,7 +155,8 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
           const lines = buildBattleLog({ log: fresh }, s.a.name, s.b.name).filter(l => l.type !== 'hp')
           if (lines.length) setLogs(v => [...v, ...lines].slice(-80))
           const t0 = now / 1000
-          let evs = fxEventsOf(fresh, s.a.name, s.b.name)
+          // 自分の通常攻撃と技には、技の種類の絵を付ける（補助・回復は絵があれば流してから光る）
+          let evs = withPlayerMotions(fxEventsOf(fresh, s.a.name, s.b.name), playerMotions, skillKindOf)
           // ボスは技ごとに絵が違う：構えた技を覚えておき、動いた（act）ごとに流す絵を付ける（landed＝当たったか。外れてもエフェクトは最後まで流す＝相手が縮まないだけ）
           //   ダメージの数字と揺れは、エフェクトが自分に届いたとき（impactMs）
           if (bossArt) {
@@ -162,7 +170,7 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
           }
           //   技の印は流し終わるまで残す（終焉の黒焔は2.5秒より長い）
           fxRef.current = [...fxRef.current.filter(f => t0 - f.t0 < Math.max(POP_SEC + 1.5, f.motion?.totalMs ? f.motion.totalMs / 1000 + 0.3 : 0)),
-            ...scheduleFx(evs, t0, { a: playerMotion ? playerMotion.hitMs / 1000 : 0, b: (e) => (e.motion ? e.motion.impactMs / 1000 : 0) })]
+            ...scheduleFx(evs, t0, { a: (e) => (e.motion ? e.motion.hitMs / 1000 : 0), b: (e) => (e.motion ? e.motion.impactMs / 1000 : 0) })]
         }
       }
       if (s?.over && !overSent.current) {
@@ -200,7 +208,7 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
       tick(now)
     }, 33)
     return () => { cancelAnimationFrame(raf); clearInterval(id) }
-  }, [runKey, paused, playerMotion, bossArt, artReady, hold]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [runKey, paused, playerMotions, bossArt, artReady, hold]) // eslint-disable-line react-hooks/exhaustive-deps
   // ログは新しい行が下に来る＝いちばん下まで送る
   useEffect(() => { if (logBox.current) logBox.current.scrollTop = logBox.current.scrollHeight }, [logs])
 
@@ -246,7 +254,7 @@ export default function V2capAtbFight({ st: s, runKey, macros, playerSrc, player
     <div>
       {/* 自分（左）とモンスター（右）・テロップは舞台の上に重ねる */}
       <div style={{ position:'relative' }}>
-        <LiveStage tickRef={stageTick} st={s} fxRef={fxRef} playerSrc={playerSrc} playerMotion={playerMotion}
+        <LiveStage tickRef={stageTick} st={s} fxRef={fxRef} playerSrc={playerSrc} playerMotion={playerMotion} playerStrips={playerMotions?.list || []}
           foeSrc={bossArt ? bossArt.idle?.src || null : enemyArtSrc(en.name)} foeBig={!!bossArt} foeArt={bossArt} lite={lite} introWait={introT0.current === null} />
         {/* 予約（手で押した技）：舞台の左端＝プレイヤーの左に、上から順に並ぶ。マクロより先に1回ずつ出る。押すと外す
             【確定】2026-11-01 ユーザー「スキルの予約はプレイヤー側の左側に表示させるようにして、予約の上限は8個まで」：前はマクロの欄の中で、増えると下の技のボタンがずれた。

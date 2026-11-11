@@ -17,7 +17,7 @@ import { callVerify, isStaleBuild } from '../lib/dungeonVerifyCall.js'
 import { totalStats } from '../lib/loadout.js'
 import { openAreaOf } from '../lib/sortie.js'
 import { LAST_SPOT } from '../lib/areas.js'
-import { motionOf } from '../lib/motionArt.js'
+import { playerMotionsOf } from '../lib/motionArt.js'
 import { homeIconOf } from '../lib/classArt.js'
 import { artGenderOf } from '../lib/gender.js'
 import { CLASS_BY_ID } from '../lib/jobs.js'
@@ -155,16 +155,16 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
   const myGender = artGenderOf(prof, loadPref('capArtGender', 'm'))
   const baseCls = CLASS_BY_ID[prof?.class]?.req?.cls
   const playerSrc = useMemo(() => homeIconOf(prof?.class, myGender, baseCls), [prof?.class, myGender, baseCls])
-  const playerMotion = useMemo(() => motionOf(prof?.class, myGender, 'attack', baseCls), [prof?.class, myGender, baseCls])
+  const playerMotions = useMemo(() => playerMotionsOf(prof?.class, myGender, baseCls), [prof?.class, myGender, baseCls])
   // 開いたボスと入っているボスの戦闘の絵を先に読む（押してから待たない）。遭遇のイラストは全部のボス＝ポップアップを開いた瞬間に大きな絵で出す
   const pickBoss = pick?.boss
-  const motionSrc = playerMotion?.src
+  const motionSrc = playerMotions.list.map(m => m.src).join(' ')   // 攻撃と技の種類ごとの絵ぜんぶ（文字にして効果の依存を軽く・アドレスに空白は無い）
   const runBosses = (state?.runs || []).map(r => r.boss).join(',')
   useEffect(() => { preloadArt(Object.keys(DUNGEON_BOSSES).map(bossEncounterOf).filter(Boolean)) }, [])
   useEffect(() => {
     for (const key of new Set([pickBoss, ...runBosses.split(',')])) {
       const art = key && artOfBoss(key)
-      if (art) preloadArt([...art.srcs, playerSrc, motionSrc].filter(Boolean))
+      if (art) preloadArt([...art.srcs, playerSrc, ...motionSrc.split(' ')].filter(Boolean))
     }
     if (pickBoss || runBosses) staleAsked.current = { at: Date.now(), ask: isStaleBuild() }
   }, [pickBoss, runBosses, playerSrc, motionSrc])
@@ -351,7 +351,7 @@ export default function V2capDungeon({ prof, inventory, onProfile, onGo, dev = f
         <div style={{ color:'#ff8866', fontSize:'12px', marginBottom:'6px' }}>
           {boss.name}（{diffOf(shown.run.boss, shown.run.diff)?.label}）
         </div>
-        <V2capAtbFight st={shown.st} runKey={shown.runKey} macros={macros} playerSrc={playerSrc} playerMotion={playerMotion}
+        <V2capAtbFight st={shown.st} runKey={shown.runKey} macros={macros} playerSrc={playerSrc} playerMotions={playerMotions}
           bossArt={artOfBoss(shown.run.boss)} onOver={onOver} onEnded={onEnded} hold={enc.hold}
           footer={earlyFight || shown.st.over ? null
             : <button onClick={giveUp} style={{ ...miniBtn('#ff8888'), flex:1, padding:'8px' }}>挑戦をやめる（ここまでの削りを入れる）</button>} />

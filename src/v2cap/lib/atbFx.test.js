@@ -282,3 +282,12 @@ test('【確定】2026-11-01 自分は受けてもグラグラしない（ユー
   assert.ok(!/writhe/.test(stage), '巻かれてもがかない')
   assert.ok(!/knock/.test(stage), '押すのは hitReactOf だけ（別に押すと、押す量が途中で切り替わって戻る途中でもう一度跳ねた）')
 })
+
+test('補助・回復の技の絵（afterAct）があれば、光る時刻と回復の数字を絵の当たるコマまで遅らせる（2026-11-11）', () => {
+  const evs = [{ kind: 'act', side: 'a', skill: 'ヒール', motion: { hitMs: 400 }, still: true }, { kind: 'use', side: 'a', skill: 'ヒール', afterAct: true }, { kind: 'heal', side: 'a', amount: 30 }]
+  const out = scheduleFx(evs, 10, { a: (e) => (e.motion ? e.motion.hitMs / 1000 : 0) })
+  assert.deepEqual(out.map(e => [e.kind, e.t0]), [['act', 10], ['use', 10.4], ['heal', 10.4]])
+  // 絵の無い補助（afterAct なし）は今までどおりすぐ光る
+  const plain = scheduleFx([{ kind: 'act', side: 'a', skill: null }, { kind: 'use', side: 'a', skill: '剣の構え' }, { kind: 'heal', side: 'a', amount: 1 }], 10, { a: 0.3 })
+  assert.deepEqual(plain.map(e => [e.kind, e.t0]), [['act', 10], ['use', 10], ['heal', 10]])
+})

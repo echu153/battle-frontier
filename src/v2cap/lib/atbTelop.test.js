@@ -164,7 +164,9 @@ test('ポップアップの「挑戦する」を押した瞬間に遭遇のイ�
   // 戦闘に要る絵は押す前に裏で読んでおく（押したらすぐ戦闘の絵が出る）
   assert.match(hook, /preloadArt\(srcs\)/)
   assert.match(src, /new Set\(\[pickBoss, \.\.\.runBosses\.split\(','\)\]\)/)
-  assert.match(src, /preloadArt\(\[\.\.\.art\.srcs, playerSrc, motionSrc\]\.filter\(Boolean\)\)/)
+  //   自分の絵は攻撃と技の種類ごとの絵ぜんぶ（2026-11-11・lib/motionArt.js の playerMotionsOf の list）
+  assert.match(src, /const motionSrc = playerMotions\.list\.map\(m => m\.src\)\.join\(' '\)/)
+  assert.match(src, /preloadArt\(\[\.\.\.art\.srcs, playerSrc, \.\.\.motionSrc\.split\(' '\)\]\.filter\(Boolean\)\)/)
   assert.ok(!/background-clip|backgroundClip/i.test(read('V2capBossEncounter.jsx')))
 })
 

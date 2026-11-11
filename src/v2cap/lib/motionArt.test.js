@@ -4,7 +4,9 @@ import assert from 'node:assert/strict'
 import { existsSync, statSync } from 'node:fs'
 import { Buffer } from 'node:buffer'
 import { MOTION_ART } from './motionArtList.js'
-import { motionOf, motionFrameAt, motionFileOf, motionMsOf, motionHitOf, MOTION_OUT, IDLE_SIZE } from './motionArt.js'
+import { motionOf, motionFrameAt, motionFileOf, motionMsOf, motionHitOf, MOTION_OUT, IDLE_SIZE, MOTION_KEYS, KIND_MOTION, playerMotionsOf, withPlayerMotions } from './motionArt.js'
+import { CLASS_BY_ID } from './jobs.js'
+import { SKILLS } from './skills.js'
 import { ART_BASE, ART_GIF } from './classArt.js'
 import { motionTargetOf, keyGreen, splitFrames, bodyOf, framesByComponents } from '../../../tools/v2cap-motion.mjs'
 import { versionOf } from '../../../tools/v2cap-art-lib.mjs'
@@ -111,4 +113,77 @@ test('まとまりで分ける：隣のコマの上まで伸びた武器は切�
   assert.equal(frames[0].x0 + frames[0].W - 1, 29, '①に②の槍は入らない')
   assert.equal(frames[3].x0 + frames[3].W - 1, 217, '④に放った玉が入る')
   assert.equal(frames[4].x0, 220, '⑤には入らない')
+})
+
+// 【確定】2026-11-11 ユーザー選択「技の種類ごと」：物理・魔法・補助・回復の絵をクラス×男女ごとに・技の種類で流し分ける
+test('技の種類の動きのファイル名（物理・魔法・補助・回復）と、技の種類（lib/skills.js の kind）がそろっている', () => {
+  for (const [name, key] of [['物理', 'phys'], ['魔法', 'mag'], ['補助', 'buff'], ['回復', 'heal'], ['攻撃', 'attack']]) assert.equal(MOTION_KEYS[name], key)
+  const kinds = new Set(SKILLS.filter(s => s.kind !== 'passive').map(s => s.kind))
+  for (const k of kinds) assert.ok(KIND_MOTION[k], `技の種類 ${k} の流す絵が決まっている`)
+  for (const [n, k] of [['剣士男物理.png', 'phys'], ['魔法使い女魔法.png', 'mag'], ['僧侶男回復.webp', 'heal'], ['戦士女補助.png', 'buff'], ['暗殺者女攻撃.png', 'attack']]) {
+    assert.equal(motionTargetOf(n)?.key, k, `${n} を道具が読める`)
+  }
+})
+
+test('プロンプト帳（tools/v2cap-skill-motion-book.mjs）：33職×男女の、ATBで使う技の種類ぜんぶにマネキンがある・ファイル名を道具が読める', async () => {
+  const { bookRows } = await import('../../../tools/v2cap-skill-motion-book.mjs')
+  const { FAMILY } = await import('../../../tools/v2cap-mannequin/plan.mjs')
+  const rows = bookRows()
+  assert.equal(rows.length, Object.keys(ART_BASE).length)
+  const used = new Set()
+  for (const c of rows) for (const x of c.g) {
+    assert.ok(x.w, `${c.cls}${x.g} の持ち物`)
+    assert.ok(x.kinds.some(k => k.kind === 'buff'), `${c.cls} は補助の技がある`)
+    for (const k of x.kinds) {
+      assert.ok(FAMILY[k.fam], `${c.cls}${x.g} ${k.kind} のマネキン`)
+      used.add(k.fam)
+      const t = motionTargetOf(k.file)
+      assert.deepEqual([t?.cls, t?.g, t?.key], [c.cls, x.g, k.kind], `${k.file} を道具が読める`)
+      assert.ok(k.prompt.includes(`（${c.cls}・${x.g === 'm' ? '男性' : '女性'}）`) && k.prompt.includes(x.w), `${k.file} の頼む文にクラスと持ち物`)
+    }
+  }
+  assert.deepEqual([...used].sort(), Object.keys(FAMILY).sort(), 'マネキンはどれも使う（使わないものを作らない）')
+  assert.equal(rows.reduce((s, c) => s + c.g.reduce((t, x) => t + x.kinds.length, 0), 0), 154, '2026-11-11 の数え（クラス×種類77×男女）')
+})
+
+test('自分の絵ぜんぶ（playerMotionsOf）：種類の絵が無ければ代わり＝物理と魔法は攻撃・回復は補助・補助は無し（光るだけ）', () => {
+  for (const cls of Object.keys(ART_BASE)) for (const g of ['m', 'f']) {
+    const base = CLASS_BY_ID[cls]?.req?.cls || null
+    const by = playerMotionsOf(cls, g, base)
+    const own = (k) => motionOf(cls, g, k, base)
+    assert.deepEqual(by.attack, own('attack'))
+    assert.deepEqual(by.phys, own('phys') || own('attack'), `${cls}${g} 物理`)
+    assert.deepEqual(by.mag, own('mag') || own('attack'), `${cls}${g} 魔法`)
+    assert.deepEqual(by.buff, own('buff'), `${cls}${g} 補助`)
+    assert.deepEqual(by.heal, own('heal') || own('buff'), `${cls}${g} 回復`)
+    const srcs = by.list.map(m => m.src)
+    assert.equal(new Set(srcs).size, srcs.length, '同じ絵は1つだけ置く')
+    for (const k of ['attack', 'phys', 'mag', 'buff', 'heal']) if (by[k]) assert.ok(srcs.includes(by[k].src))
+  }
+})
+
+test('自分の動きの印に絵を付ける（withPlayerMotions）：通常攻撃は攻撃・技は種類の絵・補助と回復は絵を流してから光る', () => {
+  const M = (k) => ({ src: k, hitMs: 200, totalMs: 500 })
+  const motions = { attack: M('atk'), phys: M('phys'), mag: M('atk'), buff: M('buff'), heal: M('buff'), list: [] }
+  const kindOf = (n) => ({ 袈裟斬り: 'phys', ファイア: 'mag', 剣の構え: 'buff', ヒール: 'heal' })[n] || null
+  const evs = [
+    { kind: 'act', side: 'a', skill: null }, { kind: 'hit', side: 'b', amount: 10 },
+    { kind: 'act', side: 'a', skill: '袈裟斬り' }, { kind: 'act', side: 'a', skill: 'ファイア' },
+    { kind: 'use', side: 'a', skill: '剣の構え' }, { kind: 'use', side: 'a', skill: 'ヒール' }, { kind: 'heal', side: 'a', amount: 5 },
+    { kind: 'use', side: 'a', skill: '防御' }, { kind: 'use', side: 'a', skill: 'HPポーション' },
+    { kind: 'act', side: 'b', skill: '黒爪' },
+  ]
+  const out = withPlayerMotions(evs, motions, kindOf)
+  assert.equal(out[0].motion.src, 'atk', '通常攻撃')
+  assert.equal(out[1].kind, 'hit')
+  assert.equal(out[2].motion.src, 'phys', '物理の技')
+  assert.equal(out[3].motion.src, 'atk', '魔法の絵が無いクラスは攻撃の絵')
+  assert.deepEqual([out[4].kind, out[4].still, out[4].motion.src, out[5].kind, out[5].afterAct], ['act', true, 'buff', 'use', true], '補助＝絵を流してから光る')
+  assert.deepEqual([out[6].kind, out[6].motion.src, out[7].afterAct], ['act', 'buff', true], '回復の絵が無ければ補助の絵')
+  assert.deepEqual(out.slice(9, 11), [{ kind: 'use', side: 'a', skill: '防御' }, { kind: 'use', side: 'a', skill: 'HPポーション' }], '防御と薬は光るだけ')
+  assert.equal(out[11].motion, undefined, '相手の動きには付けない')
+  assert.equal(withPlayerMotions(evs, null, kindOf), evs, '絵が無ければそのまま')
+  // 補助の絵が無いクラスは今までどおり光るだけ
+  const noBuff = withPlayerMotions([{ kind: 'use', side: 'a', skill: '剣の構え' }], { ...motions, buff: null, heal: null }, kindOf)
+  assert.deepEqual(noBuff, [{ kind: 'use', side: 'a', skill: '剣の構え' }])
 })

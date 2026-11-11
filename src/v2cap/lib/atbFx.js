@@ -82,7 +82,11 @@ export const scheduleFx = (events, t0, delay = {}) => {
       strikes = e.motion?.strikes || null
       return [{ ...e, t0: t0 - skip }]
     }
-    if (e.kind === 'use') { d = 0; strikes = null; return [{ ...e, t0 }] }
+    // 補助・回復の技の絵（lib/motionArt.js の withPlayerMotions・afterAct）があれば、光る時刻と回復の数字を絵の当たるコマまで遅らせる
+    if (e.kind === 'use') {
+      if (e.afterAct) return [{ ...e, t0: t0 + d }]
+      d = 0; strikes = null; return [{ ...e, t0 }]
+    }
     if (e.each && e.each.length === strikes?.length) {
       return e.each.flatMap((h, i) => {
         const at = t0 + d + strikes[i].atMs / 1000

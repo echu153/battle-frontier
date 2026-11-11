@@ -6,7 +6,7 @@ import { box, miniBtn, TEXT } from './v2ui.js'
 import { JP_BOLD } from './casinoStyle.js'
 import { loadPref } from '../core/prefs.js'
 import { macrosOf } from '../lib/atbMacro.js'
-import { motionOf } from '../lib/motionArt.js'
+import { playerMotionsOf } from '../lib/motionArt.js'
 import { homeIconOf } from '../lib/classArt.js'
 import { artGenderOf } from '../lib/gender.js'
 import { CLASS_BY_ID } from '../lib/jobs.js'
@@ -281,7 +281,7 @@ export default function V2capTraining({ prof, inventory, onProfile, dev = false 
   const myGender = artGenderOf(prof, loadPref('capArtGender', 'm'))
   const baseCls = CLASS_BY_ID[prof?.class]?.req?.cls
   const playerSrc = useMemo(() => homeIconOf(prof?.class, myGender, baseCls), [prof?.class, myGender, baseCls])
-  const playerMotion = useMemo(() => motionOf(prof?.class, myGender, 'attack', baseCls), [prof?.class, myGender, baseCls])
+  const playerMotions = useMemo(() => playerMotionsOf(prof?.class, myGender, baseCls), [prof?.class, myGender, baseCls])
   const lv = prof?.lv || 1
 
   // ===== 結果・戦闘（どちらかの枠の途中なら、それだけ出す）=====
@@ -293,7 +293,7 @@ export default function V2capTraining({ prof, inventory, onProfile, dev = false 
     return (
       <div style={{ ...box, padding:'12px' }}>
         <div style={{ color: f.q.color, fontSize:'12px', marginBottom:'6px' }}>{f.q.name}（{SCARECROW_SEC}秒・反撃しない）</div>
-        <V2capAtbFight st={f.st} runKey={f.runKey} macros={macros} playerSrc={playerSrc} playerMotion={playerMotion}
+        <V2capAtbFight st={f.st} runKey={f.runKey} macros={macros} playerSrc={playerSrc} playerMotions={playerMotions}
           bossArt={f.q.art()} onOver={() => flow.onOver(prof)} onEnded={flow.onEnded}
           footer={f.st.over ? null
             : <button onClick={() => flow.giveUp(prof)} style={{ ...miniBtn('#ff8888'), flex:1, padding:'8px' }}>{f.q.w.quit}</button>} />

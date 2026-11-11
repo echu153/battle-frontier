@@ -1,0 +1,204 @@
+<title>技モーション プロンプト帳</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&family=M+PLUS+1p:wght@400;700&display=swap">
+<style>
+/* 攻撃モーション プロンプト帳と同じ帳面：上に使い方、下にクラスごとのカード（男女を左右に・その中に技の種類の行）。見出しだけドットの字 */
+:root {
+  --bg: #f3f1f8;
+  --panel: #ffffff;
+  --panel-2: #ebe8f4;
+  --ink: #1d1a2b;
+  --muted: #5d5872;
+  --line: #d6d1e6;
+  --accent: #4b3fd1;
+  --accent-ink: #ffffff;
+  --done: #1f8a52;
+  --done-bg: #e2f4ea;
+  --green-key: #00c853;
+  --k-phys: #b5541c;
+  --k-mag: #7a3fc4;
+  --k-buff: #1d6fb8;
+  --k-heal: #1f8a52;
+  --font-display: "DotGothic16", "M PLUS 1p", system-ui, sans-serif;
+  --font-body: "M PLUS 1p", system-ui, -apple-system, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Consolas, "BIZ UDGothic", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f0d1a; --panel: #181528; --panel-2: #221e36; --ink: #ece9f7; --muted: #a49ec0; --line: #2f2a48;
+    --accent: #8f85ff; --accent-ink: #120f22; --done: #5fd896; --done-bg: #16301f; --green-key: #3ddc84;
+    --k-phys: #f0955c; --k-mag: #b98cff; --k-buff: #6fb6f5; --k-heal: #5fd896; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f0d1a; --panel: #181528; --panel-2: #221e36; --ink: #ece9f7; --muted: #a49ec0; --line: #2f2a48;
+  --accent: #8f85ff; --accent-ink: #120f22; --done: #5fd896; --done-bg: #16301f; --green-key: #3ddc84;
+  --k-phys: #f0955c; --k-mag: #b98cff; --k-buff: #6fb6f5; --k-heal: #5fd896; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.7; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 28px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1 { font-family: var(--font-display); font-weight: 400; font-size: clamp(26px, 5vw, 36px); line-height: 1.25; margin: 0 0 8px; text-wrap: balance; letter-spacing: 0.02em; }
+.lead { color: var(--muted); margin: 0 0 20px; max-width: 65ch; }
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 0 0 24px; padding: 0; list-style: none; counter-reset: s; }
+.steps li { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; min-width: 0; counter-increment: s; }
+.steps li::before { content: counter(s); font-family: var(--font-display); color: var(--accent); font-size: 20px; display: block; line-height: 1.2; }
+.steps code, .file { font-family: var(--font-mono); font-size: 12.5px; word-break: break-all; }
+.green { display: inline-block; width: 0.9em; height: 0.9em; background: var(--green-key); border-radius: 2px; vertical-align: -0.1em; }
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 10px; margin-bottom: 8px;
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tabs button { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
+.tabs button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.progress { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.progress b { color: var(--done); font-size: 16px; }
+.grid { display: grid; gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; min-width: 0; }
+.card h2 { font-family: var(--font-display); font-weight: 400; font-size: 20px; margin: 0; line-height: 1.3; }
+.head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; margin-bottom: 10px; }
+.tag { font-size: 11px; letter-spacing: 0.06em; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 760px) { .pair { grid-template-columns: 1fr; } }
+.person { background: var(--panel-2); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.who { display: flex; gap: 10px; align-items: center; }
+.sprite { width: 96px; height: 96px; flex: none; image-rendering: pixelated; cursor: grab; border-radius: 6px;
+  background: repeating-conic-gradient(var(--line) 0% 25%, transparent 0% 50%) 50% / 16px 16px; }
+.who-meta { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sex { font-weight: 700; }
+.gear { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.one { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.one.is-done { outline: 2px solid var(--done); outline-offset: -2px; }
+.kindrow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.kind { font-size: 12px; font-weight: 700; border-radius: 4px; padding: 0 6px; border: 1px solid currentColor; }
+.kind.phys { color: var(--k-phys); } .kind.mag { color: var(--k-mag); } .kind.buff { color: var(--k-buff); } .kind.heal { color: var(--k-heal); }
+.act { color: var(--muted); font-size: 12px; }
+.mann { display: block; width: 100%; max-width: 100%; aspect-ratio: 3 / 1; object-fit: contain; border-radius: 6px; cursor: grab; background: var(--green-key); }
+.file { color: var(--muted); }
+.btn { font: inherit; font-size: 13px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
+.btn:focus-visible, .tabs button:focus-visible, summary:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.check { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); cursor: pointer; }
+.one.is-done .check { color: var(--done); font-weight: 700; }
+details summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+pre { white-space: pre-wrap; word-break: break-word; font-family: var(--font-body); font-size: 12.5px; line-height: 1.65; background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 8px; padding: 10px; margin: 6px 0 0; max-height: 300px; overflow: auto; }
+.toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg);
+  padding: 8px 14px; border-radius: 999px; font-size: 13px; z-index: 20; max-width: calc(100% - 32px); }
+.foot { margin-top: 24px; color: var(--muted); font-size: 13px; max-width: 65ch; }
+@media (prefers-reduced-motion: no-preference) { .btn, .tabs button { transition: background 0.15s, border-color 0.15s; } }
+</style>
+
+<div class="wrap">
+  <h1>技モーション プロンプト帳</h1>
+  <p class="lead">ATB戦闘で技を使ったときに流す動きを、技の種類（物理・魔法・補助・回復）ごとに ChatGPT で作るための頼み方です。木の人形（マネキン）の動きの手本と、キャラの待機の絵をいっしょに渡すと、そのキャラが同じ動きをする6コマが届きます。</p>
+  <ol class="steps">
+    <li>作る行の<b>マネキンの絵</b>（緑の横長）と、上の<b>待機の絵</b>の2枚を ChatGPT へ添付する。マネキンを1枚目に（ドラッグするか、右クリック→画像をコピーして貼る）</li>
+    <li><b>プロンプトをコピー</b>して貼る。<span class="green" aria-hidden="true"></span> 真緑の背景で、横に6コマ並んだ1枚が届く</li>
+    <li>届いた画像を <code>public/V2newjob/攻撃モーション/</code> に、行に書いた名前（例：<code>剣士男物理.png</code>）で置く</li>
+  </ol>
+
+  <div class="bar">
+    <div class="tabs" role="group" aria-label="表示する行">
+      <button type="button" data-f="all" aria-pressed="true">すべて</button>
+      <button type="button" data-f="init" aria-pressed="false">初期クラス</button>
+      <button type="button" data-f="upper" aria-pressed="false">上位クラス</button>
+      <button type="button" data-f="todo" aria-pressed="false">まだ作っていない</button>
+    </div>
+    <div class="progress">作成済み <b id="doneN">0</b> / <span id="allN">0</span></div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <p class="foot">キャラがマネキンの見た目（木の人形・灰色の板）に寄ったら「マネキンはポーズの手本だけ。描くのは2枚目のキャラだけ」と頼み直してください。向きが真横に変わったら「体の向きは2枚目と同じ斜め前のまま」、武器が変わったり増えたりしたら「持ち物は6コマ全部で2枚目と同じにして」と頼み直すと戻ります。コマがくっつくと武器や効果の先が切れるので、そのときは「コマの間をもっと広く空けて」。絵が無い技は、物理と魔法は今の攻撃の動き・補助は光るだけ・回復は補助の動きで代わりに流れます。「作成済み」のしるしはこのブラウザにだけ残ります。</p>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const DATA = /*__DATA__*/null
+const MANN = /*__MANN__*/null
+const KEY = 'bf-skill-motion-done-v1'
+const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || 'null') } catch { return null } }
+const save = (s) => { try { localStorage.setItem(KEY, JSON.stringify(s)) } catch { /* 保存できなくても画面はそのまま使える */ } }
+const rowsOf = (x) => x.kinds
+const done = new Set([...(load() || []), ...DATA.flatMap(c => c.g.flatMap(x => rowsOf(x).filter(k => k.done).map(k => k.file)))])
+let filter = 'all'
+
+const toastEl = document.getElementById('toast')
+let toastT = 0
+const toast = (t) => { toastEl.textContent = t; toastEl.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { toastEl.hidden = true }, 1800) }
+
+const copy = async (text, label, pre) => {
+  try { await navigator.clipboard.writeText(text); toast(`${label}をコピーしました`) }
+  catch {
+    if (pre) {
+      pre.closest('details').open = true
+      const r = document.createRange(); r.selectNodeContents(pre)
+      const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r)
+      toast('選んだので Ctrl+C（⌘C）でコピーしてください')
+    } else toast('コピーできませんでした。文字を選んでコピーしてください')
+  }
+}
+
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag)
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v)
+    else e.setAttribute(k, v)
+  }
+  for (const k of kids.flat()) if (k != null) e.append(k)
+  return e
+}
+
+const render = () => {
+  const grid = document.getElementById('grid')
+  grid.replaceChildren()
+  for (const c of DATA) {
+    if (filter === 'init' && c.group !== 'init') continue
+    if (filter === 'upper' && c.group !== 'upper') continue
+    const people = c.g.map(x => ({ ...x, rows: rowsOf(x).filter(k => filter !== 'todo' || !done.has(k.file)) })).filter(x => x.rows.length)
+    if (!people.length) continue
+    const card = el('section', { class: 'card' },
+      el('div', { class: 'head' }, el('h2', {}, c.cls), el('span', { class: 'tag' }, c.group === 'init' ? '初期クラス' : '上位クラス')),
+      el('div', { class: 'pair' }, people.map(x => el('div', { class: 'person' },
+        el('div', { class: 'who' },
+          el('img', { class: 'sprite', src: x.img, alt: `${c.cls}${x.g === 'm' ? '男' : '女'}の待機の絵`, width: '96', height: '96', draggable: 'true' }),
+          el('div', { class: 'who-meta' }, el('span', { class: 'sex' }, x.g === 'm' ? '男性' : '女性'), el('span', { class: 'gear' }, `持ち物：${x.w}`))),
+        x.rows.map(k => {
+          const id = `d-${k.file}`
+          const pre = el('pre', {}, k.prompt)
+          return el('div', { class: 'one' + (done.has(k.file) ? ' is-done' : '') },
+            el('div', { class: 'kindrow' }, el('span', { class: `kind ${k.kind}` }, k.label), el('span', { class: 'act' }, k.act)),
+            el('img', { class: 'mann', src: MANN[k.fam].src, alt: `マネキンの動きの手本：${MANN[k.fam].label}`, draggable: 'true', loading: 'lazy' }),
+            el('span', { class: 'file' }, k.file),
+            el('div', { class: 'row' },
+              el('button', { class: 'btn primary', type: 'button', onclick: () => copy(k.prompt, 'プロンプト', pre) }, 'プロンプトをコピー'),
+              el('button', { class: 'btn', type: 'button', onclick: () => copy(k.file, 'ファイル名') }, '名前をコピー'),
+              el('label', { class: 'check', for: id },
+                el('input', { type: 'checkbox', id, ...(done.has(k.file) ? { checked: '' } : {}), onchange: (e) => {
+                  if (e.target.checked) done.add(k.file); else done.delete(k.file)
+                  save([...done]); render()
+                } }), '作成済み')),
+            el('details', {}, el('summary', {}, 'プロンプトを見る'), pre))
+        })))))
+    grid.append(card)
+  }
+  const all = DATA.flatMap(c => c.g.flatMap(rowsOf))
+  document.getElementById('doneN').textContent = all.filter(k => done.has(k.file)).length
+  document.getElementById('allN').textContent = all.length
+}
+
+for (const b of document.querySelectorAll('.tabs button')) {
+  b.addEventListener('click', () => {
+    filter = b.dataset.f
+    for (const x of document.querySelectorAll('.tabs button')) x.setAttribute('aria-pressed', String(x === b))
+    render()
+  })
+}
+render()
+</script>

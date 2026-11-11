@@ -2,7 +2,8 @@
 // v2cap のクラスのモーション（ChatGPT で作った「横一列に6コマ・真緑の背景」の1枚）を、画面で使う形にする
 // ------------------------------------------------------------
 // 元の絵（ユーザーが置く・git に入れない）：public/V2newjob/攻撃モーション/<クラス名><男|女><動き>.png（.webp・.jpg も可）
-//   例：暗殺者女攻撃.png。動きは 攻撃・技・被弾・倒れる（src/v2cap/lib/motionArt.js の MOTION_KEYS）
+//   例：暗殺者女攻撃.png・剣士男物理.png。動きは 攻撃・物理・魔法・補助・回復・技・被弾・倒れる（src/v2cap/lib/motionArt.js の MOTION_KEYS）
+//   物理・魔法・補助・回復＝技の種類ごとの動き（2026-11-11・マネキンのシートを手本に ChatGPT で描いてもらう）
 // 作るもの：
 //   public/V2newjob/motion/<ローマ字>-<m|f>-<キー>.webp … ②〜⑤のコマを横に並べた1枚（透明つき・劣化なし）
 //   src/v2cap/lib/motionArtList.js                       … 一覧（コマの数・1コマの大きさ・ずらし・速さ）
@@ -208,8 +209,10 @@ export const bodyOf = ({ W, H, data }) => {
 
 // ファイル名 → { cls, g, key }
 const ART_GENDER_OF_KANJI = Object.fromEntries(ART_GENDERS.map(g => [g.kanji, g.key]))
+//   動きの名前は lib/motionArt.js の MOTION_KEYS（攻撃・物理・魔法・補助・回復・技・被弾・倒れる）
+const MOTION_NAME = new RegExp(`^(.+?)(男|女)(${Object.keys(MOTION_KEYS).join('|')})[.](png|webp|jpe?g)$`, 'i')
 export const motionTargetOf = (file) => {
-  const m = path.basename(file).match(/^(.+?)(男|女)(攻撃|技|被弾|倒れる)\.(png|webp|jpe?g)$/i)
+  const m = path.basename(file).match(MOTION_NAME)
   if (!m) return null
   const cls = GIF_CLASS_ALIAS[m[1]] || m[1]
   if (!ART_BASE[cls]) return null
@@ -297,7 +300,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
   for (const name of readdirSync(SRC).sort()) {
     const file = path.join(SRC, name)
     const t = motionTargetOf(file)
-    if (!t) { console.log(`  ? 名前が読めない（<クラス名><男|女><攻撃|技|被弾|倒れる>.png）：${name}`); continue }
+    if (!t) { console.log(`  ? 名前が読めない（<クラス名><男|女><${Object.keys(MOTION_KEYS).join('|')}>.png）：${name}`); continue }
     const out = path.join(OUT, motionFileOf(t.cls, t.g, t.key))
     if (!FORCE && art[t.cls]?.[t.g]?.[t.key] && existsSync(out) && statSync(out).mtimeMs >= statSync(file).mtimeMs) { skipped++; continue }
     try {

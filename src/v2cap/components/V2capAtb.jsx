@@ -11,7 +11,7 @@ import { itemCountsOf, itemTotalOf } from '../core/atbItems.js'
 import { macrosOf, validateMacros } from '../lib/atbMacro.js'
 import { atbUsableOf, saveErrText } from '../lib/atbSkills.js'
 import { loadPref, savePref } from '../core/prefs.js'
-import { motionOf } from '../lib/motionArt.js'
+import { playerMotionsOf } from '../lib/motionArt.js'
 import { homeIconOf } from '../lib/classArt.js'
 import { artGenderOf } from '../lib/gender.js'
 import { BOSS_DEFS, bossArtOf, bossEncounterOf, bossThumbOf } from '../lib/bossArt.js'
@@ -75,10 +75,10 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
   // 絵：自分はクラスの待機GIF（ホームのアイコンと同じ・男女はキャラの性別）／相手は図鑑と同じ絵（ドット絵が届いたら差し替える）
   const myGender = artGenderOf(prof, loadPref('capArtGender', 'm'))
   const playerSrc = homeIconOf(prof?.class, myGender, CLASS_BY_ID[prof?.class]?.req?.cls)
-  // 攻撃の絵（あるクラスだけ・lib/motionArt.js）。無ければ踏み込み
-  const playerMotion = useMemo(() => motionOf(prof?.class, myGender, 'attack', CLASS_BY_ID[prof?.class]?.req?.cls), [prof?.class, myGender])
-  // 攻撃の絵は先に読んでおく（はじめて殴った瞬間に絵が間に合わないと、1回目だけ消えて見える）
-  useEffect(() => { if (playerMotion) { const im = new Image(); im.src = playerMotion.src } }, [playerMotion])
+  // 攻撃と技の種類ごとの絵（あるクラスだけ・lib/motionArt.js）。無ければ踏み込み
+  const playerMotions = useMemo(() => playerMotionsOf(prof?.class, myGender, CLASS_BY_ID[prof?.class]?.req?.cls), [prof?.class, myGender])
+  // 絵は先に読んでおく（はじめて殴った瞬間に絵が間に合わないと、1回目だけ消えて見える）
+  useEffect(() => { for (const m of playerMotions.list) { const im = new Image(); im.src = m.src } }, [playerMotions])
   // ダンジョンのボスの絵（イラスト版かドット絵版・技ごとの絵とエフェクト）。絵は先に読んでおく
   const bossKey = foe?.bossArt || null
   const [artVer, setArtVer] = useState(() => loadPref('capBossArtVer', 'illust'))
@@ -113,7 +113,7 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
     setRunKey(k => k + 1)
     setPhase('fight')
     if (bossEncounterOf(foe.bossArt)) {
-      enc.begin(foe.bossArt, bossDiff, [...(bossArt?.srcs || []), bossEncounterOf(foe.bossArt), playerSrc, playerMotion?.src].filter(Boolean))
+      enc.begin(foe.bossArt, bossDiff, [...(bossArt?.srcs || []), bossEncounterOf(foe.bossArt), playerSrc, ...playerMotions.list.map(m => m.src)].filter(Boolean))
       enc.finish()
     }
   }
@@ -204,7 +204,7 @@ export default function V2capAtb({ prof, inventory, onProfile }) {
   return (
     <div style={{ ...box, padding:'12px' }}>
       {enc.enc && <V2capBossEncounter key={enc.enc.id} bossKey={enc.enc.bossKey} diffKey={enc.enc.diffKey} out={enc.enc.out} onTap={enc.skip} />}
-      <V2capAtbFight st={st.current} runKey={runKey} macros={macros} playerSrc={playerSrc} playerMotion={playerMotion}
+      <V2capAtbFight st={st.current} runKey={runKey} macros={macros} playerSrc={playerSrc} playerMotions={playerMotions}
         bossArt={bossArt} verPicker={verPicker} dev hold={enc.hold}
         footer={<>
           <button onClick={start} style={{ ...miniBtn('#44ddff'), flex:1, padding:'8px' }}>↻ もう一度</button>
