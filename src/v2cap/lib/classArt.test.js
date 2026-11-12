@@ -15,7 +15,7 @@ import {
   ART_SD, SD_DIR, SD_OUT, SD_ALIAS, sdTargetOf, sdSrcOf, battleIconOf,
   ART_GIF, GIF_DIR, GIF_OUT, GIF_ALIAS, gifTargetOf, gifSrcOf, homeIconOf,
 } from './classArt.js'
-import { MOTION_SRC_DIR, MOTION_OUT } from './motionArt.js'
+import { MOTION_SRC_DIRS, MOTION_OUT } from './motionArt.js'
 
 const PUBLIC = fileURLToPath(new URL('../../../public', import.meta.url))
 
@@ -109,7 +109,7 @@ test('使っていない大きさのフォルダが残っていない（一覧�
   // SD/ はユーザーが置くSDの元の絵・上位職/ は上位クラスの元の絵（どちらも git に入れない）・icon/ はSDから作る戦闘ログのアイコン
   // ★2026-10-26 ATBの攻撃などのモーション：攻撃モーション/ は元の絵（git に入れない）・motion/ は画面で使う版（lib/motionArt.js）
   const dirs = readdirSync(PUBLIC + ART_DIR, { withFileTypes: true })
-    .filter(d => d.isDirectory() && d.name !== SD_DIR && d.name !== ART_UPPER_DIR && d.name !== GIF_DIR && d.name !== MOTION_SRC_DIR).map(d => d.name).sort()
+    .filter(d => d.isDirectory() && d.name !== SD_DIR && d.name !== ART_UPPER_DIR && d.name !== GIF_DIR && !MOTION_SRC_DIRS.includes(d.name)).map(d => d.name).sort()
   assert.deepEqual(dirs, [...ART_SIZES, SD_OUT, GIF_OUT, MOTION_OUT].sort())
 })
 

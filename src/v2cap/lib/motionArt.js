@@ -14,6 +14,10 @@ import { MOTION_ART } from './motionArtList.js'
 import { ART_BASE, ART_DIR, gifSrcOf } from './classArt.js'
 
 export const MOTION_SRC_DIR = '攻撃モーション'   // public/V2newjob の下・元の絵（git に入れない・ユーザーが決めた場所）
+// 技の種類（物理・魔法・補助・回復）の元の絵の置き場所（2026-11-13 ユーザーが public/V2newjob/モーション/ に剣士男物理.png を置いた）。
+//   どちらに置いても道具（tools/v2cap-motion.mjs）は読む＝ファイル名の動きで決まる
+export const SKILL_MOTION_SRC_DIR = 'モーション'
+export const MOTION_SRC_DIRS = [MOTION_SRC_DIR, SKILL_MOTION_SRC_DIR]
 export const MOTION_OUT = 'motion'           // public/V2newjob の下・画面で使う版
 // ファイル名の動き → キー。攻撃＝通常攻撃（技の種類の絵が無いときの代わりも）。技・被弾・倒れるは置ければ作れるが、画面ではまだ流さない
 //   【確定】2026-11-11 ユーザー「ATB戦用のクラスが使うスキルのモーションを作って欲しい」→ 選択「技の種類ごと」：

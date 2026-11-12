@@ -3,7 +3,8 @@
 // ------------------------------------------------------------
 // 元の絵（ユーザーが置く・git に入れない）：public/V2newjob/攻撃モーション/<クラス名><男|女><動き>.png（.webp・.jpg も可）
 //   例：暗殺者女攻撃.png・剣士男物理.png。動きは 攻撃・物理・魔法・補助・回復・技・被弾・倒れる（src/v2cap/lib/motionArt.js の MOTION_KEYS）
-//   物理・魔法・補助・回復＝技の種類ごとの動き（2026-11-11・頼む文は tools/v2cap-skill-motion-book.mjs のプロンプト帳）
+//   物理・魔法・補助・回復＝技の種類ごとの動き（2026-11-11・頼む文は tools/v2cap-skill-motion-book.mjs のプロンプト帳）。
+//   技の種類の絵はユーザーが public/V2newjob/モーション/ に置く（2026-11-13）。どちらのフォルダに置いても読む（lib/motionArt.js の MOTION_SRC_DIRS）
 // 作るもの：
 //   public/V2newjob/motion/<ローマ字>-<m|f>-<キー>.webp … ②〜⑤のコマを横に並べた1枚（透明つき・劣化なし）
 //   src/v2cap/lib/motionArtList.js                       … 一覧（コマの数・1コマの大きさ・ずらし・速さ）
@@ -27,13 +28,13 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { probe, bleed, versionOf } from './v2cap-art-lib.mjs'
 import { ART_BASE, ART_GENDERS, GIF_CLASS_ALIAS, GIF_OUT } from '../src/v2cap/lib/classArt.js'
-import { MOTION_SRC_DIR, MOTION_OUT, MOTION_KEYS, SHEET_FRAMES, IDLE_SIZE, motionMsOf, motionHitOf, motionFileOf } from '../src/v2cap/lib/motionArt.js'
+import { MOTION_SRC_DIRS, MOTION_OUT, MOTION_KEYS, SHEET_FRAMES, IDLE_SIZE, motionMsOf, motionHitOf, motionFileOf } from '../src/v2cap/lib/motionArt.js'
 import { MOTION_ART } from '../src/v2cap/lib/motionArtList.js'
 
 const SELF = fileURLToPath(import.meta.url)
 const ROOT = path.resolve(path.dirname(SELF), '..')
 const PUB = path.join(ROOT, 'public', 'V2newjob')
-const SRC = path.join(PUB, MOTION_SRC_DIR)
+const SRCS = MOTION_SRC_DIRS.map(d => path.join(PUB, d))   // 攻撃モーション/（攻撃）・モーション/（技の種類）
 const OUT = path.join(PUB, MOTION_OUT)
 const LIST = path.join(ROOT, 'src', 'v2cap', 'lib', 'motionArtList.js')
 const FORCE = process.argv.includes('--force')
@@ -224,6 +225,9 @@ const build = (file, { cls, g, key }) => {
   if (!existsSync(idleFile)) throw new Error(`待機GIFが無い：${path.relative(ROOT, idleFile)}`)
   const idle = bodyOf(readRgba(idleFile))
   let sheet = keyGreen(readRgba(file))
+  // 横一列に6コマの横長の1枚でなければ作らない（2026-11-13 攻撃モーション/ に置いてあった 224×224 の剣士女攻撃.png を切って、
+  //   1コマ 1360×5622・倍率26.5 の壊れた絵ができた＝待機の絵か何かの置き間違い）。①の体が小さすぎる（倍率が大きすぎる）ものも同じ
+  if (sheet.W < sheet.H * 2) throw new Error(`横一列に6コマの横長の絵ではない（${sheet.W}×${sheet.H}）`)
   const splitOf = (img) => {
     const byComp = framesByComponents(img)
     if (byComp) return { frames: byComp, how: 'まとまり' }
@@ -234,6 +238,7 @@ const build = (file, { cls, g, key }) => {
   const first = bodyOf(frames[0])
   // ③ 大きさ：①（立ちポーズ）の高さを待機の体の高さへ。8%以内なら縮めない
   let k = (idle.bot - idle.top + 1) / (first.bot - first.top + 1)
+  if (k > 2) throw new Error(`①の体が待機の絵の半分より小さい（倍率${k.toFixed(2)}）＝6コマの絵か見直す`)
   if (Math.abs(k - 1) <= 0.08) k = 1
   else {
     bleed(sheet)
@@ -294,11 +299,12 @@ const writeList = (art) => {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
-  if (!existsSync(SRC)) { console.log(`元の絵の場所がありません：${path.relative(ROOT, SRC)}`); process.exit(0) }
+  const dirs = SRCS.filter(d => existsSync(d))
+  if (!dirs.length) { console.log(`元の絵の場所がありません：${SRCS.map(d => path.relative(ROOT, d)).join('・')}`); process.exit(0) }
   const art = JSON.parse(JSON.stringify(MOTION_ART))
   let made = 0, skipped = 0
-  for (const name of readdirSync(SRC).sort()) {
-    const file = path.join(SRC, name)
+  for (const file of dirs.flatMap(d => readdirSync(d).sort().map(n => path.join(d, n))).filter(f => statSync(f).isFile())) {
+    const name = path.basename(file)
     const t = motionTargetOf(file)
     if (!t) { console.log(`  ? 名前が読めない（<クラス名><男|女><${Object.keys(MOTION_KEYS).join('|')}>.png）：${name}`); continue }
     const out = path.join(OUT, motionFileOf(t.cls, t.g, t.key))
