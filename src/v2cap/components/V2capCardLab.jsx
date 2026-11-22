@@ -3,7 +3,10 @@
 //   →「GIFはあくまで参考ね、クリックとかタップでカードをGIFの視点みたいに見まわせるようにしてほしい　試しにフェアリーで作ってみて」
 //   ・GIF は使わない。図鑑の大きい絵（public/enemy-art-big）1枚に、傾き・厚み・虹色の光・流れるハイライト・星・粒を画面で重ねる
 //     ＝敵が何体いても増えるファイルは無い
-//   ・押したまま動かすと、押した所が奥へ沈むように傾く。離すと、ゆっくり回る元の動きへ戻る
+//   ・ふだんは止まった絵（正面・粒も明かりも止まる）。押している間だけ動く
+//     【ユーザー指示】2026-11-23「デフォは静止画にしてほしい、タップとかクリックホールドで動かせるように」
+//     ＝はじめの版の「何もしなくてもゆっくり回って浮き沈みする」はやめた。戻さない
+//   ・押したまま動かすと、押した所が奥へ沈むように傾く。離すと正面へ戻って止まる（止まったら毎コマの計算もやめる）
 //   ・色は絵から拾う（絵のあざやかな所の色あい）。拾えないときは種族の色
 //   ・枠と文字の置きかたは独自のもの（参考のGIFは光の質感だけを借りた）
 //   ★まだ試作：手に入れかた・報酬・サーバーの保存は無い。見た目が決まってから決める
@@ -15,11 +18,6 @@ import { raceDefOf } from '../lib/monsterRace.js'
 import { AREA_LIST } from '../lib/areas.js'
 
 // ===== 動きのつまみ =====
-const IDLE_X = 10.5      // 何もしていないときの傾き（度）：上下
-const IDLE_Y = 17.5      //                              ：左右
-const ORBIT_SEC = 5.2    // ひと回りの秒数
-const BOB_SEC = 3.4      // 浮き沈みの秒数
-const BOB_PX = 5
 const DRAG_X = 26        // 押して動かしたときの傾きの上限（度）：上下
 const DRAG_Y = 34        //                                    ：左右
 const THICK = 8          // 厚みの板の枚数（1枚1px）
@@ -29,7 +27,6 @@ const STARS = [[17, 13, 1], [85, 21, 0.8], [69, 45, 1.2], [23, 57, 0.7], [88, 69
 const STAR_PATH = 'M12 0C12.6 8 16 11.4 24 12C16 12.6 12.6 16 12 24C11.4 16 8 12.6 0 12C8 11.4 11.4 8 12 0Z'
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v))
-const isReduced = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch { return false } }
 
 // 色あい（0〜360）：#rrggbb から
 const hueOfHex = (hex) => {
@@ -82,7 +79,7 @@ const CSS = `
 @keyframes v2card-mote { 0% { transform: translate(0, 0); opacity: 0 } 18% { opacity: .85 } 100% { transform: translate(var(--drift), -110px); opacity: 0 } }
 @keyframes v2card-breath { 0%, 100% { opacity: .55; transform: translate(-50%, -50%) scale(1) } 50% { opacity: .9; transform: translate(-50%, -50%) scale(1.08) } }
 .v2card-mote { position: absolute; border-radius: 50%; animation: v2card-mote linear infinite; pointer-events: none }
-@media (prefers-reduced-motion: reduce) { .v2card-mote, .v2card-breath { animation: none !important } }
+[data-held="0"] .v2card-mote, [data-held="0"] .v2card-breath { animation-play-state: paused !important }
 `
 
 function Motes({ list, hue, front }) {
@@ -117,47 +114,58 @@ export function V2capMonsterCard({ name }) {
   const backMotes = useMemo(() => makeMotes(16, 11), [])
   const frontMotes = useMemo(() => makeMotes(8, 29), [])
 
-  useEffect(() => {
+  const loop = useRef({ raf: 0, last: 0 })
+  // いまの傾きを画面へ写す（光・帯・星の場所も傾きから決まる）
+  const paint = () => {
     const stage = stageRef.current
-    if (!stage) return undefined
-    const still = isReduced()
+    if (!stage) return
     const s = pose.current
-    const t0 = performance.now()
-    let raf = 0
-    let last = t0
-    const tick = (now) => {
-      const t = (now - t0) / 1000
-      const dt = Math.min(0.1, (now - last) / 1000)   // コマ数が少ない端末でも同じ速さで追いつく
-      last = now
-      if (!s.drag) {
-        const a = t * Math.PI * 2 / ORBIT_SEC
-        s.tx = still ? -4 : IDLE_X * Math.sin(a)
-        s.ty = still ? 9 : IDLE_Y * Math.cos(a)
-      }
-      const k = 1 - Math.exp(-dt * (s.drag ? 16 : 3.6))
-      s.rx += (s.tx - s.rx) * k
-      s.ry += (s.ty - s.ry) * k
-      const bob = still ? 0 : Math.sin(t * Math.PI * 2 / BOB_SEC) * BOB_PX
-      const band = 50 + s.ry * 2.5 + s.rx * 0.9    // 流れるハイライトの場所（%）
-      const st = stage.style
-      st.setProperty('--rxn', s.rx.toFixed(2))
-      st.setProperty('--ryn', s.ry.toFixed(2))
-      st.setProperty('--bob', `${bob.toFixed(2)}px`)
-      st.setProperty('--band', band.toFixed(2))
-      st.setProperty('--gx', `${(50 + s.ry * 1.5).toFixed(1)}%`)
-      st.setProperty('--gy', `${(50 - s.rx * 1.6).toFixed(1)}%`)
-      STARS.forEach(([x, y, size], i) => {
-        const el = starRefs.current[i]
-        if (!el) return
-        const d = (x - (band + (50 - y) * 0.375)) / 9      // ハイライトの帯は斜め（上ほど右）
-        const o = Math.exp(-d * d)
-        el.style.opacity = o.toFixed(3)
-        el.style.transform = `translate(-50%, -50%) scale(${(size * (0.35 + o * 0.9)).toFixed(3)}) rotate(${(o * 30).toFixed(1)}deg)`
-      })
-      raf = requestAnimationFrame(tick)
+    const band = 50 + s.ry * 2.5 + s.rx * 0.9    // 流れるハイライトの場所（%）
+    const st = stage.style
+    st.setProperty('--rxn', s.rx.toFixed(2))
+    st.setProperty('--ryn', s.ry.toFixed(2))
+    st.setProperty('--band', band.toFixed(2))
+    st.setProperty('--gx', `${(50 + s.ry * 1.5).toFixed(1)}%`)
+    st.setProperty('--gy', `${(50 - s.rx * 1.6).toFixed(1)}%`)
+    STARS.forEach(([x, y, size], i) => {
+      const el = starRefs.current[i]
+      if (!el) return
+      const d = (x - (band + (50 - y) * 0.375)) / 9      // ハイライトの帯は斜め（上ほど右）
+      const o = Math.exp(-d * d)
+      el.style.opacity = o.toFixed(3)
+      el.style.transform = `translate(-50%, -50%) scale(${(size * (0.35 + o * 0.9)).toFixed(3)}) rotate(${(o * 30).toFixed(1)}deg)`
+    })
+  }
+  const tick = (now) => {
+    const s = pose.current, l = loop.current
+    const dt = Math.min(0.1, (now - l.last) / 1000)   // コマ数が少ない端末でも同じ速さで追いつく
+    l.last = now
+    if (!s.drag) { s.tx = 0; s.ty = 0 }
+    const k = 1 - Math.exp(-dt * (s.drag ? 16 : 6))
+    s.rx += (s.tx - s.rx) * k
+    s.ry += (s.ty - s.ry) * k
+    // 離して正面まで戻ったら止まる（止まった絵に戻る）
+    if (!s.drag && Math.abs(s.rx) < 0.05 && Math.abs(s.ry) < 0.05) {
+      s.rx = 0; s.ry = 0
+      paint()
+      l.raf = 0
+      if (stageRef.current) stageRef.current.dataset.held = '0'
+      return
     }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
+    paint()
+    l.raf = requestAnimationFrame(tick)
+  }
+  const wake = () => {
+    const l = loop.current
+    if (stageRef.current) stageRef.current.dataset.held = '1'
+    if (l.raf) return
+    l.last = performance.now()
+    l.raf = requestAnimationFrame(tick)
+  }
+  useEffect(() => {
+    paint()
+    const l = loop.current
+    return () => { cancelAnimationFrame(l.raf); l.raf = 0 }
   }, [])
 
   // 押した所が奥へ沈むように傾ける
@@ -170,7 +178,7 @@ export function V2capMonsterCard({ name }) {
     pose.current.ty = nx * DRAG_Y
     pose.current.tx = -ny * DRAG_X
   }
-  const onDown = (e) => { pose.current.drag = true; try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* つかめない端末 */ } aim(e) }
+  const onDown = (e) => { pose.current.drag = true; wake(); try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* つかめない端末 */ } aim(e) }
   const onMove = (e) => { if (pose.current.drag) aim(e) }
   const onUp = () => { pose.current.drag = false }
 
@@ -179,19 +187,19 @@ export function V2capMonsterCard({ name }) {
 
   return (
     <div
-      ref={stageRef}
+      ref={stageRef} data-held="0"
       onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
       style={{
         position: 'relative', width: '100%', maxWidth: 460, margin: '0 auto', padding: '46px 0 62px', overflow: 'hidden',
         perspective: '900px', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', cursor: 'grab',
         background: `radial-gradient(ellipse at 50% 44%, hsl(${hue} 45% 17%) 0%, hsl(${hue} 50% 7%) 55%, #020308 100%)`,
-        '--rxn': 0, '--ryn': 0, '--bob': '0px', '--band': 50, '--gx': '50%', '--gy': '50%',
+        '--rxn': 0, '--ryn': 0, '--band': 50, '--gx': '50%', '--gy': '50%',
       }}
     >
       <style>{CSS}</style>
       {/* カードのうしろの明かり（息をするように明るさが変わる） */}
       <div className="v2card-breath" style={{ position: 'absolute', left: '50%', top: '48%', width: '92%', aspectRatio: '1', borderRadius: '50%', pointerEvents: 'none',
-        background: `radial-gradient(circle, hsl(${hue} 85% 58% / .42), hsl(${(hue + 40) % 360} 80% 50% / .14) 45%, transparent 68%)`, animation: `v2card-breath ${BOB_SEC * 1.5}s ease-in-out infinite` }} />
+        background: `radial-gradient(circle, hsl(${hue} 85% 58% / .42), hsl(${(hue + 40) % 360} 80% 50% / .14) 45%, transparent 68%)`, animation: 'v2card-breath 5s ease-in-out infinite' }} />
       <Motes list={backMotes} hue={hue} />
       {/* 床に落ちる影（傾きと逆へずれる・浮くと薄くなる） */}
       <div style={{ position: 'absolute', left: '50%', bottom: 22, width: 'min(230px, 58vw)', height: 26, borderRadius: '50%', pointerEvents: 'none',
@@ -200,7 +208,7 @@ export function V2capMonsterCard({ name }) {
 
       <div ref={cardRef} style={{
         position: 'relative', width: 'min(300px, 76vw)', aspectRatio: '5 / 7', margin: '0 auto', transformStyle: 'preserve-3d',
-        transform: 'translateY(var(--bob)) rotateX(calc(var(--rxn) * 1deg)) rotateY(calc(var(--ryn) * 1deg))', willChange: 'transform',
+        transform: 'rotateX(calc(var(--rxn) * 1deg)) rotateY(calc(var(--ryn) * 1deg))', willChange: 'transform',
       }}>
         {/* 厚み：うしろへ1pxずつ重ねた金属の板 */}
         {Array.from({ length: THICK }, (_, i) => (
@@ -296,7 +304,7 @@ export default function V2capCardLab() {
           ))}
         </div>
         <div style={{ color: TEXT.sub, fontSize: '10px', marginTop: '6px', lineHeight: 1.6 }}>
-          カードを押したまま動かすと、傾けて見まわせます。離すと、ゆっくり回る動きへ戻ります
+          カードを押したまま動かすと、傾けて見まわせます。離すと正面へ戻ります
         </div>
       </div>
       <V2capMonsterCard key={name} name={name} />
