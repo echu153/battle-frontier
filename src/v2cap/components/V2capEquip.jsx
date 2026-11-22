@@ -71,7 +71,9 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
                 <GearIcon item={w?.item} size={34} slotIcon={GEAR_SLOT_ICON[slot]} />
                 {w ? (
                   <>
-                    <span style={{ flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                    {/* 名前の下に上がるステ（2026-11-23・絵を入れたので、スマホの幅で名前が1〜2文字に切れないよう2段に） */}
+                    <span style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', gap:'2px' }}>
+                    <span style={{ minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                       {/* ユニーク（2026-10-21）はカーソルで固有の能力 */}
                       {isUnique(w.item)
                         ? <V2Tip width="260px" color={RARITY_COLOR.U} style={{ color: nameColor(w.item), borderBottom:`1px dotted ${RARITY_COLOR.U}` }}
@@ -92,6 +94,7 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
                       {SHINKA_ON && w.item.part === '武器' && <span style={{ marginLeft:'6px' }}><ShinkaNote inv={w.inv} item={w.item} /></span>}
                     </span>
                     <span style={{ color: TEXT.sub, fontSize:'10px' }}>{statLine(statsAt(w.item, w.inv.ilv, prof.lv, plusOf(w.inv)))}</span>
+                    </span>
                     <button onClick={() => unequip(slot)} disabled={busy} style={miniBtn('#aa5566')}>外す</button>
                   </>
                 ) : <span style={{ color: TEXT.empty }}>—</span>}
