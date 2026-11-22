@@ -131,6 +131,9 @@ const V2capAtb = lazy(() => import('../components/V2capAtb.jsx'))
 // サブ垢の見張り（2026-11-06・管理者だけ・lib/altWatch.js）。開いたときだけ読み込む
 const V2capAltWatch = lazy(() => import('../components/V2capAltWatch.jsx'))
 SCREEN_TITLE.altWatch = '🔍 サブ垢の見張り［管理］'
+// モンスターのカードの試作（2026-11-23・開発用の枠から・V2capCardLab.jsx）。開いたときだけ読み込む
+const V2capCardLab = lazy(() => import('../components/V2capCardLab.jsx'))
+SCREEN_TITLE.cardLab = '🃏 モンスターのカード［試作］'
 // ホームを開いたとき・キャラを作った直後に、端末の印を送る（IPはサーバーが見る・supabase_v2cap_core.sql §4-2）。
 //   開発モードは effect が2回走るので、開いたときの分は読み込みごとに1回だけ。失敗しても遊びは止めない
 let watchSent = false
@@ -543,6 +546,7 @@ export default function V2capHome() {
                       </button>
                       <button onClick={() => setScreen('uniqueCheck')} style={miniBtn(RARITY_COLOR.U)}>💎 ユニークの能力を確かめる</button>
                       <button onClick={() => setScreen('atb')} style={miniBtn('#44ddff')}>⏱ ATB戦闘の試し撃ち</button>
+                      <button onClick={() => setScreen('cardLab')} style={miniBtn('#ffdd88')}>🃏 モンスターのカード（試作）</button>
                       {/* サブ垢の見張り（2026-11-06）：公開したあとも管理者だけ（開発用の枠を出す人が変わっても、ここは isAdmin で見る） */}
                       {isAdmin && <button onClick={() => setScreen('altWatch')} style={miniBtn('#ff8888')}>🔍 サブ垢の見張り</button>}
                       {/* 案内役ナハトの全部のセリフを順に見る（サーバーに何も書かない） */}
@@ -596,6 +600,11 @@ export default function V2capHome() {
             {screen === 'altWatch' && isAdmin && (
               <Suspense fallback={<div style={{ color: TEXT.label, fontSize:'11px' }}>読み込み中…</div>}>
                 <V2capAltWatch />
+              </Suspense>
+            )}
+            {screen === 'cardLab' && (
+              <Suspense fallback={<div style={{ color: TEXT.label, fontSize:'11px' }}>読み込み中…</div>}>
+                <V2capCardLab />
               </Suspense>
             )}
             {screen === 'atb' && (
