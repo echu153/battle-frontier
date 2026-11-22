@@ -13,6 +13,7 @@ import { statLine, nameColor, useGearRows, useFavToggle, withFavs } from './v2ca
 import { PlusTag, GearFilterBar, FavStar } from './v2capGear.jsx'
 import { saveGearFav } from './v2capGearFav.js'
 import { V2Tip } from './V2ItemTip.jsx'
+import GearIcon, { GEAR_SLOT_ICON } from './V2capGearIcon.jsx'
 import { isSetPiece, setLabel, setTierText, armorSetOf, SET_TIERS } from '../lib/armorSets.js'
 import { ShinkaNote } from './V2capShinka.jsx'
 import { SHINKA_ON } from '../lib/shinka.js'
@@ -66,6 +67,8 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
             return (
               <div key={slot} style={{ background:'#000818', border:'1px solid #002244', padding:'5px 7px', display:'flex', alignItems:'center', gap:'6px', fontSize:'11px', flexWrap:'wrap' }}>
                 <span style={{ color: TEXT.label, width:'52px', flexShrink:0 }}>{SLOT_LABEL[slot]}</span>
+                {/* 装備の絵（2026-11-23・空の枠は部位の印） */}
+                <GearIcon item={w?.item} size={34} slotIcon={GEAR_SLOT_ICON[slot]} />
                 {w ? (
                   <>
                     <span style={{ flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
@@ -124,7 +127,10 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
             const effect = item.line ? ARMOR_EFFECT[item.line]?.label : null
             const power = powerAt(item, inv.ilv, plus)
             return (
-              <div key={inv.id} style={{ background:'#000818', border:`1px solid ${isWorn ? '#0055aa' : '#002244'}`, padding:'6px 8px', opacity: usable ? 1 : 0.6 }}>
+              <div key={inv.id} style={{ background:'#000818', border:`1px solid ${isWorn ? '#0055aa' : '#002244'}`, padding:'6px 8px', opacity: usable ? 1 : 0.6, display:'flex', gap:'8px', alignItems:'flex-start' }}>
+                {/* 装備の絵（2026-11-23 ユーザー指示「装備画面でイラストも表示されて、視覚的にわかりやすいように」・枠は等級ごと） */}
+                <GearIcon item={item} size={48} />
+                <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12px' }}>
                   <span style={{ color: nameColor(item), flex:1, minWidth:0 }}>
                     {item.name}<PlusTag inv={inv} />
@@ -181,6 +187,7 @@ export default function V2capEquip({ prof, inventory, onProfile, onGo }) {
                         )
                     })
                     : <span style={{ color:'#c69a5c', fontSize:'10px' }}>{prof.class}は{item.type}を装備できない</span>}
+                </div>
                 </div>
               </div>
             )

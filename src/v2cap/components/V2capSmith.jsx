@@ -20,6 +20,7 @@ import { STONE_HIGH_AREA } from '../lib/sortie.js'
 import { statLine, nameColor, PLUS_COLOR, gainText, areaOptionLabel, filterSelect, optionStyle, useGearRows, useFavToggle, withFavs } from './v2capGearView.js'
 import { PlusTag, GearFilterBar, StatChange, FavStar } from './v2capGear.jsx'
 import { saveGearFav } from './v2capGearFav.js'
+import GearIcon from './V2capGearIcon.jsx'
 import V2capEnhanceFx from './V2capEnhanceFx.jsx'
 import V2capCraftFx from './V2capCraftFx.jsx'
 import { ticketOf, canUseTicket } from '../lib/v1carry.js'
@@ -492,6 +493,7 @@ function AreaCraft({ prof, all, busy, call, setError, setNotice, say }) {
           return (
             <div key={item.id} style={rowBox('#002244')}>
               <div style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12px' }}>
+                <GearIcon item={item} size={36} />
                 <span style={{ color: nameColor(item), flex:1, minWidth:0 }}>
                   {item.name}
                   <span style={{ color: TEXT.sub, fontSize:'10px', marginLeft:'5px' }}>{kindLabel(item)}</span>
@@ -581,6 +583,7 @@ function ChallengeCraft({ prof, all, busy, call, setError, setNotice, say }) {
           return (
             <div key={item.id} style={rowBox('#002244')}>
               <div style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12px' }}>
+                <GearIcon item={item} size={36} />
                 <span style={{ color: nameColor(item), flex:1, minWidth:0 }}>
                   {item.name}
                   <span style={{ color: TEXT.sub, fontSize:'10px', marginLeft:'5px' }}>{kindLabel(item)}</span>
@@ -613,6 +616,7 @@ function ItemHead({ inv, item, lv, isWorn, check, star }) {
   return (
     <div style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12px' }}>
       {check}
+      <GearIcon item={item} size={36} />
       <span style={{ color: nameColor(item), flex:1, minWidth:0 }}>
         {item.name}<PlusTag inv={inv} />
         <span style={{ color: TEXT.sub, fontSize:'10px', marginLeft:'5px' }}>{kindLabel(item)}</span>
@@ -669,7 +673,8 @@ function SmithModal({ row, prof, busy, msg, say, onEnhance, onClose }) {
       onConfirm={err ? undefined : onEnhance} onClose={onClose}>
       {say && err && <MasterSays face={say.face} line={say.text} />}
       {/* 装備の名前は大きく（2026-10-26 ユーザー指示「強化選択時の装備名の文字大きく」） */}
-      <div>
+      <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
+        <GearIcon item={item} size={56} />
         <span style={{ fontSize:'16px' }}><span style={{ color: nameColor(item) }}>{item.name}</span><PlusTag inv={inv} /></span>
         <span style={{ color: TEXT.sub, fontSize:'11px' }}>（{kindLabel(item)}・LV{needLvOf(item, inv.ilv)}）</span>
       </div>

@@ -19,6 +19,7 @@ import V2capArmorSets from './V2capArmorSets.jsx'
 import V2capUniqueFx from './V2capUniqueFx.jsx'
 import V2capChallengeFx from './V2capChallengeGear.jsx'
 import { isUnique, isChallenge } from '../lib/equipment.js'
+import GearIcon, { GEAR_SLOT_ICON } from './V2capGearIcon.jsx'
 import { SHOP_NAME, MEAL_COLOR, leftText, burgerEffectText, toppingText } from '../lib/burger.js'
 import { FLIP_COLOR, flipLeftMsOf, encounterBandOf } from '../lib/shop.js'
 
@@ -114,6 +115,7 @@ export default function V2capStatus({ prof, inventory, onProfile, open = true, o
     return (
       <div key={slot} style={cell}>
         <span style={{ color:'#7fa6d0', fontSize:'9px', flexShrink:0 }}>{SLOT_LABEL[slot]}</span>
+        <GearIcon item={w?.item} size={24} slotIcon={GEAR_SLOT_ICON[slot]} />
         {w ? (
           <V2Tip alignRight={i % 2 === 1} width="230px" style={{ display:'block', flex:1, minWidth:0 }}
             body={<>

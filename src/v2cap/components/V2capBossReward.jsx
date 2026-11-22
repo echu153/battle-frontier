@@ -6,6 +6,7 @@ import { DIFF_COLOR, DUNGEON_BOSSES, HELPER_REWARD_MIN_PCT, contributionPctOf, d
 import { CORRECTED_TEXT } from '../lib/dungeonVerifyCall.js'
 import { gainedExpOf, levelUpLines } from '../lib/settleLines.js'
 import { chDropsOf } from '../lib/challenge.js'
+import GearIcon from './V2capGearIcon.jsx'
 import { RARITY_COLOR, kindLabel, needLvOf } from '../lib/equipment.js'
 
 // ============================================================
@@ -135,6 +136,7 @@ export default function V2capBossReward({ bossKey, diffKey, cls, st = null, resu
                     {x.kind === 'mat'
                       ? <span style={{ color:'#cfe2ff' }}>{x.name} ×{x.n}</span>
                       : <span style={{ minWidth: 0 }}>
+                          <GearIcon item={x.item} size={30} style={{ marginRight:'6px' }} />
                           <span style={{ color: RARITY_COLOR[x.item.rarity], fontWeight:'bold' }}>{x.item.name}</span>
                           <span style={{ color: TEXT.sub, fontSize:'10px' }}>（{kindLabel(x.item)}・LV{needLvOf(x.item, x.ilv)}）</span>
                         </span>}
