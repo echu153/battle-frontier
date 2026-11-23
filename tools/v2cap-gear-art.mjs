@@ -18,7 +18,7 @@
 import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { probe, decode, bleed, alphaBox, encodeSquare, keyBackground, transparentBorderRatio, versionOf } from './v2cap-art-lib.mjs'
+import { probe, decode, bleed, each4, alphaBox, encodeSquare, keyBackground, transparentBorderRatio, versionOf } from './v2cap-art-lib.mjs'
 import { GEAR_ART } from '../src/v2cap/lib/gearArtList.js'
 import {
   GEAR_SHEETS, GEAR_SHEET_BY_ID, GEAR_ART_DIR, GEAR_ART_SIZE, GEAR_SHEET_SOURCE, SHEET_COLS,
@@ -65,6 +65,39 @@ const removeMagenta = ({ data, W, H }) => {
     if (m > g) { const cut = m - g; data[p * 4] -= cut; data[p * 4 + 2] -= cut }
   }
 }
+// 絵に囲まれて残ったマゼンタのすき間を抜く（2026-11-23 本物の1枚目 U01 の「番人の心核」の輪の内側）。
+//   ChatGPT の背景は場所で少し色が違い（縁 251,1,250・輪の内側 239,5,239）、共通部品の「すき間」の条件（差の平均6以下）から外れた。
+//   装備にマゼンタは使わない（頼み方に書いてある）ので、はっきりマゼンタの画素のかたまり（POCKET_MIN 以上）は背景として抜く
+const POCKET_MIN = 12
+const isMagenta = (d, p) => d[p * 4 + 3] > 0 && d[p * 4] > 185 && d[p * 4 + 2] > 175 && d[p * 4 + 1] < 80
+const clearMagentaPockets = ({ data, W, H }) => {
+  const seen = new Uint8Array(W * H)
+  for (let s0 = 0; s0 < W * H; s0++) {
+    if (seen[s0] || !isMagenta(data, s0)) continue
+    const blob = [s0]; seen[s0] = 1
+    for (let h = 0; h < blob.length; h++) each4(W, H, blob[h], r => { if (!seen[r] && isMagenta(data, r)) { seen[r] = 1; blob.push(r) } })
+    if (blob.length >= POCKET_MIN) for (const p of blob) data[p * 4 + 3] = 0
+  }
+}
+// 透明のとなり（FRINGE 画素ぶん）に残ったマゼンタのにじみを消す：赤と青がそろって緑より強く、赤が青より弱すぎない画素の赤と青を下げる
+//   （紫の布は青のほうがずっと強いので当たらない）。輪郭の線は暗い色として残る
+const FRINGE = 2
+const cleanFringe = ({ data, W, H }) => {
+  const near = new Uint8Array(W * H)
+  let front = []
+  for (let p = 0; p < W * H; p++) if (data[p * 4 + 3] === 0) front.push(p)
+  for (let b = 1; b <= FRINGE; b++) {
+    const next = []
+    for (const p of front) each4(W, H, p, r => { if (data[r * 4 + 3] > 0 && !near[r]) { near[r] = b; next.push(r) } })
+    front = next
+  }
+  for (let p = 0; p < W * H; p++) {
+    if (!near[p]) continue
+    const R = data[p * 4], G = data[p * 4 + 1], B = data[p * 4 + 2]
+    const cut = Math.min(R, B) - G
+    if (cut > 50 && R > B * 0.8) { data[p * 4] = Math.round(R - cut * 0.85); data[p * 4 + 2] = Math.round(B - cut * 0.85) }
+  }
+}
 const load = (file) => {
   const { w, h } = probe(file)
   if (Math.abs(w - h) > Math.max(w, h) * 0.02) throw new Error(`正方形でない（${w}×${h}）`)
@@ -76,6 +109,8 @@ const load = (file) => {
     if (r.edgeLeft > EDGE_LEFT_MAX) throw new Error(`背景が抜けていない（縁の${Math.round(r.edgeLeft * 100)}%が絵のまま）`)
     img = r.img
     removeMagenta(img)
+    clearMagentaPockets(img)
+    cleanFringe(img)
     mode = '背景を抜いた'
   }
   snapAlpha(img)
