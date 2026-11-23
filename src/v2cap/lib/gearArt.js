@@ -122,7 +122,7 @@ const setGroupsOf = (sheet) => {
 export const gearSheetPromptOf = (sheet) => {
   const tiers = [...new Set(sheet.items.map(gearTierOf))]
   const parts = Object.keys(KIND_HINT).filter(p => sheet.items.some(i => i.part === p))
-  const rows = chunk(sheet.items.map((item, i) => `${i + 1}. ${item.name}（${kindLabel(item)}）— ${cellNote(item)}`), SHEET_COLS)
+  const rows = chunk(sheet.items.map((item, i) => `${i + 1}. ${item.name}（${promptKindOf(item)}）— ${cellNote(item)}`), SHEET_COLS)
   const sets = setGroupsOf(sheet)
   const empty = SHEET_CELLS - sheet.items.length
   return [
@@ -139,6 +139,7 @@ export const gearSheetPromptOf = (sheet) => {
     '・光は左上から。装備だけを描く（手・人・台・背景の飾りは描かない）',
     '・マゼンタとそれに近い色（明るいピンク紫）は装備に使わない',
     ...parts.map(p => `・${KIND_HINT[p]}`),
+    ...Object.keys(KIND_SHAPE).filter(k => sheet.items.some(i => i.kind === k)).map(k => `・${ACC_WORD[k]}＝${KIND_SHAPE[k].slice(1, -1)}`),
     '',
     '【豪華さ】',
     ...tiers.map(t => `・${RARITY_LABEL[t]}：${TIER_STYLE[t]}`),
@@ -150,6 +151,45 @@ export const gearSheetPromptOf = (sheet) => {
     '',
     '【描く装備】名前と添え書きから形と色を考えてください',
     ...rows.map((r, i) => `${i + 1}段目\n${r.join('\n')}`),
+  ].join('\n')
+}
+
+// ===== 1個だけ描き直す =====
+// 【確定】2026-11-24 ユーザー「描き直す」（四凶のシートで、指輪が宝珠の飾り・耳飾りが指輪に描かれた）：
+//   シートの1個だけを描き直した絵は public/V2装備/one/<絵の名前>.png に置く（道具がシートの絵より優先して使う）。
+//   頼む文は、種類の形をはっきり書く（装飾品は名前から別の物に描かれやすい）
+export const GEAR_ONE_DIR = 'one'
+export const gearOneFileOf = (item) => `${gearArtKeyOf(item)}.png`
+// 頼む文に書く種類：装飾品は「装飾品・指輪」のように何の装飾品かまで書く
+//   （2026-11-24 四凶のシートで、「装飾品」としか書いていなかったリングが珠の飾りに、イヤリングが指輪に描かれた＝ユーザー「描き直す」）
+const ACC_WORD = { リング: '指輪', イヤリング: '耳飾り', ベルト: 'ベルト', ネックレス: '首飾り' }
+const promptKindOf = (item) => (ACC_WORD[item.kind] ? `装飾品・${ACC_WORD[item.kind]}` : kindLabel(item))
+const KIND_SHAPE = {
+  リング: '（指にはめる輪。輪の全体が見えること。玉や飾りは輪の上に付ける）',
+  イヤリング: '（左右一組を並べる。耳にかける金具が上に見えること。指輪・腕輪にはしない）',
+  ベルト: '（腰に巻く帯。帯の輪の全体と、正面の留め具が見えること。留め具だけにはしない）',
+  ネックレス: '（首にかける鎖かひもと、下がる飾り。鎖かひもが見えること）',
+}
+export const gearOnePromptOf = (item) => {
+  const tier = gearTierOf(item)
+  return [
+    'RPGの装備のアイコンを、ドット絵で1個だけ、正方形の画像に描いてください。',
+    '',
+    `【描く装備】${item.name}（${promptKindOf(item)}）— ${cellNote(item)}`,
+    ...(KIND_SHAPE[item.kind] ? [`・これは${ACC_WORD[item.kind]}＝${KIND_SHAPE[item.kind].slice(1, -1)}`] : []),
+    `・${KIND_HINT[item.part]}`,
+    '',
+    '【置き方】',
+    '・装備は画像の真ん中に、画像の7〜8割の大きさで。縁にふれない',
+    `・背景は全部 真マゼンタ（${SHEET_BG}）の一色。枠・文字・影・床は描かない`,
+    '',
+    '【絵柄】',
+    '・16ビットのゲームふうのドット絵。1ドットがはっきり見える粗さ・くっきりした濃い色の輪郭線・ぼかしやグラデーションは使わない',
+    '・光は左上から。装備だけを描く（手・人・台・背景の飾りは描かない）',
+    '・マゼンタとそれに近い色（明るいピンク紫）は装備に使わない',
+    '',
+    '【豪華さ】',
+    `・${RARITY_LABEL[tier]}：${TIER_STYLE[tier]}`,
   ].join('\n')
 }
 

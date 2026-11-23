@@ -66,6 +66,25 @@ test('頼み方：全部の装備の名前・背景の色・並べ方・等級�
   assert.doesNotMatch(gearSheetPromptOf(GEAR_SHEET_BY_ID['N-other01']), /豪華に/, 'ノーマルは素朴に')
 })
 
+test('【確定】2026-11-24 ユーザー「描き直す」：頼む文は装飾品が何の装飾品か（指輪・耳飾り・ベルト・首飾り）と形を書く・1個だけ描き直す文もある', async () => {
+  const { gearOnePromptOf, gearOneFileOf } = await import('./gearArt.js')
+  // 四凶のシートで、「装飾品」としか書いていなかったリングが珠の飾りに、イヤリングが指輪に描かれた
+  const c = gearSheetPromptOf(GEAR_SHEET_BY_ID['C01'])
+  assert.ok(c.includes('水禍の蒼珠（装飾品・指輪）') && c.includes('神雷の環（装飾品・耳飾り）') && c.includes('六道輪廻の数珠（装飾品・首飾り）'))
+  assert.match(c, /・指輪＝指にはめる輪/)
+  assert.match(c, /・耳飾り＝左右一組を並べる/)
+  for (const s of GEAR_SHEETS) {
+    const p = gearSheetPromptOf(s)
+    assert.doesNotMatch(p, /（装飾品）/, `${s.id} に種類の無い「装飾品」`)
+  }
+  assert.doesNotMatch(gearSheetPromptOf(GEAR_SHEET_BY_ID['L-armor01']), /指輪＝|ベルト＝/, '防具だけのシートに装飾品の説明は入れない')
+  const ring = ITEM_BY_ID['C11:zerugiasu:イヤリング']
+  assert.equal(gearOneFileOf(ring), 'C11-zerugiasu-k24.png')
+  const one = gearOnePromptOf(ring)
+  assert.ok(one.includes('1個だけ') && one.includes('神雷の環（装飾品・耳飾り）') && one.includes('指輪・腕輪にはしない') && one.includes(SHEET_BG) && one.includes('豪華に'))
+  assert.match(read('../../../tools/v2cap-gear-art.mjs'), /GEAR_ONE_DIR/, '道具が1個だけの絵をシートより優先して使う')
+})
+
 test('等級：枠の色は5等級とも違う・豪華に見せるのはレジェンダリーとユニーク（四凶の専用装備はレジェンダリー）', () => {
   assert.equal(new Set(ALL_RARITIES.map(r => RARITY_COLOR[r])).size, 5)
   assert.deepEqual([...new Set(ALL.map(gearTierOf))].sort(), ['E', 'L', 'N', 'R', 'U'])

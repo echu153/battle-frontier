@@ -10,6 +10,7 @@
 //   node tools/v2cap-gear-art.mjs --force         … 全部やり直す
 //   node tools/v2cap-gear-art.mjs --list          … シートの一覧と進み具合
 //   node tools/v2cap-gear-art.mjs --prompt U01    … そのシートの頼み方（ChatGPT に貼る文）
+//   node tools/v2cap-gear-art.mjs --one 神雷の環  … 1個だけ描き直すときの頼み方と置く場所（public/V2装備/one/<絵の名前>.png・シートより優先）
 //   --public <元の絵の public>・--out <書き出す場所>（道具を試すとき＝ゲームのファイルを変えない）
 // ★マスは画像を4×4に等分する。マスの中の絵がちょうど収まる正方形に切り直すので、マスの中で少しずれていてもよい
 // ★止める場合（そのシートは1つも書かない）：背景が抜けない・絵の無いマスがある・となりのマスへはみ出している（マスの境目に絵がある）
@@ -22,7 +23,7 @@ import { probe, decode, bleed, each4, alphaBox, encodeSquare, keyBackground, tra
 import { GEAR_ART } from '../src/v2cap/lib/gearArtList.js'
 import {
   GEAR_SHEETS, GEAR_SHEET_BY_ID, GEAR_ART_DIR, GEAR_ART_SIZE, GEAR_SHEET_SOURCE, SHEET_COLS,
-  gearArtKeyOf, gearArtFileOf, gearSheetFileOf, gearSheetPromptOf, gearArtProgress,
+  gearArtKeyOf, gearArtFileOf, gearSheetFileOf, gearSheetPromptOf, gearArtProgress, GEAR_ONE_DIR, gearOneFileOf, gearOnePromptOf,
 } from '../src/v2cap/lib/gearArt.js'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -43,6 +44,13 @@ if (process.argv.includes('--prompt')) {
   const sheet = GEAR_SHEET_BY_ID[argOf('--prompt')]
   if (!sheet) { console.log(`シート ${argOf('--prompt')} は無い（--list で一覧）`); process.exit(1) }
   console.log(gearSheetPromptOf(sheet))
+  process.exit(0)
+}
+// --one <装備の名前> … 1個だけ描き直すときの頼む文と、置くファイルの名前
+if (process.argv.includes('--one')) {
+  const items = GEAR_SHEETS.flatMap(s => s.items).filter(i => i.name === argOf('--one'))
+  if (!items.length) { console.log(`装備 ${argOf('--one')} は無い`); process.exit(1) }
+  for (const item of items) console.log(`■ 置く場所：public/${GEAR_SHEET_SOURCE}/${GEAR_ONE_DIR}/${gearOneFileOf(item)}\n${gearOnePromptOf(item)}\n`)
   process.exit(0)
 }
 if (process.argv.includes('--list')) {
@@ -167,7 +175,27 @@ for (const sheet of GEAR_SHEETS) {
     console.log(`✔ ${gearSheetFileOf(sheet)}（${sheet.label}・${mode}）→ ${cells.length}個`)
   } catch (e) { failed.push(`${gearSheetFileOf(sheet)}：${e.message}`) }
 }
-const body = Object.entries(all).sort((a, b) => a[0].localeCompare(b[0])).map(([k, v]) => `  '${k}': { v: '${v.v}' },\n`).join('')
+// 1個だけ描き直した絵（public/V2装備/one/<絵の名前>.png）：シートの絵より優先する（2026-11-24 ユーザー「描き直す」）。
+//   画像の全体が1個＝絵がちょうど収まる正方形に切る。シートを切り直した回は、その上からもう一度書く
+const ONE = path.join(SRC, GEAR_ONE_DIR)
+const sheetWrote = wrote
+for (const item of GEAR_SHEETS.flatMap(s => s.items)) {
+  const src = path.join(ONE, gearOneFileOf(item)), out = path.join(OUT, gearArtFileOf(item))
+  if (!existsSync(src)) continue
+  if (!FORCE && !sheetWrote && existsSync(out) && statSync(out).mtimeMs >= statSync(src).mtimeMs && all[gearArtKeyOf(item)]) continue
+  try {
+    const { img, mode } = load(src)
+    const box = alphaBox(img)
+    if (!box || solidCount(img) < img.W * img.H * CELL_MIN) throw new Error('絵が無い')
+    mkdirSync(OUT, { recursive: true })
+    bleed(img)
+    encodeSquare(img, box, out, { size: GEAR_ART_SIZE, margin: 0.04, quality: QUALITY })
+    all[gearArtKeyOf(item)] = { v: versionOf(out) }
+    wrote++
+    console.log(`✔ one/${gearOneFileOf(item)}（${item.name}・${mode}）`)
+  } catch (e) { failed.push(`one/${gearOneFileOf(item)}（${item.name}）：${e.message}`) }
+}
+const body =Object.entries(all).sort((a, b) => a[0].localeCompare(b[0])).map(([k, v]) => `  '${k}': { v: '${v.v}' },\n`).join('')
 writeFileSync(LIST, `// tools/v2cap-gear-art.mjs が書くファイル（手で直さない）。絵の名前 → 中身の印（v＝画面のアドレスの ?v=）\nexport const GEAR_ART = {\n${body}}\n`)
 const p = gearArtProgress(all)
 console.log(`書いた絵 ${wrote}個・絵が入った装備 ${p.done} / ${p.total}`)
