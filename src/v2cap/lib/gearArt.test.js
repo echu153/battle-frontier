@@ -75,7 +75,8 @@ test('等級：枠の色は5等級とも違う・豪華に見せるのはレジ�
   // 画面の枠：等級ごとの作りがあり、動きはレジェンダリーとユニークだけ・視差効果を減らす端末では止める
   const src = read('../components/V2capGearIcon.jsx')
   for (const t of ['N', 'R', 'E', 'L', 'U']) assert.match(src, new RegExp(`\\n  ${t}: \\{ border`), `${t} の枠`)
-  assert.match(src, /L: \{[^}]*corners: true[^}]*sweep: true/)
+  assert.match(src, /L: \{[^}]*sweep: true/)
+  assert.doesNotMatch(src, /corners|CORNERS|#fff6c9/, '【確定】2026-11-23 ユーザー「四隅の白い枠いらない、」＝四隅の飾りは付けない')
   assert.match(src, /U: \{[^}]*aura: true[^}]*sparks: true/)
   assert.doesNotMatch(src, /\n  [NRE]: \{[^}]*(sweep|aura|sparks)/, 'ノーマル・レア・エピックは動かさない')
   assert.match(src, /prefers-reduced-motion: reduce/)

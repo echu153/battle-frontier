@@ -6,8 +6,9 @@ import { gearArtSrcOf, gearFallbackOf, gearTierOf } from '../lib/gearArt.js'
 //   【確定】2026-11-23 ユーザー「枠の色を変えるのは当たり前、レジェンダリー以上はレアな装備ってわかるように豪華に」
 //   ・枠の色は等級ごと（名前の色と同じ RARITY_COLOR）
 //   ・ノーマル＝細い枠だけ／レア＝枠＋うっすら色の地／エピック＝枠＋内側の光
-//   ・レジェンダリー＝太い金の枠・四隅の飾り・外へにじむ光・流れるハイライト
-//   ・ユニーク＝太い赤の枠・四隅の飾り・後ろで回る光の輪・立ちのぼる粒・流れるハイライト
+//   ・レジェンダリー＝太い金の枠・外へにじむ光・流れるハイライト
+//   ・ユニーク＝太い赤の枠・後ろで回る光の輪・立ちのぼる粒・流れるハイライト
+//   ⚠四隅の白い飾りは付けない（2026-11-23 ユーザー「四隅の白い枠いらない、」＝最初の版にあったのを外した）
 //   ・動きは transform と opacity だけ（一覧に何十個も並ぶ）。「視差効果を減らす」の端末では止める
 //   ・絵がまだ無い装備は種類ごとの仮のアイコン（色を抜いて薄く）
 // item が無ければ空の枠（slotIcon＝その枠の印）
@@ -38,17 +39,13 @@ export const GEAR_FRAME = {
   N: { border: 1, tint: 0.00, inner: 0, outer: 0 },
   R: { border: 1, tint: 0.14, inner: 0, outer: 0 },
   E: { border: 1, tint: 0.22, inner: 7, outer: 3 },
-  L: { border: 2, tint: 0.30, inner: 8, outer: 7, corners: true, sweep: true },
-  U: { border: 2, tint: 0.30, inner: 9, outer: 9, corners: true, sweep: true, aura: true, sparks: true },
+  L: { border: 2, tint: 0.30, inner: 8, outer: 7, sweep: true },
+  U: { border: 2, tint: 0.30, inner: 9, outer: 9, sweep: true, aura: true, sparks: true },
 }
 // 空の枠に出す部位の印（装備画面の「装備中」）
 export const GEAR_SLOT_ICON = { weapon:'⚔', head:'🪖', body:'🛡', arm:'🧤', foot:'🥾', acc1:'💍', acc2:'💍' }
 const hexA =(a) => Math.round(Math.max(0, Math.min(1, a)) * 255).toString(16).padStart(2, '0')
 const SPARKS = [{ left: '18%', delay: '0s' }, { left: '52%', delay: '.8s' }, { left: '78%', delay: '1.5s' }]
-const CORNERS = [
-  { top: -1, left: -1, borderRight: 'none', borderBottom: 'none' }, { top: -1, right: -1, borderLeft: 'none', borderBottom: 'none' },
-  { bottom: -1, left: -1, borderRight: 'none', borderTop: 'none' }, { bottom: -1, right: -1, borderLeft: 'none', borderTop: 'none' },
-]
 
 export default function GearIcon({ item, size = 44, slotIcon = '', dim = false, style }) {
   ensureCss()
@@ -56,7 +53,6 @@ export default function GearIcon({ item, size = 44, slotIcon = '', dim = false, 
   const f = GEAR_FRAME[tier]
   const color = item ? RARITY_COLOR[tier] : '#22334d'
   const src = item ? gearArtSrcOf(item) : null
-  const corner = Math.max(5, Math.round(size * 0.2))
   return (
     <span data-gear-tier={item ? tier : 'none'} style={{
       position:'relative', display:'inline-block', width: size, height: size, flexShrink: 0, boxSizing:'border-box', verticalAlign:'middle',
@@ -91,10 +87,6 @@ export default function GearIcon({ item, size = 44, slotIcon = '', dim = false, 
             background:'linear-gradient(90deg, transparent, #ffffff66 45%, #ffffffaa 50%, #ffffff66 55%, transparent)' }} />
         )}
       </span>
-      {/* 四隅の飾り（レジェンダリー・ユニーク） */}
-      {item && f.corners && CORNERS.map((c, i) => (
-        <span key={i} style={{ position:'absolute', width: corner, height: corner, border:'2px solid #fff6c9', boxSizing:'border-box', display:'block', ...c }} />
-      ))}
     </span>
   )
 }
