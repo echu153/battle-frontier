@@ -1,5 +1,17 @@
 // tools/v2cap-gear-art.mjs が書くファイル（手で直さない）。絵の名前 → 中身の印（v＝画面のアドレスの ?v=）
 export const GEAR_ART = {
+  'C11-amaza-k10': { v: '778a690f' },
+  'C11-amaza-k20': { v: '1f364424' },
+  'C11-amaza-k23': { v: 'c171dc8a' },
+  'C11-enma-k14': { v: '41004da0' },
+  'C11-enma-k20': { v: 'd130b5d1' },
+  'C11-enma-k26': { v: '97cb5823' },
+  'C11-varuzenoku-k02': { v: 'e0240cda' },
+  'C11-varuzenoku-k09': { v: 'f1ce3570' },
+  'C11-varuzenoku-k16': { v: '7ef1a20f' },
+  'C11-zerugiasu-k06': { v: '85f9b2a6' },
+  'C11-zerugiasu-k16': { v: 'a989dffd' },
+  'C11-zerugiasu-k24': { v: 'ae12092d' },
   'U1-k06': { v: '5122b8ef' },
   'U10-k17': { v: '01f63b40' },
   'U11-k01': { v: '132a5cad' },
